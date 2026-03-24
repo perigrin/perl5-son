@@ -1,0 +1,14 @@
+# Build artifacts
+Makefile
+Makefile.old
+MYMETA.*
+blib/
+pm_to_blib
+SoN.bs
+SoN.c
+FieldInfo.c
+FieldInfo.o
+*.o
+*.bs
+*.bundle
+*.so
