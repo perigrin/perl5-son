@@ -105,8 +105,8 @@ through the graph.
 
 This project grew out of two observations. First, the
 [Chalk][chalk] compiler demonstrated that Perl semantics can be
-represented in a Sea of Nodes IR — that it's not just a trick for
-statically-typed languages. Second, perl's optree couples the IR and
+represented in a Sea of Nodes IR — that pervasive coercions don't
+prevent the kind of analysis these graphs enable. Second, perl's optree couples the IR and
 execution format, which limits optimization to local peephole
 patterns. Separating them opens the door to global analysis.
 
