@@ -116,9 +116,12 @@ class SoN::FromOptree::OpMap 0.01 {
         enteriter => [0, undef,      0, LOOP],
 
         # Try/catch
-        entertry  => [0, undef,      0, BRANCH],
-        leavetry  => [1, undef,      1, 0],
-        catch     => [0, undef,      0, BRANCH],
+        entertry      => [0, undef,  0, BRANCH],
+        leavetry      => [1, undef,  1, 0],
+        catch         => [0, undef,  0, BRANCH],
+        entertrycatch => [0, undef,  0, BRANCH],
+        leavetrycatch => [0, undef,  0, 0],
+        poptry        => [0, undef,  0, 0],
 
         # Array/hash operations (basic set)
         aelem     => [2, 'Subscript', 1, 0],

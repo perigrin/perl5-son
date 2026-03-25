@@ -85,8 +85,36 @@ class SoN::FromOptree 0.01 {
                 next;
             }
 
-            # Other branch ops (iter, entertry, catch) - skip for now
-            if ($opmap->is_branch($name)) {
+            # Try/catch handling
+            if ($name eq 'entertrycatch') {
+                # Walk try body (op->other leads to catch)
+                my $try_sim = $sim->snapshot;
+                _walk_branch($cv, $op->next, $try_sim, $factory, $opmap, \%visited);
+
+                # Walk catch body (op->other)
+                my $catch_sim = $sim->snapshot;
+                _walk_branch($cv, $op->other, $catch_sim, $factory, $opmap, \%visited);
+
+                # Merge at leavetrycatch
+                my $region = $try_sim->merge($catch_sim, $factory);
+                $sim->set_control($region);
+
+                if ($try_sim->stack_depth > 0) {
+                    $sim->push_node($try_sim->pop_node);
+                }
+
+                $op = $op->next;
+                # Skip ahead past the try/catch structure
+                while ($$op && $op->name ne 'leavetrycatch') {
+                    last if $visited{$$op}++;
+                    $op = $op->next;
+                }
+                $op = $op->next if $$op;
+                next;
+            }
+
+            # Other branch ops (iter, poptry, catch, leavetrycatch) - skip
+            if ($opmap->is_branch($name) || $name eq 'poptry' || $name eq 'leavetrycatch') {
                 $op = $op->next;
                 next;
             }
