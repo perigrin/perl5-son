@@ -1,0 +1,74 @@
+# ABOUTME: Tests for SoN::IR::Node base class and CFG node subclasses.
+# ABOUTME: Verifies node construction, use-def chains, and CFG node identity.
+
+use v5.42.0;
+use Test2::V0;
+
+use SoN::IR::Node;
+use SoN::IR::Node::Start;
+use SoN::IR::Node::Return;
+use SoN::IR::Node::Region;
+use SoN::IR::Node::If;
+use SoN::IR::Node::Proj;
+use SoN::IR::Node::Loop;
+
+subtest 'Node base class fields' => sub {
+    my $node = SoN::IR::Node::Start->new();
+    ok(defined $node->id, 'node has an id');
+    is(ref $node->inputs, 'ARRAY', 'inputs is an array ref');
+    is(ref $node->consumers, 'ARRAY', 'consumers is an array ref');
+    is($node->stamp, undef, 'stamp defaults to undef');
+};
+
+subtest 'CFG nodes get unique sequential IDs' => sub {
+    my $a = SoN::IR::Node::Start->new();
+    my $b = SoN::IR::Node::Return->new();
+    my $c = SoN::IR::Node::Region->new();
+    ok($a->id ne $b->id, 'different nodes get different IDs');
+    ok($b->id ne $c->id, 'different nodes get different IDs');
+};
+
+subtest 'All 6 CFG node types constructable' => sub {
+    my $start  = SoN::IR::Node::Start->new();
+    my $return = SoN::IR::Node::Return->new(inputs => [$start]);
+    my $region = SoN::IR::Node::Region->new();
+    my $if     = SoN::IR::Node::If->new();
+    my $proj   = SoN::IR::Node::Proj->new(inputs => [$if], index => 0);
+    my $loop   = SoN::IR::Node::Loop->new();
+
+    isa_ok($start,  'SoN::IR::Node');
+    isa_ok($return, 'SoN::IR::Node');
+    isa_ok($region, 'SoN::IR::Node');
+    isa_ok($if,     'SoN::IR::Node');
+    isa_ok($proj,   'SoN::IR::Node');
+    isa_ok($loop,   'SoN::IR::Node');
+};
+
+subtest 'Use-def chains maintained' => sub {
+    my $start  = SoN::IR::Node::Start->new();
+    my $return = SoN::IR::Node::Return->new(inputs => [$start]);
+
+    # Return's inputs should contain start
+    is(scalar $return->inputs->@*, 1, 'return has 1 input');
+    is($return->inputs->[0], $start, 'return input is start');
+
+    # Start's consumers should contain return
+    is(scalar $start->consumers->@*, 1, 'start has 1 consumer');
+    is($start->consumers->[0], $return, 'start consumer is return');
+};
+
+subtest 'Multiple consumers tracked' => sub {
+    my $start   = SoN::IR::Node::Start->new();
+    my $region1 = SoN::IR::Node::Region->new(inputs => [$start]);
+    my $region2 = SoN::IR::Node::Region->new(inputs => [$start]);
+
+    is(scalar $start->consumers->@*, 2, 'start has 2 consumers');
+};
+
+subtest 'Proj carries index' => sub {
+    my $if   = SoN::IR::Node::If->new();
+    my $proj = SoN::IR::Node::Proj->new(inputs => [$if], index => 1);
+    is($proj->index, 1, 'proj carries its index');
+};
+
+done_testing;
