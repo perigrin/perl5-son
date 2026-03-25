@@ -19,6 +19,14 @@ class SoN::IR::Node 0.01 {
             push $input->consumers->@*, $self;
         }
     }
+
+    method operation () { ref($self) =~ s/.*:://r }
+
+    method content_hash () {
+        my $op = $self->operation;
+        my @input_ids = map { $_->id } $inputs->@*;
+        return $op . '|' . CORE::join('|', @input_ids);
+    }
 }
 
 1;
