@@ -28,6 +28,8 @@ class SoN::FromOptree::OpMap 0.01 {
         scope     => [0, undef,     0, SKIP],
         lineseq   => [0, undef,     0, SKIP],
         dbstate   => [0, undef,     0, SKIP],
+        methstart => [0, undef,     0, SKIP],
+        argcheck  => [0, undef,     0, SKIP],
 
         # Constants
         const     => [0, 'Constant', 1, 0],
@@ -39,6 +41,7 @@ class SoN::FromOptree::OpMap 0.01 {
         padhv     => [0, 'PadAccess', 1, 0],
 
         # Global variable access
+        gv        => [0, 'StashAccess', 1, 0],
         gvsv      => [0, 'StashAccess', 1, 0],
         rv2sv     => [1, 'StashAccess', 1, 0],
 
