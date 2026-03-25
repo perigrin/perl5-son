@@ -91,8 +91,47 @@ class SoN::FromOptree 0.01 {
                 next;
             }
 
-            # Loop ops - skip for now (complex Phi sentinel logic)
-            if ($opmap->is_loop($name)) {
+            # Loop ops: enterloop, enteriter
+            if ($name eq 'enterloop' || $name eq 'enteriter') {
+                my $loop_node = $factory->make_cfg('Loop', inputs => [$sim->control]);
+                $sim->set_control($loop_node);
+
+                # Save pre-loop scope to detect modifications
+                my $pre_loop_scope = $sim->scope_bindings;
+
+                # Walk the loop body: condition + body
+                # enterloop->next leads to the condition check
+                my $body_op = $op->next;
+                my %loop_visited;
+                _walk_loop_body($cv, $body_op, $sim, $factory, $opmap, \%loop_visited, \%visited);
+
+                # Create Phis for any variables modified during the loop
+                my $post_loop_scope = $sim->scope_bindings;
+                for my $targ (keys %$post_loop_scope) {
+                    my $pre = $pre_loop_scope->{$targ};
+                    my $post = $post_loop_scope->{$targ};
+                    if (defined $pre && defined $post && $pre != $post) {
+                        my $phi = $factory->make('Phi',
+                            inputs => [$pre, $post],
+                            region => $loop_node,
+                        );
+                        $sim->define($targ, $phi);
+                    }
+                }
+
+                # Continue after the loop (leaveloop)
+                # The B::LOOP op has lastop pointing to exit
+                if ($op->can('lastop')) {
+                    my $exit = $op->lastop;
+                    $op = $exit;
+                } else {
+                    $op = $op->next;
+                }
+                next;
+            }
+
+            # leaveloop - end of loop, continue
+            if ($name eq 'leaveloop') {
                 $op = $op->next;
                 next;
             }
@@ -334,6 +373,143 @@ class SoN::FromOptree 0.01 {
         }
         else {
             return (undef, SoN::IR::Stamp->new(type => 'Unknown'));
+        }
+    }
+
+    # Walk a loop body (condition + body), handling the internal and/or
+    sub _walk_loop_body ($cv, $op, $sim, $factory, $opmap, $loop_visited, $outer_visited) {
+        while ($$op) {
+            # Stop if we've looped back (unstack goes back to condition)
+            last if $loop_visited->{$$op}++;
+
+            my $name = $op->name;
+
+            # Skip bookkeeping
+            if ($name eq 'pushmark') { $sim->push_mark; $op = $op->next; next; }
+            if ($opmap->is_skip($name)) { $op = $op->next; next; }
+
+            # unstack marks end of loop iteration - stop
+            if ($name eq 'unstack') {
+                last;
+            }
+
+            # leaveloop - exit the loop
+            if ($name eq 'leaveloop') {
+                last;
+            }
+
+            # Handle the loop condition (and/or) - walk body via other
+            if (($name eq 'and' || $name eq 'or') && $sim->stack_depth > 0) {
+                my $cond = $sim->pop_node;
+                my $if_node = $factory->make_cfg('If', inputs => [$sim->control, $cond]);
+                my $body_proj = $factory->make_cfg('Proj', inputs => [$if_node], index => 0);
+                $sim->set_control($body_proj);
+                # For while loops: and->other is the body, and->next is leaveloop
+                $op = $op->other;
+                next;
+            }
+
+            # Handle const
+            if ($name eq 'const') {
+                my $sv = $op->sv;
+                if (!$$sv || $sv->isa('B::SPECIAL')) {
+                    my $targ = $op->targ;
+                    my $padl = $cv->PADLIST;
+                    if ($targ && $$padl) {
+                        $sv = $padl->ARRAYelt(1)->ARRAYelt($targ);
+                    }
+                }
+                my ($value, $stamp) = _extract_const($sv);
+                $sim->push_node($factory->make('Constant', value => $value, stamp => $stamp));
+                $op = $op->next;
+                next;
+            }
+
+            # Handle padsv
+            if ($name eq 'padsv') {
+                my $targ = $op->targ;
+                my $existing = $sim->lookup($targ);
+                if ($existing) {
+                    $sim->push_node($existing);
+                } else {
+                    my $node = _make_pad_or_field($cv, $targ, $factory);
+                    $sim->define($targ, $node);
+                    $sim->push_node($node);
+                }
+                $op = $op->next;
+                next;
+            }
+
+            # Handle sassign
+            if ($name eq 'sassign') {
+                my $value = $sim->pop_node;
+                my $target = $sim->pop_node;
+                if ($target->isa('SoN::IR::Node::PadAccess')) {
+                    $sim->define($target->targ, $value);
+                }
+                $sim->push_node($value);
+                $op = $op->next;
+                next;
+            }
+
+            if ($name eq 'padsv_store') {
+                my $value = $sim->pop_node;
+                $sim->define($op->targ, $value);
+                $sim->push_node($value);
+                $op = $op->next;
+                next;
+            }
+
+            # Handle ops with TARGMY (add[$i:1,6] vK/TARGMY) - writes result to pad
+            if ($opmap->is_known($name) && $op->can('targ') && $op->targ
+                && ($op->private & 16)) {  # OPpTARGET_MY = 0x10
+                my $pop_count = $opmap->pop_count($name);
+                my $node_type = $opmap->node_type($name);
+
+                my @inputs;
+                if (defined $pop_count && $pop_count > 0) {
+                    for (1 .. $pop_count) {
+                        unshift @inputs, $sim->pop_node;
+                    }
+                }
+
+                if (defined $node_type) {
+                    my $node = $factory->make($node_type, inputs => \@inputs);
+                    $sim->define($op->targ, $node);
+                    $sim->push_node($node);
+                }
+
+                $op = $op->next;
+                next;
+            }
+
+            # Generic op via OpMap
+            if ($opmap->is_known($name) && !$opmap->is_branch($name) && !$opmap->is_loop($name)) {
+                my $pop_count = $opmap->pop_count($name);
+                my $node_type = $opmap->node_type($name);
+                my $push_count = $opmap->push_count($name);
+
+                my @inputs;
+                if (defined $pop_count && $pop_count eq 'mark') {
+                    my $args = $sim->pop_to_mark;
+                    @inputs = $args->@*;
+                } elsif (defined $pop_count && $pop_count > 0) {
+                    for (1 .. $pop_count) {
+                        unshift @inputs, $sim->pop_node;
+                    }
+                }
+
+                if (defined $node_type) {
+                    my $node = $factory->make($node_type, inputs => \@inputs);
+                    $sim->push_node($node) if $push_count;
+                }
+
+                $op = $op->next;
+                next;
+            }
+
+            # Unknown - skip
+            $op = $op->next;
         }
     }
 
