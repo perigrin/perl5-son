@@ -7,7 +7,7 @@ package SoN::FieldInfo;
 
 our $VERSION = '0.01';
 
-require XSLoader;
-XSLoader::load('SoN::FieldInfo', $VERSION);
+# XS functions live in the SoN shared object, load it once
+require SoN;
 
 1;

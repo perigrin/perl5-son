@@ -2,11 +2,13 @@
 # ABOUTME: Provides version and loads core components.
 
 use v5.42.0;
-use feature 'class';
 
 package SoN;
 
 our $VERSION = '0.01';
+
+require XSLoader;
+XSLoader::load('SoN', $VERSION);
 
 1;
 
