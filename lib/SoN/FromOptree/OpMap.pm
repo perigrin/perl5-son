@@ -454,6 +454,41 @@ class SoN::FromOptree::OpMap 0.01 {
 
         # === Custom ops ===
         custom      => [0, 'Call',      1, 0],
+
+        # === Remaining ops (uncommon but completeness) ===
+        crypt       => [2, 'Call',      1, 0],
+        fcntl       => [3, 'Call',      1, 0],
+        ioctl       => [3, 'Call',      1, 0],
+        dbmopen     => [3, 'Call',      1, 0],
+        dbmclose    => [1, 'Call',      1, 0],
+        sysopen     => ['mark', 'Call', 1, 0],
+        sysread     => ['mark', 'Call', 1, 0],
+        syswrite    => ['mark', 'Call', 1, 0],
+        sysseek     => [3, 'Call',      1, 0],
+        syscall     => ['mark', 'Call', 1, 0],
+        study       => [1, 'Call',      1, 0],
+        substr_left => [2, 'Call',      1, 0],
+
+        # Lvalue refs and assignment
+        lvref       => [1, 'Call',      1, 0],
+        lvavref     => [1, 'Call',      1, 0],
+        lvrefslice  => ['mark', 'Call', 1, 0],
+        refassign   => [2, 'Assign',    1, 0],
+
+        # Internal compiler ops
+        introcv     => [0, undef,       0, SKIP],
+        clonecv     => [0, undef,       0, SKIP],
+        padcv       => [0, undef,       1, SKIP],
+        runcv       => [0, 'Call',      1, 0],
+        gelem       => [2, 'Subscript', 1, 0],
+        coreargs    => ['mark', 'Call', 1, 0],
+        hintseval   => [0, 'Constant',  1, 0],
+        avhvswitch  => [1, undef,       1, SKIP],
+
+        # any/all (5.40+)
+        allstart    => ['mark', 'Call', 1, 0],
+        anystart    => ['mark', 'Call', 1, 0],
+        anywhile    => [1, undef,       1, BRANCH],
     );
 
     method lookup ($opname) {
