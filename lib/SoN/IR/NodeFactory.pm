@@ -72,17 +72,23 @@ use SoN::IR::Node::Subtract;
 use SoN::IR::Node::Multiply;
 use SoN::IR::Node::Divide;
 use SoN::IR::Node::Negate;
+use SoN::IR::Node::Modulo;
+use SoN::IR::Node::Power;
 SoN::IR::NodeFactory->register('Add',      'SoN::IR::Node::Add');
 SoN::IR::NodeFactory->register('Subtract', 'SoN::IR::Node::Subtract');
 SoN::IR::NodeFactory->register('Multiply', 'SoN::IR::Node::Multiply');
 SoN::IR::NodeFactory->register('Divide',   'SoN::IR::Node::Divide');
 SoN::IR::NodeFactory->register('Negate',   'SoN::IR::Node::Negate');
+SoN::IR::NodeFactory->register('Modulo',   'SoN::IR::Node::Modulo');
+SoN::IR::NodeFactory->register('Power',    'SoN::IR::Node::Power');
 
 # String operation nodes
 use SoN::IR::Node::Concat;
 use SoN::IR::Node::Length;
-SoN::IR::NodeFactory->register('Concat', 'SoN::IR::Node::Concat');
-SoN::IR::NodeFactory->register('Length', 'SoN::IR::Node::Length');
+use SoN::IR::Node::Stringify;
+SoN::IR::NodeFactory->register('Concat',    'SoN::IR::Node::Concat');
+SoN::IR::NodeFactory->register('Length',    'SoN::IR::Node::Length');
+SoN::IR::NodeFactory->register('Stringify', 'SoN::IR::Node::Stringify');
 
 # Numeric comparison nodes
 use SoN::IR::Node::NumEq;
@@ -126,6 +132,20 @@ SoN::IR::NodeFactory->register('Or',      'SoN::IR::Node::Or');
 SoN::IR::NodeFactory->register('Not',     'SoN::IR::Node::Not');
 SoN::IR::NodeFactory->register('Defined', 'SoN::IR::Node::Defined');
 
+# Bitwise operation nodes
+use SoN::IR::Node::BitAnd;
+use SoN::IR::Node::BitOr;
+use SoN::IR::Node::BitXor;
+use SoN::IR::Node::LeftShift;
+use SoN::IR::Node::RightShift;
+use SoN::IR::Node::Complement;
+SoN::IR::NodeFactory->register('BitAnd',      'SoN::IR::Node::BitAnd');
+SoN::IR::NodeFactory->register('BitOr',       'SoN::IR::Node::BitOr');
+SoN::IR::NodeFactory->register('BitXor',      'SoN::IR::Node::BitXor');
+SoN::IR::NodeFactory->register('LeftShift',   'SoN::IR::Node::LeftShift');
+SoN::IR::NodeFactory->register('RightShift',  'SoN::IR::Node::RightShift');
+SoN::IR::NodeFactory->register('Complement',  'SoN::IR::Node::Complement');
+
 # Assignment node
 use SoN::IR::Node::Assign;
 SoN::IR::NodeFactory->register('Assign', 'SoN::IR::Node::Assign');
@@ -145,5 +165,11 @@ use SoN::IR::Node::StashAccess;
 SoN::IR::NodeFactory->register('PadAccess',   'SoN::IR::Node::PadAccess');
 SoN::IR::NodeFactory->register('FieldAccess', 'SoN::IR::Node::FieldAccess');
 SoN::IR::NodeFactory->register('StashAccess', 'SoN::IR::Node::StashAccess');
+
+# Collection access nodes
+use SoN::IR::Node::Subscript;
+use SoN::IR::Node::Slice;
+SoN::IR::NodeFactory->register('Subscript', 'SoN::IR::Node::Subscript');
+SoN::IR::NodeFactory->register('Slice',     'SoN::IR::Node::Slice');
 
 1;

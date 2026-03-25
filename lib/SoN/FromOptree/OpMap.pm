@@ -17,7 +17,7 @@ class SoN::FromOptree::OpMap 0.01 {
     use constant LOOP   => 4;
 
     my %MAP = (
-        # Bookkeeping - skip these
+        # === Bookkeeping - skip these ===
         null      => [0, undef,     0, SKIP],
         stub      => [0, undef,     0, SKIP],
         enter     => [0, undef,     0, SKIP],
@@ -30,133 +30,430 @@ class SoN::FromOptree::OpMap 0.01 {
         dbstate   => [0, undef,     0, SKIP],
         methstart => [0, undef,     0, SKIP],
         argcheck  => [0, undef,     0, SKIP],
+        scalar    => [0, undef,     0, SKIP],  # context hint
+        list      => [0, undef,     0, SKIP],  # context hint
+        padrange  => [0, undef,     0, SKIP],  # optimized pad intro
+        padany    => [0, undef,     0, SKIP],  # pad placeholder
 
-        # Constants
+        # === Constants ===
         const     => [0, 'Constant', 1, 0],
 
-        # Pad (lexical) variable access
-        padsv     => [0, 'PadAccess', 1, 0],
-        padsv_store => [1, 'Assign',  1, 0],  # optimized assign to pad
-        padav     => [0, 'PadAccess', 1, 0],
-        padhv     => [0, 'PadAccess', 1, 0],
+        # === Pad (lexical) variable access ===
+        padsv       => [0, 'PadAccess', 1, 0],
+        padsv_store => [1, 'Assign',    1, 0],
+        padav       => [0, 'PadAccess', 1, 0],
+        padhv       => [0, 'PadAccess', 1, 0],
 
-        # Global variable access
+        # === Global variable access ===
         gv        => [0, 'StashAccess', 1, 0],
         gvsv      => [0, 'StashAccess', 1, 0],
         rv2sv     => [1, 'StashAccess', 1, 0],
+        rv2av     => [1, undef,         1, SKIP],
+        rv2hv     => [1, undef,         1, SKIP],
+        rv2cv     => [1, undef,         1, SKIP],
+        rv2gv     => [1, undef,         1, SKIP],
 
-        # Arithmetic
-        add       => [2, 'Add',      1, 0],
-        subtract  => [2, 'Subtract', 1, 0],
-        multiply  => [2, 'Multiply', 1, 0],
-        divide    => [2, 'Divide',   1, 0],
-        negate    => [1, 'Negate',   1, 0],
-        i_add     => [2, 'Add',      1, 0],
+        # === Arithmetic ===
+        add        => [2, 'Add',      1, 0],
+        subtract   => [2, 'Subtract', 1, 0],
+        multiply   => [2, 'Multiply', 1, 0],
+        divide     => [2, 'Divide',   1, 0],
+        negate     => [1, 'Negate',   1, 0],
+        i_add      => [2, 'Add',      1, 0],
         i_subtract => [2, 'Subtract', 1, 0],
         i_multiply => [2, 'Multiply', 1, 0],
-        i_divide  => [2, 'Divide',   1, 0],
-        i_negate  => [1, 'Negate',   1, 0],
-        modulo    => [2, 'Modulo',   1, 0],
-        pow       => [2, 'Power',    1, 0],
+        i_divide   => [2, 'Divide',   1, 0],
+        i_negate   => [1, 'Negate',   1, 0],
+        modulo     => [2, 'Modulo',   1, 0],
+        i_modulo   => [2, 'Modulo',   1, 0],
+        pow        => [2, 'Power',    1, 0],
+        preinc     => [1, 'Call',     1, 0],  # ++$x
+        predec     => [1, 'Call',     1, 0],  # --$x
+        postinc    => [1, 'Call',     1, 0],  # $x++
+        postdec    => [1, 'Call',     1, 0],  # $x--
+        i_preinc   => [1, 'Call',     1, 0],
+        i_predec   => [1, 'Call',     1, 0],
+        i_postinc  => [1, 'Call',     1, 0],
+        i_postdec  => [1, 'Call',     1, 0],
 
-        # String
-        concat    => [2, 'Concat',   1, 0],
-        length    => [1, 'Length',   1, 0],
-        stringify => [1, 'Stringify', 1, 0],
+        # === Bitwise ===
+        bit_and      => [2, 'BitAnd',     1, 0],
+        bit_or       => [2, 'BitOr',      1, 0],
+        bit_xor      => [2, 'BitXor',     1, 0],
+        nbit_and     => [2, 'BitAnd',     1, 0],
+        nbit_or      => [2, 'BitOr',      1, 0],
+        nbit_xor     => [2, 'BitXor',     1, 0],
+        sbit_and     => [2, 'BitAnd',     1, 0],
+        sbit_or      => [2, 'BitOr',      1, 0],
+        sbit_xor     => [2, 'BitXor',     1, 0],
+        complement   => [1, 'Complement', 1, 0],
+        ncomplement  => [1, 'Complement', 1, 0],
+        scomplement  => [1, 'Complement', 1, 0],
+        left_shift   => [2, 'LeftShift',  1, 0],
+        right_shift  => [2, 'RightShift', 1, 0],
+
+        # === String operations ===
+        concat      => [2, 'Concat',    1, 0],
+        length      => [1, 'Length',    1, 0],
+        stringify   => [1, 'Stringify', 1, 0],
         multiconcat => ['mark', 'Concat', 1, 0],
+        substr      => [2, 'Call',      1, 0],   # 2-3 args
+        index       => [2, 'Call',      1, 0],
+        rindex      => [2, 'Call',      1, 0],
+        repeat      => [2, 'Call',      1, 0],   # x operator
+        uc          => [1, 'Call',      1, 0],
+        ucfirst     => [1, 'Call',      1, 0],
+        lc          => [1, 'Call',      1, 0],
+        lcfirst     => [1, 'Call',      1, 0],
+        fc          => [1, 'Call',      1, 0],   # foldcase
+        quotemeta   => [1, 'Call',      1, 0],
+        chomp       => [1, 'Call',      1, 0],
+        chop        => [1, 'Call',      1, 0],
+        schomp      => [1, 'Call',      1, 0],   # scalar chomp
+        schop       => [1, 'Call',      1, 0],   # scalar chop
+        sprintf     => ['mark', 'Call', 1, 0],
+        join        => ['mark', 'Call', 1, 0],
+        split       => ['mark', 'Call', 1, 0],
+        pack        => ['mark', 'Call', 1, 0],
+        unpack      => ['mark', 'Call', 1, 0],
 
-        # Numeric comparison
-        eq        => [2, 'NumEq',    1, 0],
-        lt        => [2, 'NumLt',    1, 0],
-        gt        => [2, 'NumGt',    1, 0],
-        le        => [2, 'NumLe',    1, 0],
-        ge        => [2, 'NumGe',    1, 0],
-        ne        => [2, 'NumNe',    1, 0],
-        ncmp      => [2, 'NumCmp',   1, 0],
-        i_eq      => [2, 'NumEq',    1, 0],
-        i_lt      => [2, 'NumLt',    1, 0],
-        i_gt      => [2, 'NumGt',    1, 0],
-        i_le      => [2, 'NumLe',    1, 0],
-        i_ge      => [2, 'NumGe',    1, 0],
-        i_ne      => [2, 'NumNe',    1, 0],
-        i_ncmp    => [2, 'NumCmp',   1, 0],
+        # === Numeric comparison ===
+        eq          => [2, 'NumEq',    1, 0],
+        lt          => [2, 'NumLt',    1, 0],
+        gt          => [2, 'NumGt',    1, 0],
+        le          => [2, 'NumLe',    1, 0],
+        ge          => [2, 'NumGe',    1, 0],
+        ne          => [2, 'NumNe',    1, 0],
+        ncmp        => [2, 'NumCmp',   1, 0],
+        i_eq        => [2, 'NumEq',    1, 0],
+        i_lt        => [2, 'NumLt',    1, 0],
+        i_gt        => [2, 'NumGt',    1, 0],
+        i_le        => [2, 'NumLe',    1, 0],
+        i_ge        => [2, 'NumGe',    1, 0],
+        i_ne        => [2, 'NumNe',    1, 0],
+        i_ncmp      => [2, 'NumCmp',   1, 0],
 
-        # String comparison
-        seq       => [2, 'StrEq',    1, 0],
-        slt       => [2, 'StrLt',    1, 0],
-        sgt       => [2, 'StrGt',    1, 0],
-        sle       => [2, 'StrLe',    1, 0],
-        sge       => [2, 'StrGe',    1, 0],
-        sne       => [2, 'StrNe',    1, 0],
-        scmp      => [2, 'StrCmp',   1, 0],
+        # === String comparison ===
+        seq         => [2, 'StrEq',    1, 0],
+        slt         => [2, 'StrLt',    1, 0],
+        sgt         => [2, 'StrGt',    1, 0],
+        sle         => [2, 'StrLe',    1, 0],
+        sge         => [2, 'StrGe',    1, 0],
+        sne         => [2, 'StrNe',    1, 0],
+        scmp        => [2, 'StrCmp',   1, 0],
 
-        # Logical / control flow
-        and       => [1, undef,      1, BRANCH],
-        or        => [1, undef,      1, BRANCH],
-        not       => [1, 'Not',      1, 0],
-        cond_expr => [1, undef,      1, BRANCH],
-        defined   => [1, 'Defined',  1, 0],
+        # === Logical / control flow ===
+        and         => [1, undef,      1, BRANCH],
+        or          => [1, undef,      1, BRANCH],
+        dor         => [1, undef,      1, BRANCH],  # //
+        not         => [1, 'Not',      1, 0],
+        xor         => [2, 'Call',     1, 0],
+        cond_expr   => [1, undef,      1, BRANCH],
+        defined     => [1, 'Defined',  1, 0],
+        andassign   => [1, undef,      1, BRANCH],  # &&=
+        orassign    => [1, undef,      1, BRANCH],  # ||=
+        dorassign   => [1, undef,      1, BRANCH],  # //=
 
-        # Assignment
-        sassign   => [2, 'Assign',   1, 0],
+        # === Assignment ===
+        sassign     => [2, 'Assign',   1, 0],
+        aassign     => ['mark', 'Assign', 1, 0],  # list assign
 
-        # Subroutine calls
-        entersub  => ['mark', 'Call', 1, 0],
-        method_named => [1, undef,   1, 0],  # handled specially with entersub
+        # === Subroutine calls ===
+        entersub     => ['mark', 'Call', 1, 0],
+        method_named => [1, undef,      1, 0],  # handled specially
+        method       => [1, undef,      1, 0],
+        method_super => [1, undef,      1, 0],
+        method_redir => [1, undef,      1, 0],
+        method_redir_super => [1, undef, 1, 0],
 
-        # Return
-        return    => ['mark', undef,  0, 0],   # handled specially
-        leavesub  => [1, undef,       1, 0],   # handled specially
-        leavesublv => [1, undef,      1, 0],
+        # === Return ===
+        return      => ['mark', undef,  0, 0],
+        leavesub    => [1, undef,       1, 0],
+        leavesublv  => [1, undef,       1, 0],
 
-        # Loops
-        enterloop => [0, undef,      0, LOOP],
-        leaveloop => [2, undef,      0, 0],
-        iter      => [0, undef,      1, BRANCH],
-        enteriter => [0, undef,      0, LOOP],
+        # === Loops ===
+        enterloop   => [0, undef,      0, LOOP],
+        leaveloop   => [2, undef,      0, 0],
+        iter        => [0, undef,      1, BRANCH],
+        enteriter   => [0, undef,      0, LOOP],
+        last        => [0, undef,      0, 0],
+        next        => [0, undef,      0, 0],
+        redo        => [0, undef,      0, 0],
 
-        # Try/catch
-        entertry      => [0, undef,  0, BRANCH],
-        leavetry      => [1, undef,  1, 0],
-        catch         => [0, undef,  0, BRANCH],
-        entertrycatch => [0, undef,  0, BRANCH],
-        leavetrycatch => [0, undef,  0, 0],
-        poptry        => [0, undef,  0, 0],
+        # === Try/catch ===
+        entertry      => [0, undef,    0, BRANCH],
+        leavetry      => [1, undef,    1, 0],
+        catch         => [0, undef,    0, BRANCH],
+        entertrycatch => [0, undef,    0, BRANCH],
+        leavetrycatch => [0, undef,    0, 0],
+        poptry        => [0, undef,    0, 0],
 
-        # Array/hash operations (basic set)
-        aelem     => [2, 'Subscript', 1, 0],
-        helem     => [2, 'Subscript', 1, 0],
-        rv2av     => [1, undef,       1, SKIP],
-        rv2hv     => [1, undef,       1, SKIP],
-        aslice    => ['mark', 'Slice', 1, 0],
-        hslice    => ['mark', 'Slice', 1, 0],
-        push      => ['mark', 'Call',  1, 0],
-        pop       => [1, 'Call',       1, 0],
-        shift     => [1, 'Call',       1, 0],
-        unshift   => ['mark', 'Call',  1, 0],
-        keys      => [1, 'Call',       1, 0],
-        values    => [1, 'Call',       1, 0],
-        each      => [1, 'Call',       1, 0],
-        exists    => [1, 'Defined',    1, 0],
-        delete    => [1, 'Call',       1, 0],
-        splice    => ['mark', 'Call',  1, 0],
+        # === Array operations ===
+        aelem          => [2, 'Subscript', 1, 0],
+        aelemfast      => [0, 'Subscript', 1, 0],  # optimized constant index
+        aelemfast_lex  => [0, 'Subscript', 1, 0],
+        aelemfastlex_store => [1, 'Assign', 1, 0],
+        aslice         => ['mark', 'Slice', 1, 0],
+        kvaslice       => ['mark', 'Slice', 1, 0],
+        lslice         => [2, 'Slice',      1, 0],
+        anonlist       => ['mark', 'Call',  1, 0],
+        anonhash       => ['mark', 'Call',  1, 0],
+        emptyavhv      => [0, 'Constant',  1, 0],
+        av2arylen      => [1, 'Length',     1, 0],  # $#array
+        push           => ['mark', 'Call',  1, 0],
+        pop            => [1, 'Call',       1, 0],
+        shift          => [1, 'Call',       1, 0],
+        unshift        => ['mark', 'Call',  1, 0],
+        splice         => ['mark', 'Call',  1, 0],
+        reverse        => ['mark', 'Call',  1, 0],
+        sort           => ['mark', 'Call',  1, 0],
 
-        # Misc
-        undef     => [0, 'Constant',  1, 0],  # undef literal
-        wantarray => [0, 'Constant',  1, 0],
-        caller    => [0, 'Call',       1, 0],
-        die       => ['mark', 'Call',  1, 0],
-        warn      => ['mark', 'Call',  1, 0],
-        print     => ['mark', 'Call',  1, 0],
-        say       => ['mark', 'Call',  1, 0],
-        chr       => [1, 'Call',       1, 0],
-        ord       => [1, 'Call',       1, 0],
-        hex       => [1, 'Call',       1, 0],
-        oct       => [1, 'Call',       1, 0],
-        abs       => [1, 'Call',       1, 0],
-        sqrt      => [1, 'Call',       1, 0],
-        int       => [1, 'Call',       1, 0],
-        ref       => [1, 'Call',       1, 0],
+        # === Hash operations ===
+        helem          => [2, 'Subscript', 1, 0],
+        hslice         => ['mark', 'Slice', 1, 0],
+        kvhslice       => ['mark', 'Slice', 1, 0],
+        keys           => [1, 'Call',       1, 0],
+        values         => [1, 'Call',       1, 0],
+        each           => [1, 'Call',       1, 0],
+        aeach          => [1, 'Call',       1, 0],
+        akeys          => [1, 'Call',       1, 0],
+        avalues        => [1, 'Call',       1, 0],
+        exists         => [1, 'Defined',    1, 0],
+        delete         => [1, 'Call',       1, 0],
+        helemexistsor  => [2, undef,        1, BRANCH],
+
+        # === Multideref (optimized chained access) ===
+        multideref     => [1, 'Subscript',  1, 0],
+
+        # === Reference operations ===
+        refgen      => [1, 'Call',     1, 0],  # \expr
+        srefgen     => [1, 'Call',     1, 0],  # \scalar
+        ref         => [1, 'Call',     1, 0],
+        reftype     => [1, 'Call',     1, 0],
+        refaddr     => [1, 'Call',     1, 0],
+        bless       => [2, 'Call',     1, 0],
+        blessed     => [1, 'Call',     1, 0],
+        weaken      => [1, 'Call',     1, 0],
+        unweaken    => [1, 'Call',     1, 0],
+        is_weak     => [1, 'Call',     1, 0],
+        is_bool     => [1, 'Call',     1, 0],
+        is_tainted  => [1, 'Call',     1, 0],
+        isa         => [2, 'Call',     1, 0],
+        tie         => ['mark', 'Call', 1, 0],
+        untie       => [1, 'Call',     1, 0],
+        tied        => [1, 'Call',     1, 0],
+
+        # === Regex operations ===
+        match       => [1, 'Call',     1, 0],
+        subst       => [1, 'Call',     1, 0],
+        substcont   => [0, undef,      0, BRANCH],
+        trans       => [1, 'Call',     1, 0],
+        transr      => [1, 'Call',     1, 0],
+        qr          => [1, 'Call',     1, 0],
+        regcomp     => [1, undef,      1, SKIP],
+        regcmaybe   => [1, undef,      1, SKIP],
+        regcreset   => [1, undef,      1, SKIP],
+
+        # === I/O operations ===
+        print       => ['mark', 'Call', 1, 0],
+        say         => ['mark', 'Call', 1, 0],
+        prtf        => ['mark', 'Call', 1, 0],  # printf
+        readline    => [1, 'Call',      1, 0],
+        rcatline    => [1, 'Call',      1, 0],
+        getc        => [1, 'Call',      1, 0],
+        open        => ['mark', 'Call', 1, 0],
+        close       => [1, 'Call',      1, 0],
+        binmode     => [2, 'Call',      1, 0],
+        eof         => [1, 'Call',      1, 0],
+        seek        => [3, 'Call',      1, 0],
+        tell        => [1, 'Call',      1, 0],
+        read        => ['mark', 'Call', 1, 0],
+        truncate    => [2, 'Call',      1, 0],
+        fileno      => [1, 'Call',      1, 0],
+        flock       => [2, 'Call',      1, 0],
+        select      => [1, 'Call',      1, 0],
+        sselect     => [4, 'Call',      1, 0],
+        backtick    => [1, 'Call',      1, 0],
+
+        # === File tests ===
+        (map { $_ => [1, 'Call', 1, 0] }
+            qw(ftatime ftbinary ftblk ftchr ftctime ftdir
+               fteexec fteowned fteread ftewrite ftfile ftis
+               ftlink ftmtime ftpipe ftrexec ftrowned ftrread
+               ftrwrite ftsgid ftsize ftsock ftsuid ftsvtx
+               fttext fttty ftzero)),
+
+        # === Filesystem operations ===
+        stat        => [1, 'Call',      1, 0],
+        lstat       => [1, 'Call',      1, 0],
+        rename      => [2, 'Call',      1, 0],
+        link        => [2, 'Call',      1, 0],
+        symlink     => [2, 'Call',      1, 0],
+        readlink    => [1, 'Call',      1, 0],
+        unlink      => ['mark', 'Call', 1, 0],
+        mkdir       => [2, 'Call',      1, 0],
+        rmdir       => [1, 'Call',      1, 0],
+        chmod       => ['mark', 'Call', 1, 0],
+        chown       => ['mark', 'Call', 1, 0],
+        chdir       => [1, 'Call',      1, 0],
+        chroot      => [1, 'Call',      1, 0],
+        glob        => [1, 'Call',      1, 0],
+        opendir     => [2, 'Call',      1, 0],
+        readdir     => [1, 'Call',      1, 0],
+        closedir    => [1, 'Call',      1, 0],
+        rewinddir   => [1, 'Call',      1, 0],
+        seekdir     => [2, 'Call',      1, 0],
+        telldir     => [1, 'Call',      1, 0],
+        open_dir    => [2, 'Call',      1, 0],
+        umask       => [1, 'Call',      1, 0],
+        utime       => ['mark', 'Call', 1, 0],
+
+        # === Process operations ===
+        fork        => [0, 'Call',      1, 0],
+        wait        => [0, 'Call',      1, 0],
+        waitpid     => [2, 'Call',      1, 0],
+        exec        => ['mark', 'Call', 1, 0],
+        system      => ['mark', 'Call', 1, 0],
+        kill        => ['mark', 'Call', 1, 0],
+        alarm       => [1, 'Call',      1, 0],
+        sleep       => [1, 'Call',      1, 0],
+        exit        => [1, 'Call',      0, 0],
+
+        # === Time operations ===
+        time        => [0, 'Call',      1, 0],
+        gmtime      => [1, 'Call',      1, 0],
+        localtime   => [1, 'Call',      1, 0],
+        tms         => [0, 'Call',      1, 0],
+
+        # === Math builtins ===
+        abs         => [1, 'Call',      1, 0],
+        sqrt        => [1, 'Call',      1, 0],
+        int         => [1, 'Call',      1, 0],
+        sin         => [1, 'Call',      1, 0],
+        cos         => [1, 'Call',      1, 0],
+        atan2       => [2, 'Call',      1, 0],
+        exp         => [1, 'Call',      1, 0],
+        log         => [1, 'Call',      1, 0],
+        rand        => [1, 'Call',      1, 0],
+        srand       => [1, 'Call',      1, 0],
+        ceil        => [1, 'Call',      1, 0],
+        floor       => [1, 'Call',      1, 0],
+
+        # === Conversion builtins ===
+        chr         => [1, 'Call',      1, 0],
+        ord         => [1, 'Call',      1, 0],
+        hex         => [1, 'Call',      1, 0],
+        oct         => [1, 'Call',      1, 0],
+        vec         => [3, 'Call',      1, 0],
+        pos         => [1, 'Call',      1, 0],
+
+        # === Misc builtins ===
+        undef       => [0, 'Constant',  1, 0],
+        wantarray   => [0, 'Constant',  1, 0],
+        caller      => [0, 'Call',       1, 0],
+        die         => ['mark', 'Call',  1, 0],
+        warn        => ['mark', 'Call',  1, 0],
+        require     => [1, 'Call',       1, 0],
+        dofile      => [1, 'Call',       1, 0],
+        prototype   => [1, 'Call',       1, 0],
+        lock        => [1, 'Call',       1, 0],
+        reset       => [0, 'Call',       1, 0],
+        getlogin    => [0, 'Call',       1, 0],
+
+        # === Grep/map ===
+        grepstart   => ['mark', 'Call',  1, 0],
+        grepwhile   => [1, undef,        1, BRANCH],
+        mapstart    => ['mark', 'Call',  1, 0],
+        mapwhile    => [1, undef,        1, BRANCH],
+
+        # === Eval ===
+        entereval   => [1, undef,        1, BRANCH],
+        leaveeval   => [1, undef,        1, 0],
+
+        # === Control flow ===
+        goto        => [1, undef,        0, 0],
+        last        => [0, undef,        0, 0],
+        next        => [0, undef,        0, 0],
+        redo        => [0, undef,        0, 0],
+        continue    => [0, undef,        0, SKIP],
+        break       => [0, undef,        0, 0],
+        dump        => [0, undef,        0, 0],
+
+        # === Smartmatch/given/when (legacy) ===
+        smartmatch  => [2, 'Call',       1, 0],
+        entergiven  => [1, undef,        0, BRANCH],
+        leavegiven  => [1, undef,        1, 0],
+        enterwhen   => [1, undef,        0, BRANCH],
+        leavewhen   => [1, undef,        1, 0],
+
+        # === Range / flip-flop ===
+        range       => [0, undef,        1, BRANCH],
+        flip        => [1, undef,        1, BRANCH],
+        flop        => [1, undef,        1, BRANCH],
+
+        # === Class operations ===
+        initfield   => [0, undef,        0, SKIP],  # field initialization
+        classname   => [0, 'Constant',   1, 0],
+
+        # === Closure / anonymous ===
+        anoncode    => [0, 'Call',       1, 0],
+        anonconst   => [1, 'Call',       1, 0],
+
+        # === Format ===
+        enterwrite  => [0, undef,        0, 0],
+        leavewrite  => [1, undef,        1, 0],
+        formline    => ['mark', 'Call',  1, 0],
+
+        # === Socket operations ===
+        socket      => ['mark', 'Call', 1, 0],
+        connect     => [2, 'Call',      1, 0],
+        listen      => [2, 'Call',      1, 0],
+        accept      => [2, 'Call',      1, 0],
+        bind        => [2, 'Call',      1, 0],
+        shutdown    => [2, 'Call',      1, 0],
+        send        => ['mark', 'Call', 1, 0],
+        recv        => ['mark', 'Call', 1, 0],
+        pipe_op     => [2, 'Call',      1, 0],
+        sockpair    => ['mark', 'Call', 1, 0],
+        getsockname => [1, 'Call',      1, 0],
+        getpeername => [1, 'Call',      1, 0],
+        gsockopt    => ['mark', 'Call', 1, 0],
+        ssockopt    => ['mark', 'Call', 1, 0],
+
+        # === System V IPC ===
+        (map { $_ => ['mark', 'Call', 1, 0] }
+            qw(msgctl msgget msgrcv msgsnd
+               semctl semget semop
+               shmctl shmget shmread shmwrite)),
+
+        # === User/group database ===
+        (map { $_ => [0, 'Call', 1, 0] }
+            qw(gpwnam gpwuid gpwent spwent epwent
+               ggrnam ggrgid ggrent sgrent egrent
+               ghbyname ghbyaddr ghostent shostent ehostent
+               gnbyname gnbyaddr gnetent snetent enetent
+               gpbyname gpbynumber gprotoent sprotoent eprotoent
+               gsbyname gsbyport gservent sservent eservent
+               getpgrp getppid getpriority)),
+        setpgrp     => [2, 'Call',      1, 0],
+        setpriority => [3, 'Call',      1, 0],
+
+        # === Argument handling ===
+        argelem     => [0, 'PadAccess', 1, 0],
+        argdefelem  => [1, undef,       1, BRANCH],
+
+        # === Deferred blocks ===
+        pushdefer   => [0, undef,       0, 0],
+
+        # === Comparison chaining ===
+        cmpchain_and => [0, undef,      1, BRANCH],
+        cmpchain_dup => [0, undef,      1, 0],
+
+        # === Once ===
+        once        => [0, undef,       1, BRANCH],
+
+        # === Custom ops ===
+        custom      => [0, 'Call',      1, 0],
     );
 
     method lookup ($opname) {
@@ -195,6 +492,10 @@ class SoN::FromOptree::OpMap 0.01 {
 
     method is_known ($opname) {
         return exists $MAP{$opname};
+    }
+
+    method known_count () {
+        return scalar keys %MAP;
     }
 }
 
