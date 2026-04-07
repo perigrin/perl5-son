@@ -54,11 +54,7 @@ subtest 'Variable assignment and use' => sub {
 
 subtest 'Ternary operator' => sub {
     my ($graph, $text) = translate_and_render(eval 'sub { my $x = 1; $x ? 10 : 20 }');
-    like($text, qr/If/, 'If node');
-    like($text, qr/Proj.*index: 0/, 'true projection');
-    like($text, qr/Proj.*index: 1/, 'false projection');
-    like($text, qr/Region/, 'merge region');
-    like($text, qr/Phi/, 'phi for merge');
+    like($text, qr/TernaryExpr/, 'TernaryExpr node');
     diag($text);
 };
 

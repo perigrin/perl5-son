@@ -46,8 +46,63 @@ class SoN::FromOptree 0.01 {
                 next;
             }
 
-            # Branch ops: and, or, cond_expr
-            if ($opmap->is_branch($name) && ($name eq 'and' || $name eq 'or' || $name eq 'cond_expr')) {
+            # dor op: $lhs // $rhs -> DefinedOr node
+            if ($opmap->is_branch($name) && $name eq 'dor') {
+                my $lhs = $sim->pop_node;
+                # Walk the other path (RHS of //) to get the fallback value
+                my $rhs_sim = $sim->snapshot;
+                my $rhs_end = _walk_branch($cv, $op->other, $rhs_sim, $factory, $opmap, \%visited);
+                my $rhs;
+                if ($rhs_sim->stack_depth > 0) {
+                    $rhs = $rhs_sim->pop_node;
+                } else {
+                    $rhs = $factory->make('Constant',
+                        value      => undef,
+                        const_type => 'undef',
+                        stamp      => SoN::IR::Stamp->new(type => 'Undef'));
+                }
+                my $node = $factory->make('DefinedOr', inputs => [$lhs, $rhs]);
+                $sim->push_node($node);
+                $op = $rhs_end // $op->next;
+                next;
+            }
+
+            # cond_expr op: $cond ? $true : $false -> TernaryExpr node
+            if ($opmap->is_branch($name) && $name eq 'cond_expr') {
+                my $cond = $sim->pop_node;
+                # Walk true path (op->next) to get the true-branch value
+                my $true_sim = $sim->snapshot;
+                my $true_end = _walk_branch($cv, $op->next, $true_sim, $factory, $opmap, \%visited);
+                my $true_val;
+                if ($true_sim->stack_depth > 0) {
+                    $true_val = $true_sim->pop_node;
+                } else {
+                    $true_val = $factory->make('Constant',
+                        value      => undef,
+                        const_type => 'undef',
+                        stamp      => SoN::IR::Stamp->new(type => 'Undef'));
+                }
+                # Walk false path (op->other) to get the false-branch value
+                my $false_sim = $sim->snapshot;
+                my $false_end = _walk_branch($cv, $op->other, $false_sim, $factory, $opmap, \%visited);
+                my $false_val;
+                if ($false_sim->stack_depth > 0) {
+                    $false_val = $false_sim->pop_node;
+                } else {
+                    $false_val = $factory->make('Constant',
+                        value      => undef,
+                        const_type => 'undef',
+                        stamp      => SoN::IR::Stamp->new(type => 'Undef'));
+                }
+                my $node = $factory->make('TernaryExpr',
+                    inputs => [$cond, $true_val, $false_val]);
+                $sim->push_node($node);
+                $op = $true_end // $false_end // $op->next;
+                next;
+            }
+
+            # Branch ops: and, or
+            if ($opmap->is_branch($name) && ($name eq 'and' || $name eq 'or')) {
                 my $cond = $sim->pop_node;
                 my $if_node = $factory->make_cfg('If', inputs => [$sim->control, $cond]);
                 my $true_proj = $factory->make_cfg('Proj', inputs => [$if_node], index => 0);
@@ -333,6 +388,53 @@ class SoN::FromOptree 0.01 {
                 }
                 $sim->define($targ, $value);
                 $sim->push_node($value);
+                $op = $op->next;
+                next;
+            }
+
+            # Handle match - regex match op: /pattern/flags against pad variable
+            if ($name eq 'match' && $op->isa('B::PMOP')) {
+                my $pattern = $op->precomp // '';
+                my $flags   = _pmflags_to_str($op->pmflags);
+                my $targ    = $op->targ;
+                my $target  = $sim->lookup($targ);
+                if (!$target) {
+                    $target = _make_pad_or_field($cv, $targ, $factory);
+                    $sim->define($targ, $target);
+                }
+                my $node = $factory->make('RegexMatch',
+                    inputs  => [$target],
+                    pattern => $pattern,
+                    flags   => $flags,
+                );
+                $sim->push_node($node);
+                $op = $op->next;
+                next;
+            }
+
+            # Handle subst - regex substitution op: s/pattern/replacement/flags
+            if ($name eq 'subst' && $op->isa('B::PMOP')) {
+                my $pattern = $op->precomp // '';
+                my $flags   = _pmflags_to_str($op->pmflags);
+                my $targ    = $op->targ;
+                my $target  = $sim->lookup($targ);
+                if (!$target) {
+                    $target = _make_pad_or_field($cv, $targ, $factory);
+                    $sim->define($targ, $target);
+                }
+                # The replacement string is on the stack (pushed by const op before subst)
+                my $repl_node = $sim->stack_depth > 0 ? $sim->pop_node : undef;
+                my $replacement = '';
+                if ($repl_node && $repl_node->isa('SoN::IR::Node::Constant')) {
+                    $replacement = $repl_node->value // '';
+                }
+                my $node = $factory->make('RegexSubst',
+                    inputs      => [$target],
+                    pattern     => $pattern,
+                    replacement => $replacement,
+                    flags       => $flags,
+                );
+                $sim->push_node($node);
                 $op = $op->next;
                 next;
             }
@@ -697,6 +799,17 @@ class SoN::FromOptree 0.01 {
         return '$?' unless ref $pn eq 'B::PADNAME';
         my $name = eval { $pn->PV };
         return defined $name ? $name : '$?';
+    }
+
+    # Convert a PMOP pmflags bitmask to a flag string (e.g. "gi")
+    sub _pmflags_to_str ($flags) {
+        my $str = '';
+        $str .= 'm' if $flags & 1;        # PMf_MULTILINE
+        $str .= 's' if $flags & 2;        # PMf_SINGLELINE
+        $str .= 'i' if $flags & 4;        # PMf_FOLD (case-insensitive)
+        $str .= 'x' if $flags & 8;        # PMf_EXTENDED
+        $str .= 'g' if $flags & 8388608;  # PMf_GLOBAL
+        return $str;
     }
 }
 

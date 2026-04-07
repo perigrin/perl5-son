@@ -9,14 +9,12 @@ use SoN::Render::Text;
 
 my $renderer = SoN::Render::Text->new();
 
-subtest 'Ternary produces If + Region' => sub {
+subtest 'Ternary produces TernaryExpr node' => sub {
     my $sub = eval 'sub { my $x = 1; $x ? 10 : 20 }';
     my $graph = SoN::FromOptree->translate($sub);
     ok(defined $graph, 'got a graph');
     my $text = $renderer->render($graph);
-    like($text, qr/If/, 'has If node');
-    like($text, qr/Proj/, 'has Proj node');
-    like($text, qr/Region/, 'has Region node');
+    like($text, qr/TernaryExpr/, 'has TernaryExpr node');
     diag($text);
 };
 

@@ -119,4 +119,55 @@ subtest 'No regressions: existing Call ops still work' => sub {
     ok(defined $graph, 'translation succeeded');
 };
 
+# -----------------------------------------------------------------------
+# Part 5: dor → DefinedOr
+# -----------------------------------------------------------------------
+
+subtest 'dor produces DefinedOr node' => sub {
+    my $graph = SoN::FromOptree->translate(sub { my $x; $x // 42 });
+    my @nodes = nodes_of_type($graph, 'DefinedOr');
+    ok(scalar @nodes > 0, 'dor op produces DefinedOr node');
+    is($nodes[0]->operation, 'DefinedOr', 'node operation is DefinedOr');
+};
+
+# -----------------------------------------------------------------------
+# Part 6: cond_expr → TernaryExpr
+# -----------------------------------------------------------------------
+
+subtest 'cond_expr produces TernaryExpr node' => sub {
+    my $graph = SoN::FromOptree->translate(sub { my $x = 1; $x ? "yes" : "no" });
+    my @nodes = nodes_of_type($graph, 'TernaryExpr');
+    ok(scalar @nodes > 0, 'cond_expr op produces TernaryExpr node');
+    is($nodes[0]->operation, 'TernaryExpr', 'node operation is TernaryExpr');
+};
+
+# -----------------------------------------------------------------------
+# Part 7: match → RegexMatch
+# -----------------------------------------------------------------------
+
+subtest 'match produces RegexMatch node' => sub {
+    my $graph = SoN::FromOptree->translate(sub { my $x = "hello"; $x =~ /ell/i });
+    my @nodes = nodes_of_type($graph, 'RegexMatch');
+    my ($rm) = @nodes;
+    ok($rm, 'match op produces RegexMatch node');
+    is($rm->operation, 'RegexMatch', 'node operation is RegexMatch');
+    is($rm->pattern, 'ell', 'RegexMatch has correct pattern');
+    like($rm->flags, qr/i/, 'RegexMatch has i flag');
+};
+
+# -----------------------------------------------------------------------
+# Part 8: subst → RegexSubst
+# -----------------------------------------------------------------------
+
+subtest 'subst produces RegexSubst node' => sub {
+    my $graph = SoN::FromOptree->translate(sub { my $x = "hello"; $x =~ s/ell/all/g });
+    my @nodes = nodes_of_type($graph, 'RegexSubst');
+    my ($rs) = @nodes;
+    ok($rs, 'subst op produces RegexSubst node');
+    is($rs->operation, 'RegexSubst', 'node operation is RegexSubst');
+    is($rs->pattern, 'ell', 'RegexSubst has correct pattern');
+    is($rs->replacement, 'all', 'RegexSubst has correct replacement');
+    like($rs->flags, qr/g/, 'RegexSubst has g flag');
+};
+
 done_testing;
