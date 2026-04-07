@@ -100,7 +100,7 @@ class SoN::FromOptree::OpMap 0.01 {
         substr      => [2, 'Call',      1, 0],   # 2-3 args
         index       => [2, 'Call',      1, 0],
         rindex      => [2, 'Call',      1, 0],
-        repeat      => [2, 'Call',      1, 0],   # x operator
+        repeat      => [2, 'Repeat',    1, 0],   # x operator
         uc          => [1, 'Call',      1, 0],
         ucfirst     => [1, 'Call',      1, 0],
         lc          => [1, 'Call',      1, 0],
@@ -147,7 +147,7 @@ class SoN::FromOptree::OpMap 0.01 {
         or          => [1, undef,      1, BRANCH],
         dor         => [1, undef,      1, BRANCH],  # //
         not         => [1, 'Not',      1, 0],
-        xor         => [2, 'Call',     1, 0],
+        xor         => [2, 'Xor',      1, 0],
         cond_expr   => [1, undef,      1, BRANCH],
         defined     => [1, 'Defined',  1, 0],
         andassign   => [1, undef,      1, BRANCH],  # &&=
@@ -196,8 +196,8 @@ class SoN::FromOptree::OpMap 0.01 {
         aslice         => ['mark', 'Slice', 1, 0],
         kvaslice       => ['mark', 'Slice', 1, 0],
         lslice         => [2, 'Slice',      1, 0],
-        anonlist       => ['mark', 'Call',  1, 0],
-        anonhash       => ['mark', 'Call',  1, 0],
+        anonlist       => ['mark', 'ArrayRef', 1, 0],
+        anonhash       => ['mark', 'HashRef',  1, 0],
         emptyavhv      => [0, 'Constant',  1, 0],
         av2arylen      => [1, 'Length',     1, 0],  # $#array
         push           => ['mark', 'Call',  1, 0],
@@ -226,8 +226,8 @@ class SoN::FromOptree::OpMap 0.01 {
         multideref     => [1, 'Subscript',  1, 0],
 
         # === Reference operations ===
-        refgen      => [1, 'Call',     1, 0],  # \expr
-        srefgen     => [1, 'Call',     1, 0],  # \scalar
+        refgen      => [1, 'Ref',      1, 0],  # \expr
+        srefgen     => [1, 'Ref',      1, 0],  # \scalar
         ref         => [1, 'Call',     1, 0],
         reftype     => [1, 'Call',     1, 0],
         refaddr     => [1, 'Call',     1, 0],
@@ -238,7 +238,7 @@ class SoN::FromOptree::OpMap 0.01 {
         is_weak     => [1, 'Call',     1, 0],
         is_bool     => [1, 'Call',     1, 0],
         is_tainted  => [1, 'Call',     1, 0],
-        isa         => [2, 'Call',     1, 0],
+        isa         => [2, 'IsaOp',    1, 0],
         tie         => ['mark', 'Call', 1, 0],
         untie       => [1, 'Call',     1, 0],
         tied        => [1, 'Call',     1, 0],
@@ -273,7 +273,7 @@ class SoN::FromOptree::OpMap 0.01 {
         flock       => [2, 'Call',      1, 0],
         select      => [1, 'Call',      1, 0],
         sselect     => [4, 'Call',      1, 0],
-        backtick    => [1, 'Call',      1, 0],
+        backtick    => [1, 'BacktickExpr', 1, 0],
 
         # === File tests ===
         (map { $_ => [1, 'Call', 1, 0] }
@@ -351,7 +351,7 @@ class SoN::FromOptree::OpMap 0.01 {
         undef       => [0, 'Constant',  1, 0],
         wantarray   => [0, 'Constant',  1, 0],
         caller      => [0, 'Call',       1, 0],
-        die         => ['mark', 'Call',  1, 0],
+        die         => ['mark', undef,   0, 0],  # handled specially in FromOptree.pm
         warn        => ['mark', 'Call',  1, 0],
         require     => [1, 'Call',       1, 0],
         dofile      => [1, 'Call',       1, 0],
@@ -380,7 +380,7 @@ class SoN::FromOptree::OpMap 0.01 {
         dump        => [0, undef,        0, 0],
 
         # === Smartmatch/given/when (legacy) ===
-        smartmatch  => [2, 'Call',       1, 0],
+        smartmatch  => [2, 'Match',      1, 0],
         entergiven  => [1, undef,        0, BRANCH],
         leavegiven  => [1, undef,        1, 0],
         enterwhen   => [1, undef,        0, BRANCH],
@@ -396,7 +396,7 @@ class SoN::FromOptree::OpMap 0.01 {
         classname   => [0, 'Constant',   1, 0],
 
         # === Closure / anonymous ===
-        anoncode    => [0, 'Call',       1, 0],
+        anoncode    => [0, 'AnonSub',    1, 0],
         anonconst   => [1, 'Call',       1, 0],
 
         # === Format ===

@@ -320,8 +320,29 @@ class SoN::FromOptree 0.01 {
             if ($name eq 'padsv_store') {
                 my $value = $sim->pop_node;
                 my $targ = $op->targ;
+                # OPpLVAL_INTRO (128) indicates a new lexical declaration (my $x)
+                if ($op->private & 128) {
+                    my $pad_node = _make_pad_or_field($cv, $targ, $factory);
+                    # VarDecl wraps the pad slot; value stays as the scope binding
+                    # so subsequent uses of the variable return the rhs value, not
+                    # the declaration node.  Inputs include the value so VarDecl
+                    # remains reachable in the graph traversal.
+                    $factory->make('VarDecl',
+                        inputs => [$pad_node, $value],
+                        scope  => 'my');
+                }
                 $sim->define($targ, $value);
                 $sim->push_node($value);
+                $op = $op->next;
+                next;
+            }
+
+            # Handle die specially: creates an Unwind CFG node, nothing pushed to stack
+            if ($name eq 'die') {
+                my $args = $sim->pop_to_mark;
+                my $unwind = $factory->make_cfg('Unwind',
+                    inputs => [$sim->control, $args->@*]);
+                $sim->set_control($unwind);
                 $op = $op->next;
                 next;
             }
