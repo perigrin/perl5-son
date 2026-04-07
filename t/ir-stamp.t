@@ -81,4 +81,66 @@ subtest 'Join (least upper bound)' => sub {
         'join(DualVar, Num) = Scalar');
 };
 
+subtest 'New types: Void, List, Regex, Glob are representable' => sub {
+    for my $type (qw(Void List Regex Glob)) {
+        my $stamp = SoN::IR::Stamp->new(type => $type);
+        is($stamp->type, $type, "$type stamp created");
+    }
+};
+
+subtest 'Void and List are siblings of Scalar under Unknown' => sub {
+    my $void    = SoN::IR::Stamp->new(type => 'Void');
+    my $list    = SoN::IR::Stamp->new(type => 'List');
+    my $unknown = SoN::IR::Stamp->new(type => 'Unknown');
+    my $scalar  = SoN::IR::Stamp->new(type => 'Scalar');
+
+    ok($void->is_subtype_of($unknown),   'Void < Unknown');
+    ok($list->is_subtype_of($unknown),   'List < Unknown');
+    ok(!$void->is_subtype_of($scalar),   'Void is not < Scalar (sibling)');
+    ok(!$list->is_subtype_of($scalar),   'List is not < Scalar (sibling)');
+    ok(!$scalar->is_subtype_of($void),   'Scalar is not < Void');
+};
+
+subtest 'Regex and Glob are subtypes of Ref' => sub {
+    my $regex = SoN::IR::Stamp->new(type => 'Regex');
+    my $glob  = SoN::IR::Stamp->new(type => 'Glob');
+    my $ref   = SoN::IR::Stamp->new(type => 'Ref');
+
+    ok($regex->is_subtype_of($ref),  'Regex < Ref');
+    ok($glob->is_subtype_of($ref),   'Glob < Ref');
+};
+
+subtest 'None is subtype of new types' => sub {
+    my $none  = SoN::IR::Stamp->new(type => 'None');
+    my $regex = SoN::IR::Stamp->new(type => 'Regex');
+    my $glob  = SoN::IR::Stamp->new(type => 'Glob');
+
+    ok($none->is_subtype_of($regex), 'None < Regex');
+    ok($none->is_subtype_of($glob),  'None < Glob');
+};
+
+subtest 'Meet with new types' => sub {
+    my $regex   = SoN::IR::Stamp->new(type => 'Regex');
+    my $coderef = SoN::IR::Stamp->new(type => 'CodeRef');
+    my $void    = SoN::IR::Stamp->new(type => 'Void');
+    my $scalar  = SoN::IR::Stamp->new(type => 'Scalar');
+
+    is(SoN::IR::Stamp::meet($regex, $coderef)->type, 'None',
+        'meet(Regex, CodeRef) = None (siblings under Ref)');
+    is(SoN::IR::Stamp::meet($void, $scalar)->type, 'None',
+        'meet(Void, Scalar) = None (no common subtype)');
+};
+
+subtest 'Join with new types' => sub {
+    my $regex   = SoN::IR::Stamp->new(type => 'Regex');
+    my $coderef = SoN::IR::Stamp->new(type => 'CodeRef');
+    my $void    = SoN::IR::Stamp->new(type => 'Void');
+    my $scalar  = SoN::IR::Stamp->new(type => 'Scalar');
+
+    is(SoN::IR::Stamp::join($regex, $coderef)->type, 'Ref',
+        'join(Regex, CodeRef) = Ref');
+    is(SoN::IR::Stamp::join($void, $scalar)->type, 'Unknown',
+        'join(Void, Scalar) = Unknown');
+};
+
 done_testing;

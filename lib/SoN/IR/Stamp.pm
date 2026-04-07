@@ -9,7 +9,7 @@ class SoN::IR::Stamp 0.01 {
     # The lattice as a DAG. Each type maps to its direct parents.
     # Based on https://pvm.tools/papers/perl-types-formal.html
     my %PARENTS = (
-        None      => [qw(Int Boolean Undef ScalarRef ArrayRef HashRef CodeRef Object DualVar)],
+        None      => [qw(Int Boolean Undef ScalarRef ArrayRef HashRef CodeRef Object DualVar Regex Glob)],
         Int       => [qw(Num)],
         Num       => [qw(Str)],
         Str       => [qw(Scalar)],
@@ -22,7 +22,11 @@ class SoN::IR::Stamp 0.01 {
         HashRef   => [qw(Ref)],
         CodeRef   => [qw(Ref)],
         Object    => [qw(Ref)],
+        Regex     => [qw(Ref)],
+        Glob      => [qw(Ref)],
         Scalar    => [qw(Unknown)],
+        Void      => [qw(Unknown)],
+        List      => [qw(Unknown)],
         Unknown   => [],
     );
 
