@@ -54,6 +54,7 @@ use SoN::IR::Node::Region;
 use SoN::IR::Node::If;
 use SoN::IR::Node::Proj;
 use SoN::IR::Node::Loop;
+use SoN::IR::Node::Unwind;
 
 SoN::IR::NodeFactory->register_cfg('Start',  'SoN::IR::Node::Start');
 SoN::IR::NodeFactory->register_cfg('Return', 'SoN::IR::Node::Return');
@@ -61,6 +62,7 @@ SoN::IR::NodeFactory->register_cfg('Region', 'SoN::IR::Node::Region');
 SoN::IR::NodeFactory->register_cfg('If',     'SoN::IR::Node::If');
 SoN::IR::NodeFactory->register_cfg('Proj',   'SoN::IR::Node::Proj');
 SoN::IR::NodeFactory->register_cfg('Loop',   'SoN::IR::Node::Loop');
+SoN::IR::NodeFactory->register_cfg('Unwind', 'SoN::IR::Node::Unwind');
 
 # Register built-in data node types
 use SoN::IR::Node::Constant;
