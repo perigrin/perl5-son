@@ -4,9 +4,12 @@
 use v5.42.0;
 use feature 'class';
 no warnings 'experimental::class';
+use SoN::IR::Node::BinOp;
 
-class SoN::IR::Node::NumLt :isa(SoN::IR::Node) {
+class SoN::IR::Node::NumLt :isa(SoN::IR::Node::BinOp) {
     method operation () { 'NumLt' }
+
+    method op_str () { '<' }
 }
 
 1;
