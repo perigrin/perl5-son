@@ -214,4 +214,12 @@ use SoN::IR::Node::Slice;
 SoN::IR::NodeFactory->register('Subscript', 'SoN::IR::Node::Subscript');
 SoN::IR::NodeFactory->register('Slice',     'SoN::IR::Node::Slice');
 
+# Aggregate nodes
+use SoN::IR::Node::HashRef;
+use SoN::IR::Node::ArrayRef;
+use SoN::IR::Node::Interpolate;
+SoN::IR::NodeFactory->register('HashRef',     'SoN::IR::Node::HashRef');
+SoN::IR::NodeFactory->register('ArrayRef',    'SoN::IR::Node::ArrayRef');
+SoN::IR::NodeFactory->register('Interpolate', 'SoN::IR::Node::Interpolate');
+
 1;
