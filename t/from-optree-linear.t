@@ -62,4 +62,21 @@ subtest 'Text rendering of output matches expected graph structure' => sub {
     diag($text);
 };
 
+subtest 'Constant nodes carry correct const_type from optree translation' => sub {
+    my $int_sub = eval 'sub { 42 }';
+    my $int_graph = SoN::FromOptree->translate($int_sub);
+    my @const_nodes = grep { $_->isa('SoN::IR::Node::Constant') } $int_graph->nodes->@*;
+    ok(scalar @const_nodes > 0, 'found at least one Constant node');
+    my ($c42) = grep { defined $_->value && $_->value == 42 } @const_nodes;
+    ok(defined $c42, 'found the 42 constant');
+    is($c42->const_type, 'integer', 'integer literal has const_type integer');
+
+    my $str_sub = eval 'sub { "hello" }';
+    my $str_graph = SoN::FromOptree->translate($str_sub);
+    my @str_consts = grep { $_->isa('SoN::IR::Node::Constant') } $str_graph->nodes->@*;
+    my ($chello) = grep { defined $_->value && $_->value eq 'hello' } @str_consts;
+    ok(defined $chello, 'found the hello constant');
+    is($chello->const_type, 'string', 'string literal has const_type string');
+};
+
 done_testing;

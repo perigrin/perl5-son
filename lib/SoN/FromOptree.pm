@@ -184,8 +184,9 @@ class SoN::FromOptree 0.01 {
                     }
                 }
                 my $node = $factory->make('Constant',
-                    value => $gv_name,
-                    stamp => SoN::IR::Stamp->new(type => 'Str'));
+                    value      => $gv_name,
+                    const_type => 'string',
+                    stamp      => SoN::IR::Stamp->new(type => 'Str'));
                 $sim->push_node($node);
                 $op = $op->next;
                 next;
@@ -221,8 +222,9 @@ class SoN::FromOptree 0.01 {
                 # Pop the invocant, create a method-dispatch Call
                 my $invocant = $sim->pop_node;
                 my $node = $factory->make('Constant',
-                    value => $meth_name,
-                    stamp => SoN::IR::Stamp->new(type => 'Str'));
+                    value      => $meth_name,
+                    const_type => 'string',
+                    stamp      => SoN::IR::Stamp->new(type => 'Str'));
                 $sim->push_node($invocant);
                 $sim->push_node($node);
                 $op = $op->next;
@@ -233,7 +235,9 @@ class SoN::FromOptree 0.01 {
             if ($name eq 'return') {
                 my $args = $sim->pop_to_mark;
                 my $retval = $args->@* ? $args->[-1] : $factory->make('Constant',
-                    value => undef, stamp => SoN::IR::Stamp->new(type => 'Undef'));
+                    value      => undef,
+                    const_type => 'undef',
+                    stamp      => SoN::IR::Stamp->new(type => 'Undef'));
                 my $ret = $factory->make_cfg('Return',
                     inputs => [$sim->control, $retval]);
                 my $graph = SoN::IR::Graph->new(
@@ -251,7 +255,9 @@ class SoN::FromOptree 0.01 {
                     $retval = $sim->pop_node;
                 } else {
                     $retval = $factory->make('Constant',
-                        value => undef, stamp => SoN::IR::Stamp->new(type => 'Undef'));
+                        value      => undef,
+                        const_type => 'undef',
+                        stamp      => SoN::IR::Stamp->new(type => 'Undef'));
                 }
                 my $ret = $factory->make_cfg('Return',
                     inputs => [$sim->control, $retval]);
@@ -274,9 +280,9 @@ class SoN::FromOptree 0.01 {
                         $sv = $padl->ARRAYelt(1)->ARRAYelt($targ);
                     }
                 }
-                my ($value, $stamp) = _extract_const($sv);
+                my ($value, $stamp, $const_type) = _extract_const($sv);
                 my $node = $factory->make('Constant',
-                    value => $value, stamp => $stamp);
+                    value => $value, stamp => $stamp, const_type => $const_type);
                 $sim->push_node($node);
                 $op = $op->next;
                 next;
@@ -358,7 +364,9 @@ class SoN::FromOptree 0.01 {
             $retval = $sim->pop_node;
         } else {
             $retval = $factory->make('Constant',
-                value => undef, stamp => SoN::IR::Stamp->new(type => 'Undef'));
+                value      => undef,
+                const_type => 'undef',
+                stamp      => SoN::IR::Stamp->new(type => 'Undef'));
         }
         my $ret = $factory->make_cfg('Return',
             inputs => [$sim->control, $retval]);
@@ -369,38 +377,40 @@ class SoN::FromOptree 0.01 {
         );
     }
 
-    # Extract value and stamp from a B::SV
+    # Extract value, stamp, and const_type from a B::SV.
+    # Returns ($value, $stamp, $const_type) where const_type is one of:
+    # 'integer', 'number', 'string', or 'undef'.
     sub _extract_const ($sv) {
-        return (undef, SoN::IR::Stamp->new(type => 'Undef'))
+        return (undef, SoN::IR::Stamp->new(type => 'Undef'), 'undef')
             unless defined $sv && $$sv;
 
         if ($sv->isa('B::IV')) {
-            return ($sv->int_value, SoN::IR::Stamp->new(type => 'Int'));
+            return ($sv->int_value, SoN::IR::Stamp->new(type => 'Int'), 'integer');
         }
         elsif ($sv->isa('B::NV')) {
-            return ($sv->NV, SoN::IR::Stamp->new(type => 'Num'));
+            return ($sv->NV, SoN::IR::Stamp->new(type => 'Num'), 'number');
         }
         elsif ($sv->isa('B::PV')) {
-            return ($sv->PV, SoN::IR::Stamp->new(type => 'Str'));
+            return ($sv->PV, SoN::IR::Stamp->new(type => 'Str'), 'string');
         }
         elsif ($sv->isa('B::PVIV')) {
             # Could be either - check flags
             if ($sv->FLAGS & B::SVf_IOK()) {
-                return ($sv->int_value, SoN::IR::Stamp->new(type => 'Int'));
+                return ($sv->int_value, SoN::IR::Stamp->new(type => 'Int'), 'integer');
             }
-            return ($sv->PV, SoN::IR::Stamp->new(type => 'Str'));
+            return ($sv->PV, SoN::IR::Stamp->new(type => 'Str'), 'string');
         }
         elsif ($sv->isa('B::PVNV')) {
             if ($sv->FLAGS & B::SVf_NOK()) {
-                return ($sv->NV, SoN::IR::Stamp->new(type => 'Num'));
+                return ($sv->NV, SoN::IR::Stamp->new(type => 'Num'), 'number');
             }
             if ($sv->FLAGS & B::SVf_IOK()) {
-                return ($sv->int_value, SoN::IR::Stamp->new(type => 'Int'));
+                return ($sv->int_value, SoN::IR::Stamp->new(type => 'Int'), 'integer');
             }
-            return ($sv->PV, SoN::IR::Stamp->new(type => 'Str'));
+            return ($sv->PV, SoN::IR::Stamp->new(type => 'Str'), 'string');
         }
         else {
-            return (undef, SoN::IR::Stamp->new(type => 'Unknown'));
+            return (undef, SoN::IR::Stamp->new(type => 'Unknown'), 'string');
         }
     }
 
@@ -447,8 +457,9 @@ class SoN::FromOptree 0.01 {
                         $sv = $padl->ARRAYelt(1)->ARRAYelt($targ);
                     }
                 }
-                my ($value, $stamp) = _extract_const($sv);
-                $sim->push_node($factory->make('Constant', value => $value, stamp => $stamp));
+                my ($value, $stamp, $const_type) = _extract_const($sv);
+                $sim->push_node($factory->make('Constant',
+                    value => $value, stamp => $stamp, const_type => $const_type));
                 $op = $op->next;
                 next;
             }
@@ -564,8 +575,9 @@ class SoN::FromOptree 0.01 {
                         $sv = $padl->ARRAYelt(1)->ARRAYelt($targ);
                     }
                 }
-                my ($value, $stamp) = _extract_const($sv);
-                $sim->push_node($factory->make('Constant', value => $value, stamp => $stamp));
+                my ($value, $stamp, $const_type) = _extract_const($sv);
+                $sim->push_node($factory->make('Constant',
+                    value => $value, stamp => $stamp, const_type => $const_type));
                 $op = $op->next;
                 next;
             }

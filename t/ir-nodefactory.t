@@ -56,4 +56,48 @@ subtest 'Content hash is deterministic' => sub {
     is($a1->content_hash, $a2->content_hash, 'same content produces same hash');
 };
 
+subtest 'Constant content_hash includes const_type' => sub {
+    my $factory = SoN::IR::NodeFactory->new();
+
+    my $int_const = $factory->make('Constant',
+        value      => 42,
+        const_type => 'integer',
+        stamp      => SoN::IR::Stamp->new(type => 'Int'),
+    );
+    is($int_const->const_type, 'integer', 'const_type reader returns value');
+    is($int_const->content_hash,
+        'Constant|const_type=integer|value=42',
+        'integer constant content_hash includes const_type');
+
+    my $str_const = $factory->make('Constant',
+        value      => 'hello',
+        const_type => 'string',
+        stamp      => SoN::IR::Stamp->new(type => 'Str'),
+    );
+    is($str_const->content_hash,
+        'Constant|const_type=string|value=hello',
+        'string constant content_hash includes const_type');
+
+    my $undef_const = $factory->make('Constant',
+        value      => undef,
+        const_type => 'undef',
+        stamp      => SoN::IR::Stamp->new(type => 'Undef'),
+    );
+    is($undef_const->content_hash,
+        'Constant|const_type=undef|value=undef',
+        'undef constant content_hash includes const_type');
+};
+
+subtest 'Constant const_type defaults to string' => sub {
+    my $factory = SoN::IR::NodeFactory->new();
+    my $c = $factory->make('Constant',
+        value => 'plain',
+        stamp => SoN::IR::Stamp->new(type => 'Str'),
+    );
+    is($c->const_type, 'string', 'const_type defaults to string when omitted');
+    is($c->content_hash,
+        'Constant|const_type=string|value=plain',
+        'default const_type appears in content_hash');
+};
+
 done_testing;
