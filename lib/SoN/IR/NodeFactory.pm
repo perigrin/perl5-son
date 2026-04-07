@@ -148,6 +148,14 @@ SoN::IR::NodeFactory->register('LeftShift',   'SoN::IR::Node::LeftShift');
 SoN::IR::NodeFactory->register('RightShift',  'SoN::IR::Node::RightShift');
 SoN::IR::NodeFactory->register('Complement',  'SoN::IR::Node::Complement');
 
+# Additional unary operation nodes
+use SoN::IR::Node::UnaryPlus;
+use SoN::IR::Node::Ref;
+use SoN::IR::Node::PostfixDeref;
+SoN::IR::NodeFactory->register('UnaryPlus',    'SoN::IR::Node::UnaryPlus');
+SoN::IR::NodeFactory->register('Ref',          'SoN::IR::Node::Ref');
+SoN::IR::NodeFactory->register('PostfixDeref', 'SoN::IR::Node::PostfixDeref');
+
 # Assignment node
 use SoN::IR::Node::Assign;
 SoN::IR::NodeFactory->register('Assign', 'SoN::IR::Node::Assign');
