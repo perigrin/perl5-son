@@ -222,4 +222,24 @@ SoN::IR::NodeFactory->register('HashRef',     'SoN::IR::Node::HashRef');
 SoN::IR::NodeFactory->register('ArrayRef',    'SoN::IR::Node::ArrayRef');
 SoN::IR::NodeFactory->register('Interpolate', 'SoN::IR::Node::Interpolate');
 
+# Standalone nodes
+use SoN::IR::Node::TernaryExpr;
+use SoN::IR::Node::TryCatch;
+use SoN::IR::Node::BacktickExpr;
+use SoN::IR::Node::StructRef;
+use SoN::IR::Node::StructFieldAccess;
+use SoN::IR::Node::AnonSub;
+use SoN::IR::Node::RegexMatch;
+use SoN::IR::Node::RegexSubst;
+use SoN::IR::Node::VarDecl;
+SoN::IR::NodeFactory->register('TernaryExpr',       'SoN::IR::Node::TernaryExpr');
+SoN::IR::NodeFactory->register('TryCatch',          'SoN::IR::Node::TryCatch');
+SoN::IR::NodeFactory->register('BacktickExpr',      'SoN::IR::Node::BacktickExpr');
+SoN::IR::NodeFactory->register('StructRef',         'SoN::IR::Node::StructRef');
+SoN::IR::NodeFactory->register('StructFieldAccess', 'SoN::IR::Node::StructFieldAccess');
+SoN::IR::NodeFactory->register('AnonSub',           'SoN::IR::Node::AnonSub');
+SoN::IR::NodeFactory->register('RegexMatch',        'SoN::IR::Node::RegexMatch');
+SoN::IR::NodeFactory->register('RegexSubst',        'SoN::IR::Node::RegexSubst');
+SoN::IR::NodeFactory->register('VarDecl',           'SoN::IR::Node::VarDecl');
+
 1;
