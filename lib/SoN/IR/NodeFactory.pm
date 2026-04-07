@@ -152,6 +152,38 @@ SoN::IR::NodeFactory->register('Complement',  'SoN::IR::Node::Complement');
 use SoN::IR::Node::Assign;
 SoN::IR::NodeFactory->register('Assign', 'SoN::IR::Node::Assign');
 
+# Compound assignment node
+use SoN::IR::Node::CompoundAssign;
+SoN::IR::NodeFactory->register('CompoundAssign', 'SoN::IR::Node::CompoundAssign');
+
+# Regex binding nodes
+use SoN::IR::Node::Match;
+use SoN::IR::Node::NotMatch;
+SoN::IR::NodeFactory->register('Match',    'SoN::IR::Node::Match');
+SoN::IR::NodeFactory->register('NotMatch', 'SoN::IR::Node::NotMatch');
+
+# String/list repetition node
+use SoN::IR::Node::Repeat;
+SoN::IR::NodeFactory->register('Repeat', 'SoN::IR::Node::Repeat');
+
+# Defined-or operator node
+use SoN::IR::Node::DefinedOr;
+SoN::IR::NodeFactory->register('DefinedOr', 'SoN::IR::Node::DefinedOr');
+
+# Logical exclusive or node
+use SoN::IR::Node::Xor;
+SoN::IR::NodeFactory->register('Xor', 'SoN::IR::Node::Xor');
+
+# Range operator nodes
+use SoN::IR::Node::Range;
+use SoN::IR::Node::Yada;
+SoN::IR::NodeFactory->register('Range', 'SoN::IR::Node::Range');
+SoN::IR::NodeFactory->register('Yada',  'SoN::IR::Node::Yada');
+
+# Type check operator node
+use SoN::IR::Node::IsaOp;
+SoN::IR::NodeFactory->register('IsaOp', 'SoN::IR::Node::IsaOp');
+
 # Call node
 use SoN::IR::Node::Call;
 SoN::IR::NodeFactory->register('Call', 'SoN::IR::Node::Call');
