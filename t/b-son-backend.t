@@ -84,4 +84,51 @@ subtest 'JSON graph structure has required fields' => sub {
     ok(exists $method->{returns}, 'method has returns');
 };
 
+# ====================================================
+# Test 7: package filter — single package, JSON
+# ====================================================
+
+subtest 'package filter emits only specified package (json)' => sub {
+    my $output = `$perl -Ilib -MO=SoN,json,package=Baz -e 'package Baz; sub quux { 3 } package Qux; sub nope { 4 }' 2>/dev/null`;
+    my $data = eval { JSON::PP::decode_json($output) };
+    ok(!$@, "JSON parses without error: $@");
+    ok(exists $data->{methods}{'Baz::quux'}, 'filtered output has Baz::quux');
+    ok(!exists $data->{methods}{'Qux::nope'}, 'filtered output excludes Qux::nope');
+};
+
+# ====================================================
+# Test 8: package filter — multiple packages
+# ====================================================
+
+subtest 'multiple package filters emit all specified packages' => sub {
+    my $output = `$perl -Ilib -MO=SoN,json,package=Foo,package=Bar -e 'package Foo; sub f { 1 } package Bar; sub b { 2 } package Baz; sub z { 3 }' 2>/dev/null`;
+    my $data = eval { JSON::PP::decode_json($output) };
+    ok(!$@, "JSON parses without error: $@");
+    ok(exists $data->{methods}{'Foo::f'}, 'output has Foo::f');
+    ok(exists $data->{methods}{'Bar::b'}, 'output has Bar::b');
+    ok(!exists $data->{methods}{'Baz::z'}, 'output excludes Baz::z');
+};
+
+# ====================================================
+# Test 9: package filter — text format
+# ====================================================
+
+subtest 'package filter works with text output' => sub {
+    my $output = `$perl -Ilib -MO=SoN,package=Baz -e 'package Baz; sub quux { 3 } package Qux; sub nope { 4 }' 2>&1`;
+    like($output, qr/=== Baz::quux ===/, 'text output has Baz::quux header');
+    unlike($output, qr/=== Qux::nope ===/, 'text output excludes Qux::nope header');
+};
+
+# ====================================================
+# Test 10: no package filter — backwards compatible
+# ====================================================
+
+subtest 'no package filter emits all packages (backwards compat)' => sub {
+    my $output = `$perl -Ilib -MO=SoN,json -e 'package Foo; sub f { 1 } package Bar; sub b { 2 }' 2>/dev/null`;
+    my $data = eval { JSON::PP::decode_json($output) };
+    ok(!$@, "JSON parses without error: $@");
+    ok(exists $data->{methods}{'Foo::f'}, 'unfiltered output has Foo::f');
+    ok(exists $data->{methods}{'Bar::b'}, 'unfiltered output has Bar::b');
+};
+
 done_testing;

@@ -18,8 +18,17 @@ sub compile {
     my $format = 'text';
     $format    = 'json' if grep { $_ eq 'json' } @opts;
 
+    # Collect package= filters (exact match, multiple allowed)
+    my %pkg_filter;
+    for my $opt (@opts) {
+        if ( $opt =~ /^package=(.+)$/ ) {
+            $pkg_filter{$1} = 1;
+        }
+    }
+    my $filter = %pkg_filter ? \%pkg_filter : undef;
+
     return sub {
-        my %graphs = _discover_and_translate();
+        my %graphs = _discover_and_translate($filter);
 
         if ( $format eq 'json' ) {
             print to_json( \%graphs );
@@ -38,8 +47,9 @@ sub compile {
 # _discover_and_translate() — walk all package stashes and translate CVs to
 # SoN graphs.  Returns a flat hash of fully-qualified name => graph.
 sub _discover_and_translate {
+    my ($filter) = @_;
     my %graphs;
-    _walk_package( \%graphs, 'main', \%main:: );
+    _walk_package( \%graphs, 'main', \%main::, $filter );
     return %graphs;
 }
 
@@ -50,14 +60,18 @@ sub _discover_and_translate {
 # Perl stashes always report their own NAME in canonical form, so we derive
 # it from the stash itself rather than constructing it from the parent path.
 sub _walk_package {
-    my ( $graphs, $pkg_name, $stash ) = @_;
+    my ( $graphs, $pkg_name, $stash, $filter ) = @_;
 
     no strict 'refs';
+
+    # If filter is active and this package is not in the filter, skip CVs
+    my $emit_cvs = !$filter || exists $filter->{$pkg_name};
 
     for my $name ( sort keys %$stash ) {
         # Skip sub-package slots (end with ::) and non-identifier names
         next if $name =~ /::$/;
         next if $name =~ /^[^a-zA-Z_]/;
+        next unless $emit_cvs;
 
         # Obtain the GV for this slot via the canonical package name
         my $gv = eval { svref_2object( \*{"${pkg_name}::${name}"} ) };
@@ -107,7 +121,7 @@ sub _walk_package {
             B::svref_2object($sub_stash)->NAME
         } // "${pkg_name}::${sub_pkg_short}";
 
-        _walk_package( $graphs, $canonical_name, $sub_stash );
+        _walk_package( $graphs, $canonical_name, $sub_stash, $filter );
     }
 }
 
