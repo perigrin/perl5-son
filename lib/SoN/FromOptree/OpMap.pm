@@ -41,8 +41,8 @@ class SoN::FromOptree::OpMap 0.01 {
         # === Pad (lexical) variable access ===
         padsv       => [0, 'PadAccess', 1, 0],
         padsv_store => [1, 'Assign',    1, 0],
-        padav       => [0, 'PadAccess', 1, 0],
-        padhv       => [0, 'PadAccess', 1, 0],
+        # padav/padhv handled directly in FromOptree.pm (need targ/varname extraction)
+        # argelem handled directly in FromOptree.pm (need targ/varname extraction)
 
         # === Global variable access ===
         gv        => [0, 'StashAccess', 1, 0],
@@ -439,7 +439,7 @@ class SoN::FromOptree::OpMap 0.01 {
         setpriority => [3, 'Call',      1, 0],
 
         # === Argument handling ===
-        argelem     => [0, 'PadAccess', 1, 0],
+        # argelem handled directly in FromOptree.pm (needs targ/varname extraction)
         argdefelem  => [1, undef,       1, BRANCH],
 
         # === Deferred blocks ===

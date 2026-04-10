@@ -358,6 +358,32 @@ class SoN::FromOptree 0.01 {
                 next;
             }
 
+            # Handle padav/padhv - lexical array/hash variable access
+            if ($name eq 'padav' || $name eq 'padhv') {
+                my $targ = $op->targ;
+                my $existing = $sim->lookup($targ);
+                if ($existing) {
+                    $sim->push_node($existing);
+                } else {
+                    my $node = _make_pad_or_field($cv, $targ, $factory);
+                    $sim->define($targ, $node);
+                    $sim->push_node($node);
+                }
+                $op = $op->next;
+                next;
+            }
+
+            # Handle argelem -- subroutine signature parameter binding to pad slot
+            if ($name eq 'argelem') {
+                my $targ = $op->targ;
+                my $varname = _padname($cv, $targ);
+                my $node = $factory->make('PadAccess', targ => $targ, varname => $varname);
+                $sim->define($targ, $node);
+                $sim->push_node($node);
+                $op = $op->next;
+                next;
+            }
+
             # Handle sassign - scalar assignment
             if ($name eq 'sassign') {
                 my $value = $sim->pop_node;
@@ -466,7 +492,13 @@ class SoN::FromOptree 0.01 {
                 }
 
                 if (defined $node_type) {
-                    my $node = $factory->make($node_type, inputs => \@inputs);
+                    my %extra;
+                    # Call nodes require dispatch_kind and name from the op
+                    if ($node_type eq 'Call') {
+                        $extra{dispatch_kind} = 'builtin';
+                        $extra{name}          = $name;
+                    }
+                    my $node = $factory->make($node_type, inputs => \@inputs, %extra);
                     if ($push_count) {
                         $sim->push_node($node);
                     }
@@ -602,6 +634,32 @@ class SoN::FromOptree 0.01 {
                 next;
             }
 
+            # Handle padav/padhv - lexical array/hash variable access
+            if ($name eq 'padav' || $name eq 'padhv') {
+                my $targ = $op->targ;
+                my $existing = $sim->lookup($targ);
+                if ($existing) {
+                    $sim->push_node($existing);
+                } else {
+                    my $node = _make_pad_or_field($cv, $targ, $factory);
+                    $sim->define($targ, $node);
+                    $sim->push_node($node);
+                }
+                $op = $op->next;
+                next;
+            }
+
+            # Handle argelem -- subroutine signature parameter binding to pad slot
+            if ($name eq 'argelem') {
+                my $targ = $op->targ;
+                my $varname = _padname($cv, $targ);
+                my $node = $factory->make('PadAccess', targ => $targ, varname => $varname);
+                $sim->define($targ, $node);
+                $sim->push_node($node);
+                $op = $op->next;
+                next;
+            }
+
             # Handle sassign
             if ($name eq 'sassign') {
                 my $value = $sim->pop_node;
@@ -629,14 +687,22 @@ class SoN::FromOptree 0.01 {
                 my $node_type = $opmap->node_type($name);
 
                 my @inputs;
-                if (defined $pop_count && $pop_count > 0) {
+                if (defined $pop_count && $pop_count eq 'mark') {
+                    my $args = $sim->pop_to_mark;
+                    @inputs = $args->@*;
+                } elsif (defined $pop_count && $pop_count > 0) {
                     for (1 .. $pop_count) {
                         unshift @inputs, $sim->pop_node;
                     }
                 }
 
                 if (defined $node_type) {
-                    my $node = $factory->make($node_type, inputs => \@inputs);
+                    my %extra;
+                    if ($node_type eq 'Call') {
+                        $extra{dispatch_kind} = 'builtin';
+                        $extra{name}          = $name;
+                    }
+                    my $node = $factory->make($node_type, inputs => \@inputs, %extra);
                     $sim->define($op->targ, $node);
                     $sim->push_node($node);
                 }
@@ -662,7 +728,12 @@ class SoN::FromOptree 0.01 {
                 }
 
                 if (defined $node_type) {
-                    my $node = $factory->make($node_type, inputs => \@inputs);
+                    my %extra;
+                    if ($node_type eq 'Call') {
+                        $extra{dispatch_kind} = 'builtin';
+                        $extra{name}          = $name;
+                    }
+                    my $node = $factory->make($node_type, inputs => \@inputs, %extra);
                     $sim->push_node($node) if $push_count;
                 }
 
@@ -721,6 +792,34 @@ class SoN::FromOptree 0.01 {
                 next;
             }
 
+            # Handle padav/padhv - lexical array/hash variable access
+            if ($name eq 'padav' || $name eq 'padhv') {
+                my $targ = $op->targ;
+                my $existing = $sim->lookup($targ);
+                if ($existing) {
+                    $sim->push_node($existing);
+                } else {
+                    my $varname = _padname($cv, $targ);
+                    my $node = $factory->make('PadAccess', targ => $targ, varname => $varname);
+                    $sim->define($targ, $node);
+                    $sim->push_node($node);
+                }
+                $op = $op->next;
+                next;
+            }
+
+            # Handle argelem -- signature parameter binding to a pad slot.
+            # argelem stores the argument in a pad slot, similar to padsv.
+            if ($name eq 'argelem') {
+                my $targ = $op->targ;
+                my $varname = _padname($cv, $targ);
+                my $node = $factory->make('PadAccess', targ => $targ, varname => $varname);
+                $sim->define($targ, $node);
+                $sim->push_node($node);
+                $op = $op->next;
+                next;
+            }
+
             # Handle sassign in branch
             if ($name eq 'sassign') {
                 my $value = $sim->pop_node;
@@ -758,7 +857,12 @@ class SoN::FromOptree 0.01 {
                 }
 
                 if (defined $node_type) {
-                    my $node = $factory->make($node_type, inputs => \@inputs);
+                    my %extra;
+                    if ($node_type eq 'Call') {
+                        $extra{dispatch_kind} = 'builtin';
+                        $extra{name}          = $name;
+                    }
+                    my $node = $factory->make($node_type, inputs => \@inputs, %extra);
                     $sim->push_node($node) if $push_count;
                 }
 
