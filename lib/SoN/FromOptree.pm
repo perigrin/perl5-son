@@ -27,7 +27,16 @@ class SoN::FromOptree 0.01 {
 
         my %visited;
         my $op = $cv->START;
-        my $ctx = { mode => 'main' };
+        # @exits accumulates every explicit return/leavesub exit as
+        # { control => <cfg node>, value => <value node> }. A return inside a
+        # branch arm is a control edge to the FUNCTION exit, not a value that
+        # merges back into the post-branch stack -- so we collect all exits and
+        # build ONE Region+Phi+Return at the end (single-exit normalization,
+        # Phase 4b-1). Shared with _walk_branch via $ctx so an early return in
+        # an arm records its exit instead of dying / truncating the graph.
+        my @exits;
+        my $main_terminated = 0;   # set when the main path hits return/leavesub
+        my $ctx = { mode => 'main', exits => \@exits };
 
         while ($$op) {
             last if $visited{$$op}++;
@@ -104,7 +113,8 @@ class SoN::FromOptree 0.01 {
                 if ($name eq 'and') {
                     $true_sim->push_node($cond) if $name eq 'or';
                 }
-                my $true_end = _walk_branch($cv, $op->next, $true_sim, $factory, $opmap, \%visited);
+                my ($true_end, $true_sig)
+                    = _walk_branch($cv, $op->next, $true_sim, $factory, $opmap, \%visited, \@exits);
 
                 # Walk false path (op->other)
                 my $false_sim = $sim->snapshot;
@@ -112,18 +122,37 @@ class SoN::FromOptree 0.01 {
                 if ($name eq 'or') {
                     $false_sim->push_node($cond);
                 }
-                my $false_end = _walk_branch($cv, $op->other, $false_sim, $factory, $opmap, \%visited);
+                my ($false_end, $false_sig)
+                    = _walk_branch($cv, $op->other, $false_sim, $factory, $opmap, \%visited, \@exits);
 
-                # Merge at convergence
+                # If exactly one arm exited the function (early return), the
+                # OTHER arm continues alone from this If's Proj -- no merge
+                # Region, no rejoin. The exited arm is already recorded in
+                # @exits and built into the final single-exit Return.
+                if (($true_sig // '') eq 'exited' && ($false_sig // '') ne 'exited') {
+                    $sim->set_control($false_proj);
+                    $sim->push_node($false_sim->pop_node) if $false_sim->stack_depth > 0;
+                    $op = $false_end // $op->other;
+                    next;
+                }
+                if (($false_sig // '') eq 'exited' && ($true_sig // '') ne 'exited') {
+                    $sim->set_control($true_proj);
+                    $sim->push_node($true_sim->pop_node) if $true_sim->stack_depth > 0;
+                    $op = $true_end // $op->next;
+                    next;
+                }
+                # Both arms exited: nothing continues past the If -- the walk
+                # ends, both exits are recorded. Stop the main loop.
+                if (($true_sig // '') eq 'exited' && ($false_sig // '') eq 'exited') {
+                    last;
+                }
+
+                # Neither arm exited: the normal value-merge (unchanged).
                 my $region = $true_sim->merge($false_sim, $factory);
                 $sim->set_control($region);
-
-                # The result is on the merged stack
                 if ($true_sim->stack_depth > 0) {
                     $sim->push_node($true_sim->pop_node);
                 }
-
-                # Continue from where both branches converged
                 $op = $true_end // $op->next;
                 next;
             }
@@ -274,42 +303,21 @@ class SoN::FromOptree 0.01 {
                 next;
             }
 
-            # Handle return specially
+            # Handle return / leavesub: record an exit and STOP this linear
+            # path. The final single Return is built from @exits below (plus
+            # the fall-through value if the walk reaches the sub end without an
+            # explicit terminal return). On the main path this is the function
+            # exit; reached inside a branch arm it is recorded by _walk_branch
+            # the same way.
             if ($name eq 'return') {
-                my $args = $sim->pop_to_mark;
-                my $retval = $args->@* ? $args->[-1] : $factory->make('Constant',
-                    value      => undef,
-                    const_type => 'undef',
-                    stamp      => SoN::IR::Stamp->new(type => 'Undef'));
-                my $ret = $factory->make_cfg('Return',
-                    inputs => [$sim->control, $retval]);
-                my $graph = SoN::IR::Graph->new(
-                    start   => $start,
-                    returns => [$ret],
-                    source  => $coderef,
-                );
-                return $graph;
+                push @exits, _exit_record($sim, $factory, 'return');
+                $main_terminated = 1;
+                last;
             }
-
-            # Handle leavesub - implicit return of top of stack
             if ($name eq 'leavesub' || $name eq 'leavesublv') {
-                my $retval;
-                if ($sim->stack_depth > 0) {
-                    $retval = $sim->pop_node;
-                } else {
-                    $retval = $factory->make('Constant',
-                        value      => undef,
-                        const_type => 'undef',
-                        stamp      => SoN::IR::Stamp->new(type => 'Undef'));
-                }
-                my $ret = $factory->make_cfg('Return',
-                    inputs => [$sim->control, $retval]);
-                my $graph = SoN::IR::Graph->new(
-                    start   => $start,
-                    returns => [$ret],
-                    source  => $coderef,
-                );
-                return $graph;
+                push @exits, _exit_record($sim, $factory, 'leavesub');
+                $main_terminated = 1;
+                last;
             }
 
             # Handle match - regex match op: /pattern/flags against pad variable
@@ -382,23 +390,64 @@ class SoN::FromOptree 0.01 {
             $op = $op->next;
         }
 
-        # If we fell through without a return/leavesub, build graph from stack
-        my $retval;
-        if ($sim->stack_depth > 0) {
-            $retval = $sim->pop_node;
-        } else {
-            $retval = $factory->make('Constant',
-                value      => undef,
-                const_type => 'undef',
-                stamp      => SoN::IR::Stamp->new(type => 'Undef'));
+        # If the main path ran to the end of the op chain WITHOUT a terminal
+        # return/leavesub (and both branch arms didn't already exit), the final
+        # stack value is one more exit. A both-arms-exited body (last via the
+        # and-handler) leaves $main_terminated false but @exits already holds
+        # every exit and the sim has no continuation value to add.
+        if (!$main_terminated && $sim->stack_depth > 0) {
+            push @exits, _exit_record($sim, $factory, 'fallthrough');
         }
-        my $ret = $factory->make_cfg('Return',
-            inputs => [$sim->control, $retval]);
+        elsif (!@exits) {
+            # No explicit return anywhere and an empty stack: undef return.
+            push @exits, _exit_record($sim, $factory, 'fallthrough');
+        }
+
+        my $ret = _build_single_exit($factory, \@exits);
         return SoN::IR::Graph->new(
             start   => $start,
             returns => [$ret],
             source  => $coderef,
         );
+    }
+
+    # _exit_record($sim, $factory, $kind) -> { control, value }
+    # Capture a function-exit edge: the control node at this point and the
+    # value being returned. 'return' pops to the mark (the return-list's last
+    # value); 'leavesub'/'fallthrough' take the top of stack; an empty stack
+    # is an undef return.
+    sub _exit_record ($sim, $factory, $kind) {
+        my $value;
+        if ($kind eq 'return') {
+            my $args = $sim->pop_to_mark;
+            $value = $args->@* ? $args->[-1] : undef;
+        }
+        elsif ($sim->stack_depth > 0) {
+            $value = $sim->pop_node;
+        }
+        $value //= $factory->make('Constant',
+            value      => undef,
+            const_type => 'undef',
+            stamp      => SoN::IR::Stamp->new(type => 'Undef'));
+        return { control => $sim->control, value => $value };
+    }
+
+    # _build_single_exit($factory, \@exits) -> the single Return node.
+    # One exit: a plain Return. Multiple exits (early returns): merge the
+    # control edges through a Region and the values through a Phi over that
+    # Region, then one Return -- the single-exit shape the LLVM backend's
+    # _method_body_root requires.
+    sub _build_single_exit ($factory, $exits) {
+        if (@$exits == 1) {
+            return $factory->make_cfg('Return',
+                inputs => [$exits->[0]{control}, $exits->[0]{value}]);
+        }
+        my $region = $factory->make_cfg('Region',
+            inputs => [map { $_->{control} } @$exits]);
+        my $phi = $factory->make('Phi',
+            inputs => [map { $_->{value} } @$exits],
+            region => $region);
+        return $factory->make_cfg('Return', inputs => [$region, $phi]);
     }
 
     # Extract value, stamp, and const_type from a B::SV.
@@ -666,14 +715,29 @@ class SoN::FromOptree 0.01 {
         }
     }
 
-    # Walk a branch path until we hit a visited op or end
-    sub _walk_branch ($cv, $op, $sim, $factory, $opmap, $visited) {
+    # Walk a branch path until we hit a visited op, a function exit, or end.
+    # $exits (optional) is the shared single-exit accumulator: an explicit
+    # return/leavesub inside this arm is a control edge to the FUNCTION exit,
+    # recorded there and terminating the arm with the 'exited' signal so the
+    # caller's merge knows this arm does not rejoin (Phase 4b-1). When $exits
+    # is not passed (older callers: dor/cond_expr/trycatch arms that compute a
+    # value), a return falls through to the legacy stop-at-op behavior.
+    sub _walk_branch ($cv, $op, $sim, $factory, $opmap, $visited, $exits = undef) {
         my $ctx = { mode => 'branch' };
         while ($$op) {
             # If we've already visited this op, we've converged
             return $op if $visited->{$$op};
-            $visited->{$$op}++;
 
+            my $name = $op->name;
+            if ($exits && ($name eq 'return' || $name eq 'leavesub'
+                    || $name eq 'leavesublv')) {
+                $visited->{$$op}++;
+                push @$exits, _exit_record($sim, $factory,
+                    $name eq 'return' ? 'return' : 'leavesub');
+                return ($op, 'exited');
+            }
+
+            $visited->{$$op}++;
             my ($next, $sig) = _step($cv, $op, $sim, $factory, $opmap, $ctx);
             if ($sig eq 'unhandled') {
                 # Hit a branch or unknown - stop
