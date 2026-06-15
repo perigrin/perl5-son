@@ -27,24 +27,12 @@ class SoN::FromOptree 0.01 {
 
         my %visited;
         my $op = $cv->START;
+        my $ctx = { mode => 'main' };
 
         while ($$op) {
             last if $visited{$$op}++;
 
             my $name = $op->name;
-
-            # Handle pushmark specially - just record the mark
-            if ($name eq 'pushmark') {
-                $sim->push_mark;
-                $op = $op->next;
-                next;
-            }
-
-            # Skip bookkeeping ops
-            if ($opmap->is_skip($name)) {
-                $op = $op->next;
-                next;
-            }
 
             # dor op: $lhs // $rhs -> DefinedOr node
             if ($opmap->is_branch($name) && $name eq 'dor') {
@@ -324,100 +312,6 @@ class SoN::FromOptree 0.01 {
                 return $graph;
             }
 
-            # Handle const specially - extract value from the op
-            if ($name eq 'const') {
-                my $sv = $op->sv;
-                # For B::SPECIAL (shared constants), use the SV from padlist
-                if (!$$sv || $sv->isa('B::SPECIAL')) {
-                    my $targ = $op->targ;
-                    my $padl = $cv->PADLIST;
-                    if ($targ && $$padl) {
-                        $sv = $padl->ARRAYelt(1)->ARRAYelt($targ);
-                    }
-                }
-                my ($value, $stamp, $const_type) = _extract_const($sv);
-                my $node = $factory->make('Constant',
-                    value => $value, stamp => $stamp, const_type => $const_type);
-                $sim->push_node($node);
-                $op = $op->next;
-                next;
-            }
-
-            # Handle padsv - lexical variable or field access
-            if ($name eq 'padsv') {
-                my $targ = $op->targ;
-                my $existing = $sim->lookup($targ);
-                if ($existing) {
-                    $sim->push_node($existing);
-                } else {
-                    my $node = _make_pad_or_field($cv, $targ, $factory);
-                    $sim->define($targ, $node);
-                    $sim->push_node($node);
-                }
-                $op = $op->next;
-                next;
-            }
-
-            # Handle padav/padhv - lexical array/hash variable access
-            if ($name eq 'padav' || $name eq 'padhv') {
-                my $targ = $op->targ;
-                my $existing = $sim->lookup($targ);
-                if ($existing) {
-                    $sim->push_node($existing);
-                } else {
-                    my $node = _make_pad_or_field($cv, $targ, $factory);
-                    $sim->define($targ, $node);
-                    $sim->push_node($node);
-                }
-                $op = $op->next;
-                next;
-            }
-
-            # Handle argelem -- subroutine signature parameter binding to pad slot
-            if ($name eq 'argelem') {
-                my $targ = $op->targ;
-                my $varname = _padname($cv, $targ);
-                my $node = $factory->make('PadAccess', targ => $targ, varname => $varname);
-                $sim->define($targ, $node);
-                $sim->push_node($node);
-                $op = $op->next;
-                next;
-            }
-
-            # Handle sassign - scalar assignment
-            if ($name eq 'sassign') {
-                my $value = $sim->pop_node;
-                my $target = $sim->pop_node;
-                # If target is a PadAccess, update the scope binding
-                if ($target->isa('SoN::IR::Node::PadAccess')) {
-                    $sim->define($target->targ, $value);
-                }
-                $sim->push_node($value);
-                $op = $op->next;
-                next;
-            }
-
-            # Handle padsv_store - optimized pad assignment
-            if ($name eq 'padsv_store') {
-                my $value = $sim->pop_node;
-                my $targ = $op->targ;
-                # OPpLVAL_INTRO (128) indicates a new lexical declaration (my $x)
-                if ($op->private & 128) {
-                    my $pad_node = _make_pad_or_field($cv, $targ, $factory);
-                    # VarDecl wraps the pad slot; value stays as the scope binding
-                    # so subsequent uses of the variable return the rhs value, not
-                    # the declaration node.  Inputs include the value so VarDecl
-                    # remains reachable in the graph traversal.
-                    $factory->make('VarDecl',
-                        inputs => [$pad_node, $value],
-                        scope  => 'my');
-                }
-                $sim->define($targ, $value);
-                $sim->push_node($value);
-                $op = $op->next;
-                next;
-            }
-
             # Handle match - regex match op: /pattern/flags against pad variable
             if ($name eq 'match' && $op->isa('B::PMOP')) {
                 my $pattern = $op->precomp // '';
@@ -475,36 +369,11 @@ class SoN::FromOptree 0.01 {
                 next;
             }
 
-            # Generic op handling via OpMap
-            if ($opmap->is_known($name)) {
-                my $pop_count = $opmap->pop_count($name);
-                my $node_type = $opmap->node_type($name);
-                my $push_count = $opmap->push_count($name);
-
-                my @inputs;
-                if (defined $pop_count && $pop_count eq 'mark') {
-                    my $args = $sim->pop_to_mark;
-                    @inputs = $args->@*;
-                } elsif (defined $pop_count && $pop_count > 0) {
-                    for (1 .. $pop_count) {
-                        unshift @inputs, $sim->pop_node;
-                    }
-                }
-
-                if (defined $node_type) {
-                    my %extra;
-                    # Call nodes require dispatch_kind and name from the op
-                    if ($node_type eq 'Call') {
-                        $extra{dispatch_kind} = 'builtin';
-                        $extra{name}          = $name;
-                    }
-                    my $node = $factory->make($node_type, inputs => \@inputs, %extra);
-                    if ($push_count) {
-                        $sim->push_node($node);
-                    }
-                }
-
-                $op = $op->next;
+            # Common op-set (const, pad access, sassign, padsv_store, generic
+            # OpMap dispatch) via the shared step handler.
+            my ($next, $sig) = _step($cv, $op, $sim, $factory, $opmap, $ctx);
+            if ($sig ne 'unhandled') {
+                $op = $next;
                 next;
             }
 
@@ -569,17 +438,202 @@ class SoN::FromOptree 0.01 {
         }
     }
 
+    # Shared op-handler core for all three walkers.
+    #
+    #   _step($cv, $op, $sim, $factory, $opmap, $ctx) -> ($next_op, $signal)
+    #     $ctx = { mode => 'main'|'branch'|'loop' }
+    #
+    # Handles ONLY the common op-set that is identical across translate,
+    # _walk_branch, and _walk_loop_body: pushmark, the skip-ops, const, padsv,
+    # padav/padhv, argelem, sassign, padsv_store, the TARGMY-write path, and the
+    # generic OpMap dispatch.  Two of these have a per-walker difference that is
+    # preserved via $ctx->{mode}: the padsv_store OPpLVAL_INTRO VarDecl emission
+    # (main only) and the TARGMY-write define path (loop only).
+    #
+    # Returns ($op->next-or-equivalent, 'handled') when it consumed the op, or
+    # ($op, 'unhandled') for any op the common core does not own so the caller's
+    # mode-specific switch runs.
+    sub _step ($cv, $op, $sim, $factory, $opmap, $ctx) {
+        my $name = $op->name;
+        my $mode = $ctx->{mode};
+
+        # Handle pushmark specially - just record the mark
+        if ($name eq 'pushmark') {
+            $sim->push_mark;
+            return ($op->next, 'handled');
+        }
+
+        # Skip bookkeeping ops
+        if ($opmap->is_skip($name)) {
+            return ($op->next, 'handled');
+        }
+
+        # Handle const specially - extract value from the op
+        if ($name eq 'const') {
+            my $sv = $op->sv;
+            # For B::SPECIAL (shared constants), use the SV from padlist
+            if (!$$sv || $sv->isa('B::SPECIAL')) {
+                my $targ = $op->targ;
+                my $padl = $cv->PADLIST;
+                if ($targ && $$padl) {
+                    $sv = $padl->ARRAYelt(1)->ARRAYelt($targ);
+                }
+            }
+            my ($value, $stamp, $const_type) = _extract_const($sv);
+            my $node = $factory->make('Constant',
+                value => $value, stamp => $stamp, const_type => $const_type);
+            $sim->push_node($node);
+            return ($op->next, 'handled');
+        }
+
+        # Handle padsv - lexical variable or field access
+        if ($name eq 'padsv') {
+            my $targ = $op->targ;
+            my $existing = $sim->lookup($targ);
+            if ($existing) {
+                $sim->push_node($existing);
+            } else {
+                my $node = _make_pad_or_field($cv, $targ, $factory);
+                $sim->define($targ, $node);
+                $sim->push_node($node);
+            }
+            return ($op->next, 'handled');
+        }
+
+        # Handle padav/padhv - lexical array/hash variable access
+        if ($name eq 'padav' || $name eq 'padhv') {
+            my $targ = $op->targ;
+            my $existing = $sim->lookup($targ);
+            if ($existing) {
+                $sim->push_node($existing);
+            } else {
+                my $node = _make_pad_or_field($cv, $targ, $factory);
+                $sim->define($targ, $node);
+                $sim->push_node($node);
+            }
+            return ($op->next, 'handled');
+        }
+
+        # Handle argelem -- subroutine signature parameter binding to pad slot
+        if ($name eq 'argelem') {
+            my $targ = $op->targ;
+            my $varname = _padname($cv, $targ);
+            my $node = $factory->make('PadAccess', targ => $targ, varname => $varname);
+            $sim->define($targ, $node);
+            $sim->push_node($node);
+            return ($op->next, 'handled');
+        }
+
+        # Handle sassign - scalar assignment
+        if ($name eq 'sassign') {
+            my $value = $sim->pop_node;
+            my $target = $sim->pop_node;
+            # If target is a PadAccess, update the scope binding
+            if ($target->isa('SoN::IR::Node::PadAccess')) {
+                $sim->define($target->targ, $value);
+            }
+            $sim->push_node($value);
+            return ($op->next, 'handled');
+        }
+
+        # Handle padsv_store - optimized pad assignment
+        if ($name eq 'padsv_store') {
+            my $value = $sim->pop_node;
+            my $targ = $op->targ;
+            # OPpLVAL_INTRO (128) indicates a new lexical declaration (my $x).
+            # Only the main walker emits the VarDecl wrapper.
+            if ($mode eq 'main' && ($op->private & 128)) {
+                my $pad_node = _make_pad_or_field($cv, $targ, $factory);
+                # VarDecl wraps the pad slot; value stays as the scope binding
+                # so subsequent uses of the variable return the rhs value, not
+                # the declaration node.  Inputs include the value so VarDecl
+                # remains reachable in the graph traversal.
+                $factory->make('VarDecl',
+                    inputs => [$pad_node, $value],
+                    scope  => 'my');
+            }
+            $sim->define($targ, $value);
+            $sim->push_node($value);
+            return ($op->next, 'handled');
+        }
+
+        # Handle ops with TARGMY (add[$i:1,6] vK/TARGMY) - writes result to pad.
+        # Only the loop walker takes this path; in other modes a TARGMY op falls
+        # through to the generic OpMap dispatch.
+        if ($mode eq 'loop'
+            && $opmap->is_known($name) && $op->can('targ') && $op->targ
+            && ($op->private & 16)) {  # OPpTARGET_MY = 0x10
+            my $pop_count = $opmap->pop_count($name);
+            my $node_type = $opmap->node_type($name);
+
+            my @inputs;
+            if (defined $pop_count && $pop_count eq 'mark') {
+                my $args = $sim->pop_to_mark;
+                @inputs = $args->@*;
+            } elsif (defined $pop_count && $pop_count > 0) {
+                for (1 .. $pop_count) {
+                    unshift @inputs, $sim->pop_node;
+                }
+            }
+
+            if (defined $node_type) {
+                my %extra;
+                if ($node_type eq 'Call') {
+                    $extra{dispatch_kind} = 'builtin';
+                    $extra{name}          = $name;
+                }
+                my $node = $factory->make($node_type, inputs => \@inputs, %extra);
+                $sim->define($op->targ, $node);
+                $sim->push_node($node);
+            }
+
+            return ($op->next, 'handled');
+        }
+
+        # Generic op handling via OpMap.  Branch/loop ops are excluded so the
+        # caller's mode-specific switch owns them.
+        if ($opmap->is_known($name) && !$opmap->is_branch($name) && !$opmap->is_loop($name)) {
+            my $pop_count = $opmap->pop_count($name);
+            my $node_type = $opmap->node_type($name);
+            my $push_count = $opmap->push_count($name);
+
+            my @inputs;
+            if (defined $pop_count && $pop_count eq 'mark') {
+                my $args = $sim->pop_to_mark;
+                @inputs = $args->@*;
+            } elsif (defined $pop_count && $pop_count > 0) {
+                for (1 .. $pop_count) {
+                    unshift @inputs, $sim->pop_node;
+                }
+            }
+
+            if (defined $node_type) {
+                my %extra;
+                # Call nodes require dispatch_kind and name from the op
+                if ($node_type eq 'Call') {
+                    $extra{dispatch_kind} = 'builtin';
+                    $extra{name}          = $name;
+                }
+                my $node = $factory->make($node_type, inputs => \@inputs, %extra);
+                if ($push_count) {
+                    $sim->push_node($node);
+                }
+            }
+
+            return ($op->next, 'handled');
+        }
+
+        return ($op, 'unhandled');
+    }
+
     # Walk a loop body (condition + body), handling the internal and/or
     sub _walk_loop_body ($cv, $op, $sim, $factory, $opmap, $loop_visited, $outer_visited) {
+        my $ctx = { mode => 'loop' };
         while ($$op) {
             # Stop if we've looped back (unstack goes back to condition)
             last if $loop_visited->{$$op}++;
 
             my $name = $op->name;
-
-            # Skip bookkeeping
-            if ($name eq 'pushmark') { $sim->push_mark; $op = $op->next; next; }
-            if ($opmap->is_skip($name)) { $op = $op->next; next; }
 
             # unstack marks end of loop iteration - stop
             if ($name eq 'unstack') {
@@ -602,276 +656,30 @@ class SoN::FromOptree 0.01 {
                 next;
             }
 
-            # Handle const
-            if ($name eq 'const') {
-                my $sv = $op->sv;
-                if (!$$sv || $sv->isa('B::SPECIAL')) {
-                    my $targ = $op->targ;
-                    my $padl = $cv->PADLIST;
-                    if ($targ && $$padl) {
-                        $sv = $padl->ARRAYelt(1)->ARRAYelt($targ);
-                    }
-                }
-                my ($value, $stamp, $const_type) = _extract_const($sv);
-                $sim->push_node($factory->make('Constant',
-                    value => $value, stamp => $stamp, const_type => $const_type));
+            my ($next, $sig) = _step($cv, $op, $sim, $factory, $opmap, $ctx);
+            if ($sig eq 'unhandled') {
+                # Unknown - skip
                 $op = $op->next;
                 next;
             }
-
-            # Handle padsv
-            if ($name eq 'padsv') {
-                my $targ = $op->targ;
-                my $existing = $sim->lookup($targ);
-                if ($existing) {
-                    $sim->push_node($existing);
-                } else {
-                    my $node = _make_pad_or_field($cv, $targ, $factory);
-                    $sim->define($targ, $node);
-                    $sim->push_node($node);
-                }
-                $op = $op->next;
-                next;
-            }
-
-            # Handle padav/padhv - lexical array/hash variable access
-            if ($name eq 'padav' || $name eq 'padhv') {
-                my $targ = $op->targ;
-                my $existing = $sim->lookup($targ);
-                if ($existing) {
-                    $sim->push_node($existing);
-                } else {
-                    my $node = _make_pad_or_field($cv, $targ, $factory);
-                    $sim->define($targ, $node);
-                    $sim->push_node($node);
-                }
-                $op = $op->next;
-                next;
-            }
-
-            # Handle argelem -- subroutine signature parameter binding to pad slot
-            if ($name eq 'argelem') {
-                my $targ = $op->targ;
-                my $varname = _padname($cv, $targ);
-                my $node = $factory->make('PadAccess', targ => $targ, varname => $varname);
-                $sim->define($targ, $node);
-                $sim->push_node($node);
-                $op = $op->next;
-                next;
-            }
-
-            # Handle sassign
-            if ($name eq 'sassign') {
-                my $value = $sim->pop_node;
-                my $target = $sim->pop_node;
-                if ($target->isa('SoN::IR::Node::PadAccess')) {
-                    $sim->define($target->targ, $value);
-                }
-                $sim->push_node($value);
-                $op = $op->next;
-                next;
-            }
-
-            if ($name eq 'padsv_store') {
-                my $value = $sim->pop_node;
-                $sim->define($op->targ, $value);
-                $sim->push_node($value);
-                $op = $op->next;
-                next;
-            }
-
-            # Handle ops with TARGMY (add[$i:1,6] vK/TARGMY) - writes result to pad
-            if ($opmap->is_known($name) && $op->can('targ') && $op->targ
-                && ($op->private & 16)) {  # OPpTARGET_MY = 0x10
-                my $pop_count = $opmap->pop_count($name);
-                my $node_type = $opmap->node_type($name);
-
-                my @inputs;
-                if (defined $pop_count && $pop_count eq 'mark') {
-                    my $args = $sim->pop_to_mark;
-                    @inputs = $args->@*;
-                } elsif (defined $pop_count && $pop_count > 0) {
-                    for (1 .. $pop_count) {
-                        unshift @inputs, $sim->pop_node;
-                    }
-                }
-
-                if (defined $node_type) {
-                    my %extra;
-                    if ($node_type eq 'Call') {
-                        $extra{dispatch_kind} = 'builtin';
-                        $extra{name}          = $name;
-                    }
-                    my $node = $factory->make($node_type, inputs => \@inputs, %extra);
-                    $sim->define($op->targ, $node);
-                    $sim->push_node($node);
-                }
-
-                $op = $op->next;
-                next;
-            }
-
-            # Generic op via OpMap
-            if ($opmap->is_known($name) && !$opmap->is_branch($name) && !$opmap->is_loop($name)) {
-                my $pop_count = $opmap->pop_count($name);
-                my $node_type = $opmap->node_type($name);
-                my $push_count = $opmap->push_count($name);
-
-                my @inputs;
-                if (defined $pop_count && $pop_count eq 'mark') {
-                    my $args = $sim->pop_to_mark;
-                    @inputs = $args->@*;
-                } elsif (defined $pop_count && $pop_count > 0) {
-                    for (1 .. $pop_count) {
-                        unshift @inputs, $sim->pop_node;
-                    }
-                }
-
-                if (defined $node_type) {
-                    my %extra;
-                    if ($node_type eq 'Call') {
-                        $extra{dispatch_kind} = 'builtin';
-                        $extra{name}          = $name;
-                    }
-                    my $node = $factory->make($node_type, inputs => \@inputs, %extra);
-                    $sim->push_node($node) if $push_count;
-                }
-
-                $op = $op->next;
-                next;
-            }
-
-            # Unknown - skip
-            $op = $op->next;
+            $op = $next;
         }
     }
 
     # Walk a branch path until we hit a visited op or end
     sub _walk_branch ($cv, $op, $sim, $factory, $opmap, $visited) {
+        my $ctx = { mode => 'branch' };
         while ($$op) {
             # If we've already visited this op, we've converged
             return $op if $visited->{$$op};
             $visited->{$$op}++;
 
-            my $name = $op->name;
-
-            # Skip bookkeeping
-            if ($name eq 'pushmark') { $sim->push_mark; $op = $op->next; next; }
-            if ($opmap->is_skip($name)) { $op = $op->next; next; }
-
-            # Handle const
-            if ($name eq 'const') {
-                my $sv = $op->sv;
-                if (!$$sv || $sv->isa('B::SPECIAL')) {
-                    my $targ = $op->targ;
-                    my $padl = $cv->PADLIST;
-                    if ($targ && $$padl) {
-                        $sv = $padl->ARRAYelt(1)->ARRAYelt($targ);
-                    }
-                }
-                my ($value, $stamp, $const_type) = _extract_const($sv);
-                $sim->push_node($factory->make('Constant',
-                    value => $value, stamp => $stamp, const_type => $const_type));
-                $op = $op->next;
-                next;
+            my ($next, $sig) = _step($cv, $op, $sim, $factory, $opmap, $ctx);
+            if ($sig eq 'unhandled') {
+                # Hit a branch or unknown - stop
+                return $op;
             }
-
-            # Handle padsv
-            if ($name eq 'padsv') {
-                my $targ = $op->targ;
-                my $existing = $sim->lookup($targ);
-                if ($existing) {
-                    $sim->push_node($existing);
-                } else {
-                    my $varname = _padname($cv, $targ);
-                    my $node = $factory->make('PadAccess', targ => $targ, varname => $varname);
-                    $sim->define($targ, $node);
-                    $sim->push_node($node);
-                }
-                $op = $op->next;
-                next;
-            }
-
-            # Handle padav/padhv - lexical array/hash variable access
-            if ($name eq 'padav' || $name eq 'padhv') {
-                my $targ = $op->targ;
-                my $existing = $sim->lookup($targ);
-                if ($existing) {
-                    $sim->push_node($existing);
-                } else {
-                    my $varname = _padname($cv, $targ);
-                    my $node = $factory->make('PadAccess', targ => $targ, varname => $varname);
-                    $sim->define($targ, $node);
-                    $sim->push_node($node);
-                }
-                $op = $op->next;
-                next;
-            }
-
-            # Handle argelem -- signature parameter binding to a pad slot.
-            # argelem stores the argument in a pad slot, similar to padsv.
-            if ($name eq 'argelem') {
-                my $targ = $op->targ;
-                my $varname = _padname($cv, $targ);
-                my $node = $factory->make('PadAccess', targ => $targ, varname => $varname);
-                $sim->define($targ, $node);
-                $sim->push_node($node);
-                $op = $op->next;
-                next;
-            }
-
-            # Handle sassign in branch
-            if ($name eq 'sassign') {
-                my $value = $sim->pop_node;
-                my $target = $sim->pop_node;
-                if ($target->isa('SoN::IR::Node::PadAccess')) {
-                    $sim->define($target->targ, $value);
-                }
-                $sim->push_node($value);
-                $op = $op->next;
-                next;
-            }
-
-            if ($name eq 'padsv_store') {
-                my $value = $sim->pop_node;
-                $sim->define($op->targ, $value);
-                $sim->push_node($value);
-                $op = $op->next;
-                next;
-            }
-
-            # Generic op via OpMap
-            if ($opmap->is_known($name) && !$opmap->is_branch($name) && !$opmap->is_loop($name)) {
-                my $pop_count = $opmap->pop_count($name);
-                my $node_type = $opmap->node_type($name);
-                my $push_count = $opmap->push_count($name);
-
-                my @inputs;
-                if (defined $pop_count && $pop_count eq 'mark') {
-                    my $args = $sim->pop_to_mark;
-                    @inputs = $args->@*;
-                } elsif (defined $pop_count && $pop_count > 0) {
-                    for (1 .. $pop_count) {
-                        unshift @inputs, $sim->pop_node;
-                    }
-                }
-
-                if (defined $node_type) {
-                    my %extra;
-                    if ($node_type eq 'Call') {
-                        $extra{dispatch_kind} = 'builtin';
-                        $extra{name}          = $name;
-                    }
-                    my $node = $factory->make($node_type, inputs => \@inputs, %extra);
-                    $sim->push_node($node) if $push_count;
-                }
-
-                $op = $op->next;
-                next;
-            }
-
-            # Hit a branch or unknown - stop
-            return $op;
+            $op = $next;
         }
         return undef;
     }
