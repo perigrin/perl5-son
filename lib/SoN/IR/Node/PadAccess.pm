@@ -12,8 +12,13 @@ class SoN::IR::Node::PadAccess :isa(SoN::IR::Node) {
     method operation () { 'PadAccess' }
 
     method content_hash () {
+        # Identity is the variable name plus inputs. `targ` (the pad-slot index)
+        # is CV-local and unstable across compilation units, so it is NOT
+        # identity-bearing: two semantically identical reads at different pad
+        # indices must hash-cons together. `targ` is retained as a serialized
+        # diagnostic field only (no consumer reads it behaviorally).
         my @input_ids = map { $_->id } $self->inputs->@*;
-        return "PadAccess|targ=" . $targ
+        return "PadAccess"
              . "|varname=" . $varname
              . "|" . CORE::join('|', @input_ids);
     }

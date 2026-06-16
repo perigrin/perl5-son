@@ -766,15 +766,20 @@ class SoN::FromOptree 0.01 {
         return $factory->make('PadAccess', targ => $targ, varname => $varname);
     }
 
-    # Get the variable name for a pad index
+    # Get the variable name for a pad index.
+    #
+    # When a usable pad name is unavailable (anonymous/temporary slots), the
+    # fallback name is suffixed with the targ. PadAccess identity is keyed on
+    # varname (not targ -- see PadAccess::content_hash), so the suffix keeps
+    # distinct unnamed slots distinct rather than collapsing them all to '$?'.
     sub _padname ($cv, $targ) {
         my $padlist = $cv->PADLIST;
-        return '$?' unless $$padlist;
+        return "\$?$targ" unless $$padlist;
         my $padnames = $padlist->ARRAYelt(0);
         my $pn = $padnames->ARRAYelt($targ);
-        return '$?' unless ref $pn eq 'B::PADNAME';
+        return "\$?$targ" unless ref $pn eq 'B::PADNAME';
         my $name = eval { $pn->PV };
-        return defined $name ? $name : '$?';
+        return defined $name ? $name : "\$?$targ";
     }
 
     # Convert a PMOP pmflags bitmask to a flag string (e.g. "gi")
