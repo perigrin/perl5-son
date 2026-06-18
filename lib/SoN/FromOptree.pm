@@ -512,6 +512,39 @@ class SoN::FromOptree 0.01 {
             return ($op->next, 'handled');
         }
 
+        # Handle padrange - the optimizer's fused replacement for the pushmark
+        # plus LVINTRO of a list-assignment LHS, `my (...) = @_`. The rv2av(@_)
+        # RHS is elided in this form, so bind each introduced lexical positionally
+        # to @_[i]. Only a mark is left on the stack; the trailing aassign pops
+        # that empty mark and emits nothing. Checked before is_skip (padrange is
+        # SKIP-flagged for the non-LVINTRO context-hint case).
+        if ($name eq 'padrange' && ($op->flags & 0x80)) { # OPf_SPECIAL = LVINTRO range
+            $sim->push_mark;
+            my $first  = $op->targ;
+            my $count  = $op->private & 0x7f; # OPpPADRANGE_COUNTMASK
+            my $args   = _args_source($factory);
+            for my $i (0 .. $count - 1) {
+                my $targ = $first + $i;
+                my $pad  = _make_pad_or_field($cv, $targ, $factory);
+                my $idx  = $factory->make('Constant',
+                    value => $i, const_type => 'integer',
+                    stamp => SoN::IR::Stamp->new(type => 'Int'));
+                my $elem = $factory->make('Subscript', inputs => [$args, $idx]);
+                # Each list-assign target is a `my` declaration; emit a VarDecl
+                # so the lexical is declared in the graph, mirroring padsv_store
+                # for `my $x = ...`. The scope binding is the @_ element value.
+                if ($mode eq 'main') {
+                    $factory->make('VarDecl',
+                        inputs => [$pad, $elem],
+                        scope  => 'my');
+                }
+                $sim->define($targ, $elem);
+            }
+            # The binding is complete; the trailing aassign pops this (empty)
+            # mark and emits nothing (see the aassign empty-list guard).
+            return ($op->next, 'handled');
+        }
+
         # Skip bookkeeping ops
         if ($opmap->is_skip($name)) {
             return ($op->next, 'handled');
@@ -571,6 +604,15 @@ class SoN::FromOptree 0.01 {
             $sim->define($targ, $node);
             $sim->push_node($node);
             return ($op->next, 'handled');
+        }
+
+        # Handle bare shift/pop - the @_ operand is implicit (nullary op).
+        # `shift @arr` has OPf_KIDS set and pushes its array operand normally;
+        # bare `shift` is nullary, so supply the implicit @_ source here and let
+        # the generic OpMap Call dispatch consume it.
+        if (($name eq 'shift' || $name eq 'pop') && !($op->flags & 4)) { # OPf_KIDS
+            $sim->push_node(_args_source($factory));
+            # fall through to generic dispatch below (do not return)
         }
 
         # Handle sassign - scalar assignment
@@ -636,6 +678,21 @@ class SoN::FromOptree 0.01 {
                 $sim->push_node($node);
             }
 
+            return ($op->next, 'handled');
+        }
+
+        # Handle aassign whose targets were already bound by a preceding padrange
+        # (`my (...) = @_`): the mark is empty because padrange consumed the LHS
+        # and the @_ RHS was elided. Pop the empty mark and emit nothing rather
+        # than a stray, dead Assign node. Real list-assigns with values on the
+        # stack fall through to the generic dispatch below.
+        if ($name eq 'aassign') {
+            my $args = $sim->pop_to_mark;
+            if (!$args->@*) {
+                return ($op->next, 'handled');
+            }
+            my $node = $factory->make('Assign', inputs => [$args->@*]);
+            $sim->push_node($node);
             return ($op->next, 'handled');
         }
 
@@ -746,6 +803,16 @@ class SoN::FromOptree 0.01 {
             $op = $next;
         }
         return undef;
+    }
+
+    # The implicit @_ argument array. Bare shift/pop operate on it, and a
+    # list-assignment `my (...) = @_` destructures it. @_ is the package array
+    # *main::_, so it is modeled as a StashAccess (a real array source), never a
+    # string Constant.
+    sub _args_source ($factory) {
+        return $factory->make('StashAccess',
+            stash_name => 'main',
+            var_name   => '_');
     }
 
     # Create PadAccess or FieldAccess depending on whether it's a class field
