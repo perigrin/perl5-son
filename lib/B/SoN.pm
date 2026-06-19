@@ -10,6 +10,15 @@ use B qw(svref_2object);
 use SoN::FromOptree;
 use SoN::Render::Text;
 use SoN::Serialize::JSON qw(to_json);
+use SoN::OptSuppress;
+
+# Suppress the peephole optimizer for the duration of the target program's
+# compilation. B::SoN loads via -MO=SoN at BEGIN, before the target body
+# compiles, so installing the no-op rpeep here keeps element access, list
+# intro, and similar in canonical, unfused form (aelem/helem/pushmark+padsv
+# rather than aelemfast/multideref/padrange) -- which map directly to the IR.
+# rpeep is an optimization, not a correctness pass: the optree still executes.
+BEGIN { SoN::OptSuppress::suppress_peep(); }
 
 # compile(\@opts) — called by O.pm; returns a CODE ref that O.pm invokes
 # after the program has been compiled and the full optree is available.

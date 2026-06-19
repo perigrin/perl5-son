@@ -631,11 +631,16 @@ class SoN::FromOptree 0.01 {
             return ($op->next, 'handled');
         }
 
-        # Handle padsv - lexical variable or field access
+        # Handle padsv - lexical variable or field access. An lvalue padsv
+        # (OPf_MOD, e.g. the LHS of `$x = 2`) must push a PadAccess so the
+        # following sassign can rebind its targ; returning the currently-bound
+        # value would lose the assignment target. An rvalue padsv returns the
+        # bound value (the variable's current value).
         if ($name eq 'padsv') {
             my $targ = $op->targ;
+            my $is_lvalue = ($op->flags & 32); # OPf_MOD
             my $existing = $sim->lookup($targ);
-            if ($existing) {
+            if ($existing && !$is_lvalue) {
                 $sim->push_node($existing);
             } else {
                 my $node = _make_pad_or_field($cv, $targ, $factory);
@@ -680,8 +685,10 @@ class SoN::FromOptree 0.01 {
 
         # Handle sassign - scalar assignment
         if ($name eq 'sassign') {
-            my $value = $sim->pop_node;
+            # Perl pushes the RHS (value) first, then the LHS (target), so the
+            # target is on top: pop it first, then the value.
             my $target = $sim->pop_node;
+            my $value  = $sim->pop_node;
             # If target is a PadAccess, update the scope binding
             if ($target->isa('SoN::IR::Node::PadAccess')) {
                 $sim->define($target->targ, $value);
