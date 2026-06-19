@@ -34,6 +34,10 @@ class SoN::FromOptree::StackSim 0.01 {
         push @marks, scalar @stack;
     }
 
+    method has_mark () {
+        return scalar @marks;
+    }
+
     method stack_depth () {
         return scalar @stack;
     }

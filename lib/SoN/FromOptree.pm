@@ -674,6 +674,29 @@ class SoN::FromOptree 0.01 {
             return ($op->next, 'handled');
         }
 
+        # Handle aelem/helem - array/hash element access (canonical, unfused).
+        # The container and index are on the stack (index on top). An lvalue
+        # access (OPf_MOD, the LHS of `$a[0] = ...`) yields a Subscript that the
+        # following sassign stores into. An rvalue read resolves to the most
+        # recent element store for (container, index) if one exists, so that a
+        # read after a store sees the stored value; otherwise it is a Subscript.
+        if ($name eq 'aelem' || $name eq 'helem') {
+            my $index     = $sim->pop_node;
+            my $container = $sim->pop_node;
+            my $is_lvalue = ($op->flags & 32); # OPf_MOD
+            my $key       = _elem_key($container, $index);
+
+            if (!$is_lvalue && defined $key
+                && exists $ctx->{elem_store}{$key}) {
+                $sim->push_node($ctx->{elem_store}{$key});
+            }
+            else {
+                my $sub = $factory->make('Subscript', inputs => [$container, $index]);
+                $sim->push_node($sub);
+            }
+            return ($op->next, 'handled');
+        }
+
         # Handle bare shift/pop - the @_ operand is implicit (nullary op).
         # `shift @arr` has OPf_KIDS set and pushes its array operand normally;
         # bare `shift` is nullary, so supply the implicit @_ source here and let
@@ -689,11 +712,25 @@ class SoN::FromOptree 0.01 {
             # target is on top: pop it first, then the value.
             my $target = $sim->pop_node;
             my $value  = $sim->pop_node;
-            # If target is a PadAccess, update the scope binding
+            # If target is a PadAccess, update the scope binding.
             if ($target->isa('SoN::IR::Node::PadAccess')) {
                 $sim->define($target->targ, $value);
+                $sim->push_node($value);
             }
-            $sim->push_node($value);
+            # An element store (`$a[0] = 42`): the target is a Subscript lvalue.
+            # Emit Assign(Subscript, value) and record the store so a later read
+            # of the same element returns the stored value. The assignment's
+            # result value is the stored value, so push that as the result.
+            elsif ($target->isa('SoN::IR::Node::Subscript')) {
+                $factory->make('Assign', inputs => [$target, $value]);
+                my ($container, $index) = $target->inputs->@*;
+                my $key = _elem_key($container, $index);
+                $ctx->{elem_store}{$key} = $value if defined $key;
+                $sim->push_node($value);
+            }
+            else {
+                $sim->push_node($value);
+            }
             return ($op->next, 'handled');
         }
 
@@ -759,11 +796,43 @@ class SoN::FromOptree 0.01 {
         # than a stray, dead Assign node. Real list-assigns with values on the
         # stack fall through to the generic dispatch below.
         if ($name eq 'aassign') {
-            my $args = $sim->pop_to_mark;
-            if (!$args->@*) {
+            # The LHS list is the most recent mark; the RHS list (if present) is
+            # the mark before it. Perl lays out aassign as
+            # pushmark RHS... pushmark LHS..., so popping to the last mark yields
+            # the LHS, then popping to the prior mark yields the RHS.
+            my $lhs = $sim->pop_to_mark;
+
+            # `my (...) = @_` with a padrange-bound LHS leaves an empty mark and
+            # no RHS; emit nothing (the bind already happened).
+            if (!$lhs->@*) {
                 return ($op->next, 'handled');
             }
-            my $node = $factory->make('Assign', inputs => [$args->@*]);
+
+            # Array/hash construction: `my @a = (1,2,3)` / `my %h = (k=>0)`.
+            # The LHS is a single padav/padhv; bind it to an ArrayRef/HashRef of
+            # the RHS values so later element access has a real container.
+            if (@$lhs == 1
+                && $lhs->[0]->isa('SoN::IR::Node::PadAccess')
+                && $sim->has_mark) {
+                my $target = $lhs->[0];
+                my $rhs    = $sim->pop_to_mark;
+                my $sigil  = substr($target->varname, 0, 1);
+                if ($sigil eq '@') {
+                    my $aref = $factory->make('ArrayRef', inputs => [$rhs->@*]);
+                    $sim->define($target->targ, $aref);
+                    $sim->push_node($aref);
+                    return ($op->next, 'handled');
+                }
+                elsif ($sigil eq '%') {
+                    my $href = $factory->make('HashRef', inputs => [$rhs->@*]);
+                    $sim->define($target->targ, $href);
+                    $sim->push_node($href);
+                    return ($op->next, 'handled');
+                }
+            }
+
+            # Fallback: a generic list assignment.
+            my $node = $factory->make('Assign', inputs => [$lhs->@*]);
             $sim->push_node($node);
             return ($op->next, 'handled');
         }
@@ -877,6 +946,14 @@ class SoN::FromOptree 0.01 {
             $op = $next;
         }
         return undef;
+    }
+
+    # Key an element store/read by its container node and a constant index, so
+    # a read after a store of the same element returns the stored value. Returns
+    # undef when the index is not a constant (a dynamic index cannot be matched).
+    sub _elem_key ($container, $index) {
+        return undef unless $index->isa('SoN::IR::Node::Constant');
+        return $container->id . ':' . ($index->value // '');
     }
 
     # The implicit @_ argument array. Bare shift/pop operate on it, and a
