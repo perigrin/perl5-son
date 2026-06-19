@@ -15,6 +15,59 @@ class SoN::FromOptree 0.01 {
     use SoN::FromOptree::StackSim;
     use SoN::FieldInfo;
 
+    # Result-stamp rules for computed nodes, keyed by Chalk node type. The
+    # result representation of a computed value is derivable from its inputs,
+    # which Chalk's backend needs but B::SoN previously only set on leaf
+    # Constants. Values:
+    #   'join'        - the lattice join of the input stamps (Int+Int=Int,
+    #                   Int+Num=Num); used for arithmetic that preserves type.
+    #   a type string - a fixed result type regardless of inputs.
+    # A node type absent from this table is left unstamped (no guessing).
+    my %RESULT_STAMP = (
+        # Arithmetic that preserves the wider input type.
+        Add      => 'join',
+        Subtract => 'join',
+        Multiply => 'join',
+        Negate   => 'join',
+        # Fixed-result arithmetic.
+        Divide   => 'Num',     # Perl / is always float
+        Power    => 'Num',     # Perl ** yields an NV
+        Modulo   => 'Int',     # Perl % is integer
+        # Bitwise / shifts are integer.
+        BitAnd     => 'Int',
+        BitOr      => 'Int',
+        BitXor     => 'Int',
+        LeftShift  => 'Int',
+        RightShift => 'Int',
+        Complement => 'Int',
+        # String ops.
+        Concat => 'Str',
+        Length => 'Int',
+        # Comparisons yield a boolean; the three-way <=> / cmp yield an int.
+        (map { $_ => 'Boolean' } qw(
+            NumEq NumLt NumGt NumLe NumGe NumNe
+            StrEq StrLt StrGt StrLe StrGe StrNe
+        )),
+        NumCmp => 'Int',
+        StrCmp => 'Int',
+    );
+
+    # _result_stamp($node_type, \@inputs) -> SoN::IR::Stamp or undef.
+    # Derive a computed node's result stamp from its rule and input stamps.
+    # Returns undef (leaving the node unstamped) when the rule is 'join' but an
+    # input lacks a stamp -- an honest GAP, never a guessed type.
+    sub _result_stamp ($node_type, $inputs) {
+        my $rule = $RESULT_STAMP{$node_type} // return undef;
+        return SoN::IR::Stamp->new(type => $rule) if $rule ne 'join';
+
+        my @stamps = map { $_->stamp } $inputs->@*;
+        return undef if grep { !defined } @stamps;
+
+        my $acc = shift @stamps;
+        $acc = SoN::IR::Stamp::join($acc, $_) for @stamps;
+        return $acc;
+    }
+
     # Translate a code reference to a SoN graph
     sub translate ($class_or_self, $coderef) {
         my $cv = B::svref_2object($coderef);
@@ -454,6 +507,16 @@ class SoN::FromOptree 0.01 {
     # Returns ($value, $stamp, $const_type) where const_type is one of:
     # 'integer', 'number', 'string', or 'undef'.
     sub _extract_const ($sv) {
+        # A constant-folded boolean comparison (1 < 2) resolves to the shared
+        # PL_sv_yes / PL_sv_no SVs, which surface as a B::SPECIAL whose index is
+        # 2 (yes) or 3 (no) in B::specialsv_name. Preserve the boolean-ness as a
+        # Boolean Constant rather than losing it to the Unknown/string fallback.
+        if (defined $sv && ref($sv) eq 'B::SPECIAL') {
+            my $idx = $$sv;
+            return (1,  SoN::IR::Stamp->new(type => 'Boolean'), 'boolean') if $idx == 2;
+            return ('', SoN::IR::Stamp->new(type => 'Boolean'), 'boolean') if $idx == 3;
+        }
+
         return (undef, SoN::IR::Stamp->new(type => 'Undef'), 'undef')
             unless defined $sv && $$sv;
 
@@ -673,6 +736,8 @@ class SoN::FromOptree 0.01 {
                     $extra{dispatch_kind} = 'builtin';
                     $extra{name}          = $name;
                 }
+                my $stamp = _result_stamp($node_type, \@inputs);
+                $extra{stamp} = $stamp if defined $stamp;
                 my $node = $factory->make($node_type, inputs => \@inputs, %extra);
                 $sim->define($op->targ, $node);
                 $sim->push_node($node);
@@ -720,6 +785,8 @@ class SoN::FromOptree 0.01 {
                     $extra{dispatch_kind} = 'builtin';
                     $extra{name}          = $name;
                 }
+                my $stamp = _result_stamp($node_type, \@inputs);
+                $extra{stamp} = $stamp if defined $stamp;
                 my $node = $factory->make($node_type, inputs => \@inputs, %extra);
                 if ($push_count) {
                     $sim->push_node($node);
