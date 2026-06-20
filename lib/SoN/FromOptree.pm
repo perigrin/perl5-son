@@ -701,6 +701,40 @@ class SoN::FromOptree 0.01 {
             return ($op->next, 'handled');
         }
 
+        # Handle pre/post increment and decrement. These are read-modify-write
+        # ops on an lvalue pad: read the current value, add/subtract 1, rebind
+        # the target, and push the result. A PRE op (++$i / --$i) yields the NEW
+        # value; a POST op ($i++ / $i--) yields the OLD value. Perl collapses a
+        # void-context $i++ to preinc, so the K2 corpus case (read after) is
+        # correctly the new value either way.
+        if ($name =~ /^(i_)?(pre|post)(inc|dec)$/) {
+            my $dir      = $3;          # inc | dec
+            my $is_post  = ($2 eq 'post');
+            my $old      = $sim->pop_node;
+
+            # Resolve an lvalue PadAccess to the variable's current bound value
+            # so the arithmetic carries a real (stamped) input.
+            my $targ;
+            if ($old->isa('SoN::IR::Node::PadAccess')) {
+                $targ  = $old->targ;
+                my $bound = $sim->lookup($targ);
+                $old = $bound if defined $bound;
+            }
+
+            my $one = $factory->make('Constant',
+                value => 1, const_type => 'integer',
+                stamp => SoN::IR::Stamp->new(type => 'Int'));
+            my $node_type = ($dir eq 'inc') ? 'Add' : 'Subtract';
+            my $stamp = _result_stamp($node_type, [$old, $one]);
+            my %extra = defined $stamp ? (stamp => $stamp) : ();
+            my $new = $factory->make($node_type, inputs => [$old, $one], %extra);
+
+            $sim->define($targ, $new) if defined $targ;
+            # Pre yields the new value; post yields the old value.
+            $sim->push_node($is_post ? $old : $new);
+            return ($op->next, 'handled');
+        }
+
         # Handle bare shift/pop - the @_ operand is implicit (nullary op).
         # `shift @arr` has OPf_KIDS set and pushes its array operand normally;
         # bare `shift` is nullary, so supply the implicit @_ source here and let
