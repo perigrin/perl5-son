@@ -644,7 +644,11 @@ class SoN::FromOptree 0.01 {
                 $sim->push_node($existing);
             } else {
                 my $node = _make_pad_or_field($cv, $targ, $factory);
-                $sim->define($targ, $node);
+                # Only seed the binding when the slot has none yet. An lvalue
+                # padsv over an already-bound slot must NOT clobber the binding:
+                # a plain `$x = 2` rebinds via the following sassign, while a
+                # compound `$x += 2` reads the current bound value first.
+                $sim->define($targ, $node) unless defined $existing;
                 $sim->push_node($node);
             }
             return ($op->next, 'handled');
@@ -861,9 +865,37 @@ class SoN::FromOptree 0.01 {
                     $extra{dispatch_kind} = 'builtin';
                     $extra{name}          = $name;
                 }
+                # Compound assignment (`$x += 2`): a binary arithmetic op whose
+                # FIRST operand is an lvalue (OPf_MOD) pad read is a read-modify-
+                # write. The lvalue padsv pushed a fresh PadAccess (Commit A's
+                # rule for assignment targets), but the read half of `+=` needs
+                # the variable's CURRENT value: resolve it to the bound value so
+                # the op carries a real (stamped) input. `$y = $x + 2` does not
+                # match -- its $x read is not in modify context.
+                my $is_compound =
+                       @inputs >= 1
+                    && $inputs[0]->isa('SoN::IR::Node::PadAccess')
+                    && $op->can('first')
+                    && $op->first->name =~ /^padsv|^padav|^padhv/
+                    && ($op->first->flags & 32); # OPf_MOD
+
+                my $lvalue_targ;
+                if ($is_compound) {
+                    $lvalue_targ = $inputs[0]->targ;
+                    my $bound = $sim->lookup($lvalue_targ);
+                    $inputs[0] = $bound if defined $bound;
+                }
+
                 my $stamp = _result_stamp($node_type, \@inputs);
                 $extra{stamp} = $stamp if defined $stamp;
                 my $node = $factory->make($node_type, inputs => \@inputs, %extra);
+
+                # Rebind the target to the result so a later read sees the new
+                # value.
+                if ($is_compound) {
+                    $sim->define($lvalue_targ, $node);
+                }
+
                 if ($push_count) {
                     $sim->push_node($node);
                 }
