@@ -793,11 +793,41 @@ class SoN::FromOptree 0.01 {
             return ($op->next, 'handled');
         }
 
-        # Handle ops with TARGMY (add[$i:1,6] vK/TARGMY) - writes result to pad.
-        # Only the loop walker takes this path; in other modes a TARGMY op falls
-        # through to the generic OpMap dispatch.
-        if ($mode eq 'loop'
-            && $opmap->is_known($name) && $op->can('targ') && $op->targ
+        # Handle multiconcat for the `.=` const-append case (corpus S4). The op
+        # is `$s .= "lit"`: a multiconcat with OPpMULTICONCAT_APPEND (0x40) and
+        # nargs == 0 (all parts constant). aux_list is [nargs, const_str, len];
+        # the result is Concat($s, const_str) stored back to the targ slot.
+        # Dynamic parts (nargs > 0, e.g. `$s .= $t`) are not yet modeled.
+        if ($name eq 'multiconcat'
+            && ($op->private & 0x40)            # OPpMULTICONCAT_APPEND
+            && $op->can('aux_list')) {
+            my @aux   = $op->aux_list($cv);
+            my $nargs = $aux[0];
+            if (defined $nargs && $nargs == 0 && @aux >= 2) {
+                my $lit  = ref $aux[1] ? eval { $aux[1]->PV } : $aux[1];
+                my $targ = $op->targ;
+                my $cur  = $sim->lookup($targ);
+                if (defined $cur && defined $lit) {
+                    my $rhs = $factory->make('Constant',
+                        value => $lit, const_type => 'string',
+                        stamp => SoN::IR::Stamp->new(type => 'Str'));
+                    my $cat = $factory->make('Concat',
+                        inputs => [$cur, $rhs],
+                        stamp  => SoN::IR::Stamp->new(type => 'Str'));
+                    $sim->define($targ, $cat);
+                    $sim->push_node($cat);
+                    return ($op->next, 'handled');
+                }
+            }
+            # Fall through: dynamic / multi-part multiconcat is not yet handled.
+        }
+
+        # Handle ops with TARGMY (add[$i:1,6] vK/TARGMY) - the op writes its
+        # result in-place to its targ slot. This is the canonical shape of a
+        # self-assign (`$x = $x + 1`), a field write (`$n = $n + 1`), and other
+        # store-back-to-self forms. Rebind the targ so a later read of that slot
+        # returns the new value.
+        if ($opmap->is_known($name) && $op->can('targ') && $op->targ
             && ($op->private & 16)) {  # OPpTARGET_MY = 0x10
             my $pop_count = $opmap->pop_count($name);
             my $node_type = $opmap->node_type($name);
