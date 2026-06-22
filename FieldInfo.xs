@@ -65,6 +65,78 @@ field_info(sv)
             PUSHs(&PL_sv_undef);
         mPUSHi(info->def_if_undef | (info->def_if_false << 1));
 
+MODULE = SoN  PACKAGE = SoN::ClassAux
+
+PROTOTYPES: DISABLE
+
+# A feature-class stores its field initializers and ADJUST blocks as separate
+# CVs on the class HvAUX struct (CORE/hv.h xpvhv_aux), not in the built-in `new`
+# XSUB. These accessors expose them, plus the :isa superclass, so B::SoN can
+# extract the full class structure from the compiled program.
+
+bool
+is_class(stashref)
+    SV *stashref
+    CODE:
+        if (!SvROK(stashref) || SvTYPE(SvRV(stashref)) != SVt_PVHV)
+            XSRETURN_NO;
+        HV *stash = (HV *)SvRV(stashref);
+        RETVAL = HvSTASH_IS_CLASS(stash) ? TRUE : FALSE;
+    OUTPUT:
+        RETVAL
+
+SV *
+initfields_cv(stashref)
+    SV *stashref
+    CODE:
+        if (!SvROK(stashref) || SvTYPE(SvRV(stashref)) != SVt_PVHV)
+            XSRETURN_UNDEF;
+        HV *stash = (HV *)SvRV(stashref);
+        if (!HvSTASH_IS_CLASS(stash))
+            XSRETURN_UNDEF;
+        CV *cv = HvAUX(stash)->xhv_class_initfields_cv;
+        if (!cv)
+            XSRETURN_UNDEF;
+        RETVAL = newRV_inc((SV *)cv);
+    OUTPUT:
+        RETVAL
+
+void
+adjust_cvs(stashref)
+    SV *stashref
+    PPCODE:
+        if (!SvROK(stashref) || SvTYPE(SvRV(stashref)) != SVt_PVHV)
+            XSRETURN_EMPTY;
+        HV *stash = (HV *)SvRV(stashref);
+        if (!HvSTASH_IS_CLASS(stash))
+            XSRETURN_EMPTY;
+        AV *blocks = HvAUX(stash)->xhv_class_adjust_blocks;
+        if (!blocks)
+            XSRETURN_EMPTY;
+        SSize_t n = av_count(blocks);
+        EXTEND(SP, n);
+        for (SSize_t i = 0; i < n; i++) {
+            SV **el = av_fetch(blocks, i, 0);
+            if (el && *el)
+                mPUSHs(newRV_inc(*el));
+        }
+
+SV *
+superclass_name(stashref)
+    SV *stashref
+    CODE:
+        if (!SvROK(stashref) || SvTYPE(SvRV(stashref)) != SVt_PVHV)
+            XSRETURN_UNDEF;
+        HV *stash = (HV *)SvRV(stashref);
+        if (!HvSTASH_IS_CLASS(stash))
+            XSRETURN_UNDEF;
+        HV *super = HvAUX(stash)->xhv_class_superclass;
+        if (!super || !HvNAME(super))
+            XSRETURN_UNDEF;
+        RETVAL = newSVpv(HvNAME(super), HvNAMELEN(super));
+    OUTPUT:
+        RETVAL
+
 MODULE = SoN  PACKAGE = SoN::OptSuppress
 
 PROTOTYPES: DISABLE
