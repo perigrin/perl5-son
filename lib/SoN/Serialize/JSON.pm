@@ -143,7 +143,7 @@ sub _serialize_graph ($graph) {
 # -----------------------------------------------------------------------
 # to_json(\%named_graphs) — serialize named graphs to a JSON string.
 # -----------------------------------------------------------------------
-sub to_json ($named_graphs) {
+sub to_json ($named_graphs, $classes = undef) {
     my %methods;
     for my $name (sort keys $named_graphs->%*) {
         $methods{$name} = _serialize_graph($named_graphs->{$name});
@@ -154,6 +154,10 @@ sub to_json ($named_graphs) {
         source  => undef,
         methods => \%methods,
     };
+
+    # The declarative class section (4c): name, parent, fields, method-refs.
+    # Chalk's loader replays it through the MOP declare_*/seal API.
+    $data->{classes} = $classes if defined $classes && %$classes;
 
     return JSON::PP->new->canonical->pretty->encode($data);
 }

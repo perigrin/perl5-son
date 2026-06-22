@@ -7,10 +7,13 @@ use v5.42.0;
 use utf8;
 
 use B qw(svref_2object);
+use JSON::PP ();
 use SoN::FromOptree;
 use SoN::Render::Text;
 use SoN::Serialize::JSON qw(to_json);
 use SoN::OptSuppress;
+use SoN::ClassAux;
+use SoN::FieldInfo;
 
 # Suppress the peephole optimizer for the duration of the target program's
 # compilation. B::SoN loads via -MO=SoN at BEGIN, before the target body
@@ -37,29 +40,32 @@ sub compile {
     my $filter = %pkg_filter ? \%pkg_filter : undef;
 
     return sub {
-        my %graphs = _discover_and_translate($filter);
+        my ( $graphs, $classes ) = _discover_and_translate($filter);
 
         if ( $format eq 'json' ) {
-            print to_json( \%graphs );
+            print to_json( $graphs, $classes );
         }
         else {
-            for my $name ( sort keys %graphs ) {
+            for my $name ( sort keys $graphs->%* ) {
                 print "=== $name ===\n";
                 my $renderer = SoN::Render::Text->new();
-                print $renderer->render( $graphs{$name} );
+                print $renderer->render( $graphs->{$name} );
                 print "\n";
             }
         }
     };
 }
 
-# _discover_and_translate() — walk all package stashes and translate CVs to
-# SoN graphs.  Returns a flat hash of fully-qualified name => graph.
+# _discover_and_translate() — walk all package stashes, translating CVs to SoN
+# graphs and collecting feature-class structure. Returns ($graphs, $classes):
+# $graphs is fully-qualified name => graph; $classes is class name => declarative
+# class structure (parent, fields, methods) for the MOP replay.
 sub _discover_and_translate {
     my ($filter) = @_;
     my %graphs;
-    _walk_package( \%graphs, 'main', \%main::, $filter );
-    return %graphs;
+    my %classes;
+    _walk_package( \%graphs, \%classes, 'main', \%main::, $filter );
+    return ( \%graphs, \%classes );
 }
 
 # _walk_package(\%graphs, $pkg_name, \%stash) — recursively walk a stash,
@@ -69,12 +75,17 @@ sub _discover_and_translate {
 # Perl stashes always report their own NAME in canonical form, so we derive
 # it from the stash itself rather than constructing it from the parent path.
 sub _walk_package {
-    my ( $graphs, $pkg_name, $stash, $filter ) = @_;
+    my ( $graphs, $classes, $pkg_name, $stash, $filter ) = @_;
 
     no strict 'refs';
 
     # If filter is active and this package is not in the filter, skip CVs
     my $emit_cvs = !$filter || exists $filter->{$pkg_name};
+
+    # Record feature-class structure (declarative; methods land in $graphs).
+    if ( $emit_cvs && SoN::ClassAux::is_class($stash) ) {
+        $classes->{$pkg_name} = _extract_class( $pkg_name, $stash );
+    }
 
     for my $name ( sort keys %$stash ) {
         # Skip sub-package slots (end with ::) and non-identifier names
@@ -130,8 +141,79 @@ sub _walk_package {
             B::svref_2object($sub_stash)->NAME
         } // "${pkg_name}::${sub_pkg_short}";
 
-        _walk_package( $graphs, $canonical_name, $sub_stash, $filter );
+        _walk_package( $graphs, $classes, $canonical_name, $sub_stash, $filter );
     }
+}
+
+# _extract_class($pkg_name, $stash) — build the declarative class structure for
+# a feature-class package: name, parent (:isa), fields (name, fieldix, param),
+# and method-name → graph-ref map. Field DEFAULTS and ADJUST bodies are NOT
+# emitted here (they require initfield-aux decoding; a follow-up stage).
+sub _extract_class {
+    my ( $pkg_name, $stash ) = @_;
+
+    no strict 'refs';
+
+    my %class = (
+        name    => $pkg_name,
+        parent  => SoN::ClassAux::superclass_name($stash),
+        fields  => _extract_fields( $pkg_name, $stash ),
+        methods => {},
+    );
+
+    # Map each method name to its per-method graph ref (the fully-qualified key
+    # under which _walk_package translated it into $graphs).
+    for my $name ( sort keys %$stash ) {
+        next if $name =~ /::$/;
+        next if $name =~ /^[^a-zA-Z_]/;
+        my $gv = eval { svref_2object( \*{"${pkg_name}::${name}"} ) };
+        next unless defined $gv && $gv->isa('B::GV');
+        my $cv = $gv->CV;
+        next unless $$cv && !$cv->isa('B::SPECIAL');
+        my $start = eval { $cv->START };
+        next unless defined $start && $$start;    # skip the synthesized `new` XSUB
+        $class{methods}{$name} = "${pkg_name}::${name}";
+    }
+
+    return \%class;
+}
+
+# _extract_fields($pkg_name, $stash) — collect the class's fields by walking a
+# method's padlist for FIELD padnames (via SoN::FieldInfo), deduped by fieldix.
+sub _extract_fields {
+    my ( $pkg_name, $stash ) = @_;
+
+    no strict 'refs';
+
+    my %by_ix;
+    for my $name ( sort keys %$stash ) {
+        next if $name =~ /::$/;
+        my $gv = eval { svref_2object( \*{"${pkg_name}::${name}"} ) };
+        next unless defined $gv && $gv->isa('B::GV');
+        my $cv = $gv->CV;
+        next unless $$cv && !$cv->isa('B::SPECIAL');
+        my $padlist = eval { $cv->PADLIST };
+        next unless $padlist && $$padlist;
+        my $padnames = $padlist->ARRAYelt(0);
+        next unless $padnames && $$padnames;
+
+        for my $i ( 0 .. $padnames->MAX ) {
+            my $pn = $padnames->ARRAYelt($i);
+            next unless ref $pn eq 'B::PADNAME' && SoN::FieldInfo::is_field($pn);
+            my @info     = SoN::FieldInfo::field_info($pn);
+            my $fieldix  = $info[0];
+            next if exists $by_ix{$fieldix};
+            my $varname  = eval { $pn->PV } // '$?';
+            $by_ix{$fieldix} = {
+                name       => $varname,
+                fieldix    => $fieldix,
+                is_param   => ( defined $info[2] ? JSON::PP::true : JSON::PP::false ),
+                param_name => $info[2],
+            };
+        }
+    }
+
+    return [ map { $by_ix{$_} } sort { $a <=> $b } keys %by_ix ];
 }
 
 1;
