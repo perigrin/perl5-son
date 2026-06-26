@@ -89,6 +89,8 @@ class SoN::FromOptree 0.01 {
         # an arm records its exit instead of dying / truncating the graph.
         my @exits;
         my $main_terminated = 0;   # set when the main path hits return/leavesub
+        my $pending_method;        # method name recorded by method_named for the
+                                   # following entersub (method dispatch)
         my $ctx = { mode => 'main', exits => \@exits };
 
         while ($$op) {
@@ -317,22 +319,55 @@ class SoN::FromOptree 0.01 {
                 next;
             }
 
-            # Handle entersub - subroutine/method call
+            # Handle entersub - subroutine or method call. A method dispatch is
+            # signalled by a preceding method_named (recorded in $pending_method);
+            # otherwise it is a direct sub call.
             if ($name eq 'entersub') {
                 my $args = $sim->pop_to_mark;
-                # Last arg is the CV/method, rest are arguments
-                my $cv_node = $args->@* ? pop $args->@* : undef;
-                my $dispatch = 'direct';
-                my $call_name = 'unknown';
 
-                # Check if preceded by method_named
+                if (defined $pending_method) {
+                    # Method dispatch: the first stack arg is the invocant, the
+                    # rest are call arguments. class_name is statically known
+                    # when the invocant is a bareword class (Class->new); for
+                    # $obj->meth the invocant node (scope-resolved to its
+                    # constructor Call) lets the backend infer the class.
+                    my $invocant = shift $args->@*;
+                    # The invocant pad read is in MOD (lvalue) context, so it
+                    # arrives as a fresh PadAccess; resolve it to the variable's
+                    # bound value (e.g. the constructor Call) so the backend can
+                    # infer the class from the object.
+                    if ($invocant
+                        && $invocant->isa('SoN::IR::Node::PadAccess')) {
+                        my $bound = $sim->lookup($invocant->targ);
+                        $invocant = $bound if defined $bound;
+                    }
+                    my $class_name;
+                    if ($invocant
+                        && $invocant->isa('SoN::IR::Node::Constant')
+                        && ($invocant->const_type // '') eq 'string') {
+                        $class_name = $invocant->value;
+                    }
+                    my $node = $factory->make('Call',
+                        inputs        => [ $invocant, $args->@* ],
+                        dispatch_kind => 'method',
+                        name          => $pending_method,
+                        (defined $class_name ? (class_name => $class_name) : ()),
+                    );
+                    $sim->push_node($node);
+                    $pending_method = undef;
+                    $op = $op->next;
+                    next;
+                }
+
+                # Direct sub call: the last arg is the callee, the rest are args.
+                my $cv_node   = $args->@* ? pop $args->@* : undef;
+                my $call_name = 'unknown';
                 if ($cv_node && $cv_node->isa('SoN::IR::Node::Constant')) {
                     $call_name = $cv_node->value // 'unknown';
                 }
-
                 my $node = $factory->make('Call',
                     inputs        => $args->@* ? $args : [],
-                    dispatch_kind => $dispatch,
+                    dispatch_kind => 'direct',
                     name          => $call_name,
                 );
                 $sim->push_node($node);
@@ -340,18 +375,19 @@ class SoN::FromOptree 0.01 {
                 next;
             }
 
-            # Handle method_named - push the method name as a constant
+            # Handle method_named - record the method name for the following
+            # entersub. The invocant stays on the stack (entersub consumes it).
+            # The name SV can be a shared B::SPECIAL whose value lives in the
+            # pad (the same indirection the const handler resolves).
             if ($name eq 'method_named') {
                 my $meth_sv = $op->meth_sv;
-                my $meth_name = $$meth_sv ? $meth_sv->PV : 'unknown';
-                # Pop the invocant, create a method-dispatch Call
-                my $invocant = $sim->pop_node;
-                my $node = $factory->make('Constant',
-                    value      => $meth_name,
-                    const_type => 'string',
-                    stamp      => SoN::IR::Stamp->new(type => 'Str'));
-                $sim->push_node($invocant);
-                $sim->push_node($node);
+                if ((!$$meth_sv || $meth_sv->isa('B::SPECIAL')) && $op->targ) {
+                    my $padl = $cv->PADLIST;
+                    $meth_sv = $padl->ARRAYelt(1)->ARRAYelt($op->targ)
+                        if $$padl;
+                }
+                $pending_method =
+                    ($$meth_sv && $meth_sv->can('PV')) ? $meth_sv->PV : 'unknown';
                 $op = $op->next;
                 next;
             }

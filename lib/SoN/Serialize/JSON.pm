@@ -41,6 +41,10 @@ sub _extract_fields ($node, $id_remap) {
         return {
             dispatch_kind => $node->dispatch_kind,
             name          => $node->name,
+            # The statically-known class for a method dispatch (Class->new).
+            ( defined $node->class_name
+                ? ( class_name => $node->class_name )
+                : () ),
         };
     }
     if ($op eq 'Phi') {
@@ -198,6 +202,8 @@ sub _deserialize_graph ($method_data) {
         elsif ($op eq 'Call') {
             $args{dispatch_kind} = $fields->{dispatch_kind};
             $args{name}          = $fields->{name};
+            $args{class_name}    = $fields->{class_name}
+                if exists $fields->{class_name};
         }
         elsif ($op eq 'Phi') {
             $args{region} = $nodes[ $fields->{region} ];
