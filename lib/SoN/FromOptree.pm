@@ -334,18 +334,27 @@ class SoN::FromOptree 0.01 {
                     my $invocant = shift $args->@*;
                     # The invocant pad read is in MOD (lvalue) context, so it
                     # arrives as a fresh PadAccess; resolve it to the variable's
-                    # bound value (e.g. the constructor Call) so the backend can
-                    # infer the class from the object.
+                    # bound value (e.g. the constructor Call) so the dispatch
+                    # names the right class.
                     if ($invocant
                         && $invocant->isa('SoN::IR::Node::PadAccess')) {
                         my $bound = $sim->lookup($invocant->targ);
                         $invocant = $bound if defined $bound;
                     }
+                    # The backend requires class_name ON the method Call node.
+                    # Class->new: the bareword constant invocant names the class.
+                    # $obj->meth: the invocant resolves to the constructor Call,
+                    # which carries the class_name -- propagate it.
                     my $class_name;
                     if ($invocant
                         && $invocant->isa('SoN::IR::Node::Constant')
                         && ($invocant->const_type // '') eq 'string') {
                         $class_name = $invocant->value;
+                    }
+                    elsif ($invocant
+                        && $invocant->isa('SoN::IR::Node::Call')
+                        && defined $invocant->class_name) {
+                        $class_name = $invocant->class_name;
                     }
                     my $node = $factory->make('Call',
                         inputs        => [ $invocant, $args->@* ],

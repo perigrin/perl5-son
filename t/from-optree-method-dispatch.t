@@ -49,11 +49,14 @@ subtest '$obj->meth produces a method-dispatch Call named for the method' => sub
     my ($greet) = grep { $_->name eq 'greet' } @calls;
     ok(defined $greet, 'has a Call(greet)');
     is($greet->dispatch_kind, 'method', 'dispatch_kind is method');
-    # The invocant resolves through the scope binding to the Call(new), so the
-    # backend can infer the class; the greet Call itself names the method.
+    # The invocant resolves through the scope binding to the Call(new); the
+    # greet Call propagates that constructor's class_name (the backend requires
+    # class_name ON the method Call node).
     my ($new) = grep { $_->name eq 'new' } @calls;
     is($greet->inputs->[0], $new,
         'the greet invocant is the Call(new) (scope-resolved $g)');
+    is($greet->class_name, 'Greeter',
+        'greet Call propagates class_name from its constructor invocant');
 };
 
 done_testing();
