@@ -14,6 +14,9 @@ use SoN::Serialize::JSON qw(to_json);
 use SoN::OptSuppress;
 use SoN::ClassAux;
 use SoN::FieldInfo;
+use SoN::IR::NodeFactory;
+use SoN::IR::Graph;
+use SoN::IR::Stamp;
 
 # Suppress the peephole optimizer for the duration of the target program's
 # compilation. B::SoN loads via -MO=SoN at BEGIN, before the target body
@@ -84,7 +87,7 @@ sub _walk_package {
 
     # Record feature-class structure (declarative; methods land in $graphs).
     if ( $emit_cvs && SoN::ClassAux::is_class($stash) ) {
-        $classes->{$pkg_name} = _extract_class( $pkg_name, $stash );
+        $classes->{$pkg_name} = _extract_class( $graphs, $pkg_name, $stash );
     }
 
     for my $name ( sort keys %$stash ) {
@@ -145,12 +148,12 @@ sub _walk_package {
     }
 }
 
-# _extract_class($pkg_name, $stash) — build the declarative class structure for
-# a feature-class package: name, parent (:isa), fields (name, fieldix, param),
-# and method-name → graph-ref map. Field DEFAULTS and ADJUST bodies are NOT
-# emitted here (they require initfield-aux decoding; a follow-up stage).
+# _extract_class($graphs, $pkg_name, $stash) — build the declarative class
+# structure for a feature-class package: name, parent (:isa), fields (name,
+# fieldix, param, plus default value + type from initfields_cv), method-name →
+# graph-ref map, and ADJUST blocks as graph-refs.
 sub _extract_class {
-    my ( $pkg_name, $stash ) = @_;
+    my ( $graphs, $pkg_name, $stash ) = @_;
 
     no strict 'refs';
 
@@ -159,6 +162,7 @@ sub _extract_class {
         parent  => SoN::ClassAux::superclass_name($stash),
         fields  => _extract_fields( $pkg_name, $stash ),
         methods => {},
+        adjusts => [],
     );
 
     # Map each method name to its per-method graph ref (the fully-qualified key
@@ -175,7 +179,143 @@ sub _extract_class {
         $class{methods}{$name} = "${pkg_name}::${name}";
     }
 
+    # Field defaults: walk initfields_cv, pair each field (by declaration order)
+    # with its default value, and stamp the field type from the default. Each
+    # default is emitted as a one-node Constant graph referenced from the field.
+    _wire_field_defaults( $graphs, $pkg_name, $stash, $class{fields} );
+
+    # ADJUST blocks: translate each ADJUST CV to a graph and reference it.
+    # adjust_cvs is the FLATTENED chain (incl. inherited); emit OWN-only here so
+    # the consumer does not double-apply a parent's ADJUST. We approximate
+    # own-only by emitting only the blocks beyond the parent's count.
+    my @adj_cvs = SoN::ClassAux::adjust_cvs($stash);
+    my $parent  = SoN::ClassAux::superclass_name($stash);
+    my $inherited = 0;
+    if ( defined $parent ) {
+        no strict 'refs';
+        $inherited = scalar SoN::ClassAux::adjust_cvs( \%{"${parent}::"} );
+    }
+    my $aix = 0;
+    for my $i ( $inherited .. $#adj_cvs ) {
+        # adjust_cvs returns coderefs; translate takes a coderef directly.
+        my $g = eval { SoN::FromOptree->translate( $adj_cvs[$i] ) };
+        next unless $g;
+        my $key = "${pkg_name}::__ADJUST_${aix}";
+        $graphs->{$key} = $g;
+        push $class{adjusts}->@*, $key;
+        $aix++;
+    }
+
     return \%class;
+}
+
+# _wire_field_defaults($graphs, $pkg_name, $stash, $fields) — extract each
+# field's default value from the initfields_cv and attach has_default,
+# default_ref (a one-node Constant graph), and a type inferred from the default.
+sub _wire_field_defaults {
+    my ( $graphs, $pkg_name, $stash, $fields ) = @_;
+
+    my $init = SoN::ClassAux::initfields_cv($stash);
+    return unless defined $init;
+    my $cv = svref_2object($init);
+
+    # Each field produces one initfield op, in declaration (fieldix) order.
+    my @defaults;   # fieldix => default const op (or undef)
+    my $idx = 0;
+    _walk_initfields( $cv->ROOT, sub ($default_op) {
+        $defaults[$idx++] = $default_op;
+    });
+
+    my $factory = SoN::IR::NodeFactory->new;
+    for my $f (@$fields) {
+        my $fix = $f->{fieldix};
+        my $dop = $defaults[$fix];
+        next unless defined $dop;
+
+        my ( $value, $stamp, $const_type ) = _const_op_value( $cv, $dop );
+        next unless defined $stamp;
+
+        my $start = $factory->make_cfg('Start');
+        my $const = $factory->make('Constant',
+            value => $value, stamp => $stamp, const_type => $const_type );
+        my $ret = $factory->make_cfg('Return', inputs => [ $start, $const ] );
+
+        my $key = "${pkg_name}::__DEFAULT_${fix}";
+        $graphs->{$key} = SoN::IR::Graph->new( start => $start, returns => [$ret] );
+        $f->{has_default} = JSON::PP::true;
+        $f->{default_ref} = $key;
+        $f->{type}        = $stamp->type;
+    }
+    return;
+}
+
+# _walk_initfields($op, $cb) — for each initfield in the initfields optree (in
+# order), invoke $cb with the op holding its default value, or undef when the
+# field has no constant default. A :param field is
+# `initfield -> ... -> helemexistsor(param-lookup, DEFAULT)`; a plain-default
+# field is `initfield -> CONST`; a bare field has no usable default.
+sub _walk_initfields {
+    my ( $op, $cb ) = @_;
+    return unless $$op;
+    if ( $op->name eq 'initfield' ) {
+        $cb->( _initfield_default($op) );
+        return;
+    }
+    if ( $op->can('first') ) {
+        my $k = $op->first;
+        while ($$k) { _walk_initfields( $k, $cb ); $k = $k->sibling; }
+    }
+    return;
+}
+
+# _initfield_default($initfield_op) — the op node holding the field's default
+# value, or undef. Descends through the wrapping null/helemexistsor.
+sub _initfield_default {
+    my ($op) = @_;
+    # initfield's child is the value expression (possibly wrapped in null).
+    my $child = $op->can('first') ? $op->first : undef;
+    return undef unless $child && $$child;
+    $child = $child->first while $child->name eq 'null' && $child->can('first') && ${ $child->first };
+
+    if ( $child->name eq 'helemexistsor' ) {
+        # :param field: the OR-else (last child) is the default.
+        my $last;
+        my $k = $child->first;
+        while ($$k) { $last = $k; $k = $k->sibling; }
+        return ( $last && $last->name eq 'const' ) ? $last : undef;
+    }
+    return ( $child->name eq 'const' ) ? $child : undef;
+}
+
+# _const_op_value($cv, $const_op) — (value, stamp, const_type) for a const op,
+# resolving a shared B::SPECIAL through the pad (as the FromOptree const handler
+# does). Only simple scalar defaults (Int/Num/Str) are recovered.
+sub _const_op_value {
+    my ( $cv, $op ) = @_;
+    my $sv   = $op->sv;
+    my $targ = $op->targ;
+    if ( ( !$$sv || $sv->isa('B::SPECIAL') ) && $targ ) {
+        my $padl = $cv->PADLIST;
+        $sv = $padl->ARRAYelt(1)->ARRAYelt($targ) if $$padl;
+    }
+    return ( undef, undef, undef ) unless $sv && $$sv;
+
+    if ( $sv->isa('B::IV') && !$sv->isa('B::PVIV') ) {
+        return ( $sv->int_value, SoN::IR::Stamp->new( type => 'Int' ), 'integer' );
+    }
+    if ( $sv->isa('B::NV') && !$sv->isa('B::PVNV') ) {
+        return ( $sv->NV, SoN::IR::Stamp->new( type => 'Num' ), 'number' );
+    }
+    if ( $sv->FLAGS & B::SVf_IOK() ) {
+        return ( $sv->int_value, SoN::IR::Stamp->new( type => 'Int' ), 'integer' );
+    }
+    if ( $sv->FLAGS & B::SVf_NOK() ) {
+        return ( $sv->NV, SoN::IR::Stamp->new( type => 'Num' ), 'number' );
+    }
+    if ( $sv->can('PV') ) {
+        return ( $sv->PV, SoN::IR::Stamp->new( type => 'Str' ), 'string' );
+    }
+    return ( undef, undef, undef );
 }
 
 # _extract_fields($pkg_name, $stash) — collect the class's fields by walking a
