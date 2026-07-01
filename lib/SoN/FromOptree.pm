@@ -159,62 +159,75 @@ class SoN::FromOptree 0.01 {
                 next;
             }
 
-            # Branch ops: and, or
+            # Branch ops: and (&&), or (||). Perl compiles TWO distinct
+            # constructs to the same optree op:
+            #
+            #  1. Value context -- `$a && $b` / `$a || $b`: SHORT-CIRCUIT
+            #     OPERAND-RETURNING operators. `$a && $b` returns $a (falsy) or $b
+            #     (truthy); `$a || $b` returns $a (truthy) or $b (falsy). Per
+            #     corpus/mdtest/logical.md L1/L2 these lower to a single operand-
+            #     returning node And(lhs, rhs) / Or(lhs, rhs); the Chalk LLVM
+            #     backend expands each into the short-circuit br+phi at lowering
+            #     time (the same producer/backend split DefinedOr uses for `//`).
+            #
+            #  2. Statement modifier -- `return 1 if $x` compiles to `$x and
+            #     return 1`: op->other is a FUNCTION EXIT, not a value. This is
+            #     control flow: the exit is recorded and the fall-through
+            #     continues past the If on the false Proj (single-exit norm).
+            #
+            # The LEFT operand ($a / the guard) is already on the stack when the
+            # op fires; the RIGHT arm is reached via op->other. We walk op->other
+            # on a snapshot with @exits so an exit there is recorded; the 'exited'
+            # signal selects control flow (case 2), otherwise a value node (case 1).
             if ($opmap->is_branch($name) && ($name eq 'and' || $name eq 'or')) {
-                my $cond = $sim->pop_node;
-                my $if_node = $factory->make_cfg('If', inputs => [$sim->control, $cond]);
-                my $true_proj = $factory->make_cfg('Proj', inputs => [$if_node], index => 0);
-                my $false_proj = $factory->make_cfg('Proj', inputs => [$if_node], index => 1);
+                my $lhs = $sim->pop_node;
+                my $rhs_sim = $sim->snapshot;
+                # $stop_at_exit: keep the value arm's result on the stack (stop
+                # before the implicit trailing leavesub) while still recording an
+                # EXPLICIT return in op->other as a function exit (statement
+                # modifier `return X if COND`).
+                my $base_depth = $rhs_sim->stack_depth;
+                my ($rhs_end, $rhs_sig)
+                    = _walk_branch($cv, $op->other, $rhs_sim, $factory, $opmap, \%visited, \@exits, 1);
 
-                # Walk true path (op->next)
-                my $true_sim = $sim->snapshot;
-                $true_sim->set_control($true_proj);
-                # For 'and', the true value is the result of continuing
-                # For 'or', the false value is the result of continuing
-                if ($name eq 'and') {
-                    $true_sim->push_node($cond) if $name eq 'or';
-                }
-                my ($true_end, $true_sig)
-                    = _walk_branch($cv, $op->next, $true_sim, $factory, $opmap, \%visited, \@exits);
-
-                # Walk false path (op->other)
-                my $false_sim = $sim->snapshot;
-                $false_sim->set_control($false_proj);
-                if ($name eq 'or') {
-                    $false_sim->push_node($cond);
-                }
-                my ($false_end, $false_sig)
-                    = _walk_branch($cv, $op->other, $false_sim, $factory, $opmap, \%visited, \@exits);
-
-                # If exactly one arm exited the function (early return), the
-                # OTHER arm continues alone from this If's Proj -- no merge
-                # Region, no rejoin. The exited arm is already recorded in
-                # @exits and built into the final single-exit Return.
-                if (($true_sig // '') eq 'exited' && ($false_sig // '') ne 'exited') {
-                    $sim->set_control($false_proj);
-                    $sim->push_node($false_sim->pop_node) if $false_sim->stack_depth > 0;
-                    $op = $false_end // $op->other;
+                if (($rhs_sig // '') eq 'exited') {
+                    # Statement-modifier / guarded exit: the op->other arm left
+                    # the function. Model the guard as an If; the exit's control
+                    # edge was recorded by _walk_branch. The main path continues
+                    # on the Proj where the guard is NOT taken, with $lhs
+                    # discarded (`return X if/unless C` yields nothing).
+                    #
+                    # The exit polarity differs by op:
+                    #  and (`return X if C`):     exit when C true  -> continue on
+                    #                             the FALSE Proj (index 1).
+                    #  or  (`return X unless C`): exit when C false -> continue on
+                    #                             the TRUE Proj (index 0).
+                    my $if_node = $factory->make_cfg('If',
+                        inputs => [$sim->control, $lhs]);
+                    my $cont_index = $name eq 'and' ? 1 : 0;
+                    my $cont_proj = $factory->make_cfg('Proj',
+                        inputs => [$if_node], index => $cont_index);
+                    $sim->set_control($cont_proj);
+                    $op = $op->next;
                     next;
                 }
-                if (($false_sig // '') eq 'exited' && ($true_sig // '') ne 'exited') {
-                    $sim->set_control($true_proj);
-                    $sim->push_node($true_sim->pop_node) if $true_sim->stack_depth > 0;
-                    $op = $true_end // $op->next;
-                    next;
-                }
-                # Both arms exited: nothing continues past the If -- the walk
-                # ends, both exits are recorded. Stop the main loop.
-                if (($true_sig // '') eq 'exited' && ($false_sig // '') eq 'exited') {
-                    last;
-                }
 
-                # Neither arm exited: the normal value-merge (unchanged).
-                my $region = $true_sim->merge($false_sim, $factory);
-                $sim->set_control($region);
-                if ($true_sim->stack_depth > 0) {
-                    $sim->push_node($true_sim->pop_node);
-                }
-                $op = $true_end // $op->next;
+                # Value context: build the operand-returning And/Or node. The RHS
+                # value is what op->other PUSHED past the pre-walk base depth (a
+                # prior statement's discarded value can sit below it). A real
+                # `$a && $b` always pushes a value, so the undef Constant is a
+                # defensive floor (matching the dor / cond_expr handlers), not an
+                # expected path.
+                my $rhs = $rhs_sim->stack_depth > $base_depth
+                    ? $rhs_sim->pop_node
+                    : $factory->make('Constant',
+                        value      => undef,
+                        const_type => 'undef',
+                        stamp      => SoN::IR::Stamp->new(type => 'Undef'));
+                my $node_op = $name eq 'and' ? 'And' : 'Or';
+                my $node = $factory->make($node_op, inputs => [$lhs, $rhs]);
+                $sim->push_node($node);
+                $op = $rhs_end // $op->next;
                 next;
             }
 
@@ -1076,18 +1089,25 @@ class SoN::FromOptree 0.01 {
             return $op if $visited->{$$op};
 
             my $name = $op->name;
-            if ($exits && ($name eq 'return' || $name eq 'leavesub'
-                    || $name eq 'leavesublv')) {
+            my $is_leavesub = $name eq 'leavesub' || $name eq 'leavesublv';
+            # With $stop_at_exit, the IMPLICIT trailing leavesub must NOT be
+            # recorded as an exit -- it would consume the arm's computed value
+            # (the value-returning && / || / ternary arm). Only an EXPLICIT
+            # return is a real exit there. Without $stop_at_exit, both a return
+            # and a leavesub terminate the arm as a function exit.
+            my $exit_here = $exits
+                && ($name eq 'return' || (!$stop_at_exit && $is_leavesub));
+            if ($exit_here) {
                 $visited->{$$op}++;
                 push @$exits, _exit_record($sim, $factory,
                     $name eq 'return' ? 'return' : 'leavesub');
                 return ($op, 'exited');
             }
-            # $stop_at_exit (cond_expr value arms): stop BEFORE stepping the
-            # implicit function exit (leavesub) so it does not consume the arm's
-            # computed value. An EXPLICIT return in an arm is stepped normally so
-            # its pushmark/pop_to_mark stay balanced (stopping before it would
-            # leak the mark and underflow the caller's return).
+            # $stop_at_exit (cond_expr / && / || value arms): stop BEFORE stepping
+            # the implicit function exit (leavesub) so it does not consume the
+            # arm's computed value. An EXPLICIT return in an arm is handled above
+            # (recorded as an exit) so its pushmark/pop_to_mark stay balanced
+            # (stopping before it would leak the mark and underflow the caller).
             if ($stop_at_exit
                 && ($name eq 'leavesub' || $name eq 'leavesublv')) {
                 return $op;

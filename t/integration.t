@@ -59,8 +59,10 @@ subtest 'Ternary operator' => sub {
 };
 
 subtest 'Short-circuit and' => sub {
+    # `&&` is an operand-returning short-circuit op: the producer emits a single
+    # And node (corpus logical.md L1); the backend expands it to the br+phi.
     my ($graph, $text) = translate_and_render(eval 'sub { my $a = 1; my $b = 2; $a && $b }');
-    like($text, qr/If/, 'If node for &&');
+    like($text, qr/And/, 'And node for &&');
     diag($text);
 };
 
