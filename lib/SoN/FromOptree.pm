@@ -119,33 +119,39 @@ class SoN::FromOptree 0.01 {
                 next;
             }
 
-            # cond_expr op: $cond ? $true : $false -> TernaryExpr node
+            # cond_expr op: $cond ? $true : $false -> TernaryExpr node.
+            #
+            # In Perl's cond_expr, op->next reaches the FALSE arm and op->other
+            # the TRUE arm (probe-confirmed). TernaryExpr wants inputs[1]=true,
+            # inputs[2]=false (the backend reads inputs[1] as the true branch), so
+            # the op->next result is the FALSE value and op->other the TRUE value.
+            #
+            # The arm value is what the arm PUSHES on top of the snapshot, not any
+            # pre-existing leftover (a prior statement's discarded value can sit
+            # on the stack) -- pop only when the arm grew the stack past its base.
+            # _walk_branch stops before a function exit (leavesub) so the exit
+            # does not consume the arm's value; without that, whichever arm walked
+            # first through the shared exit lost its value.
             if ($opmap->is_branch($name) && $name eq 'cond_expr') {
                 my $cond = $sim->pop_node;
-                # Walk true path (op->next) to get the true-branch value
-                my $true_sim = $sim->snapshot;
-                my $true_end = _walk_branch($cv, $op->next, $true_sim, $factory, $opmap, \%visited);
-                my $true_val;
-                if ($true_sim->stack_depth > 0) {
-                    $true_val = $true_sim->pop_node;
-                } else {
-                    $true_val = $factory->make('Constant',
-                        value      => undef,
-                        const_type => 'undef',
-                        stamp      => SoN::IR::Stamp->new(type => 'Undef'));
-                }
-                # Walk false path (op->other) to get the false-branch value
-                my $false_sim = $sim->snapshot;
-                my $false_end = _walk_branch($cv, $op->other, $false_sim, $factory, $opmap, \%visited);
-                my $false_val;
-                if ($false_sim->stack_depth > 0) {
-                    $false_val = $false_sim->pop_node;
-                } else {
-                    $false_val = $factory->make('Constant',
-                        value      => undef,
-                        const_type => 'undef',
-                        stamp      => SoN::IR::Stamp->new(type => 'Undef'));
-                }
+
+                my $base_depth = $sim->stack_depth;
+                my $walk_arm = sub ($start) {
+                    my $arm_sim = $sim->snapshot;
+                    my $end = _walk_branch($cv, $start, $arm_sim, $factory, $opmap,
+                        \%visited, undef, 1);   # stop_at_exit: keep the arm value
+                    my $val = $arm_sim->stack_depth > $base_depth
+                        ? $arm_sim->pop_node
+                        : $factory->make('Constant',
+                            value => undef, const_type => 'undef',
+                            stamp => SoN::IR::Stamp->new(type => 'Undef'));
+                    return ($val, $end);
+                };
+
+                # op->next = false arm, op->other = true arm.
+                my ($false_val, $false_end) = $walk_arm->($op->next);
+                my ($true_val,  $true_end)  = $walk_arm->($op->other);
+
                 my $node = $factory->make('TernaryExpr',
                     inputs => [$cond, $true_val, $false_val]);
                 $sim->push_node($node);
@@ -1063,7 +1069,7 @@ class SoN::FromOptree 0.01 {
     # caller's merge knows this arm does not rejoin (Phase 4b-1). When $exits
     # is not passed (older callers: dor/cond_expr/trycatch arms that compute a
     # value), a return falls through to the legacy stop-at-op behavior.
-    sub _walk_branch ($cv, $op, $sim, $factory, $opmap, $visited, $exits = undef) {
+    sub _walk_branch ($cv, $op, $sim, $factory, $opmap, $visited, $exits = undef, $stop_at_exit = 0) {
         my $ctx = { mode => 'branch' };
         while ($$op) {
             # If we've already visited this op, we've converged
@@ -1076,6 +1082,15 @@ class SoN::FromOptree 0.01 {
                 push @$exits, _exit_record($sim, $factory,
                     $name eq 'return' ? 'return' : 'leavesub');
                 return ($op, 'exited');
+            }
+            # $stop_at_exit (cond_expr value arms): stop BEFORE stepping the
+            # implicit function exit (leavesub) so it does not consume the arm's
+            # computed value. An EXPLICIT return in an arm is stepped normally so
+            # its pushmark/pop_to_mark stay balanced (stopping before it would
+            # leak the mark and underflow the caller's return).
+            if ($stop_at_exit
+                && ($name eq 'leavesub' || $name eq 'leavesublv')) {
+                return $op;
             }
 
             $visited->{$$op}++;
