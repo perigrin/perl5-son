@@ -53,6 +53,22 @@ subtest 'concat is stamped Str' => sub {
     is($cat->stamp->type, 'Str', 'Concat result stamp is Str');
 };
 
+subtest 'Not is stamped Boolean' => sub {
+    # Perl ! always yields a genuine primitive boolean (is_bool(!5) is true),
+    # so Not is a fixed-result rule: Boolean regardless of input stamps.
+    my $not = computed(sub { my $a = 5; !$a }, 'Not');
+    ok(defined $not, 'has a Not node');
+    ok(defined $not->stamp, 'Not carries a stamp');
+    is($not->stamp->type, 'Boolean', 'Not result stamp is Boolean');
+};
+
+subtest 'Not of an unstamped operand is still Boolean' => sub {
+    my $not = computed(sub ($x) { !$x }, 'Not');
+    ok(defined $not, 'has a Not node');
+    ok(defined $not->stamp, 'Not carries a stamp even over unstamped input');
+    is($not->stamp->type, 'Boolean', 'fixed-result rule ignores input stamps');
+};
+
 subtest 'unstamped inputs leave the result unstamped (honest GAP)' => sub {
     # Signature params have no type annotation, so their PadAccess carries no
     # stamp; the Add result must NOT be invented -- it stays unstamped so the

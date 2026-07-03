@@ -50,6 +50,9 @@ class SoN::FromOptree 0.01 {
         )),
         NumCmp => 'Int',
         StrCmp => 'Int',
+        # Logical negation always yields a genuine primitive boolean
+        # (is_bool(!5) is true), regardless of the operand's type.
+        Not => 'Boolean',
     );
 
     # _result_stamp($node_type, \@inputs) -> SoN::IR::Stamp or undef.
