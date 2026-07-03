@@ -122,43 +122,11 @@ class SoN::FromOptree 0.01 {
                 next;
             }
 
-            # cond_expr op: $cond ? $true : $false -> TernaryExpr node.
-            #
-            # In Perl's cond_expr, op->next reaches the FALSE arm and op->other
-            # the TRUE arm (probe-confirmed). TernaryExpr wants inputs[1]=true,
-            # inputs[2]=false (the backend reads inputs[1] as the true branch), so
-            # the op->next result is the FALSE value and op->other the TRUE value.
-            #
-            # The arm value is what the arm PUSHES on top of the snapshot, not any
-            # pre-existing leftover (a prior statement's discarded value can sit
-            # on the stack) -- pop only when the arm grew the stack past its base.
-            # _walk_branch stops before a function exit (leavesub) so the exit
-            # does not consume the arm's value; without that, whichever arm walked
-            # first through the shared exit lost its value.
+            # cond_expr op: ternary / if-else. Handled by _handle_cond_expr
+            # (shared with _walk_branch so nesting recurses).
             if ($opmap->is_branch($name) && $name eq 'cond_expr') {
-                my $cond = $sim->pop_node;
-
-                my $base_depth = $sim->stack_depth;
-                my $walk_arm = sub ($start) {
-                    my $arm_sim = $sim->snapshot;
-                    my $end = _walk_branch($cv, $start, $arm_sim, $factory, $opmap,
-                        \%visited, undef, 1);   # stop_at_exit: keep the arm value
-                    my $val = $arm_sim->stack_depth > $base_depth
-                        ? $arm_sim->pop_node
-                        : $factory->make('Constant',
-                            value => undef, const_type => 'undef',
-                            stamp => SoN::IR::Stamp->new(type => 'Undef'));
-                    return ($val, $end);
-                };
-
-                # op->next = false arm, op->other = true arm.
-                my ($false_val, $false_end) = $walk_arm->($op->next);
-                my ($true_val,  $true_end)  = $walk_arm->($op->other);
-
-                my $node = $factory->make('TernaryExpr',
-                    inputs => [$cond, $true_val, $false_val]);
-                $sim->push_node($node);
-                $op = $true_end // $false_end // $op->next;
+                $op = _handle_cond_expr($cv, $op, $sim, $factory, $opmap,
+                    \%visited);
                 next;
             }
 
@@ -265,8 +233,8 @@ class SoN::FromOptree 0.01 {
                         my @arms = $name eq 'and'
                             ? ($armv, $base)    # if:     cond ? arm : base
                             : ($base, $armv);   # unless: cond ? base : arm
-                        $sim->define($targ, $factory->make('TernaryExpr',
-                            inputs => [$lhs, @arms]));
+                        $sim->define($targ,
+                            _make_ternary($factory, $lhs, @arms));
                     }
                     $op = $op->next;
                     next;
@@ -1438,6 +1406,106 @@ class SoN::FromOptree 0.01 {
         return $exit_proj;
     }
 
+    # Both arms of a cond_expr rejoin at the op AFTER the construct, but that
+    # op is not derivable from the cond_expr itself (op_next IS the false
+    # arm). Scan each arm's op_next chain and take the first address the two
+    # share: a linear op_next scan follows SOME path through any nested
+    # branches, and all paths rejoin, so the join lies on every chain.
+    # Returns 0 when no common op is found (degenerate/cyclic chains).
+    sub _find_join_addr ($a_start, $b_start) {
+        my %a_seen;
+        for (my $op = $a_start; $$op && !$a_seen{$$op}; $op = $op->next) {
+            $a_seen{$$op} = 1;
+        }
+        my %b_seen;
+        for (my $op = $b_start; $$op && !$b_seen{$$op}; $op = $op->next) {
+            return $$op if $a_seen{$$op};
+            $b_seen{$$op} = 1;
+        }
+        return 0;
+    }
+
+    sub _undef_constant ($factory) {
+        return $factory->make('Constant',
+            value      => undef,
+            const_type => 'undef',
+            stamp      => SoN::IR::Stamp->new(type => 'Undef'));
+    }
+
+    # A merge's type is the join of its two ARM stamps -- the condition never
+    # contributes (a Boolean guard does not make the value a Boolean). Left
+    # unstamped when either arm is (honest GAP, no guessing); the backend
+    # requires an explicit repr on a ternary consumed as another's arm.
+    sub _make_ternary ($factory, $cond, $true_val, $false_val) {
+        my %args = (inputs => [$cond, $true_val, $false_val]);
+        if (defined $true_val->stamp && defined $false_val->stamp) {
+            $args{stamp} = SoN::IR::Stamp::join(
+                $true_val->stamp, $false_val->stamp);
+        }
+        return $factory->make('TernaryExpr', %args);
+    }
+
+    # cond_expr: $cond ? $true : $false, and the statement form
+    # `if (...) {...} else {...}` (a VOID cond_expr). op->next reaches the
+    # FALSE arm and op->other the TRUE arm (probe-confirmed); TernaryExpr
+    # wants inputs[1]=true, inputs[2]=false. Each arm walks on a snapshot
+    # with a stop at the join op so it cannot consume the rest of the sub.
+    #
+    # Value context: the construct's value is what each arm PUSHES past the
+    # pre-walk base depth (a prior statement's discarded value can sit below).
+    # Void context: the value is discarded; the effect is the pad rebinds the
+    # arms made -- each slot changed in EITHER arm rebinds to
+    # TernaryExpr(cond, true_binding, false_binding), falling back to the
+    # pre-construct binding (or undef: an if/else may initialize a declared-
+    # but-unassigned `my $x`) for the arm that left it alone.
+    #
+    # Called from the main walk AND from _walk_branch, so nested ternaries /
+    # if-else inside an arm recurse instead of degrading the arm value to the
+    # inner condition. Returns the op where translation continues.
+    sub _handle_cond_expr ($cv, $op, $sim, $factory, $opmap, $visited) {
+        my $cond = $sim->pop_node;
+        my $join_addr = _find_join_addr($op->other, $op->next) || undef;
+
+        my $base_depth = $sim->stack_depth;
+        my $walk_arm = sub ($start) {
+            my $arm_sim = $sim->snapshot;
+            my $end = _walk_branch($cv, $start, $arm_sim, $factory, $opmap,
+                $visited, undef, 1, $join_addr);  # stop_at_exit + join stop
+            my $val = $arm_sim->stack_depth > $base_depth
+                ? $arm_sim->pop_node
+                : _undef_constant($factory);
+            return ($val, $end, $arm_sim);
+        };
+
+        # op->next = false arm, op->other = true arm.
+        my ($false_val, $false_end, $false_sim) = $walk_arm->($op->next);
+        my ($true_val,  $true_end,  $true_sim)  = $walk_arm->($op->other);
+
+        if (($op->flags & 3) == 1) {   # OPf_WANT == OPf_WANT_VOID
+            my $base_scope  = $sim->scope_bindings;
+            my $true_scope  = $true_sim->scope_bindings;
+            my $false_scope = $false_sim->scope_bindings;
+            my %targs = map { $_ => 1 } keys %$true_scope, keys %$false_scope;
+            for my $targ (sort { $a <=> $b } keys %targs) {
+                my $pre = $base_scope->{$targ};
+                my $tv  = $true_scope->{$targ}  // $pre;
+                my $fv  = $false_scope->{$targ} // $pre;
+                next if !defined $tv && !defined $fv;
+                next if defined $pre
+                    && defined $tv && defined $fv
+                    && $tv == $pre && $fv == $pre;
+                $tv //= _undef_constant($factory);
+                $fv //= _undef_constant($factory);
+                $sim->define($targ, _make_ternary($factory, $cond, $tv, $fv));
+            }
+            return $true_end // $false_end // $op->next;
+        }
+
+        my $node = _make_ternary($factory, $cond, $true_val, $false_val);
+        $sim->push_node($node);
+        return $true_end // $false_end // $op->next;
+    }
+
     # Walk a branch path until we hit a visited op, a function exit, or end.
     # $exits (optional) is the shared single-exit accumulator: an explicit
     # return/leavesub inside this arm is a control edge to the FUNCTION exit,
@@ -1480,6 +1548,18 @@ class SoN::FromOptree 0.01 {
             if ($stop_at_exit
                 && ($name eq 'leavesub' || $name eq 'leavesublv')) {
                 return $op;
+            }
+
+            # A nested ternary / if-else inside an arm must be translated,
+            # not treated as an unhandled stop -- otherwise the arm's value
+            # degrades to the inner CONDITION and the inner assignments
+            # vanish (the corpus D7/D9 miscompile).
+            if ($name eq 'cond_expr' && $opmap->is_branch($name)
+                && $sim->stack_depth > 0) {
+                $visited->{$$op}++;
+                $op = _handle_cond_expr($cv, $op, $sim, $factory, $opmap,
+                    $visited);
+                next;
             }
 
             $visited->{$$op}++;
