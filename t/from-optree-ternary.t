@@ -38,24 +38,32 @@ subtest 'distinct values confirm the order is not accidental' => sub {
     is($false_arm->value, 20, 'false arm is 20');
 };
 
-# Regression guard: the ternary arm walk stops before a function exit only for
-# cond_expr's own arms. Other branch idioms whose arm contains a return/die
-# (EXPR // return X -- ubiquitous in real lib/) must still translate; a naive
-# stop-before-exit leaks the return's pushmark and underflows the mark stack.
-sub translates_ok ($code) {
+# Regression guard: a dor arm containing a return (EXPR // return X --
+# ubiquitous in real lib/) must still translate without leaking the return's
+# pushmark and underflowing the mark stack. A cond_expr arm containing a
+# return, by contrast, now refuses LOUDLY: the old walk stepped through the
+# exit and silently dropped it (the function returned the merge instead), and
+# a one-sided arm exit needs real control threading to lower. The GAP die is
+# also mark-balanced -- the point of the original underflow guard.
+sub translate_result ($code) {
     SoN::OptSuppress::suppress_peep();
     my $cv = eval $code;
     my $err = $@;
     SoN::OptSuppress::restore_peep();
     die "compile failed: $err" if $err;
-    return defined eval { SoN::FromOptree->translate($cv) };
+    my $g = eval { SoN::FromOptree->translate($cv) };
+    return ($g, $@);
 }
 
-subtest 'return inside a dor or ternary arm still translates' => sub {
-    ok(translates_ok('sub { my %M = (a=>1); my $x = $M{b} // return "f"; $x }'),
-        'EXPR // return X translates (no mark underflow)');
-    ok(translates_ok('sub { my $n = 5; $n > 0 ? (return 1) : 2 }'),
-        'a ternary arm containing return translates (no mark underflow)');
+subtest 'return inside a dor or ternary arm' => sub {
+    my ($dor_g, $dor_err) = translate_result(
+        'sub { my %M = (a=>1); my $x = $M{b} // return "f"; $x }');
+    ok(defined $dor_g, 'EXPR // return X translates (no mark underflow)')
+        or diag($dor_err);
+    my ($tern_g, $tern_err) = translate_result(
+        'sub { my $n = 5; $n > 0 ? (return 1) : 2 }');
+    ok(!defined $tern_g, 'a ternary arm containing return refuses');
+    like($tern_err, qr/GAP/, 'and the refusal is a GAP die, not a crash');
 };
 
 done_testing();

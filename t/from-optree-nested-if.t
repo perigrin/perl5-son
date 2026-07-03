@@ -99,4 +99,19 @@ subtest 'one-armed if merges against the prior binding' => sub {
     is($false->value, 9, 'false arm is the prior binding');
 };
 
+subtest 'return inside an if/else arm refuses loudly' => sub {
+    # Pre-existing hole surfaced by review discipline: the arm walk ran with
+    # no exit accumulator, so `return 9` in an arm was silently dropped and
+    # the function returned the merge instead (wrong value, no error). The
+    # one-sided-exit merge needs real control threading; refuse until then.
+    SoN::OptSuppress::suppress_peep();
+    my $cv = eval
+        'sub { my $n = 5; my $x = 0; if ($n > 0) { return 9 } else { $x = 1 } $x }';
+    my $err = $@;
+    SoN::OptSuppress::restore_peep();
+    die "compile failed: $err" if $err;
+    like(dies { SoN::FromOptree->translate($cv) }, qr/GAP/,
+        'function exit inside a cond_expr arm dies with a GAP message');
+};
+
 done_testing();

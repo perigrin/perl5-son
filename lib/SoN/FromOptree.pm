@@ -1469,8 +1469,15 @@ class SoN::FromOptree 0.01 {
         my $base_depth = $sim->stack_depth;
         my $walk_arm = sub ($start) {
             my $arm_sim = $sim->snapshot;
-            my $end = _walk_branch($cv, $start, $arm_sim, $factory, $opmap,
-                $visited, undef, 1, $join_addr);  # stop_at_exit + join stop
+            # A local exit accumulator so an explicit `return` in the arm is
+            # DETECTED (with none, the walk stepped through it and silently
+            # dropped the exit -- the function then returned the merge).
+            # A one-sided exit needs real control threading; refuse loudly.
+            my @arm_exits;
+            my ($end, $sig) = _walk_branch($cv, $start, $arm_sim, $factory,
+                $opmap, $visited, \@arm_exits, 1, $join_addr);
+            die "GAP: function exit inside an if/else arm not yet lowered\n"
+                if ($sig // '') eq 'exited';
             my $val = $arm_sim->stack_depth > $base_depth
                 ? $arm_sim->pop_node
                 : _undef_constant($factory);
