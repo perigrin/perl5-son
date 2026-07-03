@@ -243,12 +243,13 @@ class SoN::FromOptree::OpMap 0.01 {
         tied        => [1, 'Call',     1, 0],
 
         # === Regex operations ===
-        match       => [1, 'Call',     1, 0],
+        # match and qr are handled directly in FromOptree.pm (PMOP pattern
+        # extraction); regcomp is transparent -- it leaves the runtime
+        # pattern value on the stack for the following match op.
         subst       => [1, 'Call',     1, 0],
         substcont   => [0, undef,      0, BRANCH],
         trans       => [1, 'Call',     1, 0],
         transr      => [1, 'Call',     1, 0],
-        qr          => [1, 'Call',     1, 0],
         regcomp     => [1, undef,      1, SKIP],
         regcmaybe   => [1, undef,      1, SKIP],
         regcreset   => [1, undef,      1, SKIP],

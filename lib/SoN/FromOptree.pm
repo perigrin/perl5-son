@@ -438,68 +438,6 @@ class SoN::FromOptree 0.01 {
                 last;
             }
 
-            # Handle match - regex match op: /pattern/flags against pad variable.
-            # A literal pattern (precomp) is a RegexMatch; a runtime pattern
-            # ($s =~ $re) has no precomp -- the preceding regcomp staged the
-            # matcher value, and the application is a Match(subject, matcher)
-            # node (corpus regex.md R2). Either way the node is recorded as
-            # the last match so a following $N read can wire to it.
-            if ($name eq 'match' && $op->isa('B::PMOP')) {
-                my $pattern = $op->precomp;
-                my $flags   = _pmflags_to_str($op->pmflags);
-                my $targ    = $op->targ;
-                my $target  = $sim->lookup($targ);
-                if (!$target) {
-                    $target = _make_pad_or_field($cv, $targ, $factory);
-                    $sim->define($targ, $target);
-                }
-                my $node;
-                if (defined $pattern) {
-                    $node = $factory->make('RegexMatch',
-                        inputs  => [$target],
-                        pattern => $pattern,
-                        flags   => $flags,
-                    );
-                }
-                else {
-                    my $matcher = $sim->take_pending_regex
-                        // die "GAP: =~ with a runtime pattern and no preceding regcomp\n";
-                    $node = $factory->make('Match',
-                        inputs => [$target, $matcher],
-                        stamp  => SoN::IR::Stamp->new(type => 'Boolean'),
-                    );
-                }
-                $sim->set_last_match($node);
-                $sim->push_node($node);
-                $op = $op->next;
-                next;
-            }
-
-            # Handle qr// - a compiled-regex literal. It is a first-class
-            # matcher VALUE (corpus regex.md R2): a Constant of const_type
-            # 'regex' carrying the pattern. A later =~ applies it; the backend
-            # resolves the constant statically (no runtime regex compile).
-            if ($name eq 'qr' && $op->isa('B::PMOP')) {
-                my $pattern = $op->precomp
-                    // die "GAP: qr// with a runtime-interpolated pattern not yet lowered\n";
-                my $node = $factory->make('Constant',
-                    value      => $pattern,
-                    const_type => 'regex',
-                );
-                $sim->push_node($node);
-                $op = $op->next;
-                next;
-            }
-
-            # Handle regcomp - compiles the popped pattern value for the
-            # following match op. Staged on the sim; the backend GAPs loudly
-            # at lowering if the value is not a statically-known qr constant.
-            if ($name eq 'regcomp') {
-                $sim->set_pending_regex($sim->pop_node);
-                $op = $op->next;
-                next;
-            }
-
             # Handle subst - regex substitution op: s/pattern/replacement/flags
             if ($name eq 'subst' && $op->isa('B::PMOP')) {
                 my $pattern = $op->precomp // '';
@@ -781,7 +719,7 @@ class SoN::FromOptree 0.01 {
         if ($name eq 'gv') {
             my $gv = _op_gv($cv, $op);
             my $node = $factory->make('Constant',
-                value      => ($gv && $gv->can('NAME')) ? $gv->NAME : 'unknown',
+                value      => $gv ? $gv->NAME : 'unknown',
                 const_type => 'string',
                 stamp      => SoN::IR::Stamp->new(type => 'Str'));
             $sim->push_node($node);
@@ -798,7 +736,7 @@ class SoN::FromOptree 0.01 {
             # rv2sv's gv kid already pushed its name Constant; discard it.
             $sim->pop_node if $name eq 'rv2sv';
             my $gv = _op_gv($cv, $gv_op);
-            my $gv_name = ($gv && $gv->can('NAME')) ? $gv->NAME : undef;
+            my $gv_name = $gv && $gv->NAME;
             die "GAP: package scalar read with an unresolvable GV not yet lowered\n"
                 unless defined $gv_name;
             if ($gv_name =~ /^[1-9][0-9]*$/) {
@@ -824,6 +762,54 @@ class SoN::FromOptree 0.01 {
             die "GAP: scalar dereference (rv2sv over a non-gv) not yet lowered\n";
         }
 
+        # Handle match - regex match op. A literal pattern (precomp) is a
+        # RegexMatch; a runtime pattern ($s =~ $re) has no precomp -- its
+        # regcomp kid is transparent (OpMap SKIP), leaving the matcher value
+        # on the stack, and the application is a Match(subject, matcher)
+        # node (corpus regex.md R2; the backend resolves a qr constant
+        # statically). Either way the node is recorded as the last match so
+        # a following $N read can wire to it.
+        if ($name eq 'match' && $op->isa('B::PMOP')) {
+            my $pattern = $op->precomp;
+            my $targ    = $op->targ;
+            my $target  = $sim->lookup($targ);
+            if (!$target) {
+                $target = _make_pad_or_field($cv, $targ, $factory);
+                $sim->define($targ, $target);
+            }
+            my $node;
+            if (defined $pattern) {
+                $node = $factory->make('RegexMatch',
+                    inputs  => [$target],
+                    pattern => $pattern,
+                    flags   => _pmflags_to_str($op->pmflags),
+                );
+            }
+            else {
+                $node = $factory->make('Match',
+                    inputs => [$target, $sim->pop_node],
+                    stamp  => SoN::IR::Stamp->new(type => 'Boolean'),
+                );
+            }
+            $sim->set_last_match($node);
+            $sim->push_node($node);
+            return ($op->next, 'handled');
+        }
+
+        # Handle qr// - a compiled-regex literal. It is a first-class
+        # matcher VALUE (corpus regex.md R2): a Constant of const_type
+        # 'regex' carrying the pattern. A later =~ applies it.
+        if ($name eq 'qr' && $op->isa('B::PMOP')) {
+            my $pattern = $op->precomp
+                // die "GAP: qr// with a runtime-interpolated pattern not yet lowered\n";
+            my $node = $factory->make('Constant',
+                value      => $pattern,
+                const_type => 'regex',
+            );
+            $sim->push_node($node);
+            return ($op->next, 'handled');
+        }
+
         # Handle undef -- perl compiles `my $a = undef` to a single undef op
         # with LVINTRO+TARGMY (the sassign is nulled), and a bare undef value
         # to the same op with no targ. Either way the value is the Undef
@@ -831,10 +817,7 @@ class SoN::FromOptree 0.01 {
         # its operand -- not modeled yet.
         if ($name eq 'undef') {
             die "GAP: undef(EXPR) not yet lowered\n" if $op->flags & 4; # OPf_KIDS
-            my $node = $factory->make('Constant',
-                value      => undef,
-                const_type => 'undef',
-                stamp      => SoN::IR::Stamp->new(type => 'Undef'));
+            my $node = _undef_constant($factory);
             if ($op->can('targ') && $op->targ && ($op->private & 16)) { # OPpTARGET_MY
                 my $targ = $op->targ;
                 if ($mode eq 'main' && ($op->private & 128)) { # OPpLVAL_INTRO
@@ -1740,9 +1723,7 @@ class SoN::FromOptree 0.01 {
             my $sv = $op->sv;
             return $sv if $$sv && $sv->isa('B::GV');
         }
-        my $ix = $op->can('padix') ? $op->padix
-               : $op->can('targ')  ? $op->targ
-               :                     0;
+        my $ix = $op->can('padix') ? $op->padix : $op->targ;
         if ($ix) {
             my $padl = $cv->PADLIST;
             if ($$padl) {
