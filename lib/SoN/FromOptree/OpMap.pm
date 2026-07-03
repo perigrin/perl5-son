@@ -45,9 +45,8 @@ class SoN::FromOptree::OpMap 0.01 {
         # argelem handled directly in FromOptree.pm (need targ/varname extraction)
 
         # === Global variable access ===
-        gv        => [0, 'StashAccess', 1, 0],
-        gvsv      => [0, 'StashAccess', 1, 0],
-        rv2sv     => [1, 'StashAccess', 1, 0],
+        # gv, gvsv, and rv2sv are handled directly in FromOptree.pm (they
+        # need GV name extraction; $N capture reads become RegexCapture).
         rv2av     => [1, undef,         1, SKIP],
         rv2hv     => [1, undef,         1, SKIP],
         rv2cv     => [1, undef,         1, SKIP],

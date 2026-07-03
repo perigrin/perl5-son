@@ -339,34 +339,6 @@ class SoN::FromOptree 0.01 {
                 next;
             }
 
-            # Handle gv - global variable reference (for sub calls etc.)
-            if ($name eq 'gv') {
-                my $sv = $op->sv;
-                my $gv_name = 'unknown';
-                if ($$sv && $sv->isa('B::GV')) {
-                    $gv_name = $sv->NAME;
-                } elsif (!$$sv || $sv->isa('B::SPECIAL')) {
-                    # Shared GV, look in pad
-                    my $targ = $op->targ;
-                    if ($targ) {
-                        my $padl = $cv->PADLIST;
-                        if ($$padl) {
-                            my $pad_sv = $padl->ARRAYelt(1)->ARRAYelt($targ);
-                            if ($$pad_sv && $pad_sv->isa('B::GV')) {
-                                $gv_name = $pad_sv->NAME;
-                            }
-                        }
-                    }
-                }
-                my $node = $factory->make('Constant',
-                    value      => $gv_name,
-                    const_type => 'string',
-                    stamp      => SoN::IR::Stamp->new(type => 'Str'));
-                $sim->push_node($node);
-                $op = $op->next;
-                next;
-            }
-
             # Handle entersub - subroutine or method call. A method dispatch is
             # signalled by a preceding method_named (recorded in $pending_method);
             # otherwise it is a direct sub call.
@@ -466,9 +438,14 @@ class SoN::FromOptree 0.01 {
                 last;
             }
 
-            # Handle match - regex match op: /pattern/flags against pad variable
+            # Handle match - regex match op: /pattern/flags against pad variable.
+            # A literal pattern (precomp) is a RegexMatch; a runtime pattern
+            # ($s =~ $re) has no precomp -- the preceding regcomp staged the
+            # matcher value, and the application is a Match(subject, matcher)
+            # node (corpus regex.md R2). Either way the node is recorded as
+            # the last match so a following $N read can wire to it.
             if ($name eq 'match' && $op->isa('B::PMOP')) {
-                my $pattern = $op->precomp // '';
+                my $pattern = $op->precomp;
                 my $flags   = _pmflags_to_str($op->pmflags);
                 my $targ    = $op->targ;
                 my $target  = $sim->lookup($targ);
@@ -476,12 +453,49 @@ class SoN::FromOptree 0.01 {
                     $target = _make_pad_or_field($cv, $targ, $factory);
                     $sim->define($targ, $target);
                 }
-                my $node = $factory->make('RegexMatch',
-                    inputs  => [$target],
-                    pattern => $pattern,
-                    flags   => $flags,
+                my $node;
+                if (defined $pattern) {
+                    $node = $factory->make('RegexMatch',
+                        inputs  => [$target],
+                        pattern => $pattern,
+                        flags   => $flags,
+                    );
+                }
+                else {
+                    my $matcher = $sim->take_pending_regex
+                        // die "GAP: =~ with a runtime pattern and no preceding regcomp\n";
+                    $node = $factory->make('Match',
+                        inputs => [$target, $matcher],
+                        stamp  => SoN::IR::Stamp->new(type => 'Boolean'),
+                    );
+                }
+                $sim->set_last_match($node);
+                $sim->push_node($node);
+                $op = $op->next;
+                next;
+            }
+
+            # Handle qr// - a compiled-regex literal. It is a first-class
+            # matcher VALUE (corpus regex.md R2): a Constant of const_type
+            # 'regex' carrying the pattern. A later =~ applies it; the backend
+            # resolves the constant statically (no runtime regex compile).
+            if ($name eq 'qr' && $op->isa('B::PMOP')) {
+                my $pattern = $op->precomp
+                    // die "GAP: qr// with a runtime-interpolated pattern not yet lowered\n";
+                my $node = $factory->make('Constant',
+                    value      => $pattern,
+                    const_type => 'regex',
                 );
                 $sim->push_node($node);
+                $op = $op->next;
+                next;
+            }
+
+            # Handle regcomp - compiles the popped pattern value for the
+            # following match op. Staged on the sim; the backend GAPs loudly
+            # at lowering if the value is not a statically-known qr constant.
+            if ($name eq 'regcomp') {
+                $sim->set_pending_regex($sim->pop_node);
                 $op = $op->next;
                 next;
             }
@@ -758,6 +772,80 @@ class SoN::FromOptree 0.01 {
                 $sim->define($targ, $node);
                 $sim->push_node($node);
             }
+            return ($op->next, 'handled');
+        }
+
+        # Handle gv - global variable reference. Pushes the GV NAME as a
+        # string Constant: an entersub consumes it as the callee name. An
+        # rv2sv over it (a package scalar read) pops and replaces it below.
+        if ($name eq 'gv') {
+            my $gv = _op_gv($cv, $op);
+            my $node = $factory->make('Constant',
+                value      => ($gv && $gv->can('NAME')) ? $gv->NAME : 'unknown',
+                const_type => 'string',
+                stamp      => SoN::IR::Stamp->new(type => 'Str'));
+            $sim->push_node($node);
+            return ($op->next, 'handled');
+        }
+
+        # Handle gvsv (peep-fused) and rv2sv-over-gv (canonical): a package
+        # scalar read. A numbered capture var ($1..) reads a group of the
+        # last regex match (corpus host.md H1/H2: RegexCapture(match, n)
+        # :Str); any other package scalar is a StashAccess named from its GV.
+        if ($name eq 'gvsv'
+            || ($name eq 'rv2sv' && $op->can('first') && $op->first->name eq 'gv')) {
+            my $gv_op = $name eq 'gvsv' ? $op : $op->first;
+            # rv2sv's gv kid already pushed its name Constant; discard it.
+            $sim->pop_node if $name eq 'rv2sv';
+            my $gv = _op_gv($cv, $gv_op);
+            my $gv_name = ($gv && $gv->can('NAME')) ? $gv->NAME : undef;
+            die "GAP: package scalar read with an unresolvable GV not yet lowered\n"
+                unless defined $gv_name;
+            if ($gv_name =~ /^[1-9][0-9]*$/) {
+                my $match = $sim->last_match
+                    // die "GAP: capture \$$gv_name read with no preceding match in scope\n";
+                my $node = $factory->make('RegexCapture',
+                    inputs => [$match],
+                    n      => 0 + $gv_name,
+                    stamp  => SoN::IR::Stamp->new(type => 'Str'));
+                $sim->push_node($node);
+            }
+            else {
+                my $node = $factory->make('StashAccess',
+                    stash_name => $gv->STASH->NAME,
+                    var_name   => $gv_name);
+                $sim->push_node($node);
+            }
+            return ($op->next, 'handled');
+        }
+
+        # Any other rv2sv is a scalar dereference this walker does not model.
+        if ($name eq 'rv2sv') {
+            die "GAP: scalar dereference (rv2sv over a non-gv) not yet lowered\n";
+        }
+
+        # Handle undef -- perl compiles `my $a = undef` to a single undef op
+        # with LVINTRO+TARGMY (the sassign is nulled), and a bare undef value
+        # to the same op with no targ. Either way the value is the Undef
+        # Constant (corpus logical.md L3b). undef(EXPR) has kids and mutates
+        # its operand -- not modeled yet.
+        if ($name eq 'undef') {
+            die "GAP: undef(EXPR) not yet lowered\n" if $op->flags & 4; # OPf_KIDS
+            my $node = $factory->make('Constant',
+                value      => undef,
+                const_type => 'undef',
+                stamp      => SoN::IR::Stamp->new(type => 'Undef'));
+            if ($op->can('targ') && $op->targ && ($op->private & 16)) { # OPpTARGET_MY
+                my $targ = $op->targ;
+                if ($mode eq 'main' && ($op->private & 128)) { # OPpLVAL_INTRO
+                    my $pad_node = _make_pad_or_field($cv, $targ, $factory);
+                    $factory->make('VarDecl',
+                        inputs => [$pad_node, $node],
+                        scope  => 'my');
+                }
+                $sim->define($targ, $node);
+            }
+            $sim->push_node($node);
             return ($op->next, 'handled');
         }
 
@@ -1642,6 +1730,27 @@ class SoN::FromOptree 0.01 {
         }
         my $varname = _padname($cv, $targ);
         return $factory->make('PadAccess', targ => $targ, varname => $varname);
+    }
+
+    # Resolve the GV of a gv/gvsv op. Unthreaded perls store it on the op
+    # (B::SVOP, ->sv is a B::GV); threaded perls store it in the pad
+    # (B::PADOP at ->padix, or an SVOP with a B::SPECIAL sv and ->targ).
+    sub _op_gv ($cv, $op) {
+        if ($op->can('sv')) {
+            my $sv = $op->sv;
+            return $sv if $$sv && $sv->isa('B::GV');
+        }
+        my $ix = $op->can('padix') ? $op->padix
+               : $op->can('targ')  ? $op->targ
+               :                     0;
+        if ($ix) {
+            my $padl = $cv->PADLIST;
+            if ($$padl) {
+                my $gv = $padl->ARRAYelt(1)->ARRAYelt($ix);
+                return $gv if $$gv && $gv->isa('B::GV');
+            }
+        }
+        return undef;
     }
 
     # Get the variable name for a pad index.

@@ -92,6 +92,9 @@ sub _extract_fields ($node, $id_remap) {
             flags       => $node->flags,
         };
     }
+    if ($op eq 'RegexCapture') {
+        return { n => $node->n };
+    }
     if ($op eq 'VarDecl') {
         return { scope => $node->scope };
     }

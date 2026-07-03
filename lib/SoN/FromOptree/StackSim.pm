@@ -10,6 +10,10 @@ class SoN::FromOptree::StackSim 0.01 {
     field @marks;
     field %scope;
     field $control :param :reader;
+    # The most recent regex match node ($N capture reads resolve to it) and
+    # the pattern value a regcomp op staged for the following match op.
+    field $last_match;
+    field $pending_regex;
 
     method push_node ($node) {
         push @stack, $node;
@@ -46,6 +50,23 @@ class SoN::FromOptree::StackSim 0.01 {
         $control = $node;
     }
 
+    method last_match () { $last_match }
+
+    method set_last_match ($node) {
+        $last_match = $node;
+    }
+
+    method set_pending_regex ($node) {
+        $pending_regex = $node;
+    }
+
+    # Consume the staged pattern (regcomp feeds exactly one match op).
+    method take_pending_regex () {
+        my $node = $pending_regex;
+        $pending_regex = undef;
+        return $node;
+    }
+
     # Scope: immutable-style variable bindings
     method define ($targ, $node) {
         $scope{$targ} = $node;
@@ -67,6 +88,8 @@ class SoN::FromOptree::StackSim 0.01 {
         for my $targ (keys %scope) {
             $copy->define($targ, $scope{$targ});
         }
+        $copy->set_last_match($self->last_match);
+        $copy->set_pending_regex($pending_regex);
         return $copy;
     }
 

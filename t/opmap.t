@@ -28,7 +28,9 @@ subtest 'Comparison ops mapped' => sub {
 
 subtest 'Variable access mapped' => sub {
     is($map->node_type('padsv'), 'PadAccess', 'padsv -> PadAccess');
-    is($map->node_type('gvsv'), 'StashAccess', 'gvsv -> StashAccess');
+    # gv/gvsv/rv2sv are handled directly in FromOptree.pm (GV name
+    # extraction; $N reads become RegexCapture) -- not in the table.
+    ok(!$map->is_known('gvsv'), 'gvsv is not table-mapped (direct handler)');
 };
 
 subtest 'Call ops mapped' => sub {
