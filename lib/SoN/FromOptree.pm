@@ -341,6 +341,14 @@ class SoN::FromOptree 0.01 {
             # yet). Non-constant bounds are refused: the synthesized
             # continuation condition needs high+1 at translation time.
             if ($name eq 'enteriter') {
+                # The iteration variable's pad slot rides on the enteriter op
+                # itself (LVINTRO). Implicit $_ and package-var iterators have
+                # no lexical slot -- and their gv kid rides the mark stack,
+                # which previously tripped the bounds check with a misleading
+                # message. Check the iterator first so the GAP is truthful.
+                die "GAP: foreach with a non-lexical iterator (\$_ or a"
+                  . " package variable) not yet lowered\n"
+                    unless $op->targ;
                 die "GAP: foreach over a general list not yet lowered\n"
                     unless $op->flags & 64;   # OPf_STACKED
                 my $bounds = $sim->pop_to_mark;
@@ -1161,12 +1169,75 @@ class SoN::FromOptree 0.01 {
             $phi->set_stamp($join);
         }
         elsif (defined $phi->stamp) {
-            $phi->set_stamp(undef);
+            # The body was already stamped against this Phi's optimistic
+            # init stamp; merely un-stamping the Phi here leaves those stale
+            # stamps contaminating sibling Phi joins (a type-level
+            # miscompile). Refuse until fixpoint restamping exists.
+            die "GAP: loop-carried value loses its stamp (unstamped"
+              . " back-edge); fixpoint restamping not yet lowered\n";
+        }
+        return;
+    }
+
+    # The backend recovers the loop condition as "the comparison consuming a
+    # header Phi" (its strategy-2 fallback; the producer does not yet wire the
+    # control edge strategy 1 wants). That is only sound when exactly ONE such
+    # comparison exists -- a second one (a body comparison on a loop-carried
+    # value) makes the choice arbitrary, and review reproduced the backend
+    # picking a decoy. Refuse until the condition is structurally wired.
+    my %ICMP_OP = map { $_ => 1 } qw(NumEq NumLt NumGt NumLe NumGe NumNe);
+    sub _assert_unambiguous_condition (@phis) {
+        my %cmp;
+        for my $phi (@phis) {
+            for my $c ($phi->consumers->@*) {
+                $cmp{$c->id} = 1 if $ICMP_OP{$c->operation};
+            }
+        }
+        die "GAP: ambiguous loop condition (multiple comparisons consume"
+          . " header Phis) not yet lowered\n"
+            if keys %cmp > 1;
+    }
+
+    # The condition segment runs once more than the body (the failing test
+    # still applies its side effects), which this translation cannot represent
+    # -- and on the postfix path the main walk has already applied one
+    # evaluation's mutations to the live scope, contaminating the Phi inits.
+    # Scout the condition ops alone on an insulated sim (stopping at the
+    # and/or that closes the condition) and refuse loudly if they rebind any
+    # pad slot.
+    sub _assert_pure_condition ($cv, $cond_start, $sim, $opmap) {
+        my $probe = $cond_start;
+        my %probe_seen;
+        $probe = $probe->next
+            while $$probe && !$probe_seen{$$probe}++
+                && $probe->name ne 'and' && $probe->name ne 'or';
+        return unless $$probe
+            && ($probe->name eq 'and' || $probe->name eq 'or');
+
+        my $cond_factory = SoN::IR::NodeFactory->new();
+        my $cond_sim     = SoN::FromOptree::StackSim->new(
+            control => $cond_factory->make_cfg('Start'));
+        my %placeholder;
+        for my $targ (keys $sim->scope_bindings->%*) {
+            my $ph = $cond_factory->make_unique('Constant',
+                value => 'scout', const_type => 'string');
+            $placeholder{$targ} = $ph;
+            $cond_sim->define($targ, $ph);
+        }
+        _walk_branch($cv, $cond_start, $cond_sim, $cond_factory, $opmap,
+            {}, undef, 0, $$probe);
+        my $after = $cond_sim->scope_bindings;
+        for my $targ (keys %placeholder) {
+            next unless defined $after->{$targ};
+            die "GAP: side-effecting loop condition not yet lowered\n"
+                if $after->{$targ} != $placeholder{$targ};
         }
         return;
     }
 
     sub _translate_while_loop ($cv, $cond_start, $sim, $factory, $opmap, $visited) {
+        _assert_pure_condition($cv, $cond_start, $sim, $opmap);
+
         # Phase 1: scout the condition + body for mutated pad slots.
         my $pre_scope = $sim->scope_bindings;
         my $mutated = _scout_mutated_targs($cv, $cond_start, $sim, $opmap);
@@ -1190,6 +1261,7 @@ class SoN::FromOptree 0.01 {
         # Phase 4: patch back-edges and stamps.
         my $post_scope = $sim->scope_bindings;
         _patch_loop_phi($sim, $_, $phis{$_}, $post_scope->{$_}) for $mutated->@*;
+        _assert_unambiguous_condition(values %phis);
 
         # Phase 5: post-loop control continues on the exit edge.
         my $exit_region = $factory->make_cfg('Region', inputs => [$exit_proj]);
@@ -1238,7 +1310,10 @@ class SoN::FromOptree 0.01 {
         # Continuation condition: loop while i <= high, authored as
         # NumGt(high+1, i_phi) per the corpus D3 ir-block. The backend
         # recovers it as the comparison consuming a header Phi; it needs no
-        # consumer here.
+        # consumer here. high+1 at IV_MAX overflows to an NV and wraps in
+        # the emitted i64 (zero iterations, silently) -- refuse that edge.
+        die "GAP: foreach range bound at IV_MAX not yet lowered\n"
+            if $high->value >= 9223372036854775807;
         my $bound = $factory->make('Constant',
             value      => $high->value + 1,
             const_type => 'integer',
@@ -1264,6 +1339,7 @@ class SoN::FromOptree 0.01 {
         $i_phi->set_backedge($i_next);
         my $post_scope = $sim->scope_bindings;
         _patch_loop_phi($sim, $_, $phis{$_}, $post_scope->{$_}) for $mutated->@*;
+        _assert_unambiguous_condition($i_phi, values %phis);
 
         # Phase 5: post-loop control continues on the exit edge.
         my $exit_region = $factory->make_cfg('Region', inputs => [$exit_proj]);
@@ -1280,6 +1356,7 @@ class SoN::FromOptree 0.01 {
     sub _walk_loop_body ($cv, $op, $sim, $factory, $opmap, $loop_visited, $outer_visited, $loop_node = undef) {
         my $ctx = { mode => 'loop' };
         my $exit_proj;
+        my $condition_fired = 0;
         while ($$op) {
             # Stop if we've looped back (unstack goes back to condition)
             last if $loop_visited->{$$op}++;
@@ -1303,8 +1380,30 @@ class SoN::FromOptree 0.01 {
                 die "GAP: function exit inside a loop body not yet lowered\n";
             }
 
+            # Loop-control ops re-route the iteration; walking past one
+            # produced silently wrong graphs (a dropped `last` ran the loop
+            # to completion). Refuse loudly.
+            if ($name eq 'last' || $name eq 'next' || $name eq 'redo') {
+                die "GAP: loop control ($name) inside a loop body not yet lowered\n";
+            }
+
+            # Nested control structure in a body is only translated by the
+            # MAIN walker; skipping it here emitted corrupt graphs (a nested
+            # loop minted Projs on the OUTER Loop and truncated the walk; a
+            # skipped if/else dropped its arms entirely). Refuse loudly. The
+            # loop's own and/or condition is handled below.
+            if ($name eq 'enterloop' || $name eq 'enteriter'
+                || ($opmap->is_branch($name) && $name ne 'and' && $name ne 'or')) {
+                die "GAP: $name inside a loop body not yet lowered\n";
+            }
+
             # Handle the loop condition (and/or) - walk body via other
             if (($name eq 'and' || $name eq 'or') && $sim->stack_depth > 0) {
+                # A second and/or here is NOT the loop condition -- it is a
+                # nested logical/modifier construct this walker cannot
+                # translate (it would mint a second Proj pair on the Loop).
+                die "GAP: nested and/or inside a loop body not yet lowered\n"
+                    if $condition_fired++;
                 my $cond = $sim->pop_node;
                 if (defined $loop_node) {
                     # The backend recovers the condition as the comparison

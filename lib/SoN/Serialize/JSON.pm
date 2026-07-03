@@ -173,15 +173,16 @@ sub _deserialize_graph ($method_data) {
     my $factory   = SoN::IR::NodeFactory->new();
     my @node_data = $method_data->{nodes}->@*;
 
-    # Two-pass approach: first create all nodes without inputs,
-    # then re-wire inputs in a second pass. This is necessary because
-    # inputs reference nodes by positional ID which may not exist yet.
-    # However the topological order guarantees inputs are always created
-    # before consumers, so a single forward pass is sufficient for all
-    # non-Phi fields. Phi's region is also an input to the Region node
-    # which precedes it, so single-pass works here too.
+    # The serializer's topological order guarantees inputs are created
+    # before consumers for every edge EXCEPT a loop Phi's back-edge:
+    # Graph::nodes cuts exactly that edge (the Phi<->back-edge data cycle
+    # forces one forward reference in any order), so a loop Phi's inputs[1]
+    # may point forward. Such a Phi is constructed with its init input only
+    # and the back-edge is wired via set_backedge once every node exists --
+    # the same defer-patch the Chalk loader performs.
 
     my @nodes;  # positional array of created node objects
+    my @backedge_patches;  # [phi_position, backedge_index] deferred wirings
 
     for my $nd (@node_data) {
         my $op     = $nd->{op};
@@ -207,6 +208,11 @@ sub _deserialize_graph ($method_data) {
         }
         elsif ($op eq 'Phi') {
             $args{region} = $nodes[ $fields->{region} ];
+            my @idx = ($nd->{inputs} // [])->@*;
+            if (@idx == 2 && $idx[1] >= @nodes) {
+                push @backedge_patches, [ scalar @nodes, $idx[1] ];
+                $args{inputs} = [ $inputs[0] ];
+            }
         }
         elsif ($op eq 'Proj') {
             $args{index} = $fields->{index};
@@ -251,6 +257,12 @@ sub _deserialize_graph ($method_data) {
         }
 
         push @nodes, $node;
+    }
+
+    # Wire the deferred loop-Phi back-edges now that every node exists.
+    for my $patch (@backedge_patches) {
+        my ($phi_idx, $val_idx) = @$patch;
+        $nodes[$phi_idx]->set_backedge($nodes[$val_idx]);
     }
 
     my $start   = $nodes[ $method_data->{start} ];

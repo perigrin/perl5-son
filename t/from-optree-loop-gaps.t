@@ -1,0 +1,94 @@
+# ABOUTME: Tests the loop translator refuses loudly (GAP die) on shapes it cannot
+# ABOUTME: lower correctly yet -- every case here previously MISCOMPILED silently.
+
+use v5.42.0;
+use Test2::V0;
+
+use SoN::OptSuppress;
+use SoN::FromOptree;
+
+# The producer's contract is refuse-or-lower: a graph that lowers and runs to
+# the WRONG value is the worst outcome (Phase 4 trusts "divergence = producer
+# bug", which is only sound with no known silent miscompiles). Each subtest
+# pins a case the RC2b review reproduced as a silent wrong answer.
+
+sub translate_dies ($code) {
+    SoN::OptSuppress::suppress_peep();
+    my $cv = eval $code;
+    my $err = $@;
+    SoN::OptSuppress::restore_peep();
+    die "compile failed: $err" if $err;
+    return dies { SoN::FromOptree->translate($cv) };
+}
+
+subtest 'last inside a loop body refuses loudly' => sub {
+    # Was: last silently dropped -> Int:15 instead of Int:1.
+    like(translate_dies(
+        'sub { my $s = 0; my $n = 5; while ($n > 0) { $s = $s + $n; last; } $s }'),
+        qr/GAP.*loop control/i, 'bare last dies with a GAP message');
+};
+
+subtest 'if/else inside a loop body refuses loudly' => sub {
+    # Was: cond_expr silently skipped -> Int:0 instead of Int:103.
+    like(translate_dies(
+        'sub { my $n = 3; my $s = 0; while ($n > 0) { if ($n == 2) { $s = $s + 100 } else { $s = $s + 1 } $n = $n - 1 } $s }'),
+        qr/GAP/, 'cond_expr in a body dies with a GAP message');
+};
+
+subtest 'nested loop inside a loop body refuses loudly' => sub {
+    # Was: inner loop minted Projs on the OUTER Loop, truncated the body walk,
+    # and one variant ran to Int:3 instead of Int:6 silently.
+    like(translate_dies(
+        'sub { my $s = 0; my $i = 2; while ($i > 0) { my $j = 2; while ($j > 0) { $s = $s + 1; $j = $j - 1 } $i = $i - 1 } $s }'),
+        qr/GAP/, 'nested while dies with a GAP message');
+};
+
+subtest 'side-effecting loop condition refuses loudly (block form)' => sub {
+    # Was: the failing (final) condition evaluation's mutation lost ->
+    # Int:0 instead of Int:-1.
+    like(translate_dies(
+        'sub { my $i = 3; while ($i-- > 0) { } $i }'),
+        qr/GAP.*condition/i, 'while ($i-- > 0) dies with a GAP message');
+};
+
+subtest 'side-effecting loop condition refuses loudly (postfix form)' => sub {
+    # Was: the main walk pre-evaluation leaked into the Phi init ->
+    # Int:1 instead of Int:3.
+    like(translate_dies(
+        'sub { my $n = 3; my $t = 0; $t = $t + $n while $n-- > 0; $t }'),
+        qr/GAP.*condition/i, 'postfix $n-- condition dies with a GAP message');
+};
+
+subtest 'ambiguous loop condition refuses loudly' => sub {
+    # Was: a decoy body comparison consuming a header Phi could be picked as
+    # the loop condition by the backend fallback -> one extra iteration.
+    like(translate_dies(
+        'sub { my $n = 4; my $s = 0; while ($n > 0) { my $c = $n > -1; $s = $s + 1; $n = $n - 1 } $s }'),
+        qr/GAP.*condition/i, 'two comparisons on header Phis die with a GAP message');
+};
+
+subtest 'unstamped back-edge refuses loudly' => sub {
+    # Was: the Phi was silently unstamped but body nodes kept stamps derived
+    # from its optimistic init stamp, contaminating sibling Phi joins.
+    like(translate_dies(
+        'sub { my $x = 1; my $y = 0; my $n = 2; while ($n > 0) { $y = $x + 1; $x = shift; $n = $n - 1 } $y }'),
+        qr/GAP/, 'loop-carried value losing its stamp dies with a GAP message');
+};
+
+subtest 'foreach range bound at IV_MAX refuses loudly' => sub {
+    # Was: high+1 overflowed to an NV, wrapped to INT64_MIN in the .ll ->
+    # zero iterations, Int:0 instead of Int:2.
+    like(translate_dies(
+        'sub { my $c = 0; for my $i (9223372036854775806..9223372036854775807) { $c = $c + 1 } $c }'),
+        qr/GAP.*IV_MAX/i, 'IV_MAX upper bound dies with a GAP message');
+};
+
+subtest 'non-lexical foreach iterator gets a truthful GAP message' => sub {
+    # Was: refused by ACCIDENT with a misleading "non-constant integer bounds"
+    # message (the iterator gv rides the mark stack and trips the count check).
+    like(translate_dies(
+        'sub { my $s = 0; for (1..3) { $s = $s + 1 } $s }'),
+        qr/GAP.*non-lexical/i, 'implicit $_ foreach names the real gap');
+};
+
+done_testing();
