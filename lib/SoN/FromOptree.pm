@@ -1463,6 +1463,12 @@ class SoN::FromOptree 0.01 {
     # if-else inside an arm recurse instead of degrading the arm value to the
     # inner condition. Returns the op where translation continues.
     sub _handle_cond_expr ($cv, $op, $sim, $factory, $opmap, $visited) {
+        # List context would need per-arm value LISTS; the scalar path below
+        # pops exactly one value per arm and silently mistranslated
+        # `my @a = $c ? (1,2) : (3,4)`. Refuse loudly.
+        die "GAP: list-context ternary not yet lowered\n"
+            if ($op->flags & 3) == 3;   # OPf_WANT == OPf_WANT_LIST
+
         my $cond = $sim->pop_node;
         my $join_addr = _find_join_addr($op->other, $op->next) || undef;
 
@@ -1478,6 +1484,14 @@ class SoN::FromOptree 0.01 {
                 $opmap, $visited, \@arm_exits, 1, $join_addr);
             die "GAP: function exit inside an if/else arm not yet lowered\n"
                 if ($sig // '') eq 'exited';
+            # An arm stopping anywhere OTHER than the join hit an op the
+            # walker cannot translate -- and it marked that op visited, so
+            # the main walk would terminate there too, silently dropping
+            # everything after the if/else. Refuse loudly.
+            die "GAP: untranslatable op inside an if/else arm"
+              . " (arm did not reach the join) not yet lowered\n"
+                if defined $join_addr
+                && !(defined $end && ref $end && $$end == $join_addr);
             my $val = $arm_sim->stack_depth > $base_depth
                 ? $arm_sim->pop_node
                 : _undef_constant($factory);
@@ -1488,7 +1502,10 @@ class SoN::FromOptree 0.01 {
         my ($false_val, $false_end, $false_sim) = $walk_arm->($op->next);
         my ($true_val,  $true_end,  $true_sim)  = $walk_arm->($op->other);
 
-        if (($op->flags & 3) == 1) {   # OPf_WANT == OPf_WANT_VOID
+        # Merge arm pad rebinds in EVERY context -- an assignment inside a
+        # value-context arm (`my $y = $c ? ($x = 1) : 2`) is a binding side
+        # effect that must become conditional exactly like the void form's.
+        {
             my $base_scope  = $sim->scope_bindings;
             my $true_scope  = $true_sim->scope_bindings;
             my $false_scope = $false_sim->scope_bindings;
@@ -1505,8 +1522,9 @@ class SoN::FromOptree 0.01 {
                 $fv //= _undef_constant($factory);
                 $sim->define($targ, _make_ternary($factory, $cond, $tv, $fv));
             }
-            return $true_end // $false_end // $op->next;
         }
+        return $true_end // $false_end // $op->next
+            if ($op->flags & 3) == 1;   # void: if/else statement, no value
 
         my $node = _make_ternary($factory, $cond, $true_val, $false_val);
         $sim->push_node($node);
@@ -1555,6 +1573,16 @@ class SoN::FromOptree 0.01 {
             if ($stop_at_exit
                 && ($name eq 'leavesub' || $name eq 'leavesublv')) {
                 return $op;
+            }
+
+            # `die` raises an exception -- a control exit this walker cannot
+            # thread. Its OpMap entry is a generic mark-consumer (the special
+            # Unwind handler lives in the main walk only), so stepping it
+            # here would consume the args and walk on, silently ERASING the
+            # exception from the program. Refuse loudly in value/modifier
+            # arms; dor arms (no stop_at_exit) keep their existing behavior.
+            if ($name eq 'die' && $stop_at_exit) {
+                die "GAP: die inside a branch arm not yet lowered\n";
             }
 
             # A nested ternary / if-else inside an arm must be translated,

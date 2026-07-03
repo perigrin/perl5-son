@@ -114,4 +114,44 @@ subtest 'return inside an if/else arm refuses loudly' => sub {
         'function exit inside a cond_expr arm dies with a GAP message');
 };
 
+subtest 'unhandled op inside an arm refuses loudly (no silent truncation)' => sub {
+    # An arm stopping anywhere other than the join marked its stop op
+    # visited, so the MAIN walk terminated there too: everything after the
+    # if/else (including the real return value) was silently dropped and the
+    # function returned stack garbage (e.g. Int:0 vs perl Int:1/Int:100).
+    SoN::OptSuppress::suppress_peep();
+    my $mod = eval 'sub { my $c = 0; my $d = 1; my $x = 0; if ($c) { $x = 5 if $d } else { $x = 1 } $x }';
+    my $die = eval 'sub { my $c = 1; my $x = 0; if ($c) { die "boom" } else { $x = 1 } $x }';
+    my $err = $@;
+    SoN::OptSuppress::restore_peep();
+    like(dies { SoN::FromOptree->translate($mod) }, qr/GAP/,
+        'a statement modifier inside an arm dies with a GAP message');
+    like(dies { SoN::FromOptree->translate($die) }, qr/GAP/,
+        'a die inside an arm dies with a GAP message');
+};
+
+subtest 'value-context ternary merges arm pad rebinds' => sub {
+    # `my $y = $c ? ($x = 1) : 2; $x + $y` -- the assignment inside the arm
+    # must rebind $x conditionally, exactly as the void form does; it was
+    # discarded with the arm snapshot (lli Int:1 vs perl Int:2).
+    my $g = graph_of(
+        'sub { my $c = 1; my $x = 0; my $y = $c ? ($x = 1) : 2; $x + $y }');
+    my ($add) = nodes_of($g, 'Add');
+    ok(defined $add, 'has the final Add');
+    is($add->inputs->[0]->operation, 'TernaryExpr',
+        '$x reads a conditional merge, not the pre-binding');
+};
+
+subtest 'list-context ternary refuses loudly' => sub {
+    # `my @a = $c ? (1,2) : (3,4)` -- the scalar value path pops exactly one
+    # value per arm and silently mistranslated the list (Int:0 vs Int:2).
+    SoN::OptSuppress::suppress_peep();
+    my $cv = eval 'sub { my $c = 1; my @a = $c ? (1, 2) : (3, 4); $a[1] }';
+    my $err = $@;
+    SoN::OptSuppress::restore_peep();
+    die "compile failed: $err" if $err;
+    like(dies { SoN::FromOptree->translate($cv) }, qr/GAP.*list/i,
+        'list-context cond_expr dies with a GAP message');
+};
+
 done_testing();

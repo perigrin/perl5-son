@@ -131,4 +131,27 @@ subtest 'no package filter emits all packages (backwards compat)' => sub {
     ok(exists $data->{methods}{'Bar::b'}, 'unfiltered output has Bar::b');
 };
 
+# ====================================================
+# GAP refusals surface on stderr, not silent omission
+# ====================================================
+
+subtest 'a GAP-refused sub is reported on stderr and other subs survive' => sub {
+    # The discovery catch swallows genuinely-untranslatable subs, but a
+    # deliberate "GAP: ..." die is the translator refusing loudly; hiding it
+    # made the sub vanish from the JSON with no trace anywhere.
+    my $src = 'sub ok_one { 42 } '
+            . 'sub refused { my $c = shift; my $x = 0; '
+            . 'if ($c) { die "boom" } else { $x = 1 } $x }';
+    my $stderr = `$perl -Ilib -MO=SoN,json -e '$src' 2>&1 >/dev/null`;
+    like($stderr, qr/B::SoN: skipped main::refused: GAP:/,
+        'the refusal names the sub and the GAP on stderr');
+
+    my $json = `$perl -Ilib -MO=SoN,json -e '$src' 2>/dev/null`;
+    my $data = JSON::PP::decode_json($json);
+    ok(exists $data->{methods}{'main::ok_one'},
+        'the translatable sub still appears in the JSON');
+    ok(!exists $data->{methods}{'main::refused'},
+        'the refused sub is omitted (skip, not crash)');
+};
+
 done_testing;

@@ -125,6 +125,10 @@ sub _walk_package {
         catch ($e) {
             # Skip subs that fail to translate (builtins, XS, compiler
             # internals, etc.) — not all optrees are representable in SoN yet.
+            # A deliberate GAP refusal is the translator speaking, though,
+            # not discovery noise: swallowing it turns a loud honest refusal
+            # into a sub silently missing from the JSON. Re-emit on stderr.
+            warn "B::SoN: skipped $full_name: $e" if $e =~ /^GAP:/;
         }
     }
 
