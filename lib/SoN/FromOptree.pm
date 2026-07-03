@@ -190,8 +190,11 @@ class SoN::FromOptree 0.01 {
                 # EXPLICIT return in op->other as a function exit (statement
                 # modifier `return X if COND`).
                 my $base_depth = $rhs_sim->stack_depth;
+                # The arm always converges at THIS op's op_next (or exits);
+                # stopping there keeps the rest of the sub out of the arm walk.
+                my $stop_addr = ${ $op->next };
                 my ($rhs_end, $rhs_sig)
-                    = _walk_branch($cv, $op->other, $rhs_sim, $factory, $opmap, \%visited, \@exits, 1);
+                    = _walk_branch($cv, $op->other, $rhs_sim, $factory, $opmap, \%visited, \@exits, 1, $stop_addr);
 
                 if (($rhs_sig // '') eq 'exited') {
                     # Statement-modifier / guarded exit: the op->other arm left
@@ -211,6 +214,44 @@ class SoN::FromOptree 0.01 {
                     my $cont_proj = $factory->make_cfg('Proj',
                         inputs => [$if_node], index => $cont_index);
                     $sim->set_control($cont_proj);
+                    $op = $op->next;
+                    next;
+                }
+
+                # Statement modifier with a side-effecting arm -- `$x = 1 if
+                # $cond` compiles to `and` in VOID context (value context is
+                # sK). The arm's result value is discarded; its effect is the
+                # pad rebindings it made in the snapshot scope. Merge each
+                # changed binding as TernaryExpr(cond, arm, base) -- arm on
+                # the false side for `or`/unless -- the same value-node
+                # strategy the cond_expr handler uses (the backend expands the
+                # merge to br+phi).
+                if (($op->flags & 3) == 1) {   # OPf_WANT == OPf_WANT_VOID
+                    unless (defined $rhs_end && ref $rhs_end
+                            && $$rhs_end == $stop_addr) {
+                        # The arm stopped somewhere other than the convergence
+                        # op: a back-edge (postfix `while`, a statement-
+                        # modifier loop) or an untranslatable op. Refuse
+                        # loudly rather than emit a straight-line merge that
+                        # silently computes one iteration.
+                        die "GAP: void-context '$name' arm did not converge"
+                          . " (statement-modifier loop or unhandled arm op)";
+                    }
+                    my $base_scope = $sim->scope_bindings;
+                    my $arm_scope  = $rhs_sim->scope_bindings;
+                    for my $targ (sort { $a <=> $b } keys %$arm_scope) {
+                        my $base = $base_scope->{$targ};
+                        my $armv = $arm_scope->{$targ};
+                        # A var introduced inside the arm is scoped to the
+                        # arm; only both-sides bindings merge.
+                        next unless defined $base && defined $armv;
+                        next if $base == $armv;
+                        my @arms = $name eq 'and'
+                            ? ($armv, $base)    # if:     cond ? arm : base
+                            : ($base, $armv);   # unless: cond ? base : arm
+                        $sim->define($targ, $factory->make('TernaryExpr',
+                            inputs => [$lhs, @arms]));
+                    }
                     $op = $op->next;
                     next;
                 }
@@ -1085,9 +1126,15 @@ class SoN::FromOptree 0.01 {
     # caller's merge knows this arm does not rejoin (Phase 4b-1). When $exits
     # is not passed (older callers: dor/cond_expr/trycatch arms that compute a
     # value), a return falls through to the legacy stop-at-op behavior.
-    sub _walk_branch ($cv, $op, $sim, $factory, $opmap, $visited, $exits = undef, $stop_at_exit = 0) {
+    sub _walk_branch ($cv, $op, $sim, $factory, $opmap, $visited, $exits = undef, $stop_at_exit = 0, $stop_addr = undef) {
         my $ctx = { mode => 'branch' };
         while ($$op) {
+            # Convergence: reached the op where this arm rejoins the main path
+            # (the branch op's op_next, passed by callers that know it). Checked
+            # before the visited test so a caller can tell clean convergence
+            # (returns the stop op) from a back-edge (returns a visited op
+            # elsewhere -- a statement-modifier loop).
+            return $op if defined $stop_addr && $$op == $stop_addr;
             # If we've already visited this op, we've converged
             return $op if $visited->{$$op};
 
