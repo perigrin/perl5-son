@@ -335,13 +335,26 @@ class SoN::FromOptree 0.01 {
                 next;
             }
 
-            # foreach loop: the iteration list, the iter op, and the loop
-            # variable's LVINTRO pad slot are not modeled yet -- the old
-            # post-hoc Phi path produced a silently wrong graph (condition
-            # read a leaked list constant; the loop variable dangled). Refuse
-            # loudly until the induction-variable lowering lands.
+            # foreach loop: only the RANGE form is lowered -- enteriter with
+            # OPf_STACKED carries the two range bounds on the stack (a
+            # general list is unmarked and has no counted-loop desugaring
+            # yet). Non-constant bounds are refused: the synthesized
+            # continuation condition needs high+1 at translation time.
             if ($name eq 'enteriter') {
-                die "GAP: foreach (enteriter) not yet lowered\n";
+                die "GAP: foreach over a general list not yet lowered\n"
+                    unless $op->flags & 64;   # OPf_STACKED
+                my $bounds = $sim->pop_to_mark;
+                die "GAP: foreach range with non-constant integer bounds not yet lowered\n"
+                    unless $bounds->@* == 2
+                    && !(grep {
+                            !$_->isa('SoN::IR::Node::Constant')
+                            || ($_->const_type // '') ne 'integer'
+                        } $bounds->@*);
+                _translate_foreach_range($cv, $op, $sim, $factory, $opmap,
+                    \%visited, $bounds->@*);
+                # Continue after the loop; the B::LOOP op's lastop is leaveloop.
+                $op = $op->can('lastop') ? $op->lastop : $op->next;
+                next;
             }
 
             # leaveloop - end of loop, continue
@@ -1089,46 +1102,81 @@ class SoN::FromOptree 0.01 {
     # throwaway sim and factory to discover the mutated pad slots (scout
     # nodes never reach the real graph); (2) create a header Phi per mutated
     # slot, rebind, walk for real, then patch each Phi's back-edge and stamp.
-    sub _translate_while_loop ($cv, $cond_start, $sim, $factory, $opmap, $visited) {
-        # Phase 1: scout. The scout sim gets placeholder bindings and a
-        # placeholder control from its own factory so NO scout node is ever
-        # constructed over a real node -- the use-def ADJUST registers a
-        # consumer edge at construction, and a scout consumer on a real node
-        # would leak scout garbage into the real graph's bidirectional walk.
+    # Scout a loop's ops on an insulated sim (own factory, own Start,
+    # placeholder bindings) to discover which pad slots the walk mutates.
+    # Constructing a scout node over a real node would leak it into the real
+    # graph through the use-def consumer edge registered at construction, so
+    # no real node is shared. $extra_targs introduces slots that do not exist
+    # pre-loop (a foreach induction variable). Returns the sorted mutated
+    # pre-existing slots.
+    sub _scout_mutated_targs ($cv, $start_op, $sim, $opmap, $extra_targs = []) {
         my $scout_factory = SoN::IR::NodeFactory->new();
         my $scout_sim     = SoN::FromOptree::StackSim->new(
             control => $scout_factory->make_cfg('Start'));
-        my $pre_scope = $sim->scope_bindings;
         my %placeholder;
-        for my $targ (keys %$pre_scope) {
+        for my $targ (keys $sim->scope_bindings->%*, $extra_targs->@*) {
             my $ph = $scout_factory->make_unique('Constant',
                 value => 'scout', const_type => 'string');
             $placeholder{$targ} = $ph;
             $scout_sim->define($targ, $ph);
         }
-        _walk_loop_body($cv, $cond_start, $scout_sim, $scout_factory, $opmap, {}, {});
+        _walk_loop_body($cv, $start_op, $scout_sim, $scout_factory, $opmap, {}, {});
         my $scout_scope = $scout_sim->scope_bindings;
-        my @mutated = sort { $a <=> $b }
+        my %extra = map { $_ => 1 } $extra_targs->@*;
+        return [ sort { $a <=> $b }
             grep {
-                defined $placeholder{$_}
+                !$extra{$_}
                 && defined $scout_scope->{$_}
                 && $scout_scope->{$_} != $placeholder{$_}
-            } keys %placeholder;
+            } keys %placeholder ];
+    }
 
-        # Phase 2: the loop header and its Phis (make_unique: two Phis with
-        # the same init are distinct recurrences until their back-edges wire).
-        # Each Phi carries its init's stamp so the body's join-stamped nodes
-        # (which read the Phi) can derive theirs; phase 4 verifies the
-        # back-edge does not widen it.
+    # Create a loop header Phi for a slot (make_unique: two Phis with the
+    # same init are distinct recurrences until their back-edges wire). The
+    # Phi carries its init's stamp so the body's join-stamped nodes, which
+    # read the Phi, can derive theirs; _patch_loop_phi verifies the
+    # back-edge does not widen it.
+    sub _make_loop_phi ($factory, $loop_node, $init) {
+        return $factory->make_unique('Phi',
+            inputs => [$init],
+            region => $loop_node,
+            (defined $init->stamp ? (stamp => $init->stamp) : ()));
+    }
+
+    # Wire a loop Phi's back-edge, re-point the slot at the Phi (the body
+    # walk rebound it to the last in-loop value; post-loop reads must see
+    # the Phi -- its value when the condition finally failed), and verify
+    # the stamp: a back-edge that widens the init-derived stamp would need
+    # a fixpoint re-walk, and an unstamped back-edge means the init stamp
+    # cannot be trusted past the first iteration -- refuse or unstamp
+    # honestly, no guessing.
+    sub _patch_loop_phi ($sim, $targ, $phi, $post) {
+        $phi->set_backedge($post);
+        $sim->define($targ, $phi);
+        my $init = $phi->inputs->[0];
+        if (defined $init->stamp && defined $post->stamp) {
+            my $join = SoN::IR::Stamp::join($init->stamp, $post->stamp);
+            die "GAP: loop-carried type widening not yet lowered\n"
+                if defined $phi->stamp && $join->type ne $phi->stamp->type;
+            $phi->set_stamp($join);
+        }
+        elsif (defined $phi->stamp) {
+            $phi->set_stamp(undef);
+        }
+        return;
+    }
+
+    sub _translate_while_loop ($cv, $cond_start, $sim, $factory, $opmap, $visited) {
+        # Phase 1: scout the condition + body for mutated pad slots.
+        my $pre_scope = $sim->scope_bindings;
+        my $mutated = _scout_mutated_targs($cv, $cond_start, $sim, $opmap);
+
+        # Phase 2: the loop header and its Phis.
         my $loop_node = $factory->make_cfg('Loop', inputs => [$sim->control]);
         $sim->set_control($loop_node);
         my %phis;
-        for my $targ (@mutated) {
-            my $init = $pre_scope->{$targ};
-            my $phi  = $factory->make_unique('Phi',
-                inputs => [$init],
-                region => $loop_node,
-                (defined $init->stamp ? (stamp => $init->stamp) : ()));
+        for my $targ ($mutated->@*) {
+            my $phi = _make_loop_phi($factory, $loop_node, $pre_scope->{$targ});
             $phis{$targ} = $phi;
             $sim->define($targ, $phi);
         }
@@ -1139,36 +1187,85 @@ class SoN::FromOptree 0.01 {
         die "GAP: loop without a lowerable condition\n"
             unless defined $exit_proj;
 
-        # Phase 4: patch back-edges and verify stamps. The body was stamped
-        # against the init-derived Phi stamp; a back-edge that widens it
-        # (e.g. Int init, Num after /=) would need a fixpoint re-walk, and an
-        # unstamped back-edge means the init stamp cannot be trusted past the
-        # first iteration -- both refuse or unstamp honestly, no guessing.
+        # Phase 4: patch back-edges and stamps.
         my $post_scope = $sim->scope_bindings;
-        for my $targ (@mutated) {
-            my $phi  = $phis{$targ};
-            my $post = $post_scope->{$targ};
-            $phi->set_backedge($post);
-            # The body walk rebound the slot to its last in-loop value;
-            # post-loop reads must see the header Phi again (its value when
-            # the condition finally failed).
+        _patch_loop_phi($sim, $_, $phis{$_}, $post_scope->{$_}) for $mutated->@*;
+
+        # Phase 5: post-loop control continues on the exit edge.
+        my $exit_region = $factory->make_cfg('Region', inputs => [$exit_proj]);
+        $sim->set_control($exit_region);
+        return;
+    }
+
+    # Translate a range foreach (enteriter with OPf_STACKED constant bounds)
+    # to the corpus counted-loop contract (control-flow.md D3): induction Phi
+    # init=low with a synthesized +1 step, continuation NumGt(high+1, phi),
+    # body walked with the induction bound to the Phi, and the while-loop
+    # Loop/Proj/Region skeleton. The unstack/iter/and condition ops are not
+    # walked -- the induction is synthesized here -- and the main walker
+    # resumes at the B::LOOP lastop (leaveloop).
+    sub _translate_foreach_range ($cv, $enteriter, $sim, $factory, $opmap, $visited, $low, $high) {
+        my $i_targ = $enteriter->targ;
+
+        # Locate the body: enteriter->next is the iteration unstack, followed
+        # by iter, then the and whose other-branch is the body.
+        my $it = $enteriter->next;
+        $it = $it->next while $$it && $it->name ne 'iter';
+        die "GAP: foreach without an iter op\n" unless $$it;
+        my $and_op = $it->next;
+        die "GAP: foreach without an and condition\n"
+            unless $$and_op && $and_op->name eq 'and';
+        my $body_start = $and_op->other;
+
+        # Phase 1: scout the body ($i is introduced by enteriter itself, so
+        # it rides as an extra slot and is excluded from the mutated set --
+        # it gets the induction Phi, not a carried-value Phi).
+        my $pre_scope = $sim->scope_bindings;
+        my $mutated = _scout_mutated_targs($cv, $body_start, $sim, $opmap, [$i_targ]);
+
+        # Phase 2: header -- induction Phi plus one Phi per mutated slot.
+        my $loop_node = $factory->make_cfg('Loop', inputs => [$sim->control]);
+        $sim->set_control($loop_node);
+        my $i_phi = _make_loop_phi($factory, $loop_node, $low);
+        $sim->define($i_targ, $i_phi);
+        my %phis;
+        for my $targ ($mutated->@*) {
+            my $phi = _make_loop_phi($factory, $loop_node, $pre_scope->{$targ});
+            $phis{$targ} = $phi;
             $sim->define($targ, $phi);
-            my $init = $phi->inputs->[0];
-            if (defined $init->stamp && defined $post->stamp) {
-                my $join = SoN::IR::Stamp::join($init->stamp, $post->stamp);
-                die "GAP: loop-carried type widening not yet lowered\n"
-                    if defined $phi->stamp
-                    && $join->type ne $phi->stamp->type;
-                $phi->set_stamp($join);
-            }
-            elsif (defined $phi->stamp) {
-                $phi->set_stamp(undef);
-            }
         }
 
-        # Phase 5: post-loop control continues on the exit edge. The Phi
-        # bindings stay: a post-loop read of a loop-carried variable sees the
-        # header Phi (its value when the condition finally failed).
+        # Continuation condition: loop while i <= high, authored as
+        # NumGt(high+1, i_phi) per the corpus D3 ir-block. The backend
+        # recovers it as the comparison consuming a header Phi; it needs no
+        # consumer here.
+        my $bound = $factory->make('Constant',
+            value      => $high->value + 1,
+            const_type => 'integer',
+            stamp      => SoN::IR::Stamp->new(type => 'Int'));
+        $factory->make('NumGt',
+            inputs => [$bound, $i_phi],
+            stamp  => SoN::IR::Stamp->new(type => 'Boolean'));
+
+        # Phase 3: body under Proj(loop,0); exit on Proj(loop,1).
+        my $body_proj = $factory->make_cfg('Proj', inputs => [$loop_node], index => 0);
+        my $exit_proj = $factory->make_cfg('Proj', inputs => [$loop_node], index => 1);
+        $sim->set_control($body_proj);
+        _walk_loop_body($cv, $body_start, $sim, $factory, $opmap, {}, $visited);
+
+        # Phase 4: back-edges. The induction step is synthesized (+1); the
+        # carried slots patch exactly like the while loop.
+        my $one = $factory->make('Constant',
+            value => 1, const_type => 'integer',
+            stamp => SoN::IR::Stamp->new(type => 'Int'));
+        my $i_next = $factory->make('Add',
+            inputs => [$i_phi, $one],
+            stamp  => _result_stamp('Add', [$i_phi, $one]));
+        $i_phi->set_backedge($i_next);
+        my $post_scope = $sim->scope_bindings;
+        _patch_loop_phi($sim, $_, $phis{$_}, $post_scope->{$_}) for $mutated->@*;
+
+        # Phase 5: post-loop control continues on the exit edge.
         my $exit_region = $factory->make_cfg('Region', inputs => [$exit_proj]);
         $sim->set_control($exit_region);
         return;

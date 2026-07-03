@@ -31,17 +31,56 @@ subtest 'While loop has Phi for modified variable' => sub {
     diag($text);
 };
 
-subtest 'For loop refuses loudly until enteriter is lowered' => sub {
-    # The old enteriter path produced a silently wrong graph (the condition
-    # read a leaked list constant; the loop variable dangled unbound). Until
-    # the induction-variable lowering lands, foreach must die honestly.
+subtest 'foreach over a range lowers as a counted loop' => sub {
+    # Per corpus control-flow.md D3: foreach my $i (1..3) desugars to a
+    # counted loop -- induction Phi (init low, step +1), continuation
+    # condition NumGt(high+1, i_phi), and the same Loop/Proj/Region skeleton
+    # as while. No Iter/Range node exists in the contract.
+    my $graph = SoN::FromOptree->translate(
+        eval 'sub { my $s = 0; foreach my $i (1..3) { $s += $i } $s }');
+    my @nodes = $graph->nodes->@*;
+    my ($loop) = grep { $_->operation eq 'Loop' } @nodes;
+    ok(defined $loop, 'has a Loop node');
+    ok(!(grep { $_->operation eq 'If' } @nodes), 'no If in the header');
+
+    my @phis = grep { $_->operation eq 'Phi' } @nodes;
+    is(scalar @phis, 2, 'two Phis: induction $i and carried $s');
+    my ($i_phi) = grep { ($_->inputs->[0]->value // '') == 1 } @phis;
+    my ($s_phi) = grep { ($_->inputs->[0]->value // '') == 0 } @phis;
+    ok(defined $i_phi, 'induction Phi init is the range low (1)');
+    ok(defined $s_phi, 'carried Phi init is 0');
+
+    my $step = $i_phi->inputs->[1];
+    is($step->operation, 'Add', 'induction step is an Add');
+    is($step->inputs->[0]->id, $i_phi->id, 'step reads the induction Phi');
+    is($step->inputs->[1]->value, 1, 'step is +1');
+
+    my $sum = $s_phi->inputs->[1];
+    is($sum->operation, 'Add', '$s backedge is the body sum');
+    is([sort map { $_->id } $sum->inputs->@*],
+       [sort ($s_phi->id, $i_phi->id)],
+       'body sum reads both Phis');
+
+    my ($cmp) = grep { $_->operation eq 'NumGt' } @nodes;
+    ok(defined $cmp, 'has the continuation condition');
+    is($cmp->inputs->[0]->value, 4, 'condition bound is high+1 (4)');
+    is($cmp->inputs->[1]->id, $i_phi->id, 'condition reads the induction Phi');
+
+    my ($ret) = grep { $_->operation eq 'Return' } @nodes;
+    is($ret->inputs->[0]->operation, 'Region', 'Return control is the exit Region');
+    is($ret->inputs->[1]->id, $s_phi->id, 'Return value is the $s Phi');
+};
+
+subtest 'foreach over a general list still refuses loudly' => sub {
+    # Only the range form (OPf_STACKED enteriter, two constant bounds) is
+    # lowered; a general list iteration has no counted-loop desugaring yet.
     like(
         dies {
             SoN::FromOptree->translate(
-                eval 'sub { my $sum = 0; for my $i (1..5) { $sum = $sum + $i } $sum }')
+                eval 'sub { my $s = 0; for my $i (1, 2, 5) { $s = $s + $i } $s }')
         },
-        qr/GAP.*enteriter/,
-        'foreach dies with a GAP message'
+        qr/GAP/,
+        'list foreach dies with a GAP message'
     );
 };
 
