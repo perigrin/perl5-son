@@ -309,43 +309,22 @@ class SoN::FromOptree 0.01 {
                 next;
             }
 
-            # Loop ops: enterloop, enteriter
-            if ($name eq 'enterloop' || $name eq 'enteriter') {
-                my $loop_node = $factory->make_cfg('Loop', inputs => [$sim->control]);
-                $sim->set_control($loop_node);
-
-                # Save pre-loop scope to detect modifications
-                my $pre_loop_scope = $sim->scope_bindings;
-
-                # Walk the loop body: condition + body
-                # enterloop->next leads to the condition check
-                my $body_op = $op->next;
-                my %loop_visited;
-                _walk_loop_body($cv, $body_op, $sim, $factory, $opmap, \%loop_visited, \%visited);
-
-                # Create Phis for any variables modified during the loop
-                my $post_loop_scope = $sim->scope_bindings;
-                for my $targ (keys %$post_loop_scope) {
-                    my $pre = $pre_loop_scope->{$targ};
-                    my $post = $post_loop_scope->{$targ};
-                    if (defined $pre && defined $post && $pre != $post) {
-                        my $phi = $factory->make('Phi',
-                            inputs => [$pre, $post],
-                            region => $loop_node,
-                        );
-                        $sim->define($targ, $phi);
-                    }
-                }
-
-                # Continue after the loop (leaveloop)
-                # The B::LOOP op has lastop pointing to exit
-                if ($op->can('lastop')) {
-                    my $exit = $op->lastop;
-                    $op = $exit;
-                } else {
-                    $op = $op->next;
-                }
+            # while/until loop: two-phase translation so in-loop reads rename
+            # through the header Phis (see _translate_while_loop).
+            if ($name eq 'enterloop') {
+                _translate_while_loop($cv, $op, $sim, $factory, $opmap, \%visited);
+                # Continue after the loop; the B::LOOP op's lastop is leaveloop.
+                $op = $op->can('lastop') ? $op->lastop : $op->next;
                 next;
+            }
+
+            # foreach loop: the iteration list, the iter op, and the loop
+            # variable's LVINTRO pad slot are not modeled yet -- the old
+            # post-hoc Phi path produced a silently wrong graph (condition
+            # read a leaked list constant; the loop variable dangled). Refuse
+            # loudly until the induction-variable lowering lands.
+            if ($name eq 'enteriter') {
+                die "GAP: foreach (enteriter) not yet lowered\n";
             }
 
             # leaveloop - end of loop, continue
@@ -1080,8 +1059,115 @@ class SoN::FromOptree 0.01 {
     }
 
     # Walk a loop body (condition + body), handling the internal and/or
-    sub _walk_loop_body ($cv, $op, $sim, $factory, $opmap, $loop_visited, $outer_visited) {
+    # Translate a while loop (enterloop) to the corpus Loop/Phi contract:
+    # Loop(entry) IS the header (no If inside it); Proj(loop,0) is the body
+    # edge, Proj(loop,1) the exit edge, Region(exit Proj) the post-loop
+    # control; every loop-carried variable reads through a header Phi
+    # (inputs[0]=init, inputs[1]=backedge, region=Loop) so the condition and
+    # body see the current iteration's value, not the pre-loop bindings.
+    #
+    # The body computes the back-edge values FROM the Phis, so the Phis must
+    # exist before the body is walked -- but which variables need one is only
+    # known from the body. Two-phase: (1) SCOUT the condition+body on a
+    # throwaway sim and factory to discover the mutated pad slots (scout
+    # nodes never reach the real graph); (2) create a header Phi per mutated
+    # slot, rebind, walk for real, then patch each Phi's back-edge and stamp.
+    sub _translate_while_loop ($cv, $enterloop, $sim, $factory, $opmap, $visited) {
+        my $cond_start = $enterloop->next;
+
+        # Phase 1: scout. The scout sim gets placeholder bindings and a
+        # placeholder control from its own factory so NO scout node is ever
+        # constructed over a real node -- the use-def ADJUST registers a
+        # consumer edge at construction, and a scout consumer on a real node
+        # would leak scout garbage into the real graph's bidirectional walk.
+        my $scout_factory = SoN::IR::NodeFactory->new();
+        my $scout_sim     = SoN::FromOptree::StackSim->new(
+            control => $scout_factory->make_cfg('Start'));
+        my $pre_scope = $sim->scope_bindings;
+        my %placeholder;
+        for my $targ (keys %$pre_scope) {
+            my $ph = $scout_factory->make_unique('Constant',
+                value => 'scout', const_type => 'string');
+            $placeholder{$targ} = $ph;
+            $scout_sim->define($targ, $ph);
+        }
+        _walk_loop_body($cv, $cond_start, $scout_sim, $scout_factory, $opmap, {}, {});
+        my $scout_scope = $scout_sim->scope_bindings;
+        my @mutated = sort { $a <=> $b }
+            grep {
+                defined $placeholder{$_}
+                && defined $scout_scope->{$_}
+                && $scout_scope->{$_} != $placeholder{$_}
+            } keys %placeholder;
+
+        # Phase 2: the loop header and its Phis (make_unique: two Phis with
+        # the same init are distinct recurrences until their back-edges wire).
+        # Each Phi carries its init's stamp so the body's join-stamped nodes
+        # (which read the Phi) can derive theirs; phase 4 verifies the
+        # back-edge does not widen it.
+        my $loop_node = $factory->make_cfg('Loop', inputs => [$sim->control]);
+        $sim->set_control($loop_node);
+        my %phis;
+        for my $targ (@mutated) {
+            my $init = $pre_scope->{$targ};
+            my $phi  = $factory->make_unique('Phi',
+                inputs => [$init],
+                region => $loop_node,
+                (defined $init->stamp ? (stamp => $init->stamp) : ()));
+            $phis{$targ} = $phi;
+            $sim->define($targ, $phi);
+        }
+
+        # Phase 3: the real walk (condition + body against the Phi bindings).
+        my $exit_proj = _walk_loop_body($cv, $cond_start, $sim, $factory,
+            $opmap, {}, $visited, $loop_node);
+        die "GAP: loop without a lowerable condition\n"
+            unless defined $exit_proj;
+
+        # Phase 4: patch back-edges and verify stamps. The body was stamped
+        # against the init-derived Phi stamp; a back-edge that widens it
+        # (e.g. Int init, Num after /=) would need a fixpoint re-walk, and an
+        # unstamped back-edge means the init stamp cannot be trusted past the
+        # first iteration -- both refuse or unstamp honestly, no guessing.
+        my $post_scope = $sim->scope_bindings;
+        for my $targ (@mutated) {
+            my $phi  = $phis{$targ};
+            my $post = $post_scope->{$targ};
+            $phi->set_backedge($post);
+            # The body walk rebound the slot to its last in-loop value;
+            # post-loop reads must see the header Phi again (its value when
+            # the condition finally failed).
+            $sim->define($targ, $phi);
+            my $init = $phi->inputs->[0];
+            if (defined $init->stamp && defined $post->stamp) {
+                my $join = SoN::IR::Stamp::join($init->stamp, $post->stamp);
+                die "GAP: loop-carried type widening not yet lowered\n"
+                    if defined $phi->stamp
+                    && $join->type ne $phi->stamp->type;
+                $phi->set_stamp($join);
+            }
+            elsif (defined $phi->stamp) {
+                $phi->set_stamp(undef);
+            }
+        }
+
+        # Phase 5: post-loop control continues on the exit edge. The Phi
+        # bindings stay: a post-loop read of a loop-carried variable sees the
+        # header Phi (its value when the condition finally failed).
+        my $exit_region = $factory->make_cfg('Region', inputs => [$exit_proj]);
+        $sim->set_control($exit_region);
+        return;
+    }
+
+    # Walk a loop's condition + body ops. With $loop_node (the real walk of
+    # _translate_while_loop) the condition builds Projs directly on the Loop
+    # per the corpus contract and the exit Proj is returned; without it (the
+    # scout walk, whose nodes are throwaway) the legacy If shape is kept --
+    # the binding effects are identical either way, which is all the scout
+    # measures.
+    sub _walk_loop_body ($cv, $op, $sim, $factory, $opmap, $loop_visited, $outer_visited, $loop_node = undef) {
         my $ctx = { mode => 'loop' };
+        my $exit_proj;
         while ($$op) {
             # Stop if we've looped back (unstack goes back to condition)
             last if $loop_visited->{$$op}++;
@@ -1098,12 +1184,33 @@ class SoN::FromOptree 0.01 {
                 last;
             }
 
+            # A function exit inside the loop body cannot be represented yet
+            # (its control edge leaves the loop mid-iteration); walking
+            # through it produced silently wrong graphs, so refuse loudly.
+            if ($name eq 'return' || $name eq 'leavesub' || $name eq 'leavesublv') {
+                die "GAP: function exit inside a loop body not yet lowered\n";
+            }
+
             # Handle the loop condition (and/or) - walk body via other
             if (($name eq 'and' || $name eq 'or') && $sim->stack_depth > 0) {
                 my $cond = $sim->pop_node;
-                my $if_node = $factory->make_cfg('If', inputs => [$sim->control, $cond]);
-                my $body_proj = $factory->make_cfg('Proj', inputs => [$if_node], index => 0);
-                $sim->set_control($body_proj);
+                if (defined $loop_node) {
+                    # The backend recovers the condition as the comparison
+                    # consuming a header Phi; $cond needs no consumer here.
+                    # An `or` condition (until) would need the negated sense.
+                    die "GAP: until (or-condition) loop not yet lowered\n"
+                        if $name eq 'or';
+                    my $body_proj = $factory->make_cfg('Proj',
+                        inputs => [$loop_node], index => 0);
+                    $exit_proj = $factory->make_cfg('Proj',
+                        inputs => [$loop_node], index => 1);
+                    $sim->set_control($body_proj);
+                }
+                else {
+                    my $if_node = $factory->make_cfg('If', inputs => [$sim->control, $cond]);
+                    my $body_proj = $factory->make_cfg('Proj', inputs => [$if_node], index => 0);
+                    $sim->set_control($body_proj);
+                }
                 # For while loops: and->other is the body, and->next is leaveloop
                 $op = $op->other;
                 next;
@@ -1117,6 +1224,7 @@ class SoN::FromOptree 0.01 {
             }
             $op = $next;
         }
+        return $exit_proj;
     }
 
     # Walk a branch path until we hit a visited op, a function exit, or end.

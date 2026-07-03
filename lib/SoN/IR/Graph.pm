@@ -38,7 +38,17 @@ class SoN::IR::Graph 0.01 {
             return if $visited{$n->id};
             return if $temp{$n->id}; # cycle (loops)
             $temp{$n->id} = 1;
-            for my $input ($n->inputs->@*) {
+            my @ins = $n->inputs->@*;
+            # A loop header Phi's back-edge (inputs[1]) is the cycle-closing
+            # edge. Cutting exactly it here makes this order a true
+            # topological order of the backedge-cut DAG, so the serializer's
+            # only forward references are the sanctioned Phi backedges (which
+            # the Chalk loader defer-patches). Merge Phis (Region region)
+            # keep their full input order.
+            if ($n->operation eq 'Phi' && $n->region->operation eq 'Loop') {
+                @ins = grep { defined } $ins[0];
+            }
+            for my $input (@ins) {
                 $visit->($input);
             }
             delete $temp{$n->id};

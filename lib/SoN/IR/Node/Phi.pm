@@ -15,6 +15,21 @@ class SoN::IR::Node::Phi :isa(SoN::IR::Node) {
         return "Phi|region=" . $region->id
              . "|" . CORE::join('|', @input_ids);
     }
+
+    # Wire the loop back-edge value as inputs[1], maintaining consumer edges.
+    # A loop header Phi is constructed with only its init input (the back-edge
+    # value does not exist yet -- it is computed by the body that reads the
+    # Phi), then patched here once the body walk completes. Mirrors the Chalk
+    # Phi contract the corpus builder relies on.
+    method set_backedge ($value) {
+        my $old = $self->inputs->[1];
+        if (defined $old) {
+            my $c = $old->consumers;
+            @$c = grep { $_ != $self } @$c;
+        }
+        $self->inputs->[1] = $value;
+        push $value->consumers->@*, $self;
+    }
 }
 
 1;

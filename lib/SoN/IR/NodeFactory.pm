@@ -39,6 +39,16 @@ class SoN::IR::NodeFactory 0.01 {
         return $node;
     }
 
+    # Create a data node WITHOUT hash consing. Loop header Phis are
+    # identity-bearing: two Phis with the same init and region are distinct
+    # recurrences until their backedges are wired, so consing at construction
+    # time would wrongly collapse them into one node.
+    method make_unique ($op_name, %args) {
+        my $node_class = $NODE_CLASSES{$op_name}
+            // die "Unknown data node type: $op_name";
+        return $node_class->new(%args);
+    }
+
     # Create a CFG node (never hash-consed)
     method make_cfg ($op_name, %args) {
         my $node_class = $CFG_CLASSES{$op_name}
