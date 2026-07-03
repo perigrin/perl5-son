@@ -227,13 +227,29 @@ class SoN::FromOptree 0.01 {
                 # strategy the cond_expr handler uses (the backend expands the
                 # merge to br+phi).
                 if (($op->flags & 3) == 1) {   # OPf_WANT == OPf_WANT_VOID
+                    # Back-edge: the arm walk stopped on an op the MAIN walk
+                    # already visited (the body's unstack->next re-enters the
+                    # condition head) -- this is `EXPR while COND`, a pre-test
+                    # loop whose graph is identical to a block while. The
+                    # condition was already walked once against pre-loop
+                    # bindings ($lhs; that node ends up unconsumed); re-walk
+                    # condition+body as a loop from the head the back-edge
+                    # targets.
+                    if ($name eq 'and'
+                            && defined $rhs_end && ref $rhs_end
+                            && $$rhs_end != $stop_addr
+                            && $visited{$$rhs_end}) {
+                        _translate_while_loop($cv, $rhs_end, $sim, $factory,
+                            $opmap, \%visited);
+                        $op = $op->next;
+                        next;
+                    }
                     unless (defined $rhs_end && ref $rhs_end
                             && $$rhs_end == $stop_addr) {
-                        # The arm stopped somewhere other than the convergence
-                        # op: a back-edge (postfix `while`, a statement-
-                        # modifier loop) or an untranslatable op. Refuse
-                        # loudly rather than emit a straight-line merge that
-                        # silently computes one iteration.
+                        # The arm stopped on an untranslatable op (or an
+                        # `until` back-edge). Refuse loudly rather than emit
+                        # a straight-line merge that silently computes one
+                        # iteration.
                         die "GAP: void-context '$name' arm did not converge"
                           . " (statement-modifier loop or unhandled arm op)";
                     }
@@ -310,9 +326,10 @@ class SoN::FromOptree 0.01 {
             }
 
             # while/until loop: two-phase translation so in-loop reads rename
-            # through the header Phis (see _translate_while_loop).
+            # through the header Phis (see _translate_while_loop). The
+            # condition head is enterloop->next.
             if ($name eq 'enterloop') {
-                _translate_while_loop($cv, $op, $sim, $factory, $opmap, \%visited);
+                _translate_while_loop($cv, $op->next, $sim, $factory, $opmap, \%visited);
                 # Continue after the loop; the B::LOOP op's lastop is leaveloop.
                 $op = $op->can('lastop') ? $op->lastop : $op->next;
                 next;
@@ -1072,9 +1089,7 @@ class SoN::FromOptree 0.01 {
     # throwaway sim and factory to discover the mutated pad slots (scout
     # nodes never reach the real graph); (2) create a header Phi per mutated
     # slot, rebind, walk for real, then patch each Phi's back-edge and stamp.
-    sub _translate_while_loop ($cv, $enterloop, $sim, $factory, $opmap, $visited) {
-        my $cond_start = $enterloop->next;
-
+    sub _translate_while_loop ($cv, $cond_start, $sim, $factory, $opmap, $visited) {
         # Phase 1: scout. The scout sim gets placeholder bindings and a
         # placeholder control from its own factory so NO scout node is ever
         # constructed over a real node -- the use-def ADJUST registers a

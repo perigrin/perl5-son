@@ -92,18 +92,33 @@ subtest 'value context still emits And when assigned' => sub {
     is($rv->id, $and->id, 'the final $c read returns the And');
 };
 
-subtest 'postfix while refuses loudly (loop lowering is separate work)' => sub {
+subtest 'postfix while lowers as a real loop (D2-identical shape)' => sub {
     # `$s += $n-- while $n > 0` is the same void `and` op but its arm loops
-    # back (unstack->next re-enters the condition). Until the loop machinery
-    # handles it, the producer must DIE (honest GAP), never emit a straight-
-    # line merge that silently computes one iteration.
-    like(
-        dies {
-            graph_of('sub { my $n = 3; my $s = 0; $s += $n-- while $n > 0; $s }')
-        },
-        qr/GAP/,
-        'non-converging void arm dies with a GAP message'
-    );
+    # back (unstack->next re-enters the condition head). Per the corpus,
+    # postfix while is a pre-test loop with a graph byte-identical to the
+    # block while: Loop header, one Phi per carried variable, condition on
+    # the Phi, exit Region -- and NO And/TernaryExpr merge.
+    my $g = graph_of('sub { my $n = 3; my $s = 0; $s += $n-- while $n > 0; $s }');
+
+    my @loops = nodes_of($g, 'Loop');
+    is(scalar @loops, 1, 'exactly one Loop node');
+    is([nodes_of($g, 'And')], [], 'no And node');
+    is([nodes_of($g, 'TernaryExpr')], [], 'no TernaryExpr merge');
+
+    my @phis = grep { $_->region->id == $loops[0]->id } nodes_of($g, 'Phi');
+    is(scalar @phis, 2, 'two loop Phis ($s, $n)');
+    my ($s_phi) = grep { $_->inputs->[1]->operation eq 'Add' } @phis;
+    my ($n_phi) = grep { $_->inputs->[1]->operation eq 'Subtract' } @phis;
+    ok(defined $s_phi, '$s Phi backedge is the sum');
+    ok(defined $n_phi, '$n Phi backedge is the decrement');
+
+    # The loop-mode condition reads the $n Phi, not the pre-loop constant.
+    my ($cmp) = grep { $_->inputs->[0]->id == $n_phi->id } nodes_of($g, 'NumGt');
+    ok(defined $cmp, 'a NumGt condition consumes the $n Phi');
+
+    my ($ret) = nodes_of($g, 'Return');
+    is($ret->inputs->[0]->operation, 'Region', 'Return control is the exit Region');
+    is($ret->inputs->[1]->id, $s_phi->id, 'Return value is the $s Phi');
 };
 
 done_testing();
