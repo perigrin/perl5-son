@@ -111,6 +111,18 @@ subtest 's///r is non-destructive: the source pad is NOT rebound (R3 /r)' => sub
     is($val->value, 'foobar', 'and it still carries the pre-subst value');
 };
 
+subtest 's///e non-foldable replacement is a loud GAP, not silent garbage' => sub {
+    # s/foo/CODE/e (and any replacement that does not fold to a Constant)
+    # cannot be resolved to a literal string. Rather than emit a plausible
+    # but wrong RegexSubst (the dangerous RC4 class), the producer must die
+    # loudly so the miscompile is visible.
+    like(
+        dies { graph_of('sub { my $s = "foobar"; $s =~ s/foo/length($s)/e; $s }') },
+        qr/GAP.*subst.*replacement|replacement.*not.*literal|GAP/,
+        'dies with a GAP for a non-literal replacement',
+    );
+};
+
 subtest 'RegexCapture and Match survive the JSON seam' => sub {
     my $g = graph_of('sub { my $s = "ab-cd"; $s =~ /(\w+)-(\w+)/; $1 }');
     my $json = SoN::Serialize::JSON::to_json({ 'main::t' => $g });

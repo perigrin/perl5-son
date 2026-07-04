@@ -15,9 +15,12 @@ class SoN::FromOptree 0.01 {
     use SoN::FromOptree::StackSim;
     use SoN::FieldInfo;
 
-    # The s///r (non-destructive) flag on a subst PMOP's pmflags. /r returns a
-    # new string and leaves the source untouched, so it must not rebind the pad.
+    # Subst PMOP pmflags bits. /r (non-destructive) returns a new string and
+    # leaves the source untouched, so it must not rebind the pad. /e (eval)
+    # makes the replacement a code subtree rather than a literal string --
+    # out of the runtime-free regex scope, so it is a loud GAP.
     use constant PMf_NONDESTRUCT => 0x4000000;   # 67108864
+    use constant PMf_EVAL        => 0x2000000;   # 33554432 (s///e)
 
     # Result-stamp rules for computed nodes, keyed by Chalk node type. The
     # result representation of a computed value is derivable from its inputs,
@@ -446,6 +449,11 @@ class SoN::FromOptree 0.01 {
             if ($name eq 'subst' && $op->isa('B::PMOP')) {
                 my $pattern = $op->precomp // '';
                 my $flags   = _pmflags_to_str($op->pmflags);
+                # s///e: the replacement is a code subtree, not a literal
+                # string. Emitting a RegexSubst with a guessed replacement
+                # would silently miscompile (the RC4 class), so refuse loudly.
+                die "GAP: s///e (code replacement) not yet lowered\n"
+                    if $op->pmflags & PMf_EVAL;
                 my $targ    = $op->targ;
                 my $target  = $sim->lookup($targ);
                 if (!$target) {
