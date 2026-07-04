@@ -65,6 +65,33 @@ subtest '$obj->meth produces a method-dispatch Call named for the method' => sub
         'greet Call propagates class_name from its constructor invocant');
 };
 
+subtest 'a void method call is threaded onto the control chain (obj-state A)' => sub {
+    # $c->inc in statement position mutates $c and its result is discarded.
+    # It must carry a control edge (input[0] = the prior control node) and be
+    # marked a statement effect, so the loader threads it into the effect chain
+    # instead of leaving it orphaned (which gets DCE'd, losing the mutation).
+    my $g = canonical_graph(
+        'sub { my $c = Counter->new(n => 10); $c->inc; $c->val }');
+    my ($inc) = grep { $_->operation eq 'Call' && $_->name eq 'inc' }
+        $g->nodes->@*;
+    ok(defined $inc, 'has a Call(inc)') or return;
+    ok($inc->is_stmt_effect, 'the void inc is marked a statement effect');
+    my $ctrl = $inc->inputs->[0];
+    ok(defined $ctrl && $ctrl->operation =~ /^(Start|Call|Region|Proj|If|Loop)$/,
+        'inc leads with a control node (input[0] is the prior control)');
+};
+
+subtest 'a value-context method call is NOT a statement effect' => sub {
+    # $c->val is in return/value position -- its result is consumed, so it
+    # stays a pure data Call with no control threading.
+    my $g = canonical_graph(
+        'sub { my $c = Counter->new(n => 10); $c->val }');
+    my ($val) = grep { $_->operation eq 'Call' && $_->name eq 'val' }
+        $g->nodes->@*;
+    ok(defined $val, 'has a Call(val)') or return;
+    ok(!$val->is_stmt_effect, 'val is not a statement effect (value-consumed)');
+};
+
 subtest 'Class->new(k=>v) splits its kv-list into param_names + value inputs' => sub {
     # Counter->new(n => 10): the constructor arg list is a param=>value kv-list.
     # It must be emitted as Call(name=new, class_name=Counter, param_names=['n'],
@@ -79,6 +106,8 @@ subtest 'Class->new(k=>v) splits its kv-list into param_names + value inputs' =>
     is($new->param_names, ['n'], 'param_names carries the bare key');
     is(scalar($new->inputs->@*), 1, 'one input: the value only (class dropped)');
     is($new->inputs->[0]->value, 10, 'the value input is Constant(10)');
+    # A constructor returns the constructed object instance.
+    is($new->stamp && $new->stamp->type, 'Object', 'new is stamped Object');
 };
 
 done_testing();

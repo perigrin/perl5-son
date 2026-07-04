@@ -410,14 +410,28 @@ class SoN::FromOptree 0.01 {
                             @call_inputs = @vals;   # class rides as class_name
                         }
                     }
+                    # A call in void statement position (OPf_WANT_VOID) has its
+                    # result discarded; its purpose is its side effect. Thread
+                    # it onto the control chain (control first in inputs) so it
+                    # is ordered and survives DCE, and do not push a value.
+                    my $void = ($op->flags & 3) == 1;   # OPf_WANT_VOID
+                    # A constructor (Class->new) returns the constructed object
+                    # instance; stamp it Object so the shape/repr contract holds.
+                    my $ctor = defined $class_name && $pending_method eq 'new';
                     my $node = $factory->make('Call',
-                        inputs        => [ @call_inputs ],
+                        inputs        => [ ($void ? $sim->control : ()), @call_inputs ],
                         dispatch_kind => 'method',
                         name          => $pending_method,
                         (defined $class_name ? (class_name => $class_name) : ()),
                         (defined $param_names ? (param_names => $param_names) : ()),
+                        ($void ? (is_stmt_effect => true) : ()),
+                        ($ctor ? (stamp => SoN::IR::Stamp->new(type => 'Object')) : ()),
                     );
-                    $sim->push_node($node);
+                    if ($void) {
+                        $sim->set_control($node);
+                    } else {
+                        $sim->push_node($node);
+                    }
                     $pending_method = undef;
                     $op = $op->next;
                     next;

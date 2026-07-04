@@ -49,6 +49,10 @@ sub _extract_fields ($node, $id_remap) {
             ( defined $node->param_names
                 ? ( param_names => $node->param_names )
                 : () ),
+            # A void statement-effect call leads with its control input.
+            ( $node->is_stmt_effect
+                ? ( is_stmt_effect => JSON::PP::true )
+                : () ),
         };
     }
     if ($op eq 'Phi') {
@@ -214,6 +218,8 @@ sub _deserialize_graph ($method_data) {
                 if exists $fields->{class_name};
             $args{param_names}   = $fields->{param_names}
                 if exists $fields->{param_names};
+            $args{is_stmt_effect} = true
+                if $fields->{is_stmt_effect};
         }
         elsif ($op eq 'Phi') {
             $args{region} = $nodes[ $fields->{region} ];
