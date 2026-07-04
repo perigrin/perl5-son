@@ -15,6 +15,10 @@ class SoN::FromOptree 0.01 {
     use SoN::FromOptree::StackSim;
     use SoN::FieldInfo;
 
+    # The s///r (non-destructive) flag on a subst PMOP's pmflags. /r returns a
+    # new string and leaves the source untouched, so it must not rebind the pad.
+    use constant PMf_NONDESTRUCT => 0x4000000;   # 67108864
+
     # Result-stamp rules for computed nodes, keyed by Chalk node type. The
     # result representation of a computed value is derivable from its inputs,
     # which Chalk's backend needs but B::SoN previously only set on leaf
@@ -468,7 +472,8 @@ class SoN::FromOptree 0.01 {
                 # padsv_store / TARGMY). The /r form (PMf_NONDESTRUCT) yields a
                 # NEW string and leaves the source untouched, so it must NOT
                 # rebind -- only push the result value.
-                $sim->define($targ, $node) unless $flags =~ /r/;
+                my $nondestruct = $op->pmflags & PMf_NONDESTRUCT;
+                $sim->define($targ, $node) unless $nondestruct;
                 $sim->push_node($node);
                 $op = $op->next;
                 next;
@@ -1767,7 +1772,7 @@ class SoN::FromOptree 0.01 {
         $str .= 'i' if $flags & 4;        # PMf_FOLD (case-insensitive)
         $str .= 'x' if $flags & 8;        # PMf_EXTENDED
         $str .= 'g' if $flags & 8388608;  # PMf_GLOBAL
-        $str .= 'r' if $flags & 67108864; # PMf_NONDESTRUCT (s///r)
+        $str .= 'r' if $flags & PMf_NONDESTRUCT; # s///r
         return $str;
     }
 }
