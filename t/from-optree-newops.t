@@ -170,4 +170,27 @@ subtest 'subst produces RegexSubst node' => sub {
     like($rs->flags, qr/g/, 'RegexSubst has g flag');
 };
 
+subtest 'anon-ref deref resolves the container to the bound aggregate (R4)' => sub {
+    # `my $r = [1,2,3]; $r->[0]` -- the deref read of $r (a DREFAV padsv, which
+    # carries OPf_MOD for autovivification) must resolve to the bound ArrayRef,
+    # not emit a fresh unbound PadAccess. Otherwise the Subscript container has
+    # no aggregate and reaches the backend with no repr.
+    require SoN::OptSuppress;
+    SoN::OptSuppress::suppress_peep();
+    my $cv = eval 'sub { my $r = [1,2,3]; $r->[0] }';
+    SoN::OptSuppress::restore_peep();
+    my $g = SoN::FromOptree->translate($cv);
+
+    my ($sub) = nodes_of_type($g, 'Subscript');
+    ok($sub, 'has a Subscript node') or return;
+    my $container = $sub->inputs->[0];
+    # The container must reach an ArrayRef (directly or through a deref), NOT be
+    # a bare unbound PadAccess.
+    my $ck = ref($container); $ck =~ s/.*:://;
+    isnt($ck, 'PadAccess',
+        'the Subscript container is not an unbound PadAccess');
+    my @arefs = nodes_of_type($g, 'ArrayRef');
+    ok(scalar @arefs > 0, 'the anon-list ArrayRef survives into the graph');
+};
+
 done_testing;

@@ -747,7 +747,12 @@ class SoN::FromOptree 0.01 {
         # bound value (the variable's current value).
         if ($name eq 'padsv') {
             my $targ = $op->targ;
-            my $is_lvalue = ($op->flags & 32); # OPf_MOD
+            # A deref padsv ($r->[0], $r->{k}) carries OPf_MOD for
+            # autovivification but is READING $r to dereference it -- resolve
+            # it to the bound value (the ref), not a fresh lvalue PadAccess, so
+            # the following rv2av/rv2hv+aelem/helem sees the aggregate.
+            my $is_deref  = ($op->private & 48); # OPpDEREF (AV|HV|SV)
+            my $is_lvalue = ($op->flags & 32) && !$is_deref; # OPf_MOD
             my $existing = $sim->lookup($targ);
             if ($existing && !$is_lvalue) {
                 $sim->push_node($existing);
