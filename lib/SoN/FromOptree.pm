@@ -460,6 +460,10 @@ class SoN::FromOptree 0.01 {
                     replacement => $replacement,
                     flags       => $flags,
                 );
+                # s/// mutates the target pad in place: rebind $targ so a later
+                # read of the same lexical resolves to the substituted value,
+                # not the pre-subst binding (mirrors padsv_store / TARGMY).
+                $sim->define($targ, $node);
                 $sim->push_node($node);
                 $op = $op->next;
                 next;

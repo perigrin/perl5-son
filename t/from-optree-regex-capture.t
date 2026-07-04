@@ -80,6 +80,21 @@ subtest '=~ against a qr value is Match(subject, qr-constant) (R2)' => sub {
     is($m->stamp->type, 'Boolean', 'match result is stamped Boolean');
 };
 
+subtest 's/// rebinds the pad so a later read sees the substituted value (R3)' => sub {
+    # $s =~ s/foo/baz/ is an in-place mutation of $s. A subsequent read of
+    # $s must resolve to the RegexSubst result, not the pre-subst Constant.
+    my $g = graph_of('sub { my $s = "foobar"; $s =~ s/foo/baz/; $s }');
+    my $subst = node_of($g, 'RegexSubst');
+    ok(defined $subst, 'has a RegexSubst node') or return;
+    is($subst->pattern, 'foo', 'pattern extracted');
+    is($subst->replacement, 'baz', 'replacement extracted');
+
+    my ($ret) = grep { $_->operation eq 'Return' } $g->nodes->@*;
+    ok(defined $ret, 'has a Return node') or return;
+    is($ret->inputs->[1], $subst,
+        'the returned $s is the RegexSubst result, not the pre-subst Constant');
+};
+
 subtest 'RegexCapture and Match survive the JSON seam' => sub {
     my $g = graph_of('sub { my $s = "ab-cd"; $s =~ /(\w+)-(\w+)/; $1 }');
     my $json = SoN::Serialize::JSON::to_json({ 'main::t' => $g });
