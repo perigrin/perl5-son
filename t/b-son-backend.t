@@ -64,7 +64,10 @@ subtest 'package sub appears under correct fully-qualified name' => sub {
 # ====================================================
 
 subtest 'text output has separate headers for each sub' => sub {
-    my $output = `$perl -Ilib -MO=SoN -e 'sub foo { 1 } sub bar { 2 }' 2>&1`;
+    # STDOUT only: STDERR carries perl's "syntax OK" and B::SoN skip
+    # diagnostics, which interleave into the STDOUT header line under
+    # symbol-table load and break a naive content match.
+    my $output = `$perl -Ilib -MO=SoN -e 'sub foo { 1 } sub bar { 2 }' 2>/dev/null`;
     like($output, qr/=== main::foo ===/, 'text output has header for foo');
     like($output, qr/=== main::bar ===/, 'text output has header for bar');
 };

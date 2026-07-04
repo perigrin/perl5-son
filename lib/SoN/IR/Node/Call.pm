@@ -12,6 +12,10 @@ class SoN::IR::Node::Call :isa(SoN::IR::Node) {
     # for direct/builtin calls and for method calls whose class is inferred from
     # the invocant. Part of identity: two calls differing only by class differ.
     field $class_name    :param :reader = undef;
+    # For a constructor dispatch (name eq 'new'), the :param keys parallel to
+    # the value inputs -- param_names->[i] names the field that inputs->[i]
+    # binds. undef for non-constructor calls. Part of identity.
+    field $param_names   :param :reader = undef;
 
     method operation () { 'Call' }
 
@@ -20,6 +24,7 @@ class SoN::IR::Node::Call :isa(SoN::IR::Node) {
         return "Call|dispatch_kind=" . $dispatch_kind
              . "|name=" . $name
              . "|class_name=" . ( $class_name // '' )
+             . "|param_names=" . ( defined $param_names ? CORE::join(',', $param_names->@*) : '' )
              . "|" . CORE::join('|', @input_ids);
     }
 }

@@ -383,11 +383,39 @@ class SoN::FromOptree 0.01 {
                         && defined $invocant->class_name) {
                         $class_name = $invocant->class_name;
                     }
+                    # Class->new(k => v, ...): the args after the invocant are a
+                    # param=>value kv-list. Split the keys onto param_names and
+                    # the values onto inputs, so the backend binds each value to
+                    # its named field (a flat kv-list leaves param_names empty
+                    # and the constructor stores field defaults). Guarded on a
+                    # statically-known class and an even-length list of constant
+                    # keys; anything else stays a generic dispatch.
+                    my @call_inputs = ($invocant, $args->@*);
+                    my $param_names;
+                    if (defined $class_name && $pending_method eq 'new'
+                        && (($args->@*) % 2 == 0)) {
+                        my (@keys, @vals, $ok);
+                        $ok = 1;
+                        for (my $i = 0; $i < $args->@*; $i += 2) {
+                            my ($k, $v) = ($args->[$i], $args->[$i + 1]);
+                            unless ($k && $k->isa('SoN::IR::Node::Constant')
+                                    && ($k->const_type // '') eq 'string') {
+                                $ok = 0; last;
+                            }
+                            push @keys, $k->value;
+                            push @vals, $v;
+                        }
+                        if ($ok) {
+                            $param_names = \@keys;
+                            @call_inputs = @vals;   # class rides as class_name
+                        }
+                    }
                     my $node = $factory->make('Call',
-                        inputs        => [ $invocant, $args->@* ],
+                        inputs        => [ @call_inputs ],
                         dispatch_kind => 'method',
                         name          => $pending_method,
                         (defined $class_name ? (class_name => $class_name) : ()),
+                        (defined $param_names ? (param_names => $param_names) : ()),
                     );
                     $sim->push_node($node);
                     $pending_method = undef;

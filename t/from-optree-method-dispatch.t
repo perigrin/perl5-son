@@ -21,6 +21,12 @@ class Greeter {
     method greet { 42 }
 }
 
+class Counter {
+    field $n :param = 0;
+    method inc { $n += 1 }
+    method val { return $n }
+}
+
 sub canonical_graph ($code) {
     SoN::OptSuppress::suppress_peep();
     my $cv = eval $code;
@@ -57,6 +63,22 @@ subtest '$obj->meth produces a method-dispatch Call named for the method' => sub
         'the greet invocant is the Call(new) (scope-resolved $g)');
     is($greet->class_name, 'Greeter',
         'greet Call propagates class_name from its constructor invocant');
+};
+
+subtest 'Class->new(k=>v) splits its kv-list into param_names + value inputs' => sub {
+    # Counter->new(n => 10): the constructor arg list is a param=>value kv-list.
+    # It must be emitted as Call(name=new, class_name=Counter, param_names=['n'],
+    # inputs=[Constant(10)]) -- the bare keys on param_names, the values as
+    # inputs (the class rides as class_name, not as an input). The backend's
+    # _lower_call_new binds inputs[i] to the field named param_names[i]; a flat
+    # kv-list of inputs leaves param_names empty and stores field defaults.
+    my $g = canonical_graph('sub { Counter->new(n => 10) }');
+    my ($new) = grep { $_->name eq 'new' } calls_of($g);
+    ok(defined $new, 'has a Call(new)') or return;
+    is($new->class_name, 'Counter', 'class_name is Counter');
+    is($new->param_names, ['n'], 'param_names carries the bare key');
+    is(scalar($new->inputs->@*), 1, 'one input: the value only (class dropped)');
+    is($new->inputs->[0]->value, 10, 'the value input is Constant(10)');
 };
 
 done_testing();

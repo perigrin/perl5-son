@@ -45,6 +45,10 @@ sub _extract_fields ($node, $id_remap) {
             ( defined $node->class_name
                 ? ( class_name => $node->class_name )
                 : () ),
+            # Constructor :param keys parallel to the value inputs.
+            ( defined $node->param_names
+                ? ( param_names => $node->param_names )
+                : () ),
         };
     }
     if ($op eq 'Phi') {
@@ -208,6 +212,8 @@ sub _deserialize_graph ($method_data) {
             $args{name}          = $fields->{name};
             $args{class_name}    = $fields->{class_name}
                 if exists $fields->{class_name};
+            $args{param_names}   = $fields->{param_names}
+                if exists $fields->{param_names};
         }
         elsif ($op eq 'Phi') {
             $args{region} = $nodes[ $fields->{region} ];
