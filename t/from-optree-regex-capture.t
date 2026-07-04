@@ -98,6 +98,19 @@ subtest 's/// rebinds the pad so a later read sees the substituted value (R3)' =
         'the returned $s is the RegexSubst result, not the pre-subst Constant');
 };
 
+subtest 's///r is non-destructive: the source pad is NOT rebound (R3 /r)' => sub {
+    # s/foo/baz/r returns a NEW string and leaves $s unchanged. A later read
+    # of $s must resolve to the original Constant, not the RegexSubst result.
+    my $g = graph_of(
+        'sub { my $s = "foobar"; my $t = $s =~ s/foo/baz/r; $s }');
+    my ($ret) = grep { $_->operation eq 'Return' } $g->nodes->@*;
+    ok(defined $ret, 'has a Return node') or return;
+    my $val = $ret->inputs->[1];
+    is($val->operation, 'Constant',
+        'returned $s is the original Constant (/r did not rebind the pad)');
+    is($val->value, 'foobar', 'and it still carries the pre-subst value');
+};
+
 subtest 'RegexCapture and Match survive the JSON seam' => sub {
     my $g = graph_of('sub { my $s = "ab-cd"; $s =~ /(\w+)-(\w+)/; $1 }');
     my $json = SoN::Serialize::JSON::to_json({ 'main::t' => $g });

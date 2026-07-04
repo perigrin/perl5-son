@@ -462,10 +462,13 @@ class SoN::FromOptree 0.01 {
                     # s/// yields the rewritten subject, always a Str.
                     stamp       => SoN::IR::Stamp->new(type => 'Str'),
                 );
-                # s/// mutates the target pad in place: rebind $targ so a later
-                # read of the same lexical resolves to the substituted value,
-                # not the pre-subst binding (mirrors padsv_store / TARGMY).
-                $sim->define($targ, $node);
+                # A destructive s/// mutates the target pad in place: rebind
+                # $targ so a later read of the same lexical resolves to the
+                # substituted value, not the pre-subst binding (mirrors
+                # padsv_store / TARGMY). The /r form (PMf_NONDESTRUCT) yields a
+                # NEW string and leaves the source untouched, so it must NOT
+                # rebind -- only push the result value.
+                $sim->define($targ, $node) unless $flags =~ /r/;
                 $sim->push_node($node);
                 $op = $op->next;
                 next;
@@ -1764,6 +1767,7 @@ class SoN::FromOptree 0.01 {
         $str .= 'i' if $flags & 4;        # PMf_FOLD (case-insensitive)
         $str .= 'x' if $flags & 8;        # PMf_EXTENDED
         $str .= 'g' if $flags & 8388608;  # PMf_GLOBAL
+        $str .= 'r' if $flags & 67108864; # PMf_NONDESTRUCT (s///r)
         return $str;
     }
 }
