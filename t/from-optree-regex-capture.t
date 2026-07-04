@@ -88,6 +88,9 @@ subtest 's/// rebinds the pad so a later read sees the substituted value (R3)' =
     ok(defined $subst, 'has a RegexSubst node') or return;
     is($subst->pattern, 'foo', 'pattern extracted');
     is($subst->replacement, 'baz', 'replacement extracted');
+    # s/// on a Str always yields a Str (the rewritten subject); the node must
+    # carry that repr so the Chalk backend can lower it (corpus R3 :Str).
+    is($subst->stamp && $subst->stamp->type, 'Str', 'RegexSubst is stamped Str');
 
     my ($ret) = grep { $_->operation eq 'Return' } $g->nodes->@*;
     ok(defined $ret, 'has a Return node') or return;

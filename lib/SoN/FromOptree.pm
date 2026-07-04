@@ -459,6 +459,8 @@ class SoN::FromOptree 0.01 {
                     pattern     => $pattern,
                     replacement => $replacement,
                     flags       => $flags,
+                    # s/// yields the rewritten subject, always a Str.
+                    stamp       => SoN::IR::Stamp->new(type => 'Str'),
                 );
                 # s/// mutates the target pad in place: rebind $targ so a later
                 # read of the same lexical resolves to the substituted value,
