@@ -785,10 +785,20 @@ class SoN::FromOptree 0.01 {
         # Handle gv - global variable reference. Pushes the GV NAME as a
         # string Constant: an entersub consumes it as the callee name. An
         # rv2sv over it (a package scalar read) pops and replaces it below.
+        # The %ENV stash (main::ENV) is pushed FULLY QUALIFIED so a later helem
+        # can tell the process environment from a package hash whose short name
+        # is also ENV (%Foo::ENV) -- the bare NAME "ENV" is ambiguous. Only
+        # main::ENV is the environment; any other stash is a normal hash.
         if ($name eq 'gv') {
             my $gv = _op_gv($cv, $op);
+            my $value = 'unknown';
+            if ($gv) {
+                $value = ($gv->STASH->NAME eq 'main' && $gv->NAME eq 'ENV')
+                    ? 'main::ENV'
+                    : $gv->NAME;
+            }
             my $node = $factory->make('Constant',
-                value      => $gv ? $gv->NAME : 'unknown',
+                value      => $value,
                 const_type => 'string',
                 stamp      => SoN::IR::Stamp->new(type => 'Str'));
             $sim->push_node($node);
@@ -921,7 +931,28 @@ class SoN::FromOptree 0.01 {
             my $index     = $sim->pop_node;
             my $container = $sim->pop_node;
             my $is_lvalue = ($op->flags & 32); # OPf_MOD
-            my $key       = _elem_key($container, $index);
+
+            # $ENV{KEY}: a helem whose container is the %ENV stash (gv[*ENV] with
+            # rv2hv transparent, so the container is the gv-name Constant, which
+            # the gv handler qualified to "main::ENV" for the environment stash
+            # ONLY) is a host env read, not a generic hash Subscript. A package
+            # hash %Foo::ENV pushes the bare "ENV" and correctly stays a
+            # Subscript. Corpus host.md H3: EnvRead(key: KEY) :Str, lowered to
+            # the C getenv. Only a literal key on a read (rvalue) is recognised;
+            # an lvalue $ENV{K} = ... (env write) is not modelled and falls through.
+            if ($name eq 'helem' && !$is_lvalue
+                && $container->isa('SoN::IR::Node::Constant')
+                && ($container->value // '') eq 'main::ENV'
+                && $index->isa('SoN::IR::Node::Constant')
+                && defined $index->value) {
+                my $node = $factory->make('EnvRead',
+                    key   => $index->value,
+                    stamp => SoN::IR::Stamp->new(type => 'Str'));
+                $sim->push_node($node);
+                return ($op->next, 'handled');
+            }
+
+            my $key = _elem_key($container, $index);
 
             if (!$is_lvalue && defined $key
                 && exists $ctx->{elem_store}{$key}) {

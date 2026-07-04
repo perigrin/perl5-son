@@ -242,6 +242,7 @@ use SoN::IR::Node::AnonSub;
 use SoN::IR::Node::RegexMatch;
 use SoN::IR::Node::RegexSubst;
 use SoN::IR::Node::RegexCapture;
+use SoN::IR::Node::EnvRead;
 use SoN::IR::Node::VarDecl;
 SoN::IR::NodeFactory->register('TernaryExpr',       'SoN::IR::Node::TernaryExpr');
 SoN::IR::NodeFactory->register('TryCatch',          'SoN::IR::Node::TryCatch');
@@ -252,6 +253,7 @@ SoN::IR::NodeFactory->register('AnonSub',           'SoN::IR::Node::AnonSub');
 SoN::IR::NodeFactory->register('RegexMatch',        'SoN::IR::Node::RegexMatch');
 SoN::IR::NodeFactory->register('RegexSubst',        'SoN::IR::Node::RegexSubst');
 SoN::IR::NodeFactory->register('RegexCapture',      'SoN::IR::Node::RegexCapture');
+SoN::IR::NodeFactory->register('EnvRead',           'SoN::IR::Node::EnvRead');
 SoN::IR::NodeFactory->register('VarDecl',           'SoN::IR::Node::VarDecl');
 
 1;

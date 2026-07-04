@@ -103,6 +103,9 @@ sub _extract_fields ($node, $id_remap) {
     if ($op eq 'RegexCapture') {
         return { n => $node->n };
     }
+    if ($op eq 'EnvRead') {
+        return { key => $node->key };
+    }
     if ($op eq 'VarDecl') {
         return { scope => $node->scope };
     }
@@ -258,6 +261,9 @@ sub _deserialize_graph ($method_data) {
             $args{pattern}     = $fields->{pattern};
             $args{replacement} = $fields->{replacement};
             $args{flags}       = $fields->{flags} // '';
+        }
+        elsif ($op eq 'EnvRead') {
+            $args{key} = $fields->{key};
         }
         elsif ($op eq 'VarDecl') {
             $args{scope} = $fields->{scope};
