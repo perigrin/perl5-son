@@ -78,6 +78,20 @@ class SoN::FromOptree 0.01 {
         return $acc;
     }
 
+    # _is_aggregate_node($node) -- true iff the node is an array/hash aggregate
+    # a Length can count: an ArrayRef/HashRef constructor, or a node bound to an
+    # aggregate (its stamp is ArrayRef/HashRef). A scalar (e.g. a Str Constant
+    # left by a symbolic `@$str` deref) is NOT an aggregate.
+    sub _is_aggregate_node ($node) {
+        return false unless defined $node;
+        my $op = $node->operation;
+        return true if $op eq 'ArrayRef' || $op eq 'HashRef';
+        my $stamp = $node->stamp;
+        return false unless defined $stamp;
+        my $t = $stamp->type;
+        return ($t eq 'ArrayRef' || $t eq 'HashRef') ? true : false;
+    }
+
     # Translate a code reference to a SoN graph
     sub translate ($class_or_self, $coderef) {
         my $cv = B::svref_2object($coderef);
@@ -714,6 +728,32 @@ class SoN::FromOptree 0.01 {
             }
             # The binding is complete; the trailing aassign pops this (empty)
             # mark and emits nothing (see the aassign empty-list guard).
+            return ($op->next, 'handled');
+        }
+
+        # Handle `scalar` over an aggregate: `scalar @a` / `scalar %h` imposes
+        # scalar context and yields the element count (a Length), NOT the
+        # aggregate. Its kid is an aggregate producer (padav/padhv/rv2av/rv2hv),
+        # which has already pushed the aggregate node onto the stack; pop it and
+        # push a Length. A `scalar $x` over a genuine scalar is a pure context
+        # hint and falls through to the SKIP below (leaving the scalar in place).
+        # Checked before is_skip, which maps `scalar` to SKIP unconditionally.
+        if ($name eq 'scalar' && $op->can('first')
+            && $op->first->name =~ /^(padav|padhv|rv2av|rv2hv)$/) {
+            my $agg = $sim->pop_node;
+            # Only wrap a genuine aggregate. A symbolic array-deref over a
+            # non-ref (`scalar @$str`, invalid under strict refs) leaves a
+            # scalar Constant on the stack; Length-wrapping it would take a
+            # string byte-length -- a miscompile. Fall through to SKIP (leaving
+            # the value in place) unless the operand is an aggregate.
+            if (_is_aggregate_node($agg)) {
+                my $stamp = _result_stamp('Length', [$agg]);
+                my %extra = defined $stamp ? (stamp => $stamp) : ();
+                $sim->push_node($factory->make('Length', inputs => [$agg], %extra));
+            }
+            else {
+                $sim->push_node($agg);
+            }
             return ($op->next, 'handled');
         }
 
