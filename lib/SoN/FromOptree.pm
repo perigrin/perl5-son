@@ -2,6 +2,7 @@
 # ABOUTME: Uses stack simulation to reconstruct data flow from the op_next chain.
 
 use v5.42.0;
+use utf8;
 use feature 'class';
 no warnings 'experimental::class';
 
