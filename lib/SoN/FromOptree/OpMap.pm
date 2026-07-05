@@ -227,7 +227,7 @@ class SoN::FromOptree::OpMap 0.01 {
         # === Reference operations ===
         refgen      => [1, 'Ref',      1, 0],  # \expr
         srefgen     => [1, 'Ref',      1, 0],  # \scalar
-        ref         => [1, 'Ref',      1, 0],  # ref($x): type/class name (Ref(operand))
+        ref         => [1, 'Call',     1, 0],
         reftype     => [1, 'Call',     1, 0],
         refaddr     => [1, 'Call',     1, 0],
         bless       => [2, 'Call',     1, 0],
