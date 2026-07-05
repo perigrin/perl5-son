@@ -8,8 +8,9 @@ use SoN::OptSuppress;
 use SoN::FromOptree;
 
 # Under canonical (peephole-suppressed) ops, `my @a = (...)` builds an ArrayRef
-# bound to the array, `$a[0] = V` stores into the element, and a later `$a[0]`
-# read returns the stored value. Same for hashes via HashRef/helem.
+# bound to the array, `$a[0] = V` is a threaded stmt-effect Assign store, and a
+# later `$a[0]` is a real Subscript LOAD (not a compile-time value substitution),
+# so the store persists to memory and the load sees it. Same for hashes.
 
 sub canonical_graph ($code) {
     SoN::OptSuppress::suppress_peep();
@@ -37,14 +38,17 @@ subtest 'array element read returns the constructed element' => sub {
     is($val->operation, 'Subscript', 'read is a Subscript');
 };
 
-subtest 'array element store, then read returns the stored value' => sub {
+subtest 'array element store is a threaded Assign; read is a real Subscript load' => sub {
+    # The store materialises: a stmt-effect Assign on the control chain, and the
+    # read is a real Subscript LOAD (not the stored Constant substituted in), so
+    # the store persists to memory and the load sees it (correct under aliasing).
     my $g = canonical_graph('sub { my @a = (1,2,3); $a[0] = 42; $a[0] }');
     my $val = return_value_node($g);
-    is($val->operation, 'Constant', 'return value is the stored Constant');
-    is($val->value, 42, 'read after store returns 42, not the original 1');
+    is($val->operation, 'Subscript', 'read is a Subscript load, not the stored Constant');
 
-    my @ops = map { $_->operation } $g->nodes->@*;
-    ok((grep { $_ eq 'Assign' } @ops), 'the store emits an Assign');
+    my ($assign) = grep { $_->operation eq 'Assign' } $g->nodes->@*;
+    ok(defined $assign, 'the store emits an Assign') or return;
+    ok($assign->is_stmt_effect, 'the store Assign is a threaded stmt-effect');
 };
 
 subtest 'hash construction builds a HashRef' => sub {
@@ -53,11 +57,14 @@ subtest 'hash construction builds a HashRef' => sub {
     ok((grep { $_ eq 'HashRef' } @ops), 'has a HashRef for my %h = (k => 0)');
 };
 
-subtest 'hash element store, then read returns the stored value' => sub {
+subtest 'hash element store is a threaded Assign; read is a real Subscript load' => sub {
     my $g = canonical_graph('sub { my %h = (k => 0); $h{k} = 99; $h{k} }');
     my $val = return_value_node($g);
-    is($val->operation, 'Constant', 'return value is the stored Constant');
-    is($val->value, 99, 'read after store returns 99, not the original 0');
+    is($val->operation, 'Subscript', 'read is a Subscript load, not the stored Constant');
+
+    my ($assign) = grep { $_->operation eq 'Assign' } $g->nodes->@*;
+    ok(defined $assign && $assign->is_stmt_effect,
+        'the store is a threaded stmt-effect Assign');
 };
 
 done_testing();

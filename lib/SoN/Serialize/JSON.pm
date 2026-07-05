@@ -55,6 +55,11 @@ sub _extract_fields ($node, $id_remap) {
                 : () ),
         };
     }
+    if ($op eq 'Assign' && $node->is_stmt_effect) {
+        # An element-store Assign is a statement effect and leads with its
+        # control input (mirrors the void-call contract).
+        return { is_stmt_effect => JSON::PP::true };
+    }
     if ($op eq 'Phi') {
         return {
             region => $id_remap->{ $node->region->id },
@@ -221,6 +226,10 @@ sub _deserialize_graph ($method_data) {
                 if exists $fields->{class_name};
             $args{param_names}   = $fields->{param_names}
                 if exists $fields->{param_names};
+            $args{is_stmt_effect} = true
+                if $fields->{is_stmt_effect};
+        }
+        elsif ($op eq 'Assign') {
             $args{is_stmt_effect} = true
                 if $fields->{is_stmt_effect};
         }

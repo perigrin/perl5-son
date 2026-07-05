@@ -963,11 +963,14 @@ class SoN::FromOptree 0.01 {
         }
 
         # Handle aelem/helem - array/hash element access (canonical, unfused).
-        # The container and index are on the stack (index on top). An lvalue
-        # access (OPf_MOD, the LHS of `$a[0] = ...`) yields a Subscript that the
-        # following sassign stores into. An rvalue read resolves to the most
-        # recent element store for (container, index) if one exists, so that a
-        # read after a store sees the stored value; otherwise it is a Subscript.
+        # The container and index are on the stack (index on top). Both an lvalue
+        # access (OPf_MOD, the LHS of `$a[0] = ...`, which the following sassign
+        # stores into) and an rvalue read yield a Subscript. A read is a real
+        # memory LOAD (not a compile-time value substitution), so a preceding
+        # threaded element store persists to memory and the load sees it --
+        # correct under aliasing and cross-index. (A value-substitution read-back
+        # cache was here; it was unsound under aliasing and is gone -- the fold is
+        # deferred to a later alias-aware optimization pass.)
         if ($name eq 'aelem' || $name eq 'helem') {
             my $index     = $sim->pop_node;
             my $container = $sim->pop_node;
@@ -993,16 +996,8 @@ class SoN::FromOptree 0.01 {
                 return ($op->next, 'handled');
             }
 
-            my $key = _elem_key($container, $index);
-
-            if (!$is_lvalue && defined $key
-                && exists $ctx->{elem_store}{$key}) {
-                $sim->push_node($ctx->{elem_store}{$key});
-            }
-            else {
-                my $sub = $factory->make('Subscript', inputs => [$container, $index]);
-                $sim->push_node($sub);
-            }
+            my $sub = $factory->make('Subscript', inputs => [$container, $index]);
+            $sim->push_node($sub);
             return ($op->next, 'handled');
         }
 
@@ -1061,14 +1056,18 @@ class SoN::FromOptree 0.01 {
                 $sim->push_node($value);
             }
             # An element store (`$a[0] = 42`): the target is a Subscript lvalue.
-            # Emit Assign(Subscript, value) and record the store so a later read
-            # of the same element returns the stored value. The assignment's
-            # result value is the stored value, so push that as the result.
+            # This is a statement-level EFFECT -- thread the Assign onto the
+            # control chain (control leads inputs, is_stmt_effect set) so it is
+            # ordered, survives DCE, and is reachable. A later read is a real
+            # Subscript LOAD from the same aggregate (no compile-time read-back
+            # shortcut -- see the aelem/helem read handler), so the store's
+            # effect reaches memory and the load sees it. The assignment's result
+            # value is the stored value, so push that as the result.
             elsif ($target->isa('SoN::IR::Node::Subscript')) {
-                $factory->make('Assign', inputs => [$target, $value]);
-                my ($container, $index) = $target->inputs->@*;
-                my $key = _elem_key($container, $index);
-                $ctx->{elem_store}{$key} = $value if defined $key;
+                my $node = $factory->make('Assign',
+                    inputs         => [$sim->control, $target, $value],
+                    is_stmt_effect => true);
+                $sim->set_control($node);
                 $sim->push_node($value);
             }
             else {
@@ -1818,14 +1817,6 @@ class SoN::FromOptree 0.01 {
             $op = $next;
         }
         return undef;
-    }
-
-    # Key an element store/read by its container node and a constant index, so
-    # a read after a store of the same element returns the stored value. Returns
-    # undef when the index is not a constant (a dynamic index cannot be matched).
-    sub _elem_key ($container, $index) {
-        return undef unless $index->isa('SoN::IR::Node::Constant');
-        return $container->id . ':' . ($index->value // '');
     }
 
     # The implicit @_ argument array. Bare shift/pop operate on it, and a
