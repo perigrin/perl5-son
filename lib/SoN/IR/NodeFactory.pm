@@ -59,6 +59,7 @@ class SoN::IR::NodeFactory 0.01 {
 
 # Register built-in CFG node types
 use SoN::IR::Node::Start;
+use SoN::IR::Node::MemStart;
 use SoN::IR::Node::Return;
 use SoN::IR::Node::Region;
 use SoN::IR::Node::If;
@@ -67,6 +68,9 @@ use SoN::IR::Node::Loop;
 use SoN::IR::Node::Unwind;
 
 SoN::IR::NodeFactory->register_cfg('Start',  'SoN::IR::Node::Start');
+# MemStart is the initial aggregate-memory value (memory-SSA). A data node
+# (not CFG), nullary; hash-conses to one per graph.
+SoN::IR::NodeFactory->register('MemStart', 'SoN::IR::Node::MemStart');
 SoN::IR::NodeFactory->register_cfg('Return', 'SoN::IR::Node::Return');
 SoN::IR::NodeFactory->register_cfg('Region', 'SoN::IR::Node::Region');
 SoN::IR::NodeFactory->register_cfg('If',     'SoN::IR::Node::If');

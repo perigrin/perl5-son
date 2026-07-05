@@ -10,6 +10,10 @@ class SoN::FromOptree::StackSim 0.01 {
     field @marks;
     field %scope;
     field $control :param :reader;
+    # The current aggregate-memory value (memory-SSA): MemStart at entry, a store
+    # node after an element store, a Phi at a merge. An element read takes this as
+    # its memory input so pre-store and post-store reads are distinct nodes.
+    field $memory :param :reader = undef;
     # The most recent regex match node; $N capture reads resolve to it.
     field $last_match :reader;
 
@@ -48,6 +52,10 @@ class SoN::FromOptree::StackSim 0.01 {
         $control = $node;
     }
 
+    method set_memory ($node) {
+        $memory = $node;
+    }
+
     method set_last_match ($node) {
         $last_match = $node;
     }
@@ -67,7 +75,7 @@ class SoN::FromOptree::StackSim 0.01 {
 
     # Create a snapshot for branching (deep copy)
     method snapshot () {
-        my $copy = SoN::FromOptree::StackSim->new(control => $control);
+        my $copy = SoN::FromOptree::StackSim->new(control => $control, memory => $memory);
         $copy->push_node($_) for @stack;
         $copy->push_mark() for @marks;  # approximate
         for my $targ (keys %scope) {
@@ -109,6 +117,20 @@ class SoN::FromOptree::StackSim 0.01 {
             } else {
                 push @stack, $my_top;
             }
+        }
+
+        # Merge memory (memory-SSA): if the two arms' memory differs (a store
+        # happened in one arm), create a memory Phi over the region, mirroring the
+        # scope-var merge. Straight-line code never reaches here. NOTE (phase 2a):
+        # the producer builds the memory Phi, but its BACKEND lowering is phase
+        # 2b -- a branch-with-store read that reaches a memory Phi is an honest
+        # backend GAP until then, never a miscompile.
+        my $other_memory = $other->memory;
+        if (defined $memory && defined $other_memory && $memory != $other_memory) {
+            $memory = $factory->make('Phi',
+                inputs => [$memory, $other_memory],
+                region => $region,
+            );
         }
 
         $control = $region;

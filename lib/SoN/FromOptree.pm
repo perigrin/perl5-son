@@ -101,7 +101,9 @@ class SoN::FromOptree 0.01 {
         my $factory = SoN::IR::NodeFactory->new();
         my $opmap   = SoN::FromOptree::OpMap->new();
         my $start   = $factory->make_cfg('Start');
-        my $sim     = SoN::FromOptree::StackSim->new(control => $start);
+        my $mem     = $factory->make('MemStart');
+        my $sim     = SoN::FromOptree::StackSim->new(
+            control => $start, memory => $mem);
 
         my %visited;
         my $op = $cv->START;
@@ -716,7 +718,8 @@ class SoN::FromOptree 0.01 {
                 my $idx  = $factory->make('Constant',
                     value => $i, const_type => 'integer',
                     stamp => SoN::IR::Stamp->new(type => 'Int'));
-                my $elem = $factory->make('Subscript', inputs => [$args, $idx]);
+                my $elem = $factory->make('Subscript',
+                    inputs => [$args, $idx, $sim->memory]);
                 # Each list-assign target is a `my` declaration; emit a VarDecl
                 # so the lexical is declared in the graph, mirroring padsv_store
                 # for `my $x = ...`. The scope binding is the @_ element value.
@@ -996,7 +999,19 @@ class SoN::FromOptree 0.01 {
                 return ($op->next, 'handled');
             }
 
-            my $sub = $factory->make('Subscript', inputs => [$container, $index]);
+            # Memory-SSA: an RVALUE read takes the current memory value as a third
+            # input (memory LAST so container=[0]/index=[1] stay fixed). Pre-store
+            # and post-store reads of one slot get DIFFERENT memory inputs ->
+            # distinct nodes -> each observes the memory state at its program
+            # point. An LVALUE Subscript (a store TARGET, OPf_MOD) is an ADDRESS,
+            # not a versioned read -- it takes NO memory input, so it stays a
+            # 2-input node and never hash-conses with a pre-store rvalue read of
+            # the same slot (which would fold the store target and the read into
+            # one node). The store path reads only inputs[0]/[1].
+            my @sub_inputs = $is_lvalue
+                ? ($container, $index)
+                : ($container, $index, $sim->memory);
+            my $sub = $factory->make('Subscript', inputs => \@sub_inputs);
             $sim->push_node($sub);
             return ($op->next, 'handled');
         }
@@ -1068,6 +1083,10 @@ class SoN::FromOptree 0.01 {
                     inputs         => [$sim->control, $target, $value],
                     is_stmt_effect => true);
                 $sim->set_control($node);
+                # The store PRODUCES a new memory value (memory-SSA): the store
+                # node IS its memory-out, so a following element read takes it as
+                # the read's memory input and observes the post-store state.
+                $sim->set_memory($node);
                 $sim->push_node($value);
             }
             else {
