@@ -215,6 +215,7 @@ class SoN::FromOptree 0.01 {
                     $sim->set_control($false_proj);
                 }
 
+                my %pre_arm_visited = %visited;
                 my ($rhs_end, $rhs_sig)
                     = _walk_branch($cv, $op->other, $rhs_sim, $factory, $opmap, \%visited, \@exits, 1, $stop_addr);
 
@@ -257,16 +258,25 @@ class SoN::FromOptree 0.01 {
                     # bindings ($lhs; that node ends up unconsumed); re-walk
                     # condition+body as a loop from the head the back-edge
                     # targets.
-                    # A mem-branch arm already built its own If; a nested branch
-                    # inside it makes $rhs_end a visited join (not $stop_addr),
-                    # which is NOT a loop back-edge -- do not descend into
-                    # _translate_while_loop (that walks with a broken memory state
-                    # and crashes). Let the convergence check below GAP loudly.
+                    # A genuine `EXPR while COND` back-edge re-enters the
+                    # CONDITION HEAD -- an op that was already visited BEFORE this
+                    # arm walk began (the outer walk stepped through the condition
+                    # to reach this `and`). A NESTED branch inside the arm
+                    # (if($c){if($d){...}}) instead makes $rhs_end the inner
+                    # branch's forward join -- an op first visited DURING the arm
+                    # walk. Descending into _translate_while_loop for that forward
+                    # join walks with a broken memory state and crashes (a
+                    # Subscript with an undef memory input). Require $rhs_end to be
+                    # a TRUE back-edge (visited before the arm) so a nested-branch
+                    # join falls through to the convergence check below and GAPs
+                    # loudly instead. (Raw op-address ordering is NOT a reliable
+                    # backward-edge signal -- allocation order != execution order;
+                    # pre-arm visitation is.)
                     if (!$mem_branch
                             && $name eq 'and'
                             && defined $rhs_end && ref $rhs_end
                             && $$rhs_end != $stop_addr
-                            && $visited{$$rhs_end}) {
+                            && $pre_arm_visited{$$rhs_end}) {
                         _translate_while_loop($cv, $rhs_end, $sim, $factory,
                             $opmap, \%visited);
                         $op = $op->next;
