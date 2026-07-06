@@ -1100,6 +1100,22 @@ class SoN::FromOptree 0.01 {
                 $old = $bound if defined $bound;
             }
 
+            # An element RMW (`$a[0]++`, `$h{k}--`): $old is the 2-input LVALUE
+            # Subscript (a store ADDRESS, no memory input -- see the aelem/helem
+            # handler). The arithmetic must read the PRE-store value, so build a
+            # separate 3-input RVALUE read pinned to the current (pre-store)
+            # memory; the lvalue Subscript stays the store target only. Reusing
+            # the lvalue as the read value re-reads the slot AFTER the store-back
+            # (an off-by-one / double-apply miscompile when the RMW is consumed).
+            my $lvalue;
+            if ($old->isa('SoN::IR::Node::Subscript')
+                && scalar($old->inputs->@*) == 2) {
+                $lvalue = $old;
+                $old = $factory->make('Subscript',
+                    inputs => [$lvalue->inputs->[0], $lvalue->inputs->[1],
+                               $sim->memory]);
+            }
+
             my $one = $factory->make('Constant',
                 value => 1, const_type => 'integer',
                 stamp => SoN::IR::Stamp->new(type => 'Int'));
@@ -1108,8 +1124,19 @@ class SoN::FromOptree 0.01 {
             my %extra = defined $stamp ? (stamp => $stamp) : ();
             my $new = $factory->make($node_type, inputs => [$old, $one], %extra);
 
+            if (defined $lvalue) {
+                # Store the new value back to the element and advance memory
+                # (memory-SSA), mirroring the sassign Subscript branch. The store
+                # PRODUCES the new memory value; a following read observes it.
+                my $store = $factory->make('Assign',
+                    inputs         => [$sim->control, $lvalue, $new],
+                    is_stmt_effect => true);
+                $sim->set_control($store);
+                $sim->set_memory($store);
+            }
+
             $sim->define($targ, $new) if defined $targ;
-            # Pre yields the new value; post yields the old value.
+            # Pre yields the new value; post yields the old (pre-store) value.
             $sim->push_node($is_post ? $old : $new);
             return ($op->next, 'handled');
         }
@@ -1337,6 +1364,24 @@ class SoN::FromOptree 0.01 {
                     $inputs[0] = $bound if defined $bound;
                 }
 
+                # Element compound assignment (`$a[0] += 5`): the FIRST operand
+                # is a 2-input lvalue Subscript (a store ADDRESS) and the op
+                # carries OPf_STACKED (0x40, the `op=` form -- a plain `$a[0]+$x`
+                # has no STACKED). Read-modify-write the element: the arithmetic
+                # must read the PRE-store value, so swap in a 3-input rvalue read
+                # pinned to the current memory; the lvalue stays the store target.
+                my $elem_lvalue;
+                if (!$is_compound
+                    && @inputs >= 1
+                    && $inputs[0]->isa('SoN::IR::Node::Subscript')
+                    && scalar($inputs[0]->inputs->@*) == 2
+                    && ($op->flags & 64)) { # OPf_STACKED
+                    $elem_lvalue = $inputs[0];
+                    $inputs[0] = $factory->make('Subscript',
+                        inputs => [$elem_lvalue->inputs->[0],
+                                   $elem_lvalue->inputs->[1], $sim->memory]);
+                }
+
                 my $stamp = _result_stamp($node_type, \@inputs);
                 $extra{stamp} = $stamp if defined $stamp;
                 my $node = $factory->make($node_type, inputs => \@inputs, %extra);
@@ -1345,6 +1390,15 @@ class SoN::FromOptree 0.01 {
                 # value.
                 if ($is_compound) {
                     $sim->define($lvalue_targ, $node);
+                }
+                elsif (defined $elem_lvalue) {
+                    # Store the result back to the element and advance memory
+                    # (memory-SSA), mirroring the sassign Subscript branch.
+                    my $store = $factory->make('Assign',
+                        inputs         => [$sim->control, $elem_lvalue, $node],
+                        is_stmt_effect => true);
+                    $sim->set_control($store);
+                    $sim->set_memory($store);
                 }
 
                 if ($push_count) {
