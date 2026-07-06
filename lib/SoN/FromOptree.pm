@@ -1497,7 +1497,42 @@ class SoN::FromOptree 0.01 {
         return;
     }
 
+    # Does a loop CONDITION read memory ($a[$i] / $h{$k} in the guard)? Such a
+    # read must rename through a loop-header memory-Phi, which is not yet lowered
+    # for conditions. Without this guard the read either underflows the stack sim
+    # (fused multideref path) or builds a Subscript with undef memory ("consumers
+    # on an undefined value", unfused aelem path) -- both non-GAP errors that
+    # B::SoN swallows silently, dropping the whole sub with no diagnostic. Refuse
+    # LOUDLY here instead. The condition op-chain runs from cond_start up to the
+    # and/or that closes it (the BODY hangs off that and/or's ->other), so scan
+    # only that span. A read is a multideref (fused) or a non-lvalue aelem/helem
+    # (unfused); an lvalue (OPf_MOD) element in the guard is a store, handled by
+    # _assert_pure_condition's side-effect GAP.
+    #
+    # A real condition is a single expression: its ops start immediately at
+    # cond_start (padsv/const/aelem/... then and/or) with NO leading nextstate. A
+    # headless loop (while(1)) has no condition ops at all -- cond_start IS the
+    # body, whose first statement opens with a nextstate. So a nextstate means we
+    # have entered the body; stop before it, otherwise the scan walks into the
+    # body and misblames a body memory read on the condition (a while(1) with a
+    # body read is its own honest GAP downstream, not a condition read).
+    sub _cond_reads_memory ($cond_start) {
+        my %seen;
+        for (my $op = $cond_start; $$op && !$seen{$$op}; $op = $op->next) {
+            $seen{$$op} = 1;
+            my $name = $op->name;
+            last if $name eq 'and' || $name eq 'or';
+            last if $name eq 'nextstate';   # body statement boundary -- not the condition
+            return 1 if $name eq 'multideref';
+            return 1 if ($name eq 'aelem' || $name eq 'helem')
+                && !($op->flags & 0x20);   # OPf_MOD -- lvalue element is a store
+        }
+        return 0;
+    }
+
     sub _translate_while_loop ($cv, $cond_start, $sim, $factory, $opmap, $visited) {
+        die "GAP: memory-reading loop condition not yet lowered\n"
+            if _cond_reads_memory($cond_start);
         _assert_pure_condition($cv, $cond_start, $sim, $opmap);
 
         # Phase 1: scout the condition + body for mutated pad slots.
