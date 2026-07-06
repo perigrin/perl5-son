@@ -1504,6 +1504,18 @@ class SoN::FromOptree 0.01 {
             $sim->define($targ, $phi);
         }
 
+        # A body element store advances memory; seed a header memory-Phi from the
+        # pre-loop memory so the body's store advances OFF the Phi and the
+        # post-loop read (which the loop may reach with zero iterations) observes
+        # init OR back-edge. Memory has no scalar stamp, so this is a plain Phi
+        # (no _make_loop_phi stamp copy, no _patch_loop_phi stamp join).
+        my $mem_phi;
+        if (_body_stores_memory($cond_start)) {
+            $mem_phi = $factory->make_unique('Phi',
+                inputs => [$sim->memory], region => $loop_node);
+            $sim->set_memory($mem_phi);
+        }
+
         # Phase 3: the real walk (condition + body against the Phi bindings).
         my $exit_proj = _walk_loop_body($cv, $cond_start, $sim, $factory,
             $opmap, {}, $visited, $loop_node);
@@ -1513,6 +1525,13 @@ class SoN::FromOptree 0.01 {
         # Phase 4: patch back-edges and stamps.
         my $post_scope = $sim->scope_bindings;
         _patch_loop_phi($sim, $_, $phis{$_}, $post_scope->{$_}) for $mutated->@*;
+        # Patch the memory-Phi's back-edge to the body's final store; then the
+        # exit memory is the header Phi (init OR back-edge) so the post-loop read
+        # takes it.
+        if (defined $mem_phi) {
+            $mem_phi->set_backedge($sim->memory);
+            $sim->set_memory($mem_phi);
+        }
         _assert_unambiguous_condition(values %phis);
 
         # Phase 5: post-loop control continues on the exit edge.
@@ -1574,6 +1593,15 @@ class SoN::FromOptree 0.01 {
             inputs => [$bound, $i_phi],
             stamp  => SoN::IR::Stamp->new(type => 'Boolean'));
 
+        # A body element store advances memory; seed a header memory-Phi from the
+        # pre-loop memory (memory analog of the carried-slot Phi; no stamp).
+        my $mem_phi;
+        if (_body_stores_memory($body_start)) {
+            $mem_phi = $factory->make_unique('Phi',
+                inputs => [$sim->memory], region => $loop_node);
+            $sim->set_memory($mem_phi);
+        }
+
         # Phase 3: body under Proj(loop,0); exit on Proj(loop,1).
         my $body_proj = $factory->make_cfg('Proj', inputs => [$loop_node], index => 0);
         my $exit_proj = $factory->make_cfg('Proj', inputs => [$loop_node], index => 1);
@@ -1591,6 +1619,10 @@ class SoN::FromOptree 0.01 {
         $i_phi->set_backedge($i_next);
         my $post_scope = $sim->scope_bindings;
         _patch_loop_phi($sim, $_, $phis{$_}, $post_scope->{$_}) for $mutated->@*;
+        if (defined $mem_phi) {
+            $mem_phi->set_backedge($sim->memory);
+            $sim->set_memory($mem_phi);
+        }
         _assert_unambiguous_condition($i_phi, values %phis);
 
         # Phase 5: post-loop control continues on the exit edge.
@@ -1720,6 +1752,28 @@ class SoN::FromOptree 0.01 {
         for (my $op = $start; $$op && $$op != $stop && !$seen{$$op}; $op = $op->next) {
             $seen{$$op} = 1;
             next unless $op->name eq 'aelem' || $op->name eq 'helem';
+            return 1 if $op->flags & 0x20;   # OPf_MOD -- an lvalue element target
+        }
+        return 0;
+    }
+
+    # Does a loop body contain an ELEMENT STORE? A body store advances memory,
+    # so the loop needs a header memory-Phi (2b-4) exactly like a loop-carried
+    # scope slot. The condition head's ->next chain runs condition ops up to the
+    # and/or that closes it; the BODY hangs off that and/or's ->other branch (the
+    # while condition short-circuits AROUND the body), so descend there -- the
+    # foreach caller passes body_start directly (no and/or to cross). Same
+    # OPf_MOD lvalue test as _arm_has_element_store; the cycle guard bounds it.
+    sub _body_stores_memory ($start) {
+        my %seen;
+        for (my $op = $start; $$op && !$seen{$$op}; $op = $op->next) {
+            $seen{$$op} = 1;
+            my $name = $op->name;
+            last if $name eq 'unstack' || $name eq 'leaveloop';
+            if ($name eq 'and' || $name eq 'or') {
+                return _body_stores_memory($op->other);
+            }
+            next unless $name eq 'aelem' || $name eq 'helem';
             return 1 if $op->flags & 0x20;   # OPf_MOD -- an lvalue element target
         }
         return 0;
