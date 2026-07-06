@@ -257,7 +257,13 @@ class SoN::FromOptree 0.01 {
                     # bindings ($lhs; that node ends up unconsumed); re-walk
                     # condition+body as a loop from the head the back-edge
                     # targets.
-                    if ($name eq 'and'
+                    # A mem-branch arm already built its own If; a nested branch
+                    # inside it makes $rhs_end a visited join (not $stop_addr),
+                    # which is NOT a loop back-edge -- do not descend into
+                    # _translate_while_loop (that walks with a broken memory state
+                    # and crashes). Let the convergence check below GAP loudly.
+                    if (!$mem_branch
+                            && $name eq 'and'
                             && defined $rhs_end && ref $rhs_end
                             && $$rhs_end != $stop_addr
                             && $visited{$$rhs_end}) {
@@ -281,6 +287,13 @@ class SoN::FromOptree 0.01 {
                     # plus Phis for any scope vars the arm rebound. The read after
                     # the branch takes the merged memory / bindings.
                     if ($mem_branch) {
+                        # The element-store sassign pushes its stored VALUE (perl
+                        # assignment returns its value); in void context that
+                        # value is discarded. Drop the arm's leftover stack down
+                        # to the base depth so merge() does not build a spurious
+                        # (and ill-typed) stack Phi over a dead value.
+                        $rhs_sim->pop_node
+                            while $rhs_sim->stack_depth > $sim->stack_depth;
                         $sim->merge($rhs_sim, $factory);
                         $op = $op->next;
                         next;

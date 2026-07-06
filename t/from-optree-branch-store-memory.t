@@ -62,6 +62,10 @@ subtest 'the post-branch read memory is a Phi over the Region' => sub {
     is($mem->operation, 'Phi', 'the read memory is a Phi (the memory merge)') or return;
     ok(defined $mem->region && $mem->region->operation eq 'Region',
         'the Phi is over the Region');
+    # Exactly one Phi: the memory merge. A leftover arm stack value (the store's
+    # returned value, discarded in void context) would otherwise build a spurious
+    # ill-typed stack Phi.
+    is(scalar(of_op($g, 'Phi')), 1, 'exactly one Phi (the memory merge, no stack Phi)');
 };
 
 done_testing();
