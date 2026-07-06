@@ -1773,8 +1773,13 @@ class SoN::FromOptree 0.01 {
         my $join_addr = _find_join_addr($op->other, $op->next) || undef;
 
         my $base_depth = $sim->stack_depth;
-        my $walk_arm = sub ($start) {
+        my $walk_arm = sub ($start, $arm_control = undef) {
             my $arm_sim = $sim->snapshot;
+            # Memory-SSA 2b-3: an element-store arm walks on its own guarded
+            # Proj so the store is CONTROL-DEPENDENT on the branch (emitted only
+            # in that arm) and its memory advance is per-arm. The scalar/value
+            # path passes no control and keeps the snapshot's pre-branch control.
+            $arm_sim->set_control($arm_control) if defined $arm_control;
             # A local exit accumulator so an explicit `return` in the arm is
             # DETECTED (with none, the walk stepped through it and silently
             # dropped the exit -- the function then returned the merge).
@@ -1797,6 +1802,56 @@ class SoN::FromOptree 0.01 {
                 : _undef_constant($factory);
             return ($val, $end, $arm_sim);
         };
+
+        # Memory-SSA 2b-3: a flat if/else whose arm STORES to an element must
+        # build real control flow -- each arm's store is control-dependent on
+        # its own Proj(If) and the memory after the join is a memory-Phi over a
+        # Region merging the two arms. Gated on an element-store arm (either
+        # side) so the working scalar/value pad-rebind path is untouched. Build
+        # the If + Proj(true, index 0) / Proj(false, index 1) BEFORE the arm
+        # walks and route each arm onto its Proj.
+        my $mem_branch =
+            _arm_has_element_store($op->other, $op->next)      # true arm
+            || _arm_has_element_store($op->next, $op->other);  # false arm
+        if ($mem_branch) {
+            # This path lowers only the VOID if/else statement form (the store
+            # is a discarded side effect). A value-context ternary whose arms
+            # store an element (`my $x = $c ? ($a[0]=7) : ($a[0]=8)`) would fall
+            # through here and drop the ternary value without pushing it. The
+            # scalar-value merge below cannot run once this block fires, so
+            # refuse loudly rather than lean on a downstream backend GAP (the
+            # same discipline as the list-context GAP above).
+            die "GAP: value-context ternary with a branch-guarded element"
+              . " store not yet lowered\n"
+                if ($op->flags & 3) != 1;   # OPf_WANT != OPf_WANT_VOID
+            my $if_node = $factory->make_cfg('If',
+                inputs => [$sim->control, $cond]);
+            my $true_proj  = $factory->make_cfg('Proj',
+                inputs => [$if_node], index => 0);
+            my $false_proj = $factory->make_cfg('Proj',
+                inputs => [$if_node], index => 1);
+            # op->next = false arm, op->other = true arm.
+            my (undef, undef, $false_sim) = $walk_arm->($op->next,  $false_proj);
+            my (undef, $true_end, $true_sim) = $walk_arm->($op->other, $true_proj);
+            # The element-store sassign PUSHES its stored value (perl assignment
+            # returns its value); in void context that leftover must be dropped
+            # to base depth so merge() does not build a spurious ill-typed stack
+            # Phi over a dead value. (This bug was found in 2b-1 review.)
+            $false_sim->pop_node while $false_sim->stack_depth > $base_depth;
+            $true_sim->pop_node  while $true_sim->stack_depth  > $base_depth;
+            # merge() builds the Region over [true_control, false_control], scope
+            # Phis, and the memory-Phi over [true_memory, false_memory]. Adopt the
+            # merged control / memory / scope into the main sim (Region-input order
+            # matches merge's own [self, other] so the backend's Region handling
+            # works unchanged).
+            $true_sim->merge($false_sim, $factory);
+            $sim->set_control($true_sim->control);
+            $sim->set_memory($true_sim->memory);
+            my $merged_scope = $true_sim->scope_bindings;
+            $sim->define($_, $merged_scope->{$_}) for keys %$merged_scope;
+            # An if/else with an element store is a void statement (no value).
+            return $true_end // $op->next;
+        }
 
         # op->next = false arm, op->other = true arm.
         my ($false_val, $false_end, $false_sim) = $walk_arm->($op->next);
