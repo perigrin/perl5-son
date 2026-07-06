@@ -185,6 +185,36 @@ class SoN::FromOptree 0.01 {
                 # The arm always converges at THIS op's op_next (or exits);
                 # stopping there keeps the rest of the sub out of the arm walk.
                 my $stop_addr = ${ $op->next };
+
+                # Memory-SSA 2b: a void branch whose arm STORES to an element
+                # (`if ($c) { $a[0] = 9 }`) must build real control flow so the
+                # store is CONTROL-DEPENDENT on the branch (emitted only when the
+                # guard is taken) and a memory-Phi merges the arms. Build the If +
+                # Proj(true) BEFORE the arm walk and set the arm control to
+                # Proj(true), so the store (control = $sim->control at build time)
+                # lands on the true arm. The base continues on Proj(false); the
+                # post-walk merge() builds the Region + memory-Phi. Gated on an
+                # element-store arm so the working scalar/value/exit paths are
+                # untouched.
+                my $mem_branch =
+                    ($op->flags & 3) == 1   # OPf_WANT_VOID
+                    && _arm_has_element_store($op->other, $op->next);
+                my ($if_node, $true_proj, $false_proj);
+                if ($mem_branch) {
+                    $if_node   = $factory->make_cfg('If',
+                        inputs => [$sim->control, $lhs]);
+                    # `and` (if C): true arm runs the body. `or` (unless C): the
+                    # body runs on the FALSE arm.
+                    my ($body_idx, $cont_idx) =
+                        $name eq 'and' ? (0, 1) : (1, 0);
+                    $true_proj  = $factory->make_cfg('Proj',
+                        inputs => [$if_node], index => $body_idx);
+                    $false_proj = $factory->make_cfg('Proj',
+                        inputs => [$if_node], index => $cont_idx);
+                    $rhs_sim->set_control($true_proj);
+                    $sim->set_control($false_proj);
+                }
+
                 my ($rhs_end, $rhs_sig)
                     = _walk_branch($cv, $op->other, $rhs_sim, $factory, $opmap, \%visited, \@exits, 1, $stop_addr);
 
@@ -245,6 +275,17 @@ class SoN::FromOptree 0.01 {
                         die "GAP: void-context '$name' arm did not converge"
                           . " (statement-modifier loop or unhandled arm op)";
                     }
+                    # Memory-SSA 2b: an element-store arm was walked on Proj(true)
+                    # with a control-dependent store. merge() builds the Region
+                    # (over false_proj + the arm's control) and the memory-Phi,
+                    # plus Phis for any scope vars the arm rebound. The read after
+                    # the branch takes the merged memory / bindings.
+                    if ($mem_branch) {
+                        $sim->merge($rhs_sim, $factory);
+                        $op = $op->next;
+                        next;
+                    }
+
                     my $base_scope = $sim->scope_bindings;
                     my $arm_scope  = $rhs_sim->scope_bindings;
                     for my $targ (sort { $a <=> $b } keys %$arm_scope) {
@@ -1651,6 +1692,22 @@ class SoN::FromOptree 0.01 {
         for (my $op = $b_start; $$op && !$b_seen{$$op}; $op = $op->next) {
             return $$op if $a_seen{$$op};
             $b_seen{$$op} = 1;
+        }
+        return 0;
+    }
+
+    # Does the arm (op chain from $start up to but excluding $stop) contain an
+    # ELEMENT STORE -- an sassign whose lvalue is an aelem/helem? Such a store
+    # advances memory (memory-SSA), so the branch must be built with a
+    # control-dependent store + a memory-Phi (2b), not a straight-line merge.
+    # Pure lexical scan (no translation, no side effects); OPf_MOD (lvalue,
+    # flag 0x20) on the aelem/helem distinguishes a store target from a read.
+    sub _arm_has_element_store ($start, $stop) {
+        my %seen;
+        for (my $op = $start; $$op && $$op != $stop && !$seen{$$op}; $op = $op->next) {
+            $seen{$$op} = 1;
+            next unless $op->name eq 'aelem' || $op->name eq 'helem';
+            return 1 if $op->flags & 0x20;   # OPf_MOD -- an lvalue element target
         }
         return 0;
     }
