@@ -276,6 +276,16 @@ sub _extract_class {
         adjusts => [],
     );
 
+    # A `:reader` field synthesizes an accessor CV named after the field (sans
+    # sigil). That CV is NOT flagged CVf_METHOD and its body reads the field via
+    # a pad slot whose padname is NOT is_field-tagged, so it cannot lower as a
+    # method graph — the backend instead synthesizes it from the field's :reader
+    # attribute. Map each field's short name so a matching non-method CV is
+    # recognized as its reader and tagged (is_reader) rather than emitted as a
+    # user-method graph that would shadow the synthesized accessor.
+    my %field_by_short =
+        map { ( substr( $_->{name}, 1 ) => $_ ) } $class{fields}->@*;
+
     # Map each method name to its per-method graph ref (the fully-qualified key
     # under which _walk_package translated it into $graphs).
     for my $name ( sort keys %$stash ) {
@@ -287,6 +297,16 @@ sub _extract_class {
         next unless $$cv && !$cv->isa('B::SPECIAL');
         my $start = eval { $cv->START };
         next unless defined $start && $$start;    # skip the synthesized `new` XSUB
+
+        # A :reader accessor: a non-CVf_METHOD CV whose name matches a declared
+        # field. Tag the field :reader (the backend synthesizes the accessor)
+        # and do NOT emit its body as a shadowing user-method graph.
+        my $is_method = $cv->CvFLAGS & 0x1;    # CVf_METHOD
+        if ( !$is_method && ( my $f = $field_by_short{$name} ) ) {
+            $f->{is_reader} = JSON::PP::true;
+            next;
+        }
+
         $class{methods}{$name} = "${pkg_name}::${name}";
     }
 
@@ -429,42 +449,117 @@ sub _const_op_value {
     return ( undef, undef, undef );
 }
 
-# _extract_fields($pkg_name, $stash) — collect the class's fields by walking a
-# method's padlist for FIELD padnames (via SoN::FieldInfo), deduped by fieldix.
+# _extract_fields($pkg_name, $stash) — collect ALL of the class's declared
+# fields. The authoritative full list comes from the initfields_cv optree, which
+# has one `initfield` op per declared field in fieldix order (so it sees fields
+# no user method references — a :reader-only field, an ADJUST-only field). The
+# initfield op yields the fieldix, :param flag, and param name; the field's
+# variable NAME (e.g. `$double`) is not on the op, so it is recovered from a
+# FIELD padname in any method or ADJUST CV that references the field, falling
+# back to `$` + param_name (or a placeholder) when nothing references it.
 sub _extract_fields {
     my ( $pkg_name, $stash ) = @_;
 
     no strict 'refs';
 
-    my %by_ix;
+    # fieldix -> variable name, from every CV that names the field (methods +
+    # ADJUST blocks). Synthesized :reader XSUBs carry no field padnames, which
+    # is exactly why the initfields enumeration below is the source of truth.
+    my %varname;
+    my @cvs;
     for my $name ( sort keys %$stash ) {
         next if $name =~ /::$/;
         my $gv = eval { svref_2object( \*{"${pkg_name}::${name}"} ) };
         next unless defined $gv && $gv->isa('B::GV');
         my $cv = $gv->CV;
         next unless $$cv && !$cv->isa('B::SPECIAL');
+        push @cvs, $cv;
+    }
+    push @cvs, map { svref_2object($_) } SoN::ClassAux::adjust_cvs($stash);
+
+    for my $cv (@cvs) {
         my $padlist = eval { $cv->PADLIST };
         next unless $padlist && $$padlist;
         my $padnames = $padlist->ARRAYelt(0);
         next unless $padnames && $$padnames;
-
         for my $i ( 0 .. $padnames->MAX ) {
             my $pn = $padnames->ARRAYelt($i);
             next unless ref $pn eq 'B::PADNAME' && SoN::FieldInfo::is_field($pn);
-            my @info     = SoN::FieldInfo::field_info($pn);
-            my $fieldix  = $info[0];
-            next if exists $by_ix{$fieldix};
-            my $varname  = eval { $pn->PV } // '$?';
-            $by_ix{$fieldix} = {
-                name       => $varname,
-                fieldix    => $fieldix,
-                is_param   => ( defined $info[2] ? JSON::PP::true : JSON::PP::false ),
-                param_name => $info[2],
-            };
+            my @info    = SoN::FieldInfo::field_info($pn);
+            my $fieldix = $info[0];
+            $varname{$fieldix} //= eval { $pn->PV } // '$?';
         }
     }
 
-    return [ map { $by_ix{$_} } sort { $a <=> $b } keys %by_ix ];
+    # The declarative field list, in fieldix order, from the initfields optree.
+    my @fields;
+    my $init = SoN::ClassAux::initfields_cv($stash);
+    if ( defined $init ) {
+        my $init_cv = svref_2object($init);
+        my $ix      = 0;
+        _walk_initfield_ops( $init_cv->ROOT, sub ($op) {
+            my ( $is_param, $param_name ) = _initfield_param( $init_cv, $op );
+            my $name = $varname{$ix}
+                // ( defined $param_name ? "\$$param_name" : "\$field$ix" );
+            push @fields, {
+                name       => $name,
+                fieldix    => $ix,
+                is_param   => ( $is_param ? JSON::PP::true : JSON::PP::false ),
+                param_name => $param_name,
+            };
+            $ix++;
+        });
+    }
+
+    return \@fields;
+}
+
+# _walk_initfield_ops($op, $cb) — invoke $cb once per `initfield` op, in optree
+# (declaration / fieldix) order. Mirrors _walk_initfields but hands the initfield
+# op itself to the callback (that one walks to the default value).
+sub _walk_initfield_ops {
+    my ( $op, $cb ) = @_;
+    return unless $$op;
+    if ( $op->name eq 'initfield' ) {
+        $cb->($op);
+        return;
+    }
+    if ( $op->can('first') ) {
+        my $k = $op->first;
+        while ($$k) { _walk_initfield_ops( $k, $cb ); $k = $k->sibling; }
+    }
+    return;
+}
+
+# _initfield_param($cv, $initfield_op) — (is_param, param_name) for a field. A
+# :param field's value expression is `helemexistsor(%(params){NAME}, DEFAULT)`;
+# the NAME const (the sibling of the params padhv) is the constructor param name.
+# A non-:param field has no helemexistsor, so is_param is false.
+sub _initfield_param {
+    my ( $cv, $op ) = @_;
+    my $child = $op->can('first') ? $op->first : undef;
+    return ( 0, undef ) unless $child && $$child;
+    $child = $child->first
+        while $child->name eq 'null' && $child->can('first') && ${ $child->first };
+    return ( 0, undef ) unless $child->name eq 'helemexistsor';
+
+    # helemexistsor's first child is the params hash-elem lookup:
+    # null? -> (padhv %(params), const PARAMNAME). Descend to the padhv, then
+    # its sibling const is the param name.
+    my $hx = $child->first;
+    $hx = $hx->first
+        while $hx->name eq 'null' && $hx->can('first') && ${ $hx->first };
+    my $key = $hx->sibling;
+    return ( 1, undef ) unless $key && $$key && $key->name eq 'const';
+
+    my $sv   = $key->sv;
+    my $targ = $key->targ;
+    if ( ( !$$sv || $sv->isa('B::SPECIAL') ) && $targ ) {
+        my $padl = $cv->PADLIST;
+        $sv = $padl->ARRAYelt(1)->ARRAYelt($targ) if $$padl;
+    }
+    my $pname = ( $sv && $$sv && $sv->can('PV') ) ? $sv->PV : undef;
+    return ( 1, $pname );
 }
 
 1;

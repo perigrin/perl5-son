@@ -1265,6 +1265,20 @@ class SoN::FromOptree 0.01 {
                 my $stamp = _result_stamp($node_type, \@inputs);
                 $extra{stamp} = $stamp if defined $stamp;
                 my $node = $factory->make($node_type, inputs => \@inputs, %extra);
+
+                # A TARGMY write into a class FIELD slot (e.g. ADJUST's
+                # `$double = $val * 2`) is a field store, not a plain pad rebind.
+                # Emit an explicit Assign(FieldAccess-lvalue, value) so the store
+                # target (fieldix) survives into the graph — the loader types the
+                # field from the stored value's repr. Mirrors the corpus IR spec.
+                my $lv = _make_pad_or_field($cv, $op->targ, $factory);
+                if ($lv->isa('SoN::IR::Node::FieldAccess')) {
+                    my $store = $factory->make('Assign',
+                        inputs         => [$sim->control, $lv, $node],
+                        is_stmt_effect => true);
+                    $sim->set_control($store);
+                }
+
                 $sim->define($op->targ, $node);
                 $sim->push_node($node);
             }
