@@ -68,7 +68,114 @@ sub _discover_and_translate {
     my %graphs;
     my %classes;
     _walk_package( \%graphs, \%classes, 'main', \%main::, $filter );
+
+    # Under a package= filter, a class referenced from an emitted sub (e.g.
+    # `Counter->new` / `$c->get` inside main::) is not itself in the filter, so
+    # its MOP + method graphs were skipped -- leaving the method Call with no
+    # return repr to infer from. Transitively emit the MOP of every class
+    # actually referenced (via a method Call's class_name) from the graphs we
+    # have, and only those classes: the whole stash would leak every internal
+    # SoN class. A newly-emitted method graph may reference further classes, so
+    # fixpoint until no new class appears.
+    _emit_referenced_classes( \%graphs, \%classes ) if $filter;
+
     return ( \%graphs, \%classes );
+}
+
+# _emit_referenced_classes(\%graphs, \%classes) — walk the emitted graphs for
+# method-dispatch Call nodes, collect their class_name, and _extract_class each
+# referenced class not yet emitted. _extract_class adds the class's method
+# graphs to %graphs, which may reference further classes, so re-scan to a
+# fixpoint. The :isa parent of every emitted class is emitted too -- the
+# backend requires a class's declared superclass to be present in the same
+# graph (and an inherited method resolves through the parent's method graph).
+# Emits ONLY referenced classes and their parent chains, never the whole stash.
+sub _emit_referenced_classes {
+    my ( $graphs, $classes ) = @_;
+
+    no strict 'refs';
+
+    my %scanned;   # graph keys already scanned for class refs
+    while (1) {
+        # Two roots feed the worklist: classes named by a method Call, and the
+        # :isa parent of any class already emitted (the parent may itself carry
+        # further parents / referenced classes -- the outer fixpoint closes it).
+        my @refs = _referenced_class_names( $graphs, \%scanned );
+        push @refs, grep { defined }
+            map  { $classes->{$_}{parent} } keys $classes->%*;
+
+        my $added = 0;
+        for my $cname (@refs) {
+            next if exists $classes->{$cname};
+            my $stash = \%{"${cname}::"};
+            next unless SoN::ClassAux::is_class($stash);
+            $classes->{$cname} =
+                _extract_class( $graphs, $cname, $stash );
+            # _extract_class records the method-name -> graph-key map but does
+            # not translate the method CVs (that is _walk_package's job, which
+            # skipped this class because it is outside the package= filter).
+            # Translate each referenced method graph now.
+            _translate_class_methods( $graphs, $cname, $stash,
+                $classes->{$cname}{methods} );
+            $added++;
+        }
+        last unless $added;   # fixpoint: no new class this round
+    }
+    return;
+}
+
+# _translate_class_methods(\%graphs, $pkg_name, $stash, $methods) — translate
+# each of a referenced class's method CVs into $graphs, keyed by the same
+# fully-qualified key _extract_class recorded in $methods. Mirrors the CV
+# translation _walk_package performs for in-filter packages; a class emitted
+# only because it is referenced never passes through that loop.
+sub _translate_class_methods {
+    my ( $graphs, $pkg_name, $stash, $methods ) = @_;
+
+    no strict 'refs';
+
+    for my $name ( sort keys $methods->%* ) {
+        my $full_name = $methods->{$name};
+        next if exists $graphs->{$full_name};
+
+        my $gv = eval { svref_2object( \*{"${pkg_name}::${name}"} ) };
+        next unless defined $gv && $gv->isa('B::GV');
+        my $cv = $gv->CV;
+        next unless $$cv;
+        next if $cv->isa('B::SPECIAL');
+        my $start = eval { $cv->START };
+        next unless defined $start && $$start;
+
+        try {
+            $graphs->{$full_name} =
+                SoN::FromOptree->translate( $cv->object_2svref );
+        }
+        catch ($e) {
+            # A deliberate GAP refusal is the translator speaking; surface it
+            # so the method silently missing is a loud honest refusal, not
+            # discovery noise (same policy as _walk_package).
+            warn "B::SoN: skipped $full_name: $e" if $e =~ /^GAP:/;
+        }
+    }
+    return;
+}
+
+# _referenced_class_names(\%graphs, \%scanned) — the class_name of every
+# method-dispatch Call in graphs not yet scanned. Marks each scanned so a
+# fixpoint loop does not re-walk it.
+sub _referenced_class_names {
+    my ( $graphs, $scanned ) = @_;
+    my %names;
+    for my $key ( keys $graphs->%* ) {
+        next if $scanned->{$key}++;
+        for my $node ( $graphs->{$key}->nodes->@* ) {
+            next unless $node->operation eq 'Call';
+            next unless ( $node->dispatch_kind // '' ) eq 'method';
+            my $cname = $node->class_name // next;
+            $names{$cname} = 1;
+        }
+    }
+    return keys %names;
 }
 
 # _walk_package(\%graphs, $pkg_name, \%stash) — recursively walk a stash,
