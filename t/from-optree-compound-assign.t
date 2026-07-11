@@ -2,10 +2,25 @@
 # ABOUTME: Canonical ops: a binop over an lvalue pad read rebinds the variable.
 
 use v5.42.0;
+use feature 'class';
+no warnings 'experimental::class';
 use Test2::V0;
 
 use SoN::OptSuppress;
 use SoN::FromOptree;
+
+# A compound assignment INTO A CLASS FIELD ($n += 1 in a method) is a memory
+# store, not an SSA rebind: the field lives in the object struct, so the new
+# value must be written back via an Assign(FieldAccess-lvalue). Unlike a pad
+# `my $x += 1` (which rebinds the SSA value and needs no store), a bare-field
+# `$n += 1` optree targets a temp (padsv add[t] leavesub) and DROPS the write
+# unless the field-slot store is emitted -- the same store the `$n = $n + 1`
+# TARGMY form emits.
+class FieldCounter {
+    field $n :param = 0;
+    method inc_compound { $n += 1 }
+    method inc_assign   { $n = $n + 1 }
+}
 
 # `$x += 2` is a read-modify-write: the arithmetic op reads $x's current value,
 # computes the result, and rebinds $x so a later read sees it. The distinguishing
@@ -54,6 +69,32 @@ subtest 'plain $y = $x + 2 does NOT rebind $x' => sub {
     my $rv = return_value($g);
     is($rv->operation, 'Constant', '$x is unchanged');
     is($rv->value, 1, '$x is still 1 (the y assignment did not rebind it)');
+};
+
+subtest 'compound assign into a class field emits an Assign store (B4)' => sub {
+    SoN::OptSuppress::suppress_peep();
+    my $g = SoN::FromOptree->translate(\&{'FieldCounter::inc_compound'});
+    SoN::OptSuppress::restore_peep();
+    my ($assign) = grep { $_->operation eq 'Assign' } $g->nodes->@*;
+    ok(defined $assign, '$n += 1 emits a field-store Assign (not a dropped temp)')
+        or return;
+    ok($assign->is_stmt_effect, 'the field store is a threaded statement effect');
+    is($assign->left->operation, 'FieldAccess',
+        'the store target is the field lvalue (FieldAccess)');
+    is($assign->right->operation, 'Add',
+        'the stored value is the += result (Add)');
+};
+
+subtest 'compound += store matches the = TARGMY store shape (B4 parity)' => sub {
+    SoN::OptSuppress::suppress_peep();
+    my $g_pe = SoN::FromOptree->translate(\&{'FieldCounter::inc_compound'});
+    my $g_eq = SoN::FromOptree->translate(\&{'FieldCounter::inc_assign'});
+    SoN::OptSuppress::restore_peep();
+    my ($a_pe) = grep { $_->operation eq 'Assign' } $g_pe->nodes->@*;
+    my ($a_eq) = grep { $_->operation eq 'Assign' } $g_eq->nodes->@*;
+    ok(defined $a_pe && defined $a_eq, 'both forms emit an Assign') or return;
+    is($a_pe->left->operation, $a_eq->left->operation,
+        '+= and = store to the same lvalue kind (FieldAccess)');
 };
 
 done_testing();

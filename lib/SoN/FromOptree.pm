@@ -706,8 +706,18 @@ class SoN::FromOptree 0.01 {
     # _method_body_root requires.
     sub _build_single_exit ($factory, $exits) {
         if (@$exits == 1) {
-            return $factory->make_cfg('Return',
-                inputs => [$exits->[0]{control}, $exits->[0]{value}]);
+            my ($ctrl, $value) = $exits->[0]->@{qw(control value)};
+            # Normally control leads inputs ([control, value]) so a downstream
+            # loader demotes it to control_in. But a VOID stmt-effect Call as the
+            # trailing control is NOT demotable (it is a data node, not a CFG
+            # token): if it led inputs it would be read as the return VALUE. Put
+            # the value first ([value, control]) so the result slot is correct,
+            # while keeping the void effect reachable at a later input.
+            if (ref($ctrl) && $ctrl->can('is_stmt_effect')
+                    && $ctrl->operation eq 'Call' && $ctrl->is_stmt_effect) {
+                return $factory->make_cfg('Return', inputs => [$value, $ctrl]);
+            }
+            return $factory->make_cfg('Return', inputs => [$ctrl, $value]);
         }
         my $region = $factory->make_cfg('Region',
             inputs => [map { $_->{control} } @$exits]);
@@ -1219,6 +1229,18 @@ class SoN::FromOptree 0.01 {
                 $sim->set_memory($node);
                 $sim->push_node($value);
             }
+            # A field store (`$name = "hi"` inside a method, where $name is a
+            # class field): the target is a FieldAccess lvalue. Emit an explicit
+            # Assign(FieldAccess-lvalue, value) threaded onto the control chain,
+            # exactly like the TARGMY field-write path -- else the store is
+            # silently dropped and the field keeps its default (zhi 019f2dee).
+            elsif ($target->isa('SoN::IR::Node::FieldAccess')) {
+                my $store = $factory->make('Assign',
+                    inputs         => [$sim->control, $target, $value],
+                    is_stmt_effect => true);
+                $sim->set_control($store);
+                $sim->push_node($value);
+            }
             else {
                 $sim->push_node($value);
             }
@@ -1430,6 +1452,21 @@ class SoN::FromOptree 0.01 {
                     $inputs[0] = $bound if defined $bound;
                 }
 
+                # Field compound assignment (`$n += 1` in a method): the FIRST
+                # operand is a class-field read (FieldAccess) whose padsv carries
+                # OPf_MOD and the op is the STACKED `op=` form. The field lives in
+                # the object struct, so the += result must be written back via an
+                # Assign(FieldAccess-lvalue) store -- the same store the `$n = $n +
+                # 1` TARGMY path emits. Without it the temp result (the add targets
+                # a temp, not the field) is dropped and the mutation is lost.
+                my $field_compound =
+                       @inputs >= 1
+                    && $inputs[0]->isa('SoN::IR::Node::FieldAccess')
+                    && ($op->flags & 64)          # OPf_STACKED (the op= form)
+                    && $op->can('first')
+                    && $op->first->name =~ /^padsv/
+                    && ($op->first->flags & 32);  # OPf_MOD (lvalue read)
+
                 # Element compound assignment (`$a[0] += 5`): the FIRST operand
                 # is a 2-input lvalue Subscript (a store ADDRESS) and the op
                 # carries OPf_STACKED (0x40, the `op=` form -- a plain `$a[0]+$x`
@@ -1456,6 +1493,16 @@ class SoN::FromOptree 0.01 {
                 # value.
                 if ($is_compound) {
                     $sim->define($lvalue_targ, $node);
+                }
+                elsif ($field_compound) {
+                    # Store the += result back to the field slot (memory), like
+                    # the TARGMY `=` field-write path. The lvalue is a fresh
+                    # FieldAccess for the same field (the first operand's padsv).
+                    my $lv = _make_pad_or_field($cv, $op->first->targ, $factory);
+                    my $store = $factory->make('Assign',
+                        inputs         => [$sim->control, $lv, $node],
+                        is_stmt_effect => true);
+                    $sim->set_control($store);
                 }
                 elsif (defined $elem_lvalue) {
                     # Store the result back to the element and advance memory
