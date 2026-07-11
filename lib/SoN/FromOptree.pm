@@ -93,6 +93,21 @@ class SoN::FromOptree 0.01 {
         return ($t eq 'ArrayRef' || $t eq 'HashRef') ? true : false;
     }
 
+    # _rhs_is_aggregate_access($assign_op) -- true iff the RHS of a scalar
+    # assignment (padsv_store / sassign) is a genuine aggregate-VARIABLE read
+    # (padav/padhv/rv2av/rv2hv), i.e. an array/hash in scalar context that must
+    # yield its count. Distinguishes `my $n = @a` (padav, count) from
+    # `my $r = [1,2,3]` (anonlist -- a scalar REFERENCE literal, NOT a count):
+    # both build an identical ArrayRef node, so the node's repr cannot tell them
+    # apart -- only the source op can. Mirrors the `scalar @a` handler's op-name
+    # predicate. $op->first is the RHS value op for both padsv_store and sassign.
+    sub _rhs_is_aggregate_access ($op) {
+        return false unless $op->can('first');
+        my $rhs = $op->first;
+        return false unless $rhs && $$rhs;
+        return $rhs->name =~ /^(padav|padhv|rv2av|rv2hv)$/ ? true : false;
+    }
+
     # Translate a code reference to a SoN graph
     sub translate ($class_or_self, $coderef) {
         my $cv = B::svref_2object($coderef);
@@ -1170,8 +1185,18 @@ class SoN::FromOptree 0.01 {
             # target is on top: pop it first, then the value.
             my $target = $sim->pop_node;
             my $value  = $sim->pop_node;
-            # If target is a PadAccess, update the scope binding.
+            # If target is a PadAccess, update the scope binding. A sassign whose
+            # RHS is an aggregate-variable read ($n = @a) imposes scalar context:
+            # yield the count, like padsv_store and the explicit `scalar`
+            # handler. Keyed on the RHS OP (padav/...), NOT the value node's repr
+            # -- an anon-ref literal ($r = [1,2,3]) also makes an ArrayRef node
+            # but is a scalar reference and must pass through.
             if ($target->isa('SoN::IR::Node::PadAccess')) {
+                if (_rhs_is_aggregate_access($op) && _is_aggregate_node($value)) {
+                    my $stamp = _result_stamp('Length', [$value]);
+                    my %extra = defined $stamp ? (stamp => $stamp) : ();
+                    $value = $factory->make('Length', inputs => [$value], %extra);
+                }
                 $sim->define($target->targ, $value);
                 $sim->push_node($value);
             }
@@ -1204,6 +1229,19 @@ class SoN::FromOptree 0.01 {
         if ($name eq 'padsv_store') {
             my $value = $sim->pop_node;
             my $targ = $op->targ;
+            # padsv_store targets a SCALAR pad, so a genuine aggregate on the RHS
+            # (my $n = @a) is in scalar context: yield the element count (a
+            # Length), not the aggregate. Keyed on the RHS OP being an
+            # aggregate-variable read (padav/... via _rhs_is_aggregate_access) --
+            # the same predicate the explicit `scalar @a` handler uses -- NOT on
+            # the value node's repr: an anon-ref literal (my $r = [1,2,3], an
+            # anonlist) builds an identical ArrayRef node but IS a scalar
+            # reference, so it must pass through unchanged.
+            if (_rhs_is_aggregate_access($op) && _is_aggregate_node($value)) {
+                my $stamp = _result_stamp('Length', [$value]);
+                my %extra = defined $stamp ? (stamp => $stamp) : ();
+                $value = $factory->make('Length', inputs => [$value], %extra);
+            }
             # OPpLVAL_INTRO (128) indicates a new lexical declaration (my $x).
             # Only the main walker emits the VarDecl wrapper.
             if ($mode eq 'main' && ($op->private & 128)) {
