@@ -524,6 +524,15 @@ class SoN::FromOptree 0.01 {
                 if ($cv_node && $cv_node->isa('SoN::IR::Node::Constant')) {
                     $call_name = $cv_node->value // 'unknown';
                 }
+                # Resolve the callee to its fully-qualified name (STASH::NAME)
+                # from the entersub's own callee op, so the Call names the same
+                # key (main::foo) the producer keys the callee graph under. The
+                # gv-handler Constant only carries the short NAME; qualifying it
+                # here (in the entersub's known callee context) avoids touching
+                # package-variable reads that share a name with a sub.
+                if (my $callee_gv = _entersub_callee_gv($cv, $op)) {
+                    $call_name = $callee_gv->STASH->NAME . '::' . $callee_gv->NAME;
+                }
                 my $node = $factory->make('Call',
                     inputs        => $args->@* ? $args : [],
                     dispatch_kind => 'direct',
@@ -901,6 +910,11 @@ class SoN::FromOptree 0.01 {
             my $gv = _op_gv($cv, $op);
             my $value = 'unknown';
             if ($gv) {
+                # A callee gv (gv[IV \&main::foo]) resolves via a CV-ref; qualify
+                # it to STASH::NAME so a direct-call Call node names the same key
+                # (main::foo) the producer keys the callee graph under. %ENV stays
+                # fully qualified for the same disambiguation reason; every other
+                # gv keeps its short NAME (the existing StashAccess contract).
                 $value = ($gv->STASH->NAME eq 'main' && $gv->NAME eq 'ENV')
                     ? 'main::ENV'
                     : $gv->NAME;
@@ -2161,20 +2175,68 @@ class SoN::FromOptree 0.01 {
     # Resolve the GV of a gv/gvsv op. Unthreaded perls store it on the op
     # (B::SVOP, ->sv is a B::GV); threaded perls store it in the pad
     # (B::PADOP at ->padix, or an SVOP with a B::SPECIAL sv and ->targ).
+    #
+    # A `gv[IV \&main::foo]` op (the callee of a direct sub call) does NOT hold
+    # a bare GV: the pad/op slot is a B::IV whose ->RV is the callee B::CV. Its
+    # sub name lives on the CV's GV, so unwrap the CV-ref to that GV.
     sub _op_gv ($cv, $op) {
+        my $slot = _gv_op_slot($cv, $op);
+        return undef unless $slot;
+        return $slot if $slot->isa('B::GV');
+        my $rcv = _cv_ref($slot);
+        return $rcv ? $rcv->GV : undef;
+    }
+
+    # The GV/SV slot a gv op reads from: on the op (unthreaded) or the pad
+    # (threaded). Returns undef when neither carries a value.
+    sub _gv_op_slot ($cv, $op) {
         if ($op->can('sv')) {
             my $sv = $op->sv;
-            return $sv if $$sv && $sv->isa('B::GV');
+            return $sv if $$sv;
         }
         my $ix = $op->can('padix') ? $op->padix : $op->targ;
         if ($ix) {
             my $padl = $cv->PADLIST;
             if ($$padl) {
-                my $gv = $padl->ARRAYelt(1)->ARRAYelt($ix);
-                return $gv if $$gv && $gv->isa('B::GV');
+                my $slot = $padl->ARRAYelt(1)->ARRAYelt($ix);
+                return $slot if $$slot;
             }
         }
         return undef;
+    }
+
+    # If $sv is a reference to a CV (a direct-call callee, gv[IV \&main::foo]),
+    # return that B::CV; otherwise undef. Guarded on SVf_ROK so a plain-scalar
+    # pad slot (an integer/undef) does not trip ->RV's "not SvROK" die.
+    sub _cv_ref ($sv) {
+        return undef unless $sv->can('RV') && ($sv->FLAGS & B::SVf_ROK);
+        my $rv = $sv->RV;
+        return $rv->isa('B::CV') ? $rv : undef;
+    }
+
+    # Resolve the callee GV of a direct-sub-call entersub op. The callee rides
+    # as the LAST kid of entersub->first (an ex-list): pushmark, then the args,
+    # then the callee under a nulled ex-rv2cv. Descend through null wrappers to
+    # the gv and resolve it. Returns the B::GV, or undef when the callee is not a
+    # plain named sub (e.g. a coderef in a pad -- F2's `$fn->()`).
+    sub _entersub_callee_gv ($cv, $op) {
+        return undef unless $op->can('first');
+        my $list = $op->first;                  # ex-list
+        return undef unless $$list && $list->can('first');
+        my $kid = $list->first;
+        my $callee;
+        while ($$kid) {                          # last non-pushmark kid = callee
+            $callee = $kid unless $kid->name eq 'pushmark';
+            last unless $kid->can('sibling');
+            $kid = $kid->sibling;
+        }
+        return undef unless $callee && $$callee;
+        while ($callee->name eq 'null' && $callee->can('first')) {
+            $callee = $callee->first;            # peel ex-rv2cv
+        }
+        return undef unless $callee->name eq 'gv';
+        my $gv = _op_gv($cv, $callee);
+        return ($gv && $gv->isa('B::GV')) ? $gv : undef;
     }
 
     # Get the variable name for a pad index.
