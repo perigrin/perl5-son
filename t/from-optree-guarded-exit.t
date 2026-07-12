@@ -6,12 +6,20 @@ use Test2::V0;
 
 use SoN::FromOptree;
 
-# `return X if C` compiles to `C and return X`: the exit is on op->other, taken
-# when C is TRUE, so the CONTINUATION is the FALSE branch -> Proj index 1.
-# `return X unless C` compiles to `C or return X`: the exit is taken when C is
-# FALSE, so the CONTINUATION is the TRUE branch -> Proj index 0. A handler that
-# hardcodes one polarity mis-branches one of the two idioms -- both `... or die`
-# and `... or return` (dominant lib/ idioms) would branch backwards.
+# The EXIT must land on the If's TRUE branch (Proj index 0) for BOTH idioms, so
+# it aligns with the exit value in the single-exit Phi (the backend wires Phi
+# arm 0 = then/true, and _build_single_exit records the exit value FIRST). So
+# the CONTINUATION (guard not taken) is always the FALSE branch -> Proj index 1.
+#
+# `return X if C` compiles to `C and return X`: the exit fires when C is TRUE, so
+# C already IS the exit condition -> If(C), exit on the TRUE branch, continue on
+# index 1.  `return X unless C` compiles to `C or return X`: the exit fires when
+# C is FALSE, so the exit condition is Not(C) -> If(Not(C)), exit on the TRUE
+# branch, continue on index 1.  A handler that continued `unless` on the TRUE
+# proj (index 0) without negating the condition put the exit value (Phi arm 0)
+# on the true branch while the exit actually fired on the false branch -- an
+# inverted polarity that miscompiled (`return 99 unless $e>3` with $e<=3
+# returned the fall-through instead of 99). zhi 019f26a5.
 
 # Find the Proj that feeds the continuation's control chain: the guard's If has
 # two Projs; the one whose consumer is NOT the recorded return exit is the
@@ -52,9 +60,29 @@ subtest 'return-if (and-guard): continuation is the FALSE proj (index 1)' => sub
     is($idx, 1, 'and-guarded exit continues on Proj index 1 (guard false)');
 };
 
-subtest 'return-unless (or-guard): continuation is the TRUE proj (index 0)' => sub {
+subtest 'return-unless (or-guard): continuation is the FALSE proj (index 1)' => sub {
     my $idx = continuation_proj_index('sub ($x) { return 1 unless $x; return 2 }');
-    is($idx, 0, 'or-guarded exit continues on Proj index 0 (guard true)');
+    is($idx, 1, 'or-guarded exit continues on Proj index 1 (guard not taken)');
+};
+
+# The `unless` guard negates its condition (If(Not(C))) so the exit lands on the
+# TRUE branch, matching the `if` idiom and the single-exit Phi arm order.
+subtest 'return-unless negates the condition (If(Not(C)))' => sub {
+    my $cv = eval 'sub ($x) { return 1 unless $x; return 2 }';
+    my $g  = SoN::FromOptree->translate($cv);
+    my ($if) = grep { $_->operation eq 'If' } $g->nodes->@*;
+    ok($if, 'an If guards the unless-exit');
+    my $cond = $if->inputs->[1];
+    is($cond->operation, 'Not', 'the unless guard tests Not(C), not C');
+};
+
+# `return X if C` must NOT negate -- C is already the exit condition.
+subtest 'return-if does not negate the condition' => sub {
+    my $cv = eval 'sub ($x) { return 1 if $x; return 2 }';
+    my $g  = SoN::FromOptree->translate($cv);
+    my ($if) = grep { $_->operation eq 'If' } $g->nodes->@*;
+    my $cond = $if->inputs->[1];
+    isnt($cond->operation, 'Not', 'the if guard uses C directly, not Not(C)');
 };
 
 done_testing();

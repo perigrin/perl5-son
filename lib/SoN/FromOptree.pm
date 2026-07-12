@@ -142,12 +142,46 @@ class SoN::FromOptree 0.01 {
 
             my $name = $op->name;
 
-            # dor op: $lhs // $rhs -> DefinedOr node
+            # dor op: $lhs // $rhs
             if ($opmap->is_branch($name) && $name eq 'dor') {
                 my $lhs = $sim->pop_node;
-                # Walk the other path (RHS of //) to get the fallback value
+                # Walk the fallback arm (RHS of //). Pass @exits + stop_at_exit
+                # so an EXPLICIT return/die-exit in the fallback (`E // return X`,
+                # the ubiquitous lib/ guard idiom) is recorded as a real function
+                # exit, not silently consumed as the fallback value. The arm
+                # converges at this op's op_next.
+                my $stop_addr = ${ $op->next };
                 my $rhs_sim = $sim->snapshot;
-                my $rhs_end = _walk_branch($cv, $op->other, $rhs_sim, $factory, $opmap, \%visited);
+                my ($rhs_end, $rhs_sig)
+                    = _walk_branch($cv, $op->other, $rhs_sim, $factory, $opmap,
+                        \%visited, \@exits, 1, $stop_addr);
+
+                if (($rhs_sig // '') eq 'exited') {
+                    # `E // return X`: the fallback LEAVES the function when E is
+                    # undefined. Model it as a guarded exit -- exactly the shape
+                    # `return X if C` builds. The EXIT arm must be the If's TRUE
+                    # branch so it aligns with the exit's value in the single-exit
+                    # Phi (the backend wires Phi arm 0 = then/true, arm 1 =
+                    # else/false, and _build_single_exit records the exit value
+                    # FIRST). So the guard tests NOT-defined(E) -- true when E is
+                    # undef (the exit path) -- and the main path continues on the
+                    # FALSE Proj (index 1), where E IS defined and the dor value is
+                    # E (`$x = E`). Without this the return vanished and E //
+                    # return became DefinedOr(E, E).
+                    my $defined = $factory->make('Defined', inputs => [$lhs]);
+                    my $undef   = $factory->make('Not', inputs => [$defined]);
+                    my $if_node = $factory->make_cfg('If',
+                        inputs => [$sim->control, $undef]);
+                    my $cont_proj = $factory->make_cfg('Proj',
+                        inputs => [$if_node], index => 1);   # defined -> continue
+                    $sim->set_control($cont_proj);
+                    $sim->push_node($lhs);                   # dor value is E
+                    $op = $op->next;
+                    next;
+                }
+
+                # Value fallback (`E // V`): a single DefinedOr the backend
+                # expands to the short-circuit br+phi at lowering.
                 my $rhs;
                 if ($rhs_sim->stack_depth > 0) {
                     $rhs = $rhs_sim->pop_node;
@@ -245,15 +279,29 @@ class SoN::FromOptree 0.01 {
                     # discarded (`return X if/unless C` yields nothing).
                     #
                     # The exit polarity differs by op:
-                    #  and (`return X if C`):     exit when C true  -> continue on
-                    #                             the FALSE Proj (index 1).
-                    #  or  (`return X unless C`): exit when C false -> continue on
-                    #                             the TRUE Proj (index 0).
+                    # The EXIT must land on the If's TRUE branch (index 0) so it
+                    # aligns with the exit value in the single-exit Phi -- the
+                    # backend wires Phi arm 0 = then/true, arm 1 = else/false,
+                    # and _build_single_exit records the exit value FIRST (arm 0).
+                    #
+                    #  and (`return X if C`):     exit when C true. C already IS
+                    #    the exit condition -> If(C), continue on the FALSE Proj
+                    #    (index 1) where C is false and the guard is not taken.
+                    #  or  (`return X unless C`): exit when C FALSE. The exit
+                    #    condition is Not(C) -> If(Not(C)) so the exit is again the
+                    #    TRUE branch, continue on the FALSE Proj (index 1) where C
+                    #    is true and the guard is not taken. Without the negation
+                    #    the exit value (Phi arm 0) landed on the true branch while
+                    #    the exit actually fired on the false branch -- an inverted
+                    #    polarity that miscompiled (return-X-unless returned the
+                    #    fall-through when C was false).
+                    my $cond = $name eq 'and'
+                        ? $lhs
+                        : $factory->make('Not', inputs => [$lhs]);
                     my $if_node = $factory->make_cfg('If',
-                        inputs => [$sim->control, $lhs]);
-                    my $cont_index = $name eq 'and' ? 1 : 0;
+                        inputs => [$sim->control, $cond]);
                     my $cont_proj = $factory->make_cfg('Proj',
-                        inputs => [$if_node], index => $cont_index);
+                        inputs => [$if_node], index => 1);   # guard not taken
                     $sim->set_control($cont_proj);
                     $op = $op->next;
                     next;
