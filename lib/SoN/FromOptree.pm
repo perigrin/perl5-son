@@ -315,6 +315,28 @@ class SoN::FromOptree 0.01 {
                     # plus Phis for any scope vars the arm rebound. The read after
                     # the branch takes the merged memory / bindings.
                     if ($mem_branch) {
+                        # A void-call arm that ALSO rebinds a scope var is 2b-3
+                        # territory: merge() would build a value-Phi for the
+                        # rebound slot, but with no element store advancing the
+                        # memory chain the backend has no Region/If in the
+                        # Return's control path to place that Phi against
+                        # (Phi-before-Region). An element-store arm is the
+                        # supported 2b case (the memory-Phi carries it). GAP
+                        # loudly rather than emit an unplaceable Phi.
+                        my $arm_rebinds = do {
+                            my $base = $sim->scope_bindings;
+                            my $arm  = $rhs_sim->scope_bindings;
+                            my $diff = 0;
+                            for my $t (keys %$arm) {
+                                next unless defined $base->{$t} && defined $arm->{$t};
+                                $diff = 1, last if $base->{$t} != $arm->{$t};
+                            }
+                            $diff;
+                        };
+                        die "GAP: void-context '$name' arm combines a void call"
+                          . " with a scalar rebind (2b-3 mixed effect not yet lowered)"
+                            if $arm_rebinds
+                            && !_arm_has_element_store($op->other, $op->next);
                         # The element-store sassign pushes its stored VALUE (perl
                         # assignment returns its value); in void context that
                         # value is discarded. Drop the arm's leftover stack down
@@ -784,11 +806,7 @@ class SoN::FromOptree 0.01 {
                 ($void ? (is_stmt_effect => true) : ()),
                 ($ctor ? (stamp => SoN::IR::Stamp->new(type => 'Object')) : ()),
             );
-            if ($void) {
-                $sim->set_control($node);
-            } else {
-                $sim->push_node($node);
-            }
+            _place_call($sim, $node, $void);
             $ctx->{pending_method} = undef;
             return;
         }
@@ -808,12 +826,20 @@ class SoN::FromOptree 0.01 {
         if (my $callee_gv = _entersub_callee_gv($cv, $op)) {
             $call_name = $callee_gv->STASH->NAME . '::' . $callee_gv->NAME;
         }
+        # A direct call in void statement position (`helper();`) has its result
+        # discarded; its purpose is its side effect. Thread it onto the control
+        # chain (control first in inputs, is_stmt_effect set) so it is ordered
+        # and survives DCE, exactly as the void METHOD branch does (zhi
+        # 019f2dee/019f2df7). Without this the pushed value was dead in void
+        # context and the call vanished silently.
+        my $void = ($op->flags & 3) == 1;   # OPf_WANT_VOID
         my $node = $factory->make('Call',
-            inputs        => $args->@* ? $args : [],
+            inputs        => [ ($void ? $sim->control : ()), ($args->@* ? $args->@* : ()) ],
             dispatch_kind => 'direct',
             name          => $call_name,
+            ($void ? (is_stmt_effect => true) : ()),
         );
-        $sim->push_node($node);
+        _place_call($sim, $node, $void);
         return;
     }
 
@@ -2041,17 +2067,28 @@ class SoN::FromOptree 0.01 {
     # stop at it so a nested branch stays the loud GAP the convergence check
     # raises, rather than being routed through the $mem_branch merge with a
     # broken memory state.
+    # Place a translated Call: a VOID call is a statement effect, already
+    # threaded onto the control chain (is_stmt_effect, control in inputs), so
+    # advance control to it and push no value; a value call pushes its result.
+    sub _place_call ($sim, $node, $void) {
+        if ($void) { $sim->set_control($node) }
+        else       { $sim->push_node($node) }
+        return;
+    }
+
     sub _arm_has_void_call ($start, $stop) {
         my %seen;
-        my $saw_method;
         for (my $op = $start; $$op && $$op != $stop && !$seen{$$op}; $op = $op->next) {
             $seen{$$op} = 1;
             my $name = $op->name;
             # A nested branch: not a plain void-call arm. Bail so it GAPs loudly.
             return 0 if $name eq 'and' || $name eq 'or' || $name eq 'cond_expr';
-            $saw_method = 1 if $name eq 'method_named' || $name eq 'method';
+            # A void entersub is the effect -- a method call (method_named
+            # recorded the name earlier) OR a bare direct call (`helper()`);
+            # both thread through _handle_entersub. OPf_WANT_VOID marks the
+            # statement-effect call whose result is discarded.
             next unless $name eq 'entersub';
-            return 1 if $saw_method && ($op->flags & 3) == 1;   # OPf_WANT_VOID
+            return 1 if ($op->flags & 3) == 1;   # OPf_WANT_VOID
         }
         return 0;
     }
