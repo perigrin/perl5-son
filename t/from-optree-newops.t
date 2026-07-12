@@ -160,7 +160,11 @@ subtest 'match produces RegexMatch node' => sub {
 # -----------------------------------------------------------------------
 
 subtest 'subst produces RegexSubst node' => sub {
-    my $graph = SoN::FromOptree->translate(sub { my $x = "hello"; $x =~ s/ell/all/g });
+    # Void-context destructive s/// (the corpus R3 form): the subst mutates $x
+    # in place and $x is returned. A scalar-context destructive s/// as the
+    # return value would yield the integer match COUNT, not a string, and now
+    # GAPs loudly (zhi 019f2d79) -- so the subject must be read AFTER the subst.
+    my $graph = SoN::FromOptree->translate(sub { my $x = "hello"; $x =~ s/ell/all/g; $x });
     my @nodes = nodes_of_type($graph, 'RegexSubst');
     my ($rs) = @nodes;
     ok($rs, 'subst op produces RegexSubst node');

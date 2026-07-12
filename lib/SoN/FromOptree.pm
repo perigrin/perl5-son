@@ -486,7 +486,34 @@ class SoN::FromOptree 0.01 {
                 # would silently miscompile (the RC4 class), so refuse loudly.
                 die "GAP: s///e (code replacement) not yet lowered\n"
                     if $op->pmflags & PMf_EVAL;
+                # An interpolated (multi-part) replacement -- `s/a/$y$z/`,
+                # `s/a/x$y/` -- is a runtime substcont subtree (pmreplroot set),
+                # NOT a single folded const. The handler below pops ONE stack
+                # Constant and uses it as the whole replacement, silently
+                # dropping every other part. A single interpolated variable
+                # (`s/a/$y/`) folds to a compile-time Constant under
+                # rpeep-suppression (pmreplroot NULL) and stays correct; only a
+                # genuine subtree GAPs. Refuse loudly until it is lowered.
+                my $replroot = $op->pmreplroot;
+                die "GAP: s/// interpolated (multi-part) replacement not yet lowered\n"
+                    if $replroot && ref($replroot) && $$replroot;
+                my $nondestruct = $op->pmflags & PMf_NONDESTRUCT;
+                # In scalar/boolean context a DESTRUCTIVE s/// returns the
+                # integer match COUNT, not the rewritten string (only /r
+                # yields a string). The handler stamps every result Str and
+                # pushes the rewritten string -- correct for void context and
+                # for /r, a silent value+type miscompile for scalar-context
+                # destructive subst. GAP loudly until count-context is lowered.
+                die "GAP: s/// count-context result (scalar-context destructive) not yet lowered\n"
+                    if !$nondestruct && ($op->flags & 3) != 1;   # OPf_WANT != VOID
+                # The target is keyed on the pad targ. targ 0 means an implicit
+                # $_ or a package/global target (the GV is on the stack, not a
+                # pad slot) -- the handler cannot name it, so it used to
+                # fabricate a slot-0 rebind and silently drop the substitution.
+                # GAP loudly until non-pad targets are lowered.
                 my $targ    = $op->targ;
+                die "GAP: s/// on an implicit \$_ or package/global target not yet lowered\n"
+                    unless $targ;
                 my $target  = $sim->lookup($targ);
                 if (!$target) {
                     $target = _make_pad_or_field($cv, $targ, $factory);
@@ -511,8 +538,7 @@ class SoN::FromOptree 0.01 {
                 # substituted value, not the pre-subst binding (mirrors
                 # padsv_store / TARGMY). The /r form (PMf_NONDESTRUCT) yields a
                 # NEW string and leaves the source untouched, so it must NOT
-                # rebind -- only push the result value.
-                my $nondestruct = $op->pmflags & PMf_NONDESTRUCT;
+                # rebind -- only push the result value ($nondestruct above).
                 $sim->define($targ, $node) unless $nondestruct;
                 $sim->push_node($node);
                 $op = $op->next;
