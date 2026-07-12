@@ -1739,25 +1739,6 @@ class SoN::FromOptree 0.01 {
         return;
     }
 
-    # The backend recovers the loop condition as "the comparison consuming a
-    # header Phi" (its strategy-2 fallback; the producer does not yet wire the
-    # control edge strategy 1 wants). That is only sound when exactly ONE such
-    # comparison exists -- a second one (a body comparison on a loop-carried
-    # value) makes the choice arbitrary, and review reproduced the backend
-    # picking a decoy. Refuse until the condition is structurally wired.
-    my %ICMP_OP = map { $_ => 1 } qw(NumEq NumLt NumGt NumLe NumGe NumNe);
-    sub _assert_unambiguous_condition (@phis) {
-        my %cmp;
-        for my $phi (@phis) {
-            for my $c ($phi->consumers->@*) {
-                $cmp{$c->id} = 1 if $ICMP_OP{$c->operation};
-            }
-        }
-        die "GAP: ambiguous loop condition (multiple comparisons consume"
-          . " header Phis) not yet lowered\n"
-            if keys %cmp > 1;
-    }
-
     # The condition segment runs once more than the body (the failing test
     # still applies its side effects), which this translation cannot represent
     # -- and on the postfix path the main walk has already applied one
@@ -1875,7 +1856,6 @@ class SoN::FromOptree 0.01 {
             $mem_phi->set_backedge($sim->memory);
             $sim->set_memory($mem_phi);
         }
-        _assert_unambiguous_condition(values %phis);
 
         # Phase 5: post-loop control continues on the exit edge.
         my $exit_region = $factory->make_cfg('Region', inputs => [$exit_proj]);
@@ -1932,9 +1912,12 @@ class SoN::FromOptree 0.01 {
             value      => $high->value + 1,
             const_type => 'integer',
             stamp      => SoN::IR::Stamp->new(type => 'Int'));
-        $factory->make('NumGt',
+        my $range_cond = $factory->make('NumGt',
             inputs => [$bound, $i_phi],
             stamp  => SoN::IR::Stamp->new(type => 'Boolean'));
+        # Structural control edge to the Loop (see _walk_loop_body), so the
+        # backend recovers this continuation test unambiguously.
+        $range_cond->set_loop_control($loop_node);
 
         # A body element store advances memory; seed a header memory-Phi from the
         # pre-loop memory (memory analog of the carried-slot Phi; no stamp).
@@ -1966,7 +1949,6 @@ class SoN::FromOptree 0.01 {
             $mem_phi->set_backedge($sim->memory);
             $sim->set_memory($mem_phi);
         }
-        _assert_unambiguous_condition($i_phi, values %phis);
 
         # Phase 5: post-loop control continues on the exit edge.
         my $exit_region = $factory->make_cfg('Region', inputs => [$exit_proj]);
@@ -2033,11 +2015,14 @@ class SoN::FromOptree 0.01 {
                     if $condition_fired++;
                 my $cond = $sim->pop_node;
                 if (defined $loop_node) {
-                    # The backend recovers the condition as the comparison
-                    # consuming a header Phi; $cond needs no consumer here.
+                    # Wire the condition's control edge to the Loop so the
+                    # backend recovers it structurally (its control_in IS the
+                    # Loop) rather than by the ambiguous "first icmp consuming a
+                    # header Phi" heuristic, which a body comparison can hijack.
                     # An `or` condition (until) would need the negated sense.
                     die "GAP: until (or-condition) loop not yet lowered\n"
                         if $name eq 'or';
+                    $cond->set_loop_control($loop_node);
                     my $body_proj = $factory->make_cfg('Proj',
                         inputs => [$loop_node], index => 0);
                     $exit_proj = $factory->make_cfg('Proj',

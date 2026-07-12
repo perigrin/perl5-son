@@ -12,6 +12,8 @@ use SoN::FromOptree;
 # bug", which is only sound with no known silent miscompiles). Each subtest
 # pins a case the RC2b review reproduced as a silent wrong answer.
 
+my %ICMP_OP = map { $_ => 1 } qw(NumEq NumLt NumGt NumLe NumGe NumNe);
+
 sub translate_dies ($code) {
     SoN::OptSuppress::suppress_peep();
     my $cv = eval $code;
@@ -85,12 +87,29 @@ subtest 'side-effecting loop condition refuses loudly (postfix form)' => sub {
         qr/GAP.*condition/i, 'postfix $n-- condition dies with a GAP message');
 };
 
-subtest 'ambiguous loop condition refuses loudly' => sub {
+subtest 'loop condition with a body decoy comparison wires structurally (zhi 019f29ed)' => sub {
     # Was: a decoy body comparison consuming a header Phi could be picked as
-    # the loop condition by the backend fallback -> one extra iteration.
-    like(translate_dies(
-        'sub { my $n = 4; my $s = 0; while ($n > 0) { my $c = $n > -1; $s = $s + 1; $n = $n - 1 } $s }'),
-        qr/GAP.*condition/i, 'two comparisons on header Phis die with a GAP message');
+    # the loop condition by the backend fallback -> one extra iteration. Now the
+    # header condition carries a control edge to the Loop (set_loop_control), so
+    # the backend recovers it structurally regardless of body comparisons.
+    SoN::OptSuppress::suppress_peep();
+    my $cv = eval
+        'sub { my $n = 4; my $s = 0; while ($n > 0) { my $c = $n > -1; $s = $s + 1; $n = $n - 1 } $s }';
+    my $err = $@;
+    SoN::OptSuppress::restore_peep();
+    die "compile failed: $err" if $err;
+
+    my $graph = SoN::FromOptree->translate($cv);
+    ok($graph, 'the decoy-comparison loop translates cleanly (no GAP)');
+
+    # Exactly one node carries loop_control, and it is the header condition
+    # (NumGt(phi, 0)) -- not the body decoy (NumGt(phi, -1)).
+    my @wired = grep { defined $_->loop_control } $graph->nodes->@*;
+    is(scalar @wired, 1, 'exactly one condition is control-wired to the Loop');
+    is($wired[0]->loop_control->operation, 'Loop',
+        'the wired condition points at the Loop node');
+    ok($ICMP_OP{ $wired[0]->operation },
+        'the wired node is a comparison (the header condition, not the decoy)');
 };
 
 subtest 'unstamped back-edge refuses loudly' => sub {

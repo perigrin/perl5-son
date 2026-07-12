@@ -146,6 +146,11 @@ sub _serialize_graph ($graph) {
         if (defined $node->stamp) {
             $entry{stamp} = $node->stamp->type;
         }
+        # A loop-header condition carries a control edge to its Loop (op-agnostic,
+        # emitted as a node-id reference the loader demotes to control_in).
+        if (defined $node->loop_control) {
+            $entry{loop_control} = $id_remap{ $node->loop_control->id };
+        }
 
         push @nodes, \%entry;
     }
@@ -285,6 +290,12 @@ sub _deserialize_graph ($method_data) {
         else {
             $node = $factory->make($op, %args);
         }
+
+        # Restore a loop condition's control edge to its Loop. The Loop always
+        # precedes the condition in topo order (the condition consumes the header
+        # Phi that regions the Loop), so this is a backward reference wired inline.
+        $node->set_loop_control($nodes[ $nd->{loop_control} ])
+            if defined $nd->{loop_control};
 
         push @nodes, $node;
     }
