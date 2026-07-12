@@ -131,8 +131,10 @@ class SoN::FromOptree 0.01 {
         # an arm records its exit instead of dying / truncating the graph.
         my @exits;
         my $main_terminated = 0;   # set when the main path hits return/leavesub
-        my $pending_method;        # method name recorded by method_named for the
-                                   # following entersub (method dispatch)
+        # $ctx->{pending_method}: method name recorded by method_named for the
+        # following entersub (method dispatch). Carried on $ctx so the SHARED
+        # entersub/method_named handlers work identically in the main walk and in
+        # _walk_branch/_step (a void method call in a branch arm -- zhi 019f2df7).
         my $ctx = { mode => 'main', exits => \@exits };
 
         while ($$op) {
@@ -213,7 +215,8 @@ class SoN::FromOptree 0.01 {
                 # untouched.
                 my $mem_branch =
                     ($op->flags & 3) == 1   # OPf_WANT_VOID
-                    && _arm_has_element_store($op->other, $op->next);
+                    && (_arm_has_element_store($op->other, $op->next)
+                        || _arm_has_void_call($op->other, $op->next));
                 my ($if_node, $true_proj, $false_proj);
                 if ($mem_branch) {
                     $if_node   = $factory->make_cfg('If',
@@ -442,135 +445,17 @@ class SoN::FromOptree 0.01 {
                 next;
             }
 
-            # Handle entersub - subroutine or method call. A method dispatch is
-            # signalled by a preceding method_named (recorded in $pending_method);
-            # otherwise it is a direct sub call.
+            # Handle entersub / method_named via the shared handlers so a
+            # (void) method call translates identically here and inside a branch
+            # arm (_walk_branch/_step). Method dispatch is signalled by a
+            # preceding method_named recorded on $ctx->{pending_method}.
             if ($name eq 'entersub') {
-                my $args = $sim->pop_to_mark;
-
-                if (defined $pending_method) {
-                    # Method dispatch: the first stack arg is the invocant, the
-                    # rest are call arguments. class_name is statically known
-                    # when the invocant is a bareword class (Class->new); for
-                    # $obj->meth the invocant node (scope-resolved to its
-                    # constructor Call) lets the backend infer the class.
-                    my $invocant = shift $args->@*;
-                    # The invocant pad read is in MOD (lvalue) context, so it
-                    # arrives as a fresh PadAccess; resolve it to the variable's
-                    # bound value (e.g. the constructor Call) so the dispatch
-                    # names the right class.
-                    if ($invocant
-                        && $invocant->isa('SoN::IR::Node::PadAccess')) {
-                        my $bound = $sim->lookup($invocant->targ);
-                        $invocant = $bound if defined $bound;
-                    }
-                    # The backend requires class_name ON the method Call node.
-                    # Class->new: the bareword constant invocant names the class.
-                    # $obj->meth: the invocant resolves to the constructor Call,
-                    # which carries the class_name -- propagate it.
-                    my $class_name;
-                    if ($invocant
-                        && $invocant->isa('SoN::IR::Node::Constant')
-                        && ($invocant->const_type // '') eq 'string') {
-                        $class_name = $invocant->value;
-                    }
-                    elsif ($invocant
-                        && $invocant->isa('SoN::IR::Node::Call')
-                        && defined $invocant->class_name) {
-                        $class_name = $invocant->class_name;
-                    }
-                    # Class->new(k => v, ...): the args after the invocant are a
-                    # param=>value kv-list. Split the keys onto param_names and
-                    # the values onto inputs, so the backend binds each value to
-                    # its named field (a flat kv-list leaves param_names empty
-                    # and the constructor stores field defaults). Guarded on a
-                    # statically-known class and an even-length list of constant
-                    # keys; anything else stays a generic dispatch.
-                    my @call_inputs = ($invocant, $args->@*);
-                    my $param_names;
-                    if (defined $class_name && $pending_method eq 'new'
-                        && (($args->@*) % 2 == 0)) {
-                        my (@keys, @vals, $ok);
-                        $ok = 1;
-                        for (my $i = 0; $i < $args->@*; $i += 2) {
-                            my ($k, $v) = ($args->[$i], $args->[$i + 1]);
-                            unless ($k && $k->isa('SoN::IR::Node::Constant')
-                                    && ($k->const_type // '') eq 'string') {
-                                $ok = 0; last;
-                            }
-                            push @keys, $k->value;
-                            push @vals, $v;
-                        }
-                        if ($ok) {
-                            $param_names = \@keys;
-                            @call_inputs = @vals;   # class rides as class_name
-                        }
-                    }
-                    # A call in void statement position (OPf_WANT_VOID) has its
-                    # result discarded; its purpose is its side effect. Thread
-                    # it onto the control chain (control first in inputs) so it
-                    # is ordered and survives DCE, and do not push a value.
-                    my $void = ($op->flags & 3) == 1;   # OPf_WANT_VOID
-                    # A constructor (Class->new) returns the constructed object
-                    # instance; stamp it Object so the shape/repr contract holds.
-                    my $ctor = defined $class_name && $pending_method eq 'new';
-                    my $node = $factory->make('Call',
-                        inputs        => [ ($void ? $sim->control : ()), @call_inputs ],
-                        dispatch_kind => 'method',
-                        name          => $pending_method,
-                        (defined $class_name ? (class_name => $class_name) : ()),
-                        (defined $param_names ? (param_names => $param_names) : ()),
-                        ($void ? (is_stmt_effect => true) : ()),
-                        ($ctor ? (stamp => SoN::IR::Stamp->new(type => 'Object')) : ()),
-                    );
-                    if ($void) {
-                        $sim->set_control($node);
-                    } else {
-                        $sim->push_node($node);
-                    }
-                    $pending_method = undef;
-                    $op = $op->next;
-                    next;
-                }
-
-                # Direct sub call: the last arg is the callee, the rest are args.
-                my $cv_node   = $args->@* ? pop $args->@* : undef;
-                my $call_name = 'unknown';
-                if ($cv_node && $cv_node->isa('SoN::IR::Node::Constant')) {
-                    $call_name = $cv_node->value // 'unknown';
-                }
-                # Resolve the callee to its fully-qualified name (STASH::NAME)
-                # from the entersub's own callee op, so the Call names the same
-                # key (main::foo) the producer keys the callee graph under. The
-                # gv-handler Constant only carries the short NAME; qualifying it
-                # here (in the entersub's known callee context) avoids touching
-                # package-variable reads that share a name with a sub.
-                if (my $callee_gv = _entersub_callee_gv($cv, $op)) {
-                    $call_name = $callee_gv->STASH->NAME . '::' . $callee_gv->NAME;
-                }
-                my $node = $factory->make('Call',
-                    inputs        => $args->@* ? $args : [],
-                    dispatch_kind => 'direct',
-                    name          => $call_name,
-                );
-                $sim->push_node($node);
+                _handle_entersub($cv, $op, $sim, $factory, $ctx);
                 $op = $op->next;
                 next;
             }
-
-            # Handle method_named - record the method name for the following
-            # entersub. The invocant stays on the stack (entersub consumes it).
-            # The name SV can be a shared B::SPECIAL whose value lives in the
-            # pad (the same indirection the const handler resolves).
             if ($name eq 'method_named') {
-                my $meth_sv = $op->meth_sv;
-                if ((!$$meth_sv || $meth_sv->isa('B::SPECIAL')) && $op->targ) {
-                    my $padl = $cv->PADLIST;
-                    $meth_sv = $padl->ARRAYelt(1)->ARRAYelt($op->targ)
-                        if $$padl;
-                }
-                $pending_method =
-                    ($$meth_sv && $meth_sv->can('PV')) ? $meth_sv->PV : 'unknown';
+                _handle_method_named($cv, $op, $ctx);
                 $op = $op->next;
                 next;
             }
@@ -774,6 +659,138 @@ class SoN::FromOptree 0.01 {
         }
     }
 
+    # Record the method name for the following entersub. The invocant stays on
+    # the stack (entersub consumes it). The name SV can be a shared B::SPECIAL
+    # whose value lives in the pad (the same indirection the const handler
+    # resolves). State rides $ctx->{pending_method} so every walker shares it.
+    sub _handle_method_named ($cv, $op, $ctx) {
+        my $meth_sv = $op->meth_sv;
+        if ((!$$meth_sv || $meth_sv->isa('B::SPECIAL')) && $op->targ) {
+            my $padl = $cv->PADLIST;
+            $meth_sv = $padl->ARRAYelt(1)->ARRAYelt($op->targ)
+                if $$padl;
+        }
+        $ctx->{pending_method} =
+            ($$meth_sv && $meth_sv->can('PV')) ? $meth_sv->PV : 'unknown';
+        return;
+    }
+
+    # entersub - subroutine or method call. A method dispatch is signalled by a
+    # preceding method_named (recorded on $ctx->{pending_method}); otherwise it
+    # is a direct sub call. Shared by the main walk and _walk_branch/_step so a
+    # (void) method call in a conditional branch arm translates identically.
+    sub _handle_entersub ($cv, $op, $sim, $factory, $ctx) {
+        my $args = $sim->pop_to_mark;
+
+        if (defined $ctx->{pending_method}) {
+            my $pending_method = $ctx->{pending_method};
+            # Method dispatch: the first stack arg is the invocant, the
+            # rest are call arguments. class_name is statically known
+            # when the invocant is a bareword class (Class->new); for
+            # $obj->meth the invocant node (scope-resolved to its
+            # constructor Call) lets the backend infer the class.
+            my $invocant = shift $args->@*;
+            # The invocant pad read is in MOD (lvalue) context, so it
+            # arrives as a fresh PadAccess; resolve it to the variable's
+            # bound value (e.g. the constructor Call) so the dispatch
+            # names the right class.
+            if ($invocant
+                && $invocant->isa('SoN::IR::Node::PadAccess')) {
+                my $bound = $sim->lookup($invocant->targ);
+                $invocant = $bound if defined $bound;
+            }
+            # The backend requires class_name ON the method Call node.
+            # Class->new: the bareword constant invocant names the class.
+            # $obj->meth: the invocant resolves to the constructor Call,
+            # which carries the class_name -- propagate it.
+            my $class_name;
+            if ($invocant
+                && $invocant->isa('SoN::IR::Node::Constant')
+                && ($invocant->const_type // '') eq 'string') {
+                $class_name = $invocant->value;
+            }
+            elsif ($invocant
+                && $invocant->isa('SoN::IR::Node::Call')
+                && defined $invocant->class_name) {
+                $class_name = $invocant->class_name;
+            }
+            # Class->new(k => v, ...): the args after the invocant are a
+            # param=>value kv-list. Split the keys onto param_names and
+            # the values onto inputs, so the backend binds each value to
+            # its named field (a flat kv-list leaves param_names empty
+            # and the constructor stores field defaults). Guarded on a
+            # statically-known class and an even-length list of constant
+            # keys; anything else stays a generic dispatch.
+            my @call_inputs = ($invocant, $args->@*);
+            my $param_names;
+            if (defined $class_name && $pending_method eq 'new'
+                && (($args->@*) % 2 == 0)) {
+                my (@keys, @vals, $ok);
+                $ok = 1;
+                for (my $i = 0; $i < $args->@*; $i += 2) {
+                    my ($k, $v) = ($args->[$i], $args->[$i + 1]);
+                    unless ($k && $k->isa('SoN::IR::Node::Constant')
+                            && ($k->const_type // '') eq 'string') {
+                        $ok = 0; last;
+                    }
+                    push @keys, $k->value;
+                    push @vals, $v;
+                }
+                if ($ok) {
+                    $param_names = \@keys;
+                    @call_inputs = @vals;   # class rides as class_name
+                }
+            }
+            # A call in void statement position (OPf_WANT_VOID) has its
+            # result discarded; its purpose is its side effect. Thread
+            # it onto the control chain (control first in inputs) so it
+            # is ordered and survives DCE, and do not push a value.
+            my $void = ($op->flags & 3) == 1;   # OPf_WANT_VOID
+            # A constructor (Class->new) returns the constructed object
+            # instance; stamp it Object so the shape/repr contract holds.
+            my $ctor = defined $class_name && $pending_method eq 'new';
+            my $node = $factory->make('Call',
+                inputs        => [ ($void ? $sim->control : ()), @call_inputs ],
+                dispatch_kind => 'method',
+                name          => $pending_method,
+                (defined $class_name ? (class_name => $class_name) : ()),
+                (defined $param_names ? (param_names => $param_names) : ()),
+                ($void ? (is_stmt_effect => true) : ()),
+                ($ctor ? (stamp => SoN::IR::Stamp->new(type => 'Object')) : ()),
+            );
+            if ($void) {
+                $sim->set_control($node);
+            } else {
+                $sim->push_node($node);
+            }
+            $ctx->{pending_method} = undef;
+            return;
+        }
+
+        # Direct sub call: the last arg is the callee, the rest are args.
+        my $cv_node   = $args->@* ? pop $args->@* : undef;
+        my $call_name = 'unknown';
+        if ($cv_node && $cv_node->isa('SoN::IR::Node::Constant')) {
+            $call_name = $cv_node->value // 'unknown';
+        }
+        # Resolve the callee to its fully-qualified name (STASH::NAME)
+        # from the entersub's own callee op, so the Call names the same
+        # key (main::foo) the producer keys the callee graph under. The
+        # gv-handler Constant only carries the short NAME; qualifying it
+        # here (in the entersub's known callee context) avoids touching
+        # package-variable reads that share a name with a sub.
+        if (my $callee_gv = _entersub_callee_gv($cv, $op)) {
+            $call_name = $callee_gv->STASH->NAME . '::' . $callee_gv->NAME;
+        }
+        my $node = $factory->make('Call',
+            inputs        => $args->@* ? $args : [],
+            dispatch_kind => 'direct',
+            name          => $call_name,
+        );
+        $sim->push_node($node);
+        return;
+    }
+
     # Shared op-handler core for all three walkers.
     #
     #   _step($cv, $op, $sim, $factory, $opmap, $ctx) -> ($next_op, $signal)
@@ -796,6 +813,20 @@ class SoN::FromOptree 0.01 {
         # Handle pushmark specially - just record the mark
         if ($name eq 'pushmark') {
             $sim->push_mark;
+            return ($op->next, 'handled');
+        }
+
+        # Method / sub call. Shared with the main walk via the same handlers;
+        # $ctx->{pending_method} carries the dispatch name from method_named to
+        # the following entersub. Lets a (void) method call inside a branch arm
+        # (_walk_branch) or loop body translate exactly as on the main path
+        # (zhi 019f2df7 -- a void `$c->inc` in a conditional arm was dropped).
+        if ($name eq 'method_named') {
+            _handle_method_named($cv, $op, $ctx);
+            return ($op->next, 'handled');
+        }
+        if ($name eq 'entersub') {
+            _handle_entersub($cv, $op, $sim, $factory, $ctx);
             return ($op->next, 'handled');
         }
 
@@ -1965,6 +1996,36 @@ class SoN::FromOptree 0.01 {
             $seen{$$op} = 1;
             next unless $op->name eq 'aelem' || $op->name eq 'helem';
             return 1 if $op->flags & 0x20;   # OPf_MOD -- an lvalue element target
+        }
+        return 0;
+    }
+
+    # Does the arm (op chain from $start up to but excluding $stop) contain a
+    # VOID METHOD CALL -- a `$c->inc`-style dispatch whose result is discarded?
+    # Such a call carries a side effect (a field mutation inside the method), so
+    # the branch must build real control flow (If + Proj + merge) exactly like an
+    # element store: the call is walked on Proj(true), control-threaded, and a
+    # Region merges the arms so a later read sees it. Without this the void call
+    # falls to the pad-rebind value-merge path, which merges nothing (a void call
+    # rebinds no pad slot) and silently drops the effect (zhi 019f2df7).
+    #
+    # A void method call is a method_named followed by an entersub in VOID want
+    # (OPf_WANT_VOID). The linear ->next scan follows THIS arm only; a nested
+    # branch (and/or/cond_expr) inside the arm is NOT a simple void-call arm --
+    # stop at it so a nested branch stays the loud GAP the convergence check
+    # raises, rather than being routed through the $mem_branch merge with a
+    # broken memory state.
+    sub _arm_has_void_call ($start, $stop) {
+        my %seen;
+        my $saw_method;
+        for (my $op = $start; $$op && $$op != $stop && !$seen{$$op}; $op = $op->next) {
+            $seen{$$op} = 1;
+            my $name = $op->name;
+            # A nested branch: not a plain void-call arm. Bail so it GAPs loudly.
+            return 0 if $name eq 'and' || $name eq 'or' || $name eq 'cond_expr';
+            $saw_method = 1 if $name eq 'method_named' || $name eq 'method';
+            next unless $name eq 'entersub';
+            return 1 if $saw_method && ($op->flags & 3) == 1;   # OPf_WANT_VOID
         }
         return 0;
     }
