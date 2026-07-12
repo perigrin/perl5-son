@@ -44,6 +44,11 @@ class SoN::FromOptree::StackSim 0.01 {
         return scalar @marks;
     }
 
+    # Set the mark positions (stack indices) verbatim, for copying state in snapshot.
+    method restore_marks ($positions) {
+        @marks = $positions->@*;
+    }
+
     method stack_depth () {
         return scalar @stack;
     }
@@ -73,11 +78,13 @@ class SoN::FromOptree::StackSim 0.01 {
         return {%scope};
     }
 
-    # Create a snapshot for branching (deep copy)
+    # Create a snapshot for branching. Copies the stack values, mark POSITIONS
+    # (verbatim -- push_mark would re-record them at the copy's final depth and
+    # collapse them all to the top), scope bindings, and last-match reference.
     method snapshot () {
         my $copy = SoN::FromOptree::StackSim->new(control => $control, memory => $memory);
         $copy->push_node($_) for @stack;
-        $copy->push_mark() for @marks;  # approximate
+        $copy->restore_marks([@marks]);
         for my $targ (keys %scope) {
             $copy->define($targ, $scope{$targ});
         }

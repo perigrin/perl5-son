@@ -72,6 +72,33 @@ subtest 'Snapshot creates independent copy' => sub {
     is($copy->stack_depth, 1, 'copy stack depth unchanged');
 };
 
+subtest 'Snapshot preserves mark positions below leftover values' => sub {
+    # A mark can sit BELOW leftover stack values: the arm pushes some values,
+    # then opens a mark, then pushes the args for a mark-consuming op. When such
+    # a state is snapshotted, the copy must resolve pop_to_mark to the SAME
+    # position as the original -- not collapse the mark to the final depth.
+    my $start = $factory->make_cfg('Start');
+    my $sim = SoN::FromOptree::StackSim->new(control => $start);
+    my ($a, $b, $c, $d) =
+        map { $factory->make('Constant', value => $_, stamp => $int_stamp) } 1 .. 4;
+
+    $sim->push_node($a);   # leftover pos 0
+    $sim->push_node($b);   # leftover pos 1
+    $sim->push_mark;       # mark at position 2
+    $sim->push_node($c);   # arg pos 2
+    $sim->push_node($d);   # arg pos 3
+
+    my $copy = $sim->snapshot;
+    is($copy->stack_depth, 4, 'copy stack depth matches');
+    is($copy->has_mark, 1, 'copy has the mark');
+
+    my $args = $copy->pop_to_mark;
+    is(scalar $args->@*, 2, 'pop_to_mark returns the 2 args above the mark');
+    is($args->[0], $c, 'first arg is C');
+    is($args->[1], $d, 'second arg is D');
+    is($copy->stack_depth, 2, 'the 2 leftover values remain below the mark');
+};
+
 subtest 'Merge creates Region and Phi' => sub {
     my $start = $factory->make_cfg('Start');
     my $sim_a = SoN::FromOptree::StackSim->new(control => $start);
