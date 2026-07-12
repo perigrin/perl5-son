@@ -43,6 +43,32 @@ subtest 'nested loop inside a loop body refuses loudly' => sub {
         qr/GAP/, 'nested while dies with a GAP message');
 };
 
+subtest 'nested and/or inside a loop body refuses loudly (zhi 019f26a5)' => sub {
+    # _walk_loop_body treats the FIRST and/or with stack_depth>0 as the loop
+    # condition (mints the header Projs). A nested value-context and/or in the
+    # body (`my $x = $i && 1`) would mint a SECOND Proj pair on the Loop and
+    # corrupt the loop shape. $condition_fired++ refuses the second one loudly.
+    like(translate_dies(
+        'sub { my $i=0; my $r=0; while ($i<3) { my $x = ($i && 1); $r=$r+$x; $i=$i+1 } $r }'),
+        qr/GAP: nested and.or inside a loop body/, 'nested && in the body dies with a GAP');
+    like(translate_dies(
+        'sub { my $i=0; my $r=0; while ($i<3) { my $x = ($i || 5); $r=$r+$x; $i=$i+1 } $r }'),
+        qr/GAP: nested and.or inside a loop body/, 'nested || in the body dies with a GAP');
+    # A COMPOUND loop condition (`while (A && B)`) is a nested and/or too --
+    # single-comparison recovery cannot express short-circuit; GAP not miscompile.
+    like(translate_dies(
+        'sub { my $i=0; my $j=0; my $r=0; while ($i<3 && $j<5) { $r=$r+1; $i=$i+1; $j=$j+1 } $r }'),
+        qr/GAP: nested and.or inside a loop body/, 'compound && condition dies with a GAP');
+};
+
+subtest 'a plain loop body still translates (the GAP does not over-fire)' => sub {
+    # The nested-and/or GAP must not sweep up a legitimate single-condition loop
+    # with no body logical -- that is the working memory-SSA loop path.
+    my $err = translate_dies(
+        'sub { my $i=0; my $r=0; while ($i<3) { $r=$r+$i; $i=$i+1 } $r }');
+    is($err, undef, 'a plain while loop with no body and/or translates cleanly');
+};
+
 subtest 'side-effecting loop condition refuses loudly (block form)' => sub {
     # Was: the failing (final) condition evaluation's mutation lost ->
     # Int:0 instead of Int:-1.
