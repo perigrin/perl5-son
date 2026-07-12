@@ -112,6 +112,30 @@ subtest 'loop condition with a body decoy comparison wires structurally (zhi 019
         'the wired node is a comparison (the header condition, not the decoy)');
 };
 
+subtest 'bare-truthiness loop condition synthesizes a comparison (zhi 019f29ed)' => sub {
+    # Was: `while ($n) { my $c = $n > 2; ... }` -- a bare-truthiness header whose
+    # popped condition is the loop-carried Phi (not a comparison). set_loop_control
+    # landed on the Phi, but the backend's strategy 1 only accepts icmp consumers,
+    # so it fell to strategy 2 and picked the body decoy $n>2 -> silent miscompile
+    # (Int:2 for oracle 4). Now the producer synthesizes NumNe($cond, 0) and wires
+    # loop_control onto THAT, so an icmp is always the control-wired condition.
+    SoN::OptSuppress::suppress_peep();
+    my $cv = eval
+        'sub { my $n = 4; my $s = 0; while ($n) { my $c = $n > 2; $s = $s + 1; $n = $n - 1 } $s }';
+    my $err = $@;
+    SoN::OptSuppress::restore_peep();
+    die "compile failed: $err" if $err;
+
+    my $graph = SoN::FromOptree->translate($cv);
+    ok($graph, 'the bare-truthiness loop translates cleanly (no GAP)');
+
+    my @wired = grep { defined $_->loop_control } $graph->nodes->@*;
+    is(scalar @wired, 1, 'exactly one condition is control-wired to the Loop');
+    ok($ICMP_OP{ $wired[0]->operation },
+        'the wired node is a synthesized comparison, not the bare Phi');
+    is($wired[0]->operation, 'NumNe', 'the synthesized truthiness test is NumNe(cond, 0)');
+};
+
 subtest 'unstamped back-edge refuses loudly' => sub {
     # Was: the Phi was silently unstamped but body nodes kept stamps derived
     # from its optimistic init stamp, contaminating sibling Phi joins.

@@ -1739,6 +1739,25 @@ class SoN::FromOptree 0.01 {
         return;
     }
 
+    # A loop-header condition must be an icmp for the backend to recover it
+    # structurally (control_in on the Loop). These are the comparison ops.
+    my %COMPARISON_OP = map { $_ => 1 } qw(NumEq NumLt NumGt NumLe NumGe NumNe);
+    sub _is_comparison ($node) {
+        return $COMPARISON_OP{ $node->operation } ? 1 : 0;
+    }
+
+    # Synthesize an explicit truthiness test NumNe($value, 0) for a bare-scalar
+    # loop condition (`while ($n)`), so the control-wired condition is an icmp.
+    sub _truthiness_test ($value, $factory) {
+        my $zero = $factory->make('Constant',
+            value      => 0,
+            const_type => 'integer',
+            stamp      => SoN::IR::Stamp->new(type => 'Int'));
+        return $factory->make('NumNe',
+            inputs => [$value, $zero],
+            stamp  => SoN::IR::Stamp->new(type => 'Boolean'));
+    }
+
     # The condition segment runs once more than the body (the failing test
     # still applies its side effects), which this translation cannot represent
     # -- and on the postfix path the main walk has already applied one
@@ -2022,6 +2041,13 @@ class SoN::FromOptree 0.01 {
                     # An `or` condition (until) would need the negated sense.
                     die "GAP: until (or-condition) loop not yet lowered\n"
                         if $name eq 'or';
+                    # A bare-truthiness header (`while ($n)`) pops a non-comparison
+                    # condition (the loop-carried value). The backend's structural
+                    # recovery only accepts an icmp, so synthesize an explicit
+                    # NumNe($cond, 0) truthiness test and wire the control edge onto
+                    # THAT -- otherwise the backend falls back to a body comparison.
+                    $cond = _truthiness_test($cond, $factory)
+                        unless _is_comparison($cond);
                     $cond->set_loop_control($loop_node);
                     my $body_proj = $factory->make_cfg('Proj',
                         inputs => [$loop_node], index => 0);
