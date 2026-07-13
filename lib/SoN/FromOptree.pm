@@ -79,6 +79,20 @@ class SoN::FromOptree 0.01 {
         return $acc;
     }
 
+    # _array_element_stamp($array) -> the element stamp of an ArrayRef node
+    # (the join of its element stamps), or undef when the array is not a literal
+    # ArrayRef or any element is unstamped. Used to stamp shift/pop's removed
+    # value. An empty array has no element type, so returns undef (unstamped).
+    sub _array_element_stamp ($array) {
+        return undef unless defined $array
+            && $array->operation eq 'ArrayRef';
+        my @stamps = map { $_->stamp } $array->inputs->@*;
+        return undef if !@stamps || grep { !defined } @stamps;
+        my $acc = shift @stamps;
+        $acc = SoN::IR::Stamp::join($acc, $_) for @stamps;
+        return $acc;
+    }
+
     # _is_aggregate_node($node) -- true iff the node is an array/hash aggregate
     # a Length can count: an ArrayRef/HashRef constructor, or a node bound to an
     # aggregate (its stamp is ArrayRef/HashRef). A scalar (e.g. a Str Constant
@@ -1561,6 +1575,30 @@ class SoN::FromOptree 0.01 {
                 if ($node_type eq 'Call') {
                     $extra{dispatch_kind} = 'builtin';
                     $extra{name}          = $name;
+                }
+
+                # shift/pop MUTATE their array (remove an element) and yield the
+                # removed value. Model as a memory statement effect (mirrors the
+                # element-store path): the current memory leads the inputs,
+                # is_stmt_effect orders it on the control chain, and the Call
+                # becomes the new memory version so a later whole-array read
+                # (Length/element) observes the drained array. Stamp with the
+                # array's element type so the removed value (and anything derived
+                # from it) carries a repr.
+                if ($node_type eq 'Call' && ($name eq 'shift' || $name eq 'pop')
+                        && @inputs == 1 && _is_aggregate_node($inputs[0])
+                        && defined $sim->control && defined $sim->memory) {
+                    my $elem_stamp = _array_element_stamp($inputs[0]);
+                    my $call = $factory->make('Call',
+                        inputs         => [$sim->control, $inputs[0], $sim->memory],
+                        is_stmt_effect => true,
+                        dispatch_kind  => 'builtin',
+                        name           => $name,
+                        (defined $elem_stamp ? (stamp => $elem_stamp) : ()));
+                    $sim->set_control($call);
+                    $sim->set_memory($call);
+                    $sim->push_node($call) if $push_count;
+                    return ($op->next, 'handled');
                 }
                 # Compound assignment (`$x += 2`): a binary arithmetic op whose
                 # FIRST operand is an lvalue (OPf_MOD) pad read is a read-modify-
