@@ -1030,6 +1030,28 @@ class SoN::FromOptree 0.01 {
             return ($op->next, 'handled');
         }
 
+        # rv2av over a constant-folded array: `my @q = (1..4)` compiles to
+        # const[AV] -> rv2av -> aassign. The const handler expanded the folded AV
+        # into a single ArrayRef; here rv2av dereferences it in LIST context, so
+        # flatten it to its elements (like a normal `my @q=(1,2,3)` list) -- then
+        # the trailing aassign collects the N values and builds the array from
+        # them, not ArrayRef(ArrayRef(...)) (zhi 019f5942). Gated on the kid being
+        # a `const` op so a genuine `my @a = ([1,2,3])` (anonlist, NO rv2av) and a
+        # real array-ref deref (rv2av over padsv/a variable) are untouched.
+        if ($name eq 'rv2av'
+                && $op->can('first') && ${$op->first}
+                && $op->first->name eq 'const'
+                && $sim->stack_depth > 0) {
+            my $top = $sim->pop_node;
+            if ($top->operation eq 'ArrayRef') {
+                $sim->push_node($_) for $top->inputs->@*;
+            }
+            else {
+                $sim->push_node($top);   # not a const-range ArrayRef: leave as-is
+            }
+            return ($op->next, 'handled');
+        }
+
         # Skip bookkeeping ops
         if ($opmap->is_skip($name)) {
             return ($op->next, 'handled');
@@ -1046,14 +1068,25 @@ class SoN::FromOptree 0.01 {
                     $sv = $padl->ARRAYelt(1)->ARRAYelt($targ);
                 }
             }
-            # A folded constant AGGREGATE (`(1..4)` constant-folds to a
-            # const[AV ARRAY]; a constant hash list similarly) is not a scalar
-            # Constant. _extract_const would read only its first element and
-            # silently build a 1-element ArrayRef (a miscompile: `my @q=(1..4);
-            # scalar @q` -> 1). Refuse loudly until folded-list expansion exists.
-            if ($$sv && ($sv->isa('B::AV') || $sv->isa('B::HV'))) {
-                die "GAP: constant aggregate literal (a folded range or list, "
-                  . "e.g. (1..4)) not yet lowered\n";
+            # A folded constant ARRAY (`(1..4)` constant-folds to a const[AV
+            # ARRAY]) is not a scalar Constant -- it is an aggregate. _extract_const
+            # would read only its FIRST element (a miscompile: `my @q=(1..4);
+            # scalar @q` -> 1). Expand every AV element into a Constant and build
+            # the equivalent N-element ArrayRef, matching the anonlist path.
+            if ($$sv && $sv->isa('B::AV')) {
+                my @elems = map {
+                    my ($v, $st, $ct) = _extract_const($_);
+                    $factory->make('Constant',
+                        value => $v, stamp => $st, const_type => $ct);
+                } $sv->ARRAY;
+                my $arr = $factory->make('ArrayRef', inputs => \@elems);
+                $sim->push_node($arr);
+                return ($op->next, 'handled');
+            }
+            # A folded constant HASH list is likewise an aggregate, not a scalar;
+            # its key/value expansion is not yet lowered -- refuse loudly.
+            if ($$sv && $sv->isa('B::HV')) {
+                die "GAP: constant hash literal (a folded const HV) not yet lowered\n";
             }
             my ($value, $stamp, $const_type) = _extract_const($sv);
             my $node = $factory->make('Constant',
