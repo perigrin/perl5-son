@@ -22,6 +22,9 @@ class Counter {
 
 class Child :isa(Counter) { }
 
+# A class whose fields use a CUSTOM :param(NAME) != the variable name.
+class CFNParam { field $left :param(alpha) :reader; field $right :param(beta) :reader; }
+
 package PlainPkg { sub regular { 1 } }
 
 subtest 'is_class distinguishes a class from a plain package' => sub {
@@ -68,6 +71,34 @@ subtest 'superclass_name returns the :isa parent' => sub {
         'Child :isa(Counter)');
     is(SoN::ClassAux::superclass_name(\%Counter::), undef,
         'Counter has no parent');
+};
+
+subtest 'class_field_names returns the class field variable names by fieldix (zhi 019f4625)' => sub {
+    # The class's OWN field padnames (HvAUX xhv_class_fields) -- the authoritative
+    # source of a field's VARIABLE name, independent of any referencing CV. This
+    # is what a custom :param(NAME) needs so the recorded name is the variable
+    # ($n/$d), not the param name. The XSUB returns a flat (name, fieldix, ...)
+    # list; build the fieldix -> name map the way _extract_fields does.
+    my %by_ix;
+    { my @pairs = SoN::ClassAux::class_field_names(\%Counter::);
+      while (my ($name, $ix) = splice @pairs, 0, 2) { $by_ix{$ix} = $name } }
+    is($by_ix{0}, '$n', 'field 0 variable name is $n');
+    is($by_ix{1}, '$d', 'field 1 variable name is $d');
+
+    # A field with a custom :param(NAME) still reports its VARIABLE name here.
+    my %param_ix;
+    { my @pairs = SoN::ClassAux::class_field_names(\%CFNParam::);
+      while (my ($name, $ix) = splice @pairs, 0, 2) { $param_ix{$ix} = $name } }
+    is($param_ix{0}, '$left',  'custom :param(alpha) field 0 is still $left');
+    is($param_ix{1}, '$right', 'custom :param(beta) field 1 is still $right');
+
+    # A non-class package returns an empty list.
+    my @none = SoN::ClassAux::class_field_names(\%PlainPkg::);
+    is(scalar @none, 0, 'a plain package has no class fields');
+
+    # Inherited fields are NOT included; a child reports only its own.
+    my @child = SoN::ClassAux::class_field_names(\%Child::);
+    is(scalar @child, 0, 'Child (no own fields) reports none of Counter\'s');
 };
 
 done_testing();

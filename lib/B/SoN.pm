@@ -462,33 +462,18 @@ sub _extract_fields {
 
     no strict 'refs';
 
-    # fieldix -> variable name, from every CV that names the field (methods +
-    # ADJUST blocks). Synthesized :reader XSUBs carry no field padnames, which
-    # is exactly why the initfields enumeration below is the source of truth.
+    # fieldix -> variable name, from the class's OWN field padnames
+    # (SoN::ClassAux::class_field_names walks HvAUX(stash)->xhv_class_fields).
+    # This is authoritative and independent of whether any method/ADJUST body
+    # references the field -- the old code scavenged field padnames from
+    # referencing CVs and fell back to `$` + param_name when nothing referenced
+    # the field, which yielded the wrong name for a custom `:param(NAME)` where
+    # NAME != the variable name (e.g. `$left :param(alpha)` -> `$alpha`, breaking
+    # reader detection). The class field list has the real `$left` (zhi 019f4625).
     my %varname;
-    my @cvs;
-    for my $name ( sort keys %$stash ) {
-        next if $name =~ /::$/;
-        my $gv = eval { svref_2object( \*{"${pkg_name}::${name}"} ) };
-        next unless defined $gv && $gv->isa('B::GV');
-        my $cv = $gv->CV;
-        next unless $$cv && !$cv->isa('B::SPECIAL');
-        push @cvs, $cv;
-    }
-    push @cvs, map { svref_2object($_) } SoN::ClassAux::adjust_cvs($stash);
-
-    for my $cv (@cvs) {
-        my $padlist = eval { $cv->PADLIST };
-        next unless $padlist && $$padlist;
-        my $padnames = $padlist->ARRAYelt(0);
-        next unless $padnames && $$padnames;
-        for my $i ( 0 .. $padnames->MAX ) {
-            my $pn = $padnames->ARRAYelt($i);
-            next unless ref $pn eq 'B::PADNAME' && SoN::FieldInfo::is_field($pn);
-            my @info    = SoN::FieldInfo::field_info($pn);
-            my $fieldix = $info[0];
-            $varname{$fieldix} //= eval { $pn->PV } // '$?';
-        }
+    my @field_pairs = SoN::ClassAux::class_field_names($stash);
+    while ( my ( $name, $fieldix ) = splice @field_pairs, 0, 2 ) {
+        $varname{$fieldix} //= $name;
     }
 
     # The declarative field list, in fieldix order, from the initfields optree.

@@ -137,6 +137,34 @@ superclass_name(stashref)
     OUTPUT:
         RETVAL
 
+# The class's OWN field padnames, from HvAUX(stash)->xhv_class_fields (a
+# PADNAMELIST of PadnameIsFIELD padnames). Returns a flat (name, fieldix) list in
+# declaration order -- the authoritative source of a field's variable name,
+# independent of whether any method/ADJUST body references the field. Inherited
+# fields are NOT included (each class's list holds only its own fields), and
+# fieldix stays continuous across the :isa chain.
+void
+class_field_names(stashref)
+    SV *stashref
+    PPCODE:
+        if (!SvROK(stashref) || SvTYPE(SvRV(stashref)) != SVt_PVHV)
+            XSRETURN_EMPTY;
+        HV *stash = (HV *)SvRV(stashref);
+        if (!HvSTASH_IS_CLASS(stash))
+            XSRETURN_EMPTY;
+        PADNAMELIST *fields = HvAUX(stash)->xhv_class_fields;
+        if (!fields)
+            XSRETURN_EMPTY;
+        SSize_t max = PadnamelistMAX(fields);
+        PADNAME **arr = PadnamelistARRAY(fields);
+        for (SSize_t i = 0; i <= max; i++) {
+            PADNAME *pn = arr[i];
+            if (!pn || pn == &PL_padname_undef)
+                continue;
+            mPUSHp(PadnamePV(pn), PadnameLEN(pn));                /* "$left" */
+            mPUSHu(PadnameFIELDINFO(pn)->fieldix);               /* 0, 1, ... */
+        }
+
 MODULE = SoN  PACKAGE = SoN::OptSuppress
 
 PROTOTYPES: DISABLE
