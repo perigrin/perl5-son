@@ -2282,6 +2282,31 @@ class SoN::FromOptree 0.01 {
         return 0;
     }
 
+    # Does the arm (op chain from $start up to but excluding $stop) STORE to a
+    # class FIELD? A branched field mutation (`method bump { if(C){$n=$n+5}
+    # else{$n=$n+1} }`) must build real control flow so each arm's field store is
+    # control-dependent on its own Proj and a Region merges the arms -- exactly
+    # like an element store. Without this the arm falls to the pad-rebind merge,
+    # which merges only pad SCOPE bindings (a field is not one), so the store is
+    # never emitted control-guarded and the method body reaches the backend with
+    # no repr (zhi 019f5368). A field write is a TARGMY op (OPpTARGET_MY) or a
+    # padsv_store whose targ's padname is_field.
+    sub _arm_has_field_store ($cv, $start, $stop) {
+        my $padlist = $cv->PADLIST;   # loop-invariant; the padname table is per-CV
+        return 0 unless $$padlist;
+        my $padnames = $padlist->ARRAYelt(0);
+        my %seen;
+        for (my $op = $start; $$op && $$op != $stop && !$seen{$$op}; $op = $op->next) {
+            $seen{$$op} = 1;
+            my $is_targmy   = $op->can('targ') && $op->targ && ($op->private & 16);
+            my $is_padstore = $op->name eq 'padsv_store' && $op->can('targ') && $op->targ;
+            next unless $is_targmy || $is_padstore;
+            my $pn = $padnames->ARRAYelt($op->targ);
+            return 1 if ref $pn eq 'B::PADNAME' && SoN::FieldInfo::is_field($pn);
+        }
+        return 0;
+    }
+
     # Does the arm (op chain from $start up to but excluding $stop) contain a
     # VOID METHOD CALL -- a `$c->inc`-style dispatch whose result is discarded?
     # Such a call carries a side effect (a field mutation inside the method), so
@@ -2449,20 +2474,28 @@ class SoN::FromOptree 0.01 {
         # side) so the working scalar/value pad-rebind path is untouched. Build
         # the If + Proj(true, index 0) / Proj(false, index 1) BEFORE the arm
         # walks and route each arm onto its Proj.
-        my $mem_branch =
-            _arm_has_element_store($op->other, $op->next)      # true arm
-            || _arm_has_element_store($op->next, $op->other);  # false arm
+        # An element store threads on MEMORY (needs a stack Phi in value context);
+        # a field store (`if(C){$n=$n+5}else{$n=$n+1}`, $n a class field) threads
+        # on CONTROL so its arm residual is a plain merged ternary. Both need the
+        # same real control flow (If/Proj/Region) rather than the pad-rebind merge
+        # (zhi 019f5368). Compute each flag once; $mem_branch drives the shared
+        # control-flow path and $elem_branch alone gates the value-context GAP.
+        my $elem_branch = _arm_has_element_store($op->other, $op->next)   # true arm
+                       || _arm_has_element_store($op->next, $op->other);  # false arm
+        my $mem_branch  = $elem_branch
+                       || _arm_has_field_store($cv, $op->other, $op->next)
+                       || _arm_has_field_store($cv, $op->next, $op->other);
         if ($mem_branch) {
-            # This path lowers only the VOID if/else statement form (the store
-            # is a discarded side effect). A value-context ternary whose arms
-            # store an element (`my $x = $c ? ($a[0]=7) : ($a[0]=8)`) would fall
-            # through here and drop the ternary value without pushing it. The
-            # scalar-value merge below cannot run once this block fires, so
-            # refuse loudly rather than lean on a downstream backend GAP (the
-            # same discipline as the list-context GAP above).
+            # A value-context ternary whose arms store an ELEMENT
+            # (`my $x = $c ? ($a[0]=7) : ($a[0]=8)`) would need the pushed
+            # element-store value merged into a stack Phi -- not yet lowered, so
+            # refuse loudly rather than lean on a downstream backend GAP. A
+            # value-context FIELD store threads on control, so its arm residual is
+            # a plain merged ternary (handled below), same as the void form.
+            my $is_void = ($op->flags & 3) == 1;   # OPf_WANT == OPf_WANT_VOID
             die "GAP: value-context ternary with a branch-guarded element"
               . " store not yet lowered\n"
-                if ($op->flags & 3) != 1;   # OPf_WANT != OPf_WANT_VOID
+                if !$is_void && $elem_branch;
             my $if_node = $factory->make_cfg('If',
                 inputs => [$sim->control, $cond]);
             my $true_proj  = $factory->make_cfg('Proj',
@@ -2472,10 +2505,15 @@ class SoN::FromOptree 0.01 {
             # op->next = false arm, op->other = true arm.
             my (undef, undef, $false_sim) = $walk_arm->($op->next,  $false_proj);
             my (undef, $true_end, $true_sim) = $walk_arm->($op->other, $true_proj);
-            # The element-store sassign PUSHES its stored value (perl assignment
-            # returns its value); in void context that leftover must be dropped
-            # to base depth so merge() does not build a spurious ill-typed stack
-            # Phi over a dead value. (This bug was found in 2b-1 review.)
+            # An arm's assignment PUSHES its stored value (perl assignment returns
+            # its value). In void context that leftover is dropped to base depth so
+            # merge() does not build a spurious ill-typed stack Phi over a dead
+            # value (bug found in 2b-1 review). In value context the residual TOP of
+            # stack IS the ternary value: grab each arm's top first, then drain any
+            # lower leftovers, and push a merged ternary after the control/memory
+            # merge below.
+            my $true_val  = $true_sim->stack_depth  > $base_depth ? $true_sim->pop_node  : undef;
+            my $false_val = $false_sim->stack_depth > $base_depth ? $false_sim->pop_node : undef;
             $false_sim->pop_node while $false_sim->stack_depth > $base_depth;
             $true_sim->pop_node  while $true_sim->stack_depth  > $base_depth;
             # merge() builds the Region over [true_control, false_control], scope
@@ -2488,7 +2526,11 @@ class SoN::FromOptree 0.01 {
             $sim->set_memory($true_sim->memory);
             my $merged_scope = $true_sim->scope_bindings;
             $sim->define($_, $merged_scope->{$_}) for keys %$merged_scope;
-            # An if/else with an element store is a void statement (no value).
+            unless ($is_void) {
+                $true_val  //= _undef_constant($factory);
+                $false_val //= _undef_constant($factory);
+                $sim->push_node(_make_ternary($factory, $cond, $true_val, $false_val));
+            }
             return $true_end // $op->next;
         }
 
