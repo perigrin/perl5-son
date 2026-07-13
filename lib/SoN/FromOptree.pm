@@ -2497,13 +2497,26 @@ class SoN::FromOptree 0.01 {
             # A value-context ternary whose arms store an ELEMENT
             # (`my $x = $c ? ($a[0]=7) : ($a[0]=8)`) would need the pushed
             # element-store value merged into a stack Phi -- not yet lowered, so
-            # refuse loudly rather than lean on a downstream backend GAP. A
-            # value-context FIELD store threads on control, so its arm residual is
-            # a plain merged ternary (handled below), same as the void form.
-            my $is_void = ($op->flags & 3) == 1;   # OPf_WANT == OPf_WANT_VOID
+            # refuse loudly rather than lean on a downstream backend GAP.
+            #
+            # A field store threads on control, so the void/discarded form (the
+            # method-body if/else `bump`, OPf_WANT unset = 0) merges to an Undef
+            # residual below and lowers fine. But when the ternary's VALUE is
+            # explicitly CONSUMED (OPf_WANT scalar=2 or list=3, e.g.
+            # `my $x = $c ? ($n = 5) : ($n = 8)`), the residual IS observed and
+            # must be the assigned value -- yet the field-read arms are unstamped
+            # here, so the merged ternary would silently collapse to Undef (a
+            # miscompile: $x would read undef, not 5). GAP loudly instead (zhi
+            # 019f5368 review). The discarded form (WANT=0) is unaffected.
+            my $want    = $op->flags & 3;   # OPf_WANT: 0=void/context 1=void 2=scalar 3=list
+            my $is_void = $want == 1 || $want == 0;
             die "GAP: value-context ternary with a branch-guarded element"
               . " store not yet lowered\n"
                 if !$is_void && $elem_branch;
+            die "GAP: a consumed value-context ternary whose arms store a class"
+              . " field is not yet lowered (the arm residual is unstamped, so"
+              . " the merged value would silently be Undef)\n"
+                if !$is_void;   # $elem_branch already died above; here it's a field store
             my $if_node = $factory->make_cfg('If',
                 inputs => [$sim->control, $cond]);
             my $true_proj  = $factory->make_cfg('Proj',
