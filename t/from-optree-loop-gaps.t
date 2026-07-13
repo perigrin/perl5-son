@@ -63,6 +63,30 @@ subtest 'nested and/or inside a loop body refuses loudly (zhi 019f26a5)' => sub 
         qr/GAP: nested and.or inside a loop body/, 'compound && condition dies with a GAP');
 };
 
+subtest 'postfix if/unless modifier inside a FOREACH body refuses loudly (zhi 019f5a27)' => sub {
+    # A foreach has NO and/or loop condition (the range iterator drives it), so
+    # the FIRST and/or the body walk sees is a postfix MODIFIER guard, not the
+    # condition. _walk_loop_body mistook it for the loop condition, consumed it,
+    # and never emitted the guard's If -- the guarded statement fired every
+    # iteration (silent miscompile: `$s = $s + $i unless $i == 2` over 1..3 gave
+    # 106, oracle 104). GAP loudly until the nested guard is lowered in a loop.
+    like(translate_dies(
+        'sub { my $s = 100; for my $i (1..3) { $s = $s + $i unless $i == 2; } $s }'),
+        qr/GAP: nested and.or \(postfix modifier\) inside a foreach body/i,
+        'unless-modifier in a foreach body dies with a GAP');
+    like(translate_dies(
+        'sub { my $s = 100; for my $i (1..3) { $s = $s + $i if $i != 2; } $s }'),
+        qr/GAP: nested and.or \(postfix modifier\) inside a foreach body/i,
+        'if-modifier in a foreach body dies with a GAP');
+};
+
+subtest 'a plain FOREACH body with no modifier still translates (the GAP does not over-fire)' => sub {
+    # The foreach modifier GAP must not sweep up a plain foreach body.
+    my $err = translate_dies(
+        'sub { my $s = 0; for my $i (1..3) { $s = $s + $i } $s }');
+    is($err, undef, 'a plain foreach with no body modifier translates cleanly');
+};
+
 subtest 'a plain loop body still translates (the GAP does not over-fire)' => sub {
     # The nested-and/or GAP must not sweep up a legitimate single-condition loop
     # with no body logical -- that is the working memory-SSA loop path.

@@ -2103,6 +2103,18 @@ class SoN::FromOptree 0.01 {
             $sim->set_memory($mem_phi);
         }
 
+        # A foreach has no and/or loop condition (the range iterator drives it,
+        # and its own iteration `and` was consumed at $and_op above). So any
+        # top-level and/or in the body is a postfix MODIFIER guard (`STMT unless
+        # C`). _walk_loop_body's condition handler would treat that modifier as the
+        # loop condition, drop the guard's If, and fire the guarded statement every
+        # iteration (silent miscompile: `$s=$s+$i unless $i==2` over 1..3 gave 106
+        # not 104, zhi 019f5a27). Lowering a nested guard inside a loop body is a
+        # control-flow feature not yet built; GAP loudly before the real walk.
+        die "GAP: nested and/or (postfix modifier) inside a foreach body not yet"
+          . " lowered\n"
+            if _body_has_modifier_andor($body_start);
+
         # Phase 3: body under Proj(loop,0); exit on Proj(loop,1).
         my $body_proj = $factory->make_cfg('Proj', inputs => [$loop_node], index => 0);
         my $exit_proj = $factory->make_cfg('Proj', inputs => [$loop_node], index => 1);
@@ -2270,6 +2282,23 @@ class SoN::FromOptree 0.01 {
         for (my $op = $b_start; $$op && !$b_seen{$$op}; $op = $op->next) {
             return $$op if $a_seen{$$op};
             $b_seen{$$op} = 1;
+        }
+        return 0;
+    }
+
+    # Does a foreach body (op chain from $body_start to its loop terminator)
+    # contain a top-level `and`/`or` -- a postfix modifier guard? A foreach has no
+    # and/or loop condition, so an `and`/`or` here is `STMT if/unless C`, which the
+    # loop-body walker cannot lower yet (zhi 019f5a27). Pure lexical scan; stop at
+    # the body's unstack/leaveloop (the iteration/loop boundary) so a following
+    # loop's ops are not scanned.
+    sub _body_has_modifier_andor ($body_start) {
+        my %seen;
+        for (my $op = $body_start; $$op && !$seen{$$op}; $op = $op->next) {
+            $seen{$$op} = 1;
+            my $name = $op->name;
+            last if $name eq 'unstack' || $name eq 'leaveloop';
+            return 1 if $name eq 'and' || $name eq 'or';
         }
         return 0;
     }
