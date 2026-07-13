@@ -493,6 +493,32 @@ class SoN::FromOptree 0.01 {
                 next;
             }
 
+            # postfix-while (`EXPR while COND`) compiles to enter/leave (NOT
+            # enterloop) with a back-edge: the and/or's body arm ends in an
+            # `unstack` that jumps back to the condition head (enter->next). Detect
+            # it HERE, at `enter`, and translate the whole loop via the two-phase
+            # scout BEFORE the main walk builds any real condition/body node --
+            # otherwise the pre-walk commits pre-loop-constant orphans that
+            # _translate_while_loop's Phi-based re-walk leaves dead in the graph
+            # (zhi 019f29ed). The condition head is enter->next; skip to `leave`.
+            if ($name eq 'enter') {
+                my $cond_head = $op->next;
+                if (_is_postfix_while($op)) {
+                    _translate_while_loop($cv, $cond_head, $sim, $factory,
+                        $opmap, \%visited);
+                    # Advance past the loop body to `leave`, then continue.
+                    my %skip;
+                    while ($$op && $op->name ne 'leave' && !$skip{$$op}++) {
+                        $op = $op->next;
+                    }
+                    $op = $op->next if $$op;   # step past leave
+                    next;
+                }
+                # Not a postfix-while: `enter` is a no-op scope marker, skip it.
+                $op = $op->next;
+                next;
+            }
+
             # foreach loop: only the RANGE form is lowered -- enteriter with
             # OPf_STACKED carries the two range bounds on the stack (a
             # general list is unmarked and has no counted-loop desugaring
@@ -1701,6 +1727,38 @@ class SoN::FromOptree 0.01 {
         }
 
         return ($op, 'unhandled');
+    }
+
+    # _is_postfix_while($enter_op): true iff the enter/leave scope is a postfix
+    # `EXPR while COND` -- i.e. the statement's and/or has a body arm (->other)
+    # that ends in an `unstack` whose ->next jumps back to the condition head
+    # (enter->next). A plain `enter` scope has no such back-edge. Detecting this
+    # at `enter` lets the main walk delegate to _translate_while_loop's two-phase
+    # scout BEFORE building any real node, so no dead pre-loop-constant
+    # pre-evaluation orphans are committed (zhi 019f29ed).
+    sub _is_postfix_while ($enter_op) {
+        my $cond_head = $enter_op->next;
+        return 0 unless $$cond_head;
+        my $op = $cond_head;
+        my %seen;
+        while ($$op && !$seen{$$op}++) {
+            my $name = $op->name;
+            last if $name eq 'leave' || $name eq 'nextstate';
+            if ($name eq 'and' || $name eq 'or') {
+                my $arm = $op->other;
+                my %aseen;
+                while ($$arm && !$aseen{$$arm}++) {
+                    if ($arm->name eq 'unstack') {
+                        my $target = $arm->next;
+                        return ($$target && $$target == $$cond_head) ? 1 : 0;
+                    }
+                    $arm = $arm->next;
+                }
+                return 0;
+            }
+            $op = $op->next;
+        }
+        return 0;
     }
 
     # Walk a loop body (condition + body), handling the internal and/or

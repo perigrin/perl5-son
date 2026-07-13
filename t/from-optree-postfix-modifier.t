@@ -121,4 +121,24 @@ subtest 'postfix while lowers as a real loop (D2-identical shape)' => sub {
     is($ret->inputs->[1]->id, $s_phi->id, 'Return value is the $s Phi');
 };
 
+subtest 'a postfix-while ships NO dead pre-evaluation orphans (zhi 019f29ed)' => sub {
+    # The main-walk condition pass and arm walk build real nodes against the
+    # pre-loop constants BEFORE back-edge detection re-walks against the Phis;
+    # those orphans (a NumGt/Add/Subtract consuming a constant, not a Phi) used
+    # to ship into the serialized graph. A dead orphan is an unconsumed data node
+    # (cons == 0) that is not a control terminal (Return/Proj) and not a loop
+    # condition (loop_control). The loop's REAL condition is unconsumed too but
+    # carries loop_control, so it is not an orphan.
+    my $g = graph_of(
+        'sub { my $n = 3; my $t = 0; $t = $t + $n, $n = $n - 1 while $n > 0; $t }');
+    my %terminal = (Return => 1, Proj => 1, Start => 1, Loop => 1, Region => 1);
+    my @orphans = grep {
+        !$terminal{ $_->operation }
+            && !defined $_->loop_control
+            && $_->consumers->@* == 0
+    } $g->nodes->@*;
+    is(scalar @orphans, 0, 'no dead pre-evaluation orphan nodes')
+        or diag('orphans: ' . join(', ', map { $_->operation } @orphans));
+};
+
 done_testing();
