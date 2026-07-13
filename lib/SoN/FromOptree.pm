@@ -477,6 +477,19 @@ class SoN::FromOptree 0.01 {
                 next;
             }
 
+            # A runtime range (range/flip/flop) PRODUCES a list -- it is not a
+            # control branch. A constant range (1..4) constant-folds to a const[AV]
+            # and never reaches here; only a NON-constant bound (1..$n) emits these
+            # ops. They have no handler, so the generic branch-skip below dropped
+            # the range's list value and the aassign saw a 1-element stack (`my
+            # @q=(1..$n); scalar @q` gave 1, oracle 4 -- a silent miscompile, zhi
+            # 019f5b4b). Lowering a runtime range (a counted N-element expansion) is
+            # a feature not yet built; GAP loudly rather than skip.
+            if ($name eq 'range' || $name eq 'flip' || $name eq 'flop') {
+                die "GAP: a runtime range with a non-constant bound (1..\$n) is not"
+                  . " yet lowered\n";
+            }
+
             # Other branch ops (iter, poptry, catch, leavetrycatch) - skip
             if ($opmap->is_branch($name) || $name eq 'poptry' || $name eq 'leavetrycatch') {
                 $op = $op->next;
