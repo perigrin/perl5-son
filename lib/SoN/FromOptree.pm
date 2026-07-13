@@ -1559,14 +1559,22 @@ class SoN::FromOptree 0.01 {
                 # target (fieldix) survives into the graph — the loader types the
                 # field from the stored value's repr. Mirrors the corpus IR spec.
                 my $lv = _make_pad_or_field($cv, $op->targ, $factory);
-                if ($lv->isa('SoN::IR::Node::FieldAccess')) {
+                my $is_field = $lv->isa('SoN::IR::Node::FieldAccess');
+                if ($is_field) {
                     my $store = $factory->make('Assign',
                         inputs         => [$sim->control, $lv, $node],
                         is_stmt_effect => true);
                     $sim->set_control($store);
                 }
 
-                $sim->define($op->targ, $node);
+                # A pad self-assign rebinds the slot in SSA scope so a later read
+                # returns the new value. A FIELD, by contrast, is stored to the
+                # object slot by the Assign above and re-read from that slot (like
+                # element memory) -- it is NOT a pad-SSA binding. Defining it in
+                # scope makes merge() build a dead value-Phi over the branch arms
+                # (Phi#9) that reaches the backend with no repr (zhi 019f5368); the
+                # field store already threads on control, so skip the scope rebind.
+                $sim->define($op->targ, $node) unless $is_field;
                 $sim->push_node($node);
             }
 
