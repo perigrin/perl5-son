@@ -1020,6 +1020,15 @@ class SoN::FromOptree 0.01 {
                     $sv = $padl->ARRAYelt(1)->ARRAYelt($targ);
                 }
             }
+            # A folded constant AGGREGATE (`(1..4)` constant-folds to a
+            # const[AV ARRAY]; a constant hash list similarly) is not a scalar
+            # Constant. _extract_const would read only its first element and
+            # silently build a 1-element ArrayRef (a miscompile: `my @q=(1..4);
+            # scalar @q` -> 1). Refuse loudly until folded-list expansion exists.
+            if ($$sv && ($sv->isa('B::AV') || $sv->isa('B::HV'))) {
+                die "GAP: constant aggregate literal (a folded range or list, "
+                  . "e.g. (1..4)) not yet lowered\n";
+            }
             my ($value, $stamp, $const_type) = _extract_const($sv);
             my $node = $factory->make('Constant',
                 value => $value, stamp => $stamp, const_type => $const_type);
@@ -1778,10 +1787,20 @@ class SoN::FromOptree 0.01 {
     }
 
     # A loop-header condition must be an icmp for the backend to recover it
-    # structurally (control_in on the Loop). These are the comparison ops.
-    my %COMPARISON_OP = map { $_ => 1 } qw(NumEq NumLt NumGt NumLe NumGe NumNe);
+    # structurally (control_in on the Loop). These are the comparison ops; the
+    # Boolean-producing ops (Defined/Not/etc.) already yield an i1 and must NOT be
+    # re-wrapped in NumNe(x,0) -- that would compare an i1 as an i64 (a type
+    # mismatch the backend rejects). A node with a Boolean stamp is already a
+    # truthiness value.
+    my %COMPARISON_OP = map { $_ => 1 }
+        qw(NumEq NumLt NumGt NumLe NumGe NumNe
+           StrEq StrLt StrGt StrLe StrGe StrNe
+           Defined Not IsaOp Match NotMatch);
     sub _is_comparison ($node) {
-        return $COMPARISON_OP{ $node->operation } ? 1 : 0;
+        return 1 if $COMPARISON_OP{ $node->operation };
+        my $stamp = $node->stamp;
+        return 1 if defined $stamp && $stamp->type eq 'Boolean';
+        return 0;
     }
 
     # Synthesize an explicit truthiness test NumNe($value, 0) for a bare-scalar
@@ -2203,11 +2222,30 @@ class SoN::FromOptree 0.01 {
             $seen{$$op} = 1;
             my $name = $op->name;
             last if $name eq 'unstack' || $name eq 'leaveloop';
+            # shift/pop MUTATE their array (a memory effect), so a loop whose
+            # condition or body drains an array carries memory through the header.
+            return 1 if $name eq 'shift' || $name eq 'pop';
             if ($name eq 'and' || $name eq 'or') {
+                return 1 if _cond_drains_array($start, $$op);
                 return _body_stores_memory($op->other);
             }
             next unless $name eq 'aelem' || $name eq 'helem';
             return 1 if $op->flags & 0x20;   # OPf_MOD -- an lvalue element target
+        }
+        return 0;
+    }
+
+    # Does the CONDITION segment (from $start up to the closing and/or at
+    # $stop_addr) contain a shift/pop array drain? The condition ops precede the
+    # and/or; _body_stores_memory's and/or branch recurses into the BODY
+    # (->other), so a drain in the condition itself (`while (shift @q)`) is only
+    # seen by scanning the leading segment here.
+    sub _cond_drains_array ($start, $stop_addr) {
+        my %seen;
+        for (my $op = $start; $$op && $$op != $stop_addr && !$seen{$$op}; $op = $op->next) {
+            $seen{$$op} = 1;
+            my $name = $op->name;
+            return 1 if $name eq 'shift' || $name eq 'pop';
         }
         return 0;
     }
