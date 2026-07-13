@@ -1507,33 +1507,73 @@ class SoN::FromOptree 0.01 {
             return ($op->next, 'handled');
         }
 
-        # Handle multiconcat for the `.=` const-append case (corpus S4). The op
-        # is `$s .= "lit"`: a multiconcat with OPpMULTICONCAT_APPEND (0x40) and
-        # nargs == 0 (all parts constant). aux_list is [nargs, const_str, len];
-        # the result is Concat($s, const_str) stored back to the targ slot.
-        # Dynamic parts (nargs > 0, e.g. `$s .= $t`) are not yet modeled.
-        if ($name eq 'multiconcat'
-            && ($op->private & 0x40)            # OPpMULTICONCAT_APPEND
-            && $op->can('aux_list')) {
-            my @aux   = $op->aux_list($cv);
-            my $nargs = $aux[0];
-            if (defined $nargs && $nargs == 0 && @aux >= 2) {
-                my $lit  = ref $aux[1] ? eval { $aux[1]->PV } : $aux[1];
-                my $targ = $op->targ;
-                my $cur  = $sim->lookup($targ);
-                if (defined $cur && defined $lit) {
-                    my $rhs = $factory->make('Constant',
-                        value => $lit, const_type => 'string',
-                        stamp => SoN::IR::Stamp->new(type => 'Str'));
-                    my $cat = $factory->make('Concat',
-                        inputs => [$cur, $rhs],
-                        stamp  => SoN::IR::Stamp->new(type => 'Str'));
-                    $sim->define($targ, $cat);
-                    $sim->push_node($cat);
-                    return ($op->next, 'handled');
-                }
+        # Handle multiconcat: `.=` append and string interpolation `qq{$a$b}`.
+        # multiconcat is a UNOP_AUX; aux_list is [nargs, plain_pv, seglen_0 ..
+        # seglen_nargs]. plain_pv is all constant text segments concatenated flat;
+        # the nargs+1 seglens slice it in order (a seglen of -1 is an empty
+        # segment). The nargs dynamic operands were pushed by the preceding padsv
+        # ops (arg0 deepest, argN on top). The value is the left-folded chain
+        #   seg[0] . arg[0] . seg[1] . arg[1] . ... . seg[nargs]
+        # of binary Concat nodes (empty segments skipped). APPEND (OPpMULTICONCAT_
+        # APPEND, 0x40) folds onto the current targ value ($s .= ...); otherwise
+        # the fold starts at seg[0] and, with OPpLVAL_INTRO (0x80, `my $c = ...`),
+        # a VarDecl wraps the new pad slot -- mirroring padsv_store's LVINTRO path.
+        if ($name eq 'multiconcat' && $op->can('aux_list')) {
+            my @aux    = $op->aux_list($cv);
+            my $nargs  = $aux[0] // 0;
+            my $plain  = ref $aux[1] ? (eval { $aux[1]->PV } // '') : ($aux[1] // '');
+            my @seglen = @aux[2 .. 2 + $nargs];   # nargs+1 segment lengths
+
+            # Slice plain_pv into segments; a seglen of -1 is an empty segment.
+            my ($pos, @seg) = (0);
+            for my $len (@seglen) {
+                if (!defined $len || $len < 0) { push @seg, undef }
+                else { push @seg, substr($plain, $pos, $len); $pos += $len }
             }
-            # Fall through: dynamic / multi-part multiconcat is not yet handled.
+
+            # Pop the dynamic operands: argN is on top, arg0 deepest.
+            my @args;
+            unshift @args, $sim->pop_node for 1 .. $nargs;
+
+            my $mkstr = sub ($s) {
+                $factory->make('Constant',
+                    value => $s, const_type => 'string',
+                    stamp => SoN::IR::Stamp->new(type => 'Str'));
+            };
+            my $concat = sub ($l, $r) {
+                $factory->make('Concat',
+                    inputs => [$l, $r],
+                    stamp  => SoN::IR::Stamp->new(type => 'Str'));
+            };
+
+            # Seed the accumulator with seg[0]: APPEND ($s .= ...) folds onto the
+            # current $s value, so seg[0] (e.g. the "bar" of `$s .= "bar"`) appends
+            # to $s; a fresh concat starts at seg[0] itself. Then interleave each
+            # arg[i] with the segment that follows it (seg[i+1]).
+            my $acc;
+            if ($op->private & 0x40) {
+                $acc = $sim->lookup($op->targ);
+                $acc = $concat->($acc, $mkstr->($seg[0])) if defined $seg[0];
+            }
+            elsif (defined $seg[0]) { $acc = $mkstr->($seg[0]) }
+
+            for my $i (0 .. $nargs - 1) {
+                $acc = defined $acc ? $concat->($acc, $args[$i]) : $args[$i];
+                $acc = $concat->($acc, $mkstr->($seg[$i + 1])) if defined $seg[$i + 1];
+            }
+            $acc //= $mkstr->('');   # degenerate: no args and no non-empty segment
+
+            my $targ = $op->targ;
+            # OPpLVAL_INTRO (0x80): a new lexical (`my $c = qq{...}`). The main
+            # walker wraps the pad slot in a VarDecl so the declaration is
+            # reachable; the value stays the scope binding.
+            if ($mode eq 'main' && ($op->private & 0x80)) {
+                my $pad = _make_pad_or_field($cv, $targ, $factory);
+                $factory->make('VarDecl', inputs => [$pad, $acc], scope => 'my');
+            }
+            $sim->define($targ, $acc);
+            $sim->push_node($acc);
+            return ($op->next, 'handled');
         }
 
         # Handle ops with TARGMY (add[$i:1,6] vK/TARGMY) - the op writes its
