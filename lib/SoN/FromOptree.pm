@@ -2100,11 +2100,34 @@ class SoN::FromOptree 0.01 {
         my $ctx = { mode => 'loop' };
         my $exit_proj;
         my $condition_fired = 0;
+        # A do-block (`$x = do { STMT; ...; RESULT }`) opens an `enter`/`leave`
+        # sub-statement scope INSIDE the enclosing expression. Its intermediate
+        # statements (`my $t=$i;`) are void: padsv_store pushes the stored value,
+        # which perl discards at the do-block's inner statement boundary. The
+        # StackSim does not model that reset (nextstate is a SKIP), so the leaked
+        # value corrupts a later pop -- the accumulator's `$s = $s + ...` add read
+        # $i's leftover instead of $s (zhi 019f59b1). Track the stack depth at each
+        # `enter` and, at a `nextstate` inside the do-block, pop leftovers back to
+        # that depth -- preserving the OUTER operand ($s) pushed before the enter.
+        my @enter_depth;
         while ($$op) {
             # Stop if we've looped back (unstack goes back to condition)
             last if $loop_visited->{$$op}++;
 
             my $name = $op->name;
+
+            if ($name eq 'enter') {
+                push @enter_depth, $sim->stack_depth;
+            }
+            elsif ($name eq 'leave') {
+                pop @enter_depth;
+            }
+            elsif ($name eq 'nextstate' && @enter_depth) {
+                # A statement boundary inside a do-block: discard the just-completed
+                # sub-statement's leftover values, keeping the do-block entry depth.
+                my $base = $enter_depth[-1];
+                $sim->pop_node while $sim->stack_depth > $base;
+            }
 
             # unstack marks end of loop iteration - stop
             if ($name eq 'unstack') {
