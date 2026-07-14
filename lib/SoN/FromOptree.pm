@@ -1108,24 +1108,37 @@ class SoN::FromOptree 0.01 {
             return ($op->next, 'handled');
         }
 
-        # rv2av over a constant-folded array: `my @q = (1..4)` compiles to
-        # const[AV] -> rv2av -> aassign. The const handler expanded the folded AV
-        # into a single ArrayRef; here rv2av dereferences it in LIST context, so
-        # flatten it to its elements (like a normal `my @q=(1,2,3)` list) -- then
-        # the trailing aassign collects the N values and builds the array from
-        # them, not ArrayRef(ArrayRef(...)) (zhi 019f5942). Gated on the kid being
-        # a `const` op so a genuine `my @a = ([1,2,3])` (anonlist, NO rv2av) and a
-        # real array-ref deref (rv2av over padsv/a variable) are untouched.
+        # rv2av dereferences an array-ref in LIST context (OPf_WANT_LIST) as an
+        # assignment source, and must flatten to the referent's elements so the
+        # trailing aassign builds the array from N values -- not
+        # ArrayRef(ArrayRef(...)), which makes `scalar @b` return 1 (a silent
+        # miscompile). Two kid shapes reach here:
+        #   const[AV]: `my @q = (1..4)` -- the const handler expanded the folded
+        #     AV into an ArrayRef (zhi 019f5942).
+        #   padsv:     `my $r=[1,2,3]; my @b=@$r` -- the padsv resolved $r to its
+        #     bound ArrayRef (zhi 019f5e42).
+        # In both the popped node is an ArrayRef we flatten. A padsv bound to a
+        # RUNTIME ref (not a literal ArrayRef node -- e.g. `my ($r)=@_; @$r`)
+        # cannot be statically flattened; leaving the single ref as one element
+        # is a silent miscompile, so GAP loudly. A SCALAR-context rv2av (`scalar
+        # @$r`) is handled by the scalar-of-aggregate path above, so gate on
+        # OPf_WANT_LIST here. A genuine `my @a = ([1,2,3])` (anonlist, NO rv2av)
+        # is untouched.
         if ($name eq 'rv2av'
                 && $op->can('first') && ${$op->first}
-                && $op->first->name eq 'const'
+                && ($op->first->name eq 'const' || $op->first->name eq 'padsv')
+                && ($op->flags & 3) == 3          # OPf_WANT_LIST
                 && $sim->stack_depth > 0) {
             my $top = $sim->pop_node;
             if ($top->operation eq 'ArrayRef') {
                 $sim->push_node($_) for $top->inputs->@*;
             }
-            else {
+            elsif ($op->first->name eq 'const') {
                 $sim->push_node($top);   # not a const-range ArrayRef: leave as-is
+            }
+            else {
+                die "GAP: list-context deref of a runtime array-ref (\@\$r where "
+                  . "\$r is not a literal ArrayRef) not yet lowered\n";
             }
             return ($op->next, 'handled');
         }
@@ -1792,6 +1805,21 @@ class SoN::FromOptree 0.01 {
                 if ($node_type eq 'Call') {
                     $extra{dispatch_kind} = 'builtin';
                     $extra{name}          = $name;
+                }
+
+                # push/unshift GROW their array. shift/pop are memory-SSA modeled
+                # below (the Call becomes the new memory version, so a later
+                # whole-array read observes the mutation), but push/unshift are
+                # not: the generic Call built here does NOT thread onto @a's
+                # memory version, so a later `scalar @a` reads the PRE-push
+                # binding and returns the old length -- a silent miscompile
+                # (`my @b=@a; push @b,3; scalar @b` -> 2, not 3). GAP loudly per
+                # GAP-not-miscompile until the growing mutation is memory-modeled
+                # like shift/pop. zhi 019f5e42.
+                if ($node_type eq 'Call'
+                        && ($name eq 'push' || $name eq 'unshift')) {
+                    die "GAP: $name (array-growing mutation) not yet lowered -- "
+                      . "the new length is not observed by a later read.\n";
                 }
 
                 # shift/pop MUTATE their array (remove an element) and yield the
