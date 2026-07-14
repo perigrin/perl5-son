@@ -1140,6 +1140,29 @@ class SoN::FromOptree 0.01 {
         if ($name eq 'padav' || $name eq 'padhv') {
             my $targ = $op->targ;
             my $existing = $sim->lookup($targ);
+            # A LIST-context read of an existing array as an assignment SOURCE
+            # (`my @b = @a`, `my @b = (@a, 4)`) FLATTENS its elements onto the
+            # stack, so the trailing aassign collects the N values and builds @b
+            # from them -- NOT ArrayRef(ArrayRef(...)), which made `scalar @b`
+            # return 1 (a silent miscompile, zhi 019f5deb). Same list-flatten as
+            # the rv2av-over-const-AV path above, for a bare array variable.
+            #
+            # The flag combination distinguishes a flatten SOURCE from an op that
+            # wants the AGGREGATE itself. A source has OPf_WANT_LIST (3), no
+            # OPf_MOD/OPf_REF (0x20/0x10 -- set when the parent op modifies or
+            # takes a reference to the array: `shift @q`/`pop @q`/`push @q`), and
+            # is not an LVINTRO target (0x80). A SCALAR read (`scalar @a`,
+            # `my $n = @a`) is OPf_WANT_SCALAR (2) and keeps the aggregate for its
+            # Length; a shift/pop operand keeps the ArrayRef for the builtin.
+            my $want        = $op->flags & 3;         # OPf_WANT: 3=list 2=scalar
+            my $ref_or_mod  = $op->flags & 0x30;      # OPf_REF | OPf_MOD
+            my $is_lvintro  = $op->private & 0x80;    # OPpLVAL_INTRO (target)
+            if ($name eq 'padav' && $existing && $want == 3
+                    && !$ref_or_mod && !$is_lvintro
+                    && $existing->operation eq 'ArrayRef') {
+                $sim->push_node($_) for $existing->inputs->@*;
+                return ($op->next, 'handled');
+            }
             if ($existing) {
                 $sim->push_node($existing);
             } else {
