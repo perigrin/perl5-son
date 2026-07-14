@@ -1807,18 +1807,20 @@ class SoN::FromOptree 0.01 {
                     $extra{name}          = $name;
                 }
 
-                # push/unshift GROW their array. shift/pop are memory-SSA modeled
-                # below (the Call becomes the new memory version, so a later
-                # whole-array read observes the mutation), but push/unshift are
-                # not: the generic Call built here does NOT thread onto @a's
-                # memory version, so a later `scalar @a` reads the PRE-push
-                # binding and returns the old length -- a silent miscompile
-                # (`my @b=@a; push @b,3; scalar @b` -> 2, not 3). GAP loudly per
-                # GAP-not-miscompile until the growing mutation is memory-modeled
-                # like shift/pop. zhi 019f5e42.
+                # push/unshift/splice MUTATE their array's length. shift/pop are
+                # memory-SSA modeled below (the Call becomes the new memory
+                # version, so a later whole-array read observes the mutation),
+                # but these are not: the generic Call built here does NOT thread
+                # onto @a's memory version, so a later `scalar @a` reads the
+                # PRE-mutation binding and returns the old length -- a silent
+                # miscompile (`my @b=@a; push @b,3; scalar @b` -> 2 not 3;
+                # `splice(@a,1,1); scalar @a` -> 3 not 2). GAP loudly per
+                # GAP-not-miscompile until the length mutation is memory-modeled
+                # like shift/pop. zhi 019f5e42 (push/unshift), 019f5ed3 (splice).
                 if ($node_type eq 'Call'
-                        && ($name eq 'push' || $name eq 'unshift')) {
-                    die "GAP: $name (array-growing mutation) not yet lowered -- "
+                        && ($name eq 'push' || $name eq 'unshift'
+                            || $name eq 'splice')) {
+                    die "GAP: $name (array length mutation) not yet lowered -- "
                       . "the new length is not observed by a later read.\n";
                 }
 
