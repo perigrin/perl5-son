@@ -2048,7 +2048,12 @@ class SoN::FromOptree 0.01 {
     sub _body_writes_targ ($cv, $start_op, $sim, $opmap, $targ) {
         my $scout_factory = SoN::IR::NodeFactory->new();
         my $scout_sim     = SoN::FromOptree::StackSim->new(
-            control => $scout_factory->make_cfg('Start'));
+            control => $scout_factory->make_cfg('Start'),
+            # A throwaway MemStart so a body element read (`$a[$i]`) builds a
+            # Subscript with a defined memory input during scouting -- else the
+            # Node ADJUST dies "consumers on undef" and B::SoN masks it as a
+            # silent sub-drop.
+            memory  => $scout_factory->make('MemStart'));
         # Seed the current scope so body reads resolve, plus a placeholder for
         # the iterator slot so a write to it is detectable.
         for my $t (keys $sim->scope_bindings->%*) {
@@ -2066,7 +2071,10 @@ class SoN::FromOptree 0.01 {
     sub _scout_mutated_targs ($cv, $start_op, $sim, $opmap, $extra_targs = []) {
         my $scout_factory = SoN::IR::NodeFactory->new();
         my $scout_sim     = SoN::FromOptree::StackSim->new(
-            control => $scout_factory->make_cfg('Start'));
+            control => $scout_factory->make_cfg('Start'),
+            # A throwaway MemStart so a body element read builds a Subscript with
+            # a defined memory input during scouting (see _body_writes_targ).
+            memory  => $scout_factory->make('MemStart'));
         my %placeholder;
         for my $targ (keys $sim->scope_bindings->%*, $extra_targs->@*) {
             my $ph = $scout_factory->make_unique('Constant',

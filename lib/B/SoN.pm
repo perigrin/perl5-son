@@ -232,10 +232,22 @@ sub _walk_package {
         catch ($e) {
             # Skip subs that fail to translate (builtins, XS, compiler
             # internals, etc.) — not all optrees are representable in SoN yet.
-            # A deliberate GAP refusal is the translator speaking, though,
-            # not discovery noise: swallowing it turns a loud honest refusal
-            # into a sub silently missing from the JSON. Re-emit on stderr.
-            warn "B::SoN: skipped $full_name: $e" if $e =~ /^GAP:/;
+            # A deliberate GAP refusal ("GAP: ...") is the translator speaking:
+            # swallowing it turns a loud honest refusal into a sub silently
+            # missing from the JSON, so re-emit it. A NON-GAP exception is an
+            # INTERNAL producer bug (e.g. a Node built with an undef input, an
+            # undef-deref) -- swallowing THAT is worse: it masks a real defect as
+            # a silent sub-drop, indistinguishable from an intentional skip. Warn
+            # on it LOUDLY with a distinct prefix so it is not lost. Discovery
+            # noise (a builtin/XS optree with no chance of lowering) also lands
+            # here, so this is a warn, not a die.
+            if ($e =~ /^GAP:/) {
+                warn "B::SoN: skipped $full_name: $e";
+            }
+            else {
+                warn "B::SoN: INTERNAL ERROR translating $full_name (masked as "
+                   . "a silent skip -- fix or convert to a clean GAP): $e";
+            }
         }
     }
 
