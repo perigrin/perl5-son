@@ -1484,7 +1484,23 @@ class SoN::FromOptree 0.01 {
             my @sub_inputs = $is_lvalue
                 ? ($container, $index)
                 : ($container, $index, $sim->memory);
-            my $sub = $factory->make('Subscript', inputs => \@sub_inputs);
+            # An RVALUE array element read at a DYNAMIC index carries the
+            # container's element type (an ArrayRef of Ints reads an Int).
+            # Without it, a loop accumulator over an element (`$s += $a[$i]`)
+            # has an unstamped back-edge (Add($s_phi, Subscript)) that
+            # _patch_loop_phi refuses ("loop-carried value loses its stamp").
+            # Only stamp a DYNAMIC (non-Constant) index: a LITERAL constant index
+            # must stay unstamped so the loader's _static_miss analysis can prove
+            # an out-of-bounds read and re-type it as Slot (undef) -- stamping it
+            # Int here would suppress that and read an OOB element as the payload
+            # 0 (references R9 miscompile). A hash element or an unknown container
+            # yields no element stamp -- leave it unstamped then.
+            my $elem_stamp = ($name eq 'aelem' && !$is_lvalue
+                    && !$index->isa('SoN::IR::Node::Constant'))
+                ? _array_element_stamp($container) : undef;
+            my $sub = $factory->make('Subscript',
+                inputs => \@sub_inputs,
+                (defined $elem_stamp ? (stamp => $elem_stamp) : ()));
             $sim->push_node($sub);
             return ($op->next, 'handled');
         }
