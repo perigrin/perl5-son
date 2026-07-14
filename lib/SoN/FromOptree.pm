@@ -549,14 +549,26 @@ class SoN::FromOptree 0.01 {
                 die "GAP: foreach over a general list not yet lowered\n"
                     unless $op->flags & 64;   # OPf_STACKED
                 my $bounds = $sim->pop_to_mark;
-                die "GAP: foreach range with non-constant integer bounds not yet lowered\n"
-                    unless $bounds->@* == 2
+                # Two shapes reach an OPf_STACKED enteriter:
+                #   RANGE  `for my $i (LOW..HIGH)`: two integer-Constant bounds.
+                #   ARRAY  `for my $x (@a)`: a single aggregate (the array node)
+                #          -- for/foreach are aliases, same optree.
+                my $is_range = $bounds->@* == 2
                     && !(grep {
                             !$_->isa('SoN::IR::Node::Constant')
                             || ($_->const_type // '') ne 'integer'
                         } $bounds->@*);
-                _translate_foreach_range($cv, $op, $sim, $factory, $opmap,
-                    \%visited, $bounds->@*);
+                if ($is_range) {
+                    _translate_foreach_range($cv, $op, $sim, $factory, $opmap,
+                        \%visited, $bounds->@*);
+                }
+                elsif ($bounds->@* == 1 && _is_aggregate_node($bounds->[0])) {
+                    _translate_foreach_array($cv, $op, $sim, $factory, $opmap,
+                        \%visited, $bounds->[0]);
+                }
+                else {
+                    die "GAP: foreach range with non-constant integer bounds not yet lowered\n";
+                }
                 # Continue after the loop; the B::LOOP op's lastop is leaveloop.
                 $op = $op->can('lastop') ? $op->lastop : $op->next;
                 next;
@@ -1994,6 +2006,32 @@ class SoN::FromOptree 0.01 {
     # no real node is shared. $extra_targs introduces slots that do not exist
     # pre-loop (a foreach induction variable). Returns the sorted mutated
     # pre-existing slots.
+    # _body_writes_targ($cv, $start_op, $sim, $opmap, $targ) -> bool
+    #
+    # True if walking the loop body rebinds pad slot $targ (a write). Used to
+    # detect a foreach body that assigns its iterator variable (an aliasing
+    # write-back to the array). The scout seeds ONLY $targ with a placeholder and
+    # reports whether the body rebound it -- _scout_mutated_targs cannot answer
+    # this for the iterator because it excludes $extra_targs from its result and
+    # only seeds slots already in scope (the iterator is not in the outer scope).
+    sub _body_writes_targ ($cv, $start_op, $sim, $opmap, $targ) {
+        my $scout_factory = SoN::IR::NodeFactory->new();
+        my $scout_sim     = SoN::FromOptree::StackSim->new(
+            control => $scout_factory->make_cfg('Start'));
+        # Seed the current scope so body reads resolve, plus a placeholder for
+        # the iterator slot so a write to it is detectable.
+        for my $t (keys $sim->scope_bindings->%*) {
+            $scout_sim->define($t, $scout_factory->make_unique('Constant',
+                value => 'scout', const_type => 'string'));
+        }
+        my $ph = $scout_factory->make_unique('Constant',
+            value => 'scout-iter', const_type => 'string');
+        $scout_sim->define($targ, $ph);
+        _walk_loop_body($cv, $start_op, $scout_sim, $scout_factory, $opmap, {}, {});
+        my $after = $scout_sim->scope_bindings->{$targ};
+        return defined $after && $after != $ph;
+    }
+
     sub _scout_mutated_targs ($cv, $start_op, $sim, $opmap, $extra_targs = []) {
         my $scout_factory = SoN::IR::NodeFactory->new();
         my $scout_sim     = SoN::FromOptree::StackSim->new(
@@ -2294,6 +2332,120 @@ class SoN::FromOptree 0.01 {
 
         # Phase 4: back-edges. The induction step is synthesized (+1); the
         # carried slots patch exactly like the while loop.
+        my $one = $factory->make('Constant',
+            value => 1, const_type => 'integer',
+            stamp => SoN::IR::Stamp->new(type => 'Int'));
+        my $i_next = $factory->make('Add',
+            inputs => [$i_phi, $one],
+            stamp  => _result_stamp('Add', [$i_phi, $one]));
+        $i_phi->set_backedge($i_next);
+        my $post_scope = $sim->scope_bindings;
+        _patch_loop_phi($sim, $_, $phis{$_}, $post_scope->{$_}) for $mutated->@*;
+        if (defined $mem_phi) {
+            $mem_phi->set_backedge($sim->memory);
+            $sim->set_memory($mem_phi);
+        }
+
+        # Phase 5: post-loop control continues on the exit edge.
+        my $exit_region = $factory->make_cfg('Region', inputs => [$exit_proj]);
+        $sim->set_control($exit_region);
+        return;
+    }
+
+    # Translate an array foreach (`for my $x (@a)` -- enteriter with OPf_STACKED
+    # over a single aggregate) to a counted loop over the array's elements. The
+    # skeleton mirrors _translate_foreach_range (Loop/Phi/Proj/Region, the same
+    # while-loop shape the backend already lowers), but the induction is
+    # 0..len-1 and the iterator variable binds to Subscript(arr, i) each pass,
+    # not to the induction value itself. for/foreach are aliases (same optree),
+    # so both spellings reach here. zhi 019f5da9.
+    sub _translate_foreach_array ($cv, $enteriter, $sim, $factory, $opmap, $visited, $array) {
+        my $x_targ = $enteriter->targ;
+
+        # Locate the body (enteriter->next: unstack, iter, then the and whose
+        # other-branch is the body) -- identical structure to the range form.
+        my $it = $enteriter->next;
+        $it = $it->next while $$it && $it->name ne 'iter';
+        die "GAP: foreach without an iter op\n" unless $$it;
+        my $and_op = $it->next;
+        die "GAP: foreach without an and condition\n"
+            unless $$and_op && $and_op->name eq 'and';
+        my $body_start = $and_op->other;
+
+        # A nested postfix modifier (`STMT if C`) in the body is an unbuilt
+        # control-flow feature; the same GAP the range form refuses (zhi 019f5a27).
+        die "GAP: nested and/or (postfix modifier) inside a foreach body not yet"
+          . " lowered\n"
+            if _body_has_modifier_andor($body_start);
+
+        # ALIASING: Perl's `for my $x (@a)` ALIASES $x to each element, so a body
+        # write `$x = ...` MUTATES @a in place. This lowering binds $x to a
+        # READ-ONLY Subscript(arr, i) element copy, so a write to $x would NOT
+        # propagate back to @a -- a silent miscompile (`for my $x (@a){ $x=$x+1 }
+        # $a[0]` would read the un-incremented element). Detect an iterator write
+        # by scouting WITHOUT excluding $x_targ: if $x is in the mutated set, the
+        # body assigns the alias. GAP loudly until the write-back is modeled.
+        die "GAP: foreach body writes the iterator variable (aliasing write-back "
+          . "to the array) not yet lowered\n"
+            if _body_writes_targ($cv, $body_start, $sim, $opmap, $x_targ);
+
+        # The loop bound is the array's element count.
+        my $len = $factory->make('Length',
+            inputs => [$array],
+            stamp  => SoN::IR::Stamp->new(type => 'Int'));
+        my $zero = $factory->make('Constant',
+            value => 0, const_type => 'integer',
+            stamp => SoN::IR::Stamp->new(type => 'Int'));
+        my $elem_stamp = _array_element_stamp($array);
+
+        # Phase 1: scout the body. $x rides on enteriter (its own slot) and gets
+        # the element binding, not a carried-value Phi, so exclude it.
+        my $pre_scope = $sim->scope_bindings;
+        my $mutated = _scout_mutated_targs($cv, $body_start, $sim, $opmap, [$x_targ]);
+
+        # Phase 2: header -- induction Phi (i: 0..len-1) plus one Phi per mutated
+        # slot. The induction Phi is NOT bound to $x; $x is the element read below.
+        my $loop_node = $factory->make_cfg('Loop', inputs => [$sim->control]);
+        $sim->set_control($loop_node);
+        my $i_phi = _make_loop_phi($factory, $loop_node, $zero);
+        my %phis;
+        for my $targ ($mutated->@*) {
+            my $phi = _make_loop_phi($factory, $loop_node, $pre_scope->{$targ});
+            $phis{$targ} = $phi;
+            $sim->define($targ, $phi);
+        }
+
+        # Continuation: loop while i < len, authored as NumGt(len, i_phi) -- the
+        # same shape the backend recovers as "the comparison consuming a header
+        # Phi" (structural loop_control edge to the Loop).
+        my $range_cond = $factory->make('NumGt',
+            inputs => [$len, $i_phi],
+            stamp  => SoN::IR::Stamp->new(type => 'Boolean'));
+        $range_cond->set_loop_control($loop_node);
+
+        # A body element store advances memory; seed a header memory-Phi from the
+        # pre-loop memory (same as the range form).
+        my $mem_phi;
+        if (_body_stores_memory($body_start)) {
+            $mem_phi = $factory->make_unique('Phi',
+                inputs => [$sim->memory], region => $loop_node);
+            $sim->set_memory($mem_phi);
+        }
+
+        # Phase 3: body under Proj(loop,0); exit on Proj(loop,1). Bind $x to the
+        # element read Subscript(arr, i_phi, memory) BEFORE walking the body, so a
+        # body reference to $x reads element[i].
+        my $body_proj = $factory->make_cfg('Proj', inputs => [$loop_node], index => 0);
+        my $exit_proj = $factory->make_cfg('Proj', inputs => [$loop_node], index => 1);
+        $sim->set_control($body_proj);
+        my $elem = $factory->make('Subscript',
+            inputs => [$array, $i_phi, $sim->memory],
+            (defined $elem_stamp ? (stamp => $elem_stamp) : ()));
+        $sim->define($x_targ, $elem);
+        _walk_loop_body($cv, $body_start, $sim, $factory, $opmap, {}, $visited);
+
+        # Phase 4: back-edges. The induction step is +1; carried slots patch like
+        # the while loop.
         my $one = $factory->make('Constant',
             value => 1, const_type => 'integer',
             stamp => SoN::IR::Stamp->new(type => 'Int'));
