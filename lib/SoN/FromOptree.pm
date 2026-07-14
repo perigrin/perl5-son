@@ -595,7 +595,7 @@ class SoN::FromOptree 0.01 {
                 last;
             }
             if ($name eq 'leavesub' || $name eq 'leavesublv') {
-                push @exits, _exit_record($sim, $factory, 'leavesub');
+                push @exits, _exit_record($sim, $factory, 'leavesub', $op);
                 $main_terminated = 1;
                 last;
             }
@@ -717,13 +717,54 @@ class SoN::FromOptree 0.01 {
     # value being returned. 'return' pops to the mark (the return-list's last
     # value); 'leavesub'/'fallthrough' take the top of stack; an empty stack
     # is an undef return.
-    sub _exit_record ($sim, $factory, $kind) {
+    # A `return ($a, $b, ...)` / trailing `($a, $b, ...)` yields a LIST. In
+    # scalar/comma context the value is the last element; in list context the
+    # caller receives every element. The sub body is compiled once and is
+    # context-independent, so the producer cannot know the caller's runtime
+    # wantarray -- a >1-value return cannot be soundly collapsed to a single
+    # scalar Return, and keeping only the last value silently drops the rest for
+    # a list-context caller (`my @x = f()` would see 1 element, not N). The
+    # multi-value shape is an OP_LIST with a pushmark and >1 value child. Detect
+    # it structurally (NOT via stack depth, which cross-path branch residue
+    # inflates) so a single-value guarded return is not over-GAPped. zhi 019f5e41.
+    sub _leavesub_returns_list ($leave_op) {
+        return false unless $leave_op && ref($leave_op) && $$leave_op;
+        my $lineseq = $leave_op->first;
+        return false unless $lineseq && $$lineseq && $lineseq->name eq 'lineseq';
+        # The last kid of the lineseq is the sub's trailing (result) statement.
+        my ($last, $kid) = (undef, $lineseq->first);
+        while ($kid && $$kid) { $last = $kid; $kid = $kid->sibling; }
+        # An implicit trailing list is an OP_LIST; an explicit `return (LIST)`
+        # is an OP_RETURN wrapping the same pushmark+values (the return op is
+        # peephole-elided from the EXEC chain, so this leavesub branch handles
+        # both). Either way the >1-value shape is the same GAP.
+        return false
+            unless $last && ($last->name eq 'list' || $last->name eq 'return');
+        # Count value-producing children (skip the leading pushmark). >1 => list.
+        my $n = 0;
+        my $c = $last->first;
+        while ($c && $$c) {
+            $n++ if $c->name ne 'pushmark';
+            $c = $c->sibling;
+        }
+        return $n > 1 ? true : false;
+    }
+
+    sub _exit_record ($sim, $factory, $kind, $exit_op = undef) {
         my $value;
         if ($kind eq 'return') {
             my $args = $sim->pop_to_mark;
+            die "GAP: multi-value list return (return LIST) not yet lowered\n"
+                if $args->@* > 1;
             $value = $args->@* ? $args->[-1] : undef;
         }
         elsif ($sim->stack_depth > 0) {
+            # The peephole optimizer elides an explicit `return` when it is the
+            # trailing statement: `sub { (10,20,30) }` compiles to const pushes
+            # then leavesub (no return op, no runtime pushmark). Recover the
+            # multi-value shape from the leavesub's optree, not the stack.
+            die "GAP: multi-value list return (trailing list) not yet lowered\n"
+                if _leavesub_returns_list($exit_op);
             $value = $sim->pop_node;
         }
         $value //= $factory->make('Constant',
@@ -2748,7 +2789,7 @@ class SoN::FromOptree 0.01 {
             if ($exit_here) {
                 $visited->{$$op}++;
                 push @$exits, _exit_record($sim, $factory,
-                    $name eq 'return' ? 'return' : 'leavesub');
+                    $name eq 'return' ? 'return' : 'leavesub', $op);
                 return ($op, 'exited');
             }
             # $stop_at_exit (cond_expr / && / || value arms): stop BEFORE stepping
