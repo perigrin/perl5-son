@@ -26,6 +26,12 @@ class SoN::FromOptree::StackSim 0.01 {
         return pop @stack;
     }
 
+    # The top-of-stack node without removing it (undef if empty). Lets a handler
+    # inspect the operand shape before deciding to consume it.
+    method peek_node () {
+        return @stack ? $stack[-1] : undef;
+    }
+
     method pop_to_mark () {
         die "No mark on mark stack" unless @marks;
         my $mark = pop @marks;

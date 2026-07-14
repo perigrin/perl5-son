@@ -549,16 +549,27 @@ class SoN::FromOptree 0.01 {
                 die "GAP: foreach over a general list not yet lowered\n"
                     unless $op->flags & 64;   # OPf_STACKED
                 my $bounds = $sim->pop_to_mark;
-                # Two shapes reach an OPf_STACKED enteriter:
-                #   RANGE  `for my $i (LOW..HIGH)`: two integer-Constant bounds.
-                #   ARRAY  `for my $x (@a)`: a single aggregate (the array node)
-                #          -- for/foreach are aliases, same optree.
-                my $is_range = $bounds->@* == 2
-                    && !(grep {
-                            !$_->isa('SoN::IR::Node::Constant')
-                            || ($_->const_type // '') ne 'integer'
-                        } $bounds->@*);
-                if ($is_range) {
+                # Three shapes reach an OPf_STACKED enteriter:
+                #   CONST RANGE   `for my $i (2..5)`: two integer-Constant bounds.
+                #   RUNTIME RANGE `for my $i (0..$n)` / `(0..$#a)`: two scalar-Int
+                #                 bounds where at least one is a runtime value
+                #                 (PadAccess/Length) -- the #1 lib/ blocker.
+                #   ARRAY         `for my $x (@a)`: a single aggregate.
+                # for/foreach are aliases (same optree).
+                my $two_scalar_int = $bounds->@* == 2
+                    && !(grep { _is_aggregate_node($_) } $bounds->@*);
+                if ($two_scalar_int) {
+                    # A runtime LOW bound (`for my $i ($lo..$hi)`) is not yet
+                    # lowered: the induction Phi init would be a runtime value
+                    # whose stamp is not propagated through the back-edge (the
+                    # loop-carried-stamp fixpoint), and the range's flip/flop
+                    # materialization crashes the body walk. A constant low with a
+                    # runtime high (`0..$n`, `0..$#a`) IS handled. GAP cleanly
+                    # here rather than crashing downstream.
+                    die "GAP: foreach over a range with a runtime LOW bound "
+                      . "(for my \$i (\$lo..\$hi)) not yet lowered\n"
+                        unless $bounds->[0]->isa('SoN::IR::Node::Constant')
+                            && ($bounds->[0]->const_type // '') eq 'integer';
                     _translate_foreach_range($cv, $op, $sim, $factory, $opmap,
                         \%visited, $bounds->@*);
                 }
@@ -567,7 +578,7 @@ class SoN::FromOptree 0.01 {
                         \%visited, $bounds->[0]);
                 }
                 else {
-                    die "GAP: foreach range with non-constant integer bounds not yet lowered\n";
+                    die "GAP: foreach with unrecognized bounds shape not yet lowered\n";
                 }
                 # Continue after the loop; the B::LOOP op's lastop is leaveloop.
                 $op = $op->can('lastop') ? $op->lastop : $op->next;
@@ -1117,6 +1128,26 @@ class SoN::FromOptree 0.01 {
             else {
                 $sim->push_node($agg);
             }
+            return ($op->next, 'handled');
+        }
+
+        # av2arylen ($#array): the array's LAST INDEX, i.e. Length - 1 (NOT the
+        # length -- OpMap once mapped it to Length, a silent off-by-one: `$#a`
+        # for a 3-element array is 2, not 3; `for my $i (0..$#a)` then ran one
+        # extra iteration). The array was pushed by the preceding padav/rv2av.
+        # An empty array yields -1 (len 0 - 1), matching perl.
+        if ($name eq 'av2arylen' && $sim->stack_depth > 0
+                && _is_aggregate_node($sim->peek_node)) {
+            my $agg = $sim->pop_node;
+            my $len = $factory->make('Length',
+                inputs => [$agg],
+                stamp  => SoN::IR::Stamp->new(type => 'Int'));
+            my $one = $factory->make('Constant',
+                value => 1, const_type => 'integer',
+                stamp => SoN::IR::Stamp->new(type => 'Int'));
+            $sim->push_node($factory->make('Subtract',
+                inputs => [$len, $one],
+                stamp  => SoN::IR::Stamp->new(type => 'Int')));
             return ($op->next, 'handled');
         }
 
@@ -2286,16 +2317,33 @@ class SoN::FromOptree 0.01 {
         }
 
         # Continuation condition: loop while i <= high, authored as
-        # NumGt(high+1, i_phi) per the corpus D3 ir-block. The backend
-        # recovers it as the comparison consuming a header Phi; it needs no
-        # consumer here. high+1 at IV_MAX overflows to an NV and wraps in
-        # the emitted i64 (zero iterations, silently) -- refuse that edge.
-        die "GAP: foreach range bound at IV_MAX not yet lowered\n"
-            if $high->value >= 9223372036854775807;
-        my $bound = $factory->make('Constant',
-            value      => $high->value + 1,
-            const_type => 'integer',
-            stamp      => SoN::IR::Stamp->new(type => 'Int'));
+        # NumGt(high+1, i_phi) per the corpus D3 ir-block. The backend recovers
+        # it as the comparison consuming a header Phi; it needs no consumer here.
+        # A CONSTANT high folds high+1 at compile time (preserves the D3 golden
+        # shape); a RUNTIME high (`for my $i (0..$n)` / `(0..$#a)`) emits an
+        # Add(high, 1) so the bound is computed at run time. A const high+1 at
+        # IV_MAX overflows to an NV and wraps in the emitted i64 (zero iterations,
+        # silently) -- refuse that edge.
+        my $bound;
+        if ($high->isa('SoN::IR::Node::Constant')
+                && ($high->const_type // '') eq 'integer') {
+            die "GAP: foreach range bound at IV_MAX not yet lowered\n"
+                if $high->value >= 9223372036854775807;
+            $bound = $factory->make('Constant',
+                value      => $high->value + 1,
+                const_type => 'integer',
+                stamp      => SoN::IR::Stamp->new(type => 'Int'));
+        }
+        else {
+            # Runtime high bound: NumGt(Add(high, 1), i_phi). The +1 preserves the
+            # inclusive-range contract (loop while i <= high).
+            my $one = $factory->make('Constant',
+                value => 1, const_type => 'integer',
+                stamp => SoN::IR::Stamp->new(type => 'Int'));
+            $bound = $factory->make('Add',
+                inputs => [$high, $one],
+                stamp  => SoN::IR::Stamp->new(type => 'Int'));
+        }
         my $range_cond = $factory->make('NumGt',
             inputs => [$bound, $i_phi],
             stamp  => SoN::IR::Stamp->new(type => 'Boolean'));
