@@ -27,6 +27,13 @@ class Counter {
     method val { return $n }
 }
 
+# A method that dispatches on $self: the self-call names the ENCLOSING class
+# (from the CV stash), not an external invocant (zhi 019f5dec).
+class SelfCaller {
+    method flag { 1 }
+    method pick { $self->flag() ? 10 : 20 }
+}
+
 sub canonical_graph ($code) {
     SoN::OptSuppress::suppress_peep();
     my $cv = eval $code;
@@ -143,6 +150,25 @@ subtest 'single-statement Return still leads with control (B1 regression)' => su
     is($ret->inputs->[-1], $val, 'value is the trailing input');
     like($ret->inputs->[0]->operation, qr/^(Start|Region|Proj|If|Loop)$/,
         'control (a CFG node) leads inputs so the loader splits it to control_in');
+};
+
+subtest 'a $self-> method call stamps the enclosing class_name (zhi 019f5dec)' => sub {
+    my $g = SoN::FromOptree->translate(\&SelfCaller::pick);
+    my ($call) = grep { $_->operation eq 'Call' && ($_->name // '') eq 'flag' }
+                 $g->nodes->@*;
+    ok(defined $call, 'the $self->flag() self-call is a Call node');
+    is($call->dispatch_kind, 'method', 'dispatch_kind is method');
+    is($call->class_name, 'SelfCaller',
+        'class_name is the ENCLOSING class (from the CV stash), not undef');
+    # The receiver is the $self PadAccess, Object-stamped (so the backend gives
+    # it a repr) with no VarDecl input (so the backend lowers it to %self).
+    my ($recv) = grep {
+        $_->operation eq 'PadAccess' && ($_->can('varname') ? ($_->varname // '') : '') eq '$self'
+    } $g->nodes->@*;
+    ok(defined $recv, 'the receiver is a $self PadAccess');
+    is(($recv->stamp ? $recv->stamp->type : undef), 'Object',
+        'the $self receiver is Object-stamped');
+    ok(!defined $recv->inputs->[0], 'the $self receiver has no VarDecl input');
 };
 
 done_testing();

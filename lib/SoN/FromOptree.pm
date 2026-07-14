@@ -843,6 +843,26 @@ class SoN::FromOptree 0.01 {
             # arrives as a fresh PadAccess; resolve it to the variable's
             # bound value (e.g. the constructor Call) so the dispatch
             # names the right class.
+            # An invocant of `$self` inside a method: the class is statically the
+            # ENCLOSING class (the CV's stash), so a self-dispatch `$self->m()`
+            # names that class -- without which the backend GAPs ("Call(method)
+            # 'm' has no class_name"). Detect it from the ORIGINAL invocant pad's
+            # padname BEFORE resolving it to a bound value (a `$self` read resolves
+            # to nothing useful). This is the most common real-method dispatch
+            # (e.g. Chalk::Grammar::Symbol::to_string calls $self->is_terminal()),
+            # zhi 019f5dec.
+            my $self_class;
+            if ($invocant
+                && $invocant->isa('SoN::IR::Node::PadAccess')
+                && _padname($cv, $invocant->targ) eq '$self') {
+                $self_class = eval { $cv->GV->STASH->NAME };
+                # The self receiver is the object instance: stamp it Object so it
+                # carries a repr into the backend (which lowers a self PadAccess to
+                # the method's %self pointer). Without a repr the receiver PadAccess
+                # GAPs before the Call is even reached.
+                $invocant->set_stamp(SoN::IR::Stamp->new(type => 'Object'))
+                    if $invocant->can('set_stamp');
+            }
             if ($invocant
                 && $invocant->isa('SoN::IR::Node::PadAccess')) {
                 my $bound = $sim->lookup($invocant->targ);
@@ -852,8 +872,12 @@ class SoN::FromOptree 0.01 {
             # Class->new: the bareword constant invocant names the class.
             # $obj->meth: the invocant resolves to the constructor Call,
             # which carries the class_name -- propagate it.
+            # $self->meth: the enclosing class, captured above.
             my $class_name;
-            if ($invocant
+            if (defined $self_class) {
+                $class_name = $self_class;
+            }
+            elsif ($invocant
                 && $invocant->isa('SoN::IR::Node::Constant')
                 && ($invocant->const_type // '') eq 'string') {
                 $class_name = $invocant->value;
