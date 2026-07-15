@@ -2133,6 +2133,33 @@ class SoN::FromOptree 0.01 {
             (defined $init->stamp ? (stamp => $init->stamp) : ()));
     }
 
+    # _backedge_is_phi_recurrence($post, $phi) -> bool
+    #
+    # True when the back-edge is a numeric arithmetic op (Add/Subtract/Multiply/
+    # Divide/Modulo) that consumes $phi directly and whose OTHER inputs are each
+    # either stamped or a deferred element read (a Subscript over a non-literal
+    # aggregate, whose stamp the Chalk loader supplies). This is the
+    # accumulator recurrence `$s = $s <op> $elem`: the result type is $phi's own
+    # (numeric) type, so keeping $phi's init stamp is the fixpoint -- no widening.
+    # A back-edge that is NOT arithmetic over $phi, or whose unstamped input is
+    # not an element read, is a genuine unknown and still GAPs.
+    my %_ARITH_OP = map { $_ => 1 } qw(Add Subtract Multiply Divide Modulo);
+    sub _backedge_is_phi_recurrence ($post, $phi) {
+        return false unless blessed($post) && $_ARITH_OP{$post->operation};
+        my @ins = $post->inputs->@*;
+        my $reads_phi = grep { blessed($_) && $_->id == $phi->id } @ins;
+        return false unless $reads_phi;
+        for my $in (@ins) {
+            next unless blessed($in);
+            next if defined $in->stamp;                 # already typed
+            next if $in->id == $phi->id;                # the recurrence arm
+            # An unstamped input is acceptable ONLY if it is a deferred element
+            # read the loader will type.
+            return false unless $in->operation eq 'Subscript';
+        }
+        return true;
+    }
+
     # Wire a loop Phi's back-edge, re-point the slot at the Phi (the body
     # walk rebound it to the last in-loop value; post-loop reads must see
     # the Phi -- its value when the condition finally failed), and verify
@@ -2151,6 +2178,23 @@ class SoN::FromOptree 0.01 {
             $phi->set_stamp($join);
         }
         elsif (defined $phi->stamp) {
+            # The back-edge is unstamped only because ONE input's stamp is
+            # deferred to the Chalk loader (an element read Subscript over a
+            # runtime aggregate -- a FieldAccess/field-backed array, whose
+            # element type lives on the loader side). RE-DERIVE the back-edge
+            # stamp now against the Phi's (init) stamp, treating a deferred
+            # element read as the Phi's own type: for a numeric accumulator
+            # `$s = $s + $elem`, the result type is the Phi's type and the join
+            # is a no-op. If the back-edge is a genuine arithmetic recurrence
+            # over the Phi with one deferred input, this is a fixpoint no-op
+            # (join(init, init) == init). Any OTHER unstamped shape (not
+            # arithmetic over the Phi) still GAPs -- no guessing.
+            if (_backedge_is_phi_recurrence($post, $phi)) {
+                # The Phi keeps its init stamp; the deferred input is typed by
+                # the loader, and the backend's fixpoint (loop-Phi placement)
+                # sees a stamped Phi. Nothing to widen.
+                return;
+            }
             # The body was already stamped against this Phi's optimistic
             # init stamp; merely un-stamping the Phi here leaves those stale
             # stamps contaminating sibling Phi joins (a type-level
