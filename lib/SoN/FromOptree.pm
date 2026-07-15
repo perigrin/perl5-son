@@ -1748,6 +1748,44 @@ class SoN::FromOptree 0.01 {
             return ($op->next, 'handled');
         }
 
+        # Handle emptyavhv - the fused op modern perl emits for an empty `[]` or
+        # `{}` (`my $r = []`). Unlike a non-empty `[1,2,3]` (an anonlist with a
+        # pushmark and const kids), an empty aggregate has NO list op: perl fuses
+        # it to a single emptyavhv that writes an empty AV/HV straight into its
+        # TARGMY pad slot. The array/hash choice is the OPpEMPTYAVHV_IS_HV (0x20)
+        # private flag. It must build an empty ArrayRef/HashRef (0 inputs); the
+        # generic TARGMY path below would instead build a valueless Constant and
+        # die -- an internal error masked as a silent skip (the whole sub vanished
+        # from the output, zhi 019f5ed3).
+        if ($name eq 'emptyavhv') {
+            my $is_hash = $op->private & 0x20;   # OPpEMPTYAVHV_IS_HV
+            my $node = $factory->make($is_hash ? 'HashRef' : 'ArrayRef',
+                inputs => []);
+            my $targ = $op->targ;
+
+            # A field store (TARGMY into a class field slot) threads on control
+            # via an explicit Assign, exactly like the generic TARGMY path; a pad
+            # slot is an SSA rebind. LVINTRO in main mode wraps the pad in a
+            # VarDecl so the `my` declaration stays reachable.
+            my $lv       = _make_pad_or_field($cv, $targ, $factory);
+            my $is_field = $lv->isa('SoN::IR::Node::FieldAccess');
+            if ($is_field) {
+                my $store = $factory->make('Assign',
+                    inputs         => [$sim->control, $lv, $node],
+                    is_stmt_effect => true);
+                $sim->set_control($store);
+            }
+            else {
+                if ($mode eq 'main' && ($op->private & 0x80)) {  # OPpLVAL_INTRO
+                    $factory->make('VarDecl',
+                        inputs => [$lv, $node], scope => 'my');
+                }
+                $sim->define($targ, $node);
+            }
+            $sim->push_node($node);
+            return ($op->next, 'handled');
+        }
+
         # Handle ops with TARGMY (add[$i:1,6] vK/TARGMY) - the op writes its
         # result in-place to its targ slot. This is the canonical shape of a
         # self-assign (`$x = $x + 1`), a field write (`$n = $n + 1`), and other

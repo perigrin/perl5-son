@@ -197,7 +197,7 @@ class SoN::FromOptree::OpMap 0.01 {
         lslice         => [2, 'Slice',      1, 0],
         anonlist       => ['mark', 'ArrayRef', 1, 0],
         anonhash       => ['mark', 'HashRef',  1, 0],
-        emptyavhv      => [0, 'Constant',  1, 0],
+        emptyavhv      => [0, 'ArrayRef',  1, 0],  # fused empty []/{}; FromOptree picks Array/Hash via OPpEMPTYAVHV_IS_HV
         av2arylen      => [1, 'Length',     1, 0],  # $#array
         push           => ['mark', 'Call',  1, 0],
         pop            => [1, 'Call',       1, 0],
