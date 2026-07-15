@@ -375,19 +375,44 @@ sub _wire_field_defaults {
         my $dop = $defaults[$fix];
         next unless defined $dop;
 
-        my ( $value, $stamp, $const_type ) = _const_op_value( $cv, $dop );
-        next unless defined $stamp;
-
         my $start = $factory->make_cfg('Start');
-        my $const = $factory->make('Constant',
-            value => $value, stamp => $stamp, const_type => $const_type );
-        my $ret = $factory->make_cfg('Return', inputs => [ $start, $const ] );
+        my ($value_node, $field_type);
+
+        # An aggregate default (`field $items = [1,2,3]` / `{a=>1}`) is an
+        # anonlist/anonhash of const children: build an ArrayRef/HashRef of
+        # Constants, so the field types ArrayRef/HashRef and a read of it lowers
+        # (zhi 019f61ad). A scalar default is a single Constant.
+        if ( $dop->name eq 'anonlist' || $dop->name eq 'anonhash' ) {
+            my @elems;
+            my $k = $dop->first;
+            while ( $$k ) {
+                if ( $k->name eq 'const' ) {
+                    my ( $v, $st, $ct ) = _const_op_value( $cv, $k );
+                    push @elems, $factory->make('Constant',
+                        value => $v, stamp => $st, const_type => $ct )
+                        if defined $st;
+                }
+                $k = $k->sibling;
+            }
+            my $agg_op = $dop->name eq 'anonlist' ? 'ArrayRef' : 'HashRef';
+            $field_type = $agg_op;
+            $value_node = $factory->make( $agg_op, inputs => \@elems );
+        }
+        else {
+            my ( $value, $stamp, $const_type ) = _const_op_value( $cv, $dop );
+            next unless defined $stamp;
+            $field_type = $stamp->type;
+            $value_node = $factory->make('Constant',
+                value => $value, stamp => $stamp, const_type => $const_type );
+        }
+
+        my $ret = $factory->make_cfg('Return', inputs => [ $start, $value_node ] );
 
         my $key = "${pkg_name}::__DEFAULT_${fix}";
         $graphs->{$key} = SoN::IR::Graph->new( start => $start, returns => [$ret] );
         $f->{has_default} = JSON::PP::true;
         $f->{default_ref} = $key;
-        $f->{type}        = $stamp->type;
+        $f->{type}        = $field_type;
     }
     return;
 }
@@ -425,9 +450,13 @@ sub _initfield_default {
         my $last;
         my $k = $child->first;
         while ($$k) { $last = $k; $k = $k->sibling; }
-        return ( $last && $last->name eq 'const' ) ? $last : undef;
+        return ( $last && ($last->name eq 'const' || $last->name eq 'anonlist'
+                        || $last->name eq 'anonhash') ) ? $last : undef;
     }
-    return ( $child->name eq 'const' ) ? $child : undef;
+    # A scalar default is a `const`; an aggregate default (`field $x = [1,2,3]`
+    # / `{a=>1}`) is an `anonlist`/`anonhash` (built as a ref).
+    return ( $child->name eq 'const' || $child->name eq 'anonlist'
+          || $child->name eq 'anonhash' ) ? $child : undef;
 }
 
 # _const_op_value($cv, $const_op) — (value, stamp, const_type) for a const op,

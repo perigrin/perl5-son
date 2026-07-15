@@ -577,6 +577,18 @@ class SoN::FromOptree 0.01 {
                     _translate_foreach_array($cv, $op, $sim, $factory, $opmap,
                         \%visited, $bounds->[0]);
                 }
+                elsif ($bounds->@* == 1
+                        && $bounds->[0]->operation eq 'FieldAccess') {
+                    # `for my $x ($items->@*)` over an aggregate FIELD: the
+                    # rv2av-deref left the FieldAccess ref on the stack. The
+                    # field's ArrayRef type + element type are inferred on the
+                    # Chalk loader side (from the aggregate default), so iterate it
+                    # like a runtime array (Length(field) + Subscript(field,i)).
+                    # A `@$r` over an @_-sourced ref (a Subscript bound) stays a
+                    # GAP -- its element type is statically unknowable. zhi 019f61ad.
+                    _translate_foreach_array($cv, $op, $sim, $factory, $opmap,
+                        \%visited, $bounds->[0]);
+                }
                 else {
                     die "GAP: foreach with unrecognized bounds shape not yet lowered\n";
                 }
