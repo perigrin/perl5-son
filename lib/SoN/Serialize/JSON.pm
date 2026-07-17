@@ -111,6 +111,16 @@ sub _extract_fields ($node, $id_remap) {
     if ($op eq 'EnvRead') {
         return { key => $node->key };
     }
+    if ($op eq 'Print') {
+        # A void Print leads with its control token (inputs[0]); flag it so the
+        # loader demotes that leading input to control_in (the void-call
+        # contract), leaving inputs = the printed list.
+        return (
+            $node->is_stmt_effect
+                ? { is_stmt_effect => JSON::PP::true }
+                : undef
+        );
+    }
     if ($op eq 'VarDecl') {
         return { scope => $node->scope };
     }
@@ -278,6 +288,10 @@ sub _deserialize_graph ($method_data) {
         }
         elsif ($op eq 'EnvRead') {
             $args{key} = $fields->{key};
+        }
+        elsif ($op eq 'Print') {
+            $args{is_stmt_effect} = true
+                if $fields->{is_stmt_effect};
         }
         elsif ($op eq 'VarDecl') {
             $args{scope} = $fields->{scope};

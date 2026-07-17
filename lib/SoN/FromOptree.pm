@@ -1891,6 +1891,45 @@ class SoN::FromOptree 0.01 {
             return ($op->next, 'handled');
         }
 
+        # print LISTOP: emit a Print node over the whole argument list, control-
+        # pinned (a bare `print` is OPf_WANT_VOID, an ordered stdout effect that
+        # must survive DCE). The list is a pushmark..print span; pop_to_mark
+        # gathers every element as an input. print yields 1, so the Print node is
+        # also usable as a value.
+        #
+        # An explicit filehandle (`print STDOUT ...` / `print $fh ...`) sets
+        # OPf_STACKED (0x40) and pushes a gv/rv2gv onto the stack before the
+        # args -- a LOUD GAP, never a silent misroute to fd 1: the runtime-free
+        # backend writes only to stdout, so honoring an explicit handle would be
+        # a miscompile.
+        if ($name eq 'print') {
+            if ($op->flags & 64) {   # OPf_STACKED: an explicit filehandle operand
+                die "GAP: print to an explicit filehandle (print FH ... / "
+                  . "print \$fh ...) is not lowered -- the runtime-free backend "
+                  . "writes only to stdout; honoring a handle would misroute.\n";
+            }
+            my $args = $sim->pop_to_mark;
+            my @inputs = $args->@*;
+
+            # Void statement position (the only shape wired): control-pin so the
+            # stdout effect is ordered and survives DCE, mirroring the I1 void-
+            # effect path. control leads the inputs; is_stmt_effect is set;
+            # control advances to the Print.
+            my %extra;
+            if (defined $sim->control) {
+                unshift @inputs, $sim->control;
+                $extra{is_stmt_effect} = true;
+            }
+            my $node = $factory->make('Print', inputs => \@inputs, %extra);
+            $sim->set_control($node) if $extra{is_stmt_effect};
+
+            # print returns 1; push it so a value context (`my $ok = print ...`)
+            # reads the return. A void print's pushed value is dead and dropped
+            # by the surrounding nextstate, exactly like the void-effect Call.
+            $sim->push_node($node) unless (($op->flags & 3) == 1);  # OPf_WANT_VOID
+            return ($op->next, 'handled');
+        }
+
         # Generic op handling via OpMap.  Branch/loop ops are excluded so the
         # caller's mode-specific switch owns them.
         if ($opmap->is_known($name) && !$opmap->is_branch($name) && !$opmap->is_loop($name)) {
