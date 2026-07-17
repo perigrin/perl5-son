@@ -10,11 +10,16 @@ class SoN::FromOptree::OpMap 0.01 {
     # pop_count: integer or 'mark' (pop to last mark)
     # node_type: SoN node operation name, or undef for skip/special
     # push_count: 0 or 1
-    # flags: bitmask - 1=skip, 2=cfg(branch), 4=cfg(loop)
+    # flags: bitmask - 1=skip, 2=cfg(branch), 4=cfg(loop), 8=pure
 
     use constant SKIP   => 1;
     use constant BRANCH => 2;
     use constant LOOP   => 4;
+    # PURE marks a Call-producing builtin whose result depends only on its
+    # inputs and which mutates nothing observable. Effect-by-default pins every
+    # other Call in void position to the control chain; a PURE call is exempt so
+    # it stays a floatable data node (CSE/hash-consing preserved).
+    use constant PURE   => 8;
 
     my %MAP = (
         # === Bookkeeping - skip these ===
@@ -96,25 +101,29 @@ class SoN::FromOptree::OpMap 0.01 {
         length      => [1, 'Length',    1, 0],
         stringify   => [1, 'Stringify', 1, 0],
         multiconcat => ['mark', 'Concat', 1, 0],
-        substr      => [2, 'Call',      1, 0],   # 2-3 args
-        index       => [2, 'Call',      1, 0],
-        rindex      => [2, 'Call',      1, 0],
+        # substr is PURE as an rvalue but MUTATES as an lvalue (substr(...)=x);
+        # the same op name cannot distinguish them statically, so FromOptree
+        # overrides this PURE flag to effectful when the op is the fused
+        # store form (OPf_STACKED) in void position.
+        substr      => [2, 'Call',      1, PURE], # 2-3 args
+        index       => [2, 'Call',      1, PURE],
+        rindex      => [2, 'Call',      1, PURE],
         repeat      => [2, 'Repeat',    1, 0],   # x operator
-        uc          => [1, 'Call',      1, 0],
-        ucfirst     => [1, 'Call',      1, 0],
-        lc          => [1, 'Call',      1, 0],
-        lcfirst     => [1, 'Call',      1, 0],
-        fc          => [1, 'Call',      1, 0],   # foldcase
-        quotemeta   => [1, 'Call',      1, 0],
+        uc          => [1, 'Call',      1, PURE],
+        ucfirst     => [1, 'Call',      1, PURE],
+        lc          => [1, 'Call',      1, PURE],
+        lcfirst     => [1, 'Call',      1, PURE],
+        fc          => [1, 'Call',      1, PURE], # foldcase
+        quotemeta   => [1, 'Call',      1, PURE],
         chomp       => [1, 'Call',      1, 0],
         chop        => [1, 'Call',      1, 0],
         schomp      => [1, 'Call',      1, 0],   # scalar chomp
         schop       => [1, 'Call',      1, 0],   # scalar chop
-        sprintf     => ['mark', 'Call', 1, 0],
-        join        => ['mark', 'Call', 1, 0],
+        sprintf     => ['mark', 'Call', 1, PURE],
+        join        => ['mark', 'Call', 1, PURE],
         split       => ['mark', 'Call', 1, 0],
-        pack        => ['mark', 'Call', 1, 0],
-        unpack      => ['mark', 'Call', 1, 0],
+        pack        => ['mark', 'Call', 1, PURE],
+        unpack      => ['mark', 'Call', 1, PURE],
 
         # === Numeric comparison ===
         eq          => [2, 'NumEq',    1, 0],
@@ -204,7 +213,7 @@ class SoN::FromOptree::OpMap 0.01 {
         shift          => [1, 'Call',       1, 0],
         unshift        => ['mark', 'Call',  1, 0],
         splice         => ['mark', 'Call',  1, 0],
-        reverse        => ['mark', 'Call',  1, 0],
+        reverse        => ['mark', 'Call',  1, PURE],
         sort           => ['mark', 'Call',  1, 0],
 
         # === Hash operations ===
@@ -326,9 +335,9 @@ class SoN::FromOptree::OpMap 0.01 {
         tms         => [0, 'Call',      1, 0],
 
         # === Math builtins ===
-        abs         => [1, 'Call',      1, 0],
-        sqrt        => [1, 'Call',      1, 0],
-        int         => [1, 'Call',      1, 0],
+        abs         => [1, 'Call',      1, PURE],
+        sqrt        => [1, 'Call',      1, PURE],
+        int         => [1, 'Call',      1, PURE],
         sin         => [1, 'Call',      1, 0],
         cos         => [1, 'Call',      1, 0],
         atan2       => [2, 'Call',      1, 0],
@@ -508,6 +517,11 @@ class SoN::FromOptree::OpMap 0.01 {
     method is_loop ($opname) {
         my $entry = $MAP{$opname} // return false;
         return ($entry->[3] & LOOP) ? true : false;
+    }
+
+    method is_pure ($opname) {
+        my $entry = $MAP{$opname} // return false;
+        return ($entry->[3] & PURE) ? true : false;
     }
 
     method pop_count ($opname) {

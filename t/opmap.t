@@ -51,6 +51,18 @@ subtest 'Bookkeeping ops flagged as skip' => sub {
     }
 };
 
+subtest 'Pure builtins flagged; effectful builtins are not' => sub {
+    for my $op (qw(uc lc lcfirst ucfirst fc quotemeta index rindex
+                   join sprintf pack unpack reverse abs int sqrt substr)) {
+        ok($map->is_pure($op), "$op is pure");
+    }
+    for my $op (qw(print say prtf warn chomp chop schomp push pop shift
+                   unshift splice preinc predec postinc postdec)) {
+        ok(!$map->is_pure($op), "$op is NOT pure (effectful)");
+    }
+    ok(!$map->is_pure('nonexistent_op'), 'unknown op is not pure');
+};
+
 subtest 'Unknown ops produce clear error' => sub {
     ok(!$map->is_known('nonexistent_op'), 'nonexistent op is not known');
     is($map->lookup('nonexistent_op'), undef, 'lookup returns undef');

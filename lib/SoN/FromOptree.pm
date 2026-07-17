@@ -2012,7 +2012,42 @@ class SoN::FromOptree 0.01 {
 
                 my $stamp = _result_stamp($node_type, \@inputs);
                 $extra{stamp} = $stamp if defined $stamp;
+
+                # Effect-by-default for generic builtin Calls. Chalk's effect
+                # classifier defaults a Call to PURE (floatable, DCE-if-value-
+                # unused), so an effectful builtin (chomp/warn/print) in void
+                # position had its pushed value dead and vanished silently
+                # (`chomp $s; length $s` computed length of the un-chomped
+                # string). Invert that here: a Call in void statement position
+                # (OPf_WANT_VOID) that is NOT on the OpMap pure allow-list is
+                # built control-pinned -- control leads the inputs, is_stmt_effect
+                # set, control advanced -- mirroring the void entersub path, so
+                # the effect is ordered and survives DCE. A PURE call, or any
+                # Call whose value is consumed (non-void), stays a plain floatable
+                # data node (CSE/hash-consing preserved).
+                #
+                # substr is PURE as an rvalue but MUTATES as an lvalue
+                # (substr(...)="X"); the static PURE flag cannot tell them apart.
+                # The optimizer folds the assignment into the substr op in the
+                # lvalue form, which carries OPf_STACKED (the same `op=`/store
+                # marker the element-compound-assign path below keys on). A
+                # STACKED pure Call is an in-place store, so it overrides PURE
+                # and is pinned like any other effect.
+                my $void_effect_call = false;
+                if ($node_type eq 'Call' && defined $sim->control) {
+                    my $void      = ($op->flags & 3) == 1;    # OPf_WANT_VOID
+                    my $lvalue    = ($op->flags & 64);         # OPf_STACKED (store form)
+                    my $effectful = !$opmap->is_pure($name) || $lvalue;
+                    $void_effect_call = $void && $effectful;
+                }
+                if ($void_effect_call) {
+                    unshift @inputs, $sim->control;
+                    $extra{is_stmt_effect} = true;
+                }
                 my $node = $factory->make($node_type, inputs => \@inputs, %extra);
+                if ($void_effect_call) {
+                    $sim->set_control($node);
+                }
 
                 # Rebind the target to the result so a later read sees the new
                 # value.
@@ -2039,7 +2074,11 @@ class SoN::FromOptree 0.01 {
                     $sim->set_memory($store);
                 }
 
-                if ($push_count) {
+                # A void effectful call's result is discarded (OPf_WANT_VOID);
+                # control was already advanced to it, and pushing its dead value
+                # would leave a stray operand on the stack (the void entersub path
+                # likewise pushes nothing). Every other node pushes normally.
+                if ($push_count && !$void_effect_call) {
                     $sim->push_node($node);
                 }
             }
