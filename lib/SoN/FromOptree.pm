@@ -49,8 +49,9 @@ class SoN::FromOptree 0.01 {
         RightShift => 'Int',
         Complement => 'Int',
         # String ops.
-        Concat => 'Str',
-        Length => 'Int',
+        Concat    => 'Str',
+        Stringify => 'Str',   # value -> Str coercion
+        Length    => 'Int',
         # Comparisons yield a boolean; the three-way <=> / cmp yield an int.
         (map { $_ => 'Boolean' } qw(
             NumEq NumLt NumGt NumLe NumGe NumNe
@@ -77,6 +78,22 @@ class SoN::FromOptree 0.01 {
         my $acc = shift @stamps;
         $acc = SoN::IR::Stamp::join($acc, $_) for @stamps;
         return $acc;
+    }
+
+    # _coerce_to_str($factory, $node) -- return a node whose stamp is Str,
+    # wrapping $node in a Stringify (Int->Str coercion) unless it is already Str.
+    # In Chalk "ok $n" is COERCION, not interpolation: a non-Str operand of an
+    # interpolation Concat is stringified first. A node already stamped Str (a
+    # Str Constant segment, a nested Concat) passes through unchanged; every other
+    # operand -- Int Constant (foldable) or unstamped Call (dynamic) alike -- is
+    # wrapped. Stringify's result is unconditionally Str, so this is not a guess
+    # about the operand's type, it is the interpolation coercion contract.
+    sub _coerce_to_str ($factory, $node) {
+        my $stamp = $node->stamp;
+        return $node if defined $stamp && $stamp->type eq 'Str';
+        return $factory->make('Stringify',
+            inputs => [$node],
+            stamp  => SoN::IR::Stamp->new(type => 'Str'));
     }
 
     # _array_element_stamp($array) -> the element stamp of an ArrayRef node
@@ -1730,7 +1747,12 @@ class SoN::FromOptree 0.01 {
             elsif (defined $seg[0]) { $acc = $mkstr->($seg[0]) }
 
             for my $i (0 .. $nargs - 1) {
-                $acc = defined $acc ? $concat->($acc, $args[$i]) : $args[$i];
+                # Interpolation is COERCION: a non-Str operand is stringified
+                # before it enters the Concat (or seeds the fold), so the chain
+                # sees only Str inputs. Applies to a foldable Int Constant and a
+                # dynamic Call alike.
+                my $arg = _coerce_to_str($factory, $args[$i]);
+                $acc = defined $acc ? $concat->($acc, $arg) : $arg;
                 $acc = $concat->($acc, $mkstr->($seg[$i + 1])) if defined $seg[$i + 1];
             }
             $acc //= $mkstr->('');   # degenerate: no args and no non-empty segment
