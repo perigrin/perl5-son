@@ -3290,12 +3290,17 @@ class SoN::FromOptree 0.01 {
             my $name = $op->name;
             # A nested branch: not a plain void-call arm. Bail so it GAPs loudly.
             return 0 if $name eq 'and' || $name eq 'or' || $name eq 'cond_expr';
-            # A void print (`EXPR && (print ...)`) is a statement effect exactly
-            # like a void entersub -- _handle_print control-pins it, advancing the
-            # arm's control to the Print, so merge() Regions it onto the taken
-            # arm. Treat it as a void-effect arm so the branch builds real control
-            # flow and the Print survives on the arm's control path.
-            return 1 if $name eq 'print' && ($op->flags & 3) == 1;  # OPf_WANT_VOID
+            # A print is a statement effect in ANY context -- _handle_print
+            # control-pins it, advancing the arm's control to the Print, so merge()
+            # Regions it onto the taken arm. Even in SCALAR context (WANT=2, the
+            # last-statement `if(C){print..}else{print..}` whose Bool return is the
+            # sub's value), the print's stdout SIDE EFFECT must be guarded by the
+            # branch -- otherwise both arms' prints land unconditionally on the
+            # shared control and BOTH fire (a silent miscompile). Treat a print in
+            # any context as a control-flow-requiring effect arm; its Bool return
+            # value becomes the arm's residual for the value merge. (t/base/if.t,
+            # t/base/cond.t last-statement if/else.)
+            return 1 if $name eq 'print';
             # A void entersub is the effect -- a method call (method_named
             # recorded the name earlier) OR a bare direct call (`helper()`);
             # both thread through _handle_entersub. OPf_WANT_VOID marks the
