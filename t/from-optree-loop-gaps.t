@@ -30,11 +30,26 @@ subtest 'last inside a loop body refuses loudly' => sub {
         qr/GAP.*loop control/i, 'bare last dies with a GAP message');
 };
 
-subtest 'if/else inside a loop body refuses loudly' => sub {
-    # Was: cond_expr silently skipped -> Int:0 instead of Int:103.
-    like(translate_dies(
-        'sub { my $n = 3; my $s = 0; while ($n > 0) { if ($n == 2) { $s = $s + 100 } else { $s = $s + 1 } $n = $n - 1 } $s }'),
-        qr/GAP/, 'cond_expr in a body dies with a GAP message');
+subtest 'cond_expr inside a loop body now lowers (was a GAP)' => sub {
+    # A cond_expr (ternary / if-else) in a loop body is dispatched to the shared
+    # _handle_cond_expr, which builds the same select construction the main walk
+    # uses -- it no longer GAPs. This if/else statement stores to a pad slot in
+    # each arm, so it takes the pad-rebind merge path (a conditional per-slot
+    # TernaryExpr) and lowers to the correct Int:102 (n=3:+1, n=2:+100, n=1:+1).
+    # Was: cond_expr silently skipped -> wrong answer; then a loud GAP.
+    my $cv = do {
+        SoN::OptSuppress::suppress_peep();
+        my $c = eval 'sub { my $n = 3; my $s = 0; while ($n > 0) { if ($n == 2) { $s = $s + 100 } else { $s = $s + 1 } $n = $n - 1 } $s }';
+        SoN::OptSuppress::restore_peep();
+        $c;
+    };
+    ok(lives { SoN::FromOptree->translate($cv) },
+        'if/else in a loop body translates without a GAP die');
+    my $graph = SoN::FromOptree->translate($cv);
+    my @nodes = $graph->nodes->@*;
+    ok((grep { $_->operation eq 'Loop' } @nodes), 'has a Loop node');
+    ok((grep { $_->operation eq 'TernaryExpr' } @nodes),
+        'the arm-select lowered to a TernaryExpr');
 };
 
 subtest 'nested loop inside a loop body refuses loudly' => sub {
