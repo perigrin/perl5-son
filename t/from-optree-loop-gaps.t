@@ -77,28 +77,52 @@ subtest 'a FIRST-statement `last if` in a while(1) body now lowers (hoisted)' =>
     is($wired[0]->loop_control->operation, 'Loop', 'it points at the Loop node');
 };
 
-subtest 'a `last if` deeper in the body refuses loudly (bottom/mid-loop exit)' => sub {
-    # A `last if` that is NOT the first body statement would need the check
-    # reordered ahead of the earlier statements to hoist -- a miscompile. GAP.
-    like(translate_dies(
-        'sub { my $i = 0; my $s = 0; while (1) { $s = $s + 10; last if $i >= 2; $i = $i + 1 } $s }'),
-        qr/GAP.*last not at the head/i, 'a mid-body `last if` dies with a GAP message');
+subtest 'a `last if` deeper in the body now lowers (mid-body exit split)' => sub {
+    # A `last if` that is NOT the first body statement is a genuine mid-body exit:
+    # the producer builds a real If(C) at the break position whose taken arm
+    # routes to the loop's exit Region (an extra predecessor) and whose other arm
+    # continues the body. No hoist (that would reorder the check ahead of the
+    # earlier statements). Was a GAP; now lowers to a Loop + If + exit Region.
+    my $cv = do {
+        SoN::OptSuppress::suppress_peep();
+        my $c = eval 'sub { my $i = 0; my $s = 0; while ($i < 5) { $i = $i + 1; last if $i == 3; $s = $s + $i } $s }';
+        SoN::OptSuppress::restore_peep();
+        $c;
+    };
+    ok(lives { SoN::FromOptree->translate($cv) },
+        'a mid-body `last if` translates without a GAP die');
+    my @nodes = SoN::FromOptree->translate($cv)->nodes->@*;
+    ok((grep { $_->operation eq 'Loop' } @nodes), 'has a Loop node');
+    ok((grep { $_->operation eq 'If' } @nodes),
+        'the mid-body break lowered to a real If split');
 };
 
-subtest 'a `last if` in a loop that ALSO has a header refuses loudly' => sub {
-    # `while (COND) { ...; last if C2 }` is a two-exit loop -- the header hoist
-    # only models a single continuation. GAP rather than mis-model.
-    like(translate_dies(
-        'sub { my $i = 0; my $s = 0; while ($i < 5) { $i = $i + 1; last if $i == 3; $s = $s + $i } $s }'),
-        qr/GAP/, 'a header + body `last if` dies with a GAP message');
+subtest 'a `next if` inside a loop body now lowers (guard on the remainder)' => sub {
+    # `next if C` at position P is `if (!C) { REST-OF-BODY }`: the taken arm skips
+    # the rest of the body this pass, the other arm runs it, and merge() Phis the
+    # accumulator into the back-edge. No loop-control edge is needed. Was a GAP;
+    # now lowers to a Loop + If + a merge Region.
+    my $cv = do {
+        SoN::OptSuppress::suppress_peep();
+        my $c = eval 'sub { my $s = 0; for my $i (1..3) { next if $i == 2; $s = $s + $i } $s }';
+        SoN::OptSuppress::restore_peep();
+        $c;
+    };
+    ok(lives { SoN::FromOptree->translate($cv) },
+        'a `next if` in a loop body translates without a GAP die');
+    my @nodes = SoN::FromOptree->translate($cv)->nodes->@*;
+    ok((grep { $_->operation eq 'Loop' } @nodes), 'has a Loop node');
+    ok((grep { $_->operation eq 'If' } @nodes),
+        'the `next if` lowered to a real If split');
 };
 
-subtest '`next` inside a loop body still refuses loudly' => sub {
-    # Only `last` (break to exit) is hoistable; `next` (continue to header) is a
-    # distinct control edge not yet modeled -- it must still GAP, not miscompile.
+subtest 'an UNCONDITIONAL bare last inside a loop body still refuses loudly' => sub {
+    # Only the CONDITIONAL `last if C` / `next if C` (an `and(other->last/next)`)
+    # lowers. A bare unconditional `last`/`next` reached directly is not a guard
+    # -- it must still GAP loudly, not miscompile.
     like(translate_dies(
-        'sub { my $i = 0; my $s = 0; while (1) { next if $i >= 3; $s = $s + $i; $i = $i + 1 } $s }'),
-        qr/GAP.*loop control \(next\)/i, 'a `next if` dies with a GAP message');
+        'sub { my $i = 0; my $s = 0; while (1) { $s = $s + $i; last; $i = $i + 1 } $s }'),
+        qr/GAP.*loop control \(last\)/i, 'a bare unconditional `last` dies with a GAP message');
 };
 
 subtest 'nested loop inside a loop body refuses loudly' => sub {
