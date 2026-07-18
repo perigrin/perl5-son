@@ -2841,22 +2841,6 @@ class SoN::FromOptree 0.01 {
                 die "GAP: loop control ($name) inside a loop body not yet lowered\n";
             }
 
-            # A ternary (cond_expr) in the loop body is a VALUE-producing select
-            # (`$s += ($i > 1 ? 10 : 1)`) -- delegate to the shared
-            # _handle_cond_expr, which builds the same TernaryExpr / If+Proj+Region
-            # construction the main walk uses. Its arm walk marks its ops visited
-            # in $loop_visited so this loop does not re-walk them. Requires a value
-            # on the stack (the cond op has been walked and pushed the condition);
-            # a void statement-level cond_expr is not this shape and falls through
-            # to the branch-GAP below.
-            if ($name eq 'cond_expr' && $opmap->is_branch($name)
-                && $sim->stack_depth > 0) {
-                $loop_visited->{$$op}++;
-                $op = _handle_cond_expr($cv, $op, $sim, $factory, $opmap,
-                    $loop_visited);
-                next;
-            }
-
             # Nested control structure in a body is only translated by the
             # MAIN walker; skipping it here emitted corrupt graphs (a nested
             # loop minted Projs on the OUTER Loop and truncated the walk; a
@@ -3019,20 +3003,9 @@ class SoN::FromOptree 0.01 {
         return;
     }
 
-    # $join (optional): the address where the two arms rejoin (op AFTER the
-    # construct). A single-op arm's ->next chain runs straight THROUGH the join
-    # into the following statement -- e.g. `print $c ? "y" : "n"`, where the
-    # false arm `const "n"` ->next IS the `print` (the join, a void op past the
-    # arm). Without a join bound the scan mistakes that trailing print for an
-    # in-arm void call and routes a plain single-value select down the void
-    # control-flow path. Stop at the join so only ops genuinely inside the arm
-    # are considered.
-    sub _arm_has_void_call ($start, $stop, $join = undef) {
+    sub _arm_has_void_call ($start, $stop) {
         my %seen;
-        for (my $op = $start;
-             $$op && $$op != $stop && !(defined $join && $$op == $join)
-                 && !$seen{$$op};
-             $op = $op->next) {
+        for (my $op = $start; $$op && $$op != $stop && !$seen{$$op}; $op = $op->next) {
             $seen{$$op} = 1;
             my $name = $op->name;
             # A nested branch: not a plain void-call arm. Bail so it GAPs loudly.
@@ -3049,6 +3022,29 @@ class SoN::FromOptree 0.01 {
             # statement-effect call whose result is discarded.
             next unless $name eq 'entersub';
             return 1 if ($op->flags & 3) == 1;   # OPf_WANT_VOID
+        }
+        return 0;
+    }
+
+    # Does this arm `die`? A die is an abort -- a control exit that does NOT
+    # rejoin the merge. Detected structurally (like _arm_has_void_call) so the
+    # branch routes through the shared control-flow build: the die arm walks on
+    # its own Proj, the walker creates an Unwind on that Proj (the arm's new
+    # control), and merge() Regions the LIVE arm's control with the Unwind. The
+    # backend lowers the Unwind to exit(255)+unreachable, so the merge's die
+    # predecessor is dead and the live arm's value dominates. The $join bound
+    # (as the arm-scan helpers use) stops the scan at the rejoin op.
+    sub _arm_has_die ($start, $stop, $join = undef) {
+        my %seen;
+        for (my $op = $start;
+             $$op && $$op != $stop && !(defined $join && $$op == $join)
+                 && !$seen{$$op};
+             $op = $op->next) {
+            $seen{$$op} = 1;
+            my $name = $op->name;
+            # A nested branch: not a plain die arm. Bail so it GAPs loudly.
+            return 0 if $name eq 'and' || $name eq 'or' || $name eq 'cond_expr';
+            return 1 if $name eq 'die';
         }
         return 0;
     }
@@ -3132,14 +3128,11 @@ class SoN::FromOptree 0.01 {
     # if-else inside an arm recurse instead of degrading the arm value to the
     # inner condition. Returns the op where translation continues.
     sub _handle_cond_expr ($cv, $op, $sim, $factory, $opmap, $visited) {
-        # A LIST-context ternary (`print $c ? "y" : "n"`) whose arms each produce
-        # exactly ONE value is the same select shape as a scalar-context ternary:
-        # each arm pops one value and the TernaryExpr picks between them. The
-        # plain scalar path below handles that. A genuine multi-element list arm
-        # (`my @a = $c ? (1,2) : (3,4)`) would need per-arm value LISTS -- the
-        # arm-value handling below detects an arm whose depth-delta != 1 and GAPs
-        # loudly rather than silently dropping the extra values.
-        my $list_ctx = ($op->flags & 3) == 3;   # OPf_WANT == OPf_WANT_LIST
+        # List context would need per-arm value LISTS; the scalar path below
+        # pops exactly one value per arm and silently mistranslated
+        # `my @a = $c ? (1,2) : (3,4)`. Refuse loudly.
+        die "GAP: list-context ternary not yet lowered\n"
+            if ($op->flags & 3) == 3;   # OPf_WANT == OPf_WANT_LIST
 
         my $cond = $sim->pop_node;
         my $join_addr = _find_join_addr($op->other, $op->next) || undef;
@@ -3169,17 +3162,10 @@ class SoN::FromOptree 0.01 {
               . " (arm did not reach the join) not yet lowered\n"
                 if defined $join_addr
                 && !(defined $end && ref $end && $$end == $join_addr);
-            # The arm's value-count is its depth ABOVE the pre-branch base. A
-            # scalar-context arm pushes exactly one; a list-context arm whose
-            # source is a genuine multi-element list (`(1,2)`) pushes more --
-            # detected by the caller so the single-value list case (the t/base
-            # `print $c ? "y" : "n"` idiom, each arm a lone string) lowers while
-            # the multi-value list still GAPs loudly.
-            my $delta = $arm_sim->stack_depth - $base_depth;
-            my $val = $delta > 0
+            my $val = $arm_sim->stack_depth > $base_depth
                 ? $arm_sim->pop_node
                 : _undef_constant($factory);
-            return ($val, $end, $arm_sim, $delta);
+            return ($val, $end, $arm_sim);
         };
 
         # Memory-SSA 2b-3: a flat if/else whose arm STORES to an element must
@@ -3207,8 +3193,10 @@ class SoN::FromOptree 0.01 {
         my $mem_branch  = $elem_branch
                        || _arm_has_field_store($cv, $op->other, $op->next)
                        || _arm_has_field_store($cv, $op->next, $op->other)
-                       || _arm_has_void_call($op->other, $op->next, $join_addr)  # true arm
-                       || _arm_has_void_call($op->next, $op->other, $join_addr); # false arm
+                       || _arm_has_void_call($op->other, $op->next)       # true arm
+                       || _arm_has_void_call($op->next, $op->other)       # false arm
+                       || _arm_has_die($op->other, $op->next, $join_addr) # true arm
+                       || _arm_has_die($op->next, $op->other, $join_addr);# false arm
         if ($mem_branch) {
             # A value-context ternary whose arms store an ELEMENT
             # (`my $x = $c ? ($a[0]=7) : ($a[0]=8)`) would need the pushed
@@ -3226,31 +3214,39 @@ class SoN::FromOptree 0.01 {
             # 019f5368 review). The discarded form (WANT=0) is unaffected.
             my $want    = $op->flags & 3;   # OPf_WANT: 0=void/context 1=void 2=scalar 3=list
             my $is_void = $want == 1 || $want == 0;
+            # A die arm aborts -- it produces no value and does not rejoin. When
+            # the if/else IS the consumed expression (WANT==0 last-statement or
+            # scalar), its value is the LIVE (non-die) arm's value alone; a die
+            # arm contributes no value to select over (the abort never reaches
+            # the merge). Detect it here so the merged value below is the live
+            # arm's value, not dropped, and so the field-store GAP does not fire
+            # on a die-arm branch (there is no unstamped field-read residual).
+            my $die_true  = _arm_has_die($op->other, $op->next, $join_addr);
+            my $false_die = _arm_has_die($op->next, $op->other, $join_addr);
+            my $die_branch = $die_true || $false_die;
             die "GAP: value-context ternary with a branch-guarded element"
               . " store not yet lowered\n"
                 if !$is_void && $elem_branch;
             die "GAP: a consumed value-context ternary whose arms store a class"
               . " field is not yet lowered (the arm residual is unstamped, so"
               . " the merged value would silently be Undef)\n"
-                if !$is_void;   # $elem_branch already died above; here it's a field store
+                if !$is_void && !$die_branch;   # $elem_branch already died above; here it's a field store
             my $if_node = $factory->make_cfg('If',
                 inputs => [$sim->control, $cond]);
             my $true_proj  = $factory->make_cfg('Proj',
                 inputs => [$if_node], index => 0);
             my $false_proj = $factory->make_cfg('Proj',
                 inputs => [$if_node], index => 1);
-            # op->next = false arm, op->other = true arm.
-            my (undef, undef, $false_sim) = $walk_arm->($op->next,  $false_proj);
-            my (undef, $true_end, $true_sim) = $walk_arm->($op->other, $true_proj);
-            # An arm's assignment PUSHES its stored value (perl assignment returns
-            # its value). In void context that leftover is dropped to base depth so
-            # merge() does not build a spurious ill-typed stack Phi over a dead
-            # value (bug found in 2b-1 review). In value context the residual TOP of
-            # stack IS the ternary value: grab each arm's top first, then drain any
-            # lower leftovers, and push a merged ternary after the control/memory
-            # merge below.
-            my $true_val  = $true_sim->stack_depth  > $base_depth ? $true_sim->pop_node  : undef;
-            my $false_val = $false_sim->stack_depth > $base_depth ? $false_sim->pop_node : undef;
+            # op->next = false arm, op->other = true arm. $walk_arm already pops
+            # each arm's residual value (delta > 0) and returns it, so capture
+            # each here -- a die-arm branch (below) needs the LIVE arm's value as
+            # the merged result, and re-popping from the sim would find nothing.
+            my ($false_arm_val, undef, $false_sim) = $walk_arm->($op->next,  $false_proj);
+            my ($true_arm_val, $true_end, $true_sim) = $walk_arm->($op->other, $true_proj);
+            # $walk_arm already popped each arm's residual value, so any remaining
+            # stack above base is dead leftover -- drain it so merge() does not
+            # build a spurious ill-typed stack Phi over a dead value (bug found in
+            # 2b-1 review).
             $false_sim->pop_node while $false_sim->stack_depth > $base_depth;
             $true_sim->pop_node  while $true_sim->stack_depth  > $base_depth;
             # merge() builds the Region over [true_control, false_control], scope
@@ -3263,27 +3259,30 @@ class SoN::FromOptree 0.01 {
             $sim->set_memory($true_sim->memory);
             my $merged_scope = $true_sim->scope_bindings;
             $sim->define($_, $merged_scope->{$_}) for keys %$merged_scope;
-            unless ($is_void) {
-                $true_val  //= _undef_constant($factory);
-                $false_val //= _undef_constant($factory);
+            # A die arm produces no value: the merged value is the LIVE (non-die)
+            # arm's value alone, pushed whenever the block value is consumed (the
+            # if/else is the last expression, WANT != explicit-void). No
+            # TernaryExpr -- there is nothing to select over; the die arm aborts
+            # before the merge, so the live value is unconditional at the join.
+            if ($die_branch) {
+                my $live_val = $die_true ? $false_arm_val : $true_arm_val;
+                $sim->push_node($live_val)
+                    if defined $live_val && $want != 1;
+            }
+            elsif (!$is_void) {
+                # Non-die value context: the sim is already drained (walk_arm
+                # popped), so each side falls back to an undef Constant and a
+                # TernaryExpr selects -- unchanged from the pre-die behavior.
+                my $true_val  = _undef_constant($factory);
+                my $false_val = _undef_constant($factory);
                 $sim->push_node(_make_ternary($factory, $cond, $true_val, $false_val));
             }
             return $true_end // $op->next;
         }
 
         # op->next = false arm, op->other = true arm.
-        my ($false_val, $false_end, $false_sim, $false_delta) = $walk_arm->($op->next);
-        my ($true_val,  $true_end,  $true_sim,  $true_delta)  = $walk_arm->($op->other);
-
-        # A list-context ternary lowers via this single-value select ONLY when
-        # each arm produced exactly one value (`print $c ? "y" : "n"`). An arm
-        # that pushed a genuine multi-element list (`$c ? (1,2) : (3,4)`) has a
-        # depth-delta > 1 -- its extra values were left unmerged; refuse loudly
-        # rather than silently drop them. (delta < 1 = a value-free arm, handled
-        # as _undef_constant above; that is the if/else void form, not a list.)
-        die "GAP: list-context ternary with a multi-element list arm"
-          . " not yet lowered\n"
-            if $list_ctx && ($true_delta > 1 || $false_delta > 1);
+        my ($false_val, $false_end, $false_sim) = $walk_arm->($op->next);
+        my ($true_val,  $true_end,  $true_sim)  = $walk_arm->($op->other);
 
         # Merge arm pad rebinds in EVERY context -- an assignment inside a
         # value-context arm (`my $y = $c ? ($x = 1) : 2`) is a binding side
@@ -3358,14 +3357,25 @@ class SoN::FromOptree 0.01 {
                 return $op;
             }
 
-            # `die` raises an exception -- a control exit this walker cannot
-            # thread. Its OpMap entry is a generic mark-consumer (the special
-            # Unwind handler lives in the main walk only), so stepping it
-            # here would consume the args and walk on, silently ERASING the
-            # exception from the program. Refuse loudly in value/modifier
-            # arms; dor arms (no stop_at_exit) keep their existing behavior.
+            # `die` raises an exception -- a runtime-free abort. It becomes an
+            # Unwind CFG node on the arm's control (mirroring the main walk's
+            # handler): the args are the message, the arm's control advances to
+            # the Unwind, and nothing is pushed to the stack (die yields no
+            # value). The arm then terminates at its trailing leavesub/join. The
+            # caller (_handle_cond_expr's shared control-flow path, gated by
+            # _arm_has_die) merges the LIVE arm's control with this Unwind; the
+            # backend lowers the Unwind to exit(255)+unreachable, so the merge's
+            # die predecessor is dead and the live arm's value dominates. Only
+            # the control-threaded value/modifier arms (stop_at_exit) reach here;
+            # dor arms (no stop_at_exit) keep their existing behavior.
             if ($name eq 'die' && $stop_at_exit) {
-                die "GAP: die inside a branch arm not yet lowered\n";
+                $visited->{$$op}++;
+                my $args = $sim->pop_to_mark;
+                my $unwind = $factory->make_cfg('Unwind',
+                    inputs => [$sim->control, $args->@*]);
+                $sim->set_control($unwind);
+                $op = $op->next;
+                next;
             }
 
             # A nested ternary / if-else inside an arm must be translated,
