@@ -3112,11 +3112,20 @@ class SoN::FromOptree 0.01 {
         # same real control flow (If/Proj/Region) rather than the pad-rebind merge
         # (zhi 019f5368). Compute each flag once; $mem_branch drives the shared
         # control-flow path and $elem_branch alone gates the value-context GAP.
+        # A VOID statement-effect arm (`if($c){print "a\n"}else{print "b\n"}`, a
+        # void print or a void method call) is the same shape as the logical-op
+        # arm the &&/|| handler routes through _arm_has_void_call: the effect
+        # rebinds no pad slot, so the pad-rebind merge path below drops it. Build
+        # the same real control flow so each arm's control-pinned effect fires on
+        # its own Proj and a Region merges the arms. An `if` statement is always
+        # void (WANT 0/1), so this contributes only to the void path.
         my $elem_branch = _arm_has_element_store($op->other, $op->next)   # true arm
                        || _arm_has_element_store($op->next, $op->other);  # false arm
         my $mem_branch  = $elem_branch
                        || _arm_has_field_store($cv, $op->other, $op->next)
-                       || _arm_has_field_store($cv, $op->next, $op->other);
+                       || _arm_has_field_store($cv, $op->next, $op->other)
+                       || _arm_has_void_call($op->other, $op->next)       # true arm
+                       || _arm_has_void_call($op->next, $op->other);      # false arm
         if ($mem_branch) {
             # A value-context ternary whose arms store an ELEMENT
             # (`my $x = $c ? ($a[0]=7) : ($a[0]=8)`) would need the pushed
