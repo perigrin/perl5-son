@@ -1656,6 +1656,24 @@ class SoN::FromOptree 0.01 {
                 $sim->set_control($store);
                 $sim->push_node($value);
             }
+            # A package-scalar store (`our $g = 5`, where $g is a stash entry):
+            # the target is a StashAccess lvalue. Without this branch the store
+            # falls through to the catch-all below (push_node($value)), which
+            # DROPS it -- a later `$g` read then loads an uninitialized slot (a
+            # silent miscompile). Emit an explicit Assign(StashAccess-lvalue,
+            # value) threaded onto the control chain (is_stmt_effect), exactly
+            # like the Subscript/FieldAccess element/field stores. Stamp the
+            # lvalue StashAccess Int so the matching read has a representation the
+            # backend can lower runtime-free.
+            elsif ($target->isa('SoN::IR::Node::StashAccess')) {
+                $target->set_stamp(SoN::IR::Stamp->new(type => 'Int'))
+                    if $target->can('set_stamp') && !defined $target->stamp;
+                my $store = $factory->make('Assign',
+                    inputs         => [$sim->control, $target, $value],
+                    is_stmt_effect => true);
+                $sim->set_control($store);
+                $sim->push_node($value);
+            }
             else {
                 $sim->push_node($value);
             }
