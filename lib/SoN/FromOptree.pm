@@ -3032,16 +3032,22 @@ class SoN::FromOptree 0.01 {
     }
 
     # Does the arm (op chain from $start up to but excluding $stop) contain an
-    # ELEMENT STORE -- an sassign whose lvalue is an aelem/helem? Such a store
-    # advances memory (memory-SSA), so the branch must be built with a
-    # control-dependent store + a memory-Phi (2b), not a straight-line merge.
-    # Pure lexical scan (no translation, no side effects); OPf_MOD (lvalue,
-    # flag 0x20) on the aelem/helem distinguishes a store target from a read.
+    # ELEMENT STORE -- an sassign whose lvalue is an aelem/helem, OR the fused
+    # aelemfastlex_store the optimizer emits for a constant-index lexical-array
+    # element assignment (`$a[0] = 9`)? Such a store advances memory (memory-
+    # SSA), so the branch must be built with a control-dependent store + a
+    # memory-Phi (2b), not a straight-line merge. Pure lexical scan (no
+    # translation, no side effects); OPf_MOD (lvalue, flag 0x20) on the
+    # aelem/helem distinguishes a store target from a read, while the fused
+    # *_store op is unconditionally a store (its `_store` suffix IS the lvalue).
     sub _arm_has_element_store ($start, $stop) {
         my %seen;
         for (my $op = $start; $$op && $$op != $stop && !$seen{$$op}; $op = $op->next) {
             $seen{$$op} = 1;
-            next unless $op->name eq 'aelem' || $op->name eq 'helem';
+            my $name = $op->name;
+            return 1 if $name eq 'aelemfastlex_store'
+                     || $name eq 'helemfastlex_store';
+            next unless $name eq 'aelem' || $name eq 'helem';
             return 1 if $op->flags & 0x20;   # OPf_MOD -- an lvalue element target
         }
         return 0;
@@ -3511,6 +3517,73 @@ class SoN::FromOptree 0.01 {
                 $visited->{$$op}++;
                 $op = _handle_cond_expr($cv, $op, $sim, $factory, $opmap,
                     $visited);
+                next;
+            }
+
+            # A void-context statement modifier inside an arm (`$x = 5 if
+            # $x < 10`) compiles to a void `and(COND, STORE)` / `or(COND,
+            # STORE)`. The straight arm walk hit this `and` and stopped BEFORE
+            # the join (an "untranslatable op inside an arm" GAP). Recurse into
+            # the SAME void-context pad-rebind merge the main walk uses (the
+            # &&/|| handler, lines ~349-445): pop the guard, walk the guarded
+            # body on a snapshot stopping at this op's op_next, and merge each
+            # slot the body rebound as TernaryExpr(guard, arm, base) -- arm on
+            # the false side for `or`/unless. The merged bindings flow into the
+            # outer if/else exactly as a plain assignment arm would.
+            #
+            # ONLY a pure pad/field-rebind modifier body is safe here: the merge
+            # threads the guard through the rebound SCOPE bindings, nothing else.
+            # A body with a statement EFFECT that rebinds no scope slot (a void
+            # print / void method call, `print "hi" if C`) would walk via _step,
+            # emit an unpinned Print/Call the guard does not gate, and the value-
+            # only merge would drop or misfire it (a silent effect miscompile --
+            # lli printed nothing where perl printed `hi`). An element store, a
+            # die, a nested branch, a function exit, or a back-edge (statement-
+            # modifier LOOP) is likewise not a simple rebind. Refuse every such
+            # shape loudly BEFORE the merge (the outer if/else's shared control-
+            # flow path -- _arm_has_void_call etc -- handles genuine void-effect
+            # arms; this is the modifier-inside-arm sub-case it does not reach).
+            if (($name eq 'and' || $name eq 'or')
+                && $opmap->is_branch($name)
+                && ($op->flags & 3) == 1   # OPf_WANT == OPf_WANT_VOID
+                && $sim->stack_depth > 0) {
+                $visited->{$$op}++;
+                my $mod_stop = ${ $op->next };
+                die "GAP: statement modifier with a void effect / element store"
+                  . " / die inside an if/else arm not yet lowered\n"
+                    if _arm_has_void_call($op->other, $op->next, $mod_stop)
+                    || _arm_has_element_store($op->other, $op->next)
+                    || _arm_has_die($op->other, $op->next, $mod_stop);
+                my $guard   = $sim->pop_node;
+                my $mod_sim = $sim->snapshot;
+                my ($mod_end, $mod_sig) = _walk_branch($cv, $op->other,
+                    $mod_sim, $factory, $opmap, $visited, \my @mod_exits,
+                    1, $mod_stop);
+                die "GAP: function exit inside a statement modifier in an"
+                  . " if/else arm not yet lowered\n"
+                    if ($mod_sig // '') eq 'exited';
+                # A back-edge (the body re-enters an already-visited op) is a
+                # statement-modifier LOOP, not a rebind -- refuse loudly.
+                die "GAP: statement-modifier loop or unhandled op inside an"
+                  . " if/else arm not yet lowered\n"
+                    unless defined $mod_end && ref $mod_end
+                        && $$mod_end == $mod_stop;
+                my $base_scope = $sim->scope_bindings;
+                my $arm_scope  = $mod_sim->scope_bindings;
+                for my $targ (sort { $a <=> $b } keys %$arm_scope) {
+                    my $base = $base_scope->{$targ};
+                    my $armv = $arm_scope->{$targ};
+                    # A var introduced inside the modifier body is scoped to it;
+                    # only both-sides bindings merge.
+                    next unless defined $base && defined $armv;
+                    next if $base == $armv;
+                    my @arms = $name eq 'and'
+                        ? ($armv, $base)    # if:     guard ? body : base
+                        : ($base, $armv);   # unless: guard ? base : body
+                    $sim->define($targ,
+                        _make_ternary($factory, $guard, @arms));
+                }
+                $op = $op->next;
                 next;
             }
 

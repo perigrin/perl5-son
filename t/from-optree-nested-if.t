@@ -121,11 +121,22 @@ subtest 'unhandled op inside an arm refuses loudly (no silent truncation)' => su
     # function returned stack garbage (e.g. Int:0 vs perl Int:1/Int:100).
     SoN::OptSuppress::suppress_peep();
     my $mod = eval 'sub { my $c = 0; my $d = 1; my $x = 0; if ($c) { $x = 5 if $d } else { $x = 1 } $x }';
+    my $vp  = eval 'sub { my $c = 1; my $x = 0; if ($c) { print "hi\n" if $x < 10 } else { $x = 1 } $x }';
     my $die = eval 'sub { my $c = 1; my $x = 0; if ($c) { die "boom" } else { $x = 1 } $x }';
     my $err = $@;
     SoN::OptSuppress::restore_peep();
-    like(dies { SoN::FromOptree->translate($mod) }, qr/GAP/,
-        'a statement modifier inside an arm dies with a GAP message');
+    # A PURE pad-rebind statement modifier inside an arm now LOWERS: the arm
+    # recurses into the same void-context and/or pad-rebind merge the main walk
+    # uses, so the modifier's guarded store becomes TernaryExpr(guard, body,
+    # base) and the arm reaches the join. It previously GAPped as an
+    # "untranslatable op inside an arm" (chalk T9 / perl5-son stmt-modifier-in-arm).
+    ok(lives { SoN::FromOptree->translate($mod) },
+        'a pure-rebind statement modifier inside an arm now lowers, no longer a GAP');
+    # A modifier body with a statement EFFECT that rebinds no scope slot (a void
+    # print) is NOT a simple rebind -- the value-only merge would drop the
+    # unpinned Print (a silent effect miscompile). It must still GAP loudly.
+    like(dies { SoN::FromOptree->translate($vp) }, qr/GAP/,
+        'a void-effect statement modifier inside an arm still GAPs loudly');
     # A die inside an arm now LOWERS (via an Unwind CFG node -> exit+unreachable
     # in the backend); it no longer GAPs. The taken-die aborts, the not-taken
     # arm's value is returned. This test previously asserted the GAP that the
