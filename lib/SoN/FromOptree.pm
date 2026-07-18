@@ -1663,10 +1663,15 @@ class SoN::FromOptree 0.01 {
             # silent miscompile). Emit an explicit Assign(StashAccess-lvalue,
             # value) threaded onto the control chain (is_stmt_effect), exactly
             # like the Subscript/FieldAccess element/field stores. Stamp the
-            # lvalue StashAccess Int so the matching read has a representation the
-            # backend can lower runtime-free.
+            # lvalue StashAccess with the RHS value's OWN repr (Int for `= 5`,
+            # Str for `= "hi"`) so the matching read carries the right type: the
+            # store lvalue and the read hash-cons to ONE node, so stamping here
+            # types both. A hardcoded Int would miscompile a Str global. Fall
+            # back to Int when the RHS carries no stamp (the historical default).
             elsif ($target->isa('SoN::IR::Node::StashAccess')) {
-                $target->set_stamp(SoN::IR::Stamp->new(type => 'Int'))
+                my $rhs_type = ($value->can('stamp') && defined $value->stamp)
+                    ? $value->stamp->type : 'Int';
+                $target->set_stamp(SoN::IR::Stamp->new(type => $rhs_type))
                     if $target->can('set_stamp') && !defined $target->stamp;
                 my $store = $factory->make('Assign',
                     inputs         => [$sim->control, $target, $value],
