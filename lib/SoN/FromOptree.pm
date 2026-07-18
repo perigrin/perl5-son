@@ -2372,21 +2372,29 @@ class SoN::FromOptree 0.01 {
             stamp  => SoN::IR::Stamp->new(type => 'Boolean'));
     }
 
-    # The condition segment runs once more than the body (the failing test
-    # still applies its side effects), which this translation cannot represent
-    # -- and on the postfix path the main walk has already applied one
-    # evaluation's mutations to the live scope, contaminating the Phi inits.
-    # Scout the condition ops alone on an insulated sim (stopping at the
-    # and/or that closes the condition) and refuse loudly if they rebind any
-    # pad slot.
-    sub _assert_pure_condition ($cv, $cond_start, $sim, $opmap) {
+    # Perl evaluates a while CONDITION N+1 times: the final, FAILING evaluation
+    # still applies its side effects. `while ($i-- > 0)` decrements $i on the
+    # failing pass too, so the post-loop $i is the value AFTER that pass, not the
+    # header Phi's exit value. Scout the condition ops alone on an insulated sim
+    # (stopping at the and/or that closes the condition) and return the sorted set
+    # of pad slots the condition rebinds. _translate_while_loop re-binds these
+    # slots to their loop-Phi BACK-EDGE post-loop (the value after the failing
+    # pass) instead of to the header Phi (the value that failed the test).
+    #
+    # A condition that also STORES to memory (an lvalue element `$a[$i]++` in the
+    # guard) advances the memory chain on the failing pass -- the exit-path rebind
+    # models only pad slots, not that memory back-edge -- so refuse loudly.
+    sub _scout_condition_mutated_targs ($cv, $cond_start, $sim, $opmap) {
         my $probe = $cond_start;
         my %probe_seen;
         $probe = $probe->next
             while $$probe && !$probe_seen{$$probe}++
                 && $probe->name ne 'and' && $probe->name ne 'or';
-        return unless $$probe
+        return [] unless $$probe
             && ($probe->name eq 'and' || $probe->name eq 'or');
+
+        die "GAP: side-effecting loop condition with a memory store not yet lowered\n"
+            if _cond_stores_memory($cond_start);
 
         my $cond_factory = SoN::IR::NodeFactory->new();
         my $cond_sim     = SoN::FromOptree::StackSim->new(
@@ -2401,12 +2409,28 @@ class SoN::FromOptree 0.01 {
         _walk_branch($cv, $cond_start, $cond_sim, $cond_factory, $opmap,
             {}, undef, 0, $$probe);
         my $after = $cond_sim->scope_bindings;
-        for my $targ (keys %placeholder) {
-            next unless defined $after->{$targ};
-            die "GAP: side-effecting loop condition not yet lowered\n"
-                if $after->{$targ} != $placeholder{$targ};
+        return [ sort { $a <=> $b }
+            grep { defined $after->{$_} && $after->{$_} != $placeholder{$_} }
+            keys %placeholder ];
+    }
+
+    # Does a loop CONDITION store to memory (an lvalue element `$a[$i]++` /
+    # `$h{$k}=...` in the guard)? Scan cond_start up to the and/or that closes the
+    # condition. An lvalue element (OPf_MOD set on aelem/helem, or a multideref in
+    # lvalue context) is a store; a non-lvalue read is caught separately by
+    # _cond_reads_memory. Stop at nextstate (a body statement boundary) so a
+    # headless while(1)'s body store is not misattributed to the condition.
+    sub _cond_stores_memory ($cond_start) {
+        my %seen;
+        for (my $op = $cond_start; $$op && !$seen{$$op}; $op = $op->next) {
+            $seen{$$op} = 1;
+            my $name = $op->name;
+            last if $name eq 'and' || $name eq 'or';
+            last if $name eq 'nextstate';
+            return 1 if ($name eq 'aelem' || $name eq 'helem')
+                && ($op->flags & 0x20);   # OPf_MOD -- lvalue element is a store
         }
-        return;
+        return 0;
     }
 
     # Does a loop CONDITION read memory ($a[$i] / $h{$k} in the guard)? Such a
@@ -2445,7 +2469,10 @@ class SoN::FromOptree 0.01 {
     sub _translate_while_loop ($cv, $cond_start, $sim, $factory, $opmap, $visited) {
         die "GAP: memory-reading loop condition not yet lowered\n"
             if _cond_reads_memory($cond_start);
-        _assert_pure_condition($cv, $cond_start, $sim, $opmap);
+        # Which pad slots does the CONDITION mutate? These run once more than the
+        # body (the failing N+1th eval), so post-loop they read their Phi back-edge
+        # (the value after that failing pass), not the header Phi (see Phase 4b).
+        my $cond_mutated = _scout_condition_mutated_targs($cv, $cond_start, $sim, $opmap);
 
         # Phase 1: scout the condition + body for mutated pad slots.
         my $pre_scope = $sim->scope_bindings;
@@ -2481,7 +2508,26 @@ class SoN::FromOptree 0.01 {
 
         # Phase 4: patch back-edges and stamps.
         my $post_scope = $sim->scope_bindings;
+        # The body walk rebound each mutated slot to its last in-loop value -- the
+        # Phi back-edge. Capture it BEFORE _patch_loop_phi re-points the slot at the
+        # Phi, so Phase 4b can restore a condition-mutated slot to it (the AT-EXIT
+        # value) instead.
+        my %backedge = map { $_ => $post_scope->{$_} } $mutated->@*;
         _patch_loop_phi($sim, $_, $phis{$_}, $post_scope->{$_}) for $mutated->@*;
+
+        # Phase 4b: a CONDITION-mutated slot runs on the failing (N+1th) pass too,
+        # so its post-loop value is the mutation's result on that pass -- the Phi
+        # back-edge (`Subtract($i_phi, 1)`, reading the header Phi's EXIT value),
+        # NOT the header Phi itself (which holds the value that FAILED the test).
+        # _patch_loop_phi just re-pointed the slot at the Phi; override it back to
+        # the back-edge. The backend recognizes such a back-edge (it gains a
+        # post-loop consumer beyond its own Phi) and lowers it in the loop header,
+        # where it dominates the exit. A BODY-mutated slot keeps the Phi (the body
+        # does not run on the exit pass), so override only the condition's slots.
+        for my $targ ($cond_mutated->@*) {
+            next unless exists $backedge{$targ};
+            $sim->define($targ, $backedge{$targ});
+        }
         # Patch the memory-Phi's back-edge to the body's final store; then the
         # exit memory is the header Phi (init OR back-edge) so the post-loop read
         # takes it.

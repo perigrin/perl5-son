@@ -95,20 +95,29 @@ subtest 'a plain loop body still translates (the GAP does not over-fire)' => sub
     is($err, undef, 'a plain while loop with no body and/or translates cleanly');
 };
 
-subtest 'side-effecting loop condition refuses loudly (block form)' => sub {
-    # Was: the failing (final) condition evaluation's mutation lost ->
-    # Int:0 instead of Int:-1.
-    like(translate_dies(
-        'sub { my $i = 3; while ($i-- > 0) { } $i }'),
-        qr/GAP.*condition/i, 'while ($i-- > 0) dies with a GAP message');
+subtest 'side-effecting loop condition now lowers (block form)' => sub {
+    # Was a GAP: the failing (final) condition evaluation's mutation was lost, so
+    # $i read Int:0 instead of Int:-1. Now the post-loop read binds to the Phi
+    # back-edge (the AT-EXIT decrement). Full graph + E2E coverage lives in
+    # t/from-optree-loop-cond-effect.t; here we only assert it no longer GAPs.
+    is(translate_dies('sub { my $i = 3; while ($i-- > 0) { } $i }'), undef,
+        'while ($i-- > 0) lowers, does not GAP');
 };
 
-subtest 'side-effecting loop condition refuses loudly (postfix form)' => sub {
-    # Was: the main walk pre-evaluation leaked into the Phi init ->
-    # Int:1 instead of Int:3.
-    like(translate_dies(
-        'sub { my $n = 3; my $t = 0; $t = $t + $n while $n-- > 0; $t }'),
-        qr/GAP.*condition/i, 'postfix $n-- condition dies with a GAP message');
+subtest 'side-effecting loop condition now lowers (postfix form)' => sub {
+    # Was a GAP: the postfix path leaked a pre-evaluation into the Phi init, so
+    # $t read Int:1 instead of Int:3. Now the enter-path delegation to the
+    # two-phase translation lowers it cleanly.
+    is(translate_dies('sub { my $n = 3; my $t = 0; $t = $t + $n while $n-- > 0; $t }'),
+        undef, 'postfix $n-- condition lowers, does not GAP');
+};
+
+subtest 'a side-effecting condition that ALSO stores to memory still GAPs' => sub {
+    # The exit-path rebind models pad slots only; a condition that advances the
+    # memory chain on the failing pass (an lvalue element `$a[$i]++`) is not
+    # lowered -- it must still refuse loudly, not silently drop the memory effect.
+    like(translate_dies('sub { my @a=(1,2,3); my $i=0; while ($a[$i]++ < 2) { } $i }'),
+        qr/GAP.*condition/i, 'a memory-storing condition dies with a GAP message');
 };
 
 subtest 'loop condition with a body decoy comparison wires structurally (zhi 019f29ed)' => sub {
