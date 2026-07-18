@@ -43,10 +43,19 @@ class SoN::IR::Graph 0.01 {
             # edge. Cutting exactly it here makes this order a true
             # topological order of the backedge-cut DAG, so the serializer's
             # only forward references are the sanctioned Phi backedges (which
-            # the Chalk loader defer-patches). Merge Phis (Region region)
-            # keep their full input order.
+            # the Chalk loader defer-patches).
             if ($n->operation eq 'Phi' && $n->region->operation eq 'Loop') {
                 @ins = grep { defined } $ins[0];
+            }
+            # A MERGE Phi (region is a Region, not a Loop) reaches its Region
+            # ONLY via the region field, never through inputs[]. The Chalk
+            # loader wires the Phi's region by node-array position, so the
+            # Region MUST precede the Phi in this order -- visit it as a
+            # predecessor. (A loop Phi's region is the Loop, already visited
+            # early via the control edge, so this only affects merge Phis.)
+            elsif ($n->operation eq 'Phi'
+                    && $n->region->operation ne 'Loop') {
+                $visit->($n->region);
             }
             for my $input (@ins) {
                 $visit->($input);

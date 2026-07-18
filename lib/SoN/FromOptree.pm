@@ -2546,8 +2546,12 @@ class SoN::FromOptree 0.01 {
         }
 
         # Phase 3: the real walk (condition + body against the Phi bindings).
+        # $break_projs collects a mid-body `last if C` exit edge (Proj + the
+        # bindings at the break point) so Phase 5 can add it as an extra
+        # predecessor of the loop's exit Region.
+        my @break_projs;
         my $exit_proj = _walk_loop_body($cv, $cond_start, $sim, $factory,
-            $opmap, {}, $visited, $loop_node);
+            $opmap, {}, $visited, $loop_node, \@break_projs);
         die "GAP: loop without a lowerable condition\n"
             unless defined $exit_proj;
 
@@ -2581,9 +2585,35 @@ class SoN::FromOptree 0.01 {
             $sim->set_memory($mem_phi);
         }
 
-        # Phase 5: post-loop control continues on the exit edge.
-        my $exit_region = $factory->make_cfg('Region', inputs => [$exit_proj]);
+        # Phase 5: post-loop control continues on the exit edge. A mid-body
+        # `last` adds its guard-taken Proj as an extra predecessor of the exit
+        # Region -- the loop now exits via the header-false edge OR the break.
+        my @exit_preds = ($exit_proj, map { $_->{proj} } @break_projs);
+        my $exit_region = $factory->make_cfg('Region', inputs => \@exit_preds);
         $sim->set_control($exit_region);
+
+        # SOUNDNESS for a mid-body break: the exit reads header Phis, correct for
+        # the header-false path. On the break path a slot rebound BEFORE the break
+        # holds a DIFFERENT value (its break-point binding) than its header Phi. If
+        # such a slot is read post-loop, the two exit paths disagree and need an
+        # exit Phi -- which the backend lowers only when it is DEAD (dropped) and
+        # refuses loudly when it is LIVE (a real multi-exit value merge). Bind each
+        # differing slot to an exit Phi over [header-Phi, break-binding]; DCE drops
+        # it when the slot is dead post-loop (the common `last` that only breaks),
+        # and a live read turns it into a loud GAP rather than a miscompile.
+        for my $brk (@break_projs) {
+            my $brk_bindings = $brk->{bindings};
+            for my $targ (sort { $a <=> $b } keys %$brk_bindings) {
+                my $header = $sim->scope_bindings->{$targ};   # header Phi (patched)
+                my $bval   = $brk_bindings->{$targ};
+                next unless defined $header && defined $bval && $header != $bval;
+                my $exit_phi = $factory->make('Phi',
+                    inputs => [$header, $bval],
+                    region => $exit_region,
+                    (defined $header->stamp ? (stamp => $header->stamp) : ()));
+                $sim->define($targ, $exit_phi);
+            }
+        }
         return;
     }
 
@@ -2829,7 +2859,7 @@ class SoN::FromOptree 0.01 {
     # scout walk, whose nodes are throwaway) the legacy If shape is kept --
     # the binding effects are identical either way, which is all the scout
     # measures.
-    sub _walk_loop_body ($cv, $op, $sim, $factory, $opmap, $loop_visited, $outer_visited, $loop_node = undef) {
+    sub _walk_loop_body ($cv, $op, $sim, $factory, $opmap, $loop_visited, $outer_visited, $loop_node = undef, $break_projs = undef) {
         my $ctx = { mode => 'loop' };
         my $exit_proj;
         my $condition_fired = 0;
@@ -2888,9 +2918,11 @@ class SoN::FromOptree 0.01 {
                 die "GAP: function exit inside a loop body not yet lowered\n";
             }
 
-            # Loop-control ops re-route the iteration; walking past one
-            # produced silently wrong graphs (a dropped `last` ran the loop
-            # to completion). Refuse loudly.
+            # A bare `last`/`next` op reached directly (not via an `and(other->..)`
+            # guard) is an UNCONDITIONAL loop control -- walking past one produced
+            # silently wrong graphs (a dropped `last` ran the loop to completion).
+            # The conditional `X if C` forms are caught at the `and` handlers
+            # below; only the unconditional (or `redo`) forms reach here.
             if ($name eq 'last' || $name eq 'next' || $name eq 'redo') {
                 die "GAP: loop control ($name) inside a loop body not yet lowered\n";
             }
@@ -2934,14 +2966,12 @@ class SoN::FromOptree 0.01 {
             # slots -- it just does no control wiring.
             if ($name eq 'and' && $sim->stack_depth > 0
                     && $op->can('other') && ${$op->other}
-                    && $op->other->name eq 'last') {
-                # Only a FIRST-statement `last if` hoists soundly (nothing in the
-                # iteration ran before the exit check). A `last if` deeper in the
-                # body (`BODY; last if C`) is a bottom/mid-loop exit; hoisting its
-                # check to the header would reorder it ahead of the earlier body
-                # statements -- refuse loudly rather than miscompile.
-                die "GAP: last not at the head of a loop body not yet lowered\n"
-                    if $stmt_count != 1;
+                    && $op->other->name eq 'last'
+                    && $stmt_count == 1) {
+                # HEAD-of-body `last if`: nothing in the iteration ran before the
+                # exit check, so it hoists soundly into the loop's continuation
+                # (negated). A `last if` deeper in the body is handled by the
+                # mid-body loop-control handler below (a real If split), not here.
                 die "GAP: last inside a loop body already has a loop condition\n"
                     if $condition_fired++;
                 my $cond = $sim->pop_node;
@@ -2959,6 +2989,113 @@ class SoN::FromOptree 0.01 {
                 # Continue on the false arm -- the rest of the body runs when the
                 # `last` guard is NOT taken.
                 $op = $op->next;
+                next;
+            }
+
+            # MID-BODY `last if C` / `next if C`: an `and` whose ->other is a
+            # `last`/`next` op that is NOT at the head of the body (statements ran
+            # before it). This is a genuine mid-loop control split: build a real
+            # `If(C)` at this position and route the guard-taken arm accordingly.
+            #
+            #   `next if C` = `if (!C) { REST-OF-BODY }`: `next` skips the rest of
+            #     the body this pass, then the back-edge runs unchanged. The
+            #     guard-taken (C true) arm is EMPTY (skip to the merge/back-edge);
+            #     the guard-not-taken (C false) arm runs the rest of the body.
+            #     merge() Regions the two arms and Phis any slot the rest rebinds
+            #     -- no loop-control edge is needed (a `next` is a guard on the
+            #     remainder, not a control transfer).
+            #
+            #   `last if C`: `last` LEAVES the loop when C is true -- a real second
+            #     exit edge. The guard-taken (C true) arm routes to the loop's exit
+            #     Region (its Proj becomes an extra predecessor via $break_projs);
+            #     the guard-not-taken (C false) arm continues the rest of the body
+            #     to the back-edge. Sound only when every post-loop-read slot holds
+            #     its header Phi at the break point (the exit reads header Phis);
+            #     a slot rebound BEFORE the break and read post-loop is the
+            #     multi-exit merge case and GAPs loudly (below).
+            if ($name eq 'and' && $sim->stack_depth > 0
+                    && $op->can('other') && ${$op->other}
+                    && ($op->other->name eq 'last' || $op->other->name eq 'next')) {
+                my $kind = $op->other->name;   # 'last' or 'next'
+                # NOTE: a fired loop header condition ($condition_fired) is
+                # EXPECTED here -- a `while (COND) { ...; last if C; ... }` has
+                # both. The mid-body break is an independent If split, not a
+                # second loop condition, so it does not conflict.
+                my $cond = $sim->pop_node;
+                # The guard op's op_next is where the rest-of-body arm converges
+                # back (its first op). Build the If and split the control.
+                my $if_node = $factory->make_cfg('If',
+                    inputs => [$sim->control, $cond]);
+                # Proj 0 = then (C true = guard taken), Proj 1 = else (C false =
+                # guard not taken = run the rest).
+                my $taken_proj = $factory->make_cfg('Proj',
+                    inputs => [$if_node], index => 0);
+                my $rest_proj  = $factory->make_cfg('Proj',
+                    inputs => [$if_node], index => 1);
+
+                # Walk the REST of the body (op->next chain) on the guard-not-taken
+                # arm. Use a snapshot so the guard-taken (skip/exit) arm keeps the
+                # pre-guard bindings. _walk_branch stops at the body's unstack (an
+                # unhandled op) or a visited op.
+                my $rest_sim = $sim->snapshot;
+                $rest_sim->set_control($rest_proj);
+                my ($rest_end) =
+                    _walk_branch($cv, $op->next, $rest_sim, $factory, $opmap,
+                        $loop_visited);
+                # Drain any leftover residual the rest-arm pushed (a void
+                # statement value) so merge() does not build a spurious stack Phi.
+                $rest_sim->pop_node while $rest_sim->stack_depth > $sim->stack_depth;
+
+                if ($kind eq 'next') {
+                    # The guard-taken arm (C true) skips the rest: it holds only
+                    # $taken_proj control with the pre-guard bindings. Merge the
+                    # skip arm (self, Proj 0) with the rest arm (Proj 1) so the
+                    # merge Phi's arm 0 = skip (pre-guard) and arm 1 = rest.
+                    my $skip_sim = $sim->snapshot;
+                    $skip_sim->set_control($taken_proj);
+                    my $pre = $sim->scope_bindings;
+                    $skip_sim->merge($rest_sim, $factory);
+                    # Adopt the merged control / memory / scope into the main sim.
+                    # A merge Phi over a loop-carried accumulator becomes that
+                    # slot's back-edge; _patch_loop_phi rejects an UNSTAMPED
+                    # back-edge, so stamp each newly-built merge Phi from the join
+                    # of its (stamped) arm values -- the same input-join stamping
+                    # _make_ternary applies to a select.
+                    my $merged = $skip_sim->scope_bindings;
+                    for my $targ (keys %$merged) {
+                        my $m = $merged->{$targ};
+                        next unless defined $m
+                            && $pre->{$targ} && $m != $pre->{$targ}
+                            && $m->operation eq 'Phi' && !defined $m->stamp;
+                        my ($a, $b) = $m->inputs->@*;
+                        $m->set_stamp(SoN::IR::Stamp::join($a->stamp, $b->stamp))
+                            if defined $a && defined $b
+                            && defined $a->stamp && defined $b->stamp;
+                    }
+                    $sim->set_control($skip_sim->control);
+                    $sim->set_memory($skip_sim->memory);
+                    $sim->define($_, $merged->{$_}) for keys %$merged;
+                }
+                else {
+                    # `last`: the guard-taken arm LEAVES the loop. Its Proj is an
+                    # extra predecessor of the loop's exit Region ($break_projs,
+                    # threaded to the caller which wires the exit Region + runs the
+                    # soundness check). In scout mode ($break_projs undef) the
+                    # break edge is not wired -- the scout only measures the rest
+                    # arm's rebinds, so record nothing and continue.
+                    push @$break_projs,
+                        { proj => $taken_proj, bindings => $sim->scope_bindings }
+                        if defined $break_projs;
+                    # Continue the main walk on the rest arm's merged state.
+                    $sim->set_control($rest_sim->control);
+                    $sim->set_memory($rest_sim->memory);
+                    my $rest_scope = $rest_sim->scope_bindings;
+                    $sim->define($_, $rest_scope->{$_}) for keys %$rest_scope;
+                }
+
+                # Resume the outer walk at the op the rest-arm converged on (the
+                # body's unstack / leaveloop) so the loop-body loop terminates.
+                $op = (defined $rest_end && ref $rest_end) ? $rest_end : $op->next;
                 next;
             }
 
@@ -3033,18 +3170,28 @@ class SoN::FromOptree 0.01 {
     }
 
     # Does a foreach body (op chain from $body_start to its loop terminator)
-    # contain a top-level `and`/`or` -- a postfix modifier guard? A foreach has no
-    # and/or loop condition, so an `and`/`or` here is `STMT if/unless C`, which the
-    # loop-body walker cannot lower yet (zhi 019f5a27). Pure lexical scan; stop at
-    # the body's unstack/leaveloop (the iteration/loop boundary) so a following
-    # loop's ops are not scanned.
+    # contain a top-level `and`/`or` postfix modifier guard the loop-body walker
+    # cannot lower? A foreach has no and/or loop condition, so an `and`/`or` here
+    # is either a `STMT if/unless C` value modifier (unlowered, zhi 019f5a27) OR a
+    # loop-control guard `last if C` / `next if C` whose ->other is a last/next op
+    # -- and THAT the loop-body walker DOES lower (mid-body If split). Flag only
+    # the former. Pure lexical scan; stop at the body's unstack/leaveloop (the
+    # iteration/loop boundary) so a following loop's ops are not scanned.
     sub _body_has_modifier_andor ($body_start) {
         my %seen;
         for (my $op = $body_start; $$op && !$seen{$$op}; $op = $op->next) {
             $seen{$$op} = 1;
             my $name = $op->name;
             last if $name eq 'unstack' || $name eq 'leaveloop';
-            return 1 if $name eq 'and' || $name eq 'or';
+            if ($name eq 'and' || $name eq 'or') {
+                # A loop-control guard (`last if`/`next if`) is lowered by
+                # _walk_loop_body's mid-body handler; it is not an unlowered
+                # modifier.
+                my $other = $op->can('other') && ${$op->other}
+                    ? $op->other->name : '';
+                next if $other eq 'last' || $other eq 'next';
+                return 1;
+            }
         }
         return 0;
     }
