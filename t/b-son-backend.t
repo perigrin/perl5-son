@@ -142,9 +142,12 @@ subtest 'a GAP-refused sub is reported on stderr and other subs survive' => sub 
     # The discovery catch swallows genuinely-untranslatable subs, but a
     # deliberate "GAP: ..." die is the translator refusing loudly; hiding it
     # made the sub vanish from the JSON with no trace anywhere.
+    # `refused` must exercise a shape that STILL GAPs. (die-in-arm used to GAP
+    # here but now lowers via Unwind; a `next` inside a loop body remains an
+    # honest GAP -- loop control other than a head-of-body `last` is unhandled.)
     my $src = 'sub ok_one { 42 } '
-            . 'sub refused { my $c = shift; my $x = 0; '
-            . 'if ($c) { die "boom" } else { $x = 1 } $x }';
+            . 'sub refused { my $s = 0; for my $i (1..3) { next if $i == 2; '
+            . '$s = $s + $i } $s }';
     my $stderr = `$perl -Ilib -MO=SoN,json -e '$src' 2>&1 >/dev/null`;
     like($stderr, qr/B::SoN: skipped main::refused: GAP:/,
         'the refusal names the sub and the GAP on stderr');

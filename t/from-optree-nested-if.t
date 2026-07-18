@@ -126,8 +126,12 @@ subtest 'unhandled op inside an arm refuses loudly (no silent truncation)' => su
     SoN::OptSuppress::restore_peep();
     like(dies { SoN::FromOptree->translate($mod) }, qr/GAP/,
         'a statement modifier inside an arm dies with a GAP message');
-    like(dies { SoN::FromOptree->translate($die) }, qr/GAP/,
-        'a die inside an arm dies with a GAP message');
+    # A die inside an arm now LOWERS (via an Unwind CFG node -> exit+unreachable
+    # in the backend); it no longer GAPs. The taken-die aborts, the not-taken
+    # arm's value is returned. This test previously asserted the GAP that the
+    # die-in-arm feature (chalk T2 / perl5-son die-in-arm commit) removed.
+    ok(lives { SoN::FromOptree->translate($die) },
+        'a die inside an arm now lowers (Unwind), no longer a GAP');
 };
 
 subtest 'value-context ternary merges arm pad rebinds' => sub {
