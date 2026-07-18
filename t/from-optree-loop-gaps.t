@@ -52,6 +52,55 @@ subtest 'cond_expr inside a loop body now lowers (was a GAP)' => sub {
         'the arm-select lowered to a TernaryExpr');
 };
 
+subtest 'a FIRST-statement `last if` in a while(1) body now lowers (hoisted)' => sub {
+    # `while (1) { last if COND; BODY }` == `while (!COND) { BODY }`: the folded-away
+    # `1` header means the conditional break IS the loop's continuation, negated.
+    # The producer hoists the guard into the header (NumGe -> NumLt over the same
+    # operands, control-wired to the Loop) and walks the false arm as the body.
+    SoN::OptSuppress::suppress_peep();
+    my $cv = eval 'sub { my $i = 0; my $s = 0; while (1) { last if $i >= 3; $s = $s + $i; $i = $i + 1 } $s }';
+    my $err = $@;
+    SoN::OptSuppress::restore_peep();
+    die "compile failed: $err" if $err;
+
+    my $graph = SoN::FromOptree->translate($cv);
+    ok($graph, 'the first-statement `last if` loop translates cleanly (no GAP)');
+    ok((grep { $_->operation eq 'Loop' } $graph->nodes->@*), 'has a Loop node');
+
+    # Exactly one node carries loop_control and it is the NEGATED comparison
+    # (NumLt, the continuation `$i < 3`), wired to the Loop -- not the original
+    # NumGe guard.
+    my @wired = grep { defined $_->loop_control } $graph->nodes->@*;
+    is(scalar @wired, 1, 'exactly one condition is control-wired to the Loop');
+    is($wired[0]->operation, 'NumLt',
+        'the wired continuation is the negated guard (NumGe last-if -> NumLt continue)');
+    is($wired[0]->loop_control->operation, 'Loop', 'it points at the Loop node');
+};
+
+subtest 'a `last if` deeper in the body refuses loudly (bottom/mid-loop exit)' => sub {
+    # A `last if` that is NOT the first body statement would need the check
+    # reordered ahead of the earlier statements to hoist -- a miscompile. GAP.
+    like(translate_dies(
+        'sub { my $i = 0; my $s = 0; while (1) { $s = $s + 10; last if $i >= 2; $i = $i + 1 } $s }'),
+        qr/GAP.*last not at the head/i, 'a mid-body `last if` dies with a GAP message');
+};
+
+subtest 'a `last if` in a loop that ALSO has a header refuses loudly' => sub {
+    # `while (COND) { ...; last if C2 }` is a two-exit loop -- the header hoist
+    # only models a single continuation. GAP rather than mis-model.
+    like(translate_dies(
+        'sub { my $i = 0; my $s = 0; while ($i < 5) { $i = $i + 1; last if $i == 3; $s = $s + $i } $s }'),
+        qr/GAP/, 'a header + body `last if` dies with a GAP message');
+};
+
+subtest '`next` inside a loop body still refuses loudly' => sub {
+    # Only `last` (break to exit) is hoistable; `next` (continue to header) is a
+    # distinct control edge not yet modeled -- it must still GAP, not miscompile.
+    like(translate_dies(
+        'sub { my $i = 0; my $s = 0; while (1) { next if $i >= 3; $s = $s + $i; $i = $i + 1 } $s }'),
+        qr/GAP.*loop control \(next\)/i, 'a `next if` dies with a GAP message');
+};
+
 subtest 'nested loop inside a loop body refuses loudly' => sub {
     # Was: inner loop minted Projs on the OUTER Loop, truncated the body walk,
     # and one variant ran to Int:3 instead of Int:6 silently.

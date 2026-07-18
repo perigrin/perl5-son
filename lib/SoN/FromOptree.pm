@@ -2372,6 +2372,33 @@ class SoN::FromOptree 0.01 {
             stamp  => SoN::IR::Stamp->new(type => 'Boolean'));
     }
 
+    # The logical negation of each comparison op: NumGe negates to NumLt (over the
+    # SAME operands), etc. Used to hoist a `last if COND` at the head of a
+    # `while(1)` body into the loop's continuation condition -- the loop runs
+    # while NOT COND, so the exit test on `last if $i >= 3` becomes the
+    # continuation `$i < 3` (NumLt), an icmp the backend recovers exactly like a
+    # written while-header (see _walk_loop_body's condition handler).
+    my %_NEGATE_COMPARISON = (
+        NumEq => 'NumNe', NumNe => 'NumEq',
+        NumLt => 'NumGe', NumGe => 'NumLt',
+        NumGt => 'NumLe', NumLe => 'NumGt',
+        StrEq => 'StrNe', StrNe => 'StrEq',
+        StrLt => 'StrGe', StrGe => 'StrLt',
+        StrGt => 'StrLe', StrLe => 'StrGt',
+    );
+
+    # Negate a comparison node by swapping its op over the same operands. Returns
+    # undef for any non-comparison shape (a bare-truthiness `last if $flag`),
+    # which the caller GAPs -- wrapping an arbitrary value in Not would not yield
+    # the icmp the backend's structural loop recovery requires.
+    sub _negate_comparison ($node, $factory) {
+        my $neg = $_NEGATE_COMPARISON{ $node->operation }
+            or return undef;
+        return $factory->make($neg,
+            inputs => [ $node->inputs->@* ],
+            stamp  => SoN::IR::Stamp->new(type => 'Boolean'));
+    }
+
     # Perl evaluates a while CONDITION N+1 times: the final, FAILING evaluation
     # still applies its side effects. `while ($i-- > 0)` decrements $i on the
     # failing pass too, so the post-loop $i is the value AFTER that pass, not the
@@ -2798,6 +2825,12 @@ class SoN::FromOptree 0.01 {
         # `enter` and, at a `nextstate` inside the do-block, pop leftovers back to
         # that depth -- preserving the OUTER operand ($s) pushed before the enter.
         my @enter_depth;
+        # Count top-level body statement boundaries (nextstate outside a do-block).
+        # A `last if COND` is hoistable into the loop header ONLY when it is the
+        # FIRST body statement (stmt_count == 1: just its own opening nextstate has
+        # passed) -- otherwise hoisting the exit check to the top would reorder it
+        # ahead of the statements that ran before it in the source (a miscompile).
+        my $stmt_count = 0;
         while ($$op) {
             # Stop if we've looped back (unstack goes back to condition)
             last if $loop_visited->{$$op}++;
@@ -2815,6 +2848,9 @@ class SoN::FromOptree 0.01 {
                 # sub-statement's leftover values, keeping the do-block entry depth.
                 my $base = $enter_depth[-1];
                 $sim->pop_node while $sim->stack_depth > $base;
+            }
+            elsif ($name eq 'nextstate') {
+                $stmt_count++;
             }
 
             # unstack marks end of loop iteration - stop
@@ -2849,6 +2885,47 @@ class SoN::FromOptree 0.01 {
             if ($name eq 'enterloop' || $name eq 'enteriter'
                 || ($opmap->is_branch($name) && $name ne 'and' && $name ne 'or')) {
                 die "GAP: $name inside a loop body not yet lowered\n";
+            }
+
+            # `last if COND` at the head of a headless `while(1)` body: the `and`
+            # whose ->other is a `last` op is a conditional break. The loop has no
+            # written header condition (the `1` folded away), so this exit test IS
+            # the loop's continuation, negated: run while NOT COND. Hoist it exactly
+            # like a written header -- wire the negated comparison to the Loop and
+            # continue the body walk on the false (continue) arm (and->next), NOT
+            # the true arm (and->other = last). A comparison-only guard is handled;
+            # a bare-truthiness `last if $flag` (no icmp to negate) still GAPs.
+            # Fires in scout mode too (loop_node undef): the scout must skip the
+            # `last` guard and walk the continue arm to find the body's mutated
+            # slots -- it just does no control wiring.
+            if ($name eq 'and' && $sim->stack_depth > 0
+                    && $op->can('other') && ${$op->other}
+                    && $op->other->name eq 'last') {
+                # Only a FIRST-statement `last if` hoists soundly (nothing in the
+                # iteration ran before the exit check). A `last if` deeper in the
+                # body (`BODY; last if C`) is a bottom/mid-loop exit; hoisting its
+                # check to the header would reorder it ahead of the earlier body
+                # statements -- refuse loudly rather than miscompile.
+                die "GAP: last not at the head of a loop body not yet lowered\n"
+                    if $stmt_count != 1;
+                die "GAP: last inside a loop body already has a loop condition\n"
+                    if $condition_fired++;
+                my $cond = $sim->pop_node;
+                if (defined $loop_node) {
+                    my $neg = _negate_comparison($cond, $factory)
+                        or die "GAP: non-comparison `last if` guard inside a loop"
+                             . " body not yet lowered\n";
+                    $neg->set_loop_control($loop_node);
+                    my $body_proj = $factory->make_cfg('Proj',
+                        inputs => [$loop_node], index => 0);
+                    $exit_proj = $factory->make_cfg('Proj',
+                        inputs => [$loop_node], index => 1);
+                    $sim->set_control($body_proj);
+                }
+                # Continue on the false arm -- the rest of the body runs when the
+                # `last` guard is NOT taken.
+                $op = $op->next;
+                next;
             }
 
             # Handle the loop condition (and/or) - walk body via other
