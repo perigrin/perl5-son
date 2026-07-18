@@ -2877,6 +2877,22 @@ class SoN::FromOptree 0.01 {
                 die "GAP: loop control ($name) inside a loop body not yet lowered\n";
             }
 
+            # A ternary (cond_expr) in the loop body is a VALUE-producing select
+            # (`$s += ($i > 1 ? 10 : 1)`) -- delegate to the shared
+            # _handle_cond_expr, which builds the same TernaryExpr / If+Proj+Region
+            # construction the main walk uses. Its arm walk marks its ops visited
+            # in $loop_visited so this loop does not re-walk them. Requires a value
+            # on the stack (the cond op has been walked and pushed the condition);
+            # a void statement-level cond_expr is not this shape and falls through
+            # to the branch-GAP below.
+            if ($name eq 'cond_expr' && $opmap->is_branch($name)
+                && $sim->stack_depth > 0) {
+                $loop_visited->{$$op}++;
+                $op = _handle_cond_expr($cv, $op, $sim, $factory, $opmap,
+                    $loop_visited);
+                next;
+            }
+
             # Nested control structure in a body is only translated by the
             # MAIN walker; skipping it here emitted corrupt graphs (a nested
             # loop minted Projs on the OUTER Loop and truncated the walk; a
@@ -3080,9 +3096,20 @@ class SoN::FromOptree 0.01 {
         return;
     }
 
-    sub _arm_has_void_call ($start, $stop) {
+    # $join (optional): the address where the two arms rejoin (op AFTER the
+    # construct). A single-op arm's ->next chain runs straight THROUGH the join
+    # into the following statement -- e.g. `print $c ? "y" : "n"`, where the
+    # false arm `const "n"` ->next IS the `print` (the join, a void op past the
+    # arm). Without a join bound the scan mistakes that trailing print for an
+    # in-arm void call and routes a plain single-value select down the void
+    # control-flow path. Stop at the join so only ops genuinely inside the arm
+    # are considered.
+    sub _arm_has_void_call ($start, $stop, $join = undef) {
         my %seen;
-        for (my $op = $start; $$op && $$op != $stop && !$seen{$$op}; $op = $op->next) {
+        for (my $op = $start;
+             $$op && $$op != $stop && !(defined $join && $$op == $join)
+                 && !$seen{$$op};
+             $op = $op->next) {
             $seen{$$op} = 1;
             my $name = $op->name;
             # A nested branch: not a plain void-call arm. Bail so it GAPs loudly.
@@ -3205,11 +3232,14 @@ class SoN::FromOptree 0.01 {
     # if-else inside an arm recurse instead of degrading the arm value to the
     # inner condition. Returns the op where translation continues.
     sub _handle_cond_expr ($cv, $op, $sim, $factory, $opmap, $visited) {
-        # List context would need per-arm value LISTS; the scalar path below
-        # pops exactly one value per arm and silently mistranslated
-        # `my @a = $c ? (1,2) : (3,4)`. Refuse loudly.
-        die "GAP: list-context ternary not yet lowered\n"
-            if ($op->flags & 3) == 3;   # OPf_WANT == OPf_WANT_LIST
+        # A LIST-context ternary (`print $c ? "y" : "n"`) whose arms each produce
+        # exactly ONE value is the same select shape as a scalar-context ternary:
+        # each arm pops one value and the TernaryExpr picks between them. The
+        # plain scalar path below handles that. A genuine multi-element list arm
+        # (`my @a = $c ? (1,2) : (3,4)`) would need per-arm value LISTS -- the
+        # arm-value handling below detects an arm whose depth-delta != 1 and GAPs
+        # loudly rather than silently dropping the extra values.
+        my $list_ctx = ($op->flags & 3) == 3;   # OPf_WANT == OPf_WANT_LIST
 
         my $cond = $sim->pop_node;
         my $join_addr = _find_join_addr($op->other, $op->next) || undef;
@@ -3239,10 +3269,17 @@ class SoN::FromOptree 0.01 {
               . " (arm did not reach the join) not yet lowered\n"
                 if defined $join_addr
                 && !(defined $end && ref $end && $$end == $join_addr);
-            my $val = $arm_sim->stack_depth > $base_depth
+            # The arm's value-count is its depth ABOVE the pre-branch base. A
+            # scalar-context arm pushes exactly one; a list-context arm whose
+            # source is a genuine multi-element list (`(1,2)`) pushes more --
+            # detected by the caller so the single-value list case (the t/base
+            # `print $c ? "y" : "n"` idiom, each arm a lone string) lowers while
+            # the multi-value list still GAPs loudly.
+            my $delta = $arm_sim->stack_depth - $base_depth;
+            my $val = $delta > 0
                 ? $arm_sim->pop_node
                 : _undef_constant($factory);
-            return ($val, $end, $arm_sim);
+            return ($val, $end, $arm_sim, $delta);
         };
 
         # Memory-SSA 2b-3: a flat if/else whose arm STORES to an element must
@@ -3270,8 +3307,8 @@ class SoN::FromOptree 0.01 {
         my $mem_branch  = $elem_branch
                        || _arm_has_field_store($cv, $op->other, $op->next)
                        || _arm_has_field_store($cv, $op->next, $op->other)
-                       || _arm_has_void_call($op->other, $op->next)       # true arm
-                       || _arm_has_void_call($op->next, $op->other)       # false arm
+                       || _arm_has_void_call($op->other, $op->next, $join_addr)  # true arm
+                       || _arm_has_void_call($op->next, $op->other, $join_addr)  # false arm
                        || _arm_has_die($op->other, $op->next, $join_addr) # true arm
                        || _arm_has_die($op->next, $op->other, $join_addr);# false arm
         if ($mem_branch) {
@@ -3358,8 +3395,18 @@ class SoN::FromOptree 0.01 {
         }
 
         # op->next = false arm, op->other = true arm.
-        my ($false_val, $false_end, $false_sim) = $walk_arm->($op->next);
-        my ($true_val,  $true_end,  $true_sim)  = $walk_arm->($op->other);
+        my ($false_val, $false_end, $false_sim, $false_delta) = $walk_arm->($op->next);
+        my ($true_val,  $true_end,  $true_sim,  $true_delta)  = $walk_arm->($op->other);
+
+        # A list-context ternary lowers via this single-value select ONLY when
+        # each arm produced exactly one value (`print $c ? "y" : "n"`). An arm
+        # that pushed a genuine multi-element list (`$c ? (1,2) : (3,4)`) has a
+        # depth-delta > 1 -- its extra values were left unmerged; refuse loudly
+        # rather than silently drop them. (delta < 1 = a value-free arm, handled
+        # as _undef_constant above; that is the if/else void form, not a list.)
+        die "GAP: list-context ternary with a multi-element list arm"
+          . " not yet lowered\n"
+            if $list_ctx && ($true_delta > 1 || $false_delta > 1);
 
         # Merge arm pad rebinds in EVERY context -- an assignment inside a
         # value-context arm (`my $y = $c ? ($x = 1) : 2`) is a binding side
