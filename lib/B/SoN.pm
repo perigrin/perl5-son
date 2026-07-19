@@ -474,7 +474,7 @@ sub _const_op_value {
         my $padl = $cv->PADLIST;
         $sv = $padl->ARRAYelt(1)->ARRAYelt($targ) if $$padl;
     }
-    return ( undef, undef, undef ) unless $sv && $$sv;
+    return ( undef, undef, undef ) unless $sv && $$sv && !$sv->isa('B::SPECIAL');
 
     if ( $sv->isa('B::IV') && !$sv->isa('B::PVIV') ) {
         return ( $sv->int_value, SoN::IR::Stamp->new( type => 'Int' ), 'integer' );
