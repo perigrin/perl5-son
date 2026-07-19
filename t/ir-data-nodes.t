@@ -4,10 +4,10 @@
 use v5.42.0;
 use Test2::V0;
 
-use SoN::IR::NodeFactory;
+use Chalk::IR::NodeFactory;
 use SoN::IR::Stamp;
 
-my $factory = SoN::IR::NodeFactory->new();
+my $factory = Chalk::IR::NodeFactory->new();
 my $int_stamp = SoN::IR::Stamp->new(type => 'Int');
 
 # Helper to make constants
@@ -15,7 +15,7 @@ sub const ($val) { $factory->make('Constant', value => $val, stamp => $int_stamp
 
 subtest 'Constant and Phi' => sub {
     my $c = const(42);
-    isa_ok($c, 'SoN::IR::Node');
+    isa_ok($c, 'Chalk::IR::Node');
     is($c->value, 42, 'constant value');
 
     my $region = $factory->make_cfg('Region');
@@ -30,7 +30,7 @@ subtest 'Arithmetic operations' => sub {
     my ($a, $b) = (const(10), const(20));
     for my $op (qw(Add Subtract Multiply Divide)) {
         my $node = $factory->make($op, inputs => [$a, $b]);
-        isa_ok($node, 'SoN::IR::Node');
+        isa_ok($node, 'Chalk::IR::Node');
         is($node->operation, $op, "$op operation name");
         is(scalar $node->inputs->@*, 2, "$op has 2 inputs");
     }

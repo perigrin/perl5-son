@@ -4,7 +4,7 @@
 use v5.42.0;
 use Test2::V0;
 
-use SoN::IR::NodeFactory;
+use Chalk::IR::NodeFactory;
 use SoN::IR::Graph;
 use SoN::IR::Stamp;
 use SoN::Serialize::JSON qw(to_json);
@@ -22,7 +22,7 @@ use SoN::Serialize::JSON qw(to_json);
 # ---- helpers ----
 
 sub make_simple_graph () {
-    my $factory = SoN::IR::NodeFactory->new();
+    my $factory = Chalk::IR::NodeFactory->new();
     my $start   = $factory->make_cfg('Start');
     my $const   = $factory->make('Constant', value => '42', const_type => 'integer');
     my $ret     = $factory->make_cfg('Return', inputs => [$start, $const]);
@@ -130,7 +130,7 @@ subtest 'serialize same graph twice produces identical output' => sub {
 # ====================================================
 
 subtest 'multiple named methods serialize under distinct keys' => sub {
-    my $factory = SoN::IR::NodeFactory->new();
+    my $factory = Chalk::IR::NodeFactory->new();
 
     my $start1 = $factory->make_cfg('Start');
     my $c1     = $factory->make('Constant', value => '10', const_type => 'integer');

@@ -4,12 +4,12 @@
 use v5.42.0;
 use Test2::V0;
 
-use SoN::IR::NodeFactory;
+use Chalk::IR::NodeFactory;
 use SoN::IR::Graph;
 use SoN::IR::Stamp;
 use SoN::Render::Text;
 
-my $factory = SoN::IR::NodeFactory->new();
+my $factory = Chalk::IR::NodeFactory->new();
 
 subtest 'Simple graph: 1 + 2' => sub {
     my $start = $factory->make_cfg('Start');
@@ -35,7 +35,7 @@ subtest 'Simple graph: 1 + 2' => sub {
 
 subtest 'Text rendering' => sub {
     # Fresh factory to get clean IDs
-    my $f = SoN::IR::NodeFactory->new();
+    my $f = Chalk::IR::NodeFactory->new();
     my $start = $f->make_cfg('Start');
     my $c1 = $f->make('Constant', value => 42, stamp => SoN::IR::Stamp->new(type => 'Int'));
     my $c2 = $f->make('Constant', value => 10, stamp => SoN::IR::Stamp->new(type => 'Int'));
@@ -54,7 +54,7 @@ subtest 'Text rendering' => sub {
 };
 
 subtest 'Text rendering is deterministic' => sub {
-    my $f = SoN::IR::NodeFactory->new();
+    my $f = Chalk::IR::NodeFactory->new();
     my $start = $f->make_cfg('Start');
     my $c = $f->make('Constant', value => 1, stamp => SoN::IR::Stamp->new(type => 'Int'));
     my $ret = $f->make_cfg('Return', inputs => [$start, $c]);
@@ -67,7 +67,7 @@ subtest 'Text rendering is deterministic' => sub {
 };
 
 subtest 'Node by id lookup' => sub {
-    my $f = SoN::IR::NodeFactory->new();
+    my $f = Chalk::IR::NodeFactory->new();
     my $start = $f->make_cfg('Start');
     my $ret = $f->make_cfg('Return', inputs => [$start]);
     my $graph = SoN::IR::Graph->new(start => $start, returns => [$ret]);
@@ -77,7 +77,7 @@ subtest 'Node by id lookup' => sub {
 };
 
 subtest 'PadAccess rendering' => sub {
-    my $f = SoN::IR::NodeFactory->new();
+    my $f = Chalk::IR::NodeFactory->new();
     my $start = $f->make_cfg('Start');
     my $pad = $f->make('PadAccess', targ => 3, varname => '$x');
     my $ret = $f->make_cfg('Return', inputs => [$start, $pad]);

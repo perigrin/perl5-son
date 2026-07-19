@@ -1,52 +1,44 @@
-# ABOUTME: Tests for 9 new BinOp subclasses: Repeat, Match, NotMatch, DefinedOr,
+# ABOUTME: Tests for 9 BinOp subclasses: Repeat, Match, NotMatch, DefinedOr,
 # ABOUTME: Xor, Range, Yada, IsaOp (simple), and CompoundAssign (with $op field).
 
 use v5.42.0;
 use Test2::V0;
 
-use SoN::IR::Node;
-use SoN::IR::Node::Constant;
-use SoN::IR::Node::BinOp;
+use Chalk::IR::NodeFactory;
 use SoN::IR::Stamp;
 
-use SoN::IR::Node::Repeat;
-use SoN::IR::Node::Match;
-use SoN::IR::Node::NotMatch;
-use SoN::IR::Node::DefinedOr;
-use SoN::IR::Node::Xor;
-use SoN::IR::Node::Range;
-use SoN::IR::Node::Yada;
-use SoN::IR::Node::IsaOp;
-use SoN::IR::Node::CompoundAssign;
-
+my $factory = Chalk::IR::NodeFactory->new;
 my $stamp = SoN::IR::Stamp->new(type => 'Int');
 
+# Nodes are built through the factory, not by direct ->new: Chalk::IR::Node
+# requires an explicit content-hash id that only the factory assigns
+# (SoN::IR::Node auto-generated one; Chalk::IR::Node does not).
 sub const ($val) {
-    SoN::IR::Node::Constant->new(value => $val, stamp => $stamp)
+    $factory->make('Constant', value => $val, stamp => $stamp)
 }
 
 # --- Simple BinOp subclasses ---
 
 my @simple_cases = (
-    [ 'Repeat',     'SoN::IR::Node::Repeat',     'x'   ],
-    [ 'Match',      'SoN::IR::Node::Match',      '=~'  ],
-    [ 'NotMatch',   'SoN::IR::Node::NotMatch',   '!~'  ],
-    [ 'DefinedOr',  'SoN::IR::Node::DefinedOr',  '//'  ],
-    [ 'Xor',        'SoN::IR::Node::Xor',        'xor' ],
-    [ 'Range',      'SoN::IR::Node::Range',      '..'  ],
-    [ 'Yada',       'SoN::IR::Node::Yada',       '...' ],
-    [ 'IsaOp',      'SoN::IR::Node::IsaOp',      'isa' ],
+    [ 'Repeat',     'x'   ],
+    [ 'Match',      '=~'  ],
+    [ 'NotMatch',   '!~'  ],
+    [ 'DefinedOr',  '//'  ],
+    [ 'Xor',        'xor' ],
+    [ 'Range',      '..'  ],
+    [ 'Yada',       '...' ],
+    [ 'IsaOp',      'isa' ],
 );
 
 for my $case (@simple_cases) {
-    my ($name, $class, $op) = $case->@*;
+    my ($name, $op) = $case->@*;
     subtest "$name is a BinOp" => sub {
         my $left  = const(1);
         my $right = const(2);
-        my $node  = $class->new(inputs => [$left, $right]);
+        my $node  = $factory->make($name, inputs => [$left, $right]);
 
-        isa_ok($node, ['SoN::IR::Node::BinOp'], "$name isa BinOp");
-        isa_ok($node, ['SoN::IR::Node'],        "$name isa Node");
+        isa_ok($node, ['Chalk::IR::Node::BinOp'], "$name isa BinOp");
+        isa_ok($node, ['Chalk::IR::Node'],        "$name isa Node");
         is($node->left,      $left,  "$name->left returns first input");
         is($node->right,     $right, "$name->right returns second input");
         is($node->op_str,    $op,    "$name->op_str eq '$op'");
@@ -61,8 +53,8 @@ subtest 'simple BinOp content_hash includes operation name and input ids' => sub
     my $right = const(20);
 
     for my $case (@simple_cases) {
-        my ($name, $class) = $case->@*;
-        my $node = $class->new(inputs => [$left, $right]);
+        my ($name) = $case->@*;
+        my $node = $factory->make($name, inputs => [$left, $right]);
         my $hash = $node->content_hash;
         like($hash, qr/\Q$name\E/, "$name content_hash contains operation name");
         like($hash, qr/\Q${\$left->id}\E/, "$name content_hash contains left id");
@@ -72,19 +64,22 @@ subtest 'simple BinOp content_hash includes operation name and input ids' => sub
 
 # --- CompoundAssign ---
 
-subtest 'CompoundAssign is a BinOp with op field' => sub {
+subtest 'CompoundAssign is a Node with op field' => sub {
     my $left  = const(1);
     my $right = const(2);
-    my $node  = SoN::IR::Node::CompoundAssign->new(
+    my $node  = $factory->make('CompoundAssign',
         inputs => [$left, $right],
         op     => '+=',
     );
 
-    isa_ok($node, ['SoN::IR::Node::BinOp'], 'CompoundAssign isa BinOp');
-    isa_ok($node, ['SoN::IR::Node'],        'CompoundAssign isa Node');
-    is($node->left,      $left,              'CompoundAssign->left returns first input');
-    is($node->right,     $right,             'CompoundAssign->right returns second input');
-    is($node->op_str,    '=',               'CompoundAssign->op_str eq \'=\'');
+    # Chalk::IR::Node::CompoundAssign is a %STATEMENT_EFFECT_OPS node (a
+    # distinct read-modify-write side effect), so it inherits directly from
+    # Chalk::IR::Node rather than BinOp and has no left/right/op_str
+    # accessors -- unlike SoN::IR::Node::CompoundAssign, which modeled it
+    # as a pure BinOp. Read the operands via inputs() instead.
+    isa_ok($node, ['Chalk::IR::Node'],        'CompoundAssign isa Node');
+    is($node->inputs->[0], $left,             'CompoundAssign inputs->[0] is first input');
+    is($node->inputs->[1], $right,            'CompoundAssign inputs->[1] is second input');
     is($node->operation, 'CompoundAssign',   'CompoundAssign->operation eq CompoundAssign');
     is($node->op,        '+=',              'CompoundAssign->op returns the operator');
 };
@@ -93,10 +88,10 @@ subtest 'CompoundAssign content_hash includes op field and input ids' => sub {
     my $left  = const(1);
     my $right = const(2);
 
-    my $plus_eq = SoN::IR::Node::CompoundAssign->new(
+    my $plus_eq = $factory->make('CompoundAssign',
         inputs => [$left, $right], op => '+='
     );
-    my $minus_eq = SoN::IR::Node::CompoundAssign->new(
+    my $minus_eq = $factory->make('CompoundAssign',
         inputs => [$left, $right], op => '-='
     );
 
@@ -112,12 +107,16 @@ subtest 'CompoundAssign content_hash includes op field and input ids' => sub {
 };
 
 subtest 'CompoundAssign hash-consing differentiates by op' => sub {
+    # CompoundAssign is a %STATEMENT_EFFECT_OPS entry in Chalk::IR::NodeFactory:
+    # every occurrence is a distinct side effect, so make() gives it per-call
+    # identity rather than hash-consing by content. Compare content_hash
+    # (the descriptive hash) rather than id (which now always differs).
     my $left  = const(5);
     my $right = const(3);
 
-    my $n1 = SoN::IR::Node::CompoundAssign->new(inputs => [$left, $right], op => '+=');
-    my $n2 = SoN::IR::Node::CompoundAssign->new(inputs => [$left, $right], op => '+=');
-    my $n3 = SoN::IR::Node::CompoundAssign->new(inputs => [$left, $right], op => '-=');
+    my $n1 = $factory->make('CompoundAssign', inputs => [$left, $right], op => '+=');
+    my $n2 = $factory->make('CompoundAssign', inputs => [$left, $right], op => '+=');
+    my $n3 = $factory->make('CompoundAssign', inputs => [$left, $right], op => '-=');
 
     is($n1->content_hash, $n2->content_hash, 'same op and inputs share content hash');
     isnt($n1->content_hash, $n3->content_hash, 'different op gives different content hash');
@@ -125,20 +124,19 @@ subtest 'CompoundAssign hash-consing differentiates by op' => sub {
 
 # --- NodeFactory registration ---
 
-subtest 'NodeFactory can create all 9 new nodes' => sub {
-    use SoN::IR::NodeFactory;
-
-    my $factory = SoN::IR::NodeFactory->new;
+subtest 'NodeFactory can create all 9 nodes' => sub {
     my $left    = const(1);
     my $right   = const(2);
 
     for my $name (qw(Repeat Match NotMatch DefinedOr Xor Range Yada IsaOp)) {
         my $node = $factory->make($name, inputs => [$left, $right]);
-        isa_ok($node, ['SoN::IR::Node::BinOp'], "factory->make('$name') returns BinOp");
+        isa_ok($node, ['Chalk::IR::Node::BinOp'], "factory->make('$name') returns BinOp");
     }
 
+    # CompoundAssign is not a BinOp under Chalk::IR (see the "isa BinOp"
+    # comment above) -- only assert it's a Node with the right op.
     my $ca = $factory->make('CompoundAssign', inputs => [$left, $right], op => '*=');
-    isa_ok($ca, ['SoN::IR::Node::BinOp'], "factory->make('CompoundAssign') returns BinOp");
+    isa_ok($ca, ['Chalk::IR::Node'], "factory->make('CompoundAssign') returns a Node");
     is($ca->op, '*=', "factory-made CompoundAssign has correct op");
 };
 

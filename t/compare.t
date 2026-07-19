@@ -5,7 +5,7 @@ use v5.42.0;
 use Test2::V0;
 
 use SoN::Compare;
-use SoN::IR::NodeFactory;
+use Chalk::IR::NodeFactory;
 use SoN::IR::Graph;
 use SoN::IR::Stamp;
 
@@ -13,7 +13,7 @@ my $int_stamp = SoN::IR::Stamp->new(type => 'Int');
 my $num_stamp = SoN::IR::Stamp->new(type => 'Num');
 
 subtest 'Identical graphs compare as empty diff' => sub {
-    my $f = SoN::IR::NodeFactory->new();
+    my $f = Chalk::IR::NodeFactory->new();
     my $start = $f->make_cfg('Start');
     my $c = $f->make('Constant', value => 42, stamp => $int_stamp);
     my $ret = $f->make_cfg('Return', inputs => [$start, $c]);
@@ -25,7 +25,7 @@ subtest 'Identical graphs compare as empty diff' => sub {
 };
 
 subtest 'Missing node detected' => sub {
-    my $f1 = SoN::IR::NodeFactory->new();
+    my $f1 = Chalk::IR::NodeFactory->new();
     my $s1 = $f1->make_cfg('Start');
     my $c1 = $f1->make('Constant', value => 42, stamp => $int_stamp);
     my $c2 = $f1->make('Constant', value => 10, stamp => $int_stamp);
@@ -33,7 +33,7 @@ subtest 'Missing node detected' => sub {
     my $r1 = $f1->make_cfg('Return', inputs => [$s1, $add]);
     my $g1 = SoN::IR::Graph->new(start => $s1, returns => [$r1]);
 
-    my $f2 = SoN::IR::NodeFactory->new();
+    my $f2 = Chalk::IR::NodeFactory->new();
     my $s2 = $f2->make_cfg('Start');
     my $c3 = $f2->make('Constant', value => 42, stamp => $int_stamp);
     my $r2 = $f2->make_cfg('Return', inputs => [$s2, $c3]);
@@ -45,13 +45,13 @@ subtest 'Missing node detected' => sub {
 };
 
 subtest 'Stamp differences reported' => sub {
-    my $f1 = SoN::IR::NodeFactory->new();
+    my $f1 = Chalk::IR::NodeFactory->new();
     my $s1 = $f1->make_cfg('Start');
     my $c1 = $f1->make('Constant', value => 42, stamp => $int_stamp);
     my $r1 = $f1->make_cfg('Return', inputs => [$s1, $c1]);
     my $g1 = SoN::IR::Graph->new(start => $s1, returns => [$r1]);
 
-    my $f2 = SoN::IR::NodeFactory->new();
+    my $f2 = Chalk::IR::NodeFactory->new();
     my $s2 = $f2->make_cfg('Start');
     my $c2 = $f2->make('Constant', value => 42, stamp => $num_stamp);
     my $r2 = $f2->make_cfg('Return', inputs => [$s2, $c2]);
@@ -63,12 +63,12 @@ subtest 'Stamp differences reported' => sub {
 };
 
 subtest 'to_text produces readable output' => sub {
-    my $f1 = SoN::IR::NodeFactory->new();
+    my $f1 = Chalk::IR::NodeFactory->new();
     my $s1 = $f1->make_cfg('Start');
     my $r1 = $f1->make_cfg('Return', inputs => [$s1]);
     my $g1 = SoN::IR::Graph->new(start => $s1, returns => [$r1]);
 
-    my $f2 = SoN::IR::NodeFactory->new();
+    my $f2 = Chalk::IR::NodeFactory->new();
     my $s2 = $f2->make_cfg('Start');
     my $c2 = $f2->make('Constant', value => 1, stamp => $int_stamp);
     my $r2 = $f2->make_cfg('Return', inputs => [$s2, $c2]);

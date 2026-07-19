@@ -5,10 +5,10 @@ use v5.42.0;
 use Test2::V0;
 
 use SoN::FromOptree::StackSim;
-use SoN::IR::NodeFactory;
+use Chalk::IR::NodeFactory;
 use SoN::IR::Stamp;
 
-my $factory = SoN::IR::NodeFactory->new();
+my $factory = Chalk::IR::NodeFactory->new();
 my $int_stamp = SoN::IR::Stamp->new(type => 'Int');
 
 subtest 'Stack push/pop' => sub {
@@ -112,9 +112,9 @@ subtest 'Merge creates Region and Phi' => sub {
 
     my $region = $sim_a->merge($sim_b, $factory);
 
-    isa_ok($region, 'SoN::IR::Node::Region');
+    isa_ok($region, 'Chalk::IR::Node::Region');
     my $merged = $sim_a->lookup(1);
-    isa_ok($merged, 'SoN::IR::Node::Phi');
+    isa_ok($merged, 'Chalk::IR::Node::Phi');
     is(scalar $merged->inputs->@*, 2, 'phi has 2 inputs');
 };
 
