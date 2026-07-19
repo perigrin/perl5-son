@@ -7,6 +7,7 @@ use Test2::V0;
 
 use SoN::OptSuppress;
 use SoN::FromOptree;
+use SoN::FromOptree::EffectMeta;
 
 # `our $g = 5` is a package/global scalar STORE (a side effect). The lvalue is a
 # StashAccess node; the store must be an explicit Assign(StashAccess, value)
@@ -32,7 +33,8 @@ subtest 'a package-scalar store is a control-threaded, reachable Assign' => sub 
     my ($assign) = nodes_of($g, 'Assign');
     ok(defined $assign, 'the package-scalar-store Assign is reachable from the graph')
         or return;
-    ok($assign->is_stmt_effect, 'the Assign is marked is_stmt_effect');
+    ok(SoN::FromOptree::EffectMeta::is_stmt_effect($assign),
+        'the Assign is marked is_stmt_effect');
     is($assign->inputs->[1]->operation, 'StashAccess', 'input[1] is the StashAccess lvalue');
     is($assign->inputs->[2]->operation, 'Constant', 'input[2] is the stored value');
     is($assign->inputs->[2]->value, 5, 'the stored value is 5');
