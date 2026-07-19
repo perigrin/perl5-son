@@ -51,12 +51,7 @@ subtest 'list-assignment from @_ (single)' => sub {
 
     my @ops = map { $_->operation } $g->nodes->@*;
     ok((grep { $_ eq 'Add' } @ops), 'body Add survives the @_ binding');
-    # TODO(019f7a81): the VarDecl is only consumer-reachable from the
-    # PadAccess it declares, not on the value-return chain; Chalk::IR::Graph
-    # ->nodes() drops it under bare Graph->new (no explicit merge()).
-    todo 'blocked on 019f7a81: Graph::nodes() drops the consumer-only-reachable VarDecl' => sub {
-        ok((grep { $_ eq 'VarDecl' } @ops), 'the lexical $x is declared');
-    };
+    ok((grep { $_ eq 'VarDecl' } @ops), 'the lexical $x is declared');
 };
 
 subtest 'list-assignment from @_ (multiple)' => sub {

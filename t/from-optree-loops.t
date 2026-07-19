@@ -20,13 +20,7 @@ subtest 'While loop produces Loop node' => sub {
     my ($graph, $text) = _translate(eval 'sub { my $i = 0; while ($i < 10) { $i = $i + 1 } $i }');
     like($text, qr/Loop/, 'has Loop node');
     unlike($text, qr/If/, 'no If -- the Loop IS the header (corpus contract)');
-    # TODO(019f7a81): the NumLt condition is only consumer-reachable from the
-    # Loop (it carries loop_control but is otherwise unconsumed);
-    # Chalk::IR::Graph->nodes() drops it under bare Graph->new, so it never
-    # reaches the rendered text.
-    todo 'blocked on 019f7a81: Graph::nodes() drops the consumer-only-reachable NumLt condition' => sub {
-        like($text, qr/NumLt/, 'has less-than comparison');
-    };
+    like($text, qr/NumLt/, 'has less-than comparison');
     like($text, qr/Region/, 'has the exit Region');
     diag($text);
 };
@@ -67,15 +61,10 @@ subtest 'foreach over a range lowers as a counted loop' => sub {
        [sort ($s_phi->id, $i_phi->id)],
        'body sum reads both Phis');
 
-    # TODO(019f7a81): the NumGt continuation condition is only
-    # consumer-reachable from the Loop; Chalk::IR::Graph->nodes() drops it
-    # under bare Graph->new (no explicit merge()).
-    todo 'blocked on 019f7a81: Graph::nodes() drops the consumer-only-reachable NumGt condition' => sub {
-        my ($cmp) = grep { $_->operation eq 'NumGt' } @nodes;
-        ok(defined $cmp, 'has the continuation condition');
-        is($cmp && $cmp->inputs->[0]->value, 4, 'condition bound is high+1 (4)');
-        is($cmp && $cmp->inputs->[1]->id, $i_phi->id, 'condition reads the induction Phi');
-    };
+    my ($cmp) = grep { $_->operation eq 'NumGt' } @nodes;
+    ok(defined $cmp, 'has the continuation condition');
+    is($cmp && $cmp->inputs->[0]->value, 4, 'condition bound is high+1 (4)');
+    is($cmp && $cmp->inputs->[1]->id, $i_phi->id, 'condition reads the induction Phi');
 
     my ($ret) = grep { $_->operation eq 'Return' } @nodes;
     is($ret->inputs->[0]->operation, 'Region', 'Return control is the exit Region');

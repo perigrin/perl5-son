@@ -45,14 +45,9 @@ subtest 'block while with a condition-only mutation reads the AT-EXIT value post
     is($i_phi->inputs->[1]->operation, 'Subtract', '$i Phi back-edge is the decrement');
 
     # The condition reads the Phi (the pre-decrement value on this pass).
-    # TODO(019f7a81): the NumGt condition is only consumer-reachable from the
-    # Loop (it carries loop_control but is otherwise unconsumed);
-    # Chalk::IR::Graph->nodes() drops it under bare Graph->new.
-    todo 'blocked on 019f7a81: Graph::nodes() drops the consumer-only-reachable NumGt condition' => sub {
-        my ($cmp) = nodes_of($g, 'NumGt');
-        ok(defined $cmp, 'has the loop condition NumGt');
-        is($cmp && $cmp->inputs->[0]->id, $i_phi->id, 'condition compares the $i Phi');
-    };
+    my ($cmp) = nodes_of($g, 'NumGt');
+    ok(defined $cmp, 'has the loop condition NumGt');
+    is($cmp && $cmp->inputs->[0]->id, $i_phi->id, 'condition compares the $i Phi');
 
     # THE FIX: the post-loop read of $i is the AT-EXIT decrement (the Phi back-edge
     # `Subtract($i_phi, 1)`, reading the header Phi's exit value), NOT the header

@@ -71,20 +71,13 @@ subtest 'a FIRST-statement `last if` in a while(1) body now lowers (hoisted)' =>
     # Exactly one node carries loop_control and it is the NEGATED comparison
     # (NumLt, the continuation `$i < 3`), wired to the Loop -- not the original
     # NumGe guard.
-    # TODO(019f7a81): the loop_control-marked node is a consumer-only-reachable
-    # control node; Chalk::IR::Graph->nodes() only walks nodes seeded/merged
-    # into the graph's own cache (bare Graph->new(start,returns) does not
-    # transitively discover it the way the old SoN::IR::Graph did). @wired
-    # comes back empty until 019f7a81 lands.
-    todo 'blocked on 019f7a81: Graph::nodes() drops consumer-only-reachable loop_control node' => sub {
-        my @wired = grep { defined SoN::FromOptree::EffectMeta::loop_control_of($_) }
-            $graph->nodes->@*;
-        is(scalar @wired, 1, 'exactly one condition is control-wired to the Loop');
-        is($wired[0] && $wired[0]->operation, 'NumLt',
-            'the wired continuation is the negated guard (NumGe last-if -> NumLt continue)');
-        is($wired[0] && SoN::FromOptree::EffectMeta::loop_control_of($wired[0]) && SoN::FromOptree::EffectMeta::loop_control_of($wired[0])->operation, 'Loop',
-            'it points at the Loop node');
-    };
+    my @wired = grep { defined SoN::FromOptree::EffectMeta::loop_control_of($_) }
+        $graph->nodes->@*;
+    is(scalar @wired, 1, 'exactly one condition is control-wired to the Loop');
+    is($wired[0] && $wired[0]->operation, 'NumLt',
+        'the wired continuation is the negated guard (NumGe last-if -> NumLt continue)');
+    is($wired[0] && SoN::FromOptree::EffectMeta::loop_control_of($wired[0]) && SoN::FromOptree::EffectMeta::loop_control_of($wired[0])->operation, 'Loop',
+        'it points at the Loop node');
 };
 
 subtest 'a `last if` deeper in the body now lowers (mid-body exit split)' => sub {
@@ -103,13 +96,8 @@ subtest 'a `last if` deeper in the body now lowers (mid-body exit split)' => sub
         'a mid-body `last if` translates without a GAP die');
     my @nodes = SoN::FromOptree->translate($cv)->nodes->@*;
     ok((grep { $_->operation eq 'Loop' } @nodes), 'has a Loop node');
-    # TODO(019f7a81): the mid-body exit If is only consumer-reachable from the
-    # Loop (its taken arm routes to the exit Region, not to the value-return
-    # chain); Chalk::IR::Graph->nodes() drops it under bare Graph->new.
-    todo 'blocked on 019f7a81: Graph::nodes() drops the consumer-only-reachable exit If' => sub {
-        ok((grep { $_->operation eq 'If' } @nodes),
-            'the mid-body break lowered to a real If split');
-    };
+    ok((grep { $_->operation eq 'If' } @nodes),
+        'the mid-body break lowered to a real If split');
 };
 
 subtest 'a `next if` inside a loop body now lowers (guard on the remainder)' => sub {
@@ -127,13 +115,8 @@ subtest 'a `next if` inside a loop body now lowers (guard on the remainder)' => 
         'a `next if` in a loop body translates without a GAP die');
     my @nodes = SoN::FromOptree->translate($cv)->nodes->@*;
     ok((grep { $_->operation eq 'Loop' } @nodes), 'has a Loop node');
-    # TODO(019f7a81): the guard If's skip-arm is only consumer-reachable via
-    # the merge Region, not the value-return chain; Chalk::IR::Graph->nodes()
-    # drops it under bare Graph->new.
-    todo 'blocked on 019f7a81: Graph::nodes() drops the consumer-only-reachable guard If' => sub {
-        ok((grep { $_->operation eq 'If' } @nodes),
-            'the `next if` lowered to a real If split');
-    };
+    ok((grep { $_->operation eq 'If' } @nodes),
+        'the `next if` lowered to a real If split');
 };
 
 subtest 'an UNCONDITIONAL bare last inside a loop body still refuses loudly' => sub {
@@ -245,19 +228,13 @@ subtest 'loop condition with a body decoy comparison wires structurally (zhi 019
 
     # Exactly one node carries loop_control, and it is the header condition
     # (NumGt(phi, 0)) -- not the body decoy (NumGt(phi, -1)).
-    # TODO(019f7a81): the loop_control-marked header condition is only
-    # consumer-reachable from the Loop; Chalk::IR::Graph->nodes() drops it
-    # under bare Graph->new (same reachability gap as the hoisted-`last if`
-    # case above).
-    todo 'blocked on 019f7a81: Graph::nodes() drops consumer-only-reachable loop_control node' => sub {
-        my @wired = grep { defined SoN::FromOptree::EffectMeta::loop_control_of($_) }
-            $graph->nodes->@*;
-        is(scalar @wired, 1, 'exactly one condition is control-wired to the Loop');
-        is($wired[0] && SoN::FromOptree::EffectMeta::loop_control_of($wired[0]) && SoN::FromOptree::EffectMeta::loop_control_of($wired[0])->operation, 'Loop',
-            'the wired condition points at the Loop node');
-        ok($wired[0] && $ICMP_OP{ $wired[0]->operation },
-            'the wired node is a comparison (the header condition, not the decoy)');
-    };
+    my @wired = grep { defined SoN::FromOptree::EffectMeta::loop_control_of($_) }
+        $graph->nodes->@*;
+    is(scalar @wired, 1, 'exactly one condition is control-wired to the Loop');
+    is($wired[0] && SoN::FromOptree::EffectMeta::loop_control_of($wired[0]) && SoN::FromOptree::EffectMeta::loop_control_of($wired[0])->operation, 'Loop',
+        'the wired condition points at the Loop node');
+    ok($wired[0] && $ICMP_OP{ $wired[0]->operation },
+        'the wired node is a comparison (the header condition, not the decoy)');
 };
 
 subtest 'bare-truthiness loop condition synthesizes a comparison (zhi 019f29ed)' => sub {
@@ -277,16 +254,13 @@ subtest 'bare-truthiness loop condition synthesizes a comparison (zhi 019f29ed)'
     my $graph = SoN::FromOptree->translate($cv);
     ok($graph, 'the bare-truthiness loop translates cleanly (no GAP)');
 
-    # TODO(019f7a81): same consumer-only-reachable loop_control gap as above.
-    todo 'blocked on 019f7a81: Graph::nodes() drops consumer-only-reachable loop_control node' => sub {
-        my @wired = grep { defined SoN::FromOptree::EffectMeta::loop_control_of($_) }
-            $graph->nodes->@*;
-        is(scalar @wired, 1, 'exactly one condition is control-wired to the Loop');
-        ok($wired[0] && $ICMP_OP{ $wired[0]->operation },
-            'the wired node is a synthesized comparison, not the bare Phi');
-        is($wired[0] && $wired[0]->operation, 'NumNe',
-            'the synthesized truthiness test is NumNe(cond, 0)');
-    };
+    my @wired = grep { defined SoN::FromOptree::EffectMeta::loop_control_of($_) }
+        $graph->nodes->@*;
+    is(scalar @wired, 1, 'exactly one condition is control-wired to the Loop');
+    ok($wired[0] && $ICMP_OP{ $wired[0]->operation },
+        'the wired node is a synthesized comparison, not the bare Phi');
+    is($wired[0] && $wired[0]->operation, 'NumNe',
+        'the synthesized truthiness test is NumNe(cond, 0)');
 };
 
 subtest 'unstamped back-edge refuses loudly' => sub {

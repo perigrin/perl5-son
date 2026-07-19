@@ -758,10 +758,7 @@ class SoN::FromOptree 0.01 {
         }
 
         my $ret = _build_single_exit($factory, \@exits);
-        return Chalk::IR::Graph->new(
-            start   => $start,
-            returns => [$ret],
-        );
+        return _graph_of_reachable($start, $ret);
     }
 
     # _exit_record($sim, $factory, $kind) -> { control, value }
@@ -852,6 +849,58 @@ class SoN::FromOptree 0.01 {
             inputs => [map { $_->{value} } @$exits],
             region => $region);
         return $factory->make_cfg('Return', inputs => [$region, $phi]);
+    }
+
+    # Chalk::IR::Graph->nodes() returns only nodes reachable from the
+    # graph's own %cache (inputs unconditionally, consumers filtered to
+    # cache membership -- see the comment on Graph::nodes()). Actions.pm
+    # satisfies that contract by merge()-ing every node it builds as it
+    # goes; FromOptree instead builds the whole method body against a bare
+    # NodeFactory and only learns $start/$ret at the very end. Recover the
+    # same membership by walking the full reachable closure from $start
+    # and $ret -- inputs AND consumers, unconditionally, since every node
+    # here is a real node this translate() call built (never a foreign or
+    # orphan node, the reason Graph::nodes() itself must not walk consumers
+    # unconditionally) -- and merge() every node the walk finds.
+    #
+    # A loop Phi's backedge input and the value it reads form a genuine
+    # data cycle (Phi -> backedge value -> ... -> Phi). Since all objects
+    # here are already fully-constructed, live Perl references (no
+    # serialization order to patch, unlike the JSON loader's deferred
+    # loop-Phi backedge wiring), a plain visited-set walk crosses the
+    # cycle exactly once in each direction and terminates.
+    #
+    # start/returns MUST be passed explicitly (not left to Graph's cache-
+    # scan fallback): a die-in-branch-arm body has BOTH an Unwind (the abort
+    # exit) and a Return (the live exit) in %cache, and Graph::start()/
+    # ->returns() without an explicit param scan `values %cache` -- Perl's
+    # per-hash-table randomization (not just per-process; two hashes with
+    # identical keys in the SAME process can iterate in different orders)
+    # would make $g->returns->[0] pick whichever of the two exits landed
+    # first, at random. $ret is the one true function-exit Return this
+    # translate() call built; passing it explicitly keeps start()/returns()
+    # deterministic regardless of what the closure walk also merges in.
+    sub _graph_of_reachable ($start, $ret) {
+        my $graph = Chalk::IR::Graph->new(start => $start, returns => [$ret]);
+        my %seen;
+        my @stack = ($start, $ret);
+        while (@stack) {
+            my $node = pop @stack;
+            next unless defined $node && blessed($node);
+            next if $seen{$node->id()}++;
+            $graph->merge($node);
+            for my $input ($node->inputs()->@*) {
+                if (ref($input) eq 'ARRAY') {
+                    push @stack, grep { defined $_ && blessed($_) } $input->@*;
+                    next;
+                }
+                push @stack, $input if defined $input && blessed($input);
+            }
+            if ($node->can('consumers')) {
+                push @stack, $node->consumers()->@*;
+            }
+        }
+        return $graph;
     }
 
     # Extract value, stamp, and const_type from a B::SV.

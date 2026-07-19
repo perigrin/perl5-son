@@ -114,14 +114,8 @@ subtest 'postfix while lowers as a real loop (D2-identical shape)' => sub {
     ok(defined $n_phi, '$n Phi backedge is the decrement');
 
     # The loop-mode condition reads the $n Phi, not the pre-loop constant.
-    # TODO(019f7a81): the NumGt condition is only consumer-reachable from the
-    # Loop (it carries loop_control but is otherwise unconsumed), so
-    # Chalk::IR::Graph->nodes() drops it under bare Graph->new -- nodes_of()
-    # never sees it to filter by inputs[0].
-    todo 'blocked on 019f7a81: Graph::nodes() drops the consumer-only-reachable NumGt condition' => sub {
-        my ($cmp) = grep { $_->inputs->[0]->id eq $n_phi->id } nodes_of($g, 'NumGt');
-        ok(defined $cmp, 'a NumGt condition consumes the $n Phi');
-    };
+    my ($cmp) = grep { $_->inputs->[0]->id eq $n_phi->id } nodes_of($g, 'NumGt');
+    ok(defined $cmp, 'a NumGt condition consumes the $n Phi');
 
     my ($ret) = nodes_of($g, 'Return');
     is($ret->inputs->[0]->operation, 'Region', 'Return control is the exit Region');
