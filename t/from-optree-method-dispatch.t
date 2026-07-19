@@ -9,6 +9,7 @@ no warnings 'experimental::class';
 
 use SoN::OptSuppress;
 use SoN::FromOptree;
+use SoN::FromOptree::EffectMeta;
 
 # `Class->new` and `$obj->meth` are method dispatch: pushmark, invocant,
 # method_named[name], entersub. They must produce a Call with
@@ -82,7 +83,8 @@ subtest 'a void method call is threaded onto the control chain (obj-state A)' =>
     my ($inc) = grep { $_->operation eq 'Call' && $_->name eq 'inc' }
         $g->nodes->@*;
     ok(defined $inc, 'has a Call(inc)') or return;
-    ok($inc->is_stmt_effect, 'the void inc is marked a statement effect');
+    ok(SoN::FromOptree::EffectMeta::is_stmt_effect($inc),
+        'the void inc is marked a statement effect');
     my $ctrl = $inc->inputs->[0];
     ok(defined $ctrl && $ctrl->operation =~ /^(Start|Call|Region|Proj|If|Loop)$/,
         'inc leads with a control node (input[0] is the prior control)');
@@ -96,7 +98,8 @@ subtest 'a value-context method call is NOT a statement effect' => sub {
     my ($val) = grep { $_->operation eq 'Call' && $_->name eq 'val' }
         $g->nodes->@*;
     ok(defined $val, 'has a Call(val)') or return;
-    ok(!$val->is_stmt_effect, 'val is not a statement effect (value-consumed)');
+    ok(!SoN::FromOptree::EffectMeta::is_stmt_effect($val),
+        'val is not a statement effect (value-consumed)');
 };
 
 subtest 'Class->new(k=>v) splits its kv-list into param_names + value inputs' => sub {

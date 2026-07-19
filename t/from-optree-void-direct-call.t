@@ -7,6 +7,7 @@ use Test2::V0;
 
 use SoN::OptSuppress;
 use SoN::FromOptree;
+use SoN::FromOptree::EffectMeta;
 
 # Translate a code string under rpeep suppression (the production -MO=SoN path)
 # and return the graph, or die on GAP.
@@ -27,7 +28,7 @@ sub ops_of ($g) {
 sub has_stmt_effect_call ($g) {
     return scalar grep {
         $_->operation eq 'Call'
-            && $_->can('is_stmt_effect') && $_->is_stmt_effect
+            && SoN::FromOptree::EffectMeta::is_stmt_effect($_)
     } $g->nodes->@*;
 }
 
