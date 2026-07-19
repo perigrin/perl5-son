@@ -6,6 +6,7 @@ use Test2::V0;
 
 use SoN::OptSuppress;
 use SoN::FromOptree;
+use SoN::FromOptree::EffectMeta;
 
 sub translate ($code) {
     SoN::OptSuppress::suppress_peep();
@@ -24,7 +25,8 @@ subtest 'shift @arr is a memory statement effect stamped with the element type' 
     my $g = translate('sub { my @q = (1, 2, 3); my $x = shift @q; $x }');
     my ($shift) = grep { ($_->name // '') eq 'shift' } nodes_by_op($g, 'Call');
     ok($shift, 'a shift Call node exists');
-    ok($shift->is_stmt_effect, 'shift is a statement effect (memory mutation)');
+    ok(SoN::FromOptree::EffectMeta::is_stmt_effect($shift),
+        'shift is a statement effect (memory mutation)');
     ok(defined $shift->stamp, 'shift result is stamped');
     is($shift->stamp->type, 'Int', 'shift of an Int array yields an Int');
     # inputs = [control, array, memory]; the array is the aggregate input.
@@ -39,7 +41,7 @@ subtest 'pop @arr is likewise a stamped memory effect' => sub {
     my $g = translate('sub { my @q = (5, 6); my $x = pop @q; $x }');
     my ($pop) = grep { ($_->name // '') eq 'pop' } nodes_by_op($g, 'Call');
     ok($pop, 'a pop Call node exists');
-    ok($pop->is_stmt_effect, 'pop is a statement effect');
+    ok(SoN::FromOptree::EffectMeta::is_stmt_effect($pop), 'pop is a statement effect');
     is($pop->stamp->type, 'Int', 'pop of an Int array yields an Int');
 };
 
@@ -49,7 +51,8 @@ subtest 'bare shift (from @_) is not treated as an array drain' => sub {
     my $g = translate('sub { my $x = shift; $x }');
     my ($shift) = grep { ($_->name // '') eq 'shift' } nodes_by_op($g, 'Call');
     ok($shift, 'a bare shift Call node exists');
-    ok(!$shift->is_stmt_effect, 'bare shift is NOT the array-drain memory effect');
+    ok(!SoN::FromOptree::EffectMeta::is_stmt_effect($shift),
+        'bare shift is NOT the array-drain memory effect');
 };
 
 done_testing;

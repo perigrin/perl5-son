@@ -7,6 +7,7 @@ use Test2::V0;
 
 use SoN::OptSuppress;
 use SoN::FromOptree;
+use SoN::FromOptree::EffectMeta;
 
 # Translate a code string under rpeep suppression (the production -MO=SoN path)
 # and return the graph, or die on GAP/compile error.
@@ -26,7 +27,7 @@ sub calls_named ($g, $name) {
 }
 
 sub is_effect ($n) {
-    return $n->can('is_stmt_effect') && $n->is_stmt_effect;
+    return SoN::FromOptree::EffectMeta::is_stmt_effect($n);
 }
 
 # --- 1. void effectful builtin (chomp) survives, control-pinned ---

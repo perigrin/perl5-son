@@ -7,6 +7,7 @@ use Test2::V0;
 
 use SoN::OptSuppress;
 use SoN::FromOptree;
+use SoN::FromOptree::EffectMeta;
 
 # `$a[0] = 42` is a bounds-checked element STORE (a side effect). It is threaded
 # onto the control chain (like a void call) so it is ordered and reachable. A
@@ -32,7 +33,8 @@ subtest 'an element store is a control-threaded, reachable Assign (R6)' => sub {
     my ($assign) = nodes_of($g, 'Assign');
     ok(defined $assign, 'the element-store Assign is reachable from the graph')
         or return;
-    ok($assign->is_stmt_effect, 'the Assign is marked is_stmt_effect');
+    ok(SoN::FromOptree::EffectMeta::is_stmt_effect($assign),
+        'the Assign is marked is_stmt_effect');
     is($assign->inputs->[1]->operation, 'Subscript', 'input[1] is the Subscript lvalue');
     is($assign->inputs->[2]->operation, 'Constant', 'input[2] is the stored value');
 };
@@ -54,7 +56,7 @@ subtest 'a hash element store is likewise a reachable, threaded Assign (R7)' => 
     my $g = graph_of('sub { my %h = (a => 1); $h{a} = 0; $h{a} }');
     my ($assign) = nodes_of($g, 'Assign');
     ok(defined $assign, 'the hash element-store Assign is reachable') or return;
-    ok($assign->is_stmt_effect, 'marked is_stmt_effect');
+    ok(SoN::FromOptree::EffectMeta::is_stmt_effect($assign), 'marked is_stmt_effect');
 };
 
 subtest 'a plain pad rebind is NOT a stmt-effect Assign (teeth)' => sub {
@@ -62,7 +64,7 @@ subtest 'a plain pad rebind is NOT a stmt-effect Assign (teeth)' => sub {
     # control-threaded element store.
     my $g = graph_of('sub { my $x = 1; $x = 2; $x }');
     my ($assign) = nodes_of($g, 'Assign');
-    ok(!defined $assign || !$assign->is_stmt_effect,
+    ok(!defined $assign || !SoN::FromOptree::EffectMeta::is_stmt_effect($assign),
         'a scalar pad rebind is not a stmt-effect Assign');
 };
 
