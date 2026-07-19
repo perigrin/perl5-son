@@ -6,7 +6,6 @@ use Test2::V0;
 
 use SoN::OptSuppress;
 use SoN::FromOptree;
-use SoN::FromOptree::EffectMeta;
 
 # `EXPR if COND` compiles to `and(cond, arm)` in VOID context -- the same op
 # as value-context `$a && $b` (sK). The arm's result value is discarded; what
@@ -32,7 +31,7 @@ sub nodes_of ($g, $want_op) {
 sub return_value ($g) {
     my ($ret) = grep { $_->operation eq 'Return' } $g->nodes->@*;
     return unless $ret;
-    return $ret->inputs->[1];
+    return $ret->inputs->[0];
 }
 
 subtest 'postfix if merges the assignment as TernaryExpr(cond, arm, base)' => sub {
@@ -118,8 +117,8 @@ subtest 'postfix while lowers as a real loop (D2-identical shape)' => sub {
     ok(defined $cmp, 'a NumGt condition consumes the $n Phi');
 
     my ($ret) = nodes_of($g, 'Return');
-    is($ret->inputs->[0]->operation, 'Region', 'Return control is the exit Region');
-    is($ret->inputs->[1]->id, $s_phi->id, 'Return value is the $s Phi');
+    is($ret->control_in->operation, 'Region', 'Return control is the exit Region');
+    is($ret->inputs->[0]->id, $s_phi->id, 'Return value is the $s Phi');
 };
 
 subtest 'a postfix-while ships NO dead pre-evaluation orphans (zhi 019f29ed)' => sub {
@@ -128,14 +127,15 @@ subtest 'a postfix-while ships NO dead pre-evaluation orphans (zhi 019f29ed)' =>
     # those orphans (a NumGt/Add/Subtract consuming a constant, not a Phi) used
     # to ship into the serialized graph. A dead orphan is an unconsumed data node
     # (cons == 0) that is not a control terminal (Return/Proj) and not a loop
-    # condition (loop_control). The loop's REAL condition is unconsumed too but
-    # carries loop_control, so it is not an orphan.
+    # condition (control_in pointed at a Loop). The loop's REAL condition is
+    # unconsumed too but carries control_in -> Loop, so it is not an orphan.
     my $g = graph_of(
         'sub { my $n = 3; my $t = 0; $t = $t + $n, $n = $n - 1 while $n > 0; $t }');
     my %terminal = (Return => 1, Proj => 1, Start => 1, Loop => 1, Region => 1);
     my @orphans = grep {
         !$terminal{ $_->operation }
-            && !defined SoN::FromOptree::EffectMeta::loop_control_of($_)
+            && !( $_->can('control_in') && defined $_->control_in
+                && $_->control_in->operation eq 'Loop' )
             && $_->consumers->@* == 0
     } $g->nodes->@*;
     is(scalar @orphans, 0, 'no dead pre-evaluation orphan nodes')

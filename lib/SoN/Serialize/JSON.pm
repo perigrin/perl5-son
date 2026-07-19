@@ -11,7 +11,6 @@ our @EXPORT_OK = qw(to_json);
 
 use JSON::PP ();
 use Scalar::Util qw(blessed);
-use SoN::FromOptree::EffectMeta;
 use Chalk::IR::Serialize::JSON ();
 
 # CFG node operations — these carry control tokens and are never hash-consed.
@@ -50,19 +49,7 @@ sub _extract_fields ($node, $id_remap) {
             ( defined $node->param_names
                 ? ( param_names => $node->param_names )
                 : () ),
-            # A void statement-effect call leads with its control input.
-            # Chalk::IR::Node::Call has no is_stmt_effect field (the merged
-            # type carries per-call identity via the factory instead), so
-            # this knowledge lives in the producer-side EffectMeta table.
-            ( SoN::FromOptree::EffectMeta::is_stmt_effect($node)
-                ? ( is_stmt_effect => JSON::PP::true )
-                : () ),
         };
-    }
-    if ($op eq 'Assign' && SoN::FromOptree::EffectMeta::is_stmt_effect($node)) {
-        # An element-store Assign is a statement effect and leads with its
-        # control input (mirrors the void-call contract).
-        return { is_stmt_effect => JSON::PP::true };
     }
     if ($op eq 'Phi') {
         return {
@@ -115,16 +102,6 @@ sub _extract_fields ($node, $id_remap) {
     if ($op eq 'EnvRead') {
         return { key => $node->key };
     }
-    if ($op eq 'Print') {
-        # A void Print leads with its control token (inputs[0]); flag it so the
-        # loader demotes that leading input to control_in (the void-call
-        # contract), leaving inputs = the printed list.
-        return (
-            SoN::FromOptree::EffectMeta::is_stmt_effect($node)
-                ? { is_stmt_effect => JSON::PP::true }
-                : undef
-        );
-    }
     if ($op eq 'VarDecl') {
         return { scope => $node->scope };
     }
@@ -141,12 +118,15 @@ sub _serialize_graph ($graph) {
     # Graph's own ->nodes (cache-gated on that membership set) silently
     # drops a node reachable ONLY via consumers() of an already-included
     # node: a while-loop's false-exit Proj (a consumer of Loop with no
-    # downstream input reference) or a loop condition (a consumer of the
-    # header Phi via EffectMeta's loop_control, not an inputs[] edge).
-    # Do the full inputs+consumers BFS ourselves (the pre-unification
-    # SoN::IR::Graph::nodes contract), then hand the reachable set to
-    # Chalk's shared topo-sort (which also fixes up Phi-region ordering)
-    # rather than reimplementing that half.
+    # downstream input reference), a loop condition (attached to its Loop
+    # via control_in, not an inputs[] edge), or a void statement-effect Call/
+    # Assign/Print reachable only via a downstream node's control_in (e.g. a
+    # Return whose control_in is the effect). Do the full inputs+consumers+
+    # control_in BFS ourselves (the pre-unification SoN::IR::Graph::nodes
+    # contract, extended for produce-time control), then hand the reachable
+    # set to Chalk's shared topo-sort (which also fixes up Phi-region
+    # ordering and control_in predecessor ordering) rather than
+    # reimplementing that half.
     my @worklist = ($graph->start, $graph->returns->@*);
     my %seen;
     my @reachable;
@@ -163,6 +143,8 @@ sub _serialize_graph ($graph) {
             }
         }
         push @worklist, $n->consumers->@* if $n->can('consumers');
+        push @worklist, $n->control_in
+            if $n->can('control_in') && defined $n->control_in;
     }
     my $topo_nodes = Chalk::IR::Serialize::JSON::_all_nodes_topo(\@reachable);
 
@@ -189,13 +171,18 @@ sub _serialize_graph ($graph) {
         if (defined $node->stamp) {
             $entry{stamp} = $node->stamp->type;
         }
-        # A loop-header condition carries a control edge to its Loop (op-agnostic,
-        # emitted as a node-id reference the loader demotes to control_in).
-        # Chalk::IR::Node has no loop_control field, so this knowledge lives
-        # in the producer-side EffectMeta table (see is_stmt_effect above).
-        my $loop_owner = SoN::FromOptree::EffectMeta::loop_control_of($node);
-        if (defined $loop_owner) {
-            $entry{loop_control} = $id_remap{ $loop_owner->id };
+        # Produce-time control: emit the control_in edge as its own wire key
+        # (mirrors Chalk::IR::Serialize::JSON::to_json) so the loader can
+        # decode it back onto control_in directly. Covers both a void
+        # statement-effect's control predecessor and a loop-header
+        # condition's structural edge to its Loop -- both are control_in at
+        # produce time now, with no separate transitional marker table. Only
+        # emit when the predecessor is itself part of the serialized set
+        # (guaranteed here whenever the node itself is, by
+        # _all_nodes_topo's control-aware membership walk).
+        if ($node->can('control_in') && defined $node->control_in
+                && exists $id_remap{ $node->control_in->id }) {
+            $entry{control_in} = $id_remap{ $node->control_in->id };
         }
 
         push @nodes, \%entry;

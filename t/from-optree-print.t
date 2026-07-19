@@ -7,7 +7,6 @@ use Test2::V0;
 
 use SoN::OptSuppress;
 use SoN::FromOptree;
-use SoN::FromOptree::EffectMeta;
 
 # Translate a code string under rpeep suppression (the production -MO=SoN path)
 # and return the graph, or die on GAP/compile error.
@@ -25,7 +24,7 @@ sub prints ($g) {
 }
 
 sub is_effect ($n) {
-    return SoN::FromOptree::EffectMeta::is_stmt_effect($n);
+    return defined $n->control_in;
 }
 
 # --- 1. a bare literal-list print builds ONE Print node over ALL its args ---
@@ -36,8 +35,8 @@ subtest 'print of a literal list -> Print node with every element' => sub {
         'ops = [' . join(' ', map { $_->operation } $g->nodes->@*) . ']');
     my $p = $p[0];
 
-    # inputs lead with the control token (is_stmt_effect); the remaining inputs
-    # are the three list elements ("ok ", 1, "\n").
+    # control is carried on control_in (produce-time control), not in inputs;
+    # inputs are just the three list elements ("ok ", 1, "\n").
     ok(is_effect($p), 'Print is a statement effect (control-pinned)');
     my @vals = grep { $_->operation eq 'Constant' } $p->inputs->@*;
     is(scalar @vals, 3, 'all three list elements are inputs to Print')

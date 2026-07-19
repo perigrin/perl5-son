@@ -67,8 +67,8 @@ subtest 'foreach over a range lowers as a counted loop' => sub {
     is($cmp && $cmp->inputs->[1]->id, $i_phi->id, 'condition reads the induction Phi');
 
     my ($ret) = grep { $_->operation eq 'Return' } @nodes;
-    is($ret->inputs->[0]->operation, 'Region', 'Return control is the exit Region');
-    is($ret->inputs->[1]->id, $s_phi->id, 'Return value is the $s Phi');
+    is($ret->control_in->operation, 'Region', 'Return control is the exit Region');
+    is($ret->inputs->[0]->id, $s_phi->id, 'Return value is the $s Phi');
 };
 
 subtest 'foreach over a general list still refuses loudly' => sub {

@@ -11,7 +11,6 @@ use B;
 class SoN::FromOptree 0.01 {
     use Chalk::IR::NodeFactory;
     use Chalk::IR::Graph;
-    use SoN::FromOptree::EffectMeta;
     use SoN::IR::Stamp;
     use SoN::FromOptree::OpMap;
     use SoN::FromOptree::StackSim;
@@ -831,24 +830,26 @@ class SoN::FromOptree 0.01 {
     sub _build_single_exit ($factory, $exits) {
         if (@$exits == 1) {
             my ($ctrl, $value) = $exits->[0]->@{qw(control value)};
-            # Normally control leads inputs ([control, value]) so a downstream
-            # loader demotes it to control_in. But a VOID stmt-effect Call as the
-            # trailing control is NOT demotable (it is a data node, not a CFG
-            # token): if it led inputs it would be read as the return VALUE. Put
-            # the value first ([value, control]) so the result slot is correct,
-            # while keeping the void effect reachable at a later input.
-            if (ref($ctrl) && $ctrl->operation eq 'Call'
-                    && SoN::FromOptree::EffectMeta::is_stmt_effect($ctrl)) {
-                return $factory->make_cfg('Return', inputs => [$value, $ctrl]);
-            }
-            return $factory->make_cfg('Return', inputs => [$ctrl, $value]);
+            # Produce-time control: control is carried on control_in, never
+            # flattened into inputs. This subsumes the old ctrl-is-a-stmt-
+            # effect-Call special case (previously a VOID stmt-effect Call as
+            # the trailing control could not lead inputs without being
+            # misread as the return VALUE, so it was put second instead) --
+            # control_in is never a data input, so a Return's inputs is
+            # always exactly [value] regardless of what kind of node control
+            # is.
+            my $ret = $factory->make_cfg('Return', inputs => [$value]);
+            $ret->set_control_in($ctrl) if defined $ctrl;
+            return $ret;
         }
         my $region = $factory->make_cfg('Region',
             inputs => [map { $_->{control} } @$exits]);
         my $phi = $factory->make('Phi',
             inputs => [map { $_->{value} } @$exits],
             region => $region);
-        return $factory->make_cfg('Return', inputs => [$region, $phi]);
+        my $ret = $factory->make_cfg('Return', inputs => [$phi]);
+        $ret->set_control_in($region);
+        return $ret;
     }
 
     # Chalk::IR::Graph->nodes() returns only nodes reachable from the
@@ -1057,22 +1058,22 @@ class SoN::FromOptree 0.01 {
                 }
             }
             # A call in void statement position (OPf_WANT_VOID) has its
-            # result discarded; its purpose is its side effect. Thread
-            # it onto the control chain (control first in inputs) so it
-            # is ordered and survives DCE, and do not push a value.
+            # result discarded; its purpose is its side effect. Thread it
+            # onto the control chain via control_in (produce-time control)
+            # so it is ordered and survives DCE, and do not push a value.
             my $void = ($op->flags & 3) == 1;   # OPf_WANT_VOID
             # A constructor (Class->new) returns the constructed object
             # instance; stamp it Object so the shape/repr contract holds.
             my $ctor = defined $class_name && $pending_method eq 'new';
             my $node = $factory->make('Call',
-                inputs        => [ ($void ? $sim->control : ()), @call_inputs ],
+                inputs        => \@call_inputs,
                 dispatch_kind => 'method',
                 name          => $pending_method,
                 (defined $class_name ? (class_name => $class_name) : ()),
                 (defined $param_names ? (param_names => $param_names) : ()),
                 ($ctor ? (stamp => SoN::IR::Stamp->new(type => 'Object')) : ()),
             );
-            SoN::FromOptree::EffectMeta::mark_stmt_effect($node) if $void;
+            $node->set_control_in($sim->control) if $void;
             _place_call($sim, $node, $void);
             $ctx->{pending_method} = undef;
             return;
@@ -1093,19 +1094,19 @@ class SoN::FromOptree 0.01 {
         if (my $callee_gv = _entersub_callee_gv($cv, $op)) {
             $call_name = $callee_gv->STASH->NAME . '::' . $callee_gv->NAME;
         }
-        # A direct call in void statement position (`helper();`) has its result
-        # discarded; its purpose is its side effect. Thread it onto the control
-        # chain (control first in inputs, is_stmt_effect set) so it is ordered
-        # and survives DCE, exactly as the void METHOD branch does (zhi
-        # 019f2dee/019f2df7). Without this the pushed value was dead in void
-        # context and the call vanished silently.
+        # A direct call in void statement position (`helper();`) has its
+        # result discarded; its purpose is its side effect. Thread it onto
+        # the control chain via control_in (produce-time control) so it is
+        # ordered and survives DCE, exactly as the void METHOD branch does
+        # (zhi 019f2dee/019f2df7). Without this the pushed value was dead in
+        # void context and the call vanished silently.
         my $void = ($op->flags & 3) == 1;   # OPf_WANT_VOID
         my $node = $factory->make('Call',
-            inputs        => [ ($void ? $sim->control : ()), ($args->@* ? $args->@* : ()) ],
+            inputs        => [ ($args->@* ? $args->@* : ()) ],
             dispatch_kind => 'direct',
             name          => $call_name,
         );
-        SoN::FromOptree::EffectMeta::mark_stmt_effect($node) if $void;
+        $node->set_control_in($sim->control) if $void;
         _place_call($sim, $node, $void);
         return;
     }
@@ -1631,9 +1632,10 @@ class SoN::FromOptree 0.01 {
                 # Store the new value back to the element and advance memory
                 # (memory-SSA), mirroring the sassign Subscript branch. The store
                 # PRODUCES the new memory value; a following read observes it.
+                # Control is carried on control_in (produce-time control).
                 my $store = $factory->make('Assign',
-                    inputs         => [$sim->control, $lvalue, $new]);
-                SoN::FromOptree::EffectMeta::mark_stmt_effect($store);
+                    inputs         => [$lvalue, $new]);
+                $store->set_control_in($sim->control);
                 $sim->set_control($store);
                 $sim->set_memory($store);
             }
@@ -1676,16 +1678,15 @@ class SoN::FromOptree 0.01 {
             }
             # An element store (`$a[0] = 42`): the target is a Subscript lvalue.
             # This is a statement-level EFFECT -- thread the Assign onto the
-            # control chain (control leads inputs, is_stmt_effect set) so it is
+            # control chain via control_in (produce-time control) so it is
             # ordered, survives DCE, and is reachable. A later read is a real
             # Subscript LOAD from the same aggregate (no compile-time read-back
             # shortcut -- see the aelem/helem read handler), so the store's
             # effect reaches memory and the load sees it. The assignment's result
             # value is the stored value, so push that as the result.
             elsif ($target->isa('Chalk::IR::Node::Subscript')) {
-                my $node = $factory->make('Assign',
-                    inputs         => [$sim->control, $target, $value]);
-                SoN::FromOptree::EffectMeta::mark_stmt_effect($node);
+                my $node = $factory->make('Assign', inputs => [$target, $value]);
+                $node->set_control_in($sim->control);
                 $sim->set_control($node);
                 # The store PRODUCES a new memory value (memory-SSA): the store
                 # node IS its memory-out, so a following element read takes it as
@@ -1695,13 +1696,13 @@ class SoN::FromOptree 0.01 {
             }
             # A field store (`$name = "hi"` inside a method, where $name is a
             # class field): the target is a FieldAccess lvalue. Emit an explicit
-            # Assign(FieldAccess-lvalue, value) threaded onto the control chain,
-            # exactly like the TARGMY field-write path -- else the store is
-            # silently dropped and the field keeps its default (zhi 019f2dee).
+            # Assign(FieldAccess-lvalue, value) threaded onto the control chain
+            # via control_in, exactly like the TARGMY field-write path -- else
+            # the store is silently dropped and the field keeps its default
+            # (zhi 019f2dee).
             elsif ($target->isa('Chalk::IR::Node::FieldAccess')) {
-                my $store = $factory->make('Assign',
-                    inputs         => [$sim->control, $target, $value]);
-                SoN::FromOptree::EffectMeta::mark_stmt_effect($store);
+                my $store = $factory->make('Assign', inputs => [$target, $value]);
+                $store->set_control_in($sim->control);
                 $sim->set_control($store);
                 $sim->push_node($value);
             }
@@ -1710,7 +1711,7 @@ class SoN::FromOptree 0.01 {
             # falls through to the catch-all below (push_node($value)), which
             # DROPS it -- a later `$g` read then loads an uninitialized slot (a
             # silent miscompile). Emit an explicit Assign(StashAccess-lvalue,
-            # value) threaded onto the control chain (is_stmt_effect), exactly
+            # value) threaded onto the control chain via control_in, exactly
             # like the Subscript/FieldAccess element/field stores. Stamp the
             # lvalue StashAccess with the RHS value's OWN repr (Int for `= 5`,
             # Str for `= "hi"`) so the matching read carries the right type: the
@@ -1722,9 +1723,8 @@ class SoN::FromOptree 0.01 {
                     ? $value->stamp->type : 'Int';
                 $target->set_stamp(SoN::IR::Stamp->new(type => $rhs_type))
                     if $target->can('set_stamp') && !defined $target->stamp;
-                my $store = $factory->make('Assign',
-                    inputs         => [$sim->control, $target, $value]);
-                SoN::FromOptree::EffectMeta::mark_stmt_effect($store);
+                my $store = $factory->make('Assign', inputs => [$target, $value]);
+                $store->set_control_in($sim->control);
                 $sim->set_control($store);
                 $sim->push_node($value);
             }
@@ -1864,9 +1864,8 @@ class SoN::FromOptree 0.01 {
             my $lv       = _make_pad_or_field($cv, $targ, $factory);
             my $is_field = $lv->isa('Chalk::IR::Node::FieldAccess');
             if ($is_field) {
-                my $store = $factory->make('Assign',
-                    inputs         => [$sim->control, $lv, $node]);
-                SoN::FromOptree::EffectMeta::mark_stmt_effect($store);
+                my $store = $factory->make('Assign', inputs => [$lv, $node]);
+                $store->set_control_in($sim->control);
                 $sim->set_control($store);
             }
             else {
@@ -1918,9 +1917,8 @@ class SoN::FromOptree 0.01 {
                 my $lv = _make_pad_or_field($cv, $op->targ, $factory);
                 my $is_field = $lv->isa('Chalk::IR::Node::FieldAccess');
                 if ($is_field) {
-                    my $store = $factory->make('Assign',
-                        inputs         => [$sim->control, $lv, $node]);
-                    SoN::FromOptree::EffectMeta::mark_stmt_effect($store);
+                    my $store = $factory->make('Assign', inputs => [$lv, $node]);
+                    $store->set_control_in($sim->control);
                     $sim->set_control($store);
                 }
 
@@ -2005,15 +2003,13 @@ class SoN::FromOptree 0.01 {
             my $args = $sim->pop_to_mark;
             my @inputs = $args->@*;
 
-            # Void statement position (the only shape wired): control-pin so the
-            # stdout effect is ordered and survives DCE, mirroring the I1 void-
-            # effect path. control leads the inputs; is_stmt_effect is marked;
-            # control advances to the Print.
+            # Void statement position (the only shape wired): control-pin via
+            # control_in (produce-time control) so the stdout effect is
+            # ordered and survives DCE, mirroring the I1 void-effect path.
             my $is_effect = defined $sim->control;
-            unshift @inputs, $sim->control if $is_effect;
             my $node = $factory->make('Print', inputs => \@inputs);
             if ($is_effect) {
-                SoN::FromOptree::EffectMeta::mark_stmt_effect($node);
+                $node->set_control_in($sim->control);
                 $sim->set_control($node);
             }
 
@@ -2069,21 +2065,21 @@ class SoN::FromOptree 0.01 {
                 # shift/pop MUTATE their array (remove an element) and yield the
                 # removed value. Model as a memory statement effect (mirrors the
                 # element-store path): the current memory leads the inputs,
-                # is_stmt_effect orders it on the control chain, and the Call
-                # becomes the new memory version so a later whole-array read
-                # (Length/element) observes the drained array. Stamp with the
-                # array's element type so the removed value (and anything derived
-                # from it) carries a repr.
+                # control_in orders it on the control chain (produce-time
+                # control), and the Call becomes the new memory version so a
+                # later whole-array read (Length/element) observes the drained
+                # array. Stamp with the array's element type so the removed
+                # value (and anything derived from it) carries a repr.
                 if ($node_type eq 'Call' && ($name eq 'shift' || $name eq 'pop')
                         && @inputs == 1 && _is_aggregate_node($inputs[0])
                         && defined $sim->control && defined $sim->memory) {
                     my $elem_stamp = _array_element_stamp($inputs[0]);
                     my $call = $factory->make('Call',
-                        inputs         => [$sim->control, $inputs[0], $sim->memory],
+                        inputs         => [$inputs[0], $sim->memory],
                         dispatch_kind  => 'builtin',
                         name           => $name,
                         (defined $elem_stamp ? (stamp => $elem_stamp) : ()));
-                    SoN::FromOptree::EffectMeta::mark_stmt_effect($call);
+                    $call->set_control_in($sim->control);
                     $sim->set_control($call);
                     $sim->set_memory($call);
                     $sim->push_node($call) if $push_count;
@@ -2153,11 +2149,11 @@ class SoN::FromOptree 0.01 {
                 # (`chomp $s; length $s` computed length of the un-chomped
                 # string). Invert that here: a Call in void statement position
                 # (OPf_WANT_VOID) that is NOT on the OpMap pure allow-list is
-                # built control-pinned -- control leads the inputs, is_stmt_effect
-                # set, control advanced -- mirroring the void entersub path, so
-                # the effect is ordered and survives DCE. A PURE call, or any
-                # Call whose value is consumed (non-void), stays a plain floatable
-                # data node (CSE/hash-consing preserved).
+                # built control-pinned via control_in (produce-time control)
+                # -- mirroring the void entersub path, so the effect is
+                # ordered and survives DCE. A PURE call, or any Call whose
+                # value is consumed (non-void), stays a plain floatable data
+                # node (CSE/hash-consing preserved).
                 #
                 # substr is PURE as an rvalue but MUTATES as an lvalue
                 # (substr(...)="X"); the static PURE flag cannot tell them apart.
@@ -2173,10 +2169,9 @@ class SoN::FromOptree 0.01 {
                     my $effectful = !$opmap->is_pure($name) || $lvalue;
                     $void_effect_call = $void && $effectful;
                 }
-                unshift @inputs, $sim->control if $void_effect_call;
                 my $node = $factory->make($node_type, inputs => \@inputs, %extra);
                 if ($void_effect_call) {
-                    SoN::FromOptree::EffectMeta::mark_stmt_effect($node);
+                    $node->set_control_in($sim->control);
                     $sim->set_control($node);
                 }
 
@@ -2190,17 +2185,16 @@ class SoN::FromOptree 0.01 {
                     # the TARGMY `=` field-write path. The lvalue is a fresh
                     # FieldAccess for the same field (the first operand's padsv).
                     my $lv = _make_pad_or_field($cv, $op->first->targ, $factory);
-                    my $store = $factory->make('Assign',
-                        inputs         => [$sim->control, $lv, $node]);
-                    SoN::FromOptree::EffectMeta::mark_stmt_effect($store);
+                    my $store = $factory->make('Assign', inputs => [$lv, $node]);
+                    $store->set_control_in($sim->control);
                     $sim->set_control($store);
                 }
                 elsif (defined $elem_lvalue) {
                     # Store the result back to the element and advance memory
                     # (memory-SSA), mirroring the sassign Subscript branch.
                     my $store = $factory->make('Assign',
-                        inputs         => [$sim->control, $elem_lvalue, $node]);
-                    SoN::FromOptree::EffectMeta::mark_stmt_effect($store);
+                        inputs         => [$elem_lvalue, $node]);
+                    $store->set_control_in($sim->control);
                     $sim->set_control($store);
                     $sim->set_memory($store);
                 }
@@ -2740,7 +2734,7 @@ class SoN::FromOptree 0.01 {
             stamp  => SoN::IR::Stamp->new(type => 'Boolean'));
         # Structural control edge to the Loop (see _walk_loop_body), so the
         # backend recovers this continuation test unambiguously.
-        SoN::FromOptree::EffectMeta::mark_loop_control($range_cond, $loop_node);
+        $range_cond->set_control_in($loop_node);
 
         # A body element store advances memory; seed a header memory-Phi from the
         # pre-loop memory (memory analog of the carried-slot Phi; no stamp).
@@ -2860,7 +2854,7 @@ class SoN::FromOptree 0.01 {
         my $range_cond = $factory->make('NumGt',
             inputs => [$len, $i_phi],
             stamp  => SoN::IR::Stamp->new(type => 'Boolean'));
-        SoN::FromOptree::EffectMeta::mark_loop_control($range_cond, $loop_node);
+        $range_cond->set_control_in($loop_node);
 
         # A body element store advances memory; seed a header memory-Phi from the
         # pre-loop memory (same as the range form).
@@ -3031,7 +3025,7 @@ class SoN::FromOptree 0.01 {
                     my $neg = _negate_comparison($cond, $factory)
                         or die "GAP: non-comparison `last if` guard inside a loop"
                              . " body not yet lowered\n";
-                    SoN::FromOptree::EffectMeta::mark_loop_control($neg, $loop_node);
+                    $neg->set_control_in($loop_node);
                     my $body_proj = $factory->make_cfg('Proj',
                         inputs => [$loop_node], index => 0);
                     $exit_proj = $factory->make_cfg('Proj',
@@ -3174,7 +3168,7 @@ class SoN::FromOptree 0.01 {
                     # THAT -- otherwise the backend falls back to a body comparison.
                     $cond = _truthiness_test($cond, $factory)
                         unless _is_comparison($cond);
-                    SoN::FromOptree::EffectMeta::mark_loop_control($cond, $loop_node);
+                    $cond->set_control_in($loop_node);
                     my $body_proj = $factory->make_cfg('Proj',
                         inputs => [$loop_node], index => 0);
                     $exit_proj = $factory->make_cfg('Proj',
@@ -3311,8 +3305,8 @@ class SoN::FromOptree 0.01 {
     # raises, rather than being routed through the $mem_branch merge with a
     # broken memory state.
     # Place a translated Call: a VOID call is a statement effect, already
-    # threaded onto the control chain (is_stmt_effect, control in inputs), so
-    # advance control to it and push no value; a value call pushes its result.
+    # threaded onto the control chain via control_in, so advance control to
+    # it and push no value; a value call pushes its result.
     sub _place_call ($sim, $node, $void) {
         if ($void) { $sim->set_control($node) }
         else       { $sim->push_node($node) }

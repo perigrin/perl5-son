@@ -80,8 +80,8 @@ subtest 'while loop emits the corpus Loop/Phi shape' => sub {
     is($region->inputs->[0]->id, $exit_proj->id, 'Region merges the exit Proj');
 
     my ($ret) = nodes_of($g, 'Return');
-    is($ret->inputs->[0]->id, $region->id, 'Return control is the exit Region');
-    is($ret->inputs->[1]->id, $s_phi->id,  'Return value is the $s Phi');
+    is($ret->control_in->id, $region->id, 'Return control is the exit Region');
+    is($ret->inputs->[0]->id, $s_phi->id,  'Return value is the $s Phi');
 };
 
 subtest 'unchanged variables read through, no spurious Phi' => sub {

@@ -406,7 +406,11 @@ sub _wire_field_defaults {
                 value => $value, stamp => $stamp, const_type => $const_type );
         }
 
-        my $ret = $factory->make_cfg('Return', inputs => [ $start, $value_node ] );
+        # Produce-time control: control is carried on control_in, never
+        # flattened into inputs -- Chalk::IR::Node::Return's contract is
+        # inputs=[value], control_in=predecessor.
+        my $ret = $factory->make_cfg('Return', inputs => [ $value_node ] );
+        $ret->set_control_in($start);
 
         my $key = "${pkg_name}::__DEFAULT_${fix}";
         $graphs->{$key} = Chalk::IR::Graph->new( start => $start, returns => [$ret] );

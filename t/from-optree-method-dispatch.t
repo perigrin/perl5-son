@@ -9,7 +9,6 @@ no warnings 'experimental::class';
 
 use SoN::OptSuppress;
 use SoN::FromOptree;
-use SoN::FromOptree::EffectMeta;
 
 # `Class->new` and `$obj->meth` are method dispatch: pushmark, invocant,
 # method_named[name], entersub. They must produce a Call with
@@ -83,11 +82,11 @@ subtest 'a void method call is threaded onto the control chain (obj-state A)' =>
     my ($inc) = grep { $_->operation eq 'Call' && $_->name eq 'inc' }
         $g->nodes->@*;
     ok(defined $inc, 'has a Call(inc)') or return;
-    ok(SoN::FromOptree::EffectMeta::is_stmt_effect($inc),
-        'the void inc is marked a statement effect');
-    my $ctrl = $inc->inputs->[0];
+    ok(defined $inc->control_in,
+        'the void inc is marked a statement effect (control_in set)');
+    my $ctrl = $inc->control_in;
     ok(defined $ctrl && $ctrl->operation =~ /^(Start|Call|Region|Proj|If|Loop)$/,
-        'inc leads with a control node (input[0] is the prior control)');
+        'inc carries a control_in edge to the prior control');
 };
 
 subtest 'a value-context method call is NOT a statement effect' => sub {
@@ -98,8 +97,8 @@ subtest 'a value-context method call is NOT a statement effect' => sub {
     my ($val) = grep { $_->operation eq 'Call' && $_->name eq 'val' }
         $g->nodes->@*;
     ok(defined $val, 'has a Call(val)') or return;
-    ok(!SoN::FromOptree::EffectMeta::is_stmt_effect($val),
-        'val is not a statement effect (value-consumed)');
+    ok(!defined $val->control_in,
+        'val is not a statement effect (value-consumed, no control_in)');
 };
 
 subtest 'Class->new(k=>v) splits its kv-list into param_names + value inputs' => sub {
@@ -122,12 +121,10 @@ subtest 'Class->new(k=>v) splits its kv-list into param_names + value inputs' =>
 
 subtest 'void-chain Return leads with the return-expression value (B1)' => sub {
     # my $c = Counter->new(n=>10); $c->inc; $c->val
-    # The trailing statement's VALUE (Call val) is the result. The preceding
-    # void effect (Call inc) must NOT occupy the Return's value slot -- when the
-    # control before the Return is a void stmt-effect Call (which the Chalk
-    # loader does NOT demote to control_in), the value leads inputs so the
-    # backend reads the right result, and the void effect stays reachable at a
-    # later input slot.
+    # The trailing statement's VALUE (Call val) is the result: Return.inputs
+    # is ALWAYS just [value] (produce-time control, i3) -- the preceding void
+    # effect (Call inc) never occupies a Return input slot at all; it is
+    # reachable via the control_in chain instead (Return.control_in -> inc).
     my $g = canonical_graph(
         'sub { my $c = Counter->new(n => 10); $c->inc; $c->val }');
     my ($ret) = grep { $_->operation eq 'Return' } $g->nodes->@*;
@@ -138,21 +135,21 @@ subtest 'void-chain Return leads with the return-expression value (B1)' => sub {
         'Return.inputs[0] is the val Call (the return-expression value)');
     isnt($ret->inputs->[0], $inc,
         'Return.inputs[0] is NOT the void inc Call');
-    ok((grep { $_ == $inc } $ret->inputs->@*),
-        'the void inc Call stays reachable as a Return input (not dropped)');
+    is($ret->control_in, $inc,
+        'the void inc Call stays reachable via Return.control_in (not dropped)');
 };
 
 subtest 'single-statement Return still leads with control (B1 regression)' => sub {
     # my $c = Counter->new(n=>10); $c->val  -- no void effect. Control (Start)
-    # leads inputs so the Chalk loader splits it into control_in; the value is
-    # the trailing input. This must NOT change.
+    # is carried on control_in (produce-time control, i3); the value is the
+    # sole input. This must NOT change.
     my $g = canonical_graph(
         'sub { my $c = Counter->new(n => 10); $c->val }');
     my ($ret) = grep { $_->operation eq 'Return' } $g->nodes->@*;
     my ($val) = grep { $_->operation eq 'Call' && $_->name eq 'val' } $g->nodes->@*;
     is($ret->inputs->[-1], $val, 'value is the trailing input');
-    like($ret->inputs->[0]->operation, qr/^(Start|Region|Proj|If|Loop)$/,
-        'control (a CFG node) leads inputs so the loader splits it to control_in');
+    like($ret->control_in->operation, qr/^(Start|Region|Proj|If|Loop)$/,
+        'control (a CFG node) is carried on control_in');
 };
 
 subtest 'a $self-> method call stamps the enclosing class_name (zhi 019f5dec)' => sub {

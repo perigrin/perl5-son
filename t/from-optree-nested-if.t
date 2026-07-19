@@ -32,7 +32,7 @@ sub nodes_of ($g, $want_op) {
 
 sub return_value ($g) {
     my ($ret) = grep { $_->operation eq 'Return' } $g->nodes->@*;
-    return $ret->inputs->[1];
+    return $ret->inputs->[0];
 }
 
 subtest 'nested if/else merges recursively (corpus D7 shape)' => sub {
