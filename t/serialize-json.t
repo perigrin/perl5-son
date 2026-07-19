@@ -1,5 +1,5 @@
-# ABOUTME: Tests for SoN::Serialize::JSON — serialize/deserialize SoN::IR::Graph to/from JSON.
-# ABOUTME: Verifies round-trip fidelity, field extraction, determinism, and multi-method support.
+# ABOUTME: Tests for SoN::Serialize::JSON — serializes SoN::IR::Graph to JSON.
+# ABOUTME: Verifies structure, field extraction, and determinism of to_json.
 
 use v5.42.0;
 use Test2::V0;
@@ -7,7 +7,17 @@ use Test2::V0;
 use SoN::IR::NodeFactory;
 use SoN::IR::Graph;
 use SoN::IR::Stamp;
-use SoN::Serialize::JSON qw(to_json from_json);
+use SoN::Serialize::JSON qw(to_json);
+
+# from_json/_deserialize_graph were deleted from SoN::Serialize::JSON (the
+# real pipeline's only loader is Chalk::IR::Serialize::JSON::from_json,
+# which already has its own coverage in the chalk repo, e.g.
+# t/bootstrap/ir-node-unify-roundtrip.t for the loop-Phi defer-patch this
+# file used to test here). The round-trip subtests that only exercised the
+# deleted SoN-side deserializer's own defer-patch/reconstruction behavior
+# were removed rather than retargeted: retargeting to Chalk's from_json
+# would pull the full MOP-replay/repr-inference pipeline in scope, and
+# these subtests were never asserting a still-live SoN-side contract.
 
 # ---- helpers ----
 
@@ -105,112 +115,7 @@ subtest 'start and returns use positional IDs' => sub {
 };
 
 # ====================================================
-# 2. Round-trip: serialize then deserialize
-# ====================================================
-
-subtest 'round-trip preserves node count and ops' => sub {
-    my $graph  = make_simple_graph();
-    my $json   = to_json({ 'test::rt' => $graph });
-    my $graphs = from_json($json);
-
-    ok(exists $graphs->{'test::rt'}, 'method key preserved');
-    my $rt_graph = $graphs->{'test::rt'};
-    ok($rt_graph isa SoN::IR::Graph, 'returned object is SoN::IR::Graph');
-
-    my $orig_nodes = $graph->nodes;
-    my $rt_nodes   = $rt_graph->nodes;
-
-    is(scalar $rt_nodes->@*, scalar $orig_nodes->@*, 'node count matches');
-
-    my %orig_ops = map { $_->operation => 1 } $orig_nodes->@*;
-    my %rt_ops   = map { $_->operation => 1 } $rt_nodes->@*;
-    is(\%rt_ops, \%orig_ops, 'same set of operations after round-trip');
-};
-
-subtest 'round-trip preserves input structure' => sub {
-    my $graph    = make_simple_graph();
-    my $json     = to_json({ 'test::inputs' => $graph });
-    my $graphs   = from_json($json);
-    my $rt_graph = $graphs->{'test::inputs'};
-
-    # Find the Return node
-    my ($ret) = grep { $_->operation eq 'Return' } $rt_graph->nodes->@*;
-    ok(defined $ret, 'Return node found after round-trip');
-    is(scalar $ret->inputs->@*, 2, 'Return has 2 inputs (Start + Constant)');
-
-    my ($cfg_input) = grep { $_->operation eq 'Start' } $ret->inputs->@*;
-    ok(defined $cfg_input, 'Return input includes Start node');
-
-    my ($data_input) = grep { $_->operation eq 'Constant' } $ret->inputs->@*;
-    ok(defined $data_input, 'Return input includes Constant node');
-};
-
-# ====================================================
-# 3. Field-bearing nodes round-trip
-# ====================================================
-
-subtest 'Constant fields survive round-trip' => sub {
-    my $factory = SoN::IR::NodeFactory->new();
-    my $start   = $factory->make_cfg('Start');
-    my $const   = $factory->make('Constant', value => 'hello', const_type => 'string');
-    my $ret     = $factory->make_cfg('Return', inputs => [$start, $const]);
-    my $graph   = SoN::IR::Graph->new(start => $start, returns => [$ret]);
-
-    my $json     = to_json({ 'test::const' => $graph });
-    my $graphs   = from_json($json);
-    my $rt_graph = $graphs->{'test::const'};
-
-    my ($rt_const) = grep { $_->operation eq 'Constant' } $rt_graph->nodes->@*;
-    ok(defined $rt_const, 'Constant node found');
-    is($rt_const->value,      'hello',  'value preserved');
-    is($rt_const->const_type, 'string', 'const_type preserved');
-};
-
-subtest 'Call fields survive round-trip' => sub {
-    my $factory = SoN::IR::NodeFactory->new();
-    my $start   = $factory->make_cfg('Start');
-    my $arg     = $factory->make('Constant', value => '1', const_type => 'integer');
-    my $call    = $factory->make('Call',
-        inputs        => [$arg],
-        dispatch_kind => 'method',
-        name          => 'Foo::bar',
-    );
-    my $ret = $factory->make_cfg('Return', inputs => [$start, $call]);
-    my $graph = SoN::IR::Graph->new(start => $start, returns => [$ret]);
-
-    my $json     = to_json({ 'test::call' => $graph });
-    my $graphs   = from_json($json);
-    my $rt_graph = $graphs->{'test::call'};
-
-    my ($rt_call) = grep { $_->operation eq 'Call' } $rt_graph->nodes->@*;
-    ok(defined $rt_call, 'Call node found');
-    is($rt_call->dispatch_kind, 'method',  'dispatch_kind preserved');
-    is($rt_call->name,          'Foo::bar', 'name preserved');
-};
-
-subtest 'Phi region field survives round-trip' => sub {
-    my $factory = SoN::IR::NodeFactory->new();
-    my $start   = $factory->make_cfg('Start');
-    my $region  = $factory->make_cfg('Region', inputs => [$start]);
-    my $v1      = $factory->make('Constant', value => '1', const_type => 'integer');
-    my $v2      = $factory->make('Constant', value => '2', const_type => 'integer');
-    my $phi     = $factory->make('Phi', region => $region, inputs => [$v1, $v2]);
-    my $ret     = $factory->make_cfg('Return', inputs => [$region, $phi]);
-    my $graph   = SoN::IR::Graph->new(start => $start, returns => [$ret]);
-
-    my $json     = to_json({ 'test::phi' => $graph });
-    my $graphs   = from_json($json);
-    my $rt_graph = $graphs->{'test::phi'};
-
-    my ($rt_phi) = grep { $_->operation eq 'Phi' } $rt_graph->nodes->@*;
-    ok(defined $rt_phi, 'Phi node found');
-    ok(defined $rt_phi->region, 'Phi region field is defined');
-    is($rt_phi->region->operation, 'Region', 'Phi region points to a Region node');
-    is(scalar $rt_phi->inputs->@*, 2, 'Phi has 2 value inputs');
-};
-
-# ====================================================
-# 4. Determinism
+# 2. Determinism
 # ====================================================
 
 subtest 'serialize same graph twice produces identical output' => sub {
@@ -221,10 +126,10 @@ subtest 'serialize same graph twice produces identical output' => sub {
 };
 
 # ====================================================
-# 5. Multiple methods
+# 3. Multiple methods
 # ====================================================
 
-subtest 'multiple named methods serialize and round-trip' => sub {
+subtest 'multiple named methods serialize under distinct keys' => sub {
     my $factory = SoN::IR::NodeFactory->new();
 
     my $start1 = $factory->make_cfg('Start');
@@ -237,17 +142,20 @@ subtest 'multiple named methods serialize and round-trip' => sub {
     my $ret2   = $factory->make_cfg('Return', inputs => [$start2, $c2]);
     my $g2     = SoN::IR::Graph->new(start => $start2, returns => [$ret2]);
 
-    my $json   = to_json({ 'Alpha::one' => $g1, 'Beta::two' => $g2 });
-    my $graphs = from_json($json);
+    my $json = to_json({ 'Alpha::one' => $g1, 'Beta::two' => $g2 });
 
-    ok(exists $graphs->{'Alpha::one'}, 'Alpha::one preserved');
-    ok(exists $graphs->{'Beta::two'},  'Beta::two preserved');
+    require JSON::PP;
+    my $data = JSON::PP->new->decode($json);
+    ok(exists $data->{methods}{'Alpha::one'}, 'Alpha::one present');
+    ok(exists $data->{methods}{'Beta::two'},  'Beta::two present');
 
-    my ($rt_c1) = grep { $_->operation eq 'Constant' } $graphs->{'Alpha::one'}->nodes->@*;
-    my ($rt_c2) = grep { $_->operation eq 'Constant' } $graphs->{'Beta::two'}->nodes->@*;
+    my ($c1_node) = grep { $_->{op} eq 'Constant' }
+        $data->{methods}{'Alpha::one'}{nodes}->@*;
+    my ($c2_node) = grep { $_->{op} eq 'Constant' }
+        $data->{methods}{'Beta::two'}{nodes}->@*;
 
-    is($rt_c1->value, '10', 'Alpha::one constant value preserved');
-    is($rt_c2->value, 'hi', 'Beta::two constant value preserved');
+    is($c1_node->{fields}{value}, '10', 'Alpha::one constant value serialized');
+    is($c2_node->{fields}{value}, 'hi', 'Beta::two constant value serialized');
 };
 
 done_testing;
