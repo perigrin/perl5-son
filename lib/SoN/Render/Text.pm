@@ -27,25 +27,25 @@ class SoN::Render::Text 0.01 {
 
             # Format node-specific attributes
             my @attrs;
-            if ($node->isa('SoN::IR::Node::Constant')) {
+            if ($node->isa('Chalk::IR::Node::Constant')) {
                 push @attrs, $node->value // 'undef';
             }
-            elsif ($node->isa('SoN::IR::Node::PadAccess')) {
+            elsif ($node->isa('Chalk::IR::Node::PadAccess')) {
                 push @attrs, "targ: " . $node->targ;
                 push @attrs, "name: '" . $node->varname . "'";
             }
-            elsif ($node->isa('SoN::IR::Node::FieldAccess')) {
+            elsif ($node->isa('Chalk::IR::Node::FieldAccess')) {
                 push @attrs, "index: " . $node->field_index;
                 push @attrs, "stash: '" . $node->field_stash . "'";
             }
-            elsif ($node->isa('SoN::IR::Node::StashAccess')) {
+            elsif ($node->isa('Chalk::IR::Node::StashAccess')) {
                 push @attrs, "stash: '" . $node->stash_name . "'";
                 push @attrs, "name: '" . $node->var_name . "'";
             }
-            elsif ($node->isa('SoN::IR::Node::Call')) {
+            elsif ($node->isa('Chalk::IR::Node::Call')) {
                 push @attrs, $node->dispatch_kind . ": " . $node->name;
             }
-            elsif ($node->isa('SoN::IR::Node::Proj')) {
+            elsif ($node->isa('Chalk::IR::Node::Proj')) {
                 push @attrs, "index: " . $node->index;
             }
 
