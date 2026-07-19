@@ -81,14 +81,14 @@ subtest 'compound assign into a class field emits an Assign store (B4)' => sub {
         or return;
     ok(SoN::FromOptree::EffectMeta::is_stmt_effect($assign),
         'the field store is a threaded statement effect');
-    # TODO(019f7a81): Chalk::IR::Node::Assign inherits BinOp's generic
+    # TODO(019f7b38-2317): Chalk::IR::Node::Assign inherits BinOp's generic
     # left/right (inputs[0]/inputs[1]), but a memory-SSA field store is built
     # with 3 inputs [control, lvalue, value] (control leads). The old
     # SoN::IR::Node::Assign overrode left/right to inputs[-2]/inputs[-1] to
     # handle exactly this leading-control-token shape; Chalk::IR::Node::Assign
-    # has no such override. Blocked on 019f7a81 (same design fork as the
+    # has no such override. Blocked on 019f7b38-2317 (same design fork as the
     # Graph reachability issue -- both are flattened-wire seams).
-    todo 'blocked on 019f7a81: Chalk::IR::Node::Assign left/right has no leading-control override' => sub {
+    todo 'blocked on 019f7b38-2317: Chalk::IR::Node::Assign left/right has no leading-control override' => sub {
         is($assign->left->operation, 'FieldAccess',
             'the store target is the field lvalue (FieldAccess)');
         is($assign->right->operation, 'Add',
