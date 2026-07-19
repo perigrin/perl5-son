@@ -283,8 +283,8 @@ sub _serialize_graph ($graph) {
         $entry{fields} = $fields        if defined $fields;
         # Produce-time control: emit the control_in edge as its own wire key
         # so from_json can decode it back onto control_in directly, instead
-        # of the old convention of flattening control into inputs[0] plus an
-        # is_stmt_effect/loop_control side-table. _all_nodes_topo's control-
+        # of the old convention of flattening control into inputs[0] plus a
+        # transitional producer-side marker table. _all_nodes_topo's control-
         # aware walk (membership fixpoint + control_in-as-predecessor
         # ordering) guarantees a node's control predecessor is always
         # captured, and always emitted before it, whenever the node itself
