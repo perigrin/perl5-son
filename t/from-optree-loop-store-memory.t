@@ -7,7 +7,6 @@ use Test2::V0;
 
 use SoN::OptSuppress;
 use SoN::FromOptree;
-use SoN::FromOptree::EffectMeta;
 
 # A loop body element store threads memory around the back-edge via a
 # loop-header memory-Phi -- exactly like a loop-carried scope slot. inputs[0]
@@ -82,8 +81,8 @@ subtest 'the body store advances memory OFF the header Phi' => sub {
     isnt($back, $init, 'the back-edge (post-body memory) differs from the init memory');
     is($back->operation, 'Assign', 'the back-edge is the body element store (memory-out)');
     # The store is a statement effect threaded on the loop-body control chain.
-    ok(SoN::FromOptree::EffectMeta::is_stmt_effect($back),
-        'the store is a statement-effect on the loop control chain');
+    ok(defined $back->control_in,
+        'the store is a statement-effect on the loop control chain (control_in set)');
 };
 
 subtest 'the post-loop read takes the header memory-Phi' => sub {

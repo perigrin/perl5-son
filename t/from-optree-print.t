@@ -7,7 +7,6 @@ use Test2::V0;
 
 use SoN::OptSuppress;
 use SoN::FromOptree;
-use SoN::FromOptree::EffectMeta;
 
 # Translate a code string under rpeep suppression (the production -MO=SoN path)
 # and return the graph, or die on GAP/compile error.
@@ -25,7 +24,7 @@ sub prints ($g) {
 }
 
 sub is_effect ($n) {
-    return SoN::FromOptree::EffectMeta::is_stmt_effect($n);
+    return defined $n->control_in;
 }
 
 # --- 1. a bare literal-list print builds ONE Print node over ALL its args ---

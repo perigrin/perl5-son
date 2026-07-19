@@ -54,11 +54,11 @@ subtest 'block while with a condition-only mutation reads the AT-EXIT value post
     # Phi itself. The backend lowers this back-edge in the loop header so it
     # dominates the exit.
     my ($ret) = nodes_of($g, 'Return');
-    is($ret->inputs->[1]->operation, 'Subtract',
+    is($ret->inputs->[0]->operation, 'Subtract',
         'Return value is the condition decrement (AT-EXIT value), not the Phi');
-    is($ret->inputs->[1]->id, $i_phi->inputs->[1]->id,
+    is($ret->inputs->[0]->id, $i_phi->inputs->[1]->id,
         'the post-loop read IS the Phi back-edge (the AT-EXIT decrement)');
-    is($ret->inputs->[1]->inputs->[0]->id, $i_phi->id,
+    is($ret->inputs->[0]->inputs->[0]->id, $i_phi->id,
         'the AT-EXIT decrement reads the header Phi exit value');
 };
 
@@ -71,7 +71,7 @@ subtest 'block while: a NON-mutating condition still reads the Phi post-loop' =>
     my ($n_phi) = grep { ($_->inputs->[0]->value // '') == 3 } @phis;
     ok(defined $n_phi, 'found the $n Phi (init 3)');
     my ($ret) = nodes_of($g, 'Return');
-    is($ret->inputs->[1]->id, $n_phi->id,
+    is($ret->inputs->[0]->id, $n_phi->id,
         'a body-mutated slot reads the header Phi post-loop (unchanged behavior)');
 };
 
@@ -89,7 +89,7 @@ subtest 'postfix while with a condition-only mutation reads the AT-EXIT value' =
 
     # $t is body-mutated so the Return reads the $t Phi (the accumulator's exit value).
     my ($ret) = nodes_of($g, 'Return');
-    is($ret->inputs->[1]->id, $t_phi->id, 'Return value is the $t Phi (accumulator)');
+    is($ret->inputs->[0]->id, $t_phi->id, 'Return value is the $t Phi (accumulator)');
 };
 
 subtest 'block while with a non-empty body and a condition mutation' => sub {
@@ -100,11 +100,11 @@ subtest 'block while with a non-empty body and a condition mutation' => sub {
     my ($i_phi) = grep { ($_->inputs->[0]->value // '') == 3 } @phis;
     ok(defined $i_phi, 'found the $i Phi (init 3)');
     my ($ret) = nodes_of($g, 'Return');
-    is($ret->inputs->[1]->operation, 'Subtract',
+    is($ret->inputs->[0]->operation, 'Subtract',
         'post-loop $i is the condition decrement (AT-EXIT), not the Phi');
-    is($ret->inputs->[1]->id, $i_phi->inputs->[1]->id,
+    is($ret->inputs->[0]->id, $i_phi->inputs->[1]->id,
         'the post-loop read IS the Phi back-edge (the AT-EXIT decrement)');
-    is($ret->inputs->[1]->inputs->[0]->id, $i_phi->id,
+    is($ret->inputs->[0]->inputs->[0]->id, $i_phi->id,
         'the AT-EXIT decrement reads the header Phi');
 };
 

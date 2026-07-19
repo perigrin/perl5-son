@@ -42,7 +42,7 @@ subtest 'both element stores are control-dependent on distinct Projs of the If' 
     my ($if) = of_op($g, 'If');
     my %proj_index;
     for my $store (@stores) {
-        my $ctrl = $store->inputs->[0];
+        my $ctrl = $store->control_in;
         ok(defined $ctrl, 'store has a control input') or next;
         is($ctrl->operation, 'Proj', 'store control is a Proj');
         is($ctrl->inputs->[0], $if, 'the Proj is off the one If');

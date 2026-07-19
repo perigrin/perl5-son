@@ -42,9 +42,9 @@ subtest 'the element store is control-dependent on Proj(If, true)' => sub {
         grep { ref $_ && $_->operation eq 'Subscript' } $_->inputs->@*
     } of_op($g, 'Assign');
     ok(defined $store, 'has an element-store Assign') or return;
-    # an element-store Assign carries control as inputs[0] (is_stmt_effect):
-    # inputs => [control, target, value].
-    my $ctrl = $store->inputs->[0];
+    # an element-store Assign carries control on control_in (produce-time
+    # control): inputs => [target, value].
+    my $ctrl = $store->control_in;
     ok(defined $ctrl, 'the store has a control input') or return;
     is($ctrl->operation, 'Proj', 'store control is a Proj');
     is($ctrl->inputs->[0]->operation, 'If', 'the Proj is off the If');

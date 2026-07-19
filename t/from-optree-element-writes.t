@@ -6,7 +6,6 @@ use Test2::V0;
 
 use SoN::OptSuppress;
 use SoN::FromOptree;
-use SoN::FromOptree::EffectMeta;
 
 # Under canonical (peephole-suppressed) ops, `my @a = (...)` builds an ArrayRef
 # bound to the array, `$a[0] = V` is a threaded stmt-effect Assign store, and a
@@ -49,8 +48,8 @@ subtest 'array element store is a threaded Assign; read is a real Subscript load
 
     my ($assign) = grep { $_->operation eq 'Assign' } $g->nodes->@*;
     ok(defined $assign, 'the store emits an Assign') or return;
-    ok(SoN::FromOptree::EffectMeta::is_stmt_effect($assign),
-        'the store Assign is a threaded stmt-effect');
+    ok(defined $assign->control_in,
+        'the store Assign is a threaded stmt-effect (control_in set)');
 };
 
 subtest 'hash construction builds a HashRef' => sub {
@@ -65,8 +64,8 @@ subtest 'hash element store is a threaded Assign; read is a real Subscript load'
     is($val->operation, 'Subscript', 'read is a Subscript load, not the stored Constant');
 
     my ($assign) = grep { $_->operation eq 'Assign' } $g->nodes->@*;
-    ok(defined $assign && SoN::FromOptree::EffectMeta::is_stmt_effect($assign),
-        'the store is a threaded stmt-effect Assign');
+    ok(defined $assign && defined $assign->control_in,
+        'the store is a threaded stmt-effect Assign (control_in set)');
 };
 
 done_testing();
