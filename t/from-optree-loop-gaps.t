@@ -6,6 +6,7 @@ use Test2::V0;
 
 use SoN::OptSuppress;
 use SoN::FromOptree;
+use SoN::FromOptree::EffectMeta;
 
 # The producer's contract is refuse-or-lower: a graph that lowers and runs to
 # the WRONG value is the worst outcome (Phase 4 trusts "divergence = producer
@@ -67,17 +68,15 @@ subtest 'a FIRST-statement `last if` in a while(1) body now lowers (hoisted)' =>
     ok($graph, 'the first-statement `last if` loop translates cleanly (no GAP)');
     ok((grep { $_->operation eq 'Loop' } $graph->nodes->@*), 'has a Loop node');
 
-    # Exactly one node carries control_in pointed at a Loop, and it is the
-    # NEGATED comparison (NumLt, the continuation `$i < 3`) -- not the
-    # original NumGe guard.
-    my @wired = grep {
-        $_->can('control_in') && defined $_->control_in
-            && $_->control_in->operation eq 'Loop'
-    } $graph->nodes->@*;
+    # Exactly one node carries loop_control and it is the NEGATED comparison
+    # (NumLt, the continuation `$i < 3`), wired to the Loop -- not the original
+    # NumGe guard.
+    my @wired = grep { defined SoN::FromOptree::EffectMeta::loop_control_of($_) }
+        $graph->nodes->@*;
     is(scalar @wired, 1, 'exactly one condition is control-wired to the Loop');
     is($wired[0] && $wired[0]->operation, 'NumLt',
         'the wired continuation is the negated guard (NumGe last-if -> NumLt continue)');
-    is($wired[0] && $wired[0]->control_in && $wired[0]->control_in->operation, 'Loop',
+    is($wired[0] && SoN::FromOptree::EffectMeta::loop_control_of($wired[0]) && SoN::FromOptree::EffectMeta::loop_control_of($wired[0])->operation, 'Loop',
         'it points at the Loop node');
 };
 
@@ -227,14 +226,12 @@ subtest 'loop condition with a body decoy comparison wires structurally (zhi 019
     my $graph = SoN::FromOptree->translate($cv);
     ok($graph, 'the decoy-comparison loop translates cleanly (no GAP)');
 
-    # Exactly one node carries control_in pointed at a Loop, and it is the
-    # header condition (NumGt(phi, 0)) -- not the body decoy (NumGt(phi, -1)).
-    my @wired = grep {
-        $_->can('control_in') && defined $_->control_in
-            && $_->control_in->operation eq 'Loop'
-    } $graph->nodes->@*;
+    # Exactly one node carries loop_control, and it is the header condition
+    # (NumGt(phi, 0)) -- not the body decoy (NumGt(phi, -1)).
+    my @wired = grep { defined SoN::FromOptree::EffectMeta::loop_control_of($_) }
+        $graph->nodes->@*;
     is(scalar @wired, 1, 'exactly one condition is control-wired to the Loop');
-    is($wired[0] && $wired[0]->control_in && $wired[0]->control_in->operation, 'Loop',
+    is($wired[0] && SoN::FromOptree::EffectMeta::loop_control_of($wired[0]) && SoN::FromOptree::EffectMeta::loop_control_of($wired[0])->operation, 'Loop',
         'the wired condition points at the Loop node');
     ok($wired[0] && $ICMP_OP{ $wired[0]->operation },
         'the wired node is a comparison (the header condition, not the decoy)');
@@ -257,10 +254,8 @@ subtest 'bare-truthiness loop condition synthesizes a comparison (zhi 019f29ed)'
     my $graph = SoN::FromOptree->translate($cv);
     ok($graph, 'the bare-truthiness loop translates cleanly (no GAP)');
 
-    my @wired = grep {
-        $_->can('control_in') && defined $_->control_in
-            && $_->control_in->operation eq 'Loop'
-    } $graph->nodes->@*;
+    my @wired = grep { defined SoN::FromOptree::EffectMeta::loop_control_of($_) }
+        $graph->nodes->@*;
     is(scalar @wired, 1, 'exactly one condition is control-wired to the Loop');
     ok($wired[0] && $ICMP_OP{ $wired[0]->operation },
         'the wired node is a synthesized comparison, not the bare Phi');

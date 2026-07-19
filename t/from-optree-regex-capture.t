@@ -94,7 +94,7 @@ subtest 's/// rebinds the pad so a later read sees the substituted value (R3)' =
 
     my ($ret) = grep { $_->operation eq 'Return' } $g->nodes->@*;
     ok(defined $ret, 'has a Return node') or return;
-    is($ret->inputs->[0], $subst,
+    is($ret->inputs->[1], $subst,
         'the returned $s is the RegexSubst result, not the pre-subst Constant');
 };
 
@@ -105,7 +105,7 @@ subtest 's///r is non-destructive: the source pad is NOT rebound (R3 /r)' => sub
         'sub { my $s = "foobar"; my $t = $s =~ s/foo/baz/r; $s }');
     my ($ret) = grep { $_->operation eq 'Return' } $g->nodes->@*;
     ok(defined $ret, 'has a Return node') or return;
-    my $val = $ret->inputs->[0];
+    my $val = $ret->inputs->[1];
     is($val->operation, 'Constant',
         'returned $s is the original Constant (/r did not rebind the pad)');
     is($val->value, 'foobar', 'and it still carries the pre-subst value');
