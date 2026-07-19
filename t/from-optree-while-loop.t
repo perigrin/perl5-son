@@ -121,16 +121,7 @@ subtest 'topological order cuts only the Phi backedges' => sub {
                 if $pos{ $in->id } > $pos{ $node->id };
         }
     }
-    # TODO(019f7b38-2280): Chalk::IR::Graph->nodes() is a plain post-order DFS with
-    # no loop-Phi-backedge-aware cycle cut (the old SoN::IR::Graph special-
-    # cased "Phi over a Loop region" to cut exactly at inputs[1]); its DFS
-    # cycle guard (skip a node already mid-visit) can legitimately finalize
-    # the Subtract/Add that IS a Phi's backedge value BEFORE the Phi itself,
-    # producing a forward reference this contract forbids. Same design fork
-    # as the reachability gap (Graph traversal), tracked at 019f7b38-2280.
-    todo 'blocked on 019f7b38-2280: Graph::nodes() has no loop-Phi-aware cycle cut' => sub {
-        is(\@violations, [], 'no forward references outside Phi backedges');
-    };
+    is(\@violations, [], 'no forward references outside Phi backedges');
 };
 
 subtest 'return inside a loop body refuses loudly' => sub {
