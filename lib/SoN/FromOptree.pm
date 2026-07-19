@@ -9,8 +9,9 @@ no warnings 'experimental::class';
 use B;
 
 class SoN::FromOptree 0.01 {
-    use SoN::IR::NodeFactory;
-    use SoN::IR::Graph;
+    use Chalk::IR::NodeFactory;
+    use Chalk::IR::Graph;
+    use SoN::FromOptree::EffectMeta;
     use SoN::IR::Stamp;
     use SoN::FromOptree::OpMap;
     use SoN::FromOptree::StackSim;
@@ -144,7 +145,7 @@ class SoN::FromOptree 0.01 {
         my $cv = B::svref_2object($coderef);
         die "Not a CODE ref" unless $cv->isa('B::CV');
 
-        my $factory = SoN::IR::NodeFactory->new();
+        my $factory = Chalk::IR::NodeFactory->new();
         my $opmap   = SoN::FromOptree::OpMap->new();
         my $start   = $factory->make_cfg('Start');
         my $mem     = $factory->make('MemStart');
@@ -585,7 +586,7 @@ class SoN::FromOptree 0.01 {
                     # here rather than crashing downstream.
                     die "GAP: foreach over a range with a runtime LOW bound "
                       . "(for my \$i (\$lo..\$hi)) not yet lowered\n"
-                        unless $bounds->[0]->isa('SoN::IR::Node::Constant')
+                        unless $bounds->[0]->isa('Chalk::IR::Node::Constant')
                             && ($bounds->[0]->const_type // '') eq 'integer';
                     _translate_foreach_range($cv, $op, $sim, $factory, $opmap,
                         \%visited, $bounds->@*);
@@ -697,7 +698,7 @@ class SoN::FromOptree 0.01 {
                 # The replacement string is on the stack (pushed by const op before subst)
                 my $repl_node = $sim->stack_depth > 0 ? $sim->pop_node : undef;
                 my $replacement = '';
-                if ($repl_node && $repl_node->isa('SoN::IR::Node::Constant')) {
+                if ($repl_node && $repl_node->isa('Chalk::IR::Node::Constant')) {
                     $replacement = $repl_node->value // '';
                 }
                 my $node = $factory->make('RegexSubst',
@@ -757,10 +758,9 @@ class SoN::FromOptree 0.01 {
         }
 
         my $ret = _build_single_exit($factory, \@exits);
-        return SoN::IR::Graph->new(
+        return Chalk::IR::Graph->new(
             start   => $start,
             returns => [$ret],
-            source  => $coderef,
         );
     }
 
@@ -840,8 +840,8 @@ class SoN::FromOptree 0.01 {
             # token): if it led inputs it would be read as the return VALUE. Put
             # the value first ([value, control]) so the result slot is correct,
             # while keeping the void effect reachable at a later input.
-            if (ref($ctrl) && $ctrl->can('is_stmt_effect')
-                    && $ctrl->operation eq 'Call' && $ctrl->is_stmt_effect) {
+            if (ref($ctrl) && $ctrl->operation eq 'Call'
+                    && SoN::FromOptree::EffectMeta::is_stmt_effect($ctrl)) {
                 return $factory->make_cfg('Return', inputs => [$value, $ctrl]);
             }
             return $factory->make_cfg('Return', inputs => [$ctrl, $value]);
@@ -946,7 +946,7 @@ class SoN::FromOptree 0.01 {
             # zhi 019f5dec.
             my $self_class;
             if ($invocant
-                && $invocant->isa('SoN::IR::Node::PadAccess')
+                && $invocant->isa('Chalk::IR::Node::PadAccess')
                 && _padname($cv, $invocant->targ) eq '$self') {
                 $self_class = eval { $cv->GV->STASH->NAME };
                 # The self receiver is the object instance: stamp it Object so it
@@ -957,7 +957,7 @@ class SoN::FromOptree 0.01 {
                     if $invocant->can('set_stamp');
             }
             if ($invocant
-                && $invocant->isa('SoN::IR::Node::PadAccess')) {
+                && $invocant->isa('Chalk::IR::Node::PadAccess')) {
                 my $bound = $sim->lookup($invocant->targ);
                 $invocant = $bound if defined $bound;
             }
@@ -971,12 +971,12 @@ class SoN::FromOptree 0.01 {
                 $class_name = $self_class;
             }
             elsif ($invocant
-                && $invocant->isa('SoN::IR::Node::Constant')
+                && $invocant->isa('Chalk::IR::Node::Constant')
                 && ($invocant->const_type // '') eq 'string') {
                 $class_name = $invocant->value;
             }
             elsif ($invocant
-                && $invocant->isa('SoN::IR::Node::Call')
+                && $invocant->isa('Chalk::IR::Node::Call')
                 && defined $invocant->class_name) {
                 $class_name = $invocant->class_name;
             }
@@ -995,7 +995,7 @@ class SoN::FromOptree 0.01 {
                 $ok = 1;
                 for (my $i = 0; $i < $args->@*; $i += 2) {
                     my ($k, $v) = ($args->[$i], $args->[$i + 1]);
-                    unless ($k && $k->isa('SoN::IR::Node::Constant')
+                    unless ($k && $k->isa('Chalk::IR::Node::Constant')
                             && ($k->const_type // '') eq 'string') {
                         $ok = 0; last;
                     }
@@ -1021,9 +1021,9 @@ class SoN::FromOptree 0.01 {
                 name          => $pending_method,
                 (defined $class_name ? (class_name => $class_name) : ()),
                 (defined $param_names ? (param_names => $param_names) : ()),
-                ($void ? (is_stmt_effect => true) : ()),
                 ($ctor ? (stamp => SoN::IR::Stamp->new(type => 'Object')) : ()),
             );
+            SoN::FromOptree::EffectMeta::mark_stmt_effect($node) if $void;
             _place_call($sim, $node, $void);
             $ctx->{pending_method} = undef;
             return;
@@ -1032,7 +1032,7 @@ class SoN::FromOptree 0.01 {
         # Direct sub call: the last arg is the callee, the rest are args.
         my $cv_node   = $args->@* ? pop $args->@* : undef;
         my $call_name = 'unknown';
-        if ($cv_node && $cv_node->isa('SoN::IR::Node::Constant')) {
+        if ($cv_node && $cv_node->isa('Chalk::IR::Node::Constant')) {
             $call_name = $cv_node->value // 'unknown';
         }
         # Resolve the callee to its fully-qualified name (STASH::NAME)
@@ -1055,8 +1055,8 @@ class SoN::FromOptree 0.01 {
             inputs        => [ ($void ? $sim->control : ()), ($args->@* ? $args->@* : ()) ],
             dispatch_kind => 'direct',
             name          => $call_name,
-            ($void ? (is_stmt_effect => true) : ()),
         );
+        SoN::FromOptree::EffectMeta::mark_stmt_effect($node) if $void;
         _place_call($sim, $node, $void);
         return;
     }
@@ -1490,9 +1490,9 @@ class SoN::FromOptree 0.01 {
             # the C getenv. Only a literal key on a read (rvalue) is recognised;
             # an lvalue $ENV{K} = ... (env write) is not modelled and falls through.
             if ($name eq 'helem' && !$is_lvalue
-                && $container->isa('SoN::IR::Node::Constant')
+                && $container->isa('Chalk::IR::Node::Constant')
                 && ($container->value // '') eq 'main::ENV'
-                && $index->isa('SoN::IR::Node::Constant')
+                && $index->isa('Chalk::IR::Node::Constant')
                 && defined $index->value) {
                 my $node = $factory->make('EnvRead',
                     key   => $index->value,
@@ -1525,7 +1525,7 @@ class SoN::FromOptree 0.01 {
             # 0 (references R9 miscompile). A hash element or an unknown container
             # yields no element stamp -- leave it unstamped then.
             my $elem_stamp = ($name eq 'aelem' && !$is_lvalue
-                    && !$index->isa('SoN::IR::Node::Constant'))
+                    && !$index->isa('Chalk::IR::Node::Constant'))
                 ? _array_element_stamp($container) : undef;
             my $sub = $factory->make('Subscript',
                 inputs => \@sub_inputs,
@@ -1548,7 +1548,7 @@ class SoN::FromOptree 0.01 {
             # Resolve an lvalue PadAccess to the variable's current bound value
             # so the arithmetic carries a real (stamped) input.
             my $targ;
-            if ($old->isa('SoN::IR::Node::PadAccess')) {
+            if ($old->isa('Chalk::IR::Node::PadAccess')) {
                 $targ  = $old->targ;
                 my $bound = $sim->lookup($targ);
                 $old = $bound if defined $bound;
@@ -1562,7 +1562,7 @@ class SoN::FromOptree 0.01 {
             # the lvalue as the read value re-reads the slot AFTER the store-back
             # (an off-by-one / double-apply miscompile when the RMW is consumed).
             my $lvalue;
-            if ($old->isa('SoN::IR::Node::Subscript')
+            if ($old->isa('Chalk::IR::Node::Subscript')
                 && scalar($old->inputs->@*) == 2) {
                 $lvalue = $old;
                 $old = $factory->make('Subscript',
@@ -1583,8 +1583,8 @@ class SoN::FromOptree 0.01 {
                 # (memory-SSA), mirroring the sassign Subscript branch. The store
                 # PRODUCES the new memory value; a following read observes it.
                 my $store = $factory->make('Assign',
-                    inputs         => [$sim->control, $lvalue, $new],
-                    is_stmt_effect => true);
+                    inputs         => [$sim->control, $lvalue, $new]);
+                SoN::FromOptree::EffectMeta::mark_stmt_effect($store);
                 $sim->set_control($store);
                 $sim->set_memory($store);
             }
@@ -1616,7 +1616,7 @@ class SoN::FromOptree 0.01 {
             # handler. Keyed on the RHS OP (padav/...), NOT the value node's repr
             # -- an anon-ref literal ($r = [1,2,3]) also makes an ArrayRef node
             # but is a scalar reference and must pass through.
-            if ($target->isa('SoN::IR::Node::PadAccess')) {
+            if ($target->isa('Chalk::IR::Node::PadAccess')) {
                 if (_rhs_is_aggregate_access($op) && _is_aggregate_node($value)) {
                     my $stamp = _result_stamp('Length', [$value]);
                     my %extra = defined $stamp ? (stamp => $stamp) : ();
@@ -1633,10 +1633,10 @@ class SoN::FromOptree 0.01 {
             # shortcut -- see the aelem/helem read handler), so the store's
             # effect reaches memory and the load sees it. The assignment's result
             # value is the stored value, so push that as the result.
-            elsif ($target->isa('SoN::IR::Node::Subscript')) {
+            elsif ($target->isa('Chalk::IR::Node::Subscript')) {
                 my $node = $factory->make('Assign',
-                    inputs         => [$sim->control, $target, $value],
-                    is_stmt_effect => true);
+                    inputs         => [$sim->control, $target, $value]);
+                SoN::FromOptree::EffectMeta::mark_stmt_effect($node);
                 $sim->set_control($node);
                 # The store PRODUCES a new memory value (memory-SSA): the store
                 # node IS its memory-out, so a following element read takes it as
@@ -1649,10 +1649,10 @@ class SoN::FromOptree 0.01 {
             # Assign(FieldAccess-lvalue, value) threaded onto the control chain,
             # exactly like the TARGMY field-write path -- else the store is
             # silently dropped and the field keeps its default (zhi 019f2dee).
-            elsif ($target->isa('SoN::IR::Node::FieldAccess')) {
+            elsif ($target->isa('Chalk::IR::Node::FieldAccess')) {
                 my $store = $factory->make('Assign',
-                    inputs         => [$sim->control, $target, $value],
-                    is_stmt_effect => true);
+                    inputs         => [$sim->control, $target, $value]);
+                SoN::FromOptree::EffectMeta::mark_stmt_effect($store);
                 $sim->set_control($store);
                 $sim->push_node($value);
             }
@@ -1668,14 +1668,14 @@ class SoN::FromOptree 0.01 {
             # store lvalue and the read hash-cons to ONE node, so stamping here
             # types both. A hardcoded Int would miscompile a Str global. Fall
             # back to Int when the RHS carries no stamp (the historical default).
-            elsif ($target->isa('SoN::IR::Node::StashAccess')) {
+            elsif ($target->isa('Chalk::IR::Node::StashAccess')) {
                 my $rhs_type = ($value->can('stamp') && defined $value->stamp)
                     ? $value->stamp->type : 'Int';
                 $target->set_stamp(SoN::IR::Stamp->new(type => $rhs_type))
                     if $target->can('set_stamp') && !defined $target->stamp;
                 my $store = $factory->make('Assign',
-                    inputs         => [$sim->control, $target, $value],
-                    is_stmt_effect => true);
+                    inputs         => [$sim->control, $target, $value]);
+                SoN::FromOptree::EffectMeta::mark_stmt_effect($store);
                 $sim->set_control($store);
                 $sim->push_node($value);
             }
@@ -1813,11 +1813,11 @@ class SoN::FromOptree 0.01 {
             # slot is an SSA rebind. LVINTRO in main mode wraps the pad in a
             # VarDecl so the `my` declaration stays reachable.
             my $lv       = _make_pad_or_field($cv, $targ, $factory);
-            my $is_field = $lv->isa('SoN::IR::Node::FieldAccess');
+            my $is_field = $lv->isa('Chalk::IR::Node::FieldAccess');
             if ($is_field) {
                 my $store = $factory->make('Assign',
-                    inputs         => [$sim->control, $lv, $node],
-                    is_stmt_effect => true);
+                    inputs         => [$sim->control, $lv, $node]);
+                SoN::FromOptree::EffectMeta::mark_stmt_effect($store);
                 $sim->set_control($store);
             }
             else {
@@ -1867,11 +1867,11 @@ class SoN::FromOptree 0.01 {
                 # target (fieldix) survives into the graph — the loader types the
                 # field from the stored value's repr. Mirrors the corpus IR spec.
                 my $lv = _make_pad_or_field($cv, $op->targ, $factory);
-                my $is_field = $lv->isa('SoN::IR::Node::FieldAccess');
+                my $is_field = $lv->isa('Chalk::IR::Node::FieldAccess');
                 if ($is_field) {
                     my $store = $factory->make('Assign',
-                        inputs         => [$sim->control, $lv, $node],
-                        is_stmt_effect => true);
+                        inputs         => [$sim->control, $lv, $node]);
+                    SoN::FromOptree::EffectMeta::mark_stmt_effect($store);
                     $sim->set_control($store);
                 }
 
@@ -1911,7 +1911,7 @@ class SoN::FromOptree 0.01 {
             # The LHS is a single padav/padhv; bind it to an ArrayRef/HashRef of
             # the RHS values so later element access has a real container.
             if (@$lhs == 1
-                && $lhs->[0]->isa('SoN::IR::Node::PadAccess')
+                && $lhs->[0]->isa('Chalk::IR::Node::PadAccess')
                 && $sim->has_mark) {
                 my $target = $lhs->[0];
                 my $rhs    = $sim->pop_to_mark;
@@ -1958,15 +1958,15 @@ class SoN::FromOptree 0.01 {
 
             # Void statement position (the only shape wired): control-pin so the
             # stdout effect is ordered and survives DCE, mirroring the I1 void-
-            # effect path. control leads the inputs; is_stmt_effect is set;
+            # effect path. control leads the inputs; is_stmt_effect is marked;
             # control advances to the Print.
-            my %extra;
-            if (defined $sim->control) {
-                unshift @inputs, $sim->control;
-                $extra{is_stmt_effect} = true;
+            my $is_effect = defined $sim->control;
+            unshift @inputs, $sim->control if $is_effect;
+            my $node = $factory->make('Print', inputs => \@inputs);
+            if ($is_effect) {
+                SoN::FromOptree::EffectMeta::mark_stmt_effect($node);
+                $sim->set_control($node);
             }
-            my $node = $factory->make('Print', inputs => \@inputs, %extra);
-            $sim->set_control($node) if $extra{is_stmt_effect};
 
             # print returns 1; push it so a value context (`my $ok = print ...`)
             # reads the return. A void print's pushed value is dead and dropped
@@ -2031,10 +2031,10 @@ class SoN::FromOptree 0.01 {
                     my $elem_stamp = _array_element_stamp($inputs[0]);
                     my $call = $factory->make('Call',
                         inputs         => [$sim->control, $inputs[0], $sim->memory],
-                        is_stmt_effect => true,
                         dispatch_kind  => 'builtin',
                         name           => $name,
                         (defined $elem_stamp ? (stamp => $elem_stamp) : ()));
+                    SoN::FromOptree::EffectMeta::mark_stmt_effect($call);
                     $sim->set_control($call);
                     $sim->set_memory($call);
                     $sim->push_node($call) if $push_count;
@@ -2049,7 +2049,7 @@ class SoN::FromOptree 0.01 {
                 # match -- its $x read is not in modify context.
                 my $is_compound =
                        @inputs >= 1
-                    && $inputs[0]->isa('SoN::IR::Node::PadAccess')
+                    && $inputs[0]->isa('Chalk::IR::Node::PadAccess')
                     && $op->can('first')
                     && $op->first->name =~ /^padsv|^padav|^padhv/
                     && ($op->first->flags & 32); # OPf_MOD
@@ -2070,7 +2070,7 @@ class SoN::FromOptree 0.01 {
                 # a temp, not the field) is dropped and the mutation is lost.
                 my $field_compound =
                        @inputs >= 1
-                    && $inputs[0]->isa('SoN::IR::Node::FieldAccess')
+                    && $inputs[0]->isa('Chalk::IR::Node::FieldAccess')
                     && ($op->flags & 64)          # OPf_STACKED (the op= form)
                     && $op->can('first')
                     && $op->first->name =~ /^padsv/
@@ -2085,7 +2085,7 @@ class SoN::FromOptree 0.01 {
                 my $elem_lvalue;
                 if (!$is_compound
                     && @inputs >= 1
-                    && $inputs[0]->isa('SoN::IR::Node::Subscript')
+                    && $inputs[0]->isa('Chalk::IR::Node::Subscript')
                     && scalar($inputs[0]->inputs->@*) == 2
                     && ($op->flags & 64)) { # OPf_STACKED
                     $elem_lvalue = $inputs[0];
@@ -2124,12 +2124,10 @@ class SoN::FromOptree 0.01 {
                     my $effectful = !$opmap->is_pure($name) || $lvalue;
                     $void_effect_call = $void && $effectful;
                 }
-                if ($void_effect_call) {
-                    unshift @inputs, $sim->control;
-                    $extra{is_stmt_effect} = true;
-                }
+                unshift @inputs, $sim->control if $void_effect_call;
                 my $node = $factory->make($node_type, inputs => \@inputs, %extra);
                 if ($void_effect_call) {
+                    SoN::FromOptree::EffectMeta::mark_stmt_effect($node);
                     $sim->set_control($node);
                 }
 
@@ -2144,16 +2142,16 @@ class SoN::FromOptree 0.01 {
                     # FieldAccess for the same field (the first operand's padsv).
                     my $lv = _make_pad_or_field($cv, $op->first->targ, $factory);
                     my $store = $factory->make('Assign',
-                        inputs         => [$sim->control, $lv, $node],
-                        is_stmt_effect => true);
+                        inputs         => [$sim->control, $lv, $node]);
+                    SoN::FromOptree::EffectMeta::mark_stmt_effect($store);
                     $sim->set_control($store);
                 }
                 elsif (defined $elem_lvalue) {
                     # Store the result back to the element and advance memory
                     # (memory-SSA), mirroring the sassign Subscript branch.
                     my $store = $factory->make('Assign',
-                        inputs         => [$sim->control, $elem_lvalue, $node],
-                        is_stmt_effect => true);
+                        inputs         => [$sim->control, $elem_lvalue, $node]);
+                    SoN::FromOptree::EffectMeta::mark_stmt_effect($store);
                     $sim->set_control($store);
                     $sim->set_memory($store);
                 }
@@ -2235,7 +2233,7 @@ class SoN::FromOptree 0.01 {
     # this for the iterator because it excludes $extra_targs from its result and
     # only seeds slots already in scope (the iterator is not in the outer scope).
     sub _body_writes_targ ($cv, $start_op, $sim, $opmap, $targ) {
-        my $scout_factory = SoN::IR::NodeFactory->new();
+        my $scout_factory = Chalk::IR::NodeFactory->new();
         my $scout_sim     = SoN::FromOptree::StackSim->new(
             control => $scout_factory->make_cfg('Start'),
             # A throwaway MemStart so a body element read (`$a[$i]`) builds a
@@ -2258,7 +2256,7 @@ class SoN::FromOptree 0.01 {
     }
 
     sub _scout_mutated_targs ($cv, $start_op, $sim, $opmap, $extra_targs = []) {
-        my $scout_factory = SoN::IR::NodeFactory->new();
+        my $scout_factory = Chalk::IR::NodeFactory->new();
         my $scout_sim     = SoN::FromOptree::StackSim->new(
             control => $scout_factory->make_cfg('Start'),
             # A throwaway MemStart so a body element read builds a Subscript with
@@ -2446,7 +2444,7 @@ class SoN::FromOptree 0.01 {
         die "GAP: side-effecting loop condition with a memory store not yet lowered\n"
             if _cond_stores_memory($cond_start);
 
-        my $cond_factory = SoN::IR::NodeFactory->new();
+        my $cond_factory = Chalk::IR::NodeFactory->new();
         my $cond_sim     = SoN::FromOptree::StackSim->new(
             control => $cond_factory->make_cfg('Start'));
         my %placeholder;
@@ -2669,7 +2667,7 @@ class SoN::FromOptree 0.01 {
         # IV_MAX overflows to an NV and wraps in the emitted i64 (zero iterations,
         # silently) -- refuse that edge.
         my $bound;
-        if ($high->isa('SoN::IR::Node::Constant')
+        if ($high->isa('Chalk::IR::Node::Constant')
                 && ($high->const_type // '') eq 'integer') {
             die "GAP: foreach range bound at IV_MAX not yet lowered\n"
                 if $high->value >= 9223372036854775807;
@@ -2693,7 +2691,7 @@ class SoN::FromOptree 0.01 {
             stamp  => SoN::IR::Stamp->new(type => 'Boolean'));
         # Structural control edge to the Loop (see _walk_loop_body), so the
         # backend recovers this continuation test unambiguously.
-        $range_cond->set_loop_control($loop_node);
+        SoN::FromOptree::EffectMeta::mark_loop_control($range_cond, $loop_node);
 
         # A body element store advances memory; seed a header memory-Phi from the
         # pre-loop memory (memory analog of the carried-slot Phi; no stamp).
@@ -2813,7 +2811,7 @@ class SoN::FromOptree 0.01 {
         my $range_cond = $factory->make('NumGt',
             inputs => [$len, $i_phi],
             stamp  => SoN::IR::Stamp->new(type => 'Boolean'));
-        $range_cond->set_loop_control($loop_node);
+        SoN::FromOptree::EffectMeta::mark_loop_control($range_cond, $loop_node);
 
         # A body element store advances memory; seed a header memory-Phi from the
         # pre-loop memory (same as the range form).
@@ -2984,7 +2982,7 @@ class SoN::FromOptree 0.01 {
                     my $neg = _negate_comparison($cond, $factory)
                         or die "GAP: non-comparison `last if` guard inside a loop"
                              . " body not yet lowered\n";
-                    $neg->set_loop_control($loop_node);
+                    SoN::FromOptree::EffectMeta::mark_loop_control($neg, $loop_node);
                     my $body_proj = $factory->make_cfg('Proj',
                         inputs => [$loop_node], index => 0);
                     $exit_proj = $factory->make_cfg('Proj',
@@ -3127,7 +3125,7 @@ class SoN::FromOptree 0.01 {
                     # THAT -- otherwise the backend falls back to a body comparison.
                     $cond = _truthiness_test($cond, $factory)
                         unless _is_comparison($cond);
-                    $cond->set_loop_control($loop_node);
+                    SoN::FromOptree::EffectMeta::mark_loop_control($cond, $loop_node);
                     my $body_proj = $factory->make_cfg('Proj',
                         inputs => [$loop_node], index => 0);
                     $exit_proj = $factory->make_cfg('Proj',

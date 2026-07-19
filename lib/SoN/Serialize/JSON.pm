@@ -1,5 +1,5 @@
-# ABOUTME: Serialize/deserialize SoN::IR::Graph instances to/from JSON.
-# ABOUTME: Provides to_json(\%named_graphs) and from_json($json_string) as exportable subs.
+# ABOUTME: Serialize Chalk::IR::Graph instances (built by B::SoN's FromOptree)
+# ABOUTME: to the B::SoN wire JSON format. Provides to_json(\%named_graphs).
 
 package SoN::Serialize::JSON;
 
@@ -7,11 +7,12 @@ use v5.42.0;
 use utf8;
 use Exporter 'import';
 
-our @EXPORT_OK = qw(to_json from_json);
+our @EXPORT_OK = qw(to_json);
 
 use JSON::PP ();
-use SoN::IR::Graph;
-use SoN::IR::NodeFactory;
+use Scalar::Util qw(blessed);
+use SoN::FromOptree::EffectMeta;
+use Chalk::IR::Serialize::JSON ();
 
 # CFG node operations — these carry control tokens and are never hash-consed.
 my %CFG_OPS = map { $_ => 1 } qw(Start Return Unwind If Proj Region Loop);
@@ -50,12 +51,15 @@ sub _extract_fields ($node, $id_remap) {
                 ? ( param_names => $node->param_names )
                 : () ),
             # A void statement-effect call leads with its control input.
-            ( $node->is_stmt_effect
+            # Chalk::IR::Node::Call has no is_stmt_effect field (the merged
+            # type carries per-call identity via the factory instead), so
+            # this knowledge lives in the producer-side EffectMeta table.
+            ( SoN::FromOptree::EffectMeta::is_stmt_effect($node)
                 ? ( is_stmt_effect => JSON::PP::true )
                 : () ),
         };
     }
-    if ($op eq 'Assign' && $node->is_stmt_effect) {
+    if ($op eq 'Assign' && SoN::FromOptree::EffectMeta::is_stmt_effect($node)) {
         # An element-store Assign is a statement effect and leads with its
         # control input (mirrors the void-call contract).
         return { is_stmt_effect => JSON::PP::true };
@@ -116,7 +120,7 @@ sub _extract_fields ($node, $id_remap) {
         # loader demotes that leading input to control_in (the void-call
         # contract), leaving inputs = the printed list.
         return (
-            $node->is_stmt_effect
+            SoN::FromOptree::EffectMeta::is_stmt_effect($node)
                 ? { is_stmt_effect => JSON::PP::true }
                 : undef
         );
@@ -131,7 +135,36 @@ sub _extract_fields ($node, $id_remap) {
 # _serialize_graph($graph) — returns a Perl data structure for one graph.
 # -----------------------------------------------------------------------
 sub _serialize_graph ($graph) {
-    my $topo_nodes = $graph->nodes;
+    # $graph is a Chalk::IR::Graph, but FromOptree builds it by wrapping
+    # start+returns at the very end of translate() rather than incrementally
+    # merge()-ing every node in as Chalk's own Actions.pm does -- so the
+    # Graph's own ->nodes (cache-gated on that membership set) silently
+    # drops a node reachable ONLY via consumers() of an already-included
+    # node: a while-loop's false-exit Proj (a consumer of Loop with no
+    # downstream input reference) or a loop condition (a consumer of the
+    # header Phi via EffectMeta's loop_control, not an inputs[] edge).
+    # Do the full inputs+consumers BFS ourselves (the pre-unification
+    # SoN::IR::Graph::nodes contract), then hand the reachable set to
+    # Chalk's shared topo-sort (which also fixes up Phi-region ordering)
+    # rather than reimplementing that half.
+    my @worklist = ($graph->start, $graph->returns->@*);
+    my %seen;
+    my @reachable;
+    while (my $n = shift @worklist) {
+        next unless blessed($n);
+        next if $seen{ $n->id }++;
+        push @reachable, $n;
+        for my $input ($n->inputs->@*) {
+            if (ref($input) eq 'ARRAY') {
+                push @worklist, $input->@*;
+            }
+            else {
+                push @worklist, $input;
+            }
+        }
+        push @worklist, $n->consumers->@* if $n->can('consumers');
+    }
+    my $topo_nodes = Chalk::IR::Serialize::JSON::_all_nodes_topo(\@reachable);
 
     # Build positional ID remap: node->id => positional index (0, 1, 2, ...)
     my %id_remap;
@@ -158,8 +191,11 @@ sub _serialize_graph ($graph) {
         }
         # A loop-header condition carries a control edge to its Loop (op-agnostic,
         # emitted as a node-id reference the loader demotes to control_in).
-        if (defined $node->loop_control) {
-            $entry{loop_control} = $id_remap{ $node->loop_control->id };
+        # Chalk::IR::Node has no loop_control field, so this knowledge lives
+        # in the producer-side EffectMeta table (see is_stmt_effect above).
+        my $loop_owner = SoN::FromOptree::EffectMeta::loop_control_of($node);
+        if (defined $loop_owner) {
+            $entry{loop_control} = $id_remap{ $loop_owner->id };
         }
 
         push @nodes, \%entry;
@@ -198,144 +234,6 @@ sub to_json ($named_graphs, $classes = undef) {
     $data->{classes} = $classes if defined $classes && %$classes;
 
     return JSON::PP->new->canonical->pretty->encode($data);
-}
-
-# -----------------------------------------------------------------------
-# _deserialize_graph($method_data) — rebuild a SoN::IR::Graph from data.
-# -----------------------------------------------------------------------
-sub _deserialize_graph ($method_data) {
-    my $factory   = SoN::IR::NodeFactory->new();
-    my @node_data = $method_data->{nodes}->@*;
-
-    # The serializer's topological order guarantees inputs are created
-    # before consumers for every edge EXCEPT a loop Phi's back-edge:
-    # Graph::nodes cuts exactly that edge (the Phi<->back-edge data cycle
-    # forces one forward reference in any order), so a loop Phi's inputs[1]
-    # may point forward. Such a Phi is constructed with its init input only
-    # and the back-edge is wired via set_backedge once every node exists --
-    # the same defer-patch the Chalk loader performs.
-
-    my @nodes;  # positional array of created node objects
-    my @backedge_patches;  # [phi_position, backedge_index] deferred wirings
-
-    for my $nd (@node_data) {
-        my $op     = $nd->{op};
-        my $fields = $nd->{fields} // {};
-        my $is_cfg = $nd->{cfg}    // 0;
-
-        # Resolve inputs from already-created nodes
-        my @inputs = map { $nodes[$_] } ($nd->{inputs} // [])->@*;
-
-        # Build the argument hash, with inputs and any extra fields
-        my %args = (inputs => \@inputs);
-
-        # Merge extra fields based on op type
-        if ($op eq 'Constant') {
-            $args{value}      = $fields->{value};
-            $args{const_type} = $fields->{const_type} if exists $fields->{const_type};
-        }
-        elsif ($op eq 'Call') {
-            $args{dispatch_kind} = $fields->{dispatch_kind};
-            $args{name}          = $fields->{name};
-            $args{class_name}    = $fields->{class_name}
-                if exists $fields->{class_name};
-            $args{param_names}   = $fields->{param_names}
-                if exists $fields->{param_names};
-            $args{is_stmt_effect} = true
-                if $fields->{is_stmt_effect};
-        }
-        elsif ($op eq 'Assign') {
-            $args{is_stmt_effect} = true
-                if $fields->{is_stmt_effect};
-        }
-        elsif ($op eq 'Phi') {
-            $args{region} = $nodes[ $fields->{region} ];
-            my @idx = ($nd->{inputs} // [])->@*;
-            if (@idx == 2 && $idx[1] >= @nodes) {
-                push @backedge_patches, [ scalar @nodes, $idx[1] ];
-                $args{inputs} = [ $inputs[0] ];
-            }
-        }
-        elsif ($op eq 'Proj') {
-            $args{index} = $fields->{index};
-        }
-        elsif ($op eq 'PadAccess') {
-            $args{targ}    = $fields->{targ};
-            $args{varname} = $fields->{varname};
-        }
-        elsif ($op eq 'FieldAccess') {
-            $args{field_index} = $fields->{field_index};
-            $args{field_stash} = $fields->{field_stash};
-        }
-        elsif ($op eq 'StashAccess') {
-            $args{stash_name} = $fields->{stash_name};
-            $args{var_name}   = $fields->{var_name};
-        }
-        elsif ($op eq 'CompoundAssign') {
-            $args{op} = $fields->{op};
-        }
-        elsif ($op eq 'PostfixDeref') {
-            $args{sigil} = $fields->{sigil};
-        }
-        elsif ($op eq 'RegexMatch') {
-            $args{pattern} = $fields->{pattern};
-            $args{flags}   = $fields->{flags} // '';
-        }
-        elsif ($op eq 'RegexSubst') {
-            $args{pattern}     = $fields->{pattern};
-            $args{replacement} = $fields->{replacement};
-            $args{flags}       = $fields->{flags} // '';
-        }
-        elsif ($op eq 'EnvRead') {
-            $args{key} = $fields->{key};
-        }
-        elsif ($op eq 'Print') {
-            $args{is_stmt_effect} = true
-                if $fields->{is_stmt_effect};
-        }
-        elsif ($op eq 'VarDecl') {
-            $args{scope} = $fields->{scope};
-        }
-
-        my $node;
-        if ($is_cfg) {
-            $node = $factory->make_cfg($op, %args);
-        }
-        else {
-            $node = $factory->make($op, %args);
-        }
-
-        # Restore a loop condition's control edge to its Loop. The Loop always
-        # precedes the condition in topo order (the condition consumes the header
-        # Phi that regions the Loop), so this is a backward reference wired inline.
-        $node->set_loop_control($nodes[ $nd->{loop_control} ])
-            if defined $nd->{loop_control};
-
-        push @nodes, $node;
-    }
-
-    # Wire the deferred loop-Phi back-edges now that every node exists.
-    for my $patch (@backedge_patches) {
-        my ($phi_idx, $val_idx) = @$patch;
-        $nodes[$phi_idx]->set_backedge($nodes[$val_idx]);
-    }
-
-    my $start   = $nodes[ $method_data->{start} ];
-    my @returns = map { $nodes[$_] } $method_data->{returns}->@*;
-
-    return SoN::IR::Graph->new(start => $start, returns => \@returns);
-}
-
-# -----------------------------------------------------------------------
-# from_json($json_string) — deserialize JSON to named graphs.
-# -----------------------------------------------------------------------
-sub from_json ($json_string) {
-    my $data    = JSON::PP->new->decode($json_string);
-    my %graphs;
-    for my $name (sort keys $data->{methods}->%*) {
-        $graphs{$name} = _deserialize_graph($data->{methods}{$name});
-    }
-    return \%graphs;
 }
 
 1;

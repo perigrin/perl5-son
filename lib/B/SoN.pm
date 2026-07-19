@@ -14,8 +14,8 @@ use SoN::Serialize::JSON qw(to_json);
 use SoN::OptSuppress;
 use SoN::ClassAux;
 use SoN::FieldInfo;
-use SoN::IR::NodeFactory;
-use SoN::IR::Graph;
+use Chalk::IR::NodeFactory;
+use Chalk::IR::Graph;
 use SoN::IR::Stamp;
 
 # Suppress the peephole optimizer for the duration of the target program's
@@ -369,7 +369,7 @@ sub _wire_field_defaults {
         $defaults[$idx++] = $default_op;
     });
 
-    my $factory = SoN::IR::NodeFactory->new;
+    my $factory = Chalk::IR::NodeFactory->new;
     for my $f (@$fields) {
         my $fix = $f->{fieldix};
         my $dop = $defaults[$fix];
@@ -409,7 +409,7 @@ sub _wire_field_defaults {
         my $ret = $factory->make_cfg('Return', inputs => [ $start, $value_node ] );
 
         my $key = "${pkg_name}::__DEFAULT_${fix}";
-        $graphs->{$key} = SoN::IR::Graph->new( start => $start, returns => [$ret] );
+        $graphs->{$key} = Chalk::IR::Graph->new( start => $start, returns => [$ret] );
         $f->{has_default} = JSON::PP::true;
         $f->{default_ref} = $key;
         $f->{type}        = $field_type;
