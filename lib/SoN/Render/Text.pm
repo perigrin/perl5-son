@@ -25,27 +25,32 @@ class SoN::Render::Text 0.01 {
             # Format inputs as display IDs
             my @input_strs = map { '%' . $display_id{$_->id} } $node->inputs->@*;
 
-            # Format node-specific attributes
+            # Format node-specific attributes. Dispatched by operation name
+            # (identical across the SoN::IR::Node::* and Chalk::IR::Node::*
+            # hierarchies) rather than isa(), since both node trees are
+            # still directly constructed by different parts of the suite
+            # (SoN::IR::NodeFactory for hand-built graphs, Chalk::IR::NodeFactory
+            # via FromOptree) and share the same accessor names.
             my @attrs;
-            if ($node->isa('Chalk::IR::Node::Constant')) {
+            if ($op eq 'Constant') {
                 push @attrs, $node->value // 'undef';
             }
-            elsif ($node->isa('Chalk::IR::Node::PadAccess')) {
+            elsif ($op eq 'PadAccess') {
                 push @attrs, "targ: " . $node->targ;
                 push @attrs, "name: '" . $node->varname . "'";
             }
-            elsif ($node->isa('Chalk::IR::Node::FieldAccess')) {
+            elsif ($op eq 'FieldAccess') {
                 push @attrs, "index: " . $node->field_index;
                 push @attrs, "stash: '" . $node->field_stash . "'";
             }
-            elsif ($node->isa('Chalk::IR::Node::StashAccess')) {
+            elsif ($op eq 'StashAccess') {
                 push @attrs, "stash: '" . $node->stash_name . "'";
                 push @attrs, "name: '" . $node->var_name . "'";
             }
-            elsif ($node->isa('Chalk::IR::Node::Call')) {
+            elsif ($op eq 'Call') {
                 push @attrs, $node->dispatch_kind . ": " . $node->name;
             }
-            elsif ($node->isa('Chalk::IR::Node::Proj')) {
+            elsif ($op eq 'Proj') {
                 push @attrs, "index: " . $node->index;
             }
 
