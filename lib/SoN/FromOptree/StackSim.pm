@@ -98,10 +98,17 @@ class SoN::FromOptree::StackSim 0.01 {
         return $copy;
     }
 
-    # Merge two states at a convergence point, creating Phi nodes
-    method merge ($other, $factory) {
+    # Merge two states at a convergence point, creating Phi nodes. $owner,
+    # when given, is the If/Loop node this Region merges the arms of;
+    # set_region wires BOTH the forward pointer (owner.region -> this
+    # Region, read by the backend's merge-Phi placement) and the back-
+    # pointer (Region.head -> owner, read by the control-chain walk) at
+    # produce time, so the loader never has to re-derive them from the
+    # control_in chain.
+    method merge ($other, $factory, $owner = undef) {
         my $region = $factory->make_cfg('Region',
             inputs => [$control, $other->control]);
+        $owner->set_region($region) if defined $owner;
 
         # Create Phi nodes for scope variables that differ
         my $other_scope = $other->scope_bindings;

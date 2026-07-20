@@ -184,6 +184,16 @@ sub _serialize_graph ($graph) {
                 && exists $id_remap{ $node->control_in->id }) {
             $entry{control_in} = $id_remap{ $node->control_in->id };
         }
+        # Region.head -> the owning If/Loop, set at produce time by
+        # StackSim::merge / _build_single_exit / the Loop exit-Region
+        # sites. An If/Loop is always a control predecessor of the Region
+        # it owns, so it is always already in the topo order (and hence
+        # in %id_remap) by the time the Region itself is emitted -- no
+        # forward-ref defer-patch needed (unlike the loop-Phi backedge).
+        if ($node->operation eq 'Region' && defined $node->head
+                && exists $id_remap{ $node->head->id }) {
+            $entry{head} = $id_remap{ $node->head->id };
+        }
 
         push @nodes, \%entry;
     }

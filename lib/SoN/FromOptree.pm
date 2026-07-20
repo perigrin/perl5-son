@@ -423,7 +423,7 @@ class SoN::FromOptree 0.01 {
                         # (and ill-typed) stack Phi over a dead value.
                         $rhs_sim->pop_node
                             while $rhs_sim->stack_depth > $sim->stack_depth;
-                        $sim->merge($rhs_sim, $factory);
+                        $sim->merge($rhs_sim, $factory, $if_node);
                         $op = $op->next;
                         next;
                     }
@@ -844,6 +844,28 @@ class SoN::FromOptree 0.01 {
         }
         my $region = $factory->make_cfg('Region',
             inputs => [map { $_->{control} } @$exits]);
+        # This Region merges independent function exits, not a single If/
+        # Loop's two arms -- there is no single caller-supplied owner the
+        # way the mem_branch/cond_expr/mid-body-break merge() sites have.
+        # But the common shape (`return X if C`, `E // return X`) IS an
+        # early exit guarded by exactly one If: one exit's control chains
+        # (via control_in) to a Proj of that If. Scan every exit's control
+        # for such a chain and adopt the first If/Loop found as the owner,
+        # so the backend's control-chain walk can still reach it -- the
+        # same best-effort scan the loader used to do at load time.
+        my $owner;
+        EXIT: for my $exit (@$exits) {
+            my $arm = $exit->{control};
+            my %seen;
+            while (defined $arm && blessed($arm)
+                    && $arm->operation ne 'Proj' && !$seen{$arm->id}++) {
+                $arm = $arm->can('control_in') ? $arm->control_in : undef;
+            }
+            next unless defined $arm && blessed($arm) && $arm->operation eq 'Proj';
+            my $cand = $arm->inputs->[0];
+            if (defined $cand && blessed($cand)) { $owner = $cand; last EXIT }
+        }
+        $owner->set_region($region) if defined $owner && $owner->can('set_region');
         my $phi = $factory->make('Phi',
             inputs => [map { $_->{value} } @$exits],
             region => $region);
@@ -2636,6 +2658,7 @@ class SoN::FromOptree 0.01 {
         # Region -- the loop now exits via the header-false edge OR the break.
         my @exit_preds = ($exit_proj, map { $_->{proj} } @break_projs);
         my $exit_region = $factory->make_cfg('Region', inputs => \@exit_preds);
+        $loop_node->set_region($exit_region);
         $sim->set_control($exit_region);
 
         # SOUNDNESS for a mid-body break: the exit reads header Phis, correct for
@@ -2781,6 +2804,7 @@ class SoN::FromOptree 0.01 {
 
         # Phase 5: post-loop control continues on the exit edge.
         my $exit_region = $factory->make_cfg('Region', inputs => [$exit_proj]);
+        $loop_node->set_region($exit_region);
         $sim->set_control($exit_region);
         return;
     }
@@ -2895,6 +2919,7 @@ class SoN::FromOptree 0.01 {
 
         # Phase 5: post-loop control continues on the exit edge.
         my $exit_region = $factory->make_cfg('Region', inputs => [$exit_proj]);
+        $loop_node->set_region($exit_region);
         $sim->set_control($exit_region);
         return;
     }
@@ -3100,7 +3125,7 @@ class SoN::FromOptree 0.01 {
                     my $skip_sim = $sim->snapshot;
                     $skip_sim->set_control($taken_proj);
                     my $pre = $sim->scope_bindings;
-                    $skip_sim->merge($rest_sim, $factory);
+                    $skip_sim->merge($rest_sim, $factory, $if_node);
                     # Adopt the merged control / memory / scope into the main sim.
                     # A merge Phi over a loop-carried accumulator becomes that
                     # slot's back-edge; _patch_loop_phi rejects an UNSTAMPED
@@ -3590,7 +3615,7 @@ class SoN::FromOptree 0.01 {
             # merged control / memory / scope into the main sim (Region-input order
             # matches merge's own [self, other] so the backend's Region handling
             # works unchanged).
-            $true_sim->merge($false_sim, $factory);
+            $true_sim->merge($false_sim, $factory, $if_node);
             $sim->set_control($true_sim->control);
             $sim->set_memory($true_sim->memory);
             my $merged_scope = $true_sim->scope_bindings;
