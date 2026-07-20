@@ -26,11 +26,9 @@ class SoN::Render::Text 0.01 {
             my @input_strs = map { '%' . $display_id{$_->id} } $node->inputs->@*;
 
             # Format node-specific attributes. Dispatched by operation name
-            # (identical across the SoN::IR::Node::* and Chalk::IR::Node::*
-            # hierarchies) rather than isa(), since both node trees are
-            # still directly constructed by different parts of the suite
-            # (SoN::IR::NodeFactory for hand-built graphs, Chalk::IR::NodeFactory
-            # via FromOptree) and share the same accessor names.
+            # rather than isa() so this renderer works for any node sharing
+            # these accessor names, not just the Chalk::IR::Node::* subclasses
+            # Chalk::IR::NodeFactory constructs.
             my @attrs;
             if ($op eq 'Constant') {
                 push @attrs, $node->value // 'undef';

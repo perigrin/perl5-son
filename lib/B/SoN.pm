@@ -179,7 +179,7 @@ sub _referenced_class_names {
 }
 
 # _walk_package(\%graphs, $pkg_name, \%stash) — recursively walk a stash,
-# translating every CODE value found into a SoN::IR::Graph.
+# translating every CODE value found into a Chalk::IR::Graph.
 #
 # $pkg_name is the canonical Perl package name (e.g. 'Baz', not 'main::Baz').
 # Perl stashes always report their own NAME in canonical form, so we derive

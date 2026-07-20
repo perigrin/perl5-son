@@ -1,11 +1,11 @@
-# ABOUTME: Tests for SoN::IR::Graph and SoN::Render::Text.
+# ABOUTME: Tests for Chalk::IR::Graph and SoN::Render::Text.
 # ABOUTME: Verifies graph construction, topological ordering, and text rendering.
 
 use v5.42.0;
 use Test2::V0;
 
 use Chalk::IR::NodeFactory;
-use SoN::IR::Graph;
+use Chalk::IR::Graph;
 use SoN::IR::Stamp;
 use SoN::Render::Text;
 
@@ -18,7 +18,7 @@ subtest 'Simple graph: 1 + 2' => sub {
     my $add = $factory->make('Add', inputs => [$c1, $c2]);
     my $ret = $factory->make_cfg('Return', inputs => [$start, $add]);
 
-    my $graph = SoN::IR::Graph->new(start => $start, returns => [$ret]);
+    my $graph = Chalk::IR::Graph->new(start => $start, returns => [$ret]);
 
     my $nodes = $graph->nodes;
     ok(scalar $nodes->@* >= 4, 'graph has at least 4 nodes');
@@ -42,7 +42,7 @@ subtest 'Text rendering' => sub {
     my $add = $f->make('Add', inputs => [$c1, $c2]);
     my $ret = $f->make_cfg('Return', inputs => [$start, $add]);
 
-    my $graph = SoN::IR::Graph->new(start => $start, returns => [$ret]);
+    my $graph = Chalk::IR::Graph->new(start => $start, returns => [$ret]);
     my $renderer = SoN::Render::Text->new();
     my $text = $renderer->render($graph);
 
@@ -58,7 +58,7 @@ subtest 'Text rendering is deterministic' => sub {
     my $start = $f->make_cfg('Start');
     my $c = $f->make('Constant', value => 1, stamp => SoN::IR::Stamp->new(type => 'Int'));
     my $ret = $f->make_cfg('Return', inputs => [$start, $c]);
-    my $graph = SoN::IR::Graph->new(start => $start, returns => [$ret]);
+    my $graph = Chalk::IR::Graph->new(start => $start, returns => [$ret]);
 
     my $renderer = SoN::Render::Text->new();
     my $text1 = $renderer->render($graph);
@@ -66,22 +66,18 @@ subtest 'Text rendering is deterministic' => sub {
     is($text1, $text2, 'same graph renders identically');
 };
 
-subtest 'Node by id lookup' => sub {
-    my $f = Chalk::IR::NodeFactory->new();
-    my $start = $f->make_cfg('Start');
-    my $ret = $f->make_cfg('Return', inputs => [$start]);
-    my $graph = SoN::IR::Graph->new(start => $start, returns => [$ret]);
-
-    my $found = $graph->node_by_id($start->id);
-    is($found, $start, 'found start by id');
-};
+# NOTE: Chalk::IR::Graph has no node_by_id() (unlike the old
+# SoN::IR::Graph) -- its API is members()/start()/returns()/nodes() only.
+# The old "Node by id lookup" subtest tested a SoN::IR::Graph-specific
+# convenience method with no Chalk::IR::Graph equivalent, so it was
+# dropped rather than ported.
 
 subtest 'PadAccess rendering' => sub {
     my $f = Chalk::IR::NodeFactory->new();
     my $start = $f->make_cfg('Start');
     my $pad = $f->make('PadAccess', targ => 3, varname => '$x');
     my $ret = $f->make_cfg('Return', inputs => [$start, $pad]);
-    my $graph = SoN::IR::Graph->new(start => $start, returns => [$ret]);
+    my $graph = Chalk::IR::Graph->new(start => $start, returns => [$ret]);
 
     my $text = SoN::Render::Text->new()->render($graph);
     like($text, qr/PadAccess\(targ: 3, name: '\$x'/, 'PadAccess renders with targ and name');
