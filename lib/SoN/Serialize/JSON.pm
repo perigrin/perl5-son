@@ -105,6 +105,15 @@ sub _extract_fields ($node, $id_remap) {
     if ($op eq 'VarDecl') {
         return { scope => $node->scope };
     }
+    if ($op eq 'Coerce') {
+        # from_repr/to_repr are part of Coerce's content hash. Without emitting
+        # them the chalk loader rebuilds Coerce with UNDEF reprs, so the backend
+        # cannot pick the right coercion arm.
+        return {
+            from_repr => $node->from_repr,
+            to_repr   => $node->to_repr,
+        };
+    }
     return undef;
 }
 

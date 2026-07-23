@@ -96,6 +96,26 @@ class SoN::FromOptree 0.01 {
             stamp  => SoN::IR::Stamp->new(type => 'Str'));
     }
 
+    # _coerce_int_to_num($factory, $node) -- return a node whose stamp is Num,
+    # wrapping an Int-stamped $node in a Coerce(Int->Num) unless it is already
+    # non-Int. Perl `/` is always floating-point division, so an Int operand of a
+    # Divide is numerically coerced to a Num first. The Coerce node is stamped Num
+    # so the wire stamp -> %STAMP_TO_REPR arrives representation=Num on the chalk
+    # side, satisfying TypedInvariant's `Divide => Num` requirement and letting
+    # _lower_coerce emit the sitofp exactly once (a second sitofp on an already-
+    # double ref would be invalid LLVM). Only an Int operand is wrapped; a Num (or
+    # unstamped) operand passes through unchanged -- Coerce's result is
+    # unconditionally Num, so this is the division coercion contract, not a guess.
+    sub _coerce_int_to_num ($factory, $node) {
+        my $stamp = $node->stamp;
+        return $node unless defined $stamp && $stamp->type eq 'Int';
+        return $factory->make('Coerce',
+            from_repr => 'Int',
+            to_repr   => 'Num',
+            inputs    => [$node],
+            stamp     => SoN::IR::Stamp->new(type => 'Num'));
+    }
+
     # _array_element_stamp($array) -> the element stamp of an ArrayRef node
     # (the join of its element stamps), or undef when the array is not a literal
     # ArrayRef or any element is unstamped. Used to stamp shift/pop's removed
@@ -2190,6 +2210,17 @@ class SoN::FromOptree 0.01 {
                     my $lvalue    = ($op->flags & 64);         # OPf_STACKED (store form)
                     my $effectful = !$opmap->is_pure($name) || $lvalue;
                     $void_effect_call = $void && $effectful;
+                }
+
+                # Perl `/` is always floating-point division, so an Int operand
+                # must be coerced to Num before the Divide. Wrap each Int-stamped
+                # operand in a Coerce(Int->Num) at BUILD time (no post-hoc graph
+                # rewire) so the Divide's inputs arrive representation=Num on the
+                # chalk side and TypedInvariant's `Divide => Num` requirement is
+                # satisfied. Only the plain OpMap Divide is handled here; the
+                # TARGMY-Divide twin (`$x /= 2`) is out of scope.
+                if ($node_type eq 'Divide') {
+                    @inputs = map { _coerce_int_to_num($factory, $_) } @inputs;
                 }
                 my $node = $factory->make($node_type, inputs => \@inputs, %extra);
                 if ($void_effect_call) {
