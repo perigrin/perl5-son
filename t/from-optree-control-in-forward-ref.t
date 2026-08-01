@@ -10,7 +10,7 @@ no warnings 'experimental::class';
 use SoN::OptSuppress;
 use SoN::FromOptree;
 use SoN::Serialize::JSON ();
-use Chalk::IR::Serialize::JSON ();
+use SoN::IR::Serialize::JSON ();
 
 class Counter {
     field $n :param = 0;
@@ -39,7 +39,7 @@ sub canonical_graph ($code) {
 #
 # This test drives the REAL producer (SoN::FromOptree) and the REAL wire
 # serializer (SoN::Serialize::JSON), then loads through Chalk's loader
-# (Chalk::IR::Serialize::JSON::from_json) -- the exact cross-repo boundary
+# (SoN::IR::Serialize::JSON::from_json) -- the exact cross-repo boundary
 # the bug lives on.
 # =============================================================================
 subtest 'void method call (inc) survives FromOptree -> wire -> Chalk load' => sub {
@@ -50,7 +50,7 @@ subtest 'void method call (inc) survives FromOptree -> wire -> Chalk load' => su
     ok(defined $inc, 'producer-side graph has a Call(inc)') or return;
 
     my $json = SoN::Serialize::JSON::to_json({ 'main::corpus_case' => $g });
-    my $loaded = Chalk::IR::Serialize::JSON::from_json($json);
+    my $loaded = SoN::IR::Serialize::JSON::from_json($json);
     ok(exists $loaded->{'main::corpus_case'}, 'graph present after Chalk load') or return;
     my $loaded_graph = $loaded->{'main::corpus_case'};
 

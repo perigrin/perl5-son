@@ -27,8 +27,8 @@ class SoN::Render::Text 0.01 {
 
             # Format node-specific attributes. Dispatched by operation name
             # rather than isa() so this renderer works for any node sharing
-            # these accessor names, not just the Chalk::IR::Node::* subclasses
-            # Chalk::IR::NodeFactory constructs.
+            # these accessor names, not just the SoN::IR::Node::* subclasses
+            # SoN::IR::NodeFactory constructs.
             my @attrs;
             if ($op eq 'Constant') {
                 push @attrs, $node->value // 'undef';

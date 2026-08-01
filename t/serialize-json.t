@@ -1,16 +1,16 @@
-# ABOUTME: Tests for SoN::Serialize::JSON — serializes Chalk::IR::Graph to JSON.
+# ABOUTME: Tests for SoN::Serialize::JSON — serializes SoN::IR::Graph to JSON.
 # ABOUTME: Verifies structure, field extraction, and determinism of to_json.
 
 use v5.42.0;
 use Test2::V0;
 
-use Chalk::IR::NodeFactory;
-use Chalk::IR::Graph;
+use SoN::IR::NodeFactory;
+use SoN::IR::Graph;
 use SoN::IR::Stamp;
 use SoN::Serialize::JSON qw(to_json);
 
 # from_json/_deserialize_graph were deleted from SoN::Serialize::JSON (the
-# real pipeline's only loader is Chalk::IR::Serialize::JSON::from_json,
+# real pipeline's only loader is SoN::IR::Serialize::JSON::from_json,
 # which already has its own coverage in the chalk repo, e.g.
 # t/bootstrap/ir-node-unify-roundtrip.t for the loop-Phi defer-patch this
 # file used to test here). The round-trip subtests that only exercised the
@@ -22,11 +22,11 @@ use SoN::Serialize::JSON qw(to_json);
 # ---- helpers ----
 
 sub make_simple_graph () {
-    my $factory = Chalk::IR::NodeFactory->new();
+    my $factory = SoN::IR::NodeFactory->new();
     my $start   = $factory->make_cfg('Start');
     my $const   = $factory->make('Constant', value => '42', const_type => 'integer');
     my $ret     = $factory->make_cfg('Return', inputs => [$start, $const]);
-    return Chalk::IR::Graph->new(start => $start, returns => [$ret]);
+    return SoN::IR::Graph->new(start => $start, returns => [$ret]);
 }
 
 # ====================================================
@@ -130,17 +130,17 @@ subtest 'serialize same graph twice produces identical output' => sub {
 # ====================================================
 
 subtest 'multiple named methods serialize under distinct keys' => sub {
-    my $factory = Chalk::IR::NodeFactory->new();
+    my $factory = SoN::IR::NodeFactory->new();
 
     my $start1 = $factory->make_cfg('Start');
     my $c1     = $factory->make('Constant', value => '10', const_type => 'integer');
     my $ret1   = $factory->make_cfg('Return', inputs => [$start1, $c1]);
-    my $g1     = Chalk::IR::Graph->new(start => $start1, returns => [$ret1]);
+    my $g1     = SoN::IR::Graph->new(start => $start1, returns => [$ret1]);
 
     my $start2 = $factory->make_cfg('Start');
     my $c2     = $factory->make('Constant', value => 'hi', const_type => 'string');
     my $ret2   = $factory->make_cfg('Return', inputs => [$start2, $c2]);
-    my $g2     = Chalk::IR::Graph->new(start => $start2, returns => [$ret2]);
+    my $g2     = SoN::IR::Graph->new(start => $start2, returns => [$ret2]);
 
     my $json = to_json({ 'Alpha::one' => $g1, 'Beta::two' => $g2 });
 

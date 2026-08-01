@@ -8,9 +8,9 @@ use JSON::PP ();
 
 my $perl = "$ENV{HOME}/.local/share/pvm/versions/5.42.0/bin/perl";
 
-# A NEW dependency i1 vendored in (Chalk::IR::*) is now walked by B::SoN's
+# A NEW dependency i1 vendored in (SoN::IR::*) is now walked by B::SoN's
 # unfiltered whole-symbol-table discovery (_discover_and_translate walks
-# %main:: unconditionally); one Chalk::IR::Node::Call anon sub's const op
+# %main:: unconditionally); one SoN::IR::Node::Call anon sub's const op
 # resolves, through the pad, to a B::SPECIAL placeholder whose truthiness
 # check in B::SoN::_const_op_value (`return ... unless $sv && $$sv`) does not
 # catch it, so it falls through to `$sv->FLAGS`, which B::SPECIAL does not
@@ -24,7 +24,7 @@ my $perl = "$ENV{HOME}/.local/share/pvm/versions/5.42.0/bin/perl";
 # practice, which is why subtests 8-10 stay green).
 my $BSPECIAL_FLAGS_BUG =
     'pre-existing B::SoN::_const_op_value bug: B::SPECIAL has no FLAGS method, '
-  . 'newly reachable because unfiltered discovery now walks vendored Chalk::IR::*';
+  . 'newly reachable because unfiltered discovery now walks vendored SoN::IR::*';
 
 # ====================================================
 # Test 1: text output format — header and node content

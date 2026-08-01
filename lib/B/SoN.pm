@@ -14,8 +14,8 @@ use SoN::Serialize::JSON qw(to_json);
 use SoN::OptSuppress;
 use SoN::ClassAux;
 use SoN::FieldInfo;
-use Chalk::IR::NodeFactory;
-use Chalk::IR::Graph;
+use SoN::IR::NodeFactory;
+use SoN::IR::Graph;
 use SoN::IR::Stamp;
 
 # Suppress the peephole optimizer for the duration of the target program's
@@ -179,7 +179,7 @@ sub _referenced_class_names {
 }
 
 # _walk_package(\%graphs, $pkg_name, \%stash) — recursively walk a stash,
-# translating every CODE value found into a Chalk::IR::Graph.
+# translating every CODE value found into a SoN::IR::Graph.
 #
 # $pkg_name is the canonical Perl package name (e.g. 'Baz', not 'main::Baz').
 # Perl stashes always report their own NAME in canonical form, so we derive
@@ -369,7 +369,7 @@ sub _wire_field_defaults {
         $defaults[$idx++] = $default_op;
     });
 
-    my $factory = Chalk::IR::NodeFactory->new;
+    my $factory = SoN::IR::NodeFactory->new;
     for my $f (@$fields) {
         my $fix = $f->{fieldix};
         my $dop = $defaults[$fix];
@@ -407,13 +407,13 @@ sub _wire_field_defaults {
         }
 
         # Produce-time control: control is carried on control_in, never
-        # flattened into inputs -- Chalk::IR::Node::Return's contract is
+        # flattened into inputs -- SoN::IR::Node::Return's contract is
         # inputs=[value], control_in=predecessor.
         my $ret = $factory->make_cfg('Return', inputs => [ $value_node ] );
         $ret->set_control_in($start);
 
         my $key = "${pkg_name}::__DEFAULT_${fix}";
-        $graphs->{$key} = Chalk::IR::Graph->new( start => $start, returns => [$ret] );
+        $graphs->{$key} = SoN::IR::Graph->new( start => $start, returns => [$ret] );
         $f->{has_default} = JSON::PP::true;
         $f->{default_ref} = $key;
         $f->{type}        = $field_type;

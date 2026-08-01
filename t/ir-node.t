@@ -1,18 +1,18 @@
-# ABOUTME: Tests for Chalk::IR::Node base class and CFG node subclasses.
+# ABOUTME: Tests for SoN::IR::Node base class and CFG node subclasses.
 # ABOUTME: Verifies node construction, use-def chains, and CFG node identity.
 
 use v5.42.0;
 use Test2::V0;
 
-use Chalk::IR::NodeFactory;
-use Chalk::IR::Node::Start;
-use Chalk::IR::Node::Return;
-use Chalk::IR::Node::Region;
-use Chalk::IR::Node::If;
-use Chalk::IR::Node::Proj;
-use Chalk::IR::Node::Loop;
+use SoN::IR::NodeFactory;
+use SoN::IR::Node::Start;
+use SoN::IR::Node::Return;
+use SoN::IR::Node::Region;
+use SoN::IR::Node::If;
+use SoN::IR::Node::Proj;
+use SoN::IR::Node::Loop;
 
-my $factory = Chalk::IR::NodeFactory->new();
+my $factory = SoN::IR::NodeFactory->new();
 
 subtest 'Node base class fields' => sub {
     my $node = $factory->make_cfg('Start');
@@ -38,12 +38,12 @@ subtest 'All 6 CFG node types constructable' => sub {
     my $proj   = $factory->make_cfg('Proj', inputs => [$if], index => 0);
     my $loop   = $factory->make_cfg('Loop');
 
-    isa_ok($start,  'Chalk::IR::Node');
-    isa_ok($return, 'Chalk::IR::Node');
-    isa_ok($region, 'Chalk::IR::Node');
-    isa_ok($if,     'Chalk::IR::Node');
-    isa_ok($proj,   'Chalk::IR::Node');
-    isa_ok($loop,   'Chalk::IR::Node');
+    isa_ok($start,  'SoN::IR::Node');
+    isa_ok($return, 'SoN::IR::Node');
+    isa_ok($region, 'SoN::IR::Node');
+    isa_ok($if,     'SoN::IR::Node');
+    isa_ok($proj,   'SoN::IR::Node');
+    isa_ok($loop,   'SoN::IR::Node');
 };
 
 subtest 'Use-def chains maintained' => sub {

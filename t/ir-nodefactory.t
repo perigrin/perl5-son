@@ -1,16 +1,16 @@
-# ABOUTME: Tests for Chalk::IR::NodeFactory hash consing and node creation.
+# ABOUTME: Tests for SoN::IR::NodeFactory hash consing and node creation.
 # ABOUTME: Verifies deduplication of data nodes and unique identity of CFG nodes.
 
 use v5.42.0;
 use Test2::V0;
 
-use Chalk::IR::NodeFactory;
-use Chalk::IR::Node::Start;
-use Chalk::IR::Node::Region;
+use SoN::IR::NodeFactory;
+use SoN::IR::Node::Start;
+use SoN::IR::Node::Region;
 use SoN::IR::Stamp;
 
 subtest 'Identical data nodes return same instance' => sub {
-    my $factory = Chalk::IR::NodeFactory->new();
+    my $factory = SoN::IR::NodeFactory->new();
     my $a = $factory->make('Constant', value => 42, stamp => SoN::IR::Stamp->new(type => 'Int'));
     my $b = $factory->make('Constant', value => 42, stamp => SoN::IR::Stamp->new(type => 'Int'));
     is($a, $b, 'same constant returns same object');
@@ -18,14 +18,14 @@ subtest 'Identical data nodes return same instance' => sub {
 };
 
 subtest 'Different data nodes return different instances' => sub {
-    my $factory = Chalk::IR::NodeFactory->new();
+    my $factory = SoN::IR::NodeFactory->new();
     my $a = $factory->make('Constant', value => 42, stamp => SoN::IR::Stamp->new(type => 'Int'));
     my $b = $factory->make('Constant', value => 99, stamp => SoN::IR::Stamp->new(type => 'Int'));
     isnt($a, $b, 'different constants return different objects');
 };
 
 subtest 'CFG nodes always create new instances' => sub {
-    my $factory = Chalk::IR::NodeFactory->new();
+    my $factory = SoN::IR::NodeFactory->new();
     my $a = $factory->make_cfg('Start');
     my $b = $factory->make_cfg('Start');
     isnt($a, $b, 'two Start nodes are different instances');
@@ -33,7 +33,7 @@ subtest 'CFG nodes always create new instances' => sub {
 };
 
 subtest 'Use-def chains maintained through factory' => sub {
-    my $factory = Chalk::IR::NodeFactory->new();
+    my $factory = SoN::IR::NodeFactory->new();
     my $c1 = $factory->make('Constant', value => 1, stamp => SoN::IR::Stamp->new(type => 'Int'));
     my $c2 = $factory->make('Constant', value => 2, stamp => SoN::IR::Stamp->new(type => 'Int'));
     my $add = $factory->make('Add', inputs => [$c1, $c2]);
@@ -46,8 +46,8 @@ subtest 'Use-def chains maintained through factory' => sub {
 };
 
 subtest 'Content hash is deterministic' => sub {
-    my $f1 = Chalk::IR::NodeFactory->new();
-    my $f2 = Chalk::IR::NodeFactory->new();
+    my $f1 = SoN::IR::NodeFactory->new();
+    my $f2 = SoN::IR::NodeFactory->new();
 
     my $a1 = $f1->make('Constant', value => 42, stamp => SoN::IR::Stamp->new(type => 'Int'));
     my $a2 = $f2->make('Constant', value => 42, stamp => SoN::IR::Stamp->new(type => 'Int'));
@@ -57,7 +57,7 @@ subtest 'Content hash is deterministic' => sub {
 };
 
 subtest 'Constant content_hash includes const_type' => sub {
-    my $factory = Chalk::IR::NodeFactory->new();
+    my $factory = SoN::IR::NodeFactory->new();
 
     my $int_const = $factory->make('Constant',
         value      => 42,
@@ -89,7 +89,7 @@ subtest 'Constant content_hash includes const_type' => sub {
 };
 
 subtest 'Constant const_type defaults to string' => sub {
-    my $factory = Chalk::IR::NodeFactory->new();
+    my $factory = SoN::IR::NodeFactory->new();
     my $c = $factory->make('Constant',
         value => 'plain',
         stamp => SoN::IR::Stamp->new(type => 'Str'),

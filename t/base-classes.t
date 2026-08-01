@@ -4,21 +4,21 @@
 use v5.42.0;
 use Test2::V0;
 
-use Chalk::IR::NodeFactory;
-use Chalk::IR::Node::Constant;
-use Chalk::IR::Node::BinOp;
-use Chalk::IR::Node::UnaryOp;
-use Chalk::IR::Node::Aggregate;
+use SoN::IR::NodeFactory;
+use SoN::IR::Node::Constant;
+use SoN::IR::Node::BinOp;
+use SoN::IR::Node::UnaryOp;
+use SoN::IR::Node::Aggregate;
 use SoN::IR::Stamp;
 
 my $stamp = SoN::IR::Stamp->new(type => 'Int');
 
 sub const ($val) {
-    Chalk::IR::Node::Constant->new(id => "const-$val", value => $val, stamp => $stamp)
+    SoN::IR::Node::Constant->new(id => "const-$val", value => $val, stamp => $stamp)
 }
 
 # BinOp/UnaryOp/Aggregate are abstract intermediate classes never
-# constructed via Chalk::IR::NodeFactory (see the %ABSTRACT_BASE list in
+# constructed via SoN::IR::NodeFactory (see the %ABSTRACT_BASE list in
 # t/bootstrap/ir-subclass-field-audit.t in the chalk repo), so this helper
 # reproduces the factory's _register_consumers wiring by hand for direct
 # ->new construction in this file.
@@ -30,9 +30,9 @@ sub wire_consumers ($node, @inputs) {
 subtest 'BinOp base class' => sub {
     my $left  = const(1);
     my $right = const(2);
-    my $node  = Chalk::IR::Node::BinOp->new(id => 'binop-1', inputs => [$left, $right]);
+    my $node  = SoN::IR::Node::BinOp->new(id => 'binop-1', inputs => [$left, $right]);
 
-    isa_ok($node, ['Chalk::IR::Node'], 'BinOp is-a Node');
+    isa_ok($node, ['SoN::IR::Node'], 'BinOp is-a Node');
     is($node->left,  $left,  'left accessor returns first input');
     is($node->right, $right, 'right accessor returns second input');
     like(dies { $node->op_str }, qr/Subclass must implement op_str/,
@@ -46,13 +46,13 @@ subtest 'BinOp base class' => sub {
 # rather than returning the class-name suffix the old SoN::IR::Node
 # hierarchy returned. The "operation name" subtests this file used to have
 # for BinOp/UnaryOp/Aggregate tested SoN::IR::Node-specific behavior with
-# no Chalk::IR::Node equivalent, so they were dropped rather than ported.
+# no SoN::IR::Node equivalent, so they were dropped rather than ported.
 
 subtest 'BinOp use-def chain wiring' => sub {
     my $left  = const(10);
     my $right = const(20);
     my $node  = wire_consumers(
-        Chalk::IR::Node::BinOp->new(id => 'binop-2', inputs => [$left, $right]),
+        SoN::IR::Node::BinOp->new(id => 'binop-2', inputs => [$left, $right]),
         $left, $right,
     );
 
@@ -64,9 +64,9 @@ subtest 'BinOp use-def chain wiring' => sub {
 
 subtest 'UnaryOp base class' => sub {
     my $operand = const(5);
-    my $node    = Chalk::IR::Node::UnaryOp->new(id => 'unaryop-1', inputs => [$operand]);
+    my $node    = SoN::IR::Node::UnaryOp->new(id => 'unaryop-1', inputs => [$operand]);
 
-    isa_ok($node, ['Chalk::IR::Node'], 'UnaryOp is-a Node');
+    isa_ok($node, ['SoN::IR::Node'], 'UnaryOp is-a Node');
     is($node->operand, $operand, 'operand accessor returns first input');
     like(dies { $node->op_str }, qr/Subclass must implement op_str/,
         'op_str is abstract on the bare base class');
@@ -75,7 +75,7 @@ subtest 'UnaryOp base class' => sub {
 subtest 'UnaryOp use-def chain wiring' => sub {
     my $operand = const(7);
     my $node    = wire_consumers(
-        Chalk::IR::Node::UnaryOp->new(id => 'unaryop-2', inputs => [$operand]),
+        SoN::IR::Node::UnaryOp->new(id => 'unaryop-2', inputs => [$operand]),
         $operand,
     );
 
@@ -85,10 +85,10 @@ subtest 'UnaryOp use-def chain wiring' => sub {
 
 subtest 'Aggregate base class' => sub {
     my ($a, $b, $c) = (const(1), const(2), const(3));
-    my $node = Chalk::IR::Node::Aggregate->new(id => 'aggregate-1', inputs => [$a, $b, $c]);
+    my $node = SoN::IR::Node::Aggregate->new(id => 'aggregate-1', inputs => [$a, $b, $c]);
 
-    isa_ok($node, ['Chalk::IR::Node'], 'Aggregate is-a Node');
-    # Chalk::IR::Node::Aggregate has no elements() accessor (unlike the old
+    isa_ok($node, ['SoN::IR::Node'], 'Aggregate is-a Node');
+    # SoN::IR::Node::Aggregate has no elements() accessor (unlike the old
     # SoN::IR::Node::Aggregate); its members are exactly its inputs.
     my $elems = $node->inputs;
     is(ref $elems, 'ARRAY', 'inputs returns an array ref');
@@ -99,7 +99,7 @@ subtest 'Aggregate base class' => sub {
 };
 
 subtest 'Aggregate with no inputs' => sub {
-    my $node = Chalk::IR::Node::Aggregate->new(id => 'aggregate-2');
+    my $node = SoN::IR::Node::Aggregate->new(id => 'aggregate-2');
 
     my $elems = $node->inputs;
     is(ref $elems, 'ARRAY', 'inputs returns an array ref');

@@ -4,13 +4,13 @@
 use v5.42.0;
 use Test2::V0;
 
-use Chalk::IR::NodeFactory;
-use Chalk::IR::Node::Constant;
-use Chalk::IR::Node::BinOp;
-use Chalk::IR::Node::UnaryOp;
+use SoN::IR::NodeFactory;
+use SoN::IR::Node::Constant;
+use SoN::IR::Node::BinOp;
+use SoN::IR::Node::UnaryOp;
 use SoN::IR::Stamp;
 
-my $factory = Chalk::IR::NodeFactory->new;
+my $factory = SoN::IR::NodeFactory->new;
 my $stamp = SoN::IR::Stamp->new(type => 'Int');
 
 sub const ($val) {
@@ -62,8 +62,8 @@ for my $case (@binop_cases) {
         my $right = const(2);
         my $node  = $factory->make($name, inputs => [$left, $right]);
 
-        isa_ok($node, ['Chalk::IR::Node::BinOp'], "$name isa BinOp");
-        isa_ok($node, ['Chalk::IR::Node'],        "$name isa Node");
+        isa_ok($node, ['SoN::IR::Node::BinOp'], "$name isa BinOp");
+        isa_ok($node, ['SoN::IR::Node'],        "$name isa Node");
         is($node->left,   $left,  "$name->left returns first input");
         is($node->right,  $right, "$name->right returns second input");
         is($node->op_str, $op,    "$name->op_str eq '$op'");
@@ -79,8 +79,8 @@ subtest "Assign is a BinOp" => sub {
     my $right = const(2);
     my $node  = $factory->make('Assign', inputs => [$left, $right]);
 
-    isa_ok($node, ['Chalk::IR::Node::BinOp'], 'Assign isa BinOp');
-    isa_ok($node, ['Chalk::IR::Node'],        'Assign isa Node');
+    isa_ok($node, ['SoN::IR::Node::BinOp'], 'Assign isa BinOp');
+    isa_ok($node, ['SoN::IR::Node'],        'Assign isa Node');
     is($node->left,   $left,  'Assign->left returns first input');
     is($node->right,  $right, 'Assign->right returns second input');
     is($node->op_str, '=',    q{Assign->op_str eq '='});
@@ -92,8 +92,8 @@ for my $case (@unaryop_cases) {
         my $operand = const(1);
         my $node    = $factory->make($name, inputs => [$operand]);
 
-        isa_ok($node, ['Chalk::IR::Node::UnaryOp'], "$name isa UnaryOp");
-        isa_ok($node, ['Chalk::IR::Node'],          "$name isa Node");
+        isa_ok($node, ['SoN::IR::Node::UnaryOp'], "$name isa UnaryOp");
+        isa_ok($node, ['SoN::IR::Node'],          "$name isa Node");
         is($node->operand, $operand, "$name->operand returns first input");
         is($node->op_str,  $op,     "$name->op_str eq '$op'");
     };

@@ -4,20 +4,20 @@
 use v5.42.0;
 use Test2::V0;
 
-use Chalk::IR::NodeFactory;
+use SoN::IR::NodeFactory;
 use SoN::IR::Stamp;
 
-my $factory = Chalk::IR::NodeFactory->new;
+my $factory = SoN::IR::NodeFactory->new;
 my $stamp = SoN::IR::Stamp->new(type => 'Str');
 
-# Nodes are built through the factory, not by direct ->new: Chalk::IR::Node
+# Nodes are built through the factory, not by direct ->new: SoN::IR::Node
 # requires an explicit content-hash id that only the factory assigns
-# (SoN::IR::Node auto-generated one; Chalk::IR::Node does not).
+# (SoN::IR::Node auto-generated one; SoN::IR::Node does not).
 sub const ($val) {
     $factory->make('Constant', value => $val, stamp => $stamp)
 }
 
-# Chalk::IR::Node::Aggregate has no elements() accessor (SoN::IR::Node::Aggregate
+# SoN::IR::Node::Aggregate has no elements() accessor (SoN::IR::Node::Aggregate
 # had one as an alias for inputs()); the aggregate's members are exactly its
 # inputs, so read them directly.
 
@@ -27,8 +27,8 @@ subtest 'HashRef is an Aggregate with 4 inputs' => sub {
     my @kv = map { const($_) } qw(k1 v1 k2 v2);
     my $node = $factory->make('HashRef', inputs => \@kv);
 
-    isa_ok($node, ['Chalk::IR::Node::Aggregate'], 'HashRef isa Aggregate');
-    isa_ok($node, ['Chalk::IR::Node'],            'HashRef isa Node');
+    isa_ok($node, ['SoN::IR::Node::Aggregate'], 'HashRef isa Aggregate');
+    isa_ok($node, ['SoN::IR::Node'],            'HashRef isa Node');
     is($node->operation, 'HashRef', 'HashRef->operation eq HashRef');
     is(scalar $node->inputs->@*, 4, 'HashRef has 4 elements');
 
@@ -55,8 +55,8 @@ subtest 'ArrayRef is an Aggregate with 3 inputs' => sub {
     my @elems = map { const($_) } (1, 2, 3);
     my $node  = $factory->make('ArrayRef', inputs => \@elems);
 
-    isa_ok($node, ['Chalk::IR::Node::Aggregate'], 'ArrayRef isa Aggregate');
-    isa_ok($node, ['Chalk::IR::Node'],            'ArrayRef isa Node');
+    isa_ok($node, ['SoN::IR::Node::Aggregate'], 'ArrayRef isa Aggregate');
+    isa_ok($node, ['SoN::IR::Node'],            'ArrayRef isa Node');
     is($node->operation, 'ArrayRef', 'ArrayRef->operation eq ArrayRef');
     is(scalar $node->inputs->@*, 3, 'ArrayRef has 3 elements');
 
@@ -84,8 +84,8 @@ subtest 'Interpolate is an Aggregate with 2 inputs' => sub {
     my $var = const('world');
     my $node = $factory->make('Interpolate', inputs => [$lit, $var]);
 
-    isa_ok($node, ['Chalk::IR::Node::Aggregate'], 'Interpolate isa Aggregate');
-    isa_ok($node, ['Chalk::IR::Node'],            'Interpolate isa Node');
+    isa_ok($node, ['SoN::IR::Node::Aggregate'], 'Interpolate isa Aggregate');
+    isa_ok($node, ['SoN::IR::Node'],            'Interpolate isa Node');
     is($node->operation, 'Interpolate', 'Interpolate->operation eq Interpolate');
     is(scalar $node->inputs->@*, 2, 'Interpolate has 2 elements');
     is($node->inputs->[0], $lit, 'elements[0] is the literal segment');
@@ -108,20 +108,20 @@ subtest 'Interpolate content_hash includes operation name and input ids' => sub 
 subtest 'NodeFactory can create all 3 aggregate nodes' => sub {
     my @kv    = map { const($_) } qw(k 1);
     my $hnode = $factory->make('HashRef', inputs => \@kv);
-    isa_ok($hnode, ['Chalk::IR::Node::Aggregate'],
+    isa_ok($hnode, ['SoN::IR::Node::Aggregate'],
         "factory->make('HashRef') returns Aggregate");
     is($hnode->operation, 'HashRef', "factory-made HashRef has correct operation");
 
     my @elems = map { const($_) } (7, 8, 9);
     my $anode = $factory->make('ArrayRef', inputs => \@elems);
-    isa_ok($anode, ['Chalk::IR::Node::Aggregate'],
+    isa_ok($anode, ['SoN::IR::Node::Aggregate'],
         "factory->make('ArrayRef') returns Aggregate");
     is($anode->operation, 'ArrayRef', "factory-made ArrayRef has correct operation");
 
     my $lit   = const('foo');
     my $var   = const('bar');
     my $inode = $factory->make('Interpolate', inputs => [$lit, $var]);
-    isa_ok($inode, ['Chalk::IR::Node::Aggregate'],
+    isa_ok($inode, ['SoN::IR::Node::Aggregate'],
         "factory->make('Interpolate') returns Aggregate");
     is($inode->operation, 'Interpolate', "factory-made Interpolate has correct operation");
 };

@@ -4,15 +4,15 @@
 use v5.42.0;
 use Test2::V0;
 
-use Chalk::IR::NodeFactory;
+use SoN::IR::NodeFactory;
 use SoN::IR::Stamp;
 
-my $factory = Chalk::IR::NodeFactory->new;
+my $factory = SoN::IR::NodeFactory->new;
 my $stamp = SoN::IR::Stamp->new(type => 'Int');
 
-# Nodes are built through the factory, not by direct ->new: Chalk::IR::Node
+# Nodes are built through the factory, not by direct ->new: SoN::IR::Node
 # requires an explicit content-hash id that only the factory assigns
-# (SoN::IR::Node auto-generated one; Chalk::IR::Node does not).
+# (SoN::IR::Node auto-generated one; SoN::IR::Node does not).
 sub const ($val) {
     $factory->make('Constant', value => $val, stamp => $stamp)
 }
@@ -30,8 +30,8 @@ for my $case (@simple_cases) {
         my $operand = const(1);
         my $node    = $factory->make($name, inputs => [$operand]);
 
-        isa_ok($node, ['Chalk::IR::Node::UnaryOp'], "$name isa UnaryOp");
-        isa_ok($node, ['Chalk::IR::Node'],          "$name isa Node");
+        isa_ok($node, ['SoN::IR::Node::UnaryOp'], "$name isa UnaryOp");
+        isa_ok($node, ['SoN::IR::Node'],          "$name isa Node");
         is($node->operand,   $operand, "$name->operand returns first input");
         is($node->op_str,    $op,      "$name->op_str eq '$op'");
         is($node->operation, $name,    "$name->operation eq '$name'");
@@ -55,7 +55,7 @@ subtest 'simple UnaryOp content_hash includes operation name and input id' => su
 # --- PostfixDeref ---
 
 subtest 'PostfixDeref is a Node with sigil field' => sub {
-    # Chalk::IR::Node::PostfixDeref inherits directly from Chalk::IR::Node
+    # SoN::IR::Node::PostfixDeref inherits directly from SoN::IR::Node
     # rather than UnaryOp and has no operand() accessor -- unlike
     # SoN::IR::Node::PostfixDeref, which modeled it as a UnaryOp. Read the
     # operand via inputs() instead.
@@ -65,7 +65,7 @@ subtest 'PostfixDeref is a Node with sigil field' => sub {
         sigil  => '@',
     );
 
-    isa_ok($node, ['Chalk::IR::Node'],  'PostfixDeref isa Node');
+    isa_ok($node, ['SoN::IR::Node'],  'PostfixDeref isa Node');
     is($node->inputs->[0], $operand,    'PostfixDeref inputs->[0] is the operand');
     is($node->sigil,     '@',           'PostfixDeref->sigil returns the sigil');
     is($node->operation, 'PostfixDeref','PostfixDeref->operation eq PostfixDeref');
@@ -122,17 +122,17 @@ subtest 'NodeFactory can create all 3 unary nodes' => sub {
 
     for my $name (qw(UnaryPlus Ref)) {
         my $node = $factory->make($name, inputs => [$operand]);
-        isa_ok($node, ['Chalk::IR::Node::UnaryOp'],
+        isa_ok($node, ['SoN::IR::Node::UnaryOp'],
             "factory->make('$name') returns UnaryOp");
     }
 
-    # PostfixDeref is not a UnaryOp under Chalk::IR (see the "isa Node"
+    # PostfixDeref is not a UnaryOp under SoN::IR (see the "isa Node"
     # comment above) -- only assert it's a Node with the right sigil.
     my $deref = $factory->make('PostfixDeref',
         inputs => [$operand],
         sigil  => '@',
     );
-    isa_ok($deref, ['Chalk::IR::Node'],
+    isa_ok($deref, ['SoN::IR::Node'],
         "factory->make('PostfixDeref') returns a Node");
     is($deref->sigil, '@', "factory-made PostfixDeref has correct sigil");
 };

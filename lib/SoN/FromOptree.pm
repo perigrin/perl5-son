@@ -9,8 +9,8 @@ no warnings 'experimental::class';
 use B;
 
 class SoN::FromOptree 0.01 {
-    use Chalk::IR::NodeFactory;
-    use Chalk::IR::Graph;
+    use SoN::IR::NodeFactory;
+    use SoN::IR::Graph;
     use SoN::IR::Stamp;
     use SoN::FromOptree::OpMap;
     use SoN::FromOptree::StackSim;
@@ -164,7 +164,7 @@ class SoN::FromOptree 0.01 {
         my $cv = B::svref_2object($coderef);
         die "Not a CODE ref" unless $cv->isa('B::CV');
 
-        my $factory = Chalk::IR::NodeFactory->new();
+        my $factory = SoN::IR::NodeFactory->new();
         my $opmap   = SoN::FromOptree::OpMap->new();
         my $start   = $factory->make_cfg('Start');
         my $mem     = $factory->make('MemStart');
@@ -605,7 +605,7 @@ class SoN::FromOptree 0.01 {
                     # here rather than crashing downstream.
                     die "GAP: foreach over a range with a runtime LOW bound "
                       . "(for my \$i (\$lo..\$hi)) not yet lowered\n"
-                        unless $bounds->[0]->isa('Chalk::IR::Node::Constant')
+                        unless $bounds->[0]->isa('SoN::IR::Node::Constant')
                             && ($bounds->[0]->const_type // '') eq 'integer';
                     _translate_foreach_range($cv, $op, $sim, $factory, $opmap,
                         \%visited, $bounds->@*);
@@ -717,7 +717,7 @@ class SoN::FromOptree 0.01 {
                 # The replacement string is on the stack (pushed by const op before subst)
                 my $repl_node = $sim->stack_depth > 0 ? $sim->pop_node : undef;
                 my $replacement = '';
-                if ($repl_node && $repl_node->isa('Chalk::IR::Node::Constant')) {
+                if ($repl_node && $repl_node->isa('SoN::IR::Node::Constant')) {
                     $replacement = $repl_node->value // '';
                 }
                 my $node = $factory->make('RegexSubst',
@@ -894,7 +894,7 @@ class SoN::FromOptree 0.01 {
         return $ret;
     }
 
-    # Chalk::IR::Graph->nodes() returns only nodes reachable from the
+    # SoN::IR::Graph->nodes() returns only nodes reachable from the
     # graph's own %cache (inputs unconditionally, consumers filtered to
     # cache membership -- see the comment on Graph::nodes()). Actions.pm
     # satisfies that contract by merge()-ing every node it builds as it
@@ -924,7 +924,7 @@ class SoN::FromOptree 0.01 {
     # translate() call built; passing it explicitly keeps start()/returns()
     # deterministic regardless of what the closure walk also merges in.
     sub _graph_of_reachable ($start, $ret) {
-        my $graph = Chalk::IR::Graph->new(start => $start, returns => [$ret]);
+        my $graph = SoN::IR::Graph->new(start => $start, returns => [$ret]);
         my %seen;
         my @stack = ($start, $ret);
         while (@stack) {
@@ -1034,11 +1034,11 @@ class SoN::FromOptree 0.01 {
             # 'm' has no class_name"). Detect it from the ORIGINAL invocant pad's
             # padname BEFORE resolving it to a bound value (a `$self` read resolves
             # to nothing useful). This is the most common real-method dispatch
-            # (e.g. Chalk::Grammar::Symbol::to_string calls $self->is_terminal()),
+            # (e.g. chalk's Grammar Symbol to_string calls $self->is_terminal()),
             # zhi 019f5dec.
             my $self_class;
             if ($invocant
-                && $invocant->isa('Chalk::IR::Node::PadAccess')
+                && $invocant->isa('SoN::IR::Node::PadAccess')
                 && _padname($cv, $invocant->targ) eq '$self') {
                 $self_class = eval { $cv->GV->STASH->NAME };
                 # The self receiver is the object instance: stamp it Object so it
@@ -1049,7 +1049,7 @@ class SoN::FromOptree 0.01 {
                     if $invocant->can('set_stamp');
             }
             if ($invocant
-                && $invocant->isa('Chalk::IR::Node::PadAccess')) {
+                && $invocant->isa('SoN::IR::Node::PadAccess')) {
                 my $bound = $sim->lookup($invocant->targ);
                 $invocant = $bound if defined $bound;
             }
@@ -1063,12 +1063,12 @@ class SoN::FromOptree 0.01 {
                 $class_name = $self_class;
             }
             elsif ($invocant
-                && $invocant->isa('Chalk::IR::Node::Constant')
+                && $invocant->isa('SoN::IR::Node::Constant')
                 && ($invocant->const_type // '') eq 'string') {
                 $class_name = $invocant->value;
             }
             elsif ($invocant
-                && $invocant->isa('Chalk::IR::Node::Call')
+                && $invocant->isa('SoN::IR::Node::Call')
                 && defined $invocant->class_name) {
                 $class_name = $invocant->class_name;
             }
@@ -1087,7 +1087,7 @@ class SoN::FromOptree 0.01 {
                 $ok = 1;
                 for (my $i = 0; $i < $args->@*; $i += 2) {
                     my ($k, $v) = ($args->[$i], $args->[$i + 1]);
-                    unless ($k && $k->isa('Chalk::IR::Node::Constant')
+                    unless ($k && $k->isa('SoN::IR::Node::Constant')
                             && ($k->const_type // '') eq 'string') {
                         $ok = 0; last;
                     }
@@ -1124,7 +1124,7 @@ class SoN::FromOptree 0.01 {
         # Direct sub call: the last arg is the callee, the rest are args.
         my $cv_node   = $args->@* ? pop $args->@* : undef;
         my $call_name = 'unknown';
-        if ($cv_node && $cv_node->isa('Chalk::IR::Node::Constant')) {
+        if ($cv_node && $cv_node->isa('SoN::IR::Node::Constant')) {
             $call_name = $cv_node->value // 'unknown';
         }
         # Resolve the callee to its fully-qualified name (STASH::NAME)
@@ -1582,9 +1582,9 @@ class SoN::FromOptree 0.01 {
             # the C getenv. Only a literal key on a read (rvalue) is recognised;
             # an lvalue $ENV{K} = ... (env write) is not modelled and falls through.
             if ($name eq 'helem' && !$is_lvalue
-                && $container->isa('Chalk::IR::Node::Constant')
+                && $container->isa('SoN::IR::Node::Constant')
                 && ($container->value // '') eq 'main::ENV'
-                && $index->isa('Chalk::IR::Node::Constant')
+                && $index->isa('SoN::IR::Node::Constant')
                 && defined $index->value) {
                 my $node = $factory->make('EnvRead',
                     key   => $index->value,
@@ -1617,7 +1617,7 @@ class SoN::FromOptree 0.01 {
             # 0 (references R9 miscompile). A hash element or an unknown container
             # yields no element stamp -- leave it unstamped then.
             my $elem_stamp = ($name eq 'aelem' && !$is_lvalue
-                    && !$index->isa('Chalk::IR::Node::Constant'))
+                    && !$index->isa('SoN::IR::Node::Constant'))
                 ? _array_element_stamp($container) : undef;
             my $sub = $factory->make('Subscript',
                 inputs => \@sub_inputs,
@@ -1640,7 +1640,7 @@ class SoN::FromOptree 0.01 {
             # Resolve an lvalue PadAccess to the variable's current bound value
             # so the arithmetic carries a real (stamped) input.
             my $targ;
-            if ($old->isa('Chalk::IR::Node::PadAccess')) {
+            if ($old->isa('SoN::IR::Node::PadAccess')) {
                 $targ  = $old->targ;
                 my $bound = $sim->lookup($targ);
                 $old = $bound if defined $bound;
@@ -1654,7 +1654,7 @@ class SoN::FromOptree 0.01 {
             # the lvalue as the read value re-reads the slot AFTER the store-back
             # (an off-by-one / double-apply miscompile when the RMW is consumed).
             my $lvalue;
-            if ($old->isa('Chalk::IR::Node::Subscript')
+            if ($old->isa('SoN::IR::Node::Subscript')
                 && scalar($old->inputs->@*) == 2) {
                 $lvalue = $old;
                 $old = $factory->make('Subscript',
@@ -1709,7 +1709,7 @@ class SoN::FromOptree 0.01 {
             # handler. Keyed on the RHS OP (padav/...), NOT the value node's repr
             # -- an anon-ref literal ($r = [1,2,3]) also makes an ArrayRef node
             # but is a scalar reference and must pass through.
-            if ($target->isa('Chalk::IR::Node::PadAccess')) {
+            if ($target->isa('SoN::IR::Node::PadAccess')) {
                 if (_rhs_is_aggregate_access($op) && _is_aggregate_node($value)) {
                     my $stamp = _result_stamp('Length', [$value]);
                     my %extra = defined $stamp ? (stamp => $stamp) : ();
@@ -1726,7 +1726,7 @@ class SoN::FromOptree 0.01 {
             # shortcut -- see the aelem/helem read handler), so the store's
             # effect reaches memory and the load sees it. The assignment's result
             # value is the stored value, so push that as the result.
-            elsif ($target->isa('Chalk::IR::Node::Subscript')) {
+            elsif ($target->isa('SoN::IR::Node::Subscript')) {
                 my $node = $factory->make('Assign', inputs => [$target, $value]);
                 $node->set_control_in($sim->control);
                 $sim->set_control($node);
@@ -1742,7 +1742,7 @@ class SoN::FromOptree 0.01 {
             # via control_in, exactly like the TARGMY field-write path -- else
             # the store is silently dropped and the field keeps its default
             # (zhi 019f2dee).
-            elsif ($target->isa('Chalk::IR::Node::FieldAccess')) {
+            elsif ($target->isa('SoN::IR::Node::FieldAccess')) {
                 my $store = $factory->make('Assign', inputs => [$target, $value]);
                 $store->set_control_in($sim->control);
                 $sim->set_control($store);
@@ -1760,7 +1760,7 @@ class SoN::FromOptree 0.01 {
             # store lvalue and the read hash-cons to ONE node, so stamping here
             # types both. A hardcoded Int would miscompile a Str global. Fall
             # back to Int when the RHS carries no stamp (the historical default).
-            elsif ($target->isa('Chalk::IR::Node::StashAccess')) {
+            elsif ($target->isa('SoN::IR::Node::StashAccess')) {
                 my $rhs_type = ($value->can('stamp') && defined $value->stamp)
                     ? $value->stamp->type : 'Int';
                 $target->set_stamp(SoN::IR::Stamp->new(type => $rhs_type))
@@ -1904,7 +1904,7 @@ class SoN::FromOptree 0.01 {
             # slot is an SSA rebind. LVINTRO in main mode wraps the pad in a
             # VarDecl so the `my` declaration stays reachable.
             my $lv       = _make_pad_or_field($cv, $targ, $factory);
-            my $is_field = $lv->isa('Chalk::IR::Node::FieldAccess');
+            my $is_field = $lv->isa('SoN::IR::Node::FieldAccess');
             if ($is_field) {
                 my $store = $factory->make('Assign', inputs => [$lv, $node]);
                 $store->set_control_in($sim->control);
@@ -1957,7 +1957,7 @@ class SoN::FromOptree 0.01 {
                 # target (fieldix) survives into the graph — the loader types the
                 # field from the stored value's repr. Mirrors the corpus IR spec.
                 my $lv = _make_pad_or_field($cv, $op->targ, $factory);
-                my $is_field = $lv->isa('Chalk::IR::Node::FieldAccess');
+                my $is_field = $lv->isa('SoN::IR::Node::FieldAccess');
                 if ($is_field) {
                     my $store = $factory->make('Assign', inputs => [$lv, $node]);
                     $store->set_control_in($sim->control);
@@ -2000,7 +2000,7 @@ class SoN::FromOptree 0.01 {
             # The LHS is a single padav/padhv; bind it to an ArrayRef/HashRef of
             # the RHS values so later element access has a real container.
             if (@$lhs == 1
-                && $lhs->[0]->isa('Chalk::IR::Node::PadAccess')
+                && $lhs->[0]->isa('SoN::IR::Node::PadAccess')
                 && $sim->has_mark) {
                 my $target = $lhs->[0];
                 my $rhs    = $sim->pop_to_mark;
@@ -2136,7 +2136,7 @@ class SoN::FromOptree 0.01 {
                 # match -- its $x read is not in modify context.
                 my $is_compound =
                        @inputs >= 1
-                    && $inputs[0]->isa('Chalk::IR::Node::PadAccess')
+                    && $inputs[0]->isa('SoN::IR::Node::PadAccess')
                     && $op->can('first')
                     && $op->first->name =~ /^padsv|^padav|^padhv/
                     && ($op->first->flags & 32); # OPf_MOD
@@ -2157,7 +2157,7 @@ class SoN::FromOptree 0.01 {
                 # a temp, not the field) is dropped and the mutation is lost.
                 my $field_compound =
                        @inputs >= 1
-                    && $inputs[0]->isa('Chalk::IR::Node::FieldAccess')
+                    && $inputs[0]->isa('SoN::IR::Node::FieldAccess')
                     && ($op->flags & 64)          # OPf_STACKED (the op= form)
                     && $op->can('first')
                     && $op->first->name =~ /^padsv/
@@ -2172,7 +2172,7 @@ class SoN::FromOptree 0.01 {
                 my $elem_lvalue;
                 if (!$is_compound
                     && @inputs >= 1
-                    && $inputs[0]->isa('Chalk::IR::Node::Subscript')
+                    && $inputs[0]->isa('SoN::IR::Node::Subscript')
                     && scalar($inputs[0]->inputs->@*) == 2
                     && ($op->flags & 64)) { # OPf_STACKED
                     $elem_lvalue = $inputs[0];
@@ -2329,7 +2329,7 @@ class SoN::FromOptree 0.01 {
     # this for the iterator because it excludes $extra_targs from its result and
     # only seeds slots already in scope (the iterator is not in the outer scope).
     sub _body_writes_targ ($cv, $start_op, $sim, $opmap, $targ) {
-        my $scout_factory = Chalk::IR::NodeFactory->new();
+        my $scout_factory = SoN::IR::NodeFactory->new();
         my $scout_sim     = SoN::FromOptree::StackSim->new(
             control => $scout_factory->make_cfg('Start'),
             # A throwaway MemStart so a body element read (`$a[$i]`) builds a
@@ -2352,7 +2352,7 @@ class SoN::FromOptree 0.01 {
     }
 
     sub _scout_mutated_targs ($cv, $start_op, $sim, $opmap, $extra_targs = []) {
-        my $scout_factory = Chalk::IR::NodeFactory->new();
+        my $scout_factory = SoN::IR::NodeFactory->new();
         my $scout_sim     = SoN::FromOptree::StackSim->new(
             control => $scout_factory->make_cfg('Start'),
             # A throwaway MemStart so a body element read builds a Subscript with
@@ -2540,7 +2540,7 @@ class SoN::FromOptree 0.01 {
         die "GAP: side-effecting loop condition with a memory store not yet lowered\n"
             if _cond_stores_memory($cond_start);
 
-        my $cond_factory = Chalk::IR::NodeFactory->new();
+        my $cond_factory = SoN::IR::NodeFactory->new();
         my $cond_sim     = SoN::FromOptree::StackSim->new(
             control => $cond_factory->make_cfg('Start'));
         my %placeholder;
@@ -2764,7 +2764,7 @@ class SoN::FromOptree 0.01 {
         # IV_MAX overflows to an NV and wraps in the emitted i64 (zero iterations,
         # silently) -- refuse that edge.
         my $bound;
-        if ($high->isa('Chalk::IR::Node::Constant')
+        if ($high->isa('SoN::IR::Node::Constant')
                 && ($high->const_type // '') eq 'integer') {
             die "GAP: foreach range bound at IV_MAX not yet lowered\n"
                 if $high->value >= 9223372036854775807;

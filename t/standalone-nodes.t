@@ -4,15 +4,15 @@
 use v5.42.0;
 use Test2::V0;
 
-use Chalk::IR::NodeFactory;
+use SoN::IR::NodeFactory;
 use SoN::IR::Stamp;
 
-my $factory = Chalk::IR::NodeFactory->new;
+my $factory = SoN::IR::NodeFactory->new;
 my $stamp = SoN::IR::Stamp->new(type => 'Str');
 
-# Nodes are built through the factory, not by direct ->new: Chalk::IR::Node
+# Nodes are built through the factory, not by direct ->new: SoN::IR::Node
 # requires an explicit content-hash id that only the factory assigns
-# (SoN::IR::Node auto-generated one; Chalk::IR::Node does not).
+# (SoN::IR::Node auto-generated one; SoN::IR::Node does not).
 sub const ($val) {
     $factory->make('Constant', value => $val, stamp => $stamp)
 }
@@ -27,7 +27,7 @@ subtest 'TernaryExpr isa Node with correct operation' => sub {
     my $false = const('no');
     my $node  = $factory->make('TernaryExpr', inputs => [$cond, $true, $false]);
 
-    isa_ok($node, ['Chalk::IR::Node'], 'TernaryExpr isa Node');
+    isa_ok($node, ['SoN::IR::Node'], 'TernaryExpr isa Node');
     is($node->operation, 'TernaryExpr', 'operation is TernaryExpr');
     is(scalar $node->inputs->@*, 3, 'has 3 inputs');
 };
@@ -50,7 +50,7 @@ subtest 'TryCatch isa Node with correct operation' => sub {
     my $handler = const('handler');
     my $node    = $factory->make('TryCatch', inputs => [$body, $handler]);
 
-    isa_ok($node, ['Chalk::IR::Node'], 'TryCatch isa Node');
+    isa_ok($node, ['SoN::IR::Node'], 'TryCatch isa Node');
     is($node->operation, 'TryCatch', 'operation is TryCatch');
     is(scalar $node->inputs->@*, 2, 'has 2 inputs');
 };
@@ -71,7 +71,7 @@ subtest 'BacktickExpr isa Node with correct operation' => sub {
     my $cmd  = const('ls -la');
     my $node = $factory->make('BacktickExpr', inputs => [$cmd]);
 
-    isa_ok($node, ['Chalk::IR::Node'], 'BacktickExpr isa Node');
+    isa_ok($node, ['SoN::IR::Node'], 'BacktickExpr isa Node');
     is($node->operation, 'BacktickExpr', 'operation is BacktickExpr');
     is(scalar $node->inputs->@*, 1, 'has 1 input');
 };
@@ -89,7 +89,7 @@ subtest 'StructRef isa Node with correct operation' => sub {
     my $orig = const('some_hash');
     my $node = $factory->make('StructRef', inputs => [$orig]);
 
-    isa_ok($node, ['Chalk::IR::Node'], 'StructRef isa Node');
+    isa_ok($node, ['SoN::IR::Node'], 'StructRef isa Node');
     is($node->operation, 'StructRef', 'operation is StructRef');
     is(scalar $node->inputs->@*, 1, 'has 1 input');
 };
@@ -107,7 +107,7 @@ subtest 'StructFieldAccess isa Node with correct operation' => sub {
     my $struct = const('struct_val');
     my $node   = $factory->make('StructFieldAccess', inputs => [$struct]);
 
-    isa_ok($node, ['Chalk::IR::Node'], 'StructFieldAccess isa Node');
+    isa_ok($node, ['SoN::IR::Node'], 'StructFieldAccess isa Node');
     is($node->operation, 'StructFieldAccess', 'operation is StructFieldAccess');
     is(scalar $node->inputs->@*, 1, 'has 1 input');
 };
@@ -125,7 +125,7 @@ subtest 'AnonSub isa Node with correct operation' => sub {
     my $body = const('sub_body');
     my $node = $factory->make('AnonSub', inputs => [$body]);
 
-    isa_ok($node, ['Chalk::IR::Node'], 'AnonSub isa Node');
+    isa_ok($node, ['SoN::IR::Node'], 'AnonSub isa Node');
     is($node->operation, 'AnonSub', 'operation is AnonSub');
     is(scalar $node->inputs->@*, 1, 'has 1 input');
 };
@@ -150,7 +150,7 @@ subtest 'RegexMatch isa Node with pattern and flags fields' => sub {
         inputs  => [$input],
     );
 
-    isa_ok($node, ['Chalk::IR::Node'], 'RegexMatch isa Node');
+    isa_ok($node, ['SoN::IR::Node'], 'RegexMatch isa Node');
     is($node->operation, 'RegexMatch',  'operation is RegexMatch');
     is($node->pattern,   'foo\d+',      'pattern accessor returns correct value');
     is($node->flags,     '',            'flags defaults to empty string');
@@ -182,7 +182,7 @@ subtest 'RegexMatch content_hash includes pattern, flags, and input ids' => sub 
     like($hash, qr/\Q${\$input->id}\E/,   'content_hash contains input id');
 };
 
-# RegexMatch is a %STATEMENT_EFFECT_OPS entry in Chalk::IR::NodeFactory:
+# RegexMatch is a %STATEMENT_EFFECT_OPS entry in SoN::IR::NodeFactory:
 # a match executes against its subject and writes capture state, so two
 # textually-identical matches at different program points are distinct
 # effects (never hash-consed by content), unlike SoN::IR::NodeFactory.
@@ -205,7 +205,7 @@ subtest 'RegexSubst isa Node with pattern, replacement, and flags fields' => sub
         inputs      => [$input],
     );
 
-    isa_ok($node, ['Chalk::IR::Node'], 'RegexSubst isa Node');
+    isa_ok($node, ['SoN::IR::Node'], 'RegexSubst isa Node');
     is($node->operation,   'RegexSubst', 'operation is RegexSubst');
     is($node->pattern,     'foo',        'pattern accessor returns correct value');
     is($node->replacement, 'bar',        'replacement accessor returns correct value');
@@ -241,7 +241,7 @@ subtest 'RegexSubst content_hash includes pattern, replacement, flags, and input
     like($hash, qr/\Q${\$input->id}\E/, 'content_hash contains input id');
 };
 
-# RegexSubst is a %STATEMENT_EFFECT_OPS entry in Chalk::IR::NodeFactory:
+# RegexSubst is a %STATEMENT_EFFECT_OPS entry in SoN::IR::NodeFactory:
 # a substitution mutates its subject, so two textually-identical
 # substitutions at different program points are distinct effects (never
 # hash-consed by content), unlike SoN::IR::NodeFactory.
@@ -263,12 +263,12 @@ subtest 'VarDecl isa Node with scope field' => sub {
     my $var  = const('$x');
     my $node = $factory->make('VarDecl', scope => 'my', inputs => [$var]);
 
-    isa_ok($node, ['Chalk::IR::Node'], 'VarDecl isa Node');
+    isa_ok($node, ['SoN::IR::Node'], 'VarDecl isa Node');
     is($node->operation, 'VarDecl', 'operation is VarDecl');
     is($node->scope,     'my',      'scope accessor returns correct value');
 };
 
-# Chalk::IR::Node::VarDecl::content_hash() returns $self->id() rather than a
+# SoN::IR::Node::VarDecl::content_hash() returns $self->id() rather than a
 # descriptive "VarDecl|scope=...|input_id" string (unlike
 # SoN::IR::Node::VarDecl). This is deliberate: VarDecl is a
 # %STATEMENT_EFFECT_OPS-style per-position node in Chalk (two textually
@@ -282,7 +282,7 @@ subtest 'VarDecl content_hash is the node id (per-position identity)' => sub {
     like($node->id, qr/^VarDecl#/, 'id carries the VarDecl per-position counter');
 };
 
-# VarDecl is allocated fresh on every make() call in Chalk::IR::NodeFactory
+# VarDecl is allocated fresh on every make() call in SoN::IR::NodeFactory
 # (see %STATEMENT_EFFECT_OPS handling) -- never hash-consed by scope+inputs,
 # unlike SoN::IR::NodeFactory::make. Two calls with identical scope and
 # inputs are still distinct declarations at distinct control positions.
@@ -305,39 +305,39 @@ subtest 'NodeFactory can create all 9 standalone nodes' => sub {
     my $c = const('dummy');
 
     my $ternary = $factory->make('TernaryExpr', inputs => [$c, $c, $c]);
-    isa_ok($ternary, ['Chalk::IR::Node'], 'factory TernaryExpr isa Node');
+    isa_ok($ternary, ['SoN::IR::Node'], 'factory TernaryExpr isa Node');
     is($ternary->operation, 'TernaryExpr', 'factory TernaryExpr operation');
 
     my $tc = $factory->make('TryCatch', inputs => [$c, $c]);
-    isa_ok($tc, ['Chalk::IR::Node'], 'factory TryCatch isa Node');
+    isa_ok($tc, ['SoN::IR::Node'], 'factory TryCatch isa Node');
     is($tc->operation, 'TryCatch', 'factory TryCatch operation');
 
     my $bt = $factory->make('BacktickExpr', inputs => [$c]);
-    isa_ok($bt, ['Chalk::IR::Node'], 'factory BacktickExpr isa Node');
+    isa_ok($bt, ['SoN::IR::Node'], 'factory BacktickExpr isa Node');
     is($bt->operation, 'BacktickExpr', 'factory BacktickExpr operation');
 
     my $sr = $factory->make('StructRef', inputs => [$c]);
-    isa_ok($sr, ['Chalk::IR::Node'], 'factory StructRef isa Node');
+    isa_ok($sr, ['SoN::IR::Node'], 'factory StructRef isa Node');
     is($sr->operation, 'StructRef', 'factory StructRef operation');
 
     my $sfa = $factory->make('StructFieldAccess', inputs => [$c]);
-    isa_ok($sfa, ['Chalk::IR::Node'], 'factory StructFieldAccess isa Node');
+    isa_ok($sfa, ['SoN::IR::Node'], 'factory StructFieldAccess isa Node');
     is($sfa->operation, 'StructFieldAccess', 'factory StructFieldAccess operation');
 
     my $as = $factory->make('AnonSub', inputs => [$c]);
-    isa_ok($as, ['Chalk::IR::Node'], 'factory AnonSub isa Node');
+    isa_ok($as, ['SoN::IR::Node'], 'factory AnonSub isa Node');
     is($as->operation, 'AnonSub', 'factory AnonSub operation');
 
     my $rm = $factory->make('RegexMatch', pattern => 'x', inputs => [$c]);
-    isa_ok($rm, ['Chalk::IR::Node'], 'factory RegexMatch isa Node');
+    isa_ok($rm, ['SoN::IR::Node'], 'factory RegexMatch isa Node');
     is($rm->operation, 'RegexMatch', 'factory RegexMatch operation');
 
     my $rs = $factory->make('RegexSubst', pattern => 'x', replacement => 'y', inputs => [$c]);
-    isa_ok($rs, ['Chalk::IR::Node'], 'factory RegexSubst isa Node');
+    isa_ok($rs, ['SoN::IR::Node'], 'factory RegexSubst isa Node');
     is($rs->operation, 'RegexSubst', 'factory RegexSubst operation');
 
     my $vd = $factory->make('VarDecl', scope => 'my', inputs => [$c]);
-    isa_ok($vd, ['Chalk::IR::Node'], 'factory VarDecl isa Node');
+    isa_ok($vd, ['SoN::IR::Node'], 'factory VarDecl isa Node');
     is($vd->operation, 'VarDecl', 'factory VarDecl operation');
 };
 
