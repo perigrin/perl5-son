@@ -20,7 +20,7 @@ class Chalk::IR::Node::Call :isa(Chalk::IR::Node) {
     # into its args; a paren-form call does not.
     field $paren_form :param :reader = false;
 
-    # Resolved callee handle (Chalk::MOP::Method or Chalk::MOP::Sub).
+    # Resolved callee handle (a chalk MOP Method or Sub).
     # Per Phase 4, CallExpression resolves the symbolic name via
     # $mop->find_method() and stores the metaobject reference here so
     # codegen can read the callee's graph/params/return-type directly

@@ -697,7 +697,13 @@ sub from_json ($json_string) {
             _stamp_field_access_reprs($classes, \%graphs);
         }
 
-        $mop = _replay_classes($classes, \%graphs);
+        # B::SoN emits a `classes` section, but this vendored copy never loads
+        # it: replaying it into a sealed metaobject protocol requires the chalk
+        # MOP, which is not vendored here. Fail loudly rather than silently
+        # dropping the class data.
+        die "Chalk::IR::Serialize::JSON::from_json: JSON has a `classes` "
+          . "section, but this package has no MOP to replay it into "
+          . "(the chalk MOP is not vendored in perl5-son)\n";
     }
 
     # Universal repr-inference: seed aggregate/regex reprs and fixpoint-propagate
@@ -776,102 +782,6 @@ sub _ctor_arg_reprs ($graphs) {
         }
     }
     return %map;
-}
-
-# _replay_classes($classes, \%graphs) — rebuild a sealed Chalk::MOP from the
-# declarative class section, wiring each method to its loaded graph. Parents are
-# declared before children so `superclass =>` can reference the parent's class.
-sub _replay_classes ($classes, $graphs) {
-    require Chalk::MOP;
-
-    # Field types are inferred onto the raw records before this point (ctor-arg
-    # and ADJUST-store passes in from_json), so declare_field below sees them.
-
-    my $mop = Chalk::MOP->new;
-
-    for my $name (_classes_in_parent_order($classes)) {
-        my $cd     = $classes->{$name};
-        my $parent = $cd->{parent};
-        my $super  = (defined $parent && length $parent)
-            ? $mop->for_class($parent)
-            : undef;
-
-        my $cls = $mop->declare_class($name,
-            (defined $super  ? (superclass  => $super)  : ()),
-            (defined $parent ? (parent_name => $parent) : ()),
-        );
-
-        for my $f (($cd->{fields} // [])->@*) {
-            my $vname = $f->{name} // '$?';
-            my @attrs;
-            push @attrs, ':param'  if $f->{is_param};
-            push @attrs, ':reader' if $f->{is_reader};
-
-            # A field default (4c-1b) rides as a graph-ref whose Return value is
-            # the default Constant; wire it as default_value + has_default. The
-            # field type (inferred from the default) becomes the field repr.
-            my ($default_node, $has_default);
-            if (defined $f->{default_ref}
-                && (my $dg = $graphs->{ $f->{default_ref} })) {
-                my ($dret) = $dg->returns->@*;
-                $default_node = $dret ? $dret->inputs->[0] : undef;
-                $has_default  = defined $default_node;
-            }
-
-            # A field whose default is an aggregate literal (`field $items = []`
-            # / `[1,2,3]` / `{}`) is an ArrayRef/HashRef, regardless of what the
-            # producer inferred for its `type` (which reads the first element's
-            # scalar type -- e.g. "integer" for `[10,20,30]`, a wrong scalar
-            # type). The default node is already repr-seeded ArrayRef/HashRef by
-            # %_SEED_REPR, and that repr is unambiguous (unlike the ctor-arg /
-            # ADJUST-store scalar inference, which the %_INFERABLE_FIELD_REPR gate
-            # guards), so lift it to the field type. This is what makes a
-            # FieldAccess to the field (and its :reader Call) carry ArrayRef so a
-            # `$items->[0]` / `scalar $items->@*` / `for my $x ($items->@*)`
-            # lowers (zhi 019f61ad).
-            my $field_type = $f->{type};
-            if (defined $default_node && $default_node->can('representation')
-                    && ($default_node->representation // '') =~ /^(?:Array|Hash)Ref$/) {
-                $field_type = $default_node->representation;
-            }
-
-            $cls->declare_field($vname,
-                sigil      => substr($vname, 0, 1),
-                param_name => $f->{param_name},
-                attributes => \@attrs,
-                (defined $field_type ? (type => $field_type) : ()),
-                ($has_default
-                    ? (default_value => $default_node, has_default => true)
-                    : ()),
-            );
-        }
-
-        my $methods = $cd->{methods} // {};
-        for my $mname (sort keys %$methods) {
-            my $graph = $graphs->{ $methods->{$mname} };
-            $cls->declare_method($mname,
-                (defined $graph ? (graph => $graph) : ()),
-            );
-        }
-
-        # ADJUST blocks (4c-1b): each rides as a graph-ref; replay via
-        # declare_adjust with the loaded graph.
-        for my $aref (($cd->{adjusts} // [])->@*) {
-            my $ag = $graphs->{$aref} or next;
-            $cls->declare_adjust(graph => $ag);
-        }
-    }
-
-    $mop->seal;
-
-    # FieldAccess reprs are stamped by from_json's pre-seal pass (before
-    # _replay_classes is called), and _mop->seal / class replay does not create
-    # new FieldAccess nodes or re-type fields, so a tail re-stamp here is
-    # redundant (idempotent) -- removed in the 019f4625 cleanup pass. The
-    # universal repr pass (_seed_and_propagate_reprs) and method-Call stamping
-    # run afterward in from_json as before.
-
-    return $mop;
 }
 
 # _propagate_computed_reprs(\%graphs) — fixpoint-propagate representations onto
@@ -1424,23 +1334,6 @@ sub _stamp_method_call_reprs ($classes, $graphs) {
         }
     }
     return $stamped;
-}
-
-# _classes_in_parent_order($classes) — class names sorted so a parent always
-# precedes its children (a child's superclass must already be declared).
-sub _classes_in_parent_order ($classes) {
-    my @order;
-    my %placed;
-    my $place;
-    $place = sub ($name) {
-        return if $placed{$name};
-        my $parent = $classes->{$name}{parent};
-        $place->($parent) if defined $parent && exists $classes->{$parent};
-        $placed{$name} = 1;
-        push @order, $name;
-    };
-    $place->($_) for sort keys %$classes;
-    return @order;
 }
 
 1;
