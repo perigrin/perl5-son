@@ -134,7 +134,7 @@ class SoN::IR::Graph {
         # Returns a topologically-sorted list of nodes in this graph.
         #
         # This is the cross-repo walk-order contract; the corpus gate enforces it.
-        # chalk's Chalk::IR::Graph carries an independent implementation of
+        # the chalk-side IR Graph carries an independent implementation of
         # the same rules -- the two are kept honest by the gate, not by sharing
         # this file.
         #

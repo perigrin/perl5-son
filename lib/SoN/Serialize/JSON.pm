@@ -118,7 +118,7 @@ sub _extract_fields ($node, $id_remap) {
 
 # -----------------------------------------------------------------------
 # This is the cross-repo walk-order contract; the corpus gate enforces it.
-# This function is a deliberate DUPLICATE of chalk's Chalk::IR::Serialize::JSON
+# This function is a deliberate DUPLICATE of chalk-side IR Serialize JSON
 # copy (the repos are divorced); the gate keeps them honest.
 #
 # _all_nodes_topo($graph_or_nodes) — return all nodes in topological order.
