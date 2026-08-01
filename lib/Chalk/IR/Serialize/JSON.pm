@@ -697,13 +697,11 @@ sub from_json ($json_string) {
             _stamp_field_access_reprs($classes, \%graphs);
         }
 
-        # B::SoN emits a `classes` section, but this vendored copy never loads
-        # it: replaying it into a sealed metaobject protocol requires the chalk
-        # MOP, which is not vendored here. Fail loudly rather than silently
-        # dropping the class data.
-        die "Chalk::IR::Serialize::JSON::from_json: JSON has a `classes` "
-          . "section, but this package has no MOP to replay it into "
-          . "(the chalk MOP is not vendored in perl5-son)\n";
+        # $mop stays undef here. Replaying the declarative class section into a
+        # sealed metaobject protocol needs the chalk MOP, which is deliberately
+        # not vendored in perl5-son — this repo is the PRODUCER side and never
+        # consumes the mop. The field-type inference above is what the graphs
+        # actually need, and it has already run; only the mop is absent.
     }
 
     # Universal repr-inference: seed aggregate/regex reprs and fixpoint-propagate
@@ -1292,9 +1290,10 @@ sub _stamp_method_call_reprs ($classes, $graphs) {
         }
 
         # A :reader field has no method graph — the backend synthesizes the
-        # accessor. Its return repr IS the field type (filled by _replay_classes
-        # from the default or the constructor argument). The reader method is
-        # named after the field, sigil-stripped.
+        # accessor. Its return repr IS the field type (inferred onto the raw
+        # class records by the field-type passes in from_json, from the default
+        # or the constructor argument). The reader method is named after the
+        # field, sigil-stripped.
         for my $f (($classes->{$cname}{fields} // [])->@*) {
             next unless $f->{is_reader} && defined $f->{type};
             my $rname = ($f->{name} // '') =~ s/^[\$\@%]//r;
