@@ -163,6 +163,34 @@ class SoN::FromOptree 0.01 {
     sub translate ($class_or_self, $coderef) {
         my $cv = B::svref_2object($coderef);
         die "Not a CODE ref" unless $cv->isa('B::CV');
+        return _translate_from($cv, $cv->START);
+    }
+
+    # Translate the top-level program (main_root/main_start/main_cv) to a SoN
+    # graph -- the ENTRY half of the bare-file protocol. A bare file's
+    # top-level statements are not a CV: B::main_cv is a real B::CV (it HAS a
+    # padlist, so pad access works) but its own ->START is 'gv', not the
+    # program's actual entry -- so we must walk from B::main_start, not from
+    # $cv->START as translate() does. B::main_root (a 'leave' LISTOP, never
+    # 'leavesub') is passed through as program_root so the walk can recognize
+    # THAT SPECIFIC leave as the program's exit, without matching every
+    # ordinary block-ending leave (see _translate_from's exit check).
+    sub translate_root ($class_or_self) {
+        my $cv = B::main_cv;
+        die "GAP: no top-level program (main_root is empty)\n"
+            unless $$cv && ${ B::main_root() };
+        return _translate_from($cv, B::main_start(),
+            program_root => ${ B::main_root() });
+    }
+
+    # _translate_from($cv, $start_op, program_root => $addr?) -- shared walk
+    # driving both translate() (a CV, $start_op == $cv->START) and
+    # translate_root() (the top-level program, $start_op == B::main_start(),
+    # $cv == B::main_cv). $program_root, when given, is the address of the
+    # bare-program's root 'leave' op -- the ONLY 'leave' the exit check below
+    # is allowed to treat as a function exit (see the leavesub/leave check).
+    sub _translate_from ($cv, $start_op, %opts) {
+        my $program_root = $opts{program_root};
 
         my $factory = SoN::IR::NodeFactory->new();
         my $opmap   = SoN::FromOptree::OpMap->new();
@@ -172,7 +200,7 @@ class SoN::FromOptree 0.01 {
             control => $start, memory => $mem);
 
         my %visited;
-        my $op = $cv->START;
+        my $op = $start_op;
         # @exits accumulates every explicit return/leavesub exit as
         # { control => <cfg node>, value => <value node> }. A return inside a
         # branch arm is a control edge to the FUNCTION exit, not a value that
@@ -666,7 +694,16 @@ class SoN::FromOptree 0.01 {
                 $main_terminated = 1;
                 last;
             }
-            if ($name eq 'leavesub' || $name eq 'leavesublv') {
+            # A bare program's root is a plain 'leave' (never 'leavesub') --
+            # but 'leave' ALSO ends ordinary blocks (if/while/do bodies), so
+            # only the program's OWN root op qualifies as a function exit.
+            # $program_root is undef for every ordinary CV walk (translate()),
+            # so this arm is unreachable there; a random mid-body 'leave' at
+            # translate_root() time still falls through to the "unknown op"
+            # handler below (skip + walk past), the existing behavior for a
+            # 'leave' that is not this exit check's business.
+            my $is_program_exit = defined $program_root && $$op == $program_root;
+            if ($name eq 'leavesub' || $name eq 'leavesublv' || $is_program_exit) {
                 push @exits, _exit_record($sim, $factory, 'leavesub', $op);
                 $main_terminated = 1;
                 last;

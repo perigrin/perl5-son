@@ -69,6 +69,32 @@ sub _discover_and_translate {
     my %classes;
     _walk_package( \%graphs, \%classes, 'main', \%main::, $filter );
 
+    # The bare file's own top-level statements (main_root/main_start/main_cv)
+    # are not a CV in any stash, so _walk_package never sees them -- translate
+    # them separately into main::__PROGRAM__, the entry protocol's exit graph
+    # (t/bootstrap/corpus/executable-gate.t in the chalk repo looks for this
+    # key first). Respect package=main the same way a CV emission would; an
+    # empty main_root (nothing at top level) is common (a library file with
+    # no top-level statements) and not an error.
+    my $emit_program = !$filter || exists $filter->{main};
+    if ( $emit_program && ${ B::main_root() } ) {
+        try {
+            $graphs{'main::__PROGRAM__'} = SoN::FromOptree->translate_root();
+        }
+        catch ($e) {
+            # Same discipline as _walk_package: a GAP refusal is the
+            # translator speaking (surface it loudly); a non-GAP exception is
+            # an internal producer bug and must not be silently swallowed.
+            if ($e =~ /^GAP:/) {
+                warn "B::SoN: skipped main::__PROGRAM__: $e";
+            }
+            else {
+                warn "B::SoN: INTERNAL ERROR translating main::__PROGRAM__ (masked as "
+                   . "a silent skip -- fix or convert to a clean GAP): $e";
+            }
+        }
+    }
+
     # Under a package= filter, a class referenced from an emitted sub (e.g.
     # `Counter->new` / `$c->get` inside main::) is not itself in the filter, so
     # its MOP + method graphs were skipped -- leaving the method Call with no
