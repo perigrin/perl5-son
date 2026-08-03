@@ -1137,10 +1137,11 @@ class SoN::FromOptree 0.01 {
                     @call_inputs = @vals;   # class rides as class_name
                 }
             }
-            # A call in void statement position (OPf_WANT_VOID) has its
-            # result discarded; its purpose is its side effect. Thread it
-            # onto the control chain via control_in (produce-time control)
-            # so it is ordered and survives DCE, and do not push a value.
+            # Every call is a control-chain effect, void or not (R1.0
+            # effect-by-default): pin control_in unconditionally so it is
+            # ordered and survives DCE. A void call's result is discarded and
+            # not pushed; a value call pushes its result on top of that same
+            # control pin.
             my $void = ($op->flags & 3) == 1;   # OPf_WANT_VOID
             # A constructor (Class->new) returns the constructed object
             # instance; stamp it Object so the shape/repr contract holds.
@@ -1153,8 +1154,9 @@ class SoN::FromOptree 0.01 {
                 (defined $param_names ? (param_names => $param_names) : ()),
                 ($ctor ? (stamp => SoN::IR::Stamp->new(type => 'Object')) : ()),
             );
-            $node->set_control_in($sim->control) if $void;
-            _place_call($sim, $node, $void);
+            $node->set_control_in($sim->control);
+            $sim->set_control($node);
+            $sim->push_node($node) unless $void;
             $ctx->{pending_method} = undef;
             return;
         }
@@ -1174,20 +1176,24 @@ class SoN::FromOptree 0.01 {
         if (my $callee_gv = _entersub_callee_gv($cv, $op)) {
             $call_name = $callee_gv->STASH->NAME . '::' . $callee_gv->NAME;
         }
-        # A direct call in void statement position (`helper();`) has its
-        # result discarded; its purpose is its side effect. Thread it onto
-        # the control chain via control_in (produce-time control) so it is
-        # ordered and survives DCE, exactly as the void METHOD branch does
-        # (zhi 019f2dee/019f2df7). Without this the pushed value was dead in
-        # void context and the call vanished silently.
+        # Every call is a control-chain effect, void or not (R1.0
+        # effect-by-default): pin control_in unconditionally so it is ordered
+        # and survives DCE, exactly as the method branch does (zhi
+        # 019f2dee/019f2df7). A void call's result is discarded and not
+        # pushed; a value call pushes its result on top of that same control
+        # pin. Without the unconditional pin a non-void call had no control
+        # edge at all and was unreachable from Return, so it vanished
+        # silently (F4) or floated to its value-use site and reordered past
+        # a following effect (F3).
         my $void = ($op->flags & 3) == 1;   # OPf_WANT_VOID
         my $node = $factory->make('Call',
             inputs        => [ ($args->@* ? $args->@* : ()) ],
             dispatch_kind => 'direct',
             name          => $call_name,
         );
-        $node->set_control_in($sim->control) if $void;
-        _place_call($sim, $node, $void);
+        $node->set_control_in($sim->control);
+        $sim->set_control($node);
+        $sim->push_node($node) unless $void;
         return;
     }
 
@@ -3398,15 +3404,6 @@ class SoN::FromOptree 0.01 {
     # stop at it so a nested branch stays the loud GAP the convergence check
     # raises, rather than being routed through the $mem_branch merge with a
     # broken memory state.
-    # Place a translated Call: a VOID call is a statement effect, already
-    # threaded onto the control chain via control_in, so advance control to
-    # it and push no value; a value call pushes its result.
-    sub _place_call ($sim, $node, $void) {
-        if ($void) { $sim->set_control($node) }
-        else       { $sim->push_node($node) }
-        return;
-    }
-
     # $join (optional): the address where the two arms rejoin (op AFTER the
     # construct). A single-op arm's ->next chain runs straight THROUGH the join
     # into the following statement -- e.g. `print $c ? "y" : "n"`, where the

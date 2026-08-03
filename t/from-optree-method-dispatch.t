@@ -89,16 +89,23 @@ subtest 'a void method call is threaded onto the control chain (obj-state A)' =>
         'inc carries a control_in edge to the prior control');
 };
 
-subtest 'a value-context method call is NOT a statement effect' => sub {
-    # $c->val is in return/value position -- its result is consumed, so it
-    # stays a pure data Call with no control threading.
+subtest 'a value-context method call is ALSO control-pinned (R1.0 effect-by-default)' => sub {
+    # $c->val is in return/value position -- its result is consumed AND
+    # pushed as a value, but every Call is control-pinned regardless of void
+    # vs. value context (R1.0): the pin keeps it ordered and reachable even
+    # if its value later goes unused, and advances the control chain so a
+    # FOLLOWING effect does not float ahead of it (F3).
     my $g = canonical_graph(
         'sub { my $c = Counter->new(n => 10); $c->val }');
     my ($val) = grep { $_->operation eq 'Call' && $_->name eq 'val' }
         $g->nodes->@*;
     ok(defined $val, 'has a Call(val)') or return;
-    ok(!defined $val->control_in,
-        'val is not a statement effect (value-consumed, no control_in)');
+    ok(defined $val->control_in,
+        'val is control-pinned (control_in set) even though its value is consumed');
+    my ($new) = grep { $_->operation eq 'Call' && $_->name eq 'new' }
+        $g->nodes->@*;
+    is($val->control_in, $new,
+        'val->control_in chains to the prior control (the new Call)');
 };
 
 subtest 'Class->new(k=>v) splits its kv-list into param_names + value inputs' => sub {
@@ -119,12 +126,14 @@ subtest 'Class->new(k=>v) splits its kv-list into param_names + value inputs' =>
     is($new->stamp && $new->stamp->type, 'Object', 'new is stamped Object');
 };
 
-subtest 'void-chain Return leads with the return-expression value (B1)' => sub {
+subtest 'void-chain Return leads with the return-expression value (R1.0)' => sub {
     # my $c = Counter->new(n=>10); $c->inc; $c->val
     # The trailing statement's VALUE (Call val) is the result: Return.inputs
-    # is ALWAYS just [value] (produce-time control, i3) -- the preceding void
-    # effect (Call inc) never occupies a Return input slot at all; it is
-    # reachable via the control_in chain instead (Return.control_in -> inc).
+    # is ALWAYS just [value] (produce-time control, i3). Under R1.0
+    # effect-by-default EVERY call is control-pinned, val included, so
+    # Return.control_in is now val itself (not inc) -- val's own control_in
+    # chains back to inc, which chains back to new, so inc stays reachable
+    # transitively rather than being Return's direct control predecessor.
     my $g = canonical_graph(
         'sub { my $c = Counter->new(n => 10); $c->inc; $c->val }');
     my ($ret) = grep { $_->operation eq 'Return' } $g->nodes->@*;
@@ -135,21 +144,27 @@ subtest 'void-chain Return leads with the return-expression value (B1)' => sub {
         'Return.inputs[0] is the val Call (the return-expression value)');
     isnt($ret->inputs->[0], $inc,
         'Return.inputs[0] is NOT the void inc Call');
-    is($ret->control_in, $inc,
-        'the void inc Call stays reachable via Return.control_in (not dropped)');
+    is($ret->control_in, $val,
+        'Return.control_in is val (every Call is control-pinned under R1.0)');
+    is($val->control_in, $inc,
+        'val->control_in chains to inc, so inc stays reachable transitively (not dropped)');
 };
 
 subtest 'single-statement Return still leads with control (B1 regression)' => sub {
-    # my $c = Counter->new(n=>10); $c->val  -- no void effect. Control (Start)
-    # is carried on control_in (produce-time control, i3); the value is the
-    # sole input. This must NOT change.
+    # my $c = Counter->new(n=>10); $c->val  -- no void effect. Under R1.0
+    # val is itself control-pinned (chaining to new, then Start), so
+    # Return.control_in is now val (a Call), not a bare CFG node; the value
+    # remains the sole Return input. This must NOT change.
     my $g = canonical_graph(
         'sub { my $c = Counter->new(n => 10); $c->val }');
     my ($ret) = grep { $_->operation eq 'Return' } $g->nodes->@*;
     my ($val) = grep { $_->operation eq 'Call' && $_->name eq 'val' } $g->nodes->@*;
+    my ($new) = grep { $_->operation eq 'Call' && $_->name eq 'new' } $g->nodes->@*;
     is($ret->inputs->[-1], $val, 'value is the trailing input');
-    like($ret->control_in->operation, qr/^(Start|Region|Proj|If|Loop)$/,
-        'control (a CFG node) is carried on control_in');
+    is($ret->control_in, $val,
+        'control (the control-pinned val Call) is carried on control_in');
+    is($val->control_in, $new,
+        'val->control_in chains to new, and on to Start (the CFG root)');
 };
 
 subtest 'a $self-> method call stamps the enclosing class_name (zhi 019f5dec)' => sub {
