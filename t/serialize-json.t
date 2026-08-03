@@ -158,4 +158,42 @@ subtest 'multiple named methods serialize under distinct keys' => sub {
     is($c2_node->{fields}{value}, 'hi', 'Beta::two constant value serialized');
 };
 
+# ====================================================
+# 4. Unwind's arrayref input (exception args)
+# ====================================================
+
+# An Unwind's inputs[0] is the exception-args ARRAYREF, not a bare node (see
+# SoN::IR::Node::Unwind's ABOUTME). The topo-order DFS must still treat the
+# arrayref's elements as producer edges -- otherwise a Constant referenced
+# only through that arrayref can be emitted AFTER the Unwind that points to
+# it, a forward reference the Chalk-side loader rejects outright.
+subtest 'Unwind exception-args node is topo-ordered before the Unwind' => sub {
+    my $factory = SoN::IR::NodeFactory->new();
+
+    my $start = $factory->make_cfg('Start');
+    my $msg   = $factory->make('Constant', value => 'boom', const_type => 'string');
+    my $unwind = $factory->make_cfg('Unwind', inputs => [[$msg]]);
+    $unwind->set_control_in($start);
+
+    my $graph = SoN::IR::Graph->new(start => $start, returns => [$unwind]);
+    my $json  = to_json({ 'Gamma::three' => $graph });
+
+    require JSON::PP;
+    my $data   = JSON::PP->new->decode($json);
+    my $method = $data->{methods}{'Gamma::three'};
+
+    my ($unwind_id) = grep { $method->{nodes}[$_]{op} eq 'Unwind' }
+        0 .. $#{ $method->{nodes} };
+    my ($msg_id) = grep { $method->{nodes}[$_]{op} eq 'Constant' }
+        0 .. $#{ $method->{nodes} };
+
+    ok(defined $unwind_id, 'Unwind node present');
+    ok(defined $msg_id,    'exception-arg Constant node present');
+    ok($msg_id < $unwind_id,
+        "args Constant (index $msg_id) precedes Unwind (index $unwind_id)");
+
+    is($method->{nodes}[$unwind_id]{inputs}, [$msg_id],
+        "Unwind's inputs[0] is the resolved index of the args Constant");
+};
+
 done_testing;

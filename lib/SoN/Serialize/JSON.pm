@@ -231,7 +231,17 @@ sub _all_nodes_topo ($graph_or_nodes) {
                 && $n->region->operation eq 'Loop') {
             @in = ($in[0]);
         }
-        my @preds = grep { defined $_ && blessed($_) } @in;
+        # An input may itself be an arrayref of nodes rather than a bare node
+        # (e.g. Unwind's exception-args list). Its elements are still
+        # producer edges -- omitting them here (as a plain `blessed($_)`
+        # filter would) lets a node reachable ONLY through that arrayref be
+        # ordered AFTER the node referencing it, a forward reference the
+        # loader rejects.
+        my @preds = map {
+            ref($_) eq 'ARRAY'
+                ? grep { defined && blessed($_) } $_->@*
+                : (defined $_ && blessed($_) ? $_ : ())
+        } @in;
         if ($n->operation eq 'Phi' && defined $n->region) {
             push @preds, $n->region;
         }
@@ -312,7 +322,15 @@ sub _serialize_graph ($graph) {
     my @nodes;
     for my $node ($topo_nodes->@*) {
         my $pos    = $id_remap{ $node->id };
-        my @inputs = map { $id_remap{ $_->id } } $node->inputs->@*;
+        # An input may be an arrayref of nodes rather than a bare node (e.g.
+        # Unwind's exception-args list) -- expand it the same way the
+        # reachability walk above already does, rather than assuming every
+        # element is blessed.
+        my @inputs = map {
+            ref($_) eq 'ARRAY'
+                ? map { $id_remap{ $_->id } } $_->@*
+                : $id_remap{ $_->id }
+        } $node->inputs->@*;
         my $fields = _extract_fields($node, \%id_remap);
 
         my %entry = (

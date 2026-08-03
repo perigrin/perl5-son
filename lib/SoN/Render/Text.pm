@@ -22,8 +22,16 @@ class SoN::Render::Text 0.01 {
             my $did = $display_id{$node->id};
             my $op  = $node->operation;
 
-            # Format inputs as display IDs
-            my @input_strs = map { '%' . $display_id{$_->id} } $node->inputs->@*;
+            # Format inputs as display IDs. An input may be an arrayref of
+            # nodes rather than a bare node (e.g. Unwind's exception-args
+            # list) -- expand it the same way SoN::IR::Graph::nodes() and
+            # SoN::IR::Serialize::JSON already do, rather than assuming
+            # every element is blessed.
+            my @input_strs = map {
+                ref($_) eq 'ARRAY'
+                    ? map { '%' . $display_id{$_->id} } $_->@*
+                    : '%' . $display_id{$_->id}
+            } $node->inputs->@*;
 
             # Format node-specific attributes. Dispatched by operation name
             # rather than isa() so this renderer works for any node sharing

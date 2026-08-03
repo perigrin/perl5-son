@@ -781,7 +781,8 @@ class SoN::FromOptree 0.01 {
             if ($name eq 'die') {
                 my $args = $sim->pop_to_mark;
                 my $unwind = $factory->make_cfg('Unwind',
-                    inputs => [$sim->control, $args->@*]);
+                    inputs => [$args]);
+                $unwind->set_control_in($sim->control);
                 $sim->set_control($unwind);
                 $op = $op->next;
                 next;
@@ -3811,7 +3812,8 @@ class SoN::FromOptree 0.01 {
                 $visited->{$$op}++;
                 my $args = $sim->pop_to_mark;
                 my $unwind = $factory->make_cfg('Unwind',
-                    inputs => [$sim->control, $args->@*]);
+                    inputs => [$args]);
+                $unwind->set_control_in($sim->control);
                 $sim->set_control($unwind);
                 $op = $op->next;
                 next;
