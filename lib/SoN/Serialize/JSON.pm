@@ -12,16 +12,6 @@ our @EXPORT_OK = qw(to_json);
 use JSON::PP ();
 use Scalar::Util qw(blessed);
 
-# CFG node operations — these carry control tokens and are never hash-consed.
-my %CFG_OPS = map { $_ => 1 } qw(Start Return Unwind If Proj Region Loop);
-
-# -----------------------------------------------------------------------
-# _is_cfg($node) — true if the node is a CFG node
-# -----------------------------------------------------------------------
-sub _is_cfg ($node) {
-    return exists $CFG_OPS{ $node->operation };
-}
-
 # -----------------------------------------------------------------------
 # _extract_fields($node, \%id_remap) — returns a hashref of extra fields
 # for nodes that carry them, or undef if no extra fields.
@@ -338,8 +328,7 @@ sub _serialize_graph ($graph) {
             op     => $node->operation,
             inputs => \@inputs,
         );
-        $entry{cfg}    = JSON::PP::true  if _is_cfg($node);
-        $entry{fields} = $fields         if defined $fields;
+        $entry{fields} = $fields if defined $fields;
         if (defined $node->stamp) {
             $entry{stamp} = $node->stamp->type;
         }

@@ -55,24 +55,6 @@ subtest 'to_json emits correct node ops' => sub {
     like($json, qr/"op"\s*:\s*"Return"/,   'Return op present');
 };
 
-subtest 'to_json marks cfg nodes with cfg:true' => sub {
-    my $graph = make_simple_graph();
-    my $json  = to_json({ 'test::fn' => $graph });
-
-    # Decode and inspect
-    require JSON::PP;
-    my $data = JSON::PP->new->decode($json);
-    my $nodes = $data->{methods}{'test::fn'}{nodes};
-    my %by_op;
-    for my $n ($nodes->@*) {
-        push $by_op{$n->{op}}->@*, $n;
-    }
-
-    ok($by_op{Start}[0]{cfg},  'Start has cfg:true');
-    ok($by_op{Return}[0]{cfg}, 'Return has cfg:true');
-    ok(!$by_op{Constant}[0]{cfg}, 'Constant does not have cfg:true');
-};
-
 subtest 'to_json emits Constant fields' => sub {
     my $graph = make_simple_graph();
     my $json  = to_json({ 'test::fn' => $graph });
