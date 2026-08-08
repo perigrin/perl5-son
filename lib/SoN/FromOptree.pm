@@ -565,6 +565,21 @@ class SoN::FromOptree 0.01 {
             # through the header Phis (see _translate_while_loop). The
             # condition head is enterloop->next.
             if ($name eq 'enterloop') {
+                # A bare block (`{ ... }`), `package Foo { ... }`, and `class
+                # Foo { ... }` ALSO compile to enterloop -- but with no back
+                # edge: nextop and lastop both point at the same leaveloop. A
+                # real while/until/C-style for has nextop = unstack (a
+                # distinct op from lastop). Keying on this (not on redoop -- a
+                # bare block DOES have redoop set) tells the two apart; only a
+                # genuine back edge goes through _translate_while_loop.
+                # Precedent: _is_postfix_while discriminates the analogous
+                # enter/leave shape the same way.
+                my $nx = $op->can('nextop') ? $op->nextop : undef;
+                my $ls = $op->can('lastop') ? $op->lastop : undef;
+                if (ref $nx && $$nx && ref $ls && $$ls && $$nx == $$ls) {
+                    $op = $op->next;
+                    next;
+                }
                 _translate_while_loop($cv, $op->next, $sim, $factory, $opmap, \%visited);
                 # Continue after the loop; the B::LOOP op's lastop is leaveloop.
                 $op = $op->can('lastop') ? $op->lastop : $op->next;
