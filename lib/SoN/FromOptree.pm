@@ -1548,10 +1548,37 @@ class SoN::FromOptree 0.01 {
         if ($name eq 'match' && $op->isa('B::PMOP')) {
             my $pattern = $op->precomp;
             my $targ    = $op->targ;
-            my $target  = $sim->lookup($targ);
-            if (!$target) {
-                $target = _make_pad_or_field($cv, $targ, $factory);
-                $sim->define($targ, $target);
+
+            # The SUBJECT reaches a match three different ways, and only one of
+            # them is the op's pad target (measured, perl 5.42):
+            #   $s =~ /re/   lexical subject IS the pad target   targ=1 flags=0x02
+            #   $g =~ /re/   package subject is PUSHED           targ=0 flags=0x46
+            #   /re/         no binding: the subject is $_       targ=0 flags=0x02
+            # Reading targ unconditionally gave the latter two a fabricated read
+            # of pad slot 0 (varname "$?0"), which names no variable at all — so
+            # the match tested an uninitialized slot instead of the subject.
+            my $target;
+            if ($op->flags & 64) {   # OPf_STACKED: subject pushed by a kid op
+                # A runtime pattern ALSO arrives on the stack, so the two-value
+                # order would have to be established before this could be
+                # popped safely. Refuse loudly rather than guess it.
+                die "GAP: a runtime pattern applied to a pushed subject "
+                  . "(\$g =~ \$re) not yet lowered\n" unless defined $pattern;
+                $target = $sim->pop_node;
+            }
+            elsif ($targ) {
+                $target = $sim->lookup($targ);
+                if (!$target) {
+                    $target = _make_pad_or_field($cv, $targ, $factory);
+                    $sim->define($targ, $target);
+                }
+            }
+            else {
+                # An unbound match reads $_ — the package scalar main::_. This
+                # is the SAME node an explicit `$_ = ...` store builds, so the
+                # two hash-cons together and the read observes the store.
+                $target = $factory->make('StashAccess',
+                    stash_name => 'main', var_name => '_');
             }
             my $node;
             if (defined $pattern) {
