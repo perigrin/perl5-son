@@ -56,9 +56,12 @@ subtest 'taking a reference to an aggregate is Ref, not RefType (collision teeth
 subtest 'a reference to a VARIABLE is refused (address-taken)' => sub {
     # Every SSA IR demotes an address-taken variable to memory: LLVM inhibits
     # mem2reg promotion, GCC gives it virtual operands (VDEF/VUSE), Go and
-    # Cranelift do not promote `addrtaken` locals. Chalk's memory-SSA covers
-    # aggregate ELEMENTS only, so a scalar has nowhere to be demoted to and the
-    # reference cannot be honoured.
+    # Cranelift do not promote `addrtaken` locals.
+    #
+    # What chalk lacks is the DEMOTION, not a representation: a stored scalar
+    # has a static type that maps to an LLVM type, which is its memory form.
+    # Absent are the decision of which variables are address-taken, and scalar
+    # load/store on the memory chain (which threads aggregate elements today).
     #
     # Read-only use is not safe either: `my $x=5; my $r=\$x; $x=7; $$r` is 7 in
     # perl, while a value binding would have captured 5.

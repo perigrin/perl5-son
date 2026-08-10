@@ -214,7 +214,21 @@ class SoN::FromOptree 0.01 {
         # following entersub (method dispatch). Carried on $ctx so the SHARED
         # entersub/method_named handlers work identically in the main walk and in
         # _walk_branch/_step (a void method call in a branch arm -- zhi 019f2df7).
-        my $ctx = { mode => 'main', exits => \@exits };
+        # is_program: this walk is the top-level program, not a sub -- only
+        # translate_root passes program_root.
+        #
+        # Currently UNUSED, and kept deliberately. A package-scalar definition
+        # made inside a sub ESCAPES it: `our $g = 5; sub bump { $g = 9 }
+        # bump(); print $g` is 9 in perl and 5 here, because a binding is
+        # per-graph and each sub is translated as its own graph before any
+        # inlining. This is the discriminator the fence for that needs.
+        #
+        # It cannot be switched on yet: the chalk corpus harness wraps every
+        # case in `sub corpus_case { ... }`, so a fragment is indistinguishable
+        # from a real sub and all 12 package-scalar cases GAP (measured). See
+        # the followups, Part H.
+        my $ctx = { mode => 'main', exits => \@exits,
+                    is_program => (defined $program_root ? 1 : 0) };
 
         while ($$op) {
             last if $visited{$$op}++;
@@ -1414,10 +1428,19 @@ class SoN::FromOptree 0.01 {
         # aliased variable virtual operands (VDEF/VUSE) instead of a real SSA
         # name; Go and Cranelift simply do not promote `addrtaken` locals.
         #
-        # Chalk has memory-SSA, but only for AGGREGATE ELEMENTS (a Subscript
-        # takes a memory input, a store advances it, a merge builds a memory
-        # Phi). A scalar has no memory representation, so there is nowhere to
-        # demote to and the reference cannot be honoured.
+        # What is missing is the DEMOTION, not a representation. An EPHEMERAL
+        # scalar -- an SSA value flowing through the graph -- needs no memory
+        # form. A STORED one has a static Chalk type, which maps to an LLVM type,
+        # which IS its memory representation (i64, double, {i8*,i64}); the
+        # `@pkg_*` globals are already that, just mis-scoped, applied to every
+        # package scalar rather than only to the ones that must live in memory.
+        #
+        # Two pieces are genuinely absent: the decision of WHICH variables are
+        # address-taken, and scalar load/store threaded on the memory chain
+        # (chalk's memory-SSA threads aggregate ELEMENT accesses today). Note a
+        # demoted variable is a CELL, so it has ONE type -- the join over its
+        # stores, with a coercion at each -- unlike an SSA value, which carries
+        # its own type per definition.
         #
         # Refuse at the point the reference is TAKEN, which is the durable
         # fence. `\$g` currently dies later in the backend ("cannot lower
@@ -1443,7 +1466,7 @@ class SoN::FromOptree 0.01 {
                     && ${$kid->first} && $kid->first->name eq 'gv')) {
                 die "GAP: taking a reference to a variable makes it"
                   . " address-taken; it must be demoted from value-SSA to"
-                  . " memory, and a scalar has no memory representation yet\n";
+                  . " memory, and scalar demotion is not built yet\n";
             }
         }
 
