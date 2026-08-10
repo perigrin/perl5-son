@@ -37,8 +37,12 @@ subtest 'isa op produces IsaOp node' => sub {
 };
 
 subtest 'refgen produces Ref node' => sub {
-    # Use a scalar ref to avoid padav (array variable) complications
-    my $graph = SoN::FromOptree->translate(sub { my $x = 42; \$x });
+    # An ANONYMOUS referent. A reference to a VARIABLE makes it address-taken
+    # and is refused -- it would have to be demoted from value-SSA to memory,
+    # and a scalar has no memory representation (see t/from-optree-ref.t). That
+    # refusal is about the REFERENT, not about Ref, so an anon referent still
+    # exercises refgen.
+    my $graph = SoN::FromOptree->translate(sub { \[1, 2] });
     my @nodes = nodes_of_type($graph, 'Ref');
     ok(scalar @nodes > 0, 'refgen produces Ref node');
     is($nodes[0]->operation, 'Ref', 'node operation is Ref');

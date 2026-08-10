@@ -1405,6 +1405,48 @@ class SoN::FromOptree 0.01 {
               . " lexical (my) aggregates and \@_ are modeled\n";
         }
 
+        # Taking a reference to a VARIABLE makes it address-taken, and an
+        # address-taken variable cannot stay in value-SSA: a write through the
+        # reference must be visible to every later read of the name, which a
+        # value binding cannot express. Every SSA IR resolves this the same way
+        # -- by demoting the variable to MEMORY. LLVM inhibits mem2reg promotion
+        # for an alloca that is not merely loaded and stored; GCC gives an
+        # aliased variable virtual operands (VDEF/VUSE) instead of a real SSA
+        # name; Go and Cranelift simply do not promote `addrtaken` locals.
+        #
+        # Chalk has memory-SSA, but only for AGGREGATE ELEMENTS (a Subscript
+        # takes a memory input, a store advances it, a merge builds a memory
+        # Phi). A scalar has no memory representation, so there is nowhere to
+        # demote to and the reference cannot be honoured.
+        #
+        # Refuse at the point the reference is TAKEN, which is the durable
+        # fence. `\$g` currently dies later in the backend ("cannot lower
+        # op=Ref"), but that guard is about Ref in general: the day Ref lowers
+        # for anon refs, a reference to a variable would slip through and alias
+        # a value rather than a location -- writes through it silently lost.
+        #
+        # Read the KID op, not the stack: `\$x` marks its padsv OPf_REF|OPf_MOD,
+        # but `\$g`'s gvsv carries neither, so under SSA the stack holds the
+        # bound VALUE and no longer says which name it came from. An anonymous
+        # ref (`[1,2]` -> anonlist, `\"hi"` -> a folded const) never reaches
+        # srefgen at all, so nothing here touches it.
+        if ($name eq 'srefgen' && $op->can('first') && ${$op->first}) {
+            # The referent sits under one or more NULLED ex-list wrappers
+            # (measured: `\$x` is srefgen -> null -> padsv, `\$g` is
+            # srefgen -> null -> null -> gvsv), so descend through them.
+            my $kid = $op->first;
+            $kid = $kid->first
+                while $$kid && $kid->name eq 'null'
+                    && $kid->can('first') && ${$kid->first};
+            if ($$kid && $kid->name =~ /\A(?:gvsv|padsv)\z/
+                || ($kid->name eq 'rv2sv' && $kid->can('first')
+                    && ${$kid->first} && $kid->first->name eq 'gv')) {
+                die "GAP: taking a reference to a variable makes it"
+                  . " address-taken; it must be demoted from value-SSA to"
+                  . " memory, and a scalar has no memory representation yet\n";
+            }
+        }
+
         # Skip bookkeeping ops
         if ($opmap->is_skip($name)) {
             return ($op->next, 'handled');
@@ -1578,22 +1620,32 @@ class SoN::FromOptree 0.01 {
                 # The StashAccess that survives is the ENTRY DEFINITION: the
                 # variable's incoming value at unit entry, before any assignment
                 # in this unit. Every later definition is an ordinary SSA value.
-                # `local $g` is DYNAMIC SCOPING: it saves the global's value and
-                # restores it when the enclosing scope exits, so the assignment
-                # is a definition WITH AN UNDO. SSA has no representation for
-                # that, and the binding model lets the local value escape the
-                # scope that was supposed to confine it. Measured, and already
-                # true before package scalars became SSA:
+                # `local $g` is a TEMPORARY SCOPE CHANGE: within the enclosing
+                # dynamic scope the name is bound to the new value, and the
+                # previous binding is restored on exit. That is an ordinary
+                # scope operation over the binding map -- save the binding for
+                # this key, define the new one, restore the saved one at scope
+                # exit -- not something the SSA model lacks a shape for.
+                #
+                # It is GAPped because the restore is not WIRED YET, and the
+                # binding therefore outlives the scope meant to confine it.
+                # Measured, and already true before package scalars became SSA:
                 #
                 #   our $g = 1; { local $g = 5; } print $g
                 #     perl: 1     chalk: 5      -- a silent wrong answer
+                #
+                # Wiring it needs the restore at EVERY scope exit, not just the
+                # bare block's leaveloop: a sub body, an if/else arm, a loop
+                # body and a `do` block each end differently, and covering one
+                # shape would leave the others silently wrong. A GAP for all of
+                # them is strictly better than correct for one.
                 #
                 # Discriminator (measured, perl 5.42): `local` sets
                 # OPpLVAL_INTRO on the gvsv (private 0x80). A plain assignment
                 # is 0x00, and an `our $g = 5` declaration-plus-assignment is
                 # 0x40, so neither is caught here.
-                die "GAP: `local` on a package scalar (dynamic scoping) not yet"
-                  . " lowered -- the saved value must be restored at scope exit\n"
+                die "GAP: `local` on a package scalar not yet lowered -- the"
+                  . " temporary binding must be restored at scope exit\n"
                     if $op->private & 128;   # OPpLVAL_INTRO
 
                 my $key       = $gv->STASH->NAME . '::' . $gv_name;

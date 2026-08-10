@@ -34,18 +34,38 @@ subtest 'ref($x) is a RefType node (not Ref, not Call)' => sub {
     ok(!defined $call || ($call->name // '') ne 'ref', 'no builtin Call(ref)');
 };
 
+# The referents below are ANONYMOUS. A reference to a VARIABLE makes it
+# address-taken and is refused (see the last subtest), so the Ref-vs-RefType
+# distinction is exercised on referents that alias no name. That refusal is
+# about the REFERENT, not about Ref, so these still have their teeth.
+
 subtest 'the \\ operator stays a Ref node (not RefType)' => sub {
-    my $g = graph_of('sub { my $x = 5; \\$x }');
-    ok(defined node_of($g, 'Ref'), '\\$x is a Ref node');
+    my $g = graph_of('sub { \\[1, 2] }');
+    ok(defined node_of($g, 'Ref'), '\\[1,2] is a Ref node');
     ok(!defined node_of($g, 'RefType'), 'no RefType node (that is ref())');
 };
 
-subtest 'taking a reference to an object is Ref, not RefType (collision teeth)' => sub {
-    # \(expr) over an object is the reference CONSTRUCTOR (Ref), NOT ref() -- the
-    # two must not collapse, or \(obj) would lower to the class name.
-    my $g = graph_of('sub { my $r = [1]; \\$r }');
-    ok(defined node_of($g, 'Ref'), '\\$r is a Ref node');
+subtest 'taking a reference to an aggregate is Ref, not RefType (collision teeth)' => sub {
+    # \(expr) over an aggregate is the reference CONSTRUCTOR (Ref), NOT ref() --
+    # the two must not collapse, or \(obj) would lower to the class name.
+    my $g = graph_of('sub { \\{ a => 1 } }');
+    ok(defined node_of($g, 'Ref'), '\\{a=>1} is a Ref node');
     ok(!defined node_of($g, 'RefType'), 'reference-taking is not a RefType');
+};
+
+subtest 'a reference to a VARIABLE is refused (address-taken)' => sub {
+    # Every SSA IR demotes an address-taken variable to memory: LLVM inhibits
+    # mem2reg promotion, GCC gives it virtual operands (VDEF/VUSE), Go and
+    # Cranelift do not promote `addrtaken` locals. Chalk's memory-SSA covers
+    # aggregate ELEMENTS only, so a scalar has nowhere to be demoted to and the
+    # reference cannot be honoured.
+    #
+    # Read-only use is not safe either: `my $x=5; my $r=\$x; $x=7; $$r` is 7 in
+    # perl, while a value binding would have captured 5.
+    for my $src ('sub { my $x = 5; \\$x }', 'sub { our $g = 5; \\$g }') {
+        my $err = dies { graph_of($src) };
+        like($err, qr/address-taken/, "refused: $src");
+    }
 };
 
 done_testing();
