@@ -1578,6 +1578,24 @@ class SoN::FromOptree 0.01 {
                 # The StashAccess that survives is the ENTRY DEFINITION: the
                 # variable's incoming value at unit entry, before any assignment
                 # in this unit. Every later definition is an ordinary SSA value.
+                # `local $g` is DYNAMIC SCOPING: it saves the global's value and
+                # restores it when the enclosing scope exits, so the assignment
+                # is a definition WITH AN UNDO. SSA has no representation for
+                # that, and the binding model lets the local value escape the
+                # scope that was supposed to confine it. Measured, and already
+                # true before package scalars became SSA:
+                #
+                #   our $g = 1; { local $g = 5; } print $g
+                #     perl: 1     chalk: 5      -- a silent wrong answer
+                #
+                # Discriminator (measured, perl 5.42): `local` sets
+                # OPpLVAL_INTRO on the gvsv (private 0x80). A plain assignment
+                # is 0x00, and an `our $g = 5` declaration-plus-assignment is
+                # 0x40, so neither is caught here.
+                die "GAP: `local` on a package scalar (dynamic scoping) not yet"
+                  . " lowered -- the saved value must be restored at scope exit\n"
+                    if $op->private & 128;   # OPpLVAL_INTRO
+
                 my $key       = $gv->STASH->NAME . '::' . $gv_name;
                 my $is_deref  = ($op->private & 48);            # OPpDEREF
                 my $is_lvalue = ($op->flags & 32) && !$is_deref; # OPf_MOD
