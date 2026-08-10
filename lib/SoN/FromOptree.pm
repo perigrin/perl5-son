@@ -1366,6 +1366,45 @@ class SoN::FromOptree 0.01 {
             return ($op->next, 'handled');
         }
 
+        # A PACKAGE array/hash (`@x`, `%h`) reaches here as rv2av/rv2hv over a
+        # `gv`. The gv handler pushed the variable's NAME as a string Constant
+        # (it is the callee name for an entersub), and rv2sv pops that Constant
+        # and replaces it with a StashAccess for a package SCALAR -- but no
+        # equivalent exists for an aggregate, so the NAME STRING was left on the
+        # stack and flowed into whatever consumed the array.
+        #
+        # That is a SILENT MISCOMPILE, not a missing feature. `$#x` became
+        # Length(Constant("x")) -- the length of the variable's NAME -- so it
+        # answered 1 for every package array regardless of contents. Measured:
+        # @x unset -> perl -1, chalk 1; one element -> perl 0, chalk 1; two
+        # elements -> perl 1, chalk 1. It agrees with perl at exactly two
+        # elements, which is why t/base/term.t's `$#x` check (its array holds
+        # exactly two) would have passed by coincidence.
+        #
+        # Two package aggregates ARE modeled and stay exempt, and between them
+        # they show what the general case is missing:
+        #   @_        _args_source builds a StashAccess for *main::_ -- a real
+        #             array source rather than a name string.
+        #   %ENV      pushed FULLY QUALIFIED as "main::ENV" (see the gv handler)
+        #             so a later helem reads the process environment.
+        # A general package aggregate needs module-level storage, the analogue
+        # of the two-slot Str package scalar. Until that exists, refuse loudly.
+        if (($name eq 'rv2av' || $name eq 'rv2hv')
+                && $op->can('first') && ${$op->first}
+                && $op->first->name eq 'gv'
+                && $sim->stack_depth > 0
+                && do {
+                    my $top = $sim->peek_node;
+                    defined $top
+                        && $top->operation eq 'Constant'
+                        && defined $top->value
+                        && $top->value ne '_'
+                        && $top->value ne 'main::ENV';
+                }) {
+            die "GAP: package array/hash (\@x / \%h) not yet lowered -- only"
+              . " lexical (my) aggregates and \@_ are modeled\n";
+        }
+
         # Skip bookkeeping ops
         if ($opmap->is_skip($name)) {
             return ($op->next, 'handled');

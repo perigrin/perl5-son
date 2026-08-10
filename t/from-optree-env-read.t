@@ -45,13 +45,19 @@ subtest 'a non-ENV hash read stays a Subscript (teeth)' => sub {
 subtest 'a package hash %Foo::ENV is NOT an EnvRead (stash teeth)' => sub {
     # The bare gv NAME "ENV" is ambiguous: %Foo::ENV shares it with the real
     # environment %main::ENV. Only main::ENV is the process environment; a
-    # package hash whose short name is ENV must stay a plain hash read, or
-    # $Foo::ENV{PATH} would miscompile into getenv("PATH").
-    my $g = graph_of('sub { $Foo::ENV{PATH} }');
-    ok(!defined node_of($g, 'EnvRead'),
-        '%Foo::ENV read is NOT an EnvRead (getenv miscompile avoided)');
-    ok(defined node_of($g, 'Subscript'),
-        'it stays a generic hash Subscript');
+    # package hash whose short name is ENV must never become getenv("PATH").
+    #
+    # It is now refused in the PRODUCER as an unmodeled package aggregate. It
+    # previously became a generic Subscript over the stash-NAME Constant, which
+    # the backend then refused anyway ("Subscript container has repr=Str") --
+    # the same refusal, one layer later. Letting that name string into the
+    # graph is what made `$#x` compute length("x"), so it is stopped at source.
+    my $err = dies { graph_of('sub { $Foo::ENV{PATH} }') };
+    like($err, qr/GAP:/, '%Foo::ENV read is refused, not silently mishandled');
+    like($err, qr{package array/hash},
+        '... named as an unmodeled package aggregate');
+    unlike($err // '', qr/EnvRead|getenv/,
+        '... and never mistaken for the process environment');
 };
 
 subtest '%ENV read from inside another package still resolves (main::ENV)' => sub {
