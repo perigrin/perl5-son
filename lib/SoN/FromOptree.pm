@@ -1564,10 +1564,36 @@ class SoN::FromOptree 0.01 {
                 $sim->push_node($node);
             }
             else {
-                my $node = $factory->make('StashAccess',
-                    stash_name => $gv->STASH->NAME,
-                    var_name   => $gv_name);
-                $sim->push_node($node);
+                # A package scalar is an ordinary SSA variable, bound in the
+                # SAME scope map as a lexical -- `our` and `my` differ in
+                # visibility and lifetime, not in typing. %scope takes any key,
+                # so a qualified name works exactly like a pad index, and
+                # merge() builds Phis over it unchanged.
+                #
+                # This mirrors the padsv handler: an lvalue (OPf_MOD, minus the
+                # deref case, which READS the ref to dereference it) pushes a
+                # fresh StashAccess as a NAME TOKEN for sassign to define from;
+                # an rvalue over a bound name pushes the bound VALUE.
+                #
+                # The StashAccess that survives is the ENTRY DEFINITION: the
+                # variable's incoming value at unit entry, before any assignment
+                # in this unit. Every later definition is an ordinary SSA value.
+                my $key       = $gv->STASH->NAME . '::' . $gv_name;
+                my $is_deref  = ($op->private & 48);            # OPpDEREF
+                my $is_lvalue = ($op->flags & 32) && !$is_deref; # OPf_MOD
+                my $existing  = $sim->lookup($key);
+                if ($existing && !$is_lvalue) {
+                    $sim->push_node($existing);
+                }
+                else {
+                    my $node = $factory->make('StashAccess',
+                        stash_name => $gv->STASH->NAME,
+                        var_name   => $gv_name);
+                    # Seed only when unbound: an lvalue over an already-bound
+                    # name must not clobber it (`$g += 2` reads first).
+                    $sim->define($key, $node) unless defined $existing;
+                    $sim->push_node($node);
+                }
             }
             return ($op->next, 'handled');
         }
@@ -1613,11 +1639,18 @@ class SoN::FromOptree 0.01 {
                 }
             }
             else {
-                # An unbound match reads $_ — the package scalar main::_. This
-                # is the SAME node an explicit `$_ = ...` store builds, so the
-                # two hash-cons together and the read observes the store.
-                $target = $factory->make('StashAccess',
-                    stash_name => 'main', var_name => '_');
+                # An unbound match reads $_ — the package scalar main::_, which
+                # is an ordinary SSA variable in the scope map. Resolve it the
+                # same way a `$_` READ does, so the match sees the reaching
+                # definition; building a fresh StashAccess here would bypass the
+                # binding and reach the backend as an untyped entry definition.
+                my $key = 'main::_';
+                $target = $sim->lookup($key);
+                unless ($target) {
+                    $target = $factory->make('StashAccess',
+                        stash_name => 'main', var_name => '_');
+                    $sim->define($key, $target);
+                }
             }
             my $node;
             if (defined $pattern) {
@@ -1886,13 +1919,20 @@ class SoN::FromOptree 0.01 {
             # types both. A hardcoded Int would miscompile a Str global. Fall
             # back to Int when the RHS carries no stamp (the historical default).
             elsif ($target->isa('SoN::IR::Node::StashAccess')) {
-                my $rhs_type = ($value->can('stamp') && defined $value->stamp)
-                    ? $value->stamp->type : 'Int';
-                $target->set_stamp(SoN::IR::Stamp->new(type => $rhs_type))
-                    if $target->can('set_stamp') && !defined $target->stamp;
-                my $store = $factory->make('Assign', inputs => [$target, $value]);
-                $store->set_control_in($sim->control);
-                $sim->set_control($store);
+                # An assignment is a DEFINITION, not a store into a cell: it
+                # binds a new value that later reads of this name resolve to.
+                # Identical to the PadAccess branch above -- the StashAccess was
+                # pushed as a name token and never enters the dataflow.
+                #
+                # This replaces an Assign(StashAccess-lvalue, value) into a
+                # typed module-level slot. That model gave one hash-consed node
+                # ONE representation while each assignment carried its own, so a
+                # scalar assigned two types lost the second store entirely
+                # (`our $g = 1; $g = "hi"; print $g` printed 1). Under SSA each
+                # definition simply has its own representation, which is why the
+                # lexical path never had the bug.
+                $sim->define(
+                    $target->stash_name . '::' . $target->var_name, $value);
                 $sim->push_node($value);
             }
             else {
@@ -2346,6 +2386,30 @@ class SoN::FromOptree 0.01 {
                 # TARGMY-Divide twin (`$x /= 2`) is out of scope.
                 if ($node_type eq 'Divide') {
                     @inputs = map { _coerce_int_to_num($factory, $_) } @inputs;
+                }
+
+                # There is ONE Add (likewise Subtract/Multiply) and its signature
+                # is (Num, Num) -> Num. Int <: Num, so an all-Int application IS
+                # a Num application -- its result is in Int, so the narrower i64
+                # representation is kept and a 64-bit integer loses no precision.
+                # Emitting `add i64` there is a representation choice (an
+                # optimization), not a second, integer-specific operator.
+                #
+                # A MIXED application is where the representations genuinely
+                # differ, and that is exactly where a coercion belongs: the Int
+                # operand gets an explicit Coerce(Int->Num), the same treatment
+                # Divide gets above, instead of an implicit sitofp inside the
+                # backend. With the coercion in the graph the operands are
+                # uniformly Num and no subtype relaxation of the invariant is
+                # needed to admit them.
+                if ($node_type eq 'Add' || $node_type eq 'Subtract'
+                                        || $node_type eq 'Multiply') {
+                    my $mixed = grep {
+                        my $s = $_->can('stamp') ? $_->stamp : undef;
+                        defined $s && $s->type eq 'Num';
+                    } @inputs;
+                    @inputs = map { _coerce_int_to_num($factory, $_) } @inputs
+                        if $mixed;
                 }
                 my $node = $factory->make($node_type, inputs => \@inputs, %extra);
                 if ($void_effect_call) {

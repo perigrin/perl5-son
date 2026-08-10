@@ -1,5 +1,5 @@
-# ABOUTME: Tests a package-scalar store (our $g = 5) emits a control-threaded StashAccess-lvalue Assign.
-# ABOUTME: Without the store the graph silently drops `our $g = 5`, so a later `$g` read loads an uninitialized slot.
+# ABOUTME: A package-scalar assignment is an SSA DEFINITION, not a store into a slot:
+# ABOUTME: later reads resolve to the bound value, and a rebind is simply a new binding.
 
 use v5.42.0;
 use utf8;
@@ -8,11 +8,16 @@ use Test2::V0;
 use SoN::OptSuppress;
 use SoN::FromOptree;
 
-# `our $g = 5` is a package/global scalar STORE (a side effect). The lvalue is a
-# StashAccess node; the store must be an explicit Assign(StashAccess, value)
-# threaded onto the control chain (is_stmt_effect), exactly like an element or
-# field store. Without it the store falls through the sassign catch-all and is
-# DROPPED -- a later `$g` read then loads an uninitialized slot (a miscompile).
+# `our $g = 5` binds a value that later reads of $g resolve to. It used to emit
+# an Assign(StashAccess-lvalue, value) into a TYPED module-level slot, with one
+# slot kind per representation (i64 / (ptr,len) / double).
+#
+# That model gave the hash-consed lvalue node ONE representation while each
+# assignment carried its own, so a scalar assigned two types lost the second
+# store entirely -- `our $g = 1; $g = "hi"; print $g` printed 1. Package scalars
+# are now bound in the same scope map as lexicals, which is why the lexical path
+# never had that bug: `our` and `my` differ in visibility and lifetime, not in
+# typing.
 
 sub graph_of ($code) {
     SoN::OptSuppress::suppress_peep();
@@ -23,40 +28,55 @@ sub graph_of ($code) {
     return SoN::FromOptree->translate($cv);
 }
 
-sub nodes_of ($g, $op) {
-    return grep { $_->operation eq $op } $g->nodes->@*;
-}
+sub nodes_of ($g, $op) { grep { $_->operation eq $op } $g->nodes->@* }
+sub return_of ($g)     { (grep { $_->operation eq 'Return' } $g->nodes->@*)[0] }
 
-subtest 'a package-scalar store is a control-threaded, reachable Assign' => sub {
+subtest 'a read resolves to the bound value, not a slot load' => sub {
     my $g = graph_of('sub { our $g = 5; $g }');
-    my ($assign) = nodes_of($g, 'Assign');
-    ok(defined $assign, 'the package-scalar-store Assign is reachable from the graph')
-        or return;
-    ok(defined $assign->control_in,
-        'the Assign is control-threaded (control_in set)');
-    is($assign->inputs->[0]->operation, 'StashAccess', 'input[0] is the StashAccess lvalue');
-    is($assign->inputs->[1]->operation, 'Constant', 'input[1] is the stored value');
-    is($assign->inputs->[1]->value, 5, 'the stored value is 5');
+    my $val = return_of($g)->inputs->[-1];
+    is($val->operation, 'Constant', 'the Return value is the bound value');
+    is($val->value, 5, '... which is what was assigned');
+
+    is(scalar nodes_of($g, 'Assign'), 0,
+        'no Assign(StashAccess-lvalue): an assignment is a definition, not a store');
 };
 
-subtest 'the stored StashAccess lvalue carries an Int stamp for the read' => sub {
-    my $g = graph_of('sub { our $g = 5; $g }');
+subtest 'a rebind is a new binding — the read sees the LATER value' => sub {
+    my $g = graph_of('sub { our $g = 5; $g = 7; $g }');
+    my $val = return_of($g)->inputs->[-1];
+    is($val->value, 7, 'the read resolves to the second definition, not the first')
+        or diag('a dropped rebind is the miscompile this pins');
+};
+
+subtest 'a definition may change representation — the bug the slot model had' => sub {
+    # One hash-consed lvalue node could carry only one representation, so the
+    # second definition here wrote a slot family no read loaded from and was
+    # silently lost. Under SSA each definition simply has its own.
+    my $g = graph_of('sub { our $g = 1; $g = "hi"; $g }');
+    my $val = return_of($g)->inputs->[-1];
+    is($val->operation, 'Constant', 'the read resolves to a value');
+    is($val->value, 'hi', 'the Str definition wins, not the earlier Int')
+        or diag('this returned 1 under the typed-slot model');
+
+    my $g2 = graph_of('sub { our $g = "hi"; $g = 7; $g }');
+    is(return_of($g2)->inputs->[-1]->value, 7, 'and in the other direction');
+};
+
+subtest 'an UNBOUND read is the entry definition' => sub {
+    # A package scalar read before any assignment in this unit has no reaching
+    # definition here; the StashAccess names its incoming value. This is the one
+    # role StashAccess keeps.
+    my $g = graph_of('sub { our $neverset; $neverset }');
     my ($sa) = nodes_of($g, 'StashAccess');
-    ok(defined $sa, 'a StashAccess node exists') or return;
+    ok(defined $sa, 'the entry definition is a StashAccess') or return;
     is($sa->stash_name, 'main', 'stash is main');
-    is($sa->var_name, 'g', 'var is g');
-    ok(defined $sa->stamp, 'the StashAccess is stamped (so the read has a repr)')
-        or return;
-    is($sa->stamp->type, 'Int', 'the stamp is Int');
+    is($sa->var_name, 'neverset', 'named for the variable');
 };
 
-subtest 'the Return yields the StashAccess read after the store' => sub {
-    # The store's Assign is the Return's control predecessor, so the read is
-    # ordered after the store.
-    my $g = graph_of('sub { our $g = 5; $g }');
-    my ($ret) = nodes_of($g, 'Return');
-    is($ret->inputs->[-1]->operation, 'StashAccess',
-        'the Return value is the StashAccess read');
+subtest 'a lexical is unaffected' => sub {
+    my $g = graph_of('sub { my $x = 5; $x = 7; $x }');
+    is(return_of($g)->inputs->[-1]->value, 7,
+        'the lexical path still resolves to the latest definition');
 };
 
 done_testing();

@@ -37,34 +37,32 @@ sub nodes_of ($g, $op) { grep { $_->operation eq $op } $g->nodes->@* }
 # silent wrong answer.
 # ---------------------------------------------------------------------------
 
-subtest 'an unbound match reads $_ as the package scalar main::_' => sub {
+subtest 'an unbound match reads $_, resolved to its reaching definition' => sub {
     my $g = translate('sub { $_ = "test"; /^test/ ? 1 : 0 }');
 
     my @pads = nodes_of($g, 'PadAccess');
     is(scalar @pads, 0, 'no PadAccess is fabricated for the missing subject')
         or diag('varnames: ' . join(',', map { $_->varname // '(undef)' } @pads));
 
+    # $_ is the package scalar main::_, an ordinary SSA variable, so the match
+    # subject is the VALUE bound by `$_ = "test"` — not a node naming the
+    # variable. Building a fresh StashAccess here instead would bypass the
+    # binding and reach the backend as an untyped entry definition.
     my ($match) = nodes_of($g, 'RegexMatch');
-    ok($match, 'the match node exists');
+    ok($match, 'the match node exists') or return;
     my $subject = $match->inputs->[0];
-    is($subject->operation, 'StashAccess', 'its subject is a StashAccess');
-    is($subject->stash_name, 'main', '... in package main');
-    is($subject->var_name,   '_',    '... naming $_');
+    is($subject->operation, 'Constant', 'its subject is the reaching definition');
+    is($subject->value, 'test', '... the value $_ was assigned');
 };
 
-subtest 'the $_ read and the $_ store are ONE node' => sub {
-    my $g = translate('sub { $_ = "test"; /^test/ ? 1 : 0 }');
-
-    # This is what makes the match observe the store. Two separate StashAccess
-    # nodes for the same variable would read a location nothing had written.
-    my @stash = nodes_of($g, 'StashAccess');
-    is(scalar @stash, 1, 'exactly one StashAccess node for $_');
-
-    my ($match)  = nodes_of($g, 'RegexMatch');
-    my ($assign) = nodes_of($g, 'Assign');
-    ok($assign, 'the store exists');
-    is($match->inputs->[0], $assign->inputs->[0],
-        'the match subject and the assign lvalue are the same node (hash-consed)');
+subtest 'the match observes the assignment, whatever its value' => sub {
+    # The point of the fix: the subject is whatever $_ was last defined as. A
+    # subject that did not track the definition would match against something
+    # else entirely (originally: an uninitialized pad slot).
+    my $g = translate('sub { $_ = "nope"; /^test/ ? 1 : 0 }');
+    my ($match) = nodes_of($g, 'RegexMatch');
+    is($match->inputs->[0]->value, 'nope',
+        'a different assignment gives the match a different subject');
 };
 
 subtest 'a package-scalar subject is popped from the stack (OPf_STACKED)' => sub {
@@ -74,8 +72,20 @@ subtest 'a package-scalar subject is popped from the stack (OPf_STACKED)' => sub
 
     my ($match) = nodes_of($g, 'RegexMatch');
     my $subject = $match->inputs->[0];
-    is($subject->operation, 'StashAccess', 'the pushed subject is the StashAccess');
-    is($subject->var_name, 'pkgsubj', '... naming the package scalar, not slot 0');
+    is($subject->operation, 'Constant',
+        'the pushed subject resolves to its reaching definition');
+    is($subject->value, 'test', '... not a read of pad slot 0');
+};
+
+subtest 'an UNASSIGNED $_ is the entry definition' => sub {
+    # With no reaching definition in this unit, the subject names the variable's
+    # incoming value — the one role StashAccess keeps under package-scalar SSA.
+    my $g = translate('sub { /^test/ ? 1 : 0 }');
+    my ($match) = nodes_of($g, 'RegexMatch');
+    ok($match, 'the match node exists') or return;
+    my $subject = $match->inputs->[0];
+    is($subject->operation, 'StashAccess', 'the subject is the entry definition');
+    is($subject->var_name, '_', '... naming $_');
 };
 
 subtest 'a lexical subject still comes from the pad target' => sub {
