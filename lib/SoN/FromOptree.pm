@@ -1419,14 +1419,22 @@ class SoN::FromOptree 0.01 {
               . " lexical (my) aggregates and \@_ are modeled\n";
         }
 
-        # Taking a reference to a VARIABLE makes it address-taken, and an
-        # address-taken variable cannot stay in value-SSA: a write through the
+        # A REFERENCED variable cannot stay in value-SSA: a write through the
         # reference must be visible to every later read of the name, which a
-        # value binding cannot express. Every SSA IR resolves this the same way
-        # -- by demoting the variable to MEMORY. LLVM inhibits mem2reg promotion
-        # for an alloca that is not merely loaded and stored; GCC gives an
-        # aliased variable virtual operands (VDEF/VUSE) instead of a real SSA
-        # name; Go and Cranelift simply do not promote `addrtaken` locals.
+        # value binding cannot express. The trigger is the reference itself,
+        # NOT whether it escapes --
+        #
+        #   my $x = 5; my $r = \$x; $$r = 9; print $x;
+        #
+        # never leaves the compiled region, and is still wrong under a value
+        # binding. An escape analysis would pass it.
+        #
+        # Every SSA IR draws the line in the same place: LLVM promotes an alloca
+        # only when it is used SOLELY by loads and stores (an address-taken but
+        # non-escaping alloca is not promoted); GCC gives an aliased variable
+        # virtual operands (VDEF/VUSE) rather than a real SSA name; Go and
+        # Cranelift do not promote `addrtaken` locals. Escape governs where the
+        # storage lives and how long, not whether it is needed.
         #
         # What is missing is the DEMOTION, not a representation. An EPHEMERAL
         # scalar -- an SSA value flowing through the graph -- needs no memory

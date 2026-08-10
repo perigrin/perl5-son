@@ -54,13 +54,16 @@ subtest 'taking a reference to an aggregate is Ref, not RefType (collision teeth
 };
 
 subtest 'a reference to a VARIABLE is refused (address-taken)' => sub {
-    # Every SSA IR demotes an address-taken variable to memory: LLVM inhibits
-    # mem2reg promotion, GCC gives it virtual operands (VDEF/VUSE), Go and
-    # Cranelift do not promote `addrtaken` locals.
+    # The trigger is the REFERENCE, not escape. `my $x=5; my $r=\$x; $$r=9;
+    # print $x` never leaves the compiled region and is still wrong under a
+    # value binding, so this must refuse on the reference being taken rather
+    # than on any escape judgement. Every SSA IR draws it there: LLVM promotes
+    # an alloca only when it is used solely by loads and stores, GCC gives an
+    # aliased variable virtual operands, Go does not promote `addrtaken` locals.
     #
     # What chalk lacks is the DEMOTION, not a representation: a stored scalar
     # has a static type that maps to an LLVM type, which is its memory form.
-    # Absent are the decision of which variables are address-taken, and scalar
+    # Absent are the decision of which variables are referenced, and scalar
     # load/store on the memory chain (which threads aggregate elements today).
     #
     # Read-only use is not safe either: `my $x=5; my $r=\$x; $x=7; $$r` is 7 in
