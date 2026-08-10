@@ -2302,14 +2302,26 @@ class SoN::FromOptree 0.01 {
         # args -- a LOUD GAP, never a silent misroute to fd 1: the runtime-free
         # backend writes only to stdout, so honoring an explicit handle would be
         # a miscompile.
-        if ($name eq 'print') {
+        # `say` IS `print` with a trailing newline -- desugared here rather than
+        # given its own node, so every downstream consumer (the control pin, the
+        # effect predicates, the backend's _lower_print) sees one operator. Its
+        # OpMap entry maps it to a generic Call, which this branch pre-empts.
+        if ($name eq 'print' || $name eq 'say') {
             if ($op->flags & 64) {   # OPf_STACKED: an explicit filehandle operand
-                die "GAP: print to an explicit filehandle (print FH ... / "
-                  . "print \$fh ...) is not lowered -- the runtime-free backend "
+                die "GAP: $name to an explicit filehandle ($name FH ... / "
+                  . "$name \$fh ...) is not lowered -- the runtime-free backend "
                   . "writes only to stdout; honoring a handle would misroute.\n";
             }
             my $args = $sim->pop_to_mark;
             my @inputs = $args->@*;
+
+            # The newline is appended as an ordinary Str operand, so a `say`
+            # lowers through exactly the same path a `print LIST, "\n"` does.
+            push @inputs, $factory->make('Constant',
+                value      => "\n",
+                const_type => 'string',
+                stamp      => SoN::IR::Stamp->new(type => 'Str'))
+                if $name eq 'say';
 
             # Void statement position (the only shape wired): control-pin via
             # control_in (produce-time control) so the stdout effect is
@@ -3678,7 +3690,11 @@ class SoN::FromOptree 0.01 {
             # any context as a control-flow-requiring effect arm; its Bool return
             # value becomes the arm's residual for the value merge. (t/base/if.t,
             # t/base/cond.t last-statement if/else.)
-            return 1 if $name eq 'print';
+            # `say` is desugared to the same Print node, so it is the same
+            # statement effect and must be recognised here too -- otherwise a
+            # `say` in an if/else arm lands unguarded on the shared control and
+            # BOTH arms fire, the exact miscompile this line exists to stop.
+            return 1 if $name eq 'print' || $name eq 'say';
             # A void entersub is the effect -- a method call (method_named
             # recorded the name earlier) OR a bare direct call (`helper()`);
             # both thread through _handle_entersub. OPf_WANT_VOID marks the
