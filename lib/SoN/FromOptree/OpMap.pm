@@ -99,7 +99,9 @@ class SoN::FromOptree::OpMap 0.01 {
         # === String operations ===
         concat      => [2, 'Concat',    1, 0],
         length      => [1, 'Length',    1, 0],
-        stringify   => [1, 'Stringify', 1, 0],
+        # `stringify` ("$x" on its own) is handled in FromOptree, which builds a
+        # Coerce(X -> Str). It cannot be mapped here: the generic path has no
+        # way to supply Coerce's from_repr/to_repr.
         multiconcat => ['mark', 'Concat', 1, 0],
         # substr is PURE as an rvalue but MUTATES as an lvalue (substr(...)=x);
         # the same op name cannot distinguish them statically, so FromOptree

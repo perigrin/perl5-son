@@ -71,7 +71,6 @@ use SoN::IR::Node::TryCatch;
 use SoN::IR::Node::PostfixDeref;
 use SoN::IR::Node::CompoundAssign;
 use SoN::IR::Node::BacktickExpr;
-use SoN::IR::Node::Stringify;
 use SoN::IR::Node::VarDecl;
 use SoN::IR::Node::ListAssign;
 use SoN::IR::Node::TernaryExpr;
@@ -100,7 +99,7 @@ my %DATA_CLASSES = map { $_ => "SoN::IR::Node::$_" } qw(
     Call HashRef ArrayRef
     Interpolate AnonSub
     RegexMatch RegexSubst RegexCapture Print EnvRead TryCatch
-    PostfixDeref CompoundAssign BacktickExpr Stringify VarDecl ListAssign
+    PostfixDeref CompoundAssign BacktickExpr VarDecl ListAssign
     TernaryExpr StructRef StructFieldAccess
     ExpressionList
     Start MemStart Return Unwind

@@ -46,7 +46,8 @@ subtest 'print of a literal list -> Print node with every element' => sub {
     # an explicit Stringify coercion rather than Print knowing how to render an
     # Int itself. The Str literals pass straight through.
     is($in[0]->operation, 'Constant',  'the leading Str literal is direct');
-    is($in[1]->operation, 'Stringify', 'the Int element is coerced to Str');
+    is($in[1]->operation, 'Coerce', 'the Int element is coerced to Str');
+    is($in[1]->to_repr, 'Str',       '... by a Coerce(X -> Str)');
     is($in[1]->inputs->[0]->value, 1,  '... wrapping the original value');
     is($in[2]->operation, 'Constant',  'the trailing Str literal is direct');
 };

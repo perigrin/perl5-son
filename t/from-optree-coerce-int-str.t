@@ -47,26 +47,29 @@ sub has_raw_int_into_concat ($graph) {
     return 0;
 }
 
-sub has_stringify_input ($graph) {
+# The coercion is a Coerce(X -> Str). It used to be a separate `Stringify` node
+# type implementing the same edge; the two had diverged in the backend, so they
+# were merged and Stringify was deleted.
+sub has_str_coercion_input ($graph) {
     for my $row (concat_input_reprs($graph)->@*) {
         for my $in ($row->@*) {
-            return 1 if $in->{op} eq 'Stringify';
+            return 1 if $in->{op} eq 'Coerce' && $in->{type} eq 'Str';
         }
     }
     return 0;
 }
 
-subtest 'foldable operand: my $n = 3; "ok $n" wraps the Int in Stringify' => sub {
+subtest 'foldable operand: my $n = 3; "ok $n" coerces the Int to Str' => sub {
     my $g = translate(q{sub { my $n = 3; my $s = "ok $n"; $s }});
     ok(defined $g, 'translates (no GAP)');
-    ok(has_stringify_input($g), 'Concat has a Stringify-wrapped operand');
+    ok(has_str_coercion_input($g), 'Concat has a Coerce(X->Str)-wrapped operand');
     ok(!has_raw_int_into_concat($g), 'no raw Int enters Concat');
 };
 
 subtest 'dynamic operand: my $n = shift; "ok $n" wraps the value in Stringify' => sub {
     my $g = translate(q{sub { my $n = shift; my $s = "ok $n"; $s }});
     ok(defined $g, 'translates (no GAP)');
-    ok(has_stringify_input($g), 'Concat has a Stringify-wrapped operand');
+    ok(has_str_coercion_input($g), 'Concat has a Coerce(X->Str)-wrapped operand');
 };
 
 done_testing();

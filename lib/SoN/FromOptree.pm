@@ -50,7 +50,6 @@ class SoN::FromOptree 0.01 {
         Complement => 'Int',
         # String ops.
         Concat    => 'Str',
-        Stringify => 'Str',   # value -> Str coercion
         Length    => 'Int',
         # Comparisons yield a boolean; the three-way <=> / cmp yield an int.
         (map { $_ => 'Boolean' } qw(
@@ -81,19 +80,29 @@ class SoN::FromOptree 0.01 {
     }
 
     # _coerce_to_str($factory, $node) -- return a node whose stamp is Str,
-    # wrapping $node in a Stringify (Int->Str coercion) unless it is already Str.
-    # In Chalk "ok $n" is COERCION, not interpolation: a non-Str operand of an
-    # interpolation Concat is stringified first. A node already stamped Str (a
-    # Str Constant segment, a nested Concat) passes through unchanged; every other
-    # operand -- Int Constant (foldable) or unstamped Call (dynamic) alike -- is
-    # wrapped. Stringify's result is unconditionally Str, so this is not a guess
-    # about the operand's type, it is the interpolation coercion contract.
+    # wrapping $node in a Coerce(X -> Str) unless it is already Str.
+    #
+    # This is THE X->Str injection point: interpolation ("ok $n" is coercion,
+    # not interpolation), Print's arguments, and StrEq/StrNe's operands all
+    # route through it, so those operators never learn a representation.
+    #
+    # It builds a Coerce, not a Stringify: `Stringify(X)` IS `Coerce(X -> Str)`,
+    # and the two were separate node types implementing one edge -- which had
+    # already diverged in the backend (Coerce's Bool arm recorded no string
+    # length, Stringify's did). One node type, one conversion.
+    #
+    # A node already stamped Str (a Str Constant segment, a nested Concat)
+    # passes through unchanged. An UNSTAMPED operand is wrapped with from_repr
+    # 'Scalar': the coercion's RESULT is unconditionally Str either way, and the
+    # backend resolves the source representation from the operand itself.
     sub _coerce_to_str ($factory, $node) {
         my $stamp = $node->stamp;
         return $node if defined $stamp && $stamp->type eq 'Str';
-        return $factory->make('Stringify',
-            inputs => [$node],
-            stamp  => SoN::IR::Stamp->new(type => 'Str'));
+        return $factory->make('Coerce',
+            from_repr => (defined $stamp ? $stamp->type : 'Scalar'),
+            to_repr   => 'Str',
+            inputs    => [$node],
+            stamp     => SoN::IR::Stamp->new(type => 'Str'));
     }
 
     # _coerce_int_to_num($factory, $node) -- return a node whose stamp is Num,
@@ -2302,6 +2311,16 @@ class SoN::FromOptree 0.01 {
         # args -- a LOUD GAP, never a silent misroute to fd 1: the runtime-free
         # backend writes only to stdout, so honoring an explicit handle would be
         # a miscompile.
+        # A bare `stringify` op ("$x" on its own -- an interpolation of exactly
+        # one operand and nothing else) is the X->Str coercion spelled by perl.
+        # Handled here rather than through OpMap because the generic path cannot
+        # supply Coerce's from_repr/to_repr; it mapped to a Stringify node,
+        # which is the same edge under a second name.
+        if ($name eq 'stringify') {
+            $sim->push_node(_coerce_to_str($factory, $sim->pop_node));
+            return ($op->next, 'handled');
+        }
+
         # `say` IS `print` with a trailing newline -- desugared here rather than
         # given its own node, so every downstream consumer (the control pin, the
         # effect predicates, the backend's _lower_print) sees one operator. Its
@@ -2324,25 +2343,17 @@ class SoN::FromOptree 0.01 {
                 if $name eq 'say';
 
             # Print's signature is Print(Str...). A non-Str argument is COERCED
-            # to Str by an explicit Stringify, exactly as Divide's Int operands
-            # are coerced to Num -- rather than Print growing a case per type.
+            # to Str, exactly as Divide's Int operands are coerced to Num --
+            # rather than Print growing a case per representation. That keeps
+            # the type knowledge in ONE place: only the coercion learns a type,
+            # and Print stays one operator over one representation.
             #
-            # That keeps the type knowledge in ONE place. Before this, Print
-            # lowered Str and Int itself and GAPped on everything else, while
-            # Stringify separately knew how to render an Int -- so a Bool or Num
-            # argument had to be taught to BOTH. Now only the coercion learns a
-            # type, and Print stays one operator over one representation.
-            #
-            # An UNSTAMPED argument is left alone: the coercion would be a guess
+            # An UNSTAMPED argument is left alone: coercing it would be a guess
             # about a type nothing has established, and the backend still has to
             # answer for it.
             @inputs = map {
                 my $st = $_->can('stamp') ? $_->stamp : undef;
-                (defined $st && $st->type ne 'Str')
-                    ? $factory->make('Stringify',
-                          inputs => [$_],
-                          stamp  => SoN::IR::Stamp->new(type => 'Str'))
-                    : $_;
+                defined $st ? _coerce_to_str($factory, $_) : $_;
             } @inputs;
 
             # Void statement position (the only shape wired): control-pin via
@@ -2538,18 +2549,14 @@ class SoN::FromOptree 0.01 {
                 # uniformly Num and no subtype relaxation of the invariant is
                 # needed to admit them.
                 # StrEq/StrNe compare STRINGS: their signature is (Str, Str), so
-                # a non-Str operand is coerced by an explicit Stringify -- the
-                # same treatment Print's arguments get. `eq` does not grow a
-                # case per representation, and the backend does not carry a
-                # second copy of the int-to-decimal renderer beside Stringify's.
+                # a non-Str operand is coerced -- the same treatment Print's
+                # arguments get, through the same injection point. `eq` does not
+                # grow a case per representation, and the backend does not carry
+                # a second copy of the int-to-decimal renderer.
                 if ($node_type eq 'StrEq' || $node_type eq 'StrNe') {
                     @inputs = map {
                         my $st = $_->can('stamp') ? $_->stamp : undef;
-                        (defined $st && $st->type ne 'Str')
-                            ? $factory->make('Stringify',
-                                  inputs => [$_],
-                                  stamp  => SoN::IR::Stamp->new(type => 'Str'))
-                            : $_;
+                        defined $st ? _coerce_to_str($factory, $_) : $_;
                     } @inputs;
                 }
 
