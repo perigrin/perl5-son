@@ -2323,6 +2323,28 @@ class SoN::FromOptree 0.01 {
                 stamp      => SoN::IR::Stamp->new(type => 'Str'))
                 if $name eq 'say';
 
+            # Print's signature is Print(Str...). A non-Str argument is COERCED
+            # to Str by an explicit Stringify, exactly as Divide's Int operands
+            # are coerced to Num -- rather than Print growing a case per type.
+            #
+            # That keeps the type knowledge in ONE place. Before this, Print
+            # lowered Str and Int itself and GAPped on everything else, while
+            # Stringify separately knew how to render an Int -- so a Bool or Num
+            # argument had to be taught to BOTH. Now only the coercion learns a
+            # type, and Print stays one operator over one representation.
+            #
+            # An UNSTAMPED argument is left alone: the coercion would be a guess
+            # about a type nothing has established, and the backend still has to
+            # answer for it.
+            @inputs = map {
+                my $st = $_->can('stamp') ? $_->stamp : undef;
+                (defined $st && $st->type ne 'Str')
+                    ? $factory->make('Stringify',
+                          inputs => [$_],
+                          stamp  => SoN::IR::Stamp->new(type => 'Str'))
+                    : $_;
+            } @inputs;
+
             # Void statement position (the only shape wired): control-pin via
             # control_in (produce-time control) so the stdout effect is
             # ordered and survives DCE, mirroring the I1 void-effect path.

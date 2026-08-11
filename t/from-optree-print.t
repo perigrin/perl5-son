@@ -36,11 +36,19 @@ subtest 'print of a literal list -> Print node with every element' => sub {
     my $p = $p[0];
 
     # control is carried on control_in (produce-time control), not in inputs;
-    # inputs are just the three list elements ("ok ", 1, "\n").
+    # inputs are the three list elements ("ok ", 1, "\n").
     ok(is_effect($p), 'Print is a statement effect (control-pinned)');
-    my @vals = grep { $_->operation eq 'Constant' } $p->inputs->@*;
-    is(scalar @vals, 3, 'all three list elements are inputs to Print')
-        or diag('inputs = [' . join(' ', map { $_->operation } $p->inputs->@*) . ']');
+    my @in = $p->inputs->@*;
+    is(scalar @in, 3, 'all three list elements are inputs to Print')
+        or diag('inputs = [' . join(' ', map { $_->operation } @in) . ']');
+
+    # Print's signature is Print(Str...), so a non-Str element arrives through
+    # an explicit Stringify coercion rather than Print knowing how to render an
+    # Int itself. The Str literals pass straight through.
+    is($in[0]->operation, 'Constant',  'the leading Str literal is direct');
+    is($in[1]->operation, 'Stringify', 'the Int element is coerced to Str');
+    is($in[1]->inputs->[0]->value, 1,  '... wrapping the original value');
+    is($in[2]->operation, 'Constant',  'the trailing Str literal is direct');
 };
 
 # --- 2. single-arg print ---
