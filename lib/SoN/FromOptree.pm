@@ -1544,6 +1544,31 @@ class SoN::FromOptree 0.01 {
             my $is_deref  = ($op->private & 48); # OPpDEREF (AV|HV|SV)
             my $is_lvalue = ($op->flags & 32) && !$is_deref; # OPf_MOD
             my $existing = $sim->lookup($targ);
+
+            # A bare `my $a;` -- a padsv that INTRODUCES the slot (OPpLVAL_INTRO)
+            # in VOID context, with no store following -- declares a variable
+            # whose value is undef. Perl is unambiguous about this, and Undef is
+            # a first-class representation, so bind it to an Undef constant
+            # rather than an unstamped PadAccess.
+            #
+            # Leaving it untyped made `my $a; $a // 9` reach the backend with an
+            # untyped DefinedOr, which looked like a defective merge: the join of
+            # an unknown and an Int is unknown. The merge was computing the right
+            # answer from a wrong input -- inference had simply never assigned
+            # the declaration a type. An initialised `my $a = ...` is a
+            # padsv_store or a following sassign and never reaches here in void
+            # context.
+            if (($op->private & 128)            # OPpLVAL_INTRO
+                    && ($op->flags & 3) == 1    # OPf_WANT_VOID: no consumer
+                    && !defined $existing) {
+                my $undef = $factory->make('Constant',
+                    value      => undef,
+                    const_type => 'undef',
+                    stamp      => SoN::IR::Stamp->new(type => 'Undef'));
+                $sim->define($targ, $undef);
+                return ($op->next, 'handled');
+            }
+
             if ($existing && !$is_lvalue) {
                 $sim->push_node($existing);
             } else {
