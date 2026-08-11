@@ -2537,6 +2537,22 @@ class SoN::FromOptree 0.01 {
                 # backend. With the coercion in the graph the operands are
                 # uniformly Num and no subtype relaxation of the invariant is
                 # needed to admit them.
+                # StrEq/StrNe compare STRINGS: their signature is (Str, Str), so
+                # a non-Str operand is coerced by an explicit Stringify -- the
+                # same treatment Print's arguments get. `eq` does not grow a
+                # case per representation, and the backend does not carry a
+                # second copy of the int-to-decimal renderer beside Stringify's.
+                if ($node_type eq 'StrEq' || $node_type eq 'StrNe') {
+                    @inputs = map {
+                        my $st = $_->can('stamp') ? $_->stamp : undef;
+                        (defined $st && $st->type ne 'Str')
+                            ? $factory->make('Stringify',
+                                  inputs => [$_],
+                                  stamp  => SoN::IR::Stamp->new(type => 'Str'))
+                            : $_;
+                    } @inputs;
+                }
+
                 if ($node_type eq 'Add' || $node_type eq 'Subtract'
                                         || $node_type eq 'Multiply') {
                     my $mixed = grep {
