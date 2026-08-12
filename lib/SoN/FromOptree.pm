@@ -349,10 +349,23 @@ class SoN::FromOptree 0.01 {
                 # post-walk merge() builds the Region + memory-Phi. Gated on an
                 # element-store arm so the working scalar/value/exit paths are
                 # untouched.
+                # An arm that TERMINATES (`die`, `exit`) needs real control flow
+                # for the same reason a void-call arm does: the effect must be
+                # control-dependent on the guard. It was not listed here, and an
+                # arm whose ONLY content is a terminator is neither an element
+                # store nor a void call -- so no If was built, the terminator
+                # was left off the control chain, and the statement after the
+                # branch ran unconditionally. Measured on
+                # `my $c=1; say 1; if ($c) { exit 4 } say 2;`:
+                #   perl  "1\n" exit 4      chalk  "1\n2\n" exit 0
+                # Wrong stdout AND wrong status, silently. `die` in the same
+                # shape had the identical defect; an if/ELSE with a die arm
+                # already worked (corpus T2), which is what made it look covered.
                 my $mem_branch =
                     ($op->flags & 3) == 1   # OPf_WANT_VOID
                     && (_arm_has_element_store($op->other, $stop_addr)
-                        || _arm_has_void_call($op->other, $stop_addr));
+                        || _arm_has_void_call($op->other, $stop_addr)
+                        || _arm_has_die($op->other, $stop_addr));
                 my ($if_node, $true_proj, $false_proj);
                 if ($mem_branch) {
                     $if_node   = $factory->make_cfg('If',
@@ -3832,7 +3845,10 @@ class SoN::FromOptree 0.01 {
             my $name = $op->name;
             # A nested branch: not a plain die arm. Bail so it GAPs loudly.
             return 0 if $name eq 'and' || $name eq 'or' || $name eq 'cond_expr';
-            return 1 if $name eq 'die';
+            # `exit` is the same CLASS as `die`: a control path that leaves and
+            # does not rejoin the merge. It differs only in the status it sets,
+            # which is the backend's business, not this scan's.
+            return 1 if $name eq 'die' || $name eq 'exit';
         }
         return 0;
     }
