@@ -742,7 +742,8 @@ class SoN::FromOptree 0.01 {
             # 'leave' that is not this exit check's business.
             my $is_program_exit = defined $program_root && $$op == $program_root;
             if ($name eq 'leavesub' || $name eq 'leavesublv' || $is_program_exit) {
-                push @exits, _exit_record($sim, $factory, 'leavesub', $op);
+                push @exits, _exit_record($sim, $factory, 'leavesub', $op,
+                                         $is_program_exit);
                 $main_terminated = 1;
                 last;
             }
@@ -844,12 +845,17 @@ class SoN::FromOptree 0.01 {
         # stack value is one more exit. A both-arms-exited body (last via the
         # and-handler) leaves $main_terminated false but @exits already holds
         # every exit and the sim has no continuation value to add.
+        # $program_root marks a top-level walk: the same no-return-value rule
+        # applies to a fall-off-the-end exit as to the explicit one above.
+        my $is_program = defined $program_root ? 1 : 0;
         if (!$main_terminated && $sim->stack_depth > 0) {
-            push @exits, _exit_record($sim, $factory, 'fallthrough');
+            push @exits, _exit_record($sim, $factory, 'fallthrough', undef,
+                                      $is_program);
         }
         elsif (!@exits) {
             # No explicit return anywhere and an empty stack: undef return.
-            push @exits, _exit_record($sim, $factory, 'fallthrough');
+            push @exits, _exit_record($sim, $factory, 'fallthrough', undef,
+                                      $is_program);
         }
 
         my $ret = _build_single_exit($factory, \@exits);
@@ -894,9 +900,26 @@ class SoN::FromOptree 0.01 {
         return $n > 1 ? true : false;
     }
 
-    sub _exit_record ($sim, $factory, $kind, $exit_op = undef) {
+    sub _exit_record ($sim, $factory, $kind, $exit_op = undef, $is_program = 0) {
         my $value;
-        if ($kind eq 'return') {
+        # A PROGRAM has no return value. Its top level runs every statement in
+        # VOID context -- perl compiles the trailing statement that way
+        # (`padsv ... v`, `leave ... vKP`), and the last value has no effect on
+        # exit status (`perl -e 'my $x = 5; $x'` exits 0, as does a trailing 0).
+        # A program's observable contract is stdout plus exit status; the status
+        # comes from `die` or `exit`, never from a value.
+        #
+        # So anything still on the simulated stack here is RESIDUE from an
+        # earlier statement that was never consumed, and taking it makes the
+        # Return adopt an unrelated value. Measured before this guard:
+        #   my @a = (1,2,3); say(scalar @a)             Return <- ArrayRef
+        #   my $n=5; my $x=0; $x = 1 if $n>0; say($x)   Return <- Constant(0),
+        #                                               with TWO values left
+        # Drop the residue and fall through to the Undef below.
+        if ($is_program) {
+            $sim->pop_node while $sim->stack_depth > 0;
+        }
+        elsif ($kind eq 'return') {
             my $args = $sim->pop_to_mark;
             die "GAP: multi-value list return (return LIST) not yet lowered\n"
                 if $args->@* > 1;
