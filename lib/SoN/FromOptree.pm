@@ -351,8 +351,8 @@ class SoN::FromOptree 0.01 {
                 # untouched.
                 my $mem_branch =
                     ($op->flags & 3) == 1   # OPf_WANT_VOID
-                    && (_arm_has_element_store($op->other, $op->next)
-                        || _arm_has_void_call($op->other, $op->next));
+                    && (_arm_has_element_store($op->other, $stop_addr)
+                        || _arm_has_void_call($op->other, $stop_addr));
                 my ($if_node, $true_proj, $false_proj);
                 if ($mem_branch) {
                     $if_node   = $factory->make_cfg('If',
@@ -3670,6 +3670,18 @@ class SoN::FromOptree 0.01 {
         return 0;
     }
 
+    # The arm scans below bound their walk by comparing an op ADDRESS
+    # (`$$op != $stop`), but every caller has a B::OP object in hand and it is
+    # one `$$` away from being right. Passing the object silently disables the
+    # bound -- a ref numifies to its SV address, which never equals an op
+    # address -- so the scan runs past the arm to the end of the sub and reports
+    # effects belonging to LATER statements. Normalising here rather than at the
+    # call sites means a caller cannot get it wrong: accept either form.
+    sub _op_addr ($stop) {
+        return undef unless defined $stop;
+        return ref($stop) ? $$stop : $stop;
+    }
+
     # Does the arm (op chain from $start up to but excluding $stop) contain an
     # ELEMENT STORE -- an sassign whose lvalue is an aelem/helem, OR the fused
     # aelemfastlex_store the optimizer emits for a constant-index lexical-array
@@ -3680,6 +3692,7 @@ class SoN::FromOptree 0.01 {
     # aelem/helem distinguishes a store target from a read, while the fused
     # *_store op is unconditionally a store (its `_store` suffix IS the lvalue).
     sub _arm_has_element_store ($start, $stop) {
+        $stop = _op_addr($stop);
         my %seen;
         for (my $op = $start; $$op && $$op != $stop && !$seen{$$op}; $op = $op->next) {
             $seen{$$op} = 1;
@@ -3702,6 +3715,7 @@ class SoN::FromOptree 0.01 {
     # no repr (zhi 019f5368). A field write is a TARGMY op (OPpTARGET_MY) or a
     # padsv_store whose targ's padname is_field.
     sub _arm_has_field_store ($cv, $start, $stop) {
+        $stop = _op_addr($stop);
         my $padlist = $cv->PADLIST;   # loop-invariant; the padname table is per-CV
         return 0 unless $$padlist;
         my $padnames = $padlist->ARRAYelt(0);
@@ -3741,6 +3755,7 @@ class SoN::FromOptree 0.01 {
     # control-flow path. Stop at the join so only ops genuinely inside the arm
     # are considered.
     sub _arm_has_void_call ($start, $stop, $join = undef) {
+        ($stop, $join) = (_op_addr($stop), _op_addr($join));
         my %seen;
         for (my $op = $start;
              $$op && $$op != $stop && !(defined $join && $$op == $join)
@@ -3784,6 +3799,7 @@ class SoN::FromOptree 0.01 {
     # predecessor is dead and the live arm's value dominates. The $join bound
     # (as the arm-scan helpers use) stops the scan at the rejoin op.
     sub _arm_has_die ($start, $stop, $join = undef) {
+        ($stop, $join) = (_op_addr($stop), _op_addr($join));
         my %seen;
         for (my $op = $start;
              $$op && $$op != $stop && !(defined $join && $$op == $join)
