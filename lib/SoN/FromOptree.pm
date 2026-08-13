@@ -92,14 +92,28 @@ class SoN::FromOptree 0.01 {
     # length, Stringify's did). One node type, one conversion.
     #
     # A node already stamped Str (a Str Constant segment, a nested Concat)
-    # passes through unchanged. An UNSTAMPED operand is wrapped with from_repr
-    # 'Scalar': the coercion's RESULT is unconditionally Str either way, and the
-    # backend resolves the source representation from the operand itself.
+    # passes through unchanged.
+    #
+    # An UNSTAMPED operand gets from_repr 'Unknown' -- the PESSIMISTIC top type,
+    # TypeScript's `unknown` rather than its `any`. At this point in the
+    # pipeline the type genuinely IS undetermined: a direct call's result, for
+    # instance, cannot be typed here because the callee's graph may not be
+    # translated yet. Saying "Unknown" states that honestly, and obliges a later
+    # pass to NARROW it before anything is lowered.
+    #
+    # This used to write 'Scalar', with the rationale that "the backend resolves
+    # the source representation from the operand itself". The backend does not:
+    # it dispatches on from_repr and GAPs. So the producer wrote a placeholder
+    # meaning "ignore this" and the backend read it as a claim -- and because
+    # Scalar is a REAL type, its GAP could not distinguish "this scalar type is
+    # not lowered yet" from "nothing ever typed this". Measured cost:
+    # perl5/t/cmd/elsif.t, whose four `main::foo` calls ARE typed Int once the
+    # loader resolves them, failed as `Coerce[Scalar->Str] is not lowered`.
     sub _coerce_to_str ($factory, $node) {
         my $stamp = $node->stamp;
         return $node if defined $stamp && $stamp->type eq 'Str';
         return $factory->make('Coerce',
-            from_repr => (defined $stamp ? $stamp->type : 'Scalar'),
+            from_repr => (defined $stamp ? $stamp->type : 'Unknown'),
             to_repr   => 'Str',
             inputs    => [$node],
             stamp     => SoN::IR::Stamp->new(type => 'Str'));
