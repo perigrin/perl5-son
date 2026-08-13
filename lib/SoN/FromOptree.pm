@@ -1462,6 +1462,24 @@ class SoN::FromOptree 0.01 {
         #             so a later helem reads the process environment.
         # A general package aggregate needs module-level storage, the analogue
         # of the two-slot Str package scalar. Until that exists, refuse loudly.
+        # A package AGGREGATE is an ordinary SSA variable, exactly as a package
+        # SCALAR is: bound in the same %scope map under a QUALIFIED KEY, since
+        # %scope takes any key and a name works there just like a pad index.
+        # `our` and `my` differ in visibility and lifetime, not in modelling --
+        # and the lexical handler (padav/padhv) is already name-agnostic:
+        # lookup($targ) / define($targ, ...) and nothing else.
+        #
+        # This mirrors the gvsv/rv2sv branch below, including its lvalue split.
+        # What it must NOT do is leave the gv's NAME Constant on the stack: that
+        # was the old miscompile, `$#x` becoming Length(Constant("x")) -- the
+        # length of the NAME -- which answers 1 for EVERY package array. A
+        # 2-element array agrees with that by coincidence, which is exactly what
+        # t/base/term.t checks, so the feature could be wholly broken while
+        # term.t passed. The name Constant is popped here.
+        #
+        # @_ and %ENV keep their existing sources: _args_source builds the
+        # arg-array StashAccess, and main::ENV is the process environment rather
+        # than a package hash.
         if (($name eq 'rv2av' || $name eq 'rv2hv')
                 && $op->can('first') && ${$op->first}
                 && $op->first->name eq 'gv'
@@ -1474,8 +1492,48 @@ class SoN::FromOptree 0.01 {
                         && $top->value ne '_'
                         && $top->value ne 'main::ENV';
                 }) {
-            die "GAP: package array/hash (\@x / \%h) not yet lowered -- only"
-              . " lexical (my) aggregates and \@_ are modeled\n";
+            my $gv      = _op_gv($cv, $op->first);
+            my $gv_name = $gv && $gv->NAME;
+            die "GAP: package array/hash with an unresolvable GV not yet lowered\n"
+                unless defined $gv_name;
+
+            # `local @x` has the same unwired-restore problem as `local $g`:
+            # the temporary binding would outlive the scope meant to confine it.
+            die "GAP: `local` on a package array/hash not yet lowered -- the"
+              . " temporary binding must be restored at scope exit\n"
+                if $op->private & 128;   # OPpLVAL_INTRO
+
+            # Discard the gv's NAME Constant: it is the callee-name token an
+            # entersub consumes, not a value.
+            $sim->pop_node;
+
+            my $key      = $gv->STASH->NAME . '::' . $gv_name;
+            my $existing = $sim->lookup($key);
+
+            # An LVINTRO target (`our @x = ...`) or an OPf_MOD use is a
+            # DEFINITION site: push a fresh StashAccess as the name token the
+            # following aassign defines from. A plain read of a bound name
+            # pushes the bound VALUE, exactly as padav does.
+            #
+            # OPf_REF alone is NOT a definition -- it means the consumer wants
+            # the AGGREGATE ITSELF rather than a flattened list. `$#x` is
+            # exactly that shape (rv2av sKR/1 feeding av2arylen), and treating
+            # it as a target pushed a fresh StashAccess instead of the bound
+            # ArrayRef, so the length had nothing to measure. Measured: `$#x`
+            # GAPped on Length.operand for every array size.
+            my $is_target = ($op->private & 0x80)      # OPpLVAL_INTRO
+                         || ($op->flags & 0x20);       # OPf_MOD
+            if ($existing && !$is_target) {
+                $sim->push_node($existing);
+            }
+            else {
+                my $node = $factory->make('StashAccess',
+                    stash_name => $gv->STASH->NAME,
+                    var_name   => $gv_name);
+                $sim->define($key, $node) unless defined $existing;
+                $sim->push_node($node);
+            }
+            return ($op->next, 'handled');
         }
 
         # A REFERENCED variable cannot stay in value-SSA: a write through the
@@ -2346,25 +2404,45 @@ class SoN::FromOptree 0.01 {
                 return ($op->next, 'handled');
             }
 
-            # Array/hash construction: `my @a = (1,2,3)` / `my %h = (k=>0)`.
-            # The LHS is a single padav/padhv; bind it to an ArrayRef/HashRef of
-            # the RHS values so later element access has a real container.
-            if (@$lhs == 1
-                && $lhs->[0]->isa('SoN::IR::Node::PadAccess')
-                && $sim->has_mark) {
+            # Array/hash construction: `my @a = (1,2,3)` / `my %h = (k=>0)`,
+            # and the `our` forms of both. The LHS is a single aggregate target;
+            # bind it to an ArrayRef/HashRef of the RHS values so later element
+            # access has a real container.
+            #
+            # A LEXICAL target is a PadAccess keyed by pad index; a PACKAGE
+            # target is a StashAccess keyed by its qualified name. %scope takes
+            # either, which is the whole reason a package aggregate needs no
+            # separate machinery -- `our` and `my` differ in visibility and
+            # lifetime, not in modelling.
+            #
+            # The SIGIL says which container to build. A PadAccess carries it in
+            # varname ('@a'); a StashAccess does not, so it comes from the op
+            # that pushed the target -- rv2av for an array, rv2hv for a hash.
+            if (@$lhs == 1 && $sim->has_mark
+                && ( $lhs->[0]->isa('SoN::IR::Node::PadAccess')
+                  || $lhs->[0]->isa('SoN::IR::Node::StashAccess') )) {
                 my $target = $lhs->[0];
-                my $rhs    = $sim->pop_to_mark;
-                my $sigil  = substr($target->varname, 0, 1);
-                if ($sigil eq '@') {
-                    my $aref = $factory->make('ArrayRef', inputs => [$rhs->@*]);
-                    $sim->define($target->targ, $aref);
-                    $sim->push_node($aref);
-                    return ($op->next, 'handled');
+                my $is_pad = $target->isa('SoN::IR::Node::PadAccess');
+
+                my ($sigil, $key);
+                if ($is_pad) {
+                    $sigil = substr($target->varname, 0, 1);
+                    $key   = $target->targ;
                 }
-                elsif ($sigil eq '%') {
-                    my $href = $factory->make('HashRef', inputs => [$rhs->@*]);
-                    $sim->define($target->targ, $href);
-                    $sim->push_node($href);
+                else {
+                    # The aggregate op that built this target. Walk the LHS
+                    # subtree for the rv2av/rv2hv rather than guessing.
+                    $sigil = _stash_target_sigil($op);
+                    $key   = $target->stash_name . '::' . $target->var_name;
+                }
+
+                if (defined $sigil && ($sigil eq '@' || $sigil eq '%')) {
+                    my $rhs = $sim->pop_to_mark;
+                    my $node = $factory->make(
+                        ($sigil eq '@' ? 'ArrayRef' : 'HashRef'),
+                        inputs => [$rhs->@*]);
+                    $sim->define($key, $node);
+                    $sim->push_node($node);
                     return ($op->next, 'handled');
                 }
             }
@@ -3741,6 +3819,28 @@ class SoN::FromOptree 0.01 {
     # translation, no side effects); OPf_MOD (lvalue, flag 0x20) on the
     # aelem/helem distinguishes a store target from a read, while the fused
     # *_store op is unconditionally a store (its `_store` suffix IS the lvalue).
+    # _stash_target_sigil($aassign_op) -> '@' | '%' | undef
+    #
+    # Which container an `our @x = ...` / `our %h = ...` assigns into. A
+    # StashAccess carries no sigil (unlike PadAccess's varname), so it comes
+    # from the op that pushed the target: rv2av for an array, rv2hv for a hash.
+    # Walk the aassign's subtree for the first of either.
+    sub _stash_target_sigil ($aassign) {
+        my @queue = ($aassign);
+        my %seen;
+        while (my $op = shift @queue) {
+            next unless $op && ref($op) && $$op && !$seen{$$op}++;
+            my $n = $op->name;
+            return '@' if $n eq 'rv2av';
+            return '%' if $n eq 'rv2hv';
+            next unless $op->can('first') && ${ $op->first };
+            for (my $kid = $op->first; $kid && $$kid; $kid = $kid->sibling) {
+                push @queue, $kid;
+            }
+        }
+        return undef;
+    }
+
     sub _arm_has_element_store ($start, $stop) {
         $stop = _op_addr($stop);
         my %seen;

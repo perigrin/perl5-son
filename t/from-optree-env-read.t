@@ -47,17 +47,21 @@ subtest 'a package hash %Foo::ENV is NOT an EnvRead (stash teeth)' => sub {
     # environment %main::ENV. Only main::ENV is the process environment; a
     # package hash whose short name is ENV must never become getenv("PATH").
     #
-    # It is now refused in the PRODUCER as an unmodeled package aggregate. It
-    # previously became a generic Subscript over the stash-NAME Constant, which
-    # the backend then refused anyway ("Subscript container has repr=Str") --
-    # the same refusal, one layer later. Letting that name string into the
-    # graph is what made `$#x` compute length("x"), so it is stopped at source.
-    my $err = dies { graph_of('sub { $Foo::ENV{PATH} }') };
-    like($err, qr/GAP:/, '%Foo::ENV read is refused, not silently mishandled');
-    like($err, qr{package array/hash},
-        '... named as an unmodeled package aggregate');
-    unlike($err // '', qr/EnvRead|getenv/,
-        '... and never mistaken for the process environment');
+    # It is an ORDINARY PACKAGE HASH, and now translates as one: a package
+    # aggregate is an SSA variable bound in the same scope map as a lexical.
+    #
+    # This used to assert a REFUSAL, but only because package aggregates were
+    # refused WHOLESALE -- the disambiguation rode on that blanket GAP rather
+    # than on anything specific to ENV, so retiring the GAP took the assertion
+    # with it. What actually matters is the last check, and it is unchanged:
+    # whatever %Foo::ENV becomes, it must NEVER become the process environment.
+    # That is the teeth; the refusal was scaffolding around it.
+    my $g = graph_of('sub { $Foo::ENV{PATH} }');
+    ok(defined $g, '%Foo::ENV translates as an ordinary package hash');
+
+    my @env = grep { $_->operation eq 'EnvRead' } $g->nodes->@*;
+    is(scalar(@env), 0,
+        '%Foo::ENV is NEVER an EnvRead -- only main::ENV is the environment');
 };
 
 subtest '%ENV read from inside another package still resolves (main::ENV)' => sub {
