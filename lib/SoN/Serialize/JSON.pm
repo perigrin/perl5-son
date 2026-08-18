@@ -41,8 +41,34 @@ sub _extract_fields ($node, $id_remap) {
         };
     }
     if ($op eq 'Phi') {
+        # predecessors[i] is the Proj that inputs[i] arrives along. It rides
+        # the wire as node INDICES, like region, and is omitted when the Phi
+        # does not record it (a loop Phi pairs with the loop's entry and back
+        # edges rather than a predecessor list).
+        #
+        # This is what lets the consumer answer "which slot is the then arm?"
+        # by reading a field instead of searching the graph. The search it
+        # replaces took three fixes and shipped an inverted merge in both
+        # polarities -- see
+        # docs/research/2026-08-18-phi-pairing-should-not-be-a-search.md in the
+        # chalk repo.
+        my $preds = $node->can('predecessors') ? $node->predecessors : undef;
+        my @pred_ids;
+        if (defined $preds && ref $preds eq 'ARRAY') {
+            for my $p (@$preds) {
+                # A predecessor outside the emitted set cannot be referenced by
+                # index. Drop the whole list rather than emit a partial one the
+                # consumer would silently mis-pair.
+                unless (defined $p && defined $id_remap->{ $p->id }) {
+                    @pred_ids = ();
+                    last;
+                }
+                push @pred_ids, $id_remap->{ $p->id };
+            }
+        }
         return {
             region => $id_remap->{ $node->region->id },
+            (@pred_ids ? (predecessors => \@pred_ids) : ()),
         };
     }
     if ($op eq 'Proj') {

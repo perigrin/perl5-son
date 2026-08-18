@@ -105,10 +105,49 @@ class SoN::FromOptree::StackSim 0.01 {
     # pointer (Region.head -> owner, read by the control-chain walk) at
     # produce time, so the loader never has to re-derive them from the
     # control_in chain.
+    # Walk a control node back to the Proj its arm hangs off, or undef.
+    #
+    # The Region input records what ran LAST on an arm (the control-chain
+    # link); this recovers what the arm STARTED from (its identity). Doing it
+    # once here, at construction, replaces a search in every consumer.
+    #
+    # Bounded by a seen-set: an arm's control chain is acyclic, but a loop
+    # back-edge elsewhere in the graph must not turn a shape this cannot
+    # classify into a hang -- the failure mode that made an earlier
+    # producer-side descent recurse forever on `perl -MO=SoN -e 'sub foo {42}'`.
+    sub _arm_proj ($node) {
+        my %seen;
+        while (defined $node && ref $node) {
+            my $id = eval { $node->id };
+            last if defined $id && $seen{$id}++;
+            my $op = $node->can('operation') ? $node->operation : '';
+            return $node if $op eq 'Proj';
+            # Stop at another merge: its arms are a different question, and
+            # descending past it would attribute this slot to the wrong branch.
+            last if $op eq 'Region';
+            $node = $node->can('control_in') ? $node->control_in : undef;
+        }
+        return undef;
+    }
+
     method merge ($other, $factory, $owner = undef) {
+        # The Region input stays the arm's LAST control node -- it is the
+        # control-chain link, and substituting the Proj here severs the effects
+        # behind it (measured: dropped a Print, broke
+        # t/from-optree-bare-block.t).
         my $region = $factory->make_cfg('Region',
             inputs => [$control, $other->control]);
         $owner->set_region($region) if defined $owner;
+
+        # Arm IDENTITY, recorded separately so the consumer does not have to
+        # search for it. Supplied only when BOTH arms resolve to a Proj: a
+        # partial list would be worse than none, since the consumer pairs by
+        # position and a missing entry would silently mis-pair.
+        my $mine_proj   = _arm_proj($control);
+        my $theirs_proj = _arm_proj($other->control);
+        my @preds = (defined $mine_proj && defined $theirs_proj)
+            ? ($mine_proj, $theirs_proj)
+            : ();
 
         # Create Phi nodes for scope variables that differ
         my $other_scope = $other->scope_bindings;
@@ -118,6 +157,7 @@ class SoN::FromOptree::StackSim 0.01 {
                 my $phi = $factory->make('Phi',
                     inputs => [$scope{$targ}, $other_scope->{$targ}],
                     region => $region,
+                    (@preds ? (predecessors => [@preds]) : ()),
                 );
                 $scope{$targ} = $phi;
             }
@@ -132,6 +172,7 @@ class SoN::FromOptree::StackSim 0.01 {
                 my $phi = $factory->make('Phi',
                     inputs => [$my_top, $other_top],
                     region => $region,
+                    (@preds ? (predecessors => [@preds]) : ()),
                 );
                 push @stack, $phi;
             } else {
@@ -150,6 +191,7 @@ class SoN::FromOptree::StackSim 0.01 {
             $memory = $factory->make('Phi',
                 inputs => [$memory, $other_memory],
                 region => $region,
+                (@preds ? (predecessors => [@preds]) : ()),
             );
         }
 
