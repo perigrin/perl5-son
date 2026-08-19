@@ -115,6 +115,13 @@ class SoN::FromOptree::StackSim 0.01 {
     # back-edge elsewhere in the graph must not turn a shape this cannot
     # classify into a hang -- the failure mode that made an earlier
     # producer-side descent recurse forever on `perl -MO=SoN -e 'sub foo {42}'`.
+    #
+    # Exposed as SoN::FromOptree::StackSim::arm_proj so FromOptree's
+    # single-exit merge can use the SAME walk rather than keeping its own copy.
+    # It had one inline (a hand-written "while not Proj, follow control_in"),
+    # which is the fourth place this search had been written.
+    sub arm_proj ($node) { return _arm_proj($node) }
+
     sub _arm_proj ($node) {
         my %seen;
         while (defined $node && ref $node) {

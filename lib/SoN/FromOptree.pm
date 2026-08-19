@@ -999,22 +999,32 @@ class SoN::FromOptree 0.01 {
         # for such a chain and adopt the first If/Loop found as the owner,
         # so the backend's control-chain walk can still reach it -- the
         # same best-effort scan the loader used to do at load time.
+        # Resolve each exit's control back to the Proj its arm hangs off. This
+        # walk used to be written inline here -- the FOURTH copy of the same
+        # search -- and is now the one in StackSim, which merge() also uses.
+        my @exit_projs = map { SoN::FromOptree::StackSim::arm_proj($_->{control}) }
+                             @$exits;
+
         my $owner;
-        EXIT: for my $exit (@$exits) {
-            my $arm = $exit->{control};
-            my %seen;
-            while (defined $arm && blessed($arm)
-                    && $arm->operation ne 'Proj' && !$seen{$arm->id}++) {
-                $arm = $arm->can('control_in') ? $arm->control_in : undef;
-            }
-            next unless defined $arm && blessed($arm) && $arm->operation eq 'Proj';
+        EXIT: for my $arm (@exit_projs) {
+            next unless defined $arm;
             my $cand = $arm->inputs->[0];
             if (defined $cand && blessed($cand)) { $owner = $cand; last EXIT }
         }
         $owner->set_region($region) if defined $owner && $owner->can('set_region');
+
+        # The walk above already knows which Proj each exit came from, so
+        # RECORD it: inputs[i] pairs with predecessors[i] and the consumer reads
+        # arm identity instead of searching for it again. Supplied only when
+        # EVERY exit resolved -- the consumer pairs by position, so a partial
+        # list would silently mis-pair.
+        my @preds = (grep { defined } @exit_projs) == @exit_projs
+            ? @exit_projs : ();
+
         my $phi = $factory->make('Phi',
             inputs => [map { $_->{value} } @$exits],
-            region => $region);
+            region => $region,
+            (@preds ? (predecessors => [@preds]) : ()));
         my $ret = $factory->make_cfg('Return', inputs => [$phi]);
         $ret->set_control_in($region);
         return $ret;
