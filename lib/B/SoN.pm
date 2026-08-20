@@ -424,20 +424,29 @@ sub _empty_class {
 sub _record_sub {
     my ( $classes, $pkg_name, $name, $full_name, $cv ) = @_;
 
-    # DO NOT auto-vivify a class record for any package that happens to hold a
-    # translatable CV. Measured before this guard, an UNFILTERED run fabricated
-    # 22 class records -- strict, warnings, utf8, Carp, Exporter, JSON::PP and
-    # B::SoN ITSELF -- because every loaded module has subs, and Chalk's
-    # _replay_classes calls declare_class unconditionally per record.
+    # Do not auto-vivify a class record for any package that merely happens to
+    # hold a translatable CV. Measured before this guard, an UNFILTERED run
+    # produced 22 extra records (strict, warnings, utf8, Carp, Exporter,
+    # JSON::PP, B::SoN) because every loaded module has subs.
     #
-    # The line is NOT "is this a feature class". Everything is a class, and a
-    # plain `package Counter { sub bump {...} }` owns its subs exactly as a
-    # declared class does. The line is WHOSE CODE IT IS -- the program under
-    # compilation, versus the ambient module set perl happened to load.
+    # WHAT IS AND IS NOT WRONG WITH THAT. Not much, on inspection: a MOP::Class
+    # is a name plus empty lists, nothing downstream iterates all classes
+    # expensively, and no downstream misbehaviour was ever demonstrated. And
+    # under everything-is-a-class, `strict` genuinely IS a class -- recording it
+    # is not a lie. The real objections are hygiene: the count is unbounded and
+    # input-dependent (it is whatever the program transitively `use`d), and it
+    # silently moved an observable output (95 -> 117) that no test watched.
     #
-    # A CV knows: ->FILE is the file it was compiled from. The user's subs come
-    # from the file being compiled; strict/warnings/JSON::PP come from their own
-    # installed files. An already-recognised class keeps its record regardless.
+    # THE LINE IS SCOPE, NOT IDENTITY: what were we ASKED to compile, versus
+    # what perl loaded along the way. A CV knows -- ->FILE is the file it was
+    # compiled from, and $0 is the file under compilation.
+    #
+    # That distinction matters BECAUSE Chalk is metacircular. B::SoN showing up
+    # in its own output is not the compiler leaking into its artifact; it is the
+    # compiler being an ordinary program, which is exactly what self-hosting
+    # requires. When Chalk compiles ITSELF, $0 is B::SoN and this guard then
+    # correctly INCLUDES it. Do not "fix" this by excluding the compiler by
+    # name -- that would break self-hosting, which is the whole point.
     return unless exists $classes->{$pkg_name}
         || _cv_is_user_code($cv);
     $classes->{$pkg_name} //= _empty_class($pkg_name);
