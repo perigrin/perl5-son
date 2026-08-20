@@ -71,20 +71,26 @@ subtest 'a void call genuinely inside the arm is still detected' => sub {
 # THE SURVIVING REFUSAL, pinned so lifting the scalar-rebind half cannot quietly
 # take the element-store half with it.
 #
-# CHARACTERIZATION, not an endorsement. Measured 2026-08-20: for
-# `if ($n==0) { $a[0]=9; $n=5 }` the producer emits If/Proj/Region/Phi for the
-# scalar rebind and NO STORE NODE AT ALL -- the `$a[0]=9` is silently dropped.
-# The graph is therefore WRONG, and what stops it becoming a wrong answer is
-# chalk's backend refusing it ("a branch arm that both rebinds a scalar and
-# stores an element", Target/LLVM/Context.pm), verified firing today.
+# The producer is CORRECT here and the refusal is chalk's backend.
 #
-# So this asserts the drop is still happening, to detect the day it changes in
-# either direction: if the producer learns to emit the store this goes red and
-# the backend refusal can be revisited; if the backend refusal is ever removed
-# while the drop remains, the corpus is the thing that catches it. Do NOT read
-# this passing as the shape being supported.
-subtest 'CHARACTERIZATION: a rebind PLUS an element store still drops the store' => sub {
-    my $sub = eval 'sub { my @a=(1,2,3); my $n=0; if ($n==0) { $a[0]=9; $n=5 } $n }';
+# Measured 2026-08-20 from the JSON wire at COMPILE phase: `main::f` containing
+# `if ($n==0) { $a[0]=9; $n=5 }` carries ArrayRef, MemStart, Subscript,
+# `Assign(%subscript, 9)` pinned to the true Proj by control_in, and BOTH merge
+# Phis (one for memory, one for the scalar). Nothing is dropped. What refuses is
+# Target/LLVM/Context.pm -- "a branch arm that both rebinds a scalar and stores
+# an element (2b-3 mixed effect)" -- a lowering gap over a well-formed graph.
+#
+# DO NOT re-derive this by calling translate() at RUNTIME. Measured: the SAME
+# `\&main::f`, the SAME translate() call, gives Assign=1 at compile phase and
+# Assign=0 at runtime -- perl has released the array ops by then, so a runtime
+# probe sees a graph the compiler never emits. Two of my probes chased that
+# artifact as if it were a producer bug.
+#
+# So this subtest asserts only what a runtime probe can honestly see: the arm's
+# scalar rebind still merges. The store's presence is verified at the wire, by
+# the chalk corpus gate, not here.
+subtest 'a rebind PLUS an element store still merges the scalar' => sub {
+    my $sub = eval 'sub { my @a=(1,2,3); my $n=0; if ($n==0) { $a[0]=9; $n=5 } $a[0] }';
     ok(defined $sub, 'compiled the probe sub') or diag($@);
 
     my $graph = eval { SoN::FromOptree->translate($sub) };
@@ -92,9 +98,7 @@ subtest 'CHARACTERIZATION: a rebind PLUS an element store still drops the store'
         or do { diag("err=$@"); return };
 
     my $text = $renderer->render($graph);
-    unlike($text, qr/\bElementStore\b|\bStore\b/,
-        'the element store is still absent -- this graph is WRONG and the '
-      . 'backend must keep refusing it')
+    like($text, qr/\bPhi\b/, 'the scalar rebind merges through a Phi')
         or diag($text);
 };
 
