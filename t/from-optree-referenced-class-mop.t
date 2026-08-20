@@ -84,8 +84,23 @@ subtest 'the main sub still carries the get Call with the class_name' => sub {
 
 subtest 'does not over-emit internal SoN classes' => sub {
     my @names = sort keys $data->{classes}->%*;
-    is( \@names, ['Counter'],
-        'only the referenced class is emitted, not the whole stash' );
+    # `main` now appears because every sub is recorded under its owning class,
+    # and a file-level sub belongs to class main ("all code belongs to a
+    # class" -- Chalk::MOP seeds an implicit main for exactly this reason).
+    # That is the sub-metadata channel, not the stash leak this subtest exists
+    # to catch, so assert the GUARD rather than the old exact set.
+    is( \@names, ['Counter', 'main'],
+        'only the referenced class (plus main) is emitted, not the whole stash' );
+    # The guard stated directly: no internal producer class leaks.
+    ok( !grep( { /^(?:SoN|B|JSON|Test)\b/ } @names ),
+        'no internal producer classes leak into the wire' )
+        or diag "leaked: @names";
+    # main owns the file-level sub; Counter's `get` is a METHOD and must not
+    # be recorded as one of its subs.
+    is( [ sort keys( ( $data->{classes}{main}{subs} // {} )->%* ) ],
+        ['corpus_case'], 'main carries exactly the file-level sub' );
+    is( [ sort keys( ( $data->{classes}{Counter}{subs} // {} )->%* ) ],
+        [], 'a class method is not recorded as a sub' );
 };
 
 done_testing();

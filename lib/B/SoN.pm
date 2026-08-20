@@ -254,6 +254,10 @@ sub _walk_package {
         try {
             my $graph = SoN::FromOptree->translate( $cv->object_2svref );
             $graphs->{$full_name} = $graph;
+            # Record the sub's METADATA while the CV is still in hand. See
+            # _record_sub: these are facts this walk knows and the emitted
+            # graph either loses or spells inconsistently.
+            _record_sub( $classes, $pkg_name, $name, $full_name, $cv );
         }
         catch ($e) {
             # Skip subs that fail to translate (builtins, XS, compiler
@@ -295,6 +299,134 @@ sub _walk_package {
 
         _walk_package( $graphs, $classes, $canonical_name, $sub_stash, $filter );
     }
+}
+
+# _record_sub($classes, $pkg_name, $name, $full_name, $cv) — record a sub's
+# METADATA on the declarative class section.
+#
+# Every sub belongs to a class: a file-level `sub f` is a sub of class `main`.
+# Chalk's MOP seeds an implicit `main` for exactly this reason ("all code
+# belongs to a class"), so no special case is needed here or in the loader.
+#
+# WHY THIS IS RECORDED RATHER THAN DERIVED. The consumer needs to know whether a
+# callee touches `@_` (to decide whether to materialise it) and what its arity
+# is. Both are known HERE, while walking the CV. Neither survives into the graph
+# usefully:
+#
+#   shift              StashAccess(_)              -- and collides with $_
+#   $_[0]              Constant("_") + Subscript
+#   my ($a,$b) = @_    NOTHING -- @_ is absent from the graph entirely
+#   scalar @_          Constant("_") returned directly
+#
+# Three spellings for one array, one of them a bare string constant, and one
+# shape where it vanishes. A graph scan over that cannot be written reliably,
+# and a scan is what this record exists to retire.
+sub _record_sub {
+    my ( $classes, $pkg_name, $name, $full_name, $cv ) = @_;
+
+    $classes->{$pkg_name} //= {
+        name    => $pkg_name,
+        parent  => undef,
+        fields  => [],
+        methods => {},
+        adjusts => [],
+    };
+
+    $classes->{$pkg_name}{subs}{$name} = {
+        name      => $name,
+        graph     => $full_name,
+        uses_args => ( _cv_uses_args($cv) ? JSON::PP::true : JSON::PP::false ),
+        params    => _cv_params($cv),
+    };
+
+    return;
+}
+
+# _cv_uses_args($cv) — does this sub body touch `@_`?
+#
+# Answered on the OPTREE, walking the whole body including nested blocks: `@_`
+# is dynamically scoped to the innermost enclosing sub CALL, so a bare block or
+# an `if` inside the sub sees the same one. Walk children as well as siblings,
+# or a use inside a nested branch is missed -- the exact defect shape fixed in
+# the arm scans earlier today.
+#
+# Not recursed into nested CVs: an inner `sub { ... }` has its OWN `@_`, so a
+# use there says nothing about this one.
+sub _cv_uses_args {
+    my ($cv) = @_;
+    my $root = eval { $cv->ROOT };
+    return 0 unless defined $root && $$root;
+    return _op_uses_args( $root, $cv );
+}
+
+sub _op_uses_args {
+    my ( $op, $cv ) = @_;
+    return 0 unless defined $op && $$op;
+
+    my $name = $op->name;
+
+    # A nested sub has its own @_; its uses are not ours.
+    return 0 if $name eq 'anoncode';
+
+    # The array itself: `@_`, `scalar @_`, `my (...) = @_`, `$_[N]`. Perl
+    # reaches *main::_ by gv/gvsv/padany depending on the form, so test the
+    # RESOLVED name rather than guessing which op kind carries it.
+    if ( $name eq 'gv' || $name eq 'gvsv' || $name eq 'aelemfast' ) {
+        my $gv_name = eval { _op_gv_name( $op, $cv ) } // '';
+        return 1 if $gv_name eq '_';
+    }
+    # A bare `shift`/`pop` with no operand defaults to @_ inside a sub.
+    if ( ( $name eq 'shift' || $name eq 'pop' )
+        && !( $op->flags & B::OPf_KIDS() ) )
+    {
+        return 1;
+    }
+
+    if ( $op->flags & B::OPf_KIDS() ) {
+        for ( my $kid = $op->first; $kid && $$kid; $kid = $kid->sibling ) {
+            return 1 if _op_uses_args( $kid, $cv );
+        }
+    }
+    return 0;
+}
+
+# Resolve the GV short name of a gv/gvsv/aelemfast op.
+#
+# Unthreaded perls store the GV on the op (B::SVOP->sv); threaded perls store it
+# in the pad (B::PADOP->padix, or an SVOP whose sv is a B::SPECIAL and whose
+# ->targ is the index). Mirrors SoN::FromOptree::_gv_op_slot, which is
+# file-scoped there and so cannot be shared without exporting it.
+sub _op_gv_name {
+    my ( $op, $cv ) = @_;
+
+    my $slot;
+    if ( $op->can('sv') ) {
+        my $sv = eval { $op->sv };
+        $slot = $sv if defined $sv && ref $sv && $$sv;
+    }
+    if ( !$slot ) {
+        my $ix = $op->can('padix') ? $op->padix : eval { $op->targ };
+        if ($ix) {
+            my $padl = eval { $cv->PADLIST };
+            if ( defined $padl && $$padl ) {
+                my $s = eval { $padl->ARRAYelt(1)->ARRAYelt($ix) };
+                $slot = $s if defined $s && ref $s && $$s;
+            }
+        }
+    }
+    return undef unless $slot && $slot->isa('B::GV');
+    return eval { $slot->NAME };
+}
+
+# _cv_params($cv) — the sub's declared parameter names, or [] when it has none.
+#
+# A signature-less sub (the common case today) has no DECLARED params; its arity
+# is a property of how it reads @_, which is a separate question from what it
+# DECLARES. Recording [] here is honest: it says "no declared signature", not
+# "takes no arguments".
+sub _cv_params {
+    my ($cv) = @_;
+    return [];
 }
 
 # _extract_class($graphs, $pkg_name, $stash) — build the declarative class
