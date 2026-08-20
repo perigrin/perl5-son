@@ -129,9 +129,28 @@ class SoN::FromOptree::StackSim 0.01 {
             last if defined $id && $seen{$id}++;
             my $op = $node->can('operation') ? $node->operation : '';
             return $node if $op eq 'Proj';
-            # Stop at another merge: its arms are a different question, and
-            # descending past it would attribute this slot to the wrong branch.
-            last if $op eq 'Region';
+
+            # A NESTED MERGE. Do NOT descend into its arms -- those belong to
+            # the inner branch and picking one would attribute this slot to the
+            # wrong side. But the merge itself sits on exactly one arm of the
+            # OUTER branch, and that arm is recoverable: Region.head is the
+            # inner If, whose control_in is the outer Proj. Step THROUGH the
+            # merge to its head rather than stopping.
+            #
+            # Stopping here was correct for a flat branch and wrong for a nested
+            # one: the outer Phi's arm IS the inner Region, so the walk returned
+            # undef and merge()'s all-or-nothing guard dropped predecessors for
+            # the outer merge entirely. The backend then fell back to the Region
+            # search, which paired the arms backwards and emitted a phi naming a
+            # value defined in the merge block as arriving from the else block --
+            # rejected by lli as "Instruction does not dominate all uses!".
+            if ($op eq 'Region') {
+                my $head = $node->can('head') ? $node->head : undef;
+                last unless defined $head && ref $head;
+                $node = $head->can('control_in') ? $head->control_in : undef;
+                next;
+            }
+
             $node = $node->can('control_in') ? $node->control_in : undef;
         }
         return undef;
