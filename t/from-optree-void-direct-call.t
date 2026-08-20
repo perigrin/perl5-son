@@ -65,16 +65,28 @@ subtest 'nested branch in the arm stays a loud GAP' => sub {
 };
 
 # A void call AND a scalar rebind in the SAME arm needs both control-threading
-# (for the call) and a value merge (for the rebind); merge() emits a value-Phi
-# the backend cannot place without a memory store. This is 2b-3 mixed-effect
-# territory -- GAP loudly rather than emit an unplaceable Phi (adversarial
-# verification wf_900ef202 caught this as a GREEN->GAP reachability regression
-# when the void-call detection first fired on a pad-rebinding arm).
-subtest 'void call + scalar rebind in one arm GAPs loudly (not an unplaceable Phi)' => sub {
-    my $err = dies {
-        translate('sub { my $x=shift; my $n=0; if ($x>3) { helper(); $n=5 } $n }');
-    };
-    like($err // '', qr/^GAP:/, 'mixed void-call + rebind arm GAPs') or diag($err);
+# (for the call) and a value merge (for the rebind). This GAPped until 2026-08-20
+# because the backend could not place the value-Phi: the arm's control chain ends
+# on the CALL, not on the Proj.
+#
+# chalk `f2971b5f` places a Phi read before its Region and `9ce43cdd` walks a
+# Region input's control chain back to its Proj -- which is precisely this shape.
+# Re-measured across 14 bilateral shapes, all matching perl on stdout and exit
+# status (chalk docs/plans/2026-08-20-2b3-measured-defect-3-is-closed.md), so the
+# refusal was outliving its defect.
+#
+# The ORIGINAL hazard this subtest guarded is still guarded: wf_900ef202 caught a
+# GREEN->GAP reachability regression when void-call detection first fired on a
+# pad-rebinding arm. That is now asserted directly -- the arm must keep BOTH its
+# Call and its merge Phi, so neither the call nor the rebind is swept away.
+subtest 'void call + scalar rebind in one arm translates, keeping call AND merge' => sub {
+    my $g = translate('sub { my $x=shift; my $n=0; if ($x>3) { helper(); $n=5 } $n }');
+    ok(defined $g, 'mixed void-call + rebind arm translates') or return;
+
+    my @ops = ops_of($g);
+    ok((grep { $_ eq 'Call' } @ops), 'the void call survives') or diag("ops=[@ops]");
+    ok((grep { $_ eq 'Phi' } @ops),  'the rebind still merges through a Phi')
+        or diag("ops=[@ops]");
 };
 
 # A PURE void-call arm (no rebind) must still translate -- it is the case this

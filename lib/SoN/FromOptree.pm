@@ -492,28 +492,36 @@ class SoN::FromOptree 0.01 {
                     # plus Phis for any scope vars the arm rebound. The read after
                     # the branch takes the merged memory / bindings.
                     if ($mem_branch) {
-                        # A void-call arm that ALSO rebinds a scope var is 2b-3
-                        # territory: merge() would build a value-Phi for the
-                        # rebound slot, but with no element store advancing the
-                        # memory chain the backend has no Region/If in the
-                        # Return's control path to place that Phi against
-                        # (Phi-before-Region). An element-store arm is the
-                        # supported 2b case (the memory-Phi carries it). GAP
-                        # loudly rather than emit an unplaceable Phi.
-                        my $arm_rebinds = do {
-                            my $base = $sim->scope_bindings;
-                            my $arm  = $rhs_sim->scope_bindings;
-                            my $diff = 0;
-                            for my $t (keys %$arm) {
-                                next unless defined $base->{$t} && defined $arm->{$t};
-                                $diff = 1, last if $base->{$t} != $arm->{$t};
-                            }
-                            $diff;
-                        };
-                        die "GAP: void-context '$name' arm combines a void call"
-                          . " with a scalar rebind (2b-3 mixed effect not yet lowered)"
-                            if $arm_rebinds
-                            && !_arm_has_element_store($op->other, $op->next);
+                        # A void-call arm that ALSO rebinds a scope var USED to
+                        # GAP here: merge() builds a value-Phi for the rebound
+                        # slot, and the backend could not place it because the
+                        # arm's control chain ends on the CALL rather than on
+                        # the Proj (Phi-before-Region).
+                        #
+                        # Both halves of that are fixed. chalk `f2971b5f` places
+                        # a Phi read before its Region, and `9ce43cdd` walks a
+                        # Region input's control chain back to its Proj -- which
+                        # is exactly this shape, since a void call is what ends
+                        # the chain somewhere other than the Proj.
+                        #
+                        # Re-measured 2026-08-20 across 14 bilateral shapes: the
+                        # block form, the statement-modifier spelling, two
+                        # rebinds in one arm, if/else where BOTH arms call and
+                        # rebind, a rebind that READS the slot after the call,
+                        # and a string rebind. All 14 match perl on stdout and
+                        # exit status. See the chalk repo,
+                        # docs/plans/2026-08-20-2b3-measured-defect-3-is-closed.md
+                        #
+                        # THE DETECTION IS NOT DISABLED, which is what the
+                        # bilateral guard in t/from-optree-arm-scan-bound.t
+                        # exists to prevent. The arm shape that genuinely cannot
+                        # lower -- a scalar rebind AND an element store in one
+                        # arm -- still refuses, in the backend where the
+                        # unlowerable step actually is
+                        # (Target/LLVM/Context.pm: "a branch arm that both
+                        # rebinds a scalar and stores an element"). Verified
+                        # firing today on
+                        # `if (...) { print "x\n"; $a[0] = 9; $n = 5 }`.
                         # The element-store sassign pushes its stored VALUE (perl
                         # assignment returns its value); in void context that
                         # value is discarded. Drop the arm's leftover stack down
