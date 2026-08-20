@@ -3924,15 +3924,42 @@ class SoN::FromOptree 0.01 {
     # are considered.
     sub _arm_has_void_call ($start, $stop, $join = undef) {
         ($stop, $join) = (_op_addr($stop), _op_addr($join));
-        my %seen;
+        # ONE seen-set for the whole scan, shared across the nested-branch
+        # descent below. A per-call set would let two branches that can reach
+        # each other recurse forever -- measured as "Deep recursion on
+        # _arm_has_die" and then a Killed process on t/b-son-backend.t, whose
+        # deeply-branched real-world code is what exposed it.
+        return _arm_has_void_call_from($start, $stop, $join, {});
+    }
+
+    sub _arm_has_void_call_from ($start, $stop, $join, $seen) {
         for (my $op = $start;
              $$op && $$op != $stop && !(defined $join && $$op == $join)
-                 && !$seen{$$op};
+                 && !$seen->{$$op};
              $op = $op->next) {
-            $seen{$$op} = 1;
+            $seen->{$$op} = 1;
             my $name = $op->name;
-            # A nested branch: not a plain void-call arm. Bail so it GAPs loudly.
-            return 0 if $name eq 'and' || $name eq 'or' || $name eq 'cond_expr';
+            # A NESTED BRANCH. Its guarded body is reached via ->other, not
+            # ->next, so the linear scan would walk straight past it and miss an
+            # effect living inside. That effect still makes THIS arm one that
+            # needs real control flow -- the arm cannot use the value-only merge
+            # if anything under it must be control-pinned -- so descend into the
+            # nested body and report what it finds.
+            #
+            # This asks only "does this arm need control flow?", which is
+            # answered the same way no matter which side of the inner branch the
+            # effect sits on. It does NOT attribute the effect to an arm; the
+            # inner branch's own handler does that when it builds its own
+            # If/Projs. Returning 0 here instead left the OUTER branch on the
+            # pad-rebind path while the inner one built control flow beneath it,
+            # so the inner guard was swallowed and its effect fired
+            # unconditionally (measured: `if(C){if(C){print}}` printed nothing,
+            # and a nested `die` exited 0 where perl exited 255).
+            if ($name eq 'and' || $name eq 'or' || $name eq 'cond_expr') {
+                return 1
+                    if _arm_has_void_call_from($op->other, $stop, $join, $seen);
+                next;
+            }
             # A print is a statement effect in ANY context -- _handle_print
             # control-pins it, advancing the arm's control to the Print, so merge()
             # Regions it onto the taken arm. Even in SCALAR context (WANT=2, the
@@ -3966,17 +3993,59 @@ class SoN::FromOptree 0.01 {
     # backend lowers the Unwind to exit(255)+unreachable, so the merge's die
     # predecessor is dead and the live arm's value dominates. The $join bound
     # (as the arm-scan helpers use) stops the scan at the rejoin op.
-    sub _arm_has_die ($start, $stop, $join = undef) {
+    # Does this arm contain a void CALL (entersub)? A narrower question than
+    # _arm_has_void_call, which also answers true for a print/say. The two
+    # differ in where the effect can be PLACED: a Print pins once on its
+    # control, while a Call is both a value and an effect and can be emitted
+    # per-consumer. Callers that can pin the first but not the second ask this
+    # separately. Descends into a nested branch for the same reason the others
+    # do, sharing one seen-set.
+    sub _arm_has_direct_call ($start, $stop, $join = undef) {
         ($stop, $join) = (_op_addr($stop), _op_addr($join));
-        my %seen;
+        return _arm_has_direct_call_from($start, $stop, $join, {});
+    }
+
+    sub _arm_has_direct_call_from ($start, $stop, $join, $seen) {
         for (my $op = $start;
              $$op && $$op != $stop && !(defined $join && $$op == $join)
-                 && !$seen{$$op};
+                 && !$seen->{$$op};
              $op = $op->next) {
-            $seen{$$op} = 1;
+            $seen->{$$op} = 1;
             my $name = $op->name;
-            # A nested branch: not a plain die arm. Bail so it GAPs loudly.
-            return 0 if $name eq 'and' || $name eq 'or' || $name eq 'cond_expr';
+            if ($name eq 'and' || $name eq 'or' || $name eq 'cond_expr') {
+                return 1
+                    if _arm_has_direct_call_from($op->other, $stop, $join, $seen);
+                next;
+            }
+            next unless $name eq 'entersub';
+            return 1 if ($op->flags & 3) == 1;   # OPf_WANT_VOID
+        }
+        return 0;
+    }
+
+    sub _arm_has_die ($start, $stop, $join = undef) {
+        ($stop, $join) = (_op_addr($stop), _op_addr($join));
+        # One shared seen-set across the nested descent -- see the note in
+        # _arm_has_void_call.
+        return _arm_has_die_from($start, $stop, $join, {});
+    }
+
+    sub _arm_has_die_from ($start, $stop, $join, $seen) {
+        for (my $op = $start;
+             $$op && $$op != $stop && !(defined $join && $$op == $join)
+                 && !$seen->{$$op};
+             $op = $op->next) {
+            $seen->{$$op} = 1;
+            my $name = $op->name;
+            # A NESTED BRANCH: descend into its guarded body (reached via
+            # ->other, which the linear ->next scan walks past). A die under a
+            # nested branch still makes THIS arm need real control flow. See the
+            # matching comment in _arm_has_void_call.
+            if ($name eq 'and' || $name eq 'or' || $name eq 'cond_expr') {
+                return 1
+                    if _arm_has_die_from($op->other, $stop, $join, $seen);
+                next;
+            }
             # `exit` is the same CLASS as `die`: a control path that leaves and
             # does not rejoin the merge. It differs only in the status it sets,
             # which is the backend's business, not this scan's.
@@ -4358,31 +4427,73 @@ class SoN::FromOptree 0.01 {
             # the false side for `or`/unless. The merged bindings flow into the
             # outer if/else exactly as a plain assignment arm would.
             #
-            # ONLY a pure pad/field-rebind modifier body is safe here: the merge
-            # threads the guard through the rebound SCOPE bindings, nothing else.
-            # A body with a statement EFFECT that rebinds no scope slot (a void
-            # print / void method call, `print "hi" if C`) would walk via _step,
-            # emit an unpinned Print/Call the guard does not gate, and the value-
-            # only merge would drop or misfire it (a silent effect miscompile --
-            # lli printed nothing where perl printed `hi`). An element store, a
-            # die, a nested branch, a function exit, or a back-edge (statement-
-            # modifier LOOP) is likewise not a simple rebind. Refuse every such
-            # shape loudly BEFORE the merge (the outer if/else's shared control-
-            # flow path -- _arm_has_void_call etc -- handles genuine void-effect
-            # arms; this is the modifier-inside-arm sub-case it does not reach).
+            # A pure pad/field-rebind body merges as values: the guard threads
+            # through the rebound SCOPE bindings and nothing else needs pinning.
+            #
+            # A body carrying a statement EFFECT that rebinds no scope slot (a
+            # void print / void method call, an element store, a die) cannot use
+            # that merge -- the effect would walk via _step, land unpinned on the
+            # shared control the guard does not gate, and the value-only merge
+            # would drop or misfire it (a silent effect miscompile -- lli printed
+            # nothing where perl printed `hi`). It needs REAL control flow, which
+            # is exactly what the main walk's &&/|| handler already builds for
+            # the same op in the same context (the $mem_branch path, ~:378):
+            # If + Proj(body)/Proj(continue) before the arm walk, the effect
+            # emitted on its own Proj, and merge() Regioning the arms after.
+            #
+            # This is the SAME shape one level down. perl compiles a one-armed
+            # `if` and a statement modifier to the same `and`, so this handler
+            # sees plain nested blocks -- `if (C) { if (D) { print; $n=7 } }` and
+            # every `elsif` -- not just the modifier idiom it was named for.
+            # Build the control flow here rather than refusing.
             if (($name eq 'and' || $name eq 'or')
                 && $opmap->is_branch($name)
                 && ($op->flags & 3) == 1   # OPf_WANT == OPf_WANT_VOID
                 && $sim->stack_depth > 0) {
                 $visited->{$$op}++;
                 my $mod_stop = ${ $op->next };
-                die "GAP: statement modifier with a void effect / element store"
-                  . " / die inside an if/else arm not yet lowered\n"
-                    if _arm_has_void_call($op->other, $op->next, $mod_stop)
-                    || _arm_has_element_store($op->other, $op->next)
+                # An ELEMENT STORE in this body is still not lowered here. The
+                # control-flow build below pins CONTROL effects; a store also
+                # advances MEMORY, and merging that needs the memory-Phi the
+                # 2b-3 path builds -- which this handler does not. Routing it
+                # through anyway silently DROPPED the store (measured:
+                # `if($c){if($d){$a[0]=9}} $a[0]` printed 1 where perl printed
+                # 9, and both guard polarities printed the same thing). Refuse
+                # loudly instead: a GAP is recoverable, a wrong answer is not.
+                die "GAP: an element store inside a nested one-armed branch is"
+                  . " not yet lowered (needs the memory-Phi merge)\n"
+                    if _arm_has_element_store($op->other, $op->next);
+                # A void CALL in this body is likewise not lowered here. Unlike
+                # a Print (a pure statement effect, pinned once on its control),
+                # a Call is both a value and an effect, and routing it through
+                # this build emitted it on BOTH paths -- measured:
+                # `if ($x>3) { helper() if $y>3 }` printed "helped" TWICE where
+                # perl printed it once. Placing it correctly is the Call
+                # classification problem, not this handler's. Refuse loudly.
+                die "GAP: a void call inside a nested one-armed branch is not"
+                  . " yet lowered (the call would be emitted on both paths)\n"
+                    if _arm_has_direct_call($op->other, $op->next, $mod_stop);
+                # A CONTROL effect that pins once (a print/say, a die) does
+                # lower: build the same If/Proj/Region the main walk's handler
+                # builds. A plain rebind body keeps the value merge below.
+                my $mem_branch =
+                       _arm_has_void_call($op->other, $op->next, $mod_stop)
                     || _arm_has_die($op->other, $op->next, $mod_stop);
                 my $guard   = $sim->pop_node;
                 my $mod_sim = $sim->snapshot;
+                my $if_node;
+                if ($mem_branch) {
+                    $if_node = $factory->make_cfg('If',
+                        inputs => [$sim->control, $guard]);
+                    # `and` (if C): the body runs on the TRUE arm. `or`
+                    # (unless C): the body runs on the FALSE arm.
+                    my ($body_idx, $cont_idx) =
+                        $name eq 'and' ? (0, 1) : (1, 0);
+                    $mod_sim->set_control($factory->make_cfg('Proj',
+                        inputs => [$if_node], index => $body_idx));
+                    $sim->set_control($factory->make_cfg('Proj',
+                        inputs => [$if_node], index => $cont_idx));
+                }
                 my ($mod_end, $mod_sig) = _walk_branch($cv, $op->other,
                     $mod_sim, $factory, $opmap, $visited, \my @mod_exits,
                     1, $mod_stop);
@@ -4395,6 +4506,17 @@ class SoN::FromOptree 0.01 {
                   . " if/else arm not yet lowered\n"
                     unless defined $mod_end && ref $mod_end
                         && $$mod_end == $mod_stop;
+                if ($mem_branch) {
+                    # The body's residual value is discarded in void context.
+                    # Drain it so merge() does not build a spurious (ill-typed)
+                    # stack Phi over a dead value -- the same drain the main
+                    # walk's handler does before its merge.
+                    $mod_sim->pop_node
+                        while $mod_sim->stack_depth > $sim->stack_depth;
+                    $sim->merge($mod_sim, $factory, $if_node);
+                    $op = $op->next;
+                    next;
+                }
                 my $base_scope = $sim->scope_bindings;
                 my $arm_scope  = $mod_sim->scope_bindings;
                 for my $targ (sort { $a <=> $b } keys %$arm_scope) {

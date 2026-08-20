@@ -133,10 +133,19 @@ subtest 'unhandled op inside an arm refuses loudly (no silent truncation)' => su
     ok(lives { SoN::FromOptree->translate($mod) },
         'a pure-rebind statement modifier inside an arm now lowers, no longer a GAP');
     # A modifier body with a statement EFFECT that rebinds no scope slot (a void
-    # print) is NOT a simple rebind -- the value-only merge would drop the
-    # unpinned Print (a silent effect miscompile). It must still GAP loudly.
-    like(dies { SoN::FromOptree->translate($vp) }, qr/GAP/,
-        'a void-effect statement modifier inside an arm still GAPs loudly');
+    # print) is not a simple rebind, so the value-only merge could not carry it
+    # and it GAPped rather than drop the unpinned Print. It now LOWERS: the
+    # handler builds the same If/Proj/Region the main walk's &&/|| handler
+    # builds, so the Print is pinned on its own Proj and a Region merges the
+    # arms. Verified behaviourally on BOTH polarities before this assertion was
+    # changed -- c=1 gives "hi\nx=0\n", c=0 gives "x=1\n", both matching perl.
+    #
+    # A void CALL in the same position still GAPs: a Call is both a value and an
+    # effect, and routing it through this build emitted it on BOTH paths
+    # ("helped" printed twice where perl printed it once). That refusal is
+    # asserted in t/from-optree-void-direct-call.t.
+    ok(lives { SoN::FromOptree->translate($vp) },
+        'a void-PRINT statement modifier inside an arm now lowers, no longer a GAP');
     # A die inside an arm now LOWERS (via an Unwind CFG node -> exit+unreachable
     # in the backend); it no longer GAPs. The taken-die aborts, the not-taken
     # arm's value is returned. This test previously asserted the GAP that the
