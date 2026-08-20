@@ -301,6 +301,40 @@ sub _walk_package {
     }
 }
 
+# _cv_is_user_code($cv) -- was this sub compiled from the file under
+# compilation, rather than from a module perl loaded along the way?
+#
+# `$0` is the script being compiled. A CV's ->FILE is where its body came from,
+# so the two match for the user's own subs (in any package they declare) and
+# differ for strict/warnings/Carp/JSON::PP and friends. That is the honest
+# boundary for "whose code is this": it does not care whether the package used
+# `class`, only whether we are compiling it.
+#
+# A CV with no ->FILE (XS, a builtin) is not user code.
+sub _cv_is_user_code {
+    my ($cv) = @_;
+    my $file = eval { $cv->FILE };
+    return 0 unless defined $file && length $file;
+    return $file eq $0;
+}
+
+# _empty_class($pkg_name) -- the default class record shape.
+#
+# ONE definition of the five keys. _extract_class overwrites parent/fields for a
+# real feature-class; _record_sub vivifies this for a package that has subs but
+# no class declaration (`main`). Two literal copies would have to stay in sync,
+# and a sixth key would reach only one of them.
+sub _empty_class {
+    my ($pkg_name) = @_;
+    return {
+        name    => $pkg_name,
+        parent  => undef,
+        fields  => [],
+        methods => {},
+        adjusts => [],
+    };
+}
+
 # _record_sub($classes, $pkg_name, $name, $full_name, $cv) — record a sub's
 # METADATA on the declarative class section.
 #
@@ -324,19 +358,40 @@ sub _walk_package {
 sub _record_sub {
     my ( $classes, $pkg_name, $name, $full_name, $cv ) = @_;
 
-    $classes->{$pkg_name} //= {
-        name    => $pkg_name,
-        parent  => undef,
-        fields  => [],
-        methods => {},
-        adjusts => [],
-    };
+    # DO NOT auto-vivify a class record for any package that happens to hold a
+    # translatable CV. Measured before this guard, an UNFILTERED run fabricated
+    # 22 class records -- strict, warnings, utf8, Carp, Exporter, JSON::PP and
+    # B::SoN ITSELF -- because every loaded module has subs, and Chalk's
+    # _replay_classes calls declare_class unconditionally per record.
+    #
+    # The line is NOT "is this a feature class". Everything is a class, and a
+    # plain `package Counter { sub bump {...} }` owns its subs exactly as a
+    # declared class does. The line is WHOSE CODE IT IS -- the program under
+    # compilation, versus the ambient module set perl happened to load.
+    #
+    # A CV knows: ->FILE is the file it was compiled from. The user's subs come
+    # from the file being compiled; strict/warnings/JSON::PP come from their own
+    # installed files. An already-recognised class keeps its record regardless.
+    return unless exists $classes->{$pkg_name}
+        || _cv_is_user_code($cv);
+    $classes->{$pkg_name} //= _empty_class($pkg_name);
+
+    # A METHOD is not a sub. _extract_class records methods separately; without
+    # this guard a `method get` was dual-listed under BOTH keys (measured on a
+    # feature-class: methods=[get,helper] subs=[get,helper]). The two differ in
+    # dispatch and in whether they carry an implicit invocant, so conflating
+    # them would hand the loader one callable under two contradictory
+    # descriptions.
+    return if exists( ( $classes->{$pkg_name}{methods} // {} )->{$name} );
 
     $classes->{$pkg_name}{subs}{$name} = {
         name      => $name,
         graph     => $full_name,
         uses_args => ( _cv_uses_args($cv) ? JSON::PP::true : JSON::PP::false ),
-        params    => _cv_params($cv),
+        # A signature-less sub has no DECLARED params. [] is honest here: it
+        # says "no declared signature", not "takes no arguments" -- arity is a
+        # property of how the body reads \@_, answered in a later step.
+        params    => [],
     };
 
     return;
@@ -368,12 +423,37 @@ sub _op_uses_args {
     # A nested sub has its own @_; its uses are not ours.
     return 0 if $name eq 'anoncode';
 
-    # The array itself: `@_`, `scalar @_`, `my (...) = @_`, `$_[N]`. Perl
-    # reaches *main::_ by gv/gvsv/padany depending on the form, so test the
-    # RESOLVED name rather than guessing which op kind carries it.
-    if ( $name eq 'gv' || $name eq 'gvsv' || $name eq 'aelemfast' ) {
-        my $gv_name = eval { _op_gv_name( $op, $cv ) } // '';
+    # THE NAME IS NOT ENOUGH: `$_` and `@_` are DIFFERENT variables that share
+    # the glob name `_`, so matching on the name alone reports a sub using `$_`
+    # as using `@_`. Measured: `sub f { $_ = "x"; /x/ }` was a false positive,
+    # which would materialise an argument array for a sub that never asked for
+    # one. The SIGIL is the discriminator and it lives on the OP KIND:
+    #
+    #   $_    gvsv[*_]                  scalar  -- NOT @_
+    #   $_[0] aelemfast[*_]             array element
+    #   @_    gv[*_] under rv2av        the array itself
+    #
+    # So `gvsv` is excluded outright, `aelemfast` is an array element access,
+    # and a bare `gv` counts only when its parent dereferences it as an ARRAY
+    # (checked by the rv2av arm below, which owns that test).
+    # `$_[0]` is REDUNDANTLY covered: the rv2av arm below catches it too, and
+    # the tests pass with this arm removed. It stays because the op IS emitted
+    # (measured: `aelemfast[*_]` appears for `sub f { $_[0] + 1 }` even with the
+    # peephole suppressed), and the two arms fail in opposite directions -- a
+    # false NEGATIVE here means @_ is not materialised for a callee that reads
+    # it, which is a silent wrong answer rather than a loud one.
+    if ( $name eq 'aelemfast' ) {
+        my $gv_name = _op_gv_name( $op, $cv ) // '';
         return 1 if $gv_name eq '_';
+    }
+    # `@_` proper: rv2av over the `_` glob -- covers `scalar @_`,
+    # `my (...) = @_`, `$#_`, `foreach (@_)` and a plain `@_` in a list.
+    if ( $name eq 'rv2av' && ( $op->flags & B::OPf_KIDS() ) ) {
+        my $kid = $op->first;
+        if ( defined $kid && $$kid && $kid->name eq 'gv' ) {
+            my $gv_name = _op_gv_name( $kid, $cv ) // '';
+            return 1 if $gv_name eq '_';
+        }
     }
     # A bare `shift`/`pop` with no operand defaults to @_ inside a sub.
     if ( ( $name eq 'shift' || $name eq 'pop' )
@@ -381,6 +461,14 @@ sub _op_uses_args {
     {
         return 1;
     }
+    # `goto &f` passes the CALLER'S @_ through to the target -- an implicit use
+    # that names `_` nowhere in the optree (the body is goto/srefgen/rv2cv/gv),
+    # so every name-based test above misses it. A false NEGATIVE is the
+    # dangerous direction: @_ would not be materialised for a sub that hands it
+    # onward. The `&f` form (entersub with no arg list) shares this property and
+    # is NOT yet detected -- filed rather than guessed at, since distinguishing
+    # it from an ordinary call needs the arg-list shape, not just the op name.
+    return 1 if $name eq 'goto';
 
     if ( $op->flags & B::OPf_KIDS() ) {
         for ( my $kid = $op->first; $kid && $$kid; $kid = $kid->sibling ) {
@@ -394,39 +482,36 @@ sub _op_uses_args {
 #
 # Unthreaded perls store the GV on the op (B::SVOP->sv); threaded perls store it
 # in the pad (B::PADOP->padix, or an SVOP whose sv is a B::SPECIAL and whose
-# ->targ is the index). Mirrors SoN::FromOptree::_gv_op_slot, which is
-# file-scoped there and so cannot be shared without exporting it.
+# ->targ is the index). The same two-branch shape as
+# SoN::FromOptree::_gv_op_slot, which is file-scoped inside a class block there
+# and so cannot be shared without exporting it. B core is NOT an option:
+# B::PADOP->gv reads PL_curpad, which is unset during static analysis, so it
+# returns a null B::SPECIAL.
+#
+# Deliberately does NOT swallow errors. An eval here would turn a producer bug
+# into undef -> uses_args=false -> @_ silently not materialised for a callee
+# that reads it. The one caller runs inside _walk_package's try/catch, which
+# reports a non-GAP exception LOUDLY as an internal error.
 sub _op_gv_name {
     my ( $op, $cv ) = @_;
 
     my $slot;
     if ( $op->can('sv') ) {
-        my $sv = eval { $op->sv };
+        my $sv = $op->sv;
         $slot = $sv if defined $sv && ref $sv && $$sv;
     }
     if ( !$slot ) {
-        my $ix = $op->can('padix') ? $op->padix : eval { $op->targ };
+        my $ix = $op->can('padix') ? $op->padix : $op->targ;
         if ($ix) {
-            my $padl = eval { $cv->PADLIST };
+            my $padl = $cv->PADLIST;
             if ( defined $padl && $$padl ) {
-                my $s = eval { $padl->ARRAYelt(1)->ARRAYelt($ix) };
+                my $s = $padl->ARRAYelt(1)->ARRAYelt($ix);
                 $slot = $s if defined $s && ref $s && $$s;
             }
         }
     }
     return undef unless $slot && $slot->isa('B::GV');
-    return eval { $slot->NAME };
-}
-
-# _cv_params($cv) — the sub's declared parameter names, or [] when it has none.
-#
-# A signature-less sub (the common case today) has no DECLARED params; its arity
-# is a property of how it reads @_, which is a separate question from what it
-# DECLARES. Recording [] here is honest: it says "no declared signature", not
-# "takes no arguments".
-sub _cv_params {
-    my ($cv) = @_;
-    return [];
+    return $slot->NAME;
 }
 
 # _extract_class($graphs, $pkg_name, $stash) — build the declarative class
