@@ -89,6 +89,11 @@ sub _extract_fields ($node, $id_remap) {
     if ($op eq 'StashAccess') {
         return {
             stash_name => $node->stash_name,
+            # The sigil is part of the variable's IDENTITY, not decoration:
+            # `$_` and `@_` share the glob name `_` and are DIFFERENT
+            # variables. Dropping it here would re-merge on the loader side
+            # exactly what the producer just kept apart.
+            sigil      => $node->sigil,
             var_name   => $node->var_name,
         };
     }

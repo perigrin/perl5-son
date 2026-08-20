@@ -536,7 +536,7 @@ class SoN::FromOptree 0.01 {
 
                     my $base_scope = $sim->scope_bindings;
                     my $arm_scope  = $rhs_sim->scope_bindings;
-                    for my $targ (sort { $a <=> $b } keys %$arm_scope) {
+                    for my $targ (sort _scope_key_order keys %$arm_scope) {
                         my $base = $base_scope->{$targ};
                         my $armv = $arm_scope->{$targ};
                         # A var introduced inside the arm is scoped to the
@@ -1525,7 +1525,10 @@ class SoN::FromOptree 0.01 {
             # entersub consumes, not a value.
             $sim->pop_node;
 
-            my $key      = $gv->STASH->NAME . '::' . $gv_name;
+            # Sigil-qualified, as the scalar site is: one stash can hold
+            # `$g` and `@g` as unrelated variables.
+            my $agg_sigil = $op->name eq 'rv2hv' ? '%' : '@';
+            my $key      = $gv->STASH->NAME . '::' . $agg_sigil . $gv_name;
             my $existing = $sim->lookup($key);
 
             # An LVINTRO target (`our @x = ...`) or an OPf_MOD use is a
@@ -1839,7 +1842,11 @@ class SoN::FromOptree 0.01 {
                   . " temporary binding must be restored at scope exit\n"
                     if $op->private & 128;   # OPpLVAL_INTRO
 
-                my $key       = $gv->STASH->NAME . '::' . $gv_name;
+                # SIGIL-QUALIFIED: `$g` and `@g` are different variables
+                # in one stash, and `$_` vs `@_` is the case that bites --
+                # a name-only key bound the match subject and the argument
+                # array to the same slot.
+                my $key       = $gv->STASH->NAME . '::$' . $gv_name;
                 my $is_deref  = ($op->private & 48);            # OPpDEREF
                 my $is_lvalue = ($op->flags & 32) && !$is_deref; # OPf_MOD
                 my $existing  = $sim->lookup($key);
@@ -1905,11 +1912,16 @@ class SoN::FromOptree 0.01 {
                 # same way a `$_` READ does, so the match sees the reaching
                 # definition; building a fresh StashAccess here would bypass the
                 # binding and reach the backend as an untyped entry definition.
-                my $key = 'main::_';
+                # Keyed by SIGIL as well as name: `$_` and `@_` are
+                # different variables sharing the glob name `_`, and a
+                # name-only key bound them to the same slot -- which then
+                # hash-consed to one node feeding both a `shift @_` and this
+                # match.
+                my $key = 'main::$_';
                 $target = $sim->lookup($key);
                 unless ($target) {
                     $target = $factory->make('StashAccess',
-                        stash_name => 'main', var_name => '_');
+                        stash_name => 'main', sigil => '$', var_name => '_');
                     $sim->define($key, $target);
                 }
             }
@@ -2192,8 +2204,13 @@ class SoN::FromOptree 0.01 {
                 # (`our $g = 1; $g = "hi"; print $g` printed 1). Under SSA each
                 # definition simply has its own representation, which is why the
                 # lexical path never had the bug.
+                # Sigil-qualified, matching every read site: `$g` and `@g`
+                # are unrelated variables in one stash, and `$_` vs `@_` is the
+                # case that bit -- a name-only key bound a match subject and an
+                # argument array to the same slot.
                 $sim->define(
-                    $target->stash_name . '::' . $target->var_name, $value);
+                    $target->stash_name . '::' . $target->sigil
+                        . $target->var_name, $value);
                 $sim->push_node($value);
             }
             else {
@@ -2451,7 +2468,10 @@ class SoN::FromOptree 0.01 {
                     # The aggregate op that built this target. Walk the LHS
                     # subtree for the rv2av/rv2hv rather than guessing.
                     $sigil = _stash_target_sigil($op);
-                    $key   = $target->stash_name . '::' . $target->var_name;
+                    # Sigil-qualified, matching the read sites: one stash can
+                    # hold `$g` and `@g` as unrelated variables.
+                    $key   = $target->stash_name . '::'
+                           . ($sigil // $target->sigil) . $target->var_name;
                 }
 
                 if (defined $sigil && ($sigil eq '@' || $sigil eq '%')) {
@@ -3221,7 +3241,7 @@ class SoN::FromOptree 0.01 {
         # and a live read turns it into a loud GAP rather than a miscompile.
         for my $brk (@break_projs) {
             my $brk_bindings = $brk->{bindings};
-            for my $targ (sort { $a <=> $b } keys %$brk_bindings) {
+            for my $targ (sort _scope_key_order keys %$brk_bindings) {
                 my $header = $sim->scope_bindings->{$targ};   # header Phi (patched)
                 my $bval   = $brk_bindings->{$targ};
                 next unless defined $header && defined $bval && $header != $bval;
@@ -4317,7 +4337,7 @@ class SoN::FromOptree 0.01 {
             my $true_scope  = $true_sim->scope_bindings;
             my $false_scope = $false_sim->scope_bindings;
             my %targs = map { $_ => 1 } keys %$true_scope, keys %$false_scope;
-            for my $targ (sort { $a <=> $b } keys %targs) {
+            for my $targ (sort _scope_key_order keys %targs) {
                 my $pre = $base_scope->{$targ};
                 my $tv  = $true_scope->{$targ}  // $pre;
                 my $fv  = $false_scope->{$targ} // $pre;
@@ -4519,7 +4539,7 @@ class SoN::FromOptree 0.01 {
                 }
                 my $base_scope = $sim->scope_bindings;
                 my $arm_scope  = $mod_sim->scope_bindings;
-                for my $targ (sort { $a <=> $b } keys %$arm_scope) {
+                for my $targ (sort _scope_key_order keys %$arm_scope) {
                     my $base = $base_scope->{$targ};
                     my $armv = $arm_scope->{$targ};
                     # A var introduced inside the modifier body is scoped to it;
@@ -4551,9 +4571,24 @@ class SoN::FromOptree 0.01 {
     # list-assignment `my (...) = @_` destructures it. @_ is the package array
     # *main::_, so it is modeled as a StashAccess (a real array source), never a
     # string Constant.
+    # Scope keys are MIXED: a pad slot is an integer, a package variable is a
+    # qualified name ('main::$_'). A numeric sort over both warns and orders
+    # the names arbitrarily -- latent before sigil-qualified keys made package
+    # variables common, and codegen must be DETERMINISTIC. Numbers first in
+    # numeric order, then names in string order.
+    sub _scope_key_order {
+        my $an = $a =~ /^[0-9]+$/;
+        my $bn = $b =~ /^[0-9]+$/;
+        return $a <=> $b if $an && $bn;
+        return -1 if $an;
+        return  1 if $bn;
+        return $a cmp $b;
+    }
+
     sub _args_source ($factory) {
         return $factory->make('StashAccess',
             stash_name => 'main',
+            sigil      => '@',      # @_ -- NOT the scalar $_
             var_name   => '_');
     }
 
