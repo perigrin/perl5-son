@@ -143,9 +143,75 @@ sub _emit_referenced_classes {
             # Translate each referenced method graph now.
             _translate_class_methods( $graphs, $cname, $stash,
                 $classes->{$cname}{methods} );
+            # ...and its plain SUBS. This path is the ONLY thing that
+            # translates CVs for an out-of-filter class (_walk_package skipped
+            # it, so _record_sub never ran), and it used to reach them because
+            # every non-:reader CV was recorded under {methods}. With a plain
+            # sub now classified as a sub, iterating {methods} alone leaves it
+            # translated NOWHERE -- measured: MyMod::helper vanished from the
+            # graph set while main's Call node still named it. An unresolvable
+            # callee, with no GAP and no warning.
+            _translate_class_subs( $graphs, $classes, $cname, $stash );
             $added++;
         }
         last unless $added;   # fixpoint: no new class this round
+    }
+    return;
+}
+
+# _translate_class_subs(\%graphs, \%classes, $pkg_name, $stash) -- translate and
+# record the plain SUBS of a referenced (out-of-filter) class.
+#
+# The sibling of _translate_class_methods for the other half of the
+# classification. _walk_package handles both for an IN-filter package; a class
+# emitted only because it was referenced never passes through that loop, so
+# without this its subs have no graph and no record.
+#
+# _record_sub's user-code guard is satisfied here by an existing class record
+# (_extract_class has just populated it), which is what lets a sub from another
+# FILE be recorded when that file's class is genuinely part of the program.
+sub _translate_class_subs {
+    my ( $graphs, $classes, $pkg_name, $stash ) = @_;
+
+    no strict 'refs';
+
+    my $methods = $classes->{$pkg_name}{methods} // {};
+
+    for my $name ( sort keys %$stash ) {
+        next if $name =~ /::$/;
+        next if $name =~ /^[^a-zA-Z_]/;
+        next if exists $methods->{$name};    # already handled as a method
+
+        my $gv = eval { svref_2object( \*{"${pkg_name}::${name}"} ) };
+        next unless defined $gv && $gv->isa('B::GV');
+        my $cv = $gv->CV;
+        next unless $$cv && !$cv->isa('B::SPECIAL');
+        my $start = eval { $cv->START };
+        next unless defined $start && $$start;
+
+        # Skip imported subs -- their CV belongs to another package.
+        my $cv_gv = eval { $cv->GV };
+        next unless defined $cv_gv && $$cv_gv;
+        my $cv_stash = eval { $cv_gv->STASH->NAME } // '';
+        next unless $cv_stash eq $pkg_name || $cv_stash eq '';
+
+        my $full_name = "${pkg_name}::${name}";
+        next if exists $graphs->{$full_name};
+
+        try {
+            $graphs->{$full_name} =
+                SoN::FromOptree->translate( $cv->object_2svref );
+            _record_sub( $classes, $pkg_name, $name, $full_name, $cv );
+        }
+        catch ($e) {
+            if ( $e =~ /^GAP:/ ) {
+                warn "B::SoN: skipped $full_name: $e";
+            }
+            else {
+                warn "B::SoN: INTERNAL ERROR translating $full_name (masked as "
+                   . "a silent skip -- fix or convert to a clean GAP): $e";
+            }
+        }
     }
     return;
 }
@@ -384,6 +450,19 @@ sub _record_sub {
     # descriptions.
     return if exists( ( $classes->{$pkg_name}{methods} // {} )->{$name} );
 
+    # A `:reader` accessor is SYNTHESIZED by the backend from the field's
+    # attribute -- _extract_class tags the field is_reader and deliberately does
+    # NOT emit the CV as a method, precisely so nothing shadows it. That CV is
+    # still in the stash, so without this guard it lands here instead and the
+    # accessor is declared twice: once synthesized from the field, once as a
+    # MOP::Sub over the reader body. Measured on
+    # `class Pt { field $x :param :reader; ... }` -- subs came back [util, x].
+    for my $f ( ( $classes->{$pkg_name}{fields} // [] )->@* ) {
+        next unless $f->{is_reader};
+        # Field names carry their sigil ($x); the accessor drops it.
+        return if substr( $f->{name} // '', 1 ) eq $name;
+    }
+
     $classes->{$pkg_name}{subs}{$name} = {
         name      => $name,
         graph     => $full_name,
@@ -556,13 +635,34 @@ sub _extract_class {
         # A :reader accessor: a non-CVf_METHOD CV whose name matches a declared
         # field. Tag the field :reader (the backend synthesizes the accessor)
         # and do NOT emit its body as a shadowing user-method graph.
-        my $is_method = $cv->CvFLAGS & 0x1;    # CVf_METHOD
-        if ( !$is_method && ( my $f = $field_by_short{$name} ) ) {
+        # TWO DIFFERENT FLAGS, and B::CVf_METHOD is the misleading one.
+        # Measured on 5.42 (cv.h: CVf_METHOD is a back-compat alias for
+        # CVf_NOWARN_AMBIGUOUS, the legacy `:method` ATTRIBUTE; CVf_IsMETHOD is
+        # "a real method of a real class"):
+        #
+        #                        CvFLAGS   &0x1  &0x100000
+        #   method get           0x101001    1       1
+        #   sub helper           0x001000    0       0
+        #   sub attr :method     0x001001    1       0     <- attribute only
+        #   :reader accessor     0x101000    0       1
+        #
+        # NOT interchangeable: `sub attr :method` has no implicit invocant but
+        # sets 0x1, and a :reader accessor sets 0x100000 yet must not be treated
+        # as a user method. Each test keeps the flag that answers ITS question.
+        my $has_method_attr = $cv->CvFLAGS & 0x1;        # legacy :method attr
+        my $is_method       = $cv->CvFLAGS & 0x100000;   # CVf_IsMETHOD
+        if ( !$has_method_attr && ( my $f = $field_by_short{$name} ) ) {
             $f->{is_reader} = JSON::PP::true;
             next;
         }
 
-        $class{methods}{$name} = "${pkg_name}::${name}";
+        # A `method` carries an implicit invocant; a plain `sub` inside a
+        # class block does not. They become DIFFERENT metaobjects downstream
+        # (MOP::Method vs MOP::Sub), so the wire must tell them apart.
+        # _record_sub fills in {subs} during the CV walk.
+        if ($is_method) {
+            $class{methods}{$name} = "${pkg_name}::${name}";
+        }
     }
 
     # Field defaults: walk initfields_cv, pair each field (by declaration order)

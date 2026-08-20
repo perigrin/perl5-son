@@ -133,16 +133,76 @@ PERL
     ok exists( ( $w->{methods} // {} )->{get} ), 'get is a method';
     ok !exists( ( $w->{subs} // {} )->{get} ),
         'get is NOT also listed as a sub';
-    # PRE-EXISTING, not introduced here: _extract_class classifies EVERY CV in a
-    # feature-class package as a method, so a plain `sub helper` inside a class
-    # lands in {methods} too and is correctly skipped by the same guard. That
-    # conflation is upstream of this record -- pinned here as the observed
-    # behaviour so a later fix to the classifier shows up as this test changing,
-    # rather than being asserted as if it were already correct.
-    ok exists( ( $w->{methods} // {} )->{helper} ),
-        'a plain sub in a class is (currently) classified as a method';
-    ok !exists( ( $w->{subs} // {} )->{helper} ),
-        'and so is not double-listed under subs';
+    # FIXED IN 1b (this test previously pinned the opposite as observed-not-
+    # endorsed): _extract_class used to put EVERY non-:reader CV into {methods}
+    # regardless of the flag it had already computed, so a plain `sub helper`
+    # inside a class block was reported as a method. It now honours
+    # CvFLAGS & CVf_METHOD, which is the same distinction the loader needs to
+    # choose MOP::Method vs MOP::Sub -- a method carries an implicit invocant
+    # and a sub does not.
+    ok exists( ( $w->{subs} // {} )->{helper} ),
+        'a plain sub in a class is recorded as a SUB';
+    ok !exists( ( $w->{methods} // {} )->{helper} ),
+        'and not as a method';
+};
+
+# A `:reader` accessor is SYNTHESIZED by the backend from the field attribute.
+# Its CV is still in the stash, so it must not ALSO be recorded as a sub --
+# that would declare the accessor twice, the second shadowing the first.
+# Measured before the guard: subs came back [util, x].
+subtest 'a :reader accessor is not recorded as a sub' => sub {
+    my $wire = wire_for(<<'PERL', 'rdr', no_filter => 1);
+use feature 'class';
+no warnings 'experimental::class';
+class Pt { field $x :param :reader = 0; method dbl { $x * 2 } sub util { 9 } }
+my $p = Pt->new(x => 3);
+print $p->x + $p->dbl, "\n";
+PERL
+    my $c = $wire->{classes}{Pt} or do { fail 'Pt recorded'; return };
+    my ($f) = grep { ( $_->{name} // '' ) eq '$x' } ( $c->{fields} // [] )->@*;
+    ok $f && $f->{is_reader}, 'the field is tagged :reader';
+    ok !exists( ( $c->{subs} // {} )->{x} ),
+        'the synthesized accessor is NOT also a sub';
+    ok exists( ( $c->{subs} // {} )->{util} ),
+        'a genuine sub alongside it still is';
+};
+
+# THE REFERENCED-CLASS PATH, which neither the other subtests here nor the
+# chalk corpus gate exercise: the gate puts EVERY class in its package= filter,
+# so _emit_referenced_classes is never taken there. A class reached only by
+# being CALLED (out of filter) is translated by that path alone -- and it used
+# to reach a plain sub only because every CV was recorded under {methods}.
+# Measured before the fix: MyMod::helper vanished from the graph set while
+# main's Call node still named it. An unresolvable callee, no GAP, no warning.
+subtest 'a referenced out-of-filter class keeps its subs' => sub {
+    my $moddir = "$dir/lib";
+    mkdir $moddir unless -d $moddir;
+    open my $mf, '>', "$moddir/MyMod.pm" or die $!;
+    print {$mf} <<'PERL';
+use 5.42.0;
+use feature 'class';
+no warnings 'experimental::class';
+class MyMod { field $n :param = 0; method get { $n } sub helper { 7 } }
+1;
+PERL
+    close $mf;
+
+    my $file = "$dir/refcls.pl";
+    open my $fh, '>', $file or die $!;
+    print {$fh} "use 5.42.0;\nuse lib '$moddir';\nuse MyMod;\n"
+        . "print MyMod->new(n=>1)->get + MyMod::helper(), \"\\n\";\n";
+    close $fh;
+
+    # The DEFAULT filter -- this is the shape that breaks.
+    my $json = qx{$PERL -Ilib -MO=SoN,json,package=main $file 2>$dir/refcls.err};
+    die 'no JSON' unless length $json;
+    my $wire = JSON::PP->new->decode($json);
+
+    ok exists $wire->{methods}{'MyMod::get'},
+        'the referenced class method is translated';
+    ok exists $wire->{methods}{'MyMod::helper'},
+        'and its plain SUB still has a graph'
+        or diag 'graphs: ' . join ',', sort keys $wire->{methods}->%*;
 };
 
 done_testing;
