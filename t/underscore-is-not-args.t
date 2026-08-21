@@ -89,4 +89,31 @@ subtest '$_ still resolves on its own' => sub {
         or diag 'match has no subject';
 };
 
+# THE GENERAL RULE, not just the `_` case. `$g` and `@g` are unrelated
+# variables in one stash. The first version of this fix sigil-qualified all
+# five scope KEYS but stamped the sigil on only two of four CONSTRUCTION
+# sites, so the key said '@' while the node defaulted to '$' -- and the nodes
+# hash-consed anyway. Measured then: DISTINCT=1 where 2 was required.
+#
+# A key and a hash are two different things; qualifying one does not qualify
+# the other. This asserts the NODES, which is where the identity lives.
+subtest '$g and @g are different nodes' => sub {
+    require SoN::FromOptree;
+    require SoN::OptSuppress;
+    SoN::OptSuppress::suppress_peep();
+    my $cv = eval 'sub { my $s = $main::g; my $n = scalar @main::g; $s . $n }';
+    SoN::OptSuppress::restore_peep();
+    ok $cv, 'compiled' or return;
+
+    my $graph = eval { SoN::FromOptree->translate($cv) };
+    ok $graph, 'translated' or do { diag $@; return };
+
+    my @stash = grep { $_->operation eq 'StashAccess' } @{ $graph->nodes };
+    my %by_sigil = map { $_->sigil => 1 } @stash;
+    is scalar(@stash), 2, 'two distinct StashAccess nodes for one name'
+        or diag join ', ', map { $_->sigil . $_->var_name } @stash;
+    ok $by_sigil{'$'}, 'one carries the scalar sigil';
+    ok $by_sigil{'@'}, 'the other carries the array sigil';
+};
+
 done_testing;

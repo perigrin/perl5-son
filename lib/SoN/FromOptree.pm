@@ -1550,8 +1550,9 @@ class SoN::FromOptree 0.01 {
             else {
                 my $node = $factory->make('StashAccess',
                     stash_name => $gv->STASH->NAME,
+                    sigil      => $agg_sigil,
                     var_name   => $gv_name);
-                $sim->define($key, $node) unless defined $existing;
+                $sim->define(_stash_key($node), $node) unless defined $existing;
                 $sim->push_node($node);
             }
             return ($op->next, 'handled');
@@ -1856,10 +1857,11 @@ class SoN::FromOptree 0.01 {
                 else {
                     my $node = $factory->make('StashAccess',
                         stash_name => $gv->STASH->NAME,
+                        sigil      => '$',
                         var_name   => $gv_name);
                     # Seed only when unbound: an lvalue over an already-bound
                     # name must not clobber it (`$g += 2` reads first).
-                    $sim->define($key, $node) unless defined $existing;
+                    $sim->define(_stash_key($node), $node) unless defined $existing;
                     $sim->push_node($node);
                 }
             }
@@ -2208,9 +2210,7 @@ class SoN::FromOptree 0.01 {
                 # are unrelated variables in one stash, and `$_` vs `@_` is the
                 # case that bit -- a name-only key bound a match subject and an
                 # argument array to the same slot.
-                $sim->define(
-                    $target->stash_name . '::' . $target->sigil
-                        . $target->var_name, $value);
+                $sim->define(_stash_key($target), $value);
                 $sim->push_node($value);
             }
             else {
@@ -2470,8 +2470,7 @@ class SoN::FromOptree 0.01 {
                     $sigil = _stash_target_sigil($op);
                     # Sigil-qualified, matching the read sites: one stash can
                     # hold `$g` and `@g` as unrelated variables.
-                    $key   = $target->stash_name . '::'
-                           . ($sigil // $target->sigil) . $target->var_name;
+                    $key   = _stash_key($target);
                 }
 
                 if (defined $sigil && ($sigil eq '@' || $sigil eq '%')) {
@@ -2906,7 +2905,7 @@ class SoN::FromOptree 0.01 {
         _walk_loop_body($cv, $start_op, $scout_sim, $scout_factory, $opmap, {}, {});
         my $scout_scope = $scout_sim->scope_bindings;
         my %extra = map { $_ => 1 } $extra_targs->@*;
-        return [ sort { $a <=> $b }
+        return [ sort _scope_key_order
             grep {
                 !$extra{$_}
                 && defined $scout_scope->{$_}
@@ -3091,7 +3090,7 @@ class SoN::FromOptree 0.01 {
         _walk_branch($cv, $cond_start, $cond_sim, $cond_factory, $opmap,
             {}, undef, 0, $$probe);
         my $after = $cond_sim->scope_bindings;
-        return [ sort { $a <=> $b }
+        return [ sort _scope_key_order
             grep { defined $after->{$_} && $after->{$_} != $placeholder{$_} }
             keys %placeholder ];
     }
@@ -3860,7 +3859,8 @@ class SoN::FromOptree 0.01 {
     # _stash_target_sigil($aassign_op) -> '@' | '%' | undef
     #
     # Which container an `our @x = ...` / `our %h = ...` assigns into. A
-    # StashAccess carries no sigil (unlike PadAccess's varname), so it comes
+    # The aassign TARGET's sigil is not on the node the LHS pushed (that node
+    # is built by the read site, which stamps its own), so it comes
     # from the op that pushed the target: rv2av for an array, rv2hv for a hash.
     # Walk the aassign's subtree for the first of either.
     sub _stash_target_sigil ($aassign) {
@@ -4583,6 +4583,19 @@ class SoN::FromOptree 0.01 {
         return -1 if $an;
         return  1 if $bn;
         return $a cmp $b;
+    }
+
+    # _stash_key($node) -- the scope-map key for a package variable.
+    #
+    # ONE definition, derived from the NODE, so the key and the node's identity
+    # cannot drift apart. They did: the aggregate read site keyed on '@' while
+    # constructing a node that defaulted to '$', so `$g` and `@g` hash-consed
+    # into one node while binding to two different slots.
+    #
+    # The sigil is part of the identity because `$g` and `@g` are unrelated
+    # variables in one stash -- `$_` vs `@_` is the case that bites.
+    sub _stash_key ($node) {
+        return $node->stash_name . '::' . $node->sigil . $node->var_name;
     }
 
     sub _args_source ($factory) {
