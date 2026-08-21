@@ -105,9 +105,20 @@ subtest 'FieldAccess' => sub {
 };
 
 subtest 'StashAccess' => sub {
-    my $stash = $factory->make('StashAccess', stash_name => 'Foo', var_name => '$bar');
+    # The sigil is its own REQUIRED field, not a prefix on the name. Carrying
+    # it in var_name ('$bar') left the two indistinguishable at the identity,
+    # which is what let $_ and @_ hash-cons into one node.
+    my $stash = $factory->make('StashAccess',
+        stash_name => 'Foo', sigil => '$', var_name => 'bar');
     is($stash->stash_name, 'Foo', 'stash name');
-    is($stash->var_name, '$bar', 'var name');
+    is($stash->sigil, '$', 'sigil');
+    is($stash->var_name, 'bar', 'var name');
+
+    # Same name, different sigil => a DIFFERENT node.
+    my $arr = $factory->make('StashAccess',
+        stash_name => 'Foo', sigil => '@', var_name => 'bar');
+    isnt($stash->content_hash, $arr->content_hash,
+        '$Foo::bar and \@Foo::bar are different variables');
 };
 
 done_testing;

@@ -10,18 +10,20 @@ class SoN::IR::Node::StashAccess :isa(SoN::IR::Node::Access) {
     field $stash_name :param :reader = '';
     field $var_name   :param :reader = '';
 
-    # THE SIGIL IS PART OF THE IDENTITY. `$_` and `@_` are DIFFERENT variables
-    # that share the glob name `_`, and a name-only identity hash-consed them
-    # into ONE node: measured, `sub f { my $n = shift; /x/ ? 1 : 0 }` produced a
-    # single StashAccess(_) feeding BOTH the `shift @_` Call and the RegexMatch
-    # subject. One node cannot be two variables.
+    # THE SIGIL IS PART OF THE IDENTITY, and it is REQUIRED -- there is no
+    # sensible default.
     #
-    # The same applies to any stash holding one name under two sigils -- `$g`
-    # and `@g` are unrelated variables.
+    # `_` alone names THREE different things in perl: the scalar `$_`, the
+    # argument array `@_`, and the bareword `_` filetest handle (`-f _`, which
+    # reuses the last stat buffer). A name-only identity hash-consed the first
+    # two into ONE node -- measured, a single StashAccess(_) fed both a
+    # `shift @_` Call and a RegexMatch subject. The same applies to any stash
+    # holding one name under two sigils: `$g` and `@g` are unrelated variables.
     #
-    # Defaults to '$' so an unstamped construction keeps a stable identity
-    # rather than silently merging with a differently-sigilled sibling.
-    field $sigil :param :reader = '$';
+    # No default, deliberately: a default lets a construction site omit the
+    # sigil and still hash-cons, which is exactly how the collision hid. A
+    # sigil-less variable lookup should be impossible to express.
+    field $sigil :param :reader;
 
     method operation() { 'StashAccess' }
 
