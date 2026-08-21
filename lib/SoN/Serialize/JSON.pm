@@ -86,7 +86,7 @@ sub _extract_fields ($node, $id_remap) {
             field_stash => $node->field_stash,
         };
     }
-    if ($op eq 'StashAccess') {
+    if ($op eq 'EntryDef') {
         return {
             stash_name => $node->stash_name,
             # The sigil is part of the variable's IDENTITY, not decoration:

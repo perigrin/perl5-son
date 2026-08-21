@@ -52,10 +52,10 @@ subtest 'capture read with no preceding match is a loud GAP' => sub {
         qr/GAP: capture/, 'dies with a GAP message, not a mystery');
 };
 
-subtest 'non-digit package scalar is a StashAccess with a name' => sub {
+subtest 'non-digit package scalar is a EntryDef with a name' => sub {
     my $g = graph_of('sub { our $x; $x }');
-    my $sa = node_of($g, 'StashAccess');
-    ok(defined $sa, 'has a StashAccess node') or return;
+    my $sa = node_of($g, 'EntryDef');
+    ok(defined $sa, 'has a EntryDef node') or return;
     is($sa->stash_name, 'main', 'stash name extracted from the GV');
     is($sa->var_name, 'x', 'var name extracted from the GV');
 };

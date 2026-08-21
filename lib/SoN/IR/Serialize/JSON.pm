@@ -73,7 +73,7 @@ sub _extract_fields ($node, $id_remap) {
     if ($op eq 'FieldAccess') {
         return { field_index => $node->field_index, field_stash => $node->field_stash };
     }
-    if ($op eq 'StashAccess') {
+    if ($op eq 'EntryDef') {
         return {
             stash_name => $node->stash_name,
             var_name   => $node->var_name,
@@ -345,7 +345,7 @@ sub to_json ($named_graphs) {
 # _deserialize_graph($method_data) — rebuild a SoN::IR::Graph from data.
 # Handles the full SoN schema. Fields that Chalk nodes don't support
 # (e.g., pattern/replacement on RegexMatch/RegexSubst, scope on VarDecl,
-# stash_name/var_name on StashAccess) are silently dropped.
+# stash_name/var_name on EntryDef) are silently dropped.
 # -----------------------------------------------------------------------
 sub _deserialize_graph ($method_data) {
     my $factory   = SoN::IR::NodeFactory->new();
@@ -437,7 +437,7 @@ sub _deserialize_graph ($method_data) {
         elsif ($op eq 'PostfixDeref') {
             $args{sigil} = $fields->{sigil};
         }
-        elsif ($op eq 'StashAccess') {
+        elsif ($op eq 'EntryDef') {
             $args{stash_name} = $fields->{stash_name} // '';
             $args{var_name}   = $fields->{var_name}   // '';
         }
@@ -589,7 +589,7 @@ sub _resolve_direct_calls ($graphs) {
 # _seed_direct_call_arg_reprs(\%graphs) -> count of nodes newly stamped.
 #
 # A callee compiled in isolation reads its Nth positional argument via a
-# `shift @_` (Call(builtin,shift) over StashAccess(*,_)), which has no type on
+# `shift @_` (Call(builtin,shift) over EntryDef(*,_)), which has no type on
 # its own -- so an expression over it (`shift + 1`) stays untyped and the
 # backend's NO-REPR guard would fire. The type is known at the CALL site: it is
 # the argument's repr. Stamp the callee's single `shift @_` read with the
@@ -611,7 +611,7 @@ sub _seed_direct_call_arg_reprs ($graphs) {
             next unless @args;
 
             # Find the callee's single positional argument read: either a
-            # `shift @_` (Call builtin shift over StashAccess(_)) or a `$_[0]`
+            # `shift @_` (Call builtin shift over EntryDef(_)) or a `$_[0]`
             # subscript (Subscript over Constant("_") at index 0). Both bind the
             # first argument; stamp whichever the callee uses.
             my $callee = $node->resolved_graph;
@@ -623,7 +623,7 @@ sub _seed_direct_call_arg_reprs ($graphs) {
                     && defined $n->name && $n->name eq 'shift'
                     && do {
                         my ($op) = grep { blessed($_) } $n->inputs->@*;
-                        $op && $op->operation eq 'StashAccess'
+                        $op && $op->operation eq 'EntryDef'
                             && $op->can('var_name') && ($op->var_name // '') eq '_';
                     };
             } $callee->nodes->@*;

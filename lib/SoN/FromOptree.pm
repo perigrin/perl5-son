@@ -1460,7 +1460,7 @@ class SoN::FromOptree 0.01 {
         # A PACKAGE array/hash (`@x`, `%h`) reaches here as rv2av/rv2hv over a
         # `gv`. The gv handler pushed the variable's NAME as a string Constant
         # (it is the callee name for an entersub), and rv2sv pops that Constant
-        # and replaces it with a StashAccess for a package SCALAR -- but no
+        # and replaces it with a EntryDef for a package SCALAR -- but no
         # equivalent exists for an aggregate, so the NAME STRING was left on the
         # stack and flowed into whatever consumed the array.
         #
@@ -1474,7 +1474,7 @@ class SoN::FromOptree 0.01 {
         #
         # Two package aggregates ARE modeled and stay exempt, and between them
         # they show what the general case is missing:
-        #   @_        _args_source builds a StashAccess for *main::_ -- a real
+        #   @_        _args_source builds a EntryDef for *main::_ -- a real
         #             array source rather than a name string.
         #   %ENV      pushed FULLY QUALIFIED as "main::ENV" (see the gv handler)
         #             so a later helem reads the process environment.
@@ -1496,7 +1496,7 @@ class SoN::FromOptree 0.01 {
         # term.t passed. The name Constant is popped here.
         #
         # @_ and %ENV keep their existing sources: _args_source builds the
-        # arg-array StashAccess, and main::ENV is the process environment rather
+        # arg-array EntryDef, and main::ENV is the process environment rather
         # than a package hash.
         if (($name eq 'rv2av' || $name eq 'rv2hv')
                 && $op->can('first') && ${$op->first}
@@ -1532,14 +1532,14 @@ class SoN::FromOptree 0.01 {
             my $existing = $sim->lookup($key);
 
             # An LVINTRO target (`our @x = ...`) or an OPf_MOD use is a
-            # DEFINITION site: push a fresh StashAccess as the name token the
+            # DEFINITION site: push a fresh EntryDef as the name token the
             # following aassign defines from. A plain read of a bound name
             # pushes the bound VALUE, exactly as padav does.
             #
             # OPf_REF alone is NOT a definition -- it means the consumer wants
             # the AGGREGATE ITSELF rather than a flattened list. `$#x` is
             # exactly that shape (rv2av sKR/1 feeding av2arylen), and treating
-            # it as a target pushed a fresh StashAccess instead of the bound
+            # it as a target pushed a fresh EntryDef instead of the bound
             # ArrayRef, so the length had nothing to measure. Measured: `$#x`
             # GAPped on Length.operand for every array size.
             my $is_target = ($op->private & 0x80)      # OPpLVAL_INTRO
@@ -1548,7 +1548,7 @@ class SoN::FromOptree 0.01 {
                 $sim->push_node($existing);
             }
             else {
-                my $node = $factory->make('StashAccess',
+                my $node = $factory->make('EntryDef',
                     stash_name => $gv->STASH->NAME,
                     sigil      => $agg_sigil,
                     var_name   => $gv_name);
@@ -1765,7 +1765,7 @@ class SoN::FromOptree 0.01 {
                 # it to STASH::NAME so a direct-call Call node names the same key
                 # (main::foo) the producer keys the callee graph under. %ENV stays
                 # fully qualified for the same disambiguation reason; every other
-                # gv keeps its short NAME (the existing StashAccess contract).
+                # gv keeps its short NAME (the existing EntryDef contract).
                 $value = ($gv->STASH->NAME eq 'main' && $gv->NAME eq 'ENV')
                     ? 'main::ENV'
                     : $gv->NAME;
@@ -1773,7 +1773,7 @@ class SoN::FromOptree 0.01 {
             # `@_` is the ARGUMENT LIST, not a name. `$_[0]` reaches it as
             # gv[*_] under an rv2av, and this handler pushed the NAME as a
             # string Constant -- so the array was represented three different
-            # ways across the IR (StashAccess for `shift`, a bare Constant
+            # ways across the IR (EntryDef for `shift`, a bare Constant
             # here, and nothing at all for `my (...) = @_`). Push the real
             # source node instead, so every spelling of `@_` names one thing.
             #
@@ -1794,7 +1794,7 @@ class SoN::FromOptree 0.01 {
         # Handle gvsv (peep-fused) and rv2sv-over-gv (canonical): a package
         # scalar read. A numbered capture var ($1..) reads a group of the
         # last regex match (corpus host.md H1/H2: RegexCapture(match, n)
-        # :Str); any other package scalar is a StashAccess named from its GV.
+        # :Str); any other package scalar is a EntryDef named from its GV.
         if ($name eq 'gvsv'
             || ($name eq 'rv2sv' && $op->can('first') && $op->first->name eq 'gv')) {
             my $gv_op = $name eq 'gvsv' ? $op : $op->first;
@@ -1822,10 +1822,10 @@ class SoN::FromOptree 0.01 {
                 #
                 # This mirrors the padsv handler: an lvalue (OPf_MOD, minus the
                 # deref case, which READS the ref to dereference it) pushes a
-                # fresh StashAccess as a NAME TOKEN for sassign to define from;
+                # fresh EntryDef as a NAME TOKEN for sassign to define from;
                 # an rvalue over a bound name pushes the bound VALUE.
                 #
-                # The StashAccess that survives is the ENTRY DEFINITION: the
+                # The EntryDef that survives is the ENTRY DEFINITION: the
                 # variable's incoming value at unit entry, before any assignment
                 # in this unit. Every later definition is an ordinary SSA value.
                 # `local $g` is a TEMPORARY SCOPE CHANGE: within the enclosing
@@ -1868,7 +1868,7 @@ class SoN::FromOptree 0.01 {
                     $sim->push_node($existing);
                 }
                 else {
-                    my $node = $factory->make('StashAccess',
+                    my $node = $factory->make('EntryDef',
                         stash_name => $gv->STASH->NAME,
                         sigil      => '$',
                         var_name   => $gv_name);
@@ -1925,7 +1925,7 @@ class SoN::FromOptree 0.01 {
                 # An unbound match reads $_ — the package scalar main::_, which
                 # is an ordinary SSA variable in the scope map. Resolve it the
                 # same way a `$_` READ does, so the match sees the reaching
-                # definition; building a fresh StashAccess here would bypass the
+                # definition; building a fresh EntryDef here would bypass the
                 # binding and reach the backend as an untyped entry definition.
                 # Keyed by SIGIL as well as name: `$_` and `@_` are
                 # different variables sharing the glob name `_`, and a
@@ -1935,7 +1935,7 @@ class SoN::FromOptree 0.01 {
                 my $key = 'main::$_';
                 $target = $sim->lookup($key);
                 unless ($target) {
-                    $target = $factory->make('StashAccess',
+                    $target = $factory->make('EntryDef',
                         stash_name => 'main', sigil => '$', var_name => '_');
                     $sim->define($key, $target);
                 }
@@ -2195,24 +2195,24 @@ class SoN::FromOptree 0.01 {
                 $sim->push_node($value);
             }
             # A package-scalar store (`our $g = 5`, where $g is a stash entry):
-            # the target is a StashAccess lvalue. Without this branch the store
+            # the target is a EntryDef lvalue. Without this branch the store
             # falls through to the catch-all below (push_node($value)), which
             # DROPS it -- a later `$g` read then loads an uninitialized slot (a
-            # silent miscompile). Emit an explicit Assign(StashAccess-lvalue,
+            # silent miscompile). Emit an explicit Assign(EntryDef-lvalue,
             # value) threaded onto the control chain via control_in, exactly
             # like the Subscript/FieldAccess element/field stores. Stamp the
-            # lvalue StashAccess with the RHS value's OWN repr (Int for `= 5`,
+            # lvalue EntryDef with the RHS value's OWN repr (Int for `= 5`,
             # Str for `= "hi"`) so the matching read carries the right type: the
             # store lvalue and the read hash-cons to ONE node, so stamping here
             # types both. A hardcoded Int would miscompile a Str global. Fall
             # back to Int when the RHS carries no stamp (the historical default).
-            elsif ($target->isa('SoN::IR::Node::StashAccess')) {
+            elsif ($target->isa('SoN::IR::Node::EntryDef')) {
                 # An assignment is a DEFINITION, not a store into a cell: it
                 # binds a new value that later reads of this name resolve to.
-                # Identical to the PadAccess branch above -- the StashAccess was
+                # Identical to the PadAccess branch above -- the EntryDef was
                 # pushed as a name token and never enters the dataflow.
                 #
-                # This replaces an Assign(StashAccess-lvalue, value) into a
+                # This replaces an Assign(EntryDef-lvalue, value) into a
                 # typed module-level slot. That model gave one hash-consed node
                 # ONE representation while each assignment carried its own, so a
                 # scalar assigned two types lost the second store entirely
@@ -2458,17 +2458,17 @@ class SoN::FromOptree 0.01 {
             # access has a real container.
             #
             # A LEXICAL target is a PadAccess keyed by pad index; a PACKAGE
-            # target is a StashAccess keyed by its qualified name. %scope takes
+            # target is a EntryDef keyed by its qualified name. %scope takes
             # either, which is the whole reason a package aggregate needs no
             # separate machinery -- `our` and `my` differ in visibility and
             # lifetime, not in modelling.
             #
             # The SIGIL says which container to build. A PadAccess carries it in
-            # varname ('@a'); a StashAccess does not, so it comes from the op
+            # varname ('@a'); a EntryDef does not, so it comes from the op
             # that pushed the target -- rv2av for an array, rv2hv for a hash.
             if (@$lhs == 1 && $sim->has_mark
                 && ( $lhs->[0]->isa('SoN::IR::Node::PadAccess')
-                  || $lhs->[0]->isa('SoN::IR::Node::StashAccess') )) {
+                  || $lhs->[0]->isa('SoN::IR::Node::EntryDef') )) {
                 my $target = $lhs->[0];
                 my $is_pad = $target->isa('SoN::IR::Node::PadAccess');
 
@@ -4582,7 +4582,7 @@ class SoN::FromOptree 0.01 {
 
     # The implicit @_ argument array. Bare shift/pop operate on it, and a
     # list-assignment `my (...) = @_` destructures it. @_ is the package array
-    # *main::_, so it is modeled as a StashAccess (a real array source), never a
+    # *main::_, so it is modeled as a EntryDef (a real array source), never a
     # string Constant.
     # Scope keys are MIXED: a pad slot is an integer, a package variable is a
     # qualified name ('main::$_'). A numeric sort over both warns and orders

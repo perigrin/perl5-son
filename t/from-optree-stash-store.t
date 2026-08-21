@@ -9,7 +9,7 @@ use SoN::OptSuppress;
 use SoN::FromOptree;
 
 # `our $g = 5` binds a value that later reads of $g resolve to. It used to emit
-# an Assign(StashAccess-lvalue, value) into a TYPED module-level slot, with one
+# an Assign(EntryDef-lvalue, value) into a TYPED module-level slot, with one
 # slot kind per representation (i64 / (ptr,len) / double).
 #
 # That model gave the hash-consed lvalue node ONE representation while each
@@ -38,7 +38,7 @@ subtest 'a read resolves to the bound value, not a slot load' => sub {
     is($val->value, 5, '... which is what was assigned');
 
     is(scalar nodes_of($g, 'Assign'), 0,
-        'no Assign(StashAccess-lvalue): an assignment is a definition, not a store');
+        'no Assign(EntryDef-lvalue): an assignment is a definition, not a store');
 };
 
 subtest 'a rebind is a new binding — the read sees the LATER value' => sub {
@@ -64,11 +64,11 @@ subtest 'a definition may change representation — the bug the slot model had' 
 
 subtest 'an UNBOUND read is the entry definition' => sub {
     # A package scalar read before any assignment in this unit has no reaching
-    # definition here; the StashAccess names its incoming value. This is the one
-    # role StashAccess keeps.
+    # definition here; the EntryDef names its incoming value. This is the one
+    # role EntryDef keeps.
     my $g = graph_of('sub { our $neverset; $neverset }');
-    my ($sa) = nodes_of($g, 'StashAccess');
-    ok(defined $sa, 'the entry definition is a StashAccess') or return;
+    my ($sa) = nodes_of($g, 'EntryDef');
+    ok(defined $sa, 'the entry definition is a EntryDef') or return;
     is($sa->stash_name, 'main', 'stash is main');
     is($sa->var_name, 'neverset', 'named for the variable');
 };

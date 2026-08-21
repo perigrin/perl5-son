@@ -28,21 +28,21 @@ sub ops_of ($wire, $graph) {
 }
 
 # `@_` is the ARGUMENT LIST: created by the caller, scoped to the innermost
-# enclosing sub call. `StashAccess`'s remaining job is the ENTRY DEFINITION --
+# enclosing sub call. `EntryDef`'s remaining job is the ENTRY DEFINITION --
 # naming a value defined OUTSIDE this unit, with no value of its own.
 #
 # Those are different jobs. Riding both on one node is what let `$_` and `@_`
 # hash-cons into a single node; the sigil closed that hazard, but the conflation
-# is still there and it blocks renaming StashAccess to EntryDef (it would not
+# is still there and it blocks renaming EntryDef to EntryDef (it would not
 # mean one thing).
-subtest '@_ is an ArgsSource, not a StashAccess' => sub {
+subtest '@_ is an ArgsSource, not a EntryDef' => sub {
     my $wire = wire_for('sub f { my $n = shift; $n + 1 } print f(41), "\n";', 'shift');
     my @ops = ops_of($wire, 'main::f');
 
     ok scalar(grep { $_ eq 'ArgsSource' } @ops),
         '@_ is an ArgsSource node' or diag "ops: @ops";
-    ok !scalar(grep { $_ eq 'StashAccess' } @ops),
-        'and NOT a StashAccess' or diag "ops: @ops";
+    ok !scalar(grep { $_ eq 'EntryDef' } @ops),
+        'and NOT a EntryDef' or diag "ops: @ops";
 };
 
 # `$_[0]` reaches the same array, so it must reach the same node kind.
@@ -63,13 +63,13 @@ subtest '$_ does not become an ArgsSource' => sub {
 };
 
 # And the OTHER remaining role stays put: a package variable read before any
-# write in this unit is an entry definition, and still a StashAccess until
+# write in this unit is an entry definition, and still a EntryDef until
 # step 4 renames it.
-subtest 'an entry definition is still a StashAccess' => sub {
+subtest 'an entry definition is still a EntryDef' => sub {
     my $wire = wire_for('our $g; print $g // "u", "\n";', 'entrydef');
     my @ops  = ops_of($wire, 'main::__PROGRAM__');
-    ok scalar(grep { $_ eq 'StashAccess' } @ops),
-        'an unwritten package read is a StashAccess' or diag "ops: @ops";
+    ok scalar(grep { $_ eq 'EntryDef' } @ops),
+        'an unwritten package read is an EntryDef' or diag "ops: @ops";
     ok !scalar(grep { $_ eq 'ArgsSource' } @ops),
         'and not an ArgsSource';
 };

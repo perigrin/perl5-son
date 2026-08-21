@@ -49,7 +49,7 @@ class SoN::Render::Text 0.01 {
                 push @attrs, "index: " . $node->field_index;
                 push @attrs, "stash: '" . $node->field_stash . "'";
             }
-            elsif ($op eq 'StashAccess') {
+            elsif ($op eq 'EntryDef') {
                 push @attrs, "stash: '" . $node->stash_name . "'";
                 push @attrs, "name: '" . $node->var_name . "'";
             }

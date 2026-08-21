@@ -10,7 +10,7 @@ use SoN::FromOptree;
 # spell out: bare `shift` is a nullary op (the @_ operand is implied), and
 # `my ($x) = @_` has its rv2av(gv[*_]) RHS elided by the padrange optimization.
 # @_ must be modeled as a real array source (an ArgsSource node), not dropped.
-# It rode on StashAccess(main,'_') until the node split -- StashAccess's job is
+# It rode on EntryDef(main,'_') until the node split -- EntryDef's job is
 # the ENTRY DEFINITION, and an argument list is not that.
 # or turned into a string Constant.
 

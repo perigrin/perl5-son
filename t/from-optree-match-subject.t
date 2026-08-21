@@ -46,7 +46,7 @@ subtest 'an unbound match reads $_, resolved to its reaching definition' => sub 
 
     # $_ is the package scalar main::_, an ordinary SSA variable, so the match
     # subject is the VALUE bound by `$_ = "test"` — not a node naming the
-    # variable. Building a fresh StashAccess here instead would bypass the
+    # variable. Building a fresh EntryDef here instead would bypass the
     # binding and reach the backend as an untyped entry definition.
     my ($match) = nodes_of($g, 'RegexMatch');
     ok($match, 'the match node exists') or return;
@@ -79,12 +79,12 @@ subtest 'a package-scalar subject is popped from the stack (OPf_STACKED)' => sub
 
 subtest 'an UNASSIGNED $_ is the entry definition' => sub {
     # With no reaching definition in this unit, the subject names the variable's
-    # incoming value — the one role StashAccess keeps under package-scalar SSA.
+    # incoming value — the one role EntryDef keeps under package-scalar SSA.
     my $g = translate('sub { /^test/ ? 1 : 0 }');
     my ($match) = nodes_of($g, 'RegexMatch');
     ok($match, 'the match node exists') or return;
     my $subject = $match->inputs->[0];
-    is($subject->operation, 'StashAccess', 'the subject is the entry definition');
+    is($subject->operation, 'EntryDef', 'the subject is the entry definition');
     is($subject->var_name, '_', '... naming $_');
 };
 
@@ -93,7 +93,7 @@ subtest 'a lexical subject still comes from the pad target' => sub {
 
     my ($match) = nodes_of($g, 'RegexMatch');
     my $subject = $match->inputs->[0];
-    isnt($subject->operation, 'StashAccess',
+    isnt($subject->operation, 'EntryDef',
         'a lexical subject is NOT rerouted to a package scalar');
 };
 

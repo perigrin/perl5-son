@@ -26,7 +26,7 @@ sub nodes_of ($wire, $graph) {
 # THE COLLISION. `$_` and `@_` are different variables that happen to share the
 # glob name `_`. The producer keyed BOTH as `main::_` in the scope map, so in a
 # sub using `shift @_` AND an unbound `/re/` match they hash-consed into ONE
-# node -- measured: a single StashAccess(_) feeding both the shift Call and the
+# node -- measured: a single EntryDef(_) feeding both the shift Call and the
 # RegexMatch.
 #
 # That is a wrong graph regardless of what the backend then does with it: one
@@ -41,7 +41,7 @@ subtest 'an unbound $_ match does not share a node with @_' => sub {
 
     # `@_` is now its own NODE KIND, which is a stronger separation than the
     # sigil that first fixed this: the two cannot share identity even in
-    # principle. (The sigil still matters for $g vs @g, and for StashAccess's
+    # principle. (The sigil still matters for $g vs @g, and for EntryDef's
     # remaining entry-definition role.)
     my %args_id = map  { ($_->{id} // '') => 1 }
                   grep { ($_->{op} // '') eq 'ArgsSource' } @n;
@@ -108,9 +108,9 @@ subtest '$g and @g are different nodes' => sub {
     my $graph = eval { SoN::FromOptree->translate($cv) };
     ok $graph, 'translated' or do { diag $@; return };
 
-    my @stash = grep { $_->operation eq 'StashAccess' } @{ $graph->nodes };
+    my @stash = grep { $_->operation eq 'EntryDef' } @{ $graph->nodes };
     my %by_sigil = map { $_->sigil => 1 } @stash;
-    is scalar(@stash), 2, 'two distinct StashAccess nodes for one name'
+    is scalar(@stash), 2, 'two distinct EntryDef nodes for one name'
         or diag join ', ', map { $_->sigil . $_->var_name } @stash;
     ok $by_sigil{'$'}, 'one carries the scalar sigil';
     ok $by_sigil{'@'}, 'the other carries the array sigil';

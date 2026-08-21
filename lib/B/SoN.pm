@@ -413,7 +413,7 @@ sub _empty_class {
 # is. Both are known HERE, while walking the CV. Neither survives into the graph
 # usefully:
 #
-#   shift              StashAccess(_)              -- and collides with $_
+#   shift              EntryDef(_)              -- and collides with $_
 #   $_[0]              Constant("_") + Subscript
 #   my ($a,$b) = @_    NOTHING -- @_ is absent from the graph entirely
 #   scalar @_          Constant("_") returned directly
