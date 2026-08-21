@@ -9,7 +9,9 @@ use SoN::FromOptree;
 # Both idioms read the implicit @_ argument array, which the optree does NOT
 # spell out: bare `shift` is a nullary op (the @_ operand is implied), and
 # `my ($x) = @_` has its rv2av(gv[*_]) RHS elided by the padrange optimization.
-# @_ must be modeled as a real array source (StashAccess on *_), not dropped
+# @_ must be modeled as a real array source (an ArgsSource node), not dropped.
+# It rode on StashAccess(main,'_') until the node split -- StashAccess's job is
+# the ENTRY DEFINITION, and an argument list is not that.
 # or turned into a string Constant.
 
 sub ops_of ($coderef) {
@@ -30,18 +32,18 @@ subtest 'bare shift reads implicit @_' => sub {
 
     # The @_ operand must be a real array source, not a bogus Constant.
     my @args_sources = grep {
-        $_->operation eq 'StashAccess' && $_->var_name eq '_'
+        $_->operation eq 'ArgsSource'
     } $g->nodes->@*;
-    ok(@args_sources, 'shift operand is a StashAccess on @_, not a Constant');
+    ok(@args_sources, 'shift operand is an ArgsSource, not a Constant');
 };
 
 subtest 'bare pop reads implicit @_' => sub {
     my $g = graph_of(sub { my $x = pop; return $x; });
     ok(defined $g, 'translate did not die on bare pop');
     my @args_sources = grep {
-        $_->operation eq 'StashAccess' && $_->var_name eq '_'
+        $_->operation eq 'ArgsSource'
     } $g->nodes->@*;
-    ok(@args_sources, 'pop operand is a StashAccess on @_');
+    ok(@args_sources, 'pop operand is an ArgsSource');
 };
 
 subtest 'list-assignment from @_ (single)' => sub {

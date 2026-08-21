@@ -39,19 +39,19 @@ subtest 'an unbound $_ match does not share a node with @_' => sub {
         'collide');
     my @n = nodes_of($wire, 'main::f');
 
-    # The ARGUMENT array specifically -- sigil '@'. Collecting every
-    # StashAccess would sweep up the match's own `$_` node and flag it as a
-    # collision with itself.
+    # `@_` is now its own NODE KIND, which is a stronger separation than the
+    # sigil that first fixed this: the two cannot share identity even in
+    # principle. (The sigil still matters for $g vs @g, and for StashAccess's
+    # remaining entry-definition role.)
     my %args_id = map  { ($_->{id} // '') => 1 }
-                  grep { ($_->{op} // '') eq 'StashAccess'
-                      && (($_->{fields}{sigil} // '$') eq '@') } @n;
+                  grep { ($_->{op} // '') eq 'ArgsSource' } @n;
 
     my ($shift) = grep {
         ($_->{op} // '') eq 'Call' && (($_->{fields}{name} // '') eq 'shift')
     } @n;
     ok $shift, 'the sub has a shift @_' or return;
     ok scalar(grep { $args_id{$_} } @{ $shift->{inputs} // [] }),
-        'the shift reads the @-sigil node';
+        'the shift reads the ArgsSource node';
 
     my ($match) = grep { ($_->{op} // '') eq 'RegexMatch' } @n;
     ok $match, 'the sub has a RegexMatch' or return;

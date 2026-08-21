@@ -1770,6 +1770,19 @@ class SoN::FromOptree 0.01 {
                     ? 'main::ENV'
                     : $gv->NAME;
             }
+            # `@_` is the ARGUMENT LIST, not a name. `$_[0]` reaches it as
+            # gv[*_] under an rv2av, and this handler pushed the NAME as a
+            # string Constant -- so the array was represented three different
+            # ways across the IR (StashAccess for `shift`, a bare Constant
+            # here, and nothing at all for `my (...) = @_`). Push the real
+            # source node instead, so every spelling of `@_` names one thing.
+            #
+            # Guarded on the stash: a package variable genuinely called `_` in
+            # some OTHER package is not the argument list.
+            if ($gv && $gv->NAME eq '_' && $gv->STASH->NAME eq 'main') {
+                $sim->push_node(_args_source($factory));
+                return ($op->next, 'handled');
+            }
             my $node = $factory->make('Constant',
                 value      => $value,
                 const_type => 'string',
@@ -4599,10 +4612,7 @@ class SoN::FromOptree 0.01 {
     }
 
     sub _args_source ($factory) {
-        return $factory->make('StashAccess',
-            stash_name => 'main',
-            sigil      => '@',      # @_ -- NOT the scalar $_
-            var_name   => '_');
+        return $factory->make('ArgsSource');
     }
 
     # Create PadAccess or FieldAccess depending on whether it's a class field
