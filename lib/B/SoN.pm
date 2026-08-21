@@ -201,7 +201,8 @@ sub _translate_class_subs {
         try {
             $graphs->{$full_name} =
                 SoN::FromOptree->translate( $cv->object_2svref );
-            _record_sub( $classes, $pkg_name, $name, $full_name, $cv );
+            _record_sub( $classes, $pkg_name, $name, $full_name, $cv,
+                         $graphs->{$full_name} );
         }
         catch ($e) {
             if ( $e =~ /^GAP:/ ) {
@@ -323,7 +324,8 @@ sub _walk_package {
             # Record the sub's METADATA while the CV is still in hand. See
             # _record_sub: these are facts this walk knows and the emitted
             # graph either loses or spells inconsistently.
-            _record_sub( $classes, $pkg_name, $name, $full_name, $cv );
+            _record_sub( $classes, $pkg_name, $name, $full_name, $cv,
+                         $graphs->{$full_name} );
         }
         catch ($e) {
             # Skip subs that fail to translate (builtins, XS, compiler
@@ -401,6 +403,32 @@ sub _empty_class {
     };
 }
 
+# _graph_return_type($graph) -> a repr name, or 'Unknown'
+#
+# The declared return type of a sub: the representation of its Return's value.
+#
+# `Unknown` is the honest answer when the value has no stamp -- a Return whose
+# value is a recursive call has nothing to read at producer time. It is a real
+# lattice point meaning "inference has not determined this", as opposed to an
+# ABSENT field, which is not a type at all and makes every consumer guess.
+#
+# Multiple Returns join later; this reports the single-Return case and Unknown
+# otherwise, leaving the join to the layer that can do it.
+sub _graph_return_type {
+    my ($graph) = @_;
+    return 'Unknown' unless defined $graph;
+    my @returns = eval { @{ $graph->returns } };
+    return 'Unknown' unless @returns == 1;
+    my $value = eval { $returns[0]->inputs->[-1] };
+    return 'Unknown' unless defined $value && ref $value;
+    # The PRODUCER vocabulary is a Stamp (->stamp->type), not the chalk-side
+    #  field. Reading the latter here silently returned undef
+    # for every determined type and declared everything Unknown.
+    my $stamp = eval { $value->stamp };
+    my $type  = $stamp ? eval { $stamp->type } : undef;
+    return defined $type ? $type : 'Unknown';
+}
+
 # _record_sub($classes, $pkg_name, $name, $full_name, $cv) — record a sub's
 # METADATA on the declarative class section.
 #
@@ -422,7 +450,7 @@ sub _empty_class {
 # shape where it vanishes. A graph scan over that cannot be written reliably,
 # and a scan is what this record exists to retire.
 sub _record_sub {
-    my ( $classes, $pkg_name, $name, $full_name, $cv ) = @_;
+    my ( $classes, $pkg_name, $name, $full_name, $cv, $graph ) = @_;
 
     # Do not auto-vivify a class record for any package that merely happens to
     # hold a translatable CV. Measured before this guard, an UNFILTERED run
@@ -480,6 +508,15 @@ sub _record_sub {
         # says "no declared signature", not "takes no arguments" -- arity is a
         # property of how the body reads \@_, answered in a later step.
         params    => [],
+        # DECLARED HERE, at IR construction, for the same reason uses_args is:
+        # this walk built the Return and knows its value node. Re-deriving it
+        # downstream by walking the graph is the recovery-by-scanning the
+        # metadata channel exists to retire.
+        #
+        # `Unknown` when the value carries no stamp yet -- a recursive call has
+        # nothing to read at this point. NOT omitted: an absent field is not a
+        # type, and it forces every consumer to invent a meaning.
+        return_type => _graph_return_type($graph),
     };
 
     return;
