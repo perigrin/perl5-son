@@ -449,6 +449,111 @@ sub _graph_return_type {
 # Three spellings for one array, one of them a bare string constant, and one
 # shape where it vanishes. A graph scan over that cannot be written reliably,
 # and a scan is what this record exists to retire.
+# _cv_signature($cv) -> a signature record, always.
+#
+# EVERY SUB HAS A SIGNATURE. `sub f {}` is exactly `sub f(@_)` -- the implicit
+# slurpy -- while `sub f() {}` is arity ZERO and perl ENFORCES it ("Too many
+# arguments for subroutine 'main::empty' (got 1; expected 0)"). Those are the
+# most permissive and most restrictive declarations respectively, so collapsing
+# one into the other inverts the strictest form.
+#
+# The optree carries the whole thing; this reads it rather than inferring:
+#
+#   sub two($a,$b)   argcheck aux=[2,0,'']   argelem(0)[$a] argelem(1)[$b]
+#   sub ary(@x)      argcheck aux=[0,0,'@']  argelem(0)[@x]
+#   sub hsh(%h)      argcheck aux=[0,0,'%']  argelem(0)[%h]
+#   sub opt($a,$b=9) argcheck aux=[2,1,'']   argelem + argdefelem
+#   sub empty()      argcheck aux=[0,0,'']   (no argelem)
+#   sub none         NO argcheck at all
+#
+# THE THIRD AUX ELEMENT IS LOAD-BEARING. `sub ary(@x)` is [0,0,'@'] -- zero
+# mandatory, zero optional, slurpy array. A reader that consults only the first
+# two reports it as taking NO arguments, which is the exact inversion of what it
+# means.
+#
+# ABSENT IS THE EMPTY STRING, WHICH IS DEFINED. Measured: `sub two($a,$b)` and
+# `sub empty()` both yield '' in that slot, while `sub ary(@x)` yields '@'. So
+# `defined` is the wrong test -- it is true for every sub, slurpy or not. The
+# discriminator is EMPTINESS: `length`.
+#
+# Per-parameter sigil comes from argelem's `private` field: 0 scalar, 2 array,
+# 4 hash. Typing by sigil is the same rule that fixed EntryDef: `$_` and `@_`
+# are different variables sharing one glob name.
+sub _cv_signature {
+    my ($cv) = @_;
+
+    my ( $argcheck, @argelem );
+    my $root = eval { $cv->ROOT };
+    if ( defined $root && ref $root && $$root ) {
+        my @stack = ($root);
+        while ( my $op = shift @stack ) {
+            next unless ref $op && $$op;
+            my $n = $op->name;
+            $argcheck = $op if $n eq 'argcheck' && !defined $argcheck;
+            push @argelem, $op if $n eq 'argelem';
+            # A nested sub has its own signature; do not read it as ours.
+            next if $n eq 'anoncode';
+            if ( $op->can('first') && ref( $op->first ) && ${ $op->first } ) {
+                my $kid = $op->first;
+                while ( ref $kid && $$kid ) {
+                    push @stack, $kid;
+                    $kid = $kid->sibling;
+                }
+            }
+        }
+    }
+
+    # NO argcheck => signature-less => implicitly (@_). One slurpy parameter.
+    unless ( defined $argcheck ) {
+        return {
+            kind      => 'implicit',
+            mandatory => 0,
+            optional  => 0,
+            slurpy    => '@',
+            params    => [ { index => 0, name => '@_', sigil => '@' } ],
+        };
+    }
+
+    my ( $mandatory, $optional, $slurpy ) = eval { $argcheck->aux_list($cv) };
+    ( $mandatory, $optional, $slurpy ) = ( 0, 0, '' ) if $@;
+    $slurpy = '' unless defined $slurpy;
+
+    my %SIGIL = ( 0 => '$', 2 => '@', 4 => '%' );
+    my @params;
+    my $i = 0;
+    for my $el (@argelem) {
+        my $sigil = $SIGIL{ $el->private // 0 } // '$';
+        push @params, {
+            index => $i,
+            name  => _pad_name_for( $cv, $el->targ ) // ( $sigil . "p$i" ),
+            sigil => $sigil,
+        };
+        $i++;
+    }
+
+    return {
+        kind      => 'declared',
+        mandatory => 0 + $mandatory,
+        optional  => 0 + $optional,
+        ( length $slurpy ? ( slurpy => $slurpy ) : () ),
+        params    => \@params,
+    };
+}
+
+# The declared name of a pad slot, e.g. '$a'. Returns undef when the pad has no
+# name for it -- a synthesized slot, or a perl that does not expose one.
+sub _pad_name_for {
+    my ( $cv, $targ ) = @_;
+    return undef unless defined $targ && $targ;
+    my $padlist = eval { $cv->PADLIST } or return undef;
+    my @pads    = eval { $padlist->ARRAY } or return undef;
+    my $names   = $pads[0] or return undef;
+    my @n       = eval { $names->ARRAY } or return undef;
+    return undef unless defined $n[$targ] && ref $n[$targ];
+    my $nm = eval { $n[$targ]->PVX };
+    return ( defined $nm && length $nm ) ? $nm : undef;
+}
+
 sub _record_sub {
     my ( $classes, $pkg_name, $name, $full_name, $cv, $graph ) = @_;
 
@@ -504,10 +609,13 @@ sub _record_sub {
         name      => $name,
         graph     => $full_name,
         uses_args => ( _cv_uses_args($cv) ? JSON::PP::true : JSON::PP::false ),
-        # A signature-less sub has no DECLARED params. [] is honest here: it
-        # says "no declared signature", not "takes no arguments" -- arity is a
-        # property of how the body reads \@_, answered in a later step.
-        params    => [],
+        # THE DECLARED SIGNATURE, read from argcheck/argelem rather than
+        # inferred. `params` is kept as the flat positional list for existing
+        # consumers; `signature` carries what params alone cannot say -- whether
+        # the sub was declared at all (`sub f {}` is implicitly `(@_)`) versus
+        # declared empty (`sub f()` is arity ZERO, and perl enforces it).
+        signature => _cv_signature($cv),
+        params    => [ map { $_->{name} } _cv_signature($cv)->{params}->@* ],
         # DECLARED HERE, at IR construction, for the same reason uses_args is:
         # this walk built the Return and knows its value node. Re-deriving it
         # downstream by walking the graph is the recovery-by-scanning the
@@ -707,7 +815,26 @@ sub _extract_class {
         # (MOP::Method vs MOP::Sub), so the wire must tell them apart.
         # _record_sub fills in {subs} during the CV walk.
         if ($is_method) {
+            # THE METHOD VALUE STAYS A GRAPH-NAME STRING. Consumers in BOTH
+            # repos use it directly as a key into the top-level {methods} graph
+            # map -- `$data->{methods}{ $methods->{val} }` producer-side,
+            # `$graphs->{ $methods->{$mname} }` in the chalk loader. Making it a
+            # hashref broke three producer tests and would have broken the
+            # loader in lockstep, for no gain at this slice.
+            #
+            # The signature rides in a SIBLING map keyed by the same method
+            # name, which is additive: an old consumer ignores it.
             $class{methods}{$name} = "${pkg_name}::${name}";
+
+            # The invocant is NOT a parameter. Perl emits methstart() for it and
+            # argcheck counts only the DECLARED params, so the first user
+            # parameter is argelem(0) -- no reserved index is needed in either
+            # direction (TurboFan reserves negative slots because JS's receiver
+            # sits outside `arguments`; that fact does not transfer).
+            $class{method_signatures}{$name} = {
+                _cv_signature($cv)->%*,
+                invocant => JSON::PP::true,
+            };
         }
     }
 

@@ -83,10 +83,21 @@ subtest 'declared arity is recorded' => sub {
     my $rec  = sub_record($wire, 'main', 'f');
     ok defined $rec, 'record exists' or return;
     # NOT `exists` -- that passes for any value, including junk, and this
-    # subtest would then be a green light over an untested path. Pin the
-    # documented contract: a signature-less sub declares NO params.
-    is_deeply $rec->{params}, [],
-        'a signature-less sub declares no params';
+    # subtest would then be a green light over an untested path.
+    #
+    # THE CONTRACT CHANGED, deliberately: EVERY SUB HAS A SIGNATURE, and
+    # `sub f {}` is exactly `sub f(@_)` -- one implicit slurpy parameter. This
+    # previously read `[]`, which conflated signature-less (the most PERMISSIVE
+    # declaration) with `sub f()` (the most RESTRICTIVE -- arity zero, enforced
+    # by perl: "Too many arguments for subroutine 'main::empty'"). Those are
+    # opposite meanings and must not share a representation.
+    # See docs/plans/2026-08-22-parameter-node-design.md in chalk.
+    is_deeply $rec->{params}, ['@_'],
+        'a signature-less sub is implicitly (@_)';
+    is $rec->{signature}{kind}, 'implicit',
+        'and the signature says so, distinct from a declared one';
+    is $rec->{signature}{slurpy}, '@',
+        'slurpy array';
 };
 
 # A sub in a real class keeps working -- the subs record must not disturb the
