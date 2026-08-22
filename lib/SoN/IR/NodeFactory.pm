@@ -57,6 +57,7 @@ use SoN::IR::Node::PadAccess;
 use SoN::IR::Node::FieldAccess;
 use SoN::IR::Node::EntryDef;
 use SoN::IR::Node::ArgsSource;
+use SoN::IR::Node::Parameter;
 use SoN::IR::Node::Subscript;
 use SoN::IR::Node::Call;
 use SoN::IR::Node::HashRef;
@@ -96,7 +97,7 @@ my %DATA_CLASSES = map { $_ => "SoN::IR::Node::$_" } qw(
     And Or BitAnd BitOr BitXor LeftShift RightShift
     Assign Repeat Match NotMatch DefinedOr Xor Range Yada IsaOp
     Not Negate Complement Defined UnaryPlus Ref RefType Length
-    PadAccess FieldAccess EntryDef ArgsSource Subscript Slice
+    PadAccess FieldAccess EntryDef ArgsSource Parameter Subscript Slice
     Call HashRef ArrayRef
     Interpolate AnonSub
     RegexMatch RegexSubst RegexCapture Print EnvRead TryCatch

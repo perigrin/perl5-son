@@ -1995,11 +1995,45 @@ class SoN::FromOptree 0.01 {
             return ($op->next, 'handled');
         }
 
-        # Handle argelem -- subroutine signature parameter binding to pad slot
+        # argelem -- a DECLARED SIGNATURE PARAMETER.
+        #
+        # This used to mint a PadAccess: perl's STORAGE for the parameter rather
+        # than the parameter itself, discarding both the position and the sigil
+        # that the op carries. A parameter is a VALUE identified by POSITION;
+        # the pad slot is how perl happens to hold it.
+        #
+        # Everything needed is on the op, so nothing is inferred:
+        #   aux_list($cv)  the positional INDEX  (0, 1, ...)
+        #   private        the SIGIL             (0 scalar, 2 array, 4 hash)
+        #   targ           the pad slot, still used to BIND the name
+        #
+        # The Parameter is bound into the pad slot exactly as before, so every
+        # later read of $a resolves through $sim->define and sees the Parameter
+        # instead of a PadAccess. Only the definition changes, not the lookup.
         if ($name eq 'argelem') {
-            my $targ = $op->targ;
+            my $targ    = $op->targ;
             my $varname = _padname($cv, $targ);
-            my $node = $factory->make('PadAccess', targ => $targ, varname => $varname);
+            my ($index) = eval { $op->aux_list($cv) };
+            $index = 0 unless defined $index;
+            my %SIGIL   = (0 => '$', 2 => '@', 4 => '%');
+            my $sigil   = $SIGIL{ $op->private // 0 } // '$';
+
+            # NO STAMP HERE, deliberately. An aggregate parameter's type is
+            # `Array`/`Hash`, and this lattice has neither -- it carries
+            # ArrayRef/HashRef (which are REFERENCES, a different thing) and
+            # `List`. Stamping `Array` dies "Unknown stamp type", which the
+            # translator masks as a silent skip, so the whole sub vanishes from
+            # the wire.
+            #
+            # Adding lattice members as a side effect of introducing this node
+            # would be the wrong order. The SIGIL is on the node and says
+            # everything a consumer needs; typing from it is the loader's job,
+            # where the Array/Hash types already exist.
+            my $node = $factory->make('Parameter',
+                index => 0 + $index,
+                name  => $varname,
+                sigil => $sigil,
+            );
             $sim->define($targ, $node);
             $sim->push_node($node);
             return ($op->next, 'handled');

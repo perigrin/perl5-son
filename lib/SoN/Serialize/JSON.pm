@@ -86,6 +86,18 @@ sub _extract_fields ($node, $id_remap) {
             field_stash => $node->field_stash,
         };
     }
+    if ($op eq 'Parameter') {
+        return {
+            # The INDEX is the identity: a parameter is a value identified by
+            # POSITION, and two reads of parameter 0 are one node. The name is
+            # debug information; the sigil is what types it ($ scalar, @ array,
+            # % hash), and a slurpy is NOT always an array -- `sub f(%h)` is a
+            # hash.
+            index => $node->index,
+            name  => $node->name,
+            sigil => $node->sigil,
+        };
+    }
     if ($op eq 'EntryDef') {
         return {
             stash_name => $node->stash_name,
