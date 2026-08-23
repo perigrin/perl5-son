@@ -4,9 +4,9 @@ use 5.42.0;
 use utf8;
 use experimental 'class';
 
-use SoN::IR::Node;
+use SoN::IR::Value;
 
-class SoN::IR::Node::UnaryOp :isa(SoN::IR::Node) {
+class SoN::IR::Node::UnaryOp :isa(SoN::IR::Value) {
     field $operand :param :reader = undef;
 
     ADJUST {

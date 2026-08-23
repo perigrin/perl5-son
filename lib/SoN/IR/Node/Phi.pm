@@ -4,9 +4,9 @@ use 5.42.0;
 use utf8;
 use experimental 'class';
 
-use SoN::IR::Node;
+use SoN::IR::Value;
 
-class SoN::IR::Node::Phi :isa(SoN::IR::Node) {
+class SoN::IR::Node::Phi :isa(SoN::IR::Value) {
     field $region :param :reader;
 
     # WHICH PREDECESSOR EACH INCOMING VALUE ARRIVES FROM.

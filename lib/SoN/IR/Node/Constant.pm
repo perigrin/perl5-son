@@ -4,9 +4,9 @@ use 5.42.0;
 use utf8;
 use experimental 'class';
 
-use SoN::IR::Node;
+use SoN::IR::Value;
 
-class SoN::IR::Node::Constant :isa(SoN::IR::Node) {
+class SoN::IR::Node::Constant :isa(SoN::IR::Value) {
     field $value      :param :reader;
     field $const_type :param :reader = 'string';
 

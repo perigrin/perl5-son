@@ -4,9 +4,9 @@ use 5.42.0;
 use utf8;
 use experimental 'class';
 
-use SoN::IR::Node;
+use SoN::IR::Value;
 
-class SoN::IR::Node::AnonSub :isa(SoN::IR::Node) {
+class SoN::IR::Node::AnonSub :isa(SoN::IR::Value) {
     # Deterministic counter for unique AnonSub identity
     my $anon_counter = 0;
 

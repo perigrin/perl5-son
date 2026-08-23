@@ -5,8 +5,8 @@ use utf8;
 use experimental 'class';
 no warnings 'experimental::class';
 
-use SoN::IR::Node;
+use SoN::IR::Value;
 
-class SoN::IR::Node::StructFieldAccess :isa(SoN::IR::Node) {
+class SoN::IR::Node::StructFieldAccess :isa(SoN::IR::Value) {
     method operation() { 'StructFieldAccess' }
 }

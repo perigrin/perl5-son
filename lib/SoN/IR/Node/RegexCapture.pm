@@ -4,9 +4,9 @@ use 5.42.0;
 use utf8;
 use experimental 'class';
 
-use SoN::IR::Node;
+use SoN::IR::Value;
 
-class SoN::IR::Node::RegexCapture :isa(SoN::IR::Node) {
+class SoN::IR::Node::RegexCapture :isa(SoN::IR::Value) {
     # Capture group number (1-based, $1..$9). The whole-match bounds (group 0)
     # are not exposed through this node ($& is a tracked follow-up).
     field $n :param :reader;

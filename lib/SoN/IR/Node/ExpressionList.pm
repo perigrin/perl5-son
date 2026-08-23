@@ -4,9 +4,9 @@ use 5.42.0;
 use utf8;
 use experimental 'class';
 
-use SoN::IR::Node;
+use SoN::IR::Value;
 
-class SoN::IR::Node::ExpressionList :isa(SoN::IR::Node) {
+class SoN::IR::Node::ExpressionList :isa(SoN::IR::Value) {
     method operation() { 'ExpressionList' }
 
     # Items are stored as a single arrayref in inputs->[0].

@@ -5,9 +5,9 @@ use utf8;
 use experimental 'class';
 no warnings 'experimental::class';
 
-use SoN::IR::Node;
+use SoN::IR::Value;
 
-class SoN::IR::Node::Coerce :isa(SoN::IR::Node) {
+class SoN::IR::Node::Coerce :isa(SoN::IR::Value) {
 
     # Source representation of the input value (e.g. 'Str', 'Int', 'Num', 'Scalar').
     # Part of content_hash: Coerce[Str->Num](x) and Coerce[Str->Int](x) are distinct
