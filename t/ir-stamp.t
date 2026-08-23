@@ -101,13 +101,21 @@ subtest 'Void and List are siblings of Scalar under Unknown' => sub {
     ok(!$scalar->is_subtype_of($void),   'Scalar is not < Void');
 };
 
-subtest 'Regex and Glob are subtypes of Ref' => sub {
-    my $regex = SoN::IR::Stamp->new(type => 'Regex');
-    my $glob  = SoN::IR::Stamp->new(type => 'Glob');
-    my $ref   = SoN::IR::Stamp->new(type => 'Ref');
+subtest 'Regex is under Object; Glob is NOT a reference' => sub {
+    my $regex   = SoN::IR::Stamp->new(type => 'Regex');
+    my $object  = SoN::IR::Stamp->new(type => 'Object');
+    my $glob    = SoN::IR::Stamp->new(type => 'Glob');
+    my $globref = SoN::IR::Stamp->new(type => 'GlobRef');
+    my $ref     = SoN::IR::Stamp->new(type => 'Ref');
 
-    ok($regex->is_subtype_of($ref),  'Regex < Ref');
-    ok($glob->is_subtype_of($ref),   'Glob < Ref');
+    # A compiled pattern is blessed into Regexp, so it is an Object first.
+    ok($regex->is_subtype_of($object), 'Regex < Object');
+    ok($regex->is_subtype_of($ref),    'Regex < Ref (transitively)');
+
+    # A glob (*STDOUT, a symbol-table entry) is not a reference; a GlobRef is.
+    # The two were previously conflated under Ref.
+    ok(!$glob->is_subtype_of($ref),    'Glob is NOT < Ref');
+    ok($globref->is_subtype_of($ref),  'GlobRef < Ref');
 };
 
 subtest 'None is subtype of new types' => sub {
@@ -139,8 +147,30 @@ subtest 'Join with new types' => sub {
 
     is(SoN::IR::Stamp::join($regex, $coderef)->type, 'Ref',
         'join(Regex, CodeRef) = Ref');
-    is(SoN::IR::Stamp::join($void, $scalar)->type, 'Unknown',
-        'join(Void, Scalar) = Unknown');
+
+    # Void and Scalar are arity classes UNDER List -- {0} and {1} are both
+    # subsets of {0,1,2,...} -- so their join is List, not the top. This is
+    # strictly more precise than the Unknown this asserted when the two were
+    # unrelated siblings of the root.
+    is(SoN::IR::Stamp::join($void, $scalar)->type, 'List',
+        'join(Void, Scalar) = List (both are arities under List)');
+};
+
+subtest 'None is a DERIVED bottom, below every type' => sub {
+    my $none = SoN::IR::Stamp->new(type => 'None');
+
+    # None used to be enumerated with 11 hand-picked parents, which left it
+    # NOT below Void, List, Scalar, Num, Str or Ref -- so meet returned it as
+    # a "lower bound" of pairs it was not actually below.
+    for my $t (qw(Void List Scalar Num Str Ref Unknown Array Hash IO Format)) {
+        ok($none->is_subtype_of(SoN::IR::Stamp->new(type => $t)), "None < $t");
+    }
+
+    # And it is join's identity, which is what lets a recursive function type
+    # from its base case.
+    my $int = SoN::IR::Stamp->new(type => 'Int');
+    is(SoN::IR::Stamp::join($int, $none)->type, 'Int', 'join(Int, None) = Int');
+    is(SoN::IR::Stamp::join($none, $int)->type, 'Int', 'join(None, Int) = Int');
 };
 
 done_testing;

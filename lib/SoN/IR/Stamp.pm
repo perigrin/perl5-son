@@ -9,24 +9,32 @@ class SoN::IR::Stamp 0.01 {
     # The lattice as a DAG. Each type maps to its direct parents.
     # Based on https://pvm.tools/papers/perl-types-formal.html
     my %PARENTS = (
-        None      => [qw(Int Boolean Undef ScalarRef ArrayRef HashRef CodeRef Object DualVar Regex Glob)],
-        Int       => [qw(Num)],
-        Num       => [qw(Str)],
-        Str       => [qw(Scalar)],
-        Boolean   => [qw(Scalar)],
+        Scalar    => [qw(List)],
+        Void      => [qw(List)],
         Undef     => [qw(Scalar)],
+        Str       => [qw(Scalar)],
+        Num       => [qw(Str)],
+        Int       => [qw(Num)],
+        Boolean   => [qw(Str)],
+        VString   => [qw(Str)],
         DualVar   => [qw(Scalar)],
         Ref       => [qw(Scalar)],
+        Object    => [qw(Ref)],
+        Regex     => [qw(Object)],
         ScalarRef => [qw(Ref)],
+        LValueRef => [qw(ScalarRef)],
         ArrayRef  => [qw(Ref)],
         HashRef   => [qw(Ref)],
         CodeRef   => [qw(Ref)],
-        Object    => [qw(Ref)],
-        Regex     => [qw(Ref)],
-        Glob      => [qw(Ref)],
-        Scalar    => [qw(Unknown)],
-        Void      => [qw(Unknown)],
+        GlobRef   => [qw(Ref)],
         List      => [qw(Unknown)],
+        Array     => [qw(List)],
+        Hash      => [qw(List)],
+        Code      => [qw(Unknown)],
+        Glob      => [qw(Unknown)],
+        IO        => [qw(Unknown)],
+        Format    => [qw(Unknown)],
+        None      => [],
         Unknown   => [],
     );
 
@@ -69,61 +77,76 @@ class SoN::IR::Stamp 0.01 {
     }
 
     method is_subtype_of ($other) {
-        return false if $type eq $other->type;
+        my $other_type = $other->type;
+        return false if $type eq $other_type;
+
+        # None is below everything; nothing but None is below None.
+        return true  if $type eq 'None';
+        return false if $other_type eq 'None';
+
         my $ancestors = _ancestors($type);
-        return exists $ancestors->{$other->type} ? true : false;
+        return exists $ancestors->{$other_type} ? true : false;
     }
 
     # Greatest lower bound: the most specific type that is a subtype of both
-    sub meet ($a, $b) {
-        my $at = $a->type;
-        my $bt = $b->type;
-        return $a if $at eq $bt;
+    # Parameters are $left/$right, not $a/$b: perl's sort localizes the $a and
+    # $b globals, so the comparator below shadowed them under the old names.
+    sub meet ($left, $right) {
+        my $lt = $left->type;
+        my $rt = $right->type;
+        return $left if $lt eq $rt;
+
+        return $left  if $lt eq 'None';
+        return $right if $rt eq 'None';
 
         # If one is subtype of the other, that's the meet
-        return $a if $a->is_subtype_of($b);
-        return $b if $b->is_subtype_of($a);
+        return $left  if $left->is_subtype_of($right);
+        return $right if $right->is_subtype_of($left);
 
-        # Find the deepest type that is an ancestor of both... but from below.
-        # Check if any leaf type is a subtype of both.
-        my $a_anc = _ancestors($at);
-        my $b_anc = _ancestors($bt);
-
-        # Find types that have both $at and $bt as ancestors
-        for my $candidate (sort { _depth($b) <=> _depth($a) } keys %PARENTS) {
+        # Look for a type below both, deepest first, so the result is the
+        # GREATEST such lower bound rather than merely a lower bound.
+        for my $candidate (sort { _depth($b) <=> _depth($a) || $a cmp $b }
+                           keys %PARENTS) {
             my $c_anc = _ancestors($candidate);
-            if (exists $c_anc->{$at} && exists $c_anc->{$bt}) {
+            if (exists $c_anc->{$lt} && exists $c_anc->{$rt}) {
                 return SoN::IR::Stamp->new(type => $candidate);
             }
         }
 
+        # Nothing inhabits both: bottom is the correct answer, not an error.
         return SoN::IR::Stamp->new(type => 'None');
     }
 
     # Least upper bound: the most specific type that both are subtypes of
-    sub join ($a, $b) {
-        my $at = $a->type;
-        my $bt = $b->type;
-        return $a if $at eq $bt;
+    sub join ($left, $right) {
+        my $lt = $left->type;
+        my $rt = $right->type;
+        return $left if $lt eq $rt;
+
+        # None is the identity. That is what lets a recursive function type
+        # from its base case: the recursive arm contributes None on the first
+        # pass, so join(Int, None) is Int rather than a widening to the top.
+        return $right if $lt eq 'None';
+        return $left  if $rt eq 'None';
 
         # If one is subtype of the other, the supertype is the join
-        return $b if $a->is_subtype_of($b);
-        return $a if $b->is_subtype_of($a);
+        return $right if $left->is_subtype_of($right);
+        return $left  if $right->is_subtype_of($left);
 
-        # Find common ancestors, pick the deepest one
-        my $a_anc = _ancestors($at);
-        my $b_anc = _ancestors($bt);
+        # Nearest common ancestor: deepest type in both ancestor sets. Sorted
+        # so the result does not depend on hash order.
+        my $left_anc  = _ancestors($lt);
+        my $right_anc = _ancestors($rt);
 
         my $best_type  = 'Unknown';
-        my $best_depth = 0;
+        my $best_depth = -1;
 
-        for my $t (keys %$a_anc) {
-            if (exists $b_anc->{$t}) {
-                my $d = _depth($t);
-                if ($d > $best_depth) {
-                    $best_depth = $d;
-                    $best_type  = $t;
-                }
+        for my $t (sort keys %$left_anc) {
+            next unless exists $right_anc->{$t};
+            my $d = _depth($t);
+            if ($d > $best_depth) {
+                $best_depth = $d;
+                $best_type  = $t;
             }
         }
 
