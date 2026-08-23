@@ -26,6 +26,41 @@ use SoN::IR::Stamp;
 # rpeep is an optimization, not a correctness pass: the optree still executes.
 BEGIN { SoN::OptSuppress::suppress_peep(); }
 
+# _make_package_filter(\%include, \@exclude_prefixes) -> coderef
+#
+# One predicate answering "emit this package?". An INCLUDE list, when
+# non-empty, is authoritative and exact -- preserving package=NAME's existing
+# meaning exactly. Otherwise every package is emitted except those under an
+# excluded prefix.
+#
+# Both may be given: the include list narrows first, then exclusions subtract.
+# That combination is unusual but well-defined, and it keeps the two options
+# from needing to know about each other at the call sites.
+sub _make_package_filter {
+    my ( $include, $exclude ) = @_;
+    my @prefixes = @$exclude;
+    my $has_include = %$include ? 1 : 0;
+
+    return sub {
+        my ($pkg) = @_;
+        return 0 if $has_include && !exists $include->{$pkg};
+        for my $prefix (@prefixes) {
+            return 0 if rindex( $pkg, $prefix, 0 ) == 0;
+        }
+        return 1;
+    };
+}
+
+# _emit_package($filter, $pkg) -> bool
+#
+# The single question every filter site asks. A filter of undef means no
+# filtering was requested, so everything is emitted.
+sub _emit_package {
+    my ( $filter, $pkg ) = @_;
+    return 1 unless $filter;
+    return $filter->($pkg) ? 1 : 0;
+}
+
 # compile(\@opts) — called by O.pm; returns a CODE ref that O.pm invokes
 # after the program has been compiled and the full optree is available.
 sub compile {
@@ -33,14 +68,40 @@ sub compile {
     my $format = 'text';
     $format    = 'json' if grep { $_ eq 'json' } @opts;
 
-    # Collect package= filters (exact match, multiple allowed)
-    my %pkg_filter;
+    # Two filters, and the difference is which way they fail.
+    #
+    # package=NAME is INCLUSION, exact match, multiple allowed. It emits only
+    # what it is told about, which is right for a caller that KNOWS its input's
+    # shape -- a corpus case whose classes are parsed out of the source. It is
+    # wrong for a caller consuming arbitrary real files: anything it was not
+    # told about vanishes silently, and a call into the vanished package then
+    # arrives with no resolved callee and no return type, GAPping downstream
+    # with a message that names the wrong layer.
+    #
+    # not_package=PREFIX is EXCLUSION, prefix match, multiple allowed. It emits
+    # everything except the named trees. It fails toward NOISE (an
+    # unanticipated internal leaks into the wire) rather than toward SILENCE
+    # (an unanticipated user package disappears), which is the right direction
+    # when the input's shape is not known in advance.
+    #
+    # PREFIX rather than exact, because the use case is "drop the SoN:: tree"
+    # -- ~90 classes -- and enumerating them is not maintainable. Exclusion
+    # also catches namespaces no source scan would find: perl's own
+    # t/base/lex.t creates `xyz` via `sub xyz::foo {...}` with no `package`
+    # statement anywhere.
+    my ( %pkg_filter, @pkg_exclude );
     for my $opt (@opts) {
-        if ( $opt =~ /^package=(.+)$/ ) {
-            $pkg_filter{$1} = 1;
-        }
+        if    ( $opt =~ /^package=(.+)$/ )     { $pkg_filter{$1} = 1 }
+        elsif ( $opt =~ /^not_package=(.+)$/ ) { push @pkg_exclude, $1 }
     }
-    my $filter = %pkg_filter ? \%pkg_filter : undef;
+
+    # Resolved to ONE predicate so the three call sites stay a single question
+    # ("emit this package?") rather than growing a second one. undef means
+    # emit everything, preserving the no-filter path exactly.
+    my $filter;
+    if ( %pkg_filter || @pkg_exclude ) {
+        $filter = _make_package_filter( \%pkg_filter, \@pkg_exclude );
+    }
 
     return sub {
         my ( $graphs, $classes ) = _discover_and_translate($filter);
@@ -76,7 +137,7 @@ sub _discover_and_translate {
     # key first). Respect package=main the same way a CV emission would; an
     # empty main_root (nothing at top level) is common (a library file with
     # no top-level statements) and not an error.
-    my $emit_program = !$filter || exists $filter->{main};
+    my $emit_program = _emit_package($filter, q{main});
     if ( $emit_program && ${ B::main_root() } ) {
         try {
             $graphs{'main::__PROGRAM__'} = SoN::FromOptree->translate_root();
@@ -283,7 +344,7 @@ sub _walk_package {
     no strict 'refs';
 
     # If filter is active and this package is not in the filter, skip CVs
-    my $emit_cvs = !$filter || exists $filter->{$pkg_name};
+    my $emit_cvs = _emit_package($filter, $pkg_name);
 
     # Record feature-class structure (declarative; methods land in $graphs).
     if ( $emit_cvs && SoN::ClassAux::is_class($stash) ) {
