@@ -64,6 +64,27 @@ use SoN::IR::Node;
 # RegexMatch all have a type fixed by the node kind alone. Those were defects.
 # Stamping them `Unknown` would be non-undef and still wrong.
 #
+# IT IS A STAMP, NOT A TYPE, AND THE NAME IS DELIBERATE. A stamp is an
+# abstract-interpretation fact ABOUT a value (C2's and Graal's sense), of
+# which the type is one component. Graal's stamps also carry non-null, exact
+# type, and integer bounds/known-bits, and a stamp is where its refinement
+# passes accumulate what they prove -- narrowing along a branch, folding a
+# guard's implication back into the value, joining to empty to show a branch
+# is dead.
+#
+# Today SoN::IR::Stamp holds only `type`, because no pass here produces the
+# other components yet -- stamps come from the optree walk reading SV flags
+# and are joined at Phis. So the object currently IS a type object, and
+# `SoN::IR::Type` would be the accurate name for what exists. It is called
+# Stamp anyway: that machinery is intended, and renaming twice (to Type now,
+# back to Stamp when refinement lands) costs more than naming it for what it
+# is meant to become. Do not "correct" this to Type.
+#
+# The practical consequence is that a predicate over a stamp should be named
+# for the QUESTION, not for typedness -- see _is_narrowed in FromOptree. Once
+# a stamp can be informative while its type is still Unknown, "is it typed"
+# stops being the same question as "does it tell us anything".
+#
 # ORTHOGONAL TO EFFECTS. Value-ness and control-reachability are independent
 # axes. Assign and CompoundAssign carry effects AND produce values (an
 # assignment's result is the stored value, so `$x = $y = 5` works). Being a

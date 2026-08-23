@@ -72,7 +72,7 @@ class SoN::FromOptree 0.01 {
         return SoN::IR::Stamp->new(type => $rule) if $rule ne 'join';
 
         my @stamps = map { $_->stamp } $inputs->@*;
-        return undef if grep { !_is_typed($_) } @stamps;
+        return undef if grep { !_is_narrowed($_) } @stamps;
 
         my $acc = shift @stamps;
         $acc = SoN::IR::Stamp::join($acc, $_) for @stamps;
@@ -147,7 +147,7 @@ class SoN::FromOptree 0.01 {
         return undef unless defined $array
             && $array->operation eq 'ArrayRef';
         my @stamps = map { $_->stamp } $array->inputs->@*;
-        return undef if !@stamps || grep { !_is_typed($_) } @stamps;
+        return undef if !@stamps || grep { !_is_narrowed($_) } @stamps;
         my $acc = shift @stamps;
         $acc = SoN::IR::Stamp::join($acc, $_) for @stamps;
         return $acc;
@@ -3002,7 +3002,7 @@ class SoN::FromOptree 0.01 {
         return $factory->make_unique('Phi',
             inputs => [$init],
             region => $loop_node,
-            (_is_typed($init->stamp) ? (stamp => $init->stamp) : ()));
+            (_is_narrowed($init->stamp) ? (stamp => $init->stamp) : ()));
     }
 
     # _backedge_is_phi_recurrence($post, $phi) -> bool
@@ -3023,7 +3023,7 @@ class SoN::FromOptree 0.01 {
         return false unless $reads_phi;
         for my $in (@ins) {
             next unless blessed($in);
-            next if _is_typed($in->stamp);                 # already typed
+            next if _is_narrowed($in->stamp);            # already narrowed
             next if $in->id == $phi->id;                # the recurrence arm
             # An unstamped input is acceptable ONLY if it is a deferred element
             # read the loader will type.
@@ -3039,12 +3039,22 @@ class SoN::FromOptree 0.01 {
     # a fixpoint re-walk, and an unstamped back-edge means the init stamp
     # cannot be trusted past the first iteration -- refuse or unstamp
     # honestly, no guessing.
-    # A stamp that says something. Every Value node carries a stamp, so
-    # defined-ness no longer distinguishes "typed" from "untyped" -- `Unknown`
-    # is the lattice top and means "nothing ever typed this". Code that used
-    # to ask `defined $node->stamp` to mean "do we know the type" must ask
-    # this instead; asking the old question now gets `yes` for everything.
-    sub _is_typed ($stamp) {
+    # True when a stamp says something -- when it has been narrowed below the
+    # lattice top. Every Value node carries a stamp now, so defined-ness no
+    # longer distinguishes "known" from "unknown": `Unknown` IS the top, and
+    # means nothing has narrowed this value yet. Code that used to ask
+    # `defined $node->stamp` to mean "do we know anything here" must ask this
+    # instead; the old question now answers yes for everything.
+    #
+    # Named for NARROWING rather than for typedness on purpose. A stamp is an
+    # abstract-interpretation fact ABOUT a value (C2's and Graal's sense), of
+    # which the type is one component -- Graal's also carry non-null, exact
+    # type, and integer ranges, filled in by refinement passes that narrow a
+    # stamp along a branch. This compiler has no such passes yet, so `type` is
+    # currently the only component and testing it is the whole question. When
+    # refinement lands, a stamp will be able to be informative while its type
+    # is still Unknown, and the check widens here rather than at every caller.
+    sub _is_narrowed ($stamp) {
         return defined $stamp && $stamp->type ne 'Unknown';
     }
 
@@ -3059,7 +3069,7 @@ class SoN::FromOptree 0.01 {
         # join(Int, Unknown) is Unknown and the mismatch reads as a widening
         # that needs a fixpoint re-walk. It is not one: it is the deferred
         # case the elsif branch already handles.
-        if (_is_typed($init->stamp) && _is_typed($post->stamp)) {
+        if (_is_narrowed($init->stamp) && _is_narrowed($post->stamp)) {
             my $join = SoN::IR::Stamp::join($init->stamp, $post->stamp);
             die "GAP: loop-carried type widening not yet lowered\n"
                 if defined $phi->stamp && $join->type ne $phi->stamp->type;
@@ -3343,7 +3353,7 @@ class SoN::FromOptree 0.01 {
                 my $exit_phi = $factory->make('Phi',
                     inputs => [$header, $bval],
                     region => $exit_region,
-                    (_is_typed($header->stamp) ? (stamp => $header->stamp) : ()));
+                    (_is_narrowed($header->stamp) ? (stamp => $header->stamp) : ()));
                 $sim->define($targ, $exit_phi);
             }
         }
@@ -3801,11 +3811,11 @@ class SoN::FromOptree 0.01 {
                         my $m = $merged->{$targ};
                         next unless defined $m
                             && $pre->{$targ} && $m != $pre->{$targ}
-                            && $m->operation eq 'Phi' && !_is_typed($m->stamp);
+                            && $m->operation eq 'Phi' && !_is_narrowed($m->stamp);
                         my ($a, $b) = $m->inputs->@*;
                         $m->set_stamp(SoN::IR::Stamp::join($a->stamp, $b->stamp))
                             if defined $a && defined $b
-                            && _is_typed($a->stamp) && _is_typed($b->stamp);
+                            && _is_narrowed($a->stamp) && _is_narrowed($b->stamp);
                     }
                     $sim->set_control($skip_sim->control);
                     $sim->set_memory($skip_sim->memory);
@@ -4224,7 +4234,7 @@ class SoN::FromOptree 0.01 {
     # requires an explicit repr on a ternary consumed as another's arm.
     sub _make_ternary ($factory, $cond, $true_val, $false_val) {
         my %args = (inputs => [$cond, $true_val, $false_val]);
-        if (_is_typed($true_val->stamp) && _is_typed($false_val->stamp)) {
+        if (_is_narrowed($true_val->stamp) && _is_narrowed($false_val->stamp)) {
             $args{stamp} = SoN::IR::Stamp::join(
                 $true_val->stamp, $false_val->stamp);
         }
