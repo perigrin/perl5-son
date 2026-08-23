@@ -1093,6 +1093,28 @@ class SoN::FromOptree 0.01 {
     # Extract value, stamp, and const_type from a B::SV.
     # Returns ($value, $stamp, $const_type) where const_type is one of:
     # 'integer', 'number', 'string', or 'undef'.
+    # The GAP message for an op that is registered but builds no node. Keyed by
+    # op name, phrased in terms of the SOURCE CONSTRUCT: an op name is perl's
+    # implementation vocabulary and does not belong in a diagnostic about a
+    # program someone wrote.
+    #
+    # `write` is a CALL, not a statement that lowers to a node. A format is
+    # compiled into a CV parked in the glob's FORM slot (measured: it is a
+    # B::FM, which isa B::CV, and its ROOT op is `leavewrite` -- the format's
+    # own root, exactly as `leavesub` roots an ordinary sub). So enterwrite and
+    # leavewrite are the two halves of a call ACROSS CVs, not a bracketed region
+    # in one optree, which is why only enterwrite appears at the call site.
+    # Compiling it needs that second CV walked plus the accumulator/formline
+    # machinery, none of which exists.
+    my %UNBUILT_OP_GAP = (
+        enterwrite => "GAP: `write` invokes a format, which is a separate CV in"
+                    . " the glob's FORM slot; compiling it needs that body"
+                    . " walked and the formline accumulator, neither of which"
+                    . " is built",
+        leavewrite => "GAP: a format body (the CV `write` invokes) is not"
+                    . " compiled",
+    );
+
     sub _extract_const ($sv) {
         # A constant-folded boolean comparison (1 < 2) resolves to the shared
         # PL_sv_yes / PL_sv_no SVs, which surface as a B::SPECIAL whose index is
@@ -2842,6 +2864,18 @@ class SoN::FromOptree 0.01 {
                 if ($push_count && !$void_effect_call) {
                     $sim->push_node($node);
                 }
+            }
+            elsif (exists $UNBUILT_OP_GAP{$name}) {
+                # This op builds no node AND nothing else compiles the construct
+                # it belongs to, so continuing would drop it silently. Refuse by
+                # name instead.
+                #
+                # Keyed by an explicit list rather than inferred from "undef
+                # node_type and no SKIP flag": that shape ALSO covers ops which
+                # correctly build nothing because a structural handler owns the
+                # construct (poptry, leavetry, the method_* family). Treating
+                # the table's shape as a semantic fact conflates the two.
+                die $UNBUILT_OP_GAP{$name} . "\n";
             }
 
             return ($op->next, 'handled');
