@@ -1131,6 +1131,31 @@ class SoN::FromOptree 0.01 {
         goto => "GAP: `goto` transfers control and is not compiled; the jump,"
               . " the statements it skips, and the label would otherwise be"
               . " dropped with no diagnostic",
+
+        # String eval is ONE op -- `entereval[t256] sK/1`, a unary op taking
+        # the source string (measured with B::Concise). Block eval is the
+        # opposite shape, `entertry(other->N) ... leavetry`, a real region
+        # whose body IS in the optree; that one is handled elsewhere.
+        #
+        # THIS IS NOT MERELY UNBUILT. B::SoN runs at CHECK time on an
+        # already-compiled optree: the entereval op is present but the eval'd
+        # code is not, because perl compiles that string only when the op
+        # EXECUTES. A CONSTANT operand does not change that -- `eval q{1+2}`
+        # looks compilable because the string is known, but building it would
+        # mean invoking the perl compiler on that string mid-walk and splicing
+        # the result, which is a different tool rather than a missing feature.
+        # So this GAP is permanent by design, not a TODO.
+        #
+        # Without this entry the walk descended into `hintseval` -- entereval's
+        # SECOND child, carrying the lexical hints the eval'd code inherits --
+        # treated that compiler metadata as a value operand, and died with
+        # "Required parameter 'value' is missing for SoN::IR::Node::Constant".
+        # Loud, so nothing miscompiled, but it named a Chalk node class for
+        # what is really "string eval is not compiled".
+        entereval => "GAP: string eval is not compiled. Its body is a STRING,"
+                   . " not an optree: perl compiles it only when the op runs,"
+                   . " and B::SoN walks the program before it runs. This holds"
+                   . " for a constant operand too",
     );
 
     sub _extract_const ($sv) {

@@ -378,7 +378,24 @@ class SoN::FromOptree::OpMap 0.01 {
         mapwhile    => [1, undef,        1, BRANCH],
 
         # === Eval ===
-        entereval   => [1, undef,        1, BRANCH],
+        # entereval is NOT a branch. Measured with B::Concise, string eval is
+        # a single unary op -- `entereval[t256] sK/1`, one declared child (the
+        # source string) -- with no arms and no closing partner at the call
+        # site. Block eval is the shape that branches: `entertry(other->N) ...
+        # leavetry`, whose body IS in the optree.
+        #
+        # The BRANCH flag was load-bearing in the wrong direction: the generic
+        # walk skips is_branch ops, so entereval never reached the
+        # %UNBUILT_OP_GAP refusal and instead fell through to a walk that
+        # descended into `hintseval` (its second child, the lexical hints the
+        # eval'd code inherits) and died building a Constant from compiler
+        # metadata.
+        #
+        # leaveeval keeps its entry but never appears at the call site: it
+        # roots the eval'd code's own optree, which does not exist until
+        # runtime. Same split as enterwrite/leavewrite, where only enterwrite
+        # is present because leavewrite roots the format's separate CV.
+        entereval   => [1, undef,        1, 0],
         leaveeval   => [1, undef,        1, 0],
 
         # === Control flow ===
@@ -493,7 +510,19 @@ class SoN::FromOptree::OpMap 0.01 {
         runcv       => [0, 'Call',      1, 0],
         gelem       => [2, 'Subscript', 1, 0],
         coreargs    => ['mark', 'Call', 1, 0],
-        hintseval   => [0, 'Constant',  1, 0],
+        # hintseval is COMPILER METADATA, not a value. It carries the lexical
+        # hints (pragma state) that string eval's body inherits, and appears as
+        # entereval's second child. Registered as a Constant it made the walk
+        # build a value node from a hints SV, which has no extractable value --
+        # so translating any string eval died with "Required parameter 'value'
+        # is missing for SoN::IR::Node::Constant", a constructor error standing
+        # in for what is really "string eval is not compiled", and entereval's
+        # own refusal was never reached.
+        #
+        # SKIP with no push keeps the stack balanced: exec order is const,
+        # entereval, hintseval, so the const supplies entereval's single popped
+        # operand and hintseval was pushing a spurious extra.
+        hintseval   => [0, undef,       0, SKIP],
         avhvswitch  => [1, undef,       1, SKIP],
 
         # any/all (5.40+)
