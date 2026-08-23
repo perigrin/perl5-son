@@ -1107,34 +1107,33 @@ class SoN::FromOptree 0.01 {
         return (undef, SoN::IR::Stamp->new(type => 'Undef'), 'undef')
             unless defined $sv && $$sv;
 
-        if ($sv->isa('B::IV')) {
+        # Dispatch on FLAGS, not on class. B's SV classes nest -- PVMG isa PV,
+        # isa NV, isa IV -- so asking isa('B::IV') first claims every richer SV
+        # including ones that carry only a string, and returns their empty
+        # integer slot. A v-string is exactly that shape: a POK-only PVMG whose
+        # isa('B::IV') is true, which decoded as 0 and lost its bytes.
+        #
+        # IOK/NOK are asked before POK because a number that has been
+        # stringified keeps its numeric slot and gains POK; POK ALONE is what
+        # means "this is a string".
+        my $flags = $sv->FLAGS;
+
+        if ($flags & B::SVf_IOK()) {
             return ($sv->int_value, SoN::IR::Stamp->new(type => 'Int'), 'integer');
         }
-        elsif ($sv->isa('B::NV')) {
+        if ($flags & B::SVf_NOK()) {
             return ($sv->NV, SoN::IR::Stamp->new(type => 'Num'), 'number');
         }
-        elsif ($sv->isa('B::PV')) {
+        if ($flags & B::SVf_POK()) {
             return ($sv->PV, SoN::IR::Stamp->new(type => 'Str'), 'string');
         }
-        elsif ($sv->isa('B::PVIV')) {
-            # Could be either - check flags
-            if ($sv->FLAGS & B::SVf_IOK()) {
-                return ($sv->int_value, SoN::IR::Stamp->new(type => 'Int'), 'integer');
-            }
-            return ($sv->PV, SoN::IR::Stamp->new(type => 'Str'), 'string');
-        }
-        elsif ($sv->isa('B::PVNV')) {
-            if ($sv->FLAGS & B::SVf_NOK()) {
-                return ($sv->NV, SoN::IR::Stamp->new(type => 'Num'), 'number');
-            }
-            if ($sv->FLAGS & B::SVf_IOK()) {
-                return ($sv->int_value, SoN::IR::Stamp->new(type => 'Int'), 'integer');
-            }
-            return ($sv->PV, SoN::IR::Stamp->new(type => 'Str'), 'string');
-        }
-        else {
-            return (undef, SoN::IR::Stamp->new(type => 'Unknown'), 'string');
-        }
+
+        # No value flag set. Fall back on what the SV can actually offer rather
+        # than guessing, so an unflagged-but-populated SV still decodes.
+        return ($sv->PV, SoN::IR::Stamp->new(type => 'Str'), 'string')
+            if $sv->can('PV') && $sv->isa('B::PV');
+
+        return (undef, SoN::IR::Stamp->new(type => 'Unknown'), 'string');
     }
 
     # Record the method name for the following entersub. The invocant stays on
