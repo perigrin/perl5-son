@@ -5,6 +5,7 @@ use utf8;
 use experimental 'class';
 no warnings 'experimental::class';
 
+use SoN::IR::Stamp;
 use SoN::IR::Node::Constant;
 use SoN::IR::Node::Phi;
 use SoN::IR::Node::Add;
@@ -168,8 +169,52 @@ class SoN::IR::NodeFactory {
     # control-threaded by the Block fixup.
     our %ALLOC_OPS = map { $_ => 1 } qw(ArrayRef HashRef);
 
+    # Ops whose result type is fixed by the OPERATION ITSELF, independent of
+    # inputs. `ref($x)` yields a string whatever $x is; `defined($x)` and a
+    # match yield a boolean; an anonymous aggregate constructor yields a ref
+    # to that aggregate. These need no inference, so leaving them for a later
+    # pass to decide was never right — measured, they were 11 of the 16
+    # untyped Value nodes across the construct sweep in t/ir-value-stamped.t.
+    #
+    # This table is for ops that are self-typing. An op whose type depends on
+    # its inputs (Add, Concat) is stamped by the walk that knows the operand
+    # types; one whose type is genuinely undecidable at construction
+    # (Subscript, Call) falls through to Unknown below. Do NOT add an op here
+    # to silence an untyped-node failure — that converts an open question
+    # into a wrong answer.
+    our %SELF_TYPED_OPS = (
+        ArrayRef   => 'ArrayRef',
+        HashRef    => 'HashRef',
+        RefType    => 'Str',
+        Defined    => 'Boolean',
+        RegexMatch => 'Boolean',
+        NotMatch   => 'Boolean',
+    );
+
     field %cache;
     field $cfg_counter = 0;
+
+    # Every SoN::IR::Value carries a stamp — undef is not a state a value
+    # node may be in (see SoN::IR::Value). Rather than require all ~80
+    # construction sites to remember, the guarantee is established once here,
+    # at the single chokepoint every data node passes through.
+    #
+    # `Unknown` is the fallback because it is an ANSWER, not an absence: a
+    # real lattice member with defined join/meet, so downstream inference can
+    # compute with it. A caller that KNOWS the type still passes it and wins —
+    # this only fills the gap where nothing was said.
+    # A stamp is a SoN::IR::Stamp OBJECT, not a type name -- the serializer
+    # reads $node->stamp->type and Stamp::join operates on the objects. A
+    # plain string here would satisfy `defined` and then die at serialization.
+    method _default_stamp($op_name, %args) {
+        return %args if defined $args{stamp};
+        my $class = $DATA_CLASSES{$op_name} // $CFG_CLASSES{$op_name};
+        return %args unless $class && $class->isa('SoN::IR::Value');
+        $args{stamp} = SoN::IR::Stamp->new(
+            type => $SELF_TYPED_OPS{$op_name} // 'Unknown'
+        );
+        return %args;
+    }
 
     method _register_consumers($node, %args) {
         my $inputs = $args{inputs} // [];
@@ -194,6 +239,8 @@ class SoN::IR::NodeFactory {
     # behavior so Actions.pm can route every call through the typed
     # factory without distinguishing between make() and make_cfg() shapes.
     method make($op_name, %args) {
+        %args = $self->_default_stamp($op_name, %args);
+
         # Phi has historical CFG-style identity in Bootstrap (never
         # deduplicated) but SoN::IR::Node::Phi takes `region` as a
         # named :param and the values arrayref as `inputs`. Bootstrap's
@@ -340,6 +387,8 @@ class SoN::IR::NodeFactory {
     # silently break the mutation check ($after != $ph). Mirrors
     # SoN::IR::NodeFactory::make_unique.
     method make_unique($op_name, %args) {
+        %args = $self->_default_stamp($op_name, %args);
+
         my $class = $DATA_CLASSES{$op_name}
             or die "Unknown data node operation: $op_name";
         $cfg_counter++;

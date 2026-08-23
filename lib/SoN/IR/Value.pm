@@ -37,6 +37,33 @@ use SoN::IR::Node;
 # silent data mismatch. The class hierarchy is the mirror; the wire stays as
 # it is.
 #
+# THE STAMP IS REQUIRED, AND `Unknown` IS THE WAY TO SAY "UNKNOWN". A Value
+# node exists to define a value, and a value has a type, so an undef stamp is
+# not a state a Value node may be in. A construction site that omits it dies
+# in ADJUST rather than quietly producing an untyped value node -- the same
+# loud-failure property the class split itself has.
+#
+# The check is an ADJUST rather than a redeclared `field $stamp :param` here.
+# `stamp` already lives on SoN::IR::Node (control nodes accept the param on
+# the deserialization path, and set_stamp patches loop-header Phis after the
+# back-edge is known). Redeclaring it in this subclass would create a SECOND
+# field of the same name: set_stamp would mutate the parent's copy while a
+# reader resolved to the child's, and the two would silently diverge. One
+# field, one reader, one setter; the CONSTRAINT is what belongs to Value.
+#
+# This closes meaning (2) above. What remains is `Unknown`, which is an ANSWER
+# ("asked, genuinely cannot tell") rather than an absence: a real member of
+# the lattice with defined join and meet, so downstream inference can compute
+# with it instead of having to special-case a hole. Subscript and Call are the
+# honest cases -- what an index yields or what a callee returns is not
+# knowable at construction, and `Unknown` says exactly that.
+#
+# `Unknown` must not become the lazy default at a site that KNOWS. Measured
+# before this was enforced, 19% of constructed Value nodes carried no stamp,
+# and the set was not arbitrary: ArrayRef, HashRef, RefType, Defined and
+# RegexMatch all have a type fixed by the node kind alone. Those were defects.
+# Stamping them `Unknown` would be non-undef and still wrong.
+#
 # ORTHOGONAL TO EFFECTS. Value-ness and control-reachability are independent
 # axes. Assign and CompoundAssign carry effects AND produce values (an
 # assignment's result is the stored value, so `$x = $y = 5` works). Being a
@@ -47,6 +74,12 @@ use SoN::IR::Node;
 # the bug. See docs/plans/2026-08-23-goto-silently-dropped.md in chalk. The
 # explicit refusal list in FromOptree's %UNBUILT_OP_GAP remains load-bearing.
 class SoN::IR::Value :isa(SoN::IR::Node) {
+
+    ADJUST {
+        die ref($self) . ": a Value node must carry a stamp"
+            . " (use 'Unknown' when the type is genuinely not known)\n"
+            unless defined $self->stamp;
+    }
 }
 
 1;

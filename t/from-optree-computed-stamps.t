@@ -69,13 +69,28 @@ subtest 'Not of an unstamped operand is still Boolean' => sub {
     is($not->stamp->type, 'Boolean', 'fixed-result rule ignores input stamps');
 };
 
-subtest 'unstamped inputs leave the result unstamped (honest GAP)' => sub {
-    # Signature params have no type annotation, so their PadAccess carries no
-    # stamp; the Add result must NOT be invented -- it stays unstamped so the
-    # backend reports an honest GAP rather than a guessed representation.
+subtest 'untyped inputs leave the result Unknown (honest GAP)' => sub {
+    # Signature params have no type annotation, so their PadAccess cannot be
+    # given a real type; the Add result must NOT be invented -- the backend
+    # has to report an honest GAP rather than a guessed representation.
+    #
+    # That invariant is unchanged. What changed is how it is SPELLED. This
+    # used to assert an undef stamp; a Value node now always carries one, and
+    # `Unknown` is how it says "nothing ever typed this". The GAP still
+    # happens: chalk's %LOWERABLE_STAMP (Serialize/JSON.pm:30) excludes
+    # Unknown, so no representation is set and _require_repr reports the same
+    # GAP an absent stamp produced.
+    #
+    # `Unknown` is strictly better than undef here because it is a LATTICE
+    # MEMBER -- join and meet are defined on it, so a consumer computes with
+    # it instead of special-casing a hole. Chalk states the same distinction
+    # from its side: "a Scalar GAP means 'this scalar type is not lowered'; an
+    # Unknown GAP means 'nothing ever typed this'" (Serialize/JSON.pm:1088).
     my $add = computed(sub ($x, $y) { $x + $y }, 'Add');
     ok(defined $add, 'has an Add node');
-    ok(!defined $add->stamp, 'Add over unstamped inputs stays unstamped');
+    isa_ok($add->stamp, ['SoN::IR::Stamp'], 'Add carries a stamp object');
+    is($add->stamp->type, 'Unknown',
+        'Add over untyped inputs is Unknown, not a guess');
 };
 
 done_testing();

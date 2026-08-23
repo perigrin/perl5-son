@@ -22,6 +22,13 @@ sub const ($val) {
 # t/bootstrap/ir-subclass-field-audit.t in the chalk repo), so this helper
 # reproduces the factory's _register_consumers wiring by hand for direct
 # ->new construction in this file.
+#
+# Direct ->new also bypasses the factory's stamp defaulting, so every
+# construction below passes `stamp` explicitly. All three are SoN::IR::Value
+# subclasses and a Value node must carry a stamp -- omitting it dies in
+# ADJUST. That is the intended behavior, not an inconvenience: the factory is
+# where the default lives, and a path around the factory is exactly the one
+# that used to produce untyped value nodes silently.
 sub wire_consumers ($node, @inputs) {
     $_->add_consumer($node) for @inputs;
     return $node;
@@ -30,7 +37,7 @@ sub wire_consumers ($node, @inputs) {
 subtest 'BinOp base class' => sub {
     my $left  = const(1);
     my $right = const(2);
-    my $node  = SoN::IR::Node::BinOp->new(id => 'binop-1', inputs => [$left, $right]);
+    my $node  = SoN::IR::Node::BinOp->new(id => 'binop-1', inputs => [$left, $right], stamp => $stamp);
 
     isa_ok($node, ['SoN::IR::Node'], 'BinOp is-a Node');
     is($node->left,  $left,  'left accessor returns first input');
@@ -52,7 +59,7 @@ subtest 'BinOp use-def chain wiring' => sub {
     my $left  = const(10);
     my $right = const(20);
     my $node  = wire_consumers(
-        SoN::IR::Node::BinOp->new(id => 'binop-2', inputs => [$left, $right]),
+        SoN::IR::Node::BinOp->new(id => 'binop-2', inputs => [$left, $right], stamp => $stamp),
         $left, $right,
     );
 
@@ -64,7 +71,7 @@ subtest 'BinOp use-def chain wiring' => sub {
 
 subtest 'UnaryOp base class' => sub {
     my $operand = const(5);
-    my $node    = SoN::IR::Node::UnaryOp->new(id => 'unaryop-1', inputs => [$operand]);
+    my $node    = SoN::IR::Node::UnaryOp->new(id => 'unaryop-1', inputs => [$operand], stamp => $stamp);
 
     isa_ok($node, ['SoN::IR::Node'], 'UnaryOp is-a Node');
     is($node->operand, $operand, 'operand accessor returns first input');
@@ -75,7 +82,7 @@ subtest 'UnaryOp base class' => sub {
 subtest 'UnaryOp use-def chain wiring' => sub {
     my $operand = const(7);
     my $node    = wire_consumers(
-        SoN::IR::Node::UnaryOp->new(id => 'unaryop-2', inputs => [$operand]),
+        SoN::IR::Node::UnaryOp->new(id => 'unaryop-2', inputs => [$operand], stamp => $stamp),
         $operand,
     );
 
@@ -85,7 +92,7 @@ subtest 'UnaryOp use-def chain wiring' => sub {
 
 subtest 'Aggregate base class' => sub {
     my ($a, $b, $c) = (const(1), const(2), const(3));
-    my $node = SoN::IR::Node::Aggregate->new(id => 'aggregate-1', inputs => [$a, $b, $c]);
+    my $node = SoN::IR::Node::Aggregate->new(id => 'aggregate-1', inputs => [$a, $b, $c], stamp => $stamp);
 
     isa_ok($node, ['SoN::IR::Node'], 'Aggregate is-a Node');
     # SoN::IR::Node::Aggregate has no elements() accessor (unlike the old
@@ -99,7 +106,7 @@ subtest 'Aggregate base class' => sub {
 };
 
 subtest 'Aggregate with no inputs' => sub {
-    my $node = SoN::IR::Node::Aggregate->new(id => 'aggregate-2');
+    my $node = SoN::IR::Node::Aggregate->new(id => 'aggregate-2', stamp => $stamp);
 
     my $elems = $node->inputs;
     is(ref $elems, 'ARRAY', 'inputs returns an array ref');
