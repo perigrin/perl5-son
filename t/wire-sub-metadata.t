@@ -5,9 +5,17 @@ use utf8;
 use Test::More;
 use File::Temp qw(tempdir);
 use JSON::PP;
+use B;
+use B::SoN;
 
 my $PERL = $^X;
 my $dir  = tempdir(CLEANUP => 1);
+
+# Fixtures for the optree-scan subtest below, which calls _cv_uses_args
+# directly rather than going through the wire.
+sub goto_target { 1 }
+sub goto_fwd    { goto &goto_target }
+sub no_args     { my $z = 5; $z + 1 }
 
 # Compile $src through B::SoN and return the decoded wire structure.
 sub wire_for ($src, $name, %opt) {
@@ -60,10 +68,9 @@ subtest 'uses_args is recorded per callee' => sub {
         # The sigil lives on the OP KIND -- gvsv is scalar $_, not @_.
         'sub f { $_ = "x"; /x/ ? 1 : 0 }'   => 0,   # $_ is NOT @_
         'sub f { $_ }'                      => 0,   # a bare $_ read
-        # goto &f hands the CALLER'S @_ to the target and names `_` NOWHERE in
-        # the optree. A false negative here means @_ is not materialised for a
-        # sub that passes it onward.
-        'sub other { 1 } sub f { goto &other }' => 1,
+        # The `goto &other` case moved to its own subtest below -- a sub
+        # containing goto no longer TRANSLATES, so it emits no wire record to
+        # assert against. See there for why that is the right level.
     );
     my $i = 0;
     for my $body (sort keys %want) {
@@ -74,6 +81,29 @@ subtest 'uses_args is recorded per callee' => sub {
         is !!$rec->{uses_args}, !!$want{$body},
             sprintf('uses_args=%d for: %s', $want{$body}, $body);
     }
+};
+
+subtest 'goto-forwarded @_ is detected at the optree scan' => sub {
+    # `goto &other` hands the CALLER'S @_ to the target and names `_` NOWHERE
+    # in the optree. A false negative means @_ is not materialised for a sub
+    # that passes it onward -- the reason this case exists.
+    #
+    # It is asserted against _cv_uses_args directly rather than against the
+    # wire, because a sub containing `goto` is now REFUSED by the translator
+    # (%UNBUILT_OP_GAP) and so emits no sub record at all. Asserting a record
+    # existed would require goto to keep silently dropping, trading a loud
+    # refusal for a miscompile to keep a metadata row about a sub the compiler
+    # then skips.
+    #
+    # The detection itself is untouched by that refusal: _cv_uses_args is an
+    # optree walk in B/SoN.pm, independent of graph translation. This subtest
+    # pins exactly that independence.
+    my $cv = B::svref_2object(\&goto_fwd);
+    ok !!B::SoN::_cv_uses_args($cv),
+        'goto &other forwards @_ and is detected as using it';
+
+    ok !B::SoN::_cv_uses_args(B::svref_2object(\&no_args)),
+        'and the negative direction still holds (bilateral)';
 };
 
 # Arity is metadata too. The backend's current arity check COUNTS positional

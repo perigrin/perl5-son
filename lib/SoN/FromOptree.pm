@@ -1113,6 +1113,24 @@ class SoN::FromOptree 0.01 {
                     . " is built",
         leavewrite => "GAP: a format body (the CV `write` invokes) is not"
                     . " compiled",
+
+        # `goto` transfers control and builds no node, so the jump, whatever
+        # it skipped, and the label all vanished: `sub { my $x = 1; goto SKIP;
+        # $x = 999; SKIP: $x }` gave Start/Constant/Return. Unlike `write`,
+        # the resulting graph looks entirely reasonable, so nothing downstream
+        # has any reason to object. Both forms share the op name `goto`
+        # (verified with B::Concise on `goto &tgt`), so one entry covers the
+        # label form and the tail-call form alike.
+        #
+        # Nothing currently compiled contains one (measured: 0 in chalk lib/
+        # and t/, 0 in perl's t/base and t/cmd; 16 of 227 t/op files, well
+        # past the frontier). This entry is insurance against a silent drop,
+        # not a step toward compiling goto -- which needs real control-flow
+        # support for the label form and tail-call replacement of the current
+        # frame for `goto &sub`.
+        goto => "GAP: `goto` transfers control and is not compiled; the jump,"
+              . " the statements it skips, and the label would otherwise be"
+              . " dropped with no diagnostic",
     );
 
     sub _extract_const ($sv) {
