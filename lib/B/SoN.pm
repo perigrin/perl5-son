@@ -896,6 +896,38 @@ sub _extract_class {
                 _cv_signature($cv)->%*,
                 invocant => JSON::PP::true,
             };
+
+            # The RETURN TYPE rides in its own sibling map, for the same reason
+            # and by the same pattern as the signature above: the method value
+            # must stay a bare graph-name string, so anything else a consumer
+            # needs about a method is keyed by name alongside it.
+            #
+            # DECLARED HERE for the same reason as the sub path's `return_type`
+            # (see _record_sub): this walk built the Return and knows its value
+            # node. Without it, a consumer's only recourse is to re-derive the
+            # type by walking the method graph -- and for methods that was not
+            # merely redundant, it was the ONLY source. Measured before this
+            # landed: return_type absent for 9 of 9 class methods, while chalk's
+            # loader carried a whole fixpoint (_stamp_method_call_reprs) to
+            # reconstruct it.
+            #
+            # `Unknown` is SENT, never omitted, matching the sub path: an absent
+            # field is not a type, and it forces every consumer to invent a
+            # meaning.
+            #
+            # The graph is translated from THIS CV rather than looked up in
+            # $graphs: at this point the method's graph is not in there yet.
+            # _extract_class records the name -> graph-key map, and the CVs are
+            # translated afterwards by _walk_package or _translate_class_methods
+            # (see the comment at :201). Looking it up here yielded `Unknown`
+            # for every method -- measured, before this was corrected.
+            #
+            # Reuses an already-translated graph when one exists, so a method
+            # walked by _walk_package first is not translated twice.
+            $class{method_return_types}{$name} = _graph_return_type(
+                $graphs->{"${pkg_name}::${name}"}
+                    // eval { SoN::FromOptree->translate( $cv->object_2svref ) }
+            );
         }
     }
 
