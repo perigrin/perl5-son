@@ -308,7 +308,17 @@ sub _translate_class_methods {
             # A deliberate GAP refusal is the translator speaking; surface it
             # so the method silently missing is a loud honest refusal, not
             # discovery noise (same policy as _walk_package).
-            warn "B::SoN: skipped $full_name: $e" if $e =~ /^GAP:/;
+            #
+            # A NON-GAP DIE IS NOT A REFUSAL -- it is a bug in us, and the
+            # method vanishes from the wire either way. Filtering the warn on
+            # /^GAP:/ reported the honest half and swallowed the dishonest
+            # half, which is the wrong way round: an unexpected failure is the
+            # one nobody is looking for. Both are reported; the message says
+            # which kind it is.
+            warn $e =~ /^GAP:/
+                ? "B::SoN: skipped $full_name: $e"
+                : "B::SoN: INTERNAL ERROR translating $full_name (not a GAP "
+                . "refusal -- the method is missing from the wire): $e";
         }
     }
     return;
@@ -924,10 +934,23 @@ sub _extract_class {
             #
             # Reuses an already-translated graph when one exists, so a method
             # walked by _walk_package first is not translated twice.
-            $class{method_return_types}{$name} = _graph_return_type(
-                $graphs->{"${pkg_name}::${name}"}
-                    // eval { SoN::FromOptree->translate( $cv->object_2svref ) }
-            );
+            # Unlike the two sites above, a failure here DEGRADES rather than
+            # deletes: _graph_return_type(undef) yields 'Unknown', so the
+            # method still reaches the wire, just untyped. That is a legitimate
+            # answer -- but an unexpected die is still a bug worth hearing
+            # about, and `eval {}` said nothing. A GAP is expected here (the
+            # method genuinely does not translate) and stays quiet, since the
+            # walk that owns that method reports it.
+            my $g = $graphs->{"${pkg_name}::${name}"};
+            unless ($g) {
+                try { $g = SoN::FromOptree->translate( $cv->object_2svref ) }
+                catch ($e) {
+                    warn "B::SoN: INTERNAL ERROR deriving return type for "
+                       . "${pkg_name}::${name} (it will read Unknown): $e"
+                        unless $e =~ /^GAP:/;
+                }
+            }
+            $class{method_return_types}{$name} = _graph_return_type($g);
         }
     }
 
@@ -950,7 +973,25 @@ sub _extract_class {
     my $aix = 0;
     for my $i ( $inherited .. $#adj_cvs ) {
         # adjust_cvs returns coderefs; translate takes a coderef directly.
-        my $g = eval { SoN::FromOptree->translate( $adj_cvs[$i] ) };
+        #
+        # A DROPPED ADJUST IS A MISCOMPILE, NOT A GAP. The block does not reach
+        # $class{adjusts}, so the consumer constructs the object WITHOUT
+        # running it -- a silently wrong object rather than an honest refusal.
+        # A bare `eval {}; next unless $g` said nothing about why, which is how
+        # a stale workaround elsewhere (argelem declining to stamp `Array` for
+        # a die the lattice stopped throwing) stayed invisible.
+        #
+        # Same policy as the method walk above: a GAP is the translator
+        # speaking; anything else is a bug in us and must not be mistaken for
+        # a refusal. Both are reported -- neither is silent.
+        my $g;
+        try {
+            $g = SoN::FromOptree->translate( $adj_cvs[$i] );
+        }
+        catch ($e) {
+            warn "B::SoN: ${pkg_name} ADJUST block $i dropped -- the object "
+               . "will be constructed WITHOUT it: $e";
+        }
         next unless $g;
         my $key = "${pkg_name}::__ADJUST_${aix}";
         $graphs->{$key} = $g;

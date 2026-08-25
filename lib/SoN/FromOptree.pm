@@ -2082,21 +2082,31 @@ class SoN::FromOptree 0.01 {
             my %SIGIL   = (0 => '$', 2 => '@', 4 => '%');
             my $sigil   = $SIGIL{ $op->private // 0 } // '$';
 
-            # NO STAMP HERE, deliberately. An aggregate parameter's type is
-            # `Array`/`Hash`, and this lattice has neither -- it carries
-            # ArrayRef/HashRef (which are REFERENCES, a different thing) and
-            # `List`. Stamping `Array` dies "Unknown stamp type", which the
-            # translator masks as a silent skip, so the whole sub vanishes from
-            # the wire.
+            # STAMPED FROM THE SIGIL. `@a` is an Array, `%h` is a Hash --
+            # containers, not the ArrayRef/HashRef REFERENCES that point at
+            # them. A scalar parameter is left unstamped: its type comes from
+            # the callsite, which this end cannot see.
             #
-            # Adding lattice members as a side effect of introducing this node
-            # would be the wrong order. The SIGIL is on the node and says
-            # everything a consumer needs; typing from it is the loader's job,
-            # where the Array/Hash types already exist.
+            # This block previously declined to stamp, on the grounds that the
+            # lattice "has neither" Array nor Hash and that stamping one died
+            # "Unknown stamp type". Both halves are now false: Stamp.pm carries
+            # `Array => [List]` and `Hash => [List]`, and constructing either
+            # succeeds. The comment outlived the condition it described.
+            #
+            # It stayed invisible because the failure it described was silent:
+            # the die was swallowed by a bare eval in B::SoN, dropping the
+            # whole sub from the wire with no diagnostic. Those evals now
+            # report (B/SoN.pm), which is what makes stamping here safe to try
+            # -- a mistake announces itself instead of deleting a sub.
+            my %SIGIL_STAMP = ('@' => 'Array', '%' => 'Hash');
+            my $stamp_type  = $SIGIL_STAMP{$sigil};
             my $node = $factory->make('Parameter',
                 index => 0 + $index,
                 name  => $varname,
                 sigil => $sigil,
+                ($stamp_type
+                    ? (stamp => SoN::IR::Stamp->new(type => $stamp_type))
+                    : ()),
             );
             $sim->define($targ, $node);
             $sim->push_node($node);
