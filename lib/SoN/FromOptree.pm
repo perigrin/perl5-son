@@ -4757,8 +4757,27 @@ class SoN::FromOptree 0.01 {
         return $node->stash_name . '::' . $node->sigil . $node->var_name;
     }
 
+    # `@_` IS AN ARRAY, and that is true structurally -- for every sub, with no
+    # inference. It has storage: you can shift it, index it, take scalar @_.
+    #
+    # Not `List`: that is the flattening notion, what a comma expression yields
+    # in list context, and the consumer refuses it as "signature vocabulary,
+    # not a value type". Not `ArrayRef` either -- that is a REFERENCE to an
+    # array, a different thing. The container's own type is Array.
+    #
+    # This defaulted to `Unknown`, which claimed inference had failed when in
+    # fact nothing had ever asked. Measured on the consumer side, it was the
+    # largest single class of untyped value node reaching the end of the
+    # analysis pipeline.
+    #
+    # It types the CONTAINER only. Readers -- `shift`, `$_[0]` -- produce their
+    # own nodes typed from the callsite, and are unaffected: an Int argument
+    # still shifts out as Int. What stays out of reach is `my @a = @_`, which
+    # binds the whole list and so needs the ELEMENT type; that is the
+    # Array[Scalar] wall, and it remains a GAP.
     sub _args_source ($factory) {
-        return $factory->make('ArgsSource');
+        return $factory->make('ArgsSource',
+            stamp => SoN::IR::Stamp->new(type => 'Array'));
     }
 
     # Create PadAccess or FieldAccess depending on whether it's a class field
