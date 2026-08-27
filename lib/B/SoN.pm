@@ -192,12 +192,17 @@ sub _discover_and_translate {
 # record learns nothing. Stamping fields first and RE-deriving the method return
 # types is what turns one root fix into the whole chain. Run in the other order
 # and every step still reads the value from before the step below it landed.
+#
+# The literal-subscript pass runs last and joins the chain rather than starting
+# it: an aggregate's elements may themselves be calls or field reads, so it wants
+# those already stamped.
 sub _resolve_deferred_stamps {
     my ( $graphs, $classes ) = @_;
 
     _stamp_field_reads( $graphs, $classes );
     _rederive_method_return_types( $graphs, $classes );
     _stamp_calls_from_callees( $graphs, $classes );
+    _stamp_literal_subscripts($graphs);
 
     return;
 }
@@ -297,6 +302,105 @@ sub _stamp_calls_from_callees {
         }
     }
     return;
+}
+
+
+# _stamp_literal_subscripts(\%graphs) -- give a subscript of a LITERAL aggregate
+# the type of the elements it could select.
+#
+# WHAT WAS WRONG. An anonymous aggregate's elements are its own input nodes, and
+# each already carries a stamp. `$a[1]` where `@a = (1,2,3)` is Int, determined
+# entirely by data the producer is holding at the time it builds the Subscript.
+# It went to the wire Unknown. Measured over chalk's 231 corpus cases, 27 of 233
+# wire Unknowns were subscripts of an aggregate whose operands were both typed.
+#
+# THREE THINGS MAKE THE OBVIOUS VERSION UNSOUND, and each was reachable in the
+# corpus. All three are why this reads more than just the element list:
+#
+# 1. THE AGGREGATE MUST NOT HAVE BEEN WRITTEN THROUGH. `my @a=(1,2,3); $a[0]="s";
+#    say($a[0])` builds the read with the STORE as its memory input, not
+#    MemStart. The literal no longer describes the array, and answering Int
+#    there is a miscompile -- the value is Str. So this only speaks when memory
+#    is still at MemStart (or absent): the aggregate is provably unwritten.
+#
+# 2. THE ELEMENT TYPES ARE JOINED, NOT INDEXED. Answering with element $i's
+#    exact type is more precise and it is WRONG here for the same reason as (1),
+#    only harder to see: a later store the walk has not linked would silently
+#    invalidate a per-slot claim, while the join over all elements stays true
+#    for whichever slot is read. Stamp::join is exactly the safe-supertype
+#    operation, so `(1,"x")` reads Str rather than sampling Int from slot 0.
+#
+# 3. OUT OF RANGE YIELDS undef, NOT AN ELEMENT. `(1,2)[5]` is not Int. A
+#    constant index can be bounds-checked here; a computed one cannot, and both
+#    the overrun and the computed index stay Unknown rather than borrowing the
+#    element join.
+#
+# HASH VALUES ONLY. A hash literal interleaves keys and values in its inputs, so
+# the values sit at ODD offsets. Joining the keys in too would make `{a=>1}`
+# read Str and quietly mistype every integer-valued hash.
+sub _stamp_literal_subscripts {
+    my ($graphs) = @_;
+
+    for my $gname ( sort keys $graphs->%* ) {
+        my $graph = $graphs->{$gname} or next;
+        for my $node ( $graph->nodes->@* ) {
+            next unless $node->isa('SoN::IR::Node::Subscript');
+            next unless ( $node->stamp ? $node->stamp->type : '' ) eq 'Unknown';
+
+            my $type = _literal_element_type($node);
+            next unless defined $type;
+
+            $node->set_stamp( SoN::IR::Stamp->new( type => $type ) );
+        }
+    }
+    return;
+}
+
+# _literal_element_type($subscript) -- the type this subscript's read could
+# yield, or undef when that is not decidable from the literal alone.
+sub _literal_element_type {
+    my ($node) = @_;
+    my $inputs = $node->inputs // [];
+    my ( $agg, $index, $mem ) = $inputs->@[ 0, 1, 2 ];
+    return undef unless defined $agg && defined $index;
+
+    # Rule 1: an aggregate that has been stored through is no longer described
+    # by its literal. Only an unwritten one (memory still at MemStart, or no
+    # memory input at all) may be read this way.
+    return undef if defined $mem && !$mem->isa('SoN::IR::Node::MemStart');
+
+    return undef unless $index->isa('SoN::IR::Node::Constant');
+
+    my $is_array = $agg->isa('SoN::IR::Node::ArrayRef');
+    my $is_hash  = $agg->isa('SoN::IR::Node::HashRef');
+    return undef unless $is_array || $is_hash;
+
+    my @elems = ( $agg->inputs // [] )->@*;
+    my @values;
+
+    if ($is_array) {
+        my $i = $index->value;
+        # Only a plain non-negative integer literal is decidable: a negative
+        # index counts from the end, and a non-integer is not an index at all.
+        return undef unless defined $i && $i =~ /^[0-9]+$/;
+        # Rule 3: past the end is undef, not an element.
+        return undef if $i > $#elems;
+        @values = @elems;
+    }
+    else {
+        # Rule: hash values sit at odd offsets.
+        @values = @elems[ grep { $_ % 2 } 0 .. $#elems ];
+    }
+    return undef unless @values;
+
+    # Rule 2: join, do not sample.
+    my $joined;
+    for my $v (@values) {
+        my $st = $v ? $v->stamp : undef;
+        return undef unless $st;
+        $joined = defined $joined ? SoN::IR::Stamp::join( $joined, $st ) : $st;
+    }
+    return $joined ? $joined->type : undef;
 }
 
 # _callee_return_type($call, \%classes) -- the declared return type of the callee
