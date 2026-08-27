@@ -144,6 +144,41 @@ runs across three SHAs to move chalk's gate -- the pairing did its job.
   producer as a live path with no version pin, so it was serialized through the
   chalk coordinator.
 
+## Gate confirmation (chalk coordinator, `f2d5637`)
+
+**215/215/215/215, 241/241, 0 failures.** Zero behavioural mismatches.
+
+The 214 at `7967639` was the R10 miscompile, fixed in `364a631`. Gating
+`364a631` then showed `gate-green=212 behavior=215 shape=212` -- three cases
+red on the SHAPE leg only, with **zero** behavioural failures: arithmetic OOB
+read, `references` R9 OOB read, and R10. Their hand-written ir blocks still
+specified `Subscript :Slot` / `Coerce(Slot -> Str)`.
+
+**Those specs were stale, not the stamps.** `Slot` is a target encoding; `Undef`
+is the lattice member and the true static answer. Chalk updated six lines across
+the three cases (chalk `3ebf0ce8`) and the gate returned to 215/215/215/215.
+
+Two things worth carrying forward:
+
+- **The shape leg compares spec against wire, so it goes red on a CORRECT
+  producer change** whenever a hand-written ir block still encodes the old
+  answer. Expect it to be the leg that moves first on any future stamp change --
+  and check which leg moved before assuming a regression.
+- **`Undef` survives chalk's loader today**; `Unknown` does not (its
+  `%LOWERABLE_STAMP` writes `Unknown` as an absence -- chalk's section 5.0, not a
+  producer defect). That is why a provably-absent read is stamped `Undef` rather
+  than refused.
+
+Nine gate runs across five producer SHAs; exactly one moved the gate, and the
+behavioural leg caught it within minutes of landing.
+
+### Do not "fix" the 7 memory Phis
+
+Recorded because it would look like an easy win and is a wrong answer with a
+plausible shape. They merge MEMORY STATES; `MemStart` carries no stamp. Stamping
+one from its store's value type asserts that a memory state is an `Int`, and
+chalk's join would then propagate that through its merge sites.
+
 ## New tests
 
     t/wire-call-return-stamp.t        callee return type reaches the callsite
