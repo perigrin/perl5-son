@@ -166,7 +166,169 @@ sub _discover_and_translate {
     # fixpoint until no new class appears.
     _emit_referenced_classes( \%graphs, \%classes ) if $filter;
 
+    _resolve_deferred_stamps( \%graphs, \%classes );
+
     return ( \%graphs, \%classes );
+}
+
+# _resolve_deferred_stamps(\%graphs, \%classes) -- answer, once every graph
+# exists, the stamp questions a single-CV walk could not.
+#
+# WHY A POST-PASS AT ALL. The walk translates one CV at a time in stash order.
+# A Call is built while translating its CALLER, so the callee's graph may not
+# exist yet -- and for a recursive call no order helps. A class field's declared
+# type is recorded by _wire_field_defaults during class extraction, which for a
+# method walked first has not run. Both answers exist once the walk is done.
+# This is the same late-decoration shape as Call::set_resolved_graph and the
+# loop-header Phi patch in Node::set_stamp: build first, then fill in what only
+# the completed set knows.
+#
+# ORDER IS LOAD-BEARING, and it is a dependency chain, not a preference:
+#
+#   field type -> FieldAccess stamp -> method return type -> Call stamp
+#
+# `method val { return $n }` returns a FieldAccess. Until that read is typed,
+# _graph_return_type reports Unknown for the method, and a callsite reading that
+# record learns nothing. Stamping fields first and RE-deriving the method return
+# types is what turns one root fix into the whole chain. Run in the other order
+# and every step still reads the value from before the step below it landed.
+sub _resolve_deferred_stamps {
+    my ( $graphs, $classes ) = @_;
+
+    _stamp_field_reads( $graphs, $classes );
+    _rederive_method_return_types( $graphs, $classes );
+    _stamp_calls_from_callees( $graphs, $classes );
+
+    return;
+}
+
+# _stamp_field_reads(\%graphs, \%classes) -- give each class-field read the type
+# its field was declared with.
+#
+# WHAT WAS WRONG. _wire_field_defaults derives a field's type from its default
+# and records it on the class section as `type`. A FieldAccess node carries
+# field_stash and field_index, which select exactly that record -- and nothing
+# read it back, so every class-field read reached the wire `Unknown`. Measured
+# over chalk's 231 corpus cases, 21 of 233 wire Unknowns were this node kind,
+# and they fed a further chain of Add/Assign/method-return Unknowns above them.
+#
+# ONLY PROPAGATES. A field with no default has no derived type, and its reads
+# stay Unknown -- the honest answer. Nothing is invented here.
+sub _stamp_field_reads {
+    my ( $graphs, $classes ) = @_;
+
+    for my $gname ( sort keys $graphs->%* ) {
+        my $graph = $graphs->{$gname} or next;
+        for my $node ( $graph->nodes->@* ) {
+            next unless $node->isa('SoN::IR::Node::FieldAccess');
+            next unless ( $node->stamp ? $node->stamp->type : '' ) eq 'Unknown';
+
+            my $cls = $classes->{ $node->field_stash // '' } or next;
+            my $fix = $node->field_index;
+            next unless defined $fix;
+
+            # Keyed by the DECLARED fieldix, not by array position: the two
+            # coincide today, but a field the extractor skips would silently
+            # shift every later index and mistype every read above it.
+            my ($rec) = grep { ( $_->{fieldix} // -1 ) == $fix }
+                        ( $cls->{fields} // [] )->@*;
+            next unless $rec && defined $rec->{type} && $rec->{type} ne 'Unknown';
+
+            $node->set_stamp( SoN::IR::Stamp->new( type => $rec->{type} ) );
+        }
+    }
+    return;
+}
+
+# _rederive_method_return_types(\%graphs, \%classes) -- recompute each method's
+# return type now that its body's reads are typed.
+#
+# The first derivation runs during class extraction, before the field reads in
+# the body have a type. Re-asking the same question of the same function against
+# the now-stamped graph is what carries a field's type out through the method
+# that returns it. Only ever narrows: an entry that is already determined is
+# left alone, so this cannot widen a type the walk got right.
+sub _rederive_method_return_types {
+    my ( $graphs, $classes ) = @_;
+
+    for my $cname ( sort keys $classes->%* ) {
+        my $rts = $classes->{$cname}{method_return_types} or next;
+        for my $mname ( sort keys $rts->%* ) {
+            next unless ( $rts->{$mname} // 'Unknown' ) eq 'Unknown';
+            my $g = $graphs->{"${cname}::${mname}"} or next;
+            $rts->{$mname} = _graph_return_type($g);
+        }
+    }
+    return;
+}
+
+# _stamp_calls_from_callees(\%graphs, \%classes) -- give each statically-resolved
+# Call the return type its callee already declared.
+#
+# WHAT WAS WRONG. `return_type` is computed by _graph_return_type and written
+# onto the sub record (and method_return_types for methods) -- and nothing read
+# it back. The callsite went to the wire stamped `Unknown` while the answer sat
+# in the same JSON document on a different record. Measured over chalk's 231
+# corpus cases: 60 of 233 wire Unknowns were Calls, and every one of them
+# resolved statically (dispatch_kind direct/method/builtin, name known). None
+# were runtime-polymorphic.
+#
+# ONLY PROPAGATES, NEVER INVENTS. A callee whose own return is undetermined
+# reports `Unknown`, and the callsite stays `Unknown` -- which is the honest
+# answer, not a failure. Builtins are left alone: their result type is a
+# property of the builtin, not of a callee graph, and `shift`'s element type is
+# the Array[Scalar] wall, still a GAP. Anything not resolved here keeps the
+# stamp it was constructed with.
+sub _stamp_calls_from_callees {
+    my ( $graphs, $classes ) = @_;
+
+    for my $gname ( sort keys $graphs->%* ) {
+        my $graph = $graphs->{$gname} or next;
+        for my $node ( $graph->nodes->@* ) {
+            next unless $node->isa('SoN::IR::Node::Call');
+            # Already typed by the walk (a constructor knows it returns its
+            # class): a caller that KNOWS still wins, as at the factory default.
+            next unless ( $node->stamp ? $node->stamp->type : '' ) eq 'Unknown';
+
+            my $type = _callee_return_type( $node, $classes );
+            next unless defined $type && $type ne 'Unknown';
+
+            $node->set_stamp( SoN::IR::Stamp->new( type => $type ) );
+        }
+    }
+    return;
+}
+
+# _callee_return_type($call, \%classes) -- the declared return type of the callee
+# this Call names, or undef when it is not a statically-resolved user callee.
+#
+# Reads the SAME records the wire carries, so the callsite stamp and the callee
+# metadata cannot disagree: one source, consulted twice.
+sub _callee_return_type {
+    my ( $call, $classes ) = @_;
+    my $kind = $call->dispatch_kind // '';
+    my $name = $call->name          // '';
+
+    # A method call names its class explicitly; the return type rides in the
+    # class section's method_return_types, keyed by bare method name.
+    if ( $kind eq 'method' ) {
+        my $cname = $call->class_name // return undef;
+        my $cls   = $classes->{$cname} or return undef;
+        return ( $cls->{method_return_types} // {} )->{$name};
+    }
+
+    # A direct sub call names the callee fully qualified (main::f). The sub
+    # record hangs off its owning class under the BARE name.
+    if ( $kind eq 'direct' ) {
+        my ( $pkg, $bare )
+            = $name =~ /^(.*)::([^:]+)$/ ? ( $1, $2 ) : ( 'main', $name );
+        my $cls = $classes->{$pkg} or return undef;
+        my $rec = ( $cls->{subs} // {} )->{$bare} or return undef;
+        return $rec->{return_type};
+    }
+
+    # Builtins are not user callees -- see the note above.
+    return undef;
 }
 
 # _emit_referenced_classes(\%graphs, \%classes) — walk the emitted graphs for
