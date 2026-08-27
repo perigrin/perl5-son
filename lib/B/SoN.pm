@@ -560,6 +560,8 @@ my %ARITH_OPS = map { $_ => 1 } qw(Add Subtract Multiply);
 #   qr/foo/      the producer wrote const_type => 'regex' into this node's OWN
 #                attributes and then stamped the node Unknown
 #   $n * 2       arithmetic over two stamped operands is decidable
+#   $a[0] = 42   an assignment yields the value it STORED, so it takes the RHS
+#                type -- the reason `$x = $y = 5` works
 #
 # ONLY PROPAGATES. An untyped operand leaves the result untyped: arithmetic
 # widens what it is given and invents nothing. `f() * 2` where f is untyped
@@ -607,6 +609,22 @@ sub _derived_type {
         # more than is known about what it points at.
         return 'ScalarRef' if $it ne '' && $it ne 'Unknown';
         return undef;
+    }
+
+    # AN ASSIGNMENT YIELDS THE VALUE IT STORED, which is why `$x = $y = 5`
+    # works -- SoN::IR::Value's own comment says so ("an assignment's result is
+    # the stored value"). So the stamp is the RHS's, NOT the target's: storing a
+    # Str into a slot that held an Int yields Str, and taking the lvalue's type
+    # would be wrong in exactly that case.
+    #
+    # inputs are [lvalue, rvalue]. A single-input Assign is a declaration form
+    # with no separate stored value, so there is nothing to take.
+    if ( $op eq 'Assign' || $op eq 'CompoundAssign' ) {
+        return undef unless @inputs == 2;
+        my $rhs = $inputs[1] or return undef;
+        my $st  = $rhs->stamp or return undef;
+        return undef if $st->type eq 'Unknown';
+        return $st->type;
     }
 
     # Arithmetic: decidable exactly when BOTH operands are.
