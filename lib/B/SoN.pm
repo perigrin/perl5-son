@@ -203,6 +203,7 @@ sub _resolve_deferred_stamps {
     _rederive_method_return_types( $graphs, $classes );
     _stamp_calls_from_callees( $graphs, $classes );
     _stamp_literal_subscripts($graphs);
+    _stamp_merges($graphs);
 
     return;
 }
@@ -401,6 +402,101 @@ sub _literal_element_type {
         $joined = defined $joined ? SoN::IR::Stamp::join( $joined, $st ) : $st;
     }
     return $joined ? $joined->type : undef;
+}
+
+
+# _is_merge_node($node) -- does this node yield one of its inputs unchanged?
+#
+# The set is deliberately CLOSED and small. A node belongs here only if it
+# selects among its operands rather than computing from them: adding one that
+# computes (Add, Concat) would stamp a result with an operand's type and be
+# wrong. TernaryExpr is absent because its first input is the CONDITION, not a
+# candidate value -- joining that in would drag Boolean into every select.
+sub _is_merge_node {
+    my ($node) = @_;
+    return 1 if $node->isa('SoN::IR::Node::Phi');
+    return 1 if $node->isa('SoN::IR::Node::And');
+    return 1 if $node->isa('SoN::IR::Node::Or');
+    return 1 if $node->isa('SoN::IR::Node::DefinedOr');
+    return 0;
+}
+
+# _stamp_merges(\%graphs) -- stamp every node that YIELDS ONE OF ITS ARMS with
+# the join of those arms.
+#
+# ONE RULE, FOUR NODE KINDS. A Phi yields whichever arm's edge was taken. `&&`
+# and `||` yield one operand or the other; so does `//`. None of them computes a
+# new value, so in every case the result type is the join of the candidates --
+# the same question, and SoN::IR::Stamp::join is the answer to all of it.
+# Treating them separately would be four spellings of one rule.
+#
+# WHAT WAS WRONG. The join was already being applied at TWO construction sites
+# -- _patch_loop_phi for a loop-carried slot, and the guarded-loop merge path --
+# but nowhere else, so an ordinary if/else merge reached the wire Unknown even
+# with both arms Int constants, and `$a // $b` over two Ints did too. Measured
+# over chalk's 231 corpus cases: 19 Phis and 8 logical-ops whose inputs were ALL
+# already stamped. This generalises what those two sites do rather than adding a
+# new rule.
+#
+# THE LOGICAL OPS ARE WHY THIS RUNS TO FIXPOINT ACROSS KINDS, not just within
+# Phi: a `//` feeding a merge leaves the Phi poisoned until the `//` itself is
+# typed. Measured -- the corpus's `my $x = $a // 0; if (...) { $x = 1 }` case had
+# a correctly-poisoned Phi whose real root was an Unknown DefinedOr.
+#
+# TO FIXPOINT, because a Phi may feed another Phi -- a merge inside a merge, an
+# elsif chain, a merge whose arm is a loop-carried value. One pass stamps the
+# innermost, the next stamps what reads it. Iterating until nothing changes is
+# what carries a type up a nested chain; a single pass leaves the outer merges
+# Unknown, which is the shape the corpus's nested-if cases have.
+#
+# AN UNKNOWN INPUT POISONS THE RESULT, and must: join(Int, Unknown) is Unknown.
+# Taking the typed arm instead would assert a type the other path cannot
+# support. That is the same rule _patch_loop_phi's _is_narrowed guard enforces,
+# and it is why this only speaks when EVERY input is narrowed.
+#
+# The bound is a backstop, not a schedule: the lattice has finite height and a
+# join only ever moves up it, so this converges in a couple of passes. A run
+# that hits the bound means the lattice or an input mutated under it, and
+# stopping is better than spinning.
+sub _stamp_merges {
+    my ($graphs) = @_;
+
+    my $ROUNDS = 10;
+    for my $round ( 1 .. $ROUNDS ) {
+        my $changed = 0;
+        for my $gname ( sort keys $graphs->%* ) {
+            my $graph = $graphs->{$gname} or next;
+            for my $node ( $graph->nodes->@* ) {
+                next unless _is_merge_node($node);
+                next unless ( $node->stamp ? $node->stamp->type : '' ) eq 'Unknown';
+
+                my @inputs = ( $node->inputs // [] )->@*;
+                next unless @inputs;
+
+                my $joined;
+                my $ok = 1;
+                for my $in (@inputs) {
+                    my $st = $in ? $in->stamp : undef;
+                    # Every input must SAY something. An Unknown arm makes the
+                    # join Unknown, so there is nothing to record and nothing
+                    # gained by writing it back.
+                    unless ( defined $st && $st->type ne 'Unknown' ) {
+                        $ok = 0;
+                        last;
+                    }
+                    $joined = defined $joined
+                        ? SoN::IR::Stamp::join( $joined, $st )
+                        : $st;
+                }
+                next unless $ok && $joined && $joined->type ne 'Unknown';
+
+                $node->set_stamp( SoN::IR::Stamp->new( type => $joined->type ) );
+                $changed++;
+            }
+        }
+        last unless $changed;
+    }
+    return;
 }
 
 # _callee_return_type($call, \%classes) -- the declared return type of the callee
