@@ -189,6 +189,9 @@ class SoN::IR::NodeFactory {
         Defined    => 'Boolean',
         RegexMatch => 'Boolean',
         NotMatch   => 'Boolean',
+        # `!$x` is a boolean whatever $x is -- the same category as Defined
+        # above, and it was simply missing from this table.
+        Not        => 'Boolean',
     );
 
     field %cache;

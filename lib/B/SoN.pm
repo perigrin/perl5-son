@@ -204,6 +204,7 @@ sub _resolve_deferred_stamps {
     _stamp_calls_from_callees( $graphs, $classes );
     _stamp_literal_subscripts($graphs);
     _stamp_merges($graphs);
+    _stamp_derived($graphs);
 
     return;
 }
@@ -331,10 +332,14 @@ sub _stamp_calls_from_callees {
 #    for whichever slot is read. Stamp::join is exactly the safe-supertype
 #    operation, so `(1,"x")` reads Str rather than sampling Int from slot 0.
 #
-# 3. OUT OF RANGE YIELDS undef, NOT AN ELEMENT. `(1,2)[5]` is not Int. A
-#    constant index can be bounds-checked here; a computed one cannot, and both
-#    the overrun and the computed index stay Unknown rather than borrowing the
-#    element join.
+# 3. A READ THAT IS NOT THERE YIELDS undef, NOT AN ELEMENT. `(1,2)[5]` is not
+#    Int, and neither is `{a=>1}{z}`. This is ONE rule over both container
+#    kinds, and having written it for array indices only was a miscompile:
+#    hashes had no membership test at all, so `$h{z}` took the value join and
+#    printed 0 where perl prints an empty line (chalk's behavioural gate,
+#    references.md R10). A provably-absent read is stamped Undef -- a real
+#    lattice member, and the true answer. A COMPUTED index or key cannot be
+#    decided either way and stays Unknown.
 #
 # HASH VALUES ONLY. A hash literal interleaves keys and values in its inputs, so
 # the values sit at ODD offsets. Joining the keys in too would make `{a=>1}`
@@ -359,6 +364,20 @@ sub _stamp_literal_subscripts {
 
 # _literal_element_type($subscript) -- the type this subscript's read could
 # yield, or undef when that is not decidable from the literal alone.
+#
+# MEMBERSHIP IS THE SAME QUESTION FOR BOTH CONTAINER KINDS, and missing that
+# for hashes was a MISCOMPILE. The first version bounds-checked array indices
+# and read a hash by joining its values with no membership test at all, so
+# `my %h=(a=>1,b=>2); say($h{z})` stamped Int and printed 0 where perl prints
+# an empty line (caught by chalk's behavioural gate, references.md R10).
+#
+# A MISSING KEY AND AN OUT-OF-RANGE INDEX ARE ONE FACT: the read yields undef,
+# so no element type describes it. The value join was not wrong in R10 -- Int
+# really is the join of 1 and 2 -- it simply did not apply, because the key was
+# not there. Both are answered UNDEF rather than refused: undef is what the read
+# yields, it is a real lattice member, and it is knowable statically here. That
+# keeps a fact rather than discarding it, and join(Undef, Int) widens correctly
+# to Scalar if the read later merges with a defined arm.
 sub _literal_element_type {
     my ($node) = @_;
     my $inputs = $node->inputs // [];
@@ -384,12 +403,36 @@ sub _literal_element_type {
         # Only a plain non-negative integer literal is decidable: a negative
         # index counts from the end, and a non-integer is not an index at all.
         return undef unless defined $i && $i =~ /^[0-9]+$/;
-        # Rule 3: past the end is undef, not an element.
-        return undef if $i > $#elems;
+        # Rule 3: past the end yields undef, and that is knowable.
+        return 'Undef' if $i > $#elems;
         @values = @elems;
     }
     else {
-        # Rule: hash values sit at odd offsets.
+        # Hash: keys sit at EVEN offsets and values at odd ones.
+        #
+        # The key must be a literal AND present. A computed key cannot be
+        # decided here at all -- not the absent case, so it refuses rather than
+        # answering Undef.
+        my $want = $index->value;
+        return undef unless defined $want;
+
+        my $found = 0;
+        my $decidable = 1;
+        for my $k ( 0 .. $#elems ) {
+            next if $k % 2;
+            my $key = $elems[$k];
+            # A non-literal key means the key set is not known, so absence
+            # cannot be concluded from not matching it.
+            unless ( $key && $key->isa('SoN::IR::Node::Constant') ) {
+                $decidable = 0;
+                last;
+            }
+            my $kv = $key->value;
+            $found = 1 if defined $kv && $kv eq $want;
+        }
+        return undef unless $decidable;
+        return 'Undef' unless $found;
+
         @values = @elems[ grep { $_ % 2 } 0 .. $#elems ];
     }
     return undef unless @values;
@@ -497,6 +540,89 @@ sub _stamp_merges {
         last unless $changed;
     }
     return;
+}
+
+# The arithmetic ops whose result type is decidable from their operands. Each
+# COMPUTES rather than selects, so unlike the merge set the answer is the join
+# of the operand types only because these operators are closed over the numeric
+# tower: Int*Int is Int, and a Str operand widens the result the same way it
+# widens the join. Division is absent on purpose -- 4/2 is Int but 1/2 is not,
+# so its result is not decidable from the operand types alone.
+my %ARITH_OPS = map { $_ => 1 } qw(Add Subtract Multiply);
+
+# _stamp_derived(\%graphs) -- stamps a node can compute from what it already
+# holds: its own attributes, or the kind of its single operand.
+#
+# WHAT WAS WRONG. Three separate one-line answers the producer had in hand:
+#
+#   \@a          a reference to an array is an ArrayRef -- the operand node is
+#                right there as the input, and its kind IS the answer
+#   qr/foo/      the producer wrote const_type => 'regex' into this node's OWN
+#                attributes and then stamped the node Unknown
+#   $n * 2       arithmetic over two stamped operands is decidable
+#
+# ONLY PROPAGATES. An untyped operand leaves the result untyped: arithmetic
+# widens what it is given and invents nothing. `f() * 2` where f is untyped
+# stays Unknown, and has a test saying so.
+sub _stamp_derived {
+    my ($graphs) = @_;
+
+    for my $gname ( sort keys $graphs->%* ) {
+        my $graph = $graphs->{$gname} or next;
+        for my $node ( $graph->nodes->@* ) {
+            next unless $node->isa('SoN::IR::Value');
+            next unless ( $node->stamp ? $node->stamp->type : '' ) eq 'Unknown';
+
+            my $type = _derived_type($node);
+            next unless defined $type;
+
+            $node->set_stamp( SoN::IR::Stamp->new( type => $type ) );
+        }
+    }
+    return;
+}
+
+# _derived_type($node) -- the type this node can work out for itself, or undef.
+sub _derived_type {
+    my ($node) = @_;
+    my $op     = $node->operation;
+    my @inputs = ( $node->inputs // [] )->@*;
+
+    # A compiled regex says so in its own const_type.
+    if ( $op eq 'Constant' ) {
+        my $ct = $node->can('const_type') ? $node->const_type : undef;
+        return 'Regex' if defined $ct && $ct eq 'regex';
+        return undef;
+    }
+
+    # \OPERAND: the reference kind follows the operand's kind.
+    if ( $op eq 'Ref' ) {
+        my $inner = $inputs[0] or return undef;
+        my $it = $inner->stamp ? $inner->stamp->type : '';
+        return 'ArrayRef'  if $it eq 'ArrayRef'  || $it eq 'Array';
+        return 'HashRef'   if $it eq 'HashRef'   || $it eq 'Hash';
+        return 'CodeRef'   if $it eq 'CodeRef'   || $it eq 'Code';
+        # A reference to a plain scalar is a ScalarRef; anything still Unknown
+        # stays Unknown rather than being called a bare Ref, which would claim
+        # more than is known about what it points at.
+        return 'ScalarRef' if $it ne '' && $it ne 'Unknown';
+        return undef;
+    }
+
+    # Arithmetic: decidable exactly when BOTH operands are.
+    if ( $ARITH_OPS{$op} ) {
+        return undef unless @inputs == 2;
+        my ( $l, $r ) = @inputs;
+        return undef unless $l && $r;
+        my ( $ls, $rs ) = ( $l->stamp, $r->stamp );
+        return undef unless $ls && $rs;
+        return undef if $ls->type eq 'Unknown' || $rs->type eq 'Unknown';
+        my $joined = SoN::IR::Stamp::join( $ls, $rs );
+        return undef unless $joined && $joined->type ne 'Unknown';
+        return $joined->type;
+    }
+
+    return undef;
 }
 
 # _callee_return_type($call, \%classes) -- the declared return type of the callee

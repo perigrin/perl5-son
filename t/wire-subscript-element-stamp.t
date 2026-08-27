@@ -94,4 +94,39 @@ subtest 'a subscript after a store does not trust the literal' => sub {
         'the read after a store is NOT claimed Int (the stored value is Str)';
 };
 
+# THE MISSING-KEY CASE, and getting it wrong is a MISCOMPILE. Caught by chalk's
+# behavioural gate (references.md R10) after the first version of this pass
+# shipped: `my %h = (a=>1,b=>2); say($h{z})` prints an empty line under perl and
+# printed 0 under chalk, because the read was stamped Int.
+#
+# A MISSING HASH KEY IS THE SAME FACT AS AN OUT-OF-RANGE ARRAY INDEX: the read
+# yields undef, so no element type describes it. The first version bounds-checked
+# array indices and never wrote the membership equivalent for hash keys -- the
+# join over the values (Int, from 1 and 2) was correct and still did not apply,
+# because the key is not there at all.
+#
+# UNDEF, NOT UNKNOWN. Undef is a real lattice member and the answer is known
+# statically: a literal key absent from a literal hash yields undef. Stamping it
+# keeps a fact the producer holds, and join(Undef, Int) widens to Scalar if this
+# read later merges with a defined arm.
+subtest 'a missing literal key is Undef, never the value type' => sub {
+    my $s = subscript_stamp('my %h = (a => 1, b => 2); say($h{z});', 'misskey');
+    isnt $s, 'Int', 'a missing key is NOT stamped with the value type';
+    is $s, 'Undef', 'a literal key absent from a literal hash reads Undef';
+};
+
+# BILATERAL: a key that IS present must still take the value type, or the fix
+# above would be indistinguishable from disabling hash stamping entirely.
+subtest 'a present literal key still takes the value type' => sub {
+    is subscript_stamp('my %h = (a => 1, b => 2); say($h{b});', 'haskey'),
+        'Int', 'a present key reads the value type';
+};
+
+# THE ARRAY ANALOGUE, stated as the same rule. A constant index provably past
+# the end is Undef for exactly the reason a missing key is.
+subtest 'a provably out-of-range constant index is Undef' => sub {
+    is subscript_stamp('my @a = (1, 2); say($a[5]);', 'oob_undef'),
+        'Undef', 'past the end reads Undef, not the element type';
+};
+
 done_testing;
