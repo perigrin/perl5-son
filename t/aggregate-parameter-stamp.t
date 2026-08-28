@@ -67,17 +67,42 @@ subtest 'a slurpy hash parameter is stamped Hash' => sub {
         'stamped Hash -- a slurpy is NOT always an array';
 };
 
-subtest 'a scalar parameter is left unstamped' => sub {
-    # Deliberate, and the opposite of a gap: this end cannot see the callsite,
-    # so guessing a type here would be inventing one. The loader binds it from
-    # the caller's argument.
+# UPDATED. The original said: "this end cannot see the callsite, so guessing a
+# type here would be inventing one. The loader binds it from the caller's
+# argument." The first half is true and the CONCLUSION does not follow -- and
+# the second half is the unsound direction.
+#
+# `sub h($x, $y) { return $x + $y }` constrains both parameters through the
+# BODY: `+` is numeric, so $x and $y are Num. That is not a guess about callers,
+# it is what the operator requires of whatever arrives. Ordinary type inference
+# does exactly this -- HM emits T($x) == Num from the same expression, abstract
+# interpretation narrows from the use site.
+#
+# And binding from the callsite is what WOULD be unsound: h(1,2) says Int, while
+# h(1.5,2) is equally legal. The body's Num is correct for every caller; the
+# callsite's Int is correct for one.
+#
+# A parameter NO operator constrains is still untyped -- see the last case.
+subtest 'a scalar parameter takes the type its body requires' => sub {
     my $p = params_for( 'sub h($x, $y) { return $x + $y } h(1,2);',
                         'scalar_params' );
     my @scalars = grep { ( $_->{sigil} // '$' ) eq '$' } @$p;
     ok scalar(@scalars), 'the scalar parameters reached the wire';
     for my $s (@scalars) {
+        is $s->{stamp}, 'Num',
+            "$s->{name}: `+` puts it in numeric context, so it is Num";
+    }
+};
+
+subtest 'an unconstrained scalar parameter stays unstamped' => sub {
+    # The half of the original premise that survives: with no operator imposing
+    # anything, this end genuinely has nothing to say, and does not invent it.
+    my $p = params_for( 'sub id($x) { return $x } id(1);', 'unconstrained_param' );
+    my @scalars = grep { ( $_->{sigil} // '$' ) eq '$' } @$p;
+    ok scalar(@scalars), 'the scalar parameter reached the wire';
+    for my $s (@scalars) {
         ok !defined $s->{stamp} || $s->{stamp} eq 'Unknown',
-            'a scalar parameter carries no committed type from this end';
+            'nothing constrains it, so nothing is claimed';
     }
 };
 

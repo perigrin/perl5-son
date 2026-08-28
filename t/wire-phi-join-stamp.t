@@ -105,7 +105,14 @@ print "x=$x\n";', 'undef_merge');
 # AN UNKNOWN ARM POISONS THE JOIN, and must. join(Int, Unknown) is Unknown --
 # claiming Int would assert a type one path cannot support. `shift` off @_ is
 # the Array[Scalar] wall, genuinely untyped at the producer.
-subtest 'an Unknown arm leaves the merge Unknown' => sub {
+# UPDATED for the same reason as the arithmetic guard: `$u > 1` is a NUMERIC
+# comparison, so it constrains $u to Num, and the arm carrying $u is then typed.
+# The merge is no longer poisoned because the arm is no longer untyped.
+#
+# What still holds, and is what this subtest now pins: the merge takes the JOIN
+# of its arms rather than one arm's type. join(Int, Num) is Num -- the wider of
+# the two -- so a merge cannot come out narrower than an arm that reaches it.
+subtest 'a merge takes the join of its arms, not the narrower one' => sub {
     my $wire = wire_for('sub g { my $u = shift; my $x = 0;
 if ($u > 1) { print "hi\n"; $x = $u }
 return $x }
@@ -113,8 +120,8 @@ print g(7), "\n";', 'poisoned');
     my @p = grep { $_->{op} eq 'Phi' && scalar(($_->{inputs} // [])->@*) == 2 }
             ($wire->{methods}{'main::g'}{nodes} // [])->@*;
     ok @p >= 1, 'a merge Phi exists' or return;
-    is $p[0]{stamp}, 'Unknown',
-        'a merge with an untyped arm stays Unknown, it does not take the typed arm';
+    is $p[0]{stamp}, 'Num',
+        'join(Int, Num) is Num -- the merge is not narrower than an arm';
 };
 
 done_testing;

@@ -164,7 +164,7 @@ sub _discover_and_translate {
     # have, and only those classes: the whole stash would leak every internal
     # SoN class. A newly-emitted method graph may reference further classes, so
     # fixpoint until no new class appears.
-    _emit_referenced_classes( \%graphs, \%classes ) if $filter;
+    _emit_referenced_classes( \%graphs, \%classes, $filter ) if $filter;
 
     _resolve_deferred_stamps( \%graphs, \%classes );
 
@@ -199,12 +199,42 @@ sub _discover_and_translate {
 sub _resolve_deferred_stamps {
     my ( $graphs, $classes ) = @_;
 
-    _stamp_field_reads( $graphs, $classes );
-    _rederive_method_return_types( $graphs, $classes );
-    _stamp_calls_from_callees( $graphs, $classes );
-    _stamp_literal_subscripts($graphs);
-    _stamp_merges($graphs);
-    _stamp_derived($graphs);
+    # TO A FIXPOINT, because the passes FEED EACH OTHER and no hand-ordering
+    # resolves that. Measured: backward inference types `$x` in
+    # `sub add1 { my ($x) = @_; return $x + 1 }`, but the Add above it is typed
+    # by _stamp_derived, which runs LATER -- so the return type was re-derived
+    # from a still-Unknown Add and stayed Unknown, and every callsite with it.
+    # Reordering only moves which pass is starved: the true dependency is a
+    # cycle (backward -> arithmetic -> return type -> callsite -> arithmetic).
+    #
+    # Terminating because every pass only ever writes a stamp to a node that
+    # had `Unknown`, and never widens one. The lattice has finite height and the
+    # untyped set shrinks monotonically, so the sweep count is bounded by it.
+    # The cap is a backstop against a pass that violates that, not a schedule.
+    my $ROUNDS = 8;
+    for my $round ( 1 .. $ROUNDS ) {
+        my $before = _count_unknown_stamps($graphs);
+
+        # BACKWARD INFERENCE RUNS LAST. A forward pass derives an ACTUAL
+        # type (the field record says Int; the callee return type says Str).
+        # Backward inference derives only a CONSTRAINT: `*` requires Num, which
+        # Int already satisfies and is strictly weaker than. Run it first and it
+        # PREEMPTS the better answer -- measured, `field $val :param = 0` has
+        # type Int on its record, but backward inference stamped the FieldAccess
+        # Num from the `*` above it, and _stamp_field_reads then skipped the node
+        # because its own only-fill-Unknown guard saw a stamp already there.
+        # Both guards are correct; the ORDER was wrong. Int * Int came out Num.
+        _stamp_field_reads( $graphs, $classes );
+        _rederive_method_return_types( $graphs, $classes );
+        _rederive_sub_return_types( $graphs, $classes );
+        _stamp_calls_from_callees( $graphs, $classes );
+        _stamp_literal_subscripts($graphs);
+        _stamp_merges($graphs);
+        _stamp_derived($graphs);
+        _infer_backward($graphs);
+
+        last if _count_unknown_stamps($graphs) == $before;
+    }
 
     return;
 }
@@ -264,6 +294,36 @@ sub _rederive_method_return_types {
             next unless ( $rts->{$mname} // 'Unknown' ) eq 'Unknown';
             my $g = $graphs->{"${cname}::${mname}"} or next;
             $rts->{$mname} = _graph_return_type($g);
+        }
+    }
+    return;
+}
+
+# _rederive_sub_return_types(\%graphs, \%classes) -- recompute each sub's return
+# type now that its body is typed.
+#
+# The sibling of _rederive_method_return_types, and needed for the same reason:
+# `_record_sub` computes `return_type` during the CV walk, BEFORE any of the
+# deferred-stamp passes run. A sub whose body only became typeable by BACKWARD
+# inference -- `sub add1 { my ($x) = @_; return $x + 1 }`, where `+` types $x
+# from its use -- reports Unknown at record time and would keep it.
+#
+# Re-asking the same question of the same function against the now-stamped graph
+# is what carries a parameter's inferred type out through the sub's signature,
+# and from there to every callsite via _stamp_calls_from_callees.
+#
+# Only ever narrows: an entry already determined is left alone, so this cannot
+# widen a type the walk got right.
+sub _rederive_sub_return_types {
+    my ( $graphs, $classes ) = @_;
+
+    for my $cname ( sort keys $classes->%* ) {
+        my $subs = $classes->{$cname}{subs} or next;
+        for my $sname ( sort keys $subs->%* ) {
+            my $rec = $subs->{$sname} or next;
+            next unless ( $rec->{return_type} // 'Unknown' ) eq 'Unknown';
+            my $g = $graphs->{ $rec->{graph} // '' } or next;
+            $rec->{return_type} = _graph_return_type($g);
         }
     }
     return;
@@ -643,6 +703,180 @@ sub _derived_type {
     return undef;
 }
 
+
+# What each op REQUIRES of its operands, by input position. undef means "no
+# requirement" -- the op is polymorphic there, or that slot is control/memory.
+#
+# This is the T1 requirement table: a TYPE constraint the operator imposes, not
+# a representation. `+` is numeric in Perl whatever its operands look like, so
+# an operand of `+` is Num. `.` and the string comparisons impose Str.
+#
+# DELIBERATELY NOT HERE. Divide is absent because its RESULT is not decidable
+# from operand types (4/2 is Int, 1/2 is not) -- but its operands ARE numeric,
+# so it appears here for the requirement while staying out of the forward
+# arithmetic table. Print is absent: it takes a Str REPRESENTATION, which is a
+# T2 fact, and putting it here would type a value from a lowering decision.
+our %OPERAND_REQUIRES = (
+    Add      => ['Num', 'Num'],   Subtract => ['Num', 'Num'],
+    Multiply => ['Num', 'Num'],   Divide   => ['Num', 'Num'],
+    Modulo   => ['Num', 'Num'],   Power    => ['Num', 'Num'],
+    Negate   => ['Num'],
+    NumEq    => ['Num', 'Num'],   NumNe    => ['Num', 'Num'],
+    NumLt    => ['Num', 'Num'],   NumGt    => ['Num', 'Num'],
+    NumLe    => ['Num', 'Num'],   NumGe    => ['Num', 'Num'],
+    NumCmp   => ['Num', 'Num'],
+
+    Concat   => ['Str', 'Str'],
+    StrEq    => ['Str', 'Str'],   StrNe    => ['Str', 'Str'],
+    StrLt    => ['Str', 'Str'],   StrGt    => ['Str', 'Str'],
+    StrLe    => ['Str', 'Str'],   StrGe    => ['Str', 'Str'],
+    StrCmp   => ['Str', 'Str'],
+    Length   => ['Str'],
+);
+
+# _count_unknown_stamps(\%graphs) -- how many Value nodes are still untyped.
+#
+# The fixpoint's progress measure. Every pass only ever REPLACES an `Unknown`
+# with a narrower type, so this count falls monotonically and reaching a
+# steady state means no pass can make further progress.
+sub _count_unknown_stamps {
+    my ($graphs) = @_;
+    my $n = 0;
+    for my $gname ( keys $graphs->%* ) {
+        my $graph = $graphs->{$gname} or next;
+        for my $node ( $graph->nodes->@* ) {
+            next unless $node->isa('SoN::IR::Value');
+            $n++ if ( $node->stamp ? $node->stamp->type : 'Unknown' ) eq 'Unknown';
+        }
+    }
+    return $n;
+}
+
+# _infer_backward(\%graphs) -- type a value from what its USES require.
+#
+# WHAT WAS MISSING. Every other pass runs FORWARD: operands to result, refusing
+# when an operand is Unknown. That leaves a value with NO forward seed untyped
+# forever -- a sub parameter, a `:param` field. Nothing flows in, so nothing
+# forward can decide it.
+#
+# But a use site CONSTRAINS its operands. `$x + 1` puts `$x` in numeric context,
+# so `$x` is Num -- from the BODY ALONE, with no callsite. That is the
+# information the producer was holding and never asked for.
+#
+# THE MEET IS THE OPERATION. A value carries what its declaration gives it (a
+# scalar slot is `Scalar`) and its uses impose a requirement; the type is
+# meet(declared, required). meet(Scalar, Num) = Num. This is the first caller of
+# Stamp::meet in the codebase -- forward passes join, this one meets.
+#
+# `Num` AND NOT `Int`, even though the corpus calls `add1(5)`. `add1(0.5)` is
+# legal and nothing in the body excludes it, so Int would be unsound. Narrowing
+# to Int needs the CALLSITE, which is a separate pass over a different edge.
+#
+# ONLY VALUES WITH NO FORWARD ANSWER. A node the forward passes already typed
+# keeps that type -- this fills gaps, it does not overrule. And a value no
+# constraining op consumes stays Unknown: the pass reads requirements, it does
+# not invent them.
+#
+# TO FIXPOINT, because typing a parameter lets the forward passes type the
+# expression above it, whose result may then constrain something else. The bound
+# is a backstop: the lattice has finite height and meet only moves down it.
+sub _infer_backward {
+    my ($graphs) = @_;
+
+    my $ROUNDS = 10;
+    for my $round ( 1 .. $ROUNDS ) {
+        my $changed = 0;
+        for my $gname ( sort keys $graphs->%* ) {
+            my $graph = $graphs->{$gname} or next;
+
+            # Collect, per value node, the requirements its consumers impose.
+            my %required;    # node id => Stamp
+            for my $node ( $graph->nodes->@* ) {
+                my $table = $OPERAND_REQUIRES{ $node->operation } or next;
+                my @inputs = ( $node->inputs // [] )->@*;
+                for my $i ( 0 .. $#inputs ) {
+                    my $want = $table->[$i] // next;
+                    my $operand = $inputs[$i] or next;
+                    next unless $operand->isa('SoN::IR::Value');
+
+                    # A COERCE IS TRANSPARENT TO A REQUIREMENT. The producer
+                    # already inserts Coerce(X -> Str) for a string context, so
+                    # `$s . "!"` has the Concat consuming a Coerce, not $s --
+                    # and the requirement would stop at a node that is already
+                    # Str. Descend to the value UNDERNEATH: it is the one with
+                    # no forward seed, and the one the requirement is about.
+                    # Measured: without this, numeric contexts type their
+                    # parameter (Add takes its operand directly) and string
+                    # contexts do not.
+                    $operand = _thread_through_coerce($operand);
+                    next unless $operand && $operand->isa('SoN::IR::Value');
+
+                    my $w = SoN::IR::Stamp->new( type => $want );
+                    my $have = $required{ $operand->id };
+                    # Two uses of one value both constrain it: meet the
+                    # requirements, so the value must satisfy both.
+                    $required{ $operand->id }
+                        = $have ? SoN::IR::Stamp::meet( $have, $w ) : $w;
+                }
+            }
+
+            for my $node ( $graph->nodes->@* ) {
+                next unless $node->isa('SoN::IR::Value');
+                next unless ( $node->stamp ? $node->stamp->type : '' ) eq 'Unknown';
+                my $want = $required{ $node->id } or next;
+                next if $want->type eq 'Unknown';
+
+                # The declared type of a scalar-slot read is `Scalar`; meeting it
+                # with the requirement is what narrows. A node whose declaration
+                # says nothing takes the requirement directly.
+                my $declared = _declared_slot_type($node);
+                my $result   = $declared
+                    ? SoN::IR::Stamp::meet( $declared, $want )
+                    : $want;
+
+                # None means the declaration and the use cannot both hold. That
+                # is a COERCION SITE, not a type here -- leave it for the pass
+                # that materialises coercions rather than stamping a bottom.
+                next if $result->type eq 'None' || $result->type eq 'Unknown';
+
+                $node->set_stamp( SoN::IR::Stamp->new( type => $result->type ) );
+                $changed++;
+            }
+        }
+        last unless $changed;
+    }
+    return;
+}
+
+# _thread_through_coerce($node) -- the value a requirement is really about.
+#
+# A Coerce is a conversion the producer inserted, not a value with a type of its
+# own to constrain. A requirement landing on one belongs to its input. Chases a
+# chain (a Coerce over a Coerce) rather than one step, and bounded so a cycle
+# cannot spin.
+sub _thread_through_coerce {
+    my ($node) = @_;
+    my $hops = 0;
+    while ( $node && $node->operation eq 'Coerce' && $hops++ < 8 ) {
+        $node = ( $node->inputs // [] )->[0];
+    }
+    return $node;
+}
+
+# _declared_slot_type($node) -- what the DECLARATION says this read can hold,
+# independent of any use. A scalar slot holds a Scalar; that excludes Array,
+# Hash, Code and Glob, so it is a real constraint and not a placeholder.
+#
+# Returns undef when the node kind carries no declaration to speak of, in which
+# case the use-site requirement stands alone.
+sub _declared_slot_type {
+    my ($node) = @_;
+    my $op = $node->operation;
+    return SoN::IR::Stamp->new( type => 'Scalar' )
+        if $op eq 'PadAccess' || $op eq 'FieldAccess';
+    return undef;
+}
+
 # _callee_return_type($call, \%classes) -- the declared return type of the callee
 # this Call names, or undef when it is not a statically-resolved user callee.
 #
@@ -688,6 +922,7 @@ sub _emit_referenced_classes {
 
     no strict 'refs';
 
+    my $filter = $_[2];
     my %scanned;   # graph keys already scanned for class refs
     while (1) {
         # Two roots feed the worklist: classes named by a method Call, and the
@@ -700,6 +935,7 @@ sub _emit_referenced_classes {
         my $added = 0;
         for my $cname (@refs) {
             next if exists $classes->{$cname};
+
             my $stash = \%{"${cname}::"};
             next unless SoN::ClassAux::is_class($stash);
             $classes->{$cname} =
@@ -833,11 +1069,41 @@ sub _translate_class_methods {
 # _referenced_class_names(\%graphs, \%scanned) — the class_name of every
 # method-dispatch Call in graphs not yet scanned. Marks each scanned so a
 # fixpoint loop does not re-walk it.
+# _is_producer_graph($key) -- is this graph B::SoN's own code, or a module it
+# dragged in, rather than the file under compilation?
+#
+# Keyed on the graph name's package prefix. These are the namespaces the
+# producer itself occupies at CHECK time; a user file compiling into one of
+# them is not a case worth supporting and would be indistinguishable anyway.
+sub _is_producer_graph {
+    my ($key) = @_;
+    return $key =~ /^(?:B|SoN|JSON::PP|Carp|Exporter|DynaLoader|Config
+                       |Scalar::Util|List::Util|overload|overloading
+                       |strict|warnings|utf8|bytes|feature|Test)\b/x ? 1 : 0;
+}
+
 sub _referenced_class_names {
     my ( $graphs, $scanned ) = @_;
     my %names;
     for my $key ( keys $graphs->%* ) {
         next if $scanned->{$key}++;
+
+        # A PRODUCER-INTERNAL GRAPH REFERENCES NOTHING THE USER ASKED FOR.
+        # %graphs holds every CV reachable at CHECK time, which includes
+        # B::SoN's own subs and everything they loaded. Scanning those for
+        # method calls pulls the producer's OWN classes onto the wire --
+        # measured, `SoN::IR::Stamp` leaked as soon as a stamping pass
+        # constructed one, because `SoN::IR::Stamp->new(...)` inside
+        # B::SoN::_resolve_deferred_stamps is a method Call carrying that
+        # class_name.
+        #
+        # The package FILTER is not the right guard here: this pass exists
+        # precisely to emit a user class that sits OUTSIDE the filter when an
+        # emitted graph references it (t/from-optree-referenced-class-mop.t
+        # asserts exactly that under package=main). The question is not "is
+        # this class in the filter" but "is this graph user code".
+        next if _is_producer_graph($key);
+
         for my $node ( $graphs->{$key}->nodes->@* ) {
             next unless $node->operation eq 'Call';
             next unless ( $node->dispatch_kind // '' ) eq 'method';
