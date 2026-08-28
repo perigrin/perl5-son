@@ -471,6 +471,46 @@ symptom of a false claim, not the reward for a true one.
 reason -- top has no REPRESENTATION. That is `_require_repr`'s question and does
 not depend on any of the above.
 
+## CORRECTION from the chalk session (2026-08-28)
+
+Two claims above are wrong, both verified by the chalk coordinator against its
+own source. Recorded rather than silently edited.
+
+**`_narrow_unknown_coercions` DOES narrow.** This document calls it "a
+`from_repr` back-patch wearing narrowing vocabulary" and lists it as evidence
+that nothing narrows. That understates it: it rebuilds the `Coerce` against the
+operand's now-concrete repr, and rebuilds rather than MUTATES because
+`from_repr` is part of the content hash -- so narrowing changes the node's
+identity (`Analysis.pm:850-873`). It is real narrowing of a `Coerce`'s source
+type. What remains true, and is the point that mattered: `meet_types` and
+`narrow_type` still have ZERO callers, so nothing narrows a VALUE's type from
+its use sites.
+
+**`_emit_coercion` has 11 arms, not 9.**
+
+**And the lattice claim in this document's `Unknown` argument had the wrong
+culprit.** It says top is reached via "the ephemeral tier". Measured
+exhaustively over all 25 members: 90 pairs join to `Unknown` with NEITHER
+operand `Unknown`, and **every one involves `Code`, `Glob`, `IO` or `Format`**
+-- the NON-ARITY entities. `List` never climbs: `join(List, Int) = List`,
+`join(List, Ref) = List`, `join(List, Array) = List`. Ephemeral values join
+fine.
+
+So `Unknown` is the join of a **CALLABLE and a plural value** -- two things with
+genuinely no common structure. That is the correct lub, not a modelling gap.
+
+**And the 100 remaining are a THIRD thing, neither leak nor absorption.**
+Re-measured: 71 roots (no `Unknown` input), 29 absorption cascades off them,
+and **ZERO climbs** -- not one came from `join(Code|Glob|IO|Format, X)`. They
+are nodes nobody ran an analysis on. Root ops: Call 35, Subscript 11, PadAccess
+10, Phi 7, FieldAccess 6, Or 1, And 1.
+
+That distinction matters for T1's design: a genuine climb (a callable reaching a
+value position) should be REFUSED at the node -- loud and rare. The 100 need no
+refusal at all; they need the backward pass. "Drive the count to zero" and
+"nothing creates one except a leak" are both incomplete, because the third
+bucket is "nothing was ever asked".
+
 ## New tests
 
     t/wire-call-return-stamp.t        callee return type reaches the callsite
