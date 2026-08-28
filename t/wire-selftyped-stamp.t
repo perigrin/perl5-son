@@ -79,28 +79,23 @@ my $b = Box->new(val => 3); say($b->double);';
     is $m->{stamp}, 'Int', 'Int * Int is Int';
 };
 
-# THE GUARD, UPDATED. This subtest asserted that `$n * 2` stays Unknown when $n
-# comes from `shift` -- true when nothing propagated BACKWARD, and false now.
+# THE GUARD. An intermediate version of the backward pass typed this `Num`, on
+# the reasoning that `*` constrains its operands whatever they held. That is
+# sound about the OPERATOR and wrong about WHICH NODE may be back-filled: the
+# operand here is a `Call` (to `shift`), and a Call's type belongs to its
+# CALLEE, not to its consumer. Letting a use site decide it fabricated a return
+# type the callee did not have, and chalk's behavioural gate caught the
+# resulting miscompile (215 -> 199, an i64 read as a double).
 #
-# `*` is numeric in Perl, so it CONSTRAINS its operands whatever they held:
-# f("7") returns 14, the string numified before the multiply. Every value that
-# reaches the operand and survives to the product is a number, by construction
-# of the operator. That is ordinary type inference -- HM emits T($n) == Num from
-# the same expression and solves it; abstract interpretation narrows from the
-# use site. The producer stating it is not a guess about callers.
-#
-# `Num` and not `Int`: f(1.5) is legal and returns 3.
-#
-# What the guard now checks is the thing that IS still unknowable: the ARGUMENT
-# type. `shift` off @_ is the Array[Scalar] wall, and no operator constrains it.
-subtest 'arithmetic over an untyped operand takes the operator constraint' => sub {
+# So `shift` off @_ stays the Array[Scalar] wall, and so does the product.
+subtest 'arithmetic over an untyped operand stays Unknown' => sub {
     my $wire = wire_for('sub f { my $n = shift; return $n * 2 } print f(3), "\n";',
                         'arith_unknown');
     my ($m) = grep { $_->{op} eq 'Multiply' }
               ($wire->{methods}{'main::f'}{nodes} // [])->@*;
     ok defined $m, 'the Multiply node exists' or return;
-    is $m->{stamp}, 'Num', '`* 2` makes the product Num, whatever shift returned';
-    isnt $m->{stamp}, 'Int', 'and NOT Int -- f(1.5) is legal';
+    is $m->{stamp}, 'Unknown',
+        'an untyped operand leaves the product Unknown';
 };
 
 done_testing;

@@ -823,6 +823,7 @@ sub _infer_backward {
             for my $node ( $graph->nodes->@* ) {
                 next unless $node->isa('SoN::IR::Value');
                 next unless ( $node->stamp ? $node->stamp->type : '' ) eq 'Unknown';
+                next unless _is_backward_inferable($node);
                 my $want = $required{ $node->id } or next;
                 next if $want->type eq 'Unknown';
 
@@ -846,6 +847,33 @@ sub _infer_backward {
         last unless $changed;
     }
     return;
+}
+
+# _is_backward_inferable($node) -- may a USE SITE decide this node's type?
+#
+# Only where the type is GENUINELY OPEN: a variable or field read, which is a
+# slot whose contents nothing else in this graph describes. Everything else has
+# an AUTHORITATIVE source elsewhere and must be left for the pass that consults
+# it -- a Call's type is its callee's return type, a Subscript's is its
+# container's element type, a Phi's is the join of its arms.
+#
+# THE SET IS CLOSED AND SMALL, and widening it caused a miscompile. Measured on
+# chalk's gate (215 -> 199): with no restriction, `$p->left - $p->right` stamped
+# both Call nodes Num from Subtract's requirement while the callee methods were
+# still Unknown and method_return_types was EMPTY. The wire asserted a return
+# type the callee did not have, disagreeing with the vtable ABI, and an i64 was
+# reinterpreted as a double -- lli printed 1.48e-323 where perl printed 3.
+#
+# The rule that generalises: backward inference FILLS A HOLE. If another pass
+# owns the answer, a use-site constraint is a weaker second opinion and must not
+# preempt it -- the same reason this whole pass runs LAST in the sweep.
+sub _is_backward_inferable {
+    my ($node) = @_;
+    my $op = $node->operation;
+    return 1 if $op eq 'PadAccess';
+    return 1 if $op eq 'FieldAccess';
+    return 1 if $op eq 'Parameter';
+    return 0;
 }
 
 # _thread_through_coerce($node) -- the value a requirement is really about.

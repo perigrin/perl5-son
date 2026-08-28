@@ -99,4 +99,33 @@ subtest 'an unconstrained parameter stays Unknown' => sub {
         'a parameter nothing constrains is still Unknown';
 };
 
+# A CALL MUST NOT BE TYPED BY ITS CONSUMER. Its type comes from its CALLEE.
+#
+# Caught by chalk's gate (215 -> 199, with real miscompiles). The first version
+# of this pass stamped ANY Value node carrying a use-site requirement, so
+# `$p->left - $p->right` stamped both Call nodes Num from Subtract's
+# requirement -- while the methods themselves were still Unknown and
+# method_return_types was EMPTY. The wire then claimed a return type the callee
+# did not have, disagreeing with the vtable ABI, and an Int was read as a
+# double: lli printed 1.48e-323 where perl printed 3.
+#
+# Backward inference is only valid where a type is GENUINELY OPEN -- a slot read
+# with no other source. A Call has an authoritative source (its callee) and so
+# does a Subscript (its container). Those must never be back-filled.
+subtest 'a Call is not typed by what its caller does with it' => sub {
+    my $src = 'use feature "class"; no warnings "experimental::class";
+class Pair { field $left :param :reader; field $right :param :reader; }
+my $p = Pair->new(left => 10, right => 20); say($p->left - $p->right);';
+    my $wire = wire_for( $src, 'call_not_backfilled', no_filter => 1 );
+    my @calls = grep {
+        $_->{op} eq 'Call' && ( $_->{fields}{name} // '' ) eq 'left'
+    } ( $wire->{methods}{'main::__PROGRAM__'}{nodes} // [] )->@*;
+    ok scalar(@calls), 'the method callsite exists' or return;
+    isnt $calls[0]{stamp}, 'Num',
+        'the Call is NOT stamped from the Subtract above it';
+    is $calls[0]{stamp}, 'Unknown',
+        'it stays Unknown -- its callee has no determined return type';
+};
+
+
 done_testing;
