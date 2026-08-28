@@ -383,6 +383,47 @@ Implementing the exception clause as refusal rather than as top is the stronger
 position: a type-system violator is rejected, not assigned an uninformative type
 and passed downstream.
 
+## THE EPHEMERAL TIER -- why `Unknown` is the top, and why that is correct
+
+perigrin: "Ephemeral just like a bare List!" That is the structural account,
+and it supersedes both the "unproducible" claim and the contingent
+`entereval`-is-refused one.
+
+**The five types parented at `Unknown` are exactly the values that exist only
+in transit**: `List`, `Code`, `Glob`, `IO`, `Format`. None can be bound to a
+variable.
+
+- A bare `List` -- `(1,2,3)` -- flattens into an assignment target, a sub's
+  arguments, a return. Store it and it becomes an `Array`; take one and it is a
+  `Scalar`. It is never held AS a list.
+- `eval STRING`'s `Code` is constructed and applied in one step.
+- `Glob`, `IO`, `Format` are symbol-table slots, not values a scalar holds.
+
+**Measured, and the lattice already encodes it exactly**: every ephemeral member
+joins to `Unknown` with EVERYTHING -- with each other AND with every durable
+type. All 42 top-reaching pairs involve one, and no ephemeral pair joins below
+top.
+
+**So top is unreachable BY CONSTRUCTION.** A join needs two values arriving at
+one program point, which needs both to persist to that point. Nothing ephemeral
+does. `Unknown` is therefore the join of things that cannot join -- correct, and
+never inhabited.
+
+This does not depend on the corpus, and it does not depend on `entereval` being
+refused. It is a property of what the types ARE.
+
+**The internal asymmetry that explains `CodeRef` vs `Code`:** `List` is the only
+ephemeral member with DURABLE children (`Array`, `Hash`, `Scalar`, `Void`) --
+storing a list is what gives you an array. `Code`/`Glob`/`IO`/`Format` have no
+durable form at all; you can only take a REFERENCE, which lands at
+`CodeRef`/`GlobRef` under `Ref <: Scalar`. A different thing. That is why
+`CodeRef` joins informatively and bare `Code` does not.
+
+**And it retires the reparenting idea for good.** `Code <: List` would claim a
+subtype relation WITHIN the ephemeral tier -- one transient thing a kind of
+another -- when they are peers. Driving 42 to 0 that way would have been the
+symptom of a false claim, not the reward for a true one.
+
 **Still independently true:** an `Unknown` reaching **T2** is fatal for its own
 reason -- top has no REPRESENTATION. That is `_require_repr`'s question and does
 not depend on any of the above.
