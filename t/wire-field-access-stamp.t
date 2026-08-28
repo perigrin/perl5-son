@@ -88,4 +88,111 @@ my $c = Counter->new; my $v = $c->val; say($v);', 'cascade');
     is $call->{stamp}, 'Int', 'and the callsite carries it';
 };
 
+# A DEFAULT TYPES A FIELD ONLY WHEN NOTHING OUTSIDE CAN WRITE IT.
+#
+# `field $v :param = 0` recorded `type: Int` from the default. That is a true
+# fact about the INITIALISER and a false one about the FIELD: `:param` lets a
+# caller pass anything, and perl agrees --
+#
+#   Box->new(v => "hello")  ->  hello
+#   Box->new(v => [1,2])    ->  an ARRAY ref
+#
+# So the declared type is the JOIN of the default with what `:param` admits.
+# Nothing constrains the argument, so that is `Scalar`.
+#
+# The same shape as `my $x = 0; sub f() { $x }` -- Int at the assignment, but
+# f's return is the join over every writer.
+subtest 'a :param field widens to Scalar despite its default' => sub {
+    my $wire = wire_for('class Box { field $v :param = 0;
+method get { return $v } }
+my $b = Box->new(v => 7); say($b->get);', 'param_widens');
+    is $wire->{classes}{Box}{fields}[0]{type}, 'Scalar',
+        'Int from the default joins with what :param admits';
+};
+
+# BILATERAL, and the case that makes the rule discriminating: with NO :param,
+# nothing outside the class can write the field, so the default DOES type it.
+subtest 'a non-param field keeps its default type' => sub {
+    my $wire = wire_for('class Box { field $v = 0;
+method get { return $v } }
+my $b = Box->new; say($b->get);', 'nonparam_keeps');
+    is $wire->{classes}{Box}{fields}[0]{type}, 'Int',
+        'no :param means no outside writer, so Int stands';
+};
+
+# A Str default widens the same way -- the rule is about the WRITER, not the
+# particular type, so a hardcoded Scalar-for-Int would not satisfy this.
+subtest 'a :param Str field also widens' => sub {
+    my $wire = wire_for('class Tag { field $s :param = "hi";
+method get { return $s } }
+my $t = Tag->new(s => "x"); say($t->get);', 'param_str_widens');
+    is $wire->{classes}{Tag}{fields}[0]{type}, 'Scalar',
+        'a Str default widens too';
+};
+
+
+# A :reader ACCESSOR RETURNS ITS FIELD'S TYPE, and nothing was wiring that up.
+#
+# The accessor body is synthesized as a PadAccess read of the field slot, NOT a
+# FieldAccess -- so _stamp_field_reads does not see it. And backward inference
+# correctly declines: `return $v` publishes no operator requirement, so there is
+# nothing for a use site to say. The hole is real and its AUTHORITATIVE SOURCE
+# is the field's declared type, which is a third connection.
+#
+# Found while unblocking chalk's vtable ABI probe: `class Box { field $v :param
+# :reader = 0; ... }` put `Box::v` on the wire as Unknown while the field record
+# beside it said type: Int.
+subtest 'a :reader accessor returns its field type' => sub {
+    # :param, so the field is Scalar -- an earlier version of this test asserted
+    # Int here, which was the unsoundness itself (a caller may pass anything).
+    my $wire = wire_for('class Box { field $v :param :reader = 0;
+method half { $v / 2 } }
+my $b = Box->new(v => 7); say($b->half);', 'reader_param');
+    is $wire->{classes}{Box}{fields}[0]{type}, 'Scalar',
+        'a :param field is Scalar, not its default type';
+    my ($pad) = nodes_of($wire, 'Box::v', 'PadAccess');
+    ok defined $pad, 'the accessor body reads the slot' or return;
+    is $pad->{stamp}, 'Scalar', 'and the read carries the field type';
+    is $wire->{classes}{Box}{method_return_types}{v}, 'Scalar',
+        'so the accessor returns Scalar';
+};
+
+subtest 'a non-param reader returns the narrow default type' => sub {
+    # No :param means no outside writer, so the default DOES type the field --
+    # and the reader carries that. This is the case that shows the reader tracks
+    # the field record rather than always widening.
+    my $wire = wire_for('class Box { field $v :reader = 0; }
+my $b = Box->new; say($b->v);', 'reader_narrow');
+    is $wire->{classes}{Box}{fields}[0]{type}, 'Int',
+        'a non-param defaulted field is Int';
+    my ($pad) = nodes_of($wire, 'Box::v', 'PadAccess');
+    ok defined $pad, 'the accessor body reads the slot' or return;
+    is $pad->{stamp}, 'Int', 'and the reader carries Int';
+    is $wire->{classes}{Box}{method_return_types}{v}, 'Int',
+        'so the accessor returns Int';
+};
+
+# BILATERAL: a Str field's reader must be Str, or a hardcoded Int would pass.
+subtest 'a Str field reader returns Str' => sub {
+    my $wire = wire_for('class Tag { field $s :reader = "hi"; }
+my $t = Tag->new; say($t->s);', 'reader_str');
+    is $wire->{classes}{Tag}{fields}[0]{type}, 'Str',
+        'the field records type Str';
+    my ($pad) = nodes_of($wire, 'Tag::s', 'PadAccess');
+    ok defined $pad, 'the accessor body reads the slot' or return;
+    is $pad->{stamp}, 'Str', 'and the read carries Str, not Int';
+};
+
+# ONLY PROPAGATES. A field with no declared type leaves its reader untyped --
+# a :param with no default has no `type` on the wire at all.
+subtest 'an untyped field leaves its reader Unknown' => sub {
+    my $wire = wire_for('class Bare { field $u :param :reader; }
+my $b = Bare->new(u => 1); say($b->u // 0);', 'reader_untyped');
+    my ($pad) = nodes_of($wire, 'Bare::u', 'PadAccess');
+    ok defined $pad, 'the accessor body reads the slot' or return;
+    is $pad->{stamp}, 'Unknown',
+        'no declared field type means nothing is claimed';
+};
+
+
 done_testing;

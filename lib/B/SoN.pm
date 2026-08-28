@@ -16,6 +16,7 @@ use SoN::ClassAux;
 use SoN::FieldInfo;
 use SoN::IR::NodeFactory;
 use SoN::IR::Graph;
+use B::SoN::TypeLibrary;
 use SoN::IR::Stamp;
 
 # Suppress the peephole optimizer for the duration of the target program's
@@ -225,6 +226,7 @@ sub _resolve_deferred_stamps {
         # because its own only-fill-Unknown guard saw a stamp already there.
         # Both guards are correct; the ORDER was wrong. Int * Int came out Num.
         _stamp_field_reads( $graphs, $classes );
+        _stamp_reader_accessors( $graphs, $classes );
         _rederive_method_return_types( $graphs, $classes );
         _rederive_sub_return_types( $graphs, $classes );
         _stamp_calls_from_callees( $graphs, $classes );
@@ -275,6 +277,68 @@ sub _stamp_field_reads {
         }
     }
     return;
+}
+
+
+# _stamp_reader_accessors(\%graphs, \%classes) -- a `:reader` accessor returns
+# its field's declared type.
+#
+# WHAT WAS MISSING. The accessor body is synthesized as a `PadAccess` read of
+# the field slot, NOT a `FieldAccess` -- so `_stamp_field_reads` never sees it,
+# and the accessor reached the wire `Unknown` while the field record beside it
+# said `type: Int`. Found while unblocking chalk's vtable ABI probe:
+# `class Box { field $v :param :reader = 0 }` put `Box::v` on the wire untyped.
+#
+# NEITHER OF THE OTHER PASSES CAN DO THIS, and that is the point. Backward
+# inference correctly DECLINES -- `return $v` publishes no operator requirement,
+# so a use site has nothing to say. `_stamp_field_reads` is looking for the
+# wrong node kind. The hole is real and its AUTHORITATIVE SOURCE is the field's
+# declared type; this is the connection, not an analysis.
+#
+# MATCHED ON THE FIELD NAME, not on the graph name. A reader for `field $n` is
+# the graph `Class::n` and its body reads `varname => '$n'`, so the sigil-less
+# graph name and the sigil-carrying varname both identify it -- but the varname
+# is what the NODE carries, and matching the node against the field record it
+# actually reads is the honest join. Guarded on is_reader so an ordinary method
+# that happens to share a field's name is not caught by it.
+#
+# ONLY PROPAGATES. A field with no declared `type` (a `:param` with no default
+# has none -- its type depends on what a caller passes) leaves its reader
+# `Unknown`.
+sub _stamp_reader_accessors {
+    my ( $graphs, $classes ) = @_;
+    my $changed = 0;
+
+    for my $cname ( sort keys $classes->%* ) {
+        my $fields = $classes->{$cname}{fields} or next;
+        for my $f (@$fields) {
+            next unless $f->{is_reader};
+            my $ftype = $f->{type};
+            next unless defined $ftype && $ftype ne 'Unknown';
+
+            # `field $n` synthesizes the accessor `Class::n`.
+            my $fname = $f->{name} // next;          # '$n'
+            ( my $bare = $fname ) =~ s/^[\$\@\%]//;  # 'n'
+            my $graph = $graphs->{"${cname}::${bare}"} or next;
+
+            for my $node ( $graph->nodes->@* ) {
+                next unless $node->isa('SoN::IR::Node::PadAccess');
+                next unless ( $node->varname // '' ) eq $fname;
+                next unless ( $node->stamp ? $node->stamp->type : '' ) eq 'Unknown';
+                $node->set_stamp( SoN::IR::Stamp->new( type => $ftype ) );
+                $changed++;
+            }
+
+            # The accessor is synthesized from the field attribute rather than
+            # emitted as a method, so `methods` does not list it and
+            # _rederive_method_return_types will not reach it. Record the
+            # return type here, from the same source.
+            $classes->{$cname}{method_return_types}{$bare} = $ftype
+                unless ( $classes->{$cname}{method_return_types}{$bare} // 'Unknown' )
+                       ne 'Unknown';
+        }
+    }
+    return $changed;
 }
 
 # _rederive_method_return_types(\%graphs, \%classes) -- recompute each method's
@@ -602,13 +666,6 @@ sub _stamp_merges {
     return;
 }
 
-# The arithmetic ops whose result type is decidable from their operands. Each
-# COMPUTES rather than selects, so unlike the merge set the answer is the join
-# of the operand types only because these operators are closed over the numeric
-# tower: Int*Int is Int, and a Str operand widens the result the same way it
-# widens the join. Division is absent on purpose -- 4/2 is Int but 1/2 is not,
-# so its result is not decidable from the operand types alone.
-my %ARITH_OPS = map { $_ => 1 } qw(Add Subtract Multiply);
 
 # _stamp_derived(\%graphs) -- stamps a node can compute from what it already
 # holds: its own attributes, or the kind of its single operand.
@@ -687,8 +744,18 @@ sub _derived_type {
         return $st->type;
     }
 
-    # Arithmetic: decidable exactly when BOTH operands are.
-    if ( $ARITH_OPS{$op} ) {
+    # An op whose result VARIES with its operands: join them, then CAP at what
+    # the operator can actually yield.
+    #
+    # THE CAP IS THE PART THAT WAS MISSING. The join is right about the
+    # operands and says nothing about the operator, so it escaped upward:
+    # measured, once a `:param` field correctly widened to Scalar,
+    # `Multiply(Scalar, Int)` came out `Scalar` -- wider than multiplication can
+    # produce. `*` yields a number whatever arrives.
+    #
+    # A MEET, not a replacement: `Int * Int` stays Int (already below the Num
+    # ceiling); only a join that escaped ABOVE the ceiling is brought down.
+    if ( B::SoN::TypeLibrary::result_is_join($op) ) {
         return undef unless @inputs == 2;
         my ( $l, $r ) = @inputs;
         return undef unless $l && $r;
@@ -697,42 +764,26 @@ sub _derived_type {
         return undef if $ls->type eq 'Unknown' || $rs->type eq 'Unknown';
         my $joined = SoN::IR::Stamp::join( $ls, $rs );
         return undef unless $joined && $joined->type ne 'Unknown';
-        return $joined->type;
+
+        my $ceiling = B::SoN::TypeLibrary::result_type($op) or return $joined->type;
+        my $capped = SoN::IR::Stamp::meet(
+            $joined, SoN::IR::Stamp->new( type => $ceiling ) );
+        # None means the join and the ceiling share nothing. The ceiling is the
+        # honest answer: what the operator yields is a fact about the operator,
+        # not about what happened to arrive.
+        return ( $capped && $capped->type ne 'None' ) ? $capped->type : $ceiling;
     }
 
     return undef;
 }
 
 
-# What each op REQUIRES of its operands, by input position. undef means "no
-# requirement" -- the op is polymorphic there, or that slot is control/memory.
-#
-# This is the T1 requirement table: a TYPE constraint the operator imposes, not
-# a representation. `+` is numeric in Perl whatever its operands look like, so
-# an operand of `+` is Num. `.` and the string comparisons impose Str.
-#
-# DELIBERATELY NOT HERE. Divide is absent because its RESULT is not decidable
-# from operand types (4/2 is Int, 1/2 is not) -- but its operands ARE numeric,
-# so it appears here for the requirement while staying out of the forward
-# arithmetic table. Print is absent: it takes a Str REPRESENTATION, which is a
-# T2 fact, and putting it here would type a value from a lowering decision.
-our %OPERAND_REQUIRES = (
-    Add      => ['Num', 'Num'],   Subtract => ['Num', 'Num'],
-    Multiply => ['Num', 'Num'],   Divide   => ['Num', 'Num'],
-    Modulo   => ['Num', 'Num'],   Power    => ['Num', 'Num'],
-    Negate   => ['Num'],
-    NumEq    => ['Num', 'Num'],   NumNe    => ['Num', 'Num'],
-    NumLt    => ['Num', 'Num'],   NumGt    => ['Num', 'Num'],
-    NumLe    => ['Num', 'Num'],   NumGe    => ['Num', 'Num'],
-    NumCmp   => ['Num', 'Num'],
-
-    Concat   => ['Str', 'Str'],
-    StrEq    => ['Str', 'Str'],   StrNe    => ['Str', 'Str'],
-    StrLt    => ['Str', 'Str'],   StrGt    => ['Str', 'Str'],
-    StrLe    => ['Str', 'Str'],   StrGe    => ['Str', 'Str'],
-    StrCmp   => ['Str', 'Str'],
-    Length   => ['Str'],
-);
+# The operator signatures live in B::SoN::TypeLibrary -- what each op requires
+# of its operands, what it yields, and whether that result varies with the
+# operands. This file previously carried a partial copy of the input half as
+# `%OPERAND_REQUIRES`, and NodeFactory carries another of the fixed-result half
+# as `%SELF_TYPED_OPS`. See that module's header for why the copy exists and
+# what obliges it to track chalk's.
 
 # _count_unknown_stamps(\%graphs) -- how many Value nodes are still untyped.
 #
@@ -792,10 +843,11 @@ sub _infer_backward {
             # Collect, per value node, the requirements its consumers impose.
             my %required;    # node id => Stamp
             for my $node ( $graph->nodes->@* ) {
-                my $table = $OPERAND_REQUIRES{ $node->operation } or next;
-                my @inputs = ( $node->inputs // [] )->@*;
+                my $op_name = $node->operation;
+                my @inputs  = ( $node->inputs // [] )->@*;
                 for my $i ( 0 .. $#inputs ) {
-                    my $want = $table->[$i] // next;
+                    my $want = B::SoN::TypeLibrary::operand_type( $op_name, $i )
+                        // next;
                     my $operand = $inputs[$i] or next;
                     next unless $operand->isa('SoN::IR::Value');
 
@@ -1866,6 +1918,32 @@ sub _wire_field_defaults {
         $graphs->{$key} = SoN::IR::Graph->new( start => $start, returns => [$ret] );
         $f->{has_default} = JSON::PP::true;
         $f->{default_ref} = $key;
+        # A DEFAULT TYPES A FIELD ONLY WHEN NOTHING OUTSIDE CAN WRITE IT.
+        #
+        # `field $v :param = 0` recorded Int from the default. That is a true
+        # fact about the INITIALISER and a false one about the FIELD: `:param`
+        # lets a caller pass anything, and perl agrees --
+        #
+        #   Box->new(v => "hello")  ->  hello
+        #   Box->new(v => [1,2])    ->  an ARRAY ref
+        #
+        # So the recorded type is the JOIN of the default with what `:param`
+        # admits. Nothing constrains the argument, so that is `Scalar` -- which
+        # is not nothing: it excludes Array, Hash, Code and Glob.
+        #
+        # The same shape as `my $x = 0; sub f() { $x }` -- Int at the
+        # assignment, but f's return is the join over every WRITER. A field
+        # WITHOUT `:param` has no outside writer, so its default stands.
+        #
+        # A method body may still narrow this: `$v / 2` meets Scalar with the
+        # Num that `/` requires and gets Num, which is how a use site recovers
+        # precision the declaration cannot promise.
+        if ( $f->{is_param} && defined $field_type ) {
+            $field_type = SoN::IR::Stamp::join(
+                SoN::IR::Stamp->new( type => $field_type ),
+                SoN::IR::Stamp->new( type => 'Scalar' ),
+            )->type;
+        }
         $f->{type}        = $field_type;
     }
     return;

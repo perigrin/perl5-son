@@ -87,16 +87,38 @@ subtest 'every method gets an entry, and Unknown is SENT not omitted' => sub {
     ok defined $rt->{$_}, "$_ has a defined type (never omitted)" for qw(a b);
 };
 
-subtest 'a generated :reader accessor is not a method record' => sub {
-    # _record_sub deliberately does NOT emit a :reader CV as a sub, so nothing
-    # shadows the synthesized accessor. The reader is a FIELD, and the field
-    # already carries its own type -- so it must not appear here either.
+# A READER IS A METHOD THAT EXPOSES A FIELD -- corrected.
+#
+# The original said "the reader is a FIELD, and the field already carries its
+# own type -- so it must not appear here either", and drew the wrong conclusion
+# from a correct rule. `$obj->x` is a method call: it dispatches, and a consumer
+# needs to know what it returns. "It is a field" describes where its VALUE comes
+# from, not what it IS.
+#
+# What _record_sub's guard actually prevents is DOUBLE-RECORDING -- the accessor
+# declared twice, once synthesized from the field and once as a MOP::Sub over
+# the reader body (measured there: "subs came back [util, x]"). That is a claim
+# about the `subs` map, not about whether the method has a return type.
+#
+# Both halves are asserted separately below.
+subtest 'a :reader accessor is not recorded as a SUB' => sub {
     my $wire = wire_for(
         'class P { field $x :param :reader = 9; } my $o = P->new(x=>9); print $o->x, "\n";',
         'reader');
+    my $subs = $wire->{classes}{P}{subs} // {};
+    ok !exists $subs->{x},
+        'the reader CV does not shadow the synthesized accessor';
+};
+
+subtest 'a :reader accessor DOES carry a return type' => sub {
+    # And it is the field's type, which for a :param field is the join of its
+    # default with what :param admits -- Scalar, not the default's Int.
+    my $wire = wire_for(
+        'class P { field $x :param :reader = 9; } my $o = P->new(x=>9); print $o->x, "\n";',
+        'reader_rt');
     my $rt = $wire->{classes}{P}{method_return_types} // {};
-    ok !exists $rt->{x},
-        'the :reader accessor is not listed as a method (it is a field)';
+    is $rt->{x}, 'Scalar',
+        'the accessor returns what the field can hold';
 };
 
 done_testing;

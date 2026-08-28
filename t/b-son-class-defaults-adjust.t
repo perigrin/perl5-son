@@ -31,7 +31,10 @@ PERL
     ok(defined $field, 'has a field');
     is($field->{name}, '$n', 'field name');
     ok($field->{has_default}, 'field has a default');
-    is($field->{type}, 'Int', 'field type inferred from the default (Int)');
+    # `:param` lets a caller pass anything -- Counter->new(n => "x") is legal --
+    # so the default types the INITIALISER, not the FIELD. Scalar is the join,
+    # and it still excludes Array, Hash, Code and Glob.
+    is($field->{type}, 'Scalar', 'field type inferred from the default (Int)');
     # The default value rides as a graph-ref so the loader can wire the node.
     ok(defined $field->{default_ref}, 'field default_ref present');
     ok(exists $d->{methods}{ $field->{default_ref} },

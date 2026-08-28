@@ -56,9 +56,11 @@ subtest 'emitted class carries its method + a return repr' => sub {
     # The get graph returns the field $n (a FieldAccess). The producer does not
     # stamp the field read directly -- Chalk's _replay_classes seeds the field
     # read repr from the class field type. So the producer contract is: the
-    # field carries a declared type. $n defaults to 0 (Int).
+    # field carries a declared type. $n defaults to 0, but it is `:param`, so a
+    # caller may pass anything and the declared type is the JOIN of the default
+    # with what :param admits -- Scalar, not Int.
     my ($field) = ( $c->{fields} // [] )->@*;
-    is( $field->{type}, 'Int', 'field $n carries its declared type Int' );
+    is( $field->{type}, 'Scalar', 'field $n carries its declared type Int' );
 
     my %by_id = map { $_->{id} => $_ } $g->{nodes}->@*;
     my ($ret_id) = ( $g->{returns} // [] )->@*;
