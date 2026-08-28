@@ -306,7 +306,8 @@ none, for two independent reasons:
    informatively: `join(Int, ArrayRef) = Scalar`, `join(Object, Int) = Scalar`,
    `join(Array, Hash) = List`.
 
-**And those 42 are UNPRODUCIBLE.** `join(Code, List)` needs one value that is a
+**And those 42 are unreachable IN THE GRAPH** (see the `eval` correction below --
+`Code` is producible in Perl, but the construct producing it is refused). `join(Code, List)` needs one value that is a
 bare `Code` on one path and a `List` on another. A Perl scalar holds a
 `CodeRef`, never a bare `Code`; bare `Code` is a glob's code slot (`*foo{CODE}`)
 and does not flow through a scalar without becoming a ref. No expression yields
@@ -333,18 +334,42 @@ manufacturing a subtype relation to make a number go to zero, the same
 (Whether `Glob <: List` is semantically true -- a glob does hold plural slots --
 is a real question, to be decided on what a glob IS, not on this.)
 
-**Does string `eval` produce bare `Code`?** No -- checked, not reasoned.
-`eval "sub { 42 }"` yields a **`CodeRef`** (`ref` is `CODE`), which is
-`CodeRef <: Ref <: Scalar` and joins informatively with everything. So it does
-not reach the `Code`/`List` pair either.
+**CORRECTION: `eval` IS `String -> Code`, and bare `Code` IS producible.**
 
-What `eval "$str"` really is: its result type is whatever the STRING evaluates
-to -- `eval '(1,2,3)'` is a list, `eval '42'` is `Int`, `eval 'sub{...}'` is
-`CodeRef`. Not statically derivable, because the string is not. That is the
-exception clause in the formal types paper (alongside `tie`), and the producer
-already implements it as REFUSAL: `FromOptree.pm` GAPs `entereval` with "string
-eval is not compiled. Its body is a STRING." No node, so no stamp, so no
-`Unknown`.
+An earlier draft of this section claimed `eval` does not produce bare `Code`,
+on the evidence that `eval "sub { 42 }"` returns a `CodeRef`. That answered the
+wrong question -- it sampled what the eval'd code RETURNS, not what `eval`
+itself denotes.
+
+`eval STRING` compiles a string into CODE and applies it. The type is
+`String -> Code`, applied immediately -- the `Code` is CONSTRUCTED AND RUN IN ONE STEP, never
+bound to a variable, never escaping. `eval "1 + 2"`
+being `Int` and `eval "say 'hello'"` being say's result are properties of the
+APPLICATION, not of `eval`. So bare `Code` is a value Perl can produce, and the
+"unproducible" claim below was false as stated about Perl.
+
+**Ephemerality is the deeper reason, independent of the refusal.** A value that
+is constructed and applied in one step never reaches a MERGE. It cannot be
+stored, cannot flow to a Phi, cannot meet another value on a branch path. So
+`join(Code, List)` is unreachable for this construct not because `Code` is
+unproduced, but because an immediately-applied value has no join partner. Top
+needs two values arriving at one point; `eval`'s `Code` is never one of two.
+
+**The conclusion survives on different grounds: `entereval` is REFUSED.**
+`FromOptree.pm` GAPs it, and the reason is exactly this one -- "the entereval op
+is present but the eval'd code is not, because perl compiles that string only
+when the op EXECUTES". B::SoN walks at CHECK time; the `Code` does not exist
+yet. The GAP is permanent by design, not a TODO, and it holds even for a
+constant operand, since building it would mean invoking the perl compiler
+mid-walk.
+
+So the `Code` never enters the IR, never gets a stamp, never joins. Top stays
+unreachable IN THE GRAPH -- not because bare `Code` is unproducible in Perl, but
+because the one construct producing it is rejected before any node exists.
+
+Note this makes the property CONTINGENT rather than structural: if `entereval`
+were ever lowered, bare `Code` would enter the lattice and
+`join(Code, List) = Unknown` would become reachable.
 
 **THREE FATES, and only the third is a failure:**
 
