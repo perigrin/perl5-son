@@ -280,6 +280,88 @@ What is missing is the pass that meets them.
 **This is a wire-contract change and is NOT scheduled.** Recorded here so the
 audit's conclusions are not read as a ceiling.
 
+## WHY `Unknown` AT T1 IS A FAILURE (the argument, not just the claim)
+
+The correction above asserts this. Here is why it holds, because it was pushed
+back on and the pushback lost. Measured against the lattice in
+`SoN::IR::Stamp`, not argued from principle.
+
+**The objection.** In abstract interpretation (Cousot 1977) top is a legitimate
+TERMINATING result -- the lattice has a top precisely so analysis can stop on
+values it cannot narrow. Graal, which `Value.pm` cites, carries an unrestricted
+stamp and lowers it. Rice's theorem says no sound terminating always-non-top
+analysis exists over a Turing-complete language. So "no `Unknown`" looks like a
+claim about the ANALYSIS (completeness) smuggled in as a claim about the
+PROGRAM (well-formedness).
+
+**Why it fails here.** That objection needs a REACHABLE top. This lattice has
+none, for two independent reasons:
+
+1. **`meet` never reaches top.** Measured over every expressible pair: 0 return
+   `Unknown`. It bottoms at `None` (122 pairs), which is a COERCION SITE by
+   design, not a failure.
+2. **`join` reaches top only via `Code`/`Glob`/`IO`/`Format`** -- 42 pairs, and
+   every one involves those four. Nothing else can get there, because everything
+   a Perl scalar can hold sits under `Scalar`, and every scalar-ish pair joins
+   informatively: `join(Int, ArrayRef) = Scalar`, `join(Object, Int) = Scalar`,
+   `join(Array, Hash) = List`.
+
+**And those 42 are UNPRODUCIBLE.** `join(Code, List)` needs one value that is a
+bare `Code` on one path and a `List` on another. A Perl scalar holds a
+`CodeRef`, never a bare `Code`; bare `Code` is a glob's code slot (`*foo{CODE}`)
+and does not flow through a scalar without becoming a ref. No expression yields
+such a value.
+
+**`Scalar` and `List` are the real tops.** Not `Unknown` -- the formal top is
+correct and simply never inhabited by an expressible value. `Scalar` is
+INFORMATIVE: it excludes `Array`, `Hash`, `Code`, `Glob`. Terminating at
+`Scalar` is a sound answer, not a failure, so the analysis never NEEDS top to
+terminate. That is what defeats the Rice's-theorem framing: undecidability does
+not disappear, it is absorbed by an imprecise answer still being a useful one.
+
+**So two readings must be kept apart:**
+
+- `Unknown` as a COMPUTED JOIN -- `lub(Code, List)`. Correct, and unreachable.
+- `Unknown` as a STAMP ON A NODE -- nobody ran an analysis. **This is the
+  failure, and it is all 100 on the wire.**
+
+**A trap recorded on the way:** `Code`/`Glob`/`IO`/`Format` are parented at
+`Unknown` because their join with anything scalar-ish genuinely HAS no better
+answer. Reparenting them under `List` drives the 42 to 0 -- and would be
+manufacturing a subtype relation to make a number go to zero, the same
+"invent an answer to close an Unknown" error as the R10 miscompile one level up.
+(Whether `Glob <: List` is semantically true -- a glob does hold plural slots --
+is a real question, to be decided on what a glob IS, not on this.)
+
+**Does string `eval` produce bare `Code`?** No -- checked, not reasoned.
+`eval "sub { 42 }"` yields a **`CodeRef`** (`ref` is `CODE`), which is
+`CodeRef <: Ref <: Scalar` and joins informatively with everything. So it does
+not reach the `Code`/`List` pair either.
+
+What `eval "$str"` really is: its result type is whatever the STRING evaluates
+to -- `eval '(1,2,3)'` is a list, `eval '42'` is `Int`, `eval 'sub{...}'` is
+`CodeRef`. Not statically derivable, because the string is not. That is the
+exception clause in the formal types paper (alongside `tie`), and the producer
+already implements it as REFUSAL: `FromOptree.pm` GAPs `entereval` with "string
+eval is not compiled. Its body is a STRING." No node, so no stamp, so no
+`Unknown`.
+
+**THREE FATES, and only the third is a failure:**
+
+1. **Refused** -- `entereval`, `goto`, `write`. A GAP. The honest answer for a
+   construct that violates the type system.
+2. **Typed** -- everything expressible, bottoming at `Scalar` or `List`, both
+   informative.
+3. **Stamped `Unknown`** -- nobody ran an analysis. The failure.
+
+Implementing the exception clause as refusal rather than as top is the stronger
+position: a type-system violator is rejected, not assigned an uninformative type
+and passed downstream.
+
+**Still independently true:** an `Unknown` reaching **T2** is fatal for its own
+reason -- top has no REPRESENTATION. That is `_require_repr`'s question and does
+not depend on any of the above.
+
 ## New tests
 
     t/wire-call-return-stamp.t        callee return type reaches the callsite
