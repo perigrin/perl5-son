@@ -383,6 +383,49 @@ Implementing the exception clause as refusal rather than as top is the stronger
 position: a type-system violator is rejected, not assigned an uninformative type
 and passed downstream.
 
+## RETRACTED: `List` MEANS PLURAL, NOT EPHEMERAL
+
+The section below is WRONG and is kept only because it is already pushed.
+perigrin: "We moved Scalar under List ... and it's Durable."
+
+`Scalar => [qw(List)]` was in the lattice the whole time. `Scalar` is a child of
+`List` and is obviously durable -- as are `Array` and `Hash`, the other two
+children. So `List` CANNOT mean "exists only in transit"; its most important
+child is the ordinary durable scalar. The counterexample was three lines above
+the entries being read.
+
+**`List` means PLURAL.** It is what values flatten into and out of. `Scalar` is
+the singleton case; `Array` and `Hash` are the stored cases. **Durability is an
+ORTHOGONAL axis**, not what the lattice edge encodes.
+
+Consequences:
+
+- **`Glob <: List` is right**, on plurality grounds: a glob holds five typed
+  slots (`*x{SCALAR}`, `{ARRAY}`, `{HASH}`, `{CODE}`, `{IO}` -- verified, all
+  populated at once). It is durable, and `Scalar` already proves durable-under-
+  `List` is fine. The objection raised below -- that a glob survives binding and
+  so cannot be under `List` -- was an artefact of the wrong reading.
+- **The "ephemeral tier" is not a tier.** `List`, `Code`, `Glob`, `IO`, `Format`
+  share a PARENT, not a property.
+- **Top-unreachability still holds**, but on the earlier grounds: `join(Code,
+  List) = Unknown` is the correct lub of two things that no expression brings to
+  one merge point. That argument does not need the ephemeral framing.
+
+Also measured while testing this, and it corrects a second claim below:
+
+- **A glob is NOT coerced in scalar or IO context.** `my $g = *x` stays a
+  `B::GV`; `print {$h}` leaves it a `B::GV`; stringifying leaves it a `B::GV`.
+  No conversion happens at all.
+- **`*STDOUT{IO}` is not a coerced glob** -- it is the IO SLOT selected out of
+  the glob, and it was always a blessed `IO::File`. `{IO}` indexes the glob the
+  way `{ARRAY}` does. That is selection, not coercion.
+- So **`IO <: Object` needs care**: what you get from `*STDOUT{IO}` is a REF to
+  the IO slot (`Object <: Ref <: Scalar`, durable). Bare `IO` -- the slot's own
+  type -- is glob-slot-shaped like bare `Code`, whose ref is `CodeRef`. Whether
+  the lattice's `IO` node names the slot or the handle-you-hold is a naming
+  question about the model, and it decides whether `IO` moves under `Object` or
+  stays a peer of `Code`.
+
 ## THE EPHEMERAL TIER -- why `Unknown` is the top, and why that is correct
 
 perigrin: "Ephemeral just like a bare List!" That is the structural account,
