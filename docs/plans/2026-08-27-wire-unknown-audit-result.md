@@ -179,6 +179,107 @@ plausible shape. They merge MEMORY STATES; `MemStart` carries no stamp. Stamping
 one from its store's value type asserts that a memory state is an `Int`, and
 chalk's join would then propagate that through its merge sites.
 
+## CORRECTION (2026-08-28): three claims above are wrong
+
+Superseded by discussion with perigrin against the formal types paper. The
+MEASUREMENTS above stand; the INTERPRETATION of what the remainder means does
+not. Left in place rather than edited, because chalk cites this document.
+
+### What is wrong
+
+1. **"58 of 100 are bucket one"** (line 68) and **"the producer genuinely does
+   not know"** (line 75). Both false. Nothing in the 43 affected corpus cases is
+   un-typeable. They are missing ANALYSIS, not missing evidence.
+2. **`Unknown` treated as an honest, correct answer.** It is not. **`Unknown` at
+   T1 is a FAILURE.** A well-formed program has none after inference converges.
+   The DO-NOT-FIX list's reasoning inherits this error even where its
+   conclusions happen to hold.
+3. **The `:param` field question was answered on the wrong axis.** See below.
+
+### The axis this document was missing
+
+- **T1** ensures the program is WELL FORMED: every type as narrow as provable.
+  Target-INDEPENDENT. **B::SoN does T1 only.**
+- **T2** ensures every T1 type is REPRESENTABLE in the target's type system.
+  Target-DEPENDENT, so it belongs to the consumer, not the producer.
+
+`meet` returning `None` at T1 is a SITE, not a verdict: the two ends cannot be
+satisfied by one type, so a coercion node is inserted there, acting as a type
+guard for T2. **For now that insertion is unconditional.** Whether some pairs
+(`ArrayRef -> Num` numifies to an address, which is rarely intended) should
+instead warn or refuse is a POLICY question, deliberately deferred, and it
+belongs to chalk.
+
+Note the practical consequence: `meet(Undef, Num) = None`, so `my $x; $x + 1`
+inserts a node. That is correct and it is COMMON -- expect the count to rise
+well beyond the exotic cases.
+
+### What actually blocks the remaining 100
+
+Not un-typeability. Two missing passes:
+
+**No backward inference.** Every pass in this document runs FORWARD, operands to
+result. `_stamp_derived`'s arithmetic rule literally refuses when an operand is
+`Unknown`. But a use site CONSTRAINS its operands:
+
+    sub add1 { my ($x) = @_; return $x + 1 }
+
+`+` imposes numeric context, so `$x : Num` -- from the body alone, with no
+callsite. `meet(Scalar, Num) = Num`: the declaration's scalar slot meets the
+operator's requirement. The signature `Num -> Num` follows. `Num` and not `Int`
+because `add1(0.5)` is legal and nothing in the body excludes it.
+
+The design is two facts per value node -- `lower` (join of definitions, rises)
+and `upper` (meet of uses, falls) -- run to a COMBINED fixpoint. Separate fields
+so each pass is monotone in its own direction; a single field with a combined
+rule oscillates.
+
+**Nothing narrows.** Measured on chalk: `TypeLibrary::meet_types` has ZERO
+callers. So does `TypeLibrary::narrow_type`. `_narrow_unknown_coercions` is
+wired but is not narrowing -- it back-patches a `Coerce`'s stale `from_repr`
+from an independently-inferred operand. Three uses of the word "narrow", none of
+them narrowing. Chalk's inference is join-only end to end.
+
+### Measured, and it supports the paper's claim
+
+**188 of 231 corpus cases are FULLY typed** -- zero `Unknown` anywhere. Of the 43
+that are not, none involves `tie`, `local`, symbolic refs, or string `eval`. The
+groups are argument binding (F3/F5/F6/F7/F8/F14/F15/F16), `:param` fields, and
+store-then-read -- all analysis gaps.
+
+Also measured: **868 values carry a use-site requirement and every one has
+exactly ONE distinct requirement; zero conflicts.** Not a corpus accident -- the
+producer already inserts a coercion at each context boundary, so a value's second
+context is consumed by the `Coerce`, never by the value. Per-node `upper` is
+therefore sound, CONDITIONAL on the pass running after coercion materialization.
+Move materialization to T2 and per-edge `upper` returns.
+
+### Why `Coerce[Scalar->Str] is not lowered` proves nothing about the lattice
+
+Quoted at `FromOptree.pm:104` as evidence that `Scalar` is the wrong stamp. It
+is not. It is a BACKEND gap: `_emit_to_str` dispatches on representation and has
+arms for `Str`/`Boolean`/`Num`/`Int` because those have distinct carriers.
+`Scalar` has no arm because `Scalar` names no representation -- it is a T1
+element with no T2 image. The failure is a T1 value reaching a T2-dispatching
+backend un-narrowed, which is exactly what happens when nothing narrows.
+
+Correspondingly, `meet(Int, Str) = Int`: on the TYPE axis an `Int` already
+satisfies a `Str` requirement, so the stringification coercions the producer
+inserts today are invisible to a type-axis meet. They are T2 conversions
+(`i64` to `(ptr,len)` via snprintf) and belong to the repr axis.
+
+### Consequence for the wire contract
+
+Under "B::SoN does T1 only", the producer should not emit `Coerce` nodes at all:
+`_coerce_to_str` and `_coerce_int_to_num` are T2 decisions made by a layer that
+does not own the target. Most of T2 already exists on chalk's side --
+`TypeLibrary::operand_repr_for_ir_op` publishes per-op, per-position repr
+requirements, and `_emit_coercion`'s nine arms are the repr lattice's edges.
+What is missing is the pass that meets them.
+
+**This is a wire-contract change and is NOT scheduled.** Recorded here so the
+audit's conclusions are not read as a ceiling.
+
 ## New tests
 
     t/wire-call-return-stamp.t        callee return type reaches the callsite
