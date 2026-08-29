@@ -60,16 +60,20 @@ subtest 'mixed element types join to their supertype' => sub {
 subtest 'an out-of-bounds index admits Undef' => sub {
     my $s = subscript_stamp('my @a = (1, 2); say($a[5]);', 'oob');
     isnt $s, 'Int', 'an out-of-bounds read is not claimed to be Int';
-    ok +($s // '') =~ /^(Unknown|Scalar|Undef)$/,
+    ok +($s // '') =~ /^(Scalar|Undef)$/,
         "an out-of-bounds read stays honest (got: " . ($s // 'undef') . ")";
 };
 
-# A subscript whose aggregate is NOT a known literal must stay Unknown. The fix
-# reads elements it has; it does not invent them.
-subtest 'a subscript of an unknown aggregate stays Unknown' => sub {
-    is subscript_stamp('sub f { my $n = shift; return $n } my $r = f(); say($r->[0]);',
-                       'unknown_agg'),
-        'Unknown', 'no known elements means no claim';
+# A subscript whose aggregate is NOT a known literal has no ELEMENT type -- the
+# fix reads elements it has and does not invent them. It is still a Scalar: see
+# the floor subtests at the end of this file. `Unknown` here would be a hole in
+# an AoT program, and the honest answer (one slot of an aggregate is a scalar)
+# is available without reading a single element.
+subtest 'a subscript of an unknown aggregate falls to the floor, not Unknown' => sub {
+    my $s = subscript_stamp('sub f { my $n = shift; return $n } my $r = f(); say($r->[0]);',
+                            'unknown_agg');
+    isnt $s, 'Unknown', 'an unreadable aggregate is not a hole';
+    is $s, 'Scalar', 'no known elements still means a scalar element';
 };
 
 # THE STORE CASE, and getting it wrong is a MISCOMPILE, not an imprecision.
@@ -127,6 +131,150 @@ subtest 'a present literal key still takes the value type' => sub {
 subtest 'a provably out-of-range constant index is Undef' => sub {
     is subscript_stamp('my @a = (1, 2); say($a[5]);', 'oob_undef'),
         'Undef', 'past the end reads Undef, not the element type';
+};
+
+# ---------------------------------------------------------------------------
+# THE SCALAR FLOOR. Everything above narrows a subscript from its aggregate's
+# literal elements. These cover what happens when that analysis DECLINES.
+#
+# A SUBSCRIPT CAN NEVER HONESTLY BE UNKNOWN. `$a[...]` and `$h{...}` read ONE
+# slot, and one slot of any Perl aggregate holds a scalar. There is no program
+# in which a subscript is plural: a slice is a different node kind entirely
+# (Slice :isa(Aggregate), against Subscript :isa(Access)).
+#
+# WHY THE FLOOR IS NOT A CONSOLATION PRIZE. Chalk compiles ahead of time, so
+# there is no runtime to defer to and an `Unknown` is not a missing annotation
+# -- it is a hole in the emitted program. `Scalar` lowers to %Slot, the tagged
+# {i1 defined, i64 payload} carrier chalk already emits in every prologue. That
+# is slower than an i64 and it RUNS. The ranking is: narrow type > %Slot >
+# nothing. An unconverged type costs speed; a missing representation costs the
+# program.
+#
+# THE FLOOR IS A FLOOR, NOT AN ANSWER. Every subtest above still asserts its
+# narrower type, because `Scalar` where `Int` is provable is also a T1 failure
+# -- just a less obvious one. These cases are where nothing narrower is
+# derivable at all.
+subtest 'a subscript after a store falls to Scalar, not Unknown' => sub {
+    my $wire = wire_for('my @a = (1, 2, 3); $a[0] = "str"; say($a[0]);', 'floor_stored');
+    my @nodes = ($wire->{methods}{'main::__PROGRAM__'}{nodes} // [])->@*;
+    my %byid  = map { $_->{id} => $_ } @nodes;
+    my ($read) = grep {
+        my $m = $byid{ ($_->{inputs} // [])->[2] // -1 };
+        $_->{op} eq 'Subscript' && $m && $m->{op} ne 'MemStart';
+    } @nodes;
+    ok defined $read, 'the post-store read exists' or return;
+    isnt $read->{stamp}, 'Int', 'still not claimed Int -- the store invalidated the literal';
+    is $read->{stamp}, 'Scalar', 'the widest TRUE answer, not a hole';
+};
+
+# The hash form of the same fact. Kept separate because the membership rule and
+# the store rule were written for arrays first and hashes were the miscompile.
+subtest 'a hash element after a store falls to Scalar' => sub {
+    my $wire = wire_for('my %h = (k => 0); $h{k} = "s"; say($h{k});', 'floor_hstored');
+    my @nodes = ($wire->{methods}{'main::__PROGRAM__'}{nodes} // [])->@*;
+    my %byid  = map { $_->{id} => $_ } @nodes;
+    my ($read) = grep {
+        my $m = $byid{ ($_->{inputs} // [])->[2] // -1 };
+        $_->{op} eq 'Subscript' && $m && $m->{op} ne 'MemStart';
+    } @nodes;
+    ok defined $read, 'the post-store read exists' or return;
+    is $read->{stamp}, 'Scalar', 'a written-through hash slot is still a scalar';
+};
+
+# A COMPUTED index over a KNOWN array already reads the element type, and that
+# is narrower than the floor: the aelem handler stamps a dynamic-index read from
+# _array_element_stamp. Asserted here so the floor cannot regress it -- Scalar
+# where Int is provable is also a T1 failure.
+subtest 'a computed index over a known array keeps the element type' => sub {
+    my $s = subscript_stamp('my @a = (1, 2, 3); my $i = 1; say($a[$i + 1]);', 'floor_dyn');
+    is $s, 'Int', 'a dynamic index over an all-Int array still reads Int';
+};
+
+# A COMPUTED KEY OVER A LITERAL HASH still takes the value join: which key is
+# read does not change what the values are. Asserted so the floor cannot regress
+# it -- the key being undecidable is not a reason to widen.
+subtest 'a computed key over a literal hash keeps the value type' => sub {
+    my $s = subscript_stamp('my %h = (a => 1); my $k = "a"; say($h{$k});', 'floor_hdyn');
+    is $s, 'Int', 'an undecidable KEY over a known hash still reads Int';
+};
+
+# THE CONTAINER, not the index, is what the floor answers for. A hash returned
+# from a sub has no literal to read elements out of, so nothing narrows and the
+# floor is the whole answer.
+subtest 'a subscript of a returned aggregate falls to Scalar' => sub {
+    my $s = subscript_stamp(
+        'sub mk { my $n = shift; return $n } my $r = mk(); say($r->{k});', 'floor_opaque');
+    is $s, 'Scalar', 'an unreadable container still yields one scalar slot';
+};
+
+# $_[0] over @_. The ArgsSource is stamped Array, and an INDEXED read of it is a
+# scalar with no callsite information and no restored binding edge required.
+# This is the `@_` family closing WITHOUT the list-assign work.
+subtest 'an indexed read of @_ is Scalar' => sub {
+    my $wire = wire_for('sub f { $_[0] + 1 } say(f(10));', 'floor_args');
+    my ($sub) = grep { $_->{op} eq 'Subscript' }
+                ($wire->{methods}{'main::f'}{nodes} // [])->@*;
+    ok defined $sub, 'the @_ subscript exists' or return;
+    is $sub->{stamp}, 'Scalar', 'one slot of @_ is a scalar';
+};
+
+# AN LVALUE SUBSCRIPT IS AN ADDRESS, NOT A VALUE, and stamping it is wrong in
+# KIND rather than in width. The producer builds a store TARGET as a 2-input
+# node (container, index) with NO memory input, precisely so it never
+# hash-conses with a pre-store rvalue read of the same slot. The floor must not
+# claim a store address holds a scalar.
+subtest 'an lvalue subscript is not stamped at all' => sub {
+    my $wire = wire_for('my @a = (1, 2, 3); $a[0] = 42; say($a[0]);', 'floor_lvalue');
+    my @subs = grep { $_->{op} eq 'Subscript' }
+               ($wire->{methods}{'main::__PROGRAM__'}{nodes} // [])->@*;
+    my @lvalues = grep { scalar(($_->{inputs} // [])->@*) == 2 } @subs;
+    ok @lvalues >= 1, 'a 2-input lvalue subscript exists' or return;
+    for my $lv (@lvalues) {
+        isnt $lv->{stamp}, 'Scalar',
+            'a store ADDRESS is not given a value type by the floor';
+    }
+};
+
+# ORDERING. The floor answers `Scalar`, the weakest possible answer, and every
+# narrowing pass guards on only-fill-Unknown -- so a floor that runs INSIDE the
+# fixpoint stamps on round 1 and each narrowing pass then skips the node.
+#
+# THIS CASE MEASURED IT. `field $items = [10,20,30]; method first { $items->[0] }`
+# reads through a FieldAccess (stamped ArrayRef), not an ArrayRef node, so
+# _literal_element_type declines: the elements live in a separate default graph.
+# With the floor inside the loop the method returned `Scalar` while chalk's
+# loader derived `Int` from the same graph and REFUSED to load it, taking the
+# corpus 231 -> 230 cases. The floor must run only after nothing else can speak.
+subtest 'a field-held literal array still narrows to Int, not the floor' => sub {
+    my $file = "$dir/bagfield.pl";
+    open my $fh, '>', $file or die "open $file: $!";
+    print {$fh} <<'SRC';
+use 5.42.0;
+use feature 'class';
+no warnings 'experimental::class';
+class Bag {
+    field $items = [10, 20, 30];
+    method first { $items->[0] }
+}
+say(Bag->new->first);
+SRC
+    close $fh;
+    my $json = qx{$PERL -Ilib -MO=SoN,json,package=main,package=Bag $file 2>$dir/bagfield.err};
+    ok length $json, 'the class emitted wire JSON' or return;
+    my $wire = JSON::PP->new->decode($json);
+
+    # The producer does NOT narrow this: the elements live in a separate
+    # default graph (Bag::__DEFAULT_0) that _literal_element_type does not
+    # cross, so the read is Unknown until the floor speaks. Chalk's loader DOES
+    # cross it and derives Int -- which is why the floor's answer here must be
+    # a true SUPERTYPE of what the consumer derives, never a conflicting peer.
+    my ($sub) = grep { $_->{op} eq 'Subscript' }
+                ($wire->{methods}{'Bag::first'}{nodes} // [])->@*;
+    ok defined $sub, 'the element read exists' or return;
+    is $sub->{stamp}, 'Scalar',
+        'a field-held aggregate is not readable here, so the floor answers';
+    is $wire->{classes}{Bag}{method_return_types}{first}, 'Scalar',
+        'and the method return type carries the same floor';
 };
 
 done_testing;

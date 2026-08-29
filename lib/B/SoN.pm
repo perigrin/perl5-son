@@ -238,6 +238,66 @@ sub _resolve_deferred_stamps {
         last if _count_unknown_stamps($graphs) == $before;
     }
 
+    # AFTER THE FIXPOINT, NOT INSIDE IT. The floor answers `Scalar`, which is
+    # the weakest possible answer, and every narrowing pass above guards on
+    # only-fill-Unknown. Run inside the loop it stamps on round 1 and each
+    # narrowing pass then SKIPS the node -- measured: `field $items = [10,20,30];
+    # method first { $items->[0] }` came out `Scalar` where `Int` is provable,
+    # and chalk's loader refused the graph over the disagreement with its own
+    # derivation. Same ordering rule the loop comment states for backward
+    # inference, one step weaker.
+    _floor_subscripts($graphs);
+
+    # AND RE-DERIVE ABOVE IT. A Return whose value is a floored Subscript must
+    # carry the floor too, or the wire contradicts itself: the node says Scalar
+    # while its method's return_type record still says Unknown. Only the two
+    # return-type passes re-run -- the floor answers a LEAF (a Subscript takes
+    # no Unknown input it could have inherited from), so nothing below it can
+    # narrow further and a full extra round would only re-walk it.
+    _rederive_method_return_types( $graphs, $classes );
+    _rederive_sub_return_types( $graphs, $classes );
+
+    return;
+}
+
+# _floor_subscripts(\%graphs) -- a Subscript that nothing narrowed is `Scalar`.
+#
+# A SUBSCRIPT IS NEVER `Unknown`. `$a[...]` and `$h{...}` read ONE slot, and one
+# slot of any Perl aggregate holds a scalar. There is no program in which a
+# subscript is plural: a slice is a different node kind entirely
+# (`Slice :isa(Aggregate)`, against `Subscript :isa(Access)`). So a read nothing
+# could narrow still has a TRUE answer, and it is `Scalar`.
+#
+# WHY THAT IS WORTH EMITTING, given `Scalar` is barely a type. Chalk compiles
+# AHEAD OF TIME, so there is no runtime to defer to: an `Unknown` is not a
+# missing annotation, it is a HOLE IN THE EMITTED PROGRAM. `Scalar` lowers to
+# `%Slot`, the tagged `{i1 defined, i64 payload}` carrier chalk already emits in
+# every prologue and object struct. That is slower than an `i64` and it RUNS.
+# The ranking is: narrow type > `%Slot` > nothing. An unconverged type costs
+# SPEED; a missing representation costs the PROGRAM.
+#
+# THE FLOOR IS A FLOOR, NOT AN ANSWER. `Scalar` where `Int` is provable is also
+# a T1 failure, just a less obvious one. This runs last precisely so it claims
+# only what nothing else could.
+#
+# AN LVALUE SUBSCRIPT IS AN ADDRESS, NOT A VALUE, and stamping one is wrong in
+# KIND rather than in width. A store TARGET is built as a 2-input node
+# (container, index) with NO memory input, so that it never hash-conses with a
+# pre-store rvalue read of the same slot (FromOptree, the aelem/helem handler).
+# The input count is the discriminator.
+sub _floor_subscripts {
+    my ($graphs) = @_;
+
+    for my $gname ( sort keys $graphs->%* ) {
+        my $graph = $graphs->{$gname} or next;
+        for my $node ( $graph->nodes->@* ) {
+            next unless $node->isa('SoN::IR::Node::Subscript');
+            next unless ( $node->stamp ? $node->stamp->type : '' ) eq 'Unknown';
+            next if scalar( ( $node->inputs // [] )->@* ) < 3;
+
+            $node->set_stamp( SoN::IR::Stamp->new( type => 'Scalar' ) );
+        }
+    }
     return;
 }
 
