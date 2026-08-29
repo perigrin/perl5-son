@@ -183,15 +183,20 @@ my $t = Tag->new; say($t->s);', 'reader_str');
     is $pad->{stamp}, 'Str', 'and the read carries Str, not Int';
 };
 
-# ONLY PROPAGATES. A field with no declared type leaves its reader untyped --
-# a :param with no default has no `type` on the wire at all.
-subtest 'an untyped field leaves its reader Unknown' => sub {
+# ONLY PROPAGATES -- and for a `:param` the floor is what it propagates. This
+# subtest asserted `Unknown` while a `:param` with no default carried no type at
+# all. It does now: `:param` admits any scalar, so the field is `Scalar` and the
+# reader takes it (_floor_param_fields). The rule being pinned is unchanged --
+# the reader claims exactly what the field record says, never more.
+subtest 'a :param reader takes the field floor, and no more' => sub {
     my $wire = wire_for('class Bare { field $u :param :reader; }
 my $b = Bare->new(u => 1); say($b->u // 0);', 'reader_untyped');
     my ($pad) = nodes_of($wire, 'Bare::u', 'PadAccess');
     ok defined $pad, 'the accessor body reads the slot' or return;
-    is $pad->{stamp}, 'Unknown',
-        'no declared field type means nothing is claimed';
+    is $wire->{classes}{Bare}{fields}[0]{type}, 'Scalar',
+        'a :param with no default floors at Scalar';
+    is $pad->{stamp}, $wire->{classes}{Bare}{fields}[0]{type},
+        'and the reader claims exactly that, not a narrower guess';
 };
 
 

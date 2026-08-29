@@ -248,6 +248,7 @@ sub _resolve_deferred_stamps {
     # inference, one step weaker.
     _floor_subscripts($graphs);
     _floor_element_removals($graphs);
+    _floor_param_fields( $graphs, $classes );
 
     # AND RE-RUN THE CHAIN ABOVE IT. A Return whose value is floored must carry
     # the floor too, or the wire contradicts itself: the node says Scalar while
@@ -449,6 +450,60 @@ sub _stamp_reader_accessors {
                        ne 'Unknown';
         }
     }
+    return $changed;
+}
+
+# _floor_param_fields(\%graphs, \%classes) -- a `:param` field admits any
+# scalar, so one nothing else could type is `Scalar`, not nothing.
+#
+# THE ANSWER WAS ALREADY WRITTEN DOWN ONE BRANCH AWAY. _extract_fields records
+# join(default, Scalar) = Scalar for a `:param` field WITH a default, and its
+# comment gives the reason: `:param` lets a caller pass anything, so the default
+# types the INITIALISER, not the field --
+#
+#     Box->new(v => "hello")  ->  hello
+#     Box->new(v => [1,2])    ->  an ARRAY ref
+#
+# A `:param` with NO default admits exactly the same set. Same `Scalar`, reached
+# from strictly less evidence. The producer recorded no type at all instead,
+# which is the audit's bucket two: the evidence was in hand, the question never
+# asked.
+#
+# `Scalar` IS NOT NOTHING. It excludes Array, Hash, Code and Glob, and it is
+# refinable: `field $bal :param; method half { $bal / 2 }` still yields Num,
+# because the narrowing passes run BEFORE this one and `/` imposes its own
+# requirement.
+#
+# A FLOOR, NOT A SEED -- and this is the whole reason it lives here rather than
+# at extraction time. Written into the field record when the record is BUILT, it
+# arrives before the narrowing chain, every pass above guards on
+# only-fill-Unknown, and each one then SKIPS the node. Measured, and it broke
+# three tests that pin exactly this: `field $n :param; method inc { $n + 1 }`
+# came out `Scalar` where `Num` is provable, and the sub-return and callsite
+# cascade lost it too. Identical to the ordering rule already stated for
+# _floor_subscripts and for backward inference: the weakest answer must speak
+# LAST.
+#
+# ONLY FOR A `:param`. A field with no outside writer keeps whatever narrow type
+# its default gives it -- that default is the whole truth about it.
+sub _floor_param_fields {
+    my ( $graphs, $classes ) = @_;
+    my $changed = 0;
+
+    for my $cname ( sort keys $classes->%* ) {
+        my $fields = $classes->{$cname}{fields} or next;
+        for my $f (@$fields) {
+            next unless $f->{is_param};
+            next if defined $f->{type} && $f->{type} ne 'Unknown';
+            $f->{type} = 'Scalar';
+            $changed++;
+        }
+    }
+
+    # The readers are stamped from the field record, so re-running the pass that
+    # reads it is what carries the floor onto the wire -- and it records the
+    # method return type from the same source.
+    $changed += _stamp_reader_accessors( $graphs, $classes );
     return $changed;
 }
 

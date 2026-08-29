@@ -123,8 +123,15 @@ my $p = Pair->new(left => 10, right => 20); say($p->left - $p->right);';
     ok scalar(@calls), 'the method callsite exists' or return;
     isnt $calls[0]{stamp}, 'Num',
         'the Call is NOT stamped from the Subtract above it';
-    is $calls[0]{stamp}, 'Unknown',
-        'it stays Unknown -- its callee has no determined return type';
+    # IT TAKES ITS CALLEE'S ANSWER, WHICH IS THE POINT. `Pair::left` reads a
+    # `:param` field, so its return type is `Scalar` and the Call carries the
+    # same -- the wire agreeing with itself. The old assertion here was
+    # `Unknown`, which was true only while the callee had NO answer to take;
+    # its own comment says so ("its callee has no determined return type").
+    # What must never happen is the Call taking `Num` from the Subtract ABOVE
+    # it while the callee says something else, and that is the line above.
+    is $calls[0]{stamp}, $wire->{classes}{Pair}{method_return_types}{left},
+        'it takes its CALLEE return type, not its consumer requirement';
 };
 
 
