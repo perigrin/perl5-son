@@ -59,16 +59,26 @@ SRC
     is $call->{stamp}, 'Int', 'the method Call node carries the return type';
 };
 
-# THE OTHER DIRECTION. A callee whose own return is genuinely undetermined must
-# still arrive Unknown -- the fix must propagate the answer, not invent one.
-# Without this, stamping every Call `Int` would pass the tests above.
-subtest 'an undetermined callee still yields Unknown' => sub {
+# THE OTHER DIRECTION. A callsite must carry what its callee ACTUALLY returns,
+# never a type invented for it. Without this, stamping every Call `Int` would
+# pass the tests above.
+#
+# STATED AS AGREEMENT, not as `Unknown`. This used to assert that a `shift`-
+# returning callee left its callsite Unknown; `shift` is now typed (it removes
+# one element of @_, so `Scalar`), and that made the old assertion untestable
+# rather than wrong. What it was really protecting is that the callsite and the
+# callee record say the SAME thing -- so that is what it now checks, against a
+# callee whose return is deliberately wider than any constant.
+subtest 'a callsite carries exactly what its callee returns' => sub {
     my $wire = wire_for('sub r { my $n = shift; return $n } my $x = r(); say($x);',
                         'undetermined');
     my ($call) = calls_named($wire, 'main::__PROGRAM__', 'main::r');
     ok defined $call, 'the callsite exists' or return;
-    is $call->{stamp}, 'Unknown',
-        'a callee with no determined return type leaves the call Unknown';
+
+    my $declared = $wire->{classes}{main}{subs}{r}{return_type};
+    is $declared, 'Scalar', 'the callee returns one element of @_';
+    is $call->{stamp}, $declared,
+        'and the callsite carries that, not something invented for it';
 };
 
 # A recursive call has no completed callee stamp to read at its own build time.

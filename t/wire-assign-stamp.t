@@ -67,13 +67,24 @@ my $c = Counter->new; say($c->inc);';
     is $as[0]{stamp}, 'Int', 'storing an Int into a field yields Int';
 };
 
-# ONLY PROPAGATES. An untyped RHS leaves the assignment untyped.
-subtest 'an untyped RHS leaves the assign Unknown' => sub {
+# ONLY PROPAGATES. An Assign takes the type of what was STORED -- never a type
+# of its own, and never one borrowed from the container it stored into.
+#
+# STATED AS AGREEMENT, not as `Unknown`. This used to store a `shift` result and
+# assert the Assign stayed Unknown; `shift` is now typed (one element of @_, so
+# `Scalar`), which made the old assertion untestable rather than wrong. The real
+# contract is that the Assign echoes its RHS, and this case still discriminates:
+# the array holds Ints, so an Assign inventing a type from its target would say
+# `Int` and an Assign echoing its RHS says `Scalar`.
+subtest 'an assign echoes its RHS, not its target' => sub {
     my $wire = wire_for('sub f { my $n = shift; my @a = (1,2); $a[0] = $n; return $a[0] }
 print f(3), "\n";', 'unknown_rhs');
     my @as = assigns($wire, 'main::f');
     ok @as >= 1, 'an Assign exists' or return;
-    is $as[0]{stamp}, 'Unknown', 'an untyped stored value leaves the assign Unknown';
+    is $as[0]{stamp}, 'Scalar',
+        'the stored value is a Scalar, so the assign is';
+    isnt $as[0]{stamp}, 'Int',
+        'NOT the Int element type of the array it stored into';
 };
 
 done_testing;

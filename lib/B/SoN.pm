@@ -247,15 +247,28 @@ sub _resolve_deferred_stamps {
     # derivation. Same ordering rule the loop comment states for backward
     # inference, one step weaker.
     _floor_subscripts($graphs);
+    _floor_element_removals($graphs);
 
-    # AND RE-DERIVE ABOVE IT. A Return whose value is a floored Subscript must
-    # carry the floor too, or the wire contradicts itself: the node says Scalar
-    # while its method's return_type record still says Unknown. Only the two
-    # return-type passes re-run -- the floor answers a LEAF (a Subscript takes
-    # no Unknown input it could have inherited from), so nothing below it can
-    # narrow further and a full extra round would only re-walk it.
-    _rederive_method_return_types( $graphs, $classes );
-    _rederive_sub_return_types( $graphs, $classes );
+    # AND RE-RUN THE CHAIN ABOVE IT. A Return whose value is floored must carry
+    # the floor too, or the wire contradicts itself: the node says Scalar while
+    # its method's return_type record still says Unknown.
+    #
+    # A FLOORED NODE IS NOT A LEAF. A floored Subscript is one -- it takes no
+    # Unknown input it could have inherited from -- but a floored `shift` sits
+    # at the BOTTOM OF A CHAIN: it retypes its sub's return type, which retypes
+    # every CALL to that sub, which retypes whatever those calls feed. Running
+    # only the two return-type passes left `sub f { my $n = shift; return $n }`
+    # with `return_type: Scalar` on its record and `Unknown` on its callsite --
+    # the same contradiction one level up. So the dependent chain runs to a
+    # fixpoint of its own, bounded the same way the main loop is.
+    for my $round ( 1 .. $ROUNDS ) {
+        my $before = _count_unknown_stamps($graphs);
+        _rederive_method_return_types( $graphs, $classes );
+        _rederive_sub_return_types( $graphs, $classes );
+        _stamp_calls_from_callees( $graphs, $classes );
+        _stamp_derived($graphs);
+        last if _count_unknown_stamps($graphs) == $before;
+    }
 
     return;
 }
@@ -294,6 +307,44 @@ sub _floor_subscripts {
             next unless $node->isa('SoN::IR::Node::Subscript');
             next unless ( $node->stamp ? $node->stamp->type : '' ) eq 'Unknown';
             next if scalar( ( $node->inputs // [] )->@* ) < 3;
+
+            $node->set_stamp( SoN::IR::Stamp->new( type => 'Scalar' ) );
+        }
+    }
+    return;
+}
+
+# _floor_element_removals(\%graphs) -- `shift`/`pop` that nothing narrowed is
+# `Scalar`.
+#
+# THE SAME RULE AS _floor_subscripts, over the other way of naming one element.
+# `shift @a` and `pop @a` REMOVE AND RETURN ONE element, so whatever the array
+# holds, the result is a scalar. FromOptree already stamps the element type when
+# it can read the aggregate's own inputs (`my @q=(1,2,3); shift @q` is `Int`),
+# and declines otherwise -- which is a reason to stop NARROWING, not a reason to
+# answer nothing.
+#
+# @_ IS THE CASE THAT MATTERS. Bare `shift` is `shift @_`, and an `ArgsSource`
+# has no element nodes to read, so the element stamp always declines there. That
+# left `my $n = shift` Unknown, which made the sub's `return_type` Unknown, which
+# made every CALL to it Unknown: measured over chalk's corpus, `shift` was 5
+# roots carrying most of the 21 callee-return cascades behind it. Nothing about
+# the caller is needed to say `Scalar`.
+#
+# LIST CONTEXT IS NOT A COUNTEREXAMPLE. `shift`/`pop` yield exactly one value in
+# any context -- unlike `splice`, which is why this names the two removal ops
+# rather than testing for a builtin that touches an array.
+sub _floor_element_removals {
+    my ($graphs) = @_;
+
+    for my $gname ( sort keys $graphs->%* ) {
+        my $graph = $graphs->{$gname} or next;
+        for my $node ( $graph->nodes->@* ) {
+            next unless $node->isa('SoN::IR::Node::Call');
+            next unless ( $node->dispatch_kind // '' ) eq 'builtin';
+            my $name = $node->name // '';
+            next unless $name eq 'shift' || $name eq 'pop';
+            next unless ( $node->stamp ? $node->stamp->type : '' ) eq 'Unknown';
 
             $node->set_stamp( SoN::IR::Stamp->new( type => 'Scalar' ) );
         }

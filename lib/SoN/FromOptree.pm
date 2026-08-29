@@ -157,10 +157,20 @@ class SoN::FromOptree 0.01 {
     # a Length can count: an ArrayRef/HashRef constructor, or a node bound to an
     # aggregate (its stamp is ArrayRef/HashRef). A scalar (e.g. a Str Constant
     # left by a symbolic `@$str` deref) is NOT an aggregate.
+    #
+    # @_ COUNTS, and leaving it out was a miscompile rather than an omission.
+    # `ArgsSource` is the sub's argument array and arrives stamped `Array` -- a
+    # different lattice member from `ArrayRef`, so a test written for the two
+    # REF types alone silently excluded it. Bare `shift` is `shift @_` and
+    # drains @_ exactly as `shift @q` drains @q, but the gate sent it down the
+    # non-aggregate path where the drain threads no memory: two shifts in one
+    # sub became two nodes with identical inputs, no memory input and no control
+    # edge, so nothing ordered them and nothing told them apart.
     sub _is_aggregate_node ($node) {
         return false unless defined $node;
         my $op = $node->operation;
         return true if $op eq 'ArrayRef' || $op eq 'HashRef';
+        return true if $op eq 'ArgsSource';
         my $stamp = $node->stamp;
         return false unless defined $stamp;
         my $t = $stamp->type;

@@ -106,23 +106,43 @@ my $b = Box->new(val => 3); say($b->double);';
         'the product is not left as wide as the field';
 };
 
-# THE GUARD. An intermediate version of the backward pass typed this `Num`, on
-# the reasoning that `*` constrains its operands whatever they held. That is
-# sound about the OPERATOR and wrong about WHICH NODE may be back-filled: the
-# operand here is a `Call` (to `shift`), and a Call's type belongs to its
-# CALLEE, not to its consumer. Letting a use site decide it fabricated a return
-# type the callee did not have, and chalk's behavioural gate caught the
+# THE GUARD. An intermediate version of the backward pass typed the CALL here
+# `Num`, on the reasoning that `*` constrains its operands whatever they held.
+# That is sound about the OPERATOR and wrong about WHICH NODE may be
+# back-filled: the operand is a `Call` (to `shift`), and a Call's type belongs
+# to its CALLEE, not to its consumer. Letting a use site decide it fabricated a
+# return type the callee did not have, and chalk's behavioural gate caught the
 # resulting miscompile (215 -> 199, an i64 read as a double).
 #
-# So `shift` off @_ stays the Array[Scalar] wall, and so does the product.
-subtest 'arithmetic over an untyped operand stays Unknown' => sub {
+# THE ASSERTION MOVED, THE GUARD DID NOT. This used to check that the PRODUCT
+# stayed `Unknown`, using `shift` as a value nothing could type. `shift` is now
+# typed forward -- it removes one element of @_, so it is a `Scalar` -- and a
+# product over it is legitimately `Num`. That is not the old bug returning: the
+# difference is direction, and it is visible on the Call's own stamp.
+#
+#   the bug:  Call stamped `Num`    <- taken from the consumer, callee said nothing
+#   correct:  Call stamped `Scalar` <- derived forward; `Multiply` then caps ITSELF
+#
+# So the guard is now stated where it belongs -- on the Call, which must carry
+# what its callee supports and never what its consumer wants.
+subtest 'a consumer never back-fills its operand Call' => sub {
     my $wire = wire_for('sub f { my $n = shift; return $n * 2 } print f(3), "\n";',
                         'arith_unknown');
-    my ($m) = grep { $_->{op} eq 'Multiply' }
-              ($wire->{methods}{'main::f'}{nodes} // [])->@*;
+    my @nodes = ($wire->{methods}{'main::f'}{nodes} // [])->@*;
+
+    my ($call) = grep {
+        $_->{op} eq 'Call' && ( $_->{fields}{name} // '' ) eq 'shift'
+    } @nodes;
+    ok defined $call, 'the shift Call exists' or return;
+    is $call->{stamp}, 'Scalar',
+        'the Call carries what shift SUPPORTS -- one element of @_';
+    isnt $call->{stamp}, 'Num',
+        'and NOT what the multiply above it wanted (the 215 -> 199 miscompile)';
+
+    my ($m) = grep { $_->{op} eq 'Multiply' } @nodes;
     ok defined $m, 'the Multiply node exists' or return;
-    is $m->{stamp}, 'Unknown',
-        'an untyped operand leaves the product Unknown';
+    is $m->{stamp}, 'Num',
+        'the product caps ITSELF at Num -- f(0.5) is legal, so not Int';
 };
 
 done_testing;
