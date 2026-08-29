@@ -3078,16 +3078,32 @@ class SoN::FromOptree 0.01 {
     # (numeric) type, so keeping $phi's init stamp is the fixpoint -- no widening.
     # A back-edge that is NOT arithmetic over $phi, or whose unstamped input is
     # not an element read, is a genuine unknown and still GAPs.
+    # STRING comparison on ids, not numeric. A node id is a string --
+    # "Phi#unique4", "Subscript|ArrayRef#2|Phi#unique4|MemStart",
+    # "Constant|const_type=integer|value=1" -- and every one of them numifies to
+    # 0, so `==` reported ANY pair of nodes as the same node. Both guards below
+    # inverted:
+    #
+    #   the `grep` matched any input, so "consumes the Phi directly" never
+    #   rejected; the `next if` skipped every input, so the loop body -- the
+    #   check that an unstamped input must be a deferred element read -- never
+    #   ran at all.
+    #
+    # This predicate is the ONLY thing standing between an unstamped back-edge
+    # and _patch_loop_phi keeping the Phi's init stamp, so returning true
+    # unconditionally made the `die "GAP: loop-carried value loses its stamp"`
+    # below it unreachable through this path, and let a Phi keep a stamp it had
+    # not earned. See t/from-optree-phi-identity.t.
     my %_ARITH_OP = map { $_ => 1 } qw(Add Subtract Multiply Divide Modulo);
     sub _backedge_is_phi_recurrence ($post, $phi) {
         return false unless blessed($post) && $_ARITH_OP{$post->operation};
         my @ins = $post->inputs->@*;
-        my $reads_phi = grep { blessed($_) && $_->id == $phi->id } @ins;
+        my $reads_phi = grep { blessed($_) && $_->id eq $phi->id } @ins;
         return false unless $reads_phi;
         for my $in (@ins) {
             next unless blessed($in);
             next if _is_narrowed($in->stamp);            # already narrowed
-            next if $in->id == $phi->id;                # the recurrence arm
+            next if $in->id eq $phi->id;                # the recurrence arm
             # An unstamped input is acceptable ONLY if it is a deferred element
             # read the loader will type.
             return false unless $in->operation eq 'Subscript';
