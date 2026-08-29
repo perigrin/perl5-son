@@ -59,11 +59,27 @@ subtest 'a store consumes memory and produces a new memory (the store node)' => 
     my $g = graph_of('sub { my @a = (1,2,3); $a[0] = 42; $a[0] }');
     my ($assign) = grep { $_->operation eq 'Assign' } $g->nodes->@*;
     ok(defined $assign, 'has the store Assign') or return;
-    # The read after the store must take the store as its memory input.
+
+    # STRING comparison. Node ids are strings ("Assign#3", "MemStart"), so `==`
+    # numifies every one to 0 and matches ANY memory input -- this assertion
+    # passed whatever the read was pinned to, including MemStart, which is
+    # exactly the bug it exists to catch.
     my ($read) = grep {
-        $_->operation eq 'Subscript' && $_->inputs->[2] && $_->inputs->[2]->id == $assign->id
+        $_->operation eq 'Subscript' && $_->inputs->[2]
+            && $_->inputs->[2]->id eq $assign->id
     } $g->nodes->@*;
     ok(defined $read, 'the post-store read takes the store Assign as its memory input');
+
+    # BILATERAL: the store TARGET must NOT be pinned to the store. It is the
+    # 2-input lvalue form (an address, no memory input at all), and a version
+    # of this check that accepted any node would not tell the two apart.
+    my @pinned_to_memstart = grep {
+        $_->operation eq 'Subscript' && $_->inputs->[2]
+            && $_->inputs->[2]->operation eq 'MemStart'
+            && $_->inputs->[2]->id eq $assign->id
+    } $g->nodes->@*;
+    is(scalar @pinned_to_memstart, 0,
+        'no read is reported as pinned to BOTH MemStart and the Assign');
 };
 
 done_testing();

@@ -2606,9 +2606,20 @@ class SoN::FromOptree 0.01 {
 
                 if (defined $sigil && ($sigil eq '@' || $sigil eq '%')) {
                     my $rhs = $sim->pop_to_mark;
+                    # AN ARRAY IS NOT A REFERENCE TO ONE. The node KIND is the
+                    # container constructor (there is one per aggregate kind);
+                    # the STAMP says what the value IS, and the sigil above
+                    # already proved it. `my @a=(1,2,3)` is an Array (List
+                    # branch); `my $r=[1,2,3]` is an ArrayRef (Ref branch).
+                    # Defaulting both to the Ref member made them
+                    # indistinguishable downstream and forced
+                    # _rhs_is_aggregate_access to key scalar context on the OP
+                    # rather than the repr.
                     my $node = $factory->make(
                         ($sigil eq '@' ? 'ArrayRef' : 'HashRef'),
-                        inputs => [$rhs->@*]);
+                        inputs => [$rhs->@*],
+                        stamp  => SoN::IR::Stamp->new(
+                            type => ($sigil eq '@' ? 'Array' : 'Hash')));
                     $sim->define($key, $node);
                     $sim->push_node($node);
                     return ($op->next, 'handled');
