@@ -106,4 +106,58 @@ subtest 'an unconditional next ends the body, and the dead tail is dropped' => s
     is(scalar @dead, 0, 'the statement after `next` is not translated');
 };
 
+
+# THE HEADER CONDITION IS ATTACHED, NOT BRANCHED -- the mirror of the gap above,
+# and the thing that makes a Loop readable without a heuristic.
+#
+#     while ($x != 3) { $x = $x + 1; }
+#
+# builds a Loop, a Phi, an Add and a NumNe -- and NO If. Reading the graph by
+# `inputs` alone, that NumNe looks DEAD: nothing consumes it. It is not. It
+# carries a CONTROL edge to the Loop (`control_in`), which is how the consumer
+# recovers which comparison is the loop's continuation test. FromOptree's own
+# comment at that site records why: recovering it structurally beats the
+# ambiguous "first icmp consuming a header Phi" heuristic, "which a body
+# comparison can hijack".
+#
+# The two forms are deliberately asymmetric, and both halves are asserted here:
+#
+#   header `while (C)`   -- C attaches to the Loop by control_in; Projs hang off
+#                           the Loop itself. No If.
+#   mid-body `last if C` -- C is consumed by a real If; a break is a genuine
+#                           control split, so it branches.
+#
+# Asserted because a reader auditing this graph for liveness WILL read the NumNe
+# as an unwired dead node and "fix" it into an infinite loop that now branches.
+subtest 'a written header condition attaches to the Loop' => sub {
+    my $g = graph_of('sub { my $x = 0; while ($x != 3) { $x = $x + 1; } $x }');
+    ok($g, 'the graph exists') or return;
+
+    my ($loop) = ops_of($g, 'Loop');
+    my ($cmp)  = ops_of($g, 'NumNe');
+    ok($loop && $cmp, 'the Loop and its condition both exist') or return;
+
+    ok($cmp->control_in, 'the condition carries a control edge') or return;
+    is($cmp->control_in->id, $loop->id,
+        'the header condition attaches to the Loop -- not dead, just not an If');
+
+    is(scalar(ops_of($g, 'If')), 0,
+        'a header-only loop builds no If: the Loop IS the test');
+};
+
+# THE OTHER HALF. A mid-body break is a real control split, so its condition is
+# consumed by an If and does NOT attach to the Loop. If both forms ever collapse
+# to the same shape, one of them is wrong.
+subtest 'a mid-body break condition branches instead' => sub {
+    my $g = graph_of('sub { my $x = 0; while (1) { $x = $x + 1; last if $x == 3; } $x }');
+    my ($cmp) = ops_of($g, 'NumEq');
+    ok($cmp, 'the break condition exists') or return;
+
+    my @ifs = ops_of($g, 'If');
+    my $consumed = grep {
+        grep { defined && $_->id eq $cmp->id } $_->inputs->@*
+    } @ifs;
+    ok($consumed, 'a break condition IS consumed by an If');
+};
+
 done_testing;
