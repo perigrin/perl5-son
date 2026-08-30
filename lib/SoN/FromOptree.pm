@@ -3387,8 +3387,25 @@ class SoN::FromOptree 0.01 {
         my @break_projs;
         my $exit_proj = _walk_loop_body($cv, $cond_start, $sim, $factory,
             $opmap, {}, $visited, $loop_node, \@break_projs);
+        # A LOOP MAY EXIT BY ITS BREAK ALONE. `while (1) { ... last if C }` has
+        # NO header test -- perl folds the constant condition away entirely, so
+        # `enterloop` carries no condition op and the `last` is the only way
+        # out. Requiring a header exit refused the idiom outright: perl's own
+        # t/base/while.t tests it second, and the whole file compiled to an
+        # empty `methods` object.
+        #
+        # The machinery below already handles this. Phase 5 builds the exit
+        # Region from `($exit_proj, @break_projs)` and gives every slot that
+        # differs at the break its own exit Phi; a break-only loop is just that
+        # list with nothing in the first position. So the requirement is not
+        # "there is a header exit" but "there is SOME exit".
+        #
+        # A LOOP WITH NEITHER STILL GAPS, and that is the part worth keeping:
+        # `while (1) { $x = $x + 1 }` never terminates, and refusing it is the
+        # honest answer rather than emitting a graph whose exit Region has no
+        # predecessors.
         die "GAP: loop without a lowerable condition\n"
-            unless defined $exit_proj;
+            unless defined $exit_proj || @break_projs;
 
         # Phase 4: patch back-edges and stamps.
         my $post_scope = $sim->scope_bindings;
@@ -3423,7 +3440,9 @@ class SoN::FromOptree 0.01 {
         # Phase 5: post-loop control continues on the exit edge. A mid-body
         # `last` adds its guard-taken Proj as an extra predecessor of the exit
         # Region -- the loop now exits via the header-false edge OR the break.
-        my @exit_preds = ($exit_proj, map { $_->{proj} } @break_projs);
+        # grep defined: a break-only loop has no header exit to lead with.
+        my @exit_preds = grep { defined }
+            ($exit_proj, map { $_->{proj} } @break_projs);
         my $exit_region = $factory->make_cfg('Region', inputs => \@exit_preds);
         $loop_node->set_region($exit_region);
         $sim->set_control($exit_region);
@@ -3756,12 +3775,32 @@ class SoN::FromOptree 0.01 {
                 die "GAP: function exit inside a loop body not yet lowered\n";
             }
 
-            # A bare `last`/`next` op reached directly (not via an `and(other->..)`
+            # AN UNCONDITIONAL `next` ENDS THE BODY, and everything after it is
+            # dead. It jumps to the loop's continue point -- the same `unstack`
+            # this walk already stops at, one op earlier -- so the ops between
+            # are unreachable and translating them would put code in the graph
+            # that perl never runs. Measured on perl's t/base/while.t test 3:
+            # `while ($x != 3) { $x = $x + 1; next; print "not "; }` prints no
+            # "not " at all.
+            #
+            # The back-edge already carries the rejoin, so there is nothing to
+            # record: a `next` returns to the header exactly as falling off the
+            # end of the body does.
+            if ($name eq 'next') {
+                last;
+            }
+
+            # A bare `last`/`redo` reached directly (not via an `and(other->..)`
             # guard) is an UNCONDITIONAL loop control -- walking past one produced
             # silently wrong graphs (a dropped `last` ran the loop to completion).
             # The conditional `X if C` forms are caught at the `and` handlers
             # below; only the unconditional (or `redo`) forms reach here.
-            if ($name eq 'last' || $name eq 'next' || $name eq 'redo') {
+            #
+            # `last` IS NOT LIKE `next` and stays refused: it LEAVES the loop, so
+            # the exit Region needs its edge and the bindings live at that point
+            # (which is what @break_projs collects for the guarded form). A `next`
+            # rejoins the header and needs neither.
+            if ($name eq 'last' || $name eq 'redo') {
                 die "GAP: loop control ($name) inside a loop body not yet lowered\n";
             }
 
