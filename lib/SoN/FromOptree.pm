@@ -2827,6 +2827,17 @@ class SoN::FromOptree 0.01 {
             my $node_type = $opmap->node_type($name);
             my $push_count = $opmap->push_count($name);
 
+            # REFUSE BEFORE POPPING. A GAP op still carries a pop_count from the
+            # table, so popping first UNDERFLOWED the stack and died with "Stack
+            # underflow at StackSim.pm line 25" -- an internal error raised a few
+            # lines above the GAP that would have named the construct. Measured
+            # on `goto FOO; print "x"`: goto is pop_count=1, node_type=undef, so
+            # it popped an operand it does not have and the reader was sent after
+            # a simulator bug instead of an unlowered `goto`. Same shape that hid
+            # block eval behind an underflow.
+            die $UNBUILT_OP_GAP{$name} . "\n"
+                if exists $UNBUILT_OP_GAP{$name};
+
             my @inputs;
             if (defined $pop_count && $pop_count eq 'mark') {
                 my $args = $sim->pop_to_mark;
