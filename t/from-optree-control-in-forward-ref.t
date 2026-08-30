@@ -10,7 +10,7 @@ no warnings 'experimental::class';
 use SoN::OptSuppress;
 use SoN::FromOptree;
 use SoN::Serialize::JSON ();
-use SoN::IR::Serialize::JSON ();
+use JSON::PP ();
 
 class Counter {
     field $n :param = 0;
@@ -38,11 +38,19 @@ sub canonical_graph ($code) {
 # forward reference resolves to undef, silently dropping inc.
 #
 # This test drives the REAL producer (SoN::FromOptree) and the REAL wire
-# serializer (SoN::Serialize::JSON), then loads through Chalk's loader
-# (SoN::IR::Serialize::JSON::from_json) -- the exact cross-repo boundary
-# the bug lives on.
+# serializer (SoN::Serialize::JSON), then checks the WIRE for the defect
+# directly.
+#
+# IT USED TO LOAD THE WIRE BACK through a vendored copy of chalk's loader, and
+# asserted the control chain survived the round trip. That copy is gone (it was
+# chalk's code, 1334 lines, never loaded by anything in lib/), and loading is
+# not what this test needs: a forward reference is a property OF THE JSON --
+# an id referenced by a node at position i whose own entry is at position j > i.
+# Reading positions is what a strictly-in-order loader does, so checking them
+# on the wire tests the same defect at its source, in this repo's own contract,
+# without carrying a consumer to do it.
 # =============================================================================
-subtest 'void method call (inc) survives FromOptree -> wire -> Chalk load' => sub {
+subtest 'void method call (inc) survives FromOptree -> wire, with no forward ref' => sub {
     my $g = canonical_graph(
         'sub { my $c = Counter->new(n => 10); $c->inc; $c->val }');
 
@@ -50,43 +58,48 @@ subtest 'void method call (inc) survives FromOptree -> wire -> Chalk load' => su
     ok(defined $inc, 'producer-side graph has a Call(inc)') or return;
 
     my $json = SoN::Serialize::JSON::to_json({ 'main::corpus_case' => $g });
-    my $loaded = SoN::IR::Serialize::JSON::from_json($json);
-    ok(exists $loaded->{'main::corpus_case'}, 'graph present after Chalk load') or return;
-    my $loaded_graph = $loaded->{'main::corpus_case'};
+    my $data = JSON::PP::decode_json($json);
+    my @nodes = ( $data->{methods}{'main::corpus_case'}{nodes} // [] )->@*;
+    ok(scalar @nodes, 'the graph reached the wire') or return;
 
-    my ($loaded_ret) = grep { $_->operation eq 'Return' } $loaded_graph->nodes->@*;
-    ok(defined $loaded_ret, 'loaded graph has a Return') or return;
+    # Position of every node id in emission order -- what an in-order loader
+    # would have available as it builds each entry.
+    my %pos;
+    $pos{ $nodes[$_]{id} } = $_ for 0 .. $#nodes;
 
-    my $ctrl = $loaded_ret->can('control_in') ? $loaded_ret->control_in : undef;
-    ok(defined $ctrl, q{Return's control_in resolved on load (the forward ref survived)})
+    my ($ret_i) = grep { $nodes[$_]{op} eq 'Return' } 0 .. $#nodes;
+    ok(defined $ret_i, 'the wire has a Return') or return;
+    my $ctrl = $nodes[$ret_i]{control_in};
+    ok(defined $ctrl, q{Return carries a control_in on the wire}) or return;
+    ok(exists $pos{$ctrl}, 'its control_in names a node that is actually emitted')
         or return;
 
-    # Walk the control_in chain from Return looking for the inc() Call -- it
-    # may be Return's DIRECT control predecessor, or reached transitively
-    # through an intervening control node (e.g. Loop/If/Region), depending on
-    # exactly how method-dispatch control threads. Either way it must be
-    # found, not silently dropped.
-    my @chain;
+    # THE DEFECT, stated as the wire property: no control_in may point FORWARD.
+    # A loader that builds nodes in array order resolves such a reference to
+    # undef and silently drops whatever it named.
+    my @forward = grep {
+        defined $nodes[$_]{control_in}
+            && defined $pos{ $nodes[$_]{control_in} }
+            && $pos{ $nodes[$_]{control_in} } > $_
+    } 0 .. $#nodes;
+    is(scalar @forward, 0, 'no control_in is a forward reference')
+        or diag('forward at node positions: ' . join(', ', @forward));
+
+    # AND THE VOID CALL IS STILL REACHABLE, which is what the forward ref would
+    # have cost. Walk the control chain the way a loader would, by id.
+    my %by_id = map { $_->{id} => $_ } @nodes;
+    my (@chain, %seen);
     my $c = $ctrl;
-    my %seen;
-    while (defined $c && !$seen{ $c->id }++) {
-        push @chain, $c;
-        $c = $c->can('control_in') ? $c->control_in : undef;
+    while (defined $c && !$seen{$c}++) {
+        my $n = $by_id{$c} or last;
+        push @chain, $n;
+        $c = $n->{control_in};
     }
     my ($inc_in_chain) = grep {
-        $_->operation eq 'Call' && $_->can('name') && ($_->name // '') eq 'inc'
+        $_->{op} eq 'Call' && ( $_->{fields}{name} // '' ) eq 'inc'
     } @chain;
     ok(defined $inc_in_chain,
-        'the void inc() Call is reachable via the loaded control_in chain (not dropped)')
-        or diag('control chain ops: ' . join(',', map { $_->operation } @chain));
-
-    # It must also be reachable from Graph::nodes() -- what the backend
-    # actually walks to decide what gets lowered.
-    my ($inc_in_nodes) = grep {
-        $_->operation eq 'Call' && $_->can('name') && ($_->name // '') eq 'inc'
-    } $loaded_graph->nodes->@*;
-    ok(defined $inc_in_nodes,
-        'the void inc() Call is reachable from Graph::nodes() on the loaded graph');
+        'the void inc() Call is reachable along the wire control chain (not dropped)');
 };
 
 done_testing();

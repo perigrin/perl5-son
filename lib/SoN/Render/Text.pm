@@ -25,7 +25,7 @@ class SoN::Render::Text 0.01 {
             # Format inputs as display IDs. An input may be an arrayref of
             # nodes rather than a bare node (e.g. Unwind's exception-args
             # list) -- expand it the same way SoN::IR::Graph::nodes() and
-            # SoN::IR::Serialize::JSON already do, rather than assuming
+            # the wire serializer already does, rather than assuming
             # every element is blessed.
             my @input_strs = map {
                 ref($_) eq 'ARRAY'

@@ -9,15 +9,13 @@ use SoN::IR::Graph;
 use SoN::IR::Stamp;
 use SoN::Serialize::JSON qw(to_json);
 
-# from_json/_deserialize_graph were deleted from SoN::Serialize::JSON (the
-# real pipeline's only loader is SoN::IR::Serialize::JSON::from_json,
-# which already has its own coverage in the chalk repo, e.g.
-# t/bootstrap/ir-node-unify-roundtrip.t for the loop-Phi defer-patch this
-# file used to test here). The round-trip subtests that only exercised the
-# deleted SoN-side deserializer's own defer-patch/reconstruction behavior
-# were removed rather than retargeted: retargeting to Chalk's from_json
-# would pull the full MOP-replay/repr-inference pipeline in scope, and
-# these subtests were never asserting a still-live SoN-side contract.
+# from_json/_deserialize_graph were deleted from SoN::Serialize::JSON, and this
+# repo now carries NO loader at all: it is the producer side, and loading is
+# chalk's contract, covered there (e.g. t/bootstrap/ir-node-unify-roundtrip.t
+# for the loop-Phi defer-patch this file used to test here). The round-trip
+# subtests that only exercised a deserializer's own defer-patch/reconstruction
+# behavior were removed rather than retargeted -- they were never asserting a
+# still-live producer-side contract.
 
 # ---- helpers ----
 

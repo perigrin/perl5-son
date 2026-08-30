@@ -376,7 +376,7 @@ sub _serialize_graph ($graph) {
             $entry{stamp} = $node->stamp->type;
         }
         # Produce-time control: emit the control_in edge as its own wire key
-        # (mirrors SoN::IR::Serialize::JSON::to_json) so the loader can
+        # (mirrors the chalk-side loader's expectation) so the loader can
         # decode it back onto control_in directly. Covers both a void
         # statement-effect's control predecessor and a loop-header
         # condition's structural edge to its Loop -- both are control_in at

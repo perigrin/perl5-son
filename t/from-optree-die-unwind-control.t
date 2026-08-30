@@ -36,7 +36,7 @@ subtest 'die builds an Unwind with control_in defined and inputs[0] the args arr
 # element, assuming inputs is always a flat list of node objects. An Unwind's
 # inputs[0] is now the exception-args ARRAYREF (per the node's own contract),
 # so a generic renderer must skip/expand non-node elements the same way
-# SoN::IR::Graph::nodes() and SoN::IR::Serialize::JSON already do.
+# SoN::IR::Graph::nodes() and the wire serializer already do.
 subtest 'rendering a graph with an Unwind does not crash on the arrayref input' => sub {
     my $sub = eval 'sub { print "before\n"; die "boom\n" }';
     die "compile failed: $@" if $@;
