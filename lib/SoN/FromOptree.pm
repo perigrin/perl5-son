@@ -4778,6 +4778,65 @@ class SoN::FromOptree 0.01 {
                 return $op;
             }
 
+            # VALUE-CONTEXT `&&` / `||` INSIDE AN ARM. The main walk lowers
+            # these to a single operand-returning And/Or node (the backend
+            # expands the short-circuit br+phi at lowering, the same split
+            # DefinedOr uses for `//`). _walk_branch had no handler at all, so
+            # an arm containing one stopped at the `or`, never reached the join,
+            # and the caller's "untranslatable op" backstop refused the whole
+            # if/else. The construct was already buildable; only this walker
+            # could not build it.
+            #
+            #     c  <|> or(other->d) lK/1     inside the arm
+            #     d      <$> const[IV 5]       the RHS value
+            #     e  <@> print vK              both sides converge here
+            #
+            # THE GUARD MUST MATCH THE MAIN WALK'S, not just "is there a
+            # value on the stack". _walk_branch is reached from more than an
+            # if/else arm -- a chained `open(...) || open(...) || (die ...)`
+            # walks its left `||` through here too. Claiming a VOID or
+            # die/store/void-call arm broke perl's own t/base/term.t, which
+            # spells exactly that: the arm produces no value, so this handler
+            # GAPped a line the main walk had always lowered. Those forms need
+            # real control flow and belong to the handlers that build it.
+            #
+            # ONLY THE VALUE FORM. The main walk's handler also covers a
+            # statement-modifier exit (`return 1 if $x`), an element-store arm
+            # and a `die` arm -- each needing real control flow. Those keep
+            # GAPping here: an arm whose RHS exits or stores is not a value, and
+            # a wrong answer is worse than a refusal. Detected by walking the
+            # RHS on a snapshot and requiring it to produce exactly one value
+            # and converge at this op's op_next.
+            if ($opmap->is_branch($name) && ($name eq 'and' || $name eq 'or')
+                    && $sim->stack_depth > 0
+                    && ($op->flags & 3) != 1            # not OPf_WANT_VOID
+                    && !_arm_has_die($op->other, ${ $op->next })
+                    && !_arm_has_void_call($op->other, ${ $op->next })
+                    && !_arm_has_element_store($op->other, ${ $op->next })) {
+                my $lhs      = $sim->pop_node;
+                my $base     = $sim->stack_depth;
+                my $stop     = ${ $op->next };
+                my $rhs_sim  = $sim->snapshot;
+                my @rhs_exits;
+                my ($rhs_end, $rhs_sig) =
+                    _walk_branch($cv, $op->other, $rhs_sim, $factory, $opmap,
+                        $visited, \@rhs_exits, 1, $stop);
+                # An exiting or non-converging RHS is the control-flow form.
+                die "GAP: short-circuit with a non-value arm inside an if/else"
+                  . " arm not yet lowered\n"
+                    if ($rhs_sig // '') eq 'exited'
+                    || @rhs_exits
+                    || !(defined $rhs_end && ref $rhs_end && $$rhs_end == $stop);
+                die "GAP: short-circuit whose arm is not a single value inside"
+                  . " an if/else arm not yet lowered\n"
+                    unless $rhs_sim->stack_depth == $base + 1;
+                my $rhs = $rhs_sim->pop_node;
+                $sim->push_node($factory->make(
+                    $name eq 'and' ? 'And' : 'Or', inputs => [$lhs, $rhs]));
+                $op = $rhs_end;
+                next;
+            }
+
             # `die` raises an exception -- a runtime-free abort. It becomes an
             # Unwind CFG node on the arm's control (mirroring the main walk's
             # handler): the args are the message, the arm's control advances to
