@@ -250,6 +250,7 @@ sub _resolve_deferred_stamps {
     _floor_element_removals($graphs);
     _floor_param_fields( $graphs, $classes );
 
+
     # AND RE-RUN THE CHAIN ABOVE IT. A Return whose value is floored must carry
     # the floor too, or the wire contradicts itself: the node says Scalar while
     # its method's return_type record still says Unknown.
@@ -262,13 +263,35 @@ sub _resolve_deferred_stamps {
     # with `return_type: Scalar` on its record and `Unknown` on its callsite --
     # the same contradiction one level up. So the dependent chain runs to a
     # fixpoint of its own, bounded the same way the main loop is.
+    #
+    # COERCION INSERTION RUNS INSIDE THAT FIXPOINT, because the dependency goes
+    # BOTH WAYS and neither order alone terminates it:
+    #
+    #   insertion needs the chain   a coercion is decided from the operand's
+    #                               TYPE, and `$p->left + $p->right` has Calls
+    #                               that are Unknown until the chain types them
+    #                               from their callee. Asked first, the pass
+    #                               correctly declines and never returns.
+    #
+    #   the chain needs insertion   inserting a Coerce re-derives the consuming
+    #                               node, which invalidates its sub's
+    #                               return_type and every callsite reading it.
+    #
+    # Measured: with insertion ahead of the chain, 4 positions across
+    # classes-013/014 wanted a Coerce and never got one -- exactly the
+    # `:param`-field Calls the chain types on its own next round. Inside the
+    # loop they are typed, then coerced, then re-derived.
     for my $round ( 1 .. $ROUNDS ) {
         my $before = _count_unknown_stamps($graphs);
         _rederive_method_return_types( $graphs, $classes );
         _rederive_sub_return_types( $graphs, $classes );
         _stamp_calls_from_callees( $graphs, $classes );
         _stamp_derived($graphs);
-        last if _count_unknown_stamps($graphs) == $before;
+        my $coerced = _insert_type_coercions( $graphs, $classes );
+        # The Unknown count alone cannot see this pass: a Str -> Num repair
+        # moves no node off Unknown. So a round that inserted anything is a
+        # round that changed something, and the loop must go again.
+        last if !$coerced && _count_unknown_stamps($graphs) == $before;
     }
 
     return;
@@ -505,6 +528,144 @@ sub _floor_param_fields {
     # method return type from the same source.
     $changed += _stamp_reader_accessors( $graphs, $classes );
     return $changed;
+}
+
+# _insert_type_coercions(\%graphs) -- materialise a Coerce wherever an operand's
+# TYPE must change to satisfy the position it is used in.
+#
+# THE PREDICATE IS `meet(from, to) != from`, and the two halves do different
+# jobs: the MEET is the test, the REQUIREMENT is the target. If the meet IS the
+# source, the source already satisfies the target and nothing changes -- no
+# node. Otherwise the value's type genuinely differs from what the position
+# needs, and the conversion is `Coerce[from -> to]`.
+#
+# DIRECTED, THOUGH MEET IS SYMMETRIC. Comparing the result against ONE side is
+# what makes it so:
+#
+#     meet(Str, Num) = Num, and Num ne Str   -> coerce Str to Num
+#     meet(Num, Str) = Num, and Num eq Num   -> do not
+#
+# One direction of each pair fires, so the coercion relation is ACYCLIC and
+# cannot oscillate. That matters: a symmetric trigger over Perl's mutually
+# convertible Int/Num/Str would admit two coercion paths between the same pair,
+# which is the classical ambiguity hazard (Swamy/Hicks/Bierman, ICFP 2009).
+#
+# NOT `meet == None`. That is the narrower case of two INCOMPARABLE types and
+# misses every NARROWING: `Str -> Num` and `Scalar -> Str` both need a real
+# conversion and neither meets to None. Measured over chalk's 240-block corpus,
+# the ==None rule finds ZERO sites and this one finds 28.
+#
+# TYPE CHANGES ONLY -- this pass is not the producer's stringification path.
+# `Int` in a `Str` position meets to `Int`, so nothing fires: an Int already
+# satisfies a Str requirement on the type axis. Rendering it as characters is a
+# REPRESENTATION change, a different axis and a different layer's decision.
+sub _insert_type_coercions {
+    my ( $graphs, $classes ) = @_;
+    my $factory  = SoN::IR::NodeFactory->new;
+    my $inserted = 0;
+    my %restamp;    # graph name => node id => node, for operands replaced
+
+    for my $gname ( sort keys $graphs->%* ) {
+        my $graph = $graphs->{$gname} or next;
+        for my $node ( $graph->nodes->@* ) {
+            my $inputs = $node->inputs or next;
+            for my $i ( 0 .. $#$inputs ) {
+                my $want = B::SoN::TypeLibrary::operand_type( $node->operation, $i )
+                    // next;
+                my $operand = $inputs->[$i] or next;
+                next unless ref $operand && $operand->isa('SoN::IR::Value');
+
+                # An operand nothing typed cannot be tested. Leave it: the pass
+                # reads types, it does not invent them.
+                my $from = $operand->stamp ? $operand->stamp->type : 'Unknown';
+                next if $from eq 'Unknown';
+
+                # AND NEVER STACK ONE ON A COERCE. Its result is already the
+                # target type, so the predicate would decline anyway -- but
+                # saying so here keeps a second pass over the same graph from
+                # depending on that.
+                next if $operand->operation eq 'Coerce';
+
+                my $meet = SoN::IR::Stamp::meet(
+                    SoN::IR::Stamp->new( type => $from ),
+                    SoN::IR::Stamp->new( type => $want ),
+                );
+                next if $meet->type eq $from;
+
+                $inputs->[$i] = $factory->make(
+                    'Coerce',
+                    from_repr => $from,
+                    to_repr   => $want,
+                    inputs    => [$operand],
+                    stamp     => SoN::IR::Stamp->new( type => $want ),
+                );
+                $inserted++;
+                $restamp{$gname}{ $node->id } = $node;
+            }
+        }
+    }
+
+    # RE-DERIVE WHAT THE OLD OPERAND DECIDED. A node's stamp was computed while
+    # the graph was built, from the operand that is no longer there -- so a node
+    # this pass rewrote is carrying an answer to a superseded question.
+    #
+    # `my $h = "hello"; $h + 1` is the case: Add takes join(Str, Int) = Str and
+    # is stamped Str, which is not merely imprecise but WRONG -- perl returns 1,
+    # a number. With the operand converted the join is over Num and Int, and the
+    # cap in _derived_type makes it Num.
+    #
+    # UNCONDITIONALLY, not only-fill-Unknown. Every other pass in this file
+    # fills gaps and must not overrule a better answer; this one is REPAIRING a
+    # stamp it invalidated itself, so declining to overwrite would leave the
+    # wrong value in place.
+    my %touched;    # graph name => 1, for graphs whose stamps this pass moved
+    for my $gname ( sort keys %restamp ) {
+        for my $node ( values $restamp{$gname}->%* ) {
+            my $type = _derived_type($node) or next;
+            $node->set_stamp( SoN::IR::Stamp->new( type => $type ) );
+            $touched{$gname} = 1;
+        }
+    }
+
+    # AND INVALIDATE THE RECORDS DERIVED FROM THOSE STAMPS. A re-derived node is
+    # not a leaf: `sub f { my $h = "hello"; return $h + 1 }` now returns Num, so
+    # the sub's `return_type` record -- computed from the Add BEFORE this pass
+    # corrected it -- says Str, and every callsite reading that record says Str
+    # too. The Return yields Num. That is the wire contradicting itself.
+    #
+    # CLEARED, NOT RECOMPUTED HERE. _rederive_sub_return_types already knows how
+    # to derive it and runs right after this pass; it declines only because it
+    # fills gaps and will not overrule an answer that is already present. So the
+    # honest move is to remove the answer this pass invalidated and let the pass
+    # that owns the question answer it again.
+    my %stale_callee;    # callee graph name => 1
+    for my $cname ( sort keys $classes->%* ) {
+        my $subs = $classes->{$cname}{subs} or next;
+        for my $sname ( sort keys $subs->%* ) {
+            my $rec = $subs->{$sname} or next;
+            next unless $touched{ $rec->{graph} // '' };
+            $rec->{return_type} = 'Unknown';
+            $stale_callee{"${cname}::${sname}"} = 1;
+            $stale_callee{$sname}              = 1;
+        }
+    }
+
+    # AND THE CALLSITES, one level further out, for the same reason. A Call
+    # carries its callee's return type, so a Call to a sub whose record just
+    # became stale is stale too -- and _stamp_calls_from_callees fills only
+    # `Unknown`, so it will not correct a stamp that is merely wrong. Clear
+    # those and let it answer again from the record it owns.
+    for my $gname ( sort keys $graphs->%* ) {
+        my $graph = $graphs->{$gname} or next;
+        for my $node ( $graph->nodes->@* ) {
+            next unless $node->isa('SoN::IR::Node::Call');
+            my $name = $node->can('name') ? ( $node->name // '' ) : '';
+            next unless $stale_callee{$name};
+            $node->set_stamp( SoN::IR::Stamp->new( type => 'Unknown' ) );
+        }
+    }
+
+    return $inserted;
 }
 
 # _rederive_method_return_types(\%graphs, \%classes) -- recompute each method's
