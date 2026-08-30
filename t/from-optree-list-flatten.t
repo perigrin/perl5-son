@@ -31,7 +31,7 @@ sub op_counts ($graph) {
 }
 
 # The Return-reachable graph shape for `my @b = @a; scalar @b`: the flattened
-# copy is a single ArrayRef of the 3 Constants, Length'd -- NO ArrayRef whose
+# copy is a single ArrayRef of the 3 Constants, Count'd -- NO ArrayRef whose
 # element is another ArrayRef (the pre-fix miscompile shape).
 sub max_arrayref_arity ($graph) {
     my $max = 0;
@@ -71,15 +71,15 @@ subtest 'two arrays (@a, @b) both flatten' => sub {
     is(max_arrayref_arity($g), 4, 'flattened list has 4 elements');
 };
 
-subtest 'scalar context does NOT flatten (keeps the aggregate for Length)' => sub {
+subtest 'scalar context does NOT flatten (keeps the aggregate for Count)' => sub {
     # `scalar @a` and `my $n = @a` are OPf_WANT_SCALAR: the array stays an
-    # aggregate a Length counts. The flatten must not fire.
+    # aggregate a Count counts. The flatten must not fire.
     my $g = translate('sub { my @a = (1, 2, 3); scalar @a }');
     my $c = op_counts($g);
-    ok($c->{Length}, 'scalar @a produces a Length over the aggregate')
+    ok($c->{Count}, 'scalar @a produces a Count over the aggregate')
         or diag('ops: ' . join(',', sort keys %$c));
     my $g2 = translate('sub { my @a = (1, 2, 3); my $n = @a; $n }');
-    ok(op_counts($g2)->{Length}, 'my $n = @a produces a Length (count), not a flatten');
+    ok(op_counts($g2)->{Count}, 'my $n = @a produces a Count, not a flatten');
 };
 
 subtest 'shift/pop operand does NOT flatten (keeps the ArrayRef for the builtin)' => sub {

@@ -36,7 +36,7 @@ sub nodes_of ($g, $op) { grep { $_->operation eq $op } $g->nodes->@* }
 # did not -- leaving the name string to flow into whatever consumed the array.
 #
 # THE LENGTHS MUST DISAGREE. The old miscompile made `$#x` into
-# Length(Constant("x")) -- the length of the NAME -- which answers 1 for EVERY
+# Count(Constant("x")) -- the length of the NAME -- which answers 1 for EVERY
 # package array. Measured against perl at the time:
 #
 #   @x unset        perl -1   chalk 1
@@ -58,10 +58,10 @@ subtest 'a package array translates and measures the ARRAY, not its name' => sub
     my $g = graph_of('sub { our @x = (1,2,3); $#main::x }');
     ok(defined $g, 'a package array translates');
 
-    my @len = nodes_of($g, 'Length');
-    ok(scalar(@len), 'it builds a Length') or return;
+    my @len = nodes_of($g, 'Count');
+    ok(scalar(@len), 'it builds a Count') or return;
 
-    # The bug restated structurally: a Length over a string Constant is the
+    # The bug restated structurally: a Count over a string Constant is the
     # name being measured. Whatever the operand is, it must not be that.
     for my $l (@len) {
         my $operand = $l->inputs->[0];
@@ -71,7 +71,7 @@ subtest 'a package array translates and measures the ARRAY, not its name' => sub
             && defined $operand->value
             && $operand->value =~ /\A\w+\z/;
         ok(!$is_name_const,
-            'the Length measures a container, not the stash NAME string');
+            'the Count measures a container, not the stash NAME string');
     }
 };
 
@@ -83,7 +83,7 @@ subtest 'a package array is the SAME SHAPE as the lexical one' => sub {
 
     ok(defined $pkg, 'the package version translates at all') or return;
 
-    for my $op (qw(ArrayRef Length)) {
+    for my $op (qw(ArrayRef Count)) {
         my $l = scalar nodes_of($lex, $op);
         my $p = scalar nodes_of($pkg, $op);
         is($p, $l, "package and lexical build the same number of $op nodes");
@@ -97,7 +97,7 @@ subtest 'a package hash translates' => sub {
 };
 
 # The BILATERAL partner for the miscompile: three lengths whose correct answers
-# are 0, 2 and 3 -- none of them 1, so a Length-of-the-name regression cannot
+# are 0, 2 and 3 -- none of them 1, so a Count-of-the-name regression cannot
 # agree with any of them.
 subtest 'package array lengths DISAGREE across sizes (the miscompile check)' => sub {
     my %want = (
@@ -108,7 +108,7 @@ subtest 'package array lengths DISAGREE across sizes (the miscompile check)' => 
     for my $code (sort keys %want) {
         my $g = eval { graph_of($code) };
         ok(defined $g, "translates: $code") or next;
-        ok(scalar(nodes_of($g, 'Length')), '... and builds a Length');
+        ok(scalar(nodes_of($g, 'Count')), '... and builds a Count');
     }
 };
 

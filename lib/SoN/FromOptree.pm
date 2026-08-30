@@ -51,6 +51,9 @@ class SoN::FromOptree 0.01 {
         # String ops.
         Concat    => 'Str',
         Length    => 'Int',
+        # An aggregate's element count. Fixed Int, like Length, and for the same
+        # reason -- but a DIFFERENT operation over a different operand kind.
+        Count     => 'Int',
         # Comparisons yield a boolean; the three-way <=> / cmp yield an int.
         (map { $_ => 'Boolean' } qw(
             NumEq NumLt NumGt NumLe NumGe NumNe
@@ -1466,9 +1469,9 @@ class SoN::FromOptree 0.01 {
             # string byte-length -- a miscompile. Fall through to SKIP (leaving
             # the value in place) unless the operand is an aggregate.
             if (_is_aggregate_node($agg)) {
-                my $stamp = _result_stamp('Length', [$agg]);
+                my $stamp = _result_stamp('Count', [$agg]);
                 my %extra = defined $stamp ? (stamp => $stamp) : ();
-                $sim->push_node($factory->make('Length', inputs => [$agg], %extra));
+                $sim->push_node($factory->make('Count', inputs => [$agg], %extra));
             }
             else {
                 $sim->push_node($agg);
@@ -1484,7 +1487,7 @@ class SoN::FromOptree 0.01 {
         if ($name eq 'av2arylen' && $sim->stack_depth > 0
                 && _is_aggregate_node($sim->peek_node)) {
             my $agg = $sim->pop_node;
-            my $len = $factory->make('Length',
+            my $len = $factory->make('Count',
                 inputs => [$agg],
                 stamp  => SoN::IR::Stamp->new(type => 'Int'));
             my $one = $factory->make('Constant',
@@ -2275,9 +2278,9 @@ class SoN::FromOptree 0.01 {
             # but is a scalar reference and must pass through.
             if ($target->isa('SoN::IR::Node::PadAccess')) {
                 if (_rhs_is_aggregate_access($op) && _is_aggregate_node($value)) {
-                    my $stamp = _result_stamp('Length', [$value]);
+                    my $stamp = _result_stamp('Count', [$value]);
                     my %extra = defined $stamp ? (stamp => $stamp) : ();
-                    $value = $factory->make('Length', inputs => [$value], %extra);
+                    $value = $factory->make('Count', inputs => [$value], %extra);
                 }
                 $sim->define($target->targ, $value);
                 $sim->push_node($value);
@@ -2363,9 +2366,9 @@ class SoN::FromOptree 0.01 {
             # anonlist) builds an identical ArrayRef node but IS a scalar
             # reference, so it must pass through unchanged.
             if (_rhs_is_aggregate_access($op) && _is_aggregate_node($value)) {
-                my $stamp = _result_stamp('Length', [$value]);
+                my $stamp = _result_stamp('Count', [$value]);
                 my %extra = defined $stamp ? (stamp => $stamp) : ();
-                $value = $factory->make('Length', inputs => [$value], %extra);
+                $value = $factory->make('Count', inputs => [$value], %extra);
             }
             # OPpLVAL_INTRO (128) indicates a new lexical declaration (my $x).
             # Only the main walker emits the VarDecl wrapper.
@@ -3611,7 +3614,7 @@ class SoN::FromOptree 0.01 {
             if _body_writes_targ($cv, $body_start, $sim, $opmap, $x_targ);
 
         # The loop bound is the array's element count.
-        my $len = $factory->make('Length',
+        my $len = $factory->make('Count',
             inputs => [$array],
             stamp  => SoN::IR::Stamp->new(type => 'Int'));
         my $zero = $factory->make('Constant',

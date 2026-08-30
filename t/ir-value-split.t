@@ -13,9 +13,18 @@ use SoN::IR::NodeFactory;
 # askable at all -- the same three-way overload Chalk::IR::Value documents.
 #
 # The roster below is not invented here: it is chalk's, read off the direct
-# parent of each class in lib/Chalk/IR/Node/. Both repos declare the same 88
-# node classes with identical intermediate parents (BinOp, UnaryOp, Access,
-# Aggregate, Regex), so the split transfers exactly.
+# parent of each class in lib/Chalk/IR/Node/, with identical intermediate
+# parents (BinOp, UnaryOp, Access, Aggregate, Regex), so the split transfers
+# exactly.
+#
+# 89, NOT 88: the producer declares one node chalk does not. `Count` (an
+# aggregate's element count) was split out of `Length` (a string's character
+# count) because they are different operations that perl itself keeps apart --
+# `length` is its own op taking a string, while `scalar(@a)` compiles to a bare
+# padav with no length op at all. Chalk still has only `Length`, so it lowers
+# `Count` by the same path until it takes the split too. The number is stated
+# here rather than derived so that a class appearing or vanishing on either
+# side is a red test rather than a silent drift.
 
 my @VALUE_CLASSES = qw(
     Access Aggregate AnonSub BacktickExpr BinOp Call Coerce CompoundAssign
@@ -47,7 +56,7 @@ subtest 'control node classes are NOT SoN::IR::Value' => sub {
 };
 
 subtest 'inherited leaves ride their intermediate parent' => sub {
-    # Add/Concat/Divide reach Value through BinOp, Length through UnaryOp,
+    # Add/Concat/Divide reach Value through BinOp, Length and Count through UnaryOp,
     # PadAccess through Access. Reparenting the intermediates is what makes
     # the other 57 classes values without touching them.
     my %VIA = (
@@ -55,6 +64,7 @@ subtest 'inherited leaves ride their intermediate parent' => sub {
         Concat     => 'BinOp',
         Divide     => 'BinOp',
         Length     => 'UnaryOp',
+        Count      => 'UnaryOp',
         Negate     => 'UnaryOp',
         PadAccess  => 'Access',
         Parameter  => 'Access',
@@ -92,7 +102,7 @@ subtest 'every node class is one or the other, never neither' => sub {
     my @names = sort map { s/\.pm$//r } grep { /\.pm$/ } readdir($dh);
     closedir $dh;
 
-    cmp_ok(scalar @names, '==', 88, 'all 88 node classes present');
+    cmp_ok(scalar @names, '==', 89, 'all 89 node classes present');
 
     for my $name (@names) {
         my $class = "SoN::IR::Node::$name";

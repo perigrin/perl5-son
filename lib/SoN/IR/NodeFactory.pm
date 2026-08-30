@@ -53,6 +53,7 @@ use SoN::IR::Node::UnaryPlus;
 use SoN::IR::Node::Ref;
 use SoN::IR::Node::RefType;
 use SoN::IR::Node::Length;
+use SoN::IR::Node::Count;
 use SoN::IR::Node::Slice;
 use SoN::IR::Node::PadAccess;
 use SoN::IR::Node::FieldAccess;
@@ -97,7 +98,7 @@ my %DATA_CLASSES = map { $_ => "SoN::IR::Node::$_" } qw(
     StrEq StrNe StrLt StrGt StrLe StrGe StrCmp
     And Or BitAnd BitOr BitXor LeftShift RightShift
     Assign Repeat Match NotMatch DefinedOr Xor Range Yada IsaOp
-    Not Negate Complement Defined UnaryPlus Ref RefType Length
+    Not Negate Complement Defined UnaryPlus Ref RefType Length Count
     PadAccess FieldAccess EntryDef ArgsSource Parameter Subscript Slice
     Call HashRef ArrayRef
     Interpolate AnonSub

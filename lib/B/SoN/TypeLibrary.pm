@@ -88,6 +88,11 @@ my %SIGNATURES = (
     StrGe      => { operands => ['Str', 'Str'], result => 'Boolean' },
     StrCmp     => { operands => ['Str', 'Str'], result => 'Int' },
     Length     => { operands => ['Str'],        result => 'Int' },
+    # A COUNT IS NOT A LENGTH. Length measures a string; Count counts an
+    # aggregate's elements, so its operand is `List` -- the lattice parent
+    # covering both Array and Hash. Sharing one entry made every array count
+    # read as a type error against a signature written for strings.
+    Count      => { operands => ['List'],       result => 'Int' },
 
     # Bitwise: integer in, integer out.
     BitAnd     => { operands => ['Int', 'Int'], result => 'Int' },

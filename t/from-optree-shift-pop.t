@@ -141,7 +141,7 @@ subtest 'a sub that never shifts gains no @_ memory effect' => sub {
 # THE CAUSE IS TWO MODELS IN ONE IR. Compare what each reader takes as input:
 #
 #     Subscript   (container, index, MEMORY)   a LOCATION -- observes mutation
-#     Length      (container)                  a VALUE    -- never does
+#     Count       (container)                  a VALUE    -- never does
 #
 # An element read threads memory, so pre- and post-store reads are distinct
 # nodes each observing the state at its own program point. A whole-array read
@@ -152,7 +152,7 @@ subtest 'a sub that never shifts gains no @_ memory effect' => sub {
 #
 # Note this is NOT the `scalar((1,2,3))` case, which is the comma operator
 # yielding its LAST VALUE (3 here, 7 for `scalar((1,2,7))`) and is handled
-# correctly -- it collapses at parse and builds no Length at all. Arrays count;
+# correctly -- it collapses at parse and builds no Count at all. Arrays count;
 # lists yield. Two plural things, two different scalar-context answers.
 #
 # PRE-EXISTING, and this probe read WORSE before bare shift became a memory
@@ -162,15 +162,15 @@ subtest 'a sub that never shifts gains no @_ memory effect' => sub {
 # rather than left silent.
 subtest 'a whole-array read observes a preceding drain' => sub {
     my $g = translate('sub { my $h = shift; scalar(@_) }');
-    my ($len) = nodes_by_op($g, 'Length');
-    ok($len, 'the Length node exists') or return;
+    my ($len) = nodes_by_op($g, 'Count');
+    ok($len, 'the Count node exists') or return;
 
     my ($shift) = grep { ($_->name // '') eq 'shift' } nodes_by_op($g, 'Call');
     ok($shift, 'the shift exists') or return;
 
     todo 'MISCOMPILE: a whole-array read takes the container, not the memory version' => sub {
         ok(_reaches($len, $shift),
-            'the Length reads through the shift, so it counts the drained array');
+            'the Count reads through the shift, so it counts the drained array');
     };
 };
 
@@ -179,15 +179,15 @@ subtest 'a whole-array read observes a preceding drain' => sub {
 # perl and 3 here.
 subtest 'a lexical whole-array read observes a preceding drain' => sub {
     my $g = translate('sub { my @a = (1,2,3); shift @a; scalar(@a) }');
-    my ($len) = nodes_by_op($g, 'Length');
-    ok($len, 'the Length node exists') or return;
+    my ($len) = nodes_by_op($g, 'Count');
+    ok($len, 'the Count node exists') or return;
 
     my ($shift) = grep { ($_->name // '') eq 'shift' } nodes_by_op($g, 'Call');
     ok($shift, 'the shift exists') or return;
 
     todo 'MISCOMPILE: the same staleness on a lexical array' => sub {
         ok(_reaches($len, $shift),
-            'the Length reads through the shift, so it counts the drained array');
+            'the Count reads through the shift, so it counts the drained array');
     };
 };
 
