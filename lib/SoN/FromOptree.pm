@@ -586,6 +586,65 @@ class SoN::FromOptree 0.01 {
             }
 
             # Try/catch handling
+            # BLOCK EVAL: entertry/leavetry. NOT entertrycatch, which is
+            # perl's `try/catch` FEATURE and the only one handled below.
+            # entertry is registered BRANCH with no handler, so the generic
+            # branch-skip stepped over it without walking the body, and
+            # leavetry then popped a value nothing had pushed -- "Stack
+            # underflow at StackSim.pm line 25". An internal crash where a
+            # refusal belongs, and the worst kind: it fires BEFORE any honest
+            # GAP could, masking the real diagnosis, and it names StackSim so a
+            # reader goes hunting a simulator bug instead of an unhandled op.
+            #
+            #     3  <|> entertry(other->4) s
+            #     9      <;> nextstate            <- ->next is the BODY
+            #     a      <$> const[IV 1]
+            #     4  <@> leavetry sK              <- ->other is where it lands
+            #
+            # The trap is the same shape string eval and entertrycatch use: the
+            # eval either yields the body's value or, having caught, undef. Two
+            # arms merging into a Region, which chalk lowers today.
+            if ($name eq 'entertry') {
+                my $body_sim = $sim->snapshot;
+                _walk_branch($cv, $op->next, $body_sim, $factory, $opmap,
+                    \%visited, undef, 1, _op_addr($op->other));
+
+                my $undef = $factory->make('Constant',
+                    value      => undef,
+                    const_type => 'undef',
+                    stamp      => SoN::IR::Stamp->new(type => 'Undef'));
+                my $region = $factory->make_cfg('Region',
+                    inputs => [$body_sim->control]);
+                $sim->set_control($region);
+                $sim->set_memory($body_sim->memory);
+
+                # The body's value, or undef if it died. Three cases, and the
+                # depth tells them apart:
+                #
+                #   deeper   the body produced a value -> Phi(value, undef)
+                #   equal    a VOID eval (`eval { print "x" };`) produced none,
+                #            and the caller wants none
+                #   equal,   a body that ALWAYS throws (`eval { die "x" }`)
+                #   wanted   pushes nothing either -- `die` builds an Unwind and
+                #            yields no value -- but the eval still HAS a result,
+                #            and perl says it is undef. Push the undef alone: a
+                #            Phi would need two arms and there is only one.
+                if ($body_sim->stack_depth > $sim->stack_depth) {
+                    my $val = $body_sim->pop_node;
+                    $sim->push_node($factory->make_unique('Phi',
+                        inputs => [$val, $undef], region => $region));
+                }
+                elsif (($op->flags & 3) != 1) {   # not OPf_WANT_VOID
+                    $sim->push_node($undef);
+                }
+
+                # Resume after the leavetry the body converged on.
+                $op = $op->other;
+                $visited{$$op}++ if $$op;
+                $op = $op->next if $$op;
+                next;
+            }
+
             if ($name eq 'entertrycatch') {
                 # Walk try body (op->other leads to catch)
                 my $try_sim = $sim->snapshot;
