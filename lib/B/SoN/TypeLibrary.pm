@@ -118,7 +118,35 @@ my %SIGNATURES = (
 
 # operand_type($ir_op, $position) -> the type this op requires of that operand,
 # or undef when it imposes nothing (or the op is unknown).
+# NODE-LEVEL OPERAND CONTRACTS, kept apart from %SIGNATURES on purpose.
+#
+# %SIGNATURES mirrors chalk's table and describes SOURCE OPERATORS: `*` needs
+# Num, `eq` needs Str. This hash is for the cases where the IR NODE and the
+# source builtin genuinely DISAGREE, and it has one member for the same reason
+# chalk's %_NODE_OPERAND_REPR has one: the IR `Print` node lowers a single
+# representation, so every argument position is Str, while perl's `print` is
+# variadic over `List` because perl flattens into it. Two claims about two
+# different things, and folding this into %SIGNATURES would put a node-level
+# fact in the source-operator table and break the mirror.
+#
+# AN ENTRY THAT MERELY RESTATES A SOURCE SIGNATURE BELONGS IN %SIGNATURES. This
+# is an override table for real conflicts, not a second place to write the same
+# answer -- the failure mode this file's header already records ("three partial
+# copies of one table, none of them labelled as such").
+my %NODE_OPERAND_TYPE = (
+    Print => 'Str',    # every position, however many arguments
+);
+
+# operand_type($ir_op, $position) -> what this position REQUIRES, or undef.
+#
+# undef is meaningful and must not become a default: a caller distinguishes
+# "this position requires nothing" from "requires Str", and
+# _insert_type_coercions skips a position whose requirement is undef. A default
+# here would start coercing the operands of every op the tables do not describe.
 sub operand_type ($ir_op, $position) {
+    # The node-level contract wins where it exists: it is a fact about the node
+    # this position belongs to, not about the operator it was spelled with.
+    return $NODE_OPERAND_TYPE{$ir_op} if exists $NODE_OPERAND_TYPE{$ir_op};
     my $sig = $SIGNATURES{$ir_op} or return undef;
     return ( $sig->{operands} // [] )->[$position];
 }
