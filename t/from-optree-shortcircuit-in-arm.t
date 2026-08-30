@@ -68,11 +68,20 @@ subtest 'the arm builds the same node the top level does' => sub {
 # Handling and/or must not turn that into a pass-through for other unhandled
 # ops -- a genuinely untranslatable arm still GAPs.
 subtest 'a genuinely untranslatable arm still refuses' => sub {
+    # String eval USED to be the example here and stopped being untranslatable
+    # when it became a Str -> Code coercion. `each` in a while loop is a
+    # current one, and it exercises the RIGHT backstop: it produces the
+    # arm-did-not-reach-the-join refusal this subtest is about, rather than
+    # some other GAP the arm walker never sees. (`goto` was tried and is
+    # wrong here -- it dies with a stack underflow, not a GAP, which is its
+    # own bug and not what this asserts.)
     my $err = dies {
-        graph_of('sub { if ($^O eq "os2") { my $s = eval "1+1"; print $s }'
+        graph_of('sub { if ($^O eq "os2") { my %h;'
+               . ' while (my ($k,$v) = each %h) { print $k } }'
                . ' else { print "b" } }')
     };
-    like($err, qr/GAP/, 'an arm the walker cannot translate still dies with a GAP');
+    like($err, qr/GAP.*if\/else arm/,
+        'an arm the walker cannot translate still dies with the arm GAP');
 };
 
 done_testing;

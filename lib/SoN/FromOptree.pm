@@ -1145,50 +1145,6 @@ class SoN::FromOptree 0.01 {
               . " the statements it skips, and the label would otherwise be"
               . " dropped with no diagnostic",
 
-        # String eval is ONE op -- `entereval[t256] sK/1`, a unary op taking
-        # the source string (measured with B::Concise). Block eval is the
-        # opposite shape, `entertry(other->N) ... leavetry`, a real region
-        # whose body IS in the optree; that one is handled elsewhere.
-        #
-        # THIS IS NOT MERELY UNBUILT. B::SoN runs at CHECK time on an
-        # already-compiled optree: the entereval op is present but the eval'd
-        # code is not, because perl compiles that string only when the op
-        # EXECUTES. A CONSTANT operand does not change that -- `eval q{1+2}`
-        # looks compilable because the string is known, but building it would
-        # mean invoking the perl compiler on that string mid-walk and splicing
-        # the result, which is a different tool rather than a missing feature.
-        # So this GAP is permanent by design, not a TODO.
-        #
-        # Without this entry the walk descended into `hintseval` -- entereval's
-        # SECOND child, carrying the lexical hints the eval'd code inherits --
-        # treated that compiler metadata as a value operand, and died with
-        # "Required parameter 'value' is missing for SoN::IR::Node::Constant".
-        # Loud, so nothing miscompiled, but it named a Chalk node class for
-        # what is really "string eval is not compiled".
-        # WHAT IT IS, IN THE TYPE SYSTEM'S OWN TERMS: `eval STRING` is a
-        # Str -> Code coercion. It takes a value and returns a first-class CODE
-        # value -- storable in a list, passable, callable -- so it is an
-        # ordinary value conversion, not a special form.
-        #
-        # It is NOT refused because the types are unrelated. `meet(Str, Code)`
-        # is None, but so is `meet(ArrayRef, Str)`, and THAT coercion the
-        # producer emits and lowers happily (perl prints ARRAY(0x...)). A None
-        # meet says the two types share no common subtype -- a fact about
-        # SUBTYPING -- and says nothing about whether a conversion exists.
-        # Stringification converts across the whole lattice.
-        #
-        # It is refused because the CONVERSION FUNCTION IS THE PERL COMPILER,
-        # and B::SoN runs at CHECK time, before that function can be invoked.
-        # Nothing about the lattice would change that: closing this needs the
-        # perl compiler run during translation and its optree spliced in, which
-        # is a different tool rather than a missing rule. A CONSTANT operand
-        # does not help -- `eval q{1+2}` looks compilable, but building it means
-        # invoking the compiler mid-walk exactly the same way.
-        entereval => "GAP: string eval is a Str -> Code coercion whose"
-                   . " conversion function is the perl compiler itself, which"
-                   . " is not available at CHECK time: perl compiles the body"
-                   . " only when the op runs, and B::SoN walks the program"
-                   . " before it runs. This holds for a constant operand too",
     );
 
     sub _extract_const ($sv) {
@@ -1762,6 +1718,59 @@ class SoN::FromOptree 0.01 {
         # following sassign can rebind its targ; returning the currently-bound
         # value would lose the assignment target. An rvalue padsv returns the
         # bound value (the variable's current value).
+        # STRING EVAL IS A Str -> Code COERCION, and the producer's job is to
+        # STATE that, not to decide whether it can be lowered. `eval STRING`
+        # takes a value and returns a first-class CODE value -- storable,
+        # passable, callable -- so it is an ordinary value conversion.
+        #
+        # This used to be a hand-written refusal in %UNBUILT_OP_GAP next to
+        # `goto`, which meant ONE eval refused the WHOLE FILE: perl's own
+        # t/base/lex.t translated 10 nodes and stopped. Emitting the node
+        # instead leaves a complete graph with exactly one un-lowerable member,
+        # which is strictly more information and the shape the rest of the
+        # producer already uses. The consumer refuses it at the Code machine
+        # type, which is where that knowledge lives (T1 states, T2 decides).
+        #
+        # THE TRAP IS A REGION, NOT A TryCatch. `eval "die"` returns undef and
+        # sets $@ without unwinding, so the graph must not claim the expression
+        # always yields a value. Block eval already models exactly that -- walk
+        # both arms, merge() to a Region -- and this reuses it. A TryCatch node
+        # type exists but has never been constructed and chalk cannot lower one
+        # (it needs an LLVM landingpad plus a personality function, a design
+        # question for a runtime-free backend). Wrapping in one would add a
+        # SECOND un-lowerable node to describe a refusal, and would misattribute
+        # the blocker: the gate would name the wrapper when the unsupported
+        # thing is the conversion.
+        if ($name eq 'entereval') {
+            my $src = $sim->pop_node;
+            my $code = $factory->make('Coerce',
+                from_repr => (defined $src->stamp ? $src->stamp->type : 'Str'),
+                to_repr   => 'Code',
+                inputs    => [$src],
+                stamp     => SoN::IR::Stamp->new(type => 'Code'));
+            # The trap: the eval either yielded its value or caught and returned
+            # undef. Two arms merging is the same shape block eval builds.
+            my $undef = $factory->make('Constant',
+                value      => undef,
+                const_type => 'undef',
+                stamp      => SoN::IR::Stamp->new(type => 'Undef'));
+            # THE COERCE IS AN EFFECT, NOT A PURE VALUE, so it is pinned to
+            # the control chain. A void `eval q{1};` discards the result, and
+            # an unpinned value node with no consumer is dead: the whole eval
+            # VANISHED from the graph, leaving a bare Region -- the same silent
+            # drop `write` and `goto` are refused for. An eval can die and can
+            # define subs; it happens whether or not anyone reads its value.
+            $code->set_control_in($sim->control);
+            $sim->set_control($code);
+            my $region = $factory->make_cfg('Region', inputs => [$code]);
+            $sim->set_control($region);
+            my $value = $factory->make_unique('Phi',
+                inputs => [$code, $undef], region => $region);
+            # Void context discards the value; the effect above still stands.
+            $sim->push_node($value) unless ($op->flags & 3) == 1; # OPf_WANT_VOID
+            return ($op->next, 'handled');
+        }
+
         if ($name eq 'padsv') {
             my $targ = $op->targ;
             # A deref padsv ($r->[0], $r->{k}) carries OPf_MOD for
