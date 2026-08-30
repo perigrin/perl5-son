@@ -3022,7 +3022,7 @@ class SoN::FromOptree 0.01 {
     # reports whether the body rebound it -- _scout_mutated_targs cannot answer
     # this for the iterator because it excludes $extra_targs from its result and
     # only seeds slots already in scope (the iterator is not in the outer scope).
-    sub _body_writes_targ ($cv, $start_op, $sim, $opmap, $targ, $cond_consumed = 0) {
+    sub _body_writes_targ ($cv, $start_op, $sim, $opmap, $targ) {
         my $scout_factory = SoN::IR::NodeFactory->new();
         my $scout_sim     = SoN::FromOptree::StackSim->new(
             control => $scout_factory->make_cfg('Start'),
@@ -3040,13 +3040,12 @@ class SoN::FromOptree 0.01 {
         my $ph = $scout_factory->make_unique('Constant',
             value => 'scout-iter', const_type => 'string');
         $scout_sim->define($targ, $ph);
-        _walk_loop_body($cv, $start_op, $scout_sim, $scout_factory, $opmap, {}, {},
-            undef, undef, $cond_consumed);
+        _walk_loop_body($cv, $start_op, $scout_sim, $scout_factory, $opmap, {}, {});
         my $after = $scout_sim->scope_bindings->{$targ};
         return defined $after && $after != $ph;
     }
 
-    sub _scout_mutated_targs ($cv, $start_op, $sim, $opmap, $extra_targs = [], $cond_consumed = 0) {
+    sub _scout_mutated_targs ($cv, $start_op, $sim, $opmap, $extra_targs = []) {
         my $scout_factory = SoN::IR::NodeFactory->new();
         my $scout_sim     = SoN::FromOptree::StackSim->new(
             control => $scout_factory->make_cfg('Start'),
@@ -3060,8 +3059,7 @@ class SoN::FromOptree 0.01 {
             $placeholder{$targ} = $ph;
             $scout_sim->define($targ, $ph);
         }
-        _walk_loop_body($cv, $start_op, $scout_sim, $scout_factory, $opmap, {}, {},
-            undef, undef, $cond_consumed);
+        _walk_loop_body($cv, $start_op, $scout_sim, $scout_factory, $opmap, {}, {});
         my $scout_scope = $scout_sim->scope_bindings;
         my %extra = map { $_ => 1 } $extra_targs->@*;
         return [ sort _scope_key_order
@@ -3498,7 +3496,7 @@ class SoN::FromOptree 0.01 {
         # it rides as an extra slot and is excluded from the mutated set --
         # it gets the induction Phi, not a carried-value Phi).
         my $pre_scope = $sim->scope_bindings;
-        my $mutated = _scout_mutated_targs($cv, $body_start, $sim, $opmap, [$i_targ], 1);
+        my $mutated = _scout_mutated_targs($cv, $body_start, $sim, $opmap, [$i_targ]);
 
         # Phase 2: header -- induction Phi plus one Phi per mutated slot.
         my $loop_node = $factory->make_cfg('Loop', inputs => [$sim->control]);
@@ -3556,21 +3554,23 @@ class SoN::FromOptree 0.01 {
             $sim->set_memory($mem_phi);
         }
 
-        # A foreach has no and/or loop condition of its own (the range iterator
-        # drives it, and its iteration `and` was consumed at $and_op above), so
-        # every top-level and/or in the body is a GUARD -- an else-less `if` or a
-        # postfix modifier. The body walk is told so ($cond_consumed = 1 below)
-        # and splits each one into a real If rather than mistaking the first for
-        # a loop condition, which would drop the guard and fire the guarded
-        # statement every iteration (`$s=$s+$i unless $i==2` over 1..3 gave 106,
-        # not 104, zhi 019f5a27).
+        # A foreach has no and/or loop condition (the range iterator drives it,
+        # and its own iteration `and` was consumed at $and_op above). So any
+        # top-level and/or in the body is a postfix MODIFIER guard (`STMT unless
+        # C`). _walk_loop_body's condition handler would treat that modifier as the
+        # loop condition, drop the guard's If, and fire the guarded statement every
+        # iteration (silent miscompile: `$s=$s+$i unless $i==2` over 1..3 gave 106
+        # not 104, zhi 019f5a27). Lowering a nested guard inside a loop body is a
+        # control-flow feature not yet built; GAP loudly before the real walk.
+        die "GAP: nested and/or (postfix modifier) inside a foreach body not yet"
+          . " lowered\n"
+            if _body_has_modifier_andor($body_start);
 
         # Phase 3: body under Proj(loop,0); exit on Proj(loop,1).
         my $body_proj = $factory->make_cfg('Proj', inputs => [$loop_node], index => 0);
         my $exit_proj = $factory->make_cfg('Proj', inputs => [$loop_node], index => 1);
         $sim->set_control($body_proj);
-        _walk_loop_body($cv, $body_start, $sim, $factory, $opmap, {}, $visited,
-            undef, undef, 1);
+        _walk_loop_body($cv, $body_start, $sim, $factory, $opmap, {}, $visited);
 
         # Phase 4: back-edges. The induction step is synthesized (+1); the
         # carried slots patch exactly like the while loop.
@@ -3615,10 +3615,11 @@ class SoN::FromOptree 0.01 {
             unless $$and_op && $and_op->name eq 'and';
         my $body_start = $and_op->other;
 
-        # A body guard (an else-less `if` or a postfix `STMT if C`) splits into a
-        # real If during the body walk, exactly as in the range form: this
-        # foreach's iteration `and` is consumed just above, so $cond_consumed
-        # tells the walk that every remaining top-level and/or is a guard.
+        # A nested postfix modifier (`STMT if C`) in the body is an unbuilt
+        # control-flow feature; the same GAP the range form refuses (zhi 019f5a27).
+        die "GAP: nested and/or (postfix modifier) inside a foreach body not yet"
+          . " lowered\n"
+            if _body_has_modifier_andor($body_start);
 
         # ALIASING: Perl's `for my $x (@a)` ALIASES $x to each element, so a body
         # write `$x = ...` MUTATES @a in place. This lowering binds $x to a
@@ -3629,7 +3630,7 @@ class SoN::FromOptree 0.01 {
         # body assigns the alias. GAP loudly until the write-back is modeled.
         die "GAP: foreach body writes the iterator variable (aliasing write-back "
           . "to the array) not yet lowered\n"
-            if _body_writes_targ($cv, $body_start, $sim, $opmap, $x_targ, 1);
+            if _body_writes_targ($cv, $body_start, $sim, $opmap, $x_targ);
 
         # The loop bound is the array's element count.
         my $len = $factory->make('Count',
@@ -3643,7 +3644,7 @@ class SoN::FromOptree 0.01 {
         # Phase 1: scout the body. $x rides on enteriter (its own slot) and gets
         # the element binding, not a carried-value Phi, so exclude it.
         my $pre_scope = $sim->scope_bindings;
-        my $mutated = _scout_mutated_targs($cv, $body_start, $sim, $opmap, [$x_targ], 1);
+        my $mutated = _scout_mutated_targs($cv, $body_start, $sim, $opmap, [$x_targ]);
 
         # Phase 2: header -- induction Phi (i: 0..len-1) plus one Phi per mutated
         # slot. The induction Phi is NOT bound to $x; $x is the element read below.
@@ -3684,8 +3685,7 @@ class SoN::FromOptree 0.01 {
             inputs => [$array, $i_phi, $sim->memory],
             (defined $elem_stamp ? (stamp => $elem_stamp) : ()));
         $sim->define($x_targ, $elem);
-        _walk_loop_body($cv, $body_start, $sim, $factory, $opmap, {}, $visited,
-            undef, undef, 1);
+        _walk_loop_body($cv, $body_start, $sim, $factory, $opmap, {}, $visited);
 
         # Phase 4: back-edges. The induction step is +1; carried slots patch like
         # the while loop.
@@ -3716,18 +3716,9 @@ class SoN::FromOptree 0.01 {
     # scout walk, whose nodes are throwaway) the legacy If shape is kept --
     # the binding effects are identical either way, which is all the scout
     # measures.
-    sub _walk_loop_body ($cv, $op, $sim, $factory, $opmap, $loop_visited, $outer_visited, $loop_node = undef, $break_projs = undef, $cond_consumed = 0) {
+    sub _walk_loop_body ($cv, $op, $sim, $factory, $opmap, $loop_visited, $outer_visited, $loop_node = undef, $break_projs = undef) {
         my $ctx = { mode => 'loop' };
         my $exit_proj;
-        # A foreach's iteration `and` is consumed by its caller before the body
-        # walk begins, so its body has NO loop condition left to find: the first
-        # top-level `and` here is already a guard. $cond_consumed says so.
-        #
-        # This is deliberately NOT folded into $condition_fired. That flag means
-        # "a WRITTEN header condition was consumed in THIS walk", and the
-        # head-of-body `last if` hoist refuses when it is already set -- so
-        # seeding it for a foreach turned `for (..) { last if C; ... }` into a
-        # GAP. Two different facts, two flags.
         my $condition_fired = 0;
         # A do-block (`$x = do { STMT; ...; RESULT }`) opens an `enter`/`leave`
         # sub-statement scope INSIDE the enclosing expression. Its intermediate
@@ -3985,111 +3976,6 @@ class SoN::FromOptree 0.01 {
                 next;
             }
 
-            # MID-BODY GUARDED STATEMENT: an `and` whose ->other is an
-            # ordinary statement (not `last`/`next`) AFTER the loop condition has
-            # already fired. Perl compiles an else-less `if (C) { STMT }` and a
-            # postfix `STMT if C` to the SAME `and` shape as the loop's own
-            # iteration guard, so position -- not shape -- tells them apart: the
-            # first such `and` is the loop condition, a later one is a guard.
-            #
-            # A VALUE-CONTEXT and/or (`my $x = $i && 1`) is not a guard either:
-            # it PRODUCES a value, where a guarded statement is void. perl marks
-            # the difference in the op flags -- the guard is vK/1 (void), the
-            # value form sK/1 (scalar) -- so gate on void context. Claiming the
-            # value form left its result unmodelled and crashed the StackSim with
-            # a stack underflow, which is worse than the GAP it replaced: an
-            # internal error is not a refusal.
-            #
-            # A COMPOUND loop condition (`while (A && B)`) is NOT a guard, and
-            # $stmt_count is what tells them apart: the second `and` of a
-            # compound condition is still in the CONDITION, before the body's
-            # first statement boundary, so $stmt_count is 0 there and the guard
-            # handler declines. Lowering `while ($i<3 && $j<5)` as a guard reads
-            # B as a body guard and A alone as the loop test -- the body's
-            # updates become conditional while the loop keeps running, which
-            # SPINS FOREVER when B fails first (perl exits after 1 iteration).
-            # Short-circuit in a loop condition stays a GAP.
-            #
-            # This is the `next if C` split with a non-empty taken arm. There,
-            # the guard-taken arm is EMPTY (skip the rest); here it RUNS the
-            # guarded statement and both arms rejoin at the same place:
-            #
-            #   b  <|> and(other->c)   <- the guard
-            #   c      ... STMT ...        guard-taken arm (b->other)
-            #   f  ...                     both arms converge here (b->next)
-            #
-            # An if/ELSE in a loop body was never affected: perl builds a
-            # cond_expr for that, which _step already lowers. Only the else-less
-            # form compiles to an `and`, which is why this one shape was the
-            # whole of the refusal.
-            if (($name eq 'and' || $name eq 'or') && $sim->stack_depth > 0
-                    && ($condition_fired || $cond_consumed)
-                    && $stmt_count >= 1
-                    && ($op->flags & 3) == 1      # OPf_WANT_VOID
-                    && $op->can('other') && ${$op->other}
-                    && !_is_loop_control_or_exit($op->other)) {
-                my $cond = $sim->pop_node;
-                my $if_node = $factory->make_cfg('If',
-                    inputs => [$sim->control, $cond]);
-                # `unless C` / `STMT or ...` compiles to an `or`, which runs the
-                # guarded statement when the condition is FALSE -- the arms are
-                # swapped relative to `and`. Take the sense from the op rather
-                # than negating the comparison: a bare-truthiness guard
-                # (`STMT unless $flag`) has no comparison to negate, and the
-                # Proj index carries the sense with no node to synthesize.
-                my ($taken_idx, $skip_idx) = $name eq 'or' ? (1, 0) : (0, 1);
-                my $taken_proj = $factory->make_cfg('Proj',
-                    inputs => [$if_node], index => $taken_idx);
-                my $skip_proj  = $factory->make_cfg('Proj',
-                    inputs => [$if_node], index => $skip_idx);
-
-                # Walk the guarded statement on the taken arm, stopping where it
-                # rejoins the main path. Both arms converge at the guard's
-                # op_next, so bound the walk there rather than letting it run on
-                # into the rest of the body (which belongs to BOTH arms).
-                my $taken_sim = $sim->snapshot;
-                $taken_sim->set_control($taken_proj);
-                _walk_branch($cv, $op->other, $taken_sim, $factory, $opmap,
-                    {}, undef, 0, _op_addr($op->next));
-                # The guarded statement is a void statement; drain any value it
-                # left so merge() does not build a spurious stack Phi.
-                $taken_sim->pop_node while $taken_sim->stack_depth > $sim->stack_depth;
-
-                # The skip arm holds the pre-guard bindings on Proj 1. Merge it
-                # with the taken arm: arm 0 = taken, arm 1 = skipped.
-                my $pre = $sim->scope_bindings;
-                my $skip_sim = $sim->snapshot;
-                $skip_sim->set_control($skip_proj);
-                # merge()'s receiver becomes Phi arm 0, which must be the arm on
-                # Proj 0 -- for an `or` that is the SKIP arm, not the taken one.
-                my ($lhs, $rhs) = $name eq 'or'
-                    ? ($skip_sim, $taken_sim) : ($taken_sim, $skip_sim);
-                $lhs->merge($rhs, $factory, $if_node);
-
-                # Stamp each newly-built merge Phi from the join of its arms.
-                # A merge Phi over a loop-carried accumulator becomes that slot's
-                # back-edge, and _patch_loop_phi rejects an UNSTAMPED back-edge.
-                my $merged = $lhs->scope_bindings;
-                for my $targ (keys %$merged) {
-                    my $m = $merged->{$targ};
-                    next unless defined $m
-                        && $pre->{$targ} && $m != $pre->{$targ}
-                        && $m->operation eq 'Phi' && !_is_narrowed($m->stamp);
-                    my ($a, $b) = $m->inputs->@*;
-                    $m->set_stamp(SoN::IR::Stamp::join($a->stamp, $b->stamp))
-                        if defined $a && defined $b
-                        && _is_narrowed($a->stamp) && _is_narrowed($b->stamp);
-                }
-                $sim->set_control($lhs->control);
-                $sim->set_memory($lhs->memory);
-                $sim->define($_, $merged->{$_}) for keys %$merged;
-
-                # Resume on the not-taken path: the rest of the body runs for
-                # both arms, from the merged state.
-                $op = $op->next;
-                next;
-            }
-
             # Handle the loop condition (and/or) - walk body via other
             if (($name eq 'and' || $name eq 'or') && $sim->stack_depth > 0) {
                 # A second and/or here is NOT the loop condition -- it is a
@@ -4168,30 +4054,6 @@ class SoN::FromOptree 0.01 {
     # -- and THAT the loop-body walker DOES lower (mid-body If split). Flag only
     # the former. Pure lexical scan; stop at the body's unstack/leaveloop (the
     # iteration/loop boundary) so a following loop's ops are not scanned.
-    # A guard's ->other is the STATEMENT it guards. When ->other is instead a
-    # control transfer -- `last`/`next`/`redo` (loop control) or a function exit
-    # (`return`/`leavesub`) -- the construct is not a guarded statement and the
-    # guard handler must not claim it: loop control has its own handlers above,
-    # and a `return` inside a loop body is an unbuilt feature that must keep
-    # GAPping rather than lower as an ordinary two-armed merge (which would drop
-    # the exit edge entirely and fall through to the back-edge).
-    sub _is_loop_control_or_exit ($other) {
-        my $n = $other->name;
-        return 1 if $n eq 'last' || $n eq 'next' || $n eq 'redo';
-        return 1 if $n eq 'return' || $n eq 'leavesub' || $n eq 'leavesublv';
-        # `return EXPR` is a return op wrapping a list; the exit can also appear
-        # as the first op of the guarded arm rather than as ->other itself.
-        my %seen;
-        for (my $o = $other; $$o && !$seen{$$o}; $o = $o->next) {
-            $seen{$$o} = 1;
-            my $m = $o->name;
-            last if $m eq 'unstack' || $m eq 'leaveloop' || $m eq 'nextstate';
-            return 1 if $m eq 'return' || $m eq 'leavesub' || $m eq 'leavesublv'
-                || $m eq 'last' || $m eq 'next' || $m eq 'redo';
-        }
-        return 0;
-    }
-
     sub _body_has_modifier_andor ($body_start) {
         my %seen;
         for (my $op = $body_start; $$op && !$seen{$$op}; $op = $op->next) {

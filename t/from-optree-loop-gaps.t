@@ -23,16 +23,6 @@ sub translate_dies ($code) {
     return dies { SoN::FromOptree->translate($cv) };
 }
 
-# A case that used to GAP and now LOWERS needs the graph, not the exception.
-sub graph_of ($code) {
-    SoN::OptSuppress::suppress_peep();
-    my $cv = eval $code;
-    my $err = $@;
-    SoN::OptSuppress::restore_peep();
-    die "compile failed: $err" if $err;
-    return SoN::FromOptree->translate($cv);
-}
-
 subtest 'last inside a loop body refuses loudly' => sub {
     # Was: last silently dropped -> Int:15 instead of Int:1.
     like(translate_dies(
@@ -165,35 +155,21 @@ subtest 'nested and/or inside a loop body refuses loudly (zhi 019f26a5)' => sub 
         qr/GAP: nested and.or inside a loop body/, 'compound && condition dies with a GAP');
 };
 
-# THE FOREACH MODIFIER GAP IS NOW A FEATURE (zhi 019f5a27 closed). It refused
-# because _walk_loop_body mistook the guard for the loop condition, dropped its
-# If, and fired the guarded statement every iteration -- `$s = $s + $i unless
-# $i == 2` over 1..3 gave 106 where perl gives 104. The guard now splits into a
-# real If, so the assertion moves from "it refuses" to "it computes the right
-# thing": the accumulator MUST merge through a Phi whose arms are the updated
-# and the unchanged value. That Phi is precisely what was missing when the
-# answer was 106.
-subtest 'a postfix modifier in a FOREACH body lowers to a guarded merge' => sub {
-    for my $src (
-        'sub { my $s = 100; for my $i (1..3) { $s = $s + $i unless $i == 2; } $s }',
-        'sub { my $s = 100; for my $i (1..3) { $s = $s + $i if $i != 2; } $s }',
-    ) {
-        my $g = graph_of($src);
-        my @if = grep { $_->operation eq 'If' } $g->nodes->@*;
-        is(scalar(@if), 1, 'the guard builds exactly one If');
-
-        # The accumulator's merge Phi: one arm is the Add, the other is the
-        # value that skipped it. Without this Phi the add is unconditional --
-        # the 106 shape.
-        my ($add) = grep { $_->operation eq 'Add' && $_->stamp && $_->stamp->type eq 'Int'
-                           && grep { $_->operation eq 'Phi' } $_->inputs->@* } $g->nodes->@*;
-        ok($add, 'the guarded add exists') or next;
-        my $merged = grep {
-            $_->operation eq 'Phi'
-                && grep { defined $_ && $_->id eq $add->id } $_->inputs->@*
-        } $g->nodes->@*;
-        ok($merged, 'the guarded add flows through a merge Phi -- it is conditional');
-    }
+subtest 'postfix if/unless modifier inside a FOREACH body refuses loudly (zhi 019f5a27)' => sub {
+    # A foreach has NO and/or loop condition (the range iterator drives it), so
+    # the FIRST and/or the body walk sees is a postfix MODIFIER guard, not the
+    # condition. _walk_loop_body mistook it for the loop condition, consumed it,
+    # and never emitted the guard's If -- the guarded statement fired every
+    # iteration (silent miscompile: `$s = $s + $i unless $i == 2` over 1..3 gave
+    # 106, oracle 104). GAP loudly until the nested guard is lowered in a loop.
+    like(translate_dies(
+        'sub { my $s = 100; for my $i (1..3) { $s = $s + $i unless $i == 2; } $s }'),
+        qr/GAP: nested and.or \(postfix modifier\) inside a foreach body/i,
+        'unless-modifier in a foreach body dies with a GAP');
+    like(translate_dies(
+        'sub { my $s = 100; for my $i (1..3) { $s = $s + $i if $i != 2; } $s }'),
+        qr/GAP: nested and.or \(postfix modifier\) inside a foreach body/i,
+        'if-modifier in a foreach body dies with a GAP');
 };
 
 subtest 'a plain FOREACH body with no modifier still translates (the GAP does not over-fire)' => sub {
