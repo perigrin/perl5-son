@@ -399,7 +399,12 @@ class SoN::FromOptree::OpMap 0.01 {
         leaveeval   => [1, undef,        1, 0],
 
         # === Control flow ===
-        goto        => [1, undef,        0, 0],
+        # goto is a LOOPEXOP -- a control transfer, like last/next/redo. It
+        # takes NO stack operand: the label rides on the op itself. The pop
+        # count was 1, so the generic handler popped an operand that does not
+        # exist and underflowed the StackSim BEFORE goto's (correct, long-
+        # present) GAP could name it. See t/opmap-respects-op-class.t.
+        goto        => [0, undef,        0, 0],
         last        => [0, undef,        0, 0],
         next        => [0, undef,        0, 0],
         redo        => [0, undef,        0, 0],
