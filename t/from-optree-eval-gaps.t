@@ -68,4 +68,37 @@ subtest 'ordinary code is untouched' => sub {
         'loops still translate');
 };
 
+# WHY IT IS REFUSED, pinned because the reason is easy to get wrong -- and was
+# got wrong twice while writing this.
+#
+# `eval STRING` IS a Str -> Code coercion, and Code is a first-class value:
+# `eval "sub { ... }"` returns a CODE ref you can store in a list, pass, and
+# call. So it is an ordinary value conversion, not a special form.
+#
+# It is NOT refused for being a conversion between unrelated types.
+# `meet(Str, Code)` is None -- but so is `meet(ArrayRef, Str)`, and the producer
+# EMITS that coercion and perl lowers it to "ARRAY(0x...)". A None meet says the
+# types share no common subtype; it says nothing about whether a conversion
+# exists. Asserted here so nobody adds a `meet == None -> refuse` rule: it would
+# break the working stringification path.
+#
+# It is refused because the conversion function IS the perl compiler, and
+# B::SoN runs at CHECK time, before that function can be invoked.
+subtest 'the refusal is about WHEN the compiler runs, not about types' => sub {
+    my $err = dies { SoN::FromOptree->translate(sub { my $x = eval "1+1"; $x }) };
+    like($err, qr/CHECK time|before it runs/,
+        'the message names the timing, which is the actual reason');
+};
+
+# THE COUNTEREXAMPLE THAT DISPROVES THE TYPE-BASED RULE: a meet==None coercion
+# the producer emits happily. If this ever GAPs, someone has added the
+# `meet == None -> refuse` rule the comment above warns against.
+subtest 'a meet==None coercion is still emitted where it is lowerable' => sub {
+    my $g = SoN::FromOptree->translate(sub { my $r = [1,2]; print "x" . $r });
+    ok($g, 'ArrayRef -> Str translates, though meet(ArrayRef,Str) is None')
+        or return;
+    my ($c) = grep { $_->operation eq 'Coerce' } $g->nodes->@*;
+    ok($c, 'and it really is a Coerce node');
+};
+
 done_testing;

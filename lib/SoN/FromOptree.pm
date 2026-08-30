@@ -1165,10 +1165,30 @@ class SoN::FromOptree 0.01 {
         # "Required parameter 'value' is missing for SoN::IR::Node::Constant".
         # Loud, so nothing miscompiled, but it named a Chalk node class for
         # what is really "string eval is not compiled".
-        entereval => "GAP: string eval is not compiled. Its body is a STRING,"
-                   . " not an optree: perl compiles it only when the op runs,"
-                   . " and B::SoN walks the program before it runs. This holds"
-                   . " for a constant operand too",
+        # WHAT IT IS, IN THE TYPE SYSTEM'S OWN TERMS: `eval STRING` is a
+        # Str -> Code coercion. It takes a value and returns a first-class CODE
+        # value -- storable in a list, passable, callable -- so it is an
+        # ordinary value conversion, not a special form.
+        #
+        # It is NOT refused because the types are unrelated. `meet(Str, Code)`
+        # is None, but so is `meet(ArrayRef, Str)`, and THAT coercion the
+        # producer emits and lowers happily (perl prints ARRAY(0x...)). A None
+        # meet says the two types share no common subtype -- a fact about
+        # SUBTYPING -- and says nothing about whether a conversion exists.
+        # Stringification converts across the whole lattice.
+        #
+        # It is refused because the CONVERSION FUNCTION IS THE PERL COMPILER,
+        # and B::SoN runs at CHECK time, before that function can be invoked.
+        # Nothing about the lattice would change that: closing this needs the
+        # perl compiler run during translation and its optree spliced in, which
+        # is a different tool rather than a missing rule. A CONSTANT operand
+        # does not help -- `eval q{1+2}` looks compilable, but building it means
+        # invoking the compiler mid-walk exactly the same way.
+        entereval => "GAP: string eval is a Str -> Code coercion whose"
+                   . " conversion function is the perl compiler itself, which"
+                   . " is not available at CHECK time: perl compiles the body"
+                   . " only when the op runs, and B::SoN walks the program"
+                   . " before it runs. This holds for a constant operand too",
     );
 
     sub _extract_const ($sv) {
