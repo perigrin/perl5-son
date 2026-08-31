@@ -194,6 +194,70 @@ class SoN::FromOptree 0.01 {
     # $cv == B::main_cv). $program_root, when given, is the address of the
     # bare-program's root 'leave' op -- the ONLY 'leave' the exit check below
     # is allowed to treat as a function exit (see the leavesub/leave check).
+    # _address_taken($cv) -> { pad targ => 1, "stash::$name" => 1 }
+    #
+    # WHICH VARIABLES CANNOT STAY IN VALUE-SSA. A write through a reference must
+    # be visible to every later read of the name, and a value binding cannot say
+    # that -- so a referenced variable moves to memory, where the existing
+    # aggregate machinery already threads stores and reads.
+    #
+    # THE TRIGGER IS THE REFERENCE, NOT ESCAPE. `my $x = 5; my $r = \$x;
+    # $$r = 9; print $x` never leaves the compiled region and is still wrong
+    # under a value binding, so an escape analysis would wrongly pass it. Every
+    # SSA IR draws the line here: LLVM promotes an alloca only when it is used
+    # SOLELY by loads and stores, GCC gives an aliased variable virtual
+    # operands, Go and Cranelift do not promote `addrtaken` locals.
+    #
+    # A PRE-PASS, because the decision must be known BEFORE the walk reaches a
+    # read. `\$x` can appear after uses of $x, and by then the reads have
+    # already been built as value bindings.
+    #
+    # Structural, not exec-order: srefgen can sit anywhere in the tree.
+    # $root is given for the PROGRAM body, whose tree is B::main_root() rather
+    # than $cv->ROOT ($cv is B::main_cv there and its ROOT is not the program).
+    sub _address_taken ($cv, $root = undef) {
+        my %taken;
+        $root //= eval { $cv->ROOT };
+        return \%taken unless $root && $$root;
+
+        my $visit;
+        $visit = sub ($op) {
+            return unless ref($op) && $$op;
+
+            if ($op->name eq 'srefgen' && $op->can('first') && ${$op->first}) {
+                # The referent sits under NULLED ex-list wrappers -- measured,
+                # `\$x` is srefgen -> null -> padsv and `\$g` is
+                # srefgen -> null -> null -> gvsv -- so descend through them.
+                my $kid = $op->first;
+                $kid = $kid->first
+                    while $$kid && $kid->name eq 'null'
+                        && $kid->can('first') && ${$kid->first};
+
+                if ($$kid && $kid->name eq 'padsv') {
+                    $taken{ $kid->targ } = 1 if $kid->targ;
+                }
+                elsif ($$kid && $kid->name eq 'gvsv') {
+                    my $gv = _op_gv($cv, $kid);
+                    $taken{ '$' . $gv->STASH->NAME . '::' . $gv->NAME } = 1
+                        if $gv && $$gv;
+                }
+                elsif ($$kid && $kid->name eq 'rv2sv' && $kid->can('first')
+                       && ${$kid->first} && $kid->first->name eq 'gv') {
+                    my $gv = _op_gv($cv, $kid->first);
+                    $taken{ '$' . $gv->STASH->NAME . '::' . $gv->NAME } = 1
+                        if $gv && $$gv;
+                }
+            }
+
+            return unless $op->flags & 4;   # OPf_KIDS
+            for (my $k = $op->first; ref($k) && $$k; $k = $k->sibling) {
+                $visit->($k);
+            }
+        };
+        $visit->($root);
+        return \%taken;
+    }
+
     sub _translate_from ($cv, $start_op, %opts) {
         my $program_root = $opts{program_root};
 
@@ -232,7 +296,12 @@ class SoN::FromOptree 0.01 {
         # case in `sub corpus_case { ... }`, so a fragment is indistinguishable
         # from a real sub and all 12 package-scalar cases GAP (measured). See
         # the followups, Part H.
+        # WHICH VARIABLES LIVE IN MEMORY, decided before the walk begins --
+        # `\$x` can appear after uses of $x, and by then those reads would
+        # already be built as value bindings.
         my $ctx = { mode => 'main', exits => \@exits,
+                    addr_taken => _address_taken($cv,
+                        defined $program_root ? B::main_root() : undef),
                     is_program => (defined $program_root ? 1 : 0) };
 
         while ($$op) {
@@ -1761,9 +1830,20 @@ class SoN::FromOptree 0.01 {
             if ($$kid && $kid->name =~ /\A(?:gvsv|padsv)\z/
                 || ($kid->name eq 'rv2sv' && $kid->can('first')
                     && ${$kid->first} && $kid->first->name eq 'gv')) {
+                # HALF-BUILT IS WORSE THAN REFUSED. _address_taken (above)
+                # correctly marks the variable and the READ side threads it --
+                # `my $x=5; my $r=\$x; $x=9; $x` builds PadAccess(MemStart)
+                # rather than folding to a constant. The WRITE side does not
+                # fire: the padsv_store handler's demotion branch is never
+                # reached for this shape, so the store is dropped and the read
+                # observes MemStart instead of the stored value. That graph
+                # looks well-formed and is silently wrong, which is the one
+                # outcome the refuse-or-lower contract exists to prevent.
                 die "GAP: taking a reference to a variable makes it"
                   . " address-taken; it must be demoted from value-SSA to"
-                  . " memory, and scalar demotion is not built yet\n";
+                  . " memory. The read side threads memory (see"
+                  . " _address_taken) but the store side is not wired, so the"
+                  . " write would be silently dropped\n";
             }
         }
 
@@ -1923,6 +2003,26 @@ class SoN::FromOptree 0.01 {
                     const_type => 'undef',
                     stamp      => SoN::IR::Stamp->new(type => 'Undef'));
                 $sim->define($targ, $undef);
+                return ($op->next, 'handled');
+            }
+
+            # A DEMOTED SLOT HAS NO VALUE BINDING TO PUSH. Its value lives in
+            # memory, so a read is a location node threaded to the memory
+            # version that produced it -- exactly what an element read does
+            # (`Subscript(array, index, Assign)`). Pushing $existing here is
+            # what folds `$x = 5; $x = 9; print $x` to the constant 9, which is
+            # right without aliasing and wrong the moment `\$x` exists.
+            if ($ctx->{addr_taken}{$targ}) {
+                # Built with the memory input rather than mutated after: a
+                # node's inputs are a construction :param, and the memory
+                # version is what makes two reads either side of a store
+                # DIFFERENT nodes rather than one hash-consed read.
+                my $read = $factory->make('PadAccess',
+                    targ     => $targ,
+                    varname  => _padname($cv, $targ),
+                    (defined $sim->memory ? (inputs => [ $sim->memory ]) : ()),
+                );
+                $sim->push_node($read);
                 return ($op->next, 'handled');
             }
 
@@ -2542,6 +2642,21 @@ class SoN::FromOptree 0.01 {
                     inputs => [$pad_node, $value],
                     scope  => 'my');
             }
+            # A DEMOTED SLOT IS WRITTEN TO MEMORY, not bound. Assign(location,
+            # value) pinned to control and becoming the new memory version --
+            # the same store form an element write uses, so the existing
+            # threading (and StackSim::merge's memory Phi) carries it without
+            # knowing a scalar is involved.
+            if ($ctx->{addr_taken}{$targ}) {
+                my $lv = _make_pad_or_field($cv, $targ, $factory);
+                my $store = $factory->make('Assign', inputs => [$lv, $value]);
+                $store->set_control_in($sim->control);
+                $sim->set_control($store);
+                $sim->set_memory($store);
+                $sim->push_node($value);
+                return ($op->next, 'handled');
+            }
+
             $sim->define($targ, $value);
             $sim->push_node($value);
             return ($op->next, 'handled');
