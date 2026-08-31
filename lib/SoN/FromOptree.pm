@@ -945,13 +945,25 @@ class SoN::FromOptree 0.01 {
                 # pad slot) -- the handler cannot name it, so it used to
                 # fabricate a slot-0 rebind and silently drop the substitution.
                 # GAP loudly until non-pad targets are lowered.
-                my $targ    = $op->targ;
-                die "GAP: s/// on an implicit \$_ or package/global target not yet lowered\n"
-                    unless $targ;
-                my $target  = $sim->lookup($targ);
+                # NO TARG MEANS $_, and $_ is nameable: it is the package
+                # scalar main::_, an ordinary SSA binding in the scope map. The
+                # MATCH handler beside this one already resolves it exactly this
+                # way, keyed with the SIGIL because `$_` and `@_` share a glob
+                # name and a name-only key hash-consed them into one node.
+                #
+                # Reads of $_ have always worked -- a match, a bare `print`, a
+                # builtin defaulting to it. Only the WRITE was refused, and the
+                # message blamed "implicit" when in fact `$_ =~ s///` was
+                # refused too: the handler could key NEITHER form.
+                my $targ = $op->targ;
+                my $scope_key = $targ || 'main::$_';
+                my $target = $sim->lookup($scope_key);
                 if (!$target) {
-                    $target = _make_pad_or_field($cv, $targ, $factory);
-                    $sim->define($targ, $target);
+                    $target = $targ
+                        ? _make_pad_or_field($cv, $targ, $factory)
+                        : $factory->make('EntryDef',
+                            stash_name => 'main', sigil => '$', var_name => '_');
+                    $sim->define($scope_key, $target);
                 }
                 # The replacement string is on the stack (pushed by const op
                 # before subst) -- but ONLY for a literal replacement. Under
@@ -984,7 +996,7 @@ class SoN::FromOptree 0.01 {
                 # padsv_store / TARGMY). The /r form (PMf_NONDESTRUCT) yields a
                 # NEW string and leaves the source untouched, so it must NOT
                 # rebind -- only push the result value ($nondestruct above).
-                $sim->define($targ, $node) unless $nondestruct;
+                $sim->define($scope_key, $node) unless $nondestruct;
                 $sim->push_node($node);
                 $op = $op->next;
                 next;

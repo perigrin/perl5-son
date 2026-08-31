@@ -10,6 +10,15 @@ use SoN::FromOptree;
 
 # Translate a code string under rpeep suppression (the production -MO=SoN path)
 # and return the die message, or '' if it translated without error.
+sub translate_ok ($code) {
+    SoN::OptSuppress::suppress_peep();
+    my $cv = eval $code;
+    my $cerr = $@;
+    SoN::OptSuppress::restore_peep();
+    die "compile failed: $cerr" if $cerr;
+    return SoN::FromOptree->translate($cv);
+}
+
 sub translate_err ($code) {
     SoN::OptSuppress::suppress_peep();
     my $cv = eval $code;
@@ -24,11 +33,20 @@ sub translate_err ($code) {
 # package/global target the pad targ is 0, so the handler cannot name the
 # target -- it used to fabricate a slot-0 rebind and drop the substitution
 # silently (returned the pre-subst value). It must GAP loudly instead.
-subtest 'implicit $_ target GAPs loudly (was: subst silently dropped)' => sub {
-    my $err = translate_err('sub { $_ = "foobar"; s/foo/baz/; $_ }');
-    like($err, qr/^GAP:/, 'implicit $_ s/// produces a loud GAP') or diag($err);
-    unlike($err, qr/consumers on an undefined|Can.t call method/,
-        'not a crash -- a clean GAP');
+# This used to assert a GAP. The concern it names -- a fabricated slot-0 rebind
+# that DROPS the substitution, so a later read returns the pre-subst value -- is
+# exactly what the handler now gets right: $_ is the package scalar main::_, an
+# ordinary binding in the scope map, and the substitution rebinds it there. So
+# the subtest asserts the rebind rather than the refusal, which is the property
+# the GAP was standing in for.
+subtest 'an implicit $_ s/// rebinds $_, and does not drop the substitution' => sub {
+    my $g = translate_ok('sub { $_ = "foobar"; s/foo/baz/; $_ }');
+    ok(defined $g, 'it translates') or return;
+
+    my ($ret) = grep { $_->operation eq 'Return' } $g->nodes->@*;
+    ok(defined $ret, 'the sub returns') or return;
+    is($ret->inputs->[0]->operation, 'RegexSubst',
+        '$_ reads the substitution result, not the pre-subst binding');
 };
 
 subtest 'package/global target GAPs loudly' => sub {
