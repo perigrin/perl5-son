@@ -98,7 +98,9 @@ subtest 'perl agrees with the rows we chose' => sub {
 subtest 'the table declines what it cannot say soundly' => sub {
     my %why = (
         # One op name, two types, decided by context the table cannot see.
-        readline => 'scalar context is one line, list context is all of them',
+        # A context-sensitive op IS table-eligible at the join of its results
+        # (`readline` now takes that and is List); these two are not, because
+        # their join reaches Unknown and says nothing.
         keys     => 'scalar context is a count, list context is the keys',
         caller   => 'scalar context is the package, list context is 3+ values',
 
@@ -106,11 +108,13 @@ subtest 'the table declines what it cannot say soundly' => sub {
         subst => 's///g returns a count; s///gr returns the string',
 
         # undef on failure -- and Boolean descends from Str in this lattice,
-        # not from Undef, so Boolean would be WRONG, not merely wide.
-        open  => 'returns undef on failure, which no Boolean row admits',
-        close => 'likewise',
+        # not from Undef, so Boolean would be WRONG, not merely wide. That
+        # rules out ONE CANDIDATE, not a row: `open` was measured against
+        # pp_open (Int pid or undef) and typed Scalar from join(Int,Undef),
+        # and `ftchr` measured as a true Boolean via is_bool. These two stay
+        # only until someone measures pp_close/pp_eof the same way.
+        close => 'undef on failure, and pp_close is not yet measured',
         eof   => 'likewise',
-        ftchr => 'a file test on a missing file is undef, and -s is a count',
 
         # The value belongs to the program, not to the operator.
         require   => 'a do-FILE returns the file last expression',

@@ -188,6 +188,24 @@ my %BUILTIN_SIGNATURES = (
     # which is the regression this table exists to avoid.
     abs    => { operands => ['Num'], result => 'Num' },
 
+    # `open` returns PUSHi((I32)PL_forkprocess) on success -- an INTEGER, the
+    # child pid for a pipe-open and 1 otherwise -- and RETPUSHUNDEF on failure
+    # (pp_sys.c, PP_wrapped(pp_open)). is_bool() is false on BOTH paths, so it
+    # is not a Boolean however boolean its use reads. join(Int, Undef) is what
+    # the LATTICE gives for that pair, and the lattice is what decides it.
+    open   => { operands => [], result => 'Scalar' },
+
+    # A line, or undef at EOF, or the whole file in list context. A
+    # context-sensitive op is still table-eligible at the JOIN of its results:
+    # sound, and vaguer than reading OPf_WANT at the construction site would
+    # be, but never wrong. Scalar <: List, so that join is List.
+    readline => { operands => [], result => 'List' },
+
+    # -c is a TRUE Boolean: is_bool(-c "/dev/null") is 1. Its siblings are not
+    # -- -s is an Int byte count, -M a Num of days -- so the family gets no
+    # blanket row and each member earns its own or none.
+    ftchr  => { operands => [], result => 'Boolean' },
+
     # shift/pop REMOVE AND RETURN ONE element, so the result is a scalar
     # whatever the array holds -- and in ANY context, unlike `splice`. This row
     # absorbs _floor_element_removals in B/SoN.pm, which said the same thing in
@@ -209,10 +227,11 @@ my %BUILTIN_RESULT_IS_JOIN = map { $_ => 1 } qw(
 # as a reachable untyped builtin Call over perl's t/base, t/cmd, t/comp and
 # t/opbasic, so each is a row someone will be tempted to add.
 #
-#   CONTEXT-SENSITIVE -- one op name, two types, and the op is not in hand
-#   here. These belong at the construction site where `$op->flags` can be read,
-#   the way BacktickExpr already is, not in a fixed row:
-#     readline  `my $s = <$f>` is one line; `my @s = <$f>` is all of them
+#   CONTEXT-SENSITIVE -- one op name, two types. A row here is still allowed
+#   at the JOIN of the two results, which is sound but vaguer than reading
+#   `$op->flags` at the construction site; `readline` takes that trade (List),
+#   these do not, because the join reaches all the way to Unknown and says
+#   nothing:
 #     keys      scalar context is a count, list context is the keys
 #     caller    scalar context is the package, list context is 3+ values
 #
@@ -220,11 +239,17 @@ my %BUILTIN_RESULT_IS_JOIN = map { $_ => 1 } qw(
 #     subst     s///g returns a COUNT (Int); s///gr returns the STRING (Str).
 #               Both are op name `subst`; only PMf_NONDESTRUCT separates them.
 #
-#   RETURNS undef ON FAILURE, and `Boolean` in this lattice descends from Str,
-#   not from Undef -- so Boolean would be a WRONG answer, not a wide one:
-#     open, close, eof, and the file tests (`-e missing` is undef). The file
-#     tests are not even uniform among themselves: -s is a byte COUNT (Int) and
-#     -M is fractional days (Num), so no single row covers the family.
+#   RETURNS undef ON FAILURE. `Boolean` descends from Str here, not from Undef,
+#   so Boolean is a WRONG answer for these -- but that rules out one candidate,
+#   NOT a row: ask the lattice for join(success, Undef) and take what it says.
+#   `open` does exactly that above and lands on Scalar. What remains absent is
+#   only what stays genuinely unresolved:
+#     close, eof        typed once someone measures pp_close/pp_eof the way
+#                       pp_open was measured, rather than assuming a Boolean.
+#     the file tests    not uniform among themselves: -c is a true Boolean
+#                       (typed above), -s a byte COUNT (Int), -M fractional
+#                       days (Num). No single row covers the family; each
+#                       member is measured on its own or left alone.
 #
 #   THE VALUE IS THE PROGRAM'S, NOT THE OPERATOR'S:
 #     require, dofile   a module returns 1, but a do-FILE returns the file's
