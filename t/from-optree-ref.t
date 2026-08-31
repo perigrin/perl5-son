@@ -53,25 +53,44 @@ subtest 'taking a reference to an aggregate is Ref, not RefType (collision teeth
     ok(!defined node_of($g, 'RefType'), 'reference-taking is not a RefType');
 };
 
-subtest 'a reference to a VARIABLE is refused (address-taken)' => sub {
+subtest 'a reference to a VARIABLE demotes it to memory' => sub {
     # The trigger is the REFERENCE, not escape. `my $x=5; my $r=\$x; $$r=9;
     # print $x` never leaves the compiled region and is still wrong under a
-    # value binding, so this must refuse on the reference being taken rather
-    # than on any escape judgement. Every SSA IR draws it there: LLVM promotes
-    # an alloca only when it is used solely by loads and stores, GCC gives an
+    # value binding, so demotion keys on the reference being taken rather than
+    # on any escape judgement. Every SSA IR draws it there: LLVM promotes an
+    # alloca only when it is used solely by loads and stores, GCC gives an
     # aliased variable virtual operands, Go does not promote `addrtaken` locals.
     #
-    # What chalk lacks is the DEMOTION, not a representation: a stored scalar
-    # has a static type that maps to an LLVM type, which is its memory form.
-    # Absent are the decision of which variables are referenced, and scalar
-    # load/store on the memory chain (which threads aggregate elements today).
+    # This used to assert a REFUSAL, and named the two absent pieces: deciding
+    # which variables are referenced, and scalar load/store on the memory chain.
+    # Both are built now -- _address_taken marks them before the walk, and the
+    # sassign PadAccess branch stores through memory exactly as the Subscript
+    # and FieldAccess branches already did.
     #
-    # Read-only use is not safe either: `my $x=5; my $r=\$x; $x=7; $$r` is 7 in
-    # perl, while a value binding would have captured 5.
-    for my $src ('sub { my $x = 5; \\$x }', 'sub { our $g = 5; \\$g }') {
-        my $err = dies { graph_of($src) };
-        like($err, qr/address-taken/, "refused: $src");
+    # WHAT IT PINS INSTEAD is the property the refusal was protecting: the
+    # variable survives as a LOCATION rather than folding to a value.
+    for my $src ('sub { my $x = 5; \$x }', 'sub { our $g = 5; \$g }') {
+        my $g = graph_of($src);
+        ok(defined node_of($g, 'Ref'), "\\ builds a Ref: $src");
+        ok(scalar(grep { $_->operation =~ /\A(?:PadAccess|EntryDef)\z/ }
+                  $g->nodes->@*),
+           "... over a surviving location, not a folded value: $src");
     }
+};
+
+# THE READ MUST OBSERVE THE WRITE -- the case the old refusal called out as
+# unsafe even for read-only use. `my $x=5; my $r=\$x; $x=7; $$r` is 7 in perl,
+# while a value binding would have captured 5.
+subtest 'a write after the reference is visible to a later read' => sub {
+    my $g = graph_of('sub { my $x = 5; my $r = \$x; $x = 7; return $x }');
+
+    my ($ret) = grep { $_->operation eq 'Return' } $g->nodes->@*;
+    ok(defined $ret, 'the sub returns') or return;
+
+    my $read = $ret->inputs->[0];
+    is($read->operation, 'PadAccess', 'the return value is a location read');
+    is($read->inputs->[0]->operation, 'Assign',
+       'threaded to the STORE, so it observes the write rather than MemStart');
 };
 
 done_testing();

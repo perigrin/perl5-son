@@ -47,11 +47,39 @@ sub nodes ( $w ) {
 # read would observe MemStart instead of the stored value. Until that is fixed
 # the construct stays REFUSED -- a plausible graph that silently loses a write
 # is the one outcome the refuse-or-lower contract exists to prevent.
-subtest 'taking a reference is still refused, and says why' => sub {
-    my ( undef, $err ) = wire( 'my $x = 5; my $r = \$x; print $$r;', 'takeref' );
-    like $err, qr/GAP:/, 'still a loud refusal';
-    like $err, qr/store side is not wired/,
-        '... naming the half that is missing, not a blanket "not built"';
+subtest 'taking a reference no longer refuses' => sub {
+    my ( $w, $err ) = wire( 'my $x = 5; my $r = \$x; print $$r;', 'takeref' );
+    ok $w, 'it translates' or diag($err), return;
+    unlike $err, qr/scalar demotion|address-taken/, 'no demotion GAP';
+};
+
+# THE STORE IS ON THE MEMORY CHAIN, and each read carries the store that
+# produced its value -- the memory-SSA shape an element access already uses:
+#
+#     PadAccess(MemStart) -> Assign -> PadAccess(Assign) -> Assign
+#                                   -> PadAccess(Assign) -> Return
+#
+# A read threaded to MemStart when a store precedes it would be the silent
+# failure: the graph looks well-formed and observes the wrong value.
+subtest 'a demoted write is a store, and the next read observes it' => sub {
+    require B;
+    require SoN::OptSuppress;
+    require SoN::FromOptree;
+
+    SoN::OptSuppress::suppress_peep();
+    my $cv = eval q{sub { my $x = 5; my $r = \$x; $x = 9; return $x }};
+    SoN::OptSuppress::restore_peep();
+    my $g = SoN::FromOptree->translate($cv);
+
+    my @assign = grep { $_->operation eq 'Assign' } $g->nodes->@*;
+    is scalar(@assign), 2, 'both writes became memory stores';
+
+    my ($ret) = grep { $_->operation eq 'Return' } $g->nodes->@*;
+    ok $ret, 'the sub returns' or return;
+    my $read = $ret->inputs->[0];
+    is $read->operation, 'PadAccess', 'it returns a location read';
+    is $read->inputs->[0]->operation, 'Assign',
+        'threaded to a STORE, not to MemStart -- it observes the write';
 };
 
 # THE PRE-PASS IS DONE AND CORRECT. It is the piece that had no analogue in the

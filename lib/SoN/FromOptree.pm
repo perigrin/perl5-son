@@ -1830,20 +1830,11 @@ class SoN::FromOptree 0.01 {
             if ($$kid && $kid->name =~ /\A(?:gvsv|padsv)\z/
                 || ($kid->name eq 'rv2sv' && $kid->can('first')
                     && ${$kid->first} && $kid->first->name eq 'gv')) {
-                # HALF-BUILT IS WORSE THAN REFUSED. _address_taken (above)
-                # correctly marks the variable and the READ side threads it --
-                # `my $x=5; my $r=\$x; $x=9; $x` builds PadAccess(MemStart)
-                # rather than folding to a constant. The WRITE side does not
-                # fire: the padsv_store handler's demotion branch is never
-                # reached for this shape, so the store is dropped and the read
-                # observes MemStart instead of the stored value. That graph
-                # looks well-formed and is silently wrong, which is the one
-                # outcome the refuse-or-lower contract exists to prevent.
-                die "GAP: taking a reference to a variable makes it"
-                  . " address-taken; it must be demoted from value-SSA to"
-                  . " memory. The read side threads memory (see"
-                  . " _address_taken) but the store side is not wired, so the"
-                  . " write would be silently dropped\n";
+                # Demotion is built: _address_taken marks the variable before
+                # the walk, its reads carry the current memory version, and its
+                # writes are Assign stores on the memory chain. Fall through and
+                # let srefgen build the reference over the location.
+                ()
             }
         }
 
@@ -2542,6 +2533,23 @@ class SoN::FromOptree 0.01 {
                     my %extra = defined $stamp ? (stamp => $stamp) : ();
                     $value = $factory->make('Count', inputs => [$value], %extra);
                 }
+                # A DEMOTED SLOT IS STORED, NOT BOUND. Its value lives in
+                # memory because a reference to it exists, so the write is an
+                # Assign(location, value) pinned to control and becoming the
+                # new memory version -- the same store form the Subscript and
+                # FieldAccess branches below use. Binding here instead would
+                # let a later read resolve to the value and miss writes made
+                # through the reference.
+                if ($ctx->{addr_taken}{ $target->targ }) {
+                    my $store = $factory->make('Assign',
+                        inputs => [$target, $value]);
+                    $store->set_control_in($sim->control);
+                    $sim->set_control($store);
+                    $sim->set_memory($store);
+                    $sim->push_node($value);
+                    return ($op->next, 'handled');
+                }
+
                 $sim->define($target->targ, $value);
                 $sim->push_node($value);
             }
@@ -2642,20 +2650,11 @@ class SoN::FromOptree 0.01 {
                     inputs => [$pad_node, $value],
                     scope  => 'my');
             }
-            # A DEMOTED SLOT IS WRITTEN TO MEMORY, not bound. Assign(location,
-            # value) pinned to control and becoming the new memory version --
-            # the same store form an element write uses, so the existing
-            # threading (and StackSim::merge's memory Phi) carries it without
-            # knowing a scalar is involved.
-            if ($ctx->{addr_taken}{$targ}) {
-                my $lv = _make_pad_or_field($cv, $targ, $factory);
-                my $store = $factory->make('Assign', inputs => [$lv, $value]);
-                $store->set_control_in($sim->control);
-                $sim->set_control($store);
-                $sim->set_memory($store);
-                $sim->push_node($value);
-                return ($op->next, 'handled');
-            }
+            # NO DEMOTION BRANCH HERE, deliberately. padsv_store is an rpeep
+            # FUSION of (const, padsv, sassign), and this walker suppresses
+            # rpeep (B::SoN.pm BEGIN) -- so in production a pad assignment
+            # arrives as `sassign` and that handler owns the demoted-store
+            # case. A copy here would be dead code that silently diverges.
 
             $sim->define($targ, $value);
             $sim->push_node($value);
