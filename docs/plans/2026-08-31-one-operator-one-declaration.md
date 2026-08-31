@@ -47,41 +47,29 @@ way and NOT fixed here."*
 
 (0 nodes lack a class file, so site 2 is currently consistent.)
 
-## What this is NOT
+## Not Allium-style generation -- decided 2026-08-31
 
-Not an Allium-style extraction from perl. That was investigated the same
-session (see `docs/` note or memory `allium-instruction-sets`) and answers the
-wrong half:
+Reviewed adversarially (Fable) and for over-engineering (ponytail); both said
+no, and the numbers say why.
 
-- **Generatable from perl:** op class, and `pop_count` for the unambiguous
-  classes. Churn here is small -- 5.38 -> 5.44 added 8 ops and removed none.
-- **NOT generatable:** `add -> Add`, `operands => ['Num','Num']`,
-  `result => join`. These encode what *our IR means* and no perl metadata knows
-  them.
+Generation reaches **~6-8% of the ~9600-line producer and ~20% of recent bugs**
+-- and that 20% is already caught by the three lints built the same night,
+which use perl's own `Opcode`/`B` at test time and so carry no artifact and no
+version skew. Allium ships 5.41.4 (415 ops); we run 5.42 (426). The skew is
+present today.
 
-Allium's `prototype` field must not be used as `pop_count`: it is the
-source-level signature, not the runtime stack discipline. They agree on plain
-BINOPs and diverge everywhere else (`floor` has `prototype: []` but pops its
-UNOP child; `and` is a LOGOP that branches; `print` is variadic and needs the
-`mark` discipline, which a prototype cannot express).
+What generation cannot reach: the op->node collapse (only 13 of 264 mappings
+are `ucfirst`; 176 collapse to one `Call`), the Num/Str narrowing that drives
+coercion insertion (perl resolves it at runtime in `pp_add`/`pp_concat`), and
+the ~4700 lines of SSA, control flow and memory ordering. Allium round-trips
+the optree SHAPE -- no SSA, no Phi placement -- so its IR is the optree with
+different capitalisation.
 
-## Proposal
+Maintenance inverts too: churn is +1/+4/+3 ops per stable release and zero
+removals. `t/every-op-has-a-disposition.t` already fails BY NAME on a new op,
+and deciding its disposition is the part no generator can do.
 
-One table, one entry per operator, everything else derived:
-
-```perl
-Add => {
-    optree   => 'add',            # -> OpMap
-    node     => 'Add',            # -> NodeFactory + class check
-    operands => ['Num', 'Num'],   # -> TypeLibrary
-    result   => 'join',           # -> TypeLibrary result + %RESULT_STAMP,
-                                  #    capped at Num
-},
-```
-
-`OpMap`, `NodeFactory`, `TypeLibrary` and `%RESULT_STAMP` all read from it. A
-missing field becomes an error at load time, not an `Unknown` on the wire three
-passes later.
+Keep the hand table as the source of truth; keep perl-derived facts as lints.
 
 ## Sequencing
 

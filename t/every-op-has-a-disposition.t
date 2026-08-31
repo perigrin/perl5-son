@@ -51,24 +51,37 @@ my %UNREACHED = map { $_ => 1 } qw(
     break cmpchain_dup dump pushdefer
 );
 
-sub dispositions () {
-    my $m   = SoN::FromOptree::OpMap->new;
-    my $src = do {
-        open my $fh, '<', 'lib/SoN/FromOptree.pm' or die "open FromOptree: $!";
-        local $/; <$fh>;
-    };
-    my %gap = map { $_ => 1 } ($src =~ /^\s+(\w+)\s+=> "GAP:/gm);
+# The three inputs, computed ONCE. Both subtests need them and both were
+# recomputing the slurp and the regex scrape.
+my $OPMAP = SoN::FromOptree::OpMap->new;
+my $SRC   = do {
+    open my $fh, '<', 'lib/SoN/FromOptree.pm' or die "open FromOptree: $!";
+    local $/; <$fh>;
+};
+my %GAP = map { $_ => 1 } ($SRC =~ /^\s+(\w+)\s+=> "GAP:/gm);
 
+# NOTE: %GAP and the handler check below scrape FromOptree's SOURCE TEXT, so
+# they are coupled to its formatting -- reflowing a handler onto two lines
+# would silently drop that op's disposition and this test would still pass.
+# A real gaps()/handlers() accessor on OpMap would remove the coupling; until
+# then, the staleness subtest below is the backstop.
+sub has_handler ($op) { return $SRC =~ /name eq \x27\Q$op\E\x27/ }
+
+sub disposition ($op) {
+    return 'node'      if defined $OPMAP->node_type($op);
+    return 'skip'      if $OPMAP->is_skip($op);
+    return 'control'   if $OPMAP->is_branch($op) || $OPMAP->is_loop($op);
+    return 'gap'       if $GAP{$op};
+    return 'handler'   if has_handler($op);
+    return 'consumed'  if $CONSUMED_BY_OPENER{$op};
+    return 'unreached' if $UNREACHED{$op};
+    return undef;
+}
+
+sub dispositions () {
     my (%how, @undecided);
     for my $op (sort +Opcode::opset_to_ops(Opcode::full_opset())) {
-        my $d = defined $m->node_type($op)              ? 'node'
-              : $m->is_skip($op)                        ? 'skip'
-              : ($m->is_branch($op) || $m->is_loop($op)) ? 'control'
-              : $gap{$op}                                ? 'gap'
-              : $src =~ /name eq \x27\Q$op\E\x27/        ? 'handler'
-              : $CONSUMED_BY_OPENER{$op}                 ? 'consumed'
-              : $UNREACHED{$op}                          ? 'unreached'
-              :                                            undef;
+        my $d = disposition($op);
         defined $d ? $how{$d}++ : push @undecided, $op;
     }
     return (\%how, \@undecided);
@@ -89,19 +102,12 @@ subtest 'every op perl can emit has a deliberate disposition' => sub {
 # unreached that LATER gets a real disposition should be removed from the list,
 # or the list slowly becomes a place where holes hide.
 subtest 'the allowlists contain only ops that need to be there' => sub {
-    my $m   = SoN::FromOptree::OpMap->new;
-    my $src = do {
-        open my $fh, '<', 'lib/SoN/FromOptree.pm' or die "open FromOptree: $!";
-        local $/; <$fh>;
-    };
-    my %gap = map { $_ => 1 } ($src =~ /^\s+(\w+)\s+=> "GAP:/gm);
-
     my @stale;
-    for my $op (sort keys %CONSUMED_BY_OPENER, keys %UNREACHED) {
+    for my $op (sort keys %CONSUMED_BY_OPENER, sort keys %UNREACHED) {
         push @stale, $op
-            if defined $m->node_type($op) || $m->is_skip($op)
-            || $m->is_branch($op) || $m->is_loop($op) || $gap{$op}
-            || $src =~ /name eq \x27\Q$op\E\x27/;
+            if defined $OPMAP->node_type($op) || $OPMAP->is_skip($op)
+            || $OPMAP->is_branch($op) || $OPMAP->is_loop($op)
+            || $GAP{$op} || has_handler($op);
     }
     diag("  now has a real disposition, drop from the allowlist: $_")
         for @stale;
