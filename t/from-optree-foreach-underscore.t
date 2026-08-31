@@ -87,12 +87,31 @@ subtest 'lexical and package iterators still translate' => sub {
 # A body that ACCUMULATES over it still GAPs, on an older limit that has
 # nothing to do with $_ (a loop-carried value losing its stamp across the
 # back-edge). Pinning the shape here, not that.
-subtest 'for (@a) reaches the array bounds branch' => sub {
-    my ( undef, $err ) = translate(
-        'my @a = (4,5,6); for (@a) { print }', 'array-iter' );
+subtest 'for (@a) iterates the array with $_ bound to each element' => sub {
+    my ( $w, $err ) = translate(
+        'my @a = (4,5,6); my $s = 0; for (@a) { $s = $s + $_ } print $s;',
+        'array-iter' );
+    ok $w, 'it translates' or diag($err), return;
     unlike $err, qr/unrecognized bounds shape/,
         'the glob is not counted as a bound';
-    unlike $err, qr/implicit \$_/, 'and $_ is keyed, not refused';
+    unlike $err, qr/loses its stamp/,
+        'and $_ is bound where the body reads it -- no unstamped back-edge';
+
+    # THE BODY MUST READ THE ELEMENT. `for my $x (@a)` binds $x to a
+    # Subscript(arr, i) element copy; $_ has to be bound under ITS key
+    # (main::$_) or the body's read resolves to an unstamped EntryDef and the
+    # loop-carried Add reaches the back-edge with nothing to type it.
+    my $ns = nodes($w);
+    my %by = map { $_->{id} => $_ } $ns->@*;
+    my @add = grep { ( $_->{op} // '' ) eq 'Add' } $ns->@*;
+    ok scalar(@add), 'the body adds' or return;
+
+    my $reads_elem = 0;
+    for my $a (@add) {
+        my @in = map { $by{$_} } ( $a->{inputs} // [] )->@*;
+        $reads_elem = 1 if grep { ( $_->{op} // '' ) eq 'Subscript' } @in;
+    }
+    ok $reads_elem, '$_ resolves to the element read, not an EntryDef';
 };
 
 done_testing;

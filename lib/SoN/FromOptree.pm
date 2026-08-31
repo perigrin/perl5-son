@@ -2725,7 +2725,7 @@ class SoN::FromOptree 0.01 {
             }
             elsif ($bounds->@* == 1 && _is_aggregate_node($bounds->[0])) {
                 _translate_foreach_array($cv, $op, $sim, $factory, $opmap,
-                    $ctx->{visited}, $bounds->[0]);
+                    $ctx->{visited}, $bounds->[0], $iter_key);
             }
             elsif ($bounds->@* == 1
                     && $bounds->[0]->operation eq 'FieldAccess') {
@@ -2737,7 +2737,7 @@ class SoN::FromOptree 0.01 {
                 # A `@$r` over an @_-sourced ref (a Subscript bound) stays a
                 # GAP -- its element type is statically unknowable. zhi 019f61ad.
                 _translate_foreach_array($cv, $op, $sim, $factory, $opmap,
-                    $ctx->{visited}, $bounds->[0]);
+                    $ctx->{visited}, $bounds->[0], $iter_key);
             }
             else {
                 die "GAP: foreach with unrecognized bounds shape not yet lowered\n";
@@ -4168,8 +4168,11 @@ class SoN::FromOptree 0.01 {
     # 0..len-1 and the iterator variable binds to Subscript(arr, i) each pass,
     # not to the induction value itself. for/foreach are aliases (same optree),
     # so both spellings reach here. zhi 019f5da9.
-    sub _translate_foreach_array ($cv, $enteriter, $sim, $factory, $opmap, $visited, $array) {
-        my $x_targ = $enteriter->targ;
+    # $iter_key names the iteration variable in the scope map, as in the range
+    # form: a pad targ for a lexical, `main::$_` for the implicit form, which
+    # has no targ at all. Defaults to the op's targ so existing callers stand.
+    sub _translate_foreach_array ($cv, $enteriter, $sim, $factory, $opmap, $visited, $array, $iter_key = undef) {
+        my $x_targ = $iter_key // $enteriter->targ;
 
         # Locate the body (enteriter->next: unstack, iter, then the and whose
         # other-branch is the body) -- identical structure to the range form.
