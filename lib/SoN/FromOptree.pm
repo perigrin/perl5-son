@@ -2662,7 +2662,23 @@ class SoN::FromOptree 0.01 {
             my $iter_key = $op->targ;
             if (!$iter_key) {
                 my $name_node = $bounds->@* > 2 ? pop $bounds->@* : undef;
-                die "GAP: foreach with an implicit \$_ iterator not yet"
+
+                # AN IMPLICIT $_ ITERATOR IS MARKED ON THE OP, not recoverable
+                # from the stack. perl sets OPpITER_DEF (private 0x8) --
+                # measured 0x8 for `for (1..3)` and 0x0 for
+                # `for $main::t (1..3)` -- and the name node that arrives for
+                # the implicit form is NOT the iterator: resolving `gv[*_]`
+                # yields an ArgsSource, because `$_` and `@_` share the glob
+                # name `_`. That is the same sigil hazard the match handler
+                # records, and it is why keying off the stack refused this.
+                #
+                # $_ keys exactly as the match and s/// handlers key it.
+                if ($op->private & 8) {   # OPpITER_DEF
+                    $iter_key = 'main::$_';
+                    goto ITER_KEYED;
+                }
+
+                die "GAP: foreach with an unnameable iterator not yet"
                   . " lowered\n"
                     unless $name_node
                         && $name_node->isa('SoN::IR::Node::Constant')
@@ -2673,6 +2689,7 @@ class SoN::FromOptree 0.01 {
                 # the iterator under a name nothing looks up.
                 my $stash = eval { $cv->GV->STASH->NAME } // 'main';
                 $iter_key = $stash . '::$' . $name_node->value;
+                ITER_KEYED: ;
             }
             # Three shapes reach an OPf_STACKED enteriter:
             #   CONST RANGE   `for my $i (2..5)`: two integer-Constant bounds.

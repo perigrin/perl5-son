@@ -308,18 +308,18 @@ subtest 'foreach range bound at IV_MAX refuses loudly' => sub {
         qr/GAP.*IV_MAX/i, 'IV_MAX upper bound dies with a GAP message');
 };
 
-subtest 'an implicit $_ foreach gets a truthful GAP message' => sub {
-    # Was: refused by ACCIDENT with a misleading "non-constant integer bounds"
-    # message (the iterator gv rides the mark stack and trips the count check).
+subtest 'an implicit $_ foreach lowers' => sub {
+    # This asserted a GAP twice over: first "non-constant integer bounds" (by
+    # accident -- the iterator gv rides the mark stack and tripped the count
+    # check), then "implicit $_" once that was diagnosed.
     #
-    # The message used to say "non-lexical", lumping implicit $_ together with
-    # a PACKAGE-variable iterator. Those are no longer the same case: a package
-    # iterator is keyed by `stash::$name` and lowers, while implicit $_ has no
-    # name on the stack to key at all. The refusal now names only what is
-    # genuinely unbuilt.
-    like(translate_dies(
-        'sub { my $s = 0; for (1..3) { $s = $s + 1 } $s }'),
-        qr/GAP.*implicit \$_/i, 'implicit $_ foreach names the real gap');
+    # Neither is a gap any more. $_ has no name ON THE STACK to key -- the node
+    # there resolves to an ArgsSource, since `$_` and `@_` share the glob name
+    # `_` -- but perl marks the form on the OP: OPpITER_DEF, private 0x8. The
+    # iterator is then keyed main::$_, exactly as the match and s/// handlers
+    # key it.
+    is(translate_dies('sub { my $s = 0; for (1..3) { $s = $s + 1 } $s }'),
+        undef, 'for (1..3) lowers');
 };
 
 # THE PACKAGE FORM IS NOT REFUSED, which is the other half of the distinction
