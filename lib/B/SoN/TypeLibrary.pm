@@ -67,6 +67,7 @@ use SoN::IR::Stamp;
 #                      (it was absent here and fixed at Num)
 my %RESULT_IS_JOIN = map { $_ => 1 } qw(
     Add Subtract Multiply Negate
+    And Or DefinedOr
 );
 
 my %SIGNATURES = (
@@ -78,6 +79,22 @@ my %SIGNATURES = (
     Modulo     => { operands => ['Num', 'Num'], result => 'Int' },
     Power      => { operands => ['Num', 'Num'], result => 'Num' },
     Negate     => { operands => ['Num'],        result => 'Num' },
+
+    # SHORT-CIRCUITS RETURN AN OPERAND, NOT A BOOLEAN. `0 || "hello"` is
+    # "hello", `"x" && 7` is 7, `undef // 5` is 5 -- so the result is the join
+    # of the two arms, the same shape as Add.
+    #
+    # `operands` is EMPTY on purpose: these impose no requirement on their arms
+    # (any value has a truth interpretation), and a requirement here would make
+    # the coercion pass insert a Coerce on every `||` in the corpus.
+    #
+    # The bound is `List`, the widest thing a scalar-or-list arm can be, which
+    # meets transparently: meet(Int,List) is Int, meet(ArrayRef,List) is
+    # ArrayRef. An operator that hands back its operand unchanged must not
+    # narrow it, and a tighter bound here would do exactly that.
+    And        => { operands => [], result => 'List' },
+    Or         => { operands => [], result => 'List' },
+    DefinedOr  => { operands => [], result => 'List' },
     UnaryPlus  => { operands => ['Num'],        result => 'Num' },
 
     # Numeric comparison: numeric in, Boolean out. <=> yields -1/0/1.

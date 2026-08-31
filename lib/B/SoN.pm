@@ -250,6 +250,7 @@ sub _resolve_deferred_stamps {
     _floor_element_removals($graphs);
     _floor_param_fields( $graphs, $classes );
     _floor_package_globals($graphs);
+    _floor_list_assigns($graphs);
 
 
     # AND RE-RUN THE CHAIN ABOVE IT. A Return whose value is floored must carry
@@ -332,8 +333,14 @@ sub _floor_subscripts {
             next unless $node->isa('SoN::IR::Node::Subscript');
             next unless ( $node->stamp ? $node->stamp->type : '' ) eq 'Unknown';
             my @in = ( $node->inputs // [] )->@*;
-            next if @in < 3;
 
+            # ARITY IS NOT THE QUESTION. `$x[0] = 'foo'` compiles to a single
+            # `aelemfast[*x] sM` with no separate memory operand, so its
+            # Subscript carries only (array, index) -- two inputs. Keying this
+            # pass on `@in >= 3` skipped exactly those and left them Unknown on
+            # the wire. What makes a floor apply is that the node is an element
+            # access whose type nothing narrowed, which is true at either arity.
+            #
             # TAKE THE STORE'S TYPE BEFORE FALLING TO THE FLOOR. The third
             # input IS the memory this read is threaded to, and when that is
             # the Assign that put the value there, the stored type is already
@@ -345,7 +352,7 @@ sub _floor_subscripts {
             # `$a[0] = "foo"; $a[0]` was floored to Scalar with Str on the
             # input. Scalar was not WRONG -- an element is one scalar slot --
             # it was the weakest true answer where a stronger one was present.
-            my $mem = $in[2];
+            my $mem = @in >= 3 ? $in[2] : undef;
             if ( $mem && $mem->isa('SoN::IR::Node::Assign') ) {
                 my $st = $mem->stamp;
                 if ( $st && $st->type ne 'Unknown' ) {
@@ -358,6 +365,53 @@ sub _floor_subscripts {
             # store whose own type is undetermined. One element is one scalar
             # slot, which stays true whatever it holds.
             $node->set_stamp( SoN::IR::Stamp->new( type => 'Scalar' ) );
+        }
+    }
+    return;
+}
+
+# _floor_list_assigns(\%graphs) -- a list assignment says what its two contexts
+# agree on.
+#
+# `my ($a,$b,$c) = @_` yields TWO different things in perl, measured:
+#
+#     scalar context   ( ($a,$b,$c) = @src )  is 3    -- the COUNT of RHS
+#                                                        elements, an Int
+#     list context     ( ($a,$b,$c) = @src )  is (7,8,9) -- the assigned LHS
+#
+# A context-sensitive node is still floorable at the JOIN of its results: sound,
+# and vaguer than reading OPf_WANT at the construction site would be, but never
+# wrong. The lattice decides what that join is; this pass does not name a type.
+#
+# A FLOOR, NOT A TABLE ROW, because the two shapes are not equally knowable. A
+# two-input scalar assign is already stamped from its RHS by the walker
+# (`$a[0] = "foo"` is Assign:Str) -- strictly more precise than any join. A row
+# in TypeLibrary would answer for every Assign and overwrite those; a floor
+# fills an Unknown and leaves a narrowed node alone. Same discipline as
+# _floor_subscripts, which takes the store's type before falling back.
+sub _floor_list_assigns {
+    my ($graphs) = @_;
+
+    my $lub = SoN::IR::Stamp::join(
+        SoN::IR::Stamp->new( type => 'Int' ),
+        SoN::IR::Stamp->new( type => 'List' ),
+    )->type;
+
+    for my $gname ( sort keys $graphs->%* ) {
+        my $graph = $graphs->{$gname} or next;
+        for my $node ( $graph->nodes->@* ) {
+            next unless $node->isa('SoN::IR::Node::Assign');
+            next unless ( $node->stamp ? $node->stamp->type : '' ) eq 'Unknown';
+
+            # ONLY THE LIST SHAPE. A scalar assign carries (target, value) and
+            # takes its type from the VALUE -- a narrowing that runs after this
+            # pass, so flooring one here would win a race it has no business
+            # winning and pin `$a[0] = $n` to List. The list form is the one
+            # with several targets and no single RHS operand to echo.
+            my @in = ( $node->inputs // [] )->@*;
+            next unless @in > 2;
+
+            $node->set_stamp( SoN::IR::Stamp->new( type => $lub ) );
         }
     }
     return;
