@@ -2969,6 +2969,20 @@ class SoN::FromOptree 0.01 {
                 }
 
                 my $stamp = _result_stamp($node_type, \@inputs);
+
+                # BACKTICKS ARE CONTEXT-SENSITIVE, so they cannot sit in
+                # %RESULT_STAMP: `my $x = \`cmd\`` yields one Str, while
+                # `my @x = \`cmd\`` yields the output split into lines. perl
+                # marks the difference on the op (sK vs lK) and ONE
+                # BacktickExpr node serves both -- list context wraps it in an
+                # ArrayRef afterwards. A fixed Str rule would be wrong for the
+                # list form, so read the context here where the op is in hand.
+                if ($node_type eq 'BacktickExpr') {
+                    my $want = $op->flags & 3;   # OPf_WANT
+                    $stamp = SoN::IR::Stamp->new(
+                        type => $want == 3 ? 'List' : 'Str');   # 3 = LIST
+                }
+
                 $extra{stamp} = $stamp if defined $stamp;
 
                 # Effect-by-default for generic builtin Calls. Chalk's effect
