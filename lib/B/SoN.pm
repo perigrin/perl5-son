@@ -200,6 +200,12 @@ sub _discover_and_translate {
 sub _resolve_deferred_stamps {
     my ( $graphs, $classes ) = @_;
 
+    # BEFORE THE LOOP, and once. It rewrites node KINDS rather than filling
+    # stamps, so it has nothing to converge to -- and running it first lets
+    # _stamp_field_reads type the FieldAccess it produces on the very next
+    # line, instead of needing a second path to type it.
+    _readers_read_fields( $graphs, $classes );
+
     # TO A FIXPOINT, because the passes FEED EACH OTHER and no hand-ordering
     # resolves that. Measured: backward inference types `$x` in
     # `sub add1 { my ($x) = @_; return $x + 1 }`, but the Add above it is typed
@@ -544,6 +550,76 @@ sub _stamp_field_reads {
 }
 
 
+# _readers_read_fields(\%graphs, \%classes) -- a `:reader` accessor's body reads
+# a FIELD, so it is a FieldAccess, exactly like the method it stands in for.
+#
+# WHAT WAS WRONG. Two methods that do the same thing reached the wire as
+# different node kinds:
+#
+#     class P { field $x :param :reader = 1 }
+#       P::x     ->  Start, PadAccess:Scalar,   Return
+#     class Q { field $y :param = 1; method get { $y } }
+#       Q::get   ->  Start, FieldAccess:Scalar, Return
+#
+# A PadAccess is a LEXICAL read and the field lives in the object, so the reader
+# graph described reading somewhere the value is not. Reported by chalk, which
+# never hit it as a miscompile only because its backend SYNTHESISES the accessor
+# from the field record rather than lowering this graph -- the wrong-shaped
+# graph shipped and was discarded.
+#
+# THE WALKER WAS NOT GUESSING. perl's own metadata differs between the two.
+# Measured on 5.42.0: the pad entry for `$y` in Q::get answers PadnameFIELDINFO
+# (is_field true), while `$x` in P::x carries FLAGS 0x0 and answers false --
+# perl compiles the generated reader against a REAL pad slot, not a field alias.
+# `_make_pad_or_field` asks that question and gets an honest "not a field", so
+# the correction cannot come from the pad. It comes from the CLASS RECORD, the
+# only place that knows `$x` is a reader and which fieldix it reads.
+#
+# A KIND REWRITE, NOT A STAMP, which is why it is separate from
+# _stamp_reader_accessors and runs before the fixpoint rather than inside it.
+sub _readers_read_fields {
+    my ( $graphs, $classes ) = @_;
+    my $factory = SoN::IR::NodeFactory->new;
+
+    for my $cname ( sort keys $classes->%* ) {
+        my $fields = $classes->{$cname}{fields} or next;
+        for my $f (@$fields) {
+            next unless $f->{is_reader};
+            my $fname = $f->{name} // next;          # '$x'
+            my $fidx  = $f->{fieldix} // next;
+            ( my $bare = $fname ) =~ s/^[\$\@\%]//;  # 'x'
+
+            # `field $x` synthesizes the accessor `Class::x`.
+            my $graph = $graphs->{"${cname}::${bare}"} or next;
+
+            # The reader body is one PadAccess of the field's own name. Rewire
+            # every consumer of it -- a Return here, but nothing depends on
+            # that -- so no stale PadAccess is left reachable.
+            my @stale = grep {
+                $_->isa('SoN::IR::Node::PadAccess')
+                    && ( $_->varname // '' ) eq $fname
+            } $graph->nodes->@*;
+            next unless @stale;
+
+            my $field_read = $factory->make( 'FieldAccess',
+                field_index => $fidx,
+                field_stash => $cname,
+            );
+
+            for my $node ( $graph->nodes->@* ) {
+                my $inputs = $node->inputs or next;
+                for my $i ( 0 .. $#$inputs ) {
+                    my $in = $inputs->[$i] // next;
+                    next unless ref $in;
+                    $inputs->[$i] = $field_read
+                        if grep { $_ == $in } @stale;
+                }
+            }
+        }
+    }
+    return;
+}
+
 # _stamp_reader_accessors(\%graphs, \%classes) -- a `:reader` accessor returns
 # its field's declared type.
 #
@@ -585,9 +661,18 @@ sub _stamp_reader_accessors {
             ( my $bare = $fname ) =~ s/^[\$\@\%]//;  # 'n'
             my $graph = $graphs->{"${cname}::${bare}"} or next;
 
+            # THE BODY IS A FieldAccess, rewritten from the pad read by
+            # _readers_read_fields. Matching it by the fieldix it carries is
+            # exact where the old varname match was a name coincidence.
+            #
+            # _stamp_field_reads types the same node from the same record, but
+            # only INSIDE the fixpoint -- and a `:param` with no default is not
+            # typed until _floor_param_fields, which runs after it. This pass is
+            # in the post-floor chain, so it is what closes that case.
             for my $node ( $graph->nodes->@* ) {
-                next unless $node->isa('SoN::IR::Node::PadAccess');
-                next unless ( $node->varname // '' ) eq $fname;
+                next unless $node->isa('SoN::IR::Node::FieldAccess');
+                next unless ( $node->field_index // -1 ) == ( $f->{fieldix} // -2 );
+                next unless ( $node->field_stash // '' ) eq $cname;
                 next unless ( $node->stamp ? $node->stamp->type : '' ) eq 'Unknown';
                 $node->set_stamp( SoN::IR::Stamp->new( type => $ftype ) );
                 $changed++;
@@ -2188,6 +2273,23 @@ sub _extract_class {
         my $is_method       = $cv->CvFLAGS & 0x100000;   # CVf_IsMETHOD
         if ( !$has_method_attr && ( my $f = $field_by_short{$name} ) ) {
             $f->{is_reader} = JSON::PP::true;
+
+            # AND RECORD IT AS A METHOD. A `:reader` IS a callable method of
+            # this class, and leaving it out of {methods} made it findable
+            # nowhere: chalk had to add a MOP::Field->is_reader accessor purely
+            # to recover a return type this record should have carried.
+            #
+            # Safe only NOW THAT THE BODY IS RIGHT. While the reader's graph
+            # read a PadAccess, listing it here would have handed consumers a
+            # plausible method whose body lowers to the wrong thing -- worse
+            # than the absence, because a missing record is visible and a wrong
+            # body is not. _readers_read_fields makes the body a FieldAccess,
+            # which is what unblocks this half.
+            #
+            # It stays OUT of {subs}: _record_sub's is_reader guard still holds,
+            # and a reader dual-listed under both keys would be one callable
+            # under two contradictory descriptions.
+            $class{methods}{$name} = "${pkg_name}::${name}";
             next;
         }
 

@@ -77,10 +77,21 @@ PERL
     is($param_by_ix{0}, 'alpha', 'field 0 param name is still alpha');
     is($param_by_ix{1}, 'beta',  'field 1 param name is still beta');
     # The :reader is detected (the reader CV `left`/`right` matches the field
-    # variable name), so it is NOT emitted as a shadowing user-method graph.
+    # variable name) and recorded ONCE, as a method of the class.
+    #
+    # This used to assert the reader appeared NOWHERE, which was a proxy for the
+    # property actually at stake: a reader must not be DOUBLE-declared, once
+    # synthesized from the field and again as a MOP::Sub over its body. That
+    # property is what is asserted now. A reader IS a callable method, and
+    # leaving it out of {methods} made it findable nowhere -- chalk had to add a
+    # MOP::Field->is_reader accessor to recover a return type this record
+    # should have carried.
     my %methods = ($d->{classes}{Pair}{methods} // {})->%*;
-    ok(!exists $methods{left},  'left is NOT a user-method (it is a synthesized reader)');
-    ok(!exists $methods{right}, 'right is NOT a user-method (it is a synthesized reader)');
+    my %subs    = ($d->{classes}{Pair}{subs}    // {})->%*;
+    ok(exists $methods{left},  'left is a method of the class');
+    ok(exists $methods{right}, 'right is a method of the class');
+    ok(!exists $subs{left},  'and NOT also a sub (no double declaration)');
+    ok(!exists $subs{right}, 'likewise right');
 };
 
 subtest 'parent is recorded for an :isa class' => sub {

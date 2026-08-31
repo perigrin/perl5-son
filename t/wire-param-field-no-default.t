@@ -63,8 +63,10 @@ subtest 'a :param field with no default is Scalar' => sub {
 subtest 'the :reader accessor and its return type follow' => sub {
     my $d = wire($PAIR);
     my $g = $d->{methods}{'Pair::left'} or return fail('Pair::left graph exists');
-    my ($pad) = grep { $_->{op} eq 'PadAccess' } $g->{nodes}->@*;
-    ok($pad, 'the accessor body reads a pad slot') or return;
+    # A FieldAccess, not a PadAccess: the reader reads the object's field, and
+    # _readers_read_fields rewrites perl's generated pad read to say so.
+    my ($pad) = grep { $_->{op} eq 'FieldAccess' } $g->{nodes}->@*;
+    ok($pad, 'the accessor body reads the field') or return;
     is($pad->{stamp}, 'Scalar', 'the reader body is typed');
     is($d->{classes}{Pair}{method_return_types}{left}, 'Scalar',
         'and the method return type records it');

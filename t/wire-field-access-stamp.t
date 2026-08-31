@@ -133,11 +133,16 @@ my $t = Tag->new(s => "x"); say($t->get);', 'param_str_widens');
 
 # A :reader ACCESSOR RETURNS ITS FIELD'S TYPE, and nothing was wiring that up.
 #
-# The accessor body is synthesized as a PadAccess read of the field slot, NOT a
-# FieldAccess -- so _stamp_field_reads does not see it. And backward inference
-# correctly declines: `return $v` publishes no operator requirement, so there is
-# nothing for a use site to say. The hole is real and its AUTHORITATIVE SOURCE
-# is the field's declared type, which is a third connection.
+# Backward inference correctly declines: `return $v` publishes no operator
+# requirement, so there is nothing for a use site to say. The hole is real and
+# its AUTHORITATIVE SOURCE is the field's declared type, which is a third
+# connection.
+#
+# The accessor body USED to be a PadAccess read of the pad slot, which is what
+# made this pass necessary in the first place and what these subtests were
+# written against. _readers_read_fields now rewrites it to the FieldAccess the
+# field actually is, so the reads below assert that kind -- the stamps they
+# check are unchanged, because the SOURCE of the type is unchanged.
 #
 # Found while unblocking chalk's vtable ABI probe: `class Box { field $v :param
 # :reader = 0; ... }` put `Box::v` on the wire as Unknown while the field record
@@ -150,8 +155,8 @@ method half { $v / 2 } }
 my $b = Box->new(v => 7); say($b->half);', 'reader_param');
     is $wire->{classes}{Box}{fields}[0]{type}, 'Scalar',
         'a :param field is Scalar, not its default type';
-    my ($pad) = nodes_of($wire, 'Box::v', 'PadAccess');
-    ok defined $pad, 'the accessor body reads the slot' or return;
+    my ($pad) = nodes_of($wire, 'Box::v', 'FieldAccess');
+    ok defined $pad, 'the accessor body reads the FIELD' or return;
     is $pad->{stamp}, 'Scalar', 'and the read carries the field type';
     is $wire->{classes}{Box}{method_return_types}{v}, 'Scalar',
         'so the accessor returns Scalar';
@@ -165,8 +170,8 @@ subtest 'a non-param reader returns the narrow default type' => sub {
 my $b = Box->new; say($b->v);', 'reader_narrow');
     is $wire->{classes}{Box}{fields}[0]{type}, 'Int',
         'a non-param defaulted field is Int';
-    my ($pad) = nodes_of($wire, 'Box::v', 'PadAccess');
-    ok defined $pad, 'the accessor body reads the slot' or return;
+    my ($pad) = nodes_of($wire, 'Box::v', 'FieldAccess');
+    ok defined $pad, 'the accessor body reads the FIELD' or return;
     is $pad->{stamp}, 'Int', 'and the reader carries Int';
     is $wire->{classes}{Box}{method_return_types}{v}, 'Int',
         'so the accessor returns Int';
@@ -178,8 +183,8 @@ subtest 'a Str field reader returns Str' => sub {
 my $t = Tag->new; say($t->s);', 'reader_str');
     is $wire->{classes}{Tag}{fields}[0]{type}, 'Str',
         'the field records type Str';
-    my ($pad) = nodes_of($wire, 'Tag::s', 'PadAccess');
-    ok defined $pad, 'the accessor body reads the slot' or return;
+    my ($pad) = nodes_of($wire, 'Tag::s', 'FieldAccess');
+    ok defined $pad, 'the accessor body reads the FIELD' or return;
     is $pad->{stamp}, 'Str', 'and the read carries Str, not Int';
 };
 
@@ -191,8 +196,8 @@ my $t = Tag->new; say($t->s);', 'reader_str');
 subtest 'a :param reader takes the field floor, and no more' => sub {
     my $wire = wire_for('class Bare { field $u :param :reader; }
 my $b = Bare->new(u => 1); say($b->u // 0);', 'reader_untyped');
-    my ($pad) = nodes_of($wire, 'Bare::u', 'PadAccess');
-    ok defined $pad, 'the accessor body reads the slot' or return;
+    my ($pad) = nodes_of($wire, 'Bare::u', 'FieldAccess');
+    ok defined $pad, 'the accessor body reads the FIELD' or return;
     is $wire->{classes}{Bare}{fields}[0]{type}, 'Scalar',
         'a :param with no default floors at Scalar';
     is $pad->{stamp}, $wire->{classes}{Bare}{fields}[0]{type},
