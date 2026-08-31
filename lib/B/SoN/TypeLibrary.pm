@@ -51,10 +51,20 @@ package B::SoN::TypeLibrary;
 #
 # Divide is deliberately NOT here: 4/2 is Int while 1/2 is not, so its result
 # is not the join of its operands. It is still capped at Num.
+# MEASURED AGAINST PERL, because this set disagreed with FromOptree's
+# %RESULT_STAMP on five entries and perl settles every one of them:
+#
+#   5.7 & 3   is 1     bitwise TRUNCATES to Int whatever arrives, so the
+#                      result does not vary with the operands -- not a join
+#   "a" . 5   is "a5"  concat is ALWAYS Str, likewise not a join. Left here,
+#                      join(Int,Int) capped at Str gave Int for `$a . $b`,
+#                      which is wrong; it was masked only because
+#                      %RESULT_STAMP stamps Concat during the walk and
+#                      _stamp_derived fills Unknowns alone.
+#   -5.5      is -5.5  negate PRESERVES its operand's type, so it IS a join
+#                      (it was absent here and fixed at Num)
 my %RESULT_IS_JOIN = map { $_ => 1 } qw(
-    Add Subtract Multiply
-    Concat
-    BitAnd BitOr BitXor LeftShift RightShift
+    Add Subtract Multiply Negate
 );
 
 my %SIGNATURES = (
