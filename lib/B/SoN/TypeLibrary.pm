@@ -46,7 +46,7 @@ use SoN::IR::Stamp;
 # The distinction between fixed and ceiling is not in the table: both are just
 # `result`. The CALLER decides whether to take it outright or meet the operand
 # join against it, because that depends on whether the op's output varies with
-# its input -- see `result_is_join` below.
+# its input. `result_for` owns that decision; it is not a caller's to make.
 
 # The operators whose result is the JOIN of their operands, capped by `result`.
 # Everything else takes its `result` outright.
@@ -140,6 +140,102 @@ my %SIGNATURES = (
     Range      => { operands => ['Int', 'Int'], result => 'List' },
 );
 
+# THE SECOND INDEX, KEYED BY BUILTIN NAME.
+#
+# ~180 optree ops collapse to ONE generic `Call` node, so %SIGNATURES -- keyed
+# by IR NODE NAME -- can only give one answer for all of them, and that answer
+# was Unknown for every one. The key that separates them already rides on the
+# node: a builtin Call carries `dispatch_kind => 'builtin'` and `name => 'join'`.
+# This is the index that reads it. Same vocabulary as %SIGNATURES (operands /
+# result), and the same join rule via %BUILTIN_RESULT_IS_JOIN below.
+#
+# PRIVATE. There is exactly ONE public question -- `result_for` -- and it routes
+# a builtin Call here itself. A caller must never have to know which of the two
+# tables holds its answer.
+#
+# EVERY ROW WAS RUN THROUGH PERL. What is NOT here matters as much as what is;
+# the omissions and their reasons are recorded below the table.
+#
+# ONLY THE `result` HALF IS WIRED. `operand_type` is asked with a node name by
+# both of its callers, and both INSERT COERCIONS from the answer -- so routing
+# builtins into it would not type a builtin, it would rewrite graphs. The
+# operands are stated anyway because a signature with a result and no operands
+# is half a fact, and the coercion question is a separate change with its own
+# fingerprint to answer for.
+my %BUILTIN_SIGNATURES = (
+    # `join` is Str however its separator and list are typed, and `join(",")`
+    # over an empty list is "" -- still Str, never undef.
+    join   => { operands => ['Str'], result => 'Str' },
+
+    # A position or a count. Both index and rindex return -1 on a miss, which
+    # is an Int like any hit.
+    index  => { operands => ['Str', 'Str'], result => 'Int' },
+    rindex => { operands => ['Str', 'Str'], result => 'Int' },
+
+    # `tell` yields a byte offset, and -1 on failure -- Int either way.
+    tell   => { operands => [], result => 'Int' },
+
+    # tr/// COUNTS what it changed; tr///r RETURNS THE NEW STRING. perl gives
+    # them separate op names (verified with B::Concise: `trans` vs `transr`),
+    # so unlike `subst` -- where /r shares the `subst` op name and is only
+    # distinguishable by PMf_NONDESTRUCT -- these are two honest fixed rows.
+    trans  => { operands => ['Str'], result => 'Int' },
+    transr => { operands => ['Str'], result => 'Str' },
+
+    # `abs` is a JOIN, not a fixed row: abs(-5) is 5 (IOK) and abs(-5.5) is
+    # 5.5 (NOK). Its result is its operand's type, capped at Num -- exactly
+    # `Negate`'s shape. A fixed Num row here would WIDEN abs(-5) from Int,
+    # which is the regression this table exists to avoid.
+    abs    => { operands => ['Num'], result => 'Num' },
+
+    # shift/pop REMOVE AND RETURN ONE element, so the result is a scalar
+    # whatever the array holds -- and in ANY context, unlike `splice`. This row
+    # absorbs _floor_element_removals in B/SoN.pm, which said the same thing in
+    # a later pass. It is a FLOOR: FromOptree stamps the array's own element
+    # type when it can read it (`my @q=(1,2,3); shift @q` is Int), and that
+    # narrower answer must keep precedence over this one.
+    shift  => { operands => [], result => 'Scalar' },
+    pop    => { operands => [], result => 'Scalar' },
+);
+
+# The builtins whose result VARIES with their operands, capped by `result` --
+# the builtin-name counterpart of %RESULT_IS_JOIN.
+my %BUILTIN_RESULT_IS_JOIN = map { $_ => 1 } qw(
+    abs
+);
+
+# WHAT IS DELIBERATELY ABSENT, and why. An honest Unknown beats a guess; 89b0008
+# reverted a guessed Scalar for exactly this reason. Every one of these appears
+# as a reachable untyped builtin Call over perl's t/base, t/cmd, t/comp and
+# t/opbasic, so each is a row someone will be tempted to add.
+#
+#   CONTEXT-SENSITIVE -- one op name, two types, and the op is not in hand
+#   here. These belong at the construction site where `$op->flags` can be read,
+#   the way BacktickExpr already is, not in a fixed row:
+#     readline  `my $s = <$f>` is one line; `my @s = <$f>` is all of them
+#     keys      scalar context is a count, list context is the keys
+#     caller    scalar context is the package, list context is 3+ values
+#
+#   ONE OP NAME, TWO RESULTS, distinguishable only by a flag on the op:
+#     subst     s///g returns a COUNT (Int); s///gr returns the STRING (Str).
+#               Both are op name `subst`; only PMf_NONDESTRUCT separates them.
+#
+#   RETURNS undef ON FAILURE, and `Boolean` in this lattice descends from Str,
+#   not from Undef -- so Boolean would be a WRONG answer, not a wide one:
+#     open, close, eof, and the file tests (`-e missing` is undef). The file
+#     tests are not even uniform among themselves: -s is a byte COUNT (Int) and
+#     -M is fractional days (Num), so no single row covers the family.
+#
+#   THE VALUE IS THE PROGRAM'S, NOT THE OPERATOR'S:
+#     require, dofile   a module returns 1, but a do-FILE returns the file's
+#                       last expression -- anything at all
+#     tie               returns the tied object
+#     mapstart, grepstart   a list whose size depends on the block
+#     prototype         a Str, or undef when there is no prototype
+#
+#   NOTHING TO GAIN: `prtf` returns 1, but every reachable occurrence is in
+#   void context, so the value is discarded. A row would be correct and idle.
+
 # operand_type($ir_op, $position) -> the type this op requires of that operand,
 # or undef when it imposes nothing (or the op is unknown).
 # NODE-LEVEL OPERAND CONTRACTS, kept apart from %SIGNATURES on purpose.
@@ -175,27 +271,35 @@ sub operand_type ($ir_op, $position) {
     return ( $sig->{operands} // [] )->[$position];
 }
 
-# result_type($ir_op) -> what this op yields, or undef when the op is unknown.
+# _result_type($ir_op) -> what this op yields, or undef when the op is unknown.
 #
 # Whether that is the answer OUTRIGHT or a CEILING to meet the operand join
-# against is `result_is_join`'s question, not this one's.
-sub result_type ($ir_op) {
+# against is `_result_is_join`'s question, not this one's.
+#
+# PRIVATE. Both halves are inputs to `result_for`'s rule, not answers on their
+# own -- see result_for's header for why a caller holding the raw pair
+# reimplements join-then-cap and gets to make its own mistakes about arity.
+sub _result_type ($ir_op) {
     my $sig = $SIGNATURES{$ir_op} or return undef;
     return $sig->{result};
 }
 
-# result_is_join($ir_op) -> does this op's result VARY with its operands?
+# _result_is_join($ir_op) -> does this op's result VARY with its operands?
 #
 # True for `$a + $b` (Int when both are Int, Num otherwise); false for `$a == $b`
-# (Boolean whatever arrives). A true answer means the caller should join the
-# operands and MEET that against result_type; a false one means take
-# result_type outright.
-sub result_is_join ($ir_op) {
+# (Boolean whatever arrives). A true answer means join the operands and MEET
+# that against _result_type; a false one means take _result_type outright.
+sub _result_is_join ($ir_op) {
     return $RESULT_IS_JOIN{$ir_op} ? 1 : 0;
 }
 
 # result_for($ir_op, @operand_types) -> the type this op yields given those
 # operands, or undef when the table cannot say.
+#
+# $ir_op is an IR OP NAME ('Add', 'Concat'), or -- for a builtin Call, whose
+# node name says nothing because ~180 ops share it -- the pair
+# ['Call', $builtin_name]. THE ONE PUBLIC QUESTION: which of the two indices
+# holds the answer is this function's business, never a caller's.
 #
 # THIS IS THE QUESTION CALLERS ACTUALLY HAVE, and result_is_join was the wrong
 # shape for it: a boolean about the CALLER'S ALGORITHM rather than an answer.
@@ -215,8 +319,21 @@ sub result_is_join ($ir_op) {
 # Any arity. An unknown or absent operand type yields undef -- an honest
 # "cannot say", never a guess.
 sub result_for ($ir_op, @operands) {
-    my $result = result_type($ir_op) // return undef;
-    return $result unless result_is_join($ir_op);
+    # A BUILTIN CALL IS KEYED BY ITS NAME, not by the node it shares with ~180
+    # others. `Call/join` and `Call/abs` are different questions; routing them
+    # here rather than at the call site is what keeps ONE public question.
+    my ($result, $is_join);
+    if ( ref $ir_op eq 'ARRAY' ) {
+        my (undef, $builtin) = $ir_op->@*;
+        my $sig = defined $builtin ? $BUILTIN_SIGNATURES{$builtin} : undef;
+        $result  = ( $sig // return undef )->{result};
+        $is_join = $BUILTIN_RESULT_IS_JOIN{$builtin} ? 1 : 0;
+    }
+    else {
+        $result  = _result_type($ir_op) // return undef;
+        $is_join = _result_is_join($ir_op);
+    }
+    return $result unless $is_join;
 
     return undef unless @operands;
     return undef if grep { !defined || $_ eq 'Unknown' } @operands;
@@ -241,6 +358,13 @@ sub result_for ($ir_op, @operands) {
 # known_ops() -> every op this table describes. For tests that assert coverage.
 sub known_ops () {
     return sort keys %SIGNATURES;
+}
+
+# known_builtins() -> every BUILTIN this table describes. The builtin index's
+# counterpart of known_ops, and the only window onto it: the rows themselves
+# stay private, and a caller still asks `result_for` for any actual answer.
+sub known_builtins () {
+    return sort keys %BUILTIN_SIGNATURES;
 }
 
 1;

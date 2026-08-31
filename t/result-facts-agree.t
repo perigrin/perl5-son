@@ -43,10 +43,16 @@ my %EXPECTED = (
 subtest 'the one table still answers for every operator the walker needs' => sub {
     my @wrong;
     for my $op (sort keys %EXPECTED) {
-        my $result = B::SoN::TypeLibrary::result_type($op);
-        my $rule = !defined $result ? 'MISSING'
-                 : B::SoN::TypeLibrary::result_is_join($op) ? 'join'
-                 : $result;
+        # THE ONE PUBLIC QUESTION answers both halves: a FIXED result is one
+        # result_for gives with NO operands; a JOIN result is one it can only
+        # give when handed some. `result_is_join` -- a boolean about the
+        # caller's algorithm -- is private now, and this asks in the vocabulary
+        # of answers instead.
+        my $fixed = B::SoN::TypeLibrary::result_for($op);
+        my $rule = defined $fixed ? $fixed
+                 : defined B::SoN::TypeLibrary::result_for($op, 'Int', 'Int')
+                     ? 'join'
+                     : 'MISSING';
         push @wrong, "$op: expected $EXPECTED{$op} got $rule"
             unless $rule eq $EXPECTED{$op};
     }

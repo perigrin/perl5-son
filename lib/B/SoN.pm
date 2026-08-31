@@ -402,26 +402,35 @@ sub _floor_package_globals {
     return;
 }
 
-# _floor_element_removals(\%graphs) -- `shift`/`pop` that nothing narrowed is
-# `Scalar`.
+# _floor_element_removals(\%graphs) -- `shift`/`pop` that nothing narrowed
+# takes the floor B::SoN::TypeLibrary's builtin index states for it.
 #
-# THE SAME RULE AS _floor_subscripts, over the other way of naming one element.
-# `shift @a` and `pop @a` REMOVE AND RETURN ONE element, so whatever the array
-# holds, the result is a scalar. FromOptree already stamps the element type when
-# it can read the aggregate's own inputs (`my @q=(1,2,3); shift @q` is `Int`),
-# and declines otherwise -- which is a reason to stop NARROWING, not a reason to
-# answer nothing.
+# THE ANSWER MOVED INTO THE TABLE; THE TIMING STAYED HERE. This pass used to
+# spell `Scalar` out itself, which made it one row of a builtin result index
+# written as a graph walk. The row now lives in TypeLibrary beside every other
+# result type, and this asks for it -- but the ASKING still has to happen after
+# the fixpoint, for the reason the caller's comment gives: `Scalar` is the
+# weakest possible answer, and every narrowing pass guards on only-fill-Unknown,
+# so a floor stamped inside the loop is a floor no later pass can lift. Measured
+# both ways: inside the loop, `my $u = shift; ... if ($u > 1) { $x = $u }` gave
+# the merge Phi `Scalar` instead of leaving it honestly Unknown.
+#
+# WHAT THE ROW SAYS, and why it is sound: `shift @a` and `pop @a` REMOVE AND
+# RETURN ONE element, so whatever the array holds, the result is a scalar --
+# in ANY context, unlike `splice`. FromOptree stamps the array's own element
+# type where it can read it (`my @q=(1,2,3); shift @q` is `Int`), and that
+# narrower answer keeps precedence; this only covers where it declined.
 #
 # @_ IS THE CASE THAT MATTERS. Bare `shift` is `shift @_`, and an `ArgsSource`
 # has no element nodes to read, so the element stamp always declines there. That
 # left `my $n = shift` Unknown, which made the sub's `return_type` Unknown, which
 # made every CALL to it Unknown: measured over chalk's corpus, `shift` was 5
-# roots carrying most of the 21 callee-return cascades behind it. Nothing about
-# the caller is needed to say `Scalar`.
+# roots carrying most of the 21 callee-return cascades behind it.
 #
-# LIST CONTEXT IS NOT A COUNTEREXAMPLE. `shift`/`pop` yield exactly one value in
-# any context -- unlike `splice`, which is why this names the two removal ops
-# rather than testing for a builtin that touches an array.
+# THE OTHER shift/pop SITES ARE NOT RESULT TYPES and are untouched: FromOptree's
+# implicit-@_ argument synthesis, its memory-SSA effect modelling,
+# `_body_stores_memory` / `_cond_drains_array`, and `_op_uses_args` all ask what
+# shift/pop DO, not what they yield.
 sub _floor_element_removals {
     my ($graphs) = @_;
 
@@ -434,7 +443,9 @@ sub _floor_element_removals {
             next unless $name eq 'shift' || $name eq 'pop';
             next unless ( $node->stamp ? $node->stamp->type : '' ) eq 'Unknown';
 
-            $node->set_stamp( SoN::IR::Stamp->new( type => 'Scalar' ) );
+            my $type = B::SoN::TypeLibrary::result_for( [ 'Call', $name ] )
+                // next;
+            $node->set_stamp( SoN::IR::Stamp->new( type => $type ) );
         }
     }
     return;
@@ -1135,24 +1146,39 @@ sub _derived_type {
         return $st->type;
     }
 
-    # An op whose result varies with its operands. TypeLibrary owns the whole
-    # rule -- join the operands, cap at what the operator can yield -- so this
-    # only has to hand it the operand types.
+    # WHATEVER THE SIGNATURES SAY. TypeLibrary owns the whole rule -- a fixed
+    # result outright, a join capped at what the operator can yield -- so this
+    # only has to hand it the key and the operand types.
     #
     # ARITY-AGNOSTIC, because result_for is. This arm previously required
     # exactly two operands, which silently made every UNARY join entry DEAD:
     # `Negate` is in the join set and never reached this code, so it agreed
     # with FromOptree's %RESULT_STAMP on paper while being unable to execute.
     #
-    # ONLY THE JOIN OPS. A fixed-result op is stamped during the walk; asking
-    # result_for about one here would answer for it a second time, in a pass
-    # whose contract is to fill Unknowns from what the operands say.
-    if ( B::SoN::TypeLibrary::result_is_join($op) ) {
-        my @types = map { $_ && $_->stamp ? $_->stamp->type : undef } @inputs;
-        return B::SoN::TypeLibrary::result_for( $op, @types );
+    # A BUILTIN CALL IS KEYED BY ITS NAME, not by the node ~180 optree ops
+    # share. This is where a builtin whose operands were narrowed after the
+    # walk gets the answer the walk could not give -- `abs $n` becomes Int once
+    # $n does, the same way `-$n` does.
+    my $key = $op;
+    if ( $op eq 'Call' && ( $node->dispatch_kind // '' ) eq 'builtin' ) {
+        my $name = $node->name // return undef;
+        $key = [ 'Call', $name ];
     }
 
-    return undef;
+    # ONLY WHAT THE OPERANDS DECIDE. This pass fills Unknowns from operand
+    # types; a FIXED result is not a fact about operands, and answering one
+    # here would stamp inside the fixpoint what a later floor pass deliberately
+    # stamps after it (see _floor_element_removals for what that broke).
+    #
+    # ASKED, NOT REIMPLEMENTED. `result_is_join` used to be public for exactly
+    # this test -- a boolean about the CALLER'S algorithm, which its own header
+    # calls the wrong shape. result_for already draws the line: an op with a
+    # fixed result answers with NO operands, and one whose result is a join
+    # cannot. So the question is asked in the vocabulary of answers.
+    return undef if defined B::SoN::TypeLibrary::result_for($key);
+
+    my @types = map { $_ && $_->stamp ? $_->stamp->type : undef } @inputs;
+    return B::SoN::TypeLibrary::result_for( $key, @types );
 }
 
 

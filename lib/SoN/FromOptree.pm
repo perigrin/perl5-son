@@ -35,8 +35,17 @@ class SoN::FromOptree 0.01 {
     # Returns undef -- leaving the node unstamped -- whenever the table cannot
     # say: an op it does not describe, or a join op reached with an operand
     # that nothing has narrowed. An honest GAP, never a guessed type.
-    sub _result_stamp ($node_type, $inputs) {
-        my $type = B::SoN::TypeLibrary::result_for($node_type,
+    #
+    # A BUILTIN CALL PASSES ITS NAME. ~180 optree ops build the one generic
+    # `Call` node, so the node type alone is a question TypeLibrary can only
+    # answer once for all of them -- and it answered Unknown. The name is the
+    # key that separates them, and it is already in hand at both generic
+    # construction sites. Which of TypeLibrary's two indices holds the answer
+    # is result_for's business, not this one's; all this does is hand over the
+    # key it has.
+    sub _result_stamp ($node_type, $inputs, $builtin = undef) {
+        my $key = defined $builtin ? [$node_type, $builtin] : $node_type;
+        my $type = B::SoN::TypeLibrary::result_for($key,
             map { $_->stamp ? $_->stamp->type : undef } $inputs->@*)
             // return undef;
         return SoN::IR::Stamp->new(type => $type);
@@ -2606,7 +2615,8 @@ class SoN::FromOptree 0.01 {
                     $extra{dispatch_kind} = 'builtin';
                     $extra{name}          = $name;
                 }
-                my $stamp = _result_stamp($node_type, \@inputs);
+                my $stamp = _result_stamp($node_type, \@inputs,
+                    $node_type eq 'Call' ? $name : undef);
                 $extra{stamp} = $stamp if defined $stamp;
                 my $node = $factory->make($node_type, inputs => \@inputs, %extra);
 
@@ -2854,6 +2864,14 @@ class SoN::FromOptree 0.01 {
                 if ($node_type eq 'Call' && ($name eq 'shift' || $name eq 'pop')
                         && @inputs == 1 && _is_aggregate_node($inputs[0])
                         && defined $sim->control && defined $sim->memory) {
+                    # NO FLOOR HERE. The array's own element type is the
+                    # better answer and belongs at construction time
+                    # (`my @q=(1,2,3); shift @q` is Int). Where it declines,
+                    # the builtin index's `Scalar` still holds -- but stamping
+                    # it HERE would be a floor laid before any narrowing pass
+                    # runs, which is the ordering _floor_element_removals
+                    # exists to get right. It is applied there, after the
+                    # fixpoint, and this leaves the node honestly unstamped.
                     my $elem_stamp = _array_element_stamp($inputs[0]);
                     my $call = $factory->make('Call',
                         inputs         => [$inputs[0], $sim->memory],
@@ -2938,7 +2956,8 @@ class SoN::FromOptree 0.01 {
                                    $elem_lvalue->inputs->[1], $sim->memory]);
                 }
 
-                my $stamp = _result_stamp($node_type, \@inputs);
+                my $stamp = _result_stamp($node_type, \@inputs,
+                    $node_type eq 'Call' ? $name : undef);
 
                 # AN ANON-REF LITERAL IS A REFERENCE, and only the OPTREE OP
                 # knows it. `anonlist`/`anonhash` build the SAME ArrayRef /
