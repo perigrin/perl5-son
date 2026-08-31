@@ -74,11 +74,16 @@ sub _extract_fields ($node, $id_remap) {
     if ($op eq 'Proj') {
         return { index => $node->index };
     }
+    # NO PAD INDEX. `targ` is perl's scratchpad slot -- an artifact of how perl
+    # stores a lexical in one CV, meaningless to a consumer, and unstable across
+    # compilation units by the producer's own account (PadAccess::content_hash
+    # excludes it for exactly that reason). Shipping it invited a consumer to
+    # key on a number we tell them not to trust.
+    #
+    # Identity does not need it: two shadowed `my $x` stay distinct on the wire
+    # because their MEMORY inputs differ, not because of the slot number.
     if ($op eq 'PadAccess') {
-        return {
-            targ    => $node->targ,
-            varname => $node->varname,
-        };
+        return { varname => $node->varname };
     }
     if ($op eq 'FieldAccess') {
         return {
