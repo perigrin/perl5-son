@@ -6,6 +6,8 @@ use utf8;
 
 package B::SoN::TypeLibrary;
 
+use SoN::IR::Stamp;
+
 # A DELIBERATE COPY, AND WHY THERE IS ONE.
 #
 # chalk carries this knowledge in `Chalk::Grammar::Perl::TypeLibrary` as
@@ -178,6 +180,50 @@ sub result_type ($ir_op) {
 # result_type outright.
 sub result_is_join ($ir_op) {
     return $RESULT_IS_JOIN{$ir_op} ? 1 : 0;
+}
+
+# result_for($ir_op, @operand_types) -> the type this op yields given those
+# operands, or undef when the table cannot say.
+#
+# THIS IS THE QUESTION CALLERS ACTUALLY HAVE, and result_is_join was the wrong
+# shape for it: a boolean about the CALLER'S ALGORITHM rather than an answer.
+# Every consumer then reimplemented join-then-cap, and each got to make its own
+# mistakes about arity -- _stamp_derived required exactly two operands, which
+# made every UNARY entry in %RESULT_IS_JOIN dead. `Negate` agreed with
+# FromOptree's %RESULT_STAMP on paper while being unable to fire.
+#
+# The rule, stated once, here:
+#
+#   a CONSTANT result   -> that type, whatever arrived  (Concat is Str,
+#                          BitAnd is Int, NumEq is Boolean)
+#   a JOIN result       -> the join of the operands, CAPPED at what the
+#                          operator can yield. `Int + Int` stays Int; a join
+#                          that escaped above the cap (Scalar) comes down to it
+#
+# Any arity. An unknown or absent operand type yields undef -- an honest
+# "cannot say", never a guess.
+sub result_for ($ir_op, @operands) {
+    my $result = result_type($ir_op) // return undef;
+    return $result unless result_is_join($ir_op);
+
+    return undef unless @operands;
+    return undef if grep { !defined || $_ eq 'Unknown' } @operands;
+
+    my $joined = SoN::IR::Stamp->new( type => shift @operands );
+    $joined = SoN::IR::Stamp::join( $joined, SoN::IR::Stamp->new( type => $_ ) )
+        for @operands;
+    return undef if !$joined || $joined->type eq 'Unknown';
+
+    # A MEET, not a replacement: the join is right about the operands and says
+    # nothing about the operator, so it can escape upward. Bring it down to
+    # what the operator can actually produce.
+    my $capped = SoN::IR::Stamp::meet(
+        $joined, SoN::IR::Stamp->new( type => $result ) );
+
+    # None means the join and the cap share nothing. The cap is the honest
+    # answer: what the operator yields is a fact about the OPERATOR, not about
+    # what happened to arrive.
+    return ( !$capped || $capped->type eq 'None' ) ? $result : $capped->type;
 }
 
 # known_ops() -> every op this table describes. For tests that assert coverage.

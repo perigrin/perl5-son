@@ -12,6 +12,7 @@ class SoN::FromOptree 0.01 {
     use SoN::IR::NodeFactory;
     use SoN::IR::Graph;
     use SoN::IR::Stamp;
+    use B::SoN::TypeLibrary;
     use SoN::FromOptree::OpMap;
     use SoN::FromOptree::StackSim;
     use SoN::FieldInfo;
@@ -23,63 +24,22 @@ class SoN::FromOptree 0.01 {
     use constant PMf_NONDESTRUCT => 0x4000000;   # 67108864
     use constant PMf_EVAL        => 0x2000000;   # 33554432 (s///e)
 
-    # Result-stamp rules for computed nodes, keyed by Chalk node type. The
-    # result representation of a computed value is derivable from its inputs,
-    # which Chalk's backend needs but B::SoN previously only set on leaf
-    # Constants. Values:
-    #   'join'        - the lattice join of the input stamps (Int+Int=Int,
-    #                   Int+Num=Num); used for arithmetic that preserves type.
-    #   a type string - a fixed result type regardless of inputs.
-    # A node type absent from this table is left unstamped (no guessing).
-    my %RESULT_STAMP = (
-        # Arithmetic that preserves the wider input type.
-        Add      => 'join',
-        Subtract => 'join',
-        Multiply => 'join',
-        Negate   => 'join',
-        # Fixed-result arithmetic.
-        Divide   => 'Num',     # Perl / is always float
-        Power    => 'Num',     # Perl ** yields an NV
-        Modulo   => 'Int',     # Perl % is integer
-        # Bitwise / shifts are integer.
-        BitAnd     => 'Int',
-        BitOr      => 'Int',
-        BitXor     => 'Int',
-        LeftShift  => 'Int',
-        RightShift => 'Int',
-        Complement => 'Int',
-        # String ops.
-        Concat    => 'Str',
-        Length    => 'Int',
-        # An aggregate's element count. Fixed Int, like Length, and for the same
-        # reason -- but a DIFFERENT operation over a different operand kind.
-        Count     => 'Int',
-        # Comparisons yield a boolean; the three-way <=> / cmp yield an int.
-        (map { $_ => 'Boolean' } qw(
-            NumEq NumLt NumGt NumLe NumGe NumNe
-            StrEq StrLt StrGt StrLe StrGe StrNe
-        )),
-        NumCmp => 'Int',
-        StrCmp => 'Int',
-        # Logical negation always yields a genuine primitive boolean
-        # (is_bool(!5) is true), regardless of the operand's type.
-        Not => 'Boolean',
-    );
-
     # _result_stamp($node_type, \@inputs) -> SoN::IR::Stamp or undef.
-    # Derive a computed node's result stamp from its rule and input stamps.
-    # Returns undef (leaving the node unstamped) when the rule is 'join' but an
-    # input lacks a stamp -- an honest GAP, never a guessed type.
+    #
+    # ONE DECLARATION. The result type of an operator is a fact about the
+    # operator, so it is stated once, in B::SoN::TypeLibrary, and asked for
+    # here. This used to carry its own copy of that table plus its own join --
+    # a join with NO CAP, so `$a + $b` over two Scalars claimed Scalar rather
+    # than Num, which is all `+` can yield. result_for caps.
+    #
+    # Returns undef -- leaving the node unstamped -- whenever the table cannot
+    # say: an op it does not describe, or a join op reached with an operand
+    # that nothing has narrowed. An honest GAP, never a guessed type.
     sub _result_stamp ($node_type, $inputs) {
-        my $rule = $RESULT_STAMP{$node_type} // return undef;
-        return SoN::IR::Stamp->new(type => $rule) if $rule ne 'join';
-
-        my @stamps = map { $_->stamp } $inputs->@*;
-        return undef if grep { !_is_narrowed($_) } @stamps;
-
-        my $acc = shift @stamps;
-        $acc = SoN::IR::Stamp::join($acc, $_) for @stamps;
-        return $acc;
+        my $type = B::SoN::TypeLibrary::result_for($node_type,
+            map { $_->stamp ? $_->stamp->type : undef } $inputs->@*)
+            // return undef;
+        return SoN::IR::Stamp->new(type => $type);
     }
 
     # _coerce_to_str($factory, $node) -- return a node whose stamp is Str,
@@ -2970,8 +2930,8 @@ class SoN::FromOptree 0.01 {
 
                 my $stamp = _result_stamp($node_type, \@inputs);
 
-                # BACKTICKS ARE CONTEXT-SENSITIVE, so they cannot sit in
-                # %RESULT_STAMP: `my $x = \`cmd\`` yields one Str, while
+                # BACKTICKS ARE CONTEXT-SENSITIVE, so they cannot be a
+                # TypeLibrary result: `my $x = \`cmd\`` yields one Str, while
                 # `my @x = \`cmd\`` yields the output split into lines. perl
                 # marks the difference on the op (sK vs lK) and ONE
                 # BacktickExpr node serves both -- list context wraps it in an

@@ -1111,34 +1111,21 @@ sub _derived_type {
         return $st->type;
     }
 
-    # An op whose result VARIES with its operands: join them, then CAP at what
-    # the operator can actually yield.
+    # An op whose result varies with its operands. TypeLibrary owns the whole
+    # rule -- join the operands, cap at what the operator can yield -- so this
+    # only has to hand it the operand types.
     #
-    # THE CAP IS THE PART THAT WAS MISSING. The join is right about the
-    # operands and says nothing about the operator, so it escaped upward:
-    # measured, once a `:param` field correctly widened to Scalar,
-    # `Multiply(Scalar, Int)` came out `Scalar` -- wider than multiplication can
-    # produce. `*` yields a number whatever arrives.
+    # ARITY-AGNOSTIC, because result_for is. This arm previously required
+    # exactly two operands, which silently made every UNARY join entry DEAD:
+    # `Negate` is in the join set and never reached this code, so it agreed
+    # with FromOptree's %RESULT_STAMP on paper while being unable to execute.
     #
-    # A MEET, not a replacement: `Int * Int` stays Int (already below the Num
-    # ceiling); only a join that escaped ABOVE the ceiling is brought down.
+    # ONLY THE JOIN OPS. A fixed-result op is stamped during the walk; asking
+    # result_for about one here would answer for it a second time, in a pass
+    # whose contract is to fill Unknowns from what the operands say.
     if ( B::SoN::TypeLibrary::result_is_join($op) ) {
-        return undef unless @inputs == 2;
-        my ( $l, $r ) = @inputs;
-        return undef unless $l && $r;
-        my ( $ls, $rs ) = ( $l->stamp, $r->stamp );
-        return undef unless $ls && $rs;
-        return undef if $ls->type eq 'Unknown' || $rs->type eq 'Unknown';
-        my $joined = SoN::IR::Stamp::join( $ls, $rs );
-        return undef unless $joined && $joined->type ne 'Unknown';
-
-        my $ceiling = B::SoN::TypeLibrary::result_type($op) or return $joined->type;
-        my $capped = SoN::IR::Stamp::meet(
-            $joined, SoN::IR::Stamp->new( type => $ceiling ) );
-        # None means the join and the ceiling share nothing. The ceiling is the
-        # honest answer: what the operator yields is a fact about the operator,
-        # not about what happened to arrive.
-        return ( $capped && $capped->type ne 'None' ) ? $capped->type : $ceiling;
+        my @types = map { $_ && $_->stamp ? $_->stamp->type : undef } @inputs;
+        return B::SoN::TypeLibrary::result_for( $op, @types );
     }
 
     return undef;
