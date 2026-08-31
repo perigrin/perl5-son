@@ -154,7 +154,13 @@ subtest 'a provably out-of-range constant index is Undef' => sub {
 # narrower type, because `Scalar` where `Int` is provable is also a T1 failure
 # -- just a less obvious one. These cases are where nothing narrower is
 # derivable at all.
-subtest 'a subscript after a store falls to Scalar, not Unknown' => sub {
+# UPDATED: a read threaded to a store now takes the STORE'S type, which is
+# narrower than the floor and provably right -- `$a[0] = "str"` then `$a[0]` is
+# a Str, and perl agrees. The floor below still applies when the store's own
+# type is undetermined. This subtest previously pinned `Scalar` here, which the
+# comment above already called a T1 failure "where Int is provable": the same
+# argument applies wherever the store says something.
+subtest 'a subscript after a store takes the stored type' => sub {
     my $wire = wire_for('my @a = (1, 2, 3); $a[0] = "str"; say($a[0]);', 'floor_stored');
     my @nodes = ($wire->{methods}{'main::__PROGRAM__'}{nodes} // [])->@*;
     my %byid  = map { $_->{id} => $_ } @nodes;
@@ -164,12 +170,12 @@ subtest 'a subscript after a store falls to Scalar, not Unknown' => sub {
     } @nodes;
     ok defined $read, 'the post-store read exists' or return;
     isnt $read->{stamp}, 'Int', 'still not claimed Int -- the store invalidated the literal';
-    is $read->{stamp}, 'Scalar', 'the widest TRUE answer, not a hole';
+    is $read->{stamp}, 'Str', 'it takes what the store put there';
 };
 
 # The hash form of the same fact. Kept separate because the membership rule and
 # the store rule were written for arrays first and hashes were the miscompile.
-subtest 'a hash element after a store falls to Scalar' => sub {
+subtest 'a hash element after a store takes the stored type' => sub {
     my $wire = wire_for('my %h = (k => 0); $h{k} = "s"; say($h{k});', 'floor_hstored');
     my @nodes = ($wire->{methods}{'main::__PROGRAM__'}{nodes} // [])->@*;
     my %byid  = map { $_->{id} => $_ } @nodes;
@@ -178,7 +184,7 @@ subtest 'a hash element after a store falls to Scalar' => sub {
         $_->{op} eq 'Subscript' && $m && $m->{op} ne 'MemStart';
     } @nodes;
     ok defined $read, 'the post-store read exists' or return;
-    is $read->{stamp}, 'Scalar', 'a written-through hash slot is still a scalar';
+    is $read->{stamp}, 'Str', 'a written-through hash slot takes the stored type';
 };
 
 # A COMPUTED index over a KNOWN array already reads the element type, and that

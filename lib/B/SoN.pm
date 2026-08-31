@@ -331,8 +331,32 @@ sub _floor_subscripts {
         for my $node ( $graph->nodes->@* ) {
             next unless $node->isa('SoN::IR::Node::Subscript');
             next unless ( $node->stamp ? $node->stamp->type : '' ) eq 'Unknown';
-            next if scalar( ( $node->inputs // [] )->@* ) < 3;
+            my @in = ( $node->inputs // [] )->@*;
+            next if @in < 3;
 
+            # TAKE THE STORE'S TYPE BEFORE FALLING TO THE FLOOR. The third
+            # input IS the memory this read is threaded to, and when that is
+            # the Assign that put the value there, the stored type is already
+            # sitting on it:
+            #
+            #     Assign     in=(Subscript, Constant:Str)  stamp=Str
+            #     Subscript  in=(EntryDef, Constant:Int, Assign:Str)
+            #
+            # `$a[0] = "foo"; $a[0]` was floored to Scalar with Str on the
+            # input. Scalar was not WRONG -- an element is one scalar slot --
+            # it was the weakest true answer where a stronger one was present.
+            my $mem = $in[2];
+            if ( $mem && $mem->isa('SoN::IR::Node::Assign') ) {
+                my $st = $mem->stamp;
+                if ( $st && $st->type ne 'Unknown' ) {
+                    $node->set_stamp( SoN::IR::Stamp->new( type => $st->type ) );
+                    next;
+                }
+            }
+
+            # Threaded to something that cannot say -- a MemStart, a Phi, or a
+            # store whose own type is undetermined. One element is one scalar
+            # slot, which stays true whatever it holds.
             $node->set_stamp( SoN::IR::Stamp->new( type => 'Scalar' ) );
         }
     }
