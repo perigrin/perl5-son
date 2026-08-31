@@ -122,6 +122,18 @@ my %SIGNATURES = (
     RefType    => { operands => [], result => 'Str' },
     RegexMatch => { operands => ['Str'], result => 'Boolean' },
     NotMatch   => { operands => ['Str'], result => 'Boolean' },
+
+    # `xor` is the LOW-PRECEDENCE BOOLEAN operator, not a bitwise one: `5 xor 3`
+    # is false (both operands are true), where `5 ^ 3` is 6. It imposes nothing
+    # on its operands -- anything has a truth value -- and always yields a
+    # Boolean. BitXor is the separate node for `^`.
+    Xor        => { operands => [], result => 'Boolean' },
+
+    # Smartmatch yields a Boolean whatever the operand kinds. The MATCHING
+    # rules are elaborate and perl deprecated them, but the result type is not
+    # in question, and leaving it undeclared was the only thing keeping this
+    # node on the not-yet-declared list.
+    Match      => { operands => [], result => 'Boolean' },
     IsaOp      => { operands => ['Scalar', 'Str'], result => 'Boolean' },
 
     # Range yields a list of integers.

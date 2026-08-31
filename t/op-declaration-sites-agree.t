@@ -35,11 +35,36 @@ sub nodes_opmap_can_build () {
 # constrain -- a Constant has none, a PadAccess reads a slot. Others are simply
 # undeclared and should gain a signature. Splitting them is the point: the
 # first list is a design fact, the second is a TODO with a name on it.
+# NODES WITH NO SIGNATURE, and why. TypeLibrary types OPERATORS: a fixed
+# result, or one that is a function of the operand types. A node whose result
+# depends on something the table cannot see does not belong in it, and saying
+# so is the point -- an exemption with a reason is a design fact, an exemption
+# without one is a TODO in disguise.
+
+# (a) NO OPERANDS TO CONSTRAIN. A literal or a read has no inputs to derive
+# from; its type comes from the syntax or the slot.
 my %NO_OPERANDS_TO_DECLARE = map { $_ => 1 } qw(
     Constant PadAccess ArrayRef HashRef AnonSub Ref
 );
-my %SIGNATURE_NOT_YET_DECLARED = map { $_ => 1 } qw(
-    Assign BacktickExpr Call Match Slice Subscript Xor
+
+# (b) RESULT DEPENDS ON SOMETHING THE TABLE CANNOT SEE. Not a TODO: no
+# signature could be written, because the answer is not a function of operand
+# TYPES.
+#
+#   Assign        yields its RHS -- a different type per assignment
+#   Subscript     yields the container's ELEMENT type
+#   Slice         yields a LIST of elements
+#   Call          ~180 optree ops collapse to this one node; there is no
+#                 per-builtin slot in a table keyed by node name (this is the
+#                 open question behind the remaining wire Unknowns)
+#   BacktickExpr  CONTEXT-SENSITIVE: Str in scalar context, List in list.
+#                 perl marks it on the op (sK vs lK) and one node serves both,
+#                 so a fixed signature would be right for one and wrong for the
+#                 other. Stamped at the construction site instead, where the op
+#                 is in hand. A signature here would be a BUG, not an
+#                 improvement.
+my %RESULT_NOT_A_FUNCTION_OF_OPERANDS = map { $_ => 1 } qw(
+    Assign Subscript Slice Call BacktickExpr
 );
 
 subtest 'every node OpMap can build has a class file' => sub {
@@ -65,7 +90,7 @@ subtest 'every node has a signature or a documented reason not to' => sub {
     my %sig = map { $_ => 1 } B::SoN::TypeLibrary::known_ops();
     my @undeclared = grep {
         !$sig{$_} && !$NO_OPERANDS_TO_DECLARE{$_}
-                  && !$SIGNATURE_NOT_YET_DECLARED{$_}
+                  && !$RESULT_NOT_A_FUNCTION_OF_OPERANDS{$_}
     } nodes_opmap_can_build();
     diag("  no signature and not on either list: $_") for @undeclared;
     is(\@undeclared, [],
@@ -77,7 +102,7 @@ subtest 'every node has a signature or a documented reason not to' => sub {
 subtest 'the exemption lists contain only nodes that need to be there' => sub {
     my %sig = map { $_ => 1 } B::SoN::TypeLibrary::known_ops();
     my @stale = grep { $sig{$_} }
-        (sort keys %NO_OPERANDS_TO_DECLARE, sort keys %SIGNATURE_NOT_YET_DECLARED);
+        (sort keys %NO_OPERANDS_TO_DECLARE, sort keys %RESULT_NOT_A_FUNCTION_OF_OPERANDS);
     diag("  now HAS a signature, drop from the exemption list: $_") for @stale;
     is(\@stale, [], 'no exempted node has quietly gained a signature');
 };
