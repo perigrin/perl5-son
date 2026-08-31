@@ -89,9 +89,13 @@ subtest 'scalar-context nondestructive s///r (string value) still translates' =>
     is($err, '', 's///r scalar value form is not GAPped');
 };
 
-subtest 's///e (code replacement) still GAPs (pre-existing)' => sub {
+subtest 's///e lowers -- its replacement is a walkable subtree' => sub {
+    # This used to assert a GAP. The replacement is not opaque: it hangs off
+    # the subst's pmreplroot and survives rpeep suppression, so it is walked
+    # and rides as a second operand on the RegexSubst. perl agrees on the
+    # value -- `s/foo/o()/e` over "foobar" is "XXbar".
     my $err = translate_err('sub { my $x="foobar"; sub o { "XX" } $x =~ s/foo/o()/e; $x }');
-    like($err, qr/^GAP:/, 's///e remains a loud GAP');
+    is($err, '', 's///e with a call replacement translates');
 };
 
 done_testing();

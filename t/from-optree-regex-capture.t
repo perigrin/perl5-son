@@ -111,16 +111,20 @@ subtest 's///r is non-destructive: the source pad is NOT rebound (R3 /r)' => sub
     is($val->value, 'foobar', 'and it still carries the pre-subst value');
 };
 
-subtest 's///e non-foldable replacement is a loud GAP, not silent garbage' => sub {
-    # s/foo/CODE/e (and any replacement that does not fold to a Constant)
-    # cannot be resolved to a literal string. Rather than emit a plausible
-    # but wrong RegexSubst (the dangerous RC4 class), the producer must die
-    # loudly so the miscompile is visible.
-    like(
-        dies { graph_of('sub { my $s = "foobar"; $s =~ s/foo/length($s)/e; $s }') },
-        qr/GAP.*subst.*replacement|replacement.*not.*literal|GAP/,
-        'dies with a GAP for a non-literal replacement',
-    );
+subtest 's///e carries its non-foldable replacement as an operand' => sub {
+    # This used to assert a GAP, on the reasoning that a replacement which does
+    # not fold to a Constant cannot be resolved to a literal string -- and that
+    # emitting a plausible-but-wrong RegexSubst is the dangerous RC4 class.
+    #
+    # That concern is unchanged and still met: the replacement is not GUESSED,
+    # it is WALKED from the subst's pmreplroot subtree and hangs off the node as
+    # a real operand. What was a refusal is now an honest edge.
+    my $g = graph_of('sub { my $s = "foobar"; $s =~ s/foo/length($s)/e; $s }');
+    my ($rs) = grep { $_->operation eq 'RegexSubst' } $g->nodes->@*;
+    ok(defined $rs, 'a RegexSubst is built rather than refused') or return;
+    is(scalar($rs->inputs->@*), 2, 'subject and computed replacement');
+    is($rs->replacement, '',
+        'the literal-replacement field stays empty -- no guessed string');
 };
 
 subtest 'RegexCapture and Match survive the JSON seam' => sub {

@@ -828,11 +828,63 @@ class SoN::FromOptree 0.01 {
             if ($name eq 'subst' && $op->isa('B::PMOP')) {
                 my $pattern = $op->precomp // '';
                 my $flags   = _pmflags_to_str($op->pmflags);
-                # s///e: the replacement is a code subtree, not a literal
-                # string. Emitting a RegexSubst with a guessed replacement
-                # would silently miscompile (the RC4 class), so refuse loudly.
-                die "GAP: s///e (code replacement) not yet lowered\n"
-                    if $op->pmflags & PMf_EVAL;
+                # s///e: the replacement is a code SUBTREE rather than a
+                # literal, and it is walkable. It hangs off pmreplroot and is
+                # intact even under the rpeep suppression this walker runs with
+                # (B::SoN.pm BEGIN):
+                #
+                #   substcont -> null -> scope -> { ex-nextstate,
+                #                                   add -> padsv $n, const 1 }
+                #
+                # What rpeep suppression DOES null is `pmreplstart`, the
+                # computed exec shortcut into that subtree -- which is why
+                # looking there found nothing and the construct read as opaque.
+                # The tree was always there; the entry is its leftmost leaf,
+                # and ->next from that leaf walks the body to the substcont
+                # that closes it.
+                #
+                # /g IS THE LINE, and it is a real one. The replacement runs
+                # ONCE PER MATCH -- measured, `s/a/ $n++ /ge` on "aaa" gives
+                # "012" with $n at 3, while /e alone gives "0aa" with $n at 1.
+                # A repeating side-effecting body is a LOOP, which one operand
+                # cannot express, so /ge stays refused rather than silently
+                # lowered as once-only.
+                my $code_repl;
+                if ($op->pmflags & PMf_EVAL) {
+                    die "GAP: s///ge (code replacement run once per match) not"
+                      . " yet lowered -- the replacement body repeats, which is"
+                      . " a loop, not a value\n"
+                        if $op->pmflags & B::PMf_GLOBAL();
+
+                    my $rr = $op->pmreplroot;
+                    die "GAP: s///e with no reachable replacement subtree not"
+                      . " yet lowered\n"
+                        unless ref($rr) && $$rr;
+
+                    # The leftmost leaf is where execution of the subtree
+                    # begins; ->next from it runs the body.
+                    my $entry = $rr;
+                    while (ref($entry) && $$entry && ($entry->flags & 4)
+                           && ref($entry->first) && ${$entry->first}) {
+                        $entry = $entry->first;
+                    }
+                    die "GAP: s///e replacement subtree has no entry op\n"
+                        unless ref($entry) && $$entry;
+
+                    my $repl_sim = $sim->snapshot;
+                    my $base     = $repl_sim->stack_depth;
+                    my @repl_exits;
+                    _walk_branch($cv, $entry, $repl_sim, $factory, $opmap,
+                        \%visited, \@repl_exits, 1, ${$rr});
+
+                    die "GAP: s///e replacement that exits (return/die) not yet"
+                      . " lowered\n" if @repl_exits;
+                    die "GAP: s///e replacement that is not a single value not"
+                      . " yet lowered\n"
+                        unless $repl_sim->stack_depth == $base + 1;
+
+                    $code_repl = $repl_sim->pop_node;
+                }
                 # An interpolated (multi-part) replacement -- `s/a/$y$z/`,
                 # `s/a/x$y/` -- is a runtime substcont subtree (pmreplroot set),
                 # NOT a single folded const. The handler below pops ONE stack
@@ -841,9 +893,15 @@ class SoN::FromOptree 0.01 {
                 # (`s/a/$y/`) folds to a compile-time Constant under
                 # rpeep-suppression (pmreplroot NULL) and stays correct; only a
                 # genuine subtree GAPs. Refuse loudly until it is lowered.
+                # NOT FOR /e, whose pmreplroot IS the replacement subtree and
+                # was consumed above. This guard is about an INTERPOLATED
+                # literal (`s/a/x$y/`), where the subtree is a substcont chain
+                # the handler below would silently reduce to one popped
+                # Constant.
                 my $replroot = $op->pmreplroot;
                 die "GAP: s/// interpolated (multi-part) replacement not yet lowered\n"
-                    if $replroot && ref($replroot) && $$replroot;
+                    if !defined $code_repl
+                    && $replroot && ref($replroot) && $$replroot;
                 my $nondestruct = $op->pmflags & PMf_NONDESTRUCT;
                 # In scalar/boolean context a DESTRUCTIVE s/// returns the
                 # integer match COUNT, not the rewritten string (only /r
@@ -866,14 +924,25 @@ class SoN::FromOptree 0.01 {
                     $target = _make_pad_or_field($cv, $targ, $factory);
                     $sim->define($targ, $target);
                 }
-                # The replacement string is on the stack (pushed by const op before subst)
-                my $repl_node = $sim->stack_depth > 0 ? $sim->pop_node : undef;
+                # The replacement string is on the stack (pushed by const op
+                # before subst) -- but ONLY for a literal replacement. Under
+                # /e there is no such push: the replacement was walked from the
+                # subtree above, and popping here would take an unrelated stack
+                # value and stamp it on the node as a string replacement
+                # contradicting the operand (measured: `s/b/ $n + 1 /e` came out
+                # with replacement="5", which is $n, not the replacement).
+                my $repl_node = !defined $code_repl && $sim->stack_depth > 0
+                    ? $sim->pop_node : undef;
                 my $replacement = '';
                 if ($repl_node && $repl_node->isa('SoN::IR::Node::Constant')) {
                     $replacement = $repl_node->value // '';
                 }
+                # THE COMPUTED REPLACEMENT IS A SECOND OPERAND. RegexSubst
+                # is a Value node and already carries inputs, so no new node
+                # kind is needed: a literal replacement keeps the string field
+                # and one input, a computed one adds the value beside it.
                 my $node = $factory->make('RegexSubst',
-                    inputs      => [$target],
+                    inputs      => [$target, ($code_repl // ())],
                     pattern     => $pattern,
                     replacement => $replacement,
                     flags       => $flags,
