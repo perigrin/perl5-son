@@ -4430,10 +4430,21 @@ class SoN::FromOptree 0.01 {
         return undef;
     }
 
-    sub _arm_has_element_store ($start, $stop) {
+    # $join BOUNDS THE SCAN, and $stop alone does not. $stop is the OTHER ARM,
+    # which the false arm never reaches -- perl's true arm ends in a `goto` to
+    # the join, so walking ->next from the false arm runs THROUGH the join and
+    # into the next statement. A store there was blamed on the arm:
+    #
+    #     print "$h{k}" eq "v" ? "y\n" : "n\n";   <- arms are constants
+    #     $h{k} = "v";                             <- found here, blamed there
+    #
+    # _arm_has_void_call and _arm_has_die already take the join for this reason;
+    # this detector and _arm_has_field_store were never given it.
+    sub _arm_has_element_store ($start, $stop, $join = undef) {
         $stop = _op_addr($stop);
         my %seen;
         for (my $op = $start; $$op && $$op != $stop && !$seen{$$op}; $op = $op->next) {
+            last if defined $join && $$op == $join;
             $seen{$$op} = 1;
             my $name = $op->name;
             return 1 if $name eq 'aelemfastlex_store'
@@ -4453,13 +4464,15 @@ class SoN::FromOptree 0.01 {
     # never emitted control-guarded and the method body reaches the backend with
     # no repr (zhi 019f5368). A field write is a TARGMY op (OPpTARGET_MY) or a
     # padsv_store whose targ's padname is_field.
-    sub _arm_has_field_store ($cv, $start, $stop) {
+    # Bounded at the JOIN for the same reason as _arm_has_element_store above.
+    sub _arm_has_field_store ($cv, $start, $stop, $join = undef) {
         $stop = _op_addr($stop);
         my $padlist = $cv->PADLIST;   # loop-invariant; the padname table is per-CV
         return 0 unless $$padlist;
         my $padnames = $padlist->ARRAYelt(0);
         my %seen;
         for (my $op = $start; $$op && $$op != $stop && !$seen{$$op}; $op = $op->next) {
+            last if defined $join && $$op == $join;
             $seen{$$op} = 1;
             my $is_targmy   = $op->can('targ') && $op->targ && ($op->private & 16);
             my $is_padstore = $op->name eq 'padsv_store' && $op->can('targ') && $op->targ;
@@ -4774,11 +4787,11 @@ class SoN::FromOptree 0.01 {
         # the same real control flow so each arm's control-pinned effect fires on
         # its own Proj and a Region merges the arms. An `if` statement is always
         # void (WANT 0/1), so this contributes only to the void path.
-        my $elem_branch = _arm_has_element_store($op->other, $op->next)   # true arm
-                       || _arm_has_element_store($op->next, $op->other);  # false arm
+        my $elem_branch = _arm_has_element_store($op->other, $op->next, $join_addr)   # true arm
+                       || _arm_has_element_store($op->next, $op->other, $join_addr);  # false arm
         my $mem_branch  = $elem_branch
-                       || _arm_has_field_store($cv, $op->other, $op->next)
-                       || _arm_has_field_store($cv, $op->next, $op->other)
+                       || _arm_has_field_store($cv, $op->other, $op->next, $join_addr)
+                       || _arm_has_field_store($cv, $op->next, $op->other, $join_addr)
                        || _arm_has_void_call($op->other, $op->next, $join_addr)  # true arm
                        || _arm_has_void_call($op->next, $op->other, $join_addr)  # false arm
                        || _arm_has_die($op->other, $op->next, $join_addr) # true arm
