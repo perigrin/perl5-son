@@ -2832,16 +2832,25 @@ class SoN::FromOptree 0.01 {
         # effect predicates, the backend's _lower_print) sees one operator. Its
         # OpMap entry maps it to a generic Call, which this branch pre-empts.
         if ($name eq 'print' || $name eq 'say') {
-            if ($op->flags & 64) {   # OPf_STACKED: an explicit filehandle operand
-                die "GAP: $name to an explicit filehandle ($name FH ... / "
-                  . "$name \$fh ...) is not lowered -- the runtime-free backend "
-                  . "writes only to stdout; honoring a handle would misroute.\n";
-            }
+            # AN EXPLICIT FILEHANDLE IS STATED, NOT REFUSED. This used to
+            # GAP because "the runtime-free backend writes only to stdout, so
+            # honoring a handle would misroute" -- which is a T2 judgement
+            # (can this TARGET represent a filehandle) made inside T1, whose
+            # job is to say truthfully what the program DOES. The producer
+            # names the operation; the consumer decides whether it can lower
+            # it, and refuses there if it cannot.
+            #
+            # OPf_STACKED means an rv2gv pushed the handle BEFORE the args, and
+            # rv2gv is OpMap SKIP, so the handle node is already on the stack
+            # under them. pop_to_mark takes the whole run, handle included, and
+            # it is first -- which is the order print itself uses.
+            my $has_fh = ($op->flags & 64) ? 1 : 0;
             my $args = $sim->pop_to_mark;
             my @inputs = $args->@*;
 
             # The newline is appended as an ordinary Str operand, so a `say`
             # lowers through exactly the same path a `print LIST, "\n"` does.
+            # It goes after the ARGUMENTS, and the handle stays at operand 0.
             push @inputs, $factory->make('Constant',
                 value      => "\n",
                 const_type => 'string',
@@ -2866,7 +2875,8 @@ class SoN::FromOptree 0.01 {
             # control_in (produce-time control) so the stdout effect is
             # ordered and survives DCE, mirroring the I1 void-effect path.
             my $is_effect = defined $sim->control;
-            my $node = $factory->make('Print', inputs => \@inputs);
+            my $node = $factory->make('Print', inputs => \@inputs,
+                has_filehandle => $has_fh);
             if ($is_effect) {
                 $node->set_control_in($sim->control);
                 $sim->set_control($node);

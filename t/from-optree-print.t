@@ -68,16 +68,32 @@ subtest 'two prints -> two Print effects on the control chain' => sub {
         or diag('ops = [' . join(' ', map { $_->operation } $g->nodes->@*) . ']');
 };
 
-# --- 4. R1.5 LOUD GAP: print to an explicit filehandle (OPf_STACKED) ---
-subtest 'print STDOUT ... is a loud GAP, never a silent fd-1 misroute' => sub {
-    my $err = dies { translate('sub { print STDOUT "x\n"; 1 }') };
-    like($err, qr/GAP.*filehandle/i,
-        'print to an explicit filehandle dies with a GAP naming the filehandle');
+# --- 4. print to an explicit filehandle (OPf_STACKED) NAMES the handle ---
+#
+# These two used to assert a GAP, on the grounds that the runtime-free backend
+# writes only to stdout so honoring a handle would misroute. That is a T2
+# judgement -- can this TARGET represent a filehandle -- made inside T1, whose
+# job is to state what the program does. The producer names the operation and
+# the consumer decides whether it can lower it.
+#
+# The concern the old title named -- "never a silent fd-1 misroute" -- is
+# unchanged and is what these now pin: the handle is IN the graph as operand 0
+# with has_filehandle set, so nothing can quietly route to fd 1. A consumer
+# that cannot honor a handle refuses on a Print that says it has one.
+subtest 'print STDOUT ... names the handle, never a silent fd-1 misroute' => sub {
+    my $g = translate('sub { print STDOUT "x\n"; 1 }');
+    my @p = prints($g);
+    is(scalar @p, 1, 'a Print node is built rather than refused') or return;
+    ok($p[0]->has_filehandle, 'and it says it targets an explicit handle');
+    is($p[0]->inputs->[0]->value, 'STDOUT', 'the handle is operand 0');
 };
 
-subtest 'print $fh ... is a loud GAP' => sub {
-    my $err = dies { translate('sub { my $fh; print $fh "x\n"; 1 }') };
-    like($err, qr/GAP.*filehandle/i, 'print to a lexical filehandle GAPs loudly');
+subtest 'print $fh ... names the lexical handle' => sub {
+    my $g = translate('sub { my $fh; print $fh "x\n"; 1 }');
+    my @p = prints($g);
+    is(scalar @p, 1, 'a Print node is built') or return;
+    ok($p[0]->has_filehandle, 'it says it targets an explicit handle');
+    is(scalar($p[0]->inputs->@*), 2, 'handle plus argument');
 };
 
 # --- 5. interpolated print: the multiconcat arg decodes to a runtime-free

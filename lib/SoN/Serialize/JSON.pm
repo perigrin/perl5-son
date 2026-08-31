@@ -121,6 +121,11 @@ sub _extract_fields ($node, $id_remap) {
             flags   => $node->flags,
         };
     }
+    # A Print states whether its operand 0 is an explicit filehandle. Emitted
+    # only when true, so a plain print's node is byte-identical to before.
+    if ($op eq 'Print') {
+        return $node->has_filehandle ? { has_filehandle => JSON::PP::true } : undef;
+    }
     if ($op eq 'RegexSubst') {
         return {
             pattern     => $node->pattern,

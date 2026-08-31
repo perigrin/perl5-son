@@ -69,12 +69,21 @@ subtest 'say is control-pinned, like print' => sub {
     ok(defined $_->control_in, 'each is control-pinned') for @prints;
 };
 
-subtest 'say to an explicit filehandle GAPs' => sub {
-    # Same refusal as print: the runtime-free backend writes only to stdout, so
-    # honouring a handle would misroute rather than fail.
-    my $err = dies { translate('sub { say STDOUT "x" }') };
-    like($err, qr/GAP:/, 'refused');
-    like($err, qr/explicit filehandle/, '... naming the filehandle form');
+subtest 'say to an explicit filehandle names the handle' => sub {
+    # This used to assert the same refusal print did, for the same reason --
+    # the runtime-free backend writes only to stdout. That is T2's judgement,
+    # not T1's: the producer states the operation and the consumer decides
+    # whether it can lower it.
+    #
+    # `say` desugars to print plus a newline, so it also pins WHERE the newline
+    # goes: after the ARGUMENTS, with the handle still at operand 0. Appending
+    # it to the handle instead would be silent and wrong.
+    my $g = translate('sub { say STDOUT "x" }');
+    my @p = nodes_of($g, 'Print');
+    is(scalar @p, 1, 'a Print node is built rather than refused') or return;
+    ok($p[0]->has_filehandle, 'it says it targets an explicit handle');
+    is($p[0]->inputs->[0]->value, 'STDOUT', 'the handle is operand 0');
+    is($p[0]->inputs->[-1]->value, "\n", 'and the newline is last');
 };
 
 done_testing;
