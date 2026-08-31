@@ -302,6 +302,7 @@ class SoN::FromOptree 0.01 {
         my $ctx = { mode => 'main', exits => \@exits,
                     addr_taken => _address_taken($cv,
                         defined $program_root ? B::main_root() : undef),
+                    visited => \%visited,
                     is_program => (defined $program_root ? 1 : 0) };
 
         while ($$op) {
@@ -780,70 +781,10 @@ class SoN::FromOptree 0.01 {
                 next;
             }
 
-            # foreach loop: only the RANGE form is lowered -- enteriter with
-            # OPf_STACKED carries the two range bounds on the stack (a
-            # general list is unmarked and has no counted-loop desugaring
-            # yet). Non-constant bounds are refused: the synthesized
-            # continuation condition needs high+1 at translation time.
-            if ($name eq 'enteriter') {
-                # The iteration variable's pad slot rides on the enteriter op
-                # itself (LVINTRO). Implicit $_ and package-var iterators have
-                # no lexical slot -- and their gv kid rides the mark stack,
-                # which previously tripped the bounds check with a misleading
-                # message. Check the iterator first so the GAP is truthful.
-                die "GAP: foreach with a non-lexical iterator (\$_ or a"
-                  . " package variable) not yet lowered\n"
-                    unless $op->targ;
-                die "GAP: foreach over a general list not yet lowered\n"
-                    unless $op->flags & 64;   # OPf_STACKED
-                my $bounds = $sim->pop_to_mark;
-                # Three shapes reach an OPf_STACKED enteriter:
-                #   CONST RANGE   `for my $i (2..5)`: two integer-Constant bounds.
-                #   RUNTIME RANGE `for my $i (0..$n)` / `(0..$#a)`: two scalar-Int
-                #                 bounds where at least one is a runtime value
-                #                 (PadAccess/Length) -- the #1 lib/ blocker.
-                #   ARRAY         `for my $x (@a)`: a single aggregate.
-                # for/foreach are aliases (same optree).
-                my $two_scalar_int = $bounds->@* == 2
-                    && !(grep { _is_aggregate_node($_) } $bounds->@*);
-                if ($two_scalar_int) {
-                    # A runtime LOW bound (`for my $i ($lo..$hi)`) is not yet
-                    # lowered: the induction Phi init would be a runtime value
-                    # whose stamp is not propagated through the back-edge (the
-                    # loop-carried-stamp fixpoint), and the range's flip/flop
-                    # materialization crashes the body walk. A constant low with a
-                    # runtime high (`0..$n`, `0..$#a`) IS handled. GAP cleanly
-                    # here rather than crashing downstream.
-                    die "GAP: foreach over a range with a runtime LOW bound "
-                      . "(for my \$i (\$lo..\$hi)) not yet lowered\n"
-                        unless $bounds->[0]->isa('SoN::IR::Node::Constant')
-                            && ($bounds->[0]->const_type // '') eq 'integer';
-                    _translate_foreach_range($cv, $op, $sim, $factory, $opmap,
-                        \%visited, $bounds->@*);
-                }
-                elsif ($bounds->@* == 1 && _is_aggregate_node($bounds->[0])) {
-                    _translate_foreach_array($cv, $op, $sim, $factory, $opmap,
-                        \%visited, $bounds->[0]);
-                }
-                elsif ($bounds->@* == 1
-                        && $bounds->[0]->operation eq 'FieldAccess') {
-                    # `for my $x ($items->@*)` over an aggregate FIELD: the
-                    # rv2av-deref left the FieldAccess ref on the stack. The
-                    # field's ArrayRef type + element type are inferred on the
-                    # Chalk loader side (from the aggregate default), so iterate it
-                    # like a runtime array (Length(field) + Subscript(field,i)).
-                    # A `@$r` over an @_-sourced ref (a Subscript bound) stays a
-                    # GAP -- its element type is statically unknowable. zhi 019f61ad.
-                    _translate_foreach_array($cv, $op, $sim, $factory, $opmap,
-                        \%visited, $bounds->[0]);
-                }
-                else {
-                    die "GAP: foreach with unrecognized bounds shape not yet lowered\n";
-                }
-                # Continue after the loop; the B::LOOP op's lastop is leaveloop.
-                $op = $op->can('lastop') ? $op->lastop : $op->next;
-                next;
-            }
+            # foreach: dispatched by the SHARED step handler so a loop
+            # translates identically here and inside a branch arm. It used to
+            # live in this loop, which _walk_branch cannot reach -- a foreach in
+            # an if/else arm stopped dead at `enteriter`.
 
             # leaveloop - end of loop, continue
             if ($name eq 'leaveloop') {
@@ -2622,6 +2563,70 @@ class SoN::FromOptree 0.01 {
         }
 
         # Handle padsv_store - optimized pad assignment
+        # foreach loop: only the RANGE form is lowered -- enteriter with
+        # OPf_STACKED carries the two range bounds on the stack (a
+        # general list is unmarked and has no counted-loop desugaring
+        # yet). Non-constant bounds are refused: the synthesized
+        # continuation condition needs high+1 at translation time.
+        if ($name eq 'enteriter') {
+            # The iteration variable's pad slot rides on the enteriter op
+            # itself (LVINTRO). Implicit $_ and package-var iterators have
+            # no lexical slot -- and their gv kid rides the mark stack,
+            # which previously tripped the bounds check with a misleading
+            # message. Check the iterator first so the GAP is truthful.
+            die "GAP: foreach with a non-lexical iterator (\$_ or a"
+              . " package variable) not yet lowered\n"
+                unless $op->targ;
+            die "GAP: foreach over a general list not yet lowered\n"
+                unless $op->flags & 64;   # OPf_STACKED
+            my $bounds = $sim->pop_to_mark;
+            # Three shapes reach an OPf_STACKED enteriter:
+            #   CONST RANGE   `for my $i (2..5)`: two integer-Constant bounds.
+            #   RUNTIME RANGE `for my $i (0..$n)` / `(0..$#a)`: two scalar-Int
+            #                 bounds where at least one is a runtime value
+            #                 (PadAccess/Length) -- the #1 lib/ blocker.
+            #   ARRAY         `for my $x (@a)`: a single aggregate.
+            # for/foreach are aliases (same optree).
+            my $two_scalar_int = $bounds->@* == 2
+                && !(grep { _is_aggregate_node($_) } $bounds->@*);
+            if ($two_scalar_int) {
+                # A runtime LOW bound (`for my $i ($lo..$hi)`) is not yet
+                # lowered: the induction Phi init would be a runtime value
+                # whose stamp is not propagated through the back-edge (the
+                # loop-carried-stamp fixpoint), and the range's flip/flop
+                # materialization crashes the body walk. A constant low with a
+                # runtime high (`0..$n`, `0..$#a`) IS handled. GAP cleanly
+                # here rather than crashing downstream.
+                die "GAP: foreach over a range with a runtime LOW bound "
+                  . "(for my \$i (\$lo..\$hi)) not yet lowered\n"
+                    unless $bounds->[0]->isa('SoN::IR::Node::Constant')
+                        && ($bounds->[0]->const_type // '') eq 'integer';
+                _translate_foreach_range($cv, $op, $sim, $factory, $opmap,
+                    $ctx->{visited}, $bounds->@*);
+            }
+            elsif ($bounds->@* == 1 && _is_aggregate_node($bounds->[0])) {
+                _translate_foreach_array($cv, $op, $sim, $factory, $opmap,
+                    $ctx->{visited}, $bounds->[0]);
+            }
+            elsif ($bounds->@* == 1
+                    && $bounds->[0]->operation eq 'FieldAccess') {
+                # `for my $x ($items->@*)` over an aggregate FIELD: the
+                # rv2av-deref left the FieldAccess ref on the stack. The
+                # field's ArrayRef type + element type are inferred on the
+                # Chalk loader side (from the aggregate default), so iterate it
+                # like a runtime array (Length(field) + Subscript(field,i)).
+                # A `@$r` over an @_-sourced ref (a Subscript bound) stays a
+                # GAP -- its element type is statically unknowable. zhi 019f61ad.
+                _translate_foreach_array($cv, $op, $sim, $factory, $opmap,
+                    $ctx->{visited}, $bounds->[0]);
+            }
+            else {
+                die "GAP: foreach with unrecognized bounds shape not yet lowered\n";
+            }
+            # Continue after the loop; the B::LOOP op's lastop is leaveloop.
+            return (($op->can('lastop') ? $op->lastop : $op->next), 'handled');
+        }
+
         if ($name eq 'padsv_store') {
             my $value = $sim->pop_node;
             my $targ = $op->targ;
@@ -5126,7 +5131,11 @@ class SoN::FromOptree 0.01 {
     # is not passed (older callers: dor/cond_expr/trycatch arms that compute a
     # value), a return falls through to the legacy stop-at-op behavior.
     sub _walk_branch ($cv, $op, $sim, $factory, $opmap, $visited, $exits = undef, $stop_at_exit = 0, $stop_addr = undef) {
-        my $ctx = { mode => 'branch' };
+        # VISITED RIDES ON THE CTX so a handler that walks a nested structure --
+        # a foreach body, say -- marks the same op set the caller does. Without
+        # it the arm and the main walk keep separate views and an op walked in
+        # one is re-walked by the other.
+        my $ctx = { mode => 'branch', visited => $visited };
         while ($$op) {
             # Convergence: reached the op where this arm rejoins the main path
             # (the branch op's op_next, passed by callers that know it). Checked
