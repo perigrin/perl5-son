@@ -249,6 +249,7 @@ sub _resolve_deferred_stamps {
     _floor_subscripts($graphs);
     _floor_element_removals($graphs);
     _floor_param_fields( $graphs, $classes );
+    _floor_package_globals($graphs);
 
 
     # AND RE-RUN THE CHAIN ABOVE IT. A Return whose value is floored must carry
@@ -333,6 +334,45 @@ sub _floor_subscripts {
             next if scalar( ( $node->inputs // [] )->@* ) < 3;
 
             $node->set_stamp( SoN::IR::Stamp->new( type => 'Scalar' ) );
+        }
+    }
+    return;
+}
+
+# _floor_package_globals(\%graphs) -- a package global read that nothing
+# narrowed is what its SIGIL says it is.
+#
+# perl guarantees the CONTAINER even when it says nothing about the contents:
+# `$x` is one scalar, `@x` an array, `%x` a hash. That is the weakest true
+# statement about the node, which is exactly what a floor is. Measured over
+# perl's t/base, EntryDef was the largest single source of wire Unknowns (7 of
+# 22), and every derived Unknown -- Add, Or, Subscript, Assign -- was Unknown
+# only because an operand was.
+#
+# SCALAR IS THE CONTAINER, NOT THE CONTENTS. A package `$x` holding an arrayref
+# is still a scalar: Scalar excludes Array, Hash, Code and Glob but INCLUDES
+# references, so the floor stays true for `$x = [1,2]` and for a tied or
+# aliased global. It claims nothing about what is inside.
+#
+# ONLY EntryDef, NOT Call. A Call floored here would carry a stamp into the
+# dependent-chain fixpoint below, whose passes all guard on only-fill-Unknown
+# -- so the floor would PREEMPT the answer that chain exists to compute. That
+# is the failure recorded above for :param fields, and 89b0008 reverted a
+# guessed Scalar for the same reason: it launders a missing inference into a
+# legitimate-looking annotation. A global has no such chain; a Call does.
+sub _floor_package_globals {
+    my ($graphs) = @_;
+
+    my %BY_SIGIL = ( '$' => 'Scalar', '@' => 'Array', '%' => 'Hash' );
+
+    for my $gname ( sort keys $graphs->%* ) {
+        my $graph = $graphs->{$gname} or next;
+        for my $node ( $graph->nodes->@* ) {
+            next unless $node->isa('SoN::IR::Node::EntryDef');
+            next unless ( $node->stamp ? $node->stamp->type : '' ) eq 'Unknown';
+
+            my $type = $BY_SIGIL{ $node->sigil // '' } or next;
+            $node->set_stamp( SoN::IR::Stamp->new( type => $type ) );
         }
     }
     return;

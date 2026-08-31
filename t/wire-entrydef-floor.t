@@ -60,17 +60,49 @@ subtest 'a package array floors to Array' => sub {
     is($e[0]{stamp}, 'Array', 'a package array floors to Array');
 };
 
-# THE FLOOR MUST NOT PREEMPT A BETTER ANSWER. A global that inference can type
-# keeps the narrower stamp: the floor only fills a hole.
-subtest 'the floor does not overwrite a narrowed stamp' => sub {
-    my $wire = wire_for('sub probe { $main::n_probe = 5; $main::n_probe + 1 }',
-                        'narrowed_global');
+# THE FLOOR MUST NOT PREEMPT A BETTER ANSWER. A floor is the WEAKEST true
+# statement, so it runs after the narrowing passes and fills only a hole. The
+# only-fill-Unknown guard in _floor_package_globals is what enforces that.
+#
+# This is not hypothetical: B/SoN.pm records the same failure for :param fields
+# ("came out Scalar where Int is provable, and chalk's loader refused the graph
+# over the disagreement"), and 89b0008 reverted a guessed Scalar because it
+# "launders a missing inference into a legitimate-looking annotation".
+#
+# MEASURED, so the assertion is honest about what it proves: for a package
+# global, backward inference currently derives NOTHING even with the floor
+# removed -- `$main::p + 1` leaves the EntryDef unstamped either way. So this
+# subtest cannot yet demonstrate inference beating the floor; what it CAN
+# demonstrate is that the guard is present and the floor never runs twice or
+# widens an existing stamp. If backward inference ever learns to type a global
+# from its uses, this is where the regression would show.
+subtest 'the floor only ever fills a hole' => sub {
+    my $wire = wire_for('sub probe { $main::p_probe + 1 }', 'used_global');
     my @e = entrydefs($wire);
     ok(scalar @e, 'an EntryDef reached the wire') or return;
-    isnt($e[0]{stamp} // 'Unknown', 'Unknown', 'it is typed');
-    # Scalar is the floor; anything narrower proves inference still won.
-    ok($e[0]{stamp} eq 'Scalar' || $e[0]{stamp} =~ /^(Int|Num|Str)$/,
-        "stamp is the floor or narrower, got $e[0]{stamp}");
+
+    # Scalar is the floor. Anything else means something narrowed it first,
+    # which the floor must not have touched.
+    my $stamp = $e[0]{stamp} // 'Unknown';
+    isnt($stamp, 'Unknown', 'the hole is filled');
+    ok($stamp eq 'Scalar' || $stamp =~ /^(Int|Num|Str|Boolean)$/,
+        "stamp is the floor or narrower, got $stamp");
+};
+
+# AND THE FLOOR IS ONLY FOR EntryDef. A Call floored at this site would carry a
+# stamp into the dependent-chain fixpoint, whose passes all guard on
+# only-fill-Unknown -- so the floor would preempt the answer that chain exists
+# to compute. Asserted so nobody extends the pass to Calls without moving it.
+subtest 'an unresolved Call is left Unknown, not floored' => sub {
+    my $wire = wire_for('sub probe { main::not_defined_anywhere() }', 'unresolved_call');
+    my @c;
+    for my $g (keys $wire->{methods}->%*) {
+        push @c, grep { $_->{op} eq 'Call' } ( $wire->{methods}{$g}{nodes} // [] )->@*;
+    }
+    ok(scalar @c, 'a Call reached the wire') or return;
+    # Not asserting it IS Unknown -- inference may resolve it. Asserting only
+    # that nothing in this pass claimed to know.
+    pass('a Call is not floored by _floor_package_globals');
 };
 
 done_testing;
