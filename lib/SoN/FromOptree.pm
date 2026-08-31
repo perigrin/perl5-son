@@ -1648,6 +1648,36 @@ class SoN::FromOptree 0.01 {
             return ($op->next, 'handled');
         }
 
+        # rv2hv IS THE SAME CASE, and had no handler. `my %c = $h->%*` fell
+        # through to the list-assign path, which wraps whatever the RHS pushed
+        # into a container -- so the DEREF became the single input of a
+        # HashLiteral. A hash literal's inputs are 2N alternating keys and
+        # values, so that node has half a pair: chalk computed a pair count from
+        # it and got 0.5 (corpus F21).
+        #
+        # Flatten the literal referent into its pairs, exactly as the array
+        # branch above does with its elements, and refuse a runtime ref for the
+        # same reason -- leaving the single ref as one "pair" is a silent
+        # miscompile, not a wide answer.
+        if ($name eq 'rv2hv'
+                && $op->can('first') && ${$op->first}
+                && ($op->first->name eq 'const' || $op->first->name eq 'padsv')
+                && ($op->flags & 3) == 3          # OPf_WANT_LIST
+                && $sim->stack_depth > 0) {
+            my $top = $sim->pop_node;
+            if ($top->operation eq 'HashLiteral') {
+                $sim->push_node($_) for $top->inputs->@*;
+            }
+            elsif ($op->first->name eq 'const') {
+                $sim->push_node($top);   # not a folded HV: leave as-is
+            }
+            else {
+                die "GAP: list-context deref of a runtime hash-ref (%\$h where "
+                  . "\$h is not a literal HashRef) not yet lowered\n";
+            }
+            return ($op->next, 'handled');
+        }
+
         # A PACKAGE array/hash (`@x`, `%h`) reaches here as rv2av/rv2hv over a
         # `gv`. The gv handler pushed the variable's NAME as a string Constant
         # (it is the callee name for an entersub), and rv2sv pops that Constant
