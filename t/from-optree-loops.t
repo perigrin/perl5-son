@@ -71,17 +71,18 @@ subtest 'foreach over a range lowers as a counted loop' => sub {
     is($ret->inputs->[0]->id, $s_phi->id, 'Return value is the $s Phi');
 };
 
-subtest 'foreach over a general list still refuses loudly' => sub {
-    # Only the range form (OPf_STACKED enteriter, two constant bounds) is
-    # lowered; a general list iteration has no counted-loop desugaring yet.
-    like(
-        dies {
-            SoN::FromOptree->translate(
-                eval 'sub { my $s = 0; for my $i (1, 2, 5) { $s = $s + $i } $s }')
-        },
-        qr/GAP/,
-        'list foreach dies with a GAP message'
-    );
+subtest 'foreach over a literal list lowers as a counted loop' => sub {
+    # This asserted a GAP: "a general list iteration has no counted-loop
+    # desugaring yet". It has one now -- an N-element list IS an array of known
+    # size, so it wraps into an ArrayRef and takes the array path, bounded by
+    # Count with the body reading Subscript(list, i).
+    my $g = SoN::FromOptree->translate(
+        eval 'sub { my $s = 0; for my $i (1, 2, 5) { $s = $s + $i } $s }');
+    ok(defined $g, 'it translates') or return;
+
+    my @ops = map { $_->operation } $g->nodes->@*;
+    ok(scalar(grep { $_ eq 'Loop' } @ops),  'a Loop node exists');
+    ok(scalar(grep { $_ eq 'Count' } @ops), 'bounded by the element count');
 };
 
 sub _translate ($sub) {

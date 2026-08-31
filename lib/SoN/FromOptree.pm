@@ -2640,8 +2640,22 @@ class SoN::FromOptree 0.01 {
             # no lexical slot -- and their gv kid rides the mark stack,
             # which previously tripped the bounds check with a misleading
             # message. Check the iterator first so the GAP is truthful.
-            die "GAP: foreach over a general list not yet lowered\n"
-                unless $op->flags & 64;   # OPf_STACKED
+            # A LITERAL LIST IS AN ARRAY OF KNOWN SIZE. `for my $i (1,2,3)`
+            # does NOT set OPf_STACKED -- measured, it compiles to pushmark +
+            # three consts + `enteriter vK/LVINTRO` with no S -- because there
+            # is no range or aggregate to stack: the elements are simply pushed,
+            # and pop_to_mark returns them.
+            #
+            # So wrap them in the ArrayRef the anonlist handler already builds
+            # and hand them to the array path, which bounds by Count and reads
+            # Subscript(arr, i). Nothing new is needed for the iteration itself.
+            #
+            # This was the most common GAP across perl's t/base, t/cmd and
+            # t/comp -- 7 occurrences, more than any other.
+            my $list_literal = 0;
+            if (!($op->flags & 64)) {   # not OPf_STACKED
+                $list_literal = 1;
+            }
             my $bounds = $sim->pop_to_mark;
 
             # THE ITERATOR IS A PAD SLOT OR A PACKAGE SCALAR, and the scope map
@@ -2699,6 +2713,19 @@ class SoN::FromOptree 0.01 {
                 $iter_key = $stash . '::$' . $name_node->value;
                 ITER_KEYED: ;
             }
+            # A LIST LITERAL: every popped value is an element. Wrap and take
+            # the array path. Guarded on there being something to iterate --
+            # `for () {}` has no elements and no loop to build.
+            if ($list_literal) {
+                die "GAP: foreach over an empty list not yet lowered\n"
+                    unless $bounds->@*;
+                my $arr = $factory->make('ArrayRef', inputs => [$bounds->@*]);
+                _translate_foreach_array($cv, $op, $sim, $factory, $opmap,
+                    $ctx->{visited}, $arr, $iter_key);
+                return (($op->can('lastop') ? $op->lastop : $op->next),
+                        'handled');
+            }
+
             # Three shapes reach an OPf_STACKED enteriter:
             #   CONST RANGE   `for my $i (2..5)`: two integer-Constant bounds.
             #   RUNTIME RANGE `for my $i (0..$n)` / `(0..$#a)`: two scalar-Int
