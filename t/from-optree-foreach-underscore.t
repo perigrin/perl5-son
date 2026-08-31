@@ -78,4 +78,21 @@ subtest 'lexical and package iterators still translate' => sub {
     }
 };
 
+# `for (@a)` -- implicit $_ over an ARRAY -- also keys correctly now. The glob
+# is the LAST stack element whatever the bounds count (one for an array, two
+# for a range), so it cannot be split off by arity the way a NAMED package
+# iterator's is; measured, leaving it in place made `for (@a)` read as a
+# two-element shape, [ArrayRef, ArgsSource], and miss every bounds branch.
+#
+# A body that ACCUMULATES over it still GAPs, on an older limit that has
+# nothing to do with $_ (a loop-carried value losing its stamp across the
+# back-edge). Pinning the shape here, not that.
+subtest 'for (@a) reaches the array bounds branch' => sub {
+    my ( undef, $err ) = translate(
+        'my @a = (4,5,6); for (@a) { print }', 'array-iter' );
+    unlike $err, qr/unrecognized bounds shape/,
+        'the glob is not counted as a bound';
+    unlike $err, qr/implicit \$_/, 'and $_ is keyed, not refused';
+};
+
 done_testing;

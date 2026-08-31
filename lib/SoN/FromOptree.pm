@@ -2674,6 +2674,14 @@ class SoN::FromOptree 0.01 {
                 #
                 # $_ keys exactly as the match and s/// handlers key it.
                 if ($op->private & 8) {   # OPpITER_DEF
+                    # The `gv[*_]` is always the LAST element, whatever the
+                    # bounds count -- one for `for (@a)`, two for `for (1..3)`
+                    # -- so it cannot be split off by arity the way a named
+                    # package iterator's is. Drop it here, where OPpITER_DEF
+                    # says it is there: left in place it is counted as a bound
+                    # and `for (@a)` is misread as a two-element shape
+                    # (measured: [ArrayRef, ArgsSource]).
+                    pop $bounds->@* if !$name_node && $bounds->@* > 1;
                     $iter_key = 'main::$_';
                     goto ITER_KEYED;
                 }
