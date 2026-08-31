@@ -1752,7 +1752,15 @@ sub _walk_package {
     my $emit_cvs = _emit_package($filter, $pkg_name);
 
     # Record feature-class structure (declarative; methods land in $graphs).
-    if ( $emit_cvs && SoN::ClassAux::is_class($stash) ) {
+    #
+    # SCOPED THE SAME WAY THE SUB WALK IS. The producer declares its own
+    # feature-classes (SoN::IR::Node and friends), and extracting one emits a
+    # __DEFAULT_n graph per defaulted field -- 11 of them survived on a
+    # four-line probe after the sub walk was gated, because they arrive here
+    # rather than through that loop. A class is ours to emit when its own code
+    # came from the file under compilation.
+    if ( $emit_cvs && SoN::ClassAux::is_class($stash)
+             && _stash_is_user_code($stash) ) {
         $classes->{$pkg_name} = _extract_class( $graphs, $pkg_name, $stash );
     }
 
@@ -1780,6 +1788,23 @@ sub _walk_package {
         # Skip XS / autoloaded subs that have no optree (START is null)
         my $start = eval { $cv->START };
         next unless defined $start && $$start;
+
+        # ONLY WHAT WE WERE ASKED TO COMPILE. perl has loaded the producer
+        # into the same interpreter that is compiling the user's file, so
+        # without this the package walk translates B::SoN's and SoN::IR's own
+        # subs too -- measured on a four-line probe: 420 graphs / 3150 nodes, of
+        # which 294 were ours. A consumer then cannot tell its graphs from the
+        # user's, which is not merely untidy: it makes "does a user program
+        # still carry Unknown stamps" unmeasurable, and that number scopes
+        # chalk's T2 pass.
+        #
+        # SCOPED BY $0, NOT BY PACKAGE NAME. _cv_is_user_code asks which FILE
+        # the CV came from. That keeps a user sub in a user-declared package
+        # (`package Foo; sub helper {...}`), and it is what makes self-hosting
+        # work: when Chalk compiles B::SoN, $0 IS B::SoN and these graphs are
+        # then correctly INCLUDED. Excluding the producer by name would look
+        # equivalent here and silently break that.
+        next unless _cv_is_user_code($cv);
 
         my $full_name = "${pkg_name}::${name}";
         next if exists $graphs->{$full_name};
@@ -1833,6 +1858,33 @@ sub _walk_package {
 
         _walk_package( $graphs, $classes, $canonical_name, $sub_stash, $filter );
     }
+}
+
+# _stash_is_user_code($stash) -- is this PACKAGE's code ours to emit?
+#
+# The package-level counterpart of _cv_is_user_code, and it asks the same
+# question of the same authority: did any CV in this stash come from $0. A
+# feature-class the producer declares (SoN::IR::Node, ...) answers no; the
+# user's `class Counter` answers yes, and so does B::SoN itself when Chalk is
+# compiling B::SoN -- which is what keeps self-hosting working.
+#
+# ANY rather than ALL: a class whose methods are all inherited still belongs to
+# the file that declared it, and a stash with no CVs at all (fields only) is
+# decided by its field-default CVs, which is what this is protecting.
+sub _stash_is_user_code {
+    my ($stash) = @_;
+    no strict 'refs';
+    for my $name ( keys %$stash ) {
+        next if $name =~ /::$/ || $name =~ /^[^a-zA-Z_]/;
+        my $gv = eval { $stash->{$name} };
+        next unless defined $gv;
+        my $b = eval { svref_2object( \$gv ) };
+        next unless $b && $b->isa('B::GV');
+        my $cv = eval { $b->CV };
+        next unless $cv && $$cv && !$cv->isa('B::SPECIAL');
+        return 1 if _cv_is_user_code($cv);
+    }
+    return 0;
 }
 
 # _cv_is_user_code($cv) -- was this sub compiled from the file under

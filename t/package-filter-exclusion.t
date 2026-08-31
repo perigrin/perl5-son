@@ -107,12 +107,18 @@ PL
         'a namespace created only by a qualified sub name survives';
 };
 
-subtest 'no filter at all still emits everything' => sub {
+subtest 'no filter still emits the user program -- and only that' => sub {
+    # This used to assert the OPPOSITE second half: that with no package=
+    # filter the producer's own internals leak onto the wire, "which is why a
+    # filter is wanted". They no longer do. The wire is scoped by $0 -- the
+    # file under compilation -- so an explicit filter narrows WITHIN the user's
+    # code rather than being the only thing standing between a consumer and
+    # 3150 nodes of SoN::IR internals.
     my $wire = wire_for($TWO_PKG, 'nofilter');
     my $classes = $wire->{classes} // {};
     ok exists $classes->{Thing}, 'Thing present with no filter';
-    ok((grep { /^SoN::/ } keys %$classes),
-        'and the internals leak, which is why a filter is wanted');
+    is scalar( grep { /^(?:SoN|B::SoN)(?:::|$)/ } keys %$classes ), 0,
+        'and the producer internals do NOT leak';
 };
 
 done_testing;
