@@ -2574,12 +2574,40 @@ class SoN::FromOptree 0.01 {
             # no lexical slot -- and their gv kid rides the mark stack,
             # which previously tripped the bounds check with a misleading
             # message. Check the iterator first so the GAP is truthful.
-            die "GAP: foreach with a non-lexical iterator (\$_ or a"
-              . " package variable) not yet lowered\n"
-                unless $op->targ;
             die "GAP: foreach over a general list not yet lowered\n"
                 unless $op->flags & 64;   # OPf_STACKED
             my $bounds = $sim->pop_to_mark;
+
+            # THE ITERATOR IS A PAD SLOT OR A PACKAGE SCALAR, and the scope map
+            # holds both -- it is a plain hash, keyed by pad targ for a lexical
+            # and by `stash::$name` for a package variable, which is how every
+            # other package-scalar read and write already resolves.
+            #
+            # A package iterator has NO targ, and its glob rides the stack:
+            # rv2gv is OpMap SKIP, so pop_to_mark returns one element MORE than
+            # a lexical loop does, with the name last. Measured:
+            #
+            #     foreach my $i (1..3)   Constant(1) | Constant(3)
+            #     foreach $t     (1..3)  Constant(1) | Constant(3) | Constant(t)
+            #
+            # Split the name off HERE, before the shape check below counts
+            # bounds -- otherwise the glob counts as a third bound and the loop
+            # is misclassified as an unrecognized shape.
+            my $iter_key = $op->targ;
+            if (!$iter_key) {
+                my $name_node = $bounds->@* > 2 ? pop $bounds->@* : undef;
+                die "GAP: foreach with an implicit \$_ iterator not yet"
+                  . " lowered\n"
+                    unless $name_node
+                        && $name_node->isa('SoN::IR::Node::Constant')
+                        && defined $name_node->value;
+                # KEYED EXACTLY AS _stash_key SPELLS IT -- stash, then '::',
+                # then the SIGIL, then the name -- because the body's reads of
+                # $t resolve through that same spelling. A near-miss here binds
+                # the iterator under a name nothing looks up.
+                my $stash = eval { $cv->GV->STASH->NAME } // 'main';
+                $iter_key = $stash . '::$' . $name_node->value;
+            }
             # Three shapes reach an OPf_STACKED enteriter:
             #   CONST RANGE   `for my $i (2..5)`: two integer-Constant bounds.
             #   RUNTIME RANGE `for my $i (0..$n)` / `(0..$#a)`: two scalar-Int
@@ -2602,7 +2630,7 @@ class SoN::FromOptree 0.01 {
                     unless $bounds->[0]->isa('SoN::IR::Node::Constant')
                         && ($bounds->[0]->const_type // '') eq 'integer';
                 _translate_foreach_range($cv, $op, $sim, $factory, $opmap,
-                    $ctx->{visited}, $bounds->@*);
+                    $ctx->{visited}, $bounds->@*, $iter_key);
             }
             elsif ($bounds->@* == 1 && _is_aggregate_node($bounds->[0])) {
                 _translate_foreach_array($cv, $op, $sim, $factory, $opmap,
@@ -3846,8 +3874,11 @@ class SoN::FromOptree 0.01 {
     # Loop/Proj/Region skeleton. The unstack/iter/and condition ops are not
     # walked -- the induction is synthesized here -- and the main walker
     # resumes at the B::LOOP lastop (leaveloop).
-    sub _translate_foreach_range ($cv, $enteriter, $sim, $factory, $opmap, $visited, $low, $high) {
-        my $i_targ = $enteriter->targ;
+    # $iter_key names the iteration variable in the scope map: a pad targ for a
+    # lexical, `stash::$name` for a package scalar. Defaults to the op's targ so
+    # existing callers are unchanged.
+    sub _translate_foreach_range ($cv, $enteriter, $sim, $factory, $opmap, $visited, $low, $high, $iter_key = undef) {
+        my $i_targ = $iter_key // $enteriter->targ;
 
         # Locate the body: enteriter->next is the iteration unstack, followed
         # by iter, then the and whose other-branch is the body.

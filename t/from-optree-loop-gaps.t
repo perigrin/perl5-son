@@ -308,12 +308,31 @@ subtest 'foreach range bound at IV_MAX refuses loudly' => sub {
         qr/GAP.*IV_MAX/i, 'IV_MAX upper bound dies with a GAP message');
 };
 
-subtest 'non-lexical foreach iterator gets a truthful GAP message' => sub {
+subtest 'an implicit $_ foreach gets a truthful GAP message' => sub {
     # Was: refused by ACCIDENT with a misleading "non-constant integer bounds"
     # message (the iterator gv rides the mark stack and trips the count check).
+    #
+    # The message used to say "non-lexical", lumping implicit $_ together with
+    # a PACKAGE-variable iterator. Those are no longer the same case: a package
+    # iterator is keyed by `stash::$name` and lowers, while implicit $_ has no
+    # name on the stack to key at all. The refusal now names only what is
+    # genuinely unbuilt.
     like(translate_dies(
         'sub { my $s = 0; for (1..3) { $s = $s + 1 } $s }'),
-        qr/GAP.*non-lexical/i, 'implicit $_ foreach names the real gap');
+        qr/GAP.*implicit \$_/i, 'implicit $_ foreach names the real gap');
+};
+
+# THE PACKAGE FORM IS NOT REFUSED, which is the other half of the distinction
+# above -- without this, narrowing the message could hide a regression that
+# re-refused it.
+subtest 'a package-variable foreach iterator is not refused' => sub {
+    # `dies {}` returns undef when nothing died -- not the empty string. The
+    # iterator is package-QUALIFIED because this file runs under v5.42 (hence
+    # strict), and a bare `$t` would fail to compile inside the eval rather
+    # than exercise the translator.
+    is(translate_dies(
+        'sub { my $s = 0; for $main::t (1..3) { $s = $s + 1 } $s }'),
+        undef, 'foreach $t (...) lowers');
 };
 
 done_testing();
