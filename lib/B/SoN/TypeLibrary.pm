@@ -264,11 +264,33 @@ my %NODE_OPERAND_TYPE = (
 # _insert_type_coercions skips a position whose requirement is undef. A default
 # here would start coercing the operands of every op the tables do not describe.
 sub operand_type ($ir_op, $position) {
+    # A BUILTIN CALL IS KEYED BY ITS NAME, exactly as `result_for` keys it. One
+    # `Call` node stands for ~180 builtins, so asking what `Call` requires has
+    # ~180 answers; asking what `abs` requires has one.
+    if ( ref $ir_op eq 'ARRAY' ) {
+        my (undef, $builtin) = $ir_op->@*;
+        my $sig = defined $builtin ? $BUILTIN_SIGNATURES{$builtin} : undef;
+        return ( ( $sig // return undef )->{operands} // [] )->[$position];
+    }
+
     # The node-level contract wins where it exists: it is a fact about the node
     # this position belongs to, not about the operator it was spelled with.
     return $NODE_OPERAND_TYPE{$ir_op} if exists $NODE_OPERAND_TYPE{$ir_op};
     my $sig = $SIGNATURES{$ir_op} or return undef;
     return ( $sig->{operands} // [] )->[$position];
+}
+
+# type_key($node) -> the key `operand_type` and `result_for` want for this node.
+#
+# A builtin Call answers to ['Call', $name]; everything else to its bare
+# operation. Callers holding a node should ask HERE rather than reconstruct the
+# shape, so the two questions cannot drift apart on how a builtin is addressed.
+sub type_key ($node) {
+    my $op = $node->operation;
+    return $op unless $op eq 'Call' && $node->can('dispatch_kind');
+    return $op unless ( $node->dispatch_kind // '' ) eq 'builtin';
+    my $name = $node->can('name') ? $node->name : undef;
+    return defined $name ? [ $op, $name ] : $op;
 }
 
 # _result_type($ir_op) -> what this op yields, or undef when the op is unknown.

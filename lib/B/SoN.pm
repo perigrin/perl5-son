@@ -645,8 +645,8 @@ sub _insert_type_coercions {
         for my $node ( $graph->nodes->@* ) {
             my $inputs = $node->inputs or next;
             for my $i ( 0 .. $#$inputs ) {
-                my $want = B::SoN::TypeLibrary::operand_type( $node->operation, $i )
-                    // next;
+                my $want = B::SoN::TypeLibrary::operand_type(
+                    B::SoN::TypeLibrary::type_key($node), $i ) // next;
                 my $operand = $inputs->[$i] or next;
                 next unless ref $operand && $operand->isa('SoN::IR::Value');
 
@@ -1247,7 +1247,7 @@ sub _infer_backward {
             # Collect, per value node, the requirements its consumers impose.
             my %required;    # node id => Stamp
             for my $node ( $graph->nodes->@* ) {
-                my $op_name = $node->operation;
+                my $op_name = B::SoN::TypeLibrary::type_key($node);
                 my @inputs  = ( $node->inputs // [] )->@*;
                 for my $i ( 0 .. $#inputs ) {
                     my $want = B::SoN::TypeLibrary::operand_type( $op_name, $i )
