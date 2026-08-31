@@ -1056,8 +1056,8 @@ sub _literal_element_type {
 
     return undef unless $index->isa('SoN::IR::Node::Constant');
 
-    my $is_array = $agg->isa('SoN::IR::Node::ArrayRef');
-    my $is_hash  = $agg->isa('SoN::IR::Node::HashRef');
+    my $is_array = $agg->isa('SoN::IR::Node::ArrayLiteral');
+    my $is_hash  = $agg->isa('SoN::IR::Node::HashLiteral');
     return undef unless $is_array || $is_hash;
 
     my @elems = ( $agg->inputs // [] )->@*;
@@ -2508,8 +2508,15 @@ sub _wire_field_defaults {
                 }
                 $k = $k->sibling;
             }
-            my $agg_op = $dop->name eq 'anonlist' ? 'ArrayRef' : 'HashRef';
-            $field_type = $agg_op;
+            # THE OP NAME AND THE TYPE ARE TWO THINGS. This line used to be
+            # `$field_type = $agg_op`, which worked only because the constructor
+            # was NAMED for the type it produced -- the exact conflation the
+            # ArrayRef -> ArrayLiteral rename exists to break. `[1,2,3]` is
+            # built by an ArrayLiteral and IS an ArrayRef; the node is not its
+            # own type.
+            my $is_list = $dop->name eq 'anonlist';
+            my $agg_op  = $is_list ? 'ArrayLiteral' : 'HashLiteral';
+            $field_type = $is_list ? 'ArrayRef'     : 'HashRef';
             $value_node = $factory->make( $agg_op, inputs => \@elems );
         }
         else {

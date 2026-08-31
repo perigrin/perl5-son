@@ -36,7 +36,7 @@ sub op_counts ($graph) {
 sub max_arrayref_arity ($graph) {
     my $max = 0;
     for my $n ($graph->nodes->@*) {
-        next unless $n->operation eq 'ArrayRef';
+        next unless $n->operation eq 'ArrayLiteral';
         my $arity = scalar $n->inputs->@*;
         $max = $arity if $arity > $max;
     }
@@ -45,8 +45,8 @@ sub max_arrayref_arity ($graph) {
 
 sub has_nested_arrayref ($graph) {
     for my $n ($graph->nodes->@*) {
-        next unless $n->operation eq 'ArrayRef';
-        return 1 if grep { $_->can('operation') && $_->operation eq 'ArrayRef' } $n->inputs->@*;
+        next unless $n->operation eq 'ArrayLiteral';
+        return 1 if grep { $_->can('operation') && $_->operation eq 'ArrayLiteral' } $n->inputs->@*;
     }
     return 0;
 }

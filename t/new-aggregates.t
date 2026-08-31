@@ -23,13 +23,13 @@ sub const ($val) {
 
 # --- HashRef ---
 
-subtest 'HashRef is an Aggregate with 4 inputs' => sub {
+subtest 'HashLiteral is an Aggregate with 4 inputs' => sub {
     my @kv = map { const($_) } qw(k1 v1 k2 v2);
-    my $node = $factory->make('HashRef', inputs => \@kv);
+    my $node = $factory->make('HashLiteral', inputs => \@kv);
 
-    isa_ok($node, ['SoN::IR::Node::Aggregate'], 'HashRef isa Aggregate');
-    isa_ok($node, ['SoN::IR::Node'],            'HashRef isa Node');
-    is($node->operation, 'HashRef', 'HashRef->operation eq HashRef');
+    isa_ok($node, ['SoN::IR::Node::Aggregate'], 'HashLiteral isa Aggregate');
+    isa_ok($node, ['SoN::IR::Node'],            'HashLiteral isa Node');
+    is($node->operation, 'HashLiteral', 'operation is HashLiteral');
     is(scalar $node->inputs->@*, 4, 'HashRef has 4 elements');
 
     my $elems = $node->inputs;
@@ -38,12 +38,12 @@ subtest 'HashRef is an Aggregate with 4 inputs' => sub {
     }
 };
 
-subtest 'HashRef content_hash includes operation name and input ids' => sub {
+subtest 'HashLiteral content_hash includes operation name and input ids' => sub {
     my @kv   = map { const($_) } qw(a 1 b 2);
-    my $node = $factory->make('HashRef', inputs => \@kv);
+    my $node = $factory->make('HashLiteral', inputs => \@kv);
     my $hash = $node->content_hash;
 
-    like($hash, qr/HashRef/, 'content_hash contains HashRef');
+    like($hash, qr/HashLiteral/, 'content_hash contains HashLiteral');
     for my $el (@kv) {
         like($hash, qr/\Q${\$el->id}\E/, 'content_hash contains input id');
     }
@@ -51,13 +51,13 @@ subtest 'HashRef content_hash includes operation name and input ids' => sub {
 
 # --- ArrayRef ---
 
-subtest 'ArrayRef is an Aggregate with 3 inputs' => sub {
+subtest 'ArrayLiteral is an Aggregate with 3 inputs' => sub {
     my @elems = map { const($_) } (1, 2, 3);
-    my $node  = $factory->make('ArrayRef', inputs => \@elems);
+    my $node  = $factory->make('ArrayLiteral', inputs => \@elems);
 
-    isa_ok($node, ['SoN::IR::Node::Aggregate'], 'ArrayRef isa Aggregate');
-    isa_ok($node, ['SoN::IR::Node'],            'ArrayRef isa Node');
-    is($node->operation, 'ArrayRef', 'ArrayRef->operation eq ArrayRef');
+    isa_ok($node, ['SoN::IR::Node::Aggregate'], 'ArrayLiteral isa Aggregate');
+    isa_ok($node, ['SoN::IR::Node'],            'ArrayLiteral isa Node');
+    is($node->operation, 'ArrayLiteral', 'operation is ArrayLiteral');
     is(scalar $node->inputs->@*, 3, 'ArrayRef has 3 elements');
 
     my $got = $node->inputs;
@@ -66,12 +66,12 @@ subtest 'ArrayRef is an Aggregate with 3 inputs' => sub {
     }
 };
 
-subtest 'ArrayRef content_hash includes operation name and input ids' => sub {
+subtest 'ArrayLiteral content_hash includes operation name and input ids' => sub {
     my @elems = map { const($_) } (10, 20, 30);
-    my $node  = $factory->make('ArrayRef', inputs => \@elems);
+    my $node  = $factory->make('ArrayLiteral', inputs => \@elems);
     my $hash  = $node->content_hash;
 
-    like($hash, qr/ArrayRef/, 'content_hash contains ArrayRef');
+    like($hash, qr/ArrayLiteral/, 'content_hash contains ArrayLiteral');
     for my $el (@elems) {
         like($hash, qr/\Q${\$el->id}\E/, 'content_hash contains input id');
     }
@@ -107,16 +107,16 @@ subtest 'Interpolate content_hash includes operation name and input ids' => sub 
 
 subtest 'NodeFactory can create all 3 aggregate nodes' => sub {
     my @kv    = map { const($_) } qw(k 1);
-    my $hnode = $factory->make('HashRef', inputs => \@kv);
+    my $hnode = $factory->make('HashLiteral', inputs => \@kv);
     isa_ok($hnode, ['SoN::IR::Node::Aggregate'],
-        "factory->make('HashRef') returns Aggregate");
-    is($hnode->operation, 'HashRef', "factory-made HashRef has correct operation");
+        "factory->make('HashLiteral') returns Aggregate");
+    is($hnode->operation, 'HashLiteral', "factory-made HashRef has correct operation");
 
     my @elems = map { const($_) } (7, 8, 9);
-    my $anode = $factory->make('ArrayRef', inputs => \@elems);
+    my $anode = $factory->make('ArrayLiteral', inputs => \@elems);
     isa_ok($anode, ['SoN::IR::Node::Aggregate'],
-        "factory->make('ArrayRef') returns Aggregate");
-    is($anode->operation, 'ArrayRef', "factory-made ArrayRef has correct operation");
+        "factory->make('ArrayLiteral') returns Aggregate");
+    is($anode->operation, 'ArrayLiteral', "factory-made ArrayRef has correct operation");
 
     my $lit   = const('foo');
     my $var   = const('bar');

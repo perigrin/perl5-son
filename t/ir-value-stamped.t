@@ -75,8 +75,8 @@ subtest 'self-typing node kinds carry their real type' => sub {
     # would be technically non-undef and still wrong -- Unknown must mean
     # "cannot tell", not "did not bother".
     my %EXPECT = (
-        'my $r = [1,2,3]; $r'        => { ArrayRef   => 'ArrayRef' },
-        'my $r = {a=>1}; $r'         => { HashRef    => 'HashRef' },
+        'my $r = [1,2,3]; $r'        => { ArrayLiteral => 'ArrayRef' },
+        'my $r = {a=>1}; $r'         => { HashLiteral  => 'HashRef' },
         'my $o = bless {}, "X"; ref($o)' => { RefType => 'Str' },
         'my $x; defined($x) ? 1 : 0' => { Defined    => 'Boolean' },
         'my $s = "abc"; $s =~ /b/ ? 1 : 0' => { RegexMatch => 'Boolean' },

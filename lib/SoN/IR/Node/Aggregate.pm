@@ -1,5 +1,5 @@
 # ABOUTME: Intermediate base class for aggregate constructor IR nodes.
-# ABOUTME: Groups HashRef, ArrayRef, and Interpolate nodes.
+# ABOUTME: Groups HashLiteral, ArrayLiteral, and Interpolate nodes.
 use 5.42.0;
 use utf8;
 use experimental 'class';

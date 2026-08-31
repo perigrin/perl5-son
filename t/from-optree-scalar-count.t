@@ -29,7 +29,7 @@ subtest '`scalar @a` is a Count over the array (R1)' => sub {
     my $g = graph_of('sub { my @a = (1, 2, 3); scalar @a }');
     my $len = node_of($g, 'Count');
     ok(defined $len, 'has a Count node') or return;
-    is($len->inputs->[0]->operation, 'ArrayRef', 'Count is over the ArrayRef');
+    is($len->inputs->[0]->operation, 'ArrayLiteral', 'Count is over the ArrayRef');
     is($len->stamp->type, 'Int', 'Count is stamped Int');
     # The Return must be wired to the Count, not the ArrayRef.
     my ($ret) = $g->returns->@*;
@@ -45,7 +45,7 @@ subtest '`scalar %h` is a Count over the hash (producer)' => sub {
     my $g = graph_of('sub { my %h = (a => 1, b => 2); scalar %h }');
     my $len = node_of($g, 'Count');
     ok(defined $len, 'has a Count node') or return;
-    is($len->inputs->[0]->operation, 'HashRef', 'Count is over the HashRef');
+    is($len->inputs->[0]->operation, 'HashLiteral', 'Count is over the HashRef');
 };
 
 subtest '`scalar $x` stays a no-op (teeth)' => sub {

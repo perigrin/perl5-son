@@ -16,7 +16,7 @@ sub translate ($code) {
 }
 
 sub aggregates ($g) {
-    return grep { $_->operation eq 'ArrayRef' } $g->nodes->@*;
+    return grep { $_->operation eq 'ArrayLiteral' } $g->nodes->@*;
 }
 
 # THE CONFLATION. `my @a = (1,2,3)` and `my $r = [1,2,3]` produced BYTE-IDENTICAL

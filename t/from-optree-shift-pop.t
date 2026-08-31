@@ -50,7 +50,7 @@ subtest 'shift @arr is a memory statement effect stamped with the element type' 
     # inputs = [array, memory]; control is on control_in.
     my ($arr) = grep {
         my $r = $_->stamp ? $_->stamp->type : '';
-        $_->operation eq 'ArrayRef'
+        $_->operation eq 'ArrayLiteral'
     } $shift->inputs->@*;
     ok($arr, 'the array is an input to the shift Call');
 };

@@ -7,7 +7,7 @@ use Test2::V0;
 use SoN::OptSuppress;
 use SoN::FromOptree;
 
-# Under canonical (peephole-suppressed) ops, `my @a = (...)` builds an ArrayRef
+# Under canonical (peephole-suppressed) ops, `my @a = (...)` builds an ArrayLiteral
 # bound to the array, `$a[0] = V` is a threaded stmt-effect Assign store, and a
 # later `$a[0]` is a real Subscript LOAD (not a compile-time value substitution),
 # so the store persists to memory and the load sees it. Same for hashes.
@@ -26,10 +26,10 @@ sub return_value_node ($graph) {
     return $ret->inputs->[-1];
 }
 
-subtest 'array construction builds an ArrayRef' => sub {
+subtest 'array construction builds an ArrayLiteral' => sub {
     my $g = canonical_graph('sub { my @a = (1,2,3); $a[0] }');
     my @ops = map { $_->operation } $g->nodes->@*;
-    ok((grep { $_ eq 'ArrayRef' } @ops), 'has an ArrayRef for my @a = (1,2,3)');
+    ok((grep { $_ eq 'ArrayLiteral' } @ops), 'has an ArrayLiteral for my @a = (1,2,3)');
 };
 
 subtest 'array element read returns the constructed element' => sub {
@@ -52,10 +52,10 @@ subtest 'array element store is a threaded Assign; read is a real Subscript load
         'the store Assign is a threaded stmt-effect (control_in set)');
 };
 
-subtest 'hash construction builds a HashRef' => sub {
+subtest 'hash construction builds a HashLiteral' => sub {
     my $g = canonical_graph('sub { my %h = (k => 0); $h{k} }');
     my @ops = map { $_->operation } $g->nodes->@*;
-    ok((grep { $_ eq 'HashRef' } @ops), 'has a HashRef for my %h = (k => 0)');
+    ok((grep { $_ eq 'HashLiteral' } @ops), 'has a HashLiteral for my %h = (k => 0)');
 };
 
 subtest 'hash element store is a threaded Assign; read is a real Subscript load' => sub {

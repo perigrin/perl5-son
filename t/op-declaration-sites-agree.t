@@ -44,7 +44,7 @@ sub nodes_opmap_can_build () {
 # (a) NO OPERANDS TO CONSTRAIN. A literal or a read has no inputs to derive
 # from; its type comes from the syntax or the slot.
 my %NO_OPERANDS_TO_DECLARE = map { $_ => 1 } qw(
-    Constant PadAccess ArrayRef HashRef AnonSub Ref
+    Constant PadAccess ArrayLiteral HashLiteral AnonSub Ref
 );
 
 # (b) RESULT DEPENDS ON SOMETHING THE TABLE CANNOT SEE. Not a TODO: no

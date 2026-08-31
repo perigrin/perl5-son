@@ -46,21 +46,21 @@ subtest 'a dead empty `[]` does not vanish the sub (no silent skip, 019f5ed3)' =
 # ArrayRef/HashRef with zero elements (not a Constant, not a crash).
 subtest 'a live empty `[]` is an empty ArrayRef (0 elements)' => sub {
     my $g = graph_of('sub { my $r = []; scalar @$r }');
-    my $aref = node_of($g, 'ArrayRef');
+    my $aref = node_of($g, 'ArrayLiteral');
     ok(defined $aref, 'has an ArrayRef node for the empty []') or return;
     is(scalar $aref->inputs->@*, 0, 'the ArrayRef has zero elements');
 };
 
 subtest 'a live empty `{}` is an empty HashRef (0 elements)' => sub {
     my $g = graph_of('sub { my $r = {}; scalar %$r }');
-    my $href = node_of($g, 'HashRef');
+    my $href = node_of($g, 'HashLiteral');
     ok(defined $href, 'has a HashRef node for the empty {}') or return;
     is(scalar $href->inputs->@*, 0, 'the HashRef has zero elements');
 };
 
 subtest 'non-empty `[1,2,3]` still builds a 3-element ArrayRef (teeth)' => sub {
     my $g = graph_of('sub { my $r = [1, 2, 3]; $r->[0] }');
-    my $aref = node_of($g, 'ArrayRef');
+    my $aref = node_of($g, 'ArrayLiteral');
     ok(defined $aref, 'has an ArrayRef node') or return;
     is(scalar $aref->inputs->@*, 3, 'the ArrayRef has 3 elements');
 };

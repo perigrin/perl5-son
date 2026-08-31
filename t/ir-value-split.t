@@ -68,7 +68,7 @@ subtest 'inherited leaves ride their intermediate parent' => sub {
         Negate     => 'UnaryOp',
         PadAccess  => 'Access',
         Parameter  => 'Access',
-        ArrayRef   => 'Aggregate',
+        ArrayLiteral   => 'Aggregate',
         RegexMatch => 'Regex',
     );
     for my $name (sort keys %VIA) {

@@ -117,7 +117,7 @@ class SoN::FromOptree 0.01 {
     # value. An empty array has no element type, so returns undef (unstamped).
     sub _array_element_stamp ($array) {
         return undef unless defined $array
-            && $array->operation eq 'ArrayRef';
+            && $array->operation eq 'ArrayLiteral';
         my @stamps = map { $_->stamp } $array->inputs->@*;
         return undef if !@stamps || grep { !_is_narrowed($_) } @stamps;
         my $acc = shift @stamps;
@@ -141,7 +141,7 @@ class SoN::FromOptree 0.01 {
     sub _is_aggregate_node ($node) {
         return false unless defined $node;
         my $op = $node->operation;
-        return true if $op eq 'ArrayRef' || $op eq 'HashRef';
+        return true if $op eq 'ArrayLiteral' || $op eq 'HashLiteral';
         return true if $op eq 'ArgsSource';
         my $stamp = $node->stamp;
         return false unless defined $stamp;
@@ -1635,7 +1635,7 @@ class SoN::FromOptree 0.01 {
                 && ($op->flags & 3) == 3          # OPf_WANT_LIST
                 && $sim->stack_depth > 0) {
             my $top = $sim->pop_node;
-            if ($top->operation eq 'ArrayRef') {
+            if ($top->operation eq 'ArrayLiteral') {
                 $sim->push_node($_) for $top->inputs->@*;
             }
             elsif ($op->first->name eq 'const') {
@@ -1841,7 +1841,7 @@ class SoN::FromOptree 0.01 {
                     $factory->make('Constant',
                         value => $v, stamp => $st, const_type => $ct);
                 } $sv->ARRAY;
-                my $arr = $factory->make('ArrayRef', inputs => \@elems);
+                my $arr = $factory->make('ArrayLiteral', inputs => \@elems);
                 $sim->push_node($arr);
                 return ($op->next, 'handled');
             }
@@ -2030,7 +2030,7 @@ class SoN::FromOptree 0.01 {
             my $is_lvintro  = $op->private & 0x80;    # OPpLVAL_INTRO (target)
             if ($name eq 'padav' && $existing && $want == 3
                     && !$ref_or_mod && !$is_lvintro
-                    && $existing->operation eq 'ArrayRef') {
+                    && $existing->operation eq 'ArrayLiteral') {
                 $sim->push_node($_) for $existing->inputs->@*;
                 return ($op->next, 'handled');
             }
@@ -2719,7 +2719,7 @@ class SoN::FromOptree 0.01 {
             if ($list_literal) {
                 die "GAP: foreach over an empty list not yet lowered\n"
                     unless $bounds->@*;
-                my $arr = $factory->make('ArrayRef', inputs => [$bounds->@*]);
+                my $arr = $factory->make('ArrayLiteral', inputs => [$bounds->@*]);
                 _translate_foreach_array($cv, $op, $sim, $factory, $opmap,
                     $ctx->{visited}, $arr, $iter_key);
                 return (($op->can('lastop') ? $op->lastop : $op->next),
@@ -2905,7 +2905,7 @@ class SoN::FromOptree 0.01 {
             # recorded at the aggregate walk). A class-level default would be
             # right here and silently WRONG at the next unstamped list-branch
             # site, turning a loud missing-stamp death into a bad type.
-            my $node = $factory->make($is_hash ? 'HashRef' : 'ArrayRef',
+            my $node = $factory->make($is_hash ? 'HashLiteral' : 'ArrayLiteral',
                 inputs => [],
                 stamp  => SoN::IR::Stamp->new(
                     type => $is_hash ? 'HashRef' : 'ArrayRef'));
@@ -3055,7 +3055,7 @@ class SoN::FromOptree 0.01 {
                     # _rhs_is_aggregate_access to key scalar context on the OP
                     # rather than the repr.
                     my $node = $factory->make(
-                        ($sigil eq '@' ? 'ArrayRef' : 'HashRef'),
+                        ($sigil eq '@' ? 'ArrayLiteral' : 'HashLiteral'),
                         inputs => [$rhs->@*],
                         stamp  => SoN::IR::Stamp->new(
                             type => ($sigil eq '@' ? 'Array' : 'Hash')));

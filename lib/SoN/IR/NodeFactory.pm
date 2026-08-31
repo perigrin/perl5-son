@@ -63,8 +63,8 @@ use SoN::IR::Node::ArgsSource;
 use SoN::IR::Node::Parameter;
 use SoN::IR::Node::Subscript;
 use SoN::IR::Node::Call;
-use SoN::IR::Node::HashRef;
-use SoN::IR::Node::ArrayRef;
+use SoN::IR::Node::HashLiteral;
+use SoN::IR::Node::ArrayLiteral;
 use SoN::IR::Node::Interpolate;
 use SoN::IR::Node::AnonSub;
 use SoN::IR::Node::RegexMatch;
@@ -101,7 +101,7 @@ my %DATA_CLASSES = map { $_ => "SoN::IR::Node::$_" } qw(
     Assign Repeat Match NotMatch DefinedOr Xor Range Yada IsaOp
     Not Negate Complement Defined UnaryPlus Ref RefType Length Count
     PadAccess FieldAccess EntryDef ArgsSource Parameter Subscript Slice
-    Call HashRef ArrayRef
+    Call HashLiteral ArrayLiteral
     Interpolate AnonSub
     RegexMatch RegexSubst RegexCapture Print EnvRead TryCatch
     PostfixDeref CompoundAssign BacktickExpr VarDecl ListAssign
@@ -169,7 +169,7 @@ class SoN::IR::NodeFactory {
     # Per-call identity like the statement effects, but NOT in
     # %STATEMENT_EFFECT_OPS: allocations are value-producing and are not
     # control-threaded by the Block fixup.
-    our %ALLOC_OPS = map { $_ => 1 } qw(ArrayRef HashRef);
+    our %ALLOC_OPS = map { $_ => 1 } qw(ArrayLiteral HashLiteral);
 
     # Aggregate LITERAL CONSTRUCTORS. Not operators: `[1,2]` yields a ref to
     # the array it just built, and no TypeLibrary signature describes that —
@@ -182,11 +182,11 @@ class SoN::IR::NodeFactory {
     # for below rather than copied here, so the two cannot drift. Do NOT add an
     # op here to silence an untyped-node failure: if TypeLibrary cannot say,
     # that is an open question, and a literal here makes it a wrong answer.
-    # The LITERAL CONSTRUCTORS that used to sit here (ArrayRef, HashRef) are
+    # The LITERAL CONSTRUCTORS that used to sit here (ArrayLiteral, HashLiteral) are
     # gone from it too, but for the opposite reason: TypeLibrary cannot say
     # what they yield, because there is no operator and no operand to ask
     # about. That makes their type a fact about the CLASS, and each now
-    # declares it via default_stamp_type (see SoN::IR::Node::ArrayRef).
+    # declares it via default_stamp_type (see SoN::IR::Node::ArrayLiteral).
     #
     # Nothing is left to tabulate. The table is retired rather than kept empty:
     # an empty one is an invitation to refill it, which is what this comment

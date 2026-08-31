@@ -33,7 +33,7 @@ subtest 'an element read carries a memory input' => sub {
     ok(defined $sub, 'has a Subscript') or return;
     is(scalar $sub->inputs->@*, 3, 'Subscript has 3 inputs (container, index, memory)');
     # container=[0], index=[1] unchanged; memory=[2].
-    is($sub->inputs->[0]->operation, 'ArrayRef', 'input[0] is the container');
+    is($sub->inputs->[0]->operation, 'ArrayLiteral', 'input[0] is the container');
     my $mem = $sub->inputs->[2];
     ok(defined $mem, 'input[2] is the memory value');
     is($mem->operation, 'MemStart', 'at entry the memory is MemStart');

@@ -93,7 +93,7 @@ subtest 'a package array is the SAME SHAPE as the lexical one' => sub {
 subtest 'a package hash translates' => sub {
     my $g = graph_of('sub { our %h = (a => 1, b => 2); $main::h{a} }');
     ok(defined $g, 'a package hash read translates');
-    ok(scalar(nodes_of($g, 'HashRef')), 'and builds a real HashRef');
+    ok(scalar(nodes_of($g, 'HashLiteral')), 'and builds a real HashRef');
 };
 
 # The BILATERAL partner for the miscompile: three lengths whose correct answers

@@ -48,18 +48,18 @@ subtest 'refgen produces Ref node' => sub {
     is($nodes[0]->operation, 'Ref', 'node operation is Ref');
 };
 
-subtest 'anonhash produces HashRef node' => sub {
+subtest 'anonhash produces HashLiteral node' => sub {
     my $graph = SoN::FromOptree->translate(sub { { a => 1, b => 2 } });
-    my @nodes = nodes_of_type($graph, 'HashRef');
-    ok(scalar @nodes > 0, 'anonhash produces HashRef node');
-    is($nodes[0]->operation, 'HashRef', 'node operation is HashRef');
+    my @nodes = nodes_of_type($graph, 'HashLiteral');
+    ok(scalar @nodes > 0, 'anonhash produces HashLiteral node');
+    is($nodes[0]->operation, 'HashLiteral', 'node operation is HashLiteral');
 };
 
-subtest 'anonlist produces ArrayRef node' => sub {
+subtest 'anonlist produces ArrayLiteral node' => sub {
     my $graph = SoN::FromOptree->translate(sub { [1, 2, 3] });
-    my @nodes = nodes_of_type($graph, 'ArrayRef');
-    ok(scalar @nodes > 0, 'anonlist produces ArrayRef node');
-    is($nodes[0]->operation, 'ArrayRef', 'node operation is ArrayRef');
+    my @nodes = nodes_of_type($graph, 'ArrayLiteral');
+    ok(scalar @nodes > 0, 'anonlist produces ArrayLiteral node');
+    is($nodes[0]->operation, 'ArrayLiteral', 'node operation is ArrayLiteral');
 };
 
 subtest 'smartmatch OpMap entry maps to Match' => sub {
@@ -197,7 +197,7 @@ subtest 'anon-ref deref resolves the container to the bound aggregate (R4)' => s
     my $ck = ref($container); $ck =~ s/.*:://;
     isnt($ck, 'PadAccess',
         'the Subscript container is not an unbound PadAccess');
-    my @arefs = nodes_of_type($g, 'ArrayRef');
+    my @arefs = nodes_of_type($g, 'ArrayLiteral');
     ok(scalar @arefs > 0, 'the anon-list ArrayRef survives into the graph');
 };
 

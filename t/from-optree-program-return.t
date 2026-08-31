@@ -56,7 +56,7 @@ SRC
     my $input = $by_id->{ $ret->{inputs}[0] };
     ok($input, 'the Return has an input node') or return;
 
-    isnt($input->{op}, 'ArrayRef',
+    isnt($input->{op}, 'ArrayLiteral',
         'the Return does not consume the array built by an earlier statement');
     is($input->{op}, 'Constant', 'the Return consumes a Constant');
     is($input->{fields}{const_type}, 'undef', 'and that Constant is the Undef');
