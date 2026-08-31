@@ -4943,10 +4943,13 @@ class SoN::FromOptree 0.01 {
             # walker cannot translate -- and it marked that op visited, so
             # the main walk would terminate there too, silently dropping
             # everything after the if/else. Refuse loudly.
-            die "GAP: untranslatable op inside an if/else arm"
-              . " (arm did not reach the join) not yet lowered\n"
-                if defined $join_addr
-                && !(defined $end && ref $end && $$end == $join_addr);
+            if (defined $join_addr
+                && !(defined $end && ref $end && $$end == $join_addr)) {
+                my $where = (defined $end && ref $end && $$end)
+                    ? $end->name : 'end-of-chain';
+                die "GAP: untranslatable op inside an if/else arm"
+                  . " (arm stopped at `$where`, not the join) not yet lowered\n";
+            }
             # The arm's value-count is its depth ABOVE the pre-branch base. A
             # scalar-context arm pushes exactly one; a list-context arm whose
             # source is a genuine multi-element list (`(1,2)`) pushes more --
