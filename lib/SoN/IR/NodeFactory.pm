@@ -6,6 +6,7 @@ use experimental 'class';
 no warnings 'experimental::class';
 
 use SoN::IR::Stamp;
+use B::SoN::TypeLibrary;
 use SoN::IR::Node::Constant;
 use SoN::IR::Node::Phi;
 use SoN::IR::Node::Add;
@@ -170,30 +171,26 @@ class SoN::IR::NodeFactory {
     # control-threaded by the Block fixup.
     our %ALLOC_OPS = map { $_ => 1 } qw(ArrayRef HashRef);
 
-    # Ops whose result type is fixed by the OPERATION ITSELF, independent of
-    # inputs. `ref($x)` yields a string whatever $x is; `defined($x)` and a
-    # match yield a boolean; an anonymous aggregate constructor yields a ref
-    # to that aggregate. These need no inference, so leaving them for a later
-    # pass to decide was never right — measured, they were 11 of the 16
-    # untyped Value nodes across the construct sweep in t/ir-value-stamped.t.
+    # Aggregate LITERAL CONSTRUCTORS. Not operators: `[1,2]` yields a ref to
+    # the array it just built, and no TypeLibrary signature describes that —
+    # result_for returns undef for both. Their type comes from the syntax that
+    # built the node, not from a signature, so it is stated here.
     #
-    # This table is for ops that are self-typing. An op whose type depends on
-    # its inputs (Add, Concat) is stamped by the walk that knows the operand
-    # types; one whose type is genuinely undecidable at construction
-    # (Subscript, Call) falls through to Unknown below. Do NOT add an op here
-    # to silence an untyped-node failure — that converts an open question
-    # into a wrong answer.
-    our %SELF_TYPED_OPS = (
-        ArrayRef   => 'ArrayRef',
-        HashRef    => 'HashRef',
-        RefType    => 'Str',
-        Defined    => 'Boolean',
-        RegexMatch => 'Boolean',
-        NotMatch   => 'Boolean',
-        # `!$x` is a boolean whatever $x is -- the same category as Defined
-        # above, and it was simply missing from this table.
-        Not        => 'Boolean',
-    );
+    # The OPERATORS that used to sit in this table (RefType, Defined,
+    # RegexMatch, NotMatch, Not) are gone from it. What an operator yields is a
+    # fact about the OPERATOR, and those live in B::SoN::TypeLibrary — asked
+    # for below rather than copied here, so the two cannot drift. Do NOT add an
+    # op here to silence an untyped-node failure: if TypeLibrary cannot say,
+    # that is an open question, and a literal here makes it a wrong answer.
+    # The LITERAL CONSTRUCTORS that used to sit here (ArrayRef, HashRef) are
+    # gone from it too, but for the opposite reason: TypeLibrary cannot say
+    # what they yield, because there is no operator and no operand to ask
+    # about. That makes their type a fact about the CLASS, and each now
+    # declares it via default_stamp_type (see SoN::IR::Node::ArrayRef).
+    #
+    # Nothing is left to tabulate. The table is retired rather than kept empty:
+    # an empty one is an invitation to refill it, which is what this comment
+    # exists to refuse.
 
     field %cache;
     field $cfg_counter = 0;
@@ -214,8 +211,29 @@ class SoN::IR::NodeFactory {
         return %args if defined $args{stamp};
         my $class = $DATA_CLASSES{$op_name} // $CFG_CLASSES{$op_name};
         return %args unless $class && $class->isa('SoN::IR::Value');
+        # ASK, DO NOT COPY. result_for with NO OPERANDS answers for exactly the
+        # ops whose result is fixed by the operation itself (`!$x` is Boolean
+        # however wide $x is, `ref($x)` is Str). Those five used to be copied
+        # into a table here; the copy is gone, because what an operator yields
+        # is a fact about the OPERATOR and B::SoN::TypeLibrary already states
+        # it. A join op (Add) reached with no operands returns undef, as does
+        # an op the table does not describe.
+        #
+        # A node kind that knows its OWN type is not stamped here: it declares
+        # default_stamp_type, and SoN::IR::Value's ADJUST consults that.
+        # Leaving the stamp unset is what lets the class answer -- anything set
+        # here arrives as an EXPLICIT stamp and would outrank the class's own
+        # fact, stamping `[]` as Unknown. Test the VALUE, not just `can`: every
+        # Value inherits the base sub, which returns undef for the vast
+        # majority that have no such fact.
+        return %args if $class->default_stamp_type;
+
+        # Unknown otherwise. It is an ANSWER, not an absence: a real lattice
+        # member with defined join/meet, so downstream inference can compute
+        # with it, and it is what a Subscript or a Call honestly is at
+        # construction time.
         $args{stamp} = SoN::IR::Stamp->new(
-            type => $SELF_TYPED_OPS{$op_name} // 'Unknown'
+            type => B::SoN::TypeLibrary::result_for($op_name) // 'Unknown'
         );
         return %args;
     }

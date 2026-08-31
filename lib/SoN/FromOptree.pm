@@ -2544,8 +2544,18 @@ class SoN::FromOptree 0.01 {
         # from the output, zhi 019f5ed3).
         if ($name eq 'emptyavhv') {
             my $is_hash = $op->private & 0x20;   # OPpEMPTYAVHV_IS_HV
+            # STAMP IT HERE, do not lean on a class default. `[]` and `{}` are
+            # always REFERENCES, but the ArrayRef/HashRef node CLASS is the
+            # container constructor and carries either stamp: the list branch
+            # below builds the same class for `my @a = (1,2,3)` and stamps it
+            # Array, because an array is not a reference to one (the miscompile
+            # recorded at the aggregate walk). A class-level default would be
+            # right here and silently WRONG at the next unstamped list-branch
+            # site, turning a loud missing-stamp death into a bad type.
             my $node = $factory->make($is_hash ? 'HashRef' : 'ArrayRef',
-                inputs => []);
+                inputs => [],
+                stamp  => SoN::IR::Stamp->new(
+                    type => $is_hash ? 'HashRef' : 'ArrayRef'));
             my $targ = $op->targ;
 
             # A field store (TARGMY into a class field slot) threads on control
@@ -2929,6 +2939,19 @@ class SoN::FromOptree 0.01 {
                 }
 
                 my $stamp = _result_stamp($node_type, \@inputs);
+
+                # AN ANON-REF LITERAL IS A REFERENCE, and only the OPTREE OP
+                # knows it. `anonlist`/`anonhash` build the SAME ArrayRef /
+                # HashRef node class as the aggregate walk's sigil branch, which
+                # stamps Array/Hash for `my @a = (1,2,3)` -- an array is not a
+                # reference to one (the miscompile recorded at that branch). The
+                # fact belongs to the OP, not the class: a class-level
+                # default_stamp_type would be right here and silently WRONG
+                # there, which is why ArrayRef/HashRef declare none.
+                if ($name eq 'anonlist' || $name eq 'anonhash') {
+                    $stamp = SoN::IR::Stamp->new(
+                        type => $name eq 'anonlist' ? 'ArrayRef' : 'HashRef');
+                }
 
                 # BACKTICKS ARE CONTEXT-SENSITIVE, so they cannot be a
                 # TypeLibrary result: `my $x = \`cmd\`` yields one Str, while

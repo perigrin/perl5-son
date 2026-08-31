@@ -8,4 +8,5 @@ use SoN::IR::Node::Aggregate;
 
 class SoN::IR::Node::HashRef :isa(SoN::IR::Node::Aggregate) {
     method operation() { 'HashRef' }
+
 }

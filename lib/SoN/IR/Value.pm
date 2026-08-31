@@ -6,6 +6,7 @@ use experimental 'class';
 no warnings 'experimental::class';
 
 use SoN::IR::Node;
+use SoN::IR::Stamp;
 
 # A node either defines a value or it does not, and that is a STRUCTURAL fact
 # about the node kind, not a property to be filled in.
@@ -96,11 +97,39 @@ use SoN::IR::Node;
 # explicit refusal list in FromOptree's %UNBUILT_OP_GAP remains load-bearing.
 class SoN::IR::Value :isa(SoN::IR::Node) {
 
+    # A node kind whose type is fixed by the KIND ALONE says so by overriding
+    # this to return a type name; the general Value cannot, so undef -- "no
+    # such fact" -- is the honest answer here. What a Subscript yields or a
+    # Call returns depends on operands or on the callee, and those keep
+    # arriving at `Unknown` as they always have.
+    #
+    # The consultation lives in Value's own ADJUST rather than each subclass's
+    # because ADJUST runs PARENT-FIRST: a subclass ADJUST would fire after the
+    # die below and never get to supply the default.
+    #
+    # It is a `sub`, not a `method`, because it states a fact about the CLASS
+    # and nothing about any particular node. The factory asks it of the class
+    # NAME, before any instance exists, to decide whether to leave the stamp
+    # unset for the class to fill in; a `method` under `use feature 'class'`
+    # dies on a non-instance invocant, and inside the factory's `can &&` guard
+    # that death is silent -- the class default is simply never seen and the
+    # node falls through to Unknown. One `sub` serves both callers.
+    sub default_stamp_type { undef }
+
     ADJUST {
+        $self->set_stamp(
+            SoN::IR::Stamp->new( type => $self->default_stamp_type ) )
+            if !defined $self->stamp && defined $self->default_stamp_type;
+
         die ref($self) . ": a Value node must carry a stamp"
             . " (use 'Unknown' when the type is genuinely not known)\n"
             unless defined $self->stamp;
     }
+
+    # The FACTORY, not this class, is where an unanswered stamp becomes
+    # `Unknown`. A node built by hand with no stamp still dies above: the
+    # construction site is what failed to say, and only it can know whether
+    # that is an honest gap or an omission.
 }
 
 1;
