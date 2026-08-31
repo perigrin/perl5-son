@@ -763,6 +763,17 @@ class SoN::FromOptree 0.01 {
             # otherwise the pre-walk commits pre-loop-constant orphans that
             # _translate_while_loop's Phi-based re-walk leaves dead in the graph
             # (zhi 019f29ed). The condition head is enter->next; skip to `leave`.
+            # postfix-while (`EXPR while COND`) compiles to enter/leave (NOT
+            # enterloop) with a back-edge: the and/or's body arm ends in an
+            # `unstack` that jumps back to the condition head (enter->next).
+            #
+            # DETECTED HERE, IN THE MAIN LOOP, and not moved into _step with
+            # foreach -- the ORDER is the point. This runs BEFORE the walk
+            # builds any condition/body node, so _translate_while_loop's
+            # Phi-based re-walk owns them. Dispatching it from _step instead
+            # lets the pre-walk commit the condition's nodes first, and the
+            # re-walk then leaves them in the graph as orphans -- measured, 3
+            # of them (Subtract, NumGt, Add), which is exactly zhi 019f29ed.
             if ($name eq 'enter') {
                 my $cond_head = $op->next;
                 if (_is_postfix_while($op)) {
@@ -3361,6 +3372,45 @@ class SoN::FromOptree 0.01 {
     # at `enter` lets the main walk delegate to _translate_while_loop's two-phase
     # scout BEFORE building any real node, so no dead pre-loop-constant
     # pre-evaluation orphans are committed (zhi 019f29ed).
+    # _and_is_loop_back_edge($and_op) -- is this and/or the CONDITION of a
+    # postfix-while rather than a statement modifier?
+    #
+    # Both spell the same op. The loop's body arm ends in an `unstack` whose
+    # ->next jumps BACKWARD to the condition head; a modifier's arm runs
+    # forward to the join. _is_postfix_while asks this from the `enter` that
+    # precedes the condition, which is where the main walk meets the construct
+    # -- but a walk that starts INSIDE an if/else arm meets the `and` first and
+    # has no enter to ask about.
+    sub _and_is_loop_back_edge ($op, $cond_head = undef) {
+        return 0 unless $op->can('other') && ${ $op->other };
+        $cond_head //= $op;
+        my $arm = $op->other;
+        my %seen;
+        while ($$arm && !$seen{$$arm}++) {
+            if ($arm->name eq 'unstack') {
+                # A BACK-EDGE IS AN OP WE HAVE ALREADY WALKED PAST, and the
+                # only reliable way to say so is to look for the target on the
+                # path from the condition head to this and/or. Comparing op
+                # ADDRESSES does not work -- they are allocation order, not
+                # execution order (measured: the target of a real back-edge
+                # compared HIGHER than the and).
+                my $target = $arm->next;
+                return 0 unless $$target;
+                my $p = $cond_head;
+                my %pseen;
+                while ($$p && !$pseen{$$p}++) {
+                    return 1 if $$p == $$target;
+                    last if $$p == $$op;
+                    $p = $p->next;
+                }
+                return 0;
+            }
+            last if $arm->name eq 'leave' || $arm->name eq 'nextstate';
+            $arm = $arm->next;
+        }
+        return 0;
+    }
+
     sub _is_postfix_while ($enter_op) {
         my $cond_head = $enter_op->next;
         return 0 unless $$cond_head;
@@ -5167,6 +5217,11 @@ class SoN::FromOptree 0.01 {
         # it the arm and the main walk keep separate views and an op walked in
         # one is re-walked by the other.
         my $ctx = { mode => 'branch', visited => $visited };
+        # The arm's ENTRY op, kept because $op is mutated by the walk below. A
+        # back-edge test needs it: "did this unstack jump to something on the
+        # path we have already walked" is the question, and the path starts
+        # here.
+        my $arm_start = $op;
         while ($$op) {
             # Convergence: reached the op where this arm rejoins the main path
             # (the branch op's op_next, passed by callers that know it). Checked
@@ -5329,6 +5384,30 @@ class SoN::FromOptree 0.01 {
                 && $opmap->is_branch($name)
                 && ($op->flags & 3) == 1   # OPf_WANT == OPf_WANT_VOID
                 && $sim->stack_depth > 0) {
+                # A LOOP, NOT A MODIFIER, and still refused -- but now for a
+                # measured reason rather than "unhandled op".
+                #
+                # Routing it to _translate_while_loop from HERE builds a Loop
+                # node whose condition is disconnected from its own induction
+                # variable: measured on
+                # `if (C) { 1 while $n++ < 3 }`, the graph came out with
+                # NumLt(Constant, Constant) -- $n's increment never reaches the
+                # test, so the loop's trip count is whatever the constants say.
+                # A Loop with no loop-carried Phi is a silent miscompile, which
+                # is worse than the refusal it replaced.
+                #
+                # The cause is that _translate_while_loop expects the CONDITION
+                # HEAD (enter->next) and the pre-loop bindings the main walk has
+                # established by then; entered at the and/or from inside an arm
+                # it has neither, so its Phi-based re-walk finds nothing to
+                # carry. Detecting the shape is done (_and_is_loop_back_edge);
+                # giving it the right entry state is the remaining work.
+                die "GAP: a postfix-while loop inside an if/else arm is not yet"
+                  . " lowered -- the loop-carried Phi is not built from this"
+                  . " entry point, so the condition would read pre-loop"
+                  . " constants\n"
+                    if _and_is_loop_back_edge($op, $arm_start);
+
                 $visited->{$$op}++;
                 my $mod_stop = ${ $op->next };
                 # An ELEMENT STORE in this body is still not lowered here. The
