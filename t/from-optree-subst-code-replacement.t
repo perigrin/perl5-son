@@ -85,4 +85,23 @@ subtest 'a plain s/// keeps its string replacement' => sub {
     is scalar( ( $rs->{inputs} // [] )->@* ), 1, 'and it has only the subject';
 };
 
+# A CONSTANT-FOLDED /e REPLACEMENT IS THE LITERAL CASE. perl folds
+# `s/a/ "X" . "Y" /e` at compile time and leaves pmreplroot NULL with PMf_EVAL
+# still set -- so the subtree walk above has nothing to walk, and treating that
+# absence as unreachable code refused a substitution that is simply constant.
+# It falls through to the literal path instead, where the folded value is
+# already on the stack.
+subtest 'a folded /e replacement takes the literal path' => sub {
+    my ( $wire, $err ) = translate(
+        'my $s = "ab"; $s =~ s/a/ "X" . "Y" /e; print $s;', 'folded' );
+    ok $wire, 'it translates' or diag($err), return;
+
+    my ($rs) = grep { ( $_->{op} // '' ) eq 'RegexSubst' } nodes($wire)->@*;
+    ok $rs, 'a RegexSubst is in the graph' or return;
+    is $rs->{fields}{replacement}, 'XY',
+        'the folded value is the string replacement';
+    is scalar( ( $rs->{inputs} // [] )->@* ), 1,
+        'and there is no code operand -- nothing was left to compute';
+};
+
 done_testing;

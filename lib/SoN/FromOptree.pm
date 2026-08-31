@@ -880,10 +880,14 @@ class SoN::FromOptree 0.01 {
                       . " a loop, not a value\n"
                         if $op->pmflags & B::PMf_GLOBAL();
 
+                    # A CONSTANT-FOLDED /e REPLACEMENT HAS NO SUBTREE, and
+                    # that is not a refusal: perl folds `s/a/ "X" . "Y" /e` at
+                    # compile time and leaves pmreplroot NULL with PMf_EVAL
+                    # still set. What reaches the stack is then an ordinary
+                    # Constant -- the literal case -- so fall through to it
+                    # rather than treating the absence as unreachable code.
                     my $rr = $op->pmreplroot;
-                    die "GAP: s///e with no reachable replacement subtree not"
-                      . " yet lowered\n"
-                        unless ref($rr) && $$rr;
+                    goto NO_CODE_REPL unless ref($rr) && $$rr;
 
                     # The leftmost leaf is where execution of the subtree
                     # begins; ->next from it runs the body.
@@ -908,6 +912,7 @@ class SoN::FromOptree 0.01 {
                         unless $repl_sim->stack_depth == $base + 1;
 
                     $code_repl = $repl_sim->pop_node;
+                    NO_CODE_REPL: ;
                 }
                 # An interpolated (multi-part) replacement -- `s/a/$y$z/`,
                 # `s/a/x$y/` -- is a runtime substcont subtree (pmreplroot set),
