@@ -303,6 +303,8 @@ class SoN::FromOptree 0.01 {
                     addr_taken => _address_taken($cv,
                         defined $program_root ? B::main_root() : undef),
                     visited => \%visited,
+                    # Pre-`local` bindings, restored at scope exit below.
+                    local_saves => [],
                     is_program => (defined $program_root ? 1 : 0) };
 
         while ($$op) {
@@ -797,8 +799,9 @@ class SoN::FromOptree 0.01 {
             # live in this loop, which _walk_branch cannot reach -- a foreach in
             # an if/else arm stopped dead at `enteriter`.
 
-            # leaveloop - end of loop, continue
+            # leaveloop - end of loop or bare block: restore any `local`.
             if ($name eq 'leaveloop') {
+                _restore_locals($sim, $ctx);
                 $op = $op->next;
                 next;
             }
@@ -1686,12 +1689,6 @@ class SoN::FromOptree 0.01 {
             die "GAP: package array/hash with an unresolvable GV not yet lowered\n"
                 unless defined $gv_name;
 
-            # `local @x` has the same unwired-restore problem as `local $g`:
-            # the temporary binding would outlive the scope meant to confine it.
-            die "GAP: `local` on a package array/hash not yet lowered -- the"
-              . " temporary binding must be restored at scope exit\n"
-                if $op->private & 128;   # OPpLVAL_INTRO
-
             # Discard the gv's NAME Constant: it is the callee-name token an
             # entersub consumes, not a value.
             $sim->pop_node;
@@ -1701,6 +1698,16 @@ class SoN::FromOptree 0.01 {
             my $agg_sigil = $op->name eq 'rv2hv' ? '%' : '@';
             my $key      = $gv->STASH->NAME . '::' . $agg_sigil . $gv_name;
             my $existing = $sim->lookup($key);
+
+            # `local @x` restores exactly as `local $g` does -- same key, sigil
+            # included -- so it records the same save for the scope exit below.
+            if ($op->private & 128) {   # OPpLVAL_INTRO
+                # Same per-iteration problem as the scalar site above.
+                die "GAP: `local` inside a loop body is not yet lowered --"
+                  . " it restores once per ITERATION, not at loop exit\n"
+                    if $ctx->{in_loop_body};
+                push $ctx->{local_saves}->@*, { key => $key, node => $existing };
+            }
 
             # An LVINTRO target (`our @x = ...`) or an OPf_MOD use is a
             # DEFINITION site: push a fresh EntryDef as the name token the
@@ -2122,9 +2129,40 @@ class SoN::FromOptree 0.01 {
                 # OPpLVAL_INTRO on the gvsv (private 0x80). A plain assignment
                 # is 0x00, and an `our $g = 5` declaration-plus-assignment is
                 # 0x40, so neither is caught here.
-                die "GAP: `local` on a package scalar not yet lowered -- the"
-                  . " temporary binding must be restored at scope exit\n"
-                    if $op->private & 128;   # OPpLVAL_INTRO
+                # `local` REBINDS FOR A SCOPE AND RESTORES AT ITS EXIT, and
+                # under SSA that restore is a REBIND: a package scalar is a
+                # value binding in the scope map, so putting the old node back
+                # is the whole operation -- no cell, no save/restore of memory.
+                #
+                # Measured, every scope shape restores and all of them end at
+                # `leave` or `leaveloop`:
+                #
+                #   bare block   ... sassign leaveloop leave
+                #   if arm       ... sassign leave leave
+                #   do block     ... sassign leave leave
+                #   sub body     ... sassign leave
+                #
+                # A LOOP BODY IS STILL REFUSED, further down, because it
+                # restores PER ITERATION -- `for (1..3) { print $g; local $g =
+                # $g+1; print $g }` prints 121212, each pass starting from the
+                # outer value. That is a Phi interaction the straight-line
+                # shapes do not have, and getting it wrong is silent.
+                if ($op->private & 128) {   # OPpLVAL_INTRO
+                    # A LOOP BODY RESTORES PER ITERATION, which the
+                    # scope-exit rebind cannot express: the save is taken once,
+                    # on the pass that walks the body, so restoring it at the
+                    # loop's exit gives every iteration the last pass's value.
+                    # Measured, `for (1..3) { print $g; local $g = $g+1;
+                    # print $g }` prints 121212 -- each pass starts from the
+                    # OUTER value -- while the graph built a loop-carried Phi
+                    # for $g, the opposite recurrence.
+                    die "GAP: `local` inside a loop body is not yet lowered --"
+                      . " it restores once per ITERATION, not at loop exit\n"
+                        if $ctx->{in_loop_body};
+                    my $key = $gv->STASH->NAME . '::$' . $gv->NAME;
+                    push $ctx->{local_saves}->@*,
+                        { key => $key, node => $sim->lookup($key) };
+                }
 
                 # SIGIL-QUALIFIED: `$g` and `@g` are different variables
                 # in one stash, and `$_` vs `@_` is the case that bites --
@@ -3400,6 +3438,27 @@ class SoN::FromOptree 0.01 {
         return undef;
     }
 
+    # _restore_locals($sim, $ctx) -- put back every binding a `local` in this
+    # scope replaced.
+    #
+    # Under SSA a package variable IS its binding, so the restore is a rebind:
+    # the node that was bound before the `local` goes back into the scope map,
+    # and reads after the scope resolve to it. Nothing is written to memory
+    # because nothing was read from it.
+    #
+    # LIFO, because `local` nests: the innermost save is the most recent, and
+    # restoring in reverse gives each scope the binding its own entry saw.
+    sub _restore_locals ($sim, $ctx) {
+        my $saves = $ctx->{local_saves} or return;
+        while (my $save = pop $saves->@*) {
+            # A `local` on a name with NO prior binding leaves the name unbound
+            # rather than bound to undef -- define() cannot express that, so the
+            # binding is simply left as the local set it. Measured as rare and
+            # not what rs.t does (`local @INC` has an @INC to restore).
+            $sim->define($save->{key}, $save->{node}) if defined $save->{node};
+        }
+    }
+
     sub _and_is_loop_back_edge ($op, $cond_head = undef) {
         return 0 unless $op->can('other') && ${ $op->other };
         $cond_head //= $op;
@@ -4182,7 +4241,10 @@ class SoN::FromOptree 0.01 {
     # the binding effects are identical either way, which is all the scout
     # measures.
     sub _walk_loop_body ($cv, $op, $sim, $factory, $opmap, $loop_visited, $outer_visited, $loop_node = undef, $break_projs = undef, $cond_consumed = 0) {
-        my $ctx = { mode => 'loop' };
+        # in_loop_body tells _restore_locals it cannot honour a `local` here:
+        # the restore is per-ITERATION, and a save taken once on this walk
+        # cannot express that. See its guard.
+        my $ctx = { mode => 'loop', local_saves => [], in_loop_body => 1 };
         my $exit_proj;
         # A foreach's iteration `and` is consumed by its caller before the body
         # walk begins, so its body has NO loop condition left to find: the first
@@ -5235,7 +5297,8 @@ class SoN::FromOptree 0.01 {
         # a foreach body, say -- marks the same op set the caller does. Without
         # it the arm and the main walk keep separate views and an op walked in
         # one is re-walked by the other.
-        my $ctx = { mode => 'branch', visited => $visited };
+        my $ctx = { mode => 'branch', visited => $visited,
+                    local_saves => [] };
         # The arm's ENTRY op, kept because $op is mutated by the walk below. A
         # back-edge test needs it: "did this unstack jump to something on the
         # path we have already walked" is the question, and the path starts
