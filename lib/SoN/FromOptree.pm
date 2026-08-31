@@ -3381,6 +3381,25 @@ class SoN::FromOptree 0.01 {
     # precedes the condition, which is where the main walk meets the construct
     # -- but a walk that starts INSIDE an if/else arm meets the `and` first and
     # has no enter to ask about.
+    # _loop_cond_head($and_op) -- the op a postfix-while's back-edge returns to,
+    # which is the loop's condition head and what _translate_while_loop expects.
+    # It is exactly the unstack's ->next: perl's back-edge jumps to the first op
+    # of the condition, so the loop tells us where it begins.
+    sub _loop_cond_head ($op) {
+        return undef unless $op->can('other') && ${ $op->other };
+        my $arm = $op->other;
+        my %seen;
+        while ($$arm && !$seen{$$arm}++) {
+            if ($arm->name eq 'unstack') {
+                my $target = $arm->next;
+                return ( ref($target) && $$target ) ? $target : undef;
+            }
+            last if $arm->name eq 'leave' || $arm->name eq 'nextstate';
+            $arm = $arm->next;
+        }
+        return undef;
+    }
+
     sub _and_is_loop_back_edge ($op, $cond_head = undef) {
         return 0 unless $op->can('other') && ${ $op->other };
         $cond_head //= $op;
@@ -5222,6 +5241,9 @@ class SoN::FromOptree 0.01 {
         # path we have already walked" is the question, and the path starts
         # here.
         my $arm_start = $op;
+        # ...and the stack depth on entry, so a handler that re-walks a nested
+        # construct can drop back to it rather than guess.
+        my $arm_base_depth = $sim->stack_depth;
         while ($$op) {
             # Convergence: reached the op where this arm rejoins the main path
             # (the branch op's op_next, passed by callers that know it). Checked
@@ -5402,11 +5424,36 @@ class SoN::FromOptree 0.01 {
                 # it has neither, so its Phi-based re-walk finds nothing to
                 # carry. Detecting the shape is done (_and_is_loop_back_edge);
                 # giving it the right entry state is the remaining work.
-                die "GAP: a postfix-while loop inside an if/else arm is not yet"
-                  . " lowered -- the loop-carried Phi is not built from this"
-                  . " entry point, so the condition would read pre-loop"
-                  . " constants\n"
-                    if _and_is_loop_back_edge($op, $arm_start);
+                if (_and_is_loop_back_edge($op, $arm_start)) {
+                    # THE CONDITION HEAD IS WHAT THE TRANSLATOR WANTS, and it
+                    # is `enter->next` -- the op the body's unstack jumps back
+                    # to. Entering at the and/or instead gave it a stack with
+                    # the condition's own operands already on it and no way to
+                    # know where the loop begins, which is why the Phi came out
+                    # unconnected.
+                    my $cond_head = _loop_cond_head($op);
+                    die "GAP: a postfix-while loop inside an if/else arm whose"
+                      . " condition head is not reachable is not yet lowered\n"
+                        unless $cond_head;
+
+                    # Drop the condition operands this walk has already pushed:
+                    # _translate_while_loop re-walks the condition itself, from
+                    # a clean stack, exactly as the main walk hands it one.
+                    $sim->pop_node while $sim->stack_depth > $arm_base_depth;
+
+                    _translate_while_loop($cv, $cond_head, $sim, $factory,
+                        $opmap, $visited);
+
+                    # Continue after the loop, at the enclosing `leave`.
+                    my %skip;
+                    my $after = $op;
+                    while ($$after && $after->name ne 'leave'
+                               && !$skip{$$after}++) {
+                        $after = $after->next;
+                    }
+                    $op = $$after ? $after->next : $after;
+                    next;
+                }
 
                 $visited->{$$op}++;
                 my $mod_stop = ${ $op->next };

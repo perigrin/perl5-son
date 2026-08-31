@@ -44,14 +44,37 @@ sub nodes ( $w ) {
 # neither, and the graph it builds is measurably wrong -- NumLt(Constant,
 # Constant), the condition disconnected from $n's increment, a Loop with no
 # loop-carried Phi. That is a silent miscompile, so the construct stays refused.
-subtest 'a postfix while in an arm is refused, for a measured reason' => sub {
-    my ( undef, $err ) = translate(
+subtest 'a postfix while in an arm translates' => sub {
+    my ( $w, $err ) = translate(
         'my $n = 0;
 if ($ARGV[0]) { 1 while $n++ < 3 } else { $n = 9 }
 print $n;', 'while-in-then' );
-    like $err, qr/GAP:/, 'still refused';
-    like $err, qr/loop-carried Phi/,
-        '... naming the missing piece, not "unhandled op"';
+    ok $w, 'it translates rather than GAPping' or diag($err), return;
+    unlike $err, qr/statement-modifier loop|postfix-while/,
+        'no loop-in-arm GAP';
+};
+
+# THE LOOP MUST BE CONNECTED TO ITS OWN INDUCTION VARIABLE. This is the case
+# that made an earlier attempt a silent miscompile: entering the translator at
+# the and/or (rather than the condition head) built a Loop whose test was
+# NumLt(Constant, Constant) -- $n's increment never reached it, so the trip
+# count was whatever the constants said. Asserting "a Loop exists" would have
+# passed that graph.
+subtest 'the arm loop condition reads the induction Phi' => sub {
+    my ( $w, $err ) = translate(
+        'my $n = 0;
+if (1) { 1 while $n++ < 3 } else { $n = 9 }
+print $n;', 'while-connected' );
+    ok $w, 'it translates' or diag($err), return;
+
+    my $ns = nodes($w);
+    my %by = map { $_->{id} => $_ } $ns->@*;
+    my ($lt) = grep { ( $_->{op} // '' ) eq 'NumLt' } $ns->@*;
+    ok $lt, 'the loop test is in the graph' or return;
+
+    my @in = map { $by{$_} } ( $lt->{inputs} // [] )->@*;
+    ok scalar( grep { ( $_->{op} // '' ) eq 'Phi' } @in ),
+        'and one operand is the loop-carried Phi, not a pre-loop constant';
 };
 
 # THE SHAPE TEST ITSELF IS RIGHT, and is what the refusal above now keys on.
