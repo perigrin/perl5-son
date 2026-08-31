@@ -2063,13 +2063,23 @@ class SoN::FromOptree 0.01 {
             # Reading targ unconditionally gave the latter two a fabricated read
             # of pad slot 0 (varname "$?0"), which names no variable at all — so
             # the match tested an uninitialized slot instead of the subject.
+            # A runtime pattern is ALSO on the stack, pushed by the
+            # transparent regcomp (OpMap SKIP, [1,undef,1]) AFTER the subject.
+            # Pop it here, before the subject, because that is push order --
+            # `=~` is a binop and its operand order is the binop's, not
+            # something to be recovered. Undef for a literal pattern, whose
+            # pattern rides on the op itself and never reaches the stack.
+            #
+            # This used to refuse the stacked+runtime pair outright, on the
+            # reasoning that two stack values needed an order established
+            # first. They have one. Popping the subject FIRST, as the old
+            # non-refusing path did, would have taken the PATTERN -- the two
+            # operands inverted, silently, since the graph still holds a Match
+            # with two inputs either way.
+            my $matcher = defined $pattern ? undef : $sim->pop_node;
+
             my $target;
             if ($op->flags & 64) {   # OPf_STACKED: subject pushed by a kid op
-                # A runtime pattern ALSO arrives on the stack, so the two-value
-                # order would have to be established before this could be
-                # popped safely. Refuse loudly rather than guess it.
-                die "GAP: a runtime pattern applied to a pushed subject "
-                  . "(\$g =~ \$re) not yet lowered\n" unless defined $pattern;
                 $target = $sim->pop_node;
             }
             elsif ($targ) {
@@ -2108,7 +2118,7 @@ class SoN::FromOptree 0.01 {
             }
             else {
                 $node = $factory->make('Match',
-                    inputs => [$target, $sim->pop_node],
+                    inputs => [$target, $matcher],
                     stamp  => SoN::IR::Stamp->new(type => 'Boolean'),
                 );
             }

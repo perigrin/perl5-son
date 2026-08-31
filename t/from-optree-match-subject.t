@@ -97,12 +97,30 @@ subtest 'a lexical subject still comes from the pad target' => sub {
         'a lexical subject is NOT rerouted to a package scalar');
 };
 
-subtest 'a runtime pattern on a pushed subject GAPs rather than guessing' => sub {
-    # Both the subject and the matcher are on the stack; the pop order has not
-    # been established, and guessing it is how the two get silently swapped.
-    my $err = dies { translate('sub { our $ps = "x"; my $re = qr/x/; $ps =~ $re ? 1 : 0 }') };
-    like($err, qr/GAP:/, 'it refuses loudly');
-    like($err, qr/pushed subject/, '... naming the shape it will not lower');
+subtest 'a runtime pattern on a pushed subject pops in push order' => sub {
+    # Both the subject and the matcher are on the stack, and this USED to
+    # refuse on the grounds that the pop order was not established. It is:
+    # regcomp is transparent and pushes the matcher AFTER the subject, so push
+    # order gives pop order. `=~` is a binop and Match(subject, pattern) has
+    # the operand order a binop has.
+    #
+    # The hazard the old refusal named is real and is what this now pins --
+    # popping the subject first takes the PATTERN, and the swap is silent
+    # because a Match with two inputs looks well-formed either way.
+    # THE SUBJECT AND PATTERN MUST DIFFER, or the assertion cannot see a swap.
+    # perl folds `our $ps = "x"` to a Constant, and `qr/x/` is a Constant whose
+    # value is also "x" -- so that pairing is blind to the very inversion this
+    # subtest exists to catch. Distinct values, and distinct const_types.
+    my $g = translate('sub { our $ps = "abc"; my $re = qr/b/; $ps =~ $re ? 1 : 0 }');
+
+    my ($match) = nodes_of($g, 'Match');
+    ok($match, 'it builds a Match rather than refusing') or return;
+    is(scalar($match->inputs->@*), 2, 'a binop: two operands');
+
+    my ($subject, $pattern) = $match->inputs->@*;
+    is($subject->value, 'abc', 'operand 0 is the SUBJECT');
+    is($pattern->value, 'b',   'operand 1 is the PATTERN');
+    is($pattern->const_type, 'regex', '... and it is the compiled regex');
 };
 
 done_testing;
