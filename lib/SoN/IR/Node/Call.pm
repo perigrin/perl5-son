@@ -10,6 +10,13 @@ class SoN::IR::Node::Call :isa(SoN::IR::Value) {
     field $dispatch_kind :param :reader;
     field $name          :param :reader;
 
+    # WHAT A FOLDED `sort` COMPARES, and in which direction. perl folds the
+    # standard comparators into flags, so those sorts carry no block -- and
+    # without these two facts three programs with three different answers are
+    # indistinguishable on the wire. Undef for every other builtin.
+    field $sort_cmp   :param :reader = undef;   # numeric | string
+    field $sort_order :param :reader = undef;   # ascending | descending
+
     # paren_form: true when the source used the parens-bounded call form
     # (e.g., `push(@arr, $x)`) rather than the bare list-op form
     # (e.g., `push @arr, $x`). Threaded from CallExpression alt 0 (paren

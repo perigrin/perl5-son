@@ -3115,6 +3115,7 @@ class SoN::FromOptree 0.01 {
                 if ($node_type eq 'Call') {
                     $extra{dispatch_kind} = 'builtin';
                     $extra{name}          = $name;
+                    %extra = (%extra, _sort_fields($op)) if $name eq 'sort';
                 }
                 my $stamp = _result_stamp($node_type, \@inputs,
                     $node_type eq 'Call' ? $name : undef);
@@ -3345,6 +3346,7 @@ class SoN::FromOptree 0.01 {
                 if ($node_type eq 'Call') {
                     $extra{dispatch_kind} = 'builtin';
                     $extra{name}          = $name;
+                    %extra = (%extra, _sort_fields($op)) if $name eq 'sort';
                 }
 
                 # push/unshift/splice MUTATE their array's length. shift/pop are
@@ -5901,6 +5903,40 @@ class SoN::FromOptree 0.01 {
     #
     # The sigil is part of the identity because `$g` and `@g` are unrelated
     # variables in one stash -- `$_` vs `@_` is the case that bites.
+    # _sort_fields($op) -- what a FOLDED sort compares, and in which direction.
+    #
+    # perl folds the standard comparators into flags on the op, which is why
+    # they carry no block. Without those flags on the wire three programs with
+    # three different answers arrive byte-identical:
+    #
+    #     sort { $a <=> $b } (3,1,2)   perl 1
+    #     sort { $b <=> $a } (3,1,2)   perl 3
+    #     sort (3,1,2)                 perl 1
+    #
+    # A consumer picking one behaviour silently miscompiles the other two -- a
+    # silent AMBIGUITY rather than a silent drop. Reported by chalk.
+    #
+    # BARE SORT IS STRING COMPARISON, which is the row that bites ordinary
+    # code: `sort (10, 9, 100)` is `10 100 9`, not `9 10 100`. A consumer
+    # assuming numeric because the common case looks numeric is wrong on plain
+    # perl. `sort { $a cmp $b }` folds to the same thing, correctly.
+    #
+    # Measured (OPpSORT_NUMERIC 0x1, OPpSORT_DESCEND 0x10):
+    #
+    #     sort { $a <=> $b }   private=0x01   numeric ascending
+    #     sort { $b <=> $a }   private=0x11   numeric descending
+    #     sort { $a cmp $b }   private=0x00   string  ascending
+    #     sort                 private=0x00   string  ascending
+    #
+    # Read off the op, so T1 states what the program says rather than inferring.
+    sub _sort_fields ($op) {
+        my $priv = $op->private;
+        return (
+            sort_cmp   => ( $priv & 1 )    ? 'numeric'    : 'string',
+            sort_order => ( $priv & 0x10 ) ? 'descending' : 'ascending',
+        );
+    }
+
     sub _stash_key ($node) {
         return $node->stash_name . '::' . $node->sigil . $node->var_name;
     }

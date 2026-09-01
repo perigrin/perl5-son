@@ -30,6 +30,16 @@ sub _extract_fields ($node, $id_remap) {
         return {
             dispatch_kind => $node->dispatch_kind,
             name          => $node->name,
+            # WHAT A FOLDED `sort` COMPARES. Emitted only for sort, where perl
+            # folded the comparator into flags and the block is therefore
+            # absent -- without these, `sort {$a<=>$b}`, `sort {$b<=>$a}` and a
+            # bare `sort` are byte-identical while perl gives three answers.
+            ( defined $node->sort_cmp
+                ? ( sort_cmp => $node->sort_cmp )
+                : () ),
+            ( defined $node->sort_order
+                ? ( sort_order => $node->sort_order )
+                : () ),
             # The statically-known class for a method dispatch (Class->new).
             ( defined $node->class_name
                 ? ( class_name => $node->class_name )
