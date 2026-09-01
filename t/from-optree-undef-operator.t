@@ -61,11 +61,20 @@ subtest 'the read after undef sees Undef, not the old value' => sub {
 # AN AGGREGATE IS A DIFFERENT OPERATION and still refuses. `undef @a` empties
 # the container; modelling it as a rebind to Undef would give a one-element
 # array, which is what `@a = undef` means and is a silent miscompile.
-subtest 'undef on an aggregate still refuses' => sub {
-    for my $src ( 'my @a = (1,2); undef @a; print scalar(@a);',
-                  'my %h = (a=>1); undef %h; print scalar(keys %h);' ) {
-        my ( undef, undef, $err ) = run_and_translate( $src, 'undef-agg' );
-        like $err, qr/GAP:/, "refused: $src";
+# AN AGGREGATE IS NOW EMPTIED, not refused -- and not rebound to undef. The
+# operation is `@a = ()`, which leaves ZERO elements; `@a = undef` leaves ONE,
+# and conflating them is the miscompile this refusal originally guarded.
+subtest 'undef on an aggregate empties it, and is not `= undef`' => sub {
+    for my $case (
+        [ 'my @a = (1,2); undef @a; print scalar(@a);',        '0' ],
+        [ 'my %h = (a=>1); undef %h; print scalar(keys %h);',  '0' ],
+        # The distinction the old refusal protected, kept as a live assertion.
+        [ 'my @a = (1,2); @a = undef; print scalar(@a);',      '1' ],
+    ) {
+        my ( $src, $want ) = $case->@*;
+        my ( $out, $w, $err ) = run_and_translate( $src, 'undef-agg' );
+        is $out, $want, "perl: $src -> $want";
+        ok $w, "... and it translates" or diag($err);
     }
 };
 

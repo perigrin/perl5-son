@@ -2359,11 +2359,53 @@ class SoN::FromOptree 0.01 {
                 $sim->push_node($_) for $existing->inputs->@*;
                 return ($op->next, 'handled');
             }
-            if ($existing) {
+            # AN ASSIGNMENT TARGET IS THE SLOT, NOT ITS CURRENT VALUE.
+            # `@a = ()` reads @a with OPf_MOD set, and pushing $existing there
+            # handed the aassign the OLD container as its LHS -- so the clear
+            # rebound nothing and a later `scalar(@a)` counted the pre-clear
+            # elements. Measured: `my @a=(1,2,3); @a=(); print scalar(@a)`
+            # gave 3 where perl gives 0, silently.
+            #
+            # MEASURED ACROSS ALL THREE USES, because REF|MOD alone does not
+            # separate them -- keying on that broke every `for my $x (@a)`:
+            #
+            #     @a = ()             f=0xb3  REF|MOD  want=LIST     target
+            #     my @a = (1,2,3)     f=0xb3  REF|MOD  want=LIST     target
+            #     for my $x (@a)      f=0x32  REF|MOD  want=SCALAR   source
+            #     shift @a            f=0x33  REF|MOD  want=LIST(!)  operand
+            #     scalar(@a)          f=0x02  --       want=SCALAR   read
+            #
+            # THE FLAGS DO NOT SEPARATE THESE. `shift @a` is f=0x33 and the
+            # clear target f=0xb3 -- identical but for LVAL_INTRO, which the
+            # DECLARATION also sets. Two attempts keyed on flags each broke a
+            # different case (foreach sources, then shift's element stamp).
+            #
+            # THE CONSUMER separates them, and it is one op away:
+            #
+            #     @a = ()      padav -> aassign     target
+            #     my @a = ()   padav -> aassign     target
+            #     shift @a     padav -> shift       operand
+            #     push @a, 4   padav -> const       operand
+            #     for (@a)     padav -> enteriter   source
+            #
+            # An aassign consumer means the binding is about to be REPLACED, so
+            # the slot must be pushed rather than its current value; anything
+            # else wants the container it already has.
+            # DESCEND THROUGH nulls. Under the rpeep suppression this walker
+            # runs with, the chain keeps the null placeholders perl would
+            # otherwise remove -- raw B shows padav->aassign, the walker sees
+            # padav->null->aassign. Matching $op->next directly found `null`
+            # and classified every target as a plain read.
+            my $consumer = $op->next;
+            $consumer = $consumer->next
+                while $consumer && $$consumer && $consumer->name eq 'null';
+            my $is_assign_target =
+                $consumer && $$consumer && $consumer->name eq 'aassign';
+            if ($existing && !$is_assign_target) {
                 $sim->push_node($existing);
             } else {
                 my $node = _make_pad_or_field($cv, $targ, $factory);
-                $sim->define($targ, $node);
+                $sim->define($targ, $node) unless $existing;
                 $sim->push_node($node);
             }
             return ($op->next, 'handled');
@@ -2843,6 +2885,28 @@ class SoN::FromOptree 0.01 {
                           . " could not be resolved ($kname) not yet lowered\n";
                     }
                     $sim->push_node($node);
+                    return ($op->next, 'handled');
+                }
+
+                # AN AGGREGATE IS EMPTIED, NOT REBOUND -- and an EMPTY
+                # container expresses that exactly. `undef @a` and `@a = ()`
+                # are the same operation (both leave 0 elements); what neither
+                # is is `@a = undef`, which leaves ONE undef element. Binding
+                # the slot to an empty ArrayLiteral/HashLiteral is the `@a=()`
+                # shape, which already lowers.
+                if ($kname eq 'padav' || $kname eq 'padhv') {
+                    my $targ = $kid->targ
+                        or die "GAP: undef(EXPR) on an unnamed aggregate not"
+                             . " yet lowered ($kname)\n";
+                    # The kid pushed the container; this is a WRITE of the slot.
+                    $sim->pop_node if $sim->stack_depth > 0;
+                    my $empty = $factory->make(
+                        ( $kname eq 'padav' ? 'ArrayLiteral' : 'HashLiteral' ),
+                        inputs => [],
+                        stamp  => SoN::IR::Stamp->new(
+                            type => $kname eq 'padav' ? 'Array' : 'Hash' ));
+                    $sim->define($targ, $empty);
+                    $sim->push_node($empty);
                     return ($op->next, 'handled');
                 }
 

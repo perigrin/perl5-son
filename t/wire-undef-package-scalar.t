@@ -70,15 +70,17 @@ subtest 'a later read sees the rebound undef' => sub {
         'it tests the rebound undef, not the earlier value';
 };
 
-# AGGREGATES STAY REFUSED. A fix that lowered them by rebinding would produce
-# the one-element array `@a = undef` means, which is a different program.
-subtest 'undef on an aggregate still refuses' => sub {
+# AGGREGATES NOW LOWER TOO, as an EMPTY container rather than a rebind to
+# undef. `undef @a` and `@a = ()` are the same operation (0 elements); what
+# neither is is `@a = undef`, which leaves ONE undef element -- pinned in
+# t/wire-aggregate-clear.t so a future change cannot collapse them.
+subtest 'undef on an aggregate empties it' => sub {
     for my $case ( [ 'my @z=(1,2); undef @z; print scalar(@z);', '0', 'array' ],
                    [ 'my %z=(a=>1); undef %z; print scalar(keys %z);', '0', 'hash' ] ) {
         my ( $src, $want, $label ) = $case->@*;
-        my ( $out, undef, $err ) = run_and_translate( $src, "undef-agg-$label" );
+        my ( $out, $w, $err ) = run_and_translate( $src, "undef-agg-$label" );
         is $out, $want, "perl empties the $label";
-        like $err, qr/GAP.*undef/, "... and B::SoN refuses it ($label)";
+        ok $w, "... and B::SoN lowers it ($label)" or diag($err);
     }
 };
 
