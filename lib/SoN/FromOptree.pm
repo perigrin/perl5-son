@@ -2434,9 +2434,19 @@ class SoN::FromOptree 0.01 {
 
             # One aggregate operand IS the list; anything else is a literal
             # list of elements, wrapped exactly as `for my $i (1,2,3)` wraps it.
+            #
+            # STAMPED List, because THE TYPE OF A LIST IS List -- a real
+            # lattice member directly under Unknown, with Array/Hash/Scalar
+            # beneath it. Every other ArrayLiteral site says what it built
+            # (`my @a = (...)` is Array, `[...]` is ArrayRef); left silent this
+            # one fell through to Unknown, the TOP, which asserts nothing about
+            # a value whose type is known right here. Not Array: these elements
+            # were never bound to an array, and calling them one repeats the
+            # "a List is not an Array" miscompile from the other direction.
             my $input = ($items->@* == 1 && _is_aggregate_node($items->[0]))
                 ? $items->[0]
-                : $factory->make('ArrayLiteral', inputs => [$items->@*]);
+                : $factory->make('ArrayLiteral', inputs => [$items->@*],
+                    stamp => SoN::IR::Stamp->new(type => 'List'));
 
             my $while_op = $op->next;
             die "GAP: $word without a ${word}while op\n"

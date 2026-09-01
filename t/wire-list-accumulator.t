@@ -86,4 +86,34 @@ subtest 'map appends the body value' => sub {
         'the appended value is the body result, not the raw element';
 };
 
+# THE TYPE OF A LIST IS List. The input list a map/grep iterates is built by
+# the same ArrayLiteral every other list site uses, and every one of THOSE
+# stamps explicitly -- `my @a = (1,2,3)` is Array, `[1,2,3]` is ArrayRef. Left
+# unstamped this site fell through to Unknown, the lattice TOP, which asserts
+# nothing about a value whose type is known at construction: a literal list is
+# a List, and List is a real member sitting directly under Unknown with
+# Array/Hash/Scalar beneath it.
+#
+# Unknown here is not merely imprecise. It is the one stamp that makes a
+# consumer unable to tell a list from a code ref, so it must not be what a
+# LITERAL LIST carries.
+subtest 'the list a map iterates is stamped List, not Unknown' => sub {
+    my ( undef, $w, $err ) = run_and_translate(
+        'my @m = map { $_ * 2 } (1,2); print "@m";', 'map-stamp' );
+    ok $w, 'it translates' or diag($err), return;
+
+    my $ns = nodes($w);
+    my %by = map { $_->{id} => $_ } $ns->@*;
+
+    # The iterated list is what Count bounds: that is the loop's input, as
+    # distinct from the empty ArrayLiteral seeding the accumulator.
+    my ($count) = grep { ( $_->{op} // '' ) eq 'Count' } $ns->@*;
+    ok $count, 'a Count bounds the loop' or return;
+    my $input = $by{ ( $count->{inputs} // [] )->[0] // '' };
+    ok $input, 'and it counts something' or return;
+
+    is $input->{op}, 'ArrayLiteral', 'the counted value is the literal list';
+    is $input->{stamp}, 'List', '... stamped List';
+};
+
 done_testing;
