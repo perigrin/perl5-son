@@ -1088,6 +1088,32 @@ class SoN::FromOptree 0.01 {
              :           undef;
     }
 
+    # The lexicals an anon sub closes over, by name, or () for none.
+    #
+    # On a threaded perl the anon CV rides in the PAD rather than on the op
+    # (`$op->sv` is a B::SPECIAL), reached by its targ. A pad name is a CAPTURE
+    # only when it carries PADNAMEt_OUTER -- an own lexical sits in the same
+    # padlist with no flag, so counting names alone over-reports.
+    sub _anoncode_captures ($cv, $op) {
+        return () unless $cv && ref($cv) && $op && ref($op) && $op->can('targ');
+        my $inner = eval { $cv->PADLIST->ARRAYelt(1)->ARRAYelt($op->targ) };
+        return () unless ref($inner) eq 'B::CV';
+        my $names = eval { $inner->PADLIST->ARRAYelt(0) };
+        return () unless ref($names);
+
+        my $PADNAMEt_OUTER = 0x1000000;
+        my @captured;
+        for my $i (0 .. $names->MAX) {
+            my $pn = $names->ARRAYelt($i);
+            next unless ref($pn) && $$pn && $pn->can('PVX');
+            my $nm = $pn->PVX;
+            next unless defined $nm && length $nm;
+            next unless $pn->can('FLAGS') && ($pn->FLAGS & $PADNAMEt_OUTER);
+            push @captured, $nm;
+        }
+        return @captured;
+    }
+
     sub _leavesub_returns_list ($leave_op) {
         return false unless $leave_op && ref($leave_op) && $$leave_op;
         my $lineseq = $leave_op->first;
@@ -2540,9 +2566,24 @@ class SoN::FromOptree 0.01 {
         # anonymous one should almost certainly follow that, but it is a wire
         # decision.
         if ($name eq 'anoncode') {
-            die "GAP: an anonymous sub (sub { ... }) is not yet lowered -- its"
-              . " body would be dropped and the call left naming an unknown"
-              . " callee\n";
+            # SAY WHICH KIND. Both still refuse, but they need different work
+            # and one message hides which one a corpus file actually hit.
+            #
+            # Capture is decidable here: a captured pad name carries the OUTER
+            # flag in the anon CV's padlist, while an own lexical does not.
+            # `does the pad have names` is the WRONG test -- it counts
+            # `sub { my $y=1; $y }` as a closure when that body needs nothing
+            # from its enclosing scope.
+            my @captured = _anoncode_captures($cv, $op);
+            die "GAP: an anonymous sub closing over "
+              . join(', ', @captured)
+              . " is not yet lowered -- the body is reachable, but the"
+              . " captured variables have no wire representation yet\n"
+                if @captured;
+
+            die "GAP: an anonymous sub (sub { ... }) is not yet lowered -- it"
+              . " captures nothing, so its body could become its own graph,"
+              . " but the calling convention is an open wire decision\n";
         }
 
         # map/grep/sort WITH A BLOCK: the block is not lowered, and shipping
