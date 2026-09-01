@@ -283,4 +283,26 @@ subtest 'single-value bodies still lower under the allow-list' => sub {
     }
 };
 
+# AN ANON SUB YIELDS ONE VALUE -- a code reference. It was absent from the
+# allow-list because that list was written before AnonSub was ever emitted, so
+# `map { sub {1} } (1,2)` refused a body that contributes exactly one thing per
+# iteration. Measured: perl gives 2 elements, both CODE refs.
+#
+# This is the allow-list's designed failure mode working correctly: an
+# unfamiliar shape became a GAP rather than a wrong count. The cost is a real
+# refusal until the entry is added, which is the trade the list makes.
+subtest 'an anon sub in a map body contributes one value' => sub {
+    my ( $out, $w, $err ) = run_and_translate(
+        'my @m = map { sub { 1 } } (1,2); print scalar(@m);', 'map-anonsub' );
+    is $out, '2', 'perl yields one coderef per iteration' or return;
+    ok $w, 'it translates rather than GAPping' or do { diag($err); return };
+
+    my $ns = nodes($w);
+    my ($app) = grep { ( $_->{op} // '' ) eq 'ListAppend' } $ns->@*;
+    ok $app, 'a ListAppend exists' or return;
+    my @ids = ( $app->{inputs} // [] )->@*;
+    shift @ids;    # inputs[0] is the accumulator
+    is scalar(@ids), 1, 'exactly one contribution per iteration';
+};
+
 done_testing;

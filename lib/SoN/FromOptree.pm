@@ -2690,13 +2690,18 @@ class SoN::FromOptree 0.01 {
 
             my $ref = $sim->pop_node;
 
-            # AN LVALUE DEREF IS A WRITE THROUGH THE REFERENCE ($$r = 5), which
-            # a value node cannot express -- the store has to be visible to
-            # every later read of the referent, and PostfixDeref is a read.
-            die "GAP: assignment through a scalar dereference (\$\$r = ...)"
-              . " not yet lowered\n"
-                if ( $op->flags & 32 ) && !( $op->private & 48 );  # MOD, !DEREF
-
+            # AN LVALUE DEREF IS A LOCATION, and the SAME node names it. `$$r`
+            # on the left of an assignment is where to store; on the right it
+            # is what to load. PostfixDeref is that location either way, and
+            # the STORE is the sassign handler's job -- it already has a
+            # demoted-slot path that emits Assign(location, value) on the
+            # memory chain.
+            #
+            # This works because taking a reference already DEMOTES the
+            # referent: `my $r = \$v` marks $v address-taken, so $v lives in
+            # memory and every read of it carries a memory version. A write
+            # through $r is a store to that same location, which is what makes
+            # it visible to later reads of $v -- and to any alias of $r.
             my $node = $factory->make('PostfixDeref',
                 inputs => [$ref],
                 sigil  => '$',
@@ -3304,7 +3309,20 @@ class SoN::FromOptree 0.01 {
             # shortcut -- see the aelem/helem read handler), so the store's
             # effect reaches memory and the load sees it. The assignment's result
             # value is the stored value, so push that as the result.
-            elsif ($target->isa('SoN::IR::Node::Subscript')) {
+            # A STORE THROUGH A DEREFERENCE is the same shape: the target is a
+            # location rather than a name, so the write is an Assign on the
+            # memory chain and NOT a rebinding of the reference variable.
+            #
+            # It works because taking the reference already demoted the
+            # referent -- `my $r = \$v` marks $v address-taken, so $v lives in
+            # memory and its later reads carry a memory version. Storing
+            # through $r writes that same location, which is what makes the
+            # write visible to `print $v` and through any alias of $r.
+            #
+            # Binding instead would lose it silently: `$$r = 5` would rebind
+            # nothing a later read of $v consults.
+            elsif ($target->isa('SoN::IR::Node::Subscript')
+                || $target->isa('SoN::IR::Node::PostfixDeref')) {
                 my $node = $factory->make('Assign', inputs => [$target, $value]);
                 $node->set_control_in($sim->control);
                 $sim->set_control($node);
@@ -5149,7 +5167,8 @@ class SoN::FromOptree 0.01 {
                 # silently drops a real op out of the list), so this was built
                 # by enumerating lib/SoN/IR/Node/*.pm rather than from memory.
                 state $YIELDS_ONE_VALUE = { map { $_ => 1 } qw(
-                    Add          And          BitAnd       BitOr
+                    Add          And          AnonSub      BitAnd
+                    BitOr
                     BitXor       Coerce       Complement   Concat
                     Constant     Count        Defined      DefinedOr
                     Divide       EnvRead      FieldAccess  Interpolate
