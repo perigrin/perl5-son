@@ -146,7 +146,15 @@ class SoN::FromOptree 0.01 {
         my $stamp = $node->stamp;
         return false unless defined $stamp;
         my $t = $stamp->type;
-        return ($t eq 'ArrayRef' || $t eq 'HashRef') ? true : false;
+        # Array/Hash COUNT TOO, and leaving them out repeated the ArgsSource
+        # miscompile above one lattice member over. `Array` is what a value
+        # BOUND to an aggregate carries -- an accumulated map/grep result, or
+        # any array flowing through a Phi -- while `ArrayRef` is a reference to
+        # one. A test written for the REF types alone silently excluded them, so
+        # `scalar(@g)` fell through to the non-aggregate path and produced a
+        # Coerce of the array instead of a Count of it.
+        return ($t eq 'ArrayRef' || $t eq 'HashRef'
+             || $t eq 'Array'    || $t eq 'Hash') ? true : false;
     }
 
     # _rhs_is_aggregate_access($assign_op) -- true iff the RHS of a scalar
@@ -2407,10 +2415,39 @@ class SoN::FromOptree 0.01 {
         # the body without walking it. The block is a real subtree
         # (`gvsv $_`, `const 2`, `multiply`, looping back to mapwhile); nothing
         # translates it. Reported by chalk, corpus F18/F19/F20.
+        #
+        # LOWERED as a counted loop with a ListAppend accumulator. map/grep are
+        # LOOPS -- they carry mapwhile/grepwhile the way `while` carries
+        # enterloop -- so the foreach lowering does the control flow; only the
+        # variable-length output needed new vocabulary. Measured shape:
+        #
+        #     pushmark, pushmark, <input list>, mapstart,
+        #     mapwhile(other-> BODY), ... goto mapwhile
+        #
+        # so the input is pop_to_mark and the body is mapwhile->other. `$_` is
+        # `gvsv[*_]`, keyed 'main::$_' exactly as an implicit foreach iterator.
         if ($name eq 'mapstart' || $name eq 'grepstart') {
             ( my $word = $name ) =~ s/start\z//;
-            die "GAP: $word with a BLOCK is not yet lowered -- the block would"
-              . " be dropped and the list returned untransformed\n";
+            my $items = $sim->pop_to_mark;
+            die "GAP: $word over an empty list not yet lowered\n"
+                unless $items->@*;
+
+            # One aggregate operand IS the list; anything else is a literal
+            # list of elements, wrapped exactly as `for my $i (1,2,3)` wraps it.
+            my $input = ($items->@* == 1 && _is_aggregate_node($items->[0]))
+                ? $items->[0]
+                : $factory->make('ArrayLiteral', inputs => [$items->@*]);
+
+            my $while_op = $op->next;
+            die "GAP: $word without a ${word}while op\n"
+                unless $$while_op && $while_op->name eq $word . 'while';
+
+            _translate_foreach_array($cv, $op, $sim, $factory, $opmap,
+                $ctx->{visited}, $input, 'main::$_',
+                scalar $while_op->other, $word);
+
+            # The whole construct is consumed: resume after the loop.
+            return ($while_op->next, 'handled');
         }
 
         # `sort` only carries a block when perl could not FOLD it. Measured:
@@ -3203,6 +3240,26 @@ class SoN::FromOptree 0.01 {
 
                 if (defined $sigil && ($sigil eq '@' || $sigil eq '%')) {
                     my $rhs = $sim->pop_to_mark;
+
+                    # AN AGGREGATE RHS IS THE VALUE, NOT AN ELEMENT OF ONE. The
+                    # wrap below makes each popped value one ELEMENT, which is
+                    # right for `my @a = (1,2,3)` -- three inputs, Count reads 3.
+                    # But a single value that is ALREADY the aggregate being
+                    # assigned (what map/grep produce: an accumulated Array)
+                    # would become ArrayLiteral[Array] -- ONE input holding TWO
+                    # elements -- and a consumer counting inputs reads 1 where
+                    # perl says 2. Match on the STAMP, not the node kind: an
+                    # ArrayLiteral is itself an aggregate node, so keying off
+                    # that would stop wrapping `my @a = (@b)` legitimately.
+                    my $want = $sigil eq '@' ? 'Array' : 'Hash';
+                    if ($rhs->@* == 1) {
+                        my $stamp = $rhs->[0]->stamp;
+                        if (defined $stamp && $stamp->type eq $want) {
+                            $sim->define($key, $rhs->[0]);
+                            $sim->push_node($rhs->[0]);
+                            return ($op->next, 'handled');
+                        }
+                    }
                     # AN ARRAY IS NOT A REFERENCE TO ONE. The node KIND is the
                     # container constructor (there is one per aggregate kind);
                     # the STAMP says what the value IS, and the sigil above
@@ -4357,18 +4414,25 @@ class SoN::FromOptree 0.01 {
     # $iter_key names the iteration variable in the scope map, as in the range
     # form: a pad targ for a lexical, `main::$_` for the implicit form, which
     # has no targ at all. Defaults to the op's targ so existing callers stand.
-    sub _translate_foreach_array ($cv, $enteriter, $sim, $factory, $opmap, $visited, $array, $iter_key = undef) {
+    # $body_start overrides where the body begins, and $collect asks for a
+    # ListAppend accumulator. Both exist for map/grep, which are loops with the
+    # same counted shape but a DIFFERENT body location (mapwhile/grepwhile
+    # rather than enteriter/iter/and) and an output whose length is not the
+    # input's. Defaulted, so a plain foreach is unchanged.
+    sub _translate_foreach_array ($cv, $enteriter, $sim, $factory, $opmap, $visited, $array, $iter_key = undef, $body_start = undef, $collect = undef) {
         my $x_targ = $iter_key // $enteriter->targ;
 
         # Locate the body (enteriter->next: unstack, iter, then the and whose
         # other-branch is the body) -- identical structure to the range form.
-        my $it = $enteriter->next;
-        $it = $it->next while $$it && $it->name ne 'iter';
-        die "GAP: foreach without an iter op\n" unless $$it;
-        my $and_op = $it->next;
-        die "GAP: foreach without an and condition\n"
-            unless $$and_op && $and_op->name eq 'and';
-        my $body_start = $and_op->other;
+        if (!defined $body_start) {
+            my $it = $enteriter->next;
+            $it = $it->next while $$it && $it->name ne 'iter';
+            die "GAP: foreach without an iter op\n" unless $$it;
+            my $and_op = $it->next;
+            die "GAP: foreach without an and condition\n"
+                unless $$and_op && $and_op->name eq 'and';
+            $body_start = $and_op->other;
+        }
 
         # A body guard (an else-less `if` or a postfix `STMT if C`) splits into a
         # real If during the body walk, exactly as in the range form: this
@@ -4405,6 +4469,19 @@ class SoN::FromOptree 0.01 {
         my $loop_node = $factory->make_cfg('Loop', inputs => [$sim->control]);
         $sim->set_control($loop_node);
         my $i_phi = _make_loop_phi($factory, $loop_node, $zero);
+
+        # $collect (map/grep) carries a LIST across the back-edge as well as the
+        # induction variable. It is seeded with the empty list and grows by a
+        # ListAppend per iteration -- see that node for why the output length is
+        # not the input's.
+        my $acc_phi;
+        if ($collect) {
+            my $empty = $factory->make('ArrayLiteral',
+                inputs => [],
+                stamp  => SoN::IR::Stamp->new(type => 'Array'));
+            $acc_phi = _make_loop_phi($factory, $loop_node, $empty);
+        }
+
         my %phis;
         for my $targ ($mutated->@*) {
             my $phi = _make_loop_phi($factory, $loop_node, $pre_scope->{$targ});
@@ -4439,8 +4516,31 @@ class SoN::FromOptree 0.01 {
             inputs => [$array, $i_phi, $sim->memory],
             (defined $elem_stamp ? (stamp => $elem_stamp) : ()));
         $sim->define($x_targ, $elem);
+        my $depth_before = $sim->stack_depth;
         _walk_loop_body($cv, $body_start, $sim, $factory, $opmap, {}, $visited,
             undef, undef, 1);
+
+        # What the body left on the stack IS this iteration's contribution: for
+        # map the body's value(s), for grep the PREDICATE -- in which case what
+        # gets appended is the element, gated by that predicate.
+        my $acc_next = $acc_phi;
+        if ($collect) {
+            my @produced;
+            unshift @produced, $sim->pop_node
+                while $sim->stack_depth > $depth_before;
+            if ($collect eq 'grep') {
+                die "GAP: grep block did not produce a single predicate value\n"
+                    unless @produced == 1;
+                $acc_next = $factory->make('ListAppend',
+                    inputs => [$acc_phi, $elem, $produced[0]],
+                    stamp  => SoN::IR::Stamp->new(type => 'Array'));
+            }
+            else {
+                $acc_next = $factory->make('ListAppend',
+                    inputs => [$acc_phi, @produced],
+                    stamp  => SoN::IR::Stamp->new(type => 'Array'));
+            }
+        }
 
         # Phase 4: back-edges. The induction step is +1; carried slots patch like
         # the while loop.
@@ -4462,6 +4562,10 @@ class SoN::FromOptree 0.01 {
         my $exit_region = $factory->make_cfg('Region', inputs => [$exit_proj]);
         $loop_node->set_region($exit_region);
         $sim->set_control($exit_region);
+        if ($collect) {
+            $acc_phi->set_backedge($acc_next);
+            $sim->push_node($acc_phi);
+        }
         return;
     }
 
@@ -4508,6 +4612,15 @@ class SoN::FromOptree 0.01 {
             last if $loop_visited->{$$op}++;
 
             my $name = $op->name;
+
+            # A map/grep BODY ends by jumping back to its own mapwhile/grepwhile
+            # -- that op IS the loop, reached along the back-edge, so the body is
+            # complete. It cannot be a NESTED map/grep: a nested one is entered
+            # through its own mapstart, which the main walker handles and which
+            # consumes its while-op before the walk can reach it. Stop here, the
+            # way a foreach body stops at its `unstack`, or the branch refusal
+            # below reads this loop's own back-edge as unlowerable nesting.
+            last if $name eq 'mapwhile' || $name eq 'grepwhile';
 
             if ($name eq 'enter') {
                 push @enter_depth, $sim->stack_depth;

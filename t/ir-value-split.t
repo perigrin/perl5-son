@@ -17,7 +17,7 @@ use SoN::IR::NodeFactory;
 # parents (BinOp, UnaryOp, Access, Aggregate, Regex), so the split transfers
 # exactly.
 #
-# 89, NOT 88: the producer declares one node chalk does not. `Count` (an
+# 90, NOT 88: the producer declares one node chalk does not. `Count` (an
 # aggregate's element count) was split out of `Length` (a string's character
 # count) because they are different operations that perl itself keeps apart --
 # `length` is its own op taking a string, while `scalar(@a)` compiles to a bare
@@ -102,7 +102,7 @@ subtest 'every node class is one or the other, never neither' => sub {
     my @names = sort map { s/\.pm$//r } grep { /\.pm$/ } readdir($dh);
     closedir $dh;
 
-    cmp_ok(scalar @names, '==', 89, 'all 89 node classes present');
+    cmp_ok(scalar @names, '==', 90, 'all 90 node classes present');
 
     for my $name (@names) {
         my $class = "SoN::IR::Node::$name";

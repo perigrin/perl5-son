@@ -1,4 +1,4 @@
-# ABOUTME: map/grep/sort with a BLOCK must refuse -- the block is not lowered.
+# ABOUTME: A BLOCK operand must never be dropped: map/grep lower it, sort refuses.
 # ABOUTME: Shipping the list without the transform is a silent wrong answer.
 use 5.42.0;
 use utf8;
@@ -42,18 +42,30 @@ sub ops ( $w ) {
 # chalk only escaped it by refusing `mapstart` for an unrelated reason (not in
 # its arithmetic slice); with a mapstart arm it would have emitted a program
 # returning the unmapped list.
-subtest 'map with a block refuses' => sub {
-    my ( undef, $err ) = translate(
+# map and grep are now LOWERED rather than refused -- as loops with a
+# ListAppend accumulator, which is what makes a variable-length output
+# expressible. The contract this file exists to protect is unchanged, and is
+# asserted here in its positive form: THE BLOCK'S COMPUTATION IS IN THE GRAPH.
+# The original defect was a graph with no Multiply in it anywhere.
+subtest 'map lowers its block rather than dropping it' => sub {
+    my ( $w, $err ) = translate(
         'my @m = map { $_ * 2 } (1,2); print $m[1];', 'map-block' );
-    like $err, qr/GAP:/, 'refused rather than silently dropping the block';
-    like $err, qr/map/, '... naming map';
+    ok $w, 'it translates' or diag($err), return;
+    my $ops = ops($w);
+    ok scalar( grep { $_ eq 'Multiply' } $ops->@* ),
+        "the block's `* 2` is in the graph -- the original defect was its absence";
+    ok scalar( grep { $_ eq 'ListAppend' } $ops->@* ),
+        '... accumulated, so the output length is not forced to the input length';
 };
 
-subtest 'grep with a block refuses' => sub {
-    my ( undef, $err ) = translate(
+subtest 'grep lowers its predicate rather than dropping it' => sub {
+    my ( $w, $err ) = translate(
         'my @g = grep { $_ > 1 } (1,2,3); print scalar(@g);', 'grep-block' );
-    like $err, qr/GAP:/, 'refused';
-    like $err, qr/grep/, '... naming grep';
+    ok $w, 'it translates' or diag($err), return;
+    my $ops = ops($w);
+    ok scalar( grep { $_ eq 'NumGt' } $ops->@* ), "the predicate is in the graph";
+    ok scalar( grep { $_ eq 'ListAppend' } $ops->@* ),
+        '... gating a ListAppend, which is how a filter shortens the list';
 };
 
 # `sort` ONLY CARRIES A BLOCK WHEN PERL COULD NOT FOLD IT, which makes it

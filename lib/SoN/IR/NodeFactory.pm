@@ -64,6 +64,7 @@ use SoN::IR::Node::Parameter;
 use SoN::IR::Node::Subscript;
 use SoN::IR::Node::Call;
 use SoN::IR::Node::HashLiteral;
+use SoN::IR::Node::ListAppend;
 use SoN::IR::Node::ArrayLiteral;
 use SoN::IR::Node::Interpolate;
 use SoN::IR::Node::AnonSub;
@@ -101,7 +102,7 @@ my %DATA_CLASSES = map { $_ => "SoN::IR::Node::$_" } qw(
     Assign Repeat Match NotMatch DefinedOr Xor Range Yada IsaOp
     Not Negate Complement Defined UnaryPlus Ref RefType Length Count
     PadAccess FieldAccess EntryDef ArgsSource Parameter Subscript Slice
-    Call HashLiteral ArrayLiteral
+    Call HashLiteral ArrayLiteral ListAppend
     Interpolate AnonSub
     RegexMatch RegexSubst RegexCapture Print EnvRead TryCatch
     PostfixDeref CompoundAssign BacktickExpr VarDecl ListAssign
