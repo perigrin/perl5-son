@@ -1381,7 +1381,26 @@ class SoN::FromOptree 0.01 {
             # callsite), and the operand structure is static here. Lowering this
             # means emitting all N honestly plus a scalar collapse computed from
             # the OPERAND LIST, before flattening.
-            if ($args->@* > 1) {
+            # A LONE AGGREGATE OPERAND STILL FLATTENS. `return @a` yields the
+            # array's ELEMENTS, not the container -- return position imposes
+            # list context, exactly as `(99,@x)` does. Measured:
+            #
+            #     sub agg { my @a=(10,20,30); return @a }
+            #     my @l = agg();  -> 3 elements
+            #     my $s = agg();  -> 3 (the count)
+            #
+            # A container survives a return ONLY as a reference, which is a
+            # genuine scalar (ArrayRef) and is left alone by the flatten.
+            # Without this the sub declared return_type=Array -- the OPERAND's
+            # type where the RETURN's belongs -- sending a consumer looking for
+            # a container that is never produced.
+            my $lone_aggregate =
+                   $args->@* == 1
+                && $args->[0]->stamp
+                && ( $args->[0]->stamp->type eq 'Array'
+                  || $args->[0]->stamp->type eq 'Hash' );
+
+            if ($args->@* > 1 || $lone_aggregate) {
                 ($value, $scalar_value) =
                     _list_return_value($factory, $args, $exit_op);
             }
