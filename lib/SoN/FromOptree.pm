@@ -5681,18 +5681,31 @@ class SoN::FromOptree 0.01 {
                     $sim->set_control($factory->make_cfg('Proj',
                         inputs => [$if_node], index => $cont_idx));
                 }
+                # RECORD INTO THE FUNCTION-WIDE LIST, exactly as the if/else
+                # arm does (2db8ba5). `return X if C` nested inside an arm is
+                # an exit two constructs deep; its control edge belongs in the
+                # shared accumulator so _build_single_exit merges it with every
+                # other exit. Handing it a local list detected the exit and
+                # dropped it, which left refusing as the only honest option.
+                my @mod_exits;
+                my $mod_sink = $exits // \@mod_exits;
                 my ($mod_end, $mod_sig) = _walk_branch($cv, $op->other,
-                    $mod_sim, $factory, $opmap, $visited, \my @mod_exits,
+                    $mod_sim, $factory, $opmap, $visited, $mod_sink,
                     1, $mod_stop);
                 die "GAP: function exit inside a statement modifier in an"
                   . " if/else arm not yet lowered\n"
-                    if ($mod_sig // '') eq 'exited';
+                    if ($mod_sig // '') eq 'exited' && !defined $exits;
                 # A back-edge (the body re-enters an already-visited op) is a
                 # statement-modifier LOOP, not a rebind -- refuse loudly.
+                #
+                # AN EXITING MODIFIER DOES NOT REACH $mod_stop, and that is
+                # correct rather than a failure: it left the function, so there
+                # is no convergence to check and nothing after it to drop.
                 die "GAP: statement-modifier loop or unhandled op inside an"
                   . " if/else arm not yet lowered\n"
-                    unless defined $mod_end && ref $mod_end
-                        && $$mod_end == $mod_stop;
+                    unless ( ($mod_sig // '') eq 'exited' )
+                        || ( defined $mod_end && ref $mod_end
+                             && $$mod_end == $mod_stop );
                 if ($mem_branch) {
                     # The body's residual value is discarded in void context.
                     # Drain it so merge() does not build a spurious (ill-typed)
