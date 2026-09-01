@@ -1992,11 +1992,71 @@ sub _stash_is_user_code {
 # `class`, only whether we are compiling it.
 #
 # A CV with no ->FILE (XS, a builtin) is not user code.
+# The file we were ASKED to compile, taken from the program's first COP.
+#
+# NOT $0, and not the CV's own FILE. A `#line` directive rewrites the filename
+# perl records from that point on, so a CV defined below one reports whatever
+# the directive said. base/lex.t TESTS the directive -- `# line 42 "plink"` --
+# and every sub after it was dropped, silently: no GAP, no warning, just absent
+# from the JSON. Four real subs went missing that way.
+#
+# The FIRST COP is emitted before any directive can take effect, so it carries
+# the true compilation-unit name. Computed once; falls back to $0 when the
+# program has no statements at all (a file of nothing but sub definitions).
+my $COMPILATION_FILE;
+sub _compilation_file {
+    return $COMPILATION_FILE if defined $COMPILATION_FILE;
+    my $op = eval { B::main_start() };
+    while ( ref($op) && $$op ) {
+        if ( $op->isa('B::COP') ) {
+            my $f = eval { $op->file };
+            return $COMPILATION_FILE = $f if defined $f && length $f;
+        }
+        $op = eval { $op->next } or last;
+    }
+    return $COMPILATION_FILE = $0;
+}
+
+# Was this CV compiled from the file we were asked to compile?
+#
+# SCOPED BY FILE, NOT BY PACKAGE. The sub walk reads the SYMBOL TABLE, not the
+# optree -- a sub's body is its own optree hanging off its CV, so nothing in the
+# program's root reaches it. That means the producer's own dependencies are
+# visible too: measured, 501 translatable CVs reachable from main::, of which
+# JSON::PP contributes 74 and Carp 26.
+#
+# Excluding by package name would look equivalent and silently break
+# self-hosting: when Chalk compiles B::SoN, those ARE the user's subs.
 sub _cv_is_user_code {
     my ($cv) = @_;
     my $file = eval { $cv->FILE };
     return 0 unless defined $file && length $file;
-    return $file eq $0;
+    return 1 if $file eq _compilation_file();
+    # A `#line` directive renamed this CV's file. Accept it when the program
+    # itself declares that name -- the directive is IN the file we are
+    # compiling, so what it names is still our code.
+    return _line_directive_names($file) ? 1 : 0;
+}
+
+# The filenames the compilation unit's own COPs mention. A `#line` directive
+# shows up here because the COPs after it carry the name it set, so a CV
+# claiming that name was compiled from THIS file under that directive.
+my %DIRECTIVE_FILES;
+sub _line_directive_names {
+    my ($file) = @_;
+    unless (%DIRECTIVE_FILES) {
+        my $op = eval { B::main_start() };
+        my %seen;
+        while ( ref($op) && $$op && !$seen{ $$op }++ ) {
+            if ( $op->isa('B::COP') ) {
+                my $f = eval { $op->file };
+                $DIRECTIVE_FILES{$f} = 1 if defined $f && length $f;
+            }
+            $op = eval { $op->next } or last;
+        }
+        $DIRECTIVE_FILES{ _compilation_file() } = 1;
+    }
+    return $DIRECTIVE_FILES{$file};
 }
 
 # _empty_class($pkg_name) -- the default class record shape.
