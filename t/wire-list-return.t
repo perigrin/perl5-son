@@ -192,4 +192,26 @@ subtest 'the scalar reading rides on the Return, not free-floating' => sub {
     }
 };
 
+# THE SUB'S DECLARED RETURN TYPE IS THE LIST READING, inputs[0]. Adding a
+# second Return input silently changed this: _graph_return_type read
+# `inputs->[-1]`, which was the value while a Return had exactly one input and
+# became the SCALAR FACE the moment there were two. The Call's stamp flipped
+# from List to Scalar with no test failing, because nothing asserted it.
+subtest 'a list-returning sub is stamped by its list reading' => sub {
+    my ( undef, $w, $err ) = run_and_translate(
+        'sub f { return (10,20,30) } my @l = f(); print scalar(@l);',
+        'return-type' );
+    ok $w, 'it translates' or do { diag($err); return };
+
+    my $ns = nodes_of( $w, 'main::__PROGRAM__' );
+    my ($call) = grep {
+        ( $_->{op} // '' ) eq 'Call'
+            && ( $_->{fields}{name} // '' ) eq 'main::f'
+    } $ns->@*;
+    ok $call, 'the program calls f' or return;
+
+    is $call->{stamp}, 'List',
+        'the Call is stamped by the LIST reading, not the scalar face';
+};
+
 done_testing;

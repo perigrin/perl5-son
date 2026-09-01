@@ -1937,7 +1937,11 @@ sub _graph_return_type {
     return 'Unknown' unless defined $graph;
     my @returns = eval { @{ $graph->returns } };
     return 'Unknown' unless @returns == 1;
-    my $value = eval { $returns[0]->inputs->[-1] };
+    # inputs[0], NOT [-1]. A Return carries the sub's value in inputs[0]; a
+    # multi-value list return adds its SCALAR READING as inputs[1], and [-1]
+    # silently became that second face the moment the slot existed, declaring
+    # every list-returning sub Scalar.
+    my $value = eval { $returns[0]->inputs->[0] };
     return 'Unknown' unless defined $value && ref $value;
     # The PRODUCER vocabulary is a Stamp (->stamp->type), not the chalk-side
     #  field. Reading the latter here silently returned undef
