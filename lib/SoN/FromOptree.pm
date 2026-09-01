@@ -1115,26 +1115,40 @@ class SoN::FromOptree 0.01 {
         }
         elsif ($kind eq 'return') {
             my $args = $sim->pop_to_mark;
-            # A LIST RETURN IS NOT AN ARRAY RETURN, which is what makes this
-            # hard rather than a missing wrapper. Measured in SCALAR context:
+            # THE CONTAINER WAS NEVER THE BUG -- the missing COLLAPSE was.
+            # An earlier attempt wrapped the N values in an ArrayLiteral and
+            # was reverted after `my $s = f(); print $s` emitted
+            # Print <- Call(:Array): the caller received the container and
+            # printed the container. That is not the round-trip being unsound,
+            # it is nobody ever reading the container back out. In pure perl the
+            # two legs are `my $s = f()` and `my $s = () = f()`; perl makes you
+            # spell the second because it cannot see the caller's context at
+            # compile time.
             #
-            #   sub f { return (10,20,30) }  my $s = f();   -> 30  (last value)
-            #   sub f { my @a=(...); return @a }  my $s=f() ->  3  (the COUNT)
+            # WHAT THE SCALAR READING ACTUALLY IS, measured -- and it is NOT
+            # "the last value", which is the leaf case of a more general rule:
             #
-            # So wrapping N popped values in an ArrayLiteral -- which is what
-            # `return @a` lowers to -- makes a list return behave like an array
-            # return, and a scalar-context caller reads the container where perl
-            # reads the last value. Verified as a real miscompile before this
-            # was reverted: `my $s = f(); print $s` gave Print <- Call(:Array)
-            # where perl prints 30.
+            #   return (10,20,30)             -> 30   last operand, a scalar
+            #   return @a       (3 elements)  ->  3   last operand, an array
+            #   my @x=(10,20); return (99,@x) ->  2   NOT 20
+            #   my @x=(10,20); return (@x,99) -> 99
+            #   my @x=();      return (1, @x) ->  0
             #
-            # The producer cannot pick one shape, because the answer depends on
-            # the CALLER's context and one sub may be called both ways in one
-            # program. Lowering this needs the callsite's OPf_WANT threaded into
-            # the callee's return, which is real work and not a wrapper.
+            # A comma list in scalar context yields its LAST OPERAND, read in
+            # scalar context -- recursively. `(99,@x)` gives @x's LENGTH, so the
+            # collapse cannot be elements[len-1] on a flattened container:
+            # flattening destroys the operand boundary the rule needs.
+            #
+            # So the callee cannot pick one shape (it is compiled once and one
+            # sub may be called both ways), but the CALLSITE can: its OPf_WANT
+            # is static in the optree (entersub flags & 3 -- measured l/s/v per
+            # callsite), and the operand structure is static here. Lowering this
+            # means emitting all N honestly plus a scalar collapse computed from
+            # the OPERAND LIST, before flattening.
             die "GAP: multi-value list return (return LIST) not yet lowered"
-              . " -- its value depends on the CALLER's context (list yields all"
-              . " N, scalar yields the last), which the callee cannot see\n"
+              . " -- list context yields all N; scalar context yields the LAST"
+              . " OPERAND read in scalar context (an array operand yields its"
+              . " length, not its last element), which the callee cannot see\n"
                 if $args->@* > 1;
             $value = $args->@* ? $args->[-1] : undef;
         }
@@ -1147,7 +1161,8 @@ class SoN::FromOptree 0.01 {
             # the same construct and the same problem -- see the explicit
             # branch above.
             die "GAP: multi-value list return (trailing list) not yet lowered"
-              . " -- its value depends on the CALLER's context\n"
+              . " -- same rule as the explicit form above: the scalar reading"
+              . " is the LAST OPERAND, not the last value\n"
                 if _leavesub_returns_list($exit_op);
             $value = $sim->pop_node;
         }

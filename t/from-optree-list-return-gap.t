@@ -13,19 +13,43 @@ use SoN::FromOptree;
 # >1-value list return cannot be soundly represented by a single scalar Return.
 # Per GAP-not-miscompile: refuse loudly rather than drop values.
 #
-# A LIST RETURN IS NOT AN ARRAY RETURN, which is the trap in "just wrap the N
-# values in the container `return @a` already uses". Measured in SCALAR context:
+# THE CONTAINER WAS NOT THE BUG. An attempt to wrap the N values in an
+# ArrayLiteral was reverted after `my $s = f(); print $s` emitted
+# Print <- Call(:Array) -- the caller received the container and printed the
+# container. Nothing ever read it back out. In pure perl the two legs are
+# `my $s = f()` and `my $s = () = f()`; both readings come off ONE container:
 #
-#     sub f { return (10,20,30) }        my $s = f();  -> 30  (the last value)
-#     sub f { my @a=(10,20,30); return @a }  my $s=f() ->  3  (the COUNT)
+#     sub lit { return (10,20,30) }        scalar -> 30   () = -> 3
+#     sub agg { my @a=(10,20,30); return @a }  scalar -> 3   () = -> 3
 #
-# So that wrapper makes a list return behave like an array return. Tried, and
-# it miscompiled exactly there: `my $s = f(); print $s` produced
-# Print <- Call(:Array) -- the whole container -- where perl prints 30.
+# THE SCALAR READING IS NOT "THE LAST VALUE". A comma list in scalar context
+# yields its LAST OPERAND, read in scalar context, recursively:
 #
-# Lowering this needs the CALLSITE's OPf_WANT threaded into the callee's return
-# shape, since one sub can be called both ways in one program. That is real
-# work, not a missing wrapper, and until it exists the refusal is correct.
+#     return (10,20,30)               -> 30   last operand is a scalar
+#     return @a         (3 elements)  ->  3   last operand is an array: LENGTH
+#     my @x=(10,20); return (99, @x)  ->  2   NOT 20
+#     my @x=(10,20); return (@x, 99)  -> 99
+#     my @x=();      return (1, @x)   ->  0
+#     my %h=(a=>1,b=>2); return (1,%h)->  2
+#
+# So the collapse cannot be elements[len-1] on a flattened container: flattening
+# destroys the operand boundary the rule needs.
+#
+# WHEN THE LAST OPERAND IS A CALL, the caller's context propagates INTO it:
+#
+#     sub probe { wantarray ? "LIST" : "SCALAR" }
+#     sub n7 { return (9, probe()) }
+#     scalar(n7())     -> SCALAR
+#     join(",", n7())  -> 9,LIST
+#
+# and that inner callsite carries NO static context -- `perl -MO=Concise,f`
+# shows `entersub KS` with an empty context slot, where the two outer callsites
+# show `sKS` and `lKS`. The body is compiled once and the context arrives at
+# runtime from the caller's frame, which is why wantarray is a function.
+#
+# Lowering therefore needs the callsite's OPf_WANT propagated inward to
+# last-operand position, not merely read at the outermost call. Until that
+# exists the refusal is correct.
 
 subtest 'multi-value list return GAPs loudly (not silent drop)' => sub {
     my $sub = eval 'sub { return (10,20,30) }';
@@ -55,6 +79,45 @@ subtest 'a bare `return;` (empty) still lowers' => sub {
         'an empty return does not GAP')
         or diag($@);
     ok(defined $graph, 'got a graph');
+};
+
+# PIN THE MEASURED SEMANTICS. Two plausible-looking collapse rules have already
+# been proposed and refuted by running perl rather than by argument: "wrap it in
+# the array container" (no read-back) and "take elements[len-1]" (wrong for a
+# trailing aggregate operand). These assertions are against PERL ITSELF, so they
+# stay true regardless of what B::SoN does, and a third attempt that gets the
+# rule wrong fails here rather than in a corpus case.
+subtest 'perl semantics the lowering must reproduce' => sub {
+    my %scalar_reading = (
+        'sub { return (10,20,30) }'                  => 30,
+        'sub { my @a=(10,20,30); return @a }'        => 3,
+        'sub { my @x=(10,20); return (99, @x) }'     => 2,
+        'sub { my @x=(10,20); return (@x, 99) }'     => 99,
+        'sub { my @x=();      return (1, @x) }'      => 0,
+        'sub { my @x=(5);     return (1, @x) }'      => 1,
+    );
+    for my $src ( sort keys %scalar_reading ) {
+        my $f = eval $src or die $@;
+        my $got = scalar $f->();
+        is($got, $scalar_reading{$src},
+            "scalar context: $src -> $scalar_reading{$src}");
+    }
+
+    # The list reading is always every value, flattened.
+    my $g = eval 'sub { my @x=(10,20); return (99, @x) }' or die $@;
+    is([$g->()], [99,10,20], 'list context yields all N, flattened');
+
+    # Context propagates INTO a last-operand call -- this is what makes the
+    # rule cross call boundaries, and why the inner callsite cannot carry a
+    # static context flag.
+    my $probe = eval 'sub { wantarray ? "LIST" : "SCALAR" }' or die $@;
+    {
+        no strict 'refs';
+        *{'main::__probe'} = $probe;
+    }
+    my $h = eval 'sub { return (9, __probe()) }' or die $@;
+    is(scalar $h->(), 'SCALAR', 'scalar context reaches the last-operand call');
+    is([$h->()], [9,'LIST'],   'list context reaches it too');
 };
 
 done_testing;
