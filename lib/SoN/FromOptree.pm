@@ -2644,9 +2644,35 @@ class SoN::FromOptree 0.01 {
             return ($op->next, 'handled');
         }
 
-        # Any other rv2sv is a scalar dereference this walker does not model.
+        # Any other rv2sv IS a scalar dereference: `$$r` reads through the
+        # reference the kid left on the stack. Distinct from the gv case above,
+        # which is a named variable read and not a dereference at all.
+        #
+        # PostfixDeref is the existing vocabulary for this -- it carries the
+        # sigil and was already registered and serialized, but built ZERO times.
+        #
+        # The `${\ EXPR }` idiom is the same node: a ref to a temporary, read
+        # straight back through. That is what kept base/lex.t off 9/9.
         if ($name eq 'rv2sv') {
-            die "GAP: scalar dereference (rv2sv over a non-gv) not yet lowered\n";
+            die "GAP: scalar dereference with no reference operand not yet"
+              . " lowered\n"
+                unless $sim->stack_depth > 0;
+
+            my $ref = $sim->pop_node;
+
+            # AN LVALUE DEREF IS A WRITE THROUGH THE REFERENCE ($$r = 5), which
+            # a value node cannot express -- the store has to be visible to
+            # every later read of the referent, and PostfixDeref is a read.
+            die "GAP: assignment through a scalar dereference (\$\$r = ...)"
+              . " not yet lowered\n"
+                if ( $op->flags & 32 ) && !( $op->private & 48 );  # MOD, !DEREF
+
+            my $node = $factory->make('PostfixDeref',
+                inputs => [$ref],
+                sigil  => '$',
+                stamp  => SoN::IR::Stamp->new(type => 'Scalar'));
+            $sim->push_node($node);
+            return ($op->next, 'handled');
         }
 
         # Handle match - regex match op. A literal pattern (precomp) is a
