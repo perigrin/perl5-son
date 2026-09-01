@@ -371,7 +371,7 @@ class SoN::FromOptree 0.01 {
             # (shared with _walk_branch so nesting recurses).
             if ($opmap->is_branch($name) && $name eq 'cond_expr') {
                 $op = _handle_cond_expr($cv, $op, $sim, $factory, $opmap,
-                    \%visited);
+                    \%visited, \@exits);
                 next;
             }
 
@@ -5178,7 +5178,12 @@ class SoN::FromOptree 0.01 {
     # Called from the main walk AND from _walk_branch, so nested ternaries /
     # if-else inside an arm recurse instead of degrading the arm value to the
     # inner condition. Returns the op where translation continues.
-    sub _handle_cond_expr ($cv, $op, $sim, $factory, $opmap, $visited) {
+    # $exits, when given, is the FUNCTION-WIDE exit accumulator. An arm that
+    # returns records its control edge there so _build_single_exit merges it
+    # with every other exit; without it the arm's exit is detected and dropped,
+    # which is why this used to refuse. The statement-modifier path has always
+    # passed it -- this is the same threading, one construct over.
+    sub _handle_cond_expr ($cv, $op, $sim, $factory, $opmap, $visited, $exits = undef) {
         # A LIST-context ternary (`print $c ? "y" : "n"`) whose arms each produce
         # exactly ONE value is the same select shape as a scalar-context ternary:
         # each arm pops one value and the TernaryExpr picks between them. The
@@ -5203,16 +5208,28 @@ class SoN::FromOptree 0.01 {
             # DETECTED (with none, the walk stepped through it and silently
             # dropped the exit -- the function then returned the merge).
             # A one-sided exit needs real control threading; refuse loudly.
+            # RECORD INTO THE FUNCTION-WIDE LIST when the caller gave us one:
+            # an arm that returns is a control edge to the function exit, and
+            # _build_single_exit merges it with the others into one Return.
+            # Falling back to a local accumulator keeps the old refusal for a
+            # caller that cannot thread exits (the loop-body walk), where
+            # dropping one would be silent.
             my @arm_exits;
+            my $exit_sink = $exits // \@arm_exits;
             my ($end, $sig) = _walk_branch($cv, $start, $arm_sim, $factory,
-                $opmap, $visited, \@arm_exits, 1, $join_addr);
+                $opmap, $visited, $exit_sink, 1, $join_addr);
             die "GAP: function exit inside an if/else arm not yet lowered\n"
-                if ($sig // '') eq 'exited';
+                if ($sig // '') eq 'exited' && !defined $exits;
             # An arm stopping anywhere OTHER than the join hit an op the
             # walker cannot translate -- and it marked that op visited, so
             # the main walk would terminate there too, silently dropping
             # everything after the if/else. Refuse loudly.
+            # AN EXITING ARM DOES NOT REACH THE JOIN, and that is correct
+            # rather than a failure: it left the function. Its control edge is
+            # already recorded in the exit list, so there is nothing to merge
+            # at the join and nothing after it in this arm to drop.
             if (defined $join_addr
+                && ($sig // '') ne 'exited'
                 && !(defined $end && ref $end && $$end == $join_addr)) {
                 my $where = (defined $end && ref $end && $$end)
                     ? $end->name : 'end-of-chain';
@@ -5533,7 +5550,7 @@ class SoN::FromOptree 0.01 {
                 && $sim->stack_depth > 0) {
                 $visited->{$$op}++;
                 $op = _handle_cond_expr($cv, $op, $sim, $factory, $opmap,
-                    $visited);
+                    $visited, $exits);
                 next;
             }
 

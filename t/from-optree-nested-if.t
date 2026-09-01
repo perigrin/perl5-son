@@ -99,19 +99,33 @@ subtest 'one-armed if merges against the prior binding' => sub {
     is($false->value, 9, 'false arm is the prior binding');
 };
 
-subtest 'return inside an if/else arm refuses loudly' => sub {
-    # Pre-existing hole surfaced by review discipline: the arm walk ran with
-    # no exit accumulator, so `return 9` in an arm was silently dropped and
-    # the function returned the merge instead (wrong value, no error). The
-    # one-sided-exit merge needs real control threading; refuse until then.
+subtest 'return inside an if/else arm merges into the single exit' => sub {
+    # The hole this used to guard: the arm walk ran with no exit accumulator,
+    # so `return 9` in an arm was silently DROPPED and the function returned
+    # the merge instead -- a wrong value with no error. Refusing was right
+    # while the exit had nowhere to go.
+    #
+    # It has somewhere now. _handle_cond_expr takes the function-wide exit list,
+    # so an arm's return records its control edge there and _build_single_exit
+    # merges it with the fall-through into one Return -- the same threading the
+    # statement-modifier form (`return X if C`) has always used.
+    #
+    # This is the ASYMMETRIC case: one arm exits, the other assigns and falls
+    # through to the code after the if/else. perl gives 91 for f(5), f(-1).
     SoN::OptSuppress::suppress_peep();
     my $cv = eval
         'sub { my $n = 5; my $x = 0; if ($n > 0) { return 9 } else { $x = 1 } $x }';
     my $err = $@;
     SoN::OptSuppress::restore_peep();
     die "compile failed: $err" if $err;
-    like(dies { SoN::FromOptree->translate($cv) }, qr/GAP/,
-        'function exit inside a cond_expr arm dies with a GAP message');
+
+    my $g = SoN::FromOptree->translate($cv);
+    ok(defined $g, 'it translates') or return;
+
+    my @ret = grep { $_->operation eq 'Return' } $g->nodes->@*;
+    is(scalar @ret, 1, 'exactly one Return -- the exits merged') or return;
+    is($ret[0]->inputs->[0]->operation, 'Phi',
+        'and its value is a Phi over the exiting arm and the fall-through');
 };
 
 subtest 'unhandled op inside an arm refuses loudly (no silent truncation)' => sub {

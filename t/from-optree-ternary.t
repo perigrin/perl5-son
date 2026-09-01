@@ -60,10 +60,21 @@ subtest 'return inside a dor or ternary arm' => sub {
         'sub { my %M = (a=>1); my $x = $M{b} // return "f"; $x }');
     ok(defined $dor_g, 'EXPR // return X translates (no mark underflow)')
         or diag($dor_err);
+    # A ternary arm that RETURNS used to refuse, for the same reason the
+    # if/else arm did: the arm walk had no exit accumulator, so the exit was
+    # detected and dropped. It now records into the function-wide exit list and
+    # merges with the other arm at the single Return. perl gives 12 for
+    # f(5), f(-1).
     my ($tern_g, $tern_err) = translate_result(
         'sub { my $n = 5; $n > 0 ? (return 1) : 2 }');
-    ok(!defined $tern_g, 'a ternary arm containing return refuses');
-    like($tern_err, qr/GAP/, 'and the refusal is a GAP die, not a crash');
+    ok(defined $tern_g, 'a ternary arm containing return translates')
+        or diag($tern_err);
+    if (defined $tern_g) {
+        my @ret = grep { $_->operation eq 'Return' } $tern_g->nodes->@*;
+        is(scalar @ret, 1, 'one Return -- the exiting arm merged with the other');
+        is($ret[0]->inputs->[0]->operation, 'Phi', 'over a Phi of both arms')
+            if @ret;
+    }
 };
 
 done_testing();
