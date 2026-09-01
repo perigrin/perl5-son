@@ -289,4 +289,44 @@ subtest 'a list return flattens its aggregate operands' => sub {
         '... over the trailing array (2), not the flattened list';
 };
 
+# WHAT DOES AND DOES NOT FLATTEN. An array or hash in list context IS its
+# elements -- unconditionally, not as an optimisation available when arity is
+# static. The ONLY way to nest in perl is a REFERENCE:
+#
+#     my @x=(10,20); return (99,@x)      -> 3    array flattens
+#     my %h=(a=>1);  return (99,%h)      -> 3    hash flattens (k,v)
+#     my @e=();      return (99,@e)      -> 1    empty contributes nothing
+#                    return (99,[10,20]) -> 2    a REF is one element
+#
+# The last is why the flatten keys on the STAMP and not the node kind: an
+# arrayref literal is built by the same ArrayLiteral node as an array, and only
+# the stamp separates `Array` (flatten) from `ArrayRef` (do not). Keying on the
+# node kind would splice the ref's elements and report 3 where perl says 2.
+subtest 'only aggregates flatten -- a reference stays one element' => sub {
+    for my $case (
+        [ 'sub f { my @x=(10,20); return (99,@x) } my @l=f(); print scalar(@l);',
+          3, 'array' ],
+        [ 'sub f { my %h=(a=>1); return (99,%h) } my @l=f(); print scalar(@l);',
+          3, 'hash' ],
+        [ 'sub f { my @e=(); return (99,@e) } my @l=f(); print scalar(@l);',
+          1, 'empty array' ],
+        [ 'sub f { return (99,[10,20]) } my @l=f(); print scalar(@l);',
+          2, 'arrayref' ],
+    ) {
+        my ( $src, $want, $label ) = $case->@*;
+        ( my $slug = $label ) =~ s/\W+/-/g;
+        my ( $out, $w, $err ) = run_and_translate( $src, "flat-$slug" );
+        is $out, "$want", "perl yields $want ($label)";
+        ok $w, "... and it translates ($label)" or do { diag($err); next };
+
+        my $ns = nodes_of( $w, 'main::f' );
+        my %by = map { $_->{id} => $_ } $ns->@*;
+        my ($ret) = grep { ( $_->{op} // '' ) eq 'Return' } $ns->@*;
+        ok $ret, "... has a Return ($label)" or next;
+        my $list = $by{ ( $ret->{inputs} // [] )->[0] // '' };
+        is scalar( ( $list->{inputs} // [] )->@* ), $want,
+            "... and the list reading holds $want values ($label)";
+    }
+};
+
 done_testing;
