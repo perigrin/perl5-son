@@ -1327,6 +1327,33 @@ class SoN::FromOptree 0.01 {
         return ($list, $scalar);
     }
 
+    # The real operand count for an op whose arity VARIES, or undef to use the
+    # table's fixed pop_count.
+    #
+    # substr is 2-, 3- or 4-argument and the table can only state one number.
+    # It said 2, so `substr($s,1,3)` popped the INDEX and LENGTH and left the
+    # STRING on the stack -- a Call slicing nothing, plus a stray value that
+    # made an enclosing s///e replacement look like "not a single value". Both
+    # silent.
+    #
+    # The op knows: after the leading null (the folded pushmark) there is
+    # exactly one kid per argument. Measured:
+    #
+    #     substr($s,1)        kids=[null,const,const]
+    #     substr($s,1,3)      kids=[null,const,const,const]
+    #     substr($s,1,3,"X")  kids=[null,padsv,const,const,const]
+    sub _variadic_pop_count ($op, $name) {
+        return undef unless $name eq 'substr';
+        return undef unless $op->can('first');
+        my $n = 0;
+        my $kid = $op->first;
+        while ( ref($kid) && $$kid ) {
+            $n++ unless $kid->name eq 'pushmark' || $kid->name eq 'null';
+            $kid = $kid->sibling;
+        }
+        return $n > 0 ? $n : undef;
+    }
+
     sub _exit_record ($sim, $factory, $kind, $exit_op = undef, $is_program = 0) {
         my $value;
         # The scalar reading of a multi-value return, when there is one. It
@@ -3593,7 +3620,8 @@ class SoN::FromOptree 0.01 {
         # returns the new value.
         if ($opmap->is_known($name) && $op->can('targ') && $op->targ
             && ($op->private & 16)) {  # OPpTARGET_MY = 0x10
-            my $pop_count = $opmap->pop_count($name);
+            my $pop_count = _variadic_pop_count($op, $name)
+                         // $opmap->pop_count($name);
             my $node_type = $opmap->node_type($name);
 
             my @inputs;
@@ -3831,7 +3859,8 @@ class SoN::FromOptree 0.01 {
         # Generic op handling via OpMap.  Branch/loop ops are excluded so the
         # caller's mode-specific switch owns them.
         if ($opmap->is_known($name) && !$opmap->is_branch($name) && !$opmap->is_loop($name)) {
-            my $pop_count = $opmap->pop_count($name);
+            my $pop_count = _variadic_pop_count($op, $name)
+                         // $opmap->pop_count($name);
             my $node_type = $opmap->node_type($name);
             my $push_count = $opmap->push_count($name);
 
