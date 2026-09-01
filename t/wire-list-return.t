@@ -214,4 +214,35 @@ subtest 'a list-returning sub is stamped by its list reading' => sub {
         'the Call is stamped by the LIST reading, not the scalar face';
 };
 
+# THE RETURN CONTRACT, pinned at the node level. Consumers reached for
+# `inputs->[-1]` -- correct while a Return had exactly one input and silently
+# the scalar face once it had two. That assumption cost one bug here and three
+# live sites in chalk, so both slots now have names and both are asserted.
+subtest 'Return exposes both readings by name' => sub {
+    use SoN::FromOptree;
+
+    my $multi = eval 'sub { return (10,20,30) }';
+    my $graph = SoN::FromOptree->translate($multi);
+    my ($ret) = grep { $_->operation eq 'Return' } $graph->nodes->@*;
+    ok $ret, 'a multi-value return has a Return' or return;
+
+    is $ret->value->operation, 'ArrayLiteral',
+        'value() is the list reading';
+    ok defined $ret->scalar_value,
+        'scalar_value() is present for a multi-value return';
+    is $ret->scalar_value->operation, 'Coerce',
+        '... and it is the scalar-face Coerce';
+
+    # A SINGLE-VALUE RETURN HAS NO SECOND FACE. value() and inputs[-1] agree
+    # here, which is exactly why the bug hid: every pre-existing shape made
+    # the two indistinguishable.
+    my $single = eval 'sub { return 42 }';
+    my $g2 = SoN::FromOptree->translate($single);
+    my ($r2) = grep { $_->operation eq 'Return' } $g2->nodes->@*;
+    ok $r2, 'a single-value return has a Return' or return;
+    ok defined $r2->value, 'value() is present';
+    ok !defined $r2->scalar_value,
+        'scalar_value() is absent -- there is no second reading to take';
+};
+
 done_testing;
