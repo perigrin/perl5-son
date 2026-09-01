@@ -1,5 +1,5 @@
-# ABOUTME: `sub { ... }` must refuse -- its body is not lowered, and shipping
-# ABOUTME: a Call to "unknown" is a silent wrong answer.
+# ABOUTME: `sub { ... }` must never leave a Call naming "unknown": a
+# ABOUTME: non-capturing one lowers to its own graph, a capturing one refuses.
 use 5.42.0;
 use utf8;
 use Test::More;
@@ -32,25 +32,46 @@ sub translate ( $src, $name ) {
 # over -- and worse, because a callback passed to a function is ordinary perl:
 # `apply(sub { 7 })` was equally silent.
 #
-# AnonSub is dead vocabulary today: the node class exists, OpMap maps anoncode
-# to it, and FromOptree builds it ZERO times.
-subtest 'an anonymous sub refuses rather than dropping its body' => sub {
-    my ( undef, $err ) = translate(
+# NOW LOWERED for the non-capturing case: the body becomes its own `methods`
+# entry under a per-site name and the Call names it. What must never come back
+# is the shape above -- a graph that looks complete with the body gone.
+subtest 'an anonymous sub is lowered, not dropped' => sub {
+    my ( $w, $err ) = translate(
         'my $c = sub { 42 }; print $c->();', 'anon-call' );
-    like $err, qr/GAP:/, 'refused';
-    like $err, qr/anonymous sub|sub \{/, '... naming the construct';
+    ok $w, 'it translates' or do { diag($err); return };
+
+    my ($call) = grep { ( $_->{op} // '' ) eq 'Call' }
+        ( $w->{methods}{'main::__PROGRAM__'}{nodes} // [] )->@*;
+    ok $call, 'the program calls something' or return;
+    isnt $call->{fields}{name} // '', 'unknown',
+        'the callee is NOT named "unknown"';
+    ok exists $w->{methods}{ $call->{fields}{name} // '' },
+        '... and its body is present under that name';
 };
 
-subtest 'an anonymous sub passed as a callback refuses' => sub {
-    my ( undef, $err ) = translate(
+subtest 'an anonymous sub passed as a callback is lowered' => sub {
+    my ( $w, $err ) = translate(
         'sub apply { my $f = shift; $f->() } print apply(sub { 7 });',
         'anon-callback' );
-    like $err, qr/GAP:/, 'refused';
+    ok $w, 'it translates' or do { diag($err); return };
+    my %methods = ( $w->{methods} // {} )->%*;
+    ok scalar( grep { /__ANON__/ } keys %methods ),
+        'the callback body reached the wire as its own graph';
+};
+
+# A CAPTURING ONE STILL REFUSES. The slice is deliberately partial: a per-site
+# name is only correct where the site IS the identity, which capture breaks
+# (three closures over three values would share one name).
+subtest 'a capturing anonymous sub still refuses' => sub {
+    my ( undef, $err ) = translate(
+        'my $x = 5; my $c = sub { $x }; print $c->();', 'anon-capture' );
+    like $err, qr/GAP:.*closing over.*\$x/,
+        'refused, naming the captured variable';
 };
 
 # A NAMED SUB IS UNCHANGED -- it already becomes its own graph in `methods`,
-# referenced by a Call carrying the graph name, and that is the convention an
-# anon sub should eventually follow.
+# referenced by a Call carrying the graph name -- the convention an anon sub
+# now follows too.
 subtest 'a named sub still becomes its own graph' => sub {
     my ( $w, $err ) = translate( 'sub f { 42 } print f();', 'named' );
     ok $w, 'it translates' or diag($err), return;

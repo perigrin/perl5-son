@@ -56,6 +56,13 @@ sub _extract_fields ($node, $id_remap) {
                 : () ),
         };
     }
+    if ($op eq 'AnonSub') {
+        # The `methods` key holding this sub's body -- same field name Call
+        # uses for the same purpose, so a consumer reads one spelling.
+        return {
+            ( defined $node->name ? ( name => $node->name ) : () ),
+        };
+    }
     if ($op eq 'Phi') {
         # predecessors[i] is the Proj that inputs[i] arrives along. It rides
         # the wire as node INDICES, like region, and is omitted when the Phi

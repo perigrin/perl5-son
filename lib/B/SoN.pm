@@ -129,6 +129,13 @@ sub _discover_and_translate {
     my ($filter) = @_;
     my %graphs;
     my %classes;
+    # Anon bodies are recorded during EVERY walk -- named subs as well as the
+    # program -- so the registry is cleared before the first of them, not
+    # between. Clearing it after _walk_package silently discarded every anon
+    # sub defined inside a named sub, leaving its Call naming a methods key
+    # that was never emitted.
+    %SoN::FromOptree::ANON_BODIES = ();
+
     _walk_package( \%graphs, \%classes, 'main', \%main::, $filter );
 
     # The bare file's own top-level statements (main_root/main_start/main_cv)
@@ -166,6 +173,40 @@ sub _discover_and_translate {
     # SoN class. A newly-emitted method graph may reference further classes, so
     # fixpoint until no new class appears.
     _emit_referenced_classes( \%graphs, \%classes, $filter ) if $filter;
+
+    # AN ANON SUB'S BODY IS ITS OWN GRAPH, beside every other sub in %graphs
+    # rather than nested inside the AnonSub node -- a nested graph has no
+    # serializer arm on either side of the wire and would be silently dropped.
+    # The walker cannot translate them itself (it is mid-walk on another CV),
+    # so it records them and they are drained here.
+    #
+    # FIXPOINT, because an anon body may contain a further anon sub: translating
+    # it registers more entries, so keep going until a pass adds none.
+    while (1) {
+        my @pending = grep { !exists $graphs{$_} }
+                      sort keys %SoN::FromOptree::ANON_BODIES;
+        last unless @pending;
+        for my $anon_name (@pending) {
+            my $body_cv = $SoN::FromOptree::ANON_BODIES{$anon_name};
+            try {
+                $graphs{$anon_name} =
+                    SoN::FromOptree->translate( $body_cv->object_2svref );
+            }
+            catch ($e) {
+                # Same discipline as every other body: a GAP is the translator
+                # speaking, anything else is an internal bug. Either way the
+                # entry must not be left half-present -- a named-but-absent
+                # methods key is a dangling reference for the consumer.
+                delete $graphs{$anon_name};
+                if ($e =~ /^GAP:/) { warn "B::SoN: skipped $anon_name: $e" }
+                else {
+                    warn "B::SoN: INTERNAL ERROR translating $anon_name "
+                       . "(masked as a silent skip -- fix or convert to a "
+                       . "clean GAP): $e";
+                }
+            }
+        }
+    }
 
     _resolve_deferred_stamps( \%graphs, \%classes );
 

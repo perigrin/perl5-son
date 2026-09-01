@@ -78,14 +78,23 @@ subtest 'anoncode refuses -- the AnonSub node carried no body' => sub {
     # perl prints 42.
     #
     # Asserting the node KIND could not see that: the kind was right and the
-    # contents were absent. Refused now, until the calling convention is
-    # decided -- a named sub becomes its own graph in `methods` referenced by
-    # name, and an anonymous one should almost certainly follow, but that is a
-    # wire decision.
+    # contents were absent. LOWERED now -- the body becomes its own `methods`
+    # entry and the AnonSub carries that name, so the node is no longer empty.
+    # A CAPTURING one still refuses, naming what it closes over.
+    my $graph;
+    ok(
+        lives { $graph = SoN::FromOptree->translate(sub { my $f = sub { 42 }; $f }) },
+        'a non-capturing anonymous sub no longer refuses',
+    ) or diag($@);
+    my ($anon) = grep { $_->operation eq 'AnonSub' } $graph->nodes->@*;
+    ok($anon, 'it builds an AnonSub node');
+    ok(defined $anon && defined $anon->name,
+        '... and the node names its body, so it is not the empty node above');
+
     like(
-        dies { SoN::FromOptree->translate(sub { my $f = sub { 42 }; $f }) },
-        qr/GAP:.*anonymous sub/,
-        'an anonymous sub refuses rather than shipping an empty AnonSub',
+        dies { SoN::FromOptree->translate(sub { my $x = 5; my $f = sub { $x }; $f }) },
+        qr/GAP:.*closing over/,
+        'a capturing anonymous sub still refuses, naming the capture',
     );
 };
 

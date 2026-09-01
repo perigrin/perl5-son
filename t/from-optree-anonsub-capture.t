@@ -24,25 +24,23 @@ use SoN::FromOptree;
 # an own lexical as a capture and would refuse a body that needs nothing from
 # its enclosing scope.
 
-subtest 'a non-capturing anon sub refuses without blaming closure' => sub {
+subtest 'a non-capturing anon sub lowers' => sub {
     for my $src (
         'sub { my $c = sub { 1; }; $c }',
         'sub { my $c = sub { my $y = 1; $y }; $c }',
         'sub { my $c = sub { $_[0] * 2 }; $c }',
     ) {
+        my $graph;
         my $sub = eval $src or die $@;
-        my $err;
-        ok( !lives { SoN::FromOptree->translate($sub) },
-            "still refuses: $src" );
-        $err = $@;
-        like( $err, qr/GAP/, '... as a GAP' );
-        # Match the CLAIM, not the word: the non-capturing message legitimately
-        # says "it captures nothing", and a blunt /captur/ rejects its own
-        # correct wording.
-        unlike( $err, qr/closing over/i,
-            '... and does not claim it closes over anything' );
-        like( $err, qr/captures nothing/i,
-            '... but does say the body is capture-free' );
+        ok( lives { $graph = SoN::FromOptree->translate($sub) },
+            "lowers: $src" ) or diag($@);
+
+        # The middle case is the one that matters: `my $y = 1` is an OWN
+        # lexical, not a capture, and a test keyed on "does the pad have
+        # names" would refuse it. It must lower like the others.
+        my ($anon) = grep { $_->operation eq 'AnonSub' } $graph->nodes->@*;
+        ok( $anon && defined $anon->name,
+            '... to an AnonSub naming its body' );
     }
 };
 

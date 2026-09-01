@@ -1088,6 +1088,84 @@ class SoN::FromOptree 0.01 {
              :           undef;
     }
 
+    # ANON SUB BODIES DISCOVERED DURING A WALK, as name => B::CV.
+    #
+    # An anon body becomes its OWN entry in `methods`, exactly as a named sub
+    # does -- not a graph nested inside the AnonSub node. The nested-graph shape
+    # the IR's `graph` field anticipates has no serializer arm on either side,
+    # so it would be silently dropped at the seam and load as graph=undef.
+    #
+    # The walker cannot translate them itself (it is mid-walk on another CV), so
+    # it records them here and B::SoN drains the registry and translates each
+    # into the same %graphs hash every other sub lands in.
+    our %ANON_BODIES;
+
+    # A deterministic, unique name for one anon sub SITE.
+    #
+    #     <enclosing>::__ANON__:<line>:<targ>
+    #
+    # `targ` is the pad slot holding the CV -- a compile-time index, so it is
+    # stable across runs and unaffected by hash seed or visit order (verified
+    # under PERL_HASH_SEED/PERL_PERTURB_KEYS). It is what distinguishes two anon
+    # subs on ONE line, which the line alone cannot.
+    #
+    # SCOPED BY THE ENCLOSING SUB, because targ is a pad index scoped to its own
+    # CV: `sub f { sub {1} }` and `sub g { sub {2} }` BOTH report targ=2, and a
+    # document-global methods key built from targ alone would silently drop one
+    # body onto the other -- it is a hash key, so the collision does not error.
+    #
+    # PER SITE IS THE RIGHT GRANULARITY, not merely a workable one. For a
+    # NON-CAPTURING anon sub the site IS the identity, and it survives both
+    # loop iterations and call frames -- measured:
+    #
+    #     map { sub {7} } (1,2,3)          -> 1 CV
+    #     for (1..3) { push @r, sub {7} }  -> 1 CV
+    #     sub mk { sub {7} }  (mk(), mk()) -> 1 CV, SHARED across frames
+    #
+    # so one name per site, one CV per site, one methods entry per site.
+    #
+    # THIS IS ALSO WHY CAPTURING SUBS ARE REFUSED RATHER THAN DEFERRED. The
+    # same measurements the other way:
+    #
+    #     map { my $i=$_; sub {$i} } (1,2,3)   -> 3 CVs, values 1,2,3
+    #     sub mkc { my $v=shift; sub {$v} }
+    #     (mkc(1), mkc(2))                     -> 2 CVs, values 1,2
+    #
+    # A per-site name there would give three runtime values ONE identity, which
+    # is a miscompile and not a limitation. The refusal boundary is exactly
+    # where this naming scheme stops being able to express the thing -- so
+    # capture support is NOT an extension of this. It needs a different identity
+    # (site plus captured environment), and nothing downstream may assume
+    # name-is-identity once such subs exist.
+    sub _anon_body_name ($cv, $op) {
+        my $inner = _anoncode_cv($cv, $op);
+        my $line  = ref($inner) eq 'B::CV'
+            ? ( eval { $inner->START->line } // 0 ) : 0;
+
+        # The enclosing sub names itself through its GV. A CV with no GV (the
+        # program root, or an anon sub containing another) has no such name, so
+        # fall back to its stash -- the scope only has to separate DISTINCT
+        # enclosing CVs, and within one file the pair (line, targ) already
+        # separates sites inside the same one.
+        my $gv = eval { $cv->GV };
+        my $enclosing =
+            ( ref($gv) eq 'B::GV' && eval { $gv->NAME } )
+                ? sprintf('%s::%s', eval { $gv->STASH->NAME } // 'main',
+                                    $gv->NAME)
+                : 'main::__PROGRAM__';
+
+        return sprintf('%s::__ANON__:%d:%d', $enclosing, $line, $op->targ);
+    }
+
+    # The B::CV an anoncode op builds. On a threaded perl it rides in the PAD
+    # rather than on the op ($op->sv is a B::SPECIAL), reached by its targ.
+    sub _anoncode_cv ($cv, $op) {
+        return undef
+            unless $cv && ref($cv) && $op && ref($op) && $op->can('targ');
+        my $inner = eval { $cv->PADLIST->ARRAYelt(1)->ARRAYelt($op->targ) };
+        return ref($inner) eq 'B::CV' ? $inner : undef;
+    }
+
     # The lexicals an anon sub closes over, by name, or () for none.
     #
     # On a threaded perl the anon CV rides in the PAD rather than on the op
@@ -1095,9 +1173,8 @@ class SoN::FromOptree 0.01 {
     # only when it carries PADNAMEt_OUTER -- an own lexical sits in the same
     # padlist with no flag, so counting names alone over-reports.
     sub _anoncode_captures ($cv, $op) {
-        return () unless $cv && ref($cv) && $op && ref($op) && $op->can('targ');
-        my $inner = eval { $cv->PADLIST->ARRAYelt(1)->ARRAYelt($op->targ) };
-        return () unless ref($inner) eq 'B::CV';
+        my $inner = _anoncode_cv($cv, $op);
+        return () unless $inner;
         my $names = eval { $inner->PADLIST->ARRAYelt(0) };
         return () unless ref($names);
 
@@ -1659,6 +1736,21 @@ class SoN::FromOptree 0.01 {
         my $call_name = 'unknown';
         if ($cv_node && $cv_node->isa('SoN::IR::Node::Constant')) {
             $call_name = $cv_node->value // 'unknown';
+        }
+        # CALLING AN ANON SUB NAMES ITS BODY. The callee node IS the AnonSub
+        # (`sub {...}->()`), or the value a pad holds resolves to one
+        # (`my $c = sub {...}; $c->()`). Without this the callee fell through
+        # to 'unknown' and the AnonSub was popped and dropped -- the exact
+        # silent wrong answer the old refusal was written to prevent, with the
+        # body now present in `methods` and nothing pointing at it.
+        my $anon_callee = $cv_node;
+        $anon_callee = $sim->lookup($anon_callee->targ)
+            if $anon_callee
+            && $anon_callee->isa('SoN::IR::Node::PadAccess')
+            && $anon_callee->can('targ');
+        if ($anon_callee && $anon_callee->isa('SoN::IR::Node::AnonSub')
+            && defined $anon_callee->name) {
+            $call_name = $anon_callee->name;
         }
         # Resolve the callee to its fully-qualified name (STASH::NAME)
         # from the entersub's own callee op, so the Call names the same
@@ -2581,9 +2673,23 @@ class SoN::FromOptree 0.01 {
               . " captured variables have no wire representation yet\n"
                 if @captured;
 
-            die "GAP: an anonymous sub (sub { ... }) is not yet lowered -- it"
-              . " captures nothing, so its body could become its own graph,"
-              . " but the calling convention is an open wire decision\n";
+            # LOWERED. The body becomes its own `methods` entry under a
+            # deterministic per-site name, and the AnonSub node carries that
+            # name -- the same shape a named sub already uses, so no nesting
+            # and no new addressing.
+            my $body = _anoncode_cv($cv, $op)
+                or die "GAP: an anonymous sub whose body could not be reached"
+                     . " from the pad is not yet lowered\n";
+
+            my $anon_name = _anon_body_name($cv, $op);
+            $ANON_BODIES{$anon_name} //= $body;
+
+            my $node = $factory->make('AnonSub',
+                inputs => [],
+                name   => $anon_name,
+                stamp  => SoN::IR::Stamp->new(type => 'Code'));
+            $sim->push_node($node);
+            return ($op->next, 'handled');
         }
 
         # map/grep/sort WITH A BLOCK: the block is not lowered, and shipping
