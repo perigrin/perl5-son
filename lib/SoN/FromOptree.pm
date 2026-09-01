@@ -2344,8 +2344,51 @@ class SoN::FromOptree 0.01 {
         # Constant (corpus logical.md L3b). undef(EXPR) has kids and mutates
         # its operand -- not modeled yet.
         if ($name eq 'undef') {
-            die "GAP: undef(EXPR) not yet lowered\n" if $op->flags & 4; # OPf_KIDS
+            # `undef EXPR` AND `EXPR = undef` ARE NOT ONE OPERATION. Measured:
+            #
+            #   my @a=(1,2,3); undef @a;   -> scalar(@a) is 0  (emptied)
+            #   my @b=(1,2,3); @b = undef; -> scalar(@b) is 1  (one undef elem)
+            #
+            # For a SCALAR they coincide, and that case lowers: perl compiles
+            # `undef $x` to a single `undef[$x] vK/TARGMY` carrying its OWN
+            # targ, so the target is named on the op and nothing needs popping.
+            # It is exactly the rebind performed below for the no-operand form;
+            # the refusal fired first only because `undef $x` also sets
+            # OPf_KIDS.
+            #
+            # An AGGREGATE operand is a different operation -- emptying a
+            # container, not rebinding a name -- and modelling it as a rebind to
+            # Undef would produce the one-element array `@a = undef` means. That
+            # stays refused.
+            # THE OPERAND IS NAMED BY THE KID, not by the op's targ. Under
+            # the rpeep suppression this walker runs with there is no TARGMY
+            # fusion -- measured, `undef $x` and `undef @a` are both
+            # `flags=0x6 private=0x1 targ=0` and indistinguishable on the op
+            # itself. The kid tells them apart and carries the pad slot:
+            #
+            #     undef $x   kid=padsv  targ=1
+            #     undef @a   kid=padav  targ=1
+            #     undef %h   kid=padhv  targ=1
+            #     undef $g   kid=rv2sv  targ=0   (package scalar)
+            my $undef_targ;
+            if ($op->flags & 4) {                               # OPf_KIDS
+                my $kid = $op->can('first') ? $op->first : undef;
+                my $kname = ( ref($kid) && $$kid ) ? $kid->name : '';
+                die "GAP: undef(EXPR) on this operand not yet lowered"
+                  . " ($kname) -- on an aggregate it EMPTIES the container"
+                  . " rather than rebinding a name, which is not `\@a = undef`\n"
+                    unless $kname eq 'padsv' && $kid->targ;
+                $undef_targ = $kid->targ;
+                # The kid pushed nothing we want: this is a WRITE of the slot,
+                # not a read of it.
+                $sim->pop_node if $sim->stack_depth > 0;
+            }
             my $node = _undef_constant($factory);
+            if (defined $undef_targ) {
+                $sim->define($undef_targ, $node);
+                $sim->push_node($node);
+                return ($op->next, 'handled');
+            }
             if ($op->can('targ') && $op->targ && ($op->private & 16)) { # OPpTARGET_MY
                 my $targ = $op->targ;
                 if ($mode eq 'main' && ($op->private & 128)) { # OPpLVAL_INTRO
