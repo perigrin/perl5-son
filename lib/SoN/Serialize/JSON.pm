@@ -40,6 +40,12 @@ sub _extract_fields ($node, $id_remap) {
             ( defined $node->sort_order
                 ? ( sort_order => $node->sort_order )
                 : () ),
+            # The callsite's context ('void'|'scalar'|'list'). A list-returning
+            # callee carries every value AND its scalar reading; this is how a
+            # consumer knows which one this callsite asked for.
+            ( defined $node->want
+                ? ( want => $node->want )
+                : () ),
             # The statically-known class for a method dispatch (Class->new).
             ( defined $node->class_name
                 ? ( class_name => $node->class_name )

@@ -25,6 +25,14 @@ class SoN::IR::Node::Call :isa(SoN::IR::Value) {
     # Consumed by the ExpressionList reify in Perl/Actions.pm: a bare
     # list-builtin call (paren_form false) absorbs the remaining list items
     # into its args; a paren-form call does not.
+    # THE CALLSITE'S CONTEXT, from entersub's OPf_WANT: 'void' | 'scalar' |
+    # 'list'. A perl sub is compiled ONCE and cannot see how it was called --
+    # `wantarray` is a runtime function for exactly that reason -- so a callee
+    # returning a list must carry both readings and the CALLSITE must say which
+    # one it wants. Measured: the same f() gives 30 in scalar context and
+    # 10,20,30 in list context, and the two entersubs differ only in this flag
+    # (sKS vs lKS). Absent for a call whose context was not recorded.
+    field $want :param :reader = undef;
     field $paren_form :param :reader = false;
 
     # Resolved callee handle (a chalk MOP Method or Sub).

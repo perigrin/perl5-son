@@ -836,7 +836,12 @@ class SoN::FromOptree 0.01 {
             # exit; reached inside a branch arm it is recorded by _walk_branch
             # the same way.
             if ($name eq 'return') {
-                push @exits, _exit_record($sim, $factory, 'return');
+                # Pass the CV's ROOT: the scalar reading of a multi-value
+                # return is its LAST OPERAND, which only the OPTREE still
+                # records -- by the time the values reach the stack they are
+                # flattened and the operand boundary is gone.
+                push @exits, _exit_record($sim, $factory, 'return',
+                    ($cv && $$cv ? $cv->ROOT : undef));
                 $main_terminated = 1;
                 last;
             }
@@ -1071,6 +1076,18 @@ class SoN::FromOptree 0.01 {
     # multi-value shape is an OP_LIST with a pushmark and >1 value child. Detect
     # it structurally (NOT via stack depth, which cross-path branch residue
     # inflates) so a single-value guarded return is not over-GAPped. zhi 019f5e41.
+    # OPf_WANT as a name. 0 is "unknown" -- perl leaves the slot empty for a
+    # call whose context is supplied at runtime by the caller's frame, which is
+    # exactly what an inner call in last-operand position is (`entersub KS`,
+    # bare K, where the outer callsites carry sKS and lKS).
+    sub _want_of ($op) {
+        my $w = $op->flags & 3;
+        return $w == 1 ? 'void'
+             : $w == 2 ? 'scalar'
+             : $w == 3 ? 'list'
+             :           undef;
+    }
+
     sub _leavesub_returns_list ($leave_op) {
         return false unless $leave_op && ref($leave_op) && $$leave_op;
         my $lineseq = $leave_op->first;
@@ -1092,6 +1109,89 @@ class SoN::FromOptree 0.01 {
             $c = $c->sibling;
         }
         return $n > 1 ? true : false;
+    }
+
+    # _last_return_operand_is_aggregate($exit_op) -- does the return's LAST
+    # operand read as a COUNT in scalar context?
+    #
+    # This is the whole collapse rule, and it is why the scalar reading cannot
+    # be computed from the flattened values. A comma list in scalar context
+    # yields its LAST OPERAND read in scalar context; an aggregate operand
+    # reads as its LENGTH:
+    #
+    #     return (10,20,30)             -> 30   last operand is a scalar
+    #     my @x=(10,20); return (99,@x) ->  2   NOT 20 -- @x's length
+    #     my @x=(10,20); return (@x,99) -> 99
+    #     my %h=(a=>1,b=>2); return (1,%h) -> 2
+    #
+    # Flattening destroys the operand boundary, so this reads the OPTREE, where
+    # the boundary still exists. `padav`/`padhv`/`rv2av`/`rv2hv` are the
+    # aggregate reads; anything else contributes its own scalar value.
+    sub _last_return_operand_is_aggregate ($leave_op) {
+        return false unless $leave_op && ref($leave_op) && $$leave_op;
+        my $lineseq = $leave_op->first;
+        return false unless $lineseq && $$lineseq && $lineseq->name eq 'lineseq';
+        my ($last, $kid) = (undef, $lineseq->first);
+        while ($kid && $$kid) { $last = $kid; $kid = $kid->sibling; }
+        return false
+            unless $last && ($last->name eq 'list' || $last->name eq 'return');
+        my $tail;
+        my $c = $last->first;
+        while ($c && $$c) {
+            $tail = $c unless $c->name eq 'pushmark';
+            $c = $c->sibling;
+        }
+        return false unless $tail;
+        my $n = $tail->name;
+        return ( $n eq 'padav' || $n eq 'padhv'
+              || $n eq 'rv2av' || $n eq 'rv2hv' ) ? true : false;
+    }
+
+    # _list_return_value($factory, \@values, $exit_op) -- the value a
+    # multi-value return carries.
+    #
+    # BOTH READINGS, because the callee cannot choose. A perl sub is compiled
+    # once and cannot see its caller's context -- that is why `wantarray` is a
+    # runtime function, and why the reverted attempt at this (a418e51) failed:
+    # it emitted the container and nothing ever read it back out.
+    #
+    # The list reading is every value, flattened, in an ArrayLiteral stamped
+    # List (the type of a list is List -- these values were never bound to an
+    # array, so `Array` would be the "a List is not an Array" miscompile from
+    # the other direction).
+    #
+    # The scalar reading rides alongside as a Coerce to Scalar. Which value it
+    # coerces is the collapse rule: the LAST OPERAND, read in scalar context.
+    # For an aggregate last operand that is its LENGTH (`return (99,@x)` is 2,
+    # not 20), so the Coerce takes a Count; otherwise it is that operand's own
+    # value. The callsite's `want` says which reading to take.
+    sub _list_return_value ($factory, $values, $exit_op) {
+        my $list = $factory->make('ArrayLiteral',
+            inputs => [ $values->@* ],
+            stamp  => SoN::IR::Stamp->new(type => 'List'));
+
+        # The scalar reading. _last_return_operand_is_aggregate reads the
+        # OPTREE, where the operand boundary still exists -- the flattened
+        # values above cannot answer this.
+        # COUNT THE LAST OPERAND, NOT THE LIST. `return (98,99,@x)` with a
+        # 2-element @x yields 2, not 3: the rule reads the last OPERAND in
+        # scalar context, and the outer list's operand count is a different
+        # number that happens to coincide whenever the leading operands are
+        # as many as the trailing array is long.
+        my $scalar_src =
+            _last_return_operand_is_aggregate($exit_op)
+                ? $factory->make('Count',
+                    inputs => [ $values->[-1] ],
+                    stamp  => SoN::IR::Stamp->new(type => 'Int'))
+                : $values->[-1];
+
+        $factory->make('Coerce',
+            inputs   => [$scalar_src],
+            from_repr => 'List',
+            to_repr   => 'Scalar',
+            stamp    => SoN::IR::Stamp->new(type => 'Scalar'));
+
+        return $list;
     }
 
     sub _exit_record ($sim, $factory, $kind, $exit_op = undef, $is_program = 0) {
@@ -1145,12 +1245,9 @@ class SoN::FromOptree 0.01 {
             # callsite), and the operand structure is static here. Lowering this
             # means emitting all N honestly plus a scalar collapse computed from
             # the OPERAND LIST, before flattening.
-            die "GAP: multi-value list return (return LIST) not yet lowered"
-              . " -- list context yields all N; scalar context yields the LAST"
-              . " OPERAND read in scalar context (an array operand yields its"
-              . " length, not its last element), which the callee cannot see\n"
-                if $args->@* > 1;
-            $value = $args->@* ? $args->[-1] : undef;
+            $value = $args->@* > 1
+                ? _list_return_value($factory, $args, $exit_op)
+                : ( $args->@* ? $args->[-1] : undef );
         }
         elsif ($sim->stack_depth > 0) {
             # The peephole optimizer elides an explicit `return` when it is the
@@ -1160,11 +1257,16 @@ class SoN::FromOptree 0.01 {
             # The elided-return form (`sub { (10,20,30) }`, no return op) is
             # the same construct and the same problem -- see the explicit
             # branch above.
-            die "GAP: multi-value list return (trailing list) not yet lowered"
-              . " -- same rule as the explicit form above: the scalar reading"
-              . " is the LAST OPERAND, not the last value\n"
-                if _leavesub_returns_list($exit_op);
-            $value = $sim->pop_node;
+            if (_leavesub_returns_list($exit_op)) {
+                # The peephole optimizer elided the `return`, so every value is
+                # already on the stack; recover them in source order.
+                my @vals;
+                unshift @vals, $sim->pop_node while $sim->stack_depth > 0;
+                $value = _list_return_value($factory, \@vals, $exit_op);
+            }
+            else {
+                $value = $sim->pop_node;
+            }
         }
         $value //= $factory->make('Constant',
             value      => undef,
@@ -1529,10 +1631,17 @@ class SoN::FromOptree 0.01 {
         # silently (F4) or floated to its value-use site and reordered past
         # a following effect (F3).
         my $void = ($op->flags & 3) == 1;   # OPf_WANT_VOID
+        # RECORD THE CALLSITE'S CONTEXT. A callee is compiled once and cannot
+        # see it (that is why `wantarray` is a runtime function), so a
+        # list-returning sub carries every value AND its scalar reading, and
+        # this field is how a consumer knows which one to take. Measured: the
+        # same f() yields 30 in scalar context and 10,20,30 in list context,
+        # with the two entersubs differing only in this flag.
         my $node = $factory->make('Call',
             inputs        => [ ($args->@* ? $args->@* : ()) ],
             dispatch_kind => 'direct',
             name          => $call_name,
+            want          => _want_of($op),
         );
         $node->set_control_in($sim->control);
         $sim->set_control($node);

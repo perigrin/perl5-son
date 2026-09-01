@@ -1,0 +1,149 @@
+# ABOUTME: A multi-value list return carries all N values on the wire, plus the
+# ABOUTME: scalar reading (its LAST OPERAND) so a caller can pick by context.
+
+use 5.42.0;
+use utf8;
+use Test::More;
+use File::Temp qw(tempdir);
+use JSON::PP;
+
+my $PERL = $^X;
+my $dir  = tempdir( CLEANUP => 1 );
+
+sub run_and_translate ( $src, $name ) {
+    my $file = "$dir/$name.pl";
+    open my $fh, '>', $file or die "open $file: $!";
+    print {$fh} "$src\n";
+    close $fh;
+    my $out  = qx{$PERL $file 2>/dev/null};
+    my $json = qx{$PERL -Ilib -MO=SoN,json $file 2>$dir/$name.err};
+    my $err  = do { open my $e, '<', "$dir/$name.err" or return ''; local $/; <$e> } // '';
+    return ( $out, ( length $json ? JSON::PP->new->decode($json) : undef ), $err );
+}
+
+sub nodes_of ( $w, $method ) {
+    return ( $w->{methods}{$method}{nodes} // [] );
+}
+
+# THE CALLEE IS COMPILED ONCE AND CANNOT SEE ITS CALLER'S CONTEXT, so it must
+# emit BOTH readings and let the callsite pick. Measured semantics (pinned
+# against perl in t/from-optree-list-return-gap.t):
+#
+#     return (10,20,30)               list -> 10,20,30    scalar -> 30
+#     return @a         (3 elements)  list -> 1,2,3       scalar -> 3
+#     my @x=(10,20); return (99,@x)   list -> 99,10,20    scalar -> 2
+#
+# The scalar reading is the LAST OPERAND read in scalar context, which is why
+# it must be computed from the operand list BEFORE flattening.
+
+subtest 'a literal list return carries every value' => sub {
+    my ( $out, $w, $err ) = run_and_translate(
+        'sub f { return (10,20,30) } my @l = f(); print "@l";', 'lit-list' );
+    is $out, '10 20 30', 'perl yields all three' or return;
+    ok $w, 'it translates rather than GAPping' or do { diag($err); return };
+
+    my $ns = nodes_of( $w, 'main::f' );
+    my %by = map { $_->{id} => $_ } $ns->@*;
+    my ($ret) = grep { ( $_->{op} // '' ) eq 'Return' } $ns->@*;
+    ok $ret, 'the callee has a Return' or return;
+
+    my $v = $by{ ( $ret->{inputs} // [] )->[0] // '' };
+    ok $v, 'it returns a value' or return;
+    is scalar( ( $v->{inputs} // [] )->@* ), 3,
+        'the returned value carries all three values, not one';
+};
+
+subtest 'a scalar-context callsite reads the last operand' => sub {
+    my ( $out, $w, $err ) = run_and_translate(
+        'sub f { return (10,20,30) } my $s = f(); print $s;', 'lit-scalar' );
+    is $out, '30', 'perl yields the last operand' or return;
+    ok $w, 'it translates' or do { diag($err); return };
+
+    # The caller must not receive the whole container: that was the miscompile
+    # in the reverted attempt, where Print read Call(:Array) and printed it.
+    my $ns = nodes_of( $w, 'main::__PROGRAM__' );
+    my %by = map { $_->{id} => $_ } $ns->@*;
+    my ($print) = grep { ( $_->{op} // '' ) eq 'Print' } $ns->@*;
+    ok $print, 'the program prints something' or return;
+
+    my $v = $by{ ( $print->{inputs} // [] )->[0] // '' };
+    $v = $by{ ( $v->{inputs} // [] )->[0] // '' }
+        while $v && ( $v->{op} // '' ) eq 'Coerce';
+    ok $v, 'the printed value resolves' or return;
+    isnt $v->{stamp}, 'Array',
+        'the printed value is not the raw container';
+
+    # THE CALLEE MUST BE PRESENT. B::SoN emits the caller even when it skips
+    # the callee, so a test that only inspects the program passes while the
+    # feature is entirely missing -- the vacuous-pass trap.
+    ok scalar( nodes_of( $w, 'main::f' )->@* ),
+        'the callee graph is emitted, not skipped';
+
+    # The callsite must say which reading it wants; without that the callee's
+    # two readings cannot be chosen between.
+    my ($call) = grep { ( $_->{op} // '' ) eq 'Call' } $ns->@*;
+    ok $call, 'the program calls f' or return;
+    is $call->{fields}{want}, 'scalar',
+        'the Call records its callsite context';
+};
+
+# THE CASE THAT KILLED elements[len-1]: a trailing AGGREGATE operand yields its
+# LENGTH, not its last element. Any collapse computed after flattening gets 20
+# here; perl says 2.
+subtest 'a trailing aggregate operand yields its length' => sub {
+    my ( $out, $w, $err ) = run_and_translate(
+        'sub f { my @x=(10,20); return (99,@x) } my $s = f(); print $s;',
+        'trailing-agg' );
+    is $out, '2', 'perl yields the array length, not its last element' or return;
+    ok $w, 'it translates' or do { diag($err); return };
+
+    my $ns = nodes_of( $w, 'main::__PROGRAM__' );
+    my %by = map { $_->{id} => $_ } $ns->@*;
+    my ($print) = grep { ( $_->{op} // '' ) eq 'Print' } $ns->@*;
+    ok $print, 'the program prints something' or return;
+
+    # A Count must appear -- but WHICH node it counts is the whole rule, and
+    # asserting only its existence passes on the wrong one. `return (98,99,@x)`
+    # with a 2-element @x is 2, while the outer operand list has 3 members, so
+    # a Count of the LIST is wrong wherever those numbers differ.
+    my $fns = nodes_of( $w, 'main::f' );
+    my %fby = map { $_->{id} => $_ } $fns->@*;
+    my ($count) = grep { ( $_->{op} // '' ) eq 'Count' } $fns->@*;
+    ok $count, 'a Count computes the trailing aggregate length' or return;
+
+    my $counted = $fby{ ( $count->{inputs} // [] )->[0] // '' };
+    ok $counted, 'the Count has an operand' or return;
+    is scalar( ( $counted->{inputs} // [] )->@* ), 2,
+        'it counts the TRAILING ARRAY (2), not the operand list';
+};
+
+# THE DISCRIMINATING CASE for that rule: leading operand count and trailing
+# array length differ, so a Count of the wrong node gives a different answer.
+subtest 'the scalar reading counts the last operand, not the list' => sub {
+    my ( $out, $w, $err ) = run_and_translate(
+        'sub f { my @x=(10,20); return (98,99,@x) } my $s = f(); print $s;',
+        'count-discriminating' );
+    is $out, '2', 'perl yields the trailing array length (2), not 3' or return;
+    ok $w, 'it translates' or do { diag($err); return };
+
+    my $fns = nodes_of( $w, 'main::f' );
+    my %fby = map { $_->{id} => $_ } $fns->@*;
+    my ($count) = grep { ( $_->{op} // '' ) eq 'Count' } $fns->@*;
+    ok $count, 'a Count exists' or return;
+    my $counted = $fby{ ( $count->{inputs} // [] )->[0] // '' };
+    is scalar( ( $counted->{inputs} // [] )->@* ), 2,
+        'the counted node has two elements, matching @x not the operand list';
+};
+
+subtest 'a list-context callsite still receives every value' => sub {
+    my ( $out, $w, $err ) = run_and_translate(
+        'sub f { my @x=(10,20); return (99,@x) } my @l = f(); print scalar(@l);',
+        'trailing-agg-list' );
+    is $out, '3', 'perl flattens to three values' or return;
+    ok $w, 'it translates' or diag($err);
+    return unless $w;
+    my $ns = nodes_of( $w, 'main::f' );
+    ok scalar($ns->@*), 'the callee graph is present';
+};
+
+done_testing;

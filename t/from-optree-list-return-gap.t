@@ -1,5 +1,5 @@
-# ABOUTME: Tests SoN::FromOptree GAPs a multi-value list return instead of
-# ABOUTME: silently dropping all-but-one value (F4 callee side, zhi 019f5e41).
+# ABOUTME: A multi-value list return carries every value plus its scalar
+# ABOUTME: reading; the perl semantics it must reproduce are pinned here.
 
 use v5.42.0;
 use Test2::V0;
@@ -51,16 +51,24 @@ use SoN::FromOptree;
 # last-operand position, not merely read at the outermost call. Until that
 # exists the refusal is correct.
 
-subtest 'multi-value list return GAPs loudly (not silent drop)' => sub {
+subtest 'multi-value list return lowers, carrying every value' => sub {
     my $sub = eval 'sub { return (10,20,30) }';
-    my $err;
-    ok(!lives { SoN::FromOptree->translate($sub) },
-        'translate dies on a multi-value list return')
-        or diag('expected a GAP, got a graph');
-    $err = $@;
-    like($err, qr/GAP.*multi-value|GAP.*list return/i,
-        'the die is a loud GAP naming the multi-value list return')
-        or diag("actual: $err");
+    my $graph;
+    ok(lives { $graph = SoN::FromOptree->translate($sub) },
+        'a multi-value list return no longer GAPs')
+        or diag($@);
+    ok(defined $graph, 'got a graph') or return;
+
+    # It must carry all three, not collapse to one. The reverted attempt at
+    # this (a418e51) emitted a container nothing read back out; the refusal
+    # that replaced it said the callee could not choose a shape. Both are
+    # resolved the same way: emit BOTH readings and let the callsite pick.
+    my ($ret) = grep { $_->operation eq 'Return' } $graph->nodes->@*;
+    ok($ret, 'the graph has a Return') or return;
+    my $value = ($ret->inputs // [])->[0];
+    ok($value, 'the Return carries a value') or return;
+    is(scalar(($value->inputs // [])->@*), 3,
+        'all three values are carried, not just the last');
 };
 
 subtest 'a single-value return still lowers (not over-GAPped)' => sub {
