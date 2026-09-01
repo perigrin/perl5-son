@@ -2366,6 +2366,42 @@ class SoN::FromOptree 0.01 {
         # to the same op with no targ. Either way the value is the Undef
         # Constant (corpus logical.md L3b). undef(EXPR) has kids and mutates
         # its operand -- not modeled yet.
+        # map/grep/sort WITH A BLOCK: the block is not lowered, and shipping
+        # the list without it is a SILENT WRONG ANSWER -- the worst outcome the
+        # refuse-or-lower contract exists to prevent.
+        #
+        # Measured, `my @m = map { $_ * 2 } (1,2)` emitted a well-formed graph
+        # with no Multiply in it anywhere and no diagnostic at all:
+        #
+        #     Start, Constant x3, Call(mapstart), ArrayLiteral, MemStart,
+        #     Subscript, Coerce, Print, Return
+        #
+        # The cause is in OpMap: mapstart/grepstart map to a generic Call that
+        # consumes the LIST, while mapwhile/grepwhile -- which ARE the block
+        # execution -- are marked BRANCH, so the generic branch-skip steps over
+        # the body without walking it. The block is a real subtree
+        # (`gvsv $_`, `const 2`, `multiply`, looping back to mapwhile); nothing
+        # translates it. Reported by chalk, corpus F18/F19/F20.
+        if ($name eq 'mapstart' || $name eq 'grepstart') {
+            ( my $word = $name ) =~ s/start\z//;
+            die "GAP: $word with a BLOCK is not yet lowered -- the block would"
+              . " be dropped and the list returned untransformed\n";
+        }
+
+        # `sort` only carries a block when perl could not FOLD it. Measured:
+        #
+        #     sort { $a <=> $b }              lK/NUM        folded, no block
+        #     sort { $b <=> $a }              lK/DESC,NUM   folded, no block
+        #     sort { length($a) <=> ... }     lKS*          OPf_STACKED, a real
+        #                                                   comparator subtree
+        #
+        # So the folded forms are not refused here -- they have no block to
+        # drop -- and OPf_STACKED is what marks one that would be.
+        if ($name eq 'sort' && ($op->flags & 64)) {   # OPf_STACKED
+            die "GAP: sort with a comparator BLOCK is not yet lowered -- the"
+              . " comparator would be dropped and the list left unsorted\n";
+        }
+
         if ($name eq 'undef') {
             # `undef EXPR` AND `EXPR = undef` ARE NOT ONE OPERATION. Measured:
             #

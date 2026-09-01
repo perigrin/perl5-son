@@ -19,8 +19,24 @@ $target_src
 use SoN::FromOptree;
 my \$g = eval { SoN::FromOptree->translate_root() };
 if (\$@) { print "ERROR: \$@"; exit 0; }
-my \@ops = map { \$_->operation } \$g->nodes->\@*;
-print "OPS: ", join(",", \@ops), "\\n";
+# NOTE: this driver is compiled as part of the probe program, so translate_root
+# walks it too. It is deliberately kept OUT of the region under test by running
+# after the target source -- the assertions below are about the target's ops,
+# and the driver's own constructs (map, push, deref-foreach) are not the
+# subject. When a refusal reaches this far it is reported through $@ above.
+# The ops are collected with a WHILE loop over an index: this driver is
+# compiled into the probe program and translate_root walks it too, so it has to
+# stay inside what the walker lowers. `map { ... }` is now refused (the block
+# would be dropped), and a foreach over a deref and `push` are refused as well
+# -- each in turn broke this test.
+my \@nodes = \$g->nodes->\@*;
+my \$ops = "";
+my \$i = 0;
+while (\$i < scalar(\@nodes)) {
+    \$ops = \$ops . \$nodes[\$i]->operation . ",";
+    \$i = \$i + 1;
+}
+print "OPS: \$ops\\n";
 print "HAS_START: ", (\$g->start ? "yes" : "no"), "\\n";
 print "HAS_RETURN: ", (\@{\$g->returns} ? "yes" : "no"), "\\n";
 COMBINED
