@@ -138,7 +138,7 @@ subtest 'an aggregate in a map body contributes its elements, not itself' => sub
     # there is no honest static arity to append -- and appending the
     # container instead made a consumer counting inputs read 1 for perl's 4.
     # A GAP is the correct answer here; a wrong count is not.
-    like $err, qr/GAP.*aggregate/,
+    like $err, qr/GAP/,
         'B::SoN refuses rather than appending the container as one element';
 
     my $ns  = $w ? nodes($w) : [];
@@ -207,6 +207,78 @@ subtest 'grep with an aggregate body still lowers' => sub {
         my ( $src, $want, $label ) = $case->@*;
         my ( $out, $w, $err ) = run_and_translate( $src, "grep-agg-$label" );
         is $out, $want, "perl keeps all $want ($label body)";
+        ok $w, "... and B::SoN still lowers it ($label)" or diag($err);
+    }
+};
+
+# THE DISCRIMINATING PROPERTY IS ARITY, NOT IDENTITY. This miscompile was
+# fixed twice by naming node properties, and each name turned out not to be the
+# one that separated the cases:
+#
+#   keyed on STAMP (Hash/Array)     -- missed Slice, stamped Unknown
+#   keyed on NODE KIND (+Slice)     -- missed reverse/sort, which are Calls
+#
+# Every member is just "contributes != 1 value", and an enumeration of kinds is
+# a proxy for that which keeps being incomplete -- silently, each time. So the
+# walk now uses an ALLOW-LIST: a contribution is accepted only when its node
+# kind is KNOWN to yield exactly one value. Anything else refuses.
+#
+# That fails safe rather than silent. The cost is GAPping shapes that would
+# have been fine; the benefit is that a new list-producing node kind arrives as
+# a refusal instead of a wrong count.
+subtest 'a list-producing builtin in a map body does not miscount' => sub {
+    for my $case (
+        [ 'my @a=(1,2,3); my @m = map { reverse @a } (1); print scalar(@m);',
+          '3', 'reverse' ],
+        [ 'my @a=(3,1,2); my @m = map { sort @a } (1); print scalar(@m);',
+          '3', 'sort' ],
+    ) {
+        my ( $src, $want, $label ) = $case->@*;
+        my ( $out, $w, $err ) = run_and_translate( $src, "map-builtin-$label" );
+        is $out, $want, "perl flattens $label to $want values";
+
+        # Either it refuses, or it appends the right NUMBER of contributions.
+        # What it must never do is append one value standing for N.
+        my $ns  = $w ? nodes($w) : [];
+        my ($app) = grep { ( $_->{op} // '' ) eq 'ListAppend' } $ns->@*;
+        if ($app) {
+            my @ids = ( $app->{inputs} // [] )->@*;
+            shift @ids;
+            is scalar(@ids), $want,
+                "... and $label appends $want contributions, not 1";
+        }
+        else {
+            like $err, qr/GAP/, "... and $label refuses rather than miscounting";
+        }
+    }
+};
+
+# A MIXED CONTRIBUTION is neither N nor 1: `map { %h, 9 }` over a 2-pair hash
+# yields 5 (four from the hash, one scalar). Named separately because an
+# arity rule that handles the pure-aggregate case can still get this wrong.
+subtest 'a mixed aggregate/scalar body does not miscount' => sub {
+    my ( $out, $w, $err ) = run_and_translate(
+        'my %h=(a=>1,b=>2); my @m = map { %h, 9 } (1); print scalar(@m);',
+        'map-mixed' );
+    is $out, '5', 'perl yields four from the hash plus one scalar' or return;
+    like $err, qr/GAP/, 'B::SoN refuses rather than miscounting';
+};
+
+# THE ALLOW-LIST MUST NOT SWALLOW THE ORDINARY CASES. Every shape that
+# genuinely contributes one value per iteration has to keep lowering, or the
+# fix is a regression dressed as caution -- the same failure mode, a third time.
+subtest 'single-value bodies still lower under the allow-list' => sub {
+    for my $case (
+        [ 'my @m = map { $_ * 2 } (1,2); print "@m";',        '2 4',  'arith' ],
+        [ 'my @m = map { $_ } (1,2); print "@m";',            '1 2',  'ident' ],
+        [ 'my @m = map { 7 } (1,2); print "@m";',             '7 7',  'const' ],
+        [ 'sub g { 7 } my @m = map { g() } (1,2); print "@m";','7 7',  'call'  ],
+        [ 'my @a=(5,6); my @m = map { $a[0] } (1,2); print "@m";','5 5','elem' ],
+        [ 'my @m = map { (1,2) } (1); print scalar(@m);',     '2', 'literal-list' ],
+    ) {
+        my ( $src, $want, $label ) = $case->@*;
+        my ( $out, $w, $err ) = run_and_translate( $src, "map-ok-$label" );
+        is $out, $want, "perl: $label";
         ok $w, "... and B::SoN still lowers it ($label)" or diag($err);
     }
 };

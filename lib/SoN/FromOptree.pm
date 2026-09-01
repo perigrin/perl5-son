@@ -4576,30 +4576,55 @@ class SoN::FromOptree 0.01 {
                 # the pair count is a runtime property of the hash, so there
                 # is no honest static arity to append, and a wrong count is
                 # worse than a GAP.
-                # KEYED ON THE NODE KIND, NOT THE STAMP. A Slice is the same
-                # hazard -- `map { @h{qw(a b)} } (1)` yields 2 values as ONE
-                # Slice node -- but it is stamped Unknown, so a stamp test
-                # walks straight past it and appends it as a single element.
-                # Its arity IS static (2 keys, 2 values), unlike a hash's, so
-                # it is refused only because nothing yet splits one into its
-                # elements: a lowering waiting to happen, not an impossibility.
+                # AN ALLOW-LIST, BECAUSE THE PROPERTY IS ARITY, NOT IDENTITY.
+                # The body runs in LIST context, so a contribution yielding N
+                # values must arrive as N inputs; appending one node that
+                # STANDS FOR N makes a consumer counting inputs read 1.
+                #
+                # This was twice keyed on the wrong property, and each proxy
+                # was silently incomplete:
+                #
+                #   stamp (Hash/Array)  -- missed Slice, which is Unknown
+                #   node kind (+Slice)  -- missed reverse/sort, which are Calls
+                #
+                # Every member is just "contributes != 1". Enumerating the
+                # kinds that DO flatten is open-ended and fails silently as new
+                # ones appear; enumerating the kinds KNOWN to yield exactly one
+                # fails safe -- an unfamiliar shape becomes a GAP, not a wrong
+                # count. The cost is refusing shapes that would have been fine.
                 #
                 # grep never reaches here (it returns above): its body is a
                 # predicate read in boolean context, so its contribution is
                 # 0-or-1 whatever the body evaluates to, and refusing it would
                 # turn correct code into a false GAP.
+                # Derived from the actual node set, not recalled: every op
+                # whose result is one scalar value. Omissions are safe (they
+                # refuse); inventions are not (a name that matches nothing
+                # silently drops a real op out of the list), so this was built
+                # by enumerating lib/SoN/IR/Node/*.pm rather than from memory.
+                state $YIELDS_ONE_VALUE = { map { $_ => 1 } qw(
+                    Add          And          BitAnd       BitOr
+                    BitXor       Coerce       Complement   Concat
+                    Constant     Count        Defined      DefinedOr
+                    Divide       EnvRead      FieldAccess  Interpolate
+                    IsaOp        Length       LeftShift    Match
+                    Modulo       Multiply     Negate       Not
+                    NotMatch     NumCmp       NumEq        NumGe
+                    NumGt        NumLe        NumLt        NumNe
+                    Or           PadAccess    Phi          Power
+                    Ref          RefType      RegexCapture RegexMatch
+                    RegexSubst   Repeat       RightShift   StrCmp
+                    StrEq        StrGe        StrGt        StrLe
+                    StrLt        StrNe        StructFieldAccess
+                    StructRef    Subscript    Subtract     TernaryExpr
+                    UnaryPlus    Xor
+                ) };
                 for my $c (@produced) {
-                    my $op_kind = $c->operation;
-                    my $st      = $c->stamp;
-                    next
-                        unless $op_kind eq 'HashLiteral'
-                        || $op_kind eq 'Slice'
-                        || ( $st
-                          && ( $st->type eq 'Hash' || $st->type eq 'Array' ) );
-                    die "GAP: $collect body yielding a whole aggregate or slice"
-                      . " (it flattens to that value's elements, and appending"
-                      . " it whole would count 1 where perl counts N) not yet"
-                      . " lowered\n";
+                    next if $YIELDS_ONE_VALUE->{ $c->operation };
+                    die "GAP: $collect body contribution of unknown arity"
+                      . " (a " . $c->operation . " may yield more than one"
+                      . " value, and appending it whole would count 1 where"
+                      . " perl counts N) not yet lowered\n";
                 }
                 $acc_next = $factory->make('ListAppend',
                     inputs => [$acc_phi, @produced],
