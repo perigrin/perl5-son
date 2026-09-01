@@ -1185,17 +1185,25 @@ class SoN::FromOptree 0.01 {
                     stamp  => SoN::IR::Stamp->new(type => 'Int'))
                 : $values->[-1];
 
-        $factory->make('Coerce',
+        my $scalar = $factory->make('Coerce',
             inputs   => [$scalar_src],
             from_repr => 'List',
             to_repr   => 'Scalar',
             stamp    => SoN::IR::Stamp->new(type => 'Scalar'));
 
-        return $list;
+        # BOTH, so the caller can put the scalar reading somewhere a consumer
+        # can find it. Emitted free-floating it survived serialization only
+        # because graph membership is bidirectional reachability -- it rode
+        # along without any node pointing at it, which is an accident rather
+        # than a contract and would not survive a dead-code pass.
+        return ($list, $scalar);
     }
 
     sub _exit_record ($sim, $factory, $kind, $exit_op = undef, $is_program = 0) {
         my $value;
+        # The scalar reading of a multi-value return, when there is one. It
+        # rides on the Return as inputs[1] so it is reachable by contract.
+        my $scalar_value;
         # A PROGRAM has no return value. Its top level runs every statement in
         # VOID context -- perl compiles the trailing statement that way
         # (`padsv ... v`, `leave ... vKP`), and the last value has no effect on
@@ -1245,9 +1253,13 @@ class SoN::FromOptree 0.01 {
             # callsite), and the operand structure is static here. Lowering this
             # means emitting all N honestly plus a scalar collapse computed from
             # the OPERAND LIST, before flattening.
-            $value = $args->@* > 1
-                ? _list_return_value($factory, $args, $exit_op)
-                : ( $args->@* ? $args->[-1] : undef );
+            if ($args->@* > 1) {
+                ($value, $scalar_value) =
+                    _list_return_value($factory, $args, $exit_op);
+            }
+            else {
+                $value = $args->@* ? $args->[-1] : undef;
+            }
         }
         elsif ($sim->stack_depth > 0) {
             # The peephole optimizer elides an explicit `return` when it is the
@@ -1262,7 +1274,8 @@ class SoN::FromOptree 0.01 {
                 # already on the stack; recover them in source order.
                 my @vals;
                 unshift @vals, $sim->pop_node while $sim->stack_depth > 0;
-                $value = _list_return_value($factory, \@vals, $exit_op);
+                ($value, $scalar_value) =
+                    _list_return_value($factory, \@vals, $exit_op);
             }
             else {
                 $value = $sim->pop_node;
@@ -1272,7 +1285,9 @@ class SoN::FromOptree 0.01 {
             value      => undef,
             const_type => 'undef',
             stamp      => SoN::IR::Stamp->new(type => 'Undef'));
-        return { control => $sim->control, value => $value };
+        return { control => $sim->control, value => $value,
+                 ( defined $scalar_value
+                     ? ( scalar_value => $scalar_value ) : () ) };
     }
 
     # _build_single_exit($factory, \@exits) -> the single Return node.
@@ -1291,7 +1306,14 @@ class SoN::FromOptree 0.01 {
             # control_in is never a data input, so a Return's inputs is
             # always exactly [value] regardless of what kind of node control
             # is.
-            my $ret = $factory->make_cfg('Return', inputs => [$value]);
+            # inputs[1], when present, is the SCALAR READING of a multi-value
+            # list return. The callee cannot know its caller's context, so it
+            # carries both faces and the callsite's `want` picks; putting the
+            # scalar one here makes it reachable by contract rather than
+            # riding along on bidirectional graph membership.
+            my $scalar = $exits->[0]{scalar_value};
+            my $ret = $factory->make_cfg('Return',
+                inputs => [$value, (defined $scalar ? ($scalar) : ())]);
             $ret->set_control_in($ctrl) if defined $ctrl;
             return $ret;
         }

@@ -146,4 +146,50 @@ subtest 'a list-context callsite still receives every value' => sub {
     ok scalar($ns->@*), 'the callee graph is present';
 };
 
+# THE SCALAR READING MUST BE REACHABLE BY CONTRACT, not by accident.
+#
+# It was first emitted as a free-floating Coerce that nothing consumed. It
+# survived serialization only because graph membership is BIDIRECTIONAL
+# reachability -- the Coerce reaches back to its operand -- so it rode along
+# without any node pointing at it. That is not a contract: a consumer has no
+# defined place to look for it, and any dead-code pass would delete it, taking
+# the scalar reading with it and leaving a graph that looks complete.
+#
+# It now rides on the Return as inputs[1], so the node that carries the list
+# reading also carries the scalar one.
+subtest 'the scalar reading rides on the Return, not free-floating' => sub {
+    for my $case (
+        [ 'sub f { return (10,20,30) } my $s=f(); print $s;', 'lit' ],
+        [ 'sub f { my @x=(10,20); return (99,@x) } my $s=f(); print $s;', 'mix' ],
+    ) {
+        my ( $src, $label ) = $case->@*;
+        my ( undef, $w, $err ) = run_and_translate( $src, "reachable-$label" );
+        ok $w, "it translates ($label)" or do { diag($err); next };
+
+        my $ns = nodes_of( $w, 'main::f' );
+        my %by = map { $_->{id} => $_ } $ns->@*;
+        my ($ret) = grep { ( $_->{op} // '' ) eq 'Return' } $ns->@*;
+        ok $ret, "the callee has a Return ($label)" or next;
+
+        my @in = ( $ret->{inputs} // [] )->@*;
+        is scalar(@in), 2,
+            "the Return carries both readings ($label)";
+
+        my $scalar_face = $by{ $in[1] // '' };
+        ok $scalar_face, "the second input resolves ($label)" or next;
+        is $scalar_face->{op}, 'Coerce',
+            "... and it is the scalar-face Coerce ($label)";
+
+        # Nothing may be left unconsumed: an orphan is exactly the shape this
+        # subtest exists to forbid.
+        my %consumed;
+        for my $n ( $ns->@* ) { $consumed{$_} = 1 for ( $n->{inputs} // [] )->@* }
+        my @orphans = grep {
+            my $id = $_->{id};
+            ( $_->{op} // '' ) eq 'Coerce' && !$consumed{$id}
+        } $ns->@*;
+        is scalar(@orphans), 0, "no dangling Coerce remains ($label)";
+    }
+};
+
 done_testing;
