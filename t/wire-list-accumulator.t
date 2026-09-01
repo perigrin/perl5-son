@@ -116,4 +116,56 @@ subtest 'the list a map iterates is stamped List, not Unknown' => sub {
     is $input->{stamp}, 'List', '... stamped List';
 };
 
+# A HASH IN A map BODY FLATTENS TO ITS KEY/VALUE PAIRS. The body runs in LIST
+# context (measured: `map { wantarray } (1)` yields LIST), so an aggregate left
+# there contributes ALL its elements, not itself:
+#
+#     my %h=(a=>1,b=>2); my @m = map { %h } (1);   -> 4 elements
+#     my @b=(7,8);       my @m = map { @b } (1,2); -> 4 elements
+#
+# The array form already flattened correctly -- the walk pops the elements. The
+# hash form appended the HashLiteral CONTAINER as a single input, so a consumer
+# counting inputs read 1 where perl says 4. Same class as the aggregate
+# double-wrap at the assignment site, one type over: a container is not an
+# element, and "a List is not an Array".
+subtest 'an aggregate in a map body contributes its elements, not itself' => sub {
+    my ( $out, $w, $err ) = run_and_translate(
+        'my %h=(a=>1,b=>2); my @m = map { %h } (1); print scalar(@m);',
+        'map-hash-flatten' );
+    is $out, '4', 'perl flattens the hash to four values' or return;
+
+    # REFUSED, not lowered. A hash's pair count is a runtime property, so
+    # there is no honest static arity to append -- and appending the
+    # container instead made a consumer counting inputs read 1 for perl's 4.
+    # A GAP is the correct answer here; a wrong count is not.
+    like $err, qr/GAP.*aggregate/,
+        'B::SoN refuses rather than appending the container as one element';
+
+    my $ns  = $w ? nodes($w) : [];
+    my @app = grep { ( $_->{op} // '' ) eq 'ListAppend' } $ns->@*;
+    is scalar(@app), 0, '... and emits no ListAppend for it';
+};
+
+# THE ARRAY FORM STILL LOWERS. The refusal above must not swallow the case
+# that already flattened correctly: the walk pops an array's elements
+# individually, so they arrive as separate contributions and the count is
+# right. A fix that refused both would be a regression dressed as caution.
+subtest 'an array in a map body still flattens and lowers' => sub {
+    my ( $out, $w, $err ) = run_and_translate(
+        'my @b=(7,8); my @m = map { @b } (1,2); print scalar(@m);',
+        'map-array-flatten' );
+    is $out, '4', 'perl flattens the array to four values' or return;
+    ok $w, 'it still translates' or diag($err), return;
+
+    my $ns = nodes($w);
+    my %by = map { $_->{id} => $_ } $ns->@*;
+    my ($app) = grep { ( $_->{op} // '' ) eq 'ListAppend' } $ns->@*;
+    ok $app, 'a ListAppend exists' or return;
+
+    my @ids = ( $app->{inputs} // [] )->@*;
+    shift @ids;    # inputs[0] is the accumulator, not a contribution
+    is scalar(@ids), 2,
+        'two contributions per iteration, matching the array length';
+};
+
 done_testing;

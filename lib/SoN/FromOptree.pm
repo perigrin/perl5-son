@@ -4561,6 +4561,28 @@ class SoN::FromOptree 0.01 {
                     stamp  => SoN::IR::Stamp->new(type => 'Array'));
             }
             else {
+                # THE CONTRIBUTION IS DECIDED, NOT INHERITED. The body runs in
+                # LIST context (measured: `map { wantarray } (1)` yields LIST),
+                # so an aggregate left on the stack contributes ALL of its
+                # elements, not itself:
+                #
+                #     my %h=(a=>1,b=>2); map { %h } (1)   -> 4 elements
+                #     my @b=(7,8);       map { @b } (1,2) -> 4 elements
+                #
+                # The array form flattens here already -- the walk pops its
+                # elements individually. A HASH does not: it arrives as one
+                # HashLiteral, and appending that container made a consumer
+                # counting inputs read 1 where perl says 4. Refuse instead:
+                # the pair count is a runtime property of the hash, so there
+                # is no honest static arity to append, and a wrong count is
+                # worse than a GAP.
+                for my $c (@produced) {
+                    my $st = $c->stamp or next;
+                    next unless $st->type eq 'Hash' || $st->type eq 'Array';
+                    die "GAP: $collect body yielding a whole aggregate"
+                      . " (it flattens to that aggregate's elements, whose"
+                      . " count is not static) not yet lowered\n";
+                }
                 $acc_next = $factory->make('ListAppend',
                     inputs => [$acc_phi, @produced],
                     stamp  => SoN::IR::Stamp->new(type => 'Array'));
