@@ -2366,6 +2366,31 @@ class SoN::FromOptree 0.01 {
         # to the same op with no targ. Either way the value is the Undef
         # Constant (corpus logical.md L3b). undef(EXPR) has kids and mutates
         # its operand -- not modeled yet.
+        # `sub { ... }` -- the body is not lowered, and shipping a Call to a
+        # callee named "unknown" is a silent wrong answer. Measured:
+        #
+        #     my $c = sub { 42 }; print $c->();
+        #       perl prints 42
+        #       graph: Constant(undef), Call(direct, name="unknown")
+        #       stderr: "syntax OK"
+        #
+        # Same class as the map/grep drop below, one construct over, and it
+        # reaches ordinary code: `apply(sub { 7 })` was equally silent.
+        #
+        # THE BODY IS REACHABLE, so this is a refusal pending a decision rather
+        # than a missing capability. On a threaded perl the CV rides in the PAD,
+        # not on the op -- `$op->sv` is a B::SPECIAL, while
+        # PADLIST->ARRAYelt(1)->ARRAYelt($op->padix) is the B::CV with a
+        # walkable START. What is undecided is the calling convention: a named
+        # sub becomes its own graph in `methods` referenced by name, and an
+        # anonymous one should almost certainly follow that, but it is a wire
+        # decision.
+        if ($name eq 'anoncode') {
+            die "GAP: an anonymous sub (sub { ... }) is not yet lowered -- its"
+              . " body would be dropped and the call left naming an unknown"
+              . " callee\n";
+        }
+
         # map/grep/sort WITH A BLOCK: the block is not lowered, and shipping
         # the list without it is a SILENT WRONG ANSWER -- the worst outcome the
         # refuse-or-lower contract exists to prevent.

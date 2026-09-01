@@ -70,11 +70,23 @@ subtest 'smartmatch OpMap entry maps to Match' => sub {
     is($map->node_type('smartmatch'), 'Match', 'smartmatch opmap entry maps to Match');
 };
 
-subtest 'anoncode produces AnonSub node' => sub {
-    my $graph = SoN::FromOptree->translate(sub { my $f = sub { 42 }; $f });
-    my @nodes = nodes_of_type($graph, 'AnonSub');
-    ok(scalar @nodes > 0, 'anoncode produces AnonSub node');
-    is($nodes[0]->operation, 'AnonSub', 'node operation is AnonSub');
+subtest 'anoncode refuses -- the AnonSub node carried no body' => sub {
+    # This asserted that anoncode produces an AnonSub node, and it passed --
+    # but the node was an empty SHELL. The sub's body was never walked, so
+    # `my $c = sub { 42 }; $c->()` emitted Constant(undef) plus a Call naming
+    # "unknown", printed nothing on stderr, and returned the wrong answer where
+    # perl prints 42.
+    #
+    # Asserting the node KIND could not see that: the kind was right and the
+    # contents were absent. Refused now, until the calling convention is
+    # decided -- a named sub becomes its own graph in `methods` referenced by
+    # name, and an anonymous one should almost certainly follow, but that is a
+    # wire decision.
+    like(
+        dies { SoN::FromOptree->translate(sub { my $f = sub { 42 }; $f }) },
+        qr/GAP:.*anonymous sub/,
+        'an anonymous sub refuses rather than shipping an empty AnonSub',
+    );
 };
 
 # -----------------------------------------------------------------------
