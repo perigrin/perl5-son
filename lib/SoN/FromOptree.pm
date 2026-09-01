@@ -4576,12 +4576,30 @@ class SoN::FromOptree 0.01 {
                 # the pair count is a runtime property of the hash, so there
                 # is no honest static arity to append, and a wrong count is
                 # worse than a GAP.
+                # KEYED ON THE NODE KIND, NOT THE STAMP. A Slice is the same
+                # hazard -- `map { @h{qw(a b)} } (1)` yields 2 values as ONE
+                # Slice node -- but it is stamped Unknown, so a stamp test
+                # walks straight past it and appends it as a single element.
+                # Its arity IS static (2 keys, 2 values), unlike a hash's, so
+                # it is refused only because nothing yet splits one into its
+                # elements: a lowering waiting to happen, not an impossibility.
+                #
+                # grep never reaches here (it returns above): its body is a
+                # predicate read in boolean context, so its contribution is
+                # 0-or-1 whatever the body evaluates to, and refusing it would
+                # turn correct code into a false GAP.
                 for my $c (@produced) {
-                    my $st = $c->stamp or next;
-                    next unless $st->type eq 'Hash' || $st->type eq 'Array';
-                    die "GAP: $collect body yielding a whole aggregate"
-                      . " (it flattens to that aggregate's elements, whose"
-                      . " count is not static) not yet lowered\n";
+                    my $op_kind = $c->operation;
+                    my $st      = $c->stamp;
+                    next
+                        unless $op_kind eq 'HashLiteral'
+                        || $op_kind eq 'Slice'
+                        || ( $st
+                          && ( $st->type eq 'Hash' || $st->type eq 'Array' ) );
+                    die "GAP: $collect body yielding a whole aggregate or slice"
+                      . " (it flattens to that value's elements, and appending"
+                      . " it whole would count 1 where perl counts N) not yet"
+                      . " lowered\n";
                 }
                 $acc_next = $factory->make('ListAppend',
                     inputs => [$acc_phi, @produced],

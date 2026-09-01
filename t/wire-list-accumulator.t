@@ -168,4 +168,47 @@ subtest 'an array in a map body still flattens and lowers' => sub {
         'two contributions per iteration, matching the array length';
 };
 
+# A SLICE IS ALSO A MULTI-VALUE CONTRIBUTION, and the stamp does not say so.
+# `@h{qw(a b)}` yields 2 values, but arrives as ONE Slice node stamped Unknown,
+# so a refusal keyed on the Hash/Array stamps walks straight past it and appends
+# it as a single element -- 1 where perl says 2. Same class as the hash body,
+# but invisible to a stamp test, which is why this is keyed on the NODE KIND.
+#
+# Unlike a hash, a slice's arity IS static (2 keys, 2 values). It is refused
+# rather than lowered only because nothing yet splits one into its elements;
+# that is a lowering waiting to happen, not an impossibility.
+subtest 'a slice in a map body is not appended as one element' => sub {
+    my ( $out, $w, $err ) = run_and_translate(
+        'my %h=(a=>1,b=>2); my @m = map { @h{qw(a b)} } (1); print scalar(@m);',
+        'map-hash-slice' );
+    is $out, '2', 'perl yields the two sliced values' or return;
+
+    like $err, qr/GAP/,
+        'B::SoN refuses rather than appending the slice as one element';
+
+    my $ns  = $w ? nodes($w) : [];
+    my @app = grep { ( $_->{op} // '' ) eq 'ListAppend' } $ns->@*;
+    is scalar(@app), 0, '... and emits no ListAppend for it';
+};
+
+# GREP IS ARITY-PRESERVING ON ITS INPUT and must NOT be caught by any of the
+# refusals above. Its body is a predicate read in boolean context -- `%h` there
+# is truthiness, never flattened -- so its contribution is structurally 0-or-1
+# whatever the body evaluates to. A refusal keyed on the contribution's shape
+# would turn a correct grep into a false GAP, which is the same
+# regression-dressed-as-caution the array subtest guards against, one op over.
+subtest 'grep with an aggregate body still lowers' => sub {
+    for my $case (
+        [ 'my %h=(a=>1,b=>2); my @g = grep { %h } (1,2); print scalar(@g);',
+          '2', 'hash' ],
+        [ 'my @b=(7,8); my @g = grep { @b } (1,2,3); print scalar(@g);',
+          '3', 'array' ],
+    ) {
+        my ( $src, $want, $label ) = $case->@*;
+        my ( $out, $w, $err ) = run_and_translate( $src, "grep-agg-$label" );
+        is $out, $want, "perl keeps all $want ($label body)";
+        ok $w, "... and B::SoN still lowers it ($label)" or diag($err);
+    }
+};
+
 done_testing;
