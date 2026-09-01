@@ -245,4 +245,48 @@ subtest 'Return exposes both readings by name' => sub {
         'scalar_value() is absent -- there is no second reading to take';
 };
 
+# THE LIST READING IS FLATTENED, not nested. `return (99,@x)` in list context
+# yields THREE values, and perl agrees for both a static and a runtime @x:
+#
+#     my @x=(10,20);      return (99,@x)  -> 99 10 20   (3)
+#     my @x=(1..$n);      return (99,@x)  -> 99 1 2 3   (4 for $n=3)
+#
+# Emitting ArrayLiteral[99, ArrayLiteral[10,20]] makes a consumer counting
+# inputs read 2 where perl says 3, and forces it to box a nested aggregate --
+# which chalk cannot tag honestly, since an %Array* is not a boxed pointer to
+# an %Array. Every list return B::SoN emits has STATIC arity (a runtime range
+# refuses upstream), so the flattening is always possible here.
+subtest 'a list return flattens its aggregate operands' => sub {
+    my ( $out, $w, $err ) = run_and_translate(
+        'sub mix { my @x=(10,20); return (99,@x) } my @l = mix(); print scalar(@l);',
+        'flatten' );
+    is $out, '3', 'perl yields three values' or return;
+    ok $w, 'it translates' or do { diag($err); return };
+
+    my $ns = nodes_of( $w, 'main::mix' );
+    my %by = map { $_->{id} => $_ } $ns->@*;
+    my ($ret) = grep { ( $_->{op} // '' ) eq 'Return' } $ns->@*;
+    ok $ret, 'the callee has a Return' or return;
+
+    my $list = $by{ ( $ret->{inputs} // [] )->[0] // '' };
+    ok $list, 'it returns a list value' or return;
+    is scalar( ( $list->{inputs} // [] )->@* ), 3,
+        'the list reading holds three values, not two-with-a-nested-array';
+
+    # No input may itself be an aggregate: that is the nesting, restated.
+    my @nested = grep {
+        my $in = $by{$_};
+        $in && ( $in->{stamp} // '' ) =~ /\A(?:Array|Hash|List)\z/
+    } ( $list->{inputs} // [] )->@*;
+    is scalar(@nested), 0, 'and none of them is itself an aggregate';
+
+    # The SCALAR reading must survive the flattening: `return (99,@x)` in
+    # scalar context is @x's LENGTH (2), not its last element and not 3.
+    my ($count) = grep { ( $_->{op} // '' ) eq 'Count' } $ns->@*;
+    ok $count, 'a Count still computes the scalar reading' or return;
+    my $counted = $by{ ( $count->{inputs} // [] )->[0] // '' };
+    is scalar( ( $counted->{inputs} // [] )->@* ), 2,
+        '... over the trailing array (2), not the flattened list';
+};
+
 done_testing;

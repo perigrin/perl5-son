@@ -1269,8 +1269,33 @@ class SoN::FromOptree 0.01 {
     # not 20), so the Coerce takes a Count; otherwise it is that operand's own
     # value. The callsite's `want` says which reading to take.
     sub _list_return_value ($factory, $values, $exit_op) {
+        # FLATTEN AGGREGATE OPERANDS. A list return yields all N values, and
+        # perl flattens whatever an operand contributes:
+        #
+        #     my @x=(10,20); return (99,@x)  ->  99 10 20   (3, not 2)
+        #
+        # Emitting ArrayLiteral[99, ArrayLiteral[10,20]] makes a consumer
+        # counting inputs read 2 where perl says 3, and hands it a nested
+        # aggregate to box -- which the backend cannot tag honestly, since an
+        # %Array* is not a boxed pointer to an %Array.
+        #
+        # Always possible here: a runtime-sized aggregate refuses upstream (a
+        # non-constant range is its own GAP), so every list return that reaches
+        # this point has statically known arity.
+        my @flat;
+        for my $v ($values->@*) {
+            my $st = $v->stamp;
+            if ( defined $st && ( $st->type eq 'Array' || $st->type eq 'Hash' )
+                 && $v->operation =~ /\A(?:Array|Hash)Literal\z/ ) {
+                push @flat, $v->inputs->@*;
+            }
+            else {
+                push @flat, $v;
+            }
+        }
+
         my $list = $factory->make('ArrayLiteral',
-            inputs => [ $values->@* ],
+            inputs => [ @flat ],
             stamp  => SoN::IR::Stamp->new(type => 'List'));
 
         # The scalar reading. _last_return_operand_is_aggregate reads the
