@@ -1107,7 +1107,26 @@ class SoN::FromOptree 0.01 {
         }
         elsif ($kind eq 'return') {
             my $args = $sim->pop_to_mark;
-            die "GAP: multi-value list return (return LIST) not yet lowered\n"
+            # A LIST RETURN IS NOT AN ARRAY RETURN, which is what makes this
+            # hard rather than a missing wrapper. Measured in SCALAR context:
+            #
+            #   sub f { return (10,20,30) }  my $s = f();   -> 30  (last value)
+            #   sub f { my @a=(...); return @a }  my $s=f() ->  3  (the COUNT)
+            #
+            # So wrapping N popped values in an ArrayLiteral -- which is what
+            # `return @a` lowers to -- makes a list return behave like an array
+            # return, and a scalar-context caller reads the container where perl
+            # reads the last value. Verified as a real miscompile before this
+            # was reverted: `my $s = f(); print $s` gave Print <- Call(:Array)
+            # where perl prints 30.
+            #
+            # The producer cannot pick one shape, because the answer depends on
+            # the CALLER's context and one sub may be called both ways in one
+            # program. Lowering this needs the callsite's OPf_WANT threaded into
+            # the callee's return, which is real work and not a wrapper.
+            die "GAP: multi-value list return (return LIST) not yet lowered"
+              . " -- its value depends on the CALLER's context (list yields all"
+              . " N, scalar yields the last), which the callee cannot see\n"
                 if $args->@* > 1;
             $value = $args->@* ? $args->[-1] : undef;
         }
@@ -1116,7 +1135,11 @@ class SoN::FromOptree 0.01 {
             # trailing statement: `sub { (10,20,30) }` compiles to const pushes
             # then leavesub (no return op, no runtime pushmark). Recover the
             # multi-value shape from the leavesub's optree, not the stack.
-            die "GAP: multi-value list return (trailing list) not yet lowered\n"
+            # The elided-return form (`sub { (10,20,30) }`, no return op) is
+            # the same construct and the same problem -- see the explicit
+            # branch above.
+            die "GAP: multi-value list return (trailing list) not yet lowered"
+              . " -- its value depends on the CALLER's context\n"
                 if _leavesub_returns_list($exit_op);
             $value = $sim->pop_node;
         }

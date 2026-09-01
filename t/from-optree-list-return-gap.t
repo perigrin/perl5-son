@@ -12,6 +12,20 @@ use SoN::FromOptree;
 # list context. The producer cannot know the caller's runtime wantarray, so a
 # >1-value list return cannot be soundly represented by a single scalar Return.
 # Per GAP-not-miscompile: refuse loudly rather than drop values.
+#
+# A LIST RETURN IS NOT AN ARRAY RETURN, which is the trap in "just wrap the N
+# values in the container `return @a` already uses". Measured in SCALAR context:
+#
+#     sub f { return (10,20,30) }        my $s = f();  -> 30  (the last value)
+#     sub f { my @a=(10,20,30); return @a }  my $s=f() ->  3  (the COUNT)
+#
+# So that wrapper makes a list return behave like an array return. Tried, and
+# it miscompiled exactly there: `my $s = f(); print $s` produced
+# Print <- Call(:Array) -- the whole container -- where perl prints 30.
+#
+# Lowering this needs the CALLSITE's OPf_WANT threaded into the callee's return
+# shape, since one sub can be called both ways in one program. That is real
+# work, not a missing wrapper, and until it exists the refusal is correct.
 
 subtest 'multi-value list return GAPs loudly (not silent drop)' => sub {
     my $sub = eval 'sub { return (10,20,30) }';
