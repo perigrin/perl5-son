@@ -70,4 +70,54 @@ subtest 'a plain list RHS is still wrapped element-wise' => sub {
     is scalar( $counted->{inputs}->@* ), 3, '... with one input per element';
 };
 
+# A BUILTIN THAT YIELDS N VALUES MUST NOT BE REWRAPPED EITHER. The rule above
+# keys on the operand's STAMP, so it fires for an aggregate VALUE (`my @a = @b`,
+# stamped Array) and walks straight past a builtin CALL, which is stamped
+# Unknown:
+#
+#     my %h = (b=>2, a=>1); my @k = keys %h; print scalar(@k);
+#     perl: 2
+#     graph: ArrayLiteral[Call(keys)] -- ONE input, so Count reads 1
+#
+# Same discriminating-property error as the map/grep contribution deny-list:
+# what matters is whether the operand yields N values, and the stamp is a proxy
+# for that which does not hold for a Call.
+#
+# Found by chalk while lowering `keys`: latent today, because keys GAPs in
+# their backend before Count runs, and live the moment it does not.
+subtest 'a list-yielding builtin is not rewrapped' => sub {
+    for my $case (
+        [ 'my %h = (b=>2, a=>1); my @k = keys %h; print scalar(@k);',
+          '2', 'keys' ],
+        [ 'my %h = (b=>2, a=>1); my @v = values %h; print scalar(@v);',
+          '2', 'values' ],
+    ) {
+        my ( $src, $want, $label ) = $case->@*;
+
+        # Run perl itself, so the expected count is measured rather than
+        # asserted from memory.
+        my $pf = "$dir/builtin-$label-run.pl";
+        open my $rfh, '>', $pf or die $!;
+        print {$rfh} "$src\n";
+        close $rfh;
+        is scalar(qx{$PERL $pf 2>/dev/null}), $want,
+            "perl yields $want ($label)";
+
+        my ( $w, $err ) = translate( $src, "builtin-$label" );
+        ok $w, "... and it translates ($label)" or do { diag($err); next };
+
+        my $ns = nodes($w);
+        my %by = map { $_->{id} => $_ } $ns->@*;
+        my ($count) = grep { ( $_->{op} // '' ) eq 'Count' } $ns->@*;
+        ok $count, "... a Count reports the size ($label)" or next;
+
+        # The Count must read the CALL, not an ArrayLiteral wrapping it: a
+        # wrapper has one input and reports 1 whatever the hash holds.
+        my $counted = $by{ ( $count->{inputs} // [] )->[0] // '' };
+        ok $counted, "... and it counts something ($label)" or next;
+        isnt $counted->{op}, 'ArrayLiteral',
+            "... the counted node is not a rewrap of the builtin ($label)";
+    }
+};
+
 done_testing;

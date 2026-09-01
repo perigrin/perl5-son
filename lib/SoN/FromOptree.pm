@@ -153,8 +153,18 @@ class SoN::FromOptree 0.01 {
         # one. A test written for the REF types alone silently excluded them, so
         # `scalar(@g)` fell through to the non-aggregate path and produced a
         # Coerce of the array instead of a Count of it.
+        # `List` COUNTS TOO, and leaving it out is this same omission a THIRD
+        # time -- first ArgsSource, then Array/Hash, now List. A list-yielding
+        # builtin (`my @k = keys %h`) is stamped List, and without this
+        # `scalar(@k)` emitted a Coerce of the Call instead of a Count of it.
+        #
+        # Every member is "a value holding N elements", and the lattice already
+        # says so: Array, Hash and Scalar all descend from List. Testing
+        # membership rather than enumerating the names would retire the class,
+        # but the names are what the callers compare today.
         return ($t eq 'ArrayRef' || $t eq 'HashRef'
-             || $t eq 'Array'    || $t eq 'Hash') ? true : false;
+             || $t eq 'Array'    || $t eq 'Hash'
+             || $t eq 'List') ? true : false;
     }
 
     # _rhs_is_aggregate_access($assign_op) -- true iff the RHS of a scalar
@@ -1352,6 +1362,26 @@ class SoN::FromOptree 0.01 {
             $kid = $kid->sibling;
         }
         return $n > 0 ? $n : undef;
+    }
+
+    # A CONTEXT-SENSITIVE BUILTIN'S RESULT, read from the op rather than a
+    # table row.
+    #
+    # TypeLibrary deliberately has no signature for these: `keys` is a COUNT in
+    # scalar context and the KEYS in list context, and the join of the two
+    # reaches Unknown, which says nothing. Its own comment prescribes reading
+    # `$op->flags` at the construction site instead -- measured, `my @k = keys
+    # %h` is want=3 and `my $n = keys %h` is want=2.
+    #
+    # Left unstamped the Call was Unknown, and `scalar(@k)` then emitted a
+    # Coerce of it rather than a Count, because _is_aggregate_node had nothing
+    # aggregate to recognise. Stamping it List is what makes the count reachable.
+    sub _context_builtin_stamp ($op, $name) {
+        state $LIST_IN_LIST_CONTEXT =
+            { map { $_ => 1 } qw( keys values reverse sort ) };
+        return undef unless $LIST_IN_LIST_CONTEXT->{$name};
+        my $want = $op->flags & 3;
+        return SoN::IR::Stamp->new( type => $want == 3 ? 'List' : 'Int' );
     }
 
     sub _exit_record ($sim, $factory, $kind, $exit_op = undef, $is_program = 0) {
@@ -3667,7 +3697,9 @@ class SoN::FromOptree 0.01 {
                     $extra{name}          = $name;
                     %extra = (%extra, _sort_fields($op)) if $name eq 'sort';
                 }
-                my $stamp = _result_stamp($node_type, \@inputs,
+                my $stamp = ( $node_type eq 'Call'
+                              ? _context_builtin_stamp($op, $name) : undef )
+                         // _result_stamp($node_type, \@inputs,
                     $node_type eq 'Call' ? $name : undef);
                 $extra{stamp} = $stamp if defined $stamp;
                 my $node = $factory->make($node_type, inputs => \@inputs, %extra);
@@ -3764,12 +3796,35 @@ class SoN::FromOptree 0.01 {
                     # perl says 2. Match on the STAMP, not the node kind: an
                     # ArrayLiteral is itself an aggregate node, so keying off
                     # that would stop wrapping `my @a = (@b)` legitimately.
+                    # A BUILTIN THAT YIELDS N VALUES IS ALSO ALREADY THE
+                    # AGGREGATE. Keying only on the stamp fires for a value
+                    # (`my @a = @b`, stamped Array) and walks past a CALL,
+                    # which is stamped Unknown -- so `my @k = keys %h` became
+                    # ArrayLiteral[Call], one input for two elements, and
+                    # Count read 1 where perl says 2.
+                    #
+                    # The discriminating property is whether the operand
+                    # yields N values, not what it is stamped; the stamp is a
+                    # proxy that does not hold for a Call. Same error as the
+                    # map/grep contribution deny-list, one construct over.
+                    state $YIELDS_LIST = { map { $_ => 1 }
+                        qw( keys values sort reverse map grep splice ) };
+
                     my $want = $sigil eq '@' ? 'Array' : 'Hash';
                     if ($rhs->@* == 1) {
-                        my $stamp = $rhs->[0]->stamp;
-                        if (defined $stamp && $stamp->type eq $want) {
-                            $sim->define($key, $rhs->[0]);
-                            $sim->push_node($rhs->[0]);
+                        my $only  = $rhs->[0];
+                        my $stamp = $only->stamp;
+                        my $is_aggregate_value =
+                            defined $stamp && $stamp->type eq $want;
+                        my $is_list_builtin =
+                               $only->operation eq 'Call'
+                            && $only->can('name')
+                            && defined $only->name
+                            && $YIELDS_LIST->{ $only->name };
+
+                        if ($is_aggregate_value || $is_list_builtin) {
+                            $sim->define($key, $only);
+                            $sim->push_node($only);
                             return ($op->next, 'handled');
                         }
                     }
@@ -4040,7 +4095,9 @@ class SoN::FromOptree 0.01 {
                                    $elem_lvalue->inputs->[1], $sim->memory]);
                 }
 
-                my $stamp = _result_stamp($node_type, \@inputs,
+                my $stamp = ( $node_type eq 'Call'
+                              ? _context_builtin_stamp($op, $name) : undef )
+                         // _result_stamp($node_type, \@inputs,
                     $node_type eq 'Call' ? $name : undef);
 
                 # AN ANON-REF LITERAL IS A REFERENCE, and only the OPTREE OP
