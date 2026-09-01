@@ -2681,6 +2681,26 @@ class SoN::FromOptree 0.01 {
                 or die "GAP: an anonymous sub whose body could not be reached"
                      . " from the pad is not yet lowered\n";
 
+            # THE NAME MUST REACH A CONSUMER, or the body is emitted with
+            # nothing pointing at it and the call goes nowhere. Measured when
+            # this was missing: `my @subs = (sub{1}, sub{2}); $subs[0]->()`
+            # emitted two bodies and two Call(name="unknown") -- perl prints 3,
+            # the graph calls nothing. That is the original silent-drop defect
+            # returned, and worse, because the graph now looks complete.
+            #
+            # WHAT MATTERS IS WHETHER THE NODE IS CONSUMED, not which op comes
+            # next. An earlier guard keyed on the following op and got this
+            # wrong twice in both directions: it refused `sub {...}->()` (the
+            # entersub is reached through a null) and, once that was fixed, it
+            # still refused `$SIG{__WARN__} = sub {...}` -- a hash-element
+            # Assign that DOES consume the AnonSub and names the body
+            # correctly. The op sequence is a proxy for consumption and a bad
+            # one; consumption is checkable directly, after the fact.
+            #
+            # So the node is built unconditionally here and the whole graph is
+            # checked once at the end (see _refuse_orphan_anon_bodies), which
+            # is the only place that can see whether anything referenced it.
+
             my $anon_name = _anon_body_name($cv, $op);
             $ANON_BODIES{$anon_name} //= $body;
 
@@ -2798,6 +2818,34 @@ class SoN::FromOptree 0.01 {
             if ($op->flags & 4) {                               # OPf_KIDS
                 my $kid = $op->can('first') ? $op->first : undef;
                 my $kname = ( ref($kid) && $$kid ) ? $kid->name : '';
+
+                # A PACKAGE SCALAR IS THE SAME OPERATION AS A LEXICAL ONE.
+                # `undef $a` rebinds that name to undef exactly as `undef $x`
+                # does; only the slot is named differently -- a stash key
+                # rather than a pad index. It was refused only because the kid
+                # is a gvsv (or rv2sv) instead of a padsv, which is a fact
+                # about how perl spells the operand, not about the operation.
+                #
+                # The kid has already pushed the variable's current value, and
+                # a package scalar's node carries its own name, so the key
+                # comes from the node rather than from a targ.
+                if ($kname eq 'gvsv' || $kname eq 'rv2sv') {
+                    my $cur = $sim->stack_depth > 0 ? $sim->pop_node : undef;
+                    my $node = _undef_constant($factory);
+                    if ($cur && $cur->can('stash_name') && $cur->can('sigil')
+                        && ( $cur->sigil // '' ) eq '$') {
+                        $sim->define(_stash_key($cur), $node);
+                    }
+                    # No recognisable name to rebind: pushing the constant
+                    # would silently drop the write, so refuse instead.
+                    else {
+                        die "GAP: undef(EXPR) on a package scalar whose name"
+                          . " could not be resolved ($kname) not yet lowered\n";
+                    }
+                    $sim->push_node($node);
+                    return ($op->next, 'handled');
+                }
+
                 die "GAP: undef(EXPR) on this operand not yet lowered"
                   . " ($kname) -- on an aggregate it EMPTIES the container"
                   . " rather than rebinding a name, which is not `\@a = undef`\n"

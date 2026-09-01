@@ -49,14 +49,52 @@ subtest 'an anonymous sub is lowered, not dropped' => sub {
         '... and its body is present under that name';
 };
 
-subtest 'an anonymous sub passed as a callback is lowered' => sub {
+# A CALLBACK ARGUMENT STILL REFUSES, and that is the correct answer today.
+# `apply(sub { 7 })` passes the anon sub as an ARGUMENT: the entersub that
+# follows calls `apply`, not the anon sub, so nothing on the wire would name
+# the body. Lowering it emits a graph whose body is unreachable -- the same
+# defect as a Call to "unknown", which is what this file exists to forbid.
+#
+# The value side needs a node carrying the name before this can lower.
+# A CALLBACK ARGUMENT LOWERS: the AnonSub node rides as an input to the Call,
+# so the body IS named even though no Call names it directly. That the callee
+# then calls it through a parameter (`$f->()` -> Call name="unknown") is a
+# separate, PRE-EXISTING limitation -- `apply(\&named_sub)` produces the same
+# unknown, so it is nothing to do with anonymity.
+subtest 'an anonymous sub passed as a callback is lowered and named' => sub {
     my ( $w, $err ) = translate(
         'sub apply { my $f = shift; $f->() } print apply(sub { 7 });',
         'anon-callback' );
     ok $w, 'it translates' or do { diag($err); return };
+
     my %methods = ( $w->{methods} // {} )->%*;
-    ok scalar( grep { /__ANON__/ } keys %methods ),
-        'the callback body reached the wire as its own graph';
+    my @anon = grep { /__ANON__/ } keys %methods;
+    is scalar(@anon), 1, 'the body reached the wire' or return;
+
+    # It must be NAMED by something -- here an AnonSub node passed as an
+    # argument, not a Call. A body nothing names is the defect this file
+    # forbids, whichever node does the naming.
+    my %named;
+    for my $mm ( keys %methods ) {
+        for my $n ( ( $methods{$mm}{nodes} // [] )->@* ) {
+            my $nm = $n->{fields}{name};
+            $named{$nm} = 1 if defined $nm;
+        }
+    }
+    ok $named{ $anon[0] }, '... and something names it';
+};
+
+# A BODY NOTHING CAN NAME REFUSES, and takes its enclosing graph with it.
+# Shipping the enclosing graph would leave a Call to "unknown" pointing at a
+# body that is not there -- worse than the refusal, because it looks complete.
+subtest 'an unnameable anon sub refuses, emitting nothing' => sub {
+    my ( $w, $err ) = translate(
+        'my @subs = (sub { 1 }, sub { 2 }); print $subs[0]->() + $subs[1]->();',
+        'anon-orphan' );
+    like $err, qr/GAP/, 'it refuses';
+    my %methods = ( ( $w // {} )->{methods} // {} )->%*;
+    is scalar( grep { /__ANON__/ } keys %methods ), 0,
+        '... and emits no orphan body';
 };
 
 # A CAPTURING ONE STILL REFUSES. The slice is deliberately partial: a per-site

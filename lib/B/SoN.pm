@@ -208,9 +208,63 @@ sub _discover_and_translate {
         }
     }
 
+    # AN ANON BODY NOTHING NAMES MUST NOT SHIP. Emitting the body while its
+    # call says name="unknown" is the original silent-drop defect returned, and
+    # worse: the graph looks complete while the call goes nowhere. Measured --
+    # `my @subs = (sub{1}, sub{2}); $subs[0]->() + $subs[1]->()` gave two
+    # bodies and two Call(name="unknown"); perl prints 3, the graph calls
+    # nothing.
+    #
+    # CHECKED HERE, not at the anoncode site, because only here is it knowable.
+    # A guess based on the following op was wrong in both directions: it
+    # refused `sub {...}->()` (its entersub is reached through a null) and
+    # `$SIG{__WARN__} = sub {...}` (an Assign that DOES consume the AnonSub).
+    # Whether a node is referenced is a fact about the finished graph.
+    _refuse_orphan_anon_bodies( \%graphs );
+
     _resolve_deferred_stamps( \%graphs, \%classes );
 
     return ( \%graphs, \%classes );
+}
+
+# _refuse_orphan_anon_bodies(\%graphs) -- drop any anon body that nothing
+# names, and the graph that should have named it.
+#
+# The name reaches a consumer either as a Call's `name` (the sub was called) or
+# as an AnonSub node's `name` (it was stored as a value). If neither appears
+# anywhere, the body is unreachable: its callsite is a Call to "unknown", so
+# shipping it would be a silent wrong answer rather than a missing feature.
+#
+# The ENCLOSING graph is dropped too, with a GAP. Keeping it would ship exactly
+# the call-to-nowhere this exists to prevent.
+sub _refuse_orphan_anon_bodies {
+    my ($graphs) = @_;
+
+    my %named;
+    for my $gname ( keys $graphs->%* ) {
+        my $graph = $graphs->{$gname} or next;
+        for my $node ( $graph->nodes->@* ) {
+            next unless $node->can('name');
+            my $n = eval { $node->name };
+            $named{$n} = 1 if defined $n;
+        }
+    }
+
+    for my $anon ( sort grep { /__ANON__/ } keys $graphs->%* ) {
+        next if $named{$anon};
+        delete $graphs->{$anon};
+
+        # The name is `<enclosing>::__ANON__:<line>:<targ>`, so the enclosing
+        # graph is the part before that marker.
+        my ($encl) = $anon =~ /\A(.*?)::__ANON__:/;
+        next unless defined $encl && exists $graphs->{$encl};
+        delete $graphs->{$encl};
+        warn "B::SoN: skipped $encl: GAP: an anonymous sub whose value is"
+           . " neither called nor bound where the wire can name it"
+           . " ($anon) is not yet lowered -- its body would ship with"
+           . " nothing pointing at it\n";
+    }
+    return;
 }
 
 # _resolve_deferred_stamps(\%graphs, \%classes) -- answer, once every graph

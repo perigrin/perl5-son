@@ -102,4 +102,54 @@ subtest 'a capturing anon sub still refuses' => sub {
         'it refuses, naming the captured variable';
 };
 
+# A BODY NOTHING NAMES IS THE ORIGINAL DEFECT, RETURNED. Emitting the body and
+# leaving its Call named "unknown" is strictly worse than the GAP it replaced:
+# the graph looks complete while the call goes nowhere.
+#
+# Measured before this was caught -- `my @subs = (sub{1}, sub{2});
+# $subs[0]->() + $subs[1]->()` gave TWO Call(name="unknown") and two methods
+# entries nothing referenced. perl prints 3; the graph calls nothing.
+#
+# The callee resolution only follows a DIRECT pad binding (`my $c = sub{...};
+# $c->()`), so an anon sub reached through an array element, a hash value, or a
+# parameter has no name to resolve. Those refuse until the value side can carry
+# the name.
+subtest 'an anon sub whose callee cannot be resolved refuses' => sub {
+    for my $case (
+        [ 'my @subs = (sub { 1 }, sub { 2 }); print $subs[0]->() + $subs[1]->();',
+          '3', 'array-element' ],
+        [ 'my %d = (a => sub { 5 }); print $d{a}->();', '5', 'hash-value' ],
+        [ '$SIG{__WARN__} = sub { 1; }; print "ok";', 'ok', 'hash-assign' ],
+    ) {
+        my ( $src, $want, $label ) = $case->@*;
+        my ( $out, $w, $err ) = run_and_translate( $src, "anon-unres-$label" );
+        is $out, $want, "perl runs it ($label)";
+
+        # Either it refuses, or every emitted anon body is named by something.
+        # What it must never do is emit a body and call "unknown".
+        if ($w) {
+            my %methods = ( $w->{methods} // {} )->%*;
+            my %named;
+            for my $mm ( keys %methods ) {
+                for my $n ( ( $methods{$mm}{nodes} // [] )->@* ) {
+                    my $nm = $n->{fields}{name};
+                    $named{$nm} = 1 if defined $nm;
+                }
+            }
+            my @dangling =
+                grep { /__ANON__/ && !$named{$_} } sort keys %methods;
+            is scalar(@dangling), 0,
+                "no anon body is emitted unreferenced ($label)";
+            ok !scalar( grep {
+                ( $_->{op} // '' ) eq 'Call'
+                    && ( $_->{fields}{name} // '' ) eq 'unknown'
+            } ( $methods{'main::__PROGRAM__'}{nodes} // [] )->@* ),
+                "... and no Call names 'unknown' ($label)";
+        }
+        else {
+            like $err, qr/GAP/, "it refuses instead ($label)";
+        }
+    }
+};
+
 done_testing;
