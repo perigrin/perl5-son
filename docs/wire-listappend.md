@@ -106,12 +106,47 @@ The **input** list is stamped by what it is, and it is not always `Array`:
 it, so a consumer wanting "some list-ish thing" should test against `List` and
 accept its subtypes rather than matching `Array` exactly.
 
+## Identity and hash-consing
+
+`ListAppend` declares no `content_hash`, so it inherits the base
+(`SoN/IR/Node.pm`): `op|inputs`. It is hash-consed and it **does** dedupe —
+two built from the same Phi with the same inputs come back as one node.
+
+Two `ListAppend`s in different loops nonetheless cannot collide, and the reason
+is structural rather than incidental: `inputs[0]` is always a loop Phi, and
+`Phi` overrides `content_hash` to include its region
+(`Phi|region=<id>|inputs`). Different loops have different regions, so their
+Phis differ, so the appends hanging off them differ.
+
+Measured against the worst case — identical bodies, identical predicate, same
+input array:
+
+    my @a = (1,2,3);
+    my @x = grep { $_ > 1 } @a;
+    my @y = grep { $_ > 1 } @a;
+
+yields two Loops, four Phis and two distinct `ListAppend`s.
+
+**The guarantee is inherited from Phi, not owned by `ListAppend`.** Were an
+emitter ever to produce a `ListAppend` whose `inputs[0]` is not a region-keyed
+Phi — one feeding another, from a nested `map` — two could collide and a
+consumer would get a silent wrong answer. Nested `map`/`grep` refuses today
+(`GAP: foreach body writes the iterator variable`), so it cannot arise. A
+consumer wanting independence from that can give the node a per-call identity
+rather than a content identity.
+
+## Serialization order
+
+Every `ListAppend` input resolves to a strictly earlier position in the node
+list — verified across the grep-literal, map-literal, empty-map and two-loop
+shapes. In particular the accumulator Phi is always serialized before the
+`ListAppend` reading it, so a loader that rejects forward input references
+(other than a loop Phi's own back-edge) will not trip on this node.
+
 ## What a consumer must not assume
 
 1. That `ListAppend` has a fixed arity. It does not; it is 1 or more.
-2. That `inputs[0]` is a Phi *forever*. It is one in every graph emitted today,
-   because nested `map`/`grep` currently refuses (`GAP: foreach body writes the
-   iterator variable`) and so no `ListAppend` ever feeds another. Treat it as a
-   list-valued node.
+2. That `inputs[0]` is a Phi *forever*. See "Identity" below for why that
+   currently matters more than it looks.
 3. That the last input is a predicate. That holds for `grep` only.
 4. That the input list is stamped `Array`. A literal list is stamped `List`.
