@@ -3866,8 +3866,29 @@ class SoN::FromOptree 0.01 {
                 }
             }
 
-            # Fallback: a generic list assignment.
-            my $node = $factory->make('Assign', inputs => [$lhs->@*]);
+            # Fallback: a generic list assignment. THE RHS IS STILL ON THE
+            # STACK behind its mark, and building the Assign from the LHS alone
+            # DROPPED IT -- measured:
+            #
+            #     @_ = map { "x$_" } "y";  print "@_";
+            #     perl:  xy
+            #     graph: Assign in=[ArgsSource]   -- one input, no value
+            #
+            # The map result reached nothing, so a consumer could not recover
+            # what was assigned. The Unknown stamp was the SYMPTOM: a 1-input
+            # Assign has no stored value to yield, which _derived_type honestly
+            # refuses. Stamping it without taking the RHS would have papered
+            # over a silent drop.
+            # TAKE ONLY WHAT IS ABOVE THE MARK, and do NOT consume the mark
+            # itself: it may belong to an enclosing construct, and popping it
+            # left a later handler with none ("No mark on mark stack" in
+            # comp/require.t's bytes_to_utf, which is an INTERNAL error rather
+            # than an honest GAP).
+            my @rhs;
+            unshift @rhs, $sim->pop_node
+                while $sim->stack_depth > $sim->mark_depth;
+            my $node = $factory->make('Assign',
+                inputs => [ $lhs->@*, @rhs ]);
             $sim->push_node($node);
             return ($op->next, 'handled');
         }
@@ -3941,8 +3962,20 @@ class SoN::FromOptree 0.01 {
             # control_in (produce-time control) so the stdout effect is
             # ordered and survives DCE, mirroring the I1 void-effect path.
             my $is_effect = defined $sim->control;
+            # STAMPED, because print HAS a return value and this file already
+            # said so twice in prose -- Print.pm's ABOUTME ("yielding print's
+            # boolean 1") and the push below ("print returns 1") -- while
+            # leaving the node untyped, so a sub whose body ends in print had
+            # nothing to derive a return type from and declared Unknown.
+            #
+            # Measured: `print ""` yields 1; printing to a read-only handle
+            # yields undef. So the honest type is join(Boolean,Undef), which
+            # the lattice puts at Scalar -- the same derivation `open` and
+            # `binmode` use. Boolean ALONE would be wrong rather than narrow,
+            # since Boolean does not admit undef.
             my $node = $factory->make('Print', inputs => \@inputs,
-                has_filehandle => $has_fh);
+                has_filehandle => $has_fh,
+                stamp => SoN::IR::Stamp->new(type => 'Scalar'));
             if ($is_effect) {
                 $node->set_control_in($sim->control);
                 $sim->set_control($node);

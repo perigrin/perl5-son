@@ -5,6 +5,7 @@ use utf8;
 use Test::More;
 use File::Temp qw(tempdir);
 use JSON::PP;
+use SoN::IR::Stamp;
 
 my $PERL = $^X;
 my $dir  = tempdir(CLEANUP => 1);
@@ -109,16 +110,42 @@ print "x=$x\n";', 'undef_merge');
 # claiming Int would assert a type one path cannot support. The arm here carries
 # a value from `shift`, which is a Call: its type belongs to its callee, so no
 # use-site constraint may fill it in. See the note in wire-selftyped-stamp.t.
-subtest 'an Unknown arm leaves the merge Unknown' => sub {
+# THE PREMISE ABOVE WAS ALREADY FALSE and this subtest was passing for the
+# wrong reason. `shift` is NOT untyped: measured, its arm is Call:Scalar, and
+# has been since the floor passes started typing it. The merge read Unknown
+# only because nothing re-asked it after the floor -- so the subtest was
+# measuring a PASS-ORDERING gap while claiming to measure poisoning.
+#
+# With the merge re-asked, join(Int,Scalar) = Scalar is the lattice's answer
+# and the right one. The poisoning RULE is unchanged and is asserted directly
+# below, against Stamp itself, so it cannot again be tested by proxy through a
+# fixture whose arms turn out to be typed.
+subtest 'the poisoning rule: an Unknown arm yields Unknown' => sub {
+    is SoN::IR::Stamp::join(
+        SoN::IR::Stamp->new( type => 'Int' ),
+        SoN::IR::Stamp->new( type => 'Unknown' ),
+    )->type, 'Unknown',
+        'join(Int,Unknown) is Unknown -- claiming Int would assert a type one
+         path cannot support';
+
+    # And the merge pass must DECLINE rather than narrow when it sees one.
     my $wire = wire_for('sub g { my $u = shift; my $x = 0;
 if ($u > 1) { print "hi\n"; $x = $u }
 return $x }
 print g(7), "\n";', 'poisoned');
+    my %by = map { $_->{id} => $_ } ($wire->{methods}{'main::g'}{nodes} // [])->@*;
     my @p = grep { $_->{op} eq 'Phi' && scalar(($_->{inputs} // [])->@*) == 2 }
-            ($wire->{methods}{'main::g'}{nodes} // [])->@*;
+            values %by;
     ok @p >= 1, 'a merge Phi exists' or return;
-    is $p[0]{stamp}, 'Unknown',
-        'a merge with an untyped arm stays Unknown, not the typed arm';
+
+    # Whatever its arms turn out to be, the Phi must equal their join -- never
+    # one arm picked over the other.
+    my @arms = map { $by{$_}{stamp} // 'Unknown' } ($p[0]{inputs} // [])->@*;
+    my $lub = SoN::IR::Stamp->new( type => $arms[0] );
+    $lub = SoN::IR::Stamp::join( $lub, SoN::IR::Stamp->new( type => $_ ) )
+        for @arms[ 1 .. $#arms ];
+    is $p[0]{stamp}, $lub->type,
+        "the merge is the join of [@arms], not either arm alone";
 };
 
 done_testing;

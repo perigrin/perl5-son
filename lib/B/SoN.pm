@@ -390,6 +390,18 @@ sub _resolve_deferred_stamps {
         _rederive_sub_return_types( $graphs, $classes );
         _stamp_calls_from_callees( $graphs, $classes );
         _stamp_derived($graphs);
+        # A MERGE MUST BE RE-ASKED AFTER THE FLOOR. `_stamp_merges` already
+        # runs in the FIRST loop and already implements the right rule, but
+        # that loop settles while an arm can still be Unknown -- it declines,
+        # correctly. `_stamp_derived` above then types that arm, and nothing
+        # put the question again, so a Phi ended with both inputs narrowed and
+        # itself still Unknown.
+        #
+        # Measured on base/rs.t: a merge of Add/Num against Constant/Str,
+        # where the Add is typed only after _floor_package_globals. The
+        # poisoning rule is unaffected -- an Unknown arm still yields Unknown,
+        # which is the lattice's answer and not a special case.
+        _stamp_merges($graphs);
         my $coerced = _insert_type_coercions( $graphs, $classes );
         # The Unknown count alone cannot see this pass: a Str -> Num repair
         # moves no node off Unknown. So a round that inserted anything is a
@@ -1057,7 +1069,7 @@ sub _stamp_calls_from_callees {
             # class): a caller that KNOWS still wins, as at the factory default.
             next unless ( $node->stamp ? $node->stamp->type : '' ) eq 'Unknown';
 
-            my $type = _callee_return_type( $node, $classes );
+            my $type = _callee_return_type( $node, $classes, $graphs );
             next unless defined $type && $type ne 'Unknown';
 
             $node->set_stamp( SoN::IR::Stamp->new( type => $type ) );
@@ -1601,7 +1613,7 @@ sub _declared_slot_type {
 # Reads the SAME records the wire carries, so the callsite stamp and the callee
 # metadata cannot disagree: one source, consulted twice.
 sub _callee_return_type {
-    my ( $call, $classes ) = @_;
+    my ( $call, $classes, $graphs ) = @_;
     my $kind = $call->dispatch_kind // '';
     my $name = $call->name          // '';
 
@@ -1616,6 +1628,27 @@ sub _callee_return_type {
     # A direct sub call names the callee fully qualified (main::f). The sub
     # record hangs off its owning class under the BARE name.
     if ( $kind eq 'direct' ) {
+        # THE GRAPH IS THE MORE DIRECT SOURCE, and for an anon callee it is the
+        # ONLY one. Two independent things kept an anon body's type from its
+        # callsite, either alone sufficient:
+        #
+        #   1. No sub record exists for one. `_record_sub` runs from the stash
+        #      walks, and an anon body enters %graphs through %ANON_BODIES
+        #      without passing through it.
+        #   2. The pkg/bare split cannot parse the name even if a record did
+        #      exist: `main::__PROGRAM__::__ANON__:1:2` has a `1:2` tail, and
+        #      `[^:]+` cannot match it, so the whole match fails and the
+        #      fallback looks up a key that is never present.
+        #
+        # A Call names its callee graph exactly, so ask the graph first and
+        # neither problem arises. The class record stays the fallback: it
+        # carries a type for a sub whose graph was skipped, which the graph
+        # itself cannot then answer for.
+        if ( $graphs && exists $graphs->{$name} ) {
+            my $t = _graph_return_type( $graphs->{$name} );
+            return $t if defined $t && $t ne 'Unknown';
+        }
+
         my ( $pkg, $bare )
             = $name =~ /^(.*)::([^:]+)$/ ? ( $1, $2 ) : ( 'main', $name );
         my $cls = $classes->{$pkg} or return undef;

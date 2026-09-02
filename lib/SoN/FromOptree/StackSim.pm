@@ -55,6 +55,17 @@ class SoN::FromOptree::StackSim 0.01 {
         @marks = $positions->@*;
     }
 
+    # The stack position of the innermost mark, or 0 when there is none.
+    #
+    # READ-ONLY, unlike pop_to_mark: a handler that wants the values ABOVE the
+    # current mark without claiming the mark itself needs this. Consuming a
+    # mark that belongs to an enclosing construct leaves a later handler with
+    # none, which surfaces as "No mark on mark stack" -- an internal error
+    # rather than an honest GAP.
+    method mark_depth () {
+        return @marks ? $marks[-1] : 0;
+    }
+
     method stack_depth () {
         return scalar @stack;
     }
