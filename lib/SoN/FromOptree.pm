@@ -1776,25 +1776,6 @@ class SoN::FromOptree 0.01 {
         # so no stamp could have repaired this -- the operand was wrong as well
         # as the operator. Refuse until membership is a node of its own with
         # the container and the key as its operands.
-        # WANTARRAY IS A RUNTIME FUNCTION OF THE CALLER'S CONTEXT, and OpMap
-        # mapped it to `Constant` -- with no `value`, so the factory died
-        # "Required parameter 'value' is missing" and the sub was SILENTLY
-        # SKIPPED. An internal error where a named refusal belongs.
-        #
-        # No constant could have been right. It has THREE values, measured on
-        # 5.42.0, and which one depends on the CALLER:
-        #
-        #     my @l = w()    wantarray true    list context
-        #     my $s = w()    wantarray false   scalar context
-        #     w()            wantarray UNDEF   void context
-        #
-        # A sub is translated ONCE and cannot see its callers, which is
-        # precisely why perl makes this a runtime function -- a fact this file
-        # already states twice in prose while the table said otherwise.
-        wantarray => "GAP: `wantarray` reports the CALLER's context (list,"
-                   . " scalar, or void) and is therefore a runtime property"
-                   . " a single translation cannot fix",
-
         exists => "GAP: `exists` asks whether a key is PRESENT, which is not"
                 . " the same question as whether its value is defined, and no"
                 . " node yet expresses it -- it would otherwise test the key"
@@ -6778,9 +6759,19 @@ class SoN::FromOptree 0.01 {
         # depth-delta > 1 -- its extra values were left unmerged; refuse loudly
         # rather than silently drop them. (delta < 1 = a value-free arm, handled
         # as _undef_constant above; that is the if/else void form, not a list.)
-        die "GAP: list-context ternary with a multi-element list arm"
-          . " not yet lowered\n"
-            if $list_ctx && ($true_delta > 1 || $false_delta > 1);
+        # KEYED ON THE ARM, NOT ON THE OP'S DECLARED CONTEXT. A multi-element
+        # arm is one whatever OPf_WANT says, and requiring $list_ctx meant the
+        # guard never fired where the context is the CALLER'S:
+        #
+        #     my @l = $c ? (1,2) : ("s")        cond_expr lK/1   refused
+        #     sub g { $c ? (1,2) : ("s") }      cond_expr K/1    SILENTLY DROPPED
+        #
+        # A sub's return context is not on its ternary -- want is 0 -- so the
+        # same construct that refuses at top level dropped the `1` inside a
+        # body and `scalar(g())` read 1 where perl says 2. The delta is the
+        # real property: it counts what the arm actually pushed.
+        die "GAP: a ternary with a multi-element list arm not yet lowered\n"
+            if $true_delta > 1 || $false_delta > 1;
 
         # Merge arm pad rebinds in EVERY context -- an assignment inside a
         # value-context arm (`my $y = $c ? ($x = 1) : 2`) is a binding side

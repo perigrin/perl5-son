@@ -153,6 +153,21 @@ my %SIGNATURES = (
     Match      => { operands => [], result => 'Boolean' },
     IsaOp      => { operands => ['Scalar', 'Str'], result => 'Boolean' },
 
+    # WANTARRAY IS THE CALLSITE'S CONTEXT, and its type is the join over all
+    # three readings. Measured on 5.42.0:
+    #
+    #     my @l = f()   wantarray "1"     is_bool TRUE
+    #     my $s = f()   wantarray ""      is_bool TRUE
+    #     f()           wantarray undef
+    #
+    # join(Boolean, Undef) is Scalar. NOT Boolean alone -- the void reading is
+    # genuinely undef, and Boolean does not admit it, so claiming Boolean would
+    # have a consumer lower an i1 for a value that is undef at runtime. That is
+    # the same trade refused for `print`, whose failure path also yields undef.
+    #
+    # `operands => []` because it takes none: the value rides on the call edge.
+    Wantarray  => { operands => [], result => 'Scalar' },
+
     # Range yields a list of integers.
     Range      => { operands => ['Int', 'Int'], result => 'List' },
     # A SLICE IS A PLURAL READ, NOT A TYPE OF ITS OWN. `@a[1..5]` is a List for

@@ -17,7 +17,15 @@ use SoN::IR::NodeFactory;
 # parents (BinOp, UnaryOp, Access, Aggregate, Regex), so the split transfers
 # exactly.
 #
-# 90, NOT 88: the producer declares one node chalk does not. `Count` (an
+# 91, NOT 88: the producer declares nodes chalk does not.
+#
+# `Wantarray` is the newest. wantarray reports the CALLSITE's context, which
+# the graph carries as the Call node's `want` -- so the callee holds the
+# question and each callsite answers it, the same shape a multi-value return
+# already uses. It was previously a refusal, on the grounds that a sub is
+# compiled once and cannot see its callers: true of perl's INTERPRETER, and
+# not binding on a graph.
+# `Count` (an
 # aggregate's element count) was split out of `Length` (a string's character
 # count) because they are different operations that perl itself keeps apart --
 # `length` is its own op taking a string, while `scalar(@a)` compiles to a bare
@@ -102,7 +110,7 @@ subtest 'every node class is one or the other, never neither' => sub {
     my @names = sort map { s/\.pm$//r } grep { /\.pm$/ } readdir($dh);
     closedir $dh;
 
-    cmp_ok(scalar @names, '==', 90, 'all 90 node classes present');
+    cmp_ok(scalar @names, '==', 91, 'all 91 node classes present');
 
     for my $name (@names) {
         my $class = "SoN::IR::Node::$name";

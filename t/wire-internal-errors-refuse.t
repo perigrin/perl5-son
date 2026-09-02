@@ -37,12 +37,16 @@ sub translate ($src, $name) {
 # a sub is translated ONCE and cannot see its caller, which is exactly why
 # perl makes this a runtime function -- a fact this file already states twice
 # in prose while the table said otherwise.
-subtest 'wantarray refuses by name rather than crashing' => sub {
+# WANTARRAY IS NOW A NODE, not a refusal -- see t/wire-wantarray-node.t. It
+# reports the CALLSITE's context, and the graph carries that edge: entersub's
+# OPf_WANT reaches the wire as the Call's `want`, distinct per callsite. What
+# is asserted here is only that it does not CRASH, which is what this file is
+# about; the node's own contract is tested next door.
+subtest 'wantarray does not crash the translator' => sub {
     my (undef, $err) = translate(
-        'sub w { wantarray ? (1,2) : [] } my @l = w(); print scalar(@l);', 'wa');
+        'sub w { wantarray ? "L" : "S" } my @l = w(); print scalar(@l);', 'wa');
     unlike $err, qr/INTERNAL ERROR/, 'no internal error';
-    like $err, qr/GAP/, 'it refuses';
-    like $err, qr/wantarray/, 'and the refusal names the construct';
+    unlike $err, qr/GAP/, 'and it no longer needs to refuse';
 };
 
 # THE REFUSAL MUST NOT SPREAD. wantarray is the unlowered thing; a sub that

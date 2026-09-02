@@ -360,7 +360,12 @@ class SoN::FromOptree::OpMap 0.01 {
 
         # === Misc builtins ===
         undef       => [0, 'Constant',  1, 0],
-        wantarray   => [0, 'Constant',  1, 0],
+        # WANTARRAY IS THE CALLSITE'S CONTEXT, not a constant. It was mapped
+        # to `Constant` with no value, so the factory died "Required parameter
+        # 'value' is missing" -- an internal error for a construct that has a
+        # perfectly good node. Its value depends on the CALL EDGE, which the
+        # graph carries: the Call node's `want`, distinct per callsite.
+        wantarray   => [0, 'Wantarray', 1, PURE],
         caller      => [0, 'Call',       1, 0],
         die         => ['mark', undef,   0, 0],  # handled specially in FromOptree.pm
         warn        => ['mark', 'Call',  1, 0],
