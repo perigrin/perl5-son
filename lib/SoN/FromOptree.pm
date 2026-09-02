@@ -2277,6 +2277,43 @@ class SoN::FromOptree 0.01 {
             }
         }
 
+        # rv2gv MEANS "THE GLOB ITSELF IS THE VALUE HERE", and that is the one
+        # signal separating a glob used as a value from a glob used as a name.
+        # The gv handler pushes the glob's NAME as a Str Constant, which is
+        # correct where a name is wanted -- naming a callee, keying %ENV -- and
+        # a fabrication where the glob is the value. Measured, the optree draws
+        # the distinction for us:
+        #
+        #     foo()          gv[IV \&main::foo] -> entersub       no rv2gv
+        #     \*STDOUT       gv[*STDOUT] -> rv2gv -> srefgen      rv2gv
+        #     *STDIN         gv[*STDIN]  -> rv2gv                 rv2gv
+        #
+        # So restamp the name Constant as a Glob here rather than teaching the
+        # gv handler to guess from context it cannot see. `\*STDOUT` then
+        # becomes Ref(Glob), and B::SoN's Ref rule -- which follows its
+        # operand's kind -- yields GlobRef instead of calling it a ScalarRef.
+        #
+        # THE VALUE IS KEPT, NOT DISCARDED. The name is the only handle on
+        # WHICH glob this is (there is no address at compile time), and a
+        # consumer needs it to resolve STDOUT. What changes is the claim about
+        # its TYPE: `Glob` says "the handle named STDOUT", where `Str` said
+        # "the six-character string STDOUT" -- which is what perl prints for
+        # `print "STDOUT"` and emphatically not what it prints for
+        # `print \*STDOUT` (GLOB(0x...)).
+        if ($name eq 'rv2gv' && $sim->stack_depth > 0) {
+            my $top = $sim->peek_node;
+            if ($top && $top->isa('SoN::IR::Node::Constant')
+                && ($top->const_type // '') eq 'string'
+                && $top->stamp && $top->stamp->type eq 'Str') {
+                $sim->pop_node;
+                $sim->push_node($factory->make('Constant',
+                    value      => $top->value,
+                    const_type => 'glob',
+                    stamp      => SoN::IR::Stamp->new(type => 'Glob')));
+                return ($op->next, 'handled');
+            }
+        }
+
         # Skip bookkeeping ops
         if ($opmap->is_skip($name)) {
             return ($op->next, 'handled');
@@ -3990,10 +4027,22 @@ class SoN::FromOptree 0.01 {
             # An UNSTAMPED argument is left alone: coercing it would be a guess
             # about a type nothing has established, and the backend still has to
             # answer for it.
+            #
+            # THE FILEHANDLE IS NOT AN ARGUMENT. It is operand 0 when
+            # OPf_STACKED is set, it is a destination rather than something to
+            # print, and stringifying it is wrong in kind: `print STDERR "x"`
+            # writes "x" to stderr, it does not write "STDERR". This was masked
+            # while the gv handler stamped the handle Str -- _coerce_to_str
+            # returns a Str operand unchanged, so the wrong rule and the wrong
+            # operand type cancelled. Once the handle became an honest Glob the
+            # coercion fired and Coerce(Glob->Str) displaced the handle at
+            # operand 0.
+            my $fh_operand = $has_fh ? shift @inputs : undef;
             @inputs = map {
                 my $st = $_->can('stamp') ? $_->stamp : undef;
                 defined $st ? _coerce_to_str($factory, $_) : $_;
             } @inputs;
+            unshift @inputs, $fh_operand if defined $fh_operand;
 
             # Void statement position (the only shape wired): control-pin via
             # control_in (produce-time control) so the stdout effect is

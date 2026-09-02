@@ -891,6 +891,22 @@ sub _insert_type_coercions {
         for my $node ( $graph->nodes->@* ) {
             my $inputs = $node->inputs or next;
             for my $i ( 0 .. $#$inputs ) {
+                # PRINT'S FILEHANDLE IS A DESTINATION, NOT AN ARGUMENT.
+                # %NODE_OPERAND_TYPE says Print requires Str in "every
+                # position", which is true of everything it PRINTS and false of
+                # operand 0 when a handle is stacked there: `print STDERR "x"`
+                # writes "x" to stderr, it does not write "STDERR".
+                #
+                # This was invisible while the gv handler stamped a bareword
+                # handle Str -- the coercion predicate declines a Str operand,
+                # so a wrong rule and a wrongly-typed operand cancelled. Once
+                # the handle became an honest Glob the rule fired and
+                # Coerce(Glob->Str) took operand 0, displacing the handle.
+                next if $i == 0
+                    && $node->operation eq 'Print'
+                    && $node->can('has_filehandle')
+                    && $node->has_filehandle;
+
                 my $want = B::SoN::TypeLibrary::operand_type(
                     B::SoN::TypeLibrary::type_key($node), $i ) // next;
                 my $operand = $inputs->[$i] or next;
@@ -1369,6 +1385,10 @@ sub _derived_type {
         return 'ArrayRef'  if $it eq 'ArrayRef'  || $it eq 'Array';
         return 'HashRef'   if $it eq 'HashRef'   || $it eq 'Hash';
         return 'CodeRef'   if $it eq 'CodeRef'   || $it eq 'Code';
+        # `\*STDOUT` is a GlobRef. Without this arm it fell to the ScalarRef
+        # default below -- a reference to a filehandle described as a reference
+        # to a plain scalar.
+        return 'GlobRef'   if $it eq 'GlobRef'   || $it eq 'Glob';
         # A reference to a plain scalar is a ScalarRef; anything still Unknown
         # stays Unknown rather than being called a bare Ref, which would claim
         # more than is known about what it points at.
