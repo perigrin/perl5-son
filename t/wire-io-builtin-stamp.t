@@ -104,37 +104,27 @@ subtest 'binmode is join(Boolean, Undef)' => sub {
         "binmode is typed to the lattice's join(Boolean,Undef) = $lub";
 };
 
-# WHY Boolean <: Str IS THE RIGHT PLACE FOR IT, verified against perl rather
-# than assumed -- the close/rmdir rows above depend on it.
+# WHY THE FILE-TEST AND close/rmdir ROWS REST ON BOOLEAN'S PLACEMENT.
 #
-# `!!1`/`!!0` and `builtin::true`/`builtin::false` are the SAME values: all
-# four are is_bool, always defined, and stringify to "1" and "". So does any
-# comparison result (`1==1`).
+# Boolean sits under SCALAR, sibling to Str -- not under Str. That was
+# corrected after applying the formal type system's two-factor test properly:
+# substitutability passes (every string op works on a boolean uncoerced), but
+# CONTAINMENT fails, because `false` stringifies to "" directly and to "0"
+# through Num, and no admissible reference type preserves it. The full proof
+# and its exhaustion of reference types live in t/ir-stamp-boolean-placement.t.
 #
-# And they behave as strings with no coercion anywhere:
-#
-#     "x" . true . "y" . false . "z"  ->  "x1yz"
-#     length(true), length(false)     ->  1, 0
-#     uc(true)                        ->  "1"
-#     true eq "1",  false eq ""       ->  both true
-#     substr(true,0,1)                ->  "1"
-#     true =~ /^1$/                   ->  matches
-#
-# Which is what `Boolean <: Str` claims. Note they are NOT <: Num even though
-# they numify to 1 and 0 -- numification is a coercion Str also has, so it
-# argues for nothing narrower.
-subtest 'Boolean is a subtype of Str, and not of Num' => sub {
-    my $bool = SoN::IR::Stamp->new( type => 'Boolean' );
+# What matters here: Boolean and Undef are SIBLINGS under Scalar, so an op
+# that can return undef cannot be typed Boolean -- join(Boolean,Undef) is
+# Scalar. That is the rule the file tests and binmode follow, and the one
+# ftchr had slipped past.
+subtest 'Boolean and Undef are siblings, so their join is Scalar' => sub {
+    my $bool  = SoN::IR::Stamp->new( type => 'Boolean' );
+    my $undef = SoN::IR::Stamp->new( type => 'Undef' );
 
-    ok $bool->is_subtype_of( SoN::IR::Stamp->new( type => 'Str' ) ),
-        'Boolean <: Str -- every string operation works on it uncoerced';
-    ok !$bool->is_subtype_of( SoN::IR::Stamp->new( type => 'Num' ) ),
-        'Boolean is NOT <: Num -- numifying is a coercion, not membership';
-
-    # The consequence the close/rmdir rows rest on: a Boolean is not an Undef,
-    # so an op that CAN return undef must not be typed Boolean.
-    ok !$bool->is_subtype_of( SoN::IR::Stamp->new( type => 'Undef' ) ),
-        'and not <: Undef, which is why binmode is Scalar rather than Boolean';
+    ok !$bool->is_subtype_of( $undef ), 'Boolean is not <: Undef';
+    ok !$undef->is_subtype_of( $bool ), '... and Undef is not <: Boolean';
+    is SoN::IR::Stamp::join( $bool, $undef )->type, 'Scalar',
+        'so an op that can return undef is Scalar, never Boolean';
 };
 
 # chdir IS a true Boolean: is_bool on BOTH paths, 1 and "", never undef. The

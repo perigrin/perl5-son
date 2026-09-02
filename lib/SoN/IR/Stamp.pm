@@ -15,7 +15,28 @@ class SoN::IR::Stamp 0.01 {
         Str       => [qw(Scalar)],
         Num       => [qw(Str)],
         Int       => [qw(Num)],
-        Boolean   => [qw(Str)],
+        # SCALAR, NOT Str -- the formal type system's two-factor subtyping
+        # test, both factors applied. Factor 2 (substitutability) passes:
+        # every string operation works on a boolean uncoerced. Factor 1
+        # (containment) FAILS, and a negative here must exhaust every
+        # admissible reference type. Direct Str interpretation of `false` is
+        # "", and measured on 5.42.0:
+        #
+        #     S=Num        detour "0"  FAILS
+        #     S=Int        detour "0"  FAILS
+        #     S=ScalarRef  identity on every Str -- the vacuous test the
+        #                  well-formedness note excludes
+        #     S=Boolean    circular: the stratification is
+        #                  Scalar/List -> Str -> Num -> Int, with "Ref,
+        #                  Boolean, etc. use Scalar"
+        #
+        # `true` PASSES via S=Num (1 -> "1" -> "1"); the counterexample is
+        # `false` alone, which is why testing one value or one factor reached
+        # the wrong answer. perl-type-system-formal.md states the conclusion
+        # directly -- "Scalar contains values that belong neither to Str nor
+        # to Num - including Boolean" -- and its hierarchy makes Boolean a
+        # child of Scalar, sibling to Str.
+        Boolean   => [qw(Scalar)],
         VString   => [qw(Str)],
         DualVar   => [qw(Scalar)],
         Ref       => [qw(Scalar)],
