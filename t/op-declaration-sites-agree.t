@@ -53,7 +53,6 @@ my %NO_OPERANDS_TO_DECLARE = map { $_ => 1 } qw(
 #
 #   Assign        yields its RHS -- a different type per assignment
 #   Subscript     yields the container's ELEMENT type
-#   Slice         yields a LIST of elements
 #   Call          ~180 optree ops collapse to this one node; there is no
 #                 per-builtin slot in a table keyed by node name (this is the
 #                 open question behind the remaining wire Unknowns)
@@ -63,8 +62,16 @@ my %NO_OPERANDS_TO_DECLARE = map { $_ => 1 } qw(
 #                 other. Stamped at the construction site instead, where the op
 #                 is in hand. A signature here would be a BUG, not an
 #                 improvement.
+#
+# SLICE WAS HERE, and its stated reason -- "yields a LIST of elements" -- was
+# the signature, written down and then filed as an excuse not to write one.
+# `List` is a lattice member, not a shape: it is the parent of Array and Hash
+# and the declared result of Range, the other plural read. What made this look
+# undeclarable was reading "a list of elements" as a question about the
+# ELEMENTS, which does vary per slice. The slice's own type does not: every
+# slice is a List, whatever it holds.
 my %RESULT_NOT_A_FUNCTION_OF_OPERANDS = map { $_ => 1 } qw(
-    Assign Subscript Slice Call BacktickExpr
+    Assign Subscript Call BacktickExpr
 );
 
 subtest 'every node OpMap can build has a class file' => sub {

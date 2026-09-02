@@ -155,6 +155,32 @@ my %SIGNATURES = (
 
     # Range yields a list of integers.
     Range      => { operands => ['Int', 'Int'], result => 'List' },
+    # A SLICE IS A PLURAL READ, NOT A TYPE OF ITS OWN. `@a[1..5]` is a List for
+    # the same reason `1..5` above is: it yields as many values as it has
+    # indices. Measured on 5.42.0, it behaves as a list in every context that
+    # distinguishes one:
+    #
+    #     my @s = @a[1..3];    scalar(@s) == 3   plural in list context
+    #     my $x = @a[1..3];    $x == 4           the LAST element
+    #     my ($p) = @a[1..3];  $p == 2           the first, like any list
+    #
+    # The scalar-context rule is the proof: a scalar-typed node yields its own
+    # single value, while a LIST collapses to its final element -- the comma
+    # operator's behaviour exactly. Consumers already read it this way, since
+    # `join($", @a[1..3])` takes the Slice node directly as its argument list.
+    #
+    # NOT THE ELEMENT TYPE, and this is the trap. Stamping `Str` for a slice of
+    # strings types what the slice HOLDS and calls that the slice -- the same
+    # error as stamping an Array with its element type. It is also not a join
+    # over the operands, which are the container AND the indices: joining those
+    # types a `@a[0,1]` read against the integers 0 and 1. `operands => []`
+    # says the op imposes nothing, and the fixed `List` result is taken outright.
+    #
+    # ONE ROW, FIVE OPS. aslice/kvaslice/hslice/kvhslice/lslice all map to the
+    # Slice node in OpMap, and both generic dispatch sites in FromOptree reach
+    # their stamp through _result_stamp -- so this row is the single place the
+    # rule is stated.
+    Slice      => { operands => [], result => 'List' },
 );
 
 # THE SECOND INDEX, KEYED BY BUILTIN NAME.
