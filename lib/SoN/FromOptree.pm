@@ -706,12 +706,47 @@ class SoN::FromOptree 0.01 {
 
             if ($name eq 'entertrycatch') {
                 # Walk try body (op->other leads to catch)
+                # stop_at_exit=1 SO A `die` IN THE TRY BODY BUILDS ITS Unwind.
+                # _walk_branch's die arm is gated on that flag, and without it
+                # the `die` fell through and was DROPPED -- silently, with the
+                # message constant gone too:
+                #
+                #     try { die "boom\n"; $x = 1 } catch ($e) { $x = 2 }
+                #     graph: no Unwind, no "boom"
+                #
+                # A die inside a try is the whole point of the construct: it is
+                # the edge that reaches the catch arm, so losing it makes the
+                # catch unreachable and the try/catch meaningless.
                 my $try_sim = $sim->snapshot;
-                _walk_branch($cv, $op->next, $try_sim, $factory, $opmap, \%visited);
+                _walk_branch($cv, $op->next, $try_sim, $factory, $opmap,
+                    \%visited, undef, 1);
 
-                # Walk catch body (op->other)
+                # THE CATCH BODY IS catch->other, NOT THE catch OP ITSELF.
+                # entertrycatch->other IS the `catch` op, and `catch` is
+                # registered BRANCH with no handler -- so walking it hit the
+                # generic branch-skip, stepped straight over it, and the arm
+                # behind it was NEVER ENTERED. Measured:
+                #
+                #     try { print "in" } catch ($e) { print "caught" }
+                #     graph: Constant(in), Print   -- and no "caught" at all
+                #
+                # Silently, with nothing on stderr. A dropped arm is the
+                # failure this producer ranks below a GAP, because no consumer
+                # can see it: chalk reported the whole catch body missing with
+                # no diagnostic to explain it.
+                #
+                # Measured on the optree, `catch` holds its body on ->other
+                # (its ->next is the leavetrycatch that ends the construct):
+                #
+                #     catch: next=leavetrycatch  other=const   <- the body
+                my $catch_op = $op->other;
+                my $catch_body =
+                    ( ref $catch_op && $$catch_op && $catch_op->name eq 'catch'
+                      && $catch_op->can('other') && ${$catch_op->other} )
+                    ? $catch_op->other
+                    : $catch_op;
                 my $catch_sim = $sim->snapshot;
-                _walk_branch($cv, $op->other, $catch_sim, $factory, $opmap, \%visited);
+                _walk_branch($cv, $catch_body, $catch_sim, $factory, $opmap, \%visited);
 
                 # Merge at leavetrycatch
                 my $region = $try_sim->merge($catch_sim, $factory);
