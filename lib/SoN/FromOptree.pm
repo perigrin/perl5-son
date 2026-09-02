@@ -4098,17 +4098,72 @@ class SoN::FromOptree 0.01 {
                 # `$i + 1` then read the comparison instead of the counter, and
                 # `for my $i (0..2) { ...; print $i + 1 }` printed 111 where perl
                 # prints 123. Found in perl's own t/base/translate.t.
+                # THE OPTREE DECIDES THIS, NOT THE STACK. Testing
+                # `$inputs[0]->isa('PadAccess')` asked whether the lvalue read
+                # SURVIVED to the top of the stack, which is a different
+                # question from whether this op is a compound assignment -- and
+                # the two answers diverge as soon as the RHS contains a branch.
+                #
+                # `$s += ($i > 1 ? 10 : 1)` walks its ternary through
+                # _handle_cond_expr, which snapshots the sim per arm; by the
+                # time the add pops its operands, $s's PadAccess has already
+                # been resolved to its bound value, so inputs[0] is a Constant:
+                #
+                #     $s += 1              inputs=[PadAccess, Constant]     rebound
+                #     $s += ($c ? 10 : 1)  inputs=[Constant, TernaryExpr]   NOT rebound
+                #
+                # Both optrees say the same thing -- `add` with OPf_STACKED,
+                # first=padsv carrying OPf_MOD -- so the optree is the stable
+                # signal and the stack is not.
+                #
+                # WITHOUT THE WRITE-BACK THE MUTATION VANISHES, and it fails
+                # silently. `$s` is never rebound, so the loop scout (which
+                # discovers loop-carried slots by looking for rebinds) does not
+                # see it, no header Phi is created, and the accumulator reads
+                # its PRE-LOOP binding forever. The add itself is then consumed
+                # by nothing. Measured on chalk's corpus control-flow.md T3
+                # (`while ($i<3) { $s += ($i>1 ? 10 : 1); $i++ }`): perl prints
+                # 12, the emitted program printed 0 -- a WRONG ANSWER, not a
+                # refusal, which is the worst failure mode this producer has.
+                #
+                # OPf_STACKED (0x40) IS THE `op=` MARKER and it is what keeps
+                # this from over-firing. Measured:
+                #
+                #     $y = $x + 2   add[$y:2,3] vK/TARGMY,2   no STACKED
+                #     $s += 1       add[t2]     vKS/2         STACKED
+                #
+                # A plain binary op that happens to read an OPf_MOD operand has
+                # no STACKED, so it is not taken for a read-modify-write. The
+                # comparison guard stays: perl leaves OPf_MOD set on a
+                # comparison's first operand after folding a dead arm, and
+                # rebinding $x to a Boolean there made `for my $i (0..2)` print
+                # 111 for 123 in perl's own t/base/translate.t.
                 my $is_compound =
                        @inputs >= 1
-                    && $inputs[0]->isa('SoN::IR::Node::PadAccess')
                     && !_is_comparison_optree_op($op->name)
                     && $op->can('first')
                     && $op->first->name =~ /^padsv|^padav|^padhv/
-                    && ($op->first->flags & 32); # OPf_MOD
+                    && ($op->first->flags & 32)   # OPf_MOD
+                    && ( $inputs[0]->isa('SoN::IR::Node::PadAccess')
+                         # OPf_STACKED (the `op=` form) recovers the case where
+                         # the lvalue PadAccess did not survive the stack. It
+                         # must NOT claim a class field: `$n += 1` in a method
+                         # also reads an OPf_MOD padsv and is also STACKED, but
+                         # its value lives in the object struct and needs the
+                         # field-store Assign that $field_compound emits below.
+                         # Without this exclusion a pad rebind silently replaced
+                         # that store and the field mutation was dropped.
+                         || (   ($op->flags & 64)
+                             && !$inputs[0]->isa('SoN::IR::Node::FieldAccess') ) );
 
                 my $lvalue_targ;
                 if ($is_compound) {
-                    $lvalue_targ = $inputs[0]->targ;
+                    # The targ comes from the OPTREE when the PadAccess did not
+                    # survive: $inputs[0]->targ is unavailable precisely in the
+                    # branch-RHS case this fix exists for.
+                    $lvalue_targ = $inputs[0]->isa('SoN::IR::Node::PadAccess')
+                        ? $inputs[0]->targ
+                        : $op->first->targ;
                     my $bound = $sim->lookup($lvalue_targ);
                     $inputs[0] = $bound if defined $bound;
                 }
