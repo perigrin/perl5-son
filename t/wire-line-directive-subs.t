@@ -64,4 +64,36 @@ subtest 'modules loaded alongside the producer are still excluded' => sub {
         or diag( "leaked: " . join( ', ', @leaked ) );
 };
 
+# A PACKAGE NAME WITH EMPTY COMPONENTS IS STILL A PACKAGE. perl's lexer
+# accepts `sub foo::::::bar {...}` and puts it in a real stash whose
+# intermediate components are literally `::`:
+#
+#     foo::        keys=[::]
+#     foo::::      keys=[::]
+#     foo::::::    keys=[bar]
+#
+# base/lex.t tests exactly this, and B::SoN leverages the same lexer -- so a
+# recursion guard of `[A-Za-z_]\w*::` refuses to descend into a package perl
+# itself created, and the sub disappears with no GAP and no warning.
+subtest 'a package with empty name components is walked' => sub {
+    my ( $w, $err ) = translate(
+        'sub foo::::::bar { 7 } print foo::::::bar();', 'empty-components' );
+    ok $w, 'it translates' or do { diag($err); return };
+
+    my %m = ( $w->{methods} // {} )->%*;
+    ok scalar( grep { /bar\z/ } keys %m ),
+        'the sub in the empty-component package is emitted'
+        or diag( 'methods: ' . join( ', ', sort keys %m ) );
+};
+
+# ORDINARY NESTING IS UNAFFECTED -- a fix that loosened the guard into matching
+# anything would start walking non-package keys.
+subtest 'an ordinary nested package still works' => sub {
+    my ( $w, $err ) = translate(
+        'sub Foo::Bar::baz { 3 } print Foo::Bar::baz();', 'nested-ok' );
+    ok $w, 'it translates' or do { diag($err); return };
+    ok scalar( grep { /baz\z/ } keys( ( $w->{methods} // {} )->%* ) ),
+        'a normally-nested sub is emitted';
+};
+
 done_testing;

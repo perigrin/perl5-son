@@ -1940,7 +1940,17 @@ sub _walk_package {
     # for the recursive call so that cv_stash comparisons work correctly at
     # any nesting depth.
     for my $name ( sort keys %$stash ) {
-        next unless $name =~ /^([A-Za-z_]\w*)::$/;
+        # A PACKAGE COMPONENT MAY BE EMPTY. perl's lexer accepts
+        # `sub foo::::::bar {...}` and builds real stashes for it, whose
+        # intermediate keys are literally `::`:
+        #
+        #     foo::  -> { '::' }   foo::::  -> { '::' }   foo::::::  -> { bar }
+        #
+        # base/lex.t tests that, and B::SoN leverages the same lexer, so
+        # refusing to descend where perl created a package drops the sub with
+        # no GAP and no warning. `[A-Za-z_]\w*::` required a non-empty
+        # component and did exactly that.
+        next unless $name =~ /^(\w*)::$/;
         my $sub_pkg_short = $1;
         next if $sub_pkg_short eq 'main';
 
