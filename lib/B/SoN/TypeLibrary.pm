@@ -242,10 +242,40 @@ my %BUILTIN_SIGNATURES = (
     # be, but never wrong. Scalar <: List, so that join is List.
     readline => { operands => [], result => 'List' },
 
-    # -c is a TRUE Boolean: is_bool(-c "/dev/null") is 1. Its siblings are not
-    # -- -s is an Int byte count, -M a Num of days -- so the family gets no
-    # blanket row and each member earns its own or none.
-    ftchr  => { operands => [], result => 'Boolean' },
+    # THE FILE TESTS THAT CAN MISS. All four behave identically, measured on
+    # all THREE paths -- the third is the one an earlier row missed:
+    #
+    #     -c /dev/null      1      is_bool   (true)
+    #     -c /etc/hostname  ""     is_bool   (false)
+    #     -c missing        undef  NOT a bool
+    #
+    # `ftchr` was typed Boolean on the strength of is_bool over the first two.
+    # Boolean does not admit undef in this lattice, so that was WRONG rather
+    # than narrow -- the same rule this table applies to every other
+    # undef-on-failure op. The honest answer is join(Boolean,Undef) = Scalar.
+    #
+    # Their siblings are still NOT typed with them: -s is an Int byte count,
+    # -M a Num of days. The family gets no blanket row; each member earns its
+    # own or none.
+    ftchr  => { operands => [], result => 'Scalar' },
+    ftdir  => { operands => [], result => 'Scalar' },
+    ftfile => { operands => [], result => 'Scalar' },
+    ftlink => { operands => [], result => 'Scalar' },
+
+    # chdir IS a true Boolean, and the distinction from the file tests above is
+    # measured rather than assumed: is_bool on BOTH paths, 1 and "", never
+    # undef. They look alike and are not.
+    chdir  => { operands => ['Str'], result => 'Boolean' },
+
+    # FIXED STRING RESULTS, no failure mode. substr slices, quotemeta escapes,
+    # pack builds -- each a Str however its operands are typed.
+    substr    => { operands => ['Str'], result => 'Str' },
+    quotemeta => { operands => ['Str'], result => 'Str' },
+    pack      => { operands => ['Str'], result => 'Str' },
+
+    # `int` TRUNCATES TOWARD ZERO: int(3.7) is 3 and int(-3.7) is -3. An Int
+    # either way, never the Num it was handed.
+    int    => { operands => ['Num'], result => 'Int' },
 
     # shift/pop REMOVE AND RETURN ONE element, so the result is a scalar
     # whatever the array holds -- and in ANY context, unlike `splice`. This row

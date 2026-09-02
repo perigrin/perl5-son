@@ -39,13 +39,32 @@ subtest 'readline is List: it spans both contexts' => sub {
     is $r->( [ 'Call', 'readline' ] ), $lub, 'and readline is typed to that';
 };
 
-# The filetests are NOT uniform, which is why the family was never blanket-typed.
-# `-c` is a true Boolean (is_bool says so); `-s` is an Int byte count and `-M` a
-# Num of days. Each earns its own row or none.
-subtest 'ftchr is Boolean, and its siblings are not typed with it' => sub {
-    is $r->( [ 'Call', 'ftchr' ] ), 'Boolean', '-c is a Boolean';
-    is $r->( [ 'Call', 'ftsize' ]  ), undef, '-s is not typed as one';
-    is $r->( [ 'Call', 'ftmtime' ] ), undef, '-M is not typed as one';
+# The filetests are NOT uniform, which is why the family was never
+# blanket-typed: `-s` is an Int byte count and `-M` a Num of days. Each earns
+# its own row or none.
+#
+# `-c` WAS typed Boolean on the strength of is_bool, but only two of its three
+# paths had been measured. The third is the one that matters:
+#
+#     -c /dev/null      1      is_bool   (true)
+#     -c /etc/hostname  ""     is_bool   (false)
+#     -c missing        undef  NOT a bool
+#
+# Boolean does not admit undef in this lattice, so Boolean was WRONG for it
+# rather than narrow -- the same rule the table applies to every other
+# undef-on-failure op. Corrected to the join, alongside its -d/-f/-l siblings
+# which behave identically.
+subtest 'the file tests that can miss are join(Boolean,Undef)' => sub {
+    my $lub = SoN::IR::Stamp::join(
+        SoN::IR::Stamp->new( type => 'Boolean' ),
+        SoN::IR::Stamp->new( type => 'Undef' ),
+    )->type;
+    for my $ft (qw( ftchr ftdir ftfile ftlink )) {
+        is $r->( [ 'Call', $ft ] ), $lub,
+            "$ft is $lub -- undef when the path is absent";
+    }
+    is $r->( [ 'Call', 'ftsize' ]  ), undef, '-s is still not typed with them';
+    is $r->( [ 'Call', 'ftmtime' ] ), undef, '-M is still not typed with them';
 };
 
 # THE FILESYSTEM FOUR, measured rather than assumed -- and they are NOT
@@ -116,6 +135,25 @@ subtest 'Boolean is a subtype of Str, and not of Num' => sub {
     # so an op that CAN return undef must not be typed Boolean.
     ok !$bool->is_subtype_of( SoN::IR::Stamp->new( type => 'Undef' ) ),
         'and not <: Undef, which is why binmode is Scalar rather than Boolean';
+};
+
+# chdir IS a true Boolean: is_bool on BOTH paths, 1 and "", never undef. The
+# distinction from the file tests is measured, not assumed -- they look alike
+# and are not.
+subtest 'chdir is a true Boolean' => sub {
+    is $r->( [ 'Call', 'chdir' ] ), 'Boolean',
+        'chdir yields 1 or "", and never undef';
+};
+
+# STRING AND NUMERIC BUILTINS with a fixed result and no failure mode.
+subtest 'substr, quotemeta and pack are Str; int is Int' => sub {
+    is $r->( [ 'Call', 'substr'    ] ), 'Str', 'substr slices a string';
+    is $r->( [ 'Call', 'quotemeta' ] ), 'Str', 'quotemeta escapes one';
+    is $r->( [ 'Call', 'pack'      ] ), 'Str', 'pack builds one';
+
+    # `int` TRUNCATES TOWARD ZERO -- int(3.7) is 3 and int(-3.7) is -3, an
+    # integer either way, never the Num it was given.
+    is $r->( [ 'Call', 'int' ] ), 'Int', 'int truncates to an Int';
 };
 
 done_testing;
