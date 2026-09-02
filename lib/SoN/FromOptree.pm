@@ -1376,12 +1376,39 @@ class SoN::FromOptree 0.01 {
     # Left unstamped the Call was Unknown, and `scalar(@k)` then emitted a
     # Coerce of it rather than a Count, because _is_aggregate_node had nothing
     # aggregate to recognise. Stamping it List is what makes the count reachable.
+    #
+    # THE SCALAR ARM IS NOT ONE ANSWER. All four of these are a List in list
+    # context, which is why they share this function -- but "Int in scalar
+    # context" is true only of the two that are COUNTS. Measured on 5.42.0:
+    #
+    #     scalar keys %h         2       a count
+    #     scalar values %h       2       a count
+    #     scalar reverse "abc"   "cba"   a STRING
+    #     scalar reverse @a      "321"   a STRING -- it CONCATENATES, then
+    #                                    reverses the characters
+    #     scalar reverse(10,20)  "0201"  string-reversed "1020", not 2010
+    #     scalar sort @a         undef   not a count at all
+    #
+    # `reverse(10,20)` is the case that settles it: a numeric reading would be
+    # 2010, and perl gives "0201". Scalar reverse is a Str whatever went in.
+    #
+    # SORT IS ABSENT FROM BOTH LISTS. perl warns "Useless use of sort in scalar
+    # context" and folds the op away, so no Call is built and there is nothing
+    # to stamp -- but a rule that is unreachable today is still a wrong rule to
+    # leave written down, and it would fire the moment the op survived.
     sub _context_builtin_stamp ($op, $name) {
+        state $SCALAR_IS_A_COUNT = { map { $_ => 1 } qw( keys values ) };
+        state $SCALAR_IS_A_STR   = { map { $_ => 1 } qw( reverse ) };
         state $LIST_IN_LIST_CONTEXT =
             { map { $_ => 1 } qw( keys values reverse sort ) };
         return undef unless $LIST_IN_LIST_CONTEXT->{$name};
         my $want = $op->flags & 3;
-        return SoN::IR::Stamp->new( type => $want == 3 ? 'List' : 'Int' );
+        return SoN::IR::Stamp->new( type => 'List' ) if $want == 3;
+        return SoN::IR::Stamp->new( type => 'Int' )
+            if $SCALAR_IS_A_COUNT->{$name};
+        return SoN::IR::Stamp->new( type => 'Str' )
+            if $SCALAR_IS_A_STR->{$name};
+        return undef;
     }
 
     sub _exit_record ($sim, $factory, $kind, $exit_op = undef, $is_program = 0) {
@@ -1662,6 +1689,36 @@ class SoN::FromOptree 0.01 {
         # not a step toward compiling goto -- which needs real control-flow
         # support for the label form and tail-call replacement of the current
         # frame for `goto &sub`.
+        # EXISTS IS NOT DEFINED, and OpMap mapped it to the Defined node --
+        # over the KEY, not the slot. `exists $h{zz}` became
+        # Defined(Constant("zz")): whether the STRING "zz" is defined, which it
+        # always is. perl prints "no" for a missing key; the graph meant "yes".
+        # A SILENT WRONG ANSWER from ordinary code.
+        #
+        # The two are genuinely different questions, measured on 5.42.0:
+        #
+        #     my %h = (a => undef);
+        #     exists $h{a}     true    the key is present
+        #     defined $h{a}    false   its value is not
+        #
+        # so no stamp could have repaired this -- the operand was wrong as well
+        # as the operator. Refuse until membership is a node of its own with
+        # the container and the key as its operands.
+        exists => "GAP: `exists` asks whether a key is PRESENT, which is not"
+                . " the same question as whether its value is defined, and no"
+                . " node yet expresses it -- it would otherwise test the key"
+                . " string and answer true for every missing key",
+
+        # DELETE MUTATES AND YIELDS: it removes the key and returns the value.
+        # It reached the wire as Call(delete, Constant(key)) with the KEY as its
+        # only operand -- no container, and no memory edge -- so the removal was
+        # invisible to every later read. The same contract push/unshift/splice
+        # are held to: a mutation the graph does not thread is a silent
+        # miscompile, so refuse until it is memory-modelled.
+        delete => "GAP: `delete` removes a key and yields its value; the"
+                . " removal is not yet threaded on the memory chain, so a"
+                . " later read would still see the deleted key",
+
         goto => "GAP: `goto` transfers control and is not compiled; the jump,"
               . " the statements it skips, and the label would otherwise be"
               . " dropped with no diagnostic",
