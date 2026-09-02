@@ -91,10 +91,30 @@ subtest 'list map and grep still yield their elements' => sub {
 # the failure class that MASKS an honest refusal: the reader is sent after a
 # simulator bug instead of a named construct. Whatever the producer decides
 # about split's scalar reading, it must not crash.
-subtest 'scalar split does not crash the translator' => sub {
-    my (undef, $err) = run_wire('my $n = split(/,/, "a,b"); print $n;', 'split_s');
-    unlike $err, qr/INTERNAL ERROR/,
-        'scalar split refuses or lowers, but does not die internally';
+# SPLIT PUSHES NO MARK IN ANY FORM. OpMap registers it as a 'mark' pop, so
+# pop_to_mark died "No mark on mark stack" -- the class that MASKS an honest
+# refusal. Measured, every spelling:
+#
+#     my @x = split(/,/,$s)   split(... => @x:1,3) vK/LVINTRO,ASSIGN,LEX
+#     @y = split(/,/,$s)      split(... => @y:2,3) vK/ASSIGN,LEX
+#     my $n = split(/,/,$s)   split                sK/IMPLIM
+#
+# ALL THREE ARE TESTED because a first fix refused only the SCALAR form, on
+# the mistaken reading that the list form "fused, has a mark". It fuses the
+# ASSIGNMENT, not a mark -- so `my @x = split /\n/, $s`, an extremely common
+# idiom, was still an internal error. One polarity measured, the other assumed.
+subtest 'no form of split crashes the translator' => sub {
+    for my $case (
+        ['my $n = split(/,/, "a,b"); print $n;',        'split_scalar'],
+        ['my @x = split(/,/, "a,b"); print scalar(@x);', 'split_my_list'],
+        ['my @y; @y = split(/,/, "a,b"); print scalar(@y);', 'split_list'],
+        ['print $_ for split(/,/, "a,b");',             'split_postfix'],
+    ) {
+        my ($src, $name) = $case->@*;
+        my (undef, $err) = run_wire($src, $name);
+        unlike $err, qr/INTERNAL ERROR/,
+            "$name: refuses or lowers, but does not die internally";
+    }
 };
 
 done_testing;

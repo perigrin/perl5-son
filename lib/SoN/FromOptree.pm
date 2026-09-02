@@ -769,6 +769,38 @@ class SoN::FromOptree 0.01 {
                     $op = $op->next;
                     next;
                 }
+                # A BARE BLOCK WITH A `continue` IS NEITHER SHAPE. It compiles
+                # to a real enterloop whose nextop is the CONTINUE BODY rather
+                # than the leaveloop, so the bare-block test above declines and
+                # it fell through to the while-loop translator -- which walked
+                # it as a loop and died "Stack underflow", an INTERNAL ERROR
+                # where a named refusal belongs (perl's own t/cmd/switch.t).
+                #
+                # KEYED ON redoop == enter, which is what says BARE BLOCK.
+                # Measured across every enterloop form:
+                #
+                #     bare              next=leaveloop  redo=nextstate  n==l
+                #     bare + continue   next=pushmark   redo=ENTER      <- this
+                #     while             next=unstack    redo=nextstate
+                #     while + continue  next=stub       redo=padsv
+                #     C-style for       next=padsv      redo=stub
+                #
+                # An earlier version keyed on `nextop is not unstack`, which is
+                # true of `while + continue` and C-style `for` as well -- both
+                # translate correctly today, and both were refused. The redo
+                # target is the property that actually separates a block from a
+                # loop.
+                #
+                # REFUSED because the continue body is real control flow this
+                # walker does not model: it runs AFTER the block, and `last`
+                # SKIPS it where `next` runs it.
+                my $rd = $op->can('redoop') ? $op->redoop : undef;
+                if (ref $rd && $$rd && $rd->name eq 'enter') {
+                    die "GAP: a bare block with a `continue` block is not yet"
+                      . " lowered -- the continue body runs after the block and"
+                      . " `last` skips it, which is control flow the walker does"
+                      . " not model\n";
+                }
                 _translate_while_loop($cv, $op->next, $sim, $factory, $opmap, \%visited);
                 # Continue after the loop; the B::LOOP op's lastop is leaveloop.
                 $op = $op->can('lastop') ? $op->lastop : $op->next;
@@ -1704,6 +1736,25 @@ class SoN::FromOptree 0.01 {
         # so no stamp could have repaired this -- the operand was wrong as well
         # as the operator. Refuse until membership is a node of its own with
         # the container and the key as its operands.
+        # WANTARRAY IS A RUNTIME FUNCTION OF THE CALLER'S CONTEXT, and OpMap
+        # mapped it to `Constant` -- with no `value`, so the factory died
+        # "Required parameter 'value' is missing" and the sub was SILENTLY
+        # SKIPPED. An internal error where a named refusal belongs.
+        #
+        # No constant could have been right. It has THREE values, measured on
+        # 5.42.0, and which one depends on the CALLER:
+        #
+        #     my @l = w()    wantarray true    list context
+        #     my $s = w()    wantarray false   scalar context
+        #     w()            wantarray UNDEF   void context
+        #
+        # A sub is translated ONCE and cannot see its callers, which is
+        # precisely why perl makes this a runtime function -- a fact this file
+        # already states twice in prose while the table said otherwise.
+        wantarray => "GAP: `wantarray` reports the CALLER's context (list,"
+                   . " scalar, or void) and is therefore a runtime property"
+                   . " a single translation cannot fix",
+
         exists => "GAP: `exists` asks whether a key is PRESENT, which is not"
                 . " the same question as whether its value is defined, and no"
                 . " node yet expresses it -- it would otherwise test the key"
@@ -3070,21 +3121,30 @@ class SoN::FromOptree 0.01 {
         #
         # so the input is pop_to_mark and the body is mapwhile->other. `$_` is
         # `gvsv[*_]`, keyed 'main::$_' exactly as an implicit foreach iterator.
-        # SCALAR-CONTEXT SPLIT PUSHES NO MARK, and OpMap registers split as a
-        # 'mark' pop -- so pop_to_mark found none and died "No mark on mark
-        # stack", an INTERNAL ERROR where a named refusal belongs. Measured:
+        # SPLIT PUSHES NO MARK IN ANY FORM, and OpMap registers it as a 'mark'
+        # pop -- so pop_to_mark found none and died "No mark on mark stack", an
+        # INTERNAL ERROR where a named refusal belongs. Measured on 5.42.0,
+        # every spelling:
         #
-        #     my @n = split(/,/, $s)    vK/LVINTRO,ASSIGN,LEX   fused, has a mark
-        #     my $n = split(/,/, $s)    sK/IMPLIM               NO pushmark
+        #     my @x = split(/,/,$s)   split(/","/ => @x:1,3) vK/LVINTRO,ASSIGN,LEX
+        #     @y = split(/,/,$s)      split(/","/ => @y:2,3) vK/ASSIGN,LEX
+        #     my $n = split(/,/,$s)   split                  sK/IMPLIM
         #
-        # perl gives the field COUNT for the scalar reading (`split(/,/,"a,b")`
-        # is 2). That is expressible -- Count over the field list -- but the
-        # fields are not built here, and guessing at a shape whose operands are
-        # not on the stack is how the mark bug happened. Refuse by NAME, which
-        # is what the internal error was hiding.
-        if ($name eq 'split' && ($op->flags & 3) == 2) {
-            die "GAP: `split` in scalar context yields the number of fields,"
-              . " which is not yet lowered\n";
+        # A first version refused only the SCALAR form, on the theory that the
+        # list form "fused, has a mark". It does not: the list form fuses the
+        # ASSIGNMENT into the split op (`=> @x:1,3`) and likewise pushes no
+        # mark, so `my @x = split /\n/, $s` -- an extremely common idiom --
+        # was still an internal error. The scalar case was the symptom I
+        # happened to measure first, not the shape of the bug.
+        #
+        # REFUSED IN ALL FORMS. The list form's target array is bound INSIDE
+        # the op, which nothing here models, and the scalar form yields a field
+        # count over fields that are never built. Both are real work; neither
+        # is a stack bug, which is what the internal error was hiding.
+        if ($name eq 'split') {
+            die "GAP: `split` is not yet lowered -- the list form binds its"
+              . " target array inside the op and the scalar form yields a"
+              . " field count, and neither is modelled\n";
         }
 
         if ($name eq 'mapstart' || $name eq 'grepstart') {
