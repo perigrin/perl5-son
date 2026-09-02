@@ -166,4 +166,41 @@ subtest 'list-assigned unpack still translates' => sub {
     unlike $err, qr/GAP|INTERNAL/, 'unpack in a list assignment is unaffected';
 };
 
+# A PACKAGE-VARIABLE ITERATOR IS NAMEABLE, and the list length has nothing to
+# do with it. The glob is always LAST and always present:
+#
+#     for $f ("a")       const(a) | gv(f)
+#     for $f ("a","b")   const(a) | const(b) | gv(f)
+#
+# The name was split off only when there were more than TWO bounds, so a
+# one-element list refused as "unnameable iterator" -- and with two or more
+# elements the refusal unwound with operands still on the stack, so a later pop
+# underflowed. Nine of perl's re/*.t files are exactly this shape:
+#
+#     for $file ('./re/regexp.t', './t/re/regexp.t', ':re:regexp.t')
+#
+# EVERY LENGTH IS TESTED because the defect was keyed on length: a fix verified
+# at one length says nothing about the others, which is how it survived.
+subtest 'a package-variable iterator translates at every list length' => sub {
+    for my $case (
+        [q{for $f ('a') { print $f }},          'pkgiter1'],
+        [q{for $f ('a','b') { print $f }},      'pkgiter2'],
+        [q{for $f ('a','b','c') { print $f }},  'pkgiter3'],
+    ) {
+        my ($src, $name) = $case->@*;
+        my (undef, $err) = translate($src, $name);
+        unlike $err, qr/INTERNAL ERROR|GAP/, "$name translates";
+    }
+};
+
+# THE OTHER ITERATOR FORMS must be unaffected -- a lexical iterator has a pad
+# targ and never reaches this split, and the implicit $_ form is marked by
+# OPpITER_DEF rather than carried on the stack.
+subtest 'lexical and implicit iterators still translate' => sub {
+    my (undef, $e1) = translate('for my $i (1,2,3) { print $i }', 'lexiter');
+    unlike $e1, qr/INTERNAL ERROR|GAP/, 'a lexical iterator is unaffected';
+    my (undef, $e2) = translate('for (1,2,3) { print $_ }', 'defiter');
+    unlike $e2, qr/INTERNAL ERROR|GAP/, 'the implicit $_ iterator is unaffected';
+};
+
 done_testing;

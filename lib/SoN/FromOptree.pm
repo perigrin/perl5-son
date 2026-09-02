@@ -3720,7 +3720,28 @@ class SoN::FromOptree 0.01 {
             # is misclassified as an unrecognized shape.
             my $iter_key = $op->targ;
             if (!$iter_key) {
-                my $name_node = $bounds->@* > 2 ? pop $bounds->@* : undef;
+                # THE GLOB IS ALWAYS LAST, AND ALWAYS PRESENT for a named
+                # package iterator -- the element count does not change that.
+                # Measured:
+                #
+                #     for $f ("a")       const(a) | gv(f)
+                #     for $f ("a","b")   const(a) | const(b) | gv(f)
+                #
+                # Keying the split on `> 2` assumed at least two bounds, so a
+                # ONE-ELEMENT list left the name in place and refused as an
+                # "unnameable iterator" -- and with two or more elements the
+                # refusal unwound with operands still on the stack, so a later
+                # pop underflowed. That is 9 of perl's re/*.t files, all of
+                # them `for $file ('./re/regexp.t', './t/re/regexp.t',
+                # ':re:regexp.t')`, reported as a crash rather than as this.
+                #
+                # A package iterator IS nameable: the scope map keys package
+                # variables as `stash::$name`, which is how every other
+                # package-scalar read and write already resolves. The name is
+                # simply the last element whenever the op carries no pad targ
+                # and is not the implicit-$_ form, which OPpITER_DEF marks
+                # below.
+                my $name_node = $bounds->@* > 1 ? pop $bounds->@* : undef;
 
                 # AN IMPLICIT $_ ITERATOR IS MARKED ON THE OP, not recoverable
                 # from the stack. perl sets OPpITER_DEF (private 0x8) --
