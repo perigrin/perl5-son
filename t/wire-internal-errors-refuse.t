@@ -130,10 +130,33 @@ subtest 'two-argument bless still translates' => sub {
 #     foreach (unpack("W*","ab")) {}   INTERNAL ERROR
 #
 # From perl's own t/op/caller.t.
-subtest 'foreach over unpack refuses rather than losing its mark' => sub {
-    my (undef, $err) = translate(
+# LOWERED, NOT REFUSED -- and the refusal I first wrote here was treating a
+# symptom. `foreach (unpack(...))` died "No mark on mark stack" because OpMap
+# registered unpack as a 'mark' pop when it pushes none:
+#
+#     unpack("H2","A")   unpack vK/2   no pushmark, always two operands
+#
+# So the foreach and unpack were never contending for a mark; the table was
+# wrong about unpack. Fixing the arity retired the GAP entirely. A refusal
+# that exists because of a wrong table row is a TODO wearing a diagnostic.
+subtest 'foreach over unpack translates' => sub {
+    my ($out, $err) = translate(
         'my $o=""; foreach (unpack("W*","ab")) { $o .= $_ } print $o;', 'foreach_unpack');
     unlike $err, qr/INTERNAL ERROR/, 'no internal error';
+    unlike $err, qr/GAP/, 'and no refusal -- the arity was the whole problem';
+};
+
+# BARE `select` takes ZERO arguments and returns the currently selected
+# handle; the op says so (private=0 vs 1), while OpMap assumed a fixed 1-pop.
+# perl's own t/op/select.t.
+subtest 'bare select translates' => sub {
+    my (undef, $err) = translate('my $x = select; print defined($x)?1:0;', 'select0');
+    unlike $err, qr/INTERNAL ERROR|GAP/, 'zero-argument select is lowered';
+};
+
+subtest 'one-argument select still translates' => sub {
+    my (undef, $err) = translate('my $x = select(STDOUT); print defined($x)?1:0;', 'select1');
+    unlike $err, qr/INTERNAL ERROR|GAP/, 'the one-argument form is unaffected';
 };
 
 # THE LIST-ASSIGNED FORM STILL WORKS, so the refusal cannot be a blanket

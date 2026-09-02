@@ -1400,6 +1400,31 @@ class SoN::FromOptree 0.01 {
         # needs; the class defaults where the backend reads it.
         return $op->private if $name eq 'bless' && $op->can('private')
                             && $op->private >= 1 && $op->private <= 2;
+
+        # SELECT TAKES ZERO OR ONE ARGUMENT, and like bless the op says which:
+        #
+        #     select            select[t2] sK     private=0
+        #     select(STDOUT)    select[t4] sK/1   private=1
+        #
+        # OpMap registers a fixed 1-pop, so the bare form popped an operand
+        # that was never pushed -- "Stack underflow", in perl's own
+        # t/op/select.t. The bare form returns the CURRENTLY SELECTED handle
+        # and takes nothing; there is nothing missing, only a table that
+        # assumed one shape.
+        return $op->private if $name eq 'select' && $op->can('private')
+                            && $op->private >= 0 && $op->private <= 1;
+
+        # UNPACK TAKES EXACTLY TWO OPERANDS AND PUSHES NO MARK. OpMap
+        # registers it as a 'mark' pop, so pop_to_mark found none and died
+        # "No mark on mark stack" (t/op/chr.t, `unpack "U0 (H2)*", chr $_[0]`).
+        # Measured, both spellings:
+        #
+        #     unpack("H2","A")          unpack vK/2   no pushmark
+        #     unpack("U0 (H2)*","A")    unpack vK/2   no pushmark
+        #
+        # The template and the string, always. A fixed 2-pop is the whole fix;
+        # the mark registration was simply wrong.
+        return 2 if $name eq 'unpack';
         return undef unless $name eq 'substr';
         return undef unless $op->can('first');
         my $n = 0;
