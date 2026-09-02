@@ -3070,6 +3070,23 @@ class SoN::FromOptree 0.01 {
         #
         # so the input is pop_to_mark and the body is mapwhile->other. `$_` is
         # `gvsv[*_]`, keyed 'main::$_' exactly as an implicit foreach iterator.
+        # SCALAR-CONTEXT SPLIT PUSHES NO MARK, and OpMap registers split as a
+        # 'mark' pop -- so pop_to_mark found none and died "No mark on mark
+        # stack", an INTERNAL ERROR where a named refusal belongs. Measured:
+        #
+        #     my @n = split(/,/, $s)    vK/LVINTRO,ASSIGN,LEX   fused, has a mark
+        #     my $n = split(/,/, $s)    sK/IMPLIM               NO pushmark
+        #
+        # perl gives the field COUNT for the scalar reading (`split(/,/,"a,b")`
+        # is 2). That is expressible -- Count over the field list -- but the
+        # fields are not built here, and guessing at a shape whose operands are
+        # not on the stack is how the mark bug happened. Refuse by NAME, which
+        # is what the internal error was hiding.
+        if ($name eq 'split' && ($op->flags & 3) == 2) {
+            die "GAP: `split` in scalar context yields the number of fields,"
+              . " which is not yet lowered\n";
+        }
+
         if ($name eq 'mapstart' || $name eq 'grepstart') {
             ( my $word = $name ) =~ s/start\z//;
             my $items = $sim->pop_to_mark;
@@ -3096,9 +3113,12 @@ class SoN::FromOptree 0.01 {
             die "GAP: $word without a ${word}while op\n"
                 unless $$while_op && $while_op->name eq $word . 'while';
 
+            # $op (mapstart/grepstart) carries the CONTEXT in its OPf_WANT --
+            # sK for a scalar reading, lK for a list one -- and the accumulator
+            # push needs it to decide between the result list and its count.
             _translate_foreach_array($cv, $op, $sim, $factory, $opmap,
                 $ctx->{visited}, $input, 'main::$_',
-                scalar $while_op->other, $word);
+                scalar $while_op->other, $word, $op);
 
             # The whole construct is consumed: resume after the loop.
             return ($while_op->next, 'handled');
@@ -5338,7 +5358,7 @@ class SoN::FromOptree 0.01 {
     # same counted shape but a DIFFERENT body location (mapwhile/grepwhile
     # rather than enteriter/iter/and) and an output whose length is not the
     # input's. Defaulted, so a plain foreach is unchanged.
-    sub _translate_foreach_array ($cv, $enteriter, $sim, $factory, $opmap, $visited, $array, $iter_key = undef, $body_start = undef, $collect = undef) {
+    sub _translate_foreach_array ($cv, $enteriter, $sim, $factory, $opmap, $visited, $array, $iter_key = undef, $body_start = undef, $collect = undef, $collect_op = undef) {
         my $x_targ = $iter_key // $enteriter->targ;
 
         # Locate the body (enteriter->next: unstack, iter, then the and whose
@@ -5549,7 +5569,32 @@ class SoN::FromOptree 0.01 {
         $sim->set_control($exit_region);
         if ($collect) {
             $acc_phi->set_backedge($acc_next);
-            $sim->push_node($acc_phi);
+            # MAP AND GREP IN SCALAR CONTEXT ARE COUNTS, not their result list.
+            # Measured on 5.42.0:
+            #
+            #     my $n = map  { $_*2 } (1,2,3)    3   how many results
+            #     my $n = grep { $_>1 } (1,2,3)    2   how many matched
+            #     my @m = map  { $_*2 } (1,2,3)    the elements
+            #
+            # Both lower to this loop, and the scalar reading took the
+            # ACCUMULATOR: `print $n` emitted Print(Coerce(Phi:Array -> Str)),
+            # stringifying the result list where perl prints a count. Same class
+            # as scalar reverse -- one reading given to a context-sensitive op.
+            #
+            # The optree says which, on the map/grepstart op itself:
+            #
+            #     my $n = map {...} @a    mapstart sK   want=2  scalar
+            #     my @m = map {...} @a    mapstart lK   want=3  list
+            #
+            # Count over the accumulator, rather than a different accumulator,
+            # because the loop is identical either way -- only the READING of
+            # its result differs, and Count is exactly that reading.
+            my $want = $collect_op ? ($collect_op->flags & 3) : 3;
+            $sim->push_node(
+                $want == 3 || $want == 0
+                    ? $acc_phi
+                    : $factory->make('Count', inputs => [$acc_phi],
+                        stamp => SoN::IR::Stamp->new(type => 'Int')));
         }
         return;
     }
