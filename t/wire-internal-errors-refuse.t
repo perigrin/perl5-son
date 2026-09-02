@@ -93,4 +93,54 @@ subtest 'the loop forms that already worked still work' => sub {
     }
 };
 
+# ONE-ARGUMENT `bless` defaults to the CURRENT PACKAGE, and perl supplies
+# that at compile time -- `bless []` in main gives an object blessed into
+# main. Measured:
+#
+#     bless [], "Foo"   ref is Foo    two args, works today
+#     bless []          ref is main   ONE arg, died "Stack underflow"
+#
+# The one-arg form pops a class operand that was never pushed. Found in
+# perl's own t/op/magic.t (`sub TIEARRAY {bless[]}`), which the file-level
+# survey counted as translating.
+# LOWERED, NOT REFUSED. The private field IS the argument count, so the fix is
+# to pop the right number rather than to give up: the one-arg form blesses into
+# the CURRENT PACKAGE, which perl resolves at compile time, so the missing
+# operand is not unknown -- it simply is not on the stack.
+subtest 'one-argument bless translates instead of underflowing' => sub {
+    my ($out, $err) = translate('my $x = bless []; print ref($x);', 'bless1');
+    unlike $err, qr/INTERNAL ERROR/, 'no internal error';
+    unlike $err, qr/GAP/, 'and it does not need to refuse -- the arity is known';
+    like $out, qr/"op"\s*:\s*"Call"/, 'the bless call reaches the wire';
+};
+
+# TWO-ARGUMENT bless already works and must keep working -- the refusal is for
+# the defaulted class, not for bless.
+subtest 'two-argument bless still translates' => sub {
+    my (undef, $err) = translate('my $x = bless [], "Foo"; print ref($x);', 'bless2');
+    unlike $err, qr/GAP|INTERNAL/, 'bless with an explicit class is unaffected';
+};
+
+# FOREACH OVER A MARK-CONSUMING BUILTIN. `foreach (unpack(...))` died "No mark
+# on mark stack": the loop translator and unpack both want the mark, and the
+# scout walk consumed it. The LIST-ASSIGNED form works, which is what says the
+# defect is in the foreach pairing rather than in unpack:
+#
+#     my @u = unpack("W*","ab")        translates
+#     foreach (unpack("W*","ab")) {}   INTERNAL ERROR
+#
+# From perl's own t/op/caller.t.
+subtest 'foreach over unpack refuses rather than losing its mark' => sub {
+    my (undef, $err) = translate(
+        'my $o=""; foreach (unpack("W*","ab")) { $o .= $_ } print $o;', 'foreach_unpack');
+    unlike $err, qr/INTERNAL ERROR/, 'no internal error';
+};
+
+# THE LIST-ASSIGNED FORM STILL WORKS, so the refusal cannot be a blanket
+# unpack refusal.
+subtest 'list-assigned unpack still translates' => sub {
+    my (undef, $err) = translate('my @u = unpack("W*","ab"); print scalar(@u);', 'unpack_list');
+    unlike $err, qr/GAP|INTERNAL/, 'unpack in a list assignment is unaffected';
+};
+
 done_testing;

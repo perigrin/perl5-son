@@ -1385,6 +1385,21 @@ class SoN::FromOptree 0.01 {
     #     substr($s,1,3)      kids=[null,const,const,const]
     #     substr($s,1,3,"X")  kids=[null,padsv,const,const,const]
     sub _variadic_pop_count ($op, $name) {
+        # BLESS TAKES ONE OR TWO ARGUMENTS and the op says which, in its
+        # private field. OpMap registers a fixed 2-pop, so the one-argument
+        # form popped an operand that was never pushed and died "Stack
+        # underflow" -- an INTERNAL ERROR, in perl's own t/op/magic.t
+        # (`sub TIEARRAY {bless[]}`). Measured on 5.42.0:
+        #
+        #     bless []          bless sK/1   private=1
+        #     bless [], "Foo"   bless sK/2   private=2
+        #
+        # The one-argument form blesses into the CURRENT PACKAGE, which perl
+        # resolves at compile time -- so the missing operand is not unknown,
+        # it simply is not on the stack. Popping the right number is all this
+        # needs; the class defaults where the backend reads it.
+        return $op->private if $name eq 'bless' && $op->can('private')
+                            && $op->private >= 1 && $op->private <= 2;
         return undef unless $name eq 'substr';
         return undef unless $op->can('first');
         my $n = 0;
@@ -3647,6 +3662,20 @@ class SoN::FromOptree 0.01 {
             if (!($op->flags & 64)) {   # not OPf_STACKED
                 $list_literal = 1;
             }
+            # THE MARK CAN ALREADY BE SPENT. A mark-consuming builtin in the
+            # loop's list expression takes it before the foreach reaches here:
+            #
+            #     foreach (unpack("W*",$s)) {}   pushmark -> unpack -> enteriter
+            #
+            # unpack pops to that mark to build its Call, so pop_to_mark then
+            # died "No mark on mark stack" -- an INTERNAL ERROR masking what is
+            # really an unlowered pairing (perl's own t/op/caller.t). The
+            # list-assigned form `my @u = unpack(...)` has no such contention
+            # and works, which is what places the defect in the pairing rather
+            # than in unpack.
+            die "GAP: a foreach over a mark-consuming builtin (its list"
+              . " expression already spent the mark) is not yet lowered\n"
+                unless $sim->has_mark;
             my $bounds = $sim->pop_to_mark;
 
             # THE ITERATOR IS A PAD SLOT OR A PACKAGE SCALAR, and the scope map
