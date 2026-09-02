@@ -192,6 +192,30 @@ my %BUILTIN_SIGNATURES = (
     # `tell` yields a byte offset, and -1 on failure -- Int either way.
     tell   => { operands => [], result => 'Int' },
 
+    # THE FILESYSTEM FOUR, and they are NOT uniform -- one row cannot cover
+    # them, the same way it cannot cover the file tests. Measured on 5.42.0:
+    #
+    #     close   ok=1  fail=""      defined, length 0
+    #     rmdir   ok=1  fail=0       defined, numeric 0
+    #     unlink  two=2 none=0       a COUNT of files removed
+    #     binmode ok=1  fail=undef   UNDEF on failure
+    #
+    # `close` is the one this table's own note deferred -- "typed once someone
+    # measures pp_close the way pp_open was measured, rather than assuming a
+    # Boolean". Measured, it IS perl's canonical true/false pair, so the
+    # assumption was right and now carries evidence.
+    close  => { operands => [], result => 'Boolean' },
+    rmdir  => { operands => ['Str'], result => 'Boolean' },
+
+    # A COUNT, not a boolean that happens to be true: `unlink @files` yields 2
+    # for two files removed, and typing it Boolean would discard that.
+    unlink => { operands => ['Str'], result => 'Int' },
+
+    # UNDEF ON FAILURE, so the honest answer is the JOIN and the lattice states
+    # it -- join(Boolean, Undef) = Scalar, the same derivation `open` uses.
+    # Boolean descends from Str here, so it is the wrong answer on its own.
+    binmode => { operands => [], result => 'Scalar' },
+
     # tr/// COUNTS what it changed; tr///r RETURNS THE NEW STRING. perl gives
     # them separate op names (verified with B::Concise: `trans` vs `transr`),
     # so unlike `subst` -- where /r shares the `subst` op name and is only
@@ -259,10 +283,12 @@ my %BUILTIN_RESULT_IS_JOIN = map { $_ => 1 } qw(
 #   RETURNS undef ON FAILURE. `Boolean` descends from Str here, not from Undef,
 #   so Boolean is a WRONG answer for these -- but that rules out one candidate,
 #   NOT a row: ask the lattice for join(success, Undef) and take what it says.
-#   `open` does exactly that above and lands on Scalar. What remains absent is
-#   only what stays genuinely unresolved:
-#     close, eof        typed once someone measures pp_close/pp_eof the way
-#                       pp_open was measured, rather than assuming a Boolean.
+#   `open` does exactly that above and lands on Scalar, and `binmode` follows
+#   the same derivation. What remains absent is only what stays genuinely
+#   unresolved:
+#     eof               typed once someone measures pp_eof the way pp_open was
+#                       measured, rather than assuming a Boolean. (`close` WAS
+#                       measured -- 1 and "" -- and is typed Boolean above.)
 #     the file tests    not uniform among themselves: -c is a true Boolean
 #                       (typed above), -s a byte COUNT (Int), -M fractional
 #                       days (Num). No single row covers the family; each

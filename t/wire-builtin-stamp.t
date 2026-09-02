@@ -111,10 +111,13 @@ subtest 'the table declines what it cannot say soundly' => sub {
         # not from Undef, so Boolean would be WRONG, not merely wide. That
         # rules out ONE CANDIDATE, not a row: `open` was measured against
         # pp_open (Int pid or undef) and typed Scalar from join(Int,Undef),
-        # and `ftchr` measured as a true Boolean via is_bool. These two stay
-        # only until someone measures pp_close/pp_eof the same way.
-        close => 'undef on failure, and pp_close is not yet measured',
-        eof   => 'likewise',
+        # and `ftchr` measured as a true Boolean via is_bool.
+        #
+        # `close` NO LONGER BELONGS HERE -- it was measured (1 and "", perl's
+        # canonical true/false pair, never undef) and is typed Boolean. This
+        # entry said "not yet measured", which is a statement about our
+        # knowledge rather than about the op, and it stopped being true.
+        eof   => 'undef at a closed handle, and pp_eof is not yet measured',
 
         # The value belongs to the program, not to the operator.
         require   => 'a do-FILE returns the file last expression',
