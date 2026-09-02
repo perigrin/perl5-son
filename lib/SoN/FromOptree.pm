@@ -3018,10 +3018,27 @@ class SoN::FromOptree 0.01 {
             my $anon_name = _anon_body_name($cv, $op);
             $ANON_BODIES{$anon_name} //= $body;
 
+            # CodeRef, NOT Code. `sub { ... }` in an expression yields a code
+            # REFERENCE -- measured, `ref(sub{1})` is CODE and reftype agrees --
+            # and the distinction is load-bearing rather than cosmetic. In this
+            # lattice Code hangs off Unknown while CodeRef is a child of Ref:
+            #
+            #     Code     <: Ref  no    <: Scalar  no
+            #     CodeRef  <: Ref  yes   <: Scalar  yes
+            #
+            # so `my $c = sub {...}` gave a scalar slot a type that cannot live
+            # in a scalar, and every merge it reached collapsed:
+            #
+            #     join(Code,    Undef) = Unknown
+            #     join(CodeRef, Undef) = Scalar
+            #
+            # `Code` is the CV itself, which no perl scalar ever holds. The one
+            # place it is still right is entereval's compiled body, which is an
+            # intermediate rather than a value in a slot.
             my $node = $factory->make('AnonSub',
                 inputs => [],
                 name   => $anon_name,
-                stamp  => SoN::IR::Stamp->new(type => 'Code'));
+                stamp  => SoN::IR::Stamp->new(type => 'CodeRef'));
             $sim->push_node($node);
             return ($op->next, 'handled');
         }
