@@ -1684,6 +1684,43 @@ class SoN::FromOptree 0.01 {
         # means "this is a string".
         my $flags = $sv->FLAGS;
 
+        # A REFERENCE IS NOT ANY OF THE VALUE FLAGS, and asking only about them
+        # sent `\2` off the end of this dispatch. perl folds `\2` to a single
+        # const whose SV is ROK; measured on 5.42.0 its flags are
+        #
+        #     class=B::IV  ROK=1  IOK=0  NOK=0  POK=0
+        #
+        # so every test below failed and the bottom fallback reported a STRING
+        # constant whose value was undef -- for a value perl prints as
+        # SCALAR(0x...). That is a FABRICATION, not an imprecision: the
+        # referent was dropped, and with the value gone `\2` and `\3`
+        # hash-consed into one node.
+        #
+        # ROK IS TESTED FIRST because it is orthogonal to the value flags
+        # rather than ranked among them. A reference SV can also carry a
+        # stringified cache (POK), so asking POK first would decode the
+        # "SCALAR(0x...)" text as though it were the value.
+        #
+        # THE REFERENT IS READ RECURSIVELY. $sv->RV is an ordinary SV, and the
+        # three folded literal forms reach here with it fully populated:
+        #
+        #     \2      referent B::IV  IOK  2
+        #     \"str"  referent B::PV  POK  str
+        #     \3.5    referent B::NV  NOK  3.5
+        #
+        # Recursing means one arm covers all three and the referent keeps its
+        # own type. (`\@a` and `\&foo` are not constants and never arrive here.)
+        #
+        # THE STAMP IS ScalarRef, the lattice's Ref child for a reference to a
+        # single scalar -- which is what a folded literal ref always is.
+        # The referent's own stamp is deliberately discarded: this constant's
+        # type is the REFERENCE, not what it points at. `\2` is a ScalarRef
+        # whether the referent is an Int or a Str.
+        if ($flags & B::SVf_ROK()) {
+            my ($referent) = _extract_const($sv->RV);
+            return ($referent, SoN::IR::Stamp->new(type => 'ScalarRef'), 'ref');
+        }
+
         if ($flags & B::SVf_IOK()) {
             return ($sv->int_value, SoN::IR::Stamp->new(type => 'Int'), 'integer');
         }
