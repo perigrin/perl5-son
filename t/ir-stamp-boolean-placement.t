@@ -69,10 +69,14 @@ subtest 'Boolean is a subtype of Scalar, as the formal hierarchy places it' => s
 subtest 'joins reflect the corrected placement' => sub {
     my $bool = SoN::IR::Stamp->new( type => 'Boolean' );
 
-    is SoN::IR::Stamp::join( $bool, SoN::IR::Stamp->new( type => 'Int' ) )->type,
-        'Scalar', 'join(Boolean,Int) is Scalar, not Str';
-    is SoN::IR::Stamp::join( $bool, SoN::IR::Stamp->new( type => 'Str' ) )->type,
-        'Scalar', 'join(Boolean,Str) is Scalar -- Boolean is not below Str';
+    # ALL THREE of the Str branch move, not two. I first reported Str and
+    # Int and omitted Num, which chalk caught by enumerating rather than
+    # inferring the set from the two I had named. Num sits between them, so
+    # it could not have stayed put.
+    for my $t (qw( Str Num Int )) {
+        is SoN::IR::Stamp::join( $bool, SoN::IR::Stamp->new( type => $t ) )->type,
+            'Scalar', "join(Boolean,$t) is Scalar, not Str";
+    }
     is SoN::IR::Stamp::join( $bool, SoN::IR::Stamp->new( type => 'Undef' ) )->type,
         'Scalar', 'join(Boolean,Undef) stays Scalar, as the file tests need';
     is SoN::IR::Stamp::join( $bool, $bool )->type,
