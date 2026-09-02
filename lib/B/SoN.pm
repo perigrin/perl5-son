@@ -1184,6 +1184,27 @@ sub _literal_element_type {
     return undef unless $is_array || $is_hash;
 
     my @elems = ( $agg->inputs // [] )->@*;
+
+    # AN INPUT CAN STAND FOR MORE THAN ONE ELEMENT, and this code counts
+    # INPUTS. A slice FLATTENS into its container, so `my @t = @_[-2,-1]` is
+    # ArrayLiteral(Slice) -- one input holding two elements -- and reading the
+    # input count as the element count answered from a 1-element array:
+    #
+    #     $t[1]  index 1 > $#elems(0)  ->  'Undef'   MISCOMPILE, perl gives 4
+    #     $t[0]  element 0's stamp     ->  'List'    wrong in KIND: one slot
+    #                                                of an array is a scalar
+    #
+    # THE ARITY IS THE UNDECIDABLE THING, not the type. A `List`-stamped input
+    # stands for an unknown NUMBER of elements, so neither the bounds check nor
+    # the element join has a basis -- refuse and let the floor answer Scalar,
+    # which is true of any single slot. (Array and Hash are List's children and
+    # flatten the same way; a plain literal's inputs are one element each and
+    # are unaffected, which is what keeps `(1,2,3)[1]` narrowing to Int.)
+    for my $e (@elems) {
+        my $et = ( $e && $e->can('stamp') && $e->stamp ) ? $e->stamp->type : '';
+        return undef if $et eq 'List' || $et eq 'Array' || $et eq 'Hash';
+    }
+
     my @values;
 
     if ($is_array) {
