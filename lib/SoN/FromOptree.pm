@@ -1449,6 +1449,31 @@ class SoN::FromOptree 0.01 {
         return $op->private if $name eq 'select' && $op->can('private')
                             && $op->private >= 0 && $op->private <= 1;
 
+        # BARE `exit` TAKES NO ARGUMENT -- perl defaults the status to 0 -- and
+        # the op says so in its child count:
+        #
+        #     exit      <0> exit v       zero children
+        #     exit 0    <1> exit vK/1    one child
+        #
+        # OpMap declares a fixed 1-pop, so the bare form popped an operand that
+        # was never pushed and died "Stack underflow". THIS IS THE ROOT CAUSE
+        # BEHIND 14 OF THE 15 REMAINING INTERNAL ERRORS in perl's t/, which I
+        # had filed as "a function exit inside a branch inside a loop body" --
+        # real control-flow work -- because the first case I reduced happened
+        # to contain a loop. It needs neither a loop nor a branch: `exit;`
+        # alone crashes, and every one of those files simply contains one.
+        if ($name eq 'exit') {
+            my $n = 0;
+            if ($op->can('first')) {
+                my $kid = $op->first;
+                while (ref($kid) && $$kid) {
+                    $n++ unless $kid->name eq 'pushmark' || $kid->name eq 'null';
+                    $kid = $kid->sibling;
+                }
+            }
+            return $n;
+        }
+
         # UNPACK TAKES EXACTLY TWO OPERANDS AND PUSHES NO MARK. OpMap
         # registers it as a 'mark' pop, so pop_to_mark found none and died
         # "No mark on mark stack" (t/op/chr.t, `unpack "U0 (H2)*", chr $_[0]`).

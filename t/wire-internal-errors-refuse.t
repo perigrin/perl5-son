@@ -207,4 +207,42 @@ subtest 'lexical and implicit iterators still translate' => sub {
     unlike $e2, qr/INTERNAL ERROR|GAP/, 'the implicit $_ iterator is unaffected';
 };
 
+# BARE `exit` TAKES NO ARGUMENT and perl defaults the status to 0. The op says
+# so in its child count -- the same shape as bless[], select and unpack:
+#
+#     exit      <0> exit v       zero children
+#     exit 0    <1> exit vK/1    one child
+#
+# OpMap declared a fixed 1-pop, so the bare form popped an operand that was
+# never pushed and died "Stack underflow". This is the root cause behind 14 of
+# perl's 15 remaining internal-error files -- I had it filed as "a function
+# exit inside a branch inside a loop body", real control-flow work, because the
+# first case I reduced happened to contain a loop. It needs neither: `exit;`
+# alone crashes.
+subtest 'bare exit translates' => sub {
+    my (undef, $err) = translate('print "a"; exit; print "b";', 'exit_bare');
+    unlike $err, qr/INTERNAL ERROR/, 'no internal error';
+    unlike $err, qr/GAP/, 'and it does not need to refuse -- the arity is known';
+};
+
+subtest 'exit with a status still translates' => sub {
+    my (undef, $err) = translate('exit 0;', 'exit_status');
+    unlike $err, qr/INTERNAL ERROR|GAP/, 'the one-argument form is unaffected';
+};
+
+# THE SHAPES THAT SENT ME LOOKING FOR CONTROL FLOW. Each was reported as an
+# underflow and each is just the bare form in a context that made it look
+# structural.
+subtest 'bare exit in a branch and in a loop' => sub {
+    for my $case (
+        ['if ($ENV{X}) { exit }',                  'exit_branch'],
+        ['$ENV{X} and exit;',                      'exit_and'],
+        ['for $f ("a","b") { if ($f) { exit } }',  'exit_loop'],
+    ) {
+        my ($src, $name) = $case->@*;
+        my (undef, $err) = translate($src, $name);
+        unlike $err, qr/INTERNAL ERROR/, "$name: no internal error";
+    }
+};
+
 done_testing;
