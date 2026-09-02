@@ -1631,6 +1631,15 @@ class SoN::FromOptree 0.01 {
     # in one optree, which is why only enterwrite appears at the call site.
     # Compiling it needs that second CV walked plus the accumulator/formline
     # machinery, none of which exists.
+    # The builtins whose FIRST operand is a filehandle. A bareword handle
+    # arrives as the gv handler's name-as-string Constant, and these are the
+    # ops that say it is a handle rather than a string -- `print`/`say` are
+    # absent because their handle arrives through rv2gv (stamped Glob there)
+    # and is guarded by OPf_STACKED, which these ops do not carry.
+    my %IO_HANDLE_BUILTIN = map { $_ => 1 } qw(
+        open close binmode eof fileno readline seek tell truncate
+    );
+
     my %UNBUILT_OP_GAP = (
         enterwrite => "GAP: `write` invokes a format, which is a separate CV in"
                     . " the glob's FORM slot; compiling it needs that body"
@@ -4110,6 +4119,79 @@ class SoN::FromOptree 0.01 {
                     $extra{dispatch_kind} = 'builtin';
                     $extra{name}          = $name;
                     %extra = (%extra, _sort_fields($op)) if $name eq 'sort';
+                }
+
+                # A BAREWORD FILEHANDLE IS A GLOB, NOT ITS NAME. `open(FOO,...)`
+                # reaches here with operand 0 a Str Constant "FOO" -- the gv
+                # handler's name-as-string, correct for naming a callee and a
+                # fabrication here, the same defect `\*STDOUT` had. Unlike that
+                # one there is no rv2gv to key on: measured, the optree hands
+                # the gv straight to the builtin
+                #
+                #     open(FOO,...)   gv[*FOO] -> const -> open    no rv2gv
+                #     close FOO       gv[*FOO] -> close            no rv2gv
+                #     print FOO "x"   gv[*FOO] -> rv2gv -> print   rv2gv
+                #
+                # and `$op->next` is the next ARGUMENT for the variadic forms,
+                # so it cannot identify the consumer either. The builtin's own
+                # name is the reliable signal, and it is in hand right here.
+                #
+                # GLOB, NOT GlobRef, and the distinction is perl's:
+                #
+                #     ref(*FOO)   not a reference at all -- a Glob
+                #     ref(\*FOO)  GLOB                   -- a GlobRef
+                #     ref($lex)   GLOB                   -- a GlobRef
+                #
+                # A bareword IS the glob; a lexical handle HOLDS a reference to
+                # one. join(Glob, GlobRef) is Unknown, so these are genuinely
+                # two types and one requirement cannot cover both -- which is
+                # why this is stamped at the operand rather than declared as an
+                # `operands` entry. Declaring GlobRef there made the coercion
+                # pass insert Coerce(Str -> GlobRef), fabricating a filehandle
+                # out of the string "FOO".
+                if ($node_type eq 'Call' && $IO_HANDLE_BUILTIN{$name}
+                    && @inputs
+                    && $inputs[0]->isa('SoN::IR::Node::Constant')
+                    && ($inputs[0]->const_type // '') eq 'string'
+                    && $inputs[0]->stamp
+                    && $inputs[0]->stamp->type eq 'Str') {
+                    $inputs[0] = $factory->make('Constant',
+                        value      => $inputs[0]->value,
+                        const_type => 'glob',
+                        stamp      => SoN::IR::Stamp->new(type => 'Glob'));
+                }
+
+                # A LEXICAL HANDLE IS DEFINED BY THE OPEN ITSELF. `open(my $T,
+                # ...)` passes an unstamped PadAccess, and nothing downstream
+                # can type it: the slot's value is created BY this call.
+                # Measured on 5.42.0, after the open
+                #
+                #     ref($T)      GLOB     so the type is GlobRef
+                #     blessed($T)  no       not an object, so not IO
+                #
+                # AND OPEN DEFINES IT EVEN WHEN THE OPEN FAILS:
+                #
+                #     open($T,"<","/nonexistent")  false, but $T is ref GLOB
+                #
+                # so the stamp is unconditional rather than join(GlobRef,Undef).
+                # Only `open` does this -- close/readline READ a handle someone
+                # else defined, so stamping there would be inventing a type for
+                # a value this call did not create.
+                #
+                # NOT DECLARED AS AN `operands` REQUIREMENT, because a bareword
+                # handle is a Glob and a lexical one is a GlobRef -- two types
+                # with no common parent (join is Unknown). A GlobRef
+                # requirement made the coercion pass wrap the bareword in
+                # Coerce(Glob -> GlobRef), fabricating a reference from a glob
+                # that is not one.
+                if ($node_type eq 'Call' && $name eq 'open'
+                    && @inputs
+                    && $inputs[0]->isa('SoN::IR::Node::PadAccess')
+                    && (!$inputs[0]->stamp
+                        || $inputs[0]->stamp->type eq 'Unknown')) {
+                    $inputs[0]->set_stamp(
+                        SoN::IR::Stamp->new(type => 'GlobRef'))
+                        if $inputs[0]->can('set_stamp');
                 }
 
                 # push/unshift/splice MUTATE their array's length. shift/pop are

@@ -260,6 +260,25 @@ my %BUILTIN_SIGNATURES = (
     # (pp_sys.c, PP_wrapped(pp_open)). is_bool() is false on BOTH paths, so it
     # is not a Boolean however boolean its use reads. join(Int, Undef) is what
     # the LATTICE gives for that pair, and the lattice is what decides it.
+    # A FILEHANDLE OPERAND IS A GlobRef, and perl settles this rather than
+    # leaving it to judgement. Measured on 5.42.0 after `open(my $T, ...)`:
+    #
+    #     ref($T)      GLOB       so the lattice type is GlobRef
+    #     reftype($T)  GLOB
+    #     blessed($T)  no         not an object, so NOT IO
+    #
+    # AND OPEN DEFINES THE HANDLE EVEN WHEN THE OPEN FAILS:
+    #
+    #     open($T, "<", "/nonexistent")  -> false, but $T is defined, ref GLOB
+    #
+    # which is what makes this unconditional rather than join(GlobRef, Undef).
+    # The handle is a real value at every point after the open, whatever the
+    # open's own boolean return says -- so the operand requirement carries no
+    # Undef and _infer_backward can seed the pad slot from it.
+    #
+    # THE HANDLE IS POSITION 0 in all three, which is what lets one declaration
+    # type every spelling: `open(my $T, ...)`, `<$T>` and `close($T)` all read
+    # the SAME PadAccess node, so seeding it once types the whole chain.
     open   => { operands => [], result => 'Scalar' },
 
     # A line, or undef at EOF, or the whole file in list context. A
