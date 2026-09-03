@@ -3090,7 +3090,34 @@ class SoN::FromOptree 0.01 {
             # non-refusing path did, would have taken the PATTERN -- the two
             # operands inverted, silently, since the graph still holds a Match
             # with two inputs either way.
-            my $matcher = defined $pattern ? undef : $sim->pop_node;
+            # AN INTERPOLATED PATTERN HAS MANY PARTS, and popping ONE took
+            # only the last. Measured:
+            #
+            #     my $p="a"; my $s="ZZy"; $s =~ /x${p}y/
+            #     perl:  no match          ZZy does not contain xay
+            #     graph: Match("ZZy","y")  which is TRUE
+            #
+            # A silent wrong answer. `/x${p}y/` compiles to pushmark then three
+            # values ("x", $p, "y") then a transparent regcomp, so the parts
+            # are MARK-DELIMITED -- measured, depth 5 with the mark at 2. The
+            # parts are concatenated into the pattern exactly as string
+            # interpolation builds any other runtime string.
+            my $matcher;
+            if (!defined $pattern) {
+                my $parts = $sim->has_mark && $sim->stack_depth > $sim->mark_depth + 1
+                    ? $sim->pop_to_mark
+                    : [ $sim->pop_node ];
+                $matcher = shift $parts->@*;
+                # Fold the remaining parts on: Concat is how this file already
+                # builds an interpolated string, and _coerce_to_str is what
+                # gives each part a Str reading.
+                for my $part ($parts->@*) {
+                    $matcher = $factory->make('Concat',
+                        inputs => [ _coerce_to_str($factory, $matcher),
+                                    _coerce_to_str($factory, $part) ],
+                        stamp  => SoN::IR::Stamp->new(type => 'Str'));
+                }
+            }
 
             my $target;
             if ($op->flags & 64) {   # OPf_STACKED: subject pushed by a kid op
