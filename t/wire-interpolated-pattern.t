@@ -62,18 +62,31 @@ subtest 'a literal pattern still matches' => sub {
 };
 
 # qr// WITH AN INTERPOLATED PATTERN is the same shape one construct over, and
-# it currently refuses. Either lowering it or keeping the refusal is fine;
-# silently building a fragment is not.
-subtest 'an interpolated qr// does not build a fragment' => sub {
+# it now lowers rather than refusing. Its parts are on the stack behind a mark
+# exactly as the match form's are, so they fold with Concat the same way; the
+# refusal ("the pattern is not a compile-time literal") was true and was never
+# a reason it could not be BUILT -- the same mistake the split refusal made
+# about its fused target.
+subtest 'an interpolated qr// assembles its whole pattern' => sub {
     my ($n, $err) = wire('my $p="a"; my $re = qr/x${p}y/; print ref($re);', 'interp_qr');
-    if ($err =~ /GAP/) {
-        pass('refused loudly, which is acceptable');
-        return;
-    }
-    my @frag = grep { $_->{op} eq 'Constant' && ($_->{value} // '') eq 'y' } $n->@*;
+    unlike $err, qr/GAP|INTERNAL/, 'it lowers';
+    my %byid = map { $_->{id} => $_ } $n->@*;
+    my ($c) = grep { $_->{op} eq 'Coerce' && ($_->{to_repr} // '') eq 'Regex' } $n->@*;
+    ok defined $c, 'a Coerce to Regex is built -- compile this string as a pattern'
+        or return;
+    my ($src) = map { $byid{$_} } ($c->{inputs} // [])->@*;
+    is +($src->{op} // ''), 'Concat',
+        'and it compiles a Concat of the parts, not a single fragment';
+};
+
+# A LITERAL qr// stays a compile-time regex constant -- it has a precomp and
+# never reaches the stack, so the interpolation path must not claim it.
+subtest 'a literal qr// is still a regex constant' => sub {
+    my ($n, $err) = wire('my $re = qr/abc/; print ref($re);', 'lit_qr');
+    unlike $err, qr/GAP|INTERNAL/, 'it translates';
     my ($c) = grep { ($_->{const_type} // '') eq 'regex' } $n->@*;
-    ok !defined $c || ($c->{value} // '') ne 'y',
-        'no regex constant holding only the last fragment';
+    ok defined $c, 'a regex Constant exists';
+    is +($c->{value} // ''), 'abc', 'holding the whole literal pattern';
 };
 
 done_testing;

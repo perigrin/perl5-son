@@ -3172,13 +3172,56 @@ class SoN::FromOptree 0.01 {
         # matcher VALUE (corpus regex.md R2): a Constant of const_type
         # 'regex' carrying the pattern. A later =~ applies it.
         if ($name eq 'qr' && $op->isa('B::PMOP')) {
-            my $pattern = $op->precomp
-                // die "GAP: qr// with a runtime-interpolated pattern not yet lowered\n";
-            my $node = $factory->make('Constant',
-                value      => $pattern,
-                const_type => 'regex',
-            );
-            $sim->push_node($node);
+            my $pattern = $op->precomp;
+
+            # A LITERAL pattern rides on the op and is a compile-time constant.
+            if (defined $pattern) {
+                $sim->push_node($factory->make('Constant',
+                    value      => $pattern,
+                    const_type => 'regex',
+                    stamp      => SoN::IR::Stamp->new(type => 'Regex')));
+                return ($op->next, 'handled');
+            }
+
+            # AN INTERPOLATED PATTERN IS BUILT AT RUNTIME, and its parts are on
+            # the stack behind a mark -- the same shape the match handler above
+            # assembles. Measured:
+            #
+            #     qr/x${p}y/   pushmark, "x", $p, "y", regcomp, qr
+            #
+            # so the parts fold together with Concat exactly as any other
+            # interpolated string does. This refused on the grounds that the
+            # pattern was not a compile-time literal, which is true and was
+            # never a reason it could not be BUILT -- the same mistake the
+            # split refusal made about its fused target.
+            #
+            # The result is a Regex either way: a compiled pattern object, which
+            # is what perl's `ref(qr//)` reports as Regexp.
+            my $parts = $sim->has_mark
+                     && $sim->stack_depth > $sim->mark_depth
+                ? $sim->pop_to_mark
+                : ( $sim->stack_depth ? [ $sim->pop_node ] : [] );
+
+            die "GAP: qr// whose interpolated pattern left no parts on the"
+              . " stack is not yet lowered\n"
+                unless $parts->@*;
+
+            my $built = shift $parts->@*;
+            for my $part ($parts->@*) {
+                $built = $factory->make('Concat',
+                    inputs => [ _coerce_to_str($factory, $built),
+                                _coerce_to_str($factory, $part) ],
+                    stamp  => SoN::IR::Stamp->new(type => 'Str'));
+            }
+
+            # Coerce(Str -> Regex) says COMPILE THIS STRING AS A PATTERN, which
+            # is exactly what qr// does and what distinguishes it from the
+            # string it was built from.
+            $sim->push_node($factory->make('Coerce',
+                from_repr => 'Str',
+                to_repr   => 'Regex',
+                inputs    => [$built],
+                stamp     => SoN::IR::Stamp->new(type => 'Regex')));
             return ($op->next, 'handled');
         }
 
