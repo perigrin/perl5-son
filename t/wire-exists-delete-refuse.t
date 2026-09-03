@@ -33,11 +33,17 @@ sub translate ($src, $name) {
 #
 # and the operand was wrong on top of that: the Defined took the KEY, never the
 # slot, so no version of this mapping could have been right.
-subtest 'exists refuses rather than testing the key string' => sub {
+# EXISTS IS NOW LOWERED, not refused -- see t/wire-exists-node.t for the node's
+# contract. What this file still pins is the thing that made the refusal
+# necessary: no Defined node may be emitted over the key. That assertion is
+# meaningful on both sides of the change, which is why it is kept rather than
+# deleted with the refusal.
+subtest 'exists never emits a Defined over the key' => sub {
     my ($out, $err) = translate('my %h=(a=>1); print exists $h{zz} ? "y" : "n";', 'ex');
-    like $err, qr/GAP/, 'exists is refused, loudly';
+    unlike $err, qr/INTERNAL/, 'no crash';
     unlike $out, qr/"op"\s*:\s*"Defined"/,
-        'no Defined node is emitted over the key';
+        'no Defined node is emitted over the key -- that was the miscompile';
+    like $out, qr/"op"\s*:\s*"Exists"/, 'an Exists node is emitted instead';
 };
 
 # DELETE MUTATES AND YIELDS. It removes the key AND returns the value:
@@ -56,11 +62,13 @@ subtest 'delete refuses rather than dropping the mutation' => sub {
 # THE REFUSAL MUST NAME THE CONSTRUCT. A GAP whose message does not say what
 # was refused sends the reader hunting, which is the failure mode the
 # refuse-before-popping work in this file already fixed once.
-subtest 'the refusals name themselves' => sub {
-    my (undef, $eerr) = translate('my %h=(a=>1); print exists $h{a} ? 1 : 0;', 'exname');
-    like $eerr, qr/exists/, 'the exists GAP says "exists"';
+subtest 'the delete refusal names itself' => sub {
     my (undef, $derr) = translate('my %h=(a=>1); delete $h{a};', 'delname');
     like $derr, qr/delete/, 'the delete GAP says "delete"';
+    # `exists &sub` is the one exists form still refused, and it must say so
+    # rather than being mistaken for container membership.
+    my (undef, $serr) = translate('sub f {} print exists &f ? 1 : 0;', 'exsub');
+    like $serr, qr/exists/, 'the `exists &sub` GAP says "exists"';
 };
 
 # NEIGHBOURING HASH OPERATIONS STILL WORK. The refusal must be for these two

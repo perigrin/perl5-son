@@ -153,6 +153,17 @@ my %SIGNATURES = (
     Match      => { operands => [], result => 'Boolean' },
     IsaOp      => { operands => ['Scalar', 'Str'], result => 'Boolean' },
 
+    # MEMBERSHIP ALWAYS ANSWERS. `exists` reports whether a key or index is
+    # PRESENT, and measured on 5.42.0 `is_bool(exists $h{a})` is true -- so
+    # Boolean, not the join(Boolean, Undef) = Scalar that `print` and `open`
+    # need. Those two have a failure path yielding undef; exists has none.
+    #
+    # `operands => []` because it imposes nothing: any container and any key
+    # are askable. The container is operand 0 and the key operand 1, but
+    # neither is CONSTRAINED -- asking about a key that is not there is the
+    # normal case, not an error.
+    Exists     => { operands => [], result => 'Boolean' },
+
     # WANTARRAY IS THE CALLSITE'S CONTEXT, and its type is the join over all
     # three readings. Measured on 5.42.0:
     #

@@ -60,7 +60,7 @@ subtest 'a translated sub is on the wire' => sub {
 # arrive, and the refused one must be NAMED rather than silently absent.
 subtest 'a refused sub is named, and its neighbours still translate' => sub {
     my $a = account(
-        'sub a { 1 } sub b { my %h=(k=>1); exists $h{k} } sub c { 3 } print a(), c();',
+        'sub a { 1 } sub b { my %h=(k=>1); delete $h{k} } sub c { 3 } print a(), c();',
         'mixed');
     ok $a->{wire}{'main::a'}, 'a translated';
     ok $a->{wire}{'main::c'}, 'c translated';
@@ -74,7 +74,7 @@ subtest 'a refused sub is named, and its neighbours still translate' => sub {
 subtest 'no CV is missing from both the wire and the refusal list' => sub {
     my $src = join ' ',
         'sub t1 { 1 }',
-        'sub t2 { my %h=(k=>1); exists $h{k} }',
+        'sub t2 { my %h=(k=>1); delete $h{k} }',
         'sub t3 { my @a=(1,2); $a[0] }',
         'sub t4 { my %h; delete $h{x} }',
         'print t1(), t3();';

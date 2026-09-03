@@ -17,7 +17,13 @@ use SoN::IR::NodeFactory;
 # parents (BinOp, UnaryOp, Access, Aggregate, Regex), so the split transfers
 # exactly.
 #
-# 91, NOT 88: the producer declares nodes chalk does not.
+# 92, NOT 88: the producer declares nodes chalk does not.
+#
+# `Exists` is the newest. Membership -- is this key PRESENT -- is a different
+# question from definedness, and `exists` had been mapped onto the Defined
+# node over the KEY alone, which answered true for every missing key. It takes
+# (container, key, memory) like a Subscript and yields Boolean.
+#
 #
 # `Wantarray` is the newest. wantarray reports the CALLSITE's context, which
 # the graph carries as the Call node's `want` -- so the callee holds the
@@ -110,7 +116,7 @@ subtest 'every node class is one or the other, never neither' => sub {
     my @names = sort map { s/\.pm$//r } grep { /\.pm$/ } readdir($dh);
     closedir $dh;
 
-    cmp_ok(scalar @names, '==', 91, 'all 91 node classes present');
+    cmp_ok(scalar @names, '==', 92, 'all 92 node classes present');
 
     for my $name (@names) {
         my $class = "SoN::IR::Node::$name";

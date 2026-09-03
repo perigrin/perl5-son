@@ -228,7 +228,13 @@ class SoN::FromOptree::OpMap 0.01 {
         aeach          => [1, 'Call',       1, 0],
         akeys          => [1, 'Call',       1, 0],
         avalues        => [1, 'Call',       1, 0],
-        exists         => [1, 'Defined',    1, 0],
+        # MEMBERSHIP, NOT DEFINEDNESS. This was 'Defined' with a pop_count of
+        # 1, which took the KEY alone and asked whether that string is defined
+        # -- true for every missing key. FromOptree handles `exists` directly
+        # now (it pops container AND key, like helem) and builds an Exists
+        # node; the row stays so is_known() is true and the walk reaches that
+        # handler rather than treating the op as unknown.
+        exists         => [2, 'Exists',     1, 0],
         delete         => [1, 'Call',       1, 0],
         helemexistsor  => [2, undef,        1, BRANCH],
 

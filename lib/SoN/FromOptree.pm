@@ -1840,26 +1840,6 @@ class SoN::FromOptree 0.01 {
         # not a step toward compiling goto -- which needs real control-flow
         # support for the label form and tail-call replacement of the current
         # frame for `goto &sub`.
-        # EXISTS IS NOT DEFINED, and OpMap mapped it to the Defined node --
-        # over the KEY, not the slot. `exists $h{zz}` became
-        # Defined(Constant("zz")): whether the STRING "zz" is defined, which it
-        # always is. perl prints "no" for a missing key; the graph meant "yes".
-        # A SILENT WRONG ANSWER from ordinary code.
-        #
-        # The two are genuinely different questions, measured on 5.42.0:
-        #
-        #     my %h = (a => undef);
-        #     exists $h{a}     true    the key is present
-        #     defined $h{a}    false   its value is not
-        #
-        # so no stamp could have repaired this -- the operand was wrong as well
-        # as the operator. Refuse until membership is a node of its own with
-        # the container and the key as its operands.
-        exists => "GAP: `exists` asks whether a key is PRESENT, which is not"
-                . " the same question as whether its value is defined, and no"
-                . " node yet expresses it -- it would otherwise test the key"
-                . " string and answer true for every missing key",
-
         # DELETE MUTATES AND YIELDS: it removes the key and returns the value.
         # It reached the wire as Call(delete, Constant(key)) with the KEY as its
         # only operand -- no container, and no memory edge -- so the removal was
@@ -3518,6 +3498,43 @@ class SoN::FromOptree 0.01 {
                     : ()),
             );
             $sim->define($targ, $node);
+            $sim->push_node($node);
+            return ($op->next, 'handled');
+        }
+
+        # `exists $h{k}` / `exists $a[i]` -- MEMBERSHIP, not definedness.
+        #
+        # OpMap mapped this onto the Defined node with a pop_count of 1, so it
+        # took the KEY ALONE and asked whether that string is defined -- always
+        # true. `exists $h{zz}` meant 1 where perl prints "". A silent wrong
+        # answer, and no stamp could have fixed it: the container was not an
+        # operand at all.
+        #
+        # Measured under suppress_peep, which is how B::SoN always runs and
+        # which stops the multideref fusion from forming:
+        #
+        #     padhv const null exists     container and key BOTH on the stack
+        #
+        # so this pops two exactly as aelem/helem does. (Without suppression
+        # perl fuses the whole thing into a multideref carrying its operands in
+        # an aux list -- a shape the walker never sees. Probing an unsuppressed
+        # optree is what made this look like an aux-decoding problem.)
+        #
+        # `exists &sub` IS A DIFFERENT QUESTION -- is this CV defined in the
+        # symbol table -- and OPpEXISTS_SUB marks it: measured private=65
+        # (64|1) against 1 for the element forms. Refused by name; it has no
+        # container to test.
+        if ($name eq 'exists') {
+            die "GAP: `exists &sub` asks whether a subroutine is defined in the"
+              . " symbol table, which is a different question from container"
+              . " membership and has no node yet\n"
+                if $op->private & 64;   # OPpEXISTS_SUB
+
+            my $key       = $sim->pop_node;
+            my $container = $sim->pop_node;
+            my $node = $factory->make('Exists',
+                inputs => [$container, $key, $sim->memory],
+                stamp  => SoN::IR::Stamp->new(type => 'Boolean'));
             $sim->push_node($node);
             return ($op->next, 'handled');
         }
