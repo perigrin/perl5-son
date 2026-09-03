@@ -182,11 +182,29 @@ sub _discover_and_translate {
     #
     # FIXPOINT, because an anon body may contain a further anon sub: translating
     # it registers more entries, so keep going until a pass adds none.
+    # ATTEMPTED, NOT SUCCEEDED, IS WHAT BOUNDS THIS LOOP. Pending means "not
+    # in %graphs", and the catch below DELETES the entry on failure -- so a
+    # body that cannot translate was pending again on the next round, forever.
+    # An infinite loop by construction, and it is the same defect behind
+    # op/gmagic.t emitting 40,930 skip messages (two anon CVs at ~27,000 each,
+    # bounded only by the file running out of other work).
+    #
+    # Measured: `sub mk { sub { state sub s1; state sub s2 {\&s1} sub s1 {\&s2}
+    # if (@_) { return \&s1 } return s1(); } }` -- perl's own t/op/lexsub.t --
+    # spun emitting one identical "INTERNAL ERROR ... Stack underflow" per
+    # round until killed.
+    #
+    # %attempted records every body the loop has TRIED, so a failure is
+    # reported once and the fixpoint still terminates. The fixpoint itself is
+    # unchanged: a body that registers further anon subs still gets them
+    # drained, because those are new names and have not been attempted.
+    my %attempted;
     while (1) {
-        my @pending = grep { !exists $graphs{$_} }
+        my @pending = grep { !exists $graphs{$_} && !$attempted{$_} }
                       sort keys %SoN::FromOptree::ANON_BODIES;
         last unless @pending;
         for my $anon_name (@pending) {
+            $attempted{$anon_name} = 1;
             my $body_cv = $SoN::FromOptree::ANON_BODIES{$anon_name};
             try {
                 $graphs{$anon_name} =
