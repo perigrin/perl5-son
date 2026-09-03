@@ -3484,8 +3484,57 @@ class SoN::FromOptree 0.01 {
             #
             # The result is a Regex either way: a compiled pattern object, which
             # is what perl's `ref(qr//)` reports as Regexp.
-            my $parts = $sim->has_mark
-                     && $sim->stack_depth > $sim->mark_depth
+            # WHOSE MARK IS IT? A qr with runtime parts owns the mark those
+            # parts sit behind; a qr that is merely a CALL ARGUMENT does not,
+            # and claiming the caller's mark leaves its entersub with none --
+            # which surfaces as "No mark on mark stack", an internal error
+            # rather than an honest GAP. Measured on perl's own t/comp/use.t
+            # line 99:
+            #
+            #     like ($@, qr/^\QPerl v10.0.2 required\E/);
+            #       pushmark, $@, <pattern>, qr   and after qr, no mark
+            #
+            # so `like` lost the mark pushmark had just pushed for it.
+            #
+            # A STACK-DEPTH TEST CANNOT TELL THESE APART. Above the mark sit
+            # `$@` and the pattern -- two values, exactly as a two-part
+            # interpolation would leave -- so any `stack_depth > mark_depth + N`
+            # threshold answers the same for both. The depth is a coincidence of
+            # the call's arity, not evidence about the pattern.
+            #
+            # THE OPTREE STILL KNOWS -- but the question is not "is there a
+            # regcomp", it is "does the regcomp leave its parts SEPARATE".
+            # Both shapes below have one, and only the first leaves a mark:
+            #
+            #     qr/a${v}b/       regcomp -> null -> pushmark, const, padsv, const
+            #     qr/\Q..$^V..\E/  regcomp -> quotemeta -> multiconcat
+            #
+            # multiconcat FOLDS the parts into a single value before qr runs,
+            # so the second shape leaves exactly ONE value on the stack -- and
+            # the only mark below it is the enclosing call's. That is why a
+            # stack-depth threshold cannot work here: two values above the mark
+            # (`$@` and the folded pattern) look identical to a genuine
+            # two-part interpolation.
+            #
+            # So: this qr owns a mark only if its own subtree pushed one.
+            my $owns_mark = 0;
+            if ($op->flags & 4 && ${ $op->first }) {
+                my $seek;
+                $seek = sub ($o) {
+                    return 0 unless $o && ref($o) && $$o;
+                    return 1 if $o->name eq 'pushmark';
+                    return 0 unless $o->flags & 4;
+                    my $k = $o->first;
+                    while ($k && $$k) {
+                        return 1 if $seek->($k);
+                        $k = $k->sibling;
+                    }
+                    return 0;
+                };
+                $owns_mark = $seek->($op->first) ? 1 : 0;
+            }
+
+            my $parts = $owns_mark && $sim->has_mark
                 ? $sim->pop_to_mark
                 : ( $sim->stack_depth ? [ $sim->pop_node ] : [] );
 
