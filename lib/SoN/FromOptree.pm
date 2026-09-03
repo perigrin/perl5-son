@@ -4747,8 +4747,25 @@ class SoN::FromOptree 0.01 {
             # the array path. Guarded on there being something to iterate --
             # `for () {}` has no elements and no loop to build.
             if ($list_literal) {
-                die "GAP: foreach over an empty list not yet lowered\n"
-                    unless $bounds->@*;
+                # AN EMPTY LIST IS ZERO ITERATIONS, and emitting nothing is the
+                # ANSWER rather than a failure to find one. Measured:
+                #
+                #     for my $pkg(()){ print "BODY" } print "after";
+                #       perl prints: after
+                #
+                # perl's own t/comp/parser.t line 497 (bug #114942). This
+                # refused because there were no bounds to iterate -- true, and
+                # exactly why there is no loop to build.
+                #
+                # NOT AN EMPTY Loop NODE, which would be a different claim: it
+                # asserts a loop exists and its body is reachable, so a
+                # consumer walking for reachable blocks would find one that
+                # never runs. Skipping to the loop's exit leaves the body out
+                # of the graph, which is what perl does with it.
+                if (!$bounds->@*) {
+                    return (($op->can('lastop') ? $op->lastop : $op->next),
+                            'handled');
+                }
                 my $arr = $factory->make('ArrayLiteral', inputs => [$bounds->@*]);
                 _translate_foreach_array($cv, $op, $sim, $factory, $opmap,
                     $ctx->{visited}, $arr, $iter_key);
