@@ -37,22 +37,29 @@ sub wire ($src, $name) {
 #     my @c; unshift @c,9        returns 1
 #
 # perl's own t/comp/require.t and t/comp/utf.t both hit this.
-# STILL REFUSED, and the refusal is doing real work. Threading push onto the
-# memory chain is NOT sufficient on its own: I tried it and the graph still
-# said 2 where perl says 3, because the later READ does not consult memory.
+# THREADING THE WRITE WAS NECESSARY AND NOT SUFFICIENT, and that is why this
+# refused for so long. With push threaded the graph STILL said 2 where perl
+# says 3:
 #
 #     my @a=(1,2); push @a, 3; print scalar(@a);
-#     with push threaded:  Count(ArrayLiteral#5)   <- the PRE-push array
-#     Call(push, %5, %10, MemStart)                <- correctly threaded
+#     Count(ArrayLiteral#5)          <- the PRE-push array
+#     Call(push, %5, %10, MemStart)  <- correctly threaded, and irrelevant
 #
-# Count extends UnaryOp: one input, no memory slot. Making an aggregate read
-# memory-dependent changes that node's arity, every construction site, and the
-# consumer's contract -- a wire question, not a producer-local fix. So push
-# keeps refusing rather than shipping a graph that reads the pre-mutation
-# binding.
-subtest 'push is refused until an aggregate read can observe memory' => sub {
-    my (undef, $err) = wire('my @a=(1,2); push @a, 3; print scalar(@a);', 'push_basic');
-    like $err, qr/GAP/, 'refused rather than silently reading the old length';
+# `Count` extended UnaryOp: one input, no memory slot, so no amount of care on
+# the write side could make the READ observe anything. Count is an Access now
+# and takes [aggregate, memory], which is what unblocked this.
+#
+# shift/pop had the IDENTICAL defect and shipped it rather than refusing --
+# `shift @a; scalar @a` said 3 where perl says 2 -- so the class had two
+# answers and neither was right. See
+# t/wire-aggregate-read-observes-mutation.t.
+subtest 'push lowers and threads onto memory' => sub {
+    my ($n, $err) = wire('my @a=(1,2); push @a, 3; print scalar(@a);', 'push_basic');
+    unlike $err, qr/GAP|INTERNAL/, 'no longer refused' or return;
+    my ($p) = grep { ($_->{name} // '') eq 'push' } $n->@*;
+    ok defined $p, 'the push Call exists' or return;
+    cmp_ok scalar(($p->{inputs} // [])->@*), '>=', 3,
+        'it carries array, value and memory';
 };
 
 # THE MUTATION MUST BE OBSERVABLE. This is the assertion the refusal existed to
@@ -60,11 +67,11 @@ subtest 'push is refused until an aggregate read can observe memory' => sub {
 # memory input must be the push, not MemStart.
 subtest 'a later read observes the push' => sub {
     my ($n, $err) = wire('my @a=(1,2); push @a, 3; print scalar(@a);', 'push_observed');
-  SKIP: {
-        skip "refused: $err", 1 if $err =~ /GAP/;
+    unlike $err, qr/GAP|INTERNAL/, 'it lowers' or return;
+    {
         my %byid = map { $_->{id} => $_ } $n->@*;
         my ($count) = grep { $_->{op} eq 'Count' } $n->@*;
-        ok defined $count, 'the scalar(@a) Count exists' or skip 'no Count', 1;
+        ok defined $count, 'the scalar(@a) Count exists' or return;
         # walk back from Count: it must reach the push Call
         my (@q, %seen) = (($count->{inputs} // [])->@*);
         my $reaches = 0;
@@ -81,25 +88,35 @@ subtest 'a later read observes the push' => sub {
 # PUSH YIELDS THE NEW LENGTH, an Int -- not the array and not the pushed value.
 subtest 'push yields an Int length' => sub {
     my ($n, $err) = wire('my @a=(1,2); my $n = push @a, 3; print $n;', 'push_value');
-  SKIP: {
-        skip "refused", 1 if $err =~ /GAP/;
+    unlike $err, qr/GAP|INTERNAL/, 'it lowers' or return;
+    {
         my ($p) = grep { ($_->{name} // '') eq 'push' } $n->@*;
-        ok defined $p, 'the push Call exists' or skip 'no push', 1;
+        ok defined $p, 'the push Call exists' or return;
         is $p->{stamp}, 'Int', 'stamped Int -- the new length';
     }
 };
 
-subtest 'unshift is refused for the same reason' => sub {
-    my (undef, $err) = wire('my @a=(2,3); unshift @a, 1; print scalar(@a);', 'unshift');
-    like $err, qr/GAP/, 'refused, same missing capability';
+subtest 'unshift lowers by the same mechanism' => sub {
+    my ($n, $err) = wire('my @a=(2,3); unshift @a, 1; print scalar(@a);', 'unshift');
+    unlike $err, qr/GAP|INTERNAL/, 'no longer refused' or return;
+    ok scalar(grep { ($_->{name} // '') eq 'unshift' } $n->@*),
+        'the unshift Call exists';
 };
 
 # SPLICE STAYS REFUSED -- it removes as well as inserts and its return value is
 # the removed elements, a different shape from push's length. Asserted so it is
 # not swept up by a fix aimed at push.
-subtest 'splice still refuses' => sub {
-    my (undef, $err) = wire('my @a=(1,2,3); splice(@a,1,1); print scalar(@a);', 'splice');
-    like $err, qr/GAP/, 'splice is still refused';
+# SPLICE TAKES THE SAME PATH, but its RESULT is different: it yields the
+# REMOVED ELEMENTS, not a count. Measured -- `my @d=(1,2,3); splice(@d,1,1)`
+# returns the element 2, so stamping it Int (as push/unshift are) would be a
+# wrong answer rather than a missing one, and it is deliberately left unstamped.
+subtest 'splice lowers too, but is not stamped Int' => sub {
+    my ($n, $err) = wire('my @a=(1,2,3); splice(@a,1,1); print scalar(@a);', 'splice');
+    unlike $err, qr/GAP|INTERNAL/, 'no longer refused' or return;
+    my ($sp) = grep { ($_->{name} // '') eq 'splice' } $n->@*;
+    ok defined $sp, 'the splice Call exists' or return;
+    isnt +($sp->{stamp} // ''), 'Int',
+        'it is not claimed to be a length -- splice returns the removed elements';
 };
 
 # SHIFT/POP were already modelled and must stay working.

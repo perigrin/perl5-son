@@ -138,6 +138,39 @@ class SoN::FromOptree 0.01 {
     # non-aggregate path where the drain threads no memory: two shifts in one
     # sub became two nodes with identical inputs, no memory input and no control
     # edge, so nothing ordered them and nothing told them apart.
+    # _make_count($factory, $agg, $sim, %extra) -- the ONE place a Count is built.
+    #
+    # A whole-aggregate read is MEMORY-DEPENDENT when the aggregate lives in
+    # memory, exactly as an element read is. `Count` used to extend UnaryOp --
+    # one input, no memory slot -- and that arity was the whole bug: the read
+    # could not observe a mutation however well the mutation itself was
+    # threaded. Measured before the change:
+    #
+    #     my @a=(1,2,3); shift @a; print scalar(@a);
+    #       perl:  2
+    #       graph: Count[ArrayLiteral], reading the PRE-shift array and built
+    #              BEFORE the shift. Says 3, silently.
+    #
+    # so `push` REFUSED (it produced the same shape) while `shift` SHIPPED it.
+    # One class, two answers, and neither was right.
+    #
+    # THE MEMORY INPUT IS CONDITIONAL, and its absence carries meaning. A
+    # map/grep accumulator is a value the graph just computed and lives in no
+    # memory; threading it would assert a dependency that does not exist and
+    # order a read genuinely free to float. `$sim` is passed as undef at those
+    # sites to say so, rather than each caller re-deciding.
+    #
+    # BUILT IN ONE PLACE ON PURPOSE. Eight call sites each deciding the arity
+    # for themselves is how an operator ends up meaning two things; see
+    # docs/plans/2026-08-31-one-operator-one-declaration.md.
+    sub _make_count ($factory, $agg, $sim, %extra) {
+        $extra{stamp} //= SoN::IR::Stamp->new(type => 'Int');
+        return $factory->make('Count',
+            inputs => [$agg, (defined $sim && defined $sim->memory
+                                ? ($sim->memory) : ())],
+            %extra);
+    }
+
     sub _is_aggregate_node ($node) {
         return false unless defined $node;
         my $op = $node->operation;
@@ -1619,9 +1652,7 @@ class SoN::FromOptree 0.01 {
         # as many as the trailing array is long.
         my $scalar_src =
             _last_return_operand_is_aggregate($exit_op)
-                ? $factory->make('Count',
-                    inputs => [ $values->[-1] ],
-                    stamp  => SoN::IR::Stamp->new(type => 'Int'))
+                ? _make_count($factory, $values->[-1], undef)
                 : $values->[-1];
 
         my $scalar = $factory->make('Coerce',
@@ -2513,7 +2544,7 @@ class SoN::FromOptree 0.01 {
             if (_is_aggregate_node($agg)) {
                 my $stamp = _result_stamp('Count', [$agg]);
                 my %extra = defined $stamp ? (stamp => $stamp) : ();
-                $sim->push_node($factory->make('Count', inputs => [$agg], %extra));
+                $sim->push_node(_make_count($factory, $agg, $sim, %extra));
             }
             else {
                 $sim->push_node($agg);
@@ -2529,9 +2560,7 @@ class SoN::FromOptree 0.01 {
         if ($name eq 'av2arylen' && $sim->stack_depth > 0
                 && _is_aggregate_node($sim->peek_node)) {
             my $agg = $sim->pop_node;
-            my $len = $factory->make('Count',
-                inputs => [$agg],
-                stamp  => SoN::IR::Stamp->new(type => 'Int'));
+            my $len = _make_count($factory, $agg, $sim);
             my $one = $factory->make('Constant',
                 value => 1, const_type => 'integer',
                 stamp => SoN::IR::Stamp->new(type => 'Int'));
@@ -3857,9 +3886,7 @@ class SoN::FromOptree 0.01 {
             # THE SCALAR READING IS A COUNT over the very node the list form
             # binds. No second split, no fabricated field list.
             if ($scalar_reading) {
-                my $count = $factory->make('Count',
-                    inputs => [$node],
-                    stamp  => SoN::IR::Stamp->new(type => 'Int'));
+                my $count = _make_count($factory, $node, $sim);
                 $sim->push_node($count);
                 return ($op->next, 'handled');
             }
@@ -4361,7 +4388,7 @@ class SoN::FromOptree 0.01 {
                 if (_rhs_is_aggregate_access($op) && _is_aggregate_node($value)) {
                     my $stamp = _result_stamp('Count', [$value]);
                     my %extra = defined $stamp ? (stamp => $stamp) : ();
-                    $value = $factory->make('Count', inputs => [$value], %extra);
+                    $value = _make_count($factory, $value, $sim, %extra);
                 }
                 # A DEMOTED SLOT IS STORED, NOT BOUND. Its value lives in
                 # memory because a reference to it exists, so the write is an
@@ -4658,7 +4685,7 @@ class SoN::FromOptree 0.01 {
             if (_rhs_is_aggregate_access($op) && _is_aggregate_node($value)) {
                 my $stamp = _result_stamp('Count', [$value]);
                 my %extra = defined $stamp ? (stamp => $stamp) : ();
-                $value = $factory->make('Count', inputs => [$value], %extra);
+                $value = _make_count($factory, $value, $sim, %extra);
             }
             # OPpLVAL_INTRO (128) indicates a new lexical declaration (my $x).
             # Only the main walker emits the VarDecl wrapper.
@@ -5261,9 +5288,40 @@ class SoN::FromOptree 0.01 {
                 # like shift/pop. zhi 019f5e42 (push/unshift), 019f5ed3 (splice).
                 if ($node_type eq 'Call'
                         && ($name eq 'push' || $name eq 'unshift'
-                            || $name eq 'splice')) {
-                    die "GAP: $name (array length mutation) not yet lowered -- "
-                      . "the new length is not observed by a later read.\n";
+                            || $name eq 'splice')
+                        && @inputs && _is_aggregate_node($inputs[0])
+                        && defined $sim->control && defined $sim->memory) {
+                    # SAME SHAPE AS shift/pop BELOW. These mutate the array's
+                    # length, so the Call becomes the new memory version and a
+                    # later whole-aggregate read observes it.
+                    #
+                    # This REFUSED until the read side could see a mutation at
+                    # all. `Count` extended UnaryOp -- one input, no memory
+                    # slot -- so threading the write was necessary and not
+                    # sufficient, and the refusal was correct while that held:
+                    # `my @b=@a; push @b,3; scalar @b` would have said 2.
+                    # shift/pop had the identical defect and SHIPPED it rather
+                    # than refusing (`shift @a; scalar @a` said 3 where perl
+                    # says 2), which is how one class came to have two answers.
+                    # Count is an Access now, so both are lowerable.
+                    # push/unshift YIELD THE NEW LENGTH, an Int -- measured,
+                    # `my @a=(1,2); push @a,3,4` returns 4 and `my @c;
+                    # unshift @c,9` returns 1. NOT splice, which returns the
+                    # REMOVED ELEMENTS (`splice(@d,1,1)` yields the element,
+                    # not a count), so stamping it Int would be a wrong answer
+                    # rather than a missing one.
+                    my $ret_stamp = ($name eq 'push' || $name eq 'unshift')
+                        ? SoN::IR::Stamp->new(type => 'Int') : undef;
+                    my $call = $factory->make('Call',
+                        inputs        => [@inputs, $sim->memory],
+                        dispatch_kind => 'builtin',
+                        name          => $name,
+                        (defined $ret_stamp ? (stamp => $ret_stamp) : ()));
+                    $call->set_control_in($sim->control);
+                    $sim->set_control($call);
+                    $sim->set_memory($call);
+                    $sim->push_node($call) if $push_count;
+                    return ($op->next, 'handled');
                 }
 
                 # shift/pop MUTATE their array (remove an element) and yield the
@@ -6405,9 +6463,7 @@ class SoN::FromOptree 0.01 {
             if _body_writes_targ($cv, $body_start, $sim, $opmap, $x_targ, 1);
 
         # The loop bound is the array's element count.
-        my $len = $factory->make('Count',
-            inputs => [$array],
-            stamp  => SoN::IR::Stamp->new(type => 'Int'));
+        my $len = _make_count($factory, $array, $sim);
         my $zero = $factory->make('Constant',
             value => 0, const_type => 'integer',
             stamp => SoN::IR::Stamp->new(type => 'Int'));
@@ -6608,8 +6664,7 @@ class SoN::FromOptree 0.01 {
             $sim->push_node(
                 $want == 3 || $want == 0
                     ? $acc_phi
-                    : $factory->make('Count', inputs => [$acc_phi],
-                        stamp => SoN::IR::Stamp->new(type => 'Int')));
+                    : _make_count($factory, $acc_phi, undef));
         }
         return;
     }
