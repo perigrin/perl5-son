@@ -6692,8 +6692,43 @@ class SoN::FromOptree 0.01 {
                     StructRef    Subscript    Subtract     TernaryExpr
                     UnaryPlus    Xor
                 ) };
+                # A SCALAR BUILTIN YIELDS ONE VALUE, and node kind cannot see
+                # that. Every builtin becomes a `Call`, so keying the list on
+                # the kind swept `lc` up with genuinely variadic calls:
+                #
+                #     map { lc($_) } ("A","B")   refused, and lc yields 1
+                #
+                # MEASURED, not recalled -- each of these applied to one
+                # argument in list context yields exactly one value, while
+                # reverse/sort/split yield N and stay out:
+                #
+                #     lc uc lcfirst ucfirst abs int sqrt ord chr hex oct
+                #     log exp cos sin quotemeta         -> 1
+                #     reverse sort split                 -> N
+                #
+                # OpMap's push_count cannot answer this: it is the STACK push
+                # count and reads 1 for `sort` too, which pushes one list.
+                #
+                # A CALL WITH NO NAME, OR A NAME NOT LISTED HERE, STILL
+                # REFUSES. `map { &{$sub}($_) }` (perl's own t/comp/proto.t)
+                # calls a sub nobody can name at compile time, and a user sub's
+                # arity is a property of the CALLEE that the graph does not
+                # carry -- measured, `sub g {42}` yields 1 and
+                # `sub g { ($_[0],$_[0]) }` yields 2 from an identical
+                # callsite. Fails safe, like the list above it.
+                state $SCALAR_BUILTIN = { map { $_ => 1 } qw(
+                    lc uc lcfirst ucfirst abs int sqrt ord chr hex oct
+                    log exp cos sin quotemeta length ref defined
+                ) };
+
                 for my $c (@produced) {
                     next if $YIELDS_ONE_VALUE->{ $c->operation };
+                    next if $c->operation eq 'Call'
+                         && $c->can('dispatch_kind')
+                         && ($c->dispatch_kind // '') eq 'builtin'
+                         && $c->can('name')
+                         && defined $c->name
+                         && $SCALAR_BUILTIN->{ $c->name };
                     die "GAP: $collect body contribution of unknown arity"
                       . " (a " . $c->operation . " may yield more than one"
                       . " value, and appending it whole would count 1 where"
