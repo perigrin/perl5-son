@@ -2492,10 +2492,23 @@ class SoN::FromOptree 0.01 {
                 $sim->push_node($existing);
             }
             else {
+                # THE SIGIL ALREADY SAYS WHAT IT IS. This EntryDef was built
+                # unstamped, so `_is_aggregate_node` -- which reads the stamp --
+                # could not recognise it, and `for (@pkg)` refused with
+                # "unrecognized bounds shape". The LEXICAL form pushes a padav
+                # that IS stamped, which is why only the package spelling
+                # failed (perl's own t/comp/require.t:
+                # `push @files_to_delete, ... for @module_true_tests`).
+                #
+                # Array/Hash, not ArrayRef/HashRef: this is the aggregate
+                # ITSELF, the same thing a padav read carries, not a reference
+                # to one.
                 my $node = $factory->make('EntryDef',
                     stash_name => $gv->STASH->NAME,
                     sigil      => $agg_sigil,
-                    var_name   => $gv_name);
+                    var_name   => $gv_name,
+                    stamp      => SoN::IR::Stamp->new(
+                        type => $agg_sigil eq '%' ? 'Hash' : 'Array' ));
                 $sim->define(_stash_key($node), $node) unless defined $existing;
                 $sim->push_node($node);
             }
