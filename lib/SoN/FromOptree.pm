@@ -447,9 +447,26 @@ class SoN::FromOptree 0.01 {
                 # Wrong stdout AND wrong status, silently. `die` in the same
                 # shape had the identical defect; an if/ELSE with a die arm
                 # already worked (corpus T2), which is what made it look covered.
+                # A FIELD STORE is the fourth member of this list, and it was
+                # missing. A one-armed `if` compiles to an `and`, not a
+                # cond_expr -- so `method bump { if ($n > 5) { $n = $n + 3 } }`
+                # reaches HERE, where the field store was invisible, and not the
+                # cond_expr gate below which has tested for it all along. With no
+                # If built, the store landed on the base control chain and ran
+                # unconditionally. Measured, n=10:  perl 13, chalk 10 -- the
+                # guard silently gone. The n=1 polarity AGREES (both print 1),
+                # because dropping a store whose guard is false is coincidentally
+                # right, which is what let a one-sided check read this as green.
+                #
+                # Same shape as the `die` entry above: listed late, after the
+                # same "no If was built, so the arm ran unconditionally" defect.
+                # The asymmetry with the cond_expr gate is the whole bug -- an
+                # if/ELSE with a field store already worked, which made this look
+                # covered.
                 my $mem_branch =
                     ($op->flags & 3) == 1   # OPf_WANT_VOID
                     && (_arm_has_element_store($op->other, $stop_addr)
+                        || _arm_has_field_store($cv, $op->other, $stop_addr)
                         || _arm_has_void_call($op->other, $stop_addr)
                         || _arm_has_die($op->other, $stop_addr));
                 my ($if_node, $true_proj, $false_proj);
