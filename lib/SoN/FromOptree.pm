@@ -3436,6 +3436,43 @@ class SoN::FromOptree 0.01 {
                     return ($op->next, 'handled');
                 }
 
+                # THE PACKAGE FORM OF THE SAME THING. `our @a` reaches here as
+                # rv2av/rv2hv rather than padav/padhv, and the arm above keys
+                # on `$kid->targ` -- a pad index a package variable does not
+                # have -- so it fell through and refused. Three of perl's own
+                # t/comp files lost their entire __PROGRAM__ to this
+                # (parser.t, package.t, form_scope.t).
+                #
+                # A package aggregate's container node carries its own name, so
+                # the key comes from the node exactly as the package-SCALAR arm
+                # above takes it from _stash_key. The operation is identical to
+                # the lexical one: bind the name to an EMPTY literal, which is
+                # the `@a = ()` shape.
+                #
+                # rv2gv IS NOT INCLUDED. `undef *GLOB` clears a symbol-table
+                # slot -- code, scalar, array, hash and handle at once -- which
+                # is not emptying a container and has no empty-literal
+                # equivalent. It keeps refusing.
+                if ($kname eq 'rv2av' || $kname eq 'rv2hv') {
+                    my $cur = $sim->stack_depth > 0 ? $sim->pop_node : undef;
+                    my $empty = $factory->make(
+                        ( $kname eq 'rv2av' ? 'ArrayLiteral' : 'HashLiteral' ),
+                        inputs => [],
+                        stamp  => SoN::IR::Stamp->new(
+                            type => $kname eq 'rv2av' ? 'Array' : 'Hash' ));
+                    if ($cur && $cur->can('stash_name') && $cur->can('sigil')) {
+                        $sim->define(_stash_key($cur), $empty);
+                    }
+                    # No resolvable name means the write would be dropped
+                    # silently, which is worse than refusing.
+                    else {
+                        die "GAP: undef(EXPR) on a package aggregate whose name"
+                          . " could not be resolved ($kname) not yet lowered\n";
+                    }
+                    $sim->push_node($empty);
+                    return ($op->next, 'handled');
+                }
+
                 die "GAP: undef(EXPR) on this operand not yet lowered"
                   . " ($kname) -- on an aggregate it EMPTIES the container"
                   . " rather than rebinding a name, which is not `\@a = undef`\n"
