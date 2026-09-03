@@ -2523,6 +2523,36 @@ class SoN::FromOptree 0.01 {
             return ($op->next, 'handled');
         }
 
+        # `__CLASS__` IS THE ENCLOSING CLASS NAME, and perl gives it its own
+        # zero-child op:
+        #
+        #     method classname { return __CLASS__ }
+        #     T::classname:  <0> classname[t2]
+        #
+        # OpMap mapped it to `Constant` with NO value, so the factory died
+        # "Required parameter 'value' is missing" and the method vanished from
+        # the wire -- an INTERNAL ERROR, in perl's own t/class/class.t.
+        #
+        # THE VALUE IS KNOWN HERE, unlike wantarray's: the CV's stash names the
+        # class, which is the same `$cv->GV->STASH->NAME` this file already
+        # uses to resolve a `$self` dispatch and a package scalar. Nothing
+        # needs deferring to a callsite -- `__CLASS__` in class T is "T", for
+        # every call.
+        #
+        # Stamped Str: a class name is a string, and perl's own
+        # `$obj->classname eq "Testcase1"` compares it as one.
+        if ($name eq 'classname') {
+            my $stash = eval { $cv->GV->STASH->NAME };
+            die "GAP: `__CLASS__` outside a class block is not yet lowered\n"
+                unless defined $stash && length $stash;
+            my $node = $factory->make('Constant',
+                value      => $stash,
+                const_type => 'string',
+                stamp      => SoN::IR::Stamp->new(type => 'Str'));
+            $sim->push_node($node);
+            return ($op->next, 'handled');
+        }
+
         # Handle const specially - extract value from the op
         if ($name eq 'const') {
             my $sv = $op->sv;
