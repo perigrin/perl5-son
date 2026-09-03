@@ -207,8 +207,10 @@ subtest 'lexical and implicit iterators still translate' => sub {
     unlike $e2, qr/INTERNAL ERROR|GAP/, 'the implicit $_ iterator is unaffected';
 };
 
-# BARE `exit` TAKES NO ARGUMENT and perl defaults the status to 0. The op says
-# so in its child count -- the same shape as bless[], select and unpack:
+# `exit` TAKES AN OPTIONAL STATUS, defaulting to 0 -- effectively
+# `sub exit($status = 0)`. Its arity is 0 OR 1, and the op says which in its
+# child count -- the same shape as bless[], select and unpack, all of them
+# optional-arity operators the table described with a single fixed number:
 #
 #     exit      <0> exit v       zero children
 #     exit 0    <1> exit vK/1    one child
@@ -243,6 +245,49 @@ subtest 'bare exit in a branch and in a loop' => sub {
         my (undef, $err) = translate($src, $name);
         unlike $err, qr/INTERNAL ERROR/, "$name: no internal error";
     }
+};
+
+# A CODE-REPLACEMENT SUBSTITUTION IN A LOOP BODY. The `subst` handler lives in
+# the MAIN walk and _step has no arm for it, so the loop-body walker stepped
+# into the replacement SUBTREE and popped operands the loop had staged --
+# `subst -> gvsv -> ord`, and `ord` underflowed. perl's own opbasic/qq.t.
+#
+# ALL FOUR FORMS ARE TESTED because the defect is keyed on the replacement
+# being CODE, not on it being a substitution: a first fix refused every subst
+# here and would have taken the two working forms with it.
+subtest 'only the code-replacement forms refuse in a loop body' => sub {
+    for my $case (
+        ['my $l="a"; foreach ($l) { s/x/y/; }',            'subst_plain',  0],
+        ['my $l="a"; foreach ($l) { s/x/y/g; }',           'subst_global', 0],
+        ['my $l="a"; foreach ($l) { s/(x)/ord $1/e; }',    'subst_e',      1],
+        ['my $l="a"; foreach ($l) { s/(x)/ord $1/ge; }',   'subst_ge',     1],
+    ) {
+        my ($src, $name, $should_gap) = $case->@*;
+        my (undef, $err) = translate($src, $name);
+        unlike $err, qr/INTERNAL ERROR/, "$name: no internal error";
+        if ($should_gap) {
+            like $err, qr/GAP/, "$name: refuses by name";
+        }
+        else {
+            unlike $err, qr/GAP/, "$name: still translates";
+        }
+    }
+};
+
+# AND IT IS NOT THE s///ge GAP. Outside a loop these two refuse for DIFFERENT
+# reasons, so closing either would leave the loop-body crash standing:
+#
+#     s/(x)/ord $1/e    "capture $1 read with no preceding match in scope"
+#     s/(x)/ord $1/ge   "s///ge (code replacement run once per match)"
+#
+# The replacement SUBTREE is the common factor, which is what the refusal names.
+subtest 'the two outside-a-loop refusals are distinct' => sub {
+    my (undef, $e1) = translate('my $l="a"; s/(x)/ord $1/e; print $l;', 'e_top');
+    my (undef, $e2) = translate('my $l="a"; s/(x)/ord $1/ge; print $l;', 'ge_top');
+    like $e1, qr/GAP/, '/e refuses at top level';
+    like $e2, qr/GAP/, '/ge refuses at top level';
+    isnt +($e1 =~ /GAP: ([^\n]*)/)[0], +($e2 =~ /GAP: ([^\n]*)/)[0],
+        'and for different reasons -- one GAP does not cover the other';
 };
 
 done_testing;

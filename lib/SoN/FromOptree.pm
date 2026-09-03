@@ -1449,11 +1449,17 @@ class SoN::FromOptree 0.01 {
         return $op->private if $name eq 'select' && $op->can('private')
                             && $op->private >= 0 && $op->private <= 1;
 
-        # BARE `exit` TAKES NO ARGUMENT -- perl defaults the status to 0 -- and
-        # the op says so in its child count:
+        # `exit` TAKES AN OPTIONAL STATUS, defaulting to 0 -- effectively
+        # `sub exit($status = 0)`. So its arity is 0 OR 1 and the op says
+        # which, in its child count:
         #
-        #     exit      <0> exit v       zero children
+        #     exit      <0> exit v       zero children, status defaults to 0
         #     exit 0    <1> exit vK/1    one child
+        #
+        # OpMap declared a FIXED 1-pop, which is right for one call form and
+        # wrong for the other -- the same mistake as bless[], select and
+        # unpack, all of which are likewise optional-arity operators the table
+        # described with a single number.
         #
         # OpMap declares a fixed 1-pop, so the bare form popped an operand that
         # was never pushed and died "Stack underflow". THIS IS THE ROOT CAUSE
@@ -4961,8 +4967,28 @@ class SoN::FromOptree 0.01 {
         my $ph = $scout_factory->make_unique('Constant',
             value => 'scout-iter', const_type => 'string');
         $scout_sim->define($targ, $ph);
-        _walk_loop_body($cv, $start_op, $scout_sim, $scout_factory, $opmap, {}, {},
-            undef, undef, $cond_consumed);
+        # THIS IS A PROBE, NOT A TRANSLATION, and it must not be able to kill
+        # the compilation. It asks one question -- does the body write $targ?
+        # -- on a sim seeded with placeholders, so a body op the walker cannot
+        # handle here is a failure to ANSWER, not a failure of the program.
+        #
+        # Left unguarded it was: `foreach ($x) { s/(x)/ord $1/ge }` raised
+        # "Stack underflow" from inside this probe (a body op popping an
+        # operand the placeholder seeding never pushed), and B::SoN reported an
+        # INTERNAL ERROR for a construct whose real state is a clean GAP --
+        # s///ge is refused by name one frame away. That is the crash-masks-GAP
+        # shape: the reader is sent to StackSim instead of to `s///ge`.
+        #
+        # A failed probe answers FALSE: "no write detected". That is the
+        # conservative direction -- it declines the aliasing write-back path
+        # and leaves the body to the real walk, which then raises the honest
+        # refusal for whatever the body actually contains.
+        my $walked = eval {
+            _walk_loop_body($cv, $start_op, $scout_sim, $scout_factory, $opmap,
+                {}, {}, undef, undef, $cond_consumed);
+            1;
+        };
+        return 0 unless $walked;
         my $after = $scout_sim->scope_bindings->{$targ};
         return defined $after && $after != $ph;
     }
@@ -6205,6 +6231,37 @@ class SoN::FromOptree 0.01 {
                 # For while loops: and->other is the body, and->next is leaveloop
                 $op = $op->other;
                 next;
+            }
+
+            # A CODE-REPLACEMENT SUBSTITUTION (s///e) IN A LOOP BODY. The
+            # `subst` handler lives in the MAIN walk and _step has no arm for
+            # it, so this walker stepped into the replacement SUBTREE and
+            # popped operands the loop had already staged:
+            #
+            #     foreach ($l) { s/(x)/ord $1/e }
+            #
+            # walked subst -> gvsv -> ord, and `ord` underflowed.
+            #
+            # KEYED ON PMf_EVAL, not on subst. Measured, only the code form
+            # breaks -- a plain replacement has no subtree to walk into:
+            #
+            #     foreach ($l) { s/x/y/ }             clean
+            #     foreach ($l) { s/x/y/g }            clean
+            #     foreach ($l) { s/(x)/ord $1/e }     underflowed
+            #     foreach ($l) { s/(x)/ord $1/ge }    underflowed
+            #
+            # A first version refused every `subst` here and would have taken
+            # the two working forms with it.
+            #
+            # AND IT IS NOT THE s///ge GAP. Outside a loop these refuse for
+            # two DIFFERENT reasons -- /ge for its repeating body, /e for
+            # "capture $1 read with no preceding match in scope" -- so closing
+            # either would leave this crash standing. The replacement subtree
+            # is the common factor, and it is what this names.
+            if ($name eq 'subst' && $op->isa('B::PMOP')
+                && ($op->pmflags & PMf_EVAL)) {
+                die "GAP: a code-replacement substitution (s///e) inside a"
+                  . " loop body is not yet lowered\n";
             }
 
             my ($next, $sig) = _step($cv, $op, $sim, $factory, $opmap, $ctx);
