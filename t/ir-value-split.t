@@ -105,6 +105,22 @@ subtest 'the predicate holds on real constructed nodes' => sub {
     ok($start isa SoN::IR::Node, 'a constructed Start is still a Node');
 };
 
+# The classes present at the expected count. Kept so a mismatch can NAME what
+# changed rather than only reporting a number -- see the diag below.
+my @KNOWN_AT_92 = qw(
+    Access Add Aggregate And AnonSub ArgsSource ArrayLiteral Assign
+    BacktickExpr BinOp BitAnd BitOr BitXor Call Coerce Complement
+    CompoundAssign Concat Constant Count Defined DefinedOr Divide EntryDef
+    EnvRead Exists ExpressionList FieldAccess HashLiteral If Interpolate
+    IsaOp LeftShift Length ListAppend ListAssign Loop Match MemStart Modulo
+    Multiply Negate Not NotMatch NumCmp NumEq NumGe NumGt NumLe NumLt NumNe
+    Or PadAccess Parameter Phi PostfixDeref Power Print Proj Range Ref
+    RefType Regex RegexCapture RegexMatch RegexSubst Region Repeat Return
+    RightShift Slice Start StrCmp StrEq StrGe StrGt StrLe StrLt StrNe
+    StructFieldAccess StructRef Subscript Subtract TernaryExpr TryCatch
+    UnaryOp UnaryPlus Unwind VarDecl Wantarray Xor Yada
+);
+
 subtest 'every node class is one or the other, never neither' => sub {
     # A class that is neither reachable as a Value nor present as a declared
     # control node is a class nobody classified -- exactly the silent state
@@ -116,7 +132,22 @@ subtest 'every node class is one or the other, never neither' => sub {
     my @names = sort map { s/\.pm$//r } grep { /\.pm$/ } readdir($dh);
     closedir $dh;
 
-    cmp_ok(scalar @names, '==', 92, 'all 92 node classes present');
+    # NAMES THE DIFFERENCE, not just the count. A bare count assertion fails
+    # IDENTICALLY for "a class was added or removed" and "the tree under test
+    # is stale" -- and only one of those is interesting. chalk hit the second
+    # running this suite against a lib/ snapshot taken one commit before an
+    # Exists node landed, and nearly attributed the red to its own change.
+    my $EXPECTED = 92;
+    if (scalar @names != $EXPECTED) {
+        my %known = map { $_ => 1 } @KNOWN_AT_92;
+        my @extra   = grep { !$known{$_} } @names;
+        my %present = map { $_ => 1 } @names;
+        my @missing = grep { !$present{$_} } @KNOWN_AT_92;
+        diag "node class count is " . scalar(@names) . ", expected $EXPECTED";
+        diag "  EXTRA (add to the count and to \@KNOWN_AT_92): @extra" if @extra;
+        diag "  MISSING (a stale tree looks exactly like this): @missing" if @missing;
+    }
+    cmp_ok(scalar @names, '==', $EXPECTED, "all $EXPECTED node classes present");
 
     for my $name (@names) {
         my $class = "SoN::IR::Node::$name";
