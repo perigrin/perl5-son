@@ -1480,6 +1480,19 @@ class SoN::FromOptree 0.01 {
             return $n;
         }
 
+        # `binmode` TAKES AN OPTIONAL LAYER: `binmode FH` or
+        # `binmode FH, ":utf8"`. Measured, the op states which:
+        #
+        #     binmode STDOUT             binmode vK/1   private=1
+        #     binmode STDOUT, ":utf8"    binmode vK/2   private=2
+        #
+        # OpMap declared a fixed 2-pop, so the one-argument form popped an
+        # operand that was never pushed -- "Stack underflow" in perl's own
+        # t/op/sysio.t. The FIFTH optional-arity operator the table described
+        # with a single number, after bless, select, unpack and exit.
+        return $op->private if $name eq 'binmode' && $op->can('private')
+                            && $op->private >= 1 && $op->private <= 2;
+
         # UNPACK TAKES EXACTLY TWO OPERANDS AND PUSHES NO MARK. OpMap
         # registers it as a 'mark' pop, so pop_to_mark found none and died
         # "No mark on mark stack" (t/op/chr.t, `unpack "U0 (H2)*", chr $_[0]`).
@@ -7282,6 +7295,28 @@ class SoN::FromOptree 0.01 {
             }
 
             $visited->{$$op}++;
+            # A LOOP WHOSE `leaveloop` REACHES HERE WITH TOO FEW OPERANDS.
+            # _walk_branch DOES translate a foreach in an arm (enteriter is
+            # dispatched for it -- see t/from-optree-loop-in-arm.t), but a loop
+            # form it does not translate leaves the walk stepping through the
+            # loop's ops, and `leaveloop` then pops two operands where one is
+            # on the stack: "Stack underflow", in perl's own t/op/try.t.
+            #
+            # Surfaced by this session's try/catch fix: passing stop_at_exit=1
+            # so a `die` in a try body builds its Unwind also walks the body
+            # FURTHER, making a loop in that body reachable where the walk
+            # previously stopped short.
+            #
+            # KEYED ON THE UNDERFLOW CONDITION, not on the op. A first version
+            # refused every enterloop/enteriter/leaveloop in an arm and broke
+            # t/from-optree-loop-in-arm.t, which pins that a foreach in an arm
+            # translates -- the loops that WORK reach leaveloop with their
+            # operands present, and only the untranslated forms arrive short.
+            if ($name eq 'leaveloop' && $sim->stack_depth < 2) {
+                die "GAP: a loop inside a branch arm whose form is not yet"
+                  . " lowered (its leaveloop arrived without its operands)\n";
+            }
+
             my ($next, $sig) = _step($cv, $op, $sim, $factory, $opmap, $ctx);
             if ($sig eq 'unhandled') {
                 # Hit a branch or unknown - stop
