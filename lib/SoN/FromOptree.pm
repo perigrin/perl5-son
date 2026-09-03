@@ -6242,7 +6242,7 @@ class SoN::FromOptree 0.01 {
             # loop minted Projs on the OUTER Loop and truncated the walk; a
             # skipped if/else dropped its arms entirely). Refuse loudly. The
             # loop's own and/or condition is handled below.
-            if ($name eq 'enterloop' || $name eq 'enteriter'
+            if ($name eq 'enterloop'
                 || ($opmap->is_branch($name) && $name ne 'and' && $name ne 'or')) {
                 die "GAP: $name inside a loop body not yet lowered\n";
             }
