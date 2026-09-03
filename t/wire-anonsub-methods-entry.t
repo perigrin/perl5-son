@@ -92,14 +92,24 @@ subtest 'anon subs in different subs get distinct names' => sub {
         'both anon bodies survive -- neither overwrote the other';
 };
 
-# A CAPTURING ANON SUB STILL REFUSES. The slice is deliberately partial, and a
-# fix that lowered captures by ignoring them would be the silent wrong answer
-# this whole contract exists to prevent.
-subtest 'a capturing anon sub still refuses' => sub {
+# A CAPTURING ANON SUB LOWERS, WITHOUT IGNORING THE CAPTURE -- ignoring it is
+# the silent wrong answer this contract exists to prevent, so the assertion is
+# that the capture is REPRESENTED: a cell in the enclosing scope, taken as an
+# input by the AnonSub that closes over it.
+subtest 'a capturing anon sub lowers with its capture represented' => sub {
     my ( undef, $w, $err ) = run_and_translate(
         'my $x = 5; my $c = sub { $x }; print $c->();', 'anon-capture' );
-    like $err, qr/GAP.*closing over.*\$x/,
-        'it refuses, naming the captured variable';
+    unlike $err, qr/GAP|INTERNAL/, 'it lowers' or return;
+
+    my %methods = ( ( $w // {} )->{methods} // {} )->%*;
+    my @prog = $methods{'main::__PROGRAM__'}{nodes}->@*;
+    my ($cell) = grep { $_->{op} eq 'MakeCell' } @prog;
+    ok $cell, 'a cell is built for the capture' or return;
+    is $cell->{fields}{cell_name}, '$x', '... naming $x';
+
+    my ($anon) = grep { $_->{op} eq 'AnonSub' } @prog;
+    ok $anon && grep( { $_ == $cell->{id} } ( $anon->{inputs} // [] )->@* ),
+        '... and the AnonSub takes it as an input';
 };
 
 # A BODY NOTHING NAMES IS THE ORIGINAL DEFECT, RETURNED. Emitting the body and

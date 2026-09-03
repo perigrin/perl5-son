@@ -183,6 +183,17 @@ class SoN::FromOptree 0.01 {
     }
 
     # Translate a code reference to a SoN graph
+    # The captures of an anon body, keyed on the ADDRESS of its CV.
+    #
+    # Keyed on the CV rather than the site name because translate() receives a
+    # coderef and has no name -- and the CV address is what both sides already
+    # hold, so nothing has to be plumbed through a public signature.
+    #
+    # Each entry is the ordered capture list from _anoncode_capture_info, and
+    # the ORDER IS THE CONTRACT: input N of the AnonSub is the cell for
+    # capture N, which the body reads as CellParam(index => N).
+    our %ANON_CAPTURES;
+
     sub translate ($class_or_self, $coderef) {
         my $cv = B::svref_2object($coderef);
         die "Not a CODE ref" unless $cv->isa('B::CV');
@@ -241,6 +252,26 @@ class SoN::FromOptree 0.01 {
         my $visit;
         $visit = sub ($op) {
             return unless ref($op) && $$op;
+
+            # A CAPTURE ALIASES ITS SLOT EXACTLY AS `\\$x` DOES. Measured:
+            #
+            #     my $n=5; my $c = sub { $n }; $n = 99;   $c->() is 99
+            #     my $set = sub { $n = shift }; $set->(42); print $n;   42
+            #
+            # so the closure and the enclosing scope see ONE variable, and its
+            # value cannot ride on a value binding that constant-folds. That is
+            # the same property srefgen has, and the demotion path below
+            # already reads and writes such a slot through memory -- so a
+            # capture joins the same set rather than getting a parallel one.
+            #
+            # Structural like srefgen, and for the same reason: the anoncode
+            # can appear AFTER uses of the variable, by which point those reads
+            # are already built.
+            if ($op->name eq 'anoncode') {
+                $taken{ $_->{outer_idx} } = 1
+                    for grep { $_->{outer_idx} }
+                        _anoncode_capture_info($cv, $op);
+            }
 
             if ($op->name eq 'srefgen' && $op->can('first') && ${$op->first}) {
                 # The referent sits under NULLED ex-list wrappers -- measured,
@@ -323,7 +354,39 @@ class SoN::FromOptree 0.01 {
                     visited => \%visited,
                     # Pre-`local` bindings, restored at scope exit below.
                     local_saves => [],
+                    # Capture cells, keyed on the ENCLOSING pad slot -- one
+                    # cell per variable, shared by every closure over it.
+                    cells => {}, cells_written => {},
                     is_program => (defined $program_root ? 1 : 0) };
+
+        # THIS CV MAY BE A CLOSURE BODY, and if it is, its captured pad slots
+        # are bound to CellParams BEFORE the walk -- so the body's ordinary
+        # `padsv` reads resolve to the cell rather than to an unbound slot.
+        #
+        # The body is translated as its own graph with its own pad, so nothing
+        # in the walk can discover the capture on its own: the pad name carries
+        # PADNAMEt_OUTER, but the slot it points at lives in a CV this walk
+        # never sees. The enclosing walk recorded the mapping when it built the
+        # cells; this is where it is consumed.
+        #
+        # INDEX IS POSITIONAL AND MUST MATCH the AnonSub's input order -- that
+        # correspondence is the only thing tying a caller's cell to the body
+        # that reads it.
+        if (my $caps = $ANON_CAPTURES{$$cv}) {
+            for my $i (0 .. $#$caps) {
+                my $cap = $caps->[$i];
+                my $param = $factory->make('CellParam',
+                    inputs => [],
+                    index  => $i,
+                    name   => $cap->{name},
+                    stamp  => SoN::IR::Stamp->new(type => 'Ref'));
+                # The slot holds the CELL, and reads of it go through memory --
+                # the same demotion an address-taken slot gets, for the same
+                # reason: a closure's write must be visible to a later read.
+                $ctx->{addr_taken}{ $cap->{inner_idx} } = 1;
+                $ctx->{cell_params}{ $cap->{inner_idx} } = $param;
+            }
+        }
 
         while ($$op) {
             last if $visited{$$op}++;
@@ -1236,6 +1299,7 @@ class SoN::FromOptree 0.01 {
     # into the same %graphs hash every other sub lands in.
     our %ANON_BODIES;
 
+
     # A deterministic, unique name for one anon sub SITE.
     #
     #     <enclosing>::__ANON__:<line>:<targ>
@@ -1325,6 +1389,117 @@ class SoN::FromOptree 0.01 {
             push @captured, $nm;
         }
         return @captured;
+    }
+
+    # The same captures as _anoncode_captures, but as RECORDS -- name plus the
+    # two pad indices and whether the body writes the variable.
+    #
+    # BOTH indices are needed and they are NOT the same number. `inner_idx` is
+    # where the body's padsv reads (so the body's cell binding is keyed on it);
+    # `outer_idx` is where the ENCLOSING scope holds the variable (so the
+    # MakeCell's initial value comes from the right place). Measured on
+    # 5.42.0, `my $n; my $c; sub {$n}; sub {$c}` gives BOTH closures
+    # inner_idx=1 while their outer_idx are 1 and 2 -- keying the enclosing
+    # binding on inner_idx would hand the second closure $n's value.
+    #
+    # The inner->outer mapping is BY NAME. A pad name is unique within a scope,
+    # and PADNAMEt_OUTER is exactly the flag saying "this name resolves in an
+    # enclosing pad", so the name is the link perl itself used.
+    sub _anoncode_capture_info ($cv, $op) {
+        my $inner = _anoncode_cv($cv, $op);
+        return () unless $inner;
+        my $names = eval { $inner->PADLIST->ARRAYelt(0) };
+        return () unless ref($names);
+        my $outer_names = eval { $cv->PADLIST->ARRAYelt(0) };
+        return () unless ref($outer_names);
+
+        # name -> index in the ENCLOSING pad.
+        my %outer_of;
+        for my $i (0 .. $outer_names->MAX) {
+            my $pn = $outer_names->ARRAYelt($i);
+            next unless ref($pn) && $$pn && $pn->can('PVX');
+            my $nm = $pn->PVX;
+            next unless defined $nm && length $nm;
+            # First wins: an inner block may reuse a name in a later slot, and
+            # the OUTERMOST binding is the one an anon sub at this level sees.
+            $outer_of{$nm} //= $i;
+        }
+
+        my $PADNAMEt_OUTER = 0x1000000;
+        my @info;
+        for my $i (0 .. $names->MAX) {
+            my $pn = $names->ARRAYelt($i);
+            next unless ref($pn) && $$pn && $pn->can('PVX');
+            my $nm = $pn->PVX;
+            next unless defined $nm && length $nm;
+            next unless $pn->can('FLAGS') && ($pn->FLAGS & $PADNAMEt_OUTER);
+            # A capture whose name is not in the enclosing pad closes over
+            # something FURTHER out (a nested anon sub's grandparent capture).
+            # Refuse rather than guess an index.
+            return () unless defined $outer_of{$nm};
+            push @info, {
+                name      => $nm,
+                inner_idx => $i,
+                outer_idx => $outer_of{$nm},
+                written   => _body_writes_pad($inner, $i) ? 1 : 0,
+            };
+        }
+        return @info;
+    }
+
+    # Does an anon sub's body WRITE the pad slot $idx?
+    #
+    # Three forms, all measured on 5.42.0 -- and only the third is the one a
+    # naive "look for sassign" check finds:
+    #
+    #     sub { $n + 1 }        padsv targ=1 flags=0x02   read-only
+    #     sub { $c = $c + 1 }   add   targ=1 priv=0x12    TARGMY, NO sassign
+    #     sub { $n = 9 }        padsv targ=1 flags=0xb2   OPf_MOD, plain store
+    #
+    # THE TARGMY FORM IS THE TRAP. perl fuses `$c = $c + 1` into an add whose
+    # OPpTARGET_MY says "store my result into pad slot targ" -- there is no
+    # sassign and no OPf_MOD anywhere in the tree, so a check written against
+    # the other two forms calls the single most common closure-counter idiom
+    # read-only. Getting it wrong means the consumer skips the cell and the
+    # counter silently stops counting.
+    #
+    # Conservative direction is TRUE: a false "written" costs a cell that could
+    # have been elided; a false "read-only" is a miscompile.
+    sub _body_writes_pad ($inner_cv, $idx) {
+        my $root = eval { $inner_cv->ROOT };
+        return true unless $root && ref($root) && $$root;   # can't see: assume
+
+        my $OPf_MOD      = 0x20;
+        my $OPpTARGET_MY = 0x10;
+
+        my $found = false;
+        my $visit;
+        $visit = sub ($op) {
+            return if $found;
+            return unless $op && ref($op) && $$op;
+            my $name = $op->name;
+
+            # Form 3: a direct lvalue read of the slot.
+            $found = true
+                if $name eq 'padsv'
+                && $op->can('targ') && $op->targ == $idx
+                && ($op->flags & $OPf_MOD);
+
+            # Form 2: any op fused to store its result into the slot. This is
+            # NOT padsv-specific -- the flag rides on the add/concat/etc.
+            $found = true
+                if !$found
+                && $op->can('targ') && $op->targ == $idx
+                && ($op->private & $OPpTARGET_MY);
+
+            return if $found;
+            if ($op->can('first')) {
+                my $kid = $op->first;
+                while ($kid && $$kid) { $visit->($kid); $kid = $kid->sibling; }
+            }
+        };
+        eval { $visit->($root) };   # a probe, not a translation
+        return $found;
     }
 
     sub _leavesub_returns_list ($leave_op) {
@@ -2209,6 +2384,27 @@ class SoN::FromOptree 0.01 {
         );
         $node->set_control_in($sim->control);
         $sim->set_control($node);
+
+        # A CALL IS A MEMORY BARRIER ONCE A WRITTEN CELL EXISTS. The callee may
+        # be a closure over it, and its write has to be ordered before any
+        # later read:
+        #
+        #     my $n=5; my $set = sub { $n = 9 }; $set->(); print $n;
+        #       perl prints 9
+        #
+        # Without this the print's CellRead threaded on the MakeCell's own
+        # memory version -- ordered BEFORE the call -- and the graph read 5.
+        #
+        # NARROW ON PURPOSE. Making every call advance memory would order every
+        # unrelated read against every call and lose real optimisations; the
+        # barrier is needed only where a shared mutable cell exists to be
+        # written, which is exactly this condition. A read-only cell needs no
+        # barrier, which is what `captured_written` is checked for.
+        if (defined $sim->memory
+            && grep { $_->captured_written } values +($ctx->{cells} // {})->%*) {
+            $sim->set_memory($node);
+        }
+
         $sim->push_node($node) unless $void;
         return;
     }
@@ -2808,6 +3004,42 @@ class SoN::FromOptree 0.01 {
             # (`Subscript(array, index, Assign)`). Pushing $existing here is
             # what folds `$x = 5; $x = 9; print $x` to the constant 9, which is
             # right without aliasing and wrong the moment `\$x` exists.
+            # A CAPTURED SLOT IS DEMOTED TOO, but to a CELL rather than to
+            # this CV's own pad -- the storage is the caller's, reached through
+            # the CellParam, and a PadAccess here would name a slot in a pad
+            # the closure does not own.
+            #
+            # BOTH SIDES OF THE CAPTURE COME THROUGH HERE. Inside the closure
+            # the handle is the CellParam; in the ENCLOSING scope, once the
+            # cell exists, it is the MakeCell -- and the enclosing scope must
+            # read through it too, or the variable has two storages:
+            #
+            #     my $n=5; my $set = sub { $n = 9 }; $set->(); print $n;
+            #       perl prints 9
+            #
+            # Reading the pad slot there returned 5, because the closure's
+            # write went to the cell and the outer read did not. $ctx->{cells}
+            # is populated by the anoncode site, so a read BEFORE it still
+            # takes the ordinary path -- which is right, the cell does not
+            # exist yet.
+            my $handle = $ctx->{cell_params}{$targ} // $ctx->{cells}{$targ};
+            if (my $param = $handle) {
+                if ($is_lvalue) {
+                    # An lvalue read is the STORE's TARGET, so push the cell
+                    # handle itself; the sassign/padsv_store arm recognises a
+                    # CellParam target and builds the CellWrite. Same division
+                    # of labour a PadAccess lvalue already has.
+                    $sim->push_node($param);
+                    return ($op->next, 'handled');
+                }
+                my $read = $factory->make('CellRead',
+                    inputs => [$param,
+                        (defined $sim->memory ? ($sim->memory) : ())],
+                    stamp  => SoN::IR::Stamp->new(type => 'Unknown'));
+                $sim->push_node($read);
+                return ($op->next, 'handled');
+            }
+
             if ($ctx->{addr_taken}{$targ}) {
                 # Built with the memory input rather than mutated after: a
                 # node's inputs are a construction :param, and the memory
@@ -3313,12 +3545,18 @@ class SoN::FromOptree 0.01 {
             # `does the pad have names` is the WRONG test -- it counts
             # `sub { my $y=1; $y }` as a closure when that body needs nothing
             # from its enclosing scope.
-            my @captured = _anoncode_captures($cv, $op);
-            die "GAP: an anonymous sub closing over "
-              . join(', ', @captured)
-              . " is not yet lowered -- the body is reachable, but the"
-              . " captured variables have no wire representation yet\n"
-                if @captured;
+            my @captures = _anoncode_capture_info($cv, $op);
+
+            # A capture whose enclosing slot could not be resolved closes over
+            # something further out than this CV -- refuse rather than bind the
+            # wrong slot. _anoncode_capture_info returns () for that case, so
+            # compare against the NAME-only list, which never fails to resolve.
+            if (!@captures && (my @names = _anoncode_captures($cv, $op))) {
+                die "GAP: an anonymous sub closing over "
+                  . join(', ', @names)
+                  . " has a capture that does not resolve to a slot in the"
+                  . " enclosing pad (a nested closure's grandparent capture)\n";
+            }
 
             # LOWERED. The body becomes its own `methods` entry under a
             # deterministic per-site name, and the AnonSub node carries that
@@ -3350,6 +3588,7 @@ class SoN::FromOptree 0.01 {
 
             my $anon_name = _anon_body_name($cv, $op);
             $ANON_BODIES{$anon_name} //= $body;
+            $ANON_CAPTURES{$$body} //= [@captures] if @captures;
 
             # CodeRef, NOT Code. `sub { ... }` in an expression yields a code
             # REFERENCE -- measured, `ref(sub{1})` is CODE and reftype agrees --
@@ -3368,10 +3607,60 @@ class SoN::FromOptree 0.01 {
             # `Code` is the CV itself, which no perl scalar ever holds. The one
             # place it is still right is entereval's compiled body, which is an
             # intermediate rather than a value in a slot.
+            # THE CELLS ARE THE ANONSUB'S INPUTS, in capture order. A cell is
+            # ALLOCATED ONCE PER VARIABLE, not once per closure -- measured,
+            # `my $c=0; my $inc=sub{$c++}; my $rd=sub{$c}; $inc->(); $rd->()`
+            # is 1, so both closures must receive the SAME cell. %CELLS is
+            # keyed on the enclosing slot, which is exactly "one variable".
+            my @cell_inputs;
+            for my $cap (@captures) {
+                my $slot = $cap->{outer_idx};
+
+                # ONE CELL PER VARIABLE PER SCOPE ENTRY. Reusing the node for a
+                # second closure over the same variable is what makes them
+                # share; allocating a second would give each its own counter.
+                my $cell = $ctx->{cells}{$slot};
+
+                if (!$cell) {
+                    # The cell's initial value is whatever the slot holds NOW.
+                    # An undefined binding means the anoncode precedes the
+                    # declaration in exec order, which perl allows only for a
+                    # slot that is still undef.
+                    my $init = $sim->lookup($slot);
+                    $init //= $factory->make('Constant',
+                        value      => undef,
+                        const_type => 'undef',
+                        stamp      => SoN::IR::Stamp->new(type => 'Undef'));
+
+                    $cell = $factory->make('MakeCell',
+                        inputs           => [$init,
+                            (defined $sim->memory ? ($sim->memory) : ())],
+                        cell_name        => $cap->{name},
+                        captured_written => $cap->{written},
+                        stamp            => SoN::IR::Stamp->new(type => 'Ref'));
+
+                    # The allocation is a memory effect: it must be ordered
+                    # against the stores that follow, or a later CellWrite
+                    # could be scheduled before the cell exists.
+                    $sim->set_memory($cell) if defined $sim->memory;
+                    $ctx->{cells}{$slot} = $cell;
+                }
+                elsif ($cap->{written} && !$cell->captured_written) {
+                    # A SECOND closure may write a cell the FIRST only read.
+                    # The flag must end up true for the variable, not for
+                    # whichever closure was seen first -- otherwise a consumer
+                    # elides a cell that `$rd` reads and `$inc` writes.
+                    $ctx->{cells_written}{$slot} = 1;
+                }
+
+                push @cell_inputs, $cell;
+            }
+
             my $node = $factory->make('AnonSub',
-                inputs => [],
-                name   => $anon_name,
-                stamp  => SoN::IR::Stamp->new(type => 'CodeRef'));
+                inputs   => \@cell_inputs,
+                name     => $anon_name,
+                captures => [map { $_->{name} } @captures],
+                stamp    => SoN::IR::Stamp->new(type => 'CodeRef'));
             $sim->push_node($node);
             return ($op->next, 'handled');
         }
@@ -3903,6 +4192,25 @@ class SoN::FromOptree 0.01 {
             # memory; the lvalue Subscript stays the store target only. Reusing
             # the lvalue as the read value re-reads the slot AFTER the store-back
             # (an off-by-one / double-apply miscompile when the RMW is consumed).
+            # `$n++` INSIDE A CLOSURE IS A CELL READ-MODIFY-WRITE, and it is
+            # a FOURTH write form -- neither the padsv-OPf_MOD store nor the
+            # TARGMY fusion. The lvalue padsv pushed the CellParam, so without
+            # this arm the graph returned the CellParam itself, unread and
+            # unwritten: the counter neither counted nor yielded a number.
+            #
+            # Same split the element RMW below makes: the arithmetic must read
+            # the PRE-store value, so the read is a separate CellRead pinned to
+            # the current memory, and the CellParam stays the store target.
+            my $cell_lvalue;
+            if ($old->isa('SoN::IR::Node::CellParam')) {
+                $cell_lvalue = $old;
+                $old = $factory->make('CellRead',
+                    inputs => [$cell_lvalue,
+                        (defined $sim->memory ? ($sim->memory) : ())],
+                    stamp  => SoN::IR::Stamp->new(type => 'Unknown'));
+                $targ = undef;   # the storage is the cell, not this pad
+            }
+
             my $lvalue;
             if ($old->isa('SoN::IR::Node::Subscript')
                 && scalar($old->inputs->@*) == 2) {
@@ -3920,7 +4228,15 @@ class SoN::FromOptree 0.01 {
             my %extra = defined $stamp ? (stamp => $stamp) : ();
             my $new = $factory->make($node_type, inputs => [$old, $one], %extra);
 
-            if (defined $lvalue) {
+            if (defined $cell_lvalue) {
+                my $write = $factory->make('CellWrite',
+                    inputs => [$cell_lvalue, $new,
+                        (defined $sim->memory ? ($sim->memory) : ())]);
+                $write->set_control_in($sim->control);
+                $sim->set_control($write);
+                $sim->set_memory($write) if defined $sim->memory;
+            }
+            elsif (defined $lvalue) {
                 # Store the new value back to the element and advance memory
                 # (memory-SSA), mirroring the sassign Subscript branch. The store
                 # PRODUCES the new memory value; a following read observes it.
@@ -3959,6 +4275,26 @@ class SoN::FromOptree 0.01 {
             # handler. Keyed on the RHS OP (padav/...), NOT the value node's repr
             # -- an anon-ref literal ($r = [1,2,3]) also makes an ArrayRef node
             # but is a scalar reference and must pass through.
+            # A STORE INTO A CAPTURED SLOT IS A CELL WRITE. The lvalue padsv
+            # pushed the CellParam (the closure's handle on the caller's
+            # storage), so the target is a CellParam rather than a PadAccess
+            # and the PadAccess arm below never sees it.
+            #
+            # THE SSA REBIND WOULD BE WRONG HERE even if the arm matched: the
+            # variable is shared, so a sibling closure's read must observe this
+            # write, and only a node on the memory chain expresses that.
+            if ($target->isa('SoN::IR::Node::CellParam')) {
+                my $write = $factory->make('CellWrite',
+                    inputs => [$target, $value,
+                        (defined $sim->memory ? ($sim->memory) : ())]);
+                $write->set_control_in($sim->control);
+                $sim->set_control($write);
+                $sim->set_memory($write) if defined $sim->memory;
+                # The assignment's VALUE is the stored value, as everywhere else.
+                $sim->push_node($value);
+                return ($op->next, 'handled');
+            }
+
             if ($target->isa('SoN::IR::Node::PadAccess')) {
                 if (_rhs_is_aggregate_access($op) && _is_aggregate_node($value)) {
                     my $stamp = _result_stamp('Count', [$value]);
@@ -4446,6 +4782,27 @@ class SoN::FromOptree 0.01 {
                 # Emit an explicit Assign(FieldAccess-lvalue, value) so the store
                 # target (fieldix) survives into the graph — the loader types the
                 # field from the stored value's repr. Mirrors the corpus IR spec.
+                # A TARGMY WRITE INTO A CAPTURED SLOT IS A CELL WRITE, and
+                # this is the form that reaches it: `$c = $c + 1` fuses into an
+                # add with OPpTARGET_MY and no sassign anywhere, so the
+                # padsv-lvalue path never runs. Without this arm the graph got
+                # the Add and dropped the store -- the closure counter computed
+                # its next value and threw it away, silently.
+                #
+                # Same shape as the FIELD arm below and for the same reason:
+                # the storage is not this graph's pad, so the write must be an
+                # explicit node on the memory chain rather than an SSA rebind.
+                if (my $param = $ctx->{cell_params}{ $op->targ }) {
+                    my $write = $factory->make('CellWrite',
+                        inputs => [$param, $node,
+                            (defined $sim->memory ? ($sim->memory) : ())]);
+                    $write->set_control_in($sim->control);
+                    $sim->set_control($write);
+                    $sim->set_memory($write) if defined $sim->memory;
+                    $sim->push_node($node);
+                    return ($op->next, 'handled');
+                }
+
                 my $lv = _make_pad_or_field($cv, $op->targ, $factory);
                 my $is_field = $lv->isa('SoN::IR::Node::FieldAccess');
                 if ($is_field) {

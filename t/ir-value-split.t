@@ -25,7 +25,17 @@ use SoN::IR::NodeFactory;
 # (container, key, memory) like a Subscript and yields Boolean.
 #
 #
-# `Wantarray` is the newest. wantarray reports the CALLSITE's context, which
+# The CELL family -- `MakeCell`, `CellRead`, `CellWrite`, `CellParam` -- is the
+# newest, and it is a closure's captured variables. A capture is a SHARED
+# MUTABLE CELL, not a value: measured, `my $n=5; my $c=sub{$n}; $n=99` makes
+# $c->() yield 99, so the closure holds the VARIABLE. Riding the value on
+# AnonSub's inputs would give each closure a snapshot -- right for a read-only
+# capture and wrong the moment anything writes. `CellParam` is deliberately NOT
+# `Parameter` with a flag: Parameter means a positional argument and lowers to
+# one, so a shared spelling would hand a consumer a capture where it expects an
+# argument, silently.
+#
+# `Wantarray` reports the CALLSITE's context, which
 # the graph carries as the Call node's `want` -- so the callee holds the
 # question and each callsite answers it, the same shape a multi-value return
 # already uses. It was previously a refusal, on the grounds that a sub is
@@ -107,12 +117,14 @@ subtest 'the predicate holds on real constructed nodes' => sub {
 
 # The classes present at the expected count. Kept so a mismatch can NAME what
 # changed rather than only reporting a number -- see the diag below.
-my @KNOWN_AT_92 = qw(
+my @KNOWN_AT_96 = qw(
     Access Add Aggregate And AnonSub ArgsSource ArrayLiteral Assign
-    BacktickExpr BinOp BitAnd BitOr BitXor Call Coerce Complement
+    BacktickExpr BinOp BitAnd BitOr BitXor Call CellParam CellRead CellWrite
+    Coerce Complement
     CompoundAssign Concat Constant Count Defined DefinedOr Divide EntryDef
     EnvRead Exists ExpressionList FieldAccess HashLiteral If Interpolate
     IsaOp LeftShift Length ListAppend ListAssign Loop Match MemStart Modulo
+    MakeCell
     Multiply Negate Not NotMatch NumCmp NumEq NumGe NumGt NumLe NumLt NumNe
     Or PadAccess Parameter Phi PostfixDeref Power Print Proj Range Ref
     RefType Regex RegexCapture RegexMatch RegexSubst Region Repeat Return
@@ -137,14 +149,14 @@ subtest 'every node class is one or the other, never neither' => sub {
     # is stale" -- and only one of those is interesting. chalk hit the second
     # running this suite against a lib/ snapshot taken one commit before an
     # Exists node landed, and nearly attributed the red to its own change.
-    my $EXPECTED = 92;
+    my $EXPECTED = 96;
     if (scalar @names != $EXPECTED) {
-        my %known = map { $_ => 1 } @KNOWN_AT_92;
+        my %known = map { $_ => 1 } @KNOWN_AT_96;
         my @extra   = grep { !$known{$_} } @names;
         my %present = map { $_ => 1 } @names;
-        my @missing = grep { !$present{$_} } @KNOWN_AT_92;
+        my @missing = grep { !$present{$_} } @KNOWN_AT_96;
         diag "node class count is " . scalar(@names) . ", expected $EXPECTED";
-        diag "  EXTRA (add to the count and to \@KNOWN_AT_92): @extra" if @extra;
+        diag "  EXTRA (add to the count and to \@KNOWN_AT_96): @extra" if @extra;
         diag "  MISSING (a stale tree looks exactly like this): @missing" if @missing;
     }
     cmp_ok(scalar @names, '==', $EXPECTED, "all $EXPECTED node classes present");

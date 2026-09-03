@@ -61,6 +61,33 @@ sub _extract_fields ($node, $id_remap) {
         # uses for the same purpose, so a consumer reads one spelling.
         return {
             ( defined $node->name ? ( name => $node->name ) : () ),
+            # The captured variable names, POSITIONAL with the value inputs:
+            # input N is the cell for captures[N], which the body reads as
+            # CellParam(index => N). The body is a separate graph, so this
+            # correspondence has to be on the wire -- there is no shared pad
+            # to imply it.
+            ( defined $node->captures && $node->captures->@*
+                ? ( captures => $node->captures )
+                : () ),
+        };
+    }
+    if ($op eq 'MakeCell') {
+        return {
+            ( defined $node->cell_name ? ( cell_name => $node->cell_name ) : () ),
+            # WHETHER ANY CLOSURE OVER THIS CELL WRITES IT. False lets a
+            # consumer skip the cell and pass the value directly; true means
+            # the indirection is load-bearing. JSON::PP booleans so the
+            # consumer reads true/false rather than 1/"".
+            captured_written =>
+                ( $node->captured_written ? JSON::PP::true : JSON::PP::false ),
+        };
+    }
+    if ($op eq 'CellParam') {
+        # `index` is the position in the enclosing AnonSub's inputs; `name` is
+        # the source variable, for diagnostics.
+        return {
+            index => $node->index,
+            ( defined $node->name ? ( name => $node->name ) : () ),
         };
     }
     if ($op eq 'Phi') {

@@ -179,6 +179,29 @@ my %SIGNATURES = (
     # `operands => []` because it takes none: the value rides on the call edge.
     Wantarray  => { operands => [], result => 'Scalar' },
 
+    # THE CELL FAMILY -- a closure's captured variables.
+    #
+    # A capture is a SHARED MUTABLE CELL, so the cell itself is a Ref (it is
+    # storage reached indirectly, exactly what Ref means here) while its
+    # CONTENTS are whatever the variable held. `CellRead` therefore cannot
+    # promise better than Scalar from its signature alone: what the cell holds
+    # is the join over every value written to it from anywhere, which is a
+    # whole-program fact rather than a per-node one. Claiming the initial
+    # value's type would be wrong the moment any closure writes a different
+    # one:
+    #
+    #     my $n = 5;                 Int, if you read only this line
+    #     my $s = sub { $n = "x" };  and Str after $s->() runs
+    #
+    # `MakeCell` takes the initial value and yields the cell; `CellParam` takes
+    # nothing (the cell arrives on the call edge, like Wantarray's context) and
+    # yields the same Ref; `CellWrite` yields the value it stored, which is what
+    # an assignment yields everywhere else in this library.
+    MakeCell   => { operands => ['Scalar'], result => 'Ref' },
+    CellParam  => { operands => [],         result => 'Ref' },
+    CellRead   => { operands => ['Ref'],    result => 'Scalar' },
+    CellWrite  => { operands => ['Ref', 'Scalar'], result => 'Scalar' },
+
     # Range yields a list of integers.
     Range      => { operands => ['Int', 'Int'], result => 'List' },
     # A SLICE IS A PLURAL READ, NOT A TYPE OF ITS OWN. `@a[1..5]` is a List for

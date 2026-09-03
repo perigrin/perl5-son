@@ -44,17 +44,42 @@ subtest 'a non-capturing anon sub lowers' => sub {
     }
 };
 
-subtest 'a capturing anon sub names what it closes over' => sub {
+# A CAPTURING ANON SUB LOWERS TO A CELL. It used to refuse, on the grounds
+# that a capture had no wire representation -- true when written, and no longer
+# so. The capture is a SHARED MUTABLE CELL: measured on 5.42.0,
+#
+#     my $n=5; my $c = sub { $n }; $n = 99;   $c->() is 99
+#
+# so the closure holds the VARIABLE, not a copy of its value. MakeCell in the
+# enclosing scope is the storage, and the AnonSub takes it as an input.
+subtest 'a capturing anon sub builds a cell naming what it closes over' => sub {
     for my $case (
-        [ 'sub { my $x = 5;  my $c = sub { $x };   $c }', '$x' ],
-        [ 'sub { my $n = 0;  my $c = sub { $n++ }; $c }', '$n' ],
+        [ 'sub { my $x = 5;  my $c = sub { $x };   $c }', '$x', 0 ],
+        [ 'sub { my $n = 0;  my $c = sub { $n++ }; $c }', '$n', 1 ],
     ) {
-        my ( $src, $var ) = $case->@*;
+        my ( $src, $var, $written ) = $case->@*;
         my $sub = eval $src or die $@;
-        ok( !lives { SoN::FromOptree->translate($sub) }, "refuses: $src" );
-        my $err = $@;
-        like( $err, qr/\Q$var\E/,
-            "... naming the captured variable $var" );
+        my $graph;
+        ok( lives { $graph = SoN::FromOptree->translate($sub) },
+            "lowers: $src" ) or diag($@);
+        next unless $graph;
+
+        my ($cell) = grep { $_->operation eq 'MakeCell' } $graph->nodes->@*;
+        ok( $cell, "... building a MakeCell for $var" ) or next;
+        is( $cell->cell_name, $var, "... which names $var" );
+
+        # WHETHER THE CAPTURE IS WRITTEN is what tells a consumer the cell is
+        # load-bearing rather than eligible to be replaced by its value. `$n++`
+        # is one of FOUR write forms and the one a naive `look for sassign`
+        # check misses -- perl compiles it to preinc over an OPf_MOD padsv,
+        # with no assignment op anywhere.
+        is( !!$cell->captured_written, !!$written,
+            "... and reports captured_written correctly" );
+
+        # The cell is the closure's environment, so it must reach the AnonSub.
+        my ($anon) = grep { $_->operation eq 'AnonSub' } $graph->nodes->@*;
+        ok( $anon && grep({ $_ == $cell } $anon->inputs->@*),
+            '... and the AnonSub takes the cell as an input' );
     }
 };
 

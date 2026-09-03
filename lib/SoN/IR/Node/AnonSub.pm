@@ -17,9 +17,16 @@ class SoN::IR::Node::AnonSub :isa(SoN::IR::Value) {
     #
     # For a NON-CAPTURING anon sub the name IS the identity: the site is what
     # perl itself shares CVs by, across loop iterations and call frames alike.
-    # A capturing one needs more than a name, which is why those refuse.
+    #
+    # A CAPTURING ONE IS THE NAME PLUS ITS CELLS, and the cells are the INPUTS.
+    # That split is the whole closure representation: the name addresses one
+    # shared body, the inputs are the per-closure environment. `captures` names
+    # the variables positionally so a consumer can match input N to the body's
+    # CellParam(index=N) -- the body is a separate graph, so the correspondence
+    # has to be on the wire rather than implied by a shared pad.
     field $name     :param :reader = undef;
     field $graph    :param :reader = undef;
+    field $captures :param :reader = undef;
     field $anon_id  :reader;
 
     ADJUST {

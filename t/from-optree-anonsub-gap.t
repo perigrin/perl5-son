@@ -97,14 +97,25 @@ subtest 'an unnameable anon sub refuses, emitting nothing' => sub {
         '... and emits no orphan body';
 };
 
-# A CAPTURING ONE STILL REFUSES. The slice is deliberately partial: a per-site
-# name is only correct where the site IS the identity, which capture breaks
-# (three closures over three values would share one name).
-subtest 'a capturing anonymous sub still refuses' => sub {
-    my ( undef, $err ) = translate(
+# A CAPTURING ONE LOWERS TOO, and the per-site name is still correct: the name
+# addresses the shared BODY, while the per-closure environment rides on the
+# AnonSub's inputs as cells. Three closures over three values share one name
+# and hold three different cells -- which is exactly how perl works, one CV
+# with a per-instantiation pad.
+subtest 'a capturing anonymous sub lowers to a cell' => sub {
+    my ( $w, $err ) = translate(
         'my $x = 5; my $c = sub { $x }; print $c->();', 'anon-capture' );
-    like $err, qr/GAP:.*closing over.*\$x/,
-        'refused, naming the captured variable';
+    unlike $err, qr/GAP|INTERNAL/, 'it lowers' or return;
+
+    my %methods = ( ( $w // {} )->{methods} // {} )->%*;
+    my ($body) = grep { /__ANON__/ } sort keys %methods;
+    ok $body, 'the body is its own graph' or return;
+
+    ok scalar( grep { $_->{op} eq 'MakeCell' }
+               $methods{'main::__PROGRAM__'}{nodes}->@* ),
+        '... with a MakeCell in the enclosing scope';
+    ok scalar( grep { $_->{op} eq 'CellParam' } $methods{$body}{nodes}->@* ),
+        '... and a CellParam in the body';
 };
 
 # A NAMED SUB IS UNCHANGED -- it already becomes its own graph in `methods`,

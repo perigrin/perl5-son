@@ -62,6 +62,10 @@ use SoN::IR::Node::EntryDef;
 use SoN::IR::Node::ArgsSource;
 use SoN::IR::Node::Wantarray;
 use SoN::IR::Node::Exists;
+use SoN::IR::Node::MakeCell;
+use SoN::IR::Node::CellRead;
+use SoN::IR::Node::CellWrite;
+use SoN::IR::Node::CellParam;
 use SoN::IR::Node::Parameter;
 use SoN::IR::Node::Subscript;
 use SoN::IR::Node::Call;
@@ -103,8 +107,8 @@ my %DATA_CLASSES = map { $_ => "SoN::IR::Node::$_" } qw(
     And Or BitAnd BitOr BitXor LeftShift RightShift
     Assign Repeat Match NotMatch DefinedOr Xor Range Yada IsaOp
     Not Negate Complement Defined UnaryPlus Ref RefType Length Count
-    PadAccess FieldAccess EntryDef ArgsSource Wantarray Exists Parameter Subscript Slice
-    Call HashLiteral ArrayLiteral ListAppend
+    PadAccess FieldAccess EntryDef ArgsSource Wantarray Exists CellRead CellParam Parameter Subscript Slice
+    Call HashLiteral ArrayLiteral ListAppend MakeCell CellWrite
     Interpolate AnonSub
     RegexMatch RegexSubst RegexCapture Print EnvRead TryCatch
     PostfixDeref CompoundAssign BacktickExpr VarDecl ListAssign
@@ -172,7 +176,14 @@ class SoN::IR::NodeFactory {
     # Per-call identity like the statement effects, but NOT in
     # %STATEMENT_EFFECT_OPS: allocations are value-producing and are not
     # control-threaded by the Block fixup.
-    our %ALLOC_OPS = map { $_ => 1 } qw(ArrayLiteral HashLiteral);
+    # MakeCell and CellWrite join them for the same reason one lattice member
+    # over: each OCCURRENCE is an event, not a value. Two structurally
+    # identical MakeCells are two DIFFERENT cells -- hash-consing them is
+    # exactly the `for my $i (1..3) { push @s, sub { $i } }` -> 3,3,3
+    # miscompile, where one node with three EXECUTIONS must yield three cells.
+    # Two CellWrites of the same value to the same cell are likewise two
+    # distinct events on the memory chain.
+    our %ALLOC_OPS = map { $_ => 1 } qw(ArrayLiteral HashLiteral MakeCell CellWrite);
 
     # Aggregate LITERAL CONSTRUCTORS. Not operators: `[1,2]` yields a ref to
     # the array it just built, and no TypeLibrary signature describes that —

@@ -91,11 +91,17 @@ subtest 'anoncode refuses -- the AnonSub node carried no body' => sub {
     ok(defined $anon && defined $anon->name,
         '... and the node names its body, so it is not the empty node above');
 
-    like(
-        dies { SoN::FromOptree->translate(sub { my $x = 5; my $f = sub { $x }; $f }) },
-        qr/GAP:.*closing over/,
-        'a capturing anonymous sub still refuses, naming the capture',
-    );
+    # A CAPTURING ONE LOWERS TOO, to a MakeCell the AnonSub takes as an input.
+    # It used to refuse for want of a wire representation for the capture; the
+    # cell is that representation.
+    my $cap;
+    ok(
+        lives { $cap = SoN::FromOptree->translate(
+            sub { my $x = 5; my $f = sub { $x }; $f }) },
+        'a capturing anonymous sub lowers',
+    ) or diag($@);
+    ok( $cap && grep({ $_->operation eq 'MakeCell' } $cap->nodes->@*),
+        '... building a cell for the capture' );
 };
 
 # -----------------------------------------------------------------------
