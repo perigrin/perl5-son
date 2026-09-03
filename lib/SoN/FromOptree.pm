@@ -3181,6 +3181,35 @@ class SoN::FromOptree 0.01 {
                 return ($op->next, 'handled');
             }
 
+            # AN ARRAY READ IN SCALAR CONTEXT IS ITS COUNT, and the `scalar`
+            # OP IS NOT THE SIGNAL. perl folds that op away in a sub's trailing
+            # position -- measured, the same source compiles two ways:
+            #
+            #     sub named { my @a=(1,2,3); scalar @a }
+            #       padav(f=0x2) scalar(f=0x6)
+            #     sub       { my @a=(1,2,3); scalar @a }
+            #       padav(f=0x2)                      <- the scalar op is GONE
+            #
+            # so a handler keyed on the `scalar` op saw nothing here and let
+            # the aggregate through: the sub returned the ARRAY where perl
+            # returns 3. `my $n = @a` was unaffected because the sassign path
+            # builds its own Count downstream, which is why this survived.
+            #
+            # THE WANT FLAG IS THE SIGNAL, and it separates the cases:
+            #
+            #     scalar @a / if (@a)      f=0x02  want=SCALAR  no REF|MOD
+            #     for my $x (@a)           f=0x32  want=SCALAR  REF|MOD
+            #     trailing @a (list ret)   f=0x00  want=VOID
+            #
+            # A foreach SOURCE is want=SCALAR too, so want alone is not enough
+            # -- REF|MOD is what separates them, and keying on want alone would
+            # iterate over the number 3.
+            if ($name eq 'padav' && $existing && $want == 2
+                    && !$ref_or_mod && !$is_lvintro) {
+                $sim->push_node(_make_count($factory, $existing, $sim));
+                return ($op->next, 'handled');
+            }
+
             # A MUTATED ARRAY READ IN LIST CONTEXT has no representation yet:
             # the binding is the pre-mutation literal and there is no node for
             # "the elements of @a as they now are". Refuse rather than flatten
