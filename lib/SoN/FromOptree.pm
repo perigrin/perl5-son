@@ -163,6 +163,29 @@ class SoN::FromOptree 0.01 {
     # BUILT IN ONE PLACE ON PURPOSE. Eight call sites each deciding the arity
     # for themselves is how an operator ends up meaning two things; see
     # docs/plans/2026-08-31-one-operator-one-declaration.md.
+    # _note_aggregate_mutation($op, $ctx) -- record that this op's array
+    # operand has been mutated, so a later LIST-context read of the same slot
+    # cannot take the flatten shortcut.
+    #
+    # The shortcut pushes the bound ArrayLiteral's ORIGINAL inputs, which is
+    # the array as first constructed. That is right until something mutates
+    # the array and wrong immediately after, and the read itself carries no
+    # node that could be threaded onto memory -- it emits no node at all.
+    #
+    # KEYED ON THE PAD SLOT so a mutation of @a does not invalidate @c. The
+    # operand is the mutating op's first kid (`shift @a` is shift -> padav),
+    # and a form whose operand is not a plain pad array records nothing --
+    # those do not reach the shortcut, which requires a bound ArrayLiteral.
+    sub _note_aggregate_mutation ($op, $ctx) {
+        return unless $op && ref($op) && $$op && ($op->flags & 4);  # OPf_KIDS
+        my $kid = $op->first;
+        # push/unshift/splice put a pushmark first; shift/pop do not.
+        $kid = $kid->sibling if $kid && $$kid && $kid->name eq 'pushmark';
+        return unless $kid && $$kid;
+        return unless $kid->name eq 'padav' && $kid->can('targ') && $kid->targ;
+        $ctx->{mutated_aggregate}{ $kid->targ } = 1;
+    }
+
     sub _make_count ($factory, $agg, $sim, %extra) {
         $extra{stamp} //= SoN::IR::Stamp->new(type => 'Int');
         return $factory->make('Count',
@@ -3131,11 +3154,44 @@ class SoN::FromOptree 0.01 {
             my $want        = $op->flags & 3;         # OPf_WANT: 3=list 2=scalar
             my $ref_or_mod  = $op->flags & 0x30;      # OPf_REF | OPf_MOD
             my $is_lvintro  = $op->private & 0x80;    # OPpLVAL_INTRO (target)
+            # NOT ONCE THE ARRAY HAS BEEN MUTATED. The shortcut pushes the
+            # literal's ORIGINAL elements, which is the array as first
+            # constructed rather than as it now stands:
+            #
+            #     my @a=(1,2,3); shift @a; print "@a";
+            #       perl:  2 3
+            #       graph: join($", 1, 2, 3)   the three original constants
+            #
+            # Silent, and it reaches every list-context read -- interpolation,
+            # `my @b = @a`, an explicit join. This is the same defect Count had
+            # one path over: a read that cannot see a mutation. Count was fixed
+            # by giving it a memory input; here there is no node to thread,
+            # because the shortcut emits no read node at all.
+            #
+            # KEYED ON THE SLOT, NOT ON MEMORY GENERALLY. A mutation of @a must
+            # not invalidate @c's shortcut -- that would refuse working code to
+            # fix an unrelated array, which is the over-broad-guard mistake
+            # this file has made three times (see the `continue`, subst and
+            # leaveloop refusals).
             if ($name eq 'padav' && $existing && $want == 3
                     && !$ref_or_mod && !$is_lvintro
+                    && !$ctx->{mutated_aggregate}{$targ}
                     && $existing->operation eq 'ArrayLiteral') {
                 $sim->push_node($_) for $existing->inputs->@*;
                 return ($op->next, 'handled');
+            }
+
+            # A MUTATED ARRAY READ IN LIST CONTEXT has no representation yet:
+            # the binding is the pre-mutation literal and there is no node for
+            # "the elements of @a as they now are". Refuse rather than flatten
+            # stale elements -- a GAP is a to-do, a silent wrong answer is not.
+            if ($name eq 'padav' && $existing && $want == 3
+                    && !$ref_or_mod && !$is_lvintro
+                    && $ctx->{mutated_aggregate}{$targ}) {
+                die "GAP: a list-context read of an array mutated by"
+                  . " push/shift/splice is not yet lowered -- the binding is"
+                  . " the pre-mutation literal, and flattening it would read"
+                  . " the array as first constructed\n";
             }
             # AN ASSIGNMENT TARGET IS THE SLOT, NOT ITS CURRENT VALUE.
             # `@a = ()` reads @a with OPf_MOD set, and pushing $existing there
@@ -5312,6 +5368,7 @@ class SoN::FromOptree 0.01 {
                     # rather than a missing one.
                     my $ret_stamp = ($name eq 'push' || $name eq 'unshift')
                         ? SoN::IR::Stamp->new(type => 'Int') : undef;
+                    _note_aggregate_mutation($op, $ctx);
                     my $call = $factory->make('Call',
                         inputs        => [@inputs, $sim->memory],
                         dispatch_kind => 'builtin',
@@ -5343,6 +5400,7 @@ class SoN::FromOptree 0.01 {
                     # runs, which is the ordering _floor_element_removals
                     # exists to get right. It is applied there, after the
                     # fixpoint, and this leaves the node honestly unstamped.
+                    _note_aggregate_mutation($op, $ctx);
                     my $elem_stamp = _array_element_stamp($inputs[0]);
                     my $call = $factory->make('Call',
                         inputs         => [$inputs[0], $sim->memory],
