@@ -4258,10 +4258,57 @@ class SoN::FromOptree 0.01 {
         # (64|1) against 1 for the element forms. Refused by name; it has no
         # container to test.
         if ($name eq 'exists') {
-            die "GAP: `exists &sub` asks whether a subroutine is defined in the"
-              . " symbol table, which is a different question from container"
-              . " membership and has no node yet\n"
-                if $op->private & 64;   # OPpEXISTS_SUB
+            # `exists &sub` ASKS ABOUT THE SYMBOL TABLE, not about a container.
+            # OPpEXISTS_SUB marks it -- measured private=65 (64|1) against 1
+            # for the element forms -- and it refused because the `Exists` node
+            # takes [container, key, memory] and a sub has no container. That
+            # is a fact about that node's shape, not about the question.
+            #
+            # A CV SLOT IS AN EntryDef, the same symbol-table entry a package
+            # variable uses, with sigil '&'. So the question becomes "does this
+            # entry exist", which is what Exists already means -- container and
+            # key collapse to one addressed entry.
+            #
+            # NOT FOLDED TO A CONSTANT, though the answer IS readable here:
+            # _op_gv resolves the CV slot and reports present/absent correctly
+            # (measured, matching perl for a defined sub, a merely DECLARED one
+            # -- exists is TRUE there while defined is false -- and a missing
+            # one). Folding would still be a miscompile, because the symbol
+            # table is mutable at runtime:
+            #
+            #     say exists &late;    0
+            #     *late = sub { 1 };
+            #     say exists &late;    1
+            #
+            # Glob assignment, AUTOLOAD and plugin loading all do this, so the
+            # answer must be READ when the question is asked.
+            if ($op->private & 64) {   # OPpEXISTS_SUB
+                my $gv_op = _find_gv_op($op);
+                die "GAP: `exists &sub` whose operand is not a statically"
+                  . " named sub (a coderef or computed name) is not yet"
+                  . " lowered\n"
+                    unless $gv_op;
+                my $gv = _op_gv($cv, $gv_op);
+                die "GAP: `exists &sub` whose glob could not be resolved is"
+                  . " not yet lowered\n"
+                    unless $gv && $$gv;
+
+                # Whatever the gv op pushed is not the question's operand --
+                # the entry is addressed by NAME, so drop it rather than leave
+                # a stray value on the stack.
+                $sim->pop_node if $sim->stack_depth;
+
+                my $entry = $factory->make('EntryDef',
+                    stash_name => $gv->STASH->NAME,
+                    sigil      => '&',
+                    var_name   => $gv->NAME);
+                my $node = $factory->make('Exists',
+                    inputs => [$entry,
+                        (defined $sim->memory ? ($sim->memory) : ())],
+                    stamp  => SoN::IR::Stamp->new(type => 'Boolean'));
+                $sim->push_node($node);
+                return ($op->next, 'handled');
+            }
 
             my $key       = $sim->pop_node;
             my $container = $sim->pop_node;
@@ -8387,6 +8434,22 @@ class SoN::FromOptree 0.01 {
     # A `gv[IV \&main::foo]` op (the callee of a direct sub call) does NOT hold
     # a bare GV: the pad/op slot is a B::IV whose ->RV is the callee B::CV. Its
     # sub name lives on the CV's GV, so unwrap the CV-ref to that GV.
+    # The `gv` op under an op's subtree, or undef. `exists &f` wraps its glob
+    # in several nulls (measured: exists -> null -> null -> null -> gv), so the
+    # operand is reached by descending rather than by a fixed path.
+    sub _find_gv_op ($op) {
+        return undef unless $op && ref($op) && $$op;
+        return $op if $op->name eq 'gv';
+        return undef unless $op->flags & 4;   # OPf_KIDS
+        my $kid = $op->first;
+        while ($kid && $$kid) {
+            my $found = _find_gv_op($kid);
+            return $found if $found;
+            $kid = $kid->sibling;
+        }
+        return undef;
+    }
+
     sub _op_gv ($cv, $op) {
         my $slot = _gv_op_slot($cv, $op);
         return undef unless $slot;

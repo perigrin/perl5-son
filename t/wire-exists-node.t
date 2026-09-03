@@ -83,14 +83,26 @@ subtest 'exists works on an array element' => sub {
     ok scalar(grep { $_->{op} eq 'Exists' } $n->@*), 'and builds an Exists node';
 };
 
-# `exists &sub` IS A DIFFERENT QUESTION -- is this CV defined in the symbol
+# `exists &sub` IS A DIFFERENT QUESTION -- is this CV present in the symbol
 # table -- and it is the ONLY form carrying OPpEXISTS_SUB (private 65 = 64|1).
-# It stays refused BY NAME rather than being lowered as container membership.
-subtest 'exists &sub refuses by name' => sub {
-    my (undef, $err) = wire('sub f {} print exists &f ? 1 : 0;', 'ex_sub');
-    unlike $err, qr/INTERNAL/, 'no crash';
-    like $err, qr/GAP/, 'it refuses';
-    like $err, qr/exists/, 'and names the construct';
+# It is NOT lowered as container membership: the operand is an EntryDef with
+# sigil '&', so container and key collapse into one addressed entry.
+#
+# NOT FOLDED TO A CONSTANT, though the answer is readable at compile time. The
+# symbol table is mutable at runtime -- measured, `exists &late` is 0, then
+# `*late = sub {1}` makes it 1 -- so the answer must be read when asked.
+subtest 'exists &sub reads the symbol table' => sub {
+    my ($n, $err) = wire('sub f {} print exists &f ? 1 : 0;', 'ex_sub');
+    unlike $err, qr/GAP|INTERNAL/, 'it lowers' or return;
+
+    my ($entry) = grep { $_->{op} eq 'EntryDef' } $n->@*;
+    ok $entry, 'a symbol-table entry is built' or return;
+    is +($entry->{fields}{sigil} // ''), '&', '... with the code sigil';
+
+    my ($ex) = grep { $_->{op} eq 'Exists' } $n->@*;
+    ok $ex, 'and an Exists tests it';
+    ok scalar(grep { $_ == $entry->{id} } ($ex->{inputs} // [])->@*),
+        '... over that entry';
 };
 
 # A PLAIN READ MUST NOT BECOME AN Exists. The discriminator is the private

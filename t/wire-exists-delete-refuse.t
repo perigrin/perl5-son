@@ -65,10 +65,17 @@ subtest 'delete refuses rather than dropping the mutation' => sub {
 subtest 'the delete refusal names itself' => sub {
     my (undef, $derr) = translate('my %h=(a=>1); delete $h{a};', 'delname');
     like $derr, qr/delete/, 'the delete GAP says "delete"';
-    # `exists &sub` is the one exists form still refused, and it must say so
-    # rather than being mistaken for container membership.
-    my (undef, $serr) = translate('sub f {} print exists &f ? 1 : 0;', 'exsub');
-    like $serr, qr/exists/, 'the `exists &sub` GAP says "exists"';
+};
+
+# `exists &sub` NO LONGER REFUSES. It asks about a symbol-table CV slot rather
+# than container membership, which is an EntryDef with sigil '&' -- so the
+# question is "does this entry exist", exactly what Exists means, with the
+# container and key collapsed into one addressed entry.
+subtest 'exists &sub lowers, and delete is unaffected' => sub {
+    my ($out, $serr) = translate('sub f {} print exists &f ? 1 : 0;', 'exsub');
+    unlike $serr, qr/GAP|INTERNAL/, '`exists &sub` lowers';
+    like $out, qr/"sigil"\s*:\s*"&"/,
+        '... to a symbol-table entry with the code sigil';
 };
 
 # NEIGHBOURING HASH OPERATIONS STILL WORK. The refusal must be for these two
