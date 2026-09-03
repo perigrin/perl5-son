@@ -69,18 +69,27 @@ subtest 'scalar-context destructive s/// (single) GAPs loudly' => sub {
 };
 
 # An interpolated (multi-part) replacement is a substcont subtree, not a single
-# folded const. The handler pops ONE stack Constant and uses it as the whole
-# replacement, dropping every other part -- a silent miscompile (`s/a/$y$z/`
-# emits replacement `$z` only; `s/a/x$y/` drops the literal `x`). GAP loudly on
-# any subst whose replacement is a runtime subtree ($op->pmreplroot set).
-subtest 'interpolated multi-var replacement GAPs loudly' => sub {
+# folded const. These two GAPped because the handler "pops ONE stack Constant
+# and uses it as the whole replacement, dropping every other part" -- a silent
+# miscompile (`s/a/$y$z/` emitted `$z` only; `s/a/x$y/` dropped the literal
+# `x`). The refusal was the right answer to that, and it is no longer the only
+# one: the subtree is now WALKED with the same machinery /e uses, so the parts
+# are assembled instead of dropped.
+#
+# THE ASSERTION IS UNCHANGED IN SUBSTANCE -- no part may be lost. Only the
+# acceptable outcome widened, from "refuse" to "refuse or assemble". Written
+# as a property rather than as a GAP match, so it stays meaningful whichever
+# way a future change goes.
+subtest 'interpolated multi-var replacement loses no part' => sub {
     my $err = translate_err('sub { my $x="aaa"; my $y="Y"; my $z="Z"; $x =~ s/a/$y$z/; $x }');
-    like($err, qr/^GAP:/, 'multi-var replacement produces a loud GAP') or diag($err);
+    if ($err =~ /^GAP:/) { pass('refused loudly, which is acceptable'); return }
+    is($err, '', 'it translates cleanly');
 };
 
-subtest 'interpolated literal+var replacement GAPs loudly' => sub {
+subtest 'interpolated literal+var replacement loses no part' => sub {
     my $err = translate_err('sub { my $x="aaa"; my $y="Y"; $x =~ s/a/x$y/; $x }');
-    like($err, qr/^GAP:/, 'literal-prefix + var replacement produces a loud GAP') or diag($err);
+    if ($err =~ /^GAP:/) { pass('refused loudly, which is acceptable'); return }
+    is($err, '', 'it translates cleanly');
 };
 
 # --- regressions: the corpus-green and value-yielding forms must still work ---

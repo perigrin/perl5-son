@@ -1034,10 +1034,52 @@ class SoN::FromOptree 0.01 {
                 # literal (`s/a/x$y/`), where the subtree is a substcont chain
                 # the handler below would silently reduce to one popped
                 # Constant.
+                # AN INTERPOLATED REPLACEMENT IS A COMPUTED VALUE, exactly as
+                # an /e replacement is -- and RegexSubst already carries one,
+                # on inputs, which is how /e passes its result. The refusal
+                # said the handler "pops ONE stack Constant and uses it as the
+                # whole replacement, silently dropping every other part": true
+                # of the pop, and never a reason the parts could not be WALKED.
+                #
+                # Measured under suppress_peep:
+                #
+                #     s/a/x${p}y/   pmreplroot -> substcont -> multiconcat -> padsv
+                #
+                # so the subtree is walked with the /e machinery above --
+                # descend to the leftmost leaf, walk on a snapshot sim, take
+                # the single value it leaves. multiconcat already has a handler
+                # that assembles the parts, so nothing new is needed to read
+                # them.
+                #
+                # DIFFERENT FROM THE INTERPOLATED MATCH PATTERN (dd9d5ab),
+                # whose parts are mark-delimited ON THE STACK. Same construct
+                # family, two different recoveries; assuming the match shape
+                # here would pop operands that are not there.
                 my $replroot = $op->pmreplroot;
-                die "GAP: s/// interpolated (multi-part) replacement not yet lowered\n"
-                    if !defined $code_repl
-                    && $replroot && ref($replroot) && $$replroot;
+                if (!defined $code_repl && $replroot && ref($replroot) && $$replroot) {
+                    my $entry = $replroot;
+                    while (ref($entry) && $$entry && ($entry->flags & 4)
+                           && ref($entry->first) && ${$entry->first}) {
+                        $entry = $entry->first;
+                    }
+                    die "GAP: s/// interpolated replacement subtree has no"
+                      . " entry op\n"
+                        unless ref($entry) && $$entry;
+
+                    my $rsim = $sim->snapshot;
+                    my $base = $rsim->stack_depth;
+                    my @rexits;
+                    _walk_branch($cv, $entry, $rsim, $factory, $opmap,
+                        \%visited, \@rexits, 1, ${$replroot});
+
+                    die "GAP: s/// interpolated replacement that exits"
+                      . " (return/die) not yet lowered\n" if @rexits;
+                    die "GAP: s/// interpolated replacement that is not a"
+                      . " single value not yet lowered\n"
+                        unless $rsim->stack_depth == $base + 1;
+
+                    $code_repl = $rsim->pop_node;
+                }
                 my $nondestruct = $op->pmflags & PMf_NONDESTRUCT;
                 # In scalar/boolean context a DESTRUCTIVE s/// returns the
                 # integer match COUNT, not the rewritten string (only /r
