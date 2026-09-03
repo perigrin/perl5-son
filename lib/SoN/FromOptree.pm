@@ -1942,7 +1942,37 @@ class SoN::FromOptree 0.01 {
             return ($sv->int_value, SoN::IR::Stamp->new(type => 'Int'), 'integer');
         }
         if ($flags & B::SVf_NOK()) {
-            return ($sv->NV, SoN::IR::Stamp->new(type => 'Num'), 'number');
+            my $nv = $sv->NV;
+
+            # NaN AND Inf ARE NOT Num, and no flag distinguishes them: SVf_NOK
+            # is set for 3.14, Inf and NaN alike, so the VALUE has to be
+            # tested. They pass the syntactic component -- "NaN" round-trips to
+            # "NaN" and "Inf" to "Inf" -- and fail the semantic one. Measured on
+            # 5.42.0 against the operation contracts:
+            #
+            #     NaN == NaN   false   Contract_== violated: an equality
+            #                          reporting x != x has failed AS an equality
+            #     NaN - NaN    NaN     Contract_- violated: v - v is not the
+            #                          additive identity
+            #     Inf == Inf   true    Contract_== holds
+            #     Inf - Inf    NaN     Contract_- violated
+            #
+            # perl-types-formal.md marks both `excluded` in its contract table
+            # and derives `"NaN" is not in Num` from the semantic component in
+            # Theorem 3. Str is what remains: the syntactic half passes, so
+            # these are strings that happen to be spelled numerically.
+            #
+            # THE TESTS AVOID POSIX. `$nv != $nv` is true only for NaN. For
+            # infinity, `$nv == $nv/2` holds only when halving changes nothing,
+            # which is true of both infinities and of zero -- hence the `!= 0`
+            # guard. Verified: 0.0, -0.0 and 1e308 (the largest finite double)
+            # all read finite; NaN, Inf and -Inf do not.
+            my $is_nan = ($nv != $nv);
+            my $is_inf = (!$is_nan && $nv != 0 && $nv == $nv / 2);
+            return ("$nv", SoN::IR::Stamp->new(type => 'Str'), 'string')
+                if $is_nan || $is_inf;
+
+            return ($nv, SoN::IR::Stamp->new(type => 'Num'), 'number');
         }
         if ($flags & B::SVf_POK()) {
             return ($sv->PV, SoN::IR::Stamp->new(type => 'Str'), 'string');
