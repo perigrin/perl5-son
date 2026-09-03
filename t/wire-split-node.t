@@ -78,11 +78,23 @@ subtest 'the target array is bound to the split result' => sub {
 
 # THE SCALAR FORM has no fused target and yields the FIELD COUNT, which is a
 # different operation. It stays refused rather than being lowered as a list.
-subtest 'the scalar form refuses by name' => sub {
-    my (undef, $err) = wire('my $n = split(/,/, "a,b"); print $n;', 'split_scalar');
+# THE SCALAR FORM IS Count OVER THE SAME LIST. Its refusal said the field count
+# ran "over fields that are never built" -- true when it was written, and stale
+# the moment the list form started building them. Measured:
+#
+#     my $n = split(/,/,"a,b,c")   3      the field count
+#     my @x = split(/,/,"a,b,c")   3      the same three fields
+#
+# so the scalar reading is Count(split-result), exactly as `scalar(@x)` is.
+subtest 'the scalar form is a Count over the split result' => sub {
+    my ($n, $err) = wire('my $n = split(/,/, "a,b,c"); print $n;', 'split_scalar');
     unlike $err, qr/INTERNAL/, 'no crash';
-    like $err, qr/GAP/, 'it refuses';
-    like $err, qr/split/, 'and names the construct';
+    unlike $err, qr/GAP/, 'it no longer refuses';
+    my %byid = map { $_->{id} => $_ } $n->@*;
+    my ($count) = grep { $_->{op} eq 'Count' } $n->@*;
+    ok defined $count, 'a Count node is built' or return;
+    my ($src) = map { $byid{$_} } ($count->{inputs} // [])->@*;
+    is +($src->{name} // ''), 'split', 'and it counts the split result';
 };
 
 # THE PATTERN MUST BE AN OPERAND. It rides on the PMOP rather than the stack,

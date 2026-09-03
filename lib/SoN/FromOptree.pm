@@ -3317,10 +3317,18 @@ class SoN::FromOptree 0.01 {
             my $has_target = ($op->private & 0x10);   # OPpSPLIT_ASSIGN
             my $targ       = $has_target ? ($op->pmreplroot // 0) : 0;
 
-            die "GAP: `split` in scalar context yields the FIELD COUNT over"
-              . " fields that are never built, which is a different operation"
-              . " from the list form and is not yet lowered\n"
-                unless $has_target && $targ;
+            # THE SCALAR FORM IS Count OVER THE SAME LIST, and its refusal
+            # ("the field count runs over fields that are never built") was
+            # true when written and stale the moment the list form above
+            # started building them. Measured:
+            #
+            #     my $n = split(/,/,"a,b,c")   3    the field count
+            #     my @x = split(/,/,"a,b,c")   3    the same three fields
+            #
+            # One operation with two readings, exactly as `scalar(@x)` is Count
+            # over the array. Same shape as keys/values, whose scalar reading
+            # is a count -- and unlike reverse, whose scalar reading is a Str.
+            my $scalar_reading = !($has_target && $targ);
 
             # Drain the operands split pushed. The subject is the last one; a
             # limit constant may precede it. Nothing here needs a mark, which
@@ -3358,6 +3366,16 @@ class SoN::FromOptree 0.01 {
             # depends on the SUBJECT at runtime, so no narrower stamp is
             # honest and Count over this node is the only way to ask.
             #
+            # THE SCALAR READING IS A COUNT over the very node the list form
+            # binds. No second split, no fabricated field list.
+            if ($scalar_reading) {
+                my $count = $factory->make('Count',
+                    inputs => [$node],
+                    stamp  => SoN::IR::Stamp->new(type => 'Int'));
+                $sim->push_node($count);
+                return ($op->next, 'handled');
+            }
+
             # BIND THE TARGET, or the split runs and its result goes nowhere --
             # a silent drop, which is worse than the refusal this replaces.
             $sim->define($targ, $node);
