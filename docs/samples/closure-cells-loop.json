@@ -6,6 +6,8 @@
 
   "methods": {
     "main::__PROGRAM__": {
+      "start": 0,
+      "returns": [18],
       "nodes": [
         {"id": 0, "op": "Start", "inputs": []},
         {"id": 1, "op": "MemStart", "inputs": []},
@@ -41,6 +43,8 @@
     },
 
     "main::__PROGRAM__::__ANON__:8:37": {
+      "start": 0,
+      "returns": [4],
       "_comment": "sub { $i } -- one BODY graph shared by all three closures, which is correct: the body is the same code. What differs per instance is the CELL it is handed, which is why the cell must be an input to AnonSub and not baked into the body.",
       "nodes": [
         {"id": 0, "op": "Start", "inputs": []},

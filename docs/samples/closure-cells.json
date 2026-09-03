@@ -4,6 +4,8 @@
   "_oracle": "perl prints 611. ORDER IS LOAD-BEARING: $rd->() is 1 because $inc->() already ran and its CellWrite is visible. Calling the three again prints 622 -- $inc mutates per call. A design that snapshots the value at capture time gives 610 on the first line and 610 again on the second, which is the failure this sample exists to catch.",
   "methods": {
     "main::__PROGRAM__": {
+      "start": 0,
+      "returns": [17],
       "nodes": [
         {"id": 0, "op": "Start", "inputs": []},
         {"id": 1, "op": "MemStart", "inputs": []},
@@ -39,6 +41,8 @@
     },
 
     "main::__PROGRAM__::__ANON__:3:11": {
+      "start": 0,
+      "returns": [6],
       "_comment": "sub { $n + 1 } -- read-only. The cell arrives as a CellParam -- a DISTINCT node kind, not Parameter with a flag: a capture is not positional, comes from no argument list, and has no declared index. A consumer that has not learned about captures GAPs on an unknown op rather than silently treating a cell as argument 0.; CellRead is on the memory chain even here, because whether it CAN be elided is chalk's call, not the producer's.",
       "nodes": [
         {"id": 0, "op": "Start", "inputs": []},
@@ -52,6 +56,8 @@
     },
 
     "main::__PROGRAM__::__ANON__:5:11": {
+      "start": 0,
+      "returns": [7],
       "_comment": "sub { $c = $c + 1 } -- reads THEN writes the same cell. CellWrite yields a new memory version (#6), which is what makes the sharing visible to the other closure and to the outer scope.",
       "nodes": [
         {"id": 0, "op": "Start", "inputs": []},
@@ -66,6 +72,8 @@
     },
 
     "main::__PROGRAM__::__ANON__:6:10": {
+      "start": 0,
+      "returns": [4],
       "_comment": "sub { $c } -- SAME cell as the one above. Its CellRead must observe the other closure's CellWrite; that is the case a value-on-inputs design gets wrong.",
       "nodes": [
         {"id": 0, "op": "Start", "inputs": []},
