@@ -3299,9 +3299,70 @@ class SoN::FromOptree 0.01 {
         # count over fields that are never built. Both are real work; neither
         # is a stack bug, which is what the internal error was hiding.
         if ($name eq 'split') {
-            die "GAP: `split` is not yet lowered -- the list form binds its"
-              . " target array inside the op and the scalar form yields a"
-              . " field count, and neither is modelled\n";
+            # THE LIST FORM FUSES ITS TARGET INTO THE OP, and that is what
+            # makes it recoverable rather than unlowerable. Measured on 5.42.0
+            # under suppress_peep -- the configuration the walker sees:
+            #
+            #     my @x = split(/,/,$s)  split(... => @x:1,4) ASSIGN  root=1
+            #     @y = split(/,/,$s)     split(... => @y:3,4) ASSIGN  root=1
+            #     my $n = split(/,/,$s)  split                no target root=0
+            #
+            # pmreplroot IS the target's pad index when OPpSPLIT_ASSIGN (0x10)
+            # is set. So the "binds its target array inside the op" half of the
+            # old refusal was a description of where to LOOK, not a reason it
+            # could not be done.
+            #
+            # The operands are on the stack: the subject, and a limit const
+            # perl always supplies. The PATTERN rides on the PMOP itself.
+            my $has_target = ($op->private & 0x10);   # OPpSPLIT_ASSIGN
+            my $targ       = $has_target ? ($op->pmreplroot // 0) : 0;
+
+            die "GAP: `split` in scalar context yields the FIELD COUNT over"
+              . " fields that are never built, which is a different operation"
+              . " from the list form and is not yet lowered\n"
+                unless $has_target && $targ;
+
+            # Drain the operands split pushed. The subject is the last one; a
+            # limit constant may precede it. Nothing here needs a mark, which
+            # is why the 'mark' registration was the original bug.
+            my @operands;
+            unshift @operands, $sim->pop_node while $sim->stack_depth > 0;
+
+            # THE PATTERN RIDES ON THE PMOP, and dropping it is a silent
+            # wrong answer rather than an imprecision. Measured:
+            #
+            #     split(/,/, "a,b,c")   3 fields
+            #     split(/;/, "a,b,c")   1 field
+            #
+            # Without the pattern both emit an IDENTICAL graph and hash-cons to
+            # ONE node -- so whichever the consumer lowers, the other is wrong.
+            # `precomp` is the same accessor the match and subst handlers use.
+            my $pattern = $op->precomp;
+            die "GAP: `split` with a runtime-interpolated pattern is not yet"
+              . " lowered -- the pattern is not a compile-time literal\n"
+                unless defined $pattern;
+
+            my $pat_node = $factory->make('Constant',
+                value      => $pattern,
+                const_type => 'regex',
+                stamp      => SoN::IR::Stamp->new(type => 'Regex'));
+
+            my $node = $factory->make('Call',
+                inputs        => [$pat_node, @operands],
+                dispatch_kind => 'builtin',
+                name          => 'split',
+                stamp         => SoN::IR::Stamp->new(type => 'List'));
+
+            # A List OF UNKNOWN ARITY. Measured: split(/,/,"a,b,c") is 3
+            # fields, split(/,/,"") is 0, split(//,"ab") is 2 -- the count
+            # depends on the SUBJECT at runtime, so no narrower stamp is
+            # honest and Count over this node is the only way to ask.
+            #
+            # BIND THE TARGET, or the split runs and its result goes nowhere --
+            # a silent drop, which is worse than the refusal this replaces.
+            $sim->define($targ, $node);
+            $sim->push_node($node);
+            return ($op->next, 'handled');
         }
 
         if ($name eq 'mapstart' || $name eq 'grepstart') {
