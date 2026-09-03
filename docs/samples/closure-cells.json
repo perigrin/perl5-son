@@ -1,0 +1,80 @@
+{
+  "_comment": "PROPOSED wire shape for closure captures -- NOT emitted by the producer yet. Source is the three cases below; every node is hand-written to chalk's requested contract so the disagreement surfaces on one sample rather than five CVs.",
+  "_source": "my $n=5; my $get = sub { $n + 1 };  my $c=0; my $inc = sub { $c = $c + 1 }; my $rd = sub { $c };  print $get->(), $inc->(), $rd->();",
+  "_oracle": "perl prints 611. ORDER IS LOAD-BEARING: $rd->() is 1 because $inc->() already ran and its CellWrite is visible. Calling the three again prints 622 -- $inc mutates per call. A design that snapshots the value at capture time gives 610 on the first line and 610 again on the second, which is the failure this sample exists to catch.",
+  "methods": {
+    "main::__PROGRAM__": {
+      "nodes": [
+        {"id": 0, "op": "Start", "inputs": []},
+        {"id": 1, "op": "MemStart", "inputs": []},
+
+        {"_case": "1. READ-ONLY capture. captured_written=false lets chalk skip the cell entirely and pass the value.",
+         "id": 2, "op": "Constant", "inputs": [], "stamp": "Int", "fields": {"const_type": "integer", "value": "5"}},
+        {"id": 3, "op": "MakeCell", "inputs": [2, 1], "stamp": "Int",
+         "fields": {"cell_name": "$n", "captured_written": false}},
+
+        {"_case": "2+3. WRITTEN and SHARED. One cell, two AnonSubs take the SAME reference (#5) on their inputs.",
+         "id": 4, "op": "Constant", "inputs": [], "stamp": "Int", "fields": {"const_type": "integer", "value": "0"}},
+        {"id": 5, "op": "MakeCell", "inputs": [4, 3], "stamp": "Int",
+         "fields": {"cell_name": "$c", "captured_written": true}},
+
+        {"id": 6, "op": "AnonSub", "inputs": [3], "stamp": "CodeRef",
+         "fields": {"name": "main::__PROGRAM__::__ANON__:3:11"}},
+        {"id": 7, "op": "AnonSub", "inputs": [5], "stamp": "CodeRef",
+         "fields": {"name": "main::__PROGRAM__::__ANON__:5:11"}},
+        {"id": 8, "op": "AnonSub", "inputs": [5], "stamp": "CodeRef",
+         "fields": {"name": "main::__PROGRAM__::__ANON__:6:10"}},
+
+        {"id": 9,  "op": "Call", "inputs": [6], "stamp": "Int", "fields": {"dispatch_kind": "direct", "name": "main::__PROGRAM__::__ANON__:3:11"}},
+        {"id": 10, "op": "Call", "inputs": [7], "stamp": "Int", "fields": {"dispatch_kind": "direct", "name": "main::__PROGRAM__::__ANON__:5:11"}},
+        {"id": 11, "op": "Call", "inputs": [8], "stamp": "Int", "fields": {"dispatch_kind": "direct", "name": "main::__PROGRAM__::__ANON__:6:10"}},
+
+        {"id": 12, "op": "Coerce", "inputs": [9],  "stamp": "Str", "fields": {"from_repr": "Int", "to_repr": "Str"}},
+        {"id": 13, "op": "Coerce", "inputs": [10], "stamp": "Str", "fields": {"from_repr": "Int", "to_repr": "Str"}},
+        {"id": 14, "op": "Coerce", "inputs": [11], "stamp": "Str", "fields": {"from_repr": "Int", "to_repr": "Str"}},
+        {"id": 15, "op": "Print", "control_in": 0, "inputs": [12, 13, 14], "stamp": "Scalar"},
+        {"id": 16, "op": "Constant", "inputs": [], "stamp": "Undef", "fields": {"const_type": "undef", "value": null}},
+        {"id": 17, "op": "Return", "control_in": 15, "inputs": [16]}
+      ]
+    },
+
+    "main::__PROGRAM__::__ANON__:3:11": {
+      "_comment": "sub { $n + 1 } -- read-only. The cell arrives as a Parameter; CellRead is on the memory chain even here, because whether it CAN be elided is chalk's call, not the producer's.",
+      "nodes": [
+        {"id": 0, "op": "Start", "inputs": []},
+        {"id": 1, "op": "MemStart", "inputs": []},
+        {"id": 2, "op": "Parameter", "inputs": [], "stamp": "Int", "fields": {"index": 0, "name": "$n", "is_cell": true}},
+        {"id": 3, "op": "CellRead", "inputs": [2, 1], "stamp": "Int"},
+        {"id": 4, "op": "Constant", "inputs": [], "stamp": "Int", "fields": {"const_type": "integer", "value": "1"}},
+        {"id": 5, "op": "Add", "inputs": [3, 4], "stamp": "Int"},
+        {"id": 6, "op": "Return", "control_in": 0, "inputs": [5]}
+      ]
+    },
+
+    "main::__PROGRAM__::__ANON__:5:11": {
+      "_comment": "sub { $c = $c + 1 } -- reads THEN writes the same cell. CellWrite yields a new memory version (#6), which is what makes the sharing visible to the other closure and to the outer scope.",
+      "nodes": [
+        {"id": 0, "op": "Start", "inputs": []},
+        {"id": 1, "op": "MemStart", "inputs": []},
+        {"id": 2, "op": "Parameter", "inputs": [], "stamp": "Int", "fields": {"index": 0, "name": "$c", "is_cell": true}},
+        {"id": 3, "op": "CellRead", "inputs": [2, 1], "stamp": "Int"},
+        {"id": 4, "op": "Constant", "inputs": [], "stamp": "Int", "fields": {"const_type": "integer", "value": "1"}},
+        {"id": 5, "op": "Add", "inputs": [3, 4], "stamp": "Int"},
+        {"id": 6, "op": "CellWrite", "control_in": 0, "inputs": [2, 5, 1], "stamp": "Int"},
+        {"id": 7, "op": "Return", "control_in": 6, "inputs": [5]}
+      ]
+    },
+
+    "main::__PROGRAM__::__ANON__:6:10": {
+      "_comment": "sub { $c } -- SAME cell as the one above. Its CellRead must observe the other closure's CellWrite; that is the case a value-on-inputs design gets wrong.",
+      "nodes": [
+        {"id": 0, "op": "Start", "inputs": []},
+        {"id": 1, "op": "MemStart", "inputs": []},
+        {"id": 2, "op": "Parameter", "inputs": [], "stamp": "Int", "fields": {"index": 0, "name": "$c", "is_cell": true}},
+        {"id": 3, "op": "CellRead", "inputs": [2, 1], "stamp": "Int"},
+        {"id": 4, "op": "Return", "control_in": 0, "inputs": [3]}
+      ]
+    }
+  },
+  "classes": {}
+}
