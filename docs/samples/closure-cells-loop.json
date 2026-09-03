@@ -17,9 +17,9 @@
         {"id": 6, "op": "Proj", "inputs": [5], "fields": {"index": 0, "_note": "body edge"}},
         {"id": 7, "op": "Proj", "inputs": [5], "fields": {"index": 1, "_note": "exit edge"}},
 
-        {"_note": "the induction variable, a normal loop Phi",
-         "id": 8, "op": "Phi", "inputs": [3, 14], "stamp": "Int"},
-        {"id": 9, "op": "Phi", "inputs": [1, 12], "stamp": "Unknown", "fields": {"_note": "memory Phi across the back edge"}},
+        {"_note": "the induction variable, a normal loop Phi. `region` names the LOOP (#5), not the post-loop Region (#16) -- verified against a real emitted loop graph, where both Phis carry region=<Loop id>. A Phi without it is not attached to a merge from the consumer's side.",
+         "id": 8, "op": "Phi", "inputs": [3, 14], "stamp": "Int", "fields": {"region": 5}},
+        {"id": 9, "op": "Phi", "inputs": [1, 12], "stamp": "Unknown", "fields": {"region": 5, "_note": "memory Phi across the back edge: entry memory merged with the in-body version"}},
 
         {"_note": "ONE NODE, THREE EXECUTIONS. Inside the body, on the loop's memory chain, so each iteration allocates a fresh cell. This placement IS the per-iteration semantics.",
          "id": 10, "op": "MakeCell", "control_in": 6, "inputs": [8, 9], "stamp": "Int",
