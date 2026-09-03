@@ -39,11 +39,11 @@
     },
 
     "main::__PROGRAM__::__ANON__:3:11": {
-      "_comment": "sub { $n + 1 } -- read-only. The cell arrives as a Parameter; CellRead is on the memory chain even here, because whether it CAN be elided is chalk's call, not the producer's.",
+      "_comment": "sub { $n + 1 } -- read-only. The cell arrives as a CellParam -- a DISTINCT node kind, not Parameter with a flag: a capture is not positional, comes from no argument list, and has no declared index. A consumer that has not learned about captures GAPs on an unknown op rather than silently treating a cell as argument 0.; CellRead is on the memory chain even here, because whether it CAN be elided is chalk's call, not the producer's.",
       "nodes": [
         {"id": 0, "op": "Start", "inputs": []},
         {"id": 1, "op": "MemStart", "inputs": []},
-        {"id": 2, "op": "Parameter", "inputs": [], "stamp": "Int", "fields": {"index": 0, "name": "$n", "is_cell": true}},
+        {"id": 2, "op": "CellParam", "inputs": [], "stamp": "Int", "fields": {"index": 0, "name": "$n"}},
         {"id": 3, "op": "CellRead", "inputs": [2, 1], "stamp": "Int"},
         {"id": 4, "op": "Constant", "inputs": [], "stamp": "Int", "fields": {"const_type": "integer", "value": "1"}},
         {"id": 5, "op": "Add", "inputs": [3, 4], "stamp": "Int"},
@@ -56,7 +56,7 @@
       "nodes": [
         {"id": 0, "op": "Start", "inputs": []},
         {"id": 1, "op": "MemStart", "inputs": []},
-        {"id": 2, "op": "Parameter", "inputs": [], "stamp": "Int", "fields": {"index": 0, "name": "$c", "is_cell": true}},
+        {"id": 2, "op": "CellParam", "inputs": [], "stamp": "Int", "fields": {"index": 0, "name": "$c"}},
         {"id": 3, "op": "CellRead", "inputs": [2, 1], "stamp": "Int"},
         {"id": 4, "op": "Constant", "inputs": [], "stamp": "Int", "fields": {"const_type": "integer", "value": "1"}},
         {"id": 5, "op": "Add", "inputs": [3, 4], "stamp": "Int"},
@@ -70,7 +70,7 @@
       "nodes": [
         {"id": 0, "op": "Start", "inputs": []},
         {"id": 1, "op": "MemStart", "inputs": []},
-        {"id": 2, "op": "Parameter", "inputs": [], "stamp": "Int", "fields": {"index": 0, "name": "$c", "is_cell": true}},
+        {"id": 2, "op": "CellParam", "inputs": [], "stamp": "Int", "fields": {"index": 0, "name": "$c"}},
         {"id": 3, "op": "CellRead", "inputs": [2, 1], "stamp": "Int"},
         {"id": 4, "op": "Return", "control_in": 0, "inputs": [3]}
       ]

@@ -1,0 +1,55 @@
+{
+  "_comment": "PROPOSED wire shape for a PER-ITERATION capture -- NOT emitted by the producer yet. Companion to closure-cells.json; this is the case chalk flagged as least certain, where ONE MakeCell node executes three times.",
+  "_source": "my @subs; for my $i (1..3) { push @subs, sub { $i } }  -- see closure-cells-loop.pl",
+  "_oracle": "perl prints 1,2,3 then 1,2,3. THE DISCRIMINATOR IS NOT REPETITION -- both a per-site and a per-execution design are stable across the two lines. It is the VALUES: a per-SITE cell gives 3,3,3 (last iteration wins). The writable variant in the .pl separates them twice over: 1,2,3 then 2,3,4, where per-site gives 4,4,4.",
+  "_the_question": "MakeCell is inside the loop body and on the loop's memory chain, so ONE NODE has THREE EXECUTIONS and yields three distinct cells. That is the distinction that breaks AnonSub's name-as-identity model: the three AnonSub instances share a name and a site but must not share a cell. The wire says this by putting MakeCell under the loop's Proj rather than before the Loop.",
+
+  "methods": {
+    "main::__PROGRAM__": {
+      "nodes": [
+        {"id": 0, "op": "Start", "inputs": []},
+        {"id": 1, "op": "MemStart", "inputs": []},
+        {"id": 2, "op": "ArrayLiteral", "inputs": [], "stamp": "Array", "fields": {"_note": "my @subs"}},
+
+        {"id": 3, "op": "Constant", "inputs": [], "stamp": "Int", "fields": {"const_type": "integer", "value": "1"}},
+        {"id": 4, "op": "Constant", "inputs": [], "stamp": "Int", "fields": {"const_type": "integer", "value": "3"}},
+        {"id": 5, "op": "Loop", "inputs": [0]},
+        {"id": 6, "op": "Proj", "inputs": [5], "fields": {"index": 0, "_note": "body edge"}},
+        {"id": 7, "op": "Proj", "inputs": [5], "fields": {"index": 1, "_note": "exit edge"}},
+
+        {"_note": "the induction variable, a normal loop Phi",
+         "id": 8, "op": "Phi", "inputs": [3, 14], "stamp": "Int"},
+        {"id": 9, "op": "Phi", "inputs": [1, 12], "stamp": "Unknown", "fields": {"_note": "memory Phi across the back edge"}},
+
+        {"_note": "ONE NODE, THREE EXECUTIONS. Inside the body, on the loop's memory chain, so each iteration allocates a fresh cell. This placement IS the per-iteration semantics.",
+         "id": 10, "op": "MakeCell", "control_in": 6, "inputs": [8, 9], "stamp": "Int",
+         "fields": {"cell_name": "$i", "captured_written": false}},
+
+        {"id": 11, "op": "AnonSub", "inputs": [10], "stamp": "CodeRef",
+         "fields": {"name": "main::__PROGRAM__::__ANON__:8:37"}},
+        {"id": 12, "op": "Call", "control_in": 10, "inputs": [2, 11], "stamp": "Array",
+         "fields": {"dispatch_kind": "builtin", "name": "push", "_note": "advances memory"}},
+
+        {"id": 13, "op": "Constant", "inputs": [], "stamp": "Int", "fields": {"const_type": "integer", "value": "1"}},
+        {"id": 14, "op": "Add", "inputs": [8, 13], "stamp": "Int"},
+        {"id": 15, "op": "NumGt", "inputs": [4, 8], "stamp": "Boolean", "fields": {"_note": "continuation"}},
+        {"id": 16, "op": "Region", "inputs": [7]},
+
+        {"id": 17, "op": "Constant", "inputs": [], "stamp": "Undef", "fields": {"const_type": "undef", "value": null}},
+        {"id": 18, "op": "Return", "control_in": 16, "inputs": [17]}
+      ]
+    },
+
+    "main::__PROGRAM__::__ANON__:8:37": {
+      "_comment": "sub { $i } -- one BODY graph shared by all three closures, which is correct: the body is the same code. What differs per instance is the CELL it is handed, which is why the cell must be an input to AnonSub and not baked into the body.",
+      "nodes": [
+        {"id": 0, "op": "Start", "inputs": []},
+        {"id": 1, "op": "MemStart", "inputs": []},
+        {"id": 2, "op": "CellParam", "inputs": [], "stamp": "Int", "fields": {"index": 0, "name": "$i"}},
+        {"id": 3, "op": "CellRead", "inputs": [2, 1], "stamp": "Int"},
+        {"id": 4, "op": "Return", "control_in": 0, "inputs": [3]}
+      ]
+    }
+  },
+  "classes": {}
+}
