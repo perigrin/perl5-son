@@ -126,4 +126,22 @@ subtest 'a runtime pattern refuses' => sub {
     unlike $err, qr/INTERNAL/, 'no crash';
 };
 
+# SPLIT MUST NOT DRAIN THE WHOLE STACK. The first version popped to empty,
+# which took operands belonging to an ENCLOSING construct: a postfix
+# `EXPR for split ...` had its foreach bounds swallowed and then refused with
+# "foreach over an empty list" -- perl's own t/comp/bproto.t, and a refusal
+# pointing at a construct that was never the problem.
+#
+# Same class as the pop_to_mark bug that consumed a mark it did not own. The
+# fix is to pop exactly what split pushed: subject and limit, always two, since
+# perl supplies a default limit even where the source writes none.
+subtest 'a split inside an enclosing construct keeps its neighbours operands' => sub {
+    my (undef, $err) = wire(
+        'sub t { print $_[0] } t($_) for split /,/, "a,b";', 'split_postfix');
+    unlike $err, qr/INTERNAL/, 'no crash';
+    unlike $err, qr/foreach over an empty list/,
+        'the foreach still has its bounds -- split did not eat them';
+    unlike $err, qr/GAP/, 'and the whole statement translates';
+};
+
 done_testing;

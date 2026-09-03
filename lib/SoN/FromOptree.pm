@@ -3333,8 +3333,20 @@ class SoN::FromOptree 0.01 {
             # Drain the operands split pushed. The subject is the last one; a
             # limit constant may precede it. Nothing here needs a mark, which
             # is why the 'mark' registration was the original bug.
+            # POP EXACTLY WHAT SPLIT PUSHED, never the whole stack. Draining
+            # to empty took operands belonging to an ENCLOSING construct: a
+            # postfix `EXPR for split ...` had its foreach bounds swallowed and
+            # then refused with "foreach over an empty list", which is perl's
+            # own t/comp/bproto.t. Same class as the pop_to_mark bug that took
+            # a mark it did not own.
+            #
+            # Measured: split always arrives with the SUBJECT and a LIMIT on
+            # the stack -- perl supplies a default limit even where the source
+            # writes none -- so the count is 2 regardless of the 2-arg or
+            # 3-arg spelling. The pattern is on the PMOP, not the stack.
+            my $want = $sim->stack_depth >= 2 ? 2 : $sim->stack_depth;
             my @operands;
-            unshift @operands, $sim->pop_node while $sim->stack_depth > 0;
+            unshift @operands, $sim->pop_node for 1 .. $want;
 
             # THE PATTERN RIDES ON THE PMOP, and dropping it is a silent
             # wrong answer rather than an imprecision. Measured:
