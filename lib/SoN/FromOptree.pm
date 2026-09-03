@@ -2052,6 +2052,19 @@ class SoN::FromOptree 0.01 {
         open close binmode eof fileno readline seek tell truncate
     );
 
+    # Ops whose effect is on GLOBAL STATE rather than on a value, and which
+    # map to a generic Call. perl does not compile these in void context even
+    # when their result is discarded -- `require Foo;` is want=SCALAR -- so the
+    # OPf_WANT_VOID gate that threads other effectful calls misses them, and
+    # they are dead-code-eliminated.
+    #
+    # `use X LIST` IS EXACTLY `BEGIN { require X; X->import(LIST) }` -- verified,
+    # the two compile to byte-identical exec chains. So `use` needs no entry and
+    # no node: it is these same ops, already run before B::SoN is invoked,
+    # leaving nothing in the optree. Only the RUNTIME spelling reaches us, and
+    # then the `import` half is an ordinary method call that already lowers.
+    my %GLOBAL_STATE_BUILTIN = map { $_ => 1 } qw(require dofile);
+
     my %UNBUILT_OP_GAP = (
         enterwrite => "GAP: `write` invokes a format, which is a separate CV in"
                     . " the glob's FORM slot; compiling it needs that body"
@@ -5470,6 +5483,30 @@ class SoN::FromOptree 0.01 {
                     my $lvalue    = ($op->flags & 64);         # OPf_STACKED (store form)
                     my $effectful = !$opmap->is_pure($name) || $lvalue;
                     $void_effect_call = $void && $effectful;
+
+                    # A GLOBAL-STATE OP IS AN EFFECT IN ANY CONTEXT, and
+                    # keying on OPf_WANT_VOID silently dropped it. perl
+                    # compiles `require Foo;` as want=SCALAR, not void, so the
+                    # gate above is false, nothing threads the node on control,
+                    # and DCE removes it. Measured -- `require Exporter; my
+                    # $x=1; print $x` emitted Start, Constant, Print, Return
+                    # with no require in it anywhere and no diagnostic.
+                    #
+                    # `print` escaped this ONLY because it has its own node
+                    # type in %STATEMENT_EFFECT_OPS; every global-state op that
+                    # maps to a GENERIC Call was exposed.
+                    #
+                    # The result is not the point and cannot be relied on:
+                    #
+                    #     my $r = require POSIX;   POSIX::SigRt=HASH(...)
+                    #     my $r = require POSIX;   1     already loaded
+                    #
+                    # so the value is not a function of the inputs. What must
+                    # survive is the EFFECT -- %INC and the symbol table -- on
+                    # which a later `Foo->new` depends with no data edge to say
+                    # so. That dependency is what the memory chain is for.
+                    $void_effect_call = 1
+                        if $GLOBAL_STATE_BUILTIN{$name} && !$void;
                 }
 
                 # Perl `/` is always floating-point division, so an Int operand
@@ -5522,6 +5559,16 @@ class SoN::FromOptree 0.01 {
                 if ($void_effect_call) {
                     $node->set_control_in($sim->control);
                     $sim->set_control($node);
+                }
+
+                # A GLOBAL-STATE OP ALSO ADVANCES MEMORY, and control alone is
+                # not enough. `require X; X->import(...)` is the runtime
+                # spelling of `use X`, and the import MUST NOT float above the
+                # require -- calling POSIX->import before POSIX is loaded is a
+                # different program. Only a shared chain expresses an ordering
+                # that no data edge carries.
+                if ($GLOBAL_STATE_BUILTIN{$name} && defined $sim->memory) {
+                    $sim->set_memory($node);
                 }
 
                 # Rebind the target to the result so a later read sees the new
