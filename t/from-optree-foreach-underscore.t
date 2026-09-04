@@ -1,4 +1,4 @@
-# ABOUTME: `for (LIST)` iterates $_ -- the package scalar, keyed main::$_.
+# ABOUTME: `for (LIST)` iterates $_ -- the package scalar, keyed $main::_.
 # ABOUTME: OPpITER_DEF marks the implicit form; the stack name node is not $_.
 use 5.42.0;
 use utf8;
@@ -33,7 +33,7 @@ sub nodes ( $w ) {
 #
 # The name node is not needed. perl marks the implicit form on the op itself:
 # OPpITER_DEF (private 0x8), measured 0x8 for `for (1..3)` and 0x0 for
-# `for $main::t (1..3)`. The iterator is then keyed main::$_, exactly as the
+# `for $main::t (1..3)`. The iterator is then keyed $main::_, exactly as the
 # match handler and the s/// handler key it.
 subtest 'an implicit $_ foreach translates' => sub {
     my ( $w, $err ) = translate( 'my $n = 0; for (1..3) { $n = $n + 1 } print $n;',
@@ -99,7 +99,7 @@ subtest 'for (@a) iterates the array with $_ bound to each element' => sub {
 
     # THE BODY MUST READ THE ELEMENT. `for my $x (@a)` binds $x to a
     # Subscript(arr, i) element copy; $_ has to be bound under ITS key
-    # (main::$_) or the body's read resolves to an unstamped EntryDef and the
+    # ($main::_) or the body's read resolves to an unstamped EntryDef and the
     # loop-carried Add reaches the back-edge with nothing to type it.
     my $ns = nodes($w);
     my %by = map { $_->{id} => $_ } $ns->@*;

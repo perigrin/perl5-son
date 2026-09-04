@@ -30,7 +30,7 @@ sub nodes ( $w ) {
 #
 # It does not need one. $_ is the package scalar main::_, an ordinary SSA
 # binding in the scope map, and the MATCH handler beside this one already
-# resolves it that way -- keyed 'main::$_', sigil included, because `$_` and
+# resolves it that way -- keyed '$main::_', sigil included, because `$_` and
 # `@_` share a glob name. Reads of $_ have always worked (a match, a bare
 # `print`, a builtin defaulting to it); only the WRITE was refused.
 subtest 's/// on an implicit $_ translates' => sub {

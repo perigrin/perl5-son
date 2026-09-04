@@ -316,7 +316,7 @@ subtest 'an implicit $_ foreach lowers' => sub {
     # Neither is a gap any more. $_ has no name ON THE STACK to key -- the node
     # there resolves to an ArgsSource, since `$_` and `@_` share the glob name
     # `_` -- but perl marks the form on the OP: OPpITER_DEF, private 0x8. The
-    # iterator is then keyed main::$_, exactly as the match and s/// handlers
+    # iterator is then keyed $main::_, exactly as the match and s/// handlers
     # key it.
     is(translate_dies('sub { my $s = 0; for (1..3) { $s = $s + 1 } $s }'),
         undef, 'for (1..3) lowers');

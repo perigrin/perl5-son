@@ -60,4 +60,28 @@ subtest 'reading a package scalar in interpolation still lowers' => sub {
     like $out, qr/"op"\s*:\s*"Concat"/, 'the interpolation is in the graph';
 };
 
+# THE .= FORM HAS A TARG AND STILL DROPS. Gating on a missing targ let this
+# row through: the package `.=` carries targ=3, but that is a SCRATCH slot, not
+# the destination.
+#
+#   pkg  $g = $g . "x"   targ=0 priv=0x00 flags=0x46  STACKED
+#   pkg  $g .= "x"       targ=3 priv=0x40 flags=0x46  STACKED
+#   lex  $l .= "x"       targ=1 priv=0x50 flags=0x06  TARGMY
+#
+# OPf_STACKED is the discriminating property; a lexical target is never
+# stacked. Measured before the re-gate:
+#
+#     our $g = "a"; $g .= "x"; print "$g\n";
+#       perl : ax
+#       graph: string constants ['a', "\n"] -- no "x" anywhere
+subtest 'a package-target .= also refuses' => sub {
+    my $err = translate_err(qq{our \$g = "a";\n\$g .= "x";\nprint qq{\$g\\n};\n});
+    like $err, qr/GAP: multiconcat storing into a package/, 'it refuses' or diag $err;
+};
+
+subtest 'a lexical .= still lowers' => sub {
+    my $out = translate_out(qq{my \$l = "a";\n\$l .= "x";\nprint qq{\$l\\n};\n});
+    like $out, qr/"value"\s*:\s*"x"/, 'the appended part is in the graph';
+};
+
 done_testing;

@@ -52,7 +52,7 @@ subtest 'an implicit $_ s/// rebinds $_, and does not drop the substitution' => 
 # This refusal was reachable all along but the count-context GAP fired first
 # and hid it. With count context lowered, it is the only thing standing between
 # a package target and a SILENT DROP: _subst_target keyed a missing targ as
-# 'main::$_', which bound the wrong variable and left no RegexSubst in the
+# '$main::_', which bound the wrong variable and left no RegexSubst in the
 # graph at all. Measured -- `our $g="aaa"; $main::g =~ s/a/b/g;` printed the
 # folded "aaa" where perl prints "bbb".
 subtest 'package/global target GAPs loudly' => sub {

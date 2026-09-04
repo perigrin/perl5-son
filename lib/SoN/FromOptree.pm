@@ -2849,7 +2849,7 @@ class SoN::FromOptree 0.01 {
             # Sigil-qualified, as the scalar site is: one stash can hold
             # `$g` and `@g` as unrelated variables.
             my $agg_sigil = $op->name eq 'rv2hv' ? '%' : '@';
-            my $key      = $gv->STASH->NAME . '::' . $agg_sigil . $gv_name;
+            my $key      = _stash_name_key($agg_sigil, $gv->STASH->NAME, $gv_name);
             my $existing = $sim->lookup($key);
 
             # `local @x` restores exactly as `local $g` does -- same key, sigil
@@ -3573,7 +3573,7 @@ class SoN::FromOptree 0.01 {
                     die "GAP: `local` inside a loop body is not yet lowered --"
                       . " it restores once per ITERATION, not at loop exit\n"
                         if $ctx->{in_loop_body};
-                    my $key = $gv->STASH->NAME . '::$' . $gv->NAME;
+                    my $key = _stash_name_key('$', $gv->STASH->NAME, $gv->NAME);
                     push $ctx->{local_saves}->@*,
                         { key => $key, node => $sim->lookup($key) };
                 }
@@ -3582,7 +3582,7 @@ class SoN::FromOptree 0.01 {
                 # in one stash, and `$_` vs `@_` is the case that bites --
                 # a name-only key bound the match subject and the argument
                 # array to the same slot.
-                my $key       = $gv->STASH->NAME . '::$' . $gv_name;
+                my $key       = _stash_name_key('$', $gv->STASH->NAME, $gv_name);
                 my $is_deref  = ($op->private & 48);            # OPpDEREF
                 my $is_lvalue = ($op->flags & 32) && !$is_deref; # OPf_MOD
                 my $existing  = $sim->lookup($key);
@@ -3722,7 +3722,7 @@ class SoN::FromOptree 0.01 {
                 # name-only key bound them to the same slot -- which then
                 # hash-consed to one node feeding both a `shift @_` and this
                 # match.
-                my $key = 'main::$_';
+                my $key = '$main::_';
                 $target = $sim->lookup($key);
                 unless ($target) {
                     $target = $factory->make('EntryDef',
@@ -4034,7 +4034,7 @@ class SoN::FromOptree 0.01 {
         #     mapwhile(other-> BODY), ... goto mapwhile
         #
         # so the input is pop_to_mark and the body is mapwhile->other. `$_` is
-        # `gvsv[*_]`, keyed 'main::$_' exactly as an implicit foreach iterator.
+        # `gvsv[*_]`, keyed '$main::_' exactly as an implicit foreach iterator.
         # SPLIT PUSHES NO MARK IN ANY FORM, and OpMap registers it as a 'mark'
         # pop -- so pop_to_mark found none and died "No mark on mark stack", an
         # INTERNAL ERROR where a named refusal belongs. Measured on 5.42.0,
@@ -4180,7 +4180,7 @@ class SoN::FromOptree 0.01 {
             # sK for a scalar reading, lK for a list one -- and the accumulator
             # push needs it to decide between the result list and its count.
             _translate_foreach_array($cv, $op, $sim, $factory, $opmap,
-                $ctx->{visited}, $input, 'main::$_',
+                $ctx->{visited}, $input, '$main::_',
                 scalar $while_op->other, $word, $op);
 
             # The whole construct is consumed: resume after the loop.
@@ -4983,7 +4983,7 @@ class SoN::FromOptree 0.01 {
                     # and `for (@a)` is misread as a two-element shape
                     # (measured: [ArrayRef, ArgsSource]).
                     pop $bounds->@* if !$name_node && $bounds->@* > 1;
-                    $iter_key = 'main::$_';
+                    $iter_key = '$main::_';
                     goto ITER_KEYED;
                 }
 
@@ -4992,12 +4992,15 @@ class SoN::FromOptree 0.01 {
                     unless $name_node
                         && $name_node->isa('SoN::IR::Node::Constant')
                         && defined $name_node->value;
-                # KEYED EXACTLY AS _stash_key SPELLS IT -- stash, then '::',
-                # then the SIGIL, then the name -- because the body's reads of
-                # $t resolve through that same spelling. A near-miss here binds
-                # the iterator under a name nothing looks up.
+                # KEYED EXACTLY AS _stash_key SPELLS IT -- the SIGIL, then the
+                # stash, then '::', then the name ($main::t, as perl writes it)
+                # -- because the body's reads of $t resolve through that same
+                # spelling. A near-miss here binds the iterator under a name
+                # nothing looks up, which is what a partial respelling of these
+                # sites did: this was the fifth hand-built key, and the loop
+                # body silently stopped seeing its iterator.
                 my $stash = eval { $cv->GV->STASH->NAME } // 'main';
-                $iter_key = $stash . '::$' . $name_node->value;
+                $iter_key = _stash_name_key('$', $stash, $name_node->value);
                 ITER_KEYED: ;
             }
             # A LIST LITERAL: every popped value is an element. Wrap and take
@@ -5191,27 +5194,35 @@ class SoN::FromOptree 0.01 {
             $acc //= $mkstr->('');   # degenerate: no args and no non-empty segment
 
             my $targ = $op->targ;
-            # A STACKED multiconcat WITH NO TARG WRITES TO A PACKAGE SCALAR.
-            # perl fuses `$g = $g . "x"` into the multiconcat itself -- there is
-            # no sassign to catch -- and puts the destination SV on the stack:
+            # A STACKED multiconcat WRITES TO A PACKAGE SCALAR. perl fuses
+            # `$g = $g . "x"` into the multiconcat itself -- there is no sassign
+            # to catch -- and puts the destination SV on the stack:
             #
-            #   package target:  targ=0 private=0x00 flags=0x46 (STACKED)
-            #   lexical target:  targ=1 private=0x10 (OPpTARGET_MY)
+            #   pkg  $g = $g . "x"   targ=0 priv=0x00 flags=0x46  STACKED
+            #   pkg  $g .= "x"       targ=3 priv=0x40 flags=0x46  STACKED
+            #   lex  $l .= "x"       targ=1 priv=0x50 flags=0x06  TARGMY
             #
-            # targ 0 here is not "no target", it is "the target is not a pad
-            # slot". Storing with define(0, ...) wrote a binding nothing reads,
-            # so the assignment silently vanished:
+            # OPf_STACKED IS THE DISCRIMINATOR, NOT A MISSING TARG. The package
+            # `.=` form HAS a targ (3), but it is a SCRATCH slot rather than the
+            # destination; gating on !$targ let that row through to store into
+            # the scratch pad while the global went unwritten. A lexical target
+            # is never stacked -- it carries OPpTARGET_MY instead.
             #
-            #   our $g = shift(@ARGV) // "aaa"; $g = $g . "x"; print "$g\n";
-            #     perl : aaax
-            #     graph: no Concat for the append at all -- prints "aaa"
+            # Storing to a slot nothing reads made the assignment vanish:
             #
-            # Same root cause as the s/// package-target drop, and refused the
-            # same way until package-scalar stores are modelled.
-            if (!$targ && ($op->flags & 64)) {   # OPf_STACKED
+            #   our $g = "a"; $g .= "x"; print "$g\n";
+            #     perl : ax
+            #     graph: string constants ['a', "\n"] -- no "x" anywhere
+            #
+            # Same root cause as the s/// package-target drop: the SSA scope map
+            # is one environment keyed by string, and package reads already bind
+            # through _stash_key. Only the ops perl FUSES bypass it by assuming
+            # the destination is a pad slot. Refused until they key the same way.
+            if ($op->flags & 64) {   # OPf_STACKED
                 die "GAP: multiconcat storing into a package/global scalar (the"
                   . " destination is on the stack, not a pad slot) not yet"
-                  . " lowered -- defining slot 0 drops the assignment\n";
+                  . " lowered -- storing to the op's targ drops the"
+                  . " assignment\n";
             }
             # OPpLVAL_INTRO (0x80): a new lexical (`my $c = qq{...}`). The main
             # walker wraps the pad slot in a VarDecl so the declaration is
@@ -6866,7 +6877,7 @@ class SoN::FromOptree 0.01 {
     # not to the induction value itself. for/foreach are aliases (same optree),
     # so both spellings reach here. zhi 019f5da9.
     # $iter_key names the iteration variable in the scope map, as in the range
-    # form: a pad targ for a lexical, `main::$_` for the implicit form, which
+    # form: a pad targ for a lexical, `$main::_` for the implicit form, which
     # has no targ at all. Defaults to the op's targ so existing callers stand.
     # $body_start overrides where the body begins, and $collect asks for a
     # ListAppend accumulator. Both exist for map/grep, which are loops with the
@@ -8814,7 +8825,7 @@ class SoN::FromOptree 0.01 {
     # *main::_, so it is modeled as a EntryDef (a real array source), never a
     # string Constant.
     # Scope keys are MIXED: a pad slot is an integer, a package variable is a
-    # qualified name ('main::$_'). A numeric sort over both warns and orders
+    # qualified name ('$main::_'). A numeric sort over both warns and orders
     # the names arbitrarily -- latent before sigil-qualified keys made package
     # variables common, and codegen must be DETERMINISTIC. Numbers first in
     # numeric order, then names in string order.
@@ -8870,8 +8881,23 @@ class SoN::FromOptree 0.01 {
         );
     }
 
+    # _stash_name_key($sigil, $stash, $name) -- the same spelling from raw parts,
+    # for the sites that key a package variable BEFORE a node exists (a gvsv
+    # read, an aggregate read, a foreach iterator named by a constant). Five
+    # sites spelled this by hand and a partial respelling desynchronised them:
+    # the foreach iterator bound under a name the body's reads did not look up,
+    # and the loop silently stopped seeing its own variable. One speller now.
+    sub _stash_name_key ($sigil, $stash, $name) {
+        return $sigil . $stash . '::' . $name;
+    }
+
     sub _stash_key ($node) {
-        return $node->stash_name . '::' . $node->sigil . $node->var_name;
+        # SPELLED AS PERL SPELLS IT: $main::g, not main::$g. The key is
+        # internal (the wire carries stash_name/sigil/var_name as separate
+        # fields), so this is a readability fix for traces and diagnostics, not
+        # a correctness one -- but a key nobody can paste into perl is a key
+        # that misleads whoever is reading a scope dump.
+        return $node->sigil . $node->stash_name . '::' . $node->var_name;
     }
 
     # `@_` IS AN ARRAY, and that is true structurally -- for every sub, with no
@@ -9044,7 +9070,7 @@ class SoN::FromOptree 0.01 {
         my $targ      = $op->targ;
         # NO TARG DOES NOT MEAN $_. It means the target is not a pad slot, and
         # that covers two different things: the implicit $_, and a PACKAGE
-        # target whose GV is on the stack. Defaulting both to 'main::$_' bound
+        # target whose GV is on the stack. Defaulting both to '$main::_' bound
         # the wrong variable and the real substitution vanished from the graph
         # entirely -- a silent DROP, not merely a wrong stamp. Measured:
         #
@@ -9060,7 +9086,7 @@ class SoN::FromOptree 0.01 {
               . " not a pad slot) not yet lowered -- binding it as \$_ drops"
               . " the substitution\n";
         }
-        my $scope_key = $targ || 'main::$_';
+        my $scope_key = $targ || '$main::_';
         my $target    = $sim->lookup($scope_key);
         if (!$target) {
             $target = $targ
