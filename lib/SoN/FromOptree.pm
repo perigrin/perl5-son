@@ -4264,6 +4264,25 @@ class SoN::FromOptree 0.01 {
                     return ($op->next, 'handled');
                 }
 
+                # rv2gv gets its own message. `undef *foo` is not a value
+                # operation at all: it clears the whole symbol-table entry, and
+                # the CODE slot goes with it. Measured --
+                #
+                #     sub foo {"SUB"} our $foo="S"; our @foo=(1); our %foo=(k=>1);
+                #     undef(*foo);
+                #       defined &foo  -> no
+                #       foo()         -> dies, "Undefined subroutine &main::foo"
+                #
+                # A Call binds its callee BY NAME with no data edge to the glob,
+                # so there is no edge for a $sim->define to travel along and no
+                # way to say "every later call to this name now dies". The
+                # aggregate message below would send a reader toward the
+                # empty-literal lowering, which is the wrong fix for this shape.
+                die "GAP: undef(EXPR) on a glob (rv2gv) not yet lowered --"
+                  . " it clears the whole symbol-table slot INCLUDING the code"
+                  . " slot, which no rebind of a single name expresses\n"
+                    if $kname eq 'rv2gv';
+
                 die "GAP: undef(EXPR) on this operand not yet lowered"
                   . " ($kname) -- on an aggregate it EMPTIES the container"
                   . " rather than rebinding a name, which is not `\@a = undef`\n"
