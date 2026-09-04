@@ -1181,7 +1181,8 @@ class SoN::FromOptree 0.01 {
                 # family, two different recoveries; assuming the match shape
                 # here would pop operands that are not there.
                 $code_repl //= _walk_subst_replacement(
-                    $cv, $op, $sim, $factory, $opmap, \%visited);
+                    $cv, $op, $sim, $factory, $opmap, \%visited,
+                    $target, $pattern, $flags);
                 my $nondestruct = $op->pmflags & PMf_NONDESTRUCT;
                 # In scalar/boolean context a DESTRUCTIVE s/// returns the
                 # integer match COUNT, not the rewritten string (only /r
@@ -7395,15 +7396,22 @@ class SoN::FromOptree 0.01 {
             # refusal keyed on `subst` and would have taken both.
             if ($name eq 'subst' && $op->isa('B::PMOP')
                 && ($op->pmflags & PMf_EVAL)) {
-                my $repl = _walk_subst_replacement(
-                    $cv, $op, $sim, $factory, $opmap, $loop_visited);
-                # THE TARGET IS RESOLVED, NOT POPPED. `foreach ($l) { s/... }`
-                # substitutes into the ALIASED ITERATOR -- measured, that subst
-                # has targ=0, so its target is $_ and there is nothing on the
-                # stack to take. Popping here refused every such loop; the
-                # shared resolver names it the same way the main walker does.
+                # THE TARGET IS RESOLVED, NOT POPPED, and resolved BEFORE the
+                # replacement walk because the walk builds the match half that
+                # the replacement's captures read -- and that match takes the
+                # target as its operand. `foreach ($l) { s/... }` substitutes
+                # into the ALIASED ITERATOR: measured, that subst has targ=0,
+                # so its target is $_ and there is nothing on the stack.
                 my ($scope_key, $target) =
                     _subst_target($cv, $op, $sim, $factory);
+
+                # ALL THREE ARGUMENTS, or the capture in the replacement has no
+                # match to read and refuses. Extending the helper without
+                # updating every caller is how `$1` kept refusing inside a loop
+                # while it lowered at the top level.
+                my $repl = _walk_subst_replacement(
+                    $cv, $op, $sim, $factory, $opmap, $loop_visited,
+                    $target, $op->precomp, _pmflags_to_str($op->pmflags));
 
                 my $node = $factory->make('RegexSubst',
                     inputs  => [$target, (defined $repl ? ($repl) : ())],

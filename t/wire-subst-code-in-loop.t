@@ -85,22 +85,23 @@ subtest 's///e on an outer lexical inside a counted loop lowers' => sub {
 };
 
 subtest 'the remaining refusals are named and not the old crash' => sub {
-    my (undef, undef, $cap) = run_and_wire(
-        'my $l="axb"; foreach ($l) { s/(x)/ord $1/e } print $l;', 'se-cap');
-    like $cap, qr/capture/,
-        'a capture in the replacement refuses for the capture reason';
-    unlike $cap, qr/Stack underflow|INTERNAL/, '... not by crashing';
-
     # A DESTRUCTIVE s/// ON THE ITERATOR IS AN ALIASING WRITE-BACK, and that
     # is a real missing capability rather than a missing site: `foreach ($l)`
     # aliases $_ to $l, so substituting into $_ mutates $l. The lowering binds
-    # a read-only element copy, so the write would not propagate. It refuses
-    # for THAT reason now, which is the correct next question.
-    my (undef, undef, $ali) = run_and_wire(
-        'my $l="axb"; my $n=5; foreach ($l) { s/x/$n+1/e } print $l;', 'se-ali');
-    like $ali, qr/writes the iterator/,
-        'a destructive s/// on the alias refuses as an iterator write';
-    unlike $ali, qr/Stack underflow|INTERNAL/, '... not by crashing';
+    # a read-only element copy, so the write would not propagate.
+    #
+    # BOTH SHAPES REACH IT NOW. A capture in the replacement used to refuse
+    # first, for a capture reason, which masked this one -- so the two cases
+    # below once reported different GAPs and now correctly report the same.
+    for my $src (
+        'my $l="axb"; foreach ($l) { s/(x)/ord $1/e } print $l;',
+        'my $l="axb"; my $n=5; foreach ($l) { s/x/$n+1/e } print $l;',
+    ) {
+        my (undef, undef, $err) = run_and_wire($src, 'se-ali' . length($src));
+        like $err, qr/writes the iterator/,
+            'a destructive s/// on the alias refuses as an iterator write';
+        unlike $err, qr/Stack underflow|INTERNAL/, '... not by crashing';
+    }
 };
 
 # THE UNDERFLOW MUST NOT RETURN. It was an INTERNAL error masked as a silent

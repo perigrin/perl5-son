@@ -88,6 +88,25 @@ subtest 'a replacement reads its own capture via the match node' => sub {
         'and the substitution itself is still built';
 };
 
+# EVERY WALKER SITE, not just the top-level one. The helper takes the match
+# half's operands as arguments, and a caller that omits them builds no match --
+# so `$1` kept refusing inside a loop while it lowered at the top level. There
+# are THREE call sites (main /e, main interpolated, loop body) and all three
+# must pass them.
+subtest 'a capture in a replacement works inside a loop too' => sub {
+    my ($said, $n, $err) = run_and_wire(
+        'my @a=("axb"); for my $t (@a) { my $u=$t;'
+      . ' $u =~ s/(x)/ord($1)/e; print $u }', 'cap-loop');
+    is $said, 'a120b', 'perl substitutes inside the loop' or return;
+    unlike $err, qr/GAP|INTERNAL/, 'it lowers' or return;
+
+    my %by = map { $_->{id} => $_ } $n->@*;
+    my ($rc) = grep { $_->{op} eq 'RegexCapture' } $n->@*;
+    ok $rc, 'a RegexCapture is built' or return;
+    is +($by{ ($rc->{inputs} // [])->[0] // '' }{op} // ''), 'RegexMatch',
+        '... reading a RegexMatch, same shape as at the top level';
+};
+
 # /ge STILL REFUSES, and this is the assertion that keeps the decomposition
 # honest -- it is sound only because the replacement runs once.
 subtest 's///ge still refuses -- its replacement is a loop' => sub {
