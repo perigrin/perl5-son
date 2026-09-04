@@ -2573,9 +2573,7 @@ class SoN::FromOptree 0.01 {
                 # so the lexical is declared in the graph, mirroring padsv_store
                 # for `my $x = ...`. The scope binding is the @_ element value.
                 if ($mode eq 'main') {
-                    $factory->make('VarDecl',
-                        inputs => [$pad, $elem],
-                        scope  => 'my');
+                    _declare($factory, $pad, $elem);
                 }
                 $sim->define($targ, $elem);
             }
@@ -4247,9 +4245,7 @@ class SoN::FromOptree 0.01 {
                 my $targ = $op->targ;
                 if ($mode eq 'main' && ($op->private & 128)) { # OPpLVAL_INTRO
                     my $pad_node = _make_pad_or_field($cv, $targ, $factory);
-                    $factory->make('VarDecl',
-                        inputs => [$pad_node, $node],
-                        scope  => 'my');
+                    _declare($factory, $pad_node, $node);
                 }
                 $sim->define($targ, $node);
             }
@@ -5003,13 +4999,12 @@ class SoN::FromOptree 0.01 {
             # Only the main walker emits the VarDecl wrapper.
             if ($mode eq 'main' && ($op->private & 128)) {
                 my $pad_node = _make_pad_or_field($cv, $targ, $factory);
+
                 # VarDecl wraps the pad slot; value stays as the scope binding
                 # so subsequent uses of the variable return the rhs value, not
                 # the declaration node.  Inputs include the value so VarDecl
                 # remains reachable in the graph traversal.
-                $factory->make('VarDecl',
-                    inputs => [$pad_node, $value],
-                    scope  => 'my');
+                _declare($factory, $pad_node, $value);
             }
             # NO DEMOTION BRANCH HERE, deliberately. padsv_store is an rpeep
             # FUSION of (const, padsv, sassign), and this walker suppresses
@@ -5089,7 +5084,7 @@ class SoN::FromOptree 0.01 {
             # reachable; the value stays the scope binding.
             if ($mode eq 'main' && ($op->private & 0x80)) {
                 my $pad = _make_pad_or_field($cv, $targ, $factory);
-                $factory->make('VarDecl', inputs => [$pad, $acc], scope => 'my');
+                _declare($factory, $pad, $acc);
             }
             $sim->define($targ, $acc);
             $sim->push_node($acc);
@@ -5134,8 +5129,7 @@ class SoN::FromOptree 0.01 {
             }
             else {
                 if ($mode eq 'main' && ($op->private & 0x80)) {  # OPpLVAL_INTRO
-                    $factory->make('VarDecl',
-                        inputs => [$lv, $node], scope => 'my');
+                    _declare($factory, $lv, $node);
                 }
                 $sim->define($targ, $node);
             }
@@ -8753,6 +8747,37 @@ class SoN::FromOptree 0.01 {
     }
 
     # Create PadAccess or FieldAccess depending on whether it's a class field
+    # _declare($factory, $pad_node, $value) -- build a VarDecl, and give the
+    # declaration TARGET the declared value's type.
+    #
+    # A location in this IR is stamped with the type of what lives there --
+    # measured, the lvalue Subscript for `$z[0] = 9` carries Int. The pad slot
+    # a VarDecl wraps was the exception, reaching the wire Unknown while its
+    # value was fully typed:
+    #
+    #     my $f = "abc$$";
+    #       Concat    stamp=Str       the value
+    #       PadAccess stamp=Unknown   the slot bound to it
+    #
+    # ONLY WHERE THE VALUE HAS ONE: a declaration whose value is itself untyped
+    # leaves the slot untyped. Inventing a type is the change that improves a
+    # coverage number and makes the producer worse.
+    #
+    # ONE PLACE, because there are FIVE VarDecl sites -- padsv_store, argelem,
+    # the TARGMY path, aassign and the list-assign element -- and a fix applied
+    # at the one I happened to be reading is how this session has repeatedly
+    # left a construct half-fixed.
+    sub _declare ($factory, $pad_node, $value) {
+        if ($pad_node && $pad_node->can('set_stamp')
+            && (!$pad_node->stamp || $pad_node->stamp->type eq 'Unknown')
+            && $value && $value->can('stamp') && $value->stamp
+            && $value->stamp->type ne 'Unknown') {
+            $pad_node->set_stamp($value->stamp);
+        }
+        return $factory->make('VarDecl',
+            inputs => [$pad_node, $value], scope => 'my');
+    }
+
     sub _make_pad_or_field ($cv, $targ, $factory) {
         my $padlist = $cv->PADLIST;
         if ($$padlist) {
