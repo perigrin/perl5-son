@@ -75,6 +75,7 @@ use SoN::IR::Node::ArrayLiteral;
 use SoN::IR::Node::Interpolate;
 use SoN::IR::Node::AnonSub;
 use SoN::IR::Node::RegexMatch;
+use SoN::IR::Node::EntryWrite;
 use SoN::IR::Node::RegexSubst;
 use SoN::IR::Node::RegexSubstCount;
 use SoN::IR::Node::RegexCapture;
@@ -108,7 +109,7 @@ my %DATA_CLASSES = map { $_ => "SoN::IR::Node::$_" } qw(
     And Or BitAnd BitOr BitXor LeftShift RightShift
     Assign Repeat Match NotMatch DefinedOr Xor Range Yada IsaOp
     Not Negate Complement Defined UnaryPlus Ref RefType Length Count
-    PadAccess FieldAccess EntryDef ArgsSource Wantarray Exists CellRead CellParam Parameter Subscript Slice
+    PadAccess FieldAccess EntryDef EntryWrite ArgsSource Wantarray Exists CellRead CellParam Parameter Subscript Slice
     Call HashLiteral ArrayLiteral ListAppend MakeCell CellWrite
     Interpolate AnonSub
     RegexMatch RegexSubst RegexSubstCount RegexCapture Print EnvRead TryCatch

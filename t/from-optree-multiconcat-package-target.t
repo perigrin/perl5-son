@@ -40,10 +40,11 @@ sub translate_out ($src) {
 #
 # Same root cause as the s/// package-target drop: targ 0 means the target is
 # not a pad slot, and both of the things it covers need telling apart.
-subtest 'a package-target multiconcat refuses rather than dropping the store' => sub {
-    my $err = translate_err(
+subtest 'a package-target multiconcat stores through memory' => sub {
+    my $out = translate_out(
         qq{our \$g = shift(\@ARGV) // "aaa";\n\$g = \$g . "x";\nprint qq{\$g\\n};\n});
-    like $err, qr/GAP: multiconcat storing into a package/, 'it refuses' or diag $err;
+    like $out, qr/"op"\s*:\s*"EntryWrite"/, 'the store is an EntryWrite';
+    like $out, qr/"value"\s*:\s*"x"/, 'and the appended part is in the graph';
 };
 
 # The lexical form is the one that always worked and must keep working.
@@ -74,9 +75,10 @@ subtest 'reading a package scalar in interpolation still lowers' => sub {
 #     our $g = "a"; $g .= "x"; print "$g\n";
 #       perl : ax
 #       graph: string constants ['a', "\n"] -- no "x" anywhere
-subtest 'a package-target .= also refuses' => sub {
-    my $err = translate_err(qq{our \$g = "a";\n\$g .= "x";\nprint qq{\$g\\n};\n});
-    like $err, qr/GAP: multiconcat storing into a package/, 'it refuses' or diag $err;
+subtest 'a package-target .= also stores through memory' => sub {
+    my $out = translate_out(qq{our \$g = "a";\n\$g .= "x";\nprint qq{\$g\\n};\n});
+    like $out, qr/"op"\s*:\s*"EntryWrite"/, 'the store is an EntryWrite';
+    like $out, qr/"value"\s*:\s*"x"/, 'and the appended part is in the graph';
 };
 
 subtest 'a lexical .= still lowers' => sub {

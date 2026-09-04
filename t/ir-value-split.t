@@ -117,11 +117,11 @@ subtest 'the predicate holds on real constructed nodes' => sub {
 
 # The classes present at the expected count. Kept so a mismatch can NAME what
 # changed rather than only reporting a number -- see the diag below.
-my @KNOWN_AT_97 = qw(
+my @KNOWN_AT_98 = qw(
     Access Add Aggregate And AnonSub ArgsSource ArrayLiteral Assign
     BacktickExpr BinOp BitAnd BitOr BitXor Call CellParam CellRead CellWrite
     Coerce Complement
-    CompoundAssign Concat Constant Count Defined DefinedOr Divide EntryDef
+    CompoundAssign Concat Constant Count Defined DefinedOr Divide EntryDef EntryWrite
     EnvRead Exists ExpressionList FieldAccess HashLiteral If Interpolate
     IsaOp LeftShift Length ListAppend ListAssign Loop Match MemStart Modulo
     MakeCell
@@ -150,14 +150,14 @@ subtest 'every node class is one or the other, never neither' => sub {
     # is stale" -- and only one of those is interesting. chalk hit the second
     # running this suite against a lib/ snapshot taken one commit before an
     # Exists node landed, and nearly attributed the red to its own change.
-    my $EXPECTED = 97;
+    my $EXPECTED = 98;
     if (scalar @names != $EXPECTED) {
-        my %known = map { $_ => 1 } @KNOWN_AT_97;
+        my %known = map { $_ => 1 } @KNOWN_AT_98;
         my @extra   = grep { !$known{$_} } @names;
         my %present = map { $_ => 1 } @names;
-        my @missing = grep { !$present{$_} } @KNOWN_AT_97;
+        my @missing = grep { !$present{$_} } @KNOWN_AT_98;
         diag "node class count is " . scalar(@names) . ", expected $EXPECTED";
-        diag "  EXTRA (add to the count and to \@KNOWN_AT_97): @extra" if @extra;
+        diag "  EXTRA (add to the count and to \@KNOWN_AT_98): @extra" if @extra;
         diag "  MISSING (a stale tree looks exactly like this): @missing" if @missing;
     }
     cmp_ok(scalar @names, '==', $EXPECTED, "all $EXPECTED node classes present");

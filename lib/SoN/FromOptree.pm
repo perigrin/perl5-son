@@ -3590,10 +3590,22 @@ class SoN::FromOptree 0.01 {
                     $sim->push_node($existing);
                 }
                 else {
+                    # MEMORY-DEPENDENT, like every other read of something that
+                    # lives outside this sub. Without the memory input a read
+                    # could not observe a write made in another sub, and two
+                    # reads either side of a call hash-consed into ONE node --
+                    # the same arity bug Count had, where a whole-aggregate read
+                    # could not see a mutation however well the mutation was
+                    # threaded. An LVALUE occurrence is a NAME TOKEN, not a
+                    # read, and takes no memory: it is the destination handed to
+                    # sassign, and giving it a memory input would make the
+                    # store's own operand depend on the memory it produces.
                     my $node = $factory->make('EntryDef',
                         stash_name => $gv->STASH->NAME,
                         sigil      => '$',
-                        var_name   => $gv_name);
+                        var_name   => $gv_name,
+                        ($is_lvalue || !defined $sim->memory
+                            ? () : (inputs => [$sim->memory])));
                     # Seed only when unbound: an lvalue over an already-bound
                     # name must not clobber it (`$g += 2` reads first).
                     $sim->define(_stash_key($node), $node) unless defined $existing;
@@ -4872,6 +4884,28 @@ class SoN::FromOptree 0.01 {
                 # case that bit -- a name-only key bound a match subject and an
                 # argument array to the same slot.
                 $sim->define(_stash_key($target), $value);
+
+                # ...AND A STORE, because the scope map alone cannot carry this
+                # one across a sub boundary. A pad slot is private to its sub,
+                # so the rebind above IS the semantics. A package variable is
+                # reachable from every sub, so a write here and a read in
+                # another sub are ordered only through memory. Measured before
+                # this: `sub poke { $g = "changed" }` emitted Start, Constant,
+                # Return -- no store anywhere -- and the caller's two peek()
+                # calls hash-consed into one node.
+                if (defined $sim->memory) {
+                    my $write = $factory->make('EntryWrite',
+                        inputs => [$target, $value, $sim->memory]);
+                    # PINNED ON CONTROL, like every other effect. A store that
+                    # advances memory but hangs off nothing is unreachable from
+                    # the Return, and the graph keeps only what a Return
+                    # reaches -- so DCE deletes the write and the global is
+                    # silently never assigned. Measured: main::poke emitted the
+                    # EntryWrite AFTER its Return, with no edge to it.
+                    $write->set_control_in($sim->control);
+                    $sim->set_control($write);
+                    $sim->set_memory($write);
+                }
                 $sim->push_node($value);
             }
             else {
@@ -5175,9 +5209,46 @@ class SoN::FromOptree 0.01 {
             # current $s value, so seg[0] (e.g. the "bar" of `$s .= "bar"`) appends
             # to $s; a fresh concat starts at seg[0] itself. Then interleave each
             # arg[i] with the segment that follows it (seg[i+1]).
+            # A STACKED multiconcat's destination is an EntryDef on the stack
+            # (a package scalar), not a pad slot. Pop it here so both the APPEND
+            # seed and the store below name the right variable -- $op->targ for
+            # this form is a SCRATCH slot, and seeding from it is what silently
+            # lost the old value in `$g .= "x"`.
+            # THE TWO STACKED FORMS PUT THE DESTINATION IN DIFFERENT PLACES,
+            # and taking the wrong end silently stores to something else:
+            #
+            #   $g .= "x"       gvsv(dest)             nargs=1, dest NOT an arg
+            #   $g = $g . "x"   gvsv(dest) gvsv(read)  nargs=1, dest IS args[0]
+            #
+            # perl pushes the destination first in both, so for APPEND it is
+            # what remains on the stack, and for the plain assignment the arg
+            # pop has already taken it (measured: args=EntryDef, and the stack
+            # top was an unrelated Constant from the previous statement).
+            my $pkg_target;
+            if ($op->flags & 64) {   # OPf_STACKED
+                if ($op->private & 0x40) {       # APPEND: still on the stack
+                    $pkg_target = $sim->pop_node if $sim->stack_depth;
+                }
+                elsif (@args) {
+                    # PLAIN ASSIGNMENT: args[0] IS the destination AND the read.
+                    # `$g = $g . "x"` compiles to two gvsv[*g] ops, but they are
+                    # the same variable and resolve to ONE EntryDef, which the
+                    # arg pop already took. Naming it as the destination must
+                    # NOT remove it from @args -- doing that dropped the read,
+                    # and the store landed an empty string ("" instead of "ax")
+                    # while the print showed Concat("", "\n").
+                    $pkg_target = $args[0];
+                }
+                $pkg_target = undef
+                    unless $pkg_target
+                        && $pkg_target->isa('SoN::IR::Node::EntryDef');
+            }
+
             my $acc;
             if ($op->private & 0x40) {
-                $acc = $sim->lookup($op->targ);
+                $acc = $pkg_target
+                    ? $sim->lookup(_stash_key($pkg_target))
+                    : $sim->lookup($op->targ);
                 $acc = $concat->($acc, $mkstr->($seg[0])) if defined $seg[0];
             }
             elsif (defined $seg[0]) { $acc = $mkstr->($seg[0]) }
@@ -5216,13 +5287,29 @@ class SoN::FromOptree 0.01 {
             #
             # Same root cause as the s/// package-target drop: the SSA scope map
             # is one environment keyed by string, and package reads already bind
-            # through _stash_key. Only the ops perl FUSES bypass it by assuming
-            # the destination is a pad slot. Refused until they key the same way.
+            # through _stash_key. The ops perl FUSES bypass it by assuming the
+            # destination is a pad slot, so route them through the same key AND
+            # the same EntryWrite store an unfused sassign now emits -- a
+            # package scalar is observable from another sub, so the rebind alone
+            # cannot carry it.
+            if ($pkg_target) {
+                $sim->define(_stash_key($pkg_target), $acc);
+                if (defined $sim->memory) {
+                    my $write = $factory->make('EntryWrite',
+                        inputs => [$pkg_target, $acc, $sim->memory]);
+                    $write->set_control_in($sim->control);
+                    $sim->set_control($write);
+                    $sim->set_memory($write);
+                }
+                $sim->push_node($acc) unless ($op->flags & 3) == 1;   # void
+                return ($op->next, 'handled');
+            }
+            # A STACKED multiconcat whose destination is not a package scalar
+            # is not modelled: storing to the op's targ would drop it.
             if ($op->flags & 64) {   # OPf_STACKED
-                die "GAP: multiconcat storing into a package/global scalar (the"
-                  . " destination is on the stack, not a pad slot) not yet"
-                  . " lowered -- storing to the op's targ drops the"
-                  . " assignment\n";
+                die "GAP: multiconcat storing into a stacked destination that is"
+                  . " not a package scalar not yet lowered -- storing to the"
+                  . " op's targ drops the assignment\n";
             }
             # OPpLVAL_INTRO (0x80): a new lexical (`my $c = qq{...}`). The main
             # walker wraps the pad slot in a VarDecl so the declaration is
