@@ -135,4 +135,26 @@ my $p = Pair->new(left => 10, right => 20); say($p->left - $p->right);';
 };
 
 
+# THE ORDER OF USES DOES NOT MATTER, which is what makes the write-once guard
+# safe. perigrin asked whether "skips any node whose stamp is not Unknown"
+# sounded like a bug -- it is a termination guard (a stamp is written once,
+# from Unknown, so the monotone fixpoint at _stamp_merges converges), and it
+# would only lose information if the write took the FIRST requirement seen.
+#
+# It does not: requirements are accumulated and MET across every use before
+# anything is written, so the single write is the final answer.
+subtest 'requirements from several uses are met, not raced' => sub {
+    for my $src (
+        'sub a3 { my ($x) = @_; return length($x) + $x } print a3(5);',
+        'sub a4 { my ($x) = @_; return $x + length($x) } print a4(5);',
+    ) {
+        my $wire = wire_for($src, 'ord' . length($src));
+        my ($sub) = grep { !/__PROGRAM__/ } keys $wire->{methods}->%*;
+        my $pad = node_in($wire, $sub, 'PadAccess', varname => '$x');
+        ok defined $pad, 'the $x read exists' or next;
+        is $pad->{stamp}, 'Num',
+            'meet(Str, Num) = Num regardless of which use comes first';
+    }
+};
+
 done_testing;

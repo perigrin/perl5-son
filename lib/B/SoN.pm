@@ -1584,6 +1584,23 @@ sub _infer_backward {
                 }
             }
 
+            # WRITTEN ONCE, FROM Unknown, and that is the termination
+            # argument rather than a missed narrowing. Every pass here shares
+            # the guard, and the invariant it protects is stated at
+            # _stamp_merges: "a join only ever moves up [the lattice]". A node
+            # revised downward after being stamped would break the
+            # monotonicity these fixpoints rely on to converge.
+            #
+            # IT DOES NOT LOSE THE MEET. Requirements are accumulated across
+            # ALL uses first -- the loop above meets each new one into
+            # %required -- so the single write is the FINAL answer, not the
+            # first-seen. Measured, order does not matter:
+            #
+            #     length($x) + $x    Num
+            #     $x + length($x)    Num
+            #
+            # meet(Str, Num) either way. A pass that re-narrowed on each use
+            # would reach the same answer more slowly and lose the guarantee.
             for my $node ( $graph->nodes->@* ) {
                 next unless $node->isa('SoN::IR::Value');
                 next unless ( $node->stamp ? $node->stamp->type : '' ) eq 'Unknown';
