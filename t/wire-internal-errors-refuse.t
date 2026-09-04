@@ -274,20 +274,27 @@ subtest 'only the code-replacement forms refuse in a loop body' => sub {
     }
 };
 
-# AND IT IS NOT THE s///ge GAP. Outside a loop these two refuse for DIFFERENT
-# reasons, so closing either would leave the loop-body crash standing:
+# /e AND /ge HAVE SEPARATED. This subtest once recorded that both refused, for
+# different reasons, as the argument for a third refusal in the loop body. Both
+# halves of that have since been closed:
 #
-#     s/(x)/ord $1/e    "capture $1 read with no preceding match in scope"
-#     s/(x)/ord $1/ge   "s///ge (code replacement run once per match)"
+#     s/(x)/ord $1/e    lowers -- the replacement reads its own captures
+#                       through a RegexMatch built before the walk
+#     s/(x)/ord $1/ge   still refuses -- the body runs ONCE PER MATCH with a
+#                       different capture each time, which is a loop
 #
-# The replacement SUBTREE is the common factor, which is what the refusal names.
-subtest 'the two outside-a-loop refusals are distinct' => sub {
-    my (undef, $e1) = translate('my $l="a"; s/(x)/ord $1/e; print $l;', 'e_top');
-    my (undef, $e2) = translate('my $l="a"; s/(x)/ord $1/ge; print $l;', 'ge_top');
-    like $e1, qr/GAP/, '/e refuses at top level';
-    like $e2, qr/GAP/, '/ge refuses at top level';
-    isnt +($e1 =~ /GAP: ([^\n]*)/)[0], +($e2 =~ /GAP: ([^\n]*)/)[0],
-        'and for different reasons -- one GAP does not cover the other';
+# The /g boundary is the load-bearing one and is measured: `s/(\d)/$1*10/ge` on
+# "a1b2c" is a10b20c, while the single-match decomposition gives a10b10c.
+subtest '/e lowers while /ge still refuses' => sub {
+    my ($o1, $e1) = translate('my $l="axb"; $l =~ s/(x)/ord $1/e; print $l;', 'e_top');
+    unlike $e1, qr/GAP|INTERNAL/, '/e lowers at top level';
+    like $o1, qr/"op"\s*:\s*"RegexMatch"/,
+        '... via a RegexMatch its capture can read';
+
+    my (undef, $e2) = translate('my $l="axb"; $l =~ s/(x)/ord $1/ge; print $l;', 'ge_top');
+    like $e2, qr/GAP/, '/ge still refuses';
+    like $e2, qr/once per match|loop/,
+        '... because its replacement repeats, which one operand cannot express';
 };
 
 done_testing;

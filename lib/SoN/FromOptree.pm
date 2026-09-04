@@ -1090,6 +1090,12 @@ class SoN::FromOptree 0.01 {
             if ($name eq 'subst' && $op->isa('B::PMOP')) {
                 my $pattern = $op->precomp // '';
                 my $flags   = _pmflags_to_str($op->pmflags);
+
+                # RESOLVED HERE because the /e path needs it: the match half is
+                # built before the replacement is walked, and takes the target
+                # as its operand. Idempotent -- returns the existing binding.
+                my ($scope_key, $target) =
+                    _subst_target($cv, $op, $sim, $factory);
                 # s///e: the replacement is a code SUBTREE rather than a
                 # literal, and it is walkable. It hangs off pmreplroot and is
                 # intact even under the rpeep suppression this walker runs with
@@ -1129,27 +1135,15 @@ class SoN::FromOptree 0.01 {
 
                     # The leftmost leaf is where execution of the subtree
                     # begins; ->next from it runs the body.
-                    my $entry = $rr;
-                    while (ref($entry) && $$entry && ($entry->flags & 4)
-                           && ref($entry->first) && ${$entry->first}) {
-                        $entry = $entry->first;
-                    }
-                    die "GAP: s///e replacement subtree has no entry op\n"
-                        unless ref($entry) && $$entry;
-
-                    my $repl_sim = $sim->snapshot;
-                    my $base     = $repl_sim->stack_depth;
-                    my @repl_exits;
-                    _walk_branch($cv, $entry, $repl_sim, $factory, $opmap,
-                        \%visited, \@repl_exits, 1, ${$rr});
-
-                    die "GAP: s///e replacement that exits (return/die) not yet"
-                      . " lowered\n" if @repl_exits;
-                    die "GAP: s///e replacement that is not a single value not"
-                      . " yet lowered\n"
-                        unless $repl_sim->stack_depth == $base + 1;
-
-                    $code_repl = $repl_sim->pop_node;
+                    # ONE WALK, SHARED. This was the THIRD copy of the same
+                    # subtree walk -- main /e, main interpolated, loop body --
+                    # and the capture fix has to land in all of them, so they
+                    # now go through one helper. Passing the target/pattern/
+                    # flags is what lets it build the match half the
+                    # replacement's captures read.
+                    $code_repl = _walk_subst_replacement(
+                        $cv, $op, $sim, $factory, $opmap, \%visited,
+                        $target, $pattern, $flags);
                     NO_CODE_REPL: ;
                 }
                 # An interpolated (multi-part) replacement -- `s/a/$y$z/`,
@@ -1212,8 +1206,6 @@ class SoN::FromOptree 0.01 {
                 # builtin defaulting to it. Only the WRITE was refused, and the
                 # message blamed "implicit" when in fact `$_ =~ s///` was
                 # refused too: the handler could key NEITHER form.
-                my ($scope_key, $target) =
-                    _subst_target($cv, $op, $sim, $factory);
                 # The replacement string is on the stack (pushed by const op
                 # before subst) -- but ONLY for a literal replacement. Under
                 # /e there is no such push: the replacement was walked from the
@@ -8640,7 +8632,9 @@ class SoN::FromOptree 0.01 {
         return ($scope_key, $target);
     }
 
-    sub _walk_subst_replacement ($cv, $op, $sim, $factory, $opmap, $visited) {
+    sub _walk_subst_replacement ($cv, $op, $sim, $factory, $opmap, $visited,
+                                 $target = undef, $pattern = undef,
+                                 $flags = undef) {
         my $replroot = $op->pmreplroot;
         return undef unless $replroot && ref($replroot) && $$replroot;
 
@@ -8652,7 +8646,40 @@ class SoN::FromOptree 0.01 {
         die "GAP: s/// interpolated replacement subtree has no entry op\n"
             unless ref($entry) && $$entry;
 
+        # THE MATCH HALF, BUILT BEFORE THE WALK, is what lets the replacement
+        # read its OWN captures without a cycle. `$1` in a s///e replacement is
+        # this substitution's capture -- measured, an earlier match does not
+        # leak in:
+        #
+        #     my $t="QQ"; $t =~ /(Q)/;
+        #     my $u="ayb"; $u =~ s/(y)/"[$1]"/e;   a[y]b, not a[Q]b
+        #
+        # Pointing the capture at the RegexSubst would be a cycle (the subst
+        # reads the replacement the capture is part of), and the wire sanctions
+        # exactly one forward reference -- a loop Phi's backedge. But
+        # RegexMatch and RegexSubst ALREADY share a base class carrying pattern
+        # and flags, so the match half needs no new vocabulary and
+        # RegexCapture keeps its contract that inputs[0] is the MATCH node:
+        #
+        #     RegexMatch(target, pattern) <- the capture reads this
+        #       -> replacement -> RegexSubst(target, replacement)
+        #
+        # Every edge points backwards.
+        #
+        # ONLY SOUND WITHOUT /g. Measured, `s/(\d)/$1*10/ge` on "a1b2c" is
+        # a10b20c directly and a10b10c decomposed, because the body runs once
+        # per match with a DIFFERENT capture each time -- a loop, not a value.
+        # /ge is refused before this is reached.
         my $rsim = $sim->snapshot;
+        my $match_half;
+        if (defined $target) {
+            $match_half = $factory->make('RegexMatch',
+                inputs  => [$target],
+                pattern => ($pattern // ''),
+                flags   => ($flags // ''),
+                stamp   => SoN::IR::Stamp->new(type => 'Boolean'));
+            $rsim->set_last_match($match_half);
+        }
         my $base = $rsim->stack_depth;
         my @rexits;
         _walk_branch($cv, $entry, $rsim, $factory, $opmap,

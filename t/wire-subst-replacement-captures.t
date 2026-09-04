@@ -44,24 +44,57 @@ sub run_and_wire ($src, $name) {
 #     my $t="QQ"; $t =~ /(Q)/;
 #     my $u="ayb"; $u =~ s/(y)/"[$1]"/e;          a[y]b   NOT a[Q]b
 
-# IT REFUSES, AND THE REFUSAL IS THE POINT. The capture must read the
-# RegexSubst while the RegexSubst reads the replacement the capture is part of
-# -- a cycle. RegexCapture's contract is `inputs[0] is the match node`, and
-# inputs are a construction :param that hash-consing depends on, so the edge
-# cannot be patched in afterwards.
+# THE MATCH HALF IS ALREADY A NODE, which is what breaks the cycle without any
+# new wire vocabulary. RegexMatch and RegexSubst already share a base class
+# carrying pattern and flags; RegexSubst only adds `replacement`. So a s///e
+# decomposes into the two nodes that already exist:
 #
-# THE IR SANCTIONS EXACTLY ONE FORWARD REFERENCE: a loop header Phi's backedge,
-# which chalk's loader defer-patches via set_backedge (SoN::IR::Graph::nodes
-# calls it "the sole, sanctioned forward reference in the order"). There is no
-# second mechanism, so this needs a WIRE decision, not a producer-side fix.
-subtest 'a replacement reading its own capture refuses as a cycle' => sub {
+#     RegexMatch(target, pattern)      <- the RegexCapture reads THIS
+#           |
+#     replacement (reads the capture)
+#           |
+#     RegexSubst(target, replacement)
+#
+# Every edge points backwards. No forward reference, no defer-patch, and
+# RegexCapture keeps its contract that inputs[0] is the MATCH node.
+#
+# Verified equivalent by hand on 5.42.0:
+#
+#     my $s="axb"; if ($s =~ /(x)/) { my $r=ord($1); $s =~ s/(x)/$r/ }   a120b
+#     my $t="axb"; $t =~ s/(x)/ord($1)/e;                                a120b
+#
+# THE DECOMPOSITION IS ONLY VALID WITHOUT /g, and that boundary is real:
+#
+#     s/(\d)/$1*10/ge on "a1b2c"    direct: a10b20c   decomposed: a10b10c
+#
+# because the replacement runs ONCE PER MATCH with a different capture each
+# time -- a loop, not a value. /ge is already refused for exactly that reason,
+# BEFORE the replacement is walked, so anything reaching here is single-match.
+subtest 'a replacement reads its own capture via the match node' => sub {
     my ($said, $n, $err) = run_and_wire(
         'my $s="axb"; $s =~ s/(x)/ord($1)/e; print $s;', 'cap-own');
     is $said, 'a120b', 'perl substitutes ord(x)' or return;
+    unlike $err, qr/GAP|INTERNAL/, 'it lowers' or return;
 
-    like $err, qr/GAP/, 'it refuses rather than guessing an edge';
-    like $err, qr/cycle/, '... naming the cycle as the blocker';
-    unlike $err, qr/INTERNAL|Stack underflow/, '... and does not crash';
+    my %by = map { $_->{id} => $_ } $n->@*;
+    my ($rc) = grep { $_->{op} eq 'RegexCapture' } $n->@*;
+    ok $rc, 'a RegexCapture is built for $1' or return;
+
+    my $src = $by{ ($rc->{inputs} // [])->[0] // '' };
+    is +($src->{op} // ''), 'RegexMatch',
+        '... reading a RegexMatch, keeping inputs[0] = the match node';
+
+    ok scalar(grep { $_->{op} eq 'RegexSubst' } $n->@*),
+        'and the substitution itself is still built';
+};
+
+# /ge STILL REFUSES, and this is the assertion that keeps the decomposition
+# honest -- it is sound only because the replacement runs once.
+subtest 's///ge still refuses -- its replacement is a loop' => sub {
+    my (undef, undef, $err) = run_and_wire(
+        'my $c="a1b2c"; $c =~ s/(\d)/$1*10/ge; print $c;', 'cap-ge');
+    like $err, qr/GAP/, 'refused';
+    like $err, qr/once per match|loop/, '... because the body repeats';
 };
 
 # THE CAPTURE MUST COME FROM THIS SUBSTITUTION, not from an earlier match. A
