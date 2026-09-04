@@ -1822,8 +1822,20 @@ class SoN::FromOptree 0.01 {
     sub _context_builtin_stamp ($op, $name) {
         state $SCALAR_IS_A_COUNT = { map { $_ => 1 } qw( keys values ) };
         state $SCALAR_IS_A_STR   = { map { $_ => 1 } qw( reverse ) };
+        # readline JOINS THIS FAMILY, and its scalar reading is Scalar rather
+        # than a count or a string. Measured on 5.42.0:
+        #
+        #     my $one = <$fh>    Str     one line
+        #     my @all = <$fh>    Str     each element -- a List overall
+        #     at EOF             Undef
+        #
+        # so the scalar reading is join(Str, Undef) = Scalar. It was stamped
+        # List in EVERY context, which is WRONG rather than wide: List does not
+        # admit the EOF Undef, and `while (my $l = <$fh>)` terminates on
+        # exactly that value.
+        state $SCALAR_IS_A_SCALAR = { map { $_ => 1 } qw( readline ) };
         state $LIST_IN_LIST_CONTEXT =
-            { map { $_ => 1 } qw( keys values reverse sort ) };
+            { map { $_ => 1 } qw( keys values reverse sort readline ) };
 
         # BUILTINS WHOSE RESULT TYPE PERL DEFINES, and which reached the wire
         # UNSTAMPED -- 51 of them across t/base and t/comp. An unstamped
@@ -1886,6 +1898,8 @@ class SoN::FromOptree 0.01 {
             if $SCALAR_IS_A_COUNT->{$name};
         return SoN::IR::Stamp->new( type => 'Str' )
             if $SCALAR_IS_A_STR->{$name};
+        return SoN::IR::Stamp->new( type => 'Scalar' )
+            if $SCALAR_IS_A_SCALAR->{$name};
         return undef;
     }
 
