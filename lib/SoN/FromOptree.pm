@@ -5191,6 +5191,28 @@ class SoN::FromOptree 0.01 {
             $acc //= $mkstr->('');   # degenerate: no args and no non-empty segment
 
             my $targ = $op->targ;
+            # A STACKED multiconcat WITH NO TARG WRITES TO A PACKAGE SCALAR.
+            # perl fuses `$g = $g . "x"` into the multiconcat itself -- there is
+            # no sassign to catch -- and puts the destination SV on the stack:
+            #
+            #   package target:  targ=0 private=0x00 flags=0x46 (STACKED)
+            #   lexical target:  targ=1 private=0x10 (OPpTARGET_MY)
+            #
+            # targ 0 here is not "no target", it is "the target is not a pad
+            # slot". Storing with define(0, ...) wrote a binding nothing reads,
+            # so the assignment silently vanished:
+            #
+            #   our $g = shift(@ARGV) // "aaa"; $g = $g . "x"; print "$g\n";
+            #     perl : aaax
+            #     graph: no Concat for the append at all -- prints "aaa"
+            #
+            # Same root cause as the s/// package-target drop, and refused the
+            # same way until package-scalar stores are modelled.
+            if (!$targ && ($op->flags & 64)) {   # OPf_STACKED
+                die "GAP: multiconcat storing into a package/global scalar (the"
+                  . " destination is on the stack, not a pad slot) not yet"
+                  . " lowered -- defining slot 0 drops the assignment\n";
+            }
             # OPpLVAL_INTRO (0x80): a new lexical (`my $c = qq{...}`). The main
             # walker wraps the pad slot in a VarDecl so the declaration is
             # reachable; the value stays the scope binding.
