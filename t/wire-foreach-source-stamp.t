@@ -64,4 +64,16 @@ subtest 'real literals keep their own stamps' => sub {
     is $ref->[0], 'ArrayRef', 'and [...] is still ArrayRef';
 };
 
+# A FOLDED CONSTANT AV IS ALSO AN ARRAY. `my @q=(1..4)` is pre-built by perl
+# into an AV, which the walker expands into an equivalent ArrayLiteral -- and
+# that one was unstamped, so a single graph held TWO ArrayLiterals describing
+# the SAME array, one stamped Array and one Unknown. Measured, ref(\@q) is
+# ARRAY and scalar(@q) is 4: it is a plain array, not a reference.
+subtest 'a folded constant AV is stamped Array' => sub {
+    my $st = stamps_of('my @q=(1..4); print scalar(@q);', 'fs-folded');
+    ok scalar($st->@*), 'ArrayLiterals are built' or return;
+    is scalar(grep { $_ ne 'Array' } $st->@*), 0,
+        'every one of them is stamped Array -- none left Unknown';
+};
+
 done_testing;

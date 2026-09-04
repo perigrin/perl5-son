@@ -2911,7 +2911,20 @@ class SoN::FromOptree 0.01 {
                     $factory->make('Constant',
                         value => $v, stamp => $st, const_type => $ct);
                 } $sv->ARRAY;
-                my $arr = $factory->make('ArrayLiteral', inputs => \@elems);
+                # STAMPED Array. This is a folded constant AV -- `my @q=(1..4)`
+                # that perl pre-built -- so it is a plain array, not a
+                # reference: measured, ref(\@q) is ARRAY and scalar(@q) is 4.
+                # Leaving it Unknown put TWO ArrayLiterals describing the same
+                # array in one graph, one stamped Array and one not, which is
+                # the hazard ArrayLiteral's own comment was written about: the
+                # op name promises a container and the stamp confirms nothing.
+                #
+                # (The comment above says "ArrayRef", which is stale -- the
+                # node was renamed when that name proved to assert a reference
+                # for a case the stamp called a plain array.)
+                my $arr = $factory->make('ArrayLiteral',
+                    inputs => \@elems,
+                    stamp  => SoN::IR::Stamp->new(type => 'Array'));
                 $sim->push_node($arr);
                 return ($op->next, 'handled');
             }
