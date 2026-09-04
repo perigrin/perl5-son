@@ -1227,13 +1227,27 @@ class SoN::FromOptree 0.01 {
                     $target, $pattern, $flags);
                 my $nondestruct = $op->pmflags & PMf_NONDESTRUCT;
                 # In scalar/boolean context a DESTRUCTIVE s/// returns the
-                # integer match COUNT, not the rewritten string (only /r
-                # yields a string). The handler stamps every result Str and
-                # pushes the rewritten string -- correct for void context and
-                # for /r, a silent value+type miscompile for scalar-context
-                # destructive subst. GAP loudly until count-context is lowered.
-                die "GAP: s/// count-context result (scalar-context destructive) not yet lowered\n"
-                    if !$nondestruct && ($op->flags & 3) != 1;   # OPf_WANT != VOID
+                # match COUNT, not the rewritten string; only /r yields a
+                # string. The two roles of the node separate here: the TARGET
+                # is still rebound to the substituted subject (the mutation
+                # happened either way), while the VALUE that reaches the stack
+                # is the count.
+                #
+                # THE COUNT IS Str, NOT Int AND NOT Boolean. Measured on
+                # 5.42.0:
+                #
+                #     "aaa" =~ s/a/b/g   ->  3
+                #     "xxx" =~ s/a/b/g   ->  ""   the EMPTY STRING, defined
+                #     "aaa" =~ s/a/b/    ->  1
+                #
+                # Zero matches is "" rather than 0, so `defined` does not
+                # separate the two cases and only truth does. Int is wrong
+                # about the zero case. Boolean is not available either: the
+                # lattice has Boolean => Scalar rather than Boolean => Str, on
+                # the two-factor subtyping test recorded in Stamp.pm, so
+                # stamping the count Boolean would claim something perl
+                # contradicts. Int-or-empty-string is exactly Str.
+                my $count_context = !$nondestruct && ($op->flags & 3) != 1;
                 # The target is keyed on the pad targ. targ 0 means an implicit
                 # $_ or a package/global target (the GV is on the stack, not a
                 # pad slot) -- the handler cannot name it, so it used to
@@ -1281,7 +1295,16 @@ class SoN::FromOptree 0.01 {
                 # NEW string and leaves the source untouched, so it must NOT
                 # rebind -- only push the result value ($nondestruct above).
                 $sim->define($scope_key, $node) unless $nondestruct;
-                $sim->push_node($node);
+                # The binding above is the substituted subject. In count
+                # context the VALUE is a different thing over the same
+                # operation, so push a node that says so rather than the
+                # subject -- pushing $node here is the silent value+type
+                # miscompile this used to refuse rather than commit.
+                $sim->push_node($count_context
+                    ? $factory->make('RegexSubstCount',
+                        inputs => [$node],
+                        stamp  => SoN::IR::Stamp->new(type => 'Str'))
+                    : $node);
                 $op = $op->next;
                 next;
             }
@@ -7720,7 +7743,19 @@ class SoN::FromOptree 0.01 {
                 # key and not only the value.
                 $sim->define($scope_key, $node)
                     unless $op->pmflags & PMf_NONDESTRUCT;
-                $sim->push_node($node) unless ($op->flags & 3) == 1;  # void
+                # Same split as the main walker: the BINDING is the substituted
+                # subject, but the VALUE of a destructive s/// is the match
+                # count. This site already skips the push in void context, so a
+                # push here on the destructive form is always count context.
+                # Str, not Int -- zero matches is "" and not 0. See
+                # SoN::IR::Node::RegexSubstCount.
+                unless (($op->flags & 3) == 1) {   # void
+                    $sim->push_node(($op->pmflags & PMf_NONDESTRUCT)
+                        ? $node
+                        : $factory->make('RegexSubstCount',
+                            inputs => [$node],
+                            stamp  => SoN::IR::Stamp->new(type => 'Str')));
+                }
 
                 # Skip past the replacement subtree: its ops are consumed.
                 $op = $op->next;
@@ -8985,6 +9020,24 @@ class SoN::FromOptree 0.01 {
     # docs/plans/2026-08-31-one-operator-one-declaration.md.
     sub _subst_target ($cv, $op, $sim, $factory) {
         my $targ      = $op->targ;
+        # NO TARG DOES NOT MEAN $_. It means the target is not a pad slot, and
+        # that covers two different things: the implicit $_, and a PACKAGE
+        # target whose GV is on the stack. Defaulting both to 'main::$_' bound
+        # the wrong variable and the real substitution vanished from the graph
+        # entirely -- a silent DROP, not merely a wrong stamp. Measured:
+        #
+        #     our $g = "aaa"; $main::g =~ s/a/b/g; print "g=$main::g";
+        #       perl  : g=bbb
+        #       before: no RegexSubst in the graph at all, prints the folded
+        #               "g=aaa"
+        #
+        # This was reachable all along; the count-context GAP simply fired
+        # first and hid it. A GV under the op distinguishes the two cases.
+        if (!$targ && _find_gv_op($op)) {
+            die "GAP: s/// on a package/global target (the GV is on the stack,"
+              . " not a pad slot) not yet lowered -- binding it as \$_ drops"
+              . " the substitution\n";
+        }
         my $scope_key = $targ || 'main::$_';
         my $target    = $sim->lookup($scope_key);
         if (!$target) {

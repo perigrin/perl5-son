@@ -49,23 +49,36 @@ subtest 'an implicit $_ s/// rebinds $_, and does not drop the substitution' => 
         '$_ reads the substitution result, not the pre-subst binding');
 };
 
+# This refusal was reachable all along but the count-context GAP fired first
+# and hid it. With count context lowered, it is the only thing standing between
+# a package target and a SILENT DROP: _subst_target keyed a missing targ as
+# 'main::$_', which bound the wrong variable and left no RegexSubst in the
+# graph at all. Measured -- `our $g="aaa"; $main::g =~ s/a/b/g;` printed the
+# folded "aaa" where perl prints "bbb".
 subtest 'package/global target GAPs loudly' => sub {
     my $err = translate_err('sub { our $g; $main::g =~ s/foo/baz/ }');
-    like($err, qr/^GAP:/, 'package-target s/// produces a loud GAP') or diag($err);
+    like($err, qr/^GAP: s\/\/\/ on a package\/global target/,
+        'package-target s/// produces its own loud GAP') or diag($err);
 };
 
-# Destructive s/// in scalar/boolean context returns the integer match COUNT,
-# not the rewritten string. The producer stamps every subst result Str and
-# pushes the rewritten string -- correct for void context and for /r, wrong
-# for scalar-context destructive (a silent value+type miscompile). GAP it.
-subtest 'scalar-context destructive s///g (count) GAPs loudly' => sub {
-    my $err = translate_err('sub { my $x="hello"; my $n = ($x =~ s/l/L/g); $n }');
-    like($err, qr/^GAP:/, 'count-context destructive s/// produces a loud GAP') or diag($err);
+# Destructive s/// in scalar/boolean context returns the match COUNT, not the
+# rewritten string. This GAPped rather than commit the silent value+type
+# miscompile of pushing the subject; it now LOWERS, with the count as a
+# separate node over the substitution so the two results stay distinct. The
+# stamp is Str because zero matches is "" and not 0 -- see
+# t/from-optree-subst-count-context.t for the measurements.
+subtest 'scalar-context destructive s///g lowers to a count' => sub {
+    my $g = translate_ok('sub { my $x="hello"; my $n = ($x =~ s/l/L/g); $n }');
+    ok(defined $g, 'it translates') or return;
+    ok(scalar(grep { $_->operation eq 'RegexSubstCount' } $g->nodes->@*),
+        'the count is its own node, not the substituted subject');
 };
 
-subtest 'scalar-context destructive s/// (single) GAPs loudly' => sub {
-    my $err = translate_err('sub { my $x="hello"; my $n = ($x =~ s/l/L/); $n }');
-    like($err, qr/^GAP:/, 'single-match count-context s/// produces a loud GAP') or diag($err);
+subtest 'scalar-context destructive s/// (single) lowers to a count' => sub {
+    my $g = translate_ok('sub { my $x="hello"; my $n = ($x =~ s/l/L/); $n }');
+    ok(defined $g, 'it translates') or return;
+    ok(scalar(grep { $_->operation eq 'RegexSubstCount' } $g->nodes->@*),
+        'a single-match subst counts too');
 };
 
 # An interpolated (multi-part) replacement is a substcont subtree, not a single
