@@ -535,15 +535,43 @@ sub _floor_list_assigns {
         my $graph = $graphs->{$gname} or next;
         for my $node ( $graph->nodes->@* ) {
             next unless $node->isa('SoN::IR::Node::Assign');
-            next unless ( $node->stamp ? $node->stamp->type : '' ) eq 'Unknown';
+
+            # AN Array/List STAMP HERE IS THE RHS ECHOING THROUGH, not a
+            # narrowing to protect. A list assign's TARGETS are scalars --
+            # measured, `sub p { my ($x) = @_ }` gives Int for p(5) and Str for
+            # p("s"), never an array however many arguments arrive -- so a node
+            # claiming the slot holds Array is wrong, not merely wide.
+            #
+            # The write-once guard is right for a genuine narrowing (`$a[0] =
+            # "foo"` is Assign:Str and must survive) and wrong here, because
+            # what it is protecting was never a narrowing.
+            my $st = $node->stamp ? $node->stamp->type : '';
+            next unless $st eq 'Unknown' || $st eq 'Array' || $st eq 'List'
+                     || $st eq 'Hash';
 
             # ONLY THE LIST SHAPE. A scalar assign carries (target, value) and
             # takes its type from the VALUE -- a narrowing that runs after this
             # pass, so flooring one here would win a race it has no business
             # winning and pin `$a[0] = $n` to List. The list form is the one
             # with several targets and no single RHS operand to echo.
+            # SHAPE, NOT ARITY. `@in > 2` means "several targets and an RHS",
+            # which misses the SINGLE-target list assign: `my ($x) = @_` has
+            # exactly two inputs and read as a scalar assign, keeping the RHS's
+            # Array stamp. Arity is the wrong discriminator -- the same mistake
+            # the map-body allow-list made -- because `my ($x) = @_` and
+            # `my $x = shift` differ in SHAPE, not in node count.
+            #
+            # A LIST ASSIGN IS RECOGNISED BY ITS RHS being an aggregate the
+            # targets are distributed FROM. A scalar assign's RHS is the value
+            # itself, so its stamp is the answer and is left alone above.
             my @in = ( $node->inputs // [] )->@*;
-            next unless @in > 2;
+            next unless @in >= 2;
+            if ( @in == 2 ) {
+                my $rhs = $in[1] or next;
+                my $rt  = $rhs->can('stamp') && $rhs->stamp
+                        ? $rhs->stamp->type : '';
+                next unless $rt eq 'Array' || $rt eq 'Hash' || $rt eq 'List';
+            }
 
             $node->set_stamp( SoN::IR::Stamp->new( type => $lub ) );
         }
