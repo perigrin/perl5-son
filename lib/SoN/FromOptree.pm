@@ -865,43 +865,8 @@ class SoN::FromOptree 0.01 {
             # eval either yields the body's value or, having caught, undef. Two
             # arms merging into a Region, which chalk lowers today.
             if ($name eq 'entertry') {
-                my $body_sim = $sim->snapshot;
-                _walk_branch($cv, $op->next, $body_sim, $factory, $opmap,
-                    \%visited, undef, 1, _op_addr($op->other));
-
-                my $undef = $factory->make('Constant',
-                    value      => undef,
-                    const_type => 'undef',
-                    stamp      => SoN::IR::Stamp->new(type => 'Undef'));
-                my $region = $factory->make_cfg('Region',
-                    inputs => [$body_sim->control]);
-                $sim->set_control($region);
-                $sim->set_memory($body_sim->memory);
-
-                # The body's value, or undef if it died. Three cases, and the
-                # depth tells them apart:
-                #
-                #   deeper   the body produced a value -> Phi(value, undef)
-                #   equal    a VOID eval (`eval { print "x" };`) produced none,
-                #            and the caller wants none
-                #   equal,   a body that ALWAYS throws (`eval { die "x" }`)
-                #   wanted   pushes nothing either -- `die` builds an Unwind and
-                #            yields no value -- but the eval still HAS a result,
-                #            and perl says it is undef. Push the undef alone: a
-                #            Phi would need two arms and there is only one.
-                if ($body_sim->stack_depth > $sim->stack_depth) {
-                    my $val = $body_sim->pop_node;
-                    $sim->push_node($factory->make_unique('Phi',
-                        inputs => [$val, $undef], region => $region));
-                }
-                elsif (($op->flags & 3) != 1) {   # not OPf_WANT_VOID
-                    $sim->push_node($undef);
-                }
-
-                # Resume after the leavetry the body converged on.
-                $op = $op->other;
-                $visited{$$op}++ if $$op;
-                $op = $op->next if $$op;
+                $op = _handle_entertry($cv, $op, $sim, $factory, $opmap,
+                    \%visited);
                 next;
             }
 
@@ -2321,14 +2286,34 @@ class SoN::FromOptree 0.01 {
     );
 
     sub _extract_const ($sv) {
-        # A constant-folded boolean comparison (1 < 2) resolves to the shared
-        # PL_sv_yes / PL_sv_no SVs, which surface as a B::SPECIAL whose index is
-        # 2 (yes) or 3 (no) in B::specialsv_name. Preserve the boolean-ness as a
-        # Boolean Constant rather than losing it to the Unknown/string fallback.
+        # A constant folded to one of perl's SHARED SVs surfaces as a
+        # B::SPECIAL whose index names which one (B::specialsv_name):
+        #
+        #     0 Nullsv   1 &PL_sv_undef   2 &PL_sv_yes   3 &PL_sv_no
+        #
+        # A B::SPECIAL HAS NO FLAGS METHOD, so every index must be answered
+        # here or the flag dispatch below dies with "Can't locate object method
+        # FLAGS" -- an INTERNAL ERROR, which is worse than a GAP: it fires
+        # before any honest refusal could and names a site that is not the
+        # cause.
+        #
+        # 2/3 keep the boolean-ness of a folded comparison (1 < 2) rather than
+        # losing it to the string fallback. 1 IS UNDEF AND WAS MISSING: index 0
+        # is caught by the falsy-$$sv guard below, but 1 is truthy, so it fell
+        # through and crashed. perl's own t/comp/fold.t installs one on purpose
+        # -- `$::{u} = \undef` puts a reference to undef in the stash and
+        # `1 + u` folds against it.
         if (defined $sv && ref($sv) eq 'B::SPECIAL') {
             my $idx = $$sv;
+            return (undef, SoN::IR::Stamp->new(type => 'Undef'), 'undef') if $idx == 1;
             return (1,  SoN::IR::Stamp->new(type => 'Boolean'), 'boolean') if $idx == 2;
             return ('', SoN::IR::Stamp->new(type => 'Boolean'), 'boolean') if $idx == 3;
+
+            # ANY OTHER SHARED SV IS UNANSWERED, and guessing is how a wrong
+            # constant reaches the wire silently. pWARN_ALL/pWARN_NONE (4/5)
+            # are the reachable rest.
+            die "GAP: a constant folded to the shared SV at specialsv index"
+              . " $idx is not yet lowered\n";
         }
 
         return (undef, SoN::IR::Stamp->new(type => 'Undef'), 'undef')
@@ -7509,6 +7494,19 @@ class SoN::FromOptree 0.01 {
                 next;
             }
 
+            # A block eval in the loop body is a self-contained trap, not a
+            # branch of the loop's control flow: it walks its own body, merges
+            # the two outcomes at its OWN Region and resumes at the leavetry.
+            # Nothing of it touches the Loop, which is why it delegates safely
+            # where a nested if/else does not. Same delegation as cond_expr
+            # above, to the same handler the main walk uses.
+            if ($name eq 'entertry') {
+                $loop_visited->{$$op}++;
+                $op = _handle_entertry($cv, $op, $sim, $factory, $opmap,
+                    $loop_visited);
+                next;
+            }
+
             # Nested control structure in a body is only translated by the
             # MAIN walker; skipping it here emitted corrupt graphs (a nested
             # loop minted Projs on the OUTER Loop and truncated the walk; a
@@ -8363,6 +8361,66 @@ class SoN::FromOptree 0.01 {
     # with every other exit; without it the arm's exit is detected and dropped,
     # which is why this used to refuse. The statement-modifier path has always
     # passed it -- this is the same threading, one construct over.
+    # _handle_entertry($cv, $op, ...) -> the op to resume at.
+    #
+    # BLOCK EVAL: entertry/leavetry. NOT entertrycatch, which is perl's
+    # `try/catch` FEATURE and handled separately.
+    #
+    #     3  <|> entertry(other->4) s
+    #     9      <;> nextstate            <- ->next is the BODY
+    #     a      <$> const[IV 1]
+    #     4  <@> leavetry sK              <- ->other is where it lands
+    #
+    # The trap is the same shape string eval and entertrycatch use: the eval
+    # either yields the body's value or, having caught, undef. Two arms merging
+    # into a Region, which chalk lowers today.
+    #
+    # SHARED WITH THE LOOP-BODY WALKER, which is a separate walk that refuses
+    # every branch op it has no case for. entertry is a registered branch, so a
+    # block eval that lowered fine at statement level was refused the moment it
+    # appeared inside any loop -- measured on for, while and foreach alike.
+    # Precedent: _handle_cond_expr was extracted for exactly this reason.
+    sub _handle_entertry ($cv, $op, $sim, $factory, $opmap, $visited) {
+        my $body_sim = $sim->snapshot;
+        _walk_branch($cv, $op->next, $body_sim, $factory, $opmap,
+            $visited, undef, 1, _op_addr($op->other));
+
+        my $undef = $factory->make('Constant',
+            value      => undef,
+            const_type => 'undef',
+            stamp      => SoN::IR::Stamp->new(type => 'Undef'));
+        my $region = $factory->make_cfg('Region',
+            inputs => [$body_sim->control]);
+        $sim->set_control($region);
+        $sim->set_memory($body_sim->memory);
+
+        # The body's value, or undef if it died. Three cases, and the
+        # depth tells them apart:
+        #
+        #   deeper   the body produced a value -> Phi(value, undef)
+        #   equal    a VOID eval (`eval { print "x" };`) produced none,
+        #            and the caller wants none
+        #   equal,   a body that ALWAYS throws (`eval { die "x" }`)
+        #   wanted   pushes nothing either -- `die` builds an Unwind and
+        #            yields no value -- but the eval still HAS a result,
+        #            and perl says it is undef. Push the undef alone: a
+        #            Phi would need two arms and there is only one.
+        if ($body_sim->stack_depth > $sim->stack_depth) {
+            my $val = $body_sim->pop_node;
+            $sim->push_node($factory->make_unique('Phi',
+                inputs => [$val, $undef], region => $region));
+        }
+        elsif (($op->flags & 3) != 1) {   # not OPf_WANT_VOID
+            $sim->push_node($undef);
+        }
+
+        # Resume after the leavetry the body converged on.
+        my $next = $op->other;
+        return $next unless $$next;
+        $visited->{$$next}++;
+        return $next->next;
+    }
+
     sub _handle_cond_expr ($cv, $op, $sim, $factory, $opmap, $visited, $exits = undef) {
         # A LIST-context ternary (`print $c ? "y" : "n"`) whose arms each produce
         # exactly ONE value is the same select shape as a scalar-context ternary:
