@@ -288,6 +288,24 @@ class SoN::FromOptree 0.01 {
             program_root => ${ B::main_root() });
     }
 
+    # Translate an INLINE sort comparator body -- the third caller of the shared
+    # walk, beside translate() (a CV) and translate_root() (the program).
+    #
+    # Like the program and unlike a CV, a comparator block is not its own CV: it
+    # is a subtree in the ENCLOSING cv's pad, so the walk takes that cv (for pad
+    # and stash resolution) and the block's own start op.
+    #
+    # IT NEEDS NO EXIT OP. A comparator chain ends at its comparison with
+    # ->next NULL -- there is no leavesub -- so the walk falls off the end and
+    # the shared fall-through path makes the last stack value the Return, which
+    # is exactly the comparator's result.
+    sub translate_sort_body ($class_or_self, $pair) {
+        my ($cv, $start) = $pair->@*;
+        die "GAP: a sort comparator body with no start op\n"
+            unless $cv && $$cv && $start && $$start;
+        return _translate_from($cv, $start);
+    }
+
     # _translate_from($cv, $start_op, program_root => $addr?) -- shared walk
     # driving both translate() (a CV, $start_op == $cv->START) and
     # translate_root() (the top-level program, $start_op == B::main_start(),
@@ -1396,6 +1414,20 @@ class SoN::FromOptree 0.01 {
     # it records them here and B::SoN drains the registry and translates each
     # into the same %graphs hash every other sub lands in.
     our %ANON_BODIES;
+
+    # INLINE SORT COMPARATOR BODIES, as name => [ enclosing B::CV, start op ].
+    #
+    # SEPARATE FROM %ANON_BODIES BECAUSE THE SHAPE IS DIFFERENT, not to keep
+    # two registries for one job: an anon body IS a B::CV and the drain calls
+    # ->object_2svref on it, while `sort { ... }` compiles to a plain subtree in
+    # the ENCLOSING cv's pad -- there is no CV to hand over. The pair is what a
+    # walk needs (the cv supplies the pad, the op is where to start), which is
+    # exactly what _translate_from already takes for the bare program.
+    our %SORT_BODIES;
+
+    # Per-enclosing-CV site numbering for %SORT_BODIES keys, so a name is
+    # stable across runs (an op address is not).
+    our %SORT_BODY_SEQ;
 
 
     # A deterministic, unique name for one anon sub SITE.
@@ -4211,11 +4243,6 @@ class SoN::FromOptree 0.01 {
         #
         # So the folded forms are not refused here -- they have no block to
         # drop -- and OPf_STACKED is what marks one that would be.
-        if ($name eq 'sort' && ($op->flags & 64)) {   # OPf_STACKED
-            die "GAP: sort with a comparator BLOCK is not yet lowered -- the"
-              . " comparator would be dropped and the list left unsorted\n";
-        }
-
         if ($name eq 'undef') {
             # `undef EXPR` AND `EXPR = undef` ARE NOT ONE OPERATION. Measured:
             #
@@ -5398,7 +5425,17 @@ class SoN::FromOptree 0.01 {
                 if ($node_type eq 'Call') {
                     $extra{dispatch_kind} = 'builtin';
                     $extra{name}          = $name;
-                    %extra = (%extra, _sort_fields($op)) if $name eq 'sort';
+                    if ($name eq 'sort') {
+                        %extra = (%extra, _sort_fields($cv, $op));
+                        # A NAMED COMPARATOR IS ON THE STACK, and it is not an
+                        # element to sort. `sort bylen @list` pushes
+                        # const[PV "bylen"]/BARE ahead of the list, so it
+                        # arrives as inputs[0] -- measured, the graph sorted
+                        # four items where perl sorts three, with the literal
+                        # "bylen" among them. The inline form does not do this:
+                        # its block is not threaded into the exec chain at all.
+                        shift @inputs if _sort_names_its_comparator($op);
+                    }
                 }
                 my $stamp = ( $node_type eq 'Call'
                               ? _context_builtin_stamp($op, $name) : undef )
@@ -5741,7 +5778,17 @@ class SoN::FromOptree 0.01 {
                 if ($node_type eq 'Call') {
                     $extra{dispatch_kind} = 'builtin';
                     $extra{name}          = $name;
-                    %extra = (%extra, _sort_fields($op)) if $name eq 'sort';
+                    if ($name eq 'sort') {
+                        %extra = (%extra, _sort_fields($cv, $op));
+                        # A NAMED COMPARATOR IS ON THE STACK, and it is not an
+                        # element to sort. `sort bylen @list` pushes
+                        # const[PV "bylen"]/BARE ahead of the list, so it
+                        # arrives as inputs[0] -- measured, the graph sorted
+                        # four items where perl sorts three, with the literal
+                        # "bylen" among them. The inline form does not do this:
+                        # its block is not threaded into the exec chain at all.
+                        shift @inputs if _sort_names_its_comparator($op);
+                    }
                 }
 
                 # A BAREWORD FILEHANDLE IS A GLOB, NOT ITS NAME. `open(FOO,...)`
@@ -8939,7 +8986,7 @@ class SoN::FromOptree 0.01 {
     #
     # The sigil is part of the identity because `$g` and `@g` are unrelated
     # variables in one stash -- `$_` vs `@_` is the case that bites.
-    # _sort_fields($op) -- what a FOLDED sort compares, and in which direction.
+    # _sort_fields($cv, $op) -- what a sort compares, and in which direction.
     #
     # perl folds the standard comparators into flags on the op, which is why
     # they carry no block. Without those flags on the wire three programs with
@@ -8965,12 +9012,145 @@ class SoN::FromOptree 0.01 {
     #     sort                 private=0x00   string  ascending
     #
     # Read off the op, so T1 states what the program says rather than inferring.
-    sub _sort_fields ($op) {
+    #
+    # AN UNFOLDABLE COMPARATOR IS A CALLEE, NOT A FOLD. Anything perl could not
+    # reduce to those flags arrives as a real subtree and sets OPf_STACKED. The
+    # private bits are then MEANINGLESS -- measured, `sort { $b->[1] <=> $a->[1] }`
+    # carries private=0x0, which reads as "string ascending" and is a lie about
+    # a numeric descending sort. So sort_cmp/sort_order are emitted ONLY for the
+    # folded forms; a stacked sort names its comparator body instead.
+    #
+    # Measured -- all three unfoldable forms put a `null` at kid[1] and differ
+    # only in what sits under it:
+    #
+    #     sort { $b->[1] <=> $a->[1] } ...   scope   an inline block
+    #     sort bylen ...                     const   a named CV (name in the pad)
+    #     sort $subref ...                   padsv   a runtime value
+    #
+    # The comparator reads $a and $b as PACKAGE GLOBALS through the stash
+    # (measured: the multideref aux carries B::GV(a) / B::GV(b)), so the body
+    # needs no capture machinery -- it reads the same stash every other package
+    # read reaches.
+    sub _sort_fields ($cv, $op) {
         my $priv = $op->private;
+
         return (
             sort_cmp   => ( $priv & 1 )    ? 'numeric'    : 'string',
             sort_order => ( $priv & 0x10 ) ? 'descending' : 'ascending',
-        );
+        ) unless $op->flags & 64;   # OPf_STACKED
+
+        return ( sort_cmp_body => _sort_comparator_name($cv, $op) );
+    }
+
+    # _sort_comparator_name($cv, $op) -- the `methods` key for a STACKED sort's
+    # comparator, registering the body when the name is a fresh one.
+    #
+    # The two resolvable forms need different work and it is not the same work:
+    # a NAMED comparator already exists as its own methods entry (it is an
+    # ordinary sub the walker emits anyway), so only the name is needed; an
+    # INLINE block is a subtree in THIS cv's pad and has to be registered so the
+    # drain translates it.
+    # _sort_names_its_comparator($op) -- true when the comparator was pushed
+    # onto the stack ahead of the list, so the generic arg collection picked it
+    # up as an element.
+    #
+    # ONLY THE NAMED AND SUBREF FORMS DO THIS. Measured in exec order:
+    #
+    #     sort bylen ("aa","b")    pushmark const[PV "bylen"]/BARE const const sort
+    #     sort $c (3,1,2)          pushmark padsv const const const sort
+    #     sort { ... } (...)       pushmark anonlist anonlist sort   -- no block
+    #
+    # The inline block is not threaded into the enclosing exec chain at all,
+    # which is why it needs a separate walk and why nothing of it is on the
+    # stack here. The tell is the same slot kind the name resolution reads.
+    sub _sort_names_its_comparator ($op) {
+        return 0 unless $op->flags & 64;   # OPf_STACKED
+        my $slot = $op->first->sibling;
+        return 0 unless $slot && $$slot && ($slot->flags & 4);
+        my $inner = $slot->first;
+        return 0 unless $inner && $$inner;
+        return $inner->name eq 'const' || $inner->name eq 'padsv' ? 1 : 0;
+    }
+
+    sub _sort_comparator_name ($cv, $op) {
+        my $slot = $op->first->sibling;      # kid[1], the comparator slot
+        die "GAP: a sort marked STACKED with no comparator slot is not yet"
+          . " lowered\n"
+            unless $slot && $$slot && ($slot->flags & 4);
+
+        my $inner = $slot->first;
+        die "GAP: a sort comparator slot with no body is not yet lowered\n"
+            unless $inner && $$inner;
+
+        my $kind = $inner->name;
+
+        # A NAMED COMPARATOR IS A REFERENCE TO AN ALREADY-TRANSLATED CV. The
+        # name rides in the pad on a threaded perl ($inner->sv is a B::SPECIAL),
+        # reached by its targ exactly as _anoncode_cv reaches an anon body.
+        #
+        # It is spelled as written -- `sort bylen` gives "bylen", `sort
+        # main::bylen` gives "main::bylen" -- so an unqualified name is
+        # qualified here against the op's stash, or the wire carries a key that
+        # matches no methods entry.
+        if ($kind eq 'const') {
+            my $sv = eval { $cv->PADLIST->ARRAYelt(1)->ARRAYelt($inner->targ) };
+            my $name = ( ref($sv) && eval { $sv->can('PV') } )
+                     ? eval { $sv->PV } : undef;
+            die "GAP: a named sort comparator whose name could not be resolved"
+              . " from the pad is not yet lowered\n"
+                unless defined $name && length $name;
+
+            return $name =~ /::/ ? $name : 'main::' . $name;
+        }
+
+        # AN INLINE BLOCK IS A SUBTREE, NOT A CV, so it cannot go through
+        # %ANON_BODIES -- that registry holds B::CVs and the drain calls
+        # ->object_2svref on each. It registers as a START OP instead, walked by
+        # the same _translate_from that already walks the bare program (also not
+        # a CV).
+        if ($kind eq 'scope' || $kind eq 'leave' || $kind eq 'lineseq') {
+            # THE BLOCK OP IS NOT THE EXEC START. `scope->next` is NULL -- the
+            # comparator is not threaded into the enclosing sub's chain -- so
+            # starting the walk there ends it immediately, and the body came out
+            # `Start, Constant, Return` with the comparison missing. Exec order
+            # begins at the LEFTMOST LEAF, the standard way into an unthreaded
+            # subtree.
+            my $start = $inner;
+            $start = $start->first while ($start->flags & 4) && ${ $start->first };
+
+            my $name = _sort_body_name($cv, $op);
+            $SORT_BODIES{$name} //= [ $cv, $start ];
+            return $name;
+        }
+
+        # A COMPARATOR CHOSEN AT RUNTIME CANNOT BE NAMED. `sort $c @list` picks
+        # the sub from a value, so no static name addresses it -- the same shape
+        # as `write` under a $~-selected format. Refused rather than guessed:
+        # picking any one comparator here would sort by an order the program
+        # never asked for.
+        die "GAP: a sort comparator chosen at runtime (a subref, not a block or"
+          . " a named sub) is not yet lowered -- no static name addresses it\n";
+    }
+
+    # A deterministic per-site name for an inline comparator body, built the way
+    # _anon_body_name builds one: the enclosing sub plus the site, so two sorts
+    # in one CV do not collide and the same sort is stable across runs.
+    sub _sort_body_name ($cv, $op) {
+        my $gv = eval { $cv->GV };
+        my $enclosing =
+            ( ref($gv) eq 'B::GV' && eval { $gv->NAME } )
+                ? sprintf('%s::%s', eval { $gv->STASH->NAME } // 'main',
+                                    $gv->NAME)
+                : 'main::__PROGRAM__';
+
+        # SITES ARE NUMBERED WITHIN THE ENCLOSING CV, not named by op address:
+        # an address varies between runs, so a wire key built from one is not
+        # reproducible and two compilations of the same file disagree. A line
+        # number alone would not separate `sort {...}, sort {...}` on one line,
+        # so the counter is per enclosing CV and assigned in walk order.
+        my $seq = $SORT_BODY_SEQ{$enclosing} //= {};
+        my $n = $seq->{ $$op } //= scalar keys %$seq;
+        return sprintf('%s::__SORTCMP__:%d', $enclosing, $n);
     }
 
     # _stash_name_key($sigil, $stash, $name) -- the same spelling from raw parts,

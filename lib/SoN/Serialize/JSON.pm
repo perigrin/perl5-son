@@ -40,6 +40,14 @@ sub _extract_fields ($node, $id_remap) {
             ( defined $node->sort_order
                 ? ( sort_order => $node->sort_order )
                 : () ),
+            # The `methods` key of an unfoldable comparator's body. Present
+            # INSTEAD OF sort_cmp/sort_order, never beside them: a stacked
+            # sort's private bits describe no fold and reading them as one is
+            # wrong (measured: a numeric descending comparator carries
+            # private=0x0, which reads as "string ascending").
+            ( defined $node->sort_cmp_body
+                ? ( sort_cmp_body => $node->sort_cmp_body )
+                : () ),
             # The callsite's context ('void'|'scalar'|'list'). A list-returning
             # callee carries every value AND its scalar reading; this is how a
             # consumer knows which one this callsite asked for.

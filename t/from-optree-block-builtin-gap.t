@@ -75,12 +75,30 @@ subtest 'grep lowers its predicate rather than dropping it' => sub {
 #     sort { $b <=> $a }            lK/DESC,NUM  folded, no block
 #     sort { length($a) <=> ... }   lKS*         OPf_STACKED, a real subtree
 #
-# So the standard numeric comparators are not refused -- there is nothing to
-# drop -- and only an unfoldable comparator is.
-subtest 'sort with an UNFOLDABLE comparator block refuses' => sub {
-    my ( undef, $err ) = translate(
+# So the standard numeric comparators carry no block at all, and an unfoldable
+# one is a CALLEE: its body becomes its own graph, named by the sort.
+subtest 'sort with an UNFOLDABLE comparator block lowers it as a callee' => sub {
+    my ( $w, $err ) = translate(
         'my @s = sort { length($a) <=> length($b) } ("aa","b"); print $s[0];',
         'sort-block' );
+    ok $w, 'it translates' or diag($err), return;
+    unlike $err, qr/GAP:/, 'and is not refused';
+
+    my ($call) = grep { $_->{op} eq 'Call'
+                        && ( $_->{fields}{name} // '' ) eq 'sort' }
+                 $w->{methods}{'main::__PROGRAM__'}{nodes}->@*;
+    ok defined $call, 'the sort is in the graph' or return;
+    ok defined $call->{fields}{sort_cmp_body},
+        '... naming the comparator body rather than dropping it';
+};
+
+# A comparator picked from a VALUE at runtime still has no static name, so it
+# stays refused -- lowering it would mean guessing an order the program never
+# asked for.
+subtest 'a runtime subref comparator still refuses' => sub {
+    my ( undef, $err ) = translate(
+        'my $c = sub { $a <=> $b }; my @s = sort $c (3,1); print $s[0];',
+        'sort-subref' );
     like $err, qr/GAP:/, 'refused';
     like $err, qr/comparator/, '... naming the comparator';
 };

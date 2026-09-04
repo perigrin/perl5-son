@@ -17,6 +17,20 @@ class SoN::IR::Node::Call :isa(SoN::IR::Value) {
     field $sort_cmp   :param :reader = undef;   # numeric | string
     field $sort_order :param :reader = undef;   # ascending | descending
 
+    # THE `methods` KEY OF AN UNFOLDABLE COMPARATOR's BODY. A comparator perl
+    # could not fold is a CALLEE -- an inline block, or a named sub -- and the
+    # body lives beside the other graphs under this name rather than nested
+    # here, the same shape AnonSub uses and for the same reason (a nested graph
+    # has no serializer arm on either side of the wire).
+    #
+    # MUTUALLY EXCLUSIVE WITH sort_cmp/sort_order, which describe a fold. A
+    # stacked sort's private bits do not describe its comparator -- measured,
+    # `sort { $b->[1] <=> $a->[1] }` carries private=0x0, which reads as
+    # "string ascending" and is false about a numeric descending sort -- so a
+    # consumer seeing this field must order by the body and ignore the other
+    # two. Undef for a folded sort and for every other builtin.
+    field $sort_cmp_body :param :reader = undef;
+
     # paren_form: true when the source used the parens-bounded call form
     # (e.g., `push(@arr, $x)`) rather than the bare list-op form
     # (e.g., `push @arr, $x`). Threaded from CallExpression alt 0 (paren
@@ -77,6 +91,10 @@ class SoN::IR::Node::Call :isa(SoN::IR::Value) {
             "dispatch_kind=$dispatch_kind",
             "name=$name",
             (defined $class_name ? "class_name=$class_name" : ()),
+            # THE COMPARATOR IS PART OF THE IDENTITY. Two sorts over the same
+            # list differing only in their comparator are different values, and
+            # without this they interned to one node.
+            (defined $sort_cmp_body ? "sort_cmp_body=$sort_cmp_body" : ()),
             ($paren_form ? "paren_form=1" : ()),
             $self->_serialize_inputs());
     }

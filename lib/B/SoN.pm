@@ -135,6 +135,10 @@ sub _discover_and_translate {
     # sub defined inside a named sub, leaving its Call naming a methods key
     # that was never emitted.
     %SoN::FromOptree::ANON_BODIES = ();
+    # Inline sort comparator bodies, cleared on the same schedule and for the
+    # same reason: a sort inside a named sub registers during that sub's walk.
+    %SoN::FromOptree::SORT_BODIES = ();
+    %SoN::FromOptree::SORT_BODY_SEQ = ();
     # Per-run, like the body registry: a node id from a previous compilation
     # unit must not mark a fresh graph's literal as mutated.
     %SoN::FromOptree::MUTATED_LITERALS = ();
@@ -204,14 +208,22 @@ sub _discover_and_translate {
     my %attempted;
     while (1) {
         my @pending = grep { !exists $graphs{$_} && !$attempted{$_} }
-                      sort keys %SoN::FromOptree::ANON_BODIES;
+                      sort keys %SoN::FromOptree::ANON_BODIES,
+                           keys %SoN::FromOptree::SORT_BODIES;
         last unless @pending;
         for my $anon_name (@pending) {
             $attempted{$anon_name} = 1;
             my $body_cv = $SoN::FromOptree::ANON_BODIES{$anon_name};
             try {
-                $graphs{$anon_name} =
-                    SoN::FromOptree->translate( $body_cv->object_2svref );
+                # A sort comparator body is a SUBTREE, not a CV (see
+                # %SORT_BODIES), so it takes the op-based entry point. Both
+                # kinds share this fixpoint because either can contain the
+                # other -- a sort inside an anon sub, an anon sub inside a
+                # comparator -- and a separate loop would miss the second hop.
+                $graphs{$anon_name} = defined $body_cv
+                    ? SoN::FromOptree->translate( $body_cv->object_2svref )
+                    : SoN::FromOptree->translate_sort_body(
+                          $SoN::FromOptree::SORT_BODIES{$anon_name} );
             }
             catch ($e) {
                 # Same discipline as every other body: a GAP is the translator
