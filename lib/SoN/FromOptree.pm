@@ -2875,10 +2875,8 @@ class SoN::FromOptree 0.01 {
             # `local @x` restores exactly as `local $g` does -- same key, sigil
             # included -- so it records the same save for the scope exit below.
             if ($op->private & 128) {   # OPpLVAL_INTRO
-                # Same per-iteration problem as the scalar site above.
-                die "GAP: `local` inside a loop body is not yet lowered --"
-                  . " it restores once per ITERATION, not at loop exit\n"
-                    if $ctx->{in_loop_body};
+                # `local @x` in a loop body restores at the ITERATION boundary,
+                # exactly as the scalar site does -- see there.
                 push $ctx->{local_saves}->@*, { key => $key, node => $existing };
             }
 
@@ -3582,17 +3580,22 @@ class SoN::FromOptree 0.01 {
                 # outer value. That is a Phi interaction the straight-line
                 # shapes do not have, and getting it wrong is silent.
                 if ($op->private & 128) {   # OPpLVAL_INTRO
-                    # A LOOP BODY RESTORES PER ITERATION, which the
-                    # scope-exit rebind cannot express: the save is taken once,
-                    # on the pass that walks the body, so restoring it at the
-                    # loop's exit gives every iteration the last pass's value.
+                    # A LOOP BODY RESTORES PER ITERATION, AND SO DOES THIS.
+                    # The body walk models exactly ONE iteration and stops at
+                    # the `unstack` that ends it, so that stop IS the iteration
+                    # boundary and the restore belongs there -- see
+                    # _walk_loop_body, which calls _restore_locals on it.
+                    #
                     # Measured, `for (1..3) { print $g; local $g = $g+1;
-                    # print $g }` prints 121212 -- each pass starts from the
-                    # OUTER value -- while the graph built a loop-carried Phi
-                    # for $g, the opposite recurrence.
-                    die "GAP: `local` inside a loop body is not yet lowered --"
-                      . " it restores once per ITERATION, not at loop exit\n"
-                        if $ctx->{in_loop_body};
+                    # print $g }` prints 121212: each pass starts from the
+                    # OUTER value. Restoring at the iteration boundary is what
+                    # produces that; the hazard the other way is a loop-carried
+                    # Phi for $g, which would give 123456.
+                    #
+                    # The restore is invisible in the optree -- perl unwinds a
+                    # runtime savestack, and there is no `leave` in the body,
+                    # just `unstack` and a goto -- so it is modelled here
+                    # rather than translated from an op.
                     my $key = _stash_name_key('$', $gv->STASH->NAME, $gv->NAME);
                     push $ctx->{local_saves}->@*,
                         { key => $key, node => $sim->lookup($key) };
@@ -7370,9 +7373,11 @@ class SoN::FromOptree 0.01 {
     # the binding effects are identical either way, which is all the scout
     # measures.
     sub _walk_loop_body ($cv, $op, $sim, $factory, $opmap, $loop_visited, $outer_visited, $loop_node = undef, $break_projs = undef, $cond_consumed = 0) {
-        # in_loop_body tells _restore_locals it cannot honour a `local` here:
-        # the restore is per-ITERATION, and a save taken once on this walk
-        # cannot express that. See its guard.
+        # A `local` in the body restores at the ITERATION boundary -- measured,
+        # `for (1..3) { print $g; local $g = $g+1; print $g }` prints 121212,
+        # so every pass starts from the OUTER binding. This walk models exactly
+        # one iteration and stops at the `unstack`/`leaveloop` that ends it, so
+        # that stop is the boundary and _restore_locals is called there.
         my $ctx = { mode => 'loop', local_saves => [], in_loop_body => 1 };
         my $exit_proj;
         # A foreach's iteration `and` is consumed by its caller before the body
@@ -7432,13 +7437,19 @@ class SoN::FromOptree 0.01 {
                 $stmt_count++;
             }
 
-            # unstack marks end of loop iteration - stop
+            # unstack marks end of loop iteration - stop.
+            # THE ITERATION BOUNDARY IS WHERE `local` RESTORES, so put back
+            # every binding this body replaced before leaving. Without it a
+            # read after the loop resolved to the localised value and the graph
+            # said "iter" where perl says "outer".
             if ($name eq 'unstack') {
+                _restore_locals($sim, $ctx);
                 last;
             }
 
             # leaveloop - exit the loop
             if ($name eq 'leaveloop') {
+                _restore_locals($sim, $ctx);
                 last;
             }
 

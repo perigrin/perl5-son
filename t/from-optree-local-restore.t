@@ -82,20 +82,33 @@ subtest 'local on a package array translates' => sub {
     unlike $err, qr/`local`/, 'no local GAP';
 };
 
-# A LOOP BODY IS STILL REFUSED, and this is the guard that keeps the fix
-# honest. `local` there restores once per ITERATION -- measured,
-# `for (1..3) { print $g; local $g = $g+1; print $g }` prints 121212, each pass
-# starting from the outer value -- while a scope-exit rebind would give every
-# iteration the last pass's value. Before the guard the graph built a
-# loop-carried Phi for $g, which is the opposite recurrence and silently wrong.
-subtest 'local inside a loop body is refused' => sub {
-    my ( undef, $err ) = translate(
+# A LOOP BODY RESTORES PER ITERATION, and that is the behaviour rather than an
+# obstacle to it. Measured, `for (1..3) { print $g; local $g = $g+1; print $g }`
+# prints 121212: EACH PASS STARTS FROM THE OUTER VALUE. The body walk models
+# exactly one iteration and stops at the `unstack` that ends it, so restoring
+# there gives precisely that.
+#
+# The hazard is the other direction -- a loop-carried Phi for $g would make the
+# second pass start from the first pass's value and print 123456 -- so the
+# assertion is on what the prints actually read.
+subtest 'local inside a loop body restores at the iteration boundary' => sub {
+    my ( $w, $err ) = translate(
         'our $g = 1;
 for my $i (1..3) { print $g; local $g = $g + 1; print $g; }
 print $g;', 'local-loop' );
-    like $err, qr/GAP:/, 'refused';
-    like $err, qr/per ITERATION/,
-        '... naming the recurrence it cannot express';
+    ok $w, 'it translates' or diag($err), return;
+    unlike $err, qr/GAP:/, 'and is not refused';
+
+    my $nodes = $w->{methods}{'main::__PROGRAM__'}{nodes};
+    my %by = map { $_->{id} => $_ } $nodes->@*;
+
+    # `local $g = $g + 1` must add to the OUTER binding on every pass. An Add
+    # whose operand is a Phi would be the loop-carried recurrence: 123456.
+    my ($add) = grep { $_->{op} eq 'Add' && !grep {
+        ( $by{$_}{op} // '' ) eq 'Phi' } $_->{inputs}->@* } $nodes->@*;
+    ok defined $add,
+        'the localised value is computed from the outer binding, not a '
+      . 'loop-carried Phi';
 };
 
 done_testing;
