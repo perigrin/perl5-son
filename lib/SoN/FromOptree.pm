@@ -2174,6 +2174,30 @@ class SoN::FromOptree 0.01 {
     # then the `import` half is an ordinary method call that already lowers.
     my %GLOBAL_STATE_BUILTIN = map { $_ => 1 } qw(require dofile);
 
+    # Ops that are an EFFECT in their own right rather than a call. The void
+    # branch-arm scan needs this: it asked "is this arm an entersub in void
+    # context" when the question is "does this arm hold an effect that must be
+    # control-pinned". warn/push/chdir/close are named ops, not entersub, so the
+    # scan walked past them and no If was built -- the effect landed on the base
+    # control chain and fired unconditionally. `die` and `print` escaped only
+    # because each already had its own detector, which is what made the gap look
+    # covered.
+    #
+    # This is deliberately a NAMED SET and not `!$opmap->is_pure($name)`.
+    # "Impure" in the OpMap is opt-OUT, so it holds real effects and
+    # not-yet-classified ops together -- `add`, `const` and `padsv` all answer
+    # impure. Keying on it would pin every arithmetic op in every branch arm.
+    # See docs/plans/2026-09-03-effect-by-default-had-a-hole.md, which makes the
+    # same argument for the same reason.
+    my %EFFECT_OP = map { $_ => 1 } qw(
+        warn
+        push unshift pop shift splice
+        open close binmode
+        chdir mkdir rmdir unlink rename symlink link
+        system exec
+        delete
+    );
+
     my %UNBUILT_OP_GAP = (
 
         # `goto` transfers control and builds no node, so the jump, whatever
@@ -7914,6 +7938,11 @@ class SoN::FromOptree 0.01 {
             # `say` in an if/else arm lands unguarded on the shared control and
             # BOTH arms fire, the exact miscompile this line exists to stop.
             return 1 if $name eq 'print' || $name eq 'say';
+            # An op that IS an effect, rather than a call to one. Unlike
+            # entersub these carry no useful want-flag to test -- `push @g, 9`
+            # as a statement is not marked void -- so the presence of the op in
+            # the arm is itself the answer.
+            return 1 if $EFFECT_OP{$name};
             # A void entersub is the effect -- a method call (method_named
             # recorded the name earlier) OR a bare direct call (`helper()`);
             # both thread through _handle_entersub. OPf_WANT_VOID marks the
