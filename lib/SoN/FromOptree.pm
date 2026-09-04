@@ -1824,6 +1824,42 @@ class SoN::FromOptree 0.01 {
         state $SCALAR_IS_A_STR   = { map { $_ => 1 } qw( reverse ) };
         state $LIST_IN_LIST_CONTEXT =
             { map { $_ => 1 } qw( keys values reverse sort ) };
+
+        # BUILTINS WHOSE RESULT TYPE PERL DEFINES, and which reached the wire
+        # UNSTAMPED -- 51 of them across t/base and t/comp. An unstamped
+        # builtin Call is a FAILURE Unknown: a consumer cannot tell it from a
+        # call into a sub nobody can name, which is the distinction the whole
+        # honest-vs-failure split rests on.
+        #
+        # MEASURED, and the subtleties are why most are Scalar rather than the
+        # tighter type they look like:
+        #
+        #   printf/formline  return a real boolean (is_bool TRUE) -- but they
+        #                    CAN FAIL, so the honest type is
+        #                    join(Boolean, Undef) = Scalar. Exactly the trade
+        #                    `print` already makes; claiming Boolean would be a
+        #                    WRONG answer, not a more precise one.
+        #   caller           the package name (Str) in scalar context, and
+        #                    UNDEF at the top frame -> join(Str, Undef) =
+        #                    Scalar.
+        #   prototype        undef for a sub that has none -> Scalar.
+        #   sprintf          always a string and cannot fail -> Str, the one
+        #                    that earns the tighter type.
+        #
+        # NOT LISTED AND DELIBERATELY SO: tie (returns the tied object, whose
+        # class is not on the wire), dofile/require (the module's last value),
+        # unpack (a LIST whose element types depend on the template).
+        state $FIXED_RESULT = {
+            sprintf   => 'Str',
+            prtf      => 'Scalar',   # printf
+            formline  => 'Scalar',
+            caller    => 'Scalar',
+            prototype => 'Scalar',
+        };
+        if (my $t = $FIXED_RESULT->{$name}) {
+            return SoN::IR::Stamp->new(type => $t);
+        }
+
         return undef unless $LIST_IN_LIST_CONTEXT->{$name};
         my $want = $op->flags & 3;
         return SoN::IR::Stamp->new( type => 'List' ) if $want == 3;
