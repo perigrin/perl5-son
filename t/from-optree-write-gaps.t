@@ -1,5 +1,5 @@
-# ABOUTME: Tests SoN::FromOptree refuses `write` loudly instead of dropping it.
-# ABOUTME: A format is a separate CV in the glob's FORM slot; enterwrite is a call into it.
+# ABOUTME: `write` is a CALL into the format CV in the glob's FORM slot.
+# ABOUTME: It must never vanish -- it did once, and the graph looked healthy.
 
 use v5.42.0;
 use Test2::V0;
@@ -14,13 +14,13 @@ use SoN::FromOptree;
 # a program while the statements around it compiled normally: the output looked
 # healthy and was simply missing a line. That is a miscompile, not a GAP.
 #
-# It cannot be compiled today for a structural reason: a format is compiled
-# into a CV parked in the glob's FORM slot (a B::FM, which isa B::CV, whose
-# ROOT op is `leavewrite` -- the format's own root, exactly as leavesub roots
-# an ordinary sub). enterwrite and leavewrite are therefore the two halves of a
-# call ACROSS CVs, not a bracketed region within one optree, which is why only
-# enterwrite appears at the call site. Compiling it needs that second body
-# walked plus the formline accumulator.
+# IT IS A CALL ACROSS CVs, and that structure is now what lowers it. A format
+# is compiled into a CV parked in the glob's FORM slot (a B::FM, which isa
+# B::CV, whose ROOT op is `leavewrite` -- the format's own root, exactly as
+# leavesub roots an ordinary sub), so enterwrite and leavewrite are the two
+# halves of one call rather than a bracketed region in one optree. The body is
+# registered under a deterministic name and `write` becomes a Call naming it,
+# the same addressing an anon sub uses.
 
 sub translate_program ($code) {
     SoN::OptSuppress::suppress_peep();
@@ -31,9 +31,10 @@ sub translate_program ($code) {
     return SoN::FromOptree->translate($cv);
 }
 
-subtest 'write is refused by name, not silently dropped' => sub {
-    my $err = dies {
-        translate_program(q{
+subtest 'write becomes a call, and never vanishes' => sub {
+    my $graph;
+    ok(lives {
+        $graph = translate_program(q{
             sub {
                 format STDOUT =
 @<<<
@@ -43,14 +44,24 @@ subtest 'write is refused by name, not silently dropped' => sub {
                 print "after\n";
             }
         });
-    };
+    }, 'it lowers') or diag($@);
+    return unless $graph;
 
-    ok($err, 'translation refuses rather than returning a graph');
-    like($err, qr/GAP/, 'refusal is a GAP');
-    like($err, qr/\bwrite\b/,
-        'names the construct the user wrote');
-    unlike($err, qr/enterwrite/,
-        'does NOT leak the op name -- enterwrite is perl bookkeeping');
+    # THE REGRESSION THIS FILE EXISTS FOR: `write` once VANISHED. enterwrite
+    # was registered with an undef node_type and no SKIP flag, so the generic
+    # branch built nothing and still returned 'handled' -- the statement
+    # disappeared from the middle of a program while everything around it
+    # compiled, so the output looked healthy and was simply missing a line.
+    # Whatever else changes, a write must leave a node behind.
+    my ($call) = grep {
+        $_->operation eq 'Call' && (($_->name // '') =~ /__FORMAT__/)
+    } $graph->nodes->@*;
+    ok($call, 'the write is a Call naming a format body -- not dropped');
+
+    # The statement AFTER it must still be there: a fix that swallowed the
+    # rest of the CV would also pass a "did not vanish" check on the write.
+    ok(scalar(grep { $_->operation eq 'Print' } $graph->nodes->@*),
+        'the following print survives too');
 };
 
 subtest 'ops that correctly build no node are untouched' => sub {

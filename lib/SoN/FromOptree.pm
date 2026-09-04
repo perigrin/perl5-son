@@ -250,6 +250,11 @@ class SoN::FromOptree 0.01 {
     # capture N, which the body reads as CellParam(index => N).
     our %ANON_CAPTURES;
 
+    # Format bodies, keyed by the same deterministic name their `write` Call
+    # carries. Kept in %ANON_BODIES so B::SoN's existing drain emits them --
+    # a format IS a CV (B::FM isa B::CV) whose body is walked exactly like an
+    # anon sub's, so it needs no second mechanism.
+
     sub translate ($class_or_self, $coderef) {
         my $cv = B::svref_2object($coderef);
         die "Not a CODE ref" unless $cv->isa('B::CV');
@@ -1067,7 +1072,14 @@ class SoN::FromOptree 0.01 {
             # handler below (skip + walk past), the existing behavior for a
             # 'leave' that is not this exit check's business.
             my $is_program_exit = defined $program_root && $$op == $program_root;
-            if ($name eq 'leavesub' || $name eq 'leavesublv' || $is_program_exit) {
+            # `leavewrite` ROOTS A FORMAT CV exactly as `leavesub` roots an
+            # ordinary one -- measured, a B::FM's ROOT is leavewrite and its
+            # START chain ends there. Without this the format body's ops were
+            # all walked and then dropped, because nothing recorded an exit and
+            # the graph keeps only what a Return reaches: the emitted body was
+            # Start, Constant, Return with the formline missing.
+            if ($name eq 'leavesub' || $name eq 'leavesublv'
+                    || $name eq 'leavewrite' || $is_program_exit) {
                 push @exits, _exit_record($sim, $factory, 'leavesub', $op,
                                          $is_program_exit);
                 $main_terminated = 1;
@@ -2095,8 +2107,10 @@ class SoN::FromOptree 0.01 {
     # own root, exactly as `leavesub` roots an ordinary sub). So enterwrite and
     # leavewrite are the two halves of a call ACROSS CVs, not a bracketed region
     # in one optree, which is why only enterwrite appears at the call site.
-    # Compiling it needs that second CV walked plus the accumulator/formline
-    # machinery, none of which exists.
+    # LOWERED on that reading: the format CV is registered as a body under a
+    # deterministic name and `write` becomes a Call naming it, the same shape
+    # an anon sub already uses. `formline` was already mapped to a Call with
+    # mark-delimited args, so the body needed no new vocabulary.
     # The builtins whose FIRST operand is a filehandle. A bareword handle
     # arrives as the gv handler's name-as-string Constant, and these are the
     # ops that say it is a handle rather than a string -- `print`/`say` are
@@ -2120,12 +2134,6 @@ class SoN::FromOptree 0.01 {
     my %GLOBAL_STATE_BUILTIN = map { $_ => 1 } qw(require dofile);
 
     my %UNBUILT_OP_GAP = (
-        enterwrite => "GAP: `write` invokes a format, which is a separate CV in"
-                    . " the glob's FORM slot; compiling it needs that body"
-                    . " walked and the formline accumulator, neither of which"
-                    . " is built",
-        leavewrite => "GAP: a format body (the CV `write` invokes) is not"
-                    . " compiled",
 
         # `goto` transfers control and builds no node, so the jump, whatever
         # it skipped, and the label all vanished: `sub { my $x = 1; goto SKIP;
@@ -4257,6 +4265,79 @@ class SoN::FromOptree 0.01 {
         # symbol table -- and OPpEXISTS_SUB marks it: measured private=65
         # (64|1) against 1 for the element forms. Refused by name; it has no
         # container to test.
+        # `write` INVOKES A FORMAT, which is a CV in the glob's FORM slot.
+        # Two shapes, measured:
+        #
+        #     write            enterwrite private=0, no gv   selected handle
+        #     write REPORT     enterwrite private=1, gv       named handle
+        #
+        # The body is an ordinary walkable optree --
+        # `leavewrite -> lineseq -> formline(picture, values...)` -- so it is
+        # registered like an anon sub body and `write` becomes a Call naming
+        # it. That is the same addressing an anon sub uses, so nothing new
+        # reaches the wire.
+        if ($name eq 'enterwrite') {
+            my $gv;
+            if ($op->private & 1) {
+                # A named handle: the gv is this op's own operand.
+                my $gv_op = ($op->flags & 4) ? _find_gv_op($op) : undef;
+                $gv = $gv_op ? _op_gv($cv, $gv_op) : undef;
+                # The gv pushed a value that is not the format's argument --
+                # the body is addressed by name -- so drop it.
+                $sim->pop_node if $gv_op && $sim->stack_depth;
+            }
+            else {
+                # A BARE `write` USES THE SELECTED HANDLE, which is STDOUT
+                # unless `select` changed it. `select` is a runtime call, so
+                # the handle is only knowable statically when nothing selected
+                # anything else; assuming STDOUT would silently write the wrong
+                # format in a program that selects. Refuse unless this CV is
+                # demonstrably free of `select`.
+                die "GAP: a bare `write` uses the SELECTED filehandle, which"
+                  . " `select` can change at runtime; only `write HANDLE` is"
+                  . " lowered\n"
+                    if _cv_mentions_select($cv);
+                $gv = eval { B::svref_2object(\*STDOUT) };
+            }
+
+            die "GAP: `write` whose filehandle could not be resolved is not"
+              . " yet lowered\n"
+                unless $gv && $$gv && $gv->can('FORM');
+
+            # THE FORMAT NAME CAN BE CHOSEN AT RUNTIME. `$~` selects which
+            # format a write uses, and perl's own t/comp/decl.t does exactly
+            # that:
+            #
+            #     $~ = 'one'; write;   $~ = 'two'; write;
+            #
+            # The handle's FORM slot is then empty (or holds a different
+            # format), so resolving statically would pick the wrong body or
+            # none. An empty slot is the observable symptom of both that and a
+            # genuinely missing format, so the message names both rather than
+            # asserting the one that happens to be commoner.
+            my $form = $gv->FORM;
+            die "GAP: `write` whose format is not installed on the handle is"
+              . " not yet lowered -- \$~ can name the format at runtime, so"
+              . " the body cannot be resolved from the glob alone\n"
+                unless ref($form) && $$form && $form->isa('B::CV')
+                    && ${ $form->ROOT };
+
+            my $fmt_name = 'main::__FORMAT__:' . $gv->STASH->NAME
+                         . '::' . $gv->NAME;
+            $ANON_BODIES{$fmt_name} //= $form;
+
+            my $node = $factory->make('Call',
+                inputs        => [],
+                dispatch_kind => 'direct',
+                name          => $fmt_name,
+                want          => _want_of($op));
+            $node->set_control_in($sim->control);
+            $sim->set_control($node);
+            $sim->set_memory($node) if defined $sim->memory;
+            $sim->push_node($node) unless ($op->flags & 3) == 1;  # not void
+            return ($op->next, 'handled');
+        }
+
         if ($name eq 'exists') {
             # `exists &sub` ASKS ABOUT THE SYMBOL TABLE, not about a container.
             # OPpEXISTS_SUB marks it -- measured private=65 (64|1) against 1
@@ -8454,6 +8535,27 @@ class SoN::FromOptree 0.01 {
     # The `gv` op under an op's subtree, or undef. `exists &f` wraps its glob
     # in several nulls (measured: exists -> null -> null -> null -> gv), so the
     # operand is reached by descending rather than by a fixed path.
+    # Does this CV call `select`? A bare `write` targets the SELECTED handle,
+    # so assuming STDOUT is only safe where nothing re-selects. Structural and
+    # deliberately conservative: a select anywhere in the CV disqualifies every
+    # bare write in it, which costs a refusal rather than a wrong handle.
+    sub _cv_mentions_select ($cv) {
+        my $root = eval { $cv->ROOT };
+        return false unless $root && ref($root) && $$root;
+        my $found = false;
+        my $visit;
+        $visit = sub ($o) {
+            return if $found;
+            return unless $o && ref($o) && $$o;
+            $found = true, return if $o->name eq 'select';
+            return unless $o->flags & 4;   # OPf_KIDS
+            my $k = $o->first;
+            while ($k && $$k) { $visit->($k); $k = $k->sibling; }
+        };
+        eval { $visit->($root) };   # a probe, not a translation
+        return $found;
+    }
+
     sub _find_gv_op ($op) {
         return undef unless $op && ref($op) && $$op;
         return $op if $op->name eq 'gv';
