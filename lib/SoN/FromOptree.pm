@@ -4847,7 +4847,21 @@ class SoN::FromOptree 0.01 {
                     return (($op->can('lastop') ? $op->lastop : $op->next),
                             'handled');
                 }
-                my $arr = $factory->make('ArrayLiteral', inputs => [$bounds->@*]);
+                # STAMPED Array, NOT LEFT UNKNOWN. ArrayLiteral is named for
+                # what it BUILDS and the stamp carries ref-or-not -- its own
+                # comment records the incident behind that split: when the op
+                # was called `ArrayRef`, chalk read the name, assumed it agreed
+                # with the stamp, boxed unconditionally, and 37 corpus cases
+                # emitted nothing.
+                #
+                # An unstamped one is the same hazard one step on: the name
+                # promises a container and the stamp confirms nothing. This
+                # wrapper is a plain ARRAY -- the loop indexes it with
+                # Subscript and stores back into it for an iterator write --
+                # so it is not a reference and must not read as one.
+                my $arr = $factory->make('ArrayLiteral',
+                    inputs => [$bounds->@*],
+                    stamp  => SoN::IR::Stamp->new(type => 'Array'));
                 _translate_foreach_array($cv, $op, $sim, $factory, $opmap,
                     $ctx->{visited}, $arr, $iter_key);
                 return (($op->can('lastop') ? $op->lastop : $op->next),
