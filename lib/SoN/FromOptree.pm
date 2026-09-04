@@ -1855,6 +1855,25 @@ class SoN::FromOptree 0.01 {
             formline  => 'Scalar',
             caller    => 'Scalar',
             prototype => 'Scalar',
+
+            # STRING AND NUMERIC BUILTINS, found by cross-checking these
+            # stamps against pvm's 57-observation precision corpus -- `uc($s)`
+            # reached the wire Unknown where perl observes Str. Each measured
+            # against a real perl run through the same observer:
+            uc        => 'Str',
+            lc        => 'Str',
+            ucfirst   => 'Str',
+            lcfirst   => 'Str',
+            chr       => 'Str',
+            hex       => 'Int',
+            oct       => 'Int',
+            ord       => 'Int',
+
+            # sqrt IS Num, NOT Int, and this is why the family was measured
+            # rather than reasoned about: sqrt(16) observes Int and sqrt(2)
+            # observes Num, so Int would be a WRONG answer for most inputs
+            # while Num admits both.
+            sqrt      => 'Num',
         };
         if (my $t = $FIXED_RESULT->{$name}) {
             return SoN::IR::Stamp->new(type => $t);

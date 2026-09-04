@@ -96,4 +96,29 @@ subtest 'a list read of the mutated array refuses' => sub {
         'refuses rather than flattening the pre-loop elements';
 };
 
+# AN ALIAS WRITE CAN CHANGE THE TYPE, which is the case that distinguishes
+# MODELLING the write from ignoring it. pvm raised it as a known gap in PSC:
+# a checker that never models the substitution keeps the initialiser's type
+# and happens to be right whenever the write preserves it -- and is wrong
+# exactly here.
+#
+#     my $n = 42; foreach ($n) { $_ = "x" } print $n;    perl prints x
+#
+# B::SoN rebinds the scalar's slot, so the Print reads the Str.
+subtest 'an alias write that changes the type is tracked' => sub {
+    my ($said, $n, $err) = run_and_wire(
+        'my $n = 42; foreach ($n) { $_ = "x" } print $n;', 'wb-typechange');
+    is $said, 'x', 'perl replaces the Int with a Str' or return;
+    unlike $err, qr/GAP|INTERNAL/, 'it lowers' or return;
+
+    my %by = map { $_->{id} => $_ } $n->@*;
+    my ($pr) = grep { $_->{op} eq 'Print' } $n->@*;
+    ok $pr, 'a Print is built' or return;
+    my $node = $by{ ($pr->{inputs} // [])->[0] // '' };
+    $node = $by{ ($node->{inputs} // [])->[0] // '' }
+        while $node && $node->{op} eq 'Coerce';
+    is +($node // {})->{stamp}, 'Str',
+        'the read sees Str, not the Int the variable was initialised with';
+};
+
 done_testing;
