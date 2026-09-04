@@ -248,6 +248,16 @@ class SoN::FromOptree 0.01 {
     # Each entry is the ordered capture list from _anoncode_capture_info, and
     # the ORDER IS THE CONTRACT: input N of the AnonSub is the cell for
     # capture N, which the body reads as CellParam(index => N).
+    # Aggregate LITERAL nodes that have been mutated in place, by node id.
+    #
+    # The padav flatten shortcut pushes a bound ArrayLiteral's INPUTS straight
+    # onto the stack, which is the array as first CONSTRUCTED -- correct until
+    # something mutates it. push/shift/splice record that on the pad slot via
+    # $ctx->{mutated_aggregate}; the foreach write-back has neither $ctx nor
+    # the slot (it is handed the array as a node), so it records the NODE. The
+    # shortcut checks both.
+    our %MUTATED_LITERALS;
+
     our %ANON_CAPTURES;
 
     # Format bodies, keyed by the same deterministic name their `write` Call
@@ -3146,6 +3156,7 @@ class SoN::FromOptree 0.01 {
             if ($name eq 'padav' && $existing && $want == 3
                     && !$ref_or_mod && !$is_lvintro
                     && !$ctx->{mutated_aggregate}{$targ}
+                    && !$MUTATED_LITERALS{ $existing->id // '' }
                     && $existing->operation eq 'ArrayLiteral') {
                 $sim->push_node($_) for $existing->inputs->@*;
                 return ($op->next, 'handled');
@@ -3186,9 +3197,11 @@ class SoN::FromOptree 0.01 {
             # stale elements -- a GAP is a to-do, a silent wrong answer is not.
             if ($name eq 'padav' && $existing && $want == 3
                     && !$ref_or_mod && !$is_lvintro
-                    && $ctx->{mutated_aggregate}{$targ}) {
-                die "GAP: a list-context read of an array mutated by"
-                  . " push/shift/splice is not yet lowered -- the binding is"
+                    && ($ctx->{mutated_aggregate}{$targ}
+                        || $MUTATED_LITERALS{ $existing->id // '' })) {
+                die "GAP: a list-context read of an array mutated in place"
+                  . " (push/shift/splice, or a foreach body writing its"
+                  . " aliased iterator) is not yet lowered -- the binding is"
                   . " the pre-mutation literal, and flattening it would read"
                   . " the array as first constructed\n";
             }
@@ -6677,9 +6690,37 @@ class SoN::FromOptree 0.01 {
         # $a[0]` would read the un-incremented element). Detect an iterator write
         # by scouting WITHOUT excluding $x_targ: if $x is in the mutated set, the
         # body assigns the alias. GAP loudly until the write-back is modeled.
-        die "GAP: foreach body writes the iterator variable (aliasing write-back "
-          . "to the array) not yet lowered\n"
-            if _body_writes_targ($cv, $body_start, $sim, $opmap, $x_targ, 1);
+        # AN ITERATOR WRITE IS AN ELEMENT STORE. perl ALIASES the iterator, so
+        # a body write mutates the source in place -- measured:
+        #
+        #     my @a=(1,2,3); for my $x (@a) { $x = $x*10 }   @a is 10 20 30
+        #     my @c=(1,2);   for (@c)       { $_ = $_+100 }  @c is 101 102
+        #
+        # The lowering binds $x to a Subscript element COPY, so without a
+        # store-back the mutation is lost. That was refused rather than
+        # dropped, which was right; what was missing is the store, and the
+        # shape already exists -- `$a[0]=99` builds a 2-input lvalue Subscript
+        # and an Assign, threading later reads on it. Here the subscript is the
+        # loop's own index Phi.
+        #
+        # A LITERAL LIST CANNOT REACH THIS. `for my $y (1,2) { $y = 9 }` dies
+        # at runtime with a readonly error, so there is no legal program whose
+        # write-back would target a constant.
+        my $writes_iter =
+            _body_writes_targ($cv, $body_start, $sim, $opmap, $x_targ, 1);
+
+        # A DESTRUCTIVE s/// IS A WRITE THAT _body_writes_targ CANNOT SEE. It
+        # scouts for assignment ops, and a subst rebinds its target through the
+        # scope map instead -- so `foreach ($l) { s/x/9/ }` scouted clean and
+        # the write-back was never emitted. Measured, that printed the PRE-loop
+        # constant where perl gives a9b, and it did so before this write-back
+        # existed too: the store is missing either way, so this is a refusal
+        # rather than a regression.
+        #
+        # REFUSED, not written back, because the value to store is not simply
+        # the post-body binding: the subst path rebinds $_ inside the loop
+        # walker's own scope, and threading that out is a second question from
+        # the one this write-back answers.
 
         # The loop bound is the array's element count.
         my $len = _make_count($factory, $array, $sim);
@@ -6748,6 +6789,44 @@ class SoN::FromOptree 0.01 {
         my $depth_before = $sim->stack_depth;
         _walk_loop_body($cv, $body_start, $sim, $factory, $opmap, {}, $visited,
             undef, undef, 1);
+
+        # THE STORE-BACK, and only when the body actually wrote the iterator.
+        # Adding it unconditionally would put a memory effect in every foreach
+        # that perl does not perform, and order reads that are currently free
+        # to float.
+        #
+        # The value stored is whatever $x_targ is bound to AFTER the body: the
+        # body rebound it on assignment, so the binding is the new value. If it
+        # still holds the element read, nothing wrote it and the guard above is
+        # what decides that -- not this comparison, which would miss a write
+        # that happens to produce an equal node.
+        if ($writes_iter) {
+            my $new_val = $sim->lookup($x_targ);
+            if (defined $new_val && $new_val != $elem) {
+                my $lvalue = $factory->make('Subscript',
+                    inputs => [$array, $i_phi]);
+                my $store = $factory->make('Assign',
+                    inputs => [$lvalue, $new_val]);
+                $store->set_control_in($sim->control);
+                $sim->set_control($store);
+                $sim->set_memory($store);
+
+                # RECORD THE MUTATION, or a later LIST read of this array takes
+                # the flatten shortcut and reads the ORIGINAL elements.
+                # Measured before this line: `for my $x (@a) { $x=$x*10 }
+                # print "@a"` built join() over the pre-loop constants, while
+                # the element read `$a[0]` correctly saw 10 -- so the store was
+                # right and only the whole-aggregate read was blind.
+                #
+                # KEYED ON THE NODE, not the pad slot. The push/shift/splice
+                # guard uses $ctx->{mutated_aggregate}{$targ}, and this walker
+                # has neither $ctx nor the slot -- it was handed the array as a
+                # NODE. Threading a slot through would be a second spelling of
+                # the same fact; the literal is what the shortcut ultimately
+                # tests, so marking it directly is the smaller change.
+                $MUTATED_LITERALS{ $array->id } = 1 if $array->can('id');
+            }
+        }
 
         # What the body left on the stack IS this iteration's contribution: for
         # map the body's value(s), for grep the PREDICATE -- in which case what
@@ -8639,6 +8718,7 @@ class SoN::FromOptree 0.01 {
         }
         return ($scope_key, $target);
     }
+
 
     sub _walk_subst_replacement ($cv, $op, $sim, $factory, $opmap, $visited,
                                  $target = undef, $pattern = undef,

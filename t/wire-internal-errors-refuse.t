@@ -255,23 +255,25 @@ subtest 'bare exit in a branch and in a loop' => sub {
 # ALL FOUR FORMS ARE TESTED because the defect is keyed on the replacement
 # being CODE, not on it being a substitution: a first fix refused every subst
 # here and would have taken the two working forms with it.
-subtest 'only the code-replacement forms refuse in a loop body' => sub {
-    for my $case (
-        ['my $l="a"; foreach ($l) { s/x/y/; }',            'subst_plain',  0],
-        ['my $l="a"; foreach ($l) { s/x/y/g; }',           'subst_global', 0],
-        ['my $l="a"; foreach ($l) { s/(x)/ord $1/e; }',    'subst_e',      1],
-        ['my $l="a"; foreach ($l) { s/(x)/ord $1/ge; }',   'subst_ge',     1],
+subtest 'a subst in a loop body translates; the iterator case is a known TODO'
+=> sub {
+    # THESE TRANSLATE BUT MISCOMPILE. `foreach ($l) { s/x/y/ }` emits a graph
+    # whose Print reads the PRE-loop Constant where perl gives ayb, because a
+    # foreach iterator is an ALIAS and no store-back is emitted for a subst.
+    # Tracked in t/wire-subst-code-in-loop.t as a TODO; asserted here only as
+    # "does not crash", which is all this file is about.
+    for my $src (
+        'my $l="axb"; foreach ($l) { s/x/y/ } print $l;',
+        'my $l="axax"; foreach ($l) { s/x/y/g } print $l;',
     ) {
-        my ($src, $name, $should_gap) = $case->@*;
-        my (undef, $err) = translate($src, $name);
-        unlike $err, qr/INTERNAL ERROR/, "$name: no internal error";
-        if ($should_gap) {
-            like $err, qr/GAP/, "$name: refuses by name";
-        }
-        else {
-            unlike $err, qr/GAP/, "$name: still translates";
-        }
+        my (undef, $err) = translate($src, 'sub_iter' . length($src));
+        unlike $err, qr/INTERNAL|Stack underflow/, 'no internal error';
     }
+
+    my (undef, $err) = translate(
+        'my @a=("axb"); for my $s (@a) { my $t=$s; $t =~ s/x/9/e; print $t }',
+        'sub_lexical');
+    unlike $err, qr/GAP|INTERNAL/, 'a subst into a body lexical lowers';
 };
 
 # /e AND /ge HAVE SEPARATED. This subtest once recorded that both refused, for

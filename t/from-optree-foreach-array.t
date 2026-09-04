@@ -42,16 +42,30 @@ subtest 'the foreach keyword is an alias of for (same lowering)' => sub {
 };
 
 # Perl's `for my $x (@a)` ALIASES $x to each element, so a body write `$x = ...`
-# mutates @a in place. This lowering binds $x to a read-only element copy, so a
-# write would not propagate back -- a silent miscompile. GAP loudly instead.
-subtest 'a foreach body that writes the iterator GAPs (aliasing)' => sub {
+# mutates @a in place -- measured, `for my $x (@a) { $x = $x*10 }` leaves @a as
+# 10 20 30. The lowering binds $x to an element COPY, so the write needs an
+# explicit store-back; without one it was silently lost, and it GAPed instead.
+#
+# LOWERED as the element store that already exists: `$a[0]=99` builds a 2-input
+# lvalue Subscript and an Assign, and this is that shape with the loop's index
+# Phi as the subscript.
+subtest 'a foreach body that writes the iterator stores back' => sub {
     SoN::OptSuppress::suppress_peep();
     my $cv = eval 'sub { my @a=(10,20); for my $x (@a) { $x = $x + 1 } $a[0] }';
     SoN::OptSuppress::restore_peep();
-    my $err = dies { SoN::FromOptree->translate($cv) };
-    ok($err, 'an iterator-write foreach body dies') or diag('expected a GAP');
-    like($err, qr/GAP.*iterator/i, 'the die is a loud GAP naming the iterator write')
-        or diag("actual: $err");
+
+    my $g;
+    ok(lives { $g = SoN::FromOptree->translate($cv) },
+        'an iterator-write foreach body lowers') or diag($@);
+    return unless $g;
+
+    # The store-back is an Assign over a Subscript lvalue.
+    my ($store) = grep {
+        $_->operation eq 'Assign'
+          && ($_->inputs->[0] // undef)
+          && $_->inputs->[0]->operation eq 'Subscript'
+    } $g->nodes->@*;
+    ok($store, 'an element store-back is built');
 };
 
 done_testing;

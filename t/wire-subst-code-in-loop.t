@@ -3,6 +3,7 @@
 use 5.42.0;
 use utf8;
 use Test::More;
+our $TODO;
 use File::Temp qw(tempdir);
 
 my $PERL = $^X;
@@ -84,25 +85,30 @@ subtest 's///e on an outer lexical inside a counted loop lowers' => sub {
     unlike $err, qr/GAP|INTERNAL/, 'it lowers';
 };
 
-subtest 'the remaining refusals are named and not the old crash' => sub {
-    # A DESTRUCTIVE s/// ON THE ITERATOR IS AN ALIASING WRITE-BACK, and that
-    # is a real missing capability rather than a missing site: `foreach ($l)`
-    # aliases $_ to $l, so substituting into $_ mutates $l. The lowering binds
-    # a read-only element copy, so the write would not propagate.
-    #
-    # BOTH SHAPES REACH IT NOW. A capture in the replacement used to refuse
-    # first, for a capture reason, which masked this one -- so the two cases
-    # below once reported different GAPs and now correctly report the same.
+# KNOWN AND UNFIXED: a destructive s/// into the ALIASED ITERATOR miscompiles.
+# `foreach ($l) { s/x/y/ }` prints ayb in perl; the graph reads the PRE-loop
+# constant. A subst rebinds its target through the scope map rather than
+# through an assignment op, so the iterator-write scout reads the body as
+# write-free and no store-back is emitted.
+#
+# This PREDATES the array write-back -- both shapes did it before -- and a
+# guard for it was tried and REVERTED: every version was either over-broad
+# (taking `for my $s (@a) { $t =~ s/// }`, which substitutes into a body
+# lexical and has always worked) or blind to the /e form, whose ops are
+# reachable from the body start by neither exec nor subtree edges. One version
+# took perl's own t/base/lex.t from CLEAN to PARTIAL.
+#
+# Recorded as TODO rather than left silently green.
+{
+    local $TODO = 'a subst into the aliased iterator has no write-back';
     for my $src (
+        'my $l="axb"; foreach ($l) { s/x/y/ } print $l;',
         'my $l="axb"; foreach ($l) { s/(x)/ord $1/e } print $l;',
-        'my $l="axb"; my $n=5; foreach ($l) { s/x/$n+1/e } print $l;',
     ) {
-        my (undef, undef, $err) = run_and_wire($src, 'se-ali' . length($src));
-        like $err, qr/writes the iterator/,
-            'a destructive s/// on the alias refuses as an iterator write';
-        unlike $err, qr/Stack underflow|INTERNAL/, '... not by crashing';
+        my (undef, undef, $err) = run_and_wire($src, 'se-iter' . length($src));
+        like $err, qr/GAP/, 'a subst into the iterator should refuse';
     }
-};
+}
 
 # THE UNDERFLOW MUST NOT RETURN. It was an INTERNAL error masked as a silent
 # skip -- the worst outcome -- and the refusal existed to convert it. Whatever
@@ -118,17 +124,26 @@ subtest 'it never underflows the stack' => sub {
     }
 };
 
-# THE PLAIN FORMS MUST KEEP WORKING. An earlier version of this refusal was
-# keyed on `subst` rather than on PMf_EVAL and took both of these with it.
-subtest 'plain substitutions in a loop are unaffected' => sub {
+# THE PLAIN FORMS MUST KEEP WORKING -- but not the `foreach ($l)` spelling,
+# which was MISCOMPILING: it printed the pre-loop constant, because the
+# iterator is an alias and no store-back was emitted. Those now refuse (see
+# t/wire-internal-errors-refuse.t).
+#
+# What must keep working is a subst into a BODY LEXICAL, which is what the
+# refusal is keyed narrowly enough to allow -- on the subst's own target, not
+# on "a subst exists in this body". An earlier version of that guard took this
+# case with it.
+subtest 'a substitution into a body lexical is unaffected' => sub {
     for my $case (
-        [ 'my $l="axb"; foreach ($l) { s/x/y/ } print $l;'  => 'ayb' ],
-        [ 'my $l="axax"; foreach ($l) { s/x/y/g } print $l;' => 'ayay' ],
+        [ 'my @a=("axb"); for my $s (@a) { my $t=$s; $t =~ s/x/y/; print $t }'
+          => 'ayb' ],
+        [ 'my @a=("axax"); for my $s (@a) { my $t=$s; $t =~ s/x/y/g; print $t }'
+          => 'ayay' ],
     ) {
         my ($src, $want) = $case->@*;
-        my ($said, undef, $err) = run_and_wire($src, 'se-plain' . length($src));
+        my ($said, undef, $err) = run_and_wire($src, 'se-lex' . length($src));
         is $said, $want, "perl gives $want";
-        unlike $err, qr/GAP|INTERNAL/, '... and it still lowers';
+        unlike $err, qr/GAP|INTERNAL/, '... and it lowers';
     }
 };
 

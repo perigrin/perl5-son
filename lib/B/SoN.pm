@@ -135,6 +135,9 @@ sub _discover_and_translate {
     # sub defined inside a named sub, leaving its Call naming a methods key
     # that was never emitted.
     %SoN::FromOptree::ANON_BODIES = ();
+    # Per-run, like the body registry: a node id from a previous compilation
+    # unit must not mark a fresh graph's literal as mutated.
+    %SoN::FromOptree::MUTATED_LITERALS = ();
 
     _walk_package( \%graphs, \%classes, 'main', \%main::, $filter );
 
