@@ -257,11 +257,12 @@ subtest 'bare exit in a branch and in a loop' => sub {
 # here and would have taken the two working forms with it.
 subtest 'a subst in a loop body translates; the iterator case is a known TODO'
 => sub {
-    # THESE TRANSLATE BUT MISCOMPILE. `foreach ($l) { s/x/y/ }` emits a graph
-    # whose Print reads the PRE-loop Constant where perl gives ayb, because a
-    # foreach iterator is an ALIAS and no store-back is emitted for a subst.
-    # Tracked in t/wire-subst-code-in-loop.t as a TODO; asserted here only as
-    # "does not crash", which is all this file is about.
+    # THESE NOW LOWER CORRECTLY. They once emitted a graph whose Print read
+    # the PRE-loop Constant: the loop walker had no handler for a plain s///
+    # (its arm was gated on PMf_EVAL), and the write-back stored into the
+    # synthetic one-element array that `foreach ($scalar)` builds. Asserted
+    # here only as "does not crash", which is all this file is about; the
+    # behaviour is pinned in t/wire-subst-code-in-loop.t.
     for my $src (
         'my $l="axb"; foreach ($l) { s/x/y/ } print $l;',
         'my $l="axax"; foreach ($l) { s/x/y/g } print $l;',

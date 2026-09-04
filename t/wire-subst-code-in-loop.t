@@ -3,7 +3,6 @@
 use 5.42.0;
 use utf8;
 use Test::More;
-our $TODO;
 use File::Temp qw(tempdir);
 
 my $PERL = $^X;
@@ -85,30 +84,24 @@ subtest 's///e on an outer lexical inside a counted loop lowers' => sub {
     unlike $err, qr/GAP|INTERNAL/, 'it lowers';
 };
 
-# KNOWN AND UNFIXED: a destructive s/// into the ALIASED ITERATOR miscompiles.
-# `foreach ($l) { s/x/y/ }` prints ayb in perl; the graph reads the PRE-loop
-# constant. A subst rebinds its target through the scope map rather than
-# through an assignment op, so the iterator-write scout reads the body as
-# write-free and no store-back is emitted.
-#
-# This PREDATES the array write-back -- both shapes did it before -- and a
-# guard for it was tried and REVERTED: every version was either over-broad
-# (taking `for my $s (@a) { $t =~ s/// }`, which substitutes into a body
-# lexical and has always worked) or blind to the /e form, whose ops are
-# reachable from the body start by neither exec nor subtree edges. One version
-# took perl's own t/base/lex.t from CLEAN to PARTIAL.
-#
-# Recorded as TODO rather than left silently green.
-{
-    local $TODO = 'a subst into the aliased iterator has no write-back';
-    for my $src (
-        'my $l="axb"; foreach ($l) { s/x/y/ } print $l;',
-        'my $l="axb"; foreach ($l) { s/(x)/ord $1/e } print $l;',
+# A SUBST INTO THE ALIASED ITERATOR WORKS NOW, and it took two fixes. The loop
+# walker's subst arm was gated on PMf_EVAL, so a plain s/// fell through to the
+# generic dispatch and became a bogus `Call(builtin, "subst")` over the
+# replacement string; and `foreach ($l)` wraps $l in a synthetic one-element
+# ArrayLiteral, so the write-back stored into that wrapper instead of rebinding
+# $l. Measured, both forms now read a computed node rather than the pre-loop
+# constant.
+subtest 'a subst into the aliased iterator reaches the source' => sub {
+    for my $case (
+        [ 'my $l="axb"; foreach ($l) { s/x/y/ } print $l;'          => 'ayb'   ],
+        [ 'my $l="axb"; foreach ($l) { s/(x)/ord $1/e } print $l;'  => 'a120b' ],
     ) {
-        my (undef, undef, $err) = run_and_wire($src, 'se-iter' . length($src));
-        like $err, qr/GAP/, 'a subst into the iterator should refuse';
+        my ($src, $want) = $case->@*;
+        my ($said, undef, $err) = run_and_wire($src, 'se-it' . length($src));
+        is $said, $want, "perl gives $want";
+        unlike $err, qr/GAP|INTERNAL/, '... and it lowers';
     }
-}
+};
 
 # THE UNDERFLOW MUST NOT RETURN. It was an INTERNAL error masked as a silent
 # skip -- the worst outcome -- and the refusal existed to convert it. Whatever

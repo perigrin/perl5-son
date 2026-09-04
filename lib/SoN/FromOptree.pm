@@ -6802,6 +6802,24 @@ class SoN::FromOptree 0.01 {
         # that happens to produce an equal node.
         if ($writes_iter) {
             my $new_val = $sim->lookup($x_targ);
+
+            # A SCALAR SOURCE IS NOT AN ARRAY. `foreach ($l)` wraps $l in a
+            # synthetic one-element ArrayLiteral, so storing into that wrapper
+            # leaves $l's own binding untouched -- measured, the graph's Print
+            # still read the PRE-loop Constant while the store went into a
+            # container nothing else reads. Rebind the scalar's slot instead,
+            # which is what perl's alias actually mutates.
+            if (defined $new_val && $new_val != $elem
+                && $array->can('operation')
+                && $array->operation eq 'ArrayLiteral'
+                && scalar($array->inputs->@*) == 1
+                && $array->inputs->[0]->can('operation')
+                && $array->inputs->[0]->operation eq 'PadAccess') {
+                my $slot = $array->inputs->[0]->targ;
+                $sim->define($slot, $new_val) if defined $slot;
+                return;
+            }
+
             if (defined $new_val && $new_val != $elem) {
                 my $lvalue = $factory->make('Subscript',
                     inputs => [$array, $i_phi]);
@@ -7473,8 +7491,22 @@ class SoN::FromOptree 0.01 {
             # measured, `s/x/y/` and `s/x/y/g` in a loop were always fine and
             # fall through to _step untouched. An earlier version of the
             # refusal keyed on `subst` and would have taken both.
-            if ($name eq 'subst' && $op->isa('B::PMOP')
-                && ($op->pmflags & PMf_EVAL)) {
+            # EVERY s///, NOT ONLY /e. This arm was gated on PMf_EVAL, so a
+            # plain `s/x/y/` in a loop body fell through to the generic OpMap
+            # dispatch -- which turns an unrecognised op into a builtin Call.
+            # Measured on `foreach ($l) { s/x/y/ }`:
+            #
+            #     Call(builtin, name="subst") [16]   node 16 = Constant 'y'
+            #
+            # so the node's only input was the REPLACEMENT STRING (whatever sat
+            # on the stack), the pattern was absent entirely, and the target
+            # was connected to nothing. `s/x/y/` and `s/q/y/` produced
+            # IDENTICAL graphs -- the hash-consing hazard a dropped pattern
+            # always creates, and the same defect `split` nearly shipped.
+            #
+            # The two forms differ only in where the replacement comes from: a
+            # walked subtree for /e, a stack Constant for a literal.
+            if ($name eq 'subst' && $op->isa('B::PMOP')) {
                 # THE TARGET IS RESOLVED, NOT POPPED, and resolved BEFORE the
                 # replacement walk because the walk builds the match half that
                 # the replacement's captures read -- and that match takes the
@@ -7492,11 +7524,26 @@ class SoN::FromOptree 0.01 {
                     $cv, $op, $sim, $factory, $opmap, $loop_visited,
                     $target, $op->precomp, _pmflags_to_str($op->pmflags));
 
+                # A LITERAL REPLACEMENT IS A STACK CONSTANT, pushed by the
+                # const op before the subst. Popped ONLY when no subtree was
+                # walked: under /e there is no such push, and popping would
+                # take an unrelated value and stamp it on the node as a string
+                # replacement contradicting the operand.
+                my $replacement = '';
+                if (!defined $repl && $sim->stack_depth) {
+                    my $top = $sim->peek_node;
+                    if ($top && $top->isa('SoN::IR::Node::Constant')) {
+                        $sim->pop_node;
+                        $replacement = $top->value // '';
+                    }
+                }
+
                 my $node = $factory->make('RegexSubst',
-                    inputs  => [$target, (defined $repl ? ($repl) : ())],
-                    pattern => $op->precomp,
-                    flags   => _pmflags_to_str($op->pmflags),
-                    stamp   => SoN::IR::Stamp->new(type => 'Str'));
+                    inputs      => [$target, (defined $repl ? ($repl) : ())],
+                    pattern     => $op->precomp,
+                    replacement => $replacement,
+                    flags       => _pmflags_to_str($op->pmflags),
+                    stamp       => SoN::IR::Stamp->new(type => 'Str'));
                 $node->set_control_in($sim->control);
                 $sim->set_control($node);
                 $sim->set_memory($node) if defined $sim->memory;
