@@ -1186,31 +1186,8 @@ class SoN::FromOptree 0.01 {
                 # whose parts are mark-delimited ON THE STACK. Same construct
                 # family, two different recoveries; assuming the match shape
                 # here would pop operands that are not there.
-                my $replroot = $op->pmreplroot;
-                if (!defined $code_repl && $replroot && ref($replroot) && $$replroot) {
-                    my $entry = $replroot;
-                    while (ref($entry) && $$entry && ($entry->flags & 4)
-                           && ref($entry->first) && ${$entry->first}) {
-                        $entry = $entry->first;
-                    }
-                    die "GAP: s/// interpolated replacement subtree has no"
-                      . " entry op\n"
-                        unless ref($entry) && $$entry;
-
-                    my $rsim = $sim->snapshot;
-                    my $base = $rsim->stack_depth;
-                    my @rexits;
-                    _walk_branch($cv, $entry, $rsim, $factory, $opmap,
-                        \%visited, \@rexits, 1, ${$replroot});
-
-                    die "GAP: s/// interpolated replacement that exits"
-                      . " (return/die) not yet lowered\n" if @rexits;
-                    die "GAP: s/// interpolated replacement that is not a"
-                      . " single value not yet lowered\n"
-                        unless $rsim->stack_depth == $base + 1;
-
-                    $code_repl = $rsim->pop_node;
-                }
+                $code_repl //= _walk_subst_replacement(
+                    $cv, $op, $sim, $factory, $opmap, \%visited);
                 my $nondestruct = $op->pmflags & PMf_NONDESTRUCT;
                 # In scalar/boolean context a DESTRUCTIVE s/// returns the
                 # integer match COUNT, not the rewritten string (only /r
@@ -7393,10 +7370,50 @@ class SoN::FromOptree 0.01 {
             # "capture $1 read with no preceding match in scope" -- so closing
             # either would leave this crash standing. The replacement subtree
             # is the common factor, and it is what this names.
+            # LOWERED by walking the replacement subtree, the same recovery
+            # the main walker uses -- this was a missing SITE, not a missing
+            # capability. `s/(x)/ord $1/e` lowered at the top level and
+            # underflowed here because only _translate_from had the code.
+            #
+            # The subtree must be consumed BEFORE _step, or its ops are stepped
+            # into individually with nothing on the stack, which is exactly the
+            # underflow. _walk_subst_replacement takes a snapshot sim, so an
+            # unbalanced replacement cannot corrupt the loop body's stack.
+            #
+            # STILL KEYED ON PMf_EVAL. Only the code form carries a subtree;
+            # measured, `s/x/y/` and `s/x/y/g` in a loop were always fine and
+            # fall through to _step untouched. An earlier version of the
+            # refusal keyed on `subst` and would have taken both.
             if ($name eq 'subst' && $op->isa('B::PMOP')
                 && ($op->pmflags & PMf_EVAL)) {
-                die "GAP: a code-replacement substitution (s///e) inside a"
-                  . " loop body is not yet lowered\n";
+                my $repl = _walk_subst_replacement(
+                    $cv, $op, $sim, $factory, $opmap, $loop_visited);
+                # THE TARGET RESOLUTION IS NOT SHARED YET. The main walker
+                # resolves it through a scope key (so a destructive s///
+                # rebinds the lexical, and /r does not), and duplicating that
+                # here would be the same one-operator-two-sites mistake this
+                # change is fixing. Where the target is not simply on the
+                # stack -- `foreach ($l)` aliases the iterator -- refuse rather
+                # than guess at a binding.
+                my $target = $sim->stack_depth ? $sim->pop_node : undef;
+                die "GAP: s///e in a loop body whose target is the aliased"
+                  . " iterator (not a stack value) is not yet lowered -- the"
+                  . " target resolution is not shared with the main walker"
+                  . " yet\n"
+                    unless defined $target;
+
+                my $node = $factory->make('RegexSubst',
+                    inputs  => [$target, (defined $repl ? ($repl) : ())],
+                    pattern => $op->precomp,
+                    flags   => _pmflags_to_str($op->pmflags));
+                $node->set_control_in($sim->control);
+                $sim->set_control($node);
+                $sim->set_memory($node) if defined $sim->memory;
+                $sim->push_node($node) unless ($op->flags & 3) == 1;  # void
+
+                # Skip past the replacement subtree: its ops are consumed.
+                $op = $op->next;
+                next;
             }
 
             my ($next, $sig) = _step($cv, $op, $sim, $factory, $opmap, $ctx);
@@ -8554,6 +8571,48 @@ class SoN::FromOptree 0.01 {
         };
         eval { $visit->($root) };   # a probe, not a translation
         return $found;
+    }
+
+    # The VALUE a s///e or interpolated s/// replacement computes, or undef
+    # when the op carries no replacement subtree.
+    #
+    # ONE IMPLEMENTATION, TWO WALKERS. This lived inline in _translate_from,
+    # so `s/(x)/ord $1/e` lowered at the top level and CRASHED inside a loop
+    # body -- _walk_loop_body stepped into the subtree with nothing on the
+    # stack and `ord` underflowed. That was refused rather than crashed, which
+    # was right, but the refusal was a missing SITE and not a missing
+    # capability: see docs/plans/2026-08-31-one-operator-one-declaration.md.
+    #
+    # The subtree is walked on a SNAPSHOT sim so a replacement that leaves the
+    # stack unbalanced cannot corrupt the caller's, and the result is the one
+    # value it pushes. Descending to the leftmost leaf finds the entry op --
+    # measured, `s/a/x${p}y/` is pmreplroot -> substcont -> multiconcat ->
+    # padsv, and multiconcat's own handler assembles the parts.
+    sub _walk_subst_replacement ($cv, $op, $sim, $factory, $opmap, $visited) {
+        my $replroot = $op->pmreplroot;
+        return undef unless $replroot && ref($replroot) && $$replroot;
+
+        my $entry = $replroot;
+        while (ref($entry) && $$entry && ($entry->flags & 4)
+               && ref($entry->first) && ${$entry->first}) {
+            $entry = $entry->first;
+        }
+        die "GAP: s/// interpolated replacement subtree has no entry op\n"
+            unless ref($entry) && $$entry;
+
+        my $rsim = $sim->snapshot;
+        my $base = $rsim->stack_depth;
+        my @rexits;
+        _walk_branch($cv, $entry, $rsim, $factory, $opmap,
+            $visited, \@rexits, 1, ${$replroot});
+
+        die "GAP: s/// interpolated replacement that exits (return/die) not"
+          . " yet lowered\n" if @rexits;
+        die "GAP: s/// interpolated replacement that is not a single value"
+          . " not yet lowered\n"
+            unless $rsim->stack_depth == $base + 1;
+
+        return $rsim->pop_node;
     }
 
     sub _find_gv_op ($op) {
