@@ -41,8 +41,12 @@ sub run_and_wire ($src, $name) {
 # self-contained replacement therefore lowers inside a loop, as it always did
 # outside one.
 subtest 's///e with a self-contained replacement lowers in a loop' => sub {
+    # NOT `foreach ($l)`, which aliases $_ to $l so a destructive s/// is an
+    # iterator write-back and correctly refuses for that separate reason. This
+    # substitutes into a lexical the loop does not alias, which isolates the
+    # replacement-subtree walk that was crashing.
     my ($said, $out, $err) = run_and_wire(
-        'my $l="axb"; foreach ($l) { s/x/99/e } print $l;', 'se-loop');
+        'my $s="axb"; for (1..1) { $s =~ s/x/99/e } print $s;', 'se-loop');
     is $said, 'a99b', 'perl evaluates the replacement' or return;
     unlike $err, qr/GAP|INTERNAL/, 'it lowers';
     like $out, qr/"op"\s*:\s*"RegexSubst"/, '... building a RegexSubst';
@@ -60,6 +64,26 @@ subtest 's///e with a self-contained replacement lowers in a loop' => sub {
 #   refuses because the main walker resolves its target through a scope key
 #   that is not shared yet. Duplicating that resolution here would repeat the
 #   very mistake this change fixes.
+# THE TARGET IS RESOLVED, NOT POPPED. `foreach ($l) { s/... }` substitutes into
+# the ALIASED ITERATOR -- measured, that subst has targ=0, so its target is $_
+# and there is nothing on the stack to take. An earlier version of this fix
+# popped a stack value and refused every such loop; the resolver is now shared
+# with the main walker, which names $_ the same way.
+subtest 's///e on a named lexical inside a loop lowers' => sub {
+    my ($said, $out, $err) = run_and_wire(
+        'my @a=("axb","cxd"); my $r=""; for my $s (@a) { my $t=$s;'
+      . ' $t =~ s/x/9/e; $r.=$t } print $r;', 'se-lexical');
+    is $said, 'a9bc9d', 'perl substitutes in each iteration' or return;
+    unlike $err, qr/GAP|INTERNAL/, 'it lowers';
+};
+
+subtest 's///e on an outer lexical inside a counted loop lowers' => sub {
+    my ($said, undef, $err) = run_and_wire(
+        'my $s="axb"; for (1..1) { $s =~ s/x/9/e } print $s;', 'se-counted');
+    is $said, 'a9b', 'perl substitutes once' or return;
+    unlike $err, qr/GAP|INTERNAL/, 'it lowers';
+};
+
 subtest 'the remaining refusals are named and not the old crash' => sub {
     my (undef, undef, $cap) = run_and_wire(
         'my $l="axb"; foreach ($l) { s/(x)/ord $1/e } print $l;', 'se-cap');
@@ -67,10 +91,15 @@ subtest 'the remaining refusals are named and not the old crash' => sub {
         'a capture in the replacement refuses for the capture reason';
     unlike $cap, qr/Stack underflow|INTERNAL/, '... not by crashing';
 
+    # A DESTRUCTIVE s/// ON THE ITERATOR IS AN ALIASING WRITE-BACK, and that
+    # is a real missing capability rather than a missing site: `foreach ($l)`
+    # aliases $_ to $l, so substituting into $_ mutates $l. The lowering binds
+    # a read-only element copy, so the write would not propagate. It refuses
+    # for THAT reason now, which is the correct next question.
     my (undef, undef, $ali) = run_and_wire(
         'my $l="axb"; my $n=5; foreach ($l) { s/x/$n+1/e } print $l;', 'se-ali');
-    like $ali, qr/aliased iterator/,
-        'an aliased-iterator target refuses by name';
+    like $ali, qr/writes the iterator/,
+        'a destructive s/// on the alias refuses as an iterator write';
     unlike $ali, qr/Stack underflow|INTERNAL/, '... not by crashing';
 };
 

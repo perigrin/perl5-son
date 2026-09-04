@@ -1212,16 +1212,8 @@ class SoN::FromOptree 0.01 {
                 # builtin defaulting to it. Only the WRITE was refused, and the
                 # message blamed "implicit" when in fact `$_ =~ s///` was
                 # refused too: the handler could key NEITHER form.
-                my $targ = $op->targ;
-                my $scope_key = $targ || 'main::$_';
-                my $target = $sim->lookup($scope_key);
-                if (!$target) {
-                    $target = $targ
-                        ? _make_pad_or_field($cv, $targ, $factory)
-                        : $factory->make('EntryDef',
-                            stash_name => 'main', sigil => '$', var_name => '_');
-                    $sim->define($scope_key, $target);
-                }
+                my ($scope_key, $target) =
+                    _subst_target($cv, $op, $sim, $factory);
                 # The replacement string is on the stack (pushed by const op
                 # before subst) -- but ONLY for a literal replacement. Under
                 # /e there is no such push: the replacement was walked from the
@@ -7388,27 +7380,30 @@ class SoN::FromOptree 0.01 {
                 && ($op->pmflags & PMf_EVAL)) {
                 my $repl = _walk_subst_replacement(
                     $cv, $op, $sim, $factory, $opmap, $loop_visited);
-                # THE TARGET RESOLUTION IS NOT SHARED YET. The main walker
-                # resolves it through a scope key (so a destructive s///
-                # rebinds the lexical, and /r does not), and duplicating that
-                # here would be the same one-operator-two-sites mistake this
-                # change is fixing. Where the target is not simply on the
-                # stack -- `foreach ($l)` aliases the iterator -- refuse rather
-                # than guess at a binding.
-                my $target = $sim->stack_depth ? $sim->pop_node : undef;
-                die "GAP: s///e in a loop body whose target is the aliased"
-                  . " iterator (not a stack value) is not yet lowered -- the"
-                  . " target resolution is not shared with the main walker"
-                  . " yet\n"
-                    unless defined $target;
+                # THE TARGET IS RESOLVED, NOT POPPED. `foreach ($l) { s/... }`
+                # substitutes into the ALIASED ITERATOR -- measured, that subst
+                # has targ=0, so its target is $_ and there is nothing on the
+                # stack to take. Popping here refused every such loop; the
+                # shared resolver names it the same way the main walker does.
+                my ($scope_key, $target) =
+                    _subst_target($cv, $op, $sim, $factory);
 
                 my $node = $factory->make('RegexSubst',
                     inputs  => [$target, (defined $repl ? ($repl) : ())],
                     pattern => $op->precomp,
-                    flags   => _pmflags_to_str($op->pmflags));
+                    flags   => _pmflags_to_str($op->pmflags),
+                    stamp   => SoN::IR::Stamp->new(type => 'Str'));
                 $node->set_control_in($sim->control);
                 $sim->set_control($node);
                 $sim->set_memory($node) if defined $sim->memory;
+
+                # A DESTRUCTIVE s/// REBINDS THE TARGET so a later read of the
+                # same lexical resolves to the substituted value; /r yields a
+                # new string and must leave the source alone. Same rule the
+                # main walker applies, which is why the resolver returns the
+                # key and not only the value.
+                $sim->define($scope_key, $node)
+                    unless $op->pmflags & PMf_NONDESTRUCT;
                 $sim->push_node($node) unless ($op->flags & 3) == 1;  # void
 
                 # Skip past the replacement subtree: its ops are consumed.
@@ -8588,6 +8583,38 @@ class SoN::FromOptree 0.01 {
     # value it pushes. Descending to the leftmost leaf finds the entry op --
     # measured, `s/a/x${p}y/` is pmreplroot -> substcont -> multiconcat ->
     # padsv, and multiconcat's own handler assembles the parts.
+    # The SCOPE KEY and VALUE a s/// substitutes into: ($scope_key, $target).
+    #
+    # NO TARG MEANS $_, and $_ is nameable: it is the package scalar main::_,
+    # an ordinary SSA binding in the scope map. Keyed WITH THE SIGIL because
+    # `$_` and `@_` share a glob name, and a name-only key hash-consed them
+    # into one node.
+    #
+    # THE KEY IS RETURNED, not just the value, because a DESTRUCTIVE s///
+    # rebinds it so a later read of the same lexical resolves to the
+    # substituted value -- while /r (PMf_NONDESTRUCT) yields a new string and
+    # must NOT rebind. A caller that only had the value could not tell those
+    # apart.
+    #
+    # SHARED BY BOTH WALKERS. The loop-body walker popped a stack value
+    # instead, which is wrong for `foreach ($l) { s/x/.../e }`: measured, that
+    # subst has targ=0, so its target is $_ (the aliased iterator) and there is
+    # nothing on the stack to pop. See
+    # docs/plans/2026-08-31-one-operator-one-declaration.md.
+    sub _subst_target ($cv, $op, $sim, $factory) {
+        my $targ      = $op->targ;
+        my $scope_key = $targ || 'main::$_';
+        my $target    = $sim->lookup($scope_key);
+        if (!$target) {
+            $target = $targ
+                ? _make_pad_or_field($cv, $targ, $factory)
+                : $factory->make('EntryDef',
+                    stash_name => 'main', sigil => '$', var_name => '_');
+            $sim->define($scope_key, $target);
+        }
+        return ($scope_key, $target);
+    }
+
     sub _walk_subst_replacement ($cv, $op, $sim, $factory, $opmap, $visited) {
         my $replroot = $op->pmreplroot;
         return undef unless $replroot && ref($replroot) && $$replroot;
