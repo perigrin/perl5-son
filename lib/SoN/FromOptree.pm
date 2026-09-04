@@ -8768,11 +8768,25 @@ class SoN::FromOptree 0.01 {
     # at the one I happened to be reading is how this session has repeatedly
     # left a construct half-fixed.
     sub _declare ($factory, $pad_node, $value) {
+        # NARROWS THE FLOOR, does not merely fill a hole. _make_pad_or_field
+        # stamps every slot with its SIGIL's floor -- $ is Scalar, @ is Array,
+        # % is Hash -- so by the time a declaration is built the slot is no
+        # longer Unknown, and an "only if Unknown" guard would never fire. The
+        # declared value's type is what refines that floor:
+        #
+        #     my $f = "abc$$";   floor Scalar, declared Str -> Str
+        #     sub f { my $p = shift }   floor Scalar, no better answer -> Scalar
+        #
+        # Only a strict SUBTYPE replaces it, so a wider or unrelated value
+        # leaves the floor standing rather than loosening it.
         if ($pad_node && $pad_node->can('set_stamp')
-            && (!$pad_node->stamp || $pad_node->stamp->type eq 'Unknown')
             && $value && $value->can('stamp') && $value->stamp
             && $value->stamp->type ne 'Unknown') {
-            $pad_node->set_stamp($value->stamp);
+            my $cur = $pad_node->stamp;
+            if (!$cur || $cur->type eq 'Unknown'
+                || $value->stamp->is_subtype_of($cur)) {
+                $pad_node->set_stamp($value->stamp);
+            }
         }
         return $factory->make('VarDecl',
             inputs => [$pad_node, $value], scope => 'my');
@@ -8792,6 +8806,22 @@ class SoN::FromOptree 0.01 {
             }
         }
         my $varname = _padname($cv, $targ);
+
+        # NOT STAMPED WITH THE SIGIL'S FLOOR, deliberately, and this is a
+        # refusal that earns its keep. `$` IS a floor of Scalar, `@` of Array,
+        # `%` of Hash -- measured, a $ slot holds exactly one scalar however
+        # many arguments were passed, and reftype(\@a) is ARRAY even for an
+        # empty one. But B::SoN::_declared_slot_type ALREADY supplies exactly
+        # that, and deliberately does not write it onto the node: the backward
+        # inference pass skips any node whose stamp is not Unknown, and MEETS
+        # the declared type with the use-site requirement instead.
+        #
+        #     sub add1 { my ($x) = @_; $x + 1 }
+        #       meet(Scalar, Num) = Num
+        #
+        # Stamping Scalar here pre-empts that meet and the parameter comes out
+        # Scalar -- strictly WIDER than what the body proves. Measured: it
+        # broke t/wire-backward-inference.t in exactly that way.
         return $factory->make('PadAccess', targ => $targ, varname => $varname);
     }
 
