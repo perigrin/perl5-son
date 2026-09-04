@@ -157,4 +157,55 @@ subtest 'requirements from several uses are met, not raced' => sub {
     }
 };
 
+# A SLOT NOTHING READS IS NOT A MISSED INFERENCE. perigrin asked whether $x in
+#
+#     sub p { my ($x) = @_; $x = shift; $x + 1 }
+#
+# is a copy or an alias of the first argument. Verified on 5.42.0 by SV
+# IDENTITY, which is stronger than a write-back test:
+#
+#     refaddr(\$_[0]) == refaddr(\$caller_var)    SAME SV -- an alias
+#     my ($x) = @_                                different SV -- a copy
+#     my $x = shift                               different SV -- a copy
+#
+# and the ordering confirms two storages: after `$_[0] = 99`, an earlier
+# `my ($copy) = @_` still reads 5 while the caller's variable is 99.
+#
+# WHAT ALIASES IS @_ ITSELF, however it is read -- element access AND a
+# foreach over it, since a foreach iterator is an alias in its own right:
+#
+#     sub fe { for my $e (@_) { $e = 42 } }   caller sees 42
+#
+# The two ASSIGNMENT forms are what copy.
+#
+# So the reassignment rebinds the slot to the shift result, later reads resolve
+# to THAT value, and the PadAccess left over from the first declaration has no
+# consumer but its own Assign. Backward inference correctly does not type it:
+# there is no use to infer from. The sub still returns Add stamped Num, which
+# matches perl's 6.
+#
+# I had recorded this as a defect in the list-assign path. It is not -- the
+# graph is right and the orphan is inert. Pinned so the next reader does not
+# re-open it.
+subtest 'a slot with no reader is left untyped, and that is correct' => sub {
+    my $wire = wire_for(
+        'sub p { my ($x) = @_; $x = shift; return $x + 1 } print p(5);',
+        'orphan');
+    my ($sub) = grep { !/__PROGRAM__/ } keys $wire->{methods}->%*;
+    my @nodes = $wire->{methods}{$sub}{nodes}->@*;
+    my %by    = map { $_->{id} => $_ } @nodes;
+
+    my ($pad) = grep { $_->{op} eq 'PadAccess' } @nodes;
+    ok $pad, 'the leftover declaration slot exists' or return;
+    my @consumers = grep { grep { $_ == $pad->{id} } ($_->{inputs} // [])->@* }
+                    @nodes;
+    is scalar(grep { $_->{op} ne 'Assign' } @consumers), 0,
+        'nothing but its own Assign reads it';
+
+    my ($ret) = grep { $_->{op} eq 'Return' } @nodes;
+    my $val = $by{ ($ret->{inputs} // [])->[0] // '' };
+    is +($val // {})->{stamp}, 'Num',
+        'and the value the sub actually returns IS typed';
+};
+
 done_testing;
