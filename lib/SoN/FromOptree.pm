@@ -597,14 +597,36 @@ class SoN::FromOptree 0.01 {
                 # The asymmetry with the cond_expr gate is the whole bug -- an
                 # if/ELSE with a field store already worked, which made this look
                 # covered.
-                my $mem_branch =
-                    ($op->flags & 3) == 1   # OPf_WANT_VOID
-                    && (_arm_has_element_store($op->other, $stop_addr)
-                        || _arm_has_field_store($cv, $op->other, $stop_addr)
-                        || _arm_has_void_call($op->other, $stop_addr)
-                        || _arm_has_die($op->other, $stop_addr));
+                #
+                # THE EFFECT DECIDES, NOT THE CONTEXT. This gate also required
+                # the `or` itself to be void, so an operator whose result is
+                # READ skipped control flow no matter what its arm held:
+                #
+                #     our @g; my $ok = 1; my $v = ($ok or push @g, 9);
+                #       perl  : g=0, v=1   -- short-circuit, no push
+                #       before: Call control_in=0 beside Print, no If -> g=1
+                #
+                # Perl propagates context to the RHS asymmetrically -- the LHS is
+                # scalar so the branch can be decided, the RHS inherits the
+                # statement's context (measured with wantarray: undef in a void
+                # statement, "" under assignment) -- but SHORT-CIRCUITING HOLDS
+                # IN BOTH. The arm predicates below already answer "does this arm
+                # need control flow"; the want-flag only excluded the value form
+                # of the same defect.
+                my $arm_has_effect =
+                    _arm_has_element_store($op->other, $stop_addr)
+                    || _arm_has_field_store($cv, $op->other, $stop_addr)
+                    || _arm_has_void_call($op->other, $stop_addr)
+                    || _arm_has_die($op->other, $stop_addr);
+                # A void operator discards its result, so the mem_branch path
+                # (which pushes no value) is the whole story. When the result is
+                # READ the guard still has to be built, but a value must reach
+                # the stack too -- that is $effect_value_branch below.
+                my $void_op    = ($op->flags & 3) == 1;   # OPf_WANT_VOID
+                my $mem_branch = $void_op && $arm_has_effect;
+                my $effect_value_branch = !$void_op && $arm_has_effect;
                 my ($if_node, $true_proj, $false_proj);
-                if ($mem_branch) {
+                if ($mem_branch || $effect_value_branch) {
                     $if_node   = $factory->make_cfg('If',
                         inputs => [$sim->control, $lhs]);
                     # `and` (if C): true arm runs the body. `or` (unless C): the
@@ -788,6 +810,16 @@ class SoN::FromOptree 0.01 {
                         value      => undef,
                         const_type => 'undef',
                         stamp      => SoN::IR::Stamp->new(type => 'Undef'));
+                # An effect arm in VALUE context built real control flow above,
+                # so the two paths must rejoin before the operator's value is
+                # used -- otherwise the Or would be read on the continue path
+                # while the arm's effect sits on a Proj that nothing merges.
+                # merge() builds the Region and the memory-Phi; the value node
+                # is then built on the merged control, exactly as the void form
+                # does minus the value.
+                $sim->merge($rhs_sim, $factory, $if_node)
+                    if $effect_value_branch && $if_node;
+
                 my $node_op = $name eq 'and' ? 'And' : 'Or';
                 my $node = $factory->make($node_op, inputs => [$lhs, $rhs]);
                 $sim->push_node($node);

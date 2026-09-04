@@ -51,4 +51,32 @@ for my $case (
         "$label: the guard builds an If";
 }
 
+# THE SAME DEFECT REACHED THROUGH THE NON-VOID GATE. $mem_branch tests the
+# `or` op's OWN OPf_WANT_VOID, so an `or` whose result is READ skipped control
+# flow entirely no matter what its arm held. Fixing the arm scan alone left
+# this live.
+#
+# Perl propagates context to the RHS asymmetrically -- the LHS is scalar so the
+# branch can be decided, and the RHS inherits the statement's context:
+#   lhs(0) or rhs();          rhs wantarray = undef  (void)
+#   my $v = (lhs(0) or rhs()); rhs wantarray = ""     (scalar)
+# but short-circuiting holds in BOTH, so the effect is guarded either way.
+#
+# Measured on `our @g; my $ok=1; my $v = ($ok or push @g, 9); ...`
+#   perl  : g=0, v=1        -- the push does not run
+#   before: Call control_in=0 alongside Print, no If -- it runs, g=1
+for my $case (
+    ['push in a value-context or-arm'  => 'push @g, 9'],
+    ['warn in a value-context or-arm'  => 'warn "W\n"'],
+) {
+    my ($label, $effect) = $case->@*;
+    my $g = program_graph(
+        "our \@g;\nmy \$ok = 1;\nmy \$v = (\$ok or $effect);\nprint qq{end\\n};\n");
+    ok defined $g, "$label: graph built" or next;
+
+    my @ops = map { $_->{op} } $g->{nodes}->@*;
+    ok scalar(grep { $_ eq 'If' } @ops),
+        "$label: the guard builds an If";
+}
+
 done_testing;
