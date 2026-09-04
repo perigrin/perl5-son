@@ -1294,7 +1294,10 @@ class SoN::FromOptree 0.01 {
                 # padsv_store / TARGMY). The /r form (PMf_NONDESTRUCT) yields a
                 # NEW string and leaves the source untouched, so it must NOT
                 # rebind -- only push the result value ($nondestruct above).
-                $sim->define($scope_key, $node) unless $nondestruct;
+                unless ($nondestruct) {
+                    $sim->define($scope_key, $node);
+                    _subst_store($factory, $sim, $target, $node);
+                }
                 # The binding above is the substituted subject. In count
                 # context the VALUE is a different thing over the same
                 # operation, so push a node that says so rather than the
@@ -7861,8 +7864,10 @@ class SoN::FromOptree 0.01 {
                 # new string and must leave the source alone. Same rule the
                 # main walker applies, which is why the resolver returns the
                 # key and not only the value.
-                $sim->define($scope_key, $node)
-                    unless $op->pmflags & PMf_NONDESTRUCT;
+                unless ($op->pmflags & PMf_NONDESTRUCT) {
+                    $sim->define($scope_key, $node);
+                    _subst_store($factory, $sim, $target, $node);
+                }
                 # Same split as the main walker: the BINDING is the substituted
                 # subject, but the VALUE of a destructive s/// is the match
                 # count. This site already skips the push in void context, so a
@@ -9153,6 +9158,34 @@ class SoN::FromOptree 0.01 {
     # subst has targ=0, so its target is $_ (the aliased iterator) and there is
     # nothing on the stack to pop. See
     # docs/plans/2026-08-31-one-operator-one-declaration.md.
+    # _subst_store($factory, $sim, $scope_key, $target, $value) -- a destructive
+    # s/// on a PACKAGE variable needs the same EntryWrite an sassign emits.
+    # Rebinding the scope key alone is the whole semantics for a pad slot, but a
+    # package scalar is readable from another sub, and without the store that
+    # read cannot observe the substitution. Measured before this:
+    #
+    #     our $g = "aaa";
+    #     sub mangle { $main::g =~ s/a/b/g }
+    #     sub peek   { return $main::g }
+    #     mangle(); print peek();
+    #       perl : bbb
+    #       graph: main::mangle held the RegexSubst but NO EntryWrite, so
+    #              main::peek read a value the substitution never reached.
+    #
+    # A pad target passes through untouched: $target is only an EntryDef when
+    # the destination is a package variable.
+    sub _subst_store ($factory, $sim, $target, $value) {
+        return unless $target
+            && $target->isa('SoN::IR::Node::EntryDef')
+            && defined $sim->memory;
+        my $write = $factory->make('EntryWrite',
+            inputs => [$target, $value, $sim->memory]);
+        $write->set_control_in($sim->control);
+        $sim->set_control($write);
+        $sim->set_memory($write);
+        return;
+    }
+
     sub _subst_target ($cv, $op, $sim, $factory) {
         my $targ      = $op->targ;
         # NO TARG DOES NOT MEAN $_. It means the target is not a pad slot, and
@@ -9167,11 +9200,32 @@ class SoN::FromOptree 0.01 {
         #               "g=aaa"
         #
         # This was reachable all along; the count-context GAP simply fired
-        # first and hid it. A GV under the op distinguishes the two cases.
-        if (!$targ && _find_gv_op($op)) {
-            die "GAP: s/// on a package/global target (the GV is on the stack,"
-              . " not a pad slot) not yet lowered -- binding it as \$_ drops"
-              . " the substitution\n";
+        # first and hid it. A GV under the op distinguishes the two cases, and
+        # it is also the ANSWER: a package target is an ordinary EntryDef keyed
+        # the way every other package read is keyed. It refused only because
+        # package scalars had no store to rebind through -- EntryWrite supplies
+        # that now, so the destructive rebind at the call site lands on the real
+        # variable instead of on $_.
+        if (!$targ) {
+            if (my $gv_op = _find_gv_op($op)) {
+                if (my $gv = _op_gv($cv, $gv_op)) {
+                    my $stash = eval { $gv->STASH->NAME } // 'main';
+                    my $key   = _stash_name_key('$', $stash, $gv->NAME);
+                    my $node  = $sim->lookup($key)
+                        // $factory->make('EntryDef',
+                            stash_name => $stash,
+                            sigil      => '$',
+                            var_name   => $gv->NAME);
+                    $sim->define($key, $node);
+                    return ($key, $node);
+                }
+                # A GV we cannot resolve is still not $_. Binding it as $_ would
+                # drop the substitution silently, which is the whole reason this
+                # refusal exists.
+                die "GAP: s/// on a package/global target whose GV could not be"
+                  . " resolved not yet lowered -- binding it as \$_ drops the"
+                  . " substitution\n";
+            }
         }
         my $scope_key = $targ || '$main::_';
         my $target    = $sim->lookup($scope_key);

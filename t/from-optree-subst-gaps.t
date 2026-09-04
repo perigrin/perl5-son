@@ -49,16 +49,17 @@ subtest 'an implicit $_ s/// rebinds $_, and does not drop the substitution' => 
         '$_ reads the substitution result, not the pre-subst binding');
 };
 
-# This refusal was reachable all along but the count-context GAP fired first
-# and hid it. With count context lowered, it is the only thing standing between
-# a package target and a SILENT DROP: _subst_target keyed a missing targ as
-# '$main::_', which bound the wrong variable and left no RegexSubst in the
-# graph at all. Measured -- `our $g="aaa"; $main::g =~ s/a/b/g;` printed the
-# folded "aaa" where perl prints "bbb".
-subtest 'package/global target GAPs loudly' => sub {
-    my $err = translate_err('sub { our $g; $main::g =~ s/foo/baz/ }');
-    like($err, qr/^GAP: s\/\/\/ on a package\/global target/,
-        'package-target s/// produces its own loud GAP') or diag($err);
+# This refused while package scalars had no store to rebind through: keying a
+# missing targ as '$main::_' bound the wrong variable and left no RegexSubst in
+# the graph at all, so `our $g="aaa"; $main::g =~ s/a/b/g;` printed the folded
+# "aaa" where perl prints "bbb". EntryWrite supplies the store now, so the GV
+# under the op names an ordinary EntryDef and the subst rebinds the real
+# variable. See t/from-optree-subst-package-target.t.
+subtest 'package/global target lowers to a real binding' => sub {
+    my $g = translate_ok('sub { our $g; $main::g =~ s/foo/baz/ }');
+    ok(defined $g, 'it translates') or return;
+    ok(scalar(grep { $_->operation eq 'RegexSubst' } $g->nodes->@*),
+        'the substitution is in the graph, not dropped');
 };
 
 # Destructive s/// in scalar/boolean context returns the match COUNT, not the
