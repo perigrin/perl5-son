@@ -3306,8 +3306,33 @@ class SoN::FromOptree 0.01 {
             die "GAP: package scalar read with an unresolvable GV not yet lowered\n"
                 unless defined $gv_name;
             if ($gv_name =~ /^[1-9][0-9]*$/) {
+                # A CAPTURE INSIDE A s///e REPLACEMENT IS A CYCLE, and that is
+                # why this is not simply a missing binding. `$1` there is the
+                # SUBSTITUTION'S OWN capture -- measured, an earlier match does
+                # NOT leak in:
+                #
+                #     my $t="QQ"; $t =~ /(Q)/;
+                #     my $u="ayb"; $u =~ s/(y)/"[$1]"/e;   a[y]b, not a[Q]b
+                #
+                # so the capture must read the RegexSubst, while the RegexSubst
+                # reads the replacement the capture is part of. RegexCapture's
+                # contract is `inputs[0] is the match node`, and inputs are a
+                # construction :param that hash-consing depends on, so the edge
+                # cannot be patched in afterwards.
+                #
+                # THE IR SANCTIONS EXACTLY ONE FORWARD REFERENCE -- a loop
+                # header Phi's backedge, which chalk's loader defer-patches via
+                # set_backedge (see SoN::IR::Graph::nodes). There is no second
+                # mechanism, so expressing this needs a WIRE decision rather
+                # than a producer-side fix, and refusing is correct until one
+                # exists.
                 my $match = $sim->last_match
-                    // die "GAP: capture \$$gv_name read with no preceding match in scope\n";
+                    // die "GAP: capture \$$gv_name inside a s///e replacement"
+                     . " reads the substitution's OWN match, which is a cycle"
+                     . " the wire has no defer-patch for (only a loop Phi's"
+                     . " backedge is a sanctioned forward reference); outside"
+                     . " a replacement, a capture with no preceding match in"
+                     . " scope is not yet lowered\n";
                 my $node = $factory->make('RegexCapture',
                     inputs => [$match],
                     n      => 0 + $gv_name,
