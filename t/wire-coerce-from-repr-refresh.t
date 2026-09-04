@@ -66,12 +66,22 @@ sub coerces_of ($src, $name) {
 # is still reached another way. The result was TWO Coerce nodes over one value,
 # one correct and one stale, which is worse than the stale field alone.
 #
-# What it needs is a replacement that removes the old node from the graph, not
-# an insertion. That is a Graph-level operation this file does not have, and
-# inventing one to fix a field is the wrong order of work.
+# That rebuild was the WRONG ORDER OF WORK, and so was the Graph-level node
+# replacement operation designed to make it possible. Both were infrastructure
+# to keep a field fresh that T1 does not need: from_repr is a CACHE of
+# inputs[0]'s stamp, spelled like a declaration. Measured, 375 of 376
+# non-Unknown values are exactly that stamp; the 1 exception is hardcoded and
+# false (qr// over a deref, FromOptree.pm:3771, claims Str over a Scalar).
+#
+# The justification for the rebuild -- that chalk's backend dispatches on
+# from_repr and Unknown matches no arm -- is a T2 symptom. This repo stops at
+# T1. Removing the field is the T1-clean fix and needs no pass at all, but it
+# is a wire change and belongs to the boundary conversation.
+#
+# See docs/plans/2026-09-04-from_repr-is-a-cache-t1-does-not-need.md
 {
-    local $TODO = 'from_repr is a construction-time snapshot; refresh needs '
-                . 'node replacement, not insertion';
+    local $TODO = 'from_repr is a redundant cache of the input stamp; the fix '
+                . 'is to drop the field, which is a wire decision';
     my $cs = coerces_of('sub f { my ($x)=@_; print $x } f("a");', 'cf-param');
     my @typed = grep { $_->{input} ne 'NONE' && $_->{input} ne 'Unknown' } $cs->@*;
     is scalar(grep { $_->{from} ne $_->{input} } @typed), 0,
@@ -97,5 +107,24 @@ subtest 'no Coerce claims a conversion from a type it already is' => sub {
     is scalar(grep { $_->{from} eq $_->{to} } $cs->@*), 0,
         'no from == to identity coercion is emitted';
 };
+
+
+# The hardcoded half of the same defect. qr// over a dereffed scalar ref emits
+# Coerce(from_repr=Str -> Regex) whose input is stamped Scalar, and unlike the
+# snapshot above this one cannot go stale -- it is wrong on construction and
+# stays wrong whatever flows in. Everything else in that subgraph is correct:
+# Ref/PostfixDeref models the deref, Scalar is honest for a deref result, and
+# to_repr=Regex correctly says "compile this as a pattern".
+{
+    my $cs = coerces_of('my $p = "a"; my $r = \$p; my $re = qr/$$r/;', 'cf-qr');
+    my ($qr) = grep { $_->{to} eq 'Regex' } $cs->@*;
+    ok defined $qr, 'the qr// Coerce is in the graph' or return;
+
+    local $TODO = 'from_repr is hardcoded Str at the qr// site regardless of '
+                . 'what the input is stamped';
+    is $qr->{from}, $qr->{input},
+        'from_repr should match the input stamp at qr//';
+}
+
 
 done_testing;
