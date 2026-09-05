@@ -6549,6 +6549,33 @@ class SoN::FromOptree 0.01 {
         return defined $stamp && $stamp->type ne 'Unknown';
     }
 
+    # _stale_consumers($phi, $join) -- everything transitively reading $phi that
+    # is stamped NARROWER than the widened join.
+    #
+    # A node whose stamp already covers the join has nothing stale about it: the
+    # Coerce the walker inserts at a use site widens there, so the arithmetic
+    # above it is stamped correctly whatever the Phi says. What cannot stand is
+    # a consumer that read the Phi at the narrower type and kept it.
+    #
+    # Bounded by the visited set, which a cycle needs -- a loop Phi is reachable
+    # from its own back-edge by construction.
+    sub _stale_consumers ($phi, $join) {
+        my (%seen, @stale, @queue);
+        @queue = ($phi);
+        while (my $node = shift @queue) {
+            next if $seen{$node->id}++;
+            push @queue, $node->consumers->@*;
+            next if $node->id eq $phi->id;
+
+            my $stamp = $node->stamp;
+            next unless _is_narrowed($stamp);
+            # Already at or above the join: nothing to restamp.
+            next if SoN::IR::Stamp::join($stamp, $join)->type eq $stamp->type;
+            push @stale, $node->operation . '/' . $stamp->type;
+        }
+        return @stale;
+    }
+
     sub _patch_loop_phi ($sim, $targ, $phi, $post) {
         $phi->set_backedge($post);
         $sim->define($targ, $phi);
@@ -6562,8 +6589,30 @@ class SoN::FromOptree 0.01 {
         # case the elsif branch already handles.
         if (_is_narrowed($init->stamp) && _is_narrowed($post->stamp)) {
             my $join = SoN::IR::Stamp::join($init->stamp, $post->stamp);
-            die "GAP: loop-carried type widening not yet lowered\n"
-                if defined $phi->stamp && $join->type ne $phi->stamp->type;
+            if (defined $phi->stamp && $join->type ne $phi->stamp->type) {
+                # THE BODY WAS WALKED UNDER THE OPTIMISTIC INIT STAMP, so a
+                # widening back-edge can leave a consumer holding a stamp that
+                # is now too narrow -- a type-level miscompile, and the reason
+                # this refusal exists.
+                #
+                # BUT IT IS A PROPERTY TO MEASURE, NOT TO ASSUME, and assuming
+                # it refused ordinary code. Measured on the Phi's consumer cone:
+                #
+                #   $t += 0.5             Phi/Int Coerce/Num Add/Num   clean
+                #   $s = $s . "x"         Phi/Int Coerce/Str ...       clean
+                #   my $u=$t+1; $t+=0.5   ... Add/Int                  STALE
+                #
+                # The walker inserts a Coerce at the use site, which already
+                # widens; only a consumer that read the Phi DIRECTLY at the
+                # narrower type is stale. `my $t = 0; $t += 0.5` -- about as
+                # ordinary as perl gets -- was refused for a staleness it did
+                # not have.
+                my @stale = _stale_consumers($phi, $join);
+                die "GAP: loop-carried type widening not yet lowered"
+                  . " (consumers stamped narrower than the join: "
+                  . join(', ', @stale) . ")\n"
+                    if @stale;
+            }
             $phi->set_stamp($join);
         }
         elsif (defined $phi->stamp) {
@@ -8418,8 +8467,29 @@ class SoN::FromOptree 0.01 {
         #            Phi would need two arms and there is only one.
         if ($body_sim->stack_depth > $sim->stack_depth) {
             my $val = $body_sim->pop_node;
+
+            # STAMP IT HERE, from the join of the two arms. B::SoN's
+            # _stamp_merges would compute the same join, but it is a POST-PASS:
+            # it runs after translation, and _patch_loop_phi refuses an
+            # unstamped back-edge DURING the walk. An eval feeding a
+            # loop-carried accumulator makes this Phi that back-edge, so the
+            # post-pass answer arrives too late and the whole loop was refused.
+            #
+            # Every other merge-Phi site in this walker already stamps from the
+            # join for exactly this reason -- see the and/or merge sites: "a
+            # merge Phi over a loop-carried accumulator becomes that slot's
+            # back-edge, and _patch_loop_phi rejects an UNSTAMPED back-edge".
+            #
+            # Only when BOTH arms say something: join(x, Unknown) is Unknown,
+            # so there is nothing to record, and the scout pre-pass builds
+            # placeholder Constants that are honestly Unknown.
+            my $stamp;
+            $stamp = SoN::IR::Stamp::join($val->stamp, $undef->stamp)
+                if _is_narrowed($val->stamp) && _is_narrowed($undef->stamp);
+
             $sim->push_node($factory->make_unique('Phi',
-                inputs => [$val, $undef], region => $region));
+                inputs => [$val, $undef], region => $region,
+                (defined $stamp ? (stamp => $stamp) : ())));
         }
         elsif (($op->flags & 3) != 1) {   # not OPf_WANT_VOID
             $sim->push_node($undef);
