@@ -8918,6 +8918,24 @@ class SoN::FromOptree 0.01 {
                 next;
             }
 
+            # A BLOCK EVAL INSIDE AN ARM is a self-contained trap, exactly as
+            # it is inside a loop body: it walks its own body, merges the two
+            # outcomes at its OWN Region and resumes at the leavetry, touching
+            # neither the arm's control nor the join.
+            #
+            # THIS IS THE THIRD WALK THAT NEEDED THE SAME DISPATCH. The main
+            # walk and the loop body already had it; without it here the arm
+            # stopped at the entertry and the caller reported the SYMPTOM --
+            # "arm stopped at `entertry`, not the join" -- while the and/or
+            # path reported the same cause as "did not converge". One missing
+            # dispatch, three different messages.
+            if ($name eq 'entertry') {
+                $visited->{$$op}++;
+                $op = _handle_entertry($cv, $op, $sim, $factory, $opmap,
+                    $visited);
+                next;
+            }
+
             # A nested ternary / if-else inside an arm must be translated,
             # not treated as an unhandled stop -- otherwise the arm's value
             # degrades to the inner CONDITION and the inner assignments
