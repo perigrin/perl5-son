@@ -2269,16 +2269,6 @@ class SoN::FromOptree 0.01 {
         # not a step toward compiling goto -- which needs real control-flow
         # support for the label form and tail-call replacement of the current
         # frame for `goto &sub`.
-        # DELETE MUTATES AND YIELDS: it removes the key and returns the value.
-        # It reached the wire as Call(delete, Constant(key)) with the KEY as its
-        # only operand -- no container, and no memory edge -- so the removal was
-        # invisible to every later read. The same contract push/unshift/splice
-        # are held to: a mutation the graph does not thread is a silent
-        # miscompile, so refuse until it is memory-modelled.
-        delete => "GAP: `delete` removes a key and yields its value; the"
-                . " removal is not yet threaded on the memory chain, so a"
-                . " later read would still see the deleted key",
-
         goto => "GAP: `goto` transfers control and is not compiled; the jump,"
               . " the statements it skips, and the label would otherwise be"
               . " dropped with no diagnostic",
@@ -4541,6 +4531,63 @@ class SoN::FromOptree 0.01 {
             $sim->set_control($node);
             $sim->set_memory($node) if defined $sim->memory;
             $sim->push_node($node) unless ($op->flags & 3) == 1;  # not void
+            return ($op->next, 'handled');
+        }
+
+        # DELETE MUTATES AND YIELDS: it removes the key and returns the value
+        # that was there. Both halves have to reach the graph.
+        #
+        # The OpMap gave it a pop_count of 1, so it took the KEY alone -- the
+        # container stayed on the stack and the node reached the wire as
+        # Call(delete, key) with neither container nor memory. Measured:
+        #
+        #     my %h=(a=>1,b=>2); delete $h{a}; print defined($h{a}) ? "y" : "n"
+        #       perl : n
+        #       before: the later read still threaded to MemStart, so the graph
+        #               computed "y"
+        #
+        # `exists` had exactly this defect and its handler below is the template:
+        # pop container AND key, carry [container, key, memory].
+        #
+        # IT ADVANCES MEMORY, which is the difference from Exists. A later read
+        # threads to the Delete rather than past it, so the removal is observed.
+        if ($name eq 'delete') {
+            # A SLICE DELETES MANY KEYS AT ONCE and its operands arrive as a
+            # list, not as one key -- a different arity, and popping two would
+            # take one key and whatever happened to sit under it. Refused rather
+            # than guessed: the wrong arity here is the defect this handler
+            # exists to fix, in the other direction.
+            # OPpSLICE IS A PRIVATE BIT, NOT AN OPf FLAG, and keying on
+            # `flags & 64` (OPf_STACKED) matched nothing -- measured,
+            # `delete @h{qw(a b)}` is flags=0x4 private=0x40. The refusal never
+            # fired and the slice popped ONE key off a list of them, so the node
+            # came out Delete(Constant, HashLiteral) -- container and key
+            # swapped, removing something the program never named.
+            die "GAP: a `delete` slice (more than one key at once) is not yet"
+              . " lowered -- its operands arrive as a list, not as a single"
+              . " container/key pair\n"
+                if $op->private & 64;   # OPpSLICE
+
+            die "GAP: `delete` with no container on the stack is not yet"
+              . " lowered\n"
+                unless $sim->stack_depth >= 2;
+
+            my $key       = $sim->pop_node;
+            my $container = $sim->pop_node;
+
+            my $node = $factory->make('Delete',
+                inputs => [$container, $key,
+                    (defined $sim->memory ? ($sim->memory) : ())]);
+
+            # PINNED AND THREADED, because the removal is an effect. Without the
+            # control edge DCE deletes a void `delete $h{a}` outright; without
+            # advancing memory a later read still sees the key.
+            $node->set_control_in($sim->control);
+            $sim->set_control($node);
+            $sim->set_memory($node) if defined $sim->memory;
+
+            # The removed value is the result, and a void delete has no reader.
+            $sim->push_node($node) unless ($op->flags & 3) == 1;  # OPf_WANT_VOID
             return ($op->next, 'handled');
         }
 

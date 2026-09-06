@@ -121,7 +121,7 @@ my @KNOWN_AT_98 = qw(
     Access Add Aggregate And AnonSub ArgsSource ArrayLiteral Assign
     BacktickExpr BinOp BitAnd BitOr BitXor Call CellParam CellRead CellWrite
     Coerce Complement
-    CompoundAssign Concat Constant Count Defined DefinedOr Divide EntryDef EntryWrite
+    CompoundAssign Concat Constant Count Defined DefinedOr Delete Divide EntryDef EntryWrite
     EnvRead Exists ExpressionList FieldAccess HashLiteral If Interpolate
     IsaOp LeftShift Length ListAppend ListAssign Loop Match MemStart Modulo
     MakeCell
@@ -150,7 +150,7 @@ subtest 'every node class is one or the other, never neither' => sub {
     # is stale" -- and only one of those is interesting. chalk hit the second
     # running this suite against a lib/ snapshot taken one commit before an
     # Exists node landed, and nearly attributed the red to its own change.
-    my $EXPECTED = 98;
+    my $EXPECTED = 99;
     if (scalar @names != $EXPECTED) {
         my %known = map { $_ => 1 } @KNOWN_AT_98;
         my @extra   = grep { !$known{$_} } @names;

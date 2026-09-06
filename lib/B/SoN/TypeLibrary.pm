@@ -164,6 +164,25 @@ my %SIGNATURES = (
     # normal case, not an error.
     Exists     => { operands => [], result => 'Boolean' },
 
+    # DELETE YIELDS THE VALUE IT REMOVED, so unlike Exists its result is not
+    # fixed by the operation: it is the container's element type, and Undef when
+    # the key was not there.
+    #
+    # SCALAR IS THE HONEST ANSWER, and it is a real constraint rather than a
+    # shrug -- one slot of a container holds one scalar, which excludes Array,
+    # Hash, Code and Glob. It is what CellRead declares for the same situation
+    # (a read of contents this op cannot narrow), and it covers the missing-key
+    # case: Undef is below Scalar, so `my $v = delete $h{absent}` is described.
+    #
+    # NOT `undef`. Every op must declare a result -- a half-filled entry would
+    # let a caller narrow an operand and then have nothing to say about the
+    # value produced from it, which t/typelibrary.t gates.
+    #
+    # `operands => []` for the same reason Exists has none: any container and
+    # any key are deletable, and removing an absent key is the normal case
+    # rather than an error.
+    Delete     => { operands => [], result => 'Scalar' },
+
     # WANTARRAY IS THE CALLSITE'S CONTEXT, and its type is the join over all
     # three readings. Measured on 5.42.0:
     #

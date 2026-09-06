@@ -235,7 +235,13 @@ class SoN::FromOptree::OpMap 0.01 {
         # node; the row stays so is_known() is true and the walk reaches that
         # handler rather than treating the op as unknown.
         exists         => [2, 'Exists',     1, 0],
-        delete         => [1, 'Call',       1, 0],
+        # DELETE POPS CONTAINER AND KEY, exactly as `exists` does above and for
+        # the same reason: a pop_count of 1 took the KEY alone and left the
+        # container stranded, so the node reached the wire with nothing to
+        # remove the key FROM. FromOptree handles `delete` directly and builds
+        # a Delete node (which also advances memory, since it mutates); this
+        # row stays so is_known() is true and the walk reaches that handler.
+        delete         => [2, 'Delete',     1, 0],
         helemexistsor  => [2, undef,        1, BRANCH],
 
         # === Multideref (optimized chained access) ===

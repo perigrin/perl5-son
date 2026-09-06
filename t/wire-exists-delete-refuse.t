@@ -51,20 +51,28 @@ subtest 'exists never emits a Defined over the key' => sub {
 #     my %h=(a=>1,b=>2); my $d = delete $h{a};   $d is 1, and a is gone
 #
 # It reached the wire as Call(delete, Constant("a")) :Unknown -- the KEY as its
-# only operand, no hash, and no memory edge, so a later read could not observe
-# the removal. Refuse until the mutation is memory-modelled, the same contract
-# push/unshift/splice are held to.
-subtest 'delete refuses rather than dropping the mutation' => sub {
+# only operand (the OpMap gave it a pop_count of 1, exactly the defect `exists`
+# had above), no hash, and no memory edge, so a later read could not observe the
+# removal. It is now a Delete node carrying [container, key, memory], which is
+# the same shape Exists carries plus the memory ADVANCE a mutation needs.
+subtest 'delete carries its container and threads the removal' => sub {
     my ($out, $err) = translate('my %h=(a=>1,b=>2); my $d = delete $h{a}; print $d;', 'del');
-    like $err, qr/GAP/, 'delete is refused, loudly';
+    unlike $err, qr/GAP/, 'delete is no longer refused';
+    like $out, qr/"op"\s*:\s*"Delete"/, 'a Delete node is emitted';
+    unlike $out, qr/"name"\s*:\s*"delete"/,
+        'and not the operand-less Call that dropped the mutation';
 };
 
-# THE REFUSAL MUST NAME THE CONSTRUCT. A GAP whose message does not say what
-# was refused sends the reader hunting, which is the failure mode the
-# refuse-before-popping work in this file already fixed once.
-subtest 'the delete refusal names itself' => sub {
-    my (undef, $derr) = translate('my %h=(a=>1); delete $h{a};', 'delname');
-    like $derr, qr/delete/, 'the delete GAP says "delete"';
+# A SLICE IS STILL REFUSED, and the discriminator is a PRIVATE bit rather than
+# an OPf flag -- measured, `delete $h{a}` is private=0x0 and
+# `delete @h{qw(a b)}` is private=0x40 (OPpSLICE). Keyed on OPf_STACKED the
+# refusal never fired and the slice popped one key off a list of them, emitting
+# Delete(Constant, HashLiteral) with container and key SWAPPED.
+subtest 'a delete slice still refuses, and names itself' => sub {
+    my (undef, $derr) = translate('my %h=(a=>1,b=>2); delete @h{qw(a b)};', 'delslice');
+    like $derr, qr/GAP/, 'the slice is refused, loudly';
+    like $derr, qr/delete/, 'the GAP says "delete"';
+    like $derr, qr/slice/, '... and says which form';
 };
 
 # `exists &sub` NO LONGER REFUSES. It asks about a symbol-table CV slot rather

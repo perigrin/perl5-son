@@ -61,6 +61,7 @@ use SoN::IR::Node::FieldAccess;
 use SoN::IR::Node::EntryDef;
 use SoN::IR::Node::ArgsSource;
 use SoN::IR::Node::Wantarray;
+use SoN::IR::Node::Delete;
 use SoN::IR::Node::Exists;
 use SoN::IR::Node::MakeCell;
 use SoN::IR::Node::CellRead;
@@ -109,7 +110,7 @@ my %DATA_CLASSES = map { $_ => "SoN::IR::Node::$_" } qw(
     And Or BitAnd BitOr BitXor LeftShift RightShift
     Assign Repeat Match NotMatch DefinedOr Xor Range Yada IsaOp
     Not Negate Complement Defined UnaryPlus Ref RefType Length Count
-    PadAccess FieldAccess EntryDef EntryWrite ArgsSource Wantarray Exists CellRead CellParam Parameter Subscript Slice
+    PadAccess FieldAccess EntryDef EntryWrite ArgsSource Wantarray Exists Delete CellRead CellParam Parameter Subscript Slice
     Call HashLiteral ArrayLiteral ListAppend MakeCell CellWrite
     Interpolate AnonSub
     RegexMatch RegexSubst RegexSubstCount RegexCapture Print EnvRead TryCatch
