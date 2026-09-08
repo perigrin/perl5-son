@@ -21,14 +21,25 @@ subtest 'my @b = @$r flattens a literal-arrayref variable (no GAP)' => sub {
     ok(defined $graph, 'got a graph');
 };
 
-# A runtime arrayref (`@$r` where $r is a computed ref, not a literal ArrayRef
-# node in the graph) cannot be statically flattened. Rather than leave the
-# single ref as one element (silent miscompile), GAP loudly.
-subtest 'rv2av over a non-literal ref in list context GAPs (not silent)' => sub {
+# A RUNTIME ARRAYREF IS THE SAME READ. It "cannot be statically flattened",
+# which was true and was not the question: a deref READS the referent, and a
+# read does not need its contents known at compile time. It is a PostfixDeref
+# carrying the sigil and a memory input, the same node `$$r` already used.
+#
+# The flatten it replaced was itself unsound where it DID apply -- substituting
+# an ArrayRef's construction-time elements loses every mutation between
+# construction and deref (`my $r=[1,2]; $r->[0]=9; @$r` gave "1 2" for perl's
+# "9 2"). See t/from-optree-deref-is-a-memory-read.t.
+subtest 'rv2av over a non-literal ref in list context lowers' => sub {
     my $sub = sub { my ($r) = @_; my @b = @$r; scalar @b };
-    ok(!lives { SoN::FromOptree->translate($sub) },
-        'a runtime-ref deref-flatten GAPs') or diag('expected a GAP, got a graph');
-    like($@, qr/GAP/i, 'the die is a loud GAP') or diag("actual: $@");
+    my $graph;
+    ok(lives { $graph = SoN::FromOptree->translate($sub) },
+        'a runtime-ref deref lowers') or diag($@);
+    ok(defined $graph, 'got a graph') or return;
+
+    my ($deref) = grep { $_->operation eq 'PostfixDeref' } $graph->nodes->@*;
+    ok defined $deref, 'it is a PostfixDeref' or return;
+    is $deref->sigil, '@', '... carrying the array sigil';
 };
 
 done_testing;

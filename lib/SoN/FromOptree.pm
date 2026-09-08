@@ -2751,16 +2751,17 @@ class SoN::FromOptree 0.01 {
                 && ($op->flags & 3) == 3          # OPf_WANT_LIST
                 && $sim->stack_depth > 0) {
             my $top = $sim->pop_node;
-            if ($top->operation eq 'ArrayLiteral') {
-                $sim->push_node($_) for $top->inputs->@*;
+
+            # A const-folded AV that is NOT an ArrayRef node (`my @q = (1..4)`
+            # reaching here as something else) has no referent to read: leave
+            # it as the const handler built it.
+            if ($op->first->name eq 'const'
+                    && $top->operation ne 'ArrayLiteral') {
+                $sim->push_node($top);
+                return ($op->next, 'handled');
             }
-            elsif ($op->first->name eq 'const') {
-                $sim->push_node($top);   # not a const-range ArrayRef: leave as-is
-            }
-            else {
-                die "GAP: list-context deref of a runtime array-ref (\@\$r where "
-                  . "\$r is not a literal ArrayRef) not yet lowered\n";
-            }
+
+            $sim->push_node(_deref_read($factory, $sim, $top, '@'));
             return ($op->next, 'handled');
         }
 
@@ -2781,16 +2782,14 @@ class SoN::FromOptree 0.01 {
                 && ($op->flags & 3) == 3          # OPf_WANT_LIST
                 && $sim->stack_depth > 0) {
             my $top = $sim->pop_node;
-            if ($top->operation eq 'HashLiteral') {
-                $sim->push_node($_) for $top->inputs->@*;
+
+            if ($op->first->name eq 'const'
+                    && $top->operation ne 'HashLiteral') {
+                $sim->push_node($top);
+                return ($op->next, 'handled');
             }
-            elsif ($op->first->name eq 'const') {
-                $sim->push_node($top);   # not a folded HV: leave as-is
-            }
-            else {
-                die "GAP: list-context deref of a runtime hash-ref (%\$h where "
-                  . "\$h is not a literal HashRef) not yet lowered\n";
-            }
+
+            $sim->push_node(_deref_read($factory, $sim, $top, '%'));
             return ($op->next, 'handled');
         }
 
@@ -8487,6 +8486,46 @@ class SoN::FromOptree 0.01 {
     # block eval that lowered fine at statement level was refused the moment it
     # appeared inside any loop -- measured on for, while and foreach alike.
     # Precedent: _handle_cond_expr was extracted for exactly this reason.
+    # _deref_read($factory, $sim, $ref, $sigil) -- `@$r` / `%$h` in list
+    # context: the referent read through the reference.
+    #
+    # A DEREF IS A MEMORY READ, not a compile-time substitution. Both branches
+    # used to FLATTEN a literal referent -- pushing the ArrayRef's construction
+    # elements as separate values -- and refuse a runtime ref for having no
+    # elements to flatten. The refusal was reasoning from the shortcut: a read
+    # does not need its contents known, so a runtime ref is the same node.
+    #
+    # THE SHORTCUT WAS ALSO WRONG WHERE IT APPLIED, which is the more serious
+    # half. Substituting construction-time values loses every mutation between
+    # construction and deref. Measured on 5.42.0:
+    #
+    #     my $r=[1,2]; $r->[0]=9; my @c=@$r;   perl "9 2", flattened "1 2"
+    #     my $r=[1,2]; my $s=$r; $s->[0]=9;    same, through an alias
+    #     my $r=[1,2]; push @$r,3; my @c=@$r;  perl 3, flattened 2 -- and the
+    #                                          push took the flattened elements
+    #                                          as its operands, so it appended
+    #                                          to nothing
+    #
+    # The element-read path (aelem/helem) made exactly this correction already:
+    # "a value-substitution read-back cache was here; it was unsound under
+    # aliasing and is gone -- the fold is deferred to a later alias-aware
+    # optimization pass." This is the same fold in the whole-aggregate case.
+    #
+    # PostfixDeref is the existing vocabulary and already carries the sigil; it
+    # was built only for `$$r`. The memory input is what orders the read against
+    # stores through the reference, exactly as a Subscript's third input does.
+    #
+    # THE STAMP IS THE CONTAINER KIND, not the element type: `@$r` in list
+    # context yields the array itself, whose type is Array (a List child), and
+    # `%$h` a Hash. A caller wanting one element indexes it.
+    sub _deref_read ($factory, $sim, $ref, $sigil) {
+        return $factory->make('PostfixDeref',
+            inputs => [$ref, (defined $sim->memory ? ($sim->memory) : ())],
+            sigil  => $sigil,
+            stamp  => SoN::IR::Stamp->new(
+                type => $sigil eq '%' ? 'Hash' : 'Array'));
+    }
+
     sub _handle_entertry ($cv, $op, $sim, $factory, $opmap, $visited) {
         my $body_sim = $sim->snapshot;
         _walk_branch($cv, $op->next, $body_sim, $factory, $opmap,
