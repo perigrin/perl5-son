@@ -6661,7 +6661,24 @@ class SoN::FromOptree 0.01 {
             }
             $phi->set_stamp($join);
         }
-        elsif (defined $phi->stamp) {
+        # AN UNSTAMPED PHI NEVER ASSERTED ANYTHING, so nothing can be stale
+        # against it. _make_loop_phi stamps a loop Phi ONLY when its init is
+        # narrowed, so an Unknown Phi means the body was walked against Unknown
+        # and no consumer holds a claim this back-edge could contradict.
+        #
+        # The guard here was `defined $phi->stamp`, which is TRUE FOR EVERY
+        # NODE -- the exact trap the comment at the top of this sub names
+        # ("'Has a stamp' is not the question ... `Unknown` is how a stamp says
+        # it does not"). The first branch was corrected to _is_narrowed and
+        # this one was not, so it refused unconditionally whenever the
+        # back-edge was unstamped.
+        #
+        # Measured: all three corpus files behind this GAP (comp/proto.t,
+        # comp/require.t, comp/retainedlines.t) have BOTH arms Unknown, so
+        # join(Unknown, Unknown) is Unknown -- no widening, and nothing to
+        # restamp. Falling through leaves the Phi honestly unstamped, which is
+        # what the post-pass fixpoint in B::SoN.pm narrows later if it can.
+        elsif (_is_narrowed($phi->stamp)) {
             # The back-edge is unstamped only because ONE input's stamp is
             # deferred to the Chalk loader (an element read Subscript over a
             # runtime aggregate -- a FieldAccess/field-backed array, whose
