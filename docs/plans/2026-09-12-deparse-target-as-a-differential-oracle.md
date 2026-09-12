@@ -85,6 +85,42 @@ The genuinely hard set is small and known:
     chosen BECAUSE the optree does not express it directly; each needs a
     deliberate spelling.
 
+## The correctness criterion
+
+**Observational equivalence, program by program.** A graph must be able to
+produce SOME Perl program that behaves identically to the input: same outputs,
+same effects, same order WHERE ORDER IS OBSERVABLE.
+
+The obligation is on the PROGRAM, not on the node. Whether any individual node
+has a Perl spelling is irrelevant -- a memory-Phi, a `Proj`, a `Region` and
+`Start` are structure, and structure is discharged by WHERE things are emitted
+rather than by what they translate to. The memory-Phi in
+
+    my @a = (1,2);
+    if ($cond) { $a[1] = 9 }
+    my $v = $a[1];
+
+says "this read observes whichever store the taken path made". Emitting the
+`if` and then the read discharges it; the Phi needs no syntax of its own.
+
+An earlier draft of this document claimed some nodes have "no honest Perl
+spelling" and that a permanently-refusing emitter was therefore acceptable.
+That is wrong, and wrong in a way worth recording: we STARTED from Perl
+semantics, so if a graph cannot be rendered back to an equivalent Perl program,
+the graph lost something it needed -- and that is a defect in the IR, not a
+fact to design around. "No token for this node" never implies "meaning lost".
+
+WHAT ORDER IS OBSERVABLE is exactly what the graph already encodes: `control_in`
+for what is ordered, data edges for what is not. Two `print`s must stay
+ordered; two pure arithmetic ops need not. So emitted programs may legitimately
+differ from the input in the unordered parts -- that is the line between the
+emitter being allowed to be UGLY and the emitter being allowed to be WRONG.
+
+This also settles what a failure means. A round-trip that differs localises to
+a PROGRAM, with a diff behind it, and you bisect toward the construct -- the
+same debugging motion as every blocker fixed this week. There is no
+node-by-node audit and no "unspellable node" register to maintain.
+
 ## The failure mode to design against
 
 **A shared assumption cancels out.** If the emitter reproduces a fold the
@@ -119,8 +155,10 @@ defect, it is not earning its keep.
 blocker) is detected.
 
 **Phase 4 -- the corpus.** Run over all of base+comp. Every CLEAN file must
-round-trip to identical output, or produce a named refusal from the emitter.
-An emitter GAP is fine; a silent difference is not.
+round-trip to OBSERVATIONALLY EQUIVALENT output, or produce a named refusal
+from the emitter. An emitter GAP is fine; a silent difference is not. A file
+that cannot round-trip is a claim that the graph lost input semantics --
+bisect it toward the construct, as with any other blocker.
 
 **Phase 5 -- wire it into the suite** as a corpus gate, so a future producer
 change that breaks a round-trip fails a test rather than waiting to be noticed.
@@ -150,8 +188,10 @@ still open.
 2. **Where does it live** -- `lib/SoN/Deparse.pm` in this repo, or a separate
    tool? In-repo means it tracks IR changes; separate keeps the producer
    dependency-free.
-3. **Is a REFUSING emitter acceptable** as a permanent state for nodes with no
-   honest Perl spelling, or does every node need a spelling eventually?
+3. RESOLVED during review: the criterion is observational equivalence per
+   PROGRAM, not a spelling per node (see The correctness criterion). An
+   emitter refusal is scaffolding -- "no rule written yet" -- and the measure
+   is simply how many corpus files round-trip to identical output.
 4. **Does this change the priority** of the remaining comp blockers? Building
    the oracle first would likely find defects in the 29 files currently CLEAN,
    which may matter more than the 5 PARTIAL ones.
