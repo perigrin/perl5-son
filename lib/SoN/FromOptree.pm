@@ -6160,6 +6160,12 @@ class SoN::FromOptree 0.01 {
                 # STACKED pure Call is an in-place store, so it overrides PURE
                 # and is pinned like any other effect.
                 my $void_effect_call = false;
+                # PINNING AND DISCARDING ARE TWO DECISIONS. For a genuinely
+                # void call they coincide, which is why one flag served both --
+                # but a global-state op must be pinned in ANY context, and
+                # borrowing this flag to do that also suppressed the push. See
+                # the widening below.
+                my $pin_on_control   = false;
                 if ($node_type eq 'Call' && defined $sim->control) {
                     my $void      = ($op->flags & 3) == 1;    # OPf_WANT_VOID
                     my $lvalue    = ($op->flags & 64);         # OPf_STACKED (store form)
@@ -6187,7 +6193,17 @@ class SoN::FromOptree 0.01 {
                     # survive is the EFFECT -- %INC and the symbol table -- on
                     # which a later `Foo->new` depends with no data edge to say
                     # so. That dependency is what the memory chain is for.
-                    $void_effect_call = 1
+                    #
+                    # PIN IT, DO NOT DISCARD IT. Setting $void_effect_call here
+                    # borrowed the control pinning and inherited the value
+                    # SUPPRESSION with it, so a non-void require pushed nothing
+                    # and `require "x.pm" or die $@` underflowed the stack in
+                    # the `or` handler's unconditional LHS pop -- an INTERNAL
+                    # ERROR naming StackSim, which is the worse category
+                    # because it fires before any honest refusal could.
+                    # `do "x.do" or die $@` is the same bug; perl's own
+                    # t/comp/require.t has it as `sub dofile`.
+                    $pin_on_control = 1
                         if $GLOBAL_STATE_BUILTIN{$name} && !$void;
                 }
 
@@ -6238,7 +6254,7 @@ class SoN::FromOptree 0.01 {
                         if $mixed;
                 }
                 my $node = $factory->make($node_type, inputs => \@inputs, %extra);
-                if ($void_effect_call) {
+                if ($void_effect_call || $pin_on_control) {
                     $node->set_control_in($sim->control);
                     $sim->set_control($node);
                 }

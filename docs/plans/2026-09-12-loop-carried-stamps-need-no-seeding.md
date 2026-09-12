@@ -115,4 +115,9 @@ GAP that fired first. An INTERNAL ERROR is the worse category (it fires before
 any honest refusal could, and names StackSim rather than the unhandled op), so
 it is recorded here rather than left to be rediscovered.
 
-`comp/require.t` stays PARTIAL on it.
+FIXED the same day, in the commit after this one: `$void_effect_call` meant
+"void AND effectful" -- pin on control and push nothing, which coincide for a
+genuinely void call -- and the global-state widening set that SAME flag for a
+NON-void require/dofile to borrow the pinning, inheriting the value suppression.
+So `require "x.pm" or die $@` pushed no LHS and the `or` handler's unconditional
+pop underflowed. Two decisions, now two flags.
