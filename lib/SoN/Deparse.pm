@@ -1,0 +1,291 @@
+# ABOUTME: Renders a SoN graph back to Perl source, as a differential oracle for the producer.
+# ABOUTME: The criterion is observational equivalence per program, never a spelling per node.
+use v5.42.0;
+use utf8;
+use experimental 'class';
+
+# WHY THIS EXISTS. Every correctness check on the producer is otherwise
+# STRUCTURAL -- read the graph and reason about whether it says what perl says.
+# Every defect found that way was a WRONG ANSWER from a structurally plausible
+# graph, with the test suite green throughout. Running the rendering and
+# diffing it against the original catches that class mechanically.
+# See docs/plans/2026-09-12-deparse-target-as-a-differential-oracle.md.
+#
+# THE CRITERION IS OBSERVATIONAL EQUIVALENCE, PROGRAM BY PROGRAM: same output,
+# same effects, same order where order is observable. The obligation is on the
+# PROGRAM, not the node -- a memory-Phi, a Proj, a Region and Start are
+# structure, discharged by WHERE things are emitted rather than by what they
+# translate to. Not every node needs a spelling; no input semantics may be lost.
+#
+# WHAT ORDER IS OBSERVABLE is what the graph already encodes: `control_in` is
+# what is ordered, data edges are what is not. So the emitted program may differ
+# from the input in the unordered parts. It is allowed to be UGLY. It is not
+# allowed to be WRONG.
+#
+# DELIBERATELY DUMB, and this is the load-bearing design rule. If this emitter
+# reproduces a fold the walker made, the round-trip agrees with itself and the
+# miscompile stays invisible -- `@$r` is the shape to fear: flatten on the way
+# in, flatten on the way out, output matches, bug survives. So this emits what
+# the node SAYS, never what the source probably meant, and it imports NOTHING
+# from FromOptree.pm. Shared code is shared assumptions.
+#
+# It reads the JSON wire format rather than producer internals: the wire is what
+# chalk consumes too, so a rendering defect here is a wire defect, not an
+# artefact of reaching into the producer.
+class SoN::Deparse 0.01 {
+    field $nodes;      # id => node hash
+    field %rendered;   # id => Perl expression text
+
+    # The reason the last render() refused, for a caller that wants to report it
+    # rather than just see undef.
+    field $gap :reader = undef;
+
+    # render($data) -- the decoded JSON wire, to Perl source for main::__PROGRAM__.
+    #
+    # Returns undef when the graph holds a node this emitter has no rule for,
+    # and sets ->gap to say WHICH. A REFUSAL IS SCAFFOLDING, not a resting
+    # state: every one is a live question about whether that node's meaning
+    # survives the round trip. An UNNAMED refusal is worse than none -- it is
+    # the silent-drop shape this whole tool exists to catch, so the reason is
+    # always recorded.
+    method render ($data) {
+        $gap = undef;
+        my $graph = $data->{methods}{'main::__PROGRAM__'};
+        unless ($graph) { $gap = 'no main::__PROGRAM__ in the graph'; return undef }
+
+        $nodes = { map { $_->{id} => $_ } ($graph->{nodes} // [])->@* };
+        %rendered = ();
+
+        my $body = eval { $self->_emit_control_chain($graph) };
+        if (!defined $body) { $gap = $@ || 'render failed with no reason'; return undef }
+        return $body;
+    }
+
+    # THE CONTROL CHAIN IS THE STATEMENT ORDER. Measured: `control_in` is a
+    # total order over effects, with pure values hanging off it as a DAG. So
+    # there is no scheduling pass -- walk the chain, and emit each effect's
+    # operand tree as an expression.
+    method _emit_control_chain ($graph) {
+        # CONTROL FLOWS BY TWO MECHANISMS and the index must see both.
+        # An EFFECT names its predecessor in `control_in`; a CFG node names
+        # its predecessor as a DATA input -- measured, a Proj carries
+        # inputs=[If] with control_in absent, and a Region carries
+        # inputs=[arm, arm]. Indexing only control_in found an If with "0 Proj
+        # arms", because the Projs hang off the data edge.
+        my %next_of;
+        my %is_cfg = map { $_ => 1 } qw(Proj Region);
+        for my $n (($graph->{nodes} // [])->@*) {
+            my $ci = $n->{control_in};
+            push $next_of{$ci}->@*, $n if defined $ci;
+            next unless $is_cfg{ $n->{op} };
+            push $next_of{$_}->@*, $n for (($n->{inputs} // [])->@*);
+        }
+
+        my ($start) = grep { $_->{op} eq 'Start' } values $nodes->%*;
+        die "no Start node\n" unless $start;
+
+        return $self->_emit_from($start->{id}, \%next_of, undef);
+    }
+
+    # Walk forward from $id, emitting a statement per control successor, until
+    # the chain ends or reaches $stop (the Region that joins branch arms).
+    method _emit_from ($id, $next_of, $stop) {
+        my $out = '';
+        my $cur = $id;
+        while (defined $cur) {
+            my $succ = $next_of->{$cur} // [];
+            last unless $succ->@*;
+            die "GAP: a control node with " . scalar($succ->@*)
+              . " successors is not yet rendered\n" if $succ->@* > 1;
+            my $n = $succ->[0];
+            last if defined $stop && $n->{id} == $stop;
+
+            # AN `If` IS A DIAMOND, not a statement in the chain. Emit it whole
+            # -- both arms and the join -- and resume at the Region, which is
+            # where the two arms' control converges.
+            if ($n->{op} eq 'If') {
+                my ($text, $join) = $self->_emit_if($n, $next_of);
+                $out .= $text;
+                last unless defined $join;
+                last if defined $stop && $join == $stop;
+                $cur = $join;
+                next;
+            }
+
+            $out .= $self->_emit_statement($n, $next_of);
+            $cur = $n->{id};
+        }
+        return $out;
+    }
+
+    # _emit_if($n, $next_of) -> (source, join id)
+    #
+    # THE DIAMOND IS DISCHARGED BY PLACEMENT. `If` has two `Proj` successors --
+    # index 0 is the true arm, index 1 the false -- and each arm's control runs
+    # until both reach the `Region` that joins them. Rendering the arms as
+    # if/else blocks and resuming after the Region is what makes the arms'
+    # effects conditional and everything after unconditional. Neither the Proj
+    # nor the Region needs a spelling of its own.
+    method _emit_if ($n, $next_of) {
+        my $cond = $self->_expr($n->{inputs}[1]);
+
+        my @projs = ($next_of->{ $n->{id} } // [])->@*;
+        die "GAP: an If with " . scalar(@projs) . " Proj arms is not yet"
+          . " rendered\n" unless @projs == 2;
+        die "GAP: an If arm that is not a Proj is not yet rendered\n"
+            if grep { $_->{op} ne 'Proj' } @projs;
+
+        my %arm = map { ($_->{fields}{index} // 0) => $_ } @projs;
+        die "GAP: an If whose Projs are not indexed 0 and 1 is not yet"
+          . " rendered\n" unless exists $arm{0} && exists $arm{1};
+
+        # WHERE THE ARMS CONVERGE. A Region's inputs are the arms' last control
+        # nodes, so it is the join. Find it by looking for the Region that both
+        # arms reach.
+        my $join = $self->_join_region($arm{0}, $arm{1}, $next_of);
+
+        my $t = $self->_emit_from($arm{0}{id}, $next_of, $join);
+        my $f = $self->_emit_from($arm{1}{id}, $next_of, $join);
+
+        my $text = sprintf("if (%s) {\n%s}\n", $cond, _indent($t));
+        $text = sprintf("if (%s) {\n%s} else {\n%s}\n",
+            $cond, _indent($t), _indent($f)) if length $f;
+
+        return ($text, $join);
+    }
+
+    # The Region both arms converge on, or undef when they do not rejoin (each
+    # arm leaving the program, say). Its inputs ARE the arms' last control
+    # nodes, so a Region naming a node reachable from each arm is the join.
+    method _join_region ($true_proj, $false_proj, $next_of) {
+        my %from_true = map { $_ => 1 } $self->_control_reachable($true_proj->{id}, $next_of);
+        for my $id ($self->_control_reachable($false_proj->{id}, $next_of)) {
+            my $n = $nodes->{$id} or next;
+            next unless $n->{op} eq 'Region';
+            my @ins = ($n->{inputs} // [])->@*;
+            return $id if (grep { $from_true{$_} } @ins)
+                       && (grep { !$from_true{$_} } @ins);
+        }
+        return undef;
+    }
+
+    # Every control node reachable forward from $id, including Region inputs
+    # (a Region takes its predecessors as data inputs, not via control_in).
+    method _control_reachable ($id, $next_of) {
+        my (%seen, @queue, @out);
+        @queue = ($id);
+        while (@queue) {
+            my $cur = shift @queue;
+            next if $seen{$cur}++;
+            push @out, $cur;
+            push @queue, map { $_->{id} } ($next_of->{$cur} // [])->@*;
+            # A Region consumes the arm's last control node as an input, so it
+            # is a forward step the control_in index does not record.
+            for my $n (values $nodes->%*) {
+                next unless $n->{op} eq 'Region';
+                push @queue, $n->{id}
+                    if grep { $_ == $cur } (($n->{inputs} // [])->@*);
+            }
+        }
+        return @out;
+    }
+
+    # INDENTATION IS COSMETIC AND MUST STAY THAT WAY. Splitting the emitted
+    # source on every newline also splits newlines INSIDE string literals, so
+    # "ok 1\n" came out as "ok 1\n    " -- the indent became part of the
+    # program's OUTPUT. Emit statements as a list instead of re-splitting text,
+    # and a literal is never touched.
+    sub _indent ($text) {
+        return $text;
+    }
+
+    method _emit_statement ($n, $next_of) {
+        my $op = $n->{op};
+
+        return sprintf("print %s;\n", $self->_expr($n->{inputs}[0]))
+            if $op eq 'Print';
+
+        # A package scalar store. The EntryDef names the slot; emitting the
+        # assignment in chain order is what makes later reads observe it.
+        if ($op eq 'EntryWrite') {
+            my $slot = $nodes->{ $n->{inputs}[0] };
+            return sprintf("%s = %s;\n",
+                $self->_slot_name($slot), $self->_expr($n->{inputs}[1]));
+        }
+
+        return '' if $op eq 'Return';
+
+        die "GAP: no rule for control node `$op`\n";
+    }
+
+    # A package variable's Perl spelling, from the fields the wire carries.
+    method _slot_name ($n) {
+        die "GAP: expected an EntryDef, got `$n->{op}`\n"
+            unless $n->{op} eq 'EntryDef';
+        my $f = $n->{fields} // {};
+        my $sigil = $f->{sigil} // '$';
+        my $stash = $f->{stash_name} // 'main';
+        return sprintf('%s%s::%s', $sigil, $stash, $f->{var_name});
+    }
+
+    # _expr($id) -- a value node as a Perl expression.
+    method _expr ($id) {
+        return $rendered{$id} if exists $rendered{$id};
+        my $n = $nodes->{$id} or die "GAP: dangling input $id\n";
+        my $op = $n->{op};
+        my @in = ($n->{inputs} // [])->@*;
+
+        my $text;
+        if ($op eq 'Constant') {
+            $text = $self->_constant($n);
+        }
+        elsif ($op eq 'EntryDef') {
+            # A read of the named slot. NOT folded to whatever was last stored:
+            # the point of the oracle is that the RUNTIME decides what a read
+            # sees, so the emitted program must read.
+            $text = $self->_slot_name($n);
+        }
+        elsif ($op eq 'StrEq') { $text = $self->_binop('eq', @in) }
+        elsif ($op eq 'StrNe') { $text = $self->_binop('ne', @in) }
+        else {
+            die "GAP: no rule for value node `$op`\n";
+        }
+
+        return $rendered{$id} = $text;
+    }
+
+    method _binop ($perl_op, $l, $r) {
+        return sprintf('(%s %s %s)',
+            $self->_expr($l), $perl_op, $self->_expr($r));
+    }
+
+    # A Constant's Perl literal. The wire carries `value` as a string plus a
+    # `const_type`, so the spelling is decided here rather than guessed from
+    # the text -- "1" as a Str and 1 as an Int are different programs.
+    method _constant ($n) {
+        my $f = $n->{fields} // {};
+        my $t = $f->{const_type} // '';
+        my $v = $f->{value};
+
+        return 'undef' if $t eq 'undef' || !defined $v;
+        return $v      if $t eq 'integer' || $t eq 'number';
+        if ($t eq 'string') {
+            # DOUBLE-QUOTED WITH EXPLICIT ESCAPES. A single-quoted literal
+            # cannot carry a newline as \n, and these constants routinely hold
+            # one ("ok 1 - if eq\n"). Escape the metacharacters rather than
+            # relying on the shape of the text.
+            my $s = $v;
+            $s =~ s/\\/\\\\/g;
+            $s =~ s/"/\\"/g;
+            $s =~ s/\$/\\\$/g;
+            $s =~ s/\@/\\\@/g;
+            $s =~ s/\n/\\n/g;
+            $s =~ s/\t/\\t/g;
+            $s =~ s/\r/\\r/g;
+            return '"' . $s . '"';
+        }
+        die "GAP: no rule for a `$t` Constant\n";
+    }
+}
+
+1;
