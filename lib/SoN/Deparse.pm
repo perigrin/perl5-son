@@ -33,6 +33,22 @@ use experimental 'class';
 # chalk consumes too, so a rendering defect here is a wire defect, not an
 # artefact of reaching into the producer.
 class SoN::Deparse 0.01 {
+    # ONE TABLE, ONE SPELLING EACH. These are not interchangeable: `==` for
+    # `eq` agrees on numbers and disagrees on strings, which is exactly the
+    # Int/Str confusion the stamp lattice tracks. A wrong entry here is a wrong
+    # ANSWER, and the round-trip is what catches it.
+    my %BINOP = (
+        NumEq => '==',  NumNe => '!=',  NumLt => '<',   NumGt => '>',
+        NumLe => '<=',  NumGe => '>=',  NumCmp => '<=>',
+        StrEq => 'eq',  StrNe => 'ne',  StrLt => 'lt',  StrGt => 'gt',
+        StrLe => 'le',  StrGe => 'ge',  StrCmp => 'cmp',
+        Add => '+',     Subtract => '-', Multiply => '*', Divide => '/',
+        Modulo => '%',  Power => '**',
+        Concat => '.',  Repeat => 'x',
+        BitAnd => '&',  BitOr => '|',   BitXor => '^',
+        LeftShift => '<<', RightShift => '>>',
+    );
+
     field $nodes;      # id => node hash
     field %rendered;   # id => Perl expression text
 
@@ -84,7 +100,27 @@ class SoN::Deparse 0.01 {
         my ($start) = grep { $_->{op} eq 'Start' } values $nodes->%*;
         die "no Start node\n" unless $start;
 
-        return $self->_emit_from($start->{id}, \%next_of, undef);
+        my $body = $self->_emit_from($start->{id}, \%next_of, undef);
+
+        # A PAD BINDING IS NOT ON THE CONTROL CHAIN. Measured: `my ($a,$b) =
+        # (2,3)` builds an Assign with control_in ABSENT, so a chain walk never
+        # reaches it and the emitted program read two undefs. Under SSA a pad
+        # binding needs no ordering -- the reads name the same node either way
+        # -- but PERL needs the `my` to have happened, so the emitter must
+        # place it.
+        #
+        # Emitted as a PROLOGUE, before the chain. That is sound here because
+        # these bindings have no control edge to order them against; a binding
+        # that DID need ordering would carry one, and would already be in the
+        # chain.
+        my $prologue = '';
+        for my $n (sort { $a->{id} <=> $b->{id} } values $nodes->%*) {
+            next unless $n->{op} eq 'Assign';
+            next if defined $n->{control_in};   # already emitted in the chain
+            $prologue .= $self->_emit_statement($n, \%next_of);
+        }
+
+        return $prologue . $body;
     }
 
     # Walk forward from $id, emitting a statement per control successor, until
@@ -202,8 +238,16 @@ class SoN::Deparse 0.01 {
     method _emit_statement ($n, $next_of) {
         my $op = $n->{op};
 
-        return sprintf("print %s;\n", $self->_expr($n->{inputs}[0]))
-            if $op eq 'Print';
+        # `print (EXPR)` IS NOT `print EXPR`. Perl parses a leading open paren
+        # as the complete argument list and discards whatever follows -- the
+        # classic gotcha -- so `print ($c ? "y" : "n"), "\n"` prints only the
+        # ternary. Measured: the emitted program printed "y\n" where the
+        # original printed "n\n". Interposing `join('')` keeps the argument
+        # list a list without ever starting it with a paren.
+        if ($op eq 'Print') {
+            my @args = map { $self->_expr($_) } (($n->{inputs} // [])->@*);
+            return sprintf("print join('', %s);\n", join(', ', @args));
+        }
 
         # A package scalar store. The EntryDef names the slot; emitting the
         # assignment in chain order is what makes later reads observe it.
@@ -211,6 +255,26 @@ class SoN::Deparse 0.01 {
             my $slot = $nodes->{ $n->{inputs}[0] };
             return sprintf("%s = %s;\n",
                 $self->_slot_name($slot), $self->_expr($n->{inputs}[1]));
+        }
+
+        # A LIST ASSIGN binds N targets from N values: inputs are the targets
+        # followed by the values. `my ($a,$b) = (2,3)` is one statement, and
+        # emitting it as one is what puts the slots in scope for later reads.
+        if ($op eq 'Assign') {
+            my @in = ($n->{inputs} // [])->@*;
+            die "GAP: an Assign with an odd input count is not yet rendered\n"
+                if @in % 2;
+            my $half = @in / 2;
+            my @lhs = map { $self->_expr($_) } @in[0 .. $half-1];
+            my @rhs = map { $self->_expr($_) } @in[$half .. $#in];
+            # `my` is what puts a lexical in scope; the producer does not record
+            # declaration separately from binding, so the first write to a pad
+            # slot declares it.
+            my $decl = (grep { /^\$/ } @lhs) == @lhs ? 'my ' : '';
+            return sprintf("%s(%s) = (%s);\n",
+                $decl, join(', ', @lhs), join(', ', @rhs))
+                if @lhs > 1;
+            return sprintf("%s%s = %s;\n", $decl, $lhs[0], $rhs[0]);
         }
 
         return '' if $op eq 'Return';
@@ -239,14 +303,52 @@ class SoN::Deparse 0.01 {
         if ($op eq 'Constant') {
             $text = $self->_constant($n);
         }
+        elsif ($op eq 'PadAccess') {
+            # A LEXICAL READ. SSA has no variable names, but the producer keeps
+            # the source spelling in `varname` -- so the name survives the round
+            # trip and the emitted program reads the same slot the original did.
+            my $v = ($n->{fields} // {})->{varname};
+            die "GAP: a PadAccess with no varname is not yet rendered\n"
+                unless defined $v && length $v;
+            $text = $v;
+        }
         elsif ($op eq 'EntryDef') {
             # A read of the named slot. NOT folded to whatever was last stored:
             # the point of the oracle is that the RUNTIME decides what a read
             # sees, so the emitted program must read.
             $text = $self->_slot_name($n);
         }
-        elsif ($op eq 'StrEq') { $text = $self->_binop('eq', @in) }
-        elsif ($op eq 'StrNe') { $text = $self->_binop('ne', @in) }
+        elsif (my $sym = $BINOP{$op}) { $text = $self->_binop($sym, @in) }
+        elsif ($op eq 'TernaryExpr') {
+            # cond ? then : else -- a VALUE select, distinct from the If
+            # diamond, which is control. The producer builds this when both
+            # arms yield a value and neither has an effect.
+            die "GAP: a TernaryExpr with " . scalar(@in) . " inputs is not"
+              . " yet rendered\n" unless @in == 3;
+            $text = sprintf('(%s ? %s : %s)',
+                $self->_expr($in[0]), $self->_expr($in[1]), $self->_expr($in[2]));
+        }
+        elsif ($op eq 'Coerce') {
+            # A COERCE IS THE PRODUCER'S OWN NOTE, not something the source
+            # said. perl converts between string and number implicitly at the
+            # point of use, so the conversion is already carried by the
+            # operator this feeds -- `$a + $b` numifies whatever it is given.
+            # Emitting a cast would be inventing a step the program does not
+            # take; passing the operand through renders what the SOURCE means.
+            #
+            # This is the one place the emitter is allowed to drop a node, and
+            # only because the semantics survive: the round-trip proves it. If
+            # a Coerce ever means something an operator does not already do,
+            # this is where that shows up as a failing diff.
+            die "GAP: a Coerce with " . scalar(@in) . " inputs is not yet"
+              . " rendered\n" unless @in == 1;
+            $text = $self->_expr($in[0]);
+        }
+        elsif ($op eq 'Not') {
+            die "GAP: a Not with " . scalar(@in) . " inputs is not yet"
+              . " rendered\n" unless @in == 1;
+            $text = sprintf('(!%s)', $self->_expr($in[0]));
+        }
         else {
             die "GAP: no rule for value node `$op`\n";
         }
