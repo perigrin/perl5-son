@@ -138,30 +138,78 @@ code is shared assumptions.
 
 ## Phasing
 
-**Phase 1 -- straight-line.** `Constant`, the binops, `Concat`, `Coerce`,
-`PadAccess`, `Print`, `Return`, `Call` (builtins). Walk the control chain, emit
-statements. Gate: a hand-written corpus of straight-line programs round-trips
-with identical output.
+The phase boundary is **`Loop`**, and it was chosen by measurement rather than
+intuition. An earlier draft split at "straight-line", which carves the corpus
+at an unnatural line: measured over the CLEAN corpus,
 
-**Phase 2 -- memory.** `MemStart`, `Subscript` reads with memory inputs,
-`Assign`, `EntryDef`/`EntryWrite`, `Delete`, `ArrayLiteral`/`HashLiteral`.
-Gate: the `keys`/`values`/`each` defect and the `@$r` mutation cases are
-DETECTED by the oracle without being told where to look. That is the
-acceptance test for the whole idea -- if it cannot rediscover a known open
-defect, it is not earning its keep.
+    48/115 CVs  straight-line only
+    51/115      + Phi                      (a Phi without a branch is rare)
+    75/115      + conditionals (If/Ternary)
+    94/115      + logical (And/Or)
+   100/115      + Unwind
+   100/115      everything but Loop
 
-**Phase 3 -- control.** `If`/`Proj`/`Region`, `Phi`, `TernaryExpr`, `And`/`Or`,
-`Loop`, `Unwind`. Gate: the nested one-armed element store (this session's open
-blocker) is detected.
+Allowing `Phi` alone buys three CVs. Conditionals buy 27, and `And`/`Or` -- the
+same merge machinery with short-circuit -- buy 19 more. Everything up to that
+point is ACYCLIC control flow, reconstructible by structural recursion over the
+dominator tree. A loop needs back-edge detection and a different emission
+strategy. That is the real cliff.
 
-**Phase 4 -- the corpus.** Run over all of base+comp. Every CLEAN file must
-round-trip to OBSERVATIONALLY EQUIVALENT output, or produce a named refusal
-from the emitter. An emitter GAP is fine; a silent difference is not. A file
-that cannot round-trip is a claim that the graph lost input semantics --
-bisect it toward the construct, as with any other blocker.
+**The unit is `main::__PROGRAM__`, not the CV.** A CV count dilutes the answer
+-- a file with 60 trivial named subs and one loop-bearing program body reads as
+mostly covered and still cannot be tested end to end. Measured: the files whose
+`__PROGRAM__` is acyclic are EXACTLY the files that are entirely acyclic (14 of
+28), so `__PROGRAM__` decides the file.
 
-**Phase 5 -- wire it into the suite** as a corpus gate, so a future producer
-change that breaks a round-trip fails a test rather than waiting to be noticed.
+### Phase 1 -- acyclic
+
+Values, memory, and all non-loop control: `If`, `Proj`, `Region`, `Phi`,
+`TernaryExpr`, `And`, `Or`, plus the value and memory vocabulary.
+
+**First target: `base/if.t`.** Nine lines, deterministic three-line output, no
+named subs, and 12 node kinds that are exactly the Phase 1 core:
+
+    Constant EntryDef EntryWrite If MemStart Print Proj Region Return Start
+    StrEq StrNe
+
+A package scalar write, reads that must observe it, an If/Proj/Region diamond
+taken both ways, and `Print` so there is output to diff. Notably NO `Phi` --
+both arms print and neither yields a value -- so it is the control diamond
+without the value merge, one step rather than all of acyclic control at once.
+
+`comp/filter_exception.t` has fewer nodes (18 vs 27) but prints NOTHING, so a
+round-trip on it compares two silences. Smallest is not simplest.
+
+The ladder, each rung adding roughly one thing:
+
+  1. `base/if.t`   -- control diamond, package memory, printed output
+  2. `base/pat.t`  -- the same shape with `RegexMatch` for `StrEq`
+  3. `base/cond.t`, `comp/colon.t`, `comp/term.t`, ... -- `Phi`, `Coerce`,
+     `TernaryExpr`, `And`/`Or`
+  4. the rest of the 14
+
+**Gate:** all 14 acyclic CLEAN files round-trip to observationally equivalent
+output:
+
+    base/cond.t  base/if.t  base/num.t  base/pat.t  comp/cmdopt.t
+    comp/colon.t  comp/filter_exception.t  comp/opsubs.t  comp/our.t
+    comp/package.t  comp/package_block.t  comp/redef.t  comp/term.t
+    comp/uproto.t
+
+**Go/no-go inside Phase 1:** the oracle must rediscover
+`keys`/`values`/`each` (docs/plans/2026-09-06) WITHOUT being told where to
+look. That defect lives in acyclic code, so it is reachable here. If the oracle
+cannot find a defect already known to be present, it is not earning its tax --
+say so and go back to clearing blockers by hand.
+
+### Phase 2 -- loops
+
+`Loop`, loop-carried Phis, `Unwind`. Gate: the remaining 14 files.
+
+### Phase 3 -- suite integration
+
+Wire the round-trip in as a corpus gate, so a producer change that breaks
+equivalence fails a test rather than waiting to be noticed.
 
 ## What this is NOT
 
@@ -173,9 +221,11 @@ change that breaks a round-trip fails a test rather than waiting to be noticed.
 
 ## Cost and the honest caveat
 
-A week or so for Phases 1-3 covering the corpus vocabulary, and it grows with
-the IR -- every new node kind needs an emission rule or an explicit refusal.
-That is a real ongoing tax.
+Phase 1 is bigger than the "few days" an earlier draft assumed, because
+acyclic control is in it rather than deferred -- If/Phi/Region emission was
+always going to be written, and doing it first is what makes the gate
+meaningful instead of vacuous. It also grows with the IR: every new node kind
+needs an emission rule or an explicit refusal. That is a real ongoing tax.
 
 The case for paying it: the last three defects found were all "the reader does
 not observe the store", the class where the graph looks complete and computes
@@ -184,14 +234,21 @@ still open.
 
 ## Open questions for review
 
-1. **Scope.** Phases 1-3 to prove the concept, or straight to 4?
-2. **Where does it live** -- `lib/SoN/Deparse.pm` in this repo, or a separate
-   tool? In-repo means it tracks IR changes; separate keeps the producer
-   dependency-free.
+1. RESOLVED during review: the boundary is `Loop`, the unit is
+   `main::__PROGRAM__`, and Phase 1 gates on the 14 acyclic CLEAN files with
+   `base/if.t` first. The go/no-go is rediscovering keys/values/each.
+2. RESOLVED during review: `lib/SoN/Deparse.pm`, in-repo, reading the JSON
+   wire format rather than producer internals -- coupled to the wire (which
+   chalk consumes too) rather than to FromOptree.pm.
 3. RESOLVED during review: the criterion is observational equivalence per
    PROGRAM, not a spelling per node (see The correctness criterion). An
    emitter refusal is scaffolding -- "no rule written yet" -- and the measure
    is simply how many corpus files round-trip to identical output.
-4. **Does this change the priority** of the remaining comp blockers? Building
-   the oracle first would likely find defects in the 29 files currently CLEAN,
-   which may matter more than the 5 PARTIAL ones.
+4. RESOLVED during review: build the oracle first, because it is the TOOL for
+   the partials. It helps memory- and control-shaped blockers directly
+   (comp/use.t is exactly "the read does not observe the store"), and helps
+   every blocker indirectly by replacing "read the graph and reason" -- the
+   slow, error-prone step, mis-read twice in one sitting on comp/use.t -- with
+   "run it and diff". It does NOT help where the construct is simply
+   unmodelled (comp/decl.t's `write`/$~, comp/form_scope.t's undef(*glob)):
+   there is no graph to round-trip until the lowering exists.
