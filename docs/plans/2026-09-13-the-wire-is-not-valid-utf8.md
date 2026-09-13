@@ -95,15 +95,40 @@ decodable wire. `comp/parser.t` does not, and it never can:
 
 That is a deliberate buffer-overflow test, and the character is ~89,000 times
 beyond Unicode's maximum of 0x10FFFF. Perl encodes it with its own extended
-UTF-8 (71 ff 80 80 80 80 80 81 9d 88 9d ae a1 80), which is valid perl and
-invalid UTF-8 BY DEFINITION -- no encoder can make it decodable, because the
-value has no UTF-8 representation.
+UTF-8: 71 ff 80 80 80 80 80 81 9d 88 9d ae a1 80.
+
+IT IS NOT "INVALID UTF-8 BY DEFINITION", which is what an earlier revision of
+this section said. The chalk session measured it and perl's OWN utf8::decode
+ACCEPTS those bytes, recovering codepoint 100000000064 exactly -- confirmed
+here. Perl's decoder implements a superset of Unicode. What refuses the value
+is the JSON decoder, not UTF-8 validation in general.
+
+That sharpens the finding rather than weakening it: TWO DECODERS IN THE SAME
+INTERPRETER DISAGREE ABOUT THE SAME BYTES. utf8::decode accepts, JSON::PP
+refuses. The disagreement is the whole point of stating a decodability
+guarantee at all.
+
+ALL THREE MODES FAIL, AND NOT ALIKE -- measured on `"q" . chr(100000000064)`:
+
+    plain   DECODE DIES: malformed UTF-8 character in JSON string
+    utf8    DECODE DIES: malformed UTF-8 character in JSON string
+    ascii   DECODE DIES: missing high surrogate character in surrogate pair
+
+`->ascii` does not merely fail further along; it fails IN THE ESCAPE SYNTAX,
+because the codepoint cannot be written as a `\uXXXX` surrogate pair either.
+A different layer, a different reason, the same outcome.
+
+WHY THE CARVE-OUT IS SAFE TO STATE, which is chalk's observation and the part
+that matters most: every one of those deaths is LOUD. None substitutes U+FFFD
+and carries on. A carve-out saying "this file is outside the guarantee" would
+be dangerous if the failure were silent -- it would read as permission to
+ignore a corrupted value. It is safe precisely because the file cannot pass
+quietly.
 
 The honest position: the wire is decodable for every program whose string
-values are Unicode, and `comp/parser.t` is testing perl's handling of values
-that are not. A consumer reading it must expect perl-extended UTF-8 or refuse
-the file; there is no third option, and pretending otherwise by escaping
-(`->ascii` would emit `\u{...}` beyond the BMP) only moves where it breaks.
+values are within Unicode, and `comp/parser.t` is testing perl's handling of a
+value that is not. A consumer must expect perl-extended UTF-8 or refuse the
+file, and it will know which it got.
 
 ## Still to check
 
