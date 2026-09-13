@@ -518,7 +518,27 @@ sub to_json ($named_graphs, $classes = undef) {
     # Chalk's loader replays it through the MOP declare_*/seal API.
     $data->{classes} = $classes if defined $classes && %$classes;
 
-    return JSON::PP->new->canonical->pretty->encode($data);
+    # ->utf8 BECAUSE THE WIRE IS BYTES AND THE VALUES ARE CHARACTERS.
+    # Without it `encode` returns a character string, and printing that to a
+    # non-`:utf8` handle writes each character's low byte -- so a string
+    # Constant holding anything above U+007F reached the wire as a raw byte,
+    # inside JSON every consumer assumes is UTF-8. Measured: 4 of 34 corpus
+    # files emitted a wire Python's json.load refuses outright, while perl's
+    # decoder accepted it, which is why the producer writing and reading its
+    # own wire never noticed.
+    #
+    # The values here are ALREADY CHARACTERS -- measured, both a "café"
+    # literal and a high-byte string arrive with utf8_flag=ON -- so this
+    # encodes once rather than twice, and the round trip returns the original
+    # string exactly.
+    #
+    # NOT ->ascii, which is equally correct and optimises for the pathological
+    # case: it escapes every non-ASCII character, so "café" becomes
+    # "caf\u00e9" and the wire grows ~60% for any program containing ordinary
+    # Unicode. Four corpus files carry raw high bytes; far more will one day
+    # carry text. See docs/plans/2026-09-13-the-wire-is-not-valid-utf8.md,
+    # which also records the measurement I first got backwards.
+    return JSON::PP->new->canonical->pretty->utf8->encode($data);
 }
 
 1;

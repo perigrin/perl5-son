@@ -1,8 +1,9 @@
 # The wire is not valid UTF-8, and `->utf8` is the fix
 
 **Date:** 2026-09-13
-**Status:** OPEN. Found while building the deparse oracle; not fixed there
-because it is a serializer change, not an emitter one.
+**Status:** FIXED for 3 of the 4 files. `->utf8` added at the single encode
+site. One file remains and CANNOT be fixed -- see "The one that stays broken,
+legitimately".
 
 **Corrected 2026-09-13:** an earlier revision of this document said `->utf8`
 would corrupt the data and `->ascii` was the answer. That was wrong. See
@@ -85,16 +86,29 @@ The lesson worth keeping: "these bytes changed" is not the same finding as
 "this value changed", and only the second one matters. Check the round trip,
 not the hex.
 
-## What a fix needs
+## The one that stays broken, legitimately
 
-1. Add `->utf8` at the single encode site in `SoN::Serialize::JSON`.
-2. A test asserting the wire decodes as UTF-8 for every corpus file -- the
-   property that was never checked. Round-tripping a Constant holding a
-   character above U+007F through encode/decode and comparing is the direct
-   form.
-3. Check whether chalk's loader decodes the wire as UTF-8 or reads it raw. It
-   is a Perl consumer, so it has been getting away with the same thing the
-   producer has.
+After `->utf8`, base/lex.t, base/num.t and comp/parser_run.t all emit a
+decodable wire. `comp/parser.t` does not, and it never can:
+
+    eval "q" . chr(100000000064);      # comp/parser.t:651
+
+That is a deliberate buffer-overflow test, and the character is ~89,000 times
+beyond Unicode's maximum of 0x10FFFF. Perl encodes it with its own extended
+UTF-8 (71 ff 80 80 80 80 80 81 9d 88 9d ae a1 80), which is valid perl and
+invalid UTF-8 BY DEFINITION -- no encoder can make it decodable, because the
+value has no UTF-8 representation.
+
+The honest position: the wire is decodable for every program whose string
+values are Unicode, and `comp/parser.t` is testing perl's handling of values
+that are not. A consumer reading it must expect perl-extended UTF-8 or refuse
+the file; there is no third option, and pretending otherwise by escaping
+(`->ascii` would emit `\u{...}` beyond the BMP) only moves where it breaks.
+
+## Still to check
+
+Whether chalk's loader decodes the wire as UTF-8 or reads it raw. It is a Perl
+consumer, so it has been getting away with the same thing the producer has.
 
 ## Why it matters beyond tidiness
 
