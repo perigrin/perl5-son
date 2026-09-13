@@ -89,11 +89,31 @@ subtest 'a read-only body builds no store' => sub {
 # loop would join the pre-loop constants. Measured before the store recorded
 # its mutation, that is exactly what it did -- while `$a[1]` correctly read 20,
 # so the store was right and only the whole-aggregate read was blind.
-subtest 'a list read of the mutated array refuses' => sub {
-    my (undef, undef, $err) = run_and_wire(
+# A LIST READ AFTER AN ALIAS WRITE OBSERVES THE WRITE. This refused for having
+# "no node for the elements of @a as they now are"; PostfixDeref is that node
+# and it takes a memory input, so the read threads to the in-loop Assign rather
+# than to the pre-loop literal. Measured:
+#
+#     my @a=(1,2,3); for my $x (@a) { $x = $x*10 } print "@a"
+#       perl : 10 20 30
+#       graph: PostfixDeref(ArrayLiteral, Assign) feeding join -- the read is
+#              threaded to the alias write, not to the original constants
+subtest 'a list read observes the alias write' => sub {
+    my ($out, $nodes, $err) = run_and_wire(
         'my @a=(1,2,3); for my $x (@a) { $x = $x*10 } print "@a";', 'wb-list');
-    like $err, qr/list-context read of an array mutated/,
-        'refuses rather than flattening the pre-loop elements';
+    unlike $err, qr/GAP:/, 'it is not refused' or diag $err;
+    is $out, '10 20 30', 'perl mutates through the alias' or return;
+
+    my %by = map { $_->{id} => $_ } $nodes->@*;
+
+    my ($read) = grep {
+        $_->{op} eq 'PostfixDeref' && ($_->{inputs} // [])->@* >= 2
+    } $nodes->@*;
+    ok $read, 'the list read is a memory-threaded PostfixDeref' or return;
+
+    my $mem = $by{ $read->{inputs}[1] };
+    isnt $mem->{op}, 'MemStart',
+        '... threaded to the write, not to the pre-loop memory';
 };
 
 # AN ALIAS WRITE CAN CHANGE THE TYPE, which is the case that distinguishes

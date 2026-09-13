@@ -3358,19 +3358,35 @@ class SoN::FromOptree 0.01 {
                 return ($op->next, 'handled');
             }
 
-            # A MUTATED ARRAY READ IN LIST CONTEXT has no representation yet:
-            # the binding is the pre-mutation literal and there is no node for
-            # "the elements of @a as they now are". Refuse rather than flatten
-            # stale elements -- a GAP is a to-do, a silent wrong answer is not.
+            # A MUTATED ARRAY READ IN LIST CONTEXT IS A MEMORY READ, not a
+            # flatten. The binding is the pre-mutation literal, so pushing its
+            # elements reads the array AS FIRST CONSTRUCTED -- measured,
+            # `my @a=(1,2,3); shift @a; print "@a"` gave the three original
+            # constants where perl gives `2 3`.
+            #
+            # This was refused for having "no node for the elements of @a as
+            # they now are". THERE IS ONE, AND IT WAS ALREADY BUILT:
+            # PostfixDeref does exactly this for `@$r`, and measured on
+            # `my $r=[1,2,3]; push @$r,4; my @c=@$r` it threads the read to the
+            # push and counts 4. Same shape, same fix Count got one path over
+            # -- give the read a memory input and it observes the mutation.
+            #
+            # The flatten shortcut above still handles the UNMUTATED case,
+            # which is the common one and correct there: with no store to
+            # observe, the literal's elements ARE the array.
             if ($name eq 'padav' && $existing && $want == 3
                     && !$ref_or_mod && !$is_lvintro
                     && ($ctx->{mutated_aggregate}{$targ}
                         || $MUTATED_LITERALS{ $existing->id // '' })) {
                 die "GAP: a list-context read of an array mutated in place"
-                  . " (push/shift/splice, or a foreach body writing its"
-                  . " aliased iterator) is not yet lowered -- the binding is"
-                  . " the pre-mutation literal, and flattening it would read"
-                  . " the array as first constructed\n";
+                  . " has no memory to observe the mutation against\n"
+                    unless defined $sim->memory;
+
+                $sim->push_node($factory->make('PostfixDeref',
+                    inputs => [$existing, $sim->memory],
+                    sigil  => '@',
+                    stamp  => SoN::IR::Stamp->new(type => 'Array')));
+                return ($op->next, 'handled');
             }
             # AN ASSIGNMENT TARGET IS THE SLOT, NOT ITS CURRENT VALUE.
             # `@a = ()` reads @a with OPf_MOD set, and pushing $existing there
