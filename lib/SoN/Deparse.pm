@@ -353,7 +353,29 @@ class SoN::Deparse 0.01 {
         my $f = $n->{fields} // {};
         my $sigil = $f->{sigil} // '$';
         my $stash = $f->{stash_name} // 'main';
-        return sprintf('%s%s::%s', $sigil, $stash, $f->{var_name});
+        my $name  = $f->{var_name};
+        die "GAP: an EntryDef with no var_name is not yet rendered\n"
+            unless defined $name;
+
+        # A PUNCTUATION VARIABLE IS STORED AS ITS CONTROL CHARACTER. `$^O` is
+        # literally ${"\x0f"} in the symbol table, and emitting that raw byte
+        # gives perl "Unrecognized character \x0F" -- measured on base/num.t,
+        # which reads $^O to skip OS-specific cases. The caret form is the
+        # spelling that parses, and it is the same variable.
+        #
+        # These live in main:: only, and a package qualifier on one is a syntax
+        # error, so they are emitted bare.
+        if ($name =~ /\A([\x00-\x1f])(.*)\z/s) {
+            my ($ctrl, $rest) = ($1, $2);
+            return sprintf('%s^%s%s', $sigil, chr(ord($ctrl) + 64), $rest);
+        }
+
+        # `$_`, `$0`, `$1` and friends are also main-only and take no
+        # qualifier: `$main::_` is legal but `$main::1` is not.
+        return sprintf('%s%s', $sigil, $name)
+            if $name !~ /\A[A-Za-z_]\w*\z/;
+
+        return sprintf('%s%s::%s', $sigil, $stash, $name);
     }
 
     # _expr($id) -- a value node as a Perl expression.
