@@ -178,7 +178,9 @@ subtest 'a $self-> method call stamps the enclosing class_name (zhi 019f5dec)' =
     # The receiver is the $self PadAccess, Object-stamped (so the backend gives
     # it a repr) with no VarDecl input (so the backend lowers it to %self).
     my ($recv) = grep {
-        $_->operation eq 'PadAccess' && ($_->can('varname') ? ($_->varname // '') : '') eq '$self'
+        $_->operation eq 'PadAccess'
+            && ( $_->sigil  // '' ) eq '$'
+            && ( $_->symbol // '' ) eq 'self'
     } $g->nodes->@*;
     ok(defined $recv, 'the receiver is a $self PadAccess');
     is(($recv->stamp ? $recv->stamp->type : undef), 'Object',

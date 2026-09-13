@@ -89,7 +89,7 @@ subtest 'an uninitialised array has no aggregate node yet' => sub {
     is(scalar(aggregates($g)), 0, 'no ArrayRef node is built');
 
     my ($pad) = grep {
-        $_->operation eq 'PadAccess' && ($_->varname // '') eq '@a'
+        $_->operation eq 'PadAccess' && ( $_->sigil // '' ) eq '@' && ( $_->symbol // '' ) eq 'a'
     } $g->nodes->@*;
     ok($pad, 'the pad slot exists') or return;
 

@@ -75,7 +75,7 @@ subtest 'Text rendering is deterministic' => sub {
 subtest 'PadAccess rendering' => sub {
     my $f = SoN::IR::NodeFactory->new();
     my $start = $f->make_cfg('Start');
-    my $pad = $f->make('PadAccess', targ => 3, varname => '$x');
+    my $pad = $f->make('PadAccess', targ => 3, sigil => '$', symbol => 'x');
     my $ret = $f->make_cfg('Return', inputs => [$start, $pad]);
     my $graph = SoN::IR::Graph->new(start => $start, returns => [$ret]);
 

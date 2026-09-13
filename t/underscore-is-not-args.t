@@ -111,7 +111,7 @@ subtest '$g and @g are different nodes' => sub {
     my @stash = grep { $_->operation eq 'EntryDef' } @{ $graph->nodes };
     my %by_sigil = map { $_->sigil => 1 } @stash;
     is scalar(@stash), 2, 'two distinct EntryDef nodes for one name'
-        or diag join ', ', map { $_->sigil . $_->var_name } @stash;
+        or diag join ', ', map { $_->sigil . $_->symbol } @stash;
     ok $by_sigil{'$'}, 'one carries the scalar sigil';
     ok $by_sigil{'@'}, 'the other carries the array sigil';
 };

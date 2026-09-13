@@ -43,15 +43,16 @@ class SoN::Render::Text 0.01 {
             }
             elsif ($op eq 'PadAccess') {
                 push @attrs, "targ: " . $node->targ;
-                push @attrs, "name: '" . $node->varname . "'";
+                push @attrs, "name: '"
+                    . ( $node->sigil // '' ) . ( $node->symbol // '' ) . "'";
             }
             elsif ($op eq 'FieldAccess') {
                 push @attrs, "index: " . $node->field_index;
                 push @attrs, "stash: '" . $node->field_stash . "'";
             }
             elsif ($op eq 'EntryDef') {
-                push @attrs, "stash: '" . $node->stash_name . "'";
-                push @attrs, "name: '" . $node->var_name . "'";
+                push @attrs, "stash: '" . $node->package . "'";
+                push @attrs, "name: '" . $node->symbol . "'";
             }
             elsif ($op eq 'Call') {
                 push @attrs, $node->dispatch_kind . ": " . $node->name;

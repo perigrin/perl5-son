@@ -40,8 +40,8 @@ subtest 'a PadAccess does not ship its pad index' => sub {
     ok scalar(@pads), 'the graph has PadAccess nodes' or return;
     is scalar( grep { exists $_->{fields}{targ} } @pads ), 0,
         'none of them carry a targ';
-    is scalar( grep { defined $_->{fields}{varname} } @pads ), scalar(@pads),
-        'and all of them still carry the varname a consumer can use';
+    is scalar( grep { defined $_->{fields}{symbol} } @pads ), scalar(@pads),
+        'and all of them still carry the symbol a consumer can use';
 };
 
 # IDENTITY DOES NOT DEPEND ON IT. Two shadowed `my $x` in sibling scopes are

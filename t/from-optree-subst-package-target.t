@@ -44,7 +44,7 @@ subtest 'a package-target s/// binds the real variable' => sub {
     my %by = map { $_->{id} => $_ } $g->{nodes}->@*;
     my $dest = $by{ $write->{inputs}[0] };
     is $dest->{op}, 'EntryDef', 'into an EntryDef';
-    is $dest->{fields}{var_name}, 'g', 'naming g, not _';
+    is $dest->{fields}{symbol}, 'g', 'naming g, not _';
 };
 
 # The store exists so another sub can see the substitution. Without it, peek()

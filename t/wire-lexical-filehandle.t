@@ -39,7 +39,9 @@ my $SRC = 'open(my $T, "<", "/dev/null") or die; my $l = <$T>; close($T);';
 # open's own boolean says.
 subtest 'a lexical filehandle is a GlobRef, not a hole' => sub {
     my $nodes = nodes_of($SRC, 'lexfh');
-    my ($pad) = grep { $_->{op} eq 'PadAccess' && ($_->{varname} // '') eq '$T' } $nodes->@*;
+    my ($pad) = grep { $_->{op} eq 'PadAccess'
+        && (($_->{fields} // {})->{sigil}  // '') eq '$'
+        && (($_->{fields} // {})->{symbol} // '') eq 'T' } $nodes->@*;
     ok defined $pad, 'the $T pad access exists' or return;
     isnt $pad->{stamp}, 'Unknown', 'the handle is not a hole';
     is $pad->{stamp}, 'GlobRef', 'perl says ref($T) is GLOB, so the stamp is GlobRef';
@@ -57,7 +59,8 @@ subtest 'every builtin taking the handle sees a typed operand' => sub {
     my $checked = 0;
     for my $c (@calls) {
         my $operand = $byid{ ($c->{inputs} // [])->[0] // -1 } or next;
-        next unless ($operand->{varname} // '') eq '$T';
+        next unless (($operand->{fields} // {})->{sigil}  // '') eq '$'
+                 && (($operand->{fields} // {})->{symbol} // '') eq 'T';
         $checked++;
         isnt $operand->{stamp}, 'Unknown',
             "$c->{name}: its handle operand is typed";

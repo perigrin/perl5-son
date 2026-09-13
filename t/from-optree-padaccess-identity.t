@@ -22,7 +22,7 @@ use SoN::FromOptree;
 sub padaccess_for ($coderef, $varname) {
     my $graph = SoN::FromOptree->translate($coderef);
     my @hits  = grep {
-        $_->operation eq 'PadAccess' && $_->varname eq $varname
+        $_->operation eq 'PadAccess' && ( $_->sigil // '' ) . ( $_->symbol // '' ) eq $varname
     } $graph->nodes->@*;
     return @hits ? $hits[0] : undef;
 }

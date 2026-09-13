@@ -93,9 +93,9 @@ subtest 'Hash consing for operations' => sub {
 };
 
 subtest 'PadAccess' => sub {
-    my $pad = $factory->make('PadAccess', targ => 3, varname => '$x');
+    my $pad = $factory->make('PadAccess', targ => 3, sigil => '$', symbol => 'x');
     is($pad->targ, 3, 'pad targ');
-    is($pad->varname, '$x', 'pad varname');
+    is(( $pad->sigil . $pad->symbol ), '$x', 'pad varname');
 };
 
 subtest 'FieldAccess' => sub {
@@ -109,14 +109,14 @@ subtest 'EntryDef' => sub {
     # it in var_name ('$bar') left the two indistinguishable at the identity,
     # which is what let $_ and @_ hash-cons into one node.
     my $stash = $factory->make('EntryDef',
-        stash_name => 'Foo', sigil => '$', var_name => 'bar');
-    is($stash->stash_name, 'Foo', 'stash name');
+        package => 'Foo', sigil => '$', symbol => 'bar');
+    is($stash->package, 'Foo', 'stash name');
     is($stash->sigil, '$', 'sigil');
-    is($stash->var_name, 'bar', 'var name');
+    is($stash->symbol, 'bar', 'var name');
 
     # Same name, different sigil => a DIFFERENT node.
     my $arr = $factory->make('EntryDef',
-        stash_name => 'Foo', sigil => '@', var_name => 'bar');
+        package => 'Foo', sigil => '@', symbol => 'bar');
     isnt($stash->content_hash, $arr->content_hash,
         '$Foo::bar and \@Foo::bar are different variables');
 };

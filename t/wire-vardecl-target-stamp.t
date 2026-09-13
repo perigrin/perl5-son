@@ -41,7 +41,8 @@ sub nodes_of ($src, $name) {
 subtest 'a declared string slot is Str' => sub {
     my $n = nodes_of('my $f = "abc$$"; print $f;', 'vd-str');
     my ($pad) = grep { $_->{op} eq 'PadAccess'
-                       && (($_->{fields} // {})->{varname} // '') eq '$f' } $n->@*;
+                       && (($_->{fields} // {})->{sigil} // '') eq '$'
+                       && (($_->{fields} // {})->{symbol} // '') eq 'f' } $n->@*;
     ok $pad, 'the declaration target is built' or return;
     is $pad->{stamp}, 'Str', 'and carries the declared value type';
 };
@@ -78,7 +79,8 @@ subtest 'an unknown value leaves the slot unknown' => sub {
     my $n = nodes_of('my $v = utf8::is_utf8("x"); my $d = $v; print $d ? 1 : 0;',
                      'vd-unknown');
     my ($pad) = grep { $_->{op} eq 'PadAccess'
-                       && (($_->{fields} // {})->{varname} // '') eq '$d' } $n->@*;
+                       && (($_->{fields} // {})->{sigil} // '') eq '$'
+                       && (($_->{fields} // {})->{symbol} // '') eq 'd' } $n->@*;
   SKIP: {
         skip 'no such declaration in this shape', 1 unless $pad;
         ok +(($pad->{stamp} // 'NONE') =~ /^(Unknown|NONE|Scalar)$/),

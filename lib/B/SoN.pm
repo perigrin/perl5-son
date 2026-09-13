@@ -763,9 +763,13 @@ sub _readers_read_fields {
             # The reader body is one PadAccess of the field's own name. Rewire
             # every consumer of it -- a Return here, but nothing depends on
             # that -- so no stale PadAccess is left reachable.
+            # COMPOSED FROM THE PARTS. A PadAccess carries `sigil` and
+            # `symbol` separately; the field record's name arrives with its
+            # sigil attached ('$n'), so the comparison composes rather than
+            # splitting one of them by hand.
             my @stale = grep {
                 $_->isa('SoN::IR::Node::PadAccess')
-                    && ( $_->varname // '' ) eq $fname
+                    && ( ( $_->sigil // '' ) . ( $_->symbol // '' ) ) eq $fname
             } $graph->nodes->@*;
             next unless @stale;
 
@@ -804,10 +808,10 @@ sub _readers_read_fields {
 # declared type; this is the connection, not an analysis.
 #
 # MATCHED ON THE FIELD NAME, not on the graph name. A reader for `field $n` is
-# the graph `Class::n` and its body reads `varname => '$n'`, so the sigil-less
-# graph name and the sigil-carrying varname both identify it -- but the varname
-# is what the NODE carries, and matching the node against the field record it
-# actually reads is the honest join. Guarded on is_reader so an ordinary method
+# the graph `Class::n` and its body reads sigil '$' + symbol 'n', so the
+# sigil-less graph name and the node's composed name both identify it -- but
+# the node's parts are what it CARRIES, and matching the node against the field
+# record it actually reads is the honest join. Guarded on is_reader so an ordinary method
 # that happens to share a field's name is not caught by it.
 #
 # ONLY PROPAGATES. A field with no declared `type` (a `:param` with no default

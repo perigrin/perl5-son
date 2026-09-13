@@ -36,7 +36,8 @@ class SoN::IR::Node::ArrayLiteral :isa(SoN::IR::Node::Aggregate) {
     # not depend on the name, and including it would make an unnamed and a
     # named aggregate with identical contents fail to share a cache entry for
     # no gain.
-    field $varname :param :reader = undef;
+    field $sigil  :param :reader = undef;
+    field $symbol :param :reader = undef;
 
     method operation() { 'ArrayLiteral' }
 }

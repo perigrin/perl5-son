@@ -2898,9 +2898,9 @@ class SoN::FromOptree 0.01 {
                 # ITSELF, the same thing a padav read carries, not a reference
                 # to one.
                 my $node = $factory->make('EntryDef',
-                    stash_name => $gv->STASH->NAME,
+                    package => $gv->STASH->NAME,
                     sigil      => $agg_sigil,
-                    var_name   => $gv_name,
+                    symbol => $gv_name,
                     stamp      => SoN::IR::Stamp->new(
                         type => $agg_sigil eq '%' ? 'Hash' : 'Array' ));
                 $sim->define(_stash_key($node), $node) unless defined $existing;
@@ -3258,7 +3258,8 @@ class SoN::FromOptree 0.01 {
                 # DIFFERENT nodes rather than one hash-consed read.
                 my $read = $factory->make('PadAccess',
                     targ     => $targ,
-                    varname  => _padname($cv, $targ),
+                    do { my ($sg, $sy) = _padparts($cv, $targ);
+                         (sigil => $sg, symbol => $sy) },
                     (defined $sim->memory ? (inputs => [ $sim->memory ]) : ()),
                 );
                 $sim->push_node($read);
@@ -3613,9 +3614,9 @@ class SoN::FromOptree 0.01 {
                     # sassign, and giving it a memory input would make the
                     # store's own operand depend on the memory it produces.
                     my $node = $factory->make('EntryDef',
-                        stash_name => $gv->STASH->NAME,
+                        package => $gv->STASH->NAME,
                         sigil      => '$',
-                        var_name   => $gv_name,
+                        symbol => $gv_name,
                         ($is_lvalue || !defined $sim->memory
                             ? () : (inputs => [$sim->memory])));
                     # Seed only when unbound: an lvalue over an already-bound
@@ -3750,7 +3751,7 @@ class SoN::FromOptree 0.01 {
                 $target = $sim->lookup($key);
                 unless ($target) {
                     $target = $factory->make('EntryDef',
-                        stash_name => 'main', sigil => '$', var_name => '_');
+                        package => 'main', sigil => '$', symbol => '_');
                     $sim->define($key, $target);
                 }
             }
@@ -4265,7 +4266,7 @@ class SoN::FromOptree 0.01 {
                 if ($kname eq 'gvsv' || $kname eq 'rv2sv') {
                     my $cur = $sim->stack_depth > 0 ? $sim->pop_node : undef;
                     my $node = _undef_constant($factory);
-                    if ($cur && $cur->can('stash_name') && $cur->can('sigil')
+                    if ($cur && $cur->can('package') && $cur->can('sigil')
                         && ( $cur->sigil // '' ) eq '$') {
                         $sim->define(_stash_key($cur), $node);
                     }
@@ -4325,7 +4326,7 @@ class SoN::FromOptree 0.01 {
                         inputs => [],
                         stamp  => SoN::IR::Stamp->new(
                             type => $kname eq 'rv2av' ? 'Array' : 'Hash' ));
-                    if ($cur && $cur->can('stash_name') && $cur->can('sigil')) {
+                    if ($cur && $cur->can('package') && $cur->can('sigil')) {
                         $sim->define(_stash_key($cur), $empty);
                     }
                     # No resolvable name means the write would be dropped
@@ -4632,9 +4633,9 @@ class SoN::FromOptree 0.01 {
                 $sim->pop_node if $sim->stack_depth;
 
                 my $entry = $factory->make('EntryDef',
-                    stash_name => $gv->STASH->NAME,
+                    package => $gv->STASH->NAME,
                     sigil      => '&',
-                    var_name   => $gv->NAME);
+                    symbol => $gv->NAME);
                 my $node = $factory->make('Exists',
                     inputs => [$entry,
                         (defined $sim->memory ? ($sim->memory) : ())],
@@ -5566,7 +5567,7 @@ class SoN::FromOptree 0.01 {
 
                 my ($sigil, $key);
                 if ($is_pad) {
-                    $sigil = substr($target->varname, 0, 1);
+                    $sigil = $target->sigil;
                     $key   = $target->targ;
                 }
                 else {
@@ -5642,11 +5643,14 @@ class SoN::FromOptree 0.01 {
                     #
                     # A PACKAGE aggregate is named by its stash entry rather
                     # than a pad slot, and _stash_key already spells that.
-                    my $varname = $is_pad ? $target->varname : $key;
+                    # The target already carries its parts; a package
+                    # aggregate is named by its stash entry instead.
+                    my $symbol = $is_pad ? $target->symbol : $key;
                     my $node = $factory->make(
                         ($sigil eq '@' ? 'ArrayLiteral' : 'HashLiteral'),
                         inputs  => [$rhs->@*],
-                        varname => $varname,
+                        sigil   => $sigil,
+                        symbol  => $symbol,
                         stamp   => SoN::IR::Stamp->new(
                             type => ($sigil eq '@' ? 'Array' : 'Hash')));
                     $sim->define($key, $node);
@@ -9457,7 +9461,7 @@ class SoN::FromOptree 0.01 {
         # fields), so this is a readability fix for traces and diagnostics, not
         # a correctness one -- but a key nobody can paste into perl is a key
         # that misleads whoever is reading a scope dump.
-        return $node->sigil . $node->stash_name . '::' . $node->var_name;
+        return $node->sigil . $node->package . '::' . $node->symbol;
     }
 
     # `@_` IS AN ARRAY, and that is true structurally -- for every sub, with no
@@ -9542,8 +9546,6 @@ class SoN::FromOptree 0.01 {
                 );
             }
         }
-        my $varname = _padname($cv, $targ);
-
         # NOT STAMPED WITH THE SIGIL'S FLOOR, deliberately, and this is a
         # refusal that earns its keep. `$` IS a floor of Scalar, `@` of Array,
         # `%` of Hash -- measured, a $ slot holds exactly one scalar however
@@ -9559,7 +9561,9 @@ class SoN::FromOptree 0.01 {
         # Stamping Scalar here pre-empts that meet and the parameter comes out
         # Scalar -- strictly WIDER than what the body proves. Measured: it
         # broke t/wire-backward-inference.t in exactly that way.
-        return $factory->make('PadAccess', targ => $targ, varname => $varname);
+        my ($sigil, $symbol) = _padparts($cv, $targ);
+        return $factory->make('PadAccess',
+            targ => $targ, sigil => $sigil, symbol => $symbol);
     }
 
     # Resolve the GV of a gv/gvsv op. Unthreaded perls store it on the op
@@ -9681,9 +9685,9 @@ class SoN::FromOptree 0.01 {
                     my $key   = _stash_name_key('$', $stash, $gv->NAME);
                     my $node  = $sim->lookup($key)
                         // $factory->make('EntryDef',
-                            stash_name => $stash,
+                            package => $stash,
                             sigil      => '$',
-                            var_name   => $gv->NAME);
+                            symbol => $gv->NAME);
                     $sim->define($key, $node);
                     return ($key, $node);
                 }
@@ -9701,7 +9705,7 @@ class SoN::FromOptree 0.01 {
             $target = $targ
                 ? _make_pad_or_field($cv, $targ, $factory)
                 : $factory->make('EntryDef',
-                    stash_name => 'main', sigil => '$', var_name => '_');
+                    package => 'main', sigil => '$', symbol => '_');
             $sim->define($scope_key, $target);
         }
         return ($scope_key, $target);
@@ -9857,6 +9861,28 @@ class SoN::FromOptree 0.01 {
         return "\$?$targ" unless ref $pn eq 'B::PADNAME';
         my $name = eval { $pn->PV };
         return defined $name ? $name : "\$?$targ";
+    }
+
+    # _padparts($cv, $targ) -> (sigil, symbol)
+    #
+    # THE PARTS, FROM THE ONE PLACE THAT READS THE PAD. A pad name is stored
+    # with its sigil ('@a'), and every consumer wanting one or the other used
+    # to split it by hand -- `substr($name, 0, 1)` here, `s/\A[\@\%]//` in the
+    # deparse emitter. Two parsers of one string, in two modules.
+    #
+    # perl's own terms (Symbol.pm): `qualify` turns "symbol names" into
+    # qualified "variable names", and `qualify("x")` is "main::x" with NO
+    # SIGIL -- the symbol table is sigil-free and the sigil selects a slot
+    # within the glob. So the bare identifier is the SYMBOL.
+    #
+    # A synthetic name for an unnamed slot ("$?3") keeps its whole spelling as
+    # the symbol: it names no variable, so splitting it would invent a sigil
+    # the program never wrote.
+    sub _padparts ($cv, $targ) {
+        my $name = _padname($cv, $targ);
+        return ('$', $name) if $name =~ /\A\$\?/;
+        return ($1, $2) if $name =~ /\A([\$\@\%\&\*])(.*)\z/s;
+        return (undef, $name);
     }
 
     # Convert a PMOP pmflags bitmask to a flag string (e.g. "gi")

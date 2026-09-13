@@ -40,7 +40,7 @@ sub node_in ($wire, $graph, $op, %match) {
 subtest 'a parameter is typed by what its body does with it' => sub {
     my $wire = wire_for('sub add1 { my ($x) = @_; return $x + 1 } print add1(5), "\n";',
                         'param_num');
-    my $pad = node_in($wire, 'main::add1', 'PadAccess', varname => '$x');
+    my $pad = node_in($wire, 'main::add1', 'PadAccess', symbol => 'x');
     ok defined $pad, 'the $x read exists' or return;
     is $pad->{stamp}, 'Num', '`$x + 1` types $x as Num';
 };
@@ -50,7 +50,7 @@ subtest 'a parameter is typed by what its body does with it' => sub {
 subtest 'numeric context gives Num, not Int' => sub {
     my $wire = wire_for('sub add1 { my ($x) = @_; return $x + 1 } print add1(5), "\n";',
                         'param_notint');
-    my $pad = node_in($wire, 'main::add1', 'PadAccess', varname => '$x');
+    my $pad = node_in($wire, 'main::add1', 'PadAccess', symbol => 'x');
     ok defined $pad, 'the $x read exists' or return;
     isnt $pad->{stamp}, 'Int', 'not narrowed to Int -- add1(0.5) is legal';
 };
@@ -59,7 +59,7 @@ subtest 'numeric context gives Num, not Int' => sub {
 subtest 'string context types the parameter Str' => sub {
     my $wire = wire_for('sub tag { my ($s) = @_; return $s . "!" } print tag("a"), "\n";',
                         'param_str');
-    my $pad = node_in($wire, 'main::tag', 'PadAccess', varname => '$s');
+    my $pad = node_in($wire, 'main::tag', 'PadAccess', symbol => 's');
     ok defined $pad, 'the $s read exists' or return;
     is $pad->{stamp}, 'Str', '`$s . "!"` types $s as Str';
 };
@@ -93,7 +93,7 @@ my $a = Adder->new(n => 1); print $a->inc, "\n";';
 subtest 'an unconstrained parameter stays Unknown' => sub {
     my $wire = wire_for('sub id { my ($x) = @_; return $x } print id(5), "\n";',
                         'unconstrained');
-    my $pad = node_in($wire, 'main::id', 'PadAccess', varname => '$x');
+    my $pad = node_in($wire, 'main::id', 'PadAccess', symbol => 'x');
     ok defined $pad, 'the $x read exists' or return;
     is $pad->{stamp}, 'Unknown',
         'a parameter nothing constrains is still Unknown';
@@ -150,7 +150,7 @@ subtest 'requirements from several uses are met, not raced' => sub {
     ) {
         my $wire = wire_for($src, 'ord' . length($src));
         my ($sub) = grep { !/__PROGRAM__/ } keys $wire->{methods}->%*;
-        my $pad = node_in($wire, $sub, 'PadAccess', varname => '$x');
+        my $pad = node_in($wire, $sub, 'PadAccess', symbol => 'x');
         ok defined $pad, 'the $x read exists' or next;
         is $pad->{stamp}, 'Num',
             'meet(Str, Num) = Num regardless of which use comes first';

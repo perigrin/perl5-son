@@ -69,8 +69,8 @@ subtest 'an UNBOUND read is the entry definition' => sub {
     my $g = graph_of('sub { our $neverset; $neverset }');
     my ($sa) = nodes_of($g, 'EntryDef');
     ok(defined $sa, 'the entry definition is a EntryDef') or return;
-    is($sa->stash_name, 'main', 'stash is main');
-    is($sa->var_name, 'neverset', 'named for the variable');
+    is($sa->package, 'main', 'stash is main');
+    is($sa->symbol, 'neverset', 'named for the variable');
 };
 
 subtest 'a lexical is unaffected' => sub {

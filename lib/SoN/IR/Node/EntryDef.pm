@@ -7,8 +7,8 @@ use experimental 'class';
 use SoN::IR::Node::Access;
 
 class SoN::IR::Node::EntryDef :isa(SoN::IR::Node::Access) {
-    field $stash_name :param :reader = '';
-    field $var_name   :param :reader = '';
+    field $package   :param :reader = '';
+    field $symbol    :param :reader = '';
 
     # THE SIGIL IS PART OF THE IDENTITY, and it is REQUIRED -- there is no
     # sensible default.
@@ -28,7 +28,7 @@ class SoN::IR::Node::EntryDef :isa(SoN::IR::Node::Access) {
     method operation() { 'EntryDef' }
 
     method content_hash() {
-        return join('|', 'EntryDef', "stash_name=$stash_name",
-            "sigil=$sigil", "var_name=$var_name", $self->_serialize_inputs());
+        return join('|', 'EntryDef', "package=$package",
+            "sigil=$sigil", "symbol=$symbol", $self->_serialize_inputs());
     }
 }

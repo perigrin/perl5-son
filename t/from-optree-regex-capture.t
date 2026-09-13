@@ -56,8 +56,8 @@ subtest 'non-digit package scalar is a EntryDef with a name' => sub {
     my $g = graph_of('sub { our $x; $x }');
     my $sa = node_of($g, 'EntryDef');
     ok(defined $sa, 'has a EntryDef node') or return;
-    is($sa->stash_name, 'main', 'stash name extracted from the GV');
-    is($sa->var_name, 'x', 'var name extracted from the GV');
+    is($sa->package, 'main', 'stash name extracted from the GV');
+    is($sa->symbol, 'x', 'var name extracted from the GV');
 };
 
 subtest 'qr// is a Constant of const_type regex (R2)' => sub {

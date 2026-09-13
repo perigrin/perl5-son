@@ -153,8 +153,9 @@ class SoN::Deparse 0.01 {
         my $prologue = '';
         for my $n (sort { $a->{id} <=> $b->{id} } values $nodes->%*) {
             next unless ($n->{op} // '') =~ /\A(?:Array|Hash)Literal\z/;
-            my $vn = ($n->{fields} // {})->{varname};
-            next unless defined $vn;
+            my $af = $n->{fields} // {};
+            next unless defined $af->{symbol};
+            my $vn = ($af->{sigil} // '@') . $af->{symbol};
             $prologue .= sprintf("my %s = (%s);\n", $vn,
                 join(', ', map { $self->_expr($_) } (($n->{inputs} // [])->@*)));
         }
@@ -346,7 +347,7 @@ class SoN::Deparse 0.01 {
                   . " variable to name -- `(1,2,3)[0] = 7` is not"
                   . " assignable\n"
                     if $agg && ($agg->{op} // '') =~ /Literal\z/
-                    && !defined(($agg->{fields} // {})->{varname});
+                    && !defined(($agg->{fields} // {})->{symbol});
             }
 
             die "GAP: an Assign with no target slots is not yet rendered\n"
@@ -410,8 +411,8 @@ class SoN::Deparse 0.01 {
             unless $n->{op} eq 'EntryDef';
         my $f = $n->{fields} // {};
         my $sigil = $f->{sigil} // '$';
-        my $stash = $f->{stash_name} // 'main';
-        my $name  = $f->{var_name};
+        my $stash = $f->{package} // 'main';
+        my $name  = $f->{symbol};
         die "GAP: an EntryDef with no var_name is not yet rendered\n"
             unless defined $name;
 
@@ -541,11 +542,12 @@ class SoN::Deparse 0.01 {
             my $kind = $agg->{op} // '';
 
             if ($kind eq 'ArrayLiteral' || $kind eq 'HashLiteral') {
-                my $vn = ($agg->{fields} // {})->{varname};
-                if (defined $vn) {
+                my $bare = ($agg->{fields} // {})->{symbol};
+                if (defined $bare) {
                     # NAMED: index the variable. `$a[0]` reads and assigns;
-                    # a list slice does neither.
-                    ( my $bare = $vn ) =~ s/\A[\@\%]//;
+                    # a list slice does neither. The SYMBOL is already the bare
+                    # identifier -- no stripping, which is the point of
+                    # carrying the parts rather than the blob.
                     $text = $kind eq 'ArrayLiteral'
                         ? sprintf('$%s[%s]', $bare, $idx)
                         : sprintf('$%s{%s}', $bare, $idx);
@@ -587,7 +589,9 @@ class SoN::Deparse 0.01 {
             # The declaration is emitted separately (see _declare_aggregates),
             # because a Perl variable has to exist before it is indexed and the
             # graph has no node for "declare @a".
-            my $vn = ($n->{fields} // {})->{varname};
+            my $af = $n->{fields} // {};
+            my $vn = defined $af->{symbol}
+                ? ($af->{sigil} // '@') . $af->{symbol} : undef;
             if (defined $vn) { $text = $vn }
             else {
                 # ANONYMOUS: a parenthesised list. The consumer (a subscript, a
@@ -602,13 +606,14 @@ class SoN::Deparse 0.01 {
             $text = '@_';
         }
         elsif ($op eq 'PadAccess') {
-            # A LEXICAL READ. SSA has no variable names, but the producer keeps
-            # the source spelling in `varname` -- so the name survives the round
-            # trip and the emitted program reads the same slot the original did.
-            my $v = ($n->{fields} // {})->{varname};
-            die "GAP: a PadAccess with no varname is not yet rendered\n"
-                unless defined $v && length $v;
-            $text = $v;
+            # A LEXICAL READ. SSA has no variable names, but the producer
+            # keeps the source spelling in parts -- so the name survives the
+            # round trip and the emitted program reads the same slot.
+            my $f = $n->{fields} // {};
+            my $sym = $f->{symbol};
+            die "GAP: a PadAccess with no symbol is not yet rendered\n"
+                unless defined $sym && length $sym;
+            $text = ($f->{sigil} // '') . $sym;
         }
         elsif ($op eq 'EntryDef') {
             # A read of the named slot. NOT folded to whatever was last stored:

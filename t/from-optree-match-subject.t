@@ -42,7 +42,7 @@ subtest 'an unbound match reads $_, resolved to its reaching definition' => sub 
 
     my @pads = nodes_of($g, 'PadAccess');
     is(scalar @pads, 0, 'no PadAccess is fabricated for the missing subject')
-        or diag('varnames: ' . join(',', map { $_->varname // '(undef)' } @pads));
+        or diag('varnames: ' . join(',', map { ( $_->sigil // '' ) . ( $_->symbol // '' ) // '(undef)' } @pads));
 
     # $_ is the package scalar main::_, an ordinary SSA variable, so the match
     # subject is the VALUE bound by `$_ = "test"` — not a node naming the
@@ -85,7 +85,7 @@ subtest 'an UNASSIGNED $_ is the entry definition' => sub {
     ok($match, 'the match node exists') or return;
     my $subject = $match->inputs->[0];
     is($subject->operation, 'EntryDef', 'the subject is the entry definition');
-    is($subject->var_name, '_', '... naming $_');
+    is($subject->symbol, '_', '... naming $_');
 };
 
 subtest 'a lexical subject still comes from the pad target' => sub {

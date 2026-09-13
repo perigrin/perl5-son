@@ -72,9 +72,8 @@ sub _extract_fields ($node, $id_remap) {
     # (Array/Hash vs ArrayRef/HashRef).
     if ($op eq 'ArrayLiteral' || $op eq 'HashLiteral') {
         return {
-            ( defined $node->varname
-                ? ( varname => $node->varname )
-                : () ),
+            ( defined $node->sigil  ? ( sigil  => $node->sigil )  : () ),
+            ( defined $node->symbol ? ( symbol => $node->symbol ) : () ),
         };
     }
 
@@ -155,7 +154,10 @@ sub _extract_fields ($node, $id_remap) {
     # Identity does not need it: two shadowed `my $x` stay distinct on the wire
     # because their MEMORY inputs differ, not because of the slot number.
     if ($op eq 'PadAccess') {
-        return { varname => $node->varname };
+        return {
+            ( defined $node->sigil  ? ( sigil  => $node->sigil )  : () ),
+            ( defined $node->symbol ? ( symbol => $node->symbol ) : () ),
+        };
     }
     if ($op eq 'FieldAccess') {
         return {
@@ -177,13 +179,13 @@ sub _extract_fields ($node, $id_remap) {
     }
     if ($op eq 'EntryDef') {
         return {
-            stash_name => $node->stash_name,
+            package => $node->package,
             # The sigil is part of the variable's IDENTITY, not decoration:
             # `$_` and `@_` share the glob name `_` and are DIFFERENT
             # variables. Dropping it here would re-merge on the loader side
             # exactly what the producer just kept apart.
             sigil      => $node->sigil,
-            var_name   => $node->var_name,
+            symbol => $node->symbol,
         };
     }
     if ($op eq 'CompoundAssign') {

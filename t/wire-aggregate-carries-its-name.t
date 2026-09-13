@@ -33,7 +33,7 @@ sub graph_of ($src) {
 #     $sigil = substr($target->varname, 0, 1);
 #
 # -- so `@a` was in hand and only its first character kept.
-subtest 'a pad-bound array carries its varname' => sub {
+subtest 'a pad-bound array carries its name in parts' => sub {
     my $g = graph_of('my @a = (1,2,3); print "@a\n";');
     ok $g, 'it translates' or return;
 
@@ -41,10 +41,11 @@ subtest 'a pad-bound array carries its varname' => sub {
         $_->{op} eq 'ArrayLiteral' && ($_->{stamp} // '') eq 'Array'
     } $g->{nodes}->@*;
     ok $lit, 'the array is an Array-stamped ArrayLiteral' or return;
-    is $lit->{fields}{varname}, '@a', 'and it carries the name it was bound to';
+    is $lit->{fields}{sigil},  '@', 'and it carries the sigil';
+    is $lit->{fields}{symbol}, 'a', '... and the bare symbol, not the blob';
 };
 
-subtest 'a pad-bound hash carries its varname' => sub {
+subtest 'a pad-bound hash carries its name in parts' => sub {
     my $g = graph_of('my %h = (k => 1); print scalar(keys %h), "\n";');
     ok $g, 'it translates' or return;
 
@@ -52,7 +53,8 @@ subtest 'a pad-bound hash carries its varname' => sub {
         $_->{op} eq 'HashLiteral' && ($_->{stamp} // '') eq 'Hash'
     } $g->{nodes}->@*;
     ok $lit, 'the hash is a Hash-stamped HashLiteral' or return;
-    is $lit->{fields}{varname}, '%h', 'and it carries the name it was bound to';
+    is $lit->{fields}{sigil},  '%', 'and it carries the sigil';
+    is $lit->{fields}{symbol}, 'h', '... and the bare symbol, not the blob';
 };
 
 # AN ANONYMOUS AGGREGATE HAS NO NAME TO CARRY, and must not acquire one. The
@@ -66,8 +68,8 @@ subtest 'an anonymous aggregate carries no name' => sub {
         $_->{op} eq 'ArrayLiteral' && ($_->{stamp} // '') eq 'ArrayRef'
     } $g->{nodes}->@*;
     ok $ref, 'the anon array is an ArrayRef-stamped ArrayLiteral' or return;
-    ok !defined $ref->{fields}{varname},
-        'and carries no varname -- there is no variable to name';
+    ok !defined $ref->{fields}{symbol},
+        'and carries no symbol -- there is no variable to name';
 };
 
 # TWO ARRAYS ARE TWO CONTAINERS, and the names must not collapse them. The
@@ -81,7 +83,7 @@ subtest 'distinct arrays keep distinct names' => sub {
         $_->{op} eq 'ArrayLiteral' && ($_->{stamp} // '') eq 'Array'
     } $g->{nodes}->@*;
     is scalar(@lits), 2, 'two arrays are two nodes' or return;
-    my %names = map { ($_->{fields}{varname} // '?') => 1 } @lits;
+    my %names = map { (($_->{fields}{sigil} // '') . ($_->{fields}{symbol} // '?')) => 1 } @lits;
     is [sort keys %names], ['@a', '@b'], 'each carrying its own name';
 };
 

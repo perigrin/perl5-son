@@ -54,13 +54,13 @@ subtest 'a never-written fully-qualified read is an EntryDef' => sub {
 subtest 'EntryDef keeps its sigil identity' => sub {
     require SoN::IR::NodeFactory;
     my $f = SoN::IR::NodeFactory->new;
-    my $s = $f->make('EntryDef', stash_name => 'Foo', sigil => '$', var_name => 'bar');
-    my $a = $f->make('EntryDef', stash_name => 'Foo', sigil => '@', var_name => 'bar');
+    my $s = $f->make('EntryDef', package => 'Foo', sigil => '$', symbol => 'bar');
+    my $a = $f->make('EntryDef', package => 'Foo', sigil => '@', symbol => 'bar');
     is $s->sigil, '$', 'scalar sigil readable';
     isnt $s->content_hash, $a->content_hash,
         '$Foo::bar and @Foo::bar remain different variables';
 
-    my $missing = eval { $f->make('EntryDef', stash_name => 'Foo', var_name => 'bar'); 1 };
+    my $missing = eval { $f->make('EntryDef', package => 'Foo', symbol => 'bar'); 1 };
     ok !$missing, 'a sigil-less EntryDef is not constructible';
 };
 

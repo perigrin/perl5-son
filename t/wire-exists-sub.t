@@ -53,7 +53,7 @@ subtest 'exists &sub lowers to a symbol-table read' => sub {
     my ($ed) = grep { $_->{op} eq 'EntryDef' } $n->@*;
     ok $ed, 'a symbol-table entry is built' or return;
     is +($ed->{fields}{sigil} // ''), '&', '... with the code sigil';
-    is +($ed->{fields}{var_name} // ''), 'f', '... naming the sub';
+    is +($ed->{fields}{symbol} // ''), 'f', '... naming the sub';
 };
 
 subtest 'a missing sub is the same shape, not a folded constant' => sub {

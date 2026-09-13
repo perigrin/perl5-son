@@ -51,7 +51,8 @@ sub pads_of ($src, $name) {
 subtest 'a parameter is narrowed by its use, not floored at its sigil' => sub {
     my $p = pads_of('sub add1 { my ($x) = @_; return $x + 1 } print add1(5);',
                     'sf-param');
-    my ($pad) = grep { (($_->{fields} // {})->{varname} // '') eq '$x' } $p->@*;
+    my ($pad) = grep { my $f = $_->{fields} // {};
+        ($f->{sigil} // '') eq '$' && ($f->{symbol} // '') eq 'x' } $p->@*;
     ok $pad, 'the $x read exists' or return;
     is $pad->{stamp}, 'Num',
         'Num from `$x + 1` -- meet(Scalar, Num), not the bare Scalar floor';
@@ -63,7 +64,7 @@ subtest 'an unconstrained slot stays Unknown for the meet to fill' => sub {
     my $p = pads_of(
         'my %t; $t{a}=1; sub u { my %c = %t; scalar keys %c } print u();',
         'sf-hash');
-    my @hp = grep { (($_->{fields} // {})->{varname} // '') =~ /^\%/ } $p->@*;
+    my @hp = grep { (($_->{fields} // {})->{sigil} // '') eq '%' } $p->@*;
     ok scalar(@hp), 'a % pad node is built' or return;
     ok +(grep { ($_->{stamp} // 'NONE') eq 'Unknown' } @hp),
         'left Unknown -- _declared_slot_type supplies Hash to the meet instead';
@@ -74,7 +75,8 @@ subtest 'an unconstrained slot stays Unknown for the meet to fill' => sub {
 # fires where the VALUE is known, which is not the parameter case.
 subtest 'a declared value still types its target' => sub {
     my $p = pads_of('my $f = "abc$$"; print $f;', 'sf-decl');
-    my ($pad) = grep { (($_->{fields} // {})->{varname} // '') eq '$f' } $p->@*;
+    my ($pad) = grep { my $f = $_->{fields} // {};
+        ($f->{sigil} // '') eq '$' && ($f->{symbol} // '') eq 'f' } $p->@*;
     ok $pad, 'the declaration target exists' or return;
     is $pad->{stamp}, 'Str', 'still Str';
 };
