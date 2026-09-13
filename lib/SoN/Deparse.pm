@@ -374,6 +374,75 @@ class SoN::Deparse 0.01 {
             my @a = map { $self->_expr($_) } (($n->{inputs} // [])->@*);
             $text = sprintf("print(join('', %s))", join(', ', @a));
         }
+        elsif ($op eq 'RegexMatch') {
+            # THE PATTERN AND FLAGS ARE THE PROGRAM. /i changes what matches,
+            # /g how many times -- a dropped flag is a different program, not a
+            # cosmetic loss, so both ride on the node and both are emitted.
+            #
+            # The pattern is emitted RAW between delimiters: it is already a
+            # regex, and escaping it would turn metacharacters into literals.
+            my $f = $n->{fields} // {};
+            my $pat = $f->{pattern};
+            die "GAP: a RegexMatch with no pattern is not yet rendered\n"
+                unless defined $pat;
+            die "GAP: a RegexMatch with " . scalar(@in) . " inputs is not yet"
+              . " rendered\n" unless @in == 1;
+            $text = sprintf('(%s =~ m{%s}%s)',
+                $self->_expr($in[0]), $pat, $f->{flags} // '');
+        }
+        elsif ($op eq 'RegexSubst') {
+            # A SUBSTITUTION YIELDS THE MODIFIED STRING here rather than
+            # mutating in place -- the producer threads the result to whatever
+            # binds it. So it renders as a match-and-replace over a COPY, which
+            # is what `s///r` means, and the binding is the caller's job.
+            my $f = $n->{fields} // {};
+            my $pat = $f->{pattern};
+            die "GAP: a RegexSubst with no pattern is not yet rendered\n"
+                unless defined $pat;
+            my $rep = $f->{replacement};
+            die "GAP: a RegexSubst with no replacement is not yet rendered\n"
+                unless defined $rep;
+            ( my $flags = $f->{flags} // '' ) =~ s/r//g;
+            $text = sprintf('(%s =~ s{%s}{%s}%sr)',
+                $self->_expr($in[0]), $pat, $rep, $flags);
+        }
+        elsif ($op eq 'RegexSubstCount') {
+            # THE COUNT IS NOT THE STRING. A destructive s/// in scalar context
+            # yields how many substitutions happened, and the producer splits
+            # that into its own node over the RegexSubst. Rendering it as the
+            # subst would return the modified string instead of a number.
+            die "GAP: a RegexSubstCount with " . scalar(@in) . " inputs is not"
+              . " yet rendered\n" unless @in == 1;
+            my $sub = $nodes->{ $in[0] };
+            die "GAP: a RegexSubstCount over `" . ($sub->{op} // '?')
+              . "` is not yet rendered\n"
+                unless $sub && $sub->{op} eq 'RegexSubst';
+            my $f = $sub->{fields} // {};
+            ( my $flags = $f->{flags} // '' ) =~ s/r//g;
+
+            # A COUNTED s/// MUST MODIFY SOMETHING. The destructive form is
+            # what returns a count, and it needs an LVALUE -- but the producer
+            # resolved the subject to the value it was bound to, so the graph
+            # hands this a Constant. `"aaa" =~ s{a}{b}g` is a compile error
+            # ("Can't modify constant item in substitution").
+            #
+            # REFUSED rather than spelled around. Binding a temporary would
+            # emit a program that substitutes into a DIFFERENT variable from
+            # the one the source named, and whether the original is modified is
+            # the observable difference between s/// and s///r. The graph has
+            # lost the target here; that is a finding, not a rendering problem.
+            my $subj = $nodes->{ ($sub->{inputs} // [])->[0] // -1 };
+            die "GAP: a counted s/// whose subject is a `"
+              . (($subj->{op} // '?')) . "` has no lvalue to modify -- the"
+              . " graph names a value, not the variable the source"
+              . " substituted into\n"
+                if $subj && $subj->{op} eq 'Constant';
+
+            # Counted, so NOT /r: the destructive form is what returns a count.
+            $text = sprintf('(%s =~ s{%s}{%s}%s)',
+                $self->_expr(($sub->{inputs} // [])->[0]),
+                $f->{pattern}, $f->{replacement}, $flags);
+        }
         elsif ($op eq 'Length') {
             die "GAP: a Length with " . scalar(@in) . " inputs is not yet"
               . " rendered\n" unless @in == 1;
@@ -432,6 +501,19 @@ class SoN::Deparse 0.01 {
               . " rendered\n" unless @in == 1;
             $text = $self->_expr($in[0]);
         }
+        # `&&`, `||` AND `//` YIELD AN OPERAND, not a boolean -- `0 || "x"` is
+        # "x", not 1. Rendering them as a boolean test would agree on
+        # truthiness and disagree on the value, the same class of defect as
+        # `==` for `eq`.
+        #
+        # These are the VALUE forms. When the producer lowers a short-circuit
+        # to control flow instead (an If/Region diamond), the diamond emission
+        # handles it and no node reaches here -- measured, all four
+        # short-circuit effect cases round-trip without these rules.
+        elsif ($op eq 'And') { $text = $self->_binop('&&', @in) }
+        elsif ($op eq 'Or')  { $text = $self->_binop('||', @in) }
+        elsif ($op eq 'DefinedOr') { $text = $self->_binop('//', @in) }
+        elsif ($op eq 'Xor') { $text = $self->_binop('xor', @in) }
         elsif ($op eq 'Not') {
             die "GAP: a Not with " . scalar(@in) . " inputs is not yet"
               . " rendered\n" unless @in == 1;
@@ -529,6 +611,13 @@ class SoN::Deparse 0.01 {
             $s =~ s/\r/\\r/g;
             return '"' . $s . '"';
         }
+        # A qr// LITERAL. The producer records the compiled pattern's text, and
+        # it is emitted as a pattern rather than as a string -- the two are
+        # different values, and only one of them matches.
+        if ($t eq 'regex') {
+            return sprintf('qr{%s}', $v);
+        }
+
         die "GAP: no rule for a `$t` Constant\n";
     }
 }
