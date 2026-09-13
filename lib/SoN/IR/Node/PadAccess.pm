@@ -17,8 +17,26 @@ class SoN::IR::Node::PadAccess :isa(SoN::IR::Node::Access) {
     # qualified "variable names", and `qualify("x")` is "main::x" -- NO SIGIL,
     # because the symbol table is sigil-free. The sigil selects a slot WITHIN
     # the glob, which is why $x and @x share one entry.
-    field $sigil  :param :reader = undef;
-    field $symbol :param :reader = undef;
+    field $sigil  :param :reader;
+    field $symbol :param :reader;
+
+    # BOTH REQUIRED, and the sigil is the load-bearing half. This node is
+    # hash-consed by content, so two PadAccess nodes with the same symbol and
+    # no sigil ARE THE SAME NODE -- `$_` and `@_` would silently become one.
+    # That is the collision the stash-key work hit from the other direction:
+    # one stash holds `$x` and `@x` as unrelated variables.
+    #
+    # EntryDef has required its sigil since it was written. This did not, and
+    # a guarantee enforced at only one end of a wire is a convention rather
+    # than a contract -- the chalk deserializer dies on a sigil-less
+    # PadAccess, so the producer should not be able to emit one.
+    ADJUST {
+        die "PadAccess: a sigil is required (\$_ and \@_ are different"
+          . " variables, and this node is hash-consed by content)\n"
+            unless defined $sigil && length $sigil;
+        die "PadAccess: a symbol is required\n"
+            unless defined $symbol && length $symbol;
+    }
 
     method operation() { 'PadAccess' }
 

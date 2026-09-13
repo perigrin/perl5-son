@@ -9882,7 +9882,16 @@ class SoN::FromOptree 0.01 {
         my $name = _padname($cv, $targ);
         return ('$', $name) if $name =~ /\A\$\?/;
         return ($1, $2) if $name =~ /\A([\$\@\%\&\*])(.*)\z/s;
-        return (undef, $name);
+
+        # A PAD NAME WITH NO RECOGNISABLE SIGIL. Measured across base+comp:
+        # zero of 424 named nodes reach this, so it is a hole rather than a
+        # live case -- but PadAccess now REQUIRES a sigil (the node is
+        # hash-consed by content, and `$_` and `@_` would otherwise merge), so
+        # falling through would raise an internal error inside the node
+        # constructor instead of a named refusal here.
+        die "GAP: a pad slot whose name carries no recognisable sigil"
+          . " ($name) is not yet lowered -- a named node needs its sigil, and"
+          . " inventing one would merge unrelated variables\n";
     }
 
     # Convert a PMOP pmflags bitmask to a flag string (e.g. "gi")
