@@ -64,6 +64,20 @@ sub _extract_fields ($node, $id_remap) {
                 : () ),
         };
     }
+    # A PAD-BOUND AGGREGATE CARRIES THE NAME IT WAS BOUND TO, so a consumer can
+    # WRITE the container. Without it an element store is unrenderable: the
+    # aggregate is represented by the literal that initialised it, and
+    # `(1,2,3)[0] = 7` is not assignable. Absent for an anonymous aggregate,
+    # where there is no variable to name -- the stamp already separates the two
+    # (Array/Hash vs ArrayRef/HashRef).
+    if ($op eq 'ArrayLiteral' || $op eq 'HashLiteral') {
+        return {
+            ( defined $node->varname
+                ? ( varname => $node->varname )
+                : () ),
+        };
+    }
+
     if ($op eq 'AnonSub') {
         # The `methods` key holding this sub's body -- same field name Call
         # uses for the same purpose, so a consumer reads one spelling.

@@ -5632,10 +5632,22 @@ class SoN::FromOptree 0.01 {
                     # indistinguishable downstream and forced
                     # _rhs_is_aggregate_access to key scalar context on the OP
                     # rather than the repr.
+                    # CARRY THE NAME, not just its sigil. `$target->varname`
+                    # is read above for `substr(..., 0, 1)`, so `@a` was
+                    # already in hand and only its first character kept --
+                    # which left nothing downstream able to WRITE the
+                    # container. An element store came out as
+                    # Assign(Subscript(ArrayLiteral, 0), 7), and
+                    # `(1,2,3)[0] = 7` is not assignable Perl.
+                    #
+                    # A PACKAGE aggregate is named by its stash entry rather
+                    # than a pad slot, and _stash_key already spells that.
+                    my $varname = $is_pad ? $target->varname : $key;
                     my $node = $factory->make(
                         ($sigil eq '@' ? 'ArrayLiteral' : 'HashLiteral'),
-                        inputs => [$rhs->@*],
-                        stamp  => SoN::IR::Stamp->new(
+                        inputs  => [$rhs->@*],
+                        varname => $varname,
+                        stamp   => SoN::IR::Stamp->new(
                             type => ($sigil eq '@' ? 'Array' : 'Hash')));
                     $sim->define($key, $node);
                     $sim->push_node($node);

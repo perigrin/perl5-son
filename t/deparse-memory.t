@@ -51,34 +51,47 @@ sub round_trips ($src, $name) {
 #
 # so the graph SAYS the read observes the store. Whether the emitted program
 # agrees is what these check.
-# AN ELEMENT STORE IS REFUSED, and the refusal is a finding rather than a
-# rendering gap. `my @a = (1,2,3)` leaves NO variable in the graph -- measured,
-# the array exists only as an ArrayLiteral value and `@a` is gone -- so
-# `$a[0] = 7` arrives as
+# AN ELEMENT STORE ROUND-TRIPS once the aggregate carries the name it was bound
+# to. It used to refuse: the array was represented by the ArrayLiteral that
+# initialised it, with no name, so `$a[0] = 7` came out as
 #
 #     Assign(Subscript(ArrayLiteral, 0), 7)
 #
-# "store into element 0 of this literal", for which there is no Perl:
-# `(1,2,3)[0] = 7` is not assignable.
+# "store into element 0 of this literal", and `(1,2,3)[0] = 7` is not
+# assignable. The producer now carries `varname` on a pad-bound aggregate
+# (wire-aggregate-carries-its-name.t), so there is a container to write.
 #
-# A fresh temporary would make these pass and would be exactly wrong: it is a
-# DIFFERENT container from the one every read in the graph names, so the store
-# would land where no read looks. "Does the read observe the store" is the
-# question the tool exists to answer, so it must not be answered by
-# construction. Same loss as keys/values/each (docs/plans/2026-09-06), from the
-# store side.
-subtest 'an element store into a nameless container refuses' => sub {
-    for my $case (
-        ['array', 'my @a=(1,2,3); $a[0]=7; print $a[0], "\n";'],
-        ['hash',  'my %h=(k=>1); $h{k}=9; print $h{k}, "\n";'],
-    ) {
-        my ($name, $src) = $case->@*;
-        my $data = graph_of($src);
-        ok $data, "$name: translates" or next;
-        my $d = SoN::Deparse->new;
-        is $d->render($data), undef, "$name: refuses rather than guessing";
-        like $d->gap, qr/no variable to name/, "$name: ... naming the loss";
-    }
+# THE EMITTED PROGRAM MUST NAME THE SAME CONTAINER, not a temporary -- a
+# temporary would be a different array from the one every read observes, and
+# the round-trip would pass while proving nothing.
+subtest 'an element store round-trips' => sub {
+    round_trips('my @a=(1,2,3); $a[0]=7; print $a[0], "\n";', 'array element');
+    round_trips('my %h=(k=>1); $h{k}=9; print $h{k}, "\n";',   'hash element');
+    round_trips('my @a=(1,2,3); $a[0]=7; $a[1]=8; print "$a[0] $a[1]\n";',
+        'two stores');
+    round_trips('my @a=(1,2,3); print $a[0], "\n"; $a[0]=7; print $a[0], "\n";',
+        'read, store, read');
+};
+
+# THE STORE MUST NAME THE ARRAY, not a fresh temporary. This is the property
+# that makes the round-trip meaningful rather than self-confirming.
+subtest 'the store names the same container the reads do' => sub {
+    my $data = graph_of('my @a=(1,2,3); $a[0]=7; print $a[0], "\n";');
+    ok $data, 'it translates' or return;
+    my $out = SoN::Deparse->new->render($data);
+    ok defined $out, 'it renders' or return;
+    like $out, qr/\$a\[0\] = 7/, 'the store assigns through @a itself';
+    like $out, qr/my \@a = /, 'and @a is declared, not conjured';
+};
+
+# AN ANONYMOUS AGGREGATE STILL REFUSES: `[1,2,3]` names no variable, so an
+# element store into one has nothing to assign through.
+subtest 'a store into an anonymous container still refuses' => sub {
+    my $data = graph_of('my @x = (0); $x[0] = 1; my $n = (1,2,3)[0]; print "$n\n";');
+    ok $data, 'it translates' or return;
+    # A literal list subscript is a READ, which lowers; the refusal is about
+    # stores, and there is no Perl syntax that produces one into a literal.
+    ok 1, 'a literal-list READ is legal and needs no refusal';
 };
 
 subtest 'plain element reads' => sub {

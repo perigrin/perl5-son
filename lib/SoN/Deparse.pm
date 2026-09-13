@@ -142,7 +142,23 @@ class SoN::Deparse 0.01 {
         # these bindings have no control edge to order them against; a binding
         # that DID need ordering would carry one, and would already be in the
         # chain.
+        # A NAMED AGGREGATE MUST EXIST BEFORE IT IS INDEXED. The graph has no
+        # node for "declare @a" -- the literal IS the array, holding both its
+        # identity and its initial contents -- so the declaration is
+        # reconstructed here from the node that carries the name.
+        #
+        # Emitted before the chain for the same reason the pad bindings are:
+        # these carry no control edge, so nothing orders them, and Perl needs
+        # the `my` to have happened.
         my $prologue = '';
+        for my $n (sort { $a->{id} <=> $b->{id} } values $nodes->%*) {
+            next unless ($n->{op} // '') =~ /\A(?:Array|Hash)Literal\z/;
+            my $vn = ($n->{fields} // {})->{varname};
+            next unless defined $vn;
+            $prologue .= sprintf("my %s = (%s);\n", $vn,
+                join(', ', map { $self->_expr($_) } (($n->{inputs} // [])->@*)));
+        }
+
         for my $n (sort { $a->{id} <=> $b->{id} } values $nodes->%*) {
             next unless $n->{op} eq 'Assign';
             next if defined $n->{control_in};   # already emitted in the chain
@@ -322,11 +338,15 @@ class SoN::Deparse 0.01 {
                 my $tgt = $nodes->{ $in[$i] };
                 next unless ($tgt->{op} // '') eq 'Subscript';
                 my $agg = $nodes->{ ($tgt->{inputs} // [])->[0] // -1 };
-                die "GAP: an element store into a literal container has no"
-                  . " variable to name -- the graph kept the aggregate's VALUE"
-                  . " but not its name, and `(1,2,3)[0] = 7` is not"
+                # ONLY THE NAMELESS CASE REFUSES. A pad-bound aggregate now
+                # carries the variable it was bound to, so the store has
+                # something to assign through; an ANONYMOUS one still does not,
+                # and `(1,2,3)[0] = 7` is not assignable.
+                die "GAP: an element store into an anonymous container has no"
+                  . " variable to name -- `(1,2,3)[0] = 7` is not"
                   . " assignable\n"
-                    if $agg && ($agg->{op} // '') =~ /Literal\z/;
+                    if $agg && ($agg->{op} // '') =~ /Literal\z/
+                    && !defined(($agg->{fields} // {})->{varname});
             }
 
             die "GAP: an Assign with no target slots is not yet rendered\n"
@@ -335,10 +355,19 @@ class SoN::Deparse 0.01 {
             my @rhs = map { $self->_expr($_) } @in[$t .. $#in];
             die "GAP: an Assign with no values is not yet rendered\n"
                 unless @rhs;
-            # `my` is what puts a lexical in scope; the producer does not record
-            # declaration separately from binding, so the first write to a pad
-            # slot declares it.
-            my $decl = (grep { /^\$/ } @lhs) == @lhs ? 'my ' : '';
+            # `my` DECLARES A SLOT; AN ELEMENT STORE WRITES ONE. The producer
+            # does not record declaration separately from binding, so a write
+            # to a pad slot is taken as its declaration -- but an element
+            # target is an existing container's slot, and `my $a[0] = 7` is a
+            # syntax error. Only a whole-slot target declares.
+            my $all_slots = 1;
+            for my $i (0 .. $t-1) {
+                $all_slots = 0, last
+                    unless ($nodes->{ $in[$i] }{op} // '')
+                             =~ /\A(?:PadAccess|EntryDef)\z/;
+            }
+            my $decl = ($all_slots && (grep { /^\$/ } @lhs) == @lhs)
+                ? 'my ' : '';
             return sprintf("%s(%s) = (%s);\n",
                 $decl, join(', ', @lhs), join(', ', @rhs))
                 if @lhs > 1;
@@ -512,12 +541,23 @@ class SoN::Deparse 0.01 {
             my $kind = $agg->{op} // '';
 
             if ($kind eq 'ArrayLiteral' || $kind eq 'HashLiteral') {
-                # A list slice over the literal: `(1,2,3)[1]`. For a hash
-                # literal the key must be LOOKED UP, not positionally indexed,
-                # so those two are not the same operation.
-                $text = $kind eq 'ArrayLiteral'
-                    ? sprintf('(%s)[%s]', $self->_expr($in[0]) =~ s/\A\((.*)\)\z/$1/rs, $idx)
-                    : sprintf('{%s}->{%s}', $self->_expr($in[0]) =~ s/\A\((.*)\)\z/$1/rs, $idx);
+                my $vn = ($agg->{fields} // {})->{varname};
+                if (defined $vn) {
+                    # NAMED: index the variable. `$a[0]` reads and assigns;
+                    # a list slice does neither.
+                    ( my $bare = $vn ) =~ s/\A[\@\%]//;
+                    $text = $kind eq 'ArrayLiteral'
+                        ? sprintf('$%s[%s]', $bare, $idx)
+                        : sprintf('$%s{%s}', $bare, $idx);
+                }
+                else {
+                    # ANONYMOUS: a list slice over the literal. For a hash
+                    # literal the key is LOOKED UP, not positionally indexed,
+                    # so the two are not the same operation.
+                    $text = $kind eq 'ArrayLiteral'
+                        ? sprintf('(%s)[%s]', $self->_expr($in[0]) =~ s/\A\((.*)\)\z/$1/rs, $idx)
+                        : sprintf('{%s}->{%s}', $self->_expr($in[0]) =~ s/\A\((.*)\)\z/$1/rs, $idx);
+                }
             }
             else {
                 $text = sprintf('%s->[%s]', $self->_expr($in[0]), $idx);
@@ -539,11 +579,22 @@ class SoN::Deparse 0.01 {
             $text = sprintf('length(%s)', $self->_expr($in[0]));
         }
         elsif ($op eq 'ArrayLiteral' || $op eq 'HashLiteral') {
-            # A LIST, spelled as one. The producer distinguishes the two by
-            # what it BUILT; in an expression both are a parenthesised list,
-            # and the consumer (keys, a list assign) decides what it means.
-            $text = sprintf('(%s)',
-                join(', ', map { $self->_expr($_) } @in));
+            # A NAMED AGGREGATE IS ITS VARIABLE. The node represents the
+            # container, and when it was bound to a pad slot the name is the
+            # only thing that can WRITE it -- `(1,2,3)[0] = 7` is not
+            # assignable, `$a[0] = 7` is.
+            #
+            # The declaration is emitted separately (see _declare_aggregates),
+            # because a Perl variable has to exist before it is indexed and the
+            # graph has no node for "declare @a".
+            my $vn = ($n->{fields} // {})->{varname};
+            if (defined $vn) { $text = $vn }
+            else {
+                # ANONYMOUS: a parenthesised list. The consumer (a subscript, a
+                # list assign) decides what it means.
+                $text = sprintf('(%s)',
+                    join(', ', map { $self->_expr($_) } @in));
+            }
         }
         elsif ($op eq 'ArgsSource') {
             # THE SUB'S ARGUMENT ARRAY. `my ($x,$y) = @_` binds from it, so it
