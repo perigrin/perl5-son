@@ -299,7 +299,36 @@ class SoN::Deparse 0.01 {
             # them is the value list.
             my $t = 0;
             $t++ while $t < @in
-                && ($nodes->{ $in[$t] }{op} // '') =~ /\A(?:PadAccess|EntryDef)\z/;
+                && ($nodes->{ $in[$t] }{op} // '')
+                     =~ /\A(?:PadAccess|EntryDef|Subscript)\z/;
+
+            # AN ELEMENT STORE NEEDS A NAMED CONTAINER. `my @a = (1,2,3)`
+            # leaves NO variable in the graph -- measured, the array exists
+            # only as an ArrayLiteral value and `@a` is gone -- so
+            # `$a[0] = 7` arrives as
+            #
+            #     Assign(Subscript(ArrayLiteral, 0), 7)
+            #
+            # which says "store into element 0 of this literal". There is no
+            # Perl for that: `(1,2,3)[0] = 7` is not assignable.
+            #
+            # REFUSED rather than given a fresh temporary. A temporary would be
+            # a DIFFERENT container from the one every other read in the graph
+            # names, so the store would land somewhere the reads never look --
+            # and "does the read observe the store" is the question this whole
+            # tool exists to answer. Same loss as keys/values/each
+            # (docs/plans/2026-09-06), from the store side.
+            for my $i (0 .. $t-1) {
+                my $tgt = $nodes->{ $in[$i] };
+                next unless ($tgt->{op} // '') eq 'Subscript';
+                my $agg = $nodes->{ ($tgt->{inputs} // [])->[0] // -1 };
+                die "GAP: an element store into a literal container has no"
+                  . " variable to name -- the graph kept the aggregate's VALUE"
+                  . " but not its name, and `(1,2,3)[0] = 7` is not"
+                  . " assignable\n"
+                    if $agg && ($agg->{op} // '') =~ /Literal\z/;
+            }
+
             die "GAP: an Assign with no target slots is not yet rendered\n"
                 unless $t;
             my @lhs = map { $self->_expr($_) } @in[0 .. $t-1];
@@ -464,6 +493,45 @@ class SoN::Deparse 0.01 {
             $text = sprintf('(%s =~ s{%s}{%s}%s)',
                 $self->_expr(($sub->{inputs} // [])->[0]),
                 $f->{pattern}, $f->{replacement}, $flags);
+        }
+        elsif ($op eq 'Subscript') {
+            # AN ELEMENT READ, and its third input is the MEMORY it observes.
+            # A read threaded to a store sees the stored value; one threaded
+            # past it sees the old one. That ordering is the whole question
+            # this oracle exists to check.
+            #
+            # THE CONTAINER MAY HAVE NO NAME. `my @a = (1,2,3)` leaves no
+            # variable in the graph at all -- measured, the array exists only
+            # as an ArrayLiteral value and `@a` is gone. A literal container is
+            # indexed as a list slice, which is what the graph says; a named
+            # one is indexed normally.
+            die "GAP: a Subscript with " . scalar(@in) . " inputs is not yet"
+              . " rendered\n" if @in < 2;
+            my $agg = $nodes->{ $in[0] };
+            my $idx = $self->_expr($in[1]);
+            my $kind = $agg->{op} // '';
+
+            if ($kind eq 'ArrayLiteral' || $kind eq 'HashLiteral') {
+                # A list slice over the literal: `(1,2,3)[1]`. For a hash
+                # literal the key must be LOOKED UP, not positionally indexed,
+                # so those two are not the same operation.
+                $text = $kind eq 'ArrayLiteral'
+                    ? sprintf('(%s)[%s]', $self->_expr($in[0]) =~ s/\A\((.*)\)\z/$1/rs, $idx)
+                    : sprintf('{%s}->{%s}', $self->_expr($in[0]) =~ s/\A\((.*)\)\z/$1/rs, $idx);
+            }
+            else {
+                $text = sprintf('%s->[%s]', $self->_expr($in[0]), $idx);
+            }
+        }
+        elsif ($op eq 'Count') {
+            # scalar(@a) -- the element count, and a memory-dependent read like
+            # any other: inputs are [aggregate, memory].
+            die "GAP: a Count with no aggregate is not yet rendered\n"
+                unless @in;
+            my $agg = $nodes->{ $in[0] };
+            $text = ($agg->{op} // '') =~ /Literal\z/
+                ? sprintf('scalar(%s)', $self->_expr($in[0]))
+                : sprintf('scalar(@{%s})', $self->_expr($in[0]));
         }
         elsif ($op eq 'Length') {
             die "GAP: a Length with " . scalar(@in) . " inputs is not yet"
