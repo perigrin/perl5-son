@@ -66,15 +66,44 @@ class SoN::Deparse 0.01 {
     # always recorded.
     method render ($data) {
         $gap = undef;
-        my $graph = $data->{methods}{'main::__PROGRAM__'};
+        my $methods = $data->{methods} // {};
+        my $graph = $methods->{'main::__PROGRAM__'};
         unless ($graph) { $gap = 'no main::__PROGRAM__ in the graph'; return undef }
 
+        # EVERY SUB IS ITS OWN GRAPH on the wire, so a direct call names a
+        # `methods` entry that must ALSO be emitted -- calling a sub the
+        # emitted program never defines is a runtime death, not a wrong value.
+        my $out = '';
+        for my $name (sort keys $methods->%*) {
+            next if $name eq 'main::__PROGRAM__';
+            my $sub = eval { $self->_emit_sub($name, $methods->{$name}) };
+            if (!defined $sub) { $gap = $@ || "failed to render $name"; return undef }
+            $out .= $sub;
+        }
+
+        $nodes = { map { $_->{id} => $_ } ($graph->{nodes} // [])->@* };
+        %rendered = ();
+        my $body = eval { $self->_emit_control_chain($graph) };
+        if (!defined $body) { $gap = $@ || 'render failed with no reason'; return undef }
+        return $out . $body;
+    }
+
+    # A named sub. Its body is the same control-chain walk the program body
+    # gets; only the wrapper differs.
+    method _emit_sub ($name, $graph) {
+        my $save_nodes = $nodes;
+        my %save_rendered = %rendered;
         $nodes = { map { $_->{id} => $_ } ($graph->{nodes} // [])->@* };
         %rendered = ();
 
         my $body = eval { $self->_emit_control_chain($graph) };
-        if (!defined $body) { $gap = $@ || 'render failed with no reason'; return undef }
-        return $body;
+        my $err = $@;
+        $nodes = $save_nodes;
+        %rendered = %save_rendered;
+        die $err unless defined $body;
+
+        ( my $short = $name ) =~ s/^main:://;
+        return sprintf("sub %s {\n%s}\n", $short, $body);
     }
 
     # THE CONTROL CHAIN IS THE STATEMENT ORDER. Measured: `control_in` is a
@@ -262,11 +291,21 @@ class SoN::Deparse 0.01 {
         # emitting it as one is what puts the slots in scope for later reads.
         if ($op eq 'Assign') {
             my @in = ($n->{inputs} // [])->@*;
-            die "GAP: an Assign with an odd input count is not yet rendered\n"
-                if @in % 2;
-            my $half = @in / 2;
-            my @lhs = map { $self->_expr($_) } @in[0 .. $half-1];
-            my @rhs = map { $self->_expr($_) } @in[$half .. $#in];
+
+            # TARGETS FIRST, THEN VALUES -- and the counts need not match. An
+            # even split was wrong: `my ($x,$y) = @_` is TWO targets from ONE
+            # source (the ArgsSource), and `my ($a,$b) = (2,3)` is two from
+            # two. The targets are the leading slot nodes; everything after
+            # them is the value list.
+            my $t = 0;
+            $t++ while $t < @in
+                && ($nodes->{ $in[$t] }{op} // '') =~ /\A(?:PadAccess|EntryDef)\z/;
+            die "GAP: an Assign with no target slots is not yet rendered\n"
+                unless $t;
+            my @lhs = map { $self->_expr($_) } @in[0 .. $t-1];
+            my @rhs = map { $self->_expr($_) } @in[$t .. $#in];
+            die "GAP: an Assign with no values is not yet rendered\n"
+                unless @rhs;
             # `my` is what puts a lexical in scope; the producer does not record
             # declaration separately from binding, so the first write to a pad
             # slot declares it.
@@ -277,7 +316,32 @@ class SoN::Deparse 0.01 {
             return sprintf("%s%s = %s;\n", $decl, $lhs[0], $rhs[0]);
         }
 
-        return '' if $op eq 'Return';
+        # A VOID CALL IS AN EFFECT: dropping it loses whatever the sub did.
+        return sprintf("%s;\n", $self->_call_expr($n)) if $op eq 'Call';
+
+        # THE PROGRAM BODY'S Return CARRIES NOTHING OBSERVABLE -- it is the
+        # implicit fall-off-the-end. A SUB's Return is a real `return` and
+        # carries its value.
+        if ($op eq 'Return') {
+            my @in = ($n->{inputs} // [])->@*;
+            return '' unless @in;
+            my $v = $nodes->{ $in[0] };
+
+            # The undef Constant every program body ends with is not a value
+            # the source returned.
+            return '' if $v && $v->{op} eq 'Constant'
+                      && (($v->{fields} // {})->{const_type} // '') eq 'undef';
+
+            # AN EFFECT IS NOT RE-RUN TO RETURN IT. A sub whose last statement
+            # is a `print` returns print's value (1), and the Return names that
+            # same node -- so emitting `return <expr>` ran the print A SECOND
+            # TIME. Measured: `sub shout { print "loud\n" }` printed "loud"
+            # twice. An effect already placed in the chain is returned by
+            # falling off the end, exactly as perl does.
+            return '' if $v && defined $v->{control_in};
+
+            return sprintf("return %s;\n", $self->_expr($in[0]));
+        }
 
         die "GAP: no rule for control node `$op`\n";
     }
@@ -302,6 +366,30 @@ class SoN::Deparse 0.01 {
         my $text;
         if ($op eq 'Constant') {
             $text = $self->_constant($n);
+        }
+        elsif ($op eq 'Call') { $text = $self->_call_expr($n) }
+        elsif ($op eq 'Print') {
+            # A Print reached as a VALUE is one whose result is reused -- print
+            # returns 1 on success. Emit it as the expression it is.
+            my @a = map { $self->_expr($_) } (($n->{inputs} // [])->@*);
+            $text = sprintf("print(join('', %s))", join(', ', @a));
+        }
+        elsif ($op eq 'Length') {
+            die "GAP: a Length with " . scalar(@in) . " inputs is not yet"
+              . " rendered\n" unless @in == 1;
+            $text = sprintf('length(%s)', $self->_expr($in[0]));
+        }
+        elsif ($op eq 'ArrayLiteral' || $op eq 'HashLiteral') {
+            # A LIST, spelled as one. The producer distinguishes the two by
+            # what it BUILT; in an expression both are a parenthesised list,
+            # and the consumer (keys, a list assign) decides what it means.
+            $text = sprintf('(%s)',
+                join(', ', map { $self->_expr($_) } @in));
+        }
+        elsif ($op eq 'ArgsSource') {
+            # THE SUB'S ARGUMENT ARRAY. `my ($x,$y) = @_` binds from it, so it
+            # renders as @_ and the emitted sub reads the same arguments.
+            $text = '@_';
         }
         elsif ($op eq 'PadAccess') {
             # A LEXICAL READ. SSA has no variable names, but the producer keeps
@@ -354,6 +442,61 @@ class SoN::Deparse 0.01 {
         }
 
         return $rendered{$id} = $text;
+    }
+
+    # _call_expr($n) -- a Call in whichever of its three dispatch kinds.
+    #
+    # Measured across the corpus files this unblocks: 105 direct, 19 builtin,
+    # 8 method, and the wire discriminates them consistently -- a direct call
+    # always carries `want` and never `class_name`, a method always carries
+    # `class_name`, a builtin carries neither.
+    method _call_expr ($n) {
+        my $f    = $n->{fields} // {};
+        my $kind = $f->{dispatch_kind} // '';
+        my $name = $f->{name};
+        my @args = map { $self->_expr($_) } (($n->{inputs} // [])->@*);
+
+        die "GAP: a Call with no name is not yet rendered\n"
+            unless defined $name && length $name;
+
+        if ($kind eq 'direct') {
+            # PARENTHESISED ALWAYS. `f $x` is a syntax error unless f was
+            # predeclared, and the emitted program defines its subs in whatever
+            # order `sort` gives -- so never rely on the callee being visible.
+            ( my $short = $name ) =~ s/^main:://;
+            return sprintf('%s(%s)', $short, join(', ', @args));
+        }
+
+        if ($kind eq 'builtin') {
+            # `keys`, `values` and `each` TAKE A CONTAINER, not a list --
+            # `keys(("a",1))` is a compile error ("Type of arg 1 to keys must
+            # be hash or array"). The operand here is a HashLiteral/ArrayLiteral
+            # with no variable to name, so there is nothing to hand them.
+            #
+            # REFUSED rather than spelled around: binding a temporary would
+            # emit a program whose aggregate is a DIFFERENT container from the
+            # one the graph names, and the defect this tool exists to catch
+            # (docs/plans/2026-09-06, keys/values/each do not observe stores)
+            # is exactly about which container a read sees. A spelled-around
+            # round-trip would agree with itself and hide it.
+            if ($name =~ /\A(?:keys|values|each)\z/) {
+                my $arg = $nodes->{ ($n->{inputs} // [])->[0] // -1 };
+                die "GAP: `$name` over a literal aggregate has no container to"
+                  . " name -- see docs/plans/2026-09-06-keys-values-each-do-"
+                  . "not-observe-stores.md\n"
+                    if $arg && ($arg->{op} // '') =~ /Literal\z/;
+            }
+            return sprintf('%s(%s)', $name, join(', ', @args));
+        }
+
+        if ($kind eq 'method') {
+            my $cls = $f->{class_name};
+            die "GAP: a method Call with no class_name is not yet rendered\n"
+                unless defined $cls;
+            return sprintf('%s->%s(%s)', $cls, $name, join(', ', @args));
+        }
+
+        die "GAP: a Call with dispatch_kind `$kind` is not yet rendered\n";
     }
 
     method _binop ($perl_op, $l, $r) {
