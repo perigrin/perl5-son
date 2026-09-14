@@ -118,3 +118,29 @@ If a node calls `set_memory`, it takes a memory input. The two are the same
 claim -- "I am a point in this chain" -- and stating only half of it leaves a
 node that behaves like memory to the producer and like a value to everyone
 else.
+
+---
+
+## Unrelated, recorded here so it is not lost: a Slice over a string
+
+`base/lex.t` refuses with "a Slice over an anonymous `Constant` has no
+container to name". Measured:
+
+    1098 Constant  value="b"        stamp=Str
+    1099 Slice     in=[6, 1098]     stamp=List
+    1100 Coerce    in=[1099]        List -> Str
+    1101 StrEq     in=[1100, 1098]
+
+`Slice`'s operands are [indices, container], so the CONTAINER is a string
+Constant. A slice over a string is not a Perl operation, so this graph is
+probably wrong rather than merely unspellable -- but it was not isolated.
+
+The construct is one of base/lex.t's caret-variable interpolation tests
+(`"${^TEST}[0]"`, `"${^TEST[0]}"`, `"${ ^TEST [1] }"` around lines 168-174),
+which differ in whether the subscript is inside or outside the braces. perl
+folds most of each away before B::SoN sees it, and a reproduction using an
+ordinary `@TEST` does not produce the shape -- `@{^TEST}` is a different
+variable from `@TEST`.
+
+Worth an hour with `-MO=Concise` on those four lines specifically. Not worth
+guessing at.
