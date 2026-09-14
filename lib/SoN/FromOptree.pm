@@ -258,6 +258,41 @@ class SoN::FromOptree 0.01 {
     # shortcut checks both.
     our %MUTATED_LITERALS;
 
+    # Package-scalar keys currently ALIASED by an enclosing foreach, as a
+    # counted stack (one entry per active loop, so a nested `for (@a) { for
+    # (@b) {...} }` restores the outer alias when the inner one ends).
+    #
+    # WHY THE READ CANNOT JUST LOOK THE KEY UP. A foreach binds its iterator in
+    # the scope map -- `$sim->define($x_targ, $elem)` -- and for an explicit
+    # `for my $x (@a)` that is the whole story, because a pad read resolves the
+    # binding directly. The IMPLICIT `$_` is a PACKAGE scalar, and a package
+    # scalar read is demoted by _package_scalars_written: a body that writes
+    # `$_` marks '$main::_' written program-wide, so the read stopped
+    # forwarding its binding and built a fresh memory-bound EntryDef instead.
+    # Measured on `my @a=(1,2); for (@a) { $_ = $_ * 10 } print "@a"`:
+    #
+    #      8 Subscript  in=[4, 7]        the element the loop bound
+    #     10 EntryDef   in=[9]           the body's read, memory = MemStart
+    #     12 Multiply   in=[10, 11]      so it multiplied the UNBOUND alias
+    #     16 Assign     in=[8, 12]       storing undef*10 into the element
+    #
+    #       perl: 10 20      emitted: 0 0
+    #
+    # and with `+ 100` rather than `* 10` the emitted program gave 200 300,
+    # because the one unbound EntryDef hash-consed across both iterations. The
+    # read-only spelling `for (@a) { print $_ }` was correct throughout -- the
+    # key is only demoted when something writes it -- which is what makes this
+    # the WRITE path's bug and not foreach's.
+    #
+    # THE DEMOTION IS RIGHT IN GENERAL AND WRONG HERE. It exists because some
+    # OTHER sub can assign a package scalar behind this graph's back, so the
+    # binding cannot be trusted. A foreach alias is the case where it can: the
+    # loop itself established the binding one op ago, in this graph, and the
+    # element Subscript it points at IS what perl's alias refers to. Suspending
+    # the demotion for exactly the aliased key, for exactly the loop's extent,
+    # leaves every other package scalar demoted as before.
+    our @ALIAS_BOUND_KEYS;
+
     # _note_literal_mutation($target) -- record that an element store has
     # mutated the aggregate $target indexes, so a later LIST-context read of
     # that aggregate cannot take the flatten shortcut.
@@ -3870,7 +3905,14 @@ class SoN::FromOptree 0.01 {
                 # EntryDef in it at all, and the program printed 0 for perl's
                 # 2. See _package_scalars_written for why the discriminator
                 # has to be a program-wide scan.
-                my $forwardable = !_package_scalars_written()->{$key};
+                # AN ACTIVE FOREACH ALIAS OUTRANKS THE DEMOTION -- see
+                # @ALIAS_BOUND_KEYS for the measurement. The loop bound this
+                # key to its element Subscript in THIS graph, so the binding is
+                # the alias perl refers to, not a value some other sub may have
+                # replaced.
+                my $aliased = grep { $_ eq $key } @ALIAS_BOUND_KEYS;
+                my $forwardable = $aliased
+                    || !_package_scalars_written()->{$key};
                 if ($existing && !$is_lvalue && $forwardable) {
                     $sim->push_node($existing);
                 }
@@ -6811,6 +6853,24 @@ class SoN::FromOptree 0.01 {
                     @inputs = map { _coerce_int_to_num($factory, $_) } @inputs
                         if $mixed;
                 }
+
+                # A NODE THAT ADVANCES MEMORY MUST ALSO CARRY IT. Every other
+                # memory point names the version it supersedes -- EntryWrite is
+                # [slot, value, memory], an aggregate builtin is
+                # [args..., memory] -- and that is what lets a reader recognise
+                # the chain STRUCTURALLY rather than by name.
+                #
+                # require/dofile advanced memory (below) while taking only
+                # their argument, so they were memory points invisible to any
+                # such reader. Measured on comp/require.t, that made
+                # `Phi(1190) in=[Call(require), EntryWrite]` -- a merge of two
+                # memory chains -- look like a VALUE Phi, which bound the
+                # EntryWrite and then asked to render a store as an expression.
+                push @inputs, $sim->memory
+                    if $node_type eq 'Call'
+                    && $GLOBAL_STATE_BUILTIN{$name}
+                    && defined $sim->memory;
+
                 my $node = $factory->make($node_type, inputs => \@inputs, %extra);
                 if ($void_effect_call || $pin_on_control) {
                     $node->set_control_in($sim->control);
@@ -7699,6 +7759,26 @@ class SoN::FromOptree 0.01 {
         my $body_proj = $factory->make_cfg('Proj', inputs => [$loop_node], index => 0);
         my $exit_proj = $factory->make_cfg('Proj', inputs => [$loop_node], index => 1);
         $sim->set_control($body_proj);
+
+        # THE RANGE FORM ALIASES ITS ITERATOR TOO, and an implicit `$_` here is
+        # the same package scalar the array form binds -- so the same demotion
+        # reaches it. Measured, and the contagion is the point: the key is
+        # demoted PROGRAM-WIDE, so a write to `$_` in some OTHER loop breaks a
+        # range loop that only READS it --
+        #
+        #     for (1..3) { $_ = $_ * 2; print $_ }         perl 246  was 000
+        #     my @b=(9); for (@b) { $_ = 1 }
+        #       my $s=0; for (1..3) { $s = $s + $_ }       perl 6    was 3
+        #
+        # The second has no write in the range loop at all; it reads a global
+        # the array loop's write demoted. Both are silent wrong answers.
+        #
+        # NO WRITE-BACK HERE, unlike the array form. A range has no container
+        # to store into -- perl's iterator yields a fresh value per pass and
+        # discards a body write at the iteration boundary -- so binding the
+        # READ is the whole fix.
+        local @ALIAS_BOUND_KEYS = (@ALIAS_BOUND_KEYS, $i_targ);
+
         _walk_loop_body($cv, $body_start, $sim, $factory, $opmap, {}, $visited,
             undef, undef, 1);
 
@@ -7863,6 +7943,21 @@ class SoN::FromOptree 0.01 {
             inputs => [$array, $i_phi, $sim->memory],
             (defined $elem_stamp ? (stamp => $elem_stamp) : ()));
         $sim->define($x_targ, $elem);
+
+        # THE ALIAS IS IN FORCE FOR THE BODY ONLY. An implicit `$_` iterator is
+        # a PACKAGE scalar, and a package scalar the program writes anywhere is
+        # demoted to a memory-bound EntryDef read -- which here would read a
+        # global nothing bound instead of the element just bound above. Announce
+        # the alias so the gvsv read forwards this binding; see
+        # @ALIAS_BOUND_KEYS for the measurement. A pad iterator is unaffected
+        # (its key is a targ, which no package-scalar read looks up), so this
+        # costs the explicit form nothing.
+        #
+        # PUSH/POP RATHER THAN SET/CLEAR, so a nested foreach over the same key
+        # restores the OUTER loop's alias when the inner one ends rather than
+        # clearing it outright.
+        local @ALIAS_BOUND_KEYS = (@ALIAS_BOUND_KEYS, $x_targ);
+
         my $depth_before = $sim->stack_depth;
         _walk_loop_body($cv, $body_start, $sim, $factory, $opmap, {}, $visited,
             undef, undef, 1);

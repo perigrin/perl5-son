@@ -83,6 +83,35 @@ an extra input. The producer-side audit is the one with a finite, checkable
 answer; the wire does not carry enough to ask the question from outside, which
 is itself the finding.
 
+## The audit, run
+
+Of the 31 `set_memory` sites, most are fine by construction -- a memory Phi,
+or a site forwarding another sim's chain. The ones that pass a NODE THEY JUST
+BUILT were checked, and one more violates the invariant:
+
+**`RegexSubst`** (two sites, FromOptree.pm ~1446 and ~8750) calls
+`set_memory($node)` -- a destructive s/// stores into its target and a later
+read must observe it -- while its inputs are
+`[target, pattern?, replacement?]`. Measured on
+`our $g = "aaa"; $g =~ s/a/b/; $g =~ s/b/c/`:
+
+    11 RegexSubst in=[3]    no memory input
+    12 RegexSubst in=[11]   chained through its TARGET, not through memory
+
+The ordering happens to fall out of the data edge, which is exactly how a
+missing memory edge stays invisible until something else needs it.
+
+NOT FIXED, because it needs a wire decision. RegexSubst has TWO optional input
+slots, so appending memory makes position ambiguous -- a 2-input node could be
+[target, pattern], [target, replacement] or [target, memory]. It already
+carries `pattern_is_input` for this reason; doing memory properly means a
+second flag or always-present slots. Pinned as TODO in
+t/wire-global-state-call-carries-memory.t.
+
+Worth noting HOW it was found: the producer-side audit, with no corpus file
+pointing at it. That is the argument for running the audit rather than
+chasing files.
+
 ## The general rule, for new nodes
 
 If a node calls `set_memory`, it takes a memory input. The two are the same
