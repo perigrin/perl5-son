@@ -406,6 +406,56 @@ class SoN::Deparse 0.01 {
     }
 
     # A package variable's Perl spelling, from the fields the wire carries.
+    # THE LVALUE A DESTRUCTIVE s/// MODIFIES, or undef when nothing names one.
+    #
+    # A destructive s/// needs a variable, and the producer hands the node a
+    # VALUE -- either the Constant the variable was initialised from, or the
+    # previous RegexSubst in a chain. Two steps recover the name:
+    #
+    #   1. Walk the subject back through any RegexSubst chain to its ROOT.
+    #      Each link substituted into the same storage; only the first names a
+    #      value that some EntryWrite bound.
+    #   2. Find the EntryWrite whose written value IS that root, and take its
+    #      slot. `$w = "aXbY"` emits EntryWrite(EntryDef $w, Constant "aXbY"),
+    #      so the Constant identifies the variable unambiguously.
+    #
+    # A subject that already IS an EntryDef or PadAccess is its own lvalue and
+    # needs no lookup -- that is the `sub mangle { $main::g =~ s/a/b/g }` shape,
+    # where the producer never forwarded the binding.
+    #
+    # AMBIGUITY REFUSES. Two variables initialised from the same literal
+    # hash-cons to one Constant, so a single value can be named by several
+    # EntryWrites. Picking one would substitute into a variable the source did
+    # not name, which is exactly the miscompile the old refusal existed to
+    # prevent -- so more than one match is still a GAP.
+    method _subst_lvalue ($sub) {
+        my $root = $nodes->{ ($sub->{inputs} // [])->[0] // -1 };
+        return undef unless $root;
+
+        my %seen;
+        while (($root->{op} // '') eq 'RegexSubst') {
+            last if $seen{ $root->{id} // '' }++;
+            my $next = $nodes->{ ($root->{inputs} // [])->[0] // -1 };
+            last unless $next;
+            $root = $next;
+        }
+
+        return $self->_slot_name($root) if ($root->{op} // '') eq 'EntryDef';
+        return $self->_expr($root->{id})
+            if ($root->{op} // '') eq 'PadAccess';
+
+        my @slot;
+        for my $n (values $nodes->%*) {
+            next unless ($n->{op} // '') eq 'EntryWrite';
+            my @in = ($n->{inputs} // [])->@*;
+            next unless @in >= 2 && defined $in[1] && $in[1] == ($root->{id} // -1);
+            push @slot, $nodes->{ $in[0] };
+        }
+        return undef unless @slot == 1;
+        return undef unless ($slot[0]{op} // '') eq 'EntryDef';
+        return $self->_slot_name($slot[0]);
+    }
+
     method _slot_name ($n) {
         die "GAP: expected an EntryDef, got `$n->{op}`\n"
             unless $n->{op} eq 'EntryDef';
@@ -507,22 +557,33 @@ class SoN::Deparse 0.01 {
             # hands this a Constant. `"aaa" =~ s{a}{b}g` is a compile error
             # ("Can't modify constant item in substitution").
             #
-            # REFUSED rather than spelled around. Binding a temporary would
-            # emit a program that substitutes into a DIFFERENT variable from
-            # the one the source named, and whether the original is modified is
-            # the observable difference between s/// and s///r. The graph has
-            # lost the target here; that is a finding, not a rendering problem.
-            my $subj = $nodes->{ ($sub->{inputs} // [])->[0] // -1 };
+            # THE GRAPH HAS NOT LOST THE TARGET -- an earlier revision of this
+            # comment said it had. The producer resolves a package scalar's
+            # read to the SSA VALUE it was bound to, so the subject is a
+            # Constant or a previous RegexSubst. But the EntryWrite that bound
+            # it still names the slot, so the lvalue is recoverable by walking
+            # the subst chain to its root and finding what was written there.
+            #
+            # WITHOUT IT, A CHAIN IS UNSPELLABLE. SSA threads each destructive
+            # s/// to the one before, which is the right graph -- the second
+            # observes the first. Rendered literally that is
+            #
+            #     (($w =~ s{X}{}r) =~ s{Y}{})
+            #
+            # and perl refuses: "Can't modify substitution (s///) in
+            # substitution (s///)". A destructive s/// needs an lvalue, and
+            # only the variable is one. comp/redef.t is this shape twenty
+            # times over.
+            my $lv = $self->_subst_lvalue($sub);
             die "GAP: a counted s/// whose subject is a `"
-              . (($subj->{op} // '?')) . "` has no lvalue to modify -- the"
-              . " graph names a value, not the variable the source"
-              . " substituted into\n"
-                if $subj && $subj->{op} eq 'Constant';
+              . (($nodes->{ ($sub->{inputs} // [])->[0] // -1 }{op}) // '?')
+              . "` has no lvalue to modify -- the graph names a value, and no"
+              . " EntryWrite names the variable it was bound to\n"
+                unless defined $lv;
 
             # Counted, so NOT /r: the destructive form is what returns a count.
             $text = sprintf('(%s =~ s{%s}{%s}%s)',
-                $self->_expr(($sub->{inputs} // [])->[0]),
-                $f->{pattern}, $f->{replacement}, $flags);
+                $lv, $f->{pattern}, $f->{replacement}, $flags);
         }
         elsif ($op eq 'Subscript') {
             # AN ELEMENT READ, and its third input is the MEMORY it observes.

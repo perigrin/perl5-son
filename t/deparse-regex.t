@@ -72,4 +72,21 @@ subtest 'substitution' => sub {
     like $d->gap, qr/no lvalue to modify/, '... naming what is missing';
 };
 
+# A CHAIN OF COUNTED SUBSTITUTIONS NEEDS THE VARIABLE, not the previous
+# substitution's value. SSA threads each s/// to the one before it, which is
+# the right graph: the second substitution observes the first. But a
+# DESTRUCTIVE s/// needs an LVALUE, and `(... =~ s{}{}r) =~ s{}{}` is a
+# compile error -- "Can't modify substitution (s///) in substitution (s///)".
+#
+# comp/redef.t is this shape, twenty times over: every `ok N, $warn =~ s/.../`
+# substitutes into the same package scalar and reads the count.
+subtest 'a chain of counted substitutions' => sub {
+    round_trips(<<'SRC', 'two counted s/// on one variable');
+$main::w = "aXbY";
+my $a = ($main::w =~ s/X//) ? "1\n" : "0\n";
+my $b = ($main::w =~ s/Y//) ? "1\n" : "0\n";
+print $a, $b, "$main::w\n";
+SRC
+};
+
 done_testing;
