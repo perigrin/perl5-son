@@ -258,6 +258,39 @@ class SoN::FromOptree 0.01 {
     # shortcut checks both.
     our %MUTATED_LITERALS;
 
+    # _note_literal_mutation($target) -- record that an element store has
+    # mutated the aggregate $target indexes, so a later LIST-context read of
+    # that aggregate cannot take the flatten shortcut.
+    #
+    # THE SHORTCUT READS THE ARRAY AS FIRST CONSTRUCTED. It pushes the bound
+    # ArrayLiteral's ORIGINAL inputs, which is right until something writes to
+    # the array. push/shift/splice record that on the pad slot
+    # ($ctx->{mutated_aggregate}); the foreach write-back records the node.
+    # AN ELEMENT STORE DID NEITHER, so:
+    #
+    #     my @a=(0); $a[0]=5; print "@a"
+    #       perl : 5
+    #       graph: join($", 0)     -- the pre-store constant
+    #
+    # A silent wrong answer, found by the deparse oracle. It is not confined to
+    # `aelemfastlex_store`: every store shape lands on an Assign whose target
+    # is a Subscript, so keying on THAT covers `$a[$i]`, `$h{k}` and whatever
+    # spelling the optimizer picks -- rather than on the op, which is how this
+    # file has repeatedly fixed one form and left its siblings.
+    #
+    # KEYED ON THE NODE, like the foreach write-back and for the same reason:
+    # the literal is what the shortcut ultimately tests, and the container is
+    # already an input of the Subscript.
+    sub _note_literal_mutation ($target) {
+        return unless $target && $target->isa('SoN::IR::Node::Subscript');
+        my $container = ($target->inputs // [])->[0] or return;
+        return unless $container->can('operation');
+        return unless $container->operation =~ /\A(?:Array|Hash)Literal\z/;
+        $MUTATED_LITERALS{ $container->id } = 1 if $container->can('id');
+        return;
+    }
+
+
     our %ANON_CAPTURES;
 
     # Format bodies, keyed by the same deterministic name their `write` Call
@@ -4924,6 +4957,7 @@ class SoN::FromOptree 0.01 {
             # nothing a later read of $v consults.
             elsif ($target->isa('SoN::IR::Node::Subscript')
                 || $target->isa('SoN::IR::Node::PostfixDeref')) {
+                _note_literal_mutation($target);
                 my $node = $factory->make('Assign', inputs => [$target, $value]);
                 $node->set_control_in($sim->control);
                 $sim->set_control($node);

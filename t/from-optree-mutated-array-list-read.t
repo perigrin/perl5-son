@@ -63,6 +63,46 @@ subtest 'a list read after push sees the mutated array' => sub {
     ok $g, 'it translates';
 };
 
+# AN ELEMENT STORE MUTATES THE ARRAY TOO, and this path missed it. `push`,
+# `shift` and `splice` go through the builtin handler that notes the mutation;
+# `$a[0] = 5` is an Assign to a Subscript and did not, so the later list read
+# still flattened the ORIGINAL literal:
+#
+#     my @a=(0); $a[0]=5; print "@a"
+#       perl : 5
+#       graph: join($", 0)      -- the pre-store constant
+#
+# A SILENT WRONG ANSWER, not a refusal, and found by the deparse oracle rather
+# than by this file -- which had the right shape and only the wrong set of
+# mutations.
+subtest 'a list read after an element store sees the new value' => sub {
+    my ($want, $err, $g) = run_and_graph('my @a=(0); $a[0]=5; print "@a\n";');
+    is $want, "5\n", 'perl prints the stored value' or return;
+    unlike $err, qr/GAP:/, 'it is not refused' or diag $err;
+    ok $g, 'it translates' or return;
+
+    my %by = map { $_->{id} => $_ } $g->{nodes}->@*;
+
+    # THE READ MUST NOT BE THE LITERAL. Whatever node feeds `join`, it cannot
+    # be the pre-store constant -- that is the miscompile.
+    my ($join) = grep { ($_->{op} // '') eq 'Call'
+                     && (($_->{fields} // {})->{name} // '') eq 'join' }
+                 $g->{nodes}->@*;
+    ok $join, 'the interpolation is a join' or return;
+
+    my @args = (($join->{inputs} // [])->@*)[1 .. $#{$join->{inputs}}];
+    my ($lit) = grep { ($by{$_}{op} // '') eq 'Constant'
+                    && (($by{$_}{fields} // {})->{value} // '') eq '0' } @args;
+    ok !$lit, 'join does not read the pre-store constant';
+
+    my ($read) = grep {
+        ($_->{op} // '') eq 'PostfixDeref' && ($_->{inputs} // [])->@* >= 2
+    } $g->{nodes}->@*;
+    ok $read, 'the list read is a memory-threaded PostfixDeref' or return;
+    isnt +($by{ $read->{inputs}[1] }{op} // ''), 'MemStart',
+        '... threaded to the store, not to the pre-store memory';
+};
+
 # AN UNMUTATED ARRAY MUST NOT REGRESS. The flatten shortcut is correct when
 # nothing has written to the slot, and it is the common case.
 subtest 'an unmutated array still lowers' => sub {
