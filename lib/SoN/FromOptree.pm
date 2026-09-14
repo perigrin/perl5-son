@@ -1117,8 +1117,9 @@ class SoN::FromOptree 0.01 {
                 # BEFORE ANYTHING POPS. The pattern parts sit ABOVE the
                 # replacement on the stack, so any pop that runs first takes a
                 # pattern piece and calls it something else.
-                my $pattern = _subst_runtime_pattern($op, $sim)
-                    // ($op->precomp // '');
+                my ($rt_pat, $pat_node) =
+                    _subst_runtime_pattern($op, $sim, $factory);
+                my $pattern = $rt_pat // ($op->precomp // '');
 
                 # RESOLVED HERE because the /e path needs it: the match half is
                 # built before the replacement is walked, and takes the target
@@ -1267,8 +1268,13 @@ class SoN::FromOptree 0.01 {
                 # is a Value node and already carries inputs, so no new node
                 # kind is needed: a literal replacement keeps the string field
                 # and one input, a computed one adds the value beside it.
+                # INPUT ORDER IS [target, pattern?, replacement?] and the flag
+                # says whether the pattern slot is filled. Without it a
+                # computed pattern and an /e replacement are the same position.
                 my $node = $factory->make('RegexSubst',
-                    inputs      => [$target, ($code_repl // ())],
+                    inputs      => [$target, ($pat_node // ()),
+                                    ($code_repl // ())],
+                    pattern_is_input => (defined $pat_node ? 1 : 0),
                     pattern     => $pattern,
                     replacement => $replacement,
                     flags       => $flags,
@@ -8088,8 +8094,9 @@ class SoN::FromOptree 0.01 {
                 # a package target reads its GV off the stack, which would
                 # take a pattern piece. Same call, same reason, as the main
                 # walker: two declaration sites for one operator.
-                my $pattern = _subst_runtime_pattern($op, $sim)
-                    // ($op->precomp // '');
+                my ($rt_pat, $pat_node) =
+                    _subst_runtime_pattern($op, $sim, $factory);
+                my $pattern = $rt_pat // ($op->precomp // '');
 
                 # THE TARGET IS RESOLVED, NOT POPPED, and resolved BEFORE the
                 # replacement walk because the walk builds the match half that
@@ -8122,8 +8129,12 @@ class SoN::FromOptree 0.01 {
                     }
                 }
 
+                # Same input order and flag as the main walker: one operator,
+                # two declaration sites.
                 my $node = $factory->make('RegexSubst',
-                    inputs      => [$target, (defined $repl ? ($repl) : ())],
+                    inputs      => [$target, ($pat_node // ()),
+                                    (defined $repl ? ($repl) : ())],
+                    pattern_is_input => (defined $pat_node ? 1 : 0),
                     pattern     => $pattern,
                     replacement => $replacement,
                     flags       => _pmflags_to_str($op->pmflags),
@@ -9768,12 +9779,16 @@ class SoN::FromOptree 0.01 {
     # pattern the source wrote, and the node keeps its string `pattern` field
     # with no wire change.
     #
-    # A RUNTIME PART REFUSES. `s/$P b$/X/` has a padsv among the pieces, and
-    # RegexSubst has nowhere to put a computed pattern: `pattern` is a string
-    # field, and its one optional input is already the computed replacement, so
-    # a value there would be positionally indistinguishable from a /e result.
-    # Carrying it needs a wire field, which is a boundary decision rather than
-    # a producer one. Until then this is a GAP and not a wrong pattern.
+    # A RUNTIME PART BECOMES A VALUE. `s/$P b$/X/` has a padsv among the
+    # pieces, so the pattern is only known at runtime and rides on inputs the
+    # way Match's already does -- measured, `$s =~ /${P}b/` is
+    # Match(subject, Concat("a","b")). The parts fold with Concat, which is how
+    # this file already builds any interpolated string, and the node's
+    # `pattern_is_input` flag says to read input 1 as the pattern rather than
+    # as an /e replacement.
+    #
+    # base/lex.t:330 is the live case: `s/${s|||;\""}not //` builds its
+    # pattern from a nested substitution, a deref and a literal.
     #
     # THE DISCRIMINATOR IS A `regcomp` KID, NOT A STACK DEPTH. An empty
     # `precomp` alone does not mean parts are waiting: a stale mark from an
@@ -9788,23 +9803,36 @@ class SoN::FromOptree 0.01 {
     # its own. That is a property of THIS op rather than of whatever happens to
     # be on the stack, which is what the earlier version got wrong.
     #
-    # Returns the folded pattern, or undef when the op's own precomp stands.
-    sub _subst_runtime_pattern ($op, $sim) {
-        return undef if length($op->precomp // '');
-        return undef unless $op->flags & 4;   # OPf_KIDS
+    # Returns (pattern_string, pattern_node): a folded string when every part
+    # is a Constant, a value node when any part is computed, and an empty list
+    # when the op's own precomp stands.
+    sub _subst_runtime_pattern ($op, $sim, $factory) {
+        return if length($op->precomp // '');
+        return unless $op->flags & 4;   # OPf_KIDS
         my $has_regcomp = 0;
         for (my $k = $op->first; $$k; $k = $k->sibling) {
             $has_regcomp = 1, last if $k->name eq 'regcomp';
         }
-        return undef unless $has_regcomp;
-        return undef unless $sim->has_mark;
+        return unless $has_regcomp;
+        return unless $sim->has_mark;
         my $parts = $sim->pop_to_mark;
-        my @runtime = grep { !$_->isa('SoN::IR::Node::Constant') } $parts->@*;
-        die "GAP: an interpolated s/// pattern has "
-          . scalar(@runtime) . " runtime part(s) and RegexSubst carries its"
-          . " pattern as a string field, so there is nowhere to put them\n"
-            if @runtime;
-        return join '', map { $_->value // '' } $parts->@*;
+        return unless $parts->@*;
+
+        # ALL CONSTANT: fold to text and keep the string field, so every
+        # existing wire stays byte-identical.
+        return (join('', map { $_->value // '' } $parts->@*), undef)
+            unless grep { !$_->isa('SoN::IR::Node::Constant') } $parts->@*;
+
+        # COMPUTED: fold with Concat, exactly as the match side folds its
+        # parts, and hand the value back for input 1.
+        my $pat = shift $parts->@*;
+        for my $part ($parts->@*) {
+            $pat = $factory->make('Concat',
+                inputs => [ _coerce_to_str($factory, $pat),
+                            _coerce_to_str($factory, $part) ],
+                stamp  => SoN::IR::Stamp->new(type => 'Str'));
+        }
+        return ('', $pat);
     }
 
     sub _subst_target ($cv, $op, $sim, $factory) {

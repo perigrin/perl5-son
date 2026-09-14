@@ -89,4 +89,28 @@ print $a, $b, "$main::w\n";
 SRC
 };
 
+# A COMPUTED PATTERN MUST SURVIVE THE ROUND TRIP. The graph holds the pattern
+# as a VALUE, and the emitted program has to turn it back into a pattern --
+# interpolating it is what does that, since perl compiles the string.
+#
+# THE GROUP IS NOT DECORATION. A value like `a|z` binds past its own extent
+# without one: `s/$P b$/` would let the alternation swallow ` b$`, matching
+# something the source never wrote. Both cases below are checked because only
+# the alternation one can tell a correct grouping from a missing one.
+subtest 'a computed pattern round-trips' => sub {
+    round_trips(<<'SRC', 'a computed pattern');
+my $P = @ARGV ? $ARGV[0] : "a";
+my $s = "a b";
+$s =~ s/$P b$/X/;
+print "$s\n";
+SRC
+
+    round_trips(<<'SRC', 'an alternation keeps its extent');
+my $P = @ARGV ? $ARGV[0] : "a|z";
+my $s = "a bz";
+$s =~ s/$P b/X/;
+print "$s\n";
+SRC
+};
+
 done_testing;

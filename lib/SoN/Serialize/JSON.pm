@@ -210,6 +210,10 @@ sub _extract_fields ($node, $id_remap) {
             pattern     => $node->pattern,
             replacement => $node->replacement,
             flags       => $node->flags,
+            # Emitted only when true, so a literal-pattern node's wire is
+            # byte-identical to before. Same rule as Print's has_filehandle.
+            ($node->pattern_is_input
+                ? (pattern_is_input => JSON::PP::true) : ()),
         };
     }
     if ($op eq 'RegexCapture') {

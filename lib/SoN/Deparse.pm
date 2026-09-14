@@ -527,13 +527,30 @@ class SoN::Deparse 0.01 {
             # binds it. So it renders as a match-and-replace over a COPY, which
             # is what `s///r` means, and the binding is the caller's job.
             my $f = $n->{fields} // {};
-            my $pat = $f->{pattern};
-            die "GAP: a RegexSubst with no pattern is not yet rendered\n"
-                unless defined $pat;
             my $rep = $f->{replacement};
             die "GAP: a RegexSubst with no replacement is not yet rendered\n"
                 unless defined $rep;
             ( my $flags = $f->{flags} // '' ) =~ s/r//g;
+
+            # A COMPUTED PATTERN IS INPUT 1, and the node says so. Interpolating
+            # the value is what makes it a pattern again: perl compiles the
+            # string, which is exactly what the source `s/$P b$/X/` did.
+            #
+            # WRAPPED IN (?:...) because the value is a whole pattern and the
+            # text around it is not. Without the group `s/$P b$/` would let a
+            # value like `a|z` bind past its own extent -- the alternation
+            # would swallow ` b$`, which the source never wrote.
+            my $pat;
+            if ($f->{pattern_is_input}) {
+                die "GAP: a RegexSubst says its pattern is an input but has "
+                  . scalar(@in) . " inputs\n" unless @in >= 2;
+                $pat = sprintf('(?:${\ (%s) })', $self->_expr($in[1]));
+            }
+            else {
+                $pat = $f->{pattern};
+                die "GAP: a RegexSubst with no pattern is not yet rendered\n"
+                    unless defined $pat;
+            }
             $text = sprintf('(%s =~ s{%s}{%s}%sr)',
                 $self->_expr($in[0]), $pat, $rep, $flags);
         }
@@ -582,8 +599,19 @@ class SoN::Deparse 0.01 {
                 unless defined $lv;
 
             # Counted, so NOT /r: the destructive form is what returns a count.
+            # A COMPUTED PATTERN INTERPOLATES HERE TOO, wrapped the same way
+            # and for the same reason. Reading the string field blindly would
+            # emit an EMPTY pattern, which matches at every position -- a
+            # substitution the source never wrote.
+            my $cpat = $f->{pattern};
+            if ($f->{pattern_is_input}) {
+                my @sin = ($sub->{inputs} // [])->@*;
+                die "GAP: a counted s/// says its pattern is an input but has "
+                  . scalar(@sin) . " inputs\n" unless @sin >= 2;
+                $cpat = sprintf('(?:${\ (%s) })', $self->_expr($sin[1]));
+            }
             $text = sprintf('(%s =~ s{%s}{%s}%s)',
-                $lv, $f->{pattern}, $f->{replacement}, $flags);
+                $lv, $cpat, $f->{replacement}, $flags);
         }
         elsif ($op eq 'Subscript') {
             # AN ELEMENT READ, and its third input is the MEMORY it observes.

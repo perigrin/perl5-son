@@ -84,6 +84,50 @@ subtest 'constant parts fold back into the pattern' => sub {
     is +($sub->{replacement} // ''), 'X', 'and the replacement is the replacement';
 };
 
+# A COMPUTED PATTERN RIDES ON INPUTS, the way Match's already does -- measured,
+# `$s =~ /${P}b/` is Match(subject, Concat("a","b")) with no pattern field at
+# all. RegexSubst cannot simply follow suit, because its optional second input
+# is already the /e replacement, so a flag says which reading applies. Print
+# carries `has_filehandle` for exactly this reason and is the convention here.
+#
+# base/lex.t:330 is the live case: `s/${s|||;\""}not //` builds its pattern
+# from a nested substitution, a deref and a literal.
+# THE VARIABLE MUST NOT BE FOLDABLE. `my $P="a"` resolves to a Constant at
+# translation time, so `s/$P b$/X/` folds to the literal pattern `a b$` -- the
+# right answer, and no test of this path. A value the producer cannot know
+# (@ARGV) is what forces the computed form.
+subtest 'a computed pattern is carried, not dropped' => sub {
+    my ($n, $err) = wire('my $P=shift(@ARGV); my $s="a b";'
+                       . ' $s =~ s/$P b$/X/; print $s;',
+                         'computed_pat');
+    unlike $err, qr/GAP|INTERNAL/, 'it translates rather than refusing';
+    my ($sub) = grep { $_->{op} eq 'RegexSubst' } $n->@*;
+    ok defined $sub, 'a RegexSubst node exists' or return;
+
+    ok $sub->{pattern_is_input}, 'the node says its pattern is an input';
+    is +($sub->{pattern} // ''), '', 'and the string field is empty';
+    is +($sub->{replacement} // ''), 'X',
+        'while the replacement is still the replacement';
+
+    # The pattern input must be the FOLDED parts, not one fragment -- the
+    # defect this whole file exists for.
+    my %by_id = map { $_->{id} => $_ } $n->@*;
+    my $pat = $by_id{ ($sub->{inputs} // [])->[1] // -1 };
+    ok defined $pat, 'input 1 is the pattern' or return;
+    isnt $pat->{op}, 'Constant',
+        'and it is a computed value, not the last literal fragment';
+};
+
+# TWO COMPUTED PATTERNS DIFFERING ONLY IN THEIR VARIABLE MUST NOT HASH-CONS.
+subtest 'computed patterns stay distinguishable' => sub {
+    my ($n, $err) = wire(
+        'my $P=shift(@ARGV); my $Q=shift(@ARGV); my $s="abzb";'
+      . ' $s =~ s/${P}b$/1/; $s =~ s/${Q}b/2/; print $s;', 'two_computed');
+    unlike $err, qr/GAP|INTERNAL/, 'both translate';
+    my @sub = grep { $_->{op} eq 'RegexSubst' } $n->@*;
+    is scalar(@sub), 2, 'two distinct RegexSubst nodes';
+};
+
 # A LITERAL pattern rides on the op and must keep working -- it is the path
 # every non-interpolated s/// in the corpus takes.
 subtest 'a literal pattern still substitutes' => sub {
