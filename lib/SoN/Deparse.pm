@@ -50,6 +50,30 @@ class SoN::Deparse 0.01 {
     );
 
     field $nodes;      # id => node hash
+
+    # Effects on the control chain whose value some other node reads: id =>
+    # the variable the emitter binds them to. See _emit_control_chain.
+    field %bound;
+
+    # NODES THAT CARRY A TRAILING MEMORY EDGE, and the number of real operands
+    # that precede it. A node of this kind with MORE inputs than its operand
+    # count has a memory edge last; anything else does not, however much its
+    # last input looks like one.
+    #
+    # Taken from the producer's construction sites rather than guessed:
+    # FromOptree.pm builds Call with [args..., memory] at three sites
+    # (keys/values/each, push/unshift/splice, shift/pop), and the aggregate
+    # readers and writers each append one the same way.
+    our %MEM_MIN_INPUTS = (
+        Call         => 1,   # [arg, ..., memory]
+        EntryWrite   => 2,   # [slot, value, memory]
+        Assign       => 2,   # [target, value, memory]
+        Delete       => 2,   # [container, key, memory]
+        Subscript    => 2,   # [container, index, memory]
+        Count        => 1,   # [aggregate, memory]
+        PostfixDeref => 1,   # [container, memory]
+        EntryDef     => 0,   # [memory] -- ordering only
+    );
     field %rendered;   # id => Perl expression text
 
     # The reason the last render() refused, for a caller that wants to report it
@@ -83,6 +107,7 @@ class SoN::Deparse 0.01 {
 
         $nodes = { map { $_->{id} => $_ } ($graph->{nodes} // [])->@* };
         %rendered = ();
+        %bound    = ();
         my $body = eval { $self->_emit_control_chain($graph) };
         if (!defined $body) { $gap = $@ || 'render failed with no reason'; return undef }
         return $out . $body;
@@ -93,13 +118,19 @@ class SoN::Deparse 0.01 {
     method _emit_sub ($name, $graph) {
         my $save_nodes = $nodes;
         my %save_rendered = %rendered;
+        # NODE IDS ARE PER-SUB, so the bindings are too -- node 3 in one sub is
+        # a different node from node 3 in another. Carrying them over emitted
+        # `my shift(@_) = shift(@_)`, the caller's binding read as this sub's.
+        my %save_bound = %bound;
         $nodes = { map { $_->{id} => $_ } ($graph->{nodes} // [])->@* };
         %rendered = ();
+        %bound    = ();
 
         my $body = eval { $self->_emit_control_chain($graph) };
         my $err = $@;
         $nodes = $save_nodes;
         %rendered = %save_rendered;
+        %bound    = %save_bound;
         die $err unless defined $body;
 
         ( my $short = $name ) =~ s/^main:://;
@@ -128,6 +159,66 @@ class SoN::Deparse 0.01 {
 
         my ($start) = grep { $_->{op} eq 'Start' } values $nodes->%*;
         die "no Start node\n" unless $start;
+
+        # AN EFFECT IS RUN ONCE, AND ITS VALUE IS READ, NOT RE-RUN. A node on
+        # the control chain happens where the chain puts it; inlining it again
+        # at a use runs it a SECOND time. Measured on `sub foo { my $s = shift }`:
+        #
+        #     sub foo { shift(@_); return (shift(@_) + 1) }
+        #
+        # two shifts off a one-element @_, so the answer was 1 instead of 42.
+        # The `Return` case of this was already special-cased; the general one
+        # is any effect whose value another node reads.
+        #
+        # SSA HAS NO NAME FOR IT, so the emitter makes one: the effect is bound
+        # at its chain position and every read renders the variable. That is
+        # the same device _emit_loop uses for a Phi, and for the same reason --
+        # Perl needs a place to put a value that SSA keeps in an edge.
+        #
+        # ONLY WHEN SOMETHING READS IT. An effect nobody reads stays a bare
+        # statement, so the common case emits exactly as before.
+        my %reads;
+        for my $n (values $nodes->%*) {
+            # A CFG NODE NAMES CONTROL AS A DATA INPUT, not a value. Proj and
+            # Region take only predecessors; an If takes [predecessor,
+            # condition] and a Loop takes [predecessor] -- measured on
+            # base/if.t, `If(11) in=[9,10]` where 9 is the EntryWrite it
+            # follows. Counting input 0 bound that effect and then asked for
+            # an `EntryWrite` as an expression.
+            #
+            # _emit_if already reads inputs[1] for the condition, so the
+            # condition is still counted; only the control edge is skipped.
+            my $cfg = ($n->{op} // '');
+            if ($cfg =~ /\A(?:Proj|Region|Loop)\z/) { next }
+            if ($cfg eq 'If') {
+                my @cin = ($n->{inputs} // [])->@*;
+                $reads{ $cin[1] }++ if @cin > 1;
+                next;
+            }
+
+            # A MEMORY EDGE IN THE LAST POSITION IS NOT A READ. Counting one
+            # binds the effect it names, and something then tries to render
+            # that effect as a value -- measured, `EntryDef $main::"` carries
+            # inputs=[Assign] purely to order the read of `$"` against an
+            # element store, and counting it asked for `Assign` as an
+            # expression.
+            #
+            # ONLY THE NODES THE PRODUCER GIVES ONE. Asking "is the last input
+            # a memory node" of EVERY node is too broad: a Coerce over a
+            # `shift` has exactly that shape and its one input IS the value.
+            # These are the kinds that take a memory edge, from the producer.
+            my @in = ($n->{inputs} // [])->@*;
+            pop @in if @in > ($MEM_MIN_INPUTS{ $n->{op} // '' } // 99)
+                    && $self->_is_memory($in[-1]);
+
+            $reads{$_}++ for @in;
+        }
+        for my $id (keys %reads) {
+            my $n = $nodes->{$id} or next;
+            next unless defined $n->{control_in};
+            next if ($n->{op} // '') =~ /\A(?:Proj|Region|Loop|If|Start)\z/;
+            $bound{$id} = sprintf('$eff%d', $id);
+        }
 
         my $body = $self->_emit_from($start->{id}, \%next_of, undef);
 
@@ -207,7 +298,22 @@ class SoN::Deparse 0.01 {
                 next;
             }
 
-            $out .= $self->_emit_statement($n, $next_of);
+            # A BOUND EFFECT BINDS AT ITS CHAIN POSITION. `_emit_statement`
+            # would emit it bare, and the reads would then have nothing to
+            # name -- so the value is captured here, once, where it happens.
+            if (exists $bound{ $n->{id} }) {
+                # THE VARIABLE IS READ OUT FIRST. Passing `$bound{...}` to
+                # sprintf passes the hash element as an ALIAS, and
+                # _expr_uncached deletes and restores that very element -- so
+                # the alias resolved to the restored value and the binding
+                # emitted `my shift(@_) = shift(@_)`.
+                my $var  = $bound{ $n->{id} };
+                my $expr = $self->_expr_uncached($n->{id});
+                $out .= sprintf("my %s = %s;\n", $var, $expr);
+            }
+            else {
+                $out .= $self->_emit_statement($n, $next_of);
+            }
             $cur = $n->{id};
         }
         return $out;
@@ -601,7 +707,22 @@ class SoN::Deparse 0.01 {
     }
 
     # _expr($id) -- a value node as a Perl expression.
+    # Render a node as an expression, IGNORING its binding. Used exactly once
+    # per bound effect -- at the chain position where the binding is made --
+    # because `_expr` there would return the variable being defined.
+    method _expr_uncached ($id) {
+        my $save = delete $bound{$id};
+        my $text = eval { $self->_expr($id) };
+        my $err  = $@;
+        $bound{$id} = $save if defined $save;
+        die $err if $err;
+        return $text;
+    }
+
     method _expr ($id) {
+        # A BOUND EFFECT IS READ, NOT RE-RUN. It already happened at its place
+        # in the chain, and the variable holds what it produced.
+        return $bound{$id} if exists $bound{$id};
         return $rendered{$id} if exists $rendered{$id};
         my $n = $nodes->{$id} or die "GAP: dangling input $id\n";
         my $op = $n->{op};
@@ -821,6 +942,28 @@ class SoN::Deparse 0.01 {
                     join(', ', map { $self->_expr($_) } @in));
             }
         }
+        elsif ($op eq 'PostfixDeref') {
+            # AN AGGREGATE-WIDE READ THAT OBSERVES STORES. Inputs are
+            # [container, memory] and the sigil says which aggregate it is --
+            # measured on `push @a, 3; print "@a"`:
+            #
+            #     10 PostfixDeref in=[4, 7] sigil='@'    4 = ArrayLiteral @a
+            #
+            # The memory edge is what makes the read see the push; it orders
+            # the node and is never an operand.
+            #
+            # A NAMED container is just its variable: `@a` already means "the
+            # elements as they now are". An anonymous one is a REFERENCE, and
+            # the postfix deref is how the source spelled it.
+            die "GAP: a PostfixDeref with " . scalar(@in) . " inputs is not"
+              . " yet rendered\n" unless @in >= 1;
+            my $sigil = ($n->{fields} // {})->{sigil} // '@';
+            my $agg   = $nodes->{ $in[0] };
+            my $af    = ($agg->{fields} // {});
+            $text = ($agg->{op} // '') =~ /Literal\z/ && defined $af->{symbol}
+                ? sprintf('%s%s', $sigil, $af->{symbol})
+                : sprintf('%s{%s}', $sigil, $self->_expr($in[0]));
+        }
         elsif ($op eq 'ArgsSource') {
             # THE SUB'S ARGUMENT ARRAY. `my ($x,$y) = @_` binds from it, so it
             # renders as @_ and the emitted sub reads the same arguments.
@@ -916,6 +1059,24 @@ class SoN::Deparse 0.01 {
     # 8 method, and the wire discriminates them consistently -- a direct call
     # always carries `want` and never `class_name`, a method always carries
     # `class_name`, a builtin carries neither.
+    # Whether a node is a point in the memory chain rather than a value.
+    #
+    # THESE ARE THE NODES A MEMORY EDGE CAN NAME: the chain starts at MemStart
+    # and advances through every effect that stores -- a package write, an
+    # element assign, a delete, an aggregate-mutating builtin -- plus a Phi
+    # where two chains merge. A Call qualifies only when it is one of the
+    # mutators, which is exactly a Call that itself carries a memory edge.
+    method _is_memory ($id) {
+        my $n = $nodes->{$id} or return 0;
+        my $op = $n->{op} // '';
+        return 1 if $op =~ /\A(?:MemStart|EntryWrite|CellWrite|Delete)\z/;
+        return 1 if $op eq 'Assign';
+        return 1 if $op eq 'Phi' && $self->_is_memory(($n->{inputs} // [])->[0] // -1);
+        return 0 unless $op eq 'Call';
+        my @in = ($n->{inputs} // [])->@*;
+        return @in > 1 && $self->_is_memory($in[-1]) ? 1 : 0;
+    }
+
     method _call_expr ($n) {
         my $f    = $n->{fields} // {};
         my $kind = $f->{dispatch_kind} // '';
@@ -926,9 +1087,26 @@ class SoN::Deparse 0.01 {
 
         # A MEMORY INPUT IS AN ORDERING EDGE, NOT AN ARGUMENT. The builtins
         # that read or mutate a whole container carry one so they observe
-        # stores; rendering it would emit the MemStart as a second operand.
+        # stores; rendering it emits the memory node as an extra operand, and
+        # a MemStart has no spelling at all.
+        #
+        # THE DISCRIMINATOR IS STRUCTURAL, NOT A NAME LIST. This filtered on
+        # `keys|values|each`, and the producer appends memory at THREE sites
+        # covering more names than that:
+        #
+        #     FromOptree.pm:5981   keys values each
+        #     FromOptree.pm:6027   push unshift splice
+        #     FromOptree.pm:6060   shift pop
+        #
+        # so `shift` rendered its edge as a second argument and refused --
+        # measured on comp/package.t, `Call(shift, [ArgsSource, MemStart])`.
+        # A name list fails asymmetrically: it silently drops whichever name
+        # nobody thought of, and the next one added would fail the same way.
+        # What every site shares is the POSITION and the KIND -- a memory node
+        # appended last -- so that is what this asks.
         my @in = (($n->{inputs} // [])->@*);
-        @in = ($in[0]) if $name =~ /\A(?:keys|values|each)\z/ && @in;
+        pop @in if @in > ($MEM_MIN_INPUTS{Call} // 99)
+                && $self->_is_memory($in[-1]);
         my @args = map { $self->_expr($_) } @in;
 
         if ($kind eq 'direct') {
