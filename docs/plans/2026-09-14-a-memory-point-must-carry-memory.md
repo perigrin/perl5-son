@@ -144,3 +144,18 @@ variable from `@TEST`.
 
 Worth an hour with `-MO=Concise` on those four lines specifically. Not worth
 guessing at.
+
+---
+
+## Minor: 23 tests write temp files into t/
+
+Measured: 23 files under `t/` build a scratch program as
+`__FILE__ . ".tmp.$$.pl"` in the test directory itself, rather than in a
+`File::Temp` directory. They unlink on the normal path, so this is invisible
+until a run is interrupted -- after which `t/` holds files like
+`t/from-optree-entertry-in-branch.t.tmp.677663.pl` that `git status` reports as
+untracked.
+
+Not a correctness problem and not worth churning 23 files over on its own. If
+one of them is being edited for another reason, switching it to `File::Temp`
+(as the newer deparse tests already do) is the tidier shape.
