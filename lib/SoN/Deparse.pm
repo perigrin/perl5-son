@@ -295,6 +295,28 @@ class SoN::Deparse 0.01 {
                 next;
             }
 
+            # AN EVAL IS A JOIN WITH ONE CONTROL EDGE. `eval "..."` either
+            # yielded its value or caught and returned undef, so the VALUE
+            # forks while control does not -- measured on `my $v = eval "1+1"`:
+            #
+            #     4 Coerce  in=[3]   ci=0  Str->Code   the eval itself
+            #     5 Region  in=[4]                     one control input
+            #     6 Phi     in=[4,1] region=5          [value, undef]
+            #
+            # The producer's own words at the construction site: "the eval
+            # either yielded its value or caught and returned undef. Two arms
+            # merging is the same shape block eval builds."
+            #
+            # Discharged by placement like every other join: the effect is
+            # wrapped in `eval { }` and the Region needs no spelling, because
+            # the closing brace IS the merge. Emission resumes after it.
+            if ($n->{op} eq 'Region' && $self->_is_eval_join($n)) {
+                my $eff = $nodes->{ $n->{inputs}[0] };
+                $out .= $self->_emit_eval($eff);
+                $cur = $n->{id};
+                next;
+            }
+
             # A LOOP IS A DIAMOND THAT COMES BACK. Same discharge-by-placement
             # as `If`: two Projs, one for the body and one for the exit, and
             # emission resumes after the exit. The difference is the BACK EDGE,
@@ -428,6 +450,61 @@ class SoN::Deparse 0.01 {
     # it -- the source's `$i` is gone by the time a Phi exists, and inventing a
     # readable one risks colliding with a pad slot the program still uses.
     method _phi_var ($p) { sprintf('$phi%d', $p->{id}) }
+
+    # Whether a Region is an eval's join rather than a branch's.
+    #
+    # ONE CONTROL INPUT AND A Phi(value, undef). A branch join has one input
+    # per arm; this has one, because an eval's failure path produces no
+    # separate control -- only the value forks. The Phi over it is what says
+    # so, and requiring BOTH is what keeps this from claiming a Region that
+    # merely happens to have one predecessor.
+    method _is_eval_join ($n) {
+        my @in = ($n->{inputs} // [])->@*;
+        return 0 unless @in == 1;
+        my ($phi) = grep { ($_->{op} // '') eq 'Phi'
+                        && ((($_->{fields} // {})->{region} // -1) == $n->{id}) }
+                    values $nodes->%*;
+        return 0 unless $phi;
+        my @pin = ($phi->{inputs} // [])->@*;
+        return 0 unless @pin == 2 && defined $pin[0] && $pin[0] == $in[0];
+        my $undef = $nodes->{ $pin[1] } or return 0;
+        return 0 unless ($undef->{op} // '') eq 'Constant'
+            && ((($undef->{fields} // {})->{const_type} // '') eq 'undef');
+        return 1;
+    }
+
+    # The `eval { }` an eval join stands for, binding its value where the Phi
+    # is read. The Phi IS the eval's value -- `eval` already yields undef on
+    # failure -- so one variable serves both.
+    method _emit_eval ($eff) {
+        my ($phi) = grep { ($_->{op} // '') eq 'Phi'
+                        && (($_->{inputs} // [])->[0] // -1) == $eff->{id} }
+                    values $nodes->%*;
+
+        # THE EFFECT IS RENDERED INSIDE THE BLOCK, and its value is the
+        # block's. A string eval is a Coerce(Str->Code) whose operand is the
+        # source text, which is what `eval EXPR` takes; anything else pinned
+        # here is an ordinary effect that may die, and `eval { ... }` is the
+        # honest wrapper for it either way.
+        my $inner;
+        if (($eff->{op} // '') eq 'Coerce'
+                && ((($eff->{fields} // {})->{to_repr} // '') eq 'Code')) {
+            $inner = sprintf('eval(%s)',
+                             $self->_expr(($eff->{inputs} // [])->[0]));
+        }
+        else {
+            $inner = sprintf('eval { %s }', $self->_expr_uncached($eff->{id}));
+        }
+
+        return "$inner;\n" unless $phi;
+
+        # The Phi is bound, so every later read names the variable. Registering
+        # it here rather than in the %reads scan keeps that scan about VALUES;
+        # this binding exists because the eval was placed, not because someone
+        # read it.
+        $bound{ $phi->{id} } = sprintf('$eval%d', $phi->{id});
+        return sprintf("my %s = %s;\n", $bound{ $phi->{id} }, $inner);
+    }
 
     # _emit_if($n, $next_of) -> (source, join id)
     #
@@ -1034,6 +1111,13 @@ class SoN::Deparse 0.01 {
         elsif ($op eq 'Or')  { $text = $self->_binop('||', @in) }
         elsif ($op eq 'DefinedOr') { $text = $self->_binop('//', @in) }
         elsif ($op eq 'Xor') { $text = $self->_binop('xor', @in) }
+        elsif ($op eq 'Defined') {
+            # A unary definedness test. Parenthesised because `defined $x + 1`
+            # parses as `defined($x + 1)`, which is a different question.
+            die "GAP: a Defined with " . scalar(@in) . " inputs is not yet"
+              . " rendered\n" unless @in == 1;
+            $text = sprintf('defined(%s)', $self->_expr($in[0]));
+        }
         elsif ($op eq 'Not') {
             die "GAP: a Not with " . scalar(@in) . " inputs is not yet"
               . " rendered\n" unless @in == 1;
