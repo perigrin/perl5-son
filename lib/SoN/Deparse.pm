@@ -518,14 +518,56 @@ class SoN::Deparse 0.01 {
         my $cond = $self->_expr($n->{inputs}[1]);
 
         my @projs = ($next_of->{ $n->{id} } // [])->@*;
-        die "GAP: an If with " . scalar(@projs) . " Proj arms is not yet"
-          . " rendered\n" unless @projs == 2;
         die "GAP: an If arm that is not a Proj is not yet rendered\n"
             if grep { $_->{op} ne 'Proj' } @projs;
+        die "GAP: an If with " . scalar(@projs) . " Proj arms is not yet"
+          . " rendered\n" unless @projs == 1 || @projs == 2;
 
         my %arm = map { ($_->{fields}{index} // 0) => $_ } @projs;
         die "GAP: an If whose Projs are not indexed 0 and 1 is not yet"
-          . " rendered\n" unless exists $arm{0} && exists $arm{1};
+          . " rendered\n" if @projs == 2
+                          && !(exists $arm{0} && exists $arm{1});
+
+        # ONE PROJ MEANS THE OTHER ARM IS EMPTY. `&&` and `||` in a condition
+        # compile to NESTED Ifs on the same operand, and the inner one keeps
+        # only the arm that acts -- measured on
+        # `if (defined $a && $a > $b) { ... }`:
+        #
+        #      9 If    in=[0, 8]    8 = And(Defined, NumGt)
+        #     10 Proj  index=0      13 Proj index=1
+        #     14 If    in=[13, 8]   a SECOND If on the same And
+        #     15 Proj  index=1      and only THIS one
+        #
+        # If(14) has no index-0 Proj because nothing happens there; control
+        # falls straight through to the join. Requiring two Projs refused a
+        # shape that is complete.
+        #
+        # WHICH ARM GOES MISSING VARIES, so this cannot assume. Measured
+        # across the three files that refused: comp/our.t and comp/multiline.t
+        # keep index 1, base/translate.t keeps index 0. A fix keyed on one
+        # would have passed two files and failed the third.
+        if (@projs == 1) {
+            my ($idx)  = keys %arm;
+            my $present = $arm{$idx};
+            my $join    = $self->_lone_arm_join($present, $next_of);
+            my $body    = $self->_emit_from($present->{id}, $next_of, $join);
+
+            # THE EMPTY ARM IS NOT AN `else {}`. It is the absence of one, and
+            # the CONDITION must be negated when the arm that acts is the
+            # FALSE one -- emitting `if (c) {body}` for an index-1 Proj would
+            # run the body exactly when perl does not.
+            # THE EMPTY ARM STILL CONTRIBUTES A PHI INPUT, so the
+            # declaration seeds the variable with it and the present arm
+            # overwrites -- the empty arm has no block to assign in.
+            my ($decl, %assign) = $self->_join_phis($join, { $idx => $present },
+                                                    $idx);
+            $body .= $assign{$idx} // '';
+
+            my $text = $idx == 0
+                ? sprintf("if (%s) {\n%s}\n", $cond, _indent($body))
+                : sprintf("if (!(%s)) {\n%s}\n", $cond, _indent($body));
+            return ($decl . $text, $join);
+        }
 
         # WHERE THE ARMS CONVERGE. A Region's inputs are the arms' last control
         # nodes, so it is the join. Find it by looking for the Region that both
@@ -535,11 +577,94 @@ class SoN::Deparse 0.01 {
         my $t = $self->_emit_from($arm{0}{id}, $next_of, $join);
         my $f = $self->_emit_from($arm{1}{id}, $next_of, $join);
 
+        # A VALUE PHI AT THE JOIN IS A VARIABLE EACH ARM ASSIGNS. `if (c) {
+        # return 1 } ... return 0` merges two values at the Region, and SSA
+        # has no name for the result -- so the emitter declares one before the
+        # branch and each arm writes its own input.
+        #
+        # WHICH INPUT BELONGS TO WHICH ARM IS ON THE NODE. The Phi carries
+        # `predecessors`, the Proj ids in the same order as its inputs --
+        # measured, `Phi(18) in=[1,2] predecessors=[10,15]`. Pairing by
+        # position against %arm would be a guess; this is the graph saying so.
+        my ($decl, %assign) = $self->_join_phis($join, \%arm);
+        $t .= $assign{0} // '';
+        $f .= $assign{1} // '';
+
         my $text = sprintf("if (%s) {\n%s}\n", $cond, _indent($t));
         $text = sprintf("if (%s) {\n%s} else {\n%s}\n",
             $cond, _indent($t), _indent($f)) if length $f;
 
-        return ($text, $join);
+        return ($decl . $text, $join);
+    }
+
+    # The join a lone arm falls through to: the first Region it reaches that
+    # ALSO names the If's own predecessor, because the empty arm's control is
+    # the If's control unchanged.
+    #
+    # _join_region cannot be used -- it needs two arms to intersect. Here the
+    # empty arm contributes no nodes at all, so the join is identified by the
+    # arm that does exist reaching a Region.
+    method _lone_arm_join ($present, $next_of) {
+        for my $id ($self->_control_reachable($present->{id}, $next_of)) {
+            my $n = $nodes->{$id} or next;
+            return $id if ($n->{op} // '') eq 'Region';
+        }
+        return undef;
+    }
+
+    # _join_phis($join, \%arm, $lone_idx) -> ($declaration, %per_arm_assignment)
+    #
+    # The VALUE Phis merging at $join, as a variable each arm assigns. A Phi's
+    # `predecessors` field lists the Proj ids in the same order as its inputs,
+    # so each input is matched to its arm by the graph rather than by position
+    # -- measured, `Phi(18) in=[1,2] predecessors=[10,15]`.
+    #
+    # MEMORY PHIS ARE SKIPPED. They merge chains, not values, and are
+    # discharged by placement like the Region itself.
+    #
+    # WITH A LONE ARM the absent one has no block to assign in, so the
+    # declaration is seeded with ITS input and the present arm overwrites. The
+    # declaration must come BEFORE the `if`, because a `my` inside the block
+    # goes out of scope exactly where the join needs it.
+    method _join_phis ($join, $arm, $lone_idx = undef) {
+        return ('') unless defined $join;
+
+        my @phis = sort { $a->{id} <=> $b->{id} }
+                   grep { ($_->{op} // '') eq 'Phi'
+                       && ((($_->{fields} // {})->{region} // -1) == $join)
+                       && !$self->_is_memory($_->{id}) }
+                   values $nodes->%*;
+        return ('') unless @phis;
+
+        my %proj_arm = map { $arm->{$_}{id} => $_ } keys $arm->%*;
+
+        my ($decl, %assign) = ('');
+        for my $p (@phis) {
+            my @in   = ($p->{inputs} // [])->@*;
+            my @pred = ((($p->{fields} // {})->{predecessors}) // [])->@*;
+            die "GAP: a join Phi with " . scalar(@in) . " inputs and "
+              . scalar(@pred) . " predecessors is not yet rendered\n"
+                unless @in == @pred && @in;
+
+            my $var = sprintf('$phi%d', $p->{id});
+
+            # Seed with whichever input has no arm to assign in: the lone
+            # case's absent arm, or the first input when every arm is present
+            # (overwritten either way, and a declared-but-unset variable would
+            # warn).
+            my ($seed) = grep { !exists $proj_arm{ $pred[$_] } } 0 .. $#in;
+            $seed //= 0;
+            $decl .= sprintf("my %s = %s;\n", $var, $self->_expr($in[$seed]));
+
+            for my $i (0 .. $#in) {
+                my $a = $proj_arm{ $pred[$i] };
+                next unless defined $a;
+                $assign{$a} .= sprintf("%s = %s;\n", $var,
+                                       $self->_expr($in[$i]));
+            }
+            $bound{ $p->{id} } = $var;
+        }
+        return ($decl, %assign);
     }
 
     # The Region both arms converge on, or undef when they do not rejoin (each
