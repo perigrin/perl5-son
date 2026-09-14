@@ -194,11 +194,124 @@ class SoN::Deparse 0.01 {
                 next;
             }
 
+            # A LOOP IS A DIAMOND THAT COMES BACK. Same discharge-by-placement
+            # as `If`: two Projs, one for the body and one for the exit, and
+            # emission resumes after the exit. The difference is the BACK EDGE,
+            # which is what the loop-carried Phis express.
+            if ($n->{op} eq 'Loop') {
+                my ($text, $after) = $self->_emit_loop($n, $next_of);
+                $out .= $text;
+                last unless defined $after;
+                last if defined $stop && $after == $stop;
+                $cur = $after;
+                next;
+            }
+
             $out .= $self->_emit_statement($n, $next_of);
             $cur = $n->{id};
         }
         return $out;
     }
+
+    # _emit_loop($n, $next_of) -> (source, id to resume from)
+    #
+    # A LOOP'S PIECES ARE ALL IN THE GRAPH. Measured on `while ($i < 3) {...}`:
+    #
+    #     3 Loop    in=[0]     ci=0
+    #     4 Proj    in=[3]     index=1      the EXIT
+    #    12 Proj    in=[3]     index=0      the BODY
+    #     9 Phi     in=[8,18]  region=3     [on entry, at the bottom]
+    #    11 NumLt   in=[9,10]  ci=3         the condition, pinned on the Loop
+    #
+    # so the condition is whatever the Loop controls, the body is Proj 0's
+    # chain, and the exit is Proj 1's.
+    #
+    # A PHI BECOMES A VARIABLE, which is the whole reason a loop needs more
+    # than `If` does. In a diamond both arms' values can be inlined at the
+    # join; across a back edge they cannot, because the value at the top of an
+    # iteration is the value the PREVIOUS one left. The Phi's first input is
+    # its value on entry -- emitted before the loop -- and its second is the
+    # value at the bottom, assigned at the end of the body.
+    #
+    # THE PHIS ARE ASSIGNED TOGETHER, AT THE BOTTOM, and that is not a style
+    # choice. Measured on two carried values:
+    #
+    #     14 Phi  in=[3,19]   $i     19 = Add(14, 1)
+    #      5 Phi  in=[3,23]   $sum   23 = Add(5, 14)    reads $i's PHI
+    #
+    # `$sum`'s next value reads `$i`'s phi, not `$i`'s next value. Updating $i
+    # first would feed the already-incremented value into $sum -- an
+    # off-by-one that still prints a plausible number. Computing every next
+    # value into temporaries before assigning any of them is what preserves the
+    # simultaneity SSA means by a Phi.
+    #
+    # A PHI OUTLIVES THE LOOP. Measured, `print "final $sum"` after the loop
+    # reads the Phi node itself, so the variable is declared BEFORE the loop
+    # rather than inside it -- a `my` in the body would go out of scope exactly
+    # where the graph still needs it.
+    method _emit_loop ($n, $next_of) {
+        my @projs = ($next_of->{ $n->{id} } // [])->@*;
+        @projs = grep { $_->{op} eq 'Proj' } @projs;
+        die "GAP: a Loop with " . scalar(@projs) . " Proj arms is not yet"
+          . " rendered\n" unless @projs == 2;
+
+        my %arm = map { ($_->{fields}{index} // 0) => $_ } @projs;
+        die "GAP: a Loop whose Projs are not indexed 0 and 1 is not yet"
+          . " rendered\n" unless exists $arm{0} && exists $arm{1};
+
+        # THE CONDITION IS WHAT THE LOOP CONTROLS. It is pinned on the Loop
+        # rather than reached through a Proj, so it is found by control_in --
+        # and it is the only such node, because the body hangs off Proj 0.
+        my @cond = grep { ($_->{control_in} // -1) == $n->{id}
+                       && $_->{op} ne 'Proj' } values $nodes->%*;
+        die "GAP: a Loop with " . scalar(@cond) . " condition nodes is not yet"
+          . " rendered\n" unless @cond == 1;
+
+        my @phis = sort { $a->{id} <=> $b->{id} }
+                   grep { ($_->{op} // '') eq 'Phi'
+                       && (($_->{fields}{region} // -1) == $n->{id}) }
+                   values $nodes->%*;
+        for my $p (@phis) {
+            die "GAP: a loop Phi with " . scalar(($p->{inputs} // [])->@*)
+              . " inputs is not yet rendered\n"
+                unless ($p->{inputs} // [])->@* == 2;
+        }
+
+        my $init = '';
+        $init .= sprintf("my %s = %s;\n", $self->_phi_var($_),
+                         $self->_expr($_->{inputs}[0])) for @phis;
+
+        my $body = $self->_emit_from($arm{0}{id}, $next_of, undef);
+
+        # Next values into temporaries first, then assign: see above.
+        my $step = '';
+        if (@phis) {
+            $step .= sprintf("my %s_next = %s;\n", $self->_phi_var($_),
+                             $self->_expr($_->{inputs}[1])) for @phis;
+            $step .= sprintf("%s = %s_next;\n", $self->_phi_var($_),
+                             $self->_phi_var($_)) for @phis;
+        }
+
+        my $text = $init . sprintf("while (%s) {\n%s}\n",
+            $self->_expr($cond[0]{id}), _indent($body . $step));
+
+        # RESUME AT THE EXIT'S REGION, not at the Proj. `If` resumes at the
+        # Region that joins its arms and never emits it; a loop's exit Proj
+        # feeds a Region of its own, and returning the Proj would leave that
+        # Region to be reached as a STATEMENT, which has no spelling. A
+        # one-input Region here is the loop's exit join.
+        my $after = $arm{1}{id};
+        my ($exit_region) = grep { ($_->{op} // '') eq 'Region' }
+                            (($next_of->{ $arm{1}{id} } // [])->@*);
+        $after = $exit_region->{id} if $exit_region;
+
+        return ($text, $after);
+    }
+
+    # A loop Phi's variable. Named from the node id because SSA has no name for
+    # it -- the source's `$i` is gone by the time a Phi exists, and inventing a
+    # readable one risks colliding with a pad slot the program still uses.
+    method _phi_var ($p) { sprintf('$phi%d', $p->{id}) }
 
     # _emit_if($n, $next_of) -> (source, join id)
     #
@@ -772,6 +885,23 @@ class SoN::Deparse 0.01 {
             die "GAP: a Not with " . scalar(@in) . " inputs is not yet"
               . " rendered\n" unless @in == 1;
             $text = sprintf('(!%s)', $self->_expr($in[0]));
+        }
+        elsif ($op eq 'Phi') {
+            # READING A LOOP PHI IS READING ITS VARIABLE. _emit_loop declares
+            # one per Phi before the loop and assigns it at the bottom of the
+            # body, so every read -- inside the body, in the condition, or
+            # after the loop -- is that variable.
+            #
+            # A Phi whose region is NOT a Loop is a diamond join, and those are
+            # inlined at the join rather than named. Reaching one here means a
+            # merge the emitter has not placed, so it refuses rather than
+            # naming a variable nothing declares.
+            my $region = $nodes->{ ($n->{fields} // {})->{region} // -1 };
+            die "GAP: a Phi whose region is a `"
+              . (($region->{op}) // 'missing') . "` rather than a Loop is not"
+              . " yet rendered\n"
+                unless $region && ($region->{op} // '') eq 'Loop';
+            $text = $self->_phi_var($n);
         }
         else {
             die "GAP: no rule for value node `$op`\n";
