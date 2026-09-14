@@ -1,7 +1,7 @@
 # `keys`/`values`/`each` do not observe stores
 
 **Date:** 2026-09-06
-**Status:** OPEN. Found while threading `delete` on the memory chain; NOT fixed
+**Status:** FIXED 2026-09-14. Found while threading `delete` on the memory chain; NOT fixed
 there, because it is a different op family and an unrelated change.
 
 ## The defect
@@ -63,3 +63,32 @@ former matches every precedent in this repo.
 Whether anything in the corpus currently depends on this. `comp/require.t`'s
 blocker was `delete`, not `keys`; this was found by reading the generated graph
 beside it rather than from a failing file.
+
+## Fixed (2026-09-14)
+
+`keys`, `values` and `each` now take `[container, memory]`, so a store to the
+container is observed. Measured:
+
+    my %h=(a=>1); $h{b}=2; print scalar(keys %h)
+      perl   : 2
+      before : Call(keys) in=[HashLiteral]        -- reports 1
+      after  : Call(keys) in=[HashLiteral, Assign] -- reads at the store
+
+`each` ALSO ADVANCES MEMORY, which is what separated it from the other two.
+It consumes an iterator stored on the hash -- measured, after one `each` a
+fresh loop over a 3-key hash yields only 2 more keys -- so two calls on one
+container are different values and must not hash-cons into one node. It is
+pinned on control and advances memory, exactly as push/unshift/splice do.
+
+VERIFIED BY EXECUTION, not only by reading the graph: the deparse oracle
+round-trips `my %h=(a=>1); $h{b}=2; print scalar(keys %h)` to a program that
+prints 2.
+
+Two emitter bugs surfaced on the way, both in SoN::Deparse rather than the
+producer:
+
+  - A MEMORY INPUT IS AN EDGE, NOT AN ARGUMENT. Rendering all inputs put the
+    MemStart in the argument list.
+  - THE STAMP CARRIES THE CONTEXT. A counted `keys` is stamped Int; emitting
+    the list form for it printed the keys themselves ("ba" where perl printed
+    2).

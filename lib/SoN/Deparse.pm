@@ -682,10 +682,16 @@ class SoN::Deparse 0.01 {
         my $f    = $n->{fields} // {};
         my $kind = $f->{dispatch_kind} // '';
         my $name = $f->{name};
-        my @args = map { $self->_expr($_) } (($n->{inputs} // [])->@*);
 
         die "GAP: a Call with no name is not yet rendered\n"
             unless defined $name && length $name;
+
+        # A MEMORY INPUT IS AN ORDERING EDGE, NOT AN ARGUMENT. The builtins
+        # that read or mutate a whole container carry one so they observe
+        # stores; rendering it would emit the MemStart as a second operand.
+        my @in = (($n->{inputs} // [])->@*);
+        @in = ($in[0]) if $name =~ /\A(?:keys|values|each)\z/ && @in;
+        my @args = map { $self->_expr($_) } @in;
 
         if ($kind eq 'direct') {
             # PARENTHESISED ALWAYS. `f $x` is a syntax error unless f was
@@ -707,12 +713,29 @@ class SoN::Deparse 0.01 {
             # (docs/plans/2026-09-06, keys/values/each do not observe stores)
             # is exactly about which container a read sees. A spelled-around
             # round-trip would agree with itself and hide it.
+            # AN AGGREGATE-WIDE READ TAKES ITS CONTAINER, AND ITS MEMORY IS
+            # NOT AN ARGUMENT. `keys` now carries [container, memory] so it can
+            # observe stores; the memory edge orders the read and must not be
+            # emitted as a second operand.
+            #
+            # A NAMED container renders as its variable. An ANONYMOUS one still
+            # cannot: `keys(("a",1))` is a compile error, and binding a
+            # temporary would name a DIFFERENT container from the one the graph
+            # reads -- which is the whole question these ops were wrong about.
             if ($name =~ /\A(?:keys|values|each)\z/) {
                 my $arg = $nodes->{ ($n->{inputs} // [])->[0] // -1 };
-                die "GAP: `$name` over a literal aggregate has no container to"
-                  . " name -- see docs/plans/2026-09-06-keys-values-each-do-"
-                  . "not-observe-stores.md\n"
-                    if $arg && ($arg->{op} // '') =~ /Literal\z/;
+                die "GAP: `$name` over an anonymous aggregate has no container"
+                  . " to name -- `keys((\"a\",1))` is not valid Perl\n"
+                    if $arg && ($arg->{op} // '') =~ /Literal\z/
+                    && !defined(($arg->{fields} // {})->{symbol});
+                # THE STAMP CARRIES THE CONTEXT. `keys %h` in scalar context
+                # is the COUNT and the producer stamps it Int; in list context
+                # it is the keys and the stamp is a List kind. Emitting the
+                # list form for a counted read printed the keys themselves --
+                # measured, "ba" where perl printed 2.
+                my $st = $n->{stamp} // '';
+                my $call = sprintf('%s(%s)', $name, $args[0] // '');
+                return $st eq 'Int' ? "scalar($call)" : $call;
             }
             return sprintf('%s(%s)', $name, join(', ', @args));
         }

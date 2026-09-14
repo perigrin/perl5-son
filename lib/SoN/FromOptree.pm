@@ -5940,6 +5940,50 @@ class SoN::FromOptree 0.01 {
                 # `splice(@a,1,1); scalar @a` -> 3 not 2). GAP loudly per
                 # GAP-not-miscompile until the length mutation is memory-modeled
                 # like shift/pop. zhi 019f5e42 (push/unshift), 019f5ed3 (splice).
+                # AN AGGREGATE-WIDE READ IS A MEMORY READ. `keys`, `values`
+                # and `each` take the whole container, so a store to it changes
+                # their answer -- and with one operand and no memory input they
+                # could not observe one. Measured:
+                #
+                #     my %h=(a=>1); $h{b}=2; print scalar(keys %h)
+                #       perl : 2
+                #       before: Call(keys) in=[HashLiteral]  -- reports 1
+                #
+                # Silent, and the file reported CLEAN because nothing refused.
+                # Count had the same defect one path over and the same fix: the
+                # container plus the memory it is read at.
+                #
+                # `each` IS ALSO A WRITE, which is what separates it from the
+                # other two. It advances an iterator stored ON THE HASH --
+                # measured, after one `each` a fresh loop over a 3-key hash
+                # yields only 2 more keys -- so it advances memory as well as
+                # reading it. Without that, two `each` calls on one hash have
+                # identical inputs and hash-cons into ONE node, which would make
+                # the second call return the first call's pair.
+                if ($node_type eq 'Call'
+                        && ($name eq 'keys' || $name eq 'values'
+                            || $name eq 'each')
+                        && @inputs && defined $sim->memory) {
+                    my $mutates = $name eq 'each';
+                    my $call = $factory->make('Call',
+                        inputs        => [@inputs, $sim->memory],
+                        dispatch_kind => 'builtin',
+                        name          => $name,
+                        # THE SAME STAMP THE GENERIC PATH WOULD GIVE. `keys`
+                        # in scalar context is a count, in list context a list,
+                        # and _context_builtin_stamp reads that off the op --
+                        # taking this branch must not change the answer.
+                        do { my $st = _context_builtin_stamp($op, $name);
+                             defined $st ? (stamp => $st) : () });
+                    if ($mutates && defined $sim->control) {
+                        $call->set_control_in($sim->control);
+                        $sim->set_control($call);
+                        $sim->set_memory($call);
+                    }
+                    $sim->push_node($call) if $push_count;
+                    return ($op->next, 'handled');
+                }
+
                 if ($node_type eq 'Call'
                         && ($name eq 'push' || $name eq 'unshift'
                             || $name eq 'splice')

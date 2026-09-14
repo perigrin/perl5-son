@@ -53,20 +53,20 @@ sub round_trips ($src, $name) {
 subtest 'a builtin call' => sub {
     round_trips('my @a = (3,1,2); print join(",", sort { $a <=> $b } @a), "\n";',
         'join + sort');
-    # `keys` OVER A LITERAL AGGREGATE IS REFUSED, and the refusal is the
-    # oracle earning its keep. The graph gives keys a HashLiteral -- a LIST --
-    # with no container to name, and `keys(("a",1))` is a compile error. The
-    # emitter could bind a temporary and make this pass, and that would be
-    # exactly wrong: the known defect here (docs/plans/2026-09-06) is about
-    # WHICH container a read observes, so a spelled-around round-trip would
-    # agree with itself and hide it.
-    my $d = SoN::Deparse->new;
-    my $data = graph_of('my %h = (a=>1,b=>2); print scalar(keys %h), "\n";');
-    ok $data, 'the keys program translates' or return;
-    my $out = $d->render($data);
-    is $out, undef, 'keys over a literal aggregate refuses rather than guessing';
-    like $d->gap, qr/no container to name/,
-        '... naming the reason, and pointing at the open defect';
+    # `keys` ROUND-TRIPS NOW. It refused while the graph gave it a HashLiteral
+    # with no name and no memory -- the defect docs/plans/2026-09-06 recorded.
+    # The producer now carries both (the aggregate's name, and the memory the
+    # read observes), so the emitter has a container to name and an ordering
+    # to respect.
+    #
+    # THE MEMORY INPUT IS AN EDGE, NOT AN ARGUMENT: emitting it would put a
+    # MemStart in the argument list. And the STAMP carries the context -- a
+    # counted `keys` is stamped Int, and emitting the list form for it printed
+    # the keys themselves ("ba" where perl printed 2).
+    round_trips('my %h = (a=>1,b=>2); print scalar(keys %h), "\n";',
+        'keys in scalar context');
+    round_trips('my %h = (a=>1); $h{b}=2; print scalar(keys %h), "\n";',
+        'keys observes a store');
     round_trips('my $s = "abc"; print length($s), "\n";', 'length');
 };
 
