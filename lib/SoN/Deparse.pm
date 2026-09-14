@@ -793,6 +793,35 @@ class SoN::Deparse 0.01 {
                 join(', ', map { $self->_expr($_) } (($n->{inputs} // [])->@*)));
         }
 
+        # AN Unwind IS A `die`. Measured across the three corpus files that
+        # refused -- twelve nodes, uniform: no fields, control_in the chain
+        # predecessor, inputs either one value node or nothing. The producer
+        # builds it at two sites and both comments say `die`.
+        #
+        # TWO SHAPES HID BEHIND THE ONE MESSAGE, and one spelling covers both
+        # because it is the node's own semantics:
+        #
+        #   arm terminator   control_in is an If's Proj, and the Unwind is
+        #                    consumed as a Region input (the join). 11 of 12.
+        #   body terminator  control_in is Start, no Region names it, and a
+        #                    Return follows. 1 of 12: `sub v5 { die }`.
+        #
+        # THE CHAIN WALKS PAST IT, which is harmless: control does not
+        # continue past a die, so whatever follows is unreachable and stays
+        # observationally equivalent. Measured, what follows is the undef
+        # Constant Return that _emit_statement already suppresses.
+        #
+        # ZERO INPUTS IS A BARE `die`, 3 of the 12. Indexing inputs[0]
+        # unconditionally would render `die undef`, a different message.
+        #
+        # NOT AN ARRAYREF, whatever Unwind.pm's comment says: on the wire all
+        # twelve carry a flat single value or nothing.
+        if ($op eq 'Unwind') {
+            my @in = ($n->{inputs} // [])->@*;
+            return "die;\n" unless @in;
+            return sprintf("die %s;\n", $self->_expr($in[0]));
+        }
+
         if ($op eq 'Print') {
             my ($fh, @args) = $self->_print_parts($n);
             return sprintf("print %sjoin('', %s);\n", $fh, join(', ', @args));
