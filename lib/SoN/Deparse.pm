@@ -120,6 +120,27 @@ class SoN::Deparse 0.01 {
 
     # A named sub. Its body is the same control-chain walk the program body
     # gets; only the wrapper differs.
+    # A SUB NAME AS A PERL IDENTIFIER.
+    #
+    # THE WIRE NAME IS NOT ONE. An anon sub's body is keyed by its DEFINITION
+    # SITE -- measured, `main::__PROGRAM__::__ANON__:1:2` -- because that is
+    # what makes two `sub { 7 }` at different lines two subs. Emitted verbatim
+    # it does not parse: "Invalid separator character '1' in attribute list".
+    #
+    # Mangled the same way at every site that spells a name -- the definition,
+    # a direct call, and a reference -- because a reference that does not match
+    # its definition is a call to a sub nothing defined.
+    #
+    # THE MANGLING MUST BE INJECTIVE, since two distinct bodies collapsing to
+    # one name would silently call the wrong one: every illegal character
+    # becomes its hex code, which no legal name can produce.
+    method _sub_ident ($name) {
+        ( my $short = $name ) =~ s/^main:://;
+        $short =~ s/::/__/g;
+        $short =~ s/([^A-Za-z0-9_])/sprintf('_%02x', ord $1)/ge;
+        return $short;
+    }
+
     method _emit_sub ($name, $graph) {
         my $save_nodes = $nodes;
         my %save_rendered = %rendered;
@@ -141,8 +162,7 @@ class SoN::Deparse 0.01 {
         %after_effect = %save_after;
         die $err unless defined $body;
 
-        ( my $short = $name ) =~ s/^main:://;
-        return sprintf("sub %s {\n%s}\n", $short, $body);
+        return sprintf("sub %s {\n%s}\n", $self->_sub_ident($name), $body);
     }
 
     # THE CONTROL CHAIN IS THE STATEMENT ORDER. Measured: `control_in` is a
@@ -1182,6 +1202,13 @@ class SoN::Deparse 0.01 {
             my $idx = $self->_expr($in[1]);
             my $kind = $agg->{op} // '';
 
+            # AN ANONYMOUS LITERAL WITH A REF STAMP IS A REFERENCE, so it
+            # takes the arrow -- `[10,20,30]->[1]`. Indexing it as a list
+            # slice, `([10,20,30])[1]`, yields the REFERENCE itself: the
+            # one-element list is the ref, and element 1 of it is empty.
+            my $agg_st = $agg->{stamp} // '';
+            $kind = '' if $agg_st eq 'ArrayRef' || $agg_st eq 'HashRef';
+
             if ($kind eq 'ArrayLiteral' || $kind eq 'HashLiteral') {
                 my $bare = ($agg->{fields} // {})->{symbol};
                 if (defined $bare) {
@@ -1221,7 +1248,12 @@ class SoN::Deparse 0.01 {
                         : sprintf('%s{%s}', $spelling, $idx);
                 }
                 else {
-                    $text = sprintf('%s->[%s]', $spelling, $idx);
+                    # THE ARROW'S BRACKET FOLLOWS THE REFERENT. A hash ref
+                    # indexed with `->[...]` dies "Not an ARRAY reference",
+                    # and the stamp is what says which it is.
+                    $text = $st eq 'HashRef'
+                        ? sprintf('%s->{%s}', $spelling, $idx)
+                        : sprintf('%s->[%s]', $spelling, $idx);
                 }
             }
         }
@@ -1364,6 +1396,16 @@ class SoN::Deparse 0.01 {
         elsif ($op eq 'Or')  { $text = $self->_binop('||', @in) }
         elsif ($op eq 'DefinedOr') { $text = $self->_binop('//', @in) }
         elsif ($op eq 'Xor') { $text = $self->_binop('xor', @in) }
+        elsif ($op eq 'AnonSub') {
+            # A REFERENCE TO ITS BODY. The body is already its own `methods`
+            # entry, emitted as a named sub, so `\&that` is the value --
+            # measured, an AnonSub and the Call that invokes it name the SAME
+            # body, which is why one mangling has to serve both.
+            my $nm = ($n->{fields} // {})->{name};
+            die "GAP: an AnonSub with no name is not yet rendered\n"
+                unless defined $nm && length $nm;
+            $text = sprintf('\\&%s', $self->_sub_ident($nm));
+        }
         elsif ($op eq 'RefType') {
             # `ref EXPR` -- a unary whose op_str is already `ref`.
             # Parenthesised because `ref $x . "y"` parses as `ref($x . "y")`,
@@ -1532,8 +1574,8 @@ class SoN::Deparse 0.01 {
             # PARENTHESISED ALWAYS. `f $x` is a syntax error unless f was
             # predeclared, and the emitted program defines its subs in whatever
             # order `sort` gives -- so never rely on the callee being visible.
-            ( my $short = $name ) =~ s/^main:://;
-            return sprintf('%s(%s)', $short, join(', ', @args));
+            return sprintf('%s(%s)',
+                $self->_sub_ident($name), join(', ', @args));
         }
 
         if ($kind eq 'builtin') {

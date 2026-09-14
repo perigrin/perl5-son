@@ -93,4 +93,31 @@ unlink $f;
 SRC
 };
 
+# AN ANONYMOUS REFERENCE IS INDEXED WITH AN ARROW, not as a list slice. The
+# stamp is what separates the two spellings of the same node kind:
+#
+#     my $r = [10,20,30]   ArrayLiteral stamp=ArrayRef   ->  [..]->[1]
+#     @foo[1..2]           ArrayLiteral stamp=Array      ->  a bare list
+#
+# `([10,20,30])[1]` is a list slice over a ONE-ELEMENT list whose element is
+# the reference, so element 1 is empty -- a program that runs and prints
+# nothing. Both spellings are asserted here because one node kind serves both
+# and a rule for either alone silently breaks the other.
+subtest 'a reference and a list are indexed differently' => sub {
+    round_trips(<<'SRC', 'an anonymous array ref');
+my $r = [10, 20, 30];
+print $r->[1], "\n";
+SRC
+
+    round_trips(<<'SRC', 'an anonymous hash ref');
+my $h = { k => 5 };
+print $h->{k}, "\n";
+SRC
+
+    round_trips(<<'SRC', 'a list is still a list');
+my @foo = (10, 20, 30);
+print "[@foo[0..1]]\n";
+SRC
+};
+
 done_testing;
