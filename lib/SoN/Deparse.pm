@@ -1521,10 +1521,23 @@ class SoN::Deparse 0.01 {
             # "how many". An ARRAY in scalar context IS its count, but a list
             # expression has to be counted explicitly, and `scalar(() = LIST)`
             # is the idiom that does it.
-            $text = ($agg->{op} // '') =~ /Literal\z/
-                 || $st eq 'Array' || $st eq 'Hash'
+            # AN ANONYMOUS LITERAL IS A LIST, NOT AN ARRAY, however it is
+            # stamped. `scalar((1,2,3))` is the COMMA OPERATOR in scalar
+            # context -- it yields the LAST ELEMENT, not the count. Measured:
+            #
+            #     scalar((1,2,3))   3    right by coincidence
+            #     scalar((5,2,9))   9    the last element
+            #     scalar(@a)        3    the count
+            #
+            # A `for (LIST)` loop bounded by that ran forever or stopped
+            # early, silently -- and the (1,2,3) case looked correct.
+            my $named = ($agg->{op} // '') =~ /Literal\z/
+                     && defined(($agg->{fields} // {})->{symbol});
+
+            $text = $named || (($agg->{op} // '') !~ /Literal\z/
+                               && ($st eq 'Array' || $st eq 'Hash'))
                 ? sprintf('scalar(%s)', $self->_expr($in[0]))
-                : $st eq 'List'
+                : $st eq 'List' || ($agg->{op} // '') =~ /Literal\z/
                 ? sprintf('scalar(() = %s)', $self->_expr($in[0]))
                 : sprintf('scalar(@{%s})', $self->_expr($in[0]));
         }
