@@ -701,6 +701,24 @@ class SoN::Deparse 0.01 {
     method _emit_loop ($n, $next_of) {
         my @projs = ($next_of->{ $n->{id} } // [])->@*;
         @projs = grep { $_->{op} eq 'Proj' } @projs;
+
+        # NO PROJS IS `while (1)`. There is no header condition to test, so
+        # the producer emits no arms and the EXIT LIVES INSIDE THE BODY as an
+        # If hanging off the Loop -- measured on
+        # `my $x=0; while (1) { $x = $x+1; last if $x == 3 }`:
+        #
+        #      4 Loop  in=[0]      ci=0        NO Projs
+        #      5 Phi   in=[3, 7]   region=4    the induction
+        #     14 If    in=[4, 13]  ci=4        the exit test
+        #     15 Proj  in=[14] index=0         LEAVES, to the continuation
+        #     19 Proj  in=[14] index=1         ITERATES
+        #
+        # So the If's index-0 arm is what FOLLOWS the loop, not an arm of a
+        # branch within it -- which is why this cannot be left to _emit_if:
+        # it would emit the continuation inside the loop body and run it every
+        # iteration.
+        return $self->_emit_endless_loop($n, $next_of) unless @projs;
+
         die "GAP: a Loop with " . scalar(@projs) . " Proj arms is not yet"
           . " rendered\n" unless @projs == 2;
 
@@ -843,6 +861,80 @@ class SoN::Deparse 0.01 {
         # read it.
         $bound{ $phi->{id} } = sprintf('$eval%d', $phi->{id});
         return sprintf("my %s = %s;\n", $bound{ $phi->{id} }, $inner);
+    }
+
+    # _emit_endless_loop($n, $next_of) -> (source, id to resume from)
+    #
+    # `while (1) { BODY; last if C; MORE }` -- a Loop with no arms, whose exit
+    # is an If inside the body. Emitted as an endless loop with an explicit
+    # `last`, which is what the source said and keeps the exit where the graph
+    # put it: statements after the `last` must not run on the pass that exits.
+    method _emit_endless_loop ($n, $next_of) {
+        # THE EXIT IS THE FIRST If ON THE CHAIN, not necessarily the node
+        # pinned directly on the Loop. A body that does work before testing
+        # puts that work first -- measured on base/while.t,
+        # `Loop(31)` is followed by `EntryWrite(32)` and only then the If.
+        my $exit;
+        my $cur = $n->{id};
+        for (1 .. 10_000) {
+            my $succ = $next_of->{$cur} // [];
+            last unless $succ->@*;
+            my ($nx) = grep { ($_->{op} // '') ne 'Proj' } $succ->@*;
+            $nx //= $succ->[0];
+            if (($nx->{op} // '') eq 'If') { $exit = $nx; last }
+            last if ($nx->{op} // '') =~ /\A(?:Loop|Region)\z/;
+            $cur = $nx->{id};
+        }
+        die "GAP: a Loop with no Proj arms and no exit If is not yet"
+          . " rendered\n" unless $exit;
+
+        my @projs = grep { ($_->{op} // '') eq 'Proj' }
+                    (($next_of->{ $exit->{id} } // [])->@*);
+        my %arm = map { ($_->{fields}{index} // 0) => $_ } @projs;
+        die "GAP: an endless loop whose exit If lacks both arms is not yet"
+          . " rendered\n" unless exists $arm{0} && exists $arm{1};
+
+        my @phis = sort { $a->{id} <=> $b->{id} }
+                   grep { ($_->{op} // '') eq 'Phi'
+                       && (($_->{fields}{region} // -1) == $n->{id})
+                       && !$self->_is_memory($_->{id}) }
+                   values $nodes->%*;
+
+        my $init = '';
+        $init .= sprintf("my %s = %s;\n", $self->_phi_var($_),
+                         $self->_expr($_->{inputs}[0])) for @phis;
+
+        # THE BODY IS WHAT PRECEDES THE EXIT TEST, and it is reached from the
+        # Loop itself rather than through a Proj -- the effects between the
+        # loop header and the If are chained on control_in.
+        my $body = $self->_emit_from($n->{id}, $next_of, $exit->{id});
+
+        # THE ITERATING ARM IS INDEX 1, and whatever it holds runs after the
+        # `last` on every pass that does not exit.
+        my $more = $self->_emit_from($arm{1}{id}, $next_of, undef);
+
+        my $step = '';
+        if (@phis) {
+            $step .= sprintf("my %s_next = %s;\n", $self->_phi_var($_),
+                             $self->_expr($_->{inputs}[1])) for @phis;
+            $step .= sprintf("%s = %s_next;\n", $self->_phi_var($_),
+                             $self->_phi_var($_)) for @phis;
+        }
+
+        my $text = $init . sprintf("while (1) {\n%s}\n",
+            _indent($body
+                  . sprintf("last if %s;\n", $self->_expr($exit->{inputs}[1]))
+                  . $more . $step));
+
+        # RESUME ON THE LEAVING ARM. Index 0 is the continuation after the
+        # loop, so emission carries on from there -- through its Region when
+        # it has one, as every other join does.
+        my $after = $arm{0}{id};
+        my ($region) = grep { ($_->{op} // '') eq 'Region' }
+                       (($next_of->{ $arm{0}{id} } // [])->@*);
+        $after = $region->{id} if $region;
+
+        return ($text, $after);
     }
 
     # _emit_if($n, $next_of) -> (source, join id)
