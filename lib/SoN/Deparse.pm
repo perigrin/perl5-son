@@ -1278,9 +1278,19 @@ class SoN::Deparse 0.01 {
             my $sigil = ($n->{fields} // {})->{sigil} // '@';
             my $agg   = $nodes->{ $in[0] };
             my $af    = ($agg->{fields} // {});
+
+            # AN AGGREGATE IS NOT A REFERENCE, and the stamp says which -- the
+            # same distinction an element read needs. An ANONYMOUS aggregate
+            # reaches here too: measured on `@foo[1..2]`, the index list is
+            # `PostfixDeref(ArrayLiteral stamp=Array, memory)` with no symbol,
+            # and `@{(1, 2)}` is not a dereference of anything -- it emitted an
+            # empty slice. The literal IS the list.
+            my $st = $agg->{stamp} // '';
             $text = ($agg->{op} // '') =~ /Literal\z/ && defined $af->{symbol}
-                ? sprintf('%s%s', $sigil, $af->{symbol})
-                : sprintf('%s{%s}', $sigil, $self->_expr($in[0]));
+                  ? sprintf('%s%s', $sigil, $af->{symbol})
+                  : ($st eq 'Array' || $st eq 'Hash')
+                  ? $self->_expr($in[0])
+                  : sprintf('%s{%s}', $sigil, $self->_expr($in[0]));
         }
         elsif ($op eq 'ArgsSource') {
             # THE SUB'S ARGUMENT ARRAY. `my ($x,$y) = @_` binds from it, so it
@@ -1342,6 +1352,27 @@ class SoN::Deparse 0.01 {
         elsif ($op eq 'Or')  { $text = $self->_binop('||', @in) }
         elsif ($op eq 'DefinedOr') { $text = $self->_binop('//', @in) }
         elsif ($op eq 'Xor') { $text = $self->_binop('xor', @in) }
+        elsif ($op eq 'Slice') {
+            # AN ARRAY SLICE, and its operands are [indices, container] --
+            # measured on comp/term.t's `"@foo[0..1]b"`:
+            #
+            #     Slice(158) in=[157:PostfixDeref, 141:ArrayLiteral @main::foo]
+            #
+            # the container SECOND, which is the opposite of Subscript's order
+            # and exactly what a positional guess gets backwards.
+            #
+            # THE SIGIL IS `@`, not the container's. `$a[0]` is one element;
+            # `@a[0,1]` is a list of them, and the slice is the list form
+            # however the container was spelled.
+            die "GAP: a Slice with " . scalar(@in) . " inputs is not yet"
+              . " rendered\n" unless @in == 2;
+            my $agg = $nodes->{ $in[1] };
+            my $af  = ($agg->{fields} // {});
+            die "GAP: a Slice over an anonymous `" . ($agg->{op} // '?')
+              . "` has no container to name\n"
+                unless defined $af->{symbol};
+            $text = sprintf('@%s[%s]', $af->{symbol}, $self->_expr($in[0]));
+        }
         elsif ($op eq 'Match') {
             # `=~` WITH A RUNTIME PATTERN. RegexMatch carries its pattern as a
             # string field; Match is the binop that takes a COMPUTED one --
@@ -1583,6 +1614,17 @@ class SoN::Deparse 0.01 {
         #
         # Only a plain identifier is emitted bare: anything else is not a
         # bareword and would parse as something other than a handle.
+        # A REFERENCE TO A CONSTANT. base/rs.t sets `$/ = \2`, the
+        # record-separator form that reads fixed-size records -- measured,
+        # `Constant const_type=ref value=2` read by an EntryWrite into $/.
+        #
+        # THE VALUE IS THE REFERENT, so the backslash is not decoration:
+        # dropping it assigns the NUMBER to $/, which sets the separator to
+        # that string and reads different records.
+        if ($t eq 'ref') {
+            return sprintf('\\%s', $v);
+        }
+
         if ($t eq 'glob') {
             die "GAP: a glob Constant whose name is `$v` is not a bareword\n"
                 unless $v =~ /\A[A-Za-z_]\w*\z/;
