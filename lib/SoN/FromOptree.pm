@@ -6251,6 +6251,61 @@ class SoN::FromOptree 0.01 {
                                    $elem_lvalue->inputs->[1], $sim->memory]);
                 }
 
+                # A STACKED DESTINATION IS THE STORE, AND THERE IS NO
+                # sassign TO FIND IT. `my $s = <$fh>` compiles with the
+                # assignment NULLED and the destination carried on the reading
+                # op itself. Measured on 5.42.0:
+                #
+                #     padsv[$s]    sRM*/LVINTRO   the destination, pushed FIRST
+                #     gvsv[*fh]    s
+                #     readline[t5] sKS/1          OPf_STACKED
+                #     null         /0x45          the sassign, off the exec chain
+                #
+                # readline pops only its handle, so the destination PadAccess
+                # was left on the stack and the read's value reached NOTHING:
+                # the graph held a bare `PadAccess $s` with no producer and a
+                # readline Call consumed by nobody. A silent DROP -- `print
+                # "[$s]"` emitted the empty string where perl prints the line.
+                #
+                # THE DISCRIMINATOR IS OPf_STACKED, NOT THE OP NAME. The
+                # sibling handle builtins do NOT take this shape -- measured,
+                # each gets a real store op the walker already handles:
+                #
+                #     my $e = eof($fh)    eof sK/1      then padsv_store vKS
+                #     my $n = tell($fh)   tell[t4] sK   then padsv_store vKS
+                #     my @l = <$fh>       readline lK   then aassign vKS
+                #     my $s = <$fh>       readline sKS  NO store op at all
+                #
+                # so a name list would both miss this and double-store those.
+                # Keyed on the flag, only the op that actually carries its
+                # destination claims one -- the same OPf_STACKED signal the
+                # compound-assign arms above key on, for the same reason.
+                #
+                # THE OPERANDS POP FIRST. The destination was pushed BEFORE
+                # them, so it sits underneath @inputs and can only be popped
+                # once @inputs is final -- which is here.
+                #
+                # THE DESTINATION IS NOT A KID OF THIS OP, so it cannot be read
+                # off the optree. Measured, `readline`'s only kid is the HANDLE:
+                #
+                #     null (the nulled sassign)   /0x45
+                #       padsv[$s]  0xb2           the destination -- a SIBLING
+                #       readline   0x46
+                #         padsv[$fh]              the handle -- the only kid
+                #
+                # so `$op->first` names the handle and keying on it matched
+                # nothing. The stack is the only place the destination appears,
+                # which is why this is a stack shape rather than a tree walk.
+                my $stacked_dest;
+                if (!$is_compound && !$field_compound && !defined $elem_lvalue
+                    && ($op->flags & 64)          # OPf_STACKED
+                    && $sim->stack_depth
+                    && $sim->peek_node->isa('SoN::IR::Node::PadAccess')
+                    && defined $sim->peek_node->targ
+                    && ($sim->peek_node->sigil // '') eq '$') {
+                    $stacked_dest = $sim->pop_node;
+                }
+
                 my $stamp = ( $node_type eq 'Call'
                               ? _context_builtin_stamp($op, $name) : undef )
                          // _result_stamp($node_type, \@inputs,
@@ -6442,6 +6497,23 @@ class SoN::FromOptree 0.01 {
                     $store->set_control_in($sim->control);
                     $sim->set_control($store);
                     $sim->set_memory($store);
+                }
+                elsif (defined $stacked_dest) {
+                    # An SSA rebind, and NOTHING MORE -- exactly what sassign
+                    # does for the same slot, because the storage is this
+                    # graph's own pad.
+                    #
+                    # NO VarDecl HERE, deliberately, even for `my`. The peer
+                    # path is sassign, not padsv_store: this walker suppresses
+                    # rpeep (B::SoN.pm BEGIN), so in production every scalar
+                    # `my $x = ...` arrives as sassign and sassign declares
+                    # nothing. Measured in main mode on
+                    # `open(R,"<x"); my $e = eof(R); my $f = "lit";` -- both
+                    # bindings reach the wire with ZERO VarDecl nodes. Emitting
+                    # one here would make the readline form the only scalar
+                    # declaration in the graph carrying a wrapper its siblings
+                    # do not, a difference with no fact behind it.
+                    $sim->define($stacked_dest->targ, $node);
                 }
 
                 # A void effectful call's result is discarded (OPf_WANT_VOID);
