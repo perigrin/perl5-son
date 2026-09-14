@@ -1254,10 +1254,22 @@ class SoN::Deparse 0.01 {
                 ? ($af->{sigil} // '@') . $af->{symbol} : undef;
             if (defined $vn) { $text = $vn }
             else {
-                # ANONYMOUS: a parenthesised list. The consumer (a subscript, a
-                # list assign) decides what it means.
-                $text = sprintf('(%s)',
-                    join(', ', map { $self->_expr($_) } @in));
+                # ANONYMOUS, AND THE STAMP SAYS WHICH KIND. `[1,2]` is a
+                # REFERENCE and `(1,2)` is a list, and the graph distinguishes
+                # them -- measured, `my $a=[1,2]` gives ArrayLiteral
+                # stamp=ArrayRef while an index list gives stamp=Array.
+                #
+                # Rendering a ref as a bare list gave `ref((1, 2))`, which
+                # perl rejects: "Too many arguments for reference-type
+                # operator". The brackets are not decoration; they are what
+                # makes it one value.
+                my $st = $n->{stamp} // '';
+                my $body = join(', ', map { $self->_expr($_) } @in);
+                $text = $st eq 'ArrayRef' ? "[$body]"
+                      : $st eq 'HashRef'  ? "{$body}"
+                      # A list. The consumer (a subscript, a list assign)
+                      # decides what it means.
+                      :                     "($body)";
             }
         }
         elsif ($op eq 'PostfixDeref') {
@@ -1352,6 +1364,34 @@ class SoN::Deparse 0.01 {
         elsif ($op eq 'Or')  { $text = $self->_binop('||', @in) }
         elsif ($op eq 'DefinedOr') { $text = $self->_binop('//', @in) }
         elsif ($op eq 'Xor') { $text = $self->_binop('xor', @in) }
+        elsif ($op eq 'RefType') {
+            # `ref EXPR` -- a unary whose op_str is already `ref`.
+            # Parenthesised because `ref $x . "y"` parses as `ref($x . "y")`,
+            # a different question.
+            die "GAP: a RefType with " . scalar(@in) . " inputs is not yet"
+              . " rendered\n" unless @in == 1;
+            $text = sprintf('ref(%s)', $self->_expr($in[0]));
+        }
+        elsif ($op eq 'RegexCapture') {
+            # ONE GROUP OF A MATCH. inputs[0] is the match node and the `n`
+            # field is the group number -- a rule that ignored `n` would
+            # return the same group for $1 and $2.
+            #
+            # THE MATCH IS NOT RE-RUN HERE. It is already in the chain (a
+            # capture is only meaningful after its match), and $1 reads
+            # perl's own capture state rather than a value the graph carries.
+            my $g = ($n->{fields} // {})->{n};
+            die "GAP: a RegexCapture with no group number is not yet"
+              . " rendered\n" unless defined $g;
+            $text = sprintf('$%d', $g);
+        }
+        elsif ($op eq 'BacktickExpr') {
+            # A SHELL COMMAND, capturing its output. qx{} rather than
+            # backticks so the command text needs no backtick escaping.
+            die "GAP: a BacktickExpr with " . scalar(@in) . " inputs is not"
+              . " yet rendered\n" unless @in == 1;
+            $text = sprintf('qx{${\ (%s) }}', $self->_expr($in[0]));
+        }
         elsif ($op eq 'Slice') {
             # AN ARRAY SLICE, and its operands are [indices, container] --
             # measured on comp/term.t's `"@foo[0..1]b"`:
