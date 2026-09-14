@@ -7,6 +7,7 @@ commit will not recognise it. This is what it means and what it guarantees.
 
     op:     "ListAppend"
     inputs: [ accumulator, contribution... ]
+    fields: { collector: "map" | "grep" }
     stamp:  Array
 
 - `inputs[0]` is the accumulator so far. It is **always a Phi** in every graph
@@ -74,9 +75,34 @@ last one is a `Boolean` predicate: append `inputs[1]` if `inputs[2]` is true,
 otherwise contribute nothing. B::SoN refuses (`GAP:`) if a grep block does not
 produce exactly one predicate value, so the three-input form is guaranteed.
 
-Distinguishing the two shapes from the node alone is not possible and is not
-intended to be — the predicate's `Boolean` stamp is the tell, and a consumer that
-wants to be explicit should key off the stamp of the last input.
+## `collector` — read this field, not the stamps
+
+**An earlier revision of this document said the two shapes cannot be
+distinguished from the node alone, and that "the predicate's `Boolean` stamp is
+the tell". That advice is wrong and a consumer following it miscompiles.**
+
+Measured, all four shapes:
+
+    map  { ($_,$_) }  [Phi Array, Subscript Int, Subscript Int]
+    map  { () }       [Phi Array]
+    map  { $_ > 1 }   [Phi Array, NumGt Boolean]
+    grep { $_ > 1 }   [Phi Array, Subscript Int, NumGt Boolean]
+
+`map { $_ > 1 }` has a Boolean **contribution that must be appended**, and
+grep's Boolean is a **predicate that must not be**. Same arity, same stamps,
+opposite meanings — so any reader keying on the stamp is wrong for one of them.
+The deparse oracle duly was: `grep { $_ > 1 } (1,2,3)` rendered as an
+unconditional append gave `6 [1 2 3]` where perl gives `2 [2 3]`.
+
+The `collector` field says which, and it is the only thing that does:
+
+    collector: "map"    inputs[1..] are ALL appended
+    collector: "grep"   exactly 3 inputs; append inputs[1] IF inputs[2]
+
+It defaults to `"map"`, so a graph emitted before this field existed reads
+correctly as a map — every such graph WAS a map or a grep, and only grep is
+newly distinguishable. A consumer that has not been updated keeps working on
+map and silently mis-handles grep, which is why this is worth updating for.
 
 ## Companion wire change
 
