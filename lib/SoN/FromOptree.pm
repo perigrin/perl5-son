@@ -7877,8 +7877,9 @@ class SoN::FromOptree 0.01 {
                 die "GAP: grep block did not produce a single predicate value\n"
                     unless @produced == 1;
                 $acc_next = $factory->make('ListAppend',
-                    inputs => [$acc_phi, $elem, $produced[0]],
-                    stamp  => SoN::IR::Stamp->new(type => 'Array'));
+                    inputs    => [$acc_phi, $elem, $produced[0]],
+                    collector => 'grep',
+                    stamp     => SoN::IR::Stamp->new(type => 'Array'));
             }
             else {
                 # THE CONTRIBUTION IS DECIDED, NOT INHERITED. The body runs in
@@ -7983,8 +7984,9 @@ class SoN::FromOptree 0.01 {
                       . " perl counts N) not yet lowered\n";
                 }
                 $acc_next = $factory->make('ListAppend',
-                    inputs => [$acc_phi, @produced],
-                    stamp  => SoN::IR::Stamp->new(type => 'Array'));
+                    inputs    => [$acc_phi, @produced],
+                    collector => 'map',
+                    stamp     => SoN::IR::Stamp->new(type => 'Array'));
             }
         }
 

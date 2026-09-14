@@ -216,6 +216,11 @@ sub _extract_fields ($node, $id_remap) {
                 ? (pattern_is_input => JSON::PP::true) : ()),
         };
     }
+    # A ListAppend's inputs do not say whether the last one is a contribution
+    # (map) or a predicate (grep), and the stamps cannot separate them.
+    if ($op eq 'ListAppend') {
+        return { collector => $node->collector };
+    }
     if ($op eq 'RegexCapture') {
         return { n => $node->n };
     }

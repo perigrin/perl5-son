@@ -719,7 +719,18 @@ class SoN::Deparse 0.01 {
     # A loop Phi's variable. Named from the node id because SSA has no name for
     # it -- the source's `$i` is gone by the time a Phi exists, and inventing a
     # readable one risks colliding with a pad slot the program still uses.
-    method _phi_var ($p) { sprintf('$phi%d', $p->{id}) }
+    # A LIST-VALUED PHI NEEDS AN ARRAY. A map's accumulator is a Phi over
+    # ListAppend -- measured, `Phi(7) stamp=Array` beside the index
+    # `Phi(21) stamp=Int` -- and binding a list to a SCALAR collapses it to
+    # the last element: `my $phi7 = ()` then `map { $_*2 } (1,2,3)` printed
+    # `6` instead of `2 4 6`.
+    method _phi_var ($p) {
+        my $st = $p->{stamp} // '';
+        return sprintf('@phi%d', $p->{id})
+            if $st eq 'Array' || $st eq 'List';
+        return sprintf('%%phi%d', $p->{id}) if $st eq 'Hash';
+        return sprintf('$phi%d', $p->{id});
+    }
 
     # Whether a Region is an eval's join rather than a branch's.
     #
@@ -1691,6 +1702,38 @@ class SoN::Deparse 0.01 {
             die "GAP: an AnonSub with no name is not yet rendered\n"
                 unless defined $nm && length $nm;
             $text = sprintf('\\&%s', $self->_sub_ident($nm));
+        }
+        elsif ($op eq 'ListAppend') {
+            # THE LOOP-CARRIED LIST OF A map/grep. inputs[0] is the list so
+            # far and inputs[1..] are this iteration's contribution --
+            # measured on `map { $_ * 2 } (1,2,3)`, `ListAppend(27) in=[7, 26]`
+            # where 7 is the accumulator Phi.
+            #
+            # THE CONTRIBUTION COUNT IS NOT ONE. `map { ($_,$_) }` contributes
+            # two per element and `map { () }` contributes none, which is why
+            # this node exists rather than the foreach lowering being reused.
+            die "GAP: a ListAppend with no accumulator is not yet rendered\n"
+                unless @in;
+            my $coll = ($n->{fields} // {})->{collector} // '';
+            die "GAP: a ListAppend that does not say which collector built it"
+              . " is not yet rendered\n" unless length $coll;
+
+            if ($coll eq 'grep') {
+                # [acc, ELEMENT, PREDICATE] -- the element is appended IF the
+                # predicate holds. Appending both gave `6 [1  2  3 ]` where
+                # perl gives `2 [2 3]`: every element kept, plus its predicate.
+                die "GAP: a grep ListAppend with " . scalar(@in) . " inputs is"
+                  . " not yet rendered\n" unless @in == 3;
+                $text = sprintf('(%s, (%s) ? (%s) : ())',
+                    $self->_expr($in[0]), $self->_expr($in[2]),
+                    $self->_expr($in[1]));
+            }
+            else {
+                # [acc, CONTRIBUTION...] -- every input after the first is
+                # appended, and NONE is `map { () }` rather than an error.
+                $text = sprintf('(%s)',
+                    join(', ', map { $self->_expr($_) } @in));
+            }
         }
         elsif ($op eq 'EnvRead') {
             # `$ENV{KEY}` -- the key is a compile-time literal on the node,

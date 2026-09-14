@@ -23,5 +23,23 @@ use SoN::IR::Value;
 # grep predicate is false or a map body yields the empty list, which is what
 # makes the length variable.
 class SoN::IR::Node::ListAppend :isa(SoN::IR::Value) {
+    # WHICH COLLECTOR BUILT THIS, because the inputs alone do not say and the
+    # two mean opposite things:
+    #
+    #     map   [acc, CONTRIBUTION...]        every input is appended
+    #     grep  [acc, ELEMENT, PREDICATE]     the element is appended IF the
+    #                                         predicate is true
+    #
+    # THE STAMPS CANNOT RECOVER IT. Measured, `map { $_ > 1 }` is
+    # [Phi Array, NumGt Boolean] -- a Boolean CONTRIBUTION that must be kept --
+    # while `grep { $_ > 1 }` is [Phi Array, Subscript Int, NumGt Boolean].
+    # Same kinds, opposite meanings, so a reader that infers is wrong for one.
+    field $collector :param :reader = 'map';
+
     method operation() { 'ListAppend' }
+
+    method content_hash() {
+        return join('|', 'ListAppend', "collector=$collector",
+            $self->_serialize_inputs());
+    }
 }
