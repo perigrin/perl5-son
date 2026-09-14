@@ -731,8 +731,55 @@ class SoN::Deparse 0.01 {
         # and it is the only such node, because the body hangs off Proj 0.
         my @cond = grep { ($_->{control_in} // -1) == $n->{id}
                        && $_->{op} ne 'Proj' } values $nodes->%*;
-        die "GAP: a Loop with " . scalar(@cond) . " condition nodes is not yet"
-          . " rendered\n" unless @cond == 1;
+        die "GAP: a Loop with no condition node is not yet rendered\n"
+            unless @cond;
+
+        # Effects pinned on the loop that are not the test: they run once per
+        # iteration, before it.
+        my @pre_cond;
+
+        # MORE THAN ONE PINNED NODE IS AN EFFECT PLUS A TEST, not two tests.
+        # Measured on `while (my $line = <R>) { ... }`:
+        #
+        #     Loop 22
+        #       cond: 30 Call    [9]   name=readline
+        #       cond: 31 Defined [30]
+        #
+        # The readline is an EFFECT that must run once per iteration -- it
+        # advances the handle -- and the Defined OVER it is the test. They are
+        # one expression, and rendering the test alone re-runs the effect
+        # wherever its value is read.
+        #
+        # THE TEST IS THE ONE NOTHING ELSE PINNED HERE CONSUMES. Ordering by
+        # id would be a guess; this is the graph saying which is the root of
+        # the expression.
+        if (@cond > 1) {
+            my %consumed;
+            for my $c (@cond) {
+                $consumed{$_} = 1 for (($c->{inputs} // [])->@*);
+            }
+            my @root = grep { !$consumed{ $_->{id} } } @cond;
+            die "GAP: a Loop with " . scalar(@cond) . " pinned nodes and "
+              . scalar(@root) . " of them unconsumed is not yet rendered\n"
+                unless @root == 1;
+
+            # THE EFFECT RUNS ONCE PER ITERATION, INSIDE THE LOOP. It is
+            # bound to a variable (an effect whose value is read always is),
+            # and that binding has to be emitted where the effect happens --
+            # at the TOP of the body, before the test reads it.
+            #
+            # Emitting `while (defined($eff30))` with the binding left to the
+            # chain walk gave a condition over a variable nothing assigned,
+            # and the loop never ran.
+            #
+            # A `do { } while` shape, testing at the BOTTOM, would run the
+            # body once before the first test -- which is a different program.
+            # So the effect is emitted at the top and the test is negated into
+            # a `last`, which runs it before every iteration including the
+            # first.
+            @pre_cond = grep { $_->{id} != $root[0]{id} } @cond;
+            @cond = @root;
+        }
 
         # A MEMORY PHI CARRIES THE CHAIN, NOT A VALUE. Measured on
         # comp/retainedlines.t, three nested loops each with one:
@@ -776,8 +823,30 @@ class SoN::Deparse 0.01 {
                              $self->_phi_var($_)) for @phis;
         }
 
-        my $text = $init . sprintf("while (%s) {\n%s}\n",
-            $self->_expr($cond[0]{id}), _indent($body . $step));
+        # A PER-ITERATION EFFECT TURNS THE HEADER TEST INTO A `last`. The
+        # effect must run before each test, including the first, so it cannot
+        # sit in a `while (COND)` header -- and a bottom-tested loop would run
+        # the body once before testing, a different program.
+        my $text;
+        if (@pre_cond) {
+            my $pre = '';
+            for my $e (@pre_cond) {
+                my $var = $bound{ $e->{id} };
+                $pre .= defined $var
+                    ? sprintf("my %s = %s;\n", $var,
+                              $self->_expr_uncached($e->{id}))
+                    : sprintf("%s;\n", $self->_expr_uncached($e->{id}));
+            }
+            $text = $init . sprintf("while (1) {\n%s}\n",
+                _indent($pre
+                      . sprintf("last unless %s;\n",
+                                $self->_expr($cond[0]{id}))
+                      . $body . $step));
+        }
+        else {
+            $text = $init . sprintf("while (%s) {\n%s}\n",
+                $self->_expr($cond[0]{id}), _indent($body . $step));
+        }
 
         # RESUME AT THE EXIT'S REGION, not at the Proj. `If` resumes at the
         # Region that joins its arms and never emits it; a loop's exit Proj
