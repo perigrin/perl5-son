@@ -69,6 +69,10 @@ class SoN::Deparse 0.01 {
     # them: a second `my` would shadow the captured lexical.
     field %cell_slots;
 
+    # Join-Phi variables needing a declaration at the top of the sub, because
+    # a join can outlive the branch that assigns into it.
+    field %hoisted;
+
     # NODES THAT CARRY A TRAILING MEMORY EDGE, and the number of real operands
     # that precede it. A node of this kind with MORE inputs than its operand
     # count has a memory edge last; anything else does not, however much its
@@ -132,6 +136,7 @@ class SoN::Deparse 0.01 {
         %rendered = ();
         %bound    = ();
         %after_effect = ();
+        %hoisted  = ();
         my $body = eval { $self->_emit_control_chain($graph) };
         if (!defined $body) { $gap = $@ || 'render failed with no reason'; return undef }
         return $out . $body;
@@ -270,12 +275,14 @@ class SoN::Deparse 0.01 {
         # `my shift(@_) = shift(@_)`, the caller's binding read as this sub's.
         my %save_bound = %bound;
         my %save_after = %after_effect;
+        my %save_hoist = %hoisted;
         my $save_sub = $current_sub;
         $current_sub = $name;
         $nodes = { map { $_->{id} => $_ } ($graph->{nodes} // [])->@* };
         %rendered = ();
         %bound    = ();
         %after_effect = ();
+        %hoisted  = ();
 
         my $body = eval { $self->_emit_control_chain($graph) };
         my $err = $@;
@@ -284,6 +291,7 @@ class SoN::Deparse 0.01 {
         %rendered = %save_rendered;
         %bound    = %save_bound;
         %after_effect = %save_after;
+        %hoisted  = %save_hoist;
         die $err unless defined $body;
 
         return sprintf("sub %s {\n%s}\n", $self->_sub_ident($name), $body);
@@ -470,7 +478,14 @@ class SoN::Deparse 0.01 {
             $body = $self->_emit_from($start->{id}, \%next_of, undef);
         }
 
-        return $prologue . $body;
+        # JOIN-PHI DECLARATIONS FIRST. They are discovered while walking, so
+        # they can only be emitted once the walk is done -- and they must come
+        # before it, because a join outlives the branch that assigns into it.
+        my $decls = join '',
+            map { "my $hoisted{$_};\n" }
+            sort keys %hoisted;
+
+        return $decls . $prologue . $body;
     }
 
     # Walk forward from $id, emitting a statement per control successor, until
@@ -516,6 +531,34 @@ class SoN::Deparse 0.01 {
             if ($n->{op} eq 'Region' && $self->_is_eval_join($n)) {
                 my $eff = $nodes->{ $n->{inputs}[0] };
                 $out .= $self->_emit_eval($eff);
+                $cur = $n->{id};
+                next;
+            }
+
+            # A JOIN THE CHAIN PASSES THROUGH. An early return inside a
+            # NESTED branch leaves a Region the walk reaches as a plain
+            # statement -- measured on
+            # `if ($g) { if ($g>1) { print "a"; return 1 } } return 0`:
+            #
+            #      7 If     Proj 8 (true) / Proj 14 (false)
+            #     11 If     Proj 12 (true) / Proj 15 (false)
+            #     16 Region in=[14, 15]      the two FALSE arms
+            #     17 Region in=[13, 16]      the function exit
+            #     18 Phi    predecessors=[12, 16] region=17
+            #
+            # The outer If's arms never converge at a Region BETWEEN them: the
+            # true arm runs into the inner If and only rejoins at 16, where
+            # the outer false arm also lands. So _emit_if resumes at 16 and
+            # the chain then meets 17, which nothing claimed.
+            #
+            # IT NEEDS NO SPELLING, only passing through: the arms were
+            # already emitted by the Ifs that own them, and any value merging
+            # here is a Phi those Ifs' _join_phis already bound. Emitting
+            # anything would duplicate an arm.
+            #
+            # A MEMORY Region IS ALSO NOTHING TO SAY -- chains merge, and the
+            # ordering is the placement.
+            if ($n->{op} eq 'Region') {
                 $cur = $n->{id};
                 next;
             }
@@ -870,13 +913,30 @@ class SoN::Deparse 0.01 {
 
             my $var = sprintf('$phi%d', $p->{id});
 
+            # DECLARED AT THE TOP OF THE SUB, NOT BEFORE THIS `if`. A join
+            # can OUTLIVE the branch that assigns into it -- measured on a
+            # nested early return, `Phi(18) region=17` is the FUNCTION EXIT's
+            # join, bound while emitting the inner If. Declaring it there put
+            # `my $phi18 = 0` inside the outer `if`, so the trailing
+            # `return $phi18` was out of scope and the sub returned undef.
+            #
+            # The ASSIGNMENTS stay in their arms; only the declaration moves.
+            $hoisted{$var} //= $var;
+
             # Seed with whichever input has no arm to assign in: the lone
             # case's absent arm, or the first input when every arm is present
             # (overwritten either way, and a declared-but-unset variable would
             # warn).
+            # THE SEED GOES WITH THE DECLARATION, not into this branch. It
+            # is the input from a predecessor with no block to assign in, so
+            # the path that reaches the join WITHOUT entering the branch is
+            # exactly the path it is for -- measured, `$phi18 = 0` emitted
+            # inside the outer `if` left f(0) returning undef, because f(0)
+            # never enters it.
             my ($seed) = grep { !exists $proj_arm{ $pred[$_] } } 0 .. $#in;
             $seed //= 0;
-            $decl .= sprintf("my %s = %s;\n", $var, $self->_expr($in[$seed]));
+            $hoisted{$var} = sprintf('%s = %s', $var,
+                                     $self->_expr($in[$seed]));
 
             for my $i (0 .. $#in) {
                 my $a = $proj_arm{ $pred[$i] };
