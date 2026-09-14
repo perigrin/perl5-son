@@ -1113,8 +1113,12 @@ class SoN::FromOptree 0.01 {
 
             # Handle subst - regex substitution op: s/pattern/replacement/flags
             if ($name eq 'subst' && $op->isa('B::PMOP')) {
-                my $pattern = $op->precomp // '';
                 my $flags   = _pmflags_to_str($op->pmflags);
+                # BEFORE ANYTHING POPS. The pattern parts sit ABOVE the
+                # replacement on the stack, so any pop that runs first takes a
+                # pattern piece and calls it something else.
+                my $pattern = _subst_runtime_pattern($op, $sim)
+                    // ($op->precomp // '');
 
                 # RESOLVED HERE because the /e path needs it: the match half is
                 # built before the replacement is walked, and takes the target
@@ -8080,6 +8084,13 @@ class SoN::FromOptree 0.01 {
             # The two forms differ only in where the replacement comes from: a
             # walked subtree for /e, a stack Constant for a literal.
             if ($name eq 'subst' && $op->isa('B::PMOP')) {
+                # BEFORE ANYTHING POPS, and before the target is resolved --
+                # a package target reads its GV off the stack, which would
+                # take a pattern piece. Same call, same reason, as the main
+                # walker: two declaration sites for one operator.
+                my $pattern = _subst_runtime_pattern($op, $sim)
+                    // ($op->precomp // '');
+
                 # THE TARGET IS RESOLVED, NOT POPPED, and resolved BEFORE the
                 # replacement walk because the walk builds the match half that
                 # the replacement's captures read -- and that match takes the
@@ -8095,7 +8106,7 @@ class SoN::FromOptree 0.01 {
                 # while it lowered at the top level.
                 my $repl = _walk_subst_replacement(
                     $cv, $op, $sim, $factory, $opmap, $loop_visited,
-                    $target, $op->precomp, _pmflags_to_str($op->pmflags));
+                    $target, $pattern, _pmflags_to_str($op->pmflags));
 
                 # A LITERAL REPLACEMENT IS A STACK CONSTANT, pushed by the
                 # const op before the subst. Popped ONLY when no subtree was
@@ -8113,7 +8124,7 @@ class SoN::FromOptree 0.01 {
 
                 my $node = $factory->make('RegexSubst',
                     inputs      => [$target, (defined $repl ? ($repl) : ())],
-                    pattern     => $op->precomp,
+                    pattern     => $pattern,
                     replacement => $replacement,
                     flags       => _pmflags_to_str($op->pmflags),
                     stamp       => SoN::IR::Stamp->new(type => 'Str'));
@@ -9718,6 +9729,82 @@ class SoN::FromOptree 0.01 {
         $sim->set_control($write);
         $sim->set_memory($write);
         return;
+    }
+
+    # AN INTERPOLATED s/// PATTERN IS MARK-DELIMITED ON THE STACK, exactly as
+    # an interpolated MATCH pattern is (dd9d5ab) -- and unlike an interpolated
+    # REPLACEMENT, whose parts hang off pmreplroot as a subtree. Same construct
+    # family, two different recoveries, and this is the third.
+    #
+    # Measured on `my $P="a"; my $s="a b"; $s =~ s/$P b$/X/`:
+    #
+    #     const[PV "X"]      the REPLACEMENT, pushed BEFORE the mark
+    #     pushmark
+    #     padsv[$P]          }
+    #     const[PV " b$"]    }  the pattern parts, mark-delimited
+    #     regcomp
+    #     subst
+    #
+    # so `$op->precomp` is EMPTY and the top of stack is a PATTERN piece. The
+    # handlers popped one Constant as the replacement, which took ` b$` and
+    # left the pattern empty -- a silent wrong answer, and the reason
+    # comp/redef.t emitted `s{}{[^\n]+\n}` for `s/$NEWPROTO \Q...\E[^\n]+\n//s`.
+    #
+    # THE PARTS ARE DRAINED HERE WHETHER OR NOT THEY CAN BE LOWERED. Leaving
+    # them on the stack would desync every later pop in the statement, so the
+    # recovery and the refusal are the same operation: take exactly the parts
+    # the mark delimits, then decide.
+    #
+    # ALL-CONSTANT PARTS FOLD TO THE PATTERN STRING. `precomp` is empty
+    # whenever the pattern went through regcomp, but that does NOT mean the
+    # pattern is unknown -- rpeep suppression is why the pieces arrive
+    # separate, and `\Q...\E` or an adjacent literal splits a pattern perl
+    # itself would have folded. Measured on the two corpus files this reaches:
+    #
+    #     base/lex.t     one Constant, ""
+    #     comp/parser.t  two Constants, "A" and "\{"
+    #
+    # Both are compile-time text, so concatenating them recovers exactly the
+    # pattern the source wrote, and the node keeps its string `pattern` field
+    # with no wire change.
+    #
+    # A RUNTIME PART REFUSES. `s/$P b$/X/` has a padsv among the pieces, and
+    # RegexSubst has nowhere to put a computed pattern: `pattern` is a string
+    # field, and its one optional input is already the computed replacement, so
+    # a value there would be positionally indistinguishable from a /e result.
+    # Carrying it needs a wire field, which is a boundary decision rather than
+    # a producer one. Until then this is a GAP and not a wrong pattern.
+    #
+    # THE DISCRIMINATOR IS A `regcomp` KID, NOT A STACK DEPTH. An empty
+    # `precomp` alone does not mean parts are waiting: a stale mark from an
+    # ENCLOSING construct satisfies `has_mark`, and keying on it drained 63
+    # unrelated values off the stack in base/lex.t (mark=0, the whole stack).
+    # Measured on the PMOP's kids:
+    #
+    #     s/a/X/       kids: const
+    #     s/$P b$/X/   kids: const regcomp
+    #
+    # Only the runtime form compiles a regcomp, and only it pushes a mark of
+    # its own. That is a property of THIS op rather than of whatever happens to
+    # be on the stack, which is what the earlier version got wrong.
+    #
+    # Returns the folded pattern, or undef when the op's own precomp stands.
+    sub _subst_runtime_pattern ($op, $sim) {
+        return undef if length($op->precomp // '');
+        return undef unless $op->flags & 4;   # OPf_KIDS
+        my $has_regcomp = 0;
+        for (my $k = $op->first; $$k; $k = $k->sibling) {
+            $has_regcomp = 1, last if $k->name eq 'regcomp';
+        }
+        return undef unless $has_regcomp;
+        return undef unless $sim->has_mark;
+        my $parts = $sim->pop_to_mark;
+        my @runtime = grep { !$_->isa('SoN::IR::Node::Constant') } $parts->@*;
+        die "GAP: an interpolated s/// pattern has "
+          . scalar(@runtime) . " runtime part(s) and RegexSubst carries its"
+          . " pattern as a string field, so there is nowhere to put them\n"
+            if @runtime;
+        return join '', map { $_->value // '' } $parts->@*;
     }
 
     sub _subst_target ($cv, $op, $sim, $factory) {
