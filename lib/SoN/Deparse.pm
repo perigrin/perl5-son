@@ -1703,6 +1703,38 @@ class SoN::Deparse 0.01 {
                 unless defined $nm && length $nm;
             $text = sprintf('\\&%s', $self->_sub_ident($nm));
         }
+        elsif ($op eq 'Assign') {
+            # AN ASSIGNMENT USED AS A VALUE. Measured on base/lex.t's
+            # `my ($p,$f,$l) = caller` reached as an operand:
+            #
+            #     14 Assign  in=[10,11,12,13]  stamp=List
+            #     15 Coerce  in=[14]           Unknown -> Str
+            #
+            # so the assignment's VALUE is read, not only its effect. A list
+            # assign in scalar context is the RHS ELEMENT COUNT -- not the
+            # last value and not the number of targets -- and writing it as
+            # the assignment lets perl decide that, rather than the emitter
+            # guessing a number that would still look plausible.
+            #
+            # PARENTHESISED, because `my $n = $a = $b, 1` binds the comma
+            # before the assignment.
+            my $t = 0;
+            $t++ while $t < @in
+                && ($nodes->{ $in[$t] }{op} // '')
+                     =~ /\A(?:PadAccess|EntryDef|Subscript|PostfixDeref)\z/;
+            die "GAP: an Assign value with no target slots is not yet"
+              . " rendered\n" unless $t && $t < @in;
+
+            my @lhs = map { $self->_expr($_) } @in[0 .. $t-1];
+            my @rhs = map { $self->_expr($_) } @in[$t .. $#in];
+
+            # THE TARGET LIST KEEPS ITS PARENS. `($a,$b) = LIST` is a list
+            # assign and `$a = LIST` is a scalar one -- they yield different
+            # values, so the shape of the left side is load-bearing.
+            $text = @lhs > 1
+                ? sprintf('((%s) = (%s))', join(', ', @lhs), join(', ', @rhs))
+                : sprintf('(%s = %s)', $lhs[0], join(', ', @rhs));
+        }
         elsif ($op eq 'ListAppend') {
             # THE LOOP-CARRIED LIST OF A map/grep. inputs[0] is the list so
             # far and inputs[1..] are this iteration's contribution --
