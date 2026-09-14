@@ -59,6 +59,16 @@ class SoN::Deparse 0.01 {
     # emit right after it]. See _emit_control_chain.
     field %after_effect;
 
+    # The whole `methods` map, and the name of the sub being emitted. A body
+    # does not name its own cells -- a CellParam indexes into the enclosing
+    # AnonSub's captures, which live in the CALLER's graph.
+    field $all_methods = {};
+    field $current_sub;
+
+    # Variables already declared as cells, so the chain does not re-declare
+    # them: a second `my` would shadow the captured lexical.
+    field %cell_slots;
+
     # NODES THAT CARRY A TRAILING MEMORY EDGE, and the number of real operands
     # that precede it. A node of this kind with MORE inputs than its operand
     # count has a memory edge last; anything else does not, however much its
@@ -77,6 +87,9 @@ class SoN::Deparse 0.01 {
         Count        => 1,   # [aggregate, memory]
         PostfixDeref => 1,   # [container, memory]
         EntryDef     => 0,   # [memory] -- ordering only
+        MakeCell     => 1,   # [init_value, memory]
+        CellRead     => 1,   # [cell, memory]
+        CellWrite    => 2,   # [cell, value, memory]
     );
     field %rendered;   # id => Perl expression text
 
@@ -101,7 +114,13 @@ class SoN::Deparse 0.01 {
         # EVERY SUB IS ITS OWN GRAPH on the wire, so a direct call names a
         # `methods` entry that must ALSO be emitted -- calling a sub the
         # emitted program never defines is a runtime death, not a wrong value.
-        my $out = '';
+        $all_methods = $methods;
+
+        # CELLS FIRST, before any sub. A named sub emitted above the program
+        # body can only close over a lexical already in scope, and the cell is
+        # exactly that shared lexical.
+        my $out = $self->_emit_cell_declarations;
+
         for my $name (sort keys $methods->%*) {
             next if $name eq 'main::__PROGRAM__';
             my $sub = eval { $self->_emit_sub($name, $methods->{$name}) };
@@ -134,6 +153,108 @@ class SoN::Deparse 0.01 {
     # THE MANGLING MUST BE INJECTIVE, since two distinct bodies collapsing to
     # one name would silently call the wrong one: every illegal character
     # becomes its hex code, which no legal name can produce.
+    # A CELL'S VARIABLE. A captured lexical is a cell -- measured,
+    # `my $n = 0; my $inc = sub { $n = $n+1 }` gives
+    # `MakeCell captured_written=1 cell_name='$n'` with each closure's body
+    # holding CellParam/CellRead/CellWrite over it.
+    #
+    # THE BODIES ARE SEPARATE `methods` ENTRIES, emitted as named subs, so the
+    # cell cannot be a `my` inside either of them: it has to be one variable
+    # they both close over. Perl's own closures capture exactly that way, so
+    # the spelling is a lexical declared before the subs -- which the emitter
+    # already does, since every sub is written out before the program body.
+    #
+    # NAMED FROM THE NODE ID, not from cell_name. Two `my $n` in different
+    # scopes are two cells with the same source name, and sharing a variable
+    # between them would make one closure see the other's writes.
+    #
+    # THE CELL IS THE PAD SLOT, NOT A COPY OF IT. Measured on
+    # `my $k = 7; my $get = sub { $k }`:
+    #
+    #      3 PadAccess  sigil='$' symbol='k'
+    #      5 Assign     in=[3, 4]  ci=0        the `my $k = 7`
+    #     11 MakeCell   in=[1, 5]  cell_name='$k'
+    #
+    # MakeCell's input 0 is the UNDEF constant and input 1 is that Assign as
+    # MEMORY -- so the cell holds no value of its own, and the value lives in
+    # the pad slot the Assign bound. Declaring a separate `my $cell11` gave a
+    # variable nothing ever wrote, and the closure returned undef.
+    #
+    # So the cell is SPELLED as the slot it shadows, and the sub closes over
+    # the same lexical perl's own closure would. The declaration then comes
+    # from the Assign already in the chain, and nothing needs hoisting.
+    # TAKES THE NODE, NOT AN ID. A CellParam resolves to a MakeCell in the
+    # CALLER's graph, and looking that id up in the body's `$nodes` found a
+    # different node or none -- so the body spelled `$cell11` while the
+    # program spelled `$k`, and the closure read a variable nothing wrote.
+    method _cell_var ($cell) {
+        my $nm = $cell ? (($cell->{fields} // {})->{cell_name}) : undef;
+        return $nm if defined $nm && $nm =~ /\A[\$\@\%][A-Za-z_]\w*\z/;
+        return sprintf('$cell%d', ($cell->{id} // 0));
+    }
+
+    # The MakeCell a CellParam refers to, resolved through the AnonSub that
+    # names this body.
+    #
+    # A BODY DOES NOT NAME ITS OWN CELLS. CellParam carries an INDEX into the
+    # enclosing AnonSub's captures, so the answer lives in the CALLER's graph
+    # -- which is why this reads $all_methods rather than $nodes.
+    method _cell_for_param ($p) {
+        my $idx = ($p->{fields} // {})->{index} // 0;
+        return undef unless defined $current_sub;
+
+        for my $m (sort keys $all_methods->%*) {
+            for my $n (($all_methods->{$m}{nodes} // [])->@*) {
+                next unless ($n->{op} // '') eq 'AnonSub';
+                next unless (($n->{fields} // {})->{name} // '') eq $current_sub;
+                my @in = ($n->{inputs} // [])->@*;
+                next unless defined $in[$idx];
+                for my $c (($all_methods->{$m}{nodes} // [])->@*) {
+                    return $c if $c->{id} == $in[$idx]
+                              && ($c->{op} // '') eq 'MakeCell';
+                }
+            }
+        }
+        return undef;
+    }
+
+    # Every cell in the program, declared before the subs that close over it.
+    #
+    # A NAMED SUB IS EMITTED ABOVE THE PROGRAM BODY and can only close over a
+    # lexical already in scope, so the declaration is hoisted here while the
+    # ASSIGNMENT stays where the chain puts it. A cell allocated inside a loop
+    # is a new cell per iteration, and hoisting its value would share one
+    # across all of them.
+    #
+    # EVERY CELL IS DECLARED HERE, including one spelled as the pad slot it
+    # shadows -- the sub is emitted ABOVE the program body, so a `my $k` left
+    # in the chain comes too late and the closure captures nothing. Measured:
+    # the body returned $k correctly and the program still printed nothing,
+    # because the sub closed over a $k that did not yet exist.
+    #
+    # The chain's own `my` for that slot is suppressed in turn (see
+    # %cell_slots), since re-declaring it would shadow the captured one and
+    # the closure's writes would stop being visible.
+    method _emit_cell_declarations () {
+        my $out = '';
+        %cell_slots = ();
+        my $save = $nodes;
+        for my $m (sort keys $all_methods->%*) {
+            $nodes = { map { $_->{id} => $_ }
+                       (($all_methods->{$m}{nodes} // [])->@*) };
+            for my $n (sort { $a->{id} <=> $b->{id} }
+                       (($all_methods->{$m}{nodes} // [])->@*)) {
+                next unless ($n->{op} // '') eq 'MakeCell';
+                my $v = $self->_cell_var($n);
+                next if $cell_slots{$v}++;
+                $out .= sprintf("my %s;\n", $v);
+            }
+        }
+        $nodes = $save;
+        return $out;
+    }
+
+
     method _sub_ident ($name) {
         ( my $short = $name ) =~ s/^main:://;
         $short =~ s/::/__/g;
@@ -149,6 +270,8 @@ class SoN::Deparse 0.01 {
         # `my shift(@_) = shift(@_)`, the caller's binding read as this sub's.
         my %save_bound = %bound;
         my %save_after = %after_effect;
+        my $save_sub = $current_sub;
+        $current_sub = $name;
         $nodes = { map { $_->{id} => $_ } ($graph->{nodes} // [])->@* };
         %rendered = ();
         %bound    = ();
@@ -156,6 +279,7 @@ class SoN::Deparse 0.01 {
 
         my $body = eval { $self->_emit_control_chain($graph) };
         my $err = $@;
+        $current_sub = $save_sub;
         $nodes = $save_nodes;
         %rendered = %save_rendered;
         %bound    = %save_bound;
@@ -853,6 +977,17 @@ class SoN::Deparse 0.01 {
         #
         # NOT AN ARRAYREF, whatever Unwind.pm's comment says: on the wire all
         # twelve carry a flat single value or nothing.
+        # A CELL WRITE IS AN ASSIGNMENT TO THE SHARED VARIABLE. inputs are
+        # [cell, value, memory]; the node becomes the new memory version,
+        # which is what makes a sibling closure's read observe it.
+        if ($op eq 'CellWrite') {
+            my @cin = ($n->{inputs} // [])->@*;
+            die "GAP: a CellWrite with " . scalar(@cin) . " inputs is not yet"
+              . " rendered\n" unless @cin >= 2;
+            return sprintf("%s = %s;\n",
+                $self->_expr($cin[0]), $self->_expr($cin[1]));
+        }
+
         if ($op eq 'Unwind') {
             my @in = ($n->{inputs} // [])->@*;
             return "die;\n" unless @in;
@@ -936,7 +1071,12 @@ class SoN::Deparse 0.01 {
                     unless ($nodes->{ $in[$i] }{op} // '')
                              =~ /\A(?:PadAccess|EntryDef)\z/;
             }
-            my $decl = ($all_slots && (grep { /^\$/ } @lhs) == @lhs)
+            # A CELL SLOT IS ALREADY DECLARED, at the top, because the subs
+            # that close over it are emitted above this chain. A second `my`
+            # here would shadow the captured lexical and the closure's writes
+            # would stop being visible.
+            my $decl = ($all_slots && (grep { /^\$/ } @lhs) == @lhs
+                        && !(grep { $cell_slots{$_} } @lhs))
                 ? 'my ' : '';
             return sprintf("%s(%s) = (%s);\n",
                 $decl, join(', ', @lhs), join(', ', @rhs))
@@ -1447,6 +1587,32 @@ class SoN::Deparse 0.01 {
         elsif ($op eq 'Or')  { $text = $self->_binop('||', @in) }
         elsif ($op eq 'DefinedOr') { $text = $self->_binop('//', @in) }
         elsif ($op eq 'Xor') { $text = $self->_binop('xor', @in) }
+        elsif ($op eq 'MakeCell') {
+            # THE CELL ITSELF, as a value: an AnonSub names it to say what it
+            # captures. The declaration is emitted separately (see
+            # _emit_cell_declarations), because the cell has to exist before
+            # the subs that close over it.
+            $text = $self->_cell_var($n);
+        }
+        elsif ($op eq 'CellParam') {
+            # INSIDE A BODY, the captured variable is in scope by closure --
+            # perl needs no parameter for it. The index/name identify WHICH
+            # cell, and the enclosing AnonSub's `captures` already said.
+            #
+            # Resolved through the AnonSub that names this body, so a sub
+            # capturing two cells reads the right one.
+            my $cell = $self->_cell_for_param($n);
+            die "GAP: a CellParam whose cell cannot be resolved is not yet"
+              . " rendered\n" unless defined $cell;
+            $text = $self->_cell_var($cell);
+        }
+        elsif ($op eq 'CellRead') {
+            # READING THE CELL IS READING THE VARIABLE. Its memory input
+            # orders the read against writes and is not an operand.
+            die "GAP: a CellRead with no cell is not yet rendered\n"
+                unless @in;
+            $text = $self->_expr($in[0]);
+        }
         elsif ($op eq 'AnonSub') {
             # A REFERENCE TO ITS BODY. The body is already its own `methods`
             # entry, emitted as a named sub, so `\&that` is the value --
