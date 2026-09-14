@@ -73,6 +73,9 @@ class SoN::Deparse 0.01 {
     # a join can outlive the branch that assigns into it.
     field %hoisted;
 
+    # _is_memory's answer per node. Per-sub, since node ids are.
+    field %mem_cache;
+
     # NODES THAT CARRY A TRAILING MEMORY EDGE, and the number of real operands
     # that precede it. A node of this kind with MORE inputs than its operand
     # count has a memory edge last; anything else does not, however much its
@@ -142,6 +145,7 @@ class SoN::Deparse 0.01 {
         %bound    = ();
         %after_effect = ();
         %hoisted  = ();
+        %mem_cache = ();
         my $body = eval { $self->_emit_control_chain($graph) };
         if (!defined $body) { $gap = $@ || 'render failed with no reason'; return undef }
         return $out . $body;
@@ -332,6 +336,7 @@ class SoN::Deparse 0.01 {
         my %save_bound = %bound;
         my %save_after = %after_effect;
         my %save_hoist = %hoisted;
+        my %save_mem   = %mem_cache;
         my $save_sub = $current_sub;
         $current_sub = $name;
         $nodes = { map { $_->{id} => $_ } ($graph->{nodes} // [])->@* };
@@ -339,6 +344,7 @@ class SoN::Deparse 0.01 {
         %bound    = ();
         %after_effect = ();
         %hoisted  = ();
+        %mem_cache = ();
 
         my $body = eval { $self->_emit_control_chain($graph) };
         my $err = $@;
@@ -348,6 +354,7 @@ class SoN::Deparse 0.01 {
         %bound    = %save_bound;
         %after_effect = %save_after;
         %hoisted  = %save_hoist;
+        %mem_cache = %save_mem;
         die $err unless defined $body;
 
         return sprintf("sub %s {\n%s}\n", $self->_sub_ident($name), $body);
@@ -1930,15 +1937,59 @@ class SoN::Deparse 0.01 {
     # element assign, a delete, an aggregate-mutating builtin -- plus a Phi
     # where two chains merge. A Call qualifies only when it is one of the
     # mutators, which is exactly a Call that itself carries a memory edge.
+    # Whether a node is a point in the memory chain rather than a value.
+    #
+    # THESE ARE THE NODES A MEMORY EDGE CAN NAME: the chain starts at MemStart
+    # and advances through every effect that stores -- a package write, an
+    # element assign, a delete, an aggregate-mutating builtin -- plus a Phi
+    # where two chains merge. A Call qualifies only when it is one of the
+    # mutators, which is exactly a Call that itself carries a memory edge.
+    #
+    # ITERATIVE AND MEMOISED, not recursive. A Phi merges two CHAINS and the
+    # arms can end in different kinds of effect -- measured on comp/require.t,
+    # `Phi(1190) in=[Call(require), EntryWrite]`, one arm a global-state call
+    # and the other a store -- so every input has to be asked, not just the
+    # first. That fan-out over a chain thousands of nodes long recursed past
+    # perl's warning depth and did not finish; a worklist with a cache does it
+    # in one pass, and a node already on the stack contributes no evidence
+    # (a loop-carried Phi names itself across the back edge).
     method _is_memory ($id) {
-        my $n = $nodes->{$id} or return 0;
-        my $op = $n->{op} // '';
-        return 1 if $op =~ /\A(?:MemStart|EntryWrite|CellWrite|Delete)\z/;
-        return 1 if $op eq 'Assign';
-        return 1 if $op eq 'Phi' && $self->_is_memory(($n->{inputs} // [])->[0] // -1);
-        return 0 unless $op eq 'Call';
-        my @in = ($n->{inputs} // [])->@*;
-        return @in > 1 && $self->_is_memory($in[-1]) ? 1 : 0;
+        return $mem_cache{$id} if exists $mem_cache{$id};
+
+        my (@stack, %pending) = ($id);
+        @stack = ($id);
+        while (@stack) {
+            my $cur = $stack[-1];
+            if (exists $mem_cache{$cur}) { pop @stack; next }
+
+            my $n = $nodes->{$cur};
+            unless ($n) { $mem_cache{$cur} = 0; pop @stack; next }
+            my $op = $n->{op} // '';
+
+            if ($op =~ /\A(?:MemStart|EntryWrite|CellWrite|Delete|Assign)\z/) {
+                $mem_cache{$cur} = 1; pop @stack; next;
+            }
+
+            # The inputs that could make THIS node a memory point: every one
+            # for a Phi, the last for a memory-carrying Call, none otherwise.
+            my @in = ($n->{inputs} // [])->@*;
+            my @ask = $op eq 'Phi'  ? @in
+                    : $op eq 'Call' ? (@in > 1 ? ($in[-1]) : ())
+                    :                 ();
+            unless (@ask) { $mem_cache{$cur} = 0; pop @stack; next }
+
+            # Anything not yet decided goes on the stack first. A node already
+            # pending is a cycle and answers 0 for this question.
+            my @todo = grep { defined $_ && $_ != $cur
+                           && !exists $mem_cache{$_} && !$pending{$_} } @ask;
+            if (@todo) { $pending{$cur} = 1; push @stack, @todo; next }
+
+            $mem_cache{$cur} = (grep { $mem_cache{$_} } grep { defined } @ask)
+                ? 1 : 0;
+            delete $pending{$cur};
+            pop @stack;
+        }
+        return $mem_cache{$id} // 0;
     }
 
     method _call_expr ($n) {
