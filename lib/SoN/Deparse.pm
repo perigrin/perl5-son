@@ -2189,8 +2189,20 @@ class SoN::Deparse 0.01 {
             # PARENTHESISED ALWAYS. `f $x` is a syntax error unless f was
             # predeclared, and the emitted program defines its subs in whatever
             # order `sort` gives -- so never rely on the callee being visible.
-            return sprintf('%s(%s)',
-                $self->_sub_ident($name), join(', ', @args));
+            # A SUB NAMED AFTER AN OPERATOR NEEDS THE AMPERSAND. comp/opsubs.t
+            # defines subs called `s`, `tr`, `y`, `q`, `m`, `qq` and friends,
+            # and `s("main")` parses as the SUBSTITUTION OPERATOR -- measured,
+            # "syntax error ... near \"my \"" where the emitted line was
+            # `my $eff114 = s("main");`.
+            #
+            # `&s(...)` is unambiguous and calls the sub, so it is used for
+            # any name perl would otherwise read as a quote-like operator.
+            # The parens stay: `&s` without them passes the CALLER's @_.
+            my $ident = $self->_sub_ident($name);
+            return sprintf('&%s(%s)', $ident, join(', ', @args))
+                if $ident =~ /\A(?:s|m|y|tr|q|qq|qw|qr)\z/;
+
+            return sprintf('%s(%s)', $ident, join(', ', @args));
         }
 
         if ($kind eq 'builtin') {
@@ -2233,10 +2245,44 @@ class SoN::Deparse 0.01 {
         }
 
         if ($kind eq 'method') {
-            my $cls = $f->{class_name};
-            die "GAP: a method Call with no class_name is not yet rendered\n"
-                unless defined $cls;
-            return sprintf('%s->%s(%s)', $cls, $name, join(', ', @args));
+            # THE INVOCANT IS INPUT 0, AND class_name IS NOT IT. Measured on
+            # `my $o = Thing->new; $o->greet("bob"); Thing->greet("amy")`:
+            #
+            #      4 Call name=new   class=Thing  in=[]
+            #      6 Call name=greet class=Thing  in=[Call(4), "bob"]
+            #     10 Call name=greet class=Thing  in=[Constant "Thing", "amy"]
+            #
+            # BOTH carry class_name=Thing -- it records where the method was
+            # RESOLVED, not who it is called on. Input 0 is the invocant: the
+            # object for an instance call, the class name itself for a class
+            # call.
+            #
+            # Rendering `class_name->name(ALL inputs)` did two wrong things at
+            # once: `$o->name` became `Thing->name($o)` -- the method called
+            # on the CLASS with the instance as an argument -- and
+            # `Thing->new("inst")` became `Thing->new("Thing", "inst")`,
+            # passing the class twice.
+            #
+            # SO class_name IS NOT USED FOR THE SPELLING AT ALL. A call with
+            # no class_name (an invocant in a variable, which is what
+            # comp/opsubs.t holds) needs no special case: the invocant is in
+            # the same place either way.
+            # A CLASS CALL SOMETIMES HAS NO INPUTS AT ALL. Measured, the
+            # invocant of `Thing->new` is a `Constant "Thing"` in one program
+            # and absent in another -- so class_name is the FALLBACK when
+            # input 0 is missing, not the primary spelling. Without an
+            # invocant and without a class_name there is nothing to call the
+            # method on.
+            my $invocant;
+            if (@args) { $invocant = shift @args }
+            elsif (defined $f->{class_name}) {
+                $invocant = $f->{class_name};
+            }
+            die "GAP: a method Call with no invocant and no class_name is"
+              . " not yet rendered\n" unless defined $invocant;
+
+            return sprintf('%s->%s(%s)',
+                $invocant, $name, join(', ', @args));
         }
 
         die "GAP: a Call with dispatch_kind `$kind` is not yet rendered\n";
