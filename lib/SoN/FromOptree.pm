@@ -7167,6 +7167,39 @@ class SoN::FromOptree 0.01 {
         return defined $after && $after != $ph;
     }
 
+    # _restore_iterator_binding($sim, $targ, $pre_scope)
+    #
+    # Put back whatever $targ was bound to before a foreach body ran. perl
+    # saves and restores the loop variable across the loop --
+    #
+    #     $_ = 'outer'; for (1,2) { }              $_ is 'outer' after
+    #     for (1,2) { for (7,8) { } print $_ }     prints 1 then 2
+    #
+    # -- so the binding belongs to the BODY, like @ALIAS_BOUND_KEYS. It cannot
+    # be a `local` on the sim's scope: the sim is one long-lived object and
+    # bindings a body legitimately makes to OTHER slots must survive.
+    #
+    # A SLOT WITH NO PRE-LOOP BINDING IS LEFT ALONE, not cleared. Clearing it
+    # would need a delete on the sim's scope, which lives in another file; and
+    # it is not needed, because every place the stale binding could be READ
+    # seeds its own placeholder first. Measured: both scouts
+    # (_body_writes_targ, _scout_mutated_targs) define every key in scope plus
+    # the iterator before walking, so the inner loop's restore inside a scout
+    # puts back the SCOUT's placeholder -- which is exactly what makes the
+    # outer loop's `writes_iter` read false for a body that never wrote it.
+    #
+    # The residue is a binding for an iterator key after its loop ends. On the
+    # REAL walk that key is '$main::_' with no pre-loop binding, and a read of
+    # `$_` after the loop is demoted to a memory-bound EntryDef anyway (it is
+    # only forwardable while @ALIAS_BOUND_KEYS names it, which ends with the
+    # loop), so nothing consults it.
+    sub _restore_iterator_binding ($sim, $targ, $pre_scope) {
+        if (exists $pre_scope->{$targ}) {
+            $sim->define($targ, $pre_scope->{$targ});
+        }
+        return;
+    }
+
     sub _scout_mutated_targs ($cv, $start_op, $sim, $opmap, $extra_targs = [], $cond_consumed = 0) {
         my $scout_factory = SoN::IR::NodeFactory->new();
         my $scout_sim     = SoN::FromOptree::StackSim->new(
@@ -7962,6 +7995,35 @@ class SoN::FromOptree 0.01 {
         _walk_loop_body($cv, $body_start, $sim, $factory, $opmap, {}, $visited,
             undef, undef, 1);
 
+        # PERL RESTORES THE FOREACH VARIABLE AT LOOP EXIT, and so must this --
+        # the binding is scoped to the BODY exactly as @ALIAS_BOUND_KEYS is.
+        # Read the post-body binding out first (the write-back below needs it),
+        # then put the pre-loop one back.
+        #
+        # LEAVING IT IN PLACE LET A NESTED LOOP'S ALIAS BE READ AS THE OUTER
+        # LOOP'S OWN. Both loops of `my @v; for (1,2) { for (7,8) { push @v, $_
+        # } }` key on '$main::_', so the inner loop's binding was still
+        # standing when the outer loop asked what its iterator now held --
+        # measured, and NEITHER body assigns its alias:
+        #
+        #      4 ArrayLiteral in=[2,3]      the OUTER list
+        #      8 Subscript    in=[4,7]      the outer element
+        #     11 ArrayLiteral in=[9,10]     the INNER list
+        #     16 Subscript    in=[11,14,15] the inner element
+        #     19 Assign       in=[8,16] ci=18   the outer write-back
+        #
+        # It fired twice over: _body_writes_targ scouts the same leak and
+        # reported a write the source never made, and the write-back then
+        # stored the INNER element into the OUTER one. perl prints `7 8 7 8`;
+        # the deparse refused the graph ("an element store into an anonymous
+        # container"), correctly, since `(1,2)[0] = ...` is not assignable.
+        #
+        # A SINGLE LOOP WAS CLEAN THROUGHOUT -- nothing else rebinds
+        # '$main::_' -- which is what makes this the NESTING's bug rather than
+        # foreach's.
+        my $post_iter = $sim->lookup($x_targ);
+        _restore_iterator_binding($sim, $x_targ, $pre_scope);
+
         # THE STORE-BACK, and only when the body actually wrote the iterator.
         # Adding it unconditionally would put a memory effect in every foreach
         # that perl does not perform, and order reads that are currently free
@@ -7973,7 +8035,7 @@ class SoN::FromOptree 0.01 {
         # what decides that -- not this comparison, which would miss a write
         # that happens to produce an equal node.
         if ($writes_iter) {
-            my $new_val = $sim->lookup($x_targ);
+            my $new_val = $post_iter;
 
             # A SCALAR SOURCE IS NOT AN ARRAY. `foreach ($l)` wraps $l in a
             # synthetic one-element ArrayLiteral, so storing into that wrapper
@@ -8277,6 +8339,50 @@ class SoN::FromOptree 0.01 {
 
             # leaveloop - exit the loop
             if ($name eq 'leaveloop') {
+                # A LEAVELOOP THIS WALK REACHES BELONGS TO A NESTED LOOP OR
+                # BARE BLOCK, not to this body -- this body's own terminator is
+                # the `unstack` above -- and stopping here DISCARDS every
+                # statement after it. Measured on
+                # `my @a=(1,2); for (@a) { for (7,8) { } print "X" }`:
+                #
+                #     o  leaveloop        the INNER loop's
+                #     p  nextstate        `print "X"`, never walked
+                #     s  print
+                #     t  unstack          this body's own terminator
+                #
+                #     perl: XX      emitted: the print is simply absent
+                #
+                # and with `$_ = $_ + 100` in place of the print, perl gives
+                # `101 102` and the emitted program `1 2` -- the write never
+                # reaches the scope map, so the foreach write-back does not
+                # fire either.
+                #
+                # THE DISCRIMINATOR IS `->next` IS A NEXTSTATE, measured across
+                # every nesting shape: a nested loop that ENDS this body has
+                # `leaveloop -> unstack` (the body's terminator), while one
+                # followed by more statements has `leaveloop -> nextstate`.
+                # Both a nested foreach and a bare block spell it identically,
+                # so keying on the op that FOLLOWS covers both without asking
+                # which construct produced the leaveloop.
+                #
+                # REFUSED RATHER THAN WALKED THROUGH. Resuming past the
+                # leaveloop is the real fix, but the resume point is shared
+                # with the TOP-LEVEL walk (where `leaveloop` is this loop's own
+                # and _restore_locals belongs on it), so moving it is a
+                # separate change. A silent drop is the worse failure.
+                #
+                # This shape was previously masked: the nested-foreach alias
+                # leak made the outer loop emit a store into an anonymous
+                # container, which the deparse refused for an unrelated reason.
+                # Fixing the leak exposed the drop, so the refusal lands with
+                # it.
+                if ($$op && $op->next && ${$op->next}
+                    && $op->next->name eq 'nextstate') {
+                    die "GAP: a statement after a nested loop or bare block"
+                      . " inside a loop body is not yet lowered (this walk"
+                      . " stops at the inner leaveloop, which would silently"
+                      . " discard it)\n";
+                }
                 _restore_locals($sim, $ctx, $factory);
                 last;
             }

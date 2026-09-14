@@ -1,5 +1,5 @@
 # ABOUTME: A nested `for (LIST)` must not store the inner element into the outer one.
-# ABOUTME: The alias write-back fires even when the body never writes its alias.
+# ABOUTME: The alias write-back must fire only for a body that writes its alias.
 
 use v5.42.0;
 use Test2::V0;
@@ -58,7 +58,6 @@ sub anon_element_stores ($g) {
 }
 
 subtest 'a nested literal-list foreach stores nothing' => sub {
-    todo 'the alias write-back fires for a body that never writes it' => sub {
     my $src = 'my @v; for (1,2) { for (7,8) { push @v, $_ } } print "@v\n";';
     is run_perl($src), "7 8 7 8\n", 'perl iterates both' or return;
 
@@ -66,7 +65,6 @@ subtest 'a nested literal-list foreach stores nothing' => sub {
     ok $g, 'it translates' or return;
     is [anon_element_stores($g)], [],
         'no element store into an anonymous container';
-    };
 };
 
 # A SINGLE LOOP MUST STAY CLEAN -- it is the shape that already works, and
@@ -79,6 +77,40 @@ subtest 'a single literal-list foreach stores nothing' => sub {
     ok $g, 'it translates' or return;
     is [anon_element_stores($g)], [],
         'no element store into an anonymous container';
+};
+
+# THREE LEVELS, because the leak is per-nesting and a two-level test cannot
+# tell "restored once" from "restored at every depth". Measured, this refused
+# identically before the fix -- the middle loop saw the innermost alias.
+subtest 'three nested literal-list foreaches store nothing' => sub {
+    my $src = 'my @v; for (1,2) { for (3,4) { for (5,6) { push @v, $_ } } }'
+            . ' print "@v\n";';
+    is run_perl($src), "5 6 5 6 5 6 5 6\n", 'perl iterates all three' or return;
+
+    my $g = graph_of($src);
+    ok $g, 'it translates' or return;
+    is [anon_element_stores($g)], [],
+        'no element store into an anonymous container';
+};
+
+# THE WRITE-BACK MUST STILL FIRE when the body DOES write its alias -- the fix
+# suppresses a write the source never made, not the write-back itself.
+# Measured: `my @a=(1,2); for (@a) { $_ = $_ + 100 }` gives `101 102`, and the
+# emitted program agrees.
+subtest 'a foreach whose body writes its alias still stores back' => sub {
+    my $src = 'my @a=(1,2); for (@a) { $_ = $_ + 100 } print "@a\n";';
+    is run_perl($src), "101 102\n", 'perl mutates in place' or return;
+
+    my $g = graph_of($src);
+    ok $g, 'it translates' or return;
+
+    my %by = map { $_->{id} => $_ } $g->{nodes}->@*;
+    my @stores = grep {
+        my $t = $by{ ($_->{inputs} // [])->[0] // -1 };
+        ($_->{op} // '') eq 'Assign'
+            && $t && ($t->{op} // '') eq 'Subscript';
+    } $g->{nodes}->@*;
+    ok scalar(@stores), 'the element store-back is present';
 };
 
 done_testing;
