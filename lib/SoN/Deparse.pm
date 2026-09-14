@@ -91,6 +91,11 @@ class SoN::Deparse 0.01 {
         Count        => 1,   # [aggregate, memory]
         PostfixDeref => 1,   # [container, memory]
         EntryDef     => 0,   # [memory] -- ordering only
+        # A pad slot that is address-taken lives in memory, so its READ
+        # carries a memory version too -- measured, `my $x=1; my $r=\$x`
+        # gives `PadAccess(6) in=[Assign]`, the store it observes. Counting
+        # that as a value bound the Assign and asked to render it as one.
+        PadAccess    => 0,   # [memory] -- ordering only
         MakeCell     => 1,   # [init_value, memory]
         CellRead     => 1,   # [cell, memory]
         CellWrite    => 2,   # [cell, value, memory]
@@ -1078,10 +1083,14 @@ class SoN::Deparse 0.01 {
             # source (the ArgsSource), and `my ($a,$b) = (2,3)` is two from
             # two. The targets are the leading slot nodes; everything after
             # them is the value list.
+            # A PostfixDeref IS A TARGET TOO. `$$r = 7` stores through a
+            # reference, and leaving it off this list made the Assign report
+            # ZERO targets and refuse -- an allow-list missing the one form
+            # nobody had written a test for yet.
             my $t = 0;
             $t++ while $t < @in
                 && ($nodes->{ $in[$t] }{op} // '')
-                     =~ /\A(?:PadAccess|EntryDef|Subscript)\z/;
+                     =~ /\A(?:PadAccess|EntryDef|Subscript|PostfixDeref)\z/;
 
             # AN ELEMENT STORE NEEDS A NAMED CONTAINER. `my @a = (1,2,3)`
             # leaves NO variable in the graph -- measured, the array exists
@@ -1682,6 +1691,24 @@ class SoN::Deparse 0.01 {
             die "GAP: an AnonSub with no name is not yet rendered\n"
                 unless defined $nm && length $nm;
             $text = sprintf('\\&%s', $self->_sub_ident($nm));
+        }
+        elsif ($op eq 'EnvRead') {
+            # `$ENV{KEY}` -- the key is a compile-time literal on the node,
+            # which is why env reads hash-cons: the read is constant per
+            # process because env WRITES are not modelled.
+            my $k = ($n->{fields} // {})->{key};
+            die "GAP: an EnvRead with no key is not yet rendered\n"
+                unless defined $k;
+            ( my $q = $k ) =~ s/(['\\])/\\$1/g;
+            $text = sprintf("\$ENV{'%s'}", $q);
+        }
+        elsif ($op eq 'Ref') {
+            # `\EXPR` -- a unary whose op_str is already the backslash.
+            # Parenthesised because `\$x . "y"` takes a reference to the
+            # CONCATENATION, a different value.
+            die "GAP: a Ref with " . scalar(@in) . " inputs is not yet"
+              . " rendered\n" unless @in == 1;
+            $text = sprintf('\\(%s)', $self->_expr($in[0]));
         }
         elsif ($op eq 'RefType') {
             # `ref EXPR` -- a unary whose op_str is already `ref`.
