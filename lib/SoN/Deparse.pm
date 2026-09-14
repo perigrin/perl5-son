@@ -197,6 +197,57 @@ class SoN::Deparse 0.01 {
     # CALLER's graph, and looking that id up in the body's `$nodes` found a
     # different node or none -- so the body spelled `$cell11` while the
     # program spelled `$k`, and the closure read a variable nothing wrote.
+    # An element's Perl spelling: `$a[$i]`, `$h{k}`, or `$r->[$i]`.
+    #
+    # SHARED BY Subscript, Exists AND Delete, which all take
+    # [container, key, memory] and all face the same question -- is the
+    # container an aggregate or a reference, and which bracket does it take.
+    # Three copies of that decision is how one operator ends up meaning two
+    # things; see the Subscript rule for the measurements behind each branch.
+    method _element ($container_id, $key) {
+        my $agg  = $nodes->{$container_id};
+        my $af   = ($agg->{fields} // {});
+        my $kind = $agg->{op} // '';
+
+        my $st = $agg->{stamp} // '';
+        $kind = '' if $st eq 'ArrayRef' || $st eq 'HashRef';
+
+        if ($kind =~ /\A(?:Array|Hash)Literal\z/) {
+            # NAMED: index the variable. `$a[0]` reads and assigns; a list
+            # slice does neither. The SYMBOL is already the bare identifier --
+            # no stripping, which is the point of carrying the parts rather
+            # than the blob.
+            if (defined $af->{symbol}) {
+                return $kind eq 'ArrayLiteral'
+                    ? sprintf('$%s[%s]', $af->{symbol}, $key)
+                    : sprintf('$%s{%s}', $af->{symbol}, $key);
+            }
+
+            # ANONYMOUS: a list slice over the literal. For a hash literal the
+            # key is LOOKED UP, not positionally indexed, so the two are not
+            # the same operation.
+            my $body = $self->_expr($container_id) =~ s/\A\((.*)\)\z/$1/rs;
+            return $kind eq 'ArrayLiteral'
+                ? sprintf('(%s)[%s]', $body, $key)
+                : sprintf('{%s}->{%s}', $body, $key);
+        }
+
+        my $sg = $af->{sigil} // '';
+        $st = $sg eq '@' ? 'Array' : $sg eq '%' ? 'Hash' : $st;
+        my $spelling = $self->_expr($container_id);
+
+        if ($st eq 'Array' || $st eq 'Hash') {
+            die "GAP: an element of a `$kind` spelled `$spelling` has no"
+              . " aggregate sigil to switch\n"
+                unless $spelling =~ s/\A[\@\%]/\$/;
+            return $st eq 'Array' ? sprintf('%s[%s]', $spelling, $key)
+                                  : sprintf('%s{%s}', $spelling, $key);
+        }
+
+        return $st eq 'HashRef' ? sprintf('%s->{%s}', $spelling, $key)
+                                : sprintf('%s->[%s]', $spelling, $key);
+    }
+
     method _cell_var ($cell) {
         my $nm = $cell ? (($cell->{fields} // {})->{cell_name}) : undef;
         return $nm if defined $nm && $nm =~ /\A[\$\@\%][A-Za-z_]\w*\z/;
@@ -1056,6 +1107,16 @@ class SoN::Deparse 0.01 {
         # A CELL WRITE IS AN ASSIGNMENT TO THE SHARED VARIABLE. inputs are
         # [cell, value, memory]; the node becomes the new memory version,
         # which is what makes a sibling closure's read observe it.
+        # A DELETE REMOVES A KEY, and advances memory so a later `exists`
+        # sees it gone. Same [container, key, memory] shape as Exists.
+        if ($op eq 'Delete') {
+            my @din = ($n->{inputs} // [])->@*;
+            die "GAP: a Delete with " . scalar(@din) . " inputs is not yet"
+              . " rendered\n" unless @din >= 2;
+            return sprintf("delete(%s);\n",
+                $self->_element($din[0], $self->_expr($din[1])));
+        }
+
         if ($op eq 'CellWrite') {
             my @cin = ($n->{inputs} // [])->@*;
             die "GAP: a CellWrite with " . scalar(@cin) . " inputs is not yet"
@@ -1145,11 +1206,15 @@ class SoN::Deparse 0.01 {
             # to a pad slot is taken as its declaration -- but an element
             # target is an existing container's slot, and `my $a[0] = 7` is a
             # syntax error. Only a whole-slot target declares.
+            # A PACKAGE VARIABLE IS NEVER DECLARED WITH `my`. An EntryDef
+            # spells as `$main::x`, which starts with `$` like a pad slot --
+            # so a check on the SPELLING emitted `my ($main::x, $main::y)`,
+            # which perl rejects outright: `"my" variable $main::x can't be
+            # in a package`. The node kind is what separates them.
             my $all_slots = 1;
             for my $i (0 .. $t-1) {
                 $all_slots = 0, last
-                    unless ($nodes->{ $in[$i] }{op} // '')
-                             =~ /\A(?:PadAccess|EntryDef)\z/;
+                    unless ($nodes->{ $in[$i] }{op} // '') eq 'PadAccess';
             }
             # A CELL SLOT IS ALREADY DECLARED, at the top, because the subs
             # that close over it are emitted above this chain. A second `my`
@@ -1427,84 +1492,9 @@ class SoN::Deparse 0.01 {
             # A read threaded to a store sees the stored value; one threaded
             # past it sees the old one. That ordering is the whole question
             # this oracle exists to check.
-            #
-            # THE CONTAINER MAY HAVE NO NAME. `my @a = (1,2,3)` leaves no
-            # variable in the graph at all -- measured, the array exists only
-            # as an ArrayLiteral value and `@a` is gone. A literal container is
-            # indexed as a list slice, which is what the graph says; a named
-            # one is indexed normally.
             die "GAP: a Subscript with " . scalar(@in) . " inputs is not yet"
               . " rendered\n" if @in < 2;
-            my $agg = $nodes->{ $in[0] };
-            my $idx = $self->_expr($in[1]);
-            my $kind = $agg->{op} // '';
-
-            # AN ANONYMOUS LITERAL WITH A REF STAMP IS A REFERENCE, so it
-            # takes the arrow -- `[10,20,30]->[1]`. Indexing it as a list
-            # slice, `([10,20,30])[1]`, yields the REFERENCE itself: the
-            # one-element list is the ref, and element 1 of it is empty.
-            my $agg_st = $agg->{stamp} // '';
-            $kind = '' if $agg_st eq 'ArrayRef' || $agg_st eq 'HashRef';
-
-            if ($kind eq 'ArrayLiteral' || $kind eq 'HashLiteral') {
-                my $bare = ($agg->{fields} // {})->{symbol};
-                if (defined $bare) {
-                    # NAMED: index the variable. `$a[0]` reads and assigns;
-                    # a list slice does neither. The SYMBOL is already the bare
-                    # identifier -- no stripping, which is the point of
-                    # carrying the parts rather than the blob.
-                    $text = $kind eq 'ArrayLiteral'
-                        ? sprintf('$%s[%s]', $bare, $idx)
-                        : sprintf('$%s{%s}', $bare, $idx);
-                }
-                else {
-                    # ANONYMOUS: a list slice over the literal. For a hash
-                    # literal the key is LOOKED UP, not positionally indexed,
-                    # so the two are not the same operation.
-                    $text = $kind eq 'ArrayLiteral'
-                        ? sprintf('(%s)[%s]', $self->_expr($in[0]) =~ s/\A\((.*)\)\z/$1/rs, $idx)
-                        : sprintf('{%s}->{%s}', $self->_expr($in[0]) =~ s/\A\((.*)\)\z/$1/rs, $idx);
-                }
-            }
-            else {
-                # AN AGGREGATE IS NOT A REFERENCE. `@_` and `$r` both reach
-                # here, and only one of them takes an arrow -- `@_->[0]` is a
-                # syntax error ("Can't use an array as a reference"). The
-                # STAMP separates them: Array/Hash is the container itself,
-                # anything else is a ref to one.
-                # THE SIGIL IS AUTHORITATIVE WHEN THE NODE CARRIES ONE. A
-                # pad-bound aggregate arrives unstamped -- measured, `my %seen`
-                # is `PadAccess sigil='%' stamp=Unknown` -- so the stamp cannot
-                # answer and the sigil can. Without it `$seen{2}` emitted
-                # `%seen->["2"]`, a hash indexed with array brackets through an
-                # arrow, which dies "Can't use an undefined value as an ARRAY
-                # reference".
-                my $st = $agg->{stamp} // '';
-                my $agg_sigil = ($agg->{fields} // {})->{sigil} // '';
-                $st = $agg_sigil eq '@' ? 'Array'
-                    : $agg_sigil eq '%' ? 'Hash'
-                    : $st;
-
-                my $spelling = $self->_expr($in[0]);
-                if ($st eq 'Array' || $st eq 'Hash') {
-                    # Indexing a named aggregate switches the sigil to `$`:
-                    # one element of `@_` is `$_[0]`.
-                    die "GAP: an element of a `$kind` spelled `$spelling`"
-                      . " has no aggregate sigil to switch\n"
-                        unless $spelling =~ s/\A[\@\%]/\$/;
-                    $text = $st eq 'Array'
-                        ? sprintf('%s[%s]', $spelling, $idx)
-                        : sprintf('%s{%s}', $spelling, $idx);
-                }
-                else {
-                    # THE ARROW'S BRACKET FOLLOWS THE REFERENT. A hash ref
-                    # indexed with `->[...]` dies "Not an ARRAY reference",
-                    # and the stamp is what says which it is.
-                    $text = $st eq 'HashRef'
-                        ? sprintf('%s->{%s}', $spelling, $idx)
-                        : sprintf('%s->[%s]', $spelling, $idx);
-                }
-            }
+            $text = $self->_element($in[0], $self->_expr($in[1]));
         }
         elsif ($op eq 'Count') {
             # scalar(@a) -- the element count, and a memory-dependent read like
@@ -1702,6 +1692,27 @@ class SoN::Deparse 0.01 {
             die "GAP: an AnonSub with no name is not yet rendered\n"
                 unless defined $nm && length $nm;
             $text = sprintf('\\&%s', $self->_sub_ident($nm));
+        }
+        elsif ($op eq 'Delete') {
+            # DELETE YIELDS THE REMOVED VALUE, so it is reached as a value as
+            # well as a statement -- and when it is, the removal still has to
+            # happen. Same expression either way; only the trailing semicolon
+            # differs, which the statement arm adds.
+            die "GAP: a Delete with " . scalar(@in) . " inputs is not yet"
+              . " rendered\n" unless @in >= 2;
+            $text = sprintf('delete(%s)',
+                $self->_element($in[0], $self->_expr($in[1])));
+        }
+        elsif ($op eq 'Exists') {
+            # MEMBERSHIP, NOT DEFINEDNESS -- the node's own ABOUTME records
+            # the miscompile that created it: `exists $h{u}` is TRUE for a key
+            # whose value is undef, and `defined $h{u}` is false. Inputs are
+            # [container, key, memory], the memory ordering the question
+            # against stores.
+            die "GAP: an Exists with " . scalar(@in) . " inputs is not yet"
+              . " rendered\n" unless @in >= 2;
+            $text = sprintf('exists(%s)',
+                $self->_element($in[0], $self->_expr($in[1])));
         }
         elsif ($op eq 'Assign') {
             # AN ASSIGNMENT USED AS A VALUE. Measured on base/lex.t's

@@ -87,4 +87,21 @@ print "x=$x\n";
 SRC
 };
 
+# A PACKAGE VARIABLE IS NEVER DECLARED WITH `my`. An EntryDef spells as
+# `$main::x`, which starts with `$` exactly like a pad slot -- so a check on
+# the SPELLING emitted `my ($main::x, $main::y)` and perl rejected it outright:
+# `"my" variable $main::x can't be in a package`. The node kind separates them.
+subtest 'a package list assign takes no my' => sub {
+    round_trips(<<'SRC', 'our, declared then assigned');
+our ($x, $y);
+($x, $y) = (1, 2);
+print "$x$y\n";
+SRC
+
+    round_trips(<<'SRC', 'and a lexical one still declares');
+my ($a, $b) = (3, 4);
+print "$a$b\n";
+SRC
+};
+
 done_testing;
