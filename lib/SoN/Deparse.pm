@@ -55,6 +55,10 @@ class SoN::Deparse 0.01 {
     # the variable the emitter binds them to. See _emit_control_chain.
     field %bound;
 
+    # Pad bindings whose value is a chain-bound effect: effect id => [nodes to
+    # emit right after it]. See _emit_control_chain.
+    field %after_effect;
+
     # NODES THAT CARRY A TRAILING MEMORY EDGE, and the number of real operands
     # that precede it. A node of this kind with MORE inputs than its operand
     # count has a memory edge last; anything else does not, however much its
@@ -108,6 +112,7 @@ class SoN::Deparse 0.01 {
         $nodes = { map { $_->{id} => $_ } ($graph->{nodes} // [])->@* };
         %rendered = ();
         %bound    = ();
+        %after_effect = ();
         my $body = eval { $self->_emit_control_chain($graph) };
         if (!defined $body) { $gap = $@ || 'render failed with no reason'; return undef }
         return $out . $body;
@@ -122,15 +127,18 @@ class SoN::Deparse 0.01 {
         # a different node from node 3 in another. Carrying them over emitted
         # `my shift(@_) = shift(@_)`, the caller's binding read as this sub's.
         my %save_bound = %bound;
+        my %save_after = %after_effect;
         $nodes = { map { $_->{id} => $_ } ($graph->{nodes} // [])->@* };
         %rendered = ();
         %bound    = ();
+        %after_effect = ();
 
         my $body = eval { $self->_emit_control_chain($graph) };
         my $err = $@;
         $nodes = $save_nodes;
         %rendered = %save_rendered;
         %bound    = %save_bound;
+        %after_effect = %save_after;
         die $err unless defined $body;
 
         ( my $short = $name ) =~ s/^main:://;
@@ -227,7 +235,14 @@ class SoN::Deparse 0.01 {
             my $n = $nodes->{$id} or next;
             next unless defined $n->{control_in};
             next if ($n->{op} // '') =~ /\A(?:Proj|Region|Loop|If|Start)\z/;
-            $bound{$id} = sprintf('$eff%d', $id);
+
+            # THE BINDING MUST NOT IMPOSE A CONTEXT. `my $x = readline(FH)`
+            # reads ONE line; the same call in list context reads them all,
+            # and the graph says which -- measured, `my @got = <R>` gives the
+            # readline Call stamp=List feeding an ArrayLiteral. Binding it to
+            # a scalar silently dropped every line after the first.
+            $bound{$id} = (($n->{stamp} // '') eq 'List')
+                ? sprintf('@eff%d', $id) : sprintf('$eff%d', $id);
         }
 
         my $body = $self->_emit_from($start->{id}, \%next_of, undef);
@@ -257,6 +272,21 @@ class SoN::Deparse 0.01 {
             my $af = $n->{fields} // {};
             next unless defined $af->{symbol};
             my $vn = ($af->{sigil} // '@') . $af->{symbol};
+
+            # AN AGGREGATE WHOSE CONTENTS ARE A CHAIN-BOUND EFFECT CANNOT
+            # FLOAT EITHER. `my @got = <R>` builds ArrayLiteral(sym=got)
+            # holding the readline's value -- measured -- and hoisting the
+            # declaration put `my @got = ($eff21)` above the line declaring
+            # $eff21. Same rule as the pad bindings below, same reason.
+            my $defer = 0;
+            for my $in (($n->{inputs} // [])->@*) {
+                next unless defined $in && exists $bound{$in};
+                push $after_effect{$in}->@*, $n;
+                $defer = 1;
+                last;
+            }
+            next if $defer;
+
             $prologue .= sprintf("my %s = (%s);\n", $vn,
                 join(', ', map { $self->_expr($_) } (($n->{inputs} // [])->@*)));
         }
@@ -264,7 +294,36 @@ class SoN::Deparse 0.01 {
         for my $n (sort { $a->{id} <=> $b->{id} } values $nodes->%*) {
             next unless $n->{op} eq 'Assign';
             next if defined $n->{control_in};   # already emitted in the chain
+
+            # A BINDING OF A CHAIN-BOUND EFFECT CANNOT FLOAT. The prologue is
+            # sound for a pad binding whose value has no control edge -- there
+            # is nothing to order it against. But `my @got = <TRY>` binds a
+            # READ, which is pinned and bound to a variable at its chain
+            # position, so hoisting the binding put `my @got = ($eff21)` above
+            # the line that declares $eff21.
+            #
+            # Deferred to the chain instead, emitted right after the effect it
+            # names. Whether it is a `my` is the same question either way; only
+            # the PLACE changes.
+            my $deferred = 0;
+            for my $in (($n->{inputs} // [])->@*) {
+                next unless defined $in && exists $bound{$in};
+                push $after_effect{$in}->@*, $n;
+                $deferred = 1;
+                last;
+            }
+            next if $deferred;
+
             $prologue .= $self->_emit_statement($n, \%next_of);
+        }
+
+        # A deferred binding is emitted where its effect was placed, so the
+        # chain has to be walked again now that %after_effect is populated.
+        # Cheap, and it keeps the placement rule in one direction: the chain
+        # decides, the prologue only takes what the chain cannot order.
+        if (keys %after_effect) {
+            %rendered = ();
+            $body = $self->_emit_from($start->{id}, \%next_of, undef);
         }
 
         return $prologue . $body;
@@ -342,6 +401,8 @@ class SoN::Deparse 0.01 {
                 my $var  = $bound{ $n->{id} };
                 my $expr = $self->_expr_uncached($n->{id});
                 $out .= sprintf("my %s = %s;\n", $var, $expr);
+                $out .= $self->_emit_statement($_, $next_of)
+                    for (($after_effect{ $n->{id} } // [])->@*);
             }
             else {
                 $out .= $self->_emit_statement($n, $next_of);
@@ -721,9 +782,20 @@ class SoN::Deparse 0.01 {
         # ternary. Measured: the emitted program printed "y\n" where the
         # original printed "n\n". Interposing `join('')` keeps the argument
         # list a list without ever starting it with a paren.
+        # A DEFERRED AGGREGATE DECLARATION, placed after the effect it holds
+        # rather than in the prologue. See _emit_control_chain.
+        if ($op =~ /\A(?:Array|Hash)Literal\z/) {
+            my $af = $n->{fields} // {};
+            die "GAP: an anonymous $op reached as a statement is not yet"
+              . " rendered\n" unless defined $af->{symbol};
+            return sprintf("my %s%s = (%s);\n",
+                ($af->{sigil} // '@'), $af->{symbol},
+                join(', ', map { $self->_expr($_) } (($n->{inputs} // [])->@*)));
+        }
+
         if ($op eq 'Print') {
-            my @args = map { $self->_expr($_) } (($n->{inputs} // [])->@*);
-            return sprintf("print join('', %s);\n", join(', ', @args));
+            my ($fh, @args) = $self->_print_parts($n);
+            return sprintf("print %sjoin('', %s);\n", $fh, join(', ', @args));
         }
 
         # A package scalar store. The EntryDef names the slot; emitting the
@@ -948,8 +1020,13 @@ class SoN::Deparse 0.01 {
         elsif ($op eq 'Print') {
             # A Print reached as a VALUE is one whose result is reused -- print
             # returns 1 on success. Emit it as the expression it is.
-            my @a = map { $self->_expr($_) } (($n->{inputs} // [])->@*);
-            $text = sprintf("print(join('', %s))", join(', ', @a));
+            my ($fh, @a) = $self->_print_parts($n);
+            $text = $fh eq ''
+                ? sprintf("print(join('', %s))", join(', ', @a))
+                # NO PARENTHESISED FORM WITH A HANDLE. `print(FH LIST)` is a
+                # syntax error; the handle-and-list form takes no parens, so
+                # the whole thing is wrapped instead.
+                : sprintf("(print %sjoin('', %s))", $fh, join(', ', @a));
         }
         elsif ($op eq 'RegexMatch') {
             # THE PATTERN AND FLAGS ARE THE PROGRAM. /i changes what matches,
@@ -1393,6 +1470,29 @@ class SoN::Deparse 0.01 {
     # A Constant's Perl literal. The wire carries `value` as a string plus a
     # `const_type`, so the spelling is decided here rather than guessed from
     # the text -- "1" as a Str and 1 as an Int are different programs.
+    # A Print's filehandle (already spelled, with its trailing space) and its
+    # arguments.
+    #
+    # THE HANDLE IS OPERAND 0 WHEN THE NODE SAYS SO. `has_filehandle` is on the
+    # wire precisely because operand 0 is otherwise an ordinary argument --
+    # measured on comp/multiline.t, `Print(37) in=[14, 9] has_filehandle=1`
+    # where 14 is the bareword glob Constant. Ignoring it printed the handle's
+    # NAME to stdout and left the file empty: a program that runs and silently
+    # writes nowhere.
+    #
+    # NO COMMA AFTER THE HANDLE. `print FH, LIST` passes the handle as a value
+    # and prints to the default handle; only `print FH LIST` selects it.
+    method _print_parts ($n) {
+        my @in = ($n->{inputs} // [])->@*;
+        return ('', map { $self->_expr($_) } @in)
+            unless ($n->{fields} // {})->{has_filehandle};
+
+        die "GAP: a Print says it has a filehandle but has no inputs\n"
+            unless @in;
+        my $h = shift @in;
+        return ($self->_expr($h) . ' ', map { $self->_expr($_) } @in);
+    }
+
     method _constant ($n) {
         my $f = $n->{fields} // {};
         my $t = $f->{const_type} // '';
@@ -1420,6 +1520,21 @@ class SoN::Deparse 0.01 {
         # different values, and only one of them matches.
         if ($t eq 'regex') {
             return sprintf('qr{%s}', $v);
+        }
+
+        # A BAREWORD FILEHANDLE, and the bareword IS the spelling. Measured on
+        # comp/line_debug.t and comp/multiline.t, a `glob` Constant holds the
+        # bare name and is an operand of open, close, readline and a
+        # filehandle-Print -- so quoting it would open a file NAMED "TRY"
+        # rather than use the handle, a program that runs and does the wrong
+        # thing.
+        #
+        # Only a plain identifier is emitted bare: anything else is not a
+        # bareword and would parse as something other than a handle.
+        if ($t eq 'glob') {
+            die "GAP: a glob Constant whose name is `$v` is not a bareword\n"
+                unless $v =~ /\A[A-Za-z_]\w*\z/;
+            return $v;
         }
 
         die "GAP: no rule for a `$t` Constant\n";

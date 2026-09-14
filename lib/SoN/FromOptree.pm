@@ -2272,6 +2272,29 @@ class SoN::FromOptree 0.01 {
     # then the `import` half is an ordinary method call that already lowers.
     my %GLOBAL_STATE_BUILTIN = map { $_ => 1 } qw(require dofile);
 
+    # Handle reads whose EFFECT IS ON THE HANDLE. Reading advances the file
+    # position, so two calls on one handle return different things and the
+    # order between them is the value -- that ordering is carried by the
+    # control chain and by nothing else.
+    #
+    # THE VOID GATE MISSES THEM. `$void_effect_call` is `$void && $effectful`,
+    # and a read whose value is BOUND is not void, so it was never pinned.
+    # Measured on `open(TRY,"<$f"); my @got = <TRY>; close(TRY)`:
+    #
+    #      4 Call  readline  ci=None      not on the chain at all
+    #     21 Call  open      ci=0
+    #     23 Call  close     ci=22
+    #
+    # The deparse oracle duly emitted the read BEFORE the open, read a handle
+    # that was not yet open, and printed zero lines. The graph permitted it;
+    # nothing in it said otherwise.
+    #
+    # SEPARATE FROM %GLOBAL_STATE_BUILTIN, which also advances the MEMORY
+    # chain. These only need ordering against each other and against the
+    # open/close that bracket them; claiming they store would be a second,
+    # stronger assertion than the measurement supports.
+    my %HANDLE_READ_BUILTIN = map { $_ => 1 } qw(readline eof tell);
+
     # Ops that are an EFFECT in their own right rather than a call. The void
     # branch-arm scan needs this: it asked "is this arm an entersub in void
     # context" when the question is "does this arm hold an effect that must be
@@ -6327,6 +6350,12 @@ class SoN::FromOptree 0.01 {
                     # t/comp/require.t has it as `sub dofile`.
                     $pin_on_control = 1
                         if $GLOBAL_STATE_BUILTIN{$name} && !$void;
+
+                    # A HANDLE READ IS AN EFFECT IN ANY CONTEXT, for the same
+                    # reason and by the same mechanism. See
+                    # %HANDLE_READ_BUILTIN.
+                    $pin_on_control = 1
+                        if $HANDLE_READ_BUILTIN{$name} && !$void;
                 }
 
                 # Perl `/` is always floating-point division, so an Int operand
