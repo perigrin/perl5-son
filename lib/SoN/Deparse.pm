@@ -1342,6 +1342,29 @@ class SoN::Deparse 0.01 {
         elsif ($op eq 'Or')  { $text = $self->_binop('||', @in) }
         elsif ($op eq 'DefinedOr') { $text = $self->_binop('//', @in) }
         elsif ($op eq 'Xor') { $text = $self->_binop('xor', @in) }
+        elsif ($op eq 'Match') {
+            # `=~` WITH A RUNTIME PATTERN. RegexMatch carries its pattern as a
+            # string field; Match is the binop that takes a COMPUTED one --
+            # measured on `$s =~ /${p}c/` with an unfoldable $p:
+            #
+            #     11 Concat  in=[9, 10]   stamp=Str
+            #     12 Match   in=[2, 11]   stamp=Boolean
+            #
+            # so input 1 is the pattern value. Interpolating it back is what
+            # makes it a pattern again: perl compiles the string.
+            #
+            # WRAPPED IN (?:...), for the reason the computed s/// pattern is:
+            # the value is a whole pattern and the text around it is not, so
+            # `a|z` would bind past its own extent and swallow what follows.
+            die "GAP: a Match with " . scalar(@in) . " inputs is not yet"
+              . " rendered\n" unless @in == 2;
+            # THE RIGHT-HAND SIDE MUST BE A PATTERN, not an expression that
+            # happens to spell one -- `$s =~ (?:...)` is a syntax error. m{}
+            # is the delimiter that needs no escaping of the value's text,
+            # since the value is interpolated rather than written inline.
+            $text = sprintf('(%s =~ m{(?:${\ (%s) })})',
+                $self->_expr($in[0]), $self->_expr($in[1]));
+        }
         elsif ($op eq 'Defined') {
             # A unary definedness test. Parenthesised because `defined $x + 1`
             # parses as `defined($x + 1)`, which is a different question.
