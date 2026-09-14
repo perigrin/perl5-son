@@ -90,4 +90,34 @@ print "@k\n";
 SRC
 };
 
+# A MEMORY PHI MERGES CHAINS, NOT VALUES. Where a branch stores on both arms
+# the two memory chains join, and every input of that Phi is an effect --
+# measured on base/num.t, `Phi(603) in=[577,591]` with both an EntryWrite.
+# Counting those as reads bound the writes and then asked for an `EntryWrite`
+# as an expression.
+#
+# base/num.t round-tripped before this file's other fixes and regressed with
+# them, and only the oracle caught it -- so it is pinned here.
+subtest 'a memory Phi is not a value' => sub {
+    # A SCALAR TARGET, so this tests the memory Phi and nothing else. An
+    # ARRAY on both arms also builds one, but a list read of a mutated array
+    # is separately broken in the producer (it resolves to the pre-store
+    # literal), and a case that fails for two reasons proves neither.
+    my $data = graph_of(<<'SRC');
+my @a = (0);
+if (@ARGV) { $a[0] = 1; } else { $a[0] = 2; }
+print "$a[0]\n";
+SRC
+    ok $data && $data->{methods}{'main::__PROGRAM__'}, 'it translates'
+        or return;
+    my @phi = grep { ($_->{op} // '') eq 'Phi' }
+              ($data->{methods}{'main::__PROGRAM__'}{nodes} // [])->@*;
+    ok scalar(@phi), 'the graph has a Phi' or return;
+
+    my $d = SoN::Deparse->new;
+    my $out = $d->render($data);
+    ok defined $out, 'and it renders'
+        or diag(($d->gap // '?') =~ s/\n.*//sr);
+};
+
 done_testing;

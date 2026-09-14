@@ -190,6 +190,16 @@ class SoN::Deparse 0.01 {
             # condition is still counted; only the control edge is skipped.
             my $cfg = ($n->{op} // '');
             if ($cfg =~ /\A(?:Proj|Region|Loop)\z/) { next }
+
+            # A MEMORY PHI MERGES CHAINS, NOT VALUES. Where a branch stores on
+            # both arms the two memory chains join, and every input is an
+            # effect -- measured on base/num.t, `Phi(603) in=[577,591]` with
+            # both an EntryWrite. Counting those bound the writes and then
+            # asked for an `EntryWrite` as an expression.
+            #
+            # A VALUE Phi still counts, which is what makes a loop-carried
+            # variable work; _is_memory is what separates them.
+            next if $cfg eq 'Phi' && $self->_is_memory($n->{id});
             if ($cfg eq 'If') {
                 my @cin = ($n->{inputs} // [])->@*;
                 $reads{ $cin[1] }++ if @cin > 1;
