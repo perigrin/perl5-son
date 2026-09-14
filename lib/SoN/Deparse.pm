@@ -486,9 +486,26 @@ class SoN::Deparse 0.01 {
         die "GAP: a Loop with " . scalar(@cond) . " condition nodes is not yet"
           . " rendered\n" unless @cond == 1;
 
+        # A MEMORY PHI CARRIES THE CHAIN, NOT A VALUE. Measured on
+        # comp/retainedlines.t, three nested loops each with one:
+        #
+        #     13 MemStart
+        #     14 Phi in=[13, 14] region=4     region 4 is a Loop
+        #     15 Phi in=[14, 15] region=7
+        #     16 Phi in=[15, 16] region=10
+        #
+        # The second input is the Phi ITSELF -- correct SSA for a back edge,
+        # since at the header memory is either the entry value or what the body
+        # left. Declaring a variable for it asked for a MemStart as an
+        # expression, and a MemStart has no spelling.
+        #
+        # _join_phis already skips these at a branch join; a loop header is the
+        # same question. A VALUE Phi still gets its variable, which is what
+        # makes a loop-carried counter work.
         my @phis = sort { $a->{id} <=> $b->{id} }
                    grep { ($_->{op} // '') eq 'Phi'
-                       && (($_->{fields}{region} // -1) == $n->{id}) }
+                       && (($_->{fields}{region} // -1) == $n->{id})
+                       && !$self->_is_memory($_->{id}) }
                    values $nodes->%*;
         for my $p (@phis) {
             die "GAP: a loop Phi with " . scalar(($p->{inputs} // [])->@*)
@@ -1235,7 +1252,19 @@ class SoN::Deparse 0.01 {
                 # syntax error ("Can't use an array as a reference"). The
                 # STAMP separates them: Array/Hash is the container itself,
                 # anything else is a ref to one.
+                # THE SIGIL IS AUTHORITATIVE WHEN THE NODE CARRIES ONE. A
+                # pad-bound aggregate arrives unstamped -- measured, `my %seen`
+                # is `PadAccess sigil='%' stamp=Unknown` -- so the stamp cannot
+                # answer and the sigil can. Without it `$seen{2}` emitted
+                # `%seen->["2"]`, a hash indexed with array brackets through an
+                # arrow, which dies "Can't use an undefined value as an ARRAY
+                # reference".
                 my $st = $agg->{stamp} // '';
+                my $agg_sigil = ($agg->{fields} // {})->{sigil} // '';
+                $st = $agg_sigil eq '@' ? 'Array'
+                    : $agg_sigil eq '%' ? 'Hash'
+                    : $st;
+
                 my $spelling = $self->_expr($in[0]);
                 if ($st eq 'Array' || $st eq 'Hash') {
                     # Indexing a named aggregate switches the sigil to `$`:
@@ -1262,9 +1291,31 @@ class SoN::Deparse 0.01 {
             # any other: inputs are [aggregate, memory].
             die "GAP: a Count with no aggregate is not yet rendered\n"
                 unless @in;
+            # AN AGGREGATE NEEDS NO DEREFERENCE; a REFERENCE does. The rule
+            # was "is it a Literal", which missed every other list-valued node
+            # -- measured, `scalar(keys %seen)` after a sort emitted
+            # `scalar(@{sort(keys(%seen))})`, dereferencing a LIST, which
+            # counts nothing.
+            #
+            # The stamp answers it, and the sigil answers it for a pad-bound
+            # aggregate that arrives unstamped. Same question the element read
+            # one path over asks, same two properties.
             my $agg = $nodes->{ $in[0] };
+            my $st  = $agg->{stamp} // '';
+            my $sg  = ($agg->{fields} // {})->{sigil} // '';
+            $st = $sg eq '@' ? 'Array' : $sg eq '%' ? 'Hash' : $st;
+
+            # `scalar(LIST)` IS NOT A COUNT. Perl's `scalar` imposes scalar
+            # context rather than counting: `scalar(sort keys %h)` is
+            # undefined behaviour and returned nothing, where the source meant
+            # "how many". An ARRAY in scalar context IS its count, but a list
+            # expression has to be counted explicitly, and `scalar(() = LIST)`
+            # is the idiom that does it.
             $text = ($agg->{op} // '') =~ /Literal\z/
+                 || $st eq 'Array' || $st eq 'Hash'
                 ? sprintf('scalar(%s)', $self->_expr($in[0]))
+                : $st eq 'List'
+                ? sprintf('scalar(() = %s)', $self->_expr($in[0]))
                 : sprintf('scalar(@{%s})', $self->_expr($in[0]));
         }
         elsif ($op eq 'Length') {
