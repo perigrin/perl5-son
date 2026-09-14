@@ -5784,10 +5784,12 @@ class SoN::FromOptree 0.01 {
             # ordered and survives DCE, mirroring the I1 void-effect path.
             my $is_effect = defined $sim->control;
             # STAMPED, because print HAS a return value and this file already
-            # said so twice in prose -- Print.pm's ABOUTME ("yielding print's
-            # boolean 1") and the push below ("print returns 1") -- while
-            # leaving the node untyped, so a sub whose body ends in print had
-            # nothing to derive a return type from and declared Unknown.
+            # said so twice in prose -- Print.pm's ABOUTME and the push below
+            # ("print returns 1") -- while leaving the node untyped, so a sub
+            # whose body ends in print had nothing to derive a return type
+            # from and declared Unknown. (That ABOUTME said "boolean 1" until
+            # it was corrected to match this derivation; the prose was wrong
+            # while the stamp was right.)
             #
             # Measured: `print ""` yields 1; printing to a read-only handle
             # yields undef. So the honest type is join(Boolean,Undef), which

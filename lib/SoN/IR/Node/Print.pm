@@ -1,5 +1,5 @@
 # ABOUTME: print statement node in the Chalk IR: a control-pinned statement effect
-# ABOUTME: emitting its value inputs to a filehandle, yielding print's boolean 1.
+# ABOUTME: emitting its value inputs to a filehandle, yielding 1 or undef (Scalar).
 use 5.42.0;
 use utf8;
 use experimental 'class';
@@ -15,6 +15,18 @@ class SoN::IR::Node::Print :isa(SoN::IR::Node) {
     #
     # Whether a target can honor it is T2's question. T1 states the operation.
     field $has_filehandle :param :reader = 0;
+
+    # THE RESULT IS Scalar, NOT Boolean. `print` yields 1 on success and
+    # UNDEF on failure -- measured, printing to a closed handle returns undef
+    # rather than false -- so the honest type is join(Boolean, Undef), which
+    # this lattice puts at Scalar. Boolean alone would be a WRONG answer
+    # rather than a narrower one: it claims the failure path yields false.
+    #
+    # The stamp is applied at the construction site in FromOptree, which
+    # records the same measurement. An earlier version of this ABOUTME said
+    # "yielding print's boolean 1", and that prose was wrong while the emitted
+    # stamp was right -- the same claim `open`, `binmode` and `printf` all
+    # make correctly elsewhere.
 
     method operation() { 'Print' }
 
