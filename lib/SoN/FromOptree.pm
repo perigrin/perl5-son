@@ -3189,7 +3189,29 @@ class SoN::FromOptree 0.01 {
         # thing is the conversion.
         if ($name eq 'entereval') {
             my $src = $sim->pop_node;
-            my $code = $factory->make('Coerce',
+            # AN EVAL BODY IS AN EFFECT, AND EFFECTS DO NOT SHARE. `make`
+            # dedupes by content_hash, and SoN::IR::Node deliberately excludes
+            # control_in from that hash so a side-effect and a pure-data use of
+            # the same content still hash-cons. That rationale holds for a pure
+            # expression and is FALSE here: an eval must happen once per
+            # occurrence.
+            #
+            # Measured on `my $a = eval q{1+1}; my $b = eval q{1+1}`:
+            #
+            #     3 Region  in=[4]
+            #     4 Coerce  in=[2]  ci=3    ONE Coerce, ci its OWN Region
+            #     9 Region  in=[4]          a second Region over the same node
+            #
+            # a self-cycle, which makes the whole graph unreachable from Start.
+            # End to end the emitted program DROPPED BOTH EVALS -- perl printed
+            # n=2, the emitted program printed nothing. A silent DROP.
+            #
+            # make_unique, not make_cfg: Coerce is a data class, and the eval's
+            # Phi beside it already takes the same route for the same reason.
+            # NOT a change to content_hash -- excluding control_in is
+            # load-bearing for pure expressions, and adding it would un-CSE
+            # every statement-position call.
+            my $code = $factory->make_unique('Coerce',
                 from_repr => (defined $src->stamp ? $src->stamp->type : 'Str'),
                 to_repr   => 'Code',
                 inputs    => [$src],
