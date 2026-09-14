@@ -6022,6 +6022,64 @@ class SoN::FromOptree 0.01 {
                 while $sim->stack_depth > $sim->mark_depth;
             my $node = $factory->make('Assign',
                 inputs => [ $lhs->@*, @rhs ]);
+
+            # THE ASSIGN IS NOT THE REBIND. Building the node records WHAT was
+            # assigned; nothing in it re-points the SSA scope keys, so every
+            # later read still resolves to whatever the targets were bound to
+            # before. Measured on `my ($a,$b); ($a,$b) = (1,2); print "$a$b\n"`:
+            #
+            #     perl    : 12
+            #     emitted : (nothing)
+            #      1 Constant  undef              <- the declaration's binding,
+            #      ...                               still what the Print reads
+            #     13 Assign    in=[3,4,5,6,7]     <- correct, and unread
+            #
+            # `my ($a,$b) = (1,2)` -- one statement -- was always right, and for
+            # a reason that hides this: its LVINTRO padsv finds the slot UNBOUND
+            # and seeds it with the PadAccess the Assign then targets, so a later
+            # read resolves through the same node by name. Separate the
+            # declaration and the slot is already bound to undef, the lvalue
+            # padsv deliberately does not clobber that binding (a compound
+            # `$x += 2` must read the old value), and the undef survives.
+            #
+            # SCALAR TARGETS ONLY, positionally. A Subscript target is an
+            # element store: the Assign itself carries it and reads go back to
+            # the container, which is why `($h{a},$h{b}) = (1,2)` was already
+            # right. A PACKAGE scalar needs the store as well as the rebind --
+            # it is observable from another sub -- which is the pair
+            # sassign's EntryDef branch emits.
+            #
+            # A FLATTENING OPERAND HAS NO POSITION. `($a,$b) = @list` spreads
+            # one node over N targets, and `($a,@rest) = (1,2,3)` swallows the
+            # tail; neither is a 1:1 correspondence, so leave those bindings
+            # alone rather than guess at one. Fewer VALUES than targets is
+            # still positional -- the trailing target gets undef, which is what
+            # perl assigns it.
+            my @targets = $lhs->@*;
+            my $positional =
+                   ( !grep { _is_aggregate_node($_) } @targets, @rhs )
+                && ( grep { _is_scalar_rebind_target($_) } @targets );
+            if ($positional) {
+                # READ EVERY VALUE BEFORE WRITING ANY KEY. `($a,$b) = ($b,$a)`
+                # has the OLD bindings on the RHS already (@rhs was popped
+                # before this loop), so a swap cannot read its own writes.
+                for my $i (0 .. $#targets) {
+                    my $t = $targets[$i];
+                    next unless _is_scalar_rebind_target($t);
+                    my $v = $rhs[$i] // $factory->make('Constant',
+                        value      => undef,
+                        const_type => 'undef',
+                        stamp      => SoN::IR::Stamp->new(type => 'Undef'));
+                    if ($t->isa('SoN::IR::Node::EntryDef')) {
+                        $sim->define(_stash_key($t), $v);
+                        _entry_store($factory, $sim, $t, $v);
+                    }
+                    else {
+                        $sim->define($t->targ, $v);
+                    }
+                }
+            }
+
             $sim->push_node($node);
             return ($op->next, 'handled');
         }
@@ -10119,6 +10177,26 @@ class SoN::FromOptree 0.01 {
         # a correctness one -- but a key nobody can paste into perl is a key
         # that misleads whoever is reading a scope dump.
         return $node->sigil . $node->package . '::' . $node->symbol;
+    }
+
+    # _is_scalar_rebind_target($node) -> bool
+    #
+    # True when a list-assign LHS operand names ONE scalar whose new value is
+    # carried by an SSA scope binding rather than by the Assign node itself.
+    # That is the pad slot (PadAccess) and the package scalar (EntryDef); an
+    # element target is a Subscript, whose store the Assign already expresses.
+    #
+    # STRUCTURAL, not a name list. The sigil is the discriminator because it is
+    # what decides positional correspondence: `($a,$b) = (1,2)` binds two
+    # scalars one-for-one, while an `@` or `%` target flattens and has no
+    # position. A EntryDef carries its sigil for the same reason a PadAccess
+    # does -- one stash holds `$g` and `@g` as unrelated variables.
+    sub _is_scalar_rebind_target ($node) {
+        return 0 unless $node
+            && ( $node->isa('SoN::IR::Node::PadAccess')
+              || $node->isa('SoN::IR::Node::EntryDef') );
+        my $sigil = $node->can('sigil') ? $node->sigil : undef;
+        return defined $sigil && $sigil eq '$' ? 1 : 0;
     }
 
     # `@_` IS AN ARRAY, and that is true structurally -- for every sub, with no
