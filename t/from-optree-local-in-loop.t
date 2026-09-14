@@ -57,23 +57,34 @@ SRC
     my ($print) = grep { $_->{op} eq 'Print' } $g->{nodes}->@*;
     ok defined $print, 'the print is in the graph' or return;
 
-    # Walk back from the Print to whatever Constant feeds it.
-    my @seen;
+    # THE READ IS THROUGH MEMORY, so the question is which STORE its memory
+    # version is -- not which Constants its data cone can reach. A package
+    # scalar some sub assigns is never value-forwarded (see
+    # _package_scalars_written in FromOptree.pm), so the localised store and
+    # the restore store are BOTH in the cone, chained one after the other, and
+    # only their order says which one the read observes.
     my @queue = $print->{inputs}->@*;
     my %done;
+    my $read;
     while (my $id = shift @queue) {
         next if $done{$id}++;
         my $n = $by{$id} or next;
-        push @seen, $n->{fields}{value} // ''
-            if $n->{op} eq 'Constant';
+        if ($n->{op} eq 'EntryDef' && ($n->{fields}{symbol} // '') eq 'g') {
+            $read = $n;
+            last;
+        }
         push @queue, $n->{inputs}->@*;
     }
-    ok scalar(grep { $_ eq 'outer' } @seen),
-        'the print reaches the outer binding, not the localised one'
-        or diag "constants reached: @seen";
-    ok !scalar(grep { $_ eq 'iter' } @seen),
-        '... and not the localised one'
-        or diag "constants reached: @seen";
+    ok $read, 'the print reads the package scalar' or return;
+
+    my $mem = $by{ ($read->{inputs} // [])->[0] // -1 };
+    ok $mem && $mem->{op} eq 'EntryWrite',
+        'and reads it at a store' or return;
+
+    my $stored = $by{ $mem->{inputs}[1] };
+    is $stored->{fields}{value}, 'outer',
+        'the store it reads is the RESTORE, not the localised one'
+        or diag "read observes: " . ($stored->{fields}{value} // '?');
 };
 
 # while and foreach reach the loop-body walker by different routes.

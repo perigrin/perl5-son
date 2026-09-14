@@ -71,14 +71,20 @@ subtest 'the subject is operand 0 and the pattern operand 1' => sub {
     my ( $subj, $pat ) = map { $by{$_} } ( $m->{inputs} // [] )->@*;
     ok $subj && $pat, 'both operands resolve' or return;
 
-    # ASSERTED AGAINST THE OPTREE, NOT THE SOURCE. perl folds `our $g = "abc"`,
-    # so the subject reaches the Match as a Constant string, not as a read of
-    # $g -- the pattern is the qr Constant beside it. What discriminates the
-    # two operands is their const_type, and inverting them would swap these.
-    is( ( $subj->{fields}{const_type} // '' ), 'string',
-        'operand 0 is the SUBJECT (the string), not the pattern' );
-    is( ( $pat->{fields}{const_type} // '' ), 'regex',
-        'operand 1 is the PATTERN (the qr), not the subject' );
+    # WHICH VARIABLE, not which constant. A package scalar some sub assigns is
+    # read through memory rather than value-forwarded (see
+    # _package_scalars_written in FromOptree.pm), so each operand is an
+    # EntryDef naming its stash entry -- which says the same thing the folded
+    # const_type used to say, and keeps saying it when the value is not a
+    # literal. Inverting the operands would swap these.
+    my $name_of = sub ($n) {
+        ( $n->{op} // '' ) eq 'EntryDef' ? ( $n->{fields}{symbol} // '' )
+      : ( $n->{fields}{const_type} // '' );
+    };
+    is( $name_of->($subj), 'g',
+        'operand 0 is the SUBJECT ($g), not the pattern' );
+    is( $name_of->($pat), 're',
+        'operand 1 is the PATTERN ($re), not the subject' );
 };
 
 # THE LEXICAL FORM IS UNCHANGED, and shares no pop with the above: its subject

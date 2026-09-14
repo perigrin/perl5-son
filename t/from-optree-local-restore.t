@@ -68,8 +68,22 @@ subtest 'the read after the scope sees the restored binding' => sub {
     ok $vals[0] && $vals[1], 'both prints have a value' or return;
     isnt $vals[0]{id}, $vals[1]{id},
         'the two prints read DIFFERENT nodes -- the restore happened';
-    is $vals[1]{fields}{value}, 1,
-        'and the second reads the pre-local value';
+    # A package scalar some sub assigns is read THROUGH MEMORY (see
+    # _package_scalars_written in FromOptree.pm), so the second print's value
+    # node is an EntryDef, not the Constant itself. Follow its memory version
+    # to the store it observes -- the restore -- which is the same fact one
+    # indirection out.
+    if ( ( $vals[1]{op} // '' ) eq 'Constant' ) {
+        is $vals[1]{fields}{value}, 1,
+            'and the second reads the pre-local value';
+    }
+    else {
+        my $mem = $by{ ( $vals[1]{inputs} // [] )->[0] // -1 };
+        ok $mem && $mem->{op} eq 'EntryWrite',
+            'the second print reads the scalar at a store' or return;
+        is $by{ $mem->{inputs}[1] }{fields}{value}, 1,
+            'and the store it reads is the restore of the pre-local value';
+    }
 };
 
 # local ON A PACKAGE ARRAY is the rs.t case (`local @INC = (...)`), and takes

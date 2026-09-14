@@ -64,8 +64,24 @@ subtest 'the read after s/// sees the substituted value' => sub {
     $arg = $by{ ( $arg->{inputs} // [] )->[0] // -1 }
         if $arg && ( $arg->{op} // '' ) eq 'Coerce';
     ok $arg, 'the print has a value' or return;
-    is $arg->{op}, 'RegexSubst',
-        'it reads the RegexSubst result, not the pre-subst binding';
+    # THE READ IS THROUGH MEMORY. $_ is the package scalar main::_, and a
+    # written package scalar is never value-forwarded (see
+    # _package_scalars_written in FromOptree.pm) -- so the print reads an
+    # EntryDef whose memory version is the substitution's own store. Following
+    # that edge asserts the same fact: the value read is the RegexSubst
+    # result, not the pre-subst binding.
+    if ( ( $arg->{op} // '' ) eq 'RegexSubst' ) {
+        is $arg->{op}, 'RegexSubst',
+            'it reads the RegexSubst result, not the pre-subst binding';
+    }
+    else {
+        is $arg->{op}, 'EntryDef', 'the print reads $_' or return;
+        my $mem = $by{ ( $arg->{inputs} // [] )->[0] // -1 };
+        ok $mem && $mem->{op} eq 'EntryWrite',
+            'and reads it at a store' or return;
+        is $by{ $mem->{inputs}[1] }{op}, 'RegexSubst',
+            'and that store wrote the RegexSubst result';
+    }
 };
 
 # /r IS NON-DESTRUCTIVE and must NOT rebind: it yields a new string and leaves

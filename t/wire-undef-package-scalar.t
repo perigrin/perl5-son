@@ -61,13 +61,36 @@ subtest 'a later read sees the rebound undef' => sub {
     my $ns = prog_nodes($w);
     my %by = map { $_->{id} => $_ } $ns->@*;
 
-    # `defined($a)` must test the UNDEF constant, not the 5 that preceded it.
+    # `defined($a)` must test the UNDEF, not the 5 that preceded it.
+    #
+    # IT TESTS IT THROUGH MEMORY, not by reading a forwarded Constant. A
+    # package scalar that some sub assigns is read through the memory chain
+    # (see _package_scalars_written in FromOptree.pm), so the assertion is
+    # that the read's memory version is the undef store -- which is the same
+    # fact one indirection out, and the only spelling that stays true when
+    # the writer is in another sub.
     my ($defined) = grep { ( $_->{op} // '' ) eq 'Defined' } $ns->@*;
     ok $defined, 'the program tests definedness' or return;
     my $tested = $by{ ( $defined->{inputs} // [] )->[0] // '' };
     ok $tested, 'and it tests something' or return;
-    is $tested->{fields}{const_type} // '', 'undef',
-        'it tests the rebound undef, not the earlier value';
+
+    my $undef_id = ( grep {
+        ( $_->{op} // '' ) eq 'Constant'
+            && ( $_->{fields}{const_type} // '' ) eq 'undef'
+    } $ns->@* )[0]{id};
+
+    if ( ( $tested->{op} // '' ) eq 'Constant' ) {
+        is $tested->{fields}{const_type} // '', 'undef',
+            'it tests the rebound undef, not the earlier value';
+    }
+    else {
+        is $tested->{op}, 'EntryDef', 'it tests a read of the package scalar';
+        my $mem = $by{ ( $tested->{inputs} // [] )->[0] // '' };
+        ok $mem, 'and that read carries a memory version' or return;
+        is $mem->{op}, 'EntryWrite', 'whose producer is a store' or return;
+        is $mem->{inputs}[1], $undef_id,
+            'and that store wrote the undef, not the earlier 5';
+    }
 };
 
 # AGGREGATES NOW LOWER TOO, as an EMPTY container rather than a rebind to

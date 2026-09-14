@@ -45,8 +45,25 @@ subtest 'an implicit $_ s/// rebinds $_, and does not drop the substitution' => 
 
     my ($ret) = grep { $_->operation eq 'Return' } $g->nodes->@*;
     ok(defined $ret, 'the sub returns') or return;
-    is($ret->inputs->[0]->operation, 'RegexSubst',
-        '$_ reads the substitution result, not the pre-subst binding');
+    # THE READ IS THROUGH MEMORY. $_ is the package scalar main::_, and a
+    # written package scalar is never value-forwarded (see
+    # _package_scalars_written in FromOptree.pm) -- so the return reads an
+    # EntryDef whose memory version is the substitution's own store. Following
+    # that edge asserts the same property the direct comparison did: the
+    # substitution reached the read and was not dropped.
+    my $val = $ret->inputs->[0];
+    if ($val->operation eq 'RegexSubst') {
+        is($val->operation, 'RegexSubst',
+            '$_ reads the substitution result, not the pre-subst binding');
+    }
+    else {
+        is($val->operation, 'EntryDef', 'the return reads $_') or return;
+        my $mem = ($val->inputs // [])->[0];
+        ok($mem && $mem->operation eq 'EntryWrite',
+            'and reads it at a store') or return;
+        is($mem->inputs->[1]->operation, 'RegexSubst',
+            'and that store wrote the substitution result');
+    }
 };
 
 # This refused while package scalars had no store to rebind through: keying a

@@ -429,6 +429,102 @@ class SoN::FromOptree 0.01 {
         return \%taken;
     }
 
+    # _package_scalars_written() -- every package scalar some sub in the program
+    # ASSIGNS to, keyed exactly as _stash_name_key spells it ('$main::n').
+    #
+    # WHY A PROGRAM-WIDE SCAN AND NOT A PER-CV ONE. Each sub is translated as
+    # its own graph, and a package scalar is the one storage class whose writer
+    # and reader can be in DIFFERENT graphs. The reader's own optree contains
+    # no evidence at all that the variable is mutated -- in
+    #
+    #     our $n = 0; sub bump { $n++; 1 } bump(); bump(); print "n=$n\n";
+    #
+    # __PROGRAM__'s tree holds one store (`our $n = 0`) and two entersubs, and
+    # nothing in it says bump() writes $n. This is the same reason
+    # _address_taken runs before the walk: the fact that demotes a read can
+    # only be established by looking somewhere the read cannot see.
+    #
+    # THE SSA REBIND IS THE MISCOMPILE, not merely an optimisation that missed.
+    # The gvsv read resolves `$sim->lookup($key)` first, and `our $n = 0` bound
+    # that key to the literal Constant 0 -- so the interpolated `$n` in the
+    # print was Constant 0, with no EntryDef and no memory edge anywhere in its
+    # cone. Measured, print's operand chain was
+    #
+    #     Concat <- Concat <- Coerce <- Constant integer 0
+    #
+    # and the program printed 0 where perl prints 2. Routing the read through
+    # memory is what makes the callee's EntryWrite reachable from it.
+    #
+    # NARROW ON PURPOSE, exactly as the call barrier is. A package scalar that
+    # is only ever READ (a `our $VERSION = ...` consulted from everywhere)
+    # keeps its value binding and constant-folds as before; only one that some
+    # sub assigns is forced through memory. A pad slot is untouched: it is
+    # private to its sub and no call can reach it.
+    my %PKG_SCALAR_WRITTEN;
+    my $PKG_SCALAR_SCANNED = 0;
+    sub _package_scalars_written () {
+        return \%PKG_SCALAR_WRITTEN if $PKG_SCALAR_SCANNED;
+        $PKG_SCALAR_SCANNED = 1;
+
+        # A WRITE IS OPf_MOD ON THE NAME, not a list of assignment op names.
+        # perl spells the mutation four different ways -- sassign, a STACKED
+        # `op=` binop, preinc/predec, multiconcat -- and marks the destination
+        # the same way in all of them. Measured on `our $n = 4`:
+        #
+        #     $n = 1     gvsv flags=0x22            OPf_MOD on the gvsv
+        #     $n += 3    null flags=0x36 -> gvsv    OPf_MOD on the ex-rv2sv
+        #     $n++       null flags=0x36 -> gvsv    OPf_MOD on the ex-rv2sv
+        #
+        # so the flag is sometimes on the gvsv and sometimes on the nulled
+        # rv2sv wrapper above it -- carry it DOWN through nulls rather than
+        # testing only the gvsv, or `$n++` and `$n += 3` are both missed.
+        my $visit;
+        $visit = sub ($op, $cv, $mod) {
+            return unless ref($op) && $$op;
+            my $name = $op->name;
+            $mod ||= ($op->flags & 32) ? 1 : 0;   # OPf_MOD
+
+            if ($mod && ($name eq 'gvsv'
+                         || ($name eq 'rv2sv' && $op->can('first')
+                             && ${$op->first} && $op->first->name eq 'gv'))) {
+                my $gv_op = $name eq 'gvsv' ? $op : $op->first;
+                my $gv = eval { _op_gv($cv, $gv_op) };
+                $PKG_SCALAR_WRITTEN{
+                    _stash_name_key('$', $gv->STASH->NAME, $gv->NAME) } = 1
+                    if $gv && $$gv;
+            }
+
+            # OPf_MOD propagates through the NULLED wrappers only. A real op
+            # (the RHS of an assignment, a nested call) starts fresh, or every
+            # read inside a store's value expression would be taken for a
+            # write.
+            my $kid_mod = ($name eq 'null' || $name eq 'ex-rv2sv') ? $mod : 0;
+            return unless $op->flags & 4;   # OPf_KIDS
+            for (my $k = $op->first; ref($k) && $$k; $k = $k->sibling) {
+                $visit->($k, $cv, $kid_mod);
+            }
+        };
+
+        my $root = eval { B::main_root() };
+        $visit->($root, B::main_cv, 0) if $root && $$root;
+
+        # EVERY SUB, not just the program body -- the writer is normally in a
+        # sub and the reader in the program, which is the whole point.
+        for my $name (sort keys %main::) {
+            next unless $name =~ /^[A-Za-z_]\w*$/;
+            my $glob = $main::{$name};
+            next unless ref(\$glob) eq 'GLOB';
+            my $code = *{$glob}{CODE} or next;
+            my $sub_cv = eval { B::svref_2object($code) } or next;
+            next unless ref($sub_cv) && $sub_cv->isa('B::CV');
+            my $sub_root = eval { $sub_cv->ROOT };
+            next unless $sub_root && $$sub_root;
+            $visit->($sub_root, $sub_cv, 0);
+        }
+
+        return \%PKG_SCALAR_WRITTEN;
+    }
+
     sub _translate_from ($cv, $start_op, %opts) {
         my $program_root = $opts{program_root};
 
@@ -668,7 +764,11 @@ class SoN::FromOptree 0.01 {
                     _arm_has_element_store($op->other, $stop_addr)
                     || _arm_has_field_store($cv, $op->other, $stop_addr)
                     || _arm_has_void_call($op->other, $stop_addr)
-                    || _arm_has_die($op->other, $stop_addr);
+                    || _arm_has_die($op->other, $stop_addr)
+                    # ...or the arm advances control without holding an effect:
+                    # a call whose result is READ, or a loop. See
+                    # _arm_advances_control for the two measured graphs.
+                    || _arm_advances_control($op->other, $stop_addr);
                 # A void operator discards its result, so the mem_branch path
                 # (which pushes no value) is the whole story. When the result is
                 # READ the guard still has to be built, but a value must reach
@@ -1085,7 +1185,7 @@ class SoN::FromOptree 0.01 {
 
             # leaveloop - end of loop or bare block: restore any `local`.
             if ($name eq 'leaveloop') {
-                _restore_locals($sim, $ctx);
+                _restore_locals($sim, $ctx, $factory);
                 $op = $op->next;
                 next;
             }
@@ -1157,8 +1257,11 @@ class SoN::FromOptree 0.01 {
                 # RESOLVED HERE because the /e path needs it: the match half is
                 # built before the replacement is walked, and takes the target
                 # as its operand. Idempotent -- returns the existing binding.
-                my ($scope_key, $target) =
+                # $store_target is the NAME to store through when the
+                # binding resolved to a bare value -- see _subst_target.
+                my ($scope_key, $target, $store_target) =
                     _subst_target($cv, $op, $sim, $factory);
+                $store_target //= $target;
                 # s///e: the replacement is a code SUBTREE rather than a
                 # literal, and it is walkable. It hangs off pmreplroot and is
                 # intact even under the rpeep suppression this walker runs with
@@ -1322,7 +1425,7 @@ class SoN::FromOptree 0.01 {
                 # rebind -- only push the result value ($nondestruct above).
                 unless ($nondestruct) {
                     $sim->define($scope_key, $node);
-                    _subst_store($factory, $sim, $target, $node);
+                    _entry_store($factory, $sim, $store_target, $node);
                 }
                 # The binding above is the substituted subject. In count
                 # context the VALUE is a different thing over the same
@@ -2155,21 +2258,45 @@ class SoN::FromOptree 0.01 {
         my @exit_projs = map { SoN::FromOptree::StackSim::arm_proj($_->{control}) }
                              @$exits;
 
+        # ONE OWNER, AND ONLY WHEN IT REALLY OWNS BOTH SIDES. The scan took the
+        # FIRST exit that resolved to a Proj and stamped its If as this
+        # Region's head -- but a function-exit Region merges exits that need
+        # not be two arms of one branch. Measured on
+        # `sub f { my $g=shift; if($g){ if($g>1){ print "a\n"; return 1 } } return 0 }`:
+        #
+        #     16 Region in=[14,15] head=7    the real if/else join
+        #     17 Region in=[13,16] head=11   <- the FUNCTION EXIT, head wrong
+        #
+        # If(11) already owns Region(16)'s sibling, and claiming 17 too gave
+        # one If two regions. A head is a claim about which branch this merge
+        # closes; make it only when every exit resolves to a Proj of the SAME
+        # If, which is exactly the `return X if C` / `E // return X` shape the
+        # scan was written for.
         my $owner;
-        EXIT: for my $arm (@exit_projs) {
-            next unless defined $arm;
-            my $cand = $arm->inputs->[0];
-            if (defined $cand && blessed($cand)) { $owner = $cand; last EXIT }
+        if ((grep { defined } @exit_projs) == @exit_projs) {
+            my @heads = map { $_->inputs->[0] } @exit_projs;
+            $owner = $heads[0]
+                if (grep { defined $_ && blessed($_) } @heads) == @heads
+                && (grep { $_ == $heads[0] } @heads) == @heads;
         }
         $owner->set_region($region) if defined $owner && $owner->can('set_region');
 
-        # The walk above already knows which Proj each exit came from, so
-        # RECORD it: inputs[i] pairs with predecessors[i] and the consumer reads
-        # arm identity instead of searching for it again. Supplied only when
-        # EVERY exit resolved -- the consumer pairs by position, so a partial
-        # list would silently mis-pair.
-        my @preds = (grep { defined } @exit_projs) == @exit_projs
-            ? @exit_projs : ();
+        # THE PREDECESSOR IS THE EXIT'S CONTROL IDENTITY, not necessarily a
+        # Proj. inputs[i] pairs with predecessors[i]; the consumer looks each
+        # one up in its arm map and treats a miss as "this input arrives from
+        # outside the branch" -- the seed value it declares before the `if`.
+        # A FALLTHROUGH EXIT IS EXACTLY THAT MISS. Its control is the Region
+        # where the branches rejoined, so arm_proj answers undef (it steps
+        # through to the If's own control_in, which is no Proj) -- and the
+        # all-or-nothing guard then dropped `predecessors` from the Phi
+        # ENTIRELY. Deparse's _join_phis REQUIRES the field, so a shape whose
+        # only defect was one unresolvable arm refused as
+        # "no rule for control node `Region`". Fall back to the exit's own
+        # control node: it names the right block either way, and every entry is
+        # then defined so the list is never dropped.
+        my @preds = map { $exit_projs[$_] // $exits->[$_]{control} }
+                        0 .. $#$exits;
+        @preds = () if grep { !defined } @preds;
 
         my $phi = $factory->make('Phi',
             inputs => [map { $_->{value} } @$exits],
@@ -2671,8 +2798,30 @@ class SoN::FromOptree 0.01 {
         # barrier is needed only where a shared mutable cell exists to be
         # written, which is exactly this condition. A read-only cell needs no
         # barrier, which is what `captured_written` is checked for.
+        #
+        # A WRITTEN PACKAGE SCALAR IS THE SAME HAZARD ONE SCOPE WIDER. A
+        # capture cell is shared between an enclosing sub and its closures; a
+        # package scalar is shared with EVERY sub in the program, so a direct
+        # call is just as much a barrier for it. Measured on
+        #
+        #     our $n = 0; sub bump { $n++; 1 } bump(); bump(); print "n=$n\n";
+        #       perl prints 2
+        #
+        # with only the read-side fix in place: the print's read was a real
+        # EntryDef carrying memory, but that memory was the `our $n = 0`
+        # EntryWrite, because Call(12) and Call(13) neither consumed nor
+        # produced a memory version. The read was therefore ordered BEFORE
+        # both calls and still saw 0. Routing the read through memory and
+        # advancing memory across the call are two DIFFERENT necessary
+        # halves -- neither alone moves the answer off 0.
+        #
+        # Keyed on the same program-wide scan the read side uses, so a program
+        # with no written package scalar keeps every call floatable exactly as
+        # before.
         if (defined $sim->memory
-            && grep { $_->captured_written } values +($ctx->{cells} // {})->%*) {
+            && ( (grep { $_->captured_written }
+                    values +($ctx->{cells} // {})->%*)
+                 || %{ _package_scalars_written() } )) {
             $sim->set_memory($node);
         }
 
@@ -3691,8 +3840,16 @@ class SoN::FromOptree 0.01 {
                     # just `unstack` and a goto -- so it is modelled here
                     # rather than translated from an op.
                     my $key = _stash_name_key('$', $gv->STASH->NAME, $gv->NAME);
+                    # THE TARGET RIDES ALONG, because the restore is a STORE
+                    # as well as a rebind and the store needs an EntryDef to
+                    # name. Built here, where the GV is in hand.
                     push $ctx->{local_saves}->@*,
-                        { key => $key, node => $sim->lookup($key) };
+                        { key    => $key,
+                          node   => $sim->lookup($key),
+                          target => $factory->make('EntryDef',
+                              package => $gv->STASH->NAME,
+                              sigil   => '$',
+                              symbol  => $gv->NAME) };
                 }
 
                 # SIGIL-QUALIFIED: `$g` and `@g` are different variables
@@ -3703,7 +3860,18 @@ class SoN::FromOptree 0.01 {
                 my $is_deref  = ($op->private & 48);            # OPpDEREF
                 my $is_lvalue = ($op->flags & 32) && !$is_deref; # OPf_MOD
                 my $existing  = $sim->lookup($key);
-                if ($existing && !$is_lvalue) {
+                # A WRITTEN PACKAGE SCALAR IS NEVER VALUE-FORWARDED. The scope
+                # binding is correct only while nothing outside this graph can
+                # change the variable, and for a package scalar some other sub
+                # always can. Forwarding it made `our $n = 0; sub bump { $n++ }
+                # bump(); bump(); print "n=$n"` read the literal Constant 0 --
+                # the initial store's own VALUE -- so the print's whole data
+                # cone was Concat <- Concat <- Coerce <- Constant 0 with no
+                # EntryDef in it at all, and the program printed 0 for perl's
+                # 2. See _package_scalars_written for why the discriminator
+                # has to be a program-wide scan.
+                my $forwardable = !_package_scalars_written()->{$key};
+                if ($existing && !$is_lvalue && $forwardable) {
                     $sim->push_node($existing);
                 }
                 else {
@@ -3717,12 +3885,40 @@ class SoN::FromOptree 0.01 {
                     # read, and takes no memory: it is the destination handed to
                     # sassign, and giving it a memory input would make the
                     # store's own operand depend on the memory it produces.
+                    # IT CARRIES THE TYPE OF THE VALUE IT READS. Routing a
+                    # read through memory must not cost it its stamp: the
+                    # binding says what the variable currently holds, and
+                    # that is still true when the read is expressed as a
+                    # memory edge rather than as the value itself.
+                    #
+                    # WITHOUT THIS THE READ IS THE CLASS DEFAULT, and two
+                    # separate consumers refuse it. Measured on
+                    # `$x = 0; while ($x < 3) { $x = $x + 1 }` (perl's
+                    # t/base/while.t), the loop's back-edge came out
+                    #
+                    #     Add(EntryDef:Unknown, Constant:Int)  -> Unknown
+                    #
+                    # so _patch_loop_phi saw an unstamped back-edge against an
+                    # Int Phi and GAPped ("loop-carried value loses its
+                    # stamp"). The same unstamped read as a foreach range bound
+                    # is not an integer Constant either, which is the second
+                    # refusal -- t/base/rs.t's
+                    # `foreach $test ($test_count..$test_count + 3)`.
+                    #
+                    # Both files were CLEAN before package-scalar reads went
+                    # through memory, and both are CLEAN again with the stamp
+                    # carried across. The stamp is the binding's, not a guess:
+                    # an unbound name still yields the class default.
+                    my $read_stamp = $existing && $existing->can('stamp')
+                        ? $existing->stamp : undef;
                     my $node = $factory->make('EntryDef',
                         package => $gv->STASH->NAME,
                         sigil      => '$',
                         symbol => $gv_name,
                         ($is_lvalue || !defined $sim->memory
-                            ? () : (inputs => [$sim->memory])));
+                            ? () : (inputs => [$sim->memory])),
+                        (!$is_lvalue && defined $read_stamp
+                            ? (stamp => $read_stamp) : ()));
                     # Seed only when unbound: an lvalue over an already-bound
                     # name must not clobber it (`$g += 2` reads first).
                     $sim->define(_stash_key($node), $node) unless defined $existing;
@@ -4372,7 +4568,16 @@ class SoN::FromOptree 0.01 {
                     my $node = _undef_constant($factory);
                     if ($cur && $cur->can('package') && $cur->can('sigil')
                         && ( $cur->sigil // '' ) eq '$') {
+                        # ...AND A STORE. `undef $a` is a SIXTH spelling of a
+                        # package-scalar mutation, and the rebind alone is the
+                        # same half-fix every other spelling needed: measured
+                        # on `$a = 5; undef $a; print defined($a) ? "d" : "u"`,
+                        # the read after it threaded on the `$a = 5`
+                        # EntryWrite -- the only store in the graph -- so
+                        # Defined tested 5 and the program answered "d" where
+                        # perl says "u".
                         $sim->define(_stash_key($cur), $node);
+                        _entry_store($factory, $sim, $cur, $node);
                     }
                     # No recognisable name to rebind: pushing the constant
                     # would silently drop the write, so refuse instead.
@@ -4879,6 +5084,32 @@ class SoN::FromOptree 0.01 {
                                $sim->memory]);
             }
 
+            # `$n++` ON A PACKAGE SCALAR IS A FIFTH WRITE FORM, and it reached
+            # no store at all. The gvsv under a preinc does NOT carry OPf_MOD
+            # -- measured on `our $n = 0; sub bump { $n++; 1 }`, the flag sits
+            # on the intervening ex-rv2sv null that the exec walk never visits:
+            #
+            #     preinc     flags=0x05 private=0x1
+            #       null     flags=0x36 private=0x1   OPf_MOD is HERE
+            #         gvsv   flags=0x02 private=0x0   no OPf_MOD
+            #
+            # so the gvsv handler took its RVALUE branch and pushed a read
+            # EntryDef. That matched none of the arms above ($targ stayed
+            # undef, no lvalue), and the Add was built, bound to nothing and
+            # consumed by nobody: `bump(); bump(); print $n` printed 0 where
+            # perl prints 2 -- the increment VANISHED.
+            #
+            # The EntryDef is both the value and the name, so it serves as the
+            # store target directly. Rebind the scope key AND store, the pair
+            # sassign's own EntryDef branch emits: the rebind is what a later
+            # read in THIS unit resolves to, the store is what makes the
+            # mutation visible to another sub.
+            my $entry_lvalue;
+            if ($old->isa('SoN::IR::Node::EntryDef')) {
+                $entry_lvalue = $old;
+                $targ = undef;   # the storage is the stash entry, not a pad
+            }
+
             my $one = $factory->make('Constant',
                 value => 1, const_type => 'integer',
                 stamp => SoN::IR::Stamp->new(type => 'Int'));
@@ -4887,7 +5118,11 @@ class SoN::FromOptree 0.01 {
             my %extra = defined $stamp ? (stamp => $stamp) : ();
             my $new = $factory->make($node_type, inputs => [$old, $one], %extra);
 
-            if (defined $cell_lvalue) {
+            if (defined $entry_lvalue) {
+                $sim->define(_stash_key($entry_lvalue), $new);
+                _entry_store($factory, $sim, $entry_lvalue, $new);
+            }
+            elsif (defined $cell_lvalue) {
                 my $write = $factory->make('CellWrite',
                     inputs => [$cell_lvalue, $new,
                         (defined $sim->memory ? ($sim->memory) : ())]);
@@ -6255,6 +6490,42 @@ class SoN::FromOptree 0.01 {
                     && $op->first->name =~ /^padsv/
                     && ($op->first->flags & 32);  # OPf_MOD (lvalue read)
 
+                # Package-scalar compound assignment (`$n += 3`, `$n *= 2`):
+                # the FIRST operand is an EntryDef read of a stash entry and
+                # the op carries OPf_STACKED. Measured on
+                # `our $n = 4; sub f { $n += 3; 1 }`:
+                #
+                #     add    flags=0x45 private=0x2   STACKED, NOT TARGMY
+                #       null   flags=0x36             OPf_MOD is on the null
+                #         gvsv flags=0x02             no OPf_MOD, no pad targ
+                #       const  flags=0x02
+                #
+                # so $is_compound's `first->name =~ /^padsv/` test is false
+                # (the kid is a gvsv), and private=0x2 is not OPpTARGET_MY
+                # (0x10) either, so the TARGMY write path never ran. Nothing
+                # claimed the op: `f(); print $n` emitted Start, Constant,
+                # Return -- NOT EVEN THE ARITHMETIC -- where perl prints 7.
+                #
+                # OPf_STACKED (0x40) IS THE DISCRIMINATOR, and it is the whole
+                # `op=` family in one test rather than a list of operator
+                # names. Measured, every spelling sets it and a plain binop
+                # does not:
+                #
+                #     $n += 3  $n -= 3  $n *= 2  $n /= 2
+                #     $n %= 3  $n **= 2  $n x= 2      all flags=0x45  STACKED
+                #     $n + 3                              flags=0x05  no STACKED
+                #
+                # A name list would have missed **= and x= silently, which is
+                # the failure mode docs/plans/2026-08-31-one-operator-one-
+                # declaration.md records.
+                my $pkg_lvalue;
+                if (!$is_compound
+                    && @inputs >= 1
+                    && $inputs[0]->isa('SoN::IR::Node::EntryDef')
+                    && ($op->flags & 64)) {   # OPf_STACKED
+                    $pkg_lvalue = $inputs[0];
+                }
+
                 # Element compound assignment (`$a[0] += 5`): the FIRST operand
                 # is a 2-input lvalue Subscript (a store ADDRESS) and the op
                 # carries OPf_STACKED (0x40, the `op=` form -- a plain `$a[0]+$x`
@@ -6262,7 +6533,7 @@ class SoN::FromOptree 0.01 {
                 # must read the PRE-store value, so swap in a 3-input rvalue read
                 # pinned to the current memory; the lvalue stays the store target.
                 my $elem_lvalue;
-                if (!$is_compound
+                if (!$is_compound && !defined $pkg_lvalue
                     && @inputs >= 1
                     && $inputs[0]->isa('SoN::IR::Node::Subscript')
                     && scalar($inputs[0]->inputs->@*) == 2
@@ -6320,6 +6591,7 @@ class SoN::FromOptree 0.01 {
                 # which is why this is a stack shape rather than a tree walk.
                 my $stacked_dest;
                 if (!$is_compound && !$field_compound && !defined $elem_lvalue
+                    && !defined $pkg_lvalue
                     && ($op->flags & 64)          # OPf_STACKED
                     && $sim->stack_depth
                     && $sim->peek_node->isa('SoN::IR::Node::PadAccess')
@@ -6502,6 +6774,14 @@ class SoN::FromOptree 0.01 {
                 if ($is_compound) {
                     $sim->define($lvalue_targ, $node);
                 }
+                elsif (defined $pkg_lvalue) {
+                    # Rebind the scope key AND store, the pair sassign's own
+                    # EntryDef branch emits. The rebind is what a later read in
+                    # THIS unit resolves to; the store is what makes the
+                    # mutation observable from another sub.
+                    $sim->define(_stash_key($pkg_lvalue), $node);
+                    _entry_store($factory, $sim, $pkg_lvalue, $node);
+                }
                 elsif ($field_compound) {
                     # Store the += result back to the field slot (memory), like
                     # the TARGMY `=` field-write path. The lvalue is a fresh
@@ -6610,14 +6890,34 @@ class SoN::FromOptree 0.01 {
     #
     # LIFO, because `local` nests: the innermost save is the most recent, and
     # restoring in reverse gives each scope the binding its own entry saw.
-    sub _restore_locals ($sim, $ctx) {
+    sub _restore_locals ($sim, $ctx, $factory = undef) {
         my $saves = $ctx->{local_saves} or return;
         while (my $save = pop $saves->@*) {
             # A `local` on a name with NO prior binding leaves the name unbound
             # rather than bound to undef -- define() cannot express that, so the
             # binding is simply left as the local set it. Measured as rare and
             # not what rs.t does (`local @INC` has an @INC to restore).
-            $sim->define($save->{key}, $save->{node}) if defined $save->{node};
+            next unless defined $save->{node};
+            $sim->define($save->{key}, $save->{node});
+
+            # ...AND A STORE, because the RESTORE IS A WRITE. The scope map
+            # alone expressed it only while a package-scalar read was
+            # value-forwarded; a read that goes through memory (which one must,
+            # so it can observe a write made in another sub -- see
+            # _package_scalars_written) cannot see a rebind that touched no
+            # memory. Measured on
+            #
+            #     our $g = 1; { local $g = 2; print $g; } print $g;
+            #       perl prints 21
+            #
+            # with the restore not storing: the graph held ONE EntryDef, whose
+            # memory was the `local $g = 2` EntryWrite, and BOTH Prints read
+            # it -- 22, a silent wrong answer.
+            #
+            # $factory is optional so the two call sites that have no factory
+            # in hand keep the binding-only behaviour rather than dying.
+            _entry_store($factory, $sim, $save->{target}, $save->{node})
+                if $factory && $save->{target};
         }
     }
 
@@ -7816,13 +8116,13 @@ class SoN::FromOptree 0.01 {
             # read after the loop resolved to the localised value and the graph
             # said "iter" where perl says "outer".
             if ($name eq 'unstack') {
-                _restore_locals($sim, $ctx);
+                _restore_locals($sim, $ctx, $factory);
                 last;
             }
 
             # leaveloop - exit the loop
             if ($name eq 'leaveloop') {
-                _restore_locals($sim, $ctx);
+                _restore_locals($sim, $ctx, $factory);
                 last;
             }
 
@@ -8261,8 +8561,11 @@ class SoN::FromOptree 0.01 {
                 # target as its operand. `foreach ($l) { s/... }` substitutes
                 # into the ALIASED ITERATOR: measured, that subst has targ=0,
                 # so its target is $_ and there is nothing on the stack.
-                my ($scope_key, $target) =
+                # $store_target is the NAME to store through when the
+                # binding resolved to a bare value -- see _subst_target.
+                my ($scope_key, $target, $store_target) =
                     _subst_target($cv, $op, $sim, $factory);
+                $store_target //= $target;
 
                 # ALL THREE ARGUMENTS, or the capture in the replacement has no
                 # match to read and refuses. Extending the helper without
@@ -8307,7 +8610,7 @@ class SoN::FromOptree 0.01 {
                 # key and not only the value.
                 unless ($op->pmflags & PMf_NONDESTRUCT) {
                     $sim->define($scope_key, $node);
-                    _subst_store($factory, $sim, $target, $node);
+                    _entry_store($factory, $sim, $store_target, $node);
                 }
                 # Same split as the main walker: the BINDING is the substituted
                 # subject, but the VALUE of a destructive s/// is the match
@@ -8639,6 +8942,99 @@ class SoN::FromOptree 0.01 {
             }
             next unless $name eq 'entersub';
             return 1 if ($op->flags & 3) == 1;   # OPf_WANT_VOID
+        }
+        return 0;
+    }
+
+    # Does the arm ADVANCE CONTROL -- does anything in it become the arm's new
+    # $sim->control, so that the arm's control and the base's must be Regioned
+    # back together?
+    #
+    # THIS IS A DIFFERENT QUESTION FROM "DOES THE ARM HOLD AN EFFECT", which the
+    # four _arm_has_* predicates above answer. An effect arm needs control flow
+    # so the effect is GUARDED; a control-advancing arm needs it so the graph
+    # stays a graph. The and/or handler had only the effect question, and the
+    # two shapes below answer it `no` while still advancing control:
+    #
+    #  1. A CALL WHOSE RESULT IS READ. `_handle_entersub` pins control_in on
+    #     EVERY Call, void or not (R1.0 effect-by-default) -- but
+    #     `_arm_has_void_call` tests OPf_WANT_VOID, so a call that is the
+    #     construct's VALUE reported no effect and no If was built. Measured on
+    #     `sub c {7} sub foo { my $s = shift; if ($s) { main::c() } }`, which
+    #     perl folds to `shift and main::c()`:
+    #
+    #       3 Call(shift)   ci=0      4 Call(main::c) ci=3   <- unconditional
+    #       5 And(3,4)                6 Return in=[5] ci=3
+    #
+    #     Call(4) and Return(6) both hang off Call(3), which reads as two
+    #     control successors while it is one mis-stamped chain -- and the call
+    #     perl short-circuits away would RUN. foo(0) with a printing c():
+    #     perl prints nothing, the graph runs the call.
+    #
+    #  2. A LOOP IN THE ARM. map/grep/foreach/while all build a Loop whose exit
+    #     Region becomes the new control. In the RHS of an and/or that walk
+    #     happens on the DISCARDED snapshot ($rhs_sim), so without an If the
+    #     loop's exit control is thrown away and the Loop is left a control
+    #     SIBLING of whatever the base built. Measured on
+    #     `if (!$ENV{NO_SLEEP} and grep -e, @f) { print "s\n" }`:
+    #
+    #       Loop 6 in=[0] ci=0        If 10 in=[0,9] ci=0
+    #
+    #     two control nodes on Start. The same program with the grep as the LHS
+    #     is correct (`If 12 in=[5,11] ci=5`); only the RHS position broke,
+    #     which is what says the snapshot is where it is lost.
+    #
+    # ASKED ONLY BY THE and/or HANDLER. A cond_expr's arms are real control flow
+    # by construction and its gate is about effects; widening the shared
+    # _arm_has_void_call instead made a value-context ternary
+    # (`fib($n-1) + fib($n-2)`) take the control-flow path and weakened its
+    # declared return type from Unknown to Scalar (t/sub-return-type.t), and
+    # broke a plain `$r->[1]` round-trip (t/deparse-args-subscript.t). The
+    # question is genuinely different; it gets its own predicate rather than a
+    # fifth meaning bolted onto one that has four.
+    #
+    # Descends into a nested branch and shares one seen-set for the same reason
+    # the predicates above do.
+    sub _arm_advances_control ($start, $stop, $join = undef) {
+        ($stop, $join) = (_op_addr($stop), _op_addr($join));
+        return _arm_advances_control_from($start, $stop, $join, {});
+    }
+
+    # The ops whose handler ends with `$sim->set_control(...)` on something the
+    # arm must carry out with it: a Call (every call, per _handle_entersub) and
+    # the four loop entries, each of which leaves its exit Region as control.
+    #
+    # NOT DERIVED FROM OpMap, and measured before deciding that. OpMap's LOOP
+    # class holds only enterloop and enteriter; map/grepstart are classed
+    # ['mark','Call'] there because they arrive as a call-shaped op -- yet
+    # _step routes BOTH to _translate_foreach_array, which builds a Loop. So
+    # `$opmap->is_loop` would answer no for a grep, which is exactly the Kind C
+    # repro, and the predicate would silently drop the case it was written for
+    # ("allow-lists fail asymmetrically": a missing name loses a valid case
+    # with no diagnostic). And entersub is in no control class at all -- it is
+    # control-advancing because _handle_entersub PINS it, a property of this
+    # producer's effect-by-default rule rather than of perl's op table.
+    #
+    # THE INVARIANT THIS SET ENCODES: every op whose handler calls
+    # $sim->set_control belongs here. Adding a handler that does so and not
+    # adding its op here re-opens this defect.
+    my %ADVANCES_CONTROL_OP = map { $_ => 1 }
+        qw(entersub enterloop enteriter mapstart grepstart);
+
+    sub _arm_advances_control_from ($start, $stop, $join, $seen) {
+        for (my $op = $start;
+             $$op && $$op != $stop && !(defined $join && $$op == $join)
+                 && !$seen->{$$op};
+             $op = $op->next) {
+            $seen->{$$op} = 1;
+            my $name = $op->name;
+            if ($name eq 'and' || $name eq 'or' || $name eq 'cond_expr') {
+                return 1
+                    if _arm_advances_control_from($op->other, $stop, $join,
+                                                  $seen);
+                next;
+            }
+            return 1 if $ADVANCES_CONTROL_OP{$name};
         }
         return 0;
     }
@@ -9430,6 +9826,24 @@ class SoN::FromOptree 0.01 {
                         || ( defined $mod_end && ref $mod_end
                              && $$mod_end == $mod_stop );
                 if ($mem_branch) {
+                    # AN EXITED ARM IS NOT A MERGE INPUT. `if (C) { print; return 1 }`
+                    # LEAVES the function on the body arm: _walk_branch recorded
+                    # its control edge in @exits and _build_single_exit merges it
+                    # at the function exit. Regioning it here as well put one
+                    # control node in TWO merges. Measured on
+                    # `sub f { my $g=shift; if($g){ if($g>1){ print "a\n"; return 1 } } return 0 }`:
+                    #
+                    #     13 Print  ci=12            the body arm, which RETURNED
+                    #     16 Region in=[15,13]       <- and rejoined anyway
+                    #
+                    # giving Print two control successors, which is what the
+                    # deparse oracle refuses as "a control node with 2
+                    # successors". $sim already sits on the continue Proj, so
+                    # the fall-through needs nothing built here.
+                    if (($mod_sig // '') eq 'exited') {
+                        $op = $op->next;
+                        next;
+                    }
                     # The body's residual value is discarded in void context.
                     # Drain it so merge() does not build a spurious (ill-typed)
                     # stack Phi over a dead value -- the same drain the main
@@ -9871,11 +10285,11 @@ class SoN::FromOptree 0.01 {
     # subst has targ=0, so its target is $_ (the aliased iterator) and there is
     # nothing on the stack to pop. See
     # docs/plans/2026-08-31-one-operator-one-declaration.md.
-    # _subst_store($factory, $sim, $scope_key, $target, $value) -- a destructive
-    # s/// on a PACKAGE variable needs the same EntryWrite an sassign emits.
+    # _entry_store($factory, $sim, $target, $value) -- a mutation of a PACKAGE
+    # variable needs the same EntryWrite an sassign emits.
     # Rebinding the scope key alone is the whole semantics for a pad slot, but a
     # package scalar is readable from another sub, and without the store that
-    # read cannot observe the substitution. Measured before this:
+    # read cannot observe the mutation. Measured before this:
     #
     #     our $g = "aaa";
     #     sub mangle { $main::g =~ s/a/b/g }
@@ -9887,7 +10301,23 @@ class SoN::FromOptree 0.01 {
     #
     # A pad target passes through untouched: $target is only an EntryDef when
     # the destination is a package variable.
-    sub _subst_store ($factory, $sim, $target, $value) {
+    #
+    # SHARED BY EVERY MUTATION FORM, not just s///. A read-modify-write is the
+    # same fact one operator over, and each spelling perl gives it lands in a
+    # different handler -- preinc/predec, the STACKED `op=` binop, multiconcat,
+    # sassign. Measured on `our $n = 4; sub f { SPELLING; 1 } f(); print $n`,
+    # before this was shared:
+    #
+    #     $n++ / $n-- / ++$n   Start Constant Return EntryDef Coerce Add
+    #                            -- the Add computed and consumed by NOBODY
+    #     $n += 3 / $n *= 2    Start Constant Return
+    #                            -- no arithmetic in the graph at all
+    #     $n .= "x"            correct: EntryWrite (multiconcat's own path)
+    #     $n = $n + 1          correct: EntryWrite (sassign's path)
+    #
+    # so two of four shapes were silently wrong and the fix belongs in one
+    # place, not in each handler.
+    sub _entry_store ($factory, $sim, $target, $value) {
         return unless $target
             && $target->isa('SoN::IR::Node::EntryDef')
             && defined $sim->memory;
@@ -10041,6 +10471,26 @@ class SoN::FromOptree 0.01 {
                 : $factory->make('EntryDef',
                     package => 'main', sigil => '$', symbol => '_');
             $sim->define($scope_key, $target);
+        }
+        # THE STORE TARGET IS THE NAME, NOT THE BOUND VALUE. $sim->lookup
+        # returns whatever the key is currently bound to, and for $_ that is
+        # routinely a plain value: measured on
+        #
+        #     sub { $_ = "foobar"; s/foo/baz/; $_ }
+        #
+        # the lookup returned the Constant "foobar", so _entry_store's
+        # EntryDef check failed, NO store was emitted, and the following read
+        # of $_ threaded on the `$_ = "foobar"` write instead -- the
+        # RegexSubst was left floating, consumed by nobody, and the
+        # substitution was DROPPED.
+        #
+        # A bound value is still the right thing to RETURN (it is the subject
+        # the RegexSubst reads), so rebuild the name beside it rather than
+        # replacing it: an EntryDef for the same stash entry, which
+        # hash-conses with every other lvalue mention of that name.
+        if (!$targ && !$target->isa('SoN::IR::Node::EntryDef')) {
+            return ($scope_key, $target, $factory->make('EntryDef',
+                package => 'main', sigil => '$', symbol => '_'));
         }
         return ($scope_key, $target);
     }
