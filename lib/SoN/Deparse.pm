@@ -562,7 +562,26 @@ class SoN::Deparse 0.01 {
                 }
             }
             else {
-                $text = sprintf('%s->[%s]', $self->_expr($in[0]), $idx);
+                # AN AGGREGATE IS NOT A REFERENCE. `@_` and `$r` both reach
+                # here, and only one of them takes an arrow -- `@_->[0]` is a
+                # syntax error ("Can't use an array as a reference"). The
+                # STAMP separates them: Array/Hash is the container itself,
+                # anything else is a ref to one.
+                my $st = $agg->{stamp} // '';
+                my $spelling = $self->_expr($in[0]);
+                if ($st eq 'Array' || $st eq 'Hash') {
+                    # Indexing a named aggregate switches the sigil to `$`:
+                    # one element of `@_` is `$_[0]`.
+                    die "GAP: an element of a `$kind` spelled `$spelling`"
+                      . " has no aggregate sigil to switch\n"
+                        unless $spelling =~ s/\A[\@\%]/\$/;
+                    $text = $st eq 'Array'
+                        ? sprintf('%s[%s]', $spelling, $idx)
+                        : sprintf('%s{%s}', $spelling, $idx);
+                }
+                else {
+                    $text = sprintf('%s->[%s]', $spelling, $idx);
+                }
             }
         }
         elsif ($op eq 'Count') {
