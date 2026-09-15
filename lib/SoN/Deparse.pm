@@ -128,6 +128,13 @@ class SoN::Deparse 0.01 {
         EntryWrite   => 2,   # [slot, value, memory]
         Assign       => 2,   # [target, value, memory]
         Delete       => 2,   # [container, key, memory]
+        # THE SAME SHAPE AS Delete, one operator over, and it was missing --
+        # so `exists $h{k}` counted its memory edge as a VALUE, bound the
+        # EntryWrite that produced it, and then asked to render a store as an
+        # expression: "no rule for value node `EntryWrite`" on comp/require.t.
+        # t/deparse-memory-table-matches-producer.t scrapes FromOptree for the
+        # construction sites so this table cannot drift from it again.
+        Exists       => 2,   # [container, key, memory]
         Subscript    => 2,   # [container, index, memory]
         Count        => 1,   # [aggregate, memory]
         PostfixDeref => 1,   # [container, memory]
@@ -1723,12 +1730,42 @@ class SoN::Deparse 0.01 {
             # ArgsSource to the kind list outright made `my ($where,$num) = @_`
             # in base/lex.t's `sub T` consume its own RHS: three inputs, all
             # "targets", no values left, and the Assign refused.
+            #
+            # A PostfixDeref IS AMBIGUOUS THE SAME WAY. `$$r = 7` makes it a
+            # target, but `my ($a,$b) = @$r` makes it the SOURCE -- and both
+            # spell the same node kind. Measured on comp/require.t:
+            #
+            #     Assign in=[PadAccess x5, PostfixDeref]
+            #
+            # which is `my (...) = @$ref`. Walking it as a sixth target left
+            # NO values and refused.
+            #
+            # A TRAILING PostfixDeref AFTER A PAD TARGET IS THE SOURCE. It
+            # cannot be a target there: a list assign's targets are all
+            # lvalues, and perl writes `($$r, $$s) = ...` with the derefs
+            # FIRST, never one deref after five pad slots.
             my $t = 0;
             $t++ while $t < @in
                 && (($nodes->{ $in[$t] }{op} // '')
-                      =~ /\A(?:PadAccess|EntryDef|Subscript|PostfixDeref)\z/
+                      =~ /\A(?:PadAccess|EntryDef|Subscript)\z/
                     || ($t == 0
-                        && ($nodes->{ $in[$t] }{op} // '') eq 'ArgsSource'));
+                        && ($nodes->{ $in[$t] }{op} // '') eq 'ArgsSource')
+                    || (($nodes->{ $in[$t] }{op} // '') eq 'PostfixDeref'
+                        && ($t == 0 || $t < $#in))
+                    # `undef` IS A LEGAL PLACEHOLDER IN A TARGET LIST.
+                    # `my (undef, $b) = @_` discards the first value, and
+                    # comp/parser.t uses it as `my (undef, $f, $l) = caller`.
+                    # It reaches the wire as an undef Constant, which is not a
+                    # slot -- so the walk stopped at it and either refused (a
+                    # leading undef) or, worse, took the whole list as VALUES
+                    # and emitted nothing at all for a trailing one.
+                    #
+                    # Only in a list: a lone `undef = $x` is a perl error, and
+                    # a single-input Assign has no target list to be part of.
+                    || (@in > 2
+                        && ($nodes->{ $in[$t] }{op} // '') eq 'Constant'
+                        && (($nodes->{ $in[$t] }{fields} // {})->{const_type}
+                            // '') eq 'undef'));
 
             # AN ELEMENT STORE NEEDS A NAMED CONTAINER. `my @a = (1,2,3)`
             # leaves NO variable in the graph -- measured, the array exists
@@ -1761,11 +1798,15 @@ class SoN::Deparse 0.01 {
                     && !defined(($agg->{fields} // {})->{symbol});
             }
 
-            die "GAP: an Assign with no target slots is not yet rendered\n"
+            die "GAP: an Assign (id $n->{id}) with no target slots is not yet"
+              . " rendered -- its first input is a `"
+              . ($nodes->{ $in[0] // -1 }{op} // '?') . "`\n"
                 unless $t;
             my @lhs = map { $self->_expr($_) } @in[0 .. $t-1];
             my @rhs = map { $self->_expr($_) } @in[$t .. $#in];
-            die "GAP: an Assign with no values is not yet rendered\n"
+            die "GAP: an Assign (id $n->{id}) with no values is not yet"
+              . " rendered -- its " . scalar(@in) . " inputs all read as"
+              . " targets\n"
                 unless @rhs;
             # `my` DECLARES A SLOT; AN ELEMENT STORE WRITES ONE. The producer
             # does not record declaration separately from binding, so a write
@@ -2613,7 +2654,11 @@ class SoN::Deparse 0.01 {
             $text = $self->_phi_var($n);
         }
         else {
-            die "GAP: no rule for value node `$op`\n";
+            # THE ID IS PART OF THE DIAGNOSIS. Without it this refusal names
+            # a KIND, and a graph with 1400 nodes may hold dozens of that kind
+            # -- finding which one required editing the message by hand every
+            # time. A refusal that cannot be acted on is only half honest.
+            die "GAP: no rule for value node `$op` (id $id)\n";
         }
 
         return $rendered{$id} = $text;
