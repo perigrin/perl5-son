@@ -1,7 +1,7 @@
 # A block eval records its join but not its entry
 
 **Date:** 2026-09-15
-**Status:** REFUSES in the deparse. The fix is producer-side and scoped below.
+**Status:** FIXED. The Region now records `eval_entry`, and the deparse uses it.
 
 ## The shape
 
@@ -44,14 +44,38 @@ body handling differs.
 
 ## The fix
 
-The producer should record the eval's ENTRY, not only its join. The optree has
-it: `entertry` is the op, and its position in the exec chain is exactly the
-boundary. Either a CFG node at the entry (mirroring the Region at the exit) or
-a field on the Region naming the first protected node would do.
+`Region` gained an `eval_entry` field naming the control node the protected
+body began after. The producer had it all along -- `$sim->control` at
+`_handle_entertry`, before the body walk -- so recording it cost one line.
 
-Note the try/catch path already builds both sides (`_walk_branch` over the try
-body, then a merge), so the machinery exists -- a plain block eval simply does
-not use it.
+It rides the wire as a node INDEX, like `region` and `predecessors`, and is
+emitted only when set, so every other Region's wire is unchanged. A string
+eval leaves it unset: its Region's input IS the eval, one node, nothing to
+delimit.
+
+## The other half: claim it at the ENTRY, not the join
+
+Recording the entry was necessary and not sufficient. The deparse first used
+it while still recognising the construct when the walk ARRIVED at the Region --
+and a block eval's body is ordinary chain between the two, so those statements
+had already been emitted. Measured, they appeared BOTH before the `eval {` and
+inside it, and a `die` among them escaped:
+
+    $main::g = 1;
+    die "x\n";              <- outside the block
+    my $eval29 = eval {
+      die "x\n";            <- and inside it
+      1;
+    };
+
+So the eval is now recognised when the walk is standing ON its entry. The body
+walk then needs a re-entrancy guard, because it starts at the very node that
+identifies the construct -- without one it recognised the same eval again and
+recursed forever.
+
+WIRE CHANGE: chalk's Region needs the same field to delimit a block eval.
+It is optional and absent on every other Region, so an un-updated consumer
+reads existing graphs unchanged.
 
 ## Where this bites
 

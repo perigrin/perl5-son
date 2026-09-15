@@ -54,32 +54,39 @@ sub round_trips ($src, $name) {
 # base/rs.t's test_bad_setting is this shape eight times over:
 # `if (eval { $/ = \0; 1 }) { ... } else { ... }`.
 #
-# THE BODY CANNOT BE DELIMITED, so this REFUSES rather than guessing. The wire
-# records the eval's JOIN but not its ENTRY -- measured on
-# `our $g=0; our $h=0; $h=5; if (eval { $g = 1; 1 }) {...}`:
+# THE BODY RUNS FROM THE ENTRY TO THE JOIN. The Region names the control node
+# the protected body began after (`eval_entry`), which is what makes the block
+# delimitable at all -- before it was recorded, the statements an eval protects
+# were indistinguishable from those before it.
 #
-#     Region(23) in=[12]
-#     chain back: EntryWrite 12, 11, 10, 9, Start
+# CLAIMED AT THE ENTRY, NOT AT THE JOIN. A block eval's body is ordinary chain
+# between the two, so recognising the construct when the walk ARRIVES at the
+# Region emits those statements twice -- measured, they appeared both before
+# the `eval {` and inside it, and a `die` among them escaped.
 #
-# Four stores chain to Start and nothing marks which is inside the eval; only
-# the last one is. Guessing left statements outside the block, and a `die`
-# among them then escaped -- measured, the emitted program died where perl
-# printed "died g=1".
-#
-# A block eval's whole meaning is WHICH statements it protects, so a refusal is
-# the only honest answer until the producer records the entry.
-subtest 'a block eval refuses, naming what is missing' => sub {
-    for my $src ('our $g = 0; if (eval { $g = 1; 1 }) { print "ok\n" } else { print "died\n" }',
-                 'our $g = 0; if (eval { die "x\n"; 1 }) { print "ok\n" } else { print "died\n" }') {
-        my $data = graph_of($src);
-        ok $data && $data->{methods}{'main::__PROGRAM__'}, 'it translates'
-            or next;
-        my $d = SoN::Deparse->new;
-        my $out = $d->render($data);
-        ok !defined $out, 'the deparse refuses it' or next;
-        like $d->gap, qr/records the join but not the entry/,
-            '... naming the entry as what is missing';
-    }
+# BOTH OUTCOMES ARE CHECKED, and the side effect with them: a rule that always
+# took the success branch still prints something, and only the dying case
+# separates it.
+subtest 'a block eval as a condition' => sub {
+    round_trips(<<'SRC', 'the block completes');
+our $g = 0;
+if (eval { $g = 1; 1 }) { print "ok g=$g\n" } else { print "died g=$g\n" }
+SRC
+
+    round_trips(<<'SRC', 'the block dies');
+our $g = 0;
+if (eval { $g = 1; die "x\n"; 1 }) { print "ok g=$g\n" } else { print "died g=$g\n" }
+SRC
+
+    # STATEMENTS BEFORE THE EVAL MUST STAY OUTSIDE IT -- that is the case the
+    # entry exists to get right, and the one that escaped a die when the body
+    # was guessed.
+    round_trips(<<'SRC', 'statements before the eval stay outside');
+our $g = 0;
+our $h = 0;
+$h = 5;
+if (eval { $g = 1; 1 }) { print "ok g=$g h=$h\n" } else { print "died\n" }
+SRC
 };
 
 # A STRING EVAL STILL RENDERS -- its Region's input IS the eval, so the body

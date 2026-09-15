@@ -9507,6 +9507,13 @@ class SoN::FromOptree 0.01 {
     }
 
     sub _handle_entertry ($cv, $op, $sim, $factory, $opmap, $visited) {
+        # WHERE THE PROTECTED BODY BEGINS, captured before the walk moves on.
+        # The Region below records where the eval JOINS; without this the
+        # statements it protects cannot be told from those before it, and a
+        # consumer either leaves a `die` outside the block or pulls unrelated
+        # statements in. See SoN::IR::Node::Region's eval_entry.
+        my $eval_entry = $sim->control;
+
         my $body_sim = $sim->snapshot;
         _walk_branch($cv, $op->next, $body_sim, $factory, $opmap,
             $visited, undef, 1, _op_addr($op->other));
@@ -9517,6 +9524,7 @@ class SoN::FromOptree 0.01 {
             stamp      => SoN::IR::Stamp->new(type => 'Undef'));
         my $region = $factory->make_cfg('Region',
             inputs => [$body_sim->control]);
+        $region->set_eval_entry($eval_entry) if defined $eval_entry;
         $sim->set_control($region);
         $sim->set_memory($body_sim->memory);
 

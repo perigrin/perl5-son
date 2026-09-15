@@ -218,6 +218,17 @@ sub _extract_fields ($node, $id_remap) {
     }
     # A ListAppend's inputs do not say whether the last one is a contribution
     # (map) or a predicate (grep), and the stamps cannot separate them.
+    # A block eval's Region names where the protected body began. Emitted only
+    # when set, so every other Region's wire is unchanged.
+    if ($op eq 'Region') {
+        my $entry = $node->can('eval_entry') ? $node->eval_entry : undef;
+        # As a node INDEX, like `region` and `predecessors`. An entry outside
+        # the emitted set is dropped rather than referenced by a hash the
+        # consumer cannot resolve.
+        return undef unless defined $entry
+                         && defined $id_remap->{ $entry->id };
+        return { eval_entry => $id_remap->{ $entry->id } };
+    }
     if ($op eq 'ListAppend') {
         return { collector => $node->collector };
     }

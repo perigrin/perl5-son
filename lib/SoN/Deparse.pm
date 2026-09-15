@@ -76,6 +76,10 @@ class SoN::Deparse 0.01 {
     # _is_memory's answer per node. Per-sub, since node ids are.
     field %mem_cache;
 
+    # True while emitting a block eval's body, so the walk does not re-claim
+    # the eval whose entry it starts from. See _emit_eval.
+    our $in_eval_body = 0;
+
     # NODES THAT CARRY A TRAILING MEMORY EDGE, and the number of real operands
     # that precede it. A node of this kind with MORE inputs than its operand
     # count has a memory edge last; anything else does not, however much its
@@ -591,6 +595,23 @@ class SoN::Deparse 0.01 {
             # Discharged by placement like every other join: the effect is
             # wrapped in `eval { }` and the Region needs no spelling, because
             # the closing brace IS the merge. Emission resumes after it.
+            # CLAIMED AT THE ENTRY, NOT AT THE JOIN. A block eval's body is
+            # ordinary chain between the two, so by the time the walk ARRIVES
+            # at the Region those statements are already emitted -- measured,
+            # they appeared both before the `eval {` and inside it, and a
+            # `die` among them escaped.
+            #
+            # So the eval is recognised when the walk is standing ON its
+            # entry: the whole construct is emitted, and the walk resumes at
+            # the join. A string eval has no entry and is still claimed at its
+            # Region, where its one-node body needs no delimiting.
+            if (!$in_eval_body
+                    && (my $join = $self->_eval_join_entered_at($cur, $next_of))) {
+                $out .= $self->_emit_eval($join, $cur, $next_of);
+                $cur = $join->{id};
+                next;
+            }
+
             if ($n->{op} eq 'Region' && $self->_is_eval_join($n)) {
                 $out .= $self->_emit_eval($n, $cur, $next_of);
                 $cur = $n->{id};
@@ -883,6 +904,22 @@ class SoN::Deparse 0.01 {
     # separate control -- only the value forks. The Phi over it is what says
     # so, and requiring BOTH is what keeps this from claiming a Region that
     # merely happens to have one predecessor.
+    # The eval join whose ENTRY is $id, or undef.
+    #
+    # A block eval's Region names the control node its protected body began
+    # after. Finding it from the entry is what lets the walk emit the whole
+    # construct in one piece instead of running into the body first.
+    method _eval_join_entered_at ($id, $next_of) {
+        return undef unless defined $id;
+        for my $n (values $nodes->%*) {
+            next unless ($n->{op} // '') eq 'Region';
+            my $entry = ($n->{fields} // {})->{eval_entry};
+            next unless defined $entry && $entry == $id;
+            return $n if $self->_is_eval_join($n);
+        }
+        return undef;
+    }
+
     method _is_eval_join ($n) {
         my @in = ($n->{inputs} // [])->@*;
         return 0 unless @in == 1;
@@ -945,24 +982,32 @@ class SoN::Deparse 0.01 {
                              $self->_expr(($eff->{inputs} // [])->[0]));
         }
         else {
-            # A BLOCK EVAL CANNOT BE PLACED: the wire records the JOIN but not
-            # the ENTRY. Measured on
-            # `our $g=0; our $h=0; $h=5; if (eval { $g = 1; 1 }) {...}`:
-            #
-            #     Region(23) in=[12]
-            #     chain back: EntryWrite 12, 11, 10, 9, Start
-            #
-            # Four stores chain to Start and NOTHING marks which of them is
-            # inside the eval -- only the last one is. So the body cannot be
-            # delimited, and guessing would either leave statements outside the
-            # block (a `die` then escapes, measured: the emitted program died
-            # where perl printed "died g=1") or pull unrelated ones in.
-            #
-            # REFUSED rather than spelled around. A block eval's whole meaning
-            # is WHICH statements it protects.
-            die "GAP: a block eval's body cannot be delimited -- the wire"
-              . " records the join but not the entry, so the statements it"
-              . " protects are indistinguishable from those before it\n";
+            # A BLOCK EVAL'S BODY RUNS FROM THE ENTRY TO THE JOIN, and the
+            # Region names the entry -- without it the protected statements
+            # are indistinguishable from those before, and guessing left a
+            # `die` outside the block (measured: the emitted program died
+            # where perl printed "died g=1").
+            my $entry = ($region->{fields} // {})->{eval_entry};
+            die "GAP: a block eval whose Region does not name its entry"
+              . " cannot be delimited -- the statements it protects are"
+              . " indistinguishable from those before it\n"
+                unless defined $entry;
+
+            # The block's VALUE is the Phi's first input, unrelated to its
+            # last effect, so it is emitted after the statements rather than
+            # instead of them.
+            # THE FLAG STOPS THE BODY WALK RE-CLAIMING THIS EVAL. It starts
+            # at the entry, which is exactly the node that identifies the
+            # construct, so without it _emit_from recognises the same eval
+            # again and recurses forever.
+            my $body = do {
+                local $in_eval_body = 1;
+                $self->_emit_from($entry, $next_of, $region->{id});
+            };
+            my $val  = $phi ? $self->_expr(($phi->{inputs} // [])->[0]) : '';
+            $inner = length $val
+                ? sprintf("eval {\n%s%s}", _indent($body), _indent("$val;\n"))
+                : sprintf("eval {\n%s}", _indent($body));
         }
 
         return "$inner;\n" unless $phi;
