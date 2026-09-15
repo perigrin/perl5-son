@@ -232,6 +232,14 @@ sub _extract_fields ($node, $id_remap) {
     if ($op eq 'ListAppend') {
         return { collector => $node->collector };
     }
+    # A LIST slice's inputs are [indices..., values...] and neither length is
+    # recoverable from the other, so the split point rides on the node. The
+    # CONTAINER form (aslice/hslice) leaves it 0 and keeps its wire
+    # byte-identical: every input but the last is an index there.
+    if ($op eq 'Slice') {
+        my $n = $node->can('index_count') ? $node->index_count : 0;
+        return $n ? { index_count => $n } : undef;
+    }
     if ($op eq 'RegexCapture') {
         return { n => $node->n };
     }

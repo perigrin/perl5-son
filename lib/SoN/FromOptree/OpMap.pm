@@ -205,7 +205,11 @@ class SoN::FromOptree::OpMap 0.01 {
         aelemfastlex_store => [1, 'Assign', 1, 0],
         aslice         => ['mark', 'Slice', 1, 0],
         kvaslice       => ['mark', 'Slice', 1, 0],
-        lslice         => [2, 'Slice',      1, 0],
+        # lslice is NOT here. It takes TWO mark-delimited lists -- the
+        # indices, then the values -- and this table has no vocabulary for
+        # that: a fixed 2 popped the last two stack entries and dropped the
+        # rest, one 'mark' would claim only the values. It is handled in
+        # _step, which both walkers reach. See wire-list-slice-takes-both-lists.t.
         anonlist       => ['mark', 'ArrayLiteral', 1, 0],
         anonhash       => ['mark', 'HashLiteral',  1, 0],
         emptyavhv      => [0, 'ArrayLiteral',  1, 0],  # fused empty []/{}; FromOptree picks Array/Hash via OPpEMPTYAVHV_IS_HV

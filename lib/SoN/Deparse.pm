@@ -59,6 +59,11 @@ class SoN::Deparse 0.01 {
     # emit right after it]. See _emit_control_chain.
     field %after_effect;
 
+    # Bindings pinned to the Region that joins a loop's exit: they read a loop
+    # Phi, which only settles once the loop has closed, and the prologue would
+    # hoist them above it. Keyed by Region id, flushed when the walk reaches it.
+    field %after_region;
+
     # The whole `methods` map, and the name of the sub being emitted. A body
     # does not name its own cells -- a CellParam indexes into the enclosing
     # AnonSub's captures, which live in the CALLER's graph.
@@ -162,6 +167,7 @@ class SoN::Deparse 0.01 {
         %rendered = ();
         %bound    = ();
         %after_effect = ();
+        %after_region = ();
         %hoisted  = ();
         %mem_cache = ();
         %subst_count_var = ();
@@ -240,10 +246,17 @@ class SoN::Deparse 0.01 {
             # slice does neither. The SYMBOL is already the bare identifier --
             # no stripping, which is the point of carrying the parts rather
             # than the blob.
+            # A PACKAGE AGGREGATE'S SYMBOL IS NOT BARE. It records the whole
+            # qualified spelling (`@main::E`), so prefixing `$` gave
+            # `$@main::E[0]`, which does not parse. An ELEMENT takes `$`
+            # whatever the container's sigil, so strip the one the symbol
+            # carries rather than adding a second.
             if (defined $af->{symbol}) {
+                ( my $bare = $af->{symbol} ) =~ s/\A[\$\@%]//;
+                $bare = $self->_spell_name($bare);
                 return $kind eq 'ArrayLiteral'
-                    ? sprintf('$%s[%s]', $af->{symbol}, $key)
-                    : sprintf('$%s{%s}', $af->{symbol}, $key);
+                    ? sprintf('$%s[%s]', $bare, $key)
+                    : sprintf('$%s{%s}', $bare, $key);
             }
 
             # ANONYMOUS: a list slice over the literal. For a hash literal the
@@ -354,6 +367,7 @@ class SoN::Deparse 0.01 {
         # `my shift(@_) = shift(@_)`, the caller's binding read as this sub's.
         my %save_bound = %bound;
         my %save_after = %after_effect;
+        my %save_region = %after_region;
         my %save_hoist = %hoisted;
         my %save_mem   = %mem_cache;
         my $save_sub = $current_sub;
@@ -362,6 +376,7 @@ class SoN::Deparse 0.01 {
         %rendered = ();
         %bound    = ();
         %after_effect = ();
+        %after_region = ();
         %hoisted  = ();
         %mem_cache = ();
         %subst_count_var = ();
@@ -373,6 +388,7 @@ class SoN::Deparse 0.01 {
         %rendered = %save_rendered;
         %bound    = %save_bound;
         %after_effect = %save_after;
+        %after_region = %save_region;
         %hoisted  = %save_hoist;
         %mem_cache = %save_mem;
         die $err unless defined $body;
@@ -506,7 +522,7 @@ class SoN::Deparse 0.01 {
             next unless ($n->{op} // '') =~ /\A(?:Array|Hash)Literal\z/;
             my $af = $n->{fields} // {};
             next unless defined $af->{symbol};
-            my $vn = ($af->{sigil} // '@') . $af->{symbol};
+            my $vn = $self->_agg_name($n);
 
             # AN AGGREGATE WHOSE CONTENTS ARE A CHAIN-BOUND EFFECT CANNOT
             # FLOAT EITHER. `my @got = <R>` builds ArrayLiteral(sym=got)
@@ -522,7 +538,12 @@ class SoN::Deparse 0.01 {
             }
             next if $defer;
 
-            $prologue .= sprintf("my %s = (%s);\n", $vn,
+            # A PACKAGE AGGREGATE IS NOT DECLARED WITH `my`. `my @main::EST`
+            # is a syntax error -- "can't be in a package" -- and the package
+            # variable needs no declaration to exist. Same rule the Assign
+            # branch applies to EntryDef targets, one node kind over.
+            $prologue .= sprintf("%s%s = (%s);\n",
+                ($self->_agg_is_package($n) ? '' : 'my '), $vn,
                 join(', ', map { $self->_expr($_) } (($n->{inputs} // [])->@*)));
         }
 
@@ -549,6 +570,42 @@ class SoN::Deparse 0.01 {
             }
             next if $deferred;
 
+            # A BINDING OF A LOOP PHI CANNOT FLOAT EITHER, and a loop Phi is
+            # not in %bound -- it gets its variable from _emit_loop, not from
+            # the chain walker, so the rule above does not see it.
+            #
+            # `@_ = map { "rhu$_" } "barb2"` is Assign(ArgsSource, Phi) over
+            # the map's accumulator. Hoisted, it emitted `@_ = (@phi27);`
+            # ABOVE the while loop that fills @phi27, so @_ took the empty
+            # initial value and the program printed nothing where perl prints
+            # `rhubarb2`.
+            #
+            # A Phi whose `region` names a Loop settles only when the loop
+            # ends, so the binding belongs immediately after it -- NOT at the
+            # end of the body. A later read is still on the chain: the `print
+            # "@_"` here follows the loop, and an end-of-body epilogue put the
+            # assignment after the print, which printed nothing just the same.
+            #
+            # The loop's exit Proj leads to the Region that joins it, and that
+            # Region is walked like any other chain node. Attaching the
+            # binding there places it exactly where the loop has closed and
+            # nothing has read the target yet.
+            my $join;
+            for my $in (($n->{inputs} // [])->@*) {
+                my $src = defined $in ? $nodes->{$in} : undef;
+                next unless $src && ($src->{op} // '') eq 'Phi';
+                my $r = ($src->{fields} // {})->{region} // $src->{region};
+                next unless defined $r;
+                my $rn = $nodes->{$r};
+                next unless $rn && ($rn->{op} // '') eq 'Loop';
+                $join = $self->_loop_join($r);
+                last;
+            }
+            if (defined $join) {
+                push $after_region{$join}->@*, $n;
+                next;
+            }
+
             $prologue .= $self->_emit_statement($n, \%next_of);
         }
 
@@ -556,7 +613,10 @@ class SoN::Deparse 0.01 {
         # chain has to be walked again now that %after_effect is populated.
         # Cheap, and it keeps the placement rule in one direction: the chain
         # decides, the prologue only takes what the chain cannot order.
-        if (keys %after_effect) {
+        # %after_region is populated by the same pass and needs the same
+        # re-walk: the first walk ran before the entry existed, so without
+        # this the binding was silently DROPPED rather than merely misplaced.
+        if (keys %after_effect || keys %after_region) {
             %rendered = ();
             $body = $self->_emit_from($start->{id}, \%next_of, undef);
         }
@@ -658,6 +718,11 @@ class SoN::Deparse 0.01 {
             # A MEMORY Region IS ALSO NOTHING TO SAY -- chains merge, and the
             # ordering is the placement.
             if ($n->{op} eq 'Region') {
+                # A binding pinned to this Region goes here -- the loop it
+                # reads from has closed. This branch returns early, so the
+                # flush at the bottom of the walk never sees a Region.
+                $out .= $self->_emit_statement($_, $next_of)
+                    for (delete($after_region{ $n->{id} }) // [])->@*;
                 $cur = $n->{id};
                 next;
             }
@@ -669,6 +734,14 @@ class SoN::Deparse 0.01 {
             if ($n->{op} eq 'Loop') {
                 my ($text, $after) = $self->_emit_loop($n, $next_of);
                 $out .= $text;
+                # A binding that reads this loop's Phi goes HERE -- right
+                # after the closing brace, where the accumulator has settled
+                # and nothing has read the target yet. Pinned to the loop's
+                # join Region, which _emit_loop steps over rather than
+                # walking, so the Region branch below never sees it.
+                my $join = $self->_loop_join($n->{id});
+                $out .= $self->_emit_statement($_, $next_of)
+                    for (delete($after_region{ $join // -1 }) // [])->@*;
                 last unless defined $after;
                 last if defined $stop && $after == $stop;
                 $cur = $after;
@@ -693,6 +766,10 @@ class SoN::Deparse 0.01 {
             else {
                 $out .= $self->_emit_statement($n, $next_of);
             }
+            # A binding pinned to this Region goes here: the loop it reads
+            # from has closed, and nothing after it has read the target yet.
+            $out .= $self->_emit_statement($_, $next_of)
+                for (delete($after_region{ $n->{id} }) // [])->@*;
             $cur = $n->{id};
         }
         return $out;
@@ -905,6 +982,84 @@ class SoN::Deparse 0.01 {
     # `Phi(21) stamp=Int` -- and binding a list to a SCALAR collapses it to
     # the last element: `my $phi7 = ()` then `map { $_*2 } (1,2,3)` printed
     # `6` instead of `2 4 6`.
+    # _agg_name($node) -- an Array/HashLiteral's Perl spelling, or undef when
+    # it is anonymous.
+    #
+    # THE SYMBOL SOMETIMES ALREADY CARRIES THE SIGIL. A PAD aggregate records
+    # a bare name (`EST`) beside sigil `@`; a PACKAGE one records the whole
+    # qualified spelling (`@main::EST`) and sets the sigil as well.
+    # Concatenating both gave `@@main::EST`, which does not parse -- measured
+    # on `our @EST = ("foo","bar")`, and base/lex.t's emitted program died at
+    # compile time on exactly that.
+    #
+    # Whether the symbol is already spelled is what separates them, so ask the
+    # symbol rather than guessing from the node.
+    method _agg_name ($n) {
+        my $af  = $n->{fields} // {};
+        my $sym = $af->{symbol};
+        return undef unless defined $sym && length $sym;
+
+        my ($sigil, $bare) = $sym =~ /\A([\$\@%])(.*)\z/s
+            ? ($1, $2) : (($af->{sigil} // '@'), $sym);
+        return $sigil . $self->_spell_name($bare);
+    }
+
+    # A PUNCTUATION VARIABLE IS STORED AS ITS CONTROL CHARACTER, package
+    # qualifier and all: `%{^TEST}` is `%main::\x14EST` in the symbol table,
+    # and emitting that raw byte gives perl "Unrecognized character \x14".
+    # The caret form is the spelling that parses, and it is the same variable.
+    #
+    # SHARED WITH _slot_name, which had this for scalars only -- base/lex.t
+    # reaches it through `%{^TEST}` and `@{^TEST}`, which the scalar path
+    # never saw.
+    method _spell_name ($name) {
+        my $pkg = '';
+        if ($name =~ /\A(.*::)(.*)\z/s) { ($pkg, $name) = ($1, $2) }
+        if ($name =~ /\A([\x00-\x1f])(.*)\z/s) {
+            # Caret variables live in main:: only, and a qualifier on one is a
+            # syntax error, so the package part is dropped rather than kept.
+            #
+            # BRACED WHEN THE NAME IS MORE THAN THE CARET LETTER. `%^TEST`
+            # does not parse -- perl reads `^T` and then a bareword `EST` --
+            # so a multi-character caret name needs `%{^TEST}`. Measured:
+            # `%{^TEST} = (a=>1)` is accepted, `%^TEST = (a=>1)` is a syntax
+            # error.
+            my $caret = sprintf('^%s%s', chr(ord($1) + 64), $2);
+            return length($2) ? "{$caret}" : $caret;
+        }
+        return $pkg . $name;
+    }
+
+    # Whether an aggregate is a PACKAGE variable rather than a pad slot.
+    # `my @main::EST` is a syntax error -- "can't be in a package" -- so the
+    # reconstructed declaration must leave the `my` off for these.
+    method _agg_is_package ($n) {
+        my $sym = ($n->{fields} // {})->{symbol} // '';
+        return $sym =~ /::/ ? 1 : 0;
+    }
+
+    # _loop_join($loop_id) -- the Region that joins a Loop's exit, or undef.
+    #
+    # Found by following the loop's EXIT Proj to the Region naming it, rather
+    # than by adjacency: the two Projs are the continue and exit arms, and
+    # which index is which is not fixed. A Region that names a Proj of this
+    # loop is the join whichever arm it came from, since only the exit arm
+    # reaches code after the loop.
+    method _loop_join ($loop_id) {
+        my %proj = map { $_->{id} => 1 }
+            grep { ($_->{op} // '') eq 'Proj'
+                   && (($_->{inputs} // [])->[0] // -1) == $loop_id }
+            values $nodes->%*;
+        return undef unless keys %proj;
+        for my $n (sort { $a->{id} <=> $b->{id} } values $nodes->%*) {
+            next unless ($n->{op} // '') eq 'Region';
+            for my $in (($n->{inputs} // [])->@*) {
+                return $n->{id} if defined $in && $proj{$in};
+            }
+        }
+        return undef;
+    }
+
     method _phi_var ($p) {
         my $st = $p->{stamp} // '';
         return sprintf('@phi%d', $p->{id})
@@ -1490,10 +1645,22 @@ class SoN::Deparse 0.01 {
             # reference, and leaving it off this list made the Assign report
             # ZERO targets and refuse -- an allow-list missing the one form
             # nobody had written a test for yet.
+            #
+            # AN ArgsSource IS A TARGET ONLY IN FIRST POSITION. `@_ = LIST`
+            # assigns into the argument array, which is an ordinary lvalue --
+            # but `my ($a,$b) = @_` has an ArgsSource as its VALUE, and both
+            # spell the same node kind.
+            #
+            # POSITION IS THE DISCRIMINATING PROPERTY, not the kind. Adding
+            # ArgsSource to the kind list outright made `my ($where,$num) = @_`
+            # in base/lex.t's `sub T` consume its own RHS: three inputs, all
+            # "targets", no values left, and the Assign refused.
             my $t = 0;
             $t++ while $t < @in
-                && ($nodes->{ $in[$t] }{op} // '')
-                     =~ /\A(?:PadAccess|EntryDef|Subscript|PostfixDeref)\z/;
+                && (($nodes->{ $in[$t] }{op} // '')
+                      =~ /\A(?:PadAccess|EntryDef|Subscript|PostfixDeref)\z/
+                    || ($t == 0
+                        && ($nodes->{ $in[$t] }{op} // '') eq 'ArgsSource'));
 
             # AN ELEMENT STORE NEEDS A NAMED CONTAINER. `my @a = (1,2,3)`
             # leaves NO variable in the graph -- measured, the array exists
@@ -1557,6 +1724,39 @@ class SoN::Deparse 0.01 {
             return sprintf("%s(%s) = (%s);\n",
                 $decl, join(', ', @lhs), join(', ', @rhs))
                 if @lhs > 1;
+
+            # ONE TARGET STILL TAKES EVERY VALUE when it is list-valued.
+            # `@_ = ("a","b")` is a single target over TWO values, and
+            # emitting only $rhs[0] dropped the rest -- measured, it produced
+            # `@_ = "a"` and printed `a` where perl prints `a b`.
+            #
+            # Keyed on the target's SPELLING rather than its node kind: `@`
+            # and `%` take a list, `$` takes one scalar, and that is true
+            # however the container was named. A scalar target keeps the
+            # single-value form, so `$x = 1` does not become `$x = (1)`.
+            return sprintf("%s%s = (%s);\n",
+                $decl, $lhs[0], join(', ', @rhs))
+                if $lhs[0] =~ /\A[\@%]/;
+
+            # A SCALAR TARGET FROM A LIST SOURCE STILL NEEDS THE PARENS.
+            # `my ($a) = @_` binds the FIRST ELEMENT; `my $a = @_` binds the
+            # COUNT, and they are different programs. The Assign is a list
+            # assign either way -- the graph does not distinguish one target
+            # from several -- so the parens that make it one must survive.
+            #
+            # Measured: `sub U { my ($a) = @_; print $a }` called as U("z")
+            # printed `1` instead of `z`.
+            #
+            # Only when the source is list-valued. `my $x = 1` must not become
+            # `my ($x) = (1)`: harmless here, but it would turn a scalar
+            # assignment's VALUE from the right-hand side into a count
+            # wherever the source is an aggregate.
+            my $src = $nodes->{ $in[$t] // -1 };
+            return sprintf("%s(%s) = (%s);\n", $decl, $lhs[0], $rhs[0])
+                if @rhs == 1 && $src
+                && (($src->{op} // '') eq 'ArgsSource'
+                    || ($src->{stamp} // '') =~ /\A(?:List|Array)\z/);
+
             return sprintf("%s%s = %s;\n", $decl, $lhs[0], $rhs[0]);
         }
 
@@ -1680,9 +1880,16 @@ class SoN::Deparse 0.01 {
         #
         # These live in main:: only, and a package qualifier on one is a syntax
         # error, so they are emitted bare.
-        if ($name =~ /\A([\x00-\x1f])(.*)\z/s) {
-            my ($ctrl, $rest) = ($1, $2);
-            return sprintf('%s^%s%s', $sigil, chr(ord($ctrl) + 64), $rest);
+        # BRACED WHEN THE NAME IS MORE THAN THE CARET LETTER. `$^XY` does not
+        # parse -- perl reads `$^X` and then a bareword `Y` -- so a
+        # multi-character caret name needs `${^XY}`. base/lex.t reaches this
+        # through `${^TEST}`; the single-letter `$^O` that this branch was
+        # written for takes no braces and keeps its old spelling.
+        #
+        # Shared with the aggregate path via _spell_name, which had to solve
+        # exactly this for `%{^TEST}`.
+        if ($name =~ /\A[\x00-\x1f]/) {
+            return $sigil . $self->_spell_name($name);
         }
 
         # `$_`, `$0`, `$1` and friends are also main-only and take no
@@ -1900,9 +2107,7 @@ class SoN::Deparse 0.01 {
             # The declaration is emitted separately (see _declare_aggregates),
             # because a Perl variable has to exist before it is indexed and the
             # graph has no node for "declare @a".
-            my $af = $n->{fields} // {};
-            my $vn = defined $af->{symbol}
-                ? ($af->{sigil} // '@') . $af->{symbol} : undef;
+            my $vn = $self->_agg_name($n);
             if (defined $vn) { $text = $vn }
             else {
                 # ANONYMOUS, AND THE STAMP SAYS WHICH KIND. `[1,2]` is a
@@ -2194,14 +2399,55 @@ class SoN::Deparse 0.01 {
             # THE SIGIL IS `@`, not the container's. `$a[0]` is one element;
             # `@a[0,1]` is a list of them, and the slice is the list form
             # however the container was spelled.
-            die "GAP: a Slice with " . scalar(@in) . " inputs is not yet"
-              . " rendered\n" unless @in == 2;
-            my $agg = $nodes->{ $in[1] };
-            my $af  = ($agg->{fields} // {});
-            die "GAP: a Slice over an anonymous `" . ($agg->{op} // '?')
-              . "` has no container to name\n"
-                unless defined $af->{symbol};
-            $text = sprintf('@%s[%s]', $af->{symbol}, $self->_expr($in[0]));
+            # A LIST SLICE HAS NO CONTAINER. `(qw(p q r))[1]` slices a flat
+            # list of values rather than a named aggregate, so `index_count`
+            # says where the inputs split: [indices..., values...]. It is
+            # absent (0) for the container form, where every input but the
+            # last is an index.
+            #
+            # Rendered as `(VALUES)[INDICES]`, which is the source spelling
+            # and needs no name for anything.
+            my $f  = $n->{fields} // {};
+            my $ix = $f->{index_count} // 0;
+            if ($ix) {
+                die "GAP: a list Slice claiming $ix indices has only "
+                  . scalar(@in) . " inputs\n" if $ix >= @in;
+                my @idx = map { $self->_expr($_) } @in[0 .. $ix - 1];
+                my @val = map { $self->_expr($_) } @in[$ix .. $#in];
+                $text = sprintf('(%s)[%s]',
+                    join(', ', @val), join(', ', @idx));
+            }
+            else {
+                # THE CONTAINER IS LAST and there is exactly one; every input
+                # before it is an index. Measured on `@a[0,2]`, which gives
+                # Slice(0, 2, ArrayLiteral) -- three inputs, so the old
+                # `@in == 2` refusal turned a renderable multi-index slice
+                # into a GAP.
+                die "GAP: a Slice with no container is not yet rendered\n"
+                    unless @in >= 2;
+                my $agg = $nodes->{ $in[-1] };
+                my $af  = ($agg->{fields} // {});
+                die "GAP: a Slice over an anonymous `" . ($agg->{op} // '?')
+                  . "` has no container to name\n"
+                    unless defined $af->{symbol};
+                # A HASH SLICE SUBSCRIPTS WITH BRACES. `@h{'k1','k2'}` and
+                # `@a[0,2]` are both Slice nodes with an `@` sigil of their
+                # own; only the CONTAINER's sigil says which brackets to use,
+                # and emitting `@h[...]` would index the array `@h` -- a
+                # different variable that need not even exist.
+                #
+                # A SLICE ALWAYS TAKES `@`, whatever the container's sigil, so
+                # the symbol's own sigil is stripped rather than kept: a
+                # package aggregate records the qualified spelling and
+                # `@@main::E` does not parse.
+                my ($open, $close)
+                    = ($af->{sigil} // '@') eq '%' ? ('{', '}') : ('[', ']');
+                ( my $bare = $af->{symbol} ) =~ s/\A[\$\@%]//;
+                $bare = $self->_spell_name($bare);
+                $text = sprintf('@%s%s%s%s', $bare, $open,
+                    join(', ', map { $self->_expr($_) } @in[0 .. $#in - 1]),
+                    $close);
+            }
         }
         elsif ($op eq 'Match') {
             # `=~` WITH A RUNTIME PATTERN. RegexMatch carries its pattern as a

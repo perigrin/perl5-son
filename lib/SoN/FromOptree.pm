@@ -2918,6 +2918,45 @@ class SoN::FromOptree 0.01 {
             return ($op->next, 'handled');
         }
 
+        # A LIST SLICE IS TWO MARK-DELIMITED LISTS, not a fixed pair. The
+        # optree for `(qw(p q r))[1]` -- which perl does NOT fold -- is
+        #
+        #     pushmark; pushmark; const[IV 1];           the INDEX list
+        #     pushmark; const "p"; const "q"; const "r"; the VALUE list
+        #     lslice
+        #
+        # so both lengths are arbitrary and neither is known from the op.
+        # OpMap declared lslice `[2, 'Slice', ...]`, a FIXED arity, and the
+        # generic dispatch popped the last two stack entries: `Slice("q","r")`
+        # -- the index and the first value dropped, and "p" left behind to
+        # leak into the enclosing print's arguments.
+        #
+        # SILENT, and a WRONG ANSWER rather than a refusal in the shape
+        # base/lex.t uses: `print( (qw(b))[0] )` built no Slice at all and
+        # the emitted program printed nothing where perl prints "b".
+        #
+        # aslice, kvaslice, hslice and kvhslice are all already declared
+        # 'mark' in that table. lslice is the row that got missed -- and one
+        # 'mark' would still be wrong for it, because it takes TWO.
+        #
+        # HERE RATHER THAN IN OpMap because the table has no vocabulary for
+        # two marks, and HERE RATHER THAN IN EITHER WALKER because both reach
+        # this shared step: a handler in the main walk alone would leave
+        # `(qw(a b))[0]` inside a loop body still miscompiling.
+        #
+        # INPUT ORDER IS [indices..., values...] with the index count on the
+        # node, since neither list's length is recoverable from the other.
+        if ($name eq 'lslice') {
+            my $values  = $sim->pop_to_mark;
+            my $indices = $sim->pop_to_mark;
+            my $node = $factory->make('Slice',
+                inputs      => [$indices->@*, $values->@*],
+                index_count => scalar($indices->@*),
+            );
+            $sim->push_node($node);
+            return ($op->next, 'handled');
+        }
+
         # Method / sub call. Shared with the main walk via the same handlers;
         # $ctx->{pending_method} carries the dispatch name from method_named to
         # the following entersub. Lets a (void) method call inside a branch arm
