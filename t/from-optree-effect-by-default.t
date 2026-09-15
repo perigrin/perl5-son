@@ -29,16 +29,31 @@ sub is_effect ($n) {
     return defined $n->control_in;
 }
 
-# --- 1. void effectful builtin (chomp) survives, control-pinned ---
+# --- 1. void effectful builtin (chomp) survives and the next read sees it ---
 # Today `chomp $s; length $s` drops the chomp entirely: its pushed value is dead
-# in void context, so the Call vanishes and length reads the un-chomped string.
-# `chomp $scalar` compiles to the schomp (scalar-chomp) op.
-subtest 'void chomp is control-pinned, not dropped' => sub {
+# in void context, so the node vanishes and length reads the un-chomped string.
+#
+# NOT A Call ANY MORE, and not control-pinned. chomp builds its own Chomp node
+# and REBINDS the pad slot, so the following read names the chomped version by
+# data edge -- which is how SSA orders it, the same way s/// does. A control
+# pin would be a second mechanism saying what the rebind already says.
+#
+# What matters is unchanged and is what this asserts: the node survives, and
+# the read that follows observes it. Measured end to end --
+# `my $s = "hi\n"; chomp $s; print length($s)` emits 2, and
+# `my $b = length($s); chomp $s; my $a = length($s)` emits "2 1", so the two
+# reads see different versions in the right order.
+subtest 'void chomp survives and the next read observes it' => sub {
     my $g = translate('sub { my $s = "hi\n"; chomp $s; length $s }');
-    my ($chomp) = calls_named($g, 'schomp');
-    ok($chomp, 'the void chomp Call survives as a node')
+    my ($chomp) = grep { $_->operation eq 'Chomp' } $g->nodes->@*;
+    ok($chomp, 'the void chomp survives as a node')
         or diag('ops = [' . join(' ', map { $_->operation } $g->nodes->@*) . ']');
-    ok(is_effect($chomp), 'the void chomp Call is a statement effect (control-pinned)');
+    return unless $chomp;
+
+    my ($length) = grep { $_->operation eq 'Length' } $g->nodes->@*;
+    ok($length, 'and the length is in the graph') or return;
+    is(($length->inputs->[0] // 0), $chomp,
+        'which reads the CHOMPED value, not the original');
 };
 
 # --- 2. pure builtin stays floatable (not effect-pinned) ---
@@ -117,12 +132,21 @@ subtest 'non-allow-listed builtin is effect-pinned in void position' => sub {
 #        demote its effectful argument node ---
 subtest 'pure outer call does not demote its effectful argument' => sub {
     # length(<pure>) over a plain pad read: length demotes, no effect leaks.
+    #
+    # chomp is a Chomp node now, not a Call, and it is ordered by the pad
+    # REBIND rather than by a control pin -- see subtest 1. So what this
+    # asserts is that the chomp survives and the length reads the CHOMPED
+    # version: if length had swept the effect up, it would be reading the
+    # original instead.
     my $g = translate('sub { my $s = shift; chomp $s; my $n = length $s; $n }');
-    my ($chomp)  = calls_named($g, 'schomp');
-    my ($length) = calls_named($g, 'length');
-    ok($chomp, 'the effectful chomp survives even next to a pure length');
-    ok(is_effect($chomp), 'chomp stays control-pinned (its effect is not swept up by length)');
-    ok(!$length || !is_effect($length), 'length itself is floatable');
+    my ($chomp)  = grep { $_->operation eq 'Chomp' } $g->nodes->@*;
+    my ($length) = grep { $_->operation eq 'Length' } $g->nodes->@*;
+    ok($chomp, 'the effectful chomp survives even next to a pure length')
+        or return;
+    ok($length, 'and the length is in the graph') or return;
+    is(($length->inputs->[0] // 0), $chomp,
+        'length reads the CHOMPED value -- the effect was not swept up');
+    ok(!is_effect($length), 'length itself is floatable');
 };
 
 done_testing();

@@ -232,6 +232,11 @@ sub _extract_fields ($node, $id_remap) {
     # tr///'s character sets and flags. `d` is not recoverable from an empty
     # `to` -- `tr/x//` maps x to itself, `tr/x//d` removes it -- so the flags
     # ride alongside rather than being inferred.
+    # chomp and chop are different operations over the same shape, and the
+    # inputs do not say which.
+    if ($op eq 'Chomp') {
+        return { kind => $node->kind };
+    }
     if ($op eq 'Transliterate') {
         return {
             from  => $node->from,

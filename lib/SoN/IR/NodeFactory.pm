@@ -79,6 +79,7 @@ use SoN::IR::Node::RegexMatch;
 use SoN::IR::Node::EntryWrite;
 use SoN::IR::Node::RegexSubst;
 use SoN::IR::Node::RegexSubstCount;
+use SoN::IR::Node::Chomp;
 use SoN::IR::Node::Transliterate;
 use SoN::IR::Node::TransliterateCount;
 use SoN::IR::Node::RegexCapture;
@@ -116,7 +117,7 @@ my %DATA_CLASSES = map { $_ => "SoN::IR::Node::$_" } qw(
     Call HashLiteral ArrayLiteral ListAppend MakeCell CellWrite
     Interpolate AnonSub
     RegexMatch RegexSubst RegexSubstCount RegexCapture
-    Transliterate TransliterateCount Print EnvRead TryCatch
+    Chomp Transliterate TransliterateCount Print EnvRead TryCatch
     PostfixDeref CompoundAssign BacktickExpr VarDecl ListAssign
     TernaryExpr StructRef StructFieldAccess
     ExpressionList

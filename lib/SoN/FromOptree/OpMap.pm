@@ -119,8 +119,11 @@ class SoN::FromOptree::OpMap 0.01 {
         quotemeta   => [1, 'Call',      1, PURE],
         chomp       => [1, 'Call',      1, 0],
         chop        => [1, 'Call',      1, 0],
-        schomp      => [1, 'Call',      1, 0],   # scalar chomp
-        schop       => [1, 'Call',      1, 0],   # scalar chop
+        # schomp/schop (and the list forms) build a Chomp in _step, which
+        # both walkers reach. The rows stay so is_known() is true and the walk
+        # gets there; the node type is undef because the handler makes it.
+        schomp      => [1, undef,       1, 0],   # scalar chomp
+        schop       => [1, undef,       1, 0],   # scalar chop
         sprintf     => ['mark', 'Call', 1, PURE],
         join        => ['mark', 'Call', 1, PURE],
         split       => ['mark', 'Call', 1, 0],

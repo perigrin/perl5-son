@@ -108,19 +108,12 @@ class SoN::Deparse 0.01 {
         # parens around a parenthesised expression the way a function would --
         # `dofile($f)` is a call to a sub that does not exist.
         dofile => sub { sprintf('do %s', $_[0]) },
-        # schomp/schop are NOT here, deliberately. They are the scalar forms
-        # of chomp/chop and the keyword is obvious -- but the producer emits
-        # the Call with no store, so the graph says nothing about the mutation
-        # and the following read still names the PRE-chomp value:
-        #
-        #     my $s = "ab\n"; chomp($s); print "[$s]"
-        #       perl : [ab]
-        #       graph: Call(schomp, PadAccess) consumed by NOBODY, and the
-        #              Print reading the original Constant
-        #
-        # Spelling them would turn a loud "Undefined subroutine &main::schomp"
-        # into a silent `[ab\n]`, which is the worse failure. The refusal
-        # below is the honest answer until the producer threads the store.
+        # schomp/schop are not here because they no longer reach this table:
+        # the producer builds a Chomp node for them, which carries the kind
+        # and whose store back to the target the graph records. They were
+        # refused here while that node did not exist, because spelling them
+        # `chomp` would have turned a loud "Undefined subroutine &main::schomp"
+        # into a silent wrong answer.
         # A FILETEST IS AN OPERATOR: `-e $f`, not `ftis($f)`.
         ftis   => sub { sprintf('(-e %s)', $_[0]) },
         ftchr  => sub { sprintf('(-c %s)', $_[0]) },
@@ -2028,6 +2021,18 @@ class SoN::Deparse 0.01 {
               . " rendered\n" unless @in == 1;
             $text = sprintf('(%s =~ m{%s}%s)',
                 $self->_expr($in[0]), $pat, $f->{flags} // '');
+        }
+        elsif ($op eq 'Chomp') {
+            # chomp AND chop MUTATE, so the value form needs a copy: perl has
+            # no `/r` for these. Rendered as a do-block over a temporary so
+            # the expression yields the TRIMMED string while leaving the
+            # subject expression untouched -- the store back to the variable
+            # is the graph's separate business, exactly as it is for s///.
+            die "GAP: a Chomp with " . scalar(@in) . " inputs is not yet"
+              . " rendered\n" unless @in == 1;
+            my $kind = ($n->{fields} // {})->{kind} // 'chomp';
+            $text = sprintf('do { my $c = %s; %s($c); $c }',
+                $self->_expr($in[0]), $kind);
         }
         elsif ($op eq 'Transliterate') {
             # SAME SHAPE AS RegexSubst, same reason: the graph threads the

@@ -2931,6 +2931,63 @@ class SoN::FromOptree 0.01 {
             return ($op->next, 'handled');
         }
 
+        # chomp AND chop MUTATE IN PLACE, so the graph must record the store.
+        # The producer built `Call(schomp, [PadAccess])` consumed by NOBODY,
+        # so the mutation was invisible and the following read still named the
+        # original:
+        #
+        #     my $s = "ab\n"; chomp($s); print "[$s]"
+        #       perl : [ab]
+        #       graph: the Print reading the pre-chomp Constant
+        #
+        # The deparser could not spell `schomp` either -- it is an op name,
+        # not a keyword -- so this was an undefined sub call before it was
+        # refused.
+        #
+        # TWO OPERATIONS, NOT ONE. chomp removes a trailing $/, chop removes
+        # the LAST character whatever it is, and the inputs do not say which.
+        #
+        # THE SLOT COMES FROM THE SUBJECT NODE, not from the op: rpeep
+        # suppression nulls `$op->first`, and the op's own targ is its scratch
+        # pad, not the variable's. A PadAccess carries the targ it read.
+        # NAMED EXPLICITLY, not matched by a pattern. t/every-op-has-a-
+        # disposition.t scrapes this file for `name eq '...'` to prove no op
+        # falls through undecided, so a regex here reads as no handler at all
+        # -- and that test exists precisely to catch an op nobody decided
+        # about.
+        if ($name eq 'schomp' || $name eq 'schop'
+         || $name eq 'chomp'  || $name eq 'chop') {
+            # THE LIST FORM IS MARK-DELIMITED. `chomp($p, $q)` compiles to
+            # `pushmark; ...; chomp` -- the plain op, not schomp -- and
+            # popping ONE node chomped only the last argument. Measured:
+            #
+            #     my ($p,$q) = ("a\n","b\n"); chomp($p,$q); print "$p$q"
+            #       perl : ab
+            #       emit : a\nb     -- $p never chomped
+            #
+            # Each argument is its own trim and its own store, so the list
+            # form is N of the scalar case rather than one node over a list.
+            if ($name eq 'chomp' || $name eq 'chop') {
+                my $args = $sim->pop_to_mark;
+                my @made;
+                for my $subject ($args->@*) {
+                    push @made, _make_chomp($factory, $sim, $subject, $name);
+                }
+                # The VALUE of a list chomp is the total, which nothing in the
+                # corpus reads; pushing the last keeps the stack balanced.
+                $sim->push_node($made[-1] // $factory->make('Constant',
+                    value => 0, const_type => 'integer',
+                    stamp => SoN::IR::Stamp->new(type => 'Int')));
+                return ($op->next, 'handled');
+            }
+
+            my $subject = $sim->pop_node;
+            my $node = _make_chomp($factory, $sim, $subject, $name);
+
+            $sim->push_node($node);
+            return ($op->next, 'handled');
+        }
+
         # A TRANSLITERATION CARRIES ITS TABLE, NOT A PATTERN. `tr/a-z/A-Z/`
         # compiles to a `trans` PVOP whose 522-byte pv IS the 256-entry
         # translation table; mapping it to a generic Call dropped that
@@ -10868,6 +10925,54 @@ class SoN::FromOptree 0.01 {
     # PVOP, a UTF-8 map on a PADOP/SVOP. B::Deparse already reverses both --
     # it is what `perl -MO=Deparse` uses to print tr/// back -- so this calls
     # perl's decoder rather than keeping a second copy of the format.
+    # _make_chomp -- one argument's trim, and the store that records it.
+    #
+    # SHARED BY THE SCALAR AND LIST FORMS. `chomp($s)` is schomp with one
+    # operand; `chomp($p,$q)` is chomp over a mark-delimited list, and each
+    # argument is its own trim and its own store. One place decides how a
+    # subject is stored back, so the list form cannot drift from the scalar
+    # one -- the "one operator, N declaration sites" failure this project
+    # keeps hitting.
+    sub _make_chomp ($factory, $sim, $subject, $name) {
+        my $kind = ($name =~ /chop\z/ ? 'chop' : 'chomp');
+        my $make = sub ($in) {
+            return $factory->make('Chomp',
+                inputs => [$in],
+                kind   => $kind,
+                stamp  => SoN::IR::Stamp->new(type => 'Str'));
+        };
+
+        if ($subject->isa('SoN::IR::Node::PadAccess')) {
+            # THE SUBJECT IS THE SLOT'S LIVE VALUE, NOT A FRESH READ. chomp's
+            # operand carries OPf_MOD (`padsv sRM`) -- genuinely, since chomp
+            # does write -- and the padsv handler answers that by pushing an
+            # UNBOUND PadAccess. So the Chomp read a node nothing defines, and
+            # `my $s = "ab\n"` vanished from the graph: the emitted program
+            # chomped an undeclared variable and printed the empty string.
+            my $bound = $sim->lookup($subject->targ);
+            my $node  = $make->($bound // $subject);
+            $sim->define($subject->targ, $node);
+            return $node;
+        }
+
+        if ($subject->isa('SoN::IR::Node::EntryDef')) {
+            # A package scalar needs the EntryWrite as well as the rebind: a
+            # read from another sub cannot observe a pad rebind.
+            my $node = $make->($subject);
+            my $key  = _stash_name_key($subject->sigil,
+                                       $subject->package, $subject->symbol);
+            $sim->define($key, $node);
+            _entry_store($factory, $sim, $subject, $node);
+            return $node;
+        }
+
+        # Anything else is a VALUE with nothing to store through. perl refuses
+        # `chomp(f())` too; an AGGREGATE (`chomp(@a)`) is legal and simply not
+        # lowered yet -- it trims every element, which is a loop, not a node.
+        die "GAP: a chomp/chop whose subject is a `" . ref($subject)
+          . "` has no slot to store back into\n";
+    }
+
     sub _tr_decode ($op) {
         require B::Deparse;
         my $class = B::class($op);
