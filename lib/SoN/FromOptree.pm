@@ -4710,7 +4710,25 @@ class SoN::FromOptree 0.01 {
             # One operation with two readings, exactly as `scalar(@x)` is Count
             # over the array. Same shape as keys/values, whose scalar reading
             # is a count -- and unlike reverse, whose scalar reading is a Str.
-            my $scalar_reading = !($has_target && $targ);
+            # THE OP'S OWN WANT SAYS WHICH READING, and keying on the
+            # target array alone got it backwards for a list-assign LHS.
+            # Measured:
+            #
+            #     my ($x,$y) = split(...)   want=3 (LIST)    -- the fields
+            #     my $n      = split(...)   want=2 (SCALAR)  -- the count
+            #     my @l      = split(...)   want=0, targ set -- the fields
+            #
+            # `my ($x,$y) = split` has NO target array, so `!($has_target &&
+            # $targ)` called it scalar and pushed a Count -- and the
+            # list-assign then bound $x to the NUMBER and $y to undef:
+            #
+            #     sub f { my ($a,$b) = split(/,/,"p,q"); print "$a$b" }
+            #       perl : pq
+            #       emit : 2
+            #
+            # A count is only the reading when perl asked for a scalar.
+            my $want_flag = $op->flags & 3;          # OPf_WANT
+            my $scalar_reading = !($has_target && $targ) && $want_flag == 2;
 
             # Drain the operands split pushed. The subject is the last one; a
             # limit constant may precede it. Nothing here needs a mark, which
