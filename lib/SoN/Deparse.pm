@@ -592,8 +592,7 @@ class SoN::Deparse 0.01 {
             # wrapped in `eval { }` and the Region needs no spelling, because
             # the closing brace IS the merge. Emission resumes after it.
             if ($n->{op} eq 'Region' && $self->_is_eval_join($n)) {
-                my $eff = $nodes->{ $n->{inputs}[0] };
-                $out .= $self->_emit_eval($eff);
+                $out .= $self->_emit_eval($n, $cur, $next_of);
                 $cur = $n->{id};
                 next;
             }
@@ -892,34 +891,78 @@ class SoN::Deparse 0.01 {
                     values $nodes->%*;
         return 0 unless $phi;
         my @pin = ($phi->{inputs} // [])->@*;
-        return 0 unless @pin == 2 && defined $pin[0] && $pin[0] == $in[0];
-        my $undef = $nodes->{ $pin[1] } or return 0;
+        return 0 unless @pin == 2;
+
+        # THE SECOND INPUT IS ALWAYS THE undef, in both eval forms: that is
+        # what "or it died" means.
+        my $undef = $nodes->{ $pin[1] // -1 } or return 0;
         return 0 unless ($undef->{op} // '') eq 'Constant'
             && ((($undef->{fields} // {})->{const_type} // '') eq 'undef');
+
+        # THE FIRST INPUT DIFFERS BY FORM, and requiring it to BE the Region's
+        # control input recognised only the string form:
+        #
+        #   eval "..."       Phi[Coerce(->Code), undef]   the Coerce IS the
+        #                                                 Region's input
+        #   eval { ...; 1 }  Phi[Constant 1, undef]       the Region's input is
+        #                                                 the block's last EFFECT
+        #
+        # Measured on `if (eval { $g = 1; 1 })`: `Region(16) in=[EntryWrite(10)]`
+        # with `Phi(17) in=[Constant 6, Constant 1]`. So the block's VALUE is
+        # unrelated to its last effect, and the shape is identified by the
+        # undef alone plus the single-input Region.
         return 1;
     }
 
     # The `eval { }` an eval join stands for, binding its value where the Phi
     # is read. The Phi IS the eval's value -- `eval` already yields undef on
     # failure -- so one variable serves both.
-    method _emit_eval ($eff) {
+    # _emit_eval($region, $from, $next_of) -> source
+    #
+    # TWO FORMS SHARE THIS JOIN, and they differ in where the eval's value
+    # comes from:
+    #
+    #   eval "..."       Region[Coerce(->Code)]   Phi[that Coerce, undef]
+    #   eval { ...; 1 }  Region[last EFFECT]      Phi[Constant 1, undef]
+    #
+    # Measured on `if (eval { $g = 1; 1 })`: `Region(16) in=[EntryWrite(10)]`
+    # with `Phi(17) in=[Constant 6, Constant 1]`. So for a BLOCK the Region's
+    # input is the last statement of the body, not a value -- rendering it as
+    # an expression asked for an `EntryWrite` as one.
+    method _emit_eval ($region, $from, $next_of) {
+        my $eff = $nodes->{ $region->{inputs}[0] };
         my ($phi) = grep { ($_->{op} // '') eq 'Phi'
-                        && (($_->{inputs} // [])->[0] // -1) == $eff->{id} }
+                        && ((($_->{fields} // {})->{region} // -1)
+                            == $region->{id}) }
                     values $nodes->%*;
 
-        # THE EFFECT IS RENDERED INSIDE THE BLOCK, and its value is the
-        # block's. A string eval is a Coerce(Str->Code) whose operand is the
-        # source text, which is what `eval EXPR` takes; anything else pinned
-        # here is an ordinary effect that may die, and `eval { ... }` is the
-        # honest wrapper for it either way.
         my $inner;
         if (($eff->{op} // '') eq 'Coerce'
                 && ((($eff->{fields} // {})->{to_repr} // '') eq 'Code')) {
+            # A STRING EVAL: the operand is the source text, which is what
+            # `eval EXPR` takes.
             $inner = sprintf('eval(%s)',
                              $self->_expr(($eff->{inputs} // [])->[0]));
         }
         else {
-            $inner = sprintf('eval { %s }', $self->_expr_uncached($eff->{id}));
+            # A BLOCK EVAL CANNOT BE PLACED: the wire records the JOIN but not
+            # the ENTRY. Measured on
+            # `our $g=0; our $h=0; $h=5; if (eval { $g = 1; 1 }) {...}`:
+            #
+            #     Region(23) in=[12]
+            #     chain back: EntryWrite 12, 11, 10, 9, Start
+            #
+            # Four stores chain to Start and NOTHING marks which of them is
+            # inside the eval -- only the last one is. So the body cannot be
+            # delimited, and guessing would either leave statements outside the
+            # block (a `die` then escapes, measured: the emitted program died
+            # where perl printed "died g=1") or pull unrelated ones in.
+            #
+            # REFUSED rather than spelled around. A block eval's whole meaning
+            # is WHICH statements it protects.
+            die "GAP: a block eval's body cannot be delimited -- the wire"
+              . " records the join but not the entry, so the statements it"
+              . " protects are indistinguishable from those before it\n";
         }
 
         return "$inner;\n" unless $phi;
