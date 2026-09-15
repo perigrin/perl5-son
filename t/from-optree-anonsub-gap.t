@@ -84,17 +84,41 @@ subtest 'an anonymous sub passed as a callback is lowered and named' => sub {
     ok $named{ $anon[0] }, '... and something names it';
 };
 
-# A BODY NOTHING CAN NAME REFUSES, and takes its enclosing graph with it.
-# Shipping the enclosing graph would leave a Call to "unknown" pointing at a
-# body that is not there -- worse than the refusal, because it looks complete.
-subtest 'an unnameable anon sub refuses, emitting nothing' => sub {
+# A BODY NOTHING CAN NAME USED TO REFUSE, because shipping the enclosing graph
+# "would leave a Call to `unknown` pointing at a body that is not there".
+#
+# THAT DANGER IS GONE. A callee that is a VALUE now rides on inputs with
+# dispatch_kind='indirect', so nothing points at a missing body -- the call
+# names no body at all, it calls the value. The case round-trips: measured,
+# `my @subs = (sub{1}, sub{2}); print $subs[0]->() + $subs[1]->()` gives 3
+# through the deparse oracle, matching perl.
+#
+# THE ASSERTION KEEPS ITS INTENT. The question was never "does it refuse" but
+# "is there a Call naming a body that is not present", so that is what it now
+# checks directly.
+subtest 'an unnameable anon sub calls the value, naming no absent body' => sub {
     my ( $w, $err ) = translate(
         'my @subs = (sub { 1 }, sub { 2 }); print $subs[0]->() + $subs[1]->();',
         'anon-orphan' );
-    like $err, qr/GAP/, 'it refuses';
+    unlike $err, qr/GAP/, 'it translates' or diag $err;
     my %methods = ( ( $w // {} )->{methods} // {} )->%*;
-    is scalar( grep { /__ANON__/ } keys %methods ), 0,
-        '... and emits no orphan body';
+    ok scalar( keys %methods ), 'and emits a graph' or return;
+
+    # EVERY NAMED CALLEE MUST BE PRESENT. A name pointing at a body that is not
+    # in `methods` is the defect the old refusal existed to prevent.
+    my @dangling;
+    for my $mm ( keys %methods ) {
+        for my $n ( ( $methods{$mm}{nodes} // [] )->@* ) {
+            next unless ( $n->{op} // '' ) eq 'Call';
+            my $kind = $n->{fields}{dispatch_kind} // '';
+            next unless $kind eq 'direct';
+            my $nm = $n->{fields}{name} // '';
+            next unless $nm =~ /__ANON__/;
+            push @dangling, $nm unless exists $methods{$nm};
+        }
+    }
+    is scalar(@dangling), 0, 'no Call names an absent body'
+        or diag "dangling: @dangling";
 };
 
 # A CAPTURING ONE LOWERS TOO, and the per-site name is still correct: the name

@@ -2246,8 +2246,11 @@ class SoN::Deparse 0.01 {
         my $kind = $f->{dispatch_kind} // '';
         my $name = $f->{name};
 
+        # AN INDIRECT CALL HAS NO NAME BY CONSTRUCTION -- its callee is a
+        # value on inputs, which is the whole point of the kind. Every other
+        # kind names its callee and an empty name there is a real gap.
         die "GAP: a Call with no name is not yet rendered\n"
-            unless defined $name && length $name;
+            unless $kind eq 'indirect' || (defined $name && length $name);
 
         # A MEMORY INPUT IS AN ORDERING EDGE, NOT AN ARGUMENT. The builtins
         # that read or mutate a whole container carry one so they observe
@@ -2371,6 +2374,21 @@ class SoN::Deparse 0.01 {
 
             return sprintf('%s->%s(%s)',
                 $invocant, $name, join(', ', @args));
+        }
+
+        if ($kind eq 'indirect') {
+            # THE CALLEE IS INPUT 0, because it is a VALUE and cannot be a
+            # name -- a code ref from a parameter, an element, a field. The
+            # other three kinds all name their callee; this one is the case
+            # that cannot, which is what the field distinguishes.
+            #
+            # Before it existed, such a call carried `dispatch_kind='direct'`
+            # with the literal name 'unknown' and NO inputs, so the callee was
+            # dropped and the emitted program called a sub nothing defines.
+            die "GAP: an indirect Call with no callee is not yet rendered\n"
+                unless @args;
+            my $callee = shift @args;
+            return sprintf('%s->(%s)', $callee, join(', ', @args));
         }
 
         die "GAP: a Call with dispatch_kind `$kind` is not yet rendered\n";

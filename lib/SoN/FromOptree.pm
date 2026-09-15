@@ -2809,10 +2809,26 @@ class SoN::FromOptree 0.01 {
         # this field is how a consumer knows which one to take. Measured: the
         # same f() yields 30 in scalar context and 10,20,30 in list context,
         # with the two entersubs differing only in this flag.
+        # A CALLEE THAT IS A VALUE CANNOT BE A NAME. When none of the three
+        # resolutions above fired, the callee is a runtime code ref -- a
+        # parameter, an element, a field -- and `$call_name` is still the
+        # literal string 'unknown'. Emitting that named a sub NOTHING DEFINES:
+        # measured on `sub take { my $f = shift; return $f->() }`,
+        #
+        #     4 Call direct unknown in=[]     the callee dropped entirely
+        #
+        # and a consumer duly emitted `unknown()`.
+        #
+        # SO THE CALLEE RIDES ON INPUTS, and a fourth dispatch_kind says so.
+        # The other three -- builtin, direct, method -- all NAME their callee;
+        # this one cannot, which is exactly the distinction the field is for.
+        # Input 0 is the callee, the rest are the arguments.
+        my $indirect = $call_name eq 'unknown' && defined $cv_node;
         my $node = $factory->make('Call',
-            inputs        => [ ($args->@* ? $args->@* : ()) ],
-            dispatch_kind => 'direct',
-            name          => $call_name,
+            inputs        => [ ($indirect ? ($cv_node) : ()),
+                               ($args->@* ? $args->@* : ()) ],
+            dispatch_kind => $indirect ? 'indirect' : 'direct',
+            name          => $indirect ? '' : $call_name,
             want          => _want_of($op),
         );
         $node->set_control_in($sim->control);

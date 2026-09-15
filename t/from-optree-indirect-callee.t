@@ -1,4 +1,4 @@
-# ABOUTME: A call whose callee cannot be resolved refuses; it never names 'unknown'.
+# ABOUTME: A callee that is a VALUE rides on inputs; it never names 'unknown'.
 # ABOUTME: A code ref arriving as a parameter has no pad binding to look through.
 
 use v5.42.0;
@@ -32,18 +32,17 @@ sub translate ($src) {
 #
 # The callee is gone, and the emitted program would call a sub named
 # `unknown` that nothing defines. A GAP is acceptable; this is not.
-# TODO UNTIL THE PRODUCER REFUSES. The defect is measured and real; the fix
-# is producer-side and not yet written. Marked TODO rather than deleted so the
-# suite stays pristine while the finding stays pinned -- a defect nobody is
-# reminded of is a defect that ships.
-subtest 'a call through a parameter refuses' => sub {
-    todo 'the entersub fallback still names a phantom sub' => sub {
+# FIXED: the callee now rides on inputs with dispatch_kind='indirect'. This
+# subtest keeps its original question -- does anything name a phantom sub --
+# because that is the property that must not come back, whatever mechanism
+# answers it.
+subtest 'a call through a parameter names no phantom sub' => sub {
     my ($err, $g) = translate(<<'SRC');
 sub take { my $f = shift; return $f->() }
 print take(sub { 9 }), "\n";
 SRC
 
-    like $err, qr/GAP:/, 'it refuses' or diag $err;
+    unlike $err, qr/GAP:/, 'it translates' or diag $err;
 
     # AND NAMES NOTHING. Even when refusing, no method in the wire may hold a
     # Call named 'unknown' -- a refusal that still emits the bad node is the
@@ -58,7 +57,6 @@ SRC
         }
         is \@bad, [], 'no Call names `unknown`';
     }
-    };
 };
 
 # A RESOLVABLE CALLEE MUST NOT REGRESS. Both forms the handler already
