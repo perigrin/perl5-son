@@ -354,6 +354,22 @@ class SoN::Deparse 0.01 {
 
     method _sub_ident ($name) {
         ( my $short = $name ) =~ s/^main:://;
+
+        # A REAL PACKAGE SUB KEEPS ITS PACKAGE. `xyz::new` is already a legal
+        # fully-qualified name, and flattening it to `xyz__new` defined the
+        # sub in main:: while the CALL site still emitted `xyz->new()` --
+        # which dispatches to the real `xyz` package and found nothing there.
+        # Measured on comp/package.t: five packages collapsed into one and
+        # `xyz->new` died with "Can't locate object method".
+        #
+        # The mangling exists for names perl cannot spell as identifiers: an
+        # anon sub arrives as `main::__PROGRAM__::__ANON__:1:2`, whose `1:2`
+        # tail is not a legal package or sub name. Those still mangle -- the
+        # test is whether every segment is an identifier, not whether a `::`
+        # is present.
+        return $short
+            if $short =~ /\A[A-Za-z_]\w*(?:::[A-Za-z_]\w*)+\z/;
+
         $short =~ s/::/__/g;
         $short =~ s/([^A-Za-z0-9_])/sprintf('_%02x', ord $1)/ge;
         return $short;
@@ -1094,6 +1110,23 @@ class SoN::Deparse 0.01 {
     method _is_eval_join ($n) {
         my @in = ($n->{inputs} // [])->@*;
         return 0 unless @in == 1;
+
+        # A VOID EVAL HAS NO VALUE PHI. `eval { die "x\n"; };` discards the
+        # result and reads only $@ afterwards, so there is nothing for a Phi
+        # to merge -- and requiring one meant this Region was not recognised
+        # as an eval at all. The emitted program then had NO eval: the die
+        # propagated and killed it.
+        #
+        #     eval { die "x\n" }; print "caught\n" if $@; print "end\n";
+        #       perl : caught / end
+        #       emit : died with "x"
+        #
+        # That is a silent miscompile of exception handling, not merely a
+        # missing value. The Region ITSELF says so -- `eval_entry` is on the
+        # wire for exactly this -- so trust the field rather than inferring
+        # the shape from a Phi that a void eval never has.
+        return 1 if defined(($n->{fields} // {})->{eval_entry});
+
         my ($phi) = grep { ($_->{op} // '') eq 'Phi'
                         && ((($_->{fields} // {})->{region} // -1) == $n->{id}) }
                     values $nodes->%*;
@@ -2686,6 +2719,25 @@ class SoN::Deparse 0.01 {
         }
 
         if ($kind eq 'builtin') {
+            # ONE-ARGUMENT `bless` BLESSES INTO THE CURRENT PACKAGE, and the
+            # graph does not record which that was -- perl resolves it at
+            # compile time from the enclosing `package` statement, so the node
+            # carries only the referent.
+            #
+            # The SUB'S OWN NAME carries it. `xyz::new` runs in `xyz`, and the
+            # emitted sub is now defined there too, but a `bless []` inside it
+            # would still bless into whatever package the emitted file is in
+            # at that point. Naming the class explicitly makes the emitted
+            # program independent of that -- measured on
+            # `package xyz; sub new { bless [] }`, where `ref($o)` came back
+            # `main` instead of `xyz`.
+            if ($name eq 'bless' && @args == 1) {
+                # A package name is a bare identifier chain, so a single-quoted
+                # literal needs no escaping.
+                my $pkg = ($current_sub // '') =~ /\A(.*)::[^:]+\z/ ? $1 : 'main';
+                return sprintf("bless(%s, '%s')", $args[0], $pkg);
+            }
+
             # `keys`, `values` and `each` TAKE A CONTAINER, not a list --
             # `keys(("a",1))` is a compile error ("Type of arg 1 to keys must
             # be hash or array"). The operand here is a HashLiteral/ArrayLiteral
