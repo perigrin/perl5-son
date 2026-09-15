@@ -48,7 +48,6 @@ sub forks ($g) {
 }
 
 subtest 'a short-circuited eval is conditional' => sub {
-    todo 'both evals are pinned on one predecessor' => sub {
     my $src = <<'SRC';
 our $n = 0;
 sub bump { $n++; 1 }
@@ -61,7 +60,6 @@ SRC
     ok $g, 'it translates' or return;
     is [forks($g)], [],
         'no two effects claim the same control predecessor';
-    };
 };
 
 # AN UNCONDITIONAL SEQUENCE MUST STAY CHAINED -- measured, three plain evals
@@ -81,6 +79,56 @@ SRC
     my $g = graph_of($src);
     ok $g, 'it translates' or return;
     is [forks($g)], [], 'each effect names a distinct predecessor';
+};
+
+# THE COUNT IS THE REAL CHECK. A graph whose shape is right but whose guard is
+# inverted still produces a value; only the side effect says how many evals
+# actually ran. All three polarities are measured through the deparse oracle:
+#
+#     eval FALSE and eval ...   perl n=1   short-circuits
+#     eval TRUE  and eval ...   perl n=2   runs both
+#     eval TRUE  or  eval ...   perl n=1   short-circuits
+use SoN::Deparse;
+
+# THE WHOLE GRAPH, not just __PROGRAM__: these programs define `bump`, and
+# rendering one method drops the others -- the emitted program then calls a
+# sub nothing defines and the counter never moves. Measured: n=0 instead of
+# n=1, which looks like a short-circuit bug and is not.
+sub full_graph_of ($src) {
+    my $f = "$dir/w." . int(rand 1e9) . ".pl";
+    open my $fh, '>', $f or die $!; print $fh $src; close $fh;
+    my $j = qx($^X -Ilib -MO=SoN,json,package=main $f 2>/dev/null);
+    unlink $f; return eval { JSON::PP->new->decode($j) };
+}
+
+sub round_trips ($src, $name) {
+    my $want = run_perl($src);
+    my $data = full_graph_of($src);
+    unless ($data && $data->{methods}{'main::__PROGRAM__'}) {
+        fail "$name: translates"; return;
+    }
+    my $d = SoN::Deparse->new;
+    my $out = $d->render($data);
+    unless (defined $out) {
+        fail "$name: renders";
+        diag(($d->gap // '?') =~ s/\n.*//sr);
+        return;
+    }
+    is run_perl($out), $want, $name;
+}
+
+subtest 'the side effect count, all three polarities' => sub {
+    round_trips('our $n=0; sub bump { $n++; 1 }'
+              . ' my $r = (eval q{bump(); 0} and eval q{bump(); 1});'
+              . ' print "n=$n\n";', 'and, short-circuiting');
+
+    round_trips('our $n=0; sub bump { $n++; 1 }'
+              . ' my $r = (eval q{bump(); 1} and eval q{bump(); 1});'
+              . ' print "n=$n\n";', 'and, running both');
+
+    round_trips('our $n=0; sub bump { $n++; 1 }'
+              . ' my $r = (eval q{bump(); 1} or eval q{bump(); 1});'
+              . ' print "n=$n\n";', 'or, short-circuiting');
 };
 
 done_testing;

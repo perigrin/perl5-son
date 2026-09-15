@@ -9328,8 +9328,26 @@ class SoN::FromOptree 0.01 {
     # THE INVARIANT THIS SET ENCODES: every op whose handler calls
     # $sim->set_control belongs here. Adding a handler that does so and not
     # adding its op here re-opens this defect.
+    #
+    # AN EVAL ADVANCES CONTROL TOO, and its absence re-opened exactly the
+    # defect this comment warns about. All three eval entries build a Region
+    # and `$sim->set_control` it -- entertry (block eval), entertrycatch
+    # (try/catch), entereval (string eval) -- so an eval in an and/or arm needs
+    # the guard like any other control-advancing op.
+    #
+    # Measured on `eval q{bump(); 0} and eval q{bump(); 1}`, where perl runs
+    # only the FIRST (n=1):
+    #
+    #     13 Coerce  ci=6     the first eval
+    #     14 Region  in=[13]
+    #     19 Coerce  ci=14    the second eval -- UNCONDITIONAL
+    #     15 Print   ci=14    and the statement after it, same predecessor
+    #
+    # Two effects claiming one predecessor, with nothing saying the second
+    # eval is conditional.
     my %ADVANCES_CONTROL_OP = map { $_ => 1 }
-        qw(entersub enterloop enteriter mapstart grepstart);
+        qw(entersub enterloop enteriter mapstart grepstart
+           entertry entertrycatch entereval);
 
     sub _arm_advances_control_from ($start, $stop, $join, $seen) {
         for (my $op = $start;
