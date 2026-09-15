@@ -5538,17 +5538,23 @@ class SoN::FromOptree 0.01 {
             my $two_scalar_int = $bounds->@* == 2
                 && !(grep { _is_aggregate_node($_) } $bounds->@*);
             if ($two_scalar_int) {
-                # A runtime LOW bound (`for my $i ($lo..$hi)`) is not yet
-                # lowered: the induction Phi init would be a runtime value
-                # whose stamp is not propagated through the back-edge (the
-                # loop-carried-stamp fixpoint), and the range's flip/flop
-                # materialization crashes the body walk. A constant low with a
-                # runtime high (`0..$n`, `0..$#a`) IS handled. GAP cleanly
-                # here rather than crashing downstream.
-                die "GAP: foreach over a range with a runtime LOW bound "
-                  . "(for my \$i (\$lo..\$hi)) not yet lowered\n"
-                    unless $bounds->[0]->isa('SoN::IR::Node::Constant')
-                        && ($bounds->[0]->const_type // '') eq 'integer';
+                # A RUNTIME LOW BOUND NEEDS NOTHING SPECIAL. The induction
+                # Phi's init IS the low bound, and the lowering never required
+                # it to be a Constant -- it passes whatever node the bound
+                # resolved to.
+                #
+                # This was refused for two reasons that no longer reproduce:
+                # "the induction Phi init would be a runtime value whose stamp
+                # is not propagated through the back-edge" and "the range's
+                # flip/flop materialization crashes the body walk". Measured
+                # with the guard removed and nothing else changed, every shape
+                # lowers and round-trips -- both bounds runtime, bounds from
+                # @_, a computed low from `$#a - 2`, and the degenerate `5..2`
+                # (zero passes) and `2..2` (one pass).
+                #
+                # The loop-carried-stamp fixpoint it named has since been taken
+                # properly, which is the likeliest reason the guard outlived
+                # what it guarded.
                 _translate_foreach_range($cv, $op, $sim, $factory, $opmap,
                     $ctx->{visited}, $bounds->@*, $iter_key);
             }
@@ -7726,7 +7732,20 @@ class SoN::FromOptree 0.01 {
         # Phase 2: header -- induction Phi plus one Phi per mutated slot.
         my $loop_node = $factory->make_cfg('Loop', inputs => [$sim->control]);
         $sim->set_control($loop_node);
+        # THE INDUCTION VARIABLE OF A RANGE IS ALWAYS Int, whatever the
+        # bounds are -- perl's `..` truncates, measured: `2.7..5.2` yields
+        # `2 3 4 5`. So the stamp is a FACT OF THE CONSTRUCT rather than
+        # something to inherit from the low bound, which may well be unstamped:
+        # `my ($lo,$hi) = @_` leaves `$lo` Unknown while `$hi` picks up Num
+        # only from its use in `Add($hi, 1)`.
+        #
+        # Without this, an accumulator over a runtime range had a back-edge
+        # `Add(accumulator_Phi/Int, induction_Phi/Unknown)` and _patch_loop_phi
+        # refused it as a lost stamp -- which is what the coarser
+        # "runtime LOW bound" GAP used to hide.
         my $i_phi = _make_loop_phi($factory, $loop_node, $low);
+        $i_phi->set_stamp(SoN::IR::Stamp->new(type => 'Int'))
+            unless _is_narrowed($i_phi->stamp);
         $sim->define($i_targ, $i_phi);
         my %phis;
         for my $targ ($mutated->@*) {
