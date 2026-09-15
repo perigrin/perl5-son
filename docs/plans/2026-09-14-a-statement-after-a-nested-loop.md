@@ -1,7 +1,7 @@
 # A statement after a nested loop was silently discarded
 
 **Date:** 2026-09-14
-**Status:** REFUSES loudly. The real fix is scoped below, not done.
+**Status:** FIXED. The walk now continues past the inner `leaveloop`.
 
 ## The defect
 
@@ -52,10 +52,25 @@ A 99-file sweep reported the refusal firing nowhere. That sweep was wrong --
 it fires on comp/utf.t. The lesson is the usual one: a sweep that reports zero
 is a claim to check, not a result to trust.
 
-## The real fix
+## The fix, and a wrong premise in the way of it
 
-Resume past the `leaveloop` at `lib/SoN/FromOptree.pm:5574` rather than
-stopping. That resume point is SHARED with the top-level walk, where
-`leaveloop` is the loop's own and `_restore_locals` legitimately belongs on it,
-so moving it means separating the two callers first. That is a change of its
-own and was deliberately not bundled with the iterator-binding fix.
+The refusal's own comment said resuming was blocked because "the resume point
+is shared with the top-level walk". THAT WAS WRONG. There are two `leaveloop`
+handlers -- one in the top-level walk, one in `_walk_loop_body` -- and they are
+separate functions with separate resume points. The body walker's own comment
+says so two lines above: "a leaveloop this walk reaches belongs to a NESTED
+loop or bare block, not to this body -- this body's own terminator is the
+`unstack`."
+
+So the walk simply continues past it. `_restore_locals` is NOT run on the way
+through: it belongs on the boundary that ends an ITERATION, which is the
+`unstack`, and running it on a nested loop's leaveloop would restore the
+enclosing body's locals partway through a pass.
+
+comp/fold.t and comp/retainedlines.t are CLEAN again, and comp/utf.t advanced
+past this refusal to a different one (`map body contribution of unknown
+arity`).
+
+The lesson worth keeping: a comment explaining why something cannot be done is
+still a claim, and this one was contradicted by another comment in the same
+handler.

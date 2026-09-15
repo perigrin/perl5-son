@@ -8365,23 +8365,25 @@ class SoN::FromOptree 0.01 {
                 # so keying on the op that FOLLOWS covers both without asking
                 # which construct produced the leaveloop.
                 #
-                # REFUSED RATHER THAN WALKED THROUGH. Resuming past the
-                # leaveloop is the real fix, but the resume point is shared
-                # with the TOP-LEVEL walk (where `leaveloop` is this loop's own
-                # and _restore_locals belongs on it), so moving it is a
-                # separate change. A silent drop is the worse failure.
+                # SO THE WALK CONTINUES PAST IT. The `leaveloop` handler in
+                # the TOP-LEVEL walk is a different function with its own
+                # resume point -- this one is not shared, so continuing here
+                # does not disturb it.
+                #
+                # `local` IS NOT RESTORED ON THE WAY THROUGH. _restore_locals
+                # belongs on the boundary that ends an ITERATION, which is the
+                # `unstack` above; running it on a nested loop's leaveloop
+                # would restore the enclosing body's locals partway through a
+                # pass.
                 #
                 # This shape was previously masked: the nested-foreach alias
                 # leak made the outer loop emit a store into an anonymous
                 # container, which the deparse refused for an unrelated reason.
-                # Fixing the leak exposed the drop, so the refusal lands with
-                # it.
+                # Fixing the leak exposed the drop.
                 if ($$op && $op->next && ${$op->next}
                     && $op->next->name eq 'nextstate') {
-                    die "GAP: a statement after a nested loop or bare block"
-                      . " inside a loop body is not yet lowered (this walk"
-                      . " stops at the inner leaveloop, which would silently"
-                      . " discard it)\n";
+                    $op = $op->next;
+                    next;
                 }
                 _restore_locals($sim, $ctx, $factory);
                 last;
