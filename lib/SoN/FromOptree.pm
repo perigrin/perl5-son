@@ -2492,7 +2492,20 @@ class SoN::FromOptree 0.01 {
         chdir mkdir rmdir unlink rename symlink link
         system exec
         delete
+        prtf
     );
+    # `prtf` IS `printf`, and it writes -- the same effect `print` and `say`
+    # have, which are pre-empted by their own branch and so never reach this
+    # list. Without it the statement was not an effect, so the walk never
+    # pinned it and the pad store feeding it was dropped:
+    #
+    #     my $i = 3; printf "n=%d\n", $i;
+    #       perl : n=3
+    #       graph: no node for `my $i = 3` at all -- the emitted program
+    #              read an undeclared $i and printed n=0
+    #
+    # Reached only when the argument resists constant folding; `print "$i"`
+    # folds to a literal and never shows it.
 
     my %UNBUILT_OP_GAP = (
 
@@ -3491,6 +3504,20 @@ class SoN::FromOptree 0.01 {
             return ($op->next, 'handled');
         }
 
+    # Ops that set OPf_MOD on an operand they only READ. perl marks a pad
+    # read passed to sprintf/printf as a potential lvalue although neither
+    # stores through it; a genuine in-place writer (chomp, chop) carries
+    # OPf_REF alongside and is absent here.
+    #
+    # Kept as a list of CONSUMERS rather than a flag test because the flag
+    # cannot answer it: `sprintf("%d",$i)` and `chomp($i)` differ only in
+    # OPf_REF, and relying on that would key the question on a second
+    # incidental bit rather than on what the op does. See
+    # docs/plans and the opf-mod-is-not-a-write note.
+    my %READS_ITS_OPERANDS = map { $_ => 1 } qw(
+        sprintf prtf
+    );
+
         if ($name eq 'padsv') {
             my $targ = $op->targ;
             # A deref padsv ($r->[0], $r->{k}) carries OPf_MOD for
@@ -3511,18 +3538,34 @@ class SoN::FromOptree 0.01 {
             # comparison pushes both operands first, so `$x != $y` runs
             # padsv, padsv, ne. Scan forward over the sibling operand pushes
             # (pad reads and constants) to the op that consumes them.
-            my $mod_but_compared = 0;
+            # SPRINTF AND PRINTF ARE THE SAME TRAP, one op family over. perl
+            # sets OPf_MOD on a plain pad READ passed to either -- measured,
+            # `sprintf("%d",$i)` and `printf("%d",$i)` compile that $i as
+            # `padsv sM` while `join`, `pack`, `push`, `print`, `substr` and
+            # arithmetic all leave it `s`. Neither writes its argument.
+            #
+            # A GENUINE WRITE CARRIES OPf_REF TOO: `chomp($i)` is `sRM`. So
+            # the flag alone never separated a read from a write, and the
+            # forward scan is what does -- it asks which op CONSUMES the
+            # value, and a consumer that does not store is a read however the
+            # operand is flagged.
+            #
+            # Without this the read pushed a FRESH unbound PadAccess, so
+            # `my $i = 3; printf "n=%d\n", $i` emitted a program reading an
+            # undeclared $i and printed `n=0`.
+            my $mod_but_read = 0;
             if ($op->flags & 32) {
                 my %seen;
                 for (my $o = $op->next; $$o && !$seen{$$o}++; $o = $o->next) {
                     my $m = $o->name;
                     next if $m =~ /^(padsv|padav|padhv|const|gvsv|null)$/;
-                    $mod_but_compared = _is_comparison_optree_op($m);
+                    $mod_but_read = _is_comparison_optree_op($m)
+                                 || $READS_ITS_OPERANDS{$m};
                     last;
                 }
             }
             my $is_lvalue = ($op->flags & 32) && !$is_deref
-                                              && !$mod_but_compared; # OPf_MOD
+                                              && !$mod_but_read;    # OPf_MOD
             my $existing = $sim->lookup($targ);
 
             # A bare `my $a;` -- a padsv that INTRODUCES the slot (OPpLVAL_INTRO)

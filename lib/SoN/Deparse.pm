@@ -94,6 +94,42 @@ class SoN::Deparse 0.01 {
     # FromOptree.pm builds Call with [args..., memory] at three sites
     # (keys/values/each, push/unshift/splice, shift/pop), and the aggregate
     # readers and writers each append one the same way.
+    # An op name to its Perl spelling, for ops perl does not name after the
+    # keyword that produced them. A plain string is a function name; a coderef
+    # spells an OPERATOR, which takes no parens.
+    #
+    # Only the ops that actually reach the wire are here. The `prototype`
+    # check beside this table catches any that do not, so a name missing from
+    # here refuses rather than emitting an undefined sub call -- the failure
+    # this table exists to stop.
+    our %BUILTIN_SPELLING = (
+        prtf   => 'printf',
+        # `do EXPR` runs a file. It is a named unary operator, so it takes no
+        # parens around a parenthesised expression the way a function would --
+        # `dofile($f)` is a call to a sub that does not exist.
+        dofile => sub { sprintf('do %s', $_[0]) },
+        # schomp/schop are NOT here, deliberately. They are the scalar forms
+        # of chomp/chop and the keyword is obvious -- but the producer emits
+        # the Call with no store, so the graph says nothing about the mutation
+        # and the following read still names the PRE-chomp value:
+        #
+        #     my $s = "ab\n"; chomp($s); print "[$s]"
+        #       perl : [ab]
+        #       graph: Call(schomp, PadAccess) consumed by NOBODY, and the
+        #              Print reading the original Constant
+        #
+        # Spelling them would turn a loud "Undefined subroutine &main::schomp"
+        # into a silent `[ab\n]`, which is the worse failure. The refusal
+        # below is the honest answer until the producer threads the store.
+        # A FILETEST IS AN OPERATOR: `-e $f`, not `ftis($f)`.
+        ftis   => sub { sprintf('(-e %s)', $_[0]) },
+        ftchr  => sub { sprintf('(-c %s)', $_[0]) },
+        ftdir  => sub { sprintf('(-d %s)', $_[0]) },
+        ftfile => sub { sprintf('(-f %s)', $_[0]) },
+        ftlink => sub { sprintf('(-l %s)', $_[0]) },
+        ftzero => sub { sprintf('(-z %s)', $_[0]) },
+    );
+
     our %MEM_MIN_INPUTS = (
         Call         => 1,   # [arg, ..., memory]
         EntryWrite   => 2,   # [slot, value, memory]
@@ -2719,6 +2755,28 @@ class SoN::Deparse 0.01 {
         }
 
         if ($kind eq 'builtin') {
+            # AN OP NAME IS NOT ALWAYS THE PERL SPELLING. The producer takes
+            # `name` from the OP, and perl's op names do not all match the
+            # keyword that produced them -- `printf` is the op `prtf`, and
+            # emitting that verbatim gave "Undefined subroutine &main::prtf"
+            # on comp/bproto.t, which died on its first test.
+            #
+            # A FILETEST IS AN OPERATOR, not a function: `-e $f`, whose op is
+            # `ftis`. `ftis($f)` is a call to a sub that does not exist.
+            #
+            # THE TEST IS PERL'S OWN. `prototype("CORE::$name")` throws for a
+            # name that is not a keyword, so the check does not depend on a
+            # list of names anyone has to keep current -- which is how the
+            # unspellable ones got here in the first place.
+            if (my $spelling = $BUILTIN_SPELLING{$name}) {
+                return sprintf('%s(%s)', $spelling, join(', ', @args))
+                    unless ref $spelling;
+                return $spelling->(@args);
+            }
+            die "GAP: the builtin op `$name` has no Perl spelling -- emitting"
+              . " it verbatim would call a sub that does not exist\n"
+                unless eval { my $p = prototype("CORE::$name"); 1 };
+
             # ONE-ARGUMENT `bless` BLESSES INTO THE CURRENT PACKAGE, and the
             # graph does not record which that was -- perl resolves it at
             # compile time from the enclosing `package` statement, so the node
