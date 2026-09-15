@@ -275,8 +275,12 @@ class SoN::FromOptree::OpMap 0.01 {
         # pattern value on the stack for the following match op.
         subst       => [1, 'Call',     1, 0],
         substcont   => [0, undef,      0, BRANCH],
-        trans       => [1, 'Call',     1, 0],
-        transr      => [1, 'Call',     1, 0],
+        # trans/transr build a Transliterate in _step, which both walkers
+        # reach. The rows stay so is_known() is true and the walk gets there
+        # rather than treating the op as unknown; the node type is undef
+        # because the handler makes the node itself.
+        trans       => [1, undef,      1, 0],
+        transr      => [1, undef,      1, 0],
         regcomp     => [1, undef,      1, SKIP],
         regcmaybe   => [1, undef,      1, SKIP],
         regcreset   => [1, undef,      1, SKIP],

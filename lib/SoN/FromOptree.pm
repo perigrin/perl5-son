@@ -2931,6 +2931,96 @@ class SoN::FromOptree 0.01 {
             return ($op->next, 'handled');
         }
 
+        # A TRANSLITERATION CARRIES ITS TABLE, NOT A PATTERN. `tr/a-z/A-Z/`
+        # compiles to a `trans` PVOP whose 522-byte pv IS the 256-entry
+        # translation table; mapping it to a generic Call dropped that
+        # entirely, so the graph said `Call(trans, [target])` with no from, no
+        # to, and nothing a consumer could act on.
+        #
+        # DECODED WITH PERL'S OWN DECODER. B::Deparse::tr_decode_byte reverses
+        # the table to the SOURCE spelling -- a range comes back `a-z`, not
+        # its 26 expanded members -- and reimplementing that would be a second
+        # copy of a subtle format to keep in step with perl.
+        #
+        # NOT A RegexSubst. from/to are character SETS: read as a pattern,
+        # `a-z` is a character class matching ONE letter, which is a different
+        # program. A consumer handed these as a pattern would miscompile by
+        # construction, so tr/// gets its own node kind.
+        if ($name eq 'trans' || $name eq 'transr') {
+            my $target = $sim->pop_node;
+            my ($from, $to) = _tr_decode($op);
+            my $flags = _tr_flags($op, $name);
+            my $node = $factory->make('Transliterate',
+                inputs => [$target,
+                           (defined $sim->memory ? ($sim->memory) : ())],
+                from   => $from,
+                to     => $to,
+                flags  => $flags,
+                stamp  => SoN::IR::Stamp->new(type => 'Str'),
+            );
+
+            # A DESTRUCTIVE tr/// STORES INTO ITS TARGET, exactly as s/// does
+            # -- and the same rebind. Without it the node was consumed by
+            # NOBODY and the following read still named the pre-tr value:
+            # `my $s = "hi"; $s =~ tr/a-z/A-Z/; print $s` emitted `hi`.
+            #
+            # The op's targ names the pad slot (`trans[$s:1,2]`), so unlike
+            # s/// there is no GV to resolve -- a tr/// on a package scalar or
+            # on $_ arrives with targ 0 and is refused rather than bound to
+            # the wrong variable.
+            #
+            # `r` yields a NEW string and leaves the source alone, so it must
+            # not rebind.
+            # A NON-VOID tr/// YIELDS A COUNT, NOT THE STRING. `my $n = ($s =~
+            # tr/a//)` is how perl spells "count the a's", and the op arrives
+            # in SCALAR context (`trans[$s] sP/IDENT`) where the destructive
+            # form is VOID (`trans[$t] v`). Pushing the transliterated string
+            # there is a silent value-and-type miscompile -- measured, `2`
+            # came out as `aab`.
+            #
+            # SO IT GETS ITS OWN NODE, as s/// does. NOT RegexSubstCount:
+            # the two counts are different types -- measured, `"xyz" =~ tr/a//`
+            # is a real 0 while `"xyz" =~ s/a/b/` is the EMPTY STRING -- so
+            # sharing the node would make its stamp wrong for one of them.
+            #
+            # Refusing here instead was worse than the bug: the GAP propagates
+            # out of translate() and comp/fold.t lost its __PROGRAM__ entirely,
+            # where before it had merely differed.
+            my $void = ($op->flags & 3) == 1;   # OPf_WANT_VOID
+
+            # NO TARG MEANS $_, WHICH IS NAMEABLE. `tr[a][b]` with no explicit
+            # subject compiles as targ 0 with `gvsv[*_]` on the stack, and $_
+            # is the package scalar main::_ -- an ordinary SSA binding the
+            # s/// handler already keys exactly this way. Refusing it instead
+            # killed the whole program: the GAP propagates out of translate()
+            # and base/lex.t lost its __PROGRAM__ entirely, which is worse
+            # than the wrong answer it replaced.
+            #
+            # A DESTRUCTIVE tr/// STORES INTO ITS TARGET, and a package scalar
+            # needs the EntryWrite as well as the rebind -- a read from
+            # another sub cannot observe a pad rebind. Same rule _entry_store
+            # exists for.
+            if ($name ne 'transr') {
+                if (my $targ = $op->targ) {
+                    $sim->define($targ, $node);
+                }
+                else {
+                    my $key  = _stash_name_key('$', 'main', '_');
+                    my $name_node = $factory->make('EntryDef',
+                        package => 'main', sigil => '$', symbol => '_');
+                    $sim->define($key, $node);
+                    _entry_store($factory, $sim, $name_node, $node);
+                }
+            }
+
+            $sim->push_node(!$void && $name ne 'transr'
+                ? $factory->make('TransliterateCount',
+                    inputs => [$node],
+                    stamp  => SoN::IR::Stamp->new(type => 'Int'))
+                : $node);
+            return ($op->next, 'handled');
+        }
+
         # A LIST SLICE IS TWO MARK-DELIMITED LISTS, not a fixed pair. The
         # optree for `(qw(p q r))[1]` -- which perl does NOT fold -- is
         #
@@ -10771,6 +10861,54 @@ class SoN::FromOptree 0.01 {
     #
     # so two of four shapes were silently wrong and the fix belongs in one
     # place, not in each handler.
+    # _tr_decode($op) -- the SOURCE spelling of a tr///'s character sets.
+    #
+    # perl stores the mapping as a translation TABLE, not as the text that
+    # produced it, and the encoding differs by op class: a byte table on a
+    # PVOP, a UTF-8 map on a PADOP/SVOP. B::Deparse already reverses both --
+    # it is what `perl -MO=Deparse` uses to print tr/// back -- so this calls
+    # perl's decoder rather than keeping a second copy of the format.
+    sub _tr_decode ($op) {
+        require B::Deparse;
+        my $class = B::class($op);
+        my ($from, $to);
+        if ($class eq 'PVOP') {
+            ($from, $to) = B::Deparse::tr_decode_byte($op->pv, $op->private);
+        }
+        elsif ($class eq 'PADOP') {
+            # The map is a pad SV. Reaching it needs the CV's pad, which
+            # B::Deparse threads through its own object; without one the
+            # spelling is not recoverable here.
+            die "GAP: a tr/// whose map is in the pad is not yet lowered"
+              . " -- the character sets cannot be recovered from the op\n";
+        }
+        elsif ($class eq 'SVOP') {
+            ($from, $to) = B::Deparse::tr_decode_utf8($op->sv, $op->private);
+        }
+        else {
+            die "GAP: a tr/// on a `$class` op is not yet lowered\n";
+        }
+        return ($from // '', $to // '');
+    }
+
+    # The flags perl records in op_private, back as the source letters.
+    # `d` is NOT recoverable from an empty `to`: `tr/x//` maps x to itself
+    # while `tr/x//d` removes it, and both leave `to` empty.
+    sub _tr_flags ($op, $name) {
+        # IMPORTED, NOT HARDCODED. The first attempt guessed 1/2/4 and the
+        # real values are 32/128/8, so `tr/x//d` came out flagged `c` --
+        # complement instead of delete, a different program. B exports the
+        # constants; perl is the authority on its own bits.
+        require B;
+        my $p = $op->private;
+        my $f = '';
+        $f .= 'c' if $p & B::OPpTRANS_COMPLEMENT();
+        $f .= 'd' if $p & B::OPpTRANS_DELETE();
+        $f .= 's' if $p & B::OPpTRANS_SQUASH();
+        $f .= 'r' if $name eq 'transr';
+        return $f;
+    }
+
     sub _entry_store ($factory, $sim, $target, $value) {
         return unless $target
             && $target->isa('SoN::IR::Node::EntryDef')

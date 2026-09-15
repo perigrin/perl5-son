@@ -127,7 +127,7 @@ my @KNOWN_AT_98 = qw(
     MakeCell
     Multiply Negate Not NotMatch NumCmp NumEq NumGe NumGt NumLe NumLt NumNe
     Or PadAccess Parameter Phi PostfixDeref Power Print Proj Range Ref
-    RefType Regex RegexCapture RegexMatch RegexSubst RegexSubstCount
+    RefType Regex RegexCapture RegexMatch RegexSubst RegexSubstCount Transliterate TransliterateCount
     Region Repeat Return
     RightShift Slice Start StrCmp StrEq StrGe StrGt StrLe StrLt StrNe
     StructFieldAccess StructRef Subscript Subtract TernaryExpr TryCatch
@@ -150,7 +150,7 @@ subtest 'every node class is one or the other, never neither' => sub {
     # is stale" -- and only one of those is interesting. chalk hit the second
     # running this suite against a lib/ snapshot taken one commit before an
     # Exists node landed, and nearly attributed the red to its own change.
-    my $EXPECTED = 99;
+    my $EXPECTED = 101;
     if (scalar @names != $EXPECTED) {
         my %known = map { $_ => 1 } @KNOWN_AT_98;
         my @extra   = grep { !$known{$_} } @names;

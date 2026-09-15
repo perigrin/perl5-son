@@ -151,6 +151,12 @@ class SoN::Deparse 0.01 {
         # is whatever is left. Listed at 1 so the reads scan drops a trailing
         # memory input; the renderer never consults this entry.
         RegexSubst   => 1,
+        # A destructive tr/// stores into its target, so it advances the
+        # memory chain and carries the version it supersedes. Without this the
+        # trailing memory edge counted as a VALUE, which bound the EntryWrite
+        # that produced it and then asked to render a store as an expression
+        # -- "no rule for value node `EntryWrite`".
+        Transliterate => 1,
         MakeCell     => 1,   # [init_value, memory]
         CellRead     => 1,   # [cell, memory]
         CellWrite    => 2,   # [cell, value, memory]
@@ -2022,6 +2028,37 @@ class SoN::Deparse 0.01 {
               . " rendered\n" unless @in == 1;
             $text = sprintf('(%s =~ m{%s}%s)',
                 $self->_expr($in[0]), $pat, $f->{flags} // '');
+        }
+        elsif ($op eq 'Transliterate') {
+            # SAME SHAPE AS RegexSubst, same reason: the graph threads the
+            # result to whatever binds it, so this yields a value rather than
+            # mutating in place -- which is what `tr///r` means.
+            #
+            # DELIMITED WITH BRACKETS so the sets need no escaping: they are
+            # the source spelling, and a `/` inside one would close a
+            # slash-delimited form.
+            my $f = $n->{fields} // {};
+            ( my $flags = $f->{flags} // '' ) =~ s/r//g;
+            $text = sprintf('(%s =~ tr[%s][%s]%sr)',
+                $self->_expr($in[0]), $f->{from} // '', $f->{to} // '',
+                $flags);
+        }
+        elsif ($op eq 'TransliterateCount') {
+            # THE COUNT IS NOT THE STRING, the same split RegexSubstCount
+            # makes for s///. The destructive form is what returns a count, so
+            # this renders WITHOUT /r -- and it needs an lvalue, which the
+            # Transliterate's own subject supplies.
+            die "GAP: a TransliterateCount with " . scalar(@in) . " inputs is"
+              . " not yet rendered\n" unless @in == 1;
+            my $tr = $nodes->{ $in[0] };
+            die "GAP: a TransliterateCount over `" . ($tr->{op} // '?')
+              . "` is not yet rendered\n"
+                unless $tr && $tr->{op} eq 'Transliterate';
+            my $tf = $tr->{fields} // {};
+            ( my $tflags = $tf->{flags} // '' ) =~ s/r//g;
+            $text = sprintf('(%s =~ tr[%s][%s]%s)',
+                $self->_expr(($tr->{inputs} // [])->[0]),
+                $tf->{from} // '', $tf->{to} // '', $tflags);
         }
         elsif ($op eq 'RegexSubst') {
             # A SUBSTITUTION YIELDS THE MODIFIED STRING here rather than

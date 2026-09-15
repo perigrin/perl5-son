@@ -35,6 +35,18 @@ sub builtin_stamp ( $src, $name, $builtin ) {
     return undef;
 }
 
+# The stamp of the first node of a given KIND, for operations that have their
+# own node rather than collapsing to a Call.
+sub node_stamp ( $src, $name, $op ) {
+    my $wire = wire_for( $src, $name );
+    for my $g ( sort keys( ( $wire->{methods} // {} )->%* ) ) {
+        for my $n ( ( $wire->{methods}{$g}{nodes} // [] )->@* ) {
+            return $n->{stamp} if $n->{op} eq $op;
+        }
+    }
+    return undef;
+}
+
 # THE DEFECT. ~180 optree ops collapse to ONE generic `Call` node, and
 # TypeLibrary was keyed by IR NODE NAME alone -- so it could give exactly one
 # answer for all 180, and that answer was Unknown. Every builtin reached the
@@ -52,12 +64,16 @@ subtest 'a builtin with a fixed result is typed by name' => sub {
         'bindex', 'index' ), 'Int',
         'index is Int -- a position, and -1 on a miss is still Int';
 
-    is builtin_stamp( 'my $s = "hello"; my $n = ($s =~ tr/l/L/); print "$n\n";',
-        'btrans', 'trans' ), 'Int',
+    # tr/// NO LONGER COLLAPSES TO A Call. Its character sets are not a
+    # pattern and its two results are not the same type, so it has its own
+    # node kinds -- but the STAMPS this subtest asserts are unchanged, and
+    # they are the point: the counting form is Int, the /r form is Str.
+    is node_stamp( 'my $s = "hello"; my $n = ($s =~ tr/l/L/); print "$n\n";',
+        'btrans', 'TransliterateCount' ), 'Int',
         'tr/// COUNTS what it changed';
 
-    is builtin_stamp( 'my $s = "hello"; my $r = ($s =~ tr/l/L/r); print "$r\n";',
-        'btransr', 'transr' ), 'Str',
+    is node_stamp( 'my $s = "hello"; my $r = ($s =~ tr/l/L/r); print "$r\n";',
+        'btransr', 'Transliterate' ), 'Str',
         'and tr///r RETURNS the new string -- perl gives them separate op names';
 };
 

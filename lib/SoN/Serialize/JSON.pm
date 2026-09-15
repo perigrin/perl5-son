@@ -229,6 +229,16 @@ sub _extract_fields ($node, $id_remap) {
                          && defined $id_remap->{ $entry->id };
         return { eval_entry => $id_remap->{ $entry->id } };
     }
+    # tr///'s character sets and flags. `d` is not recoverable from an empty
+    # `to` -- `tr/x//` maps x to itself, `tr/x//d` removes it -- so the flags
+    # ride alongside rather than being inferred.
+    if ($op eq 'Transliterate') {
+        return {
+            from  => $node->from,
+            to    => $node->to,
+            flags => $node->flags,
+        };
+    }
     if ($op eq 'ListAppend') {
         return { collector => $node->collector };
     }
