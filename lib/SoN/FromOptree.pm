@@ -1442,9 +1442,22 @@ class SoN::FromOptree 0.01 {
                 # INPUT ORDER IS [target, pattern?, replacement?] and the flag
                 # says whether the pattern slot is filled. Without it a
                 # computed pattern and an /e replacement are the same position.
+                # A DESTRUCTIVE s/// STORES INTO ITS TARGET, so it advances
+                # the memory chain (below) and must therefore CARRY one --
+                # every other memory point names the version it supersedes,
+                # and that is what lets a consumer recognise the chain
+                # structurally rather than by name. Without it,
+                # `$g =~ s/a/b/; $g =~ s/b/c/` chained only through the TARGET
+                # data edge, so nothing marked either as a memory point.
+                #
+                # MEMORY GOES LAST AND THE ARITY IS RECOVERABLE. The two
+                # optional slots are each determined by a field already on the
+                # wire: pattern-present IFF `pattern_is_input`, and
+                # replacement-present IFF the `replacement` string is empty.
                 my $node = $factory->make('RegexSubst',
                     inputs      => [$target, ($pat_node // ()),
-                                    ($code_repl // ())],
+                                    ($code_repl // ()),
+                                    (defined $sim->memory ? ($sim->memory) : ())],
                     pattern_is_input => (defined $pat_node ? 1 : 0),
                     pattern     => $pattern,
                     replacement => $replacement,
@@ -8901,9 +8914,12 @@ class SoN::FromOptree 0.01 {
 
                 # Same input order and flag as the main walker: one operator,
                 # two declaration sites.
+                # Memory last, as the main walker does: one operator, two
+                # declaration sites.
                 my $node = $factory->make('RegexSubst',
                     inputs      => [$target, ($pat_node // ()),
-                                    (defined $repl ? ($repl) : ())],
+                                    (defined $repl ? ($repl) : ()),
+                                    (defined $sim->memory ? ($sim->memory) : ())],
                     pattern_is_input => (defined $pat_node ? 1 : 0),
                     pattern     => $pattern,
                     replacement => $replacement,
@@ -10803,13 +10819,23 @@ class SoN::FromOptree 0.01 {
                 if (my $gv = _op_gv($cv, $gv_op)) {
                     my $stash = eval { $gv->STASH->NAME } // 'main';
                     my $key   = _stash_name_key('$', $stash, $gv->NAME);
-                    my $node  = $sim->lookup($key)
-                        // $factory->make('EntryDef',
-                            package => $stash,
-                            sigil      => '$',
-                            symbol => $gv->NAME);
+                    my $name  = $factory->make('EntryDef',
+                        package => $stash,
+                        sigil   => '$',
+                        symbol  => $gv->NAME);
+                    my $node  = $sim->lookup($key) // $name;
                     $sim->define($key, $node);
-                    return ($key, $node);
+                    # THE STORE TARGET IS THE NAME, NOT THE BOUND VALUE --
+                    # the same split the $_ branch below makes, for the same
+                    # reason. `our $g = "aaa"` binds the key to the Constant
+                    # "aaa", so returning that as the store target made
+                    # _entry_store's EntryDef check fail and NO write-back was
+                    # emitted: the RegexSubst was computed and consumed by
+                    # nobody. Measured on
+                    # `our $g="aaa"; $g =~ s/a/b/; $g =~ s/b/c/; print $g`:
+                    # perl says caa, the graph printed aaa with both
+                    # substitutions orphaned.
+                    return ($key, $node, $name);
                 }
                 # A GV we cannot resolve is still not $_. Binding it as $_ would
                 # drop the substitution silently, which is the whole reason this

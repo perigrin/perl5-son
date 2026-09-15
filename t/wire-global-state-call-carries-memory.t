@@ -80,19 +80,20 @@ subtest 'two requires chain through memory' => sub {
 #
 # The ordering happened to fall out of the data edge here, which is exactly
 # how a missing memory edge stays invisible until something else needs it.
-# TODO UNTIL RegexSubst CAN SAY WHERE ITS MEMORY IS. Its inputs are
-# [target, pattern?, replacement?] -- TWO optional slots -- so appending memory
-# makes position ambiguous: a 2-input node could be [target, pattern],
-# [target, replacement] or [target, memory]. It already carries
-# `pattern_is_input` for exactly this reason, and fixing this properly means a
-# second flag or always-present slots, which is a wire change of its own.
+# BOTH OPTIONAL SLOTS ARE ALREADY RECOVERABLE, so memory can simply go last.
+# This was pinned as needing a wire decision -- "two optional slots, so
+# appending memory makes position ambiguous" -- and that was over-cautious.
+# Measured across all four shapes:
 #
-# Pinned rather than fixed so the finding stays visible: the audit that found
-# it is the producer-side sweep recommended in
-# docs/plans/2026-09-14-a-memory-point-must-carry-memory.md, and it found this
-# without any corpus file pointing at it.
+#     s/a/X/            in=[target]           pattern='a' replacement='X'
+#     s/a/x${y}y/       in=[target, repl]     pattern='a' replacement=''
+#     s/a/ 1+1 /e       in=[target]           pattern='a' replacement=2
+#     s/$p b$/X/        in=[target, pattern]  pattern=''  pattern_is_input=1
+#
+# so pattern-present IFF `pattern_is_input`, and replacement-present IFF the
+# `replacement` string is empty. Two fields already on the wire determine the
+# arity, and memory appended last is unambiguous.
 subtest 'a destructive s/// carries the memory it advances' => sub {
-    todo 'RegexSubst has two optional input slots and cannot place memory' => sub {
     my $g = graph_of('our $g = "aaa"; $g =~ s/a/b/; print "$g\n";');
     ok $g, 'it translates' or return;
 
@@ -105,7 +106,6 @@ subtest 'a destructive s/// carries the memory it advances' => sub {
     like +($mem->{op} // ''),
         qr/\A(?:MemStart|EntryWrite|Assign|Call|Phi|CellWrite|Delete|RegexSubst)\z/,
         'its last input is a memory point';
-    };
 };
 
 done_testing;

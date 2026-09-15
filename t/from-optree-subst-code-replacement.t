@@ -24,6 +24,24 @@ sub nodes ( $wire ) {
              sort keys( ( $wire->{methods} // {} )->%* ) ];
 }
 
+# A destructive s/// stores into its target, so it advances the memory chain
+# and carries the version it supersedes as a trailing input. That edge is not
+# an OPERAND, and these subtests are about operands -- counting raw inputs
+# made every one of them off by one the moment the edge landed.
+#
+# The memory input is the last one, and it is present exactly when the
+# substitution is destructive. Drop it by identity rather than by position so
+# an /r form (which stores nothing) still counts correctly.
+sub operands ( $rs, $wire ) {
+    my @in = ( $rs->{inputs} // [] )->@*;
+    my %by = map { $_->{id} => $_ } nodes($wire)->@*;
+    my $last = $by{ $in[-1] // -1 };
+    pop @in if $last
+        && ( $last->{op} // '' ) =~ /\A(?:MemStart|EntryWrite|Assign|Call
+                                        |CellWrite|Delete|RegexSubst)\z/x;
+    return \@in;
+}
+
 # THE DEFECT. `s/b/ $n + 1 /e` was refused outright as "code replacement not
 # yet lowered", on the reading that the replacement is opaque. It is not: it is
 # an ordinary op subtree hanging off the subst's pmreplroot, and it is intact
@@ -45,7 +63,7 @@ subtest 's///e builds a RegexSubst with the replacement as an operand' => sub {
 
     my ($rs) = grep { ( $_->{op} // '' ) eq 'RegexSubst' } nodes($wire)->@*;
     ok $rs, 'a RegexSubst is in the graph' or return;
-    is scalar( ( $rs->{inputs} // [] )->@* ), 2,
+    is scalar( operands( $rs, $wire )->@* ), 2,
         'subject AND computed replacement are both operands';
 
     my %by = map { $_->{id} => $_ } nodes($wire)->@*;
@@ -82,7 +100,7 @@ subtest 'a plain s/// keeps its string replacement' => sub {
     my ($rs) = grep { ( $_->{op} // '' ) eq 'RegexSubst' } nodes($wire)->@*;
     ok $rs, 'a RegexSubst is in the graph' or return;
     is $rs->{fields}{replacement}, 'X', 'the literal replacement is preserved';
-    is scalar( ( $rs->{inputs} // [] )->@* ), 1, 'and it has only the subject';
+    is scalar( operands( $rs, $wire )->@* ), 1, 'and it has only the subject';
 };
 
 # A CONSTANT-FOLDED /e REPLACEMENT IS THE LITERAL CASE. perl folds
@@ -100,7 +118,7 @@ subtest 'a folded /e replacement takes the literal path' => sub {
     ok $rs, 'a RegexSubst is in the graph' or return;
     is $rs->{fields}{replacement}, 'XY',
         'the folded value is the string replacement';
-    is scalar( ( $rs->{inputs} // [] )->@* ), 1,
+    is scalar( operands( $rs, $wire )->@* ), 1,
         'and there is no code operand -- nothing was left to compute';
 };
 

@@ -122,7 +122,20 @@ subtest 's///e carries its non-foldable replacement as an operand' => sub {
     my $g = graph_of('sub { my $s = "foobar"; $s =~ s/foo/length($s)/e; $s }');
     my ($rs) = grep { $_->operation eq 'RegexSubst' } $g->nodes->@*;
     ok(defined $rs, 'a RegexSubst is built rather than refused') or return;
-    is(scalar($rs->inputs->@*), 2, 'subject and computed replacement');
+    # A destructive s/// advances the memory chain and carries the version it
+    # supersedes as a TRAILING input. That edge is not an operand, and this
+    # assertion is about operands -- counting raw inputs made it off by one
+    # the moment the edge landed.
+    # Checked by ROLE rather than by an allow-list of node classes: a list
+    # naming only the kinds seen today passes by accident when the chain grows
+    # a new memory point, and a memory input is exactly a node the memory
+    # chain threads through.
+    my @operands = $rs->inputs->@*;
+    pop @operands
+        if @operands && $operands[-1]->isa('SoN::IR::Node::MemStart');
+    is(scalar(@operands), 2, 'subject and computed replacement');
+    ok(!grep({ $_->isa('SoN::IR::Node::MemStart') } @operands),
+        'and no memory node is left among the operands');
     is($rs->replacement, '',
         'the literal-replacement field stays empty -- no guessed string');
 };

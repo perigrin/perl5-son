@@ -103,11 +103,25 @@ class SoN::Deparse 0.01 {
         # gives `PadAccess(6) in=[Assign]`, the store it observes. Counting
         # that as a value bound the Assign and asked to render it as one.
         PadAccess    => 0,   # [memory] -- ordering only
+        # A destructive s/// stores into its target, so it advances the chain
+        # and carries it. Its optional slots make the operand count vary, so
+        # the table cannot express it -- _subst_operands resolves those from
+        # `pattern_is_input` and the `replacement` field, and the memory edge
+        # is whatever is left. Listed at 1 so the reads scan drops a trailing
+        # memory input; the renderer never consults this entry.
+        RegexSubst   => 1,
         MakeCell     => 1,   # [init_value, memory]
         CellRead     => 1,   # [cell, memory]
         CellWrite    => 2,   # [cell, value, memory]
     );
     field %rendered;   # id => Perl expression text
+
+    # A COUNTED s/// BOUND AT ITS STORE. The destructive form yields the
+    # count, so the store emits it once and records the variable holding that
+    # number here. Kept apart from %bound, which holds the substituted STRING
+    # for the same node -- one substitution, two different results, and a
+    # single map would hand a reader whichever was written last.
+    field %subst_count_var;   # RegexSubst id => variable holding its count
 
     # The reason the last render() refused, for a caller that wants to report it
     # rather than just see undef.
@@ -150,6 +164,7 @@ class SoN::Deparse 0.01 {
         %after_effect = ();
         %hoisted  = ();
         %mem_cache = ();
+        %subst_count_var = ();
         my $body = eval { $self->_emit_control_chain($graph) };
         if (!defined $body) { $gap = $@ || 'render failed with no reason'; return undef }
         return $out . $body;
@@ -349,6 +364,7 @@ class SoN::Deparse 0.01 {
         %after_effect = ();
         %hoisted  = ();
         %mem_cache = ();
+        %subst_count_var = ();
 
         my $body = eval { $self->_emit_control_chain($graph) };
         my $err = $@;
@@ -1396,6 +1412,37 @@ class SoN::Deparse 0.01 {
         # assignment in chain order is what makes later reads observe it.
         if ($op eq 'EntryWrite') {
             my $slot = $nodes->{ $n->{inputs}[0] };
+
+            # A COUNTED s/// MUST RUN EXACTLY ONCE. The RegexSubst has two
+            # consumers -- this store, and the RegexSubstCount over it -- and
+            # each rendered the substitution independently, so the emitted
+            # program ran it twice. The second run saw the already-substituted
+            # string and counted zero. Measured on
+            # `our $s="aaa"; my $n = ($s =~ s/a/b/g); print "$n $s"`:
+            #
+            #     perl  : 3 bbb
+            #     before: " bbb" -- right string, count lost
+            #
+            # The destructive form does BOTH jobs: it mutates the slot in
+            # place and yields the count. So emit it here, bound, and let the
+            # count read the binding instead of substituting again.
+            my $val = $nodes->{ $n->{inputs}[1] // -1 };
+            if ($val && ($val->{op} // '') eq 'RegexSubst'
+                && !exists $bound{ $val->{id} }
+                && $self->_counted_subst($val->{id})) {
+                my $lv = $self->_subst_lvalue($val);
+                if (defined $lv && $lv eq $self->_slot_name($slot)) {
+                    my $f = $val->{fields} // {};
+                    ( my $flags = $f->{flags} // '' ) =~ s/r//g;
+                    my ($pat, $rep) = $self->_subst_operands($val);
+                    my $var = sprintf('$subst%d', $val->{id});
+                    $bound{ $val->{id} }            = $lv;
+                    $subst_count_var{ $val->{id} }  = $var;
+                    return sprintf("my %s = (%s =~ s{%s}{%s}%s);\n",
+                        $var, $lv, $pat, $rep, $flags);
+                }
+            }
+
             return sprintf("%s = %s;\n",
                 $self->_slot_name($slot), $self->_expr($n->{inputs}[1]));
         }
@@ -1405,6 +1452,34 @@ class SoN::Deparse 0.01 {
         # emitting it as one is what puts the slots in scope for later reads.
         if ($op eq 'Assign') {
             my @in = ($n->{inputs} // [])->@*;
+
+            # A COUNTED s/// STORED THROUGH AN Assign STILL RUNS TWICE. The
+            # foreach form writes back through an Assign rather than an
+            # EntryWrite -- `for my $s (@w)` aliases the iterator to the
+            # element, so the store is `Assign($w[$i], RegexSubst)` -- and the
+            # store/count pair double-evaluates exactly as the EntryWrite case
+            # did before the fix above.
+            #
+            # NOT FIXED THE SAME WAY. By the time this branch runs, the
+            # generic chain walker has already bound the RegexSubst to an
+            # `$effN` holding the substituted STRING, and emitting the
+            # destructive form here ADDS a statement rather than replacing
+            # that one -- measured, the emitted loop carried the substitution
+            # three times. Suppressing the earlier binding is a change to the
+            # chain walker, not to this branch.
+            #
+            # OBSERVATIONALLY EQUIVALENT TODAY, including on non-idempotent
+            # patterns -- measured on `s/a/ab/g`, `s/x/xx/g` and `s/b/bb/g`
+            # over a foreach element, all three agreeing with perl. The store
+            # renders the /r form, which does NOT mutate, so the destructive
+            # run in the count position still sees the original subject and
+            # the store's own write-back lands last.
+            #
+            # It stops being equivalent the moment the replacement has a side
+            # effect, since that would run twice. `s///e` in a foreach is a
+            # producer GAP today (measured: no __PROGRAM__ in the graph), so
+            # the shape is not reachable -- but this is a latent hazard, not a
+            # settled correctness argument.
 
             # TARGETS FIRST, THEN VALUES -- and the counts need not match. An
             # even split was wrong: `my ($x,$y) = @_` is TWO targets from ONE
@@ -1538,6 +1613,20 @@ class SoN::Deparse 0.01 {
     # EntryWrites. Picking one would substitute into a variable the source did
     # not name, which is exactly the miscompile the old refusal existed to
     # prevent -- so more than one match is still a GAP.
+
+    # _counted_subst($id) -- is this RegexSubst read by a RegexSubstCount?
+    # Two consumers over one substitution is the double-evaluation hazard: the
+    # store wants the string, the count wants the number, and rendering each
+    # separately runs the s/// twice.
+    method _counted_subst ($id) {
+        for my $n (values $nodes->%*) {
+            next unless ($n->{op} // '') eq 'RegexSubstCount';
+            my $in = ($n->{inputs} // [])->[0];
+            return 1 if defined $in && $in == $id;
+        }
+        return 0;
+    }
+
     method _subst_lvalue ($sub) {
         my $root = $nodes->{ ($sub->{inputs} // [])->[0] // -1 };
         return undef unless $root;
@@ -1553,6 +1642,13 @@ class SoN::Deparse 0.01 {
         return $self->_slot_name($root) if ($root->{op} // '') eq 'EntryDef';
         return $self->_expr($root->{id})
             if ($root->{op} // '') eq 'PadAccess';
+
+        # AN ELEMENT IS AN LVALUE TOO. `for my $s (@w) { $s =~ s/a/b/g }`
+        # aliases the iterator to the array element, so the subject arrives as
+        # `Subscript(@w, $i)` -- and `$w[$i] =~ s///` is perfectly assignable.
+        # Refusing it here sent a renderable shape to the GAP.
+        return $self->_expr($root->{id})
+            if ($root->{op} // '') eq 'Subscript';
 
         my @slot;
         for my $n (values $nodes->%*) {
@@ -1657,30 +1753,8 @@ class SoN::Deparse 0.01 {
             # binds it. So it renders as a match-and-replace over a COPY, which
             # is what `s///r` means, and the binding is the caller's job.
             my $f = $n->{fields} // {};
-            my $rep = $f->{replacement};
-            die "GAP: a RegexSubst with no replacement is not yet rendered\n"
-                unless defined $rep;
             ( my $flags = $f->{flags} // '' ) =~ s/r//g;
-
-            # A COMPUTED PATTERN IS INPUT 1, and the node says so. Interpolating
-            # the value is what makes it a pattern again: perl compiles the
-            # string, which is exactly what the source `s/$P b$/X/` did.
-            #
-            # WRAPPED IN (?:...) because the value is a whole pattern and the
-            # text around it is not. Without the group `s/$P b$/` would let a
-            # value like `a|z` bind past its own extent -- the alternation
-            # would swallow ` b$`, which the source never wrote.
-            my $pat;
-            if ($f->{pattern_is_input}) {
-                die "GAP: a RegexSubst says its pattern is an input but has "
-                  . scalar(@in) . " inputs\n" unless @in >= 2;
-                $pat = sprintf('(?:${\ (%s) })', $self->_expr($in[1]));
-            }
-            else {
-                $pat = $f->{pattern};
-                die "GAP: a RegexSubst with no pattern is not yet rendered\n"
-                    unless defined $pat;
-            }
+            my ($pat, $rep) = $self->_subst_operands($n);
             $text = sprintf('(%s =~ s{%s}{%s}%sr)',
                 $self->_expr($in[0]), $pat, $rep, $flags);
         }
@@ -1695,6 +1769,24 @@ class SoN::Deparse 0.01 {
             die "GAP: a RegexSubstCount over `" . ($sub->{op} // '?')
               . "` is not yet rendered\n"
                 unless $sub && $sub->{op} eq 'RegexSubst';
+
+            # ALREADY RUN AT ITS STORE. When the substitution also feeds an
+            # EntryWrite, that store emitted the destructive form and bound
+            # its COUNT -- substituting again here would run the s/// a second
+            # time over the already-modified string and count zero.
+            #
+            # ONLY THAT BINDING HOLDS A COUNT. A RegexSubst inside a loop gets
+            # an ordinary `$effN` binding from the generic chain walker, and
+            # that one holds the SUBSTITUTED STRING. Reading it here emitted
+            # the string where a number belonged -- measured on
+            # `for my $s (@w) { my $n = ($s =~ s/a/b/g) }`, which printed
+            # "bbb bbb" instead of "3 bbb". So the count binding is tracked
+            # separately rather than inferred from the presence of any binding.
+            if (exists $subst_count_var{ $sub->{id} }) {
+                $text = $subst_count_var{ $sub->{id} };
+                return $rendered{$id} = $text;
+            }
+
             my $f = $sub->{fields} // {};
             ( my $flags = $f->{flags} // '' ) =~ s/r//g;
 
@@ -1733,15 +1825,12 @@ class SoN::Deparse 0.01 {
             # and for the same reason. Reading the string field blindly would
             # emit an EMPTY pattern, which matches at every position -- a
             # substitution the source never wrote.
-            my $cpat = $f->{pattern};
-            if ($f->{pattern_is_input}) {
-                my @sin = ($sub->{inputs} // [])->@*;
-                die "GAP: a counted s/// says its pattern is an input but has "
-                  . scalar(@sin) . " inputs\n" unless @sin >= 2;
-                $cpat = sprintf('(?:${\ (%s) })', $self->_expr($sin[1]));
-            }
+            #
+            # SAME RESOLVER AS THE VALUE FORM: one operator, one place that
+            # decides which inputs are operands.
+            my ($cpat, $crep) = $self->_subst_operands($sub);
             $text = sprintf('(%s =~ s{%s}{%s}%s)',
-                $lv, $cpat, $f->{replacement}, $flags);
+                $lv, $cpat, $crep, $flags);
         }
         elsif ($op eq 'Subscript') {
             # AN ELEMENT READ, and its third input is the MEMORY it observes.
@@ -2239,6 +2328,60 @@ class SoN::Deparse 0.01 {
             pop @stack;
         }
         return $mem_cache{$id} // 0;
+    }
+
+    # A RegexSubst's operands, by position: (pattern_text, replacement_text).
+    #
+    # ITS INPUTS ARE [target, pattern?, replacement?, memory?] AND THE ARITY IS
+    # RECOVERABLE from two fields already on the node:
+    #
+    #   pattern present     IFF `pattern_is_input`
+    #   replacement present IFF the `replacement` string is empty
+    #
+    # Measured across all four shapes:
+    #
+    #     s/a/X/          in=[target]           pattern='a' replacement='X'
+    #     s/a/x${y}y/     in=[target, repl]     pattern='a' replacement=''
+    #     s/a/ 1+1 /e     in=[target]           pattern='a' replacement=2
+    #     s/$p b$/X/      in=[target, pattern]  pattern=''  pattern_is_input=1
+    #
+    # THE MEMORY EDGE IS LAST AND IS NOT AN OPERAND. A destructive s/// stores
+    # into its target, so it advances the chain and carries it -- rendering it
+    # emits the memory node where the replacement belongs.
+    #
+    # A COMPUTED PATTERN IS WRAPPED IN (?:...): the value is a whole pattern
+    # and the text around it is not, so `a|z` would bind past its own extent
+    # and swallow what follows.
+    method _subst_operands ($n) {
+        my $f   = $n->{fields} // {};
+        my @in  = ($n->{inputs} // [])->@*;
+        shift @in;                       # the target
+
+        my $pat;
+        if ($f->{pattern_is_input}) {
+            die "GAP: a RegexSubst says its pattern is an input but has none\n"
+                unless @in;
+            $pat = sprintf('(?:${\ (%s) })', $self->_expr(shift @in));
+        }
+        else {
+            $pat = $f->{pattern};
+            die "GAP: a RegexSubst with no pattern is not yet rendered\n"
+                unless defined $pat;
+        }
+
+        my $rep = $f->{replacement};
+        die "GAP: a RegexSubst with no replacement is not yet rendered\n"
+            unless defined $rep;
+
+        # An EMPTY replacement field means the replacement is a computed value
+        # on inputs -- interpolated, or an /e result. Distinguishing it from a
+        # genuinely empty replacement (`s/a//`) is the input's presence, once
+        # the pattern and the memory edge are accounted for.
+        if (!length $rep && @in && !$self->_is_memory($in[0])) {
+            $rep = sprintf('${\ (%s) }', $self->_expr(shift @in));
+        }
+
+        return ($pat, $rep);
     }
 
     method _call_expr ($n) {
