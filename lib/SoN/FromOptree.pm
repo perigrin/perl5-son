@@ -8180,9 +8180,21 @@ class SoN::FromOptree 0.01 {
                 # carry -- measured, `sub g {42}` yields 1 and
                 # `sub g { ($_[0],$_[0]) }` yields 2 from an identical
                 # callsite. Fails safe, like the list above it.
+                # THE OpMap TABLE CANNOT ANSWER THIS, which is worth saying
+                # because it looks as though it should: `sprintf` is
+                # `['mark','Call',1,PURE]` and that 1 reads like a result
+                # arity -- but `split`, `sort`, `keys` and `values` carry the
+                # same 1 and all yield MANY. It is a stack PUSH count, one
+                # node, not a count of values. So an explicit set is the
+                # honest mechanism, and it fails safe: a name absent from it
+                # refuses rather than miscounting.
+                #
+                # `sprintf` yields exactly one string -- measured,
+                # `map { sprintf("%d", $_) } (1,2)` is 2 elements -- and its
+                # absence is what comp/utf.t refused on.
                 state $SCALAR_BUILTIN = { map { $_ => 1 } qw(
                     lc uc lcfirst ucfirst abs int sqrt ord chr hex oct
-                    log exp cos sin quotemeta length ref defined
+                    log exp cos sin quotemeta length ref defined sprintf
                 ) };
 
                 for my $c (@produced) {
