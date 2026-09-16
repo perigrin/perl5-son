@@ -45,24 +45,59 @@ form), which is FALSE here, so it falls through to OpMap — which declares
 emits nothing. That guard's assumption ("padrange already bound them") is
 true only for the `@_` form.
 
-## What is NOT established
+## Traced, with the mechanism confirmed
 
-Two fixes were tried and neither took effect:
+An earlier revision of this file said the walker was never reached and
+guessed at a second walker. **That was wrong** — it was an artifact of
+running the probe as `env SON_TRACE=1 perl ...`, which in this shell
+produces no output at all, not even from a bare `print STDERR`. Dropping
+the `env` prefix made every trace appear. Every "never reached"
+conclusion drawn that way was measuring nothing.
 
-1. A second `padrange` branch handling `!(flags & 0x80) && (private &
-   0x80)`, pushing each target. Inert — no observable change, and no
-   regression either.
-2. Making the empty-`$lhs` guard refuse when the stack is above the mark.
-   Never fired, so at that point the RHS is not on the stack either.
+With working traces, the mechanism is:
 
-Instrumentation added to `_step`'s dispatch and to the main walk loop
-produced NO output for this sub, while the graph is nonetheless built —
-so the trace was landing in the wrong walker. **There are two walkers**
-(the main one and the loop-body one) and the next step is to determine
-which one handles a plain sub body, then instrument that one.
+    MAIN: nextstate / pushmark / caller / padrange / aassign / ...
+    PADRANGE flags=48 private=131
+    AASSIGN-ENTER depth=1 mark=0
+    AASSIGN-LHS: Call  remaining=0
 
-Both attempts were reverted rather than left in place: inert code with a
-confident comment is worse than none.
+`padrange` IS reached; its guard (`flags & 0x80`) is false, so it falls
+through to OpMap's SKIP and pushes nothing. `aassign` then pops to the
+mark and gets **the `caller` Call as its target list** — the RHS read as
+the LHS — with an empty stack behind it.
+
+## Two fixes tried, both REVERTED
+
+1. **Push the targets in a non-`@_` padrange branch** (`!(flags & 0x80)
+   && (private & 0x80)`, with `push_mark` under them). This WORKS as far
+   as it goes: traced afterwards, `$lhs` is the three `PadAccess` nodes
+   with the Call correctly left as the RHS. But the graph is still empty,
+   because nothing then binds the slots and DCE removes the statement.
+
+2. **Bind the targets by index** when one flattening source spreads over
+   N targets, using `Subscript(source, i)`. This REGRESSED `sort` and
+   `split`, which had been correct:
+
+        my ($a,$b) = sort("q","p")    Can't use an undefined value as an
+                                      ARRAY reference
+        my ($a,$b) = split(/,/,"p,q") printed nothing
+
+   so it is net-negative and does not survive.
+
+## The real blocker
+
+`caller` has **no stamp**, so `_is_aggregate_node` is false for it and
+the "flattening source" path never applies. That is deliberate:
+`B/SoN/TypeLibrary.pm` lists `caller` under WHAT IS DELIBERATELY ABSENT —
+
+> CONTEXT-SENSITIVE -- one op name, two types. […] sound but vaguer than
+> reading `$op->flags` at the construction site; `readline` takes that
+> trade (List), these do not
+
+so the fix is to stamp `caller` at its construction site from its own
+want flag, the way `readline` is handled, rather than adding a
+TypeLibrary row. That is the next step, and it is a larger piece than the
+padrange change: it touches how a context-sensitive builtin is typed.
 
 ## Pin
 
