@@ -41,8 +41,12 @@ sub emit ($src) {
 #       perl : 3
 #       emit : 1
 #
-# The wrong ANSWER is the defect; the non-termination on real input is the
+# The wrong ANSWER was the defect; the non-termination on real input was the
 # same bug meeting a bound that never catches up.
+#
+# FIXED by rendering the count as `do { my @cN = LIST; scalar(@cN) }`. The
+# named temporary is what makes split size itself correctly -- assigning to an
+# EMPTY list told it zero fields were wanted, and it obliged.
 subtest 'a map over split sees every field' => sub {
     my $src = <<'PERL';
 sub f {
@@ -56,7 +60,6 @@ PERL
     my $emitted = emit($src);
     ok defined $emitted, 'it renders' or return;
 
-    my $todo = todo 'the map bound counts the list holding split, not its fields';
     is run_src($emitted), run_src($src), 'it agrees with perl'
         or diag "emitted:\n$emitted";
 };
@@ -77,7 +80,6 @@ subtest 'a split count is the fields, not the empty LHS' => sub {
     my $emitted = emit($src);
     ok defined $emitted, 'it renders' or return;
 
-    my $todo = todo 'scalar(() = split(...)) counts the empty left-hand list';
     is run_src($emitted), run_src($src), 'it agrees with perl'
         or diag "emitted:\n$emitted";
 };

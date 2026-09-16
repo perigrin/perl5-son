@@ -2250,8 +2250,27 @@ class SoN::Deparse 0.01 {
             # context rather than counting: `scalar(sort keys %h)` is
             # undefined behaviour and returned nothing, where the source meant
             # "how many". An ARRAY in scalar context IS its count, but a list
-            # expression has to be counted explicitly, and `scalar(() = LIST)`
-            # is the idiom that does it.
+            # expression has to be counted explicitly.
+            #
+            # `scalar(() = LIST)` IS NOT THAT IDIOM FOR split. Assigning to an
+            # EMPTY list tells split how many fields are wanted -- none -- and
+            # it optimises to that, so the count comes back 1 however many
+            # fields there are. Measured:
+            #
+            #     scalar(() = split(/,/,"a,b,c"))          1
+            #     scalar(() = split(/,/,"a,b,c", -1))      3
+            #     do { my @t = split(/,/,"a,b,c"); scalar(@t) }   3
+            #     scalar(() = (1,2,3))                     3   (right, by luck)
+            #
+            # So the old idiom was right for an ordinary list and silently
+            # wrong for split -- and a `while` bound built from it never
+            # catches up. Found by a deparsed comp/retainedlines.t that had
+            # been spinning at 99% CPU for 28 hours.
+            #
+            # A NAMED TEMPORARY IS CORRECT FOR ALL OF THEM, because split
+            # sizes itself to a real array the way the source's own target
+            # does. It costs one copy, which is the price of asking the
+            # question at all.
             # AN ANONYMOUS LITERAL IS A LIST, NOT AN ARRAY, however it is
             # stamped. `scalar((1,2,3))` is the COMMA OPERATOR in scalar
             # context -- it yields the LAST ELEMENT, not the count. Measured:
@@ -2269,7 +2288,8 @@ class SoN::Deparse 0.01 {
                                && ($st eq 'Array' || $st eq 'Hash'))
                 ? sprintf('scalar(%s)', $self->_expr($in[0]))
                 : $st eq 'List' || ($agg->{op} // '') =~ /Literal\z/
-                ? sprintf('scalar(() = %s)', $self->_expr($in[0]))
+                ? sprintf('do { my @c%d = %s; scalar(@c%d) }',
+                          $id, $self->_expr($in[0]), $id)
                 : sprintf('scalar(@{%s})', $self->_expr($in[0]));
         }
         elsif ($op eq 'Length') {
