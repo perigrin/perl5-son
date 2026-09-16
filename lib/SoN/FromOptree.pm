@@ -5688,6 +5688,27 @@ class SoN::FromOptree 0.01 {
                 }
                 $sim->push_node($value);
             }
+            # A GLOB ASSIGNMENT ALIASES A SYMBOL-TABLE ENTRY, and there is no
+            # node for that. `*FH = shift` makes every later `<FH>`, `print FH`
+            # and `close FH` act on the handle that was passed in -- a rebinding
+            # of a NAME across the whole program, not a value stored anywhere a
+            # later read consults.
+            #
+            # It reached the catch-all below and was silently DROPPED, which is
+            # worse than refusing: base/rs.t's `sub test_string { *FH = shift;
+            # ... }` emitted `shift(@_);` and then read from an unopened FH, so
+            # 24 of its 41 tests printed `not ok` while the graph claimed to
+            # have translated the sub.
+            #
+            # The target is a glob Constant because rv2gv restamps the gv's name
+            # as one -- the name is the only compile-time handle on which glob
+            # this is.
+            elsif ($target->isa('SoN::IR::Node::Constant')
+                && ($target->const_type // '') eq 'glob') {
+                die "GAP: assigning to a glob (*" . ($target->value // '?')
+                  . ") is not yet lowered -- it aliases a symbol-table entry"
+                  . " for the whole program, which no value store expresses\n";
+            }
             else {
                 $sim->push_node($value);
             }
