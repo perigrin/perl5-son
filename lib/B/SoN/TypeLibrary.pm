@@ -551,6 +551,50 @@ sub _result_is_join ($ir_op) {
 #
 # Any arity. An unknown or absent operand type yields undef -- an honest
 # "cannot say", never a guess.
+# DECLARED SIGNATURES: functions whose body this producer never compiles.
+#
+# AN OPERATOR IS A FUNCTION WITH A WEIRD SPELLING, so there is no reason this
+# table is operator-only. `result_for` already takes a two-level key -- node
+# class plus NAME -- because "`Call/join` and `Call/abs` are different
+# questions", which is exactly a signature lookup keyed by function name. Only
+# the hash it consulted made it builtin-only.
+#
+# THE THIRD ROW OF THE LAYERING. %SIGNATURES and %BUILTIN_SIGNATURES are
+# perl's own operators and builtins -- TypeScript's `lib.d.ts`, the language
+# itself. A sub record on the wire is a DERIVED interface for code we did
+# compile. This is the middle row, `@types/Foo`: a signature ASSERTED over code
+# we never see, which is what CPAN mostly is.
+#
+# AN ASSERTION IS NOT A DERIVATION, and `is_declared` keeps them apart. A
+# derived signature cannot be wrong about the body it came from; a declared one
+# can, because `*f = sub { 2 }` replaces a body at runtime and no declaration
+# sees it. TypeScript has the identical hole and calls the result sound with
+# respect to the DECLARATIONS rather than the program -- a defensible position,
+# but only for a consumer that can tell which kind of fact it holds.
+my %DECLARED;
+
+# declare($name, \%signature) -- assert a signature for a function we do not
+# compile. Same row shape as a builtin: { operands => [...], result => '...' }.
+sub declare ($name, $sig) {
+    die "TypeLibrary: a declaration cannot overwrite the builtin `$name`\n"
+        if exists $BUILTIN_SIGNATURES{$name};
+    die "TypeLibrary: a declaration cannot overwrite the operator `$name`\n"
+        if exists $SIGNATURES{$name};
+    die "TypeLibrary: a declaration for `$name` needs a `result`\n"
+        unless ref $sig eq 'HASH' && defined $sig->{result};
+
+    $DECLARED{$name} = { operands => ( $sig->{operands} // [] ),
+                         result   => $sig->{result} };
+    return;
+}
+
+# is_declared($name) -- was this row ASSERTED rather than measured?
+sub is_declared ($name) { return exists $DECLARED{$name} ? 1 : 0 }
+
+# known_declared() -- every declared name. The declared counterpart of
+# known_builtins.
+sub known_declared () { return sort keys %DECLARED }
+
 sub result_for ($ir_op, @operands) {
     # A BUILTIN CALL IS KEYED BY ITS NAME, not by the node it shares with ~180
     # others. `Call/join` and `Call/abs` are different questions; routing them
@@ -558,8 +602,20 @@ sub result_for ($ir_op, @operands) {
     my ($result, $is_join);
     if ( ref $ir_op eq 'ARRAY' ) {
         my (undef, $builtin) = $ir_op->@*;
-        my $sig = defined $builtin ? $BUILTIN_SIGNATURES{$builtin} : undef;
+        # THE LANGUAGE WINS. A builtin row is measured against perl; a
+        # declared one is someone's claim about their own code. Consulting
+        # the builtins first means a bad declaration cannot miscompile `join`,
+        # and `declare` refuses the collision outright as well -- two guards,
+        # because this is the direction that turns a wrong claim into a wrong
+        # program.
+        my $sig = defined $builtin
+            ? ( $BUILTIN_SIGNATURES{$builtin} // $DECLARED{$builtin} )
+            : undef;
         $result  = ( $sig // return undef )->{result};
+
+        # A DECLARED ROW IS NEVER A JOIN. The join/cap rule says a result
+        # varies with its operands, which is a fact measured about an operator.
+        # Nothing measures a declaration, so it yields its `result` outright.
         $is_join = $BUILTIN_RESULT_IS_JOIN{$builtin} ? 1 : 0;
     }
     else {

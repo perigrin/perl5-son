@@ -1774,9 +1774,16 @@ sub _callee_return_type {
 
         my ( $pkg, $bare )
             = $name =~ /^(.*)::([^:]+)$/ ? ( $1, $2 ) : ( 'main', $name );
-        my $cls = $classes->{$pkg} or return undef;
-        my $rec = ( $cls->{subs} // {} )->{$bare} or return undef;
-        return $rec->{return_type};
+        my $cls = $classes->{$pkg};
+        my $rec = $cls ? ( $cls->{subs} // {} )->{$bare} : undef;
+        return $rec->{return_type} if $rec && defined $rec->{return_type};
+
+        # LAST, BECAUSE IT IS AN ASSERTION. We have neither the callee's graph
+        # nor a record derived from its body, so this is a sub we never
+        # compiled -- a CPAN module, typically. A declared signature is
+        # someone's claim about it (TypeScript's `@types/Foo`), and a claim is
+        # only worth consulting where measurement has nothing to say.
+        return B::SoN::TypeLibrary::result_for( [ 'Call', $name ] );
     }
 
     # Builtins are not user callees -- see the note above.
