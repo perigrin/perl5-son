@@ -67,26 +67,49 @@ says it.
 
 ### A rejected notation, and why it is recorded
 
-I first wrote `Num($x|$y)`, meaning "the join of $x and $y, capped at Num". The
-SEMANTICS are right -- it reproduces Add exactly, including (Str,Str) -> Num
-and (Boolean,Int) -> Num -- but the notation is bad:
+I first wrote `Num($x|$y)`, meaning "the join of $x and $y, capped at Num". It
+reproduces Add's rows, and it is still wrong -- perigrin named the reason:
 
-  - `|` already means bitwise-or in perl, and this is an OPERATOR declaration,
-    so the collision lands exactly where it confuses most
-  - `Num(...)` reads as a call or a cast, not a constraint
-  - it states `Num` twice, and the second one is redundant (above)
+    Int|Num collapses to Num, because Int <: Num.
 
-### What is actually needed
+A declaration `(Num $x, Num $y)` fixes BOTH parameter types at Num, so `$x|$y`
+read over the declared types is `join(Num, Num)` = `Num`, a constant. The
+expression carries no information at all.
 
-One bit, spelled as a property of the return rather than an expression over the
-parameters. Sketches, none chosen:
+It only says something if `$x` denotes the type of the ARGUMENT at a callsite
+rather than the type of the PARAMETER -- and those differ:
 
-    sub :infix / (Num $x, Num $y) Num;         fixed
-    sub :infix + (Num $x, Num $y) :join Num;   varies with its parameters
+    Add(Int,Int) -> Int      both are legal arguments to (Num $x, Num $y)
+    Add(Num,Num) -> Num      and they give different results
 
-An attribute is the honest shape: it is the same KIND of fact as `:infix` --
-metadata about how the declaration behaves, not part of the type. And it reads
-as what it is, which `$x|$y` did not.
+So the varying quantity is the argument type, per call. No expression over
+parameter NAMES can denote it, because a parameter's type is exactly what the
+declaration pinned down. The notation was a category error, not merely ugly
+(the `|`/bitwise-or collision and the doubled `Num` are true but secondary).
+
+### What fits instead: a bounded type variable
+
+The construct that does quantify over argument types is ordinary bounded
+polymorphism:
+
+    sub :infix + <T <= Num>    (T $x, T $y) T;
+    sub :infix && <T <= Scalar> (T $x, T $y) T;
+    sub :infix /               (Num $x, Num $y) Num;
+
+T binds to the join of the actual argument types and is capped by its bound.
+Measured, that reproduces every row in both groups:
+
+    T <= Num      Add(Int,Int)=Int  (Int,Num)=Num  (Str,Int)=Num
+                  (Str,Str)=Num     (Boolean,Int)=Num
+    T <= Scalar   And(Int,Int)=Int  (Str,Int)=Str  (Str,Str)=Str
+
+and the join-vs-fixed distinction needs no attribute after all: a joining op
+MENTIONS T, a fixed one does not. `Divide` writes concrete `Num` and gets the
+flat answer for free.
+
+This also explains what `%RESULT_IS_JOIN` has been all along -- the set of ops
+whose signature is polymorphic -- and why the bound and the "cap" were always
+the same type. They are one thing: T's upper bound.
 
 ## Problem 2: perl cannot parse it
 
@@ -111,8 +134,9 @@ and nothing else needs to change to adopt one.
 
 ## Remaining work
 
-1. Decide notation for a result that DEPENDS on its parameter types (see
-   above). The cap itself needs no notation -- the declared return type is it.
+1. Confirm a bounded type variable (`<T <= Num>`) covers every joining op, not
+   just the seven probed here, and that nothing needs two independent
+   variables. If it holds, %RESULT_IS_JOIN disappears into the signatures.
 2. A parser for the declaration file, producing `declare()` calls.
 3. `:infix` and friends map a declaration onto an IR op name, so a declared
    `+` lands on `Add` rather than on a sub named `+`.
