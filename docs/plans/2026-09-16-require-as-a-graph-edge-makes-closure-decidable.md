@@ -137,3 +137,64 @@ therefore load-bearing for any future closure claim, not merely a missing
 feature.
 
 Claude-Session: https://claude.ai/code/session_01QYtFNnt2aXaRH2hrRvopyc
+
+## TypeScript's .d.ts is the closer precedent
+
+perigrin's addition, and it fits better than OCaml/Rust for one reason:
+
+    OCaml .cmi / Rust metadata   DERIVED from an implementation the compiler
+                                 compiled. The interface is a PROOF.
+    TypeScript .d.ts             DESCRIBES code the compiler never saw.
+                                 DefinitelyTyped is thousands of signatures
+                                 asserted OVER untyped JavaScript. The
+                                 interface is an ASSERTION.
+
+CPAN is the second case, not the first. We will never compile most of what a
+program calls, so an interface we can only DERIVE is an interface we mostly
+cannot have.
+
+## It also dissolves the staleness objection
+
+I argued that `*f = sub { 2 }` replacing a body at runtime makes an interface
+fingerprint unsound, because OCaml and Rust hash immutable compiled bodies.
+
+TypeScript has exactly the same hole and does not treat it as one: JavaScript
+can reassign any method at runtime, a `.d.ts` cannot see it, and the ecosystem
+accepts that a declaration is a CLAIM which can be wrong. The type checker is
+sound with respect to the declarations, not with respect to the program.
+
+That is the right posture here too, and it is the T1/T2 split again: T1 records
+what it SAW, a declaration records what someone ASSERTS, and the two are
+different kinds of fact that must not be conflated on the wire. A declared
+signature should be marked as declared, so a consumer can decide how much to
+trust it -- exactly as `dispatch_kind=indirect` already marks an honest unknown.
+
+## Where a declaration attaches, today
+
+A sub record already carries `graph name params return_type signature
+uses_args` -- interface and body already separable, with no work.
+
+And a callsite into a sub we never compiled is already honest:
+
+    Call Mod::f   stamp=Unknown   dispatch_kind=direct
+
+It knows the NAME and admits it knows nothing else. That Unknown is the slot a
+declaration fills. Nothing needs inventing to hold one; what is missing is a
+source of declarations and a `declared` marker to keep an assertion
+distinguishable from a derivation.
+
+## Revised layering
+
+    B::SoN::TypeLibrary        ambient, language-level -- perl's operators and
+                               builtins. The `lib.d.ts` analogue. EXISTS.
+    (missing)                  per-module declarations for subs we never
+                               compile. The `@types/Foo` analogue.
+    sub records                derived interfaces for what we DID compile.
+                               EXISTS.
+
+The middle row is the gap, and it is what makes precompiled libraries tractable
+without whole-program closure at all: a declared signature answers the callsite
+directly, so the require-closure work above becomes an optimization for code we
+DO have rather than a precondition for compiling anything.
+
+Claude-Session: https://claude.ai/code/session_01QYtFNnt2aXaRH2hrRvopyc
