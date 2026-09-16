@@ -7055,13 +7055,29 @@ class SoN::FromOptree 0.01 {
                 # so `$op->first` names the handle and keying on it matched
                 # nothing. The stack is the only place the destination appears,
                 # which is why this is a stack shape rather than a tree walk.
+                #
+                # A PACKAGE SCALAR IS A DESTINATION TOO. perl fuses the store
+                # the same way whichever kind of scalar the target is --
+                # measured, `$bar = <FH>` and `my $bar = <FH>` differ only in
+                # which op pushes the destination:
+                #
+                #     gvsv[*bar] s    /  padsv[$bar] sRM*
+                #     gv[*FH]    s
+                #     readline   sKS/1               OPf_STACKED, both
+                #
+                # Requiring a PadAccess let the package form fall through: the
+                # EntryDef stayed on the stack and the read's value reached
+                # nothing. base/rs.t reads its file this way eleven times, and
+                # every later comparison read an unassigned global -- 24 of its
+                # 41 tests printed `not ok`.
                 my $stacked_dest;
                 if (!$is_compound && !$field_compound && !defined $elem_lvalue
                     && !defined $pkg_lvalue
                     && ($op->flags & 64)          # OPf_STACKED
                     && $sim->stack_depth
-                    && $sim->peek_node->isa('SoN::IR::Node::PadAccess')
-                    && defined $sim->peek_node->targ
+                    && ( ( $sim->peek_node->isa('SoN::IR::Node::PadAccess')
+                           && defined $sim->peek_node->targ )
+                      || $sim->peek_node->isa('SoN::IR::Node::EntryDef') )
                     && ($sim->peek_node->sigil // '') eq '$') {
                     $stacked_dest = $sim->pop_node;
                 }
@@ -7305,7 +7321,18 @@ class SoN::FromOptree 0.01 {
                     # one here would make the readline form the only scalar
                     # declaration in the graph carrying a wrapper its siblings
                     # do not, a difference with no fact behind it.
-                    $sim->define($stacked_dest->targ, $node);
+                    #
+                    # A PACKAGE SCALAR NEEDS THE STORE AS WELL. A pad slot is
+                    # private to this sub, so the rebind IS the semantics; a
+                    # stash entry is reachable from every sub, and a write here
+                    # and a read elsewhere are ordered only through memory.
+                    if ($stacked_dest->isa('SoN::IR::Node::EntryDef')) {
+                        $sim->define(_stash_key($stacked_dest), $node);
+                        _entry_store($factory, $sim, $stacked_dest, $node);
+                    }
+                    else {
+                        $sim->define($stacked_dest->targ, $node);
+                    }
                 }
 
                 # A void effectful call's result is discarded (OPf_WANT_VOID);
