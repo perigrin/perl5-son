@@ -26,14 +26,17 @@ sub graph_of ($src) {
 # Measured on `sub c { my ($p,$f,$l) = caller; return $l }`: the graph was
 # Start, Constant undef, Return. No Call, no Assign, no PadAccess -- the sub
 # body was gone.
-# TODO: not fixed. Diagnosed to the point below but no fix landed; the two
-# assertions here are the pin.
-my $todo = todo 'a non-@_ list assign still drops its statement';
+# NOT FIXED. The assertions below are marked TODO individually rather than
+# the whole subtest: a subtest wrapped in `todo` reports as "TODO passed",
+# which reads as "this got fixed, drop the marker" when the defect is very
+# much still here.
 subtest 'a non-@_ list assign keeps its statement' => sub {
     my $g = graph_of(qq{sub c { my (\$p, \$f, \$l) = caller; return \$l }\nc();\n});
     ok defined $g, 'the sub translates' or return;
 
     my @ops = map { $_->{op} } $g->{nodes}->@*;
+    my $todo = todo 'padrange SKIPs a non-@_ LHS; aassign then reads the RHS'
+                  . ' as its target list and the statement is dropped';
     ok scalar(grep { $_ eq 'Call' } @ops), 'the caller Call survives'
         or diag "ops = @ops";
     ok scalar(grep { $_ eq 'Assign' } @ops), 'and the Assign is built'
@@ -43,6 +46,7 @@ subtest 'a non-@_ list assign keeps its statement' => sub {
 # The same shape over other no-argument list builtins, which all lost their
 # bodies the same way.
 subtest 'the other list builtins keep theirs too' => sub {
+    my $todo = todo 'same padrange defect as caller';
     for my $call ('localtime', 'times') {
         my $g = graph_of(qq{sub c { my (\$a, \$b) = $call; return \$b }\nc();\n});
         ok defined $g, "$call: the sub translates" or next;
@@ -56,8 +60,6 @@ subtest 'the other list builtins keep theirs too' => sub {
 # over an ArgsSource rather than taking padrange's own @_-element path --
 # which one applies depends on the surrounding statement, and both are
 # correct. What matters is that the Assign exists at all.
-undef $todo;
-
 subtest 'the @_ form is unchanged' => sub {
     my $g = graph_of(qq{sub c { my (\$a, \$b) = \@_; return \$b }\nc(1,2);\n});
     ok defined $g, 'the sub translates' or return;
