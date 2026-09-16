@@ -9,30 +9,57 @@ spelling" SYNTACTIC rather than merely architectural: `:infix` is the spelling,
 and everything else is an ordinary signature. Two things have to be settled
 before it can be implemented.
 
-## Problem 1: a flat return type cannot express the rows we have
+## Problem 1 (WITHDRAWN): the lattice already handles it
 
-    Add(Int,Int)    = Int        <- the JOIN of its operands, capped at Num
-    Add(Int,Num)    = Num
-    Add(Str,Int)    = Num
-    Divide(Int,Int) = Num        <- FIXED; 1/2 is not an Int
+I claimed `sub :infix + (Num $x, Num $y) Num;` was wrong because "Int + Int is
+Int, not Num". perigrin: check the type lattice.
 
-`Add` and `Divide` both "return Num" in the loose sense, and the proposed
-syntax spells them identically. Writing `Num` for Add would mistype every
-integer addition in the corpus -- `%RESULT_IS_JOIN` exists exactly because the
-two differ.
+    Int -> Num -> Str -> Scalar -> List
 
-So the return position needs to say WHICH of the two it is. The distinction is
-already in the table as a separate set; the syntax has to carry it. Sketches,
-none chosen:
+`Int` IS a `Num`. So declaring Add's return as `Num` is an UPPER BOUND that
+`Int + Int = Int` satisfies, and the join rule is a narrowing WITHIN that bound
+rather than a contradiction of it. The objection was mine, not the syntax's.
 
-    sub :infix + (Num $x, Num $y) Num;        fixed -- wrong for Add
-    sub :infix + (Num $x, Num $y) join Num;   join, capped at Num
-    sub :infix + (Num $x, Num $y) <=Num;      cap notation
-    sub :infix + (Num $x, Num $y) $x|$y;      name the operands joined
+Better still, the join is DERIVABLE from the declaration. Measured over every
+op the table describes:
 
-The third fact the table keeps -- `operands`, what the op REQUIRES of its
-inputs, which is what lets a use site type an untyped operand -- IS covered by
-the parameter list, so the signature carries two of the three facts naturally.
+    result = meet( join(operand types), declared result )
+
+holds for all 33 ops that join. The difference between `Add` and `And` is not a
+flag -- it is their declared RETURN TYPES:
+
+    Add(Str,Int)   join=Str  capped by declared Num     -> Num
+    And(Str,Int)   join=Str  capped by declared Scalar  -> Str
+
+So `(Num $x, Num $y) Num` carries the cap, and the parameter list carries the
+operand requirements. Two of the three facts fall straight out of the syntax.
+
+## What genuinely remains: join-vs-fixed
+
+12 ops do NOT join -- their result is flat whatever arrives:
+
+    Concat -> Str always      Range, Slice -> List always
+    Divide, Power -> Num      Repeat, RefType -> Str
+
+and `Divide(Int,Int)` is `Num` because `1/2` escapes Int even though its
+operands do not. No declared return type recovers that, since `Add` and
+`Divide` both declare `Num`.
+
+But the table ALREADY discriminates them without a flag, and the signature can
+too. Asked with NO operands:
+
+    result_for("Add")    -> undef     the answer DEPENDS on its operands
+    result_for("Divide") -> Num       the answer does not
+
+A joining signature is one whose result is a function of its parameter types; a
+fixed one answers without them. That is expressible as whether the return
+position MENTIONS the parameters:
+
+    sub :infix / (Num $x, Num $y) Num;        fixed -- never mentions $x/$y
+    sub :infix + (Num $x, Num $y) Num($x|$y); joins, capped at Num
+
+The second form makes the dependency visible rather than encoding it in a
+side-table, which is what `%RESULT_IS_JOIN` is today.
 
 ## Problem 2: perl cannot parse it
 
@@ -57,8 +84,8 @@ and nothing else needs to change to adopt one.
 
 ## Remaining work
 
-1. Decide how the return position spells join-vs-fixed (Problem 1). This blocks
-   the syntax being correct rather than merely parseable.
+1. Decide notation for a result that DEPENDS on its parameter types (see
+   above). The cap itself needs no notation -- the declared return type is it.
 2. A parser for the declaration file, producing `declare()` calls.
 3. `:infix` and friends map a declaration onto an IR op name, so a declared
    `+` lands on `Add` rather than on a sub named `+`.
