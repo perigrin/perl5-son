@@ -1970,6 +1970,26 @@ class SoN::FromOptree 0.01 {
         return $op->private if $name eq 'select' && $op->can('private')
                             && $op->private >= 0 && $op->private <= 1;
 
+        # localtime/gmtime TAKE AN OPTIONAL EXPRESSION, defaulting to `time`,
+        # and unlike bless/select the op says so in its FLAGS rather than its
+        # private field. Measured on 5.42.0:
+        #
+        #     localtime        localtime[t3] l     flags=3, no child
+        #     localtime(0)     localtime[t3] lK/1  flags=7, const child
+        #
+        # OpMap registers a fixed 1-pop, so the bare form popped an operand
+        # that was never pushed and StackSim died "Stack underflow" -- an
+        # INTERNAL ERROR, and one the walk MASKS as a silent skip, so the sub
+        # vanished from the wire with no method entry and no diagnostic. The
+        # crashes-mask-GAPs shape: the crash fires before any honest refusal
+        # could.
+        #
+        # OPf_KIDS (0x4) is the discriminator. The default is not unknown --
+        # it is `time`, which perl supplies -- so popping the right number is
+        # all this needs.
+        return ($op->flags & 4) ? 1 : 0
+            if $name eq 'localtime' || $name eq 'gmtime';
+
         # `exit` TAKES AN OPTIONAL STATUS, defaulting to 0 -- effectively
         # `sub exit($status = 0)`. So its arity is 0 OR 1 and the op says
         # which, in its child count:
