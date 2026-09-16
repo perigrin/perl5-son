@@ -61,19 +61,82 @@ exactly when its floor is strictly below its ceiling:
 so the flag is derivable and does not need storing. That is the simplification
 perigrin proposed; it needed the floor to exist before it could be taken.
 
+## CORRECTION: the floor is not a signature, and T1 need not join at all
+
+perigrin, on my `sub :infix + (Int $x, Int $y) Num;`:
+
+> Except this isn't the signature and it doesn't join since Int <: Num.
+> `sub :infix + (Num $x, Num $y) Num;` is correct and doesn't need to "join"
+> over anything at the T1 / IR level.
+
+Both halves are right and the second is the important one.
+
+FIRST: `(Int $x, Int $y)` is simply FALSE as a signature. `+` accepts a Num --
+`1.5 + 2` is legal -- so declaring Int would reject valid arguments. I let the
+floor mechanism dictate the declaration, which inverts the relationship: a
+signature says what the operator ACCEPTS, and the floor was an implementation
+detail of how I was computing a result. They are not the same position and the
+floor has no business in the parameter list.
+
+SECOND, and this subsumes the whole document above: T1 does not need the join.
+The only row it buys is
+
+    Add(Int,Int)  stamp Int   -- would be Num without the join
+
+and Num is TRUTHFUL for it, because Int <: Num. Losing the join costs precision,
+not correctness.
+
+And nothing at T1 consumes that precision. Measured -- the entire codebase
+branches on `Int` in exactly two places, and neither is this:
+
+  _coerce_int_to_num (FromOptree)  wraps an Int OPERAND of a Divide. Its own
+                                   comment says why: to satisfy chalk's
+                                   TypedInvariant and emit sitofp exactly once.
+                                   A T2 requirement reaching back into T1, and
+                                   it keys on the OPERAND's stamp, not on any
+                                   join.
+
+  Deparse's `keys`                 reads Int as a marker for SCALAR CONTEXT, a
+                                   fact the producer recorded from the op, not
+                                   from an arithmetic join.
+
+Measured on a real graph, `$i/$i` and `$i+$i` side by side:
+
+    Coerce in=[Constant/Int]              stamp=Num    <- on Divide's OPERAND
+    Divide in=[Coerce/Num,Coerce/Num]     stamp=Num
+    Add    in=[Constant/Int,Constant/Int] stamp=Int
+    Coerce in=[Add/Int]                   stamp=Str    <- immediately widened
+
+Add's Int is recorded and then coerced away. Nothing reads it.
+
+So the correct T1 rule is the simple one:
+
+    result = the operator's declared return type
+
+and `sub :infix + (Num $x, Num $y) Num;` says it completely -- which is what
+perigrin wrote at the start, before I added a floor, a type variable, a :join
+attribute and an expression language, none of which T1 needs.
+
+The two-bounds rule above is not wrong, it is T2's. Chalk is where Int-vs-Num
+selects an instruction, and where narrowing a result below its declared type
+pays for itself.
+
 ## Consequence for the declaration syntax
 
 Two bounds are two types, and a signature already has two type positions --
 parameters and return:
 
-    sub :infix +  (Int $x, Int $y) Num;     floor Int, ceiling Num  -- joins
-    sub :infix /  (Num $x, Num $y) Num;     floor Num, ceiling Num  -- flat
-    sub :infix .  (Str $x, Str $y) Str;     floor Str, ceiling Str  -- flat
+    sub :infix +  (Num $x, Num $y) Num;
+    sub :infix /  (Num $x, Num $y) Num;
+    sub :infix .  (Str $x, Str $y) Str;
 
-The PARAMETER types are the floor and the RETURN type is the ceiling. Nothing
-extra is needed -- no :join attribute, no type variable, no expression over
-parameters. perigrin's original spelling was sufficient all along, once the
-parameter list is read as the closure floor rather than as a coercion target.
+For T1 these are complete AS WRITTEN: the return type is the answer, full stop.
+No floor in the parameter list, no :join attribute, no type variable, no
+expression over parameters.
+
+Note that + and / now read IDENTICALLY, and at T1 that is correct -- they yield
+the same type. The distinction between them is T2's, where it decides an
+instruction.
 
 NOTE this changes what `operands` means. Today Add declares operands => ['Num']
 (what it REQUIRES); under this reading it would declare Int (what it is closed
@@ -81,11 +144,65 @@ over). Those are different facts and both are needed -- the requirement types
 an untyped operand, the floor bounds the result -- so this is a third column,
 not a renaming. Whether they can share one position is unmeasured.
 
+## MEASURED: the join IS load-bearing at T1, for a case that is not Add
+
+I predicted that dropping the join would cost precision and no behaviour.
+Tested it -- gated `result_for`'s join behind SON_NO_JOIN and ran the suite.
+The prediction was WRONG. Five files fail:
+
+    t/wire-shortcircuit-is-a-join.t         3 of 3
+    t/wire-loop-compound-assign-ternary.t   4 of 5
+    t/wire-phi-join-stamp.t, t/wire-selftyped-stamp.t,
+    t/wire-internal-errors-refuse.t         1 each
+
+And the reason is a kind of operator I had not separated from Add:
+
+    $@ || "Zombie Error"    with join: Scalar     without: List
+
+`Or`'s declared return type is `List`. Add's is `Num`, and dropping to Num
+costs only precision because Int <: Num. Dropping Or to List is NOT loose --
+List is the TOP of the lattice, and the stamp then says the expression MIGHT BE
+A LIST. It cannot be: `scalar(() = ($@ || "Zombie"))` is 1. That is a wrong
+claim about ARITY, not a vague one about width.
+
+The difference is what the operator does with its operands:
+
+    Add     COMPUTES a new value -- the result is not either operand
+    Or/And  RETURN ONE ARM UNCHANGED -- the arms ARE the result
+
+For the second kind the join is not an optimisation, it is the only way to say
+what the node yields, because the node yields exactly one of the things joined.
+A short-circuit is a Phi written as an operator, which is precisely why
+`_stamp_merges` uses the same operation for a real Phi.
+
+So the correct statement is narrower than either of us had it:
+
+  - For COMPUTING operators (Add, Subtract, Multiply), perigrin is right: T1
+    does not need the join. The declared return type is truthful, nothing at T1
+    branches on the narrower answer, and the two consumers of `Int` are a T2
+    requirement (_coerce_int_to_num, for chalk's sitofp) and a context marker
+    on `keys`.
+
+  - For SELECTING operators (And, Or, DefinedOr), the join is mandatory at T1
+    and is not about precision at all.
+
+%RESULT_IS_JOIN conflates these. Its seven members are
+
+    Add Subtract Multiply Negate      computing -- join is T2 precision
+    And Or DefinedOr                  selecting -- join is T1 correctness
+
+which is why every attempt above to give it ONE meaning -- "joins", "preserves",
+"is closed over" -- kept failing on half the set.
+
 ## Remaining work
 
-1. Measure the floor for every op in the table, not the eleven probed here.
-2. Decide whether `operands` (requirement) and the floor (closure) can share a
-   syntactic position, or whether a signature needs both.
-3. Then delete %RESULT_IS_JOIN and derive it as floor < ceiling.
+1. Split %RESULT_IS_JOIN into its two kinds -- selecting (And/Or/DefinedOr,
+   where the join is T1 correctness) and computing (Add and friends, where it
+   is T2 precision). The set is seven entries; the split is mechanical.
+2. Then decide, separately, whether T1 keeps the computing half. Dropping it
+   costs only precision -- measured, the only differing row is
+   Add(Int,Int) Int -> Num -- but chalk reads these stamps, so the decision is
+   chalk's to make, not this repo's.
+3. The two-bounds rule stands for the computing half wherever narrowing pays.
 
 Claude-Session: https://claude.ai/code/session_01QYtFNnt2aXaRH2hrRvopyc
