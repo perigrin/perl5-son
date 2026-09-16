@@ -48,7 +48,6 @@ subtest 'caller survives, which the pin fixed' => sub {
 # The same shape over other no-argument list builtins, which all lost their
 # bodies the same way.
 subtest 'the other list builtins keep theirs too' => sub {
-    my $todo = todo 'same padrange defect as caller';
     for my $call ('localtime', 'times') {
         my $g = graph_of(qq{sub c { my (\$a, \$b) = $call; return \$b }\nc();\n});
         ok defined $g, "$call: the sub translates" or next;

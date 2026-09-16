@@ -37,13 +37,10 @@ subtest 'a no-argument localtime reaches the wire' => sub {
     }
 };
 
-# NOT FIXED HERE, and a DIFFERENT defect: the list-assign statement is still
-# dropped, because padrange SKIPs a non-@_ LHS and the trailing aassign then
-# reads the RHS as its target list. See
-# t/wire-padrange-non-args-source.t, which pins that for times/localtime.
-# This file is only about the underflow that stopped the sub existing at all.
-subtest 'the statement itself is still dropped' => sub {
-    my $todo = todo 'padrange SKIPs a non-@_ LHS -- see wire-padrange-non-args-source.t';
+# The statement survives too, once a single Call RHS stops being treated as
+# positionally distributable -- its arity is unknown, so the bindings are left
+# for perl to distribute at runtime, which is what `sort` already did.
+subtest 'and the statement survives' => sub {
     for my $call ('localtime', 'gmtime') {
         my $g = sub_graph(qq{sub c { my (\$a, \$b) = $call; return \$b }\nc();\n}, 'c');
         next unless defined $g;

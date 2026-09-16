@@ -104,6 +104,9 @@ class SoN::Deparse 0.01 {
     # this table exists to stop.
     our %BUILTIN_SPELLING = (
         prtf   => 'printf',
+        # `times` is the op `tms`. Four values (user/system, and the same for
+        # children), so the same op-name-vs-keyword trap one builtin over.
+        tms    => 'times',
         # `do EXPR` runs a file. It is a named unary operator, so it takes no
         # parens around a parenthesised expression the way a function would --
         # `dofile($f)` is a call to a sub that does not exist.

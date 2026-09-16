@@ -6436,9 +6436,36 @@ class SoN::FromOptree 0.01 {
             # alone rather than guess at one. Fewer VALUES than targets is
             # still positional -- the trailing target gets undef, which is what
             # perl assigns it.
+            #
+            # A SINGLE CALL HAS UNKNOWN ARITY, so it is flattening too. The
+            # rule above recognises a flattening operand by its STAMP, and the
+            # list builtins are deliberately unstamped -- TypeLibrary has no
+            # row for times, stat, localtime, caller or split, because each is
+            # context-sensitive or returns a structure. Measured:
+            #
+            #     my ($a,$b) = times            a=0, b is a real value
+            #     my ($a,$b) = one_value_sub()  a=7, b is undef
+            #
+            # Same shape, different answers, and nothing in the graph says
+            # which. Binding positionally guessed the second and was wrong for
+            # the first: `$a` took the Call and `$b` took undef, destroying
+            # the slot bindings that a later read resolves through -- which is
+            # why `my ($a,$b) = times; return $b` lost its whole statement.
+            #
+            # `sort` escaped only because it arrives stamped List; times and
+            # stat do not, and that asymmetry is the bug rather than a fact
+            # about the operators.
+            #
+            # LEAVING THEM ALONE IS WHAT sort ALREADY DOES: each slot stays
+            # bound to its own PadAccess, the Assign names them as targets,
+            # and perl performs the distribution at runtime. That is correct
+            # for BOTH arities without knowing either.
             my @targets = $lhs->@*;
+            my $single_call = @rhs == 1
+                && $rhs[0]->isa('SoN::IR::Node::Call');
             my $positional =
                    ( !grep { _is_aggregate_node($_) } @targets, @rhs )
+                && ( !$single_call || @targets <= 1 )
                 && ( grep { _is_scalar_rebind_target($_) } @targets );
             if ($positional) {
                 # READ EVERY VALUE BEFORE WRITING ANY KEY. `($a,$b) = ($b,$a)`
