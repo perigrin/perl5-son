@@ -998,6 +998,41 @@ class SoN::Deparse 0.01 {
         $init .= sprintf("my %s = %s;\n", $self->_phi_var($_),
                          $self->_expr($_->{inputs}[0])) for @phis;
 
+        # A LOOP-INVARIANT PART OF THE TEST IS COMPUTED ONCE, AT ENTRY.
+        #
+        # `foreach $t ($c .. $c+3)` iterates a list perl builds when the loop
+        # is ENTERED, so its bound is fixed even if the body assigns to $c.
+        # The graph says so: the bound hangs off the EntryDef naming the
+        # version of $c that existed at entry, and nothing in it comes from
+        # this loop's Phis.
+        #
+        # An EntryDef renders as the variable's NAME, though, not as the
+        # version it stands for. Re-rendering the test each iteration therefore
+        # re-READ a global the body increments, and on base/rs.t
+        # `while ((($main::test_count + 3) + 1) > $phi226)` advanced its bound
+        # in step with its counter: the file spun at 97% CPU printing
+        # `ok 2106390 # skipped on non-VMS system` where perl prints four
+        # lines.
+        #
+        # Binding the maximal Phi-free subtrees of the test to temporaries
+        # emitted before the loop pins them to their entry values, and _expr
+        # returns the temporary everywhere the test is rendered afterwards.
+        #
+        # THE BINDING IS SCOPED TO THE LOOP. %bound is read by every later
+        # _expr, and an `$inv` temporary is only in scope between this loop's
+        # `my` and its closing brace. Leaving the binding behind spelled a
+        # node as `$inv26` in a statement AFTER the loop -- and, on a second
+        # loop over the same node, produced `my $inv26 = $inv26;`.
+        my @invariant = $self->_loop_invariant_roots($cond[0], $n->{id});
+        my %save_inv;
+        for my $inv (@invariant) {
+            my $var  = sprintf('$inv%d', $inv->{id});
+            my $text = $self->_expr($inv->{id});
+            $init .= sprintf("my %s = %s;\n", $var, $text);
+            $save_inv{ $inv->{id} } = $bound{ $inv->{id} };
+            $bound{ $inv->{id} } = $var;
+        }
+
         my $body = $self->_emit_from($arm{0}{id}, $next_of, undef);
 
         # Next values into temporaries first, then assign: see above.
@@ -1034,6 +1069,11 @@ class SoN::Deparse 0.01 {
                 $self->_expr($cond[0]{id}), _indent($body . $step));
         }
 
+        for my $id (keys %save_inv) {
+            if (defined $save_inv{$id}) { $bound{$id} = $save_inv{$id} }
+            else                        { delete $bound{$id} }
+        }
+
         # RESUME AT THE EXIT'S REGION, not at the Proj. `If` resumes at the
         # Region that joins its arms and never emits it; a loop's exit Proj
         # feeds a Region of its own, and returning the Proj would leave that
@@ -1045,6 +1085,65 @@ class SoN::Deparse 0.01 {
         $after = $exit_region->{id} if $exit_region;
 
         return ($text, $after);
+    }
+
+    # _loop_invariant_roots($test, $loop_id) -- the maximal subtrees of a
+    # loop's test whose value is fixed when the loop is entered.
+    #
+    # Maximal, so one temporary covers a whole bound rather than one per
+    # operand. The test itself is never a root: a test that depended on
+    # nothing in the loop would never change, and hoisting it would turn the
+    # loop into `while ($tmp)`.
+    #
+    # NOT-INVARIANT IS REACHING A PHI OF THIS LOOP. That is the graph's own
+    # statement of what the iteration carries; anything else was computed
+    # before the Loop node and cannot change while it runs.
+    #
+    # ONLY SUBTREES CONTAINING AN EntryDef ARE HOISTED. An EntryDef is the one
+    # node whose rendering is a NAME rather than a value -- it spells the
+    # variable, so it reads whatever that variable holds NOW, while the node
+    # stands for the version at entry. A subtree of constants renders the same
+    # text every iteration, and giving it a temporary would add a variable
+    # that buys nothing.
+    method _loop_invariant_roots ($test, $loop_id) {
+        my %carried;
+        my $carries; $carries = sub ($id, $seen) {
+            return $carried{$id} if exists $carried{$id};
+            return 0 if $seen->{$id}++;
+            my $n = $nodes->{$id} or return 0;
+            return $carried{$id} = 1
+                if ($n->{op} // '') eq 'Phi'
+                && ($n->{fields}{region} // -1) == $loop_id;
+            my $any = 0;
+            $any ||= $carries->($_, $seen) for ($n->{inputs} // [])->@*;
+            return $carried{$id} = $any;
+        };
+
+        my %has_entry;
+        my $names; $names = sub ($id, $seen) {
+            return $has_entry{$id} if exists $has_entry{$id};
+            return 0 if $seen->{$id}++;
+            my $n = $nodes->{$id} or return 0;
+            return $has_entry{$id} = 1 if ($n->{op} // '') eq 'EntryDef';
+            my $any = 0;
+            $any ||= $names->($_, $seen) for ($n->{inputs} // [])->@*;
+            return $has_entry{$id} = $any;
+        };
+
+        my @roots;
+        my %seen;
+        my @queue = (($test->{inputs} // [])->@*);
+        while (@queue) {
+            my $id = shift @queue;
+            next if $seen{$id}++;
+            my $n = $nodes->{$id} or next;
+            if ( !$carries->($id, {}) ) {
+                push @roots, $n if $names->($id, {});
+                next;
+            }
+            push @queue, ($n->{inputs} // [])->@*;
+        }
+        return @roots;
     }
 
     # A loop Phi's variable. Named from the node id because SSA has no name for
