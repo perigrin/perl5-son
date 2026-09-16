@@ -5703,6 +5703,27 @@ class SoN::FromOptree 0.01 {
             # The target is a glob Constant because rv2gv restamps the gv's name
             # as one -- the name is the only compile-time handle on which glob
             # this is.
+            #
+            # WHICH SLOT IS ALIASED IS A RUNTIME FACT, so there is no narrower
+            # lowering to reach for. perl picks by the RHS's type:
+            #
+            #     *D = \@SRC    aliases the ARRAY slot only; $D stays undef
+            #     *D = *SRC     aliases EVERY slot -- scalar, array, hash, code
+            #
+            # and `*FH = shift` names neither. Measured, ONE call site aliases
+            # a different slot per call:
+            #
+            #     sub f { *D = shift }
+            #     f(\@V);  # a[array] s[UNDEF]
+            #     f(\$V);  # s[scalar]
+            #
+            # The tempting narrow case -- base/rs.t's `sub f { *FH = shift }`,
+            # whose FH is only ever read as `<FH>` -- is not narrow enough
+            # either: the alias OUTLIVES the sub and is visible to every other
+            # sub, so rewriting it to a lexical handle would be wrong wherever
+            # a sibling sub reads the name. base/lex.t proves the slot cannot
+            # be assumed: `*R::crackers = \@array` is read back as
+            # `@R::crackers`, the array slot, not a handle.
             elsif ($target->isa('SoN::IR::Node::Constant')
                 && ($target->const_type // '') eq 'glob') {
                 die "GAP: assigning to a glob (*" . ($target->value // '?')

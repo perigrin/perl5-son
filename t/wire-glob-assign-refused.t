@@ -51,4 +51,35 @@ SRC
         'while the sub that assigns the glob is not';
 };
 
+# THERE IS NO NARROWER LOWERING TO REACH FOR. perl picks the aliased slot by
+# the RHS's TYPE -- `*D = \@SRC` aliases the array slot alone and leaves $D
+# undef, while `*D = *SRC` aliases every slot -- and `*FH = shift` names
+# neither at compile time. Measured, one call site aliases a different slot
+# per call:
+#
+#     sub f { *D = shift }
+#     f(\@V);   # a[array] s[UNDEF]
+#     f(\$V);   # s[scalar]
+#
+# So this is not a gap in the lowering, it is a fact perl itself defers to
+# runtime. This subtest exists so the refusal is not re-litigated as laziness.
+subtest 'the aliased slot is a runtime fact, not a compile-time one' => sub {
+    my $dir2 = $dir;
+    my $probe = "$dir2/slot-probe.pl";
+    open my $fh, '>', $probe or die "open $probe: $!";
+    print {$fh} <<'SRC';
+our @V = ("array"); our $V = "scalar";
+sub f { *D = shift; }
+f(\@V);  print "a[@D] s[", (defined $D ? $D : "UNDEF"), "]
+";
+f(\$V);  print "s[$D]
+";
+SRC
+    close $fh;
+
+    my $out = qx{$PERL $probe 2>&1};
+    is $out, "a[array] s[UNDEF]\ns[scalar]\n",
+        'the same call site aliases a different slot per call';
+};
+
 done_testing;
