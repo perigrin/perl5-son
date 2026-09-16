@@ -1305,7 +1305,24 @@ class SoN::Deparse 0.01 {
         # this binding exists because the eval was placed, not because someone
         # read it.
         $bound{ $phi->{id} } = sprintf('$eval%d', $phi->{id});
-        return sprintf("my %s = %s;\n", $bound{ $phi->{id} }, $inner);
+
+        # A CONDITIONAL eval's VALUE OUTLIVES ITS BLOCK. `A and B and C`
+        # renders as nested ifs -- each eval happening only if the previous
+        # succeeded -- but the final expression reads ALL of them:
+        #
+        #     my $eval10 = eval("1");
+        #     if ($eval10) { my $eval20 = eval("2"); }
+        #     ... $eval20 ...        <- out of scope, undef
+        #
+        # so a `my` at the eval's own position scopes it to the arm. Measured
+        # on comp/colon.t, whose every test is an `and` chain of evals: all 11
+        # came out `not ok` because each later eval read an undef.
+        #
+        # DECLARED AT THE TOP, ASSIGNED HERE -- the same mechanism a join Phi
+        # uses, and for the same reason: the value outlives the branch that
+        # produces it. %hoisted emits the declarations before the body.
+        $hoisted{ $bound{ $phi->{id} } } //= $bound{ $phi->{id} };
+        return sprintf("%s = %s;\n", $bound{ $phi->{id} }, $inner);
     }
 
     # _emit_endless_loop($n, $next_of) -> (source, id to resume from)
