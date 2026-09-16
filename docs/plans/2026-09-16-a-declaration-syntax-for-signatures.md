@@ -51,15 +51,42 @@ too. Asked with NO operands:
     result_for("Add")    -> undef     the answer DEPENDS on its operands
     result_for("Divide") -> Num       the answer does not
 
-A joining signature is one whose result is a function of its parameter types; a
-fixed one answers without them. That is expressible as whether the return
-position MENTIONS the parameters:
+So the only fact the syntax still has to carry is a BOOLEAN: does this result
+vary with its parameter types?
 
-    sub :infix / (Num $x, Num $y) Num;        fixed -- never mentions $x/$y
-    sub :infix + (Num $x, Num $y) Num($x|$y); joins, capped at Num
+### What the cap needs: nothing
 
-The second form makes the dependency visible rather than encoding it in a
-side-table, which is what `%RESULT_IS_JOIN` is today.
+Measured -- for every joining op, the type the join is capped against IS the
+declared return type. Forcing the join wide with (Str,Str) returns the cap:
+
+    Add, Subtract, Multiply, Negate   -> Num
+    And, Or, DefinedOr                -> Str
+
+So a notation does not need to spell the cap. `(Num $x, Num $y) Num` already
+says it.
+
+### A rejected notation, and why it is recorded
+
+I first wrote `Num($x|$y)`, meaning "the join of $x and $y, capped at Num". The
+SEMANTICS are right -- it reproduces Add exactly, including (Str,Str) -> Num
+and (Boolean,Int) -> Num -- but the notation is bad:
+
+  - `|` already means bitwise-or in perl, and this is an OPERATOR declaration,
+    so the collision lands exactly where it confuses most
+  - `Num(...)` reads as a call or a cast, not a constraint
+  - it states `Num` twice, and the second one is redundant (above)
+
+### What is actually needed
+
+One bit, spelled as a property of the return rather than an expression over the
+parameters. Sketches, none chosen:
+
+    sub :infix / (Num $x, Num $y) Num;         fixed
+    sub :infix + (Num $x, Num $y) :join Num;   varies with its parameters
+
+An attribute is the honest shape: it is the same KIND of fact as `:infix` --
+metadata about how the declaration behaves, not part of the type. And it reads
+as what it is, which `$x|$y` did not.
 
 ## Problem 2: perl cannot parse it
 
