@@ -30,13 +30,15 @@ sub graph_of ($src) {
 # the whole subtest: a subtest wrapped in `todo` reports as "TODO passed",
 # which reads as "this got fixed, drop the marker" when the defect is very
 # much still here.
-subtest 'a non-@_ list assign keeps its statement' => sub {
+# `caller` IS FIXED -- it is pinned to the control chain now, so DCE cannot
+# take it (see t/wire-caller-is-an-effect.t). The rest of the family is not:
+# the padrange defect is untouched, and these survive only where something
+# else happens to pin the Call.
+subtest 'caller survives, which the pin fixed' => sub {
     my $g = graph_of(qq{sub c { my (\$p, \$f, \$l) = caller; return \$l }\nc();\n});
     ok defined $g, 'the sub translates' or return;
 
     my @ops = map { $_->{op} } $g->{nodes}->@*;
-    my $todo = todo 'padrange SKIPs a non-@_ LHS; aassign then reads the RHS'
-                  . ' as its target list and the statement is dropped';
     ok scalar(grep { $_ eq 'Call' } @ops), 'the caller Call survives'
         or diag "ops = @ops";
     ok scalar(grep { $_ eq 'Assign' } @ops), 'and the Assign is built'

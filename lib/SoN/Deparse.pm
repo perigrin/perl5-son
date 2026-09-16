@@ -1118,6 +1118,33 @@ class SoN::Deparse 0.01 {
         return undef;
     }
 
+    # _feeds_list_assign($id) -- does this node's value reach an Assign with
+    # more than one target?
+    #
+    # Such a node is evaluated in LIST context by the assignment. A pinned
+    # effect cannot be: it binds to a scalar temporary at its chain position,
+    # and the assignment then sees one value where the source had many.
+    #
+    # One hop through an ArrayLiteral counts -- `my @c = caller` builds the
+    # array from the Call, and `my ($p,$f) = caller` reaches the Assign
+    # directly.
+    method _feeds_list_assign ($id) {
+        my @seen = ($id);
+        my %done;
+        while (@seen) {
+            my $cur = shift @seen;
+            next if $done{$cur}++;
+            for my $n (values $nodes->%*) {
+                my @in = ($n->{inputs} // [])->@*;
+                next unless grep { ($_ // -1) == $cur } @in;
+                my $op = $n->{op} // '';
+                return 1 if $op eq 'Assign' && @in >= 3;
+                push @seen, $n->{id} if $op =~ /\A(?:Array|Hash)Literal\z/;
+            }
+        }
+        return 0;
+    }
+
     method _phi_var ($p) {
         my $st = $p->{stamp} // '';
         return sprintf('@phi%d', $p->{id})
@@ -2842,6 +2869,44 @@ class SoN::Deparse 0.01 {
         }
 
         if ($kind eq 'builtin') {
+            # `caller` CANNOT BE LOWERED TO PERL IDENTICALLY, whatever it is
+            # rendered as. It reports the CALL STACK, and the deparsed program
+            # is a different program: a sub emitted here sits at a different
+            # depth, is called from a different line of a different file, and
+            # `(caller)[0..2]` answers accordingly. Even a perfect spelling
+            # gives a different -- correct -- answer.
+            #
+            # THIS DEPARSER IS A T2 CONSUMER, and refusing is what a T2 does
+            # with an operation it cannot lower faithfully. T1 records that
+            # the stack read HAPPENED (it is pinned to the control chain, see
+            # %STACK_READ_BUILTIN in FromOptree) so a backend that CAN lower
+            # it has everything it needs; this one cannot, and says so.
+            #
+            # NARROWED TO THE SHAPE THAT CANNOT BE SPELLED. A blanket refusal
+            # cost nine corpus files, and measurement says it was refusing the
+            # wrong thing: with the GAP removed, `comp/our.t` dies on
+            # TIESCALAR and `comp/opsubs.t` differs from test 2 -- neither
+            # because of `caller`. In four of them it sits in a
+            # `sub failed { ... }` diagnostic that emits ZERO lines on a
+            # passing run, and the emitted program agreed with perl exactly.
+            #
+            # What CANNOT round-trip is a caller BOUND TO A LIST. `my
+            # ($p,$f,$l) = caller` needs the Call evaluated in list context by
+            # the assignment, and a pinned Call binds to a scalar `$effN`
+            # first -- `my $eff1 = caller(); my ($p,$f,$l) = ($eff1)` -- which
+            # hands two targets undef. That is a wrong ANSWER, not merely a
+            # different stack, so it refuses.
+            #
+            # The other shapes render. They will report this program's stack
+            # rather than the original's, which is the honest T2 answer for a
+            # construct whose meaning is its frame; a consumer that needs the
+            # original's frame cannot get it from any deparse.
+            if ($name eq 'caller' && $self->_feeds_list_assign($n->{id})) {
+                die "GAP: a `caller` bound to a list cannot be rendered --"
+                  . " the Call binds to a scalar temporary first, so the"
+                  . " remaining targets would take undef\n";
+            }
+
             # AN OP NAME IS NOT ALWAYS THE PERL SPELLING. The producer takes
             # `name` from the OP, and perl's op names do not all match the
             # keyword that produced them -- `printf` is the op `prtf`, and

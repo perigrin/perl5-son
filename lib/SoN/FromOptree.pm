@@ -2470,6 +2470,43 @@ class SoN::FromOptree 0.01 {
     # stronger assertion than the measurement supports.
     my %HANDLE_READ_BUILTIN = map { $_ => 1 } qw(readline eof tell);
 
+    # Builtins that READ STATE OUTSIDE THE EXPRESSION, so WHERE they happen is
+    # part of what they mean. They store nothing -- no memory edge -- but they
+    # are not values either, and leaving one unpinned lets DCE remove it once
+    # its result goes unread.
+    #
+    # `caller` reads the call stack. T1's job is to say truthfully what the
+    # program DOES; a backend that cannot lower a stack read still has to be
+    # TOLD there was one, and it cannot be told what T1 did not record.
+    # Measured before this:
+    #
+    #     sub c { my ($p,$f,$l) = caller; return $l }
+    #       graph: Start, Constant undef, Return -- the Call was GONE
+    #
+    # THE VOID FORM ALREADY SURVIVED, which is what makes this a CONTEXT hole
+    # rather than a missing op: `caller();` is pinned by $void_effect_call.
+    # Exactly the gap %HANDLE_READ_BUILTIN was created for -- "a read whose
+    # value is BOUND is not void, so it was never pinned" -- one builtin over.
+    #
+    # SEPARATE FROM %HANDLE_READ_BUILTIN because the ordering claim differs:
+    # those must order against the open/close that bracket them, these only
+    # against the statements around them. Same mechanism, and the distinction
+    # is worth keeping in the names.
+    my %STACK_READ_BUILTIN = map { $_ => 1 } qw(caller);
+
+    # ITS STAMP IS STILL WRONG, and deliberately left so. `caller` comes out
+    # Scalar even in list context, because TypeLibrary has no row for it --
+    # correctly, since a row would be the JOIN of "the package" and "3+
+    # values", and that join reaches Unknown and says nothing. TypeLibrary
+    # names the remedy under WHAT IS DELIBERATELY ABSENT: read `$op->flags`
+    # here, the trade `readline` already takes.
+    #
+    # NOT DONE BECAUSE NOTHING READS IT. The deparser refuses `caller` before
+    # it looks at the stamp, and no backend lowers a stack read yet, so a
+    # stamp added now would be a claim with no consumer to check it -- which
+    # is how a guess gets embedded and then defended. The mechanism is one
+    # line (`$op->flags & 3`) whenever a reader appears.
+
     # Ops that are an EFFECT in their own right rather than a call. The void
     # branch-arm scan needs this: it asked "is this arm an entersub in void
     # context" when the question is "does this arm hold an effect that must be
@@ -7087,6 +7124,12 @@ class SoN::FromOptree 0.01 {
                     # %HANDLE_READ_BUILTIN.
                     $pin_on_control = 1
                         if $HANDLE_READ_BUILTIN{$name} && !$void;
+
+                    # A STACK READ IS AN EFFECT IN ANY CONTEXT, for the same
+                    # reason and by the same mechanism. See
+                    # %STACK_READ_BUILTIN.
+                    $pin_on_control = 1
+                        if $STACK_READ_BUILTIN{$name} && !$void;
                 }
 
                 # Perl `/` is always floating-point division, so an Int operand
