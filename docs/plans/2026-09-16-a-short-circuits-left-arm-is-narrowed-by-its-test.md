@@ -71,13 +71,60 @@ of the OPERATOR, not something a caller instantiates. It is a third column in
 the row -- alongside `operands` and `result` -- saying how the result is
 computed from the operand types.
 
+## CORRECTION: the desugaring is exact, and the win is ~nothing
+
+perigrin: False || False returns False, so `$x || $y` is exactly equivalent to
+`if ($x) { $x } else { $y }`.
+
+That desugaring is exact and it corrects a sloppy sentence above. `undef ||
+undef` IS undef -- but via the RIGHT arm, taken because the left was falsy. The
+left arm still cannot be the result when it is undef; the RESULT can be undef
+whenever the right arm is. The rule `join(L \ {Undef}, R)` already says this,
+since the subtraction applies only to L. But it was easy to read the earlier
+text as claiming the result is never Undef, which is false.
+
+More importantly, the desugaring exposes how narrow the win is. The subtraction
+is only EXPRESSIBLE when the left arm is stamped EXACTLY `Undef`:
+
+    Or(Undef,  Str)  ->  Str      the whole left arm vanishes
+    Or(Scalar, Str)  ->  Scalar   unchanged: "Scalar minus Undef" is not a
+                                  lattice member -- there is no "defined
+                                  Scalar" type to narrow to
+
+So it is not a general narrowing at all, it is a special case for one stamp.
+
+MEASURED over t/base, t/comp and t/cmd -- 37 files that translate, 42
+Or/DefinedOr nodes:
+
+    left arm stamped exactly Undef:  1
+
+One node. And the common real shape has an Unknown left arm, where there is
+nothing to subtract either:
+
+    my $u = @ARGV ? $ARGV[0] : undef;
+    my $a = $u || "fb";
+      ->  Or(TernaryExpr/Unknown, Constant/Str) stamp=Unknown
+
+A left arm stamped exactly Undef means the producer PROVED it undef, and then
+`$x || $y` is a constant expression theprogrammer would not have written.
+
+## Verdict
+
+Not worth implementing. The rule is correct and it buys one node in the whole
+corpus. Recorded so the reasoning is not redone: the blocker is not effort, it
+is that the lattice has no "defined X" type, so the narrowing cannot generalise
+past the single Undef stamp.
+
+If a `NonUndef` or a defined-ness refinement ever enters the lattice -- which
+is a real design option, and what perigrin's "true polymorphism" instinct was
+pointing at -- this becomes general and worth revisiting. Until then it is a
+special case dressed as a rule.
+
 ## Remaining work
 
-1. A failing test: `undef || "x"` should stamp Str, not Scalar.
-2. Implement the subtraction in the Or/DefinedOr path, and measure the corpus.
-   The likely win is anywhere `$x ||= default` or `$h{k} // $default` feeds a
-   typed consumer -- both common, and both currently widening to Scalar.
-3. Check whether any wire consumer depends on the current Scalar; chalk reads
-   these stamps, and a narrower one is new information rather than a fix to it.
+NONE, as measured. Revisit only if the lattice gains a defined-ness refinement
+(a `NonUndef`, or Str/Int split by definedness), at which point the subtraction
+generalises beyond the single exact-Undef case and the corpus count should be
+re-measured before implementing.
 
 Claude-Session: https://claude.ai/code/session_01QYtFNnt2aXaRH2hrRvopyc
