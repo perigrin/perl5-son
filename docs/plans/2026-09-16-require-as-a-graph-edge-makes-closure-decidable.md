@@ -78,3 +78,62 @@ An `import` that installs subs at BEGIN time, `*alias = \&Other::f`, and
 rather than something closure answers.
 
 Claude-Session: https://claude.ai/code/session_01QYtFNnt2aXaRH2hrRvopyc
+
+## Prior art: how other implementations handle precompiled libraries
+
+perigrin's question, and the short answer is that the SoN lineage does not
+answer it -- SoN is overwhelmingly a JIT IR, and the AoT members either refuse
+the open world or decline cross-module inference.
+
+    HotSpot C2, V8 Turbofan, IonMonkey   JIT. Speculate + guard + DEOPTIMIZE.
+                                         Unavailable here: no interpreter to
+                                         deopt into.
+    Graal Native Image                   AoT, and the closest precedent. Its
+                                         answer is closed-world points-to over
+                                         the whole image; reflection must be
+                                         DECLARED in config. Precision bought
+                                         by forbidding openness.
+    libFirm                              SoN, genuinely AoT, and does NOT do
+                                         cross-TU inference at all.
+    MLton                                Whole-program only. Same refusal.
+
+So the applicable technique comes from the ML/Rust module tradition, not SoN:
+
+    OCaml    .cmi is the INTERFACE, .cmx adds cross-module inlining info as an
+             advisory body, plus a dependency hash that rebuilds dependents.
+    Rust     crate metadata ships MIR for inlinable items, with a per-item
+             fingerprint (SVH) that invalidates dependents.
+
+Both separate a STABLE INTERFACE from an OPTIONAL BODY and version the pair.
+
+## We already have most of that shape
+
+A sub record on the wire today, with `graph` removed, is an interface:
+
+    name, params, signature, return_type, uses_args
+
+    their concept                    ours              status
+    .cmi / crate interface           sub record        EXISTS
+    .cmx / MIR body for inlining     record's `graph`  EXISTS
+    dependency list                  `requires`        missing (above)
+    interface hash / SVH             --                missing
+
+## Where Perl breaks the analogy
+
+OCaml and Rust hash at BUILD time because a compiled body is immutable. Perl's
+is not:
+
+    sub f { 1 }   print f();      # 1
+    *f = sub { 2 };  print f();   # 2
+
+A sub's body can be replaced AFTER load, so an interface hash can go stale at
+RUNTIME -- something none of the prior art has to survive. Note what the
+construct is: glob assignment, the same one refused earlier today.
+
+That makes monkey-patching the thing that keeps Perl's world open. A
+Graal-style closed-world claim is simply FALSE for Perl unless a graph that
+assigns to a glob is refused, which is what happens today. The existing GAP is
+therefore load-bearing for any future closure claim, not merely a missing
+feature.
+
+Claude-Session: https://claude.ai/code/session_01QYtFNnt2aXaRH2hrRvopyc
