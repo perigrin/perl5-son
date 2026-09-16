@@ -325,6 +325,18 @@ class SoN::Deparse 0.01 {
                                   : sprintf('%s{%s}', $spelling, $key);
         }
 
+        # A LIST IS NOT A REFERENCE. `->[...]` dereferences, and a
+        # list-valued CALL has nothing to dereference: measured,
+        # `split(/\n/,$p)->[1]` dies ("Can't use string as an ARRAY ref")
+        # while `(split(/\n/,$p))[1]` gives the element.
+        #
+        # The arrow fallback was right for a REF and silently wrong for a
+        # list -- and comp/retainedlines.t indexes a split inside a loop
+        # body, so the emitted program died there every iteration. That file
+        # is why a deparse of it had been spinning for 28 hours.
+        return sprintf('(%s)[%s]', $spelling, $key)
+            if $st eq 'List';
+
         return $st eq 'HashRef' ? sprintf('%s->{%s}', $spelling, $key)
                                 : sprintf('%s->[%s]', $spelling, $key);
     }

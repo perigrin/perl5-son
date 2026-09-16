@@ -17,6 +17,13 @@ sub run_src ($src) {
     return $out;
 }
 
+sub round_trips_pair ($name, $src) {
+    my $emitted = emit($src);
+    ok defined $emitted, "$name: it renders" or return;
+    is run_src($emitted), run_src($src), "$name: it agrees with perl"
+        or diag "emitted:\n$emitted";
+}
+
 sub emit ($src) {
     my $file = __FILE__ . ".tmp.$$.pl";
     open my $fh, '>', $file or die $!;
@@ -82,6 +89,27 @@ subtest 'a split count is the fields, not the empty LHS' => sub {
 
     is run_src($emitted), run_src($src), 'it agrees with perl'
         or diag "emitted:\n$emitted";
+};
+
+# A LIST IS NOT A REFERENCE. Indexing one emitted `->[...]`, which
+# dereferences -- measured, `split(/\n/,$p)->[1]` dies while
+# `(split(/\n/,$p))[1]` gives the element. The arrow fallback was right for a
+# REF and silently wrong for a list.
+#
+# comp/retainedlines.t indexes a split inside a loop body, so its emitted
+# program died there every iteration and never terminated. That file is why a
+# deparse had been spinning at 99.6% CPU for 28 hours.
+subtest 'a list-valued call is indexed with parens, not an arrow' => sub {
+    round_trips_pair(
+        'a map over split',
+        qq{my \$p = "a\\nb\\nc";\nmy \@l = map { "\$_!" } split /\\n/, \$p;\nprint "\@l\\n";\n});
+};
+
+# The REF forms must keep their arrow.
+subtest 'a reference is still indexed with an arrow' => sub {
+    round_trips_pair('an array ref', qq{my \$r = [4,5,6];\nprint \$r->[1], "\\n";\n});
+    round_trips_pair('a hash ref',   qq{my \$h = {k=>9};\nprint \$h->{k}, "\\n";\n});
+    round_trips_pair('an array',     qq{my \@a = (7,8,9);\nprint \$a[1], "\\n";\n});
 };
 
 done_testing;
