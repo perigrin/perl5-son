@@ -87,29 +87,56 @@ parameter NAMES can denote it, because a parameter's type is exactly what the
 declaration pinned down. The notation was a category error, not merely ugly
 (the `|`/bitwise-or collision and the doubled `Num` are true but secondary).
 
-### What fits instead: a bounded type variable
+### What fits instead: a bounded type variable -- AT T2, NOT T1
 
-The construct that does quantify over argument types is ordinary bounded
-polymorphism:
+Bounded polymorphism does describe the rule:
 
-    sub :infix + <T <= Num>    (T $x, T $y) T;
+    sub :infix +  <T <= Num>    (T $x, T $y) T;
     sub :infix && <T <= Scalar> (T $x, T $y) T;
-    sub :infix /               (Num $x, Num $y) Num;
+    sub :infix /                (Num $x, Num $y) Num;
 
-T binds to the join of the actual argument types and is capped by its bound.
-Measured, that reproduces every row in both groups:
+T binds to the join of the actual argument types, capped by its bound, and that
+reproduces every measured row in both groups.
 
-    T <= Num      Add(Int,Int)=Int  (Int,Num)=Num  (Str,Int)=Num
-                  (Str,Str)=Num     (Boolean,Int)=Num
-    T <= Scalar   And(Int,Int)=Int  (Str,Int)=Str  (Str,Str)=Str
+BUT perigrin: the polymorphism %RESULT_IS_JOIN measures is T2 polymorphism.
+At T1 it is mostly just a supertype in the lattice. Measured, and he is right:
 
-and the join-vs-fixed distinction needs no attribute after all: a joining op
-MENTIONS T, a fixed one does not. `Divide` writes concrete `Num` and gets the
-flat answer for free.
+    my $i = 2; my $f = 1.5; my $s = "x";
+    $i + $i   ->  wire node {op=>Add, inputs=>[..], stamp=>'Int'}
+    $f + $i   ->  stamp Num
+    $s + $i   ->  stamp Num
 
-This also explains what `%RESULT_IS_JOIN` has been all along -- the set of ops
-whose signature is polymorphic -- and why the bound and the "cap" were always
-the same type. They are one thing: T's upper bound.
+Every stamp that reaches the wire is a CONCRETE lattice member. Surveyed across
+two files, the whole stamp vocabulary is Int/Num/Str/Scalar/Boolean/Array/
+ArrayRef/HashRef/Glob/GlobRef/Regex/ScalarRef/Undef/Unknown -- no type variable
+appears anywhere, and an Add node is exactly
+
+    { id => 3, inputs => [2,2], op => 'Add', stamp => 'Int' }
+
+The join rule left NO trace. `%RESULT_IS_JOIN` is referenced only inside
+TypeLibrary; chalk never sees it.
+
+So T1 does not need polymorphic signatures. It applies the rule once, per node,
+against the operand types it is holding, and writes down a concrete answer. The
+polymorphism is a property of the OPERATOR, consumed at translation time and
+discarded -- exactly like `operands`, which types an untyped operand and is
+likewise never emitted.
+
+Where a type variable WOULD be load-bearing is T2: chalk lowers one Add to
+different machine instructions depending on the stamp, and a declaration it can
+instantiate per callsite is a different artifact from the one T1 needs. The
+`<T <= Num>` syntax belongs there.
+
+### What this means for the declaration syntax
+
+The syntax perigrin proposed --
+
+    sub :infix + (Num $x, Num $y) Num;
+
+-- is the right T1 artifact AS WRITTEN. The declared return type is the cap; T1
+meets it with the operand join and stamps the node. No T, no :join attribute,
+no notation for the dependency, because T1 never has to express the rule in the
+general case -- only to APPLY it to the operands in front of it.
 
 ## Problem 2: perl cannot parse it
 
@@ -134,9 +161,9 @@ and nothing else needs to change to adopt one.
 
 ## Remaining work
 
-1. Confirm a bounded type variable (`<T <= Num>`) covers every joining op, not
-   just the seven probed here, and that nothing needs two independent
-   variables. If it holds, %RESULT_IS_JOIN disappears into the signatures.
+1. Nothing, for T1. The flat form is sufficient, since T1 applies the rule and
+   emits a concrete stamp. A bounded type variable is a T2 question, and
+   belongs in a chalk-side plan rather than this one.
 2. A parser for the declaration file, producing `declare()` calls.
 3. `:infix` and friends map a declaration onto an IR op name, so a declared
    `+` lands on `Add` rather than on a sub named `+`.
