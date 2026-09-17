@@ -3012,6 +3012,29 @@ class SoN::Deparse 0.01 {
             # `&s(...)` is unambiguous and calls the sub, so it is used for
             # any name perl would otherwise read as a quote-like operator.
             # The parens stay: `&s` without them passes the CALLER's @_.
+            # A CALLEE THE GRAPH DOES NOT CONTAIN CANNOT BE CALLED. Every sub
+            # is its own `methods` entry on the wire, and a sub the PRODUCER
+            # refused is simply absent -- while its CALLSITE survives, because
+            # that lives in __PROGRAM__, which translated fine.
+            #
+            # Rendering the call anyway emitted a program that died:
+            #
+            #     Undefined subroutine &main::test_string called at ... line 168
+            #
+            # Measured on base/rs.t, whose test_string/test_record are refused
+            # for assigning to a glob -- perl prints 44 lines, the emitted
+            # program printed 2 and died. That reads as a successful render,
+            # which is the one outcome worse than a GAP.
+            #
+            # ANONYMOUS BODIES AND BUILTINS ARE NOT THIS CASE: an anon sub is
+            # reached through a reference rather than a name, and a builtin has
+            # no `methods` entry by construction. Only a name that LOOKS like a
+            # user sub and is absent is a call into nothing.
+            die "GAP: a call to `$name`, which is not in the graph, cannot be"
+              . " rendered -- the emitted program would die calling it\n"
+                if $name =~ /\A\w+(?:::\w+)*\z/
+                && !exists $all_methods->{$name};
+
             my $ident = $self->_sub_ident($name);
             return sprintf('&%s(%s)', $ident, join(', ', @args))
                 if $ident =~ /\A(?:s|m|y|tr|q|qq|qw|qr)\z/;
