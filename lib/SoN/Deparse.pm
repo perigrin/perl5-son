@@ -1831,6 +1831,25 @@ class SoN::Deparse 0.01 {
                 }
             }
 
+            # A BINDING IS RENDERED AS A GLOB ASSIGNMENT, because that is the
+            # only Perl spelling that ALIASES a name rather than storing into
+            # it. Emitted as a store it is a wrong answer, not an imprecise
+            # one -- measured on `our @SRC=(1,2,3); *crackers=\@SRC;`:
+            #
+            #     perl      prints "1 2 3"
+            #     as store  `@main::crackers = \(@main::SRC);` prints nothing
+            #
+            # The sigil on the target entry says WHICH slot the binding picked
+            # (the RHS's type selected it), and the glob spelling drops the
+            # sigil because `*name = REF` re-derives the slot from the
+            # reference's kind -- the same dispatch perl itself does.
+            if ( $n->{fields} && $n->{fields}{binds} ) {
+                my $name = $self->_slot_name($slot);
+                $name =~ s/\A[\$\@\%\&]//;
+                return sprintf( "*%s = %s;\n",
+                    $name, $self->_expr( $n->{inputs}[1] ) );
+            }
+
             return sprintf("%s = %s;\n",
                 $self->_slot_name($slot), $self->_expr($n->{inputs}[1]));
         }
@@ -2687,7 +2706,23 @@ class SoN::Deparse 0.01 {
             # CONCATENATION, a different value.
             die "GAP: a Ref with " . scalar(@in) . " inputs is not yet"
               . " rendered\n" unless @in == 1;
-            $text = sprintf('\\(%s)', $self->_expr($in[0]));
+
+            # AN AGGREGATE OPERAND MUST NOT BE PARENTHESISED. `\(@a)` is not
+            # `\@a`: the parens make it a LIST of references to each element,
+            # so it yields the last one in scalar context. Measured:
+            #
+            #     our @SRC=(1,2,3); *c = \(@SRC);  ->  $c is 3, @c is empty
+            #     our @SRC=(1,2,3); *c = \@SRC;    ->  @c is 1 2 3
+            #
+            # The parens above exist for a real reason -- `\$x . "y"` would
+            # take a reference to the CONCATENATION -- but that hazard is a
+            # binary operator binding looser than `\`, which a bare aggregate
+            # read cannot be. So they are dropped exactly where they change
+            # the meaning and kept everywhere else.
+            my $inner = $self->_expr($in[0]);
+            $text = $inner =~ /\A[\@%][\w:]+\z/
+                ? sprintf('\\%s', $inner)
+                : sprintf('\\(%s)', $inner);
         }
         elsif ($op eq 'RefType') {
             # `ref EXPR` -- a unary whose op_str is already `ref`.
@@ -3303,6 +3338,23 @@ class SoN::Deparse 0.01 {
             die "GAP: a glob Constant whose name is `$v` is not a bareword\n"
                 unless $v =~ /\A[A-Za-z_]\w*\z/;
             return $v;
+        }
+
+        # A CV NAMED AS A REFERENT. `\&foo` puts the SUB where a value goes,
+        # and the producer records that as a `code` Constant holding the name
+        # (there is no address at compile time, so the name is the only handle
+        # on which sub it is) -- the same shape a `glob` Constant has for
+        # `\*STDOUT`.
+        #
+        # SPELLED WITH THE AMPERSAND, which is what makes it the sub rather
+        # than a bareword string: the enclosing Ref renders `\` and this
+        # supplies `&foo`, so the pair comes back as `\&foo`. A package-
+        # qualified name is as valid here as a plain one, unlike the bareword
+        # handle above, because `&` already forces the sub interpretation.
+        if ($t eq 'code') {
+            die "GAP: a code Constant whose name is `$v` is not a sub name\n"
+                unless $v =~ /\A[A-Za-z_]\w*(?:::\w+)*\z/;
+            return '&' . $v;
         }
 
         die "GAP: no rule for a `$t` Constant\n";
