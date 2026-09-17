@@ -216,3 +216,40 @@ prototype declares PARSE arity, and they are different facts. `operands` is a
 COERCION CEILING (`Add => operands => ['Num','Num']` means "coerce both to
 Num", and `operands => []` imposes nothing), not a description of how a call is
 parsed. They must not be merged.
+
+## The circularity argument does NOT apply here (it does for a standalone parser)
+
+The pvm session (a Perl parser in Go) reversed its plan to generate prototype
+data from perl's symbol table, on perigrin's point: reading the symbol table
+means libperl has already parsed the text, and a Perl parser that must run Perl
+to parse Perl is circular. Their answer is to parse the module's own source --
+`Test/More.pm` is text on disk, and everything they need is on the `sub` line.
+
+Right for them, and it does not transfer, for two measured reasons:
+
+1. **We are a compiler BACKEND.** `perl -MO=SoN file.pm` -- perl has already
+   parsed the file into an optree before we run, and that optree IS our input.
+   The dependency they are eliminating is the one we are built on. There is no
+   circularity to break.
+
+2. **`CORE::` is not a module.** Their fix is "parse the module's text
+   instead", and that has no analogue here:
+
+       Test/More.pm   ->  /…/lib/perl5/5.42.0/Test/More.pm     TEXT ON DISK
+       CORE           ->  $INC{"CORE.pm"} is undef              THE INTERPRETER
+
+   `prototype("CORE::$name")` asks the interpreter about its own keywords.
+   There is no source file to parse, so the alternative does not exist.
+
+Our single use of it (lib/SoN/Deparse.pm) is a REFUSAL predicate, not a data
+source: it asks whether a name is a perl keyword at all, so the deparser can
+refuse an op with no Perl spelling rather than emit a call to a sub that does
+not exist. That is exactly the case the
+[[op-names-are-not-perl-spellings]] memory records a hand-maintained list
+getting wrong.
+
+Their three practical consequences are worth recording even though they do not
+bind us, because they would bind any offline generation step we ever add:
+uninstalled dependencies make a repo unanalysable, the data pins to whichever
+module version was on the generating machine, and local modules get no
+coverage.
