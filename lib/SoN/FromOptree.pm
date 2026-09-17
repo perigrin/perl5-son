@@ -2102,6 +2102,20 @@ class SoN::FromOptree 0.01 {
         # List in EVERY context, which is WRONG rather than wide: List does not
         # admit the EOF Undef, and `while (my $l = <$fh>)` terminates on
         # exactly that value.
+        #
+        # AND `Str` WOULD BE WRONG TOO, for the same reason in the other
+        # direction. It is tempting -- a line off a handle is never a number or
+        # a reference, so every DEFINED reading is a Str. But Undef is a child
+        # of Scalar and a SIBLING of Str, not a subtype of it:
+        #
+        #     Undef <: Str      NO
+        #     join(Str, Undef)  Scalar
+        #
+        # so stamping Str claims the EOF value is a string, which is the one
+        # value it is not -- and it is the value every read loop tests for.
+        # Scalar is the least upper bound of what this actually yields, which
+        # makes it the correct answer rather than a loose one. A narrower stamp
+        # needs a lattice that can say "Str or undef", which this one cannot.
         state $SCALAR_IS_A_SCALAR = { map { $_ => 1 } qw( readline ) };
         state $LIST_IN_LIST_CONTEXT =
             { map { $_ => 1 } qw( keys values reverse sort readline ) };
