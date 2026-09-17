@@ -25,7 +25,7 @@ message. Two of them contradict the message's own wording, which is why.
     1  loop-carried value loses its stamp            ARTIFACT (see 1c2e543)
     1  function exit inside a loop body              ARTIFACT
     1  element store in a nested one-armed branch    ARTIFACT
-    1  a loop inside a branch arm                    ARTIFACT (shape unknown)
+    1  a loop inside a branch arm                    ARTIFACT (reduced; see 4)
 
 ## THE PLAN'S HYPOTHESIS WAS HALF RIGHT
 
@@ -82,8 +82,8 @@ from outside the system. The audit says the corpus is nearly there --
 
     genuine facts   5 of 17   glob-from-a-Call (x2), undef(*GLOB),
                               `write` format, map-arity via &{$sub} (x2)
-    artifacts      11 of 17
-    unclassified    1 of 17   comp/utf.t's loop-in-branch
+    artifacts      12 of 17
+    unclassified    0 of 17
 
 and none of the four is string eval, which still does not GAP (it becomes
 `Coerce(Scalar -> Code)` -- see the parent plan).
@@ -110,9 +110,35 @@ and none of the four is string eval, which still does not GAP (it becomes
    t/comp and t/cmd do not exercise it. A real lowering, not a coverage win.
 3. The `continue`-block and function-exit-in-loop kinds are control flow the
    walker does not model. Real work, correctly refused today.
-4. `a loop inside a branch arm` did not reproduce from the obvious shape
-   (`if ($c) { for my $i (1..3) {...} }` translates). Its trigger in comp/utf.t
-   is unidentified; the message says "its leaveloop arrived without its
-   operands." Needs its own reduction before it can be classified.
+4. REDUCED AND CLASSIFIED: ARTIFACT. My "did not reproduce" was wrong, and
+   wrong for an instructive reason -- the probe I used happened to miss the
+   trigger by one property.
+
+   It reproduces in four lines, from the most obvious shape there is:
+
+       my $c = 1;
+       if ($c) { for my $x (1, 2) { print "x$x\n" } }
+
+   THE TRIGGER IS A CONTROL-ADVANCING EFFECT IN THE BODY, not the loop form
+   and not the branch. Measured, all inside `if ($c) { for ... }`:
+
+       $s += $x            translates
+       push @a, $x         translates
+       print "x\n"         GAP
+       warn "w\n"          GAP
+
+   and the same `print` loop OUTSIDE a branch translates. So it is the
+   combination: a loop in a branch arm whose body advances the CONTROL chain.
+   My earlier probe used `$s += $i`, a pure accumulate -- one of the two forms
+   that works.
+
+   In comp/utf.t the enclosing branch is `next if $enc eq 'UTF-8'` (line 65),
+   a statement-modifier loop-exit whose not-taken path holds the remaining
+   `for` loops. `next` is incidental: `next if` alone translates, and so do
+   several statements after it.
+
+   An ARTIFACT: nothing about the program is unknowable. The walker's branch
+   handling does not thread a nested loop's control chain, which is why the
+   leaveloop "arrived without its operands".
 
 Claude-Session: https://claude.ai/code/session_01QYtFNnt2aXaRH2hrRvopyc
