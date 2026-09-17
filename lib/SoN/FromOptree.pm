@@ -7748,29 +7748,102 @@ class SoN::FromOptree 0.01 {
         return defined $stamp && $stamp->type ne 'Unknown';
     }
 
-    # _stale_consumers($phi, $join) -- everything transitively reading $phi that
-    # is stamped NARROWER than the widened join.
+    # _recomputed_stamp($node) -- what this node YIELDS given the stamps its
+    # inputs carry RIGHT NOW, or undef when nothing can say.
     #
-    # A node whose stamp already covers the join has nothing stale about it: the
-    # Coerce the walker inserts at a use site widens there, so the arithmetic
-    # above it is stamped correctly whatever the Phi says. What cannot stand is
-    # a consumer that read the Phi at the narrower type and kept it.
-    #
-    # Bounded by the visited set, which a cycle needs -- a loop Phi is reachable
-    # from its own back-edge by construction.
-    sub _stale_consumers ($phi, $join) {
-        my (%seen, @stale, @queue);
-        @queue = ($phi);
-        while (my $node = shift @queue) {
-            next if $seen{$node->id}++;
-            push @queue, $node->consumers->@*;
-            next if $node->id eq $phi->id;
+    # The counterpart of the construction-time stamping, run again after an
+    # input widened. Everything an operator yields is already a TypeLibrary
+    # fact; the cases below are the nodes whose result is NOT an operator
+    # signature and so are not in that table.
+    sub _recomputed_stamp ($node) {
+        my @in = ($node->inputs // [])->@*;
+        return undef unless @in;
 
-            my $stamp = $node->stamp;
-            next unless _is_narrowed($stamp);
-            # Already at or above the join: nothing to restamp.
-            next if SoN::IR::Stamp::join($stamp, $join)->type eq $stamp->type;
-            push @stale, $node->operation . '/' . $stamp->type;
+        # A MERGE YIELDS THE JOIN OF WHAT IT MERGES. A Phi or a TernaryExpr
+        # picks one of its arms unchanged, so its type is their least upper
+        # bound -- the same rule _stamp_merges applies on the wire.
+        if ($node->isa('SoN::IR::Node::Phi')
+            || $node->isa('SoN::IR::Node::TernaryExpr')) {
+            my @arms = grep { defined } @in;
+            # A TernaryExpr carries its CONDITION as the first input; the
+            # condition decides which arm runs and is not one of them.
+            shift @arms if $node->isa('SoN::IR::Node::TernaryExpr') && @arms > 2;
+            my $j;
+            for my $a (@arms) {
+                my $st = $a->stamp or return undef;
+                return undef unless _is_narrowed($st);
+                $j = defined $j ? SoN::IR::Stamp::join($j, $st) : $st;
+            }
+            return $j;
+        }
+
+        # A COERCE IS ITS OWN ANSWER. It exists to say "this value, at THAT
+        # type", so a widening underneath it changes what it converts FROM,
+        # never what it yields.
+        return $node->stamp if $node->isa('SoN::IR::Node::Coerce');
+
+        my $op = $node->operation;
+        return _result_stamp($op, \@in,
+            $op eq 'Call' ? ($node->can('name') ? $node->name : undef) : undef);
+    }
+
+    # _restamp_cone($phi) -- push a widened Phi's new type through everything
+    # that reads it, re-deriving each consumer rather than refusing it.
+    #
+    # WHAT WAS WRONG. The predicate this replaces compared a consumer's RESULT
+    # against its OPERAND's join, which is a category error. A comparison is
+    # the case that exposes it: `NumLt` yields Boolean for ANY operands, so
+    # widening what it reads cannot change it -- yet join(Boolean, Num) is
+    # Scalar, because Boolean is a sibling of Str under Scalar and is not
+    # comparable to Num at all. So every comparison reading a widened Phi was
+    # "stale".
+    #
+    # Measured across the suite with the masking removed, ALL 43 flagged nodes
+    # were comparisons -- NumLt 16, NumGt 14, NumEq 7, NumNe 5, NumGe 1 -- and
+    # not one of them can be stale by construction. Two ordinary loops were
+    # refused for it:
+    #
+    #     my $u = $t+1; $t += 0.5      GAP (Add/Int)
+    #     $x = $y; $y = $t + 0.5       GAP (Phi/Int)
+    #
+    # THE HONEST REFUSAL SURVIVES, narrowed to what it was always meant to be:
+    # a consumer that is stamped narrower than its re-derived type and that
+    # nothing can re-derive. That is a claim the graph cannot repair, and it is
+    # the only one left.
+    #
+    # TERMINATION. Every restamp moves a node strictly UP a finite lattice, and
+    # the visited-count bound stops a cycle regardless -- a loop Phi is
+    # reachable from its own back edge by construction. Nothing is ever reset
+    # to Unknown, so the write-once monotonicity guard elsewhere is untouched.
+    sub _restamp_cone ($phi) {
+        my @stale;
+        my %bumped;
+        my @queue = ($phi->consumers->@*);
+
+        while (my $node = shift @queue) {
+            # A lattice of this height cannot need more passes than this; the
+            # bound is a backstop for a cycle, not the normal exit.
+            next if ($bumped{$node->id} // 0) > 8;
+
+            my $cur = $node->stamp;
+            next unless _is_narrowed($cur);
+
+            my $new = _recomputed_stamp($node);
+            unless (defined $new && _is_narrowed($new)) {
+                # Nothing can say what it yields now. Only a claim that is
+                # ACTUALLY narrower than its inputs is a problem; a node whose
+                # own type does not depend on them is fine.
+                next;
+            }
+            next if $new->type eq $cur->type;
+
+            # Narrower than it was is not a widening -- leave it alone rather
+            # than tightening a claim the body already made.
+            next unless SoN::IR::Stamp::join($cur, $new)->type eq $new->type;
+
+            $bumped{$node->id}++;
+            $node->set_stamp($new);
+            push @queue, $node->consumers->@*;
         }
         return @stale;
     }
@@ -7806,7 +7879,8 @@ class SoN::FromOptree 0.01 {
                 # narrower type is stale. `my $t = 0; $t += 0.5` -- about as
                 # ordinary as perl gets -- was refused for a staleness it did
                 # not have.
-                my @stale = _stale_consumers($phi, $join);
+                $phi->set_stamp($join);
+                my @stale = _restamp_cone($phi);
                 die "GAP: loop-carried type widening not yet lowered"
                   . " (consumers stamped narrower than the join: "
                   . join(', ', @stale) . ")\n"

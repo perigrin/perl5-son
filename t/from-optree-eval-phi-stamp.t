@@ -94,14 +94,55 @@ subtest 'an ordinary widening accumulator lowers' => sub {
     }
 };
 
-# THE STALE CASE MUST STILL REFUSE. A consumer that read the Phi at the narrower
-# type before the back-edge widened it is exactly the type-level miscompile the
-# guard was written for, and it stays refused.
-subtest 'a stale narrower consumer still refuses' => sub {
-    my (undef, $err) = translate(
+# THE "STALE" CASE IS NOT STALE -- IT IS RESTAMPED. This subtest used to assert
+# that `my $u = $t + 1; $t += 0.5` stays refused, on the reading that a consumer
+# which read the Phi before the back-edge widened it holds a claim that is now
+# wrong.
+#
+# The claim is wrong; the RESPONSE was. A widened Phi does not invalidate its
+# cone, it re-types it: Add(Phi/Int, Int) simply becomes Add(Phi/Num, Int), and
+# TypeLibrary already says what that yields. Measured, the graph this produces
+# is correct --
+#
+#     Phi in=[Constant/Int, Add/Num] stamp=Num     the accumulator, widened
+#     Phi in=[Constant/Int, Add/Int] stamp=Int     the counter, UNCHANGED
+#     Add in=[Phi/Num, Constant/Int] stamp=Num     the once-"stale" consumer
+#
+# -- and it round-trips: perl prints `u=1 u=1.5 t=1` and so does the emitted
+# program.
+#
+# The old predicate could not see this because it compared a consumer's RESULT
+# against its OPERAND's join. A comparison is where that shows: NumLt yields
+# Boolean for any operands, yet join(Boolean, Num) is Scalar, so every
+# comparison reading a widened Phi was flagged. Measured across the suite, ALL
+# 43 flagged nodes were comparisons -- NumLt 16, NumGt 14, NumEq 7, NumNe 5,
+# NumGe 1 -- and not one can be stale by construction.
+subtest 'a widening consumer is restamped, not refused' => sub {
+    my ($g, $err) = translate(
         'my $t=0; for my $i (1,2) { my $u = $t + 1; $t += 0.5 } print "$t\n";');
-    like $err, qr/GAP:/, 'refused';
-    like $err, qr/widening/, '... naming the widening';
+    unlike $err, qr/GAP:/, 'it translates' or diag $err;
+    ok $g, 'and produces a graph' or return;
+
+    # translate() returns the __PROGRAM__ METHOD, not the whole wire.
+    my @nodes = (($g->{nodes}) // [])->@*;
+    my %by = map { $_->{id} => $_ } @nodes;
+    my @phi = grep { ($_->{op} // '') eq 'Phi' } @nodes;
+
+    ok( ( grep { ($_->{stamp} // '') eq 'Num' } @phi ),
+        'the accumulator Phi widened to Num' );
+    ok( ( grep { ($_->{stamp} // '') eq 'Int' } @phi ),
+        'while the counter Phi is still Int' );
+
+    # No consumer may be left claiming a type NARROWER than what its inputs
+    # now yield -- that is the miscompile the old refusal was guarding, and
+    # restamping is what actually prevents it.
+    my @narrow = grep {
+        my $n = $_;
+        ($n->{op} // '') eq 'Add'
+            && ($n->{stamp} // '') eq 'Int'
+            && grep { (($by{$_}{stamp}) // '') eq 'Num' } (($n->{inputs}) // [])->@*
+    } @nodes;
+    is scalar(@narrow), 0, 'no Add is left stamped Int over a Num operand';
 };
 
 done_testing;
