@@ -169,3 +169,50 @@ and nothing else needs to change to adopt one.
    `+` lands on `Add` rather than on a sub named `+`.
 
 Claude-Session: https://claude.ai/code/session_01QYtFNnt2aXaRH2hrRvopyc
+
+## A prototype determines PARSE SHAPE, and it is derivable from the string
+
+Measured on 5.42.0, prompted by the pvm session (a Perl parser in Go) asking
+whether parse shape needs its own field beside a prototype. It does not:
+
+    no prototype    np(1,2,3)        swallows the list        LIST OPERATOR
+    ()              `nil + 1`        parses as nil() + 1      NILADIC
+    ($)             `one 1, 2`       parses as one(1), 2      NAMED UNARY
+    (;$)            `pass;` and `pass "x";` both parse        ZERO-OR-ONE
+
+The fourth has no slot in a list/unary/niladic enum, which is why the STRING is
+the right thing to keep and the shape should be derived from it. Same reason
+this project reads `prototype("CORE::$name")` rather than keeping a hand list
+(memory: op-names-are-not-perl-spellings).
+
+### The block-first form needs a LEADING `&`
+
+    sub bf (&@) { }   bf { ... } (1,2,3)   works
+    sub ao (&)  { }   ao { 42 }            works
+    sub na ($@) { }   na { 1 } (2,3)       syntax error near "} ("
+
+so it is not an option the caller may take -- without a leading `&` the block
+form does not parse at all. Non-initial `&` and `\&` do NOT license it (pvm
+measured these after I declined to claim them without evidence):
+
+    sub ni ($&) { }   ni { 1 } (2)   "Not enough arguments" AND a syntax error
+    sub rf (\&) { }   rf { 1 }       "Type of arg 1 ... must be subroutine
+                                      (not anonymous hash ({}))"
+
+In both, `{1}` parsed as an anonymous HASH and the failure came afterwards --
+so `&` is an ordinary code-ref slot outside the first position. Anchor on a
+leading `&` not preceded by a backslash; `strings.Contains(proto, "&")` gets
+the negative cases wrong.
+
+NOTE on the non-initial case: perl emits BOTH an arity error and a syntax
+error, so a test that asserts "arity error, not syntax error" is testing
+something perl does not promise.
+
+### Why this is recorded here
+
+If the declaration syntax above ever gets a parser, a prototype is a plausible
+third column beside `operands`/`result` -- a signature declares arity, a
+prototype declares PARSE arity, and they are different facts. `operands` is a
+COERCION CEILING (`Add => operands => ['Num','Num']` means "coerce both to
+Num", and `operands => []` imposes nothing), not a description of how a call is
+parsed. They must not be merged.
