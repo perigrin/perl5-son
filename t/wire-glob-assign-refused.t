@@ -33,8 +33,15 @@ sub f { *FH = shift; 1 }
 f(\*STDOUT);
 SRC
     like $err, qr/GAP:/, 'it is refused';
-    like $err, qr/glob/,        '... naming the construct';
-    like $err, qr/symbol-table/, '... and why a value store cannot carry it';
+    like $err, qr/glob/, '... naming the construct';
+    # THE REASON IS SPECIFIC TO THIS SHAPE. A glob binding whose RHS type IS
+    # known is lowered (t/wire-glob-assign-typed-binding.t); what refuses here
+    # is the one whose slot nothing in the graph can name, and the message has
+    # to say THAT rather than a blanket "no value store expresses it" -- the
+    # two refusals are different facts and conflating them hid the decidable
+    # case behind the undecidable one.
+    like $err, qr/not known until runtime/,
+        '... and that the slot is what is missing';
 };
 
 # THE REFUSAL IS SCOPED TO THE SUB THAT USES IT. __PROGRAM__ still translates,

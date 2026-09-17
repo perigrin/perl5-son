@@ -3542,6 +3542,54 @@ class SoN::FromOptree 0.01 {
         # "the six-character string STDOUT" -- which is what perl prints for
         # `print "STDOUT"` and emphatically not what it prints for
         # `print \*STDOUT` (GLOB(0x...)).
+        # rv2cv IS TO CODE WHAT rv2gv IS TO GLOBS, and the defect is the same
+        # one the block below fixes: the gv handler pushes the sub's NAME as a
+        # Str Constant, which is right where a name is wanted and a fabrication
+        # where the sub itself is the value. Measured, the optree separates
+        # them with this op:
+        #
+        #     foo()       gv[IV \&main::foo] -> entersub              no rv2cv
+        #     \&SRC       gv[IV \&main::SRC] -> rv2cv -> srefgen      rv2cv
+        #
+        # Left as Str, B::SoN's Ref rule -- "the reference kind follows the
+        # operand's kind" -- correctly concluded ScalarRef from what it was
+        # handed, so `our $x = \&SRC` shipped as a reference to a STRING. That
+        # is wrong in KIND rather than width: nothing downstream can call it.
+        #
+        # ONLY UNDER srefgen, unlike rv2gv. An rv2cv also sits on the CALL path
+        # (`&$code(...)`, and an ex-rv2cv under every entersub), where the name
+        # is still a name -- restamping there would break the callee lookup
+        # this file does by name. The parent op is the discriminator, and it is
+        # the same signal the srefgen handler above already reads.
+        #
+        # THE VALUE IS KEPT, exactly as rv2gv keeps it: there is no address at
+        # compile time, so the name is the only handle on WHICH sub this is.
+        # What changes is the claim about its type.
+        if ($name eq 'rv2cv' && $sim->stack_depth > 0) {
+            # THE LINK IS THROUGH NULLS. The walker runs with rpeep
+            # suppression, so exec order still threads the ex-list wrappers:
+            # measured, rv2cv's ->next is `null`, not `srefgen`. Reading one
+            # link found nothing and the restamp never fired -- the same shape
+            # as pmreplstart being null under suppression.
+            my $nx = $op->next;
+            $nx = $nx->next
+                while $$nx && $nx->name eq 'null' && ${ $nx->next };
+            my $under_srefgen = $$nx && $nx->name eq 'srefgen';
+
+            my $top = $sim->peek_node;
+            if ($under_srefgen && $top
+                && $top->isa('SoN::IR::Node::Constant')
+                && ($top->const_type // '') eq 'string'
+                && $top->stamp && $top->stamp->type eq 'Str') {
+                $sim->pop_node;
+                $sim->push_node($factory->make('Constant',
+                    value      => $top->value,
+                    const_type => 'code',
+                    stamp      => SoN::IR::Stamp->new(type => 'Code')));
+                return ($op->next, 'handled');
+            }
+        }
+
         if ($name eq 'rv2gv' && $sim->stack_depth > 0) {
             my $top = $sim->peek_node;
             if ($top && $top->isa('SoN::IR::Node::Constant')
@@ -5718,14 +5766,32 @@ class SoN::FromOptree 0.01 {
             # as one -- the name is the only compile-time handle on which glob
             # this is.
             #
-            # WHICH SLOT IS ALIASED IS A RUNTIME FACT, so there is no narrower
-            # lowering to reach for. perl picks by the RHS's type:
+            # WHICH SLOT IS ALIASED FOLLOWS THE RHS'S TYPE, and that is
+            # dispatch on type rather than a store into one of four locations
+            # -- which is why modelling it as Assign(target, value) never fit.
+            # perl picks by the RHS's type:
             #
             #     *D = \@SRC    aliases the ARRAY slot only; $D stays undef
             #     *D = *SRC     aliases EVERY slot -- scalar, array, hash, code
             #
-            # and `*FH = shift` names neither. Measured, ONE call site aliases
-            # a different slot per call:
+            # and `*FH = shift` names neither AT THE WALK. But most of the
+            # corpus does, one phase later: measured at this point,
+            #
+            #     *foo3 = sub {...}   AnonSub   CodeRef    known here
+            #     *foo3 = \\&SRC       Ref       Unknown    Ref rule: CodeRef
+            #     *crackers = \\@SRC   Ref       Unknown    Ref rule: ArrayRef
+            #     *d = \\$S            Ref       Unknown    Ref rule: ScalarRef
+            #     *D = *SRC           Constant  Glob       every slot at once
+            #     *FH = shift         Call      Unknown    a runtime fact
+            #
+            # and lib/B/SoN.pm's "\\OPERAND: the reference kind follows the
+            # operand's kind" derives exactly those three in the post-pass. So
+            # refusing all six here refused four for a PHASE ARTIFACT. The
+            # binding is recorded instead and the decision moves to where the
+            # types are known; only an all-slot Glob RHS is refused here, and
+            # a still-Unknown RHS is refused after inference.
+            #
+            # Measured, ONE call site aliases a different slot per call:
             #
             #     sub f { *D = shift }
             #     f(\@V);  # a[array] s[UNDEF]
@@ -5740,9 +5806,7 @@ class SoN::FromOptree 0.01 {
             # `@R::crackers`, the array slot, not a handle.
             elsif ($target->isa('SoN::IR::Node::Constant')
                 && ($target->const_type // '') eq 'glob') {
-                die "GAP: assigning to a glob (*" . ($target->value // '?')
-                  . ") is not yet lowered -- it aliases a symbol-table entry"
-                  . " for the whole program, which no value store expresses\n";
+                _glob_bind($factory, $sim, $target, $value);
             }
             else {
                 $sim->push_node($value);
@@ -11279,11 +11343,81 @@ class SoN::FromOptree 0.01 {
         return $f;
     }
 
-    sub _entry_store ($factory, $sim, $target, $value) {
+    # _glob_slot_sigil($type) -> sigil | undef
+    #
+    # THE RHS'S TYPE SELECTS THE SLOT, and the slot IS a sigil -- measured:
+    #
+    #     our @SRC=(1,2,3); our $SRC="scalar"; sub SRC { "code" }
+    #     *D1 = \@SRC  ->  @D1 = 1 2 3   $D1 = UNDEF    the ARRAY slot alone
+    #     *D2 = \$SRC  ->  $D2 = scalar  @D2 = 0 elems  the SCALAR slot alone
+    #     *D3 = \&SRC  ->  D3() = code                  the CODE slot alone
+    #
+    # so a glob assignment is a BINDING at a type, not a store into one of four
+    # locations. NO NEW VOCABULARY: an EntryDef already carries a sigil as part
+    # of its IDENTITY (its own comment: "$_ and @_ are DIFFERENT variables"),
+    # which means a later read of `@crackers` hash-conses to the very node this
+    # binding writes. A separate `slot` field would have said the same thing in
+    # a second spelling that nothing else on the wire reads.
+    #
+    # GlobRef is deliberately absent: `*D = \*SRC` binds the GLOB slot, which is
+    # every slot at once, and that is the refusal below rather than a sigil.
+    sub _glob_slot_sigil ($type) {
+        return undef unless defined $type;
+        return '@' if $type eq 'ArrayRef';
+        return '%' if $type eq 'HashRef';
+        return '&' if $type eq 'CodeRef';
+        return '$' if $type eq 'ScalarRef';
+        return undef;
+    }
+
+    # _glob_bind($factory, $sim, $target, $value)
+    #
+    # Record `*NAME = RHS` as a typed binding. Three cases, and only one of
+    # them is a fact that refuses here:
+    #
+    #   RHS is a known ref kind   bind that slot now.
+    #   RHS is a Glob             aliases EVERY slot -- refuse, and say so.
+    #   RHS type is not yet known bind at the sigil the post-pass derives.
+    #                             _glob_pending_slot resolves it there; if it
+    #                             is still Unknown after inference, THAT is
+    #                             where the refusal belongs, because that is
+    #                             where the fact is finally absent.
+    #
+    # The glob's own name is the only compile-time handle on which entry this
+    # is -- rv2gv restamped the gv as a glob Constant, so the name is on the
+    # Constant's value, spelled `main::FH` or bare.
+    sub _glob_bind ($factory, $sim, $target, $value) {
+        my $name = $target->value // '';
+        $name =~ s/\A\*//;
+        my ($pkg, $sym) = $name =~ /\A(.*)::([^:]+)\z/
+            ? ($1, $2) : ('main', $name);
+
+        my $type = $value->stamp ? $value->stamp->type : undef;
+
+        die "GAP: assigning a glob to a glob (*$sym = *...) aliases every slot"
+          . " -- scalar, array, hash and code at once -- which no single typed"
+          . " binding expresses\n"
+            if defined $type && ($type eq 'Glob' || $type eq 'GlobRef');
+
+        my $sigil = _glob_slot_sigil($type) // '*';
+
+        my $entry = $factory->make('EntryDef',
+            package => $pkg,
+            sigil   => $sigil,
+            symbol  => $sym);
+        # BINDS, NOT STORES -- see EntryWrite's own comment. Rendered as a
+        # store the emitted program is wrong, not imprecise.
+        _entry_store($factory, $sim, $entry, $value, 1);
+        $sim->push_node($value);
+        return;
+    }
+
+    sub _entry_store ($factory, $sim, $target, $value, $binds = 0) {
         return unless $target
             && $target->isa('SoN::IR::Node::EntryDef')
             && defined $sim->memory;
         my $write = $factory->make('EntryWrite',
+            binds  => $binds,
             inputs => [$target, $value, $sim->memory]);
         $write->set_control_in($sim->control);
         $sim->set_control($write);

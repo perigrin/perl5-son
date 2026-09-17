@@ -177,6 +177,12 @@ sub _extract_fields ($node, $id_remap) {
             sigil => $node->sigil,
         };
     }
+    # A BINDING IS NOT A STORE. `*g = \@a` aliases the NAME; `$g = \@a` stores a
+    # reference. Emitted only when true, so an ordinary store is unchanged on
+    # the wire.
+    if ($op eq 'EntryWrite') {
+        return $node->binds ? { binds => JSON::PP::true } : undef;
+    }
     if ($op eq 'EntryDef') {
         return {
             package => $node->package,

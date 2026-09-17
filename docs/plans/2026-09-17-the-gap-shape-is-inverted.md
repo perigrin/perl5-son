@@ -70,9 +70,13 @@ An external one cannot be. The graph distinguishes them and nothing acts on it.
 
 ## Remaining work
 
-1. Move type-dependent GAPs to the post-pass. The glob assign is the worked
-   example (docs/plans/2026-09-17-a-glob-assignment-is-a-typed-binding.md): 3
-   of its 5 corpus occurrences have a knowable RHS type.
+1. DONE for the worked example. The glob assign now records during the walk and
+   resolves its slot in `B::SoN::_resolve_glob_slots`, after inference. Measured
+   across t/base, t/comp and t/cmd: glob-assign GAPs 5 -> 2, and both survivors
+   are `base/rs.t`'s `*FH = shift`, the genuinely undecidable case. The pattern
+   generalises: record the fact, refuse where the answer is finally absent.
+   Details, and two defects it uncovered, in
+   docs/plans/2026-09-17-a-glob-assignment-is-a-typed-binding.md.
 2. Audit the other 10 kinds against "is this a fact or a phase artifact". The
    convergence ones ("did not converge") read like artifacts; the arity ones
    read like facts.

@@ -257,7 +257,110 @@ sub _discover_and_translate {
 
     _resolve_deferred_stamps( \%graphs, \%classes );
 
+    # AFTER INFERENCE, NOT DURING THE WALK. A glob binding's slot follows the
+    # RHS's TYPE, and the walk does not have one yet -- see _resolve_glob_slots.
+    _resolve_glob_slots( \%graphs );
+
     return ( \%graphs, \%classes );
+}
+
+# _resolve_glob_slots(\%graphs) -- fill in which slot a glob assignment binds,
+# now that the RHS has a type, and refuse only where it still has none.
+#
+# `*NAME = RHS` binds ONE slot and the RHS's type picks which -- measured:
+#
+#     our @SRC=(1,2,3); our $SRC="scalar"; sub SRC { "code" }
+#     *D1 = \@SRC  ->  @D1 = 1 2 3   $D1 = UNDEF    the ARRAY slot alone
+#     *D2 = \$SRC  ->  $D2 = scalar  @D2 = 0 elems  the SCALAR slot alone
+#     *D3 = \&SRC  ->  D3() = code                  the CODE slot alone
+#
+# THE PRODUCER CANNOT ANSWER THAT. Measured at its sassign handler, four of the
+# six corpus shapes arrive with stamp=Unknown -- `*foo3 = \&SRC`, `*crackers =
+# \@SRC` and `*d = \$S` among them -- because the rule that types them ("\OPERAND:
+# the reference kind follows the operand's kind", _derived_type above) runs HERE,
+# one phase later. The walk records the binding with a placeholder `*` sigil and
+# this pass replaces it with the slot the type selects.
+#
+# WHAT STILL REFUSES, and why it is a FACT rather than a phase artifact:
+# `*FH = shift` is a Call whose type nothing in the graph narrows, and perl
+# itself defers the choice -- measured, ONE call site aliases a different slot
+# per call:
+#
+#     sub f { *D = shift }
+#     f(\@V);  # a[array] s[UNDEF]
+#     f(\$V);  # s[scalar]
+#
+# So the refusal moves to where the answer is finally known to be absent. The
+# graph is dropped the way _refuse_orphan_anon_bodies drops one: keeping it
+# would ship a binding that names no slot.
+sub _resolve_glob_slots {
+    my ($graphs) = @_;
+    my $factory = SoN::IR::NodeFactory->new;
+
+    # The same map the producer uses, and for the same reason: the slot IS a
+    # sigil, which an EntryDef already carries as part of its identity.
+    my %SLOT = (
+        ArrayRef  => '@',
+        HashRef   => '%',
+        CodeRef   => '&',
+        ScalarRef => '$',
+    );
+
+    for my $gname ( sort keys $graphs->%* ) {
+        my $graph = $graphs->{$gname} or next;
+        my @unresolved;
+
+        for my $node ( $graph->nodes->@* ) {
+            next unless $node->operation eq 'EntryWrite';
+            my @in = ( $node->inputs // [] )->@*;
+            my $entry = $in[0] or next;
+            next unless $entry->operation eq 'EntryDef';
+            next unless ( eval { $entry->sigil } // '' ) eq '*';
+
+            my $value = $in[1];
+            my $type  = $value && $value->stamp ? $value->stamp->type : 'Unknown';
+
+            # A glob RHS reaching here means inference DERIVED it rather than
+            # the walk seeing it; it is the same all-slot alias either way.
+            if ( $type eq 'Glob' || $type eq 'GlobRef' ) {
+                push @unresolved, [ $entry->symbol, 'every slot' ];
+                next;
+            }
+
+            my $sigil = $SLOT{$type};
+            if ( !defined $sigil ) {
+                push @unresolved, [ $entry->symbol, 'runtime' ];
+                next;
+            }
+
+            # REPLACED, NOT MUTATED. The sigil is part of an EntryDef's
+            # content_hash AND of its node id -- setting it in place would
+            # leave a node filed in the factory cache under a hash its content
+            # no longer matches, and would defeat the very consing this exists
+            # for: a later read of `@crackers` must reach THIS node. Building
+            # the resolved EntryDef through the factory conses it correctly,
+            # and the same input-swap `_insert_type_coercions` already uses
+            # puts it in place.
+            my $bound = $factory->make( 'EntryDef',
+                package => $entry->package,
+                sigil   => $sigil,
+                symbol  => $entry->symbol );
+            $node->inputs->[0] = $bound;
+            $graph->merge($bound);
+        }
+
+        next unless @unresolved;
+        delete $graphs->{$gname};
+        my ( $sym, $why ) = $unresolved[0]->@*;
+        warn "B::SoN: skipped $gname: GAP: assigning to a glob (*$sym) "
+           . ( $why eq 'every slot'
+               ? "aliases every slot -- scalar, array, hash and code at once"
+                 . " -- which no single typed binding expresses"
+               : "is not yet lowered -- which slot it aliases is not known"
+                 . " until runtime, and perl itself defers the choice" )
+           . "\n";
+    }
+    return;
 }
 
 # _refuse_orphan_anon_bodies(\%graphs) -- drop any anon body that nothing

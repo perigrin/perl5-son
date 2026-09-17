@@ -76,3 +76,79 @@ one call site aliases different slots on different calls still stands, and no
 phase reordering touches it.
 
 Claude-Session: https://claude.ai/code/session_01QYtFNnt2aXaRH2hrRvopyc
+
+## What landed, and what it cost
+
+perigrin: technically we are a compiler FRONT END -- perl's parser is upstream,
+chalk's backend lowers our IR, and the deparser is a testing consumer.
+
+The phase move is done. `_glob_bind` records the binding during the walk and
+`B::SoN::_resolve_glob_slots` fills in the slot after inference, where the Ref
+rule has run. Measured across t/base, t/comp and t/cmd:
+
+    glob-assign GAPs   5  ->  2
+
+and both survivors are `base/rs.t`'s `*FH = shift`, in `test_record` and
+`test_string` -- case (3), which this doc predicted would stay refused.
+`comp/proto.t`, `base/lex.t` and `comp/form_scope.t` now translate.
+
+## NO NEW VOCABULARY FOR THE SLOT, one flag for the EVENT
+
+The slot is a SIGIL, which an EntryDef already carries as part of its identity
+-- so a later read of `@crackers` hash-conses to the very node the binding
+writes, and a separate `slot` field would have been a second spelling nothing
+else reads.
+
+The post-pass REPLACES that EntryDef rather than mutating it: the sigil is in
+content_hash AND is the node's id, so setting it in place would file a node
+under a hash its content no longer matches. The input-swap `_insert_type_
+coercions` already uses is the established shape.
+
+What DID need a new field is `EntryWrite.binds`, and it is about the EVENT, not
+the variable: `$g = \@a` stores a reference, `*g = \@a` aliases a name, and both
+advance the memory chain over a stash entry. Rendered as a store, a binding is a
+WRONG ANSWER -- measured, `*crackers = \@SRC; print "@crackers"` emitted
+`@main::crackers = \(@main::SRC);` and printed nothing where perl prints 1 2 3.
+
+## TWO DEFECTS THE CHANGE UNCOVERED, both fixed
+
+1. `\&NAME` WAS A ScalarRef. The gv handler pushes a sub's name as a Str
+   Constant, so the Ref rule -- correctly, from what it was handed -- called
+   `our $x = \&SRC` a reference to a STRING. `rv2cv` is to code what `rv2gv`
+   is to globs, and the optree separates them:
+
+       foo()     gv[IV \&main::foo] -> entersub              no rv2cv
+       \&SRC     gv[IV \&main::SRC] -> rv2cv -> srefgen      rv2cv
+
+   restamped Str -> Code under srefgen only (an rv2cv on the CALL path still
+   wants a name). The link is threaded through NULLS under rpeep suppression --
+   reading one ->next link found `null` and the restamp never fired.
+
+2. `\(@a)` IS NOT `\@a`. The Ref renderer parenthesised unconditionally, and
+   for an aggregate that changes the program:
+
+       our @SRC=(1,2,3); *c = \(@SRC);  ->  $c is 3, @c is empty
+       our @SRC=(1,2,3); *c = \@SRC;    ->  @c is 1 2 3
+
+   The parens exist for a real reason (`\$x . "y"`), so they are dropped only
+   for a bare aggregate read, which no binary operator can be.
+
+## Remaining work
+
+1. A Ref over an `our` ARRAY drops the array's initialiser. Measured on a CLEAN
+   tree with no glob involved:
+
+       our @SRC=(1,2,3); my $r=\@SRC; print scalar(@$r);
+         perl     3
+         emitted  (empty)   -- the ArrayLiteral holding (1,2,3) is not in the graph
+
+   This is pre-existing and independent; it blocks two round-trip cases in
+   t/deparse-glob-binding-is-an-alias.t, which are TODO with this evidence.
+
+2. A CALL THROUGH A BOUND NAME is refused by the missing-callee check, which
+   cannot see that a binding installs the name. An honest refusal, not a
+   miscompile, and TODO in the same file.
+
+3. `base/rs.t` stays refused, as predicted.
+
+Claude-Session: https://claude.ai/code/session_01QYtFNnt2aXaRH2hrRvopyc

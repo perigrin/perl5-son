@@ -33,9 +33,20 @@ use SoN::IR::Value;
 #
 # NEVER HASH-CONSED, for CellWrite's reason: two writes of the same value to
 # the same variable are two distinct events.
+# A BINDING IS NOT A STORE, and the wire has to say which. `$g = \@a` puts a
+# REFERENCE in the scalar slot; `*g = \@a` makes the NAME `@g` refer to `@a`.
+# Both advance the memory chain over a stash entry, so the node kind alone
+# cannot separate them -- and rendered as a store, a binding is a wrong answer
+# rather than an imprecise one: measured, `*crackers = \@SRC; print "@crackers"`
+# printed nothing where perl prints "1 2 3".
+#
+# The flag rides on the WRITE rather than the entry because it describes the
+# EVENT, not the variable: the same `@crackers` can be bound once and stored
+# into afterwards, and the entry must stay one hash-consed node for both.
 class SoN::IR::Node::EntryWrite :isa(SoN::IR::Value) {
     my $write_counter = 0;
     field $write_id :reader;
+    field $binds :param :reader = 0;
 
     ADJUST { $write_id = $write_counter++; }
 

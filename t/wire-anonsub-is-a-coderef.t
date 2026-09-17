@@ -68,12 +68,39 @@ subtest 'an anon sub merged with a scalar does not collapse to Unknown' => sub {
 
 # A NAMED SUB IS NOT AN ANON SUB. `\&foo` is also a CODE ref, but it takes a
 # different path; asserted so the fix is not assumed to cover it.
+#
+# THE RULE IS ABOUT VALUES, NOT REFERENTS. `Code` is the CV itself and `CodeRef`
+# is what a scalar can hold, which is why a bare `Code` where a value belongs
+# poisons a merge. A REFERENT is neither: `\&foo` is a reference TO a CV, so
+# its operand is a Code and the Ref over it is a CodeRef -- exactly the shape
+# `\*STDOUT` already has, measured in the same tree:
+#
+#     Constant Glob "STDOUT"  ->  Ref GlobRef
+#     Constant Code "foo"     ->  Ref CodeRef
+#
+# This subtest read "no node is stamped Code", which held only while `\&foo`
+# was BROKEN: the sub name arrived as a Str constant and the Ref rule concluded
+# ScalarRef, so `my $c = \&foo` claimed a reference to a string while perl's
+# own ref($c) says CODE. The check is narrowed to what it was protecting --
+# nothing a scalar HOLDS is a bare Code -- rather than dropped.
 subtest 'a code ref taken with \\& is also a reference' => sub {
     my $nodes = nodes_of('sub foo { 1 } my $c = \&foo; print ref($c);', 'named');
-    my @code = grep { ($_->{stamp} // '') eq 'Code' } $nodes->@*;
-    is scalar(@code), 0,
-        'nothing in a \&foo program is stamped as a bare Code'
-        or diag explain [ map { { op => $_->{op}, s => $_->{stamp} } } @code ];
+
+    my ($ref) = grep { $_->{op} eq 'Ref' } $nodes->@*;
+    ok defined $ref, 'a Ref node is built' or return;
+    is $ref->{stamp}, 'CodeRef',
+        'perl says ref(\&foo) is CODE, so the reference is a CodeRef';
+
+    # Every Code-stamped node must be a REFERENT -- the operand of a Ref --
+    # and never a value standing on its own.
+    my %referent = map { $_ => 1 }
+        map { ( $_->{inputs} // [] )->@* }
+        grep { $_->{op} eq 'Ref' } $nodes->@*;
+    my @loose = grep { ( $_->{stamp} // '' ) eq 'Code' && !$referent{ $_->{id} } }
+        $nodes->@*;
+    is scalar(@loose), 0,
+        'no bare Code stands where a scalar would hold it'
+        or diag explain [ map { { op => $_->{op}, s => $_->{stamp} } } @loose ];
 };
 
 done_testing;
