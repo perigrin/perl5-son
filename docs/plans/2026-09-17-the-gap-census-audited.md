@@ -25,7 +25,7 @@ message. Two of them contradict the message's own wording, which is why.
     1  loop-carried value loses its stamp            ARTIFACT (see 1c2e543)
     1  function exit inside a loop body              ARTIFACT
     1  element store in a nested one-armed branch    ARTIFACT
-    1  a loop inside a branch arm                    ARTIFACT (reduced; see 4)
+    -  a loop inside a branch arm                    FIXED (see 4)
 
 ## THE PLAN'S HYPOTHESIS WAS HALF RIGHT
 
@@ -80,10 +80,10 @@ cases have no callee to find.
 perigrin's position: the only thing that should GAP is eval of a string read
 from outside the system. The audit says the corpus is nearly there --
 
-    genuine facts   5 of 17   glob-from-a-Call (x2), undef(*GLOB),
+    genuine facts   5 of 16   glob-from-a-Call (x2), undef(*GLOB),
                               `write` format, map-arity via &{$sub} (x2)
-    artifacts      12 of 17
-    unclassified    0 of 17
+    artifacts      11 of 16
+    unclassified    0 of 16
 
 and none of the four is string eval, which still does not GAP (it becomes
 `Coerce(Scalar -> Code)` -- see the parent plan).
@@ -110,35 +110,37 @@ and none of the four is string eval, which still does not GAP (it becomes
    t/comp and t/cmd do not exercise it. A real lowering, not a coverage win.
 3. The `continue`-block and function-exit-in-loop kinds are control flow the
    walker does not model. Real work, correctly refused today.
-4. REDUCED AND CLASSIFIED: ARTIFACT. My "did not reproduce" was wrong, and
-   wrong for an instructive reason -- the probe I used happened to miss the
-   trigger by one property.
+4. DONE. Reduced, classified as an artifact, and fixed.
 
-   It reproduces in four lines, from the most obvious shape there is:
+   ROOT CAUSE, one line: OpMap declares `leaveloop => [2, ...]` -- pop two. At
+   top level that never fires, because the main walk handles `leaveloop`
+   itself (restore locals, step past) and never reaches _step. A branch arm
+   had no such handler, so it fell through, honoured the pop, and underflowed.
 
-       my $c = 1;
-       if ($c) { for my $x (1, 2) { print "x$x\n" } }
+   THE GUARD WAS RIGHT AND THE POP WAS WRONG. Bypassing the refusal gives the
+   real `Stack underflow at StackSim.pm line 25` -- the crash in perl's own
+   t/op/try.t that the guard was added to convert into an honest refusal. So
+   this is fixed at the source and the refusal is gone, not relaxed.
 
-   THE TRIGGER IS A CONTROL-ADVANCING EFFECT IN THE BODY, not the loop form
-   and not the branch. Measured, all inside `if ($c) { for ... }`:
+   THE OLD GUARD MEASURED STACK RESIDUE, NOT THE LOOP. It refused on
+   `stack_depth < 2`; the body is walked three times and only the leftovers
+   differ:
 
-       $s += $x            translates
-       push @a, $x         translates
-       print "x\n"         GAP
-       warn "w\n"          GAP
+       $s += $x     leaves 1 per walk   depth 3   passed
+       print "x"    leaves 0 per walk   depth 1   refused
 
-   and the same `print` loop OUTSIDE a branch translates. So it is the
-   combination: a loop in a branch arm whose body advances the CONTROL chain.
-   My earlier probe used `$s += $i`, a pure accumulate -- one of the two forms
-   that works.
+   and the prediction held both ways -- `print; $s += $x` passed while
+   `print; print` refused, with nothing about the loop different.
+
+   WHY IT HID FOR SO LONG, and why my first audit entry said "did not
+   reproduce": t/from-optree-loop-in-arm.t pins loops-in-arms with a body of
+   `$n = $n + $i`, one of the residue-leaving shapes, and my own probe used
+   `$s += $i`. The existing coverage had exactly the blind spot I did.
+   t/from-optree-loop-in-arm-effect-body.t now covers the effect-bodied forms.
 
    In comp/utf.t the enclosing branch is `next if $enc eq 'UTF-8'` (line 65),
-   a statement-modifier loop-exit whose not-taken path holds the remaining
-   `for` loops. `next` is incidental: `next if` alone translates, and so do
-   several statements after it.
+   whose not-taken path holds the remaining `for` loops. `next` was incidental.
 
-   An ARTIFACT: nothing about the program is unknowable. The walker's branch
-   handling does not thread a nested loop's control chain, which is why the
-   leaveloop "arrived without its operands".
+   Corpus: 17 -> 16 GAPs. comp/utf.t and t/op/try.t both translate.
 
 Claude-Session: https://claude.ai/code/session_01QYtFNnt2aXaRH2hrRvopyc

@@ -10881,9 +10881,32 @@ class SoN::FromOptree 0.01 {
             # t/from-optree-loop-in-arm.t, which pins that a foreach in an arm
             # translates -- the loops that WORK reach leaveloop with their
             # operands present, and only the untranslated forms arrive short.
-            if ($name eq 'leaveloop' && $sim->stack_depth < 2) {
-                die "GAP: a loop inside a branch arm whose form is not yet"
-                  . " lowered (its leaveloop arrived without its operands)\n";
+            # `leaveloop` IS NOT A VALUE OP, AND THE MAIN WALK ALREADY KNOWS
+            # IT. OpMap declares `leaveloop => [2, ...]` -- pop two -- and at
+            # top level that never fires, because the main walk handles
+            # leaveloop itself (restore locals, step past) and never reaches
+            # _step. A branch arm had no such handler, so it fell through,
+            # honoured the pop, and underflowed.
+            #
+            # THE OLD GUARD MEASURED STACK RESIDUE, NOT THE LOOP. It refused on
+            # `stack_depth < 2`, which a body that happens to leave a value
+            # satisfies by accident -- measured, the body is walked three times
+            # and only the leftovers differ:
+            #
+            #     $s += $x     leaves 1 per walk   depth 3   passed
+            #     print "x"    leaves 0 per walk   depth 1   refused
+            #
+            # and the prediction held both ways: `print; $s += $x` passed while
+            # `print; print` refused. Nothing about the loop differed. That is
+            # also why t/from-optree-loop-in-arm.t missed this -- its body is
+            # `$n = $n + $i`, one of the residue-leaving shapes.
+            #
+            # Handling it here the way the main walk does removes the underflow
+            # at its source, so the refusal is gone rather than relaxed.
+            if ($name eq 'leaveloop') {
+                _restore_locals($sim, $ctx, $factory);
+                $op = $op->next;
+                next;
             }
 
             my ($next, $sig) = _step($cv, $op, $sim, $factory, $opmap, $ctx);
