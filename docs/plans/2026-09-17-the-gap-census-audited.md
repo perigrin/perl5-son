@@ -14,7 +14,7 @@ message. Two of them contradict the message's own wording, which is why.
 ## Census (t/base, t/comp, t/cmd -- 17 GAPs, 13 kinds)
 
     3  a bare block with a `continue` block          ARTIFACT
-    2  map body contribution of unknown arity        BOTH -- see below
+    2  map body contribution of unknown arity        FACT (both are &{$sub})
     2  assigning to a glob (*FH = shift)             FACT
     1  `write` whose format is not installed         FACT
     1  void-context 'or' arm did not converge        ARTIFACT
@@ -43,44 +43,57 @@ CORRECT where it fires -- its comment says it refuses rather than "emit a
 straight-line merge that silently computes one iteration," which is the right
 call. What is an artifact is that `until` reaches it at all.
 
-### map arity is TWO CASES refused as one
+### map arity: I CALLED THIS AN ARTIFACT AND IT IS A FACT IN THIS CORPUS
 
-This is the inverted shape again, and the sharper example than the glob was.
+Corrected after reading the refusal site and the two files that reach it. The
+first version of this audit said the refusal "reads the stamp" and could be
+split. Both halves were wrong.
 
-    sub gen { return (1,2) }                        FIXED arity
-    sub gen { return $n > 1 ? (1,2) : (9) }         DATA-DEPENDENT
+IT DOES NOT READ THE STAMP. It keys on node kind plus an explicit, measured
+list of scalar builtins, and its own comment already states the finding I
+thought I was making:
 
-Measured, the fixed-arity callee's graph carries the count:
+    "a user sub's arity is a property of the CALLEE that the graph does not
+     carry -- measured, `sub g {42}` yields 1 and `sub g { ($_[0],$_[0]) }`
+     yields 2 from an identical callsite"
 
-    main::gen
-      3 ArrayLiteral List [1, 2]
-      5 Return [3, 4]
+AND BOTH CORPUS OCCURRENCES ARE UNNAMEABLE. comp/proto.t:351 and :368 are
 
-and its sub record says `return_type: List`. So the TYPE is known and the
-COUNT is known, for this callee -- but the refusal reads only the type, and
-`List` cannot say 2. The data-dependent case has no static count at all and is
-a genuine FACT.
+    print map { &{$sub}($_) } @{$array}
 
-One refusal covers both. The fixed case is an artifact of asking the stamp
-instead of the Return.
+a coderef call through a variable. There is no compile-time name, so no
+post-pass lookup can reach a callee -- this is `*FH = shift` again, and it is
+a FACT.
+
+A NAMED fixed-arity callee IS an artifact -- `sub gen { return (1,2) }` puts
+`Return [ArrayLiteral[1,2], ...]` in the graph, and `map { gen($_) }` still
+refuses. But no corpus file exercises it: the two files with a named call in a
+map body (comp/retainedlines.t, comp/utf.t) do not GAP here. Fixing it would
+be building for a case nothing measures.
+
+The phase story is the same as the glob's -- FromOptree walks ONE CV and has
+no access to a callee's graph -- but the payoff is not, because the corpus
+cases have no callee to find.
 
 ## WHAT SHOULD GAP, RESTATED
 
 perigrin's position: the only thing that should GAP is eval of a string read
 from outside the system. The audit says the corpus is nearly there --
 
-    genuine facts   4 of 17   glob-from-a-Call, undef(*GLOB), `write` format,
-                              and the data-dependent half of map arity
-    artifacts      13 of 17
+    genuine facts   5 of 17   glob-from-a-Call (x2), undef(*GLOB),
+                              `write` format, map-arity via &{$sub} (x2)
+    artifacts      11 of 17
+    unclassified    1 of 17   comp/utf.t's loop-in-branch
 
 and none of the four is string eval, which still does not GAP (it becomes
 `Coerce(Scalar -> Code)` -- see the parent plan).
 
 ## Remaining work
 
-1. Split the map-arity refusal. A Call whose callee's Return carries a literal
-   list has a known contribution; only a data-dependent one refuses. Same
-   shape as the glob fix: read the graph, not the stamp.
+1. WITHDRAWN. Both corpus occurrences call through a coderef variable, which
+   has no compile-time callee -- a fact, correctly refused. The named-callee
+   case is a real artifact but no corpus file exercises it; splitting the
+   refusal would be speculative work. Revisit if a corpus file reaches it.
 2. `until` is a missing lowering, not a fact. It is the cheapest artifact here
    -- `while` already works.
 3. The `continue`-block and function-exit-in-loop kinds are control flow the
