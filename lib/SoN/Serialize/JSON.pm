@@ -565,7 +565,19 @@ sub to_json ($named_graphs, $classes = undef) {
 
     # The declarative class section (4c): name, parent, fields, method-refs.
     # Chalk's loader replays it through the MOP declare_*/seal API.
-    $data->{classes} = $classes if defined $classes && %$classes;
+    #
+    # THE MODEL DOES NOT SPEAK JSON. These flags are built as plain 0/1 by
+    # B::SoN, and the encoder's boolean type is applied HERE, at the boundary,
+    # where it belongs -- a record that reached for JSON::PP::true while being
+    # constructed made the producer's data model depend on its serializer.
+    #
+    # The conversion is not cosmetic: this section is emitted RAW (there is no
+    # _extract_fields pass over it), so a plain 1 would reach the wire as `1`
+    # where chalk's loader declared a boolean. t/wire-booleans-are-json-booleans.t
+    # pins the emitted text for exactly that reason -- a decoded comparison
+    # cannot tell `true` from `1`, because JSON::PP decodes them equal.
+    $data->{classes} = _json_booleans($classes)
+        if defined $classes && %$classes;
 
     # ->utf8 BECAUSE THE WIRE IS BYTES AND THE VALUES ARE CHARACTERS.
     # Without it `encode` returns a character string, and printing that to a
@@ -588,6 +600,30 @@ sub to_json ($named_graphs, $classes = undef) {
     # carry text. See docs/plans/2026-09-13-the-wire-is-not-valid-utf8.md,
     # which also records the measurement I first got backwards.
     return JSON::PP->new->canonical->pretty->utf8->encode($data);
+}
+
+# _json_booleans($data) -- copy a structure, re-typing the known boolean keys
+# as the encoder's booleans.
+#
+# KEYED ON THE FIELD NAME, not on the value's shape. Perl cannot tell a boolean
+# 1 from the integer 1, so "looks like 0 or 1" would also convert `fieldix => 0`
+# and any count that happened to be 1. The producer knows which fields ARE
+# booleans; that list is the fact, and it lives here rather than in the model.
+my %BOOLEAN_FIELD = map { $_ => 1 } qw(
+    uses_args is_reader invocant has_default is_param
+);
+
+sub _json_booleans ($data) {
+    if (ref $data eq 'HASH') {
+        return { map {
+            my $v = $data->{$_};
+            $_ => ( $BOOLEAN_FIELD{$_} && !ref $v
+                    ? ( $v ? JSON::PP::true : JSON::PP::false )
+                    : _json_booleans($v) )
+        } keys %$data };
+    }
+    return [ map { _json_booleans($_) } @$data ] if ref $data eq 'ARRAY';
+    return $data;
 }
 
 1;

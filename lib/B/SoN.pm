@@ -2562,7 +2562,7 @@ sub _record_sub {
     $classes->{$pkg_name}{subs}{$name} = {
         name      => $name,
         graph     => $full_name,
-        uses_args => ( _cv_uses_args($cv) ? JSON::PP::true : JSON::PP::false ),
+        uses_args => ( _cv_uses_args($cv) ? 1 : 0 ),
         # THE DECLARED SIGNATURE, read from argcheck/argelem rather than
         # inferred. `params` is kept as the flat positional list for existing
         # consumers; `signature` carries what params alone cannot say -- whether
@@ -2760,7 +2760,7 @@ sub _extract_class {
         my $has_method_attr = $cv->CvFLAGS & 0x1;        # legacy :method attr
         my $is_method       = $cv->CvFLAGS & 0x100000;   # CVf_IsMETHOD
         if ( !$has_method_attr && ( my $f = $field_by_short{$name} ) ) {
-            $f->{is_reader} = JSON::PP::true;
+            $f->{is_reader} = 1;
 
             # AND RECORD IT AS A METHOD. A `:reader` IS a callable method of
             # this class, and leaving it out of {methods} made it findable
@@ -2804,7 +2804,7 @@ sub _extract_class {
             # sits outside `arguments`; that fact does not transfer).
             $class{method_signatures}{$name} = {
                 _cv_signature($cv)->%*,
-                invocant => JSON::PP::true,
+                invocant => 1,
             };
 
             # The RETURN TYPE rides in its own sibling map, for the same reason
@@ -2971,7 +2971,7 @@ sub _wire_field_defaults {
 
         my $key = "${pkg_name}::__DEFAULT_${fix}";
         $graphs->{$key} = SoN::IR::Graph->new( start => $start, returns => [$ret] );
-        $f->{has_default} = JSON::PP::true;
+        $f->{has_default} = 1;
         $f->{default_ref} = $key;
         # A DEFAULT TYPES A FIELD ONLY WHEN NOTHING OUTSIDE CAN WRITE IT.
         #
@@ -3117,7 +3117,7 @@ sub _extract_fields {
             push @fields, {
                 name       => $name,
                 fieldix    => $ix,
-                is_param   => ( $is_param ? JSON::PP::true : JSON::PP::false ),
+                is_param   => ( $is_param ? 1 : 0 ),
                 param_name => $param_name,
             };
             $ix++;
