@@ -3742,8 +3742,40 @@ class SoN::FromOptree 0.01 {
             # NOT a change to content_hash -- excluding control_in is
             # load-bearing for pure expressions, and adding it would un-CSE
             # every statement-position call.
+            # `eval EXPR` IS TWO CONVERSIONS, NOT ONE. perl stringifies the
+            # operand and compiles the STRING, and that step is observable
+            # rather than an implementation detail -- measured on 5.42.0:
+            #
+            #     package O; use overload q{""} => sub { "1+1" }, fallback=>1;
+            #     my $r = eval bless({}, "O");        $r is 2
+            #
+            # perl called `""` to get "1+1" and compiled that. So a single
+            # Coerce(Scalar -> Code) claimed a Scalar becomes Code directly and
+            # hid a step the program performs.
+            #
+            # IT MATTERS TO A CONSUMER because the two halves have different
+            # lowerability: stringification is ordinary and every T2 can
+            # already do it, while only the OUTER conversion is the
+            # un-lowerable "compile arbitrary perl". Fused, a consumer cannot
+            # tell which half it is refusing.
+            #
+            # ONLY WHEN THERE IS SOMETHING TO CONVERT. `eval "1 + 2"` is
+            # already a Str, and inserting an identity Coerce there would be
+            # noise -- Str is what the compile step wants.
+            my $src_type = defined $src->stamp ? $src->stamp->type : 'Str';
+            if ( $src_type ne 'Str' ) {
+                # make_unique for the same reason the compile step below uses
+                # it: this rides the eval's effect, and an eval must happen
+                # once per occurrence.
+                $src = $factory->make_unique('Coerce',
+                    from_repr => $src_type,
+                    to_repr   => 'Str',
+                    inputs    => [$src],
+                    stamp     => SoN::IR::Stamp->new(type => 'Str'));
+                $src_type = 'Str';
+            }
             my $code = $factory->make_unique('Coerce',
-                from_repr => (defined $src->stamp ? $src->stamp->type : 'Str'),
+                from_repr => $src_type,
                 to_repr   => 'Code',
                 inputs    => [$src],
                 stamp     => SoN::IR::Stamp->new(type => 'Code'));

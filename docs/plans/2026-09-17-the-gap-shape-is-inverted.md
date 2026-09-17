@@ -90,10 +90,25 @@ An external one cannot be. The graph distinguishes them and nothing acts on it.
    lowers perl to perl and emits `eval($x)`; chalk cannot lower
    `Coerce(Scalar -> Code)` and refuses, correctly and T2-relatively.
 
-   THE DISCRIMINATING FACT IS ALREADY ON THE WIRE, measured:
+   AND IT IS TWO CONVERSIONS, NOT ONE. perigrin: it should be
+   `Coerce(Coerce(Scalar -> Str) -> Code)`. Measured -- the stringification is
+   observable, not bookkeeping:
 
-       eval "1 + 2"   Coerce(Str    -> Code)  <- Constant "1 + 2"
-       eval <STDIN>   Coerce(Scalar -> Code)  <- Call readline
+       package O; use overload q{""} => sub { "1+1" }, fallback => 1;
+       my $r = eval bless({}, "O");        $r is 2
+
+   perl called `""` to get "1+1" and compiled THAT. A single
+   Coerce(Scalar -> Code) claimed a Scalar becomes Code directly and hid a step
+   the program performs. It matters to a consumer because the halves differ in
+   LOWERABILITY: stringification is ordinary and every T2 can do it, while only
+   the outer conversion is the un-lowerable "compile arbitrary perl". Fused, a
+   consumer cannot tell which half it is refusing.
+
+   THE DISCRIMINATING FACT IS ALREADY ON THE WIRE, measured after the fix:
+
+       eval "1 + 2"   Coerce(Str -> Code)  <- Constant "1 + 2"
+       eval <STDIN>   Coerce(Str -> Code)  <- Coerce(Scalar -> Str)
+                                           <- Call readline
 
    so a consumer walks the Coerce's source and decides. A literal eval's string
    is compile-time known and could be lowered; an external one cannot be. No
