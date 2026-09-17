@@ -80,9 +80,27 @@ An external one cannot be. The graph distinguishes them and nothing acts on it.
 2. Audit the other 10 kinds against "is this a fact or a phase artifact". The
    convergence ones ("did not converge") read like artifacts; the arity ones
    read like facts.
-3. Decide what string eval should DO. Options, unmeasured: a node kind for it
-   so the fact reaches T2 and each T2 decides; or leave the Coerce and let the
-   deparser keep lowering it while chalk refuses. The second needs no new
-   vocabulary and is probably right, but chalk has to be asked.
+3. SETTLED for the producer. perigrin: string eval not GAPping at T1 makes
+   sense. T1 records what the program DOES, and `eval $code` does compile a
+   string at runtime -- that is a fact the graph can state truthfully. Refusing
+   there would be the producer making a T2 decision on chalk's behalf, the same
+   layering error the `caller` case already avoids.
+
+   So the Coerce stays and no node kind is added. Each T2 decides: the deparser
+   lowers perl to perl and emits `eval($x)`; chalk cannot lower
+   `Coerce(Scalar -> Code)` and refuses, correctly and T2-relatively.
+
+   THE DISCRIMINATING FACT IS ALREADY ON THE WIRE, measured:
+
+       eval "1 + 2"   Coerce(Str    -> Code)  <- Constant "1 + 2"
+       eval <STDIN>   Coerce(Scalar -> Code)  <- Call readline
+
+   so a consumer walks the Coerce's source and decides. A literal eval's string
+   is compile-time known and could be lowered; an external one cannot be. No
+   new vocabulary was needed for chalk to tell them apart, which is why asking
+   for a node kind would have been premature.
+
+   Still chalk's to decide: whether it refuses on both or lowers the literal
+   case. That is a consumer policy, not a producer question.
 
 Claude-Session: https://claude.ai/code/session_01QYtFNnt2aXaRH2hrRvopyc
