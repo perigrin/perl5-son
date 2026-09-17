@@ -9378,9 +9378,6 @@ class SoN::FromOptree 0.01 {
                     # backend recovers it structurally (its control_in IS the
                     # Loop) rather than by the ambiguous "first icmp consuming a
                     # header Phi" heuristic, which a body comparison can hijack.
-                    # An `or` condition (until) would need the negated sense.
-                    die "GAP: until (or-condition) loop not yet lowered\n"
-                        if $name eq 'or';
                     # A bare-truthiness header (`while ($n)`) pops a non-comparison
                     # condition (the loop-carried value). The backend's structural
                     # recovery only accepts an icmp, so synthesize an explicit
@@ -9388,7 +9385,58 @@ class SoN::FromOptree 0.01 {
                     # THAT -- otherwise the backend falls back to a body comparison.
                     $cond = _truthiness_test($cond, $factory)
                         unless _is_comparison($cond);
+
+                    # `until COND` IS `while !COND`, AND THE NEGATION GOES ON
+                    # THE CONDITION, NOT THE PROJS. Measured, the two optrees
+                    # are identical but for the connective:
+                    #
+                    #     $i++ while $i < 3     9 lt   a and(other->b)
+                    #     $i++ until $i >= 3    9 ge   a or (other->b)
+                    #
+                    # Both reach the BODY through `other`, so `and` runs the
+                    # body when the condition is TRUE and `or` when it is
+                    # FALSE.
+                    #
+                    # THE PROJ INDEX IS A ROLE, NOT A TRUTH VALUE. Proj 0 is
+                    # the body and Proj 1 the exit, always -- the deparser
+                    # states it as a convention ("the body is Proj 0's chain,
+                    # and the exit is Proj 1's") and the backend recovers the
+                    # loop the same way. Swapping them to express `until`
+                    # emitted a loop whose header kept the UNNEGATED test:
+                    # `$i++ until $i >= 3` came back as `while ($i >= 3)`,
+                    # which is the inverse program and hangs on a true
+                    # condition. So the sense is negated HERE, where the
+                    # condition is built, and every consumer keeps one rule.
+                    #
+                    # Reuses _negate_comparison, which exists for the same job
+                    # on `last if COND` at the head of a `while (1)` body.
+                    if ( $name eq 'or' ) {
+                        # `until !EXPR` NEGATES BY DROPPING THE `not`, which is
+                        # the common bare-truthiness form -- measured,
+                        # `$i-- until !$i` compiles to `not` under the `or`,
+                        # and Not is not a comparison so the map below cannot
+                        # answer it.
+                        #
+                        # Rebuilt as an explicit truthiness test rather than
+                        # handed back raw: `!!5` is 1, not 5, so the operand
+                        # and its double negation are truth-equivalent but not
+                        # equal, and the loop header wants the Boolean.
+                        my $neg;
+                        if ( $cond->operation eq 'Not' ) {
+                            my ($inner) = $cond->inputs->@*;
+                            $neg = _is_comparison($inner)
+                                ? $inner
+                                : _truthiness_test($inner, $factory);
+                        }
+                        else {
+                            $neg = _negate_comparison($cond, $factory);
+                        }
+                        die "GAP: an until whose condition is not a negatable"
+                          . " comparison is not yet lowered\n" unless $neg;
+                        $cond = $neg;
+                    }
                     $cond->set_control_in($loop_node);
+
                     my $body_proj = $factory->make_cfg('Proj',
                         inputs => [$loop_node], index => 0);
                     $exit_proj = $factory->make_cfg('Proj',

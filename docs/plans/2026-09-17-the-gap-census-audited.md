@@ -94,8 +94,20 @@ and none of the four is string eval, which still does not GAP (it becomes
    has no compile-time callee -- a fact, correctly refused. The named-callee
    case is a real artifact but no corpus file exercises it; splitting the
    refusal would be speculative work. Revisit if a corpus file reaches it.
-2. `until` is a missing lowering, not a fact. It is the cheapest artifact here
-   -- `while` already works.
+2. DONE. `until` lowers. The negation goes on the CONDITION, not the Projs:
+   a first attempt swapped the body/exit Proj indices -- which the refusal's
+   own comment ("would need the negated sense") seemed to invite -- and emitted
+   the INVERSE program, `$i++ until $i >= 3` coming back as
+   `while ($i >= 3)`, which hangs. The Proj index is a ROLE (0 body, 1 exit),
+   a convention the deparser states outright and the backend shares, so the
+   sense is negated where the condition is built and every consumer keeps one
+   rule. `until !EXPR` needs a second case, since `Not` is not a comparison:
+   drop the `Not` and rebuild an explicit truthiness test (`!!5` is 1, not 5,
+   so the operand and its double negation are truth-equivalent, not equal).
+
+   NO CORPUS GAP WAS REMOVED -- the census is still 17. This refusal was found
+   by minimal reproduction while classifying the convergence GAP, and t/base,
+   t/comp and t/cmd do not exercise it. A real lowering, not a coverage win.
 3. The `continue`-block and function-exit-in-loop kinds are control flow the
    walker does not model. Real work, correctly refused today.
 4. `a loop inside a branch arm` did not reproduce from the obvious shape
