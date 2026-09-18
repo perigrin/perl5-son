@@ -131,3 +131,58 @@ DEFERRED, NOT SKIPPED. Recorded here because it was left implicit when the
 session moved to the deref-count defect, and an unlabelled deferral drifts.
 
 Claude-Session: https://claude.ai/code/session_01QYtFNnt2aXaRH2hrRvopyc
+
+## Scoped 2026-09-18: smaller than estimated
+
+Both open questions measured.
+
+### 1. Call sites: 12, not 30, and only TWO need loop context
+
+    660    _translate_from                  dor/or arm
+    832    _translate_from                  arm with exits
+    1055   _translate_from                  try body
+    1083   _translate_from                  catch body
+    8185   _scout_condition_mutated_targs   scout
+    9308   _walk_loop_body                  REST-OF-BODY after a next/last guard
+    9431   _walk_loop_body                  guarded statement arm
+    10310  _handle_entertry                 eval body
+    10404  _handle_cond_expr                ternary arm
+    10700  _walk_branch                     recursive
+    10905  _walk_branch                     recursive
+    11896  _walk_subst_replacement          s///e replacement
+
+My earlier "30 call sites" was a grep count including the definition and
+comment mentions -- wrong, and it inflated the estimate.
+
+The two that matter (9308, 9431) are both INSIDE _walk_loop_body, where
+$loop_node and $break_projs are already in scope. The other ten are eval arms,
+ternaries, subst replacements and scouts, where a `last` genuinely has no loop
+to exit and the current refusal is the right answer. Two are recursive and
+must propagate whatever they were handed.
+
+So the parameter is optional, defaults to absent, and only two call sites pass
+it -- much narrower than "thread loop context through the whole walker".
+
+### 2. The soundness check is ALREADY where it needs to be
+
+Phase 5 of _translate_while_loop runs over @break_projs after the body walk:
+for each break, any slot whose break-point binding differs from its header Phi
+gets an exit Phi over [header, break-value]. DCE drops it when the slot is
+dead post-loop; a live read becomes a loud GAP rather than a miscompile.
+
+That runs on the COLLECTED list, not at the point of collection -- so a break
+recorded from an arm walk is checked by the same code with no change. Question
+2 dissolves.
+
+### The remaining work
+
+Pass $loop_node and $break_projs into _walk_branch (optional, propagated
+through the two recursive sites), and give it the same guarded-`last` handler
+_walk_loop_body has: build the If, push {proj, bindings} onto $break_projs,
+continue the rest on the not-taken arm. When the parameter is absent, keep
+today's refusal.
+
+The bare-`last` refusal added in 72a4da7 becomes conditional on the same
+parameter.
+
+Claude-Session: https://claude.ai/code/session_01QYtFNnt2aXaRH2hrRvopyc
