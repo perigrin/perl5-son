@@ -196,22 +196,19 @@ SRC
 #     foreach (@o) { $n++; if (COND) { last } }
 #       perl 2, emitted 1
 #
-# Lifted into _bind_break_exit_phis and run by all three walkers, so both
-# forms now give the same honest refusal.
-subtest 'a live slot at a foreach break refuses like a while does' => sub {
-    my ( $data, $err ) = graph_of( <<'SRC' );
+# Lifted into _bind_break_exit_phis and run by all three walkers.
+#
+# THIS SUBTEST ONCE ASSERTED A REFUSAL, which was the best answer available
+# when the producer built the exit Phi and the deparser could not render one.
+# It can now: the exit Phi reads as the LOOP VARIABLE (its input 0 IS the
+# header Phi), so the break pays that variable its value before leaving. The
+# assertion is replaced by the round trip it should always have been --
+# t/deparse-loop-exit-phi.t covers the rendering in detail.
+round_trips( <<'SRC', 'a live slot at a foreach break round-trips' );
 my @o = ("A", "HIT", "C");
 my $n = 0;
 foreach (@o) { $n++; if ($_ eq "HIT") { last } }
 print "$n\n";
 SRC
-    ok $data, 'it translates' or diag($err), return;
-
-    my $d   = SoN::Deparse->new;
-    my $out = eval { $d->render($data) };
-    ok !defined $out, 'the deparser refuses the multi-exit value merge';
-    like $d->gap // '', qr/Phi whose region/,
-        '... naming the exit Phi rather than emitting a wrong count';
-};
 
 done_testing;

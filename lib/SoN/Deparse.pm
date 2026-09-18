@@ -188,6 +188,12 @@ class SoN::Deparse 0.01 {
     # docs/plans/2026-09-18-how-other-son-implementations-emit-a-break.md.
     field $loop_exit_region;
 
+    # THE ASSIGNMENT A BREAK OWES ITS EXIT PHI, keyed on the Phi's id.
+    # _emit_loop computes it before walking the body (the `last` is emitted
+    # during that walk), and the break arm emits it immediately before the
+    # `last` -- the only point on that path where the value is in scope.
+    field %break_assign;
+
     # The reason the last render() refused, for a caller that wants to report it
     # rather than just see undef.
     field $gap :reader = undef;
@@ -1058,6 +1064,41 @@ class SoN::Deparse 0.01 {
             ( $next_of->{ $arm{1}{id} } // [] )->@*;
         my $save_exit = $loop_exit_region;
         $loop_exit_region = $exit_rgn ? $exit_rgn->{id} : undef;
+
+        # AN EXIT PHI IS THE VALUE FROM WHICHEVER EXIT RAN. A loop with a
+        # mid-body `last` has TWO exits, and a slot whose value differs
+        # between them gets a Phi regioned on the exit Region -- the
+        # producer's _bind_break_exit_phis, over [header-Phi, break-binding],
+        # paired positionally with the Region's predecessors (header-false
+        # first, then each break).
+        #
+        # IT READS AS THE LOOP VARIABLE. Input 0 IS the loop's header Phi, and
+        # that Phi already owns a variable holding the header-false value when
+        # the loop falls out the bottom. So only the BREAK path is missing:
+        # assign the break's value to that same variable just before the
+        # `last`, and every later read is right on both paths with no new
+        # declaration.
+        #
+        # COMPUTED BEFORE THE BODY WALK because the `last` is emitted during
+        # it. Without this the Phi reached _expr, found no variable for a
+        # non-Loop-regioned Phi, and refused.
+        %break_assign = ();
+        if ($exit_rgn) {
+            for my $ph (values $nodes->%*) {
+                next unless ($ph->{op} // '') eq 'Phi';
+                next unless (($ph->{fields} // {})->{region} // -1)
+                            == $exit_rgn->{id};
+                my @pin = ($ph->{inputs} // [])->@*;
+                next unless @pin == 2;
+                my $header = $nodes->{ $pin[0] // -1 } or next;
+                next unless ($header->{op} // '') eq 'Phi';
+                my $var = $self->_phi_var($header);
+                $bound{ $ph->{id} }        = $var;
+                $break_assign{ $ph->{id} } = sprintf("%s = %s;\n",
+                    $var, $self->_expr($pin[1]));
+            }
+        }
+
         my $body = $self->_emit_from($arm{0}{id}, $next_of, undef);
         $loop_exit_region = $save_exit;
 
@@ -1634,9 +1675,14 @@ class SoN::Deparse 0.01 {
                 # The condition is written so the BREAKING arm is the one that
                 # runs: an index-1 break means the loop leaves when the test is
                 # FALSE, so the spelling negates.
+                # THE EXIT PHIS ARE PAID HERE. Each records what the loop
+                # variable must hold on this path; assigning before the `last`
+                # is what makes a post-loop read correct on both exits.
+                my $pay = join '', map { $break_assign{$_} }
+                                   sort { $a <=> $b } keys %break_assign;
                 my $text = $ix == 0
-                    ? sprintf("if (%s) {\nlast;\n}\n", $cond)
-                    : sprintf("if (!(%s)) {\nlast;\n}\n", $cond);
+                    ? sprintf("if (%s) {\n%s}\n", $cond, _indent($pay . "last;\n"))
+                    : sprintf("if (!(%s)) {\n%s}\n", $cond, _indent($pay . "last;\n"));
                 return ( $text . $rest, undef );
             }
         }
