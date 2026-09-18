@@ -229,3 +229,50 @@ POINT, and the arm's control must join the loop's exit Region rather than
 building a second one.
 
 Claude-Session: https://claude.ai/code/session_01QYtFNnt2aXaRH2hrRvopyc
+
+## Resolved 2026-09-18 (a8e8432): the cause was a PREDICATE, not the Regions
+
+The previous section reported this as a Region-construction defect -- "two
+Regions where the while path builds one, and the break's recorded bindings hold
+the header Phi". That was the SYMPTOM. Reading the predicate rather than the
+graph found the cause, and the arm-walk threading described above turned out to
+be unnecessary.
+
+### 1. The scan stopped at a block prologue
+
+    last if C          other-> last
+    if (C) { last }    other-> enter -> nextstate -> last -> leave
+
+`_is_loop_control_or_exit` bounds its scan at `nextstate` -- correct in the
+MIDDLE of an arm, wrong at its HEAD. It fired on the prologue's nextstate and
+returned 0 before reaching the `last`, so the guarded-STATEMENT handler claimed
+`if (COND) { last }` and merged a break as an ordinary statement. That is why
+the emitted loop had no `last` in it at all, and why the increment appeared to
+"sink below the if": the arm had been merged, not broken out of.
+
+Fixed by skipping a LEADING enter/nextstate prologue only (the one-statement
+bound stands everywhere else), plus the same view in the mid-body handler,
+which tested ->other->name directly. New helper: _guarded_loop_control.
+
+### 2. The foreach walkers never ran the soundness pass
+
+Phase 5's exit-Phi construction lived inside _translate_while_loop alone:
+
+    while (..) { $n++; last if COND }         refused (correct)
+    foreach (@o) { $n++; if (COND) { last } } emitted 1 where perl gives 2
+
+Lifted into _bind_break_exit_phis, run by all three walkers.
+
+### Where this leaves it
+
+    foreach (@o) { if (COND) { last } print ... }   LOWERS
+    foreach (@o) { $n++; if (COND) { last } }       refuses, as while does
+
+The ordinary early-exit search translates. A slot LIVE at the break is the
+genuine multi-exit value merge and refuses in both loop forms, which is the
+contract.
+
+STILL OWED: the multi-exit merge itself (an exit Phi the deparser can render),
+and `next` before `last`, which the committed test pins as refused.
+
+Claude-Session: https://claude.ai/code/session_01QYtFNnt2aXaRH2hrRvopyc
