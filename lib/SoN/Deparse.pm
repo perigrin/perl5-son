@@ -173,6 +173,21 @@ class SoN::Deparse 0.01 {
     # single map would hand a reader whichever was written last.
     field %subst_count_var;   # RegexSubst id => variable holding its count
 
+    # THE ENCLOSING LOOP'S EXIT REGION, while its body is being emitted.
+    #
+    # A mid-body `last` reaches the graph as an extra PREDECESSOR of that
+    # Region -- the producer's @break_projs -- so an If inside the body whose
+    # arm lands there is a BREAK, not a local diamond. Without knowing which
+    # Region that is, _emit_if treated the loop exit as an ordinary join and
+    # emitted the continuation inline, inside the loop.
+    #
+    # This is the dominance test every structured-output compiler uses
+    # (Relooper, Stackifier): a forward edge whose source is inside the loop
+    # and whose target is outside is a break. Here the target is known
+    # exactly, so no dominance computation is needed -- see
+    # docs/plans/2026-09-18-how-other-son-implementations-emit-a-break.md.
+    field $loop_exit_region;
+
     # The reason the last render() refused, for a caller that wants to report it
     # rather than just see undef.
     field $gap :reader = undef;
@@ -1033,7 +1048,18 @@ class SoN::Deparse 0.01 {
             $bound{ $inv->{id} } = $var;
         }
 
+        # SCOPED TO THIS LOOP'S BODY, and saved/restored so a nested loop's
+        # break does not read the outer loop's exit as its own.
+        # THE REGION, NOT THE PROJ. Both the header-false Proj and any break
+        # Proj feed the SAME exit Region -- measured, Proj 8 and Proj 16 are
+        # both consumed by Region 17 -- so the Region is what a break arm
+        # lands on and what identifies one.
+        my ($exit_rgn) = grep { ( $_->{op} // '' ) eq 'Region' }
+            ( $next_of->{ $arm{1}{id} } // [] )->@*;
+        my $save_exit = $loop_exit_region;
+        $loop_exit_region = $exit_rgn ? $exit_rgn->{id} : undef;
         my $body = $self->_emit_from($arm{0}{id}, $next_of, undef);
+        $loop_exit_region = $save_exit;
 
         # Next values into temporaries first, then assign: see above.
         my $step = '';
@@ -1506,6 +1532,29 @@ class SoN::Deparse 0.01 {
     # if/else blocks and resuming after the Region is what makes the arms'
     # effects conditional and everything after unconditional. Neither the Proj
     # nor the Region needs a spelling of its own.
+    # _reaches_region($proj, $region_id, $next_of) -> bool
+    #
+    # Does this arm land on $region_id without passing through another Region?
+    # Used to spot a break: the arm's control chain ends at the LOOP'S EXIT
+    # rather than at a join inside the body.
+    #
+    # Bounded by the first Region encountered, because a nested diamond inside
+    # the arm converges at its own join and anything past that is no longer
+    # this arm's edge.
+    method _reaches_region ($proj, $region_id, $next_of) {
+        return 0 unless defined $proj && defined $region_id;
+        my %seen;
+        my @todo = ( $proj );
+        while (@todo) {
+            my $n = shift @todo;
+            next unless $n && !$seen{ $n->{id} }++;
+            return 1 if $n->{id} == $region_id;
+            next if ( $n->{op} // '' ) eq 'Region' && $n->{id} != $region_id;
+            push @todo, ( $next_of->{ $n->{id} } // [] )->@*;
+        }
+        return 0;
+    }
+
     method _emit_if ($n, $next_of) {
         my $cond = $self->_expr($n->{inputs}[1]);
 
@@ -1559,6 +1608,37 @@ class SoN::Deparse 0.01 {
                 ? sprintf("if (%s) {\n%s}\n", $cond, _indent($body))
                 : sprintf("if (!(%s)) {\n%s}\n", $cond, _indent($body));
             return ($decl . $text, $join);
+        }
+
+        # AN ARM THAT LANDS ON THE LOOP'S EXIT IS A `last`, NOT A JOIN.
+        #
+        # A mid-body break reaches the graph as an extra predecessor of the
+        # loop's exit Region, so the two arms do NOT converge inside the body:
+        # one continues, one leaves. Treated as an ordinary diamond, the
+        # leaving arm's continuation was emitted INSIDE the loop and again at
+        # the exit -- measured on
+        # `while ($i<5) { $i++; last if $i==4; $s += $i }`, perl prints 6 and
+        # the emitted program printed 615.
+        #
+        # `last` IS THE WHOLE ARM. Everything the break path would do after
+        # leaving belongs to the code after the loop, which the exit walk
+        # already emits -- so the arm is exactly the loop control, and the
+        # other arm carries the rest of the body.
+        if ( defined $loop_exit_region ) {
+            for my $ix ( 0, 1 ) {
+                next unless $self->_reaches_region( $arm{$ix}, $loop_exit_region,
+                                                    $next_of );
+                my $rest_ix = 1 - $ix;
+                my $rest = $self->_emit_from( $arm{$rest_ix}{id}, $next_of,
+                                              $loop_exit_region );
+                # The condition is written so the BREAKING arm is the one that
+                # runs: an index-1 break means the loop leaves when the test is
+                # FALSE, so the spelling negates.
+                my $text = $ix == 0
+                    ? sprintf("if (%s) {\nlast;\n}\n", $cond)
+                    : sprintf("if (!(%s)) {\nlast;\n}\n", $cond);
+                return ( $text . $rest, undef );
+            }
         }
 
         # WHERE THE ARMS CONVERGE. A Region's inputs are the arms' last control
