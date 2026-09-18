@@ -87,3 +87,47 @@ silent miscompile into an honest GAP without needing exit modelling at all.
 Lowering `last` properly is still the larger piece, and unchanged.
 
 Claude-Session: https://claude.ai/code/session_01QYtFNnt2aXaRH2hrRvopyc
+
+## Status 2026-09-18: correctness closed, ONE LOWERING STILL OWED
+
+    deparser inlines the break arm     FIXED    d85b24c
+    foreach drops the break            FIXED    0651819
+    last in a branch arm               REFUSED  72a4da7   <- lowering NOT built
+
+No known silent `last` miscompile remains. What is NOT built is the lowering
+behind the third: an arm walk that can carry a loop exit edge.
+
+### What that refusal costs
+
+    foreach (@o) { if (COND) { last } }      the ordinary early-exit search
+
+does not translate. It is a common shape and it is what comp/require.t needs
+(its `foreach { if ($_ eq "PERL_DISABLE_PMC") { $no_pmc=1; last } }` is why the
+corpus went 16 -> 17 when the refusal landed -- that file had been translating
+WRONGLY, measured `perl 2, emitted 3` on the counted form).
+
+### What the lowering needs
+
+_walk_loop_body already does this correctly: it builds the If, routes the
+guard-taken arm through @break_projs, and Phase 5 adds that Proj as an extra
+predecessor of the exit Region. An arm walk reaches none of it -- _walk_branch
+has no $loop_node, no @break_projs and no exit Region to attach to. So the work
+is threading that loop context into the arm walk and routing the break out
+through it: the same machinery, reachable from one more place.
+
+### Why it is not scoped yet
+
+Two things to settle before estimating:
+
+1. _walk_branch has 30 call sites, and MOST HAVE NO LOOP CONTEXT -- eval arms,
+   ternaries, try/catch. The parameter has to be optional and behave correctly
+   when absent, which is where a careless version would reintroduce the drop.
+2. The while path's SOUNDNESS CHECK -- the one that GAPs when a slot rebound
+   before the break is read after the loop -- has to apply from the arm too.
+   Without it a multi-exit value merge becomes a wrong answer rather than a
+   refusal.
+
+DEFERRED, NOT SKIPPED. Recorded here because it was left implicit when the
+session moved to the deref-count defect, and an unlabelled deferral drifts.
+
+Claude-Session: https://claude.ai/code/session_01QYtFNnt2aXaRH2hrRvopyc
