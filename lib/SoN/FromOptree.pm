@@ -8352,7 +8352,24 @@ class SoN::FromOptree 0.01 {
         # differing slot to an exit Phi over [header-Phi, break-binding]; DCE drops
         # it when the slot is dead post-loop (the common `last` that only breaks),
         # and a live read turns it into a loud GAP rather than a miscompile.
-        for my $brk (@break_projs) {
+        _bind_break_exit_phis($factory, $sim, $exit_region, \@break_projs);
+        return;
+    }
+
+    # _bind_break_exit_phis($factory, $sim, $exit_region, \@break_projs)
+    #
+    # The multi-exit soundness pass, lifted out of _translate_while_loop so the
+    # FOREACH walkers can run it too. They collect break edges the same way and
+    # had no equivalent -- so a `while` with a live slot at the break refused
+    # loudly (correct) while the same foreach emitted a wrong value:
+    #
+    #     foreach (@o) { $n++; if (COND) { last } }
+    #       perl 2, emitted 1     -- $n's break value never reached the exit
+    #
+    # See the block comment at the call site for what the Phi means; this is
+    # that code unchanged, with the loop's own variables passed in.
+    sub _bind_break_exit_phis ($factory, $sim, $exit_region, $break_projs) {
+        for my $brk (@$break_projs) {
             my $brk_bindings = $brk->{bindings};
             for my $targ (sort _scope_key_order keys %$brk_bindings) {
                 my $header = $sim->scope_bindings->{$targ};   # header Phi (patched)
@@ -8540,6 +8557,7 @@ class SoN::FromOptree 0.01 {
         # while path builds.
         my $exit_region = $factory->make_cfg('Region',
             inputs => [ $exit_proj, map { $_->{proj} } @break_projs ]);
+        _bind_break_exit_phis($factory, $sim, $exit_region, \@break_projs);
         $loop_node->set_region($exit_region);
         $sim->set_control($exit_region);
         return;
@@ -8962,6 +8980,7 @@ class SoN::FromOptree 0.01 {
         # while path builds.
         my $exit_region = $factory->make_cfg('Region',
             inputs => [ $exit_proj, map { $_->{proj} } @break_projs ]);
+        _bind_break_exit_phis($factory, $sim, $exit_region, \@break_projs);
         $loop_node->set_region($exit_region);
         $sim->set_control($exit_region);
         if ($collect) {
@@ -9280,8 +9299,8 @@ class SoN::FromOptree 0.01 {
             #     multi-exit merge case and GAPs loudly (below).
             if ($name eq 'and' && $sim->stack_depth > 0
                     && $op->can('other') && ${$op->other}
-                    && ($op->other->name eq 'last' || $op->other->name eq 'next')) {
-                my $kind = $op->other->name;   # 'last' or 'next'
+                    && _guarded_loop_control($op->other)) {
+                my $kind = _guarded_loop_control($op->other);
                 # NOTE: a fired loop header condition ($condition_fired) is
                 # EXPECTED here -- a `while (COND) { ...; last if C; ... }` has
                 # both. The mid-body break is an independent If split, not a
@@ -9744,14 +9763,69 @@ class SoN::FromOptree 0.01 {
     # and a `return` inside a loop body is an unbuilt feature that must keep
     # GAPping rather than lower as an ordinary two-armed merge (which would drop
     # the exit edge entirely and fall through to the back-edge).
+    # _guarded_loop_control($other) -> 'last' | 'next' | undef
+    #
+    # The loop control a guard's ->other transfers to, seeing through a BLOCK
+    # PROLOGUE. `last if C` puts the op directly on ->other; `if (C) { last }`
+    # wraps it in a scope, so ->other is `enter` and the transfer is two ops
+    # later:
+    #
+    #     last if C          other-> last
+    #     if (C) { last }    other-> enter -> nextstate -> last -> leave
+    #
+    # Both are the same construct and both must reach the mid-body handler.
+    # Testing ->other's name alone saw only the first, so the block form --
+    # the ordinary early-exit search -- fell through to the unconditional
+    # refusal.
+    #
+    # ONLY A LEADING PROLOGUE IS SKIPPED, and the first real op decides: a
+    # block whose first statement is something else is a guarded STATEMENT,
+    # not a control transfer, and must keep its own handler.
+    sub _guarded_loop_control ($other) {
+        my $o = $other;
+        my %seen;
+        while ($$o && !$seen{$$o}++
+               && ($o->name eq 'enter' || $o->name eq 'nextstate')) {
+            $o = $o->next;
+        }
+        return undef unless $$o;
+        my $n = $o->name;
+        return ($n eq 'last' || $n eq 'next') ? $n : undef;
+    }
+
     sub _is_loop_control_or_exit ($other) {
         my $n = $other->name;
         return 1 if $n eq 'last' || $n eq 'next' || $n eq 'redo';
         return 1 if $n eq 'return' || $n eq 'leavesub' || $n eq 'leavesublv';
         # `return EXPR` is a return op wrapping a list; the exit can also appear
         # as the first op of the guarded arm rather than as ->other itself.
+        # A BLOCK ARM OPENS WITH A PROLOGUE. `if (C) { last }` puts the
+        # control transfer inside a scope, so ->other is `enter` and the arm
+        # reads
+        #
+        #     o  and(other->p)
+        #     p      enter
+        #     q      nextstate
+        #     r      last
+        #     s      leave
+        #
+        # The `nextstate` stop below exists to bound the scan to ONE statement,
+        # which is right in the middle of an arm and wrong at its head: it
+        # fired on q and returned 0 before ever seeing r. So the guarded-
+        # statement handler claimed `if (COND) { last }` -- the ordinary
+        # early-exit search -- and merged the break as though it were a plain
+        # statement. Measured, `foreach (@o) { $n++; if (COND) { last } }`
+        # emitted the loop with no `last` at all and ran to completion.
+        #
+        # Skipping a LEADING enter/nextstate prologue -- and only a leading one
+        # -- keeps the one-statement bound everywhere else.
+        my $start = $other;
+        while ($$start && ($start->name eq 'enter' || $start->name eq 'nextstate')) {
+            $start = $start->next;
+        }
+
         my %seen;
-        for (my $o = $other; $$o && !$seen{$$o}; $o = $o->next) {
+        for (my $o = $start; $$o && !$seen{$$o}; $o = $o->next) {
             $seen{$$o} = 1;
             my $m = $o->name;
             last if $m eq 'unstack' || $m eq 'leaveloop' || $m eq 'nextstate';

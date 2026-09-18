@@ -169,4 +169,49 @@ for my $i (1..5) { $s += $i }
 print "$s\n";
 SRC
 
+# A `last` INSIDE AN `if` BLOCK is the ordinary early-exit search, and it
+# reached the wrong handler entirely. A block arm opens with a PROLOGUE:
+#
+#     last if C          other-> last
+#     if (C) { last }    other-> enter -> nextstate -> last -> leave
+#
+# and _is_loop_control_or_exit bounds its scan at `nextstate` -- correct in
+# the middle of an arm, wrong at its head. It hit the prologue's nextstate and
+# returned 0 before reaching the `last`, so the GUARDED-STATEMENT handler
+# claimed the construct and merged a break as though it were a statement.
+# Measured, the loop then ran to completion with no `last` emitted at all.
+#
+# A dead slot at the break lowers; the live case is the multi-exit merge and
+# refuses below.
+round_trips( <<'SRC', 'a last inside an if block' );
+my @o = ("A", "HIT", "C");
+foreach (@o) { if ($_ eq "HIT") { last } print "$_\n" }
+SRC
+
+# THE FOREACH WALKERS NEVER RAN THE SOUNDNESS PASS. Phase 5's exit-Phi
+# construction lived inside _translate_while_loop only, so a slot live at the
+# break refused loudly in a `while` and SILENTLY EMITTED A WRONG VALUE in the
+# identical foreach:
+#
+#     foreach (@o) { $n++; if (COND) { last } }
+#       perl 2, emitted 1
+#
+# Lifted into _bind_break_exit_phis and run by all three walkers, so both
+# forms now give the same honest refusal.
+subtest 'a live slot at a foreach break refuses like a while does' => sub {
+    my ( $data, $err ) = graph_of( <<'SRC' );
+my @o = ("A", "HIT", "C");
+my $n = 0;
+foreach (@o) { $n++; if ($_ eq "HIT") { last } }
+print "$n\n";
+SRC
+    ok $data, 'it translates' or diag($err), return;
+
+    my $d   = SoN::Deparse->new;
+    my $out = eval { $d->render($data) };
+    ok !defined $out, 'the deparser refuses the multi-exit value merge';
+    like $d->gap // '', qr/Phi whose region/,
+        '... naming the exit Phi rather than emitting a wrong count';
+};
+
 done_testing;
