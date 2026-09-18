@@ -55,3 +55,35 @@ Whether chalk miscompiles this today, and whether the corpus hides it behind
 earlier first-failures. Neither measured.
 
 Claude-Session: https://claude.ai/code/session_01QYtFNnt2aXaRH2hrRvopyc
+
+## Correction: the refusal exists, it just misses the conditional form
+
+perigrin asked what `for my $i (1..2) { say $i; last; }` prints. One line --
+and checking it against the producer shows the UNCONDITIONAL form is already
+refused, honestly:
+
+    for my $i (1..2) { say $i; last; }
+      GAP: loop control (last) inside a loop body not yet lowered
+
+    for my $i (1..5) { last if $i == 4; $s += $i }
+      no GAP; perl 6, emitted 15
+
+So this is not "last is unmodelled". The refusal is built and correct; the
+statement-modifier form evades it, because `last if COND` hangs the `last` off
+an `and`'s OTHER branch rather than the ->next chain -- the same structure the
+continue exit-scan had to learn to follow:
+
+    f  and(other->g)
+    g      last          <- exec order runs f -> h, skipping it
+
+A linear scan sees no `last` and lets the loop through, and the comparison is
+then built with no consumer.
+
+That makes the fix much smaller than this doc first implied: teach whatever
+detects loop control to follow `other` branches, so the conditional form
+reaches the SAME refusal the unconditional one already gets. That converts a
+silent miscompile into an honest GAP without needing exit modelling at all.
+
+Lowering `last` properly is still the larger piece, and unchanged.
+
+Claude-Session: https://claude.ai/code/session_01QYtFNnt2aXaRH2hrRvopyc
