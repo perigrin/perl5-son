@@ -8450,8 +8450,25 @@ class SoN::FromOptree 0.01 {
         # READ is the whole fix.
         local @ALIAS_BOUND_KEYS = (@ALIAS_BOUND_KEYS, $i_targ);
 
+        # A MID-BODY `last` IS AN EXTRA EXIT EDGE, and a foreach has one for
+        # exactly the reason a while does. Passing $loop_node and a collector
+        # is the whole difference: without them _walk_loop_body runs in scout
+        # mode, records no break edge, and the `last` is DROPPED -- measured,
+        # `for my $i (1..5) { last if $i==4; $s += $i }` built no If at all
+        # and left the comparison with no consumer, so the emitted program ran
+        # to completion (perl 6, emitted 15).
+        #
+        # The while path already does this (Phase 3/5 of _translate_while_loop);
+        # this is the same two arguments and the same exit-predecessor list.
+        # $loop_node IS DELIBERATELY NOT PASSED. That argument tells
+        # _walk_loop_body to treat a `last if` as the loop's HEADER condition
+        # and mint a Proj pair for it -- right for the Projless `while (1)`
+        # form, wrong here, where the Projs already exist. Passing it built
+        # FOUR arms on one Loop and the deparser refused ("a Loop with 4 Proj
+        # arms"). Only the break collector is wanted.
+        my @break_projs;
         _walk_loop_body($cv, $body_start, $sim, $factory, $opmap, {}, $visited,
-            undef, undef, 1);
+            undef, \@break_projs, 1);
 
         # Phase 4: back-edges. The induction step is synthesized (+1); the
         # carried slots patch exactly like the while loop.
@@ -8470,7 +8487,10 @@ class SoN::FromOptree 0.01 {
         }
 
         # Phase 5: post-loop control continues on the exit edge.
-        my $exit_region = $factory->make_cfg('Region', inputs => [$exit_proj]);
+        # The exit is the header-false edge OR any break -- same shape the
+        # while path builds.
+        my $exit_region = $factory->make_cfg('Region',
+            inputs => [ $exit_proj, map { $_->{proj} } @break_projs ]);
         $loop_node->set_region($exit_region);
         $sim->set_control($exit_region);
         return;
@@ -8630,8 +8650,25 @@ class SoN::FromOptree 0.01 {
         local @ALIAS_BOUND_KEYS = (@ALIAS_BOUND_KEYS, $x_targ);
 
         my $depth_before = $sim->stack_depth;
+        # A MID-BODY `last` IS AN EXTRA EXIT EDGE, and a foreach has one for
+        # exactly the reason a while does. Passing $loop_node and a collector
+        # is the whole difference: without them _walk_loop_body runs in scout
+        # mode, records no break edge, and the `last` is DROPPED -- measured,
+        # `for my $i (1..5) { last if $i==4; $s += $i }` built no If at all
+        # and left the comparison with no consumer, so the emitted program ran
+        # to completion (perl 6, emitted 15).
+        #
+        # The while path already does this (Phase 3/5 of _translate_while_loop);
+        # this is the same two arguments and the same exit-predecessor list.
+        # $loop_node IS DELIBERATELY NOT PASSED. That argument tells
+        # _walk_loop_body to treat a `last if` as the loop's HEADER condition
+        # and mint a Proj pair for it -- right for the Projless `while (1)`
+        # form, wrong here, where the Projs already exist. Passing it built
+        # FOUR arms on one Loop and the deparser refused ("a Loop with 4 Proj
+        # arms"). Only the break collector is wanted.
+        my @break_projs;
         _walk_loop_body($cv, $body_start, $sim, $factory, $opmap, {}, $visited,
-            undef, undef, 1);
+            undef, \@break_projs, 1);
 
         # PERL RESTORES THE FOREACH VARIABLE AT LOOP EXIT, and so must this --
         # the binding is scoped to the BODY exactly as @ALIAS_BOUND_KEYS is.
@@ -8872,7 +8909,10 @@ class SoN::FromOptree 0.01 {
         }
 
         # Phase 5: post-loop control continues on the exit edge.
-        my $exit_region = $factory->make_cfg('Region', inputs => [$exit_proj]);
+        # The exit is the header-false edge OR any break -- same shape the
+        # while path builds.
+        my $exit_region = $factory->make_cfg('Region',
+            inputs => [ $exit_proj, map { $_->{proj} } @break_projs ]);
         $loop_node->set_region($exit_region);
         $sim->set_control($exit_region);
         if ($collect) {
@@ -9128,7 +9168,22 @@ class SoN::FromOptree 0.01 {
             if ($name eq 'and' && $sim->stack_depth > 0
                     && $op->can('other') && ${$op->other}
                     && $op->other->name eq 'last'
-                    && $stmt_count == 1) {
+                    && $stmt_count == 1
+                    # NOT WHEN THE HEADER CONDITION IS ALREADY CONSUMED. This
+                    # hoist is for a HEADLESS `while (1)` body, where the exit
+                    # test IS the loop's continuation. A foreach has a real
+                    # header (the `iter` and), consumed by its own walker, and
+                    # says so with $cond_consumed -- the mid-body handler below
+                    # already reads it for the same reason (line ~9341).
+                    #
+                    # Without this, a `last if` as the FIRST body statement was
+                    # claimed as the loop's condition and silently dropped:
+                    # measured, `for my $i (1..5) { last if $i==4; $s += $i }`
+                    # built no If at all and ran to completion (perl 6, emitted
+                    # 15), while the same guard one statement later built the
+                    # break correctly. The position of the guard decided
+                    # whether the program was right.
+                    && !$cond_consumed) {
                 # HEAD-of-body `last if`: nothing in the iteration ran before the
                 # exit check, so it hoists soundly into the loop's continuation
                 # (negated). A `last if` deeper in the body is handled by the

@@ -89,14 +89,23 @@ SRC
 # The while form builds it correctly (Region 17 takes Proj 8 and Proj 16), so
 # this is the foreach walker not reaching the `and` guard handler, not a
 # deparser question. Nothing this file fixes can reach it.
-{
-    my $todo = todo 'the foreach walker drops a mid-body last before the graph';
-    round_trips( <<'SRC', 'a foreach with a mid-body last' );
+round_trips( <<'SRC', 'a foreach with a mid-body last' );
 my $s = 0;
 for my $i (1..5) { last if $i == 4; $s += $i }
 print "$s\n";
 SRC
-}
+
+round_trips( <<'SRC', 'an array foreach with a mid-body last' );
+my @a = (1,2,3,4,5); my $s = 0;
+for my $x (@a) { last if $x == 4; $s += $x }
+print "$s\n";
+SRC
+
+round_trips( <<'SRC', 'work after a foreach last does not run on the exit pass' );
+my @o;
+for my $i (1..5) { push @o, "a$i"; last if $i == 3; push @o, "b$i" }
+print join(",", @o), "\n";
+SRC
 
 # THE BREAK RUNS BEFORE THE REST OF THE BODY, so work after it must not happen
 # on the breaking iteration -- the case an inlined arm gets wrong in the other
