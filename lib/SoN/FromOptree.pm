@@ -10936,6 +10936,40 @@ class SoN::FromOptree 0.01 {
             # t/from-optree-loop-in-arm.t, which pins that a foreach in an arm
             # translates -- the loops that WORK reach leaveloop with their
             # operands present, and only the untranslated forms arrive short.
+            # A GUARDED LOOP CONTROL IN AN ARM IS REFUSED, NOT DROPPED.
+            #
+            # `last if C` hangs the `last` off an `and`'s ->other branch, and
+            # this walk follows only ->next -- so the op was never visited:
+            # neither lowered nor refused. Measured before this guard:
+            #
+            #     for my $i (1..9) { next if $i==2; last if $i==4; $s += $i }
+            #       perl 4, emitted 43
+            #
+            # with ONE If in the graph (the `next`) and the `last`
+            # contributing nothing. The loop ran to completion -- a silent
+            # wrong answer, which the contract ranks below a refusal.
+            #
+            # WHY IT REACHES HERE AT ALL: _walk_loop_body handles a guarded
+            # last/next itself (its mid-body handler builds the If and routes
+            # the break through @break_projs), but the `next` arm delegates
+            # THE REST OF THE BODY to this walk -- and a `last` later in that
+            # rest is then this walk's problem, with no exit edge to attach to.
+            #
+            # Refused rather than lowered because an arm walk has no loop
+            # context: no $loop_node, no @break_projs, and no exit Region to
+            # add a predecessor to. Carrying one here is the real fix and is
+            # not built.
+            # MEASURED, THE OP ARRIVES BARE. `last if C` inside the rest-arm
+            # reaches this walk as a plain `last` in the ->next chain -- not
+            # as an `and` whose ->other is the last -- because the guard's
+            # `and` was already consumed by the handler that delegated here.
+            # A first version of this guard tested the `and` and never fired.
+            if ($name eq 'last' || $name eq 'next' || $name eq 'redo') {
+                die "GAP: a loop control (`$name`) inside a branch arm is not"
+                  . " yet lowered -- the arm walk carries no loop exit edge to"
+                  . " route it to\n";
+            }
+
             # `leaveloop` IS NOT A VALUE OP, AND THE MAIN WALK ALREADY KNOWS
             # IT. OpMap declares `leaveloop => [2, ...]` -- pop two -- and at
             # top level that never fires, because the main walk handles

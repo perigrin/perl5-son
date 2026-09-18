@@ -129,14 +129,37 @@ SRC
 # the `last` is absent from the emitted code entirely once a `next` precedes
 # it (and `my $phi27 = $phi4;` is emitted before $phi4 is declared). Same
 # family as the foreach case -- the graph never carries the break.
-{
-    my $todo = todo 'a next before a last drops the break in the producer';
-    round_trips( <<'SRC', 'a next and a last in the same loop' );
+# A `last` AFTER A `next` IS REFUSED, NOT DROPPED. The `next` guard walks the
+# rest of the body with _walk_branch, which has no guarded-loop-control
+# handler -- the `last` hangs off an `and`'s ->other branch that _walk_branch
+# never follows, so it was neither lowered nor refused. Measured before:
+#
+#     for my $i (1..9) { next if $i==2; last if $i==4; $s += $i }
+#       perl 4, emitted 43     -- the loop ran to completion
+#
+# and only ONE If was built (for the next), with the last contributing
+# nothing. A silent wrong answer, which the contract ranks below a refusal, so
+# it refuses until the rest-arm walk can carry an exit edge.
+subtest 'a last after a next is refused, not silently dropped' => sub {
+    my ( $data, $err ) = graph_of( <<'SRC' );
+my $s = 0;
+for my $i (1..9) { next if $i == 2; last if $i == 4; $s += $i }
+print "$s
+";
+SRC
+    like $err, qr/GAP:/, 'it is refused';
+    like $err, qr/last|loop control/i, '... naming the construct';
+};
+
+subtest 'a last after a next in a while is refused too' => sub {
+    my ( $data, $err ) = graph_of( <<'SRC' );
 my $s = 0; my $i = 0;
 while ($i < 9) { $i++; next if $i == 2; last if $i == 4; $s += $i }
-print "$s\n";
+print "$s
+";
 SRC
-}
+    like $err, qr/GAP:/, 'it is refused';
+};
 
 # A LOOP WITH NO BREAK IS UNCHANGED -- the plain shape, kept so the fix cannot
 # regress the common case.
