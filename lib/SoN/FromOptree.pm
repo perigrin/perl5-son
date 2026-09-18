@@ -3294,6 +3294,55 @@ class SoN::FromOptree 0.01 {
         # @$r`) is handled by the scalar-of-aggregate path above, so gate on
         # OPf_WANT_LIST here. A genuine `my @a = ([1,2,3])` (anonlist, NO rv2av)
         # is untouched.
+        # SCALAR-CONTEXT rv2av IS A COUNT, and it had no handler at all. The
+        # list-context branch below says the case is "handled by the
+        # scalar-of-aggregate path above", but that path
+        # (_rhs_is_aggregate_access) keys on the RHS op of an ASSIGNMENT, so it
+        # never saw a `print scalar(@$r)` -- and it did not see `my $n = @$r`
+        # either, because by then the rv2av had already been dropped.
+        #
+        # Dropped, the REFERENCE was used where its count belongs:
+        #
+        #     my @L=(1,2,3); my $r=\@L; print scalar(@$r)
+        #       perl 3, emitted ARRAY(0x...)
+        #
+        # and the graph showed Coerce(Ref -> Str) straight off the Ref, with no
+        # deref and no Count.
+        #
+        # THE DEREF IS STILL A DEREF: this is Count over PostfixDeref, not
+        # Count over the reference, so the count reads the REFERENT and a
+        # `push @$r, 4` before it is visible (Count carries the memory edge for
+        # exactly that reason -- see SoN::IR::Node::Count).
+        # NARROWED TO A REFERENCE DEREF, and both halves were measured after a
+        # first version broke 10 test files by swallowing every scalar-context
+        # rv2av -- a foreach bound among them:
+        #
+        #     for my $x (@P)      rv2av sKRM/1   kid=gv      the AGGREGATE
+        #     scalar(@$r)         rv2av sK/1     kid=padsv   its COUNT
+        #
+        # OPf_REF|OPf_MOD (RM) says the aggregate ITSELF is wanted -- a foreach
+        # bound, an lvalue -- so it is excluded. And the kid must be a SCALAR
+        # producer (padsv/gvsv/helem/aelem), which is what makes this a
+        # dereference of a reference rather than a read of a named aggregate;
+        # a `gv` kid is `@P` spelled out, not `@$r`.
+        if (($name eq 'rv2av' || $name eq 'rv2hv')
+                && $op->can('first') && ${$op->first}
+                # MEASURED, NOT ASSUMED: B::OPf_WANT_SCALAR is 2 (VOID is 1,
+                # LIST is 3). A first version used 1 and never fired.
+                && ($op->flags & 3) == 2          # OPf_WANT_SCALAR
+                # 48, MEASURED: OPf_REF is 16 and OPf_MOD is 32. A first
+                # version wrote 12 from memory and excluded nothing.
+                && !($op->flags & 48)             # not OPf_REF|OPf_MOD
+                && $op->first->name =~ /\A(?:padsv|gvsv|helem|aelem)\z/
+                && $sim->stack_depth > 0) {
+            my $top = $sim->pop_node;
+            my $sigil = $name eq 'rv2hv' ? '%' : '@';
+            $sim->push_node(
+                _make_count($factory,
+                    _deref_read($factory, $sim, $top, $sigil), $sim));
+            return ($op->next, 'handled');
+        }
+
         if ($name eq 'rv2av'
                 && $op->can('first') && ${$op->first}
                 && ($op->first->name eq 'const' || $op->first->name eq 'padsv')

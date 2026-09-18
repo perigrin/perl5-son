@@ -61,18 +61,24 @@ sub round_trips ($src, $name) {
 # which printed nothing where perl prints "1 2 3". A store PUTS A VALUE IN a
 # slot; a binding makes the NAME refer to the referent. That distinction is
 # the whole construct, so the renderer has to keep it.
-# BLOCKED ON A SEPARATE, PRE-EXISTING DEFECT, and marked TODO rather than
-# dropped so it reports when that is fixed. `\@SRC` over an `our` array loses
-# the array's initialiser: measured on a CLEAN tree with no glob in sight,
+# BLOCKED ON A SEPARATE DEFECT, and the cause recorded here first was WRONG.
+# It said `\@SRC` over an `our` array loses the initialiser. It does not --
+# measured, all three of these emit `@main::SRC = (1, 2, 3);` correctly:
 #
-#     our @SRC=(1,2,3); my $r=\@SRC; print scalar(@$r);
-#       perl     3
-#       emitted  (empty)  -- the ArrayLiteral holding (1,2,3) is not in the graph
+#     our @SRC=(1,2,3);
+#     our @SRC=(1,2,3); my $r=\@SRC;
+#     our @SRC=(1,2,3); *c=\@SRC;
 #
-# so the binding below is rendered correctly (`*main::crackers = \@main::SRC;`)
-# and still prints nothing, because what it aliases was never filled in.
+# (The original evidence for that claim was `print scalar(@$r)` emitting
+# nothing, which turned out to be a scalar-context rv2av with no handler --
+# fixed separately, t/wire-deref-count-in-scalar-context.t.)
+#
+# What actually drops the initialiser is the glob binding PLUS A READ THROUGH
+# THE BOUND NAME: the binding renders correctly
+# (`*main::crackers = \@main::SRC;`) and `@main::SRC` is never filled in. A
+# narrower interaction than recorded, and still open.
 {
-    my $todo = todo 'a Ref over an `our` array drops the array initialiser';
+    my $todo = todo 'a glob binding read through its bound name drops the initialiser';
     round_trips( <<'SRC', 'an array binding aliases the array' );
 our @SRC = (1,2,3);
 *crackers = \@SRC;
@@ -113,7 +119,7 @@ SRC
 # THE ALIAS IS LIVE, which is what separates a binding from a copy: a later
 # write through either name is visible through both.
 {
-    my $todo = todo 'a Ref over an `our` array drops the array initialiser';
+    my $todo = todo 'a glob binding read through its bound name drops the initialiser';
     round_trips( <<'SRC', 'the alias is live, not a copy' );
 our @SRC = (1,2,3);
 *crackers = \@SRC;
