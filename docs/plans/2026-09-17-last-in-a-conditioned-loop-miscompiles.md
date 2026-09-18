@@ -186,3 +186,46 @@ The bare-`last` refusal added in 72a4da7 becomes conditional on the same
 parameter.
 
 Claude-Session: https://claude.ai/code/session_01QYtFNnt2aXaRH2hrRvopyc
+
+## Attempted 2026-09-18, reverted: the bindings are wrong at the break
+
+The scoping held -- the threading is two call sites, the parameter is optional,
+and Phase 5's soundness pass needs no change. `last;` reaches the emitted
+program in the right place. What does NOT work is WHICH VALUES the break
+carries.
+
+    foreach (@o) { $n++; if ($_ eq "HIT") { last } }
+      perl 2, emitted 1
+
+      while (...) {
+        if (...) { last; }        <- correct
+        my $phi4_next = ($phi4 + 1);   <- the $n++ sank BELOW the if
+        ...
+      }
+
+The increment ran after the break in the emitted order, so the breaking
+iteration does not count it. The graph shows why: TWO Regions where the while
+path builds one (16 over [3,15] and 21 over [15,20]), and the break's recorded
+`bindings` hold the header Phi rather than the incremented Add.
+
+Reverted rather than shipped -- a wrong answer is worse than the refusal it
+would replace.
+
+### What the attempt DID establish
+
+THE LOOP BODY IS WALKED TWICE and the scout pass has no collector. A scout runs
+with $break_projs undef BY DESIGN (it measures mutated slots and does no
+control wiring), so a refusal reached from the arm walk fires THERE and kills
+the translation before the real pass runs. Measured: both refusals came from
+the scout, `bp=no` in both. Any future attempt must let the scout tolerate a
+break and only RECORD one on the real pass -- which also means neither
+$loop_node nor $break_projs is a sound "am I in a loop" test, since the scout
+has neither. An explicit flag is needed.
+
+### Still owed
+
+Same as before, plus: the break must record the bindings AS OF THE BREAK
+POINT, and the arm's control must join the loop's exit Region rather than
+building a second one.
+
+Claude-Session: https://claude.ai/code/session_01QYtFNnt2aXaRH2hrRvopyc
