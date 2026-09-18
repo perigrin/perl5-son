@@ -144,3 +144,85 @@ and none of the four is string eval, which still does not GAP (it becomes
    Corpus: 17 -> 16 GAPs. comp/utf.t and t/op/try.t both translate.
 
 Claude-Session: https://claude.ai/code/session_01QYtFNnt2aXaRH2hrRvopyc
+
+## The `continue` kind: an attempt, and a correction (2026-09-18)
+
+### The inlining is NOT generally equivalent
+
+`while COND {...} continue {...}` translates today, and the producer lowers it
+by INLINING the continue body at the bottom of the loop:
+
+    while ($i<3) { print "b$i" } continue { $i++ }
+      ->  while ($phi7 < 3) { print ...; $phi7 = $phi7 + 1 }
+
+I took one matching round trip as evidence the deparser needs no `continue`
+vocabulary. perigrin asked whether the OPTREES are identical. They are not,
+and the difference is the whole construct:
+
+    A (continue)                    B (inlined)
+    enterloop(next->a ...)          enterloop(next->e ...)
+      a = padsv/preinc                e = unstack
+    leaveloop vK/2                  leaveloop vKP/2
+    no nextstate in body            nextstate at 7 and b
+
+`next->a` vs `next->e` is the one that matters: in A a `next` jumps INTO the
+continue body, in B it jumps PAST it. Measured:
+
+    A  while (..) { $i++; next if $i==2; push @o,"b$i" } continue { push @o,"c$i" }
+         b1,c1,c2,b3,c3,b4,c4,b5,c5
+    B  while (..) { $i++; next if $i==2; push @o,"b$i"; push @o,"c$i" }
+         b1,c1,   b3,c3,b4,c4,b5,c5        <- c2 missing
+
+So the existing lowering is correct ONLY because `while + continue + next`
+is refused upstream. Relaxing that refusal without changing the lowering
+turns an honest GAP into exactly this silent drop.
+
+### The right lowering is duplication at exit edges
+
+    fall off end   continue RUNS      inline at the bottom of the body
+    next           continue RUNS      inline before each `next` as well
+    redo           continue SKIPPED   no copy on that edge
+    last           continue SKIPPED   no copy on that edge
+
+No new IR vocabulary and nothing new for chalk -- it is where the copies go.
+
+### What blocked the bare-block case
+
+A bare block with a continue and no next/last/redo IS straight-line code
+(measured: `{ $n=1 } continue { $n+=10 }` is 11, same as the statements in
+sequence, and the optree has no back edge). Lowering it needs the construct
+to be IDENTIFIABLE, and it is not, by any local property found:
+
+    bare+continue simple   next=padsv     redo=const      want to lower
+    while+continue         next=padsv     redo=pushmark   already works
+    C-style for            next=padsv     redo=pushmark   already works
+    bare+continue redo     next=pushmark  redo=enter      must refuse
+    plain bare block       next=leaveloop redo=nextstate  already works
+    while                  next=unstack   redo=nextstate  already works
+
+The simple form shares `next=padsv` with two real loops that translate
+correctly. Guessing a discriminator risks sending those down the
+straight-line path -- trading a refusal for a miscompile. Reverted.
+
+The existing guard keys on `redoop == enter`, which means "bare block WITH AN
+INNER SCOPE", not "bare block with continue" -- which is why the simple form
+was never caught by it and reports the unrelated "loop without a lowerable
+condition" instead.
+
+### A message defect found on the way
+
+`while ($i<5) {...} continue {...}` with a `next` reports "a bare block with a
+`continue` block". It is not a bare block. Same guard, wrong text.
+
+### Kept
+
+t/from-optree-bare-block-continue.t has the measured exit matrix and pins both
+refusals. Two subtests fail (the unlowerable straight-line case), so it is not
+committed.
+
+    fall off end -> continue RUNS      next -> continue RUNS
+    redo         -> continue SKIPPED   last -> continue SKIPPED
+
+    { $i++; redo if $i<3 } continue { push @o,"c$i" }   ->  b1,b2,b3,c3
+
+Claude-Session: https://claude.ai/code/session_01QYtFNnt2aXaRH2hrRvopyc
