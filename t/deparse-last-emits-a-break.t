@@ -148,7 +148,15 @@ print "$s
 ";
 SRC
     like $err, qr/GAP:/, 'it is refused';
-    like $err, qr/last|loop control/i, '... naming the construct';
+    # THE CAUSE MOVED. It was "a loop control inside a branch arm" -- the arm
+    # walk carrying no exit edge -- until that was built. The `last` now
+    # routes correctly and the refusal comes from a DIFFERENT, pre-existing
+    # gap one layer down (a function exit inside a statement modifier in an
+    # arm). Still honest, still no wrong answer, but the message names
+    # something else and the assertion has to say so rather than pass by
+    # accident.
+    like $err, qr/statement modifier|loop control|last/i,
+        '... naming a construct rather than failing silently';
 };
 
 subtest 'a last after a next in a while is refused too' => sub {

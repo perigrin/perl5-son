@@ -9325,7 +9325,8 @@ class SoN::FromOptree 0.01 {
                 $rest_sim->set_control($rest_proj);
                 my ($rest_end) =
                     _walk_branch($cv, $op->next, $rest_sim, $factory, $opmap,
-                        $loop_visited);
+                        $loop_visited, undef, 0, undef,
+                        $loop_node, $break_projs, 1);
                 # Drain any leftover residual the rest-arm pushed (a void
                 # statement value) so merge() does not build a spurious stack Phi.
                 $rest_sim->pop_node while $rest_sim->stack_depth > $sim->stack_depth;
@@ -9447,11 +9448,39 @@ class SoN::FromOptree 0.01 {
                 # into the rest of the body (which belongs to BOTH arms).
                 my $taken_sim = $sim->snapshot;
                 $taken_sim->set_control($taken_proj);
-                _walk_branch($cv, $op->other, $taken_sim, $factory, $opmap,
-                    {}, undef, 0, _op_addr($op->next));
+                my (undef, $taken_sig) =
+                    _walk_branch($cv, $op->other, $taken_sim, $factory, $opmap,
+                        {}, undef, 0, _op_addr($op->next),
+                        $loop_node, $break_projs, 1);
                 # The guarded statement is a void statement; drain any value it
                 # left so merge() does not build a spurious stack Phi.
                 $taken_sim->pop_node while $taken_sim->stack_depth > $sim->stack_depth;
+
+                # AN ARM THAT ENDS IN `last` DOES NOT REJOIN. The statements
+                # before the break simply run first -- `if (C) { $f=1; last }`
+                # is a break with a prologue, not a guarded statement -- so
+                # merging it with the skip arm is wrong: it would send the
+                # break's bindings down the fall-through path and lose the
+                # exit edge entirely.
+                #
+                # _walk_branch says which happened. Its return signal was
+                # DISCARDED here, which is why the two could not be told
+                # apart; captured, an 'exited' arm becomes a break edge and a
+                # converging arm still merges.
+                #
+                # The break's bindings are the arm's OWN (it ran its
+                # statements), unlike the guarded-`last` case above where the
+                # taken arm is empty and the main sim's bindings are correct.
+                if (($taken_sig // '') eq 'exited') {
+                    push @$break_projs, {
+                        proj     => $taken_sim->control,
+                        bindings => $taken_sim->scope_bindings,
+                    } if defined $break_projs;
+                    # Continue on the skip arm alone: the taken arm has left.
+                    $sim->set_control($skip_proj);
+                    $op = $op->next;
+                    next;
+                }
 
                 # The skip arm holds the pre-guard bindings on Proj 1. Merge it
                 # with the taken arm: arm 0 = taken, arm 1 = skipped.
@@ -10680,7 +10709,19 @@ class SoN::FromOptree 0.01 {
     # caller's merge knows this arm does not rejoin (Phase 4b-1). When $exits
     # is not passed (older callers: dor/cond_expr/trycatch arms that compute a
     # value), a return falls through to the legacy stop-at-op behavior.
-    sub _walk_branch ($cv, $op, $sim, $factory, $opmap, $visited, $exits = undef, $stop_at_exit = 0, $stop_addr = undef) {
+    # $loop_node / $break_projs / $in_loop CARRY THE ENCLOSING LOOP.
+    #
+    # A `last` in an arm is this loop's break, but only the two call sites
+    # inside _walk_loop_body know that -- the other ten (eval bodies, ternary
+    # arms, s///e replacements, scouts, top-level) have no loop to exit, and a
+    # `last` there keeps refusing.
+    #
+    # $in_loop IS SEPARATE FROM THE OTHER TWO because a loop body is walked
+    # TWICE: a scout pass measures which slots the body mutates and runs with
+    # $break_projs undef BY DESIGN, then the real pass wires control. Refusing
+    # in the scout kills the translation before the real pass runs, so "am I
+    # in a loop" cannot be inferred from either of the others being defined.
+    sub _walk_branch ($cv, $op, $sim, $factory, $opmap, $visited, $exits = undef, $stop_at_exit = 0, $stop_addr = undef, $loop_node = undef, $break_projs = undef, $in_loop = 0) {
         # VISITED RIDES ON THE CTX so a handler that walks a nested structure --
         # a foreach body, say -- marks the same op set the caller does. Without
         # it the arm and the main walk keep separate views and an op walked in
@@ -10772,7 +10813,8 @@ class SoN::FromOptree 0.01 {
                 my @rhs_exits;
                 my ($rhs_end, $rhs_sig) =
                     _walk_branch($cv, $op->other, $rhs_sim, $factory, $opmap,
-                        $visited, \@rhs_exits, 1, $stop);
+                        $visited, \@rhs_exits, 1, $stop,
+                        $loop_node, $break_projs, $in_loop);
                 # An exiting or non-converging RHS is the control-flow form.
                 die "GAP: short-circuit with a non-value arm inside an if/else"
                   . " arm not yet lowered\n"
@@ -10978,7 +11020,7 @@ class SoN::FromOptree 0.01 {
                 my $mod_sink = $exits // \@mod_exits;
                 my ($mod_end, $mod_sig) = _walk_branch($cv, $op->other,
                     $mod_sim, $factory, $opmap, $visited, $mod_sink,
-                    1, $mod_stop);
+                    1, $mod_stop, $loop_node, $break_projs, $in_loop);
                 die "GAP: function exit inside a statement modifier in an"
                   . " if/else arm not yet lowered\n"
                     if ($mod_sig // '') eq 'exited' && !defined $exits;
@@ -11088,9 +11130,23 @@ class SoN::FromOptree 0.01 {
             # `and` was already consumed by the handler that delegated here.
             # A first version of this guard tested the `and` and never fired.
             if ($name eq 'last' || $name eq 'next' || $name eq 'redo') {
+                # A `last` WITH A LOOP TO EXIT ENDS THE ARM. The caller reads
+                # the 'exited' signal and turns the arm's control into an extra
+                # predecessor of the loop's exit Region; everything after a
+                # `last` on this path is unreachable, so the walk stops here.
+                #
+                # RECORDED ONLY ON THE REAL PASS ($break_projs defined). The
+                # scout has none and must still not refuse -- see the
+                # signature comment.
+                return ($op, 'exited') if $name eq 'last' && $in_loop;
+
                 die "GAP: a loop control (`$name`) inside a branch arm is not"
-                  . " yet lowered -- the arm walk carries no loop exit edge to"
-                  . " route it to\n";
+                  . " yet lowered"
+                  . ( $in_loop
+                      ? " -- only `last` carries an exit edge"
+                      : " -- the arm walk carries no loop exit edge to"
+                        . " route it to" )
+                  . "\n";
             }
 
             # `leaveloop` IS NOT A VALUE OP, AND THE MAIN WALK ALREADY KNOWS

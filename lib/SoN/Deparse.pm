@@ -1091,8 +1091,28 @@ class SoN::Deparse 0.01 {
                 my @pin = ($ph->{inputs} // [])->@*;
                 next unless @pin == 2;
                 my $header = $nodes->{ $pin[0] // -1 } or next;
-                next unless ($header->{op} // '') eq 'Phi';
-                my $var = $self->_phi_var($header);
+
+                # A LOOP-CARRIED SLOT REUSES ITS OWN VARIABLE. When input 0 is
+                # the loop's header Phi, that Phi already owns a variable and
+                # it already holds the right value on the fall-out path, so
+                # only the break needs to assign.
+                #
+                # A SLOT WRITTEN ONLY ON THE BREAK PATH HAS NO HEADER PHI.
+                # `my $found = 0; foreach (..) { if (C) { $found = 1; last } }`
+                # never touches $found in the body, so its exit Phi is
+                # [Constant 0, Constant 1] and input 0 is not a Phi at all.
+                # That one needs a variable of its own, declared before the
+                # loop and seeded with input 0 -- which is exactly the
+                # fall-out value.
+                my $var;
+                if (($header->{op} // '') eq 'Phi') {
+                    $var = $self->_phi_var($header);
+                }
+                else {
+                    $var = sprintf('$exit%d', $ph->{id});
+                    $init .= sprintf("my %s = %s;\n",
+                        $var, $self->_expr($pin[0]));
+                }
                 $bound{ $ph->{id} }        = $var;
                 $break_assign{ $ph->{id} } = sprintf("%s = %s;\n",
                     $var, $self->_expr($pin[1]));

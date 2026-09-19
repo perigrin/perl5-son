@@ -80,15 +80,33 @@ SRC
 # here is the assignment, so this is a multi-statement arm rather than a
 # guarded control transfer. It reaches the arm walk, which carries no exit
 # edge -- an honest refusal, and separate work from the exit Phi.
-{
-    my $todo = todo 'a multi-statement arm ending in `last` needs the arm-walk exit edge';
-    round_trips( <<'SRC', 'a flag set before the break' );
+# A MULTI-STATEMENT ARM ENDING IN `last` IS STILL A BREAK. The statements
+# before it simply run first; the arm does not rejoin the body, it LEAVES.
+# The guarded-statement handler walked the arm and then MERGED it with the
+# skip arm -- which is only right for an arm that converges -- and discarded
+# _walk_branch's return signal, so it could not tell the two apart.
+round_trips( <<'SRC', 'a flag set before the break' );
 my @o = ("A", "HIT", "C");
 my $found = 0;
 foreach (@o) { if ($_ eq "HIT") { $found = 1; last } }
 print "$found\n";
 SRC
-}
+
+round_trips( <<'SRC', 'several statements before the break' );
+my @o = (1,2,3,4);
+my $sum = 0; my $hits = 0;
+foreach (@o) { if ($_ == 3) { $hits++; $sum += 100; last } $sum += $_ }
+print "$sum $hits\n";
+SRC
+
+# AND THE ARM THAT DOES CONVERGE still merges -- the guard against fixing a
+# break by breaking every guarded statement.
+round_trips( <<'SRC', 'a guarded statement that rejoins still merges' );
+my @o = (1,2,3);
+my $n = 0;
+foreach (@o) { if ($_ == 2) { $n += 10 } $n++ }
+print "$n\n";
+SRC
 
 # THE LOOP THAT NEVER BREAKS takes the header-false arm, so the exit value is
 # the header Phi -- the case a fix keyed only on the break arm would get wrong.
