@@ -9471,7 +9471,7 @@ class SoN::FromOptree 0.01 {
                 # The break's bindings are the arm's OWN (it ran its
                 # statements), unlike the guarded-`last` case above where the
                 # taken arm is empty and the main sim's bindings are correct.
-                if (($taken_sig // '') eq 'exited') {
+                if (($taken_sig // '') eq 'broke') {
                     push @$break_projs, {
                         proj     => $taken_sim->control,
                         bindings => $taken_sim->scope_bindings,
@@ -11138,7 +11138,20 @@ class SoN::FromOptree 0.01 {
                 # RECORDED ONLY ON THE REAL PASS ($break_projs defined). The
                 # scout has none and must still not refuse -- see the
                 # signature comment.
-                return ($op, 'exited') if $name eq 'last' && $in_loop;
+                # 'broke' IS NOT 'exited'. A break leaves the LOOP and routes
+                # through @break_projs; an exit leaves the FUNCTION and needs
+                # an exits list. They were one string, so no consumer could
+                # tell them apart -- the statement-modifier handler refused
+                # both alike, and a value-arm handler would have mistaken one
+                # for the other. Introduced by the branch-arm break work
+                # (21776e8); before that a `last` in an arm never produced a
+                # signal at all.
+                #
+                # EVERY OTHER CONSUMER STILL SEES ONLY 'exited', so a break
+                # reaching a value arm or a cond_expr keeps refusing -- which
+                # is right: an arm that leaves contributes no value, whichever
+                # way it left.
+                return ($op, 'broke') if $name eq 'last' && $in_loop;
 
                 die "GAP: a loop control (`$name`) inside a branch arm is not"
                   . " yet lowered"

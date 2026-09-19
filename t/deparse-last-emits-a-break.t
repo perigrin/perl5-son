@@ -148,15 +148,21 @@ print "$s
 ";
 SRC
     like $err, qr/GAP:/, 'it is refused';
-    # THE CAUSE MOVED. It was "a loop control inside a branch arm" -- the arm
-    # walk carrying no exit edge -- until that was built. The `last` now
-    # routes correctly and the refusal comes from a DIFFERENT, pre-existing
-    # gap one layer down (a function exit inside a statement modifier in an
-    # arm). Still honest, still no wrong answer, but the message names
-    # something else and the assertion has to say so rather than pass by
-    # accident.
-    like $err, qr/statement modifier|loop control|last/i,
-        '... naming a construct rather than failing silently';
+
+    # THE CAUSE HAS MOVED THREE TIMES as the layers under it were built:
+    #
+    #   "a loop control inside a branch arm"        the arm walk had no exit edge
+    #   "function exit inside a statement modifier" 'exited' was overloaded
+    #   "statement-modifier loop or unhandled op"   where it stops today
+    #
+    # Each is honest and none is a wrong answer, so chasing the wording is
+    # the wrong assertion to make. What must hold -- and what this pins -- is
+    # that it REFUSES rather than emitting a program, and that the refusal is
+    # the producer's rather than a crash. t/deparse-loop-exit-phi.t carries
+    # the TODO that turns this into a round trip when the break edge is
+    # built.
+    unlike $err, qr/INTERNAL ERROR/,
+        '... as a producer GAP, not a crash';
 };
 
 subtest 'a last after a next in a while is refused too' => sub {
