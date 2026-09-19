@@ -276,3 +276,49 @@ STILL OWED: the multi-exit merge itself (an exit Phi the deparser can render),
 and `next` before `last`, which the committed test pins as refused.
 
 Claude-Session: https://claude.ai/code/session_01QYtFNnt2aXaRH2hrRvopyc
+
+## `next` before `last`: attempted 2026-09-19, reverted
+
+Two findings, one of them a defect I introduced and should not repeat.
+
+### THE 'exited' SIGNAL IS OVERLOADED
+
+21776e8 made a `last` in an arm return `'exited'` -- the same string the
+FUNCTION-exit path uses. They are different transfers: an exit leaves the
+function and needs an exits list, a break leaves the LOOP and routes through
+@break_projs. Every existing consumer reads one string and cannot tell them
+apart, which is why the statement-modifier handler refused both:
+
+    GAP: function exit inside a statement modifier in an if/else arm
+
+A distinct `'broke'` signal fixes the ambiguity and lets that handler route a
+break while still refusing a `return`. THAT PART WORKED -- the construct
+translated. Worth redoing.
+
+### WHAT DID NOT WORK: the break's control edge
+
+The modifier handler pushed `$mod_sim->control` as the break Proj. Measured,
+that is the NEXT-GUARD's arm, not a break-specific edge:
+
+    If 9 in=[4, 8]              the `next` guard
+    Proj 10 = If 9 index 1      the continue arm
+    Proj 15 = If 9 index 0
+    Region 16 in=[15, 10]       <- merges a LEAVING arm with a CONTINUING one
+    Region 11 in=[3, 10]        <- the exit takes Proj 10 as well
+
+So one Proj feeds both the loop's exit and a body merge, and the exit Phi ends
+up regioned on the body merge (Phi 23 rgn=16) where the deparser correctly
+refuses it. A `next`-only loop with the identical Phi shape renders fine, which
+is what rules the deparser out as the cause.
+
+The break needs its OWN control edge out of the modifier's If, the way the
+loop body's handler mints $taken_proj -- not the arm the walk happens to be
+standing on.
+
+### Established either way
+
+- `'broke'` vs `'exited'` is a real distinction the code needs, independent of
+  this case. 21776e8 introduced the overload; it is still there.
+- A `return` in the same position must keep refusing, and the test pins it.
+
+Claude-Session: https://claude.ai/code/session_01QYtFNnt2aXaRH2hrRvopyc

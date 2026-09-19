@@ -131,4 +131,31 @@ my @o = ("A", "HIT", "C");
 foreach (@o) { if ($_ eq "HIT") { last } print "$_\n" }
 SRC
 
+# A `next` BEFORE A `last` reaches the break through a statement-modifier
+# walk, which refused on the 'exited' signal. That signal meant "left the
+# function" until a `last` in an arm started using it too -- so the modifier
+# handler could not tell a RETURN (which it cannot lower without an exits
+# list) from a BREAK (which has @break_projs to route to) and refused both.
+{
+    my $todo = todo 'the break edge from a modifier is the next-guard arm, not its own';
+    round_trips( <<'SRC', 'a next before a last in a foreach' );
+my $s = 0;
+for my $i (1..9) { next if $i == 2; last if $i == 4; $s += $i }
+print "$s\n";
+SRC
+}
+
+# A RETURN in the same position must still refuse -- it is a function exit
+# with nowhere to go, and distinguishing the two signals is the whole point.
+subtest 'a return inside a statement modifier in a loop still refuses' => sub {
+    my ( undef, $err ) = graph_of( <<'SRC' );
+sub f {
+    for my $i (1..9) { next if $i == 2; return $i if $i == 4 }
+    return 0;
+}
+print f(), "\n";
+SRC
+    like $err, qr/GAP:/, 'it is refused';
+};
+
 done_testing;
