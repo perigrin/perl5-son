@@ -1163,12 +1163,77 @@ class SoN::FromOptree 0.01 {
                 # REFUSED because the continue body is real control flow this
                 # walker does not model: it runs AFTER the block, and `last`
                 # SKIPS it where `next` runs it.
-                my $rd = $op->can('redoop') ? $op->redoop : undef;
-                if (ref $rd && $$rd && $rd->name eq 'enter') {
-                    die "GAP: a bare block with a `continue` block is not yet"
-                      . " lowered -- the continue body runs after the block and"
-                      . " `last` skips it, which is control flow the walker does"
-                      . " not model\n";
+                # A BARE BLOCK ENTERS AT ITS BODY; A REAL LOOP ENTERS AT ITS
+                # CONDITION. `redo` targets the body, so `entry == redoop` IS
+                # the bare-block test -- measured against B on every form:
+                #
+                #     bare + continue        ->next=const      redo=const      SAME
+                #     bare + continue + redo ->next=enter      redo=enter      SAME
+                #     plain bare block       ->next=nextstate  redo=nextstate  SAME
+                #     while + continue       ->next=padsv      redo=pushmark   differ
+                #     C-style for            ->next=padsv      redo=pushmark   differ
+                #     while                  ->next=padsv      redo=nextstate  differ
+                #
+                # The previous test was `redoop == enter`, which means "bare
+                # block WITH AN INNER SCOPE" -- true of the redo form and
+                # false of the straight-line one, so the latter fell through
+                # to the while translator and reported an unrelated GAP. An
+                # attempt to key on the next/redo op NAMES could not separate
+                # the straight-line form from `while+continue` or a C-style
+                # `for`, which both work; the IDENTITY test has no overlap.
+                # AND `while (1)` LOOKS THE SAME FROM THE ENTRY ALONE. perl
+                # folds the constant condition away, so there is no condition
+                # to enter at and entry == redoop holds for it too:
+                #
+                #     { $n=1 } continue {..}   next=padsv     redo=const      entry==redo
+                #     { $n=1 }                 next=leaveloop redo=nextstate  entry==redo
+                #     while (1) { .. }         next=UNSTACK   redo=nextstate  entry==redo
+                #
+                # `nextop` is what tells them apart: an `unstack` IS the back
+                # edge, and a bare block has none. My first version keyed on
+                # the entry alone and broke every while(1) test in the suite
+                # (t/from-optree-while-one.t, t/deparse-infinite-loop-with-last.t,
+                # t/from-optree-loop-gaps.t) -- the six probes I measured all
+                # had a real condition or none, and never the FOLDED case.
+                my $rd    = $op->can('redoop') ? $op->redoop : undef;
+                my $entry = $op->next;
+                if (ref $rd && $$rd && ref $entry && $$entry
+                        && $$entry == $$rd
+                        && !(ref $nx && $$nx && $nx->name eq 'unstack')) {
+                    # A CONTINUE WITH NO LOOP-EXIT IS STRAIGHT-LINE CODE. The
+                    # block runs once, falls into the continue, and leaves --
+                    # measured, the answer matches the same statements written
+                    # in sequence:
+                    #
+                    #     my $n=0; { $n=1 } continue { $n+=10 }   $n is 11
+                    #     my $n=0; $n=1; $n+=10;                  $n is 11
+                    #
+                    # so exec order already walks block, then continue, then
+                    # leaveloop, and stepping into it translates the whole
+                    # thing with no loop vocabulary at all.
+                    #
+                    # WHAT MAKES IT A LOOP IS AN EXIT OP, and the three exits
+                    # have three different destinations -- measured:
+                    #
+                    #     fall off end   continue RUNS
+                    #     next           continue RUNS
+                    #     redo           continue SKIPPED (back to block top)
+                    #     last           continue SKIPPED (past it)
+                    #
+                    #     { $i++; redo if $i<3 } continue { push @o,"c$i" }
+                    #       -> b1,b2,b3,c3   (not c1,c2,c3)
+                    #
+                    # One region, three destinations, which the walker does
+                    # not model -- so those still refuse.
+                    if ( _block_has_loop_exit($op) ) {
+                        die "GAP: a bare block with a `continue` block and a"
+                          . " next/last/redo is not yet lowered -- the three"
+                          . " exits have three different destinations (next"
+                          . " runs the continue, last and redo skip it), which"
+                          . " is control flow the walker does not model\n";
+                    }
+                    $op = $op->next;
+                    next;
                 }
                 _translate_while_loop($cv, $op->next, $sim, $factory, $opmap, \%visited);
                 # Continue after the loop; the B::LOOP op's lastop is leaveloop.
@@ -11794,6 +11859,53 @@ class SoN::FromOptree 0.01 {
         _entry_store($factory, $sim, $entry, $value, 1);
         $sim->push_node($value);
         return;
+    }
+
+    # _block_has_loop_exit($enterloop) -> bool
+    #
+    # True when a bare block's body or continue body contains a next, last or
+    # redo targeting it. Those three are what make the construct a LOOP: each
+    # has a different relationship to the continue body (next runs it, last
+    # and redo skip it), and one region with three exit destinations is
+    # control flow the walker does not model. Without an exit the construct is
+    # straight-line -- block, then continue, then out.
+    #
+    # A CONDITIONAL EXIT IS NOT ON THE ->next CHAIN. `redo if $i < 3` hangs
+    # the redo off the and's OTHER branch -- measured:
+    #
+    #     f  and(other->g)
+    #     g      redo          <- exec order goes f -> h, skipping it
+    #
+    # so a linear walk finds nothing and lets a loop through as straight-line
+    # code. Both edges are followed, with a worklist rather than recursion.
+    #
+    # Bounded by the enterloop's own lastop (its leaveloop), and a NESTED loop
+    # owns its own exits -- its whole range is skipped rather than counting a
+    # `last` that belongs to it as one of ours.
+    sub _block_has_loop_exit ($enterloop) {
+        my $stop = $enterloop->can('lastop') ? $enterloop->lastop : undef;
+        return 0 unless ref $stop && $$stop;
+
+        my %seen;
+        my @todo = ( $enterloop->next );
+        while (@todo) {
+            my $p = shift @todo;
+            next unless ref $p && $$p && $$p != $$stop && !$seen{$$p}++;
+
+            my $n = $p->name;
+            return 1 if $n eq 'next' || $n eq 'last' || $n eq 'redo';
+
+            if (($n eq 'enterloop' || $n eq 'enteriter')
+                && $p->can('lastop') && ref $p->lastop && ${$p->lastop}) {
+                push @todo, $p->lastop;
+                next;
+            }
+
+            push @todo, $p->next if $p->can('next');
+            push @todo, $p->other
+                if $p->can('other') && ref $p->other && ${ $p->other };
+        }
+        return 0;
     }
 
     sub _entry_store ($factory, $sim, $target, $value, $binds = 0) {

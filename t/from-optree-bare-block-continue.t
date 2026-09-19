@@ -67,36 +67,36 @@ sub round_trips ($src, $name) {
 # It was refused with the loop-exit forms because the guard keys on
 # `redoop == enter`, which says BARE BLOCK and says nothing about whether a
 # next/last/redo is present.
-# NOT LOWERED, AND BLOCKED ON IDENTIFYING THE CONSTRUCT rather than on the
-# lowering. A bare block with a continue and no loop-exit shares its enterloop
-# shape with two forms that translate correctly today -- measured across every
-# enterloop form:
+# THE DISCRIMINATOR IS `entry == redoop`, and it is structural rather than a
+# guess. A REAL LOOP ENTERS AT ITS CONDITION; a bare block enters at its body,
+# which is exactly where `redo` targets. Measured against B directly:
 #
-#     bare+continue simple   next=padsv     redo=const      want to lower
-#     while+continue         next=padsv     redo=pushmark   already works
-#     C-style for            next=padsv     redo=pushmark   already works
-#     bare+continue redo     next=pushmark  redo=enter      must refuse
+#     bare block + continue      ->next=const      redo=const      SAME
+#     bare block + continue+redo ->next=enter      redo=enter      SAME
+#     plain bare block           ->next=nextstate  redo=nextstate  SAME
+#     while + continue           ->next=padsv      redo=pushmark   differ
+#     C-style for                ->next=padsv      redo=pushmark   differ
+#     while                      ->next=padsv      redo=nextstate  differ
 #
-# No local property separates the first from the middle two, and guessing one
-# risks sending a working `while+continue` or C-style `for` down the
-# straight-line path -- trading an honest refusal for a miscompile. TODO
-# rather than attempted again without a discriminator.
+# An earlier attempt keyed on the enterloop's next/redo op NAMES and could not
+# separate the straight-line form from `while+continue` or a C-style `for`,
+# both of which translate correctly -- guessing there risked sending a working
+# loop down the straight-line path. The IDENTITY test has no such overlap.
 #
-# See docs/plans/2026-09-17-the-gap-census-audited.md for the full attempt.
-{
-    my $todo = todo 'no local property identifies a bare block with a continue';
-    round_trips( <<'SRC', 'a continue with no loop-exit is sequential' );
+# With the exit scan below, the classification is complete: a bare block with
+# no next/last/redo is straight-line code and lowers; one with an exit is a
+# loop with three exit destinations and still refuses.
+round_trips( <<'SRC', 'a continue with no loop-exit is sequential' );
 my $n = 0;
 { $n = 1 } continue { $n += 10 }
 print "$n\n";
 SRC
 
-    round_trips( <<'SRC', 'the continue sees the block\'s writes' );
+round_trips( <<'SRC', 'the continue sees the block\'s writes' );
 my @o;
 { push @o, "b" } continue { push @o, "c" }
 print join(",", @o), "\n";
 SRC
-}
 
 # THE LOOP-EXIT FORMS STILL REFUSE, and they are a FACT rather than a missing
 # lowering: the four exits have three different destinations, measured on
