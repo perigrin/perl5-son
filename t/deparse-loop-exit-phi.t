@@ -136,11 +136,43 @@ SRC
 # function" until a `last` in an arm started using it too -- so the modifier
 # handler could not tell a RETURN (which it cannot lower without an exits
 # list) from a BREAK (which has @break_projs to route to) and refused both.
+# A `last if C` AFTER A `next if C` NEEDS ITS OWN CONTROL EDGE. The
+# statement-modifier handler only built an If (and therefore its own Projs)
+# when the arm was a void call or a die -- a break is neither, so $mod_sim
+# kept the OUTER control, which is the preceding next-guard's arm. Measured
+# before the fix:
+#
+#     If 9 in=[4, 8]           the `next` guard
+#     Proj 10 = If 9 index 1   the continue arm
+#     Region 16 in=[15, 10]    merged a LEAVING arm with a CONTINUING one
+#     Region 11 in=[3, 10]     and the loop exit took the same Proj
+#
+# One Proj feeding both the exit and a body merge put the exit Phi on the
+# body merge, where the deparser correctly refused it.
+# THE PRODUCER HALF IS DONE; the deparser half is not. The break now routes
+# to the loop's exit Region (measured: `Region 15 in=[3, 14]`, header-false
+# Proj plus the break Proj), and the graph is structurally identical to the
+# `next`-only loop that renders today. What refuses is a body-merge Phi
+# reached in this shape -- no wrong answer, an unrendered graph.
 {
-    my $todo = todo 'the break edge from a modifier is the next-guard arm, not its own';
+    my $todo = todo 'the deparser does not render a body-merge Phi in a two-exit loop';
     round_trips( <<'SRC', 'a next before a last in a foreach' );
 my $s = 0;
 for my $i (1..9) { next if $i == 2; last if $i == 4; $s += $i }
+print "$s\n";
+SRC
+
+    round_trips( <<'SRC', 'a next before a last in a while' );
+my $s = 0; my $i = 0;
+while ($i < 9) { $i++; next if $i == 2; last if $i == 4; $s += $i }
+print "$s\n";
+SRC
+
+    # ORDER DOES NOT RESCUE IT: a `last` BEFORE a `next` reaches the same
+    # merge. I assumed this one already worked and the test said otherwise.
+    round_trips( <<'SRC', 'a last before a next' );
+my $s = 0;
+for my $i (1..9) { last if $i == 6; next if $i == 2; $s += $i }
 print "$s\n";
 SRC
 }

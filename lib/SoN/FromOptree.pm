@@ -11057,9 +11057,20 @@ class SoN::FromOptree 0.01 {
                 # A CONTROL effect that pins once (a print/say, a die) does
                 # lower: build the same If/Proj/Region the main walk's handler
                 # builds. A plain rebind body keeps the value merge below.
+                # A BREAK ARM NEEDS ITS OWN CONTROL EDGE, for the same
+                # reason a void call or a die does: it goes somewhere the
+                # continuation does not. Without an If here, $mod_sim keeps
+                # the OUTER control -- which after a preceding `next if C` is
+                # that guard's arm, so the break Proj pushed below was the
+                # next-guard's continue edge. Measured, one Proj then fed BOTH
+                # the loop's exit Region and a body merge, and the exit Phi
+                # landed on the body merge where the deparser refuses it.
                 my $mem_branch =
                        _arm_has_void_call($op->other, $op->next, $mod_stop)
-                    || _arm_has_die($op->other, $op->next, $mod_stop);
+                    || _arm_has_die($op->other, $op->next, $mod_stop)
+                    || ( $in_loop
+                         && defined _guarded_loop_control($op->other)
+                         && _guarded_loop_control($op->other) eq 'last' );
                 my $guard   = $sim->pop_node;
                 my $mod_sim = $sim->snapshot;
                 my $if_node;
@@ -11095,9 +11106,13 @@ class SoN::FromOptree 0.01 {
                 # AN EXITING MODIFIER DOES NOT REACH $mod_stop, and that is
                 # correct rather than a failure: it left the function, so there
                 # is no convergence to check and nothing after it to drop.
+                # A BREAKING MODIFIER DOES NOT REACH $mod_stop EITHER, and
+                # for the same reason an exiting one does not: it left the
+                # loop, so there is no convergence to check.
                 die "GAP: statement-modifier loop or unhandled op inside an"
                   . " if/else arm not yet lowered\n"
                     unless ( ($mod_sig // '') eq 'exited' )
+                        || ( ($mod_sig // '') eq 'broke' )
                         || ( defined $mod_end && ref $mod_end
                              && $$mod_end == $mod_stop );
                 if ($mem_branch) {
@@ -11116,6 +11131,31 @@ class SoN::FromOptree 0.01 {
                     # successors". $sim already sits on the continue Proj, so
                     # the fall-through needs nothing built here.
                     if (($mod_sig // '') eq 'exited') {
+                        $op = $op->next;
+                        next;
+                    }
+                    # A BROKEN ARM IS NOT A MERGE INPUT EITHER, and for the
+                    # same reason: it LEAVES THE LOOP, so regioning it here
+                    # would give its control two successors -- the body merge
+                    # and the loop's exit Region. Measured before this branch
+                    # existed, `next if C; last if C` built
+                    #
+                    #     Region 25 in=[23, 24]   both arms of the break If
+                    #     Region 4  in=[3]        the exit, WITHOUT the break
+                    #
+                    # so the break was merged back into the body and never
+                    # reached the exit at all, and the deparser emitted an
+                    # `if (...) { }` with an empty body where the `last`
+                    # belongs.
+                    #
+                    # The break's OWN Proj is what goes to @break_projs -- the
+                    # If built above exists precisely so there is one, rather
+                    # than the outer arm the walk was standing on.
+                    if (($mod_sig // '') eq 'broke') {
+                        push @$break_projs, {
+                            proj     => $mod_sim->control,
+                            bindings => $mod_sim->scope_bindings,
+                        } if defined $break_projs;
                         $op = $op->next;
                         next;
                     }

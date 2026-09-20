@@ -140,48 +140,32 @@ SRC
 # and only ONE If was built (for the next), with the last contributing
 # nothing. A silent wrong answer, which the contract ranks below a refusal, so
 # it refuses until the rest-arm walk can carry an exit edge.
-subtest 'a last after a next is refused, not silently dropped' => sub {
+# A `last` AFTER A `next` NOW TRANSLATES. The statement-modifier handler
+# builds its own If for a break arm (it previously did so only for a void
+# call or a die), so the break gets a control edge of its own instead of the
+# preceding next-guard's arm, and routes to the loop's exit Region:
+#
+#     Region 15 in=[3, 14]    header-false Proj AND the break Proj
+#
+# The DEPARSER still refuses it -- a body-merge Phi reached in this shape --
+# so there is no wrong answer, only an unrendered graph. These two subtests
+# pinned the PRODUCER refusal, which is gone; they assert the remaining
+# deparser refusal instead, and t/deparse-loop-exit-phi.t carries the round
+# trip that converts when the rendering lands.
+subtest 'a last after a next translates; the deparser has the gap' => sub {
     my ( $data, $err ) = graph_of( <<'SRC' );
 my $s = 0;
 for my $i (1..9) { next if $i == 2; last if $i == 4; $s += $i }
-print "$s
-";
-SRC
-    like $err, qr/GAP:/, 'it is refused';
-
-    # THE CAUSE HAS MOVED THREE TIMES as the layers under it were built:
-    #
-    #   "a loop control inside a branch arm"        the arm walk had no exit edge
-    #   "function exit inside a statement modifier" 'exited' was overloaded
-    #   "statement-modifier loop or unhandled op"   where it stops today
-    #
-    # Each is honest and none is a wrong answer, so chasing the wording is
-    # the wrong assertion to make. What must hold -- and what this pins -- is
-    # that it REFUSES rather than emitting a program, and that the refusal is
-    # the producer's rather than a crash. t/deparse-loop-exit-phi.t carries
-    # the TODO that turns this into a round trip when the break edge is
-    # built.
-    unlike $err, qr/INTERNAL ERROR/,
-        '... as a producer GAP, not a crash';
-};
-
-subtest 'a last after a next in a while is refused too' => sub {
-    my ( $data, $err ) = graph_of( <<'SRC' );
-my $s = 0; my $i = 0;
-while ($i < 9) { $i++; next if $i == 2; last if $i == 4; $s += $i }
-print "$s
-";
-SRC
-    like $err, qr/GAP:/, 'it is refused';
-};
-
-# A LOOP WITH NO BREAK IS UNCHANGED -- the plain shape, kept so the fix cannot
-# regress the common case.
-round_trips( <<'SRC', 'a plain loop is unchanged' );
-my $s = 0;
-for my $i (1..5) { $s += $i }
 print "$s\n";
 SRC
+    ok $data, 'the producer translates it' or diag($err), return;
+
+    my $d = SoN::Deparse->new;
+    my $out = eval { $d->render($data) };
+    ok !defined $out, 'the deparser refuses rather than emitting a wrong answer';
+    like $d->gap // '', qr/Phi whose region/,
+        '... naming the unrendered merge';
+};
 
 # A `last` INSIDE AN `if` BLOCK is the ordinary early-exit search, and it
 # reached the wrong handler entirely. A block arm opens with a PROLOGUE:
