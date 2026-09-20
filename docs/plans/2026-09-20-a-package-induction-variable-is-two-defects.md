@@ -71,3 +71,61 @@ keeps the LEXICAL form as a guard: `for (my $i = 0; ...)` is unaffected,
 since its stamp is known during the walk.
 
 Claude-Session: https://claude.ai/code/session_01QYtFNnt2aXaRH2hrRvopyc
+
+## Attempt 2 (same day): both halves built, both reverted
+
+Both fixes work in isolation and the round trip passes. The blocker is that
+DEFECT 2's fix contradicts an existing, correct behaviour.
+
+### What was built
+
+- `_deferred_backedge_floor` (producer): an unstamped EntryDef's floor is
+  fixed by its sigil, so `join(Int, Scalar) = Scalar` is computable at walk
+  time and the Phi widens honestly. Worked.
+- `_loop_invariant_roots` (deparser): collect the variables every EntryWrite
+  targets; treat a read of one as loop-carried. Worked -- the emitted loop
+  read `$main::i` directly and terminated.
+
+t/wire-c-style-for-over-a-package-scalar.t passed 4/4.
+
+### Why it reverted: hoisting is REQUIRED for the other loop form
+
+`t/deparse-loop-bound-is-evaluated-once.t` broke -- the emitted program ran 18+
+iterations where perl runs 4. Measured, perl's two loop forms DISAGREE about
+re-reading a mutated global:
+
+    $n=2; foreach my $i (1..$n) { $n = 10; ... }    2 iterations  bound FIXED
+    $n=2; for ($i=0; $i<$n; $i++) { $n = 4; ... }   4 iterations  RE-READ
+
+So hoisting is correct for a foreach RANGE (perl evaluates the endpoints once
+at entry) and wrong for a C-style `for` (the condition runs every pass).
+Suppressing it whenever the body writes the variable is too broad: it fixes
+the C-style loop by breaking the range loop.
+
+### Three discriminators tried, none works
+
+1. `does the subtree reach a loop Phi` -- the existing test. Blind to package
+   variables, whose updates ride the memory chain.
+2. `does the body write this variable` -- what was built. Too broad; breaks
+   the range form, which must hoist regardless.
+3. `what memory version does the condition's EntryDef read` -- measured, BOTH
+   forms read an EntryWrite (the pre-loop initialisation). Identical at this
+   depth.
+
+The graphs do differ in shape -- a range condition is `NumGt(bound, Phi)` with
+the bound a separate node, a C-style condition is `NumLt(EntryDef, const)`
+reading the variable directly -- but that is a description of two programs,
+not yet a test. Whether it generalises is unmeasured.
+
+### What the next attempt needs
+
+A property that says WHICH LOOP FORM this is, or equivalently whether the
+condition is re-evaluated per iteration. The producer knows: it has separate
+translators (`_translate_foreach_range` vs the C-style path through
+`_translate_while_loop`). The deparser does not, and reconstructing it from
+the graph is the open question -- possibly the Loop node should carry it.
+
+Reverted rather than shipped: trading an honest refusal on one loop form for a
+wrong answer on another is the trade the contract forbids.
+
+Claude-Session: https://claude.ai/code/session_01QYtFNnt2aXaRH2hrRvopyc
