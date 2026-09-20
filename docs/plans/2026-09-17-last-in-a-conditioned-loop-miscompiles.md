@@ -322,3 +322,51 @@ standing on.
 - A `return` in the same position must keep refusing, and the test pins it.
 
 Claude-Session: https://claude.ai/code/session_01QYtFNnt2aXaRH2hrRvopyc
+
+## 2026-09-20: producer half DONE (91fc7c1); deparser half scoped, not built
+
+### What landed
+
+`next` before `last` translates. Two causes, both as 726b343 predicted:
+
+- The statement-modifier handler built an If (and so its own Projs) only for a
+  void call or a die. A break is neither, so $mod_sim kept the OUTER control --
+  after a preceding `next if C`, that guard's arm.
+- A 'broke' arm fell through to the merge. 'exited' already skipped it; the
+  break was folded back into the body and never reached the exit.
+
+Result: `Region 15 in=[3, 14]` -- header-false Proj AND the break Proj,
+structurally identical to the `next`-only loop that renders today.
+
+### The deparser half: what it needs, measured
+
+The refusal is `a Phi whose region is a Region rather than a Loop` on
+
+    Region 25 in=[23, 24]    Proj 23 = If 9 (next) index 0
+                             Proj 24 = If 13 (break) index 1
+    Phi 26   rgn=25          the accumulator at that join
+
+which is an ORDINARY body merge -- the `next`-taken arm and the
+break-not-taken arm are the two paths that reach the bottom of the body. Only
+the route to it is unusual.
+
+_emit_if's break branch returns `undef` as its join, so the walk never treats
+Region 25 as one and `_join_phis` never binds Phi 26.
+
+ATTEMPTED AND REVERTED: returning the rest arm's converged Region instead of
+undef. Necessary but not sufficient -- the Phi also has to be BOUND, and
+`_join_phis` maps each Phi input to an ARM. Here one arm is a `last` that
+never reaches the join and the other comes from a DIFFERENT If, so the arm map
+it expects does not exist in that shape. Building one without tracing
+_join_phis would have been guesswork.
+
+NEXT STEP for whoever takes it: trace _join_phis' predecessor matching (it
+reads the Phi's `predecessors` field, "matched to its arm by the graph rather
+than by position") and decide whether a break-shaped join can supply that map,
+or whether this join wants a different binder.
+
+Three round trips are TODO'd in t/deparse-loop-exit-phi.t with this reason --
+including `last` before `next`, which fails the same way and which I had
+assumed worked until the test said otherwise.
+
+Claude-Session: https://claude.ai/code/session_01QYtFNnt2aXaRH2hrRvopyc
