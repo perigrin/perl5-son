@@ -363,6 +363,9 @@ never reaches the join and the other comes from a DIFFERENT If, so the arm map
 it expects does not exist in that shape. Building one without tracing
 _join_phis would have been guesswork.
 
+DONE in 580ab93 -- see "Closed 2026-09-21" below, which also records where
+this scoping was wrong. Kept as written.
+
 NEXT STEP for whoever takes it: trace _join_phis' predecessor matching (it
 reads the Phi's `predecessors` field, "matched to its arm by the graph rather
 than by position") and decide whether a break-shaped join can supply that map,
@@ -372,12 +375,79 @@ Three round trips are TODO'd in t/deparse-loop-exit-phi.t with this reason --
 including `last` before `next`, which fails the same way and which I had
 assumed worked until the test said otherwise.
 
+## Closed 2026-09-21 (580ab93): the deparser half, and a second cause
+
+`next` before `last` round-trips. TWO causes, and only the first was the one
+scoped above.
+
+### 1. The break path never bound its join -- and the arm map DID exist
+
+`_emit_if`'s break branch returned `undef` as its join, so `_join_phis` never
+ran over the merge below it.
+
+The scoping above stopped at "one arm is a `last` that never reaches the join
+and the other comes from a DIFFERENT If, so the arm map it expects does not
+exist in that shape." That was wrong, and the graph says so:
+
+    Proj 27 = If 14 (next)  index 0
+    Proj 28 = If 18 (break) index 1
+    Region 29 in=[27, 28]
+    Phi 30   in=[4, 26] pred=[27, 28]
+
+Only the REST arm is a predecessor of Region 29; the break arm leaves the
+loop and is not one. So the map needs ONE entry, not two -- exactly the
+lone-arm shape `_join_phis` already supports, where the predecessor with no
+arm seeds the declaration and the present arm assigns. No new binder.
+
+The instinct to trace before building was right; the conclusion drawn without
+tracing was not.
+
+### 2. `_reaches_region` was transitive through a nested `If`
+
+NOT PREDICTED ANYWHERE ABOVE, and the more serious of the two.
+
+The scan stopped at a Region but walked straight through an `If`, so the
+next-guard's arm found the loop exit through the LATER branch:
+
+    Proj 15 -> If 18 -> Proj 19 -> Region 20 (the loop exit)
+
+The `next` was therefore classified as the break and emitted as `last`, and
+the real break was never reached. Measured: perl prints 4, the emitted
+program printed 0.
+
+Fixing cause 1 alone would have SHIPPED that -- a silent wrong answer in
+place of an honest refusal, which is the trade this project's contract
+forbids. It surfaced only because the round trip ran after the binding
+landed. Bounded at a nested `If` now, the way it was already bounded at a
+nested Region.
+
+### The third TODO was filed under the wrong cause
+
+`last` before `next` was TODO'd here as the same deparser defect. It is a
+PRODUCER refusal:
+
+    GAP: a loop control (`next`) inside a branch arm is not yet lowered
+         -- only `last` carries an exit edge
+
+perl prints 13. Repinned in t/deparse-loop-exit-phi.t as the producer refusal
+it is, asserting that message. Still open, tracked as its own defect rather
+than as this one.
+
+Two refusal tests here had gone stale in the way
+[[a-refusal-test-must-name-its-cause]] describes -- t/deparse-last-emits-a-
+break.t's subtest pinned the producer refusal, then the deparser one, and is
+now the round trip its own comment said it was heading for.
+
+### Evidence
+
+Suite 350 files / 1563 tests green. Corpus census measured on BOTH sides of
+the change and unchanged at 12 round-trips / 10 differs / 15 refused: no
+t/base, t/comp or t/cmd file reaches this shape, so the gain is in the suite,
+not the corpus.
+
 ## Status 2026-09-21
 
-The deparser half above is THE ONLY ITEM THIS DOCUMENT STILL OWES. Unchanged
-by 2488e82, which was a different defect (loop bound evaluation) in the same
-area.
-
-It refuses rather than miscompiles: an unrendered graph, no wrong answer.
+This document owes nothing further. The remaining `next`-in-a-branch-arm
+refusal is a producer defect with no plan doc of its own yet.
 
 Claude-Session: https://claude.ai/code/session_01QYtFNnt2aXaRH2hrRvopyc

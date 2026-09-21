@@ -225,4 +225,32 @@ committed.
 
     { $i++; redo if $i<3 } continue { push @o,"c$i" }   ->  b1,b2,b3,c3
 
+## A 14th kind, added 2026-09-21
+
+Not in the census above because it did not exist then: it was introduced by
+72a4da7, which turned a silent DROP of a loop control in a branch arm into a
+refusal.
+
+    GAP: a loop control (`next`) inside a branch arm is not yet lowered
+         -- only `last` carries an exit edge
+
+    my $s = 0;
+    for my $i (1..9) { last if $i == 6; next if $i == 2; $s += $i }
+    print "$s\n";                                      perl prints 13
+
+ARTIFACT, by the same criterion as the rest: the answer is present in the
+program and the walker cannot reach it. `last` in this position was lowered
+in 91fc7c1 and 580ab93 -- a break gets its own control edge and routes to the
+loop's exit Region. `next` in the same position is the same shape with a
+different destination: the loop's BACK EDGE rather than its exit. The
+machinery it needs is keyed to the exit: `@break_projs` feeds the exit
+Region's inputs (FromOptree.pm:8466) and `_bind_break_exit_phis` binds the
+carried slots there. A `next` needs the same collection routed to the back
+edge instead. Whether that is the same structure with a different
+destination, or wants its own, is UNMEASURED -- nobody has traced it.
+
+Reached from no t/base, t/comp or t/cmd file, so it does not appear in the
+corpus census -- it is pinned by t/deparse-loop-exit-phi.t instead, asserting
+this message.
+
 Claude-Session: https://claude.ai/code/session_01QYtFNnt2aXaRH2hrRvopyc
