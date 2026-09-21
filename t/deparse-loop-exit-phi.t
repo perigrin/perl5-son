@@ -149,33 +149,49 @@ SRC
 #
 # One Proj feeding both the exit and a body merge put the exit Phi on the
 # body merge, where the deparser correctly refused it.
-# THE PRODUCER HALF IS DONE; the deparser half is not. The break now routes
-# to the loop's exit Region (measured: `Region 15 in=[3, 14]`, header-false
-# Proj plus the break Proj), and the graph is structurally identical to the
-# `next`-only loop that renders today. What refuses is a body-merge Phi
-# reached in this shape -- no wrong answer, an unrendered graph.
-{
-    my $todo = todo 'the deparser does not render a body-merge Phi in a two-exit loop';
-    round_trips( <<'SRC', 'a next before a last in a foreach' );
+# BOTH HALVES ARE DONE. The break routes to the loop's exit Region, and the
+# body merge below it now binds: with a `next` earlier in the body, the
+# bottom of the body is a Region joining the next-taken arm with the break's
+# not-taken arm --
+#
+#     Proj 27 = If 14 (next)  index 0
+#     Proj 28 = If 18 (break) index 1
+#     Region 29 in=[27, 28]
+#     Phi 30   in=[4, 26] pred=[27, 28]
+#
+# Only the REST arm is a predecessor there; the break arm leaves. That is the
+# lone-arm shape _join_phis already handled, so the break path supplies it.
+round_trips( <<'SRC', 'a next before a last in a foreach' );
 my $s = 0;
 for my $i (1..9) { next if $i == 2; last if $i == 4; $s += $i }
 print "$s\n";
 SRC
 
-    round_trips( <<'SRC', 'a next before a last in a while' );
+round_trips( <<'SRC', 'a next before a last in a while' );
 my $s = 0; my $i = 0;
 while ($i < 9) { $i++; next if $i == 2; last if $i == 4; $s += $i }
 print "$s\n";
 SRC
 
-    # ORDER DOES NOT RESCUE IT: a `last` BEFORE a `next` reaches the same
-    # merge. I assumed this one already worked and the test said otherwise.
-    round_trips( <<'SRC', 'a last before a next' );
+# A `last` BEFORE A `next` IS A DIFFERENT DEFECT, and a PRODUCER one: the
+# graph is never built, so there is nothing for the deparser to render.
+#
+#     GAP: a loop control (`next`) inside a branch arm is not yet lowered
+#          -- only `last` carries an exit edge
+#
+# perl prints 13. Pinned here as the producer refusal it actually is, rather
+# than as a deparser TODO it never was.
+subtest 'a last before a next is refused by the producer' => sub {
+    my ( undef, $err ) = graph_of( <<'SRC' );
 my $s = 0;
 for my $i (1..9) { last if $i == 6; next if $i == 2; $s += $i }
 print "$s\n";
 SRC
-}
+    # The SUB is skipped, not the file -- B::SoN still emits JSON for what it
+    # could translate, so the refusal is on stderr and $data stays defined.
+    like $err, qr/a loop control \(`next`\) inside a branch arm/,
+        'it is refused, naming the unlowered next';
+};
 
 # A RETURN in the same position must still refuse -- it is a function exit
 # with nowhere to go, and distinguishing the two signals is the whole point.

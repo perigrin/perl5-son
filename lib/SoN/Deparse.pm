@@ -1625,6 +1625,12 @@ class SoN::Deparse 0.01 {
             next unless $n && !$seen{ $n->{id} }++;
             return 1 if $n->{id} == $region_id;
             next if ( $n->{op} // '' ) eq 'Region' && $n->{id} != $region_id;
+            # BOUNDED BY A NESTED `If` TOO. Reaching the exit THROUGH another
+            # branch is that branch's break, not this arm's -- measured on
+            # `next if $i==2; last if $i==4`, where the next-guard's arm
+            # Proj 15 -> If 18 -> Proj 19 -> Region 20 found the exit
+            # transitively and the `next` was emitted as `last`.
+            next if ( $n->{op} // '' ) eq 'If' && $n->{id} != $proj->{id};
             push @todo, ( $next_of->{ $n->{id} } // [] )->@*;
         }
         return 0;
@@ -1717,6 +1723,29 @@ class SoN::Deparse 0.01 {
                 my $text = $ix == 0
                     ? sprintf("if (%s) {\n%s}\n", $cond, _indent($pay . "last;\n"))
                     : sprintf("if (!(%s)) {\n%s}\n", $cond, _indent($pay . "last;\n"));
+
+                # THE REST ARM MAY STILL REACH A BODY MERGE. With a `next`
+                # earlier in the same body, the bottom of the body is a Region
+                # joining the next-taken arm with this break's not-taken arm --
+                # measured on `next if $i==2; last if $i==4`:
+                #
+                #     Proj 27 = If 14 (next)  index 0
+                #     Proj 28 = If 18 (break) index 1
+                #     Region 29 in=[27, 28]
+                #     Phi 30   in=[4, 26] pred=[27, 28]
+                #
+                # Returning undef left Phi 30 unbound, and reading it refused.
+                # Only the REST arm is a predecessor of that Region: the break
+                # arm leaves. That is the lone-arm shape _join_phis already
+                # handles -- the predecessor with no arm seeds the declaration
+                # and the present arm assigns.
+                my $bjoin = $self->_lone_arm_join( $arm{$rest_ix}, $next_of );
+                if ( defined $bjoin && $bjoin != $loop_exit_region ) {
+                    my ($bdecl, %bassign)
+                        = $self->_join_phis( $bjoin, { $rest_ix => $arm{$rest_ix} } );
+                    return ( $bdecl . $text . ( $bassign{$rest_ix} // '' ) . $rest,
+                             $bjoin );
+                }
                 return ( $text . $rest, undef );
             }
         }

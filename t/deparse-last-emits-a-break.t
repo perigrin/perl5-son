@@ -147,25 +147,18 @@ SRC
 #
 #     Region 15 in=[3, 14]    header-false Proj AND the break Proj
 #
-# The DEPARSER still refuses it -- a body-merge Phi reached in this shape --
-# so there is no wrong answer, only an unrendered graph. These two subtests
-# pinned the PRODUCER refusal, which is gone; they assert the remaining
-# deparser refusal instead, and t/deparse-loop-exit-phi.t carries the round
-# trip that converts when the rendering lands.
-subtest 'a last after a next translates; the deparser has the gap' => sub {
-    my ( $data, $err ) = graph_of( <<'SRC' );
+# AND THE DEPARSER NOW RENDERS IT. The body-merge Phi is bound on the break
+# path, and the break classification is bounded at a nested `If` so the
+# preceding next-guard is no longer mistaken for the break.
+#
+# This subtest twice pinned a refusal that then lifted -- first the producer's,
+# then the deparser's. A refusal test encodes a LIMITATION, not a fact, so it
+# is now the round trip it was always heading for.
+round_trips( <<'SRC', 'a last after a next' );
 my $s = 0;
 for my $i (1..9) { next if $i == 2; last if $i == 4; $s += $i }
 print "$s\n";
 SRC
-    ok $data, 'the producer translates it' or diag($err), return;
-
-    my $d = SoN::Deparse->new;
-    my $out = eval { $d->render($data) };
-    ok !defined $out, 'the deparser refuses rather than emitting a wrong answer';
-    like $d->gap // '', qr/Phi whose region/,
-        '... naming the unrendered merge';
-};
 
 # A `last` INSIDE AN `if` BLOCK is the ordinary early-exit search, and it
 # reached the wrong handler entirely. A block arm opens with a PROLOGUE:
