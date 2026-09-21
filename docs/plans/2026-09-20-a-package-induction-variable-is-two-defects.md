@@ -129,3 +129,28 @@ Reverted rather than shipped: trading an honest refusal on one loop form for a
 wrong answer on another is the trade the contract forbids.
 
 Claude-Session: https://claude.ai/code/session_01QYtFNnt2aXaRH2hrRvopyc
+
+## RESOLVED 2026-09-21 in 2488e82
+
+The open question above -- "possibly the Loop node should carry it" -- is what
+shipped. `SoN::IR::Node::Loop` gained a `bound` field, `'entry'` or `'each'`,
+recording WHEN the loop's bound is evaluated.
+
+The three failed discriminators are why it is a field rather than a derivation.
+A consumer cannot recover this from the graph, so the producer states it: the
+two foreach translators pass `bound => 'entry'`, and `_translate_while_loop`
+keeps the `'each'` default, which is correct for both `while` and C-style
+`for`. The deparser keys hoisting on the field instead of on a Phi test.
+
+That unblocked item 2 of the Remaining work above, so
+`_deferred_backedge_floor` was re-applied in the same commit.
+
+Both numbered items are closed. t/wire-c-style-for-over-a-package-scalar.t
+passes 4/4 with no TODO markers, t/deparse-loop-bound-is-evaluated-once.t
+still passes (the range form still hoists), and the corpus went 16 -> 15 with
+cmd/subval.t clearing.
+
+STILL REFUSED, correctly: cmd/for.t's remaining loop, whose back-edge is
+`Add(EntryDef/Unknown, Subscript/Unknown)`. `_deferred_backedge_floor`
+requires every unstamped input to be a package variable with a sigil floor;
+one input is an element read, so it declines rather than guess.

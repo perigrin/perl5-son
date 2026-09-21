@@ -176,6 +176,9 @@ recorded from an arm walk is checked by the same code with no change. Question
 
 ### The remaining work
 
+SUPERSEDED. This was built in 91fc7c1 -- see "2026-09-20: producer half DONE"
+below, which is the current state. Kept for the scoping record.
+
 Pass $loop_node and $break_projs into _walk_branch (optional, propagated
 through the two recursive sites), and give it the same guarded-`last` handler
 _walk_loop_body has: build the If, push {proj, bindings} onto $break_projs,
@@ -368,5 +371,13 @@ or whether this join wants a different binder.
 Three round trips are TODO'd in t/deparse-loop-exit-phi.t with this reason --
 including `last` before `next`, which fails the same way and which I had
 assumed worked until the test said otherwise.
+
+## Status 2026-09-21
+
+The deparser half above is THE ONLY ITEM THIS DOCUMENT STILL OWES. Unchanged
+by 2488e82, which was a different defect (loop bound evaluation) in the same
+area.
+
+It refuses rather than miscompiles: an unrendered graph, no wrong answer.
 
 Claude-Session: https://claude.ai/code/session_01QYtFNnt2aXaRH2hrRvopyc
