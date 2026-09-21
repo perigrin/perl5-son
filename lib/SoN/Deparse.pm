@@ -1044,7 +1044,21 @@ class SoN::Deparse 0.01 {
         # `my` and its closing brace. Leaving the binding behind spelled a
         # node as `$inv26` in a statement AFTER the loop -- and, on a second
         # loop over the same node, produced `my $inv26 = $inv26;`.
-        my @invariant = $self->_loop_invariant_roots($cond[0], $n->{id});
+        # HOISTING IS FORM-DEPENDENT, and the Loop says which form it is.
+        # A foreach fixes its bound at entry, so pinning it to a temporary is
+        # what makes `foreach my $i (1..$n) { $n = 10 }` iterate twice rather
+        # than chase the counter. A `while` or C-style `for` RE-READS its
+        # condition every pass, and the same hoist never terminates --
+        # measured, `for ($i=0; $i<3; $i++)` emitted
+        # `my $inv = $main::i; while ($inv <= 3)` and spun forever.
+        #
+        # Three graph-derived discriminators were tried and none separated
+        # the forms (see SoN::IR::Node::Loop's `bound`), so the producer
+        # marks it.
+        my @invariant =
+            ( ( $n->{fields} // {} )->{bound} // 'each' ) eq 'entry'
+            ? $self->_loop_invariant_roots($cond[0], $n->{id})
+            : ();
         my %save_inv;
         for my $inv (@invariant) {
             my $var  = sprintf('$inv%d', $inv->{id});

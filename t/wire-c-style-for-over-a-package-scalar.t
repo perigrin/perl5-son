@@ -70,25 +70,21 @@ sub round_trips ($src, $name) {
 # about.
 #
 # This is cmd/for.t's FIRST loop, so the whole file stood behind it.
-# TWO DEFECTS, NOT ONE, AND THE SECOND BLOCKS THE FIRST. Computing the
-# deferred floor at walk time DOES let the Phi widen honestly -- but the
-# emitted program then loops forever:
+# TWO DEFECTS, AND THE SECOND NEEDED A THIRD FACT TO FIX.
 #
-#     $main::i = 0;
-#     my $inv10 = $main::i;           <- hoisted as loop-INVARIANT
-#     while (($inv10 <= 3)) {
-#       $main::i = ($main::i + 1);    <- and the body writes it
-#     }
+# Defect 2 was that the emitted loop never terminated: _loop_invariant_roots
+# hoisted `my $inv = $main::i` to entry while the body wrote $main::i.
 #
-# _loop_invariant_roots asks "does this subtree contain a loop Phi", which a
-# package variable never does -- package variables carry their updates on the
-# MEMORY chain, not in SSA. So a read the body writes looks invariant and gets
-# pinned to its entry value.
+# Suppressing the hoist whenever the body writes the variable BROKE THE OTHER
+# LOOP FORM -- t/deparse-loop-bound-is-evaluated-once.t, because perl's forms
+# genuinely disagree:
 #
-# That is a pre-existing deparser defect this change merely exposes, and
-# fixing it is separate work. Refusing is correct until then.
-{
-    my $todo = todo 'a package read written in the body is hoisted as loop-invariant';
+#     $n=2; foreach my $i (1..$n) { $n = 10 }    2 iterations, bound FIXED
+#     $n=2; for ($i=0; $i<$n; $i++) { $n = 4 }   4 iterations, RE-READ
+#
+# Three graph-derived discriminators failed (see SoN::IR::Node::Loop's
+# `bound`), so the Loop now carries which form it is and hoisting keys on
+# that.
 round_trips( <<'SRC', 'a C-style for over a package scalar' );
 for ($i = 0; $i <= 3; $i++) { print "i=$i\n" }
 SRC
@@ -100,8 +96,6 @@ SRC
 
 # A LEXICAL INDUCTION VARIABLE IS UNAFFECTED -- its stamp is known during the
 # walk, so the Phi keeps its narrow type and nothing widens.
-}
-
 round_trips( <<'SRC', 'a C-style for over a lexical is unchanged' );
 for (my $i = 0; $i <= 3; $i++) { print "i=$i\n" }
 SRC
@@ -110,7 +104,6 @@ SRC
 # to Scalar is a narrower assertion than the truth; this pins the widening
 # rather than just the round trip.
 subtest 'the loop Phi widens to the join rather than keeping Int' => sub {
-    my $todo = todo 'blocked on the invariant-hoisting defect above';
     my ( $data, $err ) = graph_of(
         'for ($i = 0; $i <= 3; $i++) { print "i=$i\n" }' );
     ok $data, 'it translates' or diag($err), return;

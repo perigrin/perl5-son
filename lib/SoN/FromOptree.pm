@@ -7930,6 +7930,36 @@ class SoN::FromOptree 0.01 {
     # below it unreachable through this path, and let a Phi keep a stamp it had
     # not earned. See t/from-optree-phi-identity.t.
     my %_ARITH_OP = map { $_ => 1 } qw(Add Subtract Multiply Divide Modulo);
+    # _deferred_backedge_floor($post) -> Stamp | undef
+    #
+    # The stamp an unstamped back-edge will settle at, when that answer is
+    # already fixed even though the pass which assigns it runs later.
+    #
+    # A package variable is the case: B::SoN's _floor_package_globals stamps
+    # an Unknown EntryDef from its SIGIL ($ -> Scalar, @ -> Array,
+    # % -> Hash), and nothing between here and there can change that. So a
+    # walk-time join against it is honest rather than a guess.
+    #
+    # ONLY WHEN EVERY UNSTAMPED INPUT IS SUCH A VARIABLE. One input whose
+    # eventual type is genuinely unknown makes the whole join unknown, and the
+    # refusal at the call site is then the right answer. Returns the JOIN of
+    # the floors, so an expression over two package variables is handled too.
+    my %_SIGIL_FLOOR = ( '$' => 'Scalar', '@' => 'Array', '%' => 'Hash' );
+    sub _deferred_backedge_floor ($post) {
+        return undef unless blessed($post) && $_ARITH_OP{$post->operation};
+        my ($floor, $saw) = (undef, 0);
+        for my $in ($post->inputs->@*) {
+            next unless blessed($in);
+            next if _is_narrowed($in->stamp);
+            return undef unless $in->operation eq 'EntryDef';
+            my $t = $_SIGIL_FLOOR{ $in->can('sigil') ? ($in->sigil // '') : '' }
+                or return undef;
+            my $st = SoN::IR::Stamp->new(type => $t);
+            $floor = $saw++ ? SoN::IR::Stamp::join($floor, $st) : $st;
+        }
+        return $saw ? $floor : undef;
+    }
+
     sub _backedge_is_phi_recurrence ($post, $phi) {
         return false unless blessed($post) && $_ARITH_OP{$post->operation};
         my @ins = $post->inputs->@*;
@@ -8147,6 +8177,36 @@ class SoN::FromOptree 0.01 {
                 # sees a stamped Phi. Nothing to widen.
                 return;
             }
+            # AN UNSTAMPED PACKAGE VARIABLE HAS A KNOWABLE FLOOR. Its stamp
+            # comes from B::SoN's post-pass (_floor_package_globals), which
+            # runs long after this walk -- but the answer that pass will give
+            # is fixed by the SIGIL alone: `$` floors to Scalar, `@` to Array,
+            # `%` to Hash. So the join is computable now, and this refusal was
+            # phase ordering rather than a missing fact -- the same shape the
+            # glob binding had.
+            #
+            # Measured on `for ($i = 0; $i <= 3; $i++)` with an undeclared
+            # package scalar, which is cmd/for.t's FIRST loop:
+            #
+            #     Phi/Int   back-edge = Add(EntryDef/Unknown, Constant/Int)
+            #
+            # join(Int, Scalar) is Scalar, so the Phi WIDENS -- the path that
+            # already exists. Keeping Int would be a NARROWER claim than the
+            # truth, which is exactly the stale stamp this refusal guards
+            # against, so this takes the widening branch rather than the
+            # recurrence escape hatch, and _restamp_cone reports any consumer
+            # left asserting the narrower type.
+            if ( my $floor = _deferred_backedge_floor($post) ) {
+                my $widened = SoN::IR::Stamp::join($phi->stamp, $floor);
+                $phi->set_stamp($widened);
+                my @stale = _restamp_cone($phi);
+                die "GAP: loop-carried type widening not yet lowered"
+                  . " (consumers stamped narrower than the join: "
+                  . join(', ', @stale) . ")\n"
+                    if @stale;
+                return;
+            }
+
             # The body was already stamped against this Phi's optimistic
             # init stamp; merely un-stamping the Phi here leaves those stale
             # stamps contaminating sibling Phi joins (a type-level
@@ -8480,7 +8540,14 @@ class SoN::FromOptree 0.01 {
         my $mutated = _scout_mutated_targs($cv, $body_start, $sim, $opmap, [$i_targ], 1);
 
         # Phase 2: header -- induction Phi plus one Phi per mutated slot.
-        my $loop_node = $factory->make_cfg('Loop', inputs => [$sim->control]);
+        # A FOREACH FIXES ITS BOUND AT ENTRY. perl evaluates the
+        # endpoints once, when the loop is entered, and iterates the
+        # fixed list that produces -- measured, `$n=2;
+        # foreach my $i (1..$n) { $n = 10 }` runs twice. A consumer may
+        # therefore hoist the bound; for the `each` forms below that
+        # same hoist is a non-terminating loop.
+        my $loop_node = $factory->make_cfg('Loop',
+            inputs => [$sim->control], bound => 'entry');
         $sim->set_control($loop_node);
         # THE INDUCTION VARIABLE OF A RANGE IS ALWAYS Int, whatever the
         # bounds are -- perl's `..` truncates, measured: `2.7..5.2` yields
@@ -8716,7 +8783,14 @@ class SoN::FromOptree 0.01 {
 
         # Phase 2: header -- induction Phi (i: 0..len-1) plus one Phi per mutated
         # slot. The induction Phi is NOT bound to $x; $x is the element read below.
-        my $loop_node = $factory->make_cfg('Loop', inputs => [$sim->control]);
+        # A FOREACH FIXES ITS BOUND AT ENTRY. perl evaluates the
+        # endpoints once, when the loop is entered, and iterates the
+        # fixed list that produces -- measured, `$n=2;
+        # foreach my $i (1..$n) { $n = 10 }` runs twice. A consumer may
+        # therefore hoist the bound; for the `each` forms below that
+        # same hoist is a non-terminating loop.
+        my $loop_node = $factory->make_cfg('Loop',
+            inputs => [$sim->control], bound => 'entry');
         $sim->set_control($loop_node);
         my $i_phi = _make_loop_phi($factory, $loop_node, $zero);
 

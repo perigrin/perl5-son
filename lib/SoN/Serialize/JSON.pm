@@ -183,6 +183,13 @@ sub _extract_fields ($node, $id_remap) {
     if ($op eq 'EntryWrite') {
         return $node->binds ? { binds => JSON::PP::true } : undef;
     }
+    # WHEN THE LOOP'S BOUND IS EVALUATED -- see SoN::IR::Node::Loop. Emitted
+    # only for the 'entry' form, so a consumer that does not know the field
+    # keeps today's behaviour and an ordinary while/for wire is unchanged.
+    if ($op eq 'Loop') {
+        return ( ( $node->bound // 'each' ) eq 'entry' )
+            ? { bound => 'entry' } : { bound => 'each' };
+    }
     if ($op eq 'EntryDef') {
         return {
             package => $node->package,

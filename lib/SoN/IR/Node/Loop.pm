@@ -15,6 +15,30 @@ class SoN::IR::Node::Loop :isa(SoN::IR::Node) {
     # annotations.
     field $region :reader = undef;
 
+    # WHEN THE LOOP'S BOUND IS EVALUATED: 'entry' or 'each'.
+    #
+    # perl's loop forms disagree, and the difference is observable --
+    # measured on 5.42.0:
+    #
+    #     $n=2; foreach my $i (1..$n) { $n = 10; ... }    2 iterations
+    #     $n=2; for ($i=0; $i<$n; $i++) { $n = 4; ... }   4 iterations
+    #
+    # A foreach evaluates its endpoints ONCE, when the loop is entered, and
+    # iterates the fixed list that produces. A `while` and a C-style `for`
+    # run their condition every pass.
+    #
+    # A CONSUMER CANNOT DERIVE THIS. Three derivations were tried and none
+    # separated the forms: reaching a loop Phi (blind to package variables,
+    # whose updates ride the memory chain rather than SSA), whether the body
+    # writes the variable (true of both), and which memory version the
+    # condition reads (both read the pre-loop write). The producer knows --
+    # _translate_foreach_range and the C-style path through
+    # _translate_while_loop are separate translators -- so it says.
+    #
+    # It matters because hoisting the bound to a temporary is CORRECT for
+    # 'entry' and a non-terminating loop for 'each'.
+    field $bound :param :reader = 'each';
+
     method operation() { 'Loop' }
 
     # CFG nodes carry their control input in inputs[0] (entry_ctrl
