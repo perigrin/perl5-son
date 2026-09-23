@@ -25,14 +25,32 @@ use File::Temp qw(tempdir);
 
 my $dir = tempdir( CLEANUP => 1 );
 
-# THE DENOMINATOR: what the producer can construct. Two paths, because
-# control-flow nodes never appear in OpMap -- they are built directly.
+# THE DENOMINATOR: what the producer can construct. THREE paths.
+#
+# A LITERAL-STRING SCRAPE IS NOT ENOUGH, and missing that shipped a hole in
+# the first version of this test. Some nodes are built through a VARIABLE:
+#
+#     my $node_op = $name eq 'and' ? 'And' : 'Or';
+#     $factory->make($node_op, inputs => [$lhs, $rhs]);
+#
+# `And` and `Or` are emitted 126 times across our measured corpora and did
+# not appear in this list at all, so nothing required a fixture for them.
+# The third source below is the fallback: a node class that EXISTS and is
+# named anywhere in FromOptree.pm is treated as emittable unless exempted.
 sub producer_can_emit () {
     my %node;
     open my $fh, '<', 'lib/SoN/FromOptree/OpMap.pm' or die "open OpMap: $!";
     while (<$fh>) { $node{$1}++ if /=> \[\s*[^,]+,\s*'(\w+)'/ }
-    open my $fo, '<', 'lib/SoN/FromOptree.pm' or die "open FromOptree: $!";
-    while (<$fo>) { $node{$1}++ while /make(?:_cfg)?\(\s*'(\w+)'/g }
+    my $src = do {
+        open my $fo, '<', 'lib/SoN/FromOptree.pm' or die "open FromOptree: $!";
+        local $/; <$fo>;
+    };
+    $node{$1}++ while $src =~ /make(?:_cfg)?\(\s*'(\w+)'/g;
+    # A node class named as a bare quoted string anywhere in the walker.
+    for my $f (glob 'lib/SoN/IR/Node/*.pm') {
+        my ($name) = $f =~ m{([^/]+)\.pm\z};
+        $node{$name}++ if $src =~ /'\Q$name\E'/;
+    }
     return grep { /\A[A-Z]/ } sort keys %node;
 }
 
@@ -49,9 +67,14 @@ sub ops_in_corpus () {
     return %seen;
 }
 
-# (a) CONSTRUCTED ONLY BY A CONSUMER OR A PASS WE DO NOT RUN HERE. Not a
-# producer output for any Perl program, so no fixture can produce one.
+# (a) NOT A PRODUCER NODE OP AT ALL. A design fact, not a TODO.
+#
+#   Regex   a STAMP type, not a node kind. `SoN::IR::Stamp->new(type =>
+#           'Regex')` is what the walker names, and the fallback scrape above
+#           cannot tell a stamp name from a node name. Measured: zero
+#           occurrences of an op named Regex across both corpora.
 my %NOT_PRODUCER_OUTPUT = map { $_ => 1 } qw(
+    Regex
 );
 
 # (b) NEEDS A FIXTURE, none written yet. A TODO with a name on it. Anything
