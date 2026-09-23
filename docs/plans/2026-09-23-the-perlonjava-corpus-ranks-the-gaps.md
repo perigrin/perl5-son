@@ -96,9 +96,47 @@ ZERO producer GAPs. 18 methods, 505 nodes, 31 distinct ops.
 The round trip refuses only because it calls `Test::More::is`, which is
 external to the graph -- not a construct defect.
 
-## Still running
+## The round trip (983 of 986)
 
-The full 986-file ROUND TRIP (producer + deparser + diff against perl) is a
-separate and much slower census. Not yet reported.
+    ROUND-TRIPS    6
+    DIFFERS       38
+    refused      939
+
+That headline is nearly meaningless on its own, because ONE structural fact
+dominates it. Split by cause:
+
+    611  a call to a sub not in the graph   -- Test::More and friends
+    213  no main::__PROGRAM__ emitted
+      1  NO GRAPH
+    114  a construct GAP (the real number)
+
+891 of the 986 files `use Test::More`. The deparser refuses to emit a call to
+a sub outside the graph, because the emitted program would die calling it --
+correct, and exactly what examples/demo.pl hit despite translating with zero
+producer GAPs. That refusal measures the corpus's dependency on an external
+test module, not our coverage of Perl.
+
+Sampled 60 of the 213 `no main::__PROGRAM__` files: 24 fail to COMPILE at all
+(`Can't locate B/Flags.pm`, etc -- missing CPAN modules, never our defect) and
+36 compile and hit a producer GAP. The GAPs they hit are the same kinds
+already ranked above -- map arity, s///ge, foreach bounds -- so this category
+adds no new vocabulary, only volume.
+
+THREE FILES DID NOT COMPLETE: code_too_large.t (484K of generated source),
+makemaker_stale_blib_source.t and map_source_mutation_snapshot.t hung and were
+killed. 983 of 986 is the denominator above.
+
+### What the round trip is good for here, and what it is not
+
+This corpus was built to test a Perl IMPLEMENTATION by running it. Every file
+is a TAP script that loads a test framework. Our round trip needs a program
+whose whole call graph is present, so a corpus of framework-using test scripts
+is close to a worst case for it.
+
+The PRODUCER number (857/986 clean) is the one this corpus measures well. For
+the deparser, t/*.t round trips and the 39-file perl corpus remain the
+instrument, and a deparser census over this corpus would need either the test
+framework inlined or the external-call refusal relaxed -- neither of which is
+worth doing to move a number.
 
 Claude-Session: https://claude.ai/code/session_01QYtFNnt2aXaRH2hrRvopyc
