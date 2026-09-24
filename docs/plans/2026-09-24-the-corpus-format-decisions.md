@@ -158,34 +158,49 @@ Layer blocks (`behavior`, `ir`) assert about the TEST, not about any one
 file, so they do not compete with path-named source blocks. chalk's mdtest
 format and this one are compatible.
 
-## DECIDED: block-per-layer, not inline
+## Block-per-layer: taken, then the argument for it WITHDRAWN
 
-Settled with pvm 2026-09-24. Their argument, which is better than the
-readability one I was weighing:
+Settled with pvm 2026-09-24 on reasoning that does not hold. The decision may
+still be right; the stated justification was wrong and is recorded here as
+wrong rather than quietly rewritten.
 
-Ty's inline form is right FOR TY BECAUSE TY HAS ONE PRODUCER -- the assertion
-and the thing asserted are the same tool's output, so a comment beside the
-expression is the shortest honest form. With several implementations
-answering independently about one program, an inline comment would have to
-encode WHICH implementation it constrains, which is a block by another
-spelling and a worse one: it puts several tools' answers in one namespace and
-makes "who is silent here" unanswerable.
+### What was claimed, and why it fails
 
-A BLOCK-PER-LAYER SAYS SILENCE STRUCTURALLY. You fill `ir`, they fill
-`tokens`, neither validates the other's.
+The argument taken was: several implementations answer INDEPENDENTLY about
+one program, so an inline comment would have to encode WHICH implementation
+it constrains -- a block by another spelling, with worse namespacing -- and a
+block-per-layer therefore "says silence structurally."
 
-### The trigger to revisit, and we will hit it first
+THE PREMISE IS WRONG. This is a CONFORMANCE SUITE. The fixture states what
+is true about the program; each implementation checks itself against the
+parts it supports. There are not several answers in need of separate
+namespaces -- there is ONE SET OF FACTS that everyone agrees on for the parts
+they implement.
 
-Inline's real advantage is LOCALITY -- an assertion at the expression it is
-about. Nothing in pvm's corpus needs it: every claim they make is about a
+So an inline assertion never needed to say who it binds. `# revealed: Scalar`
+is a claim about the program's type. pvm's checker validates it, we validate
+it, chalk validates it, or an implementation without that layer skips it.
+Silence means "I do not support this", not "that fact belongs to another
+namespace".
+
+The "silence structurally" praise fails on its own terms for the same reason:
+an implementation lacking a type layer skips type assertions whether they sit
+in a block or a comment. Blocks organise FACTS BY KIND, which is a reasonable
+thing to want, but that is not a claim about who is answering.
+
+### What the real tradeoff is
+
+LOCALITY, which is where this started before the bad argument displaced it.
+Inline puts an assertion at the expression it is about; a block puts it in a
+list that must reference a location some other way.
+
+pvm has no per-expression claims today -- every claim of theirs is about a
 whole program (what it prints, whether it parses, what its token stream
-contains). A PER-EXPRESSION claim -- a type at a site, a diagnostic at a
-column -- would need it.
+contains), so blocks cost them nothing now. Our reveal-stamp idea is a
+per-expression claim, so we would want locality immediately.
 
-Our reveal-stamp idea is exactly that, so locality matters to us before it
-matters to them. Current guess, undecided: it stays INSIDE an ir-style block
-rather than becoming an inline comment, to keep the silence property. Not
-built, not settled.
+Undecided on the merits. Recorded so the decision is re-argued on the
+tradeoff rather than inherited from the withdrawn reasoning.
 
 ## Parse-failure fixtures can assert what parsing ones cannot
 
