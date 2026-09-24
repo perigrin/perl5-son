@@ -142,19 +142,70 @@ Three details to settle when building:
   - A BARE block with no info string is the unnamed entry point, so the
     common single-fixture case needs no ceremony.
 
+DECIDED with pvm: BARE `perl` STAYS VALID, not deprecated shorthand. The
+info string is a PATH if it contains a `.`, otherwise a language tag --
+`perl` has no dot, every path we would write has one, and that is the whole
+disambiguation.
+
+Three reasons, the third being pvm's constraint rather than ours: the
+single-file case is almost every fixture and should cost nothing; a path is
+a CLAIM (compiles as a module, needs a trailing 1;, resolves through @INC)
+that most fixtures should not make, so the absence of one is itself
+information; and it keeps pvm's migration purely additive while 13 tiers are
+mid-port.
+
 Layer blocks (`behavior`, `ir`) assert about the TEST, not about any one
 file, so they do not compete with path-named source blocks. chalk's mdtest
 format and this one are compatible.
 
-## Open: inline assertions or block-per-layer
+## DECIDED: block-per-layer, not inline
 
-Ty has ONE producer, so inline `# revealed:` / `# error:` comments suffice.
-We have three layers. chalk's t/corpus/mdtest answers it differently, with
-separate `perl` / `behavior` / `ir` blocks and an `L: GREEN` / `L: GAP`
-status marker -- 77 GREEN, 7 GAP across 12 files today.
+Settled with pvm 2026-09-24. Their argument, which is better than the
+readability one I was weighing:
 
-Unresolved, and worth resolving before pvm settles a format, since what they
-build is what we copy.
+Ty's inline form is right FOR TY BECAUSE TY HAS ONE PRODUCER -- the assertion
+and the thing asserted are the same tool's output, so a comment beside the
+expression is the shortest honest form. With several implementations
+answering independently about one program, an inline comment would have to
+encode WHICH implementation it constrains, which is a block by another
+spelling and a worse one: it puts several tools' answers in one namespace and
+makes "who is silent here" unanswerable.
+
+A BLOCK-PER-LAYER SAYS SILENCE STRUCTURALLY. You fill `ir`, they fill
+`tokens`, neither validates the other's.
+
+### The trigger to revisit, and we will hit it first
+
+Inline's real advantage is LOCALITY -- an assertion at the expression it is
+about. Nothing in pvm's corpus needs it: every claim they make is about a
+whole program (what it prints, whether it parses, what its token stream
+contains). A PER-EXPRESSION claim -- a type at a site, a diagnostic at a
+column -- would need it.
+
+Our reveal-stamp idea is exactly that, so locality matters to us before it
+matters to them. Current guess, undecided: it stays INSIDE an ir-style block
+rather than becoming an inline comment, to keep the silence property. Not
+built, not settled.
+
+## Parse-failure fixtures can assert what parsing ones cannot
+
+pvm's finding, 2026-09-24, and it is structural rather than a completeness
+argument.
+
+A non-parsing fixture EMITS NO OPS, because perl builds no optree for a
+program it will not compile. So it can spell an operator belonging to a tier
+that its own tier depends on, without violating an op-budget lint -- and a
+PARSING case cannot. Measured there on `1 .. 2 .. 3` and `1 <=> 2 <=> 3`,
+both perlop nonassoc levels.
+
+The two categories are therefore not harder-and-easier versions of one
+thing. They assert DISJOINT sets of facts.
+
+pvm also measures `perl -c` on EVERY case, not only those annotated as
+failures, so an annotation that disagrees with perl is itself a failure.
+That is stricter than the rule recorded above and we are adopting it: it
+makes the annotation checkable rather than trusted, the same move as
+matching a refusal's cause instead of its presence.
 
 ## Also open, from the same comparison
 
