@@ -199,8 +199,23 @@ whole program (what it prints, whether it parses, what its token stream
 contains), so blocks cost them nothing now. Our reveal-stamp idea is a
 per-expression claim, so we would want locality immediately.
 
-Undecided on the merits. Recorded so the decision is re-argued on the
-tradeoff rather than inherited from the withdrawn reasoning.
+### What survives, and is the actual reason
+
+BLOCKS ORGANISE FACTS BY KIND. What perl prints, whether perl compiles it,
+what the token stream contains -- three kinds of claim about one program,
+separable and greppable and machine-writable by the tool that measures each.
+
+That is a real argument for blocks and it is not a claim about who is
+answering. It is what the decision now rests on.
+
+Undecided against locality, which is the competing pull: inline puts an
+assertion at the expression it is about, and reveal-stamp will want that.
+Recorded so the decision is re-argued on the tradeoff rather than inherited
+from the withdrawn reasoning.
+
+(Authorship, since 888277e's commit message got it wrong: pvm wrote the bad
+argument, this session endorsed it without examining the premise. Both halves
+of that are worth keeping -- an argument accepted is an argument owned.)
 
 ## Parse-failure fixtures can assert what parsing ones cannot
 
