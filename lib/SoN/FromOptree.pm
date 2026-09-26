@@ -7311,8 +7311,27 @@ class SoN::FromOptree 0.01 {
                 # comparison's first operand after folding a dead arm, and
                 # rebinding $x to a Boolean there made `for my $i (0..2)` print
                 # 111 for 123 in perl's own t/base/translate.t.
+                # A COMPOUND ASSIGNMENT IS BINARY, AND THAT IS WHAT MAKES IT
+                # ONE. `$x OP= EXPR` needs both the variable and the RHS, so
+                # every op in the family is a BINOP -- measured, `+= -= *= /=
+                # **= %= .= x= |= &= ^= <<= >>=` all compile to `<2>`, and
+                # `||= &&= //=` are a short-circuit over `sassign` and never
+                # reach here at all.
+                #
+                # Without the arity test a ONE-OPERAND op over an OPf_MOD pad
+                # read satisfied every other clause and was taken for a
+                # read-modify-write. `lock($n)` is exactly that shape -- its
+                # operand is `padsv sRM` -- so inputs[0] was swapped from the
+                # PadAccess to the slot's bound VALUE, and the emitted program
+                # was `lock((7))`, which perl refuses to compile:
+                #
+                #     Can't modify constant item in lock
+                #
+                # An emission that does not compile is worse than a wrong
+                # answer, because nothing downstream can run it to notice.
+                # `pos` and `tied` are the same single-operand shape.
                 my $is_compound =
-                       @inputs >= 1
+                       @inputs >= 2
                     && !_is_comparison_optree_op($op->name)
                     && $op->can('first')
                     && $op->first->name =~ /^padsv|^padav|^padhv/
