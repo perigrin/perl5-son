@@ -87,6 +87,37 @@ emitted into `main`. A pre-existing package/method-declaration defect the
 removed refusal was masking -- [[removing-a-gap-can-create-a-miscompile]]
 caught in the act.
 
+RE-MEASURED after the five fixes of 2026-09-26 (ref-subscript parens, the two
+gv/stash fixes, Negate/Complement, the runtime range): STILL 12/10/15. None of
+those causes appears in this tier, so tier 1 progress does not transfer and the
+two tiers need separate work.
+
+### The 15 refusals, and why the headline cause is not what it says
+
+    5  "a call to X, which is not in the graph"
+    5  no main::__PROGRAM__ / NO GRAPH
+    2  a `caller` bound to a list
+    3  singletons (PostfixDeref sigil, Assign with no targets, 2 successors)
+
+THE DOMINANT CAUSE IS A DOWNSTREAM SYMPTOM. Measured per file, the five
+"not in the graph" refusals split:
+
+    cmd/switch.t   3 producer GAPs upstream   next-in-a-branch-arm, and two more
+    base/rs.t      2 producer GAPs upstream   assigning to a glob (*FH)
+    comp/parser_run.t        0   genuinely external -- require ./test.pl
+    comp/filter_exception.t  0   genuinely external
+    comp/require.t           0   genuinely external
+
+So `main::foo1` is "not in the graph" because the PRODUCER skipped it -- it is
+defined at cmd/switch.t:5 and holds `next if ...` inside an `until` with a
+`continue` block, which is the 14th GAP kind. The deparser's message names a
+missing sub where the cause is an unlowered construct one layer up.
+
+Consequence for reading this tier: 3 of 15 refusals are an external-dependency
+fact about perl's own test harness (`require ./test.pl` defines `plan`), not a
+defect. The other 12 are ours, and at least 2 chain from producer GAPs that
+also appear in tier 1's bucket 5.
+
 ### Tier 3 -- PerlOnJava's unit corpus
 
 986 construct-named files at
