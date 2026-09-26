@@ -55,9 +55,20 @@ FOURTH outcome, and an earlier tally of this tier missed it by counting
 `grep -c 'GAP:'` over a stderr stream those warnings had flooded -- one file
 came out with empty fields and 28+10 did not reach 39.
 
-Round trip for this tier was last measured as 12 round-trips / 10 differs /
-15 refused, BEFORE the `package=main` harness bug was found. Treat it as
-unmeasured until re-run.
+Round trip, re-run 2026-09-26 against HEAD and confirming an earlier figure
+that predated two harness fixes:
+
+    12 round-trips    10 differs    15 refused
+
+Baseline before the short-circuit control fixes in 2fd1215 was 7/11/19, so
+those bought +5 round-trips and took the successor-refusal class from 4 files
+to 1.
+
+`comp/package.t` is now a DIFFERS THAT A REFUSAL USED TO HIDE: the emitted
+program dies on `xyz->new` because `sub new` declared inside `package xyz` is
+emitted into `main`. A pre-existing package/method-declaration defect the
+removed refusal was masking -- [[removing-a-gap-can-create-a-miscompile]]
+caught in the act.
 
 ### Tier 3 -- PerlOnJava's unit corpus
 
