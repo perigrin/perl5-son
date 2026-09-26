@@ -101,6 +101,42 @@ Blocked tier 2 files: base/rs.t (2 subs), cmd/switch.t (3), cmd/mod.t (1),
 cmd/for.t (2), comp/form_scope.t (1). Not all of those refuse for this reason
 alone -- rs.t's is second-order, and the others need their own checks first.
 
+## The leak has a live silent-drop, found from the failing side
+
+Predicted by "the rewrite, and the flag that repairs it" above, and then met
+head-on while writing the acceptance test. Measured:
+
+    our @OTHER = (7, 8); *crackers = \@OTHER; print "@OTHER\n";
+      perl  7 8
+      ours  7 8        store kept
+
+    our @OTHER = (7, 8); *crackers = \@OTHER; print "@crackers\n";
+      perl  7 8
+      ours  (nothing)  THE STORE IS GONE
+
+    *main::crackers = \@main::OTHER;
+    print join('', (join($", @main::crackers) . "\n"));
+
+Reading the ALIAS is the trigger. `@OTHER = (7,8)` is dropped from the emission
+entirely -- no `ArrayLiteral`, no `EntryWrite` -- while the same program reading
+`@OTHER` keeps it. And taking an ordinary ref (`my $r = \@SRC`) keeps it too, so
+this is specific to the glob-bind path.
+
+WHY, and it is the rewrite: the pass replaces `crackers`'s EntryDef
+`sigil='*'` with a fresh `sigil='@'` node. A later read of `@crackers`
+hash-conses to THAT node -- same package, sigil and symbol -- so the alias read
+and the bind TARGET become one node, and the source array's store loses its
+reachability. The consing that makes `@crackers` reach the right node is exactly
+what collides here.
+
+Keeping `sigil='*'` on the bind target removes the collision by construction:
+the target is a glob, the read is an array, and they are different nodes
+because they ARE different things.
+
+It compiles and runs, printing nothing where perl prints `7 8` -- a silent wrong
+answer, which is why no census caught it: `_resolve_glob_slots` reports the
+RESOLVABLE case as success.
+
 ## Open
 
 Whether the runtime-dispatch case needs a wire signal for chalk to DECLINE, or
