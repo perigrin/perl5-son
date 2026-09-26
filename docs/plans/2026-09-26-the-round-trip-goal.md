@@ -323,7 +323,33 @@ the `package=main` fix). Then work the ranked tier-3 causes, where
 classification, since three FACTs dissolved under measurement on 2026-09-25 and
 that one rests on two files where both were `&{$sub}`.
 
-### Phase 8 -- contribute fixtures back (needs pvm's agreement, see above)
+### Phase 8 -- contribute fixtures back (ASKED 2026-09-26, awaiting pvm)
+
+Three questions sent to pvm, because none is ours to settle:
+
+  1. OWNERSHIP -- does an addition go through them, or can we land one directly
+     in conformance/mdtest/ and let their suite judge it?
+  2. TIER PLACEMENT AND THE OP BUDGET -- a construct found in perl's t/ arrives
+     without a tier, and their lint only permits operators from a case's own
+     tier or one it depends on. Who decides, and is "spells a later tier's
+     operator" a reason to reject the case or to move the operator earlier?
+  3. A CONSTRUCT THEIR PARSER CANNOT YET HANDLE -- adding it as `parses: yes`
+     would fail their suite on arrival. Is a known-failing conformance case
+     legitimate, or does it wait?
+
+THE WORKED EXAMPLE SENT WITH THE QUESTION, so it is concrete rather than
+hypothetical: perl's t/cmd/switch.t:5 holds `next` inside a branch arm, in an
+`until` with a `continue` block, with `return` inside both. We refuse it
+honestly; their corpus has no case of that shape. It is exactly what the goal's
+third clause means and it has no obvious tier.
+
+Also flagged to them: their own unknown-tag rule means a case we contribute
+could carry an `ir` block they never validate, so they should know we would use
+it rather than discover it.
+
+UNTIL AN ANSWER ARRIVES this phase is blocked in a way no amount of work here
+changes -- which is worth stating plainly, because a goal containing it will
+read as unmet regardless of tier 1 and tier 2 progress.
 
 ## ACCEPTANCE
 
