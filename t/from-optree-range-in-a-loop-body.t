@@ -68,32 +68,16 @@ sub round_trips ($src, $name) {
 # THE SCALAR FORM MUST KEEP REFUSING, and it must refuse for its own reason: a
 # flip-flop carries state across evaluations, which is genuinely loop-adjacent.
 
-# ATTEMPTED AND REVERTED 2026-09-26. The DIAGNOSIS is complete and confirmed;
-# only the mechanical refactor it needs is not done.
+# THE REFUSAL MEASURED THE OP TABLE, NOT THE CONSTRUCT. The loop-body walker's
+# generic refusal keys on OpMap's BRANCH flag -- `range => [0, undef, 1,
+# BRANCH]` -- and its own justification is about a construct that mints Projs on
+# the OUTER Loop. A range does not: it produces a LIST and touches the loop's
+# control flow not at all, which is the same property that already lets the body
+# walker delegate `cond_expr` and `entertry`.
 #
-# THE CAUSE: the loop-body walker's generic refusal keys on OpMap's BRANCH flag
-# -- `range => [0, undef, 1, BRANCH]` -- and its comment justifies itself for a
-# nested loop or if/else, which "minted Projs on the OUTER Loop and truncated
-# the walk". A range does neither. It produces a LIST and touches the loop's
-# control flow not at all, which is the same property the body walker already
-# relies on to delegate `cond_expr` and `entertry`.
-#
-# So the refusal measures the OP TABLE where it means to measure the CONSTRUCT.
-#
-# WHAT BLOCKS THE FIX: the range handler is INLINE in the main walk (around
-# FromOptree.pm:1127) and `_step` -- the shared dispatcher the body walker can
-# reach -- does not have it. Delegating via `_step` was tried and returns
-# unhandled, measured. So the handler must be EXTRACTED to a shared sub called
-# from both walkers, which is the right design and is a ~70-line move inside a
-# 12,000-line file with deep nesting. Three scripted attempts left unbalanced
-# braces; it wants a careful manual edit rather than another pattern
-# substitution.
-#
-# Recorded rather than half-done: an extraction that compiles but shifts a
-# brace is exactly the kind of change that passes a syntax check and breaks
-# something unrelated.
-{
-    my $todo = todo 'the range handler is inline in the main walk and must be extracted to be shared';
+# Fixed by EXTRACTING the range handler from the main walk into a shared sub
+# both walkers call, rather than duplicating it. The scalar-context flip-flop
+# still refuses, under its own name.
 round_trips( <<'SRC', 'a runtime range inside a foreach body' );
 my $n = 3;
 for my $i (1 .. 2) {
@@ -114,7 +98,25 @@ while ($i < 2) {
 print "\n";
 SRC
 
-round_trips( <<'SRC', 'the range bound varies per iteration' );
+# A BOUND THAT VARIES PER ITERATION IS A DEPARSER DEFECT, not a producer one,
+# and the graph proves it. For `for my $n (1..3) { my @q = (1..$n) }`:
+#
+#     8  Phi          in=[7,17]   region=2   the induction variable
+#     12 Range        in=[7,8]               reads the Phi -- varies correctly
+#
+# So the producer says exactly the right thing. The DEPARSER hoists the Range
+# above the loop, emitting
+#
+#     my @q = (((1) .. ($phi16)));     <- before $phi16 is declared
+#     my $phi16 = 1;
+#     while ((4 > $phi16)) { ... }
+#
+# which prints `0 0 0` where perl prints `1 2 3`. A pure node placed above a
+# variable it reads, which is a scheduling question in the emitter rather than
+# anything about ranges.
+{
+    my $todo = todo 'the deparser hoists a pure Range above the loop Phi it reads';
+    round_trips( <<'SRC', 'the range bound varies per iteration' );
 my @sizes;
 for my $n (1 .. 3) {
     my @q = (1 .. $n);

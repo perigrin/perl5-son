@@ -1125,73 +1125,7 @@ class SoN::FromOptree 0.01 {
             # bounds already on the stack and this handler is only ever the
             # LIST-ASSIGN shape.
             if ($name eq 'range' || $name eq 'flip' || $name eq 'flop') {
-                my $want = $op->flags & 3;    # OPf_WANT mask, from B
-                die "GAP: a scalar-context flip-flop (\$a..\$b as a stateful"
-                  . " test) is not yet lowered -- it carries state across"
-                  . " evaluations, which a counted expansion does not"
-                  . " express\n"
-                    if $want == 2;
-
-                # `flip` and `flop` WRAP the range and carry no operand of
-                # their own; skipping them keeps the stack depth right, since a
-                # node pushed at each of the three would leave two extra values
-                # for the enclosing aassign.
-                if ($name ne 'range') {
-                    $op = $op->next;
-                    next;
-                }
-
-                # RANGE IS A BRANCH OP REACHED BEFORE ITS OPERANDS. Measured
-                # exec order: the HIGH bound is down ->next and the LOW bound
-                # down ->other, so neither is on the stack here. Both are
-                # children in TREE order though -- `first` is the low bound and
-                # its sibling the high -- so each arm is walked with
-                # _walk_branch, the same way every other branch op walks an
-                # arm onto the stack.
-                # WHICH ARM HOLDS WHICH BOUND, measured rather than assumed.
-                # Concise for `my @q = (1..$n)`:
-                #
-                #     7  <|> range(other->8)[$:2,3] lK/1 ->e
-                #     e      <$> const[IV 1] s              the LOW bound
-                #     8      <0> padsv[$n:1,3] s            the HIGH bound
-                #
-                # so ->next reaches the LOW bound and ->other the HIGH. Walking
-                # `first`/`sibling` instead left an extra value on the stack:
-                # the enclosing ArrayLiteral came out `in=[Range, Constant]`,
-                # holding a bound beside the list.
-                my $lo_op = $op->next;
-                my $hi_op = $op->can('other') ? $op->other : undef;
-                die "GAP: a runtime range whose bounds are not two arms is"
-                  . " not yet lowered\n"
-                    unless ref $lo_op && $$lo_op && ref $hi_op && $$hi_op;
-
-                my $before = $sim->stack_depth;
-                _walk_branch($cv, $hi_op, $sim, $factory, $opmap, {});
-                die "GAP: a runtime range whose high bound did not evaluate to"
-                  . " a value is not yet lowered\n"
-                    unless $sim->stack_depth >= $before + 1;
-                my $hi = $sim->pop_node;
-
-                _walk_branch($cv, $lo_op, $sim, $factory, $opmap, {});
-                die "GAP: a runtime range whose low bound did not evaluate to"
-                  . " a value is not yet lowered\n"
-                    unless $sim->stack_depth >= $before + 1;
-                my $lo = $sim->pop_node;
-
-                $sim->push_node($factory->make('Range',
-                    inputs => [$lo, $hi],
-                    stamp  => SoN::IR::Stamp->new(type => 'List')));
-
-                # RESUME AFTER THE WRAPPERS. The low-bound arm ends at flip,
-                # which chains to flop; both are consumed here, so the walk
-                # continues at whatever follows them.
-                $op = $lo_op;
-                while ($$op && $op->name ne 'flip' && $op->name ne 'flop') {
-                    $op = $op->next;
-                }
-                while ($$op && ($op->name eq 'flip' || $op->name eq 'flop')) {
-                    $op = $op->next;
-                }
+                $op = _handle_range($cv, $op, $sim, $factory, $opmap);
                 next;
             }
 
@@ -9585,6 +9519,21 @@ class SoN::FromOptree 0.01 {
             # loop minted Projs on the OUTER Loop and truncated the walk; a
             # skipped if/else dropped its arms entirely). Refuse loudly. The
             # loop's own and/or condition is handled below.
+            # A LIST-CONTEXT RANGE IS A VALUE, NOT LOOP CONTROL. OpMap declares
+            # `range => [0, undef, 1, BRANCH]`, so the refusal below fired on
+            # it -- and that refusal's own justification is about a construct
+            # that mints Projs on the OUTER Loop, which a range does not do. It
+            # produces a LIST and touches the loop's control flow not at all,
+            # exactly like the `cond_expr` and `entertry` delegations above.
+            #
+            # So the refusal was measuring the OP TABLE where it means to
+            # measure the CONSTRUCT. The scalar form still refuses, under its own
+            # name, because a flip-flop carries state across evaluations.
+            if ($name eq 'range' || $name eq 'flip' || $name eq 'flop') {
+                $op = _handle_range($cv, $op, $sim, $factory, $opmap);
+                next;
+            }
+
             if ($name eq 'enterloop'
                 || ($opmap->is_branch($name) && $name ne 'and' && $name ne 'or')) {
                 die "GAP: $name inside a loop body not yet lowered\n";
@@ -11089,6 +11038,85 @@ class SoN::FromOptree 0.01 {
     # $break_projs undef BY DESIGN, then the real pass wires control. Refusing
     # in the scout kills the translation before the real pass runs, so "am I
     # in a loop" cannot be inferred from either of the others being defined.
+    # _handle_range($cv, $op, $sim, $factory, $opmap) -> $resume_op
+    #
+    # SHARED BY THE MAIN WALK AND THE LOOP-BODY WALK, which is why it is a sub
+    # rather than inline. A list-context range is a VALUE, not loop control: it
+    # walks its two bound arms, builds one Range, pushes it, and touches neither
+    # the Loop nor any Region. That is the same property the body walker already
+    # relies on to delegate `cond_expr` and `entertry`, and the reason its
+    # generic branch refusal -- right about a nested loop or if/else, which mint
+    # Projs on the OUTER Loop -- is wrong about a range.
+    #
+    # THREE OP NAMES, TWO CONSTRUCTS, split by CONTEXT. Measured, with the
+    # constants read from B rather than recalled (OPf_WANT_LIST=3,
+    # OPf_WANT_SCALAR=2, mask OPf_WANT=3):
+    #
+    #   my @q = (1..$n)               range(...) lK/1   counted expansion
+    #   print if ($l==2)..($l==4)     range(...) sK/1   stateful flip-flop
+    #
+    # A constant range (1..4) folds to a const[AV] and never arrives. A
+    # `foreach` over a runtime range never arrives either: perl OPTIMISES THE
+    # RANGE AWAY there, leaving the bounds as plain ops before enteriter, which
+    # is why _translate_foreach_range receives them already on the stack.
+    sub _handle_range ($cv, $op, $sim, $factory, $opmap) {
+        my $name = $op->name;
+        die "GAP: a scalar-context flip-flop (\$a..\$b as a stateful test) is"
+          . " not yet lowered -- it carries state across evaluations, which a"
+          . " counted expansion does not express\n"
+            if ($op->flags & 3) == 2;    # OPf_WANT_SCALAR
+
+        # `flip` and `flop` WRAP the range and carry no operand of their own;
+        # skipping them keeps the stack depth right, since a node pushed at each
+        # of the three would leave two extra values for the enclosing aassign.
+        return $op->next if $name ne 'range';
+
+        # WHICH ARM HOLDS WHICH BOUND, measured rather than assumed. Concise for
+        # `my @q = (1..$n)`:
+        #
+        #     7  <|> range(other->8)[$:2,3] lK/1 ->e
+        #     e      <$> const[IV 1] s              the LOW bound, down ->next
+        #     8      <0> padsv[$n:1,3] s            the HIGH bound, down ->other
+        #
+        # Walking `first`/`sibling` instead left an extra value on the stack and
+        # the enclosing ArrayLiteral came out `in=[Range, Constant]`, holding a
+        # bound beside the list.
+        my $lo_op = $op->next;
+        my $hi_op = $op->can('other') ? $op->other : undef;
+        die "GAP: a runtime range whose bounds are not two arms is not yet"
+          . " lowered\n"
+            unless ref $lo_op && $$lo_op && ref $hi_op && $$hi_op;
+
+        my $before = $sim->stack_depth;
+        _walk_branch($cv, $hi_op, $sim, $factory, $opmap, {});
+        die "GAP: a runtime range whose high bound did not evaluate to a value"
+          . " is not yet lowered\n"
+            unless $sim->stack_depth >= $before + 1;
+        my $hi = $sim->pop_node;
+
+        _walk_branch($cv, $lo_op, $sim, $factory, $opmap, {});
+        die "GAP: a runtime range whose low bound did not evaluate to a value"
+          . " is not yet lowered\n"
+            unless $sim->stack_depth >= $before + 1;
+        my $lo = $sim->pop_node;
+
+        $sim->push_node($factory->make('Range',
+            inputs => [$lo, $hi],
+            stamp  => SoN::IR::Stamp->new(type => 'List')));
+
+        # RESUME AFTER THE WRAPPERS. The low-bound arm ends at flip, which
+        # chains to flop; both are consumed here.
+        my $resume = $lo_op;
+        while ($$resume && $resume->name ne 'flip' && $resume->name ne 'flop') {
+            $resume = $resume->next;
+        }
+        while ($$resume
+               && ($resume->name eq 'flip' || $resume->name eq 'flop')) {
+            $resume = $resume->next;
+        }
+        return $resume;
+    }
+
     sub _walk_branch ($cv, $op, $sim, $factory, $opmap, $visited, $exits = undef, $stop_at_exit = 0, $stop_addr = undef, $loop_node = undef, $break_projs = undef, $in_loop = 0) {
         # VISITED RIDES ON THE CTX so a handler that walks a nested structure --
         # a foreach body, say -- marks the same op set the caller does. Without
