@@ -151,6 +151,78 @@ gv/stash fixes, Negate/Complement, the runtime range): STILL 12/10/15. None of
 those causes appears in this tier, so tier 1 progress does not transfer and the
 two tiers need separate work.
 
+### Re-measured 2026-09-26 evening with tools/perl-t-roundtrip.pl: 12 / 39
+
+STILL 12, after the six emission fixes that took tier 1 from 135 to 154. None
+of those causes appears in this tier, which confirms across two measurements
+that TIER 1 PROGRESS DOES NOT TRANSFER. The tiers need separate work, and a
+corpus percentage is not a proxy for this one.
+
+The census is in the repo now (it was ad-hoc): 12 ROUNDTRIP, 10 DIFFERS,
+10 REFUSED, 6 GAP, 1 NOJSON. Per tier -- base 7/9, comp 4/25, cmd 1/5. The
+bucketing differs from the 12/10/15 above only in splitting GAP and NOJSON out
+of REFUSED; the round-trip count is the same number.
+
+Its FIRST run reported 9 of 9 REFUSED for t/base, every one of which renders:
+a `require SoN::Deparse` inside `eval`, with `-I` passed only to the child
+processes. A uniform result is a harness bug until proven otherwise, and this
+one was caught by running it against a tier whose answer was already known.
+
+### A REFUSAL CAN BE SECOND-ORDER, and the mechanism is worth knowing
+
+`a call to X, which is not in the graph` is the most common single refusal
+message, and it has two unrelated causes. The mechanism, reproduced minimally:
+
+    sub helper { my $x = shift; *FH = \*STDOUT; return $x + 1 }
+    print helper(1), "\n";
+
+      skipped main::helper: GAP: assigning to a glob (*FH)
+      REFUSED: GAP: a call to `main::helper`, which is not in the graph
+
+ONE SUB GAPS AND TAKES ITS CALLER DOWN. The producer's per-sub skip is honest,
+and the deparser's refusal is honest, but the reported cause names the CALLER
+and the fixable defect is in the CALLEE. Of the ten refusals, three are this
+shape (base/rs.t, cmd/switch.t, comp/proto.t -- 2, 3 and 3 skipped subs).
+
+The other cause is a callee in a DIFFERENT COMPILATION UNIT -- `plan` reached
+through `require './test.pl'` in a BEGIN block, as comp/filter_exception.t does.
+Nothing is skipped there and nothing is defective; B::SoN sees one unit at a
+time.
+
+A FIRST PASS AT THIS SECTION GOT IT WRONG, by grouping files from a `=== `
+header list without checking which BUCKET each fell in: comp/fold.t and
+comp/our.t were counted as refusals when they are DIFFERS, and comp/decl.t and
+comp/hints.t were counted here when they do not refuse at all. Both halves were
+overstated. The corrected split is 3 second-order and 1 cross-unit, with the
+remaining 6 refusals having causes of their own.
+
+### The actionable list: 14 GAPs over 9 files, no cluster above 2
+
+Every sub skipped across base+comp+cmd, by its GAP. NOT all of these block a
+round trip -- a skipped sub only refuses the program when something CALLS it,
+which is why nine files carry skips and only three refuse for that reason:
+
+    2  map body contribution of unknown arity
+    2  assigning to a glob (*FH)
+    1  `write` whose format is not installed on the handle
+    1  void-context 'or' arm did not converge
+    1  void-context 'and' arm did not converge
+    1  untranslatable op inside an if/else arm (stopped at `return`)
+    1  untranslatable op inside an if/else arm (stopped at `range`)
+    1  undef(EXPR) on a glob (rv2gv)
+    1  loop-carried value loses its stamp (unstamped back-edge)
+    1  function exit inside a loop body
+    1  an element store inside a nested one-armed branch
+    1  a loop control (`next`) inside a branch arm
+    1  a bare block with a `continue` block and a next/last/redo
+
+THERE IS NO CHEAP WIN HERE, and that is the finding. Tier 1's work was
+profitable because five emission causes covered nineteen cases; this tier is
+fourteen causes for nine files, and several are control-flow shapes (loop exits,
+branch arms, memory-Phi merges) rather than spellings. Ranking by cluster size
+picks nothing; the honest order is by whether a GAP is a FACT about the program
+or an ARTIFACT of the walker, and that has not been classified yet.
+
 ### The 15 refusals, and why the headline cause is not what it says
 
     5  "a call to X, which is not in the graph"
