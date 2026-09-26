@@ -124,15 +124,64 @@ three -- `[1 2]` where we print `[]`. Only a byte diff caught it. That is
 investigation; every classification here that rests on a preview rather than a
 full diff should be re-checked.
 
-## Remaining work
+## The remaining 17, diffed in full
 
-18 of the 29 wrong-output cases are unsampled, plus 10 RUNS_BUT_DIES and 8
-EMITS_INVALID_PERL which have not been diagnosed at all. Expect more distinct
-causes -- the 11 sampled produced 8.
+Sampling of RUNS_WRONG_OUTPUT is now COMPLETE: 29 of 29. Five more clusters
+and six singletons, for 19 distinct causes in total.
 
-Topics still unsampled include formats, loading, embedded-code, tie,
-bless-dispatch (4 cases), taking-references, pod-and-data, handles,
-symbol-table, regex-pattern-positions.
+### 9. A TEXT SECTION AFTER THE PROGRAM IS DROPPED (161, 162, 103, 104)
+
+The biggest remaining cluster, and one shape: content that is NOT Perl but
+belongs to the file.
+
+    161  __DATA__ read through <DATA>     emits nothing; perl prints one two
+    162  __DATA__ holding non-Perl bytes  emits nothing
+    103  a format declaration + write     emits nothing
+    104  a format picture line            emits nothing
+
+`__DATA__` and a format body are not optree ops, so a walker that only reads
+the optree cannot see them. The producer must read them from the FILE.
+Related to the existing `write` refusal, but these cases produce NO output
+rather than refusing -- a silent drop, the worst outcome.
+
+### 10. `use` does not load or import (124, 125, 128)
+
+    124  use POSIX;      "POSIX loaded: no / floor imported: no"  (perl: yes/yes)
+    125  use POSIX ();   "POSIX loaded: no"                        (perl: yes)
+    128  import as an ordinary method call -> dies, undefined import method
+
+A `use` is a compile-time require plus an import call; we emit neither. 128 is
+the sharpest: the emission DIES rather than printing, so a caller cannot tell
+a missing import from a broken one.
+
+### 11. Regex-embedded code does not run (097, 098, 099)
+
+    097  (?{ }) statement inside a pattern    0 where perl says 5
+    098  qr// carrying a block                0 where perl says 7
+    099  hostile contents, region parsed      3bc 0 where perl says 3bc 5
+
+A code block frozen into a pattern is a callee the graph does not carry.
+
+### 12. Six singletons
+
+    044  `&` on strings, numeric gate     10 where perl says 8
+    055  `die` as a list operator         a line missing from the output
+    062  `prototype` reads its own input  [] where perl says [$]
+    085  `caller` amount by context       1 1 where perl says 1 0
+    120  `localtime` list vs string       returns the STRING in list context
+    179  `split` first-arg as a pattern   4 [  a b] 4 [  a b] vs 2 [a b]
+    191  `\*STDOUT` ref type             SCALAR where perl says GLOB
+
+179 and 120 are the same family as the deref defects: a list-context read
+returning the scalar-context answer.
+
+## Still undiagnosed
+
+    10  RUNS_BUT_DIES
+     8  EMITS_INVALID_PERL
+
+Not looked at. One EMITS_INVALID_PERL shape is already known from the earlier
+sample -- `tr[.][Z])` with a stray paren, from adjacency-09_regex.
 
 ## What this does to the milestone shape
 
