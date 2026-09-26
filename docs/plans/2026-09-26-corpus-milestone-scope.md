@@ -1,5 +1,12 @@
 # Step 3 scope: what "build IR for the corpus" actually means
 
+> **SUPERSEDED 2026-09-26 by docs/plans/2026-09-26-the-round-trip-goal.md.**
+> This document was assessed MODIFY with five blocking findings
+> (docs/assessments/0001-corpus-milestone-scope.md) and its scope was then
+> widened past one corpus. Kept for the measurement record; do not refine from
+> it. Its central claim -- "CHALK INHERITS ALL OF THESE" -- is FALSE, falsified
+> on case 193 where the graph is correct and the renderer is not.
+
 **Date:** 2026-09-26
 **Status:** SCOPE, ready for a crochet milestone. Measured, not projected.
 
