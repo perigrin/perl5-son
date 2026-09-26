@@ -1108,9 +1108,91 @@ class SoN::FromOptree 0.01 {
             # @q=(1..$n); scalar @q` gave 1, oracle 4 -- a silent miscompile, zhi
             # 019f5b4b). Lowering a runtime range (a counted N-element expansion) is
             # a feature not yet built; GAP loudly rather than skip.
+            # THREE OP NAMES, TWO CONSTRUCTS, split by CONTEXT. Measured,
+            # with the constants read from B rather than recalled
+            # (OPf_WANT_LIST=3, OPf_WANT_SCALAR=2, mask OPf_WANT=3):
+            #
+            #   my @q = (1..$n)               range(...) lK/1   counted expansion
+            #   print if ($l==2)..($l==4)     range(...) sK/1   stateful flip-flop
+            #
+            # A constant range (1..4) folds to a const[AV] and never arrives.
+            #
+            # A `foreach` over a runtime range never arrives either: perl
+            # OPTIMISES THE RANGE AWAY there, leaving the bounds as plain ops
+            # before enteriter -- measured, `for my $i (1..$n)` is
+            # `pushmark / const[IV 1] / padsv[$n] / enteriter`, with no range
+            # op at all. That is why _translate_foreach_range receives its
+            # bounds already on the stack and this handler is only ever the
+            # LIST-ASSIGN shape.
             if ($name eq 'range' || $name eq 'flip' || $name eq 'flop') {
-                die "GAP: a runtime range with a non-constant bound (1..\$n) is not"
-                  . " yet lowered\n";
+                my $want = $op->flags & 3;    # OPf_WANT mask, from B
+                die "GAP: a scalar-context flip-flop (\$a..\$b as a stateful"
+                  . " test) is not yet lowered -- it carries state across"
+                  . " evaluations, which a counted expansion does not"
+                  . " express\n"
+                    if $want == 2;
+
+                # `flip` and `flop` WRAP the range and carry no operand of
+                # their own; skipping them keeps the stack depth right, since a
+                # node pushed at each of the three would leave two extra values
+                # for the enclosing aassign.
+                if ($name ne 'range') {
+                    $op = $op->next;
+                    next;
+                }
+
+                # RANGE IS A BRANCH OP REACHED BEFORE ITS OPERANDS. Measured
+                # exec order: the HIGH bound is down ->next and the LOW bound
+                # down ->other, so neither is on the stack here. Both are
+                # children in TREE order though -- `first` is the low bound and
+                # its sibling the high -- so each arm is walked with
+                # _walk_branch, the same way every other branch op walks an
+                # arm onto the stack.
+                # WHICH ARM HOLDS WHICH BOUND, measured rather than assumed.
+                # Concise for `my @q = (1..$n)`:
+                #
+                #     7  <|> range(other->8)[$:2,3] lK/1 ->e
+                #     e      <$> const[IV 1] s              the LOW bound
+                #     8      <0> padsv[$n:1,3] s            the HIGH bound
+                #
+                # so ->next reaches the LOW bound and ->other the HIGH. Walking
+                # `first`/`sibling` instead left an extra value on the stack:
+                # the enclosing ArrayLiteral came out `in=[Range, Constant]`,
+                # holding a bound beside the list.
+                my $lo_op = $op->next;
+                my $hi_op = $op->can('other') ? $op->other : undef;
+                die "GAP: a runtime range whose bounds are not two arms is"
+                  . " not yet lowered\n"
+                    unless ref $lo_op && $$lo_op && ref $hi_op && $$hi_op;
+
+                my $before = $sim->stack_depth;
+                _walk_branch($cv, $hi_op, $sim, $factory, $opmap, {});
+                die "GAP: a runtime range whose high bound did not evaluate to"
+                  . " a value is not yet lowered\n"
+                    unless $sim->stack_depth >= $before + 1;
+                my $hi = $sim->pop_node;
+
+                _walk_branch($cv, $lo_op, $sim, $factory, $opmap, {});
+                die "GAP: a runtime range whose low bound did not evaluate to"
+                  . " a value is not yet lowered\n"
+                    unless $sim->stack_depth >= $before + 1;
+                my $lo = $sim->pop_node;
+
+                $sim->push_node($factory->make('Range',
+                    inputs => [$lo, $hi],
+                    stamp  => SoN::IR::Stamp->new(type => 'List')));
+
+                # RESUME AFTER THE WRAPPERS. The low-bound arm ends at flip,
+                # which chains to flop; both are consumed here, so the walk
+                # continues at whatever follows them.
+                $op = $lo_op;
+                while ($$op && $op->name ne 'flip' && $op->name ne 'flop') {
+                    $op = $op->next;
+                }
+                while ($$op && ($op->name eq 'flip' || $op->name eq 'flop')) {
+                    $op = $op->next;
+                }
+                next;
             }
 
             # Other branch ops (iter, poptry, catch, leavetrycatch) - skip

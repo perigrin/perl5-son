@@ -3062,6 +3062,18 @@ class SoN::Deparse 0.01 {
         # THE OPERAND IS PARENTHESIZED because these bind tighter than the
         # arithmetic that may be inside them: `-$a + $b` is `(-$a) + $b`, so
         # emitting `-` against an unparenthesized sum would change the answer.
+        # A RANGE IS A LIST, spelled with its two bounds. Reached only from
+        # the list-context form: perl folds a constant range to a const[AV]
+        # and optimises the range op away entirely inside a `foreach`, so this
+        # is the `my @q = (1..$n)` shape. The bounds are parenthesized because
+        # `..` binds loosely -- looser than the arithmetic that may produce a
+        # bound.
+        elsif ($op eq 'Range') {
+            die "GAP: a Range with " . scalar(@in) . " inputs is not yet"
+              . " rendered\n" unless @in == 2;
+            $text = sprintf('((%s) .. (%s))',
+                $self->_expr($in[0]), $self->_expr($in[1]));
+        }
         elsif ($op eq 'Negate') {
             die "GAP: a Negate with " . scalar(@in) . " inputs is not yet"
               . " rendered\n" unless @in == 1;

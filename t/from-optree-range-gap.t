@@ -32,11 +32,29 @@ sub translate_ok ($code) {
     return dies { SoN::FromOptree->translate($cv) };   # returns undef on success
 }
 
-subtest 'a runtime range (non-constant bound) in list context refuses loudly' => sub {
-    like(translate_dies('sub { my $n = 4; my @q = (1 .. $n); scalar @q }'),
-        qr/GAP.*range/i, 'my @q = (1..$n) dies with a GAP message');
-    like(translate_dies('sub { my $lo = 2; my @q = ($lo .. 5); scalar @q }'),
-        qr/GAP.*range/i, 'a non-constant LOW bound also dies with a GAP');
+# THE REFUSAL IS LIFTED. A list-context runtime range now lowers to a Range
+# node -- see t/from-optree-runtime-range.t, which carries the round trips.
+# This subtest pinned the LIMITATION, and a refusal test encodes a limitation
+# rather than a fact about perl ([[a-refusal-test-must-name-its-cause]]), so it
+# becomes the positive assertion it was always heading for.
+#
+# What the original defect was, kept because it is the reason the node has to
+# hold both bounds: the range's list value was DROPPED and the enclosing
+# aassign saw a 1-element stack, so `my @q=(1..$n); scalar @q` gave 1 where
+# perl gives 4 (zhi 019f5b4b).
+subtest 'a runtime range in list context translates' => sub {
+    is(translate_ok('sub { my $n = 4; my @q = (1 .. $n); scalar @q }'), undef,
+        'my @q = (1..$n) translates');
+    is(translate_ok('sub { my $lo = 2; my @q = ($lo .. 5); scalar @q }'), undef,
+        'a non-constant LOW bound translates too');
+};
+
+# THE SCALAR FORM IS A DIFFERENT CONSTRUCT and still refuses, under its own
+# name. `range`/`flip`/`flop` are three op names over two constructs, split by
+# the context flag.
+subtest 'a scalar-context flip-flop still refuses, naming itself' => sub {
+    like(translate_dies('sub { my $x = 3; my $r = (($x==1)..($x==5)) ? 1 : 0; $r }'),
+        qr/flip-flop/, 'the refusal names the flip-flop');
 };
 
 subtest 'a constant range still translates (the GAP does not over-fire)' => sub {

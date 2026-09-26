@@ -72,31 +72,22 @@ sub round_trips ($src, $name) {
 # construct is honest; refusing two under one message is not, because the
 # message cannot be matched to a cause.
 
-# ATTEMPTED AND REVERTED 2026-09-26. The split by context is correct and the
-# list form is still not lowered, because `range` IS A BRANCH OP REACHED BEFORE
-# ITS OPERANDS. Measured exec order for `my @q = (1..$n)`:
+# RANGE IS A BRANCH OP REACHED BEFORE ITS OPERANDS, and which arm holds which
+# bound is measured, not assumed:
 #
-#     6  <0> pushmark s
-#     7  <|> range(other->8)[$:2,3] lK/1
-#     8      <0> padsv[$n:1,3] s          <- the HIGH bound, on ->next
-#     9      <1> flop lK
-#     e  <$> const[IV 1] s                <- the LOW bound, on ->other
-#     f  <1> flip[$:2,3] lK/LINENUM
+#     7  <|> range(other->8)[$:2,3] lK/1 ->e
+#     e      <$> const[IV 1] s               the LOW bound, down ->next
+#     8      <0> padsv[$n:1,3] s             the HIGH bound, down ->other
 #
-# So at the moment `range` is reached the stack holds NEITHER bound: one
-# arrives down ->next and the other down ->other, and `flip`/`flop` close over
-# them. Popping two operands at the `range` op gave "fewer than two bounds on
-# the stack" -- a Range node cannot simply be built there.
+# So each arm is walked with _walk_branch, the way every other branch op walks
+# an arm onto the stack. Walking `first`/`sibling` instead left an extra value
+# behind and the enclosing ArrayLiteral came out `in=[Range, Constant]`,
+# holding a bound beside the list.
 #
-# A correct lowering has to walk both arms the way the branch handlers do and
-# join them, which is the shape _translate_foreach_range already has for the
-# loop case. Not built; the honest refusal stands rather than a guess.
-#
-# The SCALAR form additionally hits a DIFFERENT refusal first ("range inside a
-# loop body"), so the flip-flop subtest below cannot be reached from a `for`
-# loop at all until that one moves.
+# A `foreach` over a runtime range never reaches this handler: perl OPTIMISES
+# THE RANGE AWAY there, leaving the bounds as plain ops before enteriter, which
+# is why _translate_foreach_range receives them already on the stack.
 subtest 'a list-context runtime range expands' => sub {
-    my $todo = todo 'a runtime range is a branch op; both bounds arrive on separate arms';
     round_trips( <<'SRC', 'a range with a variable upper bound' );
 my $n = 4;
 my @q = (1 .. $n);
@@ -122,14 +113,19 @@ SRC
 # matched to a cause, so this pins the SPLIT rather than merely that something
 # refuses.
 subtest 'the scalar-context flip-flop refuses under its own name' => sub {
-    my $todo = todo 'the refusal does not yet name which construct it is';
-    my ( undef, $err ) = graph_of( <<'SRC' );
-my @out;
-for my $l (1 .. 6) { push @out, $l if ($l == 2) .. ($l == 4) }
-print "@out\n";
-SRC
+    # OUTSIDE A LOOP, so this reaches the range handler. Inside a `for` body an
+    # EARLIER refusal wins ("range inside a loop body") and masks this one --
+    # measured, and the reason the first draft of this subtest failed while the
+    # split was already correct.
+    my ( undef, $err ) = graph_of(
+        'my $x = 3; my $r = (($x==1)..($x==5)) ? "y" : "n"; print "$r\n";' );
     like $err, qr/flip-flop/,
         'the refusal names the flip-flop, not "a runtime range"';
+
+    # AND THE LIST FORM MUST NOT REACH IT -- the whole point of the split.
+    my ( $data, $lerr ) = graph_of('my $n=3; my @q=(1..$n); print "@q\n";');
+    unlike $lerr, qr/flip-flop/, 'a list range is not called a flip-flop';
+    ok $data && $data->{methods}{'main::__PROGRAM__'}, '... and it translates';
 };
 
 done_testing;
