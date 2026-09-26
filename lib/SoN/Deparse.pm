@@ -358,8 +358,22 @@ class SoN::Deparse 0.01 {
         return sprintf('(%s)[%s]', $spelling, $key)
             if $st eq 'List';
 
-        return $st eq 'HashRef' ? sprintf('%s->{%s}', $spelling, $key)
-                                : sprintf('%s->[%s]', $spelling, $key);
+        # THE REFERENCE IS PARENTHESIZED for the same reason the List branch
+        # above parenthesizes: `\@a->[0]` does not mean "element 0 of the
+        # reference", it means a reference TO `@a->[0]`, and perl rejects it
+        # with "Can't use an array as a reference". Measured on
+        # `my @a=(10,20); my $s=\@a; print "$$s[0]"`, whose graph is correct --
+        # `Ref/ArrayRef` over `ArrayLiteral` with a `Subscript` into it -- and
+        # whose emission died. `(\@a)->[0]` is the same node spelled so perl
+        # reads it as the graph says.
+        #
+        # A bare variable needs no parens and gets them anyway. That is the
+        # emitter being ugly rather than wrong, which is the trade its own
+        # design records: ugly and faithful is the product.
+        my $ref = ( $spelling =~ /\A\$?[A-Za-z_]\w*\z/ )
+            ? $spelling : sprintf('(%s)', $spelling);
+        return $st eq 'HashRef' ? sprintf('%s->{%s}', $ref, $key)
+                                : sprintf('%s->[%s]', $ref, $key);
     }
 
     method _cell_var ($cell) {

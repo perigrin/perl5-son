@@ -34,10 +34,27 @@ own numbers.
 pvm; ported and cut over, `.t` files deleted.
 
     PRODUCER    198 CLEAN    11 GAP    3 NOPARSE
-    ROUND TRIP  133 correct  43 DIFFERS  31 REFUSED  2 NOJSON  3 NOPARSE
+    ROUND TRIP  135 correct  41 DIFFERS  31 REFUSED  2 NOJSON  3 NOPARSE
 
-133/43 is the audited count, not the 134/42 first reported: case 025 drops a
-`local` and reorders a store, so stdout matches while stderr differs.
+135/41 as of the renderer paren fix (2026-09-26). Before it: 134/42.
+
+THE TWO HARNESSES DISAGREE BY ONE CASE, and the difference is the stderr
+convention rather than a defect either found. Ours compares STDOUT ONLY, so it
+scores case 025 ROUNDTRIP; the auditor's compares stderr too and scores it
+DIFFERS, giving 133/43. An earlier revision of this document wrote 133 without
+reconciling the two, which is the error this note replaces.
+
+The auditor is right about the underlying defect and our gate cannot see it:
+025 emits two warnings real perl suppresses, because `local $SIG{__WARN__}` is
+DROPPED and the store reordered below both `warn` calls. Measured:
+
+    stdout only   12                        matches the recorded block
+    with stderr   ab at line 3 / a at line 4 / 12
+
+So the gate needs a decision, recorded in phase 0: compare stderr and take
+133 as the honest baseline, or compare stdout and carry a list of cases whose
+stderr is known to differ. Scoring on stdout alone while calling the result a
+round trip is the weaker of the two and should not be the silent default.
 
 The 209 recorded `output` blocks were verified against stock perl first --
 209 match, 0 differ -- so a diff against a block is a diff against perl.
