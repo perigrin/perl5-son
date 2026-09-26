@@ -5619,10 +5619,46 @@ class SoN::FromOptree 0.01 {
             # fired and the slice popped ONE key off a list of them, so the node
             # came out Delete(Constant, HashLiteral) -- container and key
             # swapped, removing something the program never named.
-            die "GAP: a `delete` slice (more than one key at once) is not yet"
-              . " lowered -- its operands arrive as a list, not as a single"
-              . " container/key pair\n"
-                if $op->private & 64;   # OPpSLICE
+            # A SLICE IS N REMOVALS, ONE PER KEY, chained through memory.
+            # Measured, the operands share one mark:
+            #
+            #     pushmark / const "a" / const "b" / padhv[%h] / delete lK/SLICE
+            #
+            # so pop_to_mark gives [keys..., container] with the container LAST.
+            # Each key becomes its own Delete threaded onto the previous one,
+            # because a later read must observe every removal -- the single-key
+            # handler's own note says a Delete that does not advance memory
+            # leaves a later read still seeing the key.
+            #
+            # The RESULT is the removed values in key order, which is a list, so
+            # the values are collected into an ArrayLiteral for a non-void
+            # reader. Void context pushes nothing.
+            if ($op->private & 64) {    # OPpSLICE
+                die "GAP: a `delete` slice with no mark is not yet lowered\n"
+                    unless $sim->has_mark;
+                my $operands = $sim->pop_to_mark;
+                die "GAP: a `delete` slice with fewer than two operands is not"
+                  . " yet lowered\n" unless $operands->@* >= 2;
+                my $container = pop $operands->@*;
+
+                my @removed;
+                for my $key ($operands->@*) {
+                    my $d = $factory->make('Delete',
+                        inputs => [$container, $key,
+                            (defined $sim->memory ? ($sim->memory) : ())]);
+                    $d->set_control_in($sim->control);
+                    $sim->set_control($d);
+                    $sim->set_memory($d) if defined $sim->memory;
+                    push @removed, $d;
+                }
+
+                unless (($op->flags & 3) == 1) {   # not OPf_WANT_VOID
+                    $sim->push_node($factory->make('ArrayLiteral',
+                        inputs => \@removed,
+                        stamp  => SoN::IR::Stamp->new(type => 'List')));
+                }
+                return ($op->next, 'handled');
+            }
 
             die "GAP: `delete` with no container on the stack is not yet"
               . " lowered\n"

@@ -68,11 +68,17 @@ subtest 'delete carries its container and threads the removal' => sub {
 # `delete @h{qw(a b)}` is private=0x40 (OPpSLICE). Keyed on OPf_STACKED the
 # refusal never fired and the slice popped one key off a list of them, emitting
 # Delete(Constant, HashLiteral) with container and key SWAPPED.
-subtest 'a delete slice still refuses, and names itself' => sub {
-    my (undef, $derr) = translate('my %h=(a=>1,b=>2); delete @h{qw(a b)};', 'delslice');
-    like $derr, qr/GAP/, 'the slice is refused, loudly';
-    like $derr, qr/delete/, 'the GAP says "delete"';
-    like $derr, qr/slice/, '... and says which form';
+# THE SLICE REFUSAL IS LIFTED. A slice is N removals, one Delete per key
+# chained through memory, and the values collected for a non-void reader. This
+# subtest pinned the LIMITATION; a refusal test encodes one rather than a fact
+# about perl ([[a-refusal-test-must-name-its-cause]]), so it becomes the
+# positive assertion it was heading for. The round trips live in
+# t/from-optree-delete-slice.t, including that a later read observes EVERY
+# removal.
+subtest 'a delete slice translates' => sub {
+    my ($data, $derr) = translate('my %h=(a=>1,b=>2); delete @h{qw(a b)};', 'delslice');
+    unlike $derr, qr/GAP/, 'the slice is not refused' or diag $derr;
+    ok $data, 'it translates';
 };
 
 # `exists &sub` NO LONGER REFUSES. It asks about a symbol-table CV slot rather

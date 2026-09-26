@@ -113,14 +113,31 @@ SRC
 # HashLiteral) with container and key SWAPPED, removing something the program
 # never named. Asserting on the refusal alone would not have caught that, so the
 # single-key case below pins the operand ORDER too.
-subtest 'a delete slice refuses rather than deleting the wrong thing' => sub {
+# A DELETE SLICE NOW LOWERS, as N removals chained through memory. This subtest
+# pinned the refusal; the behaviour it was protecting -- that a later read
+# observes the removal -- is what it asserts now. Both container kinds go
+# through the same handler, verified rather than assumed.
+subtest 'a delete slice removes every key it names' => sub {
     for my $case (
         ['hash',  'my %h=(a=>1,b=>2); delete @h{qw(a b)}; print defined($h{a})?"y":"n";'],
         ['array', 'my @a=(1,2,3); delete @a[0,1]; print defined($a[0])?"y":"n";'],
     ) {
         my ($name, $src) = $case->@*;
-        my (undef, $err) = translate($src);
-        like $err, qr/GAP:.*slice/, "$name slice: refused";
+        my ($g, $err) = translate($src);
+        unlike $err, qr/GAP:/, "$name slice: not refused" or diag $err;
+        ok $g, "$name slice: translates";
+
+        # ONE Delete PER KEY, not one for the slice: each removal is its own
+        # effect, which is what makes the later read see them all.
+        # translate() returns the __PROGRAM__ graph DIRECTLY, not a `methods`
+        # map -- reading it a level too deep found nothing and reported 0.
+        my @del = grep { $_->{op} eq 'Delete' } ( $g->{nodes} // [] )->@*;
+        is scalar(@del), 2, "$name slice: two Delete nodes, one per key";
+
+        # CHAINED, not parallel: the second Delete's memory input is the first,
+        # which is what makes a later read observe both removals.
+        is $del[1]{inputs}[2], $del[0]{id},
+            "$name slice: the second removal threads onto the first";
     }
 };
 
