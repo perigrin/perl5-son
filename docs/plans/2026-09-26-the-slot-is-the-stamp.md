@@ -137,6 +137,42 @@ It compiles and runs, printing nothing where perl prints `7 8` -- a silent wrong
 answer, which is why no census caught it: `_resolve_glob_slots` reports the
 RESOLVABLE case as success.
 
+## ATTEMPTED AND REVERTED: the deparser assumes a resolved sigil
+
+The producer half is small and the design holds. Both refusal sites were
+removed -- `_resolve_glob_slots` (the pass) and `_glob_bind` (the producer) --
+and in both the answer was the `*` sigil the fallback already supplied. The
+lattice query works: `is_subtype_of` returns five ref kinds for `Scalar` and
+`Ref`, exactly one for each leaf, none for `Glob`/`Str`.
+
+THEN THE EMISSION BROKE, and it is the deparser's assumption rather than the
+model's:
+
+    our @A=(1,2); our @B; *B = *A; print scalar(@B)
+      perl   2
+      ours   **main::B = A;        syntax error
+
+Two defects in one line. The deparser adds a `*` for the EntryWrite's `binds`
+field AND the EntryDef now carries `sigil => '*'`, so the target gets two. And
+the RHS lost its sigil entirely -- it spells a glob operand from a resolved
+sigil it no longer has.
+
+So the deparser's glob path is written for "the sigil was resolved to one of
+@%&$", which is precisely the assumption the fix removes. That is the wire
+question this document already flagged as the only negotiation: a consumer that
+reads `sigil => '*'` needs a rule for it, and ours has none.
+
+REVERTED RATHER THAN FORCED. Emitting `**main::B` is worse than the refusal it
+replaced -- [[removing-a-gap-can-create-a-miscompile]] in the exact shape that
+memory names. The producer change is ready and blocked on the consumer, which
+makes it a two-sided change rather than the one-sided one it looked like.
+
+Worth noting what the revert cost: nothing, because the tree was `git add -A`'d
+first. A `git checkout` on those files is the command that silently discarded
+four verified changes earlier the same day
+([[a-checkout-reverts-more-than-the-experiment]]); staging first is what made it
+safe, and the three surviving fixes were verified by running their tests after.
+
 ## Open
 
 Whether the runtime-dispatch case needs a wire signal for chalk to DECLINE, or

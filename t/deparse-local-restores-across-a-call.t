@@ -88,7 +88,18 @@ SRC
     my ( $out, $why ) = emit($src);
     ok defined $out, 'renders' or do { diag $why; return };
 
-    my $todo = todo 'the save/restore is not emitted for a glob either';
+    # THE SAVED THING IS THE SLOT REFERENCE, which three measurements settle:
+    #
+    #   my $s = $v;  ... $v = $s     Modification of a read-only value --
+    #                                the slot now points at the literal
+    #   my $s = *v;  ... *v = $s     inner inner -- a glob is a NAME, so
+    #                                copying it snapshots nothing
+    #   my $s = \$v; ... *v = $s     inner outer -- correct
+    #
+    # So the restore is a glob BIND to a ref of the saved value, not a scalar
+    # store. `local $v` differs because it changes a value in place rather than
+    # rebinding a slot, which is why saving the value is right there and wrong
+    # here -- the same construct, two mechanisms.
     is runs($out), runs($src), 'the outer value comes back' or diag $out;
 };
 

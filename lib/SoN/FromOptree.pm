@@ -3921,6 +3921,69 @@ class SoN::FromOptree 0.01 {
             }
         }
 
+        # `local *NAME` IS A SAVE, AND IT IS A FLAG NOT AN OP. Measured, the
+        # two forms are the same op one private bit apart:
+        #
+        #     *v = \@A           rv2gv sKRM*/1
+        #     local *v = \"x"    rv2gv sKRM*/LVINTRO,1
+        #
+        # so nothing in the op STREAM distinguishes them and no save was ever
+        # recorded -- `_restore_locals` ran with n=0. The glob's previous value
+        # was clobbered permanently:
+        #
+        #     our $v = "outer";
+        #     sub show { print $v }
+        #     sub inner { local *v = \"inner"; show() }
+        #       perl inner outer    before inner inner
+        #
+        # This is the shape perl's own t/ uses -- comp/fold.t:105 `local *_`,
+        # comp/proto.t:674 -- and the scalar `local $v` half of the same defect
+        # is fixed at the gvsv site.
+        #
+        # THE NAME IS ON THE KID. rv2gv's first is the `gv`, which is where the
+        # symbol lives; the same two-step the srefgen and undef paths use.
+        #
+        # SIGIL '$' BECAUSE A GLOB ASSIGN BINDS ONE SLOT and the scalar slot is
+        # what a later `$v` read resolves through -- keyed the way
+        # _stash_name_key spells that read, or the restore would rebind a name
+        # nothing looks up. A bind to another slot is the wider question
+        # recorded in docs/plans/2026-09-26-the-slot-is-the-stamp.md.
+        if ($name eq 'rv2gv' && ($op->private & 128)   # OPpLVAL_INTRO
+                && $op->can('first') && ${$op->first}
+                && $op->first->name eq 'gv') {
+            if (my $gv = _op_gv($cv, $op->first)) {
+                my $stash = eval { $gv->STASH->NAME } // 'main';
+                my $key   = _stash_name_key('$', $stash, $gv->NAME);
+                my $entry = $factory->make('EntryDef',
+                    package => $stash, sigil => '$', symbol => $gv->NAME);
+
+                # THE SAVED THING IS THE SLOT REFERENCE, not its value, and
+                # measuring the alternatives is what settles it. `local *v`
+                # rebinds the glob's scalar slot to a new SV, so:
+                #
+                #   my $s = $v;  ... $v = $s     Modification of a read-only
+                #                                value -- the slot now points at
+                #                                the literal `\"inner"`
+                #   my $s = *v;  ... *v = $s     inner inner -- a glob is a NAME,
+                #                                copying it snapshots nothing
+                #   my $s = \$v; ... *v = $s     inner outer -- correct
+                #
+                # So the save is a REF to the old slot and the restore is a GLOB
+                # BIND that points the name back at it. That is what perl's
+                # savestack holds, and the scalar `local $v` case is different
+                # precisely because it does not rebind a slot -- it changes a
+                # value in place, so saving the value is right there.
+                my $prior = $factory->make('EntryDef',
+                    package => $stash, sigil => '$', symbol => $gv->NAME,
+                    (defined $sim->memory ? (inputs => [ $sim->memory ]) : ()));
+                push $ctx->{local_saves}->@*,
+                    { key       => $key,
+                      node      => $factory->make('Ref', inputs => [$prior]),
+                      target    => $entry,
+                      glob_bind => 1 };
+            }
+        }
+
         if ($name eq 'rv2gv' && $sim->stack_depth > 0) {
             my $top = $sim->peek_node;
             if ($top && $top->isa('SoN::IR::Node::Constant')
@@ -5554,10 +5617,95 @@ class SoN::FromOptree 0.01 {
                 # way to say "every later call to this name now dies". The
                 # aggregate message below would send a reader toward the
                 # empty-literal lowering, which is the wrong fix for this shape.
-                die "GAP: undef(EXPR) on a glob (rv2gv) not yet lowered --"
-                  . " it clears the whole symbol-table slot INCLUDING the code"
-                  . " slot, which no rebind of a single name expresses\n"
-                    if $kname eq 'rv2gv';
+                # NARROWED TO THE SHAPE THAT IS ACTUALLY UNEXPRESSIBLE. The
+                # reason above is right about the CODE SLOT and wrong about the
+                # rest: `undef *v` is total and well-defined, the program says
+                # exactly what it does, and the EMISSION is the source spelling
+                # with perl doing the clearing. Measured --
+                #
+                #     our $v="s"; our @v=(1,2); undef *v;
+                #       scalar=undef  array=0     both cleared, and
+                #                                 `undef *v` round-trips
+                #
+                # What needs a data edge is only "every LATER CALL to this name
+                # now dies", because a Call binds its callee by name. That
+                # hazard requires a later call to exist, so the scan is for one
+                # -- and comp/form_scope.t, the file this refusal blocks, does
+                # `undef *bar` and never calls `bar` again: the point of the
+                # test is that a format still works afterwards.
+                #
+                # FORWARD OVER THE EXEC CHAIN, not the whole tree: a call BEFORE
+                # the undef is unaffected. A `gv` naming the same symbol feeding
+                # an entersub is the callsite shape.
+                # rv2cv IS THE SAME SHAPE, ONE SLOT NARROWER. `undef &foo`
+                # clears the CODE slot only, and it is equally well-defined:
+                #
+                #     sub foo {"S"} undef &foo;   defined &foo -> no
+                #     sub foo {"S"} undef &foo; foo()
+                #       dies -- Undefined subroutine &main::foo called
+                #
+                # Its optree is `gv[\&main::foo]; rv2cv AMPER; undef`, so the
+                # name is on the kid exactly as it is for a glob. comp/form_scope.t
+                # does `undef &x` at line 110, one line-cluster away from the
+                # `undef *bar` this already handles, so the two were always going
+                # to be met together.
+                #
+                # THE SPELLING IS `&name`, not `*name`: a sigil of '&' on the
+                # EntryDef, which is what makes this a code-slot clear rather
+                # than a whole-entry one.
+                if ($kname eq 'rv2gv' || $kname eq 'rv2cv') {
+                    my $sigil = $kname eq 'rv2gv' ? '*' : '&';
+                    my $gv_op = _find_gv_op($kid);
+                    my $gv    = $gv_op ? _op_gv($cv, $gv_op) : undef;
+                    my $sym   = $gv ? $gv->NAME : undef;
+
+                    # A LATER CALL NEEDS NO REFUSAL EITHER, which a forward
+                    # scan for one was written to catch and then measured wrong.
+                    # PERL RAISES THE ERROR:
+                    #
+                    #     sub f {1} undef *f; print f();
+                    #       perl  Undefined subroutine &main::f called
+                    #       ours  undef(*main::f); my $eff5 = f();
+                    #             -> Undefined subroutine &main::f called
+                    #
+                    # The call is emitted and the TARGET LANGUAGE does the
+                    # dying, so the graph never needed an edge saying "this call
+                    # now dies" -- the hazard the whole refusal existed for is
+                    # handled by perl. Reproducing perl's error is a better
+                    # outcome than refusing to describe the program.
+                    #
+                    # An UNRESOLVABLE name still refuses: with no symbol there
+                    # is nothing to spell, and guessing would emit an undef of
+                    # the wrong entry.
+                    die "GAP: undef(EXPR) on a glob whose name could not be"
+                      . " resolved is not yet lowered -- there is no symbol to"
+                      . " spell, and guessing would clear the wrong entry\n"
+                        unless defined $sym;
+
+                    # Otherwise it is the source spelling, and perl clears the
+                    # entry.
+                    #
+                    # NOT A `glob` CONSTANT, which is the BAREWORD spelling --
+                    # correct for a filehandle (`close FOO`) and wrong here:
+                    # it emitted `undef(v)`, and perl said `Can't modify
+                    # constant item in undef operator`. The operand needs the
+                    # sigil, so it is an EntryDef with sigil '*' -- the same
+                    # node the glob-assignment path uses, which the deparser
+                    # already spells `*main::v`.
+                    my $stash = eval { $gv->STASH->NAME } // 'main';
+                    my $glob = $factory->make('EntryDef',
+                        package => $stash, sigil => $sigil, symbol => $sym);
+                    my $call = $factory->make('Call',
+                        inputs        => [$glob,
+                            (defined $sim->memory ? ($sim->memory) : ())],
+                        dispatch_kind => 'builtin',
+                        name          => 'undef');
+                    $call->set_control_in($sim->control) if defined $sim->control;
+                    $sim->set_control($call) if defined $sim->control;
+                    $sim->set_memory($call) if defined $sim->memory;
+                    $sim->push_node($call) unless ($op->flags & 3) == 1;
+                    return ($op->next, 'handled');
+                }
 
                 die "GAP: undef(EXPR) on this operand not yet lowered"
                   . " ($kname) -- on an aggregate it EMPTIES the container"
@@ -8063,7 +8211,15 @@ class SoN::FromOptree 0.01 {
             #
             # $factory is optional so the two call sites that have no factory
             # in hand keep the binding-only behaviour rather than dying.
-            _entry_store($factory, $sim, $save->{target}, $save->{node})
+            # A GLOB LOCAL RESTORES BY BINDING, NOT BY STORING. `local *v`
+            # rebinds the glob's slot to a new SV, so the restore must point the
+            # NAME back at the old slot -- `*v = $saved`, not `$v = $saved`.
+            # Stored as a scalar it wrote through the read-only literal the
+            # local had bound and died `Modification of a read-only value`.
+            # `binds` is the field the deparser already reads to spell a glob
+            # assignment, one path over.
+            _entry_store($factory, $sim, $save->{target}, $save->{node},
+                         $save->{glob_bind} ? 1 : 0)
                 if $factory && $save->{target};
         }
     }

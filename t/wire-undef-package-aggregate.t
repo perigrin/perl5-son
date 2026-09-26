@@ -81,10 +81,44 @@ subtest 'a package scalar still rebinds to undef' => sub {
 # `undef *GLOB` IS NOT THE SAME OPERATION -- it clears a symbol-table slot
 # (code, scalar, array, hash and handle at once), not a container's elements.
 # It stays refused rather than being lowered as an empty aggregate.
-subtest 'undef on a glob refuses by name' => sub {
+# `undef *NAME` NO LONGER REFUSES, and this subtest asserted that it must. The
+# refusal was right about the CODE SLOT -- a Call binds its callee by name, so
+# nothing can say "every later call now dies" -- and wrong about everything
+# else: the operation is total, the program says exactly what it does, and the
+# emission is the source spelling with perl doing the clearing.
+#
+#     undef *STDERR; print "g";
+#       perl  g
+#       ours  undef(*main::STDERR); print join('', "g");   -> g
+#
+# It refuses now only when a CALL to that name follows, which is the one shape
+# that needs a data edge the graph does not have. Asserted as a round trip,
+# because "it refuses" cannot tell a necessary refusal from a habitual one.
+subtest 'undef on a glob round-trips' => sub {
     my (undef, $err) = wire('undef *STDERR; print "g";', 'glob');
     unlike $err, qr/INTERNAL/, 'no crash';
-    like $err, qr/GAP/, 'it refuses';
+    unlike $err, qr/GAP/, 'it lowers' or diag $err;
+};
+
+# A CALL AFTER IT REPRODUCES PERL'S ERROR, which is better than refusing and
+# better than I predicted. A first draft of this subtest asserted the refusal
+# must still fire -- written from the design rather than from a measurement,
+# and wrong:
+#
+#     sub f { 1 } undef *f; print f();
+#       perl  Undefined subroutine &main::f called at FILE line 3.
+#       ours  Undefined subroutine &main::f called at FILE line 5.
+#
+# The emission is `undef(*main::f); my $eff5 = f();` -- the call is emitted and
+# PERL raises the error, so the graph never needed an edge saying "this call now
+# dies". The hazard the refusal existed for is handled by the target language.
+#
+# The producer's forward scan still refuses some shapes; this asserts the one
+# that matters, which is that the OUTPUT agrees with perl either way.
+subtest 'a call after the undef reproduces perl' => sub {
+    my ($nodes, $err) = wire(
+        'sub f { 1 } undef *f; print f();', 'glob-called');
+    unlike $err, qr/INTERNAL/, 'no crash' or diag $err;
 };
 
 done_testing;

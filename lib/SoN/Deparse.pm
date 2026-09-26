@@ -645,6 +645,18 @@ class SoN::Deparse 0.01 {
             next unless @in >= 2;
             my ( $slot, $val ) = ( $nodes->{ $in[0] }, $nodes->{ $in[1] } );
             next unless $slot && $val;
+
+            # A GLOB LOCAL SAVES A REF TO THE SLOT, so the value is
+            # `Ref(EntryDef)` rather than the EntryDef itself -- `local *v`
+            # rebinds the slot, and only a reference to the OLD one can point
+            # the name back at it. Look through the Ref to find the read that
+            # needs binding; without this the restore emitted
+            # `*main::v = \($main::v)`, which re-reads the slot the local just
+            # replaced and rebinds it to itself.
+            if ( ( $val->{op} // '' ) eq 'Ref' ) {
+                my $inner = $nodes->{ ( $val->{inputs} // [] )->[0] // -1 };
+                $val = $inner if $inner;
+            }
             next unless ( $val->{op} // '' ) eq 'EntryDef';
 
             my $sf = $slot->{fields} // {};
