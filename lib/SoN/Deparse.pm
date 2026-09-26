@@ -648,14 +648,33 @@ class SoN::Deparse 0.01 {
             # holding the readline's value -- measured -- and hoisting the
             # declaration put `my @got = ($eff21)` above the line declaring
             # $eff21. Same rule as the pad bindings below, same reason.
-            my $defer = 0;
+            # THE LAST BOUND INPUT, NOT THE FIRST. Attaching to the first one
+            # and stopping places the literal after that binding and BEFORE
+            # every later one. Measured on two list-returning calls in one
+            # list:
+            #
+            #     sub two { return (1, 2) }
+            #     my @r = (two(0), two(0));   perl: scalar(@r) is 4
+            #
+            #     my @eff3 = two(0);
+            #     my @r = (@eff3, @eff4);     <- the empty PACKAGE array
+            #     my @eff4 = two(0);
+            #
+            # It COMPILES without strict, `perl -w` says only "Name
+            # "main::eff4" used only once", and the program printed 2. A silent
+            # wrong answer in the path that does not refuse.
+            #
+            # The literal must follow EVERY binding it reads, so the latest one
+            # is the only safe anchor.
+            my $defer;
             for my $in (($n->{inputs} // [])->@*) {
                 next unless defined $in && exists $bound{$in};
-                push $after_effect{$in}->@*, $n;
-                $defer = 1;
-                last;
+                $defer = $in;
             }
-            next if $defer;
+            if (defined $defer) {
+                push $after_effect{$defer}->@*, $n;
+                next;
+            }
 
             # A PACKAGE AGGREGATE IS NOT DECLARED WITH `my`. `my @main::EST`
             # is a syntax error -- "can't be in a package" -- and the package
@@ -680,14 +699,21 @@ class SoN::Deparse 0.01 {
             # Deferred to the chain instead, emitted right after the effect it
             # names. Whether it is a `my` is the same question either way; only
             # the PLACE changes.
-            my $deferred = 0;
+            # THE LAST BOUND INPUT, for the reason spelled out at the
+            # ArrayLiteral loop above: an Assign reading TWO bound effects must
+            # follow BOTH, and anchoring to the first places it between them.
+            # Same rule, same loop shape, kept identical so the two cannot
+            # drift -- this file has lost a day to "one operator, two
+            # declaration sites" more than once.
+            my $deferred;
             for my $in (($n->{inputs} // [])->@*) {
                 next unless defined $in && exists $bound{$in};
-                push $after_effect{$in}->@*, $n;
-                $deferred = 1;
-                last;
+                $deferred = $in;
             }
-            next if $deferred;
+            if (defined $deferred) {
+                push $after_effect{$deferred}->@*, $n;
+                next;
+            }
 
             # A BINDING OF A LOOP PHI CANNOT FLOAT EITHER, and a loop Phi is
             # not in %bound -- it gets its variable from _emit_loop, not from
