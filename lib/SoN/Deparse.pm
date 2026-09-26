@@ -239,7 +239,18 @@ class SoN::Deparse 0.01 {
         %subst_count_var = ();
         my $body = eval { $self->_emit_control_chain($graph) };
         if (!defined $body) { $gap = $@ || 'render failed with no reason'; return undef }
-        return $out . $body;
+        # A FEATURE-GATED OPERATOR NEEDS ITS GATE. `isa` is a syntax error
+        # without `use v5.36` -- measured, `$o isa Foo` gives "Bareword found
+        # where operator expected". The source had the gate; the emission must
+        # too, or a graph that translated correctly emits Perl that does not
+        # compile.
+        #
+        # Emitted only when a gated node is present, so the common case keeps
+        # its current output byte-for-byte and no existing round trip moves.
+        my $needs_gate = grep {
+            ( $_->{op} // '' ) eq 'IsaOp'
+        } values $nodes->%*;
+        return ( $needs_gate ? "use v5.36;\n" : '' ) . $out . $body;
     }
 
     # A named sub. Its body is the same control-chain walk the program body
@@ -3068,6 +3079,33 @@ class SoN::Deparse 0.01 {
         # is the `my @q = (1..$n)` shape. The bounds are parenthesized because
         # `..` binds loosely -- looser than the arithmetic that may produce a
         # bound.
+        # `$o isa Foo` -- an infix operator, in=[object, class name]. The
+        # class arrives as a Constant string, and `isa` wants a BAREWORD or a
+        # string expression on its right; a string works for both spellings and
+        # does not have to know whether the source wrote one.
+        elsif ($op eq 'IsaOp') {
+            die "GAP: an IsaOp with " . scalar(@in) . " inputs is not yet"
+              . " rendered\n" unless @in == 2;
+            $text = sprintf('(%s isa %s)',
+                $self->_expr($in[0]), $self->_expr($in[1]));
+        }
+        # A SIGNATURE PARAMETER IS A READ OF `@_` BY INDEX, which is what perl
+        # itself lowers a signature to. Emitting `$_[0]` rather than
+        # reconstructing `sub f ($a, $b)` keeps this a value rule: the node
+        # carries index/name/sigil, and only the index is load-bearing for the
+        # VALUE. A default (`$b = 3`) is a separate Constant the producer
+        # already wired through a DefinedOr, so it needs nothing here.
+        #
+        # Ugly and faithful rather than pretty and reconstructed -- the same
+        # trade the emitter's own design records.
+        elsif ($op eq 'Parameter') {
+            my $ix  = ( $n->{fields} // {} )->{index} // 0;
+            my $sig = ( $n->{fields} // {} )->{sigil} // '$';
+            die "GAP: a Parameter with sigil `$sig` is not yet rendered"
+              . " -- only a scalar parameter reads as one \@_ element\n"
+                unless $sig eq '$';
+            $text = sprintf('$_[%d]', $ix);
+        }
         elsif ($op eq 'Range') {
             die "GAP: a Range with " . scalar(@in) . " inputs is not yet"
               . " rendered\n" unless @in == 2;
