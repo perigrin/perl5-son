@@ -3052,6 +3052,26 @@ class SoN::Deparse 0.01 {
               . " rendered\n" unless @in == 1;
             $text = sprintf('(!%s)', $self->_expr($in[0]));
         }
+        # UNARY ARITHMETIC. Both reach the wire from ordinary Perl and
+        # neither had a rule, so any graph containing one refused -- measured
+        # on pvm's adjacency-04_operators, "no rule for value node `Negate`".
+        # t/op-coverage.t already had fixtures PRODUCING both, which is that
+        # gate's stated limit as a defect: observing a node kind is not
+        # verifying it.
+        #
+        # THE OPERAND IS PARENTHESIZED because these bind tighter than the
+        # arithmetic that may be inside them: `-$a + $b` is `(-$a) + $b`, so
+        # emitting `-` against an unparenthesized sum would change the answer.
+        elsif ($op eq 'Negate') {
+            die "GAP: a Negate with " . scalar(@in) . " inputs is not yet"
+              . " rendered\n" unless @in == 1;
+            $text = sprintf('(-(%s))', $self->_expr($in[0]));
+        }
+        elsif ($op eq 'Complement') {
+            die "GAP: a Complement with " . scalar(@in) . " inputs is not yet"
+              . " rendered\n" unless @in == 1;
+            $text = sprintf('(~(%s))', $self->_expr($in[0]));
+        }
         elsif ($op eq 'Phi') {
             # READING A LOOP PHI IS READING ITS VARIABLE. _emit_loop declares
             # one per Phi before the loop and assigns it at the bottom of the
