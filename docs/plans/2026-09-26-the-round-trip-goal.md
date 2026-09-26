@@ -33,9 +33,18 @@ own numbers.
 `/home/perigrin/dev/pvm/.claude/worktrees/pu/conformance/mdtest/`. Owned by
 pvm; ported and cut over, `.t` files deleted.
 
-    ROUND TRIP  154 correct  36 DIFFERS  21 REFUSED  2 NOJSON
+    ROUND TRIP  156 correct  38 DIFFERS  21 REFUSED  2 NOJSON
 
-**154 of 213 as of 2026-09-26 evening**, from 135 at the start of that day.
+**156 of 217 as of 2026-09-26 late**, from 135 at the start of that day. The
+denominator moved 210 -> 213 -> 217 across the session as pvm landed cases,
+including the interposed-read topic contributed from here.
+
+GUARDED NOW. `t/roundtrip-ratchet.t` fails if either number drops -- both
+censuses were scripts no test invoked, so these figures held only while someone
+remembered to run them. Opt-in (`SON_RATCHET=1`, ~7 min) and VERIFIED TO FAIL:
+raising the floor to 999 gives `ROUNDTRIP 156 >= floor 999` and exit 1. A floor
+rather than a pin because the corpus grows, and it checks the denominator first,
+because a census that parsed nothing clears any floor by vacuous truth.
 
 THE DENOMINATOR MOVES, and this is the second time it has caught someone. The
 corpus is pvm's and grows while we measure: it went 210 -> 213 output blocks in
