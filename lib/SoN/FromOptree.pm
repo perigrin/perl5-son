@@ -4251,7 +4251,23 @@ class SoN::FromOptree 0.01 {
                 # (main::foo) the producer keys the callee graph under. %ENV stays
                 # fully qualified for the same disambiguation reason; every other
                 # gv keeps its short NAME (the existing EntryDef contract).
-                $value = ($gv->STASH->NAME eq 'main' && $gv->NAME eq 'ENV')
+                # A GV WITHOUT A STASH IS NOT A NAME. `glob` and `<*.c>`
+                # carry a placeholder in the gv slot -- measured,
+                # `gv[*<none>::]` -- and `->STASH` on it yields a B::SPECIAL,
+                # so reading NAME off it died. The die was masked as a silent
+                # skip, so the program emitted `{"methods":{}}`: no graph, no
+                # GAP, and a census keyed on GAP counts scored it CLEAN. A
+                # silent drop wearing a clean result, which this project ranks
+                # below every refusal.
+                #
+                # The guard narrows to "has a usable stash" rather than to
+                # "is not a glob op", because the STASH read is what
+                # disambiguates main::ENV from a package hash whose short name
+                # is also ENV; skipping it for every gv would break that.
+                my $stash = eval { $gv->STASH };
+                my $stash_name =
+                    ( ref $stash && $stash->can('NAME') ) ? $stash->NAME : '';
+                $value = ($stash_name eq 'main' && $gv->NAME eq 'ENV')
                     ? 'main::ENV'
                     : $gv->NAME;
             }
