@@ -19,11 +19,23 @@ Producer only (optree -> IR), over pvm's 212 cases:
 
 Round trip (producer -> deparser -> run -> diff against the recorded output):
 
-    ROUNDTRIP  127
-    DIFFERS     47
-    REFUSED     33
+    ROUNDTRIP  134
+    DIFFERS     42
+    REFUSED     31
     NOJSON       2
     NOPARSE      3
+
+A HARNESS ERROR INFLATED THE FIRST RUN. It used `-MO=SoN,json,package=main`,
+which FILTERS OUT every other package, so a case declaring `package Foo` lost
+`Foo::hi` from the graph and the emission called a method that did not exist.
+Measured: 4 of the 10 RUNS_BUT_DIES cases (047, 050, 052, 197) round-trip
+cleanly once `not_package=SoN` includes all packages, and the totals move
+127/47 -> 134/42.
+
+The first run's numbers were 127 ROUNDTRIP / 47 DIFFERS / 33 REFUSED. Every
+figure quoted in the sections below was taken from that run, so counts there
+are one-high in places; the per-case DIAGNOSES were each verified against a
+full byte diff and stand, except where noted.
 
 THE PAIRING IS TRUSTWORTHY. All 209 `output` blocks were checked against real
 perl first: 209 match, 0 differ. So a diff against a recorded block is a diff
