@@ -1386,6 +1386,34 @@ class SoN::FromOptree 0.01 {
             # Start, Constant, Return with the formline missing.
             if ($name eq 'leavesub' || $name eq 'leavesublv'
                     || $name eq 'leavewrite' || $is_program_exit) {
+                # A SUB BODY IS A SCOPE, and `local` unwinds at its exit like
+                # any other. This was the one scope exit with no restore:
+                # leaveloop, unstack and nextstate all had one, so a `local` in
+                # a BARE BLOCK unwound (the block compiles to
+                # enterloop/leaveloop) while the same `local` in a SUB did not.
+                #
+                # It only showed when the localised value was read through a
+                # CALL. Measured:
+                #
+                #     our $g = 1; { local $g = $g + 10; print $g } print $g
+                #       perl 11 1    ours 11 1    -- the block form, restored
+                #
+                #     sub show { print $v }
+                #     sub inner { local $v = "inner"; show() }
+                #       perl inner outer    ours inner inner
+                #
+                # In the same scope the read is lexically visible, so the walk
+                # sees pre- and post-scope values as two SSA bindings and prints
+                # the right thing WITHOUT a restore. Across a call there is no
+                # such binding -- the callee reads the package variable at
+                # whatever value it holds -- so the missing restore clobbered
+                # the outer value permanently. A silent wrong answer.
+                #
+                # BEFORE _exit_record, because the restore is a WRITE and must
+                # be ordered ahead of the exit. The return value is already on
+                # the simulated stack, so restoring first cannot change it.
+                _restore_locals($sim, $ctx, $factory);
+
                 push @exits, _exit_record($sim, $factory, 'leavesub', $op,
                                          $is_program_exit);
                 $main_terminated = 1;
@@ -4621,13 +4649,42 @@ class SoN::FromOptree 0.01 {
                     # THE TARGET RIDES ALONG, because the restore is a STORE
                     # as well as a rebind and the store needs an EntryDef to
                     # name. Built here, where the GV is in hand.
+                    # NO PRIOR BINDING IS THE COMMON CASE IN A SUB, not a
+                    # rare one. Each sub is its own graph, so a `local` inside
+                    # one has no binding for a package variable the PROGRAM
+                    # wrote -- `$sim->lookup` is empty, and a restore keyed on
+                    # having a node to put back was skipped entirely:
+                    #
+                    #     our $v = "outer";
+                    #     sub show { print $v }
+                    #     sub inner { local $v = "inner"; show() }
+                    #       perl inner outer    before inner inner
+                    #
+                    # The outer value was clobbered permanently -- a silent
+                    # wrong answer, and the only `local` shape perl's own t/
+                    # uses (comp/fold.t, comp/proto.t).
+                    #
+                    # So when the slot has no binding, READ IT: an EntryDef at
+                    # the current memory version is the value on entry, which
+                    # is exactly what the restore must put back. That read is
+                    # ordered before the local's own write because it is built
+                    # here, at the save.
+                    my $entry = $factory->make('EntryDef',
+                        package => $gv->STASH->NAME,
+                        sigil   => '$',
+                        symbol  => $gv->NAME);
+                    my $prior = $sim->lookup($key);
+                    if (!defined $prior && defined $sim->memory) {
+                        $prior = $factory->make('EntryDef',
+                            package => $gv->STASH->NAME,
+                            sigil   => '$',
+                            symbol  => $gv->NAME,
+                            inputs  => [ $sim->memory ]);
+                    }
                     push $ctx->{local_saves}->@*,
                         { key    => $key,
-                          node   => $sim->lookup($key),
-                          target => $factory->make('EntryDef',
-                              package => $gv->STASH->NAME,
-                              sigil   => '$',
-                              symbol  => $gv->NAME) };
+                          node   => $prior,
+                          target => $entry };
                 }
 
                 # SIGIL-QUALIFIED: `$g` and `@g` are different variables

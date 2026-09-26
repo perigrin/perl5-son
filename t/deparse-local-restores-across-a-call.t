@@ -72,7 +72,6 @@ SRC
     my ( $out, $why ) = emit($src);
     ok defined $out, 'renders' or do { diag $why; return };
 
-    my $todo = todo 'the save/restore is not emitted across a call boundary';
     is runs($out), runs($src), 'the outer value comes back' or diag $out;
 };
 

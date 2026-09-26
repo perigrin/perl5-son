@@ -615,7 +615,72 @@ class SoN::Deparse 0.01 {
                 ? sprintf('@eff%d', $id) : sprintf('$eff%d', $id);
         }
 
+        my @local_saves;
+        # A `local` RESTORE READS AN EARLIER VALUE OF THE SAME NAME, and a
+        # package variable has only one spelling. `local $v = "inner"` in a sub
+        # produces
+        #
+        #     4 EntryWrite(EntryDef $v, Constant "inner", MemStart)
+        #     6 EntryDef $v  in=[MemStart]          <- the value ON ENTRY
+        #     7 EntryWrite(EntryDef $v, 6, Call)    <- the restore
+        #
+        # which is the right graph -- node 6 reads at the PRE-local memory
+        # version. But `$main::v` is all the deparser can spell for a read, so
+        # the restore emitted `$main::v = $main::v`, a no-op, and the outer
+        # value stayed clobbered.
+        #
+        # perl's savestack is a TEMPORARY, and that is the spelling: bind the
+        # read where it happens and assign the temporary back.
+        #
+        #     my $saved = $v; $v = "inner"; show(); $v = $saved;
+        #
+        # KEYED ON "same name, earlier memory version", not on the op kinds
+        # alone: an EntryWrite whose VALUE is an EntryDef for the variable it
+        # WRITES is a self-assignment unless the read is pinned, and that is
+        # exactly the restore shape. An ordinary `$a = $b` names two different
+        # variables and is untouched.
+        for my $n (sort { $a->{id} <=> $b->{id} } values $nodes->%*) {
+            next unless ( $n->{op} // '' ) eq 'EntryWrite';
+            my @in = ( $n->{inputs} // [] )->@*;
+            next unless @in >= 2;
+            my ( $slot, $val ) = ( $nodes->{ $in[0] }, $nodes->{ $in[1] } );
+            next unless $slot && $val;
+            next unless ( $val->{op} // '' ) eq 'EntryDef';
+
+            my $sf = $slot->{fields} // {};
+            my $vf = $val->{fields}  // {};
+            next unless defined $sf->{symbol} && defined $vf->{symbol};
+            next unless $sf->{symbol} eq $vf->{symbol}
+                     && ( $sf->{package} // '' ) eq ( $vf->{package} // '' )
+                     && ( $sf->{sigil}   // '' ) eq ( $vf->{sigil}   // '' );
+
+            # The read must observe an EARLIER memory version, which is what
+            # makes it a saved value rather than the slot itself. A bare
+            # EntryDef with no memory input is the slot, not a read of it.
+            next unless ( $val->{inputs} // [] )->@*;
+
+            # EMITTED AS A PROLOGUE, not from the chain. The read has no
+            # control_in -- a read is not an effect -- so the chain walker
+            # never reaches it, and %bound alone left `$saved6` used and
+            # undeclared. A `local` save reads the value ON ENTRY, so the top
+            # of the sub is exactly where it belongs.
+            next if exists $bound{ $val->{id} };
+            $bound{ $val->{id} } = sprintf( '$saved%d', $val->{id} );
+            push @local_saves, $val->{id};
+        }
+
+        # SPELLED FROM THE SLOT, not through _expr. The read is ALREADY in
+        # %bound by the time this runs, so asking the expression printer for it
+        # returns the temporary's own name and emits `my $main::v = $main::v` --
+        # which is not even legal (`my` on a package name). The value being
+        # saved is the variable, and _slot_name is what spells a variable.
+        my $save_prologue = join '', map {
+            sprintf( "my %s = %s;\n", $bound{$_},
+                $self->_slot_name( $nodes->{$_} ) )
+        } @local_saves;
+
         my $body = $self->_emit_from($start->{id}, \%next_of, undef);
+        $body = $save_prologue . $body;
 
         # A PAD BINDING IS NOT ON THE CONTROL CHAIN. Measured: `my ($a,$b) =
         # (2,3)` builds an Assign with control_in ABSENT, so a chain walk never
