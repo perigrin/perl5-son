@@ -235,6 +235,17 @@ subtest 'the function-exit merge records predecessors and claims no wrong head' 
         next unless $head;
         push $owned{ $head->id }->@*, $n->id;
     }
+    # THE COUNT IS PINNED so the loop below cannot run zero assertions. A
+    # change that stopped wiring `head` at all would leave %owned empty and
+    # every per-head check would vacuously pass -- the failure mode recorded in
+    # "a refusal test must name its cause". Measured here: exactly one If (the
+    # outer one) owns the real if/else join, and the function-exit Region owns
+    # nothing.
+    is scalar(keys %owned), 1,
+        'exactly one If claims a Region -- the function exit claims none'
+        or diag('owned = [' . join(' ', map { "$_ => [@{ $owned{$_} }]" }
+                                       sort keys %owned) . ']');
+
     for my $head (sort keys %owned) {
         is scalar($owned{$head}->@*), 1,
             "$head owns exactly one Region"
