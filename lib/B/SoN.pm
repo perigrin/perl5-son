@@ -320,18 +320,45 @@ sub _resolve_glob_slots {
             my $value = $in[1];
             my $type  = $value && $value->stamp ? $value->stamp->type : 'Unknown';
 
-            # A glob RHS reaching here means inference DERIVED it rather than
-            # the walk seeing it; it is the same all-slot alias either way.
-            if ( $type eq 'Glob' || $type eq 'GlobRef' ) {
-                push @unresolved, [ $entry->symbol, 'every slot' ];
+            # AN ALL-SLOT ALIAS KEEPS ITS `*`, which IS the expression. A glob
+            # RHS reaching here means inference derived it rather than the walk
+            # seeing it, and either way the answer is the same: leave the
+            # EntryDef alone. The emission is the source spelling and perl does
+            # the aliasing.
+            #
+            # A `Str` RHS is the same operation -- measured, `*T = "S"` aliases
+            # every slot exactly as `*T = *S` does, by NAME.
+            if ( $type eq 'Glob' || $type eq 'GlobRef' || $type eq 'Str' ) {
                 next;
             }
 
-            my $sigil = $SLOT{$type};
-            if ( !defined $sigil ) {
-                push @unresolved, [ $entry->symbol, 'runtime' ];
-                next;
-            }
+            # AN UNNARROWED STAMP IS A STATEMENT, NOT A MISSING ANSWER. `*FH =
+            # shift` stamps `Scalar` -- probed on base/rs.t as `type=Scalar
+            # value_op=Call` -- which says "one slot, kind chosen at runtime".
+            # That is what the program says, so the EntryDef keeps `*` and a
+            # consumer narrows it with its own inference or declines the node.
+            #
+            # THE TABLE IS EXACT-MATCH AGAINST A LATTICE, which was the defect:
+            # `Scalar` and `Ref` sit ABOVE the four keys, missed, and the whole
+            # graph was deleted. Asked of the lattice instead -- exactly one ref
+            # kind under the stamp resolves, more than one does not.
+            # `is_subtype_of` IS STRICT: `ArrayRef` is not a subtype of
+            # itself, so a query over it alone returns ZERO for every leaf and
+            # nothing resolved. Measured -- `kinds under ArrayRef: [] count=0`.
+            # The design note said "exactly one kind under the stamp" and I
+            # wrote the query without checking the method's strictness, which
+            # made every single-slot bind fall through to `*`.
+            #
+            # The stamp counts as its own kind, hence the `eq` arm.
+            my @kinds = grep {
+                $_ eq $type
+                    || SoN::IR::Stamp->new( type => $_ )
+                           ->is_subtype_of( SoN::IR::Stamp->new( type => $type ) )
+            } qw(ArrayRef HashRef CodeRef ScalarRef GlobRef);
+            next if @kinds != 1;
+
+            my $sigil = $SLOT{ $kinds[0] };
+            next if !defined $sigil;
 
             # REPLACED, NOT MUTATED. The sigil is part of an EntryDef's
             # content_hash AND of its node id -- setting it in place would

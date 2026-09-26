@@ -5695,14 +5695,28 @@ class SoN::FromOptree 0.01 {
                     my $stash = eval { $gv->STASH->NAME } // 'main';
                     my $glob = $factory->make('EntryDef',
                         package => $stash, sigil => $sigil, symbol => $sym);
+                    # NO MEMORY INPUT. `undef` takes AT MOST ONE argument, and
+                    # a trailing memory edge is only invisible to the emission
+                    # while it stays a memory node -- once something BINDS it,
+                    # the pop-trailing-memory rule no longer recognises it and
+                    # it renders as a second argument:
+                    #
+                    #     my $eff74 = undef(&main::x, $eff73);
+                    #       Too many arguments for undef operator
+                    #
+                    # Measured on comp/form_scope.t, which this path unblocked --
+                    # so the defect arrived with the fix rather than being found
+                    # by it. The ORDER still comes from control_in, which is what
+                    # actually places the statement; memory would only have said
+                    # "a later read observes this", and nothing reads a cleared
+                    # slot through the graph -- the emitted `undef` is what
+                    # clears it.
                     my $call = $factory->make('Call',
-                        inputs        => [$glob,
-                            (defined $sim->memory ? ($sim->memory) : ())],
+                        inputs        => [$glob],
                         dispatch_kind => 'builtin',
                         name          => 'undef');
                     $call->set_control_in($sim->control) if defined $sim->control;
                     $sim->set_control($call) if defined $sim->control;
-                    $sim->set_memory($call) if defined $sim->memory;
                     $sim->push_node($call) unless ($op->flags & 3) == 1;
                     return ($op->next, 'handled');
                 }
@@ -12655,11 +12669,24 @@ class SoN::FromOptree 0.01 {
 
         my $type = $value->stamp ? $value->stamp->type : undef;
 
-        die "GAP: assigning a glob to a glob (*$sym = *...) aliases every slot"
-          . " -- scalar, array, hash and code at once -- which no single typed"
-          . " binding expresses\n"
-            if defined $type && ($type eq 'Glob' || $type eq 'GlobRef');
-
+        # AN ALL-SLOT ALIAS IS EXPRESSIBLE, AND THE EXPRESSION IS `*`. This
+        # refused with "which no single typed binding expresses" -- true, and
+        # beside the point: the `*` sigil the fallback below already supplies IS
+        # the binding that means every slot, and the emission is the source
+        # spelling with perl doing the aliasing.
+        #
+        #     our @A=(1,2); our @B; *B = *A; print scalar(@B)
+        #       perl 2
+        #
+        # Perl has ONE glob with four independent slots; modelling it as four
+        # unrelated variables is what made "every slot" unsayable, and the
+        # answer was a sigil we could already write.
+        #
+        # THE SAME ANSWER FOR AN UNNARROWED STAMP, one line down: `Scalar` and
+        # `Ref` leave every ref kind possible, so `*` says "one slot, chosen at
+        # runtime" rather than guessing. A consumer needing a static slot reads
+        # the operand's stamp and narrows or declines -- see
+        # docs/plans/2026-09-26-the-slot-is-the-stamp.md.
         my $sigil = _glob_slot_sigil($type) // '*';
 
         my $entry = $factory->make('EntryDef',

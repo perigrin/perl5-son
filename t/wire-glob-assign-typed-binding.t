@@ -114,26 +114,59 @@ SRC
 # aliases every slot at once, which no single typed binding expresses. The
 # message must say which of the two it is; "aliases a symbol-table entry"
 # conflated them.
-subtest 'a Glob RHS aliases every slot and still refuses' => sub {
-    my ( undef, $err ) = translate( <<'SRC', 'glob-glob' );
+# A GLOB RHS ALIASES EVERY SLOT AND THAT IS THE `*` SIGIL. This asserted a
+# refusal whose reason -- "which no single typed binding expresses" -- was true
+# and beside the point: `*` IS the binding that means every slot, and it was
+# already what the producer's fallback supplied. Measured:
+#
+#     our @A=(1,2); *B = *A; print scalar(@A)
+#       perl  2      ours  *main::B = *A;  -> 2
+#
+# The single-slot path is unaffected -- a leaf ref type still resolves to its
+# sigil, asserted in the subtests above.
+subtest 'a Glob RHS aliases every slot, and `*` says so' => sub {
+    my ( $wire, $err ) = translate( <<'SRC', 'glob-glob' );
 our @SRC = (1);
 sub f { *D = *SRC; 1 }
 SRC
-    like $err, qr/GAP:/, 'it is refused';
-    like $err, qr/every slot/i,
-        '... naming all-slot aliasing, not an unknown slot';
+    unlike $err, qr/GAP:/, 'it is not refused' or diag $err;
+    ok $wire, 'and produces a wire' or return;
+
+    # THE NODES COME THROUGH `nodes()`, which the other subtests use -- a first
+    # draft treated translate()'s first return as the node list and died "Not an
+    # ARRAY reference", because it is the whole wire.
+    my ($target) = grep { ( $_->{op} // '' ) eq 'EntryDef'
+                          && ( ( $_->{fields} // {} )->{symbol} // '' ) eq 'D' }
+                   nodes( $wire, 'main::f' )->@*;
+    ok $target, 'the target entry is in the graph' or return;
+    is( ( $target->{fields} // {} )->{sigil}, '*',
+        'and keeps the star, which is what "every slot" means' );
 };
 
-# CASE 3 STILL REFUSES: `*FH = shift` is a Call whose stamp is Unknown even
-# after inference, and the refusal now fires where the types are known rather
-# than during the walk.
-subtest 'an RHS still Unknown after inference refuses' => sub {
-    my ( undef, $err ) = translate( <<'SRC', 'glob-unknown' );
+
+# CASE 3 IS A STATEMENT, NOT A REFUSAL. `*FH = shift` leaves every ref kind
+# possible -- `shift` stamps Scalar -- and `*` says exactly that: one slot,
+# chosen at runtime. The whole idiom round-trips:
+#
+#     sub f { *FH = shift; 1 } f(\*STDOUT); print FH "via alias\n";
+#       perl  via alias      ours  via alias
+#
+# which is base/rs.t's shape, and getting there also needed the glob REF to keep
+# its sigil -- `\(STDOUT)` is a reference to the bareword STRING and prints
+# nothing, where `\*STDOUT` is a GlobRef.
+subtest 'an RHS still Unknown after inference keeps the star' => sub {
+    my ( $wire, $err ) = translate( <<'SRC', 'glob-unknown' );
 sub f { *FH = shift; 1 }
 SRC
-    like $err, qr/GAP:/, 'it is refused';
-    like $err, qr/not known until runtime|runtime/i,
-        '... naming the slot as a runtime fact';
+    unlike $err, qr/GAP:/, 'it is not refused' or diag $err;
+    ok $wire, 'and produces a wire' or return;
+
+    my ($target) = grep { ( $_->{op} // '' ) eq 'EntryDef'
+                          && ( ( $_->{fields} // {} )->{symbol} // '' ) eq 'FH' }
+                   nodes( $wire, 'main::f' )->@*;
+    ok $target, 'the target entry is in the graph' or return;
+    is( ( $target->{fields} // {} )->{sigil}, '*',
+        'and the slot stays unresolved rather than guessed' );
 };
 
 done_testing;

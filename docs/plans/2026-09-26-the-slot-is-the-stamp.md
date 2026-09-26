@@ -137,7 +137,58 @@ It compiles and runs, printing nothing where perl prints `7 8` -- a silent wrong
 answer, which is why no census caught it: `_resolve_glob_slots` reports the
 RESOLVABLE case as success.
 
-## ATTEMPTED AND REVERTED: the deparser assumes a resolved sigil
+## LANDED. The deparser needed two spellings, both one line
+
+**Status: DONE for the bind; the second-order store drop remains.**
+
+The first attempt reverted on `**main::B = A`, and both halves of that turned out
+to be one-line spellings rather than the wire negotiation they looked like:
+
+    the target   s/\A[$@%&]// enumerated FOUR of the five sigils, so a `*`
+                 survived and the branch prepended a second one. `**main::B`.
+    the value    a `glob` Constant renders the BAREWORD -- right for
+                 `close FOO`, wrong on the right of a glob assignment, where
+                 `*main::B = A` makes `A` a bareword. Spelled in the `binds`
+                 branch rather than in `_constant`, because the difference is
+                 POSITION, not node kind: changing the shared renderer would
+                 put a star on every bareword filehandle.
+
+Three refusal sites removed: `_glob_bind`'s Glob check, `_resolve_glob_slots`'s
+`'every slot'` and `'runtime'` branches. The lattice query replaced the
+exact-match lookup -- more than one ref kind under the stamp means "do not
+resolve", not "refuse".
+
+    our @A=(1,2); *B = *A; print scalar(@A)
+      perl  2
+      ours  *main::B = *A;   -> 2
+
+AND IT UNBLOCKED THE TWO t/ FILES IT WAS CHOSEN FOR. `base/rs.t` and
+`comp/form_scope.t` had this as their last GAP; both now translate, render and
+RUN. rs.t produces 44 output lines against perl's 44, with 18 differing -- from a
+deleted graph to 26 of 44 lines correct.
+
+    perl t/  GAP 6 -> 5    REFUSED 10 -> 9    ROUNDTRIP 12 (unchanged)
+
+A REGRESSION ARRIVED WITH IT and was caught by the census, not the suite:
+`undef(&main::x, $eff73)` -- `Too many arguments for undef operator`. The `undef`
+Call carried a memory input, which is invisible while it stays a memory node and
+renders as a SECOND ARGUMENT once something binds it. `undef` takes at most one.
+Removed; the ordering comes from `control_in`, which is what places the
+statement anyway. EMITS_INVALID_PERL went 0 -> 1 -> 0 inside one change.
+
+## What is still open: the second-order store drop
+
+Reading THROUGH the alias still loses the source's store, by both routes:
+
+    *crackers = \@OTHER; print "@crackers"   -- via a ref bind
+    *B = *A;             print "@B"           -- via a glob bind
+
+Both compile, run, and print nothing. It is a REACHABILITY defect in the graph
+rather than a spelling one -- `@OTHER = (...)` has no consumer once the read
+goes through the alias -- so it needs its own fix and is TODO-marked in
+t/wire-glob-slot-is-the-stamp.t by both routes.
+
+## The first attempt, kept because the way it failed was the useful part
 
 The producer half is small and the design holds. Both refusal sites were
 removed -- `_resolve_glob_slots` (the pass) and `_glob_bind` (the producer) --

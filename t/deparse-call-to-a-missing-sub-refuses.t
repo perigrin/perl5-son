@@ -16,9 +16,16 @@ my $dir  = tempdir( CLEANUP => 1 );
 #
 #     Undefined subroutine &main::test_string called at rs.out.pl line 168.
 #
-# Measured on base/rs.t, whose test_string/test_record are refused for
+# Measured on base/rs.t, whose test_string/test_record were once refused for
 # assigning to a glob: perl prints 44 lines, the emitted program printed 2 and
 # died. A GAP would have said so; this looked like a successful render.
+#
+# THE VEHICLE CHANGED, NOT THE SUBJECT. The glob assignment lowers now, so it no
+# longer produces an absent sub -- this uses a ternary with a multi-element list
+# arm instead, which still skips one. The refusal under test is the DEPARSER's
+# "a call to a sub that is not in the graph", and that is unaffected by which
+# producer GAP left the hole: a test whose setup depends on an unrelated refusal
+# will fail when that refusal is fixed, which is what happened here.
 #
 # THE DEPARSER IS A T2 CONSUMER, and refusing what it cannot satisfy is what a
 # T2 does. A call it cannot resolve is exactly that case.
@@ -26,8 +33,8 @@ subtest 'a call to an absent sub is refused, not emitted' => sub {
     my $file = "$dir/missing.pl";
     open my $fh, '>', $file or die "open $file: $!";
     print {$fh} <<'SRC';
-sub helper { *FH = shift; 1 }
-helper(\*STDOUT);
+sub helper { wantarray ? (1, 2) : 0 }
+my @r = helper();
 print "after\n";
 SRC
     close $fh;
@@ -37,7 +44,7 @@ SRC
     my $wire = JSON::PP->new->decode($json);
 
     ok !exists $wire->{methods}{'main::helper'},
-        'the glob-assigning sub is absent, as the producer refused it';
+        'the list-arm sub is absent, as the producer refused it';
 
     # render() CATCHES the GAP and records it on the object rather than
     # rethrowing, so the reason is read back from ->gap, not from $@.

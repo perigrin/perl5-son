@@ -27,22 +27,33 @@ sub translate ( $src, $name ) {
 # A drop is the worst outcome: base/rs.t's `sub test_string { *FH = shift; ... }`
 # emitted `shift(@_);` and then read from an unopened FH, so 24 of its 41 tests
 # printed `not ok` while the graph claimed to have translated the sub.
-subtest 'a glob assignment is refused, and says why' => sub {
-    my ( undef, $err ) = translate( <<'SRC', 'glob-assign' );
+# A GLOB ASSIGNMENT IS NO LONGER REFUSED, and the whole idiom round-trips. The
+# refusal's diagnosis was right about the mechanism -- there is no value stored
+# anywhere a later read consults -- and the conclusion did not follow: `*` on the
+# target IS the binding, and the emission is the source spelling with perl doing
+# the aliasing. Measured on this file's own case:
+#
+#     sub f { *FH = shift; 1 } f(\*STDOUT); print FH "via alias\n";
+#       perl  via alias      ours  via alias
+#
+# Getting there needed three spellings in the deparser, all of them the same
+# `glob` Constant rendering as a BAREWORD -- right for `close FOO`, wrong as a
+# glob VALUE, a glob ASSIGNMENT TARGET, and inside `\*STDOUT`.
+#
+# THE FILE'S THIRD SUBTEST STILL STANDS: the aliased slot IS a runtime fact.
+# That measurement was never the problem; what was wrong was concluding a
+# runtime fact cannot be described.
+subtest 'a glob assignment round-trips' => sub {
+    my ( $wire, $err ) = translate( <<'SRC', 'glob-assign-rt' );
 sub f { *FH = shift; 1 }
 f(\*STDOUT);
+print FH "via alias
+";
 SRC
-    like $err, qr/GAP:/, 'it is refused';
-    like $err, qr/glob/, '... naming the construct';
-    # THE REASON IS SPECIFIC TO THIS SHAPE. A glob binding whose RHS type IS
-    # known is lowered (t/wire-glob-assign-typed-binding.t); what refuses here
-    # is the one whose slot nothing in the graph can name, and the message has
-    # to say THAT rather than a blanket "no value store expresses it" -- the
-    # two refusals are different facts and conflating them hid the decidable
-    # case behind the undecidable one.
-    like $err, qr/not known until runtime/,
-        '... and that the slot is what is missing';
+    unlike $err, qr/GAP:/, 'it is not refused' or diag $err;
+    ok $wire, 'and produces a wire' or return;
 };
+
 
 # THE REFUSAL IS SCOPED TO THE SUB THAT USES IT. __PROGRAM__ still translates,
 # so one unlowerable sub does not cost the whole file.
@@ -54,8 +65,14 @@ SRC
     ok $wire, 'a graph is produced' or diag($err), return;
     ok exists $wire->{methods}{'main::__PROGRAM__'},
         'and __PROGRAM__ is in it';
-    ok !exists $wire->{methods}{'main::f'},
-        'while the sub that assigns the glob is not';
+    # AND SO IS THE SUB THAT ASSIGNS THE GLOB. This asserted its ABSENCE --
+    # the graph kept __PROGRAM__ and dropped `f`, which was the best available
+    # outcome while the glob bind refused. Now `f` translates too, so the
+    # assertion inverts: a skipped sub is a caller that cannot be rendered
+    # (`a call to main::f, which is not in the graph`), which is what this file
+    # was documenting as the cost of the refusal.
+    ok exists $wire->{methods}{'main::f'},
+        'and so is the sub that assigns the glob';
 };
 
 # THERE IS NO NARROWER LOWERING TO REACH FOR. perl picks the aliased slot by

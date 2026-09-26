@@ -2190,10 +2190,34 @@ class SoN::Deparse 0.01 {
             # sigil because `*name = REF` re-derives the slot from the
             # reference's kind -- the same dispatch perl itself does.
             if ( $n->{fields} && $n->{fields}{binds} ) {
+                # THE `*` GOES TOO. This stripped `$@%&` and not `*`, which
+                # was invisible while the slot sigil was always resolved to one
+                # of those four -- and became `**main::B = ...` the moment an
+                # all-slot alias kept its `*`. A syntax error, from a character
+                # class that enumerated four of the five sigils.
                 my $name = $self->_slot_name($slot);
-                $name =~ s/\A[\$\@\%\&]//;
-                return sprintf( "*%s = %s;\n",
-                    $name, $self->_expr( $n->{inputs}[1] ) );
+                $name =~ s/\A[\$\@\%\&\*]//;
+
+                # A GLOB VALUE NEEDS ITS SIGIL, and the `glob` Constant renders
+                # the BAREWORD -- correct where a handle is named (`close FOO`)
+                # and wrong on the right of a glob assignment:
+                #
+                #     our @A=(1,2); our @B; *B = *A;
+                #       *main::B = A;    A is a bareword -- prints 0
+                #       *main::B = *A;   prints 2
+                #
+                # Spelled HERE rather than in the shared renderer, because the
+                # difference is POSITION rather than node kind: this branch is
+                # the one that knows it is emitting a glob assignment. Changing
+                # `_constant` would put a star on every bareword filehandle.
+                my $rhs = $nodes->{ $n->{inputs}[1] };
+                my $val = ( $rhs && ( $rhs->{op} // '' ) eq 'Constant'
+                            && ( ( $rhs->{fields} // {} )->{const_type} // '' )
+                               eq 'glob' )
+                    ? '*' . ( $rhs->{fields} // {} )->{value}
+                    : $self->_expr( $n->{inputs}[1] );
+
+                return sprintf( "*%s = %s;\n", $name, $val );
             }
 
             return sprintf("%s = %s;\n",
@@ -3152,6 +3176,24 @@ class SoN::Deparse 0.01 {
             # binary operator binding looser than `\`, which a bare aggregate
             # read cannot be. So they are dropped exactly where they change
             # the meaning and kept everywhere else.
+            # A GLOB OPERAND NEEDS ITS SIGIL AND NO PARENS. `\*STDOUT` is a
+            # GlobRef; `\(STDOUT)` is a reference to the bareword STRING, and
+            # the difference is silent -- measured:
+            #
+            #     sub f { *FH = shift } f(\*STDOUT); print FH "B"   ->  B
+            #     sub f { *FH = shift } f(\(STDOUT)); print FH "A"  ->  (nothing)
+            #
+            # The `glob` Constant renders as a BARE name, which is right where a
+            # handle is named (`close FOO`) and matches neither branch below, so
+            # it fell to the parenthesised default. Third position this has
+            # bitten, after the glob-assignment target and value.
+            my $gv = $nodes->{ $in[0] };
+            if ( $gv && ( $gv->{op} // '' ) eq 'Constant'
+                     && ( ( $gv->{fields} // {} )->{const_type} // '' ) eq 'glob' ) {
+                $text = '\\*' . ( $gv->{fields} // {} )->{value};
+                return $text;
+            }
+
             my $inner = $self->_expr($in[0]);
             $text = $inner =~ /\A[\@%][\w:]+\z/
                 ? sprintf('\\%s', $inner)
