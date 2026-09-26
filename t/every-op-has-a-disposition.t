@@ -39,9 +39,16 @@ use SoN::FromOptree::OpMap;
 # exactly this category BY ASSUMPTION while its opener had no handler at all --
 # that assumption is what hid the block eval crash. Anything added here needs
 # the same check: translate the construct and confirm it works.
+# `method` LEFT THIS LIST when it gained a real handler. It was here on the
+# assumption that entersub consumed it, and that assumption hid a silent
+# miscompile: `$o->$m` built `Call(dispatch_kind=indirect, name=)` with the
+# method name DROPPED and emitted `$o->()`. The name is an OPERAND of `method`,
+# not a constant on it, so consuming the op without reading its operand lost
+# the name. That is the same shape as the `leavetry` note below -- a category
+# assigned by assumption rather than by translating the construct.
 my %CONSUMED_BY_OPENER = map { $_ => 1 } qw(
     leaveeval leavetry leavegiven leavewhen
-    method method_redir method_redir_super method_super
+    method_redir method_redir_super method_super
 );
 
 # Ops with no disposition and no construct that reaches them yet. Listing them

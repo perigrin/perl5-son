@@ -3278,10 +3278,15 @@ class SoN::Deparse 0.01 {
         my $name = $f->{name};
 
         # AN INDIRECT CALL HAS NO NAME BY CONSTRUCTION -- its callee is a
-        # value on inputs, which is the whole point of the kind. Every other
-        # kind names its callee and an empty name there is a real gap.
+        # value on inputs, which is the whole point of the kind. A
+        # `dynamic_method` is the same situation one step over: `$o->$m` has a
+        # name, but it is a VALUE the runtime computes, so it rides on inputs
+        # too and the `name` field would be a lie. Every other kind names its
+        # callee and an empty name there is a real gap.
         die "GAP: a Call with no name is not yet rendered\n"
-            unless $kind eq 'indirect' || (defined $name && length $name);
+            unless $kind eq 'indirect'
+                || $kind eq 'dynamic_method'
+                || (defined $name && length $name);
 
         # A MEMORY INPUT IS AN ORDERING EDGE, NOT AN ARGUMENT. The builtins
         # that read or mutate a whole container carry one so they observe
@@ -3522,6 +3527,28 @@ class SoN::Deparse 0.01 {
                 unless @args;
             my $callee = shift @args;
             return sprintf('%s->(%s)', $callee, join(', ', @args));
+        }
+
+        # `$o->$m` -- THE NAME IS INPUT 1, a value only the runtime knows.
+        # Input 0 is the invocant, input 1 the method name, the rest arguments.
+        # perl accepts a scalar holding a name directly in the method slot, so
+        # the emission is the same shape as the source.
+        #
+        # Distinct from `indirect`, where input 0 is a CODE REF and there is no
+        # name at all: here the name exists and is computed. Emitting this as
+        # indirect produced `$o->()` and dropped the name, which died with
+        # "Can't use an undefined value as a subroutine reference".
+        if ($kind eq 'dynamic_method') {
+            die "GAP: a dynamic method Call needs an invocant and a name\n"
+                unless @args >= 2;
+            my $invocant = shift @args;
+            my $meth     = shift @args;
+            # `->${\ EXPR}` takes a scalar ref to the name, which perl
+            # accepts in the method slot for ANY expression -- verified, where
+            # a bare `->$expr` only accepts a simple scalar variable and would
+            # refuse a computed one.
+            return sprintf('%s->${\\ %s}(%s)',
+                $invocant, $meth, join(', ', @args));
         }
 
         die "GAP: a Call with dispatch_kind `$kind` is not yet rendered\n";

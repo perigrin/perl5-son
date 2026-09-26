@@ -2902,6 +2902,34 @@ class SoN::FromOptree 0.01 {
 
         if (defined $ctx->{pending_method}) {
             my $pending_method = $ctx->{pending_method};
+            # A NODE-VALUED PENDING NAME IS THE DYNAMIC FORM. It carries the
+            # name as an INPUT beside the invocant, because no static string
+            # exists -- `name` would be a lie and a consumer keying on it would
+            # dispatch to the wrong method or to none.
+            if (blessed($pending_method)) {
+                my $invocant = shift $args->@*;
+                die "GAP: a dynamic method call with no invocant is not yet"
+                  . " lowered\n" unless $invocant;
+                # RESOLVE THE INVOCANT THE SAME WAY THE LITERAL PATH DOES. The
+                # pad read arrives fresh (MOD context), so without the lookup
+                # the Call named a PadAccess nothing had written and the
+                # emission died "Can't call method on an undefined value" --
+                # the `bless` was in the graph for the literal spelling and
+                # absent for this one, which is what named the omission.
+                if ($invocant->isa('SoN::IR::Node::PadAccess')
+                    && $invocant->can('targ') && defined $invocant->targ) {
+                    my $bound = $sim->lookup($invocant->targ);
+                    $invocant = $bound if $bound;
+                }
+                delete $ctx->{pending_method};
+                $sim->push_node($factory->make('Call',
+                    inputs        => [$invocant, $pending_method, $args->@*],
+                    dispatch_kind => 'dynamic_method',
+                    name          => '',
+                    param_names   => [],
+                    stamp => SoN::IR::Stamp->new(type => 'Unknown')));
+                return;
+            }
             # Method dispatch: the first stack arg is the invocant, the
             # rest are call arguments. class_name is statically known
             # when the invocant is a bareword class (Class->new); for
@@ -3342,6 +3370,29 @@ class SoN::FromOptree 0.01 {
         # (zhi 019f2df7 -- a void `$c->inc` in a conditional arm was dropped).
         if ($name eq 'method_named') {
             _handle_method_named($cv, $op, $ctx);
+            return ($op->next, 'handled');
+        }
+        # THE DYNAMIC FORM TAKES ITS NAME FROM THE STACK. perl has two ops:
+        # `method_named` carries a literal name as a constant ON the op, and
+        # `method` -- for `$o->$m` -- has the name pushed as an OPERAND beside
+        # the invocant. Measured:
+        #
+        #     $o->hi    method_named[hi]
+        #     $o->$m    padsv[$o] / padsv[$m] / method lK/1
+        #
+        # Only method_named was handled, so `$op->meth_sv` came back empty, the
+        # Call got `name=` and the name node was left on the stack for the
+        # enclosing expression to mistake for an argument. The emission was
+        # `$o->()` -- a SILENT MISCOMPILE, dying with "Can't use an undefined
+        # value as a subroutine reference".
+        #
+        # Recorded as a NODE rather than a string so _handle_entersub can tell
+        # the two apart: a string is a name it can resolve statically, a node is
+        # one only the runtime knows.
+        if ($name eq 'method') {
+            die "GAP: a dynamic method call whose name is not on the stack is"
+              . " not yet lowered\n" unless $sim->stack_depth > 0;
+            $ctx->{pending_method} = $sim->pop_node;
             return ($op->next, 'handled');
         }
         if ($name eq 'entersub') {
