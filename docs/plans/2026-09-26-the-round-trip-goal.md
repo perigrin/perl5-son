@@ -33,9 +33,9 @@ own numbers.
 `/home/perigrin/dev/pvm/.claude/worktrees/pu/conformance/mdtest/`. Owned by
 pvm; ported and cut over, `.t` files deleted.
 
-    ROUND TRIP  156 correct  38 DIFFERS  21 REFUSED  2 NOJSON
+    ROUND TRIP  157 correct  38 DIFFERS  21 REFUSED  2 NOJSON
 
-**156 of 217 as of 2026-09-26 late**, from 135 at the start of that day. The
+**157 of 218 as of 2026-09-26 late**, from 135 at the start of that day. The
 denominator moved 210 -> 213 -> 217 across the session as pvm landed cases,
 including the interposed-read topic contributed from here.
 
