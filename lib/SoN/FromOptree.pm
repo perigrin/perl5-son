@@ -7978,6 +7978,11 @@ class SoN::FromOptree 0.01 {
         return;
     }
 
+    # True while _scout_mutated_targs is walking. A refusal raised under it is
+    # a refusal by the slot-discovery pass rather than by the pass that builds
+    # the graph, and saying so is what makes the difference testable.
+    our $IN_SCOUT = 0;
+
     sub _scout_mutated_targs ($cv, $start_op, $sim, $opmap, $extra_targs = [], $cond_consumed = 0) {
         my $scout_factory = SoN::IR::NodeFactory->new();
         my $scout_sim     = SoN::FromOptree::StackSim->new(
@@ -7992,8 +7997,32 @@ class SoN::FromOptree 0.01 {
             $placeholder{$targ} = $ph;
             $scout_sim->define($targ, $ph);
         }
-        _walk_loop_body($cv, $start_op, $scout_sim, $scout_factory, $opmap, {}, {},
-            undef, undef, $cond_consumed);
+        # THE SCOUT IS MARKED so a refusal raised inside it is identifiable.
+        # It builds a throwaway factory and sim and emits nothing that reaches
+        # the wire, so a `die` about LOWERING raised here is raised by a pass
+        # that is not lowering -- and it aborts the loop before the real pass,
+        # which has a loop node and @break_projs and may well handle the
+        # construct. Traced on `next if A; next if B` inside a foreach: the
+        # second guard's refusal came from _scout_mutated_targs, not from the
+        # walk that builds the graph.
+        # A SCOUT REFUSAL IS NOT A TRANSLATION REFUSAL. The scout learns which
+        # slots the body mutates; it decides nothing about lowerability. So a
+        # `die` from the walk is CAUGHT here and the slots found so far are
+        # returned, leaving the real pass to refuse or lower on its own terms.
+        #
+        # THE PARTIAL SET IS THE RISK, and it is why this catches rather than
+        # ignores. If the scout stops early it may miss a slot the body writes
+        # LATER, and the header would then build no Phi for it -- a silent
+        # miscompile far worse than the refusal. Measured: the real pass refuses
+        # every case that makes the scout die today, so no such graph reaches
+        # the wire. If a case ever lowers on the real pass after a partial
+        # scout, that is the shape to look at first.
+        local $IN_SCOUT = 1;
+        my $scout_died = eval {
+            _walk_loop_body($cv, $start_op, $scout_sim, $scout_factory, $opmap,
+                {}, {}, undef, undef, $cond_consumed);
+            1;
+        } ? undef : ($@ || 'unknown');
         my $scout_scope = $scout_sim->scope_bindings;
         my %extra = map { $_ => 1 } $extra_targs->@*;
         return [ sort _scope_key_order
@@ -11447,6 +11476,9 @@ class SoN::FromOptree 0.01 {
 
                 die "GAP: a loop control (`$name`) inside a branch arm is not"
                   . " yet lowered"
+                  . ( $IN_SCOUT ? " (raised by the slot-discovery scout, which"
+                                . " builds no graph -- the real pass never ran)"
+                                : '' )
                   . ( $in_loop
                       ? " -- only `last` carries an exit edge"
                       : " -- the arm walk carries no loop exit edge to"
