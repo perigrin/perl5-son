@@ -1,8 +1,15 @@
 # The round trip over pvm's corpus: 47 defects, and the producer is at fault
 
 **Date:** 2026-09-26
-**Status:** IN PROGRESS. 11 of 29 wrong-output cases sampled and diagnosed;
-18 remain. Written down as it goes so the diagnoses are not lost.
+**Status:** IN PROGRESS. All 29 RUNS_WRONG_OUTPUT cases sampled and
+diagnosed. The other two failure modes -- 10 RUNS_BUT_DIES and 8
+EMITS_INVALID_PERL -- are untouched.
+
+TWO DIFFERENT COUNTS OF 18 COLLIDED while this was written, so to be explicit:
+the 18 still owed is 10 + 8 from the other failure modes, NOT unsampled
+wrong-output cases. An earlier draft said "11 of 29 sampled, 18 remain"; the
+done-list held 12, so 17 remained, and the run confirmed 17. That count is
+closed.
 
 ## The numbers
 
