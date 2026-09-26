@@ -1,0 +1,68 @@
+REFUSED|adjacency-02_variables|The whole tier in one body
+REFUSED|adjacency-03_context|The whole tier in one body
+DIFFERS|adjacency-05_scoping|The whole tier in one body
+REFUSED|adjacency-06_control|The whole tier in one body
+DIFFERS|adjacency-08_references|The whole tier in one body
+DIFFERS|adjacency-09_regex|The whole tier in one body
+REFUSED|adjacency-10_io|The whole tier in one body
+NOJSON|adjacency-12_packages|The whole tier in one body
+DIFFERS|adjacency-13_opaque|The whole tier in one body
+REFUSED|adjacency-14_recursive|The whole tier in one body
+NOPARSE|argument-extent|An undeclared callee is a syntax error
+DIFFERS|argument-extent|`lock` is a named unary with its own op
+REFUSED|arguments|A signature names the parameters
+REFUSED|arguments|Explicit return, early and trailing
+DIFFERS|arguments|`@_` aliases the caller's variables
+DIFFERS|bitwise|`&` on strings, gated: the numeric operation
+DIFFERS|bless-dispatch|A method name in a scalar
+REFUSED|bless-dispatch|SUPER:: dispatch
+REFUSED|bless-dispatch|`isa` is an infix operator, not dispatch
+DIFFERS|blocks-and-terminations|`die` is a list operator, and its extent is a parse question
+DIFFERS|class-feature|An empty class body
+REFUSED|class-feature|`ADJUST` alone in a class body
+REFUSED|class-feature|`field` and `method` in a class body
+DIFFERS|code-references|The code reference and the call through it
+DIFFERS|code-references|`prototype` reads the parser's own input back
+NOPARSE|comparison|Level 11 is the one true `%nonassoc`
+NOPARSE|comparison|Level 13 is `chain/na` and the halves differ
+NOJSON|compile-phase|BEGIN runs first, END runs last, whatever the source order
+DIFFERS|compound-assignment|`//=`, `||=` and `&&=` short-circuit
+DIFFERS|context-from-inside|`caller` returns different AMOUNTS in the two contexts
+REFUSED|context-from-inside|`wantarray` at file scope is undef, and costs one op
+DIFFERS|declarations|`my` shadows, and the outer binding survives
+DIFFERS|declarations|`state` scopes like `my`, and initialises once
+DIFFERS|dereferencing|The `%{ }` and `${ }{ }` hash dereferences
+DIFFERS|dereferencing|The `@{ }` whole-array dereference
+DIFFERS|dynamic-scope|A bare block is a scope, and a loop that runs once
+DIFFERS|embedded-code|Hostile contents: proving the region is parsed, not counted
+DIFFERS|embedded-code|`(?{ })`: a statement inside a pattern
+DIFFERS|embedded-code|`qr//` carrying a block: code frozen into a value
+REFUSED|eval-replacement|A second `e`: the replacement re-read as Perl
+DIFFERS|formats|A format declaration and the `write` that uses it
+DIFFERS|formats|A picture line that is not Perl
+DIFFERS|handles|`<$fh>` in list context reads EVERY remaining line
+DIFFERS|handles|`<$fh>` in scalar context reads ONE line
+REFUSED|hashes|A hash slice, where `delete` becomes a real op
+REFUSED|jumps|The three loop-control statements
+REFUSED|jumps|`goto` is one op name over unrelated constructs
+DIFFERS|list-operators-in-context|`localtime`: a nine-element list, or one string
+REFUSED|list-operators-in-context|`map BLOCK` and `map EXPR`, a fork the optree cannot see
+DIFFERS|list-operators-in-context|`sort`, and the `() =` count idiom in both contexts
+DIFFERS|loading|`use POSIX ();` loads the file and suppresses import
+DIFFERS|loading|`use POSIX;` loads the file AND calls import
+REFUSED|loops|`do BLOCK while COND` is a post-test loop
+DIFFERS|named-operators|`index` reports failure as -1, not undef
+DIFFERS|named-operators|`substr` is an lvalue
+DIFFERS|pod-and-data|A data section holding bytes that are not a program
+DIFFERS|pod-and-data|A data section read back through `DATA`
+REFUSED|range|`..` in scalar context is stateful
+DIFFERS|regex-pattern-positions|`pos` is a named operator in lvalue position
+DIFFERS|regex-pattern-positions|`split`'s first argument is a pattern
+DIFFERS|regex-quote-likes|`tr///` wears `s///`'s syntax and is not a regex
+DIFFERS|subroutines|Four spellings of one call
+REFUSED|symbol-table|`*` is a sigil and an operator, resolved by position
+REFUSED|symbol-table|`AUTOLOAD` catches a call to a sub that does not exist
+DIFFERS|taking-references|The same backslash in list context
+DIFFERS|tie|`tied` is a named unary, in boolean position
+DIFFERS|unary|The magic string increment
+REFUSED|writing|`select` is two operators sharing a name, told apart by arity
