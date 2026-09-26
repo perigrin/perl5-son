@@ -27,7 +27,7 @@ use FindBin;
 my %FLOOR = (
     # Raise these when a fix moves them. Lowering one needs a reason in the
     # commit message -- a floor that follows the number down guards nothing.
-    corpus => 154,
+    corpus => 156,   # 05ff239, undef on a glob/code slot
     perl_t => 12,
 );
 
