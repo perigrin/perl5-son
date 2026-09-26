@@ -370,7 +370,68 @@ fixture of ours had ever produced, which is what t/op-coverage.t now guards.
 
 "Any missing idioms or syntax features from t/ are added to the corpus."
 
-THIS INVERTS A DEPENDENCY AND NEEDS PVM'S AGREEMENT BEFORE ANY WORK.
+### STATUS 2026-09-26 evening: the process is settled, one topic landed
+
+THE OPEN QUESTIONS BELOW ARE ANSWERED, in practice rather than in principle.
+
+**Who owns an addition, and does it go through them.** Through them, as text in
+a message. Measured the hard way earlier: writing a case directly into their
+tree left it in their `git status` where their next `git add` could have swept it
+into an unrelated commit -- they read the diff before staging and said so. They
+also confirmed a stray file would have landed in whatever they staged next, with
+a worker mid-flight in the same tree. Text is the channel; a branch if it gets
+large.
+
+**Which tier, given the op-budget lint.** Theirs to decide, and they run
+`lintOps` rather than taking our reading. Sending the OP SET with each case is
+what makes that cheap -- `-MO=Concise,-exec`, one line per case.
+
+**Whether a construct we need but their parser does not handle is legitimate.**
+Yes, and it found a grading defect in their own corpus: my `shift @q` case was
+held back because `shift` is claimed by tier 11 (for `sub new { my $class =
+shift }`) while tier 02 already writes `unshift @a, $#a` on a plain array. The
+partial order asserted a dependency on OO that the op does not have; filed as
+`01a0dde3` and the case waits for it.
+
+LANDED: one topic, `835149b3` -- the interposed-read pattern, three cases at
+tier 09. They regenerated `corpus.ratchet` in the same commit, which is the step
+that catches a case passing on arrival, and added a note that `shift`'s tier-11
+claim is tracked so a reader in six months knows why the array spelling is
+absent.
+
+THE PATTERN WORTH REUSING, and it is not specific to that topic: pair a
+construct with a READ POSITION rather than with another construct. A mutation
+and a read of its result IN ONE STATEMENT cannot distinguish "emitted where it
+happened" from "emitted where its value was wanted"; a read INTERPOSED between
+them can. Three of my assertions passed on the one-statement shape while the
+interposed one printed the pre-mutation value.
+
+### SENT 2026-09-26, awaiting placement: four idioms in t/ and in no corpus block
+
+Measured against BLOCK CONTENTS, not files -- a word in prose does not count:
+
+    *NAME = \...             0 block lines   base/rs.t:144  `*FH = shift`
+    undef *NAME               0               comp/form_scope.t:50
+    continue { }              0               cmd/*.t
+    wantarray ? LIST : LIST   scalar form only, twice
+
+Each verified against 5.42.0, each with its op set, and each a DIFFERENT outcome
+on our side -- which is the property that makes a topic diagnostic rather than
+just a list of things we cannot do:
+
+    a glob binds one slot     DIFFERS    emits correctly, prints NOTHING
+    a glob binds CODE         REFUSED    `a call to main::copy, not in the graph`
+    undef *v                  GAP        `undef(EXPR) on a glob (rv2gv)`
+    continue { }              ROUNDTRIP  works today -- the control
+
+The glob-bind case is a SILENT WRONG ANSWER and the one worth prioritising:
+reading the alias drops the source array's initialisation, the program exits 0
+printing nothing, and our own census reports it as success. That is precisely
+the shape a conformance corpus catches and an internal ratchet does not.
+
+### The original framing, kept because the questions were real
+
+THIS INVERTS A DEPENDENCY AND NEEDED PVM'S AGREEMENT BEFORE ANY WORK.
 
 The corpus is pvm's artifact. They have just completed a 14-tier port verified
 byte-identical against the `.t` files it replaced, and their tiers carry an
