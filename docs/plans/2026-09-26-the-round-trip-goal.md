@@ -33,10 +33,69 @@ own numbers.
 `/home/perigrin/dev/pvm/.claude/worktrees/pu/conformance/mdtest/`. Owned by
 pvm; ported and cut over, `.t` files deleted.
 
-    PRODUCER    198 CLEAN    11 GAP    3 NOPARSE
-    ROUND TRIP  135 correct  41 DIFFERS  31 REFUSED  2 NOJSON  3 NOPARSE
+    ROUND TRIP  154 correct  36 DIFFERS  21 REFUSED  2 NOJSON
 
-135/41 as of the renderer paren fix (2026-09-26). Before it: 134/42.
+**154 of 213 as of 2026-09-26 evening**, from 135 at the start of that day.
+
+THE DENOMINATOR MOVES, and this is the second time it has caught someone. The
+corpus is pvm's and grows while we measure: it went 210 -> 213 output blocks in
+one afternoon, and reading the harness against a remembered 210 made its own
+correct output look like a parse defect for a few minutes. Measure it every
+run --
+
+    grep -c '^```output$' $SON_CORPUS/*.md | awk -F: '{s+=$2} END {print s}'
+
+-- and check it against the `cases:` line before reading anything below it.
+`tools/corpus-roundtrip.pl` says so in its header for the same reason.
+
+The count is OUTPUT BLOCKS rather than perl blocks: a few cases carry
+`parses: no` and pin no output at all, because perl builds no optree for a
+program it will not compile. pvm reached 3 for that set by parsing the blocks
+after `grep -c 'parses: no'` gave 5 -- the phrase appears in prose too.
+
+    EMITS_INVALID_PERL  5 -> 0
+
+Every emission in the corpus now COMPILES, which is the floor worth tracking
+separately from the round-trip percentage.
+
+THE NAME HAS A SUBJECT AND IT IS US. This counts programs THE DEPARSER
+PRODUCED that perl refuses -- not corpus cases we failed to read. An input
+parse failure is impossible by construction here: perl itself compiled the
+case to build the optree B::SoN walks, so a successful parse is GIVEN rather
+than asserted. Shortened to `INVALID_PERL` it reads as a claim about our
+parsing, which is not a thing we do.
+
+    corpus case (valid perl) -> B::SoN -> IR -> deparser -> emitted perl
+                                                            ^ the invalid one
+
+The five that did not compile were four causes:
+
+  - `is_compound` claimed a ONE-OPERAND op. `lock`, `pos` and `tied` take a
+    variable, and the compound-assignment input swap replaced it with the
+    slot's bound value. Every compound-assignment op is a BINOP -- measured --
+    so `@inputs >= 2` is the fact. (4e9b758)
+  - A destructive s/// or tr/// on a LEXICAL had no lvalue. Fixed by demoting
+    the slot the way `\$x` already does; see
+    2026-09-26-a-destructive-subst-on-a-lexical.md for why it took four parts.
+  - `\(&twice)->(21)` -- `->` binds tighter than `\`, so the arrow landed
+    inside the reference and called `&twice` with no arguments. An indirect
+    call parenthesises a callee that is not a simple variable.
+  - A folded `\"x\n"` records the REFERENT, and the renderer supplied only the
+    backslash: `\x` plus a literal newline, which COMPILES and opens a handle
+    on the wrong string. Numeric referents stay bare (`$/ = \3`).
+
+THREE OF THOSE FOUR COMPILED OR LOOKED RIGHT at the check below the one that
+caught them. Recorded as [[compiling-is-not-running]].
+
+A fifth, which compiled and ran and gave a different answer:
+
+  - `split " "` is AWK MODE -- leading whitespace stripped, runs collapsed --
+    and `split / /` is a literal one-space pattern. Measured on `"  a b "`,
+    4 fields against 2. Both reached the producer as `split(qr{ }, ...)`.
+    The separator is PMf_SKIPWHITE (2048) in the op's pmflags, WHICH B::CONCISE
+    DOES NOT PRINT: both forms render as `split(/" "/ => @a)` in a dump, so the
+    optree looked identical until the bit was read directly. Emitted now as a
+    STRING constant, which is how the source spells awk mode.
 
 THE TWO HARNESSES DISAGREE BY ONE CASE, and the difference is the stderr
 convention rather than a defect either found. Ours compares STDOUT ONLY, so it

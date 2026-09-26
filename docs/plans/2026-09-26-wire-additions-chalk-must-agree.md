@@ -91,6 +91,38 @@ Ordering, therefore:
                    classes and DECLINE what it cannot lower, before the
                    producer stops refusing
 
+## A fourth, added 2026-09-26: a DISTRIBUTIVE reference
+
+`\(@a)` and `\@a` are different ops and different programs, and perl spells
+them apart:
+
+    my @r = \(@a);   refgen  lK/1   preceded by `pushmark sRM`
+    my $r = \@a;     srefgen sK/1   no mark
+
+`refgen` is MARK-DELIMITED and DISTRIBUTIVE -- one reference per element:
+
+    my @a=(10,20); my @r = \(@a);  2 refs, ${$r[0]} is 10
+    my @a=(10,20); my @r = (\@a);  1 ref,  ref($r[0]) is ARRAY
+
+The OpMap gives both `[1, 'Ref', 1, 0]`, so the generic path pops ONE operand
+and builds ONE `Ref`. The distinction is absent from the graph and the emitted
+program dies with `Not a SCALAR reference` on `${$r[1]}`. Corpus case 195.
+
+THIS IS A KIND, NOT A FIELD, which puts it in the second group above. `Ref`
+is a `UnaryOp`: one input, one scalar reference out. A distributive ref has a
+different ARITY (N operands) and a different RESULT KIND (a list of
+references), so it cannot ride on the existing node.
+
+An attempt to pass `distributive => 1` was reverted -- the constructor rejects
+it, and forcing the field through would put something on the wire that no
+consumer has a rule for, which is the failure this whole document exists to
+avoid.
+
+Guards are written and TODO-marked in `t/from-optree-distributive-ref.t`,
+including the regression guard that `\@a` must stay a single ARRAY ref: the
+`Ref` renderer's aggregate exemption exists because `*c = \@SRC` aliases the
+array, and distributing there would bind the last element instead.
+
 ## Status
 
 No chalk session was running when this was written, so none of it has been

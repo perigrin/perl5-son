@@ -455,6 +455,38 @@ class SoN::FromOptree 0.01 {
                 }
             }
 
+            # A DESTRUCTIVE s/// OR tr/// MUTATES ITS SLOT'S STORAGE, which is
+            # the same property `\$x` has and needs the same demotion.
+            #
+            # Under a value binding the subject resolves to the value the slot
+            # was bound to, and BOTH halves of a counted substitution are then
+            # wrong. Measured on `my $s="aaa"; my $n = ($s =~ s/a/b/g)`:
+            #
+            #     perl     bbb 3
+            #     refused  the counted s/// has no lvalue -- the graph names a
+            #              value, and a pad has no EntryWrite to recover from
+            #
+            # and tr/// in the same shape did not refuse; it emitted
+            # `("a.c" =~ tr[.][Z])`, which perl will not compile. One defect,
+            # two failure modes, which is why only tr/// was visible.
+            #
+            # Demoted, the slot's store is an ordinary `Assign(PadAccess, ...)`
+            # on the control chain, reads name the variable, and the declaration
+            # survives -- everything the lvalue needs, from a mechanism that
+            # already exists and is already tested.
+            #
+            # `/r` IS EXCLUDED: it yields a new string and leaves the source
+            # alone, so it mutates nothing and demoting for it would be a cost
+            # with no cause. PMf_NONDESTRUCT is the flag for s///; for tr/// the
+            # OP NAME carries it (`transr`).
+            if ($op->name eq 'subst' && $op->can('targ') && $op->targ
+                    && !($op->pmflags & PMf_NONDESTRUCT)) {
+                $taken{ $op->targ } = 1;
+            }
+            if ($op->name eq 'trans' && $op->can('targ') && $op->targ) {
+                $taken{ $op->targ } = 1;
+            }
+
             return unless $op->flags & 4;   # OPf_KIDS
             for (my $k = $op->first; ref($k) && $$k; $k = $k->sibling) {
                 $visit->($k);
@@ -1546,6 +1578,37 @@ class SoN::FromOptree 0.01 {
                     # s/// yields the rewritten subject, always a Str.
                     stamp       => SoN::IR::Stamp->new(type => 'Str'),
                 );
+                # PINNED TO ITS STATEMENT -- BUT ONLY FOR A PAD SUBJECT.
+                #
+                # A destructive s/// mutates, so it needs an ordering, and the
+                # loop-body construction of this same node has always set one.
+                # This site never did ("one operator, two declaration sites"),
+                # and without the pin the node cannot be BOUND, so its mutation
+                # renders wherever its value is first read.
+                #
+                # A PACKAGE SUBJECT ALREADY HAS ITS ORDERING, through the
+                # EntryWrite the destructive branch below emits -- and that
+                # write is what the deparser keys on to render the substitution
+                # ONCE (Deparse.pm, the EntryWrite arm). Pinning here as well
+                # makes the node independently bindable, the generic path
+                # renders the binding with `/r`, and the emission runs the
+                # substitution TWICE:
+                #
+                #     our $s = "aaa"; my $n = ($s =~ s/a/b/g); print "$n $s"
+                #       perl    3 bbb
+                #       pinned  $main::s = "aaa";
+                #               my $eff6 = ("aaa" =~ s{a}{b}gr);
+                #               $main::s = $eff6;
+                #               print(($main::s =~ s{a}{b}g) . " " . $main::s)
+                #
+                # -- the `/r` copy assigned back, then a second destructive run
+                # over the result. So the pin goes exactly where the ordering is
+                # otherwise absent, which is the pad case.
+                if ($target->isa('SoN::IR::Node::PadAccess')) {
+                    $node->set_control_in($sim->control);
+                    $sim->set_control($node);
+                    $sim->set_memory($node) if defined $sim->memory;
+                }
                 # A destructive s/// mutates the target pad in place: rebind
                 # $targ so a later read of the same lexical resolves to the
                 # substituted value, not the pre-subst binding (mirrors
@@ -3185,6 +3248,42 @@ class SoN::FromOptree 0.01 {
         # construction, so tr/// gets its own node kind.
         if ($name eq 'trans' || $name eq 'transr') {
             my $target = $sim->pop_node;
+
+            # A DESTRUCTIVE tr/// TAKES THE SLOT, NOT ITS VALUE. perl refuses
+            # to transliterate a value -- measured:
+            #
+            #     "a.c" =~ tr/./Z/   Can't modify constant item in tr///
+            #     $tr   =~ tr/./Z/   compiles
+            #
+            # and the COUNT form is the destructive one, so it cannot be
+            # rendered `/r` to dodge the lvalue.
+            #
+            # THE OP NAMES THE SLOT AND THE STACK DOES NOT. tr/// on a lexical
+            # is a PVOP carrying the targ with NO padsv operand at all --
+            #
+            #     my $tr = "a.c"; $tr =~ tr/./Z/
+            #       trans[$tr:1,3] sP/TRANS=ONLY_UTF8_INVARIANTS
+            #
+            # -- so `pop_node` returns whatever the preceding assignment left:
+            # the VALUE the slot was bound to. Built over that, the emission was
+            # `("a.c" =~ tr[.][Z])`, which does not compile.
+            #
+            # The slot is DEMOTED by _address_taken for exactly this op, so the
+            # read here is the same memory-threaded location read an aliased
+            # slot gets. That is what keeps the declaration alive and lets the
+            # deparser name the variable.
+            #
+            # `transr` is excluded: `/r` yields a new string and mutates
+            # nothing, so a value subject is correct there.
+            if ($name ne 'transr' && $op->targ) {
+                $target = $factory->make('PadAccess',
+                    targ => $op->targ,
+                    do { my ($sg, $sy) = _padparts($cv, $op->targ);
+                         (sigil => $sg, symbol => $sy) },
+                    (defined $sim->memory ? (inputs => [ $sim->memory ]) : ()),
+                );
+            }
+
             my ($from, $to) = _tr_decode($op);
             my $flags = _tr_flags($op, $name);
             my $node = $factory->make('Transliterate',
@@ -3195,6 +3294,29 @@ class SoN::FromOptree 0.01 {
                 flags  => $flags,
                 stamp  => SoN::IR::Stamp->new(type => 'Str'),
             );
+
+            # A DESTRUCTIVE tr/// IS PINNED TO ITS STATEMENT. It mutates the
+            # slot, so every read after it must see the change and every read
+            # before it must not -- which is an ORDERING fact, and only the
+            # control chain carries one.
+            #
+            # Unpinned, the deparser emitted it wherever its value was first
+            # read, which is not where it happened. Measured on
+            # `my $t="a.c"; my $c = ($t =~ tr/./Z/); print "mid $t"; print "end $c"`:
+            #
+            #     perl   mid aZc / end 1
+            #     before mid a.c / end 1   -- the tr deferred past the read
+            #
+            # Silent, and a wrong answer rather than a refusal. s/// is pinned
+            # at both its sites for the same reason.
+            #
+            # `/r` mutates nothing, so it needs no ordering and stays a pure
+            # value.
+            if ($name ne 'transr') {
+                $node->set_control_in($sim->control);
+                $sim->set_control($node);
+                $sim->set_memory($node) if defined $sim->memory;
+            }
 
             # A DESTRUCTIVE tr/// STORES INTO ITS TARGET, exactly as s/// does
             # -- and the same rebind. Without it the node was consumed by
@@ -5125,10 +5247,42 @@ class SoN::FromOptree 0.01 {
               . " lowered -- the pattern is not a compile-time literal\n"
                 unless defined $pattern;
 
-            my $pat_node = $factory->make('Constant',
-                value      => $pattern,
-                const_type => 'regex',
-                stamp      => SoN::IR::Stamp->new(type => 'Regex'));
+            # AWK MODE IS A DIFFERENT OPERATION, and perl spells it with a
+            # STRING where the pattern goes. Measured on `"  a b "`:
+            #
+            #     split / /, ...   4 fields, ["", "", "a", "b"]
+            #     split " ", ...   2 fields, ["a", "b"]
+            #
+            # awk mode strips LEADING whitespace and splits on RUNS. It is not
+            # the pattern `/ /` and not `/\s+/` either -- only the leading
+            # strip makes it awk, and no pattern spelling reproduces it.
+            #
+            # THE BIT IS ON THE OP AND B::Concise DOES NOT PRINT IT. Both forms
+            # render as `split(/" "/ => @a)` in a Concise dump; the separator is
+            # PMf_SKIPWHITE (2048) in pmflags:
+            #
+            #     split / /, ...        pmflags=0
+            #     split " ", ...        pmflags=2048
+            #     my $p=" "; split($p)  pmflags=2048
+            #
+            # So it is a COMPILE-TIME fact even when the pattern is a runtime
+            # string: perl sets the bit whenever the pattern is a plain string
+            # expression rather than a `//` literal.
+            #
+            # Emitted as a STRING constant, which is exactly how the source
+            # spells awk mode -- rather than a new field on the node, since the
+            # existing const_type already distinguishes the two and every
+            # consumer already handles both.
+            my $awk = $op->can('pmflags') && ($op->pmflags & 2048);
+            my $pat_node = $awk
+                ? $factory->make('Constant',
+                    value      => $pattern,
+                    const_type => 'string',
+                    stamp      => SoN::IR::Stamp->new(type => 'Str'))
+                : $factory->make('Constant',
+                    value      => $pattern,
+                    const_type => 'regex',
+                    stamp      => SoN::IR::Stamp->new(type => 'Regex'));
 
             my $node = $factory->make('Call',
                 inputs        => [$pat_node, @operands],
@@ -12461,8 +12615,24 @@ class SoN::FromOptree 0.01 {
         my $scope_key = $targ || '$main::_';
         my $target    = $sim->lookup($scope_key);
         if (!$target) {
+            # A DEMOTED SLOT'S READ CARRIES THE MEMORY IT OBSERVES, the same as
+            # every other read of one. `_address_taken` demotes a destructive
+            # s///'s targ, so `$sim->lookup` is empty here by design -- the
+            # slot's value lives in memory, not in a binding -- and a bare
+            # PadAccess would be a location node with no version, which is not
+            # the shape the rest of the demotion path builds:
+            #
+            #     my $x=5; my $r=\$x; $$r=9   every PadAccess in=[memory-or-store]
+            #
+            # Without the memory input two reads either side of a store
+            # hash-cons into ONE node, which is the defect the version exists to
+            # prevent.
             $target = $targ
-                ? _make_pad_or_field($cv, $targ, $factory)
+                ? $factory->make('PadAccess',
+                    targ => $targ,
+                    do { my ($sg, $sy) = _padparts($cv, $targ);
+                         (sigil => $sg, symbol => $sy) },
+                    (defined $sim->memory ? (inputs => [ $sim->memory ]) : ()))
                 : $factory->make('EntryDef',
                     package => 'main', sigil => '$', symbol => '_');
             $sim->define($scope_key, $target);

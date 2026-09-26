@@ -871,6 +871,35 @@ class SoN::Deparse 0.01 {
             # would emit it bare, and the reads would then have nothing to
             # name -- so the value is captured here, once, where it happens.
             if (exists $bound{ $n->{id} }) {
+                # A COUNTED DESTRUCTIVE s/// ON A LEXICAL RUNS EXACTLY ONCE.
+                # The RegexSubst has two consumers -- the binding here, and the
+                # RegexSubstCount over it -- and rendering each independently
+                # runs the substitution twice. The second sees the already-
+                # substituted string. Measured on
+                # `my $s="aaa"; my $n = ($s =~ s/a/b/g); print "$s $n"`:
+                #
+                #     perl   bbb 3
+                #     before " "     -- both halves lost
+                #
+                # The DESTRUCTIVE form does both jobs: it mutates the slot in
+                # place and yields the count. So emit it here, bound to the
+                # count temporary, and let the count read that binding while
+                # later reads of the subject name the variable itself.
+                #
+                # THE SAME SPLIT `EntryWrite` MAKES for a package scalar, one
+                # binding mechanism over. A pad has no EntryWrite -- the rebind
+                # IS the mechanism -- so the arm has to live here, where a pad
+                # binding is emitted.
+                if (my $c = $self->_counted_lexical_subst($n)) {
+                    $out .= $c;
+                    $out .= $self->_emit_statement($_, $next_of)
+                        for (($after_effect{ $n->{id} } // [])->@*);
+                    $out .= $self->_emit_statement($_, $next_of)
+                        for (delete($after_region{ $n->{id} }) // [])->@*;
+                    $cur = $n->{id};
+                    next;
+                }
+
                 # THE VARIABLE IS READ OUT FIRST. Passing `$bound{...}` to
                 # sprintf passes the hash element as an ALIAS, and
                 # _expr_uncached deletes and restores that very element -- so
@@ -2327,6 +2356,82 @@ class SoN::Deparse 0.01 {
         return 0;
     }
 
+    # _counted_lexical_subst($n) -- the one-run emission for a destructive
+    # s/// or tr/// on a LEXICAL, or undef when this is not that shape.
+    #
+    # Returns the whole statement rather than a spelling, because the binding
+    # it emits is the count temporary while the SUBJECT stays the variable --
+    # two different names for what the generic path would give one.
+    #
+    # BOTH OPERATORS, ONE PLACE. s/// and tr/// have the identical defect and
+    # the identical fix: two consumers (the mutated subject and the count) over
+    # one mutating node, each rendering it independently, so the emitted program
+    # runs it twice and the second sees the already-changed string. Splitting
+    # this into two helpers is how the project's recurring "one operator, N
+    # declaration sites" drift starts.
+    method _counted_lexical_subst ($n) {
+        my $op = $n->{op} // '';
+        return undef unless $op eq 'RegexSubst' || $op eq 'Transliterate';
+
+        # COUNTED OR NOT, THE MUTATION MUST HAPPEN. An uncounted destructive
+        # s/// (`$s =~ s/a/z/;` with nothing reading the count) is bound here
+        # too, and the generic path renders a bound value with `/r` -- which
+        # substitutes into a COPY and leaves the variable alone. Measured on
+        # `my $s = "abc"; $s =~ s/a/z/; print "$s"`:
+        #
+        #     perl   zbc
+        #     /r     abc   -- the substitution happened to nothing
+        #
+        # so the count is what decides whether a TEMPORARY is needed, not
+        # whether the destructive form is. Requiring a count here regressed five
+        # corpus cases from correct to silently wrong.
+        my $counted = $op eq 'RegexSubst'
+            ? $self->_counted_subst( $n->{id} )
+            : $self->_counted_trans( $n->{id} );
+
+        # ONLY WHEN THE SUBJECT IS ITSELF AN LVALUE. A value subject is the
+        # package-scalar path's business (it recovers the name through the
+        # EntryWrite) and rendering a destructive form over one does not
+        # compile.
+        my $subj = $nodes->{ ( $n->{inputs} // [] )->[0] // -1 };
+        return undef unless $subj && ( $subj->{op} // '' ) eq 'PadAccess';
+
+        my $lv = $self->_subst_lvalue($n);
+        return undef unless defined $lv;
+
+        my $f = $n->{fields} // {};
+        ( my $flags = $f->{flags} // '' ) =~ s/r//g;
+        my $var  = sprintf( '$subst%d', $n->{id} );
+        my $text = $op eq 'RegexSubst'
+            ? do {
+                my ( $pat, $rep ) = $self->_subst_operands($n);
+                sprintf( '(%s =~ s{%s}{%s}%s)', $lv, $pat, $rep, $flags );
+            }
+            : sprintf( '(%s =~ tr[%s][%s]%s)',
+                $lv, $f->{from} // '', $f->{to} // '', $flags );
+
+        # The SUBJECT reads as the variable from here on; the COUNT, when there
+        # is one, reads the temporary. Both are recorded so neither consumer
+        # re-renders it.
+        $bound{ $n->{id} } = $lv;
+        return "$text;\n" unless $counted;
+
+        $subst_count_var{ $n->{id} } = $var;
+        return sprintf( "my %s = %s;\n", $var, $text );
+    }
+
+    # _counted_trans($id) -- is this Transliterate read by a TransliterateCount?
+    # The tr/// half of _counted_subst, and the same hazard: two consumers over
+    # one mutation.
+    method _counted_trans ($id) {
+        for my $n ( values $nodes->%* ) {
+            next unless ( $n->{op} // '' ) eq 'TransliterateCount';
+            my $in = ( $n->{inputs} // [] )->[0];
+            return 1 if defined $in && $in == $id;
+        }
+        return 0;
+    }
+
     method _subst_lvalue ($sub) {
         my $root = $nodes->{ ($sub->{inputs} // [])->[0] // -1 };
         return undef unless $root;
@@ -2491,6 +2596,17 @@ class SoN::Deparse 0.01 {
             die "GAP: a TransliterateCount over `" . ($tr->{op} // '?')
               . "` is not yet rendered\n"
                 unless $tr && $tr->{op} eq 'Transliterate';
+
+            # THE DESTRUCTIVE tr/// MAY ALREADY HAVE RUN. When its subject is a
+            # lexical, `_counted_lexical_subst` emits it once at its chain
+            # position and records the temporary holding the count. Rendering
+            # the transliteration again here would run it a second time, and
+            # the second run sees the already-transliterated string. Same split
+            # RegexSubstCount makes, for the same reason.
+            if (exists $subst_count_var{ $tr->{id} }) {
+                $text = $subst_count_var{ $tr->{id} };
+                return $text;
+            }
             my $tf = $tr->{fields} // {};
             ( my $tflags = $tf->{flags} // '' ) =~ s/r//g;
             $text = sprintf('(%s =~ tr[%s][%s]%s)',
@@ -3526,6 +3642,29 @@ class SoN::Deparse 0.01 {
             die "GAP: an indirect Call with no callee is not yet rendered\n"
                 unless @args;
             my $callee = shift @args;
+
+            # `->` BINDS TIGHTER THAN `\`, so a callee that is an EXPRESSION
+            # needs its own parens or the arrow lands inside it. Measured,
+            # perl's own deparse of `\(&twice)->(21)`:
+            #
+            #     my $x = \&twice->(21);
+            #
+            # which calls `&twice` with no arguments -- the `&` form inherits
+            # an empty @_ -- and then calls the RESULT as a code ref:
+            #
+            #     Undefined subroutine &main::0 called
+            #
+            # Two corpus cases died exactly that way, and it read as a missing
+            # sub rather than as a precedence defect. The reference is fine on
+            # its own: `\(&twice)` IS a CODE ref and `(\(&twice))->(21)` is 42.
+            #
+            # A SIMPLE VARIABLE NEEDS NO PARENS, and must not grow any: `$ref`,
+            # `$self->{cb}` and `$h{k}` are already tighter than `->`, so
+            # wrapping them would be noise in every ordinary call. The test is
+            # the spelling rather than the node kind -- what matters is whether
+            # `->` can bind to part of it, which is a question about the TEXT.
+            $callee = "($callee)"
+                unless $callee =~ /\A\$[\w:]+ (?: (?:->)? [\[{] .* [\]}] )* \z/x;
             return sprintf('%s->(%s)', $callee, join(', ', @args));
         }
 
@@ -3631,7 +3770,25 @@ class SoN::Deparse 0.01 {
         # dropping it assigns the NUMBER to $/, which sets the separator to
         # that string and reads different records.
         if ($t eq 'ref') {
-            return sprintf('\\%s', $v);
+            # THE REFERENT NEEDS ITS OWN SPELLING. `\2` and `\"x\n"` are both
+            # folded to a ref Constant holding the REFERENT, and only the
+            # numeric one is legal bare. Emitted raw, a string referent became
+            #
+            #     open($fh, "<", \x
+            #     );
+            #
+            # which COMPILES -- bareword `x` followed by a literal newline --
+            # and opens a handle on the string "x" rather than on "x\n". A
+            # wrong answer that passes a compile check, which is why the
+            # corpus's in-memory handles read nothing rather than refusing.
+            #
+            # Numeric stays bare: `$/ = \2` reads fixed-size records, and
+            # `\"2"` would set the separator to the STRING and read different
+            # ones.
+            return sprintf('\\%s', $v) if $v =~ /\A-?[0-9]+(?:\.[0-9]+)?\z/;
+            return sprintf('\\%s',
+                $self->_constant({ fields =>
+                    { const_type => 'string', value => $v } }));
         }
 
         if ($t eq 'glob') {

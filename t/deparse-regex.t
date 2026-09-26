@@ -60,16 +60,25 @@ subtest 'patterns are not mangled' => sub {
 subtest 'substitution' => sub {
     round_trips('my $s = "aaa"; $s =~ s/a/b/; print "$s\n";',  's///');
     round_trips('my $s = "aaa"; $s =~ s/a/b/g; print "$s\n";', 's///g');
-    # A COUNTED s/// REFUSES when the producer folded its subject to a value.
-    # The destructive form needs an lvalue, and the graph names a Constant --
-    # so the emitter has nothing to substitute into. Spelling around it with a
-    # temporary would emit a program modifying a DIFFERENT variable, and
-    # whether the original changes is exactly what separates s/// from s///r.
-    my $d = SoN::Deparse->new;
-    my $data = graph_of('my $s = "aaa"; my $n = ($s =~ s/a/b/g); print "$n\n";');
-    ok $data, 'the counted s/// program translates' or return;
-    is $d->render($data), undef, 'a counted s/// over a folded subject refuses';
-    like $d->gap, qr/no lvalue to modify/, '... naming what is missing';
+    # A COUNTED s/// ON A LEXICAL ROUND-TRIPS. It used to refuse, and the
+    # refusal was honest: the producer folded the subject to its value, the
+    # destructive form needs an lvalue, and the graph named a Constant.
+    #
+    # The slot is DEMOTED now -- `_address_taken` marks a destructive s///'s
+    # targ the same way `\$x` does -- so the subject is the pad slot, its
+    # declaration survives, and the substitution is emitted ONCE with the count
+    # bound to a temporary:
+    #
+    #     my $s = "aaa";
+    #     my $subst7 = ($s =~ s{a}{b}g);
+    #     print join('', ($subst7 . "\n"));
+    #
+    # Asserted as a ROUND TRIP rather than a rendering, because the two things
+    # the old refusal protected -- that the ORIGINAL changes, and that the
+    # count is the count -- are only visible by running it. See
+    # docs/plans/2026-09-26-a-destructive-subst-on-a-lexical.md.
+    round_trips('my $s = "aaa"; my $n = ($s =~ s/a/b/g); print "$n $s\n";',
+        'a counted s/// on a lexical');
 };
 
 # A CHAIN OF COUNTED SUBSTITUTIONS NEEDS THE VARIABLE, not the previous

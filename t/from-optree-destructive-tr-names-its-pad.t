@@ -62,11 +62,16 @@ sub runs ($src) {
 # -- which is why only the lexical shape failed. Case 010 of pvm's conformance
 # corpus is this, and its emission did not compile.
 
-# TODO UNTIL ALL THREE PARTS LAND. The subject change alone makes this compile
-# and print the WRONG ANSWER (`$tr` undeclared), so it is not shippable on its
-# own -- see docs/plans/2026-09-26-a-destructive-tr-on-a-lexical.md. Marked TODO
-# rather than deleted: it is the acceptance test for that plan, and it must fail
-# for the reason it names until the declaration and the double-run are fixed too.
+# THE SUBJECT ALONE IS NOT THE FIX, and this subtest is why the other four
+# exist. Giving the tr/// its pad slot makes this COMPILE and print the wrong
+# answer -- `$tr` pruned and undeclared, so it printed ` 1` for perl's `aZc 1`.
+# A compile error traded for a silent wrong answer is the worse of the two.
+#
+# Four parts, all of them load-bearing: the slot is DEMOTED (so its store is a
+# real Assign and the declaration survives), the tr/// READS that slot, it is
+# PINNED to the control chain (so the mutation lands where it happens), and it
+# is emitted ONCE (so the count does not re-run it). See
+# docs/plans/2026-09-26-a-destructive-subst-on-a-lexical.md.
 subtest 'the count form names the variable' => sub {
     my $src = <<'SRC';
 my $tr = "a.c";
@@ -75,13 +80,6 @@ print "$tr $cnt\n";
 SRC
     my ( $out, $why ) = emit($src);
     ok defined $out, 'renders' or do { diag $why; return };
-
-    # EACH ASSERTION CARRIES ITS OWN TODO, not the subtest. A `todo` around the
-    # whole block amnesties the failures and the subtest then PASSES, so the
-    # harness reports "TODO passed" -- which says the work is done when it is
-    # not. Marked here so each one fails visibly, under amnesty, naming what it
-    # is waiting for.
-    my $todo = todo 'the declaration and the single-run are not fixed yet';
 
     like $out, qr/\$\w+ =~ tr\[/,
         'the tr subject is a variable, not a value';
@@ -92,6 +90,45 @@ SRC
     like $chk, qr/syntax OK/, 'the emission compiles';
 
     is runs($out), runs($src), 'and it prints what perl prints';
+};
+
+# THE MUTATION IS AN ORDERING FACT, and this is the case that proves it. A read
+# BETWEEN the tr/// and the use of its count must see the transliterated string:
+#
+#     my $t = "a.c"; my $c = ($t =~ tr/./Z/);
+#     print "mid $t\n"; print "end $c\n";
+#       perl  mid aZc / end 1
+#
+# Unpinned from the control chain, the deparser emitted the tr/// wherever its
+# value was first READ -- the second print -- and the first printed `mid a.c`.
+# Silent, and a wrong answer rather than a refusal.
+subtest 'a read between the tr and its count sees the mutation' => sub {
+    my $src = <<'SRC';
+my $t = "a.c";
+my $c = ($t =~ tr/./Z/);
+print "mid $t\n";
+print "end $c\n";
+SRC
+    my ( $out, $why ) = emit($src);
+    ok defined $out, 'renders' or do { diag $why; return };
+    is runs($out), runs($src), 'both statements see the right value'
+        or diag $out;
+};
+
+# THE SAME DEFECT IS s///'s, and the fix is shared -- so the guard is too. This
+# shape REFUSED before (the counted s/// had no lvalue, because a pad has no
+# EntryWrite to recover the name from), which is why it never showed up as a
+# wrong answer the way tr/// did.
+subtest 'a counted s/// on a lexical round-trips' => sub {
+    my $src = <<'SRC';
+my $s = "aaa";
+my $n = ($s =~ s/a/b/g);
+print "$s $n\n";
+SRC
+    my ( $out, $why ) = emit($src);
+    ok defined $out, 'renders' or do { diag $why; return };
+    is runs($out), runs($src), 'the subject and the count are both right'
+        or diag $out;
 };
 
 # THE /r FORM IS NOT AFFECTED and must not become an lvalue: it yields a new
