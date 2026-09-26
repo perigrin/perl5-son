@@ -4245,6 +4245,7 @@ class SoN::FromOptree 0.01 {
         if ($name eq 'gv') {
             my $gv = _op_gv($cv, $op);
             my $value = 'unknown';
+            my $stash_name = '';
             if ($gv) {
                 # A callee gv (gv[IV \&main::foo]) resolves via a CV-ref; qualify
                 # it to STASH::NAME so a direct-call Call node names the same key
@@ -4265,7 +4266,7 @@ class SoN::FromOptree 0.01 {
                 # disambiguates main::ENV from a package hash whose short name
                 # is also ENV; skipping it for every gv would break that.
                 my $stash = eval { $gv->STASH };
-                my $stash_name =
+                $stash_name =
                     ( ref $stash && $stash->can('NAME') ) ? $stash->NAME : '';
                 $value = ($stash_name eq 'main' && $gv->NAME eq 'ENV')
                     ? 'main::ENV'
@@ -4280,8 +4281,22 @@ class SoN::FromOptree 0.01 {
             #
             # Guarded on the stash: a package variable genuinely called `_` in
             # some OTHER package is not the argument list.
-            if ($gv && $gv->NAME eq '_' && $gv->STASH->NAME eq 'main') {
+            if ($gv && $gv->NAME eq '_' && $stash_name eq 'main') {
                 $sim->push_node(_args_source($factory));
+                return ($op->next, 'handled');
+            }
+            # A STASHLESS PLACEHOLDER IS NOT A VALUE AND PUSHES NOTHING.
+            # `glob` and `<*.c>` carry `gv[*<none>::]` beside the pattern, and
+            # perl's own glob takes ONE argument -- `glob($pat, "")` does not
+            # even compile ("Too many arguments for glob"). Pushing a Constant
+            # for the placeholder made glob's single pop take IT and leave the
+            # pattern loose on the stack, where the enclosing list assignment
+            # collected it as an element: `scalar(@n)` read 1 for an empty
+            # match where perl reads 0.
+            #
+            # Pushing nothing lets glob's pop reach the pattern, which is the
+            # operand it actually has.
+            if (!length $stash_name && ($gv ? !length($gv->NAME // '') : 1)) {
                 return ($op->next, 'handled');
             }
             my $node = $factory->make('Constant',

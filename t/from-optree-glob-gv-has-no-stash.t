@@ -80,4 +80,38 @@ subtest 'an %ENV read still reaches EnvRead' => sub {
     is( ( $env->{fields} // {} )->{key}, 'PATH', '... keyed on PATH' );
 };
 
+# THE PATTERN IS THE FIRST OPERAND, NOT THE PLACEHOLDER. Measured, glob
+# pushes TWO things:
+#
+#     4  <$> const[PV "*.xyz"] s      the pattern
+#     5  <#> gv[*<none>::] s          the placeholder
+#     6  <@> glob[t3] lK/1
+#
+# The walker consumed the gv (which the fix above turns into an empty-named
+# Constant) and left the pattern loose on the stack, so the graph read
+#
+#     4 Call glob in=[3]        <- the EMPTY constant, not the pattern
+#     5 ArrayLiteral in=[2,4]   <- the pattern AND the call, two elements
+#
+# and `scalar(@n)` came out 1 where perl says 0: the list held the pattern
+# string itself plus the call's result.
+subtest 'glob takes its pattern, and an empty match counts 0' => sub {
+    my ( $data, $err ) = graph_of(
+        'my @n = glob("*.nonexistent-xyz"); print scalar(@n), "\n";' );
+    unlike $err, qr/INTERNAL ERROR|GAP/, 'no error' or diag($err);
+    my @nodes = map { $_->{nodes}->@* } values %{ $data->{methods} // {} };
+    my ($call) = grep {
+        $_->{op} eq 'Call'
+            && ( ( $_->{fields} // {} )->{name} // '' ) eq 'glob'
+    } @nodes;
+    ok $call, 'a glob Call exists' or return;
+
+    my %by_id = map { $_->{id} => $_ } @nodes;
+    my @args  = map { $by_id{$_} } ( $call->{inputs} // [] )->@*;
+    my ($pat) = grep {
+        ( ( $_->{fields} // {} )->{value} // '' ) eq '*.nonexistent-xyz'
+    } @args;
+    ok $pat, 'the PATTERN is an operand of the Call, not left loose';
+};
+
 done_testing;
