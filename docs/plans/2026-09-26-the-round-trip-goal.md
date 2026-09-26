@@ -392,3 +392,24 @@ a cause.
      observed; read from its `plan skip_all` guards.
 
 Claude-Session: https://claude.ai/code/session_01QYtFNnt2aXaRH2hrRvopyc
+
+## A citation hygiene finding, from pvm's side and ours
+
+pvm found that THREE of their corpus cases cited issues in state DONE --
+corpus-construction issues that never owned a parser gap. Their
+`TestRefusalCitationMustResolve` passed all three because the citations RESOLVE;
+they were simply the wrong issues. Their guard checks existence, not state.
+
+OURS IS WEAKER. 22 distinct `zhi <id>` citations appear across t/ and lib/, and
+`git zhi issue list` here returns `[]` -- the chain is empty, so NONE of them
+resolves. They are provenance notes referencing a chain that does not exist in
+this repository.
+
+That is not urgent and not wrong in the way a stale citation is wrong: a note
+saying "zhi 019f26a5" records where a defect was found, and nothing in the suite
+claims otherwise. But it does mean the citations cannot be checked, and a reader
+following one gets nothing. Worth either dropping them, or landing the chain
+they refer to, rather than leaving them as unverifiable provenance.
+
+Noted rather than acted on -- it touches 22 sites across two directories and
+changes no behaviour.
