@@ -216,6 +216,110 @@ which is why nine files carry skips and only three refuse for that reason:
     1  a loop control (`next`) inside a branch arm
     1  a bare block with a `continue` block and a next/last/redo
 
+### FACT vs ARTIFACT, first two classified
+
+**`map body contribution of unknown arity` -- ARTIFACT, fixed.** The arity is
+not in the program, which sounds like a FACT until you ask who needs it. perl
+does not count either: a map body's contribution is FLATTENED at runtime. The
+refusal was a property of OUR DESUGARING -- map into a loop with a counted
+ListAppend accumulator -- and the mechanism to describe it already existed:
+
+    my @src=(1,2); map { @src } (0,0)
+      my @phi4_next = (@phi4, 1, 2);   prints 4
+
+An aggregate body has equally unknown length and flattens correctly, because
+ListAppend renders `(acc, contribution)` -- a plain list, so the emission defers
+to perl exactly as the source does. A list-returning Call is the same shape.
+
+The tell that it was an artifact: it ALSO refused `sub one { return 7 }`, whose
+arity is one. The producer could not NAME the arity, which is a different thing
+from needing it.
+
+GREP KEEPS THE CHECK. Its body is a PREDICATE -- the contribution is the
+ELEMENT, and the body's value only decides whether to take it -- so a
+multi-value body there would append the wrong thing and the arity question is
+real. Same refusal, opposite classification, one `if ($collect ne 'map')` apart.
+
+Effect on the tier: `comp/utf.t` went 1 GAP -> 0 and `comp/proto.t` 3 skipped
+subs -> 1, but NEITHER round-trips yet -- each has a distinct downstream cause
+(`PostfixDeref` with no aggregate sigil; `a control node with 2 successors`).
+So the count stayed 12/39, which is what a tier with no clusters looks like
+when one cause is removed.
+
+**`assigning to a glob (*FH)` -- FIRST CALLED A FACT; IT IS AN ARTIFACT.**
+Corrected below; the original reasoning is kept because the way it was wrong is
+the reusable part. See docs/plans/2026-09-26-the-slot-is-the-stamp.md.
+
+THE CORRECTION: THE STAMP NAMES THE SLOT. `*X = EXPR` binds the slot given by
+EXPR's TYPE, and the lattice already relates those types --
+
+    exactly one ref kind under the stamp  -> that slot, statically resolved
+    five (Scalar, Ref)                    -> one slot, kind chosen at runtime
+    none, and Glob/GlobRef/Str            -> every slot
+
+-- so nothing is missing. `_resolve_glob_slots` reads the stamp correctly and
+then looks it up in an EXACT-MATCH hash of four keys; anything else deletes the
+graph. Probed on base/rs.t: `type=Scalar`, which is not "unknown" but the honest
+position of a value whose ref-kind has not narrowed.
+
+WHAT MADE THE FIRST ANSWER WRONG: I measured that one callsite binds different
+slots per call, concluded "nothing in the program says which", and stopped. The
+missing question was WHO NEEDS TO KNOW -- the same question that had just
+dissolved the map-arity refusal an hour earlier. The stamp is the answer at
+whatever precision inference reached, and a backend either narrows it or
+declines the node. Our refusal message even says "perl itself defers the
+choice", which is verbatim the sentence
+[[a-t2-difficulty-is-not-a-t1-refusal]] was written about.
+
+The original reasoning follows. It is accurate about perl and wrong about us:
+
+**The other two-file cluster, and what looked like the opposite answer.** `*FH = shift` in base/rs.t aliases
+the slot chosen by the RUNTIME TYPE of the value. Measured:
+
+    sub s1 { *X = shift; ... }  open(my $h,"<",...); s1($h)   aliases IO
+    sub s2 { *Y = shift; ... }  our @A=(1,2);        s2(\@A)   aliases ARRAY
+
+Two calls, one callsite, different slots. Nothing in the program says which, so
+the refusal message is accurate as written and this is a genuine T1 GAP.
+
+AND IT IS NOT OVER-REFUSING, which is the part worth checking rather than
+assuming. Where the RHS type IS known the same construct lowers and
+round-trips:
+
+    our @SRC = (1,2,3); *crackers = \@SRC;
+      *main::crackers = \@main::SRC;        prints `1 2 3`
+
+`_resolve_glob_slots` resolves a leaf ref type and refuses everything else --
+which is not the same as "refuses when the type is Unknown", and that elision is
+where the first classification went wrong. `Scalar` and `Ref` are not Unknown.
+
+**`untranslatable op inside an if/else arm (stopped at `range`)` -- ARTIFACT,
+but a big one, and the MESSAGE NAMES THE WRONG OP.** From comp/proto.t's
+`sub list_or_scalar { wantarray ? (1..10) : [] }`. Reduced:
+
+    sub f { wantarray ? (1..3) : [] }   GAP: ... stopped at `range`
+    sub f { wantarray ? (7, 8) : [] }   GAP: a ternary with a multi-element
+                                             list arm not yet lowered
+
+It is NOT the range. ANY multi-element list arm refuses; the range case merely
+hits a different message first, which would have sent a reader to
+`_handle_range` (already written, and irrelevant here).
+
+The optree names both arms completely --
+
+    3  <|> cond_expr(other->4) K/1
+    4      pushmark; const 7; const 8; list
+    9      emptyavhv
+
+-- so the program says exactly what each arm is, and by the layering rule this
+is an ARTIFACT. But the refusal is honest about its own mechanism: the arm-value
+handling detects a stack depth-delta != 1 and GAPs rather than silently dropping
+the extra values. Expressing it needs PER-ARM VALUE LISTS through the Phi merge,
+which does not exist -- this is real work, not a missing delegation.
+
+Recorded rather than started. The message should name the list arm rather than
+whichever op the walk stopped on.
+
 THERE IS NO CHEAP WIN HERE, and that is the finding. Tier 1's work was
 profitable because five emission causes covered nineteen cases; this tier is
 fourteen causes for nine files, and several are control-flow shapes (loop exits,

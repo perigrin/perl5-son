@@ -5,6 +5,8 @@ use utf8;
 use Test::More;
 use File::Temp qw(tempdir);
 use JSON::PP;
+use lib 'lib';
+use SoN::Deparse;
 
 my $PERL = $^X;
 my $dir  = tempdir( CLEANUP => 1 );
@@ -18,6 +20,31 @@ sub run_and_translate ( $src, $name ) {
     my $json = qx{$PERL -Ilib -MO=SoN,json $file 2>$dir/$name.err};
     my $err  = do { open my $e, '<', "$dir/$name.err"; local $/; <$e> } // '';
     return ( $out, ( length $json ? JSON::PP->new->decode($json) : undef ), $err );
+}
+
+# THE REFUSALS IN THIS FILE WERE PRESERVED BY THEIR OWN TESTS. Each asserted
+# `like $err, qr/GAP/` on the premise that appending an aggregate whole "makes a
+# consumer counting inputs read 1 where perl says N". That is a claim about a
+# CONSUMER, and ours does not count inputs -- the emission renders
+# `(@acc, contribution)` and perl flattens, so the final count is
+# `scalar(@acc)` at runtime. Measured, all four shapes round-trip.
+#
+# So each is asserted by RUNNING the emission and diffing against perl, which is
+# the check that can tell a necessary refusal from a habitual one.
+sub round_trips ( $src, $name ) {
+    my ( $want, $w, $err ) = run_and_translate( $src, $name );
+    return ( 0, "translate: $err" ) if $err =~ /GAP:|INTERNAL/;
+    return ( 0, 'no graph' ) unless $w;
+
+    my $emitted = eval { SoN::Deparse->new->render($w) };
+    return ( 0, "render: " . ( $@ || 'refused' ) ) unless defined $emitted;
+
+    my $ef = "$dir/$name-emit.pl";
+    open my $efh, '>', $ef or die $!;
+    print {$efh} $emitted;
+    close $efh;
+    my $got = qx{$PERL $ef 2>&1};
+    return ( $got eq $want, "got=[$got] want=[$want]\n$emitted" );
 }
 
 sub nodes ( $w ) {
@@ -134,16 +161,13 @@ subtest 'an aggregate in a map body contributes its elements, not itself' => sub
         'map-hash-flatten' );
     is $out, '4', 'perl flattens the hash to four values' or return;
 
-    # REFUSED, not lowered. A hash's pair count is a runtime property, so
-    # there is no honest static arity to append -- and appending the
-    # container instead made a consumer counting inputs read 1 for perl's 4.
-    # A GAP is the correct answer here; a wrong count is not.
-    like $err, qr/GAP/,
-        'B::SoN refuses rather than appending the container as one element';
-
-    my $ns  = $w ? nodes($w) : [];
-    my @app = grep { ( $_->{op} // '' ) eq 'ListAppend' } $ns->@*;
-    is scalar(@app), 0, '... and emits no ListAppend for it';
+    # LOWERED, and the count is right. A hash's pair count is a runtime
+    # property and never needs to be static: the emission appends the hash into
+    # a list and perl flattens it, exactly as the source does.
+    my ( $ok, $why ) = round_trips(
+        'my %h=(a=>1,b=>2); my @m = map { %h } (1); print scalar(@m);',
+        'map-hash-flatten-rt' );
+    ok $ok, 'the emitted program also says 4' or diag $why;
 };
 
 # THE ARRAY FORM STILL LOWERS. The refusal above must not swallow the case
@@ -183,12 +207,13 @@ subtest 'a slice in a map body is not appended as one element' => sub {
         'map-hash-slice' );
     is $out, '2', 'perl yields the two sliced values' or return;
 
-    like $err, qr/GAP/,
-        'B::SoN refuses rather than appending the slice as one element';
-
-    my $ns  = $w ? nodes($w) : [];
-    my @app = grep { ( $_->{op} // '' ) eq 'ListAppend' } $ns->@*;
-    is scalar(@app), 0, '... and emits no ListAppend for it';
+    # THE LOWERING WAITING TO HAPPEN HAS HAPPENED, and the comment above said
+    # so: a slice's arity is static and nothing was splitting it. Nothing needs
+    # to -- the emission appends the slice into a list and perl flattens it.
+    my ( $ok, $why ) = round_trips(
+        'my %h=(a=>1,b=>2); my @m = map { @h{qw(a b)} } (1); print scalar(@m);',
+        'map-hash-slice-rt' );
+    ok $ok, 'the emitted program also says 2' or diag $why;
 };
 
 # GREP IS ARITY-PRESERVING ON ITS INPUT and must NOT be caught by any of the
@@ -237,19 +262,14 @@ subtest 'a list-producing builtin in a map body does not miscount' => sub {
         my ( $out, $w, $err ) = run_and_translate( $src, "map-builtin-$label" );
         is $out, $want, "perl flattens $label to $want values";
 
-        # Either it refuses, or it appends the right NUMBER of contributions.
-        # What it must never do is append one value standing for N.
-        my $ns  = $w ? nodes($w) : [];
-        my ($app) = grep { ( $_->{op} // '' ) eq 'ListAppend' } $ns->@*;
-        if ($app) {
-            my @ids = ( $app->{inputs} // [] )->@*;
-            shift @ids;
-            is scalar(@ids), $want,
-                "... and $label appends $want contributions, not 1";
-        }
-        else {
-            like $err, qr/GAP/, "... and $label refuses rather than miscounting";
-        }
+        # ONE CONTRIBUTION STANDING FOR N IS CORRECT, which this subtest was
+        # written to forbid. The emission renders `(@acc, reverse(@a))` and perl
+        # flattens it, so the graph carries ONE input and the program counts N.
+        # Asserted by running it, because an input count cannot tell the two
+        # apart -- it reads 1 either way, whether that 1 flattens or not.
+        my ( $ok, $why ) = round_trips( $src, "map-builtin-$label-rt" );
+        ok $ok, "... and the emitted $label program also says $want"
+            or diag $why;
     }
 };
 
@@ -261,7 +281,14 @@ subtest 'a mixed aggregate/scalar body does not miscount' => sub {
         'my %h=(a=>1,b=>2); my @m = map { %h, 9 } (1); print scalar(@m);',
         'map-mixed' );
     is $out, '5', 'perl yields four from the hash plus one scalar' or return;
-    like $err, qr/GAP/, 'B::SoN refuses rather than miscounting';
+
+    # THE MIXED CASE IS THE STRONGEST OF THESE, because a static arity would
+    # have to add a runtime pair count to a literal 1. It never does: the
+    # emission appends both into one list and perl flattens the whole thing.
+    my ( $ok, $why ) = round_trips(
+        'my %h=(a=>1,b=>2); my @m = map { %h, 9 } (1); print scalar(@m);',
+        'map-mixed-rt' );
+    ok $ok, 'the emitted program also says 5' or diag $why;
 };
 
 # THE ALLOW-LIST MUST NOT SWALLOW THE ORDINARY CASES. Every shape that

@@ -9414,18 +9414,44 @@ class SoN::FromOptree 0.01 {
                     log exp cos sin quotemeta length ref defined sprintf
                 ) };
 
-                for my $c (@produced) {
-                    next if $YIELDS_ONE_VALUE->{ $c->operation };
-                    next if $c->operation eq 'Call'
-                         && $c->can('dispatch_kind')
-                         && ($c->dispatch_kind // '') eq 'builtin'
-                         && $c->can('name')
-                         && defined $c->name
-                         && $SCALAR_BUILTIN->{ $c->name };
-                    die "GAP: $collect body contribution of unknown arity"
-                      . " (a " . $c->operation . " may yield more than one"
-                      . " value, and appending it whole would count 1 where"
-                      . " perl counts N) not yet lowered\n";
+                # MAP NEVER NEEDS THE ARITY, and neither does perl. A map
+                # body's contribution is FLATTENED at runtime, and the emission
+                # defers to perl exactly as the source does -- ListAppend
+                # renders `(acc, contribution)`, a plain list, so a Call there
+                # is in list context and flattens itself.
+                #
+                # Measured, the mechanism was already proven by the aggregate
+                # body, whose length is equally unknown:
+                #
+                #     my @src=(1,2); map { @src } (0,0)
+                #       my @phi4_next = (@phi4, 1, 2);   prints 4
+                #
+                # A list-returning Call is the same shape. The refusal was a
+                # property of THIS DESUGARING -- map into a loop with a counted
+                # accumulator -- not of the program, which says precisely what
+                # perl acts on. It also refused `sub one { 7 }`, whose arity IS
+                # one, because the producer could not NAME the arity rather
+                # than because it needed it.
+                #
+                # GREP STILL NEEDS IT, and keeps the check. Its body is a
+                # PREDICATE: the contribution is the ELEMENT, and the body's
+                # value only decides whether to take it. A multi-value body
+                # there would append the wrong thing, and the arity question is
+                # real.
+                if ($collect ne 'map') {
+                    for my $c (@produced) {
+                        next if $YIELDS_ONE_VALUE->{ $c->operation };
+                        next if $c->operation eq 'Call'
+                             && $c->can('dispatch_kind')
+                             && ($c->dispatch_kind // '') eq 'builtin'
+                             && $c->can('name')
+                             && defined $c->name
+                             && $SCALAR_BUILTIN->{ $c->name };
+                        die "GAP: $collect body contribution of unknown arity"
+                          . " (a " . $c->operation . " may yield more than one"
+                          . " value, and appending it whole would count 1 where"
+                          . " perl counts N) not yet lowered\n";
+                    }
                 }
                 $acc_next = $factory->make('ListAppend',
                     inputs    => [$acc_phi, @produced],
@@ -11011,6 +11037,32 @@ class SoN::FromOptree 0.01 {
                 && !(defined $end && ref $end && $$end == $join_addr)) {
                 my $where = (defined $end && ref $end && $$end)
                     ? $end->name : 'end-of-chain';
+
+                # A LIST ARM HAS ITS OWN NAME, and the generic message sends a
+                # reader after the wrong thing. `wantarray ? (1..3) : []` stops
+                # at `range` and `wantarray ? (7,8) : []` stops at `list`, but
+                # NEITHER is a range or list defect: both are the multi-element
+                # list arm this walker cannot yet express, which the value-count
+                # check below already names when the arm reaches the join.
+                #
+                # Measured: the `range` spelling cost a reader a trip through
+                # `_handle_range` -- already written, and irrelevant here.
+                #
+                # NOT GUARDED ON $list_ctx, which is false for exactly the case
+                # that needs it. A ternary as a sub's last statement takes its
+                # context from the CALLER, so the op carries no want flag:
+                #
+                #     sub f { wantarray ? (1..3) : [] }
+                #       3  <|> cond_expr(other->4) K/1      OPf_WANT == 0
+                #
+                # The op the arm stopped on is the reliable signal; `list` and
+                # `range` are list constructors and stopping on one means the
+                # arm builds a list, whatever context the op records.
+                die "GAP: a ternary with a multi-element list arm not yet"
+                  . " lowered (the arm stopped at `$where`, which is the list"
+                  . " it builds rather than an op we cannot translate)\n"
+                    if $where =~ /\A(?:list|range)\z/;
+
                 die "GAP: untranslatable op inside an if/else arm"
                   . " (arm stopped at `$where`, not the join) not yet lowered\n";
             }

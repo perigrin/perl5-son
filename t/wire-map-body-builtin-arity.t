@@ -5,6 +5,7 @@ use utf8;
 use Test::More;
 use File::Temp qw(tempdir);
 use JSON::PP;
+use SoN::Deparse;
 
 my $PERL = $^X;
 my $dir  = tempdir(CLEANUP => 1);
@@ -63,26 +64,75 @@ subtest 'a scalar builtin in a map body lowers' => sub {
     }
 };
 
-# THE VARIADIC ONES MUST STILL REFUSE. reverse/sort/split yield N values, and
-# appending one node that STANDS FOR N makes a consumer counting inputs read 1
-# -- the miscompile the allow-list exists to prevent. A fix that admitted every
-# builtin would trade a false refusal for a silent wrong count.
-subtest 'a list-yielding builtin still refuses' => sub {
+# THE VARIADIC ONES LOWER TOO, AND NOBODY MISCOUNTS. The refusal's premise was
+# that "appending one node that STANDS FOR N makes a consumer counting inputs
+# read 1" -- a claim about a CONSUMER, which is testable and turned out false
+# for ours. Measured on `map { reverse($_,$_) } (5,6)`:
+#
+#     my @phi4_next = (@phi4, reverse((5,6)[$i], (5,6)[$i]));
+#     print scalar(@phi4);
+#
+# The count is `scalar(@phi4)` -- a RUNTIME count of the accumulated array, not
+# an input count of the ListAppend. perl does the flattening, exactly as it does
+# in the source. The hypothetical input-counting consumer does not exist here,
+# and a T2 backend that needs the arity declines the node kind rather than
+# having T1 refuse for it.
+#
+# ASSERTED BY RUNNING THE EMISSION. The previous form of these subtests checked
+# only that a GAP appeared, which cannot tell "the refusal is necessary" from
+# "the refusal is habitual".
+subtest 'a list-yielding builtin lowers and counts right' => sub {
     for my $b ('reverse($_,$_)', 'sort($_,$_)') {
-        my (undef, undef, $err) = run_and_wire(
-            "my \@m = map { $b } (1,2); print scalar(\@m);", "mapv-$b" =~ s/\W//gr);
-        like $err, qr/unknown arity/, "$b still refuses -- it may yield N";
+        my $tag = "mapv-$b" =~ s/\W//gr;
+        my ($said, $out, $err) = run_and_wire(
+            "my \@m = map { $b } (5,6); print scalar(\@m);", $tag);
+        is $said, '4', "perl yields four values through $b" or next;
+        unlike $err, qr/unknown arity/, "... and $b no longer refuses" or next;
+
+        my $g = eval { JSON::PP->new->decode($out) } or do {
+            fail "$b: the wire parses"; next;
+        };
+        my $emitted = eval {
+            SoN::Deparse->new->render($g);
+        };
+        ok defined $emitted, "$b renders" or do { diag $@; next };
+
+        my $ef = "$dir/$tag-emit.pl";
+        open my $efh, '>', $ef or die $!;
+        print {$efh} $emitted;
+        close $efh;
+        is qx{$PERL $ef 2>&1}, '4', "... and the emitted program counts 4 too"
+            or diag $emitted;
     }
 };
 
-# A CALL TO A USER SUB STAYS REFUSED. Its arity is a property of the callee,
-# not of the callsite, and the graph does not carry it -- measured, `sub g {42}`
-# yields 1 while `sub g { ($_[0],$_[0]) }` yields 2 from an identical callsite.
-subtest 'a user sub call still refuses' => sub {
-    my (undef, undef, $err) = run_and_wire(
-        'sub g { 42 } my @m = map { g($_) } (1,2); print scalar(@m);', 'map-user');
-    like $err, qr/unknown arity/,
-        'a named user sub refuses -- its arity is not on the wire';
+# A CALL TO A USER SUB LOWERS, and its arity is STILL not on the wire -- which
+# is the point. `sub g {42}` yields 1 and `sub g { ($_[0],$_[0]) }` yields 2
+# from an identical callsite, and neither needs to be known here, because the
+# emission defers the flattening to perl.
+subtest 'a user sub call lowers whatever its arity' => sub {
+    for my $pair ( [ 'sub g { 42 }', '2' ],
+                   [ 'sub g { ($_[0],$_[0]) }', '4' ] ) {
+        my ( $decl, $want ) = $pair->@*;
+        my $tag = 'map-user-' . length($decl);
+        my ($said, $out, $err) = run_and_wire(
+            "$decl my \@m = map { g(\$_) } (5,6); print scalar(\@m);", $tag);
+        is $said, $want, "perl says $want for `$decl`" or next;
+        unlike $err, qr/unknown arity/, "... and it no longer refuses" or next;
+
+        my $g = eval { JSON::PP->new->decode($out) } or do {
+            fail "the wire parses"; next;
+        };
+        my $emitted = eval { SoN::Deparse->new->render($g) };
+        ok defined $emitted, 'renders' or do { diag $@; next };
+
+        my $ef = "$dir/$tag-emit.pl";
+        open my $efh, '>', $ef or die $!;
+        print {$efh} $emitted;
+        close $efh;
+        is qx{$PERL $ef 2>&1}, $want, "... and the emission says $want too"
+            or diag $emitted;
+    }
 };
 
 done_testing;
