@@ -36,6 +36,10 @@ my @tiers = @ARGV ? @ARGV : qw(base comp cmd);
 my $dir = tempdir( CLEANUP => 1 );
 my %tally;
 my @differs;
+# PER-FILE STATUS, because a count cannot name a regression. Going 12 -> 11
+# says one file moved and nothing says WHICH -- so the next step was guesswork.
+# One line per file, diffable against a saved run.
+my @status;
 my $n = 0;
 
 for my $tier (@tiers) {
@@ -51,7 +55,9 @@ for my $tier (@tiers) {
         my $data = eval { JSON::PP->new->decode($json) };
         unless ( $data && $data->{methods} && $data->{methods}{'main::__PROGRAM__'} ) {
             my $e = do { open my $h, '<', "$dir/e"; local $/; <$h> } // '';
-            $tally{ $e =~ /GAP:/ ? 'GAP' : 'NOJSON' }++;
+            my $b = $e =~ /GAP:/ ? 'GAP' : 'NOJSON';
+            $tally{$b}++;
+            push @status, [ $rel, $b ];
             push @differs, [ $rel, 'no graph', '', $want ] if $verbose;
             next;
         }
@@ -65,6 +71,7 @@ for my $tier (@tiers) {
         my $out = eval { $dp->render($data) };
         unless ( defined $out ) {
             $tally{REFUSED}++;
+            push @status, [ $rel, 'REFUSED' ];
             push @differs, [ $rel, '', 'REFUSED: ' . ( $dp->gap // $@ // '?' ),
                 $want ] if $verbose;
             next;
@@ -80,18 +87,28 @@ for my $tier (@tiers) {
         my $chk = qx($^X -I$LIB -c $g 2>&1);
         unless ( $chk =~ /syntax OK/ ) {
             $tally{EMITS_INVALID_PERL}++;
+            push @status, [ $rel, 'EMITS_INVALID_PERL' ];
             push @differs, [ $rel, $out, "COMPILE: $chk", $want ] if $verbose;
             next;
         }
 
         my $got = qx(cd $PERL && $^X $g 2>/dev/null </dev/null);
-        if ( $got eq $want ) { $tally{ROUNDTRIP}++ }
+        if ( $got eq $want ) {
+            $tally{ROUNDTRIP}++;
+            push @status, [ $rel, 'ROUNDTRIP' ];
+        }
         else {
             $tally{DIFFERS}++;
+            push @status, [ $rel, 'DIFFERS' ];
             push @differs, [ $rel, $out, $got, $want ] if $verbose;
         }
     }
 }
+
+# THE PER-FILE LINES FIRST, so `perl tools/perl-t-roundtrip.pl > now.txt` and a
+# diff against a previous run names the file that moved.
+printf "%-20s %s\n", $_->[1], $_->[0] for @status;
+print "\n";
 
 printf "files: %d\n", $n;
 printf "%-20s %d\n", $_, $tally{$_} for sort keys %tally;
