@@ -6310,6 +6310,27 @@ class SoN::FromOptree 0.01 {
             }
 
             if ($target->isa('SoN::IR::Node::PadAccess')) {
+                # THE OP'S TARG, NOT THE NODE'S. `PadAccess::content_hash`
+                # excludes `targ` on purpose -- the pad index is CV-local, so
+                # two reads of one variable at different indices must be one
+                # node. Right across units, wrong within one: two `my $m` in
+                # SIBLING scopes are two variables at two indices, and they
+                # hash-cons together. `$target->targ` then reports whichever
+                # index was recorded first.
+                #
+                # Measured on
+                #   { my $m = "A"; print "got $m\n" }
+                #   { my $m = "B"; print "got $m\n" }
+                # the second store rebound slot 1, slot 5 stayed empty, the read
+                # fell back to the bare PadAccess and `Constant "B"` never
+                # entered the graph: `got A` then `got `, with `$m` undeclared.
+                #
+                # `$op->last` IS the target padsv, and its targ is the slot this
+                # statement actually writes.
+                my $tlast = $op->last;
+                my $ttarg = ( $tlast && $$tlast && $tlast->can('targ')
+                              && $tlast->targ ) ? $tlast->targ : $target->targ;
+
                 if (_rhs_is_aggregate_access($op) && _is_aggregate_node($value)) {
                     my $stamp = _result_stamp('Count', [$value]);
                     my %extra = defined $stamp ? (stamp => $stamp) : ();
@@ -6322,7 +6343,7 @@ class SoN::FromOptree 0.01 {
                 # FieldAccess branches below use. Binding here instead would
                 # let a later read resolve to the value and miss writes made
                 # through the reference.
-                if ($ctx->{addr_taken}{ $target->targ }) {
+                if ($ctx->{addr_taken}{$ttarg}) {
                     my $store = $factory->make('Assign',
                         inputs => [$target, $value]);
                     $store->set_control_in($sim->control);
@@ -6332,7 +6353,7 @@ class SoN::FromOptree 0.01 {
                     return ($op->next, 'handled');
                 }
 
-                $sim->define($target->targ, $value);
+                $sim->define($ttarg, $value);
                 $sim->push_node($value);
             }
             # An element store (`$a[0] = 42`): the target is a Subscript lvalue.
