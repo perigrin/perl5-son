@@ -1,5 +1,5 @@
-# ABOUTME: a package scalar mutated in a loop body must carry across iterations;
-# ABOUTME: it does not, and the emission silently writes the same value each pass.
+# ABOUTME: a package scalar mutated in a loop body carries across iterations --
+# ABOUTME: this loop's Phi outranks the demotion, exactly as a foreach alias does.
 use v5.42.0;
 use Test2::V0;
 use JSON::PP;
@@ -60,10 +60,29 @@ sub runs ($src) {
 # 6 on every pass. A SILENT WRONG ANSWER, not a refusal -- which is why this is
 # recorded as a failing expectation rather than left unmeasured.
 #
-# See docs/plans/2026-09-26-a-package-scalar-is-not-loop-carried.md for the two
-# candidate owners of the carried value (the memory Phi or the value Phi) and
-# why the choice has to be made deliberately.
-todo 'a package scalar mutated in a loop body is not loop-carried' => sub {
+# FIXED BY THE RULE ALREADY WRITTEN FOR ALIASES. @ALIAS_BOUND_KEYS suspends the
+# demotion for a foreach's iterator key because "the loop itself established the
+# binding one op ago, in this graph". A loop Phi is the same claim one construct
+# over, so @LOOP_PHI_KEYS suspends it for the keys a loop carries, for exactly
+# the loop's extent. The doc named the memory Phi as the other candidate owner;
+# the value Phi wins because the precedent already chose it.
+#
+# THREE LOOP BUILDERS, ONE RULE. The while/C-style form, the range foreach and
+# the list foreach each build their own %phis, so _carried_stash_keys answers
+# the question once and all three call it -- a rule spelled at one site is a
+# rule the other two silently lack.
+#
+# ONLY THE RANGE FOREACH WAS ACTUALLY BROKEN, and both halves of the fix were
+# falsified to establish that: disabling _carried_stash_keys, and separately
+# disabling the increment handler's Phi read, each break subtest 1 and NOTHING
+# ELSE. The while, list-foreach, sequential and `+=` cases below pass at HEAD
+# too -- checked by stashing.
+#
+# They stay as cases rather than being cut. Each is a DIFFERENT write form or
+# builder reaching the same rule, so they are what says a later change to that
+# rule has not broken the forms it was not aimed at; the falsification above is
+# what stops them being mistaken for evidence of this fix.
+subtest 'a package scalar mutated in a loop body is loop-carried' => sub {
     subtest 'a counter in a foreach body accumulates' => sub {
         my $src = <<'SRC';
 our $n = 5;
@@ -92,6 +111,71 @@ SRC
         my ( $out, $why ) = emit($src);
         ok defined $out, 'renders' or do { diag $why; return };
         is runs($out), runs($src), 'the counter reaches 3'
+            or diag $out;
+    };
+
+    # THE LIST FOREACH IS THE THIRD BUILDER, and it had to be told separately.
+    subtest 'a counter in a list-foreach body accumulates' => sub {
+        my $src = <<'SRC';
+our $n = 0;
+foreach my $x ('a', 'b', 'c') {
+    $n++;
+}
+print "n=$n\n";
+SRC
+        my ( $out, $why ) = emit($src);
+        ok defined $out, 'renders' or do { diag $why; return };
+        is runs($out), runs($src), 'the counter reaches 3'
+            or diag $out;
+    };
+
+    # TWO LOOPS OVER ONE KEY, which is what the `local` SCOPING is for. The
+    # suspension has to END with the first loop: a read AFTER it must go back to
+    # being memory-bound, and the second loop must establish its own carry from
+    # wherever the first left the counter.
+    #
+    # (The nested form is the sharper test of the PUSH, but nested loops are a
+    # pre-existing refusal -- `GAP: enterloop inside a loop body not yet
+    # lowered`, measured with only lexicals in play -- so it cannot be written
+    # here yet.)
+    subtest 'two sequential loops over one counter accumulate' => sub {
+        my $src = <<'SRC';
+our $n = 0;
+my $i = 0;
+while ($i < 3) {
+    $n++;
+    $i++;
+}
+print "mid $n\n";
+my $k = 0;
+while ($k < 4) {
+    $n++;
+    $k++;
+}
+print "end $n\n";
+SRC
+        my ( $out, $why ) = emit($src);
+        ok defined $out, 'renders' or do { diag $why; return };
+        is runs($out), runs($src), 'the counter reaches 3 then 7'
+            or diag $out;
+    };
+
+    # A COMPOUND ASSIGNMENT IS THE OTHER WRITE FORM. The increment handler was
+    # one of two places that read the slot; `+=` goes through sassign, so this
+    # says the gvsv read learned the rule too.
+    subtest 'a compound assignment in a loop body accumulates' => sub {
+        my $src = <<'SRC';
+our $n = 0;
+my $i = 0;
+while ($i < 4) {
+    $n += 10;
+    $i++;
+}
+print "n=$n\n";
+SRC
+        my ( $out, $why ) = emit($src);
+        ok defined $out, 'renders' or do { diag $why; return };
+        is runs($out), runs($src), 'the counter reaches 40'
             or diag $out;
     };
 };

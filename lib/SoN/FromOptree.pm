@@ -293,6 +293,25 @@ class SoN::FromOptree 0.01 {
     # leaves every other package scalar demoted as before.
     our @ALIAS_BOUND_KEYS;
 
+    # A LOOP PHI IS THE SAME CLAIM ONE CONSTRUCT OVER. `_scout_mutated_targs`
+    # detects a mutated STASH key as readily as a pad one and Phase 2 binds it
+    # to a header Phi -- so the binding is there, established by this loop, in
+    # this graph, and it is what the iteration carries. But the gvsv read
+    # bypasses the scope for any name `_package_scalars_written` names, so the
+    # body read the PRE-LOOP value and the Phi went dead:
+    #
+    #     our $n = 0; my $i = 0;
+    #     while ($i < 3) { $n++; $i++ }   perl: n=3   before: n=1
+    #
+    # The store wrote `Add(pre_loop_read, 1)` on every pass. A silent wrong
+    # answer, and the same shape as the alias case -- the demotion is right
+    # about writes from ANOTHER sub and wrong about the one the loop makes
+    # itself.
+    #
+    # Suspended for exactly the keys this loop has a Phi for, for exactly the
+    # loop's extent, like @ALIAS_BOUND_KEYS. A key with no Phi stays demoted.
+    our @LOOP_PHI_KEYS;
+
     # _note_literal_mutation($target) -- record that an element store has
     # mutated the aggregate $target indexes, so a later LIST-context read of
     # that aggregate cannot take the flatten shortcut.
@@ -4774,7 +4793,11 @@ class SoN::FromOptree 0.01 {
                 # the alias perl refers to, not a value some other sub may have
                 # replaced.
                 my $aliased = grep { $_ eq $key } @ALIAS_BOUND_KEYS;
-                my $forwardable = $aliased
+                # A LOOP-CARRIED KEY OUTRANKS THE DEMOTION for the same reason
+                # an alias does: this loop bound it, in this graph, and the Phi
+                # is what the iteration carries. See @LOOP_PHI_KEYS.
+                my $carried = grep { $_ eq $key } @LOOP_PHI_KEYS;
+                my $forwardable = $aliased || $carried
                     || !_package_scalars_written()->{$key};
                 if ($existing && !$is_lvalue && $forwardable) {
                     $sim->push_node($existing);
@@ -6215,11 +6238,25 @@ class SoN::FromOptree 0.01 {
             # And the two unpinned name tokens hash-cons to ONE node, so
             # `Add(name, 1)` does too, and the second EntryWrite stored the
             # first increment's value: the counter stopped counting.
+            #
+            # INSIDE A LOOP THAT CARRIES THIS KEY, THE PHI IS THE READ. A
+            # memory-pinned read here names the PRE-LOOP version, so the
+            # increment was loop-invariant and the store wrote the same number
+            # every pass -- `foreach $t ($n..$n+3) { $n++ }` ended at 6 for
+            # perl's 9. Same rule the gvsv read follows for @LOOP_PHI_KEYS: this
+            # loop bound the key, in this graph, and the binding is what the
+            # iteration carries.
             my $entry_lvalue;
             if ($old->isa('SoN::IR::Node::EntryDef')) {
                 $entry_lvalue = $old;
                 $targ = undef;   # the storage is the stash entry, not a pad
-                if (defined $sim->memory) {
+                my $skey = _stash_key($entry_lvalue);
+                my $carried = grep { $_ eq $skey } @LOOP_PHI_KEYS;
+                my $bound = $carried ? $sim->lookup($skey) : undef;
+                if (defined $bound) {
+                    $old = $bound;
+                }
+                elsif (defined $sim->memory) {
                     $old = $factory->make('EntryDef',
                         package => $entry_lvalue->package,
                         sigil   => $entry_lvalue->sigil,
@@ -8443,6 +8480,21 @@ class SoN::FromOptree 0.01 {
     # `$_` after the loop is demoted to a memory-bound EntryDef anyway (it is
     # only forwardable while @ALIAS_BOUND_KEYS names it, which ends with the
     # loop), so nothing consults it.
+    # _carried_stash_keys(\%phis) -- the STASH keys among a loop's header Phis.
+    #
+    # ONE DEFINITION FOR THREE LOOP BUILDERS. The while/C-style form, the range
+    # foreach and the list foreach each build their own `%phis`, and a rule
+    # spelled at one of them is a rule the other two silently lack -- this file
+    # has lost days to exactly that ("one operator, five declaration sites").
+    #
+    # Only stash keys need saying. A pad slot's read already resolves through
+    # the binding the Phi loop just made; a package read bypasses the scope for
+    # any name `_package_scalars_written` names, so it needs to be told that
+    # this loop's binding is the live one. See @LOOP_PHI_KEYS.
+    sub _carried_stash_keys ($phis) {
+        return grep { /\A[\$\@\%]\w*::/ } keys $phis->%*;
+    }
+
     sub _restore_iterator_binding ($sim, $targ, $pre_scope) {
         if (exists $pre_scope->{$targ}) {
             $sim->define($targ, $pre_scope->{$targ});
@@ -9020,6 +9072,14 @@ class SoN::FromOptree 0.01 {
         # bindings at the break point) so Phase 5 can add it as an extra
         # predecessor of the loop's exit Region.
         my @break_projs;
+        # THE STASH KEYS THIS LOOP CARRIES, suspended from the package-scalar
+        # demotion for exactly the walk that reads them. A stash key is the one
+        # that needs saying: a pad slot's read already resolves through the
+        # binding Phase 2 just made, while a package read bypasses the scope
+        # unless something says this loop's binding is the live one. See
+        # @LOOP_PHI_KEYS. `local`, so a nested loop adds to it and the outer
+        # loop's set is restored on the way out.
+        local @LOOP_PHI_KEYS = (@LOOP_PHI_KEYS, _carried_stash_keys(\%phis));
         my $exit_proj = _walk_loop_body($cv, $cond_start, $sim, $factory,
             $opmap, {}, $visited, $loop_node, \@break_projs);
         # A LOOP MAY EXIT BY ITS BREAK ALONE. `while (1) { ... last if C }` has
@@ -9262,6 +9322,13 @@ class SoN::FromOptree 0.01 {
         # READ is the whole fix.
         local @ALIAS_BOUND_KEYS = (@ALIAS_BOUND_KEYS, $i_targ);
 
+        # AND THE STASH KEYS THIS LOOP CARRIES, for the same reason and the same
+        # extent -- see _carried_stash_keys. Without it a `$n++` in the body read
+        # the PRE-LOOP value, so the increment was loop-invariant and the store
+        # wrote the same number every pass: `foreach $t ($n..$n+3) { $n++ }`
+        # ended at 6 for perl's 9.
+        local @LOOP_PHI_KEYS = (@LOOP_PHI_KEYS, _carried_stash_keys(\%phis));
+
         # A MID-BODY `last` IS AN EXTRA EXIT EDGE, and a foreach has one for
         # exactly the reason a while does. Passing $loop_node and a collector
         # is the whole difference: without them _walk_loop_body runs in scout
@@ -9468,6 +9535,13 @@ class SoN::FromOptree 0.01 {
         # restores the OUTER loop's alias when the inner one ends rather than
         # clearing it outright.
         local @ALIAS_BOUND_KEYS = (@ALIAS_BOUND_KEYS, $x_targ);
+
+        # AND THE STASH KEYS THIS LOOP CARRIES, for the same reason and the same
+        # extent -- see _carried_stash_keys. Without it a `$n++` in the body read
+        # the PRE-LOOP value, so the increment was loop-invariant and the store
+        # wrote the same number every pass: `foreach $t ($n..$n+3) { $n++ }`
+        # ended at 6 for perl's 9.
+        local @LOOP_PHI_KEYS = (@LOOP_PHI_KEYS, _carried_stash_keys(\%phis));
 
         my $depth_before = $sim->stack_depth;
         # A MID-BODY `last` IS AN EXTRA EXIT EDGE, and a foreach has one for
