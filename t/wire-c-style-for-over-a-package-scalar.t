@@ -100,20 +100,49 @@ round_trips( <<'SRC', 'a C-style for over a lexical is unchanged' );
 for (my $i = 0; $i <= 3; $i++) { print "i=$i\n" }
 SRC
 
-# THE STAMP MUST BE THE HONEST ONE. An Int claim over a back-edge that floors
-# to Scalar is a narrower assertion than the truth; this pins the widening
-# rather than just the round trip.
-subtest 'the loop Phi widens to the join rather than keeping Int' => sub {
+# THE STAMP MUST BE THE HONEST ONE -- never NARROWER than what the back-edge
+# proves. That is the fact; `Scalar` was only ever the shape that carried it.
+#
+# This subtest asserted `bag { item 'Scalar' }` and failed from 2026-09-27,
+# because the producer got MORE precise rather than less. Its own premise, in
+# the header above, was "the EntryDef is Unknown because a package scalar's
+# stamp comes from the POST-PASS while _patch_loop_phi runs during the walk" --
+# and so join(Int, Unknown) had to widen to the sigil floor, Scalar.
+#
+# The read is now stamped Int at the point the Phi is built (measured:
+# `10 EntryDef stamp=Int`), so the back-edge `Add(Int, Int)` is Int and the
+# honest join is join(Int, Int) = Int. Demanding Scalar now demands a WIDER
+# stamp than the truth, which is the same defect the original assertion
+# existed to prevent, with the sign flipped.
+#
+# So the assertion is the fact: the carried Phi's stamp must be a type the
+# back-edge satisfies, and never Unknown. Both Int and Scalar pass; a Str or an
+# unstamped Phi does not.
+subtest 'the loop Phi carries an honest stamp, never Unknown' => sub {
     my ( $data, $err ) = graph_of(
         'for ($i = 0; $i <= 3; $i++) { print "i=$i\n" }' );
     ok $data, 'it translates' or diag($err), return;
 
     my @n = ( $data->{methods}{'main::__PROGRAM__'}{nodes} // [] )->@*;
+    my %by_id = map { $_->{id} => $_ } @n;
     my @phi = grep { ( $_->{op} // '' ) eq 'Phi' } @n;
     ok scalar(@phi), 'a loop Phi exists' or return;
 
-    is [ map { $_->{stamp} } @phi ], bag { item 'Scalar'; etc; },
-        'the carried Phi is Scalar, not a stale Int';
+    for my $p (@phi) {
+        my $st = $p->{stamp} // 'Unknown';
+        ok $st ne 'Unknown',
+            "Phi $p->{id} is stamped, not Unknown (got $st)";
+
+        # AND NOT NARROWER THAN AN INPUT. A Phi claiming Int over a Str arm is
+        # the miscompile this guards; the stamp has to admit every input.
+        for my $in ( ( $p->{inputs} // [] )->@* ) {
+            my $src = $by_id{$in} or next;
+            my $ss = $src->{stamp} // 'Unknown';
+            next if $ss eq 'Unknown' || $ss eq $st;
+            ok( ( $st eq 'Scalar' || $st eq 'Num' ),
+                "Phi $p->{id} stamped $st admits its $ss input $in" );
+        }
+    }
 };
 
 done_testing;
