@@ -6194,10 +6194,40 @@ class SoN::FromOptree 0.01 {
             # sassign's own EntryDef branch emits: the rebind is what a later
             # read in THIS unit resolves to, the store is what makes the
             # mutation visible to another sub.
+            #
+            # AN LVALUE EntryDef IS A NAME TOKEN, NOT A READ -- the gvsv handler
+            # says so and gives it no memory input for exactly that reason. So
+            # the arithmetic cannot read it: build a SEPARATE rvalue EntryDef
+            # pinned to the current (pre-store) memory, exactly the split the
+            # Subscript and CellParam arms above make, and keep the name token
+            # as the store target only.
+            #
+            # Measured on
+            #   our $n = 10; print "a ", $n++, "\n"; print "b ", $n++, "\n"
+            #
+            #   perl   a 10 / b 11
+            #   before a 11 / b 12
+            #
+            # Two defects, one cause. With no memory pin the read is spelled
+            # wherever the deparser reaches it -- AFTER the store -- so the post
+            # form yielded the new value and the pre form yielded one more than
+            # the new value (`($main::n + 1)` over an already-incremented slot).
+            # And the two unpinned name tokens hash-cons to ONE node, so
+            # `Add(name, 1)` does too, and the second EntryWrite stored the
+            # first increment's value: the counter stopped counting.
             my $entry_lvalue;
             if ($old->isa('SoN::IR::Node::EntryDef')) {
                 $entry_lvalue = $old;
                 $targ = undef;   # the storage is the stash entry, not a pad
+                if (defined $sim->memory) {
+                    $old = $factory->make('EntryDef',
+                        package => $entry_lvalue->package,
+                        sigil   => $entry_lvalue->sigil,
+                        symbol  => $entry_lvalue->symbol,
+                        inputs  => [ $sim->memory ],
+                        ($entry_lvalue->can('stamp') && defined $entry_lvalue->stamp
+                            ? (stamp => $entry_lvalue->stamp) : ()));
+                }
             }
 
             my $one = $factory->make('Constant',

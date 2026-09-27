@@ -691,6 +691,160 @@ class SoN::Deparse 0.01 {
                 $self->_slot_name( $nodes->{$_} ) )
         } @local_saves;
 
+        # A READ PINNED BEFORE A STORE TO THE SAME NAME NEEDS A TEMPORARY.
+        # This is the `local` save rule above, generalised: an EntryDef renders
+        # as the variable's NAME, so it reads whatever the variable holds AT THE
+        # POINT IT IS SPELLED -- while the node stands for the version its
+        # memory input names. When a store to that name lands between the two,
+        # the spelling reads the wrong value.
+        #
+        # The `local` restore is one instance and was keyed on its own shape.
+        # `$n++` on a package scalar is another: the increment reads at the
+        # pre-store version and the print that consumes it is emitted after the
+        # store. Measured on
+        #   our $n = 10; print "a ", $n++, "\n"; print "b ", $n++, "\n"
+        # the reads spelled `$main::n` and the program printed 11 and 12 for
+        # perl's 10 and 11.
+        #
+        # THE STORE IS FOUND ON THE MEMORY CHAIN, not by op kinds: an
+        # EntryWrite naming this variable whose own memory input is the read's
+        # version (or any version reachable from it) is a store the read must
+        # not see. Bound at the read's version and emitted right after the node
+        # that produced it, which is where the value is still correct.
+        my %mem_next;
+        for my $n (values $nodes->%*) {
+            my @in = ( $n->{inputs} // [] )->@*;
+            next unless @in > ( $MEM_MIN_INPUTS{ $n->{op} // '' } // 99 );
+            next unless $self->_is_memory( $in[-1] );
+            push $mem_next{ $in[-1] }->@*, $n;
+        }
+        # A READ THE LOOP RE-READS CANNOT BE CAPTURED ONCE. A `while` or C-style
+        # `for` evaluates its condition every pass -- the Loop says so with
+        # `bound => 'each'` -- so binding a read it consumes to ONE temporary
+        # freezes the condition and the loop never terminates. This is the same
+        # defect `_loop_invariant_roots` keys its hoist on, arrived at from the
+        # other side: measured on `for ($i = 0; $i <= 3; $i++)`, the emission was
+        #
+        #     $stale10 = $main::i;
+        #     while (($stale10 <= 3)) { ... $main::i = ($stale10 + 1); }
+        #
+        # which spins forever. A read under a loop is left alone -- it is stale
+        # for the reason [[2026-09-26-a-package-scalar-is-not-loop-carried]]
+        # describes, and a temporary is the wrong answer to it.
+        my %under_loop;
+        for my $n ( values $nodes->%* ) {
+            next unless ( $n->{op} // '' ) eq 'Loop';
+            my ( @queue, %seen ) = ( $n->{id} );
+            # Everything the loop's own control reaches, plus every value those
+            # nodes read: a condition operand has no control edge of its own.
+            for my $c ( values $nodes->%* ) {
+                push @queue, $c->{id}
+                    if defined $c->{control_in} && $c->{control_in} == $n->{id};
+            }
+            push @queue, map { $_->{id} }
+                grep { ( $_->{op} // '' ) eq 'Proj'
+                       && grep { $_ == $n->{id} } ( $_->{inputs} // [] )->@* }
+                values $nodes->%*;
+            while ( @queue ) {
+                my $id = shift @queue;
+                next if !defined $id || $seen{$id}++;
+                $under_loop{$id} = 1;
+                my $c = $nodes->{$id} or next;
+                push @queue, ( $c->{inputs} // [] )->@*;
+                for my $d ( values $nodes->%* ) {
+                    push @queue, $d->{id}
+                        if defined $d->{control_in} && $d->{control_in} == $id;
+                }
+            }
+        }
+
+        my @stale_reads;
+        for my $n ( sort { $a->{id} <=> $b->{id} } values $nodes->%* ) {
+            next unless ( $n->{op} // '' ) eq 'EntryDef';
+            next if exists $bound{ $n->{id} };
+            next if $under_loop{ $n->{id} };
+            my @in = ( $n->{inputs} // [] )->@*;
+            next unless @in == 1 && $self->_is_memory( $in[0] );
+            my $f = $n->{fields} // {};
+            next unless defined $f->{symbol};
+
+            # Walk forward from the read's version looking for a store to this
+            # same name. Anything else on the chain cannot change what this
+            # read sees.
+            my ( @queue, %seen, $shadowed ) = ( $in[0] );
+            while ( @queue ) {
+                my $m = shift @queue;
+                next if $seen{$m}++;
+                for my $c ( ( $mem_next{$m} // [] )->@* ) {
+                    $shadowed = 1 if $self->_writes_this_name( $c, $f );
+                    push @queue, $c->{id};
+                }
+                last if $shadowed;
+            }
+            next unless $shadowed;
+
+            $bound{ $n->{id} } = sprintf( '$stale%d', $n->{id} );
+            push @stale_reads, $n;
+        }
+
+        # DECLARED AT THE TOP, ASSIGNED AT THE VERSION. The assignment has to
+        # land where the value is still correct, and that position can be inside
+        # a nested block -- an `eval { }` body, a branch arm -- while the READ is
+        # outside it. Declaring with `my` at the site scoped the temporary to
+        # that block and the use outside it saw an undeclared package variable:
+        # measured on perl's t/base/rs.t, `my $stale17` was declared inside
+        # `eval { }` and read in both arms of the `if` that followed, so the
+        # test counter printed empty and then restarted at 1.
+        #
+        # %hoisted is the existing answer to exactly this -- it is what a join
+        # Phi uses, for the same reason ("a join outlives the branch that
+        # assigns into it") -- so the declaration goes there and the site emits
+        # a bare assignment.
+        #
+        # A read at the ENTRY version has no producing effect on the chain, so
+        # it goes in the prologue with the `local` saves, where `my` is safe.
+        # ANCHORED TO THE LAST STORE TO THIS NAME, not to whatever produced the
+        # read's memory version. The version's producer can be a store to an
+        # UNRELATED variable, and pinning there places the assignment somewhere
+        # the value was already correct -- possibly inside a block that never
+        # completes.
+        #
+        # Measured on perl's t/base/rs.t: the read of `$test_count` was pinned to
+        # the `$/ = \0` store INSIDE `eval { }`, so the assignment landed after a
+        # statement that dies. The eval caught it, the assignment never ran, and
+        # every test in the sub printed an empty number.
+        #
+        # The value only stops being correct when the name is written, so the
+        # nearest preceding write to THIS name is the only anchor that matters.
+        # With no such write the entry value is still live and the prologue is
+        # where it belongs.
+        for my $n ( @stale_reads ) {
+            my $f = $n->{fields} // {};
+            my ( @queue, %seen, $anchor ) = ( ( $n->{inputs} // [] )->[0] );
+            while ( @queue ) {
+                my $m = shift @queue;
+                next if !defined $m || $seen{$m}++;
+                my $c = $nodes->{$m} or next;
+                if ( $self->_writes_this_name( $c, $f ) ) {
+                    $anchor = $c;
+                    last;
+                }
+                my @in = ( $c->{inputs} // [] )->@*;
+                push @queue, $in[-1] if @in && $self->_is_memory( $in[-1] );
+                push @queue, ( $c->{inputs} // [] )->@*
+                    if ( $c->{op} // '' ) eq 'Phi';
+            }
+
+            if ( $anchor && defined $anchor->{control_in} ) {
+                $hoisted{ $bound{ $n->{id} } } //= $bound{ $n->{id} };
+                push $after_effect{ $anchor->{id} }->@*, $n;
+            }
+            else {
+                $save_prologue .= sprintf( "my %s = %s;\n",
+                    $bound{ $n->{id} }, $self->_slot_name($n) );
+            }
+        }
+
         my $body = $self->_emit_from($start->{id}, \%next_of, undef);
         $body = $save_prologue . $body;
 
@@ -840,7 +994,13 @@ class SoN::Deparse 0.01 {
         # this the binding was silently DROPPED rather than merely misplaced.
         if (keys %after_effect || keys %after_region) {
             %rendered = ();
-            $body = $self->_emit_from($start->{id}, \%next_of, undef);
+            # THE SAVE PROLOGUE SURVIVES THE RE-WALK. It was prepended to the
+            # FIRST walk's text, and assigning the second walk over $body threw
+            # it away -- so a `local` save or an entry-version read emitted here
+            # was used and never declared, whenever anything else in the same
+            # sub happened to need a re-walk.
+            $body = $save_prologue
+                  . $self->_emit_from($start->{id}, \%next_of, undef);
         }
 
         # JOIN-PHI DECLARATIONS FIRST. They are discovered while walking, so
@@ -1011,12 +1171,21 @@ class SoN::Deparse 0.01 {
                 my $var  = $bound{ $n->{id} };
                 my $expr = $self->_expr_uncached($n->{id});
                 $out .= sprintf("my %s = %s;\n", $var, $expr);
-                $out .= $self->_emit_statement($_, $next_of)
-                    for (($after_effect{ $n->{id} } // [])->@*);
             }
             else {
                 $out .= $self->_emit_statement($n, $next_of);
             }
+
+            # A DEFERRED BINDING FOLLOWS ITS EFFECT WHETHER OR NOT THE EFFECT
+            # ITSELF WAS BOUND. This flush sat inside the bound branch only, so
+            # anything anchored to an UNBOUND chain node was silently dropped
+            # rather than misplaced -- a stale package read anchored to the
+            # EntryWrite that produced its memory version is exactly that shape,
+            # and its `my $stale7 = $main::n;` never appeared while `$stale7`
+            # was used twice.
+            $out .= $self->_emit_statement($_, $next_of)
+                for (($after_effect{ $n->{id} } // [])->@*);
+
             # A binding pinned to this Region goes here: the loop it reads
             # from has closed, and nothing after it has read the target yet.
             $out .= $self->_emit_statement($_, $next_of)
@@ -2006,10 +2175,22 @@ class SoN::Deparse 0.01 {
             # exactly the path it is for -- measured, `$phi18 = 0` emitted
             # inside the outer `if` left f(0) returning undef, because f(0)
             # never enters it.
+            #
+            # WHEN EVERY ARM ASSIGNS THERE IS NO SEED TO WRITE. The fallback
+            # `$seed //= 0` spelled the first input at the DECLARATION, which is
+            # a value the arms overwrite on every path -- dead, by this branch's
+            # own account. Dead and not harmless: the expression is spelled at
+            # the top of the sub, so any temporary it reads has to exist there
+            # too. Measured on perl's t/base/rs.t, the seed was
+            # `my $phi285 = ($stale26 + 1)` above `my $stale26;`, so it read
+            # undef, and a Phi that both arms set took `1` on the way in.
+            #
+            # A bare `my $x;` warns on USE, not on declaration, and a variable
+            # every arm assigns is never used unset.
             my ($seed) = grep { !exists $proj_arm{ $pred[$_] } } 0 .. $#in;
-            $seed //= 0;
-            $hoisted{$var} = sprintf('%s = %s', $var,
-                                     $self->_expr($in[$seed]));
+            $hoisted{$var} = defined $seed
+                ? sprintf('%s = %s', $var, $self->_expr($in[$seed]))
+                : $var;
 
             for my $i (0 .. $#in) {
                 my $a = $proj_arm{ $pred[$i] };
@@ -2085,6 +2266,21 @@ class SoN::Deparse 0.01 {
             return sprintf("my %s%s = (%s);\n",
                 ($af->{sigil} // '@'), $af->{symbol},
                 join(', ', map { $self->_expr($_) } (($n->{inputs} // [])->@*)));
+        }
+
+        # A DEFERRED STALE READ, bound to a temporary and placed right after the
+        # node that produced its memory version -- see _emit_control_chain's
+        # stale-read pass. Spelled from the SLOT: _expr would return the
+        # temporary's own name, the same trap the `local` save prologue notes.
+        if ($op eq 'EntryDef') {
+            die "GAP: an EntryDef reached as a statement with no binding is"
+              . " not yet rendered\n" unless exists $bound{ $n->{id} };
+            my $var = $bound{ $n->{id} };
+            # NO `my` WHEN THE DECLARATION IS HOISTED -- the assignment may sit
+            # inside a block the read outlives.
+            return sprintf( "%s%s = %s;\n",
+                ( exists $hoisted{$var} ? '' : 'my ' ),
+                $var, $self->_slot_name($n) );
         }
 
         # AN Unwind IS A `die`. Measured across the three corpus files that
@@ -3440,6 +3636,21 @@ class SoN::Deparse 0.01 {
     # perl's warning depth and did not finish; a worklist with a cache does it
     # in one pass, and a node already on the stack contributes no evidence
     # (a loop-carried Phi names itself across the back edge).
+    # _writes_this_name($node, $fields) -- is $node a store to the variable the
+    # EntryDef fields name? ONE definition, because the stale-read pass asks it
+    # twice (forward, to find a store the read must not see; backward, to find
+    # the store to anchor the temporary after) and a copy of a four-part name
+    # comparison is exactly the shape this file has lost days to.
+    method _writes_this_name ($n, $f) {
+        return 0 unless $n && ( $n->{op} // '' ) eq 'EntryWrite';
+        my $t = $nodes->{ ( $n->{inputs} // [] )->[0] // -1 } or return 0;
+        my $tf = $t->{fields} // {};
+        return 0 unless defined $tf->{symbol} && defined $f->{symbol};
+        return $tf->{symbol} eq $f->{symbol}
+            && ( $tf->{package} // '' ) eq ( $f->{package} // '' )
+            && ( $tf->{sigil}   // '' ) eq ( $f->{sigil}   // '' ) ? 1 : 0;
+    }
+
     method _is_memory ($id) {
         return $mem_cache{$id} if exists $mem_cache{$id};
 
