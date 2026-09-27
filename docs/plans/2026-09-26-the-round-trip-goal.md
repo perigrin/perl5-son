@@ -29,22 +29,29 @@ own numbers.
 
 ### Tier 1 -- pvm's conformance corpus (the gate)
 
-212 cases, 65 topics, at
+222 cases, 65 topics, at
 `/home/perigrin/dev/pvm/.claude/worktrees/pu/conformance/mdtest/`. Owned by
 pvm; ported and cut over, `.t` files deleted.
 
-    ROUND TRIP  157 correct  38 DIFFERS  21 REFUSED  2 NOJSON
+    ROUND TRIP  162 correct  37 DIFFERS  21 REFUSED  2 NOJSON
 
-**157 of 218 as of 2026-09-26 late**, from 135 at the start of that day. The
-denominator moved 210 -> 213 -> 217 across the session as pvm landed cases,
-including the interposed-read topic contributed from here.
+**162 of 222 as of 2026-09-27**, from 135 at the start of 2026-09-26. The
+denominator moved 210 -> 213 -> 217 -> 222 across the two sessions as pvm landed
+cases, including the interposed-read topic contributed from here.
 
 GUARDED NOW. `t/roundtrip-ratchet.t` fails if either number drops -- both
 censuses were scripts no test invoked, so these figures held only while someone
 remembered to run them. Opt-in (`SON_RATCHET=1`, ~7 min) and VERIFIED TO FAIL:
-raising the floor to 999 gives `ROUNDTRIP 156 >= floor 999` and exit 1. A floor
-rather than a pin because the corpus grows, and it checks the denominator first,
-because a census that parsed nothing clears any floor by vacuous truth.
+raising both floors to 999 gives `ROUNDTRIP 162 >= floor 999` and
+`ROUNDTRIP 11 >= floor 999`, both failing. A floor rather than a pin because the
+corpus grows, and it checks the denominator first, because a census that parsed
+nothing clears any floor by vacuous truth.
+
+AND THE GUARD WAS ITSELF WRONG UNTIL 2026-09-27. Its `perl_t` floor read 12
+from the day it was written while the census has never reported more than 11, so
+the ratchet failed on every run -- which is to say nobody ran it. A floor set
+from a recalled number rather than a measured one is how an opt-in guard becomes
+decorative. Both floors are now measured values with the commit that set them.
 
 THE DENOMINATOR MOVES, and this is the second time it has caught someone. The
 corpus is pvm's and grows while we measure: it went 210 -> 213 output blocks in
@@ -171,6 +178,32 @@ The census is in the repo now (it was ad-hoc): 12 ROUNDTRIP, 10 DIFFERS,
 10 REFUSED, 6 GAP, 1 NOJSON. Per tier -- base 7/9, comp 4/25, cmd 1/5. The
 bucketing differs from the 12/10/15 above only in splitting GAP and NOJSON out
 of REFUSED; the round-trip count is the same number.
+
+### Re-measured 2026-09-27, and the census now NAMES each file: 11 / 39
+
+    11 ROUNDTRIP   13 DIFFERS   9 REFUSED   5 GAP   1 NOJSON
+
+    ROUNDTRIP  base/cond.t base/if.t base/num.t base/pat.t base/term.t
+               base/translate.t base/while.t
+               comp/cmdopt.t comp/colon.t comp/term.t
+               cmd/elsif.t
+
+ELEVEN, NOT TWELVE, and the difference is not a regression from this session's
+work. `base/lex.t` refuses on "a `caller` bound to a list cannot be rendered"
+and does so IDENTICALLY at HEAD -- checked by stashing. The 12 above was
+recorded before the census printed per-file status, so which file moved was
+never knowable and the number was carried forward on trust.
+
+THE COUNT COULD NOT NAME THE REGRESSION, which is why the census now prints one
+`STATUS file` line per file before its tally. Establishing that 12 -> 11 was
+pre-existing took a stash-and-bisect that one line of output answers. Save a run
+and diff it: `perl tools/perl-t-roundtrip.pl > now.txt`.
+
+`base/rs.t` is the closest DIFFERS -- 28 differing lines of 44, down from 36 at
+the start of 2026-09-26 -- and its remainder is exactly two recorded producer
+gaps: [[2026-09-26-a-package-scalar-is-not-loop-carried]] costs the non-VMS skip
+block (a 3-count offset) and [[2026-09-26-open-our-handle-stores-the-line]]
+costs both file-read tests. Each has a TODO-marked guard.
 
 Its FIRST run reported 9 of 9 REFUSED for t/base, every one of which renders:
 a `require SoN::Deparse` inside `eval`, with `-I` passed only to the child

@@ -27,8 +27,14 @@ use FindBin;
 my %FLOOR = (
     # Raise these when a fix moves them. Lowering one needs a reason in the
     # commit message -- a floor that follows the number down guards nothing.
-    corpus => 157,   # ee682f1, the glob slot is the stamp
-    perl_t => 12,
+    #
+    # BOTH MEASURED, not recalled. `perl_t` stood at 12 from the day this file
+    # was written and the census has never reported more than 11 -- so the
+    # ratchet FAILED on every run, which is to say it was never run. An opt-in
+    # guard nobody runs is the decorative kind; a floor above the real number is
+    # how it got that way.
+    corpus => 162,   # de284ff, sibling-scope pad slots are two variables
+    perl_t => 11,    # base/lex.t refuses on a `caller` bound to a list
 );
 
 # ONE RUN PER TOOL. The corpus census takes ~3 minutes, and a first draft of
