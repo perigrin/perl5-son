@@ -474,6 +474,16 @@ class SoN::FromOptree 0.01 {
                 }
             }
 
+            # `\($x, $y)` TAKES A REFERENCE TO EACH ITEM, exactly as `\$x` does
+            # to one -- so each lexical scalar among refgen's items is demoted
+            # the same way. Missing, `${$r[1]} = 9` never reached $y.
+            if ($op->name eq 'refgen' && $op->can('first') && ${$op->first}) {
+                for (my $k = $op->first->first; ref($k) && $$k; $k = $k->sibling) {
+                    $taken{ $k->targ } = 1
+                        if $k->name eq 'padsv' && $k->targ;
+                }
+            }
+
             # A DESTRUCTIVE s/// OR tr/// MUTATES ITS SLOT'S STORAGE, which is
             # the same property `\$x` has and needs the same demotion.
             #
@@ -3998,6 +4008,42 @@ class SoN::FromOptree 0.01 {
         # bound VALUE and no longer says which name it came from. An anonymous
         # ref (`[1,2]` -> anonlist, `\"hi"` -> a folded const) never reaches
         # srefgen at all, so nothing here touches it.
+        # `\(LIST)` IS A REFERENCE PER ITEM. OpMap gives refgen one input, so
+        # `\($x, $y)` built a single Ref over the LAST item and left the first
+        # on the stack as a bare value -- `my @r = ($x, \($y))`. The items sit
+        # above refgen's mark, one stack node each (measured: two PadAccess
+        # for `\($x, $y)`, an ArrayLiteral and a PadAccess for `\(@a, $b)`).
+        #
+        # ONE PARENTHESISED AGGREGATE IS perlref's SPECIAL CASE: `\(@a)` is a
+        # reference to each ELEMENT, not to the array. The op says so with
+        # OPf_PARENS (8, asked of B) on the padav/padhv, which `\(@a, $b)`'s
+        # does not carry -- there the array is referenced whole.
+        if ($name eq 'refgen' && $sim->has_mark) {
+            my @kids;
+            for (my $k = $op->first->first; $k && $$k; $k = $k->sibling) {
+                next if $k->name eq 'pushmark' || $k->name eq 'padrange';
+                next if $k->name eq 'null' && $k->targ == B::opnumber('pushmark');
+                push @kids, $k;
+            }
+            # A REFERENCED ARRAY MAY BE STORED THROUGH from here on, so a
+            # later list read must observe memory rather than flatten the
+            # literal it was built from -- the rule a push or shift triggers.
+            $ctx->{mutated_aggregate}{ $_->targ } = 1
+                for grep { $_->name eq 'padav' && $_->targ } @kids;
+
+            my @items = $sim->pop_to_mark->@*;
+            if (@items == 1 && @kids == 1
+                    && $kids[0]->name =~ /\Apad[ah]v\z/ && ($kids[0]->flags & 8)) {
+                $sim->push_node($factory->make('Ref', inputs => [$items[0]],
+                    each => 1, stamp => SoN::IR::Stamp->new(type => 'List')));
+            }
+            else {
+                $sim->push_node($factory->make('Ref', inputs => [$_]))
+                    for @items;
+            }
+            return ($op->next, 'handled');
+        }
+
         if ($name eq 'srefgen' && $op->can('first') && ${$op->first}) {
             # The referent sits under one or more NULLED ex-list wrappers
             # (measured: `\$x` is srefgen -> null -> padsv, `\$g` is
@@ -4014,6 +4060,13 @@ class SoN::FromOptree 0.01 {
                 # writes are Assign stores on the memory chain. Fall through and
                 # let srefgen build the reference over the location.
                 ()
+            }
+            # `\@a` MAKES THE ARRAY STORABLE THROUGH THE REFERENCE, and the
+            # flatten shortcut would then read it as first constructed --
+            # measured, `my $r = \@a; $r->[0] = 5; print "@a"` gave `10 20`.
+            # Recorded as a mutation, the rule push and shift already use.
+            elsif ($$kid && $kid->name eq 'padav' && $kid->targ) {
+                $ctx->{mutated_aggregate}{ $kid->targ } = 1;
             }
         }
 
@@ -7439,6 +7492,25 @@ class SoN::FromOptree 0.01 {
                 while $sim->stack_depth > $sim->mark_depth;
             my $node = $factory->make('Assign',
                 inputs => [ $lhs->@*, @rhs ]);
+
+            # A DEMOTED TARGET IS STORED, NOT BOUND, here as in sassign: its
+            # value lives in memory because a reference to it exists, so the
+            # Assign goes on the control chain and becomes the new memory
+            # version. Left floating, `my ($x, $y) = (1, 2)` was no store at
+            # all to anything reading those slots -- a later `\($x, $y)` read
+            # MemStart, and the emission took the references before the `my`.
+            #
+            # A STORE THROUGH A REFERENCE IS THE SAME: `($$p, $$q) = (8, 9)`
+            # writes locations, and sassign already makes its PostfixDeref form
+            # an ordered memory store. Floating, it was placed by id order in
+            # the prologue -- before the `my` it writes through.
+            if (grep { ( $_->isa('SoN::IR::Node::PadAccess') && $_->targ
+                           && $ctx->{addr_taken}{ $_->targ } )
+                       || $_->isa('SoN::IR::Node::PostfixDeref') } $lhs->@*) {
+                $node->set_control_in($sim->control);
+                $sim->set_control($node);
+                $sim->set_memory($node) if defined $sim->memory;
+            }
 
             # THE ASSIGN IS NOT THE REBIND. Building the node records WHAT was
             # assigned; nothing in it re-points the SSA scope keys, so every

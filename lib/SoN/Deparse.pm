@@ -930,6 +930,17 @@ class SoN::Deparse 0.01 {
                 next;
             }
 
+            # NOR ONE WHOSE CONTENTS READ A STORE. `my @r = \($x, $y)` over
+            # demoted $x and $y holds Ref(PadAccess[memory]) -- the memory
+            # version is the Assign that declared them -- and hoisting it put
+            # `my @r = (\($x), \($y))` above `my $x = 1`, so the references
+            # were to the package variables. The dependency is two levels
+            # down, where the bound-input rule above cannot see it.
+            if (defined(my $store = $self->_latest_store_read($n))) {
+                push $after_effect{$store}->@*, $n;
+                next;
+            }
+
             # A PACKAGE AGGREGATE IS NOT DECLARED WITH `my`. `my @main::EST`
             # is a syntax error -- "can't be in a package" -- and the package
             # variable needs no declaration to exist. Same rule the Assign
@@ -966,6 +977,14 @@ class SoN::Deparse 0.01 {
             }
             if (defined $deferred) {
                 push $after_effect{$deferred}->@*, $n;
+                next;
+            }
+
+            # NOR ONE WHOSE VALUE READS A STORE -- the aggregate loop's rule,
+            # kept identical here. `my ($p, $q) = (\$x, \$y)` over demoted
+            # slots reads the Assign that declared them, two levels down.
+            if (defined(my $store = $self->_latest_store_read($n))) {
+                push $after_effect{$store}->@*, $n;
                 next;
             }
 
@@ -3418,6 +3437,13 @@ class SoN::Deparse 0.01 {
             # handle is named (`close FOO`) and matches neither branch below, so
             # it fell to the parenthesised default. Third position this has
             # bitten, after the glob-assignment target and value.
+            # A REFERENCE TO EACH ELEMENT is the parenthesised form, and here
+            # the parens are the meaning.
+            if ( ( $n->{fields} // {} )->{each} ) {
+                $text = '\\(' . $self->_expr($in[0]) . ')';
+                return $text;
+            }
+
             my $gv = $nodes->{ $in[0] };
             if ( $gv && ( $gv->{op} // '' ) eq 'Constant'
                      && ( ( $gv->{fields} // {} )->{const_type} // '' ) eq 'glob' ) {
@@ -3711,6 +3737,32 @@ class SoN::Deparse 0.01 {
         return $tf->{symbol} eq $f->{symbol}
             && ( $tf->{package} // '' ) eq ( $f->{package} // '' )
             && ( $tf->{sigil}   // '' ) eq ( $f->{sigil}   // '' ) ? 1 : 0;
+    }
+
+    # The id of the latest chain STORE that $n's value reads through pure
+    # nodes, or undef. A value node's memory input is its last input; a node
+    # on the control chain is where the search stops -- it is a statement,
+    # already ordered, not part of this value. "Latest" is the highest id:
+    # the wire numbers nodes in topological order, and a memory version is
+    # built after every version it follows.
+    method _latest_store_read ($n) {
+        my ( @queue, %seen, $latest ) = ( ( $n->{inputs} // [] )->@* );
+        while (@queue) {
+            my $id = shift @queue;
+            next if !defined $id || $seen{$id}++;
+            my $c = $nodes->{$id} or next;
+            next if defined $c->{control_in};
+            my @in = ( $c->{inputs} // [] )->@*;
+            if ( @in && $self->_is_memory( $in[-1] ) ) {
+                my $m = $nodes->{ $in[-1] };
+                $latest = $in[-1]
+                    if $m && defined $m->{control_in}
+                    && ( !defined $latest || $in[-1] > $latest );
+                pop @in;
+            }
+            push @queue, @in;
+        }
+        return $latest;
     }
 
     method _is_memory ($id) {
