@@ -181,6 +181,10 @@ sub _extract_fields ($node, $id_remap) {
             index => $node->index,
             name  => $node->name,
             sigil => $node->sigil,
+            # When the default (the node's one input) applies: 'absent',
+            # 'undef' or 'false'. Absent for a parameter with no default.
+            ( defined $node->default_when
+                ? ( default_when => $node->default_when ) : () ),
         };
     }
     # A BINDING IS NOT A STORE. `*g = \@a` aliases the NAME; `$g = \@a` stores a

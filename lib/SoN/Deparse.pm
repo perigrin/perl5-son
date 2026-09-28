@@ -3597,6 +3597,21 @@ class SoN::Deparse 0.01 {
               . " -- only a scalar parameter reads as one \@_ element\n"
                 unless $sig eq '$';
             $text = sprintf('$_[%d]', $ix);
+
+            # A DEFAULT, applied where perl applies it. `= E` only when the
+            # caller passed too few arguments -- an explicit undef is an
+            # argument -- and `//= E` / `||= E` on undef / false. The default
+            # is an effect-free value (the producer refuses any other), so
+            # spelling it at each read is the same value.
+            my $when = ( $n->{fields} // {} )->{default_when};
+            if (defined $when) {
+                die "GAP: a defaulted Parameter with " . scalar(@in)
+                  . " inputs is not yet rendered\n" unless @in == 1;
+                my $d = $self->_expr($in[0]);
+                $text = $when eq 'absent' ? "(\@_ > $ix ? $text : ($d))"
+                      : $when eq 'undef'  ? "($text // ($d))"
+                      :                     "($text || ($d))";
+            }
         }
         elsif ($op eq 'Range') {
             die "GAP: a Range with " . scalar(@in) . " inputs is not yet"

@@ -37,18 +37,30 @@ use SoN::IR::Node::Access;
 # (0 scalar, 2 array, 4 hash). A slurpy is NOT always an array -- `sub f(%h)` is
 # a hash. That is the same rule that fixed EntryDef, where `$_` and `@_`
 # hash-consed into one node because identity was keyed on name without a sigil.
+#
+# A DEFAULTED PARAMETER HAS ONE INPUT: its default's value. `($a, $b = 3)`
+# is a different value from `($a, $b)` -- it is 3 when the caller passed
+# one argument -- and the default is an expression (`$b = $a * 2` is legal),
+# so it is a node, not a literal field. `default_when` says when it applies:
+# 'absent' (`= E`), 'undef' (`//= E`, absent included) or 'false' (`||= E`).
+# Without it the default was nowhere in the graph (corpus 028).
 class SoN::IR::Node::Parameter :isa(SoN::IR::Node::Access) {
     field $index :param :reader;
     field $name  :param :reader = undef;
     field $sigil :param :reader = '$';
+    field $default_when :param :reader = undef;
 
     method operation() { 'Parameter' }
 
-    # INDEX ONLY. Two reads of the same parameter must be one node; a name would
-    # not change that here, but including it would make identity depend on debug
-    # information, and a synthesized parameter with no pad name would then fail
-    # to cons with its named twin.
+    # INDEX ONLY, for a plain parameter. Two reads of the same parameter must
+    # be one node; a name would not change that here, but including it would
+    # make identity depend on debug information, and a synthesized parameter
+    # with no pad name would then fail to cons with its named twin. A
+    # defaulted one adds its rule and its default, which do change the value.
     method content_hash() {
-        return join( '|', 'Parameter', "index=$index" );
+        return join( '|', 'Parameter', "index=$index" )
+            unless defined $default_when;
+        return join( '|', 'Parameter', "index=$index",
+            "default_when=$default_when", $self->_serialize_inputs() );
     }
 }

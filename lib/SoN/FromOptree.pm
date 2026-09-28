@@ -1215,6 +1215,27 @@ class SoN::FromOptree 0.01 {
                 next;
             }
 
+            # A SIGNATURE DEFAULT. argdefelem is the kid of the argelem it
+            # serves, and runs first: it pushes the argument if one was
+            # passed, else runs its ->other arm (the default expression). It
+            # is registered BRANCH with no handler, so the skip below stepped
+            # over the arm and the default was nowhere in the graph -- `($a,
+            # $b = 3)` called with one argument computed with undef (corpus
+            # 028). Walk the arm as a VALUE and leave it on the stack for the
+            # argelem, which carries OPf_STACKED exactly when this ran.
+            if ($name eq 'argdefelem') {
+                my $arm = $sim->snapshot;
+                my $base_depth = $arm->stack_depth;
+                _walk_branch($cv, $op->other, $arm, $factory, $opmap,
+                    \%visited, undef, 0, ${ $op->next });
+                die "GAP: a signature default with an effect\n"
+                    unless $arm->control == $sim->control
+                        && $arm->stack_depth == $base_depth + 1;
+                $sim->push_node($arm->pop_node);
+                $op = $op->next;
+                next;
+            }
+
             # `||=`, `&&=`, `//=`: THE VALUE OPERATOR, THEN A STORE. They are
             # registered BRANCH, and with no handler the skip below stepped
             # over them -- the ->other arm and its sassign were never walked,
@@ -5939,7 +5960,21 @@ class SoN::FromOptree 0.01 {
             # -- a mistake announces itself instead of deleting a sub.
             my %SIGIL_STAMP = ('@' => 'Array', '%' => 'Hash');
             my $stamp_type  = $SIGIL_STAMP{$sigil};
+
+            # A DEFAULT, when the argdefelem kid ran: its value is on the
+            # stack (OPf_STACKED, 64), and the kid's private field says when
+            # it applies -- asked of B: OPpARG_IF_UNDEF 128, OPpARG_IF_FALSE 64.
+            my %default;
+            if ($op->flags & 64) {
+                my $kid = $op->first;
+                my $when = ($kid->private & 128) ? 'undef'
+                         : ($kid->private & 64)  ? 'false'
+                         :                         'absent';
+                %default = (default_when => $when, inputs => [$sim->pop_node]);
+            }
+
             my $node = $factory->make('Parameter',
+                %default,
                 index => 0 + $index,
                 name  => $varname,
                 sigil => $sigil,
