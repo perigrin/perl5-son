@@ -70,6 +70,10 @@ class SoN::Deparse 0.01 {
     field $all_methods = {};
     field $current_sub;
 
+    # The wire's per-package sub metadata (`classes`), for what a sub header
+    # declares beyond its body -- its prototype.
+    field $sub_meta = {};
+
     # Variables already declared as cells, so the chain does not re-declare
     # them: a second `my` would shadow the captured lexical.
     field %cell_slots;
@@ -216,6 +220,7 @@ class SoN::Deparse 0.01 {
         # `methods` entry that must ALSO be emitted -- calling a sub the
         # emitted program never defines is a runtime death, not a wrong value.
         $all_methods = $methods;
+        $sub_meta = $data->{classes} // {};
 
         # CELLS FIRST, before any sub. A named sub emitted above the program
         # body can only close over a lexical already in scope, and the cell is
@@ -478,6 +483,16 @@ class SoN::Deparse 0.01 {
         return $short;
     }
 
+    # ` (PROTO)` for a sub the source declared with a prototype, else ''.
+    # The metadata is keyed by package and short name; the method key is the
+    # fully qualified one, and the last `::` separates them.
+    method _sub_prototype ($name) {
+        my ($pkg, $short) = $name =~ /\A(.*)::([^:]+)\z/ or return '';
+        my $proto = ((($sub_meta->{$pkg} // {})->{subs} // {})->{$short} // {})
+            ->{prototype};
+        return defined $proto ? " ($proto)" : '';
+    }
+
     method _emit_sub ($name, $graph) {
         my $save_nodes = $nodes;
         my %save_rendered = %rendered;
@@ -512,7 +527,8 @@ class SoN::Deparse 0.01 {
         %mem_cache = %save_mem;
         die $err unless defined $body;
 
-        return sprintf("sub %s {\n%s}\n", $self->_sub_ident($name), $body);
+        return sprintf("sub %s%s {\n%s}\n", $self->_sub_ident($name),
+            $self->_sub_prototype($name), $body);
     }
 
     # THE CONTROL CHAIN IS THE STATEMENT ORDER. Measured: `control_in` is a

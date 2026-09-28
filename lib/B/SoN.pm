@@ -2586,6 +2586,7 @@ sub _record_sub {
         return if substr( $f->{name} // '', 1 ) eq $name;
     }
 
+    my $proto = CORE::prototype( $cv->object_2svref );
     $classes->{$pkg_name}{subs}{$name} = {
         name      => $name,
         graph     => $full_name,
@@ -2606,6 +2607,12 @@ sub _record_sub {
         # nothing to read at this point. NOT omitted: an absent field is not a
         # type, and it forces every consumer to invent a meaning.
         return_type => _graph_return_type($graph),
+        # THE PROTOTYPE, read from the live CV. Not in the signature: `($)` is
+        # a parsing directive, not a parameter list, and perl reports it
+        # through prototype() at runtime -- a program that asks got "" back
+        # from an emission that declared none (corpus 063). Absent when the
+        # sub has none, which prototype() also distinguishes.
+        ( defined $proto ? ( prototype => $proto ) : () ),
     };
 
     return;
