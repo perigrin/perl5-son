@@ -32,11 +32,13 @@ my $w = length($json) ? JSON::PP->new->decode($json) : undef;
 subtest 'no merge is left Unknown once its arms are typed' => sub {
     ok $w, 'rs.t translates' or return;
 
-    my %by = map { $_->{id} => $_ }
-        map { ( $w->{methods}{$_}{nodes} // [] )->@* }
-        keys( ( $w->{methods} // {} )->%* );
-
+    # PER METHOD. Node ids are numbered within each method, so one %by over
+    # every method collides, and which node wins a collision is hash order --
+    # the test then paired a Phi from one sub with arms from another, and
+    # reported `282<-[Print,Print]` on some runs and nothing on others.
     my @stale;
+    for my $m ( sort keys( ( $w->{methods} // {} )->%* ) ) {
+    my %by = map { $_->{id} => $_ } ( $w->{methods}{$m}{nodes} // [] )->@*;
     for my $n ( values %by ) {
         next unless ( $n->{op} // '' ) eq 'Phi';
         next unless ( $n->{stamp} // '' ) eq 'Unknown';
@@ -44,8 +46,9 @@ subtest 'no merge is left Unknown once its arms are typed' => sub {
         # Only a Phi whose arms are ALL typed is a defect: an Unknown arm
         # poisons the join honestly, and that rule must stay.
         next if grep { !$_ || ( $_->{stamp} // 'Unknown' ) eq 'Unknown' } @in;
-        push @stale, sprintf( '%s<-[%s]', $n->{id},
+        push @stale, sprintf( '%s:%s<-[%s]', $m, $n->{id},
             join( ',', map { $_->{stamp} } @in ) );
+    }
     }
     is scalar(@stale), 0,
         'every Phi with fully-typed arms carries their join'
