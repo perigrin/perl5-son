@@ -1180,6 +1180,59 @@ class SoN::FromOptree 0.01 {
                 next;
             }
 
+            # `||=`, `&&=`, `//=`: THE VALUE OPERATOR, THEN A STORE. They are
+            # registered BRANCH, and with no handler the skip below stepped
+            # over them -- the ->other arm and its sassign were never walked,
+            # so `$q ||= 99` vanished with no node and no GAP (corpus 077).
+            #
+            # For a plain variable `$q ||= E` is `$q = $q || E`: the target is
+            # read once either way, and storing $q into itself on the arm that
+            # does not assign is unobservable. Measured shape:
+            #
+            #     orassign(other->a)       kids: padsv[$q] sRM, sassign/BKWARD
+            #       a  const[99]           the arm: E, then the store
+            #       b  sassign
+            #
+            # Handled: an unreferenced lexical target and an arm with no
+            # effects. Anything else refuses by name rather than walking the
+            # arm's sassign, whose BKWARD operand order the stack sim does not
+            # model.
+            if ($name eq 'orassign' || $name eq 'andassign' || $name eq 'dorassign') {
+                my $spelling = { orassign => '||=', andassign => '&&=',
+                                 dorassign => '//=' }->{$name};
+                my $tgt_op = $op->first;
+                my $store  = $$tgt_op ? $tgt_op->sibling : undef;
+                die "GAP: `$spelling` whose assignment arm is not a scalar store\n"
+                    unless $store && $$store && $store->name eq 'sassign';
+                die "GAP: `$spelling` into something other than a lexical scalar\n"
+                    unless $tgt_op->name eq 'padsv' && $tgt_op->targ;
+                my $targ = $tgt_op->targ;
+                die "GAP: `$spelling` into a referenced lexical\n"
+                    if $ctx->{addr_taken}{$targ};
+                my $current = $sim->lookup($targ);
+                die "GAP: `$spelling` into a lexical with no binding in this graph\n"
+                    unless defined $current;
+
+                $sim->pop_node;    # the lvalue the target padsv pushed
+                my $rhs_sim = $sim->snapshot;
+                my $base_depth = $rhs_sim->stack_depth;
+                _walk_branch($cv, $op->other, $rhs_sim, $factory, $opmap,
+                    \%visited, undef, 0, $$store);
+                die "GAP: `$spelling` whose right side has an effect\n"
+                    unless $rhs_sim->control == $sim->control
+                        && $rhs_sim->stack_depth == $base_depth + 1;
+                my $rhs = $rhs_sim->pop_node;
+
+                my $node = $factory->make(
+                    { orassign => 'Or', andassign => 'And',
+                      dorassign => 'DefinedOr' }->{$name},
+                    inputs => [$current, $rhs]);
+                $sim->define($targ, $node);
+                $sim->push_node($node);
+                $op = $op->next;
+                next;
+            }
+
             # Other branch ops (iter, poptry, catch, leavetrycatch) - skip
             if ($opmap->is_branch($name) || $name eq 'poptry' || $name eq 'leavetrycatch') {
                 $op = $op->next;
