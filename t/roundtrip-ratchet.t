@@ -33,7 +33,7 @@ my %FLOOR = (
     # ratchet FAILED on every run, which is to say it was never run. An opt-in
     # guard nobody runs is the decorative kind; a floor above the real number is
     # how it got that way.
-    corpus => 194,   # measured on pvm e87dee9c (224 cases), 2026-09-28
+    corpus => 195,   # measured on pvm e87dee9c (224 cases), 2026-09-28
     perl_t => 11,    # base/lex.t refuses on a `caller` bound to a list
 );
 
