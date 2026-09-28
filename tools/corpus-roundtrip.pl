@@ -76,7 +76,15 @@ for my $md (sort glob "$C/*.md") {
 printf "cases: %d\n", scalar @cases;
 my %tally;
 my @differs;
+my @unrendered;
 my $n = 0;
+
+# ALL of it, joined: the first line of a multi-line error is not its verdict
+# often enough to be trusted to decide one.
+sub whole_message {
+    my @l = grep { length } split /\n/, $_[0];
+    return @l ? join(q{ | }, @l) : q{no message};
+}
 for my $c (@cases) {
     $n++;
     my $id = sprintf "%03d", $n;
@@ -85,21 +93,41 @@ for my $c (@cases) {
 
     my $json = qx($^X -I$FindBin::Bin/../lib -MO=SoN,json,not_package=SoN $f 2>$dir/e);
     my $data = eval { JSON::PP->new->decode($json) };
-    unless ($data && $data->{methods}) { $tally{NOJSON}++; next }
+    unless ($data && $data->{methods}) {
+        $tally{NOJSON}++;
+        push @unrendered, [$id, 'NOJSON', $c->{file}, whole_message(do { local(@ARGV, $/) = "$dir/e"; <> })];
+        next;
+    }
 
     my $d = SoN::Deparse->new;
     my $out = eval { $d->render($data) };
-    unless (defined $out) { $tally{REFUSED}++; next }
+    unless (defined $out) {
+        $tally{REFUSED}++;
+        push @unrendered, [$id, 'REFUSED', $c->{file}, whole_message($d->gap // $@)];
+        next;
+    }
 
     my $g = "$dir/g$id.pl";
     open my $o2, '>', $g or die $!; print $o2 $out; close $o2;
     my $got = qx($^X $g 2>/dev/null </dev/null);
 
     if ($got eq $c->{want}) { $tally{ROUNDTRIP}++ }
-    else { $tally{DIFFERS}++; push @differs, [$id, $c->{file}, $out, $got, $c->{want}] }
+    else {
+        $tally{DIFFERS}++;
+        # A DIFFERS whose emission does not even compile is the deparser's
+        # defect, not a semantic one, and it is counted on its own line.
+        qx($^X -c $g 2>/dev/null);
+        $tally{EMITS_INVALID_PERL}++ if $?;
+        push @differs, [$id, $c->{file}, $out, $got, $c->{want}];
+    }
 }
-printf "%-12s %d\n", $_, $tally{$_} for sort keys %tally;
+$tally{EMITS_INVALID_PERL} //= 0;
+printf "%-18s %d\n", $_, $tally{$_} for sort keys %tally;
 if (@ARGV && $ARGV[0] eq '-v') {
+    # ONE LINE PER UNRENDERED CASE, with its cause. A count cannot say which
+    # case moved; the tier-2 census learned that first.
+    printf "STATUS %s %-7s %s: %s\n", $_->[0], $_->[1], $_->[2] =~ s{.*/}{}r, $_->[3]
+        for @unrendered;
     for my $d (@differs) {
         printf "\n=== %s %s ===\n--- emitted ---\n%s--- got ---\n%s--- want ---\n%s",
             $d->[0], $d->[1], $d->[2], $d->[3], $d->[4];
