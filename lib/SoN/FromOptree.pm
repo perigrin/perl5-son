@@ -2323,9 +2323,19 @@ class SoN::FromOptree 0.01 {
         # Scalar is the least upper bound of what this actually yields, which
         # makes it the correct answer rather than a loose one. A narrower stamp
         # needs a lattice that can say "Str or undef", which this one cannot.
-        state $SCALAR_IS_A_SCALAR = { map { $_ => 1 } qw( readline ) };
-        state $LIST_IN_LIST_CONTEXT =
-            { map { $_ => 1 } qw( keys values reverse sort readline ) };
+        #
+        # caller AND localtime/gmtime ARE THE SAME SHAPE. In list context each
+        # is a LIST -- caller's frame (empty at file scope), the nine time
+        # fields -- and in scalar context a string that can be undef: the
+        # package name, or undef at the top frame; the date, or undef for an
+        # out-of-range time (measured, `scalar localtime(9**99)` is undef).
+        # caller sat in $FIXED_RESULT as Scalar in EVERY context, so
+        # `my @l = caller` bound through a scalar temporary and got one undef
+        # where perl has the empty list.
+        state $SCALAR_IS_A_SCALAR =
+            { map { $_ => 1 } qw( readline caller localtime gmtime ) };
+        state $LIST_IN_LIST_CONTEXT = { map { $_ => 1 }
+            qw( keys values reverse sort readline caller localtime gmtime ) };
 
         # BUILTINS WHOSE RESULT TYPE PERL DEFINES, and which reached the wire
         # UNSTAMPED -- 51 of them across t/base and t/comp. An unstamped
@@ -2355,7 +2365,6 @@ class SoN::FromOptree 0.01 {
             sprintf   => 'Str',
             prtf      => 'Scalar',   # printf
             formline  => 'Scalar',
-            caller    => 'Scalar',
             prototype => 'Scalar',
 
             # STRING AND NUMERIC BUILTINS, found by cross-checking these

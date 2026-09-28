@@ -611,7 +611,14 @@ class SoN::Deparse 0.01 {
             # and the graph says which -- measured, `my @got = <R>` gives the
             # readline Call stamp=List feeding an ArrayLiteral. Binding it to
             # a scalar silently dropped every line after the first.
-            $bound{$id} = (($n->{stamp} // '') eq 'List')
+            #
+            # A CALL SAYS SO DIRECTLY, in `want`. The stamp is the callee's
+            # INFERRED result, and a bare `return` infers Undef -- which bound
+            # `my @e = bare()` through `$eff`, one undef where perl has the
+            # empty list. The context perl compiled the call in is the fact.
+            my $want = ($n->{fields} // {})->{want} // '';
+            $bound{$id} = (($n->{stamp} // '') eq 'List'
+                           || (($n->{op} // '') eq 'Call' && $want eq 'list'))
                 ? sprintf('@eff%d', $id) : sprintf('$eff%d', $id);
         }
 
