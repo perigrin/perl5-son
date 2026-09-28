@@ -1,6 +1,6 @@
 # A package scalar mutated in a loop body is not loop-carried
 
-Status: **recorded, not fixed.** Measured 2026-09-26. Blocks perl's
+Status: **fixed in 46df9e5.** Measured 2026-09-26. Blocked perl's
 `t/base/rs.t` (its non-VMS skip loop) and anything else that counts in a
 package scalar across iterations.
 

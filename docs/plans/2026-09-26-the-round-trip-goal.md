@@ -39,6 +39,80 @@ pvm; ported and cut over, `.t` files deleted.
 denominator moved 210 -> 213 -> 217 -> 222 across the two sessions as pvm landed
 cases, including the interposed-read topic contributed from here.
 
+### Re-measured 2026-09-28: 168 of 224
+
+    ROUNDTRIP 168   DIFFERS 33   REFUSED 21   NOJSON 2   EMITS_INVALID_PERL 0
+
+Measured on a snapshot of pvm `e87dee9c` exported with `git archive`, NOT the
+worktree: that worktree was on another session's feature branch with an
+uncommitted edit to `names.md`, and counted 225. The last committed state is
+224. The baseline on that snapshot before this session's fixes was 162/39.
+
+Six cases moved, each the one targeted and no other: 031 and 084 (a list
+call bound through a scalar temporary), 077 (`||=` family silently skipped),
+090 and 093 (`@{$r}` rendered as the reference), 141 (3-arg index).
+
+`EMITS_INVALID_PERL` WAS NEVER COUNTED before d455b7f. The ratchet asserted it
+zero and the census never printed it, so `// 0` passed on any corpus. The 5 -> 0
+below was measured some other way; the census counts it now, and it is 0.
+
+### What stands between 168 and 224, by what it needs
+
+NOT A GAP COUNT -- each case is filed under the FIRST thing found wrong in it,
+and several carry more than one defect (009 has four).
+
+LOOP CONTROL LOWERING (11): 006 007 116 117 134 (producer GAPs: `last` in a
+conditioned loop, `next` in a branch arm, `redo`, `goto`, a void `and` arm);
+008 015 030 100 (deparser: "a control node with 2 successors"); and two
+SILENT MISCOMPILES, worse than the refusals -- 118 (`next OUTER` from an inner
+loop lowered as an inner `next`) and 137 (`next` skips the `continue` block;
+the loop's `next` handler assumes the target is always the `unstack`).
+
+NEEDS A WIRE ADDITION CHALK MUST AGREE TO (see
+2026-09-26-wire-additions-chalk-must-agree.md):
+  - 028   Parameter.default (already proposed there)
+  - 063   a sub's prototype -- a method entry carries only `returns`/`start`
+  - 212 004  magic string increment. `$a++` lowers to Add(old, 1), exact for
+          numbers and wrong for "Az" -> "Ba". No increment node exists.
+  - 045   BitAnd has no numeric/string flavour: bit_and, nbit_and and
+          sbit_and all map to it, so `use v5.28`'s numeric `&` renders as a
+          string `&` on string operands.
+  - 206 009  `\(@a)` is a reference PER ELEMENT; OpMap gives refgen one input.
+          `\($x, $y)` is also wrong today -- one Ref over the last item, the
+          first left bare, and a store through it lost because _address_taken
+          sees only srefgen. The N-item form needs no new node; `\(@a)` does.
+
+NAMED SUBS CLOSING OVER FILE LEXICALS (6): 199 200 201, and the `state` forms
+005 087. The main graph folds the file-scoped `my` away because nothing in
+main reads it, and the sub's PadAccess binds to nothing. Anon subs already
+have cells (CellParam/CellWrite); named subs have no capture path at all.
+Needs a design: which side owns the storage, and where the renderer declares
+it (`my $x;` ahead of the subs, main then ASSIGNING rather than redeclaring).
+
+COMPILE-TIME AND OUT-OF-PROGRAM TEXT: 013 070 (BEGIN output lands on the
+producer's stdout ahead of the JSON), 014 166 167 (`__DATA__`), 102 103 014
+(`write`/formats print nothing), 125 126 (`use POSIX` side effects), 059 060
+061 012 (class feature / FieldAccess).
+
+REMAINING ONE-OFFS, not yet diagnosed past their symptom: 010 (s///, tr and
+pos), 029 (`$_[0]++` aliasing the caller's variable -- main folds it), 056
+(eval/die), 096 097 098 (`(?{ })`), 120 121 (`() = ...` count idiom), 144
+(4-arg and lvalue substr), 189 (pos), 197 (`&name;` shares @_), 003 176
+(scalar flip-flop), 122 (multiconcat into a non-package target), and the
+refusals 011 050 083 202 204 224.
+
+### Decisions this needs (open, 2026-09-28)
+
+  1. Is the gate 224/224, or 100% minus a named list of honest refusals (the
+     ACCEPTANCE section's wording)? `goto` depends on chalk either way.
+  2. STDOUT only, or stderr too? Case 025 is the known difference.
+  3. The five wire additions above: propose them to chalk as one batch with
+     the three already in the proposal?
+  4. Named-sub captures: approve a design before implementing.
+  5. Loop control: a project of its own, not a spot fix -- the `next` handler,
+     the `and`-guard handlers and the continue-block placement all encode
+     "next jumps to unstack".
+
 GUARDED NOW. `t/roundtrip-ratchet.t` fails if either number drops -- both
 censuses were scripts no test invoked, so these figures held only while someone
 remembered to run them. Opt-in (`SON_RATCHET=1`, ~7 min) and VERIFIED TO FAIL:

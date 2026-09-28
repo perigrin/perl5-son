@@ -33,7 +33,7 @@ my %FLOOR = (
     # ratchet FAILED on every run, which is to say it was never run. An opt-in
     # guard nobody runs is the decorative kind; a floor above the real number is
     # how it got that way.
-    corpus => 162,   # de284ff, sibling-scope pad slots are two variables
+    corpus => 168,   # f71f542, measured on pvm e87dee9c (224 cases)
     perl_t => 11,    # base/lex.t refuses on a `caller` bound to a list
 );
 
@@ -92,7 +92,12 @@ SKIP: {
     # refuses cannot be run by anything downstream. It went 5 -> 0 this session.
     subtest 'no corpus emission fails to compile' => sub {
         my ( $n, $out ) = census('corpus-roundtrip.pl');
-        is $n->{EMITS_INVALID_PERL} // 0, 0,
+
+        # THE TALLY MUST BE THERE. Until d455b7f the census never printed it,
+        # and `// 0` passed this on every corpus -- a zero read from nothing.
+        ok defined $n->{EMITS_INVALID_PERL}, 'the census counted it'
+            or do { diag $out; return };
+        is $n->{EMITS_INVALID_PERL}, 0,
             'EMITS_INVALID_PERL is zero' or diag $out;
     };
 }

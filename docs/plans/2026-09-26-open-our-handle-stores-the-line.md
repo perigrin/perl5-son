@@ -4,6 +4,11 @@ Status: **recorded, not fixed.** Measured 2026-09-26. The last defect standing
 between perl's `t/base/rs.t` and a clean round trip, along
 [[2026-09-26-a-package-scalar-is-not-loop-carried]].
 
+STILL NOT FIXED, 2026-09-28, whatever 46df9e5's message says. It reports this
+file's TODO as passing on prove's `TODO passed: 1`, which a todo-wrapped
+subtest prints even when its inner assertion fails. `prove -lv` shows
+"Failed test (with amnesty)" and `close($eff15)` still emitted.
+
 ## The shape
 
 `open my $T` round-trips. `open our $T` does not, and the discriminator is
