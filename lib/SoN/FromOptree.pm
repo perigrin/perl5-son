@@ -2236,6 +2236,22 @@ class SoN::FromOptree 0.01 {
         # The template and the string, always. A fixed 2-pop is the whole fix;
         # the mark registration was simply wrong.
         return 2 if $name eq 'unpack';
+
+        # INDEX AND RINDEX TAKE AN OPTIONAL POSITION, and the table said 2, so
+        # `index($s, "o", 5)` popped the needle and the position and left the
+        # STRING on the stack -- rendered `$s, index("o", 5)`. The op states the
+        # count in its private field, as substr's does:
+        #
+        #     index($s,"o")            private=2  kids=[null,padsv,const]
+        #     index($s,"o",5)          private=3  kids=[null,padsv,const,const]
+        #     index($main::g,"l",1)    private=3  kids=[null,null,const,const]
+        #
+        # Masked with 7, not OPpARG4_MASK (15): OPpMAYBE_LVSUB is 8 and shares
+        # that nibble. The count never exceeds 4, and the flags measured on
+        # these ops -- REPL1ST/TARGMY 16, BOOL 32, BOOLNEG 64 -- sit above it.
+        return $op->private & 7
+            if ($name eq 'index' || $name eq 'rindex')
+            && $op->can('private') && ($op->private & 7) >= 2;
         return undef unless $name eq 'substr';
         return undef unless $op->can('first');
         my $n = 0;
