@@ -572,7 +572,7 @@ sub _serialize_graph ($graph) {
 # -----------------------------------------------------------------------
 # to_json(\%named_graphs) — serialize named graphs to a JSON string.
 # -----------------------------------------------------------------------
-sub to_json ($named_graphs, $classes = undef) {
+sub to_json ($named_graphs, $classes = undef, $data_section = undef) {
     my %methods;
     for my $name (sort keys $named_graphs->%*) {
         $methods{$name} = _serialize_graph($named_graphs->{$name});
@@ -599,6 +599,10 @@ sub to_json ($named_graphs, $classes = undef) {
     # cannot tell `true` from `1`, because JSON::PP decodes them equal.
     $data->{classes} = _json_booleans($classes)
         if defined $classes && %$classes;
+
+    # The text after __DATA__ / __END__, verbatim. Absent when the source has
+    # none, so a consumer never mistakes an empty section for a missing one.
+    $data->{data_section} = $data_section if defined $data_section;
 
     # ->utf8 BECAUSE THE WIRE IS BYTES AND THE VALUES ARE CHARACTERS.
     # Without it `encode` returns a character string, and printing that to a

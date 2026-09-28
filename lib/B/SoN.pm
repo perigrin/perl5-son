@@ -108,7 +108,7 @@ sub compile {
         my ( $graphs, $classes ) = _discover_and_translate($filter);
 
         if ( $format eq 'json' ) {
-            print to_json( $graphs, $classes );
+            print to_json( $graphs, $classes, _data_section() );
         }
         else {
             for my $name ( sort keys $graphs->%* ) {
@@ -119,6 +119,24 @@ sub compile {
             }
         }
     };
+}
+
+# _data_section() -- the text after __DATA__ / __END__, or undef.
+#
+# NOT IN THE OPTREE. perl leaves it unread on main::DATA, positioned at the
+# first byte after the marker, and the program reads it at runtime -- so a
+# graph that reads DATA says nothing about what it will get, and the emission
+# read an empty handle (corpus 166, 167). This runs after compilation and
+# before any runtime, so the handle is exactly where perl left it; the
+# position is restored so nothing downstream sees a moved handle.
+sub _data_section {
+    no strict 'refs';
+    my $fh = \*{'main::DATA'};
+    return undef unless defined fileno($fh);
+    my $pos = tell($fh);
+    my $text = do { local $/; readline($fh) };
+    seek( $fh, $pos, 0 ) if $pos >= 0;
+    return $text;
 }
 
 # _discover_and_translate() — walk all package stashes, translating CVs to SoN

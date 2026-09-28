@@ -255,7 +255,11 @@ class SoN::Deparse 0.01 {
         my $needs_gate = grep {
             ( $_->{op} // '' ) eq 'IsaOp'
         } values $nodes->%*;
-        return ( $needs_gate ? "use v5.36;\n" : '' ) . $out . $body;
+        # THE DATA SECTION LAST, after the marker perl reads it from. `__DATA__`
+        # for both source markers: in a main program they open the same handle.
+        my $data_section = defined $data->{data_section}
+            ? "__DATA__\n" . $data->{data_section} : '';
+        return ( $needs_gate ? "use v5.36;\n" : '' ) . $out . $body . $data_section;
     }
 
     # A named sub. Its body is the same control-chain walk the program body
