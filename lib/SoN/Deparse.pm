@@ -3581,6 +3581,15 @@ class SoN::Deparse 0.01 {
               . " rendered\n" unless @in == 1;
             $text = sprintf('(-(%s))', $self->_expr($in[0]));
         }
+        elsif ($op eq 'Increment') {
+            # perl's `++`, magic on a string. The node is the value AFTER the
+            # increment of its input, which is a value, not a variable -- so it
+            # is spelled on a copy. `my $t = X` keeps X's string-or-number
+            # flags, and those are what perl's magic consults.
+            die "GAP: an Increment with " . scalar(@in) . " inputs is not yet"
+              . " rendered\n" unless @in == 1;
+            $text = sprintf('do { my $inc = %s; ++$inc }', $self->_expr($in[0]));
+        }
         elsif ($op eq 'Complement') {
             die "GAP: a Complement with " . scalar(@in) . " inputs is not yet"
               . " rendered\n" unless @in == 1;

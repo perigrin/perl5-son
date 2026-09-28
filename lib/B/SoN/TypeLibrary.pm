@@ -96,6 +96,10 @@ my %SIGNATURES = (
     Or         => { operands => [], result => 'List' },
     DefinedOr  => { operands => [], result => 'List' },
     UnaryPlus  => { operands => ['Num'],        result => 'Num' },
+    # `++` on a maybe-string: NO operand requirement, because a Num requirement
+    # would have the coercion pass insert the very Coerce that destroys the
+    # magic. The result is a number or a string.
+    Increment  => { operands => [],             result => 'Scalar' },
 
     # Numeric comparison: numeric in, Boolean out. <=> yields -1/0/1.
     NumEq      => { operands => ['Num', 'Num'], result => 'Boolean' },

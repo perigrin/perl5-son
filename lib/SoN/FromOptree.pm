@@ -6388,7 +6388,19 @@ class SoN::FromOptree 0.01 {
             my $node_type = ($dir eq 'inc') ? 'Add' : 'Subtract';
             my $stamp = _result_stamp($node_type, [$old, $one]);
             my %extra = defined $stamp ? (stamp => $stamp) : ();
-            my $new = $factory->make($node_type, inputs => [$old, $one], %extra);
+
+            # `++` ON A VALUE THAT MAY BE A STRING IS MAGIC: "Az"++ is "Ba",
+            # "a9"++ is "b0", and Add would coerce each to 0 first -- measured,
+            # corpus 212 printed `1 1 1` for `Ba aaa b0`. Only when the stamp
+            # already says NUMBER is Add the same operation; otherwise the
+            # operand keeps its string until perl decides. Decrement has no
+            # magic form, so `--` stays a Subtract whatever it is given.
+            my $old_type = ($old->can('stamp') && $old->stamp)
+                ? $old->stamp->type : 'Unknown';
+            my $new = ($dir eq 'inc' && $old_type !~ /\A(?:Int|Num|Boolean)\z/)
+                ? $factory->make('Increment', inputs => [$old],
+                    stamp => SoN::IR::Stamp->new(type => 'Scalar'))
+                : $factory->make($node_type, inputs => [$old, $one], %extra);
 
             if (defined $entry_lvalue) {
                 $sim->define(_stash_key($entry_lvalue), $new);
@@ -9827,7 +9839,8 @@ class SoN::FromOptree 0.01 {
                     BitOr
                     BitXor       Coerce       Complement   Concat
                     Constant     Count        Defined      DefinedOr
-                    Divide       EnvRead      FieldAccess  Interpolate
+                    Divide       EnvRead      FieldAccess  Increment
+                    Interpolate
                     IsaOp        Length       LeftShift    Match
                     Modulo       Multiply     Negate       Not
                     NotMatch     NumCmp       NumEq        NumGe
