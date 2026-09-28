@@ -810,6 +810,84 @@ class SoN::Deparse 0.01 {
             push @stale_reads, $n;
         }
 
+        # A DEMOTED LEXICAL IS READ BY NAME TOO, and goes stale the same way.
+        # `my $before = $x; $$r = 2; print "$before $x"` printed `2 2` for
+        # perl's `1 2`: the read carries its memory version, and the emission
+        # spelled it `$x` at the print, after the store. Pre-existing, found
+        # through `substr($s, 1, 1) = "X"` once that became a real store.
+        #
+        # TWO DIFFERENCES FROM THE PACKAGE CASE. A pad store is ordered by
+        # CONTROL, not by a memory input, so the walk follows the chain; and a
+        # lexical can be written through a reference, which no name comparison
+        # sees, so ANY later store or call counts. Over-binding costs a
+        # temporary; under-binding is the wrong answer above.
+        #
+        # A PadAccess that is ALSO a location -- a store target, a referent, the
+        # string a substr rewrites -- is still bound: a read and its location
+        # at one memory version are one hash-consed node. The location sites
+        # spell it by name through _location, so the binding reaches only the
+        # reads.
+        my %ctrl_next;
+        for my $c ( values $nodes->%* ) {
+            push $ctrl_next{ $c->{control_in} }->@*, $c
+                if defined $c->{control_in};
+        }
+        #
+        # BOUND ONLY WHERE EVERY CONSUMER IS KNOWN TO BE SAFE, because the
+        # failure is asymmetric. A consumer that rewrites its operand in place
+        # -- tr///, s///, chomp, a user sub through @_ -- would rewrite the
+        # TEMPORARY: corpus 191's `$t =~ tr/./Z/` did exactly that, `a.c` for
+        # `aZc`. So the list is of consumers that either read a value or spell
+        # a location by name (Assign's targets, Ref, a 4-argument substr's
+        # string); anything unlisted leaves the read unbound, which is the
+        # behaviour this pass replaces rather than a new wrong answer.
+        state $VALUE_CONSUMER = { map { $_ => 1 } keys %BINOP, qw(
+            Assign Ref Coerce Print Interpolate Length Not Negate Defined
+            DefinedOr And Or TernaryExpr UnaryPlus
+        ) };
+        my %consumers;
+        for my $c ( values $nodes->%* ) {
+            push $consumers{$_}->@*, $c for ( $c->{inputs} // [] )->@*;
+        }
+        my $safe_read = sub ($id) {
+            for my $c ( ( $consumers{$id} // [] )->@* ) {
+                my $op = $c->{op} // '';
+                next if $VALUE_CONSUMER->{$op};
+                # substr at every arity: two or three operands only READ the
+                # string, and the four-operand write spells it by name.
+                next if $op eq 'Call'
+                    && ( ( $c->{fields} // {} )->{name} // '' ) eq 'substr';
+                return 0;
+            }
+            return 1;
+        };
+        for my $n ( sort { $a->{id} <=> $b->{id} } values $nodes->%* ) {
+            next unless ( $n->{op} // '' ) eq 'PadAccess';
+            next if exists $bound{ $n->{id} };
+            next unless $safe_read->( $n->{id} );
+            next if $under_loop{ $n->{id} };
+            my @in = ( $n->{inputs} // [] )->@*;
+            next unless @in == 1 && $self->_is_memory( $in[0] );
+            my $version = $nodes->{ $in[0] };
+            next unless $version && defined $version->{control_in};
+
+            my ( @queue, %seen, $shadowed ) = ( $in[0] );
+            while ( @queue && !$shadowed ) {
+                my $id = shift @queue;
+                next if $seen{$id}++;
+                for my $c ( ( $ctrl_next{$id} // [] )->@* ) {
+                    $shadowed = 1 if ( $c->{op} // '' )
+                        =~ /\A(?:Assign|EntryWrite|CellWrite|Delete|Call)\z/;
+                    push @queue, $c->{id};
+                }
+            }
+            next unless $shadowed;
+
+            $bound{ $n->{id} } = sprintf( '$stale%d', $n->{id} );
+            $hoisted{ $bound{ $n->{id} } } //= $bound{ $n->{id} };
+            push $after_effect{ $version->{id} }->@*, $n;
+        }
+
         # DECLARED AT THE TOP, ASSIGNED AT THE VERSION. The assignment has to
         # land where the value is still correct, and that position can be inside
         # a nested block -- an `eval { }` body, a branch arm -- while the READ is
@@ -2325,6 +2403,17 @@ class SoN::Deparse 0.01 {
                 $var, $self->_slot_name($n) );
         }
 
+        # THE SAME, FOR A DEMOTED LEXICAL -- spelled from its name, for the
+        # same reason.
+        if ($op eq 'PadAccess') {
+            die "GAP: a PadAccess reached as a statement with no binding is"
+              . " not yet rendered\n" unless exists $bound{ $n->{id} };
+            my $var = $bound{ $n->{id} };
+            return sprintf( "%s%s = %s;\n",
+                ( exists $hoisted{$var} ? '' : 'my ' ),
+                $var, $self->_location( $n->{id} ) );
+        }
+
         # AN Unwind IS A `die`. Measured across the three corpus files that
         # refused -- twelve nodes, uniform: no fields, control_in the chain
         # predecessor, inputs either one value node or nothing. The producer
@@ -2587,7 +2676,7 @@ class SoN::Deparse 0.01 {
               . " rendered -- its first input is a `"
               . ($nodes->{ $in[0] // -1 }{op} // '?') . "`\n"
                 unless $t;
-            my @lhs = map { $self->_expr($_) } @in[0 .. $t-1];
+            my @lhs = map { $self->_location($_) } @in[0 .. $t-1];
             my @rhs = map { $self->_expr($_) } @in[$t .. $#in];
             die "GAP: an Assign (id $n->{id}) with no values is not yet"
               . " rendered -- its " . scalar(@in) . " inputs all read as"
@@ -2881,6 +2970,19 @@ class SoN::Deparse 0.01 {
         $bound{$id} = $save if defined $save;
         die $err if $err;
         return $text;
+    }
+
+    # A NODE IN A LOCATION POSITION -- a store target, a referent, the string
+    # a substr rewrites -- spelled as the variable, never as a binding. A
+    # demoted lexical's read and its location hash-cons into ONE PadAccess
+    # when they share a memory version, so the stale-read temporary a read
+    # needs would otherwise become the thing assigned or referenced:
+    # `\($stale8)` in place of `\$x`.
+    method _location ($id) {
+        my $n = $nodes->{$id};
+        return $n && ( $n->{op} // '' ) eq 'PadAccess'
+            ? $self->_expr_uncached($id)
+            : $self->_expr($id);
     }
 
     method _expr ($id) {
@@ -3440,7 +3542,7 @@ class SoN::Deparse 0.01 {
             # A REFERENCE TO EACH ELEMENT is the parenthesised form, and here
             # the parens are the meaning.
             if ( ( $n->{fields} // {} )->{each} ) {
-                $text = '\\(' . $self->_expr($in[0]) . ')';
+                $text = '\\(' . $self->_location($in[0]) . ')';
                 return $text;
             }
 
@@ -3451,7 +3553,7 @@ class SoN::Deparse 0.01 {
                 return $text;
             }
 
-            my $inner = $self->_expr($in[0]);
+            my $inner = $self->_location($in[0]);
             $text = $inner =~ /\A[\@%][\w:]+\z/
                 ? sprintf('\\%s', $inner)
                 : sprintf('\\(%s)', $inner);
@@ -3897,6 +3999,10 @@ class SoN::Deparse 0.01 {
         pop @in if @in > ($MEM_MIN_INPUTS{Call} // 99)
                 && $self->_is_memory($in[-1]);
         my @args = map { $self->_expr($_) } @in;
+        # A FOUR-ARGUMENT substr REWRITES ITS FIRST ARGUMENT IN PLACE, so that
+        # argument is a location -- see _location.
+        $args[0] = $self->_location($in[0])
+            if ( $f->{name} // '' ) eq 'substr' && @in == 4;
 
         if ($kind eq 'direct') {
             # PARENTHESISED ALWAYS. `f $x` is a syntax error unless f was

@@ -484,6 +484,21 @@ class SoN::FromOptree 0.01 {
                 }
             }
 
+            # A MUTATING substr WRITES ITS STRING'S SLOT, the destructive-s///
+            # case below one operator over: `substr($s,...) = X` (the substr
+            # carries OPf_MOD, 32) and `substr($s, o, l, X)` (four operands,
+            # op_private & 7). The string is the first kid after the folded
+            # pushmark.
+            if ($op->name eq 'substr' && $op->can('first') && ${$op->first}
+                    && (($op->flags & 32) || ($op->private & 7) == 4)) {
+                my $str = $op->first;
+                $str = $str->sibling
+                    if $$str && $str->name eq 'null'
+                    && $str->targ == B::opnumber('pushmark');
+                $taken{ $str->targ } = 1
+                    if $$str && $str->name eq 'padsv' && $str->targ;
+            }
+
             # A DESTRUCTIVE s/// OR tr/// MUTATES ITS SLOT'S STORAGE, which is
             # the same property `\$x` has and needs the same demotion.
             #
@@ -6664,6 +6679,28 @@ class SoN::FromOptree 0.01 {
                 $sim->set_control($store);
                 $sim->push_node($value);
             }
+            # AN LVALUE substr (`substr($s, o, l) = X`) IS THE FOUR-ARGUMENT
+            # FORM, `substr($s, o, l, X)`: the same write, spelled as a call.
+            # With the peephole suppressed the target arrives as the 3-input
+            # substr Call, and the catch-all below dropped it (corpus 144).
+            # The string's slot is demoted by _address_taken, so the call is
+            # pinned and becomes the new memory version, as the four-argument
+            # op is. The two-argument lvalue form has no length to pass.
+            elsif ($target->isa('SoN::IR::Node::Call')
+                    && ($target->name // '') eq 'substr') {
+                my @args = $target->inputs->@*;
+                die "GAP: an lvalue substr without a length is not yet lowered\n"
+                    unless @args == 3;
+                my $write = $factory->make('Call',
+                    inputs        => [@args, $value],
+                    dispatch_kind => 'builtin',
+                    name          => 'substr',
+                    stamp         => SoN::IR::Stamp->new(type => 'Str'));
+                $write->set_control_in($sim->control);
+                $sim->set_control($write);
+                $sim->set_memory($write) if defined $sim->memory;
+                $sim->push_node($value);
+            }
             # A package-scalar store (`our $g = 5`, where $g is a stash entry):
             # the target is a EntryDef lvalue. Without this branch the store
             # falls through to the catch-all below (push_node($value)), which
@@ -8320,6 +8357,12 @@ class SoN::FromOptree 0.01 {
                     # %STACK_READ_BUILTIN.
                     $pin_on_control = 1
                         if $STACK_READ_BUILTIN{$name} && !$void;
+
+                    # A FOUR-ARGUMENT substr WRITES ITS STRING, in any context
+                    # -- `my $old = substr($b, 0, 1, "J")` is want=SCALAR and
+                    # was left floating, so the write had no place in order.
+                    $pin_on_control = 1
+                        if $name eq 'substr' && ($op->private & 7) == 4;
                 }
 
                 # Perl `/` is always floating-point division, so an Int operand
@@ -8402,6 +8445,11 @@ class SoN::FromOptree 0.01 {
                 if ($GLOBAL_STATE_BUILTIN{$name} && defined $sim->memory) {
                     $sim->set_memory($node);
                 }
+                # ...and is the new memory version of that string, which
+                # _address_taken demoted, so a later read of it observes this.
+                $sim->set_memory($node)
+                    if $name eq 'substr' && ($op->private & 7) == 4
+                    && defined $sim->memory;
 
                 # Rebind the target to the result so a later read sees the new
                 # value.
