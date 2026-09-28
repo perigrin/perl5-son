@@ -108,7 +108,8 @@ sub compile {
         my ( $graphs, $classes ) = _discover_and_translate($filter);
 
         if ( $format eq 'json' ) {
-            print to_json( $graphs, $classes, _data_section() );
+            print to_json( $graphs, $classes, _data_section(),
+                _phase_blocks() );
         }
         else {
             for my $name ( sort keys $graphs->%* ) {
@@ -119,6 +120,36 @@ sub compile {
             }
         }
     };
+}
+
+# _phase_blocks() -- the program's own BEGIN and END blocks, in order, as
+# [ [ 'BEGIN'|'END', $graph ], ... ].
+#
+# NOT IN THE PROGRAM'S OPTREE. A BEGIN block runs while the file compiles and
+# is freed; `use` is one (require, then import). O.pm calls B::save_BEGINs so
+# a backend can still see them, and nothing here looked -- the emission ran
+# the main line only, and `use POSIX` imported nothing (corpus 070, 125, 126).
+#
+# begin_av holds EVERY block compiled after that, including those of each
+# module the program loads; only the program's own file is its code, the
+# same test the stash walk applies. A block that does not translate is
+# reported and left out -- the round trip then differs, which says so.
+sub _phase_blocks {
+    my @blocks;
+    for my $pair ( [ BEGIN => B::begin_av() ], [ END => B::end_av() ] ) {
+        my ( $phase, $av ) = @$pair;
+        next unless ref($av) && $av->isa('B::AV');
+        for my $cv ( $av->ARRAY ) {
+            next unless ref($cv) && $cv->isa('B::CV') && _cv_is_user_code($cv);
+            my $graph = eval { SoN::FromOptree->translate( $cv->object_2svref ) };
+            if ( !$graph ) {
+                warn "B::SoN: skipped a $phase block: $@";
+                next;
+            }
+            push @blocks, [ $phase, $graph ];
+        }
+    }
+    return \@blocks;
 }
 
 # _data_section() -- the text after __DATA__ / __END__, or undef.

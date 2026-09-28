@@ -572,7 +572,8 @@ sub _serialize_graph ($graph) {
 # -----------------------------------------------------------------------
 # to_json(\%named_graphs) — serialize named graphs to a JSON string.
 # -----------------------------------------------------------------------
-sub to_json ($named_graphs, $classes = undef, $data_section = undef) {
+sub to_json ($named_graphs, $classes = undef, $data_section = undef,
+             $phase_blocks = []) {
     my %methods;
     for my $name (sort keys $named_graphs->%*) {
         $methods{$name} = _serialize_graph($named_graphs->{$name});
@@ -603,6 +604,13 @@ sub to_json ($named_graphs, $classes = undef, $data_section = undef) {
     # The text after __DATA__ / __END__, verbatim. Absent when the source has
     # none, so a consumer never mistakes an empty section for a missing one.
     $data->{data_section} = $data_section if defined $data_section;
+
+    # The program's BEGIN and END blocks, in source order, each a graph like a
+    # method's. Kept out of `methods` because a method is emitted as a named
+    # sub, and these are not callable.
+    $data->{phase_blocks} = [ map {
+        { phase => $_->[0], _serialize_graph( $_->[1] )->%* }
+    } $phase_blocks->@* ] if $phase_blocks && $phase_blocks->@*;
 
     # ->utf8 BECAUSE THE WIRE IS BYTES AND THE VALUES ARE CHARACTERS.
     # Without it `encode` returns a character string, and printing that to a

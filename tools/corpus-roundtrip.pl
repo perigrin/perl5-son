@@ -91,7 +91,10 @@ for my $c (@cases) {
     my $f = "$dir/c$id.pl";
     open my $o, '>', $f or die $!; print $o $c->{src}; close $o;
 
-    my $json = qx($^X -I$FindBin::Bin/../lib -MO=SoN,json,not_package=SoN $f 2>$dir/e);
+    # -q: O.pm captures what a BEGIN block prints while compiling, which would
+    # otherwise land on stdout in front of the JSON (corpus 013, 070 read as
+    # NOJSON for that reason alone).
+    my $json = qx($^X -I$FindBin::Bin/../lib -MO=-q,SoN,json,not_package=SoN $f 2>$dir/e);
     my $data = eval { JSON::PP->new->decode($json) };
     unless ($data && $data->{methods}) {
         $tally{NOJSON}++;

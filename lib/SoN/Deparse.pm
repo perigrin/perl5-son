@@ -227,6 +227,18 @@ class SoN::Deparse 0.01 {
         # exactly that shared lexical.
         my $out = $self->_emit_cell_declarations;
 
+        # BEGIN BLOCKS FIRST, in source order -- they ran before anything else
+        # compiled, and a `use` among them decides what later code imports.
+        # END blocks go last; perl runs them in reverse order of definition,
+        # and emitting them in source order keeps that.
+        my ($begins, $ends) = ('', '');
+        for my $block (($data->{phase_blocks} // [])->@*) {
+            my $text = eval { $self->_emit_phase_block($block->{phase}, $block) };
+            if (!defined $text) { $gap = $@ || "failed to render a $block->{phase} block"; return undef }
+            if ($block->{phase} eq 'BEGIN') { $begins .= $text } else { $ends .= $text }
+        }
+        $out = $begins . $out;
+
         for my $name (sort keys $methods->%*) {
             next if $name eq 'main::__PROGRAM__';
             my $sub = eval { $self->_emit_sub($name, $methods->{$name}) };
@@ -259,7 +271,8 @@ class SoN::Deparse 0.01 {
         # for both source markers: in a main program they open the same handle.
         my $data_section = defined $data->{data_section}
             ? "__DATA__\n" . $data->{data_section} : '';
-        return ( $needs_gate ? "use v5.36;\n" : '' ) . $out . $body . $data_section;
+        return ( $needs_gate ? "use v5.36;\n" : '' ) . $out . $body . $ends
+             . $data_section;
     }
 
     # A named sub. Its body is the same control-chain walk the program body
@@ -498,6 +511,22 @@ class SoN::Deparse 0.01 {
     }
 
     method _emit_sub ($name, $graph) {
+        my $body = $self->_render_graph_body($name, $graph);
+        return sprintf("sub %s%s {\n%s}\n", $self->_sub_ident($name),
+            $self->_sub_prototype($name), $body);
+    }
+
+    # A BEGIN or END block: the same body rendering as a sub, under the phase
+    # keyword instead of a name.
+    method _emit_phase_block ($phase, $graph) {
+        return sprintf("%s {\n%s}\n", $phase,
+            $self->_render_graph_body("main::__$phase", $graph));
+    }
+
+    # One graph's statements, with the renderer's per-graph state saved and
+    # restored around it -- node ids and every table keyed on them are local
+    # to the graph.
+    method _render_graph_body ($name, $graph) {
         my $save_nodes = $nodes;
         my %save_rendered = %rendered;
         # NODE IDS ARE PER-SUB, so the bindings are too -- node 3 in one sub is
@@ -530,9 +559,7 @@ class SoN::Deparse 0.01 {
         %hoisted  = %save_hoist;
         %mem_cache = %save_mem;
         die $err unless defined $body;
-
-        return sprintf("sub %s%s {\n%s}\n", $self->_sub_ident($name),
-            $self->_sub_prototype($name), $body);
+        return $body;
     }
 
     # THE CONTROL CHAIN IS THE STATEMENT ORDER. Measured: `control_in` is a

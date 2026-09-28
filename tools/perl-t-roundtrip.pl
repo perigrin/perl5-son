@@ -51,7 +51,7 @@ for my $tier (@tiers) {
         my $want = qx(cd $PERL && $^X $rel 2>/dev/null </dev/null);
         my $wrc  = $?;
 
-        my $json = qx(cd $PERL && $^X -I$LIB -MO=SoN,json,not_package=SoN $rel 2>$dir/e);
+        my $json = qx(cd $PERL && $^X -I$LIB -MO=-q,SoN,json,not_package=SoN $rel 2>$dir/e);
         my $data = eval { JSON::PP->new->decode($json) };
         unless ( $data && $data->{methods} && $data->{methods}{'main::__PROGRAM__'} ) {
             my $e = do { open my $h, '<', "$dir/e"; local $/; <$h> } // '';
