@@ -54,6 +54,8 @@ sub _extract_fields ($node, $id_remap) {
             ( defined $node->want
                 ? ( want => $node->want )
                 : () ),
+            # `&name;`: the call hands on the caller's @_.
+            ( $node->shares_args ? ( shares_args => JSON::PP::true ) : () ),
             # The statically-known class for a method dispatch (Class->new).
             ( defined $node->class_name
                 ? ( class_name => $node->class_name )

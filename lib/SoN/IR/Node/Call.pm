@@ -49,6 +49,12 @@ class SoN::IR::Node::Call :isa(SoN::IR::Value) {
     field $want :param :reader = undef;
     field $paren_form :param :reader = false;
 
+    # `&name;` -- ampersand, no parentheses -- hands the CALLER's @_ to the
+    # callee instead of a fresh one. entersub says so with OPpENTERSUB_AMPER
+    # and no OPf_STACKED. The call then has no argument inputs, yet it is not
+    # a no-argument call; a consumer must pass @_ through.
+    field $shares_args :param :reader = false;
+
     # Resolved callee handle (a chalk MOP Method or Sub).
     # Per Phase 4, CallExpression resolves the symbolic name via
     # $mop->find_method() and stores the metaobject reference here so
@@ -96,6 +102,7 @@ class SoN::IR::Node::Call :isa(SoN::IR::Value) {
             # without this they interned to one node.
             (defined $sort_cmp_body ? "sort_cmp_body=$sort_cmp_body" : ()),
             ($paren_form ? "paren_form=1" : ()),
+            ($shares_args ? "shares_args=1" : ()),
             $self->_serialize_inputs());
     }
 

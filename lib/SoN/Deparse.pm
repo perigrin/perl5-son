@@ -4132,6 +4132,10 @@ class SoN::Deparse 0.01 {
                     $ident, $handle);
             }
 
+            # `&name;` HANDS ON THE CALLER'S @_, and only this spelling does;
+            # `&name()` and `name()` pass a fresh, empty one (corpus 197).
+            return sprintf('&%s', $ident) if $f->{shares_args};
+
             return sprintf('&%s(%s)', $ident, join(', ', @args))
                 if $ident =~ /\A(?:s|m|y|tr|q|qq|qw|qr)\z/;
 

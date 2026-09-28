@@ -3336,6 +3336,10 @@ class SoN::FromOptree 0.01 {
             dispatch_kind => $indirect ? 'indirect' : 'direct',
             name          => $indirect ? '' : $call_name,
             want          => _want_of($op),
+            # `&name;` passes the caller's @_ through: AMPER (8, asked of B)
+            # without OPf_STACKED (64). Corpus 197.
+            shares_args   => ( !$indirect && ($op->private & 8)
+                               && !($op->flags & 64) ) ? 1 : 0,
         );
         $node->set_control_in($sim->control);
         $sim->set_control($node);
