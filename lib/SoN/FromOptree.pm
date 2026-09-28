@@ -3634,7 +3634,7 @@ class SoN::FromOptree 0.01 {
                 # 48, MEASURED: OPf_REF is 16 and OPf_MOD is 32. A first
                 # version wrote 12 from memory and excluded nothing.
                 && !($op->flags & 48)             # not OPf_REF|OPf_MOD
-                && $op->first->name =~ /\A(?:padsv|gvsv|helem|aelem)\z/
+                && _deref_operand($op)->name =~ /\A(?:padsv|gvsv|helem|aelem)\z/
                 && $sim->stack_depth > 0) {
             my $top = $sim->pop_node;
             my $sigil = $name eq 'rv2hv' ? '%' : '@';
@@ -3646,7 +3646,8 @@ class SoN::FromOptree 0.01 {
 
         if ($name eq 'rv2av'
                 && $op->can('first') && ${$op->first}
-                && ($op->first->name eq 'const' || $op->first->name eq 'padsv')
+                && (_deref_operand($op)->name eq 'const'
+                    || _deref_operand($op)->name eq 'padsv')
                 && ($op->flags & 3) == 3          # OPf_WANT_LIST
                 && $sim->stack_depth > 0) {
             my $top = $sim->pop_node;
@@ -3654,7 +3655,7 @@ class SoN::FromOptree 0.01 {
             # A const-folded AV that is NOT an ArrayRef node (`my @q = (1..4)`
             # reaching here as something else) has no referent to read: leave
             # it as the const handler built it.
-            if ($op->first->name eq 'const'
+            if (_deref_operand($op)->name eq 'const'
                     && $top->operation ne 'ArrayLiteral') {
                 $sim->push_node($top);
                 return ($op->next, 'handled');
@@ -3677,12 +3678,13 @@ class SoN::FromOptree 0.01 {
         # miscompile, not a wide answer.
         if ($name eq 'rv2hv'
                 && $op->can('first') && ${$op->first}
-                && ($op->first->name eq 'const' || $op->first->name eq 'padsv')
+                && (_deref_operand($op)->name eq 'const'
+                    || _deref_operand($op)->name eq 'padsv')
                 && ($op->flags & 3) == 3          # OPf_WANT_LIST
                 && $sim->stack_depth > 0) {
             my $top = $sim->pop_node;
 
-            if ($op->first->name eq 'const'
+            if (_deref_operand($op)->name eq 'const'
                     && $top->operation ne 'HashLiteral') {
                 $sim->push_node($top);
                 return ($op->next, 'handled');
@@ -11261,6 +11263,26 @@ class SoN::FromOptree 0.01 {
     # THE STAMP IS THE CONTAINER KIND, not the element type: `@$r` in list
     # context yields the array itself, whose type is Array (a List child), and
     # `%$h` a Hash. A caller wanting one element indexes it.
+    #
+    # THE OPERAND OF A BRACED DEREF IS THE BLOCK'S LAST KID. Measured:
+    #
+    #     @$r                 rv2av -> padsv
+    #     @{$r}               rv2av -> scope -> padsv
+    #     @{ print; $r }      rv2av -> leave -> enter, ..., padsv
+    #
+    # The simulator has already run the block's statements by the time rv2av
+    # executes, and the value on the stack is its last kid's. A branch that tests
+    # the operand's NAME must test that kid, not the wrapper: tested against the
+    # wrapper, `my @c = @{$r}` matched no deref branch and rendered as
+    # `my @c = (\@a)` -- the reference copied as a one-element list.
+    sub _deref_operand ($op) {
+        my $kid = $op->first;
+        $kid = $kid->last
+            while $$kid && ($kid->name eq 'scope' || $kid->name eq 'leave')
+                  && $kid->can('last') && ${$kid->last};
+        return $kid;
+    }
+
     sub _deref_read ($factory, $sim, $ref, $sigil) {
         return $factory->make('PostfixDeref',
             inputs => [$ref, (defined $sim->memory ? ($sim->memory) : ())],
