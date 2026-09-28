@@ -484,6 +484,22 @@ class SoN::FromOptree 0.01 {
                 }
             }
 
+            # A SUB ARGUMENT IS AN ALIAS. perl passes each argument by alias, so
+            # the callee can write the caller's variable through @_ -- `sub
+            # bump { $_[0]++ } bump($x)` changes $x (corpus 029). That is the
+            # property `\$x` has, and it gets the same demotion. Only a DIRECT
+            # argument: `$x + 1` passes a temporary, not $x. The arguments are
+            # entersub's ex-list kids between the pushmark and the callee.
+            if ($op->name eq 'entersub' && $op->can('first') && ${$op->first}) {
+                my $list = $op->first;
+                if ($$list && $list->can('first') && ${$list->first}) {
+                    for (my $k = $list->first; ref($k) && $$k; $k = $k->sibling) {
+                        $taken{ $k->targ } = 1
+                            if $k->name eq 'padsv' && $k->targ;
+                    }
+                }
+            }
+
             # A MUTATING substr WRITES ITS STRING'S SLOT, the destructive-s///
             # case below one operator over: `substr($s,...) = X` (the substr
             # carries OPf_MOD, 32) and `substr($s, o, l, X)` (four operands,
