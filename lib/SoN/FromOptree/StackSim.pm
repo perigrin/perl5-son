@@ -3,6 +3,7 @@
 
 use v5.42.0;
 use feature 'class';
+use SoN::IR::Stamp;
 no warnings 'experimental::class';
 
 class SoN::FromOptree::StackSim 0.01 {
@@ -167,6 +168,26 @@ class SoN::FromOptree::StackSim 0.01 {
         return undef;
     }
 
+    # A MERGE YIELDS THE JOIN OF ITS ARMS, when both arms say something. A
+    # merge Phi built here was left Unknown until B::SoN's post-pass, but a
+    # loop that carries it reads it DURING the walk: _patch_loop_phi refuses an
+    # unstamped back-edge. Measured on perl's comp/require.t, where `$i++`
+    # (an Increment, stamped Scalar) under `print "not " unless ...` merged to
+    #
+    #     Phi/Unknown(Increment/Scalar, Increment/Scalar)
+    #
+    # and the loop refused. An Unknown arm leaves the Phi Unknown -- that
+    # poisoning is honest and the loop handler's own rule. The `next if` path
+    # in _walk_loop_body already stamped its merges this way; this is the same
+    # rule at the one place every merge Phi is built.
+    sub _joined_stamp ($x, $y) {
+        return () unless $x->can('stamp') && $y->can('stamp');
+        my ($sx, $sy) = ($x->stamp, $y->stamp);
+        return () unless defined $sx && defined $sy
+            && $sx->type ne 'Unknown' && $sy->type ne 'Unknown';
+        return (stamp => SoN::IR::Stamp::join($sx, $sy));
+    }
+
     method merge ($other, $factory, $owner = undef) {
         # The Region input stays the arm's LAST control node -- it is the
         # control-chain link, and substituting the Proj here severs the effects
@@ -195,6 +216,7 @@ class SoN::FromOptree::StackSim 0.01 {
                     inputs => [$scope{$targ}, $other_scope->{$targ}],
                     region => $region,
                     (@preds ? (predecessors => [@preds]) : ()),
+                    _joined_stamp($scope{$targ}, $other_scope->{$targ}),
                 );
                 $scope{$targ} = $phi;
             }

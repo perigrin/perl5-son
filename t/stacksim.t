@@ -118,4 +118,41 @@ subtest 'Merge creates Region and Phi' => sub {
     is(scalar $merged->inputs->@*, 2, 'phi has 2 inputs');
 };
 
+# A MERGE IS STAMPED WITH THE JOIN OF ITS ARMS, when both arms are narrowed.
+# A loop reads its back-edge's stamp DURING the walk, and an Unknown merge
+# there is refused as "loop-carried value loses its stamp" -- measured on
+# perl's comp/require.t, over `Phi/Unknown(Increment/Scalar, Increment/Scalar)`.
+subtest 'a merge of two typed arms carries their join' => sub {
+    my $start = $factory->make_cfg('Start');
+    my $sim_a = SoN::FromOptree::StackSim->new(control => $start);
+    my $sim_b = $sim_a->snapshot;
+
+    $sim_a->define(1, $factory->make('Constant', value => 1, stamp => $int_stamp));
+    $sim_b->define(1, $factory->make('Constant', value => 'x',
+        stamp => SoN::IR::Stamp->new(type => 'Str')));
+    $sim_a->merge($sim_b, $factory);
+
+    my $phi = $sim_a->lookup(1);
+    isa_ok($phi, 'SoN::IR::Node::Phi');
+    is($phi->stamp->type, 'Str', 'join(Int, Str) is Str');
+};
+
+# AN UNKNOWN ARM STILL POISONS IT -- that is the honest answer, and the loop
+# handler's refusal depends on seeing it.
+subtest 'a merge with an Unknown arm stays Unknown' => sub {
+    my $start = $factory->make_cfg('Start');
+    my $sim_a = SoN::FromOptree::StackSim->new(control => $start);
+    my $sim_b = $sim_a->snapshot;
+
+    $sim_a->define(1, $factory->make('Constant', value => 1, stamp => $int_stamp));
+    # A value no other subtest uses: the factory hash-conses, and an earlier
+    # Constant(2) stamped Int would be handed back in place of this one.
+    $sim_b->define(1, $factory->make('Constant', value => 'unknown-arm',
+        stamp => SoN::IR::Stamp->new(type => 'Unknown')));
+    $sim_a->merge($sim_b, $factory);
+
+    my $phi = $sim_a->lookup(1);
+    ok(!$phi->stamp || $phi->stamp->type eq 'Unknown', 'still Unknown');
+};
+
 done_testing;
