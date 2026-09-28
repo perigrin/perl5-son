@@ -727,8 +727,16 @@ class SoN::FromOptree 0.01 {
                     my $undef   = $factory->make('Not', inputs => [$defined]);
                     my $if_node = $factory->make_cfg('If',
                         inputs => [$sim->control, $undef]);
+                    my $exit_proj = $factory->make_cfg('Proj',
+                        inputs => [$if_node], index => 0);   # undef -> exit
                     my $cont_proj = $factory->make_cfg('Proj',
                         inputs => [$if_node], index => 1);   # defined -> continue
+                    # The exit leaves on the taken Proj, not the pre-guard
+                    # control -- see the and/or handler's exited path, which
+                    # had the same two-successor fork.
+                    die "GAP: a guarded exit whose arm moved control without building its If\n"
+                        unless @exits && $exits[-1]{control} == $sim->control;
+                    $exits[-1]{control} = $exit_proj;
                     $sim->set_control($cont_proj);
                     $sim->push_node($lhs);                   # dor value is E
                     $op = $op->next;
@@ -906,13 +914,40 @@ class SoN::FromOptree 0.01 {
                     #    the exit actually fired on the false branch -- an inverted
                     #    polarity that miscompiled (return-X-unless returned the
                     #    fall-through when C was false).
+                    #
+                    # AN ARM WITH AN EFFECT ALREADY HAS ITS If, built before the
+                    # walk, and the exit was recorded on its body Proj. The main
+                    # path is already on the continue Proj; building a second If
+                    # here forked the chain again.
+                    if ($if_node) {
+                        $op = $op->next;
+                        next;
+                    }
+
                     my $cond = $name eq 'and'
                         ? $lhs
                         : $factory->make('Not', inputs => [$lhs]);
-                    my $if_node = $factory->make_cfg('If',
+                    my $guard = $factory->make_cfg('If',
                         inputs => [$sim->control, $cond]);
+                    my $exit_proj = $factory->make_cfg('Proj',
+                        inputs => [$guard], index => 0);     # guard taken
                     my $cont_proj = $factory->make_cfg('Proj',
-                        inputs => [$if_node], index => 1);   # guard not taken
+                        inputs => [$guard], index => 1);     # guard not taken
+
+                    # THE EXIT LEAVES ON THE TAKEN Proj. The arm was walked on a
+                    # snapshot of the pre-guard control, so _walk_branch recorded
+                    # THAT node as the exit's control -- and it then had two
+                    # successors, this If and the exit Region, which is not a
+                    # graph anything can render ("a control node with 2
+                    # successors"). An effect-free arm put nothing on the chain,
+                    # so the recorded control is exactly the pre-guard node, and
+                    # re-seating it on the Proj is the whole fix.
+                    if (@exits && $exits[-1]{control} == $sim->control) {
+                        $exits[-1]{control} = $exit_proj;
+                    }
+                    else {
+                        die "GAP: a guarded exit whose arm moved control without building its If\n";
+                    }
                     $sim->set_control($cont_proj);
                     $op = $op->next;
                     next;

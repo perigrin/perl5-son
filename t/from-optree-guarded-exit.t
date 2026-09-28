@@ -39,20 +39,23 @@ sub continuation_proj_index ($code) {
     # the one set as control for the trailing statement. Simplest robust check:
     # the exit's control edge is the OTHER proj. Identify the return exit's
     # control, then the continuation proj is the one that is NOT it.
-    my ($ret) = grep { $_->operation eq 'Return' } $g->nodes->@*;
-    # The single-exit Region merges both control edges; find the proj that is
-    # NOT an input (directly or via Region) to the returned exit for the guarded
-    # arm. Fall back: return the index of the proj set as sim control -- which is
-    # the one threaded to op->next. We detect it as the proj with no Return/Unwind
-    # consumer among its transitive users at depth 1.
-    for my $p (@projs) {
-        my $feeds_exit = 0;
-        for my $c ($p->consumers->@*) {
-            $feeds_exit = 1 if $c->operation =~ /Return|Unwind|Region/;
-        }
-        return $p->index unless $feeds_exit;
-    }
-    return $projs[0] ? $projs[0]->index : undef;
+    #
+    # THE EXIT REGION NAMES IT. _build_single_exit records the guarded exit
+    # FIRST, so the Region's input 0 is the guarded exit's control -- the If's
+    # taken Proj -- and the continuation is the If's OTHER Proj.
+    #
+    # An earlier version found "the Proj with no Return/Region consumer" and
+    # fell back to $projs[0]. That held only while the If had no taken Proj at
+    # all: the exit then hung off the PRE-GUARD control, a two-successor fork
+    # nothing could render. With both Projs built, both reach the Region, and
+    # the fallback read the taken Proj as the continuation.
+    my ($region) = grep {
+        $_->operation eq 'Region' && $_->inputs->@* > 1
+    } $g->nodes->@*;
+    return undef unless $region;
+    my $exit_ctrl = $region->inputs->[0];
+    my ($cont) = grep { $_ != $exit_ctrl } @projs;
+    return $cont ? $cont->index : undef;
 }
 
 subtest 'return-if (and-guard): continuation is the FALSE proj (index 1)' => sub {
