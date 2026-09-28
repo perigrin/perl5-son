@@ -7388,7 +7388,35 @@ class SoN::FromOptree 0.01 {
 
             # `my (...) = @_` with a padrange-bound LHS leaves an empty mark and
             # no RHS; emit nothing (the bind already happened).
+            #
+            # `() = LIST` ALSO HAS AN EMPTY LHS, and it is the one that reaches
+            # here: B::SoN suppresses the peephole, so no padrange is built.
+            # Returning without popping left the RHS on the stack, and the next
+            # consumer took the LIST as the assignment's value -- `my $n = () =
+            # sort @a` bound $n to the sort (corpus 120, 121). A list assign
+            # yields the COUNT of its RHS in scalar context and its LHS -- here
+            # nothing -- in list context.
             if (!$lhs->@*) {
+                return ($op->next, 'handled') unless $sim->has_mark;
+                my @rhs = $sim->pop_to_mark->@*;
+                if (($op->flags & 3) == 2) {             # OPf_WANT_SCALAR
+                    my $count;
+                    for my $v (@rhs) {
+                        my $n = _is_aggregate_node($v)
+                            ? _make_count($factory, $v, $sim,
+                                stamp => SoN::IR::Stamp->new(type => 'Int'))
+                            : $factory->make('Constant', value => 1,
+                                const_type => 'integer',
+                                stamp => SoN::IR::Stamp->new(type => 'Int'));
+                        $count = defined $count
+                            ? $factory->make('Add', inputs => [$count, $n],
+                                stamp => SoN::IR::Stamp->new(type => 'Int'))
+                            : $n;
+                    }
+                    $sim->push_node($count // $factory->make('Constant',
+                        value => 0, const_type => 'integer',
+                        stamp => SoN::IR::Stamp->new(type => 'Int')));
+                }
                 return ($op->next, 'handled');
             }
 
@@ -7459,11 +7487,20 @@ class SoN::FromOptree 0.01 {
                         my $stamp = $only->stamp;
                         my $is_aggregate_value =
                             defined $stamp && $stamp->type eq $want;
+                        # ...UNLESS IT WAS CALLED IN SCALAR CONTEXT. `my $r =
+                        # reverse(...); my @d = ($r)` inlines the call, and a
+                        # scalar `reverse` is ONE string; taking it as the
+                        # aggregate made @d the call itself, with no elements.
+                        # _context_builtin_stamp says which reading it is: List
+                        # for the list one, something narrower for the scalar.
+                        my $scalar_reading = defined $stamp
+                            && $stamp->type !~ /\A(?:List|Array|Hash|Unknown)\z/;
                         my $is_list_builtin =
                                $only->operation eq 'Call'
                             && $only->can('name')
                             && defined $only->name
-                            && $YIELDS_LIST->{ $only->name };
+                            && $YIELDS_LIST->{ $only->name }
+                            && !$scalar_reading;
 
                         if ($is_aggregate_value || $is_list_builtin) {
                             $sim->define($key, $only);

@@ -4171,6 +4171,19 @@ class SoN::Deparse 0.01 {
                 my $call = sprintf('%s(%s)', $name, $args[0] // '');
                 return $st eq 'Int' ? "scalar($call)" : $call;
             }
+
+            # THE SAME RULE FOR THE REST OF THE FAMILY the producer stamps by
+            # context (_context_builtin_stamp): a List stamp is the list
+            # reading, anything narrower is the scalar one. Spelled bare, the
+            # scalar reading takes the context of wherever it lands --
+            # `my $s = localtime; my @c = ($s)` inlined as `(localtime())`,
+            # nine elements for perl's one (corpus 121).
+            if ($name =~ /\A(?:localtime|gmtime|caller|reverse)\z/) {
+                my $st = $n->{stamp} // '';
+                my $call = sprintf('%s(%s)', $name, join(', ', @args));
+                return $st ne '' && $st ne 'List' && $st ne 'Unknown'
+                    ? "scalar($call)" : $call;
+            }
             return sprintf('%s(%s)', $name, join(', ', @args));
         }
 
