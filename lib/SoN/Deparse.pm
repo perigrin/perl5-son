@@ -4072,6 +4072,19 @@ class SoN::Deparse 0.01 {
                 && !exists $all_methods->{$name};
 
             my $ident = $self->_sub_ident($name);
+
+            # A CALL TO A FORMAT BODY IS A `write`. The body is formline,
+            # which only APPENDS to the accumulator $^A; write is what prints
+            # $^A to the handle and empties it. Calling the body alone put
+            # nothing on stdout (corpus 102, 103). The handle is the one the
+            # producer resolved, named in the body's key. Top-of-form ($^)
+            # is not modelled.
+            if ($name =~ /\Amain::__FORMAT__:(.+)\z/) {
+                my $handle = $1;
+                return sprintf('do { %s(); print {*%s} $^A; $^A = ""; 1 }',
+                    $ident, $handle);
+            }
+
             return sprintf('&%s(%s)', $ident, join(', ', @args))
                 if $ident =~ /\A(?:s|m|y|tr|q|qq|qw|qr)\z/;
 
