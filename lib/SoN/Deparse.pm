@@ -3886,6 +3886,15 @@ class SoN::Deparse 0.01 {
             return sprintf('&%s(%s)', $ident, join(', ', @args))
                 if $ident =~ /\A(?:s|m|y|tr|q|qq|qw|qr)\z/;
 
+            # A PROTOTYPED CALLEE IS CALLED WITH `&`, which skips the check.
+            # The arguments here are what perl produced AFTER applying the
+            # prototype -- `_` already filled with $_, `($)` context already
+            # imposed -- so checking them again rejects correct calls:
+            # comp/uproto.t "Not enough arguments for main::f", comp/redef.t
+            # "Too many arguments for main::ok", once the header declared it.
+            return sprintf('&%s(%s)', $ident, join(', ', @args))
+                if length $self->_sub_prototype($name);
+
             return sprintf('%s(%s)', $ident, join(', ', @args));
         }
 

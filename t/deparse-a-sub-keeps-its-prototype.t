@@ -58,6 +58,18 @@ my @r = (one 1, 2);
 print scalar(@r), " @r\n";
 SRC
 
+# THE CALL'S ARGUMENTS ARE WHAT PERL ALREADY RESOLVED, and checking them
+# again against the declared prototype can refuse them at COMPILE time. A
+# call that bypassed the prototype in the source -- `&f(1)` -- carries one
+# argument, and `f(1)` under `($$)` is "Not enough arguments": perl's own
+# comp/uproto.t went from DIFFERS to EMITS_INVALID_PERL on exactly that once
+# headers declared prototypes. A prototyped callee is called with `&`.
+round_trips(<<'SRC', 'a call that bypassed the prototype still bypasses it');
+sub f ($$) { scalar(@_) . " [@_]" }
+print &f(1), "\n";
+print f(1, 2), "\n";
+SRC
+
 round_trips(<<'SRC', 'no prototype stays undeclared');
 sub g { 1 }
 print defined(prototype \&g) ? "def" : "undef", "\n";
