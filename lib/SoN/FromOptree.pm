@@ -2204,6 +2204,18 @@ class SoN::FromOptree 0.01 {
         return ($list, $scalar);
     }
 
+    # _bitwise_flavor($op_name) -> (flavor => 'numeric'|'string') or ()
+    #
+    # Under the `bitwise` feature perl compiles `&` to nbit_and and `&.` to
+    # sbit_and; without it, `&` is bit_and, which reads its operands. OpMap sends
+    # all three to BitAnd, and the emission carries no feature -- so a numeric
+    # `&` on two strings came back as a string AND (corpus 045: "12" & "10" is 8
+    # under the feature, "10" without). The op name is the whole fact.
+    sub _bitwise_flavor ($name) {
+        return () unless $name =~ /\A([ns])(?:bit_(?:and|or|xor)|complement)\z/;
+        return (flavor => $1 eq 'n' ? 'numeric' : 'string');
+    }
+
     # The real operand count for an op whose arity VARIES, or undef to use the
     # table's fixed pop_count.
     #
@@ -7186,6 +7198,7 @@ class SoN::FromOptree 0.01 {
                          // _result_stamp($node_type, \@inputs,
                     $node_type eq 'Call' ? $name : undef);
                 $extra{stamp} = $stamp if defined $stamp;
+                %extra = (%extra, _bitwise_flavor($name));
                 my $node = $factory->make($node_type, inputs => \@inputs, %extra);
 
                 # A TARGMY write into a class FIELD slot (e.g. ADJUST's
@@ -8266,6 +8279,7 @@ class SoN::FromOptree 0.01 {
                     && $GLOBAL_STATE_BUILTIN{$name}
                     && defined $sim->memory;
 
+                %extra = (%extra, _bitwise_flavor($name));
                 my $node = $factory->make($node_type, inputs => \@inputs, %extra);
                 if ($void_effect_call || $pin_on_control) {
                     $node->set_control_in($sim->control);

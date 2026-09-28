@@ -3190,6 +3190,18 @@ class SoN::Deparse 0.01 {
             # sees, so the emitted program must read.
             $text = $self->_slot_name($n);
         }
+        # A BITWISE OP THE FEATURE DECIDED. The emission carries no `use
+        # v5.28`, so its `&` is the dual operator, which does a string AND on
+        # two strings -- where the source's numeric `&` did not. Coercing each
+        # operand the way the feature's operator does makes the dual one
+        # agree: numbers for & | ^, strings for &. |. ^.
+        elsif ($op =~ /\ABit(?:And|Or|Xor)\z/
+                && defined(my $flavor = ($n->{fields} // {})->{flavor})) {
+            die "GAP: a $op with " . scalar(@in) . " inputs is not yet"
+              . " rendered\n" unless @in == 2;
+            my @spelled = map { $self->_bitwise_operand($flavor, $_) } @in;
+            $text = '(' . $spelled[0] . ' ' . $BINOP{$op} . ' ' . $spelled[1] . ')';
+        }
         elsif (my $sym = $BINOP{$op}) { $text = $self->_binop($sym, @in) }
         elsif ($op eq 'TernaryExpr') {
             # cond ? then : else -- a VALUE select, distinct from the If
@@ -3593,7 +3605,10 @@ class SoN::Deparse 0.01 {
         elsif ($op eq 'Complement') {
             die "GAP: a Complement with " . scalar(@in) . " inputs is not yet"
               . " rendered\n" unless @in == 1;
-            $text = sprintf('(~(%s))', $self->_expr($in[0]));
+            my $flavor = ($n->{fields} // {})->{flavor};
+            $text = defined $flavor
+                ? '(~' . $self->_bitwise_operand($flavor, $in[0]) . ')'
+                : sprintf('(~(%s))', $self->_expr($in[0]));
         }
         elsif ($op eq 'Phi') {
             # READING A LOOP PHI IS READING ITS VARIABLE. _emit_loop declares
@@ -4063,6 +4078,13 @@ class SoN::Deparse 0.01 {
         }
 
         die "GAP: a Call with dispatch_kind `$kind` is not yet rendered\n";
+    }
+
+    # One operand of a bitwise op whose flavor the `bitwise` feature fixed,
+    # coerced so the emission's dual operator reads it the same way.
+    method _bitwise_operand ($flavor, $id) {
+        my $e = $self->_expr($id);
+        return $flavor eq 'numeric' ? '(0 + ' . $e . ')' : '("" . ' . $e . ')';
     }
 
     method _binop ($perl_op, $l, $r) {

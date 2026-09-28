@@ -64,6 +64,12 @@ sub _extract_fields ($node, $id_remap) {
                 : () ),
         };
     }
+    # A BITWISE OP UNDER THE `bitwise` FEATURE says which operator it is:
+    # 'numeric' (& | ^ ~) or 'string' (&. |. ^. ~.). Absent for the dual
+    # operator, which decides from its operands at runtime.
+    if ($op =~ /\A(?:BitAnd|BitOr|BitXor|Complement)\z/) {
+        return defined $node->flavor ? { flavor => $node->flavor } : undef;
+    }
     # A PAD-BOUND AGGREGATE CARRIES THE NAME IT WAS BOUND TO, so a consumer can
     # WRITE the container. Without it an element store is unrenderable: the
     # aggregate is represented by the literal that initialised it, and
