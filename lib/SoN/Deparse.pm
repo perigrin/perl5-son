@@ -111,6 +111,9 @@ class SoN::Deparse 0.01 {
         # `times` is the op `tms`. Four values (user/system, and the same for
         # children), so the same op-name-vs-keyword trap one builtin over.
         tms    => 'times',
+        # The four-argument `select(R, W, E, TIMEOUT)` is the op `sselect`;
+        # `select(FH)` is `select`. Same keyword, two ops.
+        sselect => 'select',
         # `do EXPR` runs a file. It is a named unary operator, so it takes no
         # parens around a parenthesised expression the way a function would --
         # `dofile($f)` is a call to a sub that does not exist.
@@ -3782,6 +3785,12 @@ class SoN::Deparse 0.01 {
             die "GAP: a Negate with " . scalar(@in) . " inputs is not yet"
               . " rendered\n" unless @in == 1;
             $text = sprintf('(-(%s))', $self->_expr($in[0]));
+        }
+        elsif ($op eq 'Wantarray') {
+            # The calling context of the sub it runs in -- undef at file
+            # scope. Spelled as itself; the emitted sub is called in the same
+            # context its caller's graph records.
+            $text = 'wantarray';
         }
         elsif ($op eq 'Increment') {
             # perl's `++`, magic on a string. The node is the value AFTER the

@@ -2890,18 +2890,21 @@ class SoN::FromOptree 0.01 {
     # is worth keeping in the names.
     my %STACK_READ_BUILTIN = map { $_ => 1 } qw(caller);
 
-    # ITS STAMP IS STILL WRONG, and deliberately left so. `caller` comes out
-    # Scalar even in list context, because TypeLibrary has no row for it --
-    # correctly, since a row would be the JOIN of "the package" and "3+
-    # values", and that join reaches Unknown and says nothing. TypeLibrary
-    # names the remedy under WHAT IS DELIBERATELY ABSENT: read `$op->flags`
-    # here, the trade `readline` already takes.
-    #
-    # NOT DONE BECAUSE NOTHING READS IT. The deparser refuses `caller` before
-    # it looks at the stamp, and no backend lowers a stack read yet, so a
-    # stamp added now would be a claim with no consumer to check it -- which
-    # is how a guess gets embedded and then defended. The mechanism is one
-    # line (`$op->flags & 3`) whenever a reader appears.
+    # ITS STAMP IS READ FROM THE OP, as TypeLibrary prescribes under WHAT IS
+    # DELIBERATELY ABSENT -- `$op->flags` here, the trade `readline` takes.
+    # TypeLibrary still has no row for it, correctly: a row would be the JOIN
+    # of "the package" and "3+ values", which reaches Unknown and says
+    # nothing. _context_builtin_stamp gives List in list context and Scalar in
+    # scalar; the deparser reads it once `my @l = caller` needed the list
+    # binding (corpus 084).
+
+    # `select FH` CHANGES WHICH HANDLE A BARE print WRITES TO, and returns the
+    # previous one -- global state, in any context. Bound to a variable it is
+    # not void, so like the reads above it was never pinned, and the emission
+    # moved it past the print it redirects: `my $prev = select($out); print
+    # ...` came out `print ...; select(select($out))` (corpus 224). The
+    # four-argument form is the op `sselect` and changes nothing.
+    my %HANDLE_SELECT_BUILTIN = map { $_ => 1 } qw(select);
 
     # Ops that are an EFFECT in their own right rather than a call. The void
     # branch-arm scan needs this: it asked "is this arm an entersub in void
@@ -8394,6 +8397,9 @@ class SoN::FromOptree 0.01 {
                     # %STACK_READ_BUILTIN.
                     $pin_on_control = 1
                         if $STACK_READ_BUILTIN{$name} && !$void;
+
+                    $pin_on_control = 1
+                        if $HANDLE_SELECT_BUILTIN{$name} && !$void;
 
                     # A FOUR-ARGUMENT substr WRITES ITS STRING, in any context
                     # -- `my $old = substr($b, 0, 1, "J")` is want=SCALAR and
