@@ -103,7 +103,12 @@ for my $c (@cases) {
     my $out = eval { $d->render($data) };
     unless (defined $out) {
         $tally{REFUSED}++;
-        push @unrendered, [$id, 'REFUSED', $c->{file}, whole_message($d->gap // $@)];
+        # A PROGRAM THE PRODUCER SKIPPED renders as "no main::__PROGRAM__",
+        # which names no cause; the producer's GAP is on its stderr.
+        my $why = whole_message($d->gap // $@);
+        $why .= ' | ' . whole_message(do { local(@ARGV, $/) = "$dir/e"; <> })
+            if $why =~ /no main::__PROGRAM__/;
+        push @unrendered, [$id, 'REFUSED', $c->{file}, $why];
         next;
     }
 
