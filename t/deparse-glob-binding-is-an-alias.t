@@ -88,25 +88,22 @@ SRC
 
 # A CODE BINDING INSTALLS A SUB under the new name, which is what makes the
 # later call resolve at all.
-# A CALL THROUGH A BOUND NAME IS REFUSED, NOT MISCOMPILED. The renderer
-# refuses a call to a sub that is not in the graph, because emitting one would
-# produce a program that dies -- and a name installed by a glob binding is not
-# a named sub the graph carries. That refusal is correct today: nothing has
-# taught the check that a binding installs the name. TODO because the refusal
-# is a missing lowering rather than a fact, unlike `*FH = shift`.
-{
-    my $todo = todo 'a call through a glob-bound name is refused, not yet lowered';
-    round_trips( <<'SRC', 'a code binding installs the sub' );
+# A CALL THROUGH A BOUND NAME RENDERS. The renderer refuses a call to a sub
+# that is not in the graph, because emitting one would produce a program that
+# dies -- but a name installed by a glob binding is defined at runtime, and
+# the graph says so: the binding is an EntryWrite into the name's `&` slot.
+# _defined_at_runtime reads exactly that. These were TODO while the check
+# did not know it.
+round_trips( <<'SRC', 'a code binding installs the sub' );
 sub SRC { "code" }
 *foo3 = \&SRC;
 print foo3(), "\n";
 SRC
 
-    round_trips( <<'SRC', 'an anon sub binding installs the sub' );
+round_trips( <<'SRC', 'an anon sub binding installs the sub' );
 *foo4 = sub { 42 };
 print foo4(), "\n";
 SRC
-}
 
 # A SCALAR BINDING ALIASES THE SCALAR. Rendered as a store it printed
 # SCALAR(0x...) -- the reference itself -- where perl prints what it points at.

@@ -503,6 +503,27 @@ class SoN::Deparse 0.01 {
         return $short;
     }
 
+    # True when the program defines sub $name while it runs rather than by
+    # declaring it: an AUTOLOAD in its package, or a store into its CODE slot
+    # -- an EntryWrite whose target is the `&` entry of that name -- in any
+    # graph. See the not-in-the-graph refusal in _call_expr.
+    method _defined_at_runtime ($name) {
+        my ($pkg, $short) = $name =~ /\A(.*)::([^:]+)\z/ or return 0;
+        return 1 if exists $all_methods->{"${pkg}::AUTOLOAD"};
+        for my $g (values $all_methods->%*) {
+            my %by = map { $_->{id} => $_ } ($g->{nodes} // [])->@*;
+            for my $w (values %by) {
+                next unless ($w->{op} // '') eq 'EntryWrite';
+                my $t = $by{ ($w->{inputs} // [])->[0] // -1 } or next;
+                my $f = $t->{fields} // {};
+                return 1 if ($f->{sigil} // '') eq '&'
+                    && ($f->{package} // '') eq $pkg
+                    && ($f->{symbol} // '') eq $short;
+            }
+        }
+        return 0;
+    }
+
     # ` (PROTO)` for a sub the source declared with a prototype, else ''.
     # The metadata is keyed by package and short name; the method key is the
     # fully qualified one, and the last `::` separates them.
@@ -2710,6 +2731,15 @@ class SoN::Deparse 0.01 {
               . " rendered -- its first input is a `"
               . ($nodes->{ $in[0] // -1 }{op} // '?') . "`\n"
                 unless $t;
+
+            # A SCALAR ASSIGN IS [target, value], whatever kind the value is.
+            # `my $n = $AUTOLOAD` stores an EntryDef, which the kind walk above
+            # takes for a second target -- then there is no value and it
+            # refused (corpus 204). Position decides, as it does for the
+            # ArgsSource and PostfixDeref cases above; a list assign is the one
+            # stamped List, and only it can have several targets.
+            $t = 1 if $t == @in && @in == 2 && ($n->{stamp} // '') ne 'List';
+
             my @lhs = map { $self->_location($_) } @in[0 .. $t-1];
             my @rhs = map { $self->_expr($_) } @in[$t .. $#in];
             die "GAP: an Assign (id $n->{id}) with no values is not yet"
@@ -4075,10 +4105,18 @@ class SoN::Deparse 0.01 {
             # reached through a reference rather than a name, and a builtin has
             # no `methods` entry by construction. Only a name that LOOKS like a
             # user sub and is absent is a call into nothing.
+            #
+            # UNLESS THE PROGRAM DEFINES IT AT RUNTIME, which the graph says in
+            # two ways: a glob assignment into the name's CODE slot (`*sq =
+            # sub {...}` is an EntryWrite to `&main::sq`, corpus 202), or an
+            # AUTOLOAD in its package, which perl calls for any sub it cannot
+            # find (corpus 204). Either way the emitted program defines what
+            # the call reaches.
             die "GAP: a call to `$name`, which is not in the graph, cannot be"
               . " rendered -- the emitted program would die calling it\n"
                 if $name =~ /\A\w+(?:::\w+)*\z/
-                && !exists $all_methods->{$name};
+                && !exists $all_methods->{$name}
+                && !$self->_defined_at_runtime($name);
 
             my $ident = $self->_sub_ident($name);
 
