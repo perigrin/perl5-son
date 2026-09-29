@@ -1387,6 +1387,38 @@ class SoN::Deparse 0.01 {
             #
             # A MEMORY Region IS ALSO NOTHING TO SAY -- chains merge, and the
             # ordering is the placement.
+            # THE FUNCTION'S EXIT REGION, reached along the chain. From inside a
+            # loop it is a `return` of this path's value: control cannot fall
+            # out of the loop to the single Return. Outside one, an exit Phi
+            # nothing bound yet -- its other paths returned from inside a loop
+            # -- takes this path's value.
+            if ($n->{op} eq 'Region' && $self->_is_fn_exit($n, $next_of)) {
+                my @in = ($n->{inputs} // [])->@*;
+                my ($k) = grep { $in[$_] == $cur } 0 .. $#in;
+                my @rphis = grep { ($_->{op} // '') eq 'Phi'
+                        && (($_->{fields}{region} // -1) == $n->{id})
+                        && !$self->_is_memory($_->{id}) } values $nodes->%*;
+                if (@loop_frames) {
+                    die "GAP: a return from inside a loop whose exit carries"
+                      . " more than one value is not yet rendered\n"
+                        unless defined $k && @rphis <= 1;
+                    $out .= @rphis
+                        ? sprintf("return %s;\n",
+                                  $self->_expr($rphis[0]{inputs}[$k]))
+                        : "return;\n";
+                    last;
+                }
+                if (defined $k) {
+                    for my $ph (@rphis) {
+                        next if exists $bound{ $ph->{id} };
+                        my $var = sprintf('$ret%d', $ph->{id});
+                        $out .= sprintf("my %s = %s;\n", $var,
+                                        $self->_expr($ph->{inputs}[$k]));
+                        $bound{ $ph->{id} } = $var;
+                    }
+                }
+            }
+
             if ($n->{op} eq 'Region') {
                 # THE FALL-THROUGH INTO A LATCH pays its Phis their input 0.
                 for my $f (@loop_frames) {
@@ -2301,6 +2333,30 @@ class SoN::Deparse 0.01 {
         return 0;
     }
 
+    # A Region whose control goes on to the Return: the function's exit join.
+    method _is_fn_exit ($r, $next_of) {
+        return scalar grep { ($_->{op} // '') eq 'Return' }
+                           ($next_of->{ $r->{id} } // [])->@*;
+    }
+
+    # The function's exit Region an arm reaches, or undef -- bounded like
+    # _reaches_region, so an exit through a nested branch is that branch's.
+    method _arm_fn_exit ($proj, $next_of) {
+        my %seen;
+        my @todo = ( $proj );
+        while (@todo) {
+            my $n = shift @todo;
+            next unless $n && !$seen{ $n->{id} }++;
+            if ( ( $n->{op} // '' ) eq 'Region' ) {
+                return $n->{id} if $self->_is_fn_exit( $n, $next_of );
+                next;
+            }
+            next if ( $n->{op} // '' ) =~ /\A(?:If|Loop)\z/ && $n->{id} != $proj->{id};
+            push @todo, ( $next_of->{ $n->{id} } // [] )->@*;
+        }
+        return undef;
+    }
+
     method _emit_if ($n, $next_of, $outer_stop = undef) {
         my $cond = $self->_expr($n->{inputs}[1]);
 
@@ -2393,6 +2449,16 @@ class SoN::Deparse 0.01 {
                                    $f->{latch}{$r}->@* } };
             }
         }
+        # AN ARM THAT RETURNS FROM INSIDE A LOOP lands on the function's exit
+        # Region; the arm is emitted whole, ending in its `return`.
+        if (@loop_frames) {
+            for my $ix ( 0, 1 ) {
+                my $r = $arm{$ix} && $self->_arm_fn_exit( $arm{$ix}, $next_of )
+                    or next;
+                push @edges, { region => $r, word => 'return',
+                               pay => sub { '' } };
+            }
+        }
         for my $edge (@edges) {
             for my $ix ( 0, 1 ) {
                 next unless $arm{$ix}
@@ -2417,7 +2483,9 @@ class SoN::Deparse 0.01 {
                 # variable must hold on this path; assigning before the `last`
                 # is what makes a post-loop read correct on both exits.
                 my $pay  = $edge->{pay}->();
-                my $jump = "$edge->{word};\n";
+                my $jump = $edge->{word} eq 'return'
+                    ? $self->_emit_from( $arm{$ix}{id}, $next_of, undef )
+                    : "$edge->{word};\n";
                 my $text = $ix == 0
                     ? sprintf("if (%s) {\n%s}\n", $cond, _indent($pay . $jump))
                     : sprintf("if (!(%s)) {\n%s}\n", $cond, _indent($pay . $jump));

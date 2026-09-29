@@ -7,6 +7,18 @@ use File::Temp qw(tempdir);
 
 my $dir = tempdir( CLEANUP => 1 );
 
+use SoN::Deparse;
+
+sub run_perl ($src) {
+    my $f = "$dir/r." . int( rand 1e9 ) . ".pl";
+    open my $fh, '>', $f or die $!;
+    print $fh $src;
+    close $fh;
+    my $out = qx(/usr/bin/timeout 10 $^X $f 2>&1);
+    unlink $f;
+    return $out;
+}
+
 sub graph_of ($src) {
     my $f = "$dir/g." . int( rand 1e9 ) . ".pl";
     open my $fh, '>', $f or die $!;
@@ -28,7 +40,7 @@ sub graph_of ($src) {
 # This is a defect introduced by the branch-arm break work (21776e8), not a
 # pre-existing one: before it, a `last` in an arm was refused outright and
 # never produced a signal at all.
-subtest 'a break in an arm lowers where a return refuses' => sub {
+subtest 'a break in an arm and a return in an arm are different edges' => sub {
     my ( $brk, $brk_err ) = graph_of( <<'SRC' );
 my @o = ("A", "HIT", "C");
 my $n = 0;
@@ -37,14 +49,20 @@ print "$n\n";
 SRC
     ok $brk, 'the break form translates' or diag($brk_err);
 
-    my ( undef, $ret_err ) = graph_of( <<'SRC' );
+    # THE RETURN LEAVES THE SUB, not just the loop: read as a break, `f`
+    # would fall out and return 0 where perl returns 4.
+    my $src = <<'SRC';
 sub f {
     for my $i (1..9) { if ($i == 4) { return $i } }
     return 0;
 }
 print f(), "\n";
 SRC
-    like $ret_err, qr/GAP:/, 'the return form still refuses';
+    my ( $ret, $ret_err ) = graph_of($src);
+    ok $ret, 'the return form translates' or diag($ret_err);
+    my $out = $ret && SoN::Deparse->new->render($ret);
+    is run_perl($out // ''), run_perl($src), '... and returns 4 as perl does'
+        or diag $out;
 };
 
 # A BREAK MUST NOT REACH A FUNCTION-EXIT CONSUMER. The value-arm handlers

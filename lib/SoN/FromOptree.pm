@@ -364,6 +364,11 @@ class SoN::FromOptree 0.01 {
     # walk records nothing, exactly as $break_projs undef means for `last`.
     our @LOOP_STACK;
 
+    # THE FUNCTION'S EXIT LIST, for a `return` inside a loop body: the loop
+    # walkers have no path to _translate_from's @exits otherwise. `local` per
+    # translated CV.
+    our $FN_EXITS;
+
     # The label of the statement most recently entered, from its nextstate.
     # A loop's label is on the nextstate that immediately precedes its enter*.
     our $STMT_LABEL;
@@ -757,6 +762,7 @@ class SoN::FromOptree 0.01 {
         # an arm records its exit instead of dying / truncating the graph.
         my @exits;
         my $main_terminated = 0;   # set when the main path hits return/leavesub
+        local $FN_EXITS = \@exits;
         # $ctx->{pending_method}: method name recorded by method_named for the
         # following entersub (method dispatch). Carried on $ctx so the SHARED
         # entersub/method_named handlers work identically in the main walk and in
@@ -1235,6 +1241,14 @@ class SoN::FromOptree 0.01 {
                     # re-seating it on the Proj is the whole fix.
                     if (@exits && $exits[-1]{control} == $sim->control) {
                         $exits[-1]{control} = $exit_proj;
+                    }
+                    # AN ARM THAT BRANCHED BEFORE IT LEFT -- `if (C) { return 9
+                    # if D; return 1 }` -- hung its own If off the pre-guard
+                    # control. That chain is the taken arm, so its first node
+                    # moves onto the taken Proj, as a bare exit does above.
+                    elsif (@exits && (my $first = _first_control_after(
+                               $exits[-1]{control}, $sim->control))) {
+                        $first->set_control_in($exit_proj);
                     }
                     else {
                         die "GAP: a guarded exit whose arm moved control without building its If\n";
@@ -10873,6 +10887,15 @@ class SoN::FromOptree 0.01 {
             # A function exit inside the loop body cannot be represented yet
             # (its control edge leaves the loop mid-iteration); walking
             # through it produced silently wrong graphs, so refuse loudly.
+            # A `return` LEAVES THE LOOP AND THE SUB: an exit edge from here to
+            # the function's single Return, recorded like any other. This pass
+            # of the body ends with it. Recorded only on a real walk -- a
+            # scout's nodes are throwaway.
+            if ($name eq 'return' && $FN_EXITS) {
+                my $rec = _exit_record($sim, $factory, 'return', $op);
+                push @$FN_EXITS, $rec if defined $break_projs && !$IN_SCOUT;
+                last;
+            }
             if ($name eq 'return' || $name eq 'leavesub' || $name eq 'leavesublv') {
                 die "GAP: function exit inside a loop body not yet lowered\n";
             }
@@ -11127,10 +11150,26 @@ class SoN::FromOptree 0.01 {
                 # unhandled op) or a visited op.
                 my $rest_sim = $sim->snapshot;
                 $rest_sim->set_control($rest_proj);
-                my ($rest_end) =
+                # A `return` in the rest is a function exit; see $FN_EXITS.
+                my $rest_exits = (defined $break_projs && !$IN_SCOUT)
+                    ? $FN_EXITS : [];
+                my ($rest_end, $rest_sig) =
                     _walk_branch($cv, $op->next, $rest_sim, $factory, $opmap,
-                        $loop_visited, undef, 0, ($CONTINUE_START ? ${$CONTINUE_START} : undef),
+                        $loop_visited, $rest_exits, 0, ($CONTINUE_START ? ${$CONTINUE_START} : undef),
                         $loop_node, $break_projs, 1);
+                # THE REST RETURNED, so it never reaches the latch: the loop
+                # goes on only along the guard-taken arm, with the bindings it
+                # had at the guard. The ops after the return are dead.
+                if (($rest_sig // '') eq 'exited') {
+                    die "GAP: a `last if` whose rest of the body returns is not"
+                      . " yet lowered\n" unless $kind eq 'next' && !$frame;
+                    $sim->set_control($taken_proj);
+                    $op = $rest_end->next;
+                    $op = $op->next
+                        while $$op && !($CONTINUE_START && $$op == ${$CONTINUE_START})
+                            && $op->name ne 'unstack' && $op->name ne 'leaveloop';
+                    next;
+                }
                 # Drain any leftover residual the rest-arm pushed (a void
                 # statement value) so merge() does not build a spurious stack Phi.
                 $rest_sim->pop_node while $rest_sim->stack_depth > $sim->stack_depth;
@@ -11202,6 +11241,44 @@ class SoN::FromOptree 0.01 {
                 # Resume the outer walk at the op the rest-arm converged on (the
                 # body's unstack / leaveloop) so the loop-body loop terminates.
                 $op = (defined $rest_end && ref $rest_end) ? $rest_end : $op->next;
+                next;
+            }
+
+            # A GUARDED RETURN IN THE BODY -- `return X if C`, `if (C) {
+            # return X }` -- leaves the loop and the sub on the taken arm; the
+            # body goes on along the other. The arm is walked with the
+            # function's exit list, where its Return edge is recorded.
+            #
+            # Only once the loop's own condition is taken: before that, an
+            # `and` whose arm opens with a return may be the loop's header.
+            if (($name eq 'and' || $name eq 'or') && $sim->stack_depth > 0
+                    && ($condition_fired || $cond_consumed)
+                    && $stmt_count >= 1
+                    && ($op->flags & 3) == 1      # OPf_WANT_VOID
+                    && $op->can('other') && ${$op->other}
+                    && _is_loop_control_or_exit($op->other)
+                    && !defined _guarded_loop_control($op->other)
+                    && $op->other->name ne 'redo'
+                    && $FN_EXITS) {
+                my $cond = $sim->pop_node;
+                my $if_node = $factory->make_cfg('If',
+                    inputs => [$sim->control, $cond]);
+                my ($taken_idx, $skip_idx) = $name eq 'or' ? (1, 0) : (0, 1);
+                my $taken_sim = $sim->snapshot;
+                $taken_sim->set_control($factory->make_cfg('Proj',
+                    inputs => [$if_node], index => $taken_idx));
+                my $exits = (defined $break_projs && !$IN_SCOUT)
+                    ? $FN_EXITS : [];
+                my (undef, $sig) =
+                    _walk_branch($cv, $op->other, $taken_sim, $factory, $opmap,
+                        {}, $exits, 0, _op_addr($op->next),
+                        $loop_node, $break_projs, 1);
+                die "GAP: a guarded arm in a loop body that leaves by neither"
+                  . " a return nor loop control is not yet lowered\n"
+                    unless ($sig // '') eq 'exited';
+                $sim->set_control($factory->make_cfg('Proj',
+                    inputs => [$if_node], index => $skip_idx));
+                $op = $op->next;
                 next;
             }
 
@@ -11646,6 +11723,22 @@ class SoN::FromOptree 0.01 {
             $o = $o->next;
         }
         return $$o ? $o : undef;
+    }
+
+    # _first_control_after($c, $pre) -> the node on $c's control chain whose
+    # control input is $pre, walking back through Projs and control_in; undef
+    # when the chain passes a Region (a merge has no single way back) or never
+    # reaches $pre.
+    sub _first_control_after ($c, $pre) {
+        for (1 .. 10_000) {
+            return undef unless defined $c;
+            my $op = $c->operation;
+            return undef if $op eq 'Region' || $op eq 'Loop';
+            my $prev = $op eq 'Proj' ? $c->inputs->[0] : $c->control_in;
+            return $c if defined $prev && $prev == $pre;
+            $c = $prev;
+        }
+        return undef;
     }
 
     # _static_goto($op) -> the `goto LABEL` op when $op is one, or is an
@@ -12936,6 +13029,11 @@ class SoN::FromOptree 0.01 {
                     $name eq 'return' ? 'return' : 'leavesub', $op);
                 return ($op, 'exited');
             }
+            # A `return` WITH NO EXIT LIST TO RECORD IT would be stepped as an
+            # ordinary op, pop its value and build nothing -- the return
+            # vanishes. Refuse instead.
+            die "GAP: a `return` in an arm with no function exit to record it"
+              . " is not yet lowered\n" if $name eq 'return';
             # $stop_at_exit (cond_expr / && / || value arms): stop BEFORE stepping
             # the implicit function exit (leavesub) so it does not consume the
             # arm's computed value. An EXPLICIT return in an arm is handled above
@@ -13232,7 +13330,14 @@ class SoN::FromOptree 0.01 {
                     || _arm_has_die($op->other, $op->next, $mod_stop)
                     || ( $in_loop
                          && defined _guarded_loop_control($op->other)
-                         && _guarded_loop_control($op->other) eq 'last' );
+                         && _guarded_loop_control($op->other) eq 'last' )
+                    # A RETURNING ARM TOO: its exit edge must leave from the
+                    # taken Proj, or the pre-guard control has two successors
+                    # (the guard's continuation and the function exit).
+                    || ( $exits
+                         && _is_loop_control_or_exit($op->other)
+                         && !defined _guarded_loop_control($op->other)
+                         && $op->other->name ne 'redo' );
                 my $guard   = $sim->pop_node;
                 my $mod_sim = $sim->snapshot;
                 my $if_node;

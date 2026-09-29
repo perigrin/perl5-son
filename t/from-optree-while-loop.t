@@ -124,14 +124,20 @@ subtest 'topological order cuts only the Phi backedges' => sub {
     is(\@violations, [], 'no forward references outside Phi backedges');
 };
 
-subtest 'return inside a loop body refuses loudly' => sub {
-    like(
-        dies {
-            graph_of('sub { my $n = 3; while ($n > 0) { return 9 if $n == 1; $n-- } 0 }')
-        },
-        qr/GAP/,
-        'function exit inside a loop body dies with a GAP message'
-    );
+# A RETURN IN THE BODY IS A FUNCTION EXIT: an edge from inside the loop to the
+# sub's single Return, merged there with the fall-out path. It was refused;
+# walking through it instead would drop the return, which is the reason the
+# refusal existed.
+subtest 'a return inside a loop body is an exit to the single Return' => sub {
+    my $g = graph_of(
+        'sub { my $n = 3; while ($n > 0) { return 9 if $n == 1; $n-- } 0 }');
+    my @ret = nodes_of($g, 'Return');
+    is(scalar @ret, 1, 'one Return');
+    my $v = $ret[0]->inputs->[0];
+    is($v->operation, 'Phi', 'its value merges the exits');
+    my @vals = sort map { $_->operation eq 'Constant' ? $_->value : '?' }
+                    $v->inputs->@*;
+    is(\@vals, [0, 9], 'the fall-out 0 and the in-loop 9');
 };
 
 done_testing();

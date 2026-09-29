@@ -184,17 +184,16 @@ for my $i (1..9) { last if $i == 6; next if $i == 2; $s += $i }
 print "$s\n";
 SRC
 
-# A RETURN in the same position must still refuse -- it is a function exit
-# with nowhere to go, and distinguishing the two signals is the whole point.
-subtest 'a return inside a statement modifier in a loop still refuses' => sub {
-    my ( undef, $err ) = graph_of( <<'SRC' );
+# A RETURN in the same position is a FUNCTION exit, not a break: an edge from
+# inside the loop to the sub's single Return, spelled `return` where it
+# happens. Distinguishing the two signals is still the point -- a return
+# lowered as a `last` would print 0 here, where perl prints 4.
+round_trips( <<'SRC', 'a return inside a statement modifier in a loop' );
 sub f {
     for my $i (1..9) { next if $i == 2; return $i if $i == 4 }
     return 0;
 }
 print f(), "\n";
 SRC
-    like $err, qr/GAP:/, 'it is refused';
-};
 
 done_testing;
