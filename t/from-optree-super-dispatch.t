@@ -81,11 +81,11 @@ sub round_trips ($src, $name) {
 # the emitted `->SUPER::hi()` looked up main's @ISA and died "Can't locate
 # object method via package main".
 #
-# So this needs a WIRE FIELD -- the enclosing package on the Call -- and that
-# is a change chalk must agree to, not something the renderer can recover.
-# Reverted; the honest refusal stands.
-{
-    my $todo = todo 'SUPER:: needs the enclosing package on the wire (a chalk-visible change)';
+# So this needs the enclosing package, and it lands on the wire now, in the
+# method name: `$o->Derived::SUPER::hi()`, which perl resolves from Derived
+# wherever it is written. The package is the enclosing statement's (its
+# nextstate), since method_super's rclass is 0. Added producer-side ahead of
+# chalk, as approved 2026-09-28; no longer TODO.
 round_trips( <<'SRC', 'SUPER:: reaches the parent method' );
 package Base;
 sub hi { return "base" }
@@ -109,6 +109,5 @@ package main;
 my $o = bless {}, "Derived";
 print $o->both(), "\n";
 SRC
-}
 
 done_testing;

@@ -73,18 +73,17 @@ sub round_trips ($src, $name) {
 # nothing, which turned out to be a scalar-context rv2av with no handler --
 # fixed separately, t/wire-deref-count-in-scalar-context.t.)
 #
-# What actually drops the initialiser is the glob binding PLUS A READ THROUGH
-# THE BOUND NAME: the binding renders correctly
-# (`*main::crackers = \@main::SRC;`) and `@main::SRC` is never filled in. A
-# narrower interaction than recorded, and still open.
-{
-    my $todo = todo 'a glob binding read through its bound name drops the initialiser';
-    round_trips( <<'SRC', 'an array binding aliases the array' );
+# What actually dropped the initialiser was the glob binding PLUS A READ
+# THROUGH THE BOUND NAME: the binding rendered correctly
+# (`*main::crackers = \@main::SRC;`) and `@main::SRC` was never filled in,
+# because a package aggregate's assignment was a binding, not a store, and
+# reached the wire only if the program graph read it by its own name. It is a
+# store now (EntryWrite), which is what fixed this; no longer TODO.
+round_trips( <<'SRC', 'an array binding aliases the array' );
 our @SRC = (1,2,3);
 *crackers = \@SRC;
 print "@crackers\n";
 SRC
-}
 
 # A CODE BINDING INSTALLS A SUB under the new name, which is what makes the
 # later call resolve at all.
@@ -115,14 +114,11 @@ SRC
 
 # THE ALIAS IS LIVE, which is what separates a binding from a copy: a later
 # write through either name is visible through both.
-{
-    my $todo = todo 'a glob binding read through its bound name drops the initialiser';
-    round_trips( <<'SRC', 'the alias is live, not a copy' );
+round_trips( <<'SRC', 'the alias is live, not a copy' );
 our @SRC = (1,2,3);
 *crackers = \@SRC;
 push @SRC, 4;
 print "@crackers\n";
 SRC
-}
 
 done_testing;

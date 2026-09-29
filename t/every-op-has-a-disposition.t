@@ -46,9 +46,13 @@ use SoN::FromOptree::OpMap;
 # not a constant on it, so consuming the op without reading its operand lost
 # the name. That is the same shape as the `leavetry` note below -- a category
 # assigned by assumption rather than by translating the construct.
+#
+# `method_super` LEFT IT TOO, for the same reason: it carries the method name
+# on the op, and consumed unread the Call was named `unknown` (corpus 050).
+# It has a handler now, which qualifies the name with the enclosing package.
 my %CONSUMED_BY_OPENER = map { $_ => 1 } qw(
     leaveeval leavetry leavegiven leavewhen
-    method_redir method_redir_super method_super
+    method_redir method_redir_super
 );
 
 # Ops with no disposition and no construct that reaches them yet. Listing them

@@ -1536,6 +1536,11 @@ class SoN::FromOptree 0.01 {
                 $op = $op->next;
                 next;
             }
+            if ($name eq 'method_super') {
+                _handle_method_super($cv, $op, $ctx);
+                $op = $op->next;
+                next;
+            }
 
             # Handle return / leavesub: record an exit and STOP this linear
             # path. The final single Return is built from @exits below (plus
@@ -3143,6 +3148,25 @@ class SoN::FromOptree 0.01 {
     # the stack (entersub consumes it). The name SV can be a shared B::SPECIAL
     # whose value lives in the pad (the same indirection the const handler
     # resolves). State rides $ctx->{pending_method} so every walker shares it.
+    # THE PACKAGE THE CURRENT STATEMENT WAS COMPILED IN, from its nextstate.
+    # `SUPER::` resolves from it, and perl does not put it on the method_super
+    # op (rclass is 0 there) -- it is the enclosing COP's stash. A package
+    # variable rather than a $ctx field because branch and loop walks each
+    # build their own $ctx; the walk is sequential, so the last nextstate
+    # seen is the enclosing one.
+    our $CURRENT_PACKAGE = 'main';
+
+    # `$o->SUPER::m()`: the method name qualified by the package in effect,
+    # `PKG::SUPER::m`, which perl resolves from PKG wherever the call is
+    # emitted -- the emission puts every statement in main. It had no handler,
+    # so the Call was named `unknown` (corpus 050).
+    sub _handle_method_super ($cv, $op, $ctx) {
+        _handle_method_named($cv, $op, $ctx);
+        $ctx->{pending_method} = $CURRENT_PACKAGE . '::SUPER::' . $ctx->{pending_method}
+            unless $ctx->{pending_method} eq 'unknown';
+        return;
+    }
+
     sub _handle_method_named ($cv, $op, $ctx) {
         my $meth_sv = $op->meth_sv;
         if ((!$$meth_sv || $meth_sv->isa('B::SPECIAL')) && $op->targ) {
@@ -3437,6 +3461,13 @@ class SoN::FromOptree 0.01 {
         my $name = $op->name;
         my $mode = $ctx->{mode};
 
+        # THE PACKAGE IN EFFECT is the enclosing statement's, and a `package`
+        # declaration changes it mid-file. See $CURRENT_PACKAGE.
+        if ($name eq 'nextstate' || $name eq 'dbstate') {
+            my $pkg = eval { $op->stashpv } // eval { $op->stash->NAME };
+            $CURRENT_PACKAGE = $pkg if defined $pkg && length $pkg;
+        }
+
         # Handle pushmark specially - just record the mark
         if ($name eq 'pushmark') {
             $sim->push_mark;
@@ -3695,6 +3726,10 @@ class SoN::FromOptree 0.01 {
         # (zhi 019f2df7 -- a void `$c->inc` in a conditional arm was dropped).
         if ($name eq 'method_named') {
             _handle_method_named($cv, $op, $ctx);
+            return ($op->next, 'handled');
+        }
+        if ($name eq 'method_super') {
+            _handle_method_super($cv, $op, $ctx);
             return ($op->next, 'handled');
         }
         # THE DYNAMIC FORM TAKES ITS NAME FROM THE STACK. perl has two ops:
@@ -7652,6 +7687,13 @@ class SoN::FromOptree 0.01 {
                         stamp   => SoN::IR::Stamp->new(
                             type => ($sigil eq '@' ? 'Array' : 'Hash')));
                     $sim->define($key, $node);
+                    # A PACKAGE AGGREGATE IS OBSERVABLE OUTSIDE THIS GRAPH -- by
+                    # a sub (`our @x = (1,2); sub f { print "@x" }`), by method
+                    # resolution (`our @ISA = ("Base")`) -- so the assignment is
+                    # a STORE, as a package scalar's is. Bound only, it reached
+                    # the wire only if this graph also read it: both examples
+                    # emitted nothing (corpus 050's @ISA).
+                    _entry_store($factory, $sim, $target, $node) unless $is_pad;
                     $sim->push_node($node);
                     return ($op->next, 'handled');
                 }
