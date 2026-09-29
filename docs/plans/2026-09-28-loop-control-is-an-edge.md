@@ -134,6 +134,22 @@ inside a loop body"), independent of labels.
 
 Corpus 118 round-trips.
 
+## Phase 4 as built: redo, the head-of-body form only
+
+A redo point is a loop header (the CFG has no back edge but a Loop's), with
+Phis for whatever the body changed before the redo. Built only where there is
+nothing to carry: `redo if C` as the FIRST body statement, whose test leaves
+control, memory and every binding as the statement found them. That loop is
+`while (C) {}` ahead of the body -- a Loop pinned on a unique Boolean Coerce
+of C, empty body. Corpus 116 round-trips (006 then stops at its goto).
+
+DEFERRED, and still refused by name ("redo ... after the body has done
+something", or the older "loop control (redo) inside a loop body"): a redo
+after a statement, with an effectful test, in the block form or an arm, or
+naming an outer loop. That is the general redo point -- a Loop around the
+body, the redo edges its back edges, the fall-through its exit. Not in the
+corpus.
+
 ## Phases -- each TDD against its named corpus cases, full suite + census
 
   0. GUARDED RETURNS BUILD THEIR TRUE PROJ. The main and/or handler and the
