@@ -110,6 +110,30 @@ The renderer's contract is unchanged, which is why this fit. If a later phase
 
 Corpus 007 and 137 round-trip; 118 (`next OUTER`) is phase 3.
 
+## Phase 3 as built: labels
+
+  - Every loop translator pushes a frame on @LOOP_STACK (label from the
+    nextstate that opens it, $STMT_LABEL; the Loop; `breaks` and `nexts`
+    collectors, undef while scouting). A map/grep frame carries no label.
+  - `last LABEL` feeds the named loop's exit Region -- its @break_projs.
+  - `next LABEL` is an edge sim, merged into the named loop's body state at
+    its latch: before the continue block, or where the body walk ends (which
+    is not always the unstack -- a body ending in a nested loop stops at that
+    loop's leaveloop). The merge Region's head is the Loop; that is how the
+    renderer tells a latch from an if's merge. No new wire field.
+  - The renderer keeps a frame per loop being emitted, spells an arm that
+    lands on an enclosing loop's exit or latch as `last LOOPn` / `next LOOPn`
+    (a generated label, emitted only on a loop something names), pays the
+    latch Phis on both paths, and moves the step into `continue {}` when a
+    `next LABEL` names the loop.
+
+STILL REFUSED, by name: an unconditional `next LABEL;` to an outer loop, and
+a label naming no enclosing loop in the sub (a dynamic exit). Neither is in
+the corpus. A `while` nested in a loop body refuses as before ("enterloop
+inside a loop body"), independent of labels.
+
+Corpus 118 round-trips.
+
 ## Phases -- each TDD against its named corpus cases, full suite + census
 
   0. GUARDED RETURNS BUILD THEIR TRUE PROJ. The main and/or handler and the

@@ -39,11 +39,11 @@ pvm; ported and cut over, `.t` files deleted.
 denominator moved 210 -> 213 -> 217 -> 222 across the two sessions as pvm landed
 cases, including the interposed-read topic contributed from here.
 
-### Re-measured 2026-09-29: 214 of 224
+### Re-measured 2026-09-29: 215 of 224
 
-    ROUNDTRIP 214   DIFFERS 7   REFUSED 3   NOJSON 0   EMITS_INVALID_PERL 0
+    ROUNDTRIP 215   DIFFERS 6   REFUSED 3   NOJSON 0   EMITS_INVALID_PERL 0
 
-Same snapshot (pvm e87dee9c, 224 cases); ratchet floor 214 (202 earlier the
+Same snapshot (pvm e87dee9c, 224 cases); ratchet floor 215 (202 earlier the
 same day). Tier 2 per-file
 status identical to 46df9e5 throughout -- checked after every change, and
 three changes that moved it (comp/uproto.t, comp/redef.t, comp/package.t,
@@ -66,11 +66,10 @@ DEFERRED, and where -- none is in the corpus; these lines are the record:
   - `$a[0] .= "..."` (multiconcat APPEND into an element) still refuses; the
     plain assignment form is lowered.
 
-WHAT REMAINS (10):
+WHAT REMAINS (9):
 
     loop control, docs/plans/2026-09-28-loop-control-is-an-edge.md phases
-      3, 4 and 6 (1, 2 and 5 are built):
-        labels (phase 3)                118
+      4 and 6 (1, 2, 3 and 5 are built):
         redo   (phase 4)                006 116
         goto   (phase 6)                117
     named subs closing over file lexicals, design awaiting approval
@@ -80,7 +79,8 @@ WHAT REMAINS (10):
 
 Closed since 202: 007 134 137 (loop control phases 1, 2, 5); 012 059 060 061
 (classes); 096 097 098 (regex code blocks); 015 100 (a s///e replacement's
-effects -- they were walked on a snapshot and dropped).
+effects -- they were walked on a snapshot and dropped); 118 (labels,
+phase 3).
 
 ### Re-measured 2026-09-28: 168 of 224
 
