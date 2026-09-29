@@ -5036,8 +5036,10 @@ class SoN::FromOptree 0.01 {
                 # an alias does: this loop bound it, in this graph, and the Phi
                 # is what the iteration carries. See @LOOP_PHI_KEYS.
                 my $carried = grep { $_ eq $key } @LOOP_PHI_KEYS;
-                my $forwardable = $aliased || $carried
-                    || !_package_scalars_written()->{$key};
+                # `$@` NEVER FORWARDS: every eval rewrites it without a store
+                # the graph can see, so no earlier read or binding is current.
+                my $forwardable = ( $aliased || $carried
+                    || !_package_scalars_written()->{$key} ) && $gv_name ne '@';
                 if ($existing && !$is_lvalue && $forwardable) {
                     $sim->push_node($existing);
                 }
@@ -5078,7 +5080,25 @@ class SoN::FromOptree 0.01 {
                     # an unbound name still yields the class default.
                     my $read_stamp = $existing && $existing->can('stamp')
                         ? $existing->stamp : undef;
-                    my $node = $factory->make('EntryDef',
+
+                    # `$@` IS WRITTEN BY EVERY eval, with no store in the graph
+                    # to say so -- `my $w = $@; eval {...}; print $w` read the
+                    # SECOND eval's error, because nothing ordered the read
+                    # before it (corpus 056). So a read of it is pinned where it
+                    # happens, like the stack and handle reads, and the
+                    # deparser binds it there. UNIQUE: two reads at one memory
+                    # version would otherwise hash-cons into one node, and one
+                    # node cannot sit at two places in the chain.
+                    #
+                    # ON THE MAIN WALK ONLY. A branch arm is walked on a snapshot,
+                    # and a value select (a ternary) merges no control -- pinned
+                    # there, the read forked the chain, and perl's comp/package.t
+                    # (`$@ =~ /.../ ? "ok" : "not ok '$@'"`) refused with "a
+                    # control node with 2 successors". An arm's read keeps the
+                    # earlier behaviour: spelled at its use.
+                    my $errsv_read = !$is_lvalue && $gv_name eq '@'
+                        && ( $ctx->{mode} // '' ) eq 'main';
+                    my $node = $factory->${\ ($errsv_read ? 'make_unique' : 'make')}('EntryDef',
                         package => $gv->STASH->NAME,
                         sigil      => '$',
                         symbol => $gv_name,
@@ -5086,9 +5106,13 @@ class SoN::FromOptree 0.01 {
                             ? () : (inputs => [$sim->memory])),
                         (!$is_lvalue && defined $read_stamp
                             ? (stamp => $read_stamp) : ()));
+                    if ($errsv_read) {
+                        $node->set_control_in($sim->control);
+                        $sim->set_control($node);
+                    }
                     # Seed only when unbound: an lvalue over an already-bound
                     # name must not clobber it (`$g += 2` reads first).
-                    $sim->define(_stash_key($node), $node) unless defined $existing;
+                    $sim->define(_stash_key($node), $node) unless defined $existing || $errsv_read;
                     $sim->push_node($node);
                 }
             }

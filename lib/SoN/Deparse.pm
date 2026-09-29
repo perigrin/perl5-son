@@ -2516,7 +2516,10 @@ class SoN::Deparse 0.01 {
         if ($op eq 'Unwind') {
             my @in = ($n->{inputs} // [])->@*;
             return "die;\n" unless @in;
-            return sprintf("die %s;\n", $self->_expr($in[0]));
+            # EVERY OPERAND: `die LIST` joins them all into the message, and
+            # spelling only the first lost the rest (corpus 056). PARENTHESISED:
+            # `die (X), Y` is `die(X)` and a separate list.
+            return sprintf("die(%s);\n", join(', ', map { $self->_expr($_) } @in));
         }
 
         if ($op eq 'Print') {
