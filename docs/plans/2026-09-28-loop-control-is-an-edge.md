@@ -1,8 +1,8 @@
 # Loop control is an edge, not a rewrite
 
 **Date:** 2026-09-28
-**Status:** PLAN. Phase 0 approved as a bug fix; phases 1-6 rework the existing
-loop lowering and need perigrin's approval before they start.
+**Status:** PLAN, APPROVED 2026-09-29 (perigrin: phases 1-6, replacing the
+existing next/last lowering). Phase 0 done in 347d2f7.
 
 ## Why
 
