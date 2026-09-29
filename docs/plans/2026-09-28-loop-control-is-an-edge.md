@@ -150,6 +150,26 @@ naming an outer loop. That is the general redo point -- a Loop around the
 body, the redo edges its back edges, the fall-through its exit. Not in the
 corpus.
 
+## Phase 6 as built: goto
+
+FORWARD `goto LABEL` (also `if C` / `unless C`), main walk only, label found
+ahead on the same statement chain: an edge pending at the label, merged there
+into the fall-through or replacing it after an unconditional jump. What it
+skips builds nothing; the join renders as an ordinary if. Corpus 006.
+
+COMPUTED `goto $t`, operand known to be a string: an If per label ahead
+(`$t eq L`, edge pending at L), and a label BEHIND the goto opens an endless
+Loop at its nextstate that the goto leaves when `$t ne L`. The unmatched arm
+is an Unwind with perl's "Can't find label" message. Corpus 117.
+
+STILL REFUSED, by name, none in the corpus:
+  - a backward static `goto LABEL` (a loop built from a goto);
+  - a goto inside a loop body or an if arm (only the main walk has it);
+  - a computed goto with more than one label behind it, a value changed
+    around that loop, a branch in its body, or a non-string operand;
+  - `goto &sub` / `goto &$ref`, the tail call -- the polymorphism doc's
+    Call(tail => 1), not started.
+
 ## Phases -- each TDD against its named corpus cases, full suite + census
 
   0. GUARDED RETURNS BUILD THEIR TRUE PROJ. The main and/or handler and the
