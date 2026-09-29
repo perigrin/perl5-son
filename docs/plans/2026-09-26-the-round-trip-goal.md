@@ -67,8 +67,8 @@ DEFERRED, and where -- none is in the corpus; these lines are the record:
 
 WHAT REMAINS (22):
 
-    loop control, awaiting approval of docs/plans/2026-09-28-loop-control-
-      is-an-edge.md phases 1-6:        006 007 116 117 118 134 137
+    loop control, docs/plans/2026-09-28-loop-control-is-an-edge.md phases
+      1-6, approved 2026-09-29, in progress:  006 007 116 117 118 134 137
     named subs closing over file lexicals, design awaiting approval
       (docs/plans/2026-09-29-a-named-sub-shares-the-file-lexical.md):
                                         005 087 199 200 201
