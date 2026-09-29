@@ -354,6 +354,20 @@ class SoN::FromOptree 0.01 {
     # skipped it (corpus 137). `local` per loop, so a nested loop restores it.
     our $CONTINUE_START;
 
+    # THE LOOPS A LABELED `next`/`last` CAN NAME, innermost last. Each loop
+    # translator pushes a frame (`local`, so it pops on the way out) holding
+    # its label -- read off the statement that opens it, see $STMT_LABEL --
+    # its Loop node, and the two edge collectors a labeled transfer from a
+    # NESTED loop lands in: `breaks` (the loop's exit Region, the same list a
+    # plain `last if` feeds) and `nexts` (sims merged at the loop's latch).
+    # Both collectors are undef while the loop is being scouted, so a scout
+    # walk records nothing, exactly as $break_projs undef means for `last`.
+    our @LOOP_STACK;
+
+    # The label of the statement most recently entered, from its nextstate.
+    # A loop's label is on the nextstate that immediately precedes its enter*.
+    our $STMT_LABEL;
+
     our %ANON_CAPTURES;
 
     # Format bodies, keyed by the same deterministic name their `write` Call
@@ -3576,6 +3590,7 @@ class SoN::FromOptree 0.01 {
         if ($name eq 'nextstate' || $name eq 'dbstate') {
             my $pkg = eval { $op->stashpv } // eval { $op->stash->NAME };
             $CURRENT_PACKAGE = $pkg if defined $pkg && length $pkg;
+            $STMT_LABEL = $op->label;
         }
 
         # Handle pushmark specially - just record the mark
@@ -9721,6 +9736,8 @@ class SoN::FromOptree 0.01 {
     }
 
     sub _translate_while_loop ($cv, $cond_start, $sim, $factory, $opmap, $visited) {
+        my $frame = { label => $STMT_LABEL };
+        local @LOOP_STACK = (@LOOP_STACK, $frame);
         die "GAP: memory-reading loop condition not yet lowered\n"
             if _cond_reads_memory($cond_start);
         # Which pad slots does the CONDITION mutate? These run once more than the
@@ -9767,6 +9784,7 @@ class SoN::FromOptree 0.01 {
         # @LOOP_PHI_KEYS. `local`, so a nested loop adds to it and the outer
         # loop's set is restored on the way out.
         local @LOOP_PHI_KEYS = (@LOOP_PHI_KEYS, _carried_stash_keys(\%phis));
+        @$frame{qw(loop breaks nexts)} = ($loop_node, \@break_projs, []);
         my $exit_proj = _walk_loop_body($cv, $cond_start, $sim, $factory,
             $opmap, {}, $visited, $loop_node, \@break_projs);
         # A LOOP MAY EXIT BY ITS BREAK ALONE. `while (1) { ... last if C }` has
@@ -9882,6 +9900,8 @@ class SoN::FromOptree 0.01 {
     # lexical, `stash::$name` for a package scalar. Defaults to the op's targ so
     # existing callers are unchanged.
     sub _translate_foreach_range ($cv, $enteriter, $sim, $factory, $opmap, $visited, $low, $high, $iter_key = undef) {
+        my $frame = { label => $STMT_LABEL };
+        local @LOOP_STACK = (@LOOP_STACK, $frame);
         my $i_targ = $iter_key // $enteriter->targ;
 
         # Locate the body: enteriter->next is the iteration unstack, followed
@@ -10033,6 +10053,7 @@ class SoN::FromOptree 0.01 {
         # FOUR arms on one Loop and the deparser refused ("a Loop with 4 Proj
         # arms"). Only the break collector is wanted.
         my @break_projs;
+        @$frame{qw(loop breaks nexts)} = ($loop_node, \@break_projs, []);
         _walk_loop_body($cv, $body_start, $sim, $factory, $opmap, {}, $visited,
             undef, \@break_projs, 1);
 
@@ -10079,6 +10100,10 @@ class SoN::FromOptree 0.01 {
     # rather than enteriter/iter/and) and an output whose length is not the
     # input's. Defaulted, so a plain foreach is unchanged.
     sub _translate_foreach_array ($cv, $enteriter, $sim, $factory, $opmap, $visited, $array, $iter_key = undef, $body_start = undef, $collect = undef, $collect_op = undef) {
+        # A map or grep is not a loop `next`/`last` can name, whatever label
+        # its statement carries.
+        my $frame = { label => ($collect ? undef : $STMT_LABEL) };
+        local @LOOP_STACK = (@LOOP_STACK, $frame);
         my $x_targ = $iter_key // $enteriter->targ;
 
         # Locate the body (enteriter->next: unstack, iter, then the and whose
@@ -10248,6 +10273,7 @@ class SoN::FromOptree 0.01 {
         # FOUR arms on one Loop and the deparser refused ("a Loop with 4 Proj
         # arms"). Only the break collector is wanted.
         my @break_projs;
+        @$frame{qw(loop breaks nexts)} = ($loop_node, \@break_projs, []);
         _walk_loop_body($cv, $body_start, $sim, $factory, $opmap, {}, $visited,
             undef, \@break_projs, 1);
 
@@ -10596,6 +10622,12 @@ class SoN::FromOptree 0.01 {
         # ahead of the statements that ran before it in the source (a miscompile).
         my $stmt_count = 0;
         while ($$op) {
+            # THE LATCH, where every `next LABEL` naming this loop rejoins:
+            # before the continue block when there is one, else at the end of
+            # the walk (below) -- which is not always the unstack; a body
+            # ending in a nested loop stops at that loop's leaveloop.
+            _merge_labeled_nexts($sim, $factory)
+                if $CONTINUE_START && $$op == ${$CONTINUE_START};
             # Stop if we've looped back (unstack goes back to condition)
             last if $loop_visited->{$$op}++;
 
@@ -10707,6 +10739,8 @@ class SoN::FromOptree 0.01 {
             # record: a `next` returns to the header exactly as falling off the
             # end of the body does.
             if ($name eq 'next') {
+                die "GAP: an unconditional `next LABEL` naming an outer loop"
+                  . " is not yet lowered\n" if _loop_control_frame($op);
                 # TO THE LATCH: the continue block, when there is one -- a
                 # `next` runs it, and stopping here skipped it.
                 if ($CONTINUE_START && !$loop_visited->{ ${$CONTINUE_START} }) {
@@ -10867,6 +10901,11 @@ class SoN::FromOptree 0.01 {
                     && $op->can('other') && ${$op->other}
                     && _guarded_loop_control($op->other)) {
                 my $kind = _guarded_loop_control($op->other);
+                # A LABEL NAMING AN OUTER LOOP sends the taken arm to THAT
+                # loop's exit or latch; the rest of this body still runs on
+                # the other arm, exactly as for a `last`.
+                my $frame = _loop_control_frame(
+                    _guarded_loop_control_op($op->other));
                 # NOTE: a fired loop header condition ($condition_fired) is
                 # EXPECTED here -- a `while (COND) { ...; last if C; ... }` has
                 # both. The mid-body break is an independent If split, not a
@@ -10897,7 +10936,7 @@ class SoN::FromOptree 0.01 {
                 # statement value) so merge() does not build a spurious stack Phi.
                 $rest_sim->pop_node while $rest_sim->stack_depth > $sim->stack_depth;
 
-                if ($kind eq 'next') {
+                if ($kind eq 'next' && !$frame) {
                     # The guard-taken arm (C true) skips the rest: it holds only
                     # $taken_proj control with the pre-guard bindings. Merge the
                     # skip arm (self, Proj 0) with the rest arm (Proj 1) so the
@@ -10934,9 +10973,26 @@ class SoN::FromOptree 0.01 {
                     # soundness check). In scout mode ($break_projs undef) the
                     # break edge is not wired -- the scout only measures the rest
                     # arm's rebinds, so record nothing and continue.
-                    push @$break_projs,
-                        { proj => $taken_proj, bindings => $sim->scope_bindings }
-                        if defined $break_projs;
+                    # A labeled `next` is an edge carrying this point's state
+                    # to the named loop's latch; a labeled `last` feeds that
+                    # loop's exit instead of this one's.
+                    # ONLY ON A REAL WALK: an inner loop's scout would put its
+                    # throwaway nodes on the outer loop's live collectors.
+                    if ($frame && $kind eq 'next') {
+                        if ($frame->{nexts} && defined $break_projs) {
+                            my $edge = SoN::FromOptree::StackSim->new(
+                                control => $taken_proj, memory => $sim->memory);
+                            my $b = $sim->scope_bindings;
+                            $edge->define($_, $b->{$_}) for keys %$b;
+                            push $frame->{nexts}->@*, $edge;
+                        }
+                    }
+                    else {
+                        my $sink = $frame ? $frame->{breaks} : $break_projs;
+                        push @$sink,
+                            { proj => $taken_proj, bindings => $sim->scope_bindings }
+                            if defined $sink && defined $break_projs;
+                    }
                     # Continue the main walk on the rest arm's merged state.
                     $sim->set_control($rest_sim->control);
                     $sim->set_memory($rest_sim->memory);
@@ -11321,6 +11377,7 @@ class SoN::FromOptree 0.01 {
             }
             $op = $next;
         }
+        _merge_labeled_nexts($sim, $factory);
         return $exit_proj;
     }
 
@@ -11377,15 +11434,54 @@ class SoN::FromOptree 0.01 {
     # block whose first statement is something else is a guarded STATEMENT,
     # not a control transfer, and must keep its own handler.
     sub _guarded_loop_control ($other) {
+        my $o = _guarded_loop_control_op($other) or return undef;
+        my $n = $o->name;
+        return ($n eq 'last' || $n eq 'next') ? $n : undef;
+    }
+
+    sub _guarded_loop_control_op ($other) {
         my $o = $other;
         my %seen;
         while ($$o && !$seen{$$o}++
                && ($o->name eq 'enter' || $o->name eq 'nextstate')) {
             $o = $o->next;
         }
-        return undef unless $$o;
-        my $n = $o->name;
-        return ($n eq 'last' || $n eq 'next') ? $n : undef;
+        return $$o ? $o : undef;
+    }
+
+    # _loop_control_frame($op) -> the @LOOP_STACK frame a LABELED loop
+    # control op names, or undef when it names the innermost loop -- by
+    # omitting a label or by spelling the innermost loop's own -- which is
+    # the unlabeled form every handler already builds.
+    #
+    # A label naming no enclosing loop translated here refuses: it is a
+    # dynamic exit (a loop in a caller, or no loop at all) and binding it to
+    # the innermost loop is the silent miscompile this exists to end.
+    sub _loop_control_frame ($op) {
+        return undef unless $op && $op->isa('B::PVOP');
+        my $label = $op->pv;
+        return undef unless defined $label && length $label;
+        for my $i (reverse 0 .. $#LOOP_STACK) {
+            my $f = $LOOP_STACK[$i];
+            next unless defined $f->{label} && $f->{label} eq $label;
+            return $i == $#LOOP_STACK ? undef : $f;
+        }
+        die "GAP: `" . $op->name . " $label` names no enclosing loop in this"
+          . " sub, not yet lowered\n";
+    }
+
+    # A `next LABEL` edge reaches the named loop's LATCH: each is merged into
+    # the body's state where the continue block (or the back edge) begins.
+    # The Region's head is the Loop -- what tells a consumer this join is a
+    # latch, fed from inside a nested loop, and not an if's merge.
+    sub _merge_labeled_nexts ($sim, $factory) {
+        my $f = $LOOP_STACK[-1] or return;
+        my $nexts = $f->{nexts} or return;
+        while (my $edge = shift @$nexts) {
+            my $region = $sim->merge($edge, $factory);
+            $region->set_head($f->{loop});
+        }
+        return;
     }
 
     sub _is_loop_control_or_exit ($other) {
@@ -12741,6 +12837,22 @@ class SoN::FromOptree 0.01 {
                     inputs => [$if_node], index => 0);
                 my $rest  = $factory->make_cfg('Proj',
                     inputs => [$if_node], index => 1);
+                # A `next LABEL` NAMING AN OUTER LOOP leaves this one: the taken
+                # Proj is an edge to that loop's latch, and this walk goes on
+                # along the rest.
+                if (my $frame = _loop_control_frame(
+                        _guarded_loop_control_op($op->other))) {
+                    if ($frame->{nexts} && defined $break_projs) {
+                        my $edge = SoN::FromOptree::StackSim->new(
+                            control => $taken, memory => $sim->memory);
+                        my $b = $sim->scope_bindings;
+                        $edge->define($_, $b->{$_}) for keys %$b;
+                        push $frame->{nexts}->@*, $edge;
+                    }
+                    $sim->set_control($rest);
+                    $op = $op->next;
+                    next;
+                }
                 my $rest_sim = $sim->snapshot;
                 $rest_sim->set_control($rest);
                 my ($rest_end) = _walk_branch($cv, $op->next, $rest_sim,
@@ -12933,10 +13045,13 @@ class SoN::FromOptree 0.01 {
                     # If built above exists precisely so there is one, rather
                     # than the outer arm the walk was standing on.
                     if (($mod_sig // '') eq 'broke') {
-                        push @$break_projs, {
+                        # `last LABEL` feeds the named loop's exit.
+                        my $frame = _loop_control_frame($mod_end);
+                        my $sink  = $frame ? $frame->{breaks} : $break_projs;
+                        push @$sink, {
                             proj     => $mod_sim->control,
                             bindings => $mod_sim->scope_bindings,
-                        } if defined $break_projs;
+                        } if defined $sink && defined $break_projs;
                         $op = $op->next;
                         next;
                     }

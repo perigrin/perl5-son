@@ -201,6 +201,14 @@ class SoN::Deparse 0.01 {
     # `last` -- the only point on that path where the value is in scope.
     field %break_assign;
 
+    # THE LOOPS BEING EMITTED, innermost last, for an edge that leaves more
+    # than one of them. Each frame holds the loop's exit Region, its latches
+    # (Regions whose head is the Loop but which are not its exit: the join a
+    # `next LABEL` from a nested loop lands on), the exit Phi payments a
+    # `last` owes it, and whether anything named it -- only a loop that is
+    # named gets a label.
+    field @loop_frames;
+
     # The reason the last render() refused, for a caller that wants to report it
     # rather than just see undef.
     field $gap :reader = undef;
@@ -1380,6 +1388,12 @@ class SoN::Deparse 0.01 {
             # A MEMORY Region IS ALSO NOTHING TO SAY -- chains merge, and the
             # ordering is the placement.
             if ($n->{op} eq 'Region') {
+                # THE FALL-THROUGH INTO A LATCH pays its Phis their input 0.
+                for my $f (@loop_frames) {
+                    my $lphis = $f->{latch}{ $n->{id} } or next;
+                    $out .= sprintf("%s = %s;\n", $bound{ $_->{id} },
+                        $self->_expr($_->{inputs}[0])) for @$lphis;
+                }
                 # A binding pinned to this Region goes here -- the loop it
                 # reads from has closed. This branch returns early, so the
                 # flush at the bottom of the walk never sees a Region.
@@ -1739,8 +1753,43 @@ class SoN::Deparse 0.01 {
             }
         }
 
+        # A LATCH PHI IS A VARIABLE BOTH PATHS ASSIGN: the fall-through where
+        # the walk reaches the latch, the `next LABEL` just before it jumps.
+        # Input 0 is the fall-through and input 1 the edge -- the order the
+        # producer's merge builds, body first.
+        my %latch;
+        for my $r (values $nodes->%*) {
+            next unless ($r->{op} // '') eq 'Region'
+                && ($r->{head} // -1) == $n->{id}
+                && !($exit_rgn && $r->{id} == $exit_rgn->{id});
+            my @lphis = sort { $a->{id} <=> $b->{id} }
+                grep { ($_->{op} // '') eq 'Phi'
+                    && (($_->{fields}{region} // -1) == $r->{id})
+                    && !$self->_is_memory($_->{id}) } values $nodes->%*;
+            for my $ph (@lphis) {
+                my $var = sprintf('$latch%d', $ph->{id});
+                $init .= "my $var;\n";
+                $bound{ $ph->{id} } = $var;
+            }
+            $latch{ $r->{id} } = \@lphis;
+        }
+
+        my $frame = {
+            loop   => $n->{id},
+            exit   => ($exit_rgn ? $exit_rgn->{id} : undef),
+            label  => sprintf('LOOP%d', $n->{id}),
+            used   => 0,
+            breaks => { %break_assign },
+            latch  => \%latch,
+        };
+        push @loop_frames, $frame;
         my $body = $self->_emit_from($arm{0}{id}, $next_of, undef);
+        pop @loop_frames;
         $loop_exit_region = $save_exit;
+        # An inner loop resets the break payments for its own body; the
+        # enclosing loop's are its again once the inner loop is closed.
+        %break_assign = ( @loop_frames ? $loop_frames[-1]{breaks}->%* : () );
+        my $label = $frame->{used} ? "$frame->{label}: " : '';
 
         # Next values into temporaries first, then assign: see above.
         my $step = '';
@@ -1765,15 +1814,25 @@ class SoN::Deparse 0.01 {
                               $self->_expr_uncached($e->{id}))
                     : sprintf("%s;\n", $self->_expr_uncached($e->{id}));
             }
-            $text = $init . sprintf("while (1) {\n%s}\n",
-                _indent($pre
-                      . sprintf("last unless %s;\n",
-                                $self->_expr($cond[0]{id}))
-                      . $body . $step));
+            # The effect sits at the top, so a `next` still reaches it after
+            # the continue block; only the step moves.
+            my $top = $pre . sprintf("last unless %s;\n",
+                                     $self->_expr($cond[0]{id}));
+            $text = $frame->{nexted}
+                ? $init . $label . sprintf("while (1) {\n%s} continue {\n%s}\n",
+                    _indent($top . $body), _indent($step))
+                : $init . $label . sprintf("while (1) {\n%s}\n",
+                    _indent($top . $body . $step));
         }
         else {
-            $text = $init . sprintf("while (%s) {\n%s}\n",
-                $self->_expr($cond[0]{id}), _indent($body . $step));
+            # A `next LABEL` INTO THIS LOOP SKIPS THE REST OF ITS BODY, and
+            # the step is not the rest of the body: it is what perl's own
+            # latch runs, so it goes where a `next` still reaches it.
+            $text = $frame->{nexted}
+                ? $init . $label . sprintf("while (%s) {\n%s} continue {\n%s}\n",
+                    $self->_expr($cond[0]{id}), _indent($body), _indent($step))
+                : $init . $label . sprintf("while (%s) {\n%s}\n",
+                    $self->_expr($cond[0]{id}), _indent($body . $step));
         }
 
         for my $id (keys %save_inv) {
@@ -2311,10 +2370,38 @@ class SoN::Deparse 0.01 {
         # leaving belongs to the code after the loop, which the exit walk
         # already emits -- so the arm is exactly the loop control, and the
         # other arm carries the rest of the body.
-        if ( defined $loop_exit_region ) {
+        # AN ARM THAT LEAVES AN ENCLOSING LOOP is a `last LABEL` when it lands
+        # on that loop's exit and a `next LABEL` when it lands on its latch;
+        # the innermost loop's exit is the plain `last` below.
+        my @edges;
+        push @edges, { region => $loop_exit_region, word => 'last',
+                       pay => sub { join '', map { $break_assign{$_} }
+                                             sort { $a <=> $b } keys %break_assign } }
+            if defined $loop_exit_region;
+        for my $f ( @loop_frames[ 0 .. $#loop_frames - 1 ] ) {
+            push @edges, { region => $f->{exit}, word => "last $f->{label}",
+                           frame => $f,
+                           pay => sub { join '', map { $f->{breaks}{$_} }
+                                                 sort { $a <=> $b } keys $f->{breaks}->%* } }
+                if defined $f->{exit};
+            for my $r ( sort { $a <=> $b } keys $f->{latch}->%* ) {
+                push @edges, { region => $r, word => "next $f->{label}",
+                               frame => $f,
+                               pay => sub { join '', map {
+                                   sprintf("%s = %s;\n", $bound{ $_->{id} },
+                                       $self->_expr($_->{inputs}[1])) }
+                                   $f->{latch}{$r}->@* } };
+            }
+        }
+        for my $edge (@edges) {
             for my $ix ( 0, 1 ) {
-                next unless $self->_reaches_region( $arm{$ix}, $loop_exit_region,
-                                                    $next_of );
+                next unless $arm{$ix}
+                    && $self->_reaches_region( $arm{$ix}, $edge->{region},
+                                               $next_of );
+                if ( my $f = $edge->{frame} ) {
+                    $f->{used} = 1;
+                    $f->{nexted} = 1 if $edge->{word} =~ /\Anext /;
+                }
                 my $rest_ix = 1 - $ix;
                 # THE REST STOPS WHERE THE ENCLOSING WALK STOPS. Stopped only at
                 # the loop exit, it ran on through an enclosing join -- the
@@ -2329,11 +2416,11 @@ class SoN::Deparse 0.01 {
                 # THE EXIT PHIS ARE PAID HERE. Each records what the loop
                 # variable must hold on this path; assigning before the `last`
                 # is what makes a post-loop read correct on both exits.
-                my $pay = join '', map { $break_assign{$_} }
-                                   sort { $a <=> $b } keys %break_assign;
+                my $pay  = $edge->{pay}->();
+                my $jump = "$edge->{word};\n";
                 my $text = $ix == 0
-                    ? sprintf("if (%s) {\n%s}\n", $cond, _indent($pay . "last;\n"))
-                    : sprintf("if (!(%s)) {\n%s}\n", $cond, _indent($pay . "last;\n"));
+                    ? sprintf("if (%s) {\n%s}\n", $cond, _indent($pay . $jump))
+                    : sprintf("if (!(%s)) {\n%s}\n", $cond, _indent($pay . $jump));
 
                 # THE REST ARM MAY STILL REACH A BODY MERGE. With a `next`
                 # earlier in the same body, the bottom of the body is a Region
@@ -2350,8 +2437,13 @@ class SoN::Deparse 0.01 {
                 # arm leaves. That is the lone-arm shape _join_phis already
                 # handles -- the predecessor with no arm seeds the declaration
                 # and the present arm assigns.
+                # NOR IS AN EDGE'S TARGET a body merge: the rest reaches an
+                # enclosing loop's exit or latch only through a later edge of
+                # its own, and resuming there emitted the code after the outer
+                # loop inside the inner one.
                 my $bjoin = $self->_lone_arm_join( $arm{$rest_ix}, $next_of );
-                if ( defined $bjoin && $bjoin != $loop_exit_region ) {
+                if ( defined $bjoin
+                     && !grep { $_->{region} == $bjoin } @edges ) {
                     my ($bdecl, %bassign)
                         = $self->_join_phis( $bjoin, { $rest_ix => $arm{$rest_ix} } );
                     return ( $bdecl . $text . ( $bassign{$rest_ix} // '' ) . $rest,
