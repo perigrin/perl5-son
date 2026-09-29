@@ -158,6 +158,15 @@ class SoN::FromOptree::StackSim 0.01 {
             # rejected by lli as "Instruction does not dominate all uses!".
             if ($op eq 'Region') {
                 my $head = $node->can('head') ? $node->head : undef;
+                # A ONE-INPUT REGION HAS NO BRANCH TO STEP OVER. A string
+                # eval closes its trap with one (Region over its Coerce), and
+                # stopping there left an arm holding `eval $c` with no
+                # identity -- "a join Phi with 2 inputs and 0 predecessors".
+                if (!defined $head && $node->can('inputs')
+                    && $node->inputs->@* == 1) {
+                    $node = $node->inputs->[0];
+                    next;
+                }
                 last unless defined $head && ref $head;
                 $node = $head->can('control_in') ? $head->control_in : undef;
                 next;

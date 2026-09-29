@@ -12523,6 +12523,13 @@ class SoN::FromOptree 0.01 {
         # ...and the stack depth on entry, so a handler that re-walks a nested
         # construct can drop back to it rather than guess.
         my $arm_base_depth = $sim->stack_depth;
+        # A DO-BLOCK'S VOID STATEMENTS LEAVE VALUES, and perl discards them at
+        # its inner statement boundary -- the same reset _walk_loop_body makes,
+        # for the same reason. A multi-statement s///e replacement is one
+        # (`s/(\d)/$n++; $1 * 2/e` is null -> leave -> enter ...), and without
+        # the reset `$n++`'s value was still on the stack at the end: "not a
+        # single value".
+        my @enter_depth;
         while ($$op) {
             # Convergence: reached the op where this arm rejoins the main path
             # (the branch op's op_next, passed by callers that know it). Checked
@@ -12541,6 +12548,15 @@ class SoN::FromOptree 0.01 {
             return $op if $visited->{$$op};
 
             my $name = $op->name;
+            if ($name eq 'enter') {
+                push @enter_depth, $sim->stack_depth;
+            }
+            elsif ($name eq 'leave') {
+                pop @enter_depth;
+            }
+            elsif ($name eq 'nextstate' && @enter_depth) {
+                $sim->pop_node while $sim->stack_depth > $enter_depth[-1];
+            }
             my $is_leavesub = $name eq 'leavesub' || $name eq 'leavesublv';
             # With $stop_at_exit, the IMPLICIT trailing leavesub must NOT be
             # recorded as an exit -- it would consume the arm's computed value
@@ -13983,6 +13999,25 @@ class SoN::FromOptree 0.01 {
                 stamp   => SoN::IR::Stamp->new(type => 'Boolean'));
             $rsim->set_last_match($match_half);
         }
+        # A REPLACEMENT THAT DOES SOMETHING RUNS ONLY WHEN THE PATTERN MATCHES,
+        # so it is an arm of a branch on the match half. Walked on the bare
+        # snapshot, its effects stayed in the snapshot and were thrown away
+        # with it -- measured, `s/b/$n++/e` printed $n unchanged, and
+        # s///ee's string eval pinned a Coerce to a control node nothing else
+        # followed ("a control node with 2 successors").
+        #
+        # A pure replacement keeps the bare walk: it has nothing to lose and
+        # a branch would only add noise. The purity test is an ALLOW-list on
+        # purpose -- an op missing from it costs a needless branch, never a
+        # dropped effect.
+        my $if;
+        if (defined $match_half && !_replacement_is_pure($replroot)) {
+            $if = $factory->make_cfg('If',
+                inputs => [$sim->control, $match_half]);
+            $rsim->set_control($factory->make_cfg('Proj',
+                inputs => [$if], index => 0));
+        }
+
         my $base = $rsim->stack_depth;
         my @rexits;
         _walk_branch($cv, $entry, $rsim, $factory, $opmap,
@@ -13994,7 +14029,46 @@ class SoN::FromOptree 0.01 {
           . " not yet lowered\n"
             unless $rsim->stack_depth == $base + 1;
 
+        if ($if) {
+            # The no-match arm substitutes nothing, so its value is never
+            # read; undef stands in for it at the merge.
+            my $miss = $sim->snapshot;
+            $miss->set_control($factory->make_cfg('Proj',
+                inputs => [$if], index => 1));
+            $miss->push_node($factory->make('Constant',
+                value => undef, const_type => 'undef',
+                stamp => SoN::IR::Stamp->new(type => 'Undef')));
+            $rsim->merge($miss, $factory, $if);
+            $sim->set_control($rsim->control);
+            $sim->set_memory($rsim->memory);
+            my $b = $rsim->scope_bindings;
+            $sim->define($_, $b->{$_}) for keys %$b;
+        }
+
         return $rsim->pop_node;
+    }
+
+    # Ops a s///e replacement may contain and still have no effect. Anything
+    # else -- or any op flagged as an lvalue or as writing its own target --
+    # makes the replacement an arm of the match.
+    my %PURE_REPLACEMENT_OP = map { $_ => 1 } qw(
+        substcont null scope lineseq nextstate enter leave pushmark
+        const padsv gvsv rv2sv
+        add subtract multiply divide modulo negate
+        concat multiconcat stringify
+        ord chr uc lc ucfirst lcfirst length sprintf join
+    );
+
+    sub _replacement_is_pure ($op) {
+        return 1 unless ref($op) && $$op;
+        return 0 unless $PURE_REPLACEMENT_OP{$op->name};
+        return 0 if $op->flags & B::OPf_MOD();
+        return 0 if $op->private & B::OPpTARGET_MY();
+        return 1 unless $op->flags & B::OPf_KIDS();
+        for (my $kid = $op->first; ref($kid) && $$kid; $kid = $kid->sibling) {
+            return 0 unless _replacement_is_pure($kid);
+        }
+        return 1;
     }
 
     sub _find_gv_op ($op) {
