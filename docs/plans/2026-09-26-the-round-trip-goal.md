@@ -39,11 +39,12 @@ pvm; ported and cut over, `.t` files deleted.
 denominator moved 210 -> 213 -> 217 -> 222 across the two sessions as pvm landed
 cases, including the interposed-read topic contributed from here.
 
-### Re-measured 2026-09-29: 202 of 224
+### Re-measured 2026-09-29: 214 of 224
 
-    ROUNDTRIP 202   DIFFERS 12   REFUSED 10   NOJSON 0   EMITS_INVALID_PERL 0
+    ROUNDTRIP 214   DIFFERS 7   REFUSED 3   NOJSON 0   EMITS_INVALID_PERL 0
 
-Same snapshot (pvm e87dee9c, 224 cases); ratchet floor 202. Tier 2 per-file
+Same snapshot (pvm e87dee9c, 224 cases); ratchet floor 214 (202 earlier the
+same day). Tier 2 per-file
 status identical to 46df9e5 throughout -- checked after every change, and
 three changes that moved it (comp/uproto.t, comp/redef.t, comp/package.t,
 comp/require.t) were fixed before they were committed.
@@ -65,17 +66,21 @@ DEFERRED, and where -- none is in the corpus; these lines are the record:
   - `$a[0] .= "..."` (multiconcat APPEND into an element) still refuses; the
     plain assignment form is lowered.
 
-WHAT REMAINS (22):
+WHAT REMAINS (10):
 
     loop control, docs/plans/2026-09-28-loop-control-is-an-edge.md phases
-      1-6, approved 2026-09-29, in progress:  006 007 116 117 118 134 137
+      3, 4 and 6 (1, 2 and 5 are built):
+        labels (phase 3)                118
+        redo   (phase 4)                006 116
+        goto   (phase 6)                117
     named subs closing over file lexicals, design awaiting approval
       (docs/plans/2026-09-29-a-named-sub-shares-the-file-lexical.md):
                                         005 087 199 200 201
-    class feature / FieldAccess:        012 059 060 061
-    (?{ }) side effects:                096 097 098
-    s///ee (string eval replacement):   015 100
     008 -- an omnibus: each fix above moved it; re-diagnose last.
+
+Closed since 202: 007 134 137 (loop control phases 1, 2, 5); 012 059 060 061
+(classes); 096 097 098 (regex code blocks); 015 100 (a s///e replacement's
+effects -- they were walked on a snapshot and dropped).
 
 ### Re-measured 2026-09-28: 168 of 224
 
