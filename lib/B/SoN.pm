@@ -2662,6 +2662,9 @@ sub _record_sub {
         # from an emission that declared none (corpus 063). Absent when the
         # sub has none, which prototype() also distinguishes.
         ( defined $proto ? ( prototype => $proto ) : () ),
+        # AN :lvalue SUB can be assigned through (`slot() = 42`); declared
+        # without the attribute, the emission does not compile. Corpus 199.
+        ( ( $cv->CvFLAGS & B::CVf_LVALUE() ) ? ( lvalue => 1 ) : () ),
     };
 
     return;

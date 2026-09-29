@@ -19,6 +19,10 @@ class SoN::IR::Node::PadAccess :isa(SoN::IR::Node::Access) {
     # the glob, which is why $x and @x share one entry.
     field $sigil  :param :reader;
     field $symbol :param :reader;
+    # Shared with a named sub (or, in a sub, with the program): the file-level
+    # variable itself, declared once above every sub. See
+    # docs/plans/2026-09-29-a-named-sub-shares-the-file-lexical.md.
+    field $shared :param :reader = 0;
 
     # BOTH REQUIRED, and the sigil is the load-bearing half. This node is
     # hash-consed by content, so two PadAccess nodes with the same symbol and
@@ -48,6 +52,6 @@ class SoN::IR::Node::PadAccess :isa(SoN::IR::Node::Access) {
         # diagnostics / round-trip only (no consumer reads it behaviorally;
         # PadAccess resolves to its VarDecl via inputs[0]).
         return join('|', 'PadAccess', "sigil=$sigil", "symbol=$symbol",
-            $self->_serialize_inputs());
+            ($shared ? 'shared' : ()), $self->_serialize_inputs());
     }
 }

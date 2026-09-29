@@ -169,6 +169,7 @@ sub _extract_fields ($node, $id_remap) {
         return {
             ( defined $node->sigil  ? ( sigil  => $node->sigil )  : () ),
             ( defined $node->symbol ? ( symbol => $node->symbol ) : () ),
+            ( $node->shared ? ( shared => 1 ) : () ),
         };
     }
     if ($op eq 'FieldAccess') {

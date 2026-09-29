@@ -369,6 +369,19 @@ class SoN::FromOptree 0.01 {
     # translated CV.
     our $FN_EXITS;
 
+    # The pad slots this graph shares with a named sub (or, in a sub, with
+    # the program) -- $ctx->{shared_lexicals}, reachable from the PadAccess
+    # constructors that have no $ctx. See _file_lexicals_shared.
+    our $SHARED_SLOTS;
+
+    # `state $x = V` is a `once` op whose ->other is the store: the store runs
+    # the first time the statement is reached and never again. The program's
+    # own straight line is reached once, so the main walk lowers it there as
+    # the store; anywhere else -- a sub, a loop body, an arm -- it persists
+    # between runs, which a `my` does not.
+    our $ONCE_GAP = "GAP: a `state` initialiser that can run more than once is"
+                  . " not yet lowered -- it persists between runs";
+
     # The label of the statement most recently entered, from its nextstate.
     # A loop's label is on the nextstate that immediately precedes its enter*.
     our $STMT_LABEL;
@@ -741,6 +754,50 @@ class SoN::FromOptree 0.01 {
         return \%PKG_SCALAR_WRITTEN;
     }
 
+    # _file_lexicals_shared() -> { main pad index => 1 } for every file-level
+    # lexical a named sub in main:: closes over. perl records it on the sub's
+    # pad: the name carries PADNAMEf_OUTER and PARENT_PAD_INDEX is main's slot,
+    # when the sub's CvOUTSIDE is the main CV. Such a slot is read and written
+    # by code in another graph, so, like `\$x`, it is a location on both sides.
+    # See docs/plans/2026-09-29-a-named-sub-shares-the-file-lexical.md.
+    #
+    # Not cached: a test process translates many programs, each with its own
+    # subs.
+    sub _file_lexicals_shared () {
+        my %shared;
+        my $main = B::main_cv;
+        for my $name (sort keys %main::) {
+            next unless $name =~ /^[A-Za-z_]\w*$/;
+            my $glob = $main::{$name};
+            next unless ref(\$glob) eq 'GLOB';
+            my $code = *{$glob}{CODE} or next;
+            my $sub_cv = eval { B::svref_2object($code) } or next;
+            $shared{$_} = 1 for values %{ _outer_main_slots($sub_cv) };
+        }
+        return \%shared;
+    }
+
+    # _outer_main_slots($cv) -> { own pad index => main pad index } for a
+    # named sub whose outside is the main CV; empty for anything else.
+    sub _outer_main_slots ($cv) {
+        my %slots;
+        return \%slots unless ref($cv) && $cv->isa('B::CV')
+            && !($cv->CvFLAGS & B::CVf_ANON());
+        my $out = eval { $cv->OUTSIDE };
+        return \%slots unless $out && $$out && $$out == ${ B::main_cv() };
+        my $names = eval { $cv->PADLIST->ARRAYelt(0) } or return \%slots;
+        for my $i (1 .. $names->MAX) {
+            my $pn = $names->ARRAYelt($i);
+            next unless $$pn && ($pn->FLAGS & B::PADNAMEf_OUTER());
+            # A class FIELD has its own storage (FieldAccess), and an `our`
+            # name is a package variable reached through the stash.
+            next if $pn->FLAGS & (B::PADNAMEf_FIELD() | B::PADNAMEf_OUR());
+            my $parent = eval { $pn->PARENT_PAD_INDEX };
+            $slots{$i} = $parent if $parent;
+        }
+        return \%slots;
+    }
+
     sub _translate_from ($cv, $start_op, %opts) {
         my $program_root = $opts{program_root};
 
@@ -793,6 +850,14 @@ class SoN::FromOptree 0.01 {
                     # cell per variable, shared by every closure over it.
                     cells => {}, cells_written => {},
                     is_program => (defined $program_root ? 1 : 0) };
+
+        # A FILE LEXICAL SHARED WITH A NAMED SUB is a location in both graphs:
+        # the program's slot, and the sub's own index for it.
+        $ctx->{shared_lexicals} = $ctx->{is_program}
+            ? _file_lexicals_shared()
+            : { map { $_ => 1 } keys %{ _outer_main_slots($cv) } };
+        $ctx->{addr_taken}{$_} = 1 for keys $ctx->{shared_lexicals}->%*;
+        local $SHARED_SLOTS = $ctx->{shared_lexicals};
 
         # A FLIP-FLOP'S STATE SLOT STARTS UNDEF, as every pad slot does, and
         # is bound so here: a loop's scout finds carried slots by comparing
@@ -856,6 +921,14 @@ class SoN::FromOptree 0.01 {
             last if $visited{$$op}++;
 
             my $name = $op->name;
+
+            # A `state` INITIALISER IN THE PROGRAM'S STRAIGHT LINE runs once,
+            # exactly as that line does: it is the store on ->other.
+            if ($name eq 'once') {
+                die "$ONCE_GAP\n" unless $ctx->{is_program};
+                $op = $op->other;
+                next;
+            }
 
             # THE LABEL A FORWARD goto NAMED: its edges join the fall-through
             # here -- or, after an unconditional goto, replace it.
@@ -3267,6 +3340,7 @@ class SoN::FromOptree 0.01 {
     # folds to a literal and never shows it.
 
     my %UNBUILT_OP_GAP = (
+        once => $ONCE_GAP,
 
         # `goto` transfers control and builds no node, so the jump, whatever
         # it skipped, and the label all vanished: `sub { my $x = 1; goto SKIP;
@@ -3672,8 +3746,8 @@ class SoN::FromOptree 0.01 {
             name          => $indirect ? '' : $call_name,
             want          => _want_of($op),
             # `&name;` passes the caller's @_ through: AMPER (8, asked of B)
-            # without OPf_STACKED (64). Corpus 197.
-            shares_args   => ( !$indirect && ($op->private & 8)
+            # without OPf_STACKED (64). Corpus 197. `&$ref;` too (corpus 200).
+            shares_args   => ( ($op->private & 8)
                                && !($op->flags & 64) ) ? 1 : 0,
         );
         $node->set_control_in($sim->control);
@@ -3714,10 +3788,13 @@ class SoN::FromOptree 0.01 {
         # Keyed on the same program-wide scan the read side uses, so a program
         # with no written package scalar keeps every call floatable exactly as
         # before.
+        # AND A FILE LEXICAL SHARED WITH A NAMED SUB, for the same reason: the
+        # callee may write it (`sub bump { $count++ }`).
         if (defined $sim->memory
             && ( (grep { $_->captured_written }
                     values +($ctx->{cells} // {})->%*)
-                 || %{ _package_scalars_written() } )) {
+                 || %{ _package_scalars_written() }
+                 || %{ $ctx->{shared_lexicals} // {} } )) {
             $sim->set_memory($node);
         }
 
@@ -4940,6 +5017,7 @@ class SoN::FromOptree 0.01 {
                     targ     => $targ,
                     do { my ($sg, $sy) = _padparts($cv, $targ);
                          (sigil => $sg, symbol => $sy) },
+                    ($ctx->{shared_lexicals}{$targ} ? (shared => 1) : ()),
                     (defined $sim->memory ? (inputs => [ $sim->memory ]) : ()),
                 );
                 $sim->push_node($read);
@@ -6975,6 +7053,21 @@ class SoN::FromOptree 0.01 {
                 $sim->set_memory($store);
             }
 
+            # A DEMOTED SLOT IS STORED, NOT BOUND -- sassign's rule, and the
+            # same reason: its value lives in memory, where a reference or a
+            # sub that shares it reads. The lvalue padsv pushed the
+            # memory-carrying read, which is both the old value and the
+            # location. Rebinding instead dropped the increment: `my $r=\$x;
+            # $x++; print $$r` printed the old value.
+            elsif (defined $targ && $ctx->{addr_taken}{$targ}
+                   && $old->isa('SoN::IR::Node::PadAccess')) {
+                my $store = $factory->make('Assign', inputs => [$old, $new]);
+                $store->set_control_in($sim->control);
+                $sim->set_control($store);
+                $sim->set_memory($store);
+                $targ = undef;
+            }
+
             $sim->define($targ, $new) if defined $targ;
             # Pre yields the new value; post yields the old (pre-store) value.
             $sim->push_node($is_post ? $old : $new);
@@ -7119,6 +7212,24 @@ class SoN::FromOptree 0.01 {
             # assignable Perl as written.
             elsif ($target->isa('SoN::IR::Node::Call')
                     && ($target->name // '') eq 'pos') {
+                my $store = $factory->make_unique('Assign',
+                    inputs => [$target, $value]);
+                $store->set_control_in($sim->control);
+                $sim->set_control($store);
+                $sim->set_memory($store) if defined $sim->memory;
+                $sim->push_node($value);
+            }
+            # AN :lvalue SUB CALLED AS A TARGET -- `slot() = 42` -- stores
+            # through whatever the sub returns. The catch-all below dropped the
+            # store and left the call (corpus 199). The Call is the location,
+            # as pos's is: taken off the chain it was pinned to, so the sub is
+            # called once, by the assignment.
+            elsif ($target->isa('SoN::IR::Node::Call')
+                    && ($target->dispatch_kind // '') eq 'direct') {
+                if (defined $target->control_in && $sim->control == $target) {
+                    $sim->set_control($target->control_in);
+                    $target->set_control_in(undef);
+                }
                 my $store = $factory->make_unique('Assign',
                     inputs => [$target, $value]);
                 $store->set_control_in($sim->control);
@@ -7830,6 +7941,23 @@ class SoN::FromOptree 0.01 {
                     return ($op->next, 'handled');
                 }
 
+                # A DEMOTED SLOT IS STORED, as sassign stores it: the target
+                # is the slot's location at the current memory version.
+                if ($ctx->{addr_taken}{ $op->targ }) {
+                    my $loc = $factory->make('PadAccess',
+                        targ => $op->targ,
+                        do { my ($sg, $sy) = _padparts($cv, $op->targ);
+                             (sigil => $sg, symbol => $sy) },
+                        ($ctx->{shared_lexicals}{ $op->targ } ? (shared => 1) : ()),
+                        (defined $sim->memory ? (inputs => [ $sim->memory ]) : ()));
+                    my $store = $factory->make('Assign', inputs => [$loc, $node]);
+                    $store->set_control_in($sim->control);
+                    $sim->set_control($store);
+                    $sim->set_memory($store);
+                    $sim->push_node($node);
+                    return ($op->next, 'handled');
+                }
+
                 my $lv = _make_pad_or_field($cv, $op->targ, $factory);
                 my $is_field = $lv->isa('SoN::IR::Node::FieldAccess');
                 if ($is_field) {
@@ -8023,6 +8151,22 @@ class SoN::FromOptree 0.01 {
                     # the wire only if this graph also read it: both examples
                     # emitted nothing (corpus 050's @ISA).
                     _entry_store($factory, $sim, $target, $node) unless $is_pad;
+                    # A PAD AGGREGATE SHARED WITH A NAMED SUB is observable
+                    # outside this graph for the same reason, so it is stored
+                    # too: an Assign into the shared slot, on the chain. Bound
+                    # only, `my @l = (...)` reached the wire only if the program
+                    # itself read @l (corpus 201 does not).
+                    if ($is_pad && $ctx->{shared_lexicals}{ $target->targ }) {
+                        my $loc = $factory->make('PadAccess',
+                            targ => $target->targ, sigil => $sigil,
+                            symbol => $target->symbol, shared => 1,
+                            (defined $sim->memory ? (inputs => [$sim->memory]) : ()));
+                        my $store = $factory->make('Assign',
+                            inputs => [$loc, $node]);
+                        $store->set_control_in($sim->control);
+                        $sim->set_control($store);
+                        $sim->set_memory($store) if defined $sim->memory;
+                    }
                     $sim->push_node($node);
                     return ($op->next, 'handled');
                 }
@@ -8985,7 +9129,18 @@ class SoN::FromOptree 0.01 {
 
                 # Rebind the target to the result so a later read sees the new
                 # value.
-                if ($is_compound) {
+                # A DEMOTED SLOT IS STORED, as sassign and `++` store it: the
+                # compound's first operand is the memory-carrying read, which
+                # is also the location.
+                if ($is_compound && $ctx->{addr_taken}{$lvalue_targ}
+                    && $inputs[0]->isa('SoN::IR::Node::PadAccess')) {
+                    my $store = $factory->make('Assign',
+                        inputs => [$inputs[0], $node]);
+                    $store->set_control_in($sim->control);
+                    $sim->set_control($store);
+                    $sim->set_memory($store);
+                }
+                elsif ($is_compound) {
                     $sim->define($lvalue_targ, $node);
                 }
                 elsif (defined $pkg_lvalue) {
@@ -13910,7 +14065,8 @@ class SoN::FromOptree 0.01 {
         # broke t/wire-backward-inference.t in exactly that way.
         my ($sigil, $symbol) = _padparts($cv, $targ);
         return $factory->make('PadAccess',
-            targ => $targ, sigil => $sigil, symbol => $symbol);
+            targ => $targ, sigil => $sigil, symbol => $symbol,
+            ($SHARED_SLOTS && $SHARED_SLOTS->{$targ} ? (shared => 1) : ()));
     }
 
     # Resolve the GV of a gv/gvsv op. Unthreaded perls store it on the op

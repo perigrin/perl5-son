@@ -78,6 +78,10 @@ class SoN::Deparse 0.01 {
     # them: a second `my` would shadow the captured lexical.
     field %cell_slots;
 
+    # Demoted pad variables this graph has already declared: the first store
+    # is the `my`, a later one assigns the same variable.
+    field %pad_declared;
+
     # Join-Phi variables needing a declaration at the top of the sub, because
     # a join can outlive the branch that assigns into it.
     field %hoisted;
@@ -272,6 +276,7 @@ class SoN::Deparse 0.01 {
         %after_effect = ();
         %after_region = ();
         %hoisted  = ();
+        %pad_declared = ();
         %mem_cache = ();
         %subst_count_var = ();
         my $body = eval { $self->_emit_control_chain($graph) };
@@ -490,6 +495,15 @@ class SoN::Deparse 0.01 {
                        (($all_methods->{$m}{nodes} // [])->@*) };
             for my $n (sort { $a->{id} <=> $b->{id} }
                        (($all_methods->{$m}{nodes} // [])->@*)) {
+                # A FILE LEXICAL SHARED WITH A NAMED SUB is declared here for
+                # the same reason a cell is: the subs are emitted above the
+                # program body, and must see the one variable.
+                if (($n->{op} // '') eq 'PadAccess'
+                        && ($n->{fields} // {})->{shared}) {
+                    my $v = ($n->{fields}{sigil} // '$') . $n->{fields}{symbol};
+                    $out .= sprintf("my %s;\n", $v) unless $cell_slots{$v}++;
+                    next;
+                }
                 next unless ($n->{op} // '') eq 'MakeCell';
                 my $v = $self->_cell_var($n);
                 next if $cell_slots{$v}++;
@@ -557,8 +571,12 @@ class SoN::Deparse 0.01 {
 
     method _emit_sub ($name, $graph) {
         my $body = $self->_render_graph_body($name, $graph);
-        return sprintf("sub %s%s {\n%s}\n", $self->_sub_ident($name),
-            $self->_sub_prototype($name), $body);
+        my ($pkg, $short) = $name =~ /\A(.*)::([^:]+)\z/;
+        my $lvalue = defined $short
+            && ((($sub_meta->{$pkg} // {})->{subs} // {})->{$short} // {})->{lvalue}
+            ? ' :lvalue' : '';
+        return sprintf("sub %s%s%s {\n%s}\n", $self->_sub_ident($name),
+            $self->_sub_prototype($name), $lvalue, $body);
     }
 
     # The program's feature classes, declared, and the set of graph keys they
@@ -664,6 +682,7 @@ class SoN::Deparse 0.01 {
         my %save_after = %after_effect;
         my %save_region = %after_region;
         my %save_hoist = %hoisted;
+        my %save_declared = %pad_declared;
         my %save_mem   = %mem_cache;
         my $save_sub = $current_sub;
         $current_sub = $name;
@@ -673,6 +692,7 @@ class SoN::Deparse 0.01 {
         %after_effect = ();
         %after_region = ();
         %hoisted  = ();
+        %pad_declared = ();
         %mem_cache = ();
         %subst_count_var = ();
 
@@ -685,6 +705,7 @@ class SoN::Deparse 0.01 {
         %after_effect = %save_after;
         %after_region = %save_region;
         %hoisted  = %save_hoist;
+        %pad_declared = %save_declared;
         %mem_cache = %save_mem;
         die $err unless defined $body;
         return $body;
@@ -1002,7 +1023,7 @@ class SoN::Deparse 0.01 {
         # behaviour this pass replaces rather than a new wrong answer.
         state $VALUE_CONSUMER = { map { $_ => 1 } keys %BINOP, qw(
             Assign Ref Coerce Print Interpolate Length Not Negate Defined
-            DefinedOr And Or TernaryExpr UnaryPlus
+            DefinedOr And Or TernaryExpr UnaryPlus Increment
         ) };
         my %consumers;
         for my $c ( values $nodes->%* ) {
@@ -1191,8 +1212,10 @@ class SoN::Deparse 0.01 {
             # is a syntax error -- "can't be in a package" -- and the package
             # variable needs no declaration to exist. Same rule the Assign
             # branch applies to EntryDef targets, one node kind over.
+            # A SHARED ONE IS DECLARED ABOVE THE SUBS (see
+            # _emit_cell_declarations); a `my` here would shadow it.
             $prologue .= sprintf("%s%s = (%s);\n",
-                ($self->_agg_is_package($n) ? '' : 'my '), $vn,
+                ($self->_agg_is_package($n) || $cell_slots{$vn} ? '' : 'my '), $vn,
                 join(', ', map { $self->_expr($_) } (($n->{inputs} // [])->@*)));
         }
 
@@ -2903,6 +2926,18 @@ class SoN::Deparse 0.01 {
         if ($op eq 'Assign') {
             my @in = ($n->{inputs} // [])->@*;
 
+            # A SHARED AGGREGATE'S OWN INITIALISATION -- `@l` stored from the
+            # literal that already carries its name -- is the prologue's
+            # `@l = (...)`; spelled again here it is `@l = (@l)`.
+            if (@in == 2) {
+                my ($t, $v) = map { $nodes->{$_} // {} } @in;
+                return '' if ($t->{op} // '') eq 'PadAccess'
+                    && ($t->{fields} // {})->{shared}
+                    && ($v->{op} // '') =~ /\A(?:Array|Hash)Literal\z/
+                    && (($v->{fields} // {})->{symbol} // '')
+                       eq (($t->{fields} // {})->{symbol} // '');
+            }
+
             # A COUNTED s/// STORED THROUGH AN Assign STILL RUNS TWICE. The
             # foreach form writes back through an Assign rather than an
             # EntryWrite -- `for my $s (@w)` aliases the iterator to the
@@ -3058,9 +3093,14 @@ class SoN::Deparse 0.01 {
             # that close over it are emitted above this chain. A second `my`
             # here would shadow the captured lexical and the closure's writes
             # would stop being visible.
+            # AND A DEMOTED SLOT IS DECLARED BY ITS FIRST STORE ONLY: a second
+            # `my $x` is a new variable, and a reference to the first -- or a
+            # sub sharing it -- would no longer see the writes.
             my $decl = ($all_slots && (grep { /^\$/ } @lhs) == @lhs
-                        && !(grep { $cell_slots{$_} } @lhs))
+                        && !(grep { $cell_slots{$_} } @lhs)
+                        && !(grep { $pad_declared{$_} } @lhs))
                 ? 'my ' : '';
+            $pad_declared{$_} = 1 for @lhs;
             return sprintf("%s(%s) = (%s);\n",
                 $decl, join(', ', @lhs), join(', ', @rhs))
                 if @lhs > 1;
@@ -4703,6 +4743,9 @@ class SoN::Deparse 0.01 {
             # wrapping them would be noise in every ordinary call. The test is
             # the spelling rather than the node kind -- what matters is whether
             # `->` can bind to part of it, which is a question about the TEXT.
+            # `&$ref;` HANDS ON THE CALLER'S @_, as `&name;` does; `->()`
+            # would pass an empty one.
+            return sprintf('&{%s}', $callee) if $f->{shares_args};
             $callee = "($callee)"
                 unless $callee =~ /\A\$[\w:]+ (?: (?:->)? [\[{] .* [\]}] )* \z/x;
             return sprintf('%s->(%s)', $callee, join(', ', @args));
