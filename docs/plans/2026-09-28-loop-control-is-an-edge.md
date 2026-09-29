@@ -89,6 +89,27 @@ THE RENDERER spells edges, it does not reconstruct them:
 renderer emits the label and `goto LABEL`. Perl allows exactly the forward
 and backward jumps the corpus uses (not into a foreach or a sub).
 
+## Phase 1 as built (0899158), and where it departs from the design above
+
+THE MERGE WAS ALREADY THE EDGE. The "structural rewrite" a `next if` builds --
+If(C), the rest on the not-taken Proj, the taken Proj merged with it -- is a
+latch join: a Region whose predecessors are the `next` paths, with Phis for
+what differs. So phase 1 needed no new representation. The defects were
+PLACEMENT: the continue block sat inside the rest arm, before that merge, so a
+`next` skipped it; and a `next if` inside an arm refused. Built instead:
+
+  - $CONTINUE_START (nextop when not the unstack), local per loop; every rest
+    arm and every arm walk in a loop body stops there, and the continue block
+    is walked once on the merged state.
+  - An unconditional `next` jumps there.
+  - A `next if` in an arm builds the same If and merge as in the body.
+
+The latch is therefore a chain of binary merges rather than one N-way Region.
+The renderer's contract is unchanged, which is why this fit. If a later phase
+(labels, redo) needs the N-way form, this is the place it changes.
+
+Corpus 007 and 137 round-trip; 118 (`next OUTER`) is phase 3.
+
 ## Phases -- each TDD against its named corpus cases, full suite + census
 
   0. GUARDED RETURNS BUILD THEIR TRUE PROJ. The main and/or handler and the
