@@ -1,6 +1,6 @@
 # `open our $T` models the handle as an assignment target
 
-Status: **recorded, not fixed.** Measured 2026-09-26. The last defect standing
+Status: **FIXED 2026-09-29** (see "The cause" at the end). Measured 2026-09-26. The last defect standing
 between perl's `t/base/rs.t` and a clean round trip, along
 [[2026-09-26-a-package-scalar-is-not-loop-carried]].
 
@@ -67,3 +67,14 @@ should only be reading it as a handle.
 `t/from-optree-open-our-handle-round-trips.t` does not exist yet. The reduction
 above is the whole test, and it must include the `open my $T` control -- that
 is what distinguishes this defect from a general filehandle problem.
+
+## The cause (fixed 2026-09-29)
+
+Not open, readline or close. `my $line = <$T>` is a STACKED readline: its
+destination sits below it on the stack and its first input is the handle.
+The package compound-assignment arm (`$n += 3`) recognised a STACKED op
+whose first input is an EntryDef as a store into that package scalar -- so
+with `open our $T` the handle was the "target" and the line went into `$T`.
+An `op=` target carries OPf_MOD on its ex-rv2sv; a handle read does not, and
+the arm now requires it. The TODO in
+`t/from-optree-open-our-handle-round-trips.t` is promoted to a plain test.

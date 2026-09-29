@@ -74,14 +74,12 @@ SRC
 # See docs/plans/2026-09-26-open-our-handle-stores-the-line.md. The four
 # symptoms are one cause, and the `my` control below is what says the defect is
 # in the PACKAGE lvalue path rather than in open, readline or close.
-todo 'open our $T takes the package slot as a store target' => sub {
-    subtest 'an our handle reads its file' => sub {
-        my $src = read_through('our');
-        my ( $out, $why ) = emit($src);
-        ok defined $out, 'renders' or do { diag $why; return };
-        is runs($out), runs($src), 'the line comes back whole'
-            or diag $out;
-    };
+subtest 'an our handle reads its file' => sub {
+    my $src = read_through('our');
+    my ( $out, $why ) = emit($src);
+    ok defined $out, 'renders' or do { diag $why; return };
+    is runs($out), runs($src), 'the line comes back whole'
+        or diag $out;
 };
 
 # THE CONTROL. Same program, one word different, and it must keep working.

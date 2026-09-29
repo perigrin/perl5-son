@@ -8814,11 +8814,20 @@ class SoN::FromOptree 0.01 {
                 # A name list would have missed **= and x= silently, which is
                 # the failure mode docs/plans/2026-08-31-one-operator-one-
                 # declaration.md records.
+                # THE TARGET IS MARKED, not just the op. OPf_STACKED also means
+                # "my destination is below on the stack" -- `my $l = <$T>` is a
+                # STACKED readline whose first input is the HANDLE -- so with
+                # `open our $T` the handle was taken for the store target and
+                # the line written into $T (docs/plans/2026-09-26-open-our-
+                # handle-stores-the-line.md). An `op=` target carries OPf_MOD
+                # (on its ex-rv2sv); a handle read does not.
                 my $pkg_lvalue;
                 if (!$is_compound
                     && @inputs >= 1
                     && $inputs[0]->isa('SoN::IR::Node::EntryDef')
-                    && ($op->flags & 64)) {   # OPf_STACKED
+                    && ($op->flags & 64)          # OPf_STACKED
+                    && $op->can('first') && ${$op->first}
+                    && ($op->first->flags & 32)) {   # OPf_MOD
                     $pkg_lvalue = $inputs[0];
                 }
 
