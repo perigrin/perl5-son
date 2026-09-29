@@ -2458,6 +2458,14 @@ class SoN::Deparse 0.01 {
                 $var, $self->_slot_name($n) );
         }
 
+        # A MATCH PINNED FOR ITS PLACE whose value nothing reads -- a void
+        # `$s =~ m/b/g;`, run for the pos() it leaves. The statement is the
+        # expression; a read of it elsewhere is bound instead and never lands
+        # here.
+        if ($op eq 'RegexMatch') {
+            return $self->_expr_uncached( $n->{id} ) . ";\n";
+        }
+
         # THE SAME, FOR A DEMOTED LEXICAL -- spelled from its name, for the
         # same reason.
         if ($op eq 'PadAccess') {
@@ -2730,18 +2738,20 @@ class SoN::Deparse 0.01 {
                     && !defined(($agg->{fields} // {})->{symbol});
             }
 
+            # A SCALAR ASSIGN IS [target, value], whatever kinds they are.
+            # `my $n = $AUTOLOAD` stores an EntryDef, which the kind walk
+            # above takes for a second target, leaving no value (corpus 204);
+            # `pos($s) = 0` targets a Call, which it takes for no target at
+            # all (corpus 189). Position decides, as it does for the
+            # ArgsSource and PostfixDeref cases above; a list assign is the one
+            # stamped List, and only it can have several targets.
+            $t = 1 if @in == 2 && ( $n->{stamp} // '' ) ne 'List'
+                && ( $t == 0 || $t == 2 );
+
             die "GAP: an Assign (id $n->{id}) with no target slots is not yet"
               . " rendered -- its first input is a `"
               . ($nodes->{ $in[0] // -1 }{op} // '?') . "`\n"
                 unless $t;
-
-            # A SCALAR ASSIGN IS [target, value], whatever kind the value is.
-            # `my $n = $AUTOLOAD` stores an EntryDef, which the kind walk above
-            # takes for a second target -- then there is no value and it
-            # refused (corpus 204). Position decides, as it does for the
-            # ArgsSource and PostfixDeref cases above; a list assign is the one
-            # stamped List, and only it can have several targets.
-            $t = 1 if $t == @in && @in == 2 && ($n->{stamp} // '') ne 'List';
 
             my @lhs = map { $self->_location($_) } @in[0 .. $t-1];
             my @rhs = map { $self->_expr($_) } @in[$t .. $#in];
@@ -3039,6 +3049,27 @@ class SoN::Deparse 0.01 {
         return $text;
     }
 
+    # Delimiters for a match whose pattern is emitted raw. Braces while the
+    # pattern's own braces balance -- the common case, and what every existing
+    # emission uses -- else the first of a fixed list the pattern does not
+    # contain. `m{b(?{ $k = length("}}}") })}` closes at the first unbalanced
+    # `}`, and perl then reads the rest as code (corpus 098).
+    sub _match_delimiters ($pat) {
+        my $depth = 0;
+        my $balanced = 1;
+        while ($pat =~ /(\\.|[{}])/gs) {
+            next if length($1) == 2;                  # an escaped character
+            $depth += $1 eq '{' ? 1 : -1;
+            if ($depth < 0) { $balanced = 0; last }
+        }
+        return ('{', '}') if $balanced && $depth == 0;
+        for my $d ('!', '|', '~', '%', '#', ',', ';') {
+            return ($d, $d) if index($pat, $d) < 0;
+        }
+        die "GAP: a pattern that contains every available delimiter is not"
+          . " yet rendered\n";
+    }
+
     # A NODE IN A LOCATION POSITION -- a store target, a referent, the string
     # a substr rewrites -- spelled as the variable, never as a binding. A
     # demoted lexical's read and its location hash-cons into ONE PadAccess
@@ -3090,8 +3121,9 @@ class SoN::Deparse 0.01 {
                 unless defined $pat;
             die "GAP: a RegexMatch with " . scalar(@in) . " inputs is not yet"
               . " rendered\n" unless @in == 1;
-            $text = sprintf('(%s =~ m{%s}%s)',
-                $self->_expr($in[0]), $pat, $f->{flags} // '');
+            my ($open, $close) = _match_delimiters($pat);
+            $text = sprintf('(%s =~ m%s%s%s%s)',
+                $self->_expr($in[0]), $open, $pat, $close, $f->{flags} // '');
         }
         elsif ($op eq 'Chomp') {
             # chomp AND chop MUTATE, so the value form needs a copy: perl has

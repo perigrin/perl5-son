@@ -500,6 +500,21 @@ class SoN::FromOptree 0.01 {
                 }
             }
 
+            # pos() IS STATE ON THE VARIABLE. A /g match sets it and pos()
+            # reads or writes it, and a value binding has no pos -- the
+            # emission matched and asked pos() of a folded constant (corpus
+            # 010, 189). So the subject of a /g match (the match op's own
+            # targ) and the operand of pos are demoted: they must be the
+            # variable itself.
+            if ($op->name eq 'match' && $op->can('pmflags')
+                    && ($op->pmflags & 8388608) && $op->targ) {   # PMf_GLOBAL
+                $taken{ $op->targ } = 1;
+            }
+            if ($op->name eq 'pos' && $op->can('first') && ${$op->first}
+                    && $op->first->name eq 'padsv' && $op->first->targ) {
+                $taken{ $op->first->targ } = 1;
+            }
+
             # A MUTATING substr WRITES ITS STRING'S SLOT, the destructive-s///
             # case below one operator over: `substr($s,...) = X` (the substr
             # carries OPf_MOD, 32) and `substr($s, o, l, X)` (four operands,
@@ -1812,8 +1827,16 @@ class SoN::FromOptree 0.01 {
                 # padsv_store / TARGMY). The /r form (PMf_NONDESTRUCT) yields a
                 # NEW string and leaves the source untouched, so it must NOT
                 # rebind -- only push the result value ($nondestruct above).
+                #
+                # NOT FOR A PAD SUBJECT. _address_taken demotes every destructive
+                # s///'s pad target, so its value lives in memory -- this node is
+                # the new memory version -- and later reads go through memory.
+                # Rebinding the slot to this node made the NEXT s/// on it take
+                # this one's result as its subject, unpinned: `$s =~ s/a/z/;
+                # $s =~ s/c/y/; $s =~ s/d/w/` kept only the first (corpus 010).
                 unless ($nondestruct) {
-                    $sim->define($scope_key, $node);
+                    $sim->define($scope_key, $node)
+                        unless $target->isa('SoN::IR::Node::PadAccess');
                     _entry_store($factory, $sim, $store_target, $node);
                 }
                 # The binding above is the substituted subject. In count
@@ -2921,6 +2944,11 @@ class SoN::FromOptree 0.01 {
     # ...` came out `print ...; select(select($out))` (corpus 224). The
     # four-argument form is the op `sselect` and changes nothing.
     my %HANDLE_SELECT_BUILTIN = map { $_ => 1 } qw(select);
+
+    # `pos $s` READS STATE ON THE VARIABLE that a /g match and `pos($s) = N`
+    # write. Unpinned, three reads between matches collapsed to one and
+    # floated to their use: `2 2 2` where perl says `2 5 2` (corpus 189).
+    my %VARIABLE_STATE_READ_BUILTIN = map { $_ => 1 } qw(pos);
 
     # Ops that are an EFFECT in their own right rather than a call. The void
     # branch-arm scan needs this: it asked "is this arm an entersub in void
@@ -5247,12 +5275,38 @@ class SoN::FromOptree 0.01 {
                 }
             }
             my $node;
+            # A MATCH IS A READ OF ITS SUBJECT AT ONE POINT, and two kinds of
+            # subject change under it: a DEMOTED lexical (an s///, a reference,
+            # an argument) is rewritten by later statements, and a /g match
+            # itself advances pos() on its subject. Floating, the match was
+            # spelled at its use -- `my $hit = $s =~ /abc/; $s =~ s/a/z/;
+            # print $hit` matched the rewritten string (corpus 010), and
+            # `$s =~ m/b/g; my $a = pos($s)` lost the match entirely (189).
+            # So such a match is pinned where it was written and made unique,
+            # as the $@ read is -- on the main walk only, for the same reason.
+            my $demoted_subject = $target->isa('SoN::IR::Node::PadAccess')
+                && $target->can('targ') && $target->targ
+                && $ctx->{addr_taken}{ $target->targ };
+            my $flags = _pmflags_to_str($op->pmflags);
+            my $pin = ( $ctx->{mode} // '' ) eq 'main'
+                && ( $demoted_subject || $flags =~ /g/ );
             if (defined $pattern) {
-                $node = $factory->make('RegexMatch',
+                my $make = $pin ? 'make_unique' : 'make';
+                $node = $factory->$make('RegexMatch',
                     inputs  => [$target],
                     pattern => $pattern,
-                    flags   => _pmflags_to_str($op->pmflags),
+                    flags   => $flags,
+                    ($pin ? (stamp => SoN::IR::Stamp->new(type => 'Boolean')) : ()),
                 );
+                if ($pin) {
+                    $node->set_control_in($sim->control);
+                    $sim->set_control($node);
+                    # A /g MATCH WRITES pos(), so it is a new memory version
+                    # of its subject: a pos() read either side of it is then
+                    # two reads, not one hash-consed node.
+                    $sim->set_memory($node)
+                        if $flags =~ /g/ && defined $sim->memory;
+                }
             }
             else {
                 $node = $factory->make('Match',
@@ -6724,6 +6778,19 @@ class SoN::FromOptree 0.01 {
                 my $store = $factory->make('Assign', inputs => [$target, $value]);
                 $store->set_control_in($sim->control);
                 $sim->set_control($store);
+                $sim->push_node($value);
+            }
+            # `pos($s) = N` SETS THE MATCH POSITION, and the target arrives as
+            # the pos Call -- which the catch-all below dropped. An ordered
+            # Assign into it, the Call as the location; `pos($s) = 0` is
+            # assignable Perl as written.
+            elsif ($target->isa('SoN::IR::Node::Call')
+                    && ($target->name // '') eq 'pos') {
+                my $store = $factory->make_unique('Assign',
+                    inputs => [$target, $value]);
+                $store->set_control_in($sim->control);
+                $sim->set_control($store);
+                $sim->set_memory($store) if defined $sim->memory;
                 $sim->push_node($value);
             }
             # AN LVALUE substr (`substr($s, o, l) = X`) IS THE FOUR-ARGUMENT
@@ -8444,6 +8511,13 @@ class SoN::FromOptree 0.01 {
 
                     $pin_on_control = 1
                         if $HANDLE_SELECT_BUILTIN{$name} && !$void;
+
+                    $pin_on_control = 1
+                        if $VARIABLE_STATE_READ_BUILTIN{$name} && !$void
+                        # NOT the lvalue form: `pos($s) = 0` is the store's
+                        # target (OPf_MOD, 32), and pinned it became a
+                        # temporary the store then assigned to.
+                        && !($op->flags & 32);
 
                     # A FOUR-ARGUMENT substr WRITES ITS STRING, in any context
                     # -- `my $old = substr($b, 0, 1, "J")` is want=SCALAR and
