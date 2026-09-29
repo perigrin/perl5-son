@@ -842,6 +842,9 @@ class SoN::FromOptree 0.01 {
         # fall-through is dead (an unconditional goto was the last thing run).
         my %pending_goto;
         my $goto_dead = 0;
+        # A label BEHIND a computed goto is a loop header: the goto's
+        # `eq LABEL` arm is its back edge. See the computed-goto handler.
+        my $label_loop;
 
         while ($$op) {
             last if $visited{$$op}++;
@@ -861,6 +864,89 @@ class SoN::FromOptree 0.01 {
                     $goto_dead = 0;
                 }
                 $sim->merge($_, $factory) for @$edges;
+            }
+            if ($name eq 'nextstate' && defined $op->label
+                    && _computed_goto_ahead($op->next)) {
+                die "GAP: a computed goto with more than one label behind it"
+                  . " is not yet lowered\n" if $label_loop;
+                my $loop = $factory->make_cfg('Loop',
+                    inputs => [$sim->control]);
+                $sim->set_control($loop);
+                $label_loop = { label => $op->label, loop => $loop,
+                                scope => $sim->scope_bindings,
+                                memory => $sim->memory };
+            }
+
+            # `goto $t` WITH A STRING OPERAND jumps to the label that string
+            # names -- one of the labels in scope, all of which are in the
+            # optree; only the choice waits for run time. So it is an edge set:
+            #
+            #   a label behind it   the back edge of the Loop opened there:
+            #                       the loop leaves when $t ne LABEL
+            #   each label ahead    an If on $t eq LABEL, its edge pending
+            #                       at the label like a forward goto's
+            #   anything else       perl's own "Can't find label" die
+            #
+            # The walk goes on along the die arm, which never returns, so what
+            # follows the goto is in the graph but never runs.
+            if ($name eq 'goto' && _is_computed_goto($op)) {
+                my $t = $sim->pop_node;
+                my $t_type = _goto_operand_type($t);
+                die "GAP: a computed goto whose operand is not a string"
+                  . " ($t_type) is not yet lowered\n" unless $t_type eq 'Str';
+                my $label_const = sub ($l) {
+                    $factory->make('Constant', value => $l,
+                        const_type => 'string',
+                        stamp => SoN::IR::Stamp->new(type => 'Str'));
+                };
+                if (my $ll = $label_loop) {
+                    my $now = $sim->scope_bindings;
+                    die "GAP: a computed goto whose label behind it carries a"
+                      . " changed value around the loop is not yet lowered\n"
+                        if ($sim->memory // 0) != ($ll->{memory} // 0)
+                        || grep { ($ll->{scope}{$_} // 0) != $now->{$_} }
+                               keys %$now;
+                    for (my $c = $sim->control; $c != $ll->{loop};
+                         $c = $c->control_in) {
+                        die "GAP: a computed goto whose loop body branches is"
+                          . " not yet lowered\n"
+                            if !defined $c
+                            || $c->operation =~ /\A(?:If|Region|Loop|Proj)\z/;
+                    }
+                    my $ne = $factory->make('StrNe',
+                        inputs => [$t, $label_const->($ll->{label})],
+                        stamp  => SoN::IR::Stamp->new(type => 'Boolean'));
+                    my $if = $factory->make_cfg('If',
+                        inputs => [$sim->control, $ne]);
+                    $factory->make_cfg('Proj', inputs => [$if], index => 1);
+                    $sim->set_control($factory->make_cfg('Proj',
+                        inputs => [$if], index => 0));
+                    undef $label_loop;
+                }
+                for my $l (_labels_ahead($op->next)) {
+                    my $eq = $factory->make('StrEq',
+                        inputs => [$t, $label_const->($l)],
+                        stamp  => SoN::IR::Stamp->new(type => 'Boolean'));
+                    my $if = $factory->make_cfg('If',
+                        inputs => [$sim->control, $eq]);
+                    my $edge = SoN::FromOptree::StackSim->new(
+                        control => $factory->make_cfg('Proj',
+                            inputs => [$if], index => 0),
+                        memory => $sim->memory);
+                    my $b = $sim->scope_bindings;
+                    $edge->define($_, $b->{$_}) for keys %$b;
+                    push $pending_goto{$l}->@*, $edge;
+                    $sim->set_control($factory->make_cfg('Proj',
+                        inputs => [$if], index => 1));
+                }
+                my $msg = $factory->make('Concat',
+                    inputs => [$label_const->("Can't find label "), $t],
+                    stamp  => SoN::IR::Stamp->new(type => 'Str'));
+                my $unwind = $factory->make_cfg('Unwind', inputs => [[$msg]]);
+                $unwind->set_control_in($sim->control);
+                $sim->set_control($unwind);
+                $op = $op->next;
+                next;
             }
 
             # `goto LABEL`, `goto LABEL if C`, `goto LABEL unless C`, with the
@@ -11571,6 +11657,52 @@ class SoN::FromOptree 0.01 {
         return undef unless ref($g) && $$g && $g->name eq 'goto'
             && $g->isa('B::PVOP');
         return $g;
+    }
+
+    # _is_computed_goto($op) -> true for `goto EXPR` whose operand is not a
+    # code reference: `goto &name` and `goto &$ref` put an srefgen under the
+    # goto, and `goto LABEL` is a PVOP with no operand at all.
+    sub _is_computed_goto ($op) {
+        return 0 if $op->isa('B::PVOP') || !($op->flags & B::OPf_KIDS());
+        my $k = $op->first;
+        $k = $k->first while $k->name eq 'null' && ($k->flags & B::OPf_KIDS());
+        return $k->name ne 'srefgen';
+    }
+
+    # _goto_operand_type($node) -> the operand's type as far as the walk
+    # knows it. A DefinedOr is stamped after the walk, so one over string
+    # inputs -- `$ENV{T} // "TAIL"`, the shape a defaulted label takes -- is
+    # read through here: its value is always one of them.
+    # ponytail: DefinedOr only; widen when a corpus operand needs another join.
+    sub _goto_operand_type ($n) {
+        my $ty = $n->stamp ? $n->stamp->type : 'Unknown';
+        return $ty unless $ty eq 'Unknown' && $n->operation eq 'DefinedOr';
+        return (grep { _goto_operand_type($_) ne 'Str' } $n->inputs->@*)
+            ? 'Unknown' : 'Str';
+    }
+
+    # _computed_goto_ahead($op) -> true when a computed goto follows on this
+    # statement chain, which makes every label passed on the way a place it
+    # may jump back to.
+    sub _computed_goto_ahead ($op) {
+        my %seen;
+        while (ref($op) && $$op && !$seen{$$op}++) {
+            return 1 if $op->name eq 'goto' && _is_computed_goto($op);
+            $op = $op->next;
+        }
+        return 0;
+    }
+
+    # _labels_ahead($op) -> every label on this statement chain after $op, in
+    # the order they are reached.
+    sub _labels_ahead ($op) {
+        my (%seen, @l);
+        while (ref($op) && $$op && !$seen{$$op}++) {
+            push @l, $op->label
+                if $op->name eq 'nextstate' && defined $op->label;
+            $op = $op->next;
+        }
+        return @l;
     }
 
     # _label_ahead($op, $label) -> the nextstate carrying $label, found by
