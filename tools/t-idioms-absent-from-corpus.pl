@@ -19,7 +19,7 @@ use warnings;
 use FindBin;
 
 my $CORPUS = $ENV{SON_CORPUS}
-          // '/home/perigrin/dev/pvm/.claude/worktrees/pu/conformance/mdtest';
+          // "$FindBin::Bin/../t/corpus/mdtest/pvm";
 my $PERL_T = $ENV{SON_PERL_T} // "$ENV{HOME}/dev/perl5/t";
 die "no corpus at $CORPUS (set SON_CORPUS)\n" unless -d $CORPUS;
 die "no perl t/ at $PERL_T (set SON_PERL_T)\n" unless -d $PERL_T;

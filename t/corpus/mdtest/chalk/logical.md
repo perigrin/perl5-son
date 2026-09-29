@@ -1,0 +1,2029 @@
+# Logical Operators
+
+Perl's logical operators `&&`, `||`, `//`, and `!` are all runtime-free (RF)
+per docs/architecture/runtime-free-boundary.md — they are GAPs only because the
+current literal-arithmetic lowering slice lacks the control flow / representations
+they need, NOT because they require libperl. Each closes RF once its prerequisite
+lands (cfg-blocks-phi for the operand-returning operators, a Boolean/Undef
+representation for `!` and `//`).
+
+`&&` and `||` are SHORT-CIRCUIT OPERAND-RETURNING operators: they return one
+of their operands (not a boolean), so `$a && $b` returns `$a` when `$a` is
+falsy or `$b` when `$a` is truthy.  Implementing this correctly requires an
+If node selecting which operand to pass through, plus a Phi to merge the two
+paths — neither is in the current straight-line lowering slice.
+
+`//` (defined-or) checks definedness (is the value Undef?), not truthiness.
+Per the runtime-free boundary (docs/architecture/runtime-free-boundary.md) this
+is RF: an Undef-definedness check is a known operation on a known representation
+(Undef has a machine representation; the check is a tag/niche test), NOT a
+libperl dependency. It is a GAP only because the Undef representation and its
+definedness predicate are not yet modelled, not because it needs the interpreter.
+
+`!` (logical not) returns a genuine primitive BOOLEAN: `!5` is `false`, `!0` is
+`true` (`is_bool` verified). A boolean *coerces* to `""`/`"1"` in string context
+and `0`/`1` in numeric context, but its identity is Boolean, not Str. `!` is RF: a
+Boolean representation (i1) + UnaryNot(Boolean)->Boolean + `Coerce(Boolean->*)` edges — a GAP
+only until the Boolean representation is modelled, not a Str/libperl dependency.
+
+All four idioms are honest GAPs.  The behavior is still perl-specified and
+the GAP reason is documented for each case.
+
+## L1 logical and
+
+Perl `&&` returns an operand: the left operand when it is falsy, the right
+operand when the left is truthy.  For `$a = 3`, `$b = 7`, the result is `7`
+(not `1`).  This operand-passing semantics requires If+Phi short-circuit
+structure that is not in the current lowering slice.
+
+```perl
+# source
+use 5.42.0;
+my $a = 3;
+my $b = 7;
+say($a && $b);
+```
+
+```behavior
+stdout: 7\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%ca = Constant(3) :Int
+%cb = Constant(7) :Int
+%r  = And(%ca, %cb) :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%r : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [7], nodes: [
+  [Start], # 0
+  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 1
+  [Constant, {const_type: integer, value: "7"}, ~, ~, Int], # 2
+  [And, ~, [1, 2], ~, Int], # 3
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
+  [Print, ~, [4, 5], 0, Scalar], # 6
+  [Return, ~, [6], 6]]} # 7
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## L2 logical or
+
+Perl `||` also returns an operand: the left operand when it is truthy, the
+right operand when the left is falsy.  For `$a = 3`, `$b = 7`, the result is
+`3` (not `1`).  Same short-circuit If+Phi structure required.
+
+```perl
+# source
+use 5.42.0;
+my $a = 3;
+my $b = 7;
+say($a || $b);
+```
+
+```behavior
+stdout: 3\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%ca = Constant(3) :Int
+%cb = Constant(7) :Int
+%r  = Or(%ca, %cb) :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%r : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [7], nodes: [
+  [Start], # 0
+  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 1
+  [Constant, {const_type: integer, value: "7"}, ~, ~, Int], # 2
+  [Or, ~, [1, 2], ~, Int], # 3
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
+  [Print, ~, [4, 5], 0, Scalar], # 6
+  [Return, ~, [6], 6]]} # 7
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## L3 defined-or
+
+Perl `//` returns the left operand when it is defined, otherwise the right
+operand.  Definedness (is the value Undef?) is a different test from truthiness
+(`||`).  For `$a = 3`, `$b = 7`, the result is `3`.  Per the runtime-free
+boundary this is RF: a definedness check is a known predicate on the Undef
+representation, paired with the same operand-selecting control flow as `||`
+(cfg-blocks-phi).
+
+G2 GREEN: DefinedOr lowers runtime-free via the Undef representation
+(alloca+store+load defined bit) + a definedness branch (br on i1 defined bit) +
+Phi to select the defined operand. The LHS is `Int`-typed (always defined), so
+the definedness branch always takes the defined path. The return is :Int, and the
+type-tagged output is `Int:3`.
+
+```perl
+# source
+use 5.42.0;
+my $a = 3;
+my $b = 7;
+say($a // $b);
+```
+
+```behavior
+stdout: 3\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%cn  = Constant("$a") :Str
+%ca  = Constant(3) :Int
+%vda = VarDecl(%cn, %ca) :Int
+%pa  = PadAccess(%vda, "$a") :Int
+%cnb = Constant("$b") :Str
+%cb  = Constant(7) :Int
+%vdb = VarDecl(%cnb, %cb) :Int
+%pb  = PadAccess(%vdb, "$b") :Int
+%r   = DefinedOr(%pa, %pb) :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%r : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [7], nodes: [
+  [Start], # 0
+  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 1
+  [Constant, {const_type: integer, value: "7"}, ~, ~, Int], # 2
+  [DefinedOr, ~, [1, 2], ~, Int], # 3
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
+  [Print, ~, [4, 5], 0, Scalar], # 6
+  [Return, ~, [6], 6]]} # 7
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## L3b defined-or undef-left
+
+Perl `//` with an undef left operand: the left operand is Undef, so `//`
+returns the right operand.  For `$a = undef`, `$b = 7`, the result is `7`.
+This is the RUNTIME-UNDEF path: the Undef representation uses alloca+store+load
+to make the definedness bit runtime-opaque (not constant-foldable by the LLVM
+optimizer).  The DefinedOr branches on the loaded i1 bit and the phi selects
+the RHS value on the undef path.
+
+PROMOTED FROM `L: GAP` 2026-09-03. The refusal it declared -- "DefinedOr with
+repr=Scalar reached LLVM backend" -- is gone: `Scalar` has a machine type
+(%Slot), and the guard predated it. See
+docs/plans/2026-09-02-finish-the-str-strpair-migration.md for the type work and
+a340d22a for the lowering.
+
+THE RESULT IS `Scalar` AND THAT IS THE HONEST TYPE. At runtime `undef // 7`
+yields 7, an Int -- the maybe-ness really is discharged. But the STATIC type is
+the join of the two arms, and the phi needs one machine type for both, so the
+narrower arm is boxed. Knowing the value will be defined does not make the arms
+the same width.
+
+```perl
+# source
+use 5.42.0;
+my $a = undef;
+my $b = 7;
+say($a // $b);
+```
+
+```behavior
+stdout: 7\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%undef = Constant(undef) :Undef
+%seven = Constant(7) :Int
+%dor   = DefinedOr(%undef, %seven) :Scalar
+%co    = Coerce(%dor : Scalar -> Str) :Str
+%nl    = Constant("\n") :Str
+%p     = Print(%co, %nl)
+return %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [7], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Constant, {const_type: integer, value: "7"}, ~, ~, Int], # 2
+  [DefinedOr, ~, [1, 2], ~, Scalar], # 3
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
+  [Print, ~, [4, 5], 0, Scalar], # 6
+  [Return, ~, [6], 6]]} # 7
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## L3c defined-or with an early-return fallback
+
+Perl `//` whose fallback is a function EXIT: `my $x = $a // return 99`. This is
+NOT the operand-selecting `DefinedOr` -- the fallback LEAVES the sub when `$a`
+is undefined, so it is a guarded early return, not a value. For `$a = 3`
+(defined) the sub falls through: `$x = 3`, and returns `$x + 1 = 4`.
+
+The producer models it as a guarded exit -- `If(Not(Defined($a)))` -- true when
+`$a` is undef (the early-return path, the If's TRUE branch so it aligns with the
+exit value in the single-exit Phi); the main path continues on the FALSE Proj
+(index 1) where `$a` is defined and the dor value is `$a`. The two exits (the
+early `return 99` and the fall-through `$x + 1`) merge through a Region + Phi
+into the single-exit Return. Was a silent miscompile (the fallback return was
+dropped and `$a // return 99` degenerated to `DefinedOr($a, $a)`); zhi
+019f26a5.
+
+As a PROGRAM the single-exit merge joins the early `return 99` with the
+fall-through, and those arms have different machine types. The Region Phi
+bridges each arm to the Phi's own repr with a coercion emitted in that ARM'S
+block — the operator rule (Part J) applied to a merge, shared with TernaryExpr
+and `&&`/`||`. Note that `return` at a program's top level is a RUNTIME error
+(`perl -e 'return 99'` exits 255), so this program runs at all only because its
+guard is constant-false and the return is never reached; the merge is still
+built and still has to lower.
+
+```perl
+# source
+use 5.42.0;
+my $a = 3;
+my $x = $a // return 99;
+say($x + 1);
+```
+
+```behavior
+stdout: 4\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%a   = Constant(3) :Int
+%def = Defined(%a) :Boolean
+%nd  = Not(%def) :Boolean
+%if  = If(%nd)
+%p1  = Proj(%if, index: 1)
+%c99 = Constant(99) :Int
+%c1  = Constant(1) :Int
+%add = Add(%a, %c1) :Int
+%co  = Coerce(%add : Int -> Str) :Str
+%nl  = Constant("\n") :Str
+%p   = Print(%co, %nl)
+%reg = Region(%p)
+%und = Constant(undef) :Undef
+%phi = Phi(%c99, %und) :Scalar
+return %phi
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [15], nodes: [
+  [Start], # 0
+  [Constant, {const_type: integer, value: "99"}, ~, ~, Int], # 1
+  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 2
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 3
+  [Add, ~, [2, 3], ~, Int], # 4
+  [Coerce, {from_repr: Int, to_repr: Str}, [4], ~, Str], # 5
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 6
+  [Defined, ~, [2], ~, Boolean], # 7
+  [Not, ~, [7], ~, Boolean], # 8
+  [If, ~, [0, 8], 0], # 9
+  [Proj, {index: 1}, [9]], # 10
+  [Print, ~, [5, 6], 10, Scalar], # 11
+  [Proj, {index: 0}, [9]], # 12
+  [Region, {head: 9}, [12, 11]], # 13
+  [Phi, {predecessors: [12, 10], region: 13}, [1, 11], ~, Scalar], # 14
+  [Return, ~, [14], 13]]} # 15
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+THE ACCEPTANCE CRITERION THIS CASE CARRIED IS MET (2026-09-03). Its GAP said
+"Restoring this case to GREEN is T2's acceptance criterion -- T2 is not done
+while it stands", and the reason it stood was that `Scalar` -- the join of an
+Undef arm with a defined arm -- had no machine encoding.
+
+It has one. `Scalar` maps to `%Slot`, the tagged cell; what was missing was
+smaller than "T2 does not exist" and turned out to be four specific things:
+T1 had no `Scalar` row in the coercion table at all (so `Scalar -> Boolean` did
+not exist as far as the type layer knew), `_lower_and`/`_lower_or`/
+`_lower_defined_or` each refused repr=Scalar with guards written before Scalar
+had a type, the short-circuit merge bridged its arms against EACH OTHER rather
+than against the phi's type, and `_narrow_unknown_coercions` skipped a Scalar
+operand because `_is_narrowed` -- a fixpoint termination latch -- answers false
+for it.
+
+D2's ruling is vindicated rather than reversed: `Int` really was the wrong
+answer for a value that is undef on one path, the loud GAP really was better
+than a green that lies, and the honest type is what eventually lowered. The
+value IS knowably 4 at runtime here; the STATIC type is still the join, and
+boxing is how two differently-typed arms reach one phi.
+
+## L5 void print in a true && arm
+
+`EXPR && (print ...)` in VOID context is a short-circuit whose RHS arm is
+evaluated for its SIDE EFFECT (the `print`), not its value — the same statement
+modifier shape as `print ... if EXPR`. The arm fires ONLY when the left operand
+is truthy. For `$x == $x` (always true) the print fires, so stdout is `y\n`; the
+block's trailing `1` is the return value `Int:1`.
+
+The producer effect-threads the void arm `print` on the arm's control path (the
+If's TRUE Proj) exactly like an element-store or void-call arm, and merges the
+arms so the Print is control-dependent on the guard — it survives DCE and emits
+only when the arm is taken.
+
+```perl
+# source
+use 5.42.0;
+my $x = 1; $x == $x && (print "y\n"); say(1);
+```
+
+```behavior
+stdout: y\n1\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%s0 = Constant("y\n") :Str
+%p  = Print(%s0) :Boolean
+%c  = Constant(1) :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%c : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [12], nodes: [
+  [Start], # 0
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
+  [Coerce, {from_repr: Int, to_repr: Str}, [1], ~, Str], # 2
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 3
+  [NumEq, ~, [1, 1], ~, Boolean], # 4
+  [If, ~, [0, 4], 0], # 5
+  [Proj, {index: 1}, [5]], # 6
+  [Constant, {const_type: string, value: "y\n"}, ~, ~, Str], # 7
+  [Proj, {index: 0}, [5]], # 8
+  [Print, ~, [7], 8, Scalar], # 9
+  [Region, {head: 5}, [6, 9]], # 10
+  [Print, ~, [2, 3], 10, Scalar], # 11
+  [Return, ~, [11], 11]]} # 12
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## L5b void print in a false && arm (does not fire)
+
+Bilateral to L5: when the left operand is FALSE the `&&` short-circuits and the
+arm `print` does NOT fire. For `$x != $x` (always false) the print is skipped, so
+stdout is empty; the block's trailing `1` returns `Int:1`. The Print is
+control-dependent on the guard's TRUE Proj, so a false guard emits nothing.
+
+```perl
+# source
+use 5.42.0;
+my $x = 1; $x != $x && (print "y\n"); say(1);
+```
+
+```behavior
+stdout: 1\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%s0 = Constant("y\n") :Str
+%p  = Print(%s0) :Boolean
+%c  = Constant(1) :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%c : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [12], nodes: [
+  [Start], # 0
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
+  [Coerce, {from_repr: Int, to_repr: Str}, [1], ~, Str], # 2
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 3
+  [NumNe, ~, [1, 1], ~, Boolean], # 4
+  [If, ~, [0, 4], 0], # 5
+  [Proj, {index: 1}, [5]], # 6
+  [Constant, {const_type: string, value: "y\n"}, ~, ~, Str], # 7
+  [Proj, {index: 0}, [5]], # 8
+  [Print, ~, [7], 8, Scalar], # 9
+  [Region, {head: 5}, [6, 9]], # 10
+  [Print, ~, [2, 3], 10, Scalar], # 11
+  [Return, ~, [11], 11]]} # 12
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## L5c void print in a false || arm (fires when left is false)
+
+The `||` polarity of L5: `EXPR || (print ...)` fires the arm `print` when the
+left operand is FALSE (`||` short-circuits on a truthy left). For `$x != $x`
+(always false) the arm is reached, so stdout is `y\n`; the block's trailing `1`
+returns `Int:1`. The producer builds the body on the FALSE Proj for `or`
+(matching the `unless` polarity), so the Print is control-dependent on the guard
+being false.
+
+```perl
+# source
+use 5.42.0;
+my $x = 1; $x != $x || (print "y\n"); say(1);
+```
+
+```behavior
+stdout: y\n1\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%s0 = Constant("y\n") :Str
+%p  = Print(%s0) :Boolean
+%c  = Constant(1) :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%c : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [12], nodes: [
+  [Start], # 0
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
+  [Coerce, {from_repr: Int, to_repr: Str}, [1], ~, Str], # 2
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 3
+  [NumNe, ~, [1, 1], ~, Boolean], # 4
+  [If, ~, [0, 4], 0], # 5
+  [Proj, {index: 0}, [5]], # 6
+  [Constant, {const_type: string, value: "y\n"}, ~, ~, Str], # 7
+  [Proj, {index: 1}, [5]], # 8
+  [Print, ~, [7], 8, Scalar], # 9
+  [Region, {head: 5}, [6, 9]], # 10
+  [Print, ~, [2, 3], 10, Scalar], # 11
+  [Return, ~, [11], 11]]} # 12
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## L5d last-statement `&&` with a print arm (Boolean operands, WANT=0)
+
+The cond.t idiom: `EXPR && (print ...)` as the LAST statement of the block, so its
+value is the block's RETURN (OPf_WANT=0, NOT OPf_WANT_VOID). Unlike L5 (which has a
+trailing `1`, making the `&&` a mid-body VOID statement that the producer lowers to
+control flow), the last-statement form is lowered as a value-returning `And` node
+whose operands are BOTH Boolean (the `StrEq` guard and the `Print`, which returns a
+`builtin::is_bool` boolean).
+
+`$x eq $x` is always true, so the `&&` reaches the print arm: stdout is `y\n`. Perl
+`A && B` returns B when A is truthy, so the block returns the print's Boolean `1`. The
+backend expands `And` into short-circuit br+phi: the Boolean LHS is already the i1 branch
+condition (its truthiness is the identity, no `icmp ne i64`), the print fires only on
+the truthy branch, and the i1 phi merges the two Boolean operands. (t/base/cond.t.)
+
+THE MERGE IS `Scalar`, NOT `Boolean`, and this spec said Boolean until the
+producer began typing `print`. Both operands are Boolean -- a StrEq guard and a
+print's `builtin::is_bool` return -- but a FAILED print returns undef
+(measured: `print {$handle_opened_for_input} "x"` is undef, warns, and does not
+die), so the join of the two arms is `join(Boolean, Undef)` = `Scalar`.
+
+That is not imprecision to be narrowed away: it is the honest type of "one of
+these two values", and claiming Boolean would have the backend lower an i1 for
+a value that is undef at runtime. `Scalar` lowers as `%Slot`, the tagged cell,
+which is exactly what carries a disjunction whose arms differ.
+
+```perl
+# source
+use 5.42.0;
+my $x = "a"; say($x eq $x && (print "y\n"));
+```
+
+```behavior
+stdout: y\n1\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%xa = Constant("a") :Str
+%eq = StrEq(%xa, %xa) :Boolean
+%s0 = Constant("y\n") :Str
+%p  = Print(%s0) :Boolean
+%r  = And(%eq, %p) :Scalar
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%r : Scalar -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [13], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: a}, ~, ~, Str], # 1
+  [StrEq, ~, [1, 1], ~, Boolean], # 2
+  [Constant, {const_type: string, value: "y\n"}, ~, ~, Str], # 3
+  [If, ~, [0, 2], 0], # 4
+  [Proj, {index: 0}, [4]], # 5
+  [Print, ~, [3], 5, Scalar], # 6
+  [And, ~, [2, 6], ~, Scalar], # 7
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
+  [Proj, {index: 1}, [4]], # 10
+  [Region, {head: 4}, [10, 6]], # 11
+  [Print, ~, [8, 9], 11, Scalar], # 12
+  [Return, ~, [12], 12]]} # 13
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## L5e last-statement `||` with a print arm (Boolean operands, WANT=0)
+
+Bilateral `||` polarity of L5d, matching cond.t's actual last line (`$x != $x ||
+(print ...)`). `$x ne $x` is always FALSE, so `||` short-circuits to the RIGHT arm and
+the print fires: stdout is `y\n`. Perl `A || B` returns B when A is falsy, so the
+block returns the print's Boolean `1`. The backend `Or` br+phi tests the Boolean LHS
+directly (i1 truthiness = identity) and merges an i1 phi.
+
+THE MERGE IS `Scalar`, NOT `Boolean`, and this spec said Boolean until the
+producer began typing `print`. Both operands are Boolean -- a StrEq guard and a
+print's `builtin::is_bool` return -- but a FAILED print returns undef
+(measured: `print {$handle_opened_for_input} "x"` is undef, warns, and does not
+die), so the join of the two arms is `join(Boolean, Undef)` = `Scalar`.
+
+That is not imprecision to be narrowed away: it is the honest type of "one of
+these two values", and claiming Boolean would have the backend lower an i1 for
+a value that is undef at runtime. `Scalar` lowers as `%Slot`, the tagged cell,
+which is exactly what carries a disjunction whose arms differ.
+
+```perl
+# source
+use 5.42.0;
+my $x = "a"; say($x ne $x || (print "y\n"));
+```
+
+```behavior
+stdout: y\n1\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%xa = Constant("a") :Str
+%ne = StrNe(%xa, %xa) :Boolean
+%s0 = Constant("y\n") :Str
+%p  = Print(%s0) :Boolean
+%r  = Or(%ne, %p) :Scalar
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%r : Scalar -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [13], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: a}, ~, ~, Str], # 1
+  [StrNe, ~, [1, 1], ~, Boolean], # 2
+  [Constant, {const_type: string, value: "y\n"}, ~, ~, Str], # 3
+  [If, ~, [0, 2], 0], # 4
+  [Proj, {index: 1}, [4]], # 5
+  [Print, ~, [3], 5, Scalar], # 6
+  [Or, ~, [2, 6], ~, Scalar], # 7
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
+  [Proj, {index: 0}, [4]], # 10
+  [Region, {head: 4}, [10, 6]], # 11
+  [Print, ~, [8, 9], 11, Scalar], # 12
+  [Return, ~, [12], 12]]} # 13
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## L4 not
+
+Perl `!` returns a genuine BOOLEAN: `!5` is `false`, `!0` is `true`. These are
+primitive booleans (`is_bool(!5)`=1, `is_bool(!0)`=1 — verified), NOT strings.
+A boolean *coerces* to `""`/`"1"` in string context and `0`/`1` in numeric
+context, but its identity is Boolean, not Str (a literal `""` has `is_bool`=0).
+
+G2 GREEN: `!` lowers runtime-free via the Boolean representation (i1) + UnaryNot
+(xor i1 %cond, true) + Coerce(Int->Boolean) truthiness (icmp ne). The return value
+is :Boolean (i1), and the type-tagged epilogue selects between `@bool_true_str`
+("Bool:1\n") and `@bool_false_str` ("Bool:\n") directly — no Coerce(Boolean->Str)
+node is in the return path. Coerce(Boolean->Str) is the edge for internal string-context
+use (e.g., a Boolean in string interpolation), exercised separately; its string-face
+globals ("1\0" and "\0") are distinct from the tagged epilogue constants ("Bool:1\n"
+and "Bool:\n"). The type-tagged oracle (`Bool:` for false, `Bool:1` for true)
+distinguishes a Boolean result from its Str coercion (which would be `Str:`) — so
+Int-as-0 or Str-as-empty miscompiles are caught at the oracle layer.
+
+Source: `my $a = 5; !$a` — $a is 5 (truthy), so !$a is false. The ir-block
+models the Not over a PadAccess(:Int), coercing Int to Boolean via truthiness, then
+negating. The final return is :Boolean, and the type-tagged output is `Bool:`.
+
+```perl
+# source
+use 5.42.0;
+my $a = 5;
+say(!$a);
+```
+
+```behavior
+stdout: \n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%cn   = Constant("$a") :Str
+%c5   = Constant(5) :Int
+%vd   = VarDecl(%cn, %c5) :Int
+%pa   = PadAccess(%vd, "$a") :Int
+%b    = Coerce(%pa : Int -> Boolean) :Boolean
+%nb   = Not(%b) :Boolean
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%nb : Boolean -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [6], nodes: [
+  [Start], # 0
+  [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 1
+  [Not, ~, [1], ~, Boolean], # 2
+  [Coerce, {from_repr: Boolean, to_repr: Str}, [2], ~, Str], # 3
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
+  [Print, ~, [3, 4], 0, Scalar], # 5
+  [Return, ~, [5], 5]]} # 6
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## L6 string equality (eq) — t/base blocker (if.t/num.t string compare)
+
+The `eq` string-comparison operator lowers to a `StrEq` op: a byte-compare of the
+two Str {ptr,len} buffers. Equality = same length AND memcmp==0. StrEq yields a
+Boolean (i1) that the ternary condition selects on. The if.t/num.t assertions compare
+strings; this is the blocker they hit. The `my $a=..; my $b=..` operands
+propagate to Str constants (perl folds the pad reads), leaving a genuine StrEq
+node on distinct constants — perl folds `"x" eq "x"` outright only when BOTH sides
+are literal in the same op, which is why the pad form keeps the compare.
+
+```perl
+# source
+use 5.42.0;
+my $a = "x";
+my $b = "x";
+say(($a eq $b) ? 1 : 0);
+```
+
+```behavior
+stdout: 1\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%ax = Constant("x") :Str
+%bx = Constant("x") :Str
+%eq = StrEq(%ax, %bx) :Boolean
+%t  = Constant(1) :Int
+%f  = Constant(0) :Int
+%r  = TernaryExpr(%eq, %t, %f) :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%r : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [9], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: x}, ~, ~, Str], # 1
+  [StrEq, ~, [1, 1], ~, Boolean], # 2
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 3
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 4
+  [TernaryExpr, ~, [2, 3, 4], ~, Int], # 5
+  [Coerce, {from_repr: Int, to_repr: Str}, [5], ~, Str], # 6
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 7
+  [Print, ~, [6, 7], 0, Scalar], # 8
+  [Return, ~, [8], 8]]} # 9
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## L6b string equality — unequal same-length (eq is false)
+
+Bilateral against L6: two DIFFERENT single-char strings. Same length, differing
+bytes, so the memcmp is nonzero and `eq` is false — the ternary selects the false
+arm (0). This proves the memcmp leg is real, not a constant-true.
+
+```perl
+# source
+use 5.42.0;
+my $a = "x";
+my $b = "y";
+say(($a eq $b) ? 1 : 0);
+```
+
+```behavior
+stdout: 0\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%ax = Constant("x") :Str
+%by = Constant("y") :Str
+%eq = StrEq(%ax, %by) :Boolean
+%t  = Constant(1) :Int
+%f  = Constant(0) :Int
+%r  = TernaryExpr(%eq, %t, %f) :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%r : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [10], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: x}, ~, ~, Str], # 1
+  [Constant, {const_type: string, value: "y"}, ~, ~, Str], # 2
+  [StrEq, ~, [1, 2], ~, Boolean], # 3
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 4
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 5
+  [TernaryExpr, ~, [3, 4, 5], ~, Int], # 6
+  [Coerce, {from_repr: Int, to_repr: Str}, [6], ~, Str], # 7
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
+  [Print, ~, [7, 8], 0, Scalar], # 9
+  [Return, ~, [9], 9]]} # 10
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## L6c string equality — different length (length guard, eq is false)
+
+Bilateral against L6: "ab" vs "abc" — DIFFERENT lengths. The length guard
+short-circuits to false BEFORE any memcmp (a memcmp of len_a bytes over the shorter
+buffer would over-read). `eq` is false, ternary selects 0. This proves the length
+guard gates the memcmp.
+
+```perl
+# source
+use 5.42.0;
+my $a = "ab";
+my $b = "abc";
+say(($a eq $b) ? 1 : 0);
+```
+
+```behavior
+stdout: 0\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%aab  = Constant("ab") :Str
+%babc = Constant("abc") :Str
+%eq   = StrEq(%aab, %babc) :Boolean
+%t    = Constant(1) :Int
+%f    = Constant(0) :Int
+%r    = TernaryExpr(%eq, %t, %f) :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%r : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [10], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: ab}, ~, ~, Str], # 1
+  [Constant, {const_type: string, value: abc}, ~, ~, Str], # 2
+  [StrEq, ~, [1, 2], ~, Boolean], # 3
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 4
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 5
+  [TernaryExpr, ~, [3, 4, 5], ~, Int], # 6
+  [Coerce, {from_repr: Int, to_repr: Str}, [6], ~, Str], # 7
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
+  [Print, ~, [7, 8], 0, Scalar], # 9
+  [Return, ~, [9], 9]]} # 10
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## L6d string equality with an INT operand (`$a eq "1"`, t/base/num.t blocker)
+
+Perl `eq` compares STRINGS, so an Int operand is stringified to its decimal form
+first: `1 eq "1"` stringifies `1` to `"1"` and byte-compares (equal, true).
+The backend stringifies the Int operand (the shared int-to-decimal renderer,
+`_emit_int_to_str`, also used by interpolation's Stringify[Int]) into a
+length-tracked {ptr,len}, then runs the same length-guard + memcmp as a Str/Str
+compare. This is the t/base/num.t first blocker (`$a = 1; $a eq "1"`), and also
+covers octal/hex/binary integer literals (`0x100 eq "256"`) since those are Ints.
+
+```perl
+# source
+use 5.42.0;
+my $a = 1; say(($a eq "1") ? 1 : 0);
+```
+
+```behavior
+stdout: 1\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%a  = Constant(1) :Int
+%s1 = Constant("1") :Str
+%eq = StrEq(%a, %s1) :Boolean
+%t  = Constant(1) :Int
+%f  = Constant(0) :Int
+%r  = TernaryExpr(%eq, %t, %f) :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%r : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [10], nodes: [
+  [Start], # 0
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
+  [Coerce, {from_repr: Int, to_repr: Str}, [1], ~, Str], # 2
+  [Constant, {const_type: string, value: "1"}, ~, ~, Str], # 3
+  [StrEq, ~, [2, 3], ~, Boolean], # 4
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 5
+  [TernaryExpr, ~, [4, 1, 5], ~, Int], # 6
+  [Coerce, {from_repr: Int, to_repr: Str}, [6], ~, Str], # 7
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
+  [Print, ~, [7, 8], 0, Scalar], # 9
+  [Return, ~, [9], 9]]} # 10
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## L6e int-eq is a real byte compare (negative int, and a mismatch is false)
+
+Bilateral against L6d: a NEGATIVE int stringifies with its sign (`-1` -> `"-1"`,
+the renderer prepends '-'), so `-1 eq "-1"` is true; and a value/string mismatch
+(`1 eq "2"`) is false — proving the stringified bytes are really compared, not a
+constant-true. This case uses the mismatch (`1 eq "2"` -> 0) as the distinguishing
+check.
+
+```perl
+# source
+use 5.42.0;
+my $a = 1; say(($a eq "2") ? 1 : 0);
+```
+
+```behavior
+stdout: 0\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%a  = Constant(1) :Int
+%s2 = Constant("2") :Str
+%eq = StrEq(%a, %s2) :Boolean
+%t  = Constant(1) :Int
+%f  = Constant(0) :Int
+%r  = TernaryExpr(%eq, %t, %f) :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%r : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [10], nodes: [
+  [Start], # 0
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
+  [Coerce, {from_repr: Int, to_repr: Str}, [1], ~, Str], # 2
+  [Constant, {const_type: string, value: "2"}, ~, ~, Str], # 3
+  [StrEq, ~, [2, 3], ~, Boolean], # 4
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 5
+  [TernaryExpr, ~, [4, 1, 5], ~, Int], # 6
+  [Coerce, {from_repr: Int, to_repr: Str}, [6], ~, Str], # 7
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
+  [Print, ~, [7, 8], 0, Scalar], # 9
+  [Return, ~, [9], 9]]} # 10
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## L7 string inequality (ne) — t/base blocker
+
+The `ne` operator lowers to `StrNe`, the negation of StrEq — same byte-compare,
+result xored with 1. Bilateral with L6: L6 tests eq of equal strings, L7 tests ne
+of DIFFERENT strings (both true).
+
+```perl
+# source
+use 5.42.0;
+my $a = "x";
+my $b = "y";
+say(($a ne $b) ? 1 : 0);
+```
+
+```behavior
+stdout: 1\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%ax = Constant("x") :Str
+%by = Constant("y") :Str
+%ne = StrNe(%ax, %by) :Boolean
+%t  = Constant(1) :Int
+%f  = Constant(0) :Int
+%r  = TernaryExpr(%ne, %t, %f) :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%r : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [10], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: x}, ~, ~, Str], # 1
+  [Constant, {const_type: string, value: "y"}, ~, ~, Str], # 2
+  [StrNe, ~, [1, 2], ~, Boolean], # 3
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 4
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 5
+  [TernaryExpr, ~, [3, 4, 5], ~, Int], # 6
+  [Coerce, {from_repr: Int, to_repr: Str}, [6], ~, Str], # 7
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
+  [Print, ~, [7, 8], 0, Scalar], # 9
+  [Return, ~, [9], 9]]} # 10
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## L7b string inequality — equal strings (ne is false)
+
+Bilateral against L7: two EQUAL strings, so `ne` is false (StrEq true, xored to
+false) and the ternary selects the false arm (0). This proves the xor negation is
+real, not a constant-true.
+
+```perl
+# source
+use 5.42.0;
+my $a = "x";
+my $b = "x";
+say(($a ne $b) ? 1 : 0);
+```
+
+```behavior
+stdout: 0\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%ax = Constant("x") :Str
+%bx = Constant("x") :Str
+%ne = StrNe(%ax, %bx) :Boolean
+%t  = Constant(1) :Int
+%f  = Constant(0) :Int
+%r  = TernaryExpr(%ne, %t, %f) :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%r : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [9], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: x}, ~, ~, Str], # 1
+  [StrNe, ~, [1, 1], ~, Boolean], # 2
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 3
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 4
+  [TernaryExpr, ~, [2, 3, 4], ~, Int], # 5
+  [Coerce, {from_repr: Int, to_repr: Str}, [5], ~, Str], # 6
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 7
+  [Print, ~, [6, 7], 0, Scalar], # 8
+  [Return, ~, [8], 8]]} # 9
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## L9 numeric equality (==) over Str operands — t/base/cond.t blocker
+
+Perl `==` is NUMERIC: string operands are numified (leading-numeric rule) then
+compared as numbers. `"0" == "0"` numifies both to 0 and is TRUE. This is the
+t/base/cond.t blocker: `$x == $x` where `$x` is a string package scalar. The
+backend must coerce each Str operand to Num (double, via @chalk_str_to_num) and
+`fcmp oeq` the doubles — NOT `icmp i64` on the raw i8* pointers.
+
+Bilateral against L6 (StrEq): L6 is BYTE equality (memcmp), L9 is NUMERIC
+equality (numify then compare). `"0"` and `"0"` are byte-equal here too, so the
+distinguishing case is L9b (`" 3"` vs `"3"` — numerically equal, byte-unequal).
+
+```perl
+# source
+use 5.42.0;
+my $x = "0"; say(($x == $x) ? 1 : 0);
+```
+
+```behavior
+stdout: 1\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%x0 = Constant("0") :Str
+%eq = NumEq(%x0, %x0) :Boolean
+%t  = Constant(1) :Int
+%f  = Constant(0) :Int
+%r  = TernaryExpr(%eq, %t, %f) :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%r : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [10], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: "0"}, ~, ~, Str], # 1
+  [Coerce, {from_repr: Str, to_repr: Num}, [1], ~, Num], # 2
+  [NumEq, ~, [2, 2], ~, Boolean], # 3
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 4
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 5
+  [TernaryExpr, ~, [3, 4, 5], ~, Int], # 6
+  [Coerce, {from_repr: Int, to_repr: Str}, [6], ~, Str], # 7
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
+  [Print, ~, [7, 8], 0, Scalar], # 9
+  [Return, ~, [9], 9]]} # 10
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## L9b numeric equality — byte-unequal but numerically equal (`" 3"` == `"3"`)
+
+The case that separates NUMERIC `==` from BYTE `eq`: `" 3"` (leading space) and
+`"3"` are byte-UNEQUAL (StrEq would be false) but numerically EQUAL (both numify
+to 3), so `==` is TRUE. Proves the operands are numified, not memcmp'd.
+
+```perl
+# source
+use 5.42.0;
+my $a = " 3"; my $b = "3"; say(($a == $b) ? 1 : 0);
+```
+
+```behavior
+stdout: 1\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%a = Constant(" 3") :Str
+%b = Constant("3") :Str
+%eq = NumEq(%a, %b) :Boolean
+%t  = Constant(1) :Int
+%f  = Constant(0) :Int
+%r  = TernaryExpr(%eq, %t, %f) :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%r : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [12], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: " 3"}, ~, ~, Str], # 1
+  [Coerce, {from_repr: Str, to_repr: Num}, [1], ~, Num], # 2
+  [Constant, {const_type: string, value: "3"}, ~, ~, Str], # 3
+  [Coerce, {from_repr: Str, to_repr: Num}, [3], ~, Num], # 4
+  [NumEq, ~, [2, 4], ~, Boolean], # 5
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 6
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 7
+  [TernaryExpr, ~, [5, 6, 7], ~, Int], # 8
+  [Coerce, {from_repr: Int, to_repr: Str}, [8], ~, Str], # 9
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
+  [Print, ~, [9, 10], 0, Scalar], # 11
+  [Return, ~, [11], 11]]} # 12
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## L9c numeric inequality (!=) over Str operands (cond.t `$x != $x`)
+
+The `!=` polarity, matching cond.t's `$x != $x` / `$x != $y` lines. `"0" != "1"`
+numifies to `0 != 1` = TRUE. `fcmp une` (unordered-or-not-equal) is the float
+`!=` predicate.
+
+```perl
+# source
+use 5.42.0;
+my $x = "0"; my $y = "1"; say(($x != $y) ? 1 : 0);
+```
+
+```behavior
+stdout: 1\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%x = Constant("0") :Str
+%y = Constant("1") :Str
+%ne = NumNe(%x, %y) :Boolean
+%t  = Constant(1) :Int
+%f  = Constant(0) :Int
+%r  = TernaryExpr(%ne, %t, %f) :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%r : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [12], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: "0"}, ~, ~, Str], # 1
+  [Coerce, {from_repr: Str, to_repr: Num}, [1], ~, Num], # 2
+  [Constant, {const_type: string, value: "1"}, ~, ~, Str], # 3
+  [Coerce, {from_repr: Str, to_repr: Num}, [3], ~, Num], # 4
+  [NumNe, ~, [2, 4], ~, Boolean], # 5
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 6
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 7
+  [TernaryExpr, ~, [5, 6, 7], ~, Int], # 8
+  [Coerce, {from_repr: Int, to_repr: Str}, [8], ~, Str], # 9
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
+  [Print, ~, [9, 10], 0, Scalar], # 11
+  [Return, ~, [11], 11]]} # 12
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## L8 void call in an `and` arm — t/ near-miss (simple form GREEN)
+
+`EXPR and (print ...)` — the low-precedence `and` form of the `&&`-arm void print
+(I7). The SIMPLE form already lowers (the arm print is effect-threaded on the taken
+control path). The t/ files hit a harder variant (an `and` arm that combines a
+void call with a scalar rebind — the 2b-3 mixed-effect GAP), which still GAPs.
+This case locks the working simple form.
+
+```perl
+# source
+use 5.42.0;
+my $c = 1;
+$c and (print "y\n");
+say(1);
+```
+
+```behavior
+stdout: y1\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%c      = Constant(1) :Int
+%if     = If(%c) :Control
+%pt     = Proj(%if, index: 0) :Control
+%msg    = Constant("y\n") :Str
+%print  = Print(%pt, %msg) :Boolean
+%region = Region(%if, %print) :Control
+%one    = Constant(1) :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%one : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [11], nodes: [
+  [Start], # 0
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
+  [Coerce, {from_repr: Int, to_repr: Str}, [1], ~, Str], # 2
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 3
+  [If, ~, [0, 1], 0], # 4
+  [Proj, {index: 1}, [4]], # 5
+  [Constant, {const_type: string, value: "y\n"}, ~, ~, Str], # 6
+  [Proj, {index: 0}, [4]], # 7
+  [Print, ~, [6], 7, Scalar], # 8
+  [Region, {head: 4}, [5, 8]], # 9
+  [Print, ~, [2, 3], 9, Scalar], # 10
+  [Return, ~, [10], 10]]} # 11
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## L6f `eq` coerces a NUM operand (t/base/num.t idiom)
+
+`eq` compares STRINGS: its signature is `(Str, Str)`, so a Num operand is
+coerced by an explicit `Stringify` inserted at the producer build site — the
+same treatment `Print`'s arguments get. `eq` does not learn a representation.
+
+This is `t/base/num.t`'s central idiom (`$a = 0.1; $a eq "0.1"`). It was
+previously a GAP reading "string comparison stringifies only Str and Int
+operands runtime-free; Num stringification for eq/ne is unbuilt" — because the
+backend carried its OWN int-to-decimal renderer inside the comparison, separate
+from `Stringify`'s. Routing the operand through the coercion made Num work with
+no new rendering code at all.
+
+```perl
+# source
+use 5.42.0;
+our $a = 0.1;
+say($a eq "0.1" ? "y" : "n"); say(1);
+```
+
+```behavior
+stdout: y\n1\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%v   = Constant(0.1) :Num
+%sv  = Coerce(%v, from_repr: "Num", to_repr: "Str") :Str
+%lit = Constant("0.1") :Str
+%eq  = StrEq(%sv, %lit) :Boolean
+%y   = Constant("y") :Str
+%n   = Constant("n") :Str
+%t   = TernaryExpr(%eq, %y, %n) :Str
+%nl  = Constant("\n") :Str
+%p   = Print(%t, %nl)
+%one = Constant(1) :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%one : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [17], nodes: [
+  [Start], # 0
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
+  [Coerce, {from_repr: Int, to_repr: Str}, [1], ~, Str], # 2
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 3
+  [EntryDef, {package: main, sigil: $, symbol: a}, ~, ~, Scalar], # 4
+  [Constant, {const_type: number, value: "0.1"}, ~, ~, Num], # 5
+  [MemStart], # 6
+  [EntryWrite, ~, [4, 5, 6], 0, Unknown], # 7
+  [EntryDef, {package: main, sigil: $, symbol: a}, [7], ~, Num], # 8
+  [Coerce, {from_repr: Num, to_repr: Str}, [8], ~, Str], # 9
+  [Constant, {const_type: string, value: "0.1"}, ~, ~, Str], # 10
+  [StrEq, ~, [9, 10], ~, Boolean], # 11
+  [Constant, {const_type: string, value: "y"}, ~, ~, Str], # 12
+  [Constant, {const_type: string, value: "n"}, ~, ~, Str], # 13
+  [TernaryExpr, ~, [11, 12, 13], ~, Str], # 14
+  [Print, ~, [14, 3], 7, Scalar], # 15
+  [Print, ~, [2, 3], 15, Scalar], # 16
+  [Return, ~, [16], 16]]} # 17
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## L6g `eq` over a Num that does NOT match (bilateral)
+
+The partner of L6f. Without it, L6f passes against a comparison that always
+answers true — which is exactly what a dropped or misrendered operand would
+produce.
+
+```perl
+# source
+use 5.42.0;
+our $a = 0.1;
+say($a eq "0.2" ? "y" : "n"); say(1);
+```
+
+```behavior
+stdout: n\n1\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%v   = Constant(0.1) :Num
+%sv  = Coerce(%v, from_repr: "Num", to_repr: "Str") :Str
+%lit = Constant("0.2") :Str
+%eq  = StrEq(%sv, %lit) :Boolean
+%y   = Constant("y") :Str
+%n   = Constant("n") :Str
+%t   = TernaryExpr(%eq, %y, %n) :Str
+%nl  = Constant("\n") :Str
+%p   = Print(%t, %nl)
+%one = Constant(1) :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%one : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [17], nodes: [
+  [Start], # 0
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
+  [Coerce, {from_repr: Int, to_repr: Str}, [1], ~, Str], # 2
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 3
+  [EntryDef, {package: main, sigil: $, symbol: a}, ~, ~, Scalar], # 4
+  [Constant, {const_type: number, value: "0.1"}, ~, ~, Num], # 5
+  [MemStart], # 6
+  [EntryWrite, ~, [4, 5, 6], 0, Unknown], # 7
+  [EntryDef, {package: main, sigil: $, symbol: a}, [7], ~, Num], # 8
+  [Coerce, {from_repr: Num, to_repr: Str}, [8], ~, Str], # 9
+  [Constant, {const_type: string, value: "0.2"}, ~, ~, Str], # 10
+  [StrEq, ~, [9, 10], ~, Boolean], # 11
+  [Constant, {const_type: string, value: "y"}, ~, ~, Str], # 12
+  [Constant, {const_type: string, value: "n"}, ~, ~, Str], # 13
+  [TernaryExpr, ~, [11, 12, 13], ~, Str], # 14
+  [Print, ~, [14, 3], 7, Scalar], # 15
+  [Print, ~, [2, 3], 15, Scalar], # 16
+  [Return, ~, [16], 16]]} # 17
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## L6h a Num whose value is INTEGRAL (1e3 stringifies as "1000")
+
+An integral float reaches the backend as a bare integer literal — `1e3` and
+`2.0` both arrive as "1000" / "2" — and LLVM rejects an integer constant in a
+double operand ("integer constant must have integer type"). The emitted module
+did not run AT ALL: `say 1e3` produced `fadd double 0.0, 1000` and lli refused
+it, exit 1 with no output.
+
+This case pins both halves: the constant is emitted as a double, and `%.15g`
+renders it as perl does — `1000`, not `1000.0` or `1e+03`.
+
+```perl
+# source
+use 5.42.0;
+our $a = 1e3;
+say($a eq "1000" ? "y" : "n"); say(1);
+```
+
+```behavior
+stdout: y\n1\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%v   = Constant(1000) :Num
+%sv  = Coerce(%v, from_repr: "Num", to_repr: "Str") :Str
+%lit = Constant("1000") :Str
+%eq  = StrEq(%sv, %lit) :Boolean
+%y   = Constant("y") :Str
+%n   = Constant("n") :Str
+%t   = TernaryExpr(%eq, %y, %n) :Str
+%nl  = Constant("\n") :Str
+%p   = Print(%t, %nl)
+%one = Constant(1) :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%one : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [17], nodes: [
+  [Start], # 0
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
+  [Coerce, {from_repr: Int, to_repr: Str}, [1], ~, Str], # 2
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 3
+  [EntryDef, {package: main, sigil: $, symbol: a}, ~, ~, Scalar], # 4
+  [Constant, {const_type: number, value: "1000"}, ~, ~, Num], # 5
+  [MemStart], # 6
+  [EntryWrite, ~, [4, 5, 6], 0, Unknown], # 7
+  [EntryDef, {package: main, sigil: $, symbol: a}, [7], ~, Num], # 8
+  [Coerce, {from_repr: Num, to_repr: Str}, [8], ~, Str], # 9
+  [Constant, {const_type: string, value: "1000"}, ~, ~, Str], # 10
+  [StrEq, ~, [9, 10], ~, Boolean], # 11
+  [Constant, {const_type: string, value: "y"}, ~, ~, Str], # 12
+  [Constant, {const_type: string, value: "n"}, ~, ~, Str], # 13
+  [TernaryExpr, ~, [11, 12, 13], ~, Str], # 14
+  [Print, ~, [14, 3], 7, Scalar], # 15
+  [Print, ~, [2, 3], 15, Scalar], # 16
+  [Return, ~, [16], 16]]} # 17
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## L3d defined-or over an UNINITIALISED lexical
+
+`my $a;` declares a variable whose value is `undef` — perl is unambiguous, and
+`Undef` is a first-class representation. The producer used to bind a bare
+declaration to an unstamped `PadAccess`, so `$a // 9` reached the backend with
+an untyped `DefinedOr`.
+
+That looked like a defective merge, and it was not: a merge carries the JOIN of
+its arms, and the join of an unknown with an Int is unknown. The merge was
+computing the right answer from a wrong input — inference had simply never
+assigned the declaration a type.
+
+Two separate defects were stacked here, and fixing only the first left the
+symptom in place:
+
+1. a bare `my $a;` now binds an `Undef` constant, so the arm is typed
+2. the join could not combine `Undef` with `Int` at all — `Undef` is not on the
+   `Int <: Num <: Str` chain, so it was skipped as unrankable and the merge
+   stayed untyped even with both arms correct. The join is the lattice join
+   now, and it is total: `Undef` and `Int` are siblings under `Scalar`, so the
+   merge is `Scalar`.
+
+   It is NOT the defined arm's type. `Undef` was dropped before the join for a
+   while, on the argument that it "contributes no value to widen" — which is
+   about RUNTIME VALUES, and the join is about TYPES. `$a // 9` yields `Undef`
+   on no path here, but the merge's STATIC type must cover both arms, and
+   claiming `Int` for a node whose left arm is provably undef is a narrowing
+   nothing established. Deleting that drop is what makes this case honest, and
+   what makes it a GAP: `Scalar` has no machine encoding until T2.
+
+PROMOTED FROM `L: GAP` 2026-09-03. The refusal it declared -- "DefinedOr with
+repr=Scalar reached LLVM backend" -- is gone: `Scalar` has a machine type
+(%Slot), and the guard predated it. See
+docs/plans/2026-09-02-finish-the-str-strpair-migration.md for the type work and
+a340d22a for the lowering.
+
+THE RESULT IS `Scalar` AND THAT IS THE HONEST TYPE. At runtime `undef // 7`
+yields 7, an Int -- the maybe-ness really is discharged. But the STATIC type is
+the join of the two arms, and the phi needs one machine type for both, so the
+narrower arm is boxed. Knowing the value will be defined does not make the arms
+the same width.
+
+```perl
+# source
+use 5.42.0;
+my $a;
+say($a // 9); say(1);
+```
+
+```behavior
+stdout: 9\n1\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%undef = Constant(undef) :Undef
+%nine  = Constant(9) :Int
+%dor   = DefinedOr(%undef, %nine) :Scalar
+%co    = Coerce(%dor : Scalar -> Str) :Str
+%nl    = Constant("\n") :Str
+%p     = Print(%co, %nl)
+# The second statement, `say(1)`. A program top level returns nothing, so the
+# Return value is Constant(undef) and both Prints ride the control chain --
+# which is why this case does NOT `return %p`.
+%one   = Constant(1) :Int
+%co2   = Coerce(%one : Int -> Str) :Str
+%p2    = Print(%co2, %nl)
+return %p2
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [10], nodes: [
+  [Start], # 0
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
+  [Coerce, {from_repr: Int, to_repr: Str}, [1], ~, Str], # 2
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 3
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 4
+  [Constant, {const_type: integer, value: "9"}, ~, ~, Int], # 5
+  [DefinedOr, ~, [4, 5], ~, Scalar], # 6
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
+  [Print, ~, [7, 3], 0, Scalar], # 8
+  [Print, ~, [2, 3], 8, Scalar], # 9
+  [Return, ~, [9], 9]]} # 10
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## L3e defined-or whose LHS IS defined (bilateral)
+
+L3d's partner. Without it, L3d passes against a `//` that always takes the
+right-hand arm — which is exactly what a dropped or mistyped LHS would produce.
+
+```perl
+# source
+use 5.42.0;
+my $a = 5;
+say($a // 9); say(1);
+```
+
+```behavior
+stdout: 5\n1\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%a   = Constant(5) :Int
+%d   = Constant(9) :Int
+%dor = DefinedOr(%a, %d) :Int
+%nl  = Constant("\n") :Str
+%co_p   = Coerce(%dor : Int -> Str) :Str
+%p   = Print(%co_p, %nl)
+%one = Constant(1) :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%one : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [10], nodes: [
+  [Start], # 0
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
+  [Coerce, {from_repr: Int, to_repr: Str}, [1], ~, Str], # 2
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 3
+  [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 4
+  [Constant, {const_type: integer, value: "9"}, ~, ~, Int], # 5
+  [DefinedOr, ~, [4, 5], ~, Int], # 6
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
+  [Print, ~, [7, 3], 0, Scalar], # 8
+  [Print, ~, [2, 3], 8, Scalar], # 9
+  [Return, ~, [9], 9]]} # 10
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```

@@ -36,11 +36,11 @@ use FindBin;
 use lib "$FindBin::Bin/../lib";
 use SoN::Deparse;
 
-# The corpus lives in pvm's tree, so the path is an INPUT rather than a
-# constant -- a stale checkout is the failure mode pvm and I have each hit, and
-# baking one path in makes it invisible.
-my $C = $ENV{SON_CORPUS}
-     // '/home/perigrin/dev/pvm/.claude/worktrees/pu/conformance/mdtest';
+# OUR OWN COPY of pvm's corpus by default (t/corpus/mdtest/pvm; its README
+# says which pvm commit it is), so a census measures a corpus this repository
+# records rather than whatever a checkout elsewhere holds. SON_CORPUS still
+# points it at another one.
+my $C = $ENV{SON_CORPUS} // "$FindBin::Bin/../t/corpus/mdtest/pvm";
 die "no corpus at $C (set SON_CORPUS)\n" unless -d $C;
 my $dir = tempdir(CLEANUP => 1);
 my @cases;

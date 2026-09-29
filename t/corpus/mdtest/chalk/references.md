@@ -1,0 +1,2323 @@
+# References
+
+Array and hash construction, element access, element assignment, anonymous
+references, and deref idioms.
+
+All 8 original cases (R1-R8) are now `L: GREEN` — array, hash, and ref
+operations are runtime-free (RF): an array is a `{len, cap, Slot*}` vector, a
+hash is a `{count, cap, HashEntry*}` table, and a ref is a pointer (bitcast to
+i8*). Their operations are pure host-C ops — no libperl AV*/HV*/SV*. The G4
+campaign group (Array/Hash representation) closed these cases. Adversarial
+cases R9-R11 cover OOB reads, missing-key hash lookups, and hash iteration order
+normalization.
+
+Slot representation: `{i1 defined, i64 payload}` — a tagged-scalar. Element
+reads return either a defined Int payload or `Undef:` when OOB or key-missing,
+matching perl faithfully without sentinel values.
+
+Archive sources used: `anonymous-array.chalk`, `anonymous-hash.chalk`,
+`array-literal.chalk`, `hash-literal.chalk`, `array-access.chalk`,
+`hash-access.chalk`, `deref-array.chalk`, `deref-hash.chalk` (all from
+`archive/pu-2026-03-24:t/corpus/ir/`). Also A2/A3 and C4/C5 from
+`t/fixtures/ir-audit-corpus.pl`.
+
+## R1 array literal and scalar count
+
+An array literal `(1, 2, 3)` creates an array — a `{len, cap, Slot*}` vector.
+`scalar @a` returns the element count as an Int, a pure load on the vector.
+The construction path (allocate the vector, write the elements) is pure
+machine-level work; it is runtime-free.
+
+```perl
+# source
+use 5.42.0;
+my @a = (1, 2, 3);
+say(scalar @a);
+```
+
+```behavior
+stdout: 3\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%c1  = Constant(1) :Int
+%c2  = Constant(2) :Int
+%c3  = Constant(3) :Int
+%arr = ArrayLiteral(%c1, %c2, %c3) :Array
+%r   = Count(%arr) :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%r : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [10], nodes: [
+  [Start], # 0
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 2
+  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 3
+  [ArrayLiteral, {sigil: "@", symbol: a}, [1, 2, 3], ~, Array], # 4
+  [MemStart], # 5
+  [Count, ~, [4, 5], ~, Int], # 6
+  [Coerce, {from_repr: Int, to_repr: Str}, [6], ~, Str], # 7
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
+  [Print, ~, [7, 8], 0, Scalar], # 9
+  [Return, ~, [9], 9]]} # 10
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## R1b array in implicit scalar context (assignment)
+
+Assigning an array to a scalar (`my $n = @a`) imposes scalar context WITHOUT an
+explicit `scalar` op — perl counts the array. The producer keys on the RHS being
+an aggregate-variable read (padav) and wraps it in a `Length`, exactly as
+`scalar @a` does; an anon-ref literal (`my $r = [1,2,3]`) is a scalar reference
+and is left alone. The graph is identical to R1: the count is a pure load.
+
+```perl
+# source
+use 5.42.0;
+my @a = (1, 2, 3);
+my $n = @a;
+say($n);
+```
+
+```behavior
+stdout: 3\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%c1  = Constant(1) :Int
+%c2  = Constant(2) :Int
+%c3  = Constant(3) :Int
+%arr = ArrayLiteral(%c1, %c2, %c3) :Array
+%r   = Count(%arr) :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%r : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [10], nodes: [
+  [Start], # 0
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 2
+  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 3
+  [ArrayLiteral, {sigil: "@", symbol: a}, [1, 2, 3], ~, Array], # 4
+  [MemStart], # 5
+  [Count, ~, [4, 5], ~, Int], # 6
+  [Coerce, {from_repr: Int, to_repr: Str}, [6], ~, Str], # 7
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
+  [Print, ~, [7, 8], 0, Scalar], # 9
+  [Return, ~, [9], 9]]} # 10
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## R2 array element read
+
+Reading an element `$a[1]` from a declared array is a bounds-checked index
+into the `{len, cap, Slot*}` vector — a pure op. The bounds check is always
+emitted; for a known-valid index the OOB branch is dead. The result is an Int.
+
+```perl
+# source
+use 5.42.0;
+my @a = (1, 2, 3);
+say($a[1]);
+```
+
+```behavior
+stdout: 2\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%c1  = Constant(1) :Int
+%c2  = Constant(2) :Int
+%c3  = Constant(3) :Int
+%arr = ArrayLiteral(%c1, %c2, %c3) :Array
+%idx = Constant(1) :Int
+%r   = Subscript(%arr, %idx) :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%r : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [10], nodes: [
+  [Start], # 0
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 2
+  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 3
+  [ArrayLiteral, {sigil: "@", symbol: a}, [1, 2, 3], ~, Array], # 4
+  [MemStart], # 5
+  [Subscript, ~, [4, 1, 5], ~, Int], # 6
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
+  [Print, ~, [7, 8], 0, Scalar], # 9
+  [Return, ~, [9], 9]]} # 10
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## R3 hash literal and element read
+
+A hash literal `(a => 1, b => 2)` creates a hash table `{count, cap, HashEntry*}`.
+Reading `$h{a}` is a key lookup — a linear scan with memcmp on Str keys.
+Key hashing and bucket dispatch are ordinary machine-level work; no libperl.
+
+```perl
+# source
+use 5.42.0;
+my %h = (a => 1, b => 2);
+say($h{a});
+```
+
+```behavior
+stdout: 1\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%ka   = Constant("a") :Str
+%v1   = Constant(1) :Int
+%kb   = Constant("b") :Str
+%v2   = Constant(2) :Int
+%hash = HashLiteral(%ka, %v1, %kb, %v2) :Hash
+%lk   = Constant("a") :Str
+%r    = Subscript(%hash, %lk) :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%r : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [11], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: a}, ~, ~, Str], # 1
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
+  [Constant, {const_type: string, value: b}, ~, ~, Str], # 3
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 4
+  [HashLiteral, {sigil: "%", symbol: h}, [1, 2, 3, 4], ~, Hash], # 5
+  [MemStart], # 6
+  [Subscript, ~, [5, 1, 6], ~, Int], # 7
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
+  [Print, ~, [8, 9], 0, Scalar], # 10
+  [Return, ~, [10], 10]]} # 11
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## R3b hash in scalar context (key count)
+
+Assigning a hash to a scalar (`my $n = %h`) imposes scalar context; modern perl
+yields the key count. The producer wraps the HashRef in a `Length` (like the
+array case), and the backend loads the `count` field of the `%Hash` struct
+(`{count, cap, HashEntry*}`, field 0) — a pure load, no libperl.
+
+```perl
+# source
+use 5.42.0;
+my %h = (a => 1, b => 2);
+my $n = %h;
+say($n);
+```
+
+```behavior
+stdout: 2\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%ka   = Constant("a") :Str
+%v1   = Constant(1) :Int
+%kb   = Constant("b") :Str
+%v2   = Constant(2) :Int
+%hash = HashLiteral(%ka, %v1, %kb, %v2) :Hash
+%r    = Count(%hash) :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%r : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [11], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: a}, ~, ~, Str], # 1
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
+  [Constant, {const_type: string, value: b}, ~, ~, Str], # 3
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 4
+  [HashLiteral, {sigil: "%", symbol: h}, [1, 2, 3, 4], ~, Hash], # 5
+  [MemStart], # 6
+  [Count, ~, [5, 6], ~, Int], # 7
+  [Coerce, {from_repr: Int, to_repr: Str}, [7], ~, Str], # 8
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
+  [Print, ~, [8, 9], 0, Scalar], # 10
+  [Return, ~, [10], 10]]} # 11
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## R4 anonymous array ref and deref
+
+An anonymous array constructor `[1, 2, 3]` allocates a `{len, cap, Slot*}`
+vector and yields a pointer to it (bitcast to i8*) — not an AV\* wrapped in
+an SV\*. The dereference `$r->[0]` is a load-through-pointer (bitcast back to
+%Array*) then a bounds-checked index: both pure ops.
+
+```perl
+# source
+use 5.42.0;
+my $r = [1, 2, 3];
+say($r->[0]);
+```
+
+```behavior
+stdout: 1\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%c1    = Constant(1) :Int
+%c2    = Constant(2) :Int
+%c3    = Constant(3) :Int
+%ref   = ArrayLiteral(%c1, %c2, %c3) :ArrayRef
+%deref = PostfixDeref(%ref, sigil: "@") :Array
+%idx   = Constant(0) :Int
+%r     = Subscript(%deref, %idx) :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%r : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [11], nodes: [
+  [Start], # 0
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 2
+  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 3
+  [ArrayLiteral, ~, [1, 2, 3], ~, ArrayRef], # 4
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 5
+  [MemStart], # 6
+  [Subscript, ~, [4, 5, 6], ~, Int], # 7
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
+  [Print, ~, [8, 9], 0, Scalar], # 10
+  [Return, ~, [10], 10]]} # 11
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## R5 anonymous hash ref and deref
+
+An anonymous hash constructor `{a => 1, b => 2}` allocates a hash table and
+yields a pointer to it — not an HV\* wrapped in an SV\*. The dereference
+`$r->{a}` is a load-through-pointer then a key lookup: both pure ops.
+
+```perl
+# source
+use 5.42.0;
+my $r = {a => 1, b => 2};
+say($r->{a});
+```
+
+```behavior
+stdout: 1\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%ka    = Constant("a") :Str
+%v1    = Constant(1) :Int
+%kb    = Constant("b") :Str
+%v2    = Constant(2) :Int
+%ref   = HashLiteral(%ka, %v1, %kb, %v2) :HashRef
+%deref = PostfixDeref(%ref, sigil: "%") :Hash
+%lk    = Constant("a") :Str
+%r     = Subscript(%deref, %lk) :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%r : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [11], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: a}, ~, ~, Str], # 1
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
+  [Constant, {const_type: string, value: b}, ~, ~, Str], # 3
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 4
+  [HashLiteral, ~, [1, 2, 3, 4], ~, HashRef], # 5
+  [MemStart], # 6
+  [Subscript, ~, [5, 1, 6], ~, Int], # 7
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
+  [Print, ~, [8, 9], 0, Scalar], # 10
+  [Return, ~, [10], 10]]} # 11
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## R6 array element assignment
+
+Writing to an array element `$a[0] = 42` is a bounds-checked store into a slot
+of the `{len, cap, Slot*}` vector: pure ops, no AV\* mutation. The read back
+`$a[0]` is an index into the same vector (which returns the stored value).
+
+```perl
+# source
+use 5.42.0;
+my @a = (1, 2, 3);
+$a[0] = 42;
+say($a[0]);
+```
+
+```behavior
+stdout: 42\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%c1   = Constant(1) :Int
+%c2   = Constant(2) :Int
+%c3   = Constant(3) :Int
+%arr  = ArrayLiteral(%c1, %c2, %c3) :Array
+%idx  = Constant(0) :Int
+%lval = Subscript(%arr, %idx) :Int
+%nv   = Constant(42) :Int
+%r    = Assign(%lval, %nv) :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%r : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [13], nodes: [
+  [Start], # 0
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 2
+  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 3
+  [ArrayLiteral, {sigil: "@", symbol: a}, [1, 2, 3], ~, Array], # 4
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 5
+  [Subscript, ~, [4, 5], ~, Int], # 6
+  [Constant, {const_type: integer, value: "42"}, ~, ~, Int], # 7
+  [Assign, ~, [6, 7], 0, Int], # 8
+  [Subscript, ~, [4, 5, 8], ~, Int], # 9
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [9], ~, Str], # 10
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 11
+  [Print, ~, [10, 11], 8, Scalar], # 12
+  [Return, ~, [12], 12]]} # 13
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## R7 hash element assignment
+
+Writing to a hash element `$h{k} = 99` is a store into the hash table
+`{count, cap, HashEntry*}`: key scan then slot update — pure ops, no HV\* mutation.
+The read back `$h{k}` is a key lookup on the same table.
+
+```perl
+# source
+use 5.42.0;
+my %h = (k => 0);
+$h{k} = 99;
+say($h{k});
+```
+
+```behavior
+stdout: 99\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%kk   = Constant("k") :Str
+%v0   = Constant(0) :Int
+%hash = HashLiteral(%kk, %v0) :Hash
+%wk   = Constant("k") :Str
+%lval = Subscript(%hash, %wk) :Int
+%wv   = Constant(99) :Int
+%r    = Assign(%lval, %wv) :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%r : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [11], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: k}, ~, ~, Str], # 1
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 2
+  [HashLiteral, {sigil: "%", symbol: h}, [1, 2], ~, Hash], # 3
+  [Subscript, ~, [3, 1], ~, Int], # 4
+  [Constant, {const_type: integer, value: "99"}, ~, ~, Int], # 5
+  [Assign, ~, [4, 5], 0, Int], # 6
+  [Subscript, ~, [3, 1, 6], ~, Int], # 7
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
+  [Print, ~, [8, 9], 6, Scalar], # 10
+  [Return, ~, [10], 10]]} # 11
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## R8 nested array ref deref
+
+A two-level dereference `$r->[1][0]` chains two load-through-pointer levels:
+the outer ref loads a vector, an index yields an inner ref (an ArrayRef pointer
+stored as a slot payload), a second load-through-pointer and index produce the
+value. Just repeated pure ops on `{len, cap, Slot*}` vectors plus pointer refs.
+
+```perl
+# source
+use 5.42.0;
+my $r = [[1, 2], [3, 4]];
+say($r->[1][0]);
+```
+
+```behavior
+stdout: 3\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%ca1       = Constant(1) :Int
+%ca2       = Constant(2) :Int
+%ca3       = Constant(3) :Int
+%ca4       = Constant(4) :Int
+%ref0      = ArrayLiteral(%ca1, %ca2) :ArrayRef
+%ref1      = ArrayLiteral(%ca3, %ca4) :ArrayRef
+%outer_ref = ArrayLiteral(%ref0, %ref1) :ArrayRef
+%outer_arr = PostfixDeref(%outer_ref, sigil: "@") :Array
+%idx1      = Constant(1) :Int
+%inner_ref = Subscript(%outer_arr, %idx1) :ArrayRef
+%inner_arr = PostfixDeref(%inner_ref, sigil: "@") :Array
+%idx0      = Constant(0) :Int
+%r         = Subscript(%inner_arr, %idx0) :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%r : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [15], nodes: [
+  [Start], # 0
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 2
+  [ArrayLiteral, ~, [1, 2], ~, ArrayRef], # 3
+  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 4
+  [Constant, {const_type: integer, value: "4"}, ~, ~, Int], # 5
+  [ArrayLiteral, ~, [4, 5], ~, ArrayRef], # 6
+  [ArrayLiteral, ~, [3, 6], ~, ArrayRef], # 7
+  [Subscript, ~, [7, 1], ~, ArrayRef], # 8
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 9
+  [MemStart], # 10
+  [Subscript, ~, [8, 9, 10], ~, Scalar], # 11
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [11], ~, Str], # 12
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 13
+  [Print, ~, [12, 13], 0, Scalar], # 14
+  [Return, ~, [14], 14]]} # 15
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## R9 out-of-bounds array read
+
+An out-of-bounds array read `$a[9]` on a 3-element array returns perl's `undef`
+— exactly as perl does. The bounds-check `icmp ult idx, len` is always emitted
+in the LLVM IR; when the index exceeds the length, the OOB path yields a
+`Slot{defined=false, payload=0}` which the epilogue prints as `Undef:`.
+This is NEVER a segfault: bounds-checking is unconditional.
+
+```perl
+# source
+use 5.42.0;
+my @a = (1, 2, 3);
+say($a[9]);
+```
+
+```behavior
+stdout: \n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%c1  = Constant(1) :Int
+%c2  = Constant(2) :Int
+%c3  = Constant(3) :Int
+%arr = ArrayLiteral(%c1, %c2, %c3) :Array
+%idx = Constant(9) :Int
+%r   = Subscript(%arr, %idx) :Undef
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%r : Undef -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [11], nodes: [
+  [Start], # 0
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 2
+  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 3
+  [ArrayLiteral, {sigil: "@", symbol: a}, [1, 2, 3], ~, Array], # 4
+  [Constant, {const_type: integer, value: "9"}, ~, ~, Int], # 5
+  [MemStart], # 6
+  [Subscript, ~, [4, 5, 6], ~, Undef], # 7
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
+  [Print, ~, [8, 9], 0, Scalar], # 10
+  [Return, ~, [10], 10]]} # 11
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## R10 missing-key hash lookup
+
+A missing-key hash lookup `$h{z}` where `z` is not a key returns perl's `undef`.
+The linear scan exhausts all entries without a match; the miss path yields a
+`Slot{defined=false, payload=0}` which the epilogue prints as `Undef:`.
+
+```perl
+# source
+use 5.42.0;
+my %h = (a => 1, b => 2);
+say($h{z});
+```
+
+```behavior
+stdout: \n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%ka   = Constant("a") :Str
+%v1   = Constant(1) :Int
+%kb   = Constant("b") :Str
+%v2   = Constant(2) :Int
+%hash = HashLiteral(%ka, %v1, %kb, %v2) :Hash
+%lk   = Constant("z") :Str
+%r    = Subscript(%hash, %lk) :Undef
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%r : Undef -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [12], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: a}, ~, ~, Str], # 1
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
+  [Constant, {const_type: string, value: b}, ~, ~, Str], # 3
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 4
+  [HashLiteral, {sigil: "%", symbol: h}, [1, 2, 3, 4], ~, Hash], # 5
+  [Constant, {const_type: string, value: z}, ~, ~, Str], # 6
+  [MemStart], # 7
+  [Subscript, ~, [5, 6, 7], ~, Undef], # 8
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [8], ~, Str], # 9
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
+  [Print, ~, [9, 10], 0, Scalar], # 11
+  [Return, ~, [11], 11]]} # 12
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## R11 hash keys sorted order
+
+`join(",", sort keys %h)` returns the keys in sorted (normalized) order.
+
+THE SORT IS LOAD-BEARING, not decoration. perl's hash order is randomised per
+process -- three runs of `keys %h` on 5.42.0 gave `b,a,c`, `b,c,a` and
+`a,b,c` -- so only the sorted form has a stable answer to assert. chalk's
+`keys` emits INSERTION order, which is deterministic but is NOT perl's, and
+sorting is what makes the two agree.
+
+Reproducing perl's own order was considered and rejected: it IS reproducible
+under PERL_HASH_SEED with PERL_PERTURB_KEYS=0, but it depends on collision
+history and bucket splits rather than on the key set (same keys inserted in a
+different order give a different answer, and inserting-then-deleting a fourth
+key changes it again), so matching it would mean reimplementing perl's hash
+internals and pinning chalk to one build. The randomisation is also deliberate
+hardening against collision-flooding attacks.
+
+Previously `L: GAP` while sort/join/keys were outside the LLVM slice. All
+three now lower: keys reads the %Hash header, sort orders a COPY of the slot
+buffer by the producer's folded comparator (sort_cmp=string, sort_order=
+ascending -- perl folds the comparator into op flags, so a bare `sort` is a
+STRING compare and `sort (10,9,100)` is `10 100 9`), and join walks a
+runtime-arity array.
+
+The source PRINTS its result. A case is run as a program, whose observable
+contract is stdout plus exit status -- a bare trailing expression is
+evaluated in void context and the producer correctly emits nothing for it
+(measured: the graph for the old form was Start/Constant(Undef)/Return, the
+whole computation gone), so the earlier form asserted a value the program
+never produced.
+
+BEHAVIOR IS GREEN AND THE OTHER TWO LEGS ARE NOT. lli and perl agree on
+`a,b`, which is what the lowering work bought. The remaining two are not
+about sort/join/keys:
+
+  - SHAPE: this block states no node lines. It is not a declared GAP any
+    more, so the shape leg has nothing to check against and says so.
+  - INVARIANT: `op Call has undef control_in` x3. TypedInvariant's
+    @CONTROL_CHAIN_OPS lists `Call` unconditionally, but keys/sort/join are
+    PURE value producers with no side effects, so being off the control
+    chain is correct for them. The invariant does not distinguish an
+    effectful Call from a pure one; the comment above that list reasons
+    about the regex family and does not address this case.
+
+Loosening the invariant to admit a pure Call is a change to a rule that
+polices every case, made in order to pass one -- so it is filed rather than
+taken here.
+
+```perl
+# source
+my %h = (b => 2, a => 1);
+print join(",", sort keys %h);
+```
+
+```behavior
+stdout: a,b
+return: Bool:1
+context: scalar
+```
+
+```ir
+L: GAP(behavior GREEN -- lli and perl both print a,b; shape has no node lines and invariant flags pure keys/sort/join Calls as broken effect chains, neither about the lowering)
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [12], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: ","}, ~, ~, Str], # 1
+  [Constant, {const_type: string, value: b}, ~, ~, Str], # 2
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 3
+  [Constant, {const_type: string, value: a}, ~, ~, Str], # 4
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 5
+  [HashLiteral, {sigil: "%", symbol: h}, [2, 3, 4, 5], ~, Hash], # 6
+  [MemStart], # 7
+  [Call, {dispatch_kind: builtin, name: keys, param_names: []}, [6, 7], ~, List], # 8
+  [Call, {dispatch_kind: builtin, name: sort, param_names: [], sort_cmp: string, sort_order: ascending}, [8], ~, List], # 9
+  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [1, 9], ~, Str], # 10
+  [Print, ~, [10], 0, Scalar], # 11
+  [Return, ~, [11], 11]]} # 12
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## R12 aliased element store (store via ref, read via name)
+
+Storing through an alias `$r->[0] = 42` (where `$r = \@a`) mutates the SAME
+underlying array as `@a`, so a subsequent `$a[0]` must see `42`. `$r->[0]`
+subscripts the `Ref` node while `$a[0]` subscripts the `ArrayRef` node the `Ref`
+wraps. Because `\@a` and `@a` share backing storage in Perl, the `Ref` is a
+transparent alias: the store-lvalue path unwraps it to its target `ArrayRef`, so
+both the store and the read resolve to the SAME aggregate pointer (the ArrayRef's
+canonical i8*, cached and re-bitcast at each use). The store's memory write is
+therefore visible to the read (the read's memory input already threads the store
+Assign — memory-SSA phase 2a). No new alias analysis is needed: unwrapping the
+`Ref` container to its input is the whole fix.
+
+```perl
+# source
+use 5.42.0;
+my @a = (1, 2, 3);
+my $r = \@a;
+$r->[0] = 42;
+say($a[0]);
+```
+
+```behavior
+stdout: 42\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%c1   = Constant(1) :Int
+%c2   = Constant(2) :Int
+%c3   = Constant(3) :Int
+%arr  = ArrayLiteral(%c1, %c2, %c3) :Array
+%ref  = Ref(%arr)
+%i0   = Constant(0) :Int
+%lval = Subscript(%ref, %i0)
+%v42  = Constant(42) :Int
+%st   = Assign(%lval, %v42) :Int
+%rd   = Subscript(%arr, %i0) :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%rd : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [14], nodes: [
+  [Start], # 0
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 2
+  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 3
+  [ArrayLiteral, {sigil: "@", symbol: a}, [1, 2, 3], ~, Array], # 4
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 5
+  [Ref, ~, [4], ~, ArrayRef], # 6
+  [Subscript, ~, [6, 5], ~, Scalar], # 7
+  [Constant, {const_type: integer, value: "42"}, ~, ~, Int], # 8
+  [Assign, ~, [7, 8], 0, Int], # 9
+  [Subscript, ~, [4, 5, 9], ~, Int], # 10
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [10], ~, Str], # 11
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 12
+  [Print, ~, [11, 12], 9, Scalar], # 13
+  [Return, ~, [13], 13]]} # 14
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## R13 element store then read a DIFFERENT index (materialized load)
+
+`$a[0] = 42; $a[1]` stores into slot 0, then reads slot 1 -- an independent
+element. The read must be a real load of slot 1 (`2`), NOT the last stored value
+(`42`). This is the teeth for the materialize path: a value-substitution read-back
+would return `42` here; a real memory load returns `2`.
+
+```perl
+# source
+use 5.42.0;
+my @a = (1, 2, 3);
+$a[0] = 42;
+say($a[1]);
+```
+
+```behavior
+stdout: 2\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%c1   = Constant(1) :Int
+%c2   = Constant(2) :Int
+%c3   = Constant(3) :Int
+%arr  = ArrayLiteral(%c1, %c2, %c3) :Array
+%i0   = Constant(0) :Int
+%lval = Subscript(%arr, %i0)
+%v42  = Constant(42) :Int
+%st   = Assign(%lval, %v42) :Int
+%i1   = Constant(1) :Int
+%rd   = Subscript(%arr, %i1) :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%rd : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [13], nodes: [
+  [Start], # 0
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 2
+  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 3
+  [ArrayLiteral, {sigil: "@", symbol: a}, [1, 2, 3], ~, Array], # 4
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 5
+  [Subscript, ~, [4, 5], ~, Int], # 6
+  [Constant, {const_type: integer, value: "42"}, ~, ~, Int], # 7
+  [Assign, ~, [6, 7], 0, Int], # 8
+  [Subscript, ~, [4, 1, 8], ~, Int], # 9
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [9], ~, Str], # 10
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 11
+  [Print, ~, [10, 11], 8, Scalar], # 12
+  [Return, ~, [12], 12]]} # 13
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## R14 element read before a store to the SAME slot (WAR ordering)
+
+`my $x = $a[0]; $a[0] = 99; $x` reads slot 0 (`5`), THEN overwrites it. The read
+must observe the value live at its program point (`5`), not the final slot value
+(`99`). The read is memory-ordered before the store: it is a distinct load pinned
+to the pre-store memory, not a pure data node the scheduler floats past the store
+(the read/store WAR hazard, zhi 019f3354, closed by the memory-SSA milestone).
+
+```perl
+# source
+use 5.42.0;
+my @a = (5, 6, 7);
+my $x = $a[0];
+$a[0] = 99;
+say($x);
+```
+
+```behavior
+stdout: 5\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%c5   = Constant(5) :Int
+%c6   = Constant(6) :Int
+%c7   = Constant(7) :Int
+%arr  = ArrayLiteral(%c5, %c6, %c7) :Array
+%i0   = Constant(0) :Int
+%rd   = Subscript(%arr, %i0) :Int
+%v99  = Constant(99) :Int
+%lval = Subscript(%arr, %i0)
+%st   = Assign(%lval, %v99) :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%rd : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [14], nodes: [
+  [Start], # 0
+  [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 1
+  [Constant, {const_type: integer, value: "6"}, ~, ~, Int], # 2
+  [Constant, {const_type: integer, value: "7"}, ~, ~, Int], # 3
+  [ArrayLiteral, {sigil: "@", symbol: a}, [1, 2, 3], ~, Array], # 4
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 5
+  [MemStart], # 6
+  [Subscript, ~, [4, 5, 6], ~, Int], # 7
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
+  [Subscript, ~, [4, 5], ~, Int], # 10
+  [Constant, {const_type: integer, value: "99"}, ~, ~, Int], # 11
+  [Assign, ~, [10, 11], 0, Int], # 12
+  [Print, ~, [8, 9], 12, Scalar], # 13
+  [Return, ~, [13], 13]]} # 14
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## R15 interleaved read between two stores to the SAME slot (WAR ordering)
+
+`$a[0] = 1; my $x = $a[0]; $a[0] = 2; $x + $a[0]` stores 1, reads (`1`), stores 2,
+then reads again (`2`). The mid read must see `1` (its program point) and the
+final read `2` -- two distinct loads at distinct memory versions, so
+`$x + $a[0]` is `3`, not `4` (both reads collapsing to the final value).
+
+```perl
+# source
+use 5.42.0;
+my @a = (1, 2, 3);
+$a[0] = 1;
+my $x = $a[0];
+$a[0] = 2;
+say($x + $a[0]);
+```
+
+```behavior
+stdout: 3\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%c1   = Constant(1) :Int
+%c2   = Constant(2) :Int
+%c3   = Constant(3) :Int
+%arr  = ArrayLiteral(%c1, %c2, %c3) :Array
+%i0   = Constant(0) :Int
+%rd1  = Subscript(%arr, %i0) :Int
+%rd2  = Subscript(%arr, %i0) :Int
+%sum  = Add(%rd1, %rd2) :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%sum : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [15], nodes: [
+  [Start], # 0
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 2
+  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 3
+  [ArrayLiteral, {sigil: "@", symbol: a}, [1, 2, 3], ~, Array], # 4
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 5
+  [Subscript, ~, [4, 5], ~, Int], # 6
+  [Assign, ~, [6, 1], 0, Int], # 7
+  [Subscript, ~, [4, 5, 7], ~, Int], # 8
+  [Assign, ~, [6, 2], 7, Int], # 9
+  [Subscript, ~, [4, 5, 9], ~, Int], # 10
+  [Add, ~, [8, 10], ~, Int], # 11
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [11], ~, Str], # 12
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 13
+  [Print, ~, [12, 13], 9, Scalar], # 14
+  [Return, ~, [14], 14]]} # 15
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## R16 a Str array element round-trips through the Slot payload
+
+An aggregate element is one machine word (`%Slot` = {i1 defined, i64 payload}),
+but a Str is a (ptr,len) PAIR -- too wide. Storing one boxes it into a heap
+`%StrPair` and keeps the ADDRESS in the payload; reading unboxes it back into
+ptr+len. Without both halves the read yields the raw address, which prints as a
+number: a silent miscompile, not a GAP. The read side must also re-register the
+length, or `length()` on the element reads whatever was tracked last.
+
+```perl
+# source
+use 5.42.0;
+my @a = ("hi", "there");
+say($a[1]);
+```
+
+```behavior
+stdout: there\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%s0   = Constant("hi") :Str
+%s1   = Constant("there") :Str
+%arr  = ArrayLiteral(%s0, %s1) :Array
+%i1   = Constant(1) :Int
+%rd   = Subscript(%arr, %i1) :Str
+%nl = Constant("\n") :Str
+%p  = Print(%rd, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [10], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: hi}, ~, ~, Str], # 1
+  [Constant, {const_type: string, value: there}, ~, ~, Str], # 2
+  [ArrayLiteral, {sigil: "@", symbol: a}, [1, 2], ~, Array], # 3
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 4
+  [MemStart], # 5
+  [Subscript, ~, [3, 4, 5], ~, Str], # 6
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
+  [Print, ~, [7, 8], 0, Scalar], # 9
+  [Return, ~, [9], 9]]} # 10
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## R17 length() of a Str array element
+
+The companion to R16: proves the READ side re-registers the string's length
+rather than leaving it to whatever the length table last held. `length(there)`
+is 5; a stale registration would silently yield the length of another string.
+
+```perl
+# source
+use 5.42.0;
+my @a = ("hi", "there");
+say(length($a[1]));
+```
+
+```behavior
+stdout: 5\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%s0   = Constant("hi") :Str
+%s1   = Constant("there") :Str
+%arr  = ArrayLiteral(%s0, %s1) :Array
+%i1   = Constant(1) :Int
+%rd   = Subscript(%arr, %i1) :Str
+%len  = Length(%rd) :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%len : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [11], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: hi}, ~, ~, Str], # 1
+  [Constant, {const_type: string, value: there}, ~, ~, Str], # 2
+  [ArrayLiteral, {sigil: "@", symbol: a}, [1, 2], ~, Array], # 3
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 4
+  [MemStart], # 5
+  [Subscript, ~, [3, 4, 5], ~, Str], # 6
+  [Length, ~, [6], ~, Int], # 7
+  [Coerce, {from_repr: Int, to_repr: Str}, [7], ~, Str], # 8
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
+  [Print, ~, [8, 9], 0, Scalar], # 10
+  [Return, ~, [10], 10]]} # 11
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## R18 a Num array element round-trips through the Slot payload
+
+A Num is one word wide but is NOT an integer: putting it in the i64 payload is a
+`bitcast`, and reading it back is the inverse. Reading a Num payload as an Int
+prints the double's bit pattern (2.5 reads as 4612811918334230528) -- the same
+silent-miscompile class as R16, in the other direction.
+
+```perl
+# source
+use 5.42.0;
+my @a = (1.5, 2.5);
+say($a[1]);
+```
+
+```behavior
+stdout: 2.5\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%n0   = Constant(1.5) :Num
+%n1   = Constant(2.5) :Num
+%arr  = ArrayLiteral(%n0, %n1) :Array
+%i1   = Constant(1) :Int
+%rd   = Subscript(%arr, %i1) :Num
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%rd : Num -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [10], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "1.5"}, ~, ~, Num], # 1
+  [Constant, {const_type: number, value: "2.5"}, ~, ~, Num], # 2
+  [ArrayLiteral, {sigil: "@", symbol: a}, [1, 2], ~, Array], # 3
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 4
+  [MemStart], # 5
+  [Subscript, ~, [3, 4, 5], ~, Num], # 6
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
+  [Print, ~, [7, 8], 0, Scalar], # 9
+  [Return, ~, [9], 9]]} # 10
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## R19 a Str hash VALUE round-trips through the entry payload
+
+`%HashEntry` inlines the same {defined, payload} pair as `%Slot`, so a hash
+value is boxed and unboxed by the SAME rule as an array element (R16). This case
+pins that the two spellings share one rule rather than diverging -- a hash of
+strings was a GAP while an array of strings worked.
+
+```perl
+# source
+use 5.42.0;
+my %h = (k => "val");
+say($h{k});
+```
+
+```behavior
+stdout: val\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%k    = Constant("k") :Str
+%v    = Constant("val") :Str
+%h    = HashLiteral(%k, %v) :Hash
+%kk   = Constant("k") :Str
+%rd   = Subscript(%h, %kk) :Str
+%nl = Constant("\n") :Str
+%p  = Print(%rd, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [9], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: k}, ~, ~, Str], # 1
+  [Constant, {const_type: string, value: val}, ~, ~, Str], # 2
+  [HashLiteral, {sigil: "%", symbol: h}, [1, 2], ~, Hash], # 3
+  [MemStart], # 4
+  [Subscript, ~, [3, 1, 4], ~, Str], # 5
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [5], ~, Str], # 6
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 7
+  [Print, ~, [6, 7], 0, Scalar], # 8
+  [Return, ~, [8], 8]]} # 9
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## R20 a Num hash value round-trips through the entry payload
+
+The Num half of R19, mirroring R18. Together R16-R20 cover both containers
+across both non-Int scalar reprs.
+
+```perl
+# source
+use 5.42.0;
+my %h = (k => 1.5);
+say($h{k});
+```
+
+```behavior
+stdout: 1.5\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%k    = Constant("k") :Str
+%v    = Constant(1.5) :Num
+%h    = HashLiteral(%k, %v) :Hash
+%kk   = Constant("k") :Str
+%rd   = Subscript(%h, %kk) :Num
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%rd : Num -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [9], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: k}, ~, ~, Str], # 1
+  [Constant, {const_type: number, value: "1.5"}, ~, ~, Num], # 2
+  [HashLiteral, {sigil: "%", symbol: h}, [1, 2], ~, Hash], # 3
+  [MemStart], # 4
+  [Subscript, ~, [3, 1, 4], ~, Num], # 5
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [5], ~, Str], # 6
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 7
+  [Print, ~, [6, 7], 0, Scalar], # 8
+  [Return, ~, [8], 8]]} # 9
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## R21 a branch arm that BOTH stores an element and rebinds a scalar
+
+The "2b-3 mixed effect": one arm mutates the heap (`$a[0]=9`) AND rebinds a
+lexical (`$n=5`), so a MEMORY-Phi and a VALUE-Phi merge on the same Region. The
+backend refused this outright, on the stated grounds that the value-Phi's arm
+order "is not yet reconciled with the element store".
+
+That reason was a PAIRING problem, and pairing is no longer a search: the
+value-Phi carries `predecessors` naming the Proj each value arrives from, so the
+arm is a field read. The memory-Phi is skipped (it merges memory versions, not
+values) and the post-merge `$a[0]` re-loads from the aggregate at its own program
+point. Re-measured across 14 bilateral shapes before lifting.
+
+Both Phis hang off the same Region with the SAME predecessors — `[%proj1,
+%proj0]`, the false arm first, because the producer builds Region inputs
+continuing-path-first. One of them is memory and one is a value, and telling them
+apart is what makes this lowerable.
+
+```perl
+# source
+use 5.42.0;
+my @a=(1,2,3); my $n=0;
+if ($n==0) { $a[0]=9; $n=5 }
+print "a0=$a[0] n=$n\n";
+```
+
+```behavior
+stdout: a0=9 n=5\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%c1   = Constant(1) :Int
+%c2   = Constant(2) :Int
+%c3   = Constant(3) :Int
+%arr  = ArrayLiteral(%c1, %c2, %c3) :Array
+%i0   = Constant(0) :Int
+%mem  = MemStart()
+%lval = Subscript(%arr, %i0) :Int
+%v9   = Constant(9) :Int
+%cmp  = NumEq(%i0, %i0) :Boolean
+%if   = If(%start, %cmp)
+%proj0 = Proj(%if, index: 0)
+%proj1 = Proj(%if, index: 1)
+%st   = Assign(%lval, %v9) :Int
+%region = Region(%proj1, %st)
+%mphi = Phi(%mem, %st, region: %region, predecessors: [%proj1, %proj0])
+%rd   = Subscript(%arr, %i0, %mphi) :Int
+%v5   = Constant(5) :Int
+%nphi = Phi(%i0, %v5, region: %region, predecessors: [%proj1, %proj0]) :Int
+return %rd
+branch_control: %proj0 -> %st
+control: %region -> %rd
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [29], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: "a0="}, ~, ~, Str], # 1
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 3
+  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 4
+  [ArrayLiteral, {sigil: "@", symbol: a}, [2, 3, 4], ~, Array], # 5
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 6
+  [MemStart], # 7
+  [Subscript, ~, [5, 6], ~, Int], # 8
+  [Constant, {const_type: integer, value: "9"}, ~, ~, Int], # 9
+  [NumEq, ~, [6, 6], ~, Boolean], # 10
+  [If, ~, [0, 10], 0], # 11
+  [Proj, {index: 0}, [11]], # 12
+  [Assign, ~, [8, 9], 12, Int], # 13
+  [Proj, {index: 1}, [11]], # 14
+  [Region, {head: 11}, [14, 13]], # 15
+  [Phi, {predecessors: [14, 12], region: 15}, [7, 13], ~, Unknown], # 16
+  [Subscript, ~, [5, 6, 16], ~, Scalar], # 17
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [17], ~, Str], # 18
+  [Concat, ~, [1, 18], ~, Str], # 19
+  [Constant, {const_type: string, value: " n="}, ~, ~, Str], # 20
+  [Concat, ~, [19, 20], ~, Str], # 21
+  [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 22
+  [Phi, {predecessors: [14, 12], region: 15}, [6, 22], ~, Int], # 23
+  [Coerce, {from_repr: Int, to_repr: Str}, [23], ~, Str], # 24
+  [Concat, ~, [21, 24], ~, Str], # 25
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 26
+  [Concat, ~, [25, 26], ~, Str], # 27
+  [Print, ~, [27], 15, Scalar], # 28
+  [Return, ~, [28], 28]]} # 29
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## R22 the same mixed-effect arm on the FALSE polarity (bilateral)
+
+R21 with the guard failing: no store, no rebind, so the post-merge read sees the
+initial element and the scalar keeps its base value. Bilateral because the defect
+class the lifted refusal guarded against was a WRONG ARM — which reads plausible
+on one polarity and is only visible by running both.
+
+```perl
+# source
+use 5.42.0;
+my @a=(1,2,3); my $n=1;
+if ($n==0) { $a[0]=9; $n=5 }
+print "a0=$a[0] n=$n\n";
+```
+
+```behavior
+stdout: a0=1 n=1\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%c1   = Constant(1) :Int
+%c2   = Constant(2) :Int
+%c3   = Constant(3) :Int
+%arr  = ArrayLiteral(%c1, %c2, %c3) :Array
+%i0   = Constant(0) :Int
+%mem  = MemStart()
+%lval = Subscript(%arr, %i0) :Int
+%v9   = Constant(9) :Int
+%cmp  = NumEq(%c1, %i0) :Boolean
+%if   = If(%start, %cmp)
+%proj0 = Proj(%if, index: 0)
+%proj1 = Proj(%if, index: 1)
+%st   = Assign(%lval, %v9) :Int
+%region = Region(%proj1, %st)
+%mphi = Phi(%mem, %st, region: %region, predecessors: [%proj1, %proj0])
+%rd   = Subscript(%arr, %i0, %mphi) :Int
+%v5   = Constant(5) :Int
+%nphi = Phi(%c1, %v5, region: %region, predecessors: [%proj1, %proj0]) :Int
+return %rd
+branch_control: %proj0 -> %st
+control: %region -> %rd
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [29], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: "a0="}, ~, ~, Str], # 1
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 3
+  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 4
+  [ArrayLiteral, {sigil: "@", symbol: a}, [2, 3, 4], ~, Array], # 5
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 6
+  [MemStart], # 7
+  [Subscript, ~, [5, 6], ~, Int], # 8
+  [Constant, {const_type: integer, value: "9"}, ~, ~, Int], # 9
+  [NumEq, ~, [2, 6], ~, Boolean], # 10
+  [If, ~, [0, 10], 0], # 11
+  [Proj, {index: 0}, [11]], # 12
+  [Assign, ~, [8, 9], 12, Int], # 13
+  [Proj, {index: 1}, [11]], # 14
+  [Region, {head: 11}, [14, 13]], # 15
+  [Phi, {predecessors: [14, 12], region: 15}, [7, 13], ~, Unknown], # 16
+  [Subscript, ~, [5, 6, 16], ~, Scalar], # 17
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [17], ~, Str], # 18
+  [Concat, ~, [1, 18], ~, Str], # 19
+  [Constant, {const_type: string, value: " n="}, ~, ~, Str], # 20
+  [Concat, ~, [19, 20], ~, Str], # 21
+  [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 22
+  [Phi, {predecessors: [14, 12], region: 15}, [2, 22], ~, Int], # 23
+  [Coerce, {from_repr: Int, to_repr: Str}, [23], ~, Str], # 24
+  [Concat, ~, [21, 24], ~, Str], # 25
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 26
+  [Concat, ~, [25, 26], ~, Str], # 27
+  [Print, ~, [27], 15, Scalar], # 28
+  [Return, ~, [28], 28]]} # 29
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## R23 a HASH element store beside a scalar rebind (bilateral, true)
+
+R21 stores into an array. A hash entry takes a different lowering path (entry
+payload rather than slot payload), so the mixed-effect merge is worth pinning on
+both aggregate kinds — a memory-Phi that is correct for one and not the other
+would otherwise pass.
+
+```perl
+# source
+use 5.42.0;
+my %h=(k=>1); my $n=0;
+if ($n==0) { $h{k}=9; $n=5 }
+print "k=$h{k} n=$n\n";
+```
+
+```behavior
+stdout: k=9 n=5\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%kk   = Constant("k") :Str
+%c1   = Constant(1) :Int
+%h    = HashLiteral(%kk, %c1) :Hash
+%i0   = Constant(0) :Int
+%mem  = MemStart()
+%lval = Subscript(%h, %kk) :Int
+%v9   = Constant(9) :Int
+%cmp  = NumEq(%i0, %i0) :Boolean
+%if   = If(%start, %cmp)
+%proj0 = Proj(%if, index: 0)
+%proj1 = Proj(%if, index: 1)
+%st   = Assign(%lval, %v9) :Int
+%region = Region(%proj1, %st)
+%mphi = Phi(%mem, %st, region: %region, predecessors: [%proj1, %proj0])
+%rd   = Subscript(%h, %kk, %mphi) :Int
+%v5   = Constant(5) :Int
+%nphi = Phi(%i0, %v5, region: %region, predecessors: [%proj1, %proj0]) :Int
+return %rd
+branch_control: %proj0 -> %st
+control: %region -> %rd
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [28], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: "k="}, ~, ~, Str], # 1
+  [Constant, {const_type: string, value: k}, ~, ~, Str], # 2
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 3
+  [HashLiteral, {sigil: "%", symbol: h}, [2, 3], ~, Hash], # 4
+  [MemStart], # 5
+  [Subscript, ~, [4, 2], ~, Int], # 6
+  [Constant, {const_type: integer, value: "9"}, ~, ~, Int], # 7
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 8
+  [NumEq, ~, [8, 8], ~, Boolean], # 9
+  [If, ~, [0, 9], 0], # 10
+  [Proj, {index: 0}, [10]], # 11
+  [Assign, ~, [6, 7], 11, Int], # 12
+  [Proj, {index: 1}, [10]], # 13
+  [Region, {head: 10}, [13, 12]], # 14
+  [Phi, {predecessors: [13, 11], region: 14}, [5, 12], ~, Unknown], # 15
+  [Subscript, ~, [4, 2, 15], ~, Scalar], # 16
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [16], ~, Str], # 17
+  [Concat, ~, [1, 17], ~, Str], # 18
+  [Constant, {const_type: string, value: " n="}, ~, ~, Str], # 19
+  [Concat, ~, [18, 19], ~, Str], # 20
+  [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 21
+  [Phi, {predecessors: [13, 11], region: 14}, [8, 21], ~, Int], # 22
+  [Coerce, {from_repr: Int, to_repr: Str}, [22], ~, Str], # 23
+  [Concat, ~, [20, 23], ~, Str], # 24
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 25
+  [Concat, ~, [24, 25], ~, Str], # 26
+  [Print, ~, [26], 14, Scalar], # 27
+  [Return, ~, [27], 27]]} # 28
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## R24 the hash mixed-effect arm on the FALSE polarity (bilateral)
+
+```perl
+# source
+use 5.42.0;
+my %h=(k=>1); my $n=1;
+if ($n==0) { $h{k}=9; $n=5 }
+print "k=$h{k} n=$n\n";
+```
+
+```behavior
+stdout: k=1 n=1\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%kk   = Constant("k") :Str
+%c1   = Constant(1) :Int
+%h    = HashLiteral(%kk, %c1) :Hash
+%i0   = Constant(0) :Int
+%mem  = MemStart()
+%lval = Subscript(%h, %kk) :Int
+%v9   = Constant(9) :Int
+%cmp  = NumEq(%c1, %i0) :Boolean
+%if   = If(%start, %cmp)
+%proj0 = Proj(%if, index: 0)
+%proj1 = Proj(%if, index: 1)
+%st   = Assign(%lval, %v9) :Int
+%region = Region(%proj1, %st)
+%mphi = Phi(%mem, %st, region: %region, predecessors: [%proj1, %proj0])
+%rd   = Subscript(%h, %kk, %mphi) :Int
+%v5   = Constant(5) :Int
+%nphi = Phi(%c1, %v5, region: %region, predecessors: [%proj1, %proj0]) :Int
+return %rd
+branch_control: %proj0 -> %st
+control: %region -> %rd
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [28], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: "k="}, ~, ~, Str], # 1
+  [Constant, {const_type: string, value: k}, ~, ~, Str], # 2
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 3
+  [HashLiteral, {sigil: "%", symbol: h}, [2, 3], ~, Hash], # 4
+  [MemStart], # 5
+  [Subscript, ~, [4, 2], ~, Int], # 6
+  [Constant, {const_type: integer, value: "9"}, ~, ~, Int], # 7
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 8
+  [NumEq, ~, [3, 8], ~, Boolean], # 9
+  [If, ~, [0, 9], 0], # 10
+  [Proj, {index: 0}, [10]], # 11
+  [Assign, ~, [6, 7], 11, Int], # 12
+  [Proj, {index: 1}, [10]], # 13
+  [Region, {head: 10}, [13, 12]], # 14
+  [Phi, {predecessors: [13, 11], region: 14}, [5, 12], ~, Unknown], # 15
+  [Subscript, ~, [4, 2, 15], ~, Scalar], # 16
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [16], ~, Str], # 17
+  [Concat, ~, [1, 17], ~, Str], # 18
+  [Constant, {const_type: string, value: " n="}, ~, ~, Str], # 19
+  [Concat, ~, [18, 19], ~, Str], # 20
+  [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 21
+  [Phi, {predecessors: [13, 11], region: 14}, [3, 21], ~, Int], # 22
+  [Coerce, {from_repr: Int, to_repr: Str}, [22], ~, Str], # 23
+  [Concat, ~, [20, 23], ~, Str], # 24
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 25
+  [Concat, ~, [24, 25], ~, Str], # 26
+  [Print, ~, [26], 14, Scalar], # 27
+  [Return, ~, [27], 27]]} # 28
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## R25 a NESTED branch whose inner arms store an element and rebind
+
+Every other mixed-effect case here is one branch deep. This one nests: the outer
+`if`'s arm contains another `if`, and the inner arms each store an element AND
+rebind a scalar. So the OUTER merge's arm is itself a merge.
+
+That is what made it fail. A Phi records `predecessors` — which Proj each value
+arrives from — and the producer's arm walk stopped at a Region, because
+descending into another merge's arms would attribute the slot to the wrong
+branch. Correct for a flat branch; for a nested one the outer arm IS the inner
+Region, so the walk returned nothing and the all-or-nothing guard dropped
+predecessors for the outer Phis entirely. The backend then fell back to searching
+the Region and paired the arms backwards, emitting
+
+    %tmp_39 = phi i64 [ %tmp_22, %if.merge.6 ], [ %tmp_38, %if.else.2 ]
+
+which names `%tmp_38` — defined *in* `if.merge.6` — as arriving from
+`if.else.2`. lli rejects it: *Instruction does not dominate all uses!*
+
+The fix steps THROUGH a nested Region to `Region.head`'s `control_in`, which is
+the outer Proj. Note the outer Phis below carry `[%oproj1, %oproj0]` while the
+inner carry `[%iproj0, %iproj1]` — the two merges have different arm orders, and
+recording each rather than deriving it is the whole point.
+
+```perl
+# source
+use 5.42.0;
+my @a=(1,2,3); my $x = 1; my $y = 1; my $n = 0;
+if ($x) { if ($y) { $a[0]=9; $n=1 } else { $a[0]=8; $n=2 } }
+print "a0=$a[0] n=$n\n";
+```
+
+```behavior
+stdout: a0=9 n=1\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%c1   = Constant(1) :Int
+%c2   = Constant(2) :Int
+%c3   = Constant(3) :Int
+%arr  = ArrayLiteral(%c1, %c2, %c3) :Array
+%i0   = Constant(0) :Int
+%mem  = MemStart()
+%lval = Subscript(%arr, %i0) :Int
+%v9   = Constant(9) :Int
+%v8   = Constant(8) :Int
+%oif  = If(%start, %c1)
+%oproj0 = Proj(%oif, index: 0)
+%oproj1 = Proj(%oif, index: 1)
+%iif  = If(%oproj0, %c1)
+%iproj0 = Proj(%iif, index: 0)
+%iproj1 = Proj(%iif, index: 1)
+%st9  = Assign(%lval, %v9) :Int
+%st8  = Assign(%lval, %v8) :Int
+%iregion = Region(%st9, %st8)
+%imphi = Phi(%st9, %st8, region: %iregion, predecessors: [%iproj0, %iproj1])
+%oregion = Region(%oproj1, %iregion)
+%omphi = Phi(%mem, %imphi, region: %oregion, predecessors: [%oproj1, %oproj0])
+%rd   = Subscript(%arr, %i0, %omphi) :Int
+%inphi = Phi(%c1, %c2, region: %iregion, predecessors: [%iproj0, %iproj1]) :Int
+%onphi = Phi(%i0, %inphi, region: %oregion, predecessors: [%oproj1, %oproj0]) :Int
+return %rd
+branch_control: %iproj0 -> %st9
+branch_control: %iproj1 -> %st8
+control: %oregion -> %rd
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [35], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: "a0="}, ~, ~, Str], # 1
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 3
+  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 4
+  [ArrayLiteral, {sigil: "@", symbol: a}, [2, 3, 4], ~, Array], # 5
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 6
+  [MemStart], # 7
+  [Subscript, ~, [5, 6], ~, Int], # 8
+  [Constant, {const_type: integer, value: "9"}, ~, ~, Int], # 9
+  [If, ~, [0, 2], 0], # 10
+  [Proj, {index: 0}, [10]], # 11
+  [If, ~, [11, 2], 11], # 12
+  [Proj, {index: 0}, [12]], # 13
+  [Assign, ~, [8, 9], 13, Int], # 14
+  [Constant, {const_type: integer, value: "8"}, ~, ~, Int], # 15
+  [Proj, {index: 1}, [12]], # 16
+  [Assign, ~, [8, 15], 16, Int], # 17
+  [Region, {head: 12}, [14, 17]], # 18
+  [Phi, {predecessors: [13, 16], region: 18}, [14, 17], ~, Int], # 19
+  [Proj, {index: 1}, [10]], # 20
+  [Region, {head: 10}, [20, 18]], # 21
+  [Phi, {predecessors: [20, 11], region: 21}, [7, 19], ~, Unknown], # 22
+  [Subscript, ~, [5, 6, 22], ~, Scalar], # 23
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [23], ~, Str], # 24
+  [Concat, ~, [1, 24], ~, Str], # 25
+  [Constant, {const_type: string, value: " n="}, ~, ~, Str], # 26
+  [Concat, ~, [25, 26], ~, Str], # 27
+  [Phi, {predecessors: [13, 16], region: 18}, [2, 3], ~, Int], # 28
+  [Phi, {predecessors: [20, 11], region: 21}, [6, 28], ~, Int], # 29
+  [Coerce, {from_repr: Int, to_repr: Str}, [29], ~, Str], # 30
+  [Concat, ~, [27, 30], ~, Str], # 31
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 32
+  [Concat, ~, [31, 32], ~, Str], # 33
+  [Print, ~, [33], 21, Scalar], # 34
+  [Return, ~, [34], 34]]} # 35
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## R26 the nested mixed-effect branch, inner guard FALSE (bilateral)
+
+R25 with the inner guard failing, so the ELSE arm's store runs. This is the half
+that catches an inverted INNER pairing while the outer stays correct — the two
+merges are paired independently, and a fix that got only one right would pass
+R25 alone.
+
+```perl
+# source
+use 5.42.0;
+my @a=(1,2,3); my $x = 1; my $y = 0; my $n = 0;
+if ($x) { if ($y) { $a[0]=9; $n=1 } else { $a[0]=8; $n=2 } }
+print "a0=$a[0] n=$n\n";
+```
+
+```behavior
+stdout: a0=8 n=2\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%c0   = Constant(0) :Int
+%c1   = Constant(1) :Int
+%c2   = Constant(2) :Int
+%c3   = Constant(3) :Int
+%arr  = ArrayLiteral(%c1, %c2, %c3) :Array
+%mem  = MemStart()
+%lval = Subscript(%arr, %c0) :Int
+%v9   = Constant(9) :Int
+%v8   = Constant(8) :Int
+%oif  = If(%start, %c1)
+%oproj0 = Proj(%oif, index: 0)
+%oproj1 = Proj(%oif, index: 1)
+%iif  = If(%oproj0, %c0)
+%iproj0 = Proj(%iif, index: 0)
+%iproj1 = Proj(%iif, index: 1)
+%st9  = Assign(%lval, %v9) :Int
+%st8  = Assign(%lval, %v8) :Int
+%iregion = Region(%st9, %st8)
+%imphi = Phi(%st9, %st8, region: %iregion, predecessors: [%iproj0, %iproj1])
+%oregion = Region(%oproj1, %iregion)
+%omphi = Phi(%mem, %imphi, region: %oregion, predecessors: [%oproj1, %oproj0])
+%rd   = Subscript(%arr, %c0, %omphi) :Int
+%inphi = Phi(%c1, %c2, region: %iregion, predecessors: [%iproj0, %iproj1]) :Int
+%onphi = Phi(%c0, %inphi, region: %oregion, predecessors: [%oproj1, %oproj0]) :Int
+return %rd
+branch_control: %iproj0 -> %st9
+branch_control: %iproj1 -> %st8
+control: %oregion -> %rd
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [35], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: "a0="}, ~, ~, Str], # 1
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 3
+  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 4
+  [ArrayLiteral, {sigil: "@", symbol: a}, [2, 3, 4], ~, Array], # 5
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 6
+  [MemStart], # 7
+  [Subscript, ~, [5, 6], ~, Int], # 8
+  [Constant, {const_type: integer, value: "9"}, ~, ~, Int], # 9
+  [If, ~, [0, 2], 0], # 10
+  [Proj, {index: 0}, [10]], # 11
+  [If, ~, [11, 6], 11], # 12
+  [Proj, {index: 0}, [12]], # 13
+  [Assign, ~, [8, 9], 13, Int], # 14
+  [Constant, {const_type: integer, value: "8"}, ~, ~, Int], # 15
+  [Proj, {index: 1}, [12]], # 16
+  [Assign, ~, [8, 15], 16, Int], # 17
+  [Region, {head: 12}, [14, 17]], # 18
+  [Phi, {predecessors: [13, 16], region: 18}, [14, 17], ~, Int], # 19
+  [Proj, {index: 1}, [10]], # 20
+  [Region, {head: 10}, [20, 18]], # 21
+  [Phi, {predecessors: [20, 11], region: 21}, [7, 19], ~, Unknown], # 22
+  [Subscript, ~, [5, 6, 22], ~, Scalar], # 23
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [23], ~, Str], # 24
+  [Concat, ~, [1, 24], ~, Str], # 25
+  [Constant, {const_type: string, value: " n="}, ~, ~, Str], # 26
+  [Concat, ~, [25, 26], ~, Str], # 27
+  [Phi, {predecessors: [13, 16], region: 18}, [2, 3], ~, Int], # 28
+  [Phi, {predecessors: [20, 11], region: 21}, [6, 28], ~, Int], # 29
+  [Coerce, {from_repr: Int, to_repr: Str}, [29], ~, Str], # 30
+  [Concat, ~, [27, 30], ~, Str], # 31
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 32
+  [Concat, ~, [31, 32], ~, Str], # 33
+  [Print, ~, [33], 21, Scalar], # 34
+  [Return, ~, [34], 34]]} # 35
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## R27 the nested mixed-effect branch, OUTER guard false (bilateral)
+
+The third polarity: the outer guard fails, so neither inner arm runs and the
+post-merge read sees the untouched element. Pins that the outer merge selects its
+own arm correctly when the inner branch never executes — the case where a
+backwards outer pairing would read a value that was never computed.
+
+```perl
+# source
+use 5.42.0;
+my @a=(1,2,3); my $x = 0; my $y = 1; my $n = 0;
+if ($x) { if ($y) { $a[0]=9; $n=1 } else { $a[0]=8; $n=2 } }
+print "a0=$a[0] n=$n\n";
+```
+
+```behavior
+stdout: a0=1 n=0\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%c0   = Constant(0) :Int
+%c1   = Constant(1) :Int
+%c2   = Constant(2) :Int
+%c3   = Constant(3) :Int
+%arr  = ArrayLiteral(%c1, %c2, %c3) :Array
+%mem  = MemStart()
+%lval = Subscript(%arr, %c0) :Int
+%v9   = Constant(9) :Int
+%v8   = Constant(8) :Int
+%oif  = If(%start, %c0)
+%oproj0 = Proj(%oif, index: 0)
+%oproj1 = Proj(%oif, index: 1)
+%iif  = If(%oproj0, %c1)
+%iproj0 = Proj(%iif, index: 0)
+%iproj1 = Proj(%iif, index: 1)
+%st9  = Assign(%lval, %v9) :Int
+%st8  = Assign(%lval, %v8) :Int
+%iregion = Region(%st9, %st8)
+%imphi = Phi(%st9, %st8, region: %iregion, predecessors: [%iproj0, %iproj1])
+%oregion = Region(%oproj1, %iregion)
+%omphi = Phi(%mem, %imphi, region: %oregion, predecessors: [%oproj1, %oproj0])
+%rd   = Subscript(%arr, %c0, %omphi) :Int
+%inphi = Phi(%c1, %c2, region: %iregion, predecessors: [%iproj0, %iproj1]) :Int
+%onphi = Phi(%c0, %inphi, region: %oregion, predecessors: [%oproj1, %oproj0]) :Int
+return %rd
+branch_control: %iproj0 -> %st9
+branch_control: %iproj1 -> %st8
+control: %oregion -> %rd
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [35], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: "a0="}, ~, ~, Str], # 1
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 3
+  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 4
+  [ArrayLiteral, {sigil: "@", symbol: a}, [2, 3, 4], ~, Array], # 5
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 6
+  [MemStart], # 7
+  [Subscript, ~, [5, 6], ~, Int], # 8
+  [Constant, {const_type: integer, value: "9"}, ~, ~, Int], # 9
+  [If, ~, [0, 6], 0], # 10
+  [Proj, {index: 0}, [10]], # 11
+  [If, ~, [11, 2], 11], # 12
+  [Proj, {index: 0}, [12]], # 13
+  [Assign, ~, [8, 9], 13, Int], # 14
+  [Constant, {const_type: integer, value: "8"}, ~, ~, Int], # 15
+  [Proj, {index: 1}, [12]], # 16
+  [Assign, ~, [8, 15], 16, Int], # 17
+  [Region, {head: 12}, [14, 17]], # 18
+  [Phi, {predecessors: [13, 16], region: 18}, [14, 17], ~, Int], # 19
+  [Proj, {index: 1}, [10]], # 20
+  [Region, {head: 10}, [20, 18]], # 21
+  [Phi, {predecessors: [20, 11], region: 21}, [7, 19], ~, Unknown], # 22
+  [Subscript, ~, [5, 6, 22], ~, Scalar], # 23
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [23], ~, Str], # 24
+  [Concat, ~, [1, 24], ~, Str], # 25
+  [Constant, {const_type: string, value: " n="}, ~, ~, Str], # 26
+  [Concat, ~, [25, 26], ~, Str], # 27
+  [Phi, {predecessors: [13, 16], region: 18}, [2, 3], ~, Int], # 28
+  [Phi, {predecessors: [20, 11], region: 21}, [6, 28], ~, Int], # 29
+  [Coerce, {from_repr: Int, to_repr: Str}, [29], ~, Str], # 30
+  [Concat, ~, [27, 30], ~, Str], # 31
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 32
+  [Concat, ~, [31, 32], ~, Str], # 33
+  [Print, ~, [33], 21, Scalar], # 34
+  [Return, ~, [34], 34]]} # 35
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```

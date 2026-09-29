@@ -1,0 +1,2015 @@
+# Variables
+
+Lexical variable declaration, assignment, compound assignment, and reads in
+the Chalk typed-IR model.
+
+The SSA model uses `VarDecl` for declarations, `PadAccess` for reads, and
+`Assign` for writes. `PadAccess` nodes are hash-consed by `(targ, varname,
+inputs[0])`: two `PadAccess` nodes with the same varname referencing the same
+`VarDecl` are the SAME node in the graph. The B1 stale-read guard detects
+when a cached pre-assign read would be served as a post-assign value and GAPs
+rather than MISCOMPILEing.
+
+For read-modify-write idioms (`$x += 2`, `++$x`) the internal read, the lhs
+slot, and the final return read must use DISTINCT `PadAccess` nodes. This is
+done by giving each a unique `varname` string (`$x_r` for the internal read,
+`$x_l` for the write-back lhs, `$x` for the result read). The LLVM target
+handles both `Assign` and `CompoundAssign` through the same `_lower_assign`
+code path. The named-SSA builder supports the keyword-arg form
+`CompoundAssign(%lhs, %rhs, op: "+=")` for the `op` parameter.
+
+## A1 my-decl with init and read
+
+`my $x = 1; return $x` — the simplest lexical-variable idiom. A single
+`VarDecl` initialised to `1`, a single `PadAccess` read, and a `Return`.
+The control chain threads through `%vx` so the declare happens before the
+read.
+
+```perl
+# source
+use 5.42.0;
+my $x = 1; say($x);
+```
+
+```behavior
+stdout: 1\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%one  = Constant(1) :Int
+%xn   = Constant("$x") :Str
+%vx   = VarDecl(%xn, %one) :Int
+%rx   = PadAccess(%vx, "$x") :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%rx : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [5], nodes: [
+  [Start], # 0
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
+  [Coerce, {from_repr: Int, to_repr: Str}, [1], ~, Str], # 2
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 3
+  [Print, ~, [2, 3], 0, Scalar], # 4
+  [Return, ~, [4], 4]]} # 5
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## A4 my-decl then assign
+
+`my $x; $x = 1; return $x` — a declaration with no initialiser followed by
+a plain assignment. `VarDecl` is built with one argument (the name constant
+only; no init — the builder's unary-op handler). The `Assign` stores `1`
+into the variable. The `PadAccess` reads the post-assign value.
+
+The lhs of `Assign` is a `PadAccess(%vx, "$x")` node. Because `Assign` in
+`_lower_assign` never calls `lower_value(lhs)` (it only uses `lhs` to find
+the owning `VarDecl`), the lhs `PadAccess` is never recorded as a read in
+`reads_of_var`. When the result `PadAccess` is lowered, `reads_of_var` is
+empty, no poisoning has occurred, and the updated var-table value `1` is
+served correctly.
+
+```perl
+# source
+use 5.42.0;
+my $x; $x = 1; say($x);
+```
+
+```behavior
+stdout: 1\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%xn   = Constant("$x") :Str
+%vx   = VarDecl(%xn) :Int
+%one  = Constant(1) :Int
+%lhs  = PadAccess(%vx, "$x") :Int
+%as   = Assign(%lhs, %one) :Int
+%rx   = PadAccess(%vx, "$x") :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%rx : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [5], nodes: [
+  [Start], # 0
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
+  [Coerce, {from_repr: Int, to_repr: Str}, [1], ~, Str], # 2
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 3
+  [Print, ~, [2, 3], 0, Scalar], # 4
+  [Return, ~, [4], 4]]} # 5
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## A5 field param read
+
+`field $x :param; return $x` — a class field declared with `:param`. Per
+docs/architecture/runtime-free-boundary.md field access is RF: a `feature class`
+is lexically declared, so the object is a static struct `{vtable*, fields}` and a
+field read is a known offset load — no libperl, no runtime SV slot. The MOP
+object-struct + field-offset lowering (campaign group G5) models exactly this.
+
+```perl
+# source
+use 5.42.0;
+use feature 'class';
+no warnings 'experimental::class';
+class _A5Tmp { field $x :param; method val { $x } }
+say(_A5Tmp->new(x => 42)->val);
+```
+
+```behavior
+stdout: 42\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%cls    = MOP::Class(name: "_A5Tmp")
+%mf     = MOP::Field(class: %cls, name: "x", fieldix: 0, param: true, reader: false, has_default: false, type: "Int")
+%fa     = FieldAccess(field_index: 0, field_stash: "_A5Tmp") :Int
+%mi     = MOP::Method(class: %cls, name: "val", body: %fa, return_repr: "Int")
+%v42    = Constant(42) :Int
+%new    = Call(%v42, dispatch_kind: "method", name: "new", class: "_A5Tmp", param_names: "x") :Object
+%result = Call(%new, dispatch_kind: "method", name: "val", class: "_A5Tmp") :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%result : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+_A5Tmp::val: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [FieldAccess, {field_index: 0, field_stash: _A5Tmp}, ~, ~, Unknown], # 1
+  [Return, ~, [1], 0]]} # 2
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [7], nodes: [
+  [Start], # 0
+  [Constant, {const_type: integer, value: "42"}, ~, ~, Int], # 1
+  [Call, {class_name: _A5Tmp, dispatch_kind: method, name: new, param_names: [x]}, [1], 0, Object], # 2
+  [Call, {class_name: _A5Tmp, dispatch_kind: method, name: val, param_names: []}, [2], 2, Unknown], # 3
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
+  [Print, ~, [4, 5], 3, Scalar], # 6
+  [Return, ~, [6], 6]]} # 7
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 3": {start: 0, returns: [7], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: feature}, ~, ~, Str], # 1
+  [Constant, {const_type: string, value: class}, ~, ~, Str], # 2
+  [Constant, {const_type: string, value: feature.pm}, ~, ~, Str], # 3
+  [MemStart], # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
+  [Call, {class_name: feature, dispatch_kind: method, name: import, param_names: []}, [1, 2], 5, Unknown], # 6
+  [Return, ~, [6], 6]]} # 7
+"BEGIN 4": {start: 0, returns: [7], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: warnings}, ~, ~, Str], # 1
+  [Constant, {const_type: string, value: experimental::class}, ~, ~, Str], # 2
+  [Constant, {const_type: string, value: warnings.pm}, ~, ~, Str], # 3
+  [MemStart], # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
+  [Call, {class_name: warnings, dispatch_kind: method, name: unimport, param_names: []}, [1, 2], 5, Unknown], # 6
+  [Return, ~, [6], 6]]} # 7
+```
+
+## C1 reassign then read
+
+`my $x = 1; $x = 2; return $x` — a declaration initialised to `1`, followed
+by a plain reassignment to `2`, with a single read of the final value.
+
+The IR is a Sea-of-Nodes SSA graph, and dead-store elimination is IMPLICIT in
+its construction: a pad slot is modelled as an immutable value binding at each
+program point, so the reassignment `$x = 2` simply rebinds the slot to
+`Constant(2)`, and the sole read observes that binding. The init `1` is never
+observed by any read (no read-before-reassign, no read-through-copy), so it is
+not reachable from the Return and does not appear in the graph — the SSA graph
+IS `Constant(2)`. This is not an optimization applied to a fuller graph; it is
+what the SSA construction produces. (Contrast the read-before-reassign case
+`my $x = 1; my $y = $x; $x = 2; $y`, where the copy binds `$y` to the live
+value `1` at that point, so THAT graph correctly returns `Constant(1)` — SSA
+captures the distinction; the init is dead here only because it is genuinely
+never read.)
+
+```perl
+# source
+use 5.42.0;
+my $x = 1; $x = 2; say($x);
+```
+
+```behavior
+stdout: 2\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%two  = Constant(2) :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%two : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [5], nodes: [
+  [Start], # 0
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 1
+  [Coerce, {from_repr: Int, to_repr: Str}, [1], ~, Str], # 2
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 3
+  [Print, ~, [2, 3], 0, Scalar], # 4
+  [Return, ~, [4], 4]]} # 5
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## C2 compound assign then read
+
+`my $x = 1; $x += 2; return $x` — a declaration followed by a compound
+assignment. `$x += 2` is a read-modify-write (RMW): read the current value
+of `$x`, add `2`, write the result back to `$x`.
+
+RMW requires three distinct `PadAccess` nodes to avoid the B1 stale-read
+guard: the internal read (`$x_r`, for the Add input), the lhs write-back slot
+(`$x_l`, for the CompoundAssign lhs), and the result read (`$x`, for the Return).
+Using distinct varnames gives each a unique content hash, so they are
+separate nodes in the graph and no poisoning occurs.
+
+The compound assignment is modelled with `CompoundAssign(op: "+=")` — the
+accurate node for `$x += 2`. The `op` keyword arg distinguishes it from plain
+`Assign` and distinguishes different compound operators from each other.
+
+```perl
+# source
+use 5.42.0;
+my $x = 1; $x += 2; say($x);
+```
+
+```behavior
+stdout: 3\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%one   = Constant(1) :Int
+%xname = Constant("$x") :Str
+%vx    = VarDecl(%xname, %one) :Int
+%two   = Constant(2) :Int
+%read  = PadAccess(%vx, "$x_r") :Int
+%sum   = Add(%read, %two) :Int
+%lhs   = PadAccess(%vx, "$x_l") :Int
+%ca    = CompoundAssign(%lhs, %sum, op: "+=") :Int
+%rx    = PadAccess(%vx, "$x") :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%rx : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [7], nodes: [
+  [Start], # 0
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 2
+  [Add, ~, [1, 2], ~, Int], # 3
+  [Coerce, {from_repr: Int, to_repr: Str}, [3], ~, Str], # 4
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
+  [Print, ~, [4, 5], 0, Scalar], # 6
+  [Return, ~, [6], 6]]} # 7
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## A6 shift from a lexical array
+
+`my @q = (1,2,3); shift @q` removes and returns the FIRST element (1). `shift`
+mutates the array in place: it advances the array header's element pointer by
+one slot and decrements its length (an O(1) front-drop), so a later whole-array
+read observes the drained array. The mutation is modelled as a memory statement
+effect — the `Call(builtin shift)` leads with control, takes the array and the
+current memory, and produces the new memory version — so it is ordered on the
+effect chain (not orphaned) and its result is stamped with the array's element
+type.
+
+```perl
+# source
+use 5.42.0;
+my @q = (1, 2, 3);
+say(shift @q);
+```
+
+```behavior
+stdout: 1\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%c1    = Constant(1) :Int
+%c2    = Constant(2) :Int
+%c3    = Constant(3) :Int
+%arr   = ArrayLiteral(%c1, %c2, %c3) :Array
+%mem   = MemStart()
+%sh    = Call(%arr, %mem, dispatch_kind: "builtin", name: "shift") :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%sh : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [10], nodes: [
+  [Start], # 0
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 2
+  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 3
+  [ArrayLiteral, {sigil: "@", symbol: q}, [1, 2, 3], ~, Array], # 4
+  [MemStart], # 5
+  [Call, {dispatch_kind: builtin, name: shift, param_names: []}, [4, 5], 0, Int], # 6
+  [Coerce, {from_repr: Int, to_repr: Str}, [6], ~, Str], # 7
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
+  [Print, ~, [7, 8], 6, Scalar], # 9
+  [Return, ~, [9], 9]]} # 10
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## A7 pop from a lexical array
+
+`my @q = (5,6); pop @q` removes and returns the LAST element (6), decrementing
+the array's length. Like `shift`, it is a stamped memory statement effect.
+
+```perl
+# source
+use 5.42.0;
+my @q = (5, 6);
+say(pop @q);
+```
+
+```behavior
+stdout: 6\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%c5    = Constant(5) :Int
+%c6    = Constant(6) :Int
+%arr   = ArrayLiteral(%c5, %c6) :Array
+%mem   = MemStart()
+%pp    = Call(%arr, %mem, dispatch_kind: "builtin", name: "pop") :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%pp : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [9], nodes: [
+  [Start], # 0
+  [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 1
+  [Constant, {const_type: integer, value: "6"}, ~, ~, Int], # 2
+  [ArrayLiteral, {sigil: "@", symbol: q}, [1, 2], ~, Array], # 3
+  [MemStart], # 4
+  [Call, {dispatch_kind: builtin, name: pop, param_names: []}, [3, 4], 0, Int], # 5
+  [Coerce, {from_repr: Int, to_repr: Str}, [5], ~, Str], # 6
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 7
+  [Print, ~, [6, 7], 5, Scalar], # 8
+  [Return, ~, [8], 8]]} # 9
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## A8 constant range literal expands to all its elements
+
+`my @q = (1..4)` constant-folds (in perl) to a single `const[AV]` holding the
+four elements. The producer must expand that folded AV into a full 4-element
+`ArrayRef`, not read only its first element (which built a 1-element array, so
+`scalar @q` returned 1 — a silent miscompile). With the AV expanded, `scalar @q`
+counts all four.
+
+```perl
+# source
+use 5.42.0;
+my @q = (1..4);
+say(scalar @q);
+```
+
+```behavior
+stdout: 4\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%c1    = Constant(1) :Int
+%c2    = Constant(2) :Int
+%c3    = Constant(3) :Int
+%c4    = Constant(4) :Int
+%arr   = ArrayLiteral(%c1, %c2, %c3, %c4) :Array
+%len   = Count(%arr) :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%len : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [12], nodes: [
+  [Start], # 0
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 2
+  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 3
+  [Constant, {const_type: integer, value: "4"}, ~, ~, Int], # 4
+  [ArrayLiteral, ~, [1, 2, 3, 4], ~, Array], # 5
+  [MemStart], # 6
+  [PostfixDeref, {sigil: "@"}, [5, 6], ~, Array], # 7
+  [Count, ~, [7, 6], ~, Int], # 8
+  [Coerce, {from_repr: Int, to_repr: Str}, [8], ~, Str], # 9
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
+  [Print, ~, [9, 10], 0, Scalar], # 11
+  [Return, ~, [11], 11]]} # 12
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## A9 list-copy flattens the source array
+
+`my @b = @a` copies @a's ELEMENTS into @b (a list-context assignment), so
+`scalar @b` is @a's length, not 1. The producer currently wraps the source
+aggregate as a single element (ArrayLiteral(ArrayLiteral(...))) so `scalar @b` returns 1
+-- a silent miscompile of the same list-flattening class as A8's `(1..4)`. The
+target: an array variable read in the list-context RHS of a list assignment
+flattens to its elements.
+
+```perl
+# source
+use 5.42.0;
+my @a = (1, 2, 3);
+my @b = @a;
+say(scalar @b);
+```
+
+```behavior
+stdout: 3\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%c1    = Constant(1) :Int
+%c2    = Constant(2) :Int
+%c3    = Constant(3) :Int
+%arr   = ArrayLiteral(%c1, %c2, %c3) :Array
+%len   = Count(%arr) :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%len : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [10], nodes: [
+  [Start], # 0
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 2
+  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 3
+  [ArrayLiteral, {sigil: "@", symbol: b}, [1, 2, 3], ~, Array], # 4
+  [MemStart], # 5
+  [Count, ~, [4, 5], ~, Int], # 6
+  [Coerce, {from_repr: Int, to_repr: Str}, [6], ~, Str], # 7
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
+  [Print, ~, [7, 8], 0, Scalar], # 9
+  [Return, ~, [9], 9], # 10
+  [ArrayLiteral, {sigil: "@", symbol: a}, [1, 2, 3], ~, Array]]} # 11
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## A10 list literal flattens an interpolated array
+
+`my @b = (@a, 4)` builds a list that FLATTENS @a's elements and appends the
+scalar, so @b is (1, 2, 3, 4) and `scalar @b` is 4. The producer currently counts
+the array as one element (returning 2 for `(@a, 4)`) -- the list-flattening gap
+applied to an array embedded in a list literal.
+
+```perl
+# source
+use 5.42.0;
+my @a = (1, 2, 3);
+my @b = (@a, 4);
+say(scalar @b);
+```
+
+```behavior
+stdout: 4\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%c1    = Constant(1) :Int
+%c2    = Constant(2) :Int
+%c3    = Constant(3) :Int
+%c4    = Constant(4) :Int
+%arr   = ArrayLiteral(%c1, %c2, %c3, %c4) :Array
+%len   = Count(%arr) :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%len : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [11], nodes: [
+  [Start], # 0
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 2
+  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 3
+  [Constant, {const_type: integer, value: "4"}, ~, ~, Int], # 4
+  [ArrayLiteral, {sigil: "@", symbol: b}, [1, 2, 3, 4], ~, Array], # 5
+  [MemStart], # 6
+  [Count, ~, [5, 6], ~, Int], # 7
+  [Coerce, {from_repr: Int, to_repr: Str}, [7], ~, Str], # 8
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
+  [Print, ~, [8, 9], 0, Scalar], # 10
+  [Return, ~, [10], 10], # 11
+  [ArrayLiteral, {sigil: "@", symbol: a}, [1, 2, 3], ~, Array]]} # 12
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## A11 list literal flattens two arrays
+
+`my @c = (@a, @b)` flattens BOTH arrays into @c, so with @a = (1, 2) and
+@b = (3, 4), @c is (1, 2, 3, 4) and `scalar @c` is 4 (the producer currently
+returns 2). Multi-array flatten is the general form of A9/A10.
+
+```perl
+# source
+use 5.42.0;
+my @a = (1, 2);
+my @b = (3, 4);
+my @c = (@a, @b);
+say(scalar @c);
+```
+
+```behavior
+stdout: 4\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%c1    = Constant(1) :Int
+%c2    = Constant(2) :Int
+%c3    = Constant(3) :Int
+%c4    = Constant(4) :Int
+%arr   = ArrayLiteral(%c1, %c2, %c3, %c4) :Array
+%len   = Count(%arr) :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%len : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [11], nodes: [
+  [Start], # 0
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 2
+  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 3
+  [Constant, {const_type: integer, value: "4"}, ~, ~, Int], # 4
+  [ArrayLiteral, {sigil: "@", symbol: c}, [1, 2, 3, 4], ~, Array], # 5
+  [MemStart], # 6
+  [Count, ~, [5, 6], ~, Int], # 7
+  [Coerce, {from_repr: Int, to_repr: Str}, [7], ~, Str], # 8
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
+  [Print, ~, [8, 9], 0, Scalar], # 10
+  [Return, ~, [10], 10], # 11
+  [ArrayLiteral, {sigil: "@", symbol: a}, [1, 2], ~, Array], # 12
+  [ArrayLiteral, {sigil: "@", symbol: b}, [3, 4], ~, Array]]} # 13
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## A12 list-copy flattens an array-ref variable deref
+
+`my @b = @$r` derefs an arrayref VARIABLE in list context, so with
+`$r = [1, 2, 3]` @b is (1, 2, 3) and `scalar @b` is 3. The producer flattened
+only a const-range rv2av (A8) and a bare padav (A9-A11); an rv2av over a padsv
+bound to a literal ArrayRef wrapped the single ref as ONE element, so
+`scalar @b` returned 1 (a silent miscompile). The rv2av-flatten path now also
+fires over a padsv kid in list context. A `@$r` over a RUNTIME ref (not a
+literal ArrayRef node) stays a loud producer GAP. zhi 019f5e42.
+
+```perl
+# source
+use 5.42.0;
+my $r = [1, 2, 3];
+my @b = @$r;
+say(scalar @b);
+```
+
+```behavior
+stdout: 3\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%c1    = Constant(1) :Int
+%c2    = Constant(2) :Int
+%c3    = Constant(3) :Int
+%arr   = ArrayLiteral(%c1, %c2, %c3) :Array
+%len   = Count(%arr) :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%len : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [11], nodes: [
+  [Start], # 0
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 2
+  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 3
+  [ArrayLiteral, ~, [1, 2, 3], ~, ArrayRef], # 4
+  [MemStart], # 5
+  [PostfixDeref, {sigil: "@"}, [4, 5], ~, Array], # 6
+  [Count, ~, [6, 5], ~, Int], # 7
+  [Coerce, {from_repr: Int, to_repr: Str}, [7], ~, Str], # 8
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
+  [Print, ~, [8, 9], 0, Scalar], # 10
+  [Return, ~, [10], 10]]} # 11
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## A13 push onto a lexical array grows it
+
+`push @b, 3` appends to @b, so with @b = (1, 2) the result is (1, 2, 3) and
+`scalar @b` is 3. push/unshift GROW the array, but unlike shift/pop (which are
+memory-SSA modeled -- the Call becomes the new memory version) the growing
+mutation is not threaded onto @b's memory version, so a later `scalar @b` reads
+the PRE-push binding and returns 2 -- a silent miscompile. The producer now
+GAPs push/unshift loudly. Flip to `L: GREEN` when the growing mutation is
+memory-modeled like shift/pop. zhi 019f5e42.
+
+```perl
+# source
+my @a = (1, 2);
+my @b = @a;
+push @b, 3;
+scalar @b
+```
+
+```behavior
+return: 3
+context: scalar
+```
+
+```ir
+%c1    = Constant(1) :Int
+%c2    = Constant(2) :Int
+%c3    = Constant(3) :Int
+%arr   = ArrayLiteral(%c1, %c2, %c3) :ArrayRef
+%len   = Length(%arr) :Int
+return %len
+L: GAP(push/unshift array-growing mutation not memory-modeled: new length not observed by a later read)
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [8], nodes: [
+  [Start], # 0
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 2
+  [ArrayLiteral, {sigil: "@", symbol: b}, [1, 2], ~, Array], # 3
+  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 4
+  [MemStart], # 5
+  [Call, {dispatch_kind: builtin, name: push, param_names: []}, [3, 4, 5], 0, Int], # 6
+  [Count, ~, [3, 6], ~, Int], # 7
+  [Return, ~, [7], 6], # 8
+  [ArrayLiteral, {sigil: "@", symbol: a}, [1, 2], ~, Array]]} # 9
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## A14 splice shrinks a lexical array
+
+`splice(@a, 1, 1)` removes one element, so with @a = (1, 2, 3) the result is
+(1, 3) and `scalar @a` is 2. splice mutates array length like push/unshift, and
+like them the mutation is not memory-modeled (only shift/pop are memory-SSA
+modeled), so a later `scalar @a` reads the PRE-splice binding and returns 3 -- a
+silent miscompile. The producer now GAPs splice loudly. Flip to `L: GREEN` when
+the length mutation is memory-modeled like shift/pop. zhi 019f5ed3.
+
+```perl
+# source
+my @a = (1, 2, 3);
+splice(@a, 1, 1);
+scalar @a
+```
+
+```behavior
+return: 2
+context: scalar
+```
+
+```ir
+%c1    = Constant(1) :Int
+%c3    = Constant(3) :Int
+%arr   = ArrayLiteral(%c1, %c3) :ArrayRef
+%len   = Length(%arr) :Int
+return %len
+L: GAP(splice array length mutation not memory-modeled: new length not observed by a later read)
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [8], nodes: [
+  [Start], # 0
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 2
+  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 3
+  [ArrayLiteral, {sigil: "@", symbol: a}, [1, 2, 3], ~, Array], # 4
+  [MemStart], # 5
+  [Call, {dispatch_kind: builtin, name: splice, param_names: []}, [4, 1, 1, 5], 0, Unknown], # 6
+  [Count, ~, [4, 6], ~, Int], # 7
+  [Return, ~, [7], 6]]} # 8
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## A15 deref of a runtime array-ref GAPs
+
+`my $r = \@a; my @b = @$r` derefs a RUNTIME array-ref -- $r is bound to a
+Reference node (`\@a`), not a literal ArrayRef, so its elements are not known at
+compile time and cannot be statically flattened (unlike A12, where $r is a
+literal `[1,2,3]`). Leaving the single ref as one element would make `scalar @b`
+return 1 (a silent miscompile); the producer GAPs it loudly instead. Flip to
+`L: GREEN` when a runtime array-ref deref is lowered (a real deref + copy).
+zhi 019f5e42.
+
+```perl
+# source
+my @a = (1, 2, 3);
+my $r = \@a;
+my @b = @$r;
+scalar @b
+```
+
+```behavior
+return: 3
+context: scalar
+```
+
+```ir
+%c1    = Constant(1) :Int
+%c2    = Constant(2) :Int
+%c3    = Constant(3) :Int
+%arr   = ArrayLiteral(%c1, %c2, %c3) :ArrayRef
+%len   = Length(%arr) :Int
+return %len
+L: GAP(deref of a runtime array-ref: elements not statically known, needs a real deref+copy)
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [9], nodes: [
+  [Start], # 0
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 2
+  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 3
+  [ArrayLiteral, {sigil: "@", symbol: a}, [1, 2, 3], ~, Array], # 4
+  [Ref, ~, [4], ~, ArrayRef], # 5
+  [MemStart], # 6
+  [PostfixDeref, {sigil: "@"}, [5, 6], ~, Array], # 7
+  [Count, ~, [7, 6], ~, Int], # 8
+  [Return, ~, [8], 0]]} # 9
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## A16 package variable read (our $g) — t/ blocker: StashAccess
+
+A package/global variable (`our $g = 5; $g`) models the stash slot as a
+module-level LLVM global `@pkg_main_g` (an `i64` slot). The `our $g = 5` store is
+a statement effect: an `Assign(StashAccess-lvalue, value)` threaded onto the
+control chain that lowers to `store i64 5, i64* @pkg_main_g`. The `$g` read is a
+`StashAccess` load (`load i64, i64* @pkg_main_g`) — a mutable-location read, so it
+re-lowers at every use and observes the post-store value. t/ files use package
+vars.
+
+Under package-scalar SSA the variable itself does not appear in the graph: an
+assignment is a DEFINITION, so later reads resolve to the bound value and a
+constant-valued binding folds. The BEHAVIOR leg is what pins this case — the
+returned value is only correct if the binding was updated at each definition.
+
+```perl
+# source
+use 5.42.0;
+our $g = 5;
+say($g);
+```
+
+```behavior
+stdout: 5\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%c = Constant(5) :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%c : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [9], nodes: [
+  [Start], # 0
+  [EntryDef, {package: main, sigil: $, symbol: g}, ~, ~, Scalar], # 1
+  [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 2
+  [MemStart], # 3
+  [EntryWrite, ~, [1, 2, 3], 0, Unknown], # 4
+  [EntryDef, {package: main, sigil: $, symbol: g}, [4], ~, Int], # 5
+  [Coerce, {from_repr: Int, to_repr: Str}, [5], ~, Str], # 6
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 7
+  [Print, ~, [6, 7], 4, Scalar], # 8
+  [Return, ~, [8], 8]]} # 9
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## A17 two distinct package globals — no aliasing
+
+`our $g = 5; our $h = 7; $g + $h` proves two package scalars are DISTINCT
+module-level slots (`@pkg_main_g` and `@pkg_main_h`), not one aliased cell: the
+sum is 12, not 14 (which a single shared slot would yield). Each store threads
+onto the control chain; the reads load their own slot.
+
+Under package-scalar SSA the variable itself does not appear in the graph: an
+assignment is a DEFINITION, so later reads resolve to the bound value and a
+constant-valued binding folds. The BEHAVIOR leg is what pins this case — the
+returned value is only correct if the binding was updated at each definition.
+
+```perl
+# source
+use 5.42.0;
+our $g = 5;
+our $h = 7;
+say($g + $h);
+```
+
+```behavior
+stdout: 12\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%g   = Constant(5) :Int
+%h   = Constant(7) :Int
+%sum = Add(%g, %h) :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%sum : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [14], nodes: [
+  [Start], # 0
+  [EntryDef, {package: main, sigil: $, symbol: h}, ~, ~, Scalar], # 1
+  [Constant, {const_type: integer, value: "7"}, ~, ~, Int], # 2
+  [EntryDef, {package: main, sigil: $, symbol: g}, ~, ~, Scalar], # 3
+  [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 4
+  [MemStart], # 5
+  [EntryWrite, ~, [3, 4, 5], 0, Unknown], # 6
+  [EntryWrite, ~, [1, 2, 6], 6, Unknown], # 7
+  [EntryDef, {package: main, sigil: $, symbol: g}, [7], ~, Int], # 8
+  [EntryDef, {package: main, sigil: $, symbol: h}, [7], ~, Int], # 9
+  [Add, ~, [8, 9], ~, Int], # 10
+  [Coerce, {from_repr: Int, to_repr: Str}, [10], ~, Str], # 11
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 12
+  [Print, ~, [11, 12], 7, Scalar], # 13
+  [Return, ~, [13], 13]]} # 14
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## A18 read-modify-write a package global
+
+`our $g = 5; $g = $g + 1; $g` re-stores into the SAME slot: the second store
+reads the post-init value (5), adds 1, and writes 6 back. The final read observes
+the re-stored value. This exercises store + read + re-store against one
+`@pkg_main_g` slot (the mutable-read model must NOT serve a cached pre-store read).
+
+Under package-scalar SSA the variable itself does not appear in the graph: an
+assignment is a DEFINITION, so later reads resolve to the bound value and a
+constant-valued binding folds. The BEHAVIOR leg is what pins this case — the
+returned value is only correct if the binding was updated at each definition.
+
+```perl
+# source
+use 5.42.0;
+our $g = 5;
+$g = $g + 1;
+say($g);
+```
+
+```behavior
+stdout: 6\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%g   = Constant(5) :Int
+%one = Constant(1) :Int
+%new = Add(%g, %one) :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%new : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [13], nodes: [
+  [Start], # 0
+  [EntryDef, {package: main, sigil: $, symbol: g}, ~, ~, Scalar], # 1
+  [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 2
+  [MemStart], # 3
+  [EntryWrite, ~, [1, 2, 3], 0, Unknown], # 4
+  [EntryDef, {package: main, sigil: $, symbol: g}, [4], ~, Int], # 5
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 6
+  [Add, ~, [5, 6], ~, Int], # 7
+  [EntryWrite, ~, [1, 7, 4], 4, Unknown], # 8
+  [EntryDef, {package: main, sigil: $, symbol: g}, [8], ~, Int], # 9
+  [Coerce, {from_repr: Int, to_repr: Str}, [9], ~, Str], # 10
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 11
+  [Print, ~, [10, 11], 8, Scalar], # 12
+  [Return, ~, [12], 12]]} # 13
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## A19 package variable holding a string (our $g = "str")
+
+A package/global scalar can hold a STRING, not just an Int (`our $g = "hi"; $g`).
+A Str value is a `(ptr, len)` pair in this backend, so a Str package scalar is
+modeled as TWO mutable module-level slots — `@pkg_main_g_ptr` (`i8*`) and
+`@pkg_main_g_len` (`i64`) — not the single `i64` slot an Int global uses. The
+`our $g = "hi"` store writes both slots (the string-constant pointer and its byte
+length); the `$g` read loads both and re-registers the loaded ptr in the length
+table so a downstream print/return slices exactly `len` bytes. The producer stamps
+the StashAccess with the RHS value's repr (Str here), not a hardcoded Int — the
+store lvalue and the read hash-cons to one node, so the read inherits the Str repr.
+This is the t/base blocker for cond.t / if.t / pat.t (package string globals).
+
+Under package-scalar SSA the variable itself does not appear in the graph: an
+assignment is a DEFINITION, so later reads resolve to the bound value and a
+constant-valued binding folds. The BEHAVIOR leg is what pins this case — the
+returned value is only correct if the binding was updated at each definition.
+
+```perl
+# source
+use 5.42.0;
+our $g = "hi";
+say($g);
+```
+
+```behavior
+stdout: hi\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%c = Constant("hi") :Str
+%nl = Constant("\n") :Str
+%p  = Print(%c, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [8], nodes: [
+  [Start], # 0
+  [EntryDef, {package: main, sigil: $, symbol: g}, ~, ~, Scalar], # 1
+  [Constant, {const_type: string, value: hi}, ~, ~, Str], # 2
+  [MemStart], # 3
+  [EntryWrite, ~, [1, 2, 3], 0, Unknown], # 4
+  [EntryDef, {package: main, sigil: $, symbol: g}, [4], ~, Str], # 5
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 6
+  [Print, ~, [5, 6], 4, Scalar], # 7
+  [Return, ~, [7], 7]]} # 8
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## A20 reassign a string package global reads the new value
+
+`our $g = "hi"; $g = "bye"; $g` re-stores a DIFFERENT string into the same two
+slots. The final read must observe the re-stored `(ptr, len)` — "bye" (len 3), not
+"hi" (len 2) — proving the Str package global is a genuine mutable location (both
+slots re-written on the second store), not a cached pre-store read. Bilateral with
+A18 (the Int RMW): A18 re-stores an Int into one slot; A20 re-stores a Str across
+two slots, and the differing lengths (2 vs 3) make a stale-read miscompile visible.
+
+Under package-scalar SSA the variable itself does not appear in the graph: an
+assignment is a DEFINITION, so later reads resolve to the bound value and a
+constant-valued binding folds. The BEHAVIOR leg is what pins this case — the
+returned value is only correct if the binding was updated at each definition.
+
+```perl
+# source
+use 5.42.0;
+our $g = "hi";
+$g = "bye";
+say($g);
+```
+
+```behavior
+stdout: bye\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%c = Constant("bye") :Str
+%nl = Constant("\n") :Str
+%p  = Print(%c, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [10], nodes: [
+  [Start], # 0
+  [EntryDef, {package: main, sigil: $, symbol: g}, ~, ~, Scalar], # 1
+  [Constant, {const_type: string, value: bye}, ~, ~, Str], # 2
+  [Constant, {const_type: string, value: hi}, ~, ~, Str], # 3
+  [MemStart], # 4
+  [EntryWrite, ~, [1, 3, 4], 0, Unknown], # 5
+  [EntryWrite, ~, [1, 2, 5], 5, Unknown], # 6
+  [EntryDef, {package: main, sigil: $, symbol: g}, [6], ~, Str], # 7
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
+  [Print, ~, [7, 8], 6, Scalar], # 9
+  [Return, ~, [9], 9]]} # 10
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## A21 package variable holding a float (our $g = 0.5)
+
+A package/global scalar can hold a Num, not just an Int or a Str. A Num value is
+a `double`, so a Num package scalar is one mutable module-level slot
+`@pkg_main_g_num` (`double`, zero-init) — the float analogue of the Int `i64`
+slot, and a THIRD slot kind alongside A19's two-slot Str pair. It needs its own
+global rather than reusing the Int `i64`: storing a double through an i64 slot
+would either truncate or force a bitcast at every access, and the read side
+would have no way to tell which face the bits currently hold.
+
+The producer stamps the StashAccess with the RHS repr (A19's rule), so the store
+lvalue and the read hash-cons to one node and the read inherits Num.
+
+This case deliberately avoids printing the float. Rendering a Num as a string to
+perl's exact precision is dtoa — a separate subsystem — so the value is observed
+through arithmetic and comparison, which the backend already lowers (`fadd`,
+`fcmp`). `t/base/num.t` needs BOTH this slot and that formatting.
+
+Under package-scalar SSA the variable itself does not appear in the graph: an
+assignment is a DEFINITION, so later reads resolve to the bound value and a
+constant-valued binding folds. The BEHAVIOR leg is what pins this case — the
+returned value is only correct if the binding was updated at each definition.
+
+```perl
+# source
+use 5.42.0;
+our $a = 0.5;
+say(($a + 0.5) == 1 ? 1 : 0);
+```
+
+```behavior
+stdout: 1\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%half   = Constant(0.5) :Num
+%sum    = Add(%half, %half) :Num
+%one    = Constant(1) :Int
+%eq     = NumEq(%sum, %one) :Boolean
+%zero   = Constant(0) :Int
+%result = TernaryExpr(%eq, %one, %zero) :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%result : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [14], nodes: [
+  [Start], # 0
+  [EntryDef, {package: main, sigil: $, symbol: a}, ~, ~, Scalar], # 1
+  [Constant, {const_type: number, value: "0.5"}, ~, ~, Num], # 2
+  [MemStart], # 3
+  [EntryWrite, ~, [1, 2, 3], 0, Unknown], # 4
+  [EntryDef, {package: main, sigil: $, symbol: a}, [4], ~, Num], # 5
+  [Add, ~, [5, 2], ~, Num], # 6
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 7
+  [NumEq, ~, [6, 7], ~, Boolean], # 8
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 9
+  [TernaryExpr, ~, [8, 7, 9], ~, Int], # 10
+  [Coerce, {from_repr: Int, to_repr: Str}, [10], ~, Str], # 11
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 12
+  [Print, ~, [11, 12], 4, Scalar], # 13
+  [Return, ~, [13], 13]]} # 14
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## A21b the Num package slot holds the value that was stored (bilateral)
+
+A21's partner: the same program with only the STORED value changed, so the same
+comparison must now be false. Without this, A21 passes against a slot that
+always reads back some fixed value — including the 0.0 an unwritten slot holds,
+which `0.0 + 0.5 == 1` would reject, but a slot stuck at 0.5 would not.
+
+Under package-scalar SSA the variable itself does not appear in the graph: an
+assignment is a DEFINITION, so later reads resolve to the bound value and a
+constant-valued binding folds. The BEHAVIOR leg is what pins this case — the
+returned value is only correct if the binding was updated at each definition.
+
+```perl
+# source
+use 5.42.0;
+our $a = 0.25;
+say(($a + 0.5) == 1 ? 1 : 0);
+```
+
+```behavior
+stdout: 0\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%a      = Constant(0.25) :Num
+%half   = Constant(0.5) :Num
+%sum    = Add(%a, %half) :Num
+%one    = Constant(1) :Int
+%eq     = NumEq(%sum, %one) :Boolean
+%zero   = Constant(0) :Int
+%result = TernaryExpr(%eq, %one, %zero) :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%result : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [15], nodes: [
+  [Start], # 0
+  [EntryDef, {package: main, sigil: $, symbol: a}, ~, ~, Scalar], # 1
+  [Constant, {const_type: number, value: "0.25"}, ~, ~, Num], # 2
+  [MemStart], # 3
+  [EntryWrite, ~, [1, 2, 3], 0, Unknown], # 4
+  [EntryDef, {package: main, sigil: $, symbol: a}, [4], ~, Num], # 5
+  [Constant, {const_type: number, value: "0.5"}, ~, ~, Num], # 6
+  [Add, ~, [5, 6], ~, Num], # 7
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 8
+  [NumEq, ~, [7, 8], ~, Boolean], # 9
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 10
+  [TernaryExpr, ~, [9, 8, 10], ~, Int], # 11
+  [Coerce, {from_repr: Int, to_repr: Str}, [11], ~, Str], # 12
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 13
+  [Print, ~, [12, 13], 4, Scalar], # 14
+  [Return, ~, [14], 14]]} # 15
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## A21c a Num package scalar reassigned reads the NEW value
+
+The slot is mutable: a second store must be what the read observes. Mirrors A20
+(the Str reassign case) for the double slot.
+
+Under package-scalar SSA the variable itself does not appear in the graph: an
+assignment is a DEFINITION, so later reads resolve to the bound value and a
+constant-valued binding folds. The BEHAVIOR leg is what pins this case — the
+returned value is only correct if the binding was updated at each definition.
+
+```perl
+# source
+use 5.42.0;
+our $a = 0.5;
+$a = 0.25;
+say(($a + 0.75) == 1 ? 1 : 0);
+```
+
+```behavior
+stdout: 1\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%a      = Constant(0.25) :Num
+%q      = Constant(0.75) :Num
+%sum    = Add(%a, %q) :Num
+%one    = Constant(1) :Int
+%eq     = NumEq(%sum, %one) :Boolean
+%zero   = Constant(0) :Int
+%result = TernaryExpr(%eq, %one, %zero) :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%result : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [17], nodes: [
+  [Start], # 0
+  [EntryDef, {package: main, sigil: $, symbol: a}, ~, ~, Scalar], # 1
+  [Constant, {const_type: number, value: "0.25"}, ~, ~, Num], # 2
+  [Constant, {const_type: number, value: "0.5"}, ~, ~, Num], # 3
+  [MemStart], # 4
+  [EntryWrite, ~, [1, 3, 4], 0, Unknown], # 5
+  [EntryWrite, ~, [1, 2, 5], 5, Unknown], # 6
+  [EntryDef, {package: main, sigil: $, symbol: a}, [6], ~, Num], # 7
+  [Constant, {const_type: number, value: "0.75"}, ~, ~, Num], # 8
+  [Add, ~, [7, 8], ~, Num], # 9
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 10
+  [NumEq, ~, [9, 10], ~, Boolean], # 11
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 12
+  [TernaryExpr, ~, [11, 10, 12], ~, Int], # 13
+  [Coerce, {from_repr: Int, to_repr: Str}, [13], ~, Str], # 14
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 15
+  [Print, ~, [14, 15], 6, Scalar], # 16
+  [Return, ~, [16], 16]]} # 17
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## A21d a Num and an Int package scalar coexist (distinct slots)
+
+The Num slot is a separate global from the Int one, so both faces must be usable
+in the same program without either clobbering the other. This also exercises a
+MIXED `Add(Num, Int)`: the repr-join widens the Add to Num and the backend
+sitofps the Int operand, which is why the TypedInvariant judges Add's operands
+against the NODE's repr through subtyping (Int <: Num) rather than demanding an
+exact match.
+
+Under package-scalar SSA the variable itself does not appear in the graph: an
+assignment is a DEFINITION, so later reads resolve to the bound value and a
+constant-valued binding folds. The BEHAVIOR leg is what pins this case — the
+returned value is only correct if the binding was updated at each definition.
+
+```perl
+# source
+use 5.42.0;
+our $a = 0.5;
+our $i = 2;
+say(($a + $i) == 2.5 ? 1 : 0);
+```
+
+```behavior
+stdout: 1\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%a      = Constant(0.5) :Num
+%i      = Constant(2) :Int
+%ic     = Coerce(%i, from_repr: "Int", to_repr: "Num") :Num
+%sum    = Add(%a, %ic) :Num
+%exp    = Constant(2.5) :Num
+%eq     = NumEq(%sum, %exp) :Boolean
+%one    = Constant(1) :Int
+%zero   = Constant(0) :Int
+%result = TernaryExpr(%eq, %one, %zero) :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%result : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [20], nodes: [
+  [Start], # 0
+  [EntryDef, {package: main, sigil: $, symbol: i}, ~, ~, Scalar], # 1
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 2
+  [EntryDef, {package: main, sigil: $, symbol: a}, ~, ~, Scalar], # 3
+  [Constant, {const_type: number, value: "0.5"}, ~, ~, Num], # 4
+  [MemStart], # 5
+  [EntryWrite, ~, [3, 4, 5], 0, Unknown], # 6
+  [EntryWrite, ~, [1, 2, 6], 6, Unknown], # 7
+  [EntryDef, {package: main, sigil: $, symbol: a}, [7], ~, Num], # 8
+  [EntryDef, {package: main, sigil: $, symbol: i}, [7], ~, Int], # 9
+  [Coerce, {from_repr: Int, to_repr: Num}, [9], ~, Num], # 10
+  [Add, ~, [8, 10], ~, Num], # 11
+  [Constant, {const_type: number, value: "2.5"}, ~, ~, Num], # 12
+  [NumEq, ~, [11, 12], ~, Boolean], # 13
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 14
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 15
+  [TernaryExpr, ~, [13, 14, 15], ~, Int], # 16
+  [Coerce, {from_repr: Int, to_repr: Str}, [16], ~, Str], # 17
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 18
+  [Print, ~, [17, 18], 7, Scalar], # 19
+  [Return, ~, [19], 19]]} # 20
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## A22 `exists` on a present key
+
+`exists $h{a}` asks whether the KEY IS PRESENT. That is a different question
+from `defined $h{a}`, which asks about its value, and the two disagree on the
+case that separates them:
+
+    my %h = (a => undef);
+    exists  $h{a}    true     the key is there
+    defined $h{a}    false    its value is not
+
+Measured on 5.42.0. The producer mapped `exists` onto `Defined` OF THE KEY --
+`Defined(Constant("zz"))` -- which is always true, so `exists $h{zz}` on an
+absent key answered "yes" where perl answers "no". A SILENT WRONG ANSWER, and
+not repairable by stamping: the operand was the key, never the slot. It now
+refuses (perl5-son ca019b3).
+
+Filed as a pair with A23 because the present-key case agrees with the broken
+mapping by coincidence -- only the absent-key case discriminates.
+
+```perl
+# source
+use 5.42.0;
+my %h = (a => 1);
+print exists $h{a} ? "yes" : "no", "\n";
+```
+
+```behavior
+stdout: yes\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+L: GAP(exists is not Defined: the producer emitted Defined(KEY), which is always true; refused at the source rather than mis-stamped)
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [11], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: a}, ~, ~, Str], # 1
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
+  [HashLiteral, {sigil: "%", symbol: h}, [1, 2], ~, Hash], # 3
+  [MemStart], # 4
+  [Exists, ~, [3, 1, 4], ~, Boolean], # 5
+  [Constant, {const_type: string, value: "yes"}, ~, ~, Str], # 6
+  [Constant, {const_type: string, value: "no"}, ~, ~, Str], # 7
+  [TernaryExpr, ~, [5, 6, 7], ~, Str], # 8
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
+  [Print, ~, [8, 9], 0, Scalar], # 10
+  [Return, ~, [10], 10]]} # 11
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## A23 `exists` on an ABSENT key (the case that discriminates)
+
+The polarity A22 cannot see. Under the old mapping this printed "yes" where
+perl prints "no" -- a wrong answer, not a refusal. A test written only against
+A22 passes on the broken producer AND the fixed one.
+
+```perl
+# source
+use 5.42.0;
+my %h = (a => 1);
+print exists $h{zz} ? "yes" : "no", "\n";
+```
+
+```behavior
+stdout: no\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+L: GAP(exists is not Defined: Defined(Constant("zz")) is always true, so this printed "yes"; refused at the source)
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [12], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: a}, ~, ~, Str], # 1
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
+  [HashLiteral, {sigil: "%", symbol: h}, [1, 2], ~, Hash], # 3
+  [Constant, {const_type: string, value: zz}, ~, ~, Str], # 4
+  [MemStart], # 5
+  [Exists, ~, [3, 4, 5], ~, Boolean], # 6
+  [Constant, {const_type: string, value: "yes"}, ~, ~, Str], # 7
+  [Constant, {const_type: string, value: "no"}, ~, ~, Str], # 8
+  [TernaryExpr, ~, [6, 7, 8], ~, Str], # 9
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
+  [Print, ~, [9, 10], 0, Scalar], # 11
+  [Return, ~, [11], 11]]} # 12
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## A24 `delete` removes a key
+
+`delete $h{a}` removes the key, so a later `keys` sees one fewer. It reached
+the wire as `Call(delete, Constant(key))` -- the key as its ONLY operand, with
+no container and no memory edge, so the removal was invisible to every later
+read. Refused on the same contract push/unshift/splice are held to (A13/A14):
+a mutation whose effect a later read cannot observe is not modelled.
+
+```perl
+# source
+use 5.42.0;
+my %h = (a => 1, b => 2);
+delete $h{a};
+print scalar(keys %h), "\n";
+```
+
+```behavior
+stdout: 1\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+L: GAP(delete hash-key mutation not memory-modeled: the removal is not observed by a later keys read)
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [12], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: a}, ~, ~, Str], # 1
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
+  [Constant, {const_type: string, value: b}, ~, ~, Str], # 3
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 4
+  [HashLiteral, {sigil: "%", symbol: h}, [1, 2, 3, 4], ~, Hash], # 5
+  [MemStart], # 6
+  [Delete, ~, [5, 1, 6], 0, Scalar], # 7
+  [Call, {dispatch_kind: builtin, name: keys, param_names: []}, [5, 7], ~, Int], # 8
+  [Coerce, {from_repr: Int, to_repr: Str}, [8], ~, Str], # 9
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
+  [Print, ~, [9, 10], 7, Scalar], # 11
+  [Return, ~, [11], 11]]} # 12
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## A25 `scalar reverse` is a STRING, not a count
+
+One producer rule covered four builtins -- keys/values/reverse/sort, "List in
+list context, Int in scalar context" -- and only the two COUNTS satisfy it.
+Measured on 5.42.0:
+
+    scalar keys %h         2       a count
+    scalar reverse "abc"   "cba"   a STRING
+    scalar reverse @a      "321"   CONCATENATES, then reverses
+    scalar reverse(10,20)  "0201"  string-reversed "1020" -- NOT 2010
+    scalar sort @a         undef   not a count either
+
+`reverse(10,20)` is the case that settles it: a numeric reading would give
+2010. The stamp is now Str (perl5-son ca019b3). The backend has no `reverse`
+lowering, so this GAPs there rather than at the wire.
+
+```perl
+# source
+use 5.42.0;
+print scalar reverse("abc"), "\n";
+```
+
+```behavior
+stdout: cba\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+L: GAP(LLVM backend: cannot lower op=Call for reverse -- no reverse lowering exists)
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [5], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: abc}, ~, ~, Str], # 1
+  [Call, {dispatch_kind: builtin, name: reverse, param_names: []}, [1], ~, Str], # 2
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 3
+  [Print, ~, [2, 3], 0, Scalar], # 4
+  [Return, ~, [4], 4]]} # 5
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## A26 `reverse` in list context
+
+The other arm of the same builtin: in list context `reverse` returns the
+reversed LIST, so `(reverse(1,2,3))[0]` is 3. Paired with A25 so the two
+contexts are pinned together -- a rule that got one right and the other wrong
+is exactly what A25 documents.
+
+```perl
+# source
+use 5.42.0;
+my @a = reverse(1, 2, 3);
+print $a[0], "\n";
+```
+
+```behavior
+stdout: 3\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+L: GAP(LLVM backend: cannot lower op=Call for reverse -- no reverse lowering exists)
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [11], nodes: [
+  [Start], # 0
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 2
+  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 3
+  [Call, {dispatch_kind: builtin, name: reverse, param_names: []}, [1, 2, 3], ~, List], # 4
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 5
+  [MemStart], # 6
+  [Subscript, ~, [4, 5, 6], ~, Scalar], # 7
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
+  [Print, ~, [8, 9], 0, Scalar], # 10
+  [Return, ~, [10], 10]]} # 11
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```

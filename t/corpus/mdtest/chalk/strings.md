@@ -1,0 +1,884 @@
+# Strings
+
+String literals, concatenation, and interpolation idioms.
+
+Str representation is `{ ptr, len, encoding }` where `encoding` is a tagged
+enum (0=ASCII/default, 1=UTF-8, 2=UTF-16, ...). The ASCII/default slice (enc=0)
+is fully lowered: S1-S4 are GREEN. A non-ASCII (non-default-encoding) case is
+explicitly asserted GAP (honest boundary — no silent cap). The campaign forbids
+silently dropping coverage; S5 is the required explicit boundary marker.
+
+Archive source: `archive/pu-2026-03-24:t/corpus/ir/string-sq.chalk` (S1),
+`archive/pu-2026-03-24:t/corpus/ir/string-dq.chalk` (S2),
+`archive/pu-2026-03-24:t/corpus/ir/string-concat.chalk` (S3), and
+gap-map entry C3 (S4).
+
+## S1 single-quoted literal
+
+A single-quoted string literal produces a Str-typed constant node. Str is RF:
+its representation is `{ptr, len, encoding}` (enc=0 = ASCII/default). A string
+constant lowers to a private global, len = byte count, enc = 0.
+
+```perl
+# source
+use 5.42.0;
+my $s = 'hello';
+say($s);
+```
+
+```behavior
+stdout: hello\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%nc  = Constant("s") :Str
+%val = Constant("hello") :Str
+%vd  = VarDecl(%nc, %val) :Str
+%pa  = PadAccess(%vd, "s") :Str
+control: %vd
+%nl = Constant("\n") :Str
+%p  = Print(%pa, %nl)
+return %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: hello}, ~, ~, Str], # 1
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 2
+  [Print, ~, [1, 2], 0, Scalar], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## S2 double-quoted literal
+
+A double-quoted string literal with no interpolation produces a Str constant,
+identical to a single-quoted literal at the IR level.
+
+```perl
+# source
+use 5.42.0;
+my $s = "hello world";
+say($s);
+```
+
+```behavior
+stdout: hello world\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%nc  = Constant("s") :Str
+%val = Constant("hello world") :Str
+%vd  = VarDecl(%nc, %val) :Str
+%pa  = PadAccess(%vd, "s") :Str
+control: %vd
+%nl = Constant("\n") :Str
+%p  = Print(%pa, %nl)
+return %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: "hello world"}, ~, ~, Str], # 1
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 2
+  [Print, ~, [1, 2], 0, Scalar], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## S3 string concatenation (dot operator)
+
+The dot operator concatenates two string values. The IR models this as a Concat
+node. Both operands and the result carry Str representation. Concat is RF: it
+lowers to malloc+memcpy over `{ptr,len,enc}` buffers.
+
+```perl
+# source
+use 5.42.0;
+say("hello" . " world");
+```
+
+```behavior
+stdout: hello world\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%lhs = Constant("hello") :Str
+%rhs = Constant(" world") :Str
+%cat = Concat(%lhs, %rhs) :Str
+%nl = Constant("\n") :Str
+%p  = Print(%cat, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: "hello world"}, ~, ~, Str], # 1
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 2
+  [Print, ~, [1, 2], 0, Scalar], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## S4 string concat-assign (.=)
+
+The compound-assign `.=` appends to an existing string variable. A Concat node
+replaces the binding in the SSA var_table. Both the VarDecl and the Concat carry
+Str representation. The PadAccess after `.=` sees the post-concat SSA value.
+
+```perl
+# source
+use 5.42.0;
+my $s = "a";
+$s .= "b";
+say($s);
+```
+
+```behavior
+stdout: ab\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%nc   = Constant("s") :Str
+%va   = Constant("a") :Str
+%vd   = VarDecl(%nc, %va) :Str
+%pa1  = PadAccess(%vd, "s") :Str
+%vb   = Constant("b") :Str
+%cat  = Concat(%pa1, %vb) :Str
+%asgn = Assign(%pa1, %cat) :Str
+%pa2  = PadAccess(%vd, "s") :Str
+control: %vd -> %asgn
+%nl = Constant("\n") :Str
+%p  = Print(%pa2, %nl)
+return %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [6], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: a}, ~, ~, Str], # 1
+  [Constant, {const_type: string, value: b}, ~, ~, Str], # 2
+  [Concat, ~, [1, 2], ~, Str], # 3
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
+  [Print, ~, [3, 4], 0, Scalar], # 5
+  [Return, ~, [5], 5]]} # 6
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## S6 dynamic concat-assign (.= a variable)
+
+A `.=` whose right-hand side is a VARIABLE (`$s .= $t`) rather than a literal.
+perl compiles it to a dynamic `multiconcat` (OPpMULTICONCAT_APPEND, nargs=1): the
+operand `$t` rides the stack and the aux_list holds only empty segments. The
+decoder folds `$s . $t` into a Concat. Both operands are Str, so the Concat lowers
+via the shared malloc+memcpy path. (The const-append `$s .= "b"` of S4 is the
+nargs=0 form of the same op.)
+
+```perl
+# source
+use 5.42.0;
+my $s = "a";
+my $t = "b";
+$s .= $t;
+say($s);
+```
+
+```behavior
+stdout: ab\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%va   = Constant("a") :Str
+%vb   = Constant("b") :Str
+%cat  = Concat(%va, %vb) :Str
+%nl = Constant("\n") :Str
+%p  = Print(%cat, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [6], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: a}, ~, ~, Str], # 1
+  [Constant, {const_type: string, value: b}, ~, ~, Str], # 2
+  [Concat, ~, [1, 2], ~, Str], # 3
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
+  [Print, ~, [3, 4], 0, Scalar], # 5
+  [Return, ~, [5], 5]]} # 6
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## S7 string interpolation (qq{$a$b})
+
+Interpolation `qq{$a$b}` compiles to a fresh (non-APPEND) `multiconcat` that
+builds a new Str from the two dynamic operands with empty segments between them.
+The decoder folds `$a . $b` into a Concat and binds it to the new lexical `$c`.
+
+```perl
+# source
+use 5.42.0;
+my $a = "x";
+my $b = "y";
+my $c = "$a$b";
+say($c);
+```
+
+```behavior
+stdout: xy\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%va   = Constant("x") :Str
+%vb   = Constant("y") :Str
+%cat  = Concat(%va, %vb) :Str
+%nl = Constant("\n") :Str
+%p  = Print(%cat, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [6], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: x}, ~, ~, Str], # 1
+  [Constant, {const_type: string, value: "y"}, ~, ~, Str], # 2
+  [Concat, ~, [1, 2], ~, Str], # 3
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
+  [Print, ~, [3, 4], 0, Scalar], # 5
+  [Return, ~, [5], 5], # 6
+  [PadAccess, {sigil: $, symbol: c}, ~, ~, Str], # 7
+  [VarDecl, {scope: my}, [7, 3]]]} # 8
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## S8 interpolation with constant text segments
+
+Interpolation whose format has constant text between the operands
+(`qq{p-$a-m-$b-q}`) — the multiconcat aux_list slices the flat segment string
+`"p--m--q"` by the per-segment lengths and the decoder interleaves them with the
+operands: `"p-" . $a . "-m-" . $b . "-q"`, a left-folded Concat chain.
+
+```perl
+# source
+use 5.42.0;
+my $a = "x";
+my $b = "y";
+my $c = "p-$a-m-$b-q";
+say($c);
+```
+
+```behavior
+stdout: p-x-m-y-q\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%p    = Constant("p-") :Str
+%va   = Constant("x") :Str
+%c1   = Concat(%p, %va) :Str
+%m    = Constant("-m-") :Str
+%c2   = Concat(%c1, %m) :Str
+%vb   = Constant("y") :Str
+%c3   = Concat(%c2, %vb) :Str
+%q    = Constant("-q") :Str
+%c4   = Concat(%c3, %q) :Str
+%nl = Constant("\n") :Str
+%p  = Print(%c4, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [12], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: p-}, ~, ~, Str], # 1
+  [Constant, {const_type: string, value: x}, ~, ~, Str], # 2
+  [Concat, ~, [1, 2], ~, Str], # 3
+  [Constant, {const_type: string, value: "-m-"}, ~, ~, Str], # 4
+  [Concat, ~, [3, 4], ~, Str], # 5
+  [Constant, {const_type: string, value: "y"}, ~, ~, Str], # 6
+  [Concat, ~, [5, 6], ~, Str], # 7
+  [Constant, {const_type: string, value: "-q"}, ~, ~, Str], # 8
+  [Concat, ~, [7, 8], ~, Str], # 9
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
+  [Print, ~, [9, 10], 0, Scalar], # 11
+  [Return, ~, [11], 11], # 12
+  [PadAccess, {sigil: $, symbol: c}, ~, ~, Str], # 13
+  [VarDecl, {scope: my}, [13, 9]]]} # 14
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## S9 interpolation of an integer (Int->Str coercion)
+
+In Chalk `"ok $n"` is COERCION, not interpolation: the non-Str operand `$n` is
+stringified before the Concat. The multiconcat decoder wraps a non-Str operand
+(here the folded Int Constant `3`) in a `Stringify` (Int->Str), so the Concat
+sees only Str inputs. The Stringify lowers to an int-to-decimal loop that renders
+the digits and records the RUNTIME digit-count length in `_str_len_table`, so the
+Concat can slice exactly `len` bytes. The result is `Str:ok 3`.
+
+```perl
+# source
+use 5.42.0;
+my $n = 3;
+say("ok $n");
+```
+
+```behavior
+stdout: ok 3\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%s0  = Constant("ok ") :Str
+%n   = Constant(3) :Int
+%sf  = Coerce(%n, from_repr: "Int", to_repr: "Str") :Str
+%cat = Concat(%s0, %sf) :Str
+%nl = Constant("\n") :Str
+%p  = Print(%cat, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [7], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: "ok "}, ~, ~, Str], # 1
+  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 2
+  [Coerce, {from_repr: Int, to_repr: Str}, [2], ~, Str], # 3
+  [Concat, ~, [1, 3], ~, Str], # 4
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
+  [Print, ~, [4, 5], 0, Scalar], # 6
+  [Return, ~, [6], 6]]} # 7
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## S13 length() of an Int coerces its operand (the SIGNATURE says Str)
+
+`length` takes Str. Its operand's coercion target is not a new fact to discover —
+it is already written down, per position, in `TypeLibrary`'s builtin signature
+table: `length => { arg_types => ['Str'] }`. Perl agrees: `length(12345)` is 5,
+the digit COUNT, because the Int is stringified first.
+
+Nothing asked. Coercion insertion keyed off `%_STR_CONTEXT_OPS`, a three-name
+hand-written list (`Print StrEq StrNe`) that is position-blind and had no
+`Length` entry, so `length($n)` on an Int reached the backend uncoerced and GAPped
+at `Context.pm:3968` ("only Array and Str are lowered runtime-free") while the
+answer sat unread one file over. The coercion machinery it needed already
+existed and was already proven: the `Coerce(Int->Str)` node, `_lower_stringify`'s
+int-to-decimal renderer, and the `_str_len_table` length tracking are the same
+ones S9 above and the `print @a` case in statements.md exercise.
+
+This is the demonstration case for signature-driven coercion: the operand is now
+wrapped by asking `TypeLibrary` what position 0 of `length` requires, rather than
+by adding `Length` to another hand-kept list. `%_STR_CONTEXT_OPS` was a
+degenerate, incomplete re-derivation of `arg_types` — the same relationship
+`%_REPR_RANK` had to the type lattice before it was deleted for being "a second
+copy of something TypeLibrary already states".
+
+The length is the RUNTIME digit count, so it is `_str_len_table`-tracked rather
+than a compile-time literal: `12345` renders to five bytes and `length` reads
+that tracked length back.
+
+```perl
+# source
+use 5.42.0;
+my $n = 12345;
+print length($n);
+print "\n";
+```
+
+```behavior
+stdout: 5\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%nl  = Constant("\n") :Str
+%n   = Constant(12345) :Int
+%cs  = Coerce(%n, from_repr: "Int", to_repr: "Str") :Str
+%len = Length(%cs) :Int
+%cl  = Coerce(%len, from_repr: "Int", to_repr: "Str") :Str
+%p1  = Print(%cl)
+%p2  = Print(%nl)
+return %p2
+control: %start -> %p1 -> %p2
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [7], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 1
+  [Constant, {const_type: integer, value: "12345"}, ~, ~, Int], # 2
+  [Length, ~, [2], ~, Int], # 3
+  [Coerce, {from_repr: Int, to_repr: Str}, [3], ~, Str], # 4
+  [Print, ~, [4], 0, Scalar], # 5
+  [Print, ~, [1], 5, Scalar], # 6
+  [Return, ~, [6], 6]]} # 7
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## S10 interpolation of a negative integer (sign in the digit-count length)
+
+The digit-count length the Stringify records must include the sign: `-5` is two
+bytes, not one. The int-to-decimal loop renders the magnitude then prepends `-`,
+and the recorded length spans the `-`. Surrounding literal text (`val `) forces a
+genuine Str (a lone `"$n"` degenerates to the number itself in perl, which the
+oracle tags Int); the result is `Str:val -5`.
+
+```perl
+# source
+use 5.42.0;
+my $n = -5;
+say("val $n");
+```
+
+```behavior
+stdout: val -5\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%s0  = Constant("val ") :Str
+%n   = Constant(-5) :Int
+%sf  = Coerce(%n, from_repr: "Int", to_repr: "Str") :Str
+%cat = Concat(%s0, %sf) :Str
+%nl = Constant("\n") :Str
+%p  = Print(%cat, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [7], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: "val "}, ~, ~, Str], # 1
+  [Constant, {const_type: integer, value: "-5"}, ~, ~, Int], # 2
+  [Coerce, {from_repr: Int, to_repr: Str}, [2], ~, Str], # 3
+  [Concat, ~, [1, 3], ~, Str], # 4
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
+  [Print, ~, [4, 5], 0, Scalar], # 6
+  [Return, ~, [6], 6]]} # 7
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## S11 interpolation of zero (do-while emits one '0')
+
+Zero has no nonzero quotient, so a plain divide-until-zero loop would emit no
+digit. The renderer is a do-while: it always writes one digit, so `0` renders as
+the single byte `0` (length 1). Surrounding literal text (`val `) forces a genuine
+Str (a lone `"$n"` degenerates to the number in perl, tagged Int); the result is
+`Str:val 0`.
+
+```perl
+# source
+use 5.42.0;
+my $n = 0;
+say("val $n");
+```
+
+```behavior
+stdout: val 0\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%s0  = Constant("val ") :Str
+%n   = Constant(0) :Int
+%sf  = Coerce(%n, from_repr: "Int", to_repr: "Str") :Str
+%cat = Concat(%s0, %sf) :Str
+%nl = Constant("\n") :Str
+%p  = Print(%cat, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [7], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: "val "}, ~, ~, Str], # 1
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 2
+  [Coerce, {from_repr: Int, to_repr: Str}, [2], ~, Str], # 3
+  [Concat, ~, [1, 3], ~, Str], # 4
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
+  [Print, ~, [4, 5], 0, Scalar], # 6
+  [Return, ~, [6], 6]]} # 7
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## S12 print an interpolated integer to stdout
+
+`print "ok $n\n"` combines I2's Print statement effect with the Int->Str coerce:
+the interpolation builds `Concat("ok ", Stringify($n), "\n")`, print emits it to
+stdout via `printf("%.*s", len, ptr)` using the Concat's tracked runtime length,
+and the block yields the trailing `Int:1`. The stdout is `ok 3\n`.
+
+```perl
+# source
+use 5.42.0;
+my $n = 3;
+print "ok $n\n"; say(1);
+```
+
+```behavior
+stdout: ok 3\n1\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%s0  = Constant("ok ") :Str
+%n   = Constant(3) :Int
+%sf  = Coerce(%n, from_repr: "Int", to_repr: "Str") :Str
+%c1  = Concat(%s0, %sf) :Str
+%nl  = Constant("\n") :Str
+%cat = Concat(%c1, %nl) :Str
+%p   = Print(%cat) :Boolean
+%one = Constant(1) :Int
+%nl = Constant("\n") :Str
+%co_p  = Coerce(%one : Int -> Str) :Str
+%p  = Print(%co_p, %nl)
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [11], nodes: [
+  [Start], # 0
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
+  [Coerce, {from_repr: Int, to_repr: Str}, [1], ~, Str], # 2
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 3
+  [Constant, {const_type: string, value: "ok "}, ~, ~, Str], # 4
+  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 5
+  [Coerce, {from_repr: Int, to_repr: Str}, [5], ~, Str], # 6
+  [Concat, ~, [4, 6], ~, Str], # 7
+  [Concat, ~, [7, 3], ~, Str], # 8
+  [Print, ~, [8], 0, Scalar], # 9
+  [Print, ~, [2, 3], 9, Scalar], # 10
+  [Return, ~, [10], 10]]} # 11
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## S5 non-ASCII string (non-default encoding, explicit GAP boundary)
+
+A string containing non-ASCII characters such as cafe-with-accent (cafe\x{e9})
+has byte-len 5 but char-len 4 (the accented e is 2 bytes in UTF-8). The encoding
+tag would be non-zero (UTF-8). The ASCII/default-encoding slice (enc=0) does not
+cover this case: length must return 4 (char count), not 5 (byte count). This
+encoding path is not yet lowered. This GAP is the REQUIRED explicit boundary marker
+-- the campaign forbids silently dropping non-ASCII coverage.
+
+```perl
+# source
+my $s = "caf\x{e9}";
+length($s)
+```
+
+```behavior
+return: 4
+context: scalar
+```
+
+```ir
+L: GAP(non-ASCII Str with enc!=0 not yet lowered: char-len 4 != byte-len 5; a future UTF-8 encoding issue closes this path)
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [3], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: "caf\u00c3\u00a9"}, ~, ~, Str], # 1
+  [Length, ~, [1], ~, Int], # 2
+  [Return, ~, [2], 0]]} # 3
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## S7 a v-string constant keeps its bytes (PVMG decode)
+
+`v65.66` IS the two-character string "AB" -- chr(65), chr(66). The
+version-number spelling is syntax, and `sprintf "%vd"` is the display
+convention that renders the ordinals back; the VALUE is the bytes.
+
+This pins a producer defect CLASS rather than one literal. B's SV classes nest
+(PVMG isa PV, isa NV, isa IV), so a decode chain that asks `isa('B::IV')` first
+claims a POK-only PVMG and returns its empty integer slot -- the program
+printed `0` where perl prints `AB`, with no GAP. Any PVMG constant took that
+path. The decode is now driven by FLAGS, with IOK/NOK asked before POK so that
+a stringified number is still a number and POK-ALONE means Str.
+
+NOTE ON TEST DESIGN: this case must print the CONTENT. `print length(v1.2.3)`
+passes even against the defect, because perl constant-folds it to `const[IV 3]`
+before B::SoN sees an SV at all -- a case written that way would report VString
+GREEN while the bug is live.
+
+```perl
+# source
+my $v = v65.66;
+print $v, "\n";
+```
+
+```behavior
+stdout: AB\n
+return: Bool:1
+context: scalar
+```
+
+```ir
+%start = Start()
+%v  = Constant("AB") :Str
+%nl = Constant("\n") :Str
+%p  = Print(%v, %nl) :Boolean
+return %p
+control: %start -> %p
+L: GREEN
+```
+
+```son
+main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
+main::corpus_case: {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: AB}, ~, ~, Str], # 1
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 2
+  [Print, ~, [1, 2], 0, Scalar], # 3
+  [Return, ~, [3], 3]]} # 4
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
