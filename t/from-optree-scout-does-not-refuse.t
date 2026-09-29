@@ -48,10 +48,11 @@ for my $i (1 .. 6) {
 }
 print "$s\n";
 SRC
-    # THE REFUSAL NAMES ITS PASS, which is what makes this testable at all --
-    # before the marker, a scout refusal and a real-pass refusal produced the
-    # same message and no test could tell them apart.
-    like $err, qr/GAP:/, 'it refuses' or diag $err;
+    # IT NO LONGER REFUSES AT ALL: a `next if` inside an arm lowers since
+    # loop-control phase 1. The pin was that the scout does not abort the loop;
+    # the stronger fact now is that neither pass does.
+    unlike $err, qr/GAP:/, 'it translates' or diag $err;
+    ok $data && $data->{methods}{'main::__PROGRAM__'}, '... to a program';
     unlike $err, qr/slot-discovery scout/,
         'and the refusal is NOT raised by the scout'
         or diag $err;

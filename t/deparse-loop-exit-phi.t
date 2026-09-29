@@ -173,25 +173,16 @@ while ($i < 9) { $i++; next if $i == 2; last if $i == 4; $s += $i }
 print "$s\n";
 SRC
 
-# A `last` BEFORE A `next` IS A DIFFERENT DEFECT, and a PRODUCER one: the
-# graph is never built, so there is nothing for the deparser to render.
-#
-#     GAP: a loop control (`next`) inside a branch arm is not yet lowered
-#          -- only `last` carries an exit edge
-#
-# perl prints 13. Pinned here as the producer refusal it actually is, rather
-# than as a deparser TODO it never was.
-subtest 'a last before a next is refused by the producer' => sub {
-    my ( undef, $err ) = graph_of( <<'SRC' );
+# A `last` BEFORE A `next` WAS A DIFFERENT DEFECT, and a PRODUCER one: the
+# second guard sat in the first one's rest arm, and the branch walker refused
+# "a loop control (`next`) inside a branch arm". It lowers since loop-control
+# phase 1 (a `next if` in an arm merges at the latch, as in the body), so the
+# pin is now that it round-trips: perl prints 13.
+round_trips( <<'SRC', 'a last before a next' );
 my $s = 0;
 for my $i (1..9) { last if $i == 6; next if $i == 2; $s += $i }
 print "$s\n";
 SRC
-    # The SUB is skipped, not the file -- B::SoN still emits JSON for what it
-    # could translate, so the refusal is on stderr and $data stays defined.
-    like $err, qr/a loop control \(`next`\) inside a branch arm/,
-        'it is refused, naming the unlowered next';
-};
 
 # A RETURN in the same position must still refuse -- it is a function exit
 # with nowhere to go, and distinguishing the two signals is the whole point.

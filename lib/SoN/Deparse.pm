@@ -1205,7 +1205,7 @@ class SoN::Deparse 0.01 {
             # -- both arms and the join -- and resume at the Region, which is
             # where the two arms' control converges.
             if ($n->{op} eq 'If') {
-                my ($text, $join) = $self->_emit_if($n, $next_of);
+                my ($text, $join) = $self->_emit_if($n, $next_of, $stop);
                 $out .= $text;
                 last unless defined $join;
                 last if defined $stop && $join == $stop;
@@ -2137,7 +2137,7 @@ class SoN::Deparse 0.01 {
         return 0;
     }
 
-    method _emit_if ($n, $next_of) {
+    method _emit_if ($n, $next_of, $outer_stop = undef) {
         my $cond = $self->_expr($n->{inputs}[1]);
 
         my @projs = ($next_of->{ $n->{id} } // [])->@*;
@@ -2211,8 +2211,13 @@ class SoN::Deparse 0.01 {
                 next unless $self->_reaches_region( $arm{$ix}, $loop_exit_region,
                                                     $next_of );
                 my $rest_ix = 1 - $ix;
+                # THE REST STOPS WHERE THE ENCLOSING WALK STOPS. Stopped only at
+                # the loop exit, it ran on through an enclosing join -- the
+                # `next if` merge -- and emitted the continue block inside the
+                # else arm, before the enclosing walk emitted it again (corpus
+                # 137 printed c1 twice).
                 my $rest = $self->_emit_from( $arm{$rest_ix}{id}, $next_of,
-                                              $loop_exit_region );
+                                              $outer_stop // $loop_exit_region );
                 # The condition is written so the BREAKING arm is the one that
                 # runs: an index-1 break means the loop leaves when the test is
                 # FALSE, so the spelling negates.

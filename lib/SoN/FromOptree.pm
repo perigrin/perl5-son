@@ -345,6 +345,15 @@ class SoN::FromOptree 0.01 {
     }
 
 
+    # WHERE A `next` JOINS THE LOOP it is in: the first op of the continue
+    # block (a C-style for's step is one), or undef when there is none and the
+    # latch is the unstack. `next` runs the continue block -- perl's own rule
+    # -- so the body walk and a `next if` rest arm stop HERE, the `next` paths
+    # merge, and the continue block is walked once on the merged state. It was
+    # walked as trailing body statements, inside the rest arm, so a `next`
+    # skipped it (corpus 137). `local` per loop, so a nested loop restores it.
+    our $CONTINUE_START;
+
     our %ANON_CAPTURES;
 
     # Format bodies, keyed by the same deterministic name their `write` Call
@@ -1488,6 +1497,9 @@ class SoN::FromOptree 0.01 {
                     $op = $op->next;
                     next;
                 }
+                # WHERE `next` LANDS: the continue block, or the C-style step,
+                # which perl puts at nextop. See $CONTINUE_START.
+                local $CONTINUE_START = _continue_start($op);
                 _translate_while_loop($cv, $op->next, $sim, $factory, $opmap, \%visited);
                 # Continue after the loop; the B::LOOP op's lastop is leaveloop.
                 $op = $op->can('lastop') ? $op->lastop : $op->next;
@@ -3176,6 +3188,15 @@ class SoN::FromOptree 0.01 {
     # build their own $ctx; the walk is sequential, so the last nextstate
     # seen is the enclosing one.
     our $CURRENT_PACKAGE = 'main';
+
+    # The loop op's continue-block start, or undef: nextop, unless that is
+    # the unstack (no continue block).
+    sub _continue_start ($loop_op) {
+        my $nx = $loop_op->can('nextop') ? $loop_op->nextop : undef;
+        return undef unless ref $nx && $$nx;
+        return undef if $nx->name eq 'unstack';
+        return $nx;
+    }
 
     # `$o->SUPER::m()`: the method name qualified by the package in effect,
     # `PKG::SUPER::m`, which perl resolves from PKG wherever the call is
@@ -6996,6 +7017,7 @@ class SoN::FromOptree 0.01 {
         # yet). Non-constant bounds are refused: the synthesized
         # continuation condition needs high+1 at translation time.
         if ($name eq 'enteriter') {
+            local $CONTINUE_START = _continue_start($op);
             # The iteration variable's pad slot rides on the enteriter op
             # itself (LVINTRO). Implicit $_ and package-var iterators have
             # no lexical slot -- and their gv kid rides the mark stack,
@@ -10570,6 +10592,12 @@ class SoN::FromOptree 0.01 {
             # record: a `next` returns to the header exactly as falling off the
             # end of the body does.
             if ($name eq 'next') {
+                # TO THE LATCH: the continue block, when there is one -- a
+                # `next` runs it, and stopping here skipped it.
+                if ($CONTINUE_START && !$loop_visited->{ ${$CONTINUE_START} }) {
+                    $op = $CONTINUE_START;
+                    next;
+                }
                 last;
             }
 
@@ -10744,7 +10772,7 @@ class SoN::FromOptree 0.01 {
                 $rest_sim->set_control($rest_proj);
                 my ($rest_end) =
                     _walk_branch($cv, $op->next, $rest_sim, $factory, $opmap,
-                        $loop_visited, undef, 0, undef,
+                        $loop_visited, undef, 0, ($CONTINUE_START ? ${$CONTINUE_START} : undef),
                         $loop_node, $break_projs, 1);
                 # Drain any leftover residual the rest-arm pushed (a void
                 # statement value) so merge() does not build a spurious stack Phi.
@@ -12383,6 +12411,13 @@ class SoN::FromOptree 0.01 {
             # (returns the stop op) from a back-edge (returns a visited op
             # elsewhere -- a statement-modifier loop).
             return $op if defined $stop_addr && $$op == $stop_addr;
+            # EVERY ARM IN A LOOP BODY STOPS AT THE LATCH. The continue block
+            # belongs to the loop, not to whichever arm reaches it, and a
+            # nested arm walk (a `last if` inside a `next if`'s rest arm) that
+            # ran on to the unstack walked it inside the arm -- then the body
+            # walk ran it again (corpus 137 emitted `c1 c1`).
+            return $op if $in_loop && $CONTINUE_START
+                && $$op == ${$CONTINUE_START};
             # If we've already visited this op, we've converged
             return $op if $visited->{$$op};
 
@@ -12553,6 +12588,42 @@ class SoN::FromOptree 0.01 {
             # sees plain nested blocks -- `if (C) { if (D) { print; $n=7 } }` and
             # every `elsif` -- not just the modifier idiom it was named for.
             # Build the control flow here rather than refusing.
+            #
+            # A `next if C` IN AN ARM joins the loop at its latch exactly as it
+            # does in the body: If(C), the rest of the arm walked on the
+            # not-taken Proj, and the taken Proj -- which skips that rest --
+            # merged with it. The body walker has done this since the start; an
+            # arm refused it ("a loop control (`next`) inside a branch arm"),
+            # and a second `next if` IS in an arm -- the first one's rest.
+            # Corpus 007. The rest stops at the latch (see $CONTINUE_START).
+            if ($in_loop && $name eq 'and' && $sim->stack_depth > 0
+                && $op->can('other') && ${$op->other}
+                && (_guarded_loop_control($op->other) // '') eq 'next') {
+                my $cond = $sim->pop_node;
+                my $if_node = $factory->make_cfg('If',
+                    inputs => [$sim->control, $cond]);
+                my $taken = $factory->make_cfg('Proj',
+                    inputs => [$if_node], index => 0);
+                my $rest  = $factory->make_cfg('Proj',
+                    inputs => [$if_node], index => 1);
+                my $rest_sim = $sim->snapshot;
+                $rest_sim->set_control($rest);
+                my ($rest_end) = _walk_branch($cv, $op->next, $rest_sim,
+                    $factory, $opmap, $visited, $exits, $stop_at_exit,
+                    $stop_addr, $loop_node, $break_projs, 1);
+                $rest_sim->pop_node
+                    while $rest_sim->stack_depth > $sim->stack_depth;
+                my $skip_sim = $sim->snapshot;
+                $skip_sim->set_control($taken);
+                $skip_sim->merge($rest_sim, $factory, $if_node);
+                $sim->set_control($skip_sim->control);
+                $sim->set_memory($skip_sim->memory);
+                my $merged = $skip_sim->scope_bindings;
+                $sim->define($_, $merged->{$_}) for keys %$merged;
+                return ($rest_end) if !ref($rest_end) || !$$rest_end;
+                $op = $rest_end;
+                next;
+            }
             if (($name eq 'and' || $name eq 'or')
                 && $opmap->is_branch($name)
                 && ($op->flags & 3) == 1   # OPf_WANT == OPf_WANT_VOID

@@ -90,8 +90,10 @@ sub round_trips ($src, $name) {
 # whatever the rest-arm walk does with a SECOND loop control after the first
 # has already ended an arm -- the same delegation the refusal's own comment
 # describes ("the `next` arm delegates THE REST OF THE BODY to this walk").
-{
-    my $todo = todo 'a nexted signal alone loses the second guard; the rest-arm walk needs it too';
+#
+# LOWERED 2026-09-29, loop-control phase 1: the rest-arm walk does exactly
+# that -- a `next if` inside an arm builds the same If and latch merge the body
+# walker builds, and the rest stops at the latch. No longer TODO.
 round_trips( <<'SRC', 'two guarded nexts in a row' );
 my $s = 0;
 for my $i (1 .. 6) {
@@ -124,7 +126,6 @@ for my $i (1 .. 5) {
 print "$s\n";
 SRC
 
-}
 
 # AND `last` AFTER A `next` MUST STILL WORK -- it took its own fix and shares
 # this code path, so it is the regression guard. NOT todo'd: it passes today.
