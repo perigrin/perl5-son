@@ -645,7 +645,7 @@ sub to_json ($named_graphs, $classes = undef, $data_section = undef,
 # and any count that happened to be 1. The producer knows which fields ARE
 # booleans; that list is the fact, and it lives here rather than in the model.
 my %BOOLEAN_FIELD = map { $_ => 1 } qw(
-    uses_args is_reader invocant has_default is_param
+    uses_args is_reader invocant has_default is_param is_class
 );
 
 sub _json_booleans ($data) {

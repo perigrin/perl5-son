@@ -242,8 +242,17 @@ class SoN::Deparse 0.01 {
         }
         $out = $begins . $out;
 
+        # CLASSES, declared before anything that uses them. A class the
+        # `class` feature declared is emitted as one, and the graphs it owns --
+        # its methods, field defaults and ADJUST blocks -- go inside it rather
+        # than out here as named subs, where a method could not see its fields.
+        my ($classes_text, $class_owned) = $self->_emit_classes;
+        return undef unless defined $classes_text;
+        $out .= $classes_text;
+
         for my $name (sort keys $methods->%*) {
             next if $name eq 'main::__PROGRAM__';
+            next if $class_owned->{$name};
             my $sub = eval { $self->_emit_sub($name, $methods->{$name}) };
             if (!defined $sub) { $gap = $@ || "failed to render $name"; return undef }
             $out .= $sub;
@@ -274,7 +283,11 @@ class SoN::Deparse 0.01 {
         # for both source markers: in a main program they open the same handle.
         my $data_section = defined $data->{data_section}
             ? "__DATA__\n" . $data->{data_section} : '';
-        return ( $needs_gate ? "use v5.36;\n" : '' ) . $out . $body . $ends
+        # `use feature 'isa'`, NOT `use v5.36`: the bundle also turns on
+        # strict, which rejects code the source never ran under strict --
+        # corpus 012's `tie my $t` emitted as `tie($t, ...)` died "Global
+        # symbol". The operator needs its feature and nothing else.
+        return ( $needs_gate ? "use feature 'isa';\n" : '' ) . $out . $body . $ends
              . $data_section;
     }
 
@@ -540,6 +553,70 @@ class SoN::Deparse 0.01 {
             $self->_sub_prototype($name), $body);
     }
 
+    # The program's feature classes, declared, and the set of graph keys they
+    # own (methods, field defaults, ADJUST blocks), which must not also be
+    # emitted as named subs. Returns (undef) with $gap set when a part does
+    # not render.
+    #
+    # Parents first: `:isa(P)` needs P declared. A field's default is its
+    # default graph's VALUE; a method or ADJUST is its graph's statements.
+    method _emit_classes () {
+        my %owned;
+        my %cls = map { $_->{name} => $_ }
+                  grep { ref $_ eq 'HASH' && $_->{is_class} && defined $_->{name} }
+                  values $sub_meta->%*;
+        return ('', \%owned) unless %cls;
+
+        my (@order, %placed);
+        my $place; $place = sub ($name) {
+            return if $placed{$name}++;
+            my $parent = $cls{$name}{parent};
+            $place->($parent) if defined $parent && $cls{$parent};
+            push @order, $name;
+        };
+        $place->($_) for sort keys %cls;
+
+        my $text = "use feature 'class';\nno warnings 'experimental::class';\n";
+        for my $name (@order) {
+            my $c = $cls{$name};
+            my $body = '';
+            for my $f (sort { ($a->{fieldix} // 0) <=> ($b->{fieldix} // 0) }
+                       ($c->{fields} // [])->@*) {
+                my $decl = "field $f->{name}";
+                $decl .= defined $f->{param_name} ? " :param($f->{param_name})"
+                                                  : ' :param'
+                    if $f->{is_param};
+                if ($f->{has_default} && defined $f->{default_ref}) {
+                    my $key = $f->{default_ref};
+                    $owned{$key} = 1;
+                    my $v = eval { $self->_render_graph_value($key,
+                                       $all_methods->{$key} // {}) };
+                    unless (defined $v) { $gap = $@ || "failed to render $key"; return (undef) }
+                    $decl .= " = $v";
+                }
+                $body .= "$decl;\n";
+            }
+            for my $key (($c->{adjusts} // [])->@*) {
+                $owned{$key} = 1;
+                my $b = eval { $self->_render_graph_body($key,
+                                   $all_methods->{$key} // {}) };
+                unless (defined $b) { $gap = $@ || "failed to render $key"; return (undef) }
+                $body .= "ADJUST {\n" . _indent($b) . "}\n";
+            }
+            for my $m (sort keys(($c->{methods} // {})->%*)) {
+                my $key = $c->{methods}{$m};
+                $owned{$key} = 1;
+                my $b = eval { $self->_render_graph_body($key,
+                                   $all_methods->{$key} // {}) };
+                unless (defined $b) { $gap = $@ || "failed to render $key"; return (undef) }
+                $body .= "method $m {\n" . _indent($b) . "}\n";
+            }
+            my $isa = defined $c->{parent} ? " :isa($c->{parent})" : '';
+            $text .= "class $name$isa {\n" . _indent($body) . "}\n";
+        }
+        return ($text, \%owned);
+    }
+
     # A BEGIN or END block: the same body rendering as a sub, under the phase
     # keyword instead of a name.
     method _emit_phase_block ($phase, $graph) {
@@ -551,6 +628,25 @@ class SoN::Deparse 0.01 {
     # restored around it -- node ids and every table keyed on them are local
     # to the graph.
     method _render_graph_body ($name, $graph) {
+        return $self->_in_graph($name, $graph,
+            sub { $self->_emit_control_chain($graph) });
+    }
+
+    # A graph whose job is ONE VALUE -- a field's default initialiser --
+    # rendered as the expression its Return carries, not as statements.
+    method _render_graph_value ($name, $graph) {
+        return $self->_in_graph($name, $graph, sub {
+            my ($ret) = grep { ($_->{op} // '') eq 'Return' }
+                         ($graph->{nodes} // [])->@*;
+            die "GAP: a value graph with no Return is not yet rendered\n"
+                unless $ret && ($ret->{inputs} // [])->@*;
+            $self->_expr($ret->{inputs}[0]);
+        });
+    }
+
+    # Run $code with the renderer's per-graph state switched to $graph, and
+    # put the enclosing graph's state back afterwards, error or not.
+    method _in_graph ($name, $graph, $code) {
         my $save_nodes = $nodes;
         my %save_rendered = %rendered;
         # NODE IDS ARE PER-SUB, so the bindings are too -- node 3 in one sub is
@@ -572,7 +668,7 @@ class SoN::Deparse 0.01 {
         %mem_cache = ();
         %subst_count_var = ();
 
-        my $body = eval { $self->_emit_control_chain($graph) };
+        my $body = eval { $code->() };
         my $err = $@;
         $current_sub = $save_sub;
         $nodes = $save_nodes;
@@ -3856,6 +3952,19 @@ class SoN::Deparse 0.01 {
               . " rendered\n" unless @in == 1;
             $text = sprintf('(-(%s))', $self->_expr($in[0]));
         }
+        elsif ($op eq 'FieldAccess') {
+            # A FIELD IS NAMED IN ITS CLASS, and inside a method, an ADJUST or
+            # a default the name is the field itself -- `$x`, not `$self->x`.
+            # The node carries the class and the field's index; the class
+            # record on the wire carries the name for that index.
+            my $f   = $n->{fields} // {};
+            my $cls = $sub_meta->{ $f->{field_stash} // '' } // {};
+            my ($field) = grep { ($_->{fieldix} // -1) == ($f->{field_index} // -2) }
+                          ($cls->{fields} // [])->@*;
+            die "GAP: a FieldAccess to a field the class record does not name"
+              . " is not yet rendered\n" unless $field && defined $field->{name};
+            $text = $field->{name};
+        }
         elsif ($op eq 'Wantarray') {
             # The calling context of the sub it runs in -- undef at file
             # scope. Spelled as itself; the emitted sub is called in the same
@@ -4351,6 +4460,18 @@ class SoN::Deparse 0.01 {
             # input 0 is missing, not the primary spelling. Without an
             # invocant and without a class_name there is nothing to call the
             # method on.
+            # A CONSTRUCTOR WITH NAMED PARAMS HAS NO INVOCANT INPUT. Its inputs
+            # are the VALUES, paired positionally with `param_names` -- measured,
+            # `Pt->new(x => 3, why => 1)` is Call(new, class=Pt,
+            # param_names=[x, why]) in=[3, 1] -- so reading input 0 as the
+            # invocant emitted `3->new(1)`. When every input has a name, the
+            # class is the invocant and the pairs are the arguments.
+            my @pn = ($f->{param_names} // [])->@*;
+            if (@pn && @pn == @args && defined $f->{class_name}) {
+                return sprintf('%s->%s(%s)', $f->{class_name}, $name,
+                    join(', ', map { "'$pn[$_]' => $args[$_]" } 0 .. $#pn));
+            }
+
             my $invocant;
             if (@args) { $invocant = shift @args }
             elsif (defined $f->{class_name}) {

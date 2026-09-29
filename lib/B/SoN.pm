@@ -2795,6 +2795,11 @@ sub _extract_class {
 
     my %class = (
         name    => $pkg_name,
+        # A `class`, not just a package: the classes section also records
+        # plain packages (their subs), with the same keys, and an empty class
+        # is otherwise indistinguishable from a package with no subs. The
+        # deparser needs it to emit `class NAME { ... }`.
+        is_class => 1,
         parent  => SoN::ClassAux::superclass_name($stash),
         fields  => _extract_fields( $pkg_name, $stash ),
         methods => {},
