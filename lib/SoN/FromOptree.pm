@@ -10621,6 +10621,9 @@ class SoN::FromOptree 0.01 {
         # passed) -- otherwise hoisting the exit check to the top would reorder it
         # ahead of the statements that ran before it in the source (a miscompile).
         my $stmt_count = 0;
+        # The state a top-level statement opened with, so a guard can tell
+        # whether its own test changed anything.
+        my ($stmt_ctrl, $stmt_mem, $stmt_scope);
         while ($$op) {
             # THE LATCH, where every `next LABEL` naming this loop rejoins:
             # before the continue block when there is one, else at the end of
@@ -10656,6 +10659,8 @@ class SoN::FromOptree 0.01 {
             }
             elsif ($name eq 'nextstate') {
                 $stmt_count++;
+                ($stmt_ctrl, $stmt_mem, $stmt_scope) =
+                    ($sim->control, $sim->memory, $sim->scope_bindings);
             }
 
             # unstack marks end of loop iteration - stop.
@@ -10816,6 +10821,55 @@ class SoN::FromOptree 0.01 {
             if ($name eq 'enterloop'
                 || ($opmap->is_branch($name) && $name ne 'and' && $name ne 'or')) {
                 die "GAP: $name inside a loop body not yet lowered\n";
+            }
+
+            # `redo if C` HEADING THE BODY, WITH A TEST THAT CHANGES NOTHING. A
+            # redo is an edge back to the body's entry, so it makes a loop of
+            # its own; here nothing differs between one restart and the next,
+            # and that loop is exactly `while (C) {}` -- it spins while C
+            # holds and falls through to the body when it does not.
+            #
+            # Anything else -- a redo after a statement, a test with an effect,
+            # a redo in an arm -- restarts on changed state, which needs the
+            # redo point's Phis, and still refuses below.
+            #
+            # THE POSTFIX FORM ONLY: ->other IS the redo. Seeing through a
+            # block prologue would also see through a `while`'s own condition
+            # into a body that opens with `redo;`.
+            if ($name eq 'and' && $sim->stack_depth > 0
+                    && $op->can('other') && ${$op->other}
+                    && $op->other->name eq 'redo') {
+                my $ctl = $op->other;
+                my %now = $sim->scope_bindings->%*;
+                die "GAP: loop control (redo) after the body has done"
+                  . " something is not yet lowered\n"
+                    unless $stmt_count == 1
+                        && !_loop_control_frame($ctl)
+                        && $sim->control == $stmt_ctrl
+                        && ($sim->memory // 0) == ($stmt_mem // 0)
+                        && keys(%now) == keys(%$stmt_scope)
+                        && !grep { ($stmt_scope->{$_} // 0) != $now{$_} }
+                                 keys %now;
+                my $cond = $sim->pop_node;
+                my $spin = $factory->make_cfg('Loop',
+                    inputs => [$sim->control]);
+                my $test = $factory->make_unique('Coerce',
+                    from_repr => ($cond->stamp ? $cond->stamp->type
+                                               : 'Unknown'),
+                    to_repr   => 'Boolean',
+                    inputs    => [$cond],
+                    stamp     => SoN::IR::Stamp->new(type => 'Boolean'));
+                $test->set_control_in($spin);
+                $factory->make_cfg('Proj', inputs => [$spin], index => 0);
+                my $out = $factory->make_cfg('Proj',
+                    inputs => [$spin], index => 1);
+                my $join = $factory->make_cfg('Region', inputs => [$out]);
+                $spin->set_region($join);
+                $sim->set_control($join);
+                ($stmt_ctrl, $stmt_mem, $stmt_scope) =
+                    ($sim->control, $sim->memory, $sim->scope_bindings);
+                $op = $op->next;
+                next;
             }
 
             # `last if COND` at the head of a headless `while(1)` body: the `and`
