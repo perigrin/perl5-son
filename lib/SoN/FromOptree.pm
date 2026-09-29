@@ -10698,13 +10698,17 @@ class SoN::FromOptree 0.01 {
                     # 15), while the same guard one statement later built the
                     # break correctly. The position of the guard decided
                     # whether the program was right.
-                    && !$cond_consumed) {
+                    && !$cond_consumed
+                    # NOR WHEN THIS WALK HAS ALREADY TAKEN A CONDITION -- a
+                    # `while (C) { last if D; ... }`. The guard is then a break,
+                    # which the mid-body handler below builds; hoisting it as a
+                    # second condition refused instead (corpus 006).
+                    && !$condition_fired) {
                 # HEAD-of-body `last if`: nothing in the iteration ran before the
                 # exit check, so it hoists soundly into the loop's continuation
                 # (negated). A `last if` deeper in the body is handled by the
                 # mid-body loop-control handler below (a real If split), not here.
-                die "GAP: last inside a loop body already has a loop condition\n"
-                    if $condition_fired++;
+                $condition_fired++;
                 my $cond = $sim->pop_node;
                 if (defined $loop_node) {
                     my $neg = _negate_comparison($cond, $factory)
