@@ -108,21 +108,15 @@ print scalar(@q), "\n";
 SRC
 };
 
-# THE SCALAR FORM STAYS REFUSED, and its message must say which construct it
-# is. Per [[a-refusal-test-must-name-its-cause]] a shared message cannot be
-# matched to a cause, so this pins the SPLIT rather than merely that something
-# refuses.
-subtest 'the scalar-context flip-flop refuses under its own name' => sub {
-    # OUTSIDE A LOOP, so this reaches the range handler. Inside a `for` body an
-    # EARLIER refusal wins ("range inside a loop body") and masks this one --
-    # measured, and the reason the first draft of this subtest failed while the
-    # split was already correct.
-    my ( undef, $err ) = graph_of(
-        'my $x = 3; my $r = (($x==1)..($x==5)) ? "y" : "n"; print "$r\n";' );
-    like $err, qr/flip-flop/,
-        'the refusal names the flip-flop, not "a runtime range"';
+# THE SPLIT STILL HOLDS, from the other side now. The scalar form was refused
+# under its own name; it is lowered since 2026-09-29 (a state slot plus selects,
+# _desugar_flip_flop), so the pin is that it ROUND-TRIPS as a flip-flop -- and
+# that the list form is not mistaken for one.
+round_trips(
+    'my $x = 3; my $r = (($x==1)..($x==5)) ? "y" : "n"; print "$r\n";',
+    'the scalar-context flip-flop round-trips as a flip-flop' );
 
-    # AND THE LIST FORM MUST NOT REACH IT -- the whole point of the split.
+subtest 'the list form is not a flip-flop' => sub {
     my ( $data, $lerr ) = graph_of('my $n=3; my @q=(1..$n); print "@q\n";');
     unlike $lerr, qr/flip-flop/, 'a list range is not called a flip-flop';
     ok $data && $data->{methods}{'main::__PROGRAM__'}, '... and it translates';

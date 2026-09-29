@@ -4464,7 +4464,11 @@ class SoN::Deparse 0.01 {
         my $t = $f->{const_type} // '';
         my $v = $f->{value};
 
-        return 'undef' if $t eq 'undef' || !defined $v;
+        # `undef()`, NOT BARE: as an operand the bare word takes what follows
+        # as ITS operand -- `undef + 1` is undef(+1), "Can't modify constant
+        # item" -- and `undef ? a : b` warns it is ambiguous. Measured on a
+        # flip-flop outside a loop, whose undef start state is inlined.
+        return 'undef()' if $t eq 'undef' || !defined $v;
         return $v      if $t eq 'integer' || $t eq 'number';
         if ($t eq 'string') {
             # DOUBLE-QUOTED WITH EXPLICIT ESCAPES. A single-quoted literal

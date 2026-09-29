@@ -99,8 +99,12 @@ sub round_trips ($src, $name) {
 #
 # Recorded with the desugaring verified rather than assumed, so the next attempt
 # starts from a known-good target shape.
-{
-    my $todo = todo 'a flip-flop desugars to a carried state slot plus two Ifs; the target shape is verified, the construction is not built';
+#
+# BUILT 2026-09-29, as recorded here -- perigrin chose this over a FlipFlop node
+# kind. The state slot is perl's own hidden pad slot (flip's targ), seeded
+# undef at entry so a loop carries it through a Phi, and the tests are selects
+# rather than Ifs: the operands are effect-free, so evaluating both is the same
+# value. See _desugar_flip_flop. No longer TODO.
 round_trips( <<'SRC', 'a flip-flop selects an inclusive window' );
 my @out;
 for my $l (1 .. 6) {
@@ -125,7 +129,39 @@ for my $l (1 .. 4) {
 print scalar(@out), "\n";
 SRC
 
+# THE CORPUS SHAPE: inside a grep block, with array-element operands. Corpus
+# 176, and the `@window` of 003.
+round_trips( <<'SRC', 'a flip-flop in a grep block' );
+my @on  = (0, 1, 0, 0, 0, 0);
+my @off = (0, 0, 0, 0, 1, 0);
+my @i   = (0, 1, 2, 3, 4, 5);
+my @o = grep { $on[$_] .. $off[$_] } @i;
+print "@o\n";
+SRC
+
+# ITS VALUE IS A SEQUENCE NUMBER, "E0"-marked on the evaluation that closes it,
+# and "1E0" when one evaluation opens and closes it -- a truth test alone would
+# not see a wrong count.
+round_trips( <<'SRC', 'the flip-flop value, printed' );
+my @on  = (1, 0, 0, 0, 1);
+my @off = (0, 0, 1, 0, 1);
+my $out = "";
+for my $i (0 .. 4) { my $v = ($on[$i] .. $off[$i]); $out .= "[$v]" }
+print "$out\n";
+SRC
+
+# `...` DOES NOT TEST THE RIGHT OPERAND ON THE EVALUATION THAT OPENED IT.
+# Measured: flip carries OPf_SPECIAL (0x80) for `...` and not for `..`.
+round_trips( <<'SRC', 'three dots differ from two' );
+my @on  = (1, 0, 0);
+my @off = (1, 0, 1);
+my ($two, $three) = ("", "");
+for my $i (0 .. 2) {
+    $two   .= ($on[$i] .. $off[$i]) ? "y" : "n";
+    $three .= ($on[$i] ... $off[$i]) ? "y" : "n";
 }
+print "$two $three\n";
+SRC
 
 # THE LIST FORM MUST BE UNDISTURBED -- it takes the counted-expansion path and
 # is the regression guard. NOT todo'd: it passes today.

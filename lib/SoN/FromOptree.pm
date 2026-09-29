@@ -719,6 +719,27 @@ class SoN::FromOptree 0.01 {
                     cells => {}, cells_written => {},
                     is_program => (defined $program_root ? 1 : 0) };
 
+        # A FLIP-FLOP'S STATE SLOT STARTS UNDEF, as every pad slot does, and
+        # is bound so here: a loop's scout finds carried slots by comparing
+        # against bindings that exist BEFORE the loop, so a slot first bound
+        # inside the body is never carried, and each pass saw a fresh undef --
+        # the flip-flop never stayed on. See _desugar_flip_flop.
+        {
+            my $root = defined $program_root ? B::main_root() : eval { $cv->ROOT };
+            my @q = ref($root) && $$root ? ($root) : ();
+            while (my $o = shift @q) {
+                next unless ref($o) && $$o;
+                $sim->define($o->targ, $factory->make('Constant',
+                    value => undef, const_type => 'undef',
+                    stamp => SoN::IR::Stamp->new(type => 'Undef')))
+                    if $o->name eq 'flip' && $o->targ;
+                next unless $o->flags & 4;    # OPf_KIDS
+                for (my $k = $o->first; ref($k) && $$k; $k = $k->sibling) {
+                    push @q, $k;
+                }
+            }
+        }
+
         # THIS CV MAY BE A CLOSURE BODY, and if it is, its captured pad slots
         # are bound to CellParams BEFORE the walk -- so the body's ordinary
         # `padsv` reads resolve to the cell rather than to an unbound slot.
@@ -12188,10 +12209,13 @@ class SoN::FromOptree 0.01 {
     # is why _translate_foreach_range receives them already on the stack.
     sub _handle_range ($cv, $op, $sim, $factory, $opmap) {
         my $name = $op->name;
-        die "GAP: a scalar-context flip-flop (\$a..\$b as a stateful test) is"
-          . " not yet lowered -- it carries state across evaluations, which a"
-          . " counted expansion does not express\n"
-            if ($op->flags & 3) == 2;    # OPf_WANT_SCALAR
+
+        # A SCALAR-CONTEXT `..` IS THE FLIP-FLOP, desugared as
+        # t/from-optree-flip-flop.t records (74c4d5f, and perigrin's choice
+        # 2026-09-29): a state slot plus selects, no new node kind. See
+        # _desugar_flip_flop.
+        return _desugar_flip_flop($cv, $op, $sim, $factory, $opmap)
+            if $name eq 'range' && ($op->flags & 3) == 2;    # OPf_WANT_SCALAR
 
         # `flip` and `flop` WRAP the range and carry no operand of their own;
         # skipping them keeps the stack depth right, since a node pushed at each
@@ -12241,6 +12265,99 @@ class SoN::FromOptree 0.01 {
                && ($resume->name eq 'flip' || $resume->name eq 'flop')) {
             $resume = $resume->next;
         }
+        return $resume;
+    }
+
+    # _desugar_flip_flop -- the scalar `..` / `...` as a state slot plus
+    # selects, per the target shape t/from-optree-flip-flop.t verified.
+    #
+    # THE STATE SLOT IS PERL'S OWN. `flip` names a hidden pad slot per
+    # occurrence (flip[$:5,6]), so it is read and rebound here like any
+    # lexical, and a loop around it carries it through a Phi -- the scout sees
+    # the slot mutated. Off it is false (undef at first, 0 after); on it is the
+    # running count. perl's pp_flip/pp_flop, as selects:
+    #
+    #     off, L false         -> value "",           state stays off
+    #     off, L true, `..`    -> R ? "1E0" / off : 1 / state 1
+    #     off, L true, `...`   -> 1, state 1          (R not tested yet)
+    #     on (count n)         -> R ? "(n+1)E0" / off : n+1 / state n+1
+    #
+    # THE OPERANDS MUST BE EFFECT-FREE: perl evaluates each only when its side
+    # is due, and a select evaluates both. An effect refuses by name.
+    #
+    # MAIN WALK ONLY. In a named sub the slot persists across CALLS, which an
+    # SSA binding per call cannot say; that shape is not in the corpus and
+    # refuses by name (recorded in docs/plans/2026-09-26-the-round-trip-goal.md).
+    sub _desugar_flip_flop ($cv, $op, $sim, $factory, $opmap) {
+        die "GAP: a flip-flop inside a sub is not yet lowered -- its state"
+          . " persists across calls\n"
+            unless ${$cv} == ${ B::main_cv() };
+
+        my $lo_op = $op->next;
+        my $hi_op = $op->can('other') ? $op->other : undef;
+        die "GAP: a flip-flop whose operands are not two arms is not yet"
+          . " lowered\n"
+            unless ref $lo_op && $$lo_op && ref $hi_op && $$hi_op;
+
+        my $control_before = $sim->control;
+        my $before = $sim->stack_depth;
+        _walk_branch($cv, $hi_op, $sim, $factory, $opmap, {});
+        my $right = $sim->stack_depth > $before ? $sim->pop_node : undef;
+        _walk_branch($cv, $lo_op, $sim, $factory, $opmap, {});
+        my $left = $sim->stack_depth > $before ? $sim->pop_node : undef;
+        die "GAP: a flip-flop operand did not evaluate to a value\n"
+            unless $left && $right;
+        die "GAP: a flip-flop whose operands have effects is not yet lowered"
+          . " -- perl evaluates them lazily\n"
+            unless $sim->control == $control_before;
+
+        my $flip = $lo_op;
+        $flip = $flip->next while $$flip && $flip->name ne 'flip';
+        die "GAP: a flip-flop without its flip op is not yet lowered\n"
+            unless $$flip && $flip->targ;
+        my $exclusive = ($flip->flags & 0x80) ? 1 : 0;    # `...`, measured
+        my $slot = $flip->targ;
+
+        my $int = sub ($v) {
+            $factory->make('Constant', value => $v, const_type => 'integer',
+                stamp => SoN::IR::Stamp->new(type => 'Int'));
+        };
+        my $str = sub ($v) {
+            $factory->make('Constant', value => $v, const_type => 'string',
+                stamp => SoN::IR::Stamp->new(type => 'Str'));
+        };
+        my $state = $sim->lookup($slot) // $factory->make('Constant',
+            value => undef, const_type => 'undef',
+            stamp => SoN::IR::Stamp->new(type => 'Undef'));
+
+        # ON: count n+1, and R closes it with the "E0" mark.
+        my $next  = $factory->make('Add', inputs => [$state, $int->(1)],
+            stamp => SoN::IR::Stamp->new(type => 'Int'));
+        my $closed = $factory->make('Concat',
+            inputs => [_coerce_to_str($factory, $next), $str->('E0')],
+            stamp  => SoN::IR::Stamp->new(type => 'Str'));
+        my $on_value = _make_ternary($factory, $right, $closed, $next);
+        my $on_state = _make_ternary($factory, $right, $int->(0), $next);
+
+        # OFF: L opens it; `..` then tests R at once, `...` does not.
+        my ($open_value, $open_state) = $exclusive
+            ? ($int->(1), $int->(1))
+            : ( _make_ternary($factory, $right, $str->('1E0'), $int->(1)),
+                _make_ternary($factory, $right, $int->(0), $int->(1)) );
+        my $off_value = _make_ternary($factory, $left, $open_value, $str->(''));
+        my $off_state = _make_ternary($factory, $left, $open_state, $int->(0));
+
+        my $value = _make_ternary($factory, $state, $on_value, $off_value);
+        $sim->define($slot,
+            _make_ternary($factory, $state, $on_state, $off_state));
+        $sim->push_node($value);
+
+        # RESUME AFTER THE WRAPPERS, as the range path does.
+        my $resume = $lo_op;
+        $resume = $resume->next
+            while $$resume && $resume->name ne 'flip' && $resume->name ne 'flop';
+        $resume = $resume->next
+            while $$resume && ($resume->name eq 'flip' || $resume->name eq 'flop');
         return $resume;
     }
 

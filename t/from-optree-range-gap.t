@@ -49,10 +49,12 @@ subtest 'a runtime range in list context translates' => sub {
         'a non-constant LOW bound translates too');
 };
 
-# THE SCALAR FORM IS A DIFFERENT CONSTRUCT and still refuses, under its own
-# name. `range`/`flip`/`flop` are three op names over two constructs, split by
-# the context flag.
-subtest 'a scalar-context flip-flop still refuses, naming itself' => sub {
+# THE SCALAR FORM IS A DIFFERENT CONSTRUCT. `range`/`flip`/`flop` are three op
+# names over two constructs, split by the context flag. It is lowered on the
+# main walk (a state slot plus selects -- see _desugar_flip_flop); INSIDE A SUB
+# it still refuses, under its own name, because its state persists across
+# calls, which a per-call binding cannot say. This case is a sub.
+subtest 'a scalar-context flip-flop in a sub refuses, naming itself' => sub {
     like(translate_dies('sub { my $x = 3; my $r = (($x==1)..($x==5)) ? 1 : 0; $r }'),
         qr/flip-flop/, 'the refusal names the flip-flop');
 };
