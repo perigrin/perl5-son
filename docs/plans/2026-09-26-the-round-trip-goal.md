@@ -39,6 +39,41 @@ pvm; ported and cut over, `.t` files deleted.
 denominator moved 210 -> 213 -> 217 -> 222 across the two sessions as pvm landed
 cases, including the interposed-read topic contributed from here.
 
+### Re-measured 2026-09-29: 198 of 224
+
+    ROUNDTRIP 198   DIFFERS 12   REFUSED 14   NOJSON 0   EMITS_INVALID_PERL 0
+
+Same snapshot (pvm e87dee9c, 224 cases); ratchet floor 198. Tier 2 per-file
+status identical to 46df9e5 throughout -- checked after every change, and
+three changes that moved it (comp/uproto.t, comp/redef.t, comp/package.t,
+comp/require.t) were fixed before they were committed.
+
+THE GOAL WAS RESTATED BY perigrin on 2026-09-28: 224/224 with NO honest-
+refusal list -- the harness round-trips to Perl, so there is nothing the
+emission cannot say -- and wire additions are made producer-side now,
+ahead of chalk. Added so far, none yet seen by chalk: Increment; BitAnd/
+BitOr/BitXor/Complement `flavor`; the sub record's `prototype`; Parameter's
+default input and `default_when`; Ref `each`; Call `shares_args`; top-level
+`data_section` and `phase_blocks`.
+
+DEFERRED, and where: format top-of-form (`$^`, `STDOUT_TOP`) is not modelled
+-- `write` renders as the body plus a print of `$^A`. No corpus case uses a
+header; this line is the record.
+
+WHAT REMAINS (26):
+
+    loop control, awaiting approval of docs/plans/2026-09-28-loop-control-
+      is-an-edge.md phases 1-6:        006 007 116 117 118 134 137
+    named subs closing over file lexicals, awaiting a design:
+                                        005 087 199 200 201
+    class feature / FieldAccess:        012 059 060 061
+    (?{ }) side effects:                096 097 098
+    s///ee (string eval replacement):   015 100
+    scalar flip-flop:                   003 176
+    SUPER:: (Call.enclosing_package):   050
+    multiconcat into a lexical target:  122
+    008 -- an omnibus: each fix above moved it; re-diagnose last.
+
 ### Re-measured 2026-09-28: 168 of 224
 
     ROUNDTRIP 168   DIFFERS 33   REFUSED 21   NOJSON 2   EMITS_INVALID_PERL 0
