@@ -25,9 +25,12 @@ use SoN::FromOptree;
 
 sub tgt { 7 }
 
-subtest 'the label form is refused' => sub {
+# A FORWARD label is a control edge now -- see
+# t/from-optree-a-forward-goto-is-an-edge.t, which runs it against perl. A
+# BACKWARD one is a loop, and must still refuse rather than vanish.
+subtest 'the backward label form is refused' => sub {
     my $err = dies {
-        SoN::FromOptree->translate(sub { my $x = 1; goto SKIP; $x = 999; SKIP: $x });
+        SoN::FromOptree->translate(sub { my $x = 1; SKIP: $x++; goto SKIP if $x < 3; $x });
     };
 
     ok($err, 'translation refuses rather than returning a graph');

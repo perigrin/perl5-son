@@ -60,12 +60,13 @@ subtest 'a translated sub is on the wire' => sub {
 # arrive, and the refused one must be NAMED rather than silently absent.
 #
 # The refused op here is INCIDENTAL -- this subtest is about CV accounting, not
-# about which construct refuses. It used `delete` until that was lowered; if
-# `goto` is ever lowered, swap in any other still-refused construct rather than
-# reading this failure as an accounting regression.
+# about which construct refuses. It used `delete`, then a forward `goto`, until
+# each was lowered; a backward `goto` still refuses. If that is lowered too,
+# swap in any other still-refused construct rather than reading this failure
+# as an accounting regression.
 subtest 'a refused sub is named, and its neighbours still translate' => sub {
     my $a = account(
-        'sub a { 1 } sub b { goto FOO; FOO: 1 } sub c { 3 } print a(), c();',
+        'sub a { 1 } sub b { FOO: 1; goto FOO } sub c { 3 } print a(), c();',
         'mixed');
     ok $a->{wire}{'main::a'}, 'a translated';
     ok $a->{wire}{'main::c'}, 'c translated';

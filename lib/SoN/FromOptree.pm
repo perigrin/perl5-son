@@ -838,10 +838,69 @@ class SoN::FromOptree 0.01 {
             }
         }
 
+        # FORWARD `goto LABEL` edges waiting for their label, and whether the
+        # fall-through is dead (an unconditional goto was the last thing run).
+        my %pending_goto;
+        my $goto_dead = 0;
+
         while ($$op) {
             last if $visited{$$op}++;
 
             my $name = $op->name;
+
+            # THE LABEL A FORWARD goto NAMED: its edges join the fall-through
+            # here -- or, after an unconditional goto, replace it.
+            if ($name eq 'nextstate' && defined $op->label
+                    && (my $edges = delete $pending_goto{ $op->label })) {
+                if ($goto_dead) {
+                    my $first = shift @$edges;
+                    $sim->set_control($first->control);
+                    $sim->set_memory($first->memory);
+                    my $b = $first->scope_bindings;
+                    $sim->define($_, $b->{$_}) for keys %$b;
+                    $goto_dead = 0;
+                }
+                $sim->merge($_, $factory) for @$edges;
+            }
+
+            # `goto LABEL`, `goto LABEL if C`, `goto LABEL unless C`, with the
+            # label ahead in this statement sequence: a forward control edge.
+            # What lies between builds nothing -- on the jump it never runs.
+            if (my $goto = _static_goto($op)) {
+                my $label  = $goto->pv;
+                my $target = _label_ahead($op->next, $label)
+                    or die "GAP: `goto $label` whose label is not ahead in the"
+                         . " same statement sequence (a backward jump is a"
+                         . " loop) is not yet lowered\n";
+                my $edge_ctrl;
+                if ($goto == $op) {
+                    $edge_ctrl = $sim->control;
+                }
+                else {
+                    my $cond = $sim->pop_node;
+                    my $if = $factory->make_cfg('If',
+                        inputs => [$sim->control, $cond]);
+                    # `and` jumps when C is true, `or` when it is false.
+                    my ($jump, $stay) = $name eq 'and' ? (0, 1) : (1, 0);
+                    $edge_ctrl = $factory->make_cfg('Proj',
+                        inputs => [$if], index => $jump);
+                    $sim->set_control($factory->make_cfg('Proj',
+                        inputs => [$if], index => $stay));
+                }
+                my $edge = SoN::FromOptree::StackSim->new(
+                    control => $edge_ctrl, memory => $sim->memory);
+                my $b = $sim->scope_bindings;
+                $edge->define($_, $b->{$_}) for keys %$b;
+                push $pending_goto{$label}->@*, $edge;
+                if ($goto == $op) {
+                    $goto_dead = 1;
+                    $op = $target;
+                }
+                else {
+                    $op = $op->next;
+                }
+                next;
+            }
 
             # dor op: $lhs // $rhs
             if ($opmap->is_branch($name) && $name eq 'dor') {
@@ -11501,6 +11560,30 @@ class SoN::FromOptree 0.01 {
             $o = $o->next;
         }
         return $$o ? $o : undef;
+    }
+
+    # _static_goto($op) -> the `goto LABEL` op when $op is one, or is an
+    # and/or whose taken arm is one (`goto L if C` / `goto L unless C`).
+    sub _static_goto ($op) {
+        my $g = $op;
+        $g = $op->other
+            if ($op->name eq 'and' || $op->name eq 'or') && $op->can('other');
+        return undef unless ref($g) && $$g && $g->name eq 'goto'
+            && $g->isa('B::PVOP');
+        return $g;
+    }
+
+    # _label_ahead($op, $label) -> the nextstate carrying $label, found by
+    # following ->next from $op -- the statements that run after it at this
+    # level -- or undef. A label inside a nested block is off this chain.
+    sub _label_ahead ($op, $label) {
+        my %seen;
+        while (ref($op) && $$op && !$seen{$$op}++) {
+            return $op if $op->name eq 'nextstate'
+                && (($op->label // '') eq $label);
+            $op = $op->next;
+        }
+        return undef;
     }
 
     # _loop_control_frame($op) -> the @LOOP_STACK frame a LABELED loop

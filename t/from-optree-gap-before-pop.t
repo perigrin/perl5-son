@@ -32,7 +32,7 @@ sub translate ($code) {
 subtest 'a refused op names itself rather than underflowing' => sub {
     for my $src (
         'sub { goto FOO; print "x" }',
-        'sub { my $x = 1; goto SKIP; $x = 999; SKIP: $x }',
+        'sub { my $x = 1; SKIP: $x++; goto SKIP if $x < 3; $x }',
         'sub { if ($^O eq "os2") { goto FOO } else { print "b" } FOO: print "x" }',
     ) {
         my $err = dies { translate($src) };
