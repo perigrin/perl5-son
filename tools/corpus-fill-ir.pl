@@ -1,25 +1,26 @@
 #!/usr/bin/perl
 # ABOUTME: Fill (or check) each pvm corpus case's ```ir block with B::SoN's graph
-# ABOUTME: for its ```perl block, as the wire text listing SoN::Render::WireText makes.
+# ABOUTME: for its ```perl block, as the compact YAML SoN::Render::WireYAML writes.
 #
 # pvm's FORMAT.md reserves ```ir for "the GRAPH answer, which is B::SoN's". A
 # case's graph is the one its ```perl block translates to, listed from the
-# wire JSON -- so a consumer (chalk) can take the corpus one stage at a time:
-# the perl, the graph B::SoN gives it, and the output perl prints.
+# wire JSON as flow YAML any YAML parser reads -- so a consumer (chalk) can
+# take the corpus one stage at a time: the perl, the graph B::SoN gives it, and
+# the output perl prints. See SoN::Render::WireYAML for the shape.
 #
 #   perl tools/corpus-fill-ir.pl [DIR]           rewrite the ir blocks in place
 #   perl tools/corpus-fill-ir.pl --check [DIR]   write nothing; list each case
 #                                                whose block differs, exit 1
 #
 # DIR defaults to $SON_CORPUS. A `parses: no` case has no optree and gets no
-# block. A graph the producer skips is listed as `refused NAME: GAP ...`, so a
-# refusal is recorded rather than looking like an absent block.
+# block. A graph the producer skips is listed under a top-level `refused:` key,
+# so a refusal is recorded rather than looking like an absent graph.
 use strict; use warnings;
 use JSON::PP;
 use File::Temp qw(tempdir);
 use FindBin;
 use lib "$FindBin::Bin/../lib";
-use SoN::Render::WireText;
+use SoN::Render::WireYAML;
 
 my $check = @ARGV && $ARGV[0] eq '--check' ? shift @ARGV : 0;
 my $C = shift(@ARGV) // $ENV{SON_CORPUS}
@@ -38,9 +39,12 @@ sub listing {
     my @refused = map { s/\Q$tmp\E\/case\.pl/CASE/gr }
                   grep { /^B::SoN: (?:skipped|INTERNAL)/ } split /\n/, $err;
     my $wire = eval { JSON::PP->new->decode($json) };
-    my $text = $wire ? SoN::Render::WireText::render($wire) : '';
-    $text .= "refused: no wire JSON\n" unless $wire;
-    $text .= join '', map { s/^B::SoN: //r . "\n" } @refused;
+    my $text = $wire ? SoN::Render::WireYAML::render($wire) : '';
+    push @refused, 'no wire JSON' unless $wire;
+    $text .= "refused: [\n"
+           . join(",\n", map { '  ' . SoN::Render::WireYAML::_scalar(s/^B::SoN: //r) }
+                          @refused)
+           . "]\n" if @refused;
     return $text;
 }
 

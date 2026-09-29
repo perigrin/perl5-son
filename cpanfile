@@ -10,4 +10,6 @@ on 'build' => sub {
 
 on 'test' => sub {
     requires 'Test2::V0';
+    # t/render-wire-yaml.t reads the corpus YAML back to prove it is the wire.
+    requires 'YAML::PP';
 };
