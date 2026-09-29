@@ -1,7 +1,7 @@
 # A named sub shares the file lexical it reads
 
 **Date:** 2026-09-29
-**Status:** DESIGN, for perigrin's approval before any code (asked 2026-09-29).
+**Status:** APPROVED by perigrin 2026-09-29, and BUILT (02ab009). See "As built".
 
 ## The defect
 
@@ -85,11 +85,39 @@ refuse by name.
 
 Round trips for: a read (199's `slot`), a write through the sub (`bump`),
 an array and an element (201's `@l`), a coderef in a file lexical called
-from a sub (200's `$show`), a sub defined BEFORE the `my` it reads (perl
-binds it at compile time; the hoisted declaration must still precede the
-sub), and `state` at file scope and in a bare block (005, 087).
+from a sub (200's `$show`), a sub defined BEFORE the `my` it names, and
+`state` at file scope and in a bare block (005, 087).
+
+CORRECTED WHILE BUILDING: a sub compiled before the `my` does NOT share it.
+At that point no lexical exists, so the sub names the package variable
+(`$main::v`) and perl prints it empty. The test pins that it is not treated
+as sharing.
 
 ## Acceptance
 
 Corpus 005, 087, 199, 200, 201 round-trip; full suite passes; tier 2
 per-file status unchanged; no tier-1 case changes bucket otherwise.
+
+## As built (02ab009)
+
+As designed, with three departures:
+
+  - THE RENDERER NEEDED A SIGNAL. A sub cannot tell a shared lexical from
+    its own local of the same name by looking, so PadAccess carries `shared`
+    (a wire addition). It drives the hoisted `my`, and no store to a shared
+    slot is spelled `my`.
+  - A SHARED AGGREGATE IS STORED, as a package aggregate already was: its
+    `my @l = (...)` is also an Assign into the shared slot, or a program that
+    never reads `@l` itself dropped it (corpus 201).
+  - A class field and an `our` name are PADNAMEf_OUTER as well; both are
+    excluded.
+
+The cases also exposed defects the design did not predict, fixed alongside:
+`++`, `op=` and TARGMY writes into ANY demoted slot rebound instead of
+storing; every store to a demoted slot was spelled `my`; an :lvalue sub's
+assignment was dropped (the sub record now carries `lvalue`); `&$ref;` lost
+the caller's @_; and `state`'s `once` had no handler at all.
+
+STILL REFUSED, by name: a `state` initialiser that can run more than once
+(in a sub, a loop body or an arm). A sub nested in another sub, closing over
+that sub's lexical, is not covered (its CvOUTSIDE is not main).

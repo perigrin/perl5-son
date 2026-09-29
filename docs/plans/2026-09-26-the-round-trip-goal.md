@@ -39,11 +39,11 @@ pvm; ported and cut over, `.t` files deleted.
 denominator moved 210 -> 213 -> 217 -> 222 across the two sessions as pvm landed
 cases, including the interposed-read topic contributed from here.
 
-### Re-measured 2026-09-29: 219 of 224
+### Re-measured 2026-09-29: 224 of 224 -- THE GOAL
 
-    ROUNDTRIP 219   DIFFERS 5   REFUSED 0   NOJSON 0   EMITS_INVALID_PERL 0
+    ROUNDTRIP 224   DIFFERS 0   REFUSED 0   NOJSON 0   EMITS_INVALID_PERL 0
 
-Same snapshot (pvm e87dee9c, 224 cases); ratchet floor 219 (202 earlier the
+Same snapshot (pvm e87dee9c, 224 cases); ratchet floor 224 (202 earlier the
 same day). Tier 2 per-file
 status identical to 46df9e5 throughout -- checked after every change, and
 three changes that moved it (comp/uproto.t, comp/redef.t, comp/package.t,
@@ -55,7 +55,8 @@ emission cannot say -- and wire additions are made producer-side now,
 ahead of chalk. Added so far, none yet seen by chalk: Increment; BitAnd/
 BitOr/BitXor/Complement `flavor`; the sub record's `prototype`; Parameter's
 default input and `default_when`; Ref `each`; Call `shares_args`; top-level
-`data_section` and `phase_blocks`.
+`data_section` and `phase_blocks`; PadAccess `shared`; the sub record's
+`lvalue`; `shares_args` on an indirect Call.
 
 DEFERRED, and where -- none is in the corpus; these lines are the record:
 
@@ -66,11 +67,10 @@ DEFERRED, and where -- none is in the corpus; these lines are the record:
   - `$a[0] .= "..."` (multiconcat APPEND into an element) still refuses; the
     plain assignment form is lowered.
 
-WHAT REMAINS (5):
-
-    named subs closing over file lexicals, design awaiting approval
-      (docs/plans/2026-09-29-a-named-sub-shares-the-file-lexical.md):
-                                        005 087 199 200 201
+NOTHING REMAINS in the corpus. The last five -- 005 087 199 200 201 --
+closed with docs/plans/2026-09-29-a-named-sub-shares-the-file-lexical.md.
+What still refuses outside the corpus is listed in that doc and in
+docs/plans/2026-09-28-loop-control-is-an-edge.md.
 
 Closed since 202: 007 134 137 (loop control phases 1, 2, 5); 012 059 060 061
 (classes); 096 097 098 (regex code blocks); 015 100 (a s///e replacement's
