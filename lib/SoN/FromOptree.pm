@@ -7366,6 +7366,36 @@ class SoN::FromOptree 0.01 {
             }
             # A STACKED multiconcat whose destination is not a package scalar
             # is not modelled: storing to the op's targ would drop it.
+            # AN ELEMENT DESTINATION, PLAIN ASSIGNMENT. perl evaluates the
+            # element last, so it is the TOP of the stack and the arg pop took
+            # it: measured on `$a[0] = "$ENV{M}a"`, args=[Subscript] with the
+            # real operand still below. Hand it back as the destination, take
+            # the operand, rebuild the value, and store it as sassign stores an
+            # element. The append form (`.=`) leaves a different shape and
+            # still refuses below. Corpus 122.
+            if (($op->flags & 64) && !($op->private & 0x40) && @args
+                    && ($args[-1]->isa('SoN::IR::Node::Subscript')
+                        || $args[-1]->isa('SoN::IR::Node::PostfixDeref'))
+                    && $sim->stack_depth) {
+                my $dest = pop @args;
+                unshift @args, $sim->pop_node;
+                my $val;
+                $val = $mkstr->($seg[0]) if defined $seg[0];
+                for my $i (0 .. $#args) {
+                    my $arg = _coerce_to_str($factory, $args[$i]);
+                    $val = defined $val ? $concat->($val, $arg) : $arg;
+                    $val = $concat->($val, $mkstr->($seg[$i + 1]))
+                        if defined $seg[$i + 1];
+                }
+                $val //= $mkstr->('');
+                _note_literal_mutation($dest);
+                my $store = $factory->make('Assign', inputs => [$dest, $val]);
+                $store->set_control_in($sim->control);
+                $sim->set_control($store);
+                $sim->set_memory($store) if defined $sim->memory;
+                $sim->push_node($val) unless ($op->flags & 3) == 1;   # void
+                return ($op->next, 'handled');
+            }
             if ($op->flags & 64) {   # OPf_STACKED
                 die "GAP: multiconcat storing into a stacked destination that is"
                   . " not a package scalar not yet lowered -- storing to the"
