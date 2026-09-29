@@ -39,11 +39,11 @@ pvm; ported and cut over, `.t` files deleted.
 denominator moved 210 -> 213 -> 217 -> 222 across the two sessions as pvm landed
 cases, including the interposed-read topic contributed from here.
 
-### Re-measured 2026-09-29: 218 of 224
+### Re-measured 2026-09-29: 219 of 224
 
-    ROUNDTRIP 218   DIFFERS 6   REFUSED 0   NOJSON 0   EMITS_INVALID_PERL 0
+    ROUNDTRIP 219   DIFFERS 5   REFUSED 0   NOJSON 0   EMITS_INVALID_PERL 0
 
-Same snapshot (pvm e87dee9c, 224 cases); ratchet floor 218 (202 earlier the
+Same snapshot (pvm e87dee9c, 224 cases); ratchet floor 219 (202 earlier the
 same day). Tier 2 per-file
 status identical to 46df9e5 throughout -- checked after every change, and
 three changes that moved it (comp/uproto.t, comp/redef.t, comp/package.t,
@@ -66,18 +66,18 @@ DEFERRED, and where -- none is in the corpus; these lines are the record:
   - `$a[0] .= "..."` (multiconcat APPEND into an element) still refuses; the
     plain assignment form is lowered.
 
-WHAT REMAINS (6):
+WHAT REMAINS (5):
 
     named subs closing over file lexicals, design awaiting approval
       (docs/plans/2026-09-29-a-named-sub-shares-the-file-lexical.md):
                                         005 087 199 200 201
-    008 -- an omnibus: each fix above moved it; re-diagnose last.
 
 Closed since 202: 007 134 137 (loop control phases 1, 2, 5); 012 059 060 061
 (classes); 096 097 098 (regex code blocks); 015 100 (a s///e replacement's
 effects -- they were walked on a snapshot and dropped); 118 (labels,
 phase 3); 116 (redo, phase 4);
-006 117 (goto, phase 6). Every loop-control phase is built; what each still
+006 117 (goto, phase 6); 008 (a return inside a loop body was dropped
+after a `next if` -- now an exit edge). Every loop-control phase is built; what each still
 refuses is listed in docs/plans/2026-09-28-loop-control-is-an-edge.md.
 
 ### Re-measured 2026-09-28: 168 of 224
