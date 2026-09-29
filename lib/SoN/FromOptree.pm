@@ -1527,6 +1527,28 @@ class SoN::FromOptree 0.01 {
             # of them (Subtract, NumGt, Add), which is exactly zhi 019f29ed.
             if ($name eq 'enter') {
                 my $cond_head = $op->next;
+
+                # `do { BODY } while COND` RUNS THE BODY BEFORE THE FIRST TEST.
+                # Lowered as BODY once, then an ordinary top-tested
+                # `while (COND) { BODY }`, whose header _translate_while_loop
+                # finds at the test and whose body it reaches through the
+                # back-edge `and`. Walked as straight code, that back edge
+                # read as an arm that never converged (corpus 134).
+                if (my $dw = _do_while_shape($op)) {
+                    my ($unstack, $test, $guard) = @$dw;
+                    _walk_branch($cv, $op->next, $sim, $factory, $opmap, {},
+                        undef, 0, $$unstack);
+                    _translate_while_loop($cv, $test, $sim, $factory,
+                        $opmap, \%visited);
+                    $op = $guard;
+                    my %skip;
+                    while ($$op && $op->name ne 'leave' && !$skip{$$op}++) {
+                        $op = $op->next;
+                    }
+                    $op = $op->next if $$op;   # step past leave
+                    next;
+                }
+
                 if (_is_postfix_while($op)) {
                     _translate_while_loop($cv, $cond_head, $sim, $factory,
                         $opmap, \%visited);
@@ -8834,6 +8856,39 @@ class SoN::FromOptree 0.01 {
     # which is the loop's condition head and what _translate_while_loop expects.
     # It is exactly the unstack's ->next: perl's back-edge jumps to the first op
     # of the condition, so the loop tells us where it begins.
+    # _do_while_shape($enter) -> [$unstack, $test_head, $guard] | undef
+    #
+    # A do-while, measured:
+    #
+    #     enter / BODY... / unstack / TEST... / and(other->BODY-START)
+    #
+    # The body is followed by an unstack, then the test, and the loop is the
+    # `and` (or `or`, for until) whose ->other jumps BACK to the body's first
+    # op. Declines -- leaving the construct to its existing handling -- if a
+    # nested loop op appears before the unstack, whose own unstack would be
+    # found first, or if no such back edge exists.
+    sub _do_while_shape ($enter) {
+        my $start = $enter->next;
+        return undef unless ref $start && $$start;
+        my ($op, %seen) = ($start);
+        while ($$op && !$seen{$$op}++) {
+            my $n = $op->name;
+            return undef if $n =~ /\A(?:enterloop|enteriter|leave|leaveloop)\z/;
+            last if $n eq 'unstack';
+            $op = $op->next;
+        }
+        return undef unless $$op && $op->name eq 'unstack';
+        my $unstack = $op;
+        my $test = $unstack->next;
+        return undef unless ref $test && $$test;
+        for ($op = $test; $$op && !$seen{$$op}++; $op = $op->next) {
+            next unless $op->name eq 'and' || $op->name eq 'or';
+            return undef unless $op->can('other') && ${ $op->other };
+            return ${ $op->other } == $$start ? [$unstack, $test, $op] : undef;
+        }
+        return undef;
+    }
+
     sub _loop_cond_head ($op) {
         return undef unless $op->can('other') && ${ $op->other };
         my $arm = $op->other;
