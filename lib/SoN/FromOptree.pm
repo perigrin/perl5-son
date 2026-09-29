@@ -509,6 +509,52 @@ class SoN::FromOptree 0.01 {
                 }
             }
 
+            # A REGEX CODE BLOCK SHARES THE LEXICALS IT NAMES. `(?{ $k = 5 })`
+            # runs inside the regex engine when the pattern matches, and the
+            # pattern is emitted verbatim -- so every lexical named in it must
+            # be the real variable, read or written, not a folded value. The
+            # blocks are compiled as kids of the pattern op (measured:
+            # match -> list -> null -> ex-scope -> sassign -> padsv[$k]
+            # sRM*), which PMf_HAS_CV (134217728, asked of B) announces.
+            # THE PATTERN TEXT SAYS SO: `match` carries no PMf_HAS_CV (only qr
+            # does, measured), but every one of them spells the block.
+            if ($op->name =~ /\A(?:match|qr|subst)\z/ && $op->can('precomp')
+                    && (( $op->precomp // '' ) =~ /\(\?\??\{/)) {
+                # THE BLOCKS ARE ON op_code_list, NOT UNDER ->first. Measured: the
+                # match op's ->first is NULL and its flags carry no OPf_KIDS;
+                # B::Concise draws the blocks from code_list, which is where
+                # they are.
+                my $cl = $op->can('code_list') ? $op->code_list : undef;
+                my @q = ( ref($cl) && $$cl ) ? ($cl) : ();
+                while (my $k = shift @q) {
+                    next unless ref($k) && $$k;
+                    $taken{ $k->targ } = 1
+                        if $k->name eq 'padsv' && $k->targ;
+                    push @q, $k->sibling;
+                    push @q, $k->first if $k->flags & 4;
+                }
+            }
+
+            # A qr// COMPILES ITS BLOCKS INTO A CLOSURE, not onto code_list
+            # (measured: code_list NULL, PMf_HAS_CV set), reached as its
+            # regexp's qr_anoncv. That CV marks each lexical it names
+            # PADNAMEf_OUTER with the enclosing slot as PARENT_PAD_INDEX --
+            # corpus 097's `$n` is outer=1 parent=1 -- and those slots are
+            # shared with the block exactly as the literal pattern's are.
+            if ($op->name eq 'qr' && $op->can('pmregexp')) {
+                my $rx  = eval { $op->pmregexp };
+                my $acv = $rx && eval { $rx->qr_anoncv };
+                if ($acv && ref($acv) && $$acv) {
+                    my $names = eval { $acv->PADLIST->ARRAYelt(0) };
+                    for my $i (1 .. ($names ? $names->MAX : 0)) {
+                        my $pn = $names->ARRAYelt($i);
+                        next unless $$pn && ($pn->FLAGS & B::PADNAMEf_OUTER());
+                        my $parent = eval { $pn->PARENT_PAD_INDEX };
+                        $taken{$parent} = 1 if $parent;
+                    }
+                }
+            }
+
             # pos() IS STATE ON THE VARIABLE. A /g match sets it and pos()
             # reads or writes it, and a value binding has no pos -- the
             # emission matched and asked pos() of a folded constant (corpus
@@ -5387,8 +5433,15 @@ class SoN::FromOptree 0.01 {
                 && $target->can('targ') && $target->targ
                 && $ctx->{addr_taken}{ $target->targ };
             my $flags = _pmflags_to_str($op->pmflags);
+            # A PATTERN WITH A CODE BLOCK is an effect too: `(?{ $k = 5 })`
+            # runs when it matches (PMf_HAS_CV; for a runtime match, a qr
+            # whose text carries one). Dropped as a pure void match, it never
+            # ran (corpus 096, 097).
+            my $has_code = (( $op->precomp // '' ) =~ /\(\?\??\{/)
+                || ( $matcher && $matcher->isa('SoN::IR::Node::Constant')
+                     && ($matcher->value // '') =~ /\(\?\??\{/ );
             my $pin = ( $ctx->{mode} // '' ) eq 'main'
-                && ( $demoted_subject || $flags =~ /g/ );
+                && ( $demoted_subject || $flags =~ /g/ || $has_code );
             if (defined $pattern) {
                 my $make = $pin ? 'make_unique' : 'make';
                 $node = $factory->$make('RegexMatch',
@@ -5404,14 +5457,21 @@ class SoN::FromOptree 0.01 {
                     # of its subject: a pos() read either side of it is then
                     # two reads, not one hash-consed node.
                     $sim->set_memory($node)
-                        if $flags =~ /g/ && defined $sim->memory;
+                        if ($flags =~ /g/ || $has_code) && defined $sim->memory;
                 }
             }
             else {
-                $node = $factory->make('Match',
+                my $make = $pin ? 'make_unique' : 'make';
+                $node = $factory->$make('Match',
                     inputs => [$target, $matcher],
                     stamp  => SoN::IR::Stamp->new(type => 'Boolean'),
                 );
+                if ($pin) {
+                    $node->set_control_in($sim->control);
+                    $sim->set_control($node);
+                    $sim->set_memory($node)
+                        if $has_code && defined $sim->memory;
+                }
             }
             $sim->set_last_match($node);
             $sim->push_node($node);

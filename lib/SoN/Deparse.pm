@@ -1016,6 +1016,15 @@ class SoN::Deparse 0.01 {
             next unless ( $n->{op} // '' ) eq 'PadAccess';
             next if exists $bound{ $n->{id} };
             next unless $safe_read->( $n->{id} );
+            # A LOCATION ONLY IS NOT A READ: a PadAccess whose every use is a
+            # store target or a referent needs no stale temporary -- binding it
+            # emitted `$stale6 = $k;` ahead of the `my $k` it named.
+            next unless grep {
+                my $c = $_;
+                my @ci = ( $c->{inputs} // [] )->@*;
+                !( ( $c->{op} // '' ) eq 'Ref'
+                   || ( ( $c->{op} // '' ) eq 'Assign' && @ci && $ci[0] == $n->{id} ) )
+            } ( $consumers{ $n->{id} } // [] )->@*;
             next if $under_loop{ $n->{id} };
             my @in = ( $n->{inputs} // [] )->@*;
             next unless @in == 1 && $self->_is_memory( $in[0] );
@@ -2563,7 +2572,17 @@ class SoN::Deparse 0.01 {
         # `$s =~ m/b/g;`, run for the pos() it leaves. The statement is the
         # expression; a read of it elsewhere is bound instead and never lands
         # here.
-        if ($op eq 'RegexMatch') {
+        # A DESTRUCTIVE s/// OR tr/// THAT NOTHING READS is still the
+        # mutation. With its pad subject demoted, later reads go through
+        # memory rather than through this node, so it can reach the chain
+        # unbound -- corpus 098's `s{a}{ ... }e` did -- and the helper that
+        # renders the bound form renders this one too.
+        if ($op eq 'RegexSubst' || $op eq 'Transliterate') {
+            my $text = $self->_counted_lexical_subst($n);
+            return $text if defined $text;
+        }
+
+        if ($op eq 'RegexMatch' || $op eq 'Match') {
             return $self->_expr_uncached( $n->{id} ) . ";\n";
         }
 
@@ -3868,8 +3887,15 @@ class SoN::Deparse 0.01 {
             # happens to spell one -- `$s =~ (?:...)` is a syntax error. m{}
             # is the delimiter that needs no escaping of the value's text,
             # since the value is interpolated rather than written inline.
-            $text = sprintf('(%s =~ m{(?:${\ (%s) })})',
-                $self->_expr($in[0]), $self->_expr($in[1]));
+            #
+            # EXCEPT THAT THE VALUE'S TEXT IS INSIDE THE DELIMITERS WHEN IT IS A
+            # LITERAL -- a qr constant spells its pattern here -- so braces
+            # that do not balance in it close `m{` early (corpus 098). The
+            # delimiter is chosen over the whole body, as a match's is.
+            my $inner = sprintf('(?:${\ (%s) })', $self->_expr($in[1]));
+            my ($open, $close) = _match_delimiters($inner);
+            $text = sprintf('(%s =~ m%s%s%s)',
+                $self->_expr($in[0]), $open, $inner, $close);
         }
         elsif ($op eq 'Defined') {
             # A unary definedness test. Parenthesised because `defined $x + 1`
@@ -4615,7 +4641,11 @@ class SoN::Deparse 0.01 {
         # it is emitted as a pattern rather than as a string -- the two are
         # different values, and only one of them matches.
         if ($t eq 'regex') {
-            return sprintf('qr{%s}', $v);
+            # THE SAME DELIMITER RULE AS A MATCH: a pattern whose braces do
+            # not balance -- corpus 098's `(?{ ... "}}" })` -- closes `qr{`
+            # early.
+            my ($open, $close) = _match_delimiters($v);
+            return "qr$open$v$close";
         }
 
         # A BAREWORD FILEHANDLE, and the bareword IS the spelling. Measured on
