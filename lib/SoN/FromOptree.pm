@@ -11321,7 +11321,12 @@ class SoN::FromOptree 0.01 {
             #     its header Phi at the break point (the exit reads header Phis);
             #     a slot rebound BEFORE the break and read post-loop is the
             #     multi-exit merge case and GAPs loudly (below).
-            if ($name eq 'and' && $sim->stack_depth > 0
+            # `or` TOO: `next unless C` / `last unless C` jump when C is
+            # FALSE. Matched on `and` alone, the `or` form fell to the loop-
+            # condition handler below, which lowered it as the loop's own test
+            # and dropped the rest of the body -- silently: `next unless $x > 1;
+            # $n++` counted nothing.
+            if (($name eq 'and' || $name eq 'or') && $sim->stack_depth > 0
                     && $op->can('other') && ${$op->other}
                     && _guarded_loop_control($op->other)) {
                 my $kind = _guarded_loop_control($op->other);
@@ -11339,12 +11344,14 @@ class SoN::FromOptree 0.01 {
                 # back (its first op). Build the If and split the control.
                 my $if_node = $factory->make_cfg('If',
                     inputs => [$sim->control, $cond]);
-                # Proj 0 = then (C true = guard taken), Proj 1 = else (C false =
-                # guard not taken = run the rest).
+                # Proj 0 = then (C true), Proj 1 = else (C false). The guard is
+                # taken on C true for `if` (and), on C false for `unless` (or);
+                # the rest of the body runs on the other.
+                my ($taken_idx, $rest_idx) = $name eq 'or' ? (1, 0) : (0, 1);
                 my $taken_proj = $factory->make_cfg('Proj',
-                    inputs => [$if_node], index => 0);
+                    inputs => [$if_node], index => $taken_idx);
                 my $rest_proj  = $factory->make_cfg('Proj',
-                    inputs => [$if_node], index => 1);
+                    inputs => [$if_node], index => $rest_idx);
 
                 # Walk the REST of the body (op->next chain) on the guard-not-taken
                 # arm. Use a snapshot so the guard-taken (skip/exit) arm keeps the
@@ -11443,6 +11450,58 @@ class SoN::FromOptree 0.01 {
                 # Resume the outer walk at the op the rest-arm converged on (the
                 # body's unstack / leaveloop) so the loop-body loop terminates.
                 $op = (defined $rest_end && ref $rest_end) ? $rest_end : $op->next;
+                next;
+            }
+
+            # A VALUE-CONTEXT `&&` / `||` IN THE BODY -- the test of `next
+            # unless defined $x && length $x`, a `$a[$i] || 10` default -- is
+            # a value, built as the arm walker builds it: an And/Or over the
+            # two operands. The loop's own condition is a VOID and, so a
+            # non-void one here is always nested. Without this the loop-
+            # condition handler below claimed it and refused "nested and/or
+            # inside a loop body" (93 graphs in chalk's lib/). An arm that
+            # does anything but yield a value keeps refusing.
+            if (($name eq 'and' || $name eq 'or') && $sim->stack_depth > 0
+                    && ($op->flags & 3) != 1            # not OPf_WANT_VOID
+                    && $op->can('other') && ${$op->other}
+                    && !_arm_has_die($op->other, ${ $op->next })
+                    && !_arm_has_void_call($op->other, ${ $op->next })
+                    && !_arm_has_element_store($op->other, ${ $op->next })
+                    && !_arm_advances_control($op->other, ${ $op->next })) {
+                my $lhs  = $sim->pop_node;
+                my $base = $sim->stack_depth;
+                my $stop = ${ $op->next };
+                my $rhs_sim = $sim->snapshot;
+                my @rhs_exits;
+                my ($rhs_end, $rhs_sig) =
+                    _walk_branch($cv, $op->other, $rhs_sim, $factory, $opmap,
+                        $loop_visited, \@rhs_exits, 1, $stop,
+                        $loop_node, $break_projs, 1);
+                die "GAP: a short-circuit in a loop body whose arm is not a"
+                  . " value not yet lowered\n"
+                    if ($rhs_sig // '') ne ''
+                    || @rhs_exits
+                    || !(defined $rhs_end && ref $rhs_end && $$rhs_end == $stop)
+                    || $rhs_sim->stack_depth != $base + 1;
+                # A MATCH IN THE ARM IS THE ONE A LATER `$1` NAMES: `(A and
+                # /x(\d)/) ? $1 : ()` reads the capture only when the and was
+                # true, which is when the match ran (comp/retainedlines.t).
+                # Walked on a snapshot, it was lost and the read refused.
+                $sim->set_last_match($rhs_sim->last_match)
+                    if defined $rhs_sim->last_match
+                    && (!defined $sim->last_match
+                        || $rhs_sim->last_match != $sim->last_match);
+                # IT YIELDS ONE OF ITS OPERANDS, so its stamp is their join --
+                # a loop that carries it needs one ("unstamped back-edge").
+                my $rhs = $rhs_sim->pop_node;
+                my ($ls, $rs) = map { $_->can('stamp') ? $_->stamp : undef } $lhs, $rhs;
+                $sim->push_node($factory->make(
+                    $name eq 'and' ? 'And' : 'Or',
+                    inputs => [$lhs, $rhs],
+                    ((defined $ls && defined $rs && $ls->type ne 'Unknown'
+                      && $rs->type ne 'Unknown')
+                        ? (stamp => SoN::IR::Stamp::join($ls, $rs)) : ())));
+                $op = $rhs_end;
                 next;
             }
 
@@ -12982,6 +13041,18 @@ class SoN::FromOptree 0.01 {
         return $true_end // $false_end // $op->next
             if ($op->flags & 3) == 1;   # void: if/else statement, no value
 
+        # AN EMPTY ARM IN LIST CONTEXT IS AN EMPTY LIST, not undef: `map { C ?
+        # $x : () }` -- chalk's filter idiom -- contributed an undef for every
+        # element C rejected. Each arm is then the LIST of its values (none or
+        # one), and the ternary picks a list, which flattens where perl does.
+        if ($list_ctx && ($true_delta == 0 || $false_delta == 0)) {
+            my $as_list = sub ($val, $delta) {
+                $factory->make('ArrayLiteral', inputs => [ $delta ? ($val) : () ],
+                    stamp => SoN::IR::Stamp->new(type => 'Array'));
+            };
+            $true_val  = $as_list->($true_val,  $true_delta);
+            $false_val = $as_list->($false_val, $false_delta);
+        }
         my $node = _make_ternary($factory, $cond, $true_val, $false_val);
         $sim->push_node($node);
         return $true_end // $false_end // $op->next;

@@ -93,20 +93,10 @@ subtest 'the index-0 case, from the corpus' => sub {
     my $data = eval { JSON::PP->new->decode($j) };
     ok $data && $data->{methods}{'main::__PROGRAM__'}, 'it translates' or return;
 
-    my @ns = ($data->{methods}{'main::__PROGRAM__'}{nodes} // [])->@*;
-    my @one = grep {
-        my $if = $_;
-        ($if->{op} // '') eq 'If' && 1 == grep {
-            ($_->{op} // '') eq 'Proj'
-                && ((($_->{inputs} // [])->[0]) // -1) == $if->{id}
-        } @ns;
-    } @ns;
-    ok scalar(@one), 'it has an If with one Proj' or return;
-
-    my ($proj) = grep { ($_->{op} // '') eq 'Proj'
-                     && ((($_->{inputs} // [])->[0]) // -1) == $one[0]{id} } @ns;
-    is +($proj->{fields}{index}), 0, 'and the surviving arm is index 0';
-
+    # THE ONE-PROJ SHAPE IS GONE, not broken: the `A || B` test in the
+    # foreach body is now a value (an Or) rather than a nested If. What must
+    # hold is that the file renders; that it runs as perl does is tier 2's
+    # census of base/translate.t.
     my $d = SoN::Deparse->new;
     ok defined $d->render($data), 'and it renders'
         or diag(($d->gap // '?') =~ s/\n.*//sr);

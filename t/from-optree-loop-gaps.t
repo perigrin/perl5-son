@@ -147,22 +147,22 @@ subtest 'nested loop inside a loop body refuses loudly' => sub {
         qr/GAP/, 'nested while dies with a GAP message');
 };
 
-subtest 'nested and/or inside a loop body refuses loudly (zhi 019f26a5)' => sub {
-    # _walk_loop_body treats the FIRST and/or with stack_depth>0 as the loop
-    # condition (mints the header Projs). A nested value-context and/or in the
-    # body (`my $x = $i && 1`) would mint a SECOND Proj pair on the Loop and
-    # corrupt the loop shape. $condition_fired++ refuses the second one loudly.
-    like(translate_dies(
+subtest 'nested and/or inside a loop body (zhi 019f26a5)' => sub {
+    # A VALUE-CONTEXT and/or in the body (`my $x = $i && 1`) is a value: an
+    # And/Or over its operands, not a second loop condition minting a second
+    # Proj pair. It refused here until the loop body learned that; the round
+    # trip against perl is t/from-optree-a-short-circuit-value-in-a-loop-body.t.
+    is(translate_dies(
         'sub { my $i=0; my $r=0; while ($i<3) { my $x = ($i && 1); $r=$r+$x; $i=$i+1 } $r }'),
-        qr/GAP: nested and.or inside a loop body/, 'nested && in the body dies with a GAP');
-    like(translate_dies(
+        undef, 'nested && in the body translates');
+    is(translate_dies(
         'sub { my $i=0; my $r=0; while ($i<3) { my $x = ($i || 5); $r=$r+$x; $i=$i+1 } $r }'),
-        qr/GAP: nested and.or inside a loop body/, 'nested || in the body dies with a GAP');
-    # A COMPOUND loop condition (`while (A && B)`) is a nested and/or too --
-    # single-comparison recovery cannot express short-circuit; GAP not miscompile.
-    like(translate_dies(
+        undef, 'nested || in the body translates');
+    # A COMPOUND loop condition (`while (A && B)`) is an And value now, not a
+    # nested and/or; its round trip is in the short-circuit test.
+    is(translate_dies(
         'sub { my $i=0; my $j=0; my $r=0; while ($i<3 && $j<5) { $r=$r+1; $i=$i+1; $j=$j+1 } $r }'),
-        qr/GAP: nested and.or inside a loop body/, 'compound && condition dies with a GAP');
+        undef, 'compound && condition translates');
 };
 
 # THE FOREACH MODIFIER GAP IS NOW A FEATURE (zhi 019f5a27 closed). It refused
