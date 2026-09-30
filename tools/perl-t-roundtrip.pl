@@ -84,7 +84,9 @@ for my $tier (@tiers) {
 
         # -c FIRST, so a non-compiling emission is its own bucket rather than
         # hiding among the wrong answers as empty output.
-        my $chk = qx($^X -I$LIB -c $g 2>&1);
+        # FROM $PERL, as the run below is: a file's BEGIN blocks run under
+        # -c, and comp/use.t's `chdir 't'` + t/lib @INC only resolve there.
+        my $chk = qx(cd $PERL && $^X -I$LIB -c $g 2>&1);
         unless ( $chk =~ /syntax OK/ ) {
             $tally{EMITS_INVALID_PERL}++;
             push @status, [ $rel, 'EMITS_INVALID_PERL' ];
