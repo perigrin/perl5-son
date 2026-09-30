@@ -1652,9 +1652,13 @@ L: GAP(a value-context conditional string append -- $s .= $x if defined $x -- fe
 ```
 
 ```son
+Tagged::__DEFAULT_1: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Return, ~, [1], 0]]} # 2
 Tagged::render: {start: 0, returns: [7], nodes: [
   [Start], # 0
-  [FieldAccess, {field_index: 1, field_stash: Tagged}, ~, ~, Str], # 1
+  [FieldAccess, {field_index: 1, field_stash: Tagged}, ~, ~, Scalar], # 1
   [Defined, ~, [1], ~, Boolean], # 2
   [FieldAccess, {field_index: 0, field_stash: Tagged}, ~, ~, Str], # 3
   [Coerce, {from_repr: Unknown, to_repr: Str}, [1], ~, Str], # 4
@@ -1748,7 +1752,7 @@ Bag::__DEFAULT_0: {start: 0, returns: [5], nodes: [
   [Constant, {const_type: integer, value: "10"}, ~, ~, Int], # 1
   [Constant, {const_type: integer, value: "20"}, ~, ~, Int], # 2
   [Constant, {const_type: integer, value: "30"}, ~, ~, Int], # 3
-  [ArrayLiteral, ~, [1, 2, 3], ~, Unknown], # 4
+  [ArrayLiteral, ~, [1, 2, 3], ~, ArrayRef], # 4
   [Return, ~, [4], 0]]} # 5
 Bag::first: {start: 0, returns: [5], nodes: [
   [Start], # 0
@@ -1849,7 +1853,7 @@ Bag::__DEFAULT_0: {start: 0, returns: [5], nodes: [
   [Constant, {const_type: integer, value: "10"}, ~, ~, Int], # 1
   [Constant, {const_type: integer, value: "20"}, ~, ~, Int], # 2
   [Constant, {const_type: integer, value: "30"}, ~, ~, Int], # 3
-  [ArrayLiteral, ~, [1, 2, 3], ~, Unknown], # 4
+  [ArrayLiteral, ~, [1, 2, 3], ~, ArrayRef], # 4
   [Return, ~, [4], 0]]} # 5
 Bag::total: {start: 0, returns: [6], nodes: [
   [Start], # 0
