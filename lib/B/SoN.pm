@@ -3108,6 +3108,21 @@ sub _wire_field_defaults {
                 ( $is_hash ? 'HashLiteral' : 'ArrayLiteral' ), inputs => \@elems,
                 stamp => SoN::IR::Stamp->new( type => $field_type ) );
         }
+        # `= undef`: the undef Constant.
+        elsif ( $dop->name eq 'undef' ) {
+            $field_type = 'Undef';
+            $value_node = $factory->make('Constant', value => undef,
+                const_type => 'undef',
+                stamp => SoN::IR::Stamp->new( type => 'Undef' ) );
+        }
+        # `= {}` / `= []`: one fused emptyavhv, the hash form flagged.
+        elsif ( $dop->name eq 'emptyavhv' ) {
+            my $is_hash = $dop->private & 0x20;   # OPpEMPTYAVHV_IS_HV
+            $field_type = $is_hash ? 'HashRef' : 'ArrayRef';
+            $value_node = $factory->make(
+                ( $is_hash ? 'HashLiteral' : 'ArrayLiteral' ), inputs => [],
+                stamp => SoN::IR::Stamp->new( type => $field_type ) );
+        }
         else {
             my ( $value, $stamp, $const_type ) = _const_op_value( $cv, $dop );
             next unless defined $stamp;
@@ -3166,8 +3181,7 @@ sub _walk_initfields {
     my ( $op, $cb ) = @_;
     return unless $$op;
     if ( $op->name eq 'initfield' ) {
-        my $kid = $op->can('first') ? $op->first : undef;
-        $cb->( _initfield_default($op), ( $kid && $$kid ) ? 1 : 0 );
+        $cb->( _initfield_default($op), _initfield_has_default($op) );
         return;
     }
     if ( $op->can('first') ) {
@@ -3175,6 +3189,31 @@ sub _walk_initfields {
         while ($$k) { _walk_initfields( $k, $cb ); $k = $k->sibling; }
     }
     return;
+}
+
+# _initfield_has_default($initfield_op) -- true when the field HAS a default,
+# modeled or not. A REQUIRED :param's initfield has a child too -- the
+# helemexistsor lookup, whose else-arm is the `die` for a missing argument --
+# and that is no default at all.
+sub _initfield_has_default {
+    my ($op) = @_;
+    my $child = $op->can('first') ? $op->first : undef;
+    return 0 unless $child && $$child;
+    $child = $child->first while $child->name eq 'null' && $child->can('first') && ${ $child->first }
+                              && $child->first->name ne 'pushmark';
+    if ( $child->name eq 'helemexistsor' ) {
+        my $last;
+        for ( my $k = $child->first; $$k; $k = $k->sibling ) { $last = $k }
+        return ( $last && $last->name ne 'die' ) ? 1 : 0;
+    }
+    return 1;
+}
+
+# _is_default_value_op($op) -- an op a field default can be built from:
+# a constant, an `undef`, an empty `[]`/`{}`, or `[...]`/`{...}` of constants.
+sub _is_default_value_op {
+    my ($o) = @_;
+    return $o && $$o && $o->name =~ /\A(?:const|undef|emptyavhv|anonlist|anonhash)\z/;
 }
 
 # _initfield_default($initfield_op) — the op node holding the field's default
@@ -3193,13 +3232,11 @@ sub _initfield_default {
         my $last;
         my $k = $child->first;
         while ($$k) { $last = $k; $k = $k->sibling; }
-        return ( $last && ($last->name eq 'const' || $last->name eq 'anonlist'
-                        || $last->name eq 'anonhash') ) ? $last : undef;
+        return _is_default_value_op($last) ? $last : undef;
     }
     # A scalar default is a `const`; an aggregate default (`field $x = [1,2,3]`
     # / `{a=>1}`) is an `anonlist`/`anonhash` (built as a ref).
-    return $child if $child->name eq 'const' || $child->name eq 'anonlist'
-                  || $child->name eq 'anonhash';
+    return $child if _is_default_value_op($child);
     # An aggregate field's list: a null over pushmark and consts only.
     if ( $child->name eq 'null' && $child->can('first') ) {
         for ( my $k = $child->first; $$k; $k = $k->sibling ) {

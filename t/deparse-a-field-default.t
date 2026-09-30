@@ -66,6 +66,29 @@ class K { field $n = 3; field $r = [1, 2]; method all { $n . scalar(@$r) } }
 print K->new->all, "\n";
 SRC
 
+# A REQUIRED :param HAS NO DEFAULT. Its initfield still has a child -- the
+# lookup, with a `die` for a missing argument -- and reading any child as a
+# default refused 11 of chalk's lib/ classes for a default they do not have.
+round_trips(<<'SRC', 'a required :param, which has no default');
+use v5.42; use experimental 'class';
+class K { field $v :param; method v { $v } }
+print K->new(v => 4)->v, "\n";
+SRC
+
+# `= undef` AND `= {}` / `= []` ARE CONSTANTS TOO: an undef op and an
+# emptyavhv, one each in chalk's Scheduler and Target::Perl.
+round_trips(<<'SRC', 'an undef default, with and without :param');
+use v5.42; use experimental 'class';
+class K { field $a :param = undef; field $b = undef; method all { (defined $a ? "d" : "u") . (defined $b ? "d" : "u") } }
+print K->new->all, K->new(a => 1)->all, "\n";
+SRC
+
+round_trips(<<'SRC', 'an empty hash and array ref default');
+use v5.42; use experimental 'class';
+class K { field $h = {}; field $l = []; method add($k) { $h->{$k} = 1; push @$l, $k; return scalar(keys %$h) . scalar(@$l) } }
+my $o = K->new; $o->add("a"); print $o->add("b"), K->new->add("c"), "\n";
+SRC
+
 # A DEFAULT THE WIRE CANNOT CARRY -- a computed one -- was dropped just as
 # silently. It refuses now, naming the field, rather than emitting a class
 # whose field starts undef.
