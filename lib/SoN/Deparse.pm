@@ -588,8 +588,20 @@ class SoN::Deparse 0.01 {
     # default graph's VALUE; a method or ADJUST is its graph's statements.
     method _emit_classes () {
         my %owned;
+        # A CLASS FROM ANOTHER FILE is the source's `use`, not ours to
+        # declare: re-declaring it is "Cannot reopen existing class". Its
+        # graphs are owned all the same, so none is emitted as a named sub.
+        for my $c (grep { ref $_ eq 'HASH' && $_->{is_class} && $_->{external} }
+                   values $sub_meta->%*) {
+            $owned{$_} = 1 for grep { defined }
+                ( values %{ $c->{methods} // {} } ),
+                ( map { ref $_ eq 'HASH' ? $_->{graph} : $_ } values %{ $c->{subs} // {} } ),
+                ( @{ $c->{adjusts} // [] } ),
+                ( map { $_->{default_ref} } @{ $c->{fields} // [] } );
+        }
         my %cls = map { $_->{name} => $_ }
-                  grep { ref $_ eq 'HASH' && $_->{is_class} && defined $_->{name} }
+                  grep { ref $_ eq 'HASH' && $_->{is_class} && defined $_->{name}
+                         && !$_->{external} }
                   values $sub_meta->%*;
         return ('', \%owned) unless %cls;
 

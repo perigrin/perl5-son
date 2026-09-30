@@ -2000,6 +2000,11 @@ sub _emit_referenced_classes {
             next unless SoN::ClassAux::is_class($stash);
             $classes->{$cname} =
                 _extract_class( $graphs, $cname, $stash );
+            # A CLASS FROM ANOTHER FILE -- a parent the program `use`s -- is
+            # described so a consumer can resolve methods through it, and
+            # marked so an emitter loads it rather than re-declaring it.
+            $classes->{$cname}{external} = 1
+                if _stash_is_other_file( $cname, $stash );
             # _extract_class records the method-name -> graph-key map but does
             # not translate the method CVs (that is _walk_package's job, which
             # skipped this class because it is outside the package= filter).
@@ -2332,6 +2337,29 @@ sub _stash_is_user_code {
         return 1 if _cv_is_user_code($cv);
     }
     return 0;
+}
+
+# _stash_is_other_file($name, $stash) -- is this package's code DEMONSTRABLY
+# another file's? Not merely "not ours": an empty `class Empty {}` has no sub
+# of its own to ask (its `new` is perl's), and declaring it is this file's job.
+# So: a sub of its compiled from another file, and none from ours -- or, with
+# no sub either way, its own .pm is one the program loaded.
+sub _stash_is_other_file {
+    my ( $name, $stash ) = @_;
+    no strict 'refs';
+    return 0 if _stash_is_user_code($stash);
+    for my $k ( keys %$stash ) {
+        next if $k =~ /::$/ || $k =~ /^[^a-zA-Z_]/;
+        my $b = eval { svref_2object( \$stash->{$k} ) };
+        next unless $b && $b->isa('B::GV');
+        my $cv = eval { $b->CV };
+        next unless $cv && $$cv && !$cv->isa('B::SPECIAL');
+        my $file = eval { $cv->FILE };
+        return 1 if defined $file && length $file && $file ne _compilation_file()
+                 && -f $file;
+    }
+    ( my $pm = "$name.pm" ) =~ s{::}{/}g;
+    return exists $INC{$pm} ? 1 : 0;
 }
 
 # _cv_is_user_code($cv) -- was this sub compiled from the file under
