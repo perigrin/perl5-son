@@ -122,7 +122,7 @@ if-w0-w1-u3-d2-v3-et-Dx
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [96], nodes: [
+main::__PROGRAM__: {start: 0, returns: [101], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 2
@@ -139,140 +139,145 @@ main::__PROGRAM__: {start: 0, returns: [96], nodes: [
   [MemStart], # 13
   [Constant, {const_type: string, value: "x\n"}, ~, ~, Str], # 14
   [Constant, {const_type: string, value: "-e"}, ~, ~, Str], # 15
-  [EnvRead, {key: X}, ~, ~, Str], # 16
-  [Constant, {const_type: string, value: "-v"}, ~, ~, Str], # 17
-  [EnvRead, {key: "N"}, ~, ~, Str], # 18
-  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 19
-  [DefinedOr, ~, [18, 19], ~, Str], # 20
-  [Coerce, {from_repr: Str, to_repr: Num}, [20], ~, Num], # 21
-  [Add, ~, [21, 7], ~, Num], # 22
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [22], ~, Str], # 23
-  [Concat, ~, [17, 23], ~, Str], # 24
-  [Constant, {const_type: string, value: "-d"}, ~, ~, Str], # 25
-  [Add, ~, [8, 7], ~, Int], # 26
-  [Constant, {const_type: string, value: if}, ~, ~, Str], # 27
-  [If, ~, [0, 20], 0], # 28
-  [Proj, {index: 0}, [28]], # 29
-  [Print, ~, [27], 29, Scalar], # 30
-  [Constant, {const_type: string, value: else}, ~, ~, Str], # 31
-  [Proj, {index: 1}, [28]], # 32
-  [Print, ~, [31], 32, Scalar], # 33
-  [Region, {head: 28}, [30, 33]], # 34
-  [If, ~, [34, 20], 34], # 35
-  [Proj, {index: 0}, [35]], # 36
-  [Constant, {const_type: string, value: "-unless"}, ~, ~, Str], # 37
-  [Proj, {index: 1}, [35]], # 38
-  [Print, ~, [37], 38, Scalar], # 39
-  [Region, {head: 35}, [36, 39]], # 40
-  [Loop, {bound: each}, [40], 40], # 41
-  [Proj, {index: 1}, [41]], # 42
-  [Proj, {index: 0}, [41]], # 43
-  [Phi, {region: 41}, [8, 105], ~, Int], # 44
-  [NumGt, ~, [44, 7], ~, Boolean], # 45
-  [If, ~, [43, 45], 43], # 46
-  [Proj, {index: 0}, [46]], # 47
-  [Region, {head: 41}, [42, 47]], # 48
-  [Loop, {bound: each}, [48], 48], # 49
-  [Proj, {index: 1}, [49]], # 50
-  [Region, {head: 49}, [50]], # 51
-  [Loop, {bound: each}, [51], 51], # 52
-  [Phi, {region: 52}, [26, 107], ~, Int], # 53
-  [Coerce, {from_repr: Int, to_repr: Str}, [53], ~, Str], # 54
-  [Concat, ~, [25, 54], ~, Str], # 55
-  [Proj, {index: 1}, [52]], # 56
-  [Region, {head: 52}, [56]], # 57
-  [Print, ~, [55], 57, Scalar], # 58
-  [Print, ~, [24], 58, Scalar], # 59
-  [Region, {eval_entry: 59}, [59]], # 60
-  [Phi, {region: 60}, [16, 1], ~, Scalar], # 61
-  [Constant, {const_type: string, value: t}, ~, ~, Str], # 62
-  [DefinedOr, ~, [61, 62], ~, Scalar], # 63
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [63], ~, Str], # 64
-  [Concat, ~, [15, 64], ~, Str], # 65
-  [Print, ~, [65], 60, Scalar], # 66
-  [Unwind, ~, [14], 66], # 67
-  [Region, {eval_entry: 66}, [67]], # 68
-  [EntryDef, {package: main, sigil: $, symbol: "@"}, [13], 68, Scalar], # 69
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [69], ~, Str], # 70
-  [Concat, ~, [12, 70], ~, Str], # 71
-  [Print, ~, [71], 69, Scalar], # 72
-  [EnvRead, {key: R}, ~, ~, Str], # 73
-  [DefinedOr, ~, [73, 8], ~, Str], # 74
-  [If, ~, [72, 74], 72], # 75
-  [Proj, {index: 1}, [75]], # 76
-  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 77
-  [Proj, {index: 0}, [75]], # 78
-  [Call, {dispatch_kind: builtin, name: exit, param_names: []}, [77], 78, Unknown], # 79
-  [Region, {head: 75}, [76, 79]], # 80
-  [Print, ~, [11], 80, Scalar], # 81
-  [Print, ~, [3, 10], 81, Scalar], # 82
-  [Loop, {bound: each}, [82], 82], # 83
-  [Proj, {index: 1}, [83]], # 84
-  [Region, {head: 83}, [84]], # 85
-  [Loop, {bound: entry}, [85], 85], # 86
-  [Proj, {index: 1}, [86]], # 87
-  [Region, {head: 86}, [87]], # 88
-  [If, ~, [88, 20], 88], # 89
-  [Proj, {index: 1}, [89]], # 90
-  [Constant, {const_type: string, value: "-p"}, ~, ~, Str], # 91
-  [Proj, {index: 0}, [89]], # 92
-  [Print, ~, [91], 92, Scalar], # 93
-  [Region, {head: 89}, [90, 93]], # 94
-  [Print, ~, [2], 94, Scalar], # 95
-  [Return, ~, [1], 95], # 96
-  [NumLt, ~, [44, 21], 41, Boolean], # 97
-  [Add, ~, [21, 19], ~, Num], # 98
-  [NumLt, ~, [53, 21], 52, Boolean], # 99
-  [Phi, {region: 49}, [44, 103], ~, Int], # 100
-  [NumGe, ~, [100, 98], ~, Boolean], # 101
-  [NumLt, ~, [100, 98], 49, Boolean], # 102
-  [Add, ~, [100, 7], ~, Int], # 103
-  [NumGt, ~, [103, 22], ~, Boolean], # 104
-  [Add, ~, [44, 7], ~, Int], # 105
-  [Coerce, {from_repr: Int, to_repr: Str}, [44], ~, Str], # 106
-  [Add, ~, [53, 7], ~, Int], # 107
-  [Phi, {region: 83}, [8, 110], ~, Int], # 108
-  [NumLt, ~, [108, 7], 83, Boolean], # 109
-  [Add, ~, [108, 7], ~, Int], # 110
-  [Phi, {region: 86}, [8, 112], ~, Int], # 111
-  [Add, ~, [111, 7], ~, Int], # 112
-  [Proj, {index: 0}, [49]], # 113
-  [If, ~, [113, 104], 113], # 114
-  [Proj, {index: 0}, [52]], # 115
-  [Constant, {const_type: string, value: "-w"}, ~, ~, Str], # 116
-  [Concat, ~, [116, 106], ~, Str], # 117
-  [Coerce, {from_repr: Int, to_repr: Str}, [103], ~, Str], # 118
-  [Proj, {index: 0}, [114]], # 119
-  [Proj, {index: 1}, [114]], # 120
-  [Proj, {index: 0}, [86]], # 121
-  [Loop, {bound: each}, [121], 121], # 122
-  [Coerce, {from_repr: Unknown, to_repr: Boolean}, [74], 122, Boolean], # 123
-  [Coerce, {from_repr: Int, to_repr: Str}, [108], ~, Str], # 124
-  [EnvRead, {key: A}, ~, ~, Str], # 125
-  [Constant, {const_type: string, value: a}, ~, ~, Str], # 126
-  [DefinedOr, ~, [125, 126], ~, Str], # 127
-  [Constant, {const_type: string, value: b}, ~, ~, Str], # 128
-  [ArrayLiteral, {sigil: "@", symbol: l}, [127, 128], ~, Array], # 129
-  [Count, ~, [129, 13], ~, Int], # 130
-  [NumGt, ~, [130, 111], 86, Boolean], # 131
-  [Subscript, {kind: array}, [129, 111, 13], ~, Scalar], # 132
-  [Proj, {index: 1}, [46]], # 133
-  [Print, ~, [117], 133, Scalar], # 134
-  [Constant, {const_type: string, value: "-u"}, ~, ~, Str], # 135
-  [Concat, ~, [135, 118], ~, Str], # 136
-  [Proj, {index: 0}, [83]], # 137
-  [Print, ~, [136], 120, Scalar], # 138
-  [Region, {head: 114}, [119, 138]], # 139
-  [Constant, {const_type: string, value: "-c"}, ~, ~, Str], # 140
-  [Concat, ~, [140, 124], ~, Str], # 141
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [132], ~, Str], # 142
-  [Print, ~, [141], 137, Scalar], # 143
-  [Proj, {index: 0}, [122]], # 144
-  [Proj, {index: 1}, [122]], # 145
-  [Constant, {const_type: string, value: "-f"}, ~, ~, Str], # 146
-  [Concat, ~, [146, 142], ~, Str], # 147
-  [Region, {head: 122}, [145]], # 148
-  [Print, ~, [147], 148, Scalar]]} # 149
+  [Constant, {const_type: integer, value: "10"}, ~, ~, Int], # 16
+  [Coerce, {from_repr: Int, to_repr: Num}, [16], ~, Num], # 17
+  [EnvRead, {key: X}, ~, ~, Str], # 18
+  [DefinedOr, ~, [18, 8], ~, Str], # 19
+  [Coerce, {from_repr: Str, to_repr: Num}, [19], ~, Num], # 20
+  [Divide, ~, [17, 20], ~, Num], # 21
+  [Constant, {const_type: string, value: "-v"}, ~, ~, Str], # 22
+  [EnvRead, {key: "N"}, ~, ~, Str], # 23
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 24
+  [DefinedOr, ~, [23, 24], ~, Str], # 25
+  [Coerce, {from_repr: Str, to_repr: Num}, [25], ~, Num], # 26
+  [Add, ~, [26, 7], ~, Num], # 27
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [27], ~, Str], # 28
+  [Concat, ~, [22, 28], ~, Str], # 29
+  [Constant, {const_type: string, value: "-d"}, ~, ~, Str], # 30
+  [Add, ~, [8, 7], ~, Int], # 31
+  [Constant, {const_type: string, value: if}, ~, ~, Str], # 32
+  [If, ~, [0, 25], 0], # 33
+  [Proj, {index: 0}, [33]], # 34
+  [Print, ~, [32], 34, Scalar], # 35
+  [Constant, {const_type: string, value: else}, ~, ~, Str], # 36
+  [Proj, {index: 1}, [33]], # 37
+  [Print, ~, [36], 37, Scalar], # 38
+  [Region, {head: 33}, [35, 38]], # 39
+  [If, ~, [39, 25], 39], # 40
+  [Proj, {index: 0}, [40]], # 41
+  [Constant, {const_type: string, value: "-unless"}, ~, ~, Str], # 42
+  [Proj, {index: 1}, [40]], # 43
+  [Print, ~, [42], 43, Scalar], # 44
+  [Region, {head: 40}, [41, 44]], # 45
+  [Loop, {bound: each}, [45], 45], # 46
+  [Proj, {index: 1}, [46]], # 47
+  [Proj, {index: 0}, [46]], # 48
+  [Phi, {region: 46}, [8, 110], ~, Int], # 49
+  [NumGt, ~, [49, 7], ~, Boolean], # 50
+  [If, ~, [48, 50], 48], # 51
+  [Proj, {index: 0}, [51]], # 52
+  [Region, {head: 46}, [47, 52]], # 53
+  [Loop, {bound: each}, [53], 53], # 54
+  [Proj, {index: 1}, [54]], # 55
+  [Region, {head: 54}, [55]], # 56
+  [Loop, {bound: each}, [56], 56], # 57
+  [Phi, {region: 57}, [31, 112], ~, Int], # 58
+  [Coerce, {from_repr: Int, to_repr: Str}, [58], ~, Str], # 59
+  [Concat, ~, [30, 59], ~, Str], # 60
+  [Proj, {index: 1}, [57]], # 61
+  [Region, {head: 57}, [61]], # 62
+  [Print, ~, [60], 62, Scalar], # 63
+  [Print, ~, [29], 63, Scalar], # 64
+  [Region, {eval_entry: 64}, [64]], # 65
+  [Phi, {region: 65}, [21, 1], ~, Scalar], # 66
+  [Constant, {const_type: string, value: t}, ~, ~, Str], # 67
+  [DefinedOr, ~, [66, 67], ~, Scalar], # 68
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [68], ~, Str], # 69
+  [Concat, ~, [15, 69], ~, Str], # 70
+  [Print, ~, [70], 65, Scalar], # 71
+  [Unwind, ~, [14], 71], # 72
+  [Region, {eval_entry: 71}, [72]], # 73
+  [EntryDef, {package: main, sigil: $, symbol: "@"}, [13], 73, Scalar], # 74
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [74], ~, Str], # 75
+  [Concat, ~, [12, 75], ~, Str], # 76
+  [Print, ~, [76], 74, Scalar], # 77
+  [EnvRead, {key: R}, ~, ~, Str], # 78
+  [DefinedOr, ~, [78, 8], ~, Str], # 79
+  [If, ~, [77, 79], 77], # 80
+  [Proj, {index: 1}, [80]], # 81
+  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 82
+  [Proj, {index: 0}, [80]], # 83
+  [Call, {dispatch_kind: builtin, name: exit, param_names: []}, [82], 83, Unknown], # 84
+  [Region, {head: 80}, [81, 84]], # 85
+  [Print, ~, [11], 85, Scalar], # 86
+  [Print, ~, [3, 10], 86, Scalar], # 87
+  [Loop, {bound: each}, [87], 87], # 88
+  [Proj, {index: 1}, [88]], # 89
+  [Region, {head: 88}, [89]], # 90
+  [Loop, {bound: entry}, [90], 90], # 91
+  [Proj, {index: 1}, [91]], # 92
+  [Region, {head: 91}, [92]], # 93
+  [If, ~, [93, 25], 93], # 94
+  [Proj, {index: 1}, [94]], # 95
+  [Constant, {const_type: string, value: "-p"}, ~, ~, Str], # 96
+  [Proj, {index: 0}, [94]], # 97
+  [Print, ~, [96], 97, Scalar], # 98
+  [Region, {head: 94}, [95, 98]], # 99
+  [Print, ~, [2], 99, Scalar], # 100
+  [Return, ~, [1], 100], # 101
+  [NumLt, ~, [49, 26], 46, Boolean], # 102
+  [Add, ~, [26, 24], ~, Num], # 103
+  [NumLt, ~, [58, 26], 57, Boolean], # 104
+  [Phi, {region: 54}, [49, 108], ~, Int], # 105
+  [NumGe, ~, [105, 103], ~, Boolean], # 106
+  [NumLt, ~, [105, 103], 54, Boolean], # 107
+  [Add, ~, [105, 7], ~, Int], # 108
+  [NumGt, ~, [108, 27], ~, Boolean], # 109
+  [Add, ~, [49, 7], ~, Int], # 110
+  [Coerce, {from_repr: Int, to_repr: Str}, [49], ~, Str], # 111
+  [Add, ~, [58, 7], ~, Int], # 112
+  [Phi, {region: 88}, [8, 115], ~, Int], # 113
+  [NumLt, ~, [113, 7], 88, Boolean], # 114
+  [Add, ~, [113, 7], ~, Int], # 115
+  [Phi, {region: 91}, [8, 117], ~, Int], # 116
+  [Add, ~, [116, 7], ~, Int], # 117
+  [Proj, {index: 0}, [54]], # 118
+  [If, ~, [118, 109], 118], # 119
+  [Proj, {index: 0}, [57]], # 120
+  [Constant, {const_type: string, value: "-w"}, ~, ~, Str], # 121
+  [Concat, ~, [121, 111], ~, Str], # 122
+  [Coerce, {from_repr: Int, to_repr: Str}, [108], ~, Str], # 123
+  [Proj, {index: 0}, [119]], # 124
+  [Proj, {index: 1}, [119]], # 125
+  [Proj, {index: 0}, [91]], # 126
+  [Loop, {bound: each}, [126], 126], # 127
+  [Coerce, {from_repr: Unknown, to_repr: Boolean}, [79], 127, Boolean], # 128
+  [Coerce, {from_repr: Int, to_repr: Str}, [113], ~, Str], # 129
+  [EnvRead, {key: A}, ~, ~, Str], # 130
+  [Constant, {const_type: string, value: a}, ~, ~, Str], # 131
+  [DefinedOr, ~, [130, 131], ~, Str], # 132
+  [Constant, {const_type: string, value: b}, ~, ~, Str], # 133
+  [ArrayLiteral, {sigil: "@", symbol: l}, [132, 133], ~, Array], # 134
+  [Count, ~, [134, 13], ~, Int], # 135
+  [NumGt, ~, [135, 116], 91, Boolean], # 136
+  [Subscript, {kind: array}, [134, 116, 13], ~, Scalar], # 137
+  [Proj, {index: 1}, [51]], # 138
+  [Print, ~, [122], 138, Scalar], # 139
+  [Constant, {const_type: string, value: "-u"}, ~, ~, Str], # 140
+  [Concat, ~, [140, 123], ~, Str], # 141
+  [Proj, {index: 0}, [88]], # 142
+  [Print, ~, [141], 125, Scalar], # 143
+  [Region, {head: 119}, [124, 143]], # 144
+  [Constant, {const_type: string, value: "-c"}, ~, ~, Str], # 145
+  [Concat, ~, [145, 129], ~, Str], # 146
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [137], ~, Str], # 147
+  [Print, ~, [146], 142, Scalar], # 148
+  [Proj, {index: 0}, [127]], # 149
+  [Proj, {index: 1}, [127]], # 150
+  [Constant, {const_type: string, value: "-f"}, ~, ~, Str], # 151
+  [Concat, ~, [151, 147], ~, Str], # 152
+  [Region, {head: 127}, [150]], # 153
+  [Print, ~, [152], 153, Scalar]]} # 154
 ```
 
 ## Two `next` guards in a row, where the first arm carries the second
