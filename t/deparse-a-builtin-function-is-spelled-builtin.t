@@ -66,17 +66,13 @@ use v5.42; my $o = bless {}, 'K';
 print builtin::refaddr($o) > 0 ? "addr" : "none", "\n";
 SRC
 
-# ONE `{}` READ TWICE IS EMITTED TWICE -- `builtin::refaddr({}) ==
-# builtin::refaddr({})` -- two hashes where the source has one. Not about
-# builtins: `my $r = []; my $s = $r; push @$s, 1; scalar(@$r)` prints 0
-# where perl prints 1. An anonymous constructor is an allocation with no
-# place on the chain; see the round-trip plan's defect list.
-{
-    my $todo = todo 'an anonymous aggregate read twice is constructed twice';
-    round_trips(<<'SRC', 'refaddr names the same referent twice');
+# ONE `{}` READ TWICE WAS EMITTED TWICE -- `builtin::refaddr({}) ==
+# builtin::refaddr({})`, two hashes where the source has one -- until the
+# constructor was pinned as an allocation (see
+# t/deparse-an-anonymous-aggregate-is-one-allocation.t).
+round_trips(<<'SRC', 'refaddr names the same referent twice');
 use v5.42; my $r = {}; my $s = $r;
 print builtin::refaddr($r) == builtin::refaddr($s) ? "same" : "diff", "\n";
 SRC
-}
 
 done_testing;

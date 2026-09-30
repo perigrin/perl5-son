@@ -1335,11 +1335,7 @@ class SoN::Deparse 0.01 {
             #
             # The literal must follow EVERY binding it reads, so the latest one
             # is the only safe anchor.
-            my $defer;
-            for my $in (($n->{inputs} // [])->@*) {
-                next unless defined $in && exists $bound{$in};
-                $defer = $in;
-            }
+            my $defer = $self->_last_bound_input($n);
             if (defined $defer) {
                 push $after_effect{$defer}->@*, $n;
                 next;
@@ -1387,11 +1383,7 @@ class SoN::Deparse 0.01 {
             # Same rule, same loop shape, kept identical so the two cannot
             # drift -- this file has lost a day to "one operator, two
             # declaration sites" more than once.
-            my $deferred;
-            for my $in (($n->{inputs} // [])->@*) {
-                next unless defined $in && exists $bound{$in};
-                $deferred = $in;
-            }
+            my $deferred = $self->_last_bound_input($n);
             if (defined $deferred) {
                 push $after_effect{$deferred}->@*, $n;
                 next;
@@ -2123,6 +2115,27 @@ class SoN::Deparse 0.01 {
     # `Phi(21) stamp=Int` -- and binding a list to a SCALAR collapses it to
     # the last element: `my $phi7 = ()` then `map { $_*2 } (1,2,3)` printed
     # `6` instead of `2 4 6`.
+    # _last_bound_input($n) -> the last chain-bound node $n reads, in input
+    # order, LOOKING THROUGH PURE NODES: `my ($a) = @{[9]}` reads the pinned
+    # constructor under a PostfixDeref, and a direct-inputs-only search let
+    # the binding float above the line declaring it. A bound node is where
+    # the search stops -- it is what the binding must follow.
+    method _last_bound_input ($n) {
+        my ($last, %seen);
+        my $visit;
+        $visit = sub ($id) {
+            return unless defined $id && !$seen{$id}++;
+            if (exists $bound{$id}) { $last = $id; return }
+            my $m = $nodes->{$id} or return;
+            return if defined $m->{control_in};
+            return if ($m->{op} // '') =~ /\A(?:Phi|Region|Loop|Proj|If|Start)\z/;
+            $visit->($_) for ($m->{inputs} // [])->@*;
+        };
+        $visit->($_) for ($n->{inputs} // [])->@*;
+        undef $visit;
+        return $last;
+    }
+
     # A named Array/HashLiteral on the control chain: an allocation at that
     # point, which the producer pins for a `my` aggregate in a loop body.
     method _is_pinned_aggregate ($n) {
@@ -3234,11 +3247,14 @@ class SoN::Deparse 0.01 {
                 # carries the variable it was bound to, so the store has
                 # something to assign through; an ANONYMOUS one still does not,
                 # and `(1,2,3)[0] = 7` is not assignable.
+                # A PINNED ONE IS BOUND: the chain names the allocation with a
+                # temporary, and the store goes through it.
                 die "GAP: an element store into an anonymous container has no"
                   . " variable to name -- `(1,2,3)[0] = 7` is not"
                   . " assignable\n"
                     if $agg && ($agg->{op} // '') =~ /Literal\z/
-                    && !defined(($agg->{fields} // {})->{symbol});
+                    && !defined(($agg->{fields} // {})->{symbol})
+                    && !exists $bound{ $agg->{id} };
             }
 
             # A SCALAR ASSIGN IS [target, value], whatever kinds they are.
@@ -3857,9 +3873,15 @@ class SoN::Deparse 0.01 {
             my $named = ($agg->{op} // '') =~ /Literal\z/
                      && defined(($agg->{fields} // {})->{symbol});
 
+            # AN ANONYMOUS CONSTRUCTOR IS A REFERENCE -- `[1,2,3]`, stamped
+            # ArrayRef -- so its count goes through the deref. As a list it
+            # was `my @c = [1,2,3]`, one element.
             $text = $named || (($agg->{op} // '') !~ /Literal\z/
                                && ($st eq 'Array' || $st eq 'Hash'))
                 ? sprintf('scalar(%s)', $self->_expr($in[0]))
+                : $st =~ /\A(Array|Hash)Ref\z/
+                ? sprintf('scalar(%s{%s})', ($1 eq 'Hash' ? '%' : '@'),
+                          $self->_expr($in[0]))
                 : $st eq 'List' || ($agg->{op} // '') =~ /Literal\z/
                 ? sprintf('do { my @c%d = %s; scalar(@c%d) }',
                           $id, $self->_expr($in[0]), $id)

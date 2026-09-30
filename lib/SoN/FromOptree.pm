@@ -7908,6 +7908,11 @@ class SoN::FromOptree 0.01 {
                 inputs => [],
                 stamp  => SoN::IR::Stamp->new(
                     type => $is_hash ? 'HashRef' : 'ArrayRef'));
+            # AN ALLOCATION, pinned where it runs -- see anonlist/anonhash.
+            if (defined $sim->control) {
+                $node->set_control_in($sim->control);
+                $sim->set_control($node);
+            }
             my $targ = $op->targ;
 
             # A field store (TARGMY into a class field slot) threads on control
@@ -9188,6 +9193,15 @@ class SoN::FromOptree 0.01 {
                     && defined $sim->memory;
 
                 %extra = (%extra, _bitwise_flavor($name));
+                # AN ANONYMOUS CONSTRUCTOR IS AN ALLOCATION, pinned where it
+                # runs: every name that holds it names the same aggregate, and
+                # a loop makes a new one each pass. Unpinned, each read built
+                # its own -- `my $r = []; my $s = $r; push @$s, 1` left @$r
+                # empty. Like `new` in Simple.
+                $pin_on_control = 1
+                    if ($name eq 'anonlist' || $name eq 'anonhash')
+                    && ($op->flags & 3) != 1               # a value is wanted
+                    && defined $sim->control;
                 my $node = $factory->make($node_type, inputs => \@inputs, %extra);
                 if ($void_effect_call || $pin_on_control) {
                     $node->set_control_in($sim->control);
