@@ -315,7 +315,7 @@ main::__PROGRAM__: {start: 0, returns: [19], nodes: [
   [ArrayLiteral, {sigil: "@", symbol: greedy}, [4], ~, Array], # 5
   [EntryDef, {package: main, sigil: "%", symbol: SIG}, ~, ~, Hash], # 6
   [Constant, {const_type: string, value: __WARN__}, ~, ~, Str], # 7
-  [Subscript, ~, [6, 7], ~, Scalar], # 8
+  [Subscript, {kind: hash}, [6, 7], ~, Scalar], # 8
   [AnonSub, {name: main::__PROGRAM__::__ANON__:1:2}, ~, ~, CodeRef], # 9
   [Assign, ~, [8, 9], 0, CodeRef], # 10
   [Count, ~, [5, 10], ~, Int], # 11

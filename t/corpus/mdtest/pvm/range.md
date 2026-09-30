@@ -126,7 +126,7 @@ main::__PROGRAM__: {start: 0, returns: [21], nodes: [
   [Constant, {const_type: string, value: az}, ~, ~, Str], # 5
   [ArrayLiteral, {sigil: "@", symbol: seed}, [5], ~, Array], # 6
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 7
-  [Subscript, ~, [6, 7, 2], ~, Str], # 8
+  [Subscript, {kind: array}, [6, 7, 2], ~, Str], # 8
   [Coerce, {from_repr: Str, to_repr: Int}, [8], ~, Int], # 9
   [Constant, {const_type: string, value: bb}, ~, ~, Str], # 10
   [Coerce, {from_repr: Str, to_repr: Int}, [10], ~, Int], # 11
@@ -216,13 +216,13 @@ main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Proj, {index: 0}, [6]], # 25
   [Phi, {region: 6}, [1, 37], ~, Scalar], # 26
   [ArrayLiteral, {sigil: "@", symbol: "off"}, [15, 15, 15, 15, 16, 15], ~, Array], # 27
-  [Subscript, ~, [21, 23, 2], ~, Int], # 28
-  [Subscript, ~, [27, 28, 2], ~, Int], # 29
+  [Subscript, {kind: array}, [21, 23, 2], ~, Int], # 28
+  [Subscript, {kind: array}, [27, 28, 2], ~, Int], # 29
   [Coerce, {from_repr: Scalar, to_repr: Num}, [26], ~, Num], # 30
   [Add, ~, [30, 16], ~, Num], # 31
   [TernaryExpr, ~, [29, 15, 31], ~, Num], # 32
   [ArrayLiteral, {sigil: "@", symbol: "on"}, [15, 16, 15, 15, 15, 15], ~, Array], # 33
-  [Subscript, ~, [33, 28, 2], ~, Int], # 34
+  [Subscript, {kind: array}, [33, 28, 2], ~, Int], # 34
   [TernaryExpr, ~, [29, 15, 16], ~, Int], # 35
   [TernaryExpr, ~, [34, 35, 15], ~, Int], # 36
   [TernaryExpr, ~, [26, 32, 36], ~, Num], # 37

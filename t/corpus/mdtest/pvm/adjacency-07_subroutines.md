@@ -176,7 +176,7 @@ main::__PROGRAM__: {start: 0, returns: [57], nodes: [
   [ArrayLiteral, {sigil: "@", symbol: greedy}, [7], ~, Array], # 8
   [EntryDef, {package: main, sigil: "%", symbol: SIG}, ~, ~, Hash], # 9
   [Constant, {const_type: string, value: __WARN__}, ~, ~, Str], # 10
-  [Subscript, ~, [9, 10], ~, Scalar], # 11
+  [Subscript, {kind: hash}, [9, 10], ~, Scalar], # 11
   [AnonSub, {name: main::__PROGRAM__::__ANON__:21:8}, ~, ~, CodeRef], # 12
   [PadAccess, {sigil: $, symbol: "n"}, ~, ~, Unknown], # 13
   [MemStart], # 14
@@ -227,13 +227,13 @@ main::__PROGRAM__::__ANON__:16:2: {start: 0, returns: [14], nodes: [
   [Start], # 0
   [ArgsSource, ~, ~, ~, Array], # 1
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 2
-  [Subscript, ~, [1, 2], ~, Scalar], # 3
+  [Subscript, {kind: array}, [1, 2], ~, Scalar], # 3
   [Call, {dispatch_kind: direct, name: main::pick, param_names: [], want: scalar}, [3], 0, Unknown], # 4
   [Coerce, {from_repr: Unknown, to_repr: Str}, [4], ~, Str], # 5
   [Constant, {const_type: string, value: "/"}, ~, ~, Str], # 6
   [Concat, ~, [5, 6], ~, Str], # 7
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 8
-  [Subscript, ~, [1, 8], ~, Scalar], # 9
+  [Subscript, {kind: array}, [1, 8], ~, Scalar], # 9
   [Constant, {const_type: string, value: tiny}, ~, ~, Str], # 10
   [Call, {dispatch_kind: direct, name: main::pick, param_names: [], want: scalar}, [9, 10], 4, Unknown], # 11
   [Coerce, {from_repr: Unknown, to_repr: Str}, [11], ~, Str], # 12
@@ -252,8 +252,8 @@ main::bump: {start: 0, returns: [8], nodes: [
   [ArgsSource, ~, ~, ~, Array], # 1
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 2
   [MemStart], # 3
-  [Subscript, ~, [1, 2, 3], ~, Scalar], # 4
-  [Subscript, ~, [1, 2], ~, Scalar], # 5
+  [Subscript, {kind: array}, [1, 2, 3], ~, Scalar], # 4
+  [Subscript, {kind: array}, [1, 2], ~, Scalar], # 5
   [Increment, ~, [4], ~, Scalar], # 6
   [Assign, ~, [5, 6], 0, Scalar], # 7
   [Return, ~, [4], 7]]} # 8
@@ -273,7 +273,7 @@ main::g: {start: 0, returns: [10], nodes: [
   [ArgsSource, ~, ~, ~, Array], # 2
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 3
   [MemStart], # 4
-  [Subscript, ~, [2, 3, 4], ~, Scalar], # 5
+  [Subscript, {kind: array}, [2, 3, 4], ~, Scalar], # 5
   [Coerce, {from_repr: Unknown, to_repr: Str}, [5], ~, Str], # 6
   [Concat, ~, [1, 6], ~, Str], # 7
   [Constant, {const_type: string, value: "]"}, ~, ~, Str], # 8

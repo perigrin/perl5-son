@@ -582,7 +582,7 @@ main::f: {start: 0, returns: [8], nodes: [
   [ArgsSource, ~, ~, ~, Array], # 1
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 2
   [MemStart], # 3
-  [Subscript, ~, [1, 2, 3], ~, Scalar], # 4
+  [Subscript, {kind: array}, [1, 2, 3], ~, Scalar], # 4
   [Coerce, {from_repr: Scalar, to_repr: Num}, [4], ~, Num], # 5
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 6
   [Add, ~, [5, 6], ~, Num], # 7
@@ -1354,7 +1354,7 @@ main::corpus_case: {start: 0, returns: [11], nodes: [
   [Call, {dispatch_kind: builtin, name: sort, param_names: [], sort_cmp: numeric, sort_order: ascending}, [1, 2, 3], ~, List], # 4
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 5
   [MemStart], # 6
-  [Subscript, ~, [4, 5, 6], ~, Scalar], # 7
+  [Subscript, {kind: array}, [4, 5, 6], ~, Scalar], # 7
   [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
   [Print, ~, [8, 9], 0, Scalar], # 10
@@ -1476,7 +1476,7 @@ main::corpus_case: {start: 0, returns: [11], nodes: [
   [NumGt, ~, [16, 18], 2, Boolean], # 19
   [Proj, {index: 0}, [2]], # 20
   [Add, ~, [18, 13], ~, Int], # 21
-  [Subscript, ~, [15, 18, 4], ~, Int], # 22
+  [Subscript, {kind: array}, [15, 18, 4], ~, Int], # 22
   [NumGt, ~, [22, 13], ~, Boolean], # 23
   [ListAppend, {collector: grep}, [3, 22, 23], ~, Array]]} # 24
 "BEGIN 1": {start: 0, returns: [4], nodes: [
@@ -1571,7 +1571,7 @@ main::corpus_case: {start: 0, returns: [12], nodes: [
   [Phi, {region: 2}, [1, 23], ~, Array], # 3
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 4
   [MemStart], # 5
-  [Subscript, ~, [3, 4, 5], ~, Scalar], # 6
+  [Subscript, {kind: array}, [3, 4, 5], ~, Scalar], # 6
   [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
   [Proj, {index: 1}, [2]], # 9
@@ -1586,7 +1586,7 @@ main::corpus_case: {start: 0, returns: [12], nodes: [
   [NumGt, ~, [15, 17], 2, Boolean], # 18
   [Proj, {index: 0}, [2]], # 19
   [Add, ~, [17, 4], ~, Int], # 20
-  [Subscript, ~, [14, 17, 5], ~, Int], # 21
+  [Subscript, {kind: array}, [14, 17, 5], ~, Int], # 21
   [Multiply, ~, [21, 13], ~, Int], # 22
   [ListAppend, {collector: map}, [3, 22], ~, Array]]} # 23
 "BEGIN 1": {start: 0, returns: [4], nodes: [
@@ -1662,7 +1662,7 @@ main::corpus_case: {start: 0, returns: [10], nodes: [
   [HashLiteral, ~, [1, 2], ~, HashRef], # 3
   [MemStart], # 4
   [PostfixDeref, {sigil: "%"}, [3, 4], ~, Hash], # 5
-  [Subscript, ~, [5, 1, 4], ~, Scalar], # 6
+  [Subscript, {kind: hash}, [5, 1, 4], ~, Scalar], # 6
   [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
   [Print, ~, [7, 8], 0, Scalar], # 9
@@ -1854,7 +1854,7 @@ main::corpus_case: {start: 0, returns: [10], nodes: [
   [NumGt, ~, [16, 18], 2, Boolean], # 19
   [Proj, {index: 0}, [2]], # 20
   [Add, ~, [18, 11], ~, Int], # 21
-  [Subscript, ~, [14, 18, 15], ~, Int], # 22
+  [Subscript, {kind: array}, [14, 18, 15], ~, Int], # 22
   [Multiply, ~, [22, 12], ~, Int], # 23
   [ListAppend, {collector: map}, [3, 23], ~, Array]]} # 24
 "BEGIN 1": {start: 0, returns: [4], nodes: [
@@ -1925,7 +1925,7 @@ main::corpus_case: {start: 0, returns: [10], nodes: [
   [NumGt, ~, [16, 18], 2, Boolean], # 19
   [Proj, {index: 0}, [2]], # 20
   [Add, ~, [18, 11], ~, Int], # 21
-  [Subscript, ~, [14, 18, 15], ~, Int], # 22
+  [Subscript, {kind: array}, [14, 18, 15], ~, Int], # 22
   [NumGt, ~, [22, 11], ~, Boolean], # 23
   [ListAppend, {collector: grep}, [3, 22, 23], ~, Array]]} # 24
 "BEGIN 1": {start: 0, returns: [4], nodes: [
@@ -2035,7 +2035,7 @@ main::corpus_case: {start: 0, returns: [10], nodes: [
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 3
   [Call, {dispatch_kind: builtin, name: split, param_names: []}, [1, 2, 3], ~, List], # 4
   [MemStart], # 5
-  [Subscript, ~, [4, 3, 5], ~, Scalar], # 6
+  [Subscript, {kind: array}, [4, 3, 5], ~, Scalar], # 6
   [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
   [Print, ~, [7, 8], 0, Scalar], # 9

@@ -59,7 +59,7 @@ main::double: {start: 0, returns: [8], nodes: [
   [ArgsSource, ~, ~, ~, Array], # 1
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 2
   [MemStart], # 3
-  [Subscript, ~, [1, 2, 3], ~, Scalar], # 4
+  [Subscript, {kind: array}, [1, 2, 3], ~, Scalar], # 4
   [Coerce, {from_repr: Scalar, to_repr: Num}, [4], ~, Num], # 5
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 6
   [Multiply, ~, [5, 6], ~, Num], # 7
@@ -112,7 +112,7 @@ main::__PROGRAM__::__ANON__:1:2: {start: 0, returns: [8], nodes: [
   [ArgsSource, ~, ~, ~, Array], # 1
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 2
   [MemStart], # 3
-  [Subscript, ~, [1, 2, 3], ~, Scalar], # 4
+  [Subscript, {kind: array}, [1, 2, 3], ~, Scalar], # 4
   [Coerce, {from_repr: Scalar, to_repr: Num}, [4], ~, Num], # 5
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 6
   [Multiply, ~, [5, 6], ~, Num], # 7
@@ -363,7 +363,7 @@ main::__PROGRAM__::__ANON__:5:7: {start: 0, returns: [8], nodes: [
   [ArgsSource, ~, ~, ~, Array], # 1
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 2
   [MemStart], # 3
-  [Subscript, ~, [1, 2, 3], ~, Scalar], # 4
+  [Subscript, {kind: array}, [1, 2, 3], ~, Scalar], # 4
   [Coerce, {from_repr: Scalar, to_repr: Num}, [4], ~, Num], # 5
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 6
   [Multiply, ~, [5, 6], ~, Num], # 7
@@ -570,9 +570,9 @@ main::group: {start: 0, returns: [9], nodes: [
   [PadAccess, {shared: 1, sigil: "@", symbol: l}, ~, ~, Unknown], # 1
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 2
   [MemStart], # 3
-  [Subscript, ~, [1, 2, 3], ~, Scalar], # 4
+  [Subscript, {kind: array}, [1, 2, 3], ~, Scalar], # 4
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 5
-  [Subscript, ~, [1, 5, 3], ~, Scalar], # 6
+  [Subscript, {kind: array}, [1, 5, 3], ~, Scalar], # 6
   [ArrayLiteral, ~, [4, 6], ~, List], # 7
   [Coerce, {from_repr: List, to_repr: Scalar}, [6], ~, Scalar], # 8
   [Return, ~, [7, 8], 0]]} # 9
@@ -581,16 +581,16 @@ main::one: {start: 0, returns: [5], nodes: [
   [PadAccess, {shared: 1, sigil: "@", symbol: l}, ~, ~, Unknown], # 1
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 2
   [MemStart], # 3
-  [Subscript, ~, [1, 2, 3], ~, Scalar], # 4
+  [Subscript, {kind: array}, [1, 2, 3], ~, Scalar], # 4
   [Return, ~, [4], 0]]} # 5
 main::pair: {start: 0, returns: [9], nodes: [
   [Start], # 0
   [PadAccess, {shared: 1, sigil: "@", symbol: l}, ~, ~, Unknown], # 1
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 2
   [MemStart], # 3
-  [Subscript, ~, [1, 2, 3], ~, Scalar], # 4
+  [Subscript, {kind: array}, [1, 2, 3], ~, Scalar], # 4
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 5
-  [Subscript, ~, [1, 5, 3], ~, Scalar], # 6
+  [Subscript, {kind: array}, [1, 5, 3], ~, Scalar], # 6
   [ArrayLiteral, ~, [4, 6], ~, List], # 7
   [Coerce, {from_repr: List, to_repr: Scalar}, [6], ~, Scalar], # 8
   [Return, ~, [7, 8], 0]]} # 9

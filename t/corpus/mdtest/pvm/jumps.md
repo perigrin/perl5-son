@@ -76,7 +76,7 @@ main::__PROGRAM__: {start: 0, returns: [29], nodes: [
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 16
   [Phi, {region: 3}, [16, 33], ~, Int], # 17
   [MemStart], # 18
-  [Subscript, ~, [15, 17, 18], ~, Scalar], # 19
+  [Subscript, {kind: array}, [15, 17, 18], ~, Scalar], # 19
   [Coerce, {from_repr: Unknown, to_repr: Str}, [19], ~, Str], # 20
   [StrEq, ~, [20, 12], ~, Boolean], # 21
   [If, ~, [8, 21], 8], # 22
@@ -261,7 +261,7 @@ main::__PROGRAM__: {start: 0, returns: [28], nodes: [
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 14
   [Phi, {region: 6}, [14, 39], ~, Int], # 15
   [MemStart], # 16
-  [Subscript, ~, [13, 15, 16], ~, Scalar], # 17
+  [Subscript, {kind: array}, [13, 15, 16], ~, Scalar], # 17
   [Coerce, {from_repr: Unknown, to_repr: Str}, [17], ~, Str], # 18
   [StrEq, ~, [18, 11], ~, Boolean], # 19
   [If, ~, [7, 19], 7], # 20
@@ -279,7 +279,7 @@ main::__PROGRAM__: {start: 0, returns: [28], nodes: [
   [NumGt, ~, [29, 15], 6, Boolean], # 32
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 33
   [Add, ~, [30, 33], ~, Int], # 34
-  [Subscript, ~, [13, 30, 16], ~, Scalar], # 35
+  [Subscript, {kind: array}, [13, 30, 16], ~, Scalar], # 35
   [Proj, {index: 1}, [6]], # 36
   [Region, {head: 6}, [36]], # 37
   [Proj, {index: 1}, [24]], # 38

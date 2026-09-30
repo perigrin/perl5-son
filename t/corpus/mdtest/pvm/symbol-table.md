@@ -97,7 +97,7 @@ main::__PROGRAM__::__ANON__:2:4: {start: 0, returns: [7], nodes: [
   [ArgsSource, ~, ~, ~, Array], # 1
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 2
   [MemStart], # 3
-  [Subscript, ~, [1, 2, 3], ~, Scalar], # 4
+  [Subscript, {kind: array}, [1, 2, 3], ~, Scalar], # 4
   [Coerce, {from_repr: Scalar, to_repr: Num}, [4], ~, Num], # 5
   [Multiply, ~, [5, 5], ~, Num], # 6
   [Return, ~, [6], 0]]} # 7
@@ -298,7 +298,7 @@ main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Count, ~, [19, 5], ~, Int], # 20
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 21
   [Phi, {region: 9}, [21, 29], ~, Int], # 22
-  [Subscript, ~, [19, 22, 5], ~, Scalar], # 23
+  [Subscript, {kind: array}, [19, 22, 5], ~, Scalar], # 23
   [NumGt, ~, [20, 22], 9, Boolean], # 24
   [Proj, {index: 0}, [9]], # 25
   [Coerce, {from_repr: Unknown, to_repr: Str}, [23], ~, Str], # 26

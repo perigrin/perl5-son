@@ -215,7 +215,7 @@ main::__PROGRAM__: {start: 0, returns: [115], nodes: [
   [Constant, {const_type: string, value: az}, ~, ~, Str], # 92
   [ArrayLiteral, {sigil: "@", symbol: seed}, [92], ~, Array], # 93
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 94
-  [Subscript, ~, [93, 94, 6], ~, Str], # 95
+  [Subscript, {kind: array}, [93, 94, 6], ~, Str], # 95
   [Coerce, {from_repr: Str, to_repr: Int}, [95], ~, Int], # 96
   [Constant, {const_type: string, value: bb}, ~, ~, Str], # 97
   [Coerce, {from_repr: Str, to_repr: Int}, [97], ~, Int], # 98
@@ -242,13 +242,13 @@ main::__PROGRAM__: {start: 0, returns: [115], nodes: [
   [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 119
   [ArrayLiteral, {sigil: "@", symbol: idx}, [94, 3, 4, 2, 118, 119], ~, Array], # 120
   [Phi, {region: 106}, [94, 159], ~, Int], # 121
-  [Subscript, ~, [120, 121, 6], ~, Int], # 122
-  [Subscript, ~, [117, 122, 6], ~, Int], # 123
+  [Subscript, {kind: array}, [120, 121, 6], ~, Int], # 122
+  [Subscript, {kind: array}, [117, 122, 6], ~, Int], # 123
   [Coerce, {from_repr: Scalar, to_repr: Num}, [116], ~, Num], # 124
   [Add, ~, [124, 3], ~, Num], # 125
   [TernaryExpr, ~, [123, 94, 125], ~, Num], # 126
   [ArrayLiteral, {sigil: "@", symbol: "on"}, [94, 3, 94, 94, 94, 94], ~, Array], # 127
-  [Subscript, ~, [127, 122, 6], ~, Int], # 128
+  [Subscript, {kind: array}, [127, 122, 6], ~, Int], # 128
   [TernaryExpr, ~, [123, 94, 3], ~, Int], # 129
   [TernaryExpr, ~, [128, 129, 94], ~, Int], # 130
   [TernaryExpr, ~, [116, 126, 130], ~, Num], # 131
@@ -265,13 +265,13 @@ main::__PROGRAM__: {start: 0, returns: [115], nodes: [
   [NumGt, ~, [7, 141], 58, Boolean], # 142
   [Proj, {index: 0}, [58]], # 143
   [ListAppend, {collector: grep}, [107, 122, 140], ~, Array], # 144
-  [Subscript, ~, [5, 141, 6], ~, Int], # 145
+  [Subscript, {kind: array}, [5, 141, 6], ~, Int], # 145
   [Phi, {region: 66}, [94, 156], ~, Int], # 146
-  [Subscript, ~, [5, 146, 6], ~, Int], # 147
+  [Subscript, {kind: array}, [5, 146, 6], ~, Int], # 147
   [Phi, {region: 75}, [94, 157], ~, Int], # 148
-  [Subscript, ~, [5, 148, 6], ~, Int], # 149
+  [Subscript, {kind: array}, [5, 148, 6], ~, Int], # 149
   [Phi, {region: 83}, [94, 158], ~, Int], # 150
-  [Subscript, ~, [5, 150, 6], ~, Int], # 151
+  [Subscript, {kind: array}, [5, 150, 6], ~, Int], # 151
   [Count, ~, [120, 6], ~, Int], # 152
   [ArrayLiteral, {sigil: "@", symbol: copy}, [2, 3, 4], ~, Array], # 153
   [Call, {dispatch_kind: builtin, name: sort, param_names: [], sort_cmp: string, sort_order: ascending}, [2, 3, 4], ~, List], # 154

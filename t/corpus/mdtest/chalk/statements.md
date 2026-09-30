@@ -407,7 +407,7 @@ main::corpus_case: {start: 0, returns: [5], nodes: [
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 2
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 3
-  [Call, {dispatch_kind: direct, name: main::sum, param_names: []}, [1, 2, 3], 0, Unknown], # 4
+  [Call, {dispatch_kind: direct, external: true, name: main::sum, param_names: []}, [1, 2, 3], 0, Unknown], # 4
   [Return, ~, [4], 4]]} # 5
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0

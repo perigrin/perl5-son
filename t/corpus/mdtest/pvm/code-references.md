@@ -60,7 +60,7 @@ main::twice: {start: 0, returns: [8], nodes: [
   [ArgsSource, ~, ~, ~, Array], # 1
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 2
   [MemStart], # 3
-  [Subscript, ~, [1, 2, 3], ~, Scalar], # 4
+  [Subscript, {kind: array}, [1, 2, 3], ~, Scalar], # 4
   [Coerce, {from_repr: Scalar, to_repr: Num}, [4], ~, Num], # 5
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 6
   [Multiply, ~, [5, 6], ~, Num], # 7

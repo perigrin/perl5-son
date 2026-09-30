@@ -50,7 +50,7 @@ main::__PROGRAM__: {start: 0, returns: [23], nodes: [
   [EntryDef, {package: main, sigil: "@", symbol: ARGV}, ~, ~, Array], # 2
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 3
   [MemStart], # 4
-  [Subscript, ~, [2, 3, 4], ~, Scalar], # 5
+  [Subscript, {kind: array}, [2, 3, 4], ~, Scalar], # 5
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 6
   [DefinedOr, ~, [5, 6], ~, Scalar], # 7
   [Coerce, {from_repr: Scalar, to_repr: Num}, [7], ~, Num], # 8

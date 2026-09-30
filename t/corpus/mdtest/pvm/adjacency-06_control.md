@@ -255,7 +255,7 @@ main::__PROGRAM__: {start: 0, returns: [96], nodes: [
   [ArrayLiteral, {sigil: "@", symbol: l}, [127, 128], ~, Array], # 129
   [Count, ~, [129, 13], ~, Int], # 130
   [NumGt, ~, [130, 111], 86, Boolean], # 131
-  [Subscript, ~, [129, 111, 13], ~, Scalar], # 132
+  [Subscript, {kind: array}, [129, 111, 13], ~, Scalar], # 132
   [Proj, {index: 1}, [46]], # 133
   [Print, ~, [117], 133, Scalar], # 134
   [Constant, {const_type: string, value: "-u"}, ~, ~, Str], # 135

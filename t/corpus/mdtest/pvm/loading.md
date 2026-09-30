@@ -122,7 +122,7 @@ main::__PROGRAM__: {start: 0, returns: [18], nodes: [
   [EntryDef, {package: main, sigil: "%", symbol: "main::"}, ~, ~, Hash], # 3
   [Constant, {const_type: string, value: floor}, ~, ~, Str], # 4
   [MemStart], # 5
-  [Subscript, ~, [3, 4, 5], ~, Scalar], # 6
+  [Subscript, {kind: hash}, [3, 4, 5], ~, Scalar], # 6
   [Constant, {const_type: string, value: "yes"}, ~, ~, Str], # 7
   [Constant, {const_type: string, value: "no"}, ~, ~, Str], # 8
   [TernaryExpr, ~, [6, 7, 8], ~, Str], # 9
@@ -130,7 +130,7 @@ main::__PROGRAM__: {start: 0, returns: [18], nodes: [
   [Constant, {const_type: string, value: "POSIX loaded: "}, ~, ~, Str], # 11
   [EntryDef, {package: main, sigil: "%", symbol: INC}, ~, ~, Hash], # 12
   [Constant, {const_type: string, value: POSIX.pm}, ~, ~, Str], # 13
-  [Subscript, ~, [12, 13, 5], ~, Scalar], # 14
+  [Subscript, {kind: hash}, [12, 13, 5], ~, Scalar], # 14
   [TernaryExpr, ~, [14, 7, 8], ~, Str], # 15
   [Print, ~, [11, 15, 10], 0, Scalar], # 16
   [Print, ~, [2, 9, 10], 16, Scalar], # 17
@@ -191,7 +191,7 @@ main::__PROGRAM__: {start: 0, returns: [18], nodes: [
   [EntryDef, {package: main, sigil: "%", symbol: "main::"}, ~, ~, Hash], # 3
   [Constant, {const_type: string, value: floor}, ~, ~, Str], # 4
   [MemStart], # 5
-  [Subscript, ~, [3, 4, 5], ~, Scalar], # 6
+  [Subscript, {kind: hash}, [3, 4, 5], ~, Scalar], # 6
   [Constant, {const_type: string, value: "yes"}, ~, ~, Str], # 7
   [Constant, {const_type: string, value: "no"}, ~, ~, Str], # 8
   [TernaryExpr, ~, [6, 7, 8], ~, Str], # 9
@@ -199,7 +199,7 @@ main::__PROGRAM__: {start: 0, returns: [18], nodes: [
   [Constant, {const_type: string, value: "POSIX loaded: "}, ~, ~, Str], # 11
   [EntryDef, {package: main, sigil: "%", symbol: INC}, ~, ~, Hash], # 12
   [Constant, {const_type: string, value: POSIX.pm}, ~, ~, Str], # 13
-  [Subscript, ~, [12, 13, 5], ~, Scalar], # 14
+  [Subscript, {kind: hash}, [12, 13, 5], ~, Scalar], # 14
   [TernaryExpr, ~, [14, 7, 8], ~, Str], # 15
   [Print, ~, [11, 15, 10], 0, Scalar], # 16
   [Print, ~, [2, 9, 10], 16, Scalar], # 17
@@ -251,7 +251,7 @@ main::__PROGRAM__: {start: 0, returns: [13], nodes: [
   [Constant, {const_type: string, value: strict.pm}, ~, ~, Str], # 4
   [MemStart], # 5
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [4, 5], 0, Unknown], # 6
-  [Subscript, ~, [3, 4, 6], ~, Scalar], # 7
+  [Subscript, {kind: hash}, [3, 4, 6], ~, Scalar], # 7
   [Constant, {const_type: string, value: "yes"}, ~, ~, Str], # 8
   [Constant, {const_type: string, value: "no"}, ~, ~, Str], # 9
   [TernaryExpr, ~, [7, 8, 9], ~, Str], # 10
@@ -297,7 +297,7 @@ main::__PROGRAM__: {start: 0, returns: [13], nodes: [
   [Constant, {const_type: string, value: warnings.pm}, ~, ~, Str], # 4
   [MemStart], # 5
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [4, 5], 0, Unknown], # 6
-  [Subscript, ~, [3, 4, 6], ~, Scalar], # 7
+  [Subscript, {kind: hash}, [3, 4, 6], ~, Scalar], # 7
   [Constant, {const_type: string, value: "yes"}, ~, ~, Str], # 8
   [Constant, {const_type: string, value: "no"}, ~, ~, Str], # 9
   [TernaryExpr, ~, [7, 8, 9], ~, Str], # 10
@@ -349,13 +349,13 @@ Marker::import: {start: 0, returns: [17], nodes: [
   [ArgsSource, ~, ~, ~, Array], # 2
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 3
   [MemStart], # 4
-  [Subscript, ~, [2, 3, 4], ~, Scalar], # 5
+  [Subscript, {kind: array}, [2, 3, 4], ~, Scalar], # 5
   [Coerce, {from_repr: Unknown, to_repr: Str}, [5], ~, Str], # 6
   [Concat, ~, [1, 6], ~, Str], # 7
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 8
   [Concat, ~, [7, 8], ~, Str], # 9
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 10
-  [Subscript, ~, [2, 10, 4], ~, Scalar], # 11
+  [Subscript, {kind: array}, [2, 10, 4], ~, Scalar], # 11
   [Coerce, {from_repr: Unknown, to_repr: Str}, [11], ~, Str], # 12
   [Concat, ~, [9, 12], ~, Str], # 13
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 14

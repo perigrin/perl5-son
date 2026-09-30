@@ -1995,7 +1995,7 @@ main::corpus_case: {start: 0, returns: [11], nodes: [
   [Call, {dispatch_kind: builtin, name: reverse, param_names: []}, [1, 2, 3], ~, List], # 4
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 5
   [MemStart], # 6
-  [Subscript, ~, [4, 5, 6], ~, Scalar], # 7
+  [Subscript, {kind: array}, [4, 5, 6], ~, Scalar], # 7
   [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
   [Print, ~, [8, 9], 0, Scalar], # 10

@@ -149,7 +149,7 @@ main::__PROGRAM__: {start: 0, returns: [211], nodes: [
   [MemStart], # 5
   [PadAccess, {sigil: $, symbol: edit}, [5], ~, Unknown], # 6
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 7
-  [Subscript, ~, [3, 7, 5], ~, Scalar], # 8
+  [Subscript, {kind: array}, [3, 7, 5], ~, Scalar], # 8
   [Constant, {const_type: string, value: ab}, ~, ~, Str], # 9
   [DefinedOr, ~, [8, 9], ~, Scalar], # 10
   [Assign, ~, [6, 10], 0, Scalar], # 11
@@ -159,7 +159,7 @@ main::__PROGRAM__: {start: 0, returns: [211], nodes: [
   [Add, ~, [14, 7], ~, Int], # 15
   [Call, {dispatch_kind: builtin, name: chr, param_names: []}, [15], ~, Str], # 16
   [Call, {dispatch_kind: builtin, name: substr, param_names: []}, [12, 13, 7, 16], 11, Str], # 17
-  [Subscript, ~, [3, 4, 17], ~, Scalar], # 18
+  [Subscript, {kind: array}, [3, 4, 17], ~, Scalar], # 18
   [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 19
   [DefinedOr, ~, [18, 19], ~, Scalar], # 20
   [Increment, ~, [20], ~, Scalar], # 21
@@ -171,7 +171,7 @@ main::__PROGRAM__: {start: 0, returns: [211], nodes: [
   [Constant, {const_type: string, value: "] tag ["}, ~, ~, Str], # 27
   [Concat, ~, [26, 27], ~, Str], # 28
   [Constant, {const_type: integer, value: "11"}, ~, ~, Int], # 29
-  [Subscript, ~, [3, 29, 17], ~, Scalar], # 30
+  [Subscript, {kind: array}, [3, 29, 17], ~, Scalar], # 30
   [Constant, {const_type: string, value: Az}, ~, ~, Str], # 31
   [DefinedOr, ~, [30, 31], ~, Scalar], # 32
   [Increment, ~, [32], ~, Scalar], # 33
@@ -184,7 +184,7 @@ main::__PROGRAM__: {start: 0, returns: [211], nodes: [
   [Concat, ~, [37, 39], ~, Str], # 40
   [Constant, {const_type: string, value: "] group ["}, ~, ~, Str], # 41
   [Concat, ~, [40, 41], ~, Str], # 42
-  [Subscript, ~, [3, 13, 5], ~, Scalar], # 43
+  [Subscript, {kind: array}, [3, 13, 5], ~, Scalar], # 43
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 44
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 45
   [ArrayLiteral, {sigil: "@", symbol: nums}, [44, 7, 45], ~, Array], # 46
@@ -204,7 +204,7 @@ main::__PROGRAM__: {start: 0, returns: [211], nodes: [
   [Constant, {const_type: string, value: "]\n"}, ~, ~, Str], # 60
   [Concat, ~, [59, 60], ~, Str], # 61
   [Constant, {const_type: string, value: "acc ["}, ~, ~, Str], # 62
-  [Subscript, ~, [3, 19, 17], ~, Scalar], # 63
+  [Subscript, {kind: array}, [3, 19, 17], ~, Scalar], # 63
   [DefinedOr, ~, [63, 19], ~, Scalar], # 64
   [Coerce, {from_repr: Scalar, to_repr: Num}, [64], ~, Num], # 65
   [Add, ~, [65, 45], ~, Num], # 66
@@ -213,7 +213,7 @@ main::__PROGRAM__: {start: 0, returns: [211], nodes: [
   [Constant, {const_type: string, value: "] app ["}, ~, ~, Str], # 69
   [Concat, ~, [68, 69], ~, Str], # 70
   [Constant, {const_type: integer, value: "6"}, ~, ~, Int], # 71
-  [Subscript, ~, [3, 71, 17], ~, Scalar], # 72
+  [Subscript, {kind: array}, [3, 71, 17], ~, Scalar], # 72
   [Constant, {const_type: string, value: a}, ~, ~, Str], # 73
   [DefinedOr, ~, [72, 73], ~, Scalar], # 74
   [Coerce, {from_repr: Scalar, to_repr: Str}, [74], ~, Str], # 75
@@ -223,7 +223,7 @@ main::__PROGRAM__: {start: 0, returns: [211], nodes: [
   [Constant, {const_type: string, value: "] rep ["}, ~, ~, Str], # 79
   [Concat, ~, [78, 79], ~, Str], # 80
   [Constant, {const_type: integer, value: "7"}, ~, ~, Int], # 81
-  [Subscript, ~, [3, 81, 17], ~, Scalar], # 82
+  [Subscript, {kind: array}, [3, 81, 17], ~, Scalar], # 82
   [DefinedOr, ~, [82, 9], ~, Scalar], # 83
   [Coerce, {from_repr: Scalar, to_repr: Str}, [83], ~, Str], # 84
   [Repeat, ~, [84, 45], ~, Str], # 85
@@ -231,7 +231,7 @@ main::__PROGRAM__: {start: 0, returns: [211], nodes: [
   [Constant, {const_type: string, value: "] def ["}, ~, ~, Str], # 87
   [Concat, ~, [86, 87], ~, Str], # 88
   [Constant, {const_type: integer, value: "8"}, ~, ~, Int], # 89
-  [Subscript, ~, [3, 89, 17], ~, Scalar], # 90
+  [Subscript, {kind: array}, [3, 89, 17], ~, Scalar], # 90
   [DefinedOr, ~, [90, 13], ~, Scalar], # 91
   [Constant, {const_type: integer, value: "99"}, ~, ~, Int], # 92
   [DefinedOr, ~, [91, 92], ~, Scalar], # 93
@@ -239,7 +239,7 @@ main::__PROGRAM__: {start: 0, returns: [211], nodes: [
   [Concat, ~, [88, 94], ~, Str], # 95
   [Constant, {const_type: string, value: "] mask ["}, ~, ~, Str], # 96
   [Concat, ~, [95, 96], ~, Str], # 97
-  [Subscript, ~, [3, 56, 17], ~, Scalar], # 98
+  [Subscript, {kind: array}, [3, 56, 17], ~, Scalar], # 98
   [Constant, {const_type: integer, value: "12"}, ~, ~, Int], # 99
   [DefinedOr, ~, [98, 99], ~, Scalar], # 100
   [Coerce, {from_repr: Scalar, to_repr: Int}, [100], ~, Int], # 101
@@ -248,10 +248,10 @@ main::__PROGRAM__: {start: 0, returns: [211], nodes: [
   [Concat, ~, [97, 103], ~, Str], # 104
   [Concat, ~, [104, 60], ~, Str], # 105
   [Constant, {const_type: string, value: "bits ["}, ~, ~, Str], # 106
-  [Subscript, ~, [3, 45, 17], ~, Scalar], # 107
+  [Subscript, {kind: array}, [3, 45, 17], ~, Scalar], # 107
   [DefinedOr, ~, [107, 71], ~, Scalar], # 108
   [Coerce, {from_repr: Scalar, to_repr: Int}, [108], ~, Int], # 109
-  [Subscript, ~, [3, 44, 17], ~, Scalar], # 110
+  [Subscript, {kind: array}, [3, 44, 17], ~, Scalar], # 110
   [DefinedOr, ~, [110, 44], ~, Scalar], # 111
   [Coerce, {from_repr: Scalar, to_repr: Int}, [111], ~, Int], # 112
   [BitAnd, ~, [109, 112], ~, Int], # 113
@@ -261,7 +261,7 @@ main::__PROGRAM__: {start: 0, returns: [211], nodes: [
   [Concat, ~, [115, 116], ~, Str], # 117
   [BitOr, ~, [109, 112], ~, Int], # 118
   [Constant, {const_type: integer, value: "4"}, ~, ~, Int], # 119
-  [Subscript, ~, [3, 119, 17], ~, Scalar], # 120
+  [Subscript, {kind: array}, [3, 119, 17], ~, Scalar], # 120
   [DefinedOr, ~, [120, 45], ~, Scalar], # 121
   [Coerce, {from_repr: Scalar, to_repr: Int}, [121], ~, Int], # 122
   [BitAnd, ~, [118, 122], ~, Int], # 123

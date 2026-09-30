@@ -163,7 +163,7 @@ main::__PROGRAM__::__ANON__:16:25: {start: 0, returns: [7], nodes: [
   [ArgsSource, ~, ~, ~, Array], # 1
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 2
   [MemStart], # 3
-  [Subscript, ~, [1, 2, 3], ~, Scalar], # 4
+  [Subscript, {kind: array}, [1, 2, 3], ~, Scalar], # 4
   [Coerce, {from_repr: Scalar, to_repr: Num}, [4], ~, Num], # 5
   [Multiply, ~, [5, 5], ~, Num], # 6
   [Return, ~, [6], 0]]} # 7

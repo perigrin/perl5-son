@@ -202,7 +202,7 @@ main::corpus_case: {start: 0, returns: [10], nodes: [
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 3
   [ArrayLiteral, {sigil: "@", symbol: a}, [1, 2, 3], ~, Array], # 4
   [MemStart], # 5
-  [Subscript, ~, [4, 1, 5], ~, Int], # 6
+  [Subscript, {kind: array}, [4, 1, 5], ~, Int], # 6
   [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
   [Print, ~, [7, 8], 0, Scalar], # 9
@@ -270,7 +270,7 @@ main::corpus_case: {start: 0, returns: [11], nodes: [
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 4
   [HashLiteral, {sigil: "%", symbol: h}, [1, 2, 3, 4], ~, Hash], # 5
   [MemStart], # 6
-  [Subscript, ~, [5, 1, 6], ~, Int], # 7
+  [Subscript, {kind: hash}, [5, 1, 6], ~, Int], # 7
   [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
   [Print, ~, [8, 9], 0, Scalar], # 10
@@ -408,7 +408,7 @@ main::corpus_case: {start: 0, returns: [11], nodes: [
   [ArrayLiteral, ~, [1, 2, 3], ~, ArrayRef], # 4
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 5
   [MemStart], # 6
-  [Subscript, ~, [4, 5, 6], ~, Int], # 7
+  [Subscript, {kind: array}, [4, 5, 6], ~, Int], # 7
   [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
   [Print, ~, [8, 9], 0, Scalar], # 10
@@ -477,7 +477,7 @@ main::corpus_case: {start: 0, returns: [11], nodes: [
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 4
   [HashLiteral, ~, [1, 2, 3, 4], ~, HashRef], # 5
   [MemStart], # 6
-  [Subscript, ~, [5, 1, 6], ~, Int], # 7
+  [Subscript, {kind: hash}, [5, 1, 6], ~, Int], # 7
   [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
   [Print, ~, [8, 9], 0, Scalar], # 10
@@ -546,10 +546,10 @@ main::corpus_case: {start: 0, returns: [13], nodes: [
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 3
   [ArrayLiteral, {sigil: "@", symbol: a}, [1, 2, 3], ~, Array], # 4
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 5
-  [Subscript, ~, [4, 5], ~, Int], # 6
+  [Subscript, {kind: array}, [4, 5], ~, Int], # 6
   [Constant, {const_type: integer, value: "42"}, ~, ~, Int], # 7
   [Assign, ~, [6, 7], 0, Int], # 8
-  [Subscript, ~, [4, 5, 8], ~, Int], # 9
+  [Subscript, {kind: array}, [4, 5, 8], ~, Int], # 9
   [Coerce, {from_repr: Unknown, to_repr: Str}, [9], ~, Str], # 10
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 11
   [Print, ~, [10, 11], 8, Scalar], # 12
@@ -615,10 +615,10 @@ main::corpus_case: {start: 0, returns: [11], nodes: [
   [Constant, {const_type: string, value: k}, ~, ~, Str], # 1
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 2
   [HashLiteral, {sigil: "%", symbol: h}, [1, 2], ~, Hash], # 3
-  [Subscript, ~, [3, 1], ~, Int], # 4
+  [Subscript, {kind: hash}, [3, 1], ~, Int], # 4
   [Constant, {const_type: integer, value: "99"}, ~, ~, Int], # 5
   [Assign, ~, [4, 5], 0, Int], # 6
-  [Subscript, ~, [3, 1, 6], ~, Int], # 7
+  [Subscript, {kind: hash}, [3, 1, 6], ~, Int], # 7
   [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
   [Print, ~, [8, 9], 6, Scalar], # 10
@@ -694,10 +694,10 @@ main::corpus_case: {start: 0, returns: [15], nodes: [
   [Constant, {const_type: integer, value: "4"}, ~, ~, Int], # 5
   [ArrayLiteral, ~, [4, 5], ~, ArrayRef], # 6
   [ArrayLiteral, ~, [3, 6], ~, ArrayRef], # 7
-  [Subscript, ~, [7, 1], ~, ArrayRef], # 8
+  [Subscript, {kind: array}, [7, 1], ~, ArrayRef], # 8
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 9
   [MemStart], # 10
-  [Subscript, ~, [8, 9, 10], ~, Scalar], # 11
+  [Subscript, {kind: array}, [8, 9, 10], ~, Scalar], # 11
   [Coerce, {from_repr: Unknown, to_repr: Str}, [11], ~, Str], # 12
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 13
   [Print, ~, [12, 13], 0, Scalar], # 14
@@ -766,7 +766,7 @@ main::corpus_case: {start: 0, returns: [11], nodes: [
   [ArrayLiteral, {sigil: "@", symbol: a}, [1, 2, 3], ~, Array], # 4
   [Constant, {const_type: integer, value: "9"}, ~, ~, Int], # 5
   [MemStart], # 6
-  [Subscript, ~, [4, 5, 6], ~, Undef], # 7
+  [Subscript, {kind: array}, [4, 5, 6], ~, Undef], # 7
   [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
   [Print, ~, [8, 9], 0, Scalar], # 10
@@ -835,7 +835,7 @@ main::corpus_case: {start: 0, returns: [12], nodes: [
   [HashLiteral, {sigil: "%", symbol: h}, [1, 2, 3, 4], ~, Hash], # 5
   [Constant, {const_type: string, value: z}, ~, ~, Str], # 6
   [MemStart], # 7
-  [Subscript, ~, [5, 6, 7], ~, Undef], # 8
+  [Subscript, {kind: hash}, [5, 6, 7], ~, Undef], # 8
   [Coerce, {from_repr: Unknown, to_repr: Str}, [8], ~, Str], # 9
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
   [Print, ~, [9, 10], 0, Scalar], # 11
@@ -1007,10 +1007,10 @@ main::corpus_case: {start: 0, returns: [14], nodes: [
   [ArrayLiteral, {sigil: "@", symbol: a}, [1, 2, 3], ~, Array], # 4
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 5
   [Ref, ~, [4], ~, ArrayRef], # 6
-  [Subscript, ~, [6, 5], ~, Scalar], # 7
+  [Subscript, {kind: array}, [6, 5], ~, Scalar], # 7
   [Constant, {const_type: integer, value: "42"}, ~, ~, Int], # 8
   [Assign, ~, [7, 8], 0, Int], # 9
-  [Subscript, ~, [4, 5, 9], ~, Int], # 10
+  [Subscript, {kind: array}, [4, 5, 9], ~, Int], # 10
   [Coerce, {from_repr: Unknown, to_repr: Str}, [10], ~, Str], # 11
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 12
   [Print, ~, [11, 12], 9, Scalar], # 13
@@ -1082,10 +1082,10 @@ main::corpus_case: {start: 0, returns: [13], nodes: [
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 3
   [ArrayLiteral, {sigil: "@", symbol: a}, [1, 2, 3], ~, Array], # 4
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 5
-  [Subscript, ~, [4, 5], ~, Int], # 6
+  [Subscript, {kind: array}, [4, 5], ~, Int], # 6
   [Constant, {const_type: integer, value: "42"}, ~, ~, Int], # 7
   [Assign, ~, [6, 7], 0, Int], # 8
-  [Subscript, ~, [4, 1, 8], ~, Int], # 9
+  [Subscript, {kind: array}, [4, 1, 8], ~, Int], # 9
   [Coerce, {from_repr: Unknown, to_repr: Str}, [9], ~, Str], # 10
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 11
   [Print, ~, [10, 11], 8, Scalar], # 12
@@ -1159,10 +1159,10 @@ main::corpus_case: {start: 0, returns: [14], nodes: [
   [ArrayLiteral, {sigil: "@", symbol: a}, [1, 2, 3], ~, Array], # 4
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 5
   [MemStart], # 6
-  [Subscript, ~, [4, 5, 6], ~, Int], # 7
+  [Subscript, {kind: array}, [4, 5, 6], ~, Int], # 7
   [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
-  [Subscript, ~, [4, 5], ~, Int], # 10
+  [Subscript, {kind: array}, [4, 5], ~, Int], # 10
   [Constant, {const_type: integer, value: "99"}, ~, ~, Int], # 11
   [Assign, ~, [10, 11], 0, Int], # 12
   [Print, ~, [8, 9], 12, Scalar], # 13
@@ -1234,11 +1234,11 @@ main::corpus_case: {start: 0, returns: [15], nodes: [
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 3
   [ArrayLiteral, {sigil: "@", symbol: a}, [1, 2, 3], ~, Array], # 4
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 5
-  [Subscript, ~, [4, 5], ~, Int], # 6
+  [Subscript, {kind: array}, [4, 5], ~, Int], # 6
   [Assign, ~, [6, 1], 0, Int], # 7
-  [Subscript, ~, [4, 5, 7], ~, Int], # 8
+  [Subscript, {kind: array}, [4, 5, 7], ~, Int], # 8
   [Assign, ~, [6, 2], 7, Int], # 9
-  [Subscript, ~, [4, 5, 9], ~, Int], # 10
+  [Subscript, {kind: array}, [4, 5, 9], ~, Int], # 10
   [Add, ~, [8, 10], ~, Int], # 11
   [Coerce, {from_repr: Unknown, to_repr: Str}, [11], ~, Str], # 12
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 13
@@ -1306,7 +1306,7 @@ main::corpus_case: {start: 0, returns: [10], nodes: [
   [ArrayLiteral, {sigil: "@", symbol: a}, [1, 2], ~, Array], # 3
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 4
   [MemStart], # 5
-  [Subscript, ~, [3, 4, 5], ~, Str], # 6
+  [Subscript, {kind: array}, [3, 4, 5], ~, Str], # 6
   [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
   [Print, ~, [7, 8], 0, Scalar], # 9
@@ -1372,7 +1372,7 @@ main::corpus_case: {start: 0, returns: [11], nodes: [
   [ArrayLiteral, {sigil: "@", symbol: a}, [1, 2], ~, Array], # 3
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 4
   [MemStart], # 5
-  [Subscript, ~, [3, 4, 5], ~, Str], # 6
+  [Subscript, {kind: array}, [3, 4, 5], ~, Str], # 6
   [Length, ~, [6], ~, Int], # 7
   [Coerce, {from_repr: Int, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
@@ -1439,7 +1439,7 @@ main::corpus_case: {start: 0, returns: [10], nodes: [
   [ArrayLiteral, {sigil: "@", symbol: a}, [1, 2], ~, Array], # 3
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 4
   [MemStart], # 5
-  [Subscript, ~, [3, 4, 5], ~, Num], # 6
+  [Subscript, {kind: array}, [3, 4, 5], ~, Num], # 6
   [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
   [Print, ~, [7, 8], 0, Scalar], # 9
@@ -1503,7 +1503,7 @@ main::corpus_case: {start: 0, returns: [9], nodes: [
   [Constant, {const_type: string, value: val}, ~, ~, Str], # 2
   [HashLiteral, {sigil: "%", symbol: h}, [1, 2], ~, Hash], # 3
   [MemStart], # 4
-  [Subscript, ~, [3, 1, 4], ~, Str], # 5
+  [Subscript, {kind: hash}, [3, 1, 4], ~, Str], # 5
   [Coerce, {from_repr: Unknown, to_repr: Str}, [5], ~, Str], # 6
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 7
   [Print, ~, [6, 7], 0, Scalar], # 8
@@ -1566,7 +1566,7 @@ main::corpus_case: {start: 0, returns: [9], nodes: [
   [Constant, {const_type: number, value: "1.5"}, ~, ~, Num], # 2
   [HashLiteral, {sigil: "%", symbol: h}, [1, 2], ~, Hash], # 3
   [MemStart], # 4
-  [Subscript, ~, [3, 1, 4], ~, Num], # 5
+  [Subscript, {kind: hash}, [3, 1, 4], ~, Num], # 5
   [Coerce, {from_repr: Unknown, to_repr: Str}, [5], ~, Str], # 6
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 7
   [Print, ~, [6, 7], 0, Scalar], # 8
@@ -1657,7 +1657,7 @@ main::corpus_case: {start: 0, returns: [29], nodes: [
   [ArrayLiteral, {sigil: "@", symbol: a}, [2, 3, 4], ~, Array], # 5
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 6
   [MemStart], # 7
-  [Subscript, ~, [5, 6], ~, Int], # 8
+  [Subscript, {kind: array}, [5, 6], ~, Int], # 8
   [Constant, {const_type: integer, value: "9"}, ~, ~, Int], # 9
   [NumEq, ~, [6, 6], ~, Boolean], # 10
   [If, ~, [0, 10], 0], # 11
@@ -1666,7 +1666,7 @@ main::corpus_case: {start: 0, returns: [29], nodes: [
   [Proj, {index: 1}, [11]], # 14
   [Region, {head: 11}, [14, 13]], # 15
   [Phi, {predecessors: [14, 12], region: 15}, [7, 13], ~, Unknown], # 16
-  [Subscript, ~, [5, 6, 16], ~, Scalar], # 17
+  [Subscript, {kind: array}, [5, 6, 16], ~, Scalar], # 17
   [Coerce, {from_repr: Unknown, to_repr: Str}, [17], ~, Str], # 18
   [Concat, ~, [1, 18], ~, Str], # 19
   [Constant, {const_type: string, value: " n="}, ~, ~, Str], # 20
@@ -1754,7 +1754,7 @@ main::corpus_case: {start: 0, returns: [29], nodes: [
   [ArrayLiteral, {sigil: "@", symbol: a}, [2, 3, 4], ~, Array], # 5
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 6
   [MemStart], # 7
-  [Subscript, ~, [5, 6], ~, Int], # 8
+  [Subscript, {kind: array}, [5, 6], ~, Int], # 8
   [Constant, {const_type: integer, value: "9"}, ~, ~, Int], # 9
   [NumEq, ~, [2, 6], ~, Boolean], # 10
   [If, ~, [0, 10], 0], # 11
@@ -1763,7 +1763,7 @@ main::corpus_case: {start: 0, returns: [29], nodes: [
   [Proj, {index: 1}, [11]], # 14
   [Region, {head: 11}, [14, 13]], # 15
   [Phi, {predecessors: [14, 12], region: 15}, [7, 13], ~, Unknown], # 16
-  [Subscript, ~, [5, 6, 16], ~, Scalar], # 17
+  [Subscript, {kind: array}, [5, 6, 16], ~, Scalar], # 17
   [Coerce, {from_repr: Unknown, to_repr: Str}, [17], ~, Str], # 18
   [Concat, ~, [1, 18], ~, Str], # 19
   [Constant, {const_type: string, value: " n="}, ~, ~, Str], # 20
@@ -1848,7 +1848,7 @@ main::corpus_case: {start: 0, returns: [28], nodes: [
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 3
   [HashLiteral, {sigil: "%", symbol: h}, [2, 3], ~, Hash], # 4
   [MemStart], # 5
-  [Subscript, ~, [4, 2], ~, Int], # 6
+  [Subscript, {kind: hash}, [4, 2], ~, Int], # 6
   [Constant, {const_type: integer, value: "9"}, ~, ~, Int], # 7
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 8
   [NumEq, ~, [8, 8], ~, Boolean], # 9
@@ -1858,7 +1858,7 @@ main::corpus_case: {start: 0, returns: [28], nodes: [
   [Proj, {index: 1}, [10]], # 13
   [Region, {head: 10}, [13, 12]], # 14
   [Phi, {predecessors: [13, 11], region: 14}, [5, 12], ~, Unknown], # 15
-  [Subscript, ~, [4, 2, 15], ~, Scalar], # 16
+  [Subscript, {kind: hash}, [4, 2, 15], ~, Scalar], # 16
   [Coerce, {from_repr: Unknown, to_repr: Str}, [16], ~, Str], # 17
   [Concat, ~, [1, 17], ~, Str], # 18
   [Constant, {const_type: string, value: " n="}, ~, ~, Str], # 19
@@ -1938,7 +1938,7 @@ main::corpus_case: {start: 0, returns: [28], nodes: [
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 3
   [HashLiteral, {sigil: "%", symbol: h}, [2, 3], ~, Hash], # 4
   [MemStart], # 5
-  [Subscript, ~, [4, 2], ~, Int], # 6
+  [Subscript, {kind: hash}, [4, 2], ~, Int], # 6
   [Constant, {const_type: integer, value: "9"}, ~, ~, Int], # 7
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 8
   [NumEq, ~, [3, 8], ~, Boolean], # 9
@@ -1948,7 +1948,7 @@ main::corpus_case: {start: 0, returns: [28], nodes: [
   [Proj, {index: 1}, [10]], # 13
   [Region, {head: 10}, [13, 12]], # 14
   [Phi, {predecessors: [13, 11], region: 14}, [5, 12], ~, Unknown], # 15
-  [Subscript, ~, [4, 2, 15], ~, Scalar], # 16
+  [Subscript, {kind: hash}, [4, 2, 15], ~, Scalar], # 16
   [Coerce, {from_repr: Unknown, to_repr: Str}, [16], ~, Str], # 17
   [Concat, ~, [1, 17], ~, Str], # 18
   [Constant, {const_type: string, value: " n="}, ~, ~, Str], # 19
@@ -2060,7 +2060,7 @@ main::corpus_case: {start: 0, returns: [35], nodes: [
   [ArrayLiteral, {sigil: "@", symbol: a}, [2, 3, 4], ~, Array], # 5
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 6
   [MemStart], # 7
-  [Subscript, ~, [5, 6], ~, Int], # 8
+  [Subscript, {kind: array}, [5, 6], ~, Int], # 8
   [Constant, {const_type: integer, value: "9"}, ~, ~, Int], # 9
   [If, ~, [0, 2], 0], # 10
   [Proj, {index: 0}, [10]], # 11
@@ -2075,7 +2075,7 @@ main::corpus_case: {start: 0, returns: [35], nodes: [
   [Proj, {index: 1}, [10]], # 20
   [Region, {head: 10}, [20, 18]], # 21
   [Phi, {predecessors: [20, 11], region: 21}, [7, 19], ~, Unknown], # 22
-  [Subscript, ~, [5, 6, 22], ~, Scalar], # 23
+  [Subscript, {kind: array}, [5, 6, 22], ~, Scalar], # 23
   [Coerce, {from_repr: Unknown, to_repr: Str}, [23], ~, Str], # 24
   [Concat, ~, [1, 24], ~, Str], # 25
   [Constant, {const_type: string, value: " n="}, ~, ~, Str], # 26
@@ -2170,7 +2170,7 @@ main::corpus_case: {start: 0, returns: [35], nodes: [
   [ArrayLiteral, {sigil: "@", symbol: a}, [2, 3, 4], ~, Array], # 5
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 6
   [MemStart], # 7
-  [Subscript, ~, [5, 6], ~, Int], # 8
+  [Subscript, {kind: array}, [5, 6], ~, Int], # 8
   [Constant, {const_type: integer, value: "9"}, ~, ~, Int], # 9
   [If, ~, [0, 2], 0], # 10
   [Proj, {index: 0}, [10]], # 11
@@ -2185,7 +2185,7 @@ main::corpus_case: {start: 0, returns: [35], nodes: [
   [Proj, {index: 1}, [10]], # 20
   [Region, {head: 10}, [20, 18]], # 21
   [Phi, {predecessors: [20, 11], region: 21}, [7, 19], ~, Unknown], # 22
-  [Subscript, ~, [5, 6, 22], ~, Scalar], # 23
+  [Subscript, {kind: array}, [5, 6, 22], ~, Scalar], # 23
   [Coerce, {from_repr: Unknown, to_repr: Str}, [23], ~, Str], # 24
   [Concat, ~, [1, 24], ~, Str], # 25
   [Constant, {const_type: string, value: " n="}, ~, ~, Str], # 26
@@ -2280,7 +2280,7 @@ main::corpus_case: {start: 0, returns: [35], nodes: [
   [ArrayLiteral, {sigil: "@", symbol: a}, [2, 3, 4], ~, Array], # 5
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 6
   [MemStart], # 7
-  [Subscript, ~, [5, 6], ~, Int], # 8
+  [Subscript, {kind: array}, [5, 6], ~, Int], # 8
   [Constant, {const_type: integer, value: "9"}, ~, ~, Int], # 9
   [If, ~, [0, 6], 0], # 10
   [Proj, {index: 0}, [10]], # 11
@@ -2295,7 +2295,7 @@ main::corpus_case: {start: 0, returns: [35], nodes: [
   [Proj, {index: 1}, [10]], # 20
   [Region, {head: 10}, [20, 18]], # 21
   [Phi, {predecessors: [20, 11], region: 21}, [7, 19], ~, Unknown], # 22
-  [Subscript, ~, [5, 6, 22], ~, Scalar], # 23
+  [Subscript, {kind: array}, [5, 6, 22], ~, Scalar], # 23
   [Coerce, {from_repr: Unknown, to_repr: Str}, [23], ~, Str], # 24
   [Concat, ~, [1, 24], ~, Str], # 25
   [Constant, {const_type: string, value: " n="}, ~, ~, Str], # 26

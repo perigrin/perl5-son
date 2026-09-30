@@ -62,12 +62,12 @@ main::describe: {start: 0, returns: [16], nodes: [
   [ArgsSource, ~, ~, ~, Array], # 1
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 2
   [MemStart], # 3
-  [Subscript, ~, [1, 2, 3], ~, Scalar], # 4
+  [Subscript, {kind: array}, [1, 2, 3], ~, Scalar], # 4
   [Coerce, {from_repr: Unknown, to_repr: Str}, [4], ~, Str], # 5
   [Constant, {const_type: string, value: "-"}, ~, ~, Str], # 6
   [Concat, ~, [5, 6], ~, Str], # 7
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 8
-  [Subscript, ~, [1, 8, 3], ~, Scalar], # 9
+  [Subscript, {kind: array}, [1, 8, 3], ~, Scalar], # 9
   [Coerce, {from_repr: Unknown, to_repr: Str}, [9], ~, Str], # 10
   [Concat, ~, [7, 10], ~, Str], # 11
   [Concat, ~, [11, 6], ~, Str], # 12
@@ -214,8 +214,8 @@ main::bump_alias: {start: 0, returns: [8], nodes: [
   [ArgsSource, ~, ~, ~, Array], # 1
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 2
   [MemStart], # 3
-  [Subscript, ~, [1, 2, 3], ~, Scalar], # 4
-  [Subscript, ~, [1, 2], ~, Scalar], # 5
+  [Subscript, {kind: array}, [1, 2, 3], ~, Scalar], # 4
+  [Subscript, {kind: array}, [1, 2], ~, Scalar], # 5
   [Increment, ~, [4], ~, Scalar], # 6
   [Assign, ~, [5, 6], 0, Scalar], # 7
   [Return, ~, [4], 7]]} # 8
@@ -293,7 +293,7 @@ main::classify: {start: 0, returns: [19], nodes: [
   [ArgsSource, ~, ~, ~, Array], # 4
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 5
   [MemStart], # 6
-  [Subscript, ~, [4, 5, 6], ~, Scalar], # 7
+  [Subscript, {kind: array}, [4, 5, 6], ~, Scalar], # 7
   [Coerce, {from_repr: Scalar, to_repr: Num}, [7], ~, Num], # 8
   [NumEq, ~, [8, 5], ~, Boolean], # 9
   [If, ~, [0, 9], 0], # 10

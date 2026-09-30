@@ -58,12 +58,12 @@ main::__PROGRAM__: {start: 0, returns: [44], nodes: [
   [EntryDef, {package: main, sigil: "@", symbol: ARGV}, ~, ~, Array], # 2
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 3
   [MemStart], # 4
-  [Subscript, ~, [2, 3, 4], ~, Scalar], # 5
+  [Subscript, {kind: array}, [2, 3, 4], ~, Scalar], # 5
   [Constant, {const_type: integer, value: "12"}, ~, ~, Int], # 6
   [DefinedOr, ~, [5, 6], ~, Scalar], # 7
   [Coerce, {from_repr: Scalar, to_repr: Num}, [7], ~, Num], # 8
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 9
-  [Subscript, ~, [2, 9, 4], ~, Scalar], # 10
+  [Subscript, {kind: array}, [2, 9, 4], ~, Scalar], # 10
   [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 11
   [DefinedOr, ~, [10, 11], ~, Scalar], # 12
   [Coerce, {from_repr: Scalar, to_repr: Num}, [12], ~, Num], # 13
@@ -133,7 +133,7 @@ main::__PROGRAM__: {start: 0, returns: [22], nodes: [
   [EntryDef, {package: main, sigil: "@", symbol: ARGV}, ~, ~, Array], # 3
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 4
   [MemStart], # 5
-  [Subscript, ~, [3, 4, 5], ~, Scalar], # 6
+  [Subscript, {kind: array}, [3, 4, 5], ~, Scalar], # 6
   [Constant, {const_type: string, value: ab}, ~, ~, Str], # 7
   [DefinedOr, ~, [6, 7], ~, Scalar], # 8
   [Coerce, {from_repr: Scalar, to_repr: Str}, [8], ~, Str], # 9
@@ -142,7 +142,7 @@ main::__PROGRAM__: {start: 0, returns: [22], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 12
   [Constant, {const_type: string, value: "joined: "}, ~, ~, Str], # 13
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 14
-  [Subscript, ~, [3, 14, 5], ~, Scalar], # 15
+  [Subscript, {kind: array}, [3, 14, 5], ~, Scalar], # 15
   [Constant, {const_type: string, value: cd}, ~, ~, Str], # 16
   [DefinedOr, ~, [15, 16], ~, Scalar], # 17
   [Coerce, {from_repr: Scalar, to_repr: Str}, [17], ~, Str], # 18
@@ -185,16 +185,16 @@ main::__PROGRAM__: {start: 0, returns: [30], nodes: [
   [EntryDef, {package: main, sigil: "@", symbol: ARGV}, ~, ~, Array], # 2
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 3
   [MemStart], # 4
-  [Subscript, ~, [2, 3, 4], ~, Scalar], # 5
+  [Subscript, {kind: array}, [2, 3, 4], ~, Scalar], # 5
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 6
   [DefinedOr, ~, [5, 6], ~, Scalar], # 7
   [Coerce, {from_repr: Scalar, to_repr: Num}, [7], ~, Num], # 8
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 9
-  [Subscript, ~, [2, 9, 4], ~, Scalar], # 10
+  [Subscript, {kind: array}, [2, 9, 4], ~, Scalar], # 10
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 11
   [DefinedOr, ~, [10, 11], ~, Scalar], # 12
   [Coerce, {from_repr: Scalar, to_repr: Num}, [12], ~, Num], # 13
-  [Subscript, ~, [2, 6, 4], ~, Scalar], # 14
+  [Subscript, {kind: array}, [2, 6, 4], ~, Scalar], # 14
   [Constant, {const_type: integer, value: "4"}, ~, ~, Int], # 15
   [DefinedOr, ~, [14, 15], ~, Scalar], # 16
   [Coerce, {from_repr: Scalar, to_repr: Num}, [16], ~, Num], # 17
@@ -249,16 +249,16 @@ main::__PROGRAM__: {start: 0, returns: [34], nodes: [
   [EntryDef, {package: main, sigil: "@", symbol: ARGV}, ~, ~, Array], # 2
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 3
   [MemStart], # 4
-  [Subscript, ~, [2, 3, 4], ~, Scalar], # 5
+  [Subscript, {kind: array}, [2, 3, 4], ~, Scalar], # 5
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 6
   [DefinedOr, ~, [5, 6], ~, Scalar], # 7
   [Coerce, {from_repr: Scalar, to_repr: Num}, [7], ~, Num], # 8
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 9
-  [Subscript, ~, [2, 9, 4], ~, Scalar], # 10
+  [Subscript, {kind: array}, [2, 9, 4], ~, Scalar], # 10
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 11
   [DefinedOr, ~, [10, 11], ~, Scalar], # 12
   [Coerce, {from_repr: Scalar, to_repr: Num}, [12], ~, Num], # 13
-  [Subscript, ~, [2, 6, 4], ~, Scalar], # 14
+  [Subscript, {kind: array}, [2, 6, 4], ~, Scalar], # 14
   [DefinedOr, ~, [14, 6], ~, Scalar], # 15
   [Coerce, {from_repr: Scalar, to_repr: Num}, [15], ~, Num], # 16
   [Power, ~, [13, 16], ~, Num], # 17

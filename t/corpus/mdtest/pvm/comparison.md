@@ -60,12 +60,12 @@ main::__PROGRAM__: {start: 0, returns: [43], nodes: [
   [EntryDef, {package: main, sigil: "@", symbol: ARGV}, ~, ~, Array], # 3
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 4
   [MemStart], # 5
-  [Subscript, ~, [3, 4, 5], ~, Scalar], # 6
+  [Subscript, {kind: array}, [3, 4, 5], ~, Scalar], # 6
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 7
   [DefinedOr, ~, [6, 7], ~, Scalar], # 8
   [Coerce, {from_repr: Scalar, to_repr: Num}, [8], ~, Num], # 9
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 10
-  [Subscript, ~, [3, 10, 5], ~, Scalar], # 11
+  [Subscript, {kind: array}, [3, 10, 5], ~, Scalar], # 11
   [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 12
   [DefinedOr, ~, [11, 12], ~, Scalar], # 13
   [Coerce, {from_repr: Scalar, to_repr: Num}, [13], ~, Num], # 14
@@ -144,12 +144,12 @@ main::__PROGRAM__: {start: 0, returns: [45], nodes: [
   [EntryDef, {package: main, sigil: "@", symbol: ARGV}, ~, ~, Array], # 3
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 4
   [MemStart], # 5
-  [Subscript, ~, [3, 4, 5], ~, Scalar], # 6
+  [Subscript, {kind: array}, [3, 4, 5], ~, Scalar], # 6
   [Constant, {const_type: string, value: aa}, ~, ~, Str], # 7
   [DefinedOr, ~, [6, 7], ~, Scalar], # 8
   [Coerce, {from_repr: Scalar, to_repr: Str}, [8], ~, Str], # 9
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 10
-  [Subscript, ~, [3, 10, 5], ~, Scalar], # 11
+  [Subscript, {kind: array}, [3, 10, 5], ~, Scalar], # 11
   [Constant, {const_type: string, value: bb}, ~, ~, Str], # 12
   [DefinedOr, ~, [11, 12], ~, Scalar], # 13
   [Coerce, {from_repr: Scalar, to_repr: Str}, [13], ~, Str], # 14
@@ -224,10 +224,10 @@ main::__PROGRAM__: {start: 0, returns: [37], nodes: [
   [EntryDef, {package: main, sigil: "@", symbol: ARGV}, ~, ~, Array], # 3
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 4
   [MemStart], # 5
-  [Subscript, ~, [3, 4, 5], ~, Scalar], # 6
+  [Subscript, {kind: array}, [3, 4, 5], ~, Scalar], # 6
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 7
   [DefinedOr, ~, [6, 7], ~, Scalar], # 8
-  [Subscript, ~, [3, 7, 5], ~, Scalar], # 9
+  [Subscript, {kind: array}, [3, 7, 5], ~, Scalar], # 9
   [DefinedOr, ~, [9, 4], ~, Scalar], # 10
   [And, ~, [8, 10], ~, Scalar], # 11
   [Coerce, {from_repr: Unknown, to_repr: Str}, [11], ~, Str], # 12
@@ -292,7 +292,7 @@ main::__PROGRAM__: {start: 0, returns: [18], nodes: [
   [EntryDef, {package: main, sigil: "@", symbol: ARGV}, ~, ~, Array], # 2
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 3
   [MemStart], # 4
-  [Subscript, ~, [2, 3, 4], ~, Scalar], # 5
+  [Subscript, {kind: array}, [2, 3, 4], ~, Scalar], # 5
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 6
   [DefinedOr, ~, [5, 6], ~, Scalar], # 7
   [Constant, {const_type: integer, value: "9"}, ~, ~, Int], # 8

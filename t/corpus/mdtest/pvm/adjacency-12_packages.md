@@ -118,7 +118,7 @@ Greet::import: {start: 0, returns: [11], nodes: [
   [ArgsSource, ~, ~, ~, Array], # 2
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 3
   [MemStart], # 4
-  [Subscript, ~, [2, 3, 4], ~, Scalar], # 5
+  [Subscript, {kind: array}, [2, 3, 4], ~, Scalar], # 5
   [Coerce, {from_repr: Unknown, to_repr: Str}, [5], ~, Str], # 6
   [Concat, ~, [1, 6], ~, Str], # 7
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
@@ -149,18 +149,18 @@ main::__PROGRAM__: {start: 0, returns: [44], nodes: [
   [MemStart], # 16
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [15, 16], 0, Unknown], # 17
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [14, 17], 17, Unknown], # 18
-  [Subscript, ~, [12, 13, 18], ~, Scalar], # 19
+  [Subscript, {kind: hash}, [12, 13, 18], ~, Scalar], # 19
   [Constant, {const_type: string, value: "yes"}, ~, ~, Str], # 20
   [Constant, {const_type: string, value: "no"}, ~, ~, Str], # 21
   [TernaryExpr, ~, [19, 20, 21], ~, Str], # 22
   [Constant, {const_type: string, value: LOCK_EX}, ~, ~, Str], # 23
-  [Subscript, ~, [12, 23, 18], ~, Scalar], # 24
+  [Subscript, {kind: hash}, [12, 23, 18], ~, Scalar], # 24
   [TernaryExpr, ~, [24, 20, 21], ~, Str], # 25
   [Constant, {const_type: string, value: "inc: "}, ~, ~, Str], # 26
   [EntryDef, {package: main, sigil: "%", symbol: INC}, ~, ~, Hash], # 27
-  [Subscript, ~, [27, 15, 18], ~, Scalar], # 28
+  [Subscript, {kind: hash}, [27, 15, 18], ~, Scalar], # 28
   [TernaryExpr, ~, [28, 20, 21], ~, Str], # 29
-  [Subscript, ~, [27, 14, 18], ~, Scalar], # 30
+  [Subscript, {kind: hash}, [27, 14, 18], ~, Scalar], # 30
   [TernaryExpr, ~, [30, 20, 21], ~, Str], # 31
   [Constant, {const_type: string, value: Greet}, ~, ~, Str], # 32
   [Constant, {const_type: string, value: tag}, ~, ~, Str], # 33

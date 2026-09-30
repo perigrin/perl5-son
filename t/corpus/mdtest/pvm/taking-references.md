@@ -54,12 +54,12 @@ main::__PROGRAM__: {start: 0, returns: [19], nodes: [
   [Ref, ~, [4], ~, ArrayRef], # 5
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 6
   [MemStart], # 7
-  [Subscript, ~, [5, 6, 7], ~, Scalar], # 8
+  [Subscript, {kind: array}, [5, 6, 7], ~, Scalar], # 8
   [Coerce, {from_repr: Unknown, to_repr: Str}, [8], ~, Str], # 9
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 10
   [Concat, ~, [9, 10], ~, Str], # 11
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 12
-  [Subscript, ~, [5, 12, 7], ~, Scalar], # 13
+  [Subscript, {kind: array}, [5, 12, 7], ~, Scalar], # 13
   [Coerce, {from_repr: Unknown, to_repr: Str}, [13], ~, Str], # 14
   [Concat, ~, [11, 14], ~, Str], # 15
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 16
@@ -114,12 +114,12 @@ main::__PROGRAM__: {start: 0, returns: [19], nodes: [
   [ArrayLiteral, {sigil: "@", symbol: r}, [5], ~, Array], # 6
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 7
   [MemStart], # 8
-  [Subscript, ~, [6, 7, 8], ~, Scalar], # 9
+  [Subscript, {kind: array}, [6, 7, 8], ~, Scalar], # 9
   [PostfixDeref, {sigil: $}, [9], ~, Scalar], # 10
   [Coerce, {from_repr: Scalar, to_repr: Str}, [10], ~, Str], # 11
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 12
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 13
-  [Subscript, ~, [6, 13, 8], ~, Scalar], # 14
+  [Subscript, {kind: array}, [6, 13, 8], ~, Scalar], # 14
   [PostfixDeref, {sigil: $}, [14], ~, Scalar], # 15
   [Coerce, {from_repr: Scalar, to_repr: Str}, [15], ~, Str], # 16
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 17

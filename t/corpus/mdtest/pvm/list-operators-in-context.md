@@ -271,7 +271,7 @@ main::__PROGRAM__: {start: 0, returns: [41], nodes: [
   [Constant, {const_type: string, value: z}, ~, ~, Str], # 4
   [ArrayLiteral, {sigil: "@", symbol: a}, [2, 3, 4], ~, Array], # 5
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 6
-  [Subscript, ~, [5, 6], ~, Str], # 7
+  [Subscript, {kind: array}, [5, 6], ~, Str], # 7
   [EnvRead, {key: M}, ~, ~, Str], # 8
   [Constant, {const_type: string, value: a}, ~, ~, Str], # 9
   [Concat, ~, [8, 9], ~, Str], # 10
@@ -308,11 +308,11 @@ main::__PROGRAM__: {start: 0, returns: [41], nodes: [
   [Return, ~, [1], 40], # 41
   [Count, ~, [5, 11], ~, Int], # 42
   [Phi, {region: 15}, [6, 59], ~, Int], # 43
-  [Subscript, ~, [5, 43, 11], ~, Str], # 44
+  [Subscript, {kind: array}, [5, 43, 11], ~, Str], # 44
   [Phi, {region: 23}, [6, 60], ~, Int], # 45
-  [Subscript, ~, [5, 45, 11], ~, Str], # 46
+  [Subscript, {kind: array}, [5, 45, 11], ~, Str], # 46
   [Phi, {region: 31}, [6, 61], ~, Int], # 47
-  [Subscript, ~, [5, 47, 11], ~, Str], # 48
+  [Subscript, {kind: array}, [5, 47, 11], ~, Str], # 48
   [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 49
   [NumGt, ~, [42, 43], 15, Boolean], # 50
   [NumGt, ~, [42, 45], 23, Boolean], # 51
@@ -401,7 +401,7 @@ main::__PROGRAM__: {start: 0, returns: [39], nodes: [
   [Constant, {const_type: string, value: z}, ~, ~, Str], # 4
   [ArrayLiteral, {sigil: "@", symbol: a}, [2, 3, 4], ~, Array], # 5
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 6
-  [Subscript, ~, [5, 6], ~, Str], # 7
+  [Subscript, {kind: array}, [5, 6], ~, Str], # 7
   [EnvRead, {key: G}, ~, ~, Str], # 8
   [Assign, ~, [7, 8], 0, Str], # 9
   [EntryDef, {package: main, sigil: $, symbol: "\""}, [9], ~, Scalar], # 10
@@ -436,11 +436,11 @@ main::__PROGRAM__: {start: 0, returns: [39], nodes: [
   [Return, ~, [1], 38], # 39
   [Count, ~, [5, 9], ~, Int], # 40
   [Phi, {region: 13}, [6, 55], ~, Int], # 41
-  [Subscript, ~, [5, 41, 9], ~, Str], # 42
+  [Subscript, {kind: array}, [5, 41, 9], ~, Str], # 42
   [Phi, {region: 21}, [6, 56], ~, Int], # 43
-  [Subscript, ~, [5, 43, 9], ~, Str], # 44
+  [Subscript, {kind: array}, [5, 43, 9], ~, Str], # 44
   [Phi, {region: 29}, [6, 57], ~, Int], # 45
-  [Subscript, ~, [5, 45, 9], ~, Str], # 46
+  [Subscript, {kind: array}, [5, 45, 9], ~, Str], # 46
   [NumGt, ~, [40, 41], 13, Boolean], # 47
   [NumGt, ~, [40, 43], 21, Boolean], # 48
   [NumGt, ~, [40, 45], 29, Boolean], # 49

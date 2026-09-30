@@ -1755,7 +1755,7 @@ Bag::first: {start: 0, returns: [5], nodes: [
   [FieldAccess, {field_index: 0, field_stash: Bag}, ~, ~, ArrayRef], # 1
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 2
   [MemStart], # 3
-  [Subscript, ~, [1, 2, 3], ~, Scalar], # 4
+  [Subscript, {kind: array}, [1, 2, 3], ~, Scalar], # 4
   [Return, ~, [4], 0]]} # 5
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
@@ -1855,21 +1855,22 @@ Bag::total: {start: 0, returns: [6], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 1
   [Loop, {bound: entry}, [0], 0], # 2
-  [Phi, {region: 2}, [1, 15], ~, Int], # 3
+  [Phi, {region: 2}, [1, 16], ~, Int], # 3
   [Proj, {index: 1}, [2]], # 4
   [Region, {head: 2}, [4]], # 5
   [Return, ~, [3], 5], # 6
   [FieldAccess, {field_index: 0, field_stash: Bag}, ~, ~, ArrayRef], # 7
   [MemStart], # 8
-  [Count, ~, [7, 8], ~, Int], # 9
-  [Phi, {region: 2}, [1, 17], ~, Int], # 10
-  [NumGt, ~, [9, 10], 2, Boolean], # 11
-  [Proj, {index: 0}, [2]], # 12
-  [Subscript, ~, [7, 10, 8], ~, Scalar], # 13
-  [Coerce, {from_repr: Scalar, to_repr: Num}, [13], ~, Num], # 14
-  [Add, ~, [3, 14], ~, Num], # 15
-  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 16
-  [Add, ~, [10, 16], ~, Int]]} # 17
+  [PostfixDeref, {sigil: "@"}, [7, 8], ~, Array], # 9
+  [Count, ~, [9, 8], ~, Int], # 10
+  [Phi, {region: 2}, [1, 18], ~, Int], # 11
+  [NumGt, ~, [10, 11], 2, Boolean], # 12
+  [Proj, {index: 0}, [2]], # 13
+  [Subscript, {kind: array}, [9, 11, 8], ~, Scalar], # 14
+  [Coerce, {from_repr: Scalar, to_repr: Num}, [14], ~, Num], # 15
+  [Add, ~, [3, 15], ~, Num], # 16
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 17
+  [Add, ~, [11, 17], ~, Int]]} # 18
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1

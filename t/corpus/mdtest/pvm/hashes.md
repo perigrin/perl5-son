@@ -51,7 +51,7 @@ main::__PROGRAM__: {start: 0, returns: [15], nodes: [
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 5
   [HashLiteral, {sigil: "%", symbol: h}, [2, 3, 4, 5], ~, Hash], # 6
   [MemStart], # 7
-  [Subscript, ~, [6, 2, 7], ~, Int], # 8
+  [Subscript, {kind: hash}, [6, 2, 7], ~, Int], # 8
   [Coerce, {from_repr: Unknown, to_repr: Str}, [8], ~, Str], # 9
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
   [Call, {dispatch_kind: builtin, name: keys, param_names: []}, [6, 7], ~, Int], # 11
@@ -123,13 +123,13 @@ main::__PROGRAM__: {start: 0, returns: [22], nodes: [
   [Constant, {const_type: integer, value: "4"}, ~, ~, Int], # 9
   [HashLiteral, {sigil: "%", symbol: h}, [2, 3, 4, 5, 6, 7, 8, 9], ~, Hash], # 10
   [MemStart], # 11
-  [Subscript, ~, [10, 2, 11], ~, Int], # 12
+  [Subscript, {kind: hash}, [10, 2, 11], ~, Int], # 12
   [Coerce, {from_repr: Unknown, to_repr: Str}, [12], ~, Str], # 13
-  [Subscript, ~, [10, 4, 11], ~, Int], # 14
+  [Subscript, {kind: hash}, [10, 4, 11], ~, Int], # 14
   [Coerce, {from_repr: Unknown, to_repr: Str}, [14], ~, Str], # 15
-  [Subscript, ~, [10, 6, 11], ~, Int], # 16
+  [Subscript, {kind: hash}, [10, 6, 11], ~, Int], # 16
   [Coerce, {from_repr: Unknown, to_repr: Str}, [16], ~, Str], # 17
-  [Subscript, ~, [10, 8, 11], ~, Int], # 18
+  [Subscript, {kind: hash}, [10, 8, 11], ~, Int], # 18
   [Coerce, {from_repr: Unknown, to_repr: Str}, [18], ~, Str], # 19
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 20
   [Print, ~, [13, 15, 17, 19, 20], 0, Scalar], # 21
@@ -170,8 +170,8 @@ main::__PROGRAM__: {start: 0, returns: [15], nodes: [
   [ArrayLiteral, {sigil: "@", symbol: k}, [4], ~, Array], # 7
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 8
   [MemStart], # 9
-  [Subscript, ~, [7, 8, 9], ~, Str], # 10
-  [Subscript, ~, [6, 10, 9], ~, Scalar], # 11
+  [Subscript, {kind: array}, [7, 8, 9], ~, Str], # 10
+  [Subscript, {kind: hash}, [6, 10, 9], ~, Scalar], # 11
   [Coerce, {from_repr: Unknown, to_repr: Str}, [11], ~, Str], # 12
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 13
   [Print, ~, [12, 13], 0, Scalar], # 14

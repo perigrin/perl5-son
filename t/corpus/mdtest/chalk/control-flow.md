@@ -1945,7 +1945,7 @@ main::corpus_case: {start: 0, returns: [9], nodes: [
   [NumGt, ~, [18, 19], 2, Boolean], # 20
   [Proj, {index: 0}, [2]], # 21
   [Add, ~, [19, 16], ~, Int], # 22
-  [Subscript, ~, [13, 19, 14], ~, Int], # 23
+  [Subscript, {kind: array}, [13, 19, 14], ~, Int], # 23
   [Add, ~, [3, 23], ~, Int]]} # 24
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
@@ -2042,7 +2042,7 @@ main::corpus_case: {start: 0, returns: [9], nodes: [
   [Proj, {index: 0}, [2]], # 18
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 19
   [Add, ~, [16, 19], ~, Int], # 20
-  [Subscript, ~, [13, 16, 14], ~, Int], # 21
+  [Subscript, {kind: array}, [13, 16, 14], ~, Int], # 21
   [Add, ~, [3, 21], ~, Int]]} # 22
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
@@ -2126,7 +2126,7 @@ main::corpus_case: {start: 0, returns: [13], nodes: [
   [Proj, {index: 0}, [9]], # 17
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 18
   [Add, ~, [15, 18], ~, Int], # 19
-  [Subscript, ~, [4, 15, 5], ~, Int], # 20
+  [Subscript, {kind: array}, [4, 15, 5], ~, Int], # 20
   [Phi, {region: 9}, [14, 22], ~, Int], # 21
   [Add, ~, [21, 20], ~, Int]]} # 22
 "BEGIN 1": {start: 0, returns: [4], nodes: [
@@ -2184,14 +2184,14 @@ main::corpus_case: {start: 0, returns: [17], nodes: [
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 4
   [Loop, {bound: entry}, [0], 0], # 5
   [Phi, {region: 5}, [4, 20], ~, Int], # 6
-  [Subscript, ~, [3, 6], ~, Scalar], # 7
+  [Subscript, {kind: array}, [3, 6], ~, Scalar], # 7
   [MemStart], # 8
-  [Subscript, ~, [3, 6, 8], ~, Int], # 9
+  [Subscript, {kind: array}, [3, 6, 8], ~, Int], # 9
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 10
   [Add, ~, [9, 10], ~, Int], # 11
   [Proj, {index: 0}, [5]], # 12
   [Assign, ~, [7, 11], 12, Int], # 13
-  [Subscript, ~, [3, 4, 13], ~, Int], # 14
+  [Subscript, {kind: array}, [3, 4, 13], ~, Int], # 14
   [Proj, {index: 1}, [5]], # 15
   [Region, {head: 5}, [15]], # 16
   [Return, ~, [14], 16], # 17
@@ -3774,12 +3774,12 @@ main::corpus_case: {start: 0, returns: [12], nodes: [
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 3
   [ArrayLiteral, {sigil: "@", symbol: a}, [1, 2, 3], ~, Array], # 4
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 5
-  [Subscript, ~, [4, 5], ~, Int], # 6
+  [Subscript, {kind: array}, [4, 5], ~, Int], # 6
   [Constant, {const_type: integer, value: "9"}, ~, ~, Int], # 7
   [Constant, {const_type: integer, value: "8"}, ~, ~, Int], # 8
   [TernaryExpr, ~, [1, 7, 8], ~, Int], # 9
   [Assign, ~, [6, 9], 0, Int], # 10
-  [Subscript, ~, [4, 5, 10], ~, Int], # 11
+  [Subscript, {kind: array}, [4, 5, 10], ~, Int], # 11
   [Return, ~, [11], 10]]} # 12
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0

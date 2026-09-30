@@ -231,7 +231,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Phi, {region: 3}, [16, 24], ~, Int], # 17
   [NumGt, ~, [15, 17], 3, Boolean], # 18
   [Proj, {index: 0}, [3]], # 19
-  [Subscript, ~, [13, 17, 14], ~, Scalar], # 20
+  [Subscript, {kind: array}, [13, 17, 14], ~, Scalar], # 20
   [Coerce, {from_repr: Unknown, to_repr: Str}, [20], ~, Str], # 21
   [Print, ~, [21], 19, Scalar], # 22
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 23
@@ -447,7 +447,7 @@ main::__PROGRAM__: {start: 0, returns: [10], nodes: [
   [Proj, {index: 0}, [3]], # 22
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 23
   [Add, ~, [20, 23], ~, Int], # 24
-  [Subscript, ~, [16, 20, 17], ~, Scalar], # 25
+  [Subscript, {kind: array}, [16, 20, 17], ~, Scalar], # 25
   [Coerce, {from_repr: Unknown, to_repr: Str}, [25], ~, Str], # 26
   [Concat, ~, [4, 26], ~, Str]]} # 27
 ```

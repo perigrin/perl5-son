@@ -212,7 +212,7 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [Coerce, {from_repr: Int, to_repr: Str}, [9], ~, Str], # 10
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 11
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 12
-  [Subscript, ~, [5, 12, 8], ~, Scalar], # 13
+  [Subscript, {kind: array}, [5, 12, 8], ~, Scalar], # 13
   [Coerce, {from_repr: Unknown, to_repr: Str}, [13], ~, Str], # 14
   [Print, ~, [14, 11], 8, Scalar], # 15
   [Print, ~, [10, 11], 15, Scalar], # 16
@@ -254,7 +254,7 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [EntryDef, {package: main, sigil: "%", symbol: h}, ~, ~, Hash], # 7
   [MemStart], # 8
   [EntryWrite, ~, [7, 6, 8], 0, Unknown], # 9
-  [Subscript, ~, [6, 2, 9], ~, Scalar], # 10
+  [Subscript, {kind: hash}, [6, 2, 9], ~, Scalar], # 10
   [Coerce, {from_repr: Unknown, to_repr: Str}, [10], ~, Str], # 11
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 12
   [Call, {dispatch_kind: builtin, name: keys, param_names: []}, [7, 9], ~, Int], # 13

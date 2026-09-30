@@ -84,7 +84,7 @@ main::__PROGRAM__: {start: 0, returns: [20], nodes: [
   [Constant, {const_type: integer, value: "30"}, ~, ~, Int], # 6
   [MemStart], # 7
   [Call, {dispatch_kind: builtin, name: push, param_names: []}, [3, 5, 6, 7], 0, Int], # 8
-  [Subscript, ~, [3, 4, 8], ~, Scalar], # 9
+  [Subscript, {kind: array}, [3, 4, 8], ~, Scalar], # 9
   [Coerce, {from_repr: Unknown, to_repr: Str}, [9], ~, Str], # 10
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 11
   [Count, ~, [3, 8], ~, Int], # 12
@@ -159,7 +159,7 @@ main::__PROGRAM__: {start: 0, returns: [20], nodes: [
   [Constant, {const_type: integer, value: "10"}, ~, ~, Int], # 6
   [MemStart], # 7
   [Call, {dispatch_kind: builtin, name: unshift, param_names: []}, [4, 6, 7], 0, Int], # 8
-  [Subscript, ~, [4, 5, 8], ~, Scalar], # 9
+  [Subscript, {kind: array}, [4, 5, 8], ~, Scalar], # 9
   [Coerce, {from_repr: Unknown, to_repr: Str}, [9], ~, Str], # 10
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 11
   [Count, ~, [4, 8], ~, Int], # 12
@@ -221,7 +221,7 @@ main::__PROGRAM__: {start: 0, returns: [15], nodes: [
   [MemStart], # 5
   [Call, {dispatch_kind: builtin, name: values, param_names: []}, [4, 5], ~, List], # 6
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 7
-  [Subscript, ~, [6, 7, 5], ~, Scalar], # 8
+  [Subscript, {kind: array}, [6, 7, 5], ~, Scalar], # 8
   [Coerce, {from_repr: Unknown, to_repr: Str}, [8], ~, Str], # 9
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
   [Count, ~, [6, 5], ~, Int], # 11

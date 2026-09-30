@@ -555,7 +555,7 @@ main::corpus_case: {start: 0, returns: [10], nodes: [
   [ArrayLiteral, {sigil: "@", symbol: a}, [1, 2], ~, Array], # 3
   [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 4
   [MemStart], # 5
-  [Subscript, ~, [3, 4, 5], ~, Undef], # 6
+  [Subscript, {kind: array}, [3, 4, 5], ~, Undef], # 6
   [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
   [Print, ~, [7, 8], 0, Scalar], # 9

@@ -90,10 +90,10 @@ main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 4
   [ArrayLiteral, {sigil: "@", symbol: a}, [2, 3, 4], ~, Array], # 5
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 6
-  [Subscript, ~, [5, 6], ~, Int], # 7
+  [Subscript, {kind: array}, [5, 6], ~, Int], # 7
   [Constant, {const_type: integer, value: "9"}, ~, ~, Int], # 8
   [Assign, ~, [7, 8], 0, Int], # 9
-  [Subscript, ~, [5, 6, 9], ~, Int], # 10
+  [Subscript, {kind: array}, [5, 6, 9], ~, Int], # 10
   [Coerce, {from_repr: Unknown, to_repr: Str}, [10], ~, Str], # 11
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 12
   [Print, ~, [11, 12], 9, Scalar], # 13
@@ -135,7 +135,7 @@ main::__PROGRAM__: {start: 0, returns: [15], nodes: [
   [MemStart], # 6
   [Count, ~, [5, 6], ~, Int], # 7
   [Subtract, ~, [7, 2], ~, Int], # 8
-  [Subscript, ~, [5, 8, 6], ~, Int], # 9
+  [Subscript, {kind: array}, [5, 8, 6], ~, Int], # 9
   [Coerce, {from_repr: Int, to_repr: Str}, [9], ~, Str], # 10
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 11
   [Coerce, {from_repr: Int, to_repr: Str}, [8], ~, Str], # 12
