@@ -13687,7 +13687,7 @@ class SoN::FromOptree 0.01 {
                     || _arm_has_die($op->other, $op->next, $mod_stop)
                     || ( $in_loop
                          && defined _guarded_loop_control($op->other)
-                         && _guarded_loop_control($op->other) eq 'last' )
+                         && _guarded_loop_control($op->other) =~ /\A(?:last|next)\z/ )
                     # A RETURNING ARM TOO: its exit edge must leave from the
                     # taken Proj, or the pre-guard control has two successors
                     # (the guard's continuation and the function exit).
@@ -13737,6 +13737,7 @@ class SoN::FromOptree 0.01 {
                   . " if/else arm not yet lowered\n"
                     unless ( ($mod_sig // '') eq 'exited' )
                         || ( ($mod_sig // '') eq 'broke' )
+                        || ( ($mod_sig // '') eq 'nexted' )
                         || ( defined $mod_end && ref $mod_end
                              && $$mod_end == $mod_stop );
                 if ($mem_branch) {
@@ -13783,6 +13784,12 @@ class SoN::FromOptree 0.01 {
                             proj     => $mod_sim->control,
                             bindings => $mod_sim->scope_bindings,
                         } if defined $sink && defined $break_projs;
+                        $op = $op->next;
+                        next;
+                    }
+                    # A NEXTED ARM likewise: _walk_branch already recorded its
+                    # own Proj as an edge to the latch.
+                    if (($mod_sig // '') eq 'nexted') {
                         $op = $op->next;
                         next;
                     }

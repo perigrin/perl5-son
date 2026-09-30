@@ -64,6 +64,14 @@ sub f { my $s = ""; for my $x (@_) { if ($x) { $s .= "y" } else { $s .= "n"; las
 print f(1, 1, 0, 1), "\n";
 SRC
 
+# TWO `next unless` IN A ROW: the second is a statement modifier walked as
+# a branch, and its `next` arm refused -- "statement-modifier loop or
+# unhandled op inside an if/else arm", 49 graphs in chalk's lib/.
+round_trips(<<'SRC', 'two next-unless guards in a row');
+sub f { my $s = 0; for my $c (@_) { next unless $c > 1; next unless $c < 5; $s++ } $s }
+print f(0, 2, 3, 7, 4), "\n";
+SRC
+
 round_trips(<<'SRC', 'next ending an arm in a while, with a counter');
 my ($i, $odd) = (0, 0);
 while ($i < 6) { $i++; if ($i % 2 == 0) { next } $odd++ }
