@@ -3040,8 +3040,10 @@ sub _wire_field_defaults {
 
     # Each field produces one initfield op, in declaration (fieldix) order.
     my @defaults;   # fieldix => default const op (or undef)
+    my @unmodeled;  # fieldix => 1 when a default exists that is not modeled
     my $idx = 0;
-    _walk_initfields( $cv->ROOT, sub ($default_op) {
+    _walk_initfields( $cv->ROOT, sub ($default_op, $has_default) {
+        $unmodeled[$idx] = 1 if $has_default && !defined $default_op;
         $defaults[$idx++] = $default_op;
     });
 
@@ -3049,6 +3051,12 @@ sub _wire_field_defaults {
     for my $f (@$fields) {
         my $fix = $f->{fieldix};
         my $dop = $defaults[$fix];
+        # A DEFAULT THE WIRE CANNOT CARRY -- computed, `field $t = time` -- is
+        # said so, for a consumer to refuse, rather than dropped.
+        if ( !defined $dop && $unmodeled[$fix] ) {
+            $f->{default_unmodeled} = 1;
+            next;
+        }
         next unless defined $dop;
 
         my $start = $factory->make_cfg('Start');
@@ -3079,7 +3087,26 @@ sub _wire_field_defaults {
             my $is_list = $dop->name eq 'anonlist';
             my $agg_op  = $is_list ? 'ArrayLiteral' : 'HashLiteral';
             $field_type = $is_list ? 'ArrayRef'     : 'HashRef';
-            $value_node = $factory->make( $agg_op, inputs => \@elems );
+            # STAMPED, or it renders as a list: `field $r = (1, 2)` holds 2.
+            $value_node = $factory->make( $agg_op, inputs => \@elems,
+                stamp => SoN::IR::Stamp->new( type => $field_type ) );
+        }
+        # AN AGGREGATE FIELD'S LIST -- `field %m = (a => 1)` -- is a list of
+        # constants under a null. Unrecognised, it was dropped and the field
+        # started empty.
+        elsif ( $dop->name eq 'null' ) {
+            my @elems;
+            for ( my $k = $dop->first; $$k; $k = $k->sibling ) {
+                next if $k->name eq 'pushmark';
+                my ( $v, $st, $ct ) = _const_op_value( $cv, $k );
+                push @elems, $factory->make('Constant',
+                    value => $v, stamp => $st, const_type => $ct );
+            }
+            my $is_hash = substr( $f->{name}, 0, 1 ) eq '%';
+            $field_type = $is_hash ? 'Hash' : 'Array';
+            $value_node = $factory->make(
+                ( $is_hash ? 'HashLiteral' : 'ArrayLiteral' ), inputs => \@elems,
+                stamp => SoN::IR::Stamp->new( type => $field_type ) );
         }
         else {
             my ( $value, $stamp, $const_type ) = _const_op_value( $cv, $dop );
@@ -3139,7 +3166,8 @@ sub _walk_initfields {
     my ( $op, $cb ) = @_;
     return unless $$op;
     if ( $op->name eq 'initfield' ) {
-        $cb->( _initfield_default($op) );
+        my $kid = $op->can('first') ? $op->first : undef;
+        $cb->( _initfield_default($op), ( $kid && $$kid ) ? 1 : 0 );
         return;
     }
     if ( $op->can('first') ) {
@@ -3156,7 +3184,9 @@ sub _initfield_default {
     # initfield's child is the value expression (possibly wrapped in null).
     my $child = $op->can('first') ? $op->first : undef;
     return undef unless $child && $$child;
-    $child = $child->first while $child->name eq 'null' && $child->can('first') && ${ $child->first };
+    # NOT INTO A LIST: a null over a pushmark is an aggregate field's list.
+    $child = $child->first while $child->name eq 'null' && $child->can('first') && ${ $child->first }
+                              && $child->first->name ne 'pushmark';
 
     if ( $child->name eq 'helemexistsor' ) {
         # :param field: the OR-else (last child) is the default.
@@ -3168,8 +3198,16 @@ sub _initfield_default {
     }
     # A scalar default is a `const`; an aggregate default (`field $x = [1,2,3]`
     # / `{a=>1}`) is an `anonlist`/`anonhash` (built as a ref).
-    return ( $child->name eq 'const' || $child->name eq 'anonlist'
-          || $child->name eq 'anonhash' ) ? $child : undef;
+    return $child if $child->name eq 'const' || $child->name eq 'anonlist'
+                  || $child->name eq 'anonhash';
+    # An aggregate field's list: a null over pushmark and consts only.
+    if ( $child->name eq 'null' && $child->can('first') ) {
+        for ( my $k = $child->first; $$k; $k = $k->sibling ) {
+            return undef unless $k->name eq 'pushmark' || $k->name eq 'const';
+        }
+        return $child;
+    }
+    return undef;
 }
 
 # _const_op_value($cv, $const_op) — (value, stamp, const_type) for a const op,

@@ -4264,7 +4264,11 @@ class SoN::FromOptree 0.01 {
                 # 48, MEASURED: OPf_REF is 16 and OPf_MOD is 32. A first
                 # version wrote 12 from memory and excluded nothing.
                 && !($op->flags & 48)             # not OPf_REF|OPf_MOD
-                && _deref_operand($op)->name =~ /\A(?:padsv|gvsv|helem|aelem)\z/
+                # ANY OPERAND BUT A gv IS A REFERENCE. The allow-list this was
+                # (padsv|gvsv|helem|aelem) let a call's result fall through
+                # with the rv2av dropped -- `scalar(@{ r() })` counted as the
+                # reference itself.
+                && _deref_operand($op)->name ne 'gv'
                 && $sim->stack_depth > 0) {
             my $top = $sim->pop_node;
             my $sigil = $name eq 'rv2hv' ? '%' : '@';

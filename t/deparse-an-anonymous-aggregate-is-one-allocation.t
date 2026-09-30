@@ -79,4 +79,12 @@ round_trips(<<'SRC', 'a constructor returned from a sub');
 sub mk { return { n => $_[0] } } my $a = mk(1); my $b = $a; $b->{n} = 5; print $a->{n}, "\n";
 SRC
 
+# A SHARED AGGREGATE HOLDING CONSTRUCTORS is declared once, above the subs;
+# its initialiser follows the pinned constructors it reads, and must assign
+# rather than declare again -- `my %R` there masked the one the sub sees
+# (chalk's KeywordTable.pm).
+round_trips(<<'SRC', 'a file lexical shared with a sub, holding constructors');
+my %R = (a => [1, 2], b => [3]); sub rule { return $R{$_[0]} } print rule("a")->[1], rule("b")->[0], "\n";
+SRC
+
 done_testing;

@@ -405,6 +405,11 @@ class SoN::Deparse 0.01 {
         my $sg = $af->{sigil} // '';
         $st = $sg eq '@' ? 'Array' : $sg eq '%' ? 'Hash' : $st;
         my $spelling = $self->_expr($container_id);
+        # A FIELD AGGREGATE carries no sigil and no stamp -- its name comes
+        # from the class record, so the spelling (`%m`, `@a`) is the fact.
+        # Without it `$m{$k}` fell to the reference branch: `(%m)->[$k]`.
+        $st = $1 eq '@' ? 'Array' : 'Hash'
+            if $kind eq 'FieldAccess' && $spelling =~ /\A([\@%])\w/;
 
         if ($st eq 'Array' || $st eq 'Hash') {
             die "GAP: an element of a `$kind` spelled `$spelling` has no"
@@ -635,6 +640,11 @@ class SoN::Deparse 0.01 {
                 $decl .= defined $f->{param_name} ? " :param($f->{param_name})"
                                                   : ' :param'
                     if $f->{is_param};
+                if ($f->{default_unmodeled}) {
+                    $gap = "GAP: the default of field `$f->{name}` in class $name"
+                         . " is not a constant, and the wire does not carry it\n";
+                    return (undef);
+                }
                 if ($f->{has_default} && defined $f->{default_ref}) {
                     my $key = $f->{default_ref};
                     $owned{$key} = 1;
@@ -2931,8 +2941,11 @@ class SoN::Deparse 0.01 {
             my $af = $n->{fields} // {};
             die "GAP: an anonymous $op reached as a statement is not yet"
               . " rendered\n" unless defined $af->{symbol};
-            return sprintf("my %s%s = (%s);\n",
-                ($af->{sigil} // '@'), $af->{symbol},
+            # THE PROLOGUE'S RULE: a package aggregate needs no `my`, and a
+            # shared one was declared above the subs -- a `my` here masks it.
+            my $vn = $self->_agg_name($n);
+            return sprintf("%s%s = (%s);\n",
+                ($self->_agg_is_package($n) || $cell_slots{$vn} ? '' : 'my '), $vn,
                 join(', ', map { $self->_expr($_) } (($n->{inputs} // [])->@*)));
         }
 

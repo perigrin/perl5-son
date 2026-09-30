@@ -101,3 +101,7 @@ Measured against a snapshot of chalk HEAD 5948f648 (179 modules, 43k lines,
     used carries `control_in` too: one allocation, however many names hold
     it (perigrin's choice). Read twice unpinned, it was built twice and
     `my $s = $r; push @$s, 1` never reached @$r.
+  - A class field whose default the wire cannot carry (computed: `field $t
+    = time`) carries `default_unmodeled` instead of being dropped; the
+    renderer refuses it by name. An aggregate field's list of constants is
+    now a default graph like a scalar's.
