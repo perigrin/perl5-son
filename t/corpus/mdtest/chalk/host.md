@@ -55,7 +55,7 @@ main::__PROGRAM__: {start: 0, returns: [2], nodes: [
 main::corpus_case: {start: 0, returns: [6], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: ab-cd}, ~, ~, Str], # 1
-  [RegexMatch, {flags: "", pattern: "(\\w+)-(\\w+)"}, [1], ~, Boolean], # 2
+  [RegexMatch, {flags: u, pattern: "(\\w+)-(\\w+)"}, [1], ~, Boolean], # 2
   [RegexCapture, {"n": 1}, [2], ~, Str], # 3
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
   [Print, ~, [3, 4], 0, Scalar], # 5
@@ -117,7 +117,7 @@ main::__PROGRAM__: {start: 0, returns: [2], nodes: [
 main::corpus_case: {start: 0, returns: [10], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: foo}, ~, ~, Str], # 1
-  [RegexMatch, {flags: "", pattern: "(o+)"}, [1], ~, Boolean], # 2
+  [RegexMatch, {flags: u, pattern: "(o+)"}, [1], ~, Boolean], # 2
   [RegexCapture, {"n": 1}, [2], ~, Str], # 3
   [Length, ~, [3], ~, Int], # 4
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 5

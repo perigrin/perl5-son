@@ -813,7 +813,7 @@ main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Return, ~, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [3], nodes: [
   [Start], # 0
-  [Constant, {const_type: string, value: "caf\u00c3\u00a9"}, ~, ~, Str], # 1
+  [Constant, {const_type: string, value: "caf\u00e9"}, ~, ~, Str], # 1
   [Length, ~, [1], ~, Int], # 2
   [Return, ~, [2], 0]]} # 3
 "BEGIN 1": {start: 0, returns: [4], nodes: [

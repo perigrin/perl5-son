@@ -62,7 +62,7 @@ main::__PROGRAM__: {start: 0, returns: [2], nodes: [
 main::corpus_case: {start: 0, returns: [9], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: foobar}, ~, ~, Str], # 1
-  [RegexMatch, {flags: "", pattern: foo}, [1], ~, Boolean], # 2
+  [RegexMatch, {flags: u, pattern: foo}, [1], ~, Boolean], # 2
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 3
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 4
   [TernaryExpr, ~, [2, 3, 4], ~, Int], # 5
@@ -132,7 +132,7 @@ main::__PROGRAM__: {start: 0, returns: [2], nodes: [
 main::corpus_case: {start: 0, returns: [10], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: foobar}, ~, ~, Str], # 1
-  [Constant, {const_type: regex, value: foo}, ~, ~, Regex], # 2
+  [Constant, {const_type: regex, flags: u, value: foo}, ~, ~, Regex], # 2
   [Match, ~, [1, 2], ~, Boolean], # 3
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 4
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 5
@@ -198,7 +198,7 @@ main::corpus_case: {start: 0, returns: [11], nodes: [
   [Constant, {const_type: string, value: foobar}, ~, ~, Str], # 3
   [Assign, ~, [2, 3], 0, Str], # 4
   [PadAccess, {sigil: $, symbol: s}, [4], ~, Unknown], # 5
-  [RegexSubst, {flags: "", pattern: foo, replacement: baz}, [5, 4], 4, Str], # 6
+  [RegexSubst, {flags: u, pattern: foo, replacement: baz}, [5, 4], 4, Str], # 6
   [PadAccess, {sigil: $, symbol: s}, [6], ~, Str], # 7
   [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
@@ -261,7 +261,7 @@ main::__PROGRAM__: {start: 0, returns: [2], nodes: [
 main::corpus_case: {start: 0, returns: [9], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: foobar}, ~, ~, Str], # 1
-  [RegexMatch, {flags: "", pattern: "^foo"}, [1], ~, Boolean], # 2
+  [RegexMatch, {flags: u, pattern: "^foo"}, [1], ~, Boolean], # 2
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 3
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 4
   [TernaryExpr, ~, [2, 3, 4], ~, Int], # 5
@@ -326,7 +326,7 @@ main::__PROGRAM__: {start: 0, returns: [2], nodes: [
 main::corpus_case: {start: 0, returns: [9], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: a9z}, ~, ~, Str], # 1
-  [RegexMatch, {flags: "", pattern: "[0-9]"}, [1], ~, Boolean], # 2
+  [RegexMatch, {flags: u, pattern: "[0-9]"}, [1], ~, Boolean], # 2
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 3
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 4
   [TernaryExpr, ~, [2, 3, 4], ~, Int], # 5
@@ -393,7 +393,7 @@ main::__PROGRAM__: {start: 0, returns: [2], nodes: [
 main::corpus_case: {start: 0, returns: [9], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: foo_1}, ~, ~, Str], # 1
-  [RegexMatch, {flags: "", pattern: "^[A-Za-z_][A-Za-z0-9_]*$"}, [1], ~, Boolean], # 2
+  [RegexMatch, {flags: u, pattern: "^[A-Za-z_][A-Za-z0-9_]*$"}, [1], ~, Boolean], # 2
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 3
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 4
   [TernaryExpr, ~, [2, 3, 4], ~, Int], # 5
@@ -462,7 +462,7 @@ main::__PROGRAM__: {start: 0, returns: [2], nodes: [
 main::corpus_case: {start: 0, returns: [10], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: hello}, ~, ~, Str], # 1
-  [RegexMatch, {flags: "", pattern: ell}, [1], ~, Boolean], # 2
+  [RegexMatch, {flags: u, pattern: ell}, [1], ~, Boolean], # 2
   [Not, ~, [2], ~, Boolean], # 3
   [Constant, {const_type: integer, value: "111"}, ~, ~, Int], # 4
   [Constant, {const_type: integer, value: "222"}, ~, ~, Int], # 5
@@ -547,7 +547,7 @@ main::__PROGRAM__: {start: 0, returns: [2], nodes: [
 main::corpus_case: {start: 0, returns: [12], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: test}, ~, ~, Str], # 1
-  [RegexMatch, {flags: "", pattern: "^test"}, [1], ~, Boolean], # 2
+  [RegexMatch, {flags: u, pattern: "^test"}, [1], ~, Boolean], # 2
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 3
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 4
   [TernaryExpr, ~, [2, 3, 4], ~, Int], # 5
@@ -622,7 +622,7 @@ main::__PROGRAM__: {start: 0, returns: [2], nodes: [
 main::corpus_case: {start: 0, returns: [12], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: nope}, ~, ~, Str], # 1
-  [RegexMatch, {flags: "", pattern: "^test"}, [1], ~, Boolean], # 2
+  [RegexMatch, {flags: u, pattern: "^test"}, [1], ~, Boolean], # 2
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 3
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 4
   [TernaryExpr, ~, [2, 3, 4], ~, Int], # 5
@@ -704,7 +704,7 @@ main::corpus_case: {start: 0, returns: [13], nodes: [
   [MemStart], # 3
   [EntryWrite, ~, [1, 2, 3], 0, Unknown], # 4
   [EntryDef, {package: main, sigil: $, symbol: g}, [4], ~, Str], # 5
-  [RegexMatch, {flags: "", pattern: "^test"}, [5], ~, Boolean], # 6
+  [RegexMatch, {flags: u, pattern: "^test"}, [5], ~, Boolean], # 6
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 7
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 8
   [TernaryExpr, ~, [6, 7, 8], ~, Int], # 9
