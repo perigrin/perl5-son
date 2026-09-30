@@ -4900,8 +4900,13 @@ class SoN::FromOptree 0.01 {
     # OPf_REF, and relying on that would key the question on a second
     # incidental bit rather than on what the op does. See
     # docs/plans and the opf-mod-is-not-a-write note.
+    # THE builtin:: FUNCTIONS THAT ARE OPS mark their operand the same way --
+    # measured, `builtin::blessed($o)` is `padsv sM` -- and read it: the value
+    # vanished and the arg became an unbound PadAccess. weaken/unweaken are
+    # absent because they change the reference they are given.
     my %READS_ITS_OPERANDS = map { $_ => 1 } qw(
         sprintf prtf
+        is_bool blessed refaddr reftype is_weak ceil floor stringify is_tainted
     );
 
         if ($name eq 'padsv') {

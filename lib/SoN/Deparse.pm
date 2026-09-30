@@ -4794,6 +4794,13 @@ class SoN::Deparse 0.01 {
                     unless ref $spelling;
                 return $spelling->(@args);
             }
+            # A builtin:: FUNCTION is an op named for it -- blessed, refaddr,
+            # is_bool -- and not a CORE keyword. Perl's own answer again: the
+            # sub builtin::NAME is defined, and that is its spelling.
+            if (!eval { my $p = prototype("CORE::$name"); 1 }
+                    && do { no strict 'refs'; defined &{"builtin::$name"} }) {
+                return sprintf('builtin::%s(%s)', $name, join(', ', @args));
+            }
             die "GAP: the builtin op `$name` has no Perl spelling -- emitting"
               . " it verbatim would call a sub that does not exist\n"
                 unless eval { my $p = prototype("CORE::$name"); 1 };
@@ -5135,6 +5142,13 @@ class SoN::Deparse 0.01 {
             die "GAP: a code Constant whose name is `$v` is not a sub name\n"
                 unless $v =~ /\A[A-Za-z_]\w*(?:::\w+)*\z/;
             return '&' . $v;
+        }
+
+        # PERL'S OWN BOOLEANS. `!!1` and `!!0` are the immortal true and false
+        # -- builtin::is_bool says so -- where `1` and `""` print the same and
+        # are not booleans. The producer records true as "1", false as "".
+        if ($t eq 'boolean') {
+            return $v ? '!!1' : '!!0';
         }
 
         die "GAP: no rule for a `$t` Constant\n";

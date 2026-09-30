@@ -79,6 +79,11 @@ Measured against a snapshot of chalk HEAD 5948f648 (179 modules, 43k lines,
     emitted `use v5.42;` dies "use VERSION is not permitted while another use
     VERSION of 5.39 or above is in scope" (comp/use.t tests 1-9). Open: the
     bundle is the emission's scope, and a string eval compiles in it.
+  - An anonymous `{}` / `[]` read in more than one place is constructed at
+    each read: `my $r = []; my $s = $r; push @$s, 1; print scalar(@$r)`
+    prints 0 where perl prints 1. The constructor is an allocation with no
+    place on the chain -- the loop-body `my` aggregate's defect, for an
+    anonymous one. TODO in t/deparse-a-builtin-function-is-spelled-builtin.t.
   - SoN::Serialize::JSON recurses per node (line 456): comp/use.t's program
     graph draws "Deep recursion on anonymous subroutine" warnings. Output is
     right; the walk should be iterative.
