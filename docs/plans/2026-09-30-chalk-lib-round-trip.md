@@ -79,6 +79,9 @@ Measured against a snapshot of chalk HEAD 5948f648 (179 modules, 43k lines,
     emitted `use v5.42;` dies "use VERSION is not permitted while another use
     VERSION of 5.39 or above is in scope" (comp/use.t tests 1-9). Open: the
     bundle is the emission's scope, and a string eval compiles in it.
+  - `grep` over a named array holding a literal list refuses: "an element
+    of a `PostfixDeref` spelled `(1, 2, ...)` has no aggregate sigil to
+    switch" (`my @l = (1..6); my @e = grep {...} @l`). Honest, not wrong.
   - SoN::Serialize::JSON recurses per node (line 456): comp/use.t's program
     graph draws "Deep recursion on anonymous subroutine" warnings. Output is
     right; the walk should be iterative.

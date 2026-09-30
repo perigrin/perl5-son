@@ -1362,6 +1362,15 @@ class SoN::Deparse 0.01 {
                 next;
             }
 
+            # NOR ONE HOLDING A LOOP PHI -- the Assign loop's rule, kept
+            # identical: `my %h = map { $_ => 1 } @l` holds the map's
+            # accumulator, and hoisted it read @phi before the loop filled
+            # it (chalk's TypedInvariant.pm, undeclared under strict).
+            if (defined(my $join = $self->_loop_phi_join($n))) {
+                push $after_region{$join}->@*, $n;
+                next;
+            }
+
             # A PACKAGE AGGREGATE IS NOT DECLARED WITH `my`. `my @main::EST`
             # is a syntax error -- "can't be in a package" -- and the package
             # variable needs no declaration to exist. Same rule the Assign
@@ -1427,17 +1436,7 @@ class SoN::Deparse 0.01 {
             # Region is walked like any other chain node. Attaching the
             # binding there places it exactly where the loop has closed and
             # nothing has read the target yet.
-            my $join;
-            for my $in (($n->{inputs} // [])->@*) {
-                my $src = defined $in ? $nodes->{$in} : undef;
-                next unless $src && ($src->{op} // '') eq 'Phi';
-                my $r = ($src->{fields} // {})->{region} // $src->{region};
-                next unless defined $r;
-                my $rn = $nodes->{$r};
-                next unless $rn && ($rn->{op} // '') eq 'Loop';
-                $join = $self->_loop_join($r);
-                last;
-            }
+            my $join = $self->_loop_phi_join($n);
             if (defined $join) {
                 push $after_region{$join}->@*, $n;
                 next;
@@ -2125,6 +2124,22 @@ class SoN::Deparse 0.01 {
     # `Phi(21) stamp=Int` -- and binding a list to a SCALAR collapses it to
     # the last element: `my $phi7 = ()` then `map { $_*2 } (1,2,3)` printed
     # `6` instead of `2 4 6`.
+    # _loop_phi_join($n) -> the join Region of the loop whose Phi $n reads
+    # directly, or undef. A Phi whose region is a Loop settles only when the
+    # loop ends, so a binding of it belongs right after the loop.
+    method _loop_phi_join ($n) {
+        for my $in (($n->{inputs} // [])->@*) {
+            my $src = defined $in ? $nodes->{$in} : undef;
+            next unless $src && ($src->{op} // '') eq 'Phi';
+            my $r = ($src->{fields} // {})->{region} // $src->{region};
+            next unless defined $r;
+            my $rn = $nodes->{$r};
+            next unless $rn && ($rn->{op} // '') eq 'Loop';
+            return $self->_loop_join($r);
+        }
+        return undef;
+    }
+
     # _last_bound_input($n) -> the last chain-bound node $n reads, in input
     # order, LOOKING THROUGH PURE NODES: `my ($a) = @{[9]}` reads the pinned
     # constructor under a PostfixDeref, and a direct-inputs-only search let
@@ -2849,8 +2864,13 @@ class SoN::Deparse 0.01 {
             # NOT FROM INSIDE A LOOP: such a predecessor is a `return` spelled
             # where it happens, and never reads this variable -- its value may
             # name a loop variable that does not exist yet (corpus 008).
+            # NOR FROM INSIDE AN ARM: a nested branch's arm assigns its own
+            # input when that branch is emitted. Seeded here, its value was
+            # spelled ahead of the guard -- `my $phi = $c->[0]` above
+            # `unless (ref $c eq 'ARRAY')`, which died under strict refs.
             my ($seed) = grep { !exists $proj_arm{ $pred[$_] }
-                                && !$self->_inside_loop($pred[$_]) } 0 .. $#in;
+                                && !$self->_inside_loop($pred[$_])
+                                && !$self->_under_proj($pred[$_], \%proj_arm) } 0 .. $#in;
             $hoisted{$var} = defined $seed
                 ? sprintf('%s = %s', $var, $self->_expr($in[$seed]))
                 : $var;
@@ -2878,6 +2898,22 @@ class SoN::Deparse 0.01 {
             my $op = $n->{op} // '';
             return 1 if $op eq 'Loop';
             return 0 if $op eq 'Start' || $op eq 'Region';
+            $id = $op =~ /\A(?:Proj|If)\z/ ? ($n->{inputs} // [])->[0]
+                                             : $n->{control_in};
+        }
+        return 0;
+    }
+
+    # Is this control node on a path from one of the given arm Projs? Walked
+    # back along control, as _inside_loop is, to an arm (yes) or a Start or a
+    # merge (no single path to say).
+    method _under_proj ($id, $projs) {
+        my %seen;
+        while (defined $id && !$seen{$id}++) {
+            return 1 if exists $projs->{$id};
+            my $n = $nodes->{$id} or return 0;
+            my $op = $n->{op} // '';
+            return 0 if $op eq 'Start' || $op eq 'Region' || $op eq 'Loop';
             $id = $op =~ /\A(?:Proj|If)\z/ ? ($n->{inputs} // [])->[0]
                                              : $n->{control_in};
         }
