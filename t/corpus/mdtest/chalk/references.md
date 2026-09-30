@@ -405,13 +405,13 @@ main::corpus_case: {start: 0, returns: [11], nodes: [
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 2
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 3
-  [ArrayLiteral, ~, [1, 2, 3], ~, ArrayRef], # 4
+  [ArrayLiteral, ~, [1, 2, 3], 0, ArrayRef], # 4
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 5
   [MemStart], # 6
   [Subscript, {kind: array}, [4, 5, 6], ~, Int], # 7
   [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
-  [Print, ~, [8, 9], 0, Scalar], # 10
+  [Print, ~, [8, 9], 4, Scalar], # 10
   [Return, ~, [10], 10]]} # 11
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
@@ -475,12 +475,12 @@ main::corpus_case: {start: 0, returns: [11], nodes: [
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
   [Constant, {const_type: string, value: b}, ~, ~, Str], # 3
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 4
-  [HashLiteral, ~, [1, 2, 3, 4], ~, HashRef], # 5
+  [HashLiteral, ~, [1, 2, 3, 4], 0, HashRef], # 5
   [MemStart], # 6
   [Subscript, {kind: hash}, [5, 1, 6], ~, Int], # 7
   [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
-  [Print, ~, [8, 9], 0, Scalar], # 10
+  [Print, ~, [8, 9], 5, Scalar], # 10
   [Return, ~, [10], 10]]} # 11
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
@@ -689,18 +689,18 @@ main::corpus_case: {start: 0, returns: [15], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 2
-  [ArrayLiteral, ~, [1, 2], ~, ArrayRef], # 3
+  [ArrayLiteral, ~, [1, 2], 0, ArrayRef], # 3
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 4
   [Constant, {const_type: integer, value: "4"}, ~, ~, Int], # 5
-  [ArrayLiteral, ~, [4, 5], ~, ArrayRef], # 6
-  [ArrayLiteral, ~, [3, 6], ~, ArrayRef], # 7
+  [ArrayLiteral, ~, [4, 5], 3, ArrayRef], # 6
+  [ArrayLiteral, ~, [3, 6], 6, ArrayRef], # 7
   [Subscript, {kind: array}, [7, 1], ~, ArrayRef], # 8
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 9
   [MemStart], # 10
   [Subscript, {kind: array}, [8, 9, 10], ~, Scalar], # 11
   [Coerce, {from_repr: Unknown, to_repr: Str}, [11], ~, Str], # 12
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 13
-  [Print, ~, [12, 13], 0, Scalar], # 14
+  [Print, ~, [12, 13], 7, Scalar], # 14
   [Return, ~, [14], 14]]} # 15
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0

@@ -841,13 +841,13 @@ main::corpus_case: {start: 0, returns: [11], nodes: [
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 2
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 3
-  [ArrayLiteral, ~, [1, 2, 3], ~, ArrayRef], # 4
+  [ArrayLiteral, ~, [1, 2, 3], 0, ArrayRef], # 4
   [MemStart], # 5
   [PostfixDeref, {sigil: "@"}, [4, 5], ~, Array], # 6
   [Count, ~, [6, 5], ~, Int], # 7
   [Coerce, {from_repr: Int, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
-  [Print, ~, [8, 9], 0, Scalar], # 10
+  [Print, ~, [8, 9], 4, Scalar], # 10
   [Return, ~, [10], 10]]} # 11
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0

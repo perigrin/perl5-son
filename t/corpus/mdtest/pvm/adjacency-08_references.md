@@ -118,7 +118,7 @@ main::__PROGRAM__: {start: 0, returns: [48], nodes: [
   [Coerce, {from_repr: Scalar, to_repr: Str}, [32], ~, Str], # 33
   [Constant, {const_type: integer, value: "30"}, ~, ~, Int], # 34
   [Constant, {const_type: integer, value: "40"}, ~, ~, Int], # 35
-  [ArrayLiteral, ~, [34, 35], ~, ArrayRef], # 36
+  [ArrayLiteral, ~, [34, 35], 0, ArrayRef], # 36
   [Subscript, {kind: array}, [36, 8, 6], ~, Int], # 37
   [Coerce, {from_repr: Unknown, to_repr: Str}, [37], ~, Str], # 38
   [Subscript, {kind: array}, [36, 12, 6], ~, Int], # 39
@@ -126,7 +126,7 @@ main::__PROGRAM__: {start: 0, returns: [48], nodes: [
   [Constant, {const_type: code, value: twice}, ~, ~, Code], # 41
   [Ref, ~, [41], ~, CodeRef], # 42
   [Constant, {const_type: integer, value: "21"}, ~, ~, Int], # 43
-  [Call, {dispatch_kind: indirect, name: "", param_names: [], want: list}, [42, 43], 0, Unknown], # 44
+  [Call, {dispatch_kind: indirect, name: "", param_names: [], want: list}, [42, 43], 36, Unknown], # 44
   [Coerce, {from_repr: Unknown, to_repr: Str}, [44], ~, Str], # 45
   [Print, ~, [26, 11, 28, 11, 33, 11, 38, 11, 40, 11, 45, 25], 44, Scalar], # 46
   [Print, ~, [10, 11, 14, 11, 10, 11, 20, 11, 24, 25], 46, Scalar], # 47

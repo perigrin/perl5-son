@@ -110,10 +110,10 @@ Counter::FETCH: {start: 0, returns: [2], nodes: [
   [Return, ~, [1], 0]]} # 2
 Counter::TIESCALAR: {start: 0, returns: [4], nodes: [
   [Start], # 0
-  [HashLiteral, ~, ~, ~, HashRef], # 1
+  [HashLiteral, ~, ~, 0, HashRef], # 1
   [Constant, {const_type: string, value: Counter}, ~, ~, Str], # 2
   [Call, {dispatch_kind: builtin, name: bless, param_names: []}, [1, 2], ~, Unknown], # 3
-  [Return, ~, [3], 0]]} # 4
+  [Return, ~, [3], 1]]} # 4
 main::__PROGRAM__: {start: 0, returns: [12], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
@@ -199,10 +199,10 @@ Counter::FETCH: {start: 0, returns: [2], nodes: [
   [Return, ~, [1], 0]]} # 2
 Counter::TIESCALAR: {start: 0, returns: [4], nodes: [
   [Start], # 0
-  [HashLiteral, ~, ~, ~, HashRef], # 1
+  [HashLiteral, ~, ~, 0, HashRef], # 1
   [Constant, {const_type: string, value: Counter}, ~, ~, Str], # 2
   [Call, {dispatch_kind: builtin, name: bless, param_names: []}, [1, 2], ~, Unknown], # 3
-  [Return, ~, [3], 0]]} # 4
+  [Return, ~, [3], 1]]} # 4
 main::__PROGRAM__: {start: 0, returns: [16], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1

@@ -62,13 +62,13 @@ main::__PROGRAM__: {start: 0, returns: [12], nodes: [
   [Constant, {const_type: integer, value: "10"}, ~, ~, Int], # 2
   [Constant, {const_type: integer, value: "20"}, ~, ~, Int], # 3
   [Constant, {const_type: integer, value: "30"}, ~, ~, Int], # 4
-  [ArrayLiteral, ~, [2, 3, 4], ~, ArrayRef], # 5
+  [ArrayLiteral, ~, [2, 3, 4], 0, ArrayRef], # 5
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 6
   [MemStart], # 7
   [Subscript, {kind: array}, [5, 6, 7], ~, Int], # 8
   [Coerce, {from_repr: Unknown, to_repr: Str}, [8], ~, Str], # 9
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
-  [Print, ~, [9, 10], 0, Scalar], # 11
+  [Print, ~, [9, 10], 5, Scalar], # 11
   [Return, ~, [1], 11]]} # 12
 ```
 
@@ -115,13 +115,13 @@ main::__PROGRAM__: {start: 0, returns: [12], nodes: [
   [Constant, {const_type: integer, value: "10"}, ~, ~, Int], # 2
   [Constant, {const_type: integer, value: "20"}, ~, ~, Int], # 3
   [Constant, {const_type: integer, value: "30"}, ~, ~, Int], # 4
-  [ArrayLiteral, ~, [2, 3, 4], ~, ArrayRef], # 5
+  [ArrayLiteral, ~, [2, 3, 4], 0, ArrayRef], # 5
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 6
   [MemStart], # 7
   [Subscript, {kind: array}, [5, 6, 7], ~, Int], # 8
   [Coerce, {from_repr: Unknown, to_repr: Str}, [8], ~, Str], # 9
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
-  [Print, ~, [9, 10], 0, Scalar], # 11
+  [Print, ~, [9, 10], 5, Scalar], # 11
   [Return, ~, [1], 11]]} # 12
 ```
 

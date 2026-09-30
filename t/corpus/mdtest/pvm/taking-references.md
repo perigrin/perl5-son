@@ -165,7 +165,7 @@ main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Constant, {const_type: integer, value: "10"}, ~, ~, Int], # 2
   [Constant, {const_type: integer, value: "20"}, ~, ~, Int], # 3
   [Constant, {const_type: integer, value: "30"}, ~, ~, Int], # 4
-  [ArrayLiteral, ~, [2, 3, 4], ~, ArrayRef], # 5
+  [ArrayLiteral, ~, [2, 3, 4], 0, ArrayRef], # 5
   [MemStart], # 6
   [PostfixDeref, {sigil: "@"}, [5, 6], ~, Array], # 7
   [Count, ~, [7, 6], ~, Int], # 8
@@ -173,7 +173,7 @@ main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 10
   [RefType, ~, [5], ~, Str], # 11
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 12
-  [Print, ~, [9, 10, 11, 12], 0, Scalar], # 13
+  [Print, ~, [9, 10, 11, 12], 5, Scalar], # 13
   [Return, ~, [1], 13]]} # 14
 ```
 

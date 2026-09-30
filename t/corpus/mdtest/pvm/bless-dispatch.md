@@ -51,12 +51,12 @@ Foo
 main::__PROGRAM__: {start: 0, returns: [8], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [HashLiteral, ~, ~, ~, HashRef], # 2
+  [HashLiteral, ~, ~, 0, HashRef], # 2
   [Constant, {const_type: string, value: Foo}, ~, ~, Str], # 3
   [Call, {dispatch_kind: builtin, name: bless, param_names: []}, [2, 3], ~, Unknown], # 4
   [RefType, ~, [4], ~, Str], # 5
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 6
-  [Print, ~, [5, 6], 0, Scalar], # 7
+  [Print, ~, [5, 6], 2, Scalar], # 7
   [Return, ~, [1], 7]]} # 8
 ```
 
@@ -100,12 +100,12 @@ main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [Constant, {const_type: string, value: "n"}, ~, ~, Str], # 2
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 3
   [HashLiteral, {sigil: "%", symbol: a}, [2, 3], ~, Hash], # 4
-  [HashLiteral, ~, [4], ~, HashRef], # 5
+  [HashLiteral, ~, [4], 0, HashRef], # 5
   [Constant, {const_type: string, value: Foo}, ~, ~, Str], # 6
   [Call, {dispatch_kind: builtin, name: bless, param_names: []}, [5, 6], ~, Unknown], # 7
   [RefType, ~, [7], ~, Str], # 8
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
-  [Print, ~, [8, 9], 0, Scalar], # 10
+  [Print, ~, [8, 9], 5, Scalar], # 10
   [Return, ~, [1], 10]]} # 11
 ```
 
@@ -161,10 +161,10 @@ Foo::hi: {start: 0, returns: [2], nodes: [
 main::__PROGRAM__: {start: 0, returns: [9], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [HashLiteral, ~, ~, ~, HashRef], # 2
+  [HashLiteral, ~, ~, 0, HashRef], # 2
   [Constant, {const_type: string, value: Foo}, ~, ~, Str], # 3
   [Call, {dispatch_kind: builtin, name: bless, param_names: []}, [2, 3], ~, Unknown], # 4
-  [Call, {dispatch_kind: method, name: hi, param_names: []}, [4], 0, Unknown], # 5
+  [Call, {dispatch_kind: method, name: hi, param_names: []}, [4], 2, Unknown], # 5
   [Coerce, {from_repr: Unknown, to_repr: Str}, [5], ~, Str], # 6
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 7
   [Print, ~, [6, 7], 5, Scalar], # 8
@@ -210,14 +210,14 @@ Foo::hi: {start: 0, returns: [2], nodes: [
 main::__PROGRAM__: {start: 0, returns: [10], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [HashLiteral, ~, ~, ~, HashRef], # 2
+  [HashLiteral, ~, ~, 0, HashRef], # 2
   [Constant, {const_type: string, value: Foo}, ~, ~, Str], # 3
   [Call, {dispatch_kind: builtin, name: bless, param_names: []}, [2, 3], ~, Unknown], # 4
   [Constant, {const_type: string, value: hi}, ~, ~, Str], # 5
   [Call, {dispatch_kind: dynamic_method, name: "", param_names: []}, [4, 5], ~, Unknown], # 6
   [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
-  [Print, ~, [7, 8], 0, Scalar], # 9
+  [Print, ~, [7, 8], 2, Scalar], # 9
   [Return, ~, [1], 9]]} # 10
 ```
 
@@ -264,15 +264,15 @@ Base::hi: {start: 0, returns: [2], nodes: [
 main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [HashLiteral, ~, ~, ~, HashRef], # 2
-  [Constant, {const_type: string, value: Derived}, ~, ~, Str], # 3
-  [Call, {dispatch_kind: builtin, name: bless, param_names: []}, [2, 3], ~, Unknown], # 4
-  [EntryDef, {package: Derived, sigil: "@", symbol: ISA}, ~, ~, Array], # 5
-  [Constant, {const_type: string, value: Base}, ~, ~, Str], # 6
-  [ArrayLiteral, {sigil: "@", symbol: "@Derived::ISA"}, [6], ~, Array], # 7
-  [MemStart], # 8
-  [EntryWrite, ~, [5, 7, 8], 0, Unknown], # 9
-  [Call, {dispatch_kind: method, name: Derived::SUPER::hi, param_names: []}, [4], 9, Unknown], # 10
+  [EntryDef, {package: Derived, sigil: "@", symbol: ISA}, ~, ~, Array], # 2
+  [Constant, {const_type: string, value: Base}, ~, ~, Str], # 3
+  [ArrayLiteral, {sigil: "@", symbol: "@Derived::ISA"}, [3], ~, Array], # 4
+  [MemStart], # 5
+  [EntryWrite, ~, [2, 4, 5], 0, Unknown], # 6
+  [HashLiteral, ~, ~, 6, HashRef], # 7
+  [Constant, {const_type: string, value: Derived}, ~, ~, Str], # 8
+  [Call, {dispatch_kind: builtin, name: bless, param_names: []}, [7, 8], ~, Unknown], # 9
+  [Call, {dispatch_kind: method, name: Derived::SUPER::hi, param_names: []}, [9], 7, Unknown], # 10
   [Coerce, {from_repr: Unknown, to_repr: Str}, [10], ~, Str], # 11
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 12
   [Print, ~, [11, 12], 10, Scalar], # 13
@@ -318,11 +318,11 @@ one word whose text is "bless"
 ```ir
 Foo::new: {start: 0, returns: [6], nodes: [
   [Start], # 0
-  [HashLiteral, ~, ~, ~, HashRef], # 1
-  [ArgsSource, ~, ~, ~, Array], # 2
-  [MemStart], # 3
-  [Call, {dispatch_kind: builtin, name: shift, param_names: []}, [2, 3], 0, Scalar], # 4
-  [Call, {dispatch_kind: builtin, name: bless, param_names: []}, [1, 4], ~, Unknown], # 5
+  [ArgsSource, ~, ~, ~, Array], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: shift, param_names: []}, [1, 2], 0, Scalar], # 3
+  [HashLiteral, ~, ~, 3, HashRef], # 4
+  [Call, {dispatch_kind: builtin, name: bless, param_names: []}, [4, 3], ~, Unknown], # 5
   [Return, ~, [5], 4]]} # 6
 main::__PROGRAM__: {start: 0, returns: [6], nodes: [
   [Start], # 0
@@ -396,7 +396,7 @@ one string literal whose text is "\"Foo\""
 main::__PROGRAM__: {start: 0, returns: [16], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [HashLiteral, ~, ~, ~, HashRef], # 2
+  [HashLiteral, ~, ~, 0, HashRef], # 2
   [EnvRead, {key: X}, ~, ~, Str], # 3
   [Constant, {const_type: string, value: Foo}, ~, ~, Str], # 4
   [DefinedOr, ~, [3, 4], ~, Str], # 5
@@ -409,7 +409,7 @@ main::__PROGRAM__: {start: 0, returns: [16], nodes: [
   [Concat, ~, [8, 11], ~, Str], # 12
   [Constant, {const_type: string, value: "|\n"}, ~, ~, Str], # 13
   [Concat, ~, [12, 13], ~, Str], # 14
-  [Print, ~, [14], 0, Scalar], # 15
+  [Print, ~, [14], 2, Scalar], # 15
   [Return, ~, [1], 15]]} # 16
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
@@ -486,12 +486,12 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
   [PadAccess, {sigil: $, symbol: o}, [2], ~, Unknown], # 3
-  [HashLiteral, ~, ~, ~, HashRef], # 4
+  [HashLiteral, ~, ~, 0, HashRef], # 4
   [EnvRead, {key: X}, ~, ~, Str], # 5
   [Constant, {const_type: string, value: Foo}, ~, ~, Str], # 6
   [DefinedOr, ~, [5, 6], ~, Str], # 7
   [Call, {dispatch_kind: builtin, name: bless, param_names: []}, [4, 7], ~, Unknown], # 8
-  [Assign, ~, [3, 8], 0, Unknown], # 9
+  [Assign, ~, [3, 8], 4, Unknown], # 9
   [PadAccess, {sigil: $, symbol: o}, [9], ~, Unknown], # 10
   [Constant, {const_type: string, value: hi}, ~, ~, Str], # 11
   [Call, {dispatch_kind: method, name: can, param_names: []}, [10, 11], 9, Unknown], # 12

@@ -117,10 +117,10 @@ Bar::FETCH: {start: 0, returns: [2], nodes: [
   [Return, ~, [1], 0]]} # 2
 Bar::TIESCALAR: {start: 0, returns: [4], nodes: [
   [Start], # 0
-  [HashLiteral, ~, ~, ~, HashRef], # 1
+  [HashLiteral, ~, ~, 0, HashRef], # 1
   [Constant, {const_type: string, value: Bar}, ~, ~, Str], # 2
   [Call, {dispatch_kind: builtin, name: bless, param_names: []}, [1, 2], ~, Unknown], # 3
-  [Return, ~, [3], 0]]} # 4
+  [Return, ~, [3], 1]]} # 4
 Bar::hi: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: bar}, ~, ~, Str], # 1
@@ -149,9 +149,9 @@ main::__PROGRAM__: {start: 0, returns: [34], nodes: [
   [Constant, {const_type: string, value: arg}, ~, ~, Str], # 6
   [MemStart], # 7
   [PadAccess, {sigil: $, symbol: b}, [7], ~, Unknown], # 8
-  [HashLiteral, ~, ~, ~, HashRef], # 9
+  [HashLiteral, ~, ~, 2, HashRef], # 9
   [Call, {dispatch_kind: builtin, name: bless, param_names: []}, [9, 5], ~, Unknown], # 10
-  [Assign, ~, [8, 10], 2, Unknown], # 11
+  [Assign, ~, [8, 10], 9, Unknown], # 11
   [PadAccess, {sigil: $, symbol: b}, [11], ~, Scalar], # 12
   [Constant, {const_type: string, value: hi}, ~, ~, Str], # 13
   [Call, {dispatch_kind: method, name: can, param_names: []}, [12, 13], 11, Unknown], # 14
