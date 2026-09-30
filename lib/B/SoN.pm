@@ -146,7 +146,10 @@ sub _phase_blocks {
                 warn "B::SoN: skipped a $phase block: $@";
                 next;
             }
-            push @blocks, [ $phase, $graph ];
+            # THE PACKAGE IT RAN IN: a `use` imports into it, and `use
+            # parent` sets its @ISA -- the BEGIN's own stash says which.
+            my $pkg = eval { $cv->STASH->NAME } // 'main';
+            push @blocks, [ $phase, $graph, $pkg ];
         }
     }
     return \@blocks;
@@ -2201,8 +2204,12 @@ sub _walk_package {
     # four-line probe after the sub walk was gated, because they arrive here
     # rather than through that loop. A class is ours to emit when its own code
     # came from the file under compilation.
+    # NOT "HAS A SUB FROM THIS FILE": an empty `class X :isa(Y) {}` has no
+    # sub of its own and is still this file's to declare (chalk's
+    # Chalk::IR::Value). Ours unless demonstrably another file's -- the
+    # same positive-evidence test the referenced-class walk uses.
     if ( $emit_cvs && SoN::ClassAux::is_class($stash)
-             && _stash_is_user_code($stash) ) {
+             && !_stash_is_other_file( $pkg_name, $stash ) ) {
         $classes->{$pkg_name} = _extract_class( $graphs, $pkg_name, $stash );
     }
 

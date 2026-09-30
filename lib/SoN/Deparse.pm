@@ -250,11 +250,22 @@ class SoN::Deparse 0.01 {
         # END blocks go last; perl runs them in reverse order of definition,
         # and emitting them in source order keeps that.
         my ($begins, $ends) = ('', '');
+        # EACH IN THE PACKAGE IT RAN IN, and back to main after: everything
+        # else is emitted fully qualified.
+        my %in = (BEGIN => 'main', END => 'main');
         for my $block (($data->{phase_blocks} // [])->@*) {
             my $text = eval { $self->_emit_phase_block($block->{phase}, $block) };
             if (!defined $text) { $gap = $@ || "failed to render a $block->{phase} block"; return undef }
-            if ($block->{phase} eq 'BEGIN') { $begins .= $text } else { $ends .= $text }
+            my $phase = $block->{phase} eq 'BEGIN' ? 'BEGIN' : 'END';
+            my $pkg = $block->{package} // 'main';
+            if (length $text && $pkg ne $in{$phase}) {
+                $text = "package $pkg;\n$text";
+                $in{$phase} = $pkg;
+            }
+            if ($phase eq 'BEGIN') { $begins .= $text } else { $ends .= $text }
         }
+        $begins .= "package main;\n" if $in{BEGIN} ne 'main';
+        $ends   .= "package main;\n" if $in{END}   ne 'main';
         $out = $begins . $out;
 
         # CLASSES, declared before anything that uses them. A class the
@@ -4660,6 +4671,7 @@ class SoN::Deparse 0.01 {
               . " rendered -- the emitted program would die calling it\n"
                 if $name =~ /\A\w+(?:::\w+)*\z/
                 && !exists $all_methods->{$name}
+                && !$f->{external}
                 && !$self->_defined_at_runtime($name);
 
             my $ident = $self->_sub_ident($name);

@@ -55,6 +55,11 @@ class SoN::IR::Node::Call :isa(SoN::IR::Value) {
     # a no-argument call; a consumer must pass @_ through.
     field $shares_args :param :reader = false;
 
+    # The callee exists and was compiled elsewhere -- another module, an
+    # import, XS. Not in this wire, and not missing: the program that loads
+    # this one also loads it.
+    field $external :param :reader = false;
+
     # Resolved callee handle (a chalk MOP Method or Sub).
     # Per Phase 4, CallExpression resolves the symbolic name via
     # $mop->find_method() and stores the metaobject reference here so
@@ -103,6 +108,7 @@ class SoN::IR::Node::Call :isa(SoN::IR::Value) {
             (defined $sort_cmp_body ? "sort_cmp_body=$sort_cmp_body" : ()),
             ($paren_form ? "paren_form=1" : ()),
             ($shares_args ? "shares_args=1" : ()),
+            ($external ? "external=1" : ()),
             $self->_serialize_inputs());
     }
 

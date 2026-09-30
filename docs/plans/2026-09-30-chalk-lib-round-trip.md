@@ -64,3 +64,19 @@ Measured against a snapshot of chalk HEAD 5948f648 (179 modules, 43k lines,
     mark on mark stack"), an internal error rather than a GAP.
   - Emission style that draws warnings: `@foo[1]` for a one-element slice,
     `sort` in scalar context.
+  - A `require` inside an `eval` takes the previous statement's value as an
+    extra argument -- `require("t/Foo.pm", $eff11)` (comp/filter_exception.t,
+    reached once calls to other files' subs stopped refusing).
+  - comp/parser_run.t reports EMITS_INVALID_PERL but its emission compiles
+    and runs from t/ -- a harness-context difference to check.
+
+## Open-world wire facts, as built
+
+  - A class from another file: `external` on its class record (5425304); an
+    empty class declared here is still ours (recorded by the same
+    positive-evidence test).
+  - A call to a sub that exists but is compiled elsewhere (another module,
+    an import, XS): `external` on the Call; only a call to a sub that does
+    not exist still refuses.
+  - A phase block's package: `package` on the block; the emission runs each
+    `use` in the package it ran in (`use parent` sets that package's @ISA).

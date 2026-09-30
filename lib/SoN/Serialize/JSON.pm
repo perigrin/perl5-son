@@ -57,6 +57,7 @@ sub _extract_fields ($node, $id_remap) {
                 : () ),
             # `&name;`: the call hands on the caller's @_.
             ( $node->shares_args ? ( shares_args => JSON::PP::true ) : () ),
+            ( $node->external ? ( external => JSON::PP::true ) : () ),
             # The statically-known class for a method dispatch (Class->new).
             ( defined $node->class_name
                 ? ( class_name => $node->class_name )
@@ -613,7 +614,8 @@ sub to_json ($named_graphs, $classes = undef, $data_section = undef,
     # method's. Kept out of `methods` because a method is emitted as a named
     # sub, and these are not callable.
     $data->{phase_blocks} = [ map {
-        { phase => $_->[0], _serialize_graph( $_->[1] )->%* }
+        { phase => $_->[0], _serialize_graph( $_->[1] )->%*,
+          ( defined $_->[2] ? ( package => $_->[2] ) : () ) }
     } $phase_blocks->@* ] if $phase_blocks && $phase_blocks->@*;
 
     # ->utf8 BECAUSE THE WIRE IS BYTES AND THE VALUES ARE CHARACTERS.

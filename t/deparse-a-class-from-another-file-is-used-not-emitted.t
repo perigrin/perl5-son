@@ -74,4 +74,28 @@ unlike $out // '', qr/^\s*class (?:Animal|Blank)\b/m,
 is run_perl($out // ''), run_perl($src), 'and it runs as the source does'
     or diag $out;
 
+# AN EMPTY CLASS DECLARED HERE IS OURS. chalk's Chalk::IR::Value is
+# `class Chalk::IR::Value :isa(Chalk::IR::Node) {}` -- no sub of its own, so
+# nothing said it came from this file, and it was not emitted at all. A
+# subclass loaded on top of the emission then declared `:isa` of a package
+# that is not a class, and perl segfaulted (61 of chalk's lib/ modules).
+my $marker = "$dir/lib/Marker.pm";
+my $msrc = <<'PM';
+use v5.42.0;
+use experimental 'class';
+use Animal;
+class Marker :isa(Animal) {}
+PM
+my $mf = "$dir/marker.pl";
+open my $mh, '>', $mf or die $!; print $mh $msrc; close $mh;
+my $mjson = qx($^X -Ilib -I$dir/lib -MO=-q,SoN,json,not_package=SoN $mf 2>$dir/err);
+my $mdata = JSON::PP->new->utf8->decode($mjson);
+ok $mdata->{classes}{Marker} && !$mdata->{classes}{Marker}{external},
+    'an empty class declared here is on the wire as ours';
+my $mout = SoN::Deparse->new->render($mdata) // '';
+like $mout, qr/^\s*class Marker :isa\(Animal\)/m, '... and emitted';
+open my $mo, '>', $marker or die $!; print $mo $mout; close $mo;
+is scalar qx($^X -I$dir/lib -e 'use Marker; print ref(Marker->new(name => "x")), "\n"' 2>&1),
+   "Marker\n", '... so a program loading it gets the class';
+
 done_testing;

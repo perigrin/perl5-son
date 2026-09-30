@@ -3705,8 +3705,19 @@ class SoN::FromOptree 0.01 {
         # gv-handler Constant only carries the short NAME; qualifying it
         # here (in the entersub's known callee context) avoids touching
         # package-variable reads that share a name with a sub.
+        my $external = 0;
         if (my $callee_gv = _entersub_callee_gv($cv, $op)) {
             $call_name = $callee_gv->STASH->NAME . '::' . $callee_gv->NAME;
+            # A CALLEE THAT EXISTS AND IS NOT THIS FILE'S: a sub another
+            # module defines, an import, an XSUB. A library is translated one
+            # file at a time, so such a call is to a sub the loading program
+            # also loads -- not a sub that is missing.
+            # Only under B::SoN, which knows the file under compilation;
+            # translated directly there is no "elsewhere" to compare with.
+            my $ccv = eval { $callee_gv->CV };
+            my $mine = B::SoN->can('_cv_is_user_code');
+            $external = 1 if $mine && $ccv && $$ccv && !$ccv->isa('B::SPECIAL')
+                && !$mine->($ccv);
         }
         # Every call is a control-chain effect, void or not (R1.0
         # effect-by-default): pin control_in unconditionally so it is ordered
@@ -3749,6 +3760,7 @@ class SoN::FromOptree 0.01 {
             # without OPf_STACKED (64). Corpus 197. `&$ref;` too (corpus 200).
             shares_args   => ( ($op->private & 8)
                                && !($op->flags & 64) ) ? 1 : 0,
+            external      => $external,
         );
         $node->set_control_in($sim->control);
         $sim->set_control($node);
