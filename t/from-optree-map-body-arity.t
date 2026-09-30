@@ -12,7 +12,8 @@ my $dir = tempdir(CLEANUP => 1);
 sub run_perl ($src) {
     my $f = "$dir/r." . int(rand 1e9) . ".pl";
     open my $fh, '>', $f or die $!; print $fh $src; close $fh;
-    my $out = qx(timeout 10 $^X $f 2>&1); unlink $f; return $out;
+    # STDOUT ONLY: the emission runs under warnings the source may not.
+    my $out = qx(timeout 10 $^X $f 2>/dev/null); unlink $f; return $out;
 }
 
 sub translate ($src) {

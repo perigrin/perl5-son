@@ -12,7 +12,8 @@ sub run_src ($src) {
     open my $fh, '>', $file or die $!;
     print $fh $src;
     close $fh;
-    my $out = qx($^X $file 2>&1);
+    # STDOUT ONLY: the emission runs under warnings the source may not.
+    my $out = qx($^X $file 2>/dev/null);
     unlink $file;
     return $out;
 }

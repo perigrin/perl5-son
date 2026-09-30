@@ -95,7 +95,7 @@ for my $c (@cases) {
     # otherwise land on stdout in front of the JSON (corpus 013, 070 read as
     # NOJSON for that reason alone).
     my $json = qx($^X -I$FindBin::Bin/../lib -MO=-q,SoN,json,not_package=SoN $f 2>$dir/e);
-    my $data = eval { JSON::PP->new->decode($json) };
+    my $data = eval { JSON::PP->new->utf8->decode($json) };
     unless ($data && $data->{methods}) {
         $tally{NOJSON}++;
         push @unrendered, [$id, 'NOJSON', $c->{file}, whole_message(do { local(@ARGV, $/) = "$dir/e"; <> })];

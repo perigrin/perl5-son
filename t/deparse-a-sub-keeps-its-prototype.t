@@ -13,7 +13,8 @@ my $dir = tempdir(CLEANUP => 1);
 sub run_perl ($src) {
     my $f = "$dir/r." . int(rand 1e9) . ".pl";
     open my $fh, '>', $f or die $!; print $fh $src; close $fh;
-    my $out = qx($^X $f 2>&1); unlink $f; return $out;
+    # STDOUT ONLY: the emission runs under warnings the source may not.
+    my $out = qx($^X $f 2>/dev/null); unlink $f; return $out;
 }
 
 sub graph_of ($src) {
@@ -78,6 +79,19 @@ SRC
 round_trips(<<'SRC', 'an empty prototype');
 sub PI () { 3 }
 print "[", prototype(\&PI), "]\n";
+SRC
+
+# A PROTOTYPE UNDER `use v5.36`, WHERE SIGNATURES ARE ON. There `sub g ($)`
+# is a SIGNATURE, not a prototype, so the emission's `($)` parsed as one and
+# the program did not compile: corpus 008, which turns signatures off only
+# around that one sub. `:prototype(...)` means a prototype under any bundle.
+round_trips(<<'SRC', 'a prototype where signatures are on');
+use v5.36;
+no feature "signatures";
+sub g ($) { return "g[" . $_[0] . "]" }
+use feature "signatures";
+print g 1, 2;
+print "\n";
 SRC
 
 done_testing;

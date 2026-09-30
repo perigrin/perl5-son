@@ -24,6 +24,7 @@ sub _extract_fields ($node, $id_remap) {
         return {
             const_type => $node->const_type,
             value      => defined $node->value ? "${\$node->value}" : undef,
+            ( defined $node->flags ? ( flags => $node->flags ) : () ),
         };
     }
     if ($op eq 'Call') {

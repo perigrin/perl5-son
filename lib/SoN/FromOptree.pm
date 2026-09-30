@@ -5738,9 +5738,13 @@ class SoN::FromOptree 0.01 {
 
             # A LITERAL pattern rides on the op and is a compile-time constant.
             if (defined $pattern) {
+                # ITS FLAGS TOO: precomp is the pattern alone, and `qr/a/i`
+                # without its `i` is a different matcher.
+                my $qflags = _pmflags_to_str($op->pmflags);
                 $sim->push_node($factory->make('Constant',
                     value      => $pattern,
                     const_type => 'regex',
+                    (length $qflags ? (flags => $qflags) : ()),
                     stamp      => SoN::IR::Stamp->new(type => 'Regex')));
                 return ($op->next, 'handled');
             }
@@ -14854,6 +14858,10 @@ class SoN::FromOptree 0.01 {
         $str .= 'x' if $flags & 8;        # PMf_EXTENDED
         $str .= 'g' if $flags & 8388608;  # PMf_GLOBAL
         $str .= 'r' if $flags & PMf_NONDESTRUCT; # s///r
+        # THE CHARSET, when it is not perl's default /d -- (pmflags & 896) >> 7
+        # is d, l, u, a, aa. Unmarked means /d; see Deparse::_with_charset.
+        my $cs = ($flags & 896) >> 7;
+        $str .= (undef, 'l', 'u', 'a', 'aa')[$cs] // '' if $cs;
         return $str;
     }
 }

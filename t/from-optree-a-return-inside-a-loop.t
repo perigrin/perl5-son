@@ -86,4 +86,17 @@ sub p5 { my $i = 0;
 print p5(), "\n";
 SRC
 
+# THE EXIT'S VARIABLE WAS SEEDED FROM THE LOOP. With an early return before
+# the loop and one inside it, the exit Phi's declaration took its first
+# non-arm input -- the in-loop return's `"big-" . $i` -- before `$i` exists.
+# That path returns where it is and never reads the variable; without strict
+# the seed read an undefined global and nothing noticed. Corpus 008.
+round_trips(<<'SRC', 'an early return, then a return inside a loop');
+sub pick { my $n = shift;
+    return "small" if $n < 10;
+    for my $i (1 .. 2) { next if $i == 1; return "big-" . $i }
+    return "none" }
+print pick(1), " ", pick(50), "\n";
+SRC
+
 done_testing;

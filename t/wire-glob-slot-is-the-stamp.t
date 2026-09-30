@@ -19,7 +19,8 @@ sub write_tmp ($src, $tag) {
 
 sub runs ($src) {
     my $f = write_tmp( $src, 'r' );
-    my $o = qx($^X $f 2>&1);
+    # STDOUT ONLY: the emission runs under warnings the source may not.
+    my $o = qx($^X $f 2>/dev/null);
     unlink $f;
     return $o;
 }

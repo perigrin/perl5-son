@@ -52,7 +52,7 @@ for my $tier (@tiers) {
         my $wrc  = $?;
 
         my $json = qx(cd $PERL && $^X -I$LIB -MO=-q,SoN,json,not_package=SoN $rel 2>$dir/e);
-        my $data = eval { JSON::PP->new->decode($json) };
+        my $data = eval { JSON::PP->new->utf8->decode($json) };
         unless ( $data && $data->{methods} && $data->{methods}{'main::__PROGRAM__'} ) {
             my $e = do { open my $h, '<', "$dir/e"; local $/; <$h> } // '';
             my $b = $e =~ /GAP:/ ? 'GAP' : 'NOJSON';

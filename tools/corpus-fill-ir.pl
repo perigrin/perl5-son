@@ -80,7 +80,7 @@ sub listing {
     my $err  = do { local (@ARGV, $/) = "$tmp/err"; <> } // '';
     my @refused = map { s/\Q$tmp\E\/case\.pl/CASE/gr }
                   grep { /^B::SoN: (?:skipped|INTERNAL)/ } split /\n/, $err;
-    my $wire = eval { JSON::PP->new->decode($json) };
+    my $wire = eval { JSON::PP->new->utf8->decode($json) };
     my $text = $wire ? SoN::Render::WireYAML::render($wire) : '';
     push @refused, 'no wire JSON' unless $wire;
     # PERL DID NOT COMPILE IT: whatever graphs a BEGIN block left are not the

@@ -33,6 +33,9 @@ use experimental 'class';
 # chalk consumes too, so a rendering defect here is a wire defect, not an
 # artefact of reaching into the producer.
 class SoN::Deparse 0.01 {
+    # The version bundle every emission opens with.
+    our $TARGET_BUNDLE = 'v5.42';
+
     # ONE TABLE, ONE SPELLING EACH. These are not interchangeable: `==` for
     # `eq` agrees on numbers and disagrees on strings, which is exactly the
     # Int/Str confusion the stamp lattice tracks. A wrong entry here is a wrong
@@ -279,29 +282,21 @@ class SoN::Deparse 0.01 {
         %pad_declared = ();
         %mem_cache = ();
         %subst_count_var = ();
-        my $body = eval { $self->_emit_control_chain($graph) };
+        my $body = eval {
+            $self->_declare_undeclared($self->_emit_control_chain($graph))
+        };
         if (!defined $body) { $gap = $@ || 'render failed with no reason'; return undef }
-        # A FEATURE-GATED OPERATOR NEEDS ITS GATE. `isa` is a syntax error
-        # without `use v5.36` -- measured, `$o isa Foo` gives "Bareword found
-        # where operator expected". The source had the gate; the emission must
-        # too, or a graph that translated correctly emits Perl that does not
-        # compile.
-        #
-        # Emitted only when a gated node is present, so the common case keeps
-        # its current output byte-for-byte and no existing round trip moves.
-        my $needs_gate = grep {
-            ( $_->{op} // '' ) eq 'IsaOp'
-        } values $nodes->%*;
         # THE DATA SECTION LAST, after the marker perl reads it from. `__DATA__`
         # for both source markers: in a main program they open the same handle.
         my $data_section = defined $data->{data_section}
             ? "__DATA__\n" . $data->{data_section} : '';
-        # `use feature 'isa'`, NOT `use v5.36`: the bundle also turns on
-        # strict, which rejects code the source never ran under strict --
-        # corpus 012's `tie my $t` emitted as `tie($t, ...)` died "Global
-        # symbol". The operator needs its feature and nothing else.
-        return ( $needs_gate ? "use feature 'isa';\n" : '' ) . $out . $body . $ends
-             . $data_section;
+        # EVERY EMISSION IS MODERN PERL: it opens with the bundle we target --
+        # strict, warnings, signatures, isa, module_true -- whatever the source
+        # was written against, and its own `use VERSION` is subsumed (see
+        # _emit_phase_block). perigrin, 2026-09-30: emitted code runs under
+        # strict and warnings, and the round trip can bring a program up to
+        # the current idioms.
+        return "use $TARGET_BUNDLE;\n" . $out . $body . $ends . $data_section;
     }
 
     # A named sub. Its body is the same control-chain walk the program body
@@ -559,14 +554,16 @@ class SoN::Deparse 0.01 {
         return 0;
     }
 
-    # ` (PROTO)` for a sub the source declared with a prototype, else ''.
+    # ` :prototype(PROTO)` for a sub the source declared with a prototype,
+    # else ''. The ATTRIBUTE, not `(PROTO)`: under a bundle with signatures
+    # on -- every emission's -- `sub g ($)` is a signature.
     # The metadata is keyed by package and short name; the method key is the
     # fully qualified one, and the last `::` separates them.
     method _sub_prototype ($name) {
         my ($pkg, $short) = $name =~ /\A(.*)::([^:]+)\z/ or return '';
         my $proto = ((($sub_meta->{$pkg} // {})->{subs} // {})->{$short} // {})
             ->{prototype};
-        return defined $proto ? " ($proto)" : '';
+        return defined $proto ? " :prototype($proto)" : q{};
     }
 
     method _emit_sub ($name, $graph) {
@@ -658,8 +655,127 @@ class SoN::Deparse 0.01 {
     # A BEGIN or END block: the same body rendering as a sub, under the phase
     # keyword instead of a name.
     method _emit_phase_block ($phase, $graph) {
+        # `use VERSION` IS A BEGIN BLOCK WHOSE ONE EFFECT IS `require VERSION`
+        # -- and it is more than that require: it turns on the version's
+        # feature bundle (strict, warnings, say, module_true, ...), which the
+        # optree records as hints rather than as ops. Spelled as the bare
+        # require it checks the version and drops the bundle; a module ending
+        # in a class then "did not return a true value" (chalk's lib/: 77
+        # modules). The emission opens with $TARGET_BUNDLE, so a version at or
+        # below it is already said and drops out; a higher one stays a `use`.
+        if ($phase eq 'BEGIN') {
+            my @n = ($graph->{nodes} // [])->@*;
+            my %by = map { $_->{id} => $_ } @n;
+            my @effects = grep { defined $_->{control_in}
+                                 && ($_->{op} // '') ne 'Return' } @n;
+            if (@effects == 1 && ($effects[0]{op} // '') eq 'Call'
+                && (($effects[0]{fields} // {})->{name} // '') eq 'require') {
+                my $v = $by{ ($effects[0]{inputs} // [])->[0] // -1 } // {};
+                my $f = $v->{fields} // {};
+                if (($v->{op} // '') eq 'Constant'
+                    && ($f->{const_type} // '') =~ /\A(?:number|integer)\z/
+                    && ($f->{value} // '') =~ /\A\d+(?:\.\d+)?\z/) {
+                    return '' if version->parse($f->{value})
+                                 <= version->parse($TARGET_BUNDLE);
+                    return "use $f->{value};\n";
+                }
+            }
+        }
         return sprintf("%s {\n%s}\n", $phase,
             $self->_render_graph_body("main::__$phase", $graph));
+    }
+
+    # _declare_undeclared($text) -> $text with a `my` for every lexical it names
+    # and never declares.
+    #
+    # EVERY EMISSION RUNS UNDER STRICT (see $TARGET_BUNDLE), and some lexicals
+    # reach the text with no `my` at all -- a slot spelled by name where the
+    # source declared it inside an expression (`open(my $fh, ...)` emits
+    # `open($fh, ...)`), a renderer temporary assigned before any statement
+    # declares it. Without strict each silently became ONE package global;
+    # declared once at the top of its graph it becomes one lexical instead,
+    # which is never less right than what ran before.
+    #
+    # Only names this graph owns: its own pad variables (PadAccess) and the
+    # renderer's numbered temporaries. `$self` is a method's, not ours; a
+    # capture cell or a file lexical shared with a named sub is declared once
+    # above every sub (_emit_cell_declarations), and a second `my` here would
+    # be a different variable.
+    method _declare_undeclared ($text) {
+        my %names;
+        for my $n (values $nodes->%*) {
+            my $op = $n->{op} // '';
+            # A NAMED PAD AGGREGATE is the variable too: `my %h; $h{k} = ...`
+            # reaches here as a HashLiteral carrying `%h`, not a PadAccess.
+            next unless $op eq 'PadAccess'
+                || ($op =~ /\A(?:Array|Hash)Literal\z/
+                    && !$self->_agg_is_package($n));
+            my $f = $n->{fields} // {};
+            my $v = ($f->{sigil} // '') . ($f->{symbol} // '');
+            $names{$v} = 1 if $v =~ /\A[\$\@%][A-Za-z]\w*\z/;
+        }
+        my %temps;
+        $temps{$1} = $names{$1} = 1
+            while $text =~ /([\$\@%](?:phi|eff|stale|ret|latch|exit|inv)\d+)\b(?!_)/g;
+        delete $names{'$self'};
+        delete @names{ keys %cell_slots };
+        return $text unless %names;
+
+        my %declared;
+        $declared{$1} = 1 while $text =~ /\bmy\s+([\$\@%]\w+)/g;
+        while ($text =~ /\bmy\s*\(([^)]*)\)/g) {
+            $declared{$_} = 1 for $1 =~ /([\$\@%]\w+)/g;
+        }
+        # USED, BY ANY SPELLING: an aggregate is read through its elements --
+        # `%h` as `$h{k}` or `@h{...}`, `@a` as `$a[0]` or `$#a`.
+        my $used = sub ($v) {
+            my ($sigil, $id) = $v =~ /\A(.)(.*)\z/;
+            return $text =~ /\Q$v\E\b/ if $sigil eq '$';
+            return $text =~ /(?:%\Q$id\E\b|[\$\@]\Q$id\E\s*\{)/ if $sigil eq '%';
+            return $text =~ /(?:\@\Q$id\E\b|[\$\@]\Q$id\E\s*\[|\$#\Q$id\E\b)/;
+        };
+        my @missing = grep { !$declared{$_} && $used->($_) } sort keys %names;
+
+        # A TEMPORARY DECLARED DEEPER THAN IT IS READ. A value bound on one arm
+        # of a branch and read after the join -- `if ($a) { my $eff6 = c() }
+        # return ($a && $eff6)` -- is out of scope at the read. Its `my` moves
+        # to the top and the assignment stays where it is. Only the
+        # renderer's own temporaries: a source lexical keeps its scope. The
+        # renderer opens a block at the end of a line and closes one at the
+        # start of one, so the open blocks at a line are its scope -- and a
+        # use outside the declaring block, shallower OR in a sibling arm
+        # (base/rs.t), is out of scope.
+        my @lines = split /\n/, $text, -1;
+        my (%decl_scope, %decl_line, %escapes);
+        my ($next_block, @open) = (0);
+        for my $i (0 .. $#lines) {
+            my $l = $lines[$i];
+            pop @open if $l =~ /\A\s*\}/;
+            my $scope = join '/', @open;
+            for my $t (keys %temps) {
+                next unless $l =~ /\Q$t\E\b(?!_)/;
+                if (!exists $decl_scope{$t} && $l =~ /\bmy\s+\Q$t\E\b(?!_)/) {
+                    ($decl_scope{$t}, $decl_line{$t}) = ($scope, $i);
+                    next;
+                }
+                next unless exists $decl_scope{$t};
+                my $d = $decl_scope{$t};
+                $escapes{$t} = 1
+                    unless $d eq '' || $scope eq $d || index("$scope/", "$d/") == 0;
+            }
+            push @open, ++$next_block if $l =~ /\{\s*\z/;
+        }
+        my @hoist = sort keys %escapes;
+        for my $t (@hoist) {
+            $lines[ $decl_line{$t} ] =~ s/\bmy\s+(\Q$t\E\b)/$1/;
+            $lines[ $decl_line{$t} ] = ''
+                if $lines[ $decl_line{$t} ] =~ /\A\s*\Q$t\E\s*;\s*\z/;
+        }
+        $text = join("\n", @lines) if @hoist;
+
+        my @decl = (@missing, @hoist);
+        return $text unless @decl;
+        return join('', map { "my $_;\n" } @decl) . $text;
     }
 
     # One graph's statements, with the renderer's per-graph state saved and
@@ -667,7 +783,7 @@ class SoN::Deparse 0.01 {
     # to the graph.
     method _render_graph_body ($name, $graph) {
         return $self->_in_graph($name, $graph,
-            sub { $self->_emit_control_chain($graph) });
+            sub { $self->_declare_undeclared($self->_emit_control_chain($graph)) });
     }
 
     # A graph whose job is ONE VALUE -- a field's default initialiser --
@@ -2667,7 +2783,11 @@ class SoN::Deparse 0.01 {
             #
             # A bare `my $x;` warns on USE, not on declaration, and a variable
             # every arm assigns is never used unset.
-            my ($seed) = grep { !exists $proj_arm{ $pred[$_] } } 0 .. $#in;
+            # NOT FROM INSIDE A LOOP: such a predecessor is a `return` spelled
+            # where it happens, and never reads this variable -- its value may
+            # name a loop variable that does not exist yet (corpus 008).
+            my ($seed) = grep { !exists $proj_arm{ $pred[$_] }
+                                && !$self->_inside_loop($pred[$_]) } 0 .. $#in;
             $hoisted{$var} = defined $seed
                 ? sprintf('%s = %s', $var, $self->_expr($in[$seed]))
                 : $var;
@@ -2686,6 +2806,21 @@ class SoN::Deparse 0.01 {
     # The Region both arms converge on, or undef when they do not rejoin (each
     # arm leaving the program, say). Its inputs ARE the arms' last control
     # nodes, so a Region naming a node reachable from each arm is the join.
+    # Is this control node inside a loop's body? Walked back along control to
+    # the first Loop (yes) or Start, or a merge, which says no single path.
+    method _inside_loop ($id) {
+        my %seen;
+        while (defined $id && !$seen{$id}++) {
+            my $n = $nodes->{$id} or return 0;
+            my $op = $n->{op} // '';
+            return 1 if $op eq 'Loop';
+            return 0 if $op eq 'Start' || $op eq 'Region';
+            $id = $op =~ /\A(?:Proj|If)\z/ ? ($n->{inputs} // [])->[0]
+                                             : $n->{control_in};
+        }
+        return 0;
+    }
+
     method _join_region ($true_proj, $false_proj, $next_of) {
         my %from_true = map { $_ => 1 } $self->_control_reachable($true_proj->{id}, $next_of);
         for my $id ($self->_control_reachable($false_proj->{id}, $next_of)) {
@@ -2876,6 +3011,7 @@ class SoN::Deparse 0.01 {
                 if (defined $lv && $lv eq $self->_slot_name($slot)) {
                     my $f = $val->{fields} // {};
                     ( my $flags = $f->{flags} // '' ) =~ s/r//g;
+                    $flags = _with_charset($flags);
                     my ($pat, $rep) = $self->_subst_operands($val);
                     my $var = sprintf('$subst%d', $val->{id});
                     $bound{ $val->{id} }            = $lv;
@@ -3264,6 +3400,8 @@ class SoN::Deparse 0.01 {
 
         my $f = $n->{fields} // {};
         ( my $flags = $f->{flags} // '' ) =~ s/r//g;
+        # A charset for the pattern only: tr/// has none, and its `d` DELETES.
+        $flags = _with_charset($flags) if $op eq 'RegexSubst';
         my $var  = sprintf( '$subst%d', $n->{id} );
         my $text = $op eq 'RegexSubst'
             ? do {
@@ -3362,6 +3500,19 @@ class SoN::Deparse 0.01 {
 
         # `$_`, `$0`, `$1` and friends are also main-only and take no
         # qualifier: `$main::_` is legal but `$main::1` is not.
+        # A NAME NO IDENTIFIER CAN SPELL -- `@{"_<file"}`, the debugger's
+        # per-file line arrays (comp/line_debug.t) -- is reachable only
+        # symbolically, and the target bundle's strict refs forbids that. A
+        # reference taken with refs relaxed for that one expression is the
+        # same variable, as an lvalue too. Punctuation and digit variables
+        # (`$/`, `$1`) are spelled raw; strict exempts them.
+        # A stash name (`main::`) is word characters and `::`, spelled raw.
+        # `+do`: a bare `${ do {` reads as the element `$do{...}`.
+        if ($name =~ /[^\w:]/ && $name !~ /\A(?:\d+|[^\w\s])\z/) {
+            ( my $q = "${stash}::$name" ) =~ s/(["\\\$\@])/\\$1/g;
+            return sprintf(q|%s{ +do { no strict 'refs'; \\%s{"%s"} } }|,
+                $sigil, $sigil, $q);
+        }
         return sprintf('%s%s', $sigil, $name)
             if $name !~ /\A[A-Za-z_]\w*\z/;
 
@@ -3455,7 +3606,8 @@ class SoN::Deparse 0.01 {
               . " rendered\n" unless @in == 1;
             my ($open, $close) = _match_delimiters($pat);
             $text = sprintf('(%s =~ m%s%s%s%s)',
-                $self->_expr($in[0]), $open, $pat, $close, $f->{flags} // '');
+                $self->_expr($in[0]), $open, $pat, $close,
+                _with_charset($f->{flags} // ''));
         }
         elsif ($op eq 'Chomp') {
             # chomp AND chop MUTATE, so the value form needs a copy: perl has
@@ -3518,6 +3670,7 @@ class SoN::Deparse 0.01 {
             # is what `s///r` means, and the binding is the caller's job.
             my $f = $n->{fields} // {};
             ( my $flags = $f->{flags} // '' ) =~ s/r//g;
+            $flags = _with_charset($flags);
             my ($pat, $rep) = $self->_subst_operands($n);
             $text = sprintf('(%s =~ s{%s}{%s}%sr)',
                 $self->_expr($in[0]), $pat, $rep, $flags);
@@ -3553,6 +3706,7 @@ class SoN::Deparse 0.01 {
 
             my $f = $sub->{fields} // {};
             ( my $flags = $f->{flags} // '' ) =~ s/r//g;
+            $flags = _with_charset($flags);
 
             # A COUNTED s/// MUST MODIFY SOMETHING. The destructive form is
             # what returns a count, and it needs an LVALUE -- but the producer
@@ -3758,17 +3912,19 @@ class SoN::Deparse 0.01 {
             # sees, so the emitted program must read.
             $text = $self->_slot_name($n);
         }
-        # A BITWISE OP THE FEATURE DECIDED. The emission carries no `use
-        # v5.28`, so its `&` is the dual operator, which does a string AND on
-        # two strings -- where the source's numeric `&` did not. Coercing each
-        # operand the way the feature's operator does makes the dual one
-        # agree: numbers for & | ^, strings for &. |. ^.
-        elsif ($op =~ /\ABit(?:And|Or|Xor)\z/
-                && defined(my $flavor = ($n->{fields} // {})->{flavor})) {
+        # A BITWISE OP, SPELLED FOR THE TARGET BUNDLE, which turns the
+        # `bitwise` feature on: there `&` is always numeric and `&.` always
+        # string. So a numeric flavor is `&`, a string flavor `&.` -- and an
+        # unflavored op, the DUAL operator of a source without the feature
+        # (string on two strings, else numeric, decided at run time), keeps
+        # that rule by turning the feature off around itself.
+        elsif ($op =~ /\ABit(?:And|Or|Xor)\z/) {
             die "GAP: a $op with " . scalar(@in) . " inputs is not yet"
               . " rendered\n" unless @in == 2;
-            my @spelled = map { $self->_bitwise_operand($flavor, $_) } @in;
-            $text = '(' . $spelled[0] . ' ' . $BINOP{$op} . ' ' . $spelled[1] . ')';
+            my $flavor = ($n->{fields} // {})->{flavor};
+            my $sym = $BINOP{$op} . (($flavor // '') eq 'string' ? '.' : '');
+            $text = '(' . $self->_expr($in[0]) . " $sym " . $self->_expr($in[1]) . ')';
+            $text = "do { no feature 'bitwise'; $text }" unless defined $flavor;
         }
         elsif (my $sym = $BINOP{$op}) { $text = $self->_binop($sym, @in) }
         elsif ($op eq 'TernaryExpr') {
@@ -4221,10 +4377,11 @@ class SoN::Deparse 0.01 {
         elsif ($op eq 'Complement') {
             die "GAP: a Complement with " . scalar(@in) . " inputs is not yet"
               . " rendered\n" unless @in == 1;
+            # Spelled for the target bundle, as the binary forms are.
             my $flavor = ($n->{fields} // {})->{flavor};
-            $text = defined $flavor
-                ? '(~' . $self->_bitwise_operand($flavor, $in[0]) . ')'
-                : sprintf('(~(%s))', $self->_expr($in[0]));
+            my $op1 = ($flavor // '') eq 'string' ? '~.' : '~';
+            $text = sprintf('(%s(%s))', $op1, $self->_expr($in[0]));
+            $text = "do { no feature 'bitwise'; $text }" unless defined $flavor;
         }
         elsif ($op eq 'Phi') {
             # READING A LOOP PHI IS READING ITS VARIABLE. _emit_loop declares
@@ -4788,11 +4945,13 @@ class SoN::Deparse 0.01 {
         die "GAP: a Call with dispatch_kind `$kind` is not yet rendered\n";
     }
 
-    # One operand of a bitwise op whose flavor the `bitwise` feature fixed,
-    # coerced so the emission's dual operator reads it the same way.
-    method _bitwise_operand ($flavor, $id) {
-        my $e = $self->_expr($id);
-        return $flavor eq 'numeric' ? '(0 + ' . $e . ')' : '("" . ' . $e . ')';
+    # A PATTERN'S FLAGS WITH ITS CHARSET SPELLED. The producer marks a charset
+    # only when the source's was not perl's default (l, u, a, aa); unmarked is
+    # /d, and saying so matters because the emission's bundle turns
+    # unicode_strings on, under which an unmarked pattern is /u -- `qr/abc/`
+    # stringified `(?^u:abc)` for the source's `(?^:abc)` (corpus 010, 191).
+    sub _with_charset ($flags) {
+        return $flags =~ /[lua]/ ? $flags : $flags . 'd';
     }
 
     method _binop ($perl_op, $l, $r) {
@@ -4823,7 +4982,11 @@ class SoN::Deparse 0.01 {
         die "GAP: a Print says it has a filehandle but has no inputs\n"
             unless @in;
         my $h = shift @in;
-        return ($self->_expr($h) . ' ', map { $self->_expr($_) } @in);
+        # A GLOB HANDLE GOES IN A BLOCK: `print *FH LIST` is not a handle,
+        # `print {*FH} LIST` is.
+        my $ht = $self->_expr($h);
+        $ht = "{$ht}" if $ht =~ /\A\*/;
+        return ("$ht ", map { $self->_expr($_) } @in);
     }
 
     method _constant ($n) {
@@ -4850,6 +5013,10 @@ class SoN::Deparse 0.01 {
             $s =~ s/\n/\\n/g;
             $s =~ s/\t/\\t/g;
             $s =~ s/\r/\\r/g;
+            # EVERYTHING ELSE OUTSIDE PRINTABLE ASCII BY CODE POINT: the target
+            # bundle puts the source under `source::encoding "ascii"`, and a
+            # raw non-ASCII character there does not compile.
+            $s =~ s/([^\x20-\x7e])/sprintf('\\x{%X}', ord $1)/ge;
             return '"' . $s . '"';
         }
         # A qr// LITERAL. The producer records the compiled pattern's text, and
@@ -4860,7 +5027,7 @@ class SoN::Deparse 0.01 {
             # not balance -- corpus 098's `(?{ ... "}}" })` -- closes `qr{`
             # early.
             my ($open, $close) = _match_delimiters($v);
-            return "qr$open$v$close";
+            return "qr$open$v$close" . _with_charset($f->{flags} // '');
         }
 
         # A BAREWORD FILEHANDLE, and the bareword IS the spelling. Measured on
@@ -4872,6 +5039,10 @@ class SoN::Deparse 0.01 {
         #
         # Only a plain identifier is emitted bare: anything else is not a
         # bareword and would parse as something other than a handle.
+        #
+        # SPELLED AS ITS GLOB, `*TRY`, which is the same handle: the target
+        # bundle turns bareword_filehandles off, and a bare `TRY` is then a
+        # compile error ("Bareword filehandle not allowed", corpus 219).
         # A REFERENCE TO A CONSTANT. base/rs.t sets `$/ = \2`, the
         # record-separator form that reads fixed-size records -- measured,
         # `Constant const_type=ref value=2` read by an EntryWrite into $/.
@@ -4904,7 +5075,7 @@ class SoN::Deparse 0.01 {
         if ($t eq 'glob') {
             die "GAP: a glob Constant whose name is `$v` is not a bareword\n"
                 unless $v =~ /\A[A-Za-z_]\w*\z/;
-            return $v;
+            return "*$v";
         }
 
         # A CV NAMED AS A REFERENT. `\&foo` puts the SUB where a value goes,
