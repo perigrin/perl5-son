@@ -68,7 +68,20 @@ Measured against a snapshot of chalk HEAD 5948f648 (179 modules, 43k lines,
     extra argument -- `require("t/Foo.pm", $eff11)` (comp/filter_exception.t,
     reached once calls to other files' subs stopped refusing).
   - comp/parser_run.t reports EMITS_INVALID_PERL but its emission compiles
-    and runs from t/ -- a harness-context difference to check.
+    and runs from t/ -- a harness-context difference. Cause: perl-t-roundtrip
+    ran `-c` from the repo while running the program from t/; a file whose
+    BEGIN does `chdir 't'` (comp/use.t) only compiles from t/. Fixed.
+  - An array read in list context after an ELEMENT store reads the literal:
+    `my @a=(5,5); $a[0] -= 2; print "@a"` prints `5 5`. The padav flatten
+    shortcut is guarded by `mutated_aggregate`, which an element store does
+    not set.
+  - The target bundle leaks into string evals: `eval "use 5.006"` under the
+    emitted `use v5.42;` dies "use VERSION is not permitted while another use
+    VERSION of 5.39 or above is in scope" (comp/use.t tests 1-9). Open: the
+    bundle is the emission's scope, and a string eval compiles in it.
+  - SoN::Serialize::JSON recurses per node (line 456): comp/use.t's program
+    graph draws "Deep recursion on anonymous subroutine" warnings. Output is
+    right; the walk should be iterative.
 
 ## Open-world wire facts, as built
 
@@ -80,3 +93,7 @@ Measured against a snapshot of chalk HEAD 5948f648 (179 modules, 43k lines,
     not exist still refuses.
   - A phase block's package: `package` on the block; the emission runs each
     `use` in the package it ran in (`use parent` sets that package's @ISA).
+  - A `my` aggregate introduced in a loop body: its named ArrayLiteral /
+    HashLiteral carries `control_in` -- an allocation at that point, like
+    `new` in Simple -- so each iteration makes a fresh one (perigrin's
+    choice over refusing). Unpinned literals keep the prologue placement.

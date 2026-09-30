@@ -1,4 +1,4 @@
-# ABOUTME: A nested branch inside a branch arm GAPs loudly, never crashes the producer (zhi 019f34cc).
+# ABOUTME: A nested branch inside a branch arm never crashes the producer (zhi 019f34cc).
 # ABOUTME: The void and/or handler must not misread a nested-branch join as an EXPR-while-COND loop back-edge.
 
 use v5.42.0;
@@ -15,11 +15,11 @@ use SoN::FromOptree;
 # walked with a broken memory state and CRASHED building a Subscript with an
 # undef memory input ("Can't call method consumers on an undefined value").
 #
-# Nested/composed branches are memory-SSA 2b-3 territory (not yet lowered), so
-# the producer must GAP LOUDLY -- never crash. The fix: a true loop back-edge
-# re-enters the condition head (an op visited BEFORE the arm walk); a
-# nested-branch join is visited DURING the arm walk, so it must fall through to
-# the convergence GAP.
+# The producer must never crash here. The fix: a true loop back-edge re-enters
+# the condition head (an op visited BEFORE the arm walk); a nested-branch join
+# is visited DURING the arm walk, so it is not a loop. A nested element store
+# now lowers -- its round trip against perl is
+# t/from-optree-an-element-store-in-a-nested-branch.t.
 
 sub translate_err ($code) {
     SoN::OptSuppress::suppress_peep();
@@ -31,9 +31,9 @@ sub translate_err ($code) {
     return $err // '';
 }
 
-subtest 'a nested branch-store arm GAPs, never crashes on undef memory' => sub {
+subtest 'a nested branch-store arm translates, never crashes on undef memory' => sub {
     my $err = translate_err('sub { my @a=(1,2,3); my $c=1; my $d=1; if($c){if($d){$a[0]=9}} $a[0] }');
-    like($err, qr/^GAP:/, 'nested branch-store arm produces a loud GAP') or diag($err);
+    is($err, '', 'nested branch-store arm translates') or diag($err);
     unlike($err, qr/consumers on an undefined/,
         'not the pre-fix undef-memory crash');
 };

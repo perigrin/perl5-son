@@ -93,15 +93,17 @@ sub round_trips ($src, $name) {
 #    closed -- the right destination for a value that only settles then, and the
 #    wrong one for a value the body itself consumes.
 #
-# So the fix needs a placement no mechanism currently provides: inside the loop
-# body, ahead of the reader. Reverted rather than shipped, because moving a
-# defect from one wrong line to another wrong line is not progress and the
-# emission still prints `0 0 0` where perl prints `1 2 3`.
+# So the fix needs a placement inside the loop body, ahead of the reader.
+# Reverted rather than shipped, because moving a defect from one wrong line to
+# another wrong line is not progress and the emission still printed `0 0 0`
+# where perl prints `1 2 3`.
+#
+# THAT PLACEMENT IS THE PINNED ALLOCATION. A `my` aggregate in a loop body
+# carries control_in, so the chain emits `my @q = (...)` where it runs --
+# see t/from-optree-an-aggregate-declared-in-a-loop-body.t.
 #
 # The three cases below that PASS are kept as guards: whatever builds
 # body-internal placement must not disturb them.
-{
-    my $todo = todo 'the binding belongs inside the loop body before its reader; no placement mechanism does that yet';
 round_trips( <<'SRC', 'a binding reaching a loop Phi through a Range' );
 my @sizes;
 for my $n (1 .. 3) {
@@ -110,8 +112,6 @@ for my $n (1 .. 3) {
 }
 print "@sizes\n";
 SRC
-
-}
 
 round_trips( <<'SRC', 'through arithmetic rather than a Range' );
 my @sizes;

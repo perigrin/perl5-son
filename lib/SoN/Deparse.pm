@@ -943,6 +943,9 @@ class SoN::Deparse 0.01 {
             my $n = $nodes->{$id} or next;
             next unless defined $n->{control_in};
             next if ($n->{op} // '') =~ /\A(?:Proj|Region|Loop|If|Start)\z/;
+            # A PINNED NAMED AGGREGATE IS ITS OWN NAME: the chain emits its
+            # `my @a = (...)` and every read spells `@a`.
+            next if $self->_is_pinned_aggregate($n);
 
             # THE BINDING MUST NOT IMPOSE A CONTEXT. `my $x = readline(FH)`
             # reads ONE line; the same call in list context reads them all,
@@ -1304,6 +1307,9 @@ class SoN::Deparse 0.01 {
             next unless ($n->{op} // '') =~ /\A(?:Array|Hash)Literal\z/;
             my $af = $n->{fields} // {};
             next unless defined $af->{symbol};
+            # A PINNED ONE IS DECLARED WHERE THE CHAIN REACHES IT -- a `my` in
+            # a loop body is a fresh aggregate each iteration.
+            next if $self->_is_pinned_aggregate($n);
             my $vn = $self->_agg_name($n);
 
             # AN AGGREGATE WHOSE CONTENTS ARE A CHAIN-BOUND EFFECT CANNOT
@@ -2117,6 +2123,14 @@ class SoN::Deparse 0.01 {
     # `Phi(21) stamp=Int` -- and binding a list to a SCALAR collapses it to
     # the last element: `my $phi7 = ()` then `map { $_*2 } (1,2,3)` printed
     # `6` instead of `2 4 6`.
+    # A named Array/HashLiteral on the control chain: an allocation at that
+    # point, which the producer pins for a `my` aggregate in a loop body.
+    method _is_pinned_aggregate ($n) {
+        return ($n->{op} // '') =~ /\A(?:Array|Hash)Literal\z/
+            && defined $n->{control_in}
+            && defined(($n->{fields} // {})->{symbol});
+    }
+
     # _agg_name($node) -- an Array/HashLiteral's Perl spelling, or undef when
     # it is anonymous.
     #

@@ -5200,6 +5200,26 @@ class SoN::FromOptree 0.01 {
                 while $consumer && $$consumer && $consumer->name eq 'null';
             my $is_assign_target =
                 $consumer && $$consumer && $consumer->name eq 'aassign';
+            # A BARE `my @a;` IN A LOOP BODY is a fresh, empty aggregate each
+            # iteration -- pinned, as the list-assign form is.
+            if ($is_lvintro && !$is_assign_target && @LOOP_STACK) {
+                my $slot = _make_pad_or_field($cv, $targ, $factory);
+                if ($slot->isa('SoN::IR::Node::PadAccess')) {
+                    my $sigil = $slot->sigil;
+                    my $node = $factory->make(
+                        ($sigil eq '@' ? 'ArrayLiteral' : 'HashLiteral'),
+                        inputs => [],
+                        sigil  => $sigil,
+                        symbol => $slot->symbol,
+                        stamp  => SoN::IR::Stamp->new(
+                            type => ($sigil eq '@' ? 'Array' : 'Hash')));
+                    $node->set_control_in($sim->control);
+                    $sim->set_control($node);
+                    $sim->define($targ, $node);
+                    $sim->push_node($node);
+                    return ($op->next, 'handled');
+                }
+            }
             if ($existing && !$is_assign_target) {
                 $sim->push_node($existing);
             } else {
@@ -8181,6 +8201,16 @@ class SoN::FromOptree 0.01 {
                         stamp   => SoN::IR::Stamp->new(
                             type => ($sigil eq '@' ? 'Array' : 'Hash')));
                     $sim->define($key, $node);
+                    # A `my` AGGREGATE IN A LOOP BODY IS A FRESH ONE EACH
+                    # ITERATION. The literal is the aggregate, and with no
+                    # control input nothing says where it is made -- declared
+                    # once above the loop, every iteration saw the last one's
+                    # writes (`my @a=(5); $a[0]+=$i` gave 6;8;11 for 6;7;8).
+                    # Pinned, it is an allocation at this point on the chain.
+                    if ($is_pad && @LOOP_STACK && _aassign_introduces($op)) {
+                        $node->set_control_in($sim->control);
+                        $sim->set_control($node);
+                    }
                     # A PACKAGE AGGREGATE IS OBSERVABLE OUTSIDE THIS GRAPH -- by
                     # a sub (`our @x = (1,2); sub f { print "@x" }`), by method
                     # resolution (`our @ISA = ("Base")`) -- so the assignment is
@@ -12257,17 +12287,24 @@ class SoN::FromOptree 0.01 {
     #
     # _arm_has_void_call and _arm_has_die already take the join for this reason;
     # this detector and _arm_has_field_store were never given it.
+    # A NESTED GUARD'S BODY IS IN THE ARM TOO: `if ($c) { $a[0] = 9 if $d }`
+    # puts the store on the inner `and`'s ->other, which a ->next walk steps
+    # over -- the outer branch then built no If and its store hung off Start.
     sub _arm_has_element_store ($start, $stop, $join = undef) {
         $stop = _op_addr($stop);
         my %seen;
-        for (my $op = $start; $$op && $$op != $stop && !$seen{$$op}; $op = $op->next) {
-            last if defined $join && $$op == $join;
+        my @todo = ($start);
+        while (my $op = shift @todo) {
+            next unless $$op && $$op != $stop && !$seen{$$op};
+            next if defined $join && $$op == $join;
             $seen{$$op} = 1;
             my $name = $op->name;
             return 1 if $name eq 'aelemfastlex_store'
                      || $name eq 'helemfastlex_store';
-            next unless $name eq 'aelem' || $name eq 'helem';
-            return 1 if $op->flags & 0x20;   # OPf_MOD -- an lvalue element target
+            return 1 if ($name eq 'aelem' || $name eq 'helem')
+                     && $op->flags & 0x20;   # OPf_MOD -- an lvalue element target
+            push @todo, $op->next;
+            push @todo, $op->other if $op->can('other') && ref($op->other);
         }
         return 0;
     }
@@ -12807,6 +12844,17 @@ class SoN::FromOptree 0.01 {
     # the ENCLOSING loop lies in the arm: the ops from $start, along ->next and
     # a logop's ->other, up to $stop -- not into a nested loop, whose own are
     # its own.
+    # _aassign_introduces($aassign) -> true when the list assignment's target
+    # is a `my` aggregate: a padav/padhv on its LHS carries OPpLVAL_INTRO.
+    sub _aassign_introduces ($aassign) {
+        my $lhs = $aassign->last;
+        return 0 unless $lhs && $$lhs && $lhs->can('first');
+        for (my $k = $lhs->first; $k && $$k; $k = $k->sibling) {
+            return 1 if $k->name =~ /\Apad[ah]v\z/ && ($k->private & 128); # OPpLVAL_INTRO
+        }
+        return 0;
+    }
+
     sub _arm_has_loop_control ($start, $stop) {
         my %seen;
         my @todo = ($start);
@@ -13658,9 +13706,6 @@ class SoN::FromOptree 0.01 {
                 # `if($c){if($d){$a[0]=9}} $a[0]` printed 1 where perl printed
                 # 9, and both guard polarities printed the same thing). Refuse
                 # loudly instead: a GAP is recoverable, a wrong answer is not.
-                die "GAP: an element store inside a nested one-armed branch is"
-                  . " not yet lowered (needs the memory-Phi merge)\n"
-                    if _arm_has_element_store($op->other, $op->next);
                 # A void CALL in this body is likewise not lowered here. Unlike
                 # a Print (a pure statement effect, pinned once on its control),
                 # a Call is both a value and an effect, and routing it through
@@ -13683,7 +13728,8 @@ class SoN::FromOptree 0.01 {
                 # the loop's exit Region and a body merge, and the exit Phi
                 # landed on the body merge where the deparser refuses it.
                 my $mem_branch =
-                       _arm_has_void_call($op->other, $op->next, $mod_stop)
+                       _arm_has_element_store($op->other, $op->next)
+                    || _arm_has_void_call($op->other, $op->next, $mod_stop)
                     || _arm_has_die($op->other, $op->next, $mod_stop)
                     || ( $in_loop
                          && defined _guarded_loop_control($op->other)

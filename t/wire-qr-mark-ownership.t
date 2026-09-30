@@ -40,11 +40,11 @@ unlike $out, qr/No mark on mark stack/,
 unlike $out, qr/INTERNAL ERROR/,
     '... and comp/use.t reports no internal error at all';
 
-# THE REFUSAL THAT REPLACED IT IS THE POINT. The file still does not translate
-# fully, but it now says WHICH construct stopped it instead of dying inside the
-# stack simulator. A GAP is a to-do with a diagnostic; an internal error is a
-# bug that hides one.
-like $out, qr/GAP:/,
-    '... it refuses with a named GAP instead';
+# PAST THE qr THE WALK GOES ON. A crash here once stopped the whole file; the
+# program graph now comes out, which is the proof the mark stayed the call's.
+# A GAP is a to-do with a diagnostic; an internal error is a bug that hides one.
+my $json = qx{cd $T && $^X -I$lib -MO=-q,SoN,json,package=main comp/use.t 2>/dev/null};
+like $json, qr/"main::__PROGRAM__"/,
+    '... and the program translates past it';
 
 done_testing;

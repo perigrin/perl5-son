@@ -113,10 +113,8 @@ SRC
 #
 # which prints `0 0 0` where perl prints `1 2 3`. A pure node placed above a
 # variable it reads, which is a scheduling question in the emitter rather than
-# anything about ranges.
-{
-    my $todo = todo 'the deparser hoists a pure Range above the loop Phi it reads';
-    round_trips( <<'SRC', 'the range bound varies per iteration' );
+# anything about ranges. The `my @q` is now pinned where the body runs it.
+round_trips( <<'SRC', 'the range bound varies per iteration' );
 my @sizes;
 for my $n (1 .. 3) {
     my @q = (1 .. $n);
@@ -124,6 +122,5 @@ for my $n (1 .. 3) {
 }
 print "@sizes\n";
 SRC
-}
 
 done_testing;
