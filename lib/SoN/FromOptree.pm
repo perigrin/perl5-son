@@ -11225,8 +11225,10 @@ class SoN::FromOptree 0.01 {
                 next;
             }
 
+            # A VALUE-CONTEXT `//` is the value handler's, below.
             if ($name eq 'enterloop'
-                || ($opmap->is_branch($name) && $name ne 'and' && $name ne 'or')) {
+                || ($opmap->is_branch($name) && $name ne 'and' && $name ne 'or'
+                    && !($name eq 'dor' && ($op->flags & 3) != 1))) {
                 die "GAP: $name inside a loop body not yet lowered\n";
             }
 
@@ -11498,7 +11500,9 @@ class SoN::FromOptree 0.01 {
             # condition handler below claimed it and refused "nested and/or
             # inside a loop body" (93 graphs in chalk's lib/). An arm that
             # does anything but yield a value keeps refusing.
-            if (($name eq 'and' || $name eq 'or') && $sim->stack_depth > 0
+            # `E // V` IS THE SAME SHAPE, a DefinedOr, as the main walk builds.
+            if (($name eq 'and' || $name eq 'or' || $name eq 'dor')
+                    && $sim->stack_depth > 0
                     && ($op->flags & 3) != 1            # not OPf_WANT_VOID
                     && $op->can('other') && ${$op->other}
                     && !_arm_has_die($op->other, ${ $op->next })
@@ -11533,7 +11537,7 @@ class SoN::FromOptree 0.01 {
                 my $rhs = $rhs_sim->pop_node;
                 my ($ls, $rs) = map { $_->can('stamp') ? $_->stamp : undef } $lhs, $rhs;
                 $sim->push_node($factory->make(
-                    $name eq 'and' ? 'And' : 'Or',
+                    { and => 'And', or => 'Or', dor => 'DefinedOr' }->{$name},
                     inputs => [$lhs, $rhs],
                     ((defined $ls && defined $rs && $ls->type ne 'Unknown'
                       && $rs->type ne 'Unknown')
@@ -13478,7 +13482,9 @@ class SoN::FromOptree 0.01 {
             # a wrong answer is worse than a refusal. Detected by walking the
             # RHS on a snapshot and requiring it to produce exactly one value
             # and converge at this op's op_next.
-            if ($opmap->is_branch($name) && ($name eq 'and' || $name eq 'or')
+            # `E // V` IS THE SAME SHAPE, a DefinedOr, as the main walk builds.
+            if ($opmap->is_branch($name)
+                    && ($name eq 'and' || $name eq 'or' || $name eq 'dor')
                     && $sim->stack_depth > 0
                     && ($op->flags & 3) != 1            # not OPf_WANT_VOID
                     && !_arm_has_die($op->other, ${ $op->next })
@@ -13504,7 +13510,8 @@ class SoN::FromOptree 0.01 {
                     unless $rhs_sim->stack_depth == $base + 1;
                 my $rhs = $rhs_sim->pop_node;
                 $sim->push_node($factory->make(
-                    $name eq 'and' ? 'And' : 'Or', inputs => [$lhs, $rhs]));
+                    { and => 'And', or => 'Or', dor => 'DefinedOr' }->{$name},
+                    inputs => [$lhs, $rhs]));
                 $op = $rhs_end;
                 next;
             }
