@@ -367,7 +367,7 @@ class SoN::Deparse 0.01 {
     # container an aggregate or a reference, and which bracket does it take.
     # Three copies of that decision is how one operator ends up meaning two
     # things; see the Subscript rule for the measurements behind each branch.
-    method _element ($container_id, $key) {
+    method _element ($container_id, $key, $sub_kind = undef) {
         my $agg  = $nodes->{$container_id};
         my $af   = ($agg->{fields} // {});
         my $kind = $agg->{op} // '';
@@ -440,8 +440,11 @@ class SoN::Deparse 0.01 {
         # design records: ugly and faithful is the product.
         my $ref = ( $spelling =~ /\A\$?[A-Za-z_]\w*\z/ )
             ? $spelling : sprintf('(%s)', $spelling);
-        return $st eq 'HashRef' ? sprintf('%s->{%s}', $ref, $key)
-                                : sprintf('%s->[%s]', $ref, $key);
+        # THE ELEMENT'S OWN KIND DECIDES when the container's stamp does not:
+        # a scalar holding a reference says nothing of which.
+        my $hash = $st eq 'HashRef' || (!$st || $st !~ /Ref\z/) && ($sub_kind // '') eq 'hash';
+        return $hash ? sprintf('%s->{%s}', $ref, $key)
+                     : sprintf('%s->[%s]', $ref, $key);
     }
 
     method _cell_var ($cell) {
@@ -3768,7 +3771,8 @@ class SoN::Deparse 0.01 {
             # this oracle exists to check.
             die "GAP: a Subscript with " . scalar(@in) . " inputs is not yet"
               . " rendered\n" if @in < 2;
-            $text = $self->_element($in[0], $self->_expr($in[1]));
+            $text = $self->_element($in[0], $self->_expr($in[1]),
+                                    ($n->{fields} // {})->{kind});
         }
         elsif ($op eq 'Count') {
             # scalar(@a) -- the element count, and a memory-dependent read like

@@ -4150,7 +4150,7 @@ class SoN::FromOptree 0.01 {
                 my $idx  = $factory->make('Constant',
                     value => $i, const_type => 'integer',
                     stamp => SoN::IR::Stamp->new(type => 'Int'));
-                my $elem = $factory->make('Subscript',
+                my $elem = $factory->make('Subscript', kind => 'array',
                     inputs => [$args, $idx, $sim->memory]);
                 # Each list-assign target is a `my` declaration; emit a VarDecl
                 # so the lexical is declared in the graph, mirroring padsv_store
@@ -6894,6 +6894,7 @@ class SoN::FromOptree 0.01 {
                     && !$index->isa('SoN::IR::Node::Constant'))
                 ? _array_element_stamp($container) : undef;
             my $sub = $factory->make('Subscript',
+                kind   => ($name eq 'helem' ? 'hash' : 'array'),
                 inputs => \@sub_inputs,
                 (defined $elem_stamp ? (stamp => $elem_stamp) : ()));
             $sim->push_node($sub);
@@ -6950,7 +6951,7 @@ class SoN::FromOptree 0.01 {
             if ($old->isa('SoN::IR::Node::Subscript')
                 && scalar($old->inputs->@*) == 2) {
                 $lvalue = $old;
-                $old = $factory->make('Subscript',
+                $old = $factory->make('Subscript', kind => $lvalue->kind,
                     inputs => [$lvalue->inputs->[0], $lvalue->inputs->[1],
                                $sim->memory]);
             }
@@ -7437,6 +7438,26 @@ class SoN::FromOptree 0.01 {
               . " expression already spent the mark) is not yet lowered\n"
                 unless $sim->has_mark;
             my $bounds = $sim->pop_to_mark;
+            # A DEREFERENCED ARRAY -- `@$r`, `$r->@*`, `$obj->m->@*` -- is the
+            # loop's list, but rv2av in this context leaves the REFERENCE on
+            # the stack, not the array: the walker saw one Call or Subscript
+            # and refused (244 graphs in chalk's lib/). Deref it here, where
+            # the op tree says so: one list item, an rv2av not over a gv (a
+            # package array is its own case). Its elements are the referent's,
+            # so writes through the loop variable reach it.
+            if ($bounds->@* == 1 && !_is_aggregate_node($bounds->[0])
+                    && (my $item = _foreach_sole_item($op))) {
+                my $kid = $item->first;
+                $kid = $kid->first
+                    while $$kid && $kid->name eq 'null' && ($kid->flags & 4);
+                if ($item->name eq 'rv2av' && $$kid && $kid->name ne 'gv'
+                        && defined $sim->memory) {
+                    $bounds->[0] = $factory->make('PostfixDeref',
+                        inputs => [$bounds->[0], $sim->memory],
+                        sigil  => '@',
+                        stamp  => SoN::IR::Stamp->new(type => 'Array'));
+                }
+            }
 
             # THE ITERATOR IS A PAD SLOT OR A PACKAGE SCALAR, and the scope map
             # holds both -- it is a plain hash, keyed by pad targ for a lexical
@@ -8861,6 +8882,7 @@ class SoN::FromOptree 0.01 {
                     && ($op->flags & 64)) { # OPf_STACKED
                     $elem_lvalue = $inputs[0];
                     $inputs[0] = $factory->make('Subscript',
+                        kind   => $elem_lvalue->kind,
                         inputs => [$elem_lvalue->inputs->[0],
                                    $elem_lvalue->inputs->[1], $sim->memory]);
                 }
@@ -10568,7 +10590,7 @@ class SoN::FromOptree 0.01 {
         my $body_proj = $factory->make_cfg('Proj', inputs => [$loop_node], index => 0);
         my $exit_proj = $factory->make_cfg('Proj', inputs => [$loop_node], index => 1);
         $sim->set_control($body_proj);
-        my $elem = $factory->make('Subscript',
+        my $elem = $factory->make('Subscript', kind => 'array',
             inputs => [$array, $i_phi, $sim->memory],
             (defined $elem_stamp ? (stamp => $elem_stamp) : ()));
         $sim->define($x_targ, $elem);
@@ -10676,7 +10698,7 @@ class SoN::FromOptree 0.01 {
             }
 
             if (defined $new_val && $new_val != $elem) {
-                my $lvalue = $factory->make('Subscript',
+                my $lvalue = $factory->make('Subscript', kind => 'array',
                     inputs => [$array, $i_phi]);
                 my $store = $factory->make('Assign',
                     inputs => [$lvalue, $new_val]);
@@ -11919,6 +11941,19 @@ class SoN::FromOptree 0.01 {
             $c = $prev;
         }
         return undef;
+    }
+
+    # _foreach_sole_item($enteriter) -> the op of a foreach's list when it is a
+    # single expression (after the list's pushmark), else undef.
+    sub _foreach_sole_item ($op) {
+        my $list = $op->first;
+        $list = $list->sibling while $$list && $list->name ne 'null'
+            || ($$list && !($list->flags & 4));
+        return undef unless $$list && ($list->flags & 4);
+        my @items = grep { $_->name ne 'pushmark' }
+                    do { my @k; for (my $k = $list->first; $$k; $k = $k->sibling) { push @k, $k } @k };
+        return @items == 1 && $items[0]->can('first') && ($items[0]->flags & 4)
+            ? $items[0] : undef;
     }
 
     # _static_goto($op) -> the `goto LABEL` op when $op is one, or is an
