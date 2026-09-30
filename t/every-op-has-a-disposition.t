@@ -101,7 +101,7 @@ sub dispositions () {
 subtest 'every op perl can emit has a deliberate disposition' => sub {
     my ($how, $undecided) = dispositions();
 
-    diag(sprintf "  %-10s %3d", $_, $how->{$_})
+    note(sprintf "  %-10s %3d", $_, $how->{$_})
         for sort { $how->{$b} <=> $how->{$a} } keys %$how;
 
     diag("  UNDECIDED: $_") for @$undecided;

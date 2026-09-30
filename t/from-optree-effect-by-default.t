@@ -89,7 +89,7 @@ subtest 'unused effectful call kept; unused pure call dropped' => sub {
     # What is missing is the REMOVAL of a floatable node no Return reaches.
     # Marked TODO rather than weakened: the assertion is right and the pass is
     # not there yet.
-    my $g_uc = translate('sub { my $s = shift; uc($s); 42 }');
+    my $g_uc = translate('sub { no warnings "void"; my $s = shift; uc($s); 42 }');
     my @uc = calls_named($g_uc, 'uc');
     ok((grep { !is_effect($_) } @uc) == scalar @uc,
         'the unused pure uc Call is NOT control-pinned');

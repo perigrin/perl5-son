@@ -17,7 +17,7 @@ subtest 'try/catch translates to Region merge' => sub {
     like($text, qr/Start/, 'has Start');
     like($text, qr/Return/, 'has Return');
     like($text, qr/Region/, 'has Region merge for try/catch paths');
-    diag($text);
+    note($text);
 };
 
 subtest 'try/catch with variable binding' => sub {
@@ -26,7 +26,7 @@ subtest 'try/catch with variable binding' => sub {
     ok(defined $graph, 'got a graph');
     my $text = $renderer->render($graph);
     like($text, qr/Start/, 'has Start');
-    diag($text);
+    note($text);
 };
 
 done_testing;

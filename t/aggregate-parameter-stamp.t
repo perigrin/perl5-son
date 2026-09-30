@@ -42,6 +42,7 @@ sub params_for ( $src, $name ) {
             # Node-specific data rides under `fields`; `stamp` is top-level.
             push @params, {
                 sigil => ( $node->{fields} // {} )->{sigil},
+                name  => ( $node->{fields} // {} )->{name},
                 stamp => $node->{stamp},
             };
         }

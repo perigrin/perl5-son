@@ -4,8 +4,9 @@
 use v5.42.0;
 use utf8;
 use feature 'class';
-no warnings 'experimental::class';
 use Test2::V0;
+# AFTER Test2::V0, which re-enables all warnings on import.
+no warnings 'experimental::class';
 
 use SoN::OptSuppress;
 use SoN::FromOptree;

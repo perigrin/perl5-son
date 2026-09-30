@@ -23,7 +23,7 @@ subtest 'sub with single signature parameter' => sub {
     unlike($text, qr/PadAccess/,
         'and NOT a PadAccess -- the pad slot is storage, not the parameter');
     like($text, qr/Add/, 'has Add node');
-    diag($text);
+    note($text);
 };
 
 subtest 'sub with multiple signature parameters' => sub {
@@ -38,7 +38,7 @@ subtest 'sub with multiple signature parameters' => sub {
         or diag("Only found " . scalar @param_matches . " Parameter nodes");
     unlike($text, qr/PadAccess/, 'and no PadAccess for either');
     like($text, qr/Add/, 'has Add node');
-    diag($text);
+    note($text);
 };
 
 subtest 'sub with signature and default value' => sub {
@@ -49,7 +49,7 @@ subtest 'sub with signature and default value' => sub {
     my $text = $renderer->render($graph);
     like($text, qr/Parameter/, 'has Parameter for signature parameters');
     like($text, qr/Add/, 'has Add node');
-    diag($text);
+    note($text);
 };
 
 done_testing();

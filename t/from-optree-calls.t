@@ -17,7 +17,7 @@ subtest 'Direct sub call' => sub {
     ok(defined $graph, 'got a graph');
     my $text = $renderer->render($graph);
     like($text, qr/Call/, 'has Call node');
-    diag($text);
+    note($text);
 };
 
 subtest 'Builtin call (sqrt)' => sub {
@@ -27,7 +27,7 @@ subtest 'Builtin call (sqrt)' => sub {
     my $text = $renderer->render($graph);
     # sqrt may be inlined as a builtin op rather than entersub
     like($text, qr/Call|Constant/, 'has Call or folded result');
-    diag($text);
+    note($text);
 };
 
 done_testing;

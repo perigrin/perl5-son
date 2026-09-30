@@ -18,7 +18,7 @@ subtest 'Translate sub { 1 + 2 } (constant-folded by perl)' => sub {
     # Perl constant-folds 1+2 to 3, so we see a single Constant(3)
     like($text, qr/Constant\(3\)/, 'has Constant(3) (folded)');
     like($text, qr/Return/, 'has Return');
-    diag($text);
+    note($text);
 };
 
 subtest 'Translate sub with variables that prevent folding' => sub {
@@ -30,7 +30,7 @@ subtest 'Translate sub with variables that prevent folding' => sub {
     like($text, qr/Add/, 'has Add (not folded)');
     like($text, qr/Constant\(1\)/, 'has Constant(1)');
     like($text, qr/Constant\(2\)/, 'has Constant(2)');
-    diag($text);
+    note($text);
 };
 
 subtest 'Translate sub { my $x = 3; my $y = 4; $x * $y + 1 }' => sub {
@@ -40,7 +40,7 @@ subtest 'Translate sub { my $x = 3; my $y = 4; $x * $y + 1 }' => sub {
     my $text = $renderer->render($graph);
     like($text, qr/Multiply/, 'has Multiply');
     like($text, qr/Add/, 'has Add');
-    diag($text);
+    note($text);
 };
 
 subtest 'Constants get Int stamps' => sub {
@@ -48,7 +48,7 @@ subtest 'Constants get Int stamps' => sub {
     my $graph = SoN::FromOptree->translate($sub);
     my $text = $renderer->render($graph);
     like($text, qr/Constant\(42\).*\[Int\]/, 'integer constant stamped as Int');
-    diag($text);
+    note($text);
 };
 
 subtest 'Text rendering of output matches expected graph structure' => sub {
@@ -59,7 +59,7 @@ subtest 'Text rendering of output matches expected graph structure' => sub {
     like($text, qr/Constant\(20\)/, 'has 20');
     like($text, qr/Subtract/, 'has Subtract');
     like($text, qr/Return/, 'has Return');
-    diag($text);
+    note($text);
 };
 
 subtest 'Constant nodes carry correct const_type from optree translation' => sub {

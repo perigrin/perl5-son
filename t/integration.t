@@ -3,8 +3,9 @@
 
 use v5.42.0;
 use feature 'class';
-no warnings 'experimental::class';
 use Test2::V0;
+# AFTER Test2::V0, which re-enables all warnings on import.
+no warnings 'experimental::class';
 
 use SoN::FromOptree;
 use SoN::Render::Text;
@@ -25,20 +26,20 @@ subtest 'Simple addition' => sub {
     like($text, qr/Constant\(3\).*\[Int\]/, 'constant 3');
     like($text, qr/Constant\(4\).*\[Int\]/, 'constant 4');
     like($text, qr/Add/, 'addition');
-    diag($text);
+    note($text);
 };
 
 subtest 'Chained arithmetic' => sub {
     my ($graph, $text) = translate_and_render(eval 'sub { my $a = 1; my $b = 2; my $c = 3; ($a + $b) * $c }');
     like($text, qr/Add/, 'addition');
     like($text, qr/Multiply/, 'multiplication');
-    diag($text);
+    note($text);
 };
 
 subtest 'String concatenation' => sub {
     my ($graph, $text) = translate_and_render(eval 'sub { my $a = "hello"; my $b = " world"; $a . $b }');
     like($text, qr/Concat/, 'concatenation');
-    diag($text);
+    note($text);
 };
 
 # --- Variable assignment ---
@@ -47,7 +48,7 @@ subtest 'Variable assignment and use' => sub {
     my ($graph, $text) = translate_and_render(eval 'sub { my $x = 42; $x }');
     like($text, qr/Constant\(42\)/, 'constant assigned');
     like($text, qr/Return/, 'returns');
-    diag($text);
+    note($text);
 };
 
 # --- Conditionals ---
@@ -55,7 +56,7 @@ subtest 'Variable assignment and use' => sub {
 subtest 'Ternary operator' => sub {
     my ($graph, $text) = translate_and_render(eval 'sub { my $x = 1; $x ? 10 : 20 }');
     like($text, qr/TernaryExpr/, 'TernaryExpr node');
-    diag($text);
+    note($text);
 };
 
 subtest 'Short-circuit and' => sub {
@@ -63,7 +64,7 @@ subtest 'Short-circuit and' => sub {
     # And node (corpus logical.md L1); the backend expands it to the br+phi.
     my ($graph, $text) = translate_and_render(eval 'sub { my $a = 1; my $b = 2; $a && $b }');
     like($text, qr/And/, 'And node for &&');
-    diag($text);
+    note($text);
 };
 
 # --- Subroutine calls ---
@@ -71,7 +72,7 @@ subtest 'Short-circuit and' => sub {
 subtest 'Function call' => sub {
     my ($graph, $text) = translate_and_render(eval 'sub { abs(-42) }');
     like($text, qr/Call|Constant/, 'function call or folded');
-    diag($text);
+    note($text);
 };
 
 # --- Feature class ---
@@ -89,7 +90,7 @@ subtest 'Feature class field access' => sub {
     like($text, qr/FieldAccess.*index: 1.*IntegrationTestClass/, 'field $y access');
     like($text, qr/Multiply/, 'multiplication');
     like($text, qr/Add/, 'addition');
-    diag($text);
+    note($text);
 };
 
 subtest 'Feature class reader method' => sub {
@@ -98,7 +99,7 @@ subtest 'Feature class reader method' => sub {
     # variable is in the method's pad), which may appear as PadAccess
     # rather than FieldAccess depending on how perl compiles the reader.
     like($text, qr/FieldAccess|PadAccess/, 'reader accesses field via pad or field');
-    diag($text);
+    note($text);
 };
 
 # --- Comparison ---
@@ -106,7 +107,7 @@ subtest 'Feature class reader method' => sub {
 subtest 'Numeric comparison' => sub {
     my ($graph, $text) = translate_and_render(eval 'sub { my $a = 1; my $b = 2; $a < $b }');
     like($text, qr/NumLt/, 'less-than comparison');
-    diag($text);
+    note($text);
 };
 
 # --- Graph self-comparison ---

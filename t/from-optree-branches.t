@@ -15,7 +15,7 @@ subtest 'Ternary produces TernaryExpr node' => sub {
     ok(defined $graph, 'got a graph');
     my $text = $renderer->render($graph);
     like($text, qr/TernaryExpr/, 'has TernaryExpr node');
-    diag($text);
+    note($text);
 };
 
 # `&&`/`||` are operand-returning short-circuit ops. Per corpus/mdtest/
@@ -28,7 +28,7 @@ subtest 'Short-circuit && produces an And node' => sub {
     ok(defined $graph, 'got a graph');
     my $text = $renderer->render($graph);
     like($text, qr/And/, 'has And node');
-    diag($text);
+    note($text);
 };
 
 subtest 'Short-circuit || produces an Or node' => sub {
@@ -37,7 +37,7 @@ subtest 'Short-circuit || produces an Or node' => sub {
     ok(defined $graph, 'got a graph');
     my $text = $renderer->render($graph);
     like($text, qr/Or/, 'has Or node');
-    diag($text);
+    note($text);
 };
 
 done_testing;

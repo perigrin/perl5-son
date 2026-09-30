@@ -13,7 +13,7 @@ subtest 'Simple arithmetic without loops still works' => sub {
     my ($graph, $text) = _translate(eval 'sub { my $x = 0; my $y = 10; $x + $y }');
     like($text, qr/Start/, 'has Start');
     like($text, qr/Return/, 'has Return');
-    diag($text);
+    note($text);
 };
 
 subtest 'While loop produces Loop node' => sub {
@@ -22,13 +22,13 @@ subtest 'While loop produces Loop node' => sub {
     unlike($text, qr/If/, 'no If -- the Loop IS the header (corpus contract)');
     like($text, qr/NumLt/, 'has less-than comparison');
     like($text, qr/Region/, 'has the exit Region');
-    diag($text);
+    note($text);
 };
 
 subtest 'While loop has Phi for modified variable' => sub {
     my ($graph, $text) = _translate(eval 'sub { my $i = 0; while ($i < 10) { $i = $i + 1 } $i }');
     like($text, qr/Phi/, 'has Phi for loop-carried variable');
-    diag($text);
+    note($text);
 };
 
 subtest 'foreach over a range lowers as a counted loop' => sub {
