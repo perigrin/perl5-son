@@ -10097,7 +10097,10 @@ class SoN::FromOptree 0.01 {
     }
 
     sub _translate_while_loop ($cv, $cond_start, $sim, $factory, $opmap, $visited) {
-        my $frame = { label => $STMT_LABEL };
+        # nexts from creation: a scout records this loop's own `next`
+        # edges too, so a variable changed only on a path that `next`s is
+        # still seen as loop-carried. The real walk starts a fresh list.
+        my $frame = { label => $STMT_LABEL, nexts => [] };
         local @LOOP_STACK = (@LOOP_STACK, $frame);
         die "GAP: memory-reading loop condition not yet lowered\n"
             if _cond_reads_memory($cond_start);
@@ -10261,7 +10264,10 @@ class SoN::FromOptree 0.01 {
     # lexical, `stash::$name` for a package scalar. Defaults to the op's targ so
     # existing callers are unchanged.
     sub _translate_foreach_range ($cv, $enteriter, $sim, $factory, $opmap, $visited, $low, $high, $iter_key = undef) {
-        my $frame = { label => $STMT_LABEL };
+        # nexts from creation: a scout records this loop's own `next`
+        # edges too, so a variable changed only on a path that `next`s is
+        # still seen as loop-carried. The real walk starts a fresh list.
+        my $frame = { label => $STMT_LABEL, nexts => [] };
         local @LOOP_STACK = (@LOOP_STACK, $frame);
         my $i_targ = $iter_key // $enteriter->targ;
 
@@ -10463,7 +10469,7 @@ class SoN::FromOptree 0.01 {
     sub _translate_foreach_array ($cv, $enteriter, $sim, $factory, $opmap, $visited, $array, $iter_key = undef, $body_start = undef, $collect = undef, $collect_op = undef) {
         # A map or grep is not a loop `next`/`last` can name, whatever label
         # its statement carries.
-        my $frame = { label => ($collect ? undef : $STMT_LABEL) };
+        my $frame = { label => ($collect ? undef : $STMT_LABEL), nexts => [] };
         local @LOOP_STACK = (@LOOP_STACK, $frame);
         my $x_targ = $iter_key // $enteriter->targ;
 
@@ -11151,7 +11157,8 @@ class SoN::FromOptree 0.01 {
                 && $sim->stack_depth > 0) {
                 $loop_visited->{$$op}++;
                 $op = _handle_cond_expr($cv, $op, $sim, $factory, $opmap,
-                    $loop_visited);
+                    $loop_visited, undef,
+                    { node => $loop_node, breaks => $break_projs });
                 next;
             }
 
@@ -11636,6 +11643,13 @@ class SoN::FromOptree 0.01 {
                         bindings => $taken_sim->scope_bindings,
                     } if defined $break_projs;
                     # Continue on the skip arm alone: the taken arm has left.
+                    $sim->set_control($skip_proj);
+                    $op = $op->next;
+                    next;
+                }
+                # AN ARM THAT ENDED IN `next` has left for the latch; its edge
+                # is already recorded. Continue on the skip arm alone.
+                if (($taken_sig // '') eq 'nexted') {
                     $sim->set_control($skip_proj);
                     $op = $op->next;
                     next;
@@ -12789,7 +12803,32 @@ class SoN::FromOptree 0.01 {
         return $next->next;
     }
 
-    sub _handle_cond_expr ($cv, $op, $sim, $factory, $opmap, $visited, $exits = undef) {
+    # _arm_has_loop_control($start, $stop) -> true when a `next` or `last` of
+    # the ENCLOSING loop lies in the arm: the ops from $start, along ->next and
+    # a logop's ->other, up to $stop -- not into a nested loop, whose own are
+    # its own.
+    sub _arm_has_loop_control ($start, $stop) {
+        my %seen;
+        my @todo = ($start);
+        while (my $o = shift @todo) {
+            next unless ref($o) && $$o && !$seen{$$o}++;
+            next if defined $stop && $$o == $stop;
+            my $n = $o->name;
+            return 1 if $n eq 'next' || $n eq 'last';
+            if ($n eq 'enterloop' || $n eq 'enteriter') {
+                my $after = $o->can('lastop') ? $o->lastop : undef;
+                push @todo, $after->next if $after && $$after;
+                next;
+            }
+            push @todo, $o->next if $o->can('next');
+            push @todo, $o->other if $o->can('other') && ref($o->other);
+        }
+        return 0;
+    }
+
+    # $loop, from a loop-body walk: { node, breaks } -- so an arm's `next` or
+    # `last` can leave the loop rather than refuse.
+    sub _handle_cond_expr ($cv, $op, $sim, $factory, $opmap, $visited, $exits = undef, $loop = undef) {
         # A LIST-context ternary (`print $c ? "y" : "n"`) whose arms each produce
         # exactly ONE value is the same select shape as a scalar-context ternary:
         # each arm pops one value and the TernaryExpr picks between them. The
@@ -12823,7 +12862,8 @@ class SoN::FromOptree 0.01 {
             my @arm_exits;
             my $exit_sink = $exits // \@arm_exits;
             my ($end, $sig) = _walk_branch($cv, $start, $arm_sim, $factory,
-                $opmap, $visited, $exit_sink, 1, $join_addr);
+                $opmap, $visited, $exit_sink, 1, $join_addr,
+                ($loop ? ($loop->{node}, $loop->{breaks}, 1) : ()));
             die "GAP: function exit inside an if/else arm not yet lowered\n"
                 if ($sig // '') eq 'exited' && !defined $exits;
             # An arm stopping anywhere OTHER than the join hit an op the
@@ -12835,7 +12875,7 @@ class SoN::FromOptree 0.01 {
             # already recorded in the exit list, so there is nothing to merge
             # at the join and nothing after it in this arm to drop.
             if (defined $join_addr
-                && ($sig // '') ne 'exited'
+                && ($sig // '') !~ /\A(?:exited|nexted|broke)\z/
                 && !(defined $end && ref $end && $$end == $join_addr)) {
                 my $where = (defined $end && ref $end && $$end)
                     ? $end->name : 'end-of-chain';
@@ -12878,7 +12918,7 @@ class SoN::FromOptree 0.01 {
             my $val = $delta > 0
                 ? $arm_sim->pop_node
                 : _undef_constant($factory);
-            return ($val, $end, $arm_sim, $delta);
+            return ($val, $end, $arm_sim, $delta, $sig);
         };
 
         # Memory-SSA 2b-3: a flat if/else whose arm STORES to an element must
@@ -12910,7 +12950,11 @@ class SoN::FromOptree 0.01 {
                        || _arm_has_void_call($op->next, $op->other, $join_addr)  # false arm
                        || _arm_has_die($op->other, $op->next, $join_addr) # true arm
                        || _arm_has_die($op->next, $op->other, $join_addr);# false arm
-        if ($mem_branch) {
+        # AN ARM THAT LEAVES THE LOOP -- `if (C) { ... } else { ...; next }` --
+        # needs the branch built, so the leaving arm has its own Proj.
+        my $loop_branch = $loop && ( _arm_has_loop_control($op->other, $join_addr)
+                                  || _arm_has_loop_control($op->next, $join_addr) );
+        if ($mem_branch || $loop_branch) {
             # A value-context ternary whose arms store an ELEMENT
             # (`my $x = $c ? ($a[0]=7) : ($a[0]=8)`) would need the pushed
             # element-store value merged into a stack Phi -- not yet lowered, so
@@ -12927,6 +12971,8 @@ class SoN::FromOptree 0.01 {
             # 019f5368 review). The discarded form (WANT=0) is unaffected.
             my $want    = $op->flags & 3;   # OPf_WANT: 0=void/context 1=void 2=scalar 3=list
             my $is_void = $want == 1 || $want == 0;
+            die "GAP: a value-context ternary whose arm leaves the loop is not"
+              . " yet lowered\n" if $loop_branch && !$is_void;
             # A die arm aborts -- it produces no value and does not rejoin. When
             # the if/else IS the consumed expression (WANT==0 last-statement or
             # scalar), its value is the LIVE (non-die) arm's value alone; a die
@@ -12954,8 +13000,10 @@ class SoN::FromOptree 0.01 {
             # each arm's residual value (delta > 0) and returns it, so capture
             # each here -- a die-arm branch (below) needs the LIVE arm's value as
             # the merged result, and re-popping from the sim would find nothing.
-            my ($false_arm_val, undef, $false_sim) = $walk_arm->($op->next,  $false_proj);
-            my ($true_arm_val, $true_end, $true_sim) = $walk_arm->($op->other, $true_proj);
+            my ($false_arm_val, undef, $false_sim, undef, $false_sig)
+                = $walk_arm->($op->next,  $false_proj);
+            my ($true_arm_val, $true_end, $true_sim, undef, $true_sig)
+                = $walk_arm->($op->other, $true_proj);
             # $walk_arm already popped each arm's residual value, so any remaining
             # stack above base is dead leftover -- drain it so merge() does not
             # build a spurious ill-typed stack Phi over a dead value (bug found in
@@ -12967,6 +13015,29 @@ class SoN::FromOptree 0.01 {
             # merged control / memory / scope into the main sim (Region-input order
             # matches merge's own [self, other] so the backend's Region handling
             # works unchanged).
+            #
+            # AN ARM THAT LEFT THE LOOP is not a merge input: a `last` is an
+            # edge to the exit, a `next` one already recorded to the latch.
+            # The other arm carries on alone.
+            my %left;
+            for my $arm ([ true => $true_sim, $true_sig ], [ false => $false_sim, $false_sig ]) {
+                my ($which, $asim, $asig) = @$arm;
+                next unless ($asig // '') =~ /\A(?:nexted|broke)\z/;
+                $left{$which} = 1;
+                push $loop->{breaks}->@*, { proj => $asim->control,
+                                            bindings => $asim->scope_bindings }
+                    if $asig eq 'broke' && $loop && defined $loop->{breaks};
+            }
+            die "GAP: an if/else whose arms both leave the loop is not yet"
+              . " lowered\n" if keys(%left) == 2;
+            if (%left) {
+                my $stay = $left{true} ? $false_sim : $true_sim;
+                $sim->set_control($stay->control);
+                $sim->set_memory($stay->memory);
+                my $sc = $stay->scope_bindings;
+                $sim->define($_, $sc->{$_}) for keys %$sc;
+                return ($left{true} ? undef : $true_end) // $op->next;
+            }
             $true_sim->merge($false_sim, $factory, $if_node);
             $sim->set_control($true_sim->control);
             $sim->set_memory($true_sim->memory);
@@ -13813,6 +13884,25 @@ class SoN::FromOptree 0.01 {
                 # is right: an arm that leaves contributes no value, whichever
                 # way it left.
                 return ($op, 'broke') if $name eq 'last' && $in_loop;
+
+                # A BARE `next` ENDS THE ARM TOO -- `if (C) { ...; next }` --
+                # as an edge to this loop's latch, the same edge a `next
+                # LABEL` from a nested loop is (see $LOOP_STACK nexts). The
+                # caller continues on the other path alone.
+                if ($name eq 'next' && $in_loop && !_loop_control_frame($op)
+                        && @LOOP_STACK) {
+                    my $frame = $LOOP_STACK[-1];
+                    # Scout or real: this loop's OWN list either way (see the
+                    # frame's creation).
+                    if ($frame->{nexts}) {
+                        my $edge = SoN::FromOptree::StackSim->new(
+                            control => $sim->control, memory => $sim->memory);
+                        my $b = $sim->scope_bindings;
+                        $edge->define($_, $b->{$_}) for keys %$b;
+                        push $frame->{nexts}->@*, $edge;
+                    }
+                    return ($op, 'nexted');
+                }
 
                 die "GAP: a loop control (`$name`) inside a branch arm is not"
                   . " yet lowered"

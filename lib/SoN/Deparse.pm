@@ -2599,14 +2599,19 @@ class SoN::Deparse 0.01 {
                        pay => sub { join '', map { $break_assign{$_} }
                                              sort { $a <=> $b } keys %break_assign } }
             if defined $loop_exit_region;
-        for my $f ( @loop_frames[ 0 .. $#loop_frames - 1 ] ) {
+        for my $fi ( 0 .. $#loop_frames ) {
+            my $f = $loop_frames[$fi];
+            my $inner = $fi == $#loop_frames;
             push @edges, { region => $f->{exit}, word => "last $f->{label}",
                            frame => $f,
                            pay => sub { join '', map { $f->{breaks}{$_} }
                                                  sort { $a <=> $b } keys $f->{breaks}->%* } }
-                if defined $f->{exit};
+                if defined $f->{exit} && !$inner;
+            # The innermost loop's latch too: a `next` ending an arm of its
+            # own body. Plain `next` there; the label only for an outer loop.
             for my $r ( sort { $a <=> $b } keys $f->{latch}->%* ) {
-                push @edges, { region => $r, word => "next $f->{label}",
+                push @edges, { region => $r,
+                               word => $inner ? 'next' : "next $f->{label}",
                                frame => $f,
                                pay => sub { join '', map {
                                    sprintf("%s = %s;\n", $bound{ $_->{id} },
@@ -2629,9 +2634,16 @@ class SoN::Deparse 0.01 {
                 next unless $arm{$ix}
                     && $self->_reaches_region( $arm{$ix}, $edge->{region},
                                                $next_of );
+                # THE FALL-THROUGH REACHES THE LATCH TOO. When the If's join IS
+                # the latch -- `if (C) {A} else {B; next}` -- both arms land
+                # on it, and the `next` is the one that enters by an edge
+                # input, not by input 0.
+                next if $edge->{word} =~ /\Anext\b/
+                    && $self->_reaches_region( $arm{$ix},
+                           $nodes->{ $edge->{region} }{inputs}[0], $next_of );
                 if ( my $f = $edge->{frame} ) {
-                    $f->{used} = 1;
-                    $f->{nexted} = 1 if $edge->{word} =~ /\Anext /;
+                    $f->{used} = 1 if $edge->{word} =~ / /;
+                    $f->{nexted} = 1 if $edge->{word} =~ /\Anext\b/;
                 }
                 my $rest_ix = 1 - $ix;
                 # THE REST STOPS WHERE THE ENCLOSING WALK STOPS. Stopped only at
