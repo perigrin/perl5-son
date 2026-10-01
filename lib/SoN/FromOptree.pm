@@ -4295,9 +4295,21 @@ class SoN::FromOptree 0.01 {
         # for a 3-element array is 2, not 3; `for my $i (0..$#a)` then ran one
         # extra iteration). The array was pushed by the preceding padav/rv2av.
         # An empty array yields -1 (len 0 - 1), matching perl.
+        # THROUGH A REFERENCE TOO: `$#$r`, `$#{$r}` and `$r->$#*` put an rv2av
+        # sKR/1 (OPf_REF) under the av2arylen, which the deref handlers leave
+        # as the reference itself -- so this declined and the op table's
+        # Length rendered `length($r)`, the length of the ref's address.
+        # Any operand but a gv is a reference to dereference here, as for a
+        # count.
+        my $arylen_kid = $name eq 'av2arylen' && $op->can('first') ? $op->first : undef;
+        my $through_ref = $arylen_kid && $$arylen_kid
+            && $arylen_kid->name eq 'rv2av'
+            && _deref_operand($arylen_kid)->name ne 'gv';
         if ($name eq 'av2arylen' && $sim->stack_depth > 0
-                && _is_aggregate_node($sim->peek_node)) {
+                && ($through_ref || _is_aggregate_node($sim->peek_node))) {
             my $agg = $sim->pop_node;
+            $agg = _deref_read($factory, $sim, $agg, '@')
+                if $through_ref && !_is_aggregate_node($agg);
             my $len = _make_count($factory, $agg, $sim);
             my $one = $factory->make('Constant',
                 value => 1, const_type => 'integer',
@@ -4380,10 +4392,14 @@ class SoN::FromOptree 0.01 {
         # ANY OPERAND BUT A gv IS A REFERENCE, as for the scalar count above:
         # the const/padsv allow-list let `@$_` over a map's topic, and
         # `@{ r() }`, flatten to the reference itself.
+        # WANT 0 IS THE CALLER'S CONTEXT -- a sub returning `$r->@*` -- and
+        # the value is the array itself, which `@{$r}` is in either context.
+        # Asking for LIST only dropped the deref and returned the reference
+        # (chalk's MOP::Field `attributes`).
         if ($name eq 'rv2av'
                 && $op->can('first') && ${$op->first}
                 && _deref_operand($op)->name ne 'gv'
-                && ($op->flags & 3) == 3          # OPf_WANT_LIST
+                && ( ($op->flags & 3) == 3 || ($op->flags & 3) == 0 )
                 && $sim->stack_depth > 0) {
             my $top = $sim->pop_node;
 
@@ -4414,7 +4430,7 @@ class SoN::FromOptree 0.01 {
         if ($name eq 'rv2hv'
                 && $op->can('first') && ${$op->first}
                 && _deref_operand($op)->name ne 'gv'
-                && ($op->flags & 3) == 3          # OPf_WANT_LIST
+                && ( ($op->flags & 3) == 3 || ($op->flags & 3) == 0 )
                 && $sim->stack_depth > 0) {
             my $top = $sim->pop_node;
 

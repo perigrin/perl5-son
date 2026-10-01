@@ -139,4 +139,38 @@ round_trips(<<'SRC', 'an array iterator a callee writes: the element changes');
 sub bump { $_[0]++ } my @a = (1, 2); for my $x (@a) { bump($x) } print "@a\n";
 SRC
 
+# THE LAST INDEX OF A REFERENCED ARRAY -- `$#$r`, `$#{$r}`, `$r->$#*` --
+# fell through to the op table's `Length` and rendered `length($r)`: the
+# string length of the reference's address. chalk's CoreItemIndex looped
+# `for my $alt_idx (0 .. $expressions->$#*)` and ran ~20 times over 2.
+round_trips(<<'SRC', 'the last index through a reference, three spellings');
+sub f { my $r = $_[0]; return join ",", $#$r, $#{$r}, $r->$#* } print f([5, 6, 7]), "\n";
+SRC
+
+round_trips(<<'SRC', 'a range to the last index of a reference');
+sub f { my $r = $_[0]; my @o; for my $i (0 .. $r->$#*) { push @o, $r->[$i] } "@o" } print f([5, 6, 7]), "\n";
+SRC
+
+round_trips(<<'SRC', 'the last index of an empty referenced array');
+sub f { my $r = $_[0]; return $#$r } print f([]), "\n";
+SRC
+
+# A DEREF A SUB RETURNS takes the CALLER'S context -- want 0 on the rv2av --
+# and the list-deref handler asked for LIST (3) only, so the deref was
+# dropped and the sub returned the reference: chalk's MOP::Field
+# `method attributes() { return $attributes->@* }` handed back one ARRAY ref,
+# and chalk's compiler then miscompiled every class with a field.
+round_trips(<<'SRC', 'a returned array deref, three spellings');
+sub a { my $r = shift; return $r->@* } sub b { my $r = shift; $r->@* } sub c { my $r = shift; return @$r }
+my @x = a([1, 2]); my @y = b([3, 4, 5]); my @z = c([6]); print scalar(@x), scalar(@y), scalar(@z), "\n";
+SRC
+
+round_trips(<<'SRC', 'a returned array deref read in scalar context');
+sub a { my $r = shift; return $r->@* } my $n = a([7, 8, 9]); print "$n\n";
+SRC
+
+round_trips(<<'SRC', 'a returned hash deref');
+sub h { my $r = shift; return %$r } my %c = h({ k => 1, j => 2 }); print join(",", map { "$_=$c{$_}" } sort keys %c), "\n";
+SRC
+
 done_testing;
