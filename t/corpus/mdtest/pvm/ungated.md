@@ -89,18 +89,17 @@ main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
   [Print, ~, [8, 9], 3, Scalar], # 10
   [Return, ~, [1], 10]]} # 11
-main::c: {start: 0, returns: [10], nodes: [
+main::c: {start: 0, returns: [9], nodes: [
   [Start], # 0
   [EntryDef, {package: main, sigil: $, symbol: "n"}, ~, ~, Scalar], # 1
-  [MemStart], # 2
+  [Call, {dispatch_kind: method, name: state, param_names: []}, [1], 0, Unknown], # 2
   [EntryDef, {package: main, sigil: $, symbol: "n"}, [2], ~, Scalar], # 3
   [Coerce, {from_repr: Scalar, to_repr: Num}, [3], ~, Num], # 4
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 5
   [Add, ~, [4, 5], ~, Num], # 6
-  [Call, {dispatch_kind: method, name: state, param_names: []}, [1], 0, Unknown], # 7
-  [EntryWrite, ~, [1, 6, 2], 7, Unknown], # 8
-  [EntryDef, {package: main, sigil: $, symbol: "n"}, [8], ~, Scalar], # 9
-  [Return, ~, [9], 8]]} # 10
+  [EntryWrite, ~, [1, 6, 2], 2, Unknown], # 7
+  [EntryDef, {package: main, sigil: $, symbol: "n"}, [7], ~, Scalar], # 8
+  [Return, ~, [8], 7]]} # 9
 ```
 
 ## `field` without the class feature is a method call
