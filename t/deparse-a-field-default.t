@@ -89,6 +89,17 @@ class K { field $h = {}; field $l = []; method add($k) { $h->{$k} = 1; push @$l,
 my $o = K->new; $o->add("a"); print $o->add("b"), K->new->add("c"), "\n";
 SRC
 
+# `= false` WAS DROPPED, and the :param became REQUIRED: the constant reader
+# knew Int, Num and Str, returned no stamp for a boolean, and the caller
+# skipped the field. chalk's Node::Return `synthetic`, Node::Call
+# `paren_form` and four more -- "Required parameter is missing" in 69 of
+# chalk's test files against the emitted lib/.
+round_trips(<<'SRC', 'a boolean default on a :param field');
+use v5.42; use experimental 'class';
+class K { field $s :param :reader = false; field $t :param :reader = true; }
+my $o = K->new; print $o->s ? "s" : "-", $o->t ? "t" : "-", K->new(s => 1)->s ? "S" : "-", "\n";
+SRC
+
 # A DEFAULT THE WIRE CANNOT CARRY -- a computed one -- was dropped just as
 # silently. It refuses now, naming the field, rather than emitting a class
 # whose field starts undef.

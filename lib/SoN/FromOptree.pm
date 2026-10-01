@@ -5606,6 +5606,22 @@ class SoN::FromOptree 0.01 {
                 # the graph can see, so no earlier read or binding is current.
                 my $forwardable = ( $aliased || $carried
                     || !_package_scalars_written()->{$key} ) && $gv_name ne '@';
+                # A CALL ARGUMENT IS OPf_MOD AND A READ. Perl passes arguments
+                # by alias, so it marks them as potential lvalues -- the padsv
+                # handler's trap one op over. For a lexical the name token is
+                # harmless (the variable exists in the emission); for a loop's
+                # aliased topic it is not -- the topic IS the bound element,
+                # and `map { f($_) }` called f with the global `$main::_`.
+                # Scanned to the consuming op as padsv's is: an entersub reads.
+                if ($is_lvalue && $aliased && $existing) {
+                    my %seen;
+                    for (my $o = $op->next; $$o && !$seen{$$o}++; $o = $o->next) {
+                        my $m = $o->name;
+                        next if $m =~ /\A(?:padsv|padav|padhv|const|gvsv|gv|null|method_named|method)\z/;
+                        $is_lvalue = 0 if $m eq 'entersub';
+                        last;
+                    }
+                }
                 if ($existing && !$is_lvalue && $forwardable) {
                     $sim->push_node($existing);
                 }
@@ -7155,6 +7171,25 @@ class SoN::FromOptree 0.01 {
                 }
             }
 
+            # `$field++` IS A SIXTH WRITE FORM. A field's lvalue padsv is a
+            # FieldAccess, which matched none of the arms above: the Add was
+            # built and dropped, and the counter never counted (chalk's
+            # CoreItemIndex gave every item id 0). The FieldAccess stays the
+            # store target; the arithmetic reads a FRESH read pinned BEFORE the
+            # store, which the deparser binds there -- a field read has no
+            # memory version, so an unpinned one spelled after the store would
+            # read the new value.
+            my $field_lvalue;
+            if ($old->isa('SoN::IR::Node::FieldAccess')) {
+                $field_lvalue = $old;
+                $targ = undef;
+                $old = $factory->make_unique('FieldAccess',
+                    field_index => $field_lvalue->field_index,
+                    field_stash => $field_lvalue->field_stash);
+                $old->set_control_in($sim->control);
+                $sim->set_control($old);
+            }
+
             my $one = $factory->make('Constant',
                 value => 1, const_type => 'integer',
                 stamp => SoN::IR::Stamp->new(type => 'Int'));
@@ -7178,6 +7213,12 @@ class SoN::FromOptree 0.01 {
             if (defined $entry_lvalue) {
                 $sim->define(_stash_key($entry_lvalue), $new);
                 _entry_store($factory, $sim, $entry_lvalue, $new);
+            }
+            elsif (defined $field_lvalue) {
+                my $store = $factory->make('Assign',
+                    inputs => [$field_lvalue, $new]);
+                $store->set_control_in($sim->control);
+                $sim->set_control($store);
             }
             elsif (defined $cell_lvalue) {
                 my $write = $factory->make('CellWrite',

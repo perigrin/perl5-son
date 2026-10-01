@@ -83,4 +83,27 @@ round_trips(<<'SRC', 'a hash deref of a call result in list context');
 sub r { return { a => 1 } } my %h = %{ r() }; print join(",", %h), "\n";
 SRC
 
+# A LOOP TOPIC PASSED TO A CALL is OPf_MOD -- an argument is passed by
+# alias -- and the read took that for a store target: a name token,
+# `$main::_`, where the map's element was bound. `map { f($_) }` called f
+# with the global (chalk's emitted lib/ ran many such maps).
+round_trips(<<'SRC', 'a map topic passed to a sub');
+sub f { uc shift } my @r = map { f($_) } qw(a b); print "@r\n";
+SRC
+
+round_trips(<<'SRC', 'a foreach topic passed to a method');
+package O; sub new { bless {}, shift } sub g { uc $_[1] }
+package main; my $o = O->new; my $s = ""; for (qw(a b)) { $s .= $o->g($_) } print "$s\n";
+SRC
+
+round_trips(<<'SRC', 'a grep topic passed to a sub');
+sub big { $_[0] > 2 } sub keep { grep { big($_) } @_ } my @r = keep(1 .. 5); print "@r\n";
+SRC
+
+# A TOPIC STORE STAYS A STORE: the write-back to the element still goes
+# through the name.
+round_trips(<<'SRC', 'a foreach topic assigned in the body');
+my @a = (1, 2); for (@a) { $_ = $_ * 10 } print "@a\n";
+SRC
+
 done_testing;

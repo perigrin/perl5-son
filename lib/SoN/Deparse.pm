@@ -3419,7 +3419,13 @@ class SoN::Deparse 0.01 {
             # TIME. Measured: `sub shout { print "loud\n" }` printed "loud"
             # twice. An effect already placed in the chain is returned by
             # falling off the end, exactly as perl does.
-            return '' if $v && defined $v->{control_in};
+            # UNLESS IT IS BOUND: falling off the end returns the LAST
+            # statement, which is this effect only when nothing follows it.
+            # `my $i = $c++; return $i` binds the field's old value and then
+            # stores -- fallen off, the method returned the store's value.
+            # Bound, the temporary is the value and naming it re-runs nothing.
+            return '' if $v && defined $v->{control_in}
+                      && !exists $bound{ $v->{id} };
 
             return sprintf("return %s;\n", $self->_expr($in[0]));
         }

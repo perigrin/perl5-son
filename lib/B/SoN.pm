@@ -3127,7 +3127,12 @@ sub _wire_field_defaults {
         }
         else {
             my ( $value, $stamp, $const_type ) = _const_op_value( $cv, $dop );
-            next unless defined $stamp;
+            # A CONSTANT IT CANNOT READ is a default it cannot carry -- said
+            # so, as for a computed one, rather than dropped.
+            unless ( defined $stamp ) {
+                $f->{default_unmodeled} = 1;
+                next;
+            }
             $field_type = $stamp->type;
             $value_node = $factory->make('Constant',
                 value => $value, stamp => $stamp, const_type => $const_type );
@@ -3259,6 +3264,16 @@ sub _const_op_value {
     if ( ( !$$sv || $sv->isa('B::SPECIAL') ) && $targ ) {
         my $padl = $cv->PADLIST;
         $sv = $padl->ARRAYelt(1)->ARRAYelt($targ) if $$padl;
+    }
+    # PERL'S SHARED SVs, as FromOptree's constant reader maps them: `= true`
+    # and `= false` fold to &PL_sv_yes / &PL_sv_no, a B::SPECIAL whose index
+    # names which. Unanswered, a `:param = false` default was dropped and the
+    # field became required.
+    if ( $sv && $sv->isa('B::SPECIAL') ) {
+        my $idx = $$sv;
+        return ( undef, SoN::IR::Stamp->new( type => 'Undef' ), 'undef' ) if $idx == 1;
+        return ( 1,  SoN::IR::Stamp->new( type => 'Boolean' ), 'boolean' ) if $idx == 2;
+        return ( '', SoN::IR::Stamp->new( type => 'Boolean' ), 'boolean' ) if $idx == 3;
     }
     return ( undef, undef, undef ) unless $sv && $$sv && !$sv->isa('B::SPECIAL');
 
