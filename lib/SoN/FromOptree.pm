@@ -5899,8 +5899,15 @@ class SoN::FromOptree 0.01 {
             my $has_code = (( $op->precomp // '' ) =~ /\(\?\??\{/)
                 || ( $matcher && $matcher->isa('SoN::IR::Node::Constant')
                      && ($matcher->value // '') =~ /\(\?\??\{/ );
+            # A VOID MATCH WITH CAPTURES IS THERE FOR THEM: `$s =~ /(.)/;
+            # ... $1`. Unpinned, nothing emitted it -- the RegexCapture names
+            # it as an input, but only a chain node is placed -- and $1 read
+            # whatever an earlier match left.
+            my $void_capture = ($op->flags & 3) == 1       # OPf_WANT_VOID
+                && ( $op->precomp // '' ) =~ /\((?!\?)/;
             my $pin = ( $ctx->{mode} // '' ) eq 'main'
-                && ( $demoted_subject || $flags =~ /g/ || $has_code );
+                && ( $demoted_subject || $flags =~ /g/ || $has_code
+                     || $void_capture );
             if (defined $pattern) {
                 my $make = $pin ? 'make_unique' : 'make';
                 $node = $factory->$make('RegexMatch',

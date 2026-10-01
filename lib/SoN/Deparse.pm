@@ -191,6 +191,25 @@ class SoN::Deparse 0.01 {
     # compare equal.
     field $ordered_for;
     field @ordered;
+    # _param_as_variable($param) -- is this signature parameter also used AS A
+    # VARIABLE: does the graph hold a PadAccess with its name? A parameter
+    # read as `$_[N]` serves every plain read; one that is an lvalue --
+    # `pos($input) = $position` -- names its pad slot, and spelling the read
+    # `$_[0]` and the slot `my $input` made them two variables: pos was set
+    # on a fresh undef while the match ran on $_[0] (chalk's
+    # Bootstrap::Terminal::match never advanced).
+    method _param_as_variable ($param) {
+        my $f = $param->{fields} // {};
+        my $name = $f->{name} // return 0;
+        return 0 unless ($f->{sigil} // '$') eq '$' && $name =~ /\A\$(\w+)\z/;
+        my $sym = $1;
+        return scalar grep {
+            ($_->{op} // '') eq 'PadAccess'
+            && (($_->{fields} // {})->{symbol} // '') eq $sym
+            && (($_->{fields} // {})->{sigil} // '') eq '$'
+        } $self->_nodes_in_order;
+    }
+
     method _nodes_in_order () {
         if (!defined $ordered_for || $ordered_for != $nodes) {
             $ordered_for = $nodes;
@@ -1499,7 +1518,25 @@ class SoN::Deparse 0.01 {
             map { "my $hoisted{$_};\n" }
             sort keys %hoisted;
 
-        return $decls . $prologue . $body;
+        # A PARAMETER USED AS A VARIABLE is one, bound from @_ before anything
+        # reads it -- see _param_as_variable.
+        my $params = join '', map {
+            my $p = $_;
+            my $f = $p->{fields} // {};
+            my $read = sprintf('$_[%d]', $f->{index} // 0);
+            my $when = $f->{default_when};
+            if (defined $when) {
+                my $d = $self->_expr(($p->{inputs} // [])->[0]);
+                my $ix = $f->{index} // 0;
+                $read = $when eq 'absent' ? "(\@_ > $ix ? $read : ($d))"
+                      : $when eq 'undef'  ? "($read // ($d))"
+                      :                     "($read || ($d))";
+            }
+            sprintf("my %s = %s;\n", $f->{name}, $read);
+        } grep { $self->_param_as_variable($_) }
+          grep { ($_->{op} // '') eq 'Parameter' } $self->_nodes_in_order;
+
+        return $params . $decls . $prologue . $body;
     }
 
     # Walk forward from $id, emitting a statement per control successor, until
@@ -4473,7 +4510,12 @@ class SoN::Deparse 0.01 {
             # is an effect-free value (the producer refuses any other), so
             # spelling it at each read is the same value.
             my $when = ( $n->{fields} // {} )->{default_when};
-            if (defined $when) {
+            # A PARAMETER USED AS A VARIABLE reads as its name instead: it is
+            # declared once, from @_, with any default applied there.
+            if ($self->_param_as_variable($n)) {
+                $text = ( $n->{fields} // {} )->{name};
+            }
+            elsif (defined $when) {
                 die "GAP: a defaulted Parameter with " . scalar(@in)
                   . " inputs is not yet rendered\n" unless @in == 1;
                 my $d = $self->_expr($in[0]);
