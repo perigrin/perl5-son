@@ -57,4 +57,12 @@ round_trips(<<'SRC', 'a hash built by map, shared with a sub');
 my @l = qw(a b); my %h = map { $_ => 1 } @l; sub has { $h{$_[0]} ? "y" : "n" } print has("a"), has("c"), "\n";
 SRC
 
+# AFTER A STORE ITS INPUTS READ: a shared hash built before it, holding a
+# pinned constructor, gave the map's Phi a store two levels down, and the
+# store rule placed the hash after THAT -- still above the loop.
+round_trips(<<'SRC', 'a map-built hash after a hash of constructors');
+my %A = (x => [1]); my %H = map { $_ => 1 } qw(a b);
+sub has { $H{$_[0]} ? "y" : "n" } sub a { $A{x}[0] } print has("a"), a(), "\n";
+SRC
+
 done_testing;

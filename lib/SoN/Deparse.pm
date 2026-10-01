@@ -1357,17 +1357,20 @@ class SoN::Deparse 0.01 {
             # `my @r = (\($x), \($y))` above `my $x = 1`, so the references
             # were to the package variables. The dependency is two levels
             # down, where the bound-input rule above cannot see it.
-            if (defined(my $store = $self->_latest_store_read($n))) {
-                push $after_effect{$store}->@*, $n;
-                next;
-            }
-
             # NOR ONE HOLDING A LOOP PHI -- the Assign loop's rule, kept
             # identical: `my %h = map { $_ => 1 } @l` holds the map's
             # accumulator, and hoisted it read @phi before the loop filled
             # it (chalk's TypedInvariant.pm, undeclared under strict).
+            # BEFORE THE STORE RULE: the Phi settles when its loop ends, which
+            # is after any store its inputs read -- placed after such a store,
+            # it still came out above the loop.
             if (defined(my $join = $self->_loop_phi_join($n))) {
                 push $after_region{$join}->@*, $n;
+                next;
+            }
+
+            if (defined(my $store = $self->_latest_store_read($n))) {
+                push $after_effect{$store}->@*, $n;
                 next;
             }
 
@@ -1408,14 +1411,6 @@ class SoN::Deparse 0.01 {
                 next;
             }
 
-            # NOR ONE WHOSE VALUE READS A STORE -- the aggregate loop's rule,
-            # kept identical here. `my ($p, $q) = (\$x, \$y)` over demoted
-            # slots reads the Assign that declared them, two levels down.
-            if (defined(my $store = $self->_latest_store_read($n))) {
-                push $after_effect{$store}->@*, $n;
-                next;
-            }
-
             # A BINDING OF A LOOP PHI CANNOT FLOAT EITHER, and a loop Phi is
             # not in %bound -- it gets its variable from _emit_loop, not from
             # the chain walker, so the rule above does not see it.
@@ -1439,6 +1434,15 @@ class SoN::Deparse 0.01 {
             my $join = $self->_loop_phi_join($n);
             if (defined $join) {
                 push $after_region{$join}->@*, $n;
+                next;
+            }
+
+            # NOR ONE WHOSE VALUE READS A STORE -- the aggregate loop's rule,
+            # kept identical here, and AFTER the
+            # loop-Phi rule for the same reason as there. `my ($p, $q) = (\$x, \$y)` over demoted
+            # slots reads the Assign that declared them, two levels down.
+            if (defined(my $store = $self->_latest_store_read($n))) {
+                push $after_effect{$store}->@*, $n;
                 next;
             }
 

@@ -373,6 +373,10 @@ class SoN::FromOptree 0.01 {
     # the program) -- $ctx->{shared_lexicals}, reachable from the PadAccess
     # constructors that have no $ctx. See _file_lexicals_shared.
     our $SHARED_SLOTS;
+    # The main walk's demoted slots (referenced or shared lexicals), for the
+    # arm and loop-body walkers, whose contexts are built fresh: without it a
+    # store in an arm was an SSA rebind nothing outside the arm could see.
+    our $ADDR_TAKEN;
 
     # `state $x = V` is a `once` op whose ->other is the store: the store runs
     # the first time the statement is reached and never again. The program's
@@ -763,16 +767,32 @@ class SoN::FromOptree 0.01 {
     #
     # Not cached: a test process translates many programs, each with its own
     # subs.
+    # EVERY STASH, not only main's. A class's methods live in the class's
+    # stash (`K::zero`) while closing over the file's lexicals all the same,
+    # and scanning %main:: alone missed them: the program folded a read of a
+    # lexical a method increments to its initial value. _outer_main_slots
+    # keeps only subs whose outside is this file, so other files' do not
+    # count.
     sub _file_lexicals_shared () {
         my %shared;
-        my $main = B::main_cv;
-        for my $name (sort keys %main::) {
-            next unless $name =~ /^[A-Za-z_]\w*$/;
-            my $glob = $main::{$name};
-            next unless ref(\$glob) eq 'GLOB';
-            my $code = *{$glob}{CODE} or next;
-            my $sub_cv = eval { B::svref_2object($code) } or next;
-            $shared{$_} = 1 for values %{ _outer_main_slots($sub_cv) };
+        my %seen_stash;
+        my @stashes = ('main::');
+        no strict 'refs';
+        while (defined(my $pkg = shift @stashes)) {
+            next if $seen_stash{$pkg}++;
+            my $stash = \%{$pkg};
+            for my $name (sort keys %$stash) {
+                if ($name =~ /\A[A-Za-z_]\w*::\z/) {
+                    push @stashes, $pkg eq 'main::' ? $name : "$pkg$name";
+                    next;
+                }
+                next unless $name =~ /^[A-Za-z_]\w*$/;
+                my $glob = $stash->{$name};
+                next unless ref(\$glob) eq 'GLOB';
+                my $code = *{$glob}{CODE} or next;
+                my $sub_cv = eval { B::svref_2object($code) } or next;
+                $shared{$_} = 1 for values %{ _outer_main_slots($sub_cv) };
+            }
         }
         return \%shared;
     }
@@ -858,6 +878,7 @@ class SoN::FromOptree 0.01 {
             : { map { $_ => 1 } keys %{ _outer_main_slots($cv) } };
         $ctx->{addr_taken}{$_} = 1 for keys $ctx->{shared_lexicals}->%*;
         local $SHARED_SLOTS = $ctx->{shared_lexicals};
+        local $ADDR_TAKEN   = $ctx->{addr_taken};
 
         # A FLIP-FLOP'S STATE SLOT STARTS UNDEF, as every pad slot does, and
         # is bound so here: a loop's scout finds carried slots by comparing
@@ -1659,8 +1680,53 @@ class SoN::FromOptree 0.01 {
                 die "GAP: `$spelling` into something other than a lexical scalar\n"
                     unless $tgt_op->name eq 'padsv' && $tgt_op->targ;
                 my $targ = $tgt_op->targ;
-                die "GAP: `$spelling` into a referenced lexical\n"
-                    if $ctx->{addr_taken}{$targ};
+                # A REFERENCED OR SHARED LEXICAL IS A SLOT IN MEMORY, read and
+                # written like any demoted variable -- and `$C //= make()` is
+                # the memo idiom, whose right side must run ONLY when the test
+                # fails. So: the target padsv already pushed the slot's read;
+                # branch on it, walk the right side on the taken arm and store
+                # it there, merge, and read the slot again for the value.
+                if ($ctx->{addr_taken}{$targ}) {
+                    my $current = $sim->pop_node;
+                    my $test = $name eq 'dorassign'
+                        ? $factory->make('Defined', inputs => [$current])
+                        : $current;
+                    my $if_node = $factory->make_cfg('If',
+                        inputs => [$sim->control, $test]);
+                    # `&&=` assigns when the test holds; `||=` and `//=` when
+                    # it fails.
+                    my ($set_idx, $keep_idx) = $name eq 'andassign' ? (0, 1) : (1, 0);
+                    my $set_sim = $sim->snapshot;
+                    $set_sim->set_control($factory->make_cfg('Proj',
+                        inputs => [$if_node], index => $set_idx));
+                    $sim->set_control($factory->make_cfg('Proj',
+                        inputs => [$if_node], index => $keep_idx));
+                    my $base_depth = $set_sim->stack_depth;
+                    my @arm_exits;
+                    my (undef, $sig) = _walk_branch($cv, $op->other, $set_sim,
+                        $factory, $opmap, \%visited, \@arm_exits, 1, $$store);
+                    die "GAP: `$spelling` whose right side leaves or yields no"
+                      . " single value\n"
+                        if ($sig // '') ne '' || @arm_exits
+                        || $set_sim->stack_depth != $base_depth + 1;
+                    my $rhs = $set_sim->pop_node;
+                    my $slot = sub ($s) {
+                        $factory->make('PadAccess', targ => $targ,
+                            do { my ($sg, $sy) = _padparts($cv, $targ);
+                                 (sigil => $sg, symbol => $sy) },
+                            ($ctx->{shared_lexicals}{$targ} ? (shared => 1) : ()),
+                            (defined $s->memory ? (inputs => [ $s->memory ]) : ()));
+                    };
+                    my $write = $factory->make('Assign',
+                        inputs => [$slot->($set_sim), $rhs]);
+                    $write->set_control_in($set_sim->control);
+                    $set_sim->set_control($write);
+                    $set_sim->set_memory($write) if defined $set_sim->memory;
+                    $sim->merge($set_sim, $factory, $if_node);
+                    $sim->push_node($slot->($sim));
+                    $op = $op->next;
+                    next;
+                }
                 my $current = $sim->lookup($targ);
                 die "GAP: `$spelling` into a lexical with no binding in this graph\n"
                     unless defined $current;
@@ -3691,6 +3757,7 @@ class SoN::FromOptree 0.01 {
             );
             $node->set_control_in($sim->control);
             $sim->set_control($node);
+            _call_memory_barrier($sim, $node, $ctx);
             $sim->push_node($node) unless $void;
             $ctx->{pending_method} = undef;
             return;
@@ -3820,16 +3887,25 @@ class SoN::FromOptree 0.01 {
         # before.
         # AND A FILE LEXICAL SHARED WITH A NAMED SUB, for the same reason: the
         # callee may write it (`sub bump { $count++ }`).
-        if (defined $sim->memory
-            && ( (grep { $_->captured_written }
-                    values +($ctx->{cells} // {})->%*)
-                 || %{ _package_scalars_written() }
-                 || %{ $ctx->{shared_lexicals} // {} } )) {
-            $sim->set_memory($node);
-        }
+        _call_memory_barrier($sim, $node, $ctx);
 
         $sim->push_node($node) unless $void;
         return;
+    }
+
+    # _call_memory_barrier($sim, $call, $ctx) -- advance memory across a call
+    # when something it may write exists: a written capture cell, a written
+    # package scalar, a file lexical shared with a sub. See the direct-call
+    # site for the measurements; a METHOD call is the same hazard -- a method
+    # incrementing a file lexical left the program's later read ordered before
+    # the calls, and it saw the initial value.
+    sub _call_memory_barrier ($sim, $node, $ctx) {
+        $sim->set_memory($node)
+            if defined $sim->memory
+            && ( (grep { $_->captured_written }
+                    values +($ctx->{cells} // {})->%*)
+                 || %{ _package_scalars_written() }
+                 || %{ $ctx->{shared_lexicals} // {} } );
     }
 
     # Shared op-handler core for all three walkers.
@@ -8306,7 +8382,12 @@ class SoN::FromOptree 0.01 {
             # writes locations, and sassign already makes its PostfixDeref form
             # an ordered memory store. Floating, it was placed by id order in
             # the prologue -- before the `my` it writes through.
-            if (grep { ( $_->isa('SoN::IR::Node::PadAccess') && $_->targ
+            # AND IN A LOOP BODY, where it binds on each pass: unpinned, the
+            # prologue rules placed it above the inner loop whose induction
+            # variable it reads -- the loop-body `my @a`'s defect, one node
+            # kind over.
+            if (@LOOP_STACK
+                || grep { ( $_->isa('SoN::IR::Node::PadAccess') && $_->targ
                            && $ctx->{addr_taken}{ $_->targ } )
                        || $_->isa('SoN::IR::Node::PostfixDeref') } $lhs->@*) {
                 $node->set_control_in($sim->control);
@@ -11031,7 +11112,9 @@ class SoN::FromOptree 0.01 {
         # so every pass starts from the OUTER binding. This walk models exactly
         # one iteration and stops at the `unstack`/`leaveloop` that ends it, so
         # that stop is the boundary and _restore_locals is called there.
-        my $ctx = { mode => 'loop', local_saves => [], in_loop_body => 1 };
+        my $ctx = { mode => 'loop', local_saves => [], in_loop_body => 1,
+                    addr_taken => $ADDR_TAKEN // {},
+                    shared_lexicals => $SHARED_SLOTS // {} };
         my $exit_proj;
         # A foreach's iteration `and` is consumed by its caller before the body
         # walk begins, so its body has NO loop condition left to find: the first
@@ -12364,7 +12447,7 @@ class SoN::FromOptree 0.01 {
     # no repr (zhi 019f5368). A field write is a TARGMY op (OPpTARGET_MY) or a
     # padsv_store whose targ's padname is_field.
     # Bounded at the JOIN for the same reason as _arm_has_element_store above.
-    sub _arm_has_field_store ($cv, $start, $stop, $join = undef) {
+    sub _arm_has_field_store ($cv, $start, $stop, $join = undef, $fields_only = 0) {
         $stop = _op_addr($stop);
         my $padlist = $cv->PADLIST;   # loop-invariant; the padname table is per-CV
         return 0 unless $$padlist;
@@ -12373,9 +12456,17 @@ class SoN::FromOptree 0.01 {
         for (my $op = $start; $$op && $$op != $stop && !$seen{$$op}; $op = $op->next) {
             last if defined $join && $$op == $join;
             $seen{$$op} = 1;
+            # A STORE INTO A DEMOTED SLOT threads on control just as a field
+            # store does: an lvalue padsv (a store target, an increment's
+            # operand) or a padsv_store over a referenced or shared lexical.
+            return 1 if !$fields_only && $ADDR_TAKEN
+                && ($op->name eq 'padsv' || $op->name eq 'padsv_store')
+                && $op->targ && $ADDR_TAKEN->{ $op->targ }
+                && ($op->name eq 'padsv_store' || ($op->flags & 32));   # OPf_MOD
             my $is_targmy   = $op->can('targ') && $op->targ && ($op->private & 16);
             my $is_padstore = $op->name eq 'padsv_store' && $op->can('targ') && $op->targ;
             next unless $is_targmy || $is_padstore;
+            return 1 if !$fields_only && $ADDR_TAKEN && $ADDR_TAKEN->{ $op->targ };
             my $pn = $padnames->ARRAYelt($op->targ);
             return 1 if ref $pn eq 'B::PADNAME' && SoN::FieldInfo::is_field($pn);
         }
@@ -13071,13 +13162,16 @@ class SoN::FromOptree 0.01 {
                        # forked the pre-branch control without an If.
                        || _arm_allocates($op->other, $op->next, $join_addr)
                        || _arm_allocates($op->next, $op->other, $join_addr);
-        # AN ARM THAT ONLY ALLOCATES has a real value to merge, unlike a store
-        # or a call statement: the Phi over the two arm values is the result.
+        # AN ARM THAT YIELDS A VALUE merges it: the Phi over the two arm
+        # values is the result, whatever else the arm does -- allocate, call,
+        # store into a slot. An element store and a die keep their own rules
+        # below. (The Undef fallback this replaces is what made a consumed
+        # value refuse: an unmerged residual would silently read undef.)
+        # A CLASS FIELD STORE keeps its own rule (below): its arm residual is
+        # unstamped, and a consumer cannot take an unstamped value Phi.
         my $alloc_only = $mem_branch && !$elem_branch
-            && !_arm_has_field_store($cv, $op->other, $op->next, $join_addr)
-            && !_arm_has_field_store($cv, $op->next, $op->other, $join_addr)
-            && !_arm_has_void_call($op->other, $op->next, $join_addr)
-            && !_arm_has_void_call($op->next, $op->other, $join_addr)
+            && !_arm_has_field_store($cv, $op->other, $op->next, $join_addr, 1)
+            && !_arm_has_field_store($cv, $op->next, $op->other, $join_addr, 1)
             && !_arm_has_die($op->other, $op->next, $join_addr)
             && !_arm_has_die($op->next, $op->other, $join_addr);
         # AN ARM THAT LEAVES THE LOOP -- `if (C) { ... } else { ...; next }` --
@@ -13149,10 +13243,12 @@ class SoN::FromOptree 0.01 {
             # AN ARM THAT LEFT THE LOOP is not a merge input: a `last` is an
             # edge to the exit, a `next` one already recorded to the latch.
             # The other arm carries on alone.
+            # NOR ONE THAT RETURNED: its edge to the function exit is recorded,
+            # and merging it too gave its Proj two successors.
             my %left;
             for my $arm ([ true => $true_sim, $true_sig ], [ false => $false_sim, $false_sig ]) {
                 my ($which, $asim, $asig) = @$arm;
-                next unless ($asig // '') =~ /\A(?:nexted|broke)\z/;
+                next unless ($asig // '') =~ /\A(?:nexted|broke|exited)\z/;
                 $left{$which} = 1;
                 push $loop->{breaks}->@*, { proj => $asim->control,
                                             bindings => $asim->scope_bindings }
@@ -13166,6 +13262,10 @@ class SoN::FromOptree 0.01 {
                 $sim->set_memory($stay->memory);
                 my $sc = $stay->scope_bindings;
                 $sim->define($_, $sc->{$_}) for keys %$sc;
+                # The value, when it is used, is the staying arm's alone.
+                my $stay_val = $left{true} ? $false_arm_val : $true_arm_val;
+                $sim->push_node($stay_val)
+                    if defined $stay_val && $want != 1;
                 return ($left{true} ? undef : $true_end) // $op->next;
             }
             # Each arm's value back on its stack, so merge() builds the Phi.
@@ -13479,7 +13579,9 @@ class SoN::FromOptree 0.01 {
         # it the arm and the main walk keep separate views and an op walked in
         # one is re-walked by the other.
         my $ctx = { mode => 'branch', visited => $visited,
-                    local_saves => [] };
+                    local_saves => [],
+                    addr_taken => $ADDR_TAKEN // {},
+                    shared_lexicals => $SHARED_SLOTS // {} };
         # The arm's ENTRY op, kept because $op is mutated by the walk below. A
         # back-edge test needs it: "did this unstack jump to something on the
         # path we have already walked" is the question, and the path starts

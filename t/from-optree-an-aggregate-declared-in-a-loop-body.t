@@ -70,6 +70,16 @@ sub f { my $s = ""; for my $i (@_) { my @a = (5); $a[0] += $i; $s .= "$a[0];" } 
 print f(1, 2, 3), "\n";
 SRC
 
+# A LIST ASSIGN OF UNKNOWN ARITY IN A LOOP BODY stays an Assign node, and
+# with no control input it was placed by the prologue rules -- above the
+# inner loop whose induction variable it reads (chalk's BNF/Target/C.pm:
+# `$phi127` used before its declaration).
+round_trips(<<'SRC', 'a list assign from a deref in a nested loop body');
+my @g = ([[1, 2], [3, 4]], [[5, 6]]); my $s = "";
+for my $preds (@g) { for my $pair (@$preds) { my ($a, $b) = @$pair; $s .= "$a$b;" } }
+print "$s\n";
+SRC
+
 # OUTSIDE A LOOP the prologue placement is right and stays.
 round_trips(<<'SRC', 'an array declared outside any loop');
 my @a = (5); $a[0] += 1; print "$a[0]\n";

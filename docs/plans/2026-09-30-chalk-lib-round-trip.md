@@ -82,6 +82,10 @@ Measured against a snapshot of chalk HEAD 5948f648 (179 modules, 43k lines,
   - `grep` over a named array holding a literal list refuses: "an element
     of a `PostfixDeref` spelled `(1, 2, ...)` has no aggregate sigil to
     switch" (`my @l = (1..6); my @e = grep {...} @l`). Honest, not wrong.
+  - A dynamic method call (`$obj->$m(...)`) is built as a floating Call with
+    no control_in and no memory barrier, unlike a named method or a direct
+    call (FromOptree _handle_entersub, `dynamic_method`): its effects are
+    unordered.
   - SoN::Serialize::JSON recurses per node (line 456): comp/use.t's program
     graph draws "Deep recursion on anonymous subroutine" warnings. Output is
     right; the walk should be iterative.
