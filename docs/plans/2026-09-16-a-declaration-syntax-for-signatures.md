@@ -1,8 +1,20 @@
 # A declaration syntax for signatures
 
-perigrin's ideal spelling:
+perigrin's ideal spelling, IN PERL'S ORDER -- name, then attributes, then the
+signature:
 
-    sub :infix + (Num $x, Num $y) Num;
+    sub + :infix (Num $x, Num $y) Num;
+
+THE ORDER IS PERL'S, not a choice. Measured on 5.42:
+
+    sub f :lvalue ($x) {}    OK
+    sub f ($x) :lvalue {}    "Subroutine attributes must come before the signature"
+    sub :lvalue f {}         syntax error
+
+This doc first spelled it `sub :infix + (...)`; perigrin settled the order as
+above (relayed by the pvm session, whose `Module/Name.pmt` declaration files
+ship it: `sub await :keyword(TERMEXPR);`, `sub blessed ($);`). It is also the
+order of the 2026-09-17 `sub + :internal (...)` spelling.
 
 It is the right shape, and it makes "an operator is a function with a weird
 spelling" SYNTACTIC rather than merely architectural: `:infix` is the spelling,
@@ -11,7 +23,7 @@ before it can be implemented.
 
 ## Problem 1 (WITHDRAWN): the lattice already handles it
 
-I claimed `sub :infix + (Num $x, Num $y) Num;` was wrong because "Int + Int is
+I claimed `sub + :infix (Num $x, Num $y) Num;` was wrong because "Int + Int is
 Int, not Num". perigrin: check the type lattice.
 
     Int -> Num -> Str -> Scalar -> List
@@ -91,9 +103,9 @@ declaration pinned down. The notation was a category error, not merely ugly
 
 Bounded polymorphism does describe the rule:
 
-    sub :infix +  <T <= Num>    (T $x, T $y) T;
-    sub :infix && <T <= Scalar> (T $x, T $y) T;
-    sub :infix /                (Num $x, Num $y) Num;
+    sub + :infix  <T <= Num>    (T $x, T $y) T;
+    sub && :infix <T <= Scalar> (T $x, T $y) T;
+    sub / :infix                (Num $x, Num $y) Num;
 
 T binds to the join of the actual argument types, capped by its bound, and that
 reproduces every measured row in both groups.
@@ -131,7 +143,7 @@ instantiate per callsite is a different artifact from the one T1 needs. The
 
 The syntax perigrin proposed --
 
-    sub :infix + (Num $x, Num $y) Num;
+    sub + :infix (Num $x, Num $y) Num;
 
 -- is the right T1 artifact AS WRITTEN. The declared return type is the cap; T1
 meets it with the operand join and stamps the node. No T, no :join attribute,
