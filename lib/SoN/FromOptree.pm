@@ -373,6 +373,11 @@ class SoN::FromOptree 0.01 {
     # the program) -- $ctx->{shared_lexicals}, reachable from the PadAccess
     # constructors that have no $ctx. See _file_lexicals_shared.
     our $SHARED_SLOTS;
+    # True while a scout or probe (_scout_mutated_targs, _body_writes_targ)
+    # is walking. A refusal raised under it is
+    # a refusal by the slot-discovery pass rather than by the pass that builds
+    # the graph, and saying so is what makes the difference testable.
+    our $IN_SCOUT = 0;
     # The main walk's demoted slots (referenced or shared lexicals), for the
     # arm and loop-body walkers, whose contexts are built fresh: without it a
     # store in an arm was an SSA rebind nothing outside the arm could see.
@@ -4372,10 +4377,12 @@ class SoN::FromOptree 0.01 {
             return ($op->next, 'handled');
         }
 
+        # ANY OPERAND BUT A gv IS A REFERENCE, as for the scalar count above:
+        # the const/padsv allow-list let `@$_` over a map's topic, and
+        # `@{ r() }`, flatten to the reference itself.
         if ($name eq 'rv2av'
                 && $op->can('first') && ${$op->first}
-                && (_deref_operand($op)->name eq 'const'
-                    || _deref_operand($op)->name eq 'padsv')
+                && _deref_operand($op)->name ne 'gv'
                 && ($op->flags & 3) == 3          # OPf_WANT_LIST
                 && $sim->stack_depth > 0) {
             my $top = $sim->pop_node;
@@ -4406,8 +4413,7 @@ class SoN::FromOptree 0.01 {
         # miscompile, not a wide answer.
         if ($name eq 'rv2hv'
                 && $op->can('first') && ${$op->first}
-                && (_deref_operand($op)->name eq 'const'
-                    || _deref_operand($op)->name eq 'padsv')
+                && _deref_operand($op)->name ne 'gv'
                 && ($op->flags & 3) == 3          # OPf_WANT_LIST
                 && $sim->stack_depth > 0) {
             my $top = $sim->pop_node;
@@ -9659,6 +9665,11 @@ class SoN::FromOptree 0.01 {
         # conservative direction -- it declines the aliasing write-back path
         # and leaves the body to the real walk, which then raises the honest
         # refusal for whatever the body actually contains.
+        # A PROBE IS A SCOUT, and must say so: the function-exit list is
+        # global, and a guarded `return` in a nested loop walked here recorded
+        # a real exit built from probe nodes -- a second, scout-only inner
+        # loop leaked into the graph ("a control node with 2 successors").
+        local $IN_SCOUT = 1;
         my $walked = eval {
             _walk_loop_body($cv, $start_op, $scout_sim, $scout_factory, $opmap,
                 {}, {}, undef, undef, $cond_consumed);
@@ -9717,10 +9728,6 @@ class SoN::FromOptree 0.01 {
         return;
     }
 
-    # True while _scout_mutated_targs is walking. A refusal raised under it is
-    # a refusal by the slot-discovery pass rather than by the pass that builds
-    # the graph, and saying so is what makes the difference testable.
-    our $IN_SCOUT = 0;
 
     sub _scout_mutated_targs ($cv, $start_op, $sim, $opmap, $extra_targs = [], $cond_consumed = 0) {
         my $scout_factory = SoN::IR::NodeFactory->new();

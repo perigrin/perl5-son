@@ -68,4 +68,19 @@ round_trips(<<'SRC', 'the count through a variable, unchanged');
 my $r = [1, 2]; print scalar(@$r), "\n";
 SRC
 
+# THE LIST-CONTEXT DEREF HAD THE SAME ALLOW-LIST (const, padsv), so `@$_`
+# over a map's topic flattened to the reference itself: the inner map ran
+# once, over the ref, and doubled its address. perl `2 4|6`.
+round_trips(<<'SRC', 'a nested map over the outer topic');
+sub f { my @a = map { join(" ", map { $_ * 2 } @$_) } @_; return join("|", @a) } print f([1, 2], [3]), "\n";
+SRC
+
+round_trips(<<'SRC', 'a list deref of a call result');
+sub r { return [4, 5] } my @l = @{ r() }; print "@l\n";
+SRC
+
+round_trips(<<'SRC', 'a hash deref of a call result in list context');
+sub r { return { a => 1 } } my %h = %{ r() }; print join(",", %h), "\n";
+SRC
+
 done_testing;
