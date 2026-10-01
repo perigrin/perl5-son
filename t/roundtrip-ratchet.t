@@ -1,5 +1,5 @@
-# ABOUTME: The goal's two round-trip numbers, guarded -- a regression fails here
-# ABOUTME: rather than waiting for someone to remember to run a census by hand.
+# ABOUTME: The goal's round-trip numbers -- pvm corpus, perl's t/, chalk's lib/ -- guarded,
+# ABOUTME: so a regression fails here rather than waiting for a census run by hand.
 use v5.42.0;
 use Test2::V0;
 use FindBin;
@@ -35,6 +35,16 @@ my %FLOOR = (
     # how it got that way.
     corpus => 226,   # measured on t/corpus/mdtest/pvm (pvm cdce17ba, 226 cases), 2026-09-29
     perl_t => 11,    # base/lex.t refuses on a `caller` bound to a list
+    # chalk's lib/ at the commit tools/chalk-lib-roundtrip.pl pins (5948f648,
+    # 179 modules), measured 2026-10-01.
+    chalk_compiles => 129,
+);
+
+# A CEILING, NOT A FLOOR: graphs B::SoN skipped in chalk's lib/. A module can
+# compile with some of its graphs skipped, so COMPILES alone could hold while
+# the parse gate slipped. Lowering this needs no reason; raising it does.
+my %CEILING = (
+    chalk_skipped_graphs => 279,
 );
 
 # ONE RUN PER TOOL. The corpus census takes ~3 minutes, and a first draft of
@@ -52,7 +62,7 @@ sub census ($tool, @args) {
 }
 
 SKIP: {
-    skip_all 'set SON_RATCHET=1 to run the round-trip censuses (~4 minutes)'
+    skip_all 'set SON_RATCHET=1 to run the round-trip censuses (~15 minutes)'
         unless $ENV{SON_RATCHET};
 
     subtest 'the corpus round-trip does not regress' => sub {
@@ -99,6 +109,33 @@ SKIP: {
             or do { diag $out; return };
         is $n->{EMITS_INVALID_PERL}, 0,
             'EMITS_INVALID_PERL is zero' or diag $out;
+    };
+
+    # CHALK'S lib/, one module at a time. The census reads a pinned commit from
+    # a chalk clone (SON_CHALK, or ~/dev/chalk) -- never the working tree -- so
+    # chalk's own progress cannot move these numbers.
+    subtest "chalk's lib/ round-trip does not regress" => sub {
+        my ( $n, $out ) = census('chalk-lib-roundtrip.pl');
+
+        is $n->{_cases}, 179, 'the census found every module at the pinned commit'
+            or do { diag $out; return };
+
+        my $sum = 0;
+        $sum += $n->{$_} // 0 for qw(COMPILES COMPILES_PARTIAL INVALID REFUSED NOJSON);
+        is $sum, $n->{_cases}, 'every module landed in exactly one bucket'
+            or diag $out;
+
+        ok( ( $n->{COMPILES} // 0 ) >= $FLOOR{chalk_compiles},
+            "COMPILES $n->{COMPILES} >= floor $FLOOR{chalk_compiles}" )
+            or diag $out;
+        ok defined $n->{INVALID}, 'the census counted INVALID' or diag $out;
+        is $n->{INVALID}, 0, 'no module emits Perl that does not compile'
+            or diag $out;
+        ok defined $n->{SKIPPED_GRAPHS}, 'the census counted skipped graphs'
+            or diag $out;
+        ok( ( $n->{SKIPPED_GRAPHS} // 9e9 ) <= $CEILING{chalk_skipped_graphs},
+            "SKIPPED_GRAPHS $n->{SKIPPED_GRAPHS} <= ceiling $CEILING{chalk_skipped_graphs}" )
+            or diag $out;
     };
 }
 
