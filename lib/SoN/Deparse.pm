@@ -987,8 +987,14 @@ class SoN::Deparse 0.01 {
             # `my @e = bare()` through `$eff`, one undef where perl has the
             # empty list. The context perl compiled the call in is the fact.
             my $want = ($n->{fields} // {})->{want} // '';
-            $bound{$id} = (($n->{stamp} // '') eq 'List'
-                           || (($n->{op} // '') eq 'Call' && $want eq 'list'))
+            # A CALL'S RECORDED CONTEXT OUTRANKS ITS STAMP. A sub returning
+            # `$r->@*` is stamped List, and `my $n = items(...)` in scalar
+            # context bound it to an ARRAY temporary -- which ran the call in
+            # list context and gave the elements where perl gives the count.
+            my $is_call = ($n->{op} // '') eq 'Call';
+            $bound{$id} = ( $is_call && $want ne ''
+                              ? $want eq 'list'
+                              : ($n->{stamp} // '') eq 'List' )
                 ? sprintf('@eff%d', $id) : sprintf('$eff%d', $id);
         }
 

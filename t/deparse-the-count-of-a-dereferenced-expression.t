@@ -173,4 +173,15 @@ round_trips(<<'SRC', 'a returned hash deref');
 sub h { my $r = shift; return %$r } my %c = h({ k => 1, j => 2 }); print join(",", map { "$_=$c{$_}" } sort keys %c), "\n";
 SRC
 
+# A CALL IN SCALAR CONTEXT OF A LIST-STAMPED SUB is bound to a scalar: its
+# recorded `want` outranks the callee's inferred stamp. Bound to an array,
+# `my $count = items([4, 5])` ran the call in list context and printed the
+# elements, 45, where perl prints the count (found by the corpus case for
+# the returned deref, once the deref itself was fixed).
+round_trips(<<'SRC', 'a list-returning sub called in scalar context and read later');
+sub items { my $r = shift; return $r->@* }
+my @got = items([1, 2, 3]); my $count = items([4, 5]);
+print scalar(@got), " ", $count, "\n";
+SRC
+
 done_testing;
