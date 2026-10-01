@@ -1781,6 +1781,9 @@ class SoN::FromOptree 0.01 {
                     $op = $op->next;
                     next;
                 }
+                # A LOOP'S VALUE IS ITS OWN -- see _settle_loop_value. A bare
+                # block above is not a loop: its value is its last statement.
+                $ctx->{loop_floor}{$$ls} = $sim->stack_depth if ref $ls && $$ls;
                 # A BARE BLOCK WITH A `continue` IS NEITHER SHAPE. It compiles
                 # to a real enterloop whose nextop is the CONTINUE BODY rather
                 # than the leaveloop, so the bare-block test above declines and
@@ -1953,6 +1956,7 @@ class SoN::FromOptree 0.01 {
 
             # leaveloop - end of loop or bare block: restore any `local`.
             if ($name eq 'leaveloop') {
+                _settle_loop_value($op, $sim, $factory, $ctx);
                 _restore_locals($sim, $ctx, $factory);
                 $op = $op->next;
                 next;
@@ -5020,6 +5024,25 @@ class SoN::FromOptree 0.01 {
     # OPf_REF, and relying on that would key the question on a second
     # incidental bit rather than on what the op does. See
     # docs/plans and the opf-mod-is-not-a-write note.
+    # _settle_loop_value($leaveloop, $sim, $factory, $ctx) -- what a foreach
+    # leaves on the stack is its OWN value, not its body's. perl returns its
+    # shared false from a loop that is a sub's last statement -- the last
+    # failed test (measured: one value, builtin::is_bool) -- and the body's
+    # residue had leaked into the Return instead, evaluated after the loop:
+    # chalk's CoreItemIndex `build_from_grammar` returned `$e->[$i]` past the
+    # end and died on an empty grammar. The floor is recorded by the foreach
+    # handler; a void loop (OPf_WANT 1) yields nothing.
+    sub _settle_loop_value ($op, $sim, $factory, $ctx) {
+        my $floor = delete $ctx->{loop_floor}{$$op};
+        return unless defined $floor;
+        $sim->pop_node while $sim->stack_depth > $floor;
+        return if ($op->flags & 3) == 1;   # OPf_WANT_VOID
+        $sim->push_node($factory->make('Constant', value => '',
+            const_type => 'boolean',
+            stamp => SoN::IR::Stamp->new(type => 'Boolean')));
+        return;
+    }
+
     # _is_call_argument($op) -> true when $op is an argument of a sub or
     # method call: its parent, past the null list op, is the entersub.
     #
@@ -7635,6 +7658,9 @@ class SoN::FromOptree 0.01 {
               . " expression already spent the mark) is not yet lowered\n"
                 unless $sim->has_mark;
             my $bounds = $sim->pop_to_mark;
+            # The depth the loop leaves behind -- see _settle_loop_value.
+            $ctx->{loop_floor}{ ${ $op->lastop } } = $sim->stack_depth
+                if $op->can('lastop') && ${ $op->lastop };
             # A DEREFERENCED ARRAY -- `@$r`, `$r->@*`, `$obj->m->@*` -- is the
             # loop's list, but rv2av in this context leaves the REFERENCE on
             # the stack, not the array: the walker saw one Call or Subscript
@@ -11749,15 +11775,21 @@ class SoN::FromOptree 0.01 {
             # A VALUE-CONTEXT `&&` / `||` IN THE BODY -- the test of `next
             # unless defined $x && length $x`, a `$a[$i] || 10` default -- is
             # a value, built as the arm walker builds it: an And/Or over the
-            # two operands. The loop's own condition is a VOID and, so a
-            # non-void one here is always nested. Without this the loop-
-            # condition handler below claimed it and refused "nested and/or
-            # inside a loop body" (93 graphs in chalk's lib/). An arm that
-            # does anything but yield a value keeps refusing.
+            # two operands. Without this the loop-condition handler below
+            # claimed it and refused "nested and/or inside a loop body" (93
+            # graphs in chalk's lib/). An arm that does anything but yield a
+            # value keeps refusing.
             # `E // V` IS THE SAME SHAPE, a DefinedOr, as the main walk builds.
+            # NOT THE LOOP'S OWN CONDITION. Its `and` carries the LOOP's
+            # context: void mid-sub, but want 0 -- the caller's -- when the
+            # loop is a sub's last statement, and this claimed it and refused
+            # "a short-circuit in a loop body whose arm is not a value".
+            # Measured: a value and/or here, the inner `&&` of a compound
+            # condition included, is want 2 or 3; only the loop's own test
+            # is 0 or 1.
             if (($name eq 'and' || $name eq 'or' || $name eq 'dor')
                     && $sim->stack_depth > 0
-                    && ($op->flags & 3) != 1            # not OPf_WANT_VOID
+                    && ($op->flags & 3) >= 2            # OPf_WANT_SCALAR or _LIST
                     && $op->can('other') && ${$op->other}
                     && !_arm_has_die($op->other, ${ $op->next })
                     && !_arm_has_void_call($op->other, ${ $op->next })
@@ -14329,6 +14361,7 @@ class SoN::FromOptree 0.01 {
             # Handling it here the way the main walk does removes the underflow
             # at its source, so the refusal is gone rather than relaxed.
             if ($name eq 'leaveloop') {
+                _settle_loop_value($op, $sim, $factory, $ctx);
                 _restore_locals($sim, $ctx, $factory);
                 $op = $op->next;
                 next;
