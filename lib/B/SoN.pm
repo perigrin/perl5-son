@@ -3041,7 +3041,9 @@ sub _wire_field_defaults {
     # Each field produces one initfield op, in declaration (fieldix) order.
     my @defaults;   # fieldix => default const op (or undef)
     my @unmodeled;  # fieldix => 1 when a default exists that is not modeled
-    my $idx = 0;
+    # The same first index _extract_fields numbers from.
+    my ($idx) = sort { $a <=> $b } map { $_->{fieldix} } @$fields;
+    $idx //= 0;
     _walk_initfields( $cv->ROOT, sub ($default_op, $has_default) {
         $unmodeled[$idx] = 1 if $has_default && !defined $default_op;
         $defaults[$idx++] = $default_op;
@@ -3310,7 +3312,11 @@ sub _extract_fields {
     my $init = SoN::ClassAux::initfields_cv($stash);
     if ( defined $init ) {
         my $init_cv = svref_2object($init);
-        my $ix      = 0;
+        # FROM THE CLASS'S FIRST INDEX, NOT 0. perl numbers fields across the
+        # parent chain, so a subclass's first field follows its parent's --
+        # counted from 0 it found no name (`$field0`) and the wrong index,
+        # and every access to it refused.
+        my $ix      = _first_fieldix(\%varname);
         _walk_initfield_ops( $init_cv->ROOT, sub ($op) {
             my ( $is_param, $param_name ) = _initfield_param( $init_cv, $op );
             my $name = $varname{$ix}
@@ -3326,6 +3332,14 @@ sub _extract_fields {
     }
 
     return \@fields;
+}
+
+# _first_fieldix(\%varname) -- the index of the class's own first field: the
+# lowest one its field list names, or 0 for a class with none.
+sub _first_fieldix {
+    my ($varname) = @_;
+    my ($min) = sort { $a <=> $b } keys %$varname;
+    return $min // 0;
 }
 
 # _walk_initfield_ops($op, $cb) — invoke $cb once per `initfield` op, in optree
