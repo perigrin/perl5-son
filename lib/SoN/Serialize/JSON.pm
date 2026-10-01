@@ -655,13 +655,21 @@ my %BOOLEAN_FIELD = map { $_ => 1 } qw(
     uses_args is_reader invocant has_default is_param is_class
 );
 
-sub _json_booleans ($data) {
+# A MAP KEYED BY NAMES -- methods, subs, classes -- has user-chosen keys, and a
+# method called `is_param` is a name, not the flag. Its values are converted;
+# its keys are not read as field names. Converted at every depth, the methods
+# map turned `is_param => "K::is_param"` into `is_param => true`.
+my %NAME_KEYED = map { $_ => 1 } qw(
+    classes methods subs method_signatures method_return_types
+);
+
+sub _json_booleans ($data, $names = 0) {
     if (ref $data eq 'HASH') {
         return { map {
             my $v = $data->{$_};
-            $_ => ( $BOOLEAN_FIELD{$_} && !ref $v
+            $_ => ( !$names && $BOOLEAN_FIELD{$_} && !ref $v
                     ? ( $v ? JSON::PP::true : JSON::PP::false )
-                    : _json_booleans($v) )
+                    : _json_booleans($v, !$names && $NAME_KEYED{$_}) )
         } keys %$data };
     }
     return [ map { _json_booleans($_) } @$data ] if ref $data eq 'ARRAY';
