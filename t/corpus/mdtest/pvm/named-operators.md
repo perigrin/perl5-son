@@ -4,13 +4,13 @@ Operators spelled as words, and the question they all raise: HOW FAR
 DOES THE ARGUMENT RUN.
 
 **Tier 04 operators.** Introduces `defined`, `undef`, `chr`, `ord`,
-`index`, `sprintf`, `substr`. Depends on 03_context.
+`index`, `sprintf`, `substr`, `uc`. Depends on 03_context.
 
-Three of these fold away when their operands are constant -- `chr(74)`
+Four of these fold away when their operands are constant -- `chr(74)`
 arrives as `const[PV "J"]` -- so each case spells its construct with a
 runtime operand, the rule the rest of this tier lives under.
 
-WHAT MAKES THEM A TOPIC rather than seven unrelated builtins is that the
+WHAT MAKES THEM A TOPIC rather than eight unrelated builtins is that the
 op name answers almost nothing about them. `substr` is one op for three
 arities and for the lvalue form; `sprintf` is one op whose argument
 count is decided by its format's CONTENTS; `undef` is one word for two
@@ -394,4 +394,38 @@ main::__PROGRAM__: {start: 0, returns: [31], nodes: [
   [Print, ~, [29], 17, Scalar], # 30
   [Return, ~, [1], 30], # 31
   [Call, {dispatch_kind: builtin, name: substr, param_names: []}, [11, 12, 13], ~, Str]]} # 32
+```
+
+## `uc` is a named unary, so a comma ends its argument
+
+`uc $s, "-", "def"` upper-cases `$s` alone: the comma is below a named
+unary, so the rest are `print`'s further arguments. With a constant
+operand it folds -- `uc "abc"` arrives as `const[PV "ABC"]` -- so the
+case uses a runtime one. Measured 5.42.0, the stream holds `uc[t2] sK/1`
+and then `print`.
+
+```perl
+my $s = "abc";
+print uc $s, "-", "def", "\n";
+```
+
+```behavior
+parses: yes
+```
+
+```output
+ABC-def
+```
+
+```ir
+main::__PROGRAM__: {start: 0, returns: [8], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Constant, {const_type: string, value: abc}, ~, ~, Str], # 2
+  [Call, {dispatch_kind: builtin, name: uc, param_names: []}, [2], ~, Str], # 3
+  [Constant, {const_type: string, value: "-"}, ~, ~, Str], # 4
+  [Constant, {const_type: string, value: def}, ~, ~, Str], # 5
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 6
+  [Print, ~, [3, 4, 5, 6], 0, Scalar], # 7
+  [Return, ~, [1], 7]]} # 8
 ```

@@ -380,3 +380,67 @@ main::valued: {start: 0, returns: [2], nodes: [
   [Constant, {const_type: string, value: v}, ~, ~, Str], # 1
   [Return, ~, [1], 0]]} # 2
 ```
+
+## A `map` topic passed to a sub
+
+`$_` inside `map` is an alias for the current element, and passing it
+to a sub passes that alias on, so perl flags the `gvsv` `OPf_MOD`. It
+is still a read of the current element, not of the global `$_`: an
+implementation that reads the flag as a write, or the op as the
+global, prints the wrong thing. Found by B::SoN translating chalk's
+lib/ and running chalk's own suite against the emitted Perl.
+
+```perl
+sub shout { return uc $_[0] }
+my @loud = map { shout($_) } qw(a b c);
+print "@loud\n";
+```
+
+```behavior
+parses: yes
+```
+
+```output
+A B C
+```
+
+```ir
+main::__PROGRAM__: {start: 0, returns: [23], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Constant, {const_type: string, value: a}, ~, ~, Str], # 2
+  [Constant, {const_type: string, value: b}, ~, ~, Str], # 3
+  [Constant, {const_type: string, value: c}, ~, ~, Str], # 4
+  [ArrayLiteral, ~, [2, 3, 4], ~, List], # 5
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 6
+  [Loop, {bound: entry}, [0], 0], # 7
+  [Phi, {region: 7}, [6, 27], ~, Int], # 8
+  [MemStart], # 9
+  [Subscript, {kind: array}, [5, 8, 9], ~, Str], # 10
+  [Proj, {index: 0}, [7]], # 11
+  [Call, {dispatch_kind: direct, name: main::shout, param_names: [], want: list}, [10], 11, Str], # 12
+  [EntryDef, {package: main, sigil: $, symbol: "\""}, [12], ~, Scalar], # 13
+  [Coerce, {from_repr: Scalar, to_repr: Str}, [13], ~, Str], # 14
+  [ArrayLiteral, ~, ~, ~, Array], # 15
+  [Phi, {region: 7}, [15, 28], ~, Array], # 16
+  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [14, 16], ~, Str], # 17
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 18
+  [Concat, ~, [17, 18], ~, Str], # 19
+  [Proj, {index: 1}, [7]], # 20
+  [Region, {head: 7}, [20]], # 21
+  [Print, ~, [19], 21, Scalar], # 22
+  [Return, ~, [1], 22], # 23
+  [Count, ~, [5, 9], ~, Int], # 24
+  [NumGt, ~, [24, 8], 7, Boolean], # 25
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 26
+  [Add, ~, [8, 26], ~, Int], # 27
+  [ListAppend, {collector: map}, [16, 12], ~, Array]]} # 28
+main::shout: {start: 0, returns: [6], nodes: [
+  [Start], # 0
+  [ArgsSource, ~, ~, ~, Array], # 1
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 2
+  [MemStart], # 3
+  [Subscript, {kind: array}, [1, 2, 3], ~, Scalar], # 4
+  [Call, {dispatch_kind: builtin, name: uc, param_names: []}, [4], ~, Str], # 5
+  [Return, ~, [5], 0]]} # 6
+```

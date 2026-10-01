@@ -6,16 +6,11 @@ the perl, its graph, and what perl says it does.
 
 | directory | copied from | graph block |
 |-----------|-------------|-------------|
-| `pvm/`    | pvm `conformance/mdtest` at `cdce17ba` (origin/pu, 2026-09-29) | ```` ```ir ```` |
+| `pvm/`    | pvm `conformance/mdtest` at `714ef391` (feat/sub-attribute-01a0de97, 2026-10-01) | ```` ```ir ```` |
 | `chalk/`  | Chalk `t/corpus/mdtest` at `5948f648` (HEAD, 2026-09-29)        | ```` ```son ```` |
 
 These are copies, not links: they change here when we change them, and the
 round-trip census, its ratchet and the drift check all measure them.
-
-ONE LOCAL ADDITION: `pvm/chalk-found-gaps.md` holds three cases reduced from
-failures chalk's own test suite found against an emitted lib/. They were sent
-to pvm to place in its tiers; at the next copy from pvm, replace this file
-with pvm's versions of the cases.
 
 ## The graph block
 
