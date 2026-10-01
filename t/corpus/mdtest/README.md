@@ -6,7 +6,7 @@ the perl, its graph, and what perl says it does.
 
 | directory | copied from | graph block |
 |-----------|-------------|-------------|
-| `pvm/`    | pvm `conformance/mdtest` at `714ef391` (feat/sub-attribute-01a0de97, 2026-10-01) | ```` ```ir ```` |
+| `pvm/`    | pvm `conformance/mdtest` at `6001ca7f` (feat/sub-attribute-01a0de97, 2026-10-01) | ```` ```ir ```` |
 | `chalk/`  | Chalk `t/corpus/mdtest` at `5948f648` (HEAD, 2026-09-29)        | ```` ```son ```` |
 
 These are copies, not links: they change here when we change them, and the

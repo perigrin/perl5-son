@@ -397,3 +397,98 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [Print, ~, [11, 12, 14, 15], 0, Scalar], # 16
   [Return, ~, [1], 16]]} # 17
 ```
+
+## The last index through a reference, three ways
+
+`$#$r`, `$#{$r}` and `$r->$#*` all name the last index of the array
+`$r` refers to, and none of them is the length of the reference or the
+array. Found by B::SoN translating chalk's lib/ and running chalk's own suite
+against the emitted Perl, which compiled and gave a wrong answer.
+
+```perl
+my $r = [5, 6, 7];
+print $#$r, " ", $#{$r}, " ", $r->$#*, "\n";
+```
+
+```behavior
+parses: yes
+```
+
+```output
+2 2 2
+```
+
+```ir
+main::__PROGRAM__: {start: 0, returns: [14], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 2
+  [Constant, {const_type: integer, value: "6"}, ~, ~, Int], # 3
+  [Constant, {const_type: integer, value: "7"}, ~, ~, Int], # 4
+  [ArrayLiteral, ~, [2, 3, 4], 0, ArrayRef], # 5
+  [MemStart], # 6
+  [Count, ~, [5, 6], ~, Int], # 7
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 8
+  [Subtract, ~, [7, 8], ~, Int], # 9
+  [Coerce, {from_repr: Int, to_repr: Str}, [9], ~, Str], # 10
+  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 11
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 12
+  [Print, ~, [10, 11, 10, 11, 10, 12], 5, Scalar], # 13
+  [Return, ~, [1], 13]]} # 14
+```
+
+## A dereference returned takes the caller's context
+
+`return $r->@*` hands back the elements in list context and their count
+in scalar context, never the reference: the `rv2av` is compiled
+wanting the CALLER's context. Found by B::SoN translating chalk's lib/ and running chalk's own suite
+against the emitted Perl, which compiled and gave a wrong answer.
+
+```perl
+sub items { my $r = shift; return $r->@* }
+my @got = items([1, 2, 3]);
+my $count = items([4, 5]);
+print scalar(@got), " ", $count, "\n";
+```
+
+```behavior
+parses: yes
+```
+
+```output
+3 2
+```
+
+```ir
+main::__PROGRAM__: {start: 0, returns: [19], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 3
+  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 4
+  [ArrayLiteral, ~, [2, 3, 4], 0, ArrayRef], # 5
+  [Call, {dispatch_kind: direct, name: main::items, param_names: [], want: list}, [5], 5, List], # 6
+  [ArrayLiteral, {sigil: "@", symbol: got}, [6], ~, Array], # 7
+  [MemStart], # 8
+  [Count, ~, [7, 8], ~, Int], # 9
+  [Coerce, {from_repr: Int, to_repr: Str}, [9], ~, Str], # 10
+  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 11
+  [Constant, {const_type: integer, value: "4"}, ~, ~, Int], # 12
+  [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 13
+  [ArrayLiteral, ~, [12, 13], 6, ArrayRef], # 14
+  [Call, {dispatch_kind: direct, name: main::items, param_names: [], want: scalar}, [14], 14, List], # 15
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [15], ~, Str], # 16
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 17
+  [Print, ~, [10, 11, 16, 17], 15, Scalar], # 18
+  [Return, ~, [1], 18]]} # 19
+main::items: {start: 0, returns: [8], nodes: [
+  [Start], # 0
+  [ArgsSource, ~, ~, ~, Array], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: shift, param_names: []}, [1, 2], 0, Scalar], # 3
+  [PostfixDeref, {sigil: "@"}, [3, 3], ~, Array], # 4
+  [ArrayLiteral, ~, [4], ~, List], # 5
+  [Count, ~, [4], ~, Int], # 6
+  [Coerce, {from_repr: List, to_repr: Scalar}, [6], ~, Scalar], # 7
+  [Return, ~, [5, 7], 3]]} # 8
+```

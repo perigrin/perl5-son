@@ -1,13 +1,13 @@
 # The aggregate-argument operators
 
-`push`, `unshift`, `values` and `each` share an ARGUMENT RULE nothing
+`push`, `unshift`, `shift`, `values` and `each` share an ARGUMENT RULE nothing
 else in the corpus has: the first argument is the aggregate ITSELF, not
 an expression to be flattened.
 
 **Tier 02 variables.** Introduces `aassign`, `aelem`, `aelemfast`,
 `aelemfast_lex`, `aelemfastlex_store`, `aslice`, `av2arylen`, `delete`,
 `each`, `gv`, `gvsv`, `helem`, `hslice`, `multideref`, `padav`, `padhv`,
-`push`, `rv2av`, `rv2hv`, `sassign`, `unshift`, `values`. Depends on
+`push`, `rv2av`, `rv2hv`, `sassign`, `shift`, `unshift`, `values`. Depends on
 01_literals.
 
 Measured, `push @a, @tail` emits `padav[@a] lRM` and `padav[@tail] l` --
@@ -121,8 +121,8 @@ fails this.
 The negative token fact is the falsifying half: NO word spelled `shift`.
 A lexer that read `unshift` as `un` followed by `shift` -- or that
 longest-matched the keyword table wrongly -- would produce a `shift`
-here and fail. `shift` is tier 11's op, so it is also the spelling this
-case must not accidentally contain.
+here and fail. `shift` is a different op, the next case's, so it is also
+the spelling this case must not accidentally contain.
 
 ```perl
 my @a = (20, 30);
@@ -171,6 +171,53 @@ main::__PROGRAM__: {start: 0, returns: [20], nodes: [
   [Print, ~, [13, 11], 17, Scalar], # 18
   [Print, ~, [10, 11], 18, Scalar], # 19
   [Return, ~, [1], 19]]} # 20
+```
+
+## `shift`: the rule again, and the array gives up an element
+
+`shift @a` takes the aggregate itself as `push` and `unshift` do, and is
+the first of the three to CONSUME: it removes `@a`'s first element and
+returns it. Measured, its first slot is `padav[@a] lRM`, the container
+flags again, and the op is `shift sK/1`. A parser that flattened the
+slot would hand `shift` a list it cannot remove from.
+
+The value and the count separate it from a read: `$x` is 10, the element
+that was first, and `@a` is left with two. `my $self = shift` in a method
+body (tier 11) is the same op with the array left implicit.
+
+```perl
+my @a = (10, 20, 30);
+my $x = shift @a;
+print $x, "\n";
+print scalar(@a), "\n";
+```
+
+```behavior
+parses: yes
+```
+
+```output
+10
+2
+```
+
+```ir
+main::__PROGRAM__: {start: 0, returns: [14], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Constant, {const_type: integer, value: "10"}, ~, ~, Int], # 2
+  [Constant, {const_type: integer, value: "20"}, ~, ~, Int], # 3
+  [Constant, {const_type: integer, value: "30"}, ~, ~, Int], # 4
+  [ArrayLiteral, {sigil: "@", symbol: a}, [2, 3, 4], ~, Array], # 5
+  [MemStart], # 6
+  [Call, {dispatch_kind: builtin, name: shift, param_names: []}, [5, 6], 0, Int], # 7
+  [Count, ~, [5, 7], ~, Int], # 8
+  [Coerce, {from_repr: Int, to_repr: Str}, [8], ~, Str], # 9
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
+  [Coerce, {from_repr: Int, to_repr: Str}, [7], ~, Str], # 11
+  [Print, ~, [11, 10], 7, Scalar], # 12
+  [Print, ~, [9, 10], 12, Scalar], # 13
+  [Return, ~, [1], 13]]} # 14
 ```
 
 ## `values` takes the container, not a flattened list

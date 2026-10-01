@@ -444,3 +444,129 @@ main::shout: {start: 0, returns: [6], nodes: [
   [Call, {dispatch_kind: builtin, name: uc, param_names: []}, [4], ~, Str], # 5
   [Return, ~, [5], 0]]} # 6
 ```
+
+## A loop variable passed to a sub
+
+The argument is an alias the callee could write through `$_[0]`, and
+it is still the loop's value on each pass: `twice` reads `1`, `2` and
+`3`. Found by B::SoN translating chalk's lib/ and running chalk's own suite
+against the emitted Perl, which compiled and gave a wrong answer.
+
+```perl
+sub twice { return $_[0] * 2 }
+my @r;
+for my $n (1 .. 3) { push @r, twice($n) }
+print "@r\n";
+```
+
+```behavior
+parses: yes
+```
+
+```output
+2 4 6
+```
+
+```ir
+main::__PROGRAM__: {start: 0, returns: [18], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [MemStart], # 2
+  [PadAccess, {sigil: $, symbol: "n"}, [2], ~, Unknown], # 3
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 4
+  [Loop, {bound: entry}, [0], 0], # 5
+  [Phi, {region: 5}, [4, 21], ~, Int], # 6
+  [Proj, {index: 0}, [5]], # 7
+  [Assign, ~, [3, 6], 7, Int], # 8
+  [EntryDef, {package: main, sigil: $, symbol: "\""}, [8], ~, Scalar], # 9
+  [Coerce, {from_repr: Scalar, to_repr: Str}, [9], ~, Str], # 10
+  [PadAccess, {sigil: "@", symbol: r}, ~, ~, Unknown], # 11
+  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [10, 11], ~, Str], # 12
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 13
+  [Concat, ~, [12, 13], ~, Str], # 14
+  [Proj, {index: 1}, [5]], # 15
+  [Region, {head: 5}, [15]], # 16
+  [Print, ~, [14], 16, Scalar], # 17
+  [Return, ~, [1], 17], # 18
+  [Constant, {const_type: integer, value: "4"}, ~, ~, Int], # 19
+  [NumGt, ~, [19, 6], 5, Boolean], # 20
+  [Add, ~, [6, 4], ~, Int], # 21
+  [PadAccess, {sigil: $, symbol: "n"}, [8], ~, Unknown], # 22
+  [Call, {dispatch_kind: direct, name: main::twice, param_names: [], want: list}, [22], 8, Num], # 23
+  [Call, {dispatch_kind: builtin, name: push, param_names: []}, [11, 23], 23, Unknown]]} # 24
+main::twice: {start: 0, returns: [8], nodes: [
+  [Start], # 0
+  [ArgsSource, ~, ~, ~, Array], # 1
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 2
+  [MemStart], # 3
+  [Subscript, {kind: array}, [1, 2, 3], ~, Scalar], # 4
+  [Coerce, {from_repr: Scalar, to_repr: Num}, [4], ~, Num], # 5
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 6
+  [Multiply, ~, [5, 6], ~, Num], # 7
+  [Return, ~, [7], 0]]} # 8
+```
+
+## A foreach alias written through `$_[0]`
+
+`$x` aliases each element of `@a`, and `$_[0]` aliases `$x`, so the
+callee's `$_[0]++` reaches the array itself. Found by B::SoN translating chalk's lib/ and running chalk's own suite
+against the emitted Perl, which compiled and gave a wrong answer.
+
+```perl
+sub bump { $_[0]++ }
+my @a = (1, 2);
+for my $x (@a) { bump($x) }
+print "@a\n";
+```
+
+```behavior
+parses: yes
+```
+
+```output
+2 3
+```
+
+```ir
+main::__PROGRAM__: {start: 0, returns: [26], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 3
+  [ArrayLiteral, {sigil: "@", symbol: a}, [2, 3], ~, Array], # 4
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 5
+  [Loop, {bound: entry}, [0], 0], # 6
+  [Phi, {region: 6}, [5, 29], ~, Int], # 7
+  [Subscript, {kind: array}, [4, 7], ~, Scalar], # 8
+  [MemStart], # 9
+  [PadAccess, {sigil: $, symbol: x}, [9], ~, Unknown], # 10
+  [Subscript, {kind: array}, [4, 7, 9], ~, Int], # 11
+  [Proj, {index: 0}, [6]], # 12
+  [Assign, ~, [10, 11], 12, Int], # 13
+  [PadAccess, {sigil: $, symbol: x}, [13], ~, Unknown], # 14
+  [Call, {dispatch_kind: direct, name: main::bump, param_names: [], want: void}, [14], 13, Scalar], # 15
+  [Assign, ~, [8, 14], 15, Unknown], # 16
+  [EntryDef, {package: main, sigil: $, symbol: "\""}, [16], ~, Scalar], # 17
+  [Coerce, {from_repr: Scalar, to_repr: Str}, [17], ~, Str], # 18
+  [PostfixDeref, {sigil: "@"}, [4, 16], ~, Array], # 19
+  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [18, 19], ~, Str], # 20
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 21
+  [Concat, ~, [20, 21], ~, Str], # 22
+  [Proj, {index: 1}, [6]], # 23
+  [Region, {head: 6}, [23]], # 24
+  [Print, ~, [22], 24, Scalar], # 25
+  [Return, ~, [1], 25], # 26
+  [Count, ~, [4, 9], ~, Int], # 27
+  [NumGt, ~, [27, 7], 6, Boolean], # 28
+  [Add, ~, [7, 2], ~, Int]]} # 29
+main::bump: {start: 0, returns: [8], nodes: [
+  [Start], # 0
+  [ArgsSource, ~, ~, ~, Array], # 1
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 2
+  [MemStart], # 3
+  [Subscript, {kind: array}, [1, 2, 3], ~, Scalar], # 4
+  [Subscript, {kind: array}, [1, 2], ~, Scalar], # 5
+  [Increment, ~, [4], ~, Scalar], # 6
+  [Assign, ~, [5, 6], 0, Scalar], # 7
+  [Return, ~, [4], 7]]} # 8
+```
