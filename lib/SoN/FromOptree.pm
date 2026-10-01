@@ -5004,6 +5004,19 @@ class SoN::FromOptree 0.01 {
     # OPf_REF, and relying on that would key the question on a second
     # incidental bit rather than on what the op does. See
     # docs/plans and the opf-mod-is-not-a-write note.
+    # _is_call_argument($op) -> true when $op is an argument of a sub or
+    # method call: its parent, past the null list op, is the entersub.
+    #
+    # PERL PASSES ARGUMENTS BY ALIAS, so it flags each one OPf_MOD -- a
+    # potential lvalue, since the callee may assign $_[0]. As a value it is a
+    # READ. Asked of the op's PARENT rather than by scanning forward to the next
+    # non-operand op, which in `f($n, $x + 1)` is the `add` and not the call.
+    sub _is_call_argument ($op) {
+        my $p = eval { $op->parent } or return 0;
+        $p = $p->parent while $$p && $p->name eq 'null' && eval { ${ $p->parent } };
+        return $$p && $p->name eq 'entersub' ? 1 : 0;
+    }
+
     # THE builtin:: FUNCTIONS THAT ARE OPS mark their operand the same way --
     # measured, `builtin::blessed($o)` is `padsv sM` -- and read it: the value
     # vanished and the arg became an unbound PadAccess. weaken/unweaken are
@@ -5059,6 +5072,11 @@ class SoN::FromOptree 0.01 {
                     last;
                 }
             }
+            # A CALL ARGUMENT IS A READ, whatever the flag says -- see
+            # _is_call_argument. A loop counter passed to a sub lives in the
+            # graph, and the name token emitted `twice($n)` over an $n
+            # nothing assigned.
+            $mod_but_read ||= _is_call_argument($op);
             my $is_lvalue = ($op->flags & 32) && !$is_deref
                                               && !$mod_but_read;    # OPf_MOD
             my $existing = $sim->lookup($targ);
@@ -5613,15 +5631,8 @@ class SoN::FromOptree 0.01 {
                 # aliased topic it is not -- the topic IS the bound element,
                 # and `map { f($_) }` called f with the global `$main::_`.
                 # Scanned to the consuming op as padsv's is: an entersub reads.
-                if ($is_lvalue && $aliased && $existing) {
-                    my %seen;
-                    for (my $o = $op->next; $$o && !$seen{$$o}++; $o = $o->next) {
-                        my $m = $o->name;
-                        next if $m =~ /\A(?:padsv|padav|padhv|const|gvsv|gv|null|method_named|method)\z/;
-                        $is_lvalue = 0 if $m eq 'entersub';
-                        last;
-                    }
-                }
+                $is_lvalue = 0 if $is_lvalue && $aliased && $existing
+                    && _is_call_argument($op);
                 if ($existing && !$is_lvalue && $forwardable) {
                     $sim->push_node($existing);
                 }
@@ -10596,6 +10607,24 @@ class SoN::FromOptree 0.01 {
         # READ is the whole fix.
         local @ALIAS_BOUND_KEYS = (@ALIAS_BOUND_KEYS, $i_targ);
 
+        # A DEMOTED ITERATOR IS STORED EACH PASS. Passing `$n` to a sub demotes
+        # it (an argument is an alias the callee may write), so every read of
+        # it goes through its slot -- and the counter lived only in the Phi,
+        # so `twice($n)` read a slot nothing wrote: perl 2 4 6, emitted 0 0 0.
+        # The pass's value is stored into the slot where the body starts, and
+        # a callee's write through $_[0] still lands there.
+        if ($i_targ =~ /\A\d+\z/ && $ADDR_TAKEN && $ADDR_TAKEN->{$i_targ}) {
+            my $slot = $factory->make('PadAccess', targ => $i_targ,
+                do { my ($sg, $sy) = _padparts($cv, $i_targ);
+                     (sigil => $sg, symbol => $sy) },
+                ($SHARED_SLOTS && $SHARED_SLOTS->{$i_targ} ? (shared => 1) : ()),
+                (defined $sim->memory ? (inputs => [ $sim->memory ]) : ()));
+            my $store = $factory->make('Assign', inputs => [$slot, $i_phi]);
+            $store->set_control_in($sim->control);
+            $sim->set_control($store);
+            $sim->set_memory($store) if defined $sim->memory;
+        }
+
         # AND THE STASH KEYS THIS LOOP CARRIES, for the same reason and the same
         # extent -- see _carried_stash_keys. Without it a `$n++` in the body read
         # the PRE-LOOP value, so the increment was loop-invariant and the store
@@ -10815,6 +10844,25 @@ class SoN::FromOptree 0.01 {
         # clearing it outright.
         local @ALIAS_BOUND_KEYS = (@ALIAS_BOUND_KEYS, $x_targ);
 
+        # A DEMOTED ITERATOR IS STORED EACH PASS -- the range form's rule: the
+        # body reads it through its slot, so the element goes there first.
+        # Its write-back is below, once the body has run.
+        my $demoted_iter = $x_targ =~ /\A\d+\z/ && $ADDR_TAKEN
+            && $ADDR_TAKEN->{$x_targ};
+        my $iter_slot = sub {
+            $factory->make('PadAccess', targ => $x_targ,
+                do { my ($sg, $sy) = _padparts($cv, $x_targ);
+                     (sigil => $sg, symbol => $sy) },
+                ($SHARED_SLOTS && $SHARED_SLOTS->{$x_targ} ? (shared => 1) : ()),
+                (defined $sim->memory ? (inputs => [ $sim->memory ]) : ()));
+        };
+        if ($demoted_iter) {
+            my $store = $factory->make('Assign', inputs => [$iter_slot->(), $elem]);
+            $store->set_control_in($sim->control);
+            $sim->set_control($store);
+            $sim->set_memory($store) if defined $sim->memory;
+        }
+
         # AND THE STASH KEYS THIS LOOP CARRIES, for the same reason and the same
         # extent -- see _carried_stash_keys. Without it a `$n++` in the body read
         # the PRE-LOOP value, so the increment was loop-invariant and the store
@@ -10872,6 +10920,24 @@ class SoN::FromOptree 0.01 {
         # foreach's.
         my $post_iter = $sim->lookup($x_targ);
         _restore_iterator_binding($sim, $x_targ, $pre_scope);
+
+        # AND A DEMOTED ONE WRITES BACK what its slot holds: a callee writing
+        # through $_[0] (`bump($x)`) changed the slot, and perl's alias is the
+        # element. Not into an anonymous list -- `for my $x (1,2) { bump($x) }`
+        # dies in perl on the readonly value, and `(1,2)[0] = ...` is not
+        # assignable -- and not into a scalar's one-element wrapper.
+        if ($demoted_iter && !$writes_iter
+            && !( $array->can('operation') && $array->operation eq 'ArrayLiteral'
+                  && !defined(eval { $array->symbol }) )) {
+            my $lvalue = $factory->make('Subscript', kind => 'array',
+                inputs => [$array, $i_phi]);
+            my $store = $factory->make('Assign',
+                inputs => [$lvalue, $iter_slot->()]);
+            $store->set_control_in($sim->control);
+            $sim->set_control($store);
+            $sim->set_memory($store);
+            $MUTATED_LITERALS{ $array->id } = 1 if $array->can('id');
+        }
 
         # THE STORE-BACK, and only when the body actually wrote the iterator.
         # Adding it unconditionally would put a memory effect in every foreach

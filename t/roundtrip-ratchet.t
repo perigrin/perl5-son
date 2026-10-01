@@ -37,7 +37,7 @@ my %FLOOR = (
     perl_t => 11,    # base/lex.t refuses on a `caller` bound to a list
     # chalk's lib/ at the commit tools/chalk-lib-roundtrip.pl pins (5948f648,
     # 179 modules), measured 2026-10-01.
-    chalk_compiles => 129,
+    chalk_compiles => 130,
 );
 
 # A CEILING, NOT A FLOOR: graphs B::SoN skipped in chalk's lib/. A module can

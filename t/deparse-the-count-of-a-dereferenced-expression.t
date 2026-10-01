@@ -106,4 +106,37 @@ round_trips(<<'SRC', 'a foreach topic assigned in the body');
 my @a = (1, 2); for (@a) { $_ = $_ * 10 } print "@a\n";
 SRC
 
+# A LEXICAL PASSED TO A CALL is OPf_MOD for the same reason, and the read
+# became a name token -- harmless only while the lexical holds its value in
+# the emission. A loop counter, or a call result bound to a `my`, lives in
+# the graph instead: chalk's CoreItemIndex called `register($name,
+# $alt_idx, $dot)` with three variables nothing assigned.
+round_trips(<<'SRC', 'loop variables and a bound call result passed to a method');
+package R; sub new { bless {}, shift } sub reg { shift; join ":", @_ }
+sub nm { "r" }
+package main; my $o = R->new; my @out;
+for my $i (0 .. 1) { my $name = R::nm(); for my $d (0 .. 1) { push @out, $o->reg($name, $i, $d) } }
+print "@out\n";
+SRC
+
+round_trips(<<'SRC', 'a lexical passed to a sub that only reads it');
+sub twice { $_[0] * 2 } my @r; for my $n (1 .. 3) { push @r, twice($n) } print "@r\n";
+SRC
+
+# A DEMOTED ITERATOR LIVES IN ITS SLOT. Passing a loop variable to a sub
+# demotes it -- the argument is an alias the callee may write -- and the
+# loop's value then has to be in the slot each pass, and a write through
+# $_[0] has to reach what the variable aliases.
+round_trips(<<'SRC', 'a range iterator a callee writes through $_[0]');
+sub bump { $_[0]++ } my $s = ""; for my $n (1 .. 3) { bump($n); $s .= $n } print "$s\n";
+SRC
+
+round_trips(<<'SRC', 'an array iterator passed to a sub that reads it');
+sub twice { $_[0] * 2 } my @a = (1, 2, 3); my @r; for my $x (@a) { push @r, twice($x) } print "@r\n";
+SRC
+
+round_trips(<<'SRC', 'an array iterator a callee writes: the element changes');
+sub bump { $_[0]++ } my @a = (1, 2); for my $x (@a) { bump($x) } print "@a\n";
+SRC
+
 done_testing;
