@@ -14,10 +14,12 @@ use Getopt::Long;
 my $COMMIT  = '5948f648';
 my $chalk   = $ENV{SON_CHALK} // "$ENV{HOME}/dev/chalk";
 my $jobs    = 8;
-my $timeout = 120;
-my $verbose = 0;
+# 300s, not 120: an emission may run slower than the original, and at 120s
+# a test near the limit timed out under load in one run and not the next.
+my $timeout = 300;
+my $verbose = 0;   # -v lists DIFFERS rows; -v -v also the SLOW ones
 GetOptions('chalk=s' => \$chalk, 'commit=s' => \$COMMIT, 'jobs=i' => \$jobs,
-           'timeout=i' => \$timeout, 'v' => \$verbose)
+           'timeout=i' => \$timeout, 'v+' => \$verbose)
     or die "usage: $0 [--chalk PATH] [--commit SHA] [--jobs N] [--timeout S] [-v]\n";
 
 my $work = tempdir(CLEANUP => 1);
@@ -83,10 +85,15 @@ sub run_tree ($tree, $tag) {
 my $o = run_tree($orig,  'orig');
 my $x = run_tree($mixed, 'mixed');
 
-my ($same, $differs) = (0, 0);
+# A TEST THAT TIMES OUT AGAINST THE ORIGINAL has no result to compare: its
+# ok count is how far it got before the kill, which moves with machine load.
+# Measured, two runs of one commit differed in exactly such files (347 vs
+# 348). They are counted as SLOW and left out of SAME / DIFFERS.
+my ($same, $differs, $slow) = (0, 0, 0);
 my @rows;
 for my $t (@tests) {
-    if ($o->{$t} eq $x->{$t}) { $same++ }
+    if ($o->{$t} =~ /\Arc=124 /) { $slow++; push @rows, "$t | SLOW (original timed out)" if $verbose > 1 }
+    elsif ($o->{$t} eq $x->{$t}) { $same++ }
     else { $differs++; push @rows, "$t | orig $o->{$t} | emitted $x->{$t}" }
 }
 
@@ -95,4 +102,5 @@ print "overlaid: $overlaid\n";
 print "files: ", scalar(@tests), "\n";
 printf "%-8s %d\n", 'SAME', $same;
 printf "%-8s %d\n", 'DIFFERS', $differs;
+printf "%-8s %d\n", 'SLOW', $slow;
 print "$_\n" for $verbose ? @rows : ();
