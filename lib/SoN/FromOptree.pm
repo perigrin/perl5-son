@@ -1077,9 +1077,26 @@ class SoN::FromOptree 0.01 {
                 # converges at this op's op_next.
                 my $stop_addr = ${ $op->next };
                 my $rhs_sim = $sim->snapshot;
+                # A FALLBACK THAT MOVES CONTROL -- `$x // []`, whose allocation
+                # is pinned -- runs on its own Proj, as the and/or handler's
+                # effect branch does: the If tests definedness, the fallback
+                # takes the false arm, and the arms merge before the value.
+                my $dor_if;
+                if (($op->flags & 3) != 1
+                        && _arm_advances_control($op->other, $stop_addr)) {
+                    $dor_if = $factory->make_cfg('If', inputs => [$sim->control,
+                        $factory->make('Defined', inputs => [$lhs])]);
+                    $rhs_sim->set_control($factory->make_cfg('Proj',
+                        inputs => [$dor_if], index => 1));
+                    $sim->set_control($factory->make_cfg('Proj',
+                        inputs => [$dor_if], index => 0));
+                }
                 my ($rhs_end, $rhs_sig)
                     = _walk_branch($cv, $op->other, $rhs_sim, $factory, $opmap,
                         \%visited, \@exits, 1, $stop_addr);
+                die "GAP: a `//` whose fallback both moves control and leaves"
+                  . " the function is not yet lowered\n"
+                    if $dor_if && ($rhs_sig // '') eq 'exited';
 
                 if (($rhs_sig // '') eq 'exited') {
                     # `E // return X`: the fallback LEAVES the function when E is
@@ -1124,6 +1141,7 @@ class SoN::FromOptree 0.01 {
                         const_type => 'undef',
                         stamp      => SoN::IR::Stamp->new(type => 'Undef'));
                 }
+                $sim->merge($rhs_sim, $factory, $dor_if) if $dor_if;
                 my $node = $factory->make('DefinedOr', inputs => [$lhs, $rhs]);
                 $sim->push_node($node);
                 $op = $rhs_end // $op->next;
@@ -12582,9 +12600,14 @@ class SoN::FromOptree 0.01 {
     #
     # Two effects claiming one predecessor, with nothing saying the second
     # eval is conditional.
+    #
+    # AN ALLOCATION ADVANCES CONTROL TOO: anonlist, anonhash and emptyavhv
+    # are pinned where they run (one aggregate, however many names hold it),
+    # so `$x // []` and `$c ? 2 : []` forked control without an If.
     my %ADVANCES_CONTROL_OP = map { $_ => 1 }
         qw(entersub enterloop enteriter mapstart grepstart
-           entertry entertrycatch entereval);
+           entertry entertrycatch entereval
+           anonlist anonhash emptyavhv);
 
     sub _arm_advances_control_from ($start, $stop, $join, $seen) {
         for (my $op = $start;
@@ -12600,6 +12623,25 @@ class SoN::FromOptree 0.01 {
                 next;
             }
             return 1 if $ADVANCES_CONTROL_OP{$name};
+        }
+        return 0;
+    }
+
+    # Does the arm ALLOCATE -- `[...]`, `{...}`, `[]`, `{}` -- which is pinned
+    # where it runs? Narrower than _arm_advances_control: a ternary's arms
+    # take control flow for an allocation, not for every call (see there).
+    my %ALLOCATION_OP = map { $_ => 1 } qw(anonlist anonhash emptyavhv);
+
+    sub _arm_allocates ($start, $stop, $join = undef) {
+        ($stop, $join) = (_op_addr($stop), _op_addr($join));
+        my %seen;
+        my @todo = ($start);
+        while (my $op = shift @todo) {
+            next unless $$op && $$op != $stop && !(defined $join && $$op == $join)
+                && !$seen{$$op}++;
+            return 1 if $ALLOCATION_OP{ $op->name };
+            push @todo, $op->next;
+            push @todo, $op->other if $op->name =~ /\A(?:and|or|dor|cond_expr)\z/;
         }
         return 0;
     }
@@ -13024,7 +13066,20 @@ class SoN::FromOptree 0.01 {
                        || _arm_has_void_call($op->other, $op->next, $join_addr)  # true arm
                        || _arm_has_void_call($op->next, $op->other, $join_addr)  # false arm
                        || _arm_has_die($op->other, $op->next, $join_addr) # true arm
-                       || _arm_has_die($op->next, $op->other, $join_addr);# false arm
+                       || _arm_has_die($op->next, $op->other, $join_addr) # false arm
+                       # A PINNED ALLOCATION moves the arm's control: `$c ? 2 : []`
+                       # forked the pre-branch control without an If.
+                       || _arm_allocates($op->other, $op->next, $join_addr)
+                       || _arm_allocates($op->next, $op->other, $join_addr);
+        # AN ARM THAT ONLY ALLOCATES has a real value to merge, unlike a store
+        # or a call statement: the Phi over the two arm values is the result.
+        my $alloc_only = $mem_branch && !$elem_branch
+            && !_arm_has_field_store($cv, $op->other, $op->next, $join_addr)
+            && !_arm_has_field_store($cv, $op->next, $op->other, $join_addr)
+            && !_arm_has_void_call($op->other, $op->next, $join_addr)
+            && !_arm_has_void_call($op->next, $op->other, $join_addr)
+            && !_arm_has_die($op->other, $op->next, $join_addr)
+            && !_arm_has_die($op->next, $op->other, $join_addr);
         # AN ARM THAT LEAVES THE LOOP -- `if (C) { ... } else { ...; next }` --
         # needs the branch built, so the leaving arm has its own Proj.
         my $loop_branch = $loop && ( _arm_has_loop_control($op->other, $join_addr)
@@ -13064,7 +13119,7 @@ class SoN::FromOptree 0.01 {
             die "GAP: a consumed value-context ternary whose arms store a class"
               . " field is not yet lowered (the arm residual is unstamped, so"
               . " the merged value would silently be Undef)\n"
-                if !$is_void && !$die_branch;   # $elem_branch already died above; here it's a field store
+                if !$is_void && !$die_branch && !$alloc_only;   # $elem_branch already died above; here it's a field store
             my $if_node = $factory->make_cfg('If',
                 inputs => [$sim->control, $cond]);
             my $true_proj  = $factory->make_cfg('Proj',
@@ -13075,9 +13130,9 @@ class SoN::FromOptree 0.01 {
             # each arm's residual value (delta > 0) and returns it, so capture
             # each here -- a die-arm branch (below) needs the LIVE arm's value as
             # the merged result, and re-popping from the sim would find nothing.
-            my ($false_arm_val, undef, $false_sim, undef, $false_sig)
+            my ($false_arm_val, undef, $false_sim, $false_delta, $false_sig)
                 = $walk_arm->($op->next,  $false_proj);
-            my ($true_arm_val, $true_end, $true_sim, undef, $true_sig)
+            my ($true_arm_val, $true_end, $true_sim, $true_delta, $true_sig)
                 = $walk_arm->($op->other, $true_proj);
             # $walk_arm already popped each arm's residual value, so any remaining
             # stack above base is dead leftover -- drain it so merge() does not
@@ -13113,7 +13168,27 @@ class SoN::FromOptree 0.01 {
                 $sim->define($_, $sc->{$_}) for keys %$sc;
                 return ($left{true} ? undef : $true_end) // $op->next;
             }
+            # Each arm's value back on its stack, so merge() builds the Phi.
+            # WANT 0 IS THE CALLER'S CONTEXT, not void -- `return $c ? 2 : []`
+            # -- so, like the die arm's value, it is kept unless WANT is 1.
+            my $alloc_value = $alloc_only && $want != 1;
+            # ONE VALUE PER ARM, as the single-value select below demands: the
+            # drain above would drop the rest of `wantarray ? (7, 8) : []`.
+            die "GAP: a ternary with a multi-element list arm not yet lowered\n"
+                if $alloc_value && (($true_delta // 0) > 1 || ($false_delta // 0) > 1);
+            if ($alloc_value) {
+                $true_sim->push_node($true_arm_val // _undef_constant($factory));
+                $false_sim->push_node($false_arm_val // _undef_constant($factory));
+            }
             $true_sim->merge($false_sim, $factory, $if_node);
+            if ($alloc_value) {
+                $sim->push_node($true_sim->pop_node);
+                $sim->set_control($true_sim->control);
+                $sim->set_memory($true_sim->memory);
+                my $ms = $true_sim->scope_bindings;
+                $sim->define($_, $ms->{$_}) for keys %$ms;
+                return $true_end // $op->next;
+            }
             $sim->set_control($true_sim->control);
             $sim->set_memory($true_sim->memory);
             my $merged_scope = $true_sim->scope_bindings;

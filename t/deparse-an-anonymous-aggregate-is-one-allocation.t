@@ -87,4 +87,28 @@ round_trips(<<'SRC', 'a file lexical shared with a sub, holding constructors');
 my %R = (a => [1, 2], b => [3]); sub rule { return $R{$_[0]} } print rule("a")->[1], rule("b")->[0], "\n";
 SRC
 
+# A PINNED ALLOCATION IN A SHORT-CIRCUIT ARM moves the arm's control, so
+# the arm needs its own branch -- without one the control before the
+# operator had two successors, and `$x // []` (everywhere in chalk's lib/)
+# refused.
+round_trips(<<'SRC', 'a defined-or defaulting to an allocation');
+sub f { my $l = $_[0] // []; push @$l, 9; return scalar(@$l) } print f([1, 2]), f(undef), "\n";
+SRC
+
+round_trips(<<'SRC', 'an or defaulting to an allocation');
+sub f { my $h = $_[0] || {}; $h->{z} = 1; return scalar(%$h) } print f({a => 1}), f(0), "\n";
+SRC
+
+round_trips(<<'SRC', 'an and yielding an allocation');
+sub f { my $r = $_[0] && [$_[0]]; return ref($r) ? $r->[0] : "none" } print f(5), f(0), "\n";
+SRC
+
+round_trips(<<'SRC', 'a ternary with an allocation in one arm');
+sub f { return $_[0] ? 2 : [] } print f(1), ref(f(0)), "\n";
+SRC
+
+round_trips(<<'SRC', 'a ternary with an allocation in each arm');
+sub f { my $r = $_[0] ? [1] : {}; return ref($r) } print f(1), f(0), "\n";
+SRC
+
 done_testing;
