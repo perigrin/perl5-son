@@ -18,17 +18,23 @@ use SoN::Deparse;
 my $COMMIT = '5948f648';
 my $chalk  = $ENV{SON_CHALK} // "$ENV{HOME}/dev/chalk";
 my $verbose = 0;
-GetOptions('chalk=s' => \$chalk, 'commit=s' => \$COMMIT, 'v' => \$verbose)
-    or die "usage: $0 [--chalk PATH] [--commit SHA] [-v]\n";
+# --emit DIR keeps the emitted lib/ (DIR/emit/lib/...) and writes DIR/compiles.txt,
+# one module per line that compiled with no graph skipped -- what
+# tools/chalk-gate3.pl overlays onto chalk to run its tests.
+my $keep;
+GetOptions('chalk=s' => \$chalk, 'commit=s' => \$COMMIT, 'v' => \$verbose,
+           'emit=s' => \$keep)
+    or die "usage: $0 [--chalk PATH] [--commit SHA] [--emit DIR] [-v]\n";
 
 my $snap = tempdir(CLEANUP => 1);
 system("git -C '$chalk' archive '$COMMIT' lib | tar -x -C '$snap'") == 0
     or die "cannot read lib/ at $COMMIT from $chalk\n";
-my $out = tempdir(CLEANUP => 1);
+my $out = defined $keep ? $keep : tempdir(CLEANUP => 1);
+make_path($out);
 my $son = "$FindBin::Bin/../lib";
 
 my @mods = sort split /\n/, `cd '$snap' && find lib -name '*.pm'`;
-my (%tally, %why, @emitted, $skipped_graphs);
+my (%tally, %why, @emitted, $skipped_graphs, @compiles);
 $tally{$_} = 0 for qw(COMPILES COMPILES_PARTIAL INVALID REFUSED NOJSON);
 $skipped_graphs = 0;
 
@@ -67,13 +73,22 @@ for my $e (@emitted) {
     my ($m, $f, $nskip) = @$e;
     my $c = `cd '$snap' && $^X -I$out/emit/lib -Ilib -c $f 2>&1`;
     my $status;
-    if ($c =~ /syntax OK/) { $status = $nskip ? 'COMPILES_PARTIAL' : 'COMPILES' }
+    if ($c =~ /syntax OK/) {
+        $status = $nskip ? 'COMPILES_PARTIAL' : 'COMPILES';
+        push @compiles, $m if $status eq 'COMPILES';
+    }
     else {
         $status = 'INVALID';
         $why{INVALID}{ (split /\n/, $c)[0] =~ s/at \S+ line \d+.*//r }++;
     }
     $tally{$status}++;
     print "$status $m\n" if $verbose;
+}
+
+if (defined $keep) {
+    open my $fh, '>', "$out/compiles.txt" or die $!;
+    print $fh "$_\n" for @compiles;
+    close $fh;
 }
 
 print "commit: $COMMIT\n";
