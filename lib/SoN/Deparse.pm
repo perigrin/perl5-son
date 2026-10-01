@@ -180,6 +180,25 @@ class SoN::Deparse 0.01 {
     );
     field %rendered;   # id => Perl expression text
 
+    # THE NODES IN ID ORDER, every time. A walk over `values %$nodes` runs in
+    # HASH order, which perl randomises per process -- so a placement decided
+    # by "the first one found" changed from run to run, and one of chalk's
+    # modules rendered under one seed and refused under another (measured:
+    # IR/Transform/T2 refused at PERL_HASH_SEED=8, with the producer's JSON
+    # byte-identical). Cached per graph: some graphs have over a thousand
+    # nodes and this is asked inside loops. $ordered_for HOLDS the hash it
+    # cached, so no later graph's hash can be allocated at its address and
+    # compare equal.
+    field $ordered_for;
+    field @ordered;
+    method _nodes_in_order () {
+        if (!defined $ordered_for || $ordered_for != $nodes) {
+            $ordered_for = $nodes;
+            @ordered = sort { $a->{id} <=> $b->{id} } values %$nodes;
+        }
+        return @ordered;
+    }
+
     # A COUNTED s/// BOUND AT ITS STORE. The destructive form yields the
     # count, so the store emits it once and records the variable holding that
     # number here. Kept apart from %bound, which holds the substituted STRING
@@ -727,7 +746,7 @@ class SoN::Deparse 0.01 {
     # be a different variable.
     method _declare_undeclared ($text) {
         my %names;
-        for my $n (values $nodes->%*) {
+        for my $n ($self->_nodes_in_order) {
             my $op = $n->{op} // '';
             # A NAMED PAD AGGREGATE is the variable too: `my %h; $h{k} = ...`
             # reaches here as a HashLiteral carrying `%h`, not a PadAccess.
@@ -776,7 +795,7 @@ class SoN::Deparse 0.01 {
             my $l = $lines[$i];
             pop @open if $l =~ /\A\s*\}/;
             my $scope = join '/', @open;
-            for my $t (keys %temps) {
+            for my $t (sort keys %temps) {
                 next unless $l =~ /\Q$t\E\b(?!_)/;
                 if (!exists $decl_scope{$t} && $l =~ /\bmy\s+\Q$t\E\b(?!_)/) {
                     ($decl_scope{$t}, $decl_line{$t}) = ($scope, $i);
@@ -883,7 +902,7 @@ class SoN::Deparse 0.01 {
             push $next_of{$_}->@*, $n for (($n->{inputs} // [])->@*);
         }
 
-        my ($start) = grep { $_->{op} eq 'Start' } values $nodes->%*;
+        my ($start) = grep { $_->{op} eq 'Start' } $self->_nodes_in_order;
         die "no Start node\n" unless $start;
 
         # AN EFFECT IS RUN ONCE, AND ITS VALUE IS READ, NOT RE-RUN. A node on
@@ -904,7 +923,7 @@ class SoN::Deparse 0.01 {
         # ONLY WHEN SOMETHING READS IT. An effect nobody reads stays a bare
         # statement, so the common case emits exactly as before.
         my %reads;
-        for my $n (values $nodes->%*) {
+        for my $n ($self->_nodes_in_order) {
             # A CFG NODE NAMES CONTROL AS A DATA INPUT, not a value. Proj and
             # Region take only predecessors; an If takes [predecessor,
             # condition] and a Loop takes [predecessor] -- measured on
@@ -949,7 +968,7 @@ class SoN::Deparse 0.01 {
 
             $reads{$_}++ for @in;
         }
-        for my $id (keys %reads) {
+        for my $id (sort { $a <=> $b } keys %reads) {
             my $n = $nodes->{$id} or next;
             next unless defined $n->{control_in};
             next if ($n->{op} // '') =~ /\A(?:Proj|Region|Loop|If|Start)\z/;
@@ -997,7 +1016,7 @@ class SoN::Deparse 0.01 {
         # WRITES is a self-assignment unless the read is pinned, and that is
         # exactly the restore shape. An ordinary `$a = $b` names two different
         # variables and is untouched.
-        for my $n (sort { $a->{id} <=> $b->{id} } values $nodes->%*) {
+        for my $n (sort { $a->{id} <=> $b->{id} } $self->_nodes_in_order) {
             next unless ( $n->{op} // '' ) eq 'EntryWrite';
             my @in = ( $n->{inputs} // [] )->@*;
             next unless @in >= 2;
@@ -1070,7 +1089,7 @@ class SoN::Deparse 0.01 {
         # not see. Bound at the read's version and emitted right after the node
         # that produced it, which is where the value is still correct.
         my %mem_next;
-        for my $n (values $nodes->%*) {
+        for my $n ($self->_nodes_in_order) {
             my @in = ( $n->{inputs} // [] )->@*;
             next unless @in > ( $MEM_MIN_INPUTS{ $n->{op} // '' } // 99 );
             next unless $self->_is_memory( $in[-1] );
@@ -1090,26 +1109,26 @@ class SoN::Deparse 0.01 {
         # for the reason [[2026-09-26-a-package-scalar-is-not-loop-carried]]
         # describes, and a temporary is the wrong answer to it.
         my %under_loop;
-        for my $n ( values $nodes->%* ) {
+        for my $n ( $self->_nodes_in_order ) {
             next unless ( $n->{op} // '' ) eq 'Loop';
             my ( @queue, %seen ) = ( $n->{id} );
             # Everything the loop's own control reaches, plus every value those
             # nodes read: a condition operand has no control edge of its own.
-            for my $c ( values $nodes->%* ) {
+            for my $c ( $self->_nodes_in_order ) {
                 push @queue, $c->{id}
                     if defined $c->{control_in} && $c->{control_in} == $n->{id};
             }
             push @queue, map { $_->{id} }
                 grep { ( $_->{op} // '' ) eq 'Proj'
                        && grep { $_ == $n->{id} } ( $_->{inputs} // [] )->@* }
-                values $nodes->%*;
+                $self->_nodes_in_order;
             while ( @queue ) {
                 my $id = shift @queue;
                 next if !defined $id || $seen{$id}++;
                 $under_loop{$id} = 1;
                 my $c = $nodes->{$id} or next;
                 push @queue, ( $c->{inputs} // [] )->@*;
-                for my $d ( values $nodes->%* ) {
+                for my $d ( $self->_nodes_in_order ) {
                     push @queue, $d->{id}
                         if defined $d->{control_in} && $d->{control_in} == $id;
                 }
@@ -1117,7 +1136,7 @@ class SoN::Deparse 0.01 {
         }
 
         my @stale_reads;
-        for my $n ( sort { $a->{id} <=> $b->{id} } values $nodes->%* ) {
+        for my $n ( sort { $a->{id} <=> $b->{id} } $self->_nodes_in_order ) {
             next unless ( $n->{op} // '' ) eq 'EntryDef';
             next if exists $bound{ $n->{id} };
             next if $under_loop{ $n->{id} };
@@ -1163,7 +1182,7 @@ class SoN::Deparse 0.01 {
         # spell it by name through _location, so the binding reaches only the
         # reads.
         my %ctrl_next;
-        for my $c ( values $nodes->%* ) {
+        for my $c ( $self->_nodes_in_order ) {
             push $ctrl_next{ $c->{control_in} }->@*, $c
                 if defined $c->{control_in};
         }
@@ -1181,7 +1200,7 @@ class SoN::Deparse 0.01 {
             DefinedOr And Or TernaryExpr UnaryPlus Increment
         ) };
         my %consumers;
-        for my $c ( values $nodes->%* ) {
+        for my $c ( $self->_nodes_in_order ) {
             push $consumers{$_}->@*, $c for ( $c->{inputs} // [] )->@*;
         }
         my $safe_read = sub ($id) {
@@ -1196,7 +1215,7 @@ class SoN::Deparse 0.01 {
             }
             return 1;
         };
-        for my $n ( sort { $a->{id} <=> $b->{id} } values $nodes->%* ) {
+        for my $n ( sort { $a->{id} <=> $b->{id} } $self->_nodes_in_order ) {
             next unless ( $n->{op} // '' ) eq 'PadAccess';
             next if exists $bound{ $n->{id} };
             next unless $safe_read->( $n->{id} );
@@ -1313,7 +1332,7 @@ class SoN::Deparse 0.01 {
         # these carry no control edge, so nothing orders them, and Perl needs
         # the `my` to have happened.
         my $prologue = '';
-        for my $n (sort { $a->{id} <=> $b->{id} } values $nodes->%*) {
+        for my $n (sort { $a->{id} <=> $b->{id} } $self->_nodes_in_order) {
             next unless ($n->{op} // '') =~ /\A(?:Array|Hash)Literal\z/;
             my $af = $n->{fields} // {};
             next unless defined $af->{symbol};
@@ -1385,7 +1404,7 @@ class SoN::Deparse 0.01 {
                 join(', ', map { $self->_expr($_) } (($n->{inputs} // [])->@*)));
         }
 
-        for my $n (sort { $a->{id} <=> $b->{id} } values $nodes->%*) {
+        for my $n (sort { $a->{id} <=> $b->{id} } $self->_nodes_in_order) {
             next unless $n->{op} eq 'Assign';
             next if defined $n->{control_in};   # already emitted in the chain
 
@@ -1573,7 +1592,7 @@ class SoN::Deparse 0.01 {
                 my ($k) = grep { $in[$_] == $cur } 0 .. $#in;
                 my @rphis = grep { ($_->{op} // '') eq 'Phi'
                         && (($_->{fields}{region} // -1) == $n->{id})
-                        && !$self->_is_memory($_->{id}) } values $nodes->%*;
+                        && !$self->_is_memory($_->{id}) } $self->_nodes_in_order;
                 if (@loop_frames) {
                     die "GAP: a return from inside a loop whose exit carries"
                       . " more than one value is not yet rendered\n"
@@ -1765,7 +1784,7 @@ class SoN::Deparse 0.01 {
         # rather than reached through a Proj, so it is found by control_in --
         # and it is the only such node, because the body hangs off Proj 0.
         my @cond = grep { ($_->{control_in} // -1) == $n->{id}
-                       && $_->{op} ne 'Proj' } values $nodes->%*;
+                       && $_->{op} ne 'Proj' } $self->_nodes_in_order;
         die "GAP: a Loop with no condition node is not yet rendered\n"
             unless @cond;
 
@@ -1836,7 +1855,7 @@ class SoN::Deparse 0.01 {
                    grep { ($_->{op} // '') eq 'Phi'
                        && (($_->{fields}{region} // -1) == $n->{id})
                        && !$self->_is_memory($_->{id}) }
-                   values $nodes->%*;
+                   $self->_nodes_in_order;
         for my $p (@phis) {
             die "GAP: a loop Phi with " . scalar(($p->{inputs} // [])->@*)
               . " inputs is not yet rendered\n"
@@ -1926,7 +1945,7 @@ class SoN::Deparse 0.01 {
         # non-Loop-regioned Phi, and refused.
         %break_assign = ();
         if ($exit_rgn) {
-            for my $ph (values $nodes->%*) {
+            for my $ph ($self->_nodes_in_order) {
                 next unless ($ph->{op} // '') eq 'Phi';
                 next unless (($ph->{fields} // {})->{region} // -1)
                             == $exit_rgn->{id};
@@ -1966,14 +1985,14 @@ class SoN::Deparse 0.01 {
         # Input 0 is the fall-through and input 1 the edge -- the order the
         # producer's merge builds, body first.
         my %latch;
-        for my $r (values $nodes->%*) {
+        for my $r ($self->_nodes_in_order) {
             next unless ($r->{op} // '') eq 'Region'
                 && ($r->{head} // -1) == $n->{id}
                 && !($exit_rgn && $r->{id} == $exit_rgn->{id});
             my @lphis = sort { $a->{id} <=> $b->{id} }
                 grep { ($_->{op} // '') eq 'Phi'
                     && (($_->{fields}{region} // -1) == $r->{id})
-                    && !$self->_is_memory($_->{id}) } values $nodes->%*;
+                    && !$self->_is_memory($_->{id}) } $self->_nodes_in_order;
             for my $ph (@lphis) {
                 my $var = sprintf('$latch%d', $ph->{id});
                 $init .= "my $var;\n";
@@ -2043,7 +2062,7 @@ class SoN::Deparse 0.01 {
                     $self->_expr($cond[0]{id}), _indent($body . $step));
         }
 
-        for my $id (keys %save_inv) {
+        for my $id (sort { $a <=> $b } keys %save_inv) {
             if (defined $save_inv{$id}) { $bound{$id} = $save_inv{$id} }
             else                        { delete $bound{$id} }
         }
@@ -2240,9 +2259,9 @@ class SoN::Deparse 0.01 {
         my %proj = map { $_->{id} => 1 }
             grep { ($_->{op} // '') eq 'Proj'
                    && (($_->{inputs} // [])->[0] // -1) == $loop_id }
-            values $nodes->%*;
+            $self->_nodes_in_order;
         return undef unless keys %proj;
-        for my $n (sort { $a->{id} <=> $b->{id} } values $nodes->%*) {
+        for my $n (sort { $a->{id} <=> $b->{id} } $self->_nodes_in_order) {
             next unless ($n->{op} // '') eq 'Region';
             for my $in (($n->{inputs} // [])->@*) {
                 return $n->{id} if defined $in && $proj{$in};
@@ -2267,7 +2286,7 @@ class SoN::Deparse 0.01 {
         while (@seen) {
             my $cur = shift @seen;
             next if $done{$cur}++;
-            for my $n (values $nodes->%*) {
+            for my $n ($self->_nodes_in_order) {
                 my @in = ($n->{inputs} // [])->@*;
                 next unless grep { ($_ // -1) == $cur } @in;
                 my $op = $n->{op} // '';
@@ -2300,7 +2319,7 @@ class SoN::Deparse 0.01 {
     # construct in one piece instead of running into the body first.
     method _eval_join_entered_at ($id, $next_of) {
         return undef unless defined $id;
-        for my $n (values $nodes->%*) {
+        for my $n ($self->_nodes_in_order) {
             next unless ($n->{op} // '') eq 'Region';
             my $entry = ($n->{fields} // {})->{eval_entry};
             next unless defined $entry && $entry == $id;
@@ -2331,7 +2350,7 @@ class SoN::Deparse 0.01 {
 
         my ($phi) = grep { ($_->{op} // '') eq 'Phi'
                         && ((($_->{fields} // {})->{region} // -1) == $n->{id}) }
-                    values $nodes->%*;
+                    $self->_nodes_in_order;
         return 0 unless $phi;
         my @pin = ($phi->{inputs} // [])->@*;
         return 0 unless @pin == 2;
@@ -2377,7 +2396,7 @@ class SoN::Deparse 0.01 {
         my ($phi) = grep { ($_->{op} // '') eq 'Phi'
                         && ((($_->{fields} // {})->{region} // -1)
                             == $region->{id}) }
-                    values $nodes->%*;
+                    $self->_nodes_in_order;
 
         my $inner;
         if (($eff->{op} // '') eq 'Coerce'
@@ -2478,7 +2497,7 @@ class SoN::Deparse 0.01 {
                    grep { ($_->{op} // '') eq 'Phi'
                        && (($_->{fields}{region} // -1) == $n->{id})
                        && !$self->_is_memory($_->{id}) }
-                   values $nodes->%*;
+                   $self->_nodes_in_order;
 
         my $init = '';
         $init .= sprintf("my %s = %s;\n", $self->_phi_var($_),
@@ -2818,7 +2837,7 @@ class SoN::Deparse 0.01 {
                    grep { ($_->{op} // '') eq 'Phi'
                        && ((($_->{fields} // {})->{region} // -1) == $join)
                        && !$self->_is_memory($_->{id}) }
-                   values $nodes->%*;
+                   $self->_nodes_in_order;
         return ('') unless @phis;
 
         my %proj_arm = map { $arm->{$_}{id} => $_ } keys $arm->%*;
@@ -2948,7 +2967,7 @@ class SoN::Deparse 0.01 {
             push @queue, map { $_->{id} } ($next_of->{$cur} // [])->@*;
             # A Region consumes the arm's last control node as an input, so it
             # is a forward step the control_in index does not record.
-            for my $n (values $nodes->%*) {
+            for my $n ($self->_nodes_in_order) {
                 next unless $n->{op} eq 'Region';
                 push @queue, $n->{id}
                     if grep { $_ == $cur } (($n->{inputs} // [])->@*);
@@ -3462,7 +3481,7 @@ class SoN::Deparse 0.01 {
     # store wants the string, the count wants the number, and rendering each
     # separately runs the s/// twice.
     method _counted_subst ($id) {
-        for my $n (values $nodes->%*) {
+        for my $n ($self->_nodes_in_order) {
             next unless ($n->{op} // '') eq 'RegexSubstCount';
             my $in = ($n->{inputs} // [])->[0];
             return 1 if defined $in && $in == $id;
@@ -3540,7 +3559,7 @@ class SoN::Deparse 0.01 {
     # The tr/// half of _counted_subst, and the same hazard: two consumers over
     # one mutation.
     method _counted_trans ($id) {
-        for my $n ( values $nodes->%* ) {
+        for my $n ( $self->_nodes_in_order ) {
             next unless ( $n->{op} // '' ) eq 'TransliterateCount';
             my $in = ( $n->{inputs} // [] )->[0];
             return 1 if defined $in && $in == $id;
@@ -3572,7 +3591,7 @@ class SoN::Deparse 0.01 {
             if ($root->{op} // '') eq 'Subscript';
 
         my @slot;
-        for my $n (values $nodes->%*) {
+        for my $n ($self->_nodes_in_order) {
             next unless ($n->{op} // '') eq 'EntryWrite';
             my @in = ($n->{inputs} // [])->@*;
             next unless @in >= 2 && defined $in[1] && $in[1] == ($root->{id} // -1);
