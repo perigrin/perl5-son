@@ -595,3 +595,95 @@ main::pair: {start: 0, returns: [9], nodes: [
   [Coerce, {from_repr: List, to_repr: Scalar}, [6], ~, Scalar], # 8
   [Return, ~, [7, 8], 0]]} # 9
 ```
+
+## A sub whose last statement is a loop
+
+A sub returns the value of its last statement, and when that statement
+is a loop, the value is the loop's last failed test: perl's shared false.
+It is ONE value in list context and `""` in scalar context, never
+anything the body computed, for `foreach` and `while` alike. Measured,
+`builtin::is_bool` is true for both. Found by B::SoN translating chalk's
+lib/ and running chalk's own suite against the emitted Perl, which
+compiled and gave a wrong answer; it was the cause of 99 of chalk's
+failing test files.
+
+```perl
+sub last_is_for   { my @seen; for my $x (@_) { push @seen, $x * 2 } }
+sub last_is_while { my $i = 0; while ($i < 2) { $i++ } }
+my @f = last_is_for(1, 2);
+my @w = last_is_while();
+my $s = last_is_for(3);
+print scalar(@f), scalar(@w), "[", $f[0], "][", $s, "]\n";
+```
+
+```behavior
+parses: yes
+```
+
+```output
+11[][]
+```
+
+```ir
+main::__PROGRAM__: {start: 0, returns: [23], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 3
+  [Call, {dispatch_kind: direct, name: main::last_is_for, param_names: [], want: list}, [2, 3], 0, Boolean], # 4
+  [ArrayLiteral, {sigil: "@", symbol: f}, [4], ~, Array], # 5
+  [MemStart], # 6
+  [Count, ~, [5, 6], ~, Int], # 7
+  [Coerce, {from_repr: Int, to_repr: Str}, [7], ~, Str], # 8
+  [Call, {dispatch_kind: direct, name: main::last_is_while, param_names: [], want: list}, ~, 4, Boolean], # 9
+  [ArrayLiteral, {sigil: "@", symbol: w}, [9], ~, Array], # 10
+  [Count, ~, [10, 6], ~, Int], # 11
+  [Coerce, {from_repr: Int, to_repr: Str}, [11], ~, Str], # 12
+  [Constant, {const_type: string, value: "["}, ~, ~, Str], # 13
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 14
+  [Subscript, {kind: array}, [5, 14, 6], ~, Boolean], # 15
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [15], ~, Str], # 16
+  [Constant, {const_type: string, value: "]["}, ~, ~, Str], # 17
+  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 18
+  [Call, {dispatch_kind: direct, name: main::last_is_for, param_names: [], want: scalar}, [18], 9, Boolean], # 19
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [19], ~, Str], # 20
+  [Constant, {const_type: string, value: "]\n"}, ~, ~, Str], # 21
+  [Print, ~, [8, 12, 13, 16, 17, 20, 21], 19, Scalar], # 22
+  [Return, ~, [1], 22]]} # 23
+main::last_is_for: {start: 0, returns: [5], nodes: [
+  [Start], # 0
+  [Constant, {const_type: boolean, value: ""}, ~, ~, Boolean], # 1
+  [Loop, {bound: entry}, [0], 0], # 2
+  [Proj, {index: 1}, [2]], # 3
+  [Region, {head: 2}, [3]], # 4
+  [Return, ~, [1], 4], # 5
+  [ArgsSource, ~, ~, ~, Array], # 6
+  [MemStart], # 7
+  [Count, ~, [6, 7], ~, Int], # 8
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 9
+  [Phi, {region: 2}, [9, 20], ~, Int], # 10
+  [NumGt, ~, [8, 10], 2, Boolean], # 11
+  [Proj, {index: 0}, [2]], # 12
+  [PadAccess, {sigil: "@", symbol: seen}, ~, ~, Unknown], # 13
+  [Subscript, {kind: array}, [6, 10, 7], ~, Scalar], # 14
+  [Coerce, {from_repr: Scalar, to_repr: Num}, [14], ~, Num], # 15
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 16
+  [Multiply, ~, [15, 16], ~, Num], # 17
+  [Call, {dispatch_kind: builtin, name: push, param_names: []}, [13, 17], 12, Unknown], # 18
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 19
+  [Add, ~, [10, 19], ~, Int]]} # 20
+main::last_is_while: {start: 0, returns: [5], nodes: [
+  [Start], # 0
+  [Constant, {const_type: boolean, value: ""}, ~, ~, Boolean], # 1
+  [Loop, {bound: each}, [0], 0], # 2
+  [Proj, {index: 1}, [2]], # 3
+  [Region, {head: 2}, [3]], # 4
+  [Return, ~, [1], 4], # 5
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 6
+  [Phi, {region: 2}, [6, 12], ~, Int], # 7
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 8
+  [NumLt, ~, [7, 8], 2, Boolean], # 9
+  [Proj, {index: 0}, [2]], # 10
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 11
+  [Add, ~, [7, 11], ~, Int]]} # 12
+```
