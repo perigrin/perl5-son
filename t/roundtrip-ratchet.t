@@ -1,5 +1,5 @@
-# ABOUTME: The goal's round-trip numbers -- pvm corpus, perl's t/, chalk's lib/ -- guarded,
-# ABOUTME: so a regression fails here rather than waiting for a census run by hand.
+# ABOUTME: The goal's round-trip numbers -- pvm corpus, perl's t/, chalk's lib/ and chalk's
+# ABOUTME: own test suite against it -- guarded, so a regression fails here, not by hand.
 use v5.42.0;
 use Test2::V0;
 use FindBin;
@@ -38,6 +38,11 @@ my %FLOOR = (
     # chalk's lib/ at the commit tools/chalk-lib-roundtrip.pl pins (5948f648,
     # 179 modules), measured 2026-10-01.
     chalk_compiles => 130,
+    # chalk's own test files (547 at 5948f648) giving the same result
+    # against the emitted lib/ as against the original -- tools/chalk-gate3.pl,
+    # measured twice at 993af29 with identical rows. Files that time out
+    # against the ORIGINAL are SLOW and left out.
+    chalk_gate3_same => 351,
 );
 
 # A CEILING, NOT A FLOOR: graphs B::SoN skipped in chalk's lib/. A module can
@@ -62,7 +67,7 @@ sub census ($tool, @args) {
 }
 
 SKIP: {
-    skip_all 'set SON_RATCHET=1 to run the round-trip censuses (~15 minutes)'
+    skip_all 'set SON_RATCHET=1 to run the round-trip censuses (~1 hour)'
         unless $ENV{SON_RATCHET};
 
     subtest 'the corpus round-trip does not regress' => sub {
@@ -135,6 +140,26 @@ SKIP: {
             or diag $out;
         ok( ( $n->{SKIPPED_GRAPHS} // 9e9 ) <= $CEILING{chalk_skipped_graphs},
             "SKIPPED_GRAPHS $n->{SKIPPED_GRAPHS} <= ceiling $CEILING{chalk_skipped_graphs}" )
+            or diag $out;
+    };
+
+    # CHALK'S OWN TEST SUITE against the emitted lib/ -- the goal's last gate.
+    # Every module that round-trips with no graph skipped replaces its
+    # original, and each test file must give the same result. The slowest
+    # census by far: chalk's suite runs twice.
+    subtest "chalk's test suite against the emitted lib/ does not regress" => sub {
+        my ( $n, $out ) = census('chalk-gate3.pl');
+
+        is $n->{_cases}, 547, 'the census ran every test file at the pinned commit'
+            or do { diag $out; return };
+
+        my $sum = 0;
+        $sum += $n->{$_} // 0 for qw(SAME DIFFERS SLOW);
+        is $sum, $n->{_cases}, 'every test file landed in exactly one bucket'
+            or diag $out;
+
+        ok( ( $n->{SAME} // 0 ) >= $FLOOR{chalk_gate3_same},
+            "SAME $n->{SAME} >= floor $FLOOR{chalk_gate3_same}" )
             or diag $out;
     };
 }
