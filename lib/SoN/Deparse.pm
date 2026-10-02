@@ -643,8 +643,65 @@ class SoN::Deparse 0.01 {
         my $lvalue = defined $short
             && ((($sub_meta->{$pkg} // {})->{subs} // {})->{$short} // {})->{lvalue}
             ? ' :lvalue' : '';
-        return sprintf("sub %s%s%s {\n%s}\n", $self->_sub_ident($name),
-            $self->_sub_prototype($name), $lvalue, $body);
+        return sprintf("sub %s%s%s%s {\n%s}\n", $self->_sub_ident($name),
+            $self->_sub_prototype($name), $lvalue,
+            $self->_signature_for($name, $graph), $body);
+    }
+
+    # THE SOURCE'S SIGNATURE, for a sub or method that declared one, else
+    # undef. Emitted as a signature, a parameter is checked as perl checked
+    # it -- too many or too few arguments die -- and named as the source
+    # named it. Spelled as `$_[N]` under no signature, the emission took any
+    # count, and a reader of the source (chalk, reading its own lib/) saw no
+    # parameters at all.
+    method _signature_of ($key) {
+        my ($pkg, $short) = ($key // '') =~ /\A(.*)::([^:]+)\z/ or return undef;
+        my $c = $sub_meta->{$pkg};
+        return undef unless ref $c eq 'HASH';
+        my $sig;
+        if ((($c->{methods} // {})->{$short} // '') eq $key) {
+            $sig = ($c->{method_signatures} // {})->{$short};
+        }
+        else {
+            my $s = ($c->{subs} // {})->{$short};
+            $sig = $s->{signature}
+                if ref $s eq 'HASH' && ($s->{graph} // '') eq $key;
+        }
+        return ref $sig eq 'HASH' && ($sig->{kind} // '') eq 'declared'
+            ? $sig : undef;
+    }
+
+    # `($a, $b = D, @rest)` for the declared signature of graph $key, or ''.
+    # Perl's own counts: `mandatory` is every scalar parameter (the invocant
+    # too, for a method) and the last `optional` of them take defaults. A
+    # default is the input its Parameter node carries, under the operator
+    # its `default_when` names; an optional parameter the body never reads
+    # has no node, and only its optionality is observable, so `= undef`.
+    method _signature_for ($key, $graph) {
+        my $sig = $self->_signature_of($key) // return '';
+        return $self->_in_graph($key, $graph, sub {
+            my @params   = ($sig->{params} // [])->@*;
+            my $scalars  = grep { ($_->{sigil} // '$') eq '$' } @params;
+            my $required = $scalars - ($sig->{optional} // 0);
+            my %node = map { ((($_->{fields} // {})->{index}) // -1) => $_ }
+                       grep { ($_->{op} // '') eq 'Parameter' }
+                       $self->_nodes_in_order;
+            my @parts;
+            for my $i (0 .. $#params) {
+                my $p = $params[$i];
+                if (($p->{sigil} // '$') ne '$' || $i < $required) {
+                    push @parts, $p->{name};
+                    next;
+                }
+                my $n    = $node{ $p->{index} // $i };
+                my $when = (($n // {})->{fields} // {})->{default_when} // 'absent';
+                my $in   = $n ? ($n->{inputs} // [])->[0] : undef;
+                my $d    = defined $in ? $self->_expr($in) : 'undef';
+                push @parts, sprintf('%s %s %s', $p->{name},
+                    $when eq 'undef' ? '//=' : $when eq 'false' ? '||=' : '=', $d);
+            }
+            '(' . join(', ', @parts) . ')';
+        });
     }
 
     # The program's feature classes, declared, and the set of graph keys they
@@ -720,7 +777,8 @@ class SoN::Deparse 0.01 {
                 my $b = eval { $self->_render_graph_body($key,
                                    $all_methods->{$key} // {}) };
                 unless (defined $b) { $gap = $@ || "failed to render $key"; return (undef) }
-                $body .= "method $m {\n" . _indent($b) . "}\n";
+                my $sig = $self->_signature_for($key, $all_methods->{$key} // {});
+                $body .= "method $m$sig {\n" . _indent($b) . "}\n";
             }
             # A PLAIN SUB DECLARED IN THE CLASS BLOCK goes back in it, by its
             # short name. Outside, fully qualified, it is the same sub to perl
@@ -839,6 +897,10 @@ class SoN::Deparse 0.01 {
             while $text =~ /([\$\@%](?:phi|eff|stale|ret|latch|exit|inv)\d+)\b(?!_)/g;
         delete $names{'$self'};
         delete @names{ keys %cell_slots };
+        # A signature's parameters are declared by the signature.
+        if (my $sig = $self->_signature_of($current_sub)) {
+            delete @names{ map { $_->{name} } ($sig->{params} // [])->@* };
+        }
         return $text unless %names;
 
         my %declared;
@@ -1592,7 +1654,9 @@ class SoN::Deparse 0.01 {
             }
             sprintf("my %s = %s;\n", $f->{name}, $read);
         } grep { $self->_param_as_variable($_) }
-          grep { ($_->{op} // '') eq 'Parameter' } $self->_nodes_in_order;
+          grep { ($_->{op} // '') eq 'Parameter' }
+          # A signature declares them already.
+          ($self->_signature_of($current_sub) ? () : $self->_nodes_in_order);
 
         return $params . $decls . $prologue . $body;
     }
@@ -4589,6 +4653,12 @@ class SoN::Deparse 0.01 {
         #
         # Ugly and faithful rather than pretty and reconstructed -- the same
         # trade the emitter's own design records.
+        elsif ($op eq 'Parameter' && $self->_signature_of($current_sub)) {
+            # UNDER THE SOURCE'S SIGNATURE (see _signature_of) a parameter is
+            # its name -- the signature declares it, defaults and all, and a
+            # slurpy `@rest` or `%opts` is no harder than a scalar.
+            $text = ( $n->{fields} // {} )->{name};
+        }
         elsif ($op eq 'Parameter') {
             my $ix  = ( $n->{fields} // {} )->{index} // 0;
             my $sig = ( $n->{fields} // {} )->{sigil} // '$';
