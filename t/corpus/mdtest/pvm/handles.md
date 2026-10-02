@@ -62,7 +62,7 @@ main::__PROGRAM__: {start: 0, returns: [9], nodes: [
   [Call, {dispatch_kind: builtin, name: open, param_names: []}, [2, 4, 5], 0, Scalar], # 6
   [Print, ~, [3], 6, Scalar], # 7
   [Call, {dispatch_kind: builtin, name: close, param_names: []}, [2], 7, Boolean], # 8
-  [Return, ~, [1], 8]]} # 9
+  [Return, {implicit: true}, [1], 8]]} # 9
 ```
 
 ## `<$fh>` in scalar context reads ONE line
@@ -119,7 +119,7 @@ main::__PROGRAM__: {start: 0, returns: [10], nodes: [
   [Coerce, {from_repr: Scalar, to_repr: Str}, [6], ~, Str], # 7
   [Print, ~, [7], 6, Scalar], # 8
   [Call, {dispatch_kind: builtin, name: close, param_names: []}, [2], 8, Boolean], # 9
-  [Return, ~, [1], 9]]} # 10
+  [Return, {implicit: true}, [1], 9]]} # 10
 ```
 
 ## `<$fh>` in list context reads EVERY remaining line
@@ -175,7 +175,7 @@ main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 11
   [Print, ~, [10, 11], 6, Scalar], # 12
   [Call, {dispatch_kind: builtin, name: close, param_names: []}, [2], 12, Boolean], # 13
-  [Return, ~, [1], 13]]} # 14
+  [Return, {implicit: true}, [1], 13]]} # 14
 ```
 
 ## `eof($fh)` inspects the glob without making it real
@@ -225,5 +225,5 @@ main::__PROGRAM__: {start: 0, returns: [15], nodes: [
   [Print, ~, [10], 11, Scalar], # 12
   [Region, {head: 8}, [9, 12]], # 13
   [Call, {dispatch_kind: builtin, name: close, param_names: []}, [2], 13, Boolean], # 14
-  [Return, ~, [1], 14]]} # 15
+  [Return, {implicit: true}, [1], 14]]} # 15
 ```

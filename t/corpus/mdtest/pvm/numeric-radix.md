@@ -69,7 +69,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
   [Concat, ~, [3, 4], ~, Str], # 5
   [Print, ~, [5], 0, Scalar], # 6
-  [Return, ~, [1], 6]]} # 7
+  [Return, {implicit: true}, [1], 6]]} # 7
 ```
 
 ## Binary: the `0b` prefix
@@ -114,7 +114,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
   [Concat, ~, [3, 4], ~, Str], # 5
   [Print, ~, [5], 0, Scalar], # 6
-  [Return, ~, [1], 6]]} # 7
+  [Return, {implicit: true}, [1], 6]]} # 7
 ```
 
 ## Hexadecimal: the `0x` prefix
@@ -161,7 +161,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
   [Concat, ~, [3, 4], ~, Str], # 5
   [Print, ~, [5], 0, Scalar], # 6
-  [Return, ~, [1], 6]]} # 7
+  [Return, {implicit: true}, [1], 6]]} # 7
 ```
 
 ## Octal by leading zero
@@ -207,7 +207,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
   [Concat, ~, [3, 4], ~, Str], # 5
   [Print, ~, [5], 0, Scalar], # 6
-  [Return, ~, [1], 6]]} # 7
+  [Return, {implicit: true}, [1], 6]]} # 7
 ```
 
 ## Octal by the `0o` prefix
@@ -253,7 +253,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
   [Concat, ~, [3, 4], ~, Str], # 5
   [Print, ~, [5], 0, Scalar], # 6
-  [Return, ~, [1], 6]]} # 7
+  [Return, {implicit: true}, [1], 6]]} # 7
 ```
 
 ## Underscore separators
@@ -303,5 +303,5 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
   [Concat, ~, [3, 4], ~, Str], # 5
   [Print, ~, [5], 0, Scalar], # 6
-  [Return, ~, [1], 6]]} # 7
+  [Return, {implicit: true}, [1], 6]]} # 7
 ```

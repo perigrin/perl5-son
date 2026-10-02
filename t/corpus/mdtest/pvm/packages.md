@@ -58,7 +58,7 @@ main::__PROGRAM__: {start: 0, returns: [6], nodes: [
   [Coerce, {from_repr: Unknown, to_repr: Str}, [2], ~, Str], # 3
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
   [Print, ~, [3, 4], 2, Scalar], # 5
-  [Return, ~, [1], 5]]} # 6
+  [Return, {implicit: true}, [1], 5]]} # 6
 ```
 
 ## `package Foo { ... }` scopes the switch to a block
@@ -100,7 +100,7 @@ main::__PROGRAM__: {start: 0, returns: [6], nodes: [
   [Coerce, {from_repr: Unknown, to_repr: Str}, [2], ~, Str], # 3
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
   [Print, ~, [3, 4], 2, Scalar], # 5
-  [Return, ~, [1], 5]]} # 6
+  [Return, {implicit: true}, [1], 5]]} # 6
 ```
 
 ## A LEADING `::` elides `main`
@@ -169,7 +169,7 @@ main::__PROGRAM__: {start: 0, returns: [9], nodes: [
   [Call, {dispatch_kind: direct, name: Greet::hello, param_names: [], want: list}, ~, 5, Str], # 6
   [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
   [Print, ~, [7, 4], 6, Scalar], # 8
-  [Return, ~, [1], 8]]} # 9
+  [Return, {implicit: true}, [1], 8]]} # 9
 main::shout: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: HELLO}, ~, ~, Str], # 1

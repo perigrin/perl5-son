@@ -82,7 +82,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
   [Concat, ~, [3, 4], ~, Str], # 5
   [Print, ~, [5], 0, Scalar], # 6
-  [Return, ~, [1], 6]]} # 7
+  [Return, {implicit: true}, [1], 6]]} # 7
 ```
 
 ## A pod block holding text that is not a program
@@ -135,7 +135,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
   [Concat, ~, [3, 4], ~, Str], # 5
   [Print, ~, [5], 0, Scalar], # 6
-  [Return, ~, [1], 6]]} # 7
+  [Return, {implicit: true}, [1], 6]]} # 7
 ```
 
 ## A data section read back through `DATA`
@@ -199,7 +199,7 @@ main::__PROGRAM__: {start: 0, returns: [6], nodes: [
   [Call, {dispatch_kind: builtin, name: readline, param_names: []}, [2], 0, List], # 3
   [Coerce, {from_repr: List, to_repr: Str}, [3], ~, Str], # 4
   [Print, ~, [4], 3, Scalar], # 5
-  [Return, ~, [1], 5], # 6
+  [Return, {implicit: true}, [1], 5], # 6
   [ArrayLiteral, {sigil: "@", symbol: lines}, [3], ~, Array]]} # 7
 ```
 
@@ -251,6 +251,6 @@ main::__PROGRAM__: {start: 0, returns: [6], nodes: [
   [Call, {dispatch_kind: builtin, name: readline, param_names: []}, [2], 0, List], # 3
   [Coerce, {from_repr: List, to_repr: Str}, [3], ~, Str], # 4
   [Print, ~, [4], 3, Scalar], # 5
-  [Return, ~, [1], 5], # 6
+  [Return, {implicit: true}, [1], 5], # 6
   [ArrayLiteral, {sigil: "@", symbol: lines}, [3], ~, Array]]} # 7
 ```

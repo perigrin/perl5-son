@@ -77,7 +77,7 @@ main::__PROGRAM__: {start: 0, returns: [30], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 27
   [Concat, ~, [26, 27], ~, Str], # 28
   [Print, ~, [28], 0, Scalar], # 29
-  [Return, ~, [1], 29]]} # 30
+  [Return, {implicit: true}, [1], 29]]} # 30
 ```
 
 ## `.=` emits `multiconcat`, not `concat`
@@ -115,7 +115,7 @@ main::__PROGRAM__: {start: 0, returns: [10], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 7
   [Concat, ~, [6, 7], ~, Str], # 8
   [Print, ~, [8], 0, Scalar], # 9
-  [Return, ~, [1], 9]]} # 10
+  [Return, {implicit: true}, [1], 9]]} # 10
 ```
 
 ## `x=` is word-shaped
@@ -164,7 +164,7 @@ main::__PROGRAM__: {start: 0, returns: [10], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 7
   [Concat, ~, [6, 7], ~, Str], # 8
   [Print, ~, [8], 0, Scalar], # 9
-  [Return, ~, [1], 9]]} # 10
+  [Return, {implicit: true}, [1], 9]]} # 10
 ```
 
 ## `//=`, `||=` and `&&=` short-circuit
@@ -227,7 +227,7 @@ main::__PROGRAM__: {start: 0, returns: [27], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 24
   [Concat, ~, [23, 24], ~, Str], # 25
   [Print, ~, [25], 0, Scalar], # 26
-  [Return, ~, [1], 26]]} # 27
+  [Return, {implicit: true}, [1], 26]]} # 27
 ```
 
 ## The bitwise and shift forms
@@ -306,5 +306,5 @@ main::__PROGRAM__: {start: 0, returns: [39], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 36
   [Concat, ~, [35, 36], ~, Str], # 37
   [Print, ~, [37], 0, Scalar], # 38
-  [Return, ~, [1], 38]]} # 39
+  [Return, {implicit: true}, [1], 38]]} # 39
 ```

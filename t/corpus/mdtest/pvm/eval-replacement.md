@@ -77,7 +77,7 @@ main::__PROGRAM__: {start: 0, returns: [15], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 12
   [Concat, ~, [11, 12], ~, Str], # 13
   [Print, ~, [13], 9, Scalar], # 14
-  [Return, ~, [1], 14], # 15
+  [Return, {implicit: true}, [1], 14], # 15
   [RegexMatch, {flags: "", pattern: a}, [6], ~, Boolean]]} # 16
 ```
 
@@ -143,7 +143,7 @@ main::__PROGRAM__: {start: 0, returns: [23], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 20
   [Concat, ~, [19, 20], ~, Str], # 21
   [Print, ~, [21], 17, Scalar], # 22
-  [Return, ~, [1], 22]]} # 23
+  [Return, {implicit: true}, [1], 22]]} # 23
 ```
 
 ## `eval STRING`: the re-entry with no delimiter
@@ -220,5 +220,5 @@ main::__PROGRAM__: {start: 0, returns: [15], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 12
   [Concat, ~, [11, 12], ~, Str], # 13
   [Print, ~, [13], 9, Scalar], # 14
-  [Return, ~, [1], 14]]} # 15
+  [Return, {implicit: true}, [1], 14]]} # 15
 ```

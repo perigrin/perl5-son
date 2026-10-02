@@ -97,7 +97,7 @@ main::__PROGRAM__: {start: 0, returns: [43], nodes: [
   [Print, ~, [21, 23, 17], 39, Scalar], # 40
   [Print, ~, [18, 20, 17], 40, Scalar], # 41
   [Print, ~, [2, 16, 17], 41, Scalar], # 42
-  [Return, ~, [1], 42]]} # 43
+  [Return, {implicit: true}, [1], 42]]} # 43
 ```
 
 ## The string relations and `cmp`
@@ -183,7 +183,7 @@ main::__PROGRAM__: {start: 0, returns: [45], nodes: [
   [Print, ~, [21, 23, 17], 41, Scalar], # 42
   [Print, ~, [18, 20, 17], 42, Scalar], # 43
   [Print, ~, [2, 16, 17], 43, Scalar], # 44
-  [Return, ~, [1], 44]]} # 45
+  [Return, {implicit: true}, [1], 44]]} # 45
 ```
 
 ## The five logical operators
@@ -255,7 +255,7 @@ main::__PROGRAM__: {start: 0, returns: [37], nodes: [
   [Constant, {const_type: string, value: "]\n"}, ~, ~, Str], # 34
   [Concat, ~, [33, 34], ~, Str], # 35
   [Print, ~, [35], 0, Scalar], # 36
-  [Return, ~, [1], 36]]} # 37
+  [Return, {implicit: true}, [1], 36]]} # 37
 ```
 
 ## `&&` and `and` are one op at two precedences
@@ -305,7 +305,7 @@ main::__PROGRAM__: {start: 0, returns: [18], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 15
   [Concat, ~, [14, 15], ~, Str], # 16
   [Print, ~, [16], 0, Scalar], # 17
-  [Return, ~, [1], 17]]} # 18
+  [Return, {implicit: true}, [1], 17]]} # 18
 ```
 
 ## Punctuation `!`, and the double negative
@@ -351,7 +351,7 @@ main::__PROGRAM__: {start: 0, returns: [13], nodes: [
   [Coerce, {from_repr: Boolean, to_repr: Str}, [9], ~, Str], # 10
   [Constant, {const_type: string, value: "]\n"}, ~, ~, Str], # 11
   [Print, ~, [2, 7, 8, 10, 11], 0, Scalar], # 12
-  [Return, ~, [1], 12]]} # 13
+  [Return, {implicit: true}, [1], 12]]} # 13
 ```
 
 ## Comparisons chain, and the answer flips
@@ -397,7 +397,7 @@ main::__PROGRAM__: {start: 0, returns: [13], nodes: [
   [Coerce, {from_repr: Boolean, to_repr: Str}, [9], ~, Str], # 10
   [Print, ~, [2, 10, 7], 0, Scalar], # 11
   [Print, ~, [2, 6, 7], 11, Scalar], # 12
-  [Return, ~, [1], 12]]} # 13
+  [Return, {implicit: true}, [1], 12]]} # 13
 ```
 
 ## Level 13 is `chain/na` and the halves differ

@@ -64,7 +64,7 @@ main::__PROGRAM__: {start: 0, returns: [6], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 3
   [Concat, ~, [2, 3], ~, Str], # 4
   [Print, ~, [4], 0, Scalar], # 5
-  [Return, ~, [1], 5]]} # 6
+  [Return, {implicit: true}, [1], 5]]} # 6
 "BEGIN 1": {start: 0, returns: [6], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: strict}, ~, ~, Str], # 1
@@ -72,7 +72,7 @@ main::__PROGRAM__: {start: 0, returns: [6], nodes: [
   [MemStart], # 3
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [2, 3], 0, Unknown], # 4
   [Call, {class_name: strict, dispatch_kind: method, name: import, param_names: []}, [1], 4, Unknown], # 5
-  [Return, ~, [5], 5]]} # 6
+  [Return, {implicit: true}, [5], 5]]} # 6
 "BEGIN 2": {start: 0, returns: [6], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: warnings}, ~, ~, Str], # 1
@@ -80,7 +80,7 @@ main::__PROGRAM__: {start: 0, returns: [6], nodes: [
   [MemStart], # 3
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [2, 3], 0, Unknown], # 4
   [Call, {class_name: warnings, dispatch_kind: method, name: import, param_names: []}, [1], 4, Unknown], # 5
-  [Return, ~, [5], 5]]} # 6
+  [Return, {implicit: true}, [5], 5]]} # 6
 ```
 
 ## `use POSIX;` loads the file AND calls import
@@ -134,7 +134,7 @@ main::__PROGRAM__: {start: 0, returns: [18], nodes: [
   [TernaryExpr, ~, [14, 7, 8], ~, Str], # 15
   [Print, ~, [11, 15, 10], 0, Scalar], # 16
   [Print, ~, [2, 9, 10], 16, Scalar], # 17
-  [Return, ~, [1], 17]]} # 18
+  [Return, {implicit: true}, [1], 17]]} # 18
 "BEGIN 1": {start: 0, returns: [6], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: POSIX}, ~, ~, Str], # 1
@@ -142,7 +142,7 @@ main::__PROGRAM__: {start: 0, returns: [18], nodes: [
   [MemStart], # 3
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [2, 3], 0, Unknown], # 4
   [Call, {class_name: POSIX, dispatch_kind: method, name: import, param_names: []}, [1], 4, Unknown], # 5
-  [Return, ~, [5], 5]]} # 6
+  [Return, {implicit: true}, [5], 5]]} # 6
 ```
 
 ## `use POSIX ();` loads the file and suppresses import
@@ -203,13 +203,13 @@ main::__PROGRAM__: {start: 0, returns: [18], nodes: [
   [TernaryExpr, ~, [14, 7, 8], ~, Str], # 15
   [Print, ~, [11, 15, 10], 0, Scalar], # 16
   [Print, ~, [2, 9, 10], 16, Scalar], # 17
-  [Return, ~, [1], 17]]} # 18
+  [Return, {implicit: true}, [1], 17]]} # 18
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: POSIX.pm}, ~, ~, Str], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## `require strict;` -- the tier's one runtime op
@@ -257,7 +257,7 @@ main::__PROGRAM__: {start: 0, returns: [13], nodes: [
   [TernaryExpr, ~, [7, 8, 9], ~, Str], # 10
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 11
   [Print, ~, [2, 10, 11], 6, Scalar], # 12
-  [Return, ~, [1], 12]]} # 13
+  [Return, {implicit: true}, [1], 12]]} # 13
 ```
 
 ## `require $m;` takes the filename from a variable
@@ -303,7 +303,7 @@ main::__PROGRAM__: {start: 0, returns: [13], nodes: [
   [TernaryExpr, ~, [7, 8, 9], ~, Str], # 10
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 11
   [Print, ~, [2, 10, 11], 6, Scalar], # 12
-  [Return, ~, [1], 12]]} # 13
+  [Return, {implicit: true}, [1], 12]]} # 13
 ```
 
 ## `import` is an ordinary method call
@@ -361,14 +361,14 @@ Marker::import: {start: 0, returns: [17], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 14
   [Concat, ~, [13, 14], ~, Str], # 15
   [Print, ~, [15], 0, Scalar], # 16
-  [Return, ~, [16], 16]]} # 17
+  [Return, {implicit: true}, [16], 16]]} # 17
 main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: "after\n"}, ~, ~, Str], # 2
   [Constant, {const_type: string, value: Marker}, ~, ~, Str], # 3
   [Constant, {const_type: string, value: tag}, ~, ~, Str], # 4
-  [Call, {class_name: Marker, dispatch_kind: method, name: import, param_names: []}, [3, 4], 0, Unknown], # 5
+  [Call, {class_name: Marker, dispatch_kind: method, name: import, param_names: [], want: void}, [3, 4], 0, Unknown], # 5
   [Print, ~, [2], 5, Scalar], # 6
-  [Return, ~, [1], 6]]} # 7
+  [Return, {implicit: true}, [1], 6]]} # 7
 ```

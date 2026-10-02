@@ -66,7 +66,7 @@ main::__PROGRAM__: {start: 0, returns: [26], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 23
   [Concat, ~, [22, 23], ~, Str], # 24
   [Print, ~, [24], 0, Scalar], # 25
-  [Return, ~, [1], 25]]} # 26
+  [Return, {implicit: true}, [1], 25]]} # 26
 ```
 
 ## The magic string increment
@@ -125,7 +125,7 @@ main::__PROGRAM__: {start: 0, returns: [25], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 22
   [Concat, ~, [21, 22], ~, Str], # 23
   [Print, ~, [23], 0, Scalar], # 24
-  [Return, ~, [1], 24]]} # 25
+  [Return, {implicit: true}, [1], 24]]} # 25
 ```
 
 ## Unary `+` computes nothing and disambiguates
@@ -174,7 +174,7 @@ main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [Print, ~, [2], 7, Scalar], # 8
   [Print, ~, [4], 8, Scalar], # 9
   [Print, ~, [2], 9, Scalar], # 10
-  [Return, ~, [1], 10], # 11
+  [Return, {implicit: true}, [1], 10], # 11
   [Multiply, ~, [7, 5], ~, Num]]} # 12
 ```
 
@@ -241,5 +241,5 @@ main::__PROGRAM__: {start: 0, returns: [13], nodes: [
   [Coerce, {from_repr: Unknown, to_repr: Str}, [9], ~, Str], # 10
   [Constant, {const_type: string, value: "]\n"}, ~, ~, Str], # 11
   [Print, ~, [2, 7, 8, 10, 11], 0, Scalar], # 12
-  [Return, ~, [1], 12]]} # 13
+  [Return, {implicit: true}, [1], 12]]} # 13
 ```

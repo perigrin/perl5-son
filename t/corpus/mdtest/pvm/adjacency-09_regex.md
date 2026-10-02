@@ -204,5 +204,5 @@ main::__PROGRAM__: {start: 0, returns: [87], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 84
   [Concat, ~, [83, 84], ~, Str], # 85
   [Print, ~, [85], 81, Scalar], # 86
-  [Return, ~, [1], 86]]} # 87
+  [Return, {implicit: true}, [1], 86]]} # 87
 ```

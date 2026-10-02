@@ -53,7 +53,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
   [Print, ~, [4, 5], 3, Scalar], # 6
-  [Return, ~, [1], 6]]} # 7
+  [Return, {implicit: true}, [1], 6]]} # 7
 main::double: {start: 0, returns: [8], nodes: [
   [Start], # 0
   [ArgsSource, ~, ~, ~, Array], # 1
@@ -63,7 +63,7 @@ main::double: {start: 0, returns: [8], nodes: [
   [Coerce, {from_repr: Scalar, to_repr: Num}, [4], ~, Num], # 5
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 6
   [Multiply, ~, [5, 6], ~, Num], # 7
-  [Return, ~, [7], 0]]} # 8
+  [Return, {implicit: true}, [7], 0]]} # 8
 ```
 
 ## An anonymous subroutine is a value
@@ -106,7 +106,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
   [Print, ~, [4, 5], 3, Scalar], # 6
-  [Return, ~, [1], 6]]} # 7
+  [Return, {implicit: true}, [1], 6]]} # 7
 main::__PROGRAM__::__ANON__:1:2: {start: 0, returns: [8], nodes: [
   [Start], # 0
   [ArgsSource, ~, ~, ~, Array], # 1
@@ -116,7 +116,7 @@ main::__PROGRAM__::__ANON__:1:2: {start: 0, returns: [8], nodes: [
   [Coerce, {from_repr: Scalar, to_repr: Num}, [4], ~, Num], # 5
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 6
   [Multiply, ~, [5, 6], ~, Num], # 7
-  [Return, ~, [7], 0]]} # 8
+  [Return, {implicit: true}, [7], 0]]} # 8
 ```
 
 ## Four spellings of one call
@@ -177,7 +177,7 @@ main::__PROGRAM__: {start: 0, returns: [5], nodes: [
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 3
   [Call, {dispatch_kind: direct, name: main::outer, param_names: [], want: void}, [2, 3], 0, Scalar], # 4
-  [Return, ~, [1], 4]]} # 5
+  [Return, {implicit: true}, [1], 4]]} # 5
 main::answer: {start: 0, returns: [10], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "["}, ~, ~, Str], # 1
@@ -189,7 +189,7 @@ main::answer: {start: 0, returns: [10], nodes: [
   [Concat, ~, [1, 6], ~, Str], # 7
   [Constant, {const_type: string, value: "]"}, ~, ~, Str], # 8
   [Concat, ~, [7, 8], ~, Str], # 9
-  [Return, ~, [9], 0]]} # 10
+  [Return, {implicit: true}, [9], 0]]} # 10
 main::outer: {start: 0, returns: [14], nodes: [
   [Start], # 0
   [Call, {dispatch_kind: direct, name: main::answer, param_names: [], want: list}, ~, 0, Str], # 1
@@ -205,7 +205,7 @@ main::outer: {start: 0, returns: [14], nodes: [
   [Call, {dispatch_kind: direct, name: main::answer, param_names: [], want: list}, ~, 10, Str], # 11
   [Coerce, {from_repr: Unknown, to_repr: Str}, [11], ~, Str], # 12
   [Print, ~, [12, 3], 11, Scalar], # 13
-  [Return, ~, [13], 13]]} # 14
+  [Return, {implicit: true}, [13], 13]]} # 14
 ```
 
 ## Calling through a code reference
@@ -268,7 +268,7 @@ main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [Call, {dispatch_kind: direct, name: main::__PROGRAM__::__ANON__:1:2, param_names: [], want: list}, ~, 7, Str], # 8
   [Coerce, {from_repr: Unknown, to_repr: Str}, [8], ~, Str], # 9
   [Print, ~, [9, 6], 8, Scalar], # 10
-  [Return, ~, [1], 10]]} # 11
+  [Return, {implicit: true}, [1], 10]]} # 11
 main::__PROGRAM__::__ANON__:1:2: {start: 0, returns: [10], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "c["}, ~, ~, Str], # 1
@@ -357,7 +357,7 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [Call, {dispatch_kind: direct, name: main::__PROGRAM__::__ANON__:5:7, param_names: [], want: list}, [2], 13, Num], # 14
   [Coerce, {from_repr: Unknown, to_repr: Str}, [14], ~, Str], # 15
   [Print, ~, [15, 12], 14, Scalar], # 16
-  [Return, ~, [1], 16]]} # 17
+  [Return, {implicit: true}, [1], 16]]} # 17
 main::__PROGRAM__::__ANON__:5:7: {start: 0, returns: [8], nodes: [
   [Start], # 0
   [ArgsSource, ~, ~, ~, Array], # 1
@@ -367,12 +367,12 @@ main::__PROGRAM__::__ANON__:5:7: {start: 0, returns: [8], nodes: [
   [Coerce, {from_repr: Scalar, to_repr: Num}, [4], ~, Num], # 5
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 6
   [Multiply, ~, [5, 6], ~, Num], # 7
-  [Return, ~, [7], 0]]} # 8
+  [Return, {implicit: true}, [7], 0]]} # 8
 main::slot: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [MemStart], # 1
   [PadAccess, {shared: 1, sigil: $, symbol: slot}, [1], ~, Unknown], # 2
-  [Return, ~, [2], 0]]} # 3
+  [Return, {implicit: true}, [2], 0]]} # 3
 ```
 
 ## The ampersand call passes the caller's `@_`
@@ -447,7 +447,7 @@ main::__PROGRAM__: {start: 0, returns: [16], nodes: [
   [Call, {dispatch_kind: indirect, name: "", param_names: [], want: list}, [9], 12, Unknown], # 13
   [Coerce, {from_repr: Unknown, to_repr: Str}, [13], ~, Str], # 14
   [Print, ~, [14, 11], 13, Scalar], # 15
-  [Return, ~, [1], 15]]} # 16
+  [Return, {implicit: true}, [1], 15]]} # 16
 main::__PROGRAM__::__ANON__:1:2: {start: 0, returns: [10], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "["}, ~, ~, Str], # 1
@@ -564,7 +564,7 @@ main::__PROGRAM__: {start: 0, returns: [31], nodes: [
   [Coerce, {from_repr: Unknown, to_repr: Str}, [12], ~, Str], # 28
   [Print, ~, [24, 27, 28, 20], 12, Scalar], # 29
   [Print, ~, [21], 29, Scalar], # 30
-  [Return, ~, [1], 30]]} # 31
+  [Return, {implicit: true}, [1], 30]]} # 31
 main::group: {start: 0, returns: [9], nodes: [
   [Start], # 0
   [PadAccess, {shared: 1, sigil: "@", symbol: l}, ~, ~, Unknown], # 1
@@ -649,14 +649,14 @@ main::__PROGRAM__: {start: 0, returns: [23], nodes: [
   [Coerce, {from_repr: Unknown, to_repr: Str}, [19], ~, Str], # 20
   [Constant, {const_type: string, value: "]\n"}, ~, ~, Str], # 21
   [Print, ~, [8, 12, 13, 16, 17, 20, 21], 19, Scalar], # 22
-  [Return, ~, [1], 22]]} # 23
+  [Return, {implicit: true}, [1], 22]]} # 23
 main::last_is_for: {start: 0, returns: [5], nodes: [
   [Start], # 0
   [Constant, {const_type: boolean, value: ""}, ~, ~, Boolean], # 1
   [Loop, {bound: entry}, [0], 0], # 2
   [Proj, {index: 1}, [2]], # 3
   [Region, {head: 2}, [3]], # 4
-  [Return, ~, [1], 4], # 5
+  [Return, {implicit: true}, [1], 4], # 5
   [ArgsSource, ~, ~, ~, Array], # 6
   [MemStart], # 7
   [Count, ~, [6, 7], ~, Int], # 8
@@ -678,7 +678,7 @@ main::last_is_while: {start: 0, returns: [5], nodes: [
   [Loop, {bound: each}, [0], 0], # 2
   [Proj, {index: 1}, [2]], # 3
   [Region, {head: 2}, [3]], # 4
-  [Return, ~, [1], 4], # 5
+  [Return, {implicit: true}, [1], 4], # 5
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 6
   [Phi, {region: 2}, [6, 12], ~, Int], # 7
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 8

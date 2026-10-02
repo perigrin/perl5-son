@@ -51,7 +51,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [6], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: ab-cd}, ~, ~, Str], # 1
@@ -59,19 +59,19 @@ main::corpus_case: {start: 0, returns: [6], nodes: [
   [RegexCapture, {"n": 1}, [2], ~, Str], # 3
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
   [Print, ~, [3, 4], 2, Scalar], # 5
-  [Return, ~, [5], 5]]} # 6
+  [Return, {implicit: true}, [5], 5]]} # 6
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## H2 guarded capture (the dominant lib/ idiom)
@@ -113,7 +113,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [10], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: foo}, ~, ~, Str], # 1
@@ -125,19 +125,19 @@ main::corpus_case: {start: 0, returns: [10], nodes: [
   [Coerce, {from_repr: Int, to_repr: Str}, [6], ~, Str], # 7
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
   [Print, ~, [7, 8], 0, Scalar], # 9
-  [Return, ~, [9], 9]]} # 10
+  [Return, {implicit: true}, [9], 9]]} # 10
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## H3 environment read (%ENV)
@@ -173,23 +173,23 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [4], nodes: [
   [Start], # 0
   [EnvRead, {key: CHALK_G7_TEST}, ~, ~, Str], # 1
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 2
   [Print, ~, [1, 2], 0, Scalar], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```

@@ -91,7 +91,7 @@ main::__PROGRAM__: {start: 0, returns: [20], nodes: [
   [Coerce, {from_repr: Unknown, to_repr: Str}, [16], ~, Str], # 17
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 18
   [Print, ~, [13, 14, 17, 18], 12, Scalar], # 19
-  [Return, ~, [1], 19]]} # 20
+  [Return, {implicit: true}, [1], 19]]} # 20
 main::__PROGRAM__::__ANON__:2:4: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [ArgsSource, ~, ~, ~, Array], # 1
@@ -100,7 +100,7 @@ main::__PROGRAM__::__ANON__:2:4: {start: 0, returns: [7], nodes: [
   [Subscript, {kind: array}, [1, 2, 3], ~, Scalar], # 4
   [Coerce, {from_repr: Scalar, to_repr: Num}, [4], ~, Num], # 5
   [Multiply, ~, [5, 5], ~, Num], # 6
-  [Return, ~, [6], 0]]} # 7
+  [Return, {implicit: true}, [6], 0]]} # 7
 ```
 
 ## `\*STDOUT` is a reference to a GLOB, its own type
@@ -145,7 +145,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [RefType, ~, [3], ~, Str], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
   [Print, ~, [4, 5], 0, Scalar], # 6
-  [Return, ~, [1], 6]]} # 7
+  [Return, {implicit: true}, [1], 6]]} # 7
 ```
 
 ## `AUTOLOAD` catches a call to a sub that does not exist
@@ -217,7 +217,7 @@ main::__PROGRAM__: {start: 0, returns: [6], nodes: [
   [Coerce, {from_repr: Unknown, to_repr: Str}, [2], ~, Str], # 3
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
   [Print, ~, [3, 4], 2, Scalar], # 5
-  [Return, ~, [1], 5]]} # 6
+  [Return, {implicit: true}, [1], 5]]} # 6
 ```
 
 ## `foreach $pkg (LIST)` aliases a PACKAGE variable and restores it
@@ -289,7 +289,7 @@ main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Region, {head: 9}, [10]], # 11
   [Print, ~, [7], 11, Scalar], # 12
   [Print, ~, [8], 12, Scalar], # 13
-  [Return, ~, [1], 13], # 14
+  [Return, {implicit: true}, [1], 13], # 14
   [EnvRead, {key: A}, ~, ~, Str], # 15
   [Constant, {const_type: string, value: a}, ~, ~, Str], # 16
   [DefinedOr, ~, [15, 16], ~, Str], # 17

@@ -91,7 +91,7 @@ main::__PROGRAM__: {start: 0, returns: [12], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
   [Concat, ~, [8, 9], ~, Str], # 10
   [Print, ~, [10], 0, Scalar], # 11
-  [Return, ~, [1], 11]]} # 12
+  [Return, {implicit: true}, [1], 11]]} # 12
 ```
 
 ## `eval BLOCK` is a control construct
@@ -169,7 +169,7 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 14
   [Concat, ~, [13, 14], ~, Str], # 15
   [Print, ~, [15], 9, Scalar], # 16
-  [Return, ~, [1], 16]]} # 17
+  [Return, {implicit: true}, [1], 16]]} # 17
 ```
 
 ## `die` is a list operator, and its extent is a parse question
@@ -239,7 +239,7 @@ main::__PROGRAM__: {start: 0, returns: [18], nodes: [
   [EntryDef, {package: main, sigil: $, symbol: "@"}, [3], 14, Scalar], # 15
   [Coerce, {from_repr: Unknown, to_repr: Str}, [15], ~, Str], # 16
   [Print, ~, [2, 11, 12, 16], 15, Scalar], # 17
-  [Return, ~, [1], 17]]} # 18
+  [Return, {implicit: true}, [1], 17]]} # 18
 ```
 
 ## `exit` leaves the program, and `eval BLOCK` does not catch it
@@ -305,7 +305,7 @@ main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [Call, {dispatch_kind: builtin, name: exit, param_names: []}, [5], 7, Unknown], # 8
   [Region, {eval_entry: 7}, [8]], # 9
   [Print, ~, [2], 9, Scalar], # 10
-  [Return, ~, [1], 10]]} # 11
+  [Return, {implicit: true}, [1], 10]]} # 11
 ```
 
 ## `time` is niladic
@@ -383,5 +383,5 @@ main::__PROGRAM__: {start: 0, returns: [10], nodes: [
   [TernaryExpr, ~, [4, 5, 6], ~, Str], # 7
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
   [Print, ~, [7, 8], 0, Scalar], # 9
-  [Return, ~, [1], 9]]} # 10
+  [Return, {implicit: true}, [1], 9]]} # 10
 ```

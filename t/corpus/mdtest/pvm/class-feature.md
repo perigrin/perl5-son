@@ -49,11 +49,11 @@ Empty
 main::__PROGRAM__: {start: 0, returns: [6], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Call, {class_name: Empty, dispatch_kind: method, name: new, param_names: []}, ~, 0, Object], # 2
+  [Call, {class_name: Empty, dispatch_kind: method, name: new, param_names: [], want: scalar}, ~, 0, Object], # 2
   [RefType, ~, [2], ~, Str], # 3
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
   [Print, ~, [3, 4], 2, Scalar], # 5
-  [Return, ~, [1], 5]]} # 6
+  [Return, {implicit: true}, [1], 5]]} # 6
 "BEGIN 1": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: feature}, ~, ~, Str], # 1
@@ -62,7 +62,7 @@ main::__PROGRAM__: {start: 0, returns: [6], nodes: [
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
   [Call, {class_name: feature, dispatch_kind: method, name: import, param_names: []}, [1, 2], 5, Unknown], # 6
-  [Return, ~, [6], 6]]} # 7
+  [Return, {implicit: true}, [6], 6]]} # 7
 "BEGIN 2": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: warnings}, ~, ~, Str], # 1
@@ -71,7 +71,7 @@ main::__PROGRAM__: {start: 0, returns: [6], nodes: [
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
   [Call, {class_name: warnings, dispatch_kind: method, name: unimport, param_names: []}, [1, 2], 5, Unknown], # 6
-  [Return, ~, [6], 6]]} # 7
+  [Return, {implicit: true}, [6], 6]]} # 7
 ```
 
 ## `field` and `method` in a class body
@@ -127,16 +127,16 @@ Foo::__DEFAULT_0: {start: 0, returns: [2], nodes: [
 Foo::m: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [FieldAccess, {field_index: 0, field_stash: Foo}, ~, ~, Int], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Call, {class_name: Foo, dispatch_kind: method, name: new, param_names: []}, ~, 0, Object], # 2
-  [Call, {class_name: Foo, dispatch_kind: method, name: m, param_names: []}, [2], 2, Int], # 3
+  [Call, {class_name: Foo, dispatch_kind: method, name: new, param_names: [], want: scalar}, ~, 0, Object], # 2
+  [Call, {class_name: Foo, dispatch_kind: method, name: m, param_names: [], want: list}, [2], 2, Int], # 3
   [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
   [Print, ~, [4, 5], 3, Scalar], # 6
-  [Return, ~, [1], 6]]} # 7
+  [Return, {implicit: true}, [1], 6]]} # 7
 "BEGIN 1": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: feature}, ~, ~, Str], # 1
@@ -145,7 +145,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
   [Call, {class_name: feature, dispatch_kind: method, name: import, param_names: []}, [1, 2], 5, Unknown], # 6
-  [Return, ~, [6], 6]]} # 7
+  [Return, {implicit: true}, [6], 6]]} # 7
 "BEGIN 2": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: warnings}, ~, ~, Str], # 1
@@ -154,7 +154,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
   [Call, {class_name: warnings, dispatch_kind: method, name: unimport, param_names: []}, [1, 2], 5, Unknown], # 6
-  [Return, ~, [6], 6]]} # 7
+  [Return, {implicit: true}, [6], 6]]} # 7
 ```
 
 ## `ADJUST` alone in a class body
@@ -199,7 +199,7 @@ Foo::__ADJUST_0: {start: 0, returns: [4], nodes: [
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 1
   [FieldAccess, {field_index: 0, field_stash: Foo}, ~, ~, Int], # 2
   [Assign, ~, [2, 1], 0, Int], # 3
-  [Return, ~, [1], 3]]} # 4
+  [Return, {implicit: true}, [1], 3]]} # 4
 Foo::__DEFAULT_0: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
@@ -207,11 +207,11 @@ Foo::__DEFAULT_0: {start: 0, returns: [2], nodes: [
 main::__PROGRAM__: {start: 0, returns: [6], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Call, {class_name: Foo, dispatch_kind: method, name: new, param_names: []}, ~, 0, Object], # 2
+  [Call, {class_name: Foo, dispatch_kind: method, name: new, param_names: [], want: scalar}, ~, 0, Object], # 2
   [RefType, ~, [2], ~, Str], # 3
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
   [Print, ~, [3, 4], 2, Scalar], # 5
-  [Return, ~, [1], 5]]} # 6
+  [Return, {implicit: true}, [1], 5]]} # 6
 "BEGIN 1": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: feature}, ~, ~, Str], # 1
@@ -220,7 +220,7 @@ main::__PROGRAM__: {start: 0, returns: [6], nodes: [
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
   [Call, {class_name: feature, dispatch_kind: method, name: import, param_names: []}, [1, 2], 5, Unknown], # 6
-  [Return, ~, [6], 6]]} # 7
+  [Return, {implicit: true}, [6], 6]]} # 7
 "BEGIN 2": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: warnings}, ~, ~, Str], # 1
@@ -229,7 +229,7 @@ main::__PROGRAM__: {start: 0, returns: [6], nodes: [
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
   [Call, {class_name: warnings, dispatch_kind: method, name: unimport, param_names: []}, [1, 2], 5, Unknown], # 6
-  [Return, ~, [6], 6]]} # 7
+  [Return, {implicit: true}, [6], 6]]} # 7
 ```
 
 ## A `:param` field defaulting to a folded boolean
@@ -277,22 +277,22 @@ Flags::quiet: {start: 0, returns: [2], nodes: [
 main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Call, {class_name: Flags, dispatch_kind: method, name: new, param_names: []}, ~, 0, Object], # 2
-  [Call, {class_name: Flags, dispatch_kind: method, name: quiet, param_names: []}, [2], 2, Scalar], # 3
+  [Call, {class_name: Flags, dispatch_kind: method, name: new, param_names: [], want: scalar}, ~, 0, Object], # 2
+  [Call, {class_name: Flags, dispatch_kind: method, name: quiet, param_names: [], want: scalar}, [2], 2, Scalar], # 3
   [Constant, {const_type: string, value: q}, ~, ~, Str], # 4
   [Constant, {const_type: string, value: "-"}, ~, ~, Str], # 5
   [TernaryExpr, ~, [3, 4, 5], ~, Str], # 6
-  [Call, {class_name: Flags, dispatch_kind: method, name: loud, param_names: []}, [2], 3, Scalar], # 7
+  [Call, {class_name: Flags, dispatch_kind: method, name: loud, param_names: [], want: scalar}, [2], 3, Scalar], # 7
   [Constant, {const_type: string, value: l}, ~, ~, Str], # 8
   [TernaryExpr, ~, [7, 8, 5], ~, Str], # 9
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 10
-  [Call, {class_name: Flags, dispatch_kind: method, name: new, param_names: [quiet]}, [10], 7, Object], # 11
-  [Call, {class_name: Flags, dispatch_kind: method, name: quiet, param_names: []}, [11], 11, Scalar], # 12
+  [Call, {class_name: Flags, dispatch_kind: method, name: new, param_names: [quiet], want: scalar}, [10], 7, Object], # 11
+  [Call, {class_name: Flags, dispatch_kind: method, name: quiet, param_names: [], want: scalar}, [11], 11, Scalar], # 12
   [Constant, {const_type: string, value: Q}, ~, ~, Str], # 13
   [TernaryExpr, ~, [12, 13, 5], ~, Str], # 14
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 15
   [Print, ~, [6, 9, 14, 15], 12, Scalar], # 16
-  [Return, ~, [1], 16]]} # 17
+  [Return, {implicit: true}, [1], 16]]} # 17
 "BEGIN 1": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: feature}, ~, ~, Str], # 1
@@ -301,7 +301,7 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
   [Call, {class_name: feature, dispatch_kind: method, name: import, param_names: []}, [1, 2], 5, Unknown], # 6
-  [Return, ~, [6], 6]]} # 7
+  [Return, {implicit: true}, [6], 6]]} # 7
 "BEGIN 2": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: warnings}, ~, ~, Str], # 1
@@ -310,7 +310,7 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
   [Call, {class_name: warnings, dispatch_kind: method, name: unimport, param_names: []}, [1, 2], 5, Unknown], # 6
-  [Return, ~, [6], 6]]} # 7
+  [Return, {implicit: true}, [6], 6]]} # 7
 ```
 
 ## A field post-increment whose value is used
@@ -373,18 +373,18 @@ main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: ","}, ~, ~, Str], # 2
-  [Call, {class_name: Index, dispatch_kind: method, name: new, param_names: []}, ~, 0, Object], # 3
+  [Call, {class_name: Index, dispatch_kind: method, name: new, param_names: [], want: scalar}, ~, 0, Object], # 3
   [Constant, {const_type: string, value: a}, ~, ~, Str], # 4
-  [Call, {class_name: Index, dispatch_kind: method, name: register, param_names: []}, [3, 4], 3, Scalar], # 5
+  [Call, {class_name: Index, dispatch_kind: method, name: register, param_names: [], want: list}, [3, 4], 3, Scalar], # 5
   [Constant, {const_type: string, value: b}, ~, ~, Str], # 6
-  [Call, {class_name: Index, dispatch_kind: method, name: register, param_names: []}, [3, 6], 5, Scalar], # 7
-  [Call, {class_name: Index, dispatch_kind: method, name: register, param_names: []}, [3, 4], 7, Scalar], # 8
+  [Call, {class_name: Index, dispatch_kind: method, name: register, param_names: [], want: list}, [3, 6], 5, Scalar], # 7
+  [Call, {class_name: Index, dispatch_kind: method, name: register, param_names: [], want: list}, [3, 4], 7, Scalar], # 8
   [Constant, {const_type: string, value: c}, ~, ~, Str], # 9
-  [Call, {class_name: Index, dispatch_kind: method, name: register, param_names: []}, [3, 9], 8, Scalar], # 10
+  [Call, {class_name: Index, dispatch_kind: method, name: register, param_names: [], want: list}, [3, 9], 8, Scalar], # 10
   [Call, {dispatch_kind: builtin, name: join, param_names: []}, [2, 5, 7, 8, 10], ~, Str], # 11
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 12
   [Print, ~, [11, 12], 10, Scalar], # 13
-  [Return, ~, [1], 13]]} # 14
+  [Return, {implicit: true}, [1], 13]]} # 14
 "BEGIN 1": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: feature}, ~, ~, Str], # 1
@@ -393,7 +393,7 @@ main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
   [Call, {class_name: feature, dispatch_kind: method, name: import, param_names: []}, [1, 2], 5, Unknown], # 6
-  [Return, ~, [6], 6]]} # 7
+  [Return, {implicit: true}, [6], 6]]} # 7
 "BEGIN 2": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: warnings}, ~, ~, Str], # 1
@@ -402,7 +402,7 @@ main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
   [Call, {class_name: warnings, dispatch_kind: method, name: unimport, param_names: []}, [1, 2], 5, Unknown], # 6
-  [Return, ~, [6], 6]]} # 7
+  [Return, {implicit: true}, [6], 6]]} # 7
 ```
 
 ## A string built into a field
@@ -442,7 +442,7 @@ Log::__ADJUST_0: {start: 0, returns: [6], nodes: [
   [Concat, ~, [1, 2], ~, Str], # 3
   [FieldAccess, {field_index: 0, field_stash: Log}, ~, ~, Str], # 4
   [Assign, ~, [4, 3], 1, Str], # 5
-  [Return, ~, [3], 5]]} # 6
+  [Return, {implicit: true}, [3], 5]]} # 6
 Log::__DEFAULT_0: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: ""}, ~, ~, Str], # 1
@@ -474,16 +474,16 @@ Log::close: {start: 0, returns: [8], nodes: [
 main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Call, {class_name: Log, dispatch_kind: method, name: new, param_names: []}, ~, 0, Object], # 2
+  [Call, {class_name: Log, dispatch_kind: method, name: new, param_names: [], want: scalar}, ~, 0, Object], # 2
   [Constant, {const_type: string, value: a}, ~, ~, Str], # 3
-  [Call, {class_name: Log, dispatch_kind: method, name: add, param_names: []}, [2, 3], 2, Unknown], # 4
+  [Call, {class_name: Log, dispatch_kind: method, name: add, param_names: [], want: scalar}, [2, 3], 2, Unknown], # 4
   [Constant, {const_type: string, value: b}, ~, ~, Str], # 5
-  [Call, {class_name: Log, dispatch_kind: method, name: add, param_names: []}, [4, 5], 4, Unknown], # 6
-  [Call, {class_name: Log, dispatch_kind: method, name: close, param_names: []}, [6], 6, Str], # 7
+  [Call, {class_name: Log, dispatch_kind: method, name: add, param_names: [], want: scalar}, [4, 5], 4, Unknown], # 6
+  [Call, {class_name: Log, dispatch_kind: method, name: close, param_names: [], want: list}, [6], 6, Str], # 7
   [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
   [Print, ~, [8, 9], 7, Scalar], # 10
-  [Return, ~, [1], 10]]} # 11
+  [Return, {implicit: true}, [1], 10]]} # 11
 "BEGIN 1": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: feature}, ~, ~, Str], # 1
@@ -492,7 +492,7 @@ main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
   [Call, {class_name: feature, dispatch_kind: method, name: import, param_names: []}, [1, 2], 5, Unknown], # 6
-  [Return, ~, [6], 6]]} # 7
+  [Return, {implicit: true}, [6], 6]]} # 7
 "BEGIN 2": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: warnings}, ~, ~, Str], # 1
@@ -501,7 +501,7 @@ main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
   [Call, {class_name: warnings, dispatch_kind: method, name: unimport, param_names: []}, [1, 2], 5, Unknown], # 6
-  [Return, ~, [6], 6]]} # 7
+  [Return, {implicit: true}, [6], 6]]} # 7
 ```
 
 ## `//=` into a field from a call
@@ -547,11 +547,11 @@ Node::__ADJUST_0: {start: 0, returns: [12], nodes: [
   [FieldAccess, {field_index: 1, field_stash: Node}, ~, ~, Scalar], # 5
   [PadAccess, {sigil: $, symbol: self}, ~, ~, Object], # 6
   [Proj, {index: 1}, [3]], # 7
-  [Call, {class_name: Node, dispatch_kind: method, name: first, param_names: []}, [6], 7, Scalar], # 8
+  [Call, {class_name: Node, dispatch_kind: method, name: first, param_names: [], want: scalar}, [6], 7, Scalar], # 8
   [Assign, ~, [5, 8], 8, Scalar], # 9
   [Region, {head: 3}, [4, 9]], # 10
   [FieldAccess, {field_index: 1, field_stash: Node}, ~, 10, Scalar], # 11
-  [Return, ~, [11], 11]]} # 12
+  [Return, {implicit: true}, [11], 11]]} # 12
 Node::__DEFAULT_1: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
@@ -586,18 +586,18 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [Constant, {const_type: integer, value: "7"}, ~, ~, Int], # 3
   [Constant, {const_type: integer, value: "8"}, ~, ~, Int], # 4
   [ArrayLiteral, ~, [3, 4], 0, ArrayRef], # 5
-  [Call, {class_name: Node, dispatch_kind: method, name: new, param_names: [inputs]}, [5], 5, Object], # 6
+  [Call, {class_name: Node, dispatch_kind: method, name: new, param_names: [inputs], want: scalar}, [5], 5, Object], # 6
   [ArrayLiteral, ~, [3, 4], 6, ArrayRef], # 7
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 8
-  [Call, {class_name: Node, dispatch_kind: method, name: new, param_names: [inputs, left]}, [7, 8], 7, Object], # 9
-  [Call, {class_name: Node, dispatch_kind: method, name: left, param_names: []}, [6], 9, Scalar], # 10
-  [Call, {class_name: Node, dispatch_kind: method, name: calls, param_names: []}, [6], 10, Int], # 11
-  [Call, {class_name: Node, dispatch_kind: method, name: left, param_names: []}, [9], 11, Scalar], # 12
-  [Call, {class_name: Node, dispatch_kind: method, name: calls, param_names: []}, [9], 12, Int], # 13
+  [Call, {class_name: Node, dispatch_kind: method, name: new, param_names: [inputs, left], want: scalar}, [7, 8], 7, Object], # 9
+  [Call, {class_name: Node, dispatch_kind: method, name: left, param_names: [], want: list}, [6], 9, Scalar], # 10
+  [Call, {class_name: Node, dispatch_kind: method, name: calls, param_names: [], want: list}, [6], 10, Int], # 11
+  [Call, {class_name: Node, dispatch_kind: method, name: left, param_names: [], want: list}, [9], 11, Scalar], # 12
+  [Call, {class_name: Node, dispatch_kind: method, name: calls, param_names: [], want: list}, [9], 12, Int], # 13
   [Call, {dispatch_kind: builtin, name: join, param_names: []}, [2, 10, 11, 12, 13], ~, Str], # 14
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 15
   [Print, ~, [14, 15], 13, Scalar], # 16
-  [Return, ~, [1], 16]]} # 17
+  [Return, {implicit: true}, [1], 16]]} # 17
 "BEGIN 1": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: feature}, ~, ~, Str], # 1
@@ -606,7 +606,7 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
   [Call, {class_name: feature, dispatch_kind: method, name: import, param_names: []}, [1, 2], 5, Unknown], # 6
-  [Return, ~, [6], 6]]} # 7
+  [Return, {implicit: true}, [6], 6]]} # 7
 "BEGIN 2": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: warnings}, ~, ~, Str], # 1
@@ -615,7 +615,7 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
   [Call, {class_name: warnings, dispatch_kind: method, name: unimport, param_names: []}, [1, 2], 5, Unknown], # 6
-  [Return, ~, [6], 6]]} # 7
+  [Return, {implicit: true}, [6], 6]]} # 7
 ```
 
 ## A subclass's ADJUST when its parent has one
@@ -657,7 +657,7 @@ Base::__ADJUST_0: {start: 0, returns: [6], nodes: [
   [Concat, ~, [1, 2], ~, Str], # 3
   [FieldAccess, {field_index: 0, field_stash: Base}, ~, ~, Str], # 4
   [Assign, ~, [4, 3], 1, Str], # 5
-  [Return, ~, [3], 5]]} # 6
+  [Return, {implicit: true}, [3], 5]]} # 6
 Base::__DEFAULT_0: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: ""}, ~, ~, Str], # 1
@@ -681,16 +681,16 @@ Derived::__ADJUST_0: {start: 0, returns: [4], nodes: [
   [PadAccess, {sigil: $, symbol: self}, ~, ~, Object], # 1
   [Constant, {const_type: string, value: d}, ~, ~, Str], # 2
   [Call, {class_name: Derived, dispatch_kind: method, name: mark, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Call, {class_name: Derived, dispatch_kind: method, name: new, param_names: []}, ~, 0, Object], # 2
-  [Call, {class_name: Derived, dispatch_kind: method, name: trail, param_names: []}, [2], 2, Unknown], # 3
+  [Call, {class_name: Derived, dispatch_kind: method, name: new, param_names: [], want: scalar}, ~, 0, Object], # 2
+  [Call, {class_name: Derived, dispatch_kind: method, name: trail, param_names: [], want: list}, [2], 2, Unknown], # 3
   [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
   [Print, ~, [4, 5], 3, Scalar], # 6
-  [Return, ~, [1], 6]]} # 7
+  [Return, {implicit: true}, [1], 6]]} # 7
 "BEGIN 1": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: feature}, ~, ~, Str], # 1
@@ -699,7 +699,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
   [Call, {class_name: feature, dispatch_kind: method, name: import, param_names: []}, [1, 2], 5, Unknown], # 6
-  [Return, ~, [6], 6]]} # 7
+  [Return, {implicit: true}, [6], 6]]} # 7
 "BEGIN 2": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: warnings}, ~, ~, Str], # 1
@@ -708,5 +708,5 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
   [Call, {class_name: warnings, dispatch_kind: method, name: unimport, param_names: []}, [1, 2], 5, Unknown], # 6
-  [Return, ~, [6], 6]]} # 7
+  [Return, {implicit: true}, [6], 6]]} # 7
 ```

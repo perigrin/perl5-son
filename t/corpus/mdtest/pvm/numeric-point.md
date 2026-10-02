@@ -64,7 +64,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
   [Concat, ~, [3, 4], ~, Str], # 5
   [Print, ~, [5], 0, Scalar], # 6
-  [Return, ~, [1], 6]]} # 7
+  [Return, {implicit: true}, [1], 6]]} # 7
 ```
 
 ## A leading decimal point
@@ -111,7 +111,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
   [Concat, ~, [3, 4], ~, Str], # 5
   [Print, ~, [5], 0, Scalar], # 6
-  [Return, ~, [1], 6]]} # 7
+  [Return, {implicit: true}, [1], 6]]} # 7
 ```
 
 ## A trailing decimal point
@@ -162,7 +162,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
   [Concat, ~, [3, 4], ~, Str], # 5
   [Print, ~, [5], 0, Scalar], # 6
-  [Return, ~, [1], 6]]} # 7
+  [Return, {implicit: true}, [1], 6]]} # 7
 ```
 
 ## A leading minus is not part of the literal
@@ -217,7 +217,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
   [Concat, ~, [3, 4], ~, Str], # 5
   [Print, ~, [5], 0, Scalar], # 6
-  [Return, ~, [1], 6]]} # 7
+  [Return, {implicit: true}, [1], 6]]} # 7
 ```
 
 ## The sign of an exponent is part of the literal
@@ -276,5 +276,5 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
   [Concat, ~, [3, 4], ~, Str], # 5
   [Print, ~, [5], 0, Scalar], # 6
-  [Return, ~, [1], 6]]} # 7
+  [Return, {implicit: true}, [1], 6]]} # 7
 ```

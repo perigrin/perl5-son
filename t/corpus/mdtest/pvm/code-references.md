@@ -54,7 +54,7 @@ main::__PROGRAM__: {start: 0, returns: [9], nodes: [
   [Coerce, {from_repr: Unknown, to_repr: Str}, [5], ~, Str], # 6
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 7
   [Print, ~, [6, 7], 5, Scalar], # 8
-  [Return, ~, [1], 8]]} # 9
+  [Return, {implicit: true}, [1], 8]]} # 9
 main::twice: {start: 0, returns: [8], nodes: [
   [Start], # 0
   [ArgsSource, ~, ~, ~, Array], # 1
@@ -156,9 +156,9 @@ main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [Constant, {const_type: string, value: "]\n"}, ~, ~, Str], # 8
   [Concat, ~, [7, 8], ~, Str], # 9
   [Print, ~, [9], 0, Scalar], # 10
-  [Return, ~, [1], 10]]} # 11
+  [Return, {implicit: true}, [1], 10]]} # 11
 main::f: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 ```

@@ -114,7 +114,7 @@ main::__PROGRAM__: {start: 0, returns: [38], nodes: [
   [Concat, ~, [33, 34], ~, Str], # 35
   [Concat, ~, [35, 24], ~, Str], # 36
   [Print, ~, [36], 27, Scalar], # 37
-  [Return, ~, [1], 37]]} # 38
+  [Return, {implicit: true}, [1], 37]]} # 38
 "BEGIN 1": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: feature}, ~, ~, Str], # 1
@@ -123,5 +123,5 @@ main::__PROGRAM__: {start: 0, returns: [38], nodes: [
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
   [Call, {class_name: feature, dispatch_kind: method, name: import, param_names: []}, [1, 2], 5, Unknown], # 6
-  [Return, ~, [6], 6]]} # 7
+  [Return, {implicit: true}, [6], 6]]} # 7
 ```

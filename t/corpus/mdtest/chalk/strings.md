@@ -48,25 +48,25 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: hello}, ~, ~, Str], # 1
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 2
   [Print, ~, [1, 2], 0, Scalar], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## S2 double-quoted literal
@@ -103,25 +103,25 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "hello world"}, ~, ~, Str], # 1
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 2
   [Print, ~, [1, 2], 0, Scalar], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## S3 string concatenation (dot operator)
@@ -158,25 +158,25 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "hello world"}, ~, ~, Str], # 1
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 2
   [Print, ~, [1, 2], 0, Scalar], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## S4 string concat-assign (.=)
@@ -219,7 +219,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [6], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: a}, ~, ~, Str], # 1
@@ -227,19 +227,19 @@ main::corpus_case: {start: 0, returns: [6], nodes: [
   [Concat, ~, [1, 2], ~, Str], # 3
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
   [Print, ~, [3, 4], 0, Scalar], # 5
-  [Return, ~, [5], 5]]} # 6
+  [Return, {implicit: true}, [5], 5]]} # 6
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## S6 dynamic concat-assign (.= a variable)
@@ -282,7 +282,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [6], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: a}, ~, ~, Str], # 1
@@ -290,19 +290,19 @@ main::corpus_case: {start: 0, returns: [6], nodes: [
   [Concat, ~, [1, 2], ~, Str], # 3
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
   [Print, ~, [3, 4], 0, Scalar], # 5
-  [Return, ~, [5], 5]]} # 6
+  [Return, {implicit: true}, [5], 5]]} # 6
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## S7 string interpolation (qq{$a$b})
@@ -342,7 +342,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [6], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: x}, ~, ~, Str], # 1
@@ -350,7 +350,7 @@ main::corpus_case: {start: 0, returns: [6], nodes: [
   [Concat, ~, [1, 2], ~, Str], # 3
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
   [Print, ~, [3, 4], 0, Scalar], # 5
-  [Return, ~, [5], 5], # 6
+  [Return, {implicit: true}, [5], 5], # 6
   [PadAccess, {sigil: $, symbol: c}, ~, ~, Str], # 7
   [VarDecl, {scope: my}, [7, 3]]]} # 8
 "BEGIN 1": {start: 0, returns: [4], nodes: [
@@ -358,13 +358,13 @@ main::corpus_case: {start: 0, returns: [6], nodes: [
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## S8 interpolation with constant text segments
@@ -411,7 +411,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [12], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: p-}, ~, ~, Str], # 1
@@ -425,7 +425,7 @@ main::corpus_case: {start: 0, returns: [12], nodes: [
   [Concat, ~, [7, 8], ~, Str], # 9
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
   [Print, ~, [9, 10], 0, Scalar], # 11
-  [Return, ~, [11], 11], # 12
+  [Return, {implicit: true}, [11], 11], # 12
   [PadAccess, {sigil: $, symbol: c}, ~, ~, Str], # 13
   [VarDecl, {scope: my}, [13, 9]]]} # 14
 "BEGIN 1": {start: 0, returns: [4], nodes: [
@@ -433,13 +433,13 @@ main::corpus_case: {start: 0, returns: [12], nodes: [
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## S9 interpolation of an integer (Int->Str coercion)
@@ -481,7 +481,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "ok "}, ~, ~, Str], # 1
@@ -490,19 +490,19 @@ main::corpus_case: {start: 0, returns: [7], nodes: [
   [Concat, ~, [1, 3], ~, Str], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
   [Print, ~, [4, 5], 0, Scalar], # 6
-  [Return, ~, [6], 6]]} # 7
+  [Return, {implicit: true}, [6], 6]]} # 7
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## S13 length() of an Int coerces its operand (the SIGNATURE says Str)
@@ -564,7 +564,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 1
@@ -573,19 +573,19 @@ main::corpus_case: {start: 0, returns: [7], nodes: [
   [Coerce, {from_repr: Int, to_repr: Str}, [3], ~, Str], # 4
   [Print, ~, [4], 0, Scalar], # 5
   [Print, ~, [1], 5, Scalar], # 6
-  [Return, ~, [6], 6]]} # 7
+  [Return, {implicit: true}, [6], 6]]} # 7
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## S10 interpolation of a negative integer (sign in the digit-count length)
@@ -626,7 +626,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "val "}, ~, ~, Str], # 1
@@ -635,19 +635,19 @@ main::corpus_case: {start: 0, returns: [7], nodes: [
   [Concat, ~, [1, 3], ~, Str], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
   [Print, ~, [4, 5], 0, Scalar], # 6
-  [Return, ~, [6], 6]]} # 7
+  [Return, {implicit: true}, [6], 6]]} # 7
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## S11 interpolation of zero (do-while emits one '0')
@@ -688,7 +688,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "val "}, ~, ~, Str], # 1
@@ -697,19 +697,19 @@ main::corpus_case: {start: 0, returns: [7], nodes: [
   [Concat, ~, [1, 3], ~, Str], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
   [Print, ~, [4, 5], 0, Scalar], # 6
-  [Return, ~, [6], 6]]} # 7
+  [Return, {implicit: true}, [6], 6]]} # 7
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## S12 print an interpolated integer to stdout
@@ -754,7 +754,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [11], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
@@ -767,19 +767,19 @@ main::corpus_case: {start: 0, returns: [11], nodes: [
   [Concat, ~, [7, 3], ~, Str], # 8
   [Print, ~, [8], 0, Scalar], # 9
   [Print, ~, [2, 3], 9, Scalar], # 10
-  [Return, ~, [10], 10]]} # 11
+  [Return, {implicit: true}, [10], 10]]} # 11
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## S5 non-ASCII string (non-default encoding, explicit GAP boundary)
@@ -810,18 +810,18 @@ L: GAP(non-ASCII Str with enc!=0 not yet lowered: char-len 4 != byte-len 5; a fu
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "caf\u00e9"}, ~, ~, Str], # 1
   [Length, ~, [1], ~, Int], # 2
-  [Return, ~, [2], 0]]} # 3
+  [Return, {implicit: true}, [2], 0]]} # 3
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## S7 a v-string constant keeps its bytes (PVMG decode)
@@ -868,17 +868,17 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: AB}, ~, ~, Str], # 1
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 2
   [Print, ~, [1, 2], 0, Scalar], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```

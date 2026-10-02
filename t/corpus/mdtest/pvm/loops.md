@@ -58,7 +58,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Proj, {index: 1}, [3]], # 4
   [Region, {head: 3}, [4]], # 5
   [Print, ~, [2], 5, Scalar], # 6
-  [Return, ~, [1], 6], # 7
+  [Return, {implicit: true}, [1], 6], # 7
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 8
   [Phi, {region: 3}, [8, 19], ~, Int], # 9
   [EnvRead, {key: "N"}, ~, ~, Str], # 10
@@ -111,7 +111,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Proj, {index: 1}, [3]], # 4
   [Region, {head: 3}, [4]], # 5
   [Print, ~, [2], 5, Scalar], # 6
-  [Return, ~, [1], 6], # 7
+  [Return, {implicit: true}, [1], 6], # 7
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 8
   [Phi, {region: 3}, [8, 19], ~, Int], # 9
   [EnvRead, {key: "N"}, ~, ~, Str], # 10
@@ -163,7 +163,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Proj, {index: 1}, [3]], # 4
   [Region, {head: 3}, [4]], # 5
   [Print, ~, [2], 5, Scalar], # 6
-  [Return, ~, [1], 6], # 7
+  [Return, {implicit: true}, [1], 6], # 7
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 8
   [Phi, {region: 3}, [8, 19], ~, Int], # 9
   [EnvRead, {key: "N"}, ~, ~, Str], # 10
@@ -218,7 +218,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Proj, {index: 1}, [3]], # 4
   [Region, {head: 3}, [4]], # 5
   [Print, ~, [2], 5, Scalar], # 6
-  [Return, ~, [1], 6], # 7
+  [Return, {implicit: true}, [1], 6], # 7
   [EnvRead, {key: A}, ~, ~, Str], # 8
   [Constant, {const_type: string, value: a}, ~, ~, Str], # 9
   [DefinedOr, ~, [8, 9], ~, Str], # 10
@@ -293,7 +293,7 @@ main::__PROGRAM__: {start: 0, returns: [9], nodes: [
   [Proj, {index: 1}, [5]], # 6
   [Region, {head: 5}, [6]], # 7
   [Print, ~, [2], 7, Scalar], # 8
-  [Return, ~, [1], 8], # 9
+  [Return, {implicit: true}, [1], 8], # 9
   [Proj, {index: 0}, [5]], # 10
   [Print, ~, [3], 10, Scalar], # 11
   [EnvRead, {key: "N"}, ~, ~, Str], # 12
@@ -344,7 +344,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Proj, {index: 1}, [3]], # 4
   [Region, {head: 3}, [4]], # 5
   [Print, ~, [2], 5, Scalar], # 6
-  [Return, ~, [1], 6], # 7
+  [Return, {implicit: true}, [1], 6], # 7
   [EnvRead, {key: "N"}, ~, ~, Str], # 8
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 9
   [DefinedOr, ~, [8, 9], ~, Str], # 10
@@ -432,7 +432,7 @@ main::__PROGRAM__: {start: 0, returns: [10], nodes: [
   [Proj, {index: 1}, [3]], # 7
   [Region, {head: 3}, [7]], # 8
   [Print, ~, [6], 8, Scalar], # 9
-  [Return, ~, [1], 9], # 10
+  [Return, {implicit: true}, [1], 9], # 10
   [EnvRead, {key: A}, ~, ~, Str], # 11
   [Constant, {const_type: string, value: a}, ~, ~, Str], # 12
   [DefinedOr, ~, [11, 12], ~, Str], # 13
@@ -555,7 +555,7 @@ main::__PROGRAM__: {start: 0, returns: [26], nodes: [
   [Proj, {index: 0}, [22]], # 23
   [Region, {head: 9}, [10, 23]], # 24
   [Print, ~, [8], 24, Scalar], # 25
-  [Return, ~, [1], 25], # 26
+  [Return, {implicit: true}, [1], 25], # 26
   [EnvRead, {key: "N"}, ~, ~, Str], # 27
   [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 28
   [DefinedOr, ~, [27, 28], ~, Str], # 29

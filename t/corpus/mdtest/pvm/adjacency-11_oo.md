@@ -130,7 +130,7 @@ Foo::__ADJUST_0: {start: 0, returns: [4], nodes: [
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 1
   [FieldAccess, {field_index: 0, field_stash: Foo}, ~, ~, Int], # 2
   [Assign, ~, [2, 1], 0, Int], # 3
-  [Return, ~, [1], 3]]} # 4
+  [Return, {implicit: true}, [1], 3]]} # 4
 Foo::__DEFAULT_0: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
@@ -138,11 +138,11 @@ Foo::__DEFAULT_0: {start: 0, returns: [2], nodes: [
 Foo::m: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [FieldAccess, {field_index: 0, field_stash: Foo}, ~, ~, Int], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::__PROGRAM__: {start: 0, returns: [34], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Call, {class_name: Foo, dispatch_kind: method, name: new, param_names: []}, ~, 0, Object], # 2
+  [Call, {class_name: Foo, dispatch_kind: method, name: new, param_names: [], want: scalar}, ~, 0, Object], # 2
   [RefType, ~, [2], ~, Str], # 3
   [PadAccess, {sigil: $, symbol: t}, ~, ~, Str], # 4
   [Constant, {const_type: string, value: Bar}, ~, ~, Str], # 5
@@ -154,13 +154,13 @@ main::__PROGRAM__: {start: 0, returns: [34], nodes: [
   [Assign, ~, [8, 10], 9, Unknown], # 11
   [PadAccess, {sigil: $, symbol: b}, [11], ~, Scalar], # 12
   [Constant, {const_type: string, value: hi}, ~, ~, Str], # 13
-  [Call, {dispatch_kind: method, name: can, param_names: []}, [12, 13], 11, Unknown], # 14
+  [Call, {dispatch_kind: method, name: can, param_names: [], want: scalar}, [12, 13], 11, Unknown], # 14
   [Call, {dispatch_kind: indirect, name: "", param_names: [], want: scalar}, [14, 12], 14, Unknown], # 15
   [Call, {dispatch_kind: builtin, name: tie, param_names: []}, [4, 5, 6], 15, Unknown], # 16
-  [Call, {class_name: Foo, dispatch_kind: method, name: m, param_names: []}, [2], 16, Int], # 17
+  [Call, {class_name: Foo, dispatch_kind: method, name: m, param_names: [], want: list}, [2], 16, Int], # 17
   [Coerce, {from_repr: Unknown, to_repr: Str}, [17], ~, Str], # 18
   [RefType, ~, [12], ~, Str], # 19
-  [Call, {dispatch_kind: method, name: hi, param_names: []}, [12], 17, Unknown], # 20
+  [Call, {dispatch_kind: method, name: hi, param_names: [], want: list}, [12], 17, Unknown], # 20
   [Coerce, {from_repr: Unknown, to_repr: Str}, [20], ~, Str], # 21
   [Call, {dispatch_kind: dynamic_method, name: "", param_names: []}, [12, 13], ~, Unknown], # 22
   [Coerce, {from_repr: Unknown, to_repr: Str}, [22], ~, Str], # 23
@@ -174,7 +174,7 @@ main::__PROGRAM__: {start: 0, returns: [34], nodes: [
   [TernaryExpr, ~, [28, 29, 30], ~, Str], # 31
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 32
   [Print, ~, [3, 18, 19, 21, 23, 25, 26, 27, 31, 32], 20, Scalar], # 33
-  [Return, ~, [1], 33]]} # 34
+  [Return, {implicit: true}, [1], 33]]} # 34
 "BEGIN 1": {start: 0, returns: [8], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: feature}, ~, ~, Str], # 1
@@ -184,7 +184,7 @@ main::__PROGRAM__: {start: 0, returns: [34], nodes: [
   [MemStart], # 5
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [4, 5], 0, Unknown], # 6
   [Call, {class_name: feature, dispatch_kind: method, name: import, param_names: []}, [1, 2, 3], 6, Unknown], # 7
-  [Return, ~, [7], 7]]} # 8
+  [Return, {implicit: true}, [7], 7]]} # 8
 "BEGIN 2": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: warnings}, ~, ~, Str], # 1
@@ -193,5 +193,5 @@ main::__PROGRAM__: {start: 0, returns: [34], nodes: [
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
   [Call, {class_name: warnings, dispatch_kind: method, name: unimport, param_names: []}, [1, 2], 5, Unknown], # 6
-  [Return, ~, [6], 6]]} # 7
+  [Return, {implicit: true}, [6], 6]]} # 7
 ```

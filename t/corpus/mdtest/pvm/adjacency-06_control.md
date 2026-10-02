@@ -224,7 +224,7 @@ main::__PROGRAM__: {start: 0, returns: [101], nodes: [
   [Print, ~, [96], 97, Scalar], # 98
   [Region, {head: 94}, [95, 98]], # 99
   [Print, ~, [2], 99, Scalar], # 100
-  [Return, ~, [1], 100], # 101
+  [Return, {implicit: true}, [1], 100], # 101
   [NumLt, ~, [49, 26], 46, Boolean], # 102
   [Add, ~, [26, 24], ~, Num], # 103
   [NumLt, ~, [58, 26], 57, Boolean], # 104
@@ -332,7 +332,7 @@ main::__PROGRAM__: {start: 0, returns: [13], nodes: [
   [Proj, {index: 1}, [9]], # 10
   [Region, {head: 9}, [10]], # 11
   [Print, ~, [8], 11, Scalar], # 12
-  [Return, ~, [1], 12], # 13
+  [Return, {implicit: true}, [1], 12], # 13
   [Constant, {const_type: integer, value: "7"}, ~, ~, Int], # 14
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 15
   [Phi, {region: 9}, [15, 22], ~, Int], # 16

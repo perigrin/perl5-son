@@ -235,7 +235,7 @@ main::__PROGRAM__: {start: 0, returns: [115], nodes: [
   [Proj, {index: 1}, [106]], # 112
   [Region, {head: 106}, [112]], # 113
   [Print, ~, [31, 34, 46, 52, 9, 56, 87, 111], 113, Scalar], # 114
-  [Return, ~, [1], 114], # 115
+  [Return, {implicit: true}, [1], 114], # 115
   [Phi, {region: 106}, [1, 131], ~, Scalar], # 116
   [ArrayLiteral, {sigil: "@", symbol: "off"}, [94, 94, 94, 94, 3, 94], ~, Array], # 117
   [Constant, {const_type: integer, value: "4"}, ~, ~, Int], # 118

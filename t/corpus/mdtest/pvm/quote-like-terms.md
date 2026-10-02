@@ -59,7 +59,7 @@ main::__PROGRAM__: {start: 0, returns: [5], nodes: [
   [Constant, {const_type: string, value: "echo hi"}, ~, ~, Str], # 2
   [BacktickExpr, ~, [2], ~, Str], # 3
   [Print, ~, [3], 0, Scalar], # 4
-  [Return, ~, [1], 4]]} # 5
+  [Return, {implicit: true}, [1], 4]]} # 5
 ```
 
 ## The angle-bracket glob
@@ -108,13 +108,13 @@ main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [Coerce, {from_repr: Int, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
   [Print, ~, [2, 8, 9], 0, Scalar], # 10
-  [Return, ~, [1], 10]]} # 11
+  [Return, {implicit: true}, [1], 10]]} # 11
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "File/Glob.pm"}, ~, ~, Str], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## The `pack` template
@@ -180,7 +180,7 @@ main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Call, {dispatch_kind: builtin, name: pack, param_names: []}, [2, 5, 8, 10], ~, Str], # 11
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 12
   [Print, ~, [11, 12], 0, Scalar], # 13
-  [Return, ~, [1], 13]]} # 14
+  [Return, {implicit: true}, [1], 13]]} # 14
 ```
 
 ## The `unpack` template
@@ -244,7 +244,7 @@ main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 11
   [Concat, ~, [10, 11], ~, Str], # 12
   [Print, ~, [12], 0, Scalar], # 13
-  [Return, ~, [1], 13], # 14
+  [Return, {implicit: true}, [1], 13], # 14
   [ArrayLiteral, {sigil: "@", symbol: c}, [9], ~, Array]]} # 15
 ```
 
@@ -310,7 +310,7 @@ main::__PROGRAM__: {start: 0, returns: [13], nodes: [
   [Constant, {const_type: string, value: r}, ~, ~, Str], # 10
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 11
   [Print, ~, [7, 8, 9, 10, 11], 0, Scalar], # 12
-  [Return, ~, [1], 12]]} # 13
+  [Return, {implicit: true}, [1], 12]]} # 13
 ```
 
 ## `glob` and `readpipe`, spelled as functions without parens
@@ -385,11 +385,11 @@ main::__PROGRAM__: {start: 0, returns: [16], nodes: [
   [DefinedOr, ~, [3, 12], ~, Str], # 13
   [BacktickExpr, ~, [13], ~, Str], # 14
   [Print, ~, [2, 10, 11, 14], 0, Scalar], # 15
-  [Return, ~, [1], 15]]} # 16
+  [Return, {implicit: true}, [1], 15]]} # 16
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "File/Glob.pm"}, ~, ~, Str], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```

@@ -68,7 +68,7 @@ main::__PROGRAM__: {start: 0, returns: [23], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 20
   [Concat, ~, [19, 20], ~, Str], # 21
   [Print, ~, [21], 0, Scalar], # 22
-  [Return, ~, [1], 22]]} # 23
+  [Return, {implicit: true}, [1], 22]]} # 23
 ```
 
 ## `undef` is two operators wearing one word
@@ -112,7 +112,7 @@ main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [Coerce, {from_repr: Int, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
   [Print, ~, [5, 8, 9], 0, Scalar], # 10
-  [Return, ~, [1], 10]]} # 11
+  [Return, {implicit: true}, [1], 10]]} # 11
 ```
 
 ## `chr` and `ord`, folded and unfolded
@@ -163,7 +163,7 @@ main::__PROGRAM__: {start: 0, returns: [19], nodes: [
   [Constant, {const_type: string, value: "]\n"}, ~, ~, Str], # 16
   [Concat, ~, [15, 16], ~, Str], # 17
   [Print, ~, [17], 0, Scalar], # 18
-  [Return, ~, [1], 18]]} # 19
+  [Return, {implicit: true}, [1], 18]]} # 19
 ```
 
 ## `index` reports failure as -1, not undef
@@ -219,7 +219,7 @@ main::__PROGRAM__: {start: 0, returns: [25], nodes: [
   [Constant, {const_type: string, value: "]\n"}, ~, ~, Str], # 22
   [Concat, ~, [21, 22], ~, Str], # 23
   [Print, ~, [23], 0, Scalar], # 24
-  [Return, ~, [1], 24]]} # 25
+  [Return, {implicit: true}, [1], 24]]} # 25
 ```
 
 ## `%*d` makes the format consume an argument
@@ -277,7 +277,7 @@ main::__PROGRAM__: {start: 0, returns: [25], nodes: [
   [Coerce, {from_repr: Int, to_repr: Str}, [21], ~, Str], # 22
   [Constant, {const_type: string, value: "]\n"}, ~, ~, Str], # 23
   [Print, ~, [18, 22, 23], 0, Scalar], # 24
-  [Return, ~, [1], 24]]} # 25
+  [Return, {implicit: true}, [1], 24]]} # 25
 ```
 
 ## `substr` takes two, three or four arguments
@@ -329,7 +329,7 @@ main::__PROGRAM__: {start: 0, returns: [22], nodes: [
   [Constant, {const_type: string, value: "]\n"}, ~, ~, Str], # 19
   [Concat, ~, [18, 19], ~, Str], # 20
   [Print, ~, [20], 0, Scalar], # 21
-  [Return, ~, [1], 21]]} # 22
+  [Return, {implicit: true}, [1], 21]]} # 22
 ```
 
 ## `substr` is an lvalue
@@ -392,7 +392,7 @@ main::__PROGRAM__: {start: 0, returns: [31], nodes: [
   [Constant, {const_type: string, value: "]\n"}, ~, ~, Str], # 28
   [Concat, ~, [27, 28], ~, Str], # 29
   [Print, ~, [29], 17, Scalar], # 30
-  [Return, ~, [1], 30], # 31
+  [Return, {implicit: true}, [1], 30], # 31
   [Call, {dispatch_kind: builtin, name: substr, param_names: []}, [11, 12, 13], ~, Str]]} # 32
 ```
 
@@ -427,7 +427,7 @@ main::__PROGRAM__: {start: 0, returns: [8], nodes: [
   [Constant, {const_type: string, value: def}, ~, ~, Str], # 5
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 6
   [Print, ~, [3, 4, 5, 6], 0, Scalar], # 7
-  [Return, ~, [1], 7]]} # 8
+  [Return, {implicit: true}, [1], 7]]} # 8
 ```
 
 ## `length` measures a concatenation, and a comma ends it
@@ -466,5 +466,5 @@ main::__PROGRAM__: {start: 0, returns: [12], nodes: [
   [Coerce, {from_repr: Int, to_repr: Str}, [8], ~, Str], # 9
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
   [Print, ~, [6, 7, 9, 10], 0, Scalar], # 11
-  [Return, ~, [1], 11]]} # 12
+  [Return, {implicit: true}, [1], 11]]} # 12
 ```

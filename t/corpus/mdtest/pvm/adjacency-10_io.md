@@ -156,7 +156,7 @@ main::__PROGRAM__: {start: 0, returns: [55], nodes: [
   [Call, {dispatch_kind: direct, name: main::missing, param_names: [], want: list}, ~, 46, Unknown], # 52
   [Coerce, {from_repr: Unknown, to_repr: Str}, [52], ~, Str], # 53
   [Print, ~, [37, 44, 47, 48, 50, 51, 53, 26], 52, Scalar], # 54
-  [Return, ~, [1], 54], # 55
+  [Return, {implicit: true}, [1], 54], # 55
   [EntryDef, {package: main, sigil: $, symbol: AUTOLOAD}, [4], ~, Scalar]]} # 56
 main::__PROGRAM__::__ANON__:16:25: {start: 0, returns: [7], nodes: [
   [Start], # 0
@@ -166,7 +166,7 @@ main::__PROGRAM__::__ANON__:16:25: {start: 0, returns: [7], nodes: [
   [Subscript, {kind: array}, [1, 2, 3], ~, Scalar], # 4
   [Coerce, {from_repr: Scalar, to_repr: Num}, [4], ~, Num], # 5
   [Multiply, ~, [5, 5], ~, Num], # 6
-  [Return, ~, [6], 0]]} # 7
+  [Return, {implicit: true}, [6], 0]]} # 7
 "BEGIN 1": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: feature}, ~, ~, Str], # 1
@@ -175,5 +175,5 @@ main::__PROGRAM__::__ANON__:16:25: {start: 0, returns: [7], nodes: [
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
   [Call, {class_name: feature, dispatch_kind: method, name: import, param_names: []}, [1, 2], 5, Unknown], # 6
-  [Return, ~, [6], 6]]} # 7
+  [Return, {implicit: true}, [6], 6]]} # 7
 ```

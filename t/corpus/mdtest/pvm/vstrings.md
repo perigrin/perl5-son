@@ -72,7 +72,7 @@ main::__PROGRAM__: {start: 0, returns: [6], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 3
   [Concat, ~, [2, 3], ~, Str], # 4
   [Print, ~, [4], 0, Scalar], # 5
-  [Return, ~, [1], 5]]} # 6
+  [Return, {implicit: true}, [1], 5]]} # 6
 ```
 
 ## The `v` prefix
@@ -172,5 +172,5 @@ main::__PROGRAM__: {start: 0, returns: [6], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 3
   [Concat, ~, [2, 3], ~, Str], # 4
   [Print, ~, [4], 0, Scalar], # 5
-  [Return, ~, [1], 5]]} # 6
+  [Return, {implicit: true}, [1], 5]]} # 6
 ```

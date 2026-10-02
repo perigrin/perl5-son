@@ -52,7 +52,7 @@ main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [Coerce, {from_repr: Int, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
   [Print, ~, [8, 9], 0, Scalar], # 10
-  [Return, ~, [1], 10]]} # 11
+  [Return, {implicit: true}, [1], 10]]} # 11
 ```
 
 ## A constant subscript reads as one op and writes as another
@@ -97,7 +97,7 @@ main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Coerce, {from_repr: Unknown, to_repr: Str}, [10], ~, Str], # 11
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 12
   [Print, ~, [11, 12], 9, Scalar], # 13
-  [Return, ~, [1], 13]]} # 14
+  [Return, {implicit: true}, [1], 13]]} # 14
 ```
 
 ## `$#a`, and the subscript the optimiser will not fold
@@ -141,7 +141,7 @@ main::__PROGRAM__: {start: 0, returns: [15], nodes: [
   [Coerce, {from_repr: Int, to_repr: Str}, [8], ~, Str], # 12
   [Print, ~, [12, 11], 0, Scalar], # 13
   [Print, ~, [10, 11], 13, Scalar], # 14
-  [Return, ~, [1], 14]]} # 15
+  [Return, {implicit: true}, [1], 14]]} # 15
 ```
 
 ## An array slice: the sigil decides, not the name
@@ -183,5 +183,5 @@ main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [Coerce, {from_repr: List, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
   [Print, ~, [8, 9], 0, Scalar], # 10
-  [Return, ~, [1], 10]]} # 11
+  [Return, {implicit: true}, [1], 10]]} # 11
 ```

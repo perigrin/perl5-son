@@ -64,7 +64,7 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [Proj, {index: 0}, [11]], # 14
   [Print, ~, [13], 14, Scalar], # 15
   [Region, {head: 11}, [12, 15]], # 16
-  [Return, ~, [1], 16]]} # 17
+  [Return, {implicit: true}, [1], 16]]} # 17
 ```
 
 ## `unless` is `or`, not an inverted `if`
@@ -114,7 +114,7 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [Proj, {index: 1}, [11]], # 14
   [Print, ~, [13], 14, Scalar], # 15
   [Region, {head: 11}, [12, 15]], # 16
-  [Return, ~, [1], 16]]} # 17
+  [Return, {implicit: true}, [1], 16]]} # 17
 ```
 
 ## Adding an `else` changes the op
@@ -163,7 +163,7 @@ main::__PROGRAM__: {start: 0, returns: [13], nodes: [
   [Proj, {index: 1}, [6]], # 10
   [Print, ~, [9], 10, Scalar], # 11
   [Region, {head: 6}, [8, 11]], # 12
-  [Return, ~, [1], 12]]} # 13
+  [Return, {implicit: true}, [1], 12]]} # 13
 ```
 
 ## `elsif` is a third form, not `else` followed by `if`
@@ -227,5 +227,5 @@ main::__PROGRAM__: {start: 0, returns: [23], nodes: [
   [Print, ~, [18], 19, Scalar], # 20
   [Region, {head: 15}, [17, 20]], # 21
   [Region, {head: 9}, [11, 21]], # 22
-  [Return, ~, [1], 22]]} # 23
+  [Return, {implicit: true}, [1], 22]]} # 23
 ```

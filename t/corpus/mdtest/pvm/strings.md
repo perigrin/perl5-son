@@ -71,7 +71,7 @@ main::__PROGRAM__: {start: 0, returns: [5], nodes: [
   [Constant, {const_type: string, value: "a\nb"}, ~, ~, Str], # 2
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 3
   [Print, ~, [2, 3], 0, Scalar], # 4
-  [Return, ~, [1], 4]]} # 5
+  [Return, {implicit: true}, [1], 4]]} # 5
 ```
 
 ## Single quotes do not
@@ -125,7 +125,7 @@ main::__PROGRAM__: {start: 0, returns: [6], nodes: [
   [Constant, {const_type: string, value: "a\\nb"}, ~, ~, Str], # 3
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
   [Print, ~, [2, 3, 4], 0, Scalar], # 5
-  [Return, ~, [1], 5]]} # 6
+  [Return, {implicit: true}, [1], 5]]} # 6
 ```
 
 ## `q` with three delimiters
@@ -188,5 +188,5 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Constant, {const_type: string, value: three}, ~, ~, Str], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
   [Print, ~, [2, 3, 4, 5], 0, Scalar], # 6
-  [Return, ~, [1], 6]]} # 7
+  [Return, {implicit: true}, [1], 6]]} # 7
 ```

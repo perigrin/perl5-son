@@ -67,7 +67,7 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 14
   [Concat, ~, [13, 14], ~, Str], # 15
   [Print, ~, [15], 0, Scalar], # 16
-  [Return, ~, [1], 16], # 17
+  [Return, {implicit: true}, [1], 16], # 17
   [ArrayLiteral, {sigil: "@", symbol: a}, [5, 6, 7], ~, Array]]} # 18
 ```
 
@@ -142,7 +142,7 @@ main::__PROGRAM__: {start: 0, returns: [22], nodes: [
   [Coerce, {from_repr: Int, to_repr: Str}, [18], ~, Str], # 19
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 20
   [Print, ~, [16, 19, 20], 0, Scalar], # 21
-  [Return, ~, [1], 21], # 22
+  [Return, {implicit: true}, [1], 21], # 22
   [ArrayLiteral, {sigil: "@", symbol: a}, [5, 6, 7], ~, Array], # 23
   [Call, {dispatch_kind: builtin, name: sort, param_names: [], sort_cmp: string, sort_order: ascending}, [5, 6, 7], ~, List]]} # 24
 ```
@@ -199,7 +199,7 @@ main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Coerce, {from_repr: Int, to_repr: Str}, [10], ~, Str], # 11
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 12
   [Print, ~, [7, 11, 12], 0, Scalar], # 13
-  [Return, ~, [1], 13]]} # 14
+  [Return, {implicit: true}, [1], 13]]} # 14
 ```
 
 ## `map BLOCK` and `map EXPR`, a fork the optree cannot see
@@ -305,7 +305,7 @@ main::__PROGRAM__: {start: 0, returns: [41], nodes: [
   [Proj, {index: 1}, [31]], # 38
   [Region, {head: 31}, [38]], # 39
   [Print, ~, [37], 39, Scalar], # 40
-  [Return, ~, [1], 40], # 41
+  [Return, {implicit: true}, [1], 40], # 41
   [Count, ~, [5, 11], ~, Int], # 42
   [Phi, {region: 15}, [6, 59], ~, Int], # 43
   [Subscript, {kind: array}, [5, 43, 11], ~, Str], # 44
@@ -433,7 +433,7 @@ main::__PROGRAM__: {start: 0, returns: [39], nodes: [
   [Proj, {index: 1}, [29]], # 36
   [Region, {head: 29}, [36]], # 37
   [Print, ~, [35], 37, Scalar], # 38
-  [Return, ~, [1], 38], # 39
+  [Return, {implicit: true}, [1], 38], # 39
   [Count, ~, [5, 9], ~, Int], # 40
   [Phi, {region: 13}, [6, 55], ~, Int], # 41
   [Subscript, {kind: array}, [5, 41, 9], ~, Str], # 42

@@ -66,7 +66,7 @@ main::__PROGRAM__: {start: 0, returns: [15], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 12
   [Concat, ~, [11, 12], ~, Str], # 13
   [Print, ~, [13], 0, Scalar], # 14
-  [Return, ~, [1], 14]]} # 15
+  [Return, {implicit: true}, [1], 14]]} # 15
 ```
 
 ## `"@a"` is a `join`, decided at compile time
@@ -118,7 +118,7 @@ main::__PROGRAM__: {start: 0, returns: [12], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
   [Concat, ~, [8, 9], ~, Str], # 10
   [Print, ~, [10], 0, Scalar], # 11
-  [Return, ~, [1], 11], # 12
+  [Return, {implicit: true}, [1], 11], # 12
   [ArrayLiteral, {sigil: "@", symbol: a}, [5, 6, 7], ~, Array]]} # 13
 ```
 
@@ -176,6 +176,6 @@ main::__PROGRAM__: {start: 0, returns: [16], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 13
   [Concat, ~, [12, 13], ~, Str], # 14
   [Print, ~, [14], 0, Scalar], # 15
-  [Return, ~, [1], 15], # 16
+  [Return, {implicit: true}, [1], 15], # 16
   [ArrayLiteral, {sigil: "@", symbol: all}, [9, 10, 2], ~, Array]]} # 17
 ```

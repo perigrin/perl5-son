@@ -124,7 +124,7 @@ Greet::import: {start: 0, returns: [11], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
   [Concat, ~, [7, 8], ~, Str], # 9
   [Print, ~, [9], 0, Scalar], # 10
-  [Return, ~, [10], 10]]} # 11
+  [Return, {implicit: true}, [10], 10]]} # 11
 Louder::shout: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: HELLO}, ~, ~, Str], # 1
@@ -164,7 +164,7 @@ main::__PROGRAM__: {start: 0, returns: [44], nodes: [
   [TernaryExpr, ~, [30, 20, 21], ~, Str], # 31
   [Constant, {const_type: string, value: Greet}, ~, ~, Str], # 32
   [Constant, {const_type: string, value: tag}, ~, ~, Str], # 33
-  [Call, {class_name: Greet, dispatch_kind: method, name: import, param_names: []}, [32, 33], 18, Unknown], # 34
+  [Call, {class_name: Greet, dispatch_kind: method, name: import, param_names: [], want: void}, [32, 33], 18, Unknown], # 34
   [Call, {dispatch_kind: direct, name: Greet::hello, param_names: [], want: list}, ~, 34, Str], # 35
   [Coerce, {from_repr: Unknown, to_repr: Str}, [35], ~, Str], # 36
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 37
@@ -174,7 +174,7 @@ main::__PROGRAM__: {start: 0, returns: [44], nodes: [
   [Print, ~, [26, 29, 31, 10], 40, Scalar], # 41
   [Print, ~, [11, 22, 25, 10], 41, Scalar], # 42
   [Print, ~, [2, 3, 4, 5, 6, 7, 8, 9, 10], 42, Scalar], # 43
-  [Return, ~, [1], 43]]} # 44
+  [Return, {implicit: true}, [1], 43]]} # 44
 "BEGIN 1": {start: 0, returns: [6], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: POSIX}, ~, ~, Str], # 1
@@ -182,13 +182,13 @@ main::__PROGRAM__: {start: 0, returns: [44], nodes: [
   [MemStart], # 3
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [2, 3], 0, Unknown], # 4
   [Call, {class_name: POSIX, dispatch_kind: method, name: import, param_names: []}, [1], 4, Unknown], # 5
-  [Return, ~, [5], 5]]} # 6
+  [Return, {implicit: true}, [5], 5]]} # 6
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: Fcntl.pm}, ~, ~, Str], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 3": {start: 0, returns: [8], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: constant}, ~, ~, Str], # 1
@@ -198,15 +198,15 @@ main::__PROGRAM__: {start: 0, returns: [44], nodes: [
   [MemStart], # 5
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [4, 5], 0, Unknown], # 6
   [Call, {class_name: constant, dispatch_kind: method, name: import, param_names: []}, [1, 2, 3], 6, Unknown], # 7
-  [Return, ~, [7], 7]]} # 8
+  [Return, {implicit: true}, [7], 7]]} # 8
 "BEGIN 4": {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "begin\n"}, ~, ~, Str], # 1
   [Print, ~, [1], 0, Scalar], # 2
-  [Return, ~, [2], 2]]} # 3
+  [Return, {implicit: true}, [2], 2]]} # 3
 "END 5": {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "end\n"}, ~, ~, Str], # 1
   [Print, ~, [1], 0, Scalar], # 2
-  [Return, ~, [2], 2]]} # 3
+  [Return, {implicit: true}, [2], 2]]} # 3
 ```

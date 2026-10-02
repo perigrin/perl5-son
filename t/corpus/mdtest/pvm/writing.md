@@ -68,7 +68,7 @@ main::__PROGRAM__: {start: 0, returns: [13], nodes: [
   [Print, {has_filehandle: true}, [5, 6], 9, Scalar], # 10
   [Call, {dispatch_kind: builtin, name: close, param_names: []}, [5], 10, Boolean], # 11
   [Print, ~, [4], 11, Scalar], # 12
-  [Return, ~, [1], 12]]} # 13
+  [Return, {implicit: true}, [1], 12]]} # 13
 ```
 
 ## A bareword handle reaches `print` through `gv`
@@ -104,7 +104,7 @@ main::__PROGRAM__: {start: 0, returns: [5], nodes: [
   [Constant, {const_type: glob, value: STDOUT}, ~, ~, Glob], # 2
   [Constant, {const_type: string, value: "to stdout\n"}, ~, ~, Str], # 3
   [Print, {has_filehandle: true}, [2, 3], 0, Scalar], # 4
-  [Return, ~, [1], 4]]} # 5
+  [Return, {implicit: true}, [1], 4]]} # 5
 ```
 
 ## `say` is feature-gated, and the featureless spelling compiles
@@ -208,7 +208,7 @@ main::__PROGRAM__: {start: 0, returns: [23], nodes: [
   [Print, {has_filehandle: true}, [9, 10], 19, Scalar], # 20
   [Call, {dispatch_kind: builtin, name: close, param_names: []}, [9], 20, Boolean], # 21
   [Print, ~, [8], 21, Scalar], # 22
-  [Return, ~, [1], 22]]} # 23
+  [Return, {implicit: true}, [1], 22]]} # 23
 "BEGIN 1": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: feature}, ~, ~, Str], # 1
@@ -217,7 +217,7 @@ main::__PROGRAM__: {start: 0, returns: [23], nodes: [
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
   [Call, {class_name: feature, dispatch_kind: method, name: import, param_names: []}, [1, 2], 5, Unknown], # 6
-  [Return, ~, [6], 6]]} # 7
+  [Return, {implicit: true}, [6], 6]]} # 7
 ```
 
 ## `select` is two operators sharing a name, told apart by arity
@@ -323,5 +323,5 @@ main::__PROGRAM__: {start: 0, returns: [25], nodes: [
   [Call, {dispatch_kind: builtin, name: select, param_names: []}, [19], 21, Unknown], # 22
   [Call, {dispatch_kind: builtin, name: close, param_names: []}, [15], 22, Boolean], # 23
   [Print, ~, [14], 23, Scalar], # 24
-  [Return, ~, [1], 24]]} # 25
+  [Return, {implicit: true}, [1], 24]]} # 25
 ```

@@ -150,7 +150,7 @@ main::__PROGRAM__: {start: 0, returns: [60], nodes: [
   [Constant, {const_type: string, value: "a\nb"}, ~, ~, Str], # 57
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 58
   [Print, ~, [50, 51, 52, 53, 56, 57, 58], 0, Scalar], # 59
-  [Return, ~, [1], 59], # 60
+  [Return, {implicit: true}, [1], 59], # 60
   [PadAccess, {sigil: $, symbol: dq}, ~, ~, Str], # 61
   [VarDecl, {scope: my}, [61, 48]]]} # 62
 ```

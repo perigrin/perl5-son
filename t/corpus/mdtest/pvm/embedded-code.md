@@ -72,7 +72,7 @@ main::__PROGRAM__: {start: 0, returns: [13], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
   [Concat, ~, [9, 10], ~, Str], # 11
   [Print, ~, [11], 7, Scalar], # 12
-  [Return, ~, [1], 12]]} # 13
+  [Return, {implicit: true}, [1], 12]]} # 13
 ```
 
 ## `qr//` carrying a block: code frozen into a value
@@ -135,7 +135,7 @@ main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 11
   [Concat, ~, [10, 11], ~, Str], # 12
   [Print, ~, [12], 8, Scalar], # 13
-  [Return, ~, [1], 13]]} # 14
+  [Return, {implicit: true}, [1], 13]]} # 14
 ```
 
 ## Hostile contents: proving the region is parsed, not counted
@@ -239,6 +239,6 @@ main::__PROGRAM__: {start: 0, returns: [27], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 24
   [Concat, ~, [23, 24], ~, Str], # 25
   [Print, ~, [25], 16, Scalar], # 26
-  [Return, ~, [1], 26], # 27
+  [Return, {implicit: true}, [1], 26], # 27
   [RegexMatch, {flags: "", pattern: a}, [9], ~, Boolean]]} # 28
 ```

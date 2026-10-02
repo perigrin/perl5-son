@@ -69,7 +69,7 @@ main::__PROGRAM__: {start: 0, returns: [12], nodes: [
   [Coerce, {from_repr: Unknown, to_repr: Str}, [8], ~, Str], # 9
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
   [Print, ~, [9, 10], 5, Scalar], # 11
-  [Return, ~, [1], 11]]} # 12
+  [Return, {implicit: true}, [1], 11]]} # 12
 ```
 
 ## The brace dereference of an array reference
@@ -122,7 +122,7 @@ main::__PROGRAM__: {start: 0, returns: [12], nodes: [
   [Coerce, {from_repr: Unknown, to_repr: Str}, [8], ~, Str], # 9
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
   [Print, ~, [9, 10], 5, Scalar], # 11
-  [Return, ~, [1], 11]]} # 12
+  [Return, {implicit: true}, [1], 11]]} # 12
 ```
 
 ## The `@{ }` whole-array dereference
@@ -189,7 +189,7 @@ main::__PROGRAM__: {start: 0, returns: [18], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 15
   [Concat, ~, [14, 15], ~, Str], # 16
   [Print, ~, [10, 11, 16], 0, Scalar], # 17
-  [Return, ~, [1], 17]]} # 18
+  [Return, {implicit: true}, [1], 17]]} # 18
 ```
 
 ## The sigil-only `@$r` dereference
@@ -266,7 +266,7 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [Coerce, {from_repr: Unknown, to_repr: Str}, [13], ~, Str], # 14
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 15
   [Print, ~, [10, 11, 14, 15], 0, Scalar], # 16
-  [Return, ~, [1], 16]]} # 17
+  [Return, {implicit: true}, [1], 16]]} # 17
 ```
 
 ## The postfix `$r->@*` dereference
@@ -338,7 +338,7 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [Coerce, {from_repr: Unknown, to_repr: Str}, [13], ~, Str], # 14
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 15
   [Print, ~, [10, 11, 14, 15], 0, Scalar], # 16
-  [Return, ~, [1], 16]]} # 17
+  [Return, {implicit: true}, [1], 16]]} # 17
 ```
 
 ## The `%{ }` and `${ }{ }` hash dereferences
@@ -395,7 +395,7 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [Coerce, {from_repr: Unknown, to_repr: Str}, [13], ~, Str], # 14
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 15
   [Print, ~, [11, 12, 14, 15], 0, Scalar], # 16
-  [Return, ~, [1], 16]]} # 17
+  [Return, {implicit: true}, [1], 16]]} # 17
 ```
 
 ## The last index through a reference, three ways
@@ -434,7 +434,7 @@ main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 11
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 12
   [Print, ~, [10, 11, 10, 11, 10, 12], 5, Scalar], # 13
-  [Return, ~, [1], 13]]} # 14
+  [Return, {implicit: true}, [1], 13]]} # 14
 ```
 
 ## A dereference returned takes the caller's context
@@ -480,7 +480,7 @@ main::__PROGRAM__: {start: 0, returns: [19], nodes: [
   [Coerce, {from_repr: Unknown, to_repr: Str}, [15], ~, Str], # 16
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 17
   [Print, ~, [10, 11, 16, 17], 15, Scalar], # 18
-  [Return, ~, [1], 18]]} # 19
+  [Return, {implicit: true}, [1], 18]]} # 19
 main::items: {start: 0, returns: [8], nodes: [
   [Start], # 0
   [ArgsSource, ~, ~, ~, Array], # 1

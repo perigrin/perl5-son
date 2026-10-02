@@ -76,7 +76,7 @@ main::__PROGRAM__: {start: 0, returns: [18], nodes: [
   [Coerce, {from_repr: Int, to_repr: Str}, [14], ~, Str], # 15
   [Concat, ~, [15, 10], ~, Str], # 16
   [Print, ~, [16], 13, Scalar], # 17
-  [Return, ~, [1], 17]]} # 18
+  [Return, {implicit: true}, [1], 17]]} # 18
 ```
 
 ## A bare block is a scope, and a loop that runs once
@@ -157,5 +157,5 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [Print, ~, [13], 0, Scalar], # 14
   [Print, ~, [8], 14, Scalar], # 15
   [Print, ~, [2], 15, Scalar], # 16
-  [Return, ~, [1], 16]]} # 17
+  [Return, {implicit: true}, [1], 16]]} # 17
 ```

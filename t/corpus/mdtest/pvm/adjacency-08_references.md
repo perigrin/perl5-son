@@ -130,7 +130,7 @@ main::__PROGRAM__: {start: 0, returns: [48], nodes: [
   [Coerce, {from_repr: Unknown, to_repr: Str}, [44], ~, Str], # 45
   [Print, ~, [26, 11, 28, 11, 33, 11, 38, 11, 40, 11, 45, 25], 44, Scalar], # 46
   [Print, ~, [10, 11, 14, 11, 10, 11, 20, 11, 24, 25], 46, Scalar], # 47
-  [Return, ~, [1], 47]]} # 48
+  [Return, {implicit: true}, [1], 47]]} # 48
 main::one: {start: 0, returns: [5], nodes: [
   [Start], # 0
   [ArgsSource, ~, ~, ~, Array], # 1

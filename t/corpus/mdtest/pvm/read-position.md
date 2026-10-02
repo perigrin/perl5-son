@@ -70,7 +70,7 @@ main::__PROGRAM__: {start: 0, returns: [20], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 17
   [Concat, ~, [16, 17], ~, Str], # 18
   [Print, ~, [18], 8, Scalar], # 19
-  [Return, ~, [1], 19]]} # 20
+  [Return, {implicit: true}, [1], 19]]} # 20
 ```
 
 ## A read between the `tr///` and its count
@@ -124,7 +124,7 @@ main::__PROGRAM__: {start: 0, returns: [21], nodes: [
   [Concat, ~, [17, 12], ~, Str], # 18
   [Print, ~, [18], 8, Scalar], # 19
   [Print, ~, [13], 19, Scalar], # 20
-  [Return, ~, [1], 20]]} # 21
+  [Return, {implicit: true}, [1], 20]]} # 21
 ```
 
 ## The same read between an `s///` and its count
@@ -172,5 +172,5 @@ main::__PROGRAM__: {start: 0, returns: [20], nodes: [
   [Concat, ~, [16, 11], ~, Str], # 17
   [Print, ~, [17], 8, Scalar], # 18
   [Print, ~, [12], 18, Scalar], # 19
-  [Return, ~, [1], 19]]} # 20
+  [Return, {implicit: true}, [1], 19]]} # 20
 ```

@@ -58,7 +58,7 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [Coerce, {from_repr: Int, to_repr: Str}, [13], ~, Str], # 14
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 15
   [Print, ~, [8, 9, 12, 9, 14, 15], 0, Scalar], # 16
-  [Return, ~, [1], 16]]} # 17
+  [Return, {implicit: true}, [1], 16]]} # 17
 ```
 
 ## Bitwise precedence: `&` binds tighter than `|`
@@ -112,7 +112,7 @@ main::__PROGRAM__: {start: 0, returns: [23], nodes: [
   [Coerce, {from_repr: Int, to_repr: Str}, [19], ~, Str], # 20
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 21
   [Print, ~, [16, 17, 20, 21], 0, Scalar], # 22
-  [Return, ~, [1], 22]]} # 23
+  [Return, {implicit: true}, [1], 22]]} # 23
 ```
 
 ## The shift operators
@@ -161,7 +161,7 @@ main::__PROGRAM__: {start: 0, returns: [19], nodes: [
   [Coerce, {from_repr: Int, to_repr: Str}, [15], ~, Str], # 16
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 17
   [Print, ~, [8, 9, 16, 17], 0, Scalar], # 18
-  [Return, ~, [1], 18]]} # 19
+  [Return, {implicit: true}, [1], 18]]} # 19
 ```
 
 ## Complement
@@ -200,7 +200,7 @@ main::__PROGRAM__: {start: 0, returns: [12], nodes: [
   [Coerce, {from_repr: Int, to_repr: Str}, [8], ~, Str], # 9
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
   [Print, ~, [9, 10], 0, Scalar], # 11
-  [Return, ~, [1], 11]]} # 12
+  [Return, {implicit: true}, [1], 11]]} # 12
 ```
 
 ## `&` on strings, ungated: the string bitwise operation
@@ -248,7 +248,7 @@ main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Coerce, {from_repr: Int, to_repr: Str}, [10], ~, Str], # 11
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 12
   [Print, ~, [11, 12], 0, Scalar], # 13
-  [Return, ~, [1], 13]]} # 14
+  [Return, {implicit: true}, [1], 13]]} # 14
 ```
 
 ## `&` on strings, gated: the numeric operation
@@ -304,11 +304,11 @@ main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Coerce, {from_repr: Int, to_repr: Str}, [10], ~, Str], # 11
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 12
   [Print, ~, [11, 12], 0, Scalar], # 13
-  [Return, ~, [1], 13]]} # 14
+  [Return, {implicit: true}, [1], 13]]} # 14
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.028"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```

@@ -72,7 +72,7 @@ main::__PROGRAM__: {start: 0, returns: [19], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 16
   [Concat, ~, [15, 16], ~, Str], # 17
   [Print, ~, [17], 12, Scalar], # 18
-  [Return, ~, [1], 18]]} # 19
+  [Return, {implicit: true}, [1], 18]]} # 19
 ```
 
 ## The comment character as a delimiter
@@ -133,7 +133,7 @@ main::__PROGRAM__: {start: 0, returns: [16], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 13
   [Concat, ~, [12, 13], ~, Str], # 14
   [Print, ~, [14], 9, Scalar], # 15
-  [Return, ~, [1], 15]]} # 16
+  [Return, {implicit: true}, [1], 15]]} # 16
 ```
 
 ## A bracketing delimiter nests
@@ -203,5 +203,5 @@ main::__PROGRAM__: {start: 0, returns: [21], nodes: [
   [Constant, {const_type: string, value: "]\n"}, ~, ~, Str], # 18
   [Concat, ~, [17, 18], ~, Str], # 19
   [Print, ~, [19], 14, Scalar], # 20
-  [Return, ~, [1], 20]]} # 21
+  [Return, {implicit: true}, [1], 20]]} # 21
 ```

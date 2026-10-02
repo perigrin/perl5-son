@@ -127,7 +127,7 @@ main::__PROGRAM__: {start: 0, returns: [12], nodes: [
   [Constant, {const_type: string, value: b}, ~, ~, Str], # 9
   [Call, {dispatch_kind: builtin, name: tie, param_names: []}, [2, 7, 8, 9], 0, Unknown], # 10
   [Print, ~, [3, 4], 10, Scalar], # 11
-  [Return, ~, [1], 11]]} # 12
+  [Return, {implicit: true}, [1], 11]]} # 12
 ```
 
 ## `tied` is a named unary, in boolean position
@@ -220,5 +220,5 @@ main::__PROGRAM__: {start: 0, returns: [16], nodes: [
   [DefinedOr, ~, [11, 12], ~, Str], # 13
   [Call, {dispatch_kind: builtin, name: tie, param_names: []}, [2, 13], 0, Unknown], # 14
   [Print, ~, [6, 9, 10], 14, Scalar], # 15
-  [Return, ~, [1], 15]]} # 16
+  [Return, {implicit: true}, [1], 15]]} # 16
 ```

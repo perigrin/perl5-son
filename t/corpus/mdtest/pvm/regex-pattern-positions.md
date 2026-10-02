@@ -106,7 +106,7 @@ main::__PROGRAM__: {start: 0, returns: [27], nodes: [
   [Constant, {const_type: string, value: "]\n"}, ~, ~, Str], # 24
   [Concat, ~, [23, 24], ~, Str], # 25
   [Print, ~, [10, 17, 21, 25], 0, Scalar], # 26
-  [Return, ~, [1], 26]]} # 27
+  [Return, {implicit: true}, [1], 26]]} # 27
 ```
 
 ## `pos` is a named operator in lvalue position
@@ -204,5 +204,5 @@ main::__PROGRAM__: {start: 0, returns: [26], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 23
   [Concat, ~, [22, 23], ~, Str], # 24
   [Print, ~, [24], 20, Scalar], # 25
-  [Return, ~, [1], 25]]} # 26
+  [Return, {implicit: true}, [1], 25]]} # 26
 ```

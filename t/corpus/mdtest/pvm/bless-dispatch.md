@@ -57,7 +57,7 @@ main::__PROGRAM__: {start: 0, returns: [8], nodes: [
   [RefType, ~, [4], ~, Str], # 5
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 6
   [Print, ~, [5, 6], 2, Scalar], # 7
-  [Return, ~, [1], 7]]} # 8
+  [Return, {implicit: true}, [1], 7]]} # 8
 ```
 
 ## bless of a POPULATED anonymous hash
@@ -106,7 +106,7 @@ main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [RefType, ~, [7], ~, Str], # 8
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
   [Print, ~, [8, 9], 5, Scalar], # 10
-  [Return, ~, [1], 10]]} # 11
+  [Return, {implicit: true}, [1], 10]]} # 11
 ```
 
 ## A method name written out
@@ -164,11 +164,11 @@ main::__PROGRAM__: {start: 0, returns: [9], nodes: [
   [HashLiteral, ~, ~, 0, HashRef], # 2
   [Constant, {const_type: string, value: Foo}, ~, ~, Str], # 3
   [Call, {dispatch_kind: builtin, name: bless, param_names: []}, [2, 3], ~, Unknown], # 4
-  [Call, {dispatch_kind: method, name: hi, param_names: []}, [4], 2, Unknown], # 5
+  [Call, {dispatch_kind: method, name: hi, param_names: [], want: list}, [4], 2, Unknown], # 5
   [Coerce, {from_repr: Unknown, to_repr: Str}, [5], ~, Str], # 6
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 7
   [Print, ~, [6, 7], 5, Scalar], # 8
-  [Return, ~, [1], 8]]} # 9
+  [Return, {implicit: true}, [1], 8]]} # 9
 ```
 
 ## A method name in a scalar
@@ -218,7 +218,7 @@ main::__PROGRAM__: {start: 0, returns: [10], nodes: [
   [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
   [Print, ~, [7, 8], 2, Scalar], # 9
-  [Return, ~, [1], 9]]} # 10
+  [Return, {implicit: true}, [1], 9]]} # 10
 ```
 
 ## SUPER:: dispatch
@@ -272,11 +272,11 @@ main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [HashLiteral, ~, ~, 6, HashRef], # 7
   [Constant, {const_type: string, value: Derived}, ~, ~, Str], # 8
   [Call, {dispatch_kind: builtin, name: bless, param_names: []}, [7, 8], ~, Unknown], # 9
-  [Call, {dispatch_kind: method, name: Derived::SUPER::hi, param_names: []}, [9], 7, Unknown], # 10
+  [Call, {dispatch_kind: method, name: Derived::SUPER::hi, param_names: [], want: list}, [9], 7, Unknown], # 10
   [Coerce, {from_repr: Unknown, to_repr: Str}, [10], ~, Str], # 11
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 12
   [Print, ~, [11, 12], 10, Scalar], # 13
-  [Return, ~, [1], 13]]} # 14
+  [Return, {implicit: true}, [1], 13]]} # 14
 ```
 
 ## Indirect object notation: `new Foo`
@@ -327,11 +327,11 @@ Foo::new: {start: 0, returns: [6], nodes: [
 main::__PROGRAM__: {start: 0, returns: [6], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Call, {class_name: Foo, dispatch_kind: method, name: new, param_names: []}, ~, 0, Object], # 2
+  [Call, {class_name: Foo, dispatch_kind: method, name: new, param_names: [], want: scalar}, ~, 0, Object], # 2
   [RefType, ~, [2], ~, Str], # 3
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
   [Print, ~, [3, 4], 2, Scalar], # 5
-  [Return, ~, [1], 5]]} # 6
+  [Return, {implicit: true}, [1], 5]]} # 6
 ```
 
 ## `isa` is an infix operator, not dispatch
@@ -410,13 +410,13 @@ main::__PROGRAM__: {start: 0, returns: [16], nodes: [
   [Constant, {const_type: string, value: "|\n"}, ~, ~, Str], # 13
   [Concat, ~, [12, 13], ~, Str], # 14
   [Print, ~, [14], 2, Scalar], # 15
-  [Return, ~, [1], 15]]} # 16
+  [Return, {implicit: true}, [1], 15]]} # 16
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.036"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## The `->can(...)->()` chain is two calls
@@ -494,10 +494,10 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [Assign, ~, [3, 8], 4, Unknown], # 9
   [PadAccess, {sigil: $, symbol: o}, [9], ~, Unknown], # 10
   [Constant, {const_type: string, value: hi}, ~, ~, Str], # 11
-  [Call, {dispatch_kind: method, name: can, param_names: []}, [10, 11], 9, Unknown], # 12
+  [Call, {dispatch_kind: method, name: can, param_names: [], want: scalar}, [10, 11], 9, Unknown], # 12
   [Call, {dispatch_kind: indirect, name: "", param_names: [], want: list}, [12, 10], 12, Unknown], # 13
   [Coerce, {from_repr: Unknown, to_repr: Str}, [13], ~, Str], # 14
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 15
   [Print, ~, [14, 15], 13, Scalar], # 16
-  [Return, ~, [1], 16]]} # 17
+  [Return, {implicit: true}, [1], 16]]} # 17
 ```

@@ -57,7 +57,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [10], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 1
@@ -69,19 +69,19 @@ main::corpus_case: {start: 0, returns: [10], nodes: [
   [Coerce, {from_repr: Int, to_repr: Str}, [6], ~, Str], # 7
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
   [Print, ~, [7, 8], 0, Scalar], # 9
-  [Return, ~, [9], 9]]} # 10
+  [Return, {implicit: true}, [9], 9]]} # 10
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## D1 if/else
@@ -136,7 +136,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [10], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 1
@@ -148,19 +148,19 @@ main::corpus_case: {start: 0, returns: [10], nodes: [
   [Coerce, {from_repr: Int, to_repr: Str}, [6], ~, Str], # 7
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
   [Print, ~, [7, 8], 0, Scalar], # 9
-  [Return, ~, [9], 9]]} # 10
+  [Return, {implicit: true}, [9], 9]]} # 10
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## D1a void print in a true if arm
@@ -207,7 +207,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [13], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
@@ -222,19 +222,19 @@ main::corpus_case: {start: 0, returns: [13], nodes: [
   [Print, ~, [8], 9, Scalar], # 10
   [Region, {head: 5}, [7, 10]], # 11
   [Print, ~, [2, 3], 11, Scalar], # 12
-  [Return, ~, [12], 12]]} # 13
+  [Return, {implicit: true}, [12], 12]]} # 13
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## D1b void print in a false if arm (else arm fires)
@@ -276,7 +276,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [14], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
@@ -292,19 +292,19 @@ main::corpus_case: {start: 0, returns: [14], nodes: [
   [Print, ~, [9], 10, Scalar], # 11
   [Region, {head: 6}, [8, 11]], # 12
   [Print, ~, [2, 3], 12, Scalar], # 13
-  [Return, ~, [13], 13]]} # 14
+  [Return, {implicit: true}, [13], 13]]} # 14
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## D1c if/else with STRING-eq guard and print arms (t/base if.t shape)
@@ -349,7 +349,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [15], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
@@ -366,19 +366,19 @@ main::corpus_case: {start: 0, returns: [15], nodes: [
   [Print, ~, [10], 11, Scalar], # 12
   [Region, {head: 7}, [9, 12]], # 13
   [Print, ~, [2, 3], 13, Scalar], # 14
-  [Return, ~, [14], 14]]} # 15
+  [Return, {implicit: true}, [14], 14]]} # 15
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## D1d if/else with STRING-ne guard, else arm fires (t/base if.t bilateral)
@@ -421,7 +421,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [15], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
@@ -438,19 +438,19 @@ main::corpus_case: {start: 0, returns: [15], nodes: [
   [Print, ~, [10], 11, Scalar], # 12
   [Region, {head: 7}, [9, 12]], # 13
   [Print, ~, [2, 3], 13, Scalar], # 14
-  [Return, ~, [14], 14]]} # 15
+  [Return, {implicit: true}, [14], 14]]} # 15
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## D1e if/else arms sharing the SAME string constant (dominance: hoist GEP to entry)
@@ -494,7 +494,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [13], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
@@ -509,19 +509,19 @@ main::corpus_case: {start: 0, returns: [13], nodes: [
   [Print, ~, [4], 9, Scalar], # 10
   [Region, {head: 6}, [8, 10]], # 11
   [Print, ~, [2, 3], 11, Scalar], # 12
-  [Return, ~, [12], 12]]} # 13
+  [Return, {implicit: true}, [12], 12]]} # 13
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## D1f if/else with EFFECTFUL arms merging a value (the merge Phi records its arms)
@@ -604,7 +604,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [19], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
@@ -625,19 +625,19 @@ main::corpus_case: {start: 0, returns: [19], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 16
   [Concat, ~, [15, 16], ~, Str], # 17
   [Print, ~, [17], 13, Scalar], # 18
-  [Return, ~, [18], 18]]} # 19
+  [Return, {implicit: true}, [18], 18]]} # 19
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## D1g the same shape on the FALSE polarity (bilateral)
@@ -693,7 +693,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [18], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
@@ -713,19 +713,19 @@ main::corpus_case: {start: 0, returns: [18], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 15
   [Concat, ~, [14, 15], ~, Str], # 16
   [Print, ~, [16], 12, Scalar], # 17
-  [Return, ~, [17], 17]]} # 18
+  [Return, {implicit: true}, [17], 17]]} # 18
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## D1h a ONE-ARMED if whose arm both prints and rebinds (2b-3, refusal lifted)
@@ -791,7 +791,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [18], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "n="}, ~, ~, Str], # 1
@@ -811,19 +811,19 @@ main::corpus_case: {start: 0, returns: [18], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 15
   [Concat, ~, [14, 15], ~, Str], # 16
   [Print, ~, [16], 11, Scalar], # 17
-  [Return, ~, [17], 17]]} # 18
+  [Return, {implicit: true}, [17], 17]]} # 18
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## D1i the same one-armed shape with the guard FALSE (bilateral)
@@ -878,7 +878,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [19], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "n="}, ~, ~, Str], # 1
@@ -899,19 +899,19 @@ main::corpus_case: {start: 0, returns: [19], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 16
   [Concat, ~, [15, 16], ~, Str], # 17
   [Print, ~, [17], 12, Scalar], # 18
-  [Return, ~, [18], 18]]} # 19
+  [Return, {implicit: true}, [18], 18]]} # 19
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## D1j a STRING rebind in a print-and-rebind arm (bilateral, true)
@@ -964,7 +964,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [18], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "s="}, ~, ~, Str], # 1
@@ -984,19 +984,19 @@ main::corpus_case: {start: 0, returns: [18], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 15
   [Concat, ~, [14, 15], ~, Str], # 16
   [Print, ~, [16], 12, Scalar], # 17
-  [Return, ~, [17], 17]]} # 18
+  [Return, {implicit: true}, [17], 17]]} # 18
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## D1k the Str rebind with the guard FALSE (bilateral)
@@ -1044,7 +1044,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [18], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "s="}, ~, ~, Str], # 1
@@ -1064,19 +1064,19 @@ main::corpus_case: {start: 0, returns: [18], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 15
   [Concat, ~, [14, 15], ~, Str], # 16
   [Print, ~, [16], 12, Scalar], # 17
-  [Return, ~, [17], 17]]} # 18
+  [Return, {implicit: true}, [17], 17]]} # 18
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## D3f void print inside a loop body
@@ -1117,7 +1117,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [8], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
@@ -1127,7 +1127,7 @@ main::corpus_case: {start: 0, returns: [8], nodes: [
   [Proj, {index: 1}, [4]], # 5
   [Region, {head: 4}, [5]], # 6
   [Print, ~, [2, 3], 6, Scalar], # 7
-  [Return, ~, [7], 7], # 8
+  [Return, {implicit: true}, [7], 7], # 8
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 9
   [Phi, {region: 4}, [1, 15], ~, Int], # 10
   [NumGt, ~, [9, 10], 4, Boolean], # 11
@@ -1140,13 +1140,13 @@ main::corpus_case: {start: 0, returns: [8], nodes: [
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## D2 while loop
@@ -1207,7 +1207,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [9], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 1
@@ -1218,7 +1218,7 @@ main::corpus_case: {start: 0, returns: [9], nodes: [
   [Proj, {index: 1}, [2]], # 6
   [Region, {head: 2}, [6]], # 7
   [Print, ~, [4, 5], 7, Scalar], # 8
-  [Return, ~, [8], 8], # 9
+  [Return, {implicit: true}, [8], 8], # 9
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 10
   [Phi, {region: 2}, [10, 15], ~, Int], # 11
   [NumGt, ~, [11, 1], 2, Boolean], # 12
@@ -1231,13 +1231,13 @@ main::corpus_case: {start: 0, returns: [9], nodes: [
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## D2b while loop with a body decoy comparison
@@ -1302,7 +1302,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [9], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 1
@@ -1313,7 +1313,7 @@ main::corpus_case: {start: 0, returns: [9], nodes: [
   [Proj, {index: 1}, [2]], # 6
   [Region, {head: 2}, [6]], # 7
   [Print, ~, [4, 5], 7, Scalar], # 8
-  [Return, ~, [8], 8], # 9
+  [Return, {implicit: true}, [8], 8], # 9
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 10
   [Phi, {region: 2}, [10, 15], ~, Int], # 11
   [NumGt, ~, [11, 1], 2, Boolean], # 12
@@ -1328,13 +1328,13 @@ main::corpus_case: {start: 0, returns: [9], nodes: [
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## D2c while loop with a bare-truthiness header
@@ -1400,7 +1400,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [9], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 1
@@ -1411,7 +1411,7 @@ main::corpus_case: {start: 0, returns: [9], nodes: [
   [Proj, {index: 1}, [2]], # 6
   [Region, {head: 2}, [6]], # 7
   [Print, ~, [4, 5], 7, Scalar], # 8
-  [Return, ~, [8], 8], # 9
+  [Return, {implicit: true}, [8], 8], # 9
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 10
   [Phi, {region: 2}, [10, 15], ~, Int], # 11
   [NumNe, ~, [11, 1], 2, Boolean], # 12
@@ -1424,13 +1424,13 @@ main::corpus_case: {start: 0, returns: [9], nodes: [
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## D2d while loop whose CONDITION mutates a slot
@@ -1488,7 +1488,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [11], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 1
@@ -1501,7 +1501,7 @@ main::corpus_case: {start: 0, returns: [11], nodes: [
   [Proj, {index: 1}, [2]], # 8
   [Region, {head: 2}, [8]], # 9
   [Print, ~, [6, 7], 9, Scalar], # 10
-  [Return, ~, [10], 10], # 11
+  [Return, {implicit: true}, [10], 10], # 11
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 12
   [NumGt, ~, [3, 12], 2, Boolean], # 13
   [Proj, {index: 0}, [2]]]} # 14
@@ -1510,13 +1510,13 @@ main::corpus_case: {start: 0, returns: [11], nodes: [
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## D2e postfix while whose CONDITION mutates a slot
@@ -1582,7 +1582,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [9], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 1
@@ -1593,7 +1593,7 @@ main::corpus_case: {start: 0, returns: [9], nodes: [
   [Proj, {index: 1}, [2]], # 6
   [Region, {head: 2}, [6]], # 7
   [Print, ~, [4, 5], 7, Scalar], # 8
-  [Return, ~, [8], 8], # 9
+  [Return, {implicit: true}, [8], 8], # 9
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 10
   [Phi, {region: 2}, [10, 15], ~, Int], # 11
   [NumGt, ~, [11, 1], 2, Boolean], # 12
@@ -1606,13 +1606,13 @@ main::corpus_case: {start: 0, returns: [9], nodes: [
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## D3 foreach loop
@@ -1668,7 +1668,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [9], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 1
@@ -1679,7 +1679,7 @@ main::corpus_case: {start: 0, returns: [9], nodes: [
   [Proj, {index: 1}, [2]], # 6
   [Region, {head: 2}, [6]], # 7
   [Print, ~, [4, 5], 7, Scalar], # 8
-  [Return, ~, [8], 8], # 9
+  [Return, {implicit: true}, [8], 8], # 9
   [Constant, {const_type: integer, value: "4"}, ~, ~, Int], # 10
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 11
   [Phi, {region: 2}, [11, 15], ~, Int], # 12
@@ -1692,13 +1692,13 @@ main::corpus_case: {start: 0, returns: [9], nodes: [
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## D3a foreach over a range with a runtime high bound
@@ -1754,7 +1754,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [9], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 1
@@ -1765,7 +1765,7 @@ main::corpus_case: {start: 0, returns: [9], nodes: [
   [Proj, {index: 1}, [2]], # 6
   [Region, {head: 2}, [6]], # 7
   [Print, ~, [4, 5], 7, Scalar], # 8
-  [Return, ~, [8], 8], # 9
+  [Return, {implicit: true}, [8], 8], # 9
   [Constant, {const_type: integer, value: "4"}, ~, ~, Int], # 10
   [Phi, {region: 2}, [1, 15], ~, Int], # 11
   [NumGt, ~, [10, 11], 2, Boolean], # 12
@@ -1778,13 +1778,13 @@ main::corpus_case: {start: 0, returns: [9], nodes: [
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## D3a2 array last-index $#a is length minus one
@@ -1828,7 +1828,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [12], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "10"}, ~, ~, Int], # 1
@@ -1842,19 +1842,19 @@ main::corpus_case: {start: 0, returns: [12], nodes: [
   [Coerce, {from_repr: Int, to_repr: Str}, [8], ~, Str], # 9
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
   [Print, ~, [9, 10], 0, Scalar], # 11
-  [Return, ~, [11], 11]]} # 12
+  [Return, {implicit: true}, [11], 11]]} # 12
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## D3e element-indexed loop accumulator
@@ -1920,7 +1920,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [9], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 1
@@ -1931,7 +1931,7 @@ main::corpus_case: {start: 0, returns: [9], nodes: [
   [Proj, {index: 1}, [2]], # 6
   [Region, {head: 2}, [6]], # 7
   [Print, ~, [4, 5], 7, Scalar], # 8
-  [Return, ~, [8], 8], # 9
+  [Return, {implicit: true}, [8], 8], # 9
   [Constant, {const_type: integer, value: "10"}, ~, ~, Int], # 10
   [Constant, {const_type: integer, value: "20"}, ~, ~, Int], # 11
   [Constant, {const_type: integer, value: "30"}, ~, ~, Int], # 12
@@ -1952,13 +1952,13 @@ main::corpus_case: {start: 0, returns: [9], nodes: [
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## D3b foreach over a lexical array
@@ -2019,7 +2019,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [9], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 1
@@ -2030,7 +2030,7 @@ main::corpus_case: {start: 0, returns: [9], nodes: [
   [Proj, {index: 1}, [2]], # 6
   [Region, {head: 2}, [6]], # 7
   [Print, ~, [4, 5], 7, Scalar], # 8
-  [Return, ~, [8], 8], # 9
+  [Return, {implicit: true}, [8], 8], # 9
   [Constant, {const_type: integer, value: "10"}, ~, ~, Int], # 10
   [Constant, {const_type: integer, value: "20"}, ~, ~, Int], # 11
   [Constant, {const_type: integer, value: "30"}, ~, ~, Int], # 12
@@ -2049,13 +2049,13 @@ main::corpus_case: {start: 0, returns: [9], nodes: [
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## D3c array is intact after a foreach reads it
@@ -2104,7 +2104,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [13], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 1
@@ -2119,7 +2119,7 @@ main::corpus_case: {start: 0, returns: [13], nodes: [
   [Proj, {index: 1}, [9]], # 10
   [Region, {head: 9}, [10]], # 11
   [Print, ~, [7, 8], 11, Scalar], # 12
-  [Return, ~, [12], 12], # 13
+  [Return, {implicit: true}, [12], 12], # 13
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 14
   [Phi, {region: 9}, [14, 19], ~, Int], # 15
   [NumGt, ~, [6, 15], 9, Boolean], # 16
@@ -2134,13 +2134,13 @@ main::corpus_case: {start: 0, returns: [13], nodes: [
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## D3d foreach body that writes the iterator GAPs (aliasing)
@@ -2175,7 +2175,7 @@ L: GAP(foreach body writes the iterator: aliasing write-back to the array not mo
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [17], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "10"}, ~, ~, Int], # 1
@@ -2194,7 +2194,7 @@ main::corpus_case: {start: 0, returns: [17], nodes: [
   [Subscript, {kind: array}, [3, 4, 13], ~, Int], # 14
   [Proj, {index: 1}, [5]], # 15
   [Region, {head: 5}, [15]], # 16
-  [Return, ~, [14], 16], # 17
+  [Return, {implicit: true}, [14], 16], # 17
   [Count, ~, [3, 8], ~, Int], # 18
   [NumGt, ~, [18, 6], 5, Boolean], # 19
   [Add, ~, [6, 10], ~, Int]]} # 20
@@ -2203,7 +2203,7 @@ main::corpus_case: {start: 0, returns: [17], nodes: [
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## D4 postfix if
@@ -2256,7 +2256,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [9], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 1
@@ -2267,19 +2267,19 @@ main::corpus_case: {start: 0, returns: [9], nodes: [
   [Coerce, {from_repr: Int, to_repr: Str}, [5], ~, Str], # 6
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 7
   [Print, ~, [6, 7], 0, Scalar], # 8
-  [Return, ~, [8], 8]]} # 9
+  [Return, {implicit: true}, [8], 8]]} # 9
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## D5 postfix while
@@ -2342,7 +2342,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [9], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 1
@@ -2353,7 +2353,7 @@ main::corpus_case: {start: 0, returns: [9], nodes: [
   [Proj, {index: 1}, [2]], # 6
   [Region, {head: 2}, [6]], # 7
   [Print, ~, [4, 5], 7, Scalar], # 8
-  [Return, ~, [8], 8], # 9
+  [Return, {implicit: true}, [8], 8], # 9
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 10
   [Phi, {region: 2}, [10, 15], ~, Int], # 11
   [NumGt, ~, [11, 1], 2, Boolean], # 12
@@ -2366,13 +2366,13 @@ main::corpus_case: {start: 0, returns: [9], nodes: [
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## D7 nested if
@@ -2439,7 +2439,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [12], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 1
@@ -2453,19 +2453,19 @@ main::corpus_case: {start: 0, returns: [12], nodes: [
   [Coerce, {from_repr: Int, to_repr: Str}, [8], ~, Str], # 9
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
   [Print, ~, [9, 10], 0, Scalar], # 11
-  [Return, ~, [11], 11]]} # 12
+  [Return, {implicit: true}, [11], 11]]} # 12
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## D9 nested if runtime-false inner condition
@@ -2540,7 +2540,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [12], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 1
@@ -2554,19 +2554,19 @@ main::corpus_case: {start: 0, returns: [12], nodes: [
   [Coerce, {from_repr: Int, to_repr: Str}, [8], ~, Str], # 9
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
   [Print, ~, [9, 10], 0, Scalar], # 11
-  [Return, ~, [11], 11]]} # 12
+  [Return, {implicit: true}, [11], 11]]} # 12
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## D8 try/catch
@@ -2596,21 +2596,21 @@ L: GAP(needs LLVM landingpad + personality function for exception unwind)
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [5], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 2
   [Region, ~, [0, 0]], # 3
   [Phi, {region: 3}, [1, 2], ~, Int], # 4
-  [Return, ~, [4], 3], # 5
+  [Return, {implicit: true}, [4], 3], # 5
   [Phi, {region: 3}, [1, 2], ~, Int]]} # 6
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## D8b try/catch whose body carries a statement effect (control_in-membership pin)
@@ -2678,7 +2678,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
@@ -2687,14 +2687,14 @@ main::corpus_case: {start: 0, returns: [7], nodes: [
   [Print, ~, [3], 0, Scalar], # 4
   [Region, ~, [4, 0]], # 5
   [Phi, {region: 5}, [1, 2], ~, Int], # 6
-  [Return, ~, [6], 5], # 7
+  [Return, {implicit: true}, [6], 5], # 7
   [Phi, {region: 5}, [1, 2], ~, Int]]} # 8
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: feature}, ~, ~, Str], # 1
@@ -2703,7 +2703,7 @@ main::corpus_case: {start: 0, returns: [7], nodes: [
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
   [Call, {class_name: feature, dispatch_kind: method, name: import, param_names: []}, [1, 2], 5, Unknown], # 6
-  [Return, ~, [6], 6]]} # 7
+  [Return, {implicit: true}, [6], 6]]} # 7
 "BEGIN 3": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: warnings}, ~, ~, Str], # 1
@@ -2712,7 +2712,7 @@ main::corpus_case: {start: 0, returns: [7], nodes: [
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
   [Call, {class_name: warnings, dispatch_kind: method, name: unimport, param_names: []}, [1, 2], 5, Unknown], # 6
-  [Return, ~, [6], 6]]} # 7
+  [Return, {implicit: true}, [6], 6]]} # 7
 ```
 
 ## D10 do-block value
@@ -2754,7 +2754,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 1
@@ -2763,19 +2763,19 @@ main::corpus_case: {start: 0, returns: [7], nodes: [
   [Coerce, {from_repr: Int, to_repr: Str}, [3], ~, Str], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
   [Print, ~, [4, 5], 0, Scalar], # 6
-  [Return, ~, [6], 6]]} # 7
+  [Return, {implicit: true}, [6], 6]]} # 7
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## T1 list-context ternary (t/base blocker: print $c ? "y" : "n")
@@ -2821,7 +2821,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [9], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
@@ -2832,19 +2832,19 @@ main::corpus_case: {start: 0, returns: [9], nodes: [
   [TernaryExpr, ~, [1, 4, 5], ~, Str], # 6
   [Print, ~, [6], 0, Scalar], # 7
   [Print, ~, [2, 3], 7, Scalar], # 8
-  [Return, ~, [8], 8]]} # 9
+  [Return, {implicit: true}, [8], 8]]} # 9
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## T2 die inside a branch arm (t/base blocker: rs.t/term.t)
@@ -2894,7 +2894,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [12], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
@@ -2908,19 +2908,19 @@ main::corpus_case: {start: 0, returns: [12], nodes: [
   [Proj, {index: 0}, [5]], # 9
   [Unwind, ~, [8], 9], # 10
   [Region, {head: 5}, [10, 7]], # 11
-  [Return, ~, [7], 11]]} # 12
+  [Return, {implicit: true}, [7], 11]]} # 12
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## T2b die inside the TAKEN branch arm (bilateral abort proof)
@@ -2960,7 +2960,7 @@ L: GAP(taken die aborts (lli exits 255); the equality harness cannot assert an a
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [9], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "42"}, ~, ~, Int], # 1
@@ -2971,13 +2971,13 @@ main::corpus_case: {start: 0, returns: [9], nodes: [
   [Unwind, ~, [2], 5], # 6
   [Proj, {index: 1}, [4]], # 7
   [Region, {head: 4}, [6, 7]], # 8
-  [Return, ~, [1], 8]]} # 9
+  [Return, {implicit: true}, [1], 8]]} # 9
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## T2c Unwind reached ONLY via a `control_in` edge (walk-order clause-4 pin)
@@ -3033,19 +3033,19 @@ L: GAP(harness limitation only -- the BACKEND IS CORRECT as of zhi 019fbf8d. A m
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
   [Constant, {const_type: string, value: "boom\n"}, ~, ~, Str], # 2
   [Unwind, ~, [2], 0], # 3
-  [Return, ~, [1], 3]]} # 4
+  [Return, {implicit: true}, [1], 3]]} # 4
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## T3 cond_expr inside a loop body (t/base blocker: translate.t)
@@ -3111,7 +3111,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [9], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 1
@@ -3122,7 +3122,7 @@ main::corpus_case: {start: 0, returns: [9], nodes: [
   [Proj, {index: 1}, [2]], # 6
   [Region, {head: 2}, [6]], # 7
   [Print, ~, [4, 5], 7, Scalar], # 8
-  [Return, ~, [8], 8], # 9
+  [Return, {implicit: true}, [8], 8], # 9
   [Phi, {region: 2}, [1, 15], ~, Int], # 10
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 11
   [NumLt, ~, [10, 11], 2, Boolean], # 12
@@ -3138,13 +3138,13 @@ main::corpus_case: {start: 0, returns: [9], nodes: [
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## T4 loop control (last) inside a loop body (t/base blocker: while.t)
@@ -3204,7 +3204,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [9], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 1
@@ -3215,7 +3215,7 @@ main::corpus_case: {start: 0, returns: [9], nodes: [
   [Proj, {index: 1}, [2]], # 6
   [Region, {head: 2}, [6]], # 7
   [Print, ~, [4, 5], 7, Scalar], # 8
-  [Return, ~, [8], 8], # 9
+  [Return, {implicit: true}, [8], 8], # 9
   [Phi, {region: 2}, [1, 15], ~, Int], # 10
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 11
   [NumLt, ~, [10, 11], 2, Boolean], # 12
@@ -3229,13 +3229,13 @@ main::corpus_case: {start: 0, returns: [9], nodes: [
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## T4b last with an equality guard (bilateral: negation over NumEq, distinct count)
@@ -3293,7 +3293,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [9], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 1
@@ -3304,7 +3304,7 @@ main::corpus_case: {start: 0, returns: [9], nodes: [
   [Proj, {index: 1}, [2]], # 6
   [Region, {head: 2}, [6]], # 7
   [Print, ~, [4, 5], 7, Scalar], # 8
-  [Return, ~, [8], 8], # 9
+  [Return, {implicit: true}, [8], 8], # 9
   [Phi, {region: 2}, [1, 15], ~, Int], # 10
   [Constant, {const_type: integer, value: "4"}, ~, ~, Int], # 11
   [NumNe, ~, [10, 11], 2, Boolean], # 12
@@ -3318,13 +3318,13 @@ main::corpus_case: {start: 0, returns: [9], nodes: [
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## T4c last not at the head of a loop body (loud GAP: bottom/mid-loop exit)
@@ -3357,7 +3357,7 @@ L: GAP(last not at the head of a loop body not yet lowered)
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [12], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 1
@@ -3371,7 +3371,7 @@ main::corpus_case: {start: 0, returns: [12], nodes: [
   [If, ~, [2, 8], 2], # 9
   [Proj, {index: 0}, [9]], # 10
   [Region, {head: 2}, [10]], # 11
-  [Return, ~, [5], 11], # 12
+  [Return, {implicit: true}, [5], 11], # 12
   [Proj, {index: 1}, [9]], # 13
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 14
   [Add, ~, [6, 14], ~, Int]]} # 15
@@ -3380,7 +3380,7 @@ main::corpus_case: {start: 0, returns: [12], nodes: [
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## T4d mid-body `last` in a CONDITIONAL loop, slot read post-loop (multi-exit merge)
@@ -3444,7 +3444,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [17], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 1
@@ -3463,7 +3463,7 @@ main::corpus_case: {start: 0, returns: [17], nodes: [
   [Coerce, {from_repr: Int, to_repr: Str}, [13], ~, Str], # 14
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 15
   [Print, ~, [14, 15], 12, Scalar], # 16
-  [Return, ~, [16], 16], # 17
+  [Return, {implicit: true}, [16], 16], # 17
   [Constant, {const_type: integer, value: "100"}, ~, ~, Int], # 18
   [NumLt, ~, [3, 18], 2, Boolean], # 19
   [Proj, {index: 1}, [10]]]} # 20
@@ -3472,13 +3472,13 @@ main::corpus_case: {start: 0, returns: [17], nodes: [
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## T5 direct no-arg named-sub call (t/ near-miss — simple form GREEN)
@@ -3517,30 +3517,30 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [5], nodes: [
   [Start], # 0
   [Call, {dispatch_kind: direct, name: main::helper, param_names: [], want: scalar}, ~, 0, Int], # 1
   [Coerce, {from_repr: Unknown, to_repr: Str}, [1], ~, Str], # 2
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 3
   [Print, ~, [2, 3], 1, Scalar], # 4
-  [Return, ~, [4], 4]]} # 5
+  [Return, {implicit: true}, [4], 4]]} # 5
 main::helper: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "42"}, ~, ~, Int], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## T6 mid-body last (t/ blocker: last NOT at the head of a loop body)
@@ -3604,7 +3604,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [17], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 1
@@ -3623,7 +3623,7 @@ main::corpus_case: {start: 0, returns: [17], nodes: [
   [Proj, {index: 0}, [13]], # 14
   [Region, {head: 2}, [6, 14]], # 15
   [Print, ~, [4, 5], 15, Scalar], # 16
-  [Return, ~, [16], 16], # 17
+  [Return, {implicit: true}, [16], 16], # 17
   [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 18
   [NumLt, ~, [8, 18], 2, Boolean], # 19
   [Phi, {region: 15}, [8, 10], ~, Int], # 20
@@ -3634,13 +3634,13 @@ main::corpus_case: {start: 0, returns: [17], nodes: [
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## T7 next inside a loop body (t/ blocker: loop control next)
@@ -3699,7 +3699,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [9], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 1
@@ -3710,7 +3710,7 @@ main::corpus_case: {start: 0, returns: [9], nodes: [
   [Proj, {index: 1}, [2]], # 6
   [Region, {head: 2}, [6]], # 7
   [Print, ~, [4, 5], 7, Scalar], # 8
-  [Return, ~, [8], 8], # 9
+  [Return, {implicit: true}, [8], 8], # 9
   [Constant, {const_type: integer, value: "4"}, ~, ~, Int], # 10
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 11
   [Phi, {region: 2}, [11, 18], ~, Int], # 12
@@ -3730,13 +3730,13 @@ main::corpus_case: {start: 0, returns: [9], nodes: [
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## T8 value-context ternary with a branch-guarded element store (t/ blocker)
@@ -3766,7 +3766,7 @@ L: GAP(value-context ternary with a branch-guarded element store not yet lowered
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [12], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
@@ -3780,13 +3780,13 @@ main::corpus_case: {start: 0, returns: [12], nodes: [
   [TernaryExpr, ~, [1, 7, 8], ~, Int], # 9
   [Assign, ~, [6, 9], 0, Int], # 10
   [Subscript, {kind: array}, [4, 5, 10], ~, Int], # 11
-  [Return, ~, [11], 10]]} # 12
+  [Return, {implicit: true}, [11], 10]]} # 12
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## T9 statement-modifier inside an if/else arm (t/ blocker: untranslatable arm op)
@@ -3835,7 +3835,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [11], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
@@ -3848,19 +3848,19 @@ main::corpus_case: {start: 0, returns: [11], nodes: [
   [Coerce, {from_repr: Int, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
   [Print, ~, [8, 9], 0, Scalar], # 10
-  [Return, ~, [10], 10]]} # 11
+  [Return, {implicit: true}, [10], 10]]} # 11
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## T10 bare block as a lexical scope (no back-edge)
@@ -3901,18 +3901,18 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "b\n"}, ~, ~, Str], # 1
   [Print, ~, [1], 0, Scalar], # 2
-  [Return, ~, [2], 2]]} # 3
+  [Return, {implicit: true}, [2], 2]]} # 3
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## T11 block-form package declaration (same enterloop shape as T10)
@@ -3951,18 +3951,18 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "in\n"}, ~, ~, Str], # 1
   [Print, ~, [1], 0, Scalar], # 2
-  [Return, ~, [2], 2]]} # 3
+  [Return, {implicit: true}, [2], 2]]} # 3
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## T12 bilateral pair: guarded void print inside a bare block, guard FALSE (was silent drop)
@@ -4020,7 +4020,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [16], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
@@ -4038,19 +4038,19 @@ main::corpus_case: {start: 0, returns: [16], nodes: [
   [Print, ~, [5], 12, Scalar], # 13
   [Print, ~, [4], 13, Scalar], # 14
   [Print, ~, [2, 3], 14, Scalar], # 15
-  [Return, ~, [15], 15]]} # 16
+  [Return, {implicit: true}, [15], 15]]} # 16
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## T13 bilateral pair: guarded void print inside a bare block, guard TRUE (was signal 11)
@@ -4100,7 +4100,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [15], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
@@ -4117,19 +4117,19 @@ main::corpus_case: {start: 0, returns: [15], nodes: [
   [Print, ~, [5], 11, Scalar], # 12
   [Print, ~, [4], 12, Scalar], # 13
   [Print, ~, [2, 3], 13, Scalar], # 14
-  [Return, ~, [14], 14]]} # 15
+  [Return, {implicit: true}, [14], 14]]} # 15
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## D11 postfix if followed by a statement effect
@@ -4185,7 +4185,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [10], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 1
@@ -4197,19 +4197,19 @@ main::corpus_case: {start: 0, returns: [10], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 7
   [Print, ~, [6], 0, Scalar], # 8
   [Print, ~, [6, 7], 8, Scalar], # 9
-  [Return, ~, [9], 9]]} # 10
+  [Return, {implicit: true}, [9], 9]]} # 10
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## D11b the same shape on the FALSE polarity
@@ -4256,7 +4256,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [10], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "-5"}, ~, ~, Int], # 1
@@ -4268,19 +4268,19 @@ main::corpus_case: {start: 0, returns: [10], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 7
   [Print, ~, [6], 0, Scalar], # 8
   [Print, ~, [6, 7], 8, Scalar], # 9
-  [Return, ~, [9], 9]]} # 10
+  [Return, {implicit: true}, [9], 9]]} # 10
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## T14 exit inside a single-branch if (guard TAKEN)
@@ -4336,7 +4336,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [14], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 1
@@ -4352,19 +4352,19 @@ main::corpus_case: {start: 0, returns: [14], nodes: [
   [Call, {dispatch_kind: builtin, name: exit, param_names: []}, [9], 10, Unknown], # 11
   [Region, {head: 7}, [8, 11]], # 12
   [Print, ~, [2, 3], 12, Scalar], # 13
-  [Return, ~, [13], 13]]} # 14
+  [Return, {implicit: true}, [13], 13]]} # 14
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## T14b the same shape with the guard NOT taken
@@ -4407,7 +4407,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [15], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 1
@@ -4424,19 +4424,19 @@ main::corpus_case: {start: 0, returns: [15], nodes: [
   [Call, {dispatch_kind: builtin, name: exit, param_names: []}, [10], 11, Unknown], # 12
   [Region, {head: 8}, [9, 12]], # 13
   [Print, ~, [2, 3], 13, Scalar], # 14
-  [Return, ~, [14], 14]]} # 15
+  [Return, {implicit: true}, [14], 14]]} # 15
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## T15 die inside a single-branch if (guard TAKEN)
@@ -4483,7 +4483,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [14], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 1
@@ -4499,19 +4499,19 @@ main::corpus_case: {start: 0, returns: [14], nodes: [
   [Unwind, ~, [9], 10], # 11
   [Region, {head: 7}, [8, 11]], # 12
   [Print, ~, [2, 3], 12, Scalar], # 13
-  [Return, ~, [13], 13]]} # 14
+  [Return, {implicit: true}, [13], 13]]} # 14
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## T16 nested ONE-ARMED if carrying a void effect (guard TAKEN)
@@ -4566,7 +4566,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [22], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "n="}, ~, ~, Str], # 1
@@ -4590,19 +4590,19 @@ main::corpus_case: {start: 0, returns: [22], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 19
   [Concat, ~, [18, 19], ~, Str], # 20
   [Print, ~, [20], 15, Scalar], # 21
-  [Return, ~, [21], 21]]} # 22
+  [Return, {implicit: true}, [21], 21]]} # 22
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## T17 nested ONE-ARMED if whose inner guard is FALSE (bilateral pair for T16)
@@ -4646,7 +4646,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [22], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "n="}, ~, ~, Str], # 1
@@ -4670,19 +4670,19 @@ main::corpus_case: {start: 0, returns: [22], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 19
   [Concat, ~, [18, 19], ~, Str], # 20
   [Print, ~, [20], 15, Scalar], # 21
-  [Return, ~, [21], 21]]} # 22
+  [Return, {implicit: true}, [21], 21]]} # 22
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## T18 elsif whose arm carries a void effect
@@ -4720,7 +4720,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [25], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "n="}, ~, ~, Str], # 1
@@ -4747,19 +4747,19 @@ main::corpus_case: {start: 0, returns: [25], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 22
   [Concat, ~, [21, 22], ~, Str], # 23
   [Print, ~, [23], 18, Scalar], # 24
-  [Return, ~, [24], 24]]} # 25
+  [Return, {implicit: true}, [24], 24]]} # 25
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## T19 nested ONE-ARMED if containing a die (guard TAKEN)
@@ -4808,7 +4808,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [16], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "after\n"}, ~, ~, Str], # 1
@@ -4826,19 +4826,19 @@ main::corpus_case: {start: 0, returns: [16], nodes: [
   [Region, {head: 8}, [9, 12]], # 13
   [Region, {head: 5}, [6, 13]], # 14
   [Print, ~, [1], 14, Scalar], # 15
-  [Return, ~, [15], 15]]} # 16
+  [Return, {implicit: true}, [15], 15]]} # 16
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## T20 a rebind-only nested body keeps the VALUE merge (regression guard)
@@ -4877,7 +4877,7 @@ L: GREEN
 main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::corpus_case: {start: 0, returns: [12], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "n="}, ~, ~, Str], # 1
@@ -4891,17 +4891,17 @@ main::corpus_case: {start: 0, returns: [12], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
   [Concat, ~, [8, 9], ~, Str], # 10
   [Print, ~, [10], 0, Scalar], # 11
-  [Return, ~, [11], 11]]} # 12
+  [Return, {implicit: true}, [11], 11]]} # 12
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```

@@ -97,7 +97,7 @@ main::__PROGRAM__: {start: 0, returns: [44], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 41
   [Concat, ~, [40, 41], ~, Str], # 42
   [Print, ~, [42], 0, Scalar], # 43
-  [Return, ~, [1], 43]]} # 44
+  [Return, {implicit: true}, [1], 43]]} # 44
 ```
 
 ## Concatenation and repetition
@@ -149,7 +149,7 @@ main::__PROGRAM__: {start: 0, returns: [22], nodes: [
   [Concat, ~, [9, 18], ~, Str], # 19
   [Print, ~, [13, 19, 12], 0, Scalar], # 20
   [Print, ~, [2, 11, 12], 20, Scalar], # 21
-  [Return, ~, [1], 21]]} # 22
+  [Return, {implicit: true}, [1], 21]]} # 22
 ```
 
 ## `*` binds tighter than `+`
@@ -210,7 +210,7 @@ main::__PROGRAM__: {start: 0, returns: [30], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 27
   [Concat, ~, [26, 27], ~, Str], # 28
   [Print, ~, [28], 0, Scalar], # 29
-  [Return, ~, [1], 29]]} # 30
+  [Return, {implicit: true}, [1], 29]]} # 30
 ```
 
 ## `**` is right associative, `-` is left
@@ -278,5 +278,5 @@ main::__PROGRAM__: {start: 0, returns: [34], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 31
   [Concat, ~, [30, 31], ~, Str], # 32
   [Print, ~, [32], 0, Scalar], # 33
-  [Return, ~, [1], 33]]} # 34
+  [Return, {implicit: true}, [1], 33]]} # 34
 ```

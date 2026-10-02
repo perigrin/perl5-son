@@ -67,17 +67,17 @@ main::__PROGRAM__: {start: 0, returns: [4], nodes: [
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: "main\n"}, ~, ~, Str], # 2
   [Print, ~, [2], 0, Scalar], # 3
-  [Return, ~, [1], 3]]} # 4
+  [Return, {implicit: true}, [1], 3]]} # 4
 "BEGIN 1": {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "begin\n"}, ~, ~, Str], # 1
   [Print, ~, [1], 0, Scalar], # 2
-  [Return, ~, [2], 2]]} # 3
+  [Return, {implicit: true}, [2], 2]]} # 3
 "END 2": {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "end\n"}, ~, ~, Str], # 1
   [Print, ~, [1], 0, Scalar], # 2
-  [Return, ~, [2], 2]]} # 3
+  [Return, {implicit: true}, [2], 2]]} # 3
 ```
 
 ## `__PACKAGE__` is a bareword that is not a bareword
@@ -137,7 +137,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Constant, {const_type: string, value: Foo}, ~, ~, Str], # 4
   [Print, ~, [4, 3], 0, Scalar], # 5
   [Print, ~, [2, 3], 5, Scalar], # 6
-  [Return, ~, [1], 6]]} # 7
+  [Return, {implicit: true}, [1], 6]]} # 7
 ```
 
 ## A `#` at column zero that is not a comment
@@ -208,7 +208,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Constant, {const_type: string, value: bzzzt}, ~, ~, Str], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
   [Print, ~, [2, 3, 4, 5], 0, Scalar], # 6
-  [Return, ~, [1], 6]]} # 7
+  [Return, {implicit: true}, [1], 6]]} # 7
 ```
 
 ## `use constant` installs a bareword that parses as a call
@@ -279,7 +279,7 @@ main::__PROGRAM__: {start: 0, returns: [6], nodes: [
   [Coerce, {from_repr: Int, to_repr: Str}, [2], ~, Str], # 3
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
   [Print, ~, [3, 4], 0, Scalar], # 5
-  [Return, ~, [1], 5]]} # 6
+  [Return, {implicit: true}, [1], 5]]} # 6
 "BEGIN 1": {start: 0, returns: [8], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: constant}, ~, ~, Str], # 1
@@ -289,5 +289,5 @@ main::__PROGRAM__: {start: 0, returns: [6], nodes: [
   [MemStart], # 5
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [4, 5], 0, Unknown], # 6
   [Call, {class_name: constant, dispatch_kind: method, name: import, param_names: []}, [1, 2, 3], 6, Unknown], # 7
-  [Return, ~, [7], 7]]} # 8
+  [Return, {implicit: true}, [7], 7]]} # 8
 ```

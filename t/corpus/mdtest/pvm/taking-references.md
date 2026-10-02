@@ -65,7 +65,7 @@ main::__PROGRAM__: {start: 0, returns: [19], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 16
   [Concat, ~, [15, 16], ~, Str], # 17
   [Print, ~, [17], 0, Scalar], # 18
-  [Return, ~, [1], 18]]} # 19
+  [Return, {implicit: true}, [1], 18]]} # 19
 ```
 
 ## The same backslash in list context
@@ -124,7 +124,7 @@ main::__PROGRAM__: {start: 0, returns: [19], nodes: [
   [Coerce, {from_repr: Scalar, to_repr: Str}, [15], ~, Str], # 16
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 17
   [Print, ~, [11, 12, 16, 17], 0, Scalar], # 18
-  [Return, ~, [1], 18]]} # 19
+  [Return, {implicit: true}, [1], 18]]} # 19
 ```
 
 ## The anonymous array constructor
@@ -174,7 +174,7 @@ main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [RefType, ~, [5], ~, Str], # 11
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 12
   [Print, ~, [9, 10, 11, 12], 5, Scalar], # 13
-  [Return, ~, [1], 13]]} # 14
+  [Return, {implicit: true}, [1], 13]]} # 14
 ```
 
 ## `ref` over all three referent kinds
@@ -238,5 +238,5 @@ main::__PROGRAM__: {start: 0, returns: [22], nodes: [
   [Coerce, {from_repr: Scalar, to_repr: Str}, [18], ~, Str], # 19
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 20
   [Print, ~, [5, 6, 10, 6, 17, 6, 19, 20], 14, Scalar], # 21
-  [Return, ~, [1], 21]]} # 22
+  [Return, {implicit: true}, [1], 21]]} # 22
 ```

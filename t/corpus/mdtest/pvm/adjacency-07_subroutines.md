@@ -222,7 +222,7 @@ main::__PROGRAM__: {start: 0, returns: [57], nodes: [
   [Coerce, {from_repr: Int, to_repr: Str}, [4], ~, Str], # 54
   [Print, ~, [53, 54], 52, Scalar], # 55
   [Print, ~, [2], 55, Scalar], # 56
-  [Return, ~, [1], 56]]} # 57
+  [Return, {implicit: true}, [1], 56]]} # 57
 main::__PROGRAM__::__ANON__:16:2: {start: 0, returns: [14], nodes: [
   [Start], # 0
   [ArgsSource, ~, ~, ~, Array], # 1
@@ -238,15 +238,15 @@ main::__PROGRAM__::__ANON__:16:2: {start: 0, returns: [14], nodes: [
   [Call, {dispatch_kind: direct, name: main::pick, param_names: [], want: scalar}, [9, 10], 4, Unknown], # 11
   [Coerce, {from_repr: Unknown, to_repr: Str}, [11], ~, Str], # 12
   [Concat, ~, [7, 12], ~, Str], # 13
-  [Return, ~, [13], 11]]} # 14
+  [Return, {implicit: true}, [13], 11]]} # 14
 main::__PROGRAM__::__ANON__:21:8: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::answer: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "42"}, ~, ~, Int], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 main::bump: {start: 0, returns: [8], nodes: [
   [Start], # 0
   [ArgsSource, ~, ~, ~, Array], # 1
@@ -256,7 +256,7 @@ main::bump: {start: 0, returns: [8], nodes: [
   [Subscript, {kind: array}, [1, 2], ~, Scalar], # 5
   [Increment, ~, [4], ~, Scalar], # 6
   [Assign, ~, [5, 6], 0, Scalar], # 7
-  [Return, ~, [4], 7]]} # 8
+  [Return, {implicit: true}, [4], 7]]} # 8
 main::f: {start: 0, returns: [8], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "f["}, ~, ~, Str], # 1
@@ -314,7 +314,7 @@ main::pick: {start: 0, returns: [24], nodes: [
   [Constant, {const_type: number, value: "5.036"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: feature}, ~, ~, Str], # 1
@@ -323,7 +323,7 @@ main::pick: {start: 0, returns: [24], nodes: [
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
   [Call, {class_name: feature, dispatch_kind: method, name: unimport, param_names: []}, [1, 2], 5, Unknown], # 6
-  [Return, ~, [6], 6]]} # 7
+  [Return, {implicit: true}, [6], 6]]} # 7
 "BEGIN 3": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: feature}, ~, ~, Str], # 1
@@ -332,5 +332,5 @@ main::pick: {start: 0, returns: [24], nodes: [
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
   [Call, {class_name: feature, dispatch_kind: method, name: import, param_names: []}, [1, 2], 5, Unknown], # 6
-  [Return, ~, [6], 6]]} # 7
+  [Return, {implicit: true}, [6], 6]]} # 7
 ```

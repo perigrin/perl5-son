@@ -144,7 +144,7 @@ main::__FORMAT__:main::STDOUT: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "a report line\n"}, ~, ~, Str], # 1
   [Call, {dispatch_kind: builtin, name: formline, param_names: []}, [1], ~, Scalar], # 2
-  [Return, ~, [2], 0]]} # 3
+  [Return, {implicit: true}, [2], 0]]} # 3
 main::__PROGRAM__: {start: 0, returns: [19], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
@@ -165,12 +165,12 @@ main::__PROGRAM__: {start: 0, returns: [19], nodes: [
   [Print, ~, [6, 7, 8, 14, 15], 3, Scalar], # 16
   [Call, {dispatch_kind: direct, name: main::__FORMAT__:main::STDOUT, param_names: [], want: void}, ~, 16, Scalar], # 17
   [Print, ~, [4], 17, Scalar], # 18
-  [Return, ~, [1], 18], # 19
+  [Return, {implicit: true}, [1], 18], # 19
   [ArrayLiteral, {sigil: "@", symbol: data}, [3], ~, Array]]} # 20
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "File/Glob.pm"}, ~, ~, Str], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```

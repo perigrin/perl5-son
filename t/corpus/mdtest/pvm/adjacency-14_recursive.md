@@ -127,6 +127,6 @@ main::__PROGRAM__: {start: 0, returns: [45], nodes: [
   [Print, ~, [40], 41, Scalar], # 42
   [Region, {head: 38}, [39, 42]], # 43
   [Print, ~, [37], 43, Scalar], # 44
-  [Return, ~, [1], 44], # 45
+  [Return, {implicit: true}, [1], 44], # 45
   [RegexMatch, {flags: "", pattern: a}, [6], ~, Boolean]]} # 46
 ```

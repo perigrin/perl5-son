@@ -71,7 +71,7 @@ main::__PROGRAM__: {start: 0, returns: [8], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
   [Concat, ~, [4, 5], ~, Str], # 6
   [Print, ~, [6], 0, Scalar], # 7
-  [Return, ~, [1], 7]]} # 8
+  [Return, {implicit: true}, [1], 7]]} # 8
 ```
 
 ## The non-interpolating heredoc
@@ -128,7 +128,7 @@ main::__PROGRAM__: {start: 0, returns: [8], nodes: [
   [Constant, {const_type: string, value: "hello $name\n"}, ~, ~, Str], # 5
   [Print, ~, [5], 0, Scalar], # 6
   [Print, ~, [4], 6, Scalar], # 7
-  [Return, ~, [1], 7]]} # 8
+  [Return, {implicit: true}, [1], 7]]} # 8
 ```
 
 ## The indentation-stripping heredoc
@@ -169,5 +169,5 @@ main::__PROGRAM__: {start: 0, returns: [4], nodes: [
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: "trimmed\n"}, ~, ~, Str], # 2
   [Print, ~, [2], 0, Scalar], # 3
-  [Return, ~, [1], 3]]} # 4
+  [Return, {implicit: true}, [1], 3]]} # 4
 ```

@@ -69,7 +69,7 @@ main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [Concat, ~, [7, 4], ~, Str], # 8
   [Print, ~, [8], 0, Scalar], # 9
   [Print, ~, [5], 9, Scalar], # 10
-  [Return, ~, [1], 10]]} # 11
+  [Return, {implicit: true}, [1], 10]]} # 11
 ```
 
 ## `our` names a package variable, and the shadow proves it
@@ -129,7 +129,7 @@ main::__PROGRAM__: {start: 0, returns: [18], nodes: [
   [Concat, ~, [14, 8], ~, Str], # 15
   [Print, ~, [15], 5, Scalar], # 16
   [Print, ~, [9], 16, Scalar], # 17
-  [Return, ~, [1], 17]]} # 18
+  [Return, {implicit: true}, [1], 17]]} # 18
 ```
 
 ## `state` scopes like `my`, and initialises once
@@ -190,7 +190,7 @@ main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [Concat, ~, [7, 4], ~, Str], # 8
   [Print, ~, [8], 0, Scalar], # 9
   [Print, ~, [5], 9, Scalar], # 10
-  [Return, ~, [1], 10]]} # 11
+  [Return, {implicit: true}, [1], 10]]} # 11
 "BEGIN 1": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: feature}, ~, ~, Str], # 1
@@ -199,5 +199,5 @@ main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
   [Call, {class_name: feature, dispatch_kind: method, name: import, param_names: []}, [1, 2], 5, Unknown], # 6
-  [Return, ~, [6], 6]]} # 7
+  [Return, {implicit: true}, [6], 6]]} # 7
 ```

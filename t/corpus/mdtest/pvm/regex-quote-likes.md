@@ -54,7 +54,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
   [Concat, ~, [3, 4], ~, Str], # 5
   [Print, ~, [5], 0, Scalar], # 6
-  [Return, ~, [1], 6]]} # 7
+  [Return, {implicit: true}, [1], 6]]} # 7
 ```
 
 ## `tr///` wears `s///`'s syntax and is not a regex
@@ -155,5 +155,5 @@ main::__PROGRAM__: {start: 0, returns: [28], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 25
   [Concat, ~, [24, 25], ~, Str], # 26
   [Print, ~, [26], 13, Scalar], # 27
-  [Return, ~, [1], 27]]} # 28
+  [Return, {implicit: true}, [1], 27]]} # 28
 ```

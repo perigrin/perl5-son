@@ -77,7 +77,7 @@ main::__PROGRAM__: {start: 0, returns: [15], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 12
   [Concat, ~, [11, 12], ~, Str], # 13
   [Print, ~, [13], 0, Scalar], # 14
-  [Return, ~, [1], 14], # 15
+  [Return, {implicit: true}, [1], 14], # 15
   [ArrayLiteral, {sigil: "@", symbol: r}, [10], ~, Array]]} # 16
 ```
 
@@ -139,7 +139,7 @@ main::__PROGRAM__: {start: 0, returns: [21], nodes: [
   [Coerce, {from_repr: Int, to_repr: Str}, [17], ~, Str], # 18
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 19
   [Print, ~, [15, 18, 19], 0, Scalar], # 20
-  [Return, ~, [1], 20]]} # 21
+  [Return, {implicit: true}, [1], 20]]} # 21
 ```
 
 ## `..` in scalar context is stateful
@@ -202,7 +202,7 @@ main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Proj, {index: 1}, [6]], # 11
   [Region, {head: 6}, [11]], # 12
   [Print, ~, [10], 12, Scalar], # 13
-  [Return, ~, [1], 13], # 14
+  [Return, {implicit: true}, [1], 13], # 14
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 15
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 16
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 17

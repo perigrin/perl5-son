@@ -67,14 +67,14 @@ main::__FORMAT__:main::STDOUT: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "a fixed report line\n"}, ~, ~, Str], # 1
   [Call, {dispatch_kind: builtin, name: formline, param_names: []}, [1], ~, Scalar], # 2
-  [Return, ~, [2], 0]]} # 3
+  [Return, {implicit: true}, [2], 0]]} # 3
 main::__PROGRAM__: {start: 0, returns: [5], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: "after write\n"}, ~, ~, Str], # 2
   [Call, {dispatch_kind: direct, name: main::__FORMAT__:main::STDOUT, param_names: [], want: void}, ~, 0, Scalar], # 3
   [Print, ~, [2], 3, Scalar], # 4
-  [Return, ~, [1], 4]]} # 5
+  [Return, {implicit: true}, [1], 4]]} # 5
 ```
 
 ## A picture line that is not Perl
@@ -138,7 +138,7 @@ main::__FORMAT__:main::STDOUT: {start: 0, returns: [6], nodes: [
   [EntryDef, {package: main, sigil: $, symbol: name}, [2], ~, Scalar], # 3
   [EntryDef, {package: main, sigil: $, symbol: qty}, [2], ~, Scalar], # 4
   [Call, {dispatch_kind: builtin, name: formline, param_names: []}, [1, 3, 4], ~, Scalar], # 5
-  [Return, ~, [5], 0]]} # 6
+  [Return, {implicit: true}, [5], 0]]} # 6
 main::__PROGRAM__: {start: 0, returns: [12], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
@@ -152,5 +152,5 @@ main::__PROGRAM__: {start: 0, returns: [12], nodes: [
   [EntryWrite, ~, [3, 4, 8], 8, Unknown], # 9
   [Call, {dispatch_kind: direct, name: main::__FORMAT__:main::STDOUT, param_names: [], want: void}, ~, 9, Scalar], # 10
   [Print, ~, [2], 10, Scalar], # 11
-  [Return, ~, [1], 11]]} # 12
+  [Return, {implicit: true}, [1], 11]]} # 12
 ```

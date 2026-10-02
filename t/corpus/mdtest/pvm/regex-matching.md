@@ -57,7 +57,7 @@ main::__PROGRAM__: {start: 0, returns: [8], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
   [Concat, ~, [4, 5], ~, Str], # 6
   [Print, ~, [6], 0, Scalar], # 7
-  [Return, ~, [1], 7]]} # 8
+  [Return, {implicit: true}, [1], 7]]} # 8
 ```
 
 ## The binding operator emits nothing
@@ -101,7 +101,7 @@ main::__PROGRAM__: {start: 0, returns: [8], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
   [Concat, ~, [4, 5], ~, Str], # 6
   [Print, ~, [6], 0, Scalar], # 7
-  [Return, ~, [1], 7]]} # 8
+  [Return, {implicit: true}, [1], 7]]} # 8
 ```
 
 ## The negated binding is two ops
@@ -151,7 +151,7 @@ main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [Constant, {const_type: string, value: "]\n"}, ~, ~, Str], # 8
   [Concat, ~, [7, 8], ~, Str], # 9
   [Print, ~, [9], 0, Scalar], # 10
-  [Return, ~, [1], 10]]} # 11
+  [Return, {implicit: true}, [1], 10]]} # 11
 ```
 
 ## Substitution mutates in place
@@ -197,7 +197,7 @@ main::__PROGRAM__: {start: 0, returns: [13], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
   [Concat, ~, [9, 10], ~, Str], # 11
   [Print, ~, [11], 7, Scalar], # 12
-  [Return, ~, [1], 12]]} # 13
+  [Return, {implicit: true}, [1], 12]]} # 13
 ```
 
 ## An interpolated pattern adds `regcomp`
@@ -250,7 +250,7 @@ main::__PROGRAM__: {start: 0, returns: [9], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 6
   [Concat, ~, [5, 6], ~, Str], # 7
   [Print, ~, [7], 0, Scalar], # 8
-  [Return, ~, [1], 8]]} # 9
+  [Return, {implicit: true}, [1], 8]]} # 9
 ```
 
 ## `pos` and `\G` on a signature parameter
@@ -302,8 +302,8 @@ main::__PROGRAM__: {start: 0, returns: [20], nodes: [
   [TernaryExpr, ~, [14, 15, 16], ~, Str], # 17
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 18
   [Print, ~, [6, 7, 11, 7, 17, 18], 13, Scalar], # 19
-  [Return, ~, [1], 19]]} # 20
-main::token_end: {start: 0, returns: [19], nodes: [
+  [Return, {implicit: true}, [1], 19]]} # 20
+main::token_end: {start: 0, returns: [21], nodes: [
   [Start], # 0
   [Parameter, {index: 0, name: $input, sigil: $}, ~, ~, Unknown], # 1
   [Constant, {const_type: string, value: "\\G("}, ~, ~, Str], # 2
@@ -321,15 +321,17 @@ main::token_end: {start: 0, returns: [19], nodes: [
   [TernaryExpr, ~, [8, 12, 13], ~, Unknown], # 14
   [MemStart], # 15
   [PadAccess, {sigil: $, symbol: input}, [15], ~, Unknown], # 16
-  [Call, {dispatch_kind: builtin, name: pos, param_names: []}, [16], ~, Unknown], # 17
-  [Assign, ~, [17, 9], 0, Num], # 18
-  [Return, ~, [14], 18]]} # 19
+  [Assign, ~, [16, 1], 0, Unknown], # 17
+  [PadAccess, {sigil: $, symbol: input}, [17], ~, Unknown], # 18
+  [Call, {dispatch_kind: builtin, name: pos, param_names: []}, [18], ~, Unknown], # 19
+  [Assign, ~, [19, 9], 17, Num], # 20
+  [Return, ~, [14], 20]]} # 21
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.036"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## A match in void context, kept for its captures
@@ -367,5 +369,5 @@ main::__PROGRAM__: {start: 0, returns: [12], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
   [Concat, ~, [8, 9], ~, Str], # 10
   [Print, ~, [10], 3, Scalar], # 11
-  [Return, ~, [1], 11]]} # 12
+  [Return, {implicit: true}, [1], 11]]} # 12
 ```

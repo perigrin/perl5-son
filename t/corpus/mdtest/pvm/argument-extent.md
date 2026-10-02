@@ -83,7 +83,7 @@ main::__PROGRAM__: {start: 0, returns: [9], nodes: [
   [Coerce, {from_repr: Unknown, to_repr: Str}, [5], ~, Str], # 6
   [Print, ~, [6], 5, Scalar], # 7
   [Print, ~, [2], 7, Scalar], # 8
-  [Return, ~, [1], 8]]} # 9
+  [Return, {implicit: true}, [1], 8]]} # 9
 main::f: {start: 0, returns: [10], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "f["}, ~, ~, Str], # 1
@@ -165,7 +165,7 @@ main::__PROGRAM__: {start: 0, returns: [10], nodes: [
   [Coerce, {from_repr: Int, to_repr: Str}, [6], ~, Str], # 7
   [Print, ~, [5, 7], 4, Scalar], # 8
   [Print, ~, [2], 8, Scalar], # 9
-  [Return, ~, [1], 9]]} # 10
+  [Return, {implicit: true}, [1], 9]]} # 10
 main::g: {start: 0, returns: [10], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "g["}, ~, ~, Str], # 1
@@ -326,11 +326,11 @@ main::__PROGRAM__: {start: 0, returns: [19], nodes: [
   [Coerce, {from_repr: Int, to_repr: Str}, [15], ~, Str], # 16
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 17
   [Print, ~, [12, 16, 17], 10, Scalar], # 18
-  [Return, ~, [1], 18]]} # 19
+  [Return, {implicit: true}, [1], 18]]} # 19
 main::__PROGRAM__::__ANON__:1:2: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [Return, {implicit: true}, [1], 0]]} # 2
 ```
 
 ## `lock` is a named unary with its own op
@@ -406,5 +406,5 @@ main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [PadAccess, {sigil: $, symbol: "n"}, ~, ~, Unknown], # 8
   [Call, {dispatch_kind: builtin, name: lock, param_names: []}, [8], 0, Unknown], # 9
   [Print, ~, [2, 6, 7], 9, Scalar], # 10
-  [Return, ~, [1], 10]]} # 11
+  [Return, {implicit: true}, [1], 10]]} # 11
 ```

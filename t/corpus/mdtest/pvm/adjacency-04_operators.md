@@ -352,7 +352,7 @@ main::__PROGRAM__: {start: 0, returns: [211], nodes: [
   [Print, ~, [138], 207, Scalar], # 208
   [Print, ~, [105], 208, Scalar], # 209
   [Print, ~, [61], 209, Scalar], # 210
-  [Return, ~, [1], 210], # 211
+  [Return, {implicit: true}, [1], 210], # 211
   [Call, {dispatch_kind: builtin, name: substr, param_names: []}, [12, 13, 7], ~, Str], # 212
   [ArrayLiteral, {sigil: "@", symbol: cleared}, [44, 7, 45], ~, Array], # 213
   [PadAccess, {sigil: $, symbol: rel}, ~, ~, Str], # 214

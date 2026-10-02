@@ -88,11 +88,11 @@ main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [TernaryExpr, ~, [5, 6, 7], ~, Str], # 8
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
   [Print, ~, [8, 9], 3, Scalar], # 10
-  [Return, ~, [1], 10]]} # 11
+  [Return, {implicit: true}, [1], 10]]} # 11
 main::c: {start: 0, returns: [9], nodes: [
   [Start], # 0
   [EntryDef, {package: main, sigil: $, symbol: "n"}, ~, ~, Scalar], # 1
-  [Call, {dispatch_kind: method, name: state, param_names: []}, [1], 0, Unknown], # 2
+  [Call, {dispatch_kind: method, name: state, param_names: [], want: scalar}, [1], 0, Unknown], # 2
   [EntryDef, {package: main, sigil: $, symbol: "n"}, [2], ~, Scalar], # 3
   [Coerce, {from_repr: Scalar, to_repr: Num}, [3], ~, Num], # 4
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 5
@@ -160,7 +160,7 @@ main::__PROGRAM__: {start: 0, returns: [12], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
-  [Call, {dispatch_kind: method, name: field, param_names: []}, [1], 0, Unknown], # 3
+  [Call, {dispatch_kind: method, name: field, param_names: [], want: void}, [1], 0, Unknown], # 3
   [Region, {eval_entry: 0}, [3]], # 4
   [Phi, {region: 4}, [2, 1], ~, Scalar], # 5
   [Defined, ~, [5], ~, Boolean], # 6
@@ -169,7 +169,7 @@ main::__PROGRAM__: {start: 0, returns: [12], nodes: [
   [TernaryExpr, ~, [6, 7, 8], ~, Str], # 9
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
   [Print, ~, [9, 10], 4, Scalar], # 11
-  [Return, ~, [1], 11]]} # 12
+  [Return, {implicit: true}, [1], 11]]} # 12
 ```
 
 ## `__CLASS__` without the feature is a filehandle
@@ -231,7 +231,7 @@ main::__PROGRAM__: {start: 0, returns: [9], nodes: [
   [Coerce, {from_repr: Unknown, to_repr: Str}, [5], ~, Str], # 6
   [Print, {has_filehandle: true}, [3, 6], 0, Scalar], # 7
   [Print, ~, [2], 7, Scalar], # 8
-  [Return, ~, [1], 8]]} # 9
+  [Return, {implicit: true}, [1], 8]]} # 9
 ```
 
 ## `defer` without its feature runs the block FIRST
@@ -324,7 +324,7 @@ main::__PROGRAM__: {start: 0, returns: [6], nodes: [
   [Call, {dispatch_kind: direct, name: main::f, param_names: [], want: void}, ~, 0, Unknown], # 3
   [Region, {eval_entry: 0}, [3]], # 4
   [Print, ~, [2], 4, Scalar], # 5
-  [Return, ~, [1], 5]]} # 6
+  [Return, {implicit: true}, [1], 5]]} # 6
 main::f: {start: 0, returns: [6], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "D\n"}, ~, ~, Str], # 1
@@ -332,5 +332,5 @@ main::f: {start: 0, returns: [6], nodes: [
   [Constant, {const_type: string, value: "body\n"}, ~, ~, Str], # 3
   [Print, ~, [3], 2, Scalar], # 4
   [Call, {dispatch_kind: method, name: defer, param_names: []}, [2, 4], 4, Unknown], # 5
-  [Return, ~, [5], 5]]} # 6
+  [Return, {implicit: true}, [5], 5]]} # 6
 ```

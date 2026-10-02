@@ -70,7 +70,7 @@ main::__PROGRAM__: {start: 0, returns: [13], nodes: [
   [Coerce, {from_repr: Int, to_repr: Str}, [9], ~, Str], # 10
   [Print, ~, [10, 8], 0, Scalar], # 11
   [Print, ~, [7, 8], 11, Scalar], # 12
-  [Return, ~, [1], 12]]} # 13
+  [Return, {implicit: true}, [1], 12]]} # 13
 ```
 
 ## `$^O` is one variable and a bare `$^` is another
@@ -171,7 +171,7 @@ main::__PROGRAM__: {start: 0, returns: [21], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 18
   [Print, ~, [17, 18], 15, Scalar], # 19
   [Print, ~, [2], 19, Scalar], # 20
-  [Return, ~, [1], 20]]} # 21
+  [Return, {implicit: true}, [1], 20]]} # 21
 ```
 
 ## A package array subscripts through `rv2av`
@@ -216,7 +216,7 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [Coerce, {from_repr: Unknown, to_repr: Str}, [13], ~, Str], # 14
   [Print, ~, [14, 11], 8, Scalar], # 15
   [Print, ~, [10, 11], 15, Scalar], # 16
-  [Return, ~, [1], 16]]} # 17
+  [Return, {implicit: true}, [1], 16]]} # 17
 ```
 
 ## A package hash reaches storage through `rv2hv`
@@ -261,7 +261,7 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [Coerce, {from_repr: Int, to_repr: Str}, [13], ~, Str], # 14
   [Print, ~, [14, 12], 9, Scalar], # 15
   [Print, ~, [11, 12], 15, Scalar], # 16
-  [Return, ~, [1], 16]]} # 17
+  [Return, {implicit: true}, [1], 16]]} # 17
 ```
 
 ## A package scalar is where `sassign` enters the corpus
@@ -303,7 +303,7 @@ main::__PROGRAM__: {start: 0, returns: [10], nodes: [
   [Coerce, {from_repr: Int, to_repr: Str}, [6], ~, Str], # 7
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
   [Print, ~, [7, 8], 5, Scalar], # 9
-  [Return, ~, [1], 9]]} # 10
+  [Return, {implicit: true}, [1], 9]]} # 10
 ```
 
 ## The bare main stash is `$::{...}` with an EMPTY package name
@@ -376,5 +376,5 @@ main::__PROGRAM__: {start: 0, returns: [20], nodes: [
   [Print, ~, [16, 10, 11], 8, Scalar], # 17
   [Print, ~, [12, 15, 11], 17, Scalar], # 18
   [Print, ~, [2, 10, 11], 18, Scalar], # 19
-  [Return, ~, [1], 19]]} # 20
+  [Return, {implicit: true}, [1], 19]]} # 20
 ```

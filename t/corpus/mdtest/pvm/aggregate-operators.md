@@ -95,7 +95,7 @@ main::__PROGRAM__: {start: 0, returns: [20], nodes: [
   [Print, ~, [16, 11], 8, Scalar], # 17
   [Print, ~, [13, 11], 17, Scalar], # 18
   [Print, ~, [10, 11], 18, Scalar], # 19
-  [Return, ~, [1], 19]]} # 20
+  [Return, {implicit: true}, [1], 19]]} # 20
 ```
 
 ## `unshift`: the same rule at the other end
@@ -170,7 +170,7 @@ main::__PROGRAM__: {start: 0, returns: [20], nodes: [
   [Print, ~, [16, 11], 8, Scalar], # 17
   [Print, ~, [13, 11], 17, Scalar], # 18
   [Print, ~, [10, 11], 18, Scalar], # 19
-  [Return, ~, [1], 19]]} # 20
+  [Return, {implicit: true}, [1], 19]]} # 20
 ```
 
 ## `shift`: the rule again, and the array gives up an element
@@ -217,7 +217,7 @@ main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Coerce, {from_repr: Int, to_repr: Str}, [7], ~, Str], # 11
   [Print, ~, [11, 10], 7, Scalar], # 12
   [Print, ~, [9, 10], 12, Scalar], # 13
-  [Return, ~, [1], 13]]} # 14
+  [Return, {implicit: true}, [1], 13]]} # 14
 ```
 
 ## `values` takes the container, not a flattened list
@@ -275,7 +275,7 @@ main::__PROGRAM__: {start: 0, returns: [15], nodes: [
   [Coerce, {from_repr: Int, to_repr: Str}, [11], ~, Str], # 12
   [Print, ~, [12, 10], 0, Scalar], # 13
   [Print, ~, [9, 10], 13, Scalar], # 14
-  [Return, ~, [1], 14]]} # 15
+  [Return, {implicit: true}, [1], 14]]} # 15
 ```
 
 ## `each` returns a PAIR where its siblings return a flat list
@@ -340,6 +340,6 @@ main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Call, {dispatch_kind: builtin, name: each, param_names: []}, [9, 10], 0, Unknown], # 11
   [Print, ~, [6, 4], 11, Scalar], # 12
   [Print, ~, [3, 4], 12, Scalar], # 13
-  [Return, ~, [1], 13], # 14
+  [Return, {implicit: true}, [1], 13], # 14
   [Assign, ~, [5, 2, 11], ~, List]]} # 15
 ```

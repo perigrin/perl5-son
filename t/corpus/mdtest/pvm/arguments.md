@@ -56,7 +56,7 @@ main::__PROGRAM__: {start: 0, returns: [9], nodes: [
   [Coerce, {from_repr: Unknown, to_repr: Str}, [5], ~, Str], # 6
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 7
   [Print, ~, [6, 7], 5, Scalar], # 8
-  [Return, ~, [1], 8]]} # 9
+  [Return, {implicit: true}, [1], 8]]} # 9
 main::describe: {start: 0, returns: [16], nodes: [
   [Start], # 0
   [ArgsSource, ~, ~, ~, Array], # 1
@@ -124,20 +124,20 @@ main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
   [Print, ~, [4, 5, 8, 9], 7, Scalar], # 10
-  [Return, ~, [1], 10]]} # 11
+  [Return, {implicit: true}, [1], 10]]} # 11
 main::add_up: {start: 0, returns: [5], nodes: [
   [Start], # 0
   [Parameter, {index: 0, name: $a, sigil: $}, ~, ~, Num], # 1
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 2
   [Parameter, {default_when: absent, index: 1, name: $b, sigil: $}, [2], ~, Num], # 3
   [Add, ~, [1, 3], ~, Num], # 4
-  [Return, ~, [4], 0]]} # 5
+  [Return, {implicit: true}, [4], 0]]} # 5
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.036"}, ~, ~, Num], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, ~, [3], 3]]} # 4
+  [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
 ## `@_` aliases the caller's variables
@@ -208,7 +208,7 @@ main::__PROGRAM__: {start: 0, returns: [19], nodes: [
   [Call, {dispatch_kind: direct, name: main::bump_alias, param_names: [], want: void}, [7], 6, Scalar], # 16
   [Call, {dispatch_kind: direct, name: main::bump_copy, param_names: [], want: void}, [11], 16, Unknown], # 17
   [Print, ~, [15], 17, Scalar], # 18
-  [Return, ~, [1], 18]]} # 19
+  [Return, {implicit: true}, [1], 18]]} # 19
 main::bump_alias: {start: 0, returns: [8], nodes: [
   [Start], # 0
   [ArgsSource, ~, ~, ~, Array], # 1
@@ -218,11 +218,11 @@ main::bump_alias: {start: 0, returns: [8], nodes: [
   [Subscript, {kind: array}, [1, 2], ~, Scalar], # 5
   [Increment, ~, [4], ~, Scalar], # 6
   [Assign, ~, [5, 6], 0, Scalar], # 7
-  [Return, ~, [4], 7]]} # 8
+  [Return, {implicit: true}, [4], 7]]} # 8
 main::bump_copy: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [PadAccess, {sigil: $, symbol: "n"}, ~, ~, Unknown], # 1
-  [Return, ~, [1], 0], # 2
+  [Return, {implicit: true}, [1], 0], # 2
   [ArgsSource, ~, ~, ~, Array], # 3
   [Assign, ~, [1, 3], ~, List], # 4
   [Increment, ~, [1], ~, Scalar]]} # 5
@@ -284,7 +284,7 @@ main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Coerce, {from_repr: Unknown, to_repr: Str}, [10], ~, Str], # 11
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 12
   [Print, ~, [4, 5, 8, 5, 11, 12], 10, Scalar], # 13
-  [Return, ~, [1], 13]]} # 14
+  [Return, {implicit: true}, [1], 13]]} # 14
 main::classify: {start: 0, returns: [19], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: zero}, ~, ~, Str], # 1
@@ -370,7 +370,7 @@ main::__PROGRAM__: {start: 0, returns: [19], nodes: [
   [TernaryExpr, ~, [13, 14, 15], ~, Str], # 16
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 17
   [Print, ~, [6, 7, 11, 7, 16, 17], 12, Scalar], # 18
-  [Return, ~, [1], 18]]} # 19
+  [Return, {implicit: true}, [1], 18]]} # 19
 main::bare: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
@@ -429,7 +429,7 @@ main::__PROGRAM__: {start: 0, returns: [23], nodes: [
   [Proj, {index: 1}, [7]], # 20
   [Region, {head: 7}, [20]], # 21
   [Print, ~, [19], 21, Scalar], # 22
-  [Return, ~, [1], 22], # 23
+  [Return, {implicit: true}, [1], 22], # 23
   [Count, ~, [5, 9], ~, Int], # 24
   [NumGt, ~, [24, 8], 7, Boolean], # 25
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 26
@@ -487,7 +487,7 @@ main::__PROGRAM__: {start: 0, returns: [18], nodes: [
   [Proj, {index: 1}, [5]], # 15
   [Region, {head: 5}, [15]], # 16
   [Print, ~, [14], 16, Scalar], # 17
-  [Return, ~, [1], 17], # 18
+  [Return, {implicit: true}, [1], 17], # 18
   [Constant, {const_type: integer, value: "4"}, ~, ~, Int], # 19
   [NumGt, ~, [19, 6], 5, Boolean], # 20
   [Add, ~, [6, 4], ~, Int], # 21
@@ -555,7 +555,7 @@ main::__PROGRAM__: {start: 0, returns: [26], nodes: [
   [Proj, {index: 1}, [6]], # 23
   [Region, {head: 6}, [23]], # 24
   [Print, ~, [22], 24, Scalar], # 25
-  [Return, ~, [1], 25], # 26
+  [Return, {implicit: true}, [1], 25], # 26
   [Count, ~, [4, 9], ~, Int], # 27
   [NumGt, ~, [27, 7], 6, Boolean], # 28
   [Add, ~, [7, 2], ~, Int]]} # 29
@@ -568,5 +568,5 @@ main::bump: {start: 0, returns: [8], nodes: [
   [Subscript, {kind: array}, [1, 2], ~, Scalar], # 5
   [Increment, ~, [4], ~, Scalar], # 6
   [Assign, ~, [5, 6], 0, Scalar], # 7
-  [Return, ~, [4], 7]]} # 8
+  [Return, {implicit: true}, [4], 7]]} # 8
 ```

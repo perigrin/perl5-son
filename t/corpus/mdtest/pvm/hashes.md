@@ -58,7 +58,7 @@ main::__PROGRAM__: {start: 0, returns: [15], nodes: [
   [Coerce, {from_repr: Int, to_repr: Str}, [11], ~, Str], # 12
   [Print, ~, [12, 10], 0, Scalar], # 13
   [Print, ~, [9, 10], 13, Scalar], # 14
-  [Return, ~, [1], 14]]} # 15
+  [Return, {implicit: true}, [1], 14]]} # 15
 ```
 
 ## A bareword key may be spelled like a quote-like operator
@@ -133,7 +133,7 @@ main::__PROGRAM__: {start: 0, returns: [22], nodes: [
   [Coerce, {from_repr: Unknown, to_repr: Str}, [18], ~, Str], # 19
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 20
   [Print, ~, [13, 15, 17, 19, 20], 0, Scalar], # 21
-  [Return, ~, [1], 21]]} # 22
+  [Return, {implicit: true}, [1], 21]]} # 22
 ```
 
 ## A computed subscript is the only route to `helem`
@@ -175,7 +175,7 @@ main::__PROGRAM__: {start: 0, returns: [15], nodes: [
   [Coerce, {from_repr: Unknown, to_repr: Str}, [11], ~, Str], # 12
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 13
   [Print, ~, [12, 13], 0, Scalar], # 14
-  [Return, ~, [1], 14]]} # 15
+  [Return, {implicit: true}, [1], 14]]} # 15
 ```
 
 ## `exists` and `delete` on an element leave no op of their own
@@ -247,7 +247,7 @@ main::__PROGRAM__: {start: 0, returns: [22], nodes: [
   [Coerce, {from_repr: Scalar, to_repr: Str}, [16], ~, Str], # 19
   [Print, ~, [19, 11], 16, Scalar], # 20
   [Print, ~, [18, 11], 20, Scalar], # 21
-  [Return, ~, [1], 21]]} # 22
+  [Return, {implicit: true}, [1], 21]]} # 22
 ```
 
 ## A hash slice, where `delete` becomes a real op
@@ -295,5 +295,5 @@ main::__PROGRAM__: {start: 0, returns: [19], nodes: [
   [Coerce, {from_repr: Int, to_repr: Str}, [15], ~, Str], # 16
   [Print, ~, [16, 11], 14, Scalar], # 17
   [Print, ~, [10, 11], 17, Scalar], # 18
-  [Return, ~, [1], 18]]} # 19
+  [Return, {implicit: true}, [1], 18]]} # 19
 ```

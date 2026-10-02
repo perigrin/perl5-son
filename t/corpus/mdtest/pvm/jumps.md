@@ -86,7 +86,7 @@ main::__PROGRAM__: {start: 0, returns: [29], nodes: [
   [Proj, {index: 0}, [25]], # 26
   [Region, {head: 3}, [4, 26]], # 27
   [Print, ~, [2], 27, Scalar], # 28
-  [Return, ~, [1], 28], # 29
+  [Return, {implicit: true}, [1], 28], # 29
   [Count, ~, [15, 18], ~, Int], # 30
   [NumGt, ~, [30, 17], 3, Boolean], # 31
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 32
@@ -187,7 +187,7 @@ main::__PROGRAM__: {start: 0, returns: [35], nodes: [
   [Proj, {index: 0}, [28]], # 32
   [Region, ~, [31, 32]], # 33
   [Print, ~, [2], 33, Scalar], # 34
-  [Return, ~, [1], 34], # 35
+  [Return, {implicit: true}, [1], 34], # 35
   [Proj, {index: 1}, [25]]]} # 36
 ```
 
@@ -272,7 +272,7 @@ main::__PROGRAM__: {start: 0, returns: [28], nodes: [
   [Proj, {index: 0}, [24]], # 25
   [Region, {head: 3}, [4, 25]], # 26
   [Print, ~, [2], 26, Scalar], # 27
-  [Return, ~, [1], 27], # 28
+  [Return, {implicit: true}, [1], 27], # 28
   [Count, ~, [13, 16], ~, Int], # 29
   [Phi, {region: 3}, [14, 34], ~, Int], # 30
   [NumGt, ~, [29, 30], 3, Boolean], # 31
