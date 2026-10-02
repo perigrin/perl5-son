@@ -86,6 +86,11 @@ Measured against a snapshot of chalk HEAD 5948f648 (179 modules, 43k lines,
     no control_in and no memory barrier, unlike a named method or a direct
     call (FromOptree _handle_entersub, `dynamic_method`): its effects are
     unordered.
+  - `${\ f()}` in a pattern miscompiles: the call is bound as a list
+    (`my @eff6 = f()`) and the deref spelled over `\@eff6`, "Not a SCALAR
+    reference" -- perl takes a reference to the call's last value.
+    `"x" =~ ("a\$|" . $p)` with a constant target is the "No mark on mark
+    stack" crash above.
   - SoN::Serialize::JSON recurses per node (line 456): comp/use.t's program
     graph draws "Deep recursion on anonymous subroutine" warnings. Output is
     right; the walk should be iterative.
@@ -105,11 +110,20 @@ Run over the 130 emitted modules (chalk's grammar from perl_pipeline):
     `use 5.42.0;`, not `use v5.42;`.
   - Past it: `undef()` (~20 modules), circumfix `@{EXPR}` / `%{EXPR}`
     (none of chalk's grammar; it reads `@$name` and `EXPR->@*`), and one
-    regex interpolation `m{(?:${\ (...)})}` -- not yet examined.
+    computed pattern `m{(?:${\ (...)})}` (Bootstrap/Terminal.pm).
 
-Renderer spellings now: `use v5.42.0;`, `(undef)`, postfix dereference
-(t/deparse-an-emission-chalk-can-read.t, which also runs chalk's parser over
-each case when a chalk clone is present).
+Renderer spellings now: `use v5.42.0;`, `(undef)`, postfix dereference, and
+a computed match pattern written as pattern text when it is a Concat of
+string constants and plain scalars (`/\G($p)/` again). Not a `do` block
+binding a temporary: `$1` is scoped to the block, and the caller lost the
+capture. t/deparse-an-emission-chalk-can-read.t covers each, and runs chalk's
+parser over them when a chalk clone is present. After these, chalk parses
+110 of the 130 emitted modules; the other 20 are the 19 whose ORIGINALS fail
+the same way (below) and Terminal.pm, since fixed.
+
+Still spelled `${\ ...}`, no chalk module reaching them yet: a computed
+s/// pattern (_subst_operands), a computed match pattern of any other shape,
+and a dynamic method name (`->${\ EXPR}(...)`).
 
 Chalk-side gaps met on the way, at 5948f648, in chalk's semantic actions
 rather than its grammar -- they fail the ORIGINAL modules too (19 of 130):

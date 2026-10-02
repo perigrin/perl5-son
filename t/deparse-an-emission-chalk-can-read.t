@@ -140,6 +140,31 @@ round_trips($box . <<'SRC', 'a method count of a dereferenced field', $circumfix
 print C->new->load(1, 2)->n, "\n";
 SRC
 
+# A COMPUTED PATTERN is interpolated, and `${\ EXPR}` is not in chalk's
+# grammar; a variable is. Measured on chalk's Bootstrap/Terminal.pm,
+# `$input =~ /\G($pattern)/`. The target stays itself -- `\G` reads ITS pos.
+round_trips(<<'SRC', 'a match against a computed pattern', qr/\$\{\\ /);
+use v5.42; use experimental 'class';
+class C {
+  method m($input, $pos, $p) { pos($input) = $pos; if ($input =~ /\G($p)/) { return $1 } return "none" } }
+print C->new->m("abcabc", 3, "a|b"), "\n";
+print C->new->m("abcabc", 1, "c"), "\n";
+print C->new->m("abcabc", 2, "a|b"), "\n";
+SRC
+
+# TEXT A PATTERN LITERAL WOULD READ DIFFERENTLY keeps the interpolated
+# value: `[ab]` after `$p` would make `$p[ab]` an array element, and a `$` in
+# the text would interpolate. Checked for meaning only.
+round_trips(<<'SRC', 'a computed pattern whose text extends a variable', qr/(?!)/, 0);
+sub m1 { my $s = $_[0]; return ($s =~ ($_[1] . "[ab]")) ? "y" : "n" }
+print m1("xb", "x"), m1("xa", "x"), m1("xc", "x"), "\n";
+SRC
+
+round_trips(<<'SRC', 'a computed pattern whose text holds a dollar', qr/(?!)/, 0);
+sub m1 { my $s = $_[0]; return ($s =~ ("\$s|" . $_[1])) ? "y" : "n" }
+print m1("ab", "b"), m1("ab", "q"), m1("s", "q"), "\n";
+SRC
+
 # THE PROOF is chalk's own parser, read from the pinned commit the census
 # uses; it needs a chalk clone.
 SKIP: {

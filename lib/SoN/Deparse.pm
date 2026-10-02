@@ -4455,7 +4455,15 @@ class SoN::Deparse 0.01 {
             # LITERAL -- a qr constant spells its pattern here -- so braces
             # that do not balance in it close `m{` early (corpus 098). The
             # delimiter is chosen over the whole body, as a match's is.
-            my $inner = sprintf('(?:${\ (%s) })', $self->_expr($in[1]));
+            #
+            # A PATTERN BUILT FROM TEXT AND PLAIN SCALARS IS WRITTEN AS THE
+            # SOURCE WROTE IT -- `/\G($p)/` arrives as Concat("\\G(", $p, ")")
+            # -- because chalk's grammar reads a variable in a pattern and not
+            # `${\ EXPR}`. Not a block that binds a temporary: `$1` is scoped
+            # to the enclosing block, and the caller would lose the capture.
+            my $inner = $self->_pattern_text($in[1]);
+            $inner = defined $inner ? "(?:$inner)"
+                   : sprintf('(?:${\ (%s) })', $self->_expr($in[1]));
             my ($open, $close) = _match_delimiters($inner);
             $text = sprintf('(%s =~ m%s%s%s)',
                 $self->_expr($in[0]), $open, $inner, $close);
@@ -5202,6 +5210,46 @@ class SoN::Deparse 0.01 {
     # Anything but a plain scalar is parenthesised, so `->` binds to all of it.
     method _postfix_deref ($sigil, $text) {
         return $text =~ /\A\$\w+\z/ ? "$text->$sigil*" : "($text)->$sigil*";
+    }
+
+    # A COMPUTED PATTERN AS PATTERN TEXT, or undef when it cannot be one.
+    # The leaves of its Concat tree are written in order: a string constant
+    # raw -- a pattern literal hands its backslashes to the regex engine --
+    # and a plain scalar as itself, which interpolates its value. Anything a
+    # pattern literal would read differently from the string is refused:
+    # `$`, `@`, the \Q \E \U \L \u \l escapes, and a trailing backslash in
+    # text; text after a variable that would extend it (`[`, `{`, a word
+    # character, `:`, `->`); any leaf that is not a plain scalar.
+    method _pattern_text ($id) {
+        my @leaves = $self->_concat_leaves($id);
+        my $text = '';
+        for my $i (0 .. $#leaves) {
+            my ($kind, $s) = $leaves[$i]->@*;
+            if ($kind eq 'text') {
+                return undef if $s =~ /[\$\@]|\\[QEULul]|\\\z/;
+            }
+            else {
+                return undef unless $s =~ /\A\$(?:\w+|_\[\d+\])\z/;
+                my $next = $leaves[$i + 1];
+                return undef if $next && $next->[0] eq 'text'
+                             && $next->[1] =~ /\A(?:[\[\{\w:]|->)/;
+            }
+            $text .= $s;
+        }
+        return $text;
+    }
+
+    method _concat_leaves ($id) {
+        my $n  = $nodes->{$id} // {};
+        my $op = $n->{op} // '';
+        my @in = ($n->{inputs} // [])->@*;
+        return map { $self->_concat_leaves($_) } @in
+            if $op eq 'Concat' && @in == 2;
+        my $f = $n->{fields} // {};
+        return ['text', $f->{value}]
+            if $op eq 'Constant' && ($f->{const_type} // '') eq 'string'
+               && defined $f->{value};
+        return ['var', $self->_expr($id)];
     }
 
     method _constant ($n) {
