@@ -10908,6 +10908,24 @@ class SoN::FromOptree 0.01 {
         my $writes_iter =
             _body_writes_targ($cv, $body_start, $sim, $opmap, $x_targ, 1);
 
+        # A NAMED SCALAR IN THE LIST IS ITS VALUE when nothing writes the
+        # alias. Perl flags each list operand OPf_MOD -- it is aliased -- so
+        # the padsv pushed the variable's SLOT, and the slot held nothing
+        # the graph had bound: `map { "[$_]" } $p, $q` printed `[],[]`, and
+        # a foreach or grep over them the same. A body that DOES write the
+        # alias keeps the slots, which its write-back needs.
+        if (!$writes_iter && $array->isa('SoN::IR::Node::ArrayLiteral')
+            && grep { $_->isa('SoN::IR::Node::PadAccess') } $array->inputs->@*) {
+            my @vals = map {
+                my $v = $_;
+                ($v->isa('SoN::IR::Node::PadAccess') && defined $v->targ
+                    && ($v->sigil // '$') eq '$')
+                    ? ($sim->lookup($v->targ) // $v) : $v
+            } $array->inputs->@*;
+            $array = $factory->make('ArrayLiteral', inputs => \@vals,
+                ($array->stamp ? (stamp => $array->stamp) : ()));
+        }
+
         # A DESTRUCTIVE s/// IS A WRITE THAT _body_writes_targ CANNOT SEE. It
         # scouts for assignment ops, and a subst rebinds its target through the
         # scope map instead -- so `foreach ($l) { s/x/9/ }` scouted clean and
