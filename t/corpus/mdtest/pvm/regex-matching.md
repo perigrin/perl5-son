@@ -252,3 +252,120 @@ main::__PROGRAM__: {start: 0, returns: [9], nodes: [
   [Print, ~, [7], 0, Scalar], # 8
   [Return, ~, [1], 8]]} # 9
 ```
+
+## `pos` and `\G` on a signature parameter
+
+`pos($input) = $position` and the `\G` match after it both name the
+same variable: the parameter's own copy, not the caller's string. The
+match anchors where `pos` was set, so each call answers from its own
+starting point. Found by B::SoN translating chalk's lib/ and running chalk's own suite
+against the emitted Perl, which compiled and gave a wrong answer; with
+the next case, it was why chalk's grammar matcher never advanced.
+
+```perl
+use v5.36;
+sub token_end ($input, $position, $pattern) {
+    pos($input) = $position;
+    return $input =~ /\G($pattern)/ ? $position + length($1) : undef;
+}
+print token_end("aab", 1, "a+"), " ", token_end("aab", 2, "b"), " ",
+      defined token_end("aab", 0, "b") ? "matched" : "none", "\n";
+```
+
+```behavior
+parses: yes
+```
+
+```output
+2 3 none
+```
+
+```ir
+main::__PROGRAM__: {start: 0, returns: [20], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Constant, {const_type: string, value: aab}, ~, ~, Str], # 2
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 3
+  [Constant, {const_type: string, value: "a+"}, ~, ~, Str], # 4
+  [Call, {dispatch_kind: direct, name: main::token_end, param_names: [], want: list}, [2, 3, 4], 0, Unknown], # 5
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [5], ~, Str], # 6
+  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 7
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 8
+  [Constant, {const_type: string, value: b}, ~, ~, Str], # 9
+  [Call, {dispatch_kind: direct, name: main::token_end, param_names: [], want: list}, [2, 8, 9], 5, Unknown], # 10
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [10], ~, Str], # 11
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 12
+  [Call, {dispatch_kind: direct, name: main::token_end, param_names: [], want: scalar}, [2, 12, 9], 10, Unknown], # 13
+  [Defined, ~, [13], ~, Boolean], # 14
+  [Constant, {const_type: string, value: matched}, ~, ~, Str], # 15
+  [Constant, {const_type: string, value: none}, ~, ~, Str], # 16
+  [TernaryExpr, ~, [14, 15, 16], ~, Str], # 17
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 18
+  [Print, ~, [6, 7, 11, 7, 17, 18], 13, Scalar], # 19
+  [Return, ~, [1], 19]]} # 20
+main::token_end: {start: 0, returns: [19], nodes: [
+  [Start], # 0
+  [Parameter, {index: 0, name: $input, sigil: $}, ~, ~, Unknown], # 1
+  [Constant, {const_type: string, value: "\\G("}, ~, ~, Str], # 2
+  [Parameter, {index: 2, name: $pattern, sigil: $}, ~, ~, Str], # 3
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
+  [Concat, ~, [2, 4], ~, Str], # 5
+  [Constant, {const_type: string, value: ")"}, ~, ~, Str], # 6
+  [Concat, ~, [5, 6], ~, Str], # 7
+  [Match, ~, [1, 7], ~, Boolean], # 8
+  [Parameter, {index: 1, name: $position, sigil: $}, ~, ~, Num], # 9
+  [RegexCapture, {"n": 1}, [8], ~, Str], # 10
+  [Length, ~, [10], ~, Int], # 11
+  [Add, ~, [9, 11], ~, Num], # 12
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 13
+  [TernaryExpr, ~, [8, 12, 13], ~, Unknown], # 14
+  [MemStart], # 15
+  [PadAccess, {sigil: $, symbol: input}, [15], ~, Unknown], # 16
+  [Call, {dispatch_kind: builtin, name: pos, param_names: []}, [16], ~, Unknown], # 17
+  [Assign, ~, [17, 9], 0, Num], # 18
+  [Return, ~, [14], 18]]} # 19
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.036"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, ~, [3], 3]]} # 4
+```
+
+## A match in void context, kept for its captures
+
+`$s =~ /(\w+)=(\w+)/;` discards the match's value, and its captures
+remain: `$1` and `$2` are set for the statements after it. Found by B::SoN translating chalk's lib/ and running chalk's own suite
+against the emitted Perl, which compiled and gave a wrong answer; with
+the previous case, it was why chalk's grammar matcher never advanced.
+
+```perl
+my $s = "key=value";
+$s =~ /(\w+)=(\w+)/;
+print "$2 $1\n";
+```
+
+```behavior
+parses: yes
+```
+
+```output
+value key
+```
+
+```ir
+main::__PROGRAM__: {start: 0, returns: [12], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Constant, {const_type: string, value: "key=value"}, ~, ~, Str], # 2
+  [RegexMatch, {flags: "", pattern: "(\\w+)=(\\w+)"}, [2], 0, Boolean], # 3
+  [RegexCapture, {"n": 2}, [3], ~, Str], # 4
+  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 5
+  [Concat, ~, [4, 5], ~, Str], # 6
+  [RegexCapture, {"n": 1}, [3], ~, Str], # 7
+  [Concat, ~, [6, 7], ~, Str], # 8
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
+  [Concat, ~, [8, 9], ~, Str], # 10
+  [Print, ~, [10], 3, Scalar], # 11
+  [Return, ~, [1], 11]]} # 12
+```

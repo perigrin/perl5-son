@@ -33,7 +33,7 @@ my %FLOOR = (
     # ratchet FAILED on every run, which is to say it was never run. An opt-in
     # guard nobody runs is the decorative kind; a floor above the real number is
     # how it got that way.
-    corpus => 236,   # measured on t/corpus/mdtest/pvm (pvm dfe5d8c0, 236 cases), 2026-10-01
+    corpus => 242,   # measured twice on t/corpus/mdtest/pvm (pvm 84ecc3da + 3 local, 242 cases), 2026-10-02
     perl_t => 11,    # base/lex.t refuses on a `caller` bound to a list
     # chalk's lib/ at the commit tools/chalk-lib-roundtrip.pl pins (5948f648,
     # 179 modules), measured 2026-10-01.
