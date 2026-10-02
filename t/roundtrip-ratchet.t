@@ -49,7 +49,7 @@ my %FLOOR = (
 # compile with some of its graphs skipped, so COMPILES alone could hold while
 # the parse gate slipped. Lowering this needs no reason; raising it does.
 my %CEILING = (
-    chalk_skipped_graphs => 279,
+    chalk_skipped_graphs => 277,
 );
 
 # ONE RUN PER TOOL. The corpus census takes ~3 minutes, and a first draft of
