@@ -39,7 +39,7 @@ no operator whose text is "+"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [26], nodes: [
+main::__PROGRAM__: {start: 0, returns: [28], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [EnvRead, {key: X}, ~, ~, Str], # 2
@@ -54,19 +54,21 @@ main::__PROGRAM__: {start: 0, returns: [26], nodes: [
   [Coerce, {from_repr: Num, to_repr: Str}, [10], ~, Str], # 11
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 12
   [Concat, ~, [11, 12], ~, Str], # 13
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [4], ~, Str], # 14
-  [Concat, ~, [13, 14], ~, Str], # 15
-  [Concat, ~, [15, 12], ~, Str], # 16
-  [Coerce, {from_repr: Scalar, to_repr: Str}, [6], ~, Str], # 17
-  [Concat, ~, [16, 17], ~, Str], # 18
-  [Concat, ~, [18, 12], ~, Str], # 19
-  [Concat, ~, [19, 17], ~, Str], # 20
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 14
+  [DefinedOr, ~, [4, 14], ~, Scalar], # 15
+  [Coerce, {from_repr: Scalar, to_repr: Str}, [15], ~, Str], # 16
+  [Concat, ~, [13, 16], ~, Str], # 17
+  [Concat, ~, [17, 12], ~, Str], # 18
+  [Coerce, {from_repr: Scalar, to_repr: Str}, [6], ~, Str], # 19
+  [Concat, ~, [18, 19], ~, Str], # 20
   [Concat, ~, [20, 12], ~, Str], # 21
-  [Concat, ~, [21, 11], ~, Str], # 22
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 23
-  [Concat, ~, [22, 23], ~, Str], # 24
-  [Print, ~, [24], 0, Scalar], # 25
-  [Return, {implicit: true}, [1], 25]]} # 26
+  [Concat, ~, [21, 19], ~, Str], # 22
+  [Concat, ~, [22, 12], ~, Str], # 23
+  [Concat, ~, [23, 11], ~, Str], # 24
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 25
+  [Concat, ~, [24, 25], ~, Str], # 26
+  [Print, ~, [26], 0, Scalar], # 27
+  [Return, {implicit: true}, [1], 27]]} # 28
 ```
 
 ## The magic string increment

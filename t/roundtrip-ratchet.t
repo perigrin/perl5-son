@@ -33,11 +33,11 @@ my %FLOOR = (
     # ratchet FAILED on every run, which is to say it was never run. An opt-in
     # guard nobody runs is the decorative kind; a floor above the real number is
     # how it got that way.
-    corpus => 242,   # measured on t/corpus/mdtest/pvm (pvm 530b5496, 242 cases), 2026-10-02
+    corpus => 251,   # measured twice on t/corpus/mdtest/pvm (pvm 530b5496 + 9 local, 251 cases), 2026-10-02
     perl_t => 11,    # base/lex.t refuses on a `caller` bound to a list
     # chalk's lib/ at the commit tools/chalk-lib-roundtrip.pl pins (5948f648,
-    # 179 modules), measured at 5215419 twice, 2026-10-02.
-    chalk_compiles => 132,
+    # 179 modules), measured at a4b8e49 and 3da44c8, 2026-10-02.
+    chalk_compiles => 133,
     # chalk's own test files (547 at 5948f648) giving the same result
     # against the emitted lib/ as against the original -- tools/chalk-gate3.pl,
     # measured 530 at 5215419 and 531 at 2bd9512. Files that time out

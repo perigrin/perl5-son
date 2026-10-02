@@ -206,26 +206,29 @@ main::__PROGRAM__: {start: 0, returns: [19], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 14
   [Concat, ~, [13, 14], ~, Str], # 15
   [Call, {dispatch_kind: direct, name: main::bump_alias, param_names: [], want: void}, [7], 6, Scalar], # 16
-  [Call, {dispatch_kind: direct, name: main::bump_copy, param_names: [], want: void}, [11], 16, Unknown], # 17
+  [Call, {dispatch_kind: direct, name: main::bump_copy, param_names: [], want: void}, [11], 16, Scalar], # 17
   [Print, ~, [15], 17, Scalar], # 18
   [Return, {implicit: true}, [1], 18]]} # 19
-main::bump_alias: {start: 0, returns: [8], nodes: [
+main::bump_alias: {start: 0, returns: [9], nodes: [
   [Start], # 0
   [ArgsSource, ~, ~, ~, Array], # 1
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 2
   [MemStart], # 3
-  [Subscript, {kind: array}, [1, 2, 3], ~, Scalar], # 4
-  [Subscript, {kind: array}, [1, 2], ~, Scalar], # 5
-  [Increment, ~, [4], ~, Scalar], # 6
-  [Assign, ~, [5, 6], 0, Scalar], # 7
-  [Return, {implicit: true}, [4], 7]]} # 8
-main::bump_copy: {start: 0, returns: [2], nodes: [
+  [Subscript, {kind: array}, [1, 2, 3], 0, Scalar], # 4
+  [DefinedOr, ~, [4, 2], ~, Scalar], # 5
+  [Subscript, {kind: array}, [1, 2], ~, Scalar], # 6
+  [Increment, ~, [4], ~, Scalar], # 7
+  [Assign, ~, [6, 7], 4, Scalar], # 8
+  [Return, {implicit: true}, [5], 8]]} # 9
+main::bump_copy: {start: 0, returns: [4], nodes: [
   [Start], # 0
   [PadAccess, {sigil: $, symbol: "n"}, ~, ~, Unknown], # 1
-  [Return, {implicit: true}, [1], 0], # 2
-  [ArgsSource, ~, ~, ~, Array], # 3
-  [Assign, ~, [1, 3], ~, List], # 4
-  [Increment, ~, [1], ~, Scalar]]} # 5
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 2
+  [DefinedOr, ~, [1, 2], ~, Scalar], # 3
+  [Return, {implicit: true}, [3], 0], # 4
+  [ArgsSource, ~, ~, ~, Array], # 5
+  [Assign, ~, [1, 5], ~, List], # 6
+  [Increment, ~, [1], ~, Scalar]]} # 7
 ```
 
 ## Explicit return, early and trailing
@@ -559,14 +562,15 @@ main::__PROGRAM__: {start: 0, returns: [26], nodes: [
   [Count, ~, [4, 9], ~, Int], # 27
   [NumGt, ~, [27, 7], 6, Boolean], # 28
   [Add, ~, [7, 2], ~, Int]]} # 29
-main::bump: {start: 0, returns: [8], nodes: [
+main::bump: {start: 0, returns: [9], nodes: [
   [Start], # 0
   [ArgsSource, ~, ~, ~, Array], # 1
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 2
   [MemStart], # 3
-  [Subscript, {kind: array}, [1, 2, 3], ~, Scalar], # 4
-  [Subscript, {kind: array}, [1, 2], ~, Scalar], # 5
-  [Increment, ~, [4], ~, Scalar], # 6
-  [Assign, ~, [5, 6], 0, Scalar], # 7
-  [Return, {implicit: true}, [4], 7]]} # 8
+  [Subscript, {kind: array}, [1, 2, 3], 0, Scalar], # 4
+  [DefinedOr, ~, [4, 2], ~, Scalar], # 5
+  [Subscript, {kind: array}, [1, 2], ~, Scalar], # 6
+  [Increment, ~, [4], ~, Scalar], # 7
+  [Assign, ~, [6, 7], 4, Scalar], # 8
+  [Return, {implicit: true}, [5], 8]]} # 9
 ```

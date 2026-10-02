@@ -350,7 +350,7 @@ Index::__DEFAULT_1: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 1
   [Return, ~, [1], 0]]} # 2
-Index::register: {start: 0, returns: [17], nodes: [
+Index::register: {start: 0, returns: [19], nodes: [
   [Start], # 0
   [FieldAccess, {field_index: 0, field_stash: Index}, ~, ~, Unknown], # 1
   [Parameter, {index: 0, name: $key, sigil: $}, ~, ~, Unknown], # 2
@@ -360,15 +360,17 @@ Index::register: {start: 0, returns: [17], nodes: [
   [If, ~, [0, 5], 0], # 6
   [Proj, {index: 1}, [6]], # 7
   [FieldAccess, {field_index: 1, field_stash: Index}, ~, 7, Int], # 8
-  [Proj, {index: 0}, [6]], # 9
-  [Subscript, {kind: hash}, [1, 2], ~, Scalar], # 10
-  [FieldAccess, {field_index: 1, field_stash: Index}, ~, ~, Int], # 11
-  [Increment, ~, [8], ~, Scalar], # 12
-  [Assign, ~, [11, 12], 8, Scalar], # 13
-  [Assign, ~, [10, 8], 13, Int], # 14
-  [Region, {head: 6}, [9, 14]], # 15
-  [Phi, {predecessors: [9, 7], region: 15}, [4, 8], ~, Scalar], # 16
-  [Return, ~, [16], 15]]} # 17
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 9
+  [DefinedOr, ~, [8, 9], ~, Scalar], # 10
+  [Proj, {index: 0}, [6]], # 11
+  [Subscript, {kind: hash}, [1, 2], ~, Scalar], # 12
+  [FieldAccess, {field_index: 1, field_stash: Index}, ~, ~, Int], # 13
+  [Increment, ~, [8], ~, Scalar], # 14
+  [Assign, ~, [13, 14], 8, Scalar], # 15
+  [Assign, ~, [12, 10], 15, Scalar], # 16
+  [Region, {head: 6}, [11, 16]], # 17
+  [Phi, {predecessors: [11, 7], region: 17}, [4, 10], ~, Scalar], # 18
+  [Return, ~, [18], 17]]} # 19
 main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1

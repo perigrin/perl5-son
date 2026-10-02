@@ -247,16 +247,17 @@ main::answer: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "42"}, ~, ~, Int], # 1
   [Return, {implicit: true}, [1], 0]]} # 2
-main::bump: {start: 0, returns: [8], nodes: [
+main::bump: {start: 0, returns: [9], nodes: [
   [Start], # 0
   [ArgsSource, ~, ~, ~, Array], # 1
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 2
   [MemStart], # 3
-  [Subscript, {kind: array}, [1, 2, 3], ~, Scalar], # 4
-  [Subscript, {kind: array}, [1, 2], ~, Scalar], # 5
-  [Increment, ~, [4], ~, Scalar], # 6
-  [Assign, ~, [5, 6], 0, Scalar], # 7
-  [Return, {implicit: true}, [4], 7]]} # 8
+  [Subscript, {kind: array}, [1, 2, 3], 0, Scalar], # 4
+  [DefinedOr, ~, [4, 2], ~, Scalar], # 5
+  [Subscript, {kind: array}, [1, 2], ~, Scalar], # 6
+  [Increment, ~, [4], ~, Scalar], # 7
+  [Assign, ~, [6, 7], 4, Scalar], # 8
+  [Return, {implicit: true}, [5], 8]]} # 9
 main::f: {start: 0, returns: [8], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "f["}, ~, ~, Str], # 1
