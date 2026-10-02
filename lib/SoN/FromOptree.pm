@@ -1685,14 +1685,33 @@ class SoN::FromOptree 0.01 {
                 die "GAP: `$spelling` into something other than a lexical scalar\n"
                     unless $tgt_op->name eq 'padsv' && $tgt_op->targ;
                 my $targ = $tgt_op->targ;
+                # A CLASS FIELD IS STORED, NOT REBOUND -- the same write form
+                # `$field++` and `$field .= ...` are. Rebinding it as a pad
+                # slot dropped `$s //= $x` with no word, and a right side with
+                # an effect refused (chalk's Node/BinOp.pm ADJUST). It takes
+                # the memory slot's path below, reading the field pinned where
+                # it is read rather than a slot at a memory version.
+                my $field_lvalue = do {
+                    my $lv = _make_pad_or_field($cv, $targ, $factory);
+                    $lv->isa('SoN::IR::Node::FieldAccess') ? $lv : undef;
+                };
+                my $read_field = sub ($s) {
+                    my $read = $factory->make_unique('FieldAccess',
+                        field_index => $field_lvalue->field_index,
+                        field_stash => $field_lvalue->field_stash);
+                    $read->set_control_in($s->control);
+                    $s->set_control($read);
+                    return $read;
+                };
                 # A REFERENCED OR SHARED LEXICAL IS A SLOT IN MEMORY, read and
                 # written like any demoted variable -- and `$C //= make()` is
                 # the memo idiom, whose right side must run ONLY when the test
                 # fails. So: the target padsv already pushed the slot's read;
                 # branch on it, walk the right side on the taken arm and store
                 # it there, merge, and read the slot again for the value.
-                if ($ctx->{addr_taken}{$targ}) {
+                if ($ctx->{addr_taken}{$targ} || $field_lvalue) {
                     my $current = $sim->pop_node;
+                    $current = $read_field->($sim) if $field_lvalue;
                     my $test = $name eq 'dorassign'
                         ? $factory->make('Defined', inputs => [$current])
                         : $current;
@@ -1723,12 +1742,18 @@ class SoN::FromOptree 0.01 {
                             (defined $s->memory ? (inputs => [ $s->memory ]) : ()));
                     };
                     my $write = $factory->make('Assign',
-                        inputs => [$slot->($set_sim), $rhs]);
+                        inputs => [$field_lvalue // $slot->($set_sim), $rhs]);
                     $write->set_control_in($set_sim->control);
                     $set_sim->set_control($write);
-                    $set_sim->set_memory($write) if defined $set_sim->memory;
+                    $set_sim->set_memory($write)
+                        if defined $set_sim->memory && !$field_lvalue;
                     $sim->merge($set_sim, $factory, $if_node);
-                    $sim->push_node($slot->($sim));
+                    # A field read is pinned, and a pinned read nothing uses
+                    # has no rendering: in void context the stack keeps the
+                    # test's read instead of a new one.
+                    $sim->push_node(!$field_lvalue ? $slot->($sim)
+                        : ($op->flags & 3) == 1 ? $current   # OPf_WANT_VOID
+                        : $read_field->($sim));
                     $op = $op->next;
                     next;
                 }
@@ -7981,8 +8006,27 @@ class SoN::FromOptree 0.01 {
                         && $pkg_target->isa('SoN::IR::Node::EntryDef');
             }
 
+            # A FIELD TARGET IS A FIELD STORE, not a pad rebind -- the same
+            # sixth write form `$field++` is. Rebinding it as a pad slot
+            # dropped `$s .= $x` in a method without a word, and in an ADJUST
+            # the append read an unbound slot. The append reads a fresh field
+            # value pinned before the store, as `++` does.
+            my $field_lvalue;
+            if (!$pkg_target && !($op->flags & 64)) {
+                my $lv = _make_pad_or_field($cv, $op->targ, $factory);
+                $field_lvalue = $lv if $lv->isa('SoN::IR::Node::FieldAccess');
+            }
+
             my $acc;
-            if ($op->private & 0x40) {
+            if (($op->private & 0x40) && $field_lvalue) {
+                $acc = $factory->make_unique('FieldAccess',
+                    field_index => $field_lvalue->field_index,
+                    field_stash => $field_lvalue->field_stash);
+                $acc->set_control_in($sim->control);
+                $sim->set_control($acc);
+                $acc = $concat->($acc, $mkstr->($seg[0])) if defined $seg[0];
+            }
+            elsif ($op->private & 0x40) {
                 $acc = $pkg_target
                     ? $sim->lookup(_stash_key($pkg_target))
                     : $sim->lookup($op->targ);
@@ -8077,6 +8121,14 @@ class SoN::FromOptree 0.01 {
                 die "GAP: multiconcat storing into a stacked destination that is"
                   . " not a package scalar not yet lowered -- storing to the"
                   . " op's targ drops the assignment\n";
+            }
+            if ($field_lvalue) {
+                my $store = $factory->make('Assign',
+                    inputs => [$field_lvalue, $acc]);
+                $store->set_control_in($sim->control);
+                $sim->set_control($store);
+                $sim->push_node($acc) unless ($op->flags & 3) == 1;   # void
+                return ($op->next, 'handled');
             }
             # OPpLVAL_INTRO (0x80): a new lexical (`my $c = qq{...}`). The main
             # walker wraps the pad slot in a VarDecl so the declaration is

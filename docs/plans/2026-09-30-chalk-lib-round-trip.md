@@ -141,6 +141,30 @@ postfix `if` in Symbol.pm's to_string. B::SoN renders it as a ternary, as a
 compiler is free to; those rows need a per-test decision once the spellings
 stop masking them.
 
+## Silent drops in class code, found through gate 3
+
+ir-node-binop.t died after two tests against the emitted Node/BinOp.pm,
+whose ADJUST (`$left //= $self->inputs()->[0]`) was missing. Three silent
+drops, and a census that let the module through as clean:
+
+  - `$f .= ...` and `$f = "..$x.."` into a field: multiconcat rebound the
+    target as a pad slot. In a method the store vanished; in an ADJUST the
+    serializer died on the unbound read. Now Assign(FieldAccess)
+    (t/deparse-a-string-build-into-a-field.t).
+  - `//=`, `||=`, `&&=` into a field: the same rebind, and a right side with
+    an effect refused. Now the memory-slot path: If, the right side on the
+    assigning arm, the store there, a pinned read after
+    (t/deparse-a-logical-assign-into-a-field.t).
+  - A subclass's own ADJUST blocks were all dropped, without a warning,
+    when its parent had any: `scalar adjust_cvs(...)` is the last block,
+    not a count (t/deparse-an-adjust-of-a-subclass.t).
+  - tools/chalk-lib-roundtrip.pl counted only `skipped` and `INTERNAL`; a
+    dropped ADJUST warns in its own words. It counts as a skipped graph
+    now, so such a module is not overlaid.
+
+The other fused field writes (`+=`, `x=`, `**=`, `|=`, `<<=`, ...) round-trip;
+probed with starting values that make each one change the field.
+
 ## Open-world wire facts, as built
 
   - A class from another file: `external` on its class record (5425304); an

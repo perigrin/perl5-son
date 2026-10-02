@@ -2994,7 +2994,11 @@ sub _extract_class {
     my $inherited = 0;
     if ( defined $parent ) {
         no strict 'refs';
-        $inherited = scalar SoN::ClassAux::adjust_cvs( \%{"${parent}::"} );
+        # COUNTED, NOT `scalar`: adjust_cvs returns a list, and in scalar
+        # context it gave the parent's last block -- a code reference whose
+        # address emptied the range below and dropped every block of the
+        # child's own, silently.
+        $inherited = () = SoN::ClassAux::adjust_cvs( \%{"${parent}::"} );
     }
     my $aix = 0;
     for my $i ( $inherited .. $#adj_cvs ) {

@@ -41,7 +41,10 @@ $skipped_graphs = 0;
 for my $m (@mods) {
     my $json = `cd '$snap' && $^X -I$son -Ilib -MO=-q,SoN,json,not_package=SoN $m 2>$out/err`;
     my $err = do { local (@ARGV, $/) = "$out/err"; <> } // '';
-    my @skipped = $err =~ /^B::SoN: (?:skipped|INTERNAL)[^\n]*/mg;
+    # A DROPPED ADJUST BLOCK IS A SKIPPED GRAPH TOO. It warns in its own
+    # words, and counting only `skipped` passed chalk's Node/BinOp.pm as
+    # clean: gate 3 overlaid a class that no longer ran its ADJUST.
+    my @skipped = $err =~ /^B::SoN: (?:skipped|INTERNAL|\S+ ADJUST block \d+ dropped)[^\n]*/mg;
     $skipped_graphs += @skipped;
     $why{SKIPPED}{ $_ =~ s/skipped \S+: //r =~ s/\n.*//sr }++ for @skipped;
     my $data = eval { JSON::PP->new->utf8->decode($json) };
