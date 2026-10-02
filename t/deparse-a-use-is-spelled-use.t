@@ -75,4 +75,32 @@ use v5.42; use experimental 'class';
 class C { method m { return 7 } } print C->new->m, "\n";
 SRC
 
+# `use experimental 'class'` TURNS ON THE FEATURE AND SILENCES ITS WARNING,
+# so the class section's own two lines repeated it -- and chalk counts them:
+# perl-actions-tier-a found its class one statement later than the source
+# put it.
+{
+    my $src = "use v5.42; use experimental 'class';\nclass C { method m { 7 } }\nprint C->new->m, \"\\n\";\n";
+    my $out = SoN::Deparse->new->render(graph_of($src));
+    unlike $out, qr/^use feature 'class';$/m,
+        'the class feature is not said twice after use experimental';
+    is run_perl($out), "7\n", '... and the class still compiles';
+}
+{
+    my $src = "use v5.42; use feature 'class'; no warnings 'experimental::class';\nclass C { method m { 7 } }\nprint C->new->m, \"\\n\";\n";
+    my $out = SoN::Deparse->new->render(graph_of($src));
+    is run_perl($out), "7\n", 'a class under use feature still compiles';
+}
+
+# A PLAIN SUB DECLARED IN A CLASS BLOCK stays in it. Spelled outside as
+# `sub Chalk::IR::Node::Start::identity_kind`, it is the same sub to perl but
+# a top-level one to chalk, which reads the class's statements from source.
+{
+    my $src = "use v5.42; use experimental 'class';\nclass C { method m { 7 } sub kind { 'k' } }\nprint C->new->m, C::kind(), \"\\n\";\n";
+    my $out = SoN::Deparse->new->render(graph_of($src));
+    like $out, qr/^class C \{\n.*^sub kind \{.*^\}\nmy \$eff/ms, 'a sub declared in a class is emitted in it';
+    unlike $out, qr/^sub C::kind\b/m, '... and not again outside it';
+    is run_perl($out), "7k\n", '... and still runs';
+}
+
 done_testing;

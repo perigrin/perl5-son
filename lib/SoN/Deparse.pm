@@ -316,6 +316,12 @@ class SoN::Deparse 0.01 {
         # than out here as named subs, where a method could not see its fields.
         my ($classes_text, $class_owned) = $self->_emit_classes;
         return undef unless defined $classes_text;
+        # `use experimental 'class'` already said both of the class section's
+        # opening lines; repeated, they are two more statements than the
+        # source has, and chalk -- which reads lib/ as source -- counts them.
+        # A file-scope pragma, so a `package` between them does not end it.
+        $classes_text =~ s/\Ause feature 'class';\nno warnings 'experimental::class';\n//
+            if $begins =~ /^use experimental\b[^;]*"class"/m;
         $out .= $classes_text;
 
         for my $name (sort keys $methods->%*) {
@@ -715,6 +721,19 @@ class SoN::Deparse 0.01 {
                                    $all_methods->{$key} // {}) };
                 unless (defined $b) { $gap = $@ || "failed to render $key"; return (undef) }
                 $body .= "method $m {\n" . _indent($b) . "}\n";
+            }
+            # A PLAIN SUB DECLARED IN THE CLASS BLOCK goes back in it, by its
+            # short name. Outside, fully qualified, it is the same sub to perl
+            # and a top-level one to a reader of the source.
+            for my $s (sort keys(($c->{subs} // {})->%*)) {
+                my $rec = $c->{subs}{$s};
+                my $key = ref $rec eq 'HASH' ? $rec->{graph} : $rec;
+                next unless defined $key && $all_methods->{$key};
+                $owned{$key} = 1;
+                my $sub = eval { $self->_emit_sub($key, $all_methods->{$key}) };
+                unless (defined $sub) { $gap = $@ || "failed to render $key"; return (undef) }
+                $sub =~ s/\Asub \Q$key\E\b/sub $s/;
+                $body .= $sub;
             }
             my $isa = defined $c->{parent} ? " :isa($c->{parent})" : '';
             $text .= "class $name$isa {\n" . _indent($body) . "}\n";
