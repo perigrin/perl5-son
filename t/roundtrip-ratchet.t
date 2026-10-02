@@ -36,13 +36,13 @@ my %FLOOR = (
     corpus => 242,   # measured on t/corpus/mdtest/pvm (pvm 530b5496, 242 cases), 2026-10-02
     perl_t => 11,    # base/lex.t refuses on a `caller` bound to a list
     # chalk's lib/ at the commit tools/chalk-lib-roundtrip.pl pins (5948f648,
-    # 179 modules), measured 2026-10-01.
-    chalk_compiles => 130,
+    # 179 modules), measured at 5215419 twice, 2026-10-02.
+    chalk_compiles => 132,
     # chalk's own test files (547 at 5948f648) giving the same result
     # against the emitted lib/ as against the original -- tools/chalk-gate3.pl,
-    # measured 479 at ea6d8b3 and 482 at 32ab26d. Files that time out
+    # measured 530 at 5215419 and 531 at 2bd9512. Files that time out
     # against the ORIGINAL are SLOW and left out.
-    chalk_gate3_same => 479,
+    chalk_gate3_same => 530,
 );
 
 # A CEILING, NOT A FLOOR: graphs B::SoN skipped in chalk's lib/. A module can
