@@ -2588,8 +2588,12 @@ sub _cv_signature {
     my $i = 0;
     for my $el (@argelem) {
         my $sigil = $SIGIL{ $el->private // 0 } // '$';
+        # THE ARGUMENT'S OWN INDEX, from argelem's aux. A placeholder (`$`,
+        # `$=`, `@`) has no argelem, so counting the named ones put `$phi` of
+        # `($, $phi)` at 0 where its argument is at 1.
+        my ($at) = eval { $el->aux_list($cv) };
         push @params, {
-            index => $i,
+            index => defined $at ? 0 + $at : $i,
             name  => _pad_name_for( $cv, $el->targ ) // ( $sigil . "p$i" ),
             sigil => $sigil,
         };

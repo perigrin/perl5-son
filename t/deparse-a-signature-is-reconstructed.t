@@ -112,4 +112,21 @@ sub f ($x) { return "f$x" } sub g ($v) { return defined($v) ? f($v) : "u" }
 print g(1), g(undef), "\n";
 SRC
 
+# A PLACEHOLDER HAS NO argelem, so the signature record never saw it, and
+# numbered the named parameters as if it were not there: `sub collapse_phi($,
+# $phi)`, chalk's IR::Optimizer, came back as `($phi)` and refused the class
+# name its caller passes ("Too many arguments ... got 2; expected 1").
+round_trips(<<'SRC', 'placeholder parameters', qr/^sub f\(\$, \$x, \$=, \@\) \{/m);
+use v5.42;
+sub f ($, $x, $=, @) { return $x }
+print f(1, 2), f(1, 2, 3, 4, 5), "\n";
+print eval { f(1); 1 } ? "ran\n" : "too few\n";
+SRC
+
+round_trips(<<'SRC', 'a class-method placeholder');
+use v5.42;
+package O { sub collapse ($, $phi) { return "c$phi" } }
+print O->collapse(7), "\n";
+SRC
+
 done_testing;

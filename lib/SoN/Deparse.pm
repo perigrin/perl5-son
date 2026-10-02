@@ -680,25 +680,32 @@ class SoN::Deparse 0.01 {
     method _signature_for ($key, $graph) {
         my $sig = $self->_signature_of($key) // return '';
         return $self->_in_graph($key, $graph, sub {
-            my @params   = ($sig->{params} // [])->@*;
-            my $scalars  = grep { ($_->{sigil} // '$') eq '$' } @params;
+            # EVERY POSITION, from perl's own counts -- a placeholder (`$`,
+            # `$=`, `@`) has no record, only its place.
+            my $scalars  = $sig->{mandatory} // 0;
             my $required = $scalars - ($sig->{optional} // 0);
+            my %named = map { ($_->{index} // -1) => $_ } ($sig->{params} // [])->@*;
             my %node = map { ((($_->{fields} // {})->{index}) // -1) => $_ }
                        grep { ($_->{op} // '') eq 'Parameter' }
                        $self->_nodes_in_order;
             my @parts;
-            for my $i (0 .. $#params) {
-                my $p = $params[$i];
-                if (($p->{sigil} // '$') ne '$' || $i < $required) {
-                    push @parts, $p->{name};
+            for my $i (0 .. $scalars - 1) {
+                my $p = $named{$i};
+                if ($i < $required) {
+                    push @parts, $p ? $p->{name} : '$';
                     next;
                 }
-                my $n    = $node{ $p->{index} // $i };
+                unless ($p) { push @parts, '$='; next }
+                my $n    = $node{$i};
                 my $when = (($n // {})->{fields} // {})->{default_when} // 'absent';
                 my $in   = $n ? ($n->{inputs} // [])->[0] : undef;
                 my $d    = defined $in ? $self->_expr($in) : 'undef';
                 push @parts, sprintf('%s %s %s', $p->{name},
                     $when eq 'undef' ? '//=' : $when eq 'false' ? '||=' : '=', $d);
+            }
+            if (my $slurpy = $sig->{slurpy}) {
+                my ($p) = grep { ($_->{sigil} // '$') ne '$' } values %named;
+                push @parts, $p ? $p->{name} : $slurpy;
             }
             '(' . join(', ', @parts) . ')';
         });
