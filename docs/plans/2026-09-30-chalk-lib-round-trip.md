@@ -90,6 +90,43 @@ Measured against a snapshot of chalk HEAD 5948f648 (179 modules, 43k lines,
     graph draws "Deep recursion on anonymous subroutine" warnings. Output is
     right; the walk should be iterative.
 
+## Gate 3 reads source: the emission must be Perl chalk can parse
+
+59 of chalk's 547 test files read lib/ modules as INPUT to chalk's own
+parser (cfg-statements.t parses lib/Chalk/Grammar/Symbol.pm). Gate 3
+overlays those files with the emission, so those tests parse B::SoN's output.
+perigrin: chalk will meet the same test compiling itself and "needs to be
+able to parse its own output" -- so the file overlay stays and these rows
+are gaps, not harness noise.
+
+Run over the 130 emitted modules (chalk's grammar from perl_pipeline):
+
+  - All 130 failed on the preamble: chalk reads `use v5.42.0;` and
+    `use 5.42.0;`, not `use v5.42;`.
+  - Past it: `undef()` (~20 modules), circumfix `@{EXPR}` / `%{EXPR}`
+    (none of chalk's grammar; it reads `@$name` and `EXPR->@*`), and one
+    regex interpolation `m{(?:${\ (...)})}` -- not yet examined.
+
+Renderer spellings now: `use v5.42.0;`, `(undef)`, postfix dereference
+(t/deparse-an-emission-chalk-can-read.t, which also runs chalk's parser over
+each case when a chalk clone is present).
+
+Chalk-side gaps met on the way, at 5948f648, in chalk's semantic actions
+rather than its grammar -- they fail the ORIGINAL modules too (19 of 130):
+
+  - "Unknown data node operation: ArrayRef / HashRef" for any anonymous
+    `[...]` / `{...}`, `\%h`, and any list of two or more elements
+    (`my @x = ($a, $b)`).
+  - `@main::x` (a package-qualified aggregate) does not parse. B::SoN spells
+    package aggregates qualified (T2.pm: `%Chalk::IR::Transform::T2::...`,
+    and a self-assignment `%X = %X;` there worth reading). T2's original
+    fails in chalk anyway, so it is not yet on the measured path.
+
+Not a spelling: some tests assert the SHAPE of a lib/ file's source -- the
+postfix `if` in Symbol.pm's to_string. B::SoN renders it as a ternary, as a
+compiler is free to; those rows need a per-test decision once the spellings
+stop masking them.
+
 ## Open-world wire facts, as built
 
   - A class from another file: `external` on its class record (5425304); an

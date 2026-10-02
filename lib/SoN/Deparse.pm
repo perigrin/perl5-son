@@ -33,8 +33,10 @@ use experimental 'class';
 # chalk consumes too, so a rendering defect here is a wire defect, not an
 # artefact of reaching into the producer.
 class SoN::Deparse 0.01 {
-    # The version bundle every emission opens with.
-    our $TARGET_BUNDLE = 'v5.42';
+    # The version bundle every emission opens with. Three parts, not
+    # `v5.42`: chalk's grammar reads a two-part v-string as a module name
+    # and stops at the dot.
+    our $TARGET_BUNDLE = 'v5.42.0';
 
     # ONE TABLE, ONE SPELLING EACH. These are not interchangeable: `==` for
     # `eq` agrees on numbers and disagrees on strings, which is exactly the
@@ -450,6 +452,10 @@ class SoN::Deparse 0.01 {
             if $kind eq 'FieldAccess' && $spelling =~ /\A([\@%])\w/;
 
         if ($st eq 'Array' || $st eq 'Hash') {
+            # A POSTFIX DEREFERENCE (see _postfix_deref) is indexed through
+            # the arrow: `$r->@*` gives `$r->[$i]`.
+            return $st eq 'Array' ? "$1\->[$key]" : "$1\->{$key}"
+                if $spelling =~ /\A(.*)->[\@%]\*\z/s;
             die "GAP: an element of a `$kind` spelled `$spelling` has no"
               . " aggregate sigil to switch\n"
                 unless $spelling =~ s/\A[\@\%]/\$/;
@@ -3431,11 +3437,13 @@ class SoN::Deparse 0.01 {
             #
             # Keyed on the target's SPELLING rather than its node kind: `@`
             # and `%` take a list, `$` takes one scalar, and that is true
-            # however the container was named. A scalar target keeps the
-            # single-value form, so `$x = 1` does not become `$x = (1)`.
+            # however the container was named. A postfix dereference
+            # (`$r->@*`) is an aggregate too, though it opens with `$`. A
+            # scalar target keeps the single-value form, so `$x = 1` does not
+            # become `$x = (1)`.
             return sprintf("%s%s = (%s);\n",
                 $decl, $lhs[0], join(', ', @rhs))
-                if $lhs[0] =~ /\A[\@%]/;
+                if $lhs[0] =~ /\A[\@%]|->[\@%]\*\z/;
 
             # A SCALAR TARGET FROM A LIST SOURCE STILL NEEDS THE PARENS.
             # `my ($a) = @_` binds the FIRST ELEMENT; `my $a = @_` binds the
@@ -4001,12 +4009,13 @@ class SoN::Deparse 0.01 {
                                && ($st eq 'Array' || $st eq 'Hash'))
                 ? sprintf('scalar(%s)', $self->_expr($in[0]))
                 : $st =~ /\A(Array|Hash)Ref\z/
-                ? sprintf('scalar(%s{%s})', ($1 eq 'Hash' ? '%' : '@'),
-                          $self->_expr($in[0]))
+                ? sprintf('scalar(%s)', $self->_postfix_deref(
+                          ($1 eq 'Hash' ? '%' : '@'), $self->_expr($in[0])))
                 : $st eq 'List' || ($agg->{op} // '') =~ /Literal\z/
                 ? sprintf('do { my @c%d = %s; scalar(@c%d) }',
                           $id, $self->_expr($in[0]), $id)
-                : sprintf('scalar(@{%s})', $self->_expr($in[0]));
+                : sprintf('scalar(%s)',
+                          $self->_postfix_deref('@', $self->_expr($in[0])));
         }
         elsif ($op eq 'Length') {
             die "GAP: a Length with " . scalar(@in) . " inputs is not yet"
@@ -4073,7 +4082,7 @@ class SoN::Deparse 0.01 {
                   ? sprintf('%s%s', $sigil, $af->{symbol})
                   : ($st eq 'Array' || $st eq 'Hash')
                   ? $self->_expr($in[0])
-                  : sprintf('%s{%s}', $sigil, $self->_expr($in[0]));
+                  : $self->_postfix_deref($sigil, $self->_expr($in[0]));
         }
         elsif ($op eq 'ArgsSource') {
             # THE SUB'S ARGUMENT ARRAY. `my ($x,$y) = @_` binds from it, so it
@@ -4324,8 +4333,10 @@ class SoN::Deparse 0.01 {
                 return $text;
             }
 
+            # `\$r->@*` IS THE REFERENCE: `->` binds tighter than `\`. In
+            # parentheses it would be a list of references to the elements.
             my $inner = $self->_location($in[0]);
-            $text = $inner =~ /\A[\@%][\w:]+\z/
+            $text = $inner =~ /\A[\@%][\w:]+\z|->[\@%]\*\z/
                 ? sprintf('\\%s', $inner)
                 : sprintf('\\(%s)', $inner);
         }
@@ -5186,16 +5197,25 @@ class SoN::Deparse 0.01 {
         return ("$ht ", map { $self->_expr($_) } @in);
     }
 
+    # A DEREFERENCE IS SPELLED POSTFIX -- `EXPR->@*`, never `@{EXPR}`. Chalk's
+    # grammar has no circumfix dereference; its own lib/ is written postfix.
+    # Anything but a plain scalar is parenthesised, so `->` binds to all of it.
+    method _postfix_deref ($sigil, $text) {
+        return $text =~ /\A\$\w+\z/ ? "$text->$sigil*" : "($text)->$sigil*";
+    }
+
     method _constant ($n) {
         my $f = $n->{fields} // {};
         my $t = $f->{const_type} // '';
         my $v = $f->{value};
 
-        # `undef()`, NOT BARE: as an operand the bare word takes what follows
+        # `(undef)`, NOT BARE: as an operand the bare word takes what follows
         # as ITS operand -- `undef + 1` is undef(+1), "Can't modify constant
         # item" -- and `undef ? a : b` warns it is ambiguous. Measured on a
         # flip-flop outside a loop, whose undef start state is inlined.
-        return 'undef()' if $t eq 'undef' || !defined $v;
+        # Parenthesised rather than called: chalk's grammar reads `(undef)`
+        # and not `undef()`.
+        return '(undef)' if $t eq 'undef' || !defined $v;
         return $v      if $t eq 'integer' || $t eq 'number';
         if ($t eq 'string') {
             # DOUBLE-QUOTED WITH EXPLICIT ESCAPES. A single-quoted literal

@@ -34,7 +34,7 @@ sub answer { 42 }
 PM
 open my $pm, '>', "$dir/orig/Mod.pm" or die $!; print $pm $mod; close $pm;
 my $out = emit_file($mod, "$dir/emit/Mod.pm");
-like $out, qr/\Ause v5\.42;\n/, 'the emission opens with the target bundle';
+like $out, qr/\Ause v5\.42\.0;\n/, 'the emission opens with the target bundle';
 unlike $out, qr/require\(5\.0|^use 5\.042;/m, '... which subsumes the source\'s own';
 is scalar qx($^X -I$dir/emit -e 'use Mod; print Mod::answer()' 2>&1),
    scalar qx($^X -I$dir/orig -e 'use Mod; print Mod::answer()' 2>&1),
@@ -46,10 +46,10 @@ my $prog = emit_file(<<'SRC', "$dir/p.pl");
 use 5.036;
 print "ok\n";
 SRC
-like $prog, qr/\Ause v5\.42;\n/, 'an older version is raised to the target';
+like $prog, qr/\Ause v5\.42\.0;\n/, 'an older version is raised to the target';
 unlike $prog, qr/require\(5\.0|^use 5\.036;/m, '... not kept beside it';
 my $bare = emit_file("print 'hi';\n", "$dir/b.pl");
-like $bare, qr/\Ause v5\.42;\n/, 'a program with no version gets the bundle';
+like $bare, qr/\Ause v5\.42\.0;\n/, 'a program with no version gets the bundle';
 
 # THE BUNDLE PUTS THE SOURCE UNDER `source::encoding "ascii"`, so a string
 # holding a non-ASCII character must be spelled by code point, not raw.
