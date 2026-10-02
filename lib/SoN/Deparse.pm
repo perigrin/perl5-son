@@ -33,10 +33,12 @@ use experimental 'class';
 # chalk consumes too, so a rendering defect here is a wire defect, not an
 # artefact of reaching into the producer.
 class SoN::Deparse 0.01 {
-    # The version bundle every emission opens with. Three parts, not
-    # `v5.42`: chalk's grammar reads a two-part v-string as a module name
-    # and stops at the dot.
-    our $TARGET_BUNDLE = 'v5.42.0';
+    # The version bundle every emission opens with, spelled as chalk's own
+    # lib/ spells it. Not `v5.42`: chalk's grammar reads a two-part v-string
+    # as a module name and stops at the dot. And not `v5.42.0`, which it
+    # parses, because chalk carries the line into what it generates, and its
+    # tests look for `use 5.42.0` there.
+    our $TARGET_BUNDLE = '5.42.0';
 
     # ONE TABLE, ONE SPELLING EACH. These are not interchangeable: `==` for
     # `eq` agrees on numbers and disagrees on strings, which is exactly the
@@ -722,6 +724,35 @@ class SoN::Deparse 0.01 {
 
     # A BEGIN or END block: the same body rendering as a sub, under the phase
     # keyword instead of a name.
+    # `use Module LIST` / `no Module LIST` for a BEGIN block that is exactly
+    # what perl lowers one to -- `require "Module.pm"`, then Module->import
+    # (or unimport) with constant arguments, or the require alone for
+    # `use Module ()` -- else undef. The same program either way; chalk reads
+    # its lib/ as source and looks for the statement.
+    method _use_statement ($effects, $by) {
+        my ($req, $imp, @rest) = $effects->@*;
+        return undef if @rest || !$req || ($req->{op} // '') ne 'Call'
+            || (($req->{fields} // {})->{name} // '') ne 'require';
+        my $path = $by->{ ($req->{inputs} // [])->[0] // -1 } // {};
+        return undef unless ($path->{op} // '') eq 'Constant'
+            && ((($path->{fields} // {})->{value} // '') =~ m{\A([\w/]+)\.pm\z});
+        (my $module = $1) =~ s{/}{::}g;
+        return "use $module ();\n" unless $imp;
+
+        my $f = $imp->{fields} // {};
+        return undef unless ($imp->{op} // '') eq 'Call'
+            && ($f->{dispatch_kind} // '') eq 'method'
+            && ($f->{name} // '') =~ /\A(un)?import\z/;
+        my $word = $1 ? 'no' : 'use';
+        my ($class, @args) = map { $by->{$_} // {} } ($imp->{inputs} // [])->@*;
+        return undef unless ($class->{op} // '') eq 'Constant'
+            && (($class->{fields} // {})->{value} // '') eq $module;
+        return undef if grep { ($_->{op} // '') ne 'Constant'
+            || (($_->{fields} // {})->{const_type} // '') !~ /\A(?:string|integer|number)\z/ } @args;
+        return sprintf("%s %s%s;\n", $word, $module,
+            @args ? ' ' . join(', ', map { $self->_constant($_) } @args) : '');
+    }
+
     method _emit_phase_block ($phase, $graph) {
         # `use VERSION` IS A BEGIN BLOCK WHOSE ONE EFFECT IS `require VERSION`
         # -- and it is more than that require: it turns on the version's
@@ -748,6 +779,8 @@ class SoN::Deparse 0.01 {
                     return "use $f->{value};\n";
                 }
             }
+            my $use = $self->_use_statement(\@effects, \%by);
+            return $use if defined $use;
         }
         return sprintf("%s {\n%s}\n", $phase,
             $self->_render_graph_body("main::__$phase", $graph));

@@ -1,4 +1,4 @@
-# ABOUTME: The emission is spelled in the Perl Chalk's own grammar reads back: `use v5.42.0`,
+# ABOUTME: The emission is spelled in the Perl Chalk's own grammar reads back: `use 5.42.0`,
 # ABOUTME: `(undef)`, and postfix dereference -- each round-trips and, given a chalk clone, parses.
 
 use v5.42.0;
@@ -52,7 +52,7 @@ sub round_trips ($src, $name, $refuse, $chalk_builds = 1) {
 }
 
 # CHALK'S GRAMMAR rejects `use v5.42;` at the `.` -- a two-part v-string --
-# and reads `use v5.42.0;`, the spelling of its own lib/. Every one of the
+# and reads `use 5.42.0;`, the spelling of its own lib/. Every one of the
 # 130 emitted chalk modules failed to parse on this line alone.
 round_trips(<<'SRC', 'the preamble', qr/\Ause v5\.42;/);
 print "x\n";
