@@ -136,10 +136,21 @@ rather than its grammar -- they fail the ORIGINAL modules too (19 of 130):
     and a self-assignment `%X = %X;` there worth reading). T2's original
     fails in chalk anyway, so it is not yet on the measured path.
 
-Not a spelling: some tests assert the SHAPE of a lib/ file's source -- the
-postfix `if` in Symbol.pm's to_string. B::SoN renders it as a ternary, as a
-compiler is free to; those rows need a per-test decision once the spellings
-stop masking them.
+Filed on chalk (perigrin, 2026-10-02): #738 `use v5.42;`, #739 `undef()`,
+#740 the ArrayRef/HashRef semantic actions (with the 19 modules), #741 the
+Perl target generating `()` for a method with no signature; the circumfix
+`@{ EXPR }` form added to #230 as a comment.
+
+Not a spelling: some tests assert the SHAPE of a lib/ file's source. Two
+shapes are now reconstructed, by perigrin's decision over the recorded
+"ugly and faithful" `$_[N]` rule: a declared signature is emitted as one
+(it also restores perl's arity check, which `$_[N]` lost), and a sub that
+falls off its end ends on its bare value (the producer marks the Return
+`implicit`). `use Module LIST` is spelled `use`, a class keeps its own subs,
+and `use experimental 'class'` is not repeated by the class section.
+
+Still a shape difference: the postfix `if` in Symbol.pm's to_string, which
+B::SoN renders as a ternary, as a compiler is free to (cfg-statements.t).
 
 ## Silent drops in class code, found through gate 3
 
