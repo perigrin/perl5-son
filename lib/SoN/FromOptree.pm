@@ -7219,6 +7219,14 @@ class SoN::FromOptree 0.01 {
                 $old = $factory->make('Subscript', kind => $lvalue->kind,
                     inputs => [$lvalue->inputs->[0], $lvalue->inputs->[1],
                                $sim->memory]);
+                # AND PLACED: the read is at the pre-store memory, but nothing
+                # said WHERE, so it was spelled where it was used -- after the
+                # store. `next if $seen{$id}++` tested the new value (chalk's
+                # Transform::T2::run never narrowed), and `++$h{k}` added one
+                # twice. Pinned, it is bound before the store, as `$field++`'s
+                # read is.
+                $old->set_control_in($sim->control);
+                $sim->set_control($old);
             }
 
             # `$n++` ON A PACKAGE SCALAR IS A FIFTH WRITE FORM, and it reached
@@ -7377,7 +7385,19 @@ class SoN::FromOptree 0.01 {
 
             $sim->define($targ, $new) if defined $targ;
             # Pre yields the new value; post yields the old (pre-store) value.
-            $sim->push_node($is_post ? $old : $new);
+            # A POST-INCREMENT OF UNDEF YIELDS 0, not undef: pp_postinc sets
+            # its result to 0 when the old value is not defined. A decrement
+            # does not, and a string comes back as it was. Skipped where the
+            # old value is already a number, which cannot be undef.
+            my $post = $old;
+            $post = $factory->make('DefinedOr',
+                    inputs => [$old, $factory->make('Constant', value => 0,
+                        const_type => 'integer',
+                        stamp => SoN::IR::Stamp->new(type => 'Int'))],
+                    stamp => SoN::IR::Stamp->new(type => 'Scalar'))
+                if $is_post && $dir eq 'inc'
+                && $old_type !~ /\A(?:Int|Num|Boolean)\z/;
+            $sim->push_node($is_post ? $post : $new);
             return ($op->next, 'handled');
         }
 
