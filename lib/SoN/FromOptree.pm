@@ -3048,6 +3048,12 @@ class SoN::FromOptree 0.01 {
         return undef unless $LIST_IN_LIST_CONTEXT->{$name};
         my $want = $op->flags & 3;
         return SoN::IR::Stamp->new( type => 'List' ) if $want == 3;
+        # WANT 0 IS THE CALLER'S CONTEXT -- a builtin a sub returns, by
+        # `return` or by falling off its end -- and claims neither reading.
+        # Taken as scalar, `return values %c` was stamped a count and
+        # rendered `scalar(values(%c))`: one element where perl gives every
+        # value (chalk's Chalk::MOP::classes).
+        return undef if $want == 0;
         return SoN::IR::Stamp->new( type => 'Int' )
             if $SCALAR_IS_A_COUNT->{$name};
         return SoN::IR::Stamp->new( type => 'Str' )

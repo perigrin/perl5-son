@@ -97,4 +97,21 @@ class K { field %h = (a => 1, b => 2); method n { scalar %h } }
 my @a = (K->new->n); print "@a\n";
 SRC
 
+# A LIST BUILTIN RETURNED TAKES ITS CONTEXT FROM THE CALLER: its op says
+# nothing (want 0), and reading that as scalar stamped `values %c` a count
+# -- `return scalar(values(%c))`, 1 element where perl gives 2. chalk's
+# Chalk::MOP::classes is `return values %classes`, and every test that
+# walked the MOP got a number where it wanted classes.
+round_trips(<<'SRC', 'values returned to a list caller');
+use v5.42; use experimental 'class';
+class M { field %c; method add($k) { $c{$k} = 1; return } method all() { return values %c } }
+my $m = M->new; $m->add("a"); $m->add("b"); my @l = $m->all; my $n = $m->all; print scalar(@l), " $n\n";
+SRC
+
+round_trips(<<'SRC', 'keys and values returned, in both contexts');
+use v5.42;
+sub k { my %c = (a => 1, b => 2); return keys %c } sub v { my %c = (a => 1); values %c }
+my @k = k(); my $k = k(); my @v = v(); my $v = v(); print scalar(@k), " $k ", scalar(@v), " $v\n";
+SRC
+
 done_testing;
