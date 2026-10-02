@@ -8583,10 +8583,14 @@ class SoN::FromOptree 0.01 {
             # prologue rules placed it above the inner loop whose induction
             # variable it reads -- the loop-body `my @a`'s defect, one node
             # kind over.
+            # AND A CLASS FIELD, which the object carries past this graph:
+            # floating, `%registry = $graphs->%*` reached nothing and vanished
+            # (chalk's Chalk::MOP kept an empty registry).
             if (@LOOP_STACK
                 || grep { ( $_->isa('SoN::IR::Node::PadAccess') && $_->targ
                            && $ctx->{addr_taken}{ $_->targ } )
-                       || $_->isa('SoN::IR::Node::PostfixDeref') } $lhs->@*) {
+                       || $_->isa('SoN::IR::Node::PostfixDeref')
+                       || $_->isa('SoN::IR::Node::FieldAccess') } $lhs->@*) {
                 $node->set_control_in($sim->control);
                 $sim->set_control($node);
                 $sim->set_memory($node) if defined $sim->memory;

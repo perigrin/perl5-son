@@ -3465,6 +3465,10 @@ class SoN::Deparse 0.01 {
                       =~ /\A(?:PadAccess|EntryDef|Subscript)\z/
                     || ($t == 0
                         && ($nodes->{ $in[$t] }{op} // '') eq 'ArgsSource')
+                    # A FIELD AGGREGATE FIRST is the target -- `%h = ...` --
+                    # and the same kind later in the list is a value read.
+                    || ($t == 0
+                        && ($nodes->{ $in[$t] }{op} // '') eq 'FieldAccess')
                     || (($nodes->{ $in[$t] }{op} // '') eq 'PostfixDeref'
                         && ($t == 0 || $t < $#in))
                     # `undef` IS A LEGAL PLACEHOLDER IN A TARGET LIST.
@@ -3533,6 +3537,10 @@ class SoN::Deparse 0.01 {
 
             my @lhs = map { $self->_location($_) } @in[0 .. $t-1];
             my @rhs = map { $self->_expr($_) } @in[$t .. $#in];
+            # A FIELD AGGREGATE EMPTIED -- `@a = ()` -- has no values to name.
+            return sprintf("%s = ();\n", $lhs[0])
+                if !@rhs && @lhs == 1 && $lhs[0] =~ /\A[\@%]\w+\z/
+                && ($nodes->{ $in[0] }{op} // '') eq 'FieldAccess';
             die "GAP: an Assign (id $n->{id}) with no values is not yet"
               . " rendered -- its " . scalar(@in) . " inputs all read as"
               . " targets\n"
@@ -4144,6 +4152,11 @@ class SoN::Deparse 0.01 {
             # early, silently -- and the (1,2,3) case looked correct.
             my $named = ($agg->{op} // '') =~ /Literal\z/
                      && defined(($agg->{fields} // {})->{symbol});
+            # A FIELD AGGREGATE is named by its spelling (`@a`), stamped or
+            # not -- one with no default carries no Array stamp, and fell to
+            # the reference branch: `scalar((@a)->@*)`.
+            $named ||= ($agg->{op} // '') eq 'FieldAccess'
+                    && $self->_expr($in[0]) =~ /\A[\@%]\w+\z/;
 
             # AN ANONYMOUS CONSTRUCTOR IS A REFERENCE -- `[1,2,3]`, stamped
             # ArrayRef -- so its count goes through the deref. As a list it
