@@ -3785,6 +3785,10 @@ class SoN::FromOptree 0.01 {
                 inputs        => \@call_inputs,
                 dispatch_kind => 'method',
                 name          => $pending_method,
+                # THE CONTEXT, as a direct call carries it. Without it the
+                # binding fell back to the stamp, and `return @p` gave a
+                # scalar binding: the count where perl gives the elements.
+                want          => _want_of($op),
                 (defined $class_name ? (class_name => $class_name) : ()),
                 (defined $param_names ? (param_names => $param_names) : ()),
                 ($ctor ? (stamp => SoN::IR::Stamp->new(type => 'Object')) : ()),
@@ -5416,6 +5420,14 @@ class SoN::FromOptree 0.01 {
             } else {
                 my $node = _make_pad_or_field($cv, $targ, $factory);
                 $sim->define($targ, $node) unless $existing;
+                # A FIELD AGGREGATE'S FIRST READ has no binding yet, so the
+                # count rule above (which needs one) passed it by: `method n {
+                # scalar @l }` returned the array, and a list-context caller
+                # took its elements where perl gives 3. A hash the same way.
+                $node = _make_count($factory, $node, $sim)
+                    if $want == 2 && !$ref_or_mod
+                       && !$is_lvintro
+                       && $node->isa('SoN::IR::Node::FieldAccess');
                 $sim->push_node($node);
             }
             return ($op->next, 'handled');
@@ -6805,6 +6817,23 @@ class SoN::FromOptree 0.01 {
                     ? (stamp => SoN::IR::Stamp->new(type => $stamp_type))
                     : ()),
             );
+            # A DEMOTED PARAMETER IS READ FROM ITS SLOT, so the argument must
+            # be stored there. Passing `$v` on to a call demotes it (the
+            # callee's @_ aliases it), and with no store every read found the
+            # slot empty: `sub g ($v) { defined($v) ? f($v) : 'u' }` answered
+            # 'u' for every argument.
+            if ($ctx->{addr_taken}{$targ}) {
+                my $loc = $factory->make('PadAccess',
+                    targ => $targ,
+                    do { my ($sg, $sy) = _padparts($cv, $targ);
+                         (sigil => $sg, symbol => $sy) },
+                    ($ctx->{shared_lexicals}{$targ} ? (shared => 1) : ()),
+                    (defined $sim->memory ? (inputs => [ $sim->memory ]) : ()));
+                my $store = $factory->make('Assign', inputs => [$loc, $node]);
+                $store->set_control_in($sim->control);
+                $sim->set_control($store);
+                $sim->set_memory($store);
+            }
             $sim->define($targ, $node);
             $sim->push_node($node);
             return ($op->next, 'handled');
@@ -13381,8 +13410,13 @@ class SoN::FromOptree 0.01 {
                        || _arm_has_die($op->next, $op->other, $join_addr) # false arm
                        # A PINNED ALLOCATION moves the arm's control: `$c ? 2 : []`
                        # forked the pre-branch control without an If.
-                       || _arm_allocates($op->other, $op->next, $join_addr)
-                       || _arm_allocates($op->next, $op->other, $join_addr);
+                       # SO DOES A CALL WHOSE VALUE THE ARM YIELDS, and a loop or
+                       # an eval: each is pinned where it runs. Without an If the
+                       # call ran on every path -- `defined($_) ? $_->id : 'u'`
+                       # called ->id on the undef it guarded against -- or forked
+                       # control and refused (fib's `$n < 2 ? $n : fib(...)`).
+                       || _arm_advances_control($op->other, $op->next, $join_addr)
+                       || _arm_advances_control($op->next, $op->other, $join_addr);
         # AN ARM THAT YIELDS A VALUE merges it: the Phi over the two arm
         # values is the result, whatever else the arm does -- allocate, call,
         # store into a slot. An element store and a die keep their own rules

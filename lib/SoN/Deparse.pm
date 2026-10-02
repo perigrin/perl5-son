@@ -2346,10 +2346,21 @@ class SoN::Deparse 0.01 {
         return 0;
     }
 
+    # A LIST-CONTEXT CALL AS AN INPUT makes a merge a list: `map { $c ?
+    # f($_) : 'u' }` takes everything f returns. Merged into a scalar it was
+    # the count of the call's array temporary.
+    method _phi_takes_a_list ($p) {
+        return scalar grep {
+            my $in = $nodes->{$_ // -1} // {};
+            ($in->{op} // '') eq 'Call'
+                && (($in->{fields} // {})->{want} // '') eq 'list'
+        } ($p->{inputs} // [])->@*;
+    }
+
     method _phi_var ($p) {
         my $st = $p->{stamp} // '';
         return sprintf('@phi%d', $p->{id})
-            if $st eq 'Array' || $st eq 'List';
+            if $st eq 'Array' || $st eq 'List' || $self->_phi_takes_a_list($p);
         return sprintf('%%phi%d', $p->{id}) if $st eq 'Hash';
         return sprintf('$phi%d', $p->{id});
     }
@@ -2885,7 +2896,8 @@ class SoN::Deparse 0.01 {
         my @phis = sort { $a->{id} <=> $b->{id} }
                    grep { ($_->{op} // '') eq 'Phi'
                        && ((($_->{fields} // {})->{region} // -1) == $join)
-                       && !$self->_is_memory($_->{id}) }
+                       && (!$self->_is_memory($_->{id})
+                           || $self->_read_as_value($_->{id})) }
                    $self->_nodes_in_order;
         return ('') unless @phis;
 
@@ -2899,7 +2911,8 @@ class SoN::Deparse 0.01 {
               . scalar(@pred) . " predecessors is not yet rendered\n"
                 unless @in == @pred && @in;
 
-            my $var = sprintf('$phi%d', $p->{id});
+            my $var = sprintf($self->_phi_takes_a_list($p) ? '@phi%d' : '$phi%d',
+                              $p->{id});
 
             # DECLARED AT THE TOP OF THE SUB, NOT BEFORE THIS `if`. A join
             # can OUTLIVE the branch that assigns into it -- measured on a
@@ -3258,6 +3271,15 @@ class SoN::Deparse 0.01 {
                     && ($v->{op} // '') =~ /\A(?:Array|Hash)Literal\z/
                     && (($v->{fields} // {})->{symbol} // '')
                        eq (($t->{fields} // {})->{symbol} // '');
+
+                # A PARAMETER STORED INTO ITS OWN SLOT -- a demoted parameter's
+                # entry store -- is the prologue's `my $v = $_[N]`; spelled
+                # again here it is a second `my $v`.
+                return '' if ($t->{op} // '') eq 'PadAccess'
+                    && ($v->{op} // '') eq 'Parameter'
+                    && $self->_param_as_variable($v)
+                    && '$' . (($t->{fields} // {})->{symbol} // '')
+                       eq (($v->{fields} // {})->{name} // '');
             }
 
             # A COUNTED s/// STORED THROUGH AN Assign STILL RUNS TWICE. The
@@ -4726,6 +4748,28 @@ class SoN::Deparse 0.01 {
             pop @stack;
         }
         return $mem_cache{$id} // 0;
+    }
+
+    # Is this node read as a VALUE anywhere -- at an input position that
+    # cannot be a memory edge? _is_memory cannot tell a merge of two values
+    # from a merge of two memory states when an input is a call: a call is
+    # both, and `$n < 2 ? $n : fib(...)`, whose `$n` is the `shift` call,
+    # merged as "memory" and was never bound. A memory merge is only ever read
+    # where memory goes: the trailing input of a %MEM_MIN_INPUTS node, a
+    # call's last input, or another Phi.
+    method _read_as_value ($id) {
+        for my $c ($self->_nodes_in_order) {
+            my @in = ($c->{inputs} // [])->@*;
+            my $op = $c->{op} // '';
+            for my $i (grep { ($in[$_] // -1) == $id } 0 .. $#in) {
+                next if $op eq 'Phi';
+                next if $op eq 'Call' && $i == $#in && @in > 1;
+                my $min = $MEM_MIN_INPUTS{$op};
+                next if defined $min && $i >= $min;
+                return 1;
+            }
+        }
+        return 0;
     }
 
     # A RegexSubst's operands, by position: (pattern_text, replacement_text).
