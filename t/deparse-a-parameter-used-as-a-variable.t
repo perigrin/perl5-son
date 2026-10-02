@@ -72,4 +72,19 @@ sub m1 ($s) { pos($s) = 2; return pos($s) }
 my $t = "hello"; pos($t) = 1; m1($t); print pos($t), "\n";
 SRC
 
+# PASSED ON TO A CALL, a parameter is demoted to its slot -- the callee's @_
+# aliases it -- and nothing stored the argument there: every read found the
+# slot empty, so `defined($v) ? f($v) : ...` took the undef arm for any $v.
+round_trips(<<'SRC', 'a parameter passed on to a call');
+use v5.42;
+sub f ($x) { return "f$x" } sub g ($v) { return defined($v) ? f($v) : "u" }
+print g(1), g(undef), "\n";
+SRC
+
+round_trips(<<'SRC', 'a parameter a callee writes through @_');
+use v5.42;
+sub w { $_[0] = "w"; return } sub g ($v) { w($v); return $v }
+print g(1), "\n";
+SRC
+
 done_testing;
