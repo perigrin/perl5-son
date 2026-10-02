@@ -14,6 +14,11 @@ class SoN::IR::Node::Return :isa(SoN::IR::Node) {
     # an explicit-source Return emits `return EXPR;`.
     field $synthetic :param :reader = false;
 
+    # The sub returns by FALLING OFF ITS END -- its last statement's value --
+    # rather than by a `return` op. The same value either way; a reader of
+    # the source sees the difference.
+    field $implicit :param :reader = false;
+
     method operation() { 'Return' }
 
     # The returned value. Control flows through the control_in decoration

@@ -3162,7 +3162,7 @@ class SoN::FromOptree 0.01 {
             value      => undef,
             const_type => 'undef',
             stamp      => SoN::IR::Stamp->new(type => 'Undef'));
-        return { control => $sim->control, value => $value,
+        return { control => $sim->control, value => $value, kind => $kind,
                  ( defined $scalar_value
                      ? ( scalar_value => $scalar_value ) : () ) };
     }
@@ -3189,8 +3189,11 @@ class SoN::FromOptree 0.01 {
             # scalar one here makes it reachable by contract rather than
             # riding along on bidirectional graph membership.
             my $scalar = $exits->[0]{scalar_value};
+            # ONE EXIT, AND NO `return` OP MADE IT: the sub falls off its end.
+            my $implicit = ($exits->[0]{kind} // '') =~ /\A(?:leavesub|fallthrough)\z/;
             my $ret = $factory->make_cfg('Return',
-                inputs => [$value, (defined $scalar ? ($scalar) : ())]);
+                inputs => [$value, (defined $scalar ? ($scalar) : ())],
+                ($implicit ? (implicit => 1) : ()));
             $ret->set_control_in($ctrl) if defined $ctrl;
             return $ret;
         }

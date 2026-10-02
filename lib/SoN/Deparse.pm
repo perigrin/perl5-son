@@ -3635,6 +3635,11 @@ class SoN::Deparse 0.01 {
             return '' if $v && defined $v->{control_in}
                       && !exists $bound{ $v->{id} };
 
+            # A SUB THAT FELL OFF ITS END ends on its value, bare -- the
+            # producer marks the Return `implicit` -- and one that said
+            # `return` keeps the word.
+            return sprintf("%s;\n", $self->_expr($in[0]))
+                if ($n->{fields} // {})->{implicit};
             return sprintf("return %s;\n", $self->_expr($in[0]));
         }
 
