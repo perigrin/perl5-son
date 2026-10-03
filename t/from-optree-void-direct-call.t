@@ -56,12 +56,17 @@ subtest 'void direct call in a runtime-conditional arm is threaded' => sub {
 
 # --- honest GAPs: forms not lowerable now must die loudly, never drop silently ---
 
-subtest 'nested branch in the arm stays a loud GAP' => sub {
-    my $err = dies {
-        translate('sub { my $x=shift; my $y=shift; my $n=0; if ($x>3) { helper() if $y>3 } $n }');
-    };
-    like($err // '', qr/^GAP:/, 'a nested branch inside the arm GAPs, does not silently drop')
-        or diag($err);
+# A NESTED BRANCH IN THE ARM refused here once, because the call ran on both
+# paths. It takes its own If now -- t/deparse-a-call-under-a-nested-modifier.t
+# round-trips it against perl, counting the calls.
+subtest 'nested branch in the arm lowers, the call under its own guard' => sub {
+    my $g = translate('sub { my $x=shift; my $y=shift; my $n=0; if ($x>3) { helper() if $y>3 } $n }');
+    # Counted over the NODES -- ops_of names each kind once.
+    my @ops = map { $_->operation } $g->nodes->@*;
+    is scalar(grep { $_ eq 'If' } @ops), 2, 'two guards, two Ifs'
+        or diag("ops = [@ops]");
+    is scalar(grep { $_->operation eq 'Call' && ($_->name // '') =~ /helper/ } $g->nodes->@*), 1,
+        'the helper() call is built once' or diag("ops = [@ops]");
 };
 
 # A void call AND a scalar rebind in the SAME arm needs both control-threading

@@ -12996,36 +12996,6 @@ class SoN::FromOptree 0.01 {
     # backend lowers the Unwind to exit(255)+unreachable, so the merge's die
     # predecessor is dead and the live arm's value dominates. The $join bound
     # (as the arm-scan helpers use) stops the scan at the rejoin op.
-    # Does this arm contain a void CALL (entersub)? A narrower question than
-    # _arm_has_void_call, which also answers true for a print/say. The two
-    # differ in where the effect can be PLACED: a Print pins once on its
-    # control, while a Call is both a value and an effect and can be emitted
-    # per-consumer. Callers that can pin the first but not the second ask this
-    # separately. Descends into a nested branch for the same reason the others
-    # do, sharing one seen-set.
-    sub _arm_has_direct_call ($start, $stop, $join = undef) {
-        ($stop, $join) = (_op_addr($stop), _op_addr($join));
-        return _arm_has_direct_call_from($start, $stop, $join, {});
-    }
-
-    sub _arm_has_direct_call_from ($start, $stop, $join, $seen) {
-        for (my $op = $start;
-             $$op && $$op != $stop && !(defined $join && $$op == $join)
-                 && !$seen->{$$op};
-             $op = $op->next) {
-            $seen->{$$op} = 1;
-            my $name = $op->name;
-            if ($name eq 'and' || $name eq 'or' || $name eq 'cond_expr') {
-                return 1
-                    if _arm_has_direct_call_from($op->other, $stop, $join, $seen);
-                next;
-            }
-            next unless $name eq 'entersub';
-            return 1 if ($op->flags & 3) == 1;   # OPf_WANT_VOID
-        }
-        return 0;
-    }
-
     # Does the arm ADVANCE CONTROL -- does anything in it become the arm's new
     # $sim->control, so that the arm's control and the base's must be Regioned
     # back together?
@@ -14343,16 +14313,12 @@ class SoN::FromOptree 0.01 {
                 # `if($c){if($d){$a[0]=9}} $a[0]` printed 1 where perl printed
                 # 9, and both guard polarities printed the same thing). Refuse
                 # loudly instead: a GAP is recoverable, a wrong answer is not.
-                # A void CALL in this body is likewise not lowered here. Unlike
-                # a Print (a pure statement effect, pinned once on its control),
-                # a Call is both a value and an effect, and routing it through
-                # this build emitted it on BOTH paths -- measured:
-                # `if ($x>3) { helper() if $y>3 }` printed "helped" TWICE where
-                # perl printed it once. Placing it correctly is the Call
-                # classification problem, not this handler's. Refuse loudly.
-                die "GAP: a void call inside a nested one-armed branch is not"
-                  . " yet lowered (the call would be emitted on both paths)\n"
-                    if _arm_has_direct_call($op->other, $op->next, $mod_stop);
+                # A CALL in this body once printed "helped" TWICE where perl
+                # printed it once (`if ($x>3) { helper() if $y>3 }`): pinned on
+                # the arm's own control, it ran on both paths, and this
+                # refused it. It takes the If below now, like a print -- and so
+                # does a call whose VALUE is used (`$r = g($y) if $y > 3`),
+                # which advances control the same way.
                 # A CONTROL effect that pins once (a print/say, a die) does
                 # lower: build the same If/Proj/Region the main walk's handler
                 # builds. A plain rebind body keeps the value merge below.
@@ -14367,6 +14333,7 @@ class SoN::FromOptree 0.01 {
                 my $mem_branch =
                        _arm_has_element_store($op->other, $op->next)
                     || _arm_has_void_call($op->other, $op->next, $mod_stop)
+                    || _arm_advances_control($op->other, $op->next, $mod_stop)
                     || _arm_has_die($op->other, $op->next, $mod_stop)
                     || ( $in_loop
                          && defined _guarded_loop_control($op->other)
