@@ -3137,14 +3137,25 @@ class SoN::Deparse 0.01 {
     # Is this control node on a path from one of the given arm Projs? Walked
     # back along control, as _inside_loop is, to an arm (yes) or a Start or a
     # merge (no single path to say).
-    method _under_proj ($id, $projs) {
-        my %seen;
-        while (defined $id && !$seen{$id}++) {
+    # A MERGE WHOSE EVERY PREDECESSOR IS UNDER AN ARM IS UNDER IT TOO: an
+    # `or die` inside the arm joins its live path and its Unwind before the
+    # arm goes on, and stopping there took the rest of the arm for no arm's --
+    # its value was seeded at the top of the sub, ahead of what it reads.
+    method _under_proj ($id, $projs, $seen = {}) {
+        while (defined $id && !$seen->{$id}++) {
             return 1 if exists $projs->{$id};
             my $n = $nodes->{$id} or return 0;
             my $op = $n->{op} // '';
-            return 0 if $op eq 'Start' || $op eq 'Region' || $op eq 'Loop';
-            $id = $op =~ /\A(?:Proj|If)\z/ ? ($n->{inputs} // [])->[0]
+            if ($op eq 'Region') {
+                my @in = grep { defined } ($n->{inputs} // [])->@*;
+                # Each predecessor walks its own path; they meet again above
+                # the merge, so one seen-set would stop the second walk there.
+                return @in && !grep { !$self->_under_proj($_, $projs, {%$seen}) } @in;
+            }
+            return 0 if $op eq 'Start';
+            # A LOOP IS ENTERED ONE WAY, its first input: one inside the arm
+            # leaves its exit inside the arm too.
+            $id = $op =~ /\A(?:Proj|If|Loop)\z/ ? ($n->{inputs} // [])->[0]
                                              : $n->{control_in};
         }
         return 0;
