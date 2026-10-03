@@ -383,6 +383,42 @@ class SoN::FromOptree 0.01 {
     # store in an arm was an SSA rebind nothing outside the arm could see.
     our $ADDR_TAKEN;
 
+    # The pad aggregates the walked sub MUTATES -- shift, pop, push, unshift,
+    # splice, delete, or an element store -- by targ. A list assign whose
+    # value names other storage (`my @q = @_`) must COPY into such a target,
+    # or the mutation lands on the source; one that is never mutated reads the
+    # same either way and keeps the alias, whose shape consumers rely on.
+    our $MUTATED_SLOTS = {};
+
+    sub _mutated_aggregate_slots ($cv, $root = undef) {
+        my %slot;
+        $root //= eval { $cv->ROOT };
+        return \%slot unless $root && $$root;
+        my %MUTATES = map { $_ => 1 } qw(shift pop push unshift splice delete);
+        my @todo = ($root);
+        while (my $op = shift @todo) {
+            next unless ref $op && $$op;
+            my $name = $op->name;
+            my $kid  = ($op->flags & 4) ? eval { $op->first } : undef;   # OPf_KIDS
+            if ($kid && $$kid) {
+                my $k = $kid;
+                $k = $k->sibling if $k->name eq 'pushmark' && ${ $k->sibling };
+                my $agg = $k;
+                # `delete $h{k}` and an element store reach the aggregate one
+                # level down, through the helem/aelem.
+                if ($MUTATES{$name} || (($name eq 'aelem' || $name eq 'helem')
+                                        && ($op->flags & 32))) {     # OPf_MOD
+                    $agg = $agg->first
+                        if $agg->name =~ /\A(?:aelem|helem)\z/ && ($agg->flags & 4);
+                    $slot{ $agg->targ } = 1
+                        if $agg->name =~ /\A(?:padav|padhv)\z/ && $agg->targ;
+                }
+                for (my $c = $kid; ref $c && $$c; $c = $c->sibling) { push @todo, $c }
+            }
+        }
+        return \%slot;
+    }
+
     # `state $x = V` is a `once` op whose ->other is the store: the store runs
     # the first time the statement is reached and never again. The program's
     # own straight line is reached once, so the main walk lowers it there as
@@ -884,6 +920,8 @@ class SoN::FromOptree 0.01 {
         $ctx->{addr_taken}{$_} = 1 for keys $ctx->{shared_lexicals}->%*;
         local $SHARED_SLOTS = $ctx->{shared_lexicals};
         local $ADDR_TAKEN   = $ctx->{addr_taken};
+        local $MUTATED_SLOTS = _mutated_aggregate_slots($cv,
+            defined $program_root ? B::main_root() : undef);
 
         # A FLIP-FLOP'S STATE SLOT STARTS UNDEF, as every pad slot does, and
         # is bound so here: a loop's scout finds carried slots by comparing
@@ -8490,7 +8528,21 @@ class SoN::FromOptree 0.01 {
                             && $YIELDS_LIST->{ $only->name }
                             && !$scalar_reading;
 
-                        if ($is_aggregate_value || $is_list_builtin) {
+                        # ...UNLESS IT NAMES STORAGE THE TARGET THEN MUTATES.
+                        # `my @q = @_` is a COPY: bound as @_ itself, `shift
+                        # @q` rendered `shift(@_)` and the source lost an
+                        # element (perl 32, emitted 22). A fresh value -- a map
+                        # result, an accumulator -- may be taken as it is, and
+                        # so may storage nothing mutates through the target
+                        # (reading reads the same; consumers rely on
+                        # `my %c = %$h` binding the deref). Otherwise the
+                        # literal below, which copies.
+                        my $names_storage = $is_pad
+                            && $MUTATED_SLOTS->{ $target->targ }
+                            && grep { $only->isa("SoN::IR::Node::$_") }
+                                qw(ArgsSource PadAccess EntryDef FieldAccess PostfixDeref);
+                        if (($is_aggregate_value && !$names_storage)
+                            || $is_list_builtin) {
                             $sim->define($key, $only);
                             $sim->push_node($only);
                             return ($op->next, 'handled');
