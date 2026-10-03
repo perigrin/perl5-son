@@ -72,4 +72,23 @@ sub f { my ($o, $x) = @_; if ($x) { $o->hit unless $x > 5 } return $o->n }
 my $o = C->new; print f($o, 1), f($o, 9), f($o, 0), "\n";
 SRC
 
+# IN THE CALLER'S CONTEXT -- the sub's last statement -- the inner modifier
+# is neither void nor a pure value, and no handler claimed it: the walk
+# stepped past it, and its print vanished without a word.
+round_trips(<<'SRC', 'a print under a nested modifier ending a sub');
+sub f { my ($x, $y) = @_; if ($x > 3) { print "p\n" if $y > 3; } } f(5, 5); f(5, 1); f(1, 5);
+SRC
+
+round_trips(<<'SRC', 'a call under a nested modifier ending a sub');
+my $n = 0; sub h { $n++; 7 }
+sub f { my ($x, $y) = @_; if ($x > 3) { h() if $y > 3; } }
+my @r = map { scalar f(@$_) } [5, 5], [5, 1], [1, 5];
+print join(",", map { $_ // "u" } @r), " $n\n";
+SRC
+
+round_trips(<<'SRC', 'its value, when the caller uses it');
+sub f { my ($x, $y) = @_; if ($x > 3) { print "p\n" unless $y > 3; } }
+print join(",", map { scalar(f(@$_)) ? "t" : "f" } [5, 5], [5, 1], [1, 5]), "\n";
+SRC
+
 done_testing;
