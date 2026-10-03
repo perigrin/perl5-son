@@ -50,7 +50,7 @@ while (my $m = <$list>) {
 
 my @tests = sort split /\n/, `cd '$orig' && find t -name '*.t'`;
 
-# ONE RESULT PER FILE: exit code, `ok` count, and `not ok` count with TODO
+# ONE RESULT PER FILE: exit code, and the `ok` and `not ok` counts with TODO
 # lines left out. Byte-identical output would be too strict -- addresses,
 # timings and hash order vary between two runs of the SAME lib/.
 sub run_tree ($tree, $tag) {
@@ -77,8 +77,13 @@ sub run_tree ($tree, $tag) {
         my ($ok, $nok) = (0, 0);
         if (open my $fh, '<', "$out.out") {
             while (<$fh>) {
+                # A TODO COUNTS NEITHER WAY: its pass was counted and its
+                # fail was not, so a noisy TODO -- earley-leo's timing ratio,
+                # "machine-dependent and noisy" by its own description --
+                # flipped and differed.
+                next if /# TODO/;
                 $ok++  if /^\s*ok /;
-                $nok++ if /^\s*not ok / && !/# TODO/;
+                $nok++ if /^\s*not ok /;
             }
         }
         $res{$t} = "rc=$rc ok=$ok notok=$nok";
