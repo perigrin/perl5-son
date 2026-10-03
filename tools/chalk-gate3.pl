@@ -16,7 +16,11 @@ my $chalk   = $ENV{SON_CHALK} // "$ENV{HOME}/dev/chalk";
 my $jobs    = 8;
 # 300s, not 120: an emission may run slower than the original, and at 120s
 # a test near the limit timed out under load in one run and not the next.
-my $timeout = 300;
+# AN HOUR, not 300s: seven of chalk's files take longer than that against
+# the ORIGINAL lib/ -- measured under load, 344s to over 1800s -- and a file
+# that times out against the original is SLOW, compared with nothing. Two of
+# the seven differed once compared (earley-leo, perl-target-perl-tier-d).
+my $timeout = 3600;
 my $verbose = 0;   # -v lists DIFFERS rows; -v -v also the SLOW ones
 GetOptions('chalk=s' => \$chalk, 'commit=s' => \$COMMIT, 'jobs=i' => \$jobs,
            'timeout=i' => \$timeout, 'v+' => \$verbose)

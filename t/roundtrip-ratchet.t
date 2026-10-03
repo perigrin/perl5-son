@@ -67,7 +67,7 @@ sub census ($tool, @args) {
 }
 
 SKIP: {
-    skip_all 'set SON_RATCHET=1 to run the round-trip censuses (~1 hour)'
+    skip_all 'set SON_RATCHET=1 to run the round-trip censuses (~2 hours)'
         unless $ENV{SON_RATCHET};
 
     subtest 'the corpus round-trip does not regress' => sub {
