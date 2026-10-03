@@ -80,4 +80,14 @@ round_trips(<<'SRC', 'an early return beside a fallen-off end');
 use v5.42; sub f ($x) { return 'e' if $x; 'f' } print f(1), f(0), "\n";
 SRC
 
+# A SUB THAT ENDS IN die RETURNS NOTHING -- the Return behind the Unwind is
+# never reached, and its value was stack residue: `die(...); $ir;` after a
+# signature parameter. chalk's Chalk::Target::generate is that shape, and
+# perl-actions-tier-a.t counts its statements.
+round_trips(<<'SRC', 'a method ending in die', qr/^die\("Subclass must implement generate\(\)\\n"\);\n\}/m);
+use v5.42; use experimental 'class';
+class T { method generate($ir) { die "Subclass must implement generate()\n" } }
+print eval { T->new->generate(1); 1 } ? "ran\n" : $@;
+SRC
+
 done_testing;

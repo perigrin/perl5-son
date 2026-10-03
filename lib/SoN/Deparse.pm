@@ -3645,6 +3645,12 @@ class SoN::Deparse 0.01 {
             return '' if $v && $v->{op} eq 'Constant'
                       && (($v->{fields} // {})->{const_type} // '') eq 'undef';
 
+            # A RETURN BEHIND A die IS NEVER REACHED, and its value is
+            # whatever the stack held: `die(...); $ir;` after a signature
+            # parameter (chalk's Chalk::Target::generate).
+            return '' if defined $n->{control_in}
+                      && (($nodes->{ $n->{control_in} } // {})->{op} // '') eq 'Unwind';
+
             # AN EFFECT IS NOT RE-RUN TO RETURN IT. A sub whose last statement
             # is a `print` returns print's value (1), and the Return names that
             # same node -- so emitting `return <expr>` ran the print A SECOND
