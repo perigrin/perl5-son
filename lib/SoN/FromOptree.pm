@@ -14091,10 +14091,11 @@ class SoN::FromOptree 0.01 {
             # caller (_handle_cond_expr's shared control-flow path, gated by
             # _arm_has_die) merges the LIVE arm's control with this Unwind; the
             # backend lowers the Unwind to exit(255)+unreachable, so the merge's
-            # die predecessor is dead and the live arm's value dominates. Only
-            # the control-threaded value/modifier arms (stop_at_exit) reach here;
-            # dor arms (no stop_at_exit) keep their existing behavior.
-            if ($name eq 'die' && $stop_at_exit) {
+            # die predecessor is dead and the live arm's value dominates.
+            # EVERY ARM, not only a value arm (stop_at_exit): the loop body's
+            # guarded-statement walk passes none, and its `die` was stepped
+            # past and vanished -- `for (...) { die "x" if $c }` ran on.
+            if ($name eq 'die') {
                 $visited->{$$op}++;
                 my $args = $sim->pop_to_mark;
                 my $unwind = $factory->make_cfg('Unwind',
