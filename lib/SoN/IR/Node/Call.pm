@@ -47,6 +47,13 @@ class SoN::IR::Node::Call :isa(SoN::IR::Value) {
     # 10,20,30 in list context, and the two entersubs differ only in this flag
     # (sKS vs lKS). Absent for a call whose context was not recorded.
     field $want :param :reader = undef;
+
+    # THE LAST INPUT IS A MEMORY EDGE, appended by the producer (keys, values,
+    # each; push, unshift, splice; shift, pop). Said here because the input
+    # alone cannot say it: a `shift` result passed as the last ARGUMENT is a
+    # memory point too, and taking it for the edge dropped the argument --
+    # `push @o, $n` rendered `push(@o)`.
+    field $memory_input :param :reader = false;
     field $paren_form :param :reader = false;
 
     # `&name;` -- ampersand, no parentheses -- hands the CALLER's @_ to the

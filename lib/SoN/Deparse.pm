@@ -147,7 +147,10 @@ class SoN::Deparse 0.01 {
     our %MEM_MIN_INPUTS = (
         Call         => 1,   # [arg, ..., memory]
         EntryWrite   => 2,   # [slot, value, memory]
-        Assign       => 2,   # [target, value, memory]
+        # NOT Assign: the producer builds none with a memory input (every
+        # construction is [targets..., values...]), and listed here a list
+        # assign ending in a `shift` or `each` -- a memory point, and a VALUE
+        # -- had that value taken for an edge: unbound, it ran twice.
         Delete       => 2,   # [container, key, memory]
         # THE SAME SHAPE AS Delete, one operator over, and it was missing --
         # so `exists $h{k}` counted its memory edge as a VALUE, bound the
@@ -1124,8 +1127,12 @@ class SoN::Deparse 0.01 {
             # `shift` has exactly that shape and its one input IS the value.
             # These are the kinds that take a memory edge, from the producer.
             my @in = ($n->{inputs} // [])->@*;
+            # A CALL SAYS WHETHER IT HAS ONE (memory_input): a `shift` passed
+            # as its last argument is a memory point too, and is an argument.
             pop @in if @in > ($MEM_MIN_INPUTS{ $n->{op} // '' } // 99)
-                    && $self->_is_memory($in[-1]);
+                    && (($n->{op} // '') eq 'Call'
+                        ? (($n->{fields} // {})->{memory_input})
+                        : $self->_is_memory($in[-1]));
 
             $reads{$_}++ for @in;
         }
@@ -4904,7 +4911,7 @@ class SoN::Deparse 0.01 {
             # for a Phi, the last for a memory-carrying Call, none otherwise.
             my @in = ($n->{inputs} // [])->@*;
             my @ask = $op eq 'Phi'  ? @in
-                    : $op eq 'Call' ? (@in > 1 ? ($in[-1]) : ())
+                    : $op eq 'Call' ? (($n->{fields} // {})->{memory_input} ? ($in[-1]) : ())
                     :                 ();
             unless (@ask) { $mem_cache{$cur} = 0; pop @stack; next }
 
@@ -5031,11 +5038,13 @@ class SoN::Deparse 0.01 {
         # measured on comp/package.t, `Call(shift, [ArgsSource, MemStart])`.
         # A name list fails asymmetrically: it silently drops whichever name
         # nobody thought of, and the next one added would fail the same way.
-        # What every site shares is the POSITION and the KIND -- a memory node
-        # appended last -- so that is what this asks.
+        # What every site shares is that it APPENDED one, and each now says
+        # so on the node: `memory_input`. Asking the input's position and
+        # kind instead could not tell a `shift` passed as the last ARGUMENT --
+        # a memory point too -- from the edge, and dropped it: `push @o, $n`
+        # rendered `push(@o)`.
         my @in = (($n->{inputs} // [])->@*);
-        pop @in if @in > ($MEM_MIN_INPUTS{Call} // 99)
-                && $self->_is_memory($in[-1]);
+        pop @in if $f->{memory_input};
         my @args = map { $self->_expr($_) } @in;
         # A FOUR-ARGUMENT substr REWRITES ITS FIRST ARGUMENT IN PLACE, so that
         # argument is a location -- see _location.

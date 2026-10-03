@@ -8973,6 +8973,12 @@ class SoN::FromOptree 0.01 {
                         inputs        => [@inputs, $sim->memory],
                         dispatch_kind => 'builtin',
                         name          => $name,
+                        memory_input  => 1,
+                        # THE CONTEXT, which decides what `each` yields: a pair in
+                        # a list, the key alone in a scalar. Without it the
+                        # binding took a scalar, and `my ($k, $v) = each %h` lost
+                        # the value.
+                        want          => _want_of($op),
                         # THE SAME STAMP THE GENERIC PATH WOULD GIVE. `keys`
                         # in scalar context is a count, in list context a list,
                         # and _context_builtin_stamp reads that off the op --
@@ -9019,6 +9025,7 @@ class SoN::FromOptree 0.01 {
                         inputs        => [@inputs, $sim->memory],
                         dispatch_kind => 'builtin',
                         name          => $name,
+                        memory_input  => 1,
                         (defined $ret_stamp ? (stamp => $ret_stamp) : ()));
                     $call->set_control_in($sim->control);
                     $sim->set_control($call);
@@ -9052,6 +9059,7 @@ class SoN::FromOptree 0.01 {
                         inputs         => [$inputs[0], $sim->memory],
                         dispatch_kind  => 'builtin',
                         name           => $name,
+                        memory_input   => 1,
                         (defined $elem_stamp ? (stamp => $elem_stamp) : ()));
                     $call->set_control_in($sim->control);
                     $sim->set_control($call);
@@ -9511,10 +9519,11 @@ class SoN::FromOptree 0.01 {
                 # `Phi(1190) in=[Call(require), EntryWrite]` -- a merge of two
                 # memory chains -- look like a VALUE Phi, which bound the
                 # EntryWrite and then asked to render a store as an expression.
-                push @inputs, $sim->memory
-                    if $node_type eq 'Call'
-                    && $GLOBAL_STATE_BUILTIN{$name}
-                    && defined $sim->memory;
+                if ($node_type eq 'Call' && $GLOBAL_STATE_BUILTIN{$name}
+                    && defined $sim->memory) {
+                    push @inputs, $sim->memory;
+                    $extra{memory_input} = 1;   # see Call's memory_input
+                }
 
                 %extra = (%extra, _bitwise_flavor($name));
                 # AN ANONYMOUS CONSTRUCTOR IS AN ALLOCATION, pinned where it
