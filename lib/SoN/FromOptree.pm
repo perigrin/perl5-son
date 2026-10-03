@@ -12032,6 +12032,68 @@ class SoN::FromOptree 0.01 {
                 next;
             }
 
+            # THE SAME VALUE SHORT-CIRCUIT WHOSE RIGHT SIDE CALLS (or loops, or
+            # allocates): the right side runs only on one arm, so it is a
+            # branch -- an If on the left operand, the right side walked on its
+            # Proj, and the two values merged in a stack Phi. Excluded above,
+            # it fell to the loop-condition handler and refused "nested and/or
+            # inside a loop body" (`next unless $n->can(...) && ...`), and a
+            # `$x // g()` dropped its call.
+            if (($name eq 'and' || $name eq 'or' || $name eq 'dor')
+                    && $sim->stack_depth > 0
+                    && ($op->flags & 3) >= 2            # OPf_WANT_SCALAR or _LIST
+                    && $op->can('other') && ${$op->other}
+                    && !_arm_has_die($op->other, ${ $op->next })
+                    && !_arm_has_element_store($op->other, ${ $op->next })
+                    && _arm_advances_control($op->other, ${ $op->next })) {
+                my $lhs  = $sim->pop_node;
+                my $base = $sim->stack_depth;
+                my $stop = ${ $op->next };
+                my $test = $name eq 'dor'
+                    ? $factory->make('Defined', inputs => [$lhs],
+                        stamp => SoN::IR::Stamp->new(type => 'Boolean'))
+                    : $lhs;
+                my $if_node = $factory->make_cfg('If',
+                    inputs => [$sim->control, $test]);
+                # `&&` runs its right side when the test holds (Proj 0);
+                # `||` and `//` when it fails (Proj 1).
+                my ($run_idx, $skip_idx) = $name eq 'and' ? (0, 1) : (1, 0);
+                my $run_sim  = $sim->snapshot;
+                my $skip_sim = $sim->snapshot;
+                $run_sim->set_control($factory->make_cfg('Proj',
+                    inputs => [$if_node], index => $run_idx));
+                $skip_sim->set_control($factory->make_cfg('Proj',
+                    inputs => [$if_node], index => $skip_idx));
+                my @rhs_exits;
+                my ($rhs_end, $rhs_sig) =
+                    _walk_branch($cv, $op->other, $run_sim, $factory, $opmap,
+                        $loop_visited, \@rhs_exits, 1, $stop,
+                        $loop_node, $break_projs, 1);
+                die "GAP: a short-circuit in a loop body whose arm is not a"
+                  . " value not yet lowered\n"
+                    if ($rhs_sig // '') ne ''
+                    || @rhs_exits
+                    || !(defined $rhs_end && ref $rhs_end && $$rhs_end == $stop)
+                    || $run_sim->stack_depth != $base + 1;
+                $skip_sim->push_node($lhs);
+                # merge()'s receiver is Phi arm 0, the arm on Proj 0.
+                my ($first, $second) = $run_idx == 0
+                    ? ($run_sim, $skip_sim) : ($skip_sim, $run_sim);
+                $first->merge($second, $factory, $if_node);
+                my $value = $first->pop_node;
+                my @arm = grep { defined } $value->can('inputs') ? $value->inputs->@* : ();
+                $value->set_stamp(SoN::IR::Stamp::join(map { $_->stamp } @arm))
+                    if $value->operation eq 'Phi' && @arm == 2
+                    && !grep { !$_->can('stamp') || !_is_narrowed($_->stamp) } @arm;
+                $sim->set_control($first->control);
+                $sim->set_memory($first->memory);
+                my $merged = $first->scope_bindings;
+                $sim->define($_, $merged->{$_}) for keys %$merged;
+                $sim->push_node($value);
+                $op = $rhs_end;
+                next;
+            }
+
             # A GUARDED RETURN IN THE BODY -- `return X if C`, `if (C) {
             # return X }` -- leaves the loop and the sub on the taken arm; the
             # body goes on along the other. The arm is walked with the
