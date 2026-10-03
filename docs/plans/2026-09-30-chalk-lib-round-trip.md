@@ -152,6 +152,12 @@ and `use experimental 'class'` is not repeated by the class section.
 Still a shape difference: the postfix `if` in Symbol.pm's to_string, which
 B::SoN renders as a ternary, as a compiler is free to (cfg-statements.t).
 
+A `:reader` field keeps the attribute (its accessor is not written out),
+and `:param` is bare when its name is the field's. A RENAMED reader --
+`:reader(get_x)` -- is still emitted as a plain method: B::SoN recognizes a
+reader by the field's name (_extract_class and three consumers), and chalk's
+lib/ has none. Correct Perl either way; the attribute is lost.
+
 ## Silent drops in class code, found through gate 3
 
 ir-node-binop.t died after two tests against the emitted Node/BinOp.pm,

@@ -753,9 +753,14 @@ class SoN::Deparse 0.01 {
             for my $f (sort { ($a->{fieldix} // 0) <=> ($b->{fieldix} // 0) }
                        ($c->{fields} // [])->@*) {
                 my $decl = "field $f->{name}";
-                $decl .= defined $f->{param_name} ? " :param($f->{param_name})"
-                                                  : ' :param'
+                # `:param` BARE when its name is the field's own, as the
+                # source writes it; `:reader` rather than the accessor it
+                # synthesizes (skipped below) -- chalk reads the attributes.
+                $decl .= defined $f->{param_name}
+                         && $f->{param_name} ne substr($f->{name}, 1)
+                    ? " :param($f->{param_name})" : ' :param'
                     if $f->{is_param};
+                $decl .= ' :reader' if $f->{is_reader};
                 if ($f->{default_unmodeled}) {
                     $gap = "GAP: the default of field `$f->{name}` in class $name"
                          . " is not a constant, and the wire does not carry it\n";
@@ -778,9 +783,13 @@ class SoN::Deparse 0.01 {
                 unless (defined $b) { $gap = $@ || "failed to render $key"; return (undef) }
                 $body .= "ADJUST {\n" . _indent($b) . "}\n";
             }
+            # A `:reader` field's accessor is the attribute's, not written out.
+            my %reader = map { (substr($_->{name}, 1) => 1) }
+                         grep { $_->{is_reader} } ($c->{fields} // [])->@*;
             for my $m (sort keys(($c->{methods} // {})->%*)) {
                 my $key = $c->{methods}{$m};
                 $owned{$key} = 1;
+                next if $reader{$m};
                 my $b = eval { $self->_render_graph_body($key,
                                    $all_methods->{$key} // {}) };
                 unless (defined $b) { $gap = $@ || "failed to render $key"; return (undef) }
