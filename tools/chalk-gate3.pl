@@ -53,9 +53,9 @@ my @tests = sort split /\n/, `cd '$orig' && find t -name '*.t'`;
 # ONE RESULT PER FILE: exit code, and the `ok` and `not ok` counts with TODO
 # lines left out. Byte-identical output would be too strict -- addresses,
 # timings and hash order vary between two runs of the SAME lib/.
-sub run_tree ($tree, $tag) {
+sub run_tree ($tree, $tag, $skip = {}) {
     my %res;
-    my @queue = @tests;
+    my @queue = grep { !$skip->{$_} } @tests;
     my %kids;
     while (@queue || %kids) {
         while (@queue && keys(%kids) < $jobs) {
@@ -92,7 +92,10 @@ sub run_tree ($tree, $tag) {
 }
 
 my $o = run_tree($orig,  'orig');
-my $x = run_tree($mixed, 'mixed');
+# NOT RUN AGAIN where the original timed out: the file is SLOW whatever the
+# emission does, and the second run cost another hour.
+my $x = run_tree($mixed, 'mixed',
+                 { map { $_ => 1 } grep { $o->{$_} =~ /\Arc=124 / } @tests });
 
 # A TEST THAT TIMES OUT AGAINST THE ORIGINAL has no result to compare: its
 # ok count is how far it got before the kill, which moves with machine load.
@@ -116,7 +119,7 @@ my ($same, $noworse, $differs, $slow) = (0, 0, 0, 0);
 my @rows;
 for my $t (@tests) {
     my ($orc, $ook, $onok) = counts($o->{$t});
-    my ($xrc, $xok, $xnok) = counts($x->{$t});
+    my ($xrc, $xok, $xnok) = counts($x->{$t} // q{});
     if ($o->{$t} =~ /\Arc=124 /) { $slow++; push @rows, "$t | SLOW (original timed out)" if $verbose > 1 }
     elsif ($o->{$t} eq $x->{$t}) { $same++ }
     elsif (defined $xok && $xrc ne '124' && $xok >= $ook && $xnok <= $onok
