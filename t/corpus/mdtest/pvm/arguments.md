@@ -548,7 +548,7 @@ main::__PROGRAM__: {start: 0, returns: [26], nodes: [
   [Assign, ~, [10, 11], 12, Int], # 13
   [PadAccess, {sigil: $, symbol: x}, [13], ~, Unknown], # 14
   [Call, {dispatch_kind: direct, name: main::bump, param_names: [], want: void}, [14], 13, Scalar], # 15
-  [Assign, ~, [8, 14], 15, Unknown], # 16
+  [Assign, {if_changed: true}, [8, 14], 15, Unknown], # 16
   [EntryDef, {package: main, sigil: $, symbol: "\""}, [16], ~, Scalar], # 17
   [Coerce, {from_repr: Scalar, to_repr: Str}, [17], ~, Str], # 18
   [PostfixDeref, {sigil: "@"}, [4, 16], ~, Array], # 19
