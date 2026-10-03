@@ -501,3 +501,56 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [Print, ~, [14, 15], 13, Scalar], # 16
   [Return, {implicit: true}, [1], 16]]} # 17
 ```
+
+## A signature's placeholder parameter keeps its place
+
+`($, $phi)` takes two arguments and names the second: called as a class method, the class name fills the placeholder. Found by B::SoN translating chalk's lib/ and running chalk's own suite
+against the emitted Perl.
+
+```perl
+use v5.36;
+package Optimizer { sub collapse ($, $phi) { return "c$phi" } }
+print Optimizer->collapse(7), " ", (eval { Optimizer->collapse(); 1 } ? "ran" : "too few"), "\n";
+```
+
+```behavior
+parses: yes
+```
+
+```output
+c7 too few
+```
+
+```ir
+Optimizer::collapse: {start: 0, returns: [5], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: c}, ~, ~, Str], # 1
+  [Parameter, {index: 1, name: $phi, sigil: $}, ~, ~, Str], # 2
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [2], ~, Str], # 3
+  [Concat, ~, [1, 3], ~, Str], # 4
+  [Return, ~, [4], 0]]} # 5
+main::__PROGRAM__: {start: 0, returns: [16], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Constant, {const_type: string, value: Optimizer}, ~, ~, Str], # 2
+  [Constant, {const_type: integer, value: "7"}, ~, ~, Int], # 3
+  [Call, {class_name: Optimizer, dispatch_kind: method, name: collapse, param_names: [], want: list}, [2, 3], 0, Unknown], # 4
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [4], ~, Str], # 5
+  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 6
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 7
+  [Call, {class_name: Optimizer, dispatch_kind: method, name: collapse, param_names: [], want: void}, [2], 4, Unknown], # 8
+  [Region, {eval_entry: 4}, [8]], # 9
+  [Phi, {region: 9}, [7, 1], ~, Scalar], # 10
+  [Constant, {const_type: string, value: ran}, ~, ~, Str], # 11
+  [Constant, {const_type: string, value: "too few"}, ~, ~, Str], # 12
+  [TernaryExpr, ~, [10, 11, 12], ~, Str], # 13
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 14
+  [Print, ~, [5, 6, 13, 14], 9, Scalar], # 15
+  [Return, {implicit: true}, [1], 15]]} # 16
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.036"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, {implicit: true}, [3], 3]]} # 4
+```

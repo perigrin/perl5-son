@@ -573,3 +573,235 @@ main::__PROGRAM__: {start: 0, returns: [26], nodes: [
   [Concat, ~, [40, 34], ~, Str], # 41
   [Call, {dispatch_kind: builtin, name: push, param_names: []}, [5, 41], 39, Unknown]]} # 42
 ```
+
+## The seen-hash idiom
+
+`$seen{$k}++` yields the element's value from before the store. A reader that reads the element where the value is used -- after the store -- skips every key. chalk's T2 type-narrowing pass is exactly this loop, and it narrowed nothing. Found by B::SoN translating chalk's lib/ and running chalk's own suite
+against the emitted Perl.
+
+```perl
+my %seen;
+my $out = "";
+for my $k (qw(a a b a c)) {
+    next if $seen{$k}++;
+    $out .= $k;
+}
+print "$out\n";
+```
+
+```behavior
+parses: yes
+```
+
+```output
+abc
+```
+
+```ir
+main::__PROGRAM__: {start: 0, returns: [10], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Constant, {const_type: string, value: ""}, ~, ~, Str], # 2
+  [Loop, {bound: entry}, [0], 0], # 3
+  [Phi, {region: 3}, [2, 36], ~, Str], # 4
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
+  [Concat, ~, [4, 5], ~, Str], # 6
+  [Proj, {index: 1}, [3]], # 7
+  [Region, {head: 3}, [7]], # 8
+  [Print, ~, [6], 8, Scalar], # 9
+  [Return, {implicit: true}, [1], 9], # 10
+  [Constant, {const_type: string, value: a}, ~, ~, Str], # 11
+  [Constant, {const_type: string, value: b}, ~, ~, Str], # 12
+  [Constant, {const_type: string, value: c}, ~, ~, Str], # 13
+  [ArrayLiteral, ~, [11, 11, 12, 11, 13], ~, Array], # 14
+  [MemStart], # 15
+  [Count, ~, [14, 15], ~, Int], # 16
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 17
+  [Phi, {region: 3}, [17, 26], ~, Int], # 18
+  [NumGt, ~, [16, 18], 3, Boolean], # 19
+  [Proj, {index: 0}, [3]], # 20
+  [PadAccess, {sigil: "%", symbol: seen}, ~, ~, Unknown], # 21
+  [Phi, {region: 3}, [15, 29], ~, Unknown], # 22
+  [Subscript, {kind: array}, [14, 18, 22], ~, Str], # 23
+  [Subscript, {kind: hash}, [21, 23, 22], 20, Scalar], # 24
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 25
+  [Add, ~, [18, 25], ~, Int], # 26
+  [Increment, ~, [24], ~, Scalar], # 27
+  [Subscript, {kind: hash}, [21, 23], ~, Scalar], # 28
+  [Assign, ~, [28, 27], 24, Scalar], # 29
+  [DefinedOr, ~, [24, 17], ~, Scalar], # 30
+  [Concat, ~, [4, 23], ~, Str], # 31
+  [If, ~, [29, 30], 29], # 32
+  [Proj, {index: 0}, [32]], # 33
+  [Proj, {index: 1}, [32]], # 34
+  [Region, {head: 32}, [33, 34]], # 35
+  [Phi, {predecessors: [33, 34], region: 35}, [4, 31], ~, Str]]} # 36
+```
+
+## A post-increment of undef yields 0
+
+`pp_postinc` sets its result to 0 when the old value is not defined. A post-decrement does not, and a string comes back as it was. Found by B::SoN translating chalk's lib/ and running chalk's own suite
+against the emitted Perl.
+
+```perl
+my ($x, $y, %h);
+my $p = $x++;
+my $q = $y--;
+my $r = $h{k}++;
+my $s = "aa";
+my $t = $s++;
+print join(",", map { defined $_ ? "[$_]" : "undef" } $p, $q, $r, $t), "\n";
+```
+
+```behavior
+parses: yes
+```
+
+```output
+[0],undef,[0],[aa]
+```
+
+```ir
+main::__PROGRAM__: {start: 0, returns: [18], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Constant, {const_type: string, value: ","}, ~, ~, Str], # 2
+  [ArrayLiteral, ~, ~, ~, Array], # 3
+  [PadAccess, {sigil: "%", symbol: h}, ~, ~, Unknown], # 4
+  [Constant, {const_type: string, value: k}, ~, ~, Str], # 5
+  [Subscript, {kind: hash}, [4, 5], ~, Scalar], # 6
+  [MemStart], # 7
+  [Subscript, {kind: hash}, [4, 5, 7], 0, Scalar], # 8
+  [Increment, ~, [8], ~, Scalar], # 9
+  [Assign, ~, [6, 9], 8, Scalar], # 10
+  [Loop, {bound: entry}, [10], 10], # 11
+  [Phi, {region: 11}, [3, 44], ~, Array], # 12
+  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [2, 12], ~, Str], # 13
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 14
+  [Proj, {index: 1}, [11]], # 15
+  [Region, {head: 11}, [15]], # 16
+  [Print, ~, [13, 14], 16, Scalar], # 17
+  [Return, {implicit: true}, [1], 17], # 18
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 19
+  [DefinedOr, ~, [8, 19], ~, Scalar], # 20
+  [Increment, ~, [1], ~, Scalar], # 21
+  [DefinedOr, ~, [1, 19], ~, Scalar], # 22
+  [Coerce, {from_repr: Undef, to_repr: Num}, [1], ~, Num], # 23
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 24
+  [Subtract, ~, [23, 24], ~, Num], # 25
+  [Constant, {const_type: string, value: aa}, ~, ~, Str], # 26
+  [DefinedOr, ~, [26, 19], ~, Scalar], # 27
+  [ArrayLiteral, ~, [22, 1, 20, 27], ~, List], # 28
+  [Phi, {region: 11}, [19, 41], ~, Int], # 29
+  [Subscript, {kind: array}, [28, 29, 10], ~, Scalar], # 30
+  [Defined, ~, [30], ~, Boolean], # 31
+  [Constant, {const_type: string, value: "["}, ~, ~, Str], # 32
+  [Coerce, {from_repr: Scalar, to_repr: Str}, [30], ~, Str], # 33
+  [Concat, ~, [32, 33], ~, Str], # 34
+  [Constant, {const_type: string, value: "]"}, ~, ~, Str], # 35
+  [Concat, ~, [34, 35], ~, Str], # 36
+  [TernaryExpr, ~, [31, 36, 1], ~, Scalar], # 37
+  [Count, ~, [28, 10], ~, Int], # 38
+  [NumGt, ~, [38, 29], 11, Boolean], # 39
+  [Proj, {index: 0}, [11]], # 40
+  [Add, ~, [29, 24], ~, Int], # 41
+  [Constant, {const_type: string, value: undef}, ~, ~, Str], # 42
+  [TernaryExpr, ~, [31, 36, 42], ~, Str], # 43
+  [ListAppend, {collector: map}, [12, 43], ~, Array], # 44
+  [Increment, ~, [26], ~, Scalar]]} # 45
+```
+
+## Named scalars in a map, grep or foreach list
+
+Each list element is aliased to `$_` or the loop variable, so perl flags the operand as a modifiable lvalue. It is still read for its value. Found by B::SoN translating chalk's lib/ and running chalk's own suite
+against the emitted Perl.
+
+```perl
+my $p = 1 + time() * 0;
+my $q = 2 + time() * 0;
+my $o = "";
+for my $v ($p, $q) { $o .= "[$v]" }
+print join(",", map { "[$_]" } $p, $q), " ", join(",", grep { $_ > 1 } $p, $q), " $o\n";
+```
+
+```behavior
+parses: yes
+```
+
+```output
+[1],[2] 2 [1][2]
+```
+
+```ir
+main::__PROGRAM__: {start: 0, returns: [25], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Constant, {const_type: string, value: ","}, ~, ~, Str], # 2
+  [ArrayLiteral, ~, ~, ~, Array], # 3
+  [Loop, {bound: entry}, [0], 0], # 4
+  [Proj, {index: 1}, [4]], # 5
+  [Region, {head: 4}, [5]], # 6
+  [Loop, {bound: entry}, [6], 6], # 7
+  [Phi, {region: 7}, [3, 51], ~, Array], # 8
+  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [2, 8], ~, Str], # 9
+  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 10
+  [ArrayLiteral, ~, ~, ~, Array], # 11
+  [Proj, {index: 1}, [7]], # 12
+  [Region, {head: 7}, [12]], # 13
+  [Loop, {bound: entry}, [13], 13], # 14
+  [Phi, {region: 14}, [11, 57], ~, Array], # 15
+  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [2, 15], ~, Str], # 16
+  [Constant, {const_type: string, value: ""}, ~, ~, Str], # 17
+  [Phi, {region: 4}, [17, 65], ~, Str], # 18
+  [Concat, ~, [10, 18], ~, Str], # 19
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 20
+  [Concat, ~, [19, 20], ~, Str], # 21
+  [Proj, {index: 1}, [14]], # 22
+  [Region, {head: 14}, [22]], # 23
+  [Print, ~, [9, 10, 16, 21], 23, Scalar], # 24
+  [Return, {implicit: true}, [1], 24], # 25
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 26
+  [Call, {dispatch_kind: builtin, name: time, param_names: []}, ~, ~, Unknown], # 27
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 28
+  [Multiply, ~, [27, 28], ~, Unknown], # 29
+  [Add, ~, [26, 29], ~, Unknown], # 30
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 31
+  [Call, {dispatch_kind: builtin, name: time, param_names: []}, ~, ~, Unknown], # 32
+  [Multiply, ~, [32, 28], ~, Unknown], # 33
+  [Add, ~, [31, 33], ~, Unknown], # 34
+  [ArrayLiteral, ~, [30, 34], ~, Array], # 35
+  [MemStart], # 36
+  [Count, ~, [35, 36], ~, Int], # 37
+  [Phi, {region: 4}, [28, 41], ~, Int], # 38
+  [NumGt, ~, [37, 38], 4, Boolean], # 39
+  [Proj, {index: 0}, [4]], # 40
+  [Add, ~, [38, 26], ~, Int], # 41
+  [Subscript, {kind: array}, [35, 38, 36], ~, Scalar], # 42
+  [Constant, {const_type: string, value: "["}, ~, ~, Str], # 43
+  [ArrayLiteral, ~, [30, 34], ~, List], # 44
+  [Phi, {region: 7}, [28, 68], ~, Int], # 45
+  [Subscript, {kind: array}, [44, 45, 36], ~, Scalar], # 46
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [46], ~, Str], # 47
+  [Concat, ~, [43, 47], ~, Str], # 48
+  [Constant, {const_type: string, value: "]"}, ~, ~, Str], # 49
+  [Concat, ~, [48, 49], ~, Str], # 50
+  [ListAppend, {collector: map}, [8, 50], ~, Array], # 51
+  [ArrayLiteral, ~, [30, 34], ~, List], # 52
+  [Phi, {region: 14}, [28, 69], ~, Int], # 53
+  [Subscript, {kind: array}, [52, 53, 36], ~, Scalar], # 54
+  [Coerce, {from_repr: Scalar, to_repr: Num}, [54], ~, Num], # 55
+  [NumGt, ~, [55, 26], ~, Boolean], # 56
+  [ListAppend, {collector: grep}, [15, 54, 56], ~, Array], # 57
+  [Count, ~, [44, 36], ~, Int], # 58
+  [Count, ~, [52, 36], ~, Int], # 59
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [42], ~, Str], # 60
+  [NumGt, ~, [58, 45], 7, Boolean], # 61
+  [Proj, {index: 0}, [7]], # 62
+  [Concat, ~, [18, 43], ~, Str], # 63
+  [Concat, ~, [63, 60], ~, Str], # 64
+  [Concat, ~, [64, 49], ~, Str], # 65
+  [NumGt, ~, [59, 53], 14, Boolean], # 66
+  [Proj, {index: 0}, [14]], # 67
+  [Add, ~, [45, 26], ~, Int], # 68
+  [Add, ~, [53, 26], ~, Int]]} # 69
+```

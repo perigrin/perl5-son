@@ -245,3 +245,75 @@ main::__PROGRAM__: {start: 0, returns: [13], nodes: [
   [Print, ~, [2, 7, 8, 10, 11], 0, Scalar], # 12
   [Return, {implicit: true}, [1], 12]]} # 13
 ```
+
+## Pre- and post-increment of an element, used
+
+The post form yields the old value and the pre form the new one, each exactly once; the second `++$h{a}` sees the first's store. Found by B::SoN translating chalk's lib/ and running chalk's own suite
+against the emitted Perl.
+
+```perl
+my %h;
+my $a1 = $h{a}++;
+my $a2 = $h{a}++;
+my $b1 = ++$h{b};
+my $b2 = ++$h{b};
+print "$a1 $a2 $h{a} $b1 $b2 $h{b}\n";
+```
+
+```behavior
+parses: yes
+```
+
+```output
+0 1 2 1 2 2
+```
+
+```ir
+main::__PROGRAM__: {start: 0, returns: [45], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [PadAccess, {sigil: "%", symbol: h}, ~, ~, Unknown], # 2
+  [Constant, {const_type: string, value: a}, ~, ~, Str], # 3
+  [MemStart], # 4
+  [Subscript, {kind: hash}, [2, 3, 4], 0, Scalar], # 5
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 6
+  [DefinedOr, ~, [5, 6], ~, Scalar], # 7
+  [Coerce, {from_repr: Scalar, to_repr: Str}, [7], ~, Str], # 8
+  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 9
+  [Concat, ~, [8, 9], ~, Str], # 10
+  [Subscript, {kind: hash}, [2, 3], ~, Scalar], # 11
+  [Increment, ~, [5], ~, Scalar], # 12
+  [Assign, ~, [11, 12], 5, Scalar], # 13
+  [Subscript, {kind: hash}, [2, 3, 13], 13, Scalar], # 14
+  [DefinedOr, ~, [14, 6], ~, Scalar], # 15
+  [Coerce, {from_repr: Scalar, to_repr: Str}, [15], ~, Str], # 16
+  [Concat, ~, [10, 16], ~, Str], # 17
+  [Concat, ~, [17, 9], ~, Str], # 18
+  [Constant, {const_type: string, value: b}, ~, ~, Str], # 19
+  [Subscript, {kind: hash}, [2, 19], ~, Scalar], # 20
+  [Increment, ~, [14], ~, Scalar], # 21
+  [Assign, ~, [11, 21], 14, Scalar], # 22
+  [Subscript, {kind: hash}, [2, 19, 22], 22, Scalar], # 23
+  [Increment, ~, [23], ~, Scalar], # 24
+  [Assign, ~, [20, 24], 23, Scalar], # 25
+  [Subscript, {kind: hash}, [2, 19, 25], 25, Scalar], # 26
+  [Increment, ~, [26], ~, Scalar], # 27
+  [Assign, ~, [20, 27], 26, Scalar], # 28
+  [Subscript, {kind: hash}, [2, 3, 28], ~, Scalar], # 29
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [29], ~, Str], # 30
+  [Concat, ~, [18, 30], ~, Str], # 31
+  [Concat, ~, [31, 9], ~, Str], # 32
+  [Coerce, {from_repr: Scalar, to_repr: Str}, [24], ~, Str], # 33
+  [Concat, ~, [32, 33], ~, Str], # 34
+  [Concat, ~, [34, 9], ~, Str], # 35
+  [Coerce, {from_repr: Scalar, to_repr: Str}, [27], ~, Str], # 36
+  [Concat, ~, [35, 36], ~, Str], # 37
+  [Concat, ~, [37, 9], ~, Str], # 38
+  [Subscript, {kind: hash}, [2, 19, 28], ~, Scalar], # 39
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [39], ~, Str], # 40
+  [Concat, ~, [38, 40], ~, Str], # 41
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 42
+  [Concat, ~, [41, 42], ~, Str], # 43
+  [Print, ~, [43], 28, Scalar], # 44
+  [Return, {implicit: true}, [1], 44]]} # 45
+```

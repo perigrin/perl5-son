@@ -712,3 +712,382 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Call, {class_name: warnings, dispatch_kind: method, name: unimport, param_names: []}, [1, 2], 5, Unknown], # 6
   [Return, {implicit: true}, [6], 6]]} # 7
 ```
+
+## A list builtin a sub returns takes the caller's context
+
+`return values %h` is a list in list context and a count in scalar context; its op records neither, because the caller decides. chalk's MOP lists its classes this way. Found by B::SoN translating chalk's lib/ and running chalk's own suite
+against the emitted Perl.
+
+```perl
+use feature 'class';
+no warnings 'experimental::class';
+class Registry {
+    field %classes;
+    method add ($name) { $classes{$name} = 1; return $self }
+    method classes { return values %classes }
+}
+my $r = Registry->new->add("A")->add("B");
+my @all = $r->classes;
+my $n = $r->classes;
+print scalar(@all), " $n\n";
+```
+
+```behavior
+parses: yes
+```
+
+```output
+2 2
+```
+
+```ir
+Registry::add: {start: 0, returns: [7], nodes: [
+  [Start], # 0
+  [PadAccess, {sigil: $, symbol: self}, ~, ~, Unknown], # 1
+  [FieldAccess, {field_index: 0, field_stash: Registry}, ~, ~, Unknown], # 2
+  [Parameter, {index: 0, name: $name, sigil: $}, ~, ~, Unknown], # 3
+  [Subscript, {kind: hash}, [2, 3], ~, Scalar], # 4
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 5
+  [Assign, ~, [4, 5], 0, Int], # 6
+  [Return, ~, [1], 6]]} # 7
+Registry::classes: {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [FieldAccess, {field_index: 0, field_stash: Registry}, ~, ~, Unknown], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: values, param_names: []}, [1, 2], ~, Unknown], # 3
+  [Return, ~, [3], 0]]} # 4
+main::__PROGRAM__: {start: 0, returns: [19], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Call, {class_name: Registry, dispatch_kind: method, name: new, param_names: [], want: scalar}, ~, 0, Object], # 2
+  [Constant, {const_type: string, value: A}, ~, ~, Str], # 3
+  [Call, {class_name: Registry, dispatch_kind: method, name: add, param_names: [], want: scalar}, [2, 3], 2, Unknown], # 4
+  [Constant, {const_type: string, value: B}, ~, ~, Str], # 5
+  [Call, {class_name: Registry, dispatch_kind: method, name: add, param_names: [], want: scalar}, [4, 5], 4, Unknown], # 6
+  [Call, {class_name: Registry, dispatch_kind: method, name: classes, param_names: [], want: list}, [6], 6, Unknown], # 7
+  [ArrayLiteral, {sigil: "@", symbol: all}, [7], ~, Array], # 8
+  [MemStart], # 9
+  [Count, ~, [8, 9], ~, Int], # 10
+  [Coerce, {from_repr: Int, to_repr: Str}, [10], ~, Str], # 11
+  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 12
+  [Call, {class_name: Registry, dispatch_kind: method, name: classes, param_names: [], want: scalar}, [6], 7, Unknown], # 13
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [13], ~, Str], # 14
+  [Concat, ~, [12, 14], ~, Str], # 15
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 16
+  [Concat, ~, [15, 16], ~, Str], # 17
+  [Print, ~, [11, 17], 13, Scalar], # 18
+  [Return, {implicit: true}, [1], 18]]} # 19
+"BEGIN 1": {start: 0, returns: [7], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: feature}, ~, ~, Str], # 1
+  [Constant, {const_type: string, value: class}, ~, ~, Str], # 2
+  [Constant, {const_type: string, value: feature.pm}, ~, ~, Str], # 3
+  [MemStart], # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
+  [Call, {class_name: feature, dispatch_kind: method, name: import, param_names: []}, [1, 2], 5, Unknown], # 6
+  [Return, {implicit: true}, [6], 6]]} # 7
+"BEGIN 2": {start: 0, returns: [7], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: warnings}, ~, ~, Str], # 1
+  [Constant, {const_type: string, value: experimental::class}, ~, ~, Str], # 2
+  [Constant, {const_type: string, value: warnings.pm}, ~, ~, Str], # 3
+  [MemStart], # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
+  [Call, {class_name: warnings, dispatch_kind: method, name: unimport, param_names: []}, [1, 2], 5, Unknown], # 6
+  [Return, {implicit: true}, [6], 6]]} # 7
+```
+
+## A list assignment into a field aggregate
+
+`%registry = $graphs->%*` stores into the object's field. Nothing in the method reads it afterwards, so a reader that keeps only what the method itself consumes drops the statement. Found by B::SoN translating chalk's lib/ and running chalk's own suite
+against the emitted Perl.
+
+```perl
+use feature 'class';
+no warnings 'experimental::class';
+class Holder {
+    field %registry;
+    field @order;
+    method register ($graphs) { %registry = $graphs->%*; @order = sort keys %registry; return $self }
+    method clear { @order = (); return $self }
+    method summary { return scalar(keys %registry) . ":" . join(",", @order) }
+}
+my $h = Holder->new->register({ b => 2, a => 1 });
+print $h->summary, " ", $h->clear->summary, "\n";
+```
+
+```behavior
+parses: yes
+```
+
+```output
+2:a,b 2:
+```
+
+```ir
+Holder::clear: {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [PadAccess, {sigil: $, symbol: self}, ~, ~, Unknown], # 1
+  [FieldAccess, {field_index: 1, field_stash: Holder}, ~, ~, Unknown], # 2
+  [Assign, ~, [2], 0, Unknown], # 3
+  [Return, ~, [1], 3]]} # 4
+Holder::register: {start: 0, returns: [11], nodes: [
+  [Start], # 0
+  [PadAccess, {sigil: $, symbol: self}, ~, ~, Unknown], # 1
+  [FieldAccess, {field_index: 1, field_stash: Holder}, ~, ~, Unknown], # 2
+  [FieldAccess, {field_index: 0, field_stash: Holder}, ~, ~, Unknown], # 3
+  [Parameter, {index: 0, name: $graphs, sigil: $}, ~, ~, Unknown], # 4
+  [MemStart], # 5
+  [PostfixDeref, {sigil: "%"}, [4, 5], ~, Hash], # 6
+  [Assign, ~, [3, 6], 0, List], # 7
+  [Call, {dispatch_kind: builtin, name: keys, param_names: []}, [3, 7], ~, List], # 8
+  [Call, {dispatch_kind: builtin, name: sort, param_names: [], sort_cmp: string, sort_order: ascending}, [8], ~, List], # 9
+  [Assign, ~, [2, 9], 7, List], # 10
+  [Return, ~, [1], 10]]} # 11
+Holder::summary: {start: 0, returns: [11], nodes: [
+  [Start], # 0
+  [FieldAccess, {field_index: 0, field_stash: Holder}, ~, ~, Unknown], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: keys, param_names: []}, [1, 2], ~, Int], # 3
+  [Coerce, {from_repr: Int, to_repr: Str}, [3], ~, Str], # 4
+  [Constant, {const_type: string, value: ":"}, ~, ~, Str], # 5
+  [Concat, ~, [4, 5], ~, Str], # 6
+  [Constant, {const_type: string, value: ","}, ~, ~, Str], # 7
+  [FieldAccess, {field_index: 1, field_stash: Holder}, ~, ~, Unknown], # 8
+  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [7, 8], ~, Str], # 9
+  [Concat, ~, [6, 9], ~, Str], # 10
+  [Return, ~, [10], 0]]} # 11
+main::__PROGRAM__: {start: 0, returns: [17], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Call, {class_name: Holder, dispatch_kind: method, name: new, param_names: [], want: scalar}, ~, 0, Object], # 2
+  [Constant, {const_type: string, value: b}, ~, ~, Str], # 3
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 4
+  [Constant, {const_type: string, value: a}, ~, ~, Str], # 5
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 6
+  [HashLiteral, ~, [3, 4, 5, 6], 2, HashRef], # 7
+  [Call, {class_name: Holder, dispatch_kind: method, name: register, param_names: [], want: scalar}, [2, 7], 7, Unknown], # 8
+  [Call, {class_name: Holder, dispatch_kind: method, name: summary, param_names: [], want: list}, [8], 8, Str], # 9
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [9], ~, Str], # 10
+  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 11
+  [Call, {class_name: Holder, dispatch_kind: method, name: clear, param_names: [], want: scalar}, [8], 9, Unknown], # 12
+  [Call, {class_name: Holder, dispatch_kind: method, name: summary, param_names: [], want: list}, [12], 12, Str], # 13
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [13], ~, Str], # 14
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 15
+  [Print, ~, [10, 11, 14, 15], 13, Scalar], # 16
+  [Return, {implicit: true}, [1], 16]]} # 17
+"BEGIN 1": {start: 0, returns: [7], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: feature}, ~, ~, Str], # 1
+  [Constant, {const_type: string, value: class}, ~, ~, Str], # 2
+  [Constant, {const_type: string, value: feature.pm}, ~, ~, Str], # 3
+  [MemStart], # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
+  [Call, {class_name: feature, dispatch_kind: method, name: import, param_names: []}, [1, 2], 5, Unknown], # 6
+  [Return, {implicit: true}, [6], 6]]} # 7
+"BEGIN 2": {start: 0, returns: [7], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: warnings}, ~, ~, Str], # 1
+  [Constant, {const_type: string, value: experimental::class}, ~, ~, Str], # 2
+  [Constant, {const_type: string, value: warnings.pm}, ~, ~, Str], # 3
+  [MemStart], # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
+  [Call, {class_name: warnings, dispatch_kind: method, name: unimport, param_names: []}, [1, 2], 5, Unknown], # 6
+  [Return, {implicit: true}, [6], 6]]} # 7
+```
+
+## A call in a ternary arm runs only on that arm
+
+The method call is the arm's value, and the arm is taken only when the element is defined. Run unconditionally, it calls a method on undef. Found by B::SoN translating chalk's lib/ and running chalk's own suite
+against the emitted Perl.
+
+```perl
+use v5.36;
+use feature 'class';
+no warnings 'experimental::class';
+class Node { field $id :param; method id { return $id } }
+sub ids ($in) { return join(",", map { defined($_) ? $_->id : "undef" } $in->@*) }
+sub fib ($n) { return $n < 2 ? $n : fib($n - 1) + fib($n - 2) }
+print ids([Node->new(id => 1), undef, Node->new(id => 3)]), " ", fib(10), "\n";
+```
+
+```behavior
+parses: yes
+```
+
+```output
+1,undef,3 55
+```
+
+```ir
+Node::id: {start: 0, returns: [2], nodes: [
+  [Start], # 0
+  [FieldAccess, {field_index: 0, field_stash: Node}, ~, ~, Unknown], # 1
+  [Return, ~, [1], 0]]} # 2
+main::__PROGRAM__: {start: 0, returns: [15], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
+  [Call, {class_name: Node, dispatch_kind: method, name: new, param_names: [id], want: list}, [2], 0, Object], # 3
+  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 4
+  [Call, {class_name: Node, dispatch_kind: method, name: new, param_names: [id], want: list}, [4], 3, Object], # 5
+  [ArrayLiteral, ~, [3, 1, 5], 5, ArrayRef], # 6
+  [Call, {dispatch_kind: direct, name: main::ids, param_names: [], want: list}, [6], 6, Str], # 7
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
+  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 9
+  [Constant, {const_type: integer, value: "10"}, ~, ~, Int], # 10
+  [Call, {dispatch_kind: direct, name: main::fib, param_names: [], want: list}, [10], 7, Unknown], # 11
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [11], ~, Str], # 12
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 13
+  [Print, ~, [8, 9, 12, 13], 11, Scalar], # 14
+  [Return, {implicit: true}, [1], 14]]} # 15
+main::fib: {start: 0, returns: [15], nodes: [
+  [Start], # 0
+  [Parameter, {index: 0, name: $n, sigil: $}, ~, ~, Num], # 1
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
+  [Subtract, ~, [1, 2], ~, Num], # 3
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 4
+  [NumLt, ~, [1, 4], ~, Boolean], # 5
+  [If, ~, [0, 5], 0], # 6
+  [Proj, {index: 1}, [6]], # 7
+  [Call, {dispatch_kind: direct, name: main::fib, param_names: [], want: scalar}, [3], 7, Unknown], # 8
+  [Subtract, ~, [1, 4], ~, Num], # 9
+  [Call, {dispatch_kind: direct, name: main::fib, param_names: [], want: scalar}, [9], 8, Unknown], # 10
+  [Add, ~, [8, 10], ~, Unknown], # 11
+  [Proj, {index: 0}, [6]], # 12
+  [Region, {head: 6}, [12, 10]], # 13
+  [Phi, {predecessors: [12, 7], region: 13}, [1, 11], ~, Unknown], # 14
+  [Return, ~, [14], 13]]} # 15
+main::ids: {start: 0, returns: [8], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: ","}, ~, ~, Str], # 1
+  [ArrayLiteral, ~, ~, ~, Array], # 2
+  [Loop, {bound: entry}, [0], 0], # 3
+  [Phi, {region: 3}, [2, 26], ~, Array], # 4
+  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [1, 4], ~, Str], # 5
+  [Proj, {index: 1}, [3]], # 6
+  [Region, {head: 3}, [6]], # 7
+  [Return, ~, [5], 7], # 8
+  [Parameter, {index: 0, name: $in, sigil: $}, ~, ~, Unknown], # 9
+  [MemStart], # 10
+  [PostfixDeref, {sigil: "@"}, [9, 10], ~, Array], # 11
+  [Count, ~, [11, 10], ~, Int], # 12
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 13
+  [Phi, {region: 3}, [13, 28], ~, Int], # 14
+  [NumGt, ~, [12, 14], 3, Boolean], # 15
+  [Proj, {index: 0}, [3]], # 16
+  [Subscript, {kind: array}, [11, 14, 10], ~, Scalar], # 17
+  [Defined, ~, [17], ~, Boolean], # 18
+  [If, ~, [16, 18], 16], # 19
+  [Proj, {index: 0}, [19]], # 20
+  [Call, {dispatch_kind: method, name: id, param_names: [], want: list}, [17], 20, Unknown], # 21
+  [Constant, {const_type: string, value: undef}, ~, ~, Str], # 22
+  [Proj, {index: 1}, [19]], # 23
+  [Region, {head: 19}, [21, 23]], # 24
+  [Phi, {predecessors: [20, 23], region: 24}, [21, 22], ~, Unknown], # 25
+  [ListAppend, {collector: map}, [4, 25], ~, Array], # 26
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 27
+  [Add, ~, [14, 27], ~, Int]]} # 28
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.036"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, {implicit: true}, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [7], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: feature}, ~, ~, Str], # 1
+  [Constant, {const_type: string, value: class}, ~, ~, Str], # 2
+  [Constant, {const_type: string, value: feature.pm}, ~, ~, Str], # 3
+  [MemStart], # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
+  [Call, {class_name: feature, dispatch_kind: method, name: import, param_names: []}, [1, 2], 5, Unknown], # 6
+  [Return, {implicit: true}, [6], 6]]} # 7
+"BEGIN 3": {start: 0, returns: [7], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: warnings}, ~, ~, Str], # 1
+  [Constant, {const_type: string, value: experimental::class}, ~, ~, Str], # 2
+  [Constant, {const_type: string, value: warnings.pm}, ~, ~, Str], # 3
+  [MemStart], # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
+  [Call, {class_name: warnings, dispatch_kind: method, name: unimport, param_names: []}, [1, 2], 5, Unknown], # 6
+  [Return, {implicit: true}, [6], 6]]} # 7
+```
+
+## A method returning an array, called in list context
+
+The method's `return @parts` is a list to a list-context caller and a count to a scalar one; the call site's context decides. chalk's IR nodes build their content hash as `join('|', $op, $self->_serialize_inputs())`. Found by B::SoN translating chalk's lib/ and running chalk's own suite
+against the emitted Perl.
+
+```perl
+use feature 'class';
+no warnings 'experimental::class';
+class Node {
+    method parts { my @p; push @p, "a", "b"; return @p }
+    method hash  { return join("|", "op", $self->parts) }
+    method count { my $c = $self->parts; return $c }
+}
+print Node->new->hash, " ", Node->new->count, "\n";
+```
+
+```behavior
+parses: yes
+```
+
+```output
+op|a|b 2
+```
+
+```ir
+Node::count: {start: 0, returns: [3], nodes: [
+  [Start], # 0
+  [PadAccess, {sigil: $, symbol: self}, ~, ~, Object], # 1
+  [Call, {class_name: Node, dispatch_kind: method, name: parts, param_names: [], want: scalar}, [1], 0, Unknown], # 2
+  [Return, ~, [2], 2]]} # 3
+Node::hash: {start: 0, returns: [6], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: "|"}, ~, ~, Str], # 1
+  [Constant, {const_type: string, value: op}, ~, ~, Str], # 2
+  [PadAccess, {sigil: $, symbol: self}, ~, ~, Object], # 3
+  [Call, {class_name: Node, dispatch_kind: method, name: parts, param_names: [], want: list}, [3], 0, Unknown], # 4
+  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [1, 2, 4], ~, Str], # 5
+  [Return, ~, [5], 4]]} # 6
+Node::parts: {start: 0, returns: [5], nodes: [
+  [Start], # 0
+  [PadAccess, {sigil: "@", symbol: p}, ~, ~, Unknown], # 1
+  [Constant, {const_type: string, value: a}, ~, ~, Str], # 2
+  [Constant, {const_type: string, value: b}, ~, ~, Str], # 3
+  [Call, {dispatch_kind: builtin, name: push, param_names: []}, [1, 2, 3], 0, Unknown], # 4
+  [Return, ~, [1], 4]]} # 5
+main::__PROGRAM__: {start: 0, returns: [11], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Call, {class_name: Node, dispatch_kind: method, name: new, param_names: [], want: scalar}, ~, 0, Object], # 2
+  [Call, {class_name: Node, dispatch_kind: method, name: hash, param_names: [], want: list}, [2], 2, Str], # 3
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
+  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 5
+  [Call, {class_name: Node, dispatch_kind: method, name: new, param_names: [], want: scalar}, ~, 3, Object], # 6
+  [Call, {class_name: Node, dispatch_kind: method, name: count, param_names: [], want: list}, [6], 6, Unknown], # 7
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
+  [Print, ~, [4, 5, 8, 9], 7, Scalar], # 10
+  [Return, {implicit: true}, [1], 10]]} # 11
+"BEGIN 1": {start: 0, returns: [7], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: feature}, ~, ~, Str], # 1
+  [Constant, {const_type: string, value: class}, ~, ~, Str], # 2
+  [Constant, {const_type: string, value: feature.pm}, ~, ~, Str], # 3
+  [MemStart], # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
+  [Call, {class_name: feature, dispatch_kind: method, name: import, param_names: []}, [1, 2], 5, Unknown], # 6
+  [Return, {implicit: true}, [6], 6]]} # 7
+"BEGIN 2": {start: 0, returns: [7], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: warnings}, ~, ~, Str], # 1
+  [Constant, {const_type: string, value: experimental::class}, ~, ~, Str], # 2
+  [Constant, {const_type: string, value: warnings.pm}, ~, ~, Str], # 3
+  [MemStart], # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
+  [Call, {class_name: warnings, dispatch_kind: method, name: unimport, param_names: []}, [1, 2], 5, Unknown], # 6
+  [Return, {implicit: true}, [6], 6]]} # 7
+```
