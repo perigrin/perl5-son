@@ -314,7 +314,7 @@ main::pick: {start: 0, returns: [24], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.036"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
   [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 2": {start: 0, returns: [7], nodes: [
   [Start], # 0
@@ -322,7 +322,7 @@ main::pick: {start: 0, returns: [24], nodes: [
   [Constant, {const_type: string, value: signatures}, ~, ~, Str], # 2
   [Constant, {const_type: string, value: feature.pm}, ~, ~, Str], # 3
   [MemStart], # 4
-  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
+  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
   [Call, {class_name: feature, dispatch_kind: method, name: unimport, param_names: []}, [1, 2], 5, Unknown], # 6
   [Return, {implicit: true}, [6], 6]]} # 7
 "BEGIN 3": {start: 0, returns: [7], nodes: [
@@ -331,7 +331,7 @@ main::pick: {start: 0, returns: [24], nodes: [
   [Constant, {const_type: string, value: signatures}, ~, ~, Str], # 2
   [Constant, {const_type: string, value: feature.pm}, ~, ~, Str], # 3
   [MemStart], # 4
-  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
+  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
   [Call, {class_name: feature, dispatch_kind: method, name: import, param_names: []}, [1, 2], 5, Unknown], # 6
   [Return, {implicit: true}, [6], 6]]} # 7
 ```

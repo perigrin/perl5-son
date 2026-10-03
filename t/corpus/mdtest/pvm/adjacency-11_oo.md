@@ -182,7 +182,7 @@ main::__PROGRAM__: {start: 0, returns: [34], nodes: [
   [Constant, {const_type: string, value: isa}, ~, ~, Str], # 3
   [Constant, {const_type: string, value: feature.pm}, ~, ~, Str], # 4
   [MemStart], # 5
-  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [4, 5], 0, Unknown], # 6
+  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [4, 5], 0, Unknown], # 6
   [Call, {class_name: feature, dispatch_kind: method, name: import, param_names: []}, [1, 2, 3], 6, Unknown], # 7
   [Return, {implicit: true}, [7], 7]]} # 8
 "BEGIN 2": {start: 0, returns: [7], nodes: [
@@ -191,7 +191,7 @@ main::__PROGRAM__: {start: 0, returns: [34], nodes: [
   [Constant, {const_type: string, value: experimental::class}, ~, ~, Str], # 2
   [Constant, {const_type: string, value: warnings.pm}, ~, ~, Str], # 3
   [MemStart], # 4
-  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
+  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
   [Call, {class_name: warnings, dispatch_kind: method, name: unimport, param_names: []}, [1, 2], 5, Unknown], # 6
   [Return, {implicit: true}, [6], 6]]} # 7
 ```

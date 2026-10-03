@@ -309,6 +309,6 @@ main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.028"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
   [Return, {implicit: true}, [3], 3]]} # 4
 ```

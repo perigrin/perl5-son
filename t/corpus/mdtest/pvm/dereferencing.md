@@ -388,7 +388,7 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [Ref, ~, [6], ~, HashRef], # 7
   [MemStart], # 8
   [PostfixDeref, {sigil: "%"}, [7, 8], ~, Hash], # 9
-  [Call, {dispatch_kind: builtin, name: keys, param_names: []}, [9, 8], ~, Int], # 10
+  [Call, {dispatch_kind: builtin, memory_input: true, name: keys, param_names: [], want: scalar}, [9, 8], ~, Int], # 10
   [Coerce, {from_repr: Int, to_repr: Str}, [10], ~, Str], # 11
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 12
   [Subscript, {kind: hash}, [7, 2, 8], ~, Scalar], # 13
@@ -485,7 +485,7 @@ main::items: {start: 0, returns: [8], nodes: [
   [Start], # 0
   [ArgsSource, ~, ~, ~, Array], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, name: shift, param_names: []}, [1, 2], 0, Scalar], # 3
+  [Call, {dispatch_kind: builtin, memory_input: true, name: shift, param_names: []}, [1, 2], 0, Scalar], # 3
   [PostfixDeref, {sigil: "@"}, [3, 3], ~, Array], # 4
   [ArrayLiteral, ~, [4], ~, List], # 5
   [Count, ~, [4], ~, Int], # 6

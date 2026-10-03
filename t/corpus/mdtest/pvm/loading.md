@@ -70,7 +70,7 @@ main::__PROGRAM__: {start: 0, returns: [6], nodes: [
   [Constant, {const_type: string, value: strict}, ~, ~, Str], # 1
   [Constant, {const_type: string, value: strict.pm}, ~, ~, Str], # 2
   [MemStart], # 3
-  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [2, 3], 0, Unknown], # 4
+  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [2, 3], 0, Unknown], # 4
   [Call, {class_name: strict, dispatch_kind: method, name: import, param_names: []}, [1], 4, Unknown], # 5
   [Return, {implicit: true}, [5], 5]]} # 6
 "BEGIN 2": {start: 0, returns: [6], nodes: [
@@ -78,7 +78,7 @@ main::__PROGRAM__: {start: 0, returns: [6], nodes: [
   [Constant, {const_type: string, value: warnings}, ~, ~, Str], # 1
   [Constant, {const_type: string, value: warnings.pm}, ~, ~, Str], # 2
   [MemStart], # 3
-  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [2, 3], 0, Unknown], # 4
+  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [2, 3], 0, Unknown], # 4
   [Call, {class_name: warnings, dispatch_kind: method, name: import, param_names: []}, [1], 4, Unknown], # 5
   [Return, {implicit: true}, [5], 5]]} # 6
 ```
@@ -140,7 +140,7 @@ main::__PROGRAM__: {start: 0, returns: [18], nodes: [
   [Constant, {const_type: string, value: POSIX}, ~, ~, Str], # 1
   [Constant, {const_type: string, value: POSIX.pm}, ~, ~, Str], # 2
   [MemStart], # 3
-  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [2, 3], 0, Unknown], # 4
+  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [2, 3], 0, Unknown], # 4
   [Call, {class_name: POSIX, dispatch_kind: method, name: import, param_names: []}, [1], 4, Unknown], # 5
   [Return, {implicit: true}, [5], 5]]} # 6
 ```
@@ -208,7 +208,7 @@ main::__PROGRAM__: {start: 0, returns: [18], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: POSIX.pm}, ~, ~, Str], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
   [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
@@ -250,7 +250,7 @@ main::__PROGRAM__: {start: 0, returns: [13], nodes: [
   [EntryDef, {package: main, sigil: "%", symbol: INC}, ~, ~, Hash], # 3
   [Constant, {const_type: string, value: strict.pm}, ~, ~, Str], # 4
   [MemStart], # 5
-  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [4, 5], 0, Unknown], # 6
+  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [4, 5], 0, Unknown], # 6
   [Subscript, {kind: hash}, [3, 4, 6], ~, Scalar], # 7
   [Constant, {const_type: string, value: "yes"}, ~, ~, Str], # 8
   [Constant, {const_type: string, value: "no"}, ~, ~, Str], # 9
@@ -296,7 +296,7 @@ main::__PROGRAM__: {start: 0, returns: [13], nodes: [
   [EntryDef, {package: main, sigil: "%", symbol: INC}, ~, ~, Hash], # 3
   [Constant, {const_type: string, value: warnings.pm}, ~, ~, Str], # 4
   [MemStart], # 5
-  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [4, 5], 0, Unknown], # 6
+  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [4, 5], 0, Unknown], # 6
   [Subscript, {kind: hash}, [3, 4, 6], ~, Scalar], # 7
   [Constant, {const_type: string, value: "yes"}, ~, ~, Str], # 8
   [Constant, {const_type: string, value: "no"}, ~, ~, Str], # 9

@@ -147,8 +147,8 @@ main::__PROGRAM__: {start: 0, returns: [44], nodes: [
   [Constant, {const_type: string, value: warnings.pm}, ~, ~, Str], # 14
   [Constant, {const_type: string, value: strict.pm}, ~, ~, Str], # 15
   [MemStart], # 16
-  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [15, 16], 0, Unknown], # 17
-  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [14, 17], 17, Unknown], # 18
+  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [15, 16], 0, Unknown], # 17
+  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [14, 17], 17, Unknown], # 18
   [Subscript, {kind: hash}, [12, 13, 18], ~, Scalar], # 19
   [Constant, {const_type: string, value: "yes"}, ~, ~, Str], # 20
   [Constant, {const_type: string, value: "no"}, ~, ~, Str], # 21
@@ -180,14 +180,14 @@ main::__PROGRAM__: {start: 0, returns: [44], nodes: [
   [Constant, {const_type: string, value: POSIX}, ~, ~, Str], # 1
   [Constant, {const_type: string, value: POSIX.pm}, ~, ~, Str], # 2
   [MemStart], # 3
-  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [2, 3], 0, Unknown], # 4
+  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [2, 3], 0, Unknown], # 4
   [Call, {class_name: POSIX, dispatch_kind: method, name: import, param_names: []}, [1], 4, Unknown], # 5
   [Return, {implicit: true}, [5], 5]]} # 6
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: Fcntl.pm}, ~, ~, Str], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
   [Return, {implicit: true}, [3], 3]]} # 4
 "BEGIN 3": {start: 0, returns: [8], nodes: [
   [Start], # 0
@@ -196,7 +196,7 @@ main::__PROGRAM__: {start: 0, returns: [44], nodes: [
   [Constant, {const_type: string, value: c}, ~, ~, Str], # 3
   [Constant, {const_type: string, value: constant.pm}, ~, ~, Str], # 4
   [MemStart], # 5
-  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [4, 5], 0, Unknown], # 6
+  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [4, 5], 0, Unknown], # 6
   [Call, {class_name: constant, dispatch_kind: method, name: import, param_names: []}, [1, 2, 3], 6, Unknown], # 7
   [Return, {implicit: true}, [7], 7]]} # 8
 "BEGIN 4": {start: 0, returns: [3], nodes: [

@@ -320,7 +320,7 @@ Foo::new: {start: 0, returns: [6], nodes: [
   [Start], # 0
   [ArgsSource, ~, ~, ~, Array], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, name: shift, param_names: []}, [1, 2], 0, Scalar], # 3
+  [Call, {dispatch_kind: builtin, memory_input: true, name: shift, param_names: []}, [1, 2], 0, Scalar], # 3
   [HashLiteral, ~, ~, 3, HashRef], # 4
   [Call, {dispatch_kind: builtin, name: bless, param_names: []}, [4, 3], ~, Unknown], # 5
   [Return, ~, [5], 4]]} # 6
@@ -415,7 +415,7 @@ main::__PROGRAM__: {start: 0, returns: [16], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.036"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
   [Return, {implicit: true}, [3], 3]]} # 4
 ```
 
@@ -551,6 +551,6 @@ main::__PROGRAM__: {start: 0, returns: [16], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.036"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
   [Return, {implicit: true}, [3], 3]]} # 4
 ```

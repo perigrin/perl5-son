@@ -287,7 +287,7 @@ main::__PROGRAM__: {start: 0, returns: [6], nodes: [
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 3
   [Constant, {const_type: string, value: constant.pm}, ~, ~, Str], # 4
   [MemStart], # 5
-  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [4, 5], 0, Unknown], # 6
+  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [4, 5], 0, Unknown], # 6
   [Call, {class_name: constant, dispatch_kind: method, name: import, param_names: []}, [1, 2, 3], 6, Unknown], # 7
   [Return, {implicit: true}, [7], 7]]} # 8
 ```

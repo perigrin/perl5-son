@@ -153,14 +153,14 @@ main::__PROGRAM__: {start: 0, returns: [105], nodes: [
   [EntryWrite, ~, [27, 33, 32], 32, Unknown], # 34
   [EntryWrite, ~, [23, 26, 34], 34, Unknown], # 35
   [EntryWrite, ~, [19, 22, 35], 35, Unknown], # 36
-  [Call, {dispatch_kind: builtin, name: values, param_names: []}, [18, 36], ~, Int], # 37
+  [Call, {dispatch_kind: builtin, memory_input: true, name: values, param_names: [], want: scalar}, [18, 36], ~, Int], # 37
   [EntryDef, {package: main, sigil: $, symbol: s}, [36], ~, Scalar], # 38
   [Coerce, {from_repr: Unknown, to_repr: Str}, [38], ~, Str], # 39
   [Subscript, {kind: array}, [26, 6, 36], ~, Scalar], # 40
   [Coerce, {from_repr: Unknown, to_repr: Str}, [40], ~, Str], # 41
   [Count, ~, [26, 36], ~, Int], # 42
   [Coerce, {from_repr: Int, to_repr: Str}, [42], ~, Str], # 43
-  [Call, {dispatch_kind: builtin, name: keys, param_names: []}, [19, 36], ~, Int], # 44
+  [Call, {dispatch_kind: builtin, memory_input: true, name: keys, param_names: [], want: scalar}, [19, 36], ~, Int], # 44
   [Coerce, {from_repr: Int, to_repr: Str}, [44], ~, Str], # 45
   [Subscript, {kind: hash}, [22, 20, 36], ~, Scalar], # 46
   [Coerce, {from_repr: Unknown, to_repr: Str}, [46], ~, Str], # 47
@@ -185,7 +185,7 @@ main::__PROGRAM__: {start: 0, returns: [105], nodes: [
   [Coerce, {from_repr: Unknown, to_repr: Str}, [65], ~, Str], # 66
   [Slice, ~, [10, 18], ~, List], # 67
   [Coerce, {from_repr: List, to_repr: Str}, [67], ~, Str], # 68
-  [Call, {dispatch_kind: builtin, name: keys, param_names: []}, [18, 36], ~, Int], # 69
+  [Call, {dispatch_kind: builtin, memory_input: true, name: keys, param_names: [], want: scalar}, [18, 36], ~, Int], # 69
   [Coerce, {from_repr: Int, to_repr: Str}, [69], ~, Str], # 70
   [Subscript, {kind: array}, [5, 6, 36], ~, Scalar], # 71
   [Coerce, {from_repr: Unknown, to_repr: Str}, [71], ~, Str], # 72
@@ -205,11 +205,11 @@ main::__PROGRAM__: {start: 0, returns: [105], nodes: [
   [Print, ~, [60, 62, 66, 68, 70, 48], 85, Scalar], # 86
   [Print, ~, [50, 52, 53, 58, 48], 86, Scalar], # 87
   [Print, ~, [39, 41, 43, 45, 47, 48], 87, Scalar], # 88
-  [Call, {dispatch_kind: builtin, name: push, param_names: []}, [5, 37, 36], 88, Int], # 89
+  [Call, {dispatch_kind: builtin, memory_input: true, name: push, param_names: []}, [5, 37, 36], 88, Int], # 89
   [Count, ~, [5, 89], ~, Int], # 90
   [Subtract, ~, [90, 11], ~, Int], # 91
-  [Call, {dispatch_kind: builtin, name: unshift, param_names: []}, [5, 91, 89], 89, Int], # 92
-  [Call, {dispatch_kind: builtin, name: each, param_names: []}, [9, 92], 92, Unknown], # 93
+  [Call, {dispatch_kind: builtin, memory_input: true, name: unshift, param_names: []}, [5, 91, 89], 89, Int], # 92
+  [Call, {dispatch_kind: builtin, memory_input: true, name: each, param_names: [], want: list}, [9, 92], 92, Unknown], # 93
   [Subscript, {kind: array}, [5, 6, 93], ~, Scalar], # 94
   [Coerce, {from_repr: Unknown, to_repr: Str}, [94], ~, Str], # 95
   [Count, ~, [5, 93], ~, Int], # 96

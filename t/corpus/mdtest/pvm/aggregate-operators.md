@@ -83,7 +83,7 @@ main::__PROGRAM__: {start: 0, returns: [20], nodes: [
   [Constant, {const_type: integer, value: "20"}, ~, ~, Int], # 5
   [Constant, {const_type: integer, value: "30"}, ~, ~, Int], # 6
   [MemStart], # 7
-  [Call, {dispatch_kind: builtin, name: push, param_names: []}, [3, 5, 6, 7], 0, Int], # 8
+  [Call, {dispatch_kind: builtin, memory_input: true, name: push, param_names: []}, [3, 5, 6, 7], 0, Int], # 8
   [Subscript, {kind: array}, [3, 4, 8], ~, Scalar], # 9
   [Coerce, {from_repr: Unknown, to_repr: Str}, [9], ~, Str], # 10
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 11
@@ -158,7 +158,7 @@ main::__PROGRAM__: {start: 0, returns: [20], nodes: [
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 5
   [Constant, {const_type: integer, value: "10"}, ~, ~, Int], # 6
   [MemStart], # 7
-  [Call, {dispatch_kind: builtin, name: unshift, param_names: []}, [4, 6, 7], 0, Int], # 8
+  [Call, {dispatch_kind: builtin, memory_input: true, name: unshift, param_names: []}, [4, 6, 7], 0, Int], # 8
   [Subscript, {kind: array}, [4, 5, 8], ~, Scalar], # 9
   [Coerce, {from_repr: Unknown, to_repr: Str}, [9], ~, Str], # 10
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 11
@@ -210,7 +210,7 @@ main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Constant, {const_type: integer, value: "30"}, ~, ~, Int], # 4
   [ArrayLiteral, {sigil: "@", symbol: a}, [2, 3, 4], ~, Array], # 5
   [MemStart], # 6
-  [Call, {dispatch_kind: builtin, name: shift, param_names: []}, [5, 6], 0, Int], # 7
+  [Call, {dispatch_kind: builtin, memory_input: true, name: shift, param_names: []}, [5, 6], 0, Int], # 7
   [Count, ~, [5, 7], ~, Int], # 8
   [Coerce, {from_repr: Int, to_repr: Str}, [8], ~, Str], # 9
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
@@ -266,7 +266,7 @@ main::__PROGRAM__: {start: 0, returns: [15], nodes: [
   [Constant, {const_type: integer, value: "7"}, ~, ~, Int], # 3
   [HashLiteral, {sigil: "%", symbol: h}, [2, 3], ~, Hash], # 4
   [MemStart], # 5
-  [Call, {dispatch_kind: builtin, name: values, param_names: []}, [4, 5], ~, List], # 6
+  [Call, {dispatch_kind: builtin, memory_input: true, name: values, param_names: [], want: list}, [4, 5], ~, List], # 6
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 7
   [Subscript, {kind: array}, [6, 7, 5], ~, Scalar], # 8
   [Coerce, {from_repr: Unknown, to_repr: Str}, [8], ~, Str], # 9
@@ -319,7 +319,7 @@ main::__PROGRAM__: {start: 0, returns: [15], nodes: [
   [Constant, {const_type: integer, value: "7"}, ~, ~, Int], # 3
   [HashLiteral, {sigil: "%", symbol: h}, [2, 3], ~, Hash], # 4
   [MemStart], # 5
-  [Call, {dispatch_kind: builtin, name: keys, param_names: []}, [4, 5], ~, List], # 6
+  [Call, {dispatch_kind: builtin, memory_input: true, name: keys, param_names: [], want: list}, [4, 5], ~, List], # 6
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 7
   [Subscript, {kind: array}, [6, 7, 5], ~, Scalar], # 8
   [Coerce, {from_repr: Unknown, to_repr: Str}, [8], ~, Str], # 9
@@ -390,7 +390,7 @@ main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Constant, {const_type: integer, value: "7"}, ~, ~, Int], # 8
   [HashLiteral, {sigil: "%", symbol: h}, [7, 8], ~, Hash], # 9
   [MemStart], # 10
-  [Call, {dispatch_kind: builtin, name: each, param_names: []}, [9, 10], 0, Unknown], # 11
+  [Call, {dispatch_kind: builtin, memory_input: true, name: each, param_names: [], want: list}, [9, 10], 0, Unknown], # 11
   [Print, ~, [6, 4], 11, Scalar], # 12
   [Print, ~, [3, 4], 12, Scalar], # 13
   [Return, {implicit: true}, [1], 13], # 14

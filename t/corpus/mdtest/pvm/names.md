@@ -257,7 +257,7 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [Subscript, {kind: hash}, [6, 2, 9], ~, Scalar], # 10
   [Coerce, {from_repr: Unknown, to_repr: Str}, [10], ~, Str], # 11
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 12
-  [Call, {dispatch_kind: builtin, name: keys, param_names: []}, [7, 9], ~, Int], # 13
+  [Call, {dispatch_kind: builtin, memory_input: true, name: keys, param_names: [], want: scalar}, [7, 9], ~, Int], # 13
   [Coerce, {from_repr: Int, to_repr: Str}, [13], ~, Str], # 14
   [Print, ~, [14, 12], 9, Scalar], # 15
   [Print, ~, [11, 12], 15, Scalar], # 16
