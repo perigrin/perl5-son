@@ -574,3 +574,82 @@ main::bump: {start: 0, returns: [9], nodes: [
   [Assign, ~, [6, 7], 4, Scalar], # 8
   [Return, {implicit: true}, [5], 8]]} # 9
 ```
+
+## An iterator passed to a call, over read-only values
+
+A foreach iterator aliases its element, and a callee given it may change the element through `$_[0]`. These elements are constants, which perl never writes: writing each one back after the body dies "Modification of a read-only value". Found by B::SoN translating chalk's lib/ and running chalk's own suite against the emitted Perl.
+
+```perl
+sub id { $_[0] }
+sub keep {
+    my $out = "";
+    for my $x (@_) {
+        next unless id($x) > 1;
+        $out .= $x;
+    }
+    return $out;
+}
+print keep(1, 2, 3), "\n";
+```
+
+```behavior
+parses: yes
+```
+
+```output
+23
+```
+
+```ir
+main::__PROGRAM__: {start: 0, returns: [9], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 3
+  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 4
+  [Call, {dispatch_kind: direct, name: main::keep, param_names: [], want: list}, [2, 3, 4], 0, Str], # 5
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [5], ~, Str], # 6
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 7
+  [Print, ~, [6, 7], 5, Scalar], # 8
+  [Return, {implicit: true}, [1], 8]]} # 9
+main::id: {start: 0, returns: [5], nodes: [
+  [Start], # 0
+  [ArgsSource, ~, ~, ~, Array], # 1
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 2
+  [MemStart], # 3
+  [Subscript, {kind: array}, [1, 2, 3], ~, Scalar], # 4
+  [Return, {implicit: true}, [4], 0]]} # 5
+main::keep: {start: 0, returns: [6], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: ""}, ~, ~, Str], # 1
+  [Loop, {bound: entry}, [0], 0], # 2
+  [Phi, {region: 2}, [1, 28], ~, Str], # 3
+  [Proj, {index: 1}, [2]], # 4
+  [Region, {head: 2}, [4]], # 5
+  [Return, ~, [3], 5], # 6
+  [ArgsSource, ~, ~, ~, Array], # 7
+  [MemStart], # 8
+  [Count, ~, [7, 8], ~, Int], # 9
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 10
+  [Phi, {region: 2}, [10, 29], ~, Int], # 11
+  [NumGt, ~, [9, 11], 2, Boolean], # 12
+  [Proj, {index: 0}, [2]], # 13
+  [PadAccess, {sigil: $, symbol: x}, [8], ~, Unknown], # 14
+  [Subscript, {kind: array}, [7, 11, 8], ~, Scalar], # 15
+  [Assign, ~, [14, 15], 13, Scalar], # 16
+  [PadAccess, {sigil: $, symbol: x}, [16], ~, Str], # 17
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [17], ~, Str], # 18
+  [Concat, ~, [3, 18], ~, Str], # 19
+  [Call, {dispatch_kind: direct, name: main::id, param_names: [], want: scalar}, [17], 16, Scalar], # 20
+  [Coerce, {from_repr: Scalar, to_repr: Num}, [20], ~, Num], # 21
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 22
+  [NumGt, ~, [21, 22], ~, Boolean], # 23
+  [If, ~, [20, 23], 20], # 24
+  [Proj, {index: 1}, [24]], # 25
+  [Proj, {index: 0}, [24]], # 26
+  [Region, {head: 24}, [25, 26]], # 27
+  [Phi, {predecessors: [25, 26], region: 27}, [3, 19], ~, Str], # 28
+  [Add, ~, [11, 22], ~, Int], # 29
+  [Subscript, {kind: array}, [7, 11], ~, Scalar], # 30
+  [Assign, {if_changed: true}, [30, 17], 27, Str]]} # 31
+```
