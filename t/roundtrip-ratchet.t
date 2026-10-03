@@ -40,9 +40,9 @@ my %FLOOR = (
     chalk_compiles => 133,
     # chalk's own test files (547 at 5948f648) giving the same result
     # against the emitted lib/ as against the original -- tools/chalk-gate3.pl,
-    # measured 530 at 5215419 and 531 at 2bd9512. Files that time out
+    # measured 532 twice at 3da44c8. Files that time out
     # against the ORIGINAL are SLOW and left out.
-    chalk_gate3_same => 530,
+    chalk_gate3_same => 532,
 );
 
 # A CEILING, NOT A FLOOR: graphs B::SoN skipped in chalk's lib/. A module can
