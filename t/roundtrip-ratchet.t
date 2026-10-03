@@ -38,11 +38,12 @@ my %FLOOR = (
     # chalk's lib/ at the commit tools/chalk-lib-roundtrip.pl pins (5948f648,
     # 179 modules), measured at a4b8e49 and 3da44c8, 2026-10-02.
     chalk_compiles => 133,
-    # chalk's own test files (547 at 5948f648) giving the same result
-    # against the emitted lib/ as against the original -- tools/chalk-gate3.pl,
-    # measured 532 twice at 3da44c8. Files that time out
-    # against the ORIGINAL are SLOW and left out.
-    chalk_gate3_same => 532,
+    # chalk's own test files (547 at 5948f648) that MATCH against the emitted
+    # lib/ -- tools/chalk-gate3.pl: the same result, or, for a test that reads
+    # lib/ as source, no worse (perigrin, 2026-10-03). SAME alone measured 532
+    # twice at 3da44c8; the floor rises once the NOWORSE count is measured
+    # twice. Files that time out against the ORIGINAL are SLOW and left out.
+    chalk_gate3_matching => 532,
 );
 
 # A CEILING, NOT A FLOOR: graphs B::SoN skipped in chalk's lib/. A module can
@@ -154,12 +155,13 @@ SKIP: {
             or do { diag $out; return };
 
         my $sum = 0;
-        $sum += $n->{$_} // 0 for qw(SAME DIFFERS SLOW);
+        $sum += $n->{$_} // 0 for qw(SAME NOWORSE DIFFERS SLOW);
         is $sum, $n->{_cases}, 'every test file landed in exactly one bucket'
             or diag $out;
 
-        ok( ( $n->{SAME} // 0 ) >= $FLOOR{chalk_gate3_same},
-            "SAME $n->{SAME} >= floor $FLOOR{chalk_gate3_same}" )
+        my $matching = ($n->{SAME} // 0) + ($n->{NOWORSE} // 0);
+        ok( $matching >= $FLOOR{chalk_gate3_matching},
+            "SAME + NOWORSE $matching >= floor $FLOOR{chalk_gate3_matching}" )
             or diag $out;
     };
 }
