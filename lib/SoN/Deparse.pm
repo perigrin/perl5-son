@@ -3515,6 +3515,19 @@ class SoN::Deparse 0.01 {
                         && (($nodes->{ $in[$t] }{fields} // {})->{const_type}
                             // '') eq 'undef'));
 
+            # A SCALAR ASSIGN IS [target, value], whatever kinds they are.
+            # `my $n = $AUTOLOAD` stores an EntryDef, which the kind walk
+            # above takes for a second target, leaving no value (corpus 204);
+            # `pos($s) = 0` targets a Call, which it takes for no target at
+            # all (corpus 189). Position decides, as it does for the
+            # ArgsSource and PostfixDeref cases above; a list assign is the one
+            # stamped List, and only it can have several targets.
+            # BEFORE THE ANONYMOUS-CONTAINER REFUSAL: a demoted foreach iterator is
+            # bound as `Assign(PadAccess x, Subscript(LIST, i))`, and that refusal
+            # took the element VALUE for a store into the list.
+            $t = 1 if @in == 2 && ( $n->{stamp} // '' ) ne 'List'
+                && ( $t == 0 || $t == 2 );
+
             # AN ELEMENT STORE NEEDS A NAMED CONTAINER. `my @a = (1,2,3)`
             # leaves NO variable in the graph -- measured, the array exists
             # only as an ArrayLiteral value and `@a` is gone -- so
@@ -3548,16 +3561,6 @@ class SoN::Deparse 0.01 {
                     && !defined(($agg->{fields} // {})->{symbol})
                     && !exists $bound{ $agg->{id} };
             }
-
-            # A SCALAR ASSIGN IS [target, value], whatever kinds they are.
-            # `my $n = $AUTOLOAD` stores an EntryDef, which the kind walk
-            # above takes for a second target, leaving no value (corpus 204);
-            # `pos($s) = 0` targets a Call, which it takes for no target at
-            # all (corpus 189). Position decides, as it does for the
-            # ArgsSource and PostfixDeref cases above; a list assign is the one
-            # stamped List, and only it can have several targets.
-            $t = 1 if @in == 2 && ( $n->{stamp} // '' ) ne 'List'
-                && ( $t == 0 || $t == 2 );
 
             die "GAP: an Assign (id $n->{id}) with no target slots is not yet"
               . " rendered -- its first input is a `"
