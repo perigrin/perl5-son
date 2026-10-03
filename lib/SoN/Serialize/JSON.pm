@@ -160,6 +160,9 @@ sub _extract_fields ($node, $id_remap) {
     if ($op eq 'Proj') {
         return { index => $node->index };
     }
+    if ($op eq 'Assign') {
+        return $node->if_changed ? { if_changed => JSON::PP::true } : undef;
+    }
     if ($op eq 'Return') {
         return $node->implicit ? { implicit => JSON::PP::true } : undef;
     }

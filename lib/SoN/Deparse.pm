@@ -3639,6 +3639,13 @@ class SoN::Deparse 0.01 {
                 && (($src->{op} // '') eq 'ArgsSource'
                     || ($src->{stamp} // '') =~ /\A(?:List|Array)\z/);
 
+            # A WRITE-BACK THAT STORES ONLY A CHANGED VALUE (if_changed): an
+            # unchanged one may sit in a read-only element perl never wrote.
+            return sprintf("%s = %s if (defined(%s) xor defined(%s))"
+                         . " || (defined(%s) && %s ne %s);\n",
+                           $lhs[0], $rhs[0], $lhs[0], $rhs[0], $lhs[0],
+                           $lhs[0], $rhs[0])
+                if ($n->{fields} // {})->{if_changed} && !length $decl;
             return sprintf("%s%s = %s;\n", $decl, $lhs[0], $rhs[0]);
         }
 

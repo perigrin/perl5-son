@@ -73,4 +73,17 @@ round_trips(<<'SRC', 'a die unless');
 sub f { for my $x (@_) { die "small\n" unless $x > 1; } return "ok" } print eval { f(5, 0) } // $@;
 SRC
 
+# A DEMOTED ITERATOR IS WRITTEN BACK -- a callee may have changed it through
+# $_[0] -- and the write-back ran every pass, so iterating read-only values
+# (a sub's @_ holding constants) died "Modification of a read-only value"
+# where perl, which never wrote, ran on. It writes only a changed value; a
+# callee that changed a read-only one dies in perl as well.
+round_trips(<<'SRC', 'an iterator passed to a call, over read-only values');
+sub g { $_[0] } sub f { my $o = ""; for my $x (@_) { next unless g($x) && g($x) > 1; $o .= $x } return $o } print f(1, 2, 3), "\n";
+SRC
+
+round_trips(<<'SRC', 'a callee that changes the iterator still writes back');
+sub bump { $_[0]++ } my @a = (1, 2); for my $x (@a) { bump($x) } print "@a\n";
+SRC
+
 done_testing;

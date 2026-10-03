@@ -11174,7 +11174,7 @@ class SoN::FromOptree 0.01 {
             my $lvalue = $factory->make('Subscript', kind => 'array',
                 inputs => [$array, $i_phi]);
             my $store = $factory->make('Assign',
-                inputs => [$lvalue, $iter_slot->()]);
+                inputs => [$lvalue, $iter_slot->()], if_changed => 1);
             $store->set_control_in($sim->control);
             $sim->set_control($store);
             $sim->set_memory($store);
