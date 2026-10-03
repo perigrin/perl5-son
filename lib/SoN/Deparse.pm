@@ -4282,6 +4282,10 @@ class SoN::Deparse 0.01 {
             $text = '(' . $self->_expr($in[0]) . " $sym " . $self->_expr($in[1]) . ')';
             $text = "do { no feature 'bitwise'; $text }" unless defined $flavor;
         }
+        elsif ($op eq 'Concat'
+               and defined(my $interp = $self->_interpolation($n->{id}))) {
+            $text = $interp;
+        }
         elsif (my $sym = $BINOP{$op}) { $text = $self->_binop($sym, @in) }
         elsif ($op eq 'TernaryExpr') {
             # cond ? then : else -- a VALUE select, distinct from the If
@@ -5428,6 +5432,35 @@ class SoN::Deparse 0.01 {
             $text .= $s;
         }
         return $text;
+    }
+
+    # A CONCATENATION AS THE INTERPOLATED STRING THE SOURCE WROTE --
+    # `"    $code\n"`, which perl compiles to one multiconcat -- or undef. The
+    # same string either way to perl; chalk reads lib/ as source and its
+    # generator mangled the `.` chain. Text is escaped as _constant escapes
+    # it; a variable must be a plain scalar, and text after it must not
+    # extend it -- `[`, `{`, a word character, `:`, `->`, or `'` (the old
+    # package separator).
+    method _interpolation ($id) {
+        my @leaves = $self->_concat_leaves($id);
+        return undef unless grep { $_->[0] eq 'var' } @leaves;
+        my $text = '';
+        for my $i (0 .. $#leaves) {
+            my ($kind, $s) = $leaves[$i]->@*;
+            if ($kind eq 'text') {
+                my $c = $self->_constant({ op => 'Constant',
+                    fields => { const_type => 'string', value => $s } });
+                return undef unless $c =~ /\A"(.*)"\z/s;
+                $text .= $1;
+                next;
+            }
+            return undef unless $s =~ /\A\$\w+\z/;
+            my $next = $leaves[$i + 1];
+            return undef if $next && $next->[0] eq 'text'
+                         && $next->[1] =~ /\A(?:[\[\{\w:']|->)/;
+            $text .= $s;
+        }
+        return qq{"$text"};
     }
 
     method _concat_leaves ($id) {
