@@ -2544,6 +2544,21 @@ sub _graph_return_type {
 # Per-parameter sigil comes from argelem's `private` field: 0 scalar, 2 array,
 # 4 hash. Typing by sigil is the same rule that fixed EntryDef: `$_` and `@_`
 # are different variables sharing one glob name.
+# The line a CV's body starts on -- its first statement's COP -- or undef for
+# a body with no statement. Only an ORDER is wanted from it: a class's
+# methods and subs arrive in maps, and this is how an emitter recovers the
+# sequence the source declared them in.
+sub _cv_line {
+    my ($cv) = @_;
+    my $op = eval { $cv->START };
+    for ( 1 .. 64 ) {
+        last unless ref $op && $$op;
+        return $op->line if $op->name eq 'nextstate' || $op->name eq 'dbstate';
+        $op = $op->next;
+    }
+    return undef;
+}
+
 sub _cv_signature {
     my ($cv) = @_;
 
@@ -2678,6 +2693,7 @@ sub _record_sub {
     $classes->{$pkg_name}{subs}{$name} = {
         name      => $name,
         graph     => $full_name,
+        line      => _cv_line($cv),
         uses_args => ( _cv_uses_args($cv) ? 1 : 0 ),
         # THE DECLARED SIGNATURE, read from argcheck/argelem rather than
         # inferred. `params` is kept as the flat positional list for existing
@@ -2926,6 +2942,11 @@ sub _extract_class {
             # The signature rides in a SIBLING map keyed by the same method
             # name, which is additive: an old consumer ignores it.
             $class{methods}{$name} = "${pkg_name}::${name}";
+
+            # WHERE IT IS DECLARED, so an emitter can keep the source's order:
+            # {methods} is a map, and sorting it by name reordered chalk's
+            # Optimizer::Pass against the golden its codegen test compares.
+            $class{method_lines}{$name} = _cv_line($cv);
 
             # The invocant is NOT a parameter. Perl emits methstart() for it and
             # argcheck counts only the DECLARED params, so the first user

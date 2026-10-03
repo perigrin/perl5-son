@@ -663,7 +663,7 @@ my %BOOLEAN_FIELD = map { $_ => 1 } qw(
 # its keys are not read as field names. Converted at every depth, the methods
 # map turned `is_param => "K::is_param"` into `is_param => true`.
 my %NAME_KEYED = map { $_ => 1 } qw(
-    classes methods subs method_signatures method_return_types
+    classes methods subs method_signatures method_return_types method_lines
 );
 
 sub _json_booleans ($data, $names = 0) {

@@ -73,4 +73,16 @@ class C { field $x :param(ex); method x { $x } }
 print C->new(ex => 4)->x, "\n";
 SRC
 
+# METHODS IN THE SOURCE'S ORDER, not by name. The wire keeps them in a map,
+# and the emission sorted them: chalk's codegen-byte-compat.t compares the
+# code chalk generates from lib/Chalk/Bootstrap/Optimizer/Pass.pm, byte for
+# byte, with a golden in source order (name, scope, run).
+{
+    my $src = "use v5.42; use experimental 'class';\nclass C {\n  method zed { 1 }\n  method alpha { 2 }\n  method mid { 3 }\n  sub sz { 4 }\n  sub sa { 5 }\n}\nprint C->new->zed, C->new->alpha, C->new->mid, C::sz(), C::sa(), \"\\n\";\n";
+    my $out = SoN::Deparse->new->render(graph_of($src));
+    my @order = $out =~ /^(?:method|sub) (\w+)/mg;
+    is "@order", "zed alpha mid sz sa", 'methods and subs keep the source order';
+    is run_perl($out), "12345\n", '... and run';
+}
+
 done_testing;

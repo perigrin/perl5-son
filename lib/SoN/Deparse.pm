@@ -786,7 +786,11 @@ class SoN::Deparse 0.01 {
             # A `:reader` field's accessor is the attribute's, not written out.
             my %reader = map { (substr($_->{name}, 1) => 1) }
                          grep { $_->{is_reader} } ($c->{fields} // [])->@*;
-            for my $m (sort keys(($c->{methods} // {})->%*)) {
+            # IN THE SOURCE'S ORDER, by the line each was declared on; the
+            # name only breaks a tie.
+            my $mline = $c->{method_lines} // {};
+            for my $m (sort { ($mline->{$a} // 1e9) <=> ($mline->{$b} // 1e9) || $a cmp $b }
+                        keys(($c->{methods} // {})->%*)) {
                 my $key = $c->{methods}{$m};
                 $owned{$key} = 1;
                 next if $reader{$m};
@@ -799,7 +803,9 @@ class SoN::Deparse 0.01 {
             # A PLAIN SUB DECLARED IN THE CLASS BLOCK goes back in it, by its
             # short name. Outside, fully qualified, it is the same sub to perl
             # and a top-level one to a reader of the source.
-            for my $s (sort keys(($c->{subs} // {})->%*)) {
+            my $sline = sub ($s) { my $r = $c->{subs}{$s}; ref $r eq 'HASH' ? $r->{line} // 1e9 : 1e9 };
+            for my $s (sort { $sline->($a) <=> $sline->($b) || $a cmp $b }
+                        keys(($c->{subs} // {})->%*)) {
                 my $rec = $c->{subs}{$s};
                 my $key = ref $rec eq 'HASH' ? $rec->{graph} : $rec;
                 next unless defined $key && $all_methods->{$key};
