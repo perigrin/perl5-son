@@ -12846,6 +12846,19 @@ class SoN::FromOptree 0.01 {
     # no repr (zhi 019f5368). A field write is a TARGMY op (OPpTARGET_MY) or a
     # padsv_store whose targ's padname is_field.
     # Bounded at the JOIN for the same reason as _arm_has_element_store above.
+    # Is this op, in exec order, a WRITE to a package scalar? The flag is on
+    # the gvsv for `$n = 1` and on the nulled rv2sv above it for `$n++` and
+    # `$n += 3` -- the rule _package_scalars_written states -- and only the
+    # gvsv executes.
+    sub _writes_package_scalar ($op) {
+        my $name = $op->name;
+        return 0 unless $name eq 'gvsv'
+            || ($name eq 'rv2sv' && ${$op->first} && $op->first->name eq 'gv');
+        return 1 if $op->flags & 32;   # OPf_MOD
+        my $p = eval { $op->parent };
+        return ($p && $$p && $p->name eq 'null' && ($p->flags & 32)) ? 1 : 0;
+    }
+
     sub _arm_has_field_store ($cv, $start, $stop, $join = undef, $fields_only = 0) {
         $stop = _op_addr($stop);
         my $padlist = $cv->PADLIST;   # loop-invariant; the padname table is per-CV
@@ -12855,6 +12868,8 @@ class SoN::FromOptree 0.01 {
         for (my $op = $start; $$op && $$op != $stop && !$seen{$$op}; $op = $op->next) {
             last if defined $join && $$op == $join;
             $seen{$$op} = 1;
+            # A STORE INTO A PACKAGE SCALAR is shared state the same way.
+            return 1 if !$fields_only && _writes_package_scalar($op);
             # A STORE INTO A DEMOTED SLOT threads on control just as a field
             # store does: an lvalue padsv (a store target, an increment's
             # operand) or a padsv_store over a referenced or shared lexical.
@@ -14419,6 +14434,10 @@ class SoN::FromOptree 0.01 {
                 # landed on the body merge where the deparser refuses it.
                 my $mem_branch =
                        _arm_has_element_store($op->other, $op->next)
+                    # A STORE INTO A SHARED OR PACKAGE SCALAR is an effect too:
+                    # without its If it hung off the arm's control beside the
+                    # rest, and the graph refused "2 successors".
+                    || _arm_has_field_store($cv, $op->other, $op->next, $mod_stop)
                     || _arm_has_void_call($op->other, $op->next, $mod_stop)
                     || _arm_advances_control($op->other, $op->next, $mod_stop)
                     || _arm_has_die($op->other, $op->next, $mod_stop)
