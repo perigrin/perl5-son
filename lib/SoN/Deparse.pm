@@ -1519,7 +1519,7 @@ class SoN::Deparse 0.01 {
         # Emitted before the chain for the same reason the pad bindings are:
         # these carry no control edge, so nothing orders them, and Perl needs
         # the `my` to have happened.
-        my $prologue = '';
+        my @prologue;   # [node, text], ordered below
         for my $n (sort { $a->{id} <=> $b->{id} } $self->_nodes_in_order) {
             next unless ($n->{op} // '') =~ /\A(?:Array|Hash)Literal\z/;
             my $af = $n->{fields} // {};
@@ -1587,9 +1587,9 @@ class SoN::Deparse 0.01 {
             # branch applies to EntryDef targets, one node kind over.
             # A SHARED ONE IS DECLARED ABOVE THE SUBS (see
             # _emit_cell_declarations); a `my` here would shadow it.
-            $prologue .= sprintf("%s%s = (%s);\n",
+            push @prologue, [$n, sprintf("%s%s = (%s);\n",
                 ($self->_agg_is_package($n) || $cell_slots{$vn} ? '' : 'my '), $vn,
-                join(', ', map { $self->_expr($_) } (($n->{inputs} // [])->@*)));
+                join(', ', map { $self->_expr($_) } (($n->{inputs} // [])->@*)))];
         }
 
         for my $n (sort { $a->{id} <=> $b->{id} } $self->_nodes_in_order) {
@@ -1653,8 +1653,9 @@ class SoN::Deparse 0.01 {
                 next;
             }
 
-            $prologue .= $self->_emit_statement($n, \%next_of);
+            push @prologue, [$n, $self->_emit_statement($n, \%next_of)];
         }
+        my $prologue = join '', map { $_->[1] } $self->_prologue_order(@prologue);
 
         # A deferred binding is emitted where its effect was placed, so the
         # chain has to be walked again now that %after_effect is populated.
@@ -1725,6 +1726,11 @@ class SoN::Deparse 0.01 {
                 $out .= $text;
                 last unless defined $join;
                 last if defined $stop && $join == $stop;
+                # A BINDING OF THE JOIN'S Phi goes here, where the branch has
+                # merged: the walk resumes past the Region rather than on it,
+                # so the Region branch below never flushes it.
+                $out .= $self->_emit_statement($_, $next_of)
+                    for (delete($after_region{$join}) // [])->@*;
                 $cur = $join;
                 next;
             }
@@ -2373,8 +2379,12 @@ class SoN::Deparse 0.01 {
             my $r = ($src->{fields} // {})->{region} // $src->{region};
             next unless defined $r;
             my $rn = $nodes->{$r};
-            next unless $rn && ($rn->{op} // '') eq 'Loop';
-            return $self->_loop_join($r);
+            next unless $rn;
+            return $self->_loop_join($r) if ($rn->{op} // '') eq 'Loop';
+            # A BRANCH JOIN'S Phi settles at its Region, and the walk passes
+            # that Region: `my @c = $p ? two() : ()` was declared above the
+            # if and never assigned.
+            return $r if ($rn->{op} // '') eq 'Region';
         }
         return undef;
     }
@@ -2389,8 +2399,11 @@ class SoN::Deparse 0.01 {
         my $visit;
         $visit = sub ($id) {
             return unless defined $id && !$seen{$id}++;
-            if (exists $bound{$id}) { $last = $id; return }
             my $m = $nodes->{$id} or return;
+            # A Phi IS NOT ON THE CHAIN, bound or not: a binding filed after
+            # it was never emitted. _loop_phi_join places one after its join.
+            return if ($m->{op} // '') eq 'Phi';
+            if (exists $bound{$id}) { $last = $id; return }
             return if defined $m->{control_in};
             return if ($m->{op} // '') =~ /\A(?:Phi|Region|Loop|Proj|If|Start)\z/;
             $visit->($_) for ($m->{inputs} // [])->@*;
@@ -2516,11 +2529,16 @@ class SoN::Deparse 0.01 {
     # A LIST-CONTEXT CALL AS AN INPUT makes a merge a list: `map { $c ?
     # f($_) : 'u' }` takes everything f returns. Merged into a scalar it was
     # the count of the call's array temporary.
+    # A LIST RETURN VALUE does the same: `return ()` beside `return @c` is a
+    # merge of two lists, and as a scalar it held the count.
     method _phi_takes_a_list ($p) {
         return scalar grep {
             my $in = $nodes->{$_ // -1} // {};
-            ($in->{op} // '') eq 'Call'
-                && (($in->{fields} // {})->{want} // '') eq 'list'
+            (($in->{op} // '') eq 'Call'
+                && (($in->{fields} // {})->{want} // '') eq 'list')
+            || (($in->{op} // '') eq 'ArrayLiteral'
+                && ($in->{stamp} // '') eq 'List'
+                && !defined(($in->{fields} // {})->{symbol}))
         } ($p->{inputs} // [])->@*;
     }
 
@@ -3741,12 +3759,82 @@ class SoN::Deparse 0.01 {
             # A SUB THAT FELL OFF ITS END ends on its value, bare -- the
             # producer marks the Return `implicit` -- and one that said
             # `return` keeps the word.
+            # A MERGED LIST EXIT CARRIES ITS SCALAR READING as inputs[1], and
+            # the caller's context picks: the list variable to a list caller,
+            # the reading -- the last element, a count, undef -- to a scalar
+            # one, as perl's own `return LIST` would give.
+            if (@in > 1 && $v && ($v->{op} // '') eq 'Phi'
+                && $self->_expr($in[0]) =~ /\A\@/) {
+                return sprintf("return(wantarray ? %s : %s);\n",
+                               $self->_expr($in[0]), $self->_expr($in[1]));
+            }
             return sprintf("%s;\n", $self->_expr($in[0]))
                 if ($n->{fields} // {})->{implicit};
             return sprintf("return %s;\n", $self->_expr($in[0]));
         }
 
         die "GAP: no rule for control node `$op`\n";
+    }
+
+    # THE PROLOGUE IN DEPENDENCY ORDER. Its entries -- named aggregates and
+    # floating pad bindings -- carry no control edge, so nothing in the chain
+    # orders them; but each reads names the others declare. Emitted aggregates
+    # first, `my @c = (1 .. $n)` came above the `my ($n) = @_` that declares
+    # $n. An entry goes after every entry that declares a name it reads; ties
+    # keep the incoming order, and a cycle leaves the rest in it.
+    method _prologue_order (@entries) {
+        my (@decl, @reads);
+        for my $e (@entries) {
+            my $n = $e->[0];
+            my %d;
+            if (($n->{op} // '') =~ /Literal\z/) {
+                $d{ $self->_slot_key($n) } = 1;
+            }
+            else {
+                for my $i (($n->{inputs} // [])->@*) {
+                    my $t = $nodes->{ $i // -1 } or next;
+                    last unless ($t->{op} // '') eq 'PadAccess';
+                    $d{ $self->_slot_key($t) } = 1;
+                }
+            }
+            my (%r, %seen);
+            my @todo = ($n->{inputs} // [])->@*;
+            while (defined(my $id = shift @todo)) {
+                next if $seen{$id}++;
+                my $m = $nodes->{$id} or next;
+                my $op = $m->{op} // '';
+                $r{ $self->_slot_key($m) } = 1
+                    if $op eq 'PadAccess'
+                    || ($op =~ /Literal\z/ && defined(($m->{fields} // {})->{symbol}));
+                push @todo, ($m->{inputs} // [])->@* unless $op =~ /Literal\z/ && $m != $n;
+            }
+            delete @r{ keys %d };
+            push @decl, \%d; push @reads, \%r;
+        }
+        my (@out, %done);
+        while (@out < @entries) {
+            my $pick;
+            for my $i (0 .. $#entries) {
+                next if $done{$i};
+                my $blocked = grep {
+                    my $j = $_;
+                    !$done{$j} && $j != $i
+                        && grep { $decl[$j]{$_} } keys $reads[$i]->%*
+                } 0 .. $#entries;
+                next if $blocked;
+                $pick = $i; last;
+            }
+            # A cycle: take the next in the incoming order.
+            $pick //= (grep { !$done{$_} } 0 .. $#entries)[0];
+            $done{$pick} = 1;
+            push @out, $entries[$pick];
+        }
+        return @out;
+    }
+
+    method _slot_key ($n) {
+        my $f = $n->{fields} // {};
+        return join ':', $f->{sigil} // '', $f->{package} // '', $f->{symbol} // '';
     }
 
     # A package variable's Perl spelling, from the fields the wire carries.

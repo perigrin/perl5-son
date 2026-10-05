@@ -413,6 +413,21 @@ class SoN::FromOptree 0.01 {
                     $slot{ $agg->targ } = 1
                         if $agg->name =~ /\A(?:padav|padhv)\z/ && $agg->targ;
                 }
+                # A REFERENCE TAKEN TO IT lets anything change it -- `add(\%m)`
+                # as surely as `$m{b} = 2`. Through the nulled list wrapper.
+                if ($name eq 'srefgen' || $name eq 'refgen') {
+                    my @under = ($kid);
+                    while (my $u = shift @under) {
+                        next unless ref $u && $$u;
+                        if ($u->name =~ /\A(?:padav|padhv)\z/) {
+                            $slot{ $u->targ } = 1 if $u->targ;
+                        }
+                        elsif ($u->name =~ /\A(?:null|pushmark)\z/) {
+                            push @under, $u->first if $u->flags & 4;   # OPf_KIDS
+                        }
+                        push @under, $u->sibling if ${ $u->sibling };
+                    }
+                }
                 for (my $c = $kid; ref $c && $$c; $c = $c->sibling) { push @todo, $c }
             }
         }
@@ -3187,6 +3202,16 @@ class SoN::FromOptree 0.01 {
                 ($value, $scalar_value) =
                     _list_return_value($factory, $args, $exit_op);
             }
+            # A BARE `return` (or `return ()`) IS THE EMPTY LIST, and undef only
+            # to a scalar caller. Built as `return undef`, a list caller got
+            # one element where perl gives none.
+            elsif (!$args->@*) {
+                $value = $factory->make('ArrayLiteral', inputs => [],
+                    stamp => SoN::IR::Stamp->new(type => 'List'));
+                $scalar_value = $factory->make('Constant', value => undef,
+                    const_type => 'undef',
+                    stamp => SoN::IR::Stamp->new(type => 'Undef'));
+            }
             else {
                 $value = $args->@* ? $args->[-1] : undef;
             }
@@ -3311,7 +3336,17 @@ class SoN::FromOptree 0.01 {
             inputs => [map { $_->{value} } @$exits],
             region => $region,
             (@preds ? (predecessors => [@preds]) : ()));
-        my $ret = $factory->make_cfg('Return', inputs => [$phi]);
+        # THE SCALAR READINGS MERGE TOO, as inputs[1] like a single exit's.
+        # Dropped, a list exit's merge had one reading for both callers: a
+        # bare `return` beside `return @c` gave a list caller the count.
+        my $scalar_phi = (grep { defined $_->{scalar_value} } @$exits)
+            ? $factory->make('Phi',
+                  inputs => [map { $_->{scalar_value} // $_->{value} } @$exits],
+                  region => $region,
+                  (@preds ? (predecessors => [@preds]) : ()))
+            : undef;
+        my $ret = $factory->make_cfg('Return',
+            inputs => [$phi, (defined $scalar_phi ? ($scalar_phi) : ())]);
         $ret->set_control_in($region);
         return $ret;
     }
@@ -13529,9 +13564,13 @@ class SoN::FromOptree 0.01 {
             # `print $c ? "y" : "n"` idiom, each arm a lone string) lowers while
             # the multi-value list still GAPs loudly.
             my $delta = $arm_sim->stack_depth - $base_depth;
-            my $val = $delta > 0
-                ? $arm_sim->pop_node
-                : _undef_constant($factory);
+            # AN ARM THAT PUSHED NOTHING IS `()`: the empty list, and undef
+            # only in scalar context. As undef it was one element --
+            # `my @c = $p ? two() : ()` held (undef) on the false arm.
+            my $val = $delta > 0             ? $arm_sim->pop_node
+                    : ($op->flags & 3) == 2  ? _undef_constant($factory)  # OPf_WANT_SCALAR
+                    : $factory->make('ArrayLiteral', inputs => [],
+                          stamp => SoN::IR::Stamp->new(type => 'List'));
             return ($val, $end, $arm_sim, $delta, $sig);
         };
 

@@ -356,7 +356,7 @@ parses: yes
 main::__PROGRAM__: {start: 0, returns: [19], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Call, {dispatch_kind: direct, name: main::bare, param_names: [], want: list}, ~, 0, Undef], # 2
+  [Call, {dispatch_kind: direct, name: main::bare, param_names: [], want: list}, ~, 0, List], # 2
   [ArrayLiteral, {sigil: "@", symbol: empty}, [2], ~, Array], # 3
   [MemStart], # 4
   [Count, ~, [3, 4], ~, Int], # 5
@@ -366,7 +366,7 @@ main::__PROGRAM__: {start: 0, returns: [19], nodes: [
   [ArrayLiteral, {sigil: "@", symbol: one}, [8], ~, Array], # 9
   [Count, ~, [9, 4], ~, Int], # 10
   [Coerce, {from_repr: Int, to_repr: Str}, [10], ~, Str], # 11
-  [Call, {dispatch_kind: direct, name: main::bare, param_names: [], want: scalar}, ~, 8, Undef], # 12
+  [Call, {dispatch_kind: direct, name: main::bare, param_names: [], want: scalar}, ~, 8, List], # 12
   [Defined, ~, [12], ~, Boolean], # 13
   [Constant, {const_type: string, value: def}, ~, ~, Str], # 14
   [Constant, {const_type: string, value: undef}, ~, ~, Str], # 15
@@ -374,10 +374,11 @@ main::__PROGRAM__: {start: 0, returns: [19], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 17
   [Print, ~, [6, 7, 11, 7, 16, 17], 12, Scalar], # 18
   [Return, {implicit: true}, [1], 18]]} # 19
-main::bare: {start: 0, returns: [2], nodes: [
+main::bare: {start: 0, returns: [3], nodes: [
   [Start], # 0
-  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
+  [ArrayLiteral, ~, ~, ~, List], # 1
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 2
+  [Return, ~, [1, 2], 0]]} # 3
 main::valued: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: v}, ~, ~, Str], # 1

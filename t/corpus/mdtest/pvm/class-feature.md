@@ -664,16 +664,17 @@ Base::__DEFAULT_0: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: ""}, ~, ~, Str], # 1
   [Return, ~, [1], 0]]} # 2
-Base::mark: {start: 0, returns: [8], nodes: [
+Base::mark: {start: 0, returns: [9], nodes: [
   [Start], # 0
-  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [FieldAccess, {field_index: 0, field_stash: Base}, ~, ~, Str], # 2
-  [FieldAccess, {field_index: 0, field_stash: Base}, ~, 0, Str], # 3
-  [Parameter, {index: 0, name: $c, sigil: $}, ~, ~, Str], # 4
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [4], ~, Str], # 5
-  [Concat, ~, [3, 5], ~, Str], # 6
-  [Assign, ~, [2, 6], 3, Str], # 7
-  [Return, ~, [1], 7]]} # 8
+  [ArrayLiteral, ~, ~, ~, List], # 1
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 2
+  [FieldAccess, {field_index: 0, field_stash: Base}, ~, ~, Str], # 3
+  [FieldAccess, {field_index: 0, field_stash: Base}, ~, 0, Str], # 4
+  [Parameter, {index: 0, name: $c, sigil: $}, ~, ~, Str], # 5
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [5], ~, Str], # 6
+  [Concat, ~, [4, 6], ~, Str], # 7
+  [Assign, ~, [3, 7], 4, Str], # 8
+  [Return, ~, [1, 2], 8]]} # 9
 Base::trail: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [FieldAccess, {field_index: 0, field_stash: Base}, ~, ~, Str], # 1
