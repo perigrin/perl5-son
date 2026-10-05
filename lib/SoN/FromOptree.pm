@@ -4807,8 +4807,15 @@ class SoN::FromOptree 0.01 {
                 && ($top->const_type // '') eq 'string'
                 && $top->stamp && $top->stamp->type eq 'Str') {
                 $sim->pop_node;
+                # THE SUB'S PACKAGE GOES WITH IT. The gv pushed its short
+                # NAME, so `\&Q::c` arrived as `c` and the emission took
+                # \&main::c -- or, inside a class block, \&F::c.
+                my $gv_op = _find_gv_op($op);
+                my $gv    = $gv_op && _op_gv($cv, $gv_op);
+                my $stash = $gv && eval { $gv->STASH->NAME };
                 $sim->push_node($factory->make('Constant',
-                    value      => $top->value,
+                    value      => (defined $stash && length $stash
+                                   ? "${stash}::" . $gv->NAME : $top->value),
                     const_type => 'code',
                     stamp      => SoN::IR::Stamp->new(type => 'Code')));
                 return ($op->next, 'handled');

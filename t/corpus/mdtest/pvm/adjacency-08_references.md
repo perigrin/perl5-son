@@ -103,7 +103,7 @@ main::__PROGRAM__: {start: 0, returns: [48], nodes: [
   [PostfixDeref, {sigil: "%"}, [17, 6], ~, Hash], # 18
   [Subscript, {kind: hash}, [18, 15, 6], ~, Scalar], # 19
   [Coerce, {from_repr: Unknown, to_repr: Str}, [19], ~, Str], # 20
-  [Constant, {const_type: code, value: one}, ~, ~, Code], # 21
+  [Constant, {const_type: code, value: main::one}, ~, ~, Code], # 21
   [Ref, ~, [21], ~, CodeRef], # 22
   [Call, {dispatch_kind: builtin, name: prototype, param_names: []}, [22], ~, Scalar], # 23
   [Coerce, {from_repr: Scalar, to_repr: Str}, [23], ~, Str], # 24
@@ -123,7 +123,7 @@ main::__PROGRAM__: {start: 0, returns: [48], nodes: [
   [Coerce, {from_repr: Unknown, to_repr: Str}, [37], ~, Str], # 38
   [Subscript, {kind: array}, [36, 12, 6], ~, Int], # 39
   [Coerce, {from_repr: Unknown, to_repr: Str}, [39], ~, Str], # 40
-  [Constant, {const_type: code, value: twice}, ~, ~, Code], # 41
+  [Constant, {const_type: code, value: main::twice}, ~, ~, Code], # 41
   [Ref, ~, [41], ~, CodeRef], # 42
   [Constant, {const_type: integer, value: "21"}, ~, ~, Int], # 43
   [Call, {dispatch_kind: indirect, name: "", param_names: [], want: list}, [42, 43], 36, Unknown], # 44

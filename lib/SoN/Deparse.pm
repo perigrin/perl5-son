@@ -607,6 +607,17 @@ class SoN::Deparse 0.01 {
         return $short;
     }
 
+    # A main:: SUB NAMED FROM ANOTHER PACKAGE keeps `main::`. _sub_ident drops
+    # it, which is right at file scope; but a method is emitted inside its
+    # `class F { }`, where a bare `c()` is F::c.
+    method _call_ident ($name) {
+        my ($pkg) = ($current_sub // '') =~ /\A(.*)::[^:]+\z/;
+        return $name
+            if defined $pkg && $pkg ne 'main'
+            && $name =~ /\Amain::[A-Za-z_]\w*\z/;
+        return $self->_sub_ident($name);
+    }
+
     # True when the program defines sub $name while it runs rather than by
     # declaring it: an AUTOLOAD in its package, or a store into its CODE slot
     # -- an EntryWrite whose target is the `&` entry of that name -- in any
@@ -5117,7 +5128,7 @@ class SoN::Deparse 0.01 {
                 && !$f->{external}
                 && !$self->_defined_at_runtime($name);
 
-            my $ident = $self->_sub_ident($name);
+            my $ident = $self->_call_ident($name);
 
             # A CALL TO A FORMAT BODY IS A `write`. The body is formline,
             # which only APPENDS to the accumulator $^A; write is what prints

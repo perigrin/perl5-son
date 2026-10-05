@@ -47,7 +47,7 @@ one operator whose text is "->"
 main::__PROGRAM__: {start: 0, returns: [9], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Constant, {const_type: code, value: twice}, ~, ~, Code], # 2
+  [Constant, {const_type: code, value: main::twice}, ~, ~, Code], # 2
   [Ref, ~, [2], ~, CodeRef], # 3
   [Constant, {const_type: integer, value: "21"}, ~, ~, Int], # 4
   [Call, {dispatch_kind: indirect, name: "", param_names: [], want: list}, [3, 4], 0, Unknown], # 5
@@ -148,7 +148,7 @@ main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: "["}, ~, ~, Str], # 2
-  [Constant, {const_type: code, value: f}, ~, ~, Code], # 3
+  [Constant, {const_type: code, value: main::f}, ~, ~, Code], # 3
   [Ref, ~, [3], ~, CodeRef], # 4
   [Call, {dispatch_kind: builtin, name: prototype, param_names: []}, [4], ~, Scalar], # 5
   [Coerce, {from_repr: Scalar, to_repr: Str}, [5], ~, Str], # 6

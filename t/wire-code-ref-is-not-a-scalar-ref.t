@@ -70,7 +70,8 @@ SRC
 
     my $inner = $by{ ( $ref->{inputs} // [] )->[0] // -1 };
     ok $inner, 'its operand resolves' or return;
-    is $inner->{fields}{value}, 'SRC', 'the sub name is still there';
+    # QUALIFIED: the short name alone sent \&Q::c to main::c.
+    is $inner->{fields}{value}, 'main::SRC', 'the sub name is still there';
     is $inner->{stamp}, 'Code', '... carried as Code rather than Str';
 };
 
