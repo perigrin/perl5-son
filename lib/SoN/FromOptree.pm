@@ -10743,6 +10743,19 @@ class SoN::FromOptree 0.01 {
                 $sim->define($targ, $exit_phi);
             }
         }
+        # MEMORY MERGES AT THE EXIT TOO. A store into a demoted slot on the
+        # breaking arm -- `$so = $i; last` with $so passed to a sub -- lives
+        # in memory, and without this Phi the read after the loop took the
+        # memory from before the store. Inputs in the Region's order: the
+        # header exit when there is one, then each break.
+        my $mem = $sim->memory;
+        if (grep { defined $_->{memory} && $_->{memory} != $mem } @$break_projs) {
+            my $header_exit = $exit_region->inputs->@* > @$break_projs;
+            $sim->set_memory($factory->make('Phi',
+                inputs => [ ($header_exit ? ($mem) : ()),
+                            map { $_->{memory} // $mem } @$break_projs ],
+                region => $exit_region));
+        }
         return;
     }
 
@@ -12014,7 +12027,8 @@ class SoN::FromOptree 0.01 {
                     else {
                         my $sink = $frame ? $frame->{breaks} : $break_projs;
                         push @$sink,
-                            { proj => $taken_proj, bindings => $sim->scope_bindings }
+                            { proj => $taken_proj, bindings => $sim->scope_bindings,
+                              memory => $sim->memory }
                             if defined $sink && defined $break_projs;
                     }
                     # Continue the main walk on the rest arm's merged state.
@@ -12233,6 +12247,7 @@ class SoN::FromOptree 0.01 {
                     push @$break_projs, {
                         proj     => $taken_sim->control,
                         bindings => $taken_sim->scope_bindings,
+                        memory   => $taken_sim->memory,
                     } if defined $break_projs;
                     # Continue on the skip arm alone: the taken arm has left.
                     $sim->set_control($skip_proj);
@@ -13706,7 +13721,8 @@ class SoN::FromOptree 0.01 {
                 next unless ($asig // '') =~ /\A(?:nexted|broke|exited)\z/;
                 $left{$which} = 1;
                 push $loop->{breaks}->@*, { proj => $asim->control,
-                                            bindings => $asim->scope_bindings }
+                                            bindings => $asim->scope_bindings,
+                                            memory => $asim->memory }
                     if $asig eq 'broke' && $loop && defined $loop->{breaks};
             }
             die "GAP: an if/else whose arms both leave the loop is not yet"
@@ -14578,6 +14594,7 @@ class SoN::FromOptree 0.01 {
                         push @$sink, {
                             proj     => $mod_sim->control,
                             bindings => $mod_sim->scope_bindings,
+                            memory   => $mod_sim->memory,
                         } if defined $sink && defined $break_projs;
                         $op = $op->next;
                         next;

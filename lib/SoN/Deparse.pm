@@ -965,12 +965,18 @@ class SoN::Deparse 0.01 {
         # (base/rs.t), is out of scope.
         my @lines = split /\n/, $text, -1;
         my (%decl_scope, %decl_line, %escapes);
+        # A SOURCE SCALAR TOO, when a bare `my $so;` left no node: the first
+        # store became its `my`, inside the arm that made it -- and a read
+        # after the branch was undeclared. Hoisted, every `my` of the name
+        # goes: two sibling-block lexicals of one name become one variable,
+        # which no read can tell apart.
+        my %hoistable = (%temps, map { $_ => 1 } grep { /\A\$/ } keys %names);
         my ($next_block, @open) = (0);
         for my $i (0 .. $#lines) {
             my $l = $lines[$i];
             pop @open if $l =~ /\A\s*\}/;
             my $scope = join '/', @open;
-            for my $t (sort keys %temps) {
+            for my $t (sort keys %hoistable) {
                 next unless $l =~ /\Q$t\E\b(?!_)/;
                 if (!exists $decl_scope{$t} && $l =~ /\bmy\s+\Q$t\E\b(?!_)/) {
                     ($decl_scope{$t}, $decl_line{$t}) = ($scope, $i);
@@ -985,9 +991,10 @@ class SoN::Deparse 0.01 {
         }
         my @hoist = sort keys %escapes;
         for my $t (@hoist) {
-            $lines[ $decl_line{$t} ] =~ s/\bmy\s+(\Q$t\E\b)/$1/;
-            $lines[ $decl_line{$t} ] = ''
-                if $lines[ $decl_line{$t} ] =~ /\A\s*\Q$t\E\s*;\s*\z/;
+            for my $i (grep { $lines[$_] =~ /\bmy\s+\Q$t\E\b(?!_)/ } 0 .. $#lines) {
+                $lines[$i] =~ s/\bmy\s+(\Q$t\E\b)(?!_)/$1/;
+                $lines[$i] = '' if $lines[$i] =~ /\A\s*\Q$t\E\s*;\s*\z/;
+            }
         }
         $text = join("\n", @lines) if @hoist;
 
@@ -2173,6 +2180,9 @@ class SoN::Deparse 0.01 {
                             == $exit_rgn->{id};
                 my @pin = ($ph->{inputs} // [])->@*;
                 next unless @pin == 2;
+                # A MEMORY Phi merges the exit's chains, not a value: the store
+                # before the `last` is already on its path.
+                next if $self->_is_memory($ph->{id});
                 my $header = $nodes->{ $pin[0] // -1 } or next;
 
                 # A LOOP-CARRIED SLOT REUSES ITS OWN VARIABLE. When input 0 is
@@ -2988,12 +2998,20 @@ class SoN::Deparse 0.01 {
                 # variable must hold on this path; assigning before the `last`
                 # is what makes a post-loop read correct on both exits.
                 my $pay  = $edge->{pay}->();
-                my $jump = $edge->{word} eq 'return'
-                    ? $self->_emit_from( $arm{$ix}{id}, $next_of, undef )
-                    : "$edge->{word};\n";
+                # WHAT THE ARM DOES BEFORE IT LEAVES runs before the jump: a
+                # store pinned between the arm's Proj and the exit Region --
+                # `$so = $i; last` into a demoted slot -- was left out, and
+                # the loop exited without it.
+                # THE ARM FIRST, THEN THE PAYMENT: the exit values are what
+                # the variables hold on leaving, and the arm still reads them
+                # as they were -- paid first, `$so = $i + 1` read the paid $i.
+                my $leave = $edge->{word} eq 'return'
+                    ? $pay . $self->_emit_from( $arm{$ix}{id}, $next_of, undef )
+                    : $self->_emit_from( $arm{$ix}{id}, $next_of, $edge->{region} )
+                      . $pay . "$edge->{word};\n";
                 my $text = $ix == 0
-                    ? sprintf("if (%s) {\n%s}\n", $cond, _indent($pay . $jump))
-                    : sprintf("if (!(%s)) {\n%s}\n", $cond, _indent($pay . $jump));
+                    ? sprintf("if (%s) {\n%s}\n", $cond, _indent($leave))
+                    : sprintf("if (!(%s)) {\n%s}\n", $cond, _indent($leave));
 
                 # THE REST ARM MAY STILL REACH A BODY MERGE. With a `next`
                 # earlier in the same body, the bottom of the body is a Region

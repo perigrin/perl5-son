@@ -30,6 +30,10 @@ while ( $src =~ /make\(\s*'(\w+)'\s*,\s*\n?\s*inputs\s*=>\s*\[([^\]]*)\]/gs ) {
     my ( $kind, $inputs ) = ( $1, $2 );
     $builds_with_memory{$kind} = 1 if $inputs =~ /memory/;
 }
+# A Phi OVER MEMORY STATES has no trailing edge to trim: every input is a
+# memory state, and the renderer knows such a merge by _is_memory, not by
+# this table. The loop exit's merge of its breaks' memory is one.
+delete $builds_with_memory{Phi};
 
 ok scalar(keys %builds_with_memory) > 5,
     'the scrape found the construction sites'
