@@ -204,3 +204,36 @@ probed with starting values that make each one change the field.
     = time`) carries `default_unmodeled` instead of being dropped; the
     renderer refuses it by name. An aggregate field's list of constants is
     now a default graph like a scalar's.
+
+## Newly translating modules expose older defects (2026-10-03 to 10-05)
+
+Lowering more of chalk's shapes (a die in a loop guard, a value
+short-circuit whose right side calls, a call under a nested modifier) let
+four modules translate that had refused: IR/NodeFactory, IR/Schedule/
+Elaborate, MOP, Target/LLVM/ElaboratedContext. Each then emitted Perl that
+did not compile, or compiled wrong, for reasons older than the change:
+
+  - An exit join's seed was spelled at the top of the sub, ahead of what it
+    reads: _under_proj gave up at an `or die` merge or a loop exit (adad17d).
+  - The renderer resumed at a diamond the arm built itself, so everything
+    after it was emitted twice (4e6dd91).
+  - `if (C) { ...; return X if D } REST` emitted REST twice, or dropped the
+    outer guard when the arm rebinds a scalar (f0d242b).
+  - A lexical read in a ternary arm passed to a sub became an unbound name
+    (perl flags call arguments OPf_MOD): NodeFactory::make gave every Phi
+    undef inputs, and gate 3 fell from 545 to 495 at f0d242b (2f84b3a).
+  - `main::c()` from a method and `\&Q::c` lost their package (6a6da18).
+
+Gate 3 is the only census that catches the last kind: COMPILES rose to 136
+and INVALID reached 0 while 51 test files differed. A newly compiling module
+is measured by gate 3 before its count is trusted.
+
+Still open, found on the way:
+  - A sub falling off its end after `return X if C` returns 1 where perl
+    returns the failed condition (`sub mk { ...; return $c{$h} if exists
+    $c{$h}; }` with the key absent).
+  - `next unless A && B` (B calls) followed by an `if` in a loop body
+    refuses "a control node with 2 successors".
+  - `my $r = defined $v ? $v : []` refuses "an anonymous ArrayLiteral
+    reached as a statement" (the same merge, bound by an assignment rather
+    than passed as an argument).
