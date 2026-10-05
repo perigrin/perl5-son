@@ -1372,7 +1372,14 @@ class SoN::FromOptree 0.01 {
                     # walk, and the exit was recorded on its body Proj. The main
                     # path is already on the continue Proj; building a second If
                     # here forked the chain again.
+                    # NOT VOID, IT YIELDS C ON THE PATH THAT FALLS THROUGH:
+                    # `return X if C` as a sub's last statement takes the
+                    # caller's context, and when C fails the sub returns C --
+                    # false for `if`, true for `unless`. Discarded, the Return
+                    # read the residue of the statement before.
+                    my $falls_to_value = ($op->flags & 3) != 1;   # not OPf_WANT_VOID
                     if ($if_node) {
+                        $sim->push_node($lhs) if $falls_to_value;
                         $op = $op->next;
                         next;
                     }
@@ -1410,6 +1417,7 @@ class SoN::FromOptree 0.01 {
                         die "GAP: a guarded exit whose arm moved control without building its If\n";
                     }
                     $sim->set_control($cont_proj);
+                    $sim->push_node($lhs) if $falls_to_value;
                     $op = $op->next;
                     next;
                 }
