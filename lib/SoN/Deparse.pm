@@ -1119,7 +1119,10 @@ class SoN::Deparse 0.01 {
             #
             # A VALUE Phi still counts, which is what makes a loop-carried
             # variable work; _is_memory is what separates them.
-            next if $cfg eq 'Phi' && $self->_is_memory($n->{id});
+            # A MERGE OF A MEMORY POINT AND A VALUE THAT IS READ AS A VALUE is
+            # a value: a Delete and an allocation, passed as an argument.
+            next if $cfg eq 'Phi' && $self->_is_memory($n->{id})
+                && !$self->_read_as_value($n->{id});
             if ($cfg eq 'If') {
                 my @cin = ($n->{inputs} // [])->@*;
                 $reads{ $cin[1] }++ if @cin > 1;
@@ -4999,7 +5002,11 @@ class SoN::Deparse 0.01 {
             my $op = $c->{op} // '';
             for my $i (grep { ($in[$_] // -1) == $id } 0 .. $#in) {
                 next if $op eq 'Phi';
-                next if $op eq 'Call' && $i == $#in && @in > 1;
+                # A CALL SAYS WHETHER ITS LAST INPUT IS MEMORY (memory_input);
+                # without it, the last input is an argument -- `n("i", $c ? $v : [])`.
+                next if $op eq 'Call' && $i == $#in && @in > 1
+                    && (($c->{fields} // {})->{memory_input});
+                return 1 if $op eq 'Call';   # the flag above decided
                 my $min = $MEM_MIN_INPUTS{$op};
                 next if defined $min && $i >= $min;
                 return 1;

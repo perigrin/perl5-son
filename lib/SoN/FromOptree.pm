@@ -5134,9 +5134,16 @@ class SoN::FromOptree 0.01 {
     # potential lvalue, since the callee may assign $_[0]. As a value it is a
     # READ. Asked of the op's PARENT rather than by scanning forward to the next
     # non-operand op, which in `f($n, $x + 1)` is the `add` and not the call.
+    #
+    # THROUGH AN OPERATOR THAT YIELDS ITS OPERAND as well: an arm of a ternary
+    # or a short-circuit passed to the call is flagged the same way
+    # (`padsv sM` under cond_expr), and stopping there took the read for a
+    # store target -- chalk's `inputs => (defined $v ? $v : [])`.
     sub _is_call_argument ($op) {
         my $p = eval { $op->parent } or return 0;
-        $p = $p->parent while $$p && $p->name eq 'null' && eval { ${ $p->parent } };
+        $p = $p->parent
+            while $$p && $p->name =~ /\A(?:null|cond_expr|and|or|dor)\z/
+                && eval { ${ $p->parent } };
         return $$p && $p->name eq 'entersub' ? 1 : 0;
     }
 
