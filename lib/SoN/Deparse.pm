@@ -3024,10 +3024,19 @@ class SoN::Deparse 0.01 {
     # _join_region cannot be used -- it needs two arms to intersect. Here the
     # empty arm contributes no nodes at all, so the join is identified by the
     # arm that does exist reaching a Region.
+    #
+    # A REGION WHOLLY INSIDE THE ARM IS NOT IT. A diamond the arm builds and
+    # closes itself -- a short-circuit whose right side calls -- has every
+    # input reachable from the arm; taking it for the join resumed the walk
+    # there, and everything after it was emitted twice.
     method _lone_arm_join ($present, $next_of) {
-        for my $id ($self->_control_reachable($present->{id}, $next_of)) {
+        my @reach = $self->_control_reachable($present->{id}, $next_of);
+        my %inside = map { $_ => 1 } $present->{id}, @reach;
+        for my $id (@reach) {
             my $n = $nodes->{$id} or next;
-            return $id if ($n->{op} // '') eq 'Region';
+            next unless ($n->{op} // '') eq 'Region';
+            next unless grep { defined && !$inside{$_} } ($n->{inputs} // [])->@*;
+            return $id;
         }
         return undef;
     }

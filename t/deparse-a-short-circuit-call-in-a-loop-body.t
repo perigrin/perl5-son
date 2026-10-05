@@ -77,4 +77,32 @@ sub f { my $o = ""; for my $x (@_) { my $v = $x // g(); $o .= $v } return "$o:$n
 print f(undef, 2, undef), "\n";
 SRC
 
+# THE BRANCH THIS BUILDS IS A DIAMOND INSIDE THE REST OF THE BODY, and the
+# renderer took it for the body's merge: after a `next` guard it emitted the
+# rest of the body, then resumed at the diamond's Region and emitted it again
+# -- `my \$eff` declared twice, in chalk's Schedule::Elaborate.
+round_trips(<<'SRC', 'two call guards, then an if');
+package O { sub new { my ($c, %a) = @_; bless {%a}, $c } sub operation { $_[0]{op} } sub region { $_[0]{r} } sub id { $_[0]{id} } sub inputs { $_[0]{in} } }
+sub vd { my ($n) = @_; return $n if defined $n && $n->operation eq 'V'; return undef }
+sub el {
+    my ($loop, $cs, $phis) = @_;
+    for my $c (@$cs) {
+        next unless defined $c && $c->can('operation');
+        next unless $c->operation eq 'Phi';
+        my $r = $c->region;
+        next unless defined $r && $r->id eq $loop->id;
+        my $v = vd($c->inputs->[0]);
+        if (defined $v) {
+            push @$phis, { incoming => [] };
+        }
+    }
+    return scalar @$phis;
+}
+my $L = O->new(id => 'L');
+my $V = O->new(op => 'V', id => 'v');
+my @cs = (O->new(op => 'Phi', r => $L, in => [$V]), undef, O->new(op => 'X'), O->new(op => 'Phi', r => O->new(id => 'M'), in => [$V]), O->new(op => 'Phi', r => $L, in => [O->new(op => 'Y')]));
+print el($L, \@cs, []), "\n";
+
+SRC
+
 done_testing;
