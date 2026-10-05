@@ -1810,6 +1810,14 @@ class SoN::Deparse 0.01 {
                 }
                 if (defined $k) {
                     for my $ph (@rphis) {
+                        # BOUND HERE ON AN EARLIER PATH -- an arm that returned
+                        # from inside an enclosing if -- this path still pays
+                        # its own input; skipping it returned the other's.
+                        if (($bound{ $ph->{id} } // '') =~ /\A\$ret\d+\z/) {
+                            $out .= sprintf("%s = %s;\n", $bound{ $ph->{id} },
+                                            $self->_expr($ph->{inputs}[$k]));
+                            next;
+                        }
                         next if exists $bound{ $ph->{id} };
                         my $var = sprintf('$ret%d', $ph->{id});
                         $out .= sprintf("my %s = %s;\n", $var,
@@ -2912,7 +2920,15 @@ class SoN::Deparse 0.01 {
         }
         # AN ARM THAT RETURNS FROM INSIDE A LOOP lands on the function's exit
         # Region; the arm is emitted whole, ending in its `return`.
-        if (@loop_frames) {
+        # SO DOES ONE INSIDE AN ENCLOSING ARM ($outer_stop): its sibling falls
+        # through to the enclosing join, and the two meet only at the exit --
+        # taken as this If's join, the fall-through ran on past the enclosing
+        # one, and the code after it was emitted inside the arm and again
+        # after it. Not when the enclosing join IS the exit: then the two meet
+        # where the walk stops anyway, and _join_phis pays the exit's values.
+        if (@loop_frames
+            || (defined $outer_stop && $nodes->{$outer_stop}
+                && !$self->_is_fn_exit($nodes->{$outer_stop}, $next_of))) {
             for my $ix ( 0, 1 ) {
                 my $r = $arm{$ix} && $self->_arm_fn_exit( $arm{$ix}, $next_of )
                     or next;

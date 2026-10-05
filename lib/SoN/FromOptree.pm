@@ -1311,6 +1311,7 @@ class SoN::FromOptree 0.01 {
                     || _arm_has_field_store($cv, $op->other, $stop_addr)
                     || _arm_has_void_call($op->other, $stop_addr)
                     || _arm_has_die($op->other, $stop_addr)
+                    || _arm_has_return($op->other, $stop_addr)
                     # ...or the arm advances control without holding an effect:
                     # a call whose result is READ, or a loop. See
                     # _arm_advances_control for the two measured graphs.
@@ -13090,6 +13091,8 @@ class SoN::FromOptree 0.01 {
         return 0;
     }
 
+    my %LEAVING_OP = (die => 1, exit => 1);
+
     sub _arm_has_die ($start, $stop, $join = undef) {
         ($stop, $join) = (_op_addr($stop), _op_addr($join));
         # One shared seen-set across the nested descent -- see the note in
@@ -13097,7 +13100,7 @@ class SoN::FromOptree 0.01 {
         return _arm_has_die_from($start, $stop, $join, {});
     }
 
-    sub _arm_has_die_from ($start, $stop, $join, $seen) {
+    sub _arm_has_die_from ($start, $stop, $join, $seen, $names = \%LEAVING_OP) {
         for (my $op = $start;
              $$op && $$op != $stop && !(defined $join && $$op == $join)
                  && !$seen->{$$op};
@@ -13110,13 +13113,33 @@ class SoN::FromOptree 0.01 {
             # matching comment in _arm_has_void_call.
             if ($name eq 'and' || $name eq 'or' || $name eq 'cond_expr') {
                 return 1
-                    if _arm_has_die_from($op->other, $stop, $join, $seen);
+                    if _arm_has_die_from($op->other, $stop, $join, $seen, $names);
                 next;
             }
             # `exit` is the same CLASS as `die`: a control path that leaves and
             # does not rejoin the merge. It differs only in the status it sets,
             # which is the backend's business, not this scan's.
-            return 1 if $name eq 'die' || $name eq 'exit';
+            return 1 if $names->{$name};
+        }
+        return 0;
+    }
+
+    # Does the arm hold a RETURN UNDER A FURTHER BRANCH -- `if (C) { ...;
+    # return X if D }`? Such a return leaves the sub from inside the arm, so
+    # the arm needs its own control edge as a die does; lowered as a value
+    # merge, the outer guard was dropped and the return ran off the sub's
+    # Start. A return directly in the arm (`return X if C` itself, or
+    # `if (C) { ...; return X }`) has its own path and is not counted.
+    sub _arm_has_return ($start, $stop, $join = undef) {
+        ($stop, $join) = (_op_addr($stop), _op_addr($join));
+        my %seen;
+        for (my $op = $start;
+             $$op && $$op != $stop && !(defined $join && $$op == $join)
+                 && !$seen{$$op}++;
+             $op = $op->next) {
+            next unless $op->name =~ /\A(?:and|or|cond_expr)\z/;
+            return 1 if _arm_has_die_from($op->other, $stop, $join, {},
+                                          { return => 1 });
         }
         return 0;
     }
@@ -13511,6 +13534,9 @@ class SoN::FromOptree 0.01 {
                        || _arm_has_void_call($op->next, $op->other, $join_addr)  # false arm
                        || _arm_has_die($op->other, $op->next, $join_addr) # true arm
                        || _arm_has_die($op->next, $op->other, $join_addr) # false arm
+                       # A RETURN, nested in a modifier or not, leaves from its arm.
+                       || _arm_has_return($op->other, $op->next, $join_addr)
+                       || _arm_has_return($op->next, $op->other, $join_addr)
                        # A PINNED ALLOCATION moves the arm's control: `$c ? 2 : []`
                        # forked the pre-branch control without an If.
                        # SO DOES A CALL WHOSE VALUE THE ARM YIELDS, and a loop or
@@ -13531,7 +13557,9 @@ class SoN::FromOptree 0.01 {
             && !_arm_has_field_store($cv, $op->other, $op->next, $join_addr, 1)
             && !_arm_has_field_store($cv, $op->next, $op->other, $join_addr, 1)
             && !_arm_has_die($op->other, $op->next, $join_addr)
-            && !_arm_has_die($op->next, $op->other, $join_addr);
+            && !_arm_has_die($op->next, $op->other, $join_addr)
+            && !_arm_has_return($op->other, $op->next, $join_addr)
+            && !_arm_has_return($op->next, $op->other, $join_addr);
         # AN ARM THAT LEAVES THE LOOP -- `if (C) { ... } else { ...; next }` --
         # needs the branch built, so the leaving arm has its own Proj.
         my $loop_branch = $loop && ( _arm_has_loop_control($op->other, $join_addr)
