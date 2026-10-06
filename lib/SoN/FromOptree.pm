@@ -5545,6 +5545,21 @@ class SoN::FromOptree 0.01 {
         # can tell the process environment from a package hash whose short name
         # is also ENV (%Foo::ENV) -- the bare NAME "ENV" is ambiguous. Only
         # main::ENV is the environment; any other stash is a normal hash.
+        # `(LIST) x N` REPEATS THE LIST, and perl says so with a private flag
+        # on the repeat op (OPpREPEAT_DOLIST, 64 -- asked of B), not with its
+        # operands. Through the generic binary path `("x") x 3` was the
+        # string "xxx" and `(1, 2) x 2` was 1, "22". The left operand is
+        # every element above the mark; the result is a list.
+        if ($name eq 'repeat' && ($op->private & 64)) {
+            my $count = $sim->pop_node;
+            my $elems = $sim->pop_to_mark;
+            my $list  = $factory->make('ArrayLiteral', inputs => [@$elems],
+                stamp => SoN::IR::Stamp->new(type => 'List'));
+            $sim->push_node($factory->make('Repeat', inputs => [$list, $count],
+                stamp => SoN::IR::Stamp->new(type => 'List')));
+            return ($op->next, 'handled');
+        }
+
         if ($name eq 'gv') {
             my $gv = _op_gv($cv, $op);
             my $value = 'unknown';
