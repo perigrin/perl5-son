@@ -36,21 +36,22 @@ my %FLOOR = (
     corpus => 274,   # measured on t/corpus/mdtest/pvm (pvm 50cd3b10 + 16 local, 274 cases), 2026-10-06
     perl_t => 11,    # base/lex.t refuses on a `caller` bound to a list
     # chalk's lib/ at the commit tools/chalk-lib-roundtrip.pl pins (5948f648,
-    # 179 modules), measured at a4b8e49 and 3da44c8, 2026-10-02.
-    chalk_compiles => 133,
+    # 179 modules), measured at d0cb68a and 2d8fb90, 2026-10-06.
+    chalk_compiles => 137,
     # chalk's own test files (547 at 5948f648) that MATCH against the emitted
     # lib/ -- tools/chalk-gate3.pl: the same result, or, for a test that reads
-    # lib/ as source, no worse (perigrin, 2026-10-03). Measured 543 at
-    # 5a8e22d and a7f66fa. Files that time out against the ORIGINAL are SLOW
+    # lib/ as source, no worse (perigrin, 2026-10-03). Measured 545 at
+    # d0cb68a and 2d8fb90, 2026-10-06. Files that time out against the ORIGINAL are SLOW
     # and left out.
-    chalk_gate3_matching => 543,
+    chalk_gate3_matching => 545,
 );
 
 # A CEILING, NOT A FLOOR: graphs B::SoN skipped in chalk's lib/. A module can
 # compile with some of its graphs skipped, so COMPILES alone could hold while
 # the parse gate slipped. Lowering this needs no reason; raising it does.
 my %CEILING = (
-    chalk_skipped_graphs => 277,
+    # Measured 239 at d0cb68a and 2d8fb90, 2026-10-06.
+    chalk_skipped_graphs => 239,
 );
 
 # ONE RUN PER TOOL. The corpus census takes ~3 minutes, and a first draft of
