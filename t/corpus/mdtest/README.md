@@ -12,6 +12,12 @@ the perl, its graph, and what perl says it does.
 These are copies, not links: they change here when we change them, and the
 round-trip census, its ratchet and the drift check all measure them.
 
+ONE LOCAL ADDITION: `pvm/chalk-found-gaps.md` holds sixteen cases reduced from
+modules in chalk's lib/ that B::SoN refused or emitted wrongly, and two on
+`defined $v ? $v : X` against `$v // X`. They were sent to pvm to place in its
+tiers; at the next copy from pvm, replace this file with pvm's versions of
+the cases.
+
 ## The graph block
 
 Compact flow YAML any YAML parser reads, written by
