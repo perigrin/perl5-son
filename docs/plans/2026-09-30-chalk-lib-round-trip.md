@@ -237,3 +237,12 @@ Still open, found on the way:
   - `my $r = defined $v ? $v : []` refuses "an anonymous ArrayLiteral
     reached as a statement" (the same merge, bound by an assignment rather
     than passed as an argument).
+
+## Deferred: tidy chalk's NodeFactory default (perigrin, 2026-10-06)
+
+`lib/Chalk/IR/NodeFactory.pm:209` spells `inputs => (defined $values ?
+$values : [])`; `inputs => $values // []` is the same for a plain lexical
+(corpus: "A defined-ternary default and a defined-or default agree"). Not
+made: chalk's checkout had staged changes that are not ours, and perigrin
+said it can wait. When taken up, make it on a branch from `pu` in a separate
+worktree and open a PR; gate 3 stays pinned at 5948f648 either way.
