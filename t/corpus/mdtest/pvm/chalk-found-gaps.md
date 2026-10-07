@@ -1318,3 +1318,69 @@ main::__PROGRAM__: {start: 0, returns: [27], nodes: [
   [ArrayLiteral, {sigil: "@", symbol: pairs}, [18], ~, Array]]} # 28
 ```
 
+## A postfix if and a postfix unless that rebind a lexical
+
+Each modifier rebinds a lexical on one path; the value after it is the old one when the guard fails. pvm's corpus had no statement-modifier assignment.
+
+```perl
+sub describe {
+    my ($value, $quantifier) = @_;
+    my $str = ref $value ? "<ref>" : $value;
+    $str .= $quantifier if defined $quantifier;
+    my $sign = "+";
+    $sign = "-" unless $value gt "m";
+    return "$sign$str";
+}
+print describe("a", "*"), " ", describe("z"), " ", describe([1], "?"), "\n";
+```
+
+```behavior
+parses: yes
+```
+
+```output
+-a* +z -<ref>?
+```
+
+```ir
+main::__PROGRAM__: {start: 0, returns: [17], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Constant, {const_type: string, value: a}, ~, ~, Str], # 2
+  [Constant, {const_type: string, value: "*"}, ~, ~, Str], # 3
+  [Call, {dispatch_kind: direct, name: main::describe, param_names: [], want: list}, [2, 3], 0, Str], # 4
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [4], ~, Str], # 5
+  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 6
+  [Constant, {const_type: string, value: z}, ~, ~, Str], # 7
+  [Call, {dispatch_kind: direct, name: main::describe, param_names: [], want: list}, [7], 4, Str], # 8
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [8], ~, Str], # 9
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 10
+  [ArrayLiteral, ~, [10], 8, ArrayRef], # 11
+  [Constant, {const_type: string, value: "?"}, ~, ~, Str], # 12
+  [Call, {dispatch_kind: direct, name: main::describe, param_names: [], want: list}, [11, 12], 11, Str], # 13
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [13], ~, Str], # 14
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 15
+  [Print, ~, [5, 6, 9, 6, 14, 15], 13, Scalar], # 16
+  [Return, {implicit: true}, [1], 16]]} # 17
+main::describe: {start: 0, returns: [16], nodes: [
+  [Start], # 0
+  [PadAccess, {sigil: $, symbol: value}, ~, ~, Str], # 1
+  [Constant, {const_type: string, value: m}, ~, ~, Str], # 2
+  [StrGt, ~, [1, 2], ~, Boolean], # 3
+  [Constant, {const_type: string, value: "+"}, ~, ~, Str], # 4
+  [Constant, {const_type: string, value: "-"}, ~, ~, Str], # 5
+  [PadAccess, {sigil: $, symbol: quantifier}, ~, ~, Str], # 6
+  [Defined, ~, [6], ~, Boolean], # 7
+  [RefType, ~, [1], ~, Str], # 8
+  [Constant, {const_type: string, value: "<ref>"}, ~, ~, Str], # 9
+  [TernaryExpr, ~, [8, 9, 1], ~, Unknown], # 10
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 11
+  [Concat, ~, [10, 11], ~, Str], # 12
+  [TernaryExpr, {rebind_arm: 1}, [7, 12, 10], 0, Unknown], # 13
+  [TernaryExpr, {rebind_arm: 2}, [3, 4, 5], 13, Str], # 14
+  [Concat, ~, [14, 13], ~, Str], # 15
+  [Return, ~, [15], 14], # 16
+  [ArgsSource, ~, ~, ~, Array], # 17
+  [Assign, ~, [1, 6, 17], ~, List]]} # 18
+```
+
