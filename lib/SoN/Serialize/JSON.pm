@@ -166,6 +166,9 @@ sub _extract_fields ($node, $id_remap) {
     if ($op eq 'Return') {
         return $node->implicit ? { implicit => JSON::PP::true } : undef;
     }
+    if ($op eq 'TernaryExpr') {
+        return defined $node->rebind_arm ? { rebind_arm => 0 + $node->rebind_arm } : undef;
+    }
     # NO PAD INDEX. `targ` is perl's scratchpad slot -- an artifact of how perl
     # stores a lexical in one CV, meaningless to a consumer, and unstable across
     # compilation units by the producer's own account (PadAccess::content_hash

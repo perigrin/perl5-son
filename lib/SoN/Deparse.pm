@@ -1919,9 +1919,38 @@ class SoN::Deparse 0.01 {
                 # the alias resolved to the restored value and the binding
                 # emitted `my shift(@_) = shift(@_)`.
                 my $var  = $bound{ $n->{id} };
-                my $expr = $self->_expr_uncached($n->{id});
-                $out .= sprintf("my %s = %s;\n", $var, $expr);
+                if (defined(my $arm = $self->_rebind_arm($n))) {
+                    # A STATEMENT'S CONDITIONAL REBIND reads as the statement:
+                    # the value before it, then the guarded assignment --
+                    # `if` when the arm is input 1, `unless` when it is 2.
+                    my ($c, $t, $f) = ($n->{inputs} // [])->@*;
+                    my ($before, $after) = $arm == 1 ? ($f, $t) : ($t, $f);
+                    my $before_text = $self->_expr($before);
+                    my $cond_text   = $self->_expr($c);
+                    # INSIDE THE GUARD THE OLD VALUE IS THE VARIABLE --
+                    # `$v = $v . $q` -- but only there: neither the name nor
+                    # any text cached under it may outlive this statement,
+                    # or a later read would see the variable after it moved.
+                    my %save_rendered = %rendered;
+                    my $was_bound = exists $bound{$before};
+                    $bound{$before} = $var unless $was_bound;
+                    my $after_text = eval { $self->_expr($after) };
+                    my $err = $@;
+                    delete $bound{$before} unless $was_bound;
+                    %rendered = %save_rendered;
+                    die $err if $err;
+                    $out .= sprintf("my %s = %s;\n%s (%s) {\n%s = %s;\n}\n",
+                        $var, $before_text,
+                        ($arm == 1 ? 'if' : 'unless'), $cond_text,
+                        $var, $after_text);
+                }
+                else {
+                    my $expr = $self->_expr_uncached($n->{id});
+                    $out .= sprintf("my %s = %s;\n", $var, $expr);
+                }
             }
+            # An unread rebind is a value nobody takes: nothing to say.
+            elsif (defined $self->_rebind_arm($n)) { }
             else {
                 $out .= $self->_emit_statement($n, $next_of);
             }
@@ -3084,6 +3113,12 @@ class SoN::Deparse 0.01 {
     # closes itself -- a short-circuit whose right side calls -- has every
     # input reachable from the arm; taking it for the join resumed the walk
     # there, and everything after it was emitted twice.
+    # The arm a pinned conditional rebind names (1 or 2), or undef.
+    method _rebind_arm ($n) {
+        return undef unless ($n->{op} // '') eq 'TernaryExpr';
+        return (($n->{fields} // {})->{rebind_arm});
+    }
+
     method _lone_arm_join ($present, $next_of) {
         my @reach = $self->_control_reachable($present->{id}, $next_of);
         my %inside = map { $_ => 1 } $present->{id}, @reach;

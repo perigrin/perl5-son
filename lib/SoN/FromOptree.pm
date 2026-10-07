@@ -1548,7 +1548,8 @@ class SoN::FromOptree 0.01 {
                             ? ($armv, $base)    # if:     cond ? arm : base
                             : ($base, $armv);   # unless: cond ? base : arm
                         $sim->define($targ,
-                            _make_ternary($factory, $lhs, @arms));
+                            _make_rebind($factory, $sim, $lhs, @arms,
+                                         $name eq 'and' ? 1 : 2));
                     }
                     $op = $op->next;
                     next;
@@ -13291,6 +13292,23 @@ class SoN::FromOptree 0.01 {
     # contributes (a Boolean guard does not make the value a Boolean). Left
     # unstamped when either arm is (honest GAP, no guessing); the backend
     # requires an explicit repr on a ternary consumed as another's arm.
+    # A STATEMENT'S CONDITIONAL REBIND, as the merge _make_ternary builds but
+    # unshared and pinned where the statement stood, saying which input is the
+    # arm's ($arm: 1 for `if`, 2 for `unless`). Folded into the reads as a
+    # floating ternary, `$s .= $q if defined $q` came back as one expression
+    # with no `if` in it -- chalk's cfg-statements.t parses lib/ and found none.
+    sub _make_rebind ($factory, $sim, $cond, $true_val, $false_val, $arm) {
+        my %args = (inputs => [$cond, $true_val, $false_val], rebind_arm => $arm);
+        if (_is_narrowed($true_val->stamp) && _is_narrowed($false_val->stamp)) {
+            $args{stamp} = SoN::IR::Stamp::join(
+                $true_val->stamp, $false_val->stamp);
+        }
+        my $node = $factory->make_unique('TernaryExpr', %args);
+        $node->set_control_in($sim->control);
+        $sim->set_control($node);
+        return $node;
+    }
+
     sub _make_ternary ($factory, $cond, $true_val, $false_val) {
         my %args = (inputs => [$cond, $true_val, $false_val]);
         if (_is_narrowed($true_val->stamp) && _is_narrowed($false_val->stamp)) {
