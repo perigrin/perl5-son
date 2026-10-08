@@ -20,7 +20,11 @@ my $jobs    = 8;
 # the ORIGINAL lib/ -- measured under load, 344s to over 1800s -- and a file
 # that times out against the original is SLOW, compared with nothing. Two of
 # the seven differed once compared (earley-leo, perl-target-perl-tier-d).
-my $timeout = 3600;
+# THREE HOURS, not one: t/bootstrap/perl-recognize-phase5.t recognises every
+# .pm under lib/Chalk and took 8003s against the ORIGINAL lib/ (measured
+# 2026-10-07, some load) -- SLOW, so compared with nothing. perigrin chose to
+# count it at the cost of a longer gate 3 (2026-10-08).
+my $timeout = 10800;
 my $verbose = 0;   # -v lists DIFFERS rows; -v -v also the SLOW ones
 GetOptions('chalk=s' => \$chalk, 'commit=s' => \$COMMIT, 'jobs=i' => \$jobs,
            'timeout=i' => \$timeout, 'v+' => \$verbose)
