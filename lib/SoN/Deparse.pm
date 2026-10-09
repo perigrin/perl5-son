@@ -40,6 +40,11 @@ class SoN::Deparse 0.01 {
     # tests look for `use 5.42.0` there.
     our $TARGET_BUNDLE = '5.42.0';
 
+    # Markers in the program body while it is assembled; neither survives
+    # into the emission. A NUL cannot occur in rendered Perl source.
+    my $PKG_SENTINEL      = "\x00PKG\x00";
+    my $CLASS_PLACEHOLDER = "\x00CLASS\x00";
+
     # ONE TABLE, ONE SPELLING EACH. These are not interchangeable: `==` for
     # `eq` agrees on numbers and disagrees on strings, which is exactly the
     # Int/Str confusion the stamp lattice tracks. A wrong entry here is a wrong
@@ -65,6 +70,10 @@ class SoN::Deparse 0.01 {
     # Pad bindings whose value is a chain-bound effect: effect id => [nodes to
     # emit right after it]. See _emit_control_chain.
     field %after_effect;
+    # Each class's pieces from _emit_classes, and which were placed at
+    # their own statements' region (_place_package_regions).
+    field %class_parts;
+    field %placed_class;
 
     # Bindings pinned to the Region that joins a loop's exit: they read a loop
     # Phi, which only settles once the loop has closed, and the prologue would
@@ -345,9 +354,17 @@ class SoN::Deparse 0.01 {
         %mem_cache = ();
         %subst_count_var = ();
         my $body = eval {
-            $self->_declare_undeclared($self->_emit_control_chain($graph))
+            $self->_declare_undeclared(
+                $self->_place_package_regions($self->_emit_control_chain($graph)))
         };
         if (!defined $body) { $gap = $@ || 'render failed with no reason'; return undef }
+        # EACH CLASS WHERE IT LANDED: at its own statements' region when it has
+        # any, else in the class section. Filled after the scope pass, which
+        # must not mistake one method's temporaries for the program's.
+        for my $text ($out, $body) {
+            $text =~ s!\Q$CLASS_PLACEHOLDER\E([^\x00\n]+)\Q$CLASS_PLACEHOLDER\E\n!$placed_class{$1} ? '' : $class_parts{$1}{open} . $class_parts{$1}{body} . "}\n"!ge;
+            $text =~ s!\Q$CLASS_PLACEHOLDER\E([^\x00\n]+)\Q$CLASS_PLACEHOLDER\E BODY\n!$class_parts{$1}{body}!ge;
+        }
         # THE DATA SECTION LAST, after the marker perl reads it from. `__DATA__`
         # for both source markers: in a main program they open the same handle.
         my $data_section = defined $data->{data_section}
@@ -734,6 +751,7 @@ class SoN::Deparse 0.01 {
     # default graph's VALUE; a method or ADJUST is its graph's statements.
     method _emit_classes () {
         my %owned;
+        %class_parts = ();
         # A CLASS FROM ANOTHER FILE is the source's `use`, not ours to
         # declare: re-declaring it is "Cannot reopen existing class". Its
         # graphs are owned all the same, so none is emitted as a named sub.
@@ -830,9 +848,63 @@ class SoN::Deparse 0.01 {
                 $body .= $sub;
             }
             my $isa = defined $c->{parent} ? " :isa($c->{parent})" : '';
-            $text .= "class $name$isa {\n" . _indent($body) . "}\n";
+            $text .= "$CLASS_PLACEHOLDER$name$CLASS_PLACEHOLDER\n";
+            $class_parts{$name} = { open => "class $name$isa {\n", body => _indent($body) };
         }
         return ($text, \%owned);
+    }
+
+    # _place_package_regions($text) -> the program body with each region of
+    # statements that ran in another package enclosed where it ran.
+    #
+    # A CLASS OR PACKAGE BLOCK'S OWN STATEMENTS -- `our %X = ...` in a class
+    # body -- were emitted at file level in main, so every such variable was
+    # spelled fully qualified: `%Chalk::IR::NodeFactory::STATEMENT_EFFECT_OPS
+    # = (...)`. Correct Perl, but chalk's grammar has no package-qualified
+    # aggregate, and chalk's perl-recognize-phase5.t, reading lib/ as source,
+    # rejected the module. The producer marks where the package changes
+    # (PackageMark); here a region in a class this file declares becomes that
+    # class's block, at that point -- its fields and methods, then the
+    # statements -- and any other becomes `package P { ... }`. Inside, the
+    # package's own variables are spelled bare and declared `our`.
+    #
+    # AT THE POINT IT RAN, not with the classes above everything: the
+    # statements may read file-level code that runs before them.
+    method _place_package_regions ($text) {
+        %placed_class = ();
+        return $text unless index($text, $PKG_SENTINEL) >= 0;
+        my @parts = split /^\Q$PKG_SENTINEL\E([^\x00\n]+)\Q$PKG_SENTINEL\E\n/m, $text;
+        my $out = shift @parts;
+        while (@parts) {
+            my ($pkg, $region) = splice @parts, 0, 2;
+            $region //= '';
+            if ($pkg eq 'main' || !length $region) { $out .= $region; next }
+
+            # THE PACKAGE'S OWN VARIABLES, bare, each declared once. The sigil
+            # declared is the variable's: `$X{k}` is %X, `$X[0]` and `$#X`
+            # are @X.
+            my %our;
+            $region =~ s{(\$\#|[\$\@%])\Q$pkg\E::([A-Za-z_]\w*)(?=(\s*[\[\{])?)}{
+                my ($sig, $name, $sub) = ($1, $2, $3 // '');
+                my $decl = $sig eq '$#' ? '@'
+                         : $sig eq '$'  ? ($sub =~ /\[/ ? '@' : $sub =~ /\{/ ? '%' : '$')
+                         : $sig eq '@'  ? ($sub =~ /\{/ ? '%' : '@')
+                         : '%';
+                $our{"$decl$name"} = 1;
+                "$sig$name";
+            }ge;
+            my $decls = join '', map { "our $_;\n" } sort keys %our;
+
+            if ($class_parts{$pkg} && !$placed_class{$pkg}++) {
+                $out .= $class_parts{$pkg}{open}
+                      . "$CLASS_PLACEHOLDER$pkg$CLASS_PLACEHOLDER BODY\n"
+                      . $decls . $region . "}\n";
+            }
+            else {
+                $out .= "package $pkg {\n" . $decls . $region . "}\n";
+            }
+        }
+        return $out;
     }
 
     # A BEGIN or END block: the same body rendering as a sub, under the phase
@@ -3451,6 +3523,17 @@ class SoN::Deparse 0.01 {
         if ($op eq 'EntryWrite') {
             my $slot = $nodes->{ $n->{inputs}[0] };
 
+            # A STORE OF A PACKAGE AGGREGATE'S OWN LITERAL into it says
+            # nothing: `our %X = (...)` builds the literal named %X -- which is
+            # emitted as the assignment -- and stores it into %X, and both
+            # spelled out gave `%P::X = (...); %P::X = %P::X;`.
+            my $self_val = $nodes->{ $n->{inputs}[1] // -1 };
+            return ''
+                if $self_val && ($self_val->{op} // '') =~ /\A(?:Array|Hash)Literal\z/
+                && defined(($self_val->{fields} // {})->{symbol})
+                && $slot && ($slot->{op} // '') eq 'EntryDef'
+                && ($self->_agg_name($self_val) // '') eq $self->_slot_name($slot);
+
             # A COUNTED s/// MUST RUN EXACTLY ONCE. The RegexSubst has two
             # consumers -- this store, and the RegexSubstCount over it -- and
             # each rendered the substitution independently, so the emitted
@@ -3832,6 +3915,14 @@ class SoN::Deparse 0.01 {
             return sprintf("%s;\n", $self->_expr($in[0]))
                 if ($n->{fields} // {})->{implicit};
             return sprintf("return %s;\n", $self->_expr($in[0]));
+        }
+
+        # WHERE THE STATEMENTS CHANGE PACKAGE: a sentinel line the program
+        # body is split at afterwards (_place_package_regions), since a
+        # region becomes a block that encloses the statements after it.
+        if ($op eq 'PackageMark') {
+            return sprintf("%s%s%s\n", $PKG_SENTINEL,
+                           ($n->{fields} // {})->{package} // 'main', $PKG_SENTINEL);
         }
 
         die "GAP: no rule for control node `$op`\n";

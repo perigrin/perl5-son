@@ -995,11 +995,24 @@ class SoN::FromOptree 0.01 {
         # A label BEHIND a computed goto is a loop header: the goto's
         # `eq LABEL` arm is its back edge. See the computed-goto handler.
         my $label_loop;
+        # THE PACKAGE THE PROGRAM'S STATEMENTS ARE IN, and a mark on the chain
+        # where it changes -- see SoN::IR::Node::PackageMark.
+        my $prog_pkg = 'main';
 
         while ($$op) {
             last if $visited{$$op}++;
 
             my $name = $op->name;
+
+            if ($ctx->{is_program} && $name eq 'nextstate') {
+                my $pkg = eval { $op->stashpv } // 'main';
+                if (length $pkg && $pkg ne $prog_pkg) {
+                    my $mark = $factory->make_cfg('PackageMark', package => $pkg);
+                    $mark->set_control_in($sim->control);
+                    $sim->set_control($mark);
+                    $prog_pkg = $pkg;
+                }
+            }
 
             # A `state` INITIALISER IN THE PROGRAM'S STRAIGHT LINE runs once,
             # exactly as that line does: it is the store on ->other.

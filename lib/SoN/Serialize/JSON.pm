@@ -166,6 +166,9 @@ sub _extract_fields ($node, $id_remap) {
     if ($op eq 'Return') {
         return $node->implicit ? { implicit => JSON::PP::true } : undef;
     }
+    if ($op eq 'PackageMark') {
+        return { package => $node->package };
+    }
     if ($op eq 'TernaryExpr') {
         return defined $node->rebind_arm ? { rebind_arm => 0 + $node->rebind_arm } : undef;
     }

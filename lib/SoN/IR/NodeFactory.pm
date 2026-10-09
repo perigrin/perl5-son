@@ -99,6 +99,7 @@ use SoN::IR::Node::Start;
 use SoN::IR::Node::MemStart;
 use SoN::IR::Node::Return;
 use SoN::IR::Node::Unwind;
+use SoN::IR::Node::PackageMark;
 use SoN::IR::Node::If;
 use SoN::IR::Node::Proj;
 use SoN::IR::Node::Region;
@@ -133,7 +134,7 @@ my %DATA_CLASSES = map { $_ => "SoN::IR::Node::$_" } qw(
 # Callers picking between the two pick by semantic intent: make() for shared
 # entry/exit/sentinel positions, make_cfg() for per-statement control nodes.
 my %CFG_CLASSES = map { $_ => "SoN::IR::Node::$_" } qw(
-    Start Return Unwind If Proj Region Loop
+    Start Return Unwind If Proj Region Loop PackageMark
 );
 
 # Ops that have CFG semantics (per-position identity, never hash-consed

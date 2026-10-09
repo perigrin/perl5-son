@@ -139,42 +139,44 @@ Foo::m: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [FieldAccess, {field_index: 0, field_stash: Foo}, ~, ~, Int], # 1
   [Return, {implicit: true}, [1], 0]]} # 2
-main::__PROGRAM__: {start: 0, returns: [34], nodes: [
+main::__PROGRAM__: {start: 0, returns: [36], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Call, {class_name: Foo, dispatch_kind: method, name: new, param_names: [], want: scalar}, ~, 0, Object], # 2
-  [RefType, ~, [2], ~, Str], # 3
-  [PadAccess, {sigil: $, symbol: t}, ~, ~, Str], # 4
-  [Constant, {const_type: string, value: Bar}, ~, ~, Str], # 5
-  [Constant, {const_type: string, value: arg}, ~, ~, Str], # 6
-  [MemStart], # 7
-  [PadAccess, {sigil: $, symbol: b}, [7], ~, Unknown], # 8
-  [HashLiteral, ~, ~, 2, HashRef], # 9
-  [Call, {dispatch_kind: builtin, name: bless, param_names: []}, [9, 5], ~, Unknown], # 10
-  [Assign, ~, [8, 10], 9, Unknown], # 11
-  [PadAccess, {sigil: $, symbol: b}, [11], ~, Scalar], # 12
-  [Constant, {const_type: string, value: hi}, ~, ~, Str], # 13
-  [Call, {dispatch_kind: method, name: can, param_names: [], want: scalar}, [12, 13], 11, Unknown], # 14
-  [Call, {dispatch_kind: indirect, name: "", param_names: [], want: scalar}, [14, 12], 14, Unknown], # 15
-  [Call, {dispatch_kind: builtin, name: tie, param_names: []}, [4, 5, 6], 15, Unknown], # 16
-  [Call, {class_name: Foo, dispatch_kind: method, name: m, param_names: [], want: list}, [2], 16, Int], # 17
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [17], ~, Str], # 18
-  [RefType, ~, [12], ~, Str], # 19
-  [Call, {dispatch_kind: method, name: hi, param_names: [], want: list}, [12], 17, Unknown], # 20
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [20], ~, Str], # 21
-  [Call, {dispatch_kind: dynamic_method, name: "", param_names: []}, [12, 13], ~, Unknown], # 22
+  [PackageMark, {package: Foo}, ~, 0], # 2
+  [PackageMark, {package: main}, ~, 2], # 3
+  [Call, {class_name: Foo, dispatch_kind: method, name: new, param_names: [], want: scalar}, ~, 3, Object], # 4
+  [RefType, ~, [4], ~, Str], # 5
+  [PadAccess, {sigil: $, symbol: t}, ~, ~, Str], # 6
+  [Constant, {const_type: string, value: Bar}, ~, ~, Str], # 7
+  [Constant, {const_type: string, value: arg}, ~, ~, Str], # 8
+  [MemStart], # 9
+  [PadAccess, {sigil: $, symbol: b}, [9], ~, Unknown], # 10
+  [HashLiteral, ~, ~, 4, HashRef], # 11
+  [Call, {dispatch_kind: builtin, name: bless, param_names: []}, [11, 7], ~, Unknown], # 12
+  [Assign, ~, [10, 12], 11, Unknown], # 13
+  [PadAccess, {sigil: $, symbol: b}, [13], ~, Scalar], # 14
+  [Constant, {const_type: string, value: hi}, ~, ~, Str], # 15
+  [Call, {dispatch_kind: method, name: can, param_names: [], want: scalar}, [14, 15], 13, Unknown], # 16
+  [Call, {dispatch_kind: indirect, name: "", param_names: [], want: scalar}, [16, 14], 16, Unknown], # 17
+  [Call, {dispatch_kind: builtin, name: tie, param_names: []}, [6, 7, 8], 17, Unknown], # 18
+  [Call, {class_name: Foo, dispatch_kind: method, name: m, param_names: [], want: list}, [4], 18, Int], # 19
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [19], ~, Str], # 20
+  [RefType, ~, [14], ~, Str], # 21
+  [Call, {dispatch_kind: method, name: hi, param_names: [], want: list}, [14], 19, Unknown], # 22
   [Coerce, {from_repr: Unknown, to_repr: Str}, [22], ~, Str], # 23
-  [IsaOp, ~, [12, 5], ~, Boolean], # 24
-  [Coerce, {from_repr: Boolean, to_repr: Str}, [24], ~, Str], # 25
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [15], ~, Str], # 26
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [4], ~, Str], # 27
-  [Call, {dispatch_kind: builtin, name: tied, param_names: []}, [4], ~, Unknown], # 28
-  [Constant, {const_type: string, value: "y"}, ~, ~, Str], # 29
-  [Constant, {const_type: string, value: "n"}, ~, ~, Str], # 30
-  [TernaryExpr, ~, [28, 29, 30], ~, Str], # 31
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 32
-  [Print, ~, [3, 18, 19, 21, 23, 25, 26, 27, 31, 32], 20, Scalar], # 33
-  [Return, {implicit: true}, [1], 33]]} # 34
+  [Call, {dispatch_kind: dynamic_method, name: "", param_names: []}, [14, 15], ~, Unknown], # 24
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [24], ~, Str], # 25
+  [IsaOp, ~, [14, 7], ~, Boolean], # 26
+  [Coerce, {from_repr: Boolean, to_repr: Str}, [26], ~, Str], # 27
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [17], ~, Str], # 28
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 29
+  [Call, {dispatch_kind: builtin, name: tied, param_names: []}, [6], ~, Unknown], # 30
+  [Constant, {const_type: string, value: "y"}, ~, ~, Str], # 31
+  [Constant, {const_type: string, value: "n"}, ~, ~, Str], # 32
+  [TernaryExpr, ~, [30, 31, 32], ~, Str], # 33
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 34
+  [Print, ~, [5, 20, 21, 23, 25, 27, 28, 29, 33, 34], 22, Scalar], # 35
+  [Return, {implicit: true}, [1], 35]]} # 36
 "BEGIN 1": {start: 0, returns: [8], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: feature}, ~, ~, Str], # 1

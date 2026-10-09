@@ -129,15 +129,17 @@ one word whose text is "Foo"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [7], nodes: [
+main::__PROGRAM__: {start: 0, returns: [9], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: main}, ~, ~, Str], # 2
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 3
   [Constant, {const_type: string, value: Foo}, ~, ~, Str], # 4
-  [Print, ~, [4, 3], 0, Scalar], # 5
-  [Print, ~, [2, 3], 5, Scalar], # 6
-  [Return, {implicit: true}, [1], 6]]} # 7
+  [PackageMark, {package: Foo}, ~, 0], # 5
+  [Print, ~, [4, 3], 5, Scalar], # 6
+  [PackageMark, {package: main}, ~, 6], # 7
+  [Print, ~, [2, 3], 7, Scalar], # 8
+  [Return, {implicit: true}, [1], 8]]} # 9
 ```
 
 ## A `#` at column zero that is not a comment

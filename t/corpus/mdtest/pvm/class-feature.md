@@ -128,15 +128,17 @@ Foo::m: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [FieldAccess, {field_index: 0, field_stash: Foo}, ~, ~, Int], # 1
   [Return, {implicit: true}, [1], 0]]} # 2
-main::__PROGRAM__: {start: 0, returns: [7], nodes: [
+main::__PROGRAM__: {start: 0, returns: [9], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Call, {class_name: Foo, dispatch_kind: method, name: new, param_names: [], want: scalar}, ~, 0, Object], # 2
-  [Call, {class_name: Foo, dispatch_kind: method, name: m, param_names: [], want: list}, [2], 2, Int], # 3
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
-  [Print, ~, [4, 5], 3, Scalar], # 6
-  [Return, {implicit: true}, [1], 6]]} # 7
+  [PackageMark, {package: Foo}, ~, 0], # 2
+  [PackageMark, {package: main}, ~, 2], # 3
+  [Call, {class_name: Foo, dispatch_kind: method, name: new, param_names: [], want: scalar}, ~, 3, Object], # 4
+  [Call, {class_name: Foo, dispatch_kind: method, name: m, param_names: [], want: list}, [4], 4, Int], # 5
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [5], ~, Str], # 6
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 7
+  [Print, ~, [6, 7], 5, Scalar], # 8
+  [Return, {implicit: true}, [1], 8]]} # 9
 "BEGIN 1": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: feature}, ~, ~, Str], # 1
@@ -204,14 +206,16 @@ Foo::__DEFAULT_0: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
   [Return, ~, [1], 0]]} # 2
-main::__PROGRAM__: {start: 0, returns: [6], nodes: [
+main::__PROGRAM__: {start: 0, returns: [8], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Call, {class_name: Foo, dispatch_kind: method, name: new, param_names: [], want: scalar}, ~, 0, Object], # 2
-  [RefType, ~, [2], ~, Str], # 3
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
-  [Print, ~, [3, 4], 2, Scalar], # 5
-  [Return, {implicit: true}, [1], 5]]} # 6
+  [PackageMark, {package: Foo}, ~, 0], # 2
+  [PackageMark, {package: main}, ~, 2], # 3
+  [Call, {class_name: Foo, dispatch_kind: method, name: new, param_names: [], want: scalar}, ~, 3, Object], # 4
+  [RefType, ~, [4], ~, Str], # 5
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 6
+  [Print, ~, [5, 6], 4, Scalar], # 7
+  [Return, {implicit: true}, [1], 7]]} # 8
 "BEGIN 1": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: feature}, ~, ~, Str], # 1
@@ -274,25 +278,27 @@ Flags::quiet: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [FieldAccess, {field_index: 0, field_stash: Flags}, ~, ~, Scalar], # 1
   [Return, ~, [1], 0]]} # 2
-main::__PROGRAM__: {start: 0, returns: [17], nodes: [
+main::__PROGRAM__: {start: 0, returns: [19], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Call, {class_name: Flags, dispatch_kind: method, name: new, param_names: [], want: scalar}, ~, 0, Object], # 2
-  [Call, {class_name: Flags, dispatch_kind: method, name: quiet, param_names: [], want: scalar}, [2], 2, Scalar], # 3
-  [Constant, {const_type: string, value: q}, ~, ~, Str], # 4
-  [Constant, {const_type: string, value: "-"}, ~, ~, Str], # 5
-  [TernaryExpr, ~, [3, 4, 5], ~, Str], # 6
-  [Call, {class_name: Flags, dispatch_kind: method, name: loud, param_names: [], want: scalar}, [2], 3, Scalar], # 7
-  [Constant, {const_type: string, value: l}, ~, ~, Str], # 8
-  [TernaryExpr, ~, [7, 8, 5], ~, Str], # 9
-  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 10
-  [Call, {class_name: Flags, dispatch_kind: method, name: new, param_names: [quiet], want: scalar}, [10], 7, Object], # 11
-  [Call, {class_name: Flags, dispatch_kind: method, name: quiet, param_names: [], want: scalar}, [11], 11, Scalar], # 12
-  [Constant, {const_type: string, value: Q}, ~, ~, Str], # 13
-  [TernaryExpr, ~, [12, 13, 5], ~, Str], # 14
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 15
-  [Print, ~, [6, 9, 14, 15], 12, Scalar], # 16
-  [Return, {implicit: true}, [1], 16]]} # 17
+  [PackageMark, {package: Flags}, ~, 0], # 2
+  [PackageMark, {package: main}, ~, 2], # 3
+  [Call, {class_name: Flags, dispatch_kind: method, name: new, param_names: [], want: scalar}, ~, 3, Object], # 4
+  [Call, {class_name: Flags, dispatch_kind: method, name: quiet, param_names: [], want: scalar}, [4], 4, Scalar], # 5
+  [Constant, {const_type: string, value: q}, ~, ~, Str], # 6
+  [Constant, {const_type: string, value: "-"}, ~, ~, Str], # 7
+  [TernaryExpr, ~, [5, 6, 7], ~, Str], # 8
+  [Call, {class_name: Flags, dispatch_kind: method, name: loud, param_names: [], want: scalar}, [4], 5, Scalar], # 9
+  [Constant, {const_type: string, value: l}, ~, ~, Str], # 10
+  [TernaryExpr, ~, [9, 10, 7], ~, Str], # 11
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 12
+  [Call, {class_name: Flags, dispatch_kind: method, name: new, param_names: [quiet], want: scalar}, [12], 9, Object], # 13
+  [Call, {class_name: Flags, dispatch_kind: method, name: quiet, param_names: [], want: scalar}, [13], 13, Scalar], # 14
+  [Constant, {const_type: string, value: Q}, ~, ~, Str], # 15
+  [TernaryExpr, ~, [14, 15, 7], ~, Str], # 16
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 17
+  [Print, ~, [8, 11, 16, 17], 14, Scalar], # 18
+  [Return, {implicit: true}, [1], 18]]} # 19
 "BEGIN 1": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: feature}, ~, ~, Str], # 1
@@ -371,22 +377,24 @@ Index::register: {start: 0, returns: [19], nodes: [
   [Region, {head: 6}, [11, 16]], # 17
   [Phi, {predecessors: [11, 7], region: 17}, [4, 10], ~, Scalar], # 18
   [Return, ~, [18], 17]]} # 19
-main::__PROGRAM__: {start: 0, returns: [14], nodes: [
+main::__PROGRAM__: {start: 0, returns: [16], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: ","}, ~, ~, Str], # 2
-  [Call, {class_name: Index, dispatch_kind: method, name: new, param_names: [], want: scalar}, ~, 0, Object], # 3
-  [Constant, {const_type: string, value: a}, ~, ~, Str], # 4
-  [Call, {class_name: Index, dispatch_kind: method, name: register, param_names: [], want: list}, [3, 4], 3, Scalar], # 5
-  [Constant, {const_type: string, value: b}, ~, ~, Str], # 6
-  [Call, {class_name: Index, dispatch_kind: method, name: register, param_names: [], want: list}, [3, 6], 5, Scalar], # 7
-  [Call, {class_name: Index, dispatch_kind: method, name: register, param_names: [], want: list}, [3, 4], 7, Scalar], # 8
-  [Constant, {const_type: string, value: c}, ~, ~, Str], # 9
-  [Call, {class_name: Index, dispatch_kind: method, name: register, param_names: [], want: list}, [3, 9], 8, Scalar], # 10
-  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [2, 5, 7, 8, 10], ~, Str], # 11
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 12
-  [Print, ~, [11, 12], 10, Scalar], # 13
-  [Return, {implicit: true}, [1], 13]]} # 14
+  [PackageMark, {package: Index}, ~, 0], # 3
+  [PackageMark, {package: main}, ~, 3], # 4
+  [Call, {class_name: Index, dispatch_kind: method, name: new, param_names: [], want: scalar}, ~, 4, Object], # 5
+  [Constant, {const_type: string, value: a}, ~, ~, Str], # 6
+  [Call, {class_name: Index, dispatch_kind: method, name: register, param_names: [], want: list}, [5, 6], 5, Scalar], # 7
+  [Constant, {const_type: string, value: b}, ~, ~, Str], # 8
+  [Call, {class_name: Index, dispatch_kind: method, name: register, param_names: [], want: list}, [5, 8], 7, Scalar], # 9
+  [Call, {class_name: Index, dispatch_kind: method, name: register, param_names: [], want: list}, [5, 6], 9, Scalar], # 10
+  [Constant, {const_type: string, value: c}, ~, ~, Str], # 11
+  [Call, {class_name: Index, dispatch_kind: method, name: register, param_names: [], want: list}, [5, 11], 10, Scalar], # 12
+  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [2, 7, 9, 10, 12], ~, Str], # 13
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 14
+  [Print, ~, [13, 14], 12, Scalar], # 15
+  [Return, {implicit: true}, [1], 15]]} # 16
 "BEGIN 1": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: feature}, ~, ~, Str], # 1
@@ -473,19 +481,21 @@ Log::close: {start: 0, returns: [8], nodes: [
   [Concat, ~, [4, 5], ~, Str], # 6
   [Assign, ~, [1, 6], 0, Str], # 7
   [Return, ~, [1], 7]]} # 8
-main::__PROGRAM__: {start: 0, returns: [11], nodes: [
+main::__PROGRAM__: {start: 0, returns: [13], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Call, {class_name: Log, dispatch_kind: method, name: new, param_names: [], want: scalar}, ~, 0, Object], # 2
-  [Constant, {const_type: string, value: a}, ~, ~, Str], # 3
-  [Call, {class_name: Log, dispatch_kind: method, name: add, param_names: [], want: scalar}, [2, 3], 2, Unknown], # 4
-  [Constant, {const_type: string, value: b}, ~, ~, Str], # 5
+  [PackageMark, {package: Log}, ~, 0], # 2
+  [PackageMark, {package: main}, ~, 2], # 3
+  [Call, {class_name: Log, dispatch_kind: method, name: new, param_names: [], want: scalar}, ~, 3, Object], # 4
+  [Constant, {const_type: string, value: a}, ~, ~, Str], # 5
   [Call, {class_name: Log, dispatch_kind: method, name: add, param_names: [], want: scalar}, [4, 5], 4, Unknown], # 6
-  [Call, {class_name: Log, dispatch_kind: method, name: close, param_names: [], want: list}, [6], 6, Str], # 7
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
-  [Print, ~, [8, 9], 7, Scalar], # 10
-  [Return, {implicit: true}, [1], 10]]} # 11
+  [Constant, {const_type: string, value: b}, ~, ~, Str], # 7
+  [Call, {class_name: Log, dispatch_kind: method, name: add, param_names: [], want: scalar}, [6, 7], 6, Unknown], # 8
+  [Call, {class_name: Log, dispatch_kind: method, name: close, param_names: [], want: list}, [8], 8, Str], # 9
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [9], ~, Str], # 10
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 11
+  [Print, ~, [10, 11], 9, Scalar], # 12
+  [Return, {implicit: true}, [1], 12]]} # 13
 "BEGIN 1": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: feature}, ~, ~, Str], # 1
@@ -581,25 +591,27 @@ Node::left: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [FieldAccess, {field_index: 1, field_stash: Node}, ~, ~, Scalar], # 1
   [Return, ~, [1], 0]]} # 2
-main::__PROGRAM__: {start: 0, returns: [17], nodes: [
+main::__PROGRAM__: {start: 0, returns: [19], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: ","}, ~, ~, Str], # 2
   [Constant, {const_type: integer, value: "7"}, ~, ~, Int], # 3
   [Constant, {const_type: integer, value: "8"}, ~, ~, Int], # 4
-  [ArrayLiteral, ~, [3, 4], 0, ArrayRef], # 5
-  [Call, {class_name: Node, dispatch_kind: method, name: new, param_names: [inputs], want: scalar}, [5], 5, Object], # 6
+  [PackageMark, {package: Node}, ~, 0], # 5
+  [PackageMark, {package: main}, ~, 5], # 6
   [ArrayLiteral, ~, [3, 4], 6, ArrayRef], # 7
-  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 8
-  [Call, {class_name: Node, dispatch_kind: method, name: new, param_names: [inputs, left], want: scalar}, [7, 8], 7, Object], # 9
-  [Call, {class_name: Node, dispatch_kind: method, name: left, param_names: [], want: list}, [6], 9, Scalar], # 10
-  [Call, {class_name: Node, dispatch_kind: method, name: calls, param_names: [], want: list}, [6], 10, Int], # 11
-  [Call, {class_name: Node, dispatch_kind: method, name: left, param_names: [], want: list}, [9], 11, Scalar], # 12
-  [Call, {class_name: Node, dispatch_kind: method, name: calls, param_names: [], want: list}, [9], 12, Int], # 13
-  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [2, 10, 11, 12, 13], ~, Str], # 14
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 15
-  [Print, ~, [14, 15], 13, Scalar], # 16
-  [Return, {implicit: true}, [1], 16]]} # 17
+  [Call, {class_name: Node, dispatch_kind: method, name: new, param_names: [inputs], want: scalar}, [7], 7, Object], # 8
+  [ArrayLiteral, ~, [3, 4], 8, ArrayRef], # 9
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 10
+  [Call, {class_name: Node, dispatch_kind: method, name: new, param_names: [inputs, left], want: scalar}, [9, 10], 9, Object], # 11
+  [Call, {class_name: Node, dispatch_kind: method, name: left, param_names: [], want: list}, [8], 11, Scalar], # 12
+  [Call, {class_name: Node, dispatch_kind: method, name: calls, param_names: [], want: list}, [8], 12, Int], # 13
+  [Call, {class_name: Node, dispatch_kind: method, name: left, param_names: [], want: list}, [11], 13, Scalar], # 14
+  [Call, {class_name: Node, dispatch_kind: method, name: calls, param_names: [], want: list}, [11], 14, Int], # 15
+  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [2, 12, 13, 14, 15], ~, Str], # 16
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 17
+  [Print, ~, [16, 17], 15, Scalar], # 18
+  [Return, {implicit: true}, [1], 18]]} # 19
 "BEGIN 1": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: feature}, ~, ~, Str], # 1
@@ -685,15 +697,17 @@ Derived::__ADJUST_0: {start: 0, returns: [4], nodes: [
   [Constant, {const_type: string, value: d}, ~, ~, Str], # 2
   [Call, {class_name: Derived, dispatch_kind: method, name: mark, param_names: []}, [1, 2], 0, Unknown], # 3
   [Return, {implicit: true}, [3], 3]]} # 4
-main::__PROGRAM__: {start: 0, returns: [7], nodes: [
+main::__PROGRAM__: {start: 0, returns: [9], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Call, {class_name: Derived, dispatch_kind: method, name: new, param_names: [], want: scalar}, ~, 0, Object], # 2
-  [Call, {class_name: Derived, dispatch_kind: method, name: trail, param_names: [], want: list}, [2], 2, Unknown], # 3
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
-  [Print, ~, [4, 5], 3, Scalar], # 6
-  [Return, {implicit: true}, [1], 6]]} # 7
+  [PackageMark, {package: Base}, ~, 0], # 2
+  [PackageMark, {package: main}, ~, 2], # 3
+  [Call, {class_name: Derived, dispatch_kind: method, name: new, param_names: [], want: scalar}, ~, 3, Object], # 4
+  [Call, {class_name: Derived, dispatch_kind: method, name: trail, param_names: [], want: list}, [4], 4, Unknown], # 5
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [5], ~, Str], # 6
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 7
+  [Print, ~, [6, 7], 5, Scalar], # 8
+  [Return, {implicit: true}, [1], 8]]} # 9
 "BEGIN 1": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: feature}, ~, ~, Str], # 1
@@ -757,27 +771,29 @@ Registry::classes: {start: 0, returns: [4], nodes: [
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, memory_input: true, name: values, param_names: []}, [1, 2], ~, Unknown], # 3
   [Return, ~, [3], 0]]} # 4
-main::__PROGRAM__: {start: 0, returns: [19], nodes: [
+main::__PROGRAM__: {start: 0, returns: [21], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Call, {class_name: Registry, dispatch_kind: method, name: new, param_names: [], want: scalar}, ~, 0, Object], # 2
-  [Constant, {const_type: string, value: A}, ~, ~, Str], # 3
-  [Call, {class_name: Registry, dispatch_kind: method, name: add, param_names: [], want: scalar}, [2, 3], 2, Unknown], # 4
-  [Constant, {const_type: string, value: B}, ~, ~, Str], # 5
+  [PackageMark, {package: Registry}, ~, 0], # 2
+  [PackageMark, {package: main}, ~, 2], # 3
+  [Call, {class_name: Registry, dispatch_kind: method, name: new, param_names: [], want: scalar}, ~, 3, Object], # 4
+  [Constant, {const_type: string, value: A}, ~, ~, Str], # 5
   [Call, {class_name: Registry, dispatch_kind: method, name: add, param_names: [], want: scalar}, [4, 5], 4, Unknown], # 6
-  [Call, {class_name: Registry, dispatch_kind: method, name: classes, param_names: [], want: list}, [6], 6, Unknown], # 7
-  [ArrayLiteral, {sigil: "@", symbol: all}, [7], ~, Array], # 8
-  [MemStart], # 9
-  [Count, ~, [8, 9], ~, Int], # 10
-  [Coerce, {from_repr: Int, to_repr: Str}, [10], ~, Str], # 11
-  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 12
-  [Call, {class_name: Registry, dispatch_kind: method, name: classes, param_names: [], want: scalar}, [6], 7, Unknown], # 13
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [13], ~, Str], # 14
-  [Concat, ~, [12, 14], ~, Str], # 15
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 16
-  [Concat, ~, [15, 16], ~, Str], # 17
-  [Print, ~, [11, 17], 13, Scalar], # 18
-  [Return, {implicit: true}, [1], 18]]} # 19
+  [Constant, {const_type: string, value: B}, ~, ~, Str], # 7
+  [Call, {class_name: Registry, dispatch_kind: method, name: add, param_names: [], want: scalar}, [6, 7], 6, Unknown], # 8
+  [Call, {class_name: Registry, dispatch_kind: method, name: classes, param_names: [], want: list}, [8], 8, Unknown], # 9
+  [ArrayLiteral, {sigil: "@", symbol: all}, [9], ~, Array], # 10
+  [MemStart], # 11
+  [Count, ~, [10, 11], ~, Int], # 12
+  [Coerce, {from_repr: Int, to_repr: Str}, [12], ~, Str], # 13
+  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 14
+  [Call, {class_name: Registry, dispatch_kind: method, name: classes, param_names: [], want: scalar}, [8], 9, Unknown], # 15
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [15], ~, Str], # 16
+  [Concat, ~, [14, 16], ~, Str], # 17
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 18
+  [Concat, ~, [17, 18], ~, Str], # 19
+  [Print, ~, [13, 19], 15, Scalar], # 20
+  [Return, {implicit: true}, [1], 20]]} # 21
 "BEGIN 1": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: feature}, ~, ~, Str], # 1
@@ -858,25 +874,27 @@ Holder::summary: {start: 0, returns: [11], nodes: [
   [Call, {dispatch_kind: builtin, name: join, param_names: []}, [7, 8], ~, Str], # 9
   [Concat, ~, [6, 9], ~, Str], # 10
   [Return, ~, [10], 0]]} # 11
-main::__PROGRAM__: {start: 0, returns: [17], nodes: [
+main::__PROGRAM__: {start: 0, returns: [19], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Call, {class_name: Holder, dispatch_kind: method, name: new, param_names: [], want: scalar}, ~, 0, Object], # 2
-  [Constant, {const_type: string, value: b}, ~, ~, Str], # 3
-  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 4
-  [Constant, {const_type: string, value: a}, ~, ~, Str], # 5
-  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 6
-  [HashLiteral, ~, [3, 4, 5, 6], 2, HashRef], # 7
-  [Call, {class_name: Holder, dispatch_kind: method, name: register, param_names: [], want: scalar}, [2, 7], 7, Unknown], # 8
-  [Call, {class_name: Holder, dispatch_kind: method, name: summary, param_names: [], want: list}, [8], 8, Str], # 9
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [9], ~, Str], # 10
-  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 11
-  [Call, {class_name: Holder, dispatch_kind: method, name: clear, param_names: [], want: scalar}, [8], 9, Unknown], # 12
-  [Call, {class_name: Holder, dispatch_kind: method, name: summary, param_names: [], want: list}, [12], 12, Str], # 13
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [13], ~, Str], # 14
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 15
-  [Print, ~, [10, 11, 14, 15], 13, Scalar], # 16
-  [Return, {implicit: true}, [1], 16]]} # 17
+  [PackageMark, {package: Holder}, ~, 0], # 2
+  [PackageMark, {package: main}, ~, 2], # 3
+  [Call, {class_name: Holder, dispatch_kind: method, name: new, param_names: [], want: scalar}, ~, 3, Object], # 4
+  [Constant, {const_type: string, value: b}, ~, ~, Str], # 5
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 6
+  [Constant, {const_type: string, value: a}, ~, ~, Str], # 7
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 8
+  [HashLiteral, ~, [5, 6, 7, 8], 4, HashRef], # 9
+  [Call, {class_name: Holder, dispatch_kind: method, name: register, param_names: [], want: scalar}, [4, 9], 9, Unknown], # 10
+  [Call, {class_name: Holder, dispatch_kind: method, name: summary, param_names: [], want: list}, [10], 10, Str], # 11
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [11], ~, Str], # 12
+  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 13
+  [Call, {class_name: Holder, dispatch_kind: method, name: clear, param_names: [], want: scalar}, [10], 11, Unknown], # 14
+  [Call, {class_name: Holder, dispatch_kind: method, name: summary, param_names: [], want: list}, [14], 14, Str], # 15
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [15], ~, Str], # 16
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 17
+  [Print, ~, [12, 13, 16, 17], 15, Scalar], # 18
+  [Return, {implicit: true}, [1], 18]]} # 19
 "BEGIN 1": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: feature}, ~, ~, Str], # 1
@@ -925,23 +943,25 @@ Node::id: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [FieldAccess, {field_index: 0, field_stash: Node}, ~, ~, Unknown], # 1
   [Return, ~, [1], 0]]} # 2
-main::__PROGRAM__: {start: 0, returns: [15], nodes: [
+main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
-  [Call, {class_name: Node, dispatch_kind: method, name: new, param_names: [id], want: list}, [2], 0, Object], # 3
-  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 4
-  [Call, {class_name: Node, dispatch_kind: method, name: new, param_names: [id], want: list}, [4], 3, Object], # 5
-  [ArrayLiteral, ~, [3, 1, 5], 5, ArrayRef], # 6
-  [Call, {dispatch_kind: direct, name: main::ids, param_names: [], want: list}, [6], 6, Str], # 7
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
-  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 9
-  [Constant, {const_type: integer, value: "10"}, ~, ~, Int], # 10
-  [Call, {dispatch_kind: direct, name: main::fib, param_names: [], want: list}, [10], 7, Unknown], # 11
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [11], ~, Str], # 12
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 13
-  [Print, ~, [8, 9, 12, 13], 11, Scalar], # 14
-  [Return, {implicit: true}, [1], 14]]} # 15
+  [PackageMark, {package: Node}, ~, 0], # 3
+  [PackageMark, {package: main}, ~, 3], # 4
+  [Call, {class_name: Node, dispatch_kind: method, name: new, param_names: [id], want: list}, [2], 4, Object], # 5
+  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 6
+  [Call, {class_name: Node, dispatch_kind: method, name: new, param_names: [id], want: list}, [6], 5, Object], # 7
+  [ArrayLiteral, ~, [5, 1, 7], 7, ArrayRef], # 8
+  [Call, {dispatch_kind: direct, name: main::ids, param_names: [], want: list}, [8], 8, Str], # 9
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [9], ~, Str], # 10
+  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 11
+  [Constant, {const_type: integer, value: "10"}, ~, ~, Int], # 12
+  [Call, {dispatch_kind: direct, name: main::fib, param_names: [], want: list}, [12], 9, Unknown], # 13
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [13], ~, Str], # 14
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 15
+  [Print, ~, [10, 11, 14, 15], 13, Scalar], # 16
+  [Return, {implicit: true}, [1], 16]]} # 17
 main::fib: {start: 0, returns: [15], nodes: [
   [Start], # 0
   [Parameter, {index: 0, name: $n, sigil: $}, ~, ~, Num], # 1

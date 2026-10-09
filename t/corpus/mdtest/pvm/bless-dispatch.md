@@ -261,22 +261,23 @@ Base::hi: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: base}, ~, ~, Str], # 1
   [Return, ~, [1], 0]]} # 2
-main::__PROGRAM__: {start: 0, returns: [14], nodes: [
+main::__PROGRAM__: {start: 0, returns: [15], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [EntryDef, {package: Derived, sigil: "@", symbol: ISA}, ~, ~, Array], # 2
   [Constant, {const_type: string, value: Base}, ~, ~, Str], # 3
   [ArrayLiteral, {sigil: "@", symbol: "@Derived::ISA"}, [3], ~, Array], # 4
   [MemStart], # 5
-  [EntryWrite, ~, [2, 4, 5], 0, Unknown], # 6
-  [HashLiteral, ~, ~, 6, HashRef], # 7
-  [Constant, {const_type: string, value: Derived}, ~, ~, Str], # 8
-  [Call, {dispatch_kind: builtin, name: bless, param_names: []}, [7, 8], ~, Unknown], # 9
-  [Call, {dispatch_kind: method, name: Derived::SUPER::hi, param_names: [], want: list}, [9], 7, Unknown], # 10
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [10], ~, Str], # 11
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 12
-  [Print, ~, [11, 12], 10, Scalar], # 13
-  [Return, {implicit: true}, [1], 13]]} # 14
+  [PackageMark, {package: Derived}, ~, 0], # 6
+  [EntryWrite, ~, [2, 4, 5], 6, Unknown], # 7
+  [HashLiteral, ~, ~, 7, HashRef], # 8
+  [Constant, {const_type: string, value: Derived}, ~, ~, Str], # 9
+  [Call, {dispatch_kind: builtin, name: bless, param_names: []}, [8, 9], ~, Unknown], # 10
+  [Call, {dispatch_kind: method, name: Derived::SUPER::hi, param_names: [], want: list}, [10], 8, Unknown], # 11
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [11], ~, Str], # 12
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 13
+  [Print, ~, [12, 13], 11, Scalar], # 14
+  [Return, {implicit: true}, [1], 14]]} # 15
 ```
 
 ## Indirect object notation: `new Foo`
