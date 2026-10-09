@@ -79,6 +79,25 @@ class C { our $N = scalar keys %D; method n { $C::N } }
 print C->new->n, "\n";
 SRC
 
+# THE STATEMENT FORM, `package P;` at the top of a file, as chalk's
+# Transform::T2 is written: a constant table hoisted above the program's
+# statements stayed outside the package's region, qualified.
+my $stmt = emitted(<<'SRC') // '';
+package P;
+our %TABLE = (a => 1, b => 2);
+sub has { exists $TABLE{$_[0]} ? 1 : 0 }
+package main;
+print P::has("a"), P::has("z"), "\n";
+SRC
+unlike $stmt, qr/%P::TABLE\b/, 'a package-statement table is not spelled qualified';
+round_trips(<<'SRC', 'a table under a package statement');
+package P;
+our %TABLE = (a => 1, b => 2);
+sub has { exists $TABLE{$_[0]} ? 1 : 0 }
+package main;
+print P::has("a"), P::has("z"), "\n";
+SRC
+
 my $out = emitted(<<'SRC') // '';
 package P { our %X = map { $_ => 1 } qw(a b); sub has { exists $P::X{$_[0]} ? 1 : 0 } }
 print P::has("a"), "\n";

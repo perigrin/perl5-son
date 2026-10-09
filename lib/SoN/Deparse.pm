@@ -854,6 +854,17 @@ class SoN::Deparse 0.01 {
         return ($text, \%owned);
     }
 
+    # The first PackageMark for the package a qualified name (`%P::X`) is in,
+    # or undef.
+    method _package_mark_for ($spelled) {
+        my ($pkg) = $spelled =~ /\A[\$\@%](.+)::[^:]+\z/ or return undef;
+        for my $m ($self->_nodes_in_order) {
+            next unless ($m->{op} // '') eq 'PackageMark';
+            return $m->{id} if (($m->{fields} // {})->{package} // '') eq $pkg;
+        }
+        return undef;
+    }
+
     # _place_package_regions($text) -> the program body with each region of
     # statements that ran in another package enclosed where it ran.
     #
@@ -1666,6 +1677,16 @@ class SoN::Deparse 0.01 {
             # branch applies to EntryDef targets, one node kind over.
             # A SHARED ONE IS DECLARED ABOVE THE SUBS (see
             # _emit_cell_declarations); a `my` here would shadow it.
+            # A PACKAGE'S OWN TABLE GOES IN ITS REGION: after the first mark for
+            # that package, so _place_package_regions encloses it and it is
+            # declared `our` there. Hoisted above every statement, it stayed
+            # outside -- `%Chalk::IR::Transform::T2::NOT_A_VALUE = (...)`,
+            # which chalk's grammar does not read.
+            if ($self->_agg_is_package($n)
+                && defined(my $mark = $self->_package_mark_for($vn))) {
+                push $after_effect{$mark}->@*, $n;
+                next;
+            }
             push @prologue, [$n, sprintf("%s%s = (%s);\n",
                 ($self->_agg_is_package($n) || $cell_slots{$vn} ? '' : 'my '), $vn,
                 join(', ', map { $self->_expr($_) } (($n->{inputs} // [])->@*)))];
