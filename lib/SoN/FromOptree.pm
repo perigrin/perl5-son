@@ -4616,11 +4616,17 @@ class SoN::FromOptree 0.01 {
                 && $sim->stack_depth > 0
                 && do {
                     my $top = $sim->peek_node;
+                    # %ENV IS A PACKAGE HASH HERE, AS ANY OTHER, except under
+                    # its one special form: a constant-key read, `$ENV{K}`,
+                    # which helem turns into an EnvRead from the name string
+                    # (the walker runs this rv2hv, peep being suppressed).
+                    # Excluded everywhere, `keys %ENV` took that string for
+                    # the hash: `keys("main::ENV")`, which does not compile.
                     defined $top
                         && $top->operation eq 'Constant'
                         && defined $top->value
                         && $top->value ne '_'
-                        && $top->value ne 'main::ENV';
+                        && !($top->value eq 'main::ENV' && _is_const_key_helem_of($op));
                 }) {
             my $gv      = _op_gv($cv, $op->first);
             my $gv_name = $gv && $gv->NAME;
@@ -5183,6 +5189,14 @@ class SoN::FromOptree 0.01 {
     # or a short-circuit passed to the call is flagged the same way
     # (`padsv sM` under cond_expr), and stopping there took the read for a
     # store target -- chalk's `inputs => (defined $v ? $v : [])`.
+    # Is $op the container of a helem whose key is a constant -- `$ENV{K}`?
+    sub _is_const_key_helem_of ($op) {
+        my $p = eval { $op->parent } or return 0;
+        return 0 unless $$p && $p->name eq 'helem';
+        my $key = $op->sibling;
+        return ref($key) && $$key && $key->name eq 'const' ? 1 : 0;
+    }
+
     sub _is_call_argument ($op) {
         my $p = eval { $op->parent } or return 0;
         $p = $p->parent

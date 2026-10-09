@@ -2490,6 +2490,9 @@ class SoN::Deparse 0.01 {
     # SHARED WITH _slot_name, which had this for scalars only -- base/lex.t
     # reaches it through `%{^TEST}` and `@{^TEST}`, which the scalar path
     # never saw.
+    # perlvar: identifiers forced into package main whichever package names them.
+    my %FORCED_MAIN = map { $_ => 1 } qw(ENV INC ARGV ARGVOUT SIG STDIN STDOUT STDERR);
+
     method _spell_name ($name) {
         my $pkg = '';
         if ($name =~ /\A(.*::)(.*)\z/s) { ($pkg, $name) = ($1, $2) }
@@ -2505,6 +2508,11 @@ class SoN::Deparse 0.01 {
             my $caret = sprintf('^%s%s', chr(ord($1) + 64), $2);
             return length($2) ? "{$caret}" : $caret;
         }
+        # PERL'S FORCED-MAIN NAMES are main's from any package, so the bare
+        # spelling is the same variable -- and the one chalk's grammar reads:
+        # it has no package-qualified aggregate, and rejected the emitted
+        # Bootstrap::Runtime at `scalar(@main::INC)`.
+        return $name if $pkg eq 'main::' && $FORCED_MAIN{$name};
         return $pkg . $name;
     }
 
@@ -4087,6 +4095,9 @@ class SoN::Deparse 0.01 {
         }
         return sprintf('%s%s', $sigil, $name)
             if $name !~ /\A[A-Za-z_]\w*\z/;
+        # perl's forced-main names, bare: see _spell_name.
+        return sprintf('%s%s', $sigil, $name)
+            if $stash eq 'main' && $FORCED_MAIN{$name};
 
         return sprintf('%s%s::%s', $sigil, $stash, $name);
     }
