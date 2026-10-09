@@ -246,3 +246,90 @@ $values : [])`; `inputs => $values // []` is the same for a plain lexical
 made: chalk's checkout had staged changes that are not ours, and perigrin
 said it can wait. When taken up, make it on a branch from `pu` in a separate
 worktree and open a PR; gate 3 stays pinned at 5948f648 either way.
+
+## Gate 3 measures behaviour; tests that read lib/ as source are deferred (perigrin, 2026-10-09)
+
+B::SoN's product is the IR. Lowering it back to Perl and running that
+against chalk's tests is how we check the IR is right -- the Perl is
+validation, not a product. A chalk test that READS lib/ as source (feeds
+chalk's own modules to chalk as input: compiling, comparing, recognising or
+golden-checking them) measures the rendered TEXT against the overlay, not
+the program, so it validates nothing about the IR.
+
+Those tests are deferred to chalk's own LLVM lowering: when chalk compiles
+its modules to LLVM IR, their output is what gets compared. Gate 3 runs the
+rest against the emitted lib/ and requires the same per-file result.
+
+The goal, restated: every chalk test file that does not read lib/ as source
+gives the same per-file result against the emitted lib/ as against the
+original. NOWORSE is gone (it existed only for these files), and the per-file
+timeout is back to an hour (the file that needed three, perl-recognize-phase5,
+is deferred).
+
+What this deferral reverses: on 2026-10-02 the overlay was kept so that
+chalk would parse B::SoN's output. The text-shape work done for those tests
+-- conditional rebinds spelled as statements (6109270), class and package
+statements in their blocks (d8aabcf, eddfaa3), forced-main names bare
+(a05687d) -- stays: correct, and easier to read. It was not IR validation.
+
+The 59 deferred files at 5948f648 (tools/chalk-gate3.pl, reads_source):
+
+    t/benchmark/parse-performance.t
+    t/bootstrap/c-data-model-classes.t
+    t/bootstrap/c-direct-cross-class.t
+    t/bootstrap/c-repair-coverage.t
+    t/bootstrap/c-self-call-optimization.t
+    t/bootstrap/c-target-boolean.t
+    t/bootstrap/c-target-multi-class.t
+    t/bootstrap/c-type-aware-dispatch.t
+    t/bootstrap/c-xs-wrapper-gen.t
+    t/bootstrap/cfg-statements.t
+    t/bootstrap/codegen-perl.t
+    t/bootstrap/codegen-pipeline.t
+    t/bootstrap/earley-indexing.t
+    t/bootstrap/emit-son-json.t
+    t/bootstrap/implicit-return.t
+    t/bootstrap/ir-subclass-field-audit.t
+    t/bootstrap/ir/a-boxed-str-carries-its-encoding.t
+    t/bootstrap/ir/backward-inference.t
+    t/bootstrap/ir/fixpoint-folds-the-old-value.t
+    t/bootstrap/ir/graph-no-body-stmts.t
+    t/bootstrap/ir/propagate-fixpoint-terminates.t
+    t/bootstrap/ir/resolve-direct-calls-reads-the-edge.t
+    t/bootstrap/ir/slot-read-consults-the-tag.t
+    t/bootstrap/ir/slot-tag-coercion.t
+    t/bootstrap/ir/slot-tag-field.t
+    t/bootstrap/ir/slot-tag-vocabulary.t
+    t/bootstrap/ir/strpair-layout-single-source.t
+    t/bootstrap/join-is-the-lattice-join.t
+    t/bootstrap/lattice-edges-hold-in-perl.t
+    t/bootstrap/mop/parse-integration.t
+    t/bootstrap/no-tie-in-the-subset.t
+    t/bootstrap/perl-actions-tier-a.t
+    t/bootstrap/perl-actions-tier-b.t
+    t/bootstrap/perl-actions-tier-c.t
+    t/bootstrap/perl-recognize-phase5.t
+    t/bootstrap/perl-target-perl-tier-a.t
+    t/bootstrap/perl-target-perl-tier-b.t
+    t/bootstrap/perl-target-perl-tier-c.t
+    t/bootstrap/perl-target-perl-tier-d.t
+    t/bootstrap/perl-target-xs-tier-a.t
+    t/bootstrap/perl-target-xs-tier-b.t
+    t/bootstrap/perl-target-xs-tier-c.t
+    t/bootstrap/perl-target-xs-tier-d.t
+    t/bootstrap/perl-target-xs-tier-d2.t
+    t/bootstrap/perl-target-xs-tier-d3.t
+    t/bootstrap/perl-target-xs-tier-d5.t
+    t/bootstrap/perl-target-xs-tier-grammar.t
+    t/bootstrap/phase5-lib-coverage.t
+    t/bootstrap/phi-integration.t
+    t/bootstrap/sa-epoch-gc-debug.t
+    t/bootstrap/son-compare.t
+    t/bootstrap/xs-build-perl.t
+    t/bootstrap/xs-earley-behavioral.t
+    t/bootstrap/xs-earley-full-semiring.t
+    t/bootstrap/xs-pm-parse.t
+    t/bootstrap/xs-polymorphic-dispatch.t
+    t/bootstrap/xs-sub-recursion.t
+    t/bootstrap/xs-target-c-smoke.t
+    t/grammar-conformance.t

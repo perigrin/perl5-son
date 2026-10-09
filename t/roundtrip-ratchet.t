@@ -38,12 +38,12 @@ my %FLOOR = (
     # chalk's lib/ at the commit tools/chalk-lib-roundtrip.pl pins (5948f648,
     # 179 modules), measured at d0cb68a and 2d8fb90, 2026-10-06.
     chalk_compiles => 137,
-    # chalk's own test files (547 at 5948f648) that MATCH against the emitted
-    # lib/ -- tools/chalk-gate3.pl: the same result, or, for a test that reads
-    # lib/ as source, no worse (perigrin, 2026-10-03). Measured 545 at
-    # d0cb68a and 2d8fb90, 2026-10-06. Files that time out against the ORIGINAL are SLOW
-    # and left out.
-    chalk_gate3_matching => 545,
+    # chalk's own test files (547 at 5948f648) that give the SAME result
+    # against the emitted lib/ -- tools/chalk-gate3.pl. The 59 that read lib/
+    # as source are DEFERRED to chalk's own lowering (perigrin, 2026-10-09),
+    # so 488 are measured; files that time out against the ORIGINAL are SLOW
+    # and left out. Measured 488 of 488 at eddfaa3, twice, 2026-10-09.
+    chalk_gate3_matching => 488,
 );
 
 # A CEILING, NOT A FLOOR: graphs B::SoN skipped in chalk's lib/. A module can
@@ -69,7 +69,7 @@ sub census ($tool, @args) {
 }
 
 SKIP: {
-    skip_all 'set SON_RATCHET=1 to run the round-trip censuses (~5 hours)'
+    skip_all 'set SON_RATCHET=1 to run the round-trip censuses (~1.5 hours)'
         unless $ENV{SON_RATCHET};
 
     subtest 'the corpus round-trip does not regress' => sub {
@@ -156,13 +156,19 @@ SKIP: {
             or do { diag $out; return };
 
         my $sum = 0;
-        $sum += $n->{$_} // 0 for qw(SAME NOWORSE DIFFERS SLOW);
+        $sum += $n->{$_} // 0 for qw(SAME DIFFERS SLOW DEFERRED);
         is $sum, $n->{_cases}, 'every test file landed in exactly one bucket'
             or diag $out;
 
-        my $matching = ($n->{SAME} // 0) + ($n->{NOWORSE} // 0);
+        # THE DEFERRED SET IS A FACT OF THE PINNED COMMIT: the tests that read
+        # lib/ as source. A change in the classifier would move files in or
+        # out of the measured set silently; this makes it loud.
+        is $n->{DEFERRED}, 59, 'the 59 tests that read lib/ as source are deferred'
+            or diag $out;
+
+        my $matching = $n->{SAME} // 0;
         ok( $matching >= $FLOOR{chalk_gate3_matching},
-            "SAME + NOWORSE $matching >= floor $FLOOR{chalk_gate3_matching}" )
+            "SAME $matching >= floor $FLOOR{chalk_gate3_matching}" )
             or diag $out;
     };
 }

@@ -20,11 +20,9 @@ my $jobs    = 8;
 # the ORIGINAL lib/ -- measured under load, 344s to over 1800s -- and a file
 # that times out against the original is SLOW, compared with nothing. Two of
 # the seven differed once compared (earley-leo, perl-target-perl-tier-d).
-# THREE HOURS, not one: t/bootstrap/perl-recognize-phase5.t recognises every
-# .pm under lib/Chalk and took 8003s against the ORIGINAL lib/ (measured
-# 2026-10-07, some load) -- SLOW, so compared with nothing. perigrin chose to
-# count it at the cost of a longer gate 3 (2026-10-08).
-my $timeout = 10800;
+# Back to an hour: the file that needed three (perl-recognize-phase5.t, 8003s)
+# reads lib/ as source, and such tests are DEFERRED now -- see below.
+my $timeout = 3600;
 my $verbose = 0;   # -v lists DIFFERS rows; -v -v also the SLOW ones
 GetOptions('chalk=s' => \$chalk, 'commit=s' => \$COMMIT, 'jobs=i' => \$jobs,
            'timeout=i' => \$timeout, 'v+' => \$verbose)
@@ -53,6 +51,22 @@ while (my $m = <$list>) {
 }
 
 my @tests = sort split /\n/, `cd '$orig' && find t -name '*.t'`;
+
+# A TEST THAT READS lib/ AS SOURCE is DEFERRED -- run in neither tree. It
+# feeds chalk's modules to chalk as INPUT (compiling, comparing, recognising
+# or golden-checking them), so against the overlay it measures the emitted
+# TEXT, not the program. B::SoN's product is the IR; the Perl it renders is
+# only our check that the IR is right, and a check on that text's shape
+# validates nothing. perigrin (2026-10-09): these wait for chalk to lower
+# its own modules to LLVM IR, where their output is the thing compared. A
+# test reads the source when it names a lib/Chalk module path or walks lib/.
+sub reads_source ($t) {
+    open my $fh, '<', "$orig/$t" or return 0;
+    local $/;
+    my $src = <$fh>;
+    return $src =~ m{['"]lib/Chalk[A-Za-z0-9/_:]*\.pm|lib/Chalk/['"]|File::Find|glob\(.*lib} ? 1 : 0;
+}
+my %deferred = map { $_ => 1 } grep { reads_source($_) } @tests;
 
 # ONE RESULT PER FILE: exit code, and the `ok` and `not ok` counts with TODO
 # lines left out. Byte-identical output would be too strict -- addresses,
@@ -95,42 +109,24 @@ sub run_tree ($tree, $tag, $skip = {}) {
     return \%res;
 }
 
-my $o = run_tree($orig,  'orig');
+my $o = run_tree($orig,  'orig', \%deferred);
 # NOT RUN AGAIN where the original timed out: the file is SLOW whatever the
 # emission does, and the second run cost another hour.
 my $x = run_tree($mixed, 'mixed',
-                 { map { $_ => 1 } grep { $o->{$_} =~ /\Arc=124 / } @tests });
+                 { %deferred,
+                   map { $_ => 1 } grep { ($o->{$_} // '') =~ /\Arc=124 / } @tests });
 
 # A TEST THAT TIMES OUT AGAINST THE ORIGINAL has no result to compare: its
 # ok count is how far it got before the kill, which moves with machine load.
 # Measured, two runs of one commit differed in exactly such files (347 vs
 # 348). They are counted as SLOW and left out of SAME / DIFFERS.
-# A TEST THAT READS lib/ AS SOURCE -- chalk compiling, comparing or
-# golden-checking its own modules -- measures the TEXT, and the emission is
-# not the source's text: such a test can score higher against it, and in five
-# files did. perigrin: count it as matching when it is NO WORSE -- as many
-# passes or more, no more failures, no timeout. A test reads the source when
-# it names a lib/Chalk module path or walks lib/.
-sub reads_source ($t) {
-    open my $fh, '<', "$orig/$t" or return 0;
-    local $/;
-    my $src = <$fh>;
-    return $src =~ m{['"]lib/Chalk[A-Za-z0-9/_:]*\.pm|lib/Chalk/['"]|File::Find|glob\(.*lib} ? 1 : 0;
-}
-sub counts ($sig) { return $sig =~ /\Arc=(\S+) ok=(\d+) notok=(\d+)\z/ ? ($1, $2, $3) : () }
 
-my ($same, $noworse, $differs, $slow) = (0, 0, 0, 0);
+my ($same, $differs, $slow, $deferred) = (0, 0, 0, 0);
 my @rows;
 for my $t (@tests) {
-    my ($orc, $ook, $onok) = counts($o->{$t});
-    my ($xrc, $xok, $xnok) = counts($x->{$t} // q{});
-    if ($o->{$t} =~ /\Arc=124 /) { $slow++; push @rows, "$t | SLOW (original timed out)" if $verbose > 1 }
+    if ($deferred{$t}) { $deferred++; push @rows, "$t | DEFERRED (reads lib/ as source)" if $verbose > 1 }
+    elsif ($o->{$t} =~ /\Arc=124 /) { $slow++; push @rows, "$t | SLOW (original timed out)" if $verbose > 1 }
     elsif ($o->{$t} eq $x->{$t}) { $same++ }
-    elsif (defined $xok && $xrc ne '124' && $xok >= $ook && $xnok <= $onok
-           && reads_source($t)) {
-        $noworse++;
-        push @rows, "$t | NOWORSE | orig $o->{$t} | emitted $x->{$t}" if $verbose > 1;
-    }
     else { $differs++; push @rows, "$t | orig $o->{$t} | emitted $x->{$t}" }
 }
 
@@ -138,7 +134,7 @@ print "commit: $COMMIT\n";
 print "overlaid: $overlaid\n";
 print "files: ", scalar(@tests), "\n";
 printf "%-8s %d\n", 'SAME', $same;
-printf "%-8s %d\n", 'NOWORSE', $noworse;
 printf "%-8s %d\n", 'DIFFERS', $differs;
 printf "%-8s %d\n", 'SLOW', $slow;
+printf "%-8s %d\n", 'DEFERRED', $deferred;
 print "$_\n" for $verbose ? @rows : ();
