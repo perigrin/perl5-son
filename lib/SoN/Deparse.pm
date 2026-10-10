@@ -2619,6 +2619,10 @@ class SoN::Deparse 0.01 {
             # it was never emitted. _loop_phi_join places one after its join.
             return if ($m->{op} // '') eq 'Phi';
             if (exists $bound{$id}) { $last = $id; return }
+            # A PINNED AGGREGATE is declared where the chain reaches it, so a
+            # reader must follow it just as it follows a binding: hoisted,
+            # `my @c = (scalar(@b))` came above `my @b = (@a)`.
+            if ($self->_is_pinned_aggregate($m)) { $last = $id; return }
             return if defined $m->{control_in};
             return if ($m->{op} // '') =~ /\A(?:Phi|Region|Loop|Proj|If|Start)\z/;
             $visit->($_) for ($m->{inputs} // [])->@*;

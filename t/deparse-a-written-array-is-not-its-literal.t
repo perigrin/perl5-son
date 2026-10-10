@@ -111,4 +111,22 @@ round_trips(q{sub fill { push @{$_[0]}, 1 } my @c; fill(\@c); print "@c\n";},
 round_trips(q{my @c; my $r=\@c; push @$r, 1; my @d = @c; print "@d\n";},
     q{a bare-declared array pushed through a reference, then a copy});
 
+# A FLOATING INITIALISER THAT READS A PINNED COPY follows the copy: the copy
+# is declared where the chain reaches it, so hoisted above it the reader
+# named an undeclared aggregate.
+round_trips(q{my @a; my @b=@a; my @c=(scalar(@b)); print "@c\n";},
+    q{an array initialiser counting a pinned copy});
+round_trips(q{my @a; my @b=@a; my %h=(n=>scalar(@b)); print "$h{n}\n";},
+    q{a hash initialiser counting a pinned copy});
+round_trips(q{my %g; my %h=%g; my @k=(scalar(keys %h)); print "@k\n";},
+    q{an array initialiser counting the keys of a pinned hash copy});
+round_trips(q{my @a; my @b=@a; my %h=(n=>$#b); print "$h{n}\n";},
+    q{a hash initialiser reading the last index of a pinned copy});
+round_trips(q{my @a; my @b=@a; my %h=(n=>$b[0] // "u"); print "$h{n}\n";},
+    q{a hash initialiser reading an element of a pinned copy});
+round_trips(q{my @a; my @b=@a; my @c=(1) x @b; print scalar(@c),"\n";},
+    q{a repeat counted by a pinned copy});
+round_trips(q{my @a; my %h=(x=>1); my @b=@a; my %g=(%h, n=>scalar(@b)); print "$g{n}\n";},
+    q{a hash initialiser reading another hash and a pinned copy});
+
 done_testing;
