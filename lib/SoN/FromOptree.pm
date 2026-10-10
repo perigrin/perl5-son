@@ -13227,11 +13227,22 @@ class SoN::FromOptree 0.01 {
             return 1 if $name eq 'aelemfastlex_store'
                      || $name eq 'helemfastlex_store';
             return 1 if ($name eq 'aelem' || $name eq 'helem')
-                     && $op->flags & 0x20;   # OPf_MOD -- an lvalue element target
+                     && $op->flags & B::OPf_MOD()   # an lvalue element target
+                     && !_is_deferred_call_argument($op);
             push @todo, $op->next;
             push @todo, $op->other if $op->can('other') && ref($op->other);
         }
         return 0;
+    }
+
+    # A CALL OR sprintf ARGUMENT is OPf_MOD too, with OPpLVAL_DEFER: a deferred
+    # lvalue only the callee can write, and the call already pins its arm. It
+    # is not a store -- except an element of a LEXICAL ARRAY, whose write
+    # through $_[0] is not modelled (`set($a[$i])` loses it), so it keeps
+    # counting and its value-context arm keeps refusing.
+    sub _is_deferred_call_argument ($op) {
+        return 0 unless $op->private & B::OPpLVAL_DEFER();
+        return !($op->name eq 'aelem' && $op->first->name eq 'padav');
     }
 
     # Does the arm (op chain from $start up to but excluding $stop) STORE to a
