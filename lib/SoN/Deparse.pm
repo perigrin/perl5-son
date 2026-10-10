@@ -1602,6 +1602,10 @@ class SoN::Deparse 0.01 {
             }
             for my $n ( $self->_nodes_in_order ) {
                 next unless ( $n->{op} // '' ) eq 'Subscript';
+                # A PINNED READ is bound where it stands and spelled by its
+                # binding, never re-read: `next if $s{$x}++` reads the old
+                # value into `$eff23` before the store, and round-trips.
+                next if defined $n->{control_in} || exists $bound{ $n->{id} };
                 my @in = ( $n->{inputs} // [] )->@*;
                 next unless @in > ( $MEM_MIN_INPUTS{Subscript} // 99 );
                 my $v = $nodes->{ $in[-1] } or next;
