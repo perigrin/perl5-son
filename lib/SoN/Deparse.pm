@@ -4408,6 +4408,15 @@ class SoN::Deparse 0.01 {
             $text = sprintf('do { my $c = %s; %s($c); $c }',
                 $self->_expr($in[0]), $kind);
         }
+        elsif ($op eq 'ChompValue') {
+            # WHAT WAS REMOVED, computed on a copy of the subject before the
+            # trim -- the Chomp's own input -- so the trim is not run twice.
+            die "GAP: a ChompValue with " . scalar(@in) . " inputs is not yet"
+              . " rendered\n" unless @in == 1;
+            my $kind = ($n->{fields} // {})->{kind} // 'chomp';
+            $text = sprintf('do { my $c = %s; %s($c) }',
+                $self->_expr($in[0]), $kind);
+        }
         elsif ($op eq 'Transliterate') {
             # SAME SHAPE AS RegexSubst, same reason: the graph threads the
             # result to whatever binds it, so this yields a value rather than
