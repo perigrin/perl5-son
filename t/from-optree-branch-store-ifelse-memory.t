@@ -7,6 +7,9 @@ use Test2::V0;
 
 use SoN::OptSuppress;
 use SoN::FromOptree;
+use SoN::Deparse;
+use JSON::PP;
+use File::Temp qw(tempdir);
 
 # `if ($c) { $a[0] = 7 } else { $a[0] = 8 } $a[0]` -- BOTH arms store to the
 # same element. Each store is CONTROL-DEPENDENT on its own arm's Proj(If); the
@@ -76,15 +79,20 @@ subtest 'the post-branch read memory is a Phi over the Region with two store inp
     is(scalar(of_op($g, 'Phi')), 1, 'exactly one Phi (the memory merge, no stack Phi)');
 };
 
-subtest 'a VALUE-context ternary whose arms store an element GAPs, never returns void' => sub {
-    # `my $x = $c ? ($a[0]=7) : ($a[0]=8); $x` -- the mem_branch path only
-    # lowers the VOID if/else statement form (the store is a discarded side
-    # effect). In value context it would drop the ternary value without pushing
-    # it, so the producer must refuse loudly rather than silently return void.
-    my $src = 'sub { my @a = (1,2,3); my $c = 1; my $x = $c ? ($a[0]=7) : ($a[0]=8); $x }';
-    my $err = dies { graph_of($src) };
-    like($err, qr/GAP: value-context ternary with a branch-guarded element store/,
-        'value-context branch-guarded element store GAPs in the producer');
+subtest 'a VALUE-context ternary whose arms store an element merges the stored value' => sub {
+    # `my $x = $c ? ($a[0]=7) : ($a[0]=8); $x` -- each arm's element-store
+    # assign leaves its value on the stack, so the arms merge into a value Phi
+    # at the join beside the memory-Phi. The program must print what perl does.
+    my $src = 'my @a = (1,2,3); for my $c (1, 0) { my $x = $c ? ($a[0]=7) : ($a[0]=8); print "$x @a\n" }';
+    my $dir = tempdir(CLEANUP => 1);
+    my $f = "$dir/p.pl";
+    open my $fh, '>', $f or die $!; print $fh $src; close $fh;
+    my $want = qx($^X $f);
+    my $json = qx($^X -Ilib -MO=-q,SoN,json $f 2>$dir/err);
+    my $out = SoN::Deparse->new->render(JSON::PP->new->decode($json));
+    ok(defined $out, 'the graph renders');
+    open $fh, '>', "$dir/o.pl" or die $!; print $fh $out // ''; close $fh;
+    is(scalar qx($^X $dir/o.pl), $want, 'and prints what perl prints');
 };
 
 done_testing();

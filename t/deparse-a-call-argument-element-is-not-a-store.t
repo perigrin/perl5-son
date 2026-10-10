@@ -84,10 +84,10 @@ round_trips(q{sub inc { $_[0]++ } my %h; for my $c (1,0) { $c && inc($h{k}); pri
 
 # A LEXICAL ARRAY element's write through $_[0] is not modelled
 # (`set($a[$i])` loses it), so it keeps refusing in a consumed arm.
-my $elem_gap = qr/GAP: value-context ternary with a branch-guarded element store not yet lowered/;
 refuses(q{sub set { $_[0] = "w" } my @a=(1,2); for my $c (1,0) { set($c ? $a[0] : $a[1]) } print "@a\n"},
-    $elem_gap, 'a ternary of lexical array elements passed to a writing call');
+    qr/GAP: a ternary whose arm stores an element is an lvalue/, 'a ternary of lexical array elements passed to a writing call');
 refuses(q{sub inc { $_[0]++ } my @a=(0); for my $c (1,0) { my $x = $c ? inc($a[0]) : 5; print "$x @a\n" }},
-    $elem_gap, 'a writing call of a lexical array element in an arm');
+    qr/GAP: a consumed ternary arm stores an element and yields a value that is not a constant/,
+    'a writing call of a lexical array element in an arm');
 
 done_testing;

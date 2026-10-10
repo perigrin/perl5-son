@@ -13245,6 +13245,24 @@ class SoN::FromOptree 0.01 {
         return !($op->name eq 'aelem' && $op->first->name eq 'padav');
     }
 
+    # Does the arm `local`ize an element (`local $a[0] = 7`)? Bounded like
+    # _arm_has_element_store.
+    sub _arm_localizes_element ($start, $stop, $join = undef) {
+        $stop = _op_addr($stop);
+        my %seen;
+        my @todo = ($start);
+        while (my $op = shift @todo) {
+            next unless $$op && $$op != $stop && !$seen{$$op};
+            next if defined $join && $$op == $join;
+            $seen{$$op} = 1;
+            return 1 if ($op->name eq 'aelem' || $op->name eq 'helem')
+                     && $op->private & B::OPpLVAL_INTRO();
+            push @todo, $op->next;
+            push @todo, $op->other if $op->can('other') && ref($op->other);
+        }
+        return 0;
+    }
+
     # Does the arm (op chain from $start up to but excluding $stop) STORE to a
     # class FIELD? A branched field mutation (`method bump { if(C){$n=$n+5}
     # else{$n=$n+1} }`) must build real control flow so each arm's field store is
@@ -13985,8 +14003,9 @@ class SoN::FromOptree 0.01 {
         # the same real control flow so each arm's control-pinned effect fires on
         # its own Proj and a Region merges the arms. An `if` statement is always
         # void (WANT 0/1), so this contributes only to the void path.
-        my $elem_branch = _arm_has_element_store($op->other, $op->next, $join_addr)   # true arm
-                       || _arm_has_element_store($op->next, $op->other, $join_addr);  # false arm
+        my $elem_true   = _arm_has_element_store($op->other, $op->next, $join_addr);
+        my $elem_false  = _arm_has_element_store($op->next, $op->other, $join_addr);
+        my $elem_branch = $elem_true || $elem_false;
         my $mem_branch  = $elem_branch
                        || _arm_has_field_store($cv, $op->other, $op->next, $join_addr)
                        || _arm_has_field_store($cv, $op->next, $op->other, $join_addr)
@@ -14008,12 +14027,13 @@ class SoN::FromOptree 0.01 {
                        || _arm_advances_control($op->next, $op->other, $join_addr);
         # AN ARM THAT YIELDS A VALUE merges it: the Phi over the two arm
         # values is the result, whatever else the arm does -- allocate, call,
-        # store into a slot. An element store and a die keep their own rules
-        # below. (The Undef fallback this replaces is what made a consumed
-        # value refuse: an unmerged residual would silently read undef.)
+        # store into a slot or an element. A die keeps its own rule below, and
+        # an element store's value is checked where it merges. (The Undef
+        # fallback this replaces is what made a consumed value refuse: an
+        # unmerged residual would silently read undef.)
         # A CLASS FIELD STORE keeps its own rule (below): its arm residual is
         # unstamped, and a consumer cannot take an unstamped value Phi.
-        my $alloc_only = $mem_branch && !$elem_branch
+        my $alloc_only = $mem_branch
             && !_arm_has_field_store($cv, $op->other, $op->next, $join_addr, 1)
             && !_arm_has_field_store($cv, $op->next, $op->other, $join_addr, 1)
             && !_arm_has_die($op->other, $op->next, $join_addr)
@@ -14053,9 +14073,24 @@ class SoN::FromOptree 0.01 {
             my $die_true  = _arm_has_die($op->other, $op->next, $join_addr);
             my $false_die = _arm_has_die($op->next, $op->other, $join_addr);
             my $die_branch = $die_true || $false_die;
+            # An element store's value merges on the alloc path below. WANT 0
+            # IS THE CALLER'S CONTEXT -- a last statement, a return -- so it
+            # merges there too; beside a die or a return, the arm that stays
+            # yields the value, as for any other arm.
             die "GAP: value-context ternary with a branch-guarded element"
               . " store not yet lowered\n"
-                if !$is_void && $elem_branch;
+                if $elem_branch && !$is_void && !$alloc_only;
+            # The merged value is a copy; an lvalue ternary yields the element.
+            die "GAP: a ternary whose arm stores an element is an lvalue (a"
+              . " call argument, a reference or a foreach list); the alias is"
+              . " not yet lowered\n"
+                if $elem_branch && $want != 1 && $op->flags & B::OPf_MOD();
+            my $elem_local = $elem_branch
+                && (_arm_localizes_element($op->other, $op->next, $join_addr)
+                 || _arm_localizes_element($op->next, $op->other, $join_addr));
+            die "GAP: a consumed ternary arm localizes an element; its restore"
+              . " is not yet lowered\n"
+                if $elem_local && !$is_void;
             die "GAP: a consumed value-context ternary whose arms store a class"
               . " field is not yet lowered (the arm residual is unstamped, so"
               . " the merged value would silently be Undef)\n"
@@ -14123,6 +14158,30 @@ class SoN::FromOptree 0.01 {
             # drain above would drop the rest of `wantarray ? (7, 8) : []`.
             die "GAP: a ternary with a multi-element list arm not yet lowered\n"
                 if $alloc_value && (($true_delta // 0) > 1 || ($false_delta // 0) > 1);
+            # AN ELEMENT-STORE ARM MERGES ONLY A CONSTANT. Its value is the
+            # stored node, which the merge may spell after the store: an
+            # expression re-reads what the store changed (`$a[0] = $a[0] + 1`
+            # gave 7 for 6), a ++ yields the wrong side, and a key with an
+            # effect (`$h{chop $k} = $k`) reorders the read. A constant cannot.
+            # ponytail: constants only; widen once a stored value is bound
+            # before its store.
+            # WANT 0 that cannot merge pushes nothing, as before: an if/else
+            # rendered as a sub's last statement still yields its value. One
+            # rendered before a later statement does not -- an older defect,
+            # not made worse here.
+            if ($alloc_value && $elem_branch) {
+                my $unsound = $elem_local;
+                for ([$elem_true, $true_arm_val], [$elem_false, $false_arm_val]) {
+                    my ($stores, $val) = @$_;
+                    $unsound = 1
+                        if $stores && !($val && $val->isa('SoN::IR::Node::Constant'));
+                }
+                die "GAP: a consumed ternary arm stores an element and"
+                  . " yields a value that is not a constant; the merged"
+                  . " value could be read after the store\n"
+                    if $unsound && !$is_void;
+                $alloc_value = 0 if $unsound;
+            }
             if ($alloc_value) {
                 $true_sim->push_node($true_arm_val // _undef_constant($factory));
                 $false_sim->push_node($false_arm_val // _undef_constant($factory));
