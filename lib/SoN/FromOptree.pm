@@ -394,6 +394,18 @@ class SoN::FromOptree 0.01 {
     # same either way and keeps the alias, whose shape consumers rely on.
     our $MUTATED_SLOTS = {};
 
+    # The main walk's $ctx->{mutated_aggregate}, which an arm or loop-body
+    # walk shares rather than starting empty. Those walks build their own
+    # $ctx, and a push recorded there was lost when the arm ended:
+    #
+    #     my @a=(1,2); my $c=1; $c ? push(@a,3) : 0; print "@a"
+    #       perl:  1 2 3
+    #       graph: join($", 1, 2)   the flatten shortcut, blind to the push
+    #
+    # Flow-insensitive on purpose: a slot an arm mutates is read from memory
+    # for the rest of the walk, which is right whether or not the arm ran.
+    our $MUTATED_AGGREGATE;
+
     sub _mutated_aggregate_slots ($cv, $root = undef) {
         my %slot;
         $root //= eval { $cv->ROOT };
@@ -929,6 +941,7 @@ class SoN::FromOptree 0.01 {
                     # Capture cells, keyed on the ENCLOSING pad slot -- one
                     # cell per variable, shared by every closure over it.
                     cells => {}, cells_written => {},
+                    mutated_aggregate => {},
                     is_program => (defined $program_root ? 1 : 0) };
 
         # A FILE LEXICAL SHARED WITH A NAMED SUB is a location in both graphs:
@@ -945,6 +958,7 @@ class SoN::FromOptree 0.01 {
             = { map { $_ => 1 } keys $ctx->{shared_lexicals}->%* };
         local $MUTATED_SLOTS = _mutated_aggregate_slots($cv,
             defined $program_root ? B::main_root() : undef);
+        local $MUTATED_AGGREGATE = $ctx->{mutated_aggregate};
 
         # A FLIP-FLOP'S STATE SLOT STARTS UNDEF, as every pad slot does, and
         # is bound so here: a loop's scout finds carried slots by comparing
@@ -11686,6 +11700,7 @@ class SoN::FromOptree 0.01 {
         # one iteration and stops at the `unstack`/`leaveloop` that ends it, so
         # that stop is the boundary and _restore_locals is called there.
         my $ctx = { mode => 'loop', local_saves => [], in_loop_body => 1,
+                    mutated_aggregate => $MUTATED_AGGREGATE // {},
                     addr_taken => $ADDR_TAKEN // {},
                     mutated_aggregate => $MUTATED_AGGREGATE // {},
                     shared_lexicals => $SHARED_SLOTS // {} };
@@ -14281,6 +14296,7 @@ class SoN::FromOptree 0.01 {
         # one is re-walked by the other.
         my $ctx = { mode => 'branch', visited => $visited,
                     local_saves => [],
+                    mutated_aggregate => $MUTATED_AGGREGATE // {},
                     addr_taken => $ADDR_TAKEN // {},
                     mutated_aggregate => $MUTATED_AGGREGATE // {},
                     shared_lexicals => $SHARED_SLOTS // {} };
