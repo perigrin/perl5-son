@@ -8369,6 +8369,25 @@ class SoN::FromOptree 0.01 {
             }
             my $targ = $op->targ;
 
+            # A DEMOTED SLOT IS STORED, as sassign and the TARGMY path store
+            # it. `my $h = {}; f($h)` passes $h by alias, so the call reads the
+            # slot from memory; a scope rebind alone left that read at the
+            # slot's old memory version, and the callee wrote into undef.
+            if ($ctx->{addr_taken}{$targ}) {
+                my $loc = $factory->make('PadAccess',
+                    targ => $targ,
+                    do { my ($sg, $sy) = _padparts($cv, $targ);
+                         (sigil => $sg, symbol => $sy) },
+                    ($ctx->{shared_lexicals}{$targ} ? (shared => 1) : ()),
+                    (defined $sim->memory ? (inputs => [ $sim->memory ]) : ()));
+                my $store = $factory->make('Assign', inputs => [$loc, $node]);
+                $store->set_control_in($sim->control);
+                $sim->set_control($store);
+                $sim->set_memory($store);
+                $sim->push_node($node);
+                return ($op->next, 'handled');
+            }
+
             # A field store (TARGMY into a class field slot) threads on control
             # via an explicit Assign, exactly like the generic TARGMY path; a pad
             # slot is an SSA rebind. LVINTRO in main mode wraps the pad in a
