@@ -460,7 +460,7 @@ parses: yes
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [19], nodes: [
+main::__PROGRAM__: {start: 0, returns: [18], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
@@ -469,18 +469,17 @@ main::__PROGRAM__: {start: 0, returns: [19], nodes: [
   [ArrayLiteral, ~, [2, 3, 4], 0, ArrayRef], # 5
   [Call, {dispatch_kind: direct, name: main::items, param_names: [], want: list}, [5], 5, List], # 6
   [ArrayLiteral, {sigil: "@", symbol: got}, [6], ~, Array], # 7
-  [MemStart], # 8
-  [Count, ~, [7, 8], ~, Int], # 9
-  [Coerce, {from_repr: Int, to_repr: Str}, [9], ~, Str], # 10
-  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 11
-  [Constant, {const_type: integer, value: "4"}, ~, ~, Int], # 12
-  [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 13
-  [ArrayLiteral, ~, [12, 13], 6, ArrayRef], # 14
-  [Call, {dispatch_kind: direct, name: main::items, param_names: [], want: scalar}, [14], 14, List], # 15
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [15], ~, Str], # 16
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 17
-  [Print, ~, [10, 11, 16, 17], 15, Scalar], # 18
-  [Return, {implicit: true}, [1], 18]]} # 19
+  [Constant, {const_type: integer, value: "4"}, ~, ~, Int], # 8
+  [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 9
+  [ArrayLiteral, ~, [8, 9], 6, ArrayRef], # 10
+  [Call, {dispatch_kind: direct, name: main::items, param_names: [], want: scalar}, [10], 10, List], # 11
+  [Count, ~, [7, 11], ~, Int], # 12
+  [Coerce, {from_repr: Int, to_repr: Str}, [12], ~, Str], # 13
+  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 14
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [11], ~, Str], # 15
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 16
+  [Print, ~, [13, 14, 15, 16], 11, Scalar], # 17
+  [Return, {implicit: true}, [1], 17]]} # 18
 main::items: {start: 0, returns: [8], nodes: [
   [Start], # 0
   [ArgsSource, ~, ~, ~, Array], # 1

@@ -312,13 +312,12 @@ main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Return, {implicit: true}, [1], 0]]} # 2
-main::corpus_case: {start: 0, returns: [5], nodes: [
+main::corpus_case: {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Call, {dispatch_kind: direct, name: main::inner, param_names: [], want: list}, ~, 0, List], # 1
   [ArrayLiteral, {sigil: "@", symbol: x}, [1], ~, Array], # 2
-  [MemStart], # 3
-  [Count, ~, [2, 3], ~, Int], # 4
-  [Return, {implicit: true}, [4], 1]]} # 5
+  [Count, ~, [2, 1], ~, Int], # 3
+  [Return, {implicit: true}, [3], 1]]} # 4
 main::inner: {start: 0, returns: [6], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "10"}, ~, ~, Int], # 1

@@ -563,7 +563,9 @@ Node::__ADJUST_0: {start: 0, returns: [12], nodes: [
   [Assign, ~, [5, 8], 8, Scalar], # 9
   [Region, {head: 3}, [4, 9]], # 10
   [FieldAccess, {field_index: 1, field_stash: Node}, ~, 10, Scalar], # 11
-  [Return, {implicit: true}, [11], 11]]} # 12
+  [Return, {implicit: true}, [11], 11], # 12
+  [MemStart], # 13
+  [Phi, {predecessors: [4, 7], region: 10}, [13, 8], ~, Unknown]]} # 14
 Node::__DEFAULT_1: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
@@ -771,7 +773,7 @@ Registry::classes: {start: 0, returns: [4], nodes: [
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, memory_input: true, name: values, param_names: []}, [1, 2], ~, Unknown], # 3
   [Return, ~, [3], 0]]} # 4
-main::__PROGRAM__: {start: 0, returns: [21], nodes: [
+main::__PROGRAM__: {start: 0, returns: [20], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [PackageMark, {package: Registry}, ~, 0], # 2
@@ -783,17 +785,16 @@ main::__PROGRAM__: {start: 0, returns: [21], nodes: [
   [Call, {class_name: Registry, dispatch_kind: method, name: add, param_names: [], want: scalar}, [6, 7], 6, Unknown], # 8
   [Call, {class_name: Registry, dispatch_kind: method, name: classes, param_names: [], want: list}, [8], 8, Unknown], # 9
   [ArrayLiteral, {sigil: "@", symbol: all}, [9], ~, Array], # 10
-  [MemStart], # 11
+  [Call, {class_name: Registry, dispatch_kind: method, name: classes, param_names: [], want: scalar}, [8], 9, Unknown], # 11
   [Count, ~, [10, 11], ~, Int], # 12
   [Coerce, {from_repr: Int, to_repr: Str}, [12], ~, Str], # 13
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 14
-  [Call, {class_name: Registry, dispatch_kind: method, name: classes, param_names: [], want: scalar}, [8], 9, Unknown], # 15
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [15], ~, Str], # 16
-  [Concat, ~, [14, 16], ~, Str], # 17
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 18
-  [Concat, ~, [17, 18], ~, Str], # 19
-  [Print, ~, [13, 19], 15, Scalar], # 20
-  [Return, {implicit: true}, [1], 20]]} # 21
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [11], ~, Str], # 15
+  [Concat, ~, [14, 15], ~, Str], # 16
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 17
+  [Concat, ~, [16, 17], ~, Str], # 18
+  [Print, ~, [13, 18], 11, Scalar], # 19
+  [Return, {implicit: true}, [1], 19]]} # 20
 "BEGIN 1": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: feature}, ~, ~, Str], # 1
@@ -978,7 +979,9 @@ main::fib: {start: 0, returns: [15], nodes: [
   [Proj, {index: 0}, [6]], # 12
   [Region, {head: 6}, [12, 10]], # 13
   [Phi, {predecessors: [12, 7], region: 13}, [1, 11], ~, Unknown], # 14
-  [Return, ~, [14], 13]]} # 15
+  [Return, ~, [14], 13], # 15
+  [MemStart], # 16
+  [Phi, {predecessors: [12, 7], region: 13}, [16, 10], ~, Unknown]]} # 17
 main::ids: {start: 0, returns: [8], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: ","}, ~, ~, Str], # 1
@@ -1008,7 +1011,8 @@ main::ids: {start: 0, returns: [8], nodes: [
   [Phi, {predecessors: [20, 23], region: 24}, [21, 22], ~, Unknown], # 25
   [ListAppend, {collector: map}, [4, 25], ~, Array], # 26
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 27
-  [Add, ~, [14, 27], ~, Int]]} # 28
+  [Add, ~, [14, 27], ~, Int], # 28
+  [Phi, {predecessors: [20, 23], region: 24}, [21, 10], ~, Unknown]]} # 29
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.036"}, ~, ~, Num], # 1

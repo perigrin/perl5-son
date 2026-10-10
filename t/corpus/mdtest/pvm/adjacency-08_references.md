@@ -91,45 +91,45 @@ main::__PROGRAM__: {start: 0, returns: [48], nodes: [
   [MemStart], # 6
   [PostfixDeref, {sigil: "@"}, [5, 6], ~, Array], # 7
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 8
-  [Subscript, {kind: array}, [7, 8, 6], ~, Scalar], # 9
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [9], ~, Str], # 10
-  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 11
-  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 12
-  [Subscript, {kind: array}, [7, 12, 6], ~, Scalar], # 13
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [13], ~, Str], # 14
-  [Constant, {const_type: string, value: k}, ~, ~, Str], # 15
-  [HashLiteral, {sigil: "%", symbol: h}, [15, 12], ~, Hash], # 16
-  [Ref, ~, [16], ~, HashRef], # 17
-  [PostfixDeref, {sigil: "%"}, [17, 6], ~, Hash], # 18
-  [Subscript, {kind: hash}, [18, 15, 6], ~, Scalar], # 19
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [19], ~, Str], # 20
-  [Constant, {const_type: code, value: main::one}, ~, ~, Code], # 21
-  [Ref, ~, [21], ~, CodeRef], # 22
-  [Call, {dispatch_kind: builtin, name: prototype, param_names: []}, [22], ~, Scalar], # 23
-  [Coerce, {from_repr: Scalar, to_repr: Str}, [23], ~, Str], # 24
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 25
-  [RefType, ~, [5], ~, Str], # 26
-  [Subscript, {kind: array}, [5, 8, 6], ~, Scalar], # 27
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [27], ~, Str], # 28
-  [Ref, {each: true}, [4], ~, List], # 29
-  [ArrayLiteral, {sigil: "@", symbol: r}, [29], ~, Array], # 30
-  [Subscript, {kind: array}, [30, 12, 6], ~, Scalar], # 31
-  [PostfixDeref, {sigil: $}, [31], ~, Scalar], # 32
-  [Coerce, {from_repr: Scalar, to_repr: Str}, [32], ~, Str], # 33
-  [Constant, {const_type: integer, value: "30"}, ~, ~, Int], # 34
-  [Constant, {const_type: integer, value: "40"}, ~, ~, Int], # 35
-  [ArrayLiteral, ~, [34, 35], 0, ArrayRef], # 36
-  [Subscript, {kind: array}, [36, 8, 6], ~, Int], # 37
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [37], ~, Str], # 38
-  [Subscript, {kind: array}, [36, 12, 6], ~, Int], # 39
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [39], ~, Str], # 40
-  [Constant, {const_type: code, value: main::twice}, ~, ~, Code], # 41
-  [Ref, ~, [41], ~, CodeRef], # 42
-  [Constant, {const_type: integer, value: "21"}, ~, ~, Int], # 43
-  [Call, {dispatch_kind: indirect, name: "", param_names: [], want: list}, [42, 43], 36, Unknown], # 44
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [44], ~, Str], # 45
-  [Print, ~, [26, 11, 28, 11, 33, 11, 38, 11, 40, 11, 45, 25], 44, Scalar], # 46
-  [Print, ~, [10, 11, 14, 11, 10, 11, 20, 11, 24, 25], 46, Scalar], # 47
+  [Constant, {const_type: code, value: main::twice}, ~, ~, Code], # 9
+  [Ref, ~, [9], ~, CodeRef], # 10
+  [Constant, {const_type: integer, value: "21"}, ~, ~, Int], # 11
+  [Constant, {const_type: integer, value: "30"}, ~, ~, Int], # 12
+  [Constant, {const_type: integer, value: "40"}, ~, ~, Int], # 13
+  [ArrayLiteral, ~, [12, 13], 0, ArrayRef], # 14
+  [Call, {dispatch_kind: indirect, name: "", param_names: [], want: list}, [10, 11], 14, Unknown], # 15
+  [Subscript, {kind: array}, [7, 8, 15], ~, Scalar], # 16
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [16], ~, Str], # 17
+  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 18
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 19
+  [Subscript, {kind: array}, [7, 19, 15], ~, Scalar], # 20
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [20], ~, Str], # 21
+  [Constant, {const_type: string, value: k}, ~, ~, Str], # 22
+  [HashLiteral, {sigil: "%", symbol: h}, [22, 19], ~, Hash], # 23
+  [Ref, ~, [23], ~, HashRef], # 24
+  [PostfixDeref, {sigil: "%"}, [24, 6], ~, Hash], # 25
+  [Subscript, {kind: hash}, [25, 22, 15], ~, Scalar], # 26
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [26], ~, Str], # 27
+  [Constant, {const_type: code, value: main::one}, ~, ~, Code], # 28
+  [Ref, ~, [28], ~, CodeRef], # 29
+  [Call, {dispatch_kind: builtin, name: prototype, param_names: []}, [29], ~, Scalar], # 30
+  [Coerce, {from_repr: Scalar, to_repr: Str}, [30], ~, Str], # 31
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 32
+  [RefType, ~, [5], ~, Str], # 33
+  [Subscript, {kind: array}, [5, 8, 6], ~, Scalar], # 34
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [34], ~, Str], # 35
+  [Ref, {each: true}, [4], ~, List], # 36
+  [ArrayLiteral, {sigil: "@", symbol: r}, [36], ~, Array], # 37
+  [Subscript, {kind: array}, [37, 19, 6], ~, Scalar], # 38
+  [PostfixDeref, {sigil: $}, [38], ~, Scalar], # 39
+  [Coerce, {from_repr: Scalar, to_repr: Str}, [39], ~, Str], # 40
+  [Subscript, {kind: array}, [14, 8, 6], ~, Int], # 41
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [41], ~, Str], # 42
+  [Subscript, {kind: array}, [14, 19, 6], ~, Int], # 43
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [43], ~, Str], # 44
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [15], ~, Str], # 45
+  [Print, ~, [33, 18, 35, 18, 40, 18, 42, 18, 44, 18, 45, 32], 15, Scalar], # 46
+  [Print, ~, [17, 18, 21, 18, 17, 18, 27, 18, 31, 32], 46, Scalar], # 47
   [Return, {implicit: true}, [1], 47]]} # 48
 main::one: {start: 0, returns: [5], nodes: [
   [Start], # 0

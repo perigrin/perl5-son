@@ -70,7 +70,7 @@ one word whose text is "sub"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [20], nodes: [
+main::__PROGRAM__: {start: 0, returns: [21], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [EntryDef, {package: main, sigil: "&", symbol: sq}, ~, ~, Unknown], # 2
@@ -82,16 +82,17 @@ main::__PROGRAM__: {start: 0, returns: [20], nodes: [
   [DefinedOr, ~, [6, 7], ~, Str], # 8
   [Assign, ~, [5, 8], 0, Str], # 9
   [EntryWrite, {binds: true}, [2, 3, 9], 9, Unknown], # 10
-  [PadAccess, {sigil: $, symbol: "n"}, [10], ~, Num], # 11
+  [PadAccess, {sigil: $, symbol: "n"}, [10], ~, Unknown], # 11
   [Call, {dispatch_kind: direct, name: main::sq, param_names: [], want: list}, [11], 10, Unknown], # 12
   [Coerce, {from_repr: Unknown, to_repr: Str}, [12], ~, Str], # 13
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 14
-  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 15
-  [Multiply, ~, [11, 15], ~, Num], # 16
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [16], ~, Str], # 17
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 18
-  [Print, ~, [13, 14, 17, 18], 12, Scalar], # 19
-  [Return, {implicit: true}, [1], 19]]} # 20
+  [PadAccess, {sigil: $, symbol: "n"}, [12], ~, Num], # 15
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 16
+  [Multiply, ~, [15, 16], ~, Num], # 17
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [17], ~, Str], # 18
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 19
+  [Print, ~, [13, 14, 18, 19], 12, Scalar], # 20
+  [Return, {implicit: true}, [1], 20]]} # 21
 main::__PROGRAM__::__ANON__:2:4: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [ArgsSource, ~, ~, ~, Array], # 1

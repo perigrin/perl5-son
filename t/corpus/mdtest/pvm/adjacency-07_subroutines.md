@@ -187,32 +187,32 @@ main::__PROGRAM__: {start: 0, returns: [57], nodes: [
   [Call, {dispatch_kind: direct, name: main::bump, param_names: [], want: void}, [18], 17, Scalar], # 19
   [Call, {dispatch_kind: builtin, name: lock, param_names: []}, [13], 19, Unknown], # 20
   [Assign, ~, [11, 12], 20, CodeRef], # 21
-  [Count, ~, [8, 21], ~, Int], # 22
-  [Coerce, {from_repr: Int, to_repr: Str}, [22], ~, Str], # 23
-  [Call, {dispatch_kind: builtin, name: warn, param_names: []}, [5], ~, Unknown], # 24
-  [ArrayLiteral, {sigil: "@", symbol: cut}, [24, 6], ~, Array], # 25
-  [Count, ~, [25, 21], ~, Int], # 26
-  [Coerce, {from_repr: Int, to_repr: Str}, [26], ~, Str], # 27
-  [Call, {dispatch_kind: direct, name: main::pick, param_names: [], want: list}, [3], 21, Unknown], # 28
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [28], ~, Str], # 29
-  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 30
-  [Constant, {const_type: integer, value: "50"}, ~, ~, Int], # 31
-  [Call, {dispatch_kind: direct, name: main::pick, param_names: [], want: list}, [31], 28, Unknown], # 32
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [32], ~, Str], # 33
-  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 34
-  [Call, {dispatch_kind: direct, name: main::__PROGRAM__::__ANON__:16:2, param_names: [], want: list}, [4, 34], 32, Str], # 35
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [35], ~, Str], # 36
-  [PadAccess, {sigil: $, symbol: seen}, [21], ~, Str], # 37
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [37], ~, Str], # 38
-  [Print, ~, [29, 30, 33, 30, 36, 30, 38, 2], 35, Scalar], # 39
-  [Call, {dispatch_kind: direct, name: main::answer, param_names: [], shares_args: true, want: list}, ~, 39, Int], # 40
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [40], ~, Str], # 41
-  [Call, {dispatch_kind: direct, name: main::answer, param_names: [], want: list}, ~, 40, Int], # 42
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [42], ~, Str], # 43
-  [Call, {dispatch_kind: direct, name: main::answer, param_names: [], want: list}, ~, 42, Int], # 44
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [44], ~, Str], # 45
-  [Print, ~, [41, 30, 43, 30, 45, 2], 44, Scalar], # 46
-  [Print, ~, [23, 27, 2], 46, Scalar], # 47
+  [Call, {dispatch_kind: direct, name: main::pick, param_names: [], want: list}, [3], 21, Unknown], # 22
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [22], ~, Str], # 23
+  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 24
+  [Constant, {const_type: integer, value: "50"}, ~, ~, Int], # 25
+  [Call, {dispatch_kind: direct, name: main::pick, param_names: [], want: list}, [25], 22, Unknown], # 26
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [26], ~, Str], # 27
+  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 28
+  [Call, {dispatch_kind: direct, name: main::__PROGRAM__::__ANON__:16:2, param_names: [], want: list}, [4, 28], 26, Str], # 29
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [29], ~, Str], # 30
+  [PadAccess, {sigil: $, symbol: seen}, [29], ~, Str], # 31
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [31], ~, Str], # 32
+  [Print, ~, [23, 24, 27, 24, 30, 24, 32, 2], 29, Scalar], # 33
+  [Call, {dispatch_kind: direct, name: main::answer, param_names: [], shares_args: true, want: list}, ~, 33, Int], # 34
+  [Call, {dispatch_kind: direct, name: main::answer, param_names: [], want: list}, ~, 34, Int], # 35
+  [Call, {dispatch_kind: direct, name: main::answer, param_names: [], want: list}, ~, 35, Int], # 36
+  [Count, ~, [8, 36], ~, Int], # 37
+  [Coerce, {from_repr: Int, to_repr: Str}, [37], ~, Str], # 38
+  [Call, {dispatch_kind: builtin, name: warn, param_names: []}, [5], ~, Unknown], # 39
+  [ArrayLiteral, {sigil: "@", symbol: cut}, [39, 6], ~, Array], # 40
+  [Count, ~, [40, 36], ~, Int], # 41
+  [Coerce, {from_repr: Int, to_repr: Str}, [41], ~, Str], # 42
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [34], ~, Str], # 43
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [35], ~, Str], # 44
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [36], ~, Str], # 45
+  [Print, ~, [43, 24, 44, 24, 45, 2], 36, Scalar], # 46
+  [Print, ~, [38, 42, 2], 46, Scalar], # 47
   [Call, {dispatch_kind: direct, name: main::f, param_names: [], want: list}, [3, 4], 47, Str], # 48
   [Coerce, {from_repr: Unknown, to_repr: Str}, [48], ~, Str], # 49
   [Print, ~, [49], 48, Scalar], # 50
@@ -222,7 +222,8 @@ main::__PROGRAM__: {start: 0, returns: [57], nodes: [
   [Coerce, {from_repr: Int, to_repr: Str}, [4], ~, Str], # 54
   [Print, ~, [53, 54], 52, Scalar], # 55
   [Print, ~, [2], 55, Scalar], # 56
-  [Return, {implicit: true}, [1], 56]]} # 57
+  [Return, {implicit: true}, [1], 56], # 57
+  [PadAccess, {sigil: $, symbol: seen}, [19], ~, Unknown]]} # 58
 main::__PROGRAM__::__ANON__:16:2: {start: 0, returns: [14], nodes: [
   [Start], # 0
   [ArgsSource, ~, ~, ~, Array], # 1

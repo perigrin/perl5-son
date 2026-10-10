@@ -133,10 +133,11 @@ Animal::name: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [FieldAccess, {field_index: 0, field_stash: Animal}, ~, ~, Unknown], # 1
   [Return, ~, [1], 0]]} # 2
-main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, {implicit: true}, [1], 0]]} # 2
+  [PackageMark, {package: Animal}, ~, 0], # 2
+  [Return, {implicit: true}, [1], 2]]} # 3
 main::corpus_case: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: cat}, ~, ~, Str], # 1
@@ -233,10 +234,11 @@ Greeter::hello: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [FieldAccess, {field_index: 0, field_stash: Greeter}, ~, ~, Scalar], # 1
   [Return, ~, [1], 0]]} # 2
-main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, {implicit: true}, [1], 0]]} # 2
+  [PackageMark, {package: Greeter}, ~, 0], # 2
+  [Return, {implicit: true}, [1], 2]]} # 3
 main::corpus_case: {start: 0, returns: [6], nodes: [
   [Start], # 0
   [Call, {class_name: Greeter, dispatch_kind: method, name: new, param_names: [], want: scalar}, ~, 0, Object], # 1
@@ -331,10 +333,11 @@ Pair::right: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [FieldAccess, {field_index: 1, field_stash: Pair}, ~, ~, Scalar], # 1
   [Return, ~, [1], 0]]} # 2
-main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, {implicit: true}, [1], 0]]} # 2
+  [PackageMark, {package: Pair}, ~, 0], # 2
+  [Return, {implicit: true}, [1], 2]]} # 3
 main::corpus_case: {start: 0, returns: [12], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "10"}, ~, ~, Int], # 1
@@ -439,10 +442,11 @@ Pair::right: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [FieldAccess, {field_index: 1, field_stash: Pair}, ~, ~, Scalar], # 1
   [Return, ~, [1], 0]]} # 2
-main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, {implicit: true}, [1], 0]]} # 2
+  [PackageMark, {package: Pair}, ~, 0], # 2
+  [Return, {implicit: true}, [1], 2]]} # 3
 main::corpus_case: {start: 0, returns: [12], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "10"}, ~, ~, Int], # 1
@@ -661,10 +665,11 @@ Counter::val: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [FieldAccess, {field_index: 0, field_stash: Counter}, ~, ~, Scalar], # 1
   [Return, ~, [1], 0]]} # 2
-main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, {implicit: true}, [1], 0]]} # 2
+  [PackageMark, {package: Counter}, ~, 0], # 2
+  [Return, {implicit: true}, [1], 2]]} # 3
 main::corpus_case: {start: 0, returns: [8], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "10"}, ~, ~, Int], # 1
@@ -770,10 +775,11 @@ Counter::val: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [FieldAccess, {field_index: 0, field_stash: Counter}, ~, ~, Scalar], # 1
   [Return, ~, [1], 0]]} # 2
-main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, {implicit: true}, [1], 0]]} # 2
+  [PackageMark, {package: Counter}, ~, 0], # 2
+  [Return, {implicit: true}, [1], 2]]} # 3
 main::corpus_case: {start: 0, returns: [9], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "10"}, ~, ~, Int], # 1
@@ -975,10 +981,11 @@ Box::double: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [FieldAccess, {field_index: 1, field_stash: Box}, ~, ~, Unknown], # 1
   [Return, ~, [1], 0]]} # 2
-main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, {implicit: true}, [1], 0]]} # 2
+  [PackageMark, {package: Box}, ~, 0], # 2
+  [Return, {implicit: true}, [1], 2]]} # 3
 main::corpus_case: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "7"}, ~, ~, Int], # 1
@@ -1093,10 +1100,11 @@ Counter::val: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [FieldAccess, {field_index: 0, field_stash: Counter}, ~, ~, Scalar], # 1
   [Return, ~, [1], 0]]} # 2
-main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, {implicit: true}, [1], 0]]} # 2
+  [PackageMark, {package: Counter}, ~, 0], # 2
+  [Return, {implicit: true}, [1], 2]]} # 3
 main::corpus_case: {start: 0, returns: [15], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "10"}, ~, ~, Int], # 1
@@ -1113,7 +1121,8 @@ main::corpus_case: {start: 0, returns: [15], nodes: [
   [Coerce, {from_repr: Unknown, to_repr: Str}, [11], ~, Str], # 12
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 13
   [Print, ~, [12, 13], 11, Scalar], # 14
-  [Return, {implicit: true}, [14], 14]]} # 15
+  [Return, {implicit: true}, [14], 14], # 15
+  [Phi, {predecessors: [7, 8], region: 10}, [2, 9], ~, Scalar]]} # 16
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
@@ -1239,10 +1248,11 @@ Counter::val: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [FieldAccess, {field_index: 0, field_stash: Counter}, ~, ~, Scalar], # 1
   [Return, {implicit: true}, [1], 0]]} # 2
-main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, {implicit: true}, [1], 0]]} # 2
+  [PackageMark, {package: Counter}, ~, 0], # 2
+  [Return, {implicit: true}, [1], 2]]} # 3
 main::corpus_case: {start: 0, returns: [8], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "10"}, ~, ~, Int], # 1
@@ -1376,10 +1386,11 @@ Counter::val: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [FieldAccess, {field_index: 0, field_stash: Counter}, ~, ~, Scalar], # 1
   [Return, {implicit: true}, [1], 0]]} # 2
-main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, {implicit: true}, [1], 0]]} # 2
+  [PackageMark, {package: Counter}, ~, 0], # 2
+  [Return, {implicit: true}, [1], 2]]} # 3
 main::corpus_case: {start: 0, returns: [8], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "200"}, ~, ~, Int], # 1
@@ -1663,12 +1674,13 @@ Tagged::render: {start: 0, returns: [7], nodes: [
   [FieldAccess, {field_index: 0, field_stash: Tagged}, ~, ~, Str], # 3
   [Coerce, {from_repr: Unknown, to_repr: Str}, [1], ~, Str], # 4
   [Concat, ~, [3, 4], ~, Str], # 5
-  [TernaryExpr, ~, [2, 5, 3], ~, Unknown], # 6
-  [Return, {implicit: true}, [6], 0]]} # 7
-main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+  [TernaryExpr, {rebind_arm: 1}, [2, 5, 3], 0, Unknown], # 6
+  [Return, {implicit: true}, [6], 6]]} # 7
+main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, {implicit: true}, [1], 0]]} # 2
+  [PackageMark, {package: Tagged}, ~, 0], # 2
+  [Return, {implicit: true}, [1], 2]]} # 3
 main::corpus_case: {start: 0, returns: [5], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: a}, ~, ~, Str], # 1
@@ -1761,10 +1773,11 @@ Bag::first: {start: 0, returns: [5], nodes: [
   [MemStart], # 3
   [Subscript, {kind: array}, [1, 2, 3], ~, Scalar], # 4
   [Return, {implicit: true}, [4], 0]]} # 5
-main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, {implicit: true}, [1], 0]]} # 2
+  [PackageMark, {package: Bag}, ~, 0], # 2
+  [Return, {implicit: true}, [1], 2]]} # 3
 main::corpus_case: {start: 0, returns: [6], nodes: [
   [Start], # 0
   [Call, {class_name: Bag, dispatch_kind: method, name: new, param_names: [], want: scalar}, ~, 0, Object], # 1
@@ -1875,10 +1888,11 @@ Bag::total: {start: 0, returns: [6], nodes: [
   [Add, ~, [3, 15], ~, Num], # 16
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 17
   [Add, ~, [11, 17], ~, Int]]} # 18
-main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, {implicit: true}, [1], 0]]} # 2
+  [PackageMark, {package: Bag}, ~, 0], # 2
+  [Return, {implicit: true}, [1], 2]]} # 3
 main::corpus_case: {start: 0, returns: [6], nodes: [
   [Start], # 0
   [Call, {class_name: Bag, dispatch_kind: method, name: new, param_names: [], want: scalar}, ~, 0, Object], # 1
@@ -1978,10 +1992,11 @@ Counter::get: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [FieldAccess, {field_index: 0, field_stash: Counter}, ~, ~, Scalar], # 1
   [Return, {implicit: true}, [1], 0]]} # 2
-main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, {implicit: true}, [1], 0]]} # 2
+  [PackageMark, {package: Counter}, ~, 0], # 2
+  [Return, {implicit: true}, [1], 2]]} # 3
 main::corpus_case: {start: 0, returns: [9], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
@@ -2068,10 +2083,11 @@ Counter::plus: {start: 0, returns: [5], nodes: [
   [Parameter, {index: 0, name: $k, sigil: $}, ~, ~, Num], # 3
   [Add, ~, [2, 3], ~, Num], # 4
   [Return, {implicit: true}, [4], 0]]} # 5
-main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, {implicit: true}, [1], 0]]} # 2
+  [PackageMark, {package: Counter}, ~, 0], # 2
+  [Return, {implicit: true}, [1], 2]]} # 3
 main::corpus_case: {start: 0, returns: [8], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "10"}, ~, ~, Int], # 1

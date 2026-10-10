@@ -625,31 +625,30 @@ parses: yes
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [23], nodes: [
+main::__PROGRAM__: {start: 0, returns: [22], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 3
   [Call, {dispatch_kind: direct, name: main::last_is_for, param_names: [], want: list}, [2, 3], 0, Boolean], # 4
   [ArrayLiteral, {sigil: "@", symbol: f}, [4], ~, Array], # 5
-  [MemStart], # 6
-  [Count, ~, [5, 6], ~, Int], # 7
-  [Coerce, {from_repr: Int, to_repr: Str}, [7], ~, Str], # 8
-  [Call, {dispatch_kind: direct, name: main::last_is_while, param_names: [], want: list}, ~, 4, Boolean], # 9
-  [ArrayLiteral, {sigil: "@", symbol: w}, [9], ~, Array], # 10
-  [Count, ~, [10, 6], ~, Int], # 11
-  [Coerce, {from_repr: Int, to_repr: Str}, [11], ~, Str], # 12
-  [Constant, {const_type: string, value: "["}, ~, ~, Str], # 13
-  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 14
-  [Subscript, {kind: array}, [5, 14, 6], ~, Boolean], # 15
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [15], ~, Str], # 16
-  [Constant, {const_type: string, value: "]["}, ~, ~, Str], # 17
-  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 18
-  [Call, {dispatch_kind: direct, name: main::last_is_for, param_names: [], want: scalar}, [18], 9, Boolean], # 19
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [19], ~, Str], # 20
-  [Constant, {const_type: string, value: "]\n"}, ~, ~, Str], # 21
-  [Print, ~, [8, 12, 13, 16, 17, 20, 21], 19, Scalar], # 22
-  [Return, {implicit: true}, [1], 22]]} # 23
+  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 6
+  [Call, {dispatch_kind: direct, name: main::last_is_while, param_names: [], want: list}, ~, 4, Boolean], # 7
+  [Call, {dispatch_kind: direct, name: main::last_is_for, param_names: [], want: scalar}, [6], 7, Boolean], # 8
+  [Count, ~, [5, 8], ~, Int], # 9
+  [Coerce, {from_repr: Int, to_repr: Str}, [9], ~, Str], # 10
+  [ArrayLiteral, {sigil: "@", symbol: w}, [7], ~, Array], # 11
+  [Count, ~, [11, 8], ~, Int], # 12
+  [Coerce, {from_repr: Int, to_repr: Str}, [12], ~, Str], # 13
+  [Constant, {const_type: string, value: "["}, ~, ~, Str], # 14
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 15
+  [Subscript, {kind: array}, [5, 15, 8], ~, Scalar], # 16
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [16], ~, Str], # 17
+  [Constant, {const_type: string, value: "]["}, ~, ~, Str], # 18
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [8], ~, Str], # 19
+  [Constant, {const_type: string, value: "]\n"}, ~, ~, Str], # 20
+  [Print, ~, [10, 13, 14, 17, 18, 19, 20], 8, Scalar], # 21
+  [Return, {implicit: true}, [1], 21]]} # 22
 main::last_is_for: {start: 0, returns: [5], nodes: [
   [Start], # 0
   [Constant, {const_type: boolean, value: ""}, ~, ~, Boolean], # 1
@@ -722,18 +721,18 @@ main::__PROGRAM__: {start: 0, returns: [20], nodes: [
   [Call, {dispatch_kind: direct, name: main::check, param_names: [], want: scalar}, [2, 4], 0, Str], # 5
   [Region, {eval_entry: 0}, [5]], # 6
   [Phi, {region: 6}, [5, 1], ~, Scalar], # 7
-  [MemStart], # 8
-  [EntryDef, {package: main, sigil: $, symbol: "@"}, [8], ~, Scalar], # 9
-  [DefinedOr, ~, [7, 9], ~, Scalar], # 10
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [10], ~, Str], # 11
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 12
-  [Print, ~, [11, 12], 6, Scalar], # 13
-  [Call, {dispatch_kind: direct, name: main::check, param_names: [], want: scalar}, [2, 3], 13, Str], # 14
-  [Region, {eval_entry: 13}, [14]], # 15
-  [Phi, {region: 15}, [14, 1], ~, Scalar], # 16
-  [DefinedOr, ~, [16, 9], ~, Scalar], # 17
+  [EntryDef, {package: main, sigil: $, symbol: "@"}, [5], ~, Scalar], # 8
+  [DefinedOr, ~, [7, 8], ~, Scalar], # 9
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [9], ~, Str], # 10
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 11
+  [Print, ~, [10, 11], 6, Scalar], # 12
+  [Call, {dispatch_kind: direct, name: main::check, param_names: [], want: scalar}, [2, 3], 12, Str], # 13
+  [Region, {eval_entry: 12}, [13]], # 14
+  [Phi, {region: 14}, [13, 1], ~, Scalar], # 15
+  [EntryDef, {package: main, sigil: $, symbol: "@"}, [13], ~, Scalar], # 16
+  [DefinedOr, ~, [15, 16], ~, Scalar], # 17
   [Coerce, {from_repr: Unknown, to_repr: Str}, [17], ~, Str], # 18
-  [Print, ~, [18], 15, Scalar], # 19
+  [Print, ~, [18], 14, Scalar], # 19
   [Return, {implicit: true}, [1], 19]]} # 20
 main::check: {start: 0, returns: [5], nodes: [
   [Start], # 0
@@ -1003,8 +1002,11 @@ main::f: {start: 0, returns: [17], nodes: [
   [Proj, {index: 1}, [4]], # 15
   [Region, {head: 4}, [15, 12]], # 16
   [Return, {implicit: true}, [14], 16], # 17
-  [ArgsSource, ~, ~, ~, Array], # 18
-  [Assign, ~, [1, 6, 18], ~, List]]} # 19
+  [MemStart], # 18
+  [Phi, {predecessors: [9, 11], region: 12}, [10, 18], ~, Unknown], # 19
+  [Phi, {predecessors: [15, 5], region: 16}, [18, 19], ~, Unknown], # 20
+  [ArgsSource, ~, ~, ~, Array], # 21
+  [Assign, ~, [1, 6, 21], ~, List]]} # 22
 main::helper: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [MemStart], # 1

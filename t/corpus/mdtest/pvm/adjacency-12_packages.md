@@ -144,37 +144,37 @@ main::__PROGRAM__: {start: 0, returns: [46], nodes: [
   [Constant, {const_type: string, value: "use: "}, ~, ~, Str], # 11
   [EntryDef, {package: main, sigil: "%", symbol: "main::"}, ~, ~, Hash], # 12
   [Constant, {const_type: string, value: floor}, ~, ~, Str], # 13
-  [Constant, {const_type: string, value: warnings.pm}, ~, ~, Str], # 14
-  [Constant, {const_type: string, value: strict.pm}, ~, ~, Str], # 15
-  [MemStart], # 16
-  [PackageMark, {package: Greet}, ~, 0], # 17
-  [PackageMark, {package: main}, ~, 17], # 18
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [15, 16], 18, Unknown], # 19
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [14, 19], 19, Unknown], # 20
-  [Subscript, {kind: hash}, [12, 13, 20], ~, Scalar], # 21
-  [Constant, {const_type: string, value: "yes"}, ~, ~, Str], # 22
-  [Constant, {const_type: string, value: "no"}, ~, ~, Str], # 23
-  [TernaryExpr, ~, [21, 22, 23], ~, Str], # 24
-  [Constant, {const_type: string, value: LOCK_EX}, ~, ~, Str], # 25
-  [Subscript, {kind: hash}, [12, 25, 20], ~, Scalar], # 26
-  [TernaryExpr, ~, [26, 22, 23], ~, Str], # 27
-  [Constant, {const_type: string, value: "inc: "}, ~, ~, Str], # 28
-  [EntryDef, {package: main, sigil: "%", symbol: INC}, ~, ~, Hash], # 29
-  [Subscript, {kind: hash}, [29, 15, 20], ~, Scalar], # 30
-  [TernaryExpr, ~, [30, 22, 23], ~, Str], # 31
-  [Subscript, {kind: hash}, [29, 14, 20], ~, Scalar], # 32
-  [TernaryExpr, ~, [32, 22, 23], ~, Str], # 33
-  [Constant, {const_type: string, value: Greet}, ~, ~, Str], # 34
-  [Constant, {const_type: string, value: tag}, ~, ~, Str], # 35
-  [Call, {class_name: Greet, dispatch_kind: method, name: import, param_names: [], want: void}, [34, 35], 20, Unknown], # 36
-  [Call, {dispatch_kind: direct, name: Greet::hello, param_names: [], want: list}, ~, 36, Str], # 37
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [37], ~, Str], # 38
-  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 39
-  [Call, {dispatch_kind: direct, name: Louder::shout, param_names: [], want: list}, ~, 37, Str], # 40
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [40], ~, Str], # 41
-  [Print, ~, [38, 39, 41, 10], 40, Scalar], # 42
-  [Print, ~, [28, 31, 33, 10], 42, Scalar], # 43
-  [Print, ~, [11, 24, 27, 10], 43, Scalar], # 44
+  [Constant, {const_type: string, value: Greet}, ~, ~, Str], # 14
+  [Constant, {const_type: string, value: tag}, ~, ~, Str], # 15
+  [Constant, {const_type: string, value: warnings.pm}, ~, ~, Str], # 16
+  [Constant, {const_type: string, value: strict.pm}, ~, ~, Str], # 17
+  [MemStart], # 18
+  [PackageMark, {package: Greet}, ~, 0], # 19
+  [PackageMark, {package: main}, ~, 19], # 20
+  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [17, 18], 20, Unknown], # 21
+  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [16, 21], 21, Unknown], # 22
+  [Call, {class_name: Greet, dispatch_kind: method, name: import, param_names: [], want: void}, [14, 15], 22, Unknown], # 23
+  [Call, {dispatch_kind: direct, name: Greet::hello, param_names: [], want: list}, ~, 23, Str], # 24
+  [Call, {dispatch_kind: direct, name: Louder::shout, param_names: [], want: list}, ~, 24, Str], # 25
+  [Subscript, {kind: hash}, [12, 13, 25], ~, Scalar], # 26
+  [Constant, {const_type: string, value: "yes"}, ~, ~, Str], # 27
+  [Constant, {const_type: string, value: "no"}, ~, ~, Str], # 28
+  [TernaryExpr, ~, [26, 27, 28], ~, Str], # 29
+  [Constant, {const_type: string, value: LOCK_EX}, ~, ~, Str], # 30
+  [Subscript, {kind: hash}, [12, 30, 25], ~, Scalar], # 31
+  [TernaryExpr, ~, [31, 27, 28], ~, Str], # 32
+  [Constant, {const_type: string, value: "inc: "}, ~, ~, Str], # 33
+  [EntryDef, {package: main, sigil: "%", symbol: INC}, ~, ~, Hash], # 34
+  [Subscript, {kind: hash}, [34, 17, 25], ~, Scalar], # 35
+  [TernaryExpr, ~, [35, 27, 28], ~, Str], # 36
+  [Subscript, {kind: hash}, [34, 16, 25], ~, Scalar], # 37
+  [TernaryExpr, ~, [37, 27, 28], ~, Str], # 38
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [24], ~, Str], # 39
+  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 40
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [25], ~, Str], # 41
+  [Print, ~, [39, 40, 41, 10], 25, Scalar], # 42
+  [Print, ~, [33, 36, 38, 10], 42, Scalar], # 43
+  [Print, ~, [11, 29, 32, 10], 43, Scalar], # 44
   [Print, ~, [2, 3, 4, 5, 6, 7, 8, 9, 10], 44, Scalar], # 45
   [Return, {implicit: true}, [1], 45]]} # 46
 "BEGIN 1": {start: 0, returns: [6], nodes: [

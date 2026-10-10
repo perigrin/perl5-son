@@ -2263,10 +2263,10 @@ main::corpus_case: {start: 0, returns: [9], nodes: [
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 2
   [NumGt, ~, [1, 2], ~, Boolean], # 3
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 4
-  [TernaryExpr, ~, [3, 4, 2], ~, Int], # 5
+  [TernaryExpr, {rebind_arm: 1}, [3, 4, 2], 0, Int], # 5
   [Coerce, {from_repr: Int, to_repr: Str}, [5], ~, Str], # 6
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 7
-  [Print, ~, [6, 7], 0, Scalar], # 8
+  [Print, ~, [6, 7], 5, Scalar], # 8
   [Return, {implicit: true}, [8], 8]]} # 9
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
@@ -4192,10 +4192,10 @@ main::corpus_case: {start: 0, returns: [10], nodes: [
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 2
   [NumGt, ~, [1, 2], ~, Boolean], # 3
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 4
-  [TernaryExpr, ~, [3, 4, 2], ~, Int], # 5
+  [TernaryExpr, {rebind_arm: 1}, [3, 4, 2], 0, Int], # 5
   [Coerce, {from_repr: Int, to_repr: Str}, [5], ~, Str], # 6
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 7
-  [Print, ~, [6], 0, Scalar], # 8
+  [Print, ~, [6], 5, Scalar], # 8
   [Print, ~, [6, 7], 8, Scalar], # 9
   [Return, {implicit: true}, [9], 9]]} # 10
 "BEGIN 1": {start: 0, returns: [4], nodes: [
@@ -4263,10 +4263,10 @@ main::corpus_case: {start: 0, returns: [10], nodes: [
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 2
   [NumGt, ~, [1, 2], ~, Boolean], # 3
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 4
-  [TernaryExpr, ~, [3, 4, 2], ~, Int], # 5
+  [TernaryExpr, {rebind_arm: 1}, [3, 4, 2], 0, Int], # 5
   [Coerce, {from_repr: Int, to_repr: Str}, [5], ~, Str], # 6
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 7
-  [Print, ~, [6], 0, Scalar], # 8
+  [Print, ~, [6], 5, Scalar], # 8
   [Print, ~, [6, 7], 8, Scalar], # 9
   [Return, {implicit: true}, [9], 9]]} # 10
 "BEGIN 1": {start: 0, returns: [4], nodes: [
@@ -4885,12 +4885,12 @@ main::corpus_case: {start: 0, returns: [12], nodes: [
   [Constant, {const_type: integer, value: "7"}, ~, ~, Int], # 3
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 4
   [TernaryExpr, ~, [2, 3, 4], ~, Int], # 5
-  [TernaryExpr, ~, [2, 5, 4], ~, Int], # 6
+  [TernaryExpr, {rebind_arm: 1}, [2, 5, 4], 0, Int], # 6
   [Coerce, {from_repr: Int, to_repr: Str}, [6], ~, Str], # 7
   [Concat, ~, [1, 7], ~, Str], # 8
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
   [Concat, ~, [8, 9], ~, Str], # 10
-  [Print, ~, [10], 0, Scalar], # 11
+  [Print, ~, [10], 6, Scalar], # 11
   [Return, {implicit: true}, [11], 11]]} # 12
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0

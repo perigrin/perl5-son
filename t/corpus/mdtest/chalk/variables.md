@@ -190,10 +190,11 @@ _A5Tmp::val: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [FieldAccess, {field_index: 0, field_stash: _A5Tmp}, ~, ~, Unknown], # 1
   [Return, {implicit: true}, [1], 0]]} # 2
-main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, {implicit: true}, [1], 0]]} # 2
+  [PackageMark, {package: _A5Tmp}, ~, 0], # 2
+  [Return, {implicit: true}, [1], 2]]} # 3
 main::corpus_case: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "42"}, ~, ~, Int], # 1
