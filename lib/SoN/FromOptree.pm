@@ -382,6 +382,10 @@ class SoN::FromOptree 0.01 {
     # arm and loop-body walkers, whose contexts are built fresh: without it a
     # store in an arm was an SSA rebind nothing outside the arm could see.
     our $ADDR_TAKEN;
+    # The main walk's mutated pad aggregates ($ctx->{mutated_aggregate}), shared
+    # with the arm and loop-body walkers like $ADDR_TAKEN: a push in a loop or
+    # an arm must stop a list read after it from flattening the literal.
+    our $MUTATED_AGGREGATE;
 
     # The pad aggregates the walked sub MUTATES -- shift, pop, push, unshift,
     # splice, delete, or an element store -- by targ. A list assign whose
@@ -935,6 +939,10 @@ class SoN::FromOptree 0.01 {
         $ctx->{addr_taken}{$_} = 1 for keys $ctx->{shared_lexicals}->%*;
         local $SHARED_SLOTS = $ctx->{shared_lexicals};
         local $ADDR_TAKEN   = $ctx->{addr_taken};
+        # A SLOT ANOTHER SUB SHARES is written behind this graph's back, so
+        # it reads as mutated from the start.
+        local $MUTATED_AGGREGATE = $ctx->{mutated_aggregate}
+            = { map { $_ => 1 } keys $ctx->{shared_lexicals}->%* };
         local $MUTATED_SLOTS = _mutated_aggregate_slots($cv,
             defined $program_root ? B::main_root() : undef);
 
@@ -5472,7 +5480,11 @@ class SoN::FromOptree 0.01 {
             # The flatten shortcut above still handles the UNMUTATED case,
             # which is the common one and correct there: with no store to
             # observe, the literal's elements ARE the array.
-            if ($name eq 'padav' && $existing && $want == 3
+            #
+            # A SUB'S RETURN VALUE IS THE SAME READ, with its context left to
+            # the caller: `return @p` compiles want=0, so it skipped this and
+            # returned the literal -- `my @p=(); push @p,"a"; return @p` gave ().
+            if ($name eq 'padav' && $existing && ($want == 3 || $want == 0)
                     && !$ref_or_mod && !$is_lvintro
                     && ($ctx->{mutated_aggregate}{$targ}
                         || $MUTATED_LITERALS{ $existing->id // '' })) {
@@ -5530,7 +5542,12 @@ class SoN::FromOptree 0.01 {
                 $consumer && $$consumer && $consumer->name eq 'aassign';
             # A BARE `my @a;` IN A LOOP BODY is a fresh, empty aggregate each
             # iteration -- pinned, as the list-assign form is.
-            if ($is_lvintro && !$is_assign_target && @LOOP_STACK) {
+            #
+            # AND IN STRAIGHT-LINE CODE, which is the same `my @a = ()`. Left
+            # an unstamped PadAccess there, a push into it was no aggregate
+            # mutation, so `my @a; push @a,1,2; my @b=@a` copied it before
+            # the push and counted 0 where perl counts 2.
+            if ($is_lvintro && !$is_assign_target) {
                 my $slot = _make_pad_or_field($cv, $targ, $factory);
                 if ($slot->isa('SoN::IR::Node::PadAccess')) {
                     my $sigil = $slot->sigil;
@@ -11584,6 +11601,7 @@ class SoN::FromOptree 0.01 {
         # that stop is the boundary and _restore_locals is called there.
         my $ctx = { mode => 'loop', local_saves => [], in_loop_body => 1,
                     addr_taken => $ADDR_TAKEN // {},
+                    mutated_aggregate => $MUTATED_AGGREGATE // {},
                     shared_lexicals => $SHARED_SLOTS // {} };
         my $exit_proj;
         # A foreach's iteration `and` is consumed by its caller before the body
@@ -14178,6 +14196,7 @@ class SoN::FromOptree 0.01 {
         my $ctx = { mode => 'branch', visited => $visited,
                     local_saves => [],
                     addr_taken => $ADDR_TAKEN // {},
+                    mutated_aggregate => $MUTATED_AGGREGATE // {},
                     shared_lexicals => $SHARED_SLOTS // {} };
         # The arm's ENTRY op, kept because $op is mutated by the walk below. A
         # back-edge test needs it: "did this unstack jump to something on the

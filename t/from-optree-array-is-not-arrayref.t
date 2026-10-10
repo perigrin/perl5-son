@@ -79,23 +79,15 @@ subtest 'an empty anon-ref literal is still an ArrayRef' => sub {
     is($ref->stamp->type, 'ArrayRef', 'an empty anon-ref literal is a reference');
 };
 
-# `my @a` WITH NO INITIALIZER builds NO aggregate node at all -- just a
-# PadAccess stamped Unknown, and `scalar(@a)` over it produces no Length. So it
-# is not part of this split; it is its own gap, and a real one: an empty array
-# has a knowable length of 0. Recorded here because a reader will otherwise
-# expect the Array stamp to reach it.
-subtest 'an uninitialised array has no aggregate node yet' => sub {
+# `my @a` WITH NO INITIALIZER IS `my @a = ()`: an empty aggregate, stamped
+# Array like any other. Left an unstamped PadAccess, a push into it was not an
+# aggregate mutation and a later copy read it as empty.
+subtest 'an uninitialised array is an empty Array' => sub {
     my $g = translate('sub { my @a; scalar(@a) }');
-    is(scalar(aggregates($g)), 0, 'no ArrayRef node is built');
-
-    my ($pad) = grep {
-        $_->operation eq 'PadAccess' && ( $_->sigil // '' ) eq '@' && ( $_->symbol // '' ) eq 'a'
-    } $g->nodes->@*;
-    ok($pad, 'the pad slot exists') or return;
-
-    todo 'an uninitialised array is a knowable empty Array, not Unknown' => sub {
-        is($pad->stamp->type, 'Array', 'the pad read knows it holds an array');
-    };
+    my ($agg) = aggregates($g);
+    ok($agg, 'the aggregate node exists') or return;
+    is(scalar($agg->inputs->@*), 0, 'it has no elements');
+    is($agg->stamp->type, 'Array', 'it is an Array, not a reference');
 };
 
 done_testing;
