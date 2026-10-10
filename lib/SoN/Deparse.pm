@@ -4707,10 +4707,22 @@ class SoN::Deparse 0.01 {
             $named ||= ($agg->{op} // '') eq 'FieldAccess'
                     && $self->_expr($in[0]) =~ /\A[\@%]\w+\z/;
 
+            # A LIST-VALUED TERNARY IS A LIST TOO. `scalar(($c ? (7) : ()))`
+            # puts the ternary in scalar context, so the chosen arm yields its
+            # last element (or undef), not its size. Measured: `() = ($c ? 7
+            # : ())` counted 1 in perl and emitted 7; a `%h` arm counted 4
+            # and emitted 2. The temporary flattens the arm the way the
+            # source's list assignment does.
+            my $list_ternary = ($agg->{op} // '') eq 'TernaryExpr'
+                            && $st eq 'Array';
+
             # AN ANONYMOUS CONSTRUCTOR IS A REFERENCE -- `[1,2,3]`, stamped
             # ArrayRef -- so its count goes through the deref. As a list it
             # was `my @c = [1,2,3]`, one element.
-            $text = $named || (($agg->{op} // '') !~ /Literal\z/
+            $text = $list_ternary
+                ? sprintf('do { my @c%d = %s; scalar(@c%d) }',
+                          $id, $self->_expr($in[0]), $id)
+                : $named || (($agg->{op} // '') !~ /Literal\z/
                                && ($st eq 'Array' || $st eq 'Hash'))
                 ? sprintf('scalar(%s)', $self->_expr($in[0]))
                 : $st =~ /\A(Array|Hash)Ref\z/

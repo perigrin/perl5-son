@@ -8665,7 +8665,17 @@ class SoN::FromOptree 0.01 {
                         if (($is_aggregate_value && !$names_storage)
                             || $is_list_builtin) {
                             $sim->define($key, $only);
-                            $sim->push_node($only);
+                            # IN SCALAR CONTEXT THE ASSIGNMENT IS A COUNT.
+                            # Pushing the bound value made `my $n = (my @t =
+                            # ($c ? 7 : ()))` read the ternary itself, which
+                            # in scalar context is its element: perl 1,
+                            # emitted 7. A hash target's count is of the RHS
+                            # pairs, which Count over the hash does not say,
+                            # so only the array form is counted here.
+                            $sim->push_node(
+                                (($op->flags & 3) == 2 && $sigil eq '@') # OPf_WANT_SCALAR
+                                    ? _make_count($factory, $only, $sim)
+                                    : $only);
                             return ($op->next, 'handled');
                         }
                     }
