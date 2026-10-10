@@ -412,6 +412,7 @@ class SoN::FromOptree 0.01 {
     my %STRAIGHT_LINE_PARENT = map { $_ => 1 } qw(
         lineseq nextstate null leave enter scope leavesub
         sassign aassign list pushmark srefgen refgen entersub print say
+        return anonhash anonlist
     );
     # A whole assign into pad slot $targ can be seen by a reference to it
     # when one is taken under a branch (lowered out of execution order), or
@@ -419,7 +420,7 @@ class SoN::FromOptree 0.01 {
     sub _reference_can_see_assign ($targ) {
         my $ref = $MUTATED_SLOTS->{$targ} // '';
         return 1 if $ref eq 'ref-branch';
-        return $ref eq 'ref' && ($REFERENCED_SLOTS->{$targ} || @LOOP_STACK);
+        return $ref eq 'ref' && $REFERENCED_SLOTS->{$targ};
     }
 
     sub _in_straight_line ($op) {

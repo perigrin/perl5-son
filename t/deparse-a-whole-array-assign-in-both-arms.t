@@ -122,4 +122,17 @@ for my $c (
     round_trips(@$c);
 }
 
+
+# A WHOLE ASSIGN IN A LOOP ARM, with the reference taken only after the
+# loop -- chalk's Perl::Actions::AdjustBlock. The literal reads the loop
+# index, so it is spelled where the arm assigns it, not hoisted.
+round_trips(q{sub f { my @body; for my $l (@_) { my $s = $l->[0]; if (defined $s) { @body = @$s } } return { b => \@body } } my $r = f([[1,2]], [undef], [[3]]); print "@{$r->{b}}\n";},
+    q{a whole assign in a loop arm, referenced after the loop});
+round_trips(q{sub f { my @body; for my $l (@_) { my $s = $l->[0]; if (defined $s) { @body = @$s } } return \@body } my $r = f([[1,2]], [undef], [[3]]); my $q = f([[5]]); print "@$r @$q\n";},
+    q{the same, returned as a reference from two calls});
+round_trips(q{my %h; for my $k (1,2) { if ($k > 1) { %h = (k => $k) } } print join(",", %h), "\n";},
+    q{a whole hash assign in a loop arm reading the iterator});
+round_trips(q{my @b; for my $i (1..3) { @b = ($i, $i*2) if $i != 2 } print "@b\n";},
+    q{a whole array assign under a modifier reading the iterator});
+
 done_testing;

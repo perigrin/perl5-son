@@ -1812,6 +1812,7 @@ class SoN::Deparse 0.01 {
             # A PINNED ONE IS DECLARED WHERE THE CHAIN REACHES IT -- a `my` in
             # a loop body is a fresh aggregate each iteration.
             next if $self->_is_pinned_aggregate($n);
+            next if $self->_is_inline_aggregate($n);
             my $vn = $self->_agg_name($n);
 
             # AN AGGREGATE WHOSE CONTENTS ARE A CHAIN-BOUND EFFECT CANNOT
@@ -2762,6 +2763,38 @@ class SoN::Deparse 0.01 {
         return ($n->{op} // '') =~ /\A(?:Array|Hash)Literal\z/
             && defined $n->{control_in}
             && defined(($n->{fields} // {})->{symbol});
+    }
+
+    # _is_inline_aggregate($node) -- true for a versioned named literal that
+    # only a Phi consumes and whose contents read a loop Phi: spelled as its
+    # contents where the Phi is assigned, never declared.
+    #
+    # A WHOLE ASSIGN IN A LOOP ARM READS THE ITERATION. `for my $l (@_) { if
+    # (...) { @body = @{$l->[0]} } }` builds ArrayLiteral @body over the loop
+    # index Phi; hoisted to the prologue as `my @body__20 = (($_[$phi12])...)`
+    # it read $phi12 before the loop declared it, and the emission did not
+    # compile (chalk's Perl::Actions::AdjustBlock). The value is a copy the
+    # Phi takes, so its contents are all the arm needs.
+    method _is_inline_aggregate ($n) {
+        return 0 unless ($n->{op} // '') =~ /\A(?:Array|Hash)Literal\z/
+            && !defined $n->{control_in}
+            && $self->_agg_versioned->{ $n->{id} // -1 };
+        my @users = grep { grep { $_ == $n->{id} } ($_->{inputs} // [])->@* }
+            values %$nodes;
+        return 0 unless @users && !grep { ($_->{op} // '') ne 'Phi' } @users;
+        my (@queue, %seen) = ($n->{inputs} // [])->@*;
+        while (@queue) {
+            my $id = shift @queue;
+            next if !defined $id || $seen{$id}++;
+            my $c = $nodes->{$id} or next;
+            if (($c->{op} // '') eq 'Phi') {
+                my $r = $nodes->{ ($c->{fields} // {})->{region} // -1 } // {};
+                return 1 if ($r->{op} // '') eq 'Loop';
+                next;
+            }
+            push @queue, ($c->{inputs} // [])->@*;
+        }
+        return 0;
     }
 
     # _agg_name($node) -- an Array/HashLiteral's Perl spelling, or undef when
@@ -4939,7 +4972,7 @@ class SoN::Deparse 0.01 {
             # The declaration is emitted separately (see _declare_aggregates),
             # because a Perl variable has to exist before it is indexed and the
             # graph has no node for "declare @a".
-            my $vn = $self->_agg_name($n);
+            my $vn = $self->_is_inline_aggregate($n) ? undef : $self->_agg_name($n);
             if (defined $vn) { $text = $vn }
             else {
                 # ANONYMOUS, AND THE STAMP SAYS WHICH KIND. `[1,2]` is a
