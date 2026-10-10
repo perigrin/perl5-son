@@ -1962,7 +1962,11 @@ class SoN::Deparse 0.01 {
             # it away -- so a `local` save or an entry-version read emitted here
             # was used and never declared, whenever anything else in the same
             # sub happened to need a re-walk.
+            # A binding filed after Start reads the save prologue's
+            # temporaries -- see _last_bound_input -- so it follows them.
             $body = $save_prologue
+                  . join('', map { $self->_emit_statement($_, \%next_of) }
+                        ($after_effect{ $start->{id} } // [])->@*)
                   . $self->_emit_from($start->{id}, \%next_of, undef);
         }
 
@@ -2719,6 +2723,8 @@ class SoN::Deparse 0.01 {
     # the search stops -- it is what the binding must follow.
     method _last_bound_input ($n) {
         my ($last, %seen);
+        my ($start_id) = map { $_->{id} }
+            grep { ($_->{op} // '') eq 'Start' } values %$nodes;
         my $visit;
         $visit = sub ($id) {
             return unless defined $id && !$seen{$id}++;
@@ -2726,6 +2732,18 @@ class SoN::Deparse 0.01 {
             # A Phi IS NOT ON THE CHAIN, bound or not: a binding filed after
             # it was never emitted. _loop_phi_join places one after its join.
             return if ($m->{op} // '') eq 'Phi';
+            # A STALE OR SAVED READ IS BOUND OFF THE CHAIN, so a binding filed
+            # after it was never emitted: `my @a = (1) x $z` over an entry read
+            # of a shared $z vanished. One bound in the save prologue is there
+            # from the start; one placed after a store's effect would need the
+            # binding spliced behind it in that list, which is not done.
+            if (exists $bound{$id} && !defined $m->{control_in}
+                && $bound{$id} =~ /\A\$(?:stale|saved)\d+\z/) {
+                die "GAP: a declaration reads a temporary bound after a store\n"
+                    if grep { grep { $_->{id} == $id } @$_ } values %after_effect;
+                $last //= $start_id;
+                return;
+            }
             if (exists $bound{$id}) { $last = $id; return }
             return if defined $m->{control_in};
             return if ($m->{op} // '') =~ /\A(?:Phi|Region|Loop|Proj|If|Start)\z/;

@@ -150,4 +150,36 @@ round_trips('my $n = 1; sub f { my $x = $n . "a"; $n = 9; return $x } print f(),
 round_trips('my $n = 1; sub f { return $n++ . ($n = 5) } print f(), " $n\n";',
     'a post-increment is a copy, not an alias');
 
+# A DECLARATION READING AN ENTRY-BOUND READ follows the save prologue that
+# binds it: the literal deferred after the read was never emitted, and
+# `my @a = (1) x $z` vanished.
+round_trips('my $z=3; sub f { my @a = (1) x $z; my %h; $h{a} = 1; scalar @a } print f(), "\n";',
+    'a repeat count read at entry, then an unrelated store');
+round_trips('my $n=1; sub f { my @a = (1) x $n; $n = 2; scalar @a } print f(), f(), "\n";',
+    'a repeat count read at entry, then a store to it');
+round_trips('my $n=1; sub f { my @a = (1) x $n; $n = 2; return scalar @a } print f(), f(), "\n";',
+    'the return form');
+round_trips('my $n=1; sub f { my $x = $n; $n = 2; my @a = (1) x $x; scalar @a } print f(), f(), "\n";',
+    'a copy at entry used as the count after the store');
+round_trips('my $n=1; my $z=3; sub f { my $x = $z; $n = 2; my @a = (1) x $x; scalar @a } print f(), "\n";',
+    'a copy of a different shared lexical');
+round_trips('my $n=1; sub f { my $c = 0; my @a = (1) x $n; $n = 2; push @a, g(); scalar @a } sub g {7} print f(), f(), "\n";',
+    'the count read at entry, a call after the store');
+round_trips('our $n=1; sub f { my $x = $n; $n = 2; my @a = (1) x $x; scalar @a } print f(), f(), "\n";',
+    'the package-scalar form');
+
+# A DECLARATION READING A READ BOUND AFTER A STORE cannot be placed after it,
+# so it is refused rather than dropped.
+refuses_dropped('our $n=1; sub f { $n = 3; my $x = $n; $n = 2; my @a = (1) x $x; scalar @a } print f(), f(), "\n";',
+    'a package read between two stores, used as a count');
+
+sub refuses_dropped ($src, $name) {
+    my $data = graph_of($src);
+    ok $data, "$name: translates" or return;
+    my $d = SoN::Deparse->new;
+    is $d->render($data), undef, "$name: does not render";
+    like $d->gap // '', qr/reads a temporary bound after a store/,
+        "$name: the refusal names the temporary";
+}
+
 done_testing;
