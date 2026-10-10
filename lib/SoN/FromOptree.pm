@@ -382,6 +382,10 @@ class SoN::FromOptree 0.01 {
     # arm and loop-body walkers, whose contexts are built fresh: without it a
     # store in an arm was an SSA rebind nothing outside the arm could see.
     our $ADDR_TAKEN;
+    # The main walk's mutated pad aggregates ($ctx->{mutated_aggregate}), shared
+    # with the arm and loop-body walkers like $ADDR_TAKEN: a push in a loop or
+    # an arm must stop a list read after it from flattening the literal.
+    our $MUTATED_AGGREGATE;
 
     # The pad aggregates the walked sub MUTATES -- shift, pop, push, unshift,
     # splice, delete, or an element store -- by targ. A list assign whose
@@ -935,6 +939,10 @@ class SoN::FromOptree 0.01 {
         $ctx->{addr_taken}{$_} = 1 for keys $ctx->{shared_lexicals}->%*;
         local $SHARED_SLOTS = $ctx->{shared_lexicals};
         local $ADDR_TAKEN   = $ctx->{addr_taken};
+        # A SLOT ANOTHER SUB SHARES is written behind this graph's back, so
+        # it reads as mutated from the start.
+        local $MUTATED_AGGREGATE = $ctx->{mutated_aggregate}
+            = { map { $_ => 1 } keys $ctx->{shared_lexicals}->%* };
         local $MUTATED_SLOTS = _mutated_aggregate_slots($cv,
             defined $program_root ? B::main_root() : undef);
 
@@ -5472,8 +5480,18 @@ class SoN::FromOptree 0.01 {
             # The flatten shortcut above still handles the UNMUTATED case,
             # which is the common one and correct there: with no store to
             # observe, the literal's elements ARE the array.
-            if ($name eq 'padav' && $existing && $want == 3
+            #
+            # A SUB'S RETURN VALUE IS THE SAME READ, with its context left to
+            # the caller: `return @p` compiles want=0, so it skipped this and
+            # returned the literal -- `my @p=(); push @p,"a"; return @p` gave ().
+            #
+            # NOT OVER A BARE PadAccess. That binding is the live container
+            # already, and PostfixDeref over it dereferenced an array:
+            # `my @c; fill(\@c); return @c` died "Can't use an array as a
+            # reference".
+            if ($name eq 'padav' && $existing && ($want == 3 || $want == 0)
                     && !$ref_or_mod && !$is_lvintro
+                    && !$existing->isa('SoN::IR::Node::PadAccess')
                     && ($ctx->{mutated_aggregate}{$targ}
                         || $MUTATED_LITERALS{ $existing->id // '' })) {
                 die "GAP: a list-context read of an array mutated in place"
@@ -8687,7 +8705,17 @@ class SoN::FromOptree 0.01 {
                     # once above the loop, every iteration saw the last one's
                     # writes (`my @a=(5); $a[0]+=$i` gave 6;8;11 for 6;7;8).
                     # Pinned, it is an allocation at this point on the chain.
-                    if ($is_pad && @LOOP_STACK && _aassign_introduces($op)) {
+                    #
+                    # AND A COPY OF AN UNBOUND PAD AGGREGATE IS A READ AT THIS
+                    # POINT. `my @a; push @a,1,2; my @b=@a` reads @a as a bare
+                    # PadAccess, which a push on the chain writes; floating,
+                    # the copy was emitted before the push and counted 0.
+                    my $copies_container = grep {
+                        $_->isa('SoN::IR::Node::PadAccess')
+                            && ($_->sigil // '') =~ /\A[\@%]\z/
+                    } $rhs->@*;
+                    if ($is_pad && _aassign_introduces($op)
+                            && (@LOOP_STACK || $copies_container)) {
                         $node->set_control_in($sim->control);
                         $sim->set_control($node);
                     }
@@ -11597,6 +11625,7 @@ class SoN::FromOptree 0.01 {
         # that stop is the boundary and _restore_locals is called there.
         my $ctx = { mode => 'loop', local_saves => [], in_loop_body => 1,
                     addr_taken => $ADDR_TAKEN // {},
+                    mutated_aggregate => $MUTATED_AGGREGATE // {},
                     shared_lexicals => $SHARED_SLOTS // {} };
         my $exit_proj;
         # A foreach's iteration `and` is consumed by its caller before the body
@@ -14191,6 +14220,7 @@ class SoN::FromOptree 0.01 {
         my $ctx = { mode => 'branch', visited => $visited,
                     local_saves => [],
                     addr_taken => $ADDR_TAKEN // {},
+                    mutated_aggregate => $MUTATED_AGGREGATE // {},
                     shared_lexicals => $SHARED_SLOTS // {} };
         # The arm's ENTRY op, kept because $op is mutated by the walk below. A
         # back-edge test needs it: "did this unstack jump to something on the
