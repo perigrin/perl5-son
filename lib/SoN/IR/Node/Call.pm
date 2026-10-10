@@ -31,6 +31,11 @@ class SoN::IR::Node::Call :isa(SoN::IR::Value) {
     # two. Undef for a folded sort and for every other builtin.
     field $sort_cmp_body :param :reader = undef;
 
+    # THE PACKAGE OF THE SORT'S CALL SITE, beside sort_cmp_body. perl sets $a
+    # and $b in this package, not the comparator's, so a consumer calling the
+    # comparator must do it from here or the body reads unset globals.
+    field $sort_package :param :reader = undef;
+
     # paren_form: true when the source used the parens-bounded call form
     # (e.g., `push(@arr, $x)`) rather than the bare list-op form
     # (e.g., `push @arr, $x`). Threaded from CallExpression alt 0 (paren
@@ -113,6 +118,7 @@ class SoN::IR::Node::Call :isa(SoN::IR::Value) {
             # list differing only in their comparator are different values, and
             # without this they interned to one node.
             (defined $sort_cmp_body ? "sort_cmp_body=$sort_cmp_body" : ()),
+            (defined $sort_package ? "sort_package=$sort_package" : ()),
             ($paren_form ? "paren_form=1" : ()),
             ($shares_args ? "shares_args=1" : ()),
             ($external ? "external=1" : ()),

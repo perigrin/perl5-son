@@ -507,7 +507,34 @@ class SoN::FromOptree 0.01 {
         my ($cv, $start) = $pair->@*;
         die "GAP: a sort comparator body with no start op\n"
             unless $cv && $$cv && $start && $$start;
-        return _translate_from($cv, $start);
+        my $graph = _translate_from($cv, $start);
+
+        # A COMPARATOR BLOCK SHARES ITS ENCLOSING SUB'S PAD, but its body is a
+        # graph of its own. A lexical the block declares is bound inside it;
+        # one declared OUTSIDE arrives as a PadAccess (or a FieldAccess) with
+        # nothing binding it -- measured, `my @k = ...; sort { $k[$a] <=>
+        # $k[$b] }` gave a body reading a fresh, empty @k. Refused until a sort
+        # body can capture the way an anon sub does.
+        for my $n ($graph->nodes->@*) {
+            my $what =
+                $n->isa('SoN::IR::Node::PadAccess')
+                    ? 'a lexical of its enclosing scope ('
+                      . $n->sigil . $n->symbol . ')'
+              : $n->isa('SoN::IR::Node::FieldAccess')
+                    ? 'a field of ' . $n->field_stash
+              # `$_` IS THE ENCLOSING TOPIC, bound by a foreach or a map in
+              # the enclosing graph: measured, `for (1,-1) { sort { $_ * ($a
+              # <=> $b) } ... }` read $main::_ unset in the body.
+              : ( $n->isa('SoN::IR::Node::EntryDef') && $n->sigil eq '$'
+                  && $n->symbol eq '_' )
+                    ? die "GAP: a sort comparator block that reads \$_ is not"
+                        . " yet lowered -- it is the enclosing topic, and the"
+                        . " body graph has no edge to it\n"
+              : next;
+            die "GAP: a sort comparator block that reads $what is not yet"
+              . " lowered -- the body graph has no edge to that variable\n";
+        }
+        return $graph;
     }
 
     # _translate_from($cv, $start_op, program_root => $addr?) -- shared walk
@@ -15035,7 +15062,10 @@ class SoN::FromOptree 0.01 {
             sort_order => ( $priv & 0x10 ) ? 'descending' : 'ascending',
         ) unless $op->flags & 64;   # OPf_STACKED
 
-        return ( sort_cmp_body => _sort_comparator_name($cv, $op) );
+        # PERL SETS $a AND $b IN THE CALL SITE'S PACKAGE, the statement's,
+        # which is not always the comparator's or the enclosing sub's.
+        return ( sort_cmp_body => _sort_comparator_name($cv, $op),
+                 sort_package  => $CURRENT_PACKAGE );
     }
 
     # _sort_comparator_name($cv, $op) -- the `methods` key for a STACKED sort's
@@ -15096,7 +15126,7 @@ class SoN::FromOptree 0.01 {
               . " from the pad is not yet lowered\n"
                 unless defined $name && length $name;
 
-            return $name =~ /::/ ? $name : 'main::' . $name;
+            return $name =~ /::/ ? $name : "${CURRENT_PACKAGE}::$name";
         }
 
         # AN INLINE BLOCK IS A SUBTREE, NOT A CV, so it cannot go through

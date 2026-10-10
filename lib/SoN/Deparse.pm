@@ -624,6 +624,39 @@ class SoN::Deparse 0.01 {
         return $short;
     }
 
+    # The Perl for a `sort` Call whose fields are $f, over the rendered $list.
+    #
+    # A FOLDED comparator is two fields, sort_cmp and sort_order; the string
+    # ascending one is perl's default and needs no block.
+    #
+    # AN UNFOLDABLE comparator is its own `methods` entry, named by
+    # sort_cmp_body, and the sort calls it by name. PERL SETS $a AND $b IN THE
+    # PACKAGE OF THE SORT'S CALL SITE (sort_package), not the comparator's --
+    # measured, `do { package P; sort main::byd (3,1,2) }` with byd reading
+    # $main::a leaves the list unsorted. A sub is emitted at file scope, so the
+    # sort is wrapped in its own package, and the name is fully qualified so
+    # that package does not capture it.
+    method _sort_expr ($f, $list) {
+        if (defined(my $body = $f->{sort_cmp_body})) {
+            die "GAP: a sort comparator `$body`, which is not in the graph,"
+              . " cannot be rendered -- sorting without it would use an order"
+              . " the program never asked for\n"
+                unless exists $all_methods->{$body};
+            die "GAP: a sort comparator with no call-site package cannot be"
+              . " rendered -- it would read \$a and \$b from the wrong stash\n"
+                unless defined $f->{sort_package};
+            my $ident = $self->_sub_ident($body);
+            $ident = "main::$ident" unless $ident =~ /::/;
+            return sprintf('do { package %s; sort %s (%s) }',
+                $f->{sort_package}, $ident, $list);
+        }
+        my $op = ( $f->{sort_cmp} // 'string' ) eq 'numeric' ? '<=>' : 'cmp';
+        my $descending = ( $f->{sort_order} // '' ) eq 'descending';
+        return sprintf('sort(%s)', $list) if $op eq 'cmp' && !$descending;
+        return sprintf('sort { %s } (%s)',
+            $descending ? "\$b $op \$a" : "\$a $op \$b", $list);
+    }
+
     # A main:: SUB NAMED FROM ANOTHER PACKAGE keeps `main::`. _sub_ident drops
     # it, which is right at file scope; but a method is emitted inside its
     # `class F { }`, where a bare `c()` is F::c.
@@ -5727,6 +5760,12 @@ class SoN::Deparse 0.01 {
                   . " the Call binds to a scalar temporary first, so the"
                   . " remaining targets would take undef\n";
             }
+
+            # A SORT'S ORDER IS ON THE NODE, NOT IN ITS ARGUMENTS. Spelled
+            # `sort(LIST)` whatever the node said, every sort came out string
+            # ascending -- measured, `sort { $b <=> $a } 3,1,2` printed 1,2,3
+            # with no GAP. See _sort_expr.
+            return $self->_sort_expr($f, join(', ', @args)) if $name eq 'sort';
 
             # AN OP NAME IS NOT ALWAYS THE PERL SPELLING. The producer takes
             # `name` from the OP, and perl's op names do not all match the

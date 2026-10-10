@@ -49,6 +49,10 @@ sub _extract_fields ($node, $id_remap) {
             ( defined $node->sort_cmp_body
                 ? ( sort_cmp_body => $node->sort_cmp_body )
                 : () ),
+            # The package whose $a and $b the sort sets: its call site's.
+            ( defined $node->sort_package
+                ? ( sort_package => $node->sort_package )
+                : () ),
             # The callsite's context ('void'|'scalar'|'list'). A list-returning
             # callee carries every value AND its scalar reading; this is how a
             # consumer knows which one this callsite asked for.
