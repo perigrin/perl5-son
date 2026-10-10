@@ -78,6 +78,23 @@ my @cases = (
       q{`undef $h` clears a non-empty reference too} ],
     [ q{sub f { $_[0]{p}=2 } my $h={}; f($h); undef $h; print defined($h)?1:0, "\n";},
       q{`undef $h` after the callee writes through it} ],
+    # A BARE `my $x` LEAVES NO NODE, so its first store is where the
+    # emission declares it -- and a read before that store must still see
+    # a declared (undef) variable.
+    [ q{sub f { 1 } my $x; f($x); undef $x; print defined $x ? 1 : 0, "\n";},
+      q{a bare `my $x` read by a call before `undef $x` stores it} ],
+    [ q{sub f {1} my $h; f($h); $h={}; print ref $h, "\n";},
+      q{a bare `my $h` read by a call before `$h = {}` stores it} ],
+    [ q{sub f {1} my $h; f($h); $h={}; f($h); print ref $h, "\n";},
+      q{... and passed again after the store} ],
+    [ q{sub f {1} my $x; f($x); $x = 3; print "$x\n";},
+      q{a bare `my $x` read by a call before a scalar store} ],
+    [ q{sub f { $_[0]=2 } my $x; f($x); undef $x; print defined $x ? 1 : 0, "\n";},
+      q{a callee writes the bare lexical, then `undef` clears it} ],
+    [ q{my $x; my $r=\$x; print defined $x ? 1:0; undef $x; print "\n";},
+      q{a referenced bare lexical read, then undefined} ],
+    [ q{sub f { 1 } for (1,2) { my $x; f($x); print defined $x ? 1:0; $x = 3; print "$x\n" }},
+      q{a bare lexical in a loop body is fresh each pass} ],
 );
 
 for my $c (@cases) {
