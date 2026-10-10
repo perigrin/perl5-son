@@ -4251,7 +4251,73 @@ class SoN::FromOptree 0.01 {
         # program. A consumer handed these as a pattern would miscompile by
         # construction, so tr/// gets its own node kind.
         if ($name eq 'trans' || $name eq 'transr') {
-            my $target = $sim->pop_node;
+            # ONLY A STACKED tr/// HAS ITS SUBJECT ON THE STACK. Without
+            # OPf_STACKED the subject is the op's targ or $_, nothing was
+            # pushed for it, and popping took whatever an earlier op left --
+            # measured, `$t .= ($x =~ tr/a/Z/r)` transliterated $t's "q".
+            my $stacked = $op->flags & 64;   # OPf_STACKED
+            my $target;
+            if ($stacked) {
+                $target = $sim->pop_node;
+            }
+            elsif (my $targ = $op->targ) {
+                $target = $sim->lookup($targ) // $factory->make('PadAccess',
+                    targ => $targ,
+                    do { my ($sg, $sy) = _padparts($cv, $targ);
+                         (sigil => $sg, symbol => $sy) },
+                    (defined $sim->memory ? (inputs => [ $sim->memory ]) : ()));
+            }
+            else {
+                $target = $sim->lookup(_stash_name_key('$', 'main', '_'))
+                    // $factory->make('EntryDef',
+                        package => 'main', sigil => '$', symbol => '_');
+            }
+
+            # A STACKED DESTRUCTIVE tr/// WRITES WHAT THE STACK NAMED. With
+            # targ 0 and OPf_STACKED the subject is not $_ but the op's
+            # sibling: a package scalar (EntryDef), an element or deref (a
+            # location), or `(my $c = $s)` -- a sassign, which pushed the
+            # copied VALUE, so its own last kid names the slot. Each one
+            # used to be stored as $_, and the transliteration vanished:
+            # `(my $c = $s) =~ tr/a/b/` printed the untouched copy.
+            # $store is the write-back the rebind below performs.
+            #
+            # A COUNT-ONLY tr/// WRITES NOTHING. OPpTRANS_IDENTICAL marks
+            # `tr/a//`, which perl allows over any rvalue -- a call, a
+            # constant -- so there is no subject to store back, and storing
+            # into $_ instead would clobber it.
+            my $counts_only = $op->private & 4;   # OPpTRANS_IDENTICAL
+            my $store;
+            if ($stacked && $name ne 'transr' && !$counts_only) {
+                my $lv = $op->parent->first;
+                if ($lv->name eq 'sassign') {
+                    my $slot = $lv->last;
+                    die "GAP: tr/// on a copy into anything but a lexical"
+                      . " not yet lowered -- the stack holds only the copied"
+                      . " value\n"
+                        unless $slot->name eq 'padsv' && $slot->targ;
+                    my $t = $slot->targ;
+                    $store = $ctx->{addr_taken}{$t}
+                        ? $factory->make('PadAccess', targ => $t,
+                            do { my ($sg, $sy) = _padparts($cv, $t);
+                                 (sigil => $sg, symbol => $sy) },
+                            (defined $sim->memory
+                                ? (inputs => [ $sim->memory ]) : ()))
+                        : $t;
+                }
+                elsif ($target->isa('SoN::IR::Node::EntryDef')) {
+                    $store = $target;
+                    $target = $sim->lookup(_stash_key($target)) // $target;
+                }
+                elsif ($target->isa('SoN::IR::Node::Subscript')
+                    || $target->isa('SoN::IR::Node::PostfixDeref')) {
+                    $store = $target;
+                }
+                else {
+                    die "GAP: tr/// on a stacked "
+                      . $target->operation . " subject not yet lowered\n";
+                }
+            }
 
             # A DESTRUCTIVE tr/// TAKES THE SLOT, NOT ITS VALUE. perl refuses
             # to transliterate a value -- measured:
@@ -4363,7 +4429,26 @@ class SoN::FromOptree 0.01 {
             # needs the EntryWrite as well as the rebind -- a read from
             # another sub cannot observe a pad rebind. Same rule _entry_store
             # exists for.
-            if ($name ne 'transr') {
+            if ($name ne 'transr' && defined $store) {
+                # A stacked subject: a lexical slot rebinds, a package scalar
+                # rebinds and writes its entry, a location is stored through.
+                if (!ref $store) {
+                    $sim->define($store, $node);
+                }
+                elsif ($store->isa('SoN::IR::Node::EntryDef')) {
+                    $sim->define(_stash_key($store), $node);
+                    _entry_store($factory, $sim, $store, $node);
+                }
+                else {
+                    _note_literal_mutation($store)
+                        if $store->isa('SoN::IR::Node::Subscript');
+                    my $w = $factory->make('Assign', inputs => [$store, $node]);
+                    $w->set_control_in($sim->control);
+                    $sim->set_control($w);
+                    $sim->set_memory($w) if defined $sim->memory;
+                }
+            }
+            elsif ($name ne 'transr' && !($stacked && $counts_only)) {
                 if (my $targ = $op->targ) {
                     $sim->define($targ, $node);
                 }
