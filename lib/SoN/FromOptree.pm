@@ -9851,6 +9851,11 @@ class SoN::FromOptree 0.01 {
                 my $stacked_dest;
                 if (!$is_compound && !$field_compound && !defined $elem_lvalue
                     && !defined $pkg_lvalue
+                    # NOT A SORT: its OPf_STACKED names the comparator, not a
+                    # destination. A scalar left under its mark by an earlier
+                    # statement (`my $before = $c`) was taken for one, and the
+                    # sorted list was written into $c.
+                    && $name ne 'sort'
                     && ($op->flags & 64)          # OPf_STACKED
                     && $sim->stack_depth
                     && ( ( $sim->peek_node->isa('SoN::IR::Node::PadAccess')
@@ -10087,6 +10092,27 @@ class SoN::FromOptree 0.01 {
                     $sim->set_control($node);
                 }
                 _call_memory_barrier($sim, $node, $ctx) if $runs_comparator;
+
+                # AN IN-PLACE SORT IS AN ASSIGN perl folded away: `@a = sort
+                # ... @a` nulls the aassign and flags the sort INPLACE, so the
+                # sorted list reached nothing and @a kept its order. A plain
+                # lexical is rebound to the result, as the aassign would have
+                # bound it; storage anything else can see -- a package array,
+                # a captured or shared one, one a reference was taken to --
+                # refuses.
+                if ($name eq 'sort' && ($op->private & 8)) {   # OPpSORT_INPLACE
+                    my $arr = $op->first;
+                    $arr = $arr->sibling while ${ $arr->sibling };
+                    my $t = $arr->name eq 'padav' ? $arr->targ : undef;
+                    die "GAP: an in-place sort of an array other than a plain"
+                      . " lexical is not yet lowered -- the sorted list must be"
+                      . " stored back where others can see it\n"
+                        if !defined $t
+                        || $ctx->{shared_lexicals}{$t} || $ctx->{cell_params}{$t}
+                        || $ctx->{cells}{$t} || $ctx->{addr_taken}{$t}
+                        || _reference_can_see_assign($t);
+                    $sim->define($t, $node);
+                }
 
                 # A GLOBAL-STATE OP ALSO ADVANCES MEMORY, and control alone is
                 # not enough. `require X; X->import(...)` is the runtime

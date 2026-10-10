@@ -118,6 +118,60 @@ my @cases = (
     [ q{sub f {(5,0)} my $x = eval { f() }; print "$x\n";},
       'a scalar eval of a list-returning call' ],
 
+    # A SORT'S OPf_STACKED NAMES ITS COMPARATOR, not a destination: a scalar
+    # left on the stack by an earlier statement is not a store target.
+    [ q{our $c = 7; my $before = $c; my @r = sort { my $t=$a; $t <=> $b } 3,1,2; print "$before|@r\n";},
+      'a package read bound before a block sort' ],
+    [ q{our $c = 7; my $before = $c; my @r = sort { my $t=$a; $t <=> $b } 3,1,2; print "@r|$c\n";},
+      'the package scalar is not overwritten' ],
+    [ q{our $c = 7; my $before = $c; my @r = sort { my $t=$a; $t <=> $b } 3,1,2; $c = 9; print "$c|@r|$before\n";},
+      'a later store to the package scalar' ],
+    [ q{our $c = 7; sub s1 { my $before = $c; my @r = sort { my $t=$a; $t <=> $b } @_; "$before|@r" } print s1(3,1,2), "\n";},
+      'the same inside a sub' ],
+    [ q{our $c=7; sub cc {$a<=>$b} my $before=$c; my @r = sort cc 3,1,2; print "$before|@r\n";},
+      'the same with a named comparator' ],
+
+    # A CALL MAY WRITE ANY PACKAGE SCALAR, so a read before it is spelled
+    # before it.
+    [ q{our $n = 0; sub cn { $n++; $a <=> $b } my $m = $n; print "$m|", sort(cn 3,1), "\n";},
+      'a package read bound before a counting sort' ],
+    [ q{our $n = 0; sub cn { $n++; $a <=> $b } print "$n|", sort(cn 3,1), "\n";},
+      'a package read in the same list as a counting sort' ],
+    [ q{our $n = 0; sub g { $n++; 5 } my $m = $n; print "$m|", g(), "\n";},
+      'a package read bound before an ordinary call' ],
+    [ q{our $n; sub g { $n = 3; 5 } my $m = $n // 0; print "$m|", g(), "|$n\n";},
+      'a package read at entry before a call' ],
+    [ q{our $c = 0; sub f { $c++; $_[0] } my @r = sort { f($a) <=> f($b) } 3,1,2; my $d = $c; my @s = sort { f($a) <=> f($b) } 5,4; print "@r $d $c @s\n";},
+      'a read between two sub-calling block sorts' ],
+    [ q{our $c = 0; sub f { $c++; $_[0] } my $before = $c; my @r = sort { f($a) <=> f($b) } 3,1,2; print "$before @r $c\n";},
+      'a read before a sub-calling block sort' ],
+    [ q{our $n = 0; sub g { $n++; 5 } my $m = $n; if ($m == 0) { g() } print "$m|$n\n";},
+      'a package read before a call in a branch arm' ],
+    [ q{our $s = "a"; sub g { $s .= "b" } my $t = $s; g(); print "$t $s\n";},
+      'a package string read before a call that appends to it' ],
+    [ q{our $n=0; package O; sub b { $main::n++ } package main; my $m = $n; O->b; print "$m $n\n";},
+      'a package read before a method call' ],
+    # ...but a read whose version is a call inside an eval is not bound at
+    # that call: a call that dies skips the binding.
+    [ q{sub d { die "e1\n" } sub g { 1 } print eval { d(); 1 } ? "ran\n" : $@; g();},
+      'a $@ read after an eval whose call died' ],
+    [ q{our $n = 0; sub d { $n = 3; die "x\n" } sub g { $n = 7 } print eval { d(); 1 } ? "ran\n" : "$n\n"; g();},
+      'a package read after an eval whose call wrote it and died' ],
+    [ q{our $n = 1; sub bump { $_[0]++ } bump($n); bump($n); print "$n\n";},
+      'a package scalar handed to a call is still aliased' ],
+
+    # AN IN-PLACE SORT is an assign perl folded into the sort.
+    [ q{my @a = (3,1,2); @a = sort { my $t=$a; $t <=> $b } @a; print "@a\n";},
+      'an in-place block sort' ],
+    [ q{my @x=(3,1,2); @x = sort { $b <=> $a } @x; print "@x\n";},
+      'an in-place folded sort' ],
+    [ q{sub c {$a<=>$b} my @a=(3,1,2); @a = sort c @a; print "@a\n";},
+      'an in-place named sort' ],
+    [ q{sub f { my @a = @_; @a = sort { my $t=$a; $t <=> $b } @a; "@a" } print f(3,1,2), "\n";},
+      'an in-place sort in a sub' ],
+    [ q{my @a=(3,1,2); for my $i (1,2) { @a = sort { $a <=> $b } @a; } print "@a\n";},
+      'an in-place sort in a loop' ],
+
     [ q{my @x=(3,1,2); print scalar(my @y = sort { my $t=$a; $t <=> $b } @x), "\n";},
       'a counted list assign of a block sort' ],
     [ q{my %seen; for my $i (3, 1, 2) { %seen = map { $_ => 1 } sort { my $t = $a; $t <=> $b } keys(%seen), $i; } print join(",", sort keys %seen), "\n";},
@@ -141,6 +195,25 @@ refuses(q{my @k=(3,1,2); print join(",", sort { my $t=$a; $k[$t] <=> $k[$b] } 0,
 refuses(q{for (1,-1) { print join(",", sort { $_*($a <=> $b) } 3,1,2),"\n" }},
     qr/GAP: a sort comparator block that reads \$_/, 'a block reading $_');
 
+my $inplace = qr/GAP: an in-place sort of an array other than a plain lexical/;
+refuses(q{our @a = (3,1,2); @a = sort { my $t=$a; $t <=> $b } @a; print "@a\n";},
+    $inplace, 'an in-place sort of a package array');
+refuses(q{my @a=(3,1,2); my $r=\@a; @a = sort { $a <=> $b } @a; print "@$r\n";},
+    $inplace, 'an in-place sort of a referenced array');
+refuses(q{my @a=(3,1,2); my $c = sub { "@a" }; @a = sort { $a <=> $b } @a; print $c->(), "\n";},
+    $inplace, 'an in-place sort of a captured array');
+
+my $destructure = qr/GAP: a list assign that destructures a block eval's value/;
+refuses(q{my ($x, $y) = eval { sort { my $q=$a; $q <=> $b } 3,1,2 }; print "$x $y\n";},
+    $destructure, 'two targets from an eval of a block sort');
+refuses(q{my ($x) = eval { sort { my $q=$a; $q <=> $b } 3,1,2 }; print "$x\n";},
+    $destructure, 'one target from an eval of a block sort');
+refuses(q{my ($x, @y) = eval { sort { my $q=$a; $q <=> $b } 3,1,2 }; print "$x @y\n";},
+    $destructure, 'a scalar and an array from an eval of a block sort');
+refuses(q{my ($x, $y) = eval { (5,6) }; print "$x $y\n";},
+    $destructure, 'two targets from an eval of a list');
+round_trips(q{my ($x) = eval { 4 }; print "$x\n";}, 'one target from a scalar eval');
+
 my $runtime = qr/GAP: a sort comparator chosen at runtime/;
 refuses(q{my $c=sub{$b<=>$a}; print join(",", sort $c 3,1,2),"\n";},
     $runtime, 'a lexical subref comparator');
@@ -157,8 +230,6 @@ sub still_wrong ($src, $why) {
     my $todo = todo $why;
     is run_perl($out), run_perl($src), $why;
 }
-still_wrong(q{my @x=(3,1,2); @x = sort { $b <=> $a } @x; print "@x\n";},
-    'an in-place sort drops its store back into the array');
 still_wrong(q{my $n = 0; my @r = eval { $n++; reverse 3,1,2 }; print "@r $n\n";},
     'a lexical store inside a block eval is dropped');
 still_wrong(q{my @r = eval { 1 ? (1,2) : (3) }; print "@r\n";},

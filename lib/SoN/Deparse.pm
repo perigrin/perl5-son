@@ -1455,52 +1455,6 @@ class SoN::Deparse 0.01 {
             }
         }
 
-        my @stale_reads;
-        for my $n ( sort { $a->{id} <=> $b->{id} } $self->_nodes_in_order ) {
-            next unless ( $n->{op} // '' ) eq 'EntryDef';
-            next if exists $bound{ $n->{id} };
-            next if $under_loop{ $n->{id} };
-            my @in = ( $n->{inputs} // [] )->@*;
-            next unless @in == 1 && $self->_is_memory( $in[0] );
-            my $f = $n->{fields} // {};
-            next unless defined $f->{symbol};
-
-            # Walk forward from the read's version looking for a store to this
-            # same name. Anything else on the chain cannot change what this
-            # read sees.
-            my ( @queue, %seen, $shadowed ) = ( $in[0] );
-            while ( @queue ) {
-                my $m = shift @queue;
-                next if $seen{$m}++;
-                for my $c ( ( $mem_next{$m} // [] )->@* ) {
-                    $shadowed = 1 if $self->_writes_this_name( $c, $f );
-                    push @queue, $c->{id};
-                }
-                last if $shadowed;
-            }
-            next unless $shadowed;
-
-            $bound{ $n->{id} } = sprintf( '$stale%d', $n->{id} );
-            push @stale_reads, $n;
-        }
-
-        # A DEMOTED LEXICAL IS READ BY NAME TOO, and goes stale the same way.
-        # `my $before = $x; $$r = 2; print "$before $x"` printed `2 2` for
-        # perl's `1 2`: the read carries its memory version, and the emission
-        # spelled it `$x` at the print, after the store. Pre-existing, found
-        # through `substr($s, 1, 1) = "X"` once that became a real store.
-        #
-        # TWO DIFFERENCES FROM THE PACKAGE CASE. A pad store is ordered by
-        # CONTROL, not by a memory input, so the walk follows the chain; and a
-        # lexical can be written through a reference, which no name comparison
-        # sees, so ANY later store or call counts. Over-binding costs a
-        # temporary; under-binding is the wrong answer above.
-        #
-        # A PadAccess that is ALSO a location -- a store target, a referent, the
-        # string a substr rewrites -- is still bound: a read and its location
-        # at one memory version are one hash-consed node. The location sites
-        # spell it by name through _location, so the binding reaches only the
-        # reads.
         my %ctrl_next;
         for my $c ( $self->_nodes_in_order ) {
             push $ctrl_next{ $c->{control_in} }->@*, $c
@@ -1535,6 +1489,114 @@ class SoN::Deparse 0.01 {
             }
             return 1;
         };
+
+        # THE CONTROL SUCCESSORS, ARMS INCLUDED: a branch's Proj and its
+        # join Region name their predecessor as an input, not as control_in,
+        # so %ctrl_next stops at an If. `my $m = $n; if (...) { g() }` must
+        # see the call in the arm.
+        my %cfg_next = map { $_ => [ $ctrl_next{$_}->@* ] } keys %ctrl_next;
+        for my $c ( $self->_nodes_in_order ) {
+            my $op = $c->{op} // '';
+            next unless $op eq 'Proj' || $op eq 'Region';
+            my @in = ( $c->{inputs} // [] )->@*;
+            push $cfg_next{$_}->@*, $c for $op eq 'Proj' ? ( $in[0] // () ) : @in;
+        }
+
+        # Is this control node inside a block eval's body: reachable from the
+        # eval's entry, and reaching its join?
+        my $reaches = sub ( $from, $to ) {
+            my ( @q, %seen ) = ( $from );
+            while ( defined( my $id = shift @q ) ) {
+                return 1 if $id == $to;
+                next if $seen{$id}++;
+                push @q, map { $_->{id} } ( $cfg_next{$id} // [] )->@*;
+            }
+            return 0;
+        };
+        my $in_eval_body = sub ($id) {
+            for my $r ( $self->_nodes_in_order ) {
+                my $entry = ( $r->{fields} // {} )->{eval_entry};
+                next unless ( $r->{op} // '' ) eq 'Region' && defined $entry;
+                return 1 if $id != $entry
+                    && $reaches->( $entry, $id ) && $reaches->( $id, $r->{id} );
+            }
+            return 0;
+        };
+
+        my @stale_reads;
+        for my $n ( sort { $a->{id} <=> $b->{id} } $self->_nodes_in_order ) {
+            next unless ( $n->{op} // '' ) eq 'EntryDef';
+            next if exists $bound{ $n->{id} };
+            next if $under_loop{ $n->{id} };
+            my @in = ( $n->{inputs} // [] )->@*;
+            # A barrier call is a version too, made without consuming one --
+            # but not one inside a block eval: the binding lands right after
+            # the call, and a call that dies skips it. `$@` read after
+            # `eval { P->new->run(1); 1 }` was bound there and stayed undef.
+            next unless @in == 1
+                && ( $self->_is_memory( $in[0] )
+                     || ( $self->_is_barrier_call( $in[0] )
+                          && !$in_eval_body->( $in[0] ) ) );
+            my $f = $n->{fields} // {};
+            next unless defined $f->{symbol};
+
+            # Walk forward from the read's version looking for a store to this
+            # same name. Anything else on the chain cannot change what this
+            # read sees.
+            my ( @queue, %seen, $shadowed ) = ( $in[0] );
+            while ( @queue ) {
+                my $m = shift @queue;
+                next if $seen{$m}++;
+                for my $c ( ( $mem_next{$m} // [] )->@* ) {
+                    $shadowed = 1 if $self->_writes_this_name( $c, $f );
+                    push @queue, $c->{id};
+                }
+                last if $shadowed;
+            }
+            # A CALL MAY WRITE ANY PACKAGE SCALAR, and it advances memory
+            # without consuming a version, so the walk above never reaches it.
+            # `my $m = $n; print "$m|", g()` with g bumping $n spelled the read
+            # at the print, after the call. Followed on control, as the lexical
+            # pass below does, and only where every consumer just reads: a
+            # call handed the read itself aliases it through @_.
+            if ( !$shadowed && $safe_read->( $n->{id} ) ) {
+                my $version = $nodes->{ $in[0] } // {};
+                my $from = defined $version->{control_in} ? $version->{id}
+                         : ( $version->{op} // '' ) eq 'MemStart' ? $start->{id}
+                         : undef;
+                my ( @cq, %cseen ) = ( $from // () );
+                while ( @cq && !$shadowed ) {
+                    my $id = shift @cq;
+                    next if $cseen{$id}++;
+                    for my $c ( ( $cfg_next{$id} // [] )->@* ) {
+                        $shadowed = 1 if $self->_is_barrier_call( $c->{id} );
+                        push @cq, $c->{id};
+                    }
+                }
+            }
+            next unless $shadowed;
+
+            $bound{ $n->{id} } = sprintf( '$stale%d', $n->{id} );
+            push @stale_reads, $n;
+        }
+
+        # A DEMOTED LEXICAL IS READ BY NAME TOO, and goes stale the same way.
+        # `my $before = $x; $$r = 2; print "$before $x"` printed `2 2` for
+        # perl's `1 2`: the read carries its memory version, and the emission
+        # spelled it `$x` at the print, after the store. Pre-existing, found
+        # through `substr($s, 1, 1) = "X"` once that became a real store.
+        #
+        # TWO DIFFERENCES FROM THE PACKAGE CASE. A pad store is ordered by
+        # CONTROL, not by a memory input, so the walk follows the chain; and a
+        # lexical can be written through a reference, which no name comparison
+        # sees, so ANY later store or call counts. Over-binding costs a
+        # temporary; under-binding is the wrong answer above.
+        #
+        # A PadAccess that is ALSO a location -- a store target, a referent, the
+        # string a substr rewrites -- is still bound: a read and its location
+        # at one memory version are one hash-consed node. The location sites
+        # spell it by name through _location, so the binding reaches only the
+        # reads.
         for my $n ( sort { $a->{id} <=> $b->{id} } $self->_nodes_in_order ) {
             next unless ( $n->{op} // '' ) eq 'PadAccess';
             next if exists $bound{ $n->{id} };
@@ -1762,7 +1824,10 @@ class SoN::Deparse 0.01 {
                 my $m = shift @queue;
                 next if !defined $m || $seen{$m}++;
                 my $c = $nodes->{$m} or next;
-                if ( $self->_writes_this_name( $c, $f ) ) {
+                # A CALL IS AN ANCHOR TOO: it may have written the name, and
+                # the read is of the value it left.
+                if ( $self->_writes_this_name( $c, $f )
+                     || $self->_is_barrier_call($m) ) {
                     $anchor = $c;
                     last;
                 }
@@ -3204,6 +3269,22 @@ class SoN::Deparse 0.01 {
                    || $self->_phi_takes_a_list($phi) ) )
                 ? '@eval%d' : '$eval%d',
             $phi->{id});
+
+        # A LIST ASSIGN THAT DESTRUCTURES THE EVAL'S VALUE is an Assign over
+        # the Phi with no place on the chain, and nothing emits it. The
+        # producer binds a lone target to a scalar Phi itself (`my ($x) = eval
+        # { 4 }` round-trips), but with two targets, or a list value bound to
+        # an array, the targets are read unassigned: `my ($x, $y) = eval {
+        # sort ... }` printed two undefs. Refused until the assign is placed
+        # at the join.
+        die "GAP: a list assign that destructures a block eval's value is not"
+          . " yet lowered -- nothing places the assign after the eval\n"
+            if grep {
+                   my @in = ( $_->{inputs} // [] )->@*;
+                   ( $_->{op} // '' ) eq 'Assign'
+                       && @in && $in[-1] == $phi->{id}
+                       && ( @in > 2 || $bound{ $phi->{id} } =~ /\A\@/ )
+               } $self->_nodes_in_order;
 
         # A CONDITIONAL eval's VALUE OUTLIVES ITS BLOCK. `A and B and C`
         # renders as nested ifs -- each eval happening only if the previous
@@ -5663,6 +5744,19 @@ class SoN::Deparse 0.01 {
             push @queue, @in;
         }
         return $latest;
+    }
+
+    # A CALL THAT RUNS THE PROGRAM'S CODE IS A MEMORY VERSION it makes
+    # without consuming one (the producer's _call_memory_barrier), so
+    # _is_memory, which asks the inputs, does not see it. Those are a sub or
+    # method call and a sort with a comparator; a pinned builtin is not on
+    # the memory chain, and treating `undef *v` as one bound `$v` before it.
+    method _is_barrier_call ($id) {
+        my $n = $nodes->{$id} // {};
+        my $f = $n->{fields} // {};
+        return ( $n->{op} // '' ) eq 'Call' && defined $n->{control_in}
+            && ( ( $f->{dispatch_kind} // '' ) ne 'builtin'
+                 || defined $f->{sort_cmp_body} ) ? 1 : 0;
     }
 
     method _is_memory ($id) {
