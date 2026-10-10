@@ -1597,7 +1597,12 @@ class SoN::Deparse 0.01 {
             } ( $consumers{ $n->{id} } // [] )->@*;
             next if $under_loop{ $n->{id} };
             my @in = ( $n->{inputs} // [] )->@*;
-            next unless @in == 1 && $self->_is_memory( $in[0] );
+            # A READ AFTER A CALL takes the call as its version: the callee may
+            # have stored a shared lexical, and a store after the read must not
+            # reach it. `g(); my $x = $n; $n = 7; $x` returned 7.
+            next unless @in == 1 && ( $self->_is_memory( $in[0] )
+                || ( ( ( $nodes->{ $in[0] } // {} )->{op} // '' ) eq 'Call'
+                     && defined $nodes->{ $in[0] }{control_in} ) );
             my $version = $nodes->{ $in[0] };
             next unless $version;
             # A SHARED LEXICAL READ AT THE ENTRY VERSION -- a file lexical a

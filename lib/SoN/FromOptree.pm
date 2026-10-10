@@ -4084,7 +4084,7 @@ class SoN::FromOptree 0.01 {
             return ($op->next, 'handled');
         }
 
-        _refuse_alias_operand_stored_later($cv, $op);
+        _reread_alias_operand_stored_later($cv, $op, $sim, $factory, $opmap, $ctx);
 
         # chomp AND chop MUTATE IN PLACE, so the graph must record the store.
         # The producer built `Call(schomp, [PadAccess])` consumed by NOBODY,
@@ -15826,12 +15826,18 @@ class SoN::FromOptree 0.01 {
     #     my $n = 1; print $n . ($n = 5)      perl 55
     #
     # The graph reads the variable where its op stands in the walk -- before
-    # the store -- and gives 15. Until a read can be deferred to its consumer,
-    # the shape is refused. A branch condition is consumed before its arm, so
-    # a LOGOP is not an alias consumer; a postinc copies, and is not a padsv.
-    # ponytail: only the direct stores (=, op=, ++/--) are seen; chomp, s///,
-    # a list assign or a call storing the variable still pass unrefused.
-    sub _refuse_alias_operand_stored_later ($cv, $op) {
+    # the store -- and gave 15. A lexical operand is READ AGAIN once the later
+    # operands have run: its padsv is stepped a second time and the new read
+    # takes the old one's stack slot. A call in a later operand may store it
+    # too (a shared lexical, a captured one), so a call counts as a store for
+    # a lexical. A package scalar is not read again, and is refused. A branch
+    # condition is consumed before its arm, so a LOGOP is not an alias
+    # consumer; a postinc copies, and is not a padsv.
+    # ponytail: only the direct stores (=, op=, ++/--) and calls are seen;
+    # chomp, s/// or a list assign storing the variable still pass unread.
+    my %OPERAND_DEPTH;      # padsv op address -> the stack slot its read took
+    sub _reread_alias_operand_stored_later ($cv, $op, $sim, $factory, $opmap, $ctx) {
+        $OPERAND_DEPTH{$$op} = $sim->stack_depth if $op->name eq q{padsv};
         return unless $op->flags & B::OPf_KIDS;
         return if $op->isa('B::LOGOP');
         return if $op->name =~ /\A(?:leave|enter|lineseq|scope)/;
@@ -15851,6 +15857,7 @@ class SoN::FromOptree 0.01 {
         my $stores;
         $stores = sub ($o, $key) {
             return 1 if $o->name eq q{padsv_store} && "p" . $o->targ eq $key;
+            return 1 if $o->name eq q{entersub} && $key =~ /\Ap/;
             return 0 unless $o->flags & B::OPf_KIDS;
             my ( $kid, $first ) = ( $o->first, 1 );
             my $n = $o->name;
@@ -15866,20 +15873,36 @@ class SoN::FromOptree 0.01 {
             }
             return 0;
         };
-        my $kid = $op->first;
+        my ( $kid, $first ) = ( $op->first, 1 );
         while ( $kid && $$kid ) {
             my $key = $var->($kid);
             # A statement in void context is not an operand.
             undef $key if ( $kid->flags & B::OPf_WANT ) == B::OPf_WANT_VOID;
-            if ( defined $key ) {
-                for ( my $later = $kid->sibling; $later && $$later; $later = $later->sibling ) {
-                    die "GAP: a scalar operand is read by alias and a later operand stores it\n"
-                        if $stores->($later, $key);
-                }
+            if ( defined $key
+                && grep { $stores->($_, $key) } _later_siblings($kid) ) {
+                my $depth = $OPERAND_DEPTH{$$kid};
+                my $old   = defined $depth && $kid->name eq q{padsv}
+                    && $depth < $sim->stack_depth ? $sim->node_at($depth) : undef;
+                # An op= target is stored, not only read; a declaration
+                # introduces the slot.
+                die "GAP: a scalar operand is read by alias and a later operand stores it\n"
+                    if !$old
+                    || ( $first && ( $op->flags & B::OPf_STACKED ) )
+                    || ( $kid->private & B::OPpLVAL_INTRO );
+                my ( undef, $how ) = _step($cv, $kid, $sim, $factory, $opmap, $ctx);
+                die "GAP: a scalar operand is read by alias and a later operand stores it\n"
+                    unless $how eq 'handled';
+                $sim->replace_at($depth, $sim->pop_node);
             }
-            $kid = $kid->sibling;
+            ( $kid, $first ) = ( $kid->sibling, 0 );
         }
         return;
+    }
+
+    sub _later_siblings ($o) {
+        my @later;
+        for ( my $s = $o->sibling; $s && $$s; $s = $s->sibling ) { push @later, $s }
+        return @later;
     }
 
     sub _find_gv_op ($op) {
