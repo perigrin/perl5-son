@@ -277,4 +277,29 @@ sub refuses_dropped ($src, $name) {
         "$name: the refusal names the temporary";
 }
 
+# A STORE CAN BE THE ARITHMETIC OP ITSELF. `$n = $y + 3` compiles to
+# `add[$n] TARGMY` -- no sassign -- so the alias check has to see an op
+# carrying OPpTARGET_MY as a store to its targ.
+for my $c (
+    [ 'my $n=1; sub f { my $y = 0; $y = $n + ($n = $y + 3); $y } print f(), "|$n\n";',
+      'an add stored straight into the aliased scalar' ],
+    [ 'my $n=1; sub f { my $y = 0; return $n + ($n = $y + 3) } print f(), "|$n\n";',
+      'the same, returned' ],
+    [ 'my $n=1; sub f { my $y = 2; return $n + ($n = $y * 2) } print f(), "|$n\n";',
+      'a multiply stored straight into it' ],
+    [ 'my $n=1; sub f { my @a = (4); return $n + ($n = $a[0] + 1) } print f(), "|$n\n";',
+      'an add over an element stored straight into it' ],
+    [ 'my $n=1; sub f { my $y = 3; print $n, ($n = $y - 1), "\n" } f();',
+      'a subtract stored straight into it, as print operands' ],
+) {
+    my ($src, $name) = @$c;
+    my $data = graph_of($src);
+    if ($data && !grep { /GAP/ } producer_stderr()) {
+        my $d = SoN::Deparse->new;
+        my $out = $d->render($data);
+        if (defined $out) { is run_perl($out), run_perl($src), "$name: agrees with perl"; next }
+    }
+    pass "$name: refused";
+}
+
 done_testing;

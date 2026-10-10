@@ -15857,6 +15857,10 @@ class SoN::FromOptree 0.01 {
         my $stores;
         $stores = sub ($o, $key) {
             return 1 if $o->name eq q{padsv_store} && "p" . $o->targ eq $key;
+            # `$n = $y + 3` is `add[$n]` with OPpTARGET_MY: the op stores
+            # into its own targ, with no sassign to find.
+            return 1 if ( $o->private & B::OPpTARGET_MY() )
+                && "p" . $o->targ eq $key;
             return 1 if $o->name eq q{entersub} && $key =~ /\Ap/;
             return 0 unless $o->flags & B::OPf_KIDS;
             my ( $kid, $first ) = ( $o->first, 1 );
