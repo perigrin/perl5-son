@@ -1470,6 +1470,12 @@ class SoN::Deparse 0.01 {
                 for my $d ( $self->_nodes_in_order ) {
                     push @queue, $d->{id}
                         if defined $d->{control_in} && $d->{control_in} == $id;
+                    # AND A BRANCH ARM IN THE BODY, through its Proj and its
+                    # join -- but not this loop's own exit Region.
+                    push @queue, $d->{id}
+                        if ( $d->{op} // '' ) =~ /\A(?:Proj|Region)\z/
+                        && ( $d->{head} // -1 ) != $n->{id}
+                        && grep { $_ == $id } ( $d->{inputs} // [] )->@*;
                 }
             }
         }
@@ -1525,6 +1531,14 @@ class SoN::Deparse 0.01 {
             push $ctrl_next{ $c->{control_in} }->@*, $c
                 if defined $c->{control_in};
         }
+        # A BRANCH ARM IS REACHED THROUGH ITS Proj, and the code after a join
+        # through its Region: neither carries a control_in, and a store inside
+        # an `if` arm went unseen by the scalar walk below.
+        my %arm_next = map { $_ => [ $ctrl_next{$_}->@* ] } keys %ctrl_next;
+        for my $c ( $self->_nodes_in_order ) {
+            next unless ( $c->{op} // '' ) =~ /\A(?:Proj|Region)\z/;
+            push $arm_next{$_}->@*, $c for ( $c->{inputs} // [] )->@*;
+        }
         #
         # BOUND ONLY WHERE EVERY CONSUMER IS KNOWN TO BE SAFE, because the
         # failure is asymmetric. A consumer that rewrites its operand in place
@@ -1536,12 +1550,157 @@ class SoN::Deparse 0.01 {
         # behaviour this pass replaces rather than a new wrong answer.
         state $VALUE_CONSUMER = { map { $_ => 1 } keys %BINOP, qw(
             Assign Ref Coerce Print Interpolate Length Not Negate Defined
-            DefinedOr And Or TernaryExpr UnaryPlus Increment
+            DefinedOr And Or TernaryExpr UnaryPlus Increment Return Phi
         ) };
         my %consumers;
         for my $c ( $self->_nodes_in_order ) {
             push $consumers{$_}->@*, $c for ( $c->{inputs} // [] )->@*;
         }
+
+        # A SCALAR READ AT SUB ENTRY AND STORED IN A LOOP IS NOT CARRIED. Inside
+        # a named sub, a package scalar or a shared file lexical has no binding
+        # for the loop scout to give a header Phi, so the body's read names the
+        # ENTRY memory version on every pass. The emission spells it by name
+        # and is right only while nothing reads it after the body's store:
+        #
+        #     my $n=0; sub f { my @r; for (1..3) { push @r, $n++ } "@r" }
+        #     perl 0 1 2      emitted 1 2 3
+        #
+        # A read whose every use flows into the store of its own name (`$n++`
+        # in void, `$n += 2`) spells correctly; any other use is refused.
+        #
+        # A STORE IS IN THE LOOP only on its body's own control: %under_loop
+        # also takes in the loop's entry and what follows its exit, and a
+        # `$n = 0` just before the loop was refused as though it ran each pass.
+        my ( %in_body, %body_of );
+        for my $l ( grep { ( $_->{op} // '' ) eq 'Loop' } $self->_nodes_in_order ) {
+            my ( @queue, %seen ) = map { $_->{id} } grep {
+                ( defined $_->{control_in} && $_->{control_in} == $l->{id} )
+                || ( ( $_->{op} // '' ) eq 'Proj'
+                     && !( ( $_->{fields} // {} )->{index} // 0 )
+                     && grep { $_ == $l->{id} } ( $_->{inputs} // [] )->@* )
+            } $self->_nodes_in_order;
+            while ( @queue ) {
+                my $id = shift @queue;
+                next if $seen{$id}++;
+                $in_body{$id} = $body_of{ $l->{id} }{$id} = 1;
+                push @queue, map { $_->{id} }
+                    grep { ( $_->{head} // -1 ) != $l->{id} }
+                    ( $arm_next{$id} // [] )->@*;
+            }
+        }
+        # THE STORES A LOOP IS ENTERED AFTER, outside every body: a scalar
+        # stored there is read in the loop at that store's version, so a read
+        # at the entry version is one made before the loop, once.
+        my %before_loop;
+        for my $l ( grep { ( $_->{op} // '' ) eq 'Loop' } $self->_nodes_in_order ) {
+            my ( @back, %walked ) = ( $l->{control_in} );
+            while ( @back ) {
+                my $b = shift @back;
+                next if !defined $b || $walked{$b}++;
+                my $bn = $nodes->{$b} or next;
+                $before_loop{$b} = 1
+                    if ( $bn->{op} // '' ) eq 'Assign' && !$in_body{$b};
+                push @back, $bn->{control_in};
+                push @back, ( $bn->{inputs} // [] )->@*
+                    if ( $bn->{op} // '' ) =~ /\A(?:Proj|Region)\z/;
+            }
+        }
+        my ( %loop_store_of, %read_before_loop );
+        for my $c ( $self->_nodes_in_order ) {
+            next unless $in_body{ $c->{id} };
+            my $op = $c->{op} // '';
+            my @ci = ( $c->{inputs} // [] )->@*;
+            $loop_store_of{ $ci[0] }{ $c->{id} } = 1
+                if $op eq 'Assign' && @ci;
+        }
+        for my $n ( $self->_nodes_in_order ) {
+            my $op = $n->{op} // '';
+            my $f  = $n->{fields} // {};
+            next unless ( $op eq 'PadAccess' && $f->{shared} )
+                     || ( $op eq 'EntryDef' && defined $f->{package} );
+            next unless $under_loop{ $n->{id} };
+            my @in = ( $n->{inputs} // [] )->@*;
+            next unless @in == 1 && $self->_is_memory( $in[0] );
+            # AT A VERSION FROM BEFORE THE LOOP -- the entry, or a store ahead
+            # of it: `$n = 0; for (...) { push @r, $n++ }` reads the `$n = 0`.
+            my $version = $nodes->{ $in[0] } // {};
+            my $at_entry = ( $version->{op} // '' ) eq 'MemStart';
+            next unless $at_entry
+                || ( defined $version->{control_in} && !$in_body{ $in[0] } );
+            # READ BEFORE A STORE THE LOOP FOLLOWS: not a read in the loop. A
+            # shared lexical's is bound at entry below, as a read outside any
+            # loop is; spelled by name, `my $c = $n; $n = 0; for (1..$c) {...}`
+            # read the 0.
+            if ( $at_entry && $op eq 'PadAccess' && grep {
+                    my $t = $nodes->{ ( $nodes->{$_}{inputs} // [] )->[0] // -1 } // {};
+                    ( $t->{op} // '' ) eq 'PadAccess' && ( $t->{fields} // {} )->{shared}
+                    && ( ( $t->{fields} // {} )->{symbol} // '' ) eq ( $f->{symbol} // '' )
+                    && ( ( $t->{fields} // {} )->{sigil} // '' ) eq ( $f->{sigil} // '' )
+                } keys %before_loop ) {
+                $read_before_loop{ $n->{id} } = 1;
+                next;
+            }
+            my %store = %{ $loop_store_of{ $n->{id} } // {} };
+            if ( $op eq 'EntryDef' ) {
+                $store{ $_->{id} } = 1 for grep {
+                    $in_body{ $_->{id} } && $self->_writes_this_name( $_, $f )
+                } $self->_nodes_in_order;
+            }
+            next unless %store;
+            # A loop that DOES carry it -- the read is a header Phi's init.
+            next if grep {
+                ( $_->{op} // '' ) eq 'Phi'
+                && ( ( $nodes->{ ( $_->{fields} // {} )->{region} // -1 } // {} )->{op} // '' ) eq 'Loop'
+            } ( $consumers{ $n->{id} } // [] )->@*;
+            my ( @queue, %seen ) = ( $n->{id} );
+            while ( @queue ) {
+                my $id = shift @queue;
+                next if $seen{$id}++;
+                for my $c ( ( $consumers{$id} // [] )->@* ) {
+                    next if $store{ $c->{id} };
+                    # AN `if` ARM'S MERGE takes its value in the arm, so it
+                    # stands at its join; a loop header's is carried past the
+                    # store, and is refused below.
+                    my $at = $c->{control_in};
+                    if ( ( $c->{op} // '' ) eq 'Phi' ) {
+                        my $r = $nodes->{ ( $c->{fields} // {} )->{region} // -1 } // {};
+                        $at = $r->{id} if ( $r->{op} // '' ) eq 'Region';
+                    }
+                    if ( defined $at ) {
+                        # A use ordered BEFORE the store spells the value the
+                        # pass began with; one after it reads the store.
+                        my ( @back, %walked, $after ) = ( $at );
+                        while ( @back && !$after ) {
+                            my $b = shift @back;
+                            next if !defined $b || $walked{$b}++;
+                            $after = 1 if $store{$b};
+                            my $bn = $nodes->{$b} or next;
+                            # PAST A LOOP'S EXIT, after every store in its body.
+                            if ( ( $bn->{op} // '' ) eq 'Proj'
+                                && ( ( $bn->{fields} // {} )->{index} // 0 ) == 1 ) {
+                                my $body = $body_of{ ( $bn->{inputs} // [] )->[0] // -1 } // {};
+                                $after = 1 if grep { $body->{$_} } keys %store;
+                            }
+                            push @back, $bn->{control_in};
+                            push @back, ( $bn->{inputs} // [] )->@*
+                                if ( $bn->{op} // '' ) =~ /\A(?:Proj|Region)\z/;
+                        }
+                        next unless $after;
+                    }
+                    die "GAP: `$f->{sigil}$f->{symbol}` is read at entry"
+                      . " and stored in a loop with no carried value; a use"
+                      . " after the store would see it\n"
+                        if defined $at || ( $c->{op} // '' ) eq 'Phi';
+                    # A DECLARED AGGREGATE holds the value under its own name:
+                    # `my @a = (1) x $n` is not spelled again where @a is read.
+                    next if ( $c->{op} // '' ) =~ /\A(?:Array|Hash)Literal\z/
+                        && defined( ( $c->{fields} // {} )->{symbol} );
+                    push @queue, $c->{id};
+                }
+            }
+        }
+
         my $safe_read = sub ($id) {
             for my $c ( ( $consumers{$id} // [] )->@* ) {
                 my $op = $c->{op} // '';
@@ -1550,6 +1709,10 @@ class SoN::Deparse 0.01 {
                 # string, and the four-operand write spells it by name.
                 next if $op eq 'Call'
                     && ( ( $c->{fields} // {} )->{name} // '' ) eq 'substr';
+                # push and unshift copy every operand after the array.
+                next if $op eq 'Call'
+                    && ( ( $c->{fields} // {} )->{name} // '' ) =~ /\A(?:push|unshift)\z/
+                    && ( ( $c->{inputs} // [] )->[0] // -1 ) != $id;
                 return 0;
             }
             return 1;
@@ -1567,17 +1730,33 @@ class SoN::Deparse 0.01 {
                 !( ( $c->{op} // '' ) eq 'Ref'
                    || ( ( $c->{op} // '' ) eq 'Assign' && @ci && $ci[0] == $n->{id} ) )
             } ( $consumers{ $n->{id} } // [] )->@*;
-            next if $under_loop{ $n->{id} };
+            next if $under_loop{ $n->{id} } && !$read_before_loop{ $n->{id} };
             my @in = ( $n->{inputs} // [] )->@*;
-            next unless @in == 1 && $self->_is_memory( $in[0] );
+            # A READ AFTER A CALL takes the call as its version: the callee may
+            # have stored a shared lexical, and a store after the read must not
+            # reach it. `g(); my $x = $n; $n = 7; $x` returned 7.
+            next unless @in == 1 && ( $self->_is_memory( $in[0] )
+                || ( ( ( $nodes->{ $in[0] } // {} )->{op} // '' ) eq 'Call'
+                     && defined $nodes->{ $in[0] }{control_in} ) );
             my $version = $nodes->{ $in[0] };
-            next unless $version && defined $version->{control_in};
+            next unless $version;
+            # A SHARED LEXICAL READ AT THE ENTRY VERSION -- a file lexical a
+            # named sub reads before storing it -- has no effect to follow, so
+            # it is bound in the save prologue, as an element read is. Measured
+            # on `my $n=0; sub f { my $x = $n++; return $x }`: f() returned 1
+            # for perl's 0, the read spelled `$n` after the store. Only a
+            # shared lexical: it is declared outside the sub, so its name
+            # exists at the prologue; the sub's own lexicals do not yet.
+            my $at_entry = ( $version->{op} // '' ) eq 'MemStart';
+            next if $at_entry && !( $n->{fields} // {} )->{shared};
+            next unless $at_entry || defined $version->{control_in};
 
-            my ( @queue, %seen, $shadowed ) = ( $in[0] );
+            my ( @queue, %seen, $shadowed )
+                = ( $at_entry ? $start->{id} : $in[0] );
             while ( @queue && !$shadowed ) {
                 my $id = shift @queue;
                 next if $seen{$id}++;
-                for my $c ( ( $ctrl_next{$id} // [] )->@* ) {
+                for my $c ( ( $arm_next{$id} // [] )->@* ) {
                     $shadowed = 1 if ( $c->{op} // '' )
                         =~ /\A(?:Assign|EntryWrite|CellWrite|Delete|Call)\z/;
                     push @queue, $c->{id};
@@ -1586,6 +1765,14 @@ class SoN::Deparse 0.01 {
             next unless $shadowed;
 
             $bound{ $n->{id} } = sprintf( '$stale%d', $n->{id} );
+            if ( $at_entry ) {
+                # READ OUT FIRST, as for an element read: _expr_uncached
+                # unbinds the node while it spells it.
+                my $var = $bound{ $n->{id} };
+                $save_prologue .= sprintf( "my %s = %s;\n",
+                    $var, $self->_expr_uncached( $n->{id} ) );
+                next;
+            }
             $hoisted{ $bound{ $n->{id} } } //= $bound{ $n->{id} };
             push $after_effect{ $version->{id} }->@*, $n;
         }
@@ -2069,7 +2256,11 @@ class SoN::Deparse 0.01 {
             # it away -- so a `local` save or an entry-version read emitted here
             # was used and never declared, whenever anything else in the same
             # sub happened to need a re-walk.
+            # A binding filed after Start reads the save prologue's
+            # temporaries -- see _last_bound_input -- so it follows them.
             $body = $save_prologue
+                  . join('', map { $self->_emit_statement($_, \%next_of) }
+                        ($after_effect{ $start->{id} } // [])->@*)
                   . $self->_emit_from($start->{id}, \%next_of, undef);
         }
 
@@ -2830,6 +3021,8 @@ class SoN::Deparse 0.01 {
     # the search stops -- it is what the binding must follow.
     method _last_bound_input ($n) {
         my ($last, %seen);
+        my ($start_id) = map { $_->{id} }
+            grep { ($_->{op} // '') eq 'Start' } values %$nodes;
         my $visit;
         $visit = sub ($id) {
             return unless defined $id && !$seen{$id}++;
@@ -2837,6 +3030,18 @@ class SoN::Deparse 0.01 {
             # A Phi IS NOT ON THE CHAIN, bound or not: a binding filed after
             # it was never emitted. _loop_phi_join places one after its join.
             return if ($m->{op} // '') eq 'Phi';
+            # A STALE OR SAVED READ IS BOUND OFF THE CHAIN, so a binding filed
+            # after it was never emitted: `my @a = (1) x $z` over an entry read
+            # of a shared $z vanished. One bound in the save prologue is there
+            # from the start; one placed after a store's effect would need the
+            # binding spliced behind it in that list, which is not done.
+            if (exists $bound{$id} && !defined $m->{control_in}
+                && $bound{$id} =~ /\A\$(?:stale|saved)\d+\z/) {
+                die "GAP: a declaration reads a temporary bound after a store\n"
+                    if grep { grep { $_->{id} == $id } @$_ } values %after_effect;
+                $last //= $start_id;
+                return;
+            }
             if (exists $bound{$id}) { $last = $id; return }
             # A PINNED AGGREGATE is declared where the chain reaches it, so a
             # reader must follow it just as it follows a binding: hoisted,
@@ -4271,6 +4476,23 @@ class SoN::Deparse 0.01 {
                     if $agg && ($agg->{op} // '') =~ /Literal\z/
                     && !defined(($agg->{fields} // {})->{symbol})
                     && !exists $bound{ $agg->{id} };
+            }
+
+            # THE PRODUCER COUNTED THE TARGETS. A value that reads a named
+            # scalar spells like one, and the walk took it for a target:
+            # `my ($a,$b) = ($n, 7)` in a sub came out `($a, $b, $n) = (7)`.
+            # An undef value is only a placeholder taken for one, and is
+            # given back; a named read is refused -- the targets' later reads
+            # spell it by name, after the assign has moved it.
+            my $counted = ( $n->{fields} // {} )->{targets};
+            if ( defined $counted && $t > $counted ) {
+                die "GAP: a list assign's value reads a named scalar, which"
+                  . " the target list would take for a target\n"
+                    if grep {
+                        ( $nodes->{$_}{op} // '' ) ne 'Constant'
+                        || ( ( $nodes->{$_}{fields} // {} )->{const_type} // '' ) ne 'undef'
+                    } @in[ $counted .. $t - 1 ];
+                $t = $counted;
             }
 
             die "GAP: an Assign (id $n->{id}) with no target slots is not yet"

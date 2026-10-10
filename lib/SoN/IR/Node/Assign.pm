@@ -12,6 +12,10 @@ class SoN::IR::Node::Assign :isa(SoN::IR::Node::BinOp) {
     # (a sub's @_ of constants) that perl, which only aliases, never wrote.
     field $if_changed :param :reader = false;
 
+    # HOW MANY LEADING INPUTS ARE TARGETS, for a list assign: a value read of
+    # a named scalar spells like a target, so the kinds cannot say.
+    field $targets :param :reader = undef;
+
     method operation() { 'Assign' }
     method op_str()    { '=' }
 }

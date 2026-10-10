@@ -4212,6 +4212,8 @@ class SoN::FromOptree 0.01 {
             return ($op->next, 'handled');
         }
 
+        _reread_alias_operand_stored_later($cv, $op, $sim, $factory, $opmap, $ctx);
+
         # chomp AND chop MUTATE IN PLACE, so the graph must record the store.
         # The producer built `Call(schomp, [PadAccess])` consumed by NOBODY,
         # so the mutation was invisible and the following read still named the
@@ -9089,7 +9091,7 @@ class SoN::FromOptree 0.01 {
             unshift @rhs, $sim->pop_node
                 while $sim->stack_depth > $sim->mark_depth;
             my $node = $factory->make('Assign',
-                inputs => [ $lhs->@*, @rhs ]);
+                inputs => [ $lhs->@*, @rhs ], targets => scalar $lhs->@*);
 
             # A DEMOTED TARGET IS STORED, NOT BOUND, here as in sassign: its
             # value lives in memory because a reference to it exists, so the
@@ -16250,6 +16252,96 @@ class SoN::FromOptree 0.01 {
             return 0 unless _replacement_is_pure($kid);
         }
         return 1;
+    }
+
+    # AN OPERAND PERL READS BY ALIAS sees a store a later operand makes. padsv
+    # and gvsv push the variable itself, not a copy, so the op that consumes
+    # them reads the value it has when the op runs:
+    #
+    #     my $n = 1; print $n . ($n = 5)      perl 55
+    #
+    # The graph reads the variable where its op stands in the walk -- before
+    # the store -- and gave 15. A lexical operand is READ AGAIN once the later
+    # operands have run: its padsv is stepped a second time and the new read
+    # takes the old one's stack slot. A call in a later operand may store it
+    # too (a shared lexical, a captured one), so a call counts as a store for
+    # a lexical. A package scalar is not read again, and is refused. A branch
+    # condition is consumed before its arm, so a LOGOP is not an alias
+    # consumer; a postinc copies, and is not a padsv.
+    # ponytail: only the direct stores (=, op=, ++/--) and calls are seen;
+    # chomp, s/// or a list assign storing the variable still pass unread.
+    my %OPERAND_DEPTH;      # padsv op address -> the stack slot its read took
+    sub _reread_alias_operand_stored_later ($cv, $op, $sim, $factory, $opmap, $ctx) {
+        $OPERAND_DEPTH{$$op} = $sim->stack_depth if $op->name eq q{padsv};
+        return unless $op->flags & B::OPf_KIDS;
+        return if $op->isa('B::LOGOP');
+        return if $op->name =~ /\A(?:leave|enter|lineseq|scope)/;
+        my $var = sub ($o) {                                # 'p<targ>' | 'g<gv>'
+            return undef unless $o && $$o;
+            # `$n` is rv2sv(gv), or the gvsv rpeep makes of it.
+            my $rv2sv = ( $o->name eq q{rv2sv}
+                || ( $o->name eq q{null} && $o->targ == B::opnumber(q{rv2sv}) ) )
+                && ( $o->flags & B::OPf_KIDS );
+            $o = $o->first if $rv2sv;
+            return "p" . $o->targ if $o->name eq q{padsv};
+            return undef unless $o->name eq q{gvsv}
+                || ( $rv2sv && $o->name eq q{gv} );
+            my $gv = _op_gv($cv, $o);
+            return $gv ? "g" . ${$gv} : undef;
+        };
+        my $stores;
+        $stores = sub ($o, $key) {
+            return 1 if $o->name eq q{padsv_store} && "p" . $o->targ eq $key;
+            # `$n = $y + 3` is `add[$n]` with OPpTARGET_MY: the op stores
+            # into its own targ, with no sassign to find.
+            return 1 if ( $o->private & B::OPpTARGET_MY() )
+                && "p" . $o->targ eq $key;
+            return 1 if $o->name eq q{entersub} && $key =~ /\Ap/;
+            return 0 unless $o->flags & B::OPf_KIDS;
+            my ( $kid, $first ) = ( $o->first, 1 );
+            my $n = $o->name;
+            while ( $kid && $$kid ) {
+                my $k = $var->($kid);
+                return 1 if defined $k && $k eq $key && (
+                       ( $n eq 'sassign' && !${ $kid->sibling } )
+                    || $n =~ /\A(?:i_)?(?:pre|post)(?:inc|dec)\z/
+                    || ( $first && $n ne q{sassign} && $o->isa(q{B::BINOP})
+                         && ( $o->flags & B::OPf_STACKED ) ) );   # op=
+                return 1 if $stores->($kid, $key);
+                ( $kid, $first ) = ( $kid->sibling, 0 );
+            }
+            return 0;
+        };
+        my ( $kid, $first ) = ( $op->first, 1 );
+        while ( $kid && $$kid ) {
+            my $key = $var->($kid);
+            # A statement in void context is not an operand.
+            undef $key if ( $kid->flags & B::OPf_WANT ) == B::OPf_WANT_VOID;
+            if ( defined $key
+                && grep { $stores->($_, $key) } _later_siblings($kid) ) {
+                my $depth = $OPERAND_DEPTH{$$kid};
+                my $old   = defined $depth && $kid->name eq q{padsv}
+                    && $depth < $sim->stack_depth ? $sim->node_at($depth) : undef;
+                # An op= target is stored, not only read; a declaration
+                # introduces the slot.
+                die "GAP: a scalar operand is read by alias and a later operand stores it\n"
+                    if !$old
+                    || ( $first && ( $op->flags & B::OPf_STACKED ) )
+                    || ( $kid->private & B::OPpLVAL_INTRO );
+                my ( undef, $how ) = _step($cv, $kid, $sim, $factory, $opmap, $ctx);
+                die "GAP: a scalar operand is read by alias and a later operand stores it\n"
+                    unless $how eq 'handled';
+                $sim->replace_at($depth, $sim->pop_node);
+            }
+            ( $kid, $first ) = ( $kid->sibling, 0 );
+        }
+        return;
+    }
+
+    sub _later_siblings ($o) {
+        my @later;
+        for ( my $s = $o->sibling; $s && $$s; $s = $s->sibling ) { push @later, $s }
+        return @later;
     }
 
     sub _find_gv_op ($op) {
