@@ -1086,6 +1086,13 @@ class SoN::Deparse 0.01 {
         # goes: two sibling-block lexicals of one name become one variable,
         # which no read can tell apart.
         my %hoistable = (%temps, map { $_ => 1 } grep { /\A\$/ } keys %names);
+        # A SOURCE SCALAR READ BEFORE ITS FIRST STORE: a bare `my $x;` left
+        # no node, so the store that declares it can follow a read --
+        # `f($x); $x = 3` emitted `f($x); my $x = 3`. Read in the same block
+        # as that store, its `my` moves up to the read's line, so a loop body
+        # still gets a fresh variable each pass; read anywhere else, it is
+        # hoisted to the top like an escaping one.
+        my (%first_use, %early);
         my ($next_block, @open) = (0);
         for my $i (0 .. $#lines) {
             my $l = $lines[$i];
@@ -1095,8 +1102,15 @@ class SoN::Deparse 0.01 {
                 next unless $l =~ /\Q$t\E\b(?!_)/;
                 if (!exists $decl_scope{$t} && $l =~ /\bmy\s+\Q$t\E\b(?!_)/) {
                     ($decl_scope{$t}, $decl_line{$t}) = ($scope, $i);
+                    if (my $u = $first_use{$t}) {
+                        if ($u->[0] eq $scope) { $early{$t} = $u->[1] }
+                        else                   { $escapes{$t} = 1 }
+                    }
                     next;
                 }
+                $first_use{$t} //= [$scope, $i]
+                    if !exists $decl_scope{$t} && $names{$t} && !$temps{$t}
+                    && $l !~ /\bmy\s*\([^)]*\Q$t\E\b(?!_)/;
                 next unless exists $decl_scope{$t};
                 my $d = $decl_scope{$t};
                 $escapes{$t} = 1
@@ -1111,7 +1125,12 @@ class SoN::Deparse 0.01 {
                 $lines[$i] = '' if $lines[$i] =~ /\A\s*\Q$t\E\s*;\s*\z/;
             }
         }
-        $text = join("\n", @lines) if @hoist;
+        my @early = grep { !$escapes{$_} } sort keys %early;
+        for my $t (@early) {
+            $lines[ $decl_line{$t} ] =~ s/\bmy\s+(\Q$t\E\b)(?!_)/$1/;
+            $lines[ $early{$t} ] = "my $t;\n$lines[ $early{$t} ]";
+        }
+        $text = join("\n", @lines) if @hoist || @early;
 
         my @decl = (@missing, @hoist);
         return $text unless @decl;
@@ -1841,8 +1860,10 @@ class SoN::Deparse 0.01 {
             }
         }
 
+        my %declared_before_walk = %pad_declared;
         my $body = $self->_emit_from($start->{id}, \%next_of, undef);
         $body = $save_prologue . $body;
+        my %declared_by_walk = %pad_declared;
 
         # A PAD BINDING IS NOT ON THE CONTROL CHAIN. Measured: `my ($a,$b) =
         # (2,3)` builds an Assign with control_in ABSENT, so a chain walk never
@@ -2036,6 +2057,13 @@ class SoN::Deparse 0.01 {
         # this the binding was silently DROPPED rather than merely misplaced.
         if (keys %after_effect || keys %after_region) {
             %rendered = ();
+            # THE RE-WALK DECLARES WHAT THE FIRST WALK DID. Its text is thrown
+            # away, so a demoted slot it declared is undeclared again -- left
+            # marked, the re-walk emitted a bare `$h = 5` in a loop body, the
+            # `my` went to the top, and every pass shared one variable: `\$h`
+            # pushed each pass gave three references to it.
+            delete @pad_declared{ grep { !$declared_before_walk{$_} }
+                                   keys %declared_by_walk };
             # THE SAVE PROLOGUE SURVIVES THE RE-WALK. It was prepended to the
             # FIRST walk's text, and assigning the second walk over $body threw
             # it away -- so a `local` save or an entry-version read emitted here

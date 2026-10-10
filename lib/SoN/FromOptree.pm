@@ -7147,6 +7147,23 @@ class SoN::FromOptree 0.01 {
             }
             my $node = _undef_constant($factory);
             if (defined $undef_targ) {
+                # A DEMOTED SLOT IS STORED, as `$h = undef` stores it. `f($h);
+                # undef $h` reads $h from memory afterwards; a rebind alone left
+                # that read at the call's memory version, still the reference.
+                if ($ctx->{addr_taken}{$undef_targ}) {
+                    my $loc = $factory->make('PadAccess',
+                        targ => $undef_targ,
+                        do { my ($sg, $sy) = _padparts($cv, $undef_targ);
+                             (sigil => $sg, symbol => $sy) },
+                        ($ctx->{shared_lexicals}{$undef_targ} ? (shared => 1) : ()),
+                        (defined $sim->memory ? (inputs => [ $sim->memory ]) : ()));
+                    my $store = $factory->make('Assign', inputs => [$loc, $node]);
+                    $store->set_control_in($sim->control);
+                    $sim->set_control($store);
+                    $sim->set_memory($store);
+                    $sim->push_node($node);
+                    return ($op->next, 'handled');
+                }
                 $sim->define($undef_targ, $node);
                 $sim->push_node($node);
                 return ($op->next, 'handled');
@@ -8646,6 +8663,25 @@ class SoN::FromOptree 0.01 {
                 $sim->set_control($node);
             }
             my $targ = $op->targ;
+
+            # A DEMOTED SLOT IS STORED, as sassign and the TARGMY path store
+            # it. `my $h = {}; f($h)` passes $h by alias, so the call reads the
+            # slot from memory; a scope rebind alone left that read at the
+            # slot's old memory version, and the callee wrote into undef.
+            if ($ctx->{addr_taken}{$targ}) {
+                my $loc = $factory->make('PadAccess',
+                    targ => $targ,
+                    do { my ($sg, $sy) = _padparts($cv, $targ);
+                         (sigil => $sg, symbol => $sy) },
+                    ($ctx->{shared_lexicals}{$targ} ? (shared => 1) : ()),
+                    (defined $sim->memory ? (inputs => [ $sim->memory ]) : ()));
+                my $store = $factory->make('Assign', inputs => [$loc, $node]);
+                $store->set_control_in($sim->control);
+                $sim->set_control($store);
+                $sim->set_memory($store);
+                $sim->push_node($node);
+                return ($op->next, 'handled');
+            }
 
             # A field store (TARGMY into a class field slot) threads on control
             # via an explicit Assign, exactly like the generic TARGMY path; a pad
@@ -13305,6 +13341,18 @@ class SoN::FromOptree 0.01 {
         return ($p && $$p && $p->name eq 'null' && ($p->flags & 32)) ? 1 : 0;
     }
 
+    # Does $op store into a DEMOTED SLOT -- a referenced or shared lexical,
+    # which lives in memory? An lvalue padsv (a store target, an increment's
+    # operand), a padsv_store, or a TARGMY op whose target is that slot.
+    sub _stores_demoted_slot ($op) {
+        return 0 unless $ADDR_TAKEN && $op->can('targ') && $op->targ
+            && $ADDR_TAKEN->{ $op->targ };
+        my $name = $op->name;
+        return 1 if $name eq 'padsv_store';
+        return 1 if $name eq 'padsv' && ($op->flags & 32);   # OPf_MOD
+        return ($op->private & 16) ? 1 : 0;                    # OPpTARGET_MY
+    }
+
     sub _arm_has_field_store ($cv, $start, $stop, $join = undef, $fields_only = 0) {
         $stop = _op_addr($stop);
         my $padlist = $cv->PADLIST;   # loop-invariant; the padname table is per-CV
@@ -13317,16 +13365,11 @@ class SoN::FromOptree 0.01 {
             # A STORE INTO A PACKAGE SCALAR is shared state the same way.
             return 1 if !$fields_only && _writes_package_scalar($op);
             # A STORE INTO A DEMOTED SLOT threads on control just as a field
-            # store does: an lvalue padsv (a store target, an increment's
-            # operand) or a padsv_store over a referenced or shared lexical.
-            return 1 if !$fields_only && $ADDR_TAKEN
-                && ($op->name eq 'padsv' || $op->name eq 'padsv_store')
-                && $op->targ && $ADDR_TAKEN->{ $op->targ }
-                && ($op->name eq 'padsv_store' || ($op->flags & 32));   # OPf_MOD
+            # store does.
+            return 1 if !$fields_only && _stores_demoted_slot($op);
             my $is_targmy   = $op->can('targ') && $op->targ && ($op->private & 16);
             my $is_padstore = $op->name eq 'padsv_store' && $op->can('targ') && $op->targ;
             next unless $is_targmy || $is_padstore;
-            return 1 if !$fields_only && $ADDR_TAKEN && $ADDR_TAKEN->{ $op->targ };
             my $pn = $padnames->ARRAYelt($op->targ);
             return 1 if ref $pn eq 'B::PADNAME' && SoN::FieldInfo::is_field($pn);
         }
@@ -13636,6 +13679,9 @@ class SoN::FromOptree 0.01 {
             # shift/pop MUTATE their array (a memory effect), so a loop whose
             # condition or body drains an array carries memory through the header.
             return 1 if $name eq 'shift' || $name eq 'pop';
+            # So does a store into a demoted slot: `my $h = {}; push @r, \$h`
+            # left the post-loop read at the store inside the body.
+            return 1 if _stores_demoted_slot($op);
             if ($name eq 'and' || $name eq 'or') {
                 return 1 if _cond_drains_array($start, $$op);
                 return _body_stores_memory($op->other);
