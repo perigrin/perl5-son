@@ -1681,8 +1681,10 @@ class SoN::Deparse 0.01 {
             }
         }
 
+        my %declared_before_walk = %pad_declared;
         my $body = $self->_emit_from($start->{id}, \%next_of, undef);
         $body = $save_prologue . $body;
+        my %declared_by_walk = %pad_declared;
 
         # A PAD BINDING IS NOT ON THE CONTROL CHAIN. Measured: `my ($a,$b) =
         # (2,3)` builds an Assign with control_in ABSENT, so a chain walk never
@@ -1868,6 +1870,13 @@ class SoN::Deparse 0.01 {
         # this the binding was silently DROPPED rather than merely misplaced.
         if (keys %after_effect || keys %after_region) {
             %rendered = ();
+            # THE RE-WALK DECLARES WHAT THE FIRST WALK DID. Its text is thrown
+            # away, so a demoted slot it declared is undeclared again -- left
+            # marked, the re-walk emitted a bare `$h = 5` in a loop body, the
+            # `my` went to the top, and every pass shared one variable: `\$h`
+            # pushed each pass gave three references to it.
+            delete @pad_declared{ grep { !$declared_before_walk{$_} }
+                                   keys %declared_by_walk };
             # THE SAVE PROLOGUE SURVIVES THE RE-WALK. It was prepended to the
             # FIRST walk's text, and assigning the second walk over $body threw
             # it away -- so a `local` save or an entry-version read emitted here

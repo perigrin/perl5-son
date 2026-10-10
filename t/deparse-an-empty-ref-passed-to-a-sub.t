@@ -95,6 +95,24 @@ my @cases = (
       q{a referenced bare lexical read, then undefined} ],
     [ q{sub f { 1 } for (1,2) { my $x; f($x); print defined $x ? 1:0; $x = 3; print "$x\n" }},
       q{a bare lexical in a loop body is fresh each pass} ],
+    # A REFERENCED `my` IN A LOOP BODY IS A FRESH VARIABLE EACH PASS: every
+    # reference taken to it is to a different one.
+    [ q{my @r; for my $i (1..3) { my $h = {}; push @r, \$h; } print scalar(@r), ($r[0]==$r[1]?1:0), "\n";},
+      q{a referenced `my $h = {}` in a loop is fresh each pass} ],
+    [ q{my @r; for my $i (1..3) { my $h = []; push @r, \$h; } print scalar(@r), ($r[0]==$r[1]?1:0), "\n";},
+      q{... and `my $h = []`} ],
+    [ q{my @r; for my $i (1..3) { my $h = {}; push @r, \$h; } print scalar(@r), ref ${$r[0]}, ($r[0]==$r[1]?1:0), "\n";},
+      q{... and each reference still holds its hash} ],
+    [ q{my @r; for my $i (1..3) { my $h = 5; push @r, \$h; } print scalar(@r), ($r[0]==$r[1]?1:0), "\n";},
+      q{... and a scalar initialiser} ],
+    # A STORE INTO A REFERENCED LEXICAL ADVANCES MEMORY, so a read after the
+    # loop sees the memory the last pass left, not the store inside it.
+    [ q{my @r; for my $i (1..3) { my $h = {}; push @r, \$h; } print defined $r[2] ? 1 : 0, "\n";},
+      q{a read after the loop sees every pass} ],
+    [ q{my @r; for my $i (1..2) { my $h = {}; push @r, \$h; } print scalar(@r), ($r[0]==$r[1]?1:0), "\n";},
+      q{... with two passes} ],
+    [ q{my @r; my $x; for my $i (1..3) { $x = $i; push @r, \$x; } print defined $r[2] ? 1 : 0, "\n";},
+      q{... and a store into an outer referenced lexical} ],
 );
 
 for my $c (@cases) {

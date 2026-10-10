@@ -12988,6 +12988,18 @@ class SoN::FromOptree 0.01 {
         return ($p && $$p && $p->name eq 'null' && ($p->flags & 32)) ? 1 : 0;
     }
 
+    # Does $op store into a DEMOTED SLOT -- a referenced or shared lexical,
+    # which lives in memory? An lvalue padsv (a store target, an increment's
+    # operand), a padsv_store, or a TARGMY op whose target is that slot.
+    sub _stores_demoted_slot ($op) {
+        return 0 unless $ADDR_TAKEN && $op->can('targ') && $op->targ
+            && $ADDR_TAKEN->{ $op->targ };
+        my $name = $op->name;
+        return 1 if $name eq 'padsv_store';
+        return 1 if $name eq 'padsv' && ($op->flags & 32);   # OPf_MOD
+        return ($op->private & 16) ? 1 : 0;                    # OPpTARGET_MY
+    }
+
     sub _arm_has_field_store ($cv, $start, $stop, $join = undef, $fields_only = 0) {
         $stop = _op_addr($stop);
         my $padlist = $cv->PADLIST;   # loop-invariant; the padname table is per-CV
@@ -13000,16 +13012,11 @@ class SoN::FromOptree 0.01 {
             # A STORE INTO A PACKAGE SCALAR is shared state the same way.
             return 1 if !$fields_only && _writes_package_scalar($op);
             # A STORE INTO A DEMOTED SLOT threads on control just as a field
-            # store does: an lvalue padsv (a store target, an increment's
-            # operand) or a padsv_store over a referenced or shared lexical.
-            return 1 if !$fields_only && $ADDR_TAKEN
-                && ($op->name eq 'padsv' || $op->name eq 'padsv_store')
-                && $op->targ && $ADDR_TAKEN->{ $op->targ }
-                && ($op->name eq 'padsv_store' || ($op->flags & 32));   # OPf_MOD
+            # store does.
+            return 1 if !$fields_only && _stores_demoted_slot($op);
             my $is_targmy   = $op->can('targ') && $op->targ && ($op->private & 16);
             my $is_padstore = $op->name eq 'padsv_store' && $op->can('targ') && $op->targ;
             next unless $is_targmy || $is_padstore;
-            return 1 if !$fields_only && $ADDR_TAKEN && $ADDR_TAKEN->{ $op->targ };
             my $pn = $padnames->ARRAYelt($op->targ);
             return 1 if ref $pn eq 'B::PADNAME' && SoN::FieldInfo::is_field($pn);
         }
@@ -13319,6 +13326,9 @@ class SoN::FromOptree 0.01 {
             # shift/pop MUTATE their array (a memory effect), so a loop whose
             # condition or body drains an array carries memory through the header.
             return 1 if $name eq 'shift' || $name eq 'pop';
+            # So does a store into a demoted slot: `my $h = {}; push @r, \$h`
+            # left the post-loop read at the store inside the body.
+            return 1 if _stores_demoted_slot($op);
             if ($name eq 'and' || $name eq 'or') {
                 return 1 if _cond_drains_array($start, $$op);
                 return _body_stores_memory($op->other);
