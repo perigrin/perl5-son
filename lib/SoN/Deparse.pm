@@ -1507,9 +1507,47 @@ class SoN::Deparse 0.01 {
         #
         # A read whose every use flows into the store of its own name (`$n++`
         # in void, `$n += 2`) spells correctly; any other use is refused.
-        my %loop_store_of;
+        #
+        # A STORE IS IN THE LOOP only on its body's own control: %under_loop
+        # also takes in the loop's entry and what follows its exit, and a
+        # `$n = 0` just before the loop was refused as though it ran each pass.
+        my ( %in_body, %body_of );
+        for my $l ( grep { ( $_->{op} // '' ) eq 'Loop' } $self->_nodes_in_order ) {
+            my ( @queue, %seen ) = map { $_->{id} } grep {
+                ( defined $_->{control_in} && $_->{control_in} == $l->{id} )
+                || ( ( $_->{op} // '' ) eq 'Proj'
+                     && !( ( $_->{fields} // {} )->{index} // 0 )
+                     && grep { $_ == $l->{id} } ( $_->{inputs} // [] )->@* )
+            } $self->_nodes_in_order;
+            while ( @queue ) {
+                my $id = shift @queue;
+                next if $seen{$id}++;
+                $in_body{$id} = $body_of{ $l->{id} }{$id} = 1;
+                push @queue, map { $_->{id} }
+                    grep { ( $_->{head} // -1 ) != $l->{id} }
+                    ( $arm_next{$id} // [] )->@*;
+            }
+        }
+        # THE STORES A LOOP IS ENTERED AFTER, outside every body: a scalar
+        # stored there is read in the loop at that store's version, so a read
+        # at the entry version is one made before the loop, once.
+        my %before_loop;
+        for my $l ( grep { ( $_->{op} // '' ) eq 'Loop' } $self->_nodes_in_order ) {
+            my ( @back, %walked ) = ( $l->{control_in} );
+            while ( @back ) {
+                my $b = shift @back;
+                next if !defined $b || $walked{$b}++;
+                my $bn = $nodes->{$b} or next;
+                $before_loop{$b} = 1
+                    if ( $bn->{op} // '' ) eq 'Assign' && !$in_body{$b};
+                push @back, $bn->{control_in};
+                push @back, ( $bn->{inputs} // [] )->@*
+                    if ( $bn->{op} // '' ) =~ /\A(?:Proj|Region)\z/;
+            }
+        }
+        my ( %loop_store_of, %read_before_loop );
         for my $c ( $self->_nodes_in_order ) {
-            next unless $under_loop{ $c->{id} };
+            next unless $in_body{ $c->{id} };
             my $op = $c->{op} // '';
             my @ci = ( $c->{inputs} // [] )->@*;
             $loop_store_of{ $ci[0] }{ $c->{id} } = 1
@@ -1523,11 +1561,29 @@ class SoN::Deparse 0.01 {
             next unless $under_loop{ $n->{id} };
             my @in = ( $n->{inputs} // [] )->@*;
             next unless @in == 1 && $self->_is_memory( $in[0] );
-            next unless ( ( $nodes->{ $in[0] } // {} )->{op} // '' ) eq 'MemStart';
+            # AT A VERSION FROM BEFORE THE LOOP -- the entry, or a store ahead
+            # of it: `$n = 0; for (...) { push @r, $n++ }` reads the `$n = 0`.
+            my $version = $nodes->{ $in[0] } // {};
+            my $at_entry = ( $version->{op} // '' ) eq 'MemStart';
+            next unless $at_entry
+                || ( defined $version->{control_in} && !$in_body{ $in[0] } );
+            # READ BEFORE A STORE THE LOOP FOLLOWS: not a read in the loop. A
+            # shared lexical's is bound at entry below, as a read outside any
+            # loop is; spelled by name, `my $c = $n; $n = 0; for (1..$c) {...}`
+            # read the 0.
+            if ( $at_entry && $op eq 'PadAccess' && grep {
+                    my $t = $nodes->{ ( $nodes->{$_}{inputs} // [] )->[0] // -1 } // {};
+                    ( $t->{op} // '' ) eq 'PadAccess' && ( $t->{fields} // {} )->{shared}
+                    && ( ( $t->{fields} // {} )->{symbol} // '' ) eq ( $f->{symbol} // '' )
+                    && ( ( $t->{fields} // {} )->{sigil} // '' ) eq ( $f->{sigil} // '' )
+                } keys %before_loop ) {
+                $read_before_loop{ $n->{id} } = 1;
+                next;
+            }
             my %store = %{ $loop_store_of{ $n->{id} } // {} };
             if ( $op eq 'EntryDef' ) {
                 $store{ $_->{id} } = 1 for grep {
-                    $under_loop{ $_->{id} } && $self->_writes_this_name( $_, $f )
+                    $in_body{ $_->{id} } && $self->_writes_this_name( $_, $f )
                 } $self->_nodes_in_order;
             }
             next unless %store;
@@ -1542,15 +1598,29 @@ class SoN::Deparse 0.01 {
                 next if $seen{$id}++;
                 for my $c ( ( $consumers{$id} // [] )->@* ) {
                     next if $store{ $c->{id} };
-                    if ( defined $c->{control_in} ) {
+                    # AN `if` ARM'S MERGE takes its value in the arm, so it
+                    # stands at its join; a loop header's is carried past the
+                    # store, and is refused below.
+                    my $at = $c->{control_in};
+                    if ( ( $c->{op} // '' ) eq 'Phi' ) {
+                        my $r = $nodes->{ ( $c->{fields} // {} )->{region} // -1 } // {};
+                        $at = $r->{id} if ( $r->{op} // '' ) eq 'Region';
+                    }
+                    if ( defined $at ) {
                         # A use ordered BEFORE the store spells the value the
                         # pass began with; one after it reads the store.
-                        my ( @back, %walked, $after ) = ( $c->{control_in} );
+                        my ( @back, %walked, $after ) = ( $at );
                         while ( @back && !$after ) {
                             my $b = shift @back;
                             next if !defined $b || $walked{$b}++;
                             $after = 1 if $store{$b};
                             my $bn = $nodes->{$b} or next;
+                            # PAST A LOOP'S EXIT, after every store in its body.
+                            if ( ( $bn->{op} // '' ) eq 'Proj'
+                                && ( ( $bn->{fields} // {} )->{index} // 0 ) == 1 ) {
+                                my $body = $body_of{ ( $bn->{inputs} // [] )->[0] // -1 } // {};
+                                $after = 1 if grep { $body->{$_} } keys %store;
+                            }
                             push @back, $bn->{control_in};
                             push @back, ( $bn->{inputs} // [] )->@*
                                 if ( $bn->{op} // '' ) =~ /\A(?:Proj|Region)\z/;
@@ -1560,7 +1630,11 @@ class SoN::Deparse 0.01 {
                     die "GAP: `$f->{sigil}$f->{symbol}` is read at entry"
                       . " and stored in a loop with no carried value; a use"
                       . " after the store would see it\n"
-                        if defined $c->{control_in} || ( $c->{op} // '' ) eq 'Phi';
+                        if defined $at || ( $c->{op} // '' ) eq 'Phi';
+                    # A DECLARED AGGREGATE holds the value under its own name:
+                    # `my @a = (1) x $n` is not spelled again where @a is read.
+                    next if ( $c->{op} // '' ) =~ /\A(?:Array|Hash)Literal\z/
+                        && defined( ( $c->{fields} // {} )->{symbol} );
                     push @queue, $c->{id};
                 }
             }
@@ -1595,7 +1669,7 @@ class SoN::Deparse 0.01 {
                 !( ( $c->{op} // '' ) eq 'Ref'
                    || ( ( $c->{op} // '' ) eq 'Assign' && @ci && $ci[0] == $n->{id} ) )
             } ( $consumers{ $n->{id} } // [] )->@*;
-            next if $under_loop{ $n->{id} };
+            next if $under_loop{ $n->{id} } && !$read_before_loop{ $n->{id} };
             my @in = ( $n->{inputs} // [] )->@*;
             # A READ AFTER A CALL takes the call as its version: the callee may
             # have stored a shared lexical, and a store after the read must not
@@ -4016,6 +4090,23 @@ class SoN::Deparse 0.01 {
                     if $agg && ($agg->{op} // '') =~ /Literal\z/
                     && !defined(($agg->{fields} // {})->{symbol})
                     && !exists $bound{ $agg->{id} };
+            }
+
+            # THE PRODUCER COUNTED THE TARGETS. A value that reads a named
+            # scalar spells like one, and the walk took it for a target:
+            # `my ($a,$b) = ($n, 7)` in a sub came out `($a, $b, $n) = (7)`.
+            # An undef value is only a placeholder taken for one, and is
+            # given back; a named read is refused -- the targets' later reads
+            # spell it by name, after the assign has moved it.
+            my $counted = ( $n->{fields} // {} )->{targets};
+            if ( defined $counted && $t > $counted ) {
+                die "GAP: a list assign's value reads a named scalar, which"
+                  . " the target list would take for a target\n"
+                    if grep {
+                        ( $nodes->{$_}{op} // '' ) ne 'Constant'
+                        || ( ( $nodes->{$_}{fields} // {} )->{const_type} // '' ) ne 'undef'
+                    } @in[ $counted .. $t - 1 ];
+                $t = $counted;
             }
 
             die "GAP: an Assign (id $n->{id}) with no target slots is not yet"

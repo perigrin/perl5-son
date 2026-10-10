@@ -161,7 +161,11 @@ sub _extract_fields ($node, $id_remap) {
         return { index => $node->index };
     }
     if ($op eq 'Assign') {
-        return $node->if_changed ? { if_changed => JSON::PP::true } : undef;
+        my %f = (
+            ( $node->if_changed ? ( if_changed => JSON::PP::true ) : () ),
+            ( defined $node->targets ? ( targets => 0 + $node->targets ) : () ),
+        );
+        return %f ? \%f : undef;
     }
     if ($op eq 'Return') {
         return $node->implicit ? { implicit => JSON::PP::true } : undef;

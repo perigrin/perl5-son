@@ -101,6 +101,64 @@ refuses('our $n=0; sub f { my @r; for (1..3) { push @r, $n++ } return "@r" } pri
 refuses('my $n=0; sub f { my $s=""; for (1..3) { $s .= $n; $n += 2 } return $s } print f(), " $n\n";',
     'a read before a compound store in a loop');
 
+# A USE THAT IS SPELLED BEFORE THE STORE is not refused: an `if` arm's merge
+# takes its value in the arm, and a store before the loop is not in it.
+round_trips('my $n=0; sub f { my $s = ""; for my $i (1..3) { $s .= $n if $i > 1; $n = $i } $s } print f(), " $n\n";',
+    'a guarded read in a loop arm, before the store');
+round_trips('my $n=0; sub f { my $s = ""; for my $i (1..3) { $s .= $n unless $i == 1; $n += $i } $s } print f(), " $n\n";',
+    'an unless-guarded read, before a compound store');
+round_trips('my $n=0; sub f { my $s = ""; for my $i (1..3) { $s .= $n if $i > 1; $n = $i; $s .= $n if $i > 2 } $s } print f(), " $n\n";',
+    'a guarded read before the store and another after it');
+round_trips('my $n=3; sub f { my $c = $n; $n = 0; my @a = (1) x $c; for (@a) { $n++ } scalar(@a) . $n } print f(), "\n";',
+    'a store before the loop, a void increment in it');
+round_trips('our $n=3; sub f { my $c = $n; $n = 0; my @a = (1) x $c; for (@a) { $n++ } scalar(@a) . $n } print f(), "\n";',
+    'the package-scalar form of a store before the loop');
+# A READ BEFORE A STORE THAT PRECEDES THE LOOP is made once, before it, and
+# is bound at entry; a read at that store's version is the loop's.
+round_trips('my $n=3; sub f { my $c = $n; $n = 0; for (1..$c) { $n++ } $c . $n } print f(), "\n";',
+    'a copy before a store, the loop bounded by the copy');
+round_trips('my $n=3; sub f { my $c = $n + 1; $n = 0; for (1..2) { $n += $c } $n } print f(), "\n";',
+    'a copy before a store, added in the loop');
+refuses('my $n=3; sub f { my @r; my $c = $n; $n = 0; for (1..$c) { push @r, $n++ } "@r" } print f(), " $n\n";',
+    'a store before the loop, its value used in the loop');
+# PAST THE LOOP'S EXIT a use is after every store in its body.
+refuses('my $n=3; sub f { my $c = $n; for (1..2) { $n++ } $c . $n } print f(), "\n";',
+    'a copy at entry used after a loop that stores');
+refuses('my $n=3; sub f { my $c = $n; for (1..2) { $n++ } $c } print f(), " $n\n";',
+    'a copy at entry returned after a loop that stores');
+round_trips('my $n=3; sub f { my @a = (1) x $n; for (@a) { $n++ } scalar(@a) . $n } print f(), "\n";',
+    'a declared array counted after a loop that stores');
+refuses('my $n=0; sub f { my $s = ""; for my $i (1..3) { my $v = $n; $n = $i; if ($i > 1) { $s .= $v } } $s } print f(), " $n\n";',
+    'a copy used in an arm after the store');
+refuses('my $n=0; sub f { my $s = ""; for my $i (1..3) { if ($i > 1) { $s .= $n } else { $s .= "-" } $n = $i } $s } print f(), " $n\n";',
+    'an if/else merged into the loop-carried value');
+
+# A LIST ASSIGN'S VALUE READ OF A NAMED SCALAR spells like a target, and the
+# renderer counted it as one: `($a, $b, $n) = (5)`. The producer says how many
+# targets there are; a disagreement is refused.
+sub refuses_list ($src, $name) {
+    my $data = graph_of($src);
+    ok $data, "$name: translates" or return;
+    my $d = SoN::Deparse->new;
+    is $d->render($data), undef, "$name: does not render";
+    like $d->gap // '', qr/a list assign's value reads a named scalar/,
+        "$name: the refusal names the value read";
+}
+refuses_list('my $n=1; sub f { my ($a,$b) = ($n, $n = 5); "$a-$b" } print f(), " $n\n";',
+    'a list assign reading a shared lexical a later value stores');
+refuses_list('my $n=1; sub f { my ($a,$b); ($a,$b) = ($n, 7); "$a-$b" } print f(), " $n\n";',
+    'a list assign reading a shared lexical first');
+refuses_list('our $n=1; sub f { my ($a,$b) = ($n, 7); "$a-$b" } print f(), " $n\n";',
+    'a list assign reading a package scalar first');
+round_trips('my $n=1; sub f { my ($a,$b,$c) = (7, $n, 8); "$a-$b-$c" } print f(), " $n\n";',
+    'a list assign reading a shared lexical after a constant');
+round_trips('my $n=1; sub f { my ($a,$b) = ($n + 0, 7); "$a-$b" } print f(), " $n\n";',
+    'a list assign reading a shared lexical in an expression');
+round_trips('sub f { my ($a,$b,$c) = (undef, undef, 5); defined($a) ? 1 : $c } print f(), "\n";',
+    'undef values, which the target list takes for placeholders');
+round_trips('sub f { my $n = shift; my ($a,$b); ($a,$b) = ($n, 7); "$a-$b" } print f(3), "\n";',
+    'a list assign reading a lexical of the sub');
+
 # AN OPERAND PERL READS BY ALIAS sees a store a later operand of the same op
 # makes: padsv pushes the variable itself, not a copy. The producer reads a
 # lexical operand again once the later operands have run.

@@ -8741,7 +8741,7 @@ class SoN::FromOptree 0.01 {
             unshift @rhs, $sim->pop_node
                 while $sim->stack_depth > $sim->mark_depth;
             my $node = $factory->make('Assign',
-                inputs => [ $lhs->@*, @rhs ]);
+                inputs => [ $lhs->@*, @rhs ], targets => scalar $lhs->@*);
 
             # A DEMOTED TARGET IS STORED, NOT BOUND, here as in sassign: its
             # value lives in memory because a reference to it exists, so the
