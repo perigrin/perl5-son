@@ -1622,6 +1622,25 @@ class SoN::Deparse 0.01 {
                     && ( ( $_->{fields} // {} )->{dispatch_kind} // '' ) ne 'builtin'
             } ( $consumers{ $n->{id} } // [] )->@*;
             next if $under_loop{ $n->{id} };
+            # NOR A GUARDED ONE. Unlike an element read, a deref DIES on a
+            # non-reference under strict refs, so hoisting it out of `$r ?
+            # $$r : 'n'`, `ref $r && $$r` or `$a = $$r if $r` ran it on the
+            # path its guard exists to skip. Any route to a consumer through a
+            # conditional operand leaves it where it is.
+            my ( @uses, %used, $guarded ) = ( $n->{id} );
+            while ( @uses && !$guarded ) {
+                my $id = shift @uses;
+                next if $used{$id}++;
+                for my $c ( ( $consumers{$id} // [] )->@* ) {
+                    my $op = $c->{op} // '';
+                    my @at = grep { $c->{inputs}[$_] == $id } 0 .. $#{ $c->{inputs} };
+                    $guarded = 1 if $op eq 'Phi'
+                        || ( $op =~ /\A(?:TernaryExpr|And|Or|DefinedOr)\z/
+                             && grep { $_ > 0 } @at );
+                    push @uses, $c->{id};
+                }
+            }
+            next if $guarded;
             my @in = ( $n->{inputs} // [] )->@*;
             next unless @in == 2;
             my $version = $nodes->{ $in[-1] } or next;

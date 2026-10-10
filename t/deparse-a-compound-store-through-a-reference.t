@@ -95,6 +95,23 @@ round_trips(q{my $v=1; my $r=\$v; my %h = (k => $$r, j => 2); $$r = 2; print "$h
 round_trips(q{my $v=1; my $r=\$v; my $o = $$r; my @h = ($o); $$r = 2; print "$h[0] $v\n";},
     q{an array literal holding a copy of the read});
 
+# A guarded read is not hoisted above its guard: binding `$$r` ahead of
+# `$r ? $$r : ...` dereferenced undef under strict refs.
+round_trips(q{my $v=1; my $r; my $x=0; $x=1; my $a = $r ? $$r : "n"; $r=\$v; $$r=2; print "[$a] $v\n";},
+    q{a ternary-guarded read of an undef reference});
+round_trips(q{sub f { my $r=shift; my $z=0; my $zr=\$z; $z=1; my $x = ref $r ? $$r : $r; $z=2; return $x } print f(5), " ", f(\7), "\n";},
+    q{a ref-guarded read in a sub, then an unrelated store});
+round_trips(q{my $v=1; my $r; my $x=0; $x=1; my $a = defined($r) && $$r; $r=\$v; $$r=2; print "[$a] $v\n";},
+    q{an &&-guarded read});
+round_trips(q{my $v=1; my $r; my $x=0; $x=1; my $a = "u"; $a = $$r if $r; $r=\$v; $$r=2; print "[$a] $v\n";},
+    q{a statement-modifier-guarded read});
+round_trips(q{my $v=1; my $r; my $x=0; $x=1; my $a = "u"; unless (!$r) { $a = $$r; print "in\n" } $r=\$v; $$r=2; print "[$a] $v\n";},
+    q{an unless-block-guarded read});
+round_trips(q{my $v=1; my $r; my $x=0; $x=1; unless (!$r) { print $$r, "\n" } $r=\$v; $$r=2; print "$v\n";},
+    q{a read printed inside an unless block});
+round_trips(q{my $v=1; my $r; my $x=0; $x=1; my $a = $r // 0 ? $$r : "n"; $v = 2; print "[$a] $v\n";},
+    q{a guarded read with a plain store after it});
+
 # `.=` and `||=` through a ref are separate shapes (multiconcat, a
 # short-circuit over sassign); they refuse rather than drop the store.
 sub refuses ($src, $why, $name) {
