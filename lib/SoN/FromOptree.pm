@@ -744,7 +744,7 @@ class SoN::FromOptree 0.01 {
     # and the program printed 0 where perl prints 2. Routing the read through
     # memory is what makes the callee's EntryWrite reachable from it.
     #
-    # NARROW ON PURPOSE, exactly as the call barrier is. A package scalar that
+    # NARROW ON PURPOSE. A package scalar that
     # is only ever READ (a `our $VERSION = ...` consulted from everywhere)
     # keeps its value binding and constant-folds as before; only one that some
     # sub assigns is forced through memory. A pad slot is untouched: it is
@@ -4003,11 +4003,18 @@ class SoN::FromOptree 0.01 {
         # Without this the print's CellRead threaded on the MakeCell's own
         # memory version -- ordered BEFORE the call -- and the graph read 5.
         #
-        # NARROW ON PURPOSE. Making every call advance memory would order every
-        # unrelated read against every call and lose real optimisations; the
-        # barrier is needed only where a shared mutable cell exists to be
-        # written, which is exactly this condition. A read-only cell needs no
-        # barrier, which is what `captured_written` is checked for.
+        # EVERY CALL, not only where a written cell exists. A callee reaches
+        # memory the caller's optree gives no sign of: an element through a
+        # reference argument, or through the @_ alias of an element passed
+        # directly. Measured on
+        #
+        #     my @a=(1,2); my $s = $a[0]; sub g { $_[0][0] += 5 } g(\@a);
+        #     print "$s $a[0]"        perl prints 1 6
+        #
+        # the two reads of $a[0] were one hash-consed node at the entry
+        # memory, and the emission printed `1 1`. Correct before fast: a read
+        # after a call is ordered after it, whether or not anything is known
+        # to be written.
         #
         # A WRITTEN PACKAGE SCALAR IS THE SAME HAZARD ONE SCOPE WIDER. A
         # capture cell is shared between an enclosing sub and its closures; a
@@ -4025,9 +4032,6 @@ class SoN::FromOptree 0.01 {
         # advancing memory across the call are two DIFFERENT necessary
         # halves -- neither alone moves the answer off 0.
         #
-        # Keyed on the same program-wide scan the read side uses, so a program
-        # with no written package scalar keeps every call floatable exactly as
-        # before.
         # AND A FILE LEXICAL SHARED WITH A NAMED SUB, for the same reason: the
         # callee may write it (`sub bump { $count++ }`).
         _call_memory_barrier($sim, $node, $ctx);
@@ -4036,19 +4040,15 @@ class SoN::FromOptree 0.01 {
         return;
     }
 
-    # _call_memory_barrier($sim, $call, $ctx) -- advance memory across a call
-    # when something it may write exists: a written capture cell, a written
-    # package scalar, a file lexical shared with a sub. See the direct-call
-    # site for the measurements; a METHOD call is the same hazard -- a method
+    # _call_memory_barrier($sim, $call, $ctx) -- advance memory across every
+    # call: the callee may write a capture cell, a package scalar, a file
+    # lexical, or an element reached through a reference or @_. See the
+    # direct-call site for the measurements; a METHOD call is the same hazard -- a method
     # incrementing a file lexical left the program's later read ordered before
     # the calls, and it saw the initial value.
     sub _call_memory_barrier ($sim, $node, $ctx) {
         $sim->set_memory($node)
-            if defined $sim->memory
-            && ( (grep { $_->captured_written }
-                    values +($ctx->{cells} // {})->%*)
-                 || %{ _package_scalars_written() }
-                 || %{ $ctx->{shared_lexicals} // {} } );
+            if defined $sim->memory;
     }
 
     # Shared op-handler core for all three walkers.

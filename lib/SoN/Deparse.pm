@@ -1529,6 +1529,81 @@ class SoN::Deparse 0.01 {
             push $after_effect{ $version->{id} }->@*, $n;
         }
 
+        # AN ELEMENT READ GOES STALE THE SAME WAY. `my $z = $a[0]; $a[0] = 1;
+        # print $z` printed 1 for perl's 4: the Subscript carries the memory
+        # version it read at, and the emission spelled it `$a[0]` at the
+        # print, after the store. An element can be written through a
+        # reference or by a callee through @_, so -- as for a demoted lexical
+        # -- any later store or call on the chain counts.
+        #
+        # A read at the ENTRY version has no effect to follow; it is bound in
+        # the save prologue, which runs after the aggregate declarations. Its
+        # operands must exist there, so only constants and the aggregates the
+        # prologue declares are allowed; anything else is left unbound.
+        for my $n ( sort { $a->{id} <=> $b->{id} } $self->_nodes_in_order ) {
+            next unless ( $n->{op} // '' ) eq 'Subscript';
+            next if exists $bound{ $n->{id} };
+            next unless $safe_read->( $n->{id} );
+            next if $under_loop{ $n->{id} };
+            # MEMORY BY POSITION, as %MEM_MIN_INPUTS says: a call that is a
+            # memory barrier produces a version without consuming one, so
+            # _is_memory does not recognise it, and a read after it is
+            # exactly the read that goes stale.
+            my @in = ( $n->{inputs} // [] )->@*;
+            next unless @in > ( $MEM_MIN_INPUTS{Subscript} // 99 );
+            my $version = $nodes->{ $in[-1] } or next;
+            my $at_entry = !defined $version->{control_in};
+            # AN OPERAND MADE ON THE CHAIN -- an anonymous `[4]` -- is the
+            # anchor instead: the read is correct right after it exists.
+            my @made = grep { defined( ( $nodes->{$_} // {} )->{control_in} ) }
+                @in[ 0 .. $#in - 1 ];
+            if ( $at_entry && @made == 1 ) {
+                $version  = $nodes->{ $made[0] };
+                $at_entry = 0;
+            }
+            if ( $at_entry ) {
+                next if grep {
+                    my $c  = $nodes->{$_} // {};
+                    my $op = $c->{op} // '';
+                    # A literal of constants only: one holding an effect's
+                    # value is declared after that effect, not in the
+                    # prologue (`my @c = caller(0)` was, and the read of
+                    # $c[1] landed above it).
+                    !( $op eq 'Constant'
+                       || ( $op =~ /\A(?:Array|Hash)Literal\z/
+                            && defined( ( $c->{fields} // {} )->{symbol} )
+                            && !$self->_is_pinned_aggregate($c)
+                            && !grep { ( ( $nodes->{$_} // {} )->{op} // '' ) ne 'Constant' }
+                                   ( $c->{inputs} // [] )->@* ) )
+                } @in[ 0 .. $#in - 1 ];
+            }
+
+            my ( @queue, %seen, $shadowed )
+                = ( $at_entry ? $start->{id} : $version->{id} );
+            while ( @queue && !$shadowed ) {
+                my $id = shift @queue;
+                next if $seen{$id}++;
+                for my $c ( ( $ctrl_next{$id} // [] )->@* ) {
+                    $shadowed = 1 if ( $c->{op} // '' )
+                        =~ /\A(?:Assign|EntryWrite|CellWrite|Delete|Call)\z/;
+                    push @queue, $c->{id};
+                }
+            }
+            next unless $shadowed;
+
+            $bound{ $n->{id} } = sprintf( '$stale%d', $n->{id} );
+            if ( $at_entry ) {
+                # READ OUT FIRST: _expr_uncached unbinds the node while it
+                # spells it, and sprintf would see the alias change.
+                my $var = $bound{ $n->{id} };
+                $save_prologue .= sprintf( "my %s = %s;\n",
+                    $var, $self->_expr_uncached( $n->{id} ) );
+                next;
+            }
+            $hoisted{ $bound{ $n->{id} } } //= $bound{ $n->{id} };
+            push $after_effect{ $version->{id} }->@*, $n;
+        }
+
         # DECLARED AT THE TOP, ASSIGNED AT THE VERSION. The assignment has to
         # land where the value is still correct, and that position can be inside
         # a nested block -- an `eval { }` body, a branch arm -- while the READ is
@@ -1644,7 +1719,15 @@ class SoN::Deparse 0.01 {
             # is the only safe anchor.
             my $defer = $self->_last_bound_input($n);
             if (defined $defer) {
-                push $after_effect{$defer}->@*, $n;
+                # AHEAD OF THE READS ALREADY ANCHORED HERE, after any other
+                # declaration: a stale element read placed at the same effect
+                # (`my @c = g(); my $z = $c[0]; $c[0] = 1`) read `$c[0]` above
+                # the `my @c` it names.
+                my $list = $after_effect{$defer} //= [];
+                my $at = 0;
+                $at++ while $at < @$list
+                    && ( $list->[$at]{op} // '' ) =~ /\A(?:Array|Hash)Literal\z/;
+                splice @$list, $at, 0, $n;
                 next;
             }
 
@@ -3468,6 +3551,15 @@ class SoN::Deparse 0.01 {
 
         if ($op eq 'RegexMatch' || $op eq 'Match') {
             return $self->_expr_uncached( $n->{id} ) . ";\n";
+        }
+
+        # A DEFERRED STALE ELEMENT READ -- see the stale-read pass. Spelled
+        # uncached: _expr would return the temporary's own name.
+        if ($op eq 'Subscript' && exists $bound{ $n->{id} }) {
+            my $var  = $bound{ $n->{id} };
+            my $text = $self->_expr_uncached( $n->{id} );
+            return sprintf( "%s%s = %s;\n",
+                ( exists $hoisted{$var} ? '' : 'my ' ), $var, $text );
         }
 
         # THE SAME, FOR A DEMOTED LEXICAL -- spelled from its name, for the
