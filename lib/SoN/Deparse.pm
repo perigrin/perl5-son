@@ -4184,6 +4184,11 @@ class SoN::Deparse 0.01 {
         # whose subject is the copied value: rendering the count separately
         # emitted `("abca" =~ tr[a][z])`, which does not compile -- and over
         # `$a[0]` it re-ran after the store and counted 0.
+        #
+        # BOTH TEMPORARIES ARE DECLARED AT THE TOP, through %hoisted. The tr///
+        # can sit in a short-circuit arm while the count is read outside it:
+        # `my $n = $k && ($x =~ tr/a/b/)` declared `my $substN` inside the
+        # arm, and the `&&` after it named an undeclared variable.
         if ( $counted && $op eq 'Transliterate' && $subj
             && ( $subj->{op} // '' ) ne 'PadAccess' ) {
             my $f = $n->{fields} // {};
@@ -4192,7 +4197,8 @@ class SoN::Deparse 0.01 {
             my $var = sprintf( '$subst%d', $n->{id} );
             $bound{ $n->{id} }           = $tmp;
             $subst_count_var{ $n->{id} } = $var;
-            return sprintf( "my %s = ((my %s = %s) =~ tr[%s][%s]%s);\n",
+            $hoisted{$_} //= $_ for $var, $tmp;
+            return sprintf( "%s = ((%s = %s) =~ tr[%s][%s]%s);\n",
                 $var, $tmp, $self->_expr( $n->{inputs}[0] ),
                 $f->{from} // '', $f->{to} // '', $flags );
         }

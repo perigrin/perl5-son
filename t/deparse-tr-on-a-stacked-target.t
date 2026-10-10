@@ -88,6 +88,12 @@ my @cases = (
       q{tr///r on a lexical, returned from a sub} ],
     [ q{my $x="abc"; print $x =~ tr/a-c//, "\n";},
       q{the count of tr/// in a list} ],
+    [ q{our $x="aa"; my $k=1; my $n = $k && ($x =~ tr/a/b/); print "$n $x\n";},
+      q{the count of tr/// on a package scalar, in a short-circuit arm} ],
+    [ q{our $x="aa"; my $k=0; print $k || ($x =~ tr/a/b/), " $x\n";},
+      q{the count of tr/// on a package scalar, in a printed short-circuit} ],
+    [ q{my %h=(k=>"aa"); my $k=1; my $n = $k && ($h{k} =~ tr/a/b/); print "$n $h{k}\n";},
+      q{the count of tr/// on a hash element, in a short-circuit arm} ],
 );
 
 round_trips(@$_) for @cases;
