@@ -7422,7 +7422,9 @@ class SoN::FromOptree 0.01 {
                 $entry_lvalue = $old;
                 $targ = undef;   # the storage is the stash entry, not a pad
                 my $skey = _stash_key($entry_lvalue);
-                my $carried = grep { $_ eq $skey } @LOOP_PHI_KEYS;
+                # A FOREACH ALIAS IS THE SAME CLAIM: `for (@a) { ++$_ }` read
+                # the global `$main::_` and stored 1 + undef into each element.
+                my $carried = grep { $_ eq $skey } @LOOP_PHI_KEYS, @ALIAS_BOUND_KEYS;
                 my $bound = $carried ? $sim->lookup($skey) : undef;
                 if (defined $bound) {
                     $old = $bound;
@@ -9391,6 +9393,17 @@ class SoN::FromOptree 0.01 {
                     && $op->can('first') && ${$op->first}
                     && ($op->first->flags & 32)) {   # OPf_MOD
                     $pkg_lvalue = $inputs[0];
+                    # AN ALIASED TARGET READS ITS ELEMENT. The lvalue occurrence
+                    # is a name token, so for a foreach's implicit `$_` the
+                    # arithmetic read the GLOBAL `$main::_` -- measured,
+                    # `for (@a) { $_ *= 2 }` emitted `$a[$i] = $main::_ * 2`
+                    # and printed 0 0 for perl's 6 8. The alias binding is the
+                    # element, so the read is that binding; the store is
+                    # unchanged.
+                    my $key   = _stash_key($pkg_lvalue);
+                    my $bound = $sim->lookup($key);
+                    $inputs[0] = $bound
+                        if defined $bound && grep { $_ eq $key } @ALIAS_BOUND_KEYS;
                 }
 
                 # Element compound assignment (`$a[0] += 5`): the FIRST operand
