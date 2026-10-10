@@ -2897,7 +2897,14 @@ class SoN::Deparse 0.01 {
                 local $in_eval_body = 1;
                 $self->_emit_from($entry, $next_of, $region->{id});
             };
-            my $val  = $phi ? $self->_expr(($phi->{inputs} // [])->[0]) : '';
+            # A VALUE THAT IS THE BODY'S LAST EFFECT is already the body's
+            # last statement, and an eval yields its last statement's value.
+            # Rendered again as an expression it ran twice:
+            # `eval { push @a, 1 }` pushed two elements.
+            my $vid  = $phi ? ($phi->{inputs} // [])->[0] : undef;
+            my $val  = !$phi ? ''
+                     : (defined $vid && $vid == $eff->{id}) ? ''
+                     : $self->_expr($vid);
             $inner = length $val
                 ? sprintf("eval {\n%s%s}", _indent($body), _indent("$val;\n"))
                 : sprintf("eval {\n%s}", _indent($body));

@@ -5484,8 +5484,14 @@ class SoN::FromOptree 0.01 {
             # A SUB'S RETURN VALUE IS THE SAME READ, with its context left to
             # the caller: `return @p` compiles want=0, so it skipped this and
             # returned the literal -- `my @p=(); push @p,"a"; return @p` gave ().
+            #
+            # NOT OVER A BARE PadAccess. That binding is the live container
+            # already, and PostfixDeref over it dereferenced an array:
+            # `my @c; fill(\@c); return @c` died "Can't use an array as a
+            # reference".
             if ($name eq 'padav' && $existing && ($want == 3 || $want == 0)
                     && !$ref_or_mod && !$is_lvintro
+                    && !$existing->isa('SoN::IR::Node::PadAccess')
                     && ($ctx->{mutated_aggregate}{$targ}
                         || $MUTATED_LITERALS{ $existing->id // '' })) {
                 die "GAP: a list-context read of an array mutated in place"
@@ -5542,12 +5548,7 @@ class SoN::FromOptree 0.01 {
                 $consumer && $$consumer && $consumer->name eq 'aassign';
             # A BARE `my @a;` IN A LOOP BODY is a fresh, empty aggregate each
             # iteration -- pinned, as the list-assign form is.
-            #
-            # AND IN STRAIGHT-LINE CODE, which is the same `my @a = ()`. Left
-            # an unstamped PadAccess there, a push into it was no aggregate
-            # mutation, so `my @a; push @a,1,2; my @b=@a` copied it before
-            # the push and counted 0 where perl counts 2.
-            if ($is_lvintro && !$is_assign_target) {
+            if ($is_lvintro && !$is_assign_target && @LOOP_STACK) {
                 my $slot = _make_pad_or_field($cv, $targ, $factory);
                 if ($slot->isa('SoN::IR::Node::PadAccess')) {
                     my $sigil = $slot->sigil;
@@ -8702,7 +8703,17 @@ class SoN::FromOptree 0.01 {
                     # once above the loop, every iteration saw the last one's
                     # writes (`my @a=(5); $a[0]+=$i` gave 6;8;11 for 6;7;8).
                     # Pinned, it is an allocation at this point on the chain.
-                    if ($is_pad && @LOOP_STACK && _aassign_introduces($op)) {
+                    #
+                    # AND A COPY OF AN UNBOUND PAD AGGREGATE IS A READ AT THIS
+                    # POINT. `my @a; push @a,1,2; my @b=@a` reads @a as a bare
+                    # PadAccess, which a push on the chain writes; floating,
+                    # the copy was emitted before the push and counted 0.
+                    my $copies_container = grep {
+                        $_->isa('SoN::IR::Node::PadAccess')
+                            && ($_->sigil // '') =~ /\A[\@%]\z/
+                    } $rhs->@*;
+                    if ($is_pad && _aassign_introduces($op)
+                            && (@LOOP_STACK || $copies_container)) {
                         $node->set_control_in($sim->control);
                         $sim->set_control($node);
                     }
