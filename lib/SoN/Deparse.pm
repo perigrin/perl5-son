@@ -1604,6 +1604,46 @@ class SoN::Deparse 0.01 {
             push $after_effect{ $version->{id} }->@*, $n;
         }
 
+        # A READ THROUGH A SCALAR REFERENCE GOES STALE THE SAME WAY. `my $a =
+        # $$r; $$r += 1; print $a` printed 2 for perl's 1: the PostfixDeref
+        # carries the memory version it read at, and the emission spelled it
+        # `$$r` at the print, after the store. Only a read at a version on the
+        # chain is bound; one at the entry version is left as it was.
+        #
+        # ANY CONSUMER BUT A USER SUB IS SAFE: the producer pins only a deref
+        # perl compiled as an rvalue (no OPf_MOD), so nothing writes through
+        # it -- except a callee aliasing it through @_.
+        for my $n ( sort { $a->{id} <=> $b->{id} } $self->_nodes_in_order ) {
+            next unless ( $n->{op} // '' ) eq 'PostfixDeref';
+            next unless ( ( $n->{fields} // {} )->{sigil} // '' ) eq '$';
+            next if exists $bound{ $n->{id} };
+            next if grep {
+                ( $_->{op} // '' ) eq 'Call'
+                    && ( ( $_->{fields} // {} )->{dispatch_kind} // '' ) ne 'builtin'
+            } ( $consumers{ $n->{id} } // [] )->@*;
+            next if $under_loop{ $n->{id} };
+            my @in = ( $n->{inputs} // [] )->@*;
+            next unless @in == 2;
+            my $version = $nodes->{ $in[-1] } or next;
+            next unless defined $version->{control_in};
+
+            my ( @queue, %seen, $shadowed ) = ( $version->{id} );
+            while ( @queue && !$shadowed ) {
+                my $id = shift @queue;
+                next if $seen{$id}++;
+                for my $c ( ( $ctrl_next{$id} // [] )->@* ) {
+                    $shadowed = 1 if ( $c->{op} // '' )
+                        =~ /\A(?:Assign|EntryWrite|CellWrite|Delete|Call)\z/;
+                    push @queue, $c->{id};
+                }
+            }
+            next unless $shadowed;
+
+            $bound{ $n->{id} } = sprintf( '$stale%d', $n->{id} );
+            $hoisted{ $bound{ $n->{id} } } //= $bound{ $n->{id} };
+            push $after_effect{ $version->{id} }->@*, $n;
+        }
+
         # DECLARED AT THE TOP, ASSIGNED AT THE VERSION. The assignment has to
         # land where the value is still correct, and that position can be inside
         # a nested block -- an `eval { }` body, a branch arm -- while the READ is
@@ -1750,7 +1790,14 @@ class SoN::Deparse 0.01 {
             }
 
             if (defined(my $store = $self->_latest_store_read($n))) {
-                push $after_effect{$store}->@*, $n;
+                # AHEAD OF THE READS ALREADY ANCHORED HERE, as above: a stale
+                # read through `${$rs[0]}` placed at the same store read
+                # `$rs[0]` above the `my @rs` it names.
+                my $list = $after_effect{$store} //= [];
+                my $at = 0;
+                $at++ while $at < @$list
+                    && ( $list->[$at]{op} // '' ) =~ /\A(?:Array|Hash)Literal\z/;
+                splice @$list, $at, 0, $n;
                 next;
             }
 
@@ -3553,9 +3600,10 @@ class SoN::Deparse 0.01 {
             return $self->_expr_uncached( $n->{id} ) . ";\n";
         }
 
-        # A DEFERRED STALE ELEMENT READ -- see the stale-read pass. Spelled
-        # uncached: _expr would return the temporary's own name.
-        if ($op eq 'Subscript' && exists $bound{ $n->{id} }) {
+        # A DEFERRED STALE ELEMENT READ, OR A READ THROUGH A SCALAR REFERENCE
+        # -- see the stale-read pass. Spelled uncached: _expr would return the
+        # temporary's own name.
+        if (($op eq 'Subscript' || $op eq 'PostfixDeref') && exists $bound{ $n->{id} }) {
             my $var  = $bound{ $n->{id} };
             my $text = $self->_expr_uncached( $n->{id} );
             return sprintf( "%s%s = %s;\n",

@@ -5964,8 +5964,14 @@ class SoN::FromOptree 0.01 {
             # memory and every read of it carries a memory version. A write
             # through $r is a store to that same location, which is what makes
             # it visible to later reads of $v -- and to any alias of $r.
+            #
+            # A READ (no OPf_MOD) IS A LOAD, and a load names the memory it
+            # reads. Unpinned, `my $a = $$r; $$r += 1` let the read float past
+            # the store, and $a came out 2 where perl gives 1. The lvalue stays
+            # 1-input: the store arms recognise the location by that shape.
+            my $is_read = !($op->flags & 32) && defined $sim->memory; # OPf_MOD
             my $node = $factory->make('PostfixDeref',
-                inputs => [$ref],
+                inputs => [$ref, ($is_read ? ($sim->memory) : ())],
                 sigil  => '$',
                 stamp  => SoN::IR::Stamp->new(type => 'Scalar'));
             $sim->push_node($node);

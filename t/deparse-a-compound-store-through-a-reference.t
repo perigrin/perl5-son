@@ -66,6 +66,25 @@ round_trips('my $v=1; my $r = \$v; my $w = ++$$r; my $u = $$r--; print "$v $w $u
 round_trips('sub f { my $r = shift; $$r++ for 1..3; return } my $v=2; f(\$v); print "$v\n";',
     'an increment through a ref argument in a loop');
 
+# A read through the ref BEFORE the store keeps the old value: the store
+# must not float above it, nor the read below it.
+round_trips(q{my $v=1; my $r=\$v; my $a = $$r; $$r += 1; print "$a\n";},
+    q{a plain read before +=});
+round_trips(q{my $v=1; my $r=\$v; my $a = $$r; $$r++; print "$a\n";},
+    q{a plain read before ++});
+round_trips(q{sub f { my $r = shift; my $old = $$r; $$r += 10; return $old } my $v=1; print f(\$v), "\n";},
+    q{save the old value, += through a ref argument, return it});
+round_trips(q{sub f { my $r = shift; my $old = $$r; $$r++; return $old } my $v=1; print f(\$v), "\n";},
+    q{save the old value, ++ through a ref argument, return it});
+round_trips(q{my $v=1; my $r=\$v; my $a = $$r + 0; $$r *= 5; print "$a\n";},
+    q{a read inside an expression before *=});
+round_trips(q{my $v=1; my $r=\$v; my @s = ($$r); $$r += 1; print "@s\n";},
+    q{a list-context read before +=});
+round_trips(q{my $v=3; my $r=\$v; my $s = "$$r"; $$r -= 1; print "$s\n";},
+    q{an interpolated read before -=});
+round_trips(q{my $v=1; my $r=\$v; my $a = $$r; my $b = $$r++; print "$a $b\n";},
+    q{a plain read before a postinc in value context});
+
 # `.=` and `||=` through a ref are separate shapes (multiconcat, a
 # short-circuit over sassign); they refuse rather than drop the store.
 sub refuses ($src, $why, $name) {
