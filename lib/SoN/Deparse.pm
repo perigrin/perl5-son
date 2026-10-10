@@ -105,9 +105,9 @@ class SoN::Deparse 0.01 {
     # _is_memory's answer per node. Per-sub, since node ids are.
     field %mem_cache;
 
-    # True while emitting a block eval's body, so the walk does not re-claim
-    # the eval whose entry it starts from. See _emit_eval.
-    our $in_eval_body = 0;
+    # The block evals whose bodies are being emitted, by join id, so the walk
+    # does not re-claim the eval whose entry it starts from. See _emit_eval.
+    our %eval_claimed;
 
     # NODES THAT CARRY A TRAILING MEMORY EDGE, and the number of real operands
     # that precede it. A node of this kind with MORE inputs than its operand
@@ -1901,6 +1901,26 @@ class SoN::Deparse 0.01 {
             my $n = $succ->[0];
             last if defined $stop && $n->{id} == $stop;
 
+            # CLAIMED AT THE ENTRY, NOT AT THE JOIN. A block eval's body is
+            # ordinary chain between the two, so by the time the walk ARRIVES
+            # at the Region those statements are already emitted -- measured,
+            # they appeared both before the `eval {` and inside it, and a
+            # `die` among them escaped.
+            #
+            # So the eval is recognised when the walk is standing ON its
+            # entry: the whole construct is emitted, and the walk resumes at
+            # the join. A string eval has no entry and is still claimed at its
+            # Region, where its one-node body needs no delimiting.
+            #
+            # AHEAD OF THE If DIAMOND: a body that begins with a branch has the
+            # If as the entry's successor, and claiming the If first emitted
+            # it -- a guarded die included -- outside the eval as well.
+            if ((my $join = $self->_eval_join_entered_at($cur, $next_of))) {
+                $out .= $self->_emit_eval($join, $cur, $next_of);
+                $cur = $join->{id};
+                next;
+            }
+
             # AN `If` IS A DIAMOND, not a statement in the chain. Emit it whole
             # -- both arms and the join -- and resume at the Region, which is
             # where the two arms' control converges.
@@ -1933,22 +1953,6 @@ class SoN::Deparse 0.01 {
             # Discharged by placement like every other join: the effect is
             # wrapped in `eval { }` and the Region needs no spelling, because
             # the closing brace IS the merge. Emission resumes after it.
-            # CLAIMED AT THE ENTRY, NOT AT THE JOIN. A block eval's body is
-            # ordinary chain between the two, so by the time the walk ARRIVES
-            # at the Region those statements are already emitted -- measured,
-            # they appeared both before the `eval {` and inside it, and a
-            # `die` among them escaped.
-            #
-            # So the eval is recognised when the walk is standing ON its
-            # entry: the whole construct is emitted, and the walk resumes at
-            # the join. A string eval has no entry and is still claimed at its
-            # Region, where its one-node body needs no delimiting.
-            if (!$in_eval_body
-                    && (my $join = $self->_eval_join_entered_at($cur, $next_of))) {
-                $out .= $self->_emit_eval($join, $cur, $next_of);
-                $cur = $join->{id};
-                next;
-            }
 
             if ($n->{op} eq 'Region' && $self->_is_eval_join($n)) {
                 $out .= $self->_emit_eval($n, $cur, $next_of);
@@ -2787,13 +2791,22 @@ class SoN::Deparse 0.01 {
     # construct in one piece instead of running into the body first.
     method _eval_join_entered_at ($id, $next_of) {
         return undef unless defined $id;
+        # NESTED EVALS THAT BEGIN TOGETHER SHARE AN ENTRY: in
+        # `eval { my $o = eval { ... }; ... }` both Regions name the same
+        # control node. The outer one is claimed first -- its body walk then
+        # starts at the same entry and claims the inner. The producer builds
+        # an inner join before the outer, so the outermost unclaimed join is
+        # the one with the highest id.
+        my $found;
         for my $n ($self->_nodes_in_order) {
             next unless ($n->{op} // '') eq 'Region';
+            next if $eval_claimed{ $n->{id} };
             my $entry = ($n->{fields} // {})->{eval_entry};
             next unless defined $entry && $entry == $id;
-            return $n if $self->_is_eval_join($n);
+            $found = $n if $self->_is_eval_join($n)
+                && (!$found || $n->{id} > $found->{id});
         }
-        return undef;
+        return $found;
     }
 
     method _is_eval_join ($n) {
@@ -2894,7 +2907,7 @@ class SoN::Deparse 0.01 {
             # construct, so without it _emit_from recognises the same eval
             # again and recurses forever.
             my $body = do {
-                local $in_eval_body = 1;
+                local $eval_claimed{ $region->{id} } = 1;
                 $self->_emit_from($entry, $next_of, $region->{id});
             };
             my $val  = $phi ? $self->_expr(($phi->{inputs} // [])->[0]) : '';
