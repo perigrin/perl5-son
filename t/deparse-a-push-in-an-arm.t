@@ -64,4 +64,25 @@ round_trips('my @a=(1,2); my $c=1; my $r = $c ? \@a : 0; push @$r, 4; print "@a\
 round_trips('my @a=(1,2); for my $i (1..2) { push @a, $i } print "@a\n";',
     'a push in a loop body');
 
+# A WHOLE-ARRAY REASSIGN AFTER THE PUSH. The graph holds two values named @a,
+# the array as built and the one the reassign builds, and the read names the
+# second. Spelled with one name, the reassign was hoisted above the push and
+# the push landed on the new array.
+round_trips(q{my @a=(1,2); my $c=1; if ($c) { push @a, 3 } @a = (); print "[@a]\n";},
+    q{a push in an if block, then the array cleared});
+round_trips(q{my @a=(1,2); my $c=1; $c ? push(@a,3) : 0; @a = (); print "[@a]\n";},
+    q{a push in a ternary arm, then the array cleared});
+round_trips(q{my @a=(1,2); for my $i (1..2) { push @a, $i } @a = (); print "[@a]\n";},
+    q{a push in a loop body, then the array cleared});
+round_trips(q{my @a=(1,2); my $c=1; if ($c) { push @a, 3 } @a = (7,8); print "@a\n";},
+    q{a push in an if block, then the array reassigned});
+round_trips(q{my @a=(1,2); my $c=1; if ($c) { push @a, 3 } my @b=@a; @a=(7,8); print "@b|@a\n";},
+    q{a copy taken before the reassign keeps the pushed element});
+round_trips(q{my @a=(1,2); for my $i (1..2) { push @a, $i } @a = (7); print "@a\n";},
+    q{a push in a loop body, then the array reassigned});
+round_trips(q{my @a=(1,2); push @a,3; @a = (7,8); push @a, 9; print "[@a]\n";},
+    q{a push on each side of a reassign});
+round_trips(q{my %h=(a=>1); $h{b}=2; %h=(); print join(",", sort keys %h), "\n";},
+    q{a hash store, then the hash cleared});
+
 done_testing;

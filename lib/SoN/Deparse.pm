@@ -1167,6 +1167,8 @@ class SoN::Deparse 0.01 {
             push $next_of{$_}->@*, $n for (($n->{inputs} // [])->@*);
         }
 
+        $self->_split_rebound_aggregates;
+
         my ($start) = grep { $_->{op} eq 'Start' } $self->_nodes_in_order;
         die "no Start node\n" unless $start;
 
@@ -2698,6 +2700,34 @@ class SoN::Deparse 0.01 {
     method _agg_is_package ($n) {
         my $sym = ($n->{fields} // {})->{symbol} // '';
         return $sym =~ /::/ ? 1 : 0;
+    }
+
+    # TWO VALUES OF ONE LEXICAL AGGREGATE GET TWO NAMES. `@a = (7,8)` after
+    # `my @a = (1,2)` is a second ArrayLiteral named @a, an independent value
+    # in the graph; the declarations float to the prologue, so one spelling
+    # put the reassign above a push on the first value:
+    #
+    #     my @a=(1,2); push @a,3; @a=(); print "[@a]"     perl: []
+    #     my @a = (1, 2); my @a = (); push(@a, 3); ...     emitted: [3]
+    #
+    # Renamed only when two of them are read: an unread one is never emitted.
+    # A package, cell or pinned aggregate is one variable, and keeps its name.
+    method _split_rebound_aggregates () {
+        my %read;
+        $read{$_}++ for map { ($_->{inputs} // [])->@* } $self->_nodes_in_order;
+        my %by_name;
+        for my $n (sort { $a->{id} <=> $b->{id} } $self->_nodes_in_order) {
+            next unless ($n->{op} // '') =~ /\A(?:Array|Hash)Literal\z/ && $read{ $n->{id} };
+            my $vn = $self->_agg_name($n) // next;
+            next if $self->_agg_is_package($n) || $cell_slots{$vn}
+                 || $self->_is_pinned_aggregate($n);
+            push $by_name{$vn}->@*, $n;
+        }
+        for my $group (values %by_name) {
+            my (undef, @rest) = @$group;
+            $_->{fields} = { $_->{fields}->%*, symbol => "$_->{fields}{symbol}_$_->{id}" }
+                for @rest;
+        }
     }
 
     # _loop_join($loop_id) -- the Region that joins a Loop's exit, or undef.
