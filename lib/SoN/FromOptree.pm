@@ -4443,8 +4443,15 @@ class SoN::FromOptree 0.01 {
         my $through_ref = $arylen_kid && $$arylen_kid
             && $arylen_kid->name eq 'rv2av'
             && _deref_operand($arylen_kid)->name ne 'gv';
+        # THE OPERAND IS AN ARRAY BY THE OPTREE, NOT BY ITS STAMP. The slurpy of
+        # a mixed destructure (`my ($k, @x) = @_`) reaches here as a PadAccess
+        # whose stamp is still Unknown -- the producer leaves pad slots unstamped
+        # for backward inference -- so the stamp test declined and the op table
+        # rendered `length(@x)`: 1 for g(1,2,3) where perl says 1, by accident,
+        # and 1 for g(1..5) where perl says 3. A padav kid is an array.
+        my $padav_kid = $arylen_kid && $$arylen_kid && $arylen_kid->name eq 'padav';
         if ($name eq 'av2arylen' && $sim->stack_depth > 0
-                && ($through_ref || _is_aggregate_node($sim->peek_node))) {
+                && ($through_ref || $padav_kid || _is_aggregate_node($sim->peek_node))) {
             my $agg = $sim->pop_node;
             $agg = _deref_read($factory, $sim, $agg, '@')
                 if $through_ref && !_is_aggregate_node($agg);
