@@ -3139,6 +3139,49 @@ class SoN::FromOptree 0.01 {
         return undef;
     }
 
+    # _merged_aggregate_return($factory, $value) -> ($list, $scalar) or ($value)
+    #
+    # A RETURNED MERGE WITH AN AGGREGATE ARM HAS TWO READINGS, as a list
+    # return does. `sub f { wantarray ? @a : [] }` merges @a and a reference
+    # through a Phi (the allocation gives the ternary its branch), and the
+    # arm's context is the CALLER'S: @a's elements to a list caller, its
+    # count to a scalar one. One Phi carries one reading, and rendered as a
+    # scalar it gave `my @x = f()` one element where perl gives two.
+    #
+    # So, per arm: the list reading is the aggregate as a List (the reference
+    # arm stays itself), and the scalar reading is its Count. Both Phis share
+    # the merge's region and predecessors, and the Return carries the scalar
+    # one as inputs[1] -- the contract _build_single_exit already keeps.
+    sub _merged_aggregate_return ($factory, $value) {
+        return ($value) unless defined $value && blessed($value)
+            && $value->operation eq 'Phi';
+        my $is_agg = sub ($v) {
+            return false unless defined $v && blessed($v);
+            my $st = $v->stamp;
+            return true if $st && ($st->type eq 'Array' || $st->type eq 'Hash');
+            return ($v->can('sigil') && ($v->sigil // '') =~ /\A[\@%]\z/)
+                ? true : false;
+        };
+        my @in = $value->inputs->@*;
+        return ($value) unless grep { $is_agg->($_) } @in;
+        my $phi = sub (@vals) {
+            $factory->make('Phi', inputs => [@vals], region => $value->region,
+                (defined $value->predecessors
+                    ? (predecessors => $value->predecessors) : ()));
+        };
+        my $list = $phi->(map {
+            $is_agg->($_)
+                ? $factory->make('ArrayLiteral', inputs => [$_],
+                      stamp => SoN::IR::Stamp->new(type => 'List'))
+                : $_ } @in);
+        my $scalar = $phi->(map {
+            $is_agg->($_) ? _make_count($factory, $_, undef) : $_ } @in);
+        # The single-reading Phi is replaced, not kept: graph membership
+        # walks consumers, so left registered it rode into the graph dead.
+        $_->remove_consumer($value) for grep { defined } @in, $value->region;
+        return ($list, $scalar);
+    }
+
     sub _exit_record ($sim, $factory, $kind, $exit_op = undef, $is_program = 0) {
         my $value;
         # The scalar reading of a multi-value return, when there is one. It
@@ -3228,6 +3271,7 @@ class SoN::FromOptree 0.01 {
             }
             else {
                 $value = $args->@* ? $args->[-1] : undef;
+                ($value, $scalar_value) = _merged_aggregate_return($factory, $value);
             }
         }
         elsif ($sim->stack_depth > 0) {
@@ -3247,7 +3291,8 @@ class SoN::FromOptree 0.01 {
                     _list_return_value($factory, \@vals, $exit_op);
             }
             else {
-                $value = $sim->pop_node;
+                ($value, $scalar_value) =
+                    _merged_aggregate_return($factory, $sim->pop_node);
             }
         }
         $value //= $factory->make('Constant',
