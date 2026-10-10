@@ -1529,6 +1529,80 @@ class SoN::Deparse 0.01 {
             push $after_effect{ $version->{id} }->@*, $n;
         }
 
+        # AN ELEMENT READ IN A LOOP, SPELLED AFTER A STORE, IS REFUSED. The
+        # pass below leaves reads under a loop alone (binding one to a single
+        # temporary froze a `while` condition), so a read at the iteration's
+        # starting version -- MemStart, or the loop's memory Phi -- is spelled
+        # wherever its value is used. When the body stores into the same
+        # aggregate and the value is used after that store, the spelling reads
+        # the stored element. Measured on
+        #   my @a=(3,4); my $s=0; for (@a) { $_ *= 2; $s += $_ }
+        # perl's sum is 14; the back edge spelled `$phi + ($a[$i] * 2)` after
+        # `$a[$i] = ($a[$i] * 2)` and summed 28. A read the store alone
+        # consumes (`$a[$i] = $a[$i] + 1`) is spelled before it and is fine.
+        # ponytail: refusal, not a binding; a per-iteration temporary at the
+        # top of the body is the fix once the condition reads are excluded.
+        for my $loop ( grep { ( $_->{op} // '' ) eq 'Loop' } $self->_nodes_in_order ) {
+            my ($body) = grep {
+                ( $_->{op} // '' ) eq 'Proj'
+                    && ( ( $_->{fields} // {} )->{index} // -1 ) == 0
+                    && ( ( $_->{inputs} // [] )->[0] // -1 ) == $loop->{id}
+            } $self->_nodes_in_order;
+            next unless $body;
+            my ( @queue, %seen, @stores ) = ( $body->{id} );
+            while ( @queue ) {
+                my $id = shift @queue;
+                next if $seen{$id}++;
+                for my $c ( ( $ctrl_next{$id} // [] )->@* ) {
+                    push @stores, $c if ( $c->{op} // '' ) eq 'Assign';
+                    push @queue, $c->{id};
+                }
+            }
+            for my $n ( $self->_nodes_in_order ) {
+                next unless ( $n->{op} // '' ) eq 'Subscript';
+                my @in = ( $n->{inputs} // [] )->@*;
+                next unless @in > ( $MEM_MIN_INPUTS{Subscript} // 99 );
+                my $v = $nodes->{ $in[-1] } or next;
+                next unless ( $v->{op} // '' ) eq 'MemStart'
+                    || ( ( $v->{op} // '' ) eq 'Phi'
+                         && ( ( $v->{fields} // {} )->{region} // -1 ) == $loop->{id} );
+                my @same = grep {
+                    my $t = $nodes->{ ( $_->{inputs} // [] )->[0] // -1 } // {};
+                    ( $t->{op} // '' ) eq 'Subscript'
+                        && ( ( $t->{inputs} // [] )->[0] // -1 ) == $in[0]
+                } @stores;
+                next unless @same;
+
+                # Where the value lands: a loop Phi (the back edge, evaluated
+                # last) or a chain statement. Pure nodes in between are walked.
+                my ( @vq, %vseen, @roots ) = ( $n->{id} );
+                my $carried;
+                while ( @vq ) {
+                    my $id = shift @vq;
+                    next if $vseen{$id}++;
+                    for my $c ( ( $consumers{$id} // [] )->@* ) {
+                        if ( ( $c->{op} // '' ) eq 'Phi' ) {
+                            $carried = 1 if ( ( $c->{fields} // {} )->{region} // -1 )
+                                == $loop->{id};
+                        }
+                        elsif ( defined $c->{control_in} ) { push @roots, $c->{id} }
+                        else                               { push @vq, $c->{id} }
+                    }
+                }
+                for my $s ( @same ) {
+                    my ( @aq, %after ) = ( map { $_->{id} } ( $ctrl_next{ $s->{id} } // [] )->@* );
+                    while ( @aq ) {
+                        my $id = shift @aq;
+                        next if $after{$id}++;
+                        push @aq, map { $_->{id} } ( $ctrl_next{$id} // [] )->@*;
+                    }
+                    die "GAP: an element read in a loop is spelled after a store"
+                      . " to its aggregate in the same iteration\n"
+                        if $carried || grep { $after{$_} } @roots;
+                }
+            }
+        }
+
         # AN ELEMENT READ GOES STALE THE SAME WAY. `my $z = $a[0]; $a[0] = 1;
         # print $z` printed 1 for perl's 4: the Subscript carries the memory
         # version it read at, and the emission spelled it `$a[0]` at the
