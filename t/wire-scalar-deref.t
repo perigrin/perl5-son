@@ -42,8 +42,13 @@ subtest 'a scalar deref through a lexical ref lowers' => sub {
     my ($d) = grep { ( $_->{op} // '' ) eq 'PostfixDeref' } $ns->@*;
     ok $d, 'a PostfixDeref exists' or return;
     is $d->{fields}{sigil}, '$', 'and it carries the scalar sigil';
-    is scalar( ( $d->{inputs} // [] )->@* ), 1,
-        '... over exactly one operand, the reference';
+    # A READ IS A LOAD: the reference, then the memory version it reads at,
+    # so a later store through the same ref cannot float above it.
+    my @in = ( $d->{inputs} // [] )->@*;
+    is scalar(@in), 2, '... over the reference and the memory it reads';
+    my %by_id = map { $_->{id} => $_ } $ns->@*;
+    is $by_id{ $in[0] }{op}, 'Ref', '... the reference first';
+    is $by_id{ $in[1] }{op}, 'Assign', '... then the store it observes';
 };
 
 # THE lex.t IDIOM. `${\ EXPR }` takes a ref to a temporary and immediately

@@ -1724,6 +1724,65 @@ class SoN::Deparse 0.01 {
             push $after_effect{ $version->{id} }->@*, $n;
         }
 
+        # A READ THROUGH A SCALAR REFERENCE GOES STALE THE SAME WAY. `my $a =
+        # $$r; $$r += 1; print $a` printed 2 for perl's 1: the PostfixDeref
+        # carries the memory version it read at, and the emission spelled it
+        # `$$r` at the print, after the store. Only a read at a version on the
+        # chain is bound; one at the entry version is left as it was.
+        #
+        # ANY CONSUMER BUT A USER SUB IS SAFE: the producer pins only a deref
+        # perl compiled as an rvalue (no OPf_MOD), so nothing writes through
+        # it -- except a callee aliasing it through @_.
+        for my $n ( sort { $a->{id} <=> $b->{id} } $self->_nodes_in_order ) {
+            next unless ( $n->{op} // '' ) eq 'PostfixDeref';
+            next unless ( ( $n->{fields} // {} )->{sigil} // '' ) eq '$';
+            next if exists $bound{ $n->{id} };
+            next if grep {
+                ( $_->{op} // '' ) eq 'Call'
+                    && ( ( $_->{fields} // {} )->{dispatch_kind} // '' ) ne 'builtin'
+            } ( $consumers{ $n->{id} } // [] )->@*;
+            next if $under_loop{ $n->{id} };
+            # NOR A GUARDED ONE. Unlike an element read, a deref DIES on a
+            # non-reference under strict refs, so hoisting it out of `$r ?
+            # $$r : 'n'`, `ref $r && $$r` or `$a = $$r if $r` ran it on the
+            # path its guard exists to skip. Any route to a consumer through a
+            # conditional operand leaves it where it is.
+            my ( @uses, %used, $guarded ) = ( $n->{id} );
+            while ( @uses && !$guarded ) {
+                my $id = shift @uses;
+                next if $used{$id}++;
+                for my $c ( ( $consumers{$id} // [] )->@* ) {
+                    my $op = $c->{op} // '';
+                    my @at = grep { $c->{inputs}[$_] == $id } 0 .. $#{ $c->{inputs} };
+                    $guarded = 1 if $op eq 'Phi'
+                        || ( $op =~ /\A(?:TernaryExpr|And|Or|DefinedOr)\z/
+                             && grep { $_ > 0 } @at );
+                    push @uses, $c->{id};
+                }
+            }
+            next if $guarded;
+            my @in = ( $n->{inputs} // [] )->@*;
+            next unless @in == 2;
+            my $version = $nodes->{ $in[-1] } or next;
+            next unless defined $version->{control_in};
+
+            my ( @queue, %seen, $shadowed ) = ( $version->{id} );
+            while ( @queue && !$shadowed ) {
+                my $id = shift @queue;
+                next if $seen{$id}++;
+                for my $c ( ( $ctrl_next{$id} // [] )->@* ) {
+                    $shadowed = 1 if ( $c->{op} // '' )
+                        =~ /\A(?:Assign|EntryWrite|CellWrite|Delete|Call)\z/;
+                    push @queue, $c->{id};
+                }
+            }
+            next unless $shadowed;
+
+            $bound{ $n->{id} } = sprintf( '$stale%d', $n->{id} );
+            $hoisted{ $bound{ $n->{id} } } //= $bound{ $n->{id} };
+            push $after_effect{ $version->{id} }->@*, $n;
+        }
+
         # DECLARED AT THE TOP, ASSIGNED AT THE VERSION. The assignment has to
         # land where the value is still correct, and that position can be inside
         # a nested block -- an `eval { }` body, a branch arm -- while the READ is
@@ -1871,7 +1930,14 @@ class SoN::Deparse 0.01 {
             }
 
             if (defined(my $store = $self->_latest_store_read($n))) {
-                push $after_effect{$store}->@*, $n;
+                # AHEAD OF THE READS ALREADY ANCHORED HERE, as above: a stale
+                # read through `${$rs[0]}` placed at the same store read
+                # `$rs[0]` above the `my @rs` it names.
+                my $list = $after_effect{$store} //= [];
+                my $at = 0;
+                $at++ while $at < @$list
+                    && ( $list->[$at]{op} // '' ) =~ /\A(?:Array|Hash)Literal\z/;
+                splice @$list, $at, 0, $n;
                 next;
             }
 
@@ -3838,13 +3904,20 @@ class SoN::Deparse 0.01 {
             return $self->_expr_uncached( $n->{id} ) . ";\n";
         }
 
-        # A DEFERRED STALE ELEMENT READ -- see the stale-read pass. Spelled
-        # uncached: _expr would return the temporary's own name.
-        if ($op eq 'Subscript' && exists $bound{ $n->{id} }) {
+        # A DEFERRED STALE ELEMENT READ, OR A READ THROUGH A SCALAR REFERENCE
+        # -- see the stale-read pass. Spelled uncached: _expr would return the
+        # temporary's own name.
+        if (($op eq 'Subscript' || $op eq 'PostfixDeref') && exists $bound{ $n->{id} }) {
             my $var  = $bound{ $n->{id} };
             my $text = $self->_expr_uncached( $n->{id} );
+            # WHAT WAS ANCHORED TO THIS READ FOLLOWS IT. The read is itself
+            # deferred, off the chain, so the chain's flush never reaches its
+            # own list: `my @h = ($$r); $$r = 2` filed `my @h = ($stale8)`
+            # after node 8 and it was never emitted.
             return sprintf( "%s%s = %s;\n",
-                ( exists $hoisted{$var} ? '' : 'my ' ), $var, $text );
+                ( exists $hoisted{$var} ? '' : 'my ' ), $var, $text )
+                . join '', map { $self->_emit_statement($_, $next_of) }
+                    ( $after_effect{ $n->{id} } // [] )->@*;
         }
 
         # THE SAME, FOR A DEMOTED LEXICAL -- spelled from its name, for the

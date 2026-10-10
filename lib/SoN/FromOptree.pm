@@ -6219,8 +6219,14 @@ class SoN::FromOptree 0.01 {
             # memory and every read of it carries a memory version. A write
             # through $r is a store to that same location, which is what makes
             # it visible to later reads of $v -- and to any alias of $r.
+            #
+            # A READ (no OPf_MOD) IS A LOAD, and a load names the memory it
+            # reads. Unpinned, `my $a = $$r; $$r += 1` let the read float past
+            # the store, and $a came out 2 where perl gives 1. The lvalue stays
+            # 1-input: the store arms recognise the location by that shape.
+            my $is_read = !($op->flags & 32) && defined $sim->memory; # OPf_MOD
             my $node = $factory->make('PostfixDeref',
-                inputs => [$ref],
+                inputs => [$ref, ($is_read ? ($sim->memory) : ())],
                 sigil  => '$',
                 stamp  => SoN::IR::Stamp->new(type => 'Scalar'));
             $sim->push_node($node);
@@ -7619,6 +7625,21 @@ class SoN::FromOptree 0.01 {
                 # Transform::T2::run never narrowed), and `++$h{k}` added one
                 # twice. Pinned, it is bound before the store, as `$field++`'s
                 # read is.
+                $old->set_control_in($sim->control);
+                $sim->set_control($old);
+            }
+            # `$$r++` IS THE SAME SPLIT through a scalar deref: the 1-input
+            # PostfixDeref matched no arm, the Add reached no store, and `$v`
+            # kept its old value.
+            elsif ($old->isa('SoN::IR::Node::PostfixDeref')
+                && ($old->sigil // '') eq '$'
+                && scalar($old->inputs->@*) == 1) {
+                $lvalue = $old;
+                $old = $factory->make('PostfixDeref',
+                    inputs => [$lvalue->inputs->[0],
+                               (defined $sim->memory ? ($sim->memory) : ())],
+                    sigil  => '$',
+                    stamp  => SoN::IR::Stamp->new(type => 'Scalar'));
                 $old->set_control_in($sim->control);
                 $sim->set_control($old);
             }
@@ -9715,6 +9736,24 @@ class SoN::FromOptree 0.01 {
                         inputs => [$elem_lvalue->inputs->[0],
                                    $elem_lvalue->inputs->[1], $sim->memory]);
                 }
+                # A SCALAR DEREF IS THE SAME LOCATION SHAPE (`$$r += 2`): rv2sv
+                # pushed a 1-input PostfixDeref and nothing claimed it, so the
+                # Add was built and reached no store -- `print $v` emitted 1
+                # where perl prints 3. Store through it as sassign does, and
+                # read the pre-store value pinned to the current memory.
+                elsif (!$is_compound && !defined $pkg_lvalue
+                    && @inputs >= 1
+                    && $inputs[0]->isa('SoN::IR::Node::PostfixDeref')
+                    && ($inputs[0]->sigil // '') eq '$'
+                    && scalar($inputs[0]->inputs->@*) == 1
+                    && ($op->flags & 64)) { # OPf_STACKED
+                    $elem_lvalue = $inputs[0];
+                    $inputs[0] = $factory->make('PostfixDeref',
+                        inputs => [$elem_lvalue->inputs->[0],
+                                   (defined $sim->memory ? ($sim->memory) : ())],
+                        sigil  => '$',
+                        stamp  => SoN::IR::Stamp->new(type => 'Scalar'));
+                }
 
                 # A STACKED DESTINATION IS THE STORE, AND THERE IS NO
                 # sassign TO FIND IT. `my $s = <$fh>` compiles with the
@@ -10054,6 +10093,15 @@ class SoN::FromOptree 0.01 {
                     $store->set_control_in($sim->control);
                     $sim->set_control($store);
                     $sim->set_memory($store);
+                    # `$$r += 5` YIELDS `$$r`, the location after the store.
+                    # Pushing the Add gave it a second consumer, and the
+                    # emission spelled `$$r + 5` again after the store:
+                    # `my $w = ($$r += 5)` set $w to 11 where perl sets 6.
+                    $node = $factory->make('PostfixDeref',
+                        inputs => [$elem_lvalue->inputs->[0], $store],
+                        sigil  => '$',
+                        stamp  => SoN::IR::Stamp->new(type => 'Scalar'))
+                        if $elem_lvalue->isa('SoN::IR::Node::PostfixDeref');
                 }
                 elsif (defined $stacked_dest) {
                     # An SSA rebind, and NOTHING MORE -- exactly what sassign
