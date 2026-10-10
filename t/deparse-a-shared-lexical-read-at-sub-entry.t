@@ -122,9 +122,9 @@ round_trips('my $n=3; sub f { my $c = $n + 1; $n = 0; for (1..2) { $n += $c } $n
 refuses('my $n=3; sub f { my @r; my $c = $n; $n = 0; for (1..$c) { push @r, $n++ } "@r" } print f(), " $n\n";',
     'a store before the loop, its value used in the loop');
 # PAST THE LOOP'S EXIT a use is after every store in its body.
-refuses('my $n=3; sub f { my $c = $n; for (1..2) { $n++ } $c . $n } print f(), "\n";',
+round_trips('my $n=3; sub f { my $c = $n; for (1..2) { $n++ } $c . $n } print f(), "\n";',
     'a copy at entry used after a loop that stores');
-refuses('my $n=3; sub f { my $c = $n; for (1..2) { $n++ } $c } print f(), " $n\n";',
+round_trips('my $n=3; sub f { my $c = $n; for (1..2) { $n++ } $c } print f(), " $n\n";',
     'a copy at entry returned after a loop that stores');
 round_trips('my $n=3; sub f { my @a = (1) x $n; for (@a) { $n++ } scalar(@a) . $n } print f(), "\n";',
     'a declared array counted after a loop that stores');
@@ -263,9 +263,9 @@ round_trips('my $n=1; sub f { my $c = 0; my @a = (1) x $n; $n = 2; push @a, g();
 round_trips('our $n=1; sub f { my $x = $n; $n = 2; my @a = (1) x $x; scalar @a } print f(), f(), "\n";',
     'the package-scalar form');
 
-# A DECLARATION READING A READ BOUND AFTER A STORE cannot be placed after it,
-# so it is refused rather than dropped.
-refuses_dropped('our $n=1; sub f { $n = 3; my $x = $n; $n = 2; my @a = (1) x $x; scalar @a } print f(), f(), "\n";',
+# A DECLARATION READING A READ BOUND AFTER A STORE is filed behind that
+# binding in the store's after-list.
+round_trips('our $n=1; sub f { $n = 3; my $x = $n; $n = 2; my @a = (1) x $x; scalar @a } print f(), f(), "\n";',
     'a package read between two stores, used as a count');
 
 sub refuses_dropped ($src, $name) {

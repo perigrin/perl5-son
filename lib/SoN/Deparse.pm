@@ -1626,7 +1626,13 @@ class SoN::Deparse 0.01 {
             # of it: `$n = 0; for (...) { push @r, $n++ }` reads the `$n = 0`.
             my $version = $nodes->{ $in[0] } // {};
             my $at_entry = ( $version->{op} // '' ) eq 'MemStart';
-            next unless $at_entry
+            # OR AT THE LOOP'S OWN MEMORY Phi, once the loop carries memory:
+            # the pass's starting value, which the body's store overwrites
+            # before a later use spells it.
+            my $at_loop_phi = ( $version->{op} // '' ) eq 'Phi'
+                && ( ( $nodes->{ ( $version->{fields} // {} )->{region} // -1 } // {} )->{op} // '' )
+                    eq 'Loop';
+            next unless $at_entry || $at_loop_phi
                 || ( defined $version->{control_in} && !$in_body{ $in[0] } );
             # READ BEFORE A STORE THE LOOP FOLLOWS: not a read in the loop. A
             # shared lexical's is bound at entry below, as a read outside any
@@ -1676,8 +1682,10 @@ class SoN::Deparse 0.01 {
                             next if !defined $b || $walked{$b}++;
                             $after = 1 if $store{$b};
                             my $bn = $nodes->{$b} or next;
-                            # PAST A LOOP'S EXIT, after every store in its body.
-                            if ( ( $bn->{op} // '' ) eq 'Proj'
+                            # PAST A LOOP'S EXIT, after every store in its body
+                            # -- unless the read is at that loop's memory Phi,
+                            # which IS the carried value once the loop ends.
+                            if ( !$at_loop_phi && ( $bn->{op} // '' ) eq 'Proj'
                                 && ( ( $bn->{fields} // {} )->{index} // 0 ) == 1 ) {
                                 my $body = $body_of{ ( $bn->{inputs} // [] )->[0] // -1 } // {};
                                 $after = 1 if grep { $body->{$_} } keys %store;
@@ -2111,11 +2119,7 @@ class SoN::Deparse 0.01 {
                 # declaration: a stale element read placed at the same effect
                 # (`my @c = g(); my $z = $c[0]; $c[0] = 1`) read `$c[0]` above
                 # the `my @c` it names.
-                my $list = $after_effect{$defer} //= [];
-                my $at = 0;
-                $at++ while $at < @$list
-                    && ( $list->[$at]{op} // '' ) =~ /\A(?:Array|Hash)Literal\z/;
-                splice @$list, $at, 0, $n;
+                $self->_splice_declaration( $after_effect{$defer} //= [], $n );
                 next;
             }
 
@@ -2141,11 +2145,7 @@ class SoN::Deparse 0.01 {
                 # AHEAD OF THE READS ALREADY ANCHORED HERE, as above: a stale
                 # read through `${$rs[0]}` placed at the same store read
                 # `$rs[0]` above the `my @rs` it names.
-                my $list = $after_effect{$store} //= [];
-                my $at = 0;
-                $at++ while $at < @$list
-                    && ( $list->[$at]{op} // '' ) =~ /\A(?:Array|Hash)Literal\z/;
-                splice @$list, $at, 0, $n;
+                $self->_splice_declaration( $after_effect{$store} //= [], $n );
                 next;
             }
 
@@ -3037,8 +3037,11 @@ class SoN::Deparse 0.01 {
             # binding spliced behind it in that list, which is not done.
             if (exists $bound{$id} && !defined $m->{control_in}
                 && $bound{$id} =~ /\A\$(?:stale|saved)\d+\z/) {
-                die "GAP: a declaration reads a temporary bound after a store\n"
-                    if grep { grep { $_->{id} == $id } @$_ } values %after_effect;
+                # ONE PLACED AFTER A STORE anchors the reader to that store;
+                # _splice_declaration puts it behind the binding in the list.
+                my ($effect) = grep { grep { $_->{id} == $id } $after_effect{$_}->@* }
+                    keys %after_effect;
+                if (defined $effect) { $last = $effect; return }
                 $last //= $start_id;
                 return;
             }
@@ -3054,6 +3057,31 @@ class SoN::Deparse 0.01 {
         $visit->($_) for ($n->{inputs} // [])->@*;
         undef $visit;
         return $last;
+    }
+
+    # _splice_declaration(\@list, $decl) -- file a deferred aggregate
+    # declaration in an effect's after-list: ahead of the reads already
+    # anchored there (`my @c = g(); my $z = $c[0]; $c[0] = 1` read `$c[0]`
+    # above the `my @c` it names), but behind any binding the declaration
+    # itself reads (`my @h = ($$r); $$r = 2` declared `@h` over a stale
+    # temporary assigned after it).
+    method _splice_declaration ($list, $decl) {
+        my ( @queue, %reads ) = ( $decl->{inputs} // [] )->@*;
+        while (@queue) {
+            my $id = shift @queue;
+            next if !defined $id || $reads{$id}++;
+            my $m = $nodes->{$id} or next;
+            next if defined $m->{control_in}
+                || ( $m->{op} // '' ) =~ /\A(?:Phi|Region|Loop|Proj|If|Start)\z/;
+            push @queue, ( $m->{inputs} // [] )->@*;
+        }
+        my $at = 0;
+        $at++ while $at < @$list
+            && ( $list->[$at]{op} // '' ) =~ /\A(?:Array|Hash)Literal\z/;
+        for my $i ( 0 .. $#$list ) {
+            $at = $i + 1 if $reads{ $list->[$i]{id} } && $i + 1 > $at;
+        }
+        splice @$list, $at, 0, $decl;
     }
 
     # A named Array/HashLiteral on the control chain: an allocation at that
