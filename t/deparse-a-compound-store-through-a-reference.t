@@ -85,6 +85,16 @@ round_trips(q{my $v=3; my $r=\$v; my $s = "$$r"; $$r -= 1; print "$s\n";},
 round_trips(q{my $v=1; my $r=\$v; my $a = $$r; my $b = $$r++; print "$a $b\n";},
     q{a plain read before a postinc in value context});
 
+# A named aggregate holding a stale-bound read is declared after the binding.
+round_trips(q{my $v=1; my $r=\$v; my @h = ($$r); $$r = 2; print "$h[0] $v\n";},
+    q{an array literal of one deref read before a plain store});
+round_trips(q{my $v=1; my $r=\$v; my $o = $$r; my %h = (k => $o); $$r = 2; print "$h{k} $v\n";},
+    q{a hash literal holding a copy of the read});
+round_trips(q{my $v=1; my $r=\$v; my %h = (k => $$r, j => 2); $$r = 2; print "$h{k} $v\n";},
+    q{a hash literal holding the read directly});
+round_trips(q{my $v=1; my $r=\$v; my $o = $$r; my @h = ($o); $$r = 2; print "$h[0] $v\n";},
+    q{an array literal holding a copy of the read});
+
 # `.=` and `||=` through a ref are separate shapes (multiconcat, a
 # short-circuit over sassign); they refuse rather than drop the store.
 sub refuses ($src, $why, $name) {

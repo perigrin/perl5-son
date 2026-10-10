@@ -3606,8 +3606,14 @@ class SoN::Deparse 0.01 {
         if (($op eq 'Subscript' || $op eq 'PostfixDeref') && exists $bound{ $n->{id} }) {
             my $var  = $bound{ $n->{id} };
             my $text = $self->_expr_uncached( $n->{id} );
+            # WHAT WAS ANCHORED TO THIS READ FOLLOWS IT. The read is itself
+            # deferred, off the chain, so the chain's flush never reaches its
+            # own list: `my @h = ($$r); $$r = 2` filed `my @h = ($stale8)`
+            # after node 8 and it was never emitted.
             return sprintf( "%s%s = %s;\n",
-                ( exists $hoisted{$var} ? '' : 'my ' ), $var, $text );
+                ( exists $hoisted{$var} ? '' : 'my ' ), $var, $text )
+                . join '', map { $self->_emit_statement($_, $next_of) }
+                    ( $after_effect{ $n->{id} } // [] )->@*;
         }
 
         # THE SAME, FOR A DEMOTED LEXICAL -- spelled from its name, for the
