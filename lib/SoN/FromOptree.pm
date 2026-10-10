@@ -390,6 +390,34 @@ class SoN::FromOptree 0.01 {
     # same either way and keeps the alias, whose shape consumers rely on.
     our $MUTATED_SLOTS = {};
 
+    # The pad aggregates a reference has been LOWERED to so far in the walked
+    # sub, by targ. One sub-wide set rather than a $ctx key: a branch arm gets
+    # a fresh $ctx, and a reference taken in one arm outlives it.
+    our $REFERENCED_SLOTS = {};
+
+    # Whether $op runs every time the statement sequence it sits in runs:
+    # nothing between it and the sub's root is a branch or a loop. An
+    # allow-list, so an unlisted parent answers no -- which only refuses more.
+    my %STRAIGHT_LINE_PARENT = map { $_ => 1 } qw(
+        lineseq nextstate null leave enter scope leavesub
+        sassign aassign list pushmark srefgen refgen entersub print say
+    );
+    # A whole assign into pad slot $targ can be seen by a reference to it
+    # when one is taken under a branch (lowered out of execution order), or
+    # was already lowered, or a loop may carry one back from later in its body.
+    sub _reference_can_see_assign ($targ) {
+        my $ref = $MUTATED_SLOTS->{$targ} // '';
+        return 1 if $ref eq 'ref-branch';
+        return $ref eq 'ref' && ($REFERENCED_SLOTS->{$targ} || @LOOP_STACK);
+    }
+
+    sub _in_straight_line ($op) {
+        for (my $p = eval { $op->parent }; $p && $$p; $p = eval { $p->parent }) {
+            return 0 unless $STRAIGHT_LINE_PARENT{ $p->name };
+        }
+        return 1;
+    }
+
     sub _mutated_aggregate_slots ($cv, $root = undef) {
         my %slot;
         $root //= eval { $cv->ROOT };
@@ -418,12 +446,19 @@ class SoN::FromOptree 0.01 {
                 # Recorded as 'ref' rather than 1, because a whole assign
                 # into such a slot is refused (see the aassign literal path):
                 # the reference names the container, not a version of it.
+                # 'ref' when every such reference is taken in straight-line
+                # code, 'ref-branch' when one sits under a branch or loop:
+                # only a straight-line one is lowered in execution order.
                 if ($name eq 'srefgen' || $name eq 'refgen') {
+                    my $mark = _in_straight_line($op) ? 'ref' : 'ref-branch';
                     my @under = ($kid);
                     while (my $u = shift @under) {
                         next unless ref $u && $$u;
                         if ($u->name =~ /\A(?:padav|padhv)\z/) {
-                            $slot{ $u->targ } = 'ref' if $u->targ;
+                            $slot{ $u->targ } =
+                                ($slot{ $u->targ } // '') eq 'ref-branch'
+                                    ? 'ref-branch' : $mark
+                                if $u->targ;
                         }
                         elsif ($u->name =~ /\A(?:null|pushmark)\z/) {
                             push @under, $u->first if $u->flags & 4;   # OPf_KIDS
@@ -938,6 +973,7 @@ class SoN::FromOptree 0.01 {
         $ctx->{addr_taken}{$_} = 1 for keys $ctx->{shared_lexicals}->%*;
         local $SHARED_SLOTS = $ctx->{shared_lexicals};
         local $ADDR_TAKEN   = $ctx->{addr_taken};
+        local $REFERENCED_SLOTS = {};
         local $MUTATED_SLOTS = _mutated_aggregate_slots($cv,
             defined $program_root ? B::main_root() : undef);
 
@@ -4771,6 +4807,10 @@ class SoN::FromOptree 0.01 {
             # literal it was built from -- the rule a push or shift triggers.
             $ctx->{mutated_aggregate}{ $_->targ } = 1
                 for grep { $_->name eq 'padav' && $_->targ } @kids;
+            # A whole assign lowered after this point is refused (see the
+            # aassign literal path): the reference now exists to see it.
+            $REFERENCED_SLOTS->{ $_->targ } = 1
+                for grep { $_->name =~ /\Apad[ah]v\z/ && $_->targ } @kids;
 
             my @items = $sim->pop_to_mark->@*;
             if (@items == 1 && @kids == 1
@@ -4809,6 +4849,8 @@ class SoN::FromOptree 0.01 {
             elsif ($$kid && $kid->name eq 'padav' && $kid->targ) {
                 $ctx->{mutated_aggregate}{ $kid->targ } = 1;
             }
+            $REFERENCED_SLOTS->{ $kid->targ } = 1
+                if $$kid && $kid->name =~ /\Apad[ah]v\z/ && $kid->targ;
         }
 
         # rv2gv MEANS "THE GLOB ITSELF IS THE VALUE HERE", and that is the one
@@ -8680,11 +8722,15 @@ class SoN::FromOptree 0.01 {
                     # version per assignment cannot say so. Measured on
                     # `my @e = (1); my $r = \@e; @e = (2,3); print "@$r"`:
                     # perl 2 3, emitted 1.
+                    # Only a reference that can EXIST here matters: one
+                    # already lowered (exec order), or, in a loop, one a
+                    # later statement of the body takes for the next pass.
+                    # Taken after the last assign, it sees that version only.
                     die "GAP: a whole assign to a pad aggregate a reference was"
                       . " taken to is not yet lowered -- the reference would"
                       . " keep the old contents\n"
                         if $is_pad && !_aassign_introduces($op)
-                        && ($MUTATED_SLOTS->{ $target->targ } // '') eq 'ref';
+                        && _reference_can_see_assign($target->targ);
                     my $symbol = $is_pad ? $target->symbol : $key;
                     my $node = $factory->make(
                         ($sigil eq '@' ? 'ArrayLiteral' : 'HashLiteral'),

@@ -98,11 +98,28 @@ for my $c (@cases) {
 for my $src (
     q{my @e = (1); my $r = \@e; @e = (2,3); print "@$r\n";},
     q{my @e; my $r = \@e; for my $k (0,1) { if ($k) { @e = (0,4) } else { @e = (9) } } print "@$r\n";},
+    # Taken under a branch, the reference is lowered out of execution order,
+    # so where it stands against the assign is not known: refused.
+    q{my @e = (1); my $r; my $k = shift // 1; if ($k) { $r = \@e } @e = (2); print "@$r\n";},
+    q{my @e = (1); my $k = shift // 0; if ($k) { my $r = \@e; print "@$r\n" } else { @e = (2) } print "@e\n";},
+    # In a loop, a reference taken later in the body reaches the next pass.
+    q{my @e; for my $k (0,1) { @e = ($k); my $r = \@e; print "@$r\n" }},
 ) {
     graph_of($src);
     like producer_stderr(),
         qr/GAP: a whole assign to a pad aggregate a reference was taken to/,
         "refused: $src";
+}
+
+# A REFERENCE TAKEN AFTER THE LAST ASSIGN sees only that version, so nothing
+# is refused there: the assigns before it are versions no reference reaches.
+for my $c (
+    [ q{my @e = (1); @e = (2); my $r = \@e; print "@$r\n";},
+      'a reference taken after the last whole assign' ],
+    [ q{my %h = (a => 1); %h = (b => 2); my $r = \%h; print join(",", keys %$r), "\n";},
+      'a hash reference taken after the last whole assign' ],
+) {
+    round_trips(@$c);
 }
 
 done_testing;
