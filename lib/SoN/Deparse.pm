@@ -1505,6 +1505,16 @@ class SoN::Deparse 0.01 {
         for my $c ( $self->_nodes_in_order ) {
             push $ctrl_next{ $c->{control_in} }->@*, $c
                 if defined $c->{control_in};
+            # A BRANCH IS ON THE CHAIN TOO: an If reaches its arms through
+            # their Proj, and each arm reaches the join Region it feeds.
+            # Without these edges a store in an arm was never "later", and
+            # `my $y = $a[0]; if ($c) { $a[0] = 7 }` spelled $y after it.
+            my $op = $c->{op} // q{};
+            my @ci = ( $c->{inputs} // [] )->@*;
+            push $ctrl_next{ $ci[0] }->@*, $c
+                if $op eq q{Proj} && @ci
+                && ( ( $nodes->{ $ci[0] } // {} )->{op} // q{} ) eq q{If};
+            if ( $op eq q{Region} ) { push $ctrl_next{$_}->@*, $c for @ci }
         }
         #
         # BOUND ONLY WHERE EVERY CONSUMER IS KNOWN TO BE SAFE, because the
@@ -1517,7 +1527,7 @@ class SoN::Deparse 0.01 {
         # behaviour this pass replaces rather than a new wrong answer.
         state $VALUE_CONSUMER = { map { $_ => 1 } keys %BINOP, qw(
             Assign Ref Coerce Print Interpolate Length Not Negate Defined
-            DefinedOr And Or TernaryExpr UnaryPlus Increment
+            DefinedOr And Or TernaryExpr UnaryPlus Increment If
         ) };
         my %consumers;
         for my $c ( $self->_nodes_in_order ) {
@@ -1612,10 +1622,23 @@ class SoN::Deparse 0.01 {
                 next unless ( $v->{op} // '' ) eq 'MemStart'
                     || ( ( $v->{op} // '' ) eq 'Phi'
                          && ( ( $v->{fields} // {} )->{region} // -1 ) == $loop->{id} );
+                # TWO CONSTANT STRING HASH KEYS THAT DIFFER name two elements.
+                # An array index can alias through a negative one, and a number
+                # key through its spelling (`1` and `"1"`, `1.0`), so neither.
+                my $str_key = sub ($id) {
+                    my $k = $nodes->{$id} // {};
+                    ( $k->{op} // '' ) eq 'Constant'
+                        && ( ( $k->{fields} // {} )->{const_type} // '' ) eq 'string'
+                        ? $k->{fields}{value} // '' : undef;
+                };
                 my @same = grep {
                     my $t = $nodes->{ ( $_->{inputs} // [] )->[0] // -1 } // {};
+                    my $tk = ( $t->{inputs} // [] )->[1] // -1;
                     ( $t->{op} // '' ) eq 'Subscript'
                         && ( ( $t->{inputs} // [] )->[0] // -1 ) == $in[0]
+                        && !( ( ( $n->{fields} // {} )->{kind} // '' ) eq 'hash'
+                              && defined $str_key->($in[1]) && defined $str_key->($tk)
+                              && $str_key->($tk) ne $str_key->($in[1]) )
                 } @stores;
                 next unless @same;
 
@@ -1660,6 +1683,7 @@ class SoN::Deparse 0.01 {
         # the save prologue, which runs after the aggregate declarations. Its
         # operands must exist there, so only constants and the aggregates the
         # prologue declares are allowed; anything else is left unbound.
+        my %stale_at_join;   # restored for the re-walk: the first walk deletes what it flushes
         for my $n ( sort { $a->{id} <=> $b->{id} } $self->_nodes_in_order ) {
             next unless ( $n->{op} // '' ) eq 'Subscript';
             next if exists $bound{ $n->{id} };
@@ -1672,7 +1696,19 @@ class SoN::Deparse 0.01 {
             my @in = ( $n->{inputs} // [] )->@*;
             next unless @in > ( $MEM_MIN_INPUTS{Subscript} // 99 );
             my $version = $nodes->{ $in[-1] } or next;
+
+            # A JOIN'S MEMORY Phi IS NOT THE ENTRY VERSION. It has no
+            # control_in either, and taken for entry, `if ($c) { $a[0] = 7 }
+            # print $a[0]` bound the read in the prologue, above the store,
+            # and printed 1 for 7. The read is correct where the branch has
+            # merged, so it is bound at the Region.
+            my $join;
+            if ( ( $version->{op} // q{} ) eq q{Phi} ) {
+                my $r = $nodes->{ ( $version->{fields} // {} )->{region} // -1 } // {};
+                $join = $r if ( $r->{op} // q{} ) eq q{Region};
+            }
             my $at_entry = !defined $version->{control_in};
+            $at_entry = 0 if $join;
             # AN OPERAND MADE ON THE CHAIN -- an anonymous `[4]` -- is the
             # anchor instead: the read is correct right after it exists.
             my @made = grep { defined( ( $nodes->{$_} // {} )->{control_in} ) }
@@ -1689,7 +1725,12 @@ class SoN::Deparse 0.01 {
                     # value is declared after that effect, not in the
                     # prologue (`my @c = caller(0)` was, and the read of
                     # $c[1] landed above it).
+                    # A SHARED AGGREGATE a sub closes over is declared above
+                    # the subs, so it exists in the sub's prologue.
+                    # A PACKAGE one needs no declaration at all.
                     !( $op eq 'Constant'
+                       || ( $op eq 'PadAccess' && ( $c->{fields} // {} )->{shared} )
+                       || $op eq 'EntryDef'
                        || ( $op =~ /\A(?:Array|Hash)Literal\z/
                             && defined( ( $c->{fields} // {} )->{symbol} )
                             && !$self->_is_pinned_aggregate($c)
@@ -1699,7 +1740,7 @@ class SoN::Deparse 0.01 {
             }
 
             my ( @queue, %seen, $shadowed )
-                = ( $at_entry ? $start->{id} : $version->{id} );
+                = ( $at_entry ? $start->{id} : ( $join // $version )->{id} );
             while ( @queue && !$shadowed ) {
                 my $id = shift @queue;
                 next if $seen{$id}++;
@@ -1721,6 +1762,11 @@ class SoN::Deparse 0.01 {
                 next;
             }
             $hoisted{ $bound{ $n->{id} } } //= $bound{ $n->{id} };
+            if ( $join ) {
+                push $after_region{ $join->{id} }->@*, $n;
+                push $stale_at_join{ $join->{id} }->@*, $n;
+                next;
+            }
             push $after_effect{ $version->{id} }->@*, $n;
         }
 
@@ -1970,6 +2016,11 @@ class SoN::Deparse 0.01 {
         # this the binding was silently DROPPED rather than merely misplaced.
         if (keys %after_effect || keys %after_region) {
             %rendered = ();
+            for my $j ( keys %stale_at_join ) {
+                my %mine = map { $_->{id} => 1 } $stale_at_join{$j}->@*;
+                $after_region{$j} = [ $stale_at_join{$j}->@*,
+                    grep { !$mine{ $_->{id} } } ( $after_region{$j} // [] )->@* ];
+            }
             # THE SAVE PROLOGUE SURVIVES THE RE-WALK. It was prepended to the
             # FIRST walk's text, and assigning the second walk over $body threw
             # it away -- so a `local` save or an entry-version read emitted here

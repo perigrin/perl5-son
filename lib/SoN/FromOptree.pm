@@ -14181,6 +14181,36 @@ class SoN::FromOptree 0.01 {
                   . " value could be read after the store\n"
                     if $unsound && !$is_void;
                 $alloc_value = 0 if $unsound;
+                # THE VALUE IS THE ELEMENT, READ AFTER THE STORE, not the
+                # constant stored: a tied element's STORE may keep something
+                # else, and sassign yields the element, so FETCH decides
+                # (`$c ? ($h{a} = 7) : 8` is 70 under a STORE that multiplies).
+                # So the arm's value is a read at the memory its own store made.
+                # Any other last effect in the arm cannot say what it read.
+                my @reread;
+                for my $arm ([\$true_arm_val, $true_sim, $elem_true],
+                             [\$false_arm_val, $false_sim, $elem_false]) {
+                    my ($val, $asim, $stores) = @$arm;
+                    next unless $alloc_value && $stores;
+                    my $st  = $asim->memory;
+                    my $tgt = $st && $st->isa('SoN::IR::Node::Assign') && $st->inputs->[0];
+                    if ($tgt && $st->inputs->[1] == $$val
+                        && $tgt->isa('SoN::IR::Node::Subscript')
+                        && scalar($tgt->inputs->@*) == 2) {
+                        push @reread, [$val, $tgt, $st];
+                        next;
+                    }
+                    die "GAP: a consumed ternary arm stores an element but"
+                      . " its last effect is not that store; the element it"
+                      . " yields cannot be read\n"
+                        unless $is_void;
+                    $alloc_value = 0;
+                }
+                if ($alloc_value) {
+                    ${ $_->[0] } = $factory->make('Subscript', kind => $_->[1]->kind,
+                        inputs => [$_->[1]->inputs->[0], $_->[1]->inputs->[1], $_->[2]])
+                        for @reread;
+                }
             }
             if ($alloc_value) {
                 $true_sim->push_node($true_arm_val // _undef_constant($factory));
