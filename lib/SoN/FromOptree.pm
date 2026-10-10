@@ -4187,8 +4187,14 @@ class SoN::FromOptree 0.01 {
             # used to be stored as $_, and the transliteration vanished:
             # `(my $c = $s) =~ tr/a/b/` printed the untouched copy.
             # $store is the write-back the rebind below performs.
+            #
+            # A COUNT-ONLY tr/// WRITES NOTHING. OPpTRANS_IDENTICAL marks
+            # `tr/a//`, which perl allows over any rvalue -- a call, a
+            # constant -- so there is no subject to store back, and storing
+            # into $_ instead would clobber it.
+            my $counts_only = $op->private & 4;   # OPpTRANS_IDENTICAL
             my $store;
-            if ($stacked && $name ne 'transr') {
+            if ($stacked && $name ne 'transr' && !$counts_only) {
                 my $lv = $op->parent->first;
                 if ($lv->name eq 'sassign') {
                     my $slot = $lv->last;
@@ -4348,7 +4354,7 @@ class SoN::FromOptree 0.01 {
                     $sim->set_memory($w) if defined $sim->memory;
                 }
             }
-            elsif ($name ne 'transr') {
+            elsif ($name ne 'transr' && !($stacked && $counts_only)) {
                 if (my $targ = $op->targ) {
                     $sim->define($targ, $node);
                 }

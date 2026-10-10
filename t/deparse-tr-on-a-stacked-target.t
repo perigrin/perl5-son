@@ -94,6 +94,16 @@ my @cases = (
       q{the count of tr/// on a package scalar, in a printed short-circuit} ],
     [ q{my %h=(k=>"aa"); my $k=1; my $n = $k && ($h{k} =~ tr/a/b/); print "$n $h{k}\n";},
       q{the count of tr/// on a hash element, in a short-circuit arm} ],
+    [ q{sub f { "aab" } my $n = (f() =~ tr/a//); print "$n\n";},
+      q{the count of tr/// over a call's return value} ],
+    [ q{my $x="aab"; my $n = (uc($x) =~ tr/A//); print "$n $x\n";},
+      q{the count of tr/// over a builtin's return value} ],
+    [ q{my $n = ("aab" =~ tr/a//); print "$n\n";},
+      q{the count of tr/// over a constant} ],
+    [ q{$_="zz"; my $n = ("aab" =~ tr/a//); print "$n $_\n";},
+      q{the count of tr/// over a constant leaves $_ alone} ],
+    [ q{my $s="aab"; my $n = ((my $c = $s) =~ tr/a//); print "$n $c\n";},
+      q{the count of tr/// over a copy} ],
 );
 
 round_trips(@$_) for @cases;
