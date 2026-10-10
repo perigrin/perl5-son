@@ -74,6 +74,16 @@ round_trips('our $n=0; sub f { for (1..3) { $n++ } return $n } print f(), " $n\n
 round_trips('our $n; my @r; for (1..3) { push @r, $n++ } print "@r $n\n";',
     'a post-increment in a top-level loop, which carries it');
 
+# A LOOP EARLIER IN THE PROGRAM does not put the reads after it under the loop.
+round_trips(q{our $n = 10; for (1..2) { } my $x = $n; $n = 3; print "$x\n";},
+    q{a copy and a store after an empty loop});
+round_trips(q{our $n = 10; for (1..2) { print "l" } print "a ", $n++, "\n"; print "b ", $n++, "\n";},
+    q{post-increments after a loop});
+round_trips(q{our $n = 10; my $i = 0; while ($i < 2) { $i++ } print "a ", $n++, "\n"; print "b $n\n";},
+    q{a post-increment after a while loop});
+round_trips(q{our $n=0; for (1..2) { print "l" } my $x = $n; $n = 3; print "$x\n";},
+    q{a copy and a store after a loop that prints});
+
 # IN A LOOP INSIDE A SUB, the scalar has no header Phi: the read names the
 # entry memory version on every pass. A use after the body's store is refused.
 sub refuses ($src, $name) {

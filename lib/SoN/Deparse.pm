@@ -1413,7 +1413,7 @@ class SoN::Deparse 0.01 {
                     # join -- but not this loop's own exit Region.
                     push @queue, $d->{id}
                         if ( $d->{op} // '' ) =~ /\A(?:Proj|Region)\z/
-                        && ( ( $d->{fields} // {} )->{head} // -1 ) != $n->{id}
+                        && ( $d->{head} // -1 ) != $n->{id}
                         && grep { $_ == $id } ( $d->{inputs} // [] )->@*;
                 }
             }
