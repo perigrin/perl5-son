@@ -62,4 +62,33 @@ round_trips('my @a=(3,4); for (@a) { $_-- } print "@a\n";',
 round_trips('my @a=(3,4); for (@a) { $_ .= "x" } print "@a\n";',
     'a concatenating op= through the implicit iterator');
 
+# AN ELEMENT READ AT THE ITERATION-START VERSION, SPELLED AFTER A STORE TO
+# THAT AGGREGATE IN THE SAME BODY, IS A STALE READ THE EMITTER CANNOT BIND
+# YET: it re-spells `$a[$i]` after the store. Until the stale-element pass
+# can bind a read inside a loop it refuses rather than print 28 for 14.
+sub refuses ($src, $name) {
+    my $data = graph_of($src);
+    if (!$data) { fail "$name: translates"; return }
+    my $d = SoN::Deparse->new;
+    my $out = $d->render($data);
+    ok !defined $out, "$name: refuses" or diag $out;
+    like $d->gap // q(), qr/element read in a loop is spelled after a store/,
+        "$name: names the stale element read";
+}
+refuses(q(my @a=(3,4); my $s=0; for (@a) { $_ *= 2; $s += $_ } print "@a $s\n";),
+    q(the stored value carried to the next iteration));
+refuses(q(my @a=(3,4); my $s=0; for my $x (@a) { $x *= 2; $s += $x } print "@a $s\n";),
+    q(the same through a named iterator));
+refuses(q(my @a=(3,4); my $s=0; for (@a) { $_ = $_ * 2; $s += $_ } print "@a $s\n";),
+    q(the same through a plain assignment));
+refuses(q(my @a=(3,4); my $s=0; for my $i (0..1) { my $v = $a[$i]; $a[$i] = 0; $s += $v } print "@a $s\n";),
+    q(a saved element read carried past its store));
+# The guard must not fire on a read the store consumes and nothing reads after.
+round_trips(q(my @a=(3,4); for my $i (0..1) { $a[$i] = $a[$i] + 1 } print "@a\n";),
+    q(an element read consumed only by its own store));
+round_trips(q(my @a=(3,4); my $s=0; for my $i (0..1) { $a[$i] = $a[$i] * 2; $s += $a[$i] } print "@a $s\n";),
+    q(an element read again after its store));
+round_trips(q(my @a=(3,4); my $s=0; for (@a) { $s += $_ } print "@a $s\n";),
+    q(a sum over the implicit iterator with no store));
+
 done_testing;
