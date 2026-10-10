@@ -4084,6 +4084,8 @@ class SoN::FromOptree 0.01 {
             return ($op->next, 'handled');
         }
 
+        _refuse_alias_operand_stored_later($cv, $op);
+
         # chomp AND chop MUTATE IN PLACE, so the graph must record the store.
         # The producer built `Call(schomp, [PadAccess])` consumed by NOBODY,
         # so the mutation was invisible and the following read still named the
@@ -15815,6 +15817,69 @@ class SoN::FromOptree 0.01 {
             return 0 unless _replacement_is_pure($kid);
         }
         return 1;
+    }
+
+    # AN OPERAND PERL READS BY ALIAS sees a store a later operand makes. padsv
+    # and gvsv push the variable itself, not a copy, so the op that consumes
+    # them reads the value it has when the op runs:
+    #
+    #     my $n = 1; print $n . ($n = 5)      perl 55
+    #
+    # The graph reads the variable where its op stands in the walk -- before
+    # the store -- and gives 15. Until a read can be deferred to its consumer,
+    # the shape is refused. A branch condition is consumed before its arm, so
+    # a LOGOP is not an alias consumer; a postinc copies, and is not a padsv.
+    # ponytail: only the direct stores (=, op=, ++/--) are seen; chomp, s///,
+    # a list assign or a call storing the variable still pass unrefused.
+    sub _refuse_alias_operand_stored_later ($cv, $op) {
+        return unless $op->flags & B::OPf_KIDS;
+        return if $op->isa('B::LOGOP');
+        return if $op->name =~ /\A(?:leave|enter|lineseq|scope)/;
+        my $var = sub ($o) {                                # 'p<targ>' | 'g<gv>'
+            return undef unless $o && $$o;
+            # `$n` is rv2sv(gv), or the gvsv rpeep makes of it.
+            my $rv2sv = ( $o->name eq q{rv2sv}
+                || ( $o->name eq q{null} && $o->targ == B::opnumber(q{rv2sv}) ) )
+                && ( $o->flags & B::OPf_KIDS );
+            $o = $o->first if $rv2sv;
+            return "p" . $o->targ if $o->name eq q{padsv};
+            return undef unless $o->name eq q{gvsv}
+                || ( $rv2sv && $o->name eq q{gv} );
+            my $gv = _op_gv($cv, $o);
+            return $gv ? "g" . ${$gv} : undef;
+        };
+        my $stores;
+        $stores = sub ($o, $key) {
+            return 1 if $o->name eq q{padsv_store} && "p" . $o->targ eq $key;
+            return 0 unless $o->flags & B::OPf_KIDS;
+            my ( $kid, $first ) = ( $o->first, 1 );
+            my $n = $o->name;
+            while ( $kid && $$kid ) {
+                my $k = $var->($kid);
+                return 1 if defined $k && $k eq $key && (
+                       ( $n eq 'sassign' && !${ $kid->sibling } )
+                    || $n =~ /\A(?:i_)?(?:pre|post)(?:inc|dec)\z/
+                    || ( $first && $n ne q{sassign} && $o->isa(q{B::BINOP})
+                         && ( $o->flags & B::OPf_STACKED ) ) );   # op=
+                return 1 if $stores->($kid, $key);
+                ( $kid, $first ) = ( $kid->sibling, 0 );
+            }
+            return 0;
+        };
+        my $kid = $op->first;
+        while ( $kid && $$kid ) {
+            my $key = $var->($kid);
+            # A statement in void context is not an operand.
+            undef $key if ( $kid->flags & B::OPf_WANT ) == B::OPf_WANT_VOID;
+            if ( defined $key ) {
+                for ( my $later = $kid->sibling; $later && $$later; $later = $later->sibling ) {
+                    die "GAP: a scalar operand is read by alias and a later operand stores it\n"
+                        if $stores->($later, $key);
+                }
+            }
+            $kid = $kid->sibling;
+        }
+        return;
     }
 
     sub _find_gv_op ($op) {

@@ -101,4 +101,53 @@ refuses('our $n=0; sub f { my @r; for (1..3) { push @r, $n++ } return "@r" } pri
 refuses('my $n=0; sub f { my $s=""; for (1..3) { $s .= $n; $n += 2 } return $s } print f(), " $n\n";',
     'a read before a compound store in a loop');
 
+# AN OPERAND PERL READS BY ALIAS sees a store a later operand of the same op
+# makes: padsv and gvsv push the variable itself, not a copy. The graph gives
+# the read the memory version before the store, so the producer refuses.
+sub alias_refused ($src, $name) {
+    my $data = graph_of($src);
+    ok !( $data && $data->{methods}{"main::f"} ), "$name: f does not translate";
+    like producer_stderr(), qr/read by alias.*a later operand stores it/,
+        "$name: the refusal names the alias";
+}
+alias_refused('my $n = 1; sub f { return $n . ($n = 5) } print f(), " $n\n";',
+    'a concat operand stored by its right operand');
+alias_refused('my $n = 1; sub f { return $n + ($n = 5) } print f(), " $n\n";',
+    'an add operand');
+alias_refused('my $n = 1; sub f { my $x = $n . ($n = 5); return $x } print f(), " $n\n";',
+    'the concat copied out');
+alias_refused('my $n = 1; sub f { print $n, ($n = 5); print "\n" } f(); print "$n\n";',
+    'print operands');
+alias_refused('my $n = 1; sub f { if ($_[0]) { return $n . ($n = 5) } 0 } print f(1), " $n\n";',
+    'in a branch arm');
+alias_refused('my $n = 1; sub f { my $s = sprintf "%s%s", $n, ($n = 5); $s } print f(), " $n\n";',
+    'sprintf operands');
+alias_refused('my $n = 1; sub f { my @r; push @r, $n, ($n = 5); "@r" } print f(), " $n\n";',
+    'push operands');
+alias_refused('our $n = 1; sub f { return $n . ($n = 5) } print f(), " $n\n";',
+    'the package-scalar form');
+alias_refused('my $n = 1; sub f { $n = 2; my $x = $n . ($n = 5); return $x } print f(), " $n\n";',
+    'after an earlier store');
+alias_refused('my $n = 1; sub f { return $n . ($n += 5) } print f(), " $n\n";',
+    'stored by a compound assignment');
+alias_refused('my $n = 1; sub f { return $n . ++$n } print f(), " $n\n";',
+    'stored by a pre-increment');
+{
+    my $src = 'my $n = 1; print $n . ($n = 5), "\n";';
+    my $data = graph_of($src);
+    ok !( $data && $data->{methods}{'main::__PROGRAM__'} ), 'the top-level form does not translate';
+    like producer_stderr(), qr/read by alias.*a later operand stores it/, '... and says why';
+}
+
+# A BRANCH CONDITION is consumed before its arm runs, and a copy before the
+# store is a statement of its own: neither is an alias.
+round_trips('my $n = 1; sub f { $n ? ($n = 5) : 0 } print f(), " $n\n";',
+    'a condition read, its arm stores');
+round_trips('my $n = 1; sub f { $n && ($n = 5) } print f(), " $n\n";',
+    'a short-circuit read, its right side stores');
+round_trips('my $n = 1; sub f { my $x = $n . "a"; $n = 9; return $x } print f(), " $n\n";',
+    'a concat copied out, then a store');
+round_trips('my $n = 1; sub f { return $n++ . ($n = 5) } print f(), " $n\n";',
+    'a post-increment is a copy, not an alias');
+
 done_testing;
