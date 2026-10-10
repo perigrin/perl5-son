@@ -276,7 +276,9 @@ sub _extract_fields ($node, $id_remap) {
         # consumer cannot resolve.
         return undef unless defined $entry
                          && defined $id_remap->{ $entry->id };
-        return { eval_entry => $id_remap->{ $entry->id } };
+        return { eval_entry => $id_remap->{ $entry->id },
+                 # A list-context eval, so its value binds a list.
+                 ( $node->eval_list ? ( eval_list => JSON::PP::true ) : () ) };
     }
     # tr///'s character sets and flags. `d` is not recoverable from an empty
     # `to` -- `tr/x//` maps x to itself, `tr/x//d` removes it -- so the flags

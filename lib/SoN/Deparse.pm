@@ -3190,7 +3190,20 @@ class SoN::Deparse 0.01 {
         # it here rather than in the %reads scan keeps that scan about VALUES;
         # this binding exists because the eval was placed, not because someone
         # read it.
-        $bound{ $phi->{id} } = sprintf('$eval%d', $phi->{id});
+        #
+        # A LIST-CONTEXT, LIST-VALUED EVAL BINDS AN ARRAY, as a list Phi does
+        # (_phi_var). `my @r = eval { sort ... }` bound to a scalar ran the sort
+        # in scalar context, and @r got undef where perl has the sorted list.
+        # THE CONTEXT IS THE REGION'S, not the stamp's: a scalar eval of a
+        # slice is List-stamped too, and as an array it read back as the count
+        # where perl gives the last element.
+        my $st = $phi->{stamp} // '';
+        $bound{ $phi->{id} } = sprintf(
+            ( ($region->{fields} // {})->{eval_list}
+              && ( $st eq 'Array' || $st eq 'List'
+                   || $self->_phi_takes_a_list($phi) ) )
+                ? '@eval%d' : '$eval%d',
+            $phi->{id});
 
         # A CONDITIONAL eval's VALUE OUTLIVES ITS BLOCK. `A and B and C`
         # renders as nested ifs -- each eval happening only if the previous
@@ -3845,6 +3858,15 @@ class SoN::Deparse 0.01 {
             my $text = $self->_expr_uncached( $n->{id} );
             return sprintf( "%s%s = %s;\n",
                 ( exists $hoisted{$var} ? '' : 'my ' ), $var, $text );
+        }
+
+        # A SORT PINNED FOR ITS COMPARATOR whose list nothing reads still
+        # sorts: the producer pins a list-context sort, and says so with
+        # want => 'list'. Bare, it is a void sort, which perl skips without
+        # calling the comparator -- so only that want earns the `() =`.
+        if ($op eq 'Call' && (($n->{fields} // {})->{name} // '') eq 'sort'
+            && (($n->{fields} // {})->{want} // '') eq 'list') {
+            return '() = ' . $self->_expr_uncached( $n->{id} ) . ";\n";
         }
 
         # THE SAME, FOR A DEMOTED LEXICAL -- spelled from its name, for the

@@ -35,7 +35,18 @@ class SoN::IR::Node::Region :isa(SoN::IR::Node) {
     # nothing to delimit.
     field $eval_entry :reader = undef;
 
+    # A BLOCK EVAL IN LIST CONTEXT yields a list, in scalar context one
+    # scalar. The body's last value can be List-stamped either way --
+    # `my $x = eval { @a[0,1] }` is the last element -- so only the eval op
+    # says which, and a consumer binding the value needs to know.
+    field $eval_list :reader = 0;
+
     method operation() { 'Region' }
+
+    method set_eval_list() {
+        $eval_list = 1;
+        return;
+    }
 
     method set_eval_entry($node) {
         $eval_entry = $node;

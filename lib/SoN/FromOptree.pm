@@ -568,7 +568,69 @@ class SoN::FromOptree 0.01 {
             die "GAP: a sort comparator block that reads $what is not yet"
               . " lowered -- the body graph has no edge to that variable\n";
         }
+        # A WRITE LEAVES NO READ BEHIND: `my $n = 0; sort { $n++; ... }`
+        # stores into a binding nothing in the body reads, so the graph holds
+        # no PadAccess and the check above passed while the increment
+        # vanished. The optree still names the slot.
+        if (defined(my $name = _outer_pad_in_chain($cv, $start))) {
+            die "GAP: a sort comparator block that writes a lexical of its"
+              . " enclosing scope ($name) is not yet lowered -- the body graph"
+              . " has no edge to that variable\n";
+        }
         return $graph;
+    }
+
+    # _outer_pad_in_chain($cv, $start) -> the name of a pad variable the chain
+    # from $start uses without declaring it (`my`), or undef. Follows ->other
+    # as well as ->next, so a statement behind an `if` is seen.
+    sub _outer_pad_in_chain ($cv, $start) {
+        my (%seen, %mine, @used);
+        my @todo = ($start);
+        while (my $o = shift @todo) {
+            next unless $$o && !$seen{$$o}++;
+            # Any op naming a pad VARIABLE uses it -- a padsv, and also a
+            # TARGMY op writing one directly (`$s .= $a` is `concat[$s]`). A
+            # TARG temporary's slot has no name; a nulled op's targ is its
+            # old op type.
+            if    (_declares_lexical($o)) { $mine{ $o->targ } = 1 }
+            elsif ($o->name ne 'null' && $o->can('targ') && $o->targ
+                   && _padname($cv, $o->targ) =~ /\A[\$\@%]\w/) {
+                push @used, $o->targ;
+            }
+            push @todo, $o->next;
+            push @todo, $o->other if $o->can('other');
+        }
+        my ($outer) = grep { !$mine{$_} } @used;
+        return defined $outer ? _padname($cv, $outer) : undef;
+    }
+
+    # _declares_lexical($op) -- true when $op is a `my`: a pad op (padsv,
+    # padsv_store, padav, padhv, padrange) or a foreach's enteriter carrying
+    # OPpLVAL_INTRO. Bit 7 means other things on other ops, so B::Op_private
+    # names it per op.
+    sub _declares_lexical ($op) {
+        require B::Op_private;
+        my $name = $op->name;
+        return $name =~ /\A(?:pad|enteriter\z)/
+            && ( $B::Op_private::bits{$name}{7} // '' ) eq 'OPpLVAL_INTRO'
+            && ( $op->private & B::OPpLVAL_INTRO ) ? 1 : 0;
+    }
+
+    # _subtree_localises($op) -- true when an op under $op carries a `local`:
+    # OPpLVAL_INTRO on an op that is not a pad op (a pad op's is a `my`).
+    sub _subtree_localises ($op) {
+        require B::Op_private;
+        my @todo = ($op);
+        while (my $o = shift @todo) {
+            next unless $$o;
+            my $name = $o->name;
+            return 1 if $name !~ /\Apad/
+                && ( $B::Op_private::bits{$name}{7} // '' ) eq 'OPpLVAL_INTRO'
+                && ( $o->private & B::OPpLVAL_INTRO );
+            next unless $o->flags & 4;   # OPf_KIDS
+            for (my $k = $o->first; $$k; $k = $k->sibling) { push @todo, $k }
+        }
+        return 0;
     }
 
     # _translate_from($cv, $start_op, program_root => $addr?) -- shared walk
@@ -5446,7 +5508,12 @@ class SoN::FromOptree 0.01 {
     # THROUGH AN OPERATOR THAT YIELDS ITS OPERAND as well: an arm of a ternary
     # or a short-circuit passed to the call is flagged the same way
     # (`padsv sM` under cond_expr), and stopping there took the read for a
-    # store target -- chalk's `inputs => (defined $v ? $v : [])`.
+    # store target -- chalk's `inputs => (defined $v ? $v : [])`. `scalar($k)`
+    # yields its operand the same way (`scalar sKM` over `padsv sM`).
+    #
+    # A STACKED SORT ALIASES ITS ARGUMENTS TOO -- `$a` and `$b` are the
+    # elements themselves -- and flags them `padsv sM` the same way. Taken for
+    # a store target, `my $k = 5; sort { ... } 3, $k` lost its binding.
     # Is $op the container of a helem whose key is a constant -- `$ENV{K}`?
     sub _is_const_key_helem_of ($op) {
         my $p = eval { $op->parent } or return 0;
@@ -5458,9 +5525,9 @@ class SoN::FromOptree 0.01 {
     sub _is_call_argument ($op) {
         my $p = eval { $op->parent } or return 0;
         $p = $p->parent
-            while $$p && $p->name =~ /\A(?:null|cond_expr|and|or|dor)\z/
+            while $$p && $p->name =~ /\A(?:null|cond_expr|and|or|dor|scalar)\z/
                 && eval { ${ $p->parent } };
-        return $$p && $p->name eq 'entersub' ? 1 : 0;
+        return $$p && $p->name =~ /\A(?:entersub|sort)\z/ ? 1 : 0;
     }
 
     # THE builtin:: FUNCTIONS THAT ARE OPS mark their operand the same way --
@@ -9704,7 +9771,12 @@ class SoN::FromOptree 0.01 {
                 # must read the PRE-store value, so swap in a 3-input rvalue read
                 # pinned to the current memory; the lvalue stays the store target.
                 my $elem_lvalue;
+                # NOT A SORT: it is STACKED for its comparator, and its
+                # arguments are flagged OPf_MOD because it aliases them, as a
+                # call does. Taken for `$a[0] op= ...`, `sort { ... } $a[0], 2`
+                # wrote the sorted list into $a[0].
                 if (!$is_compound && !defined $pkg_lvalue
+                    && $name ne 'sort'
                     && @inputs >= 1
                     && $inputs[0]->isa('SoN::IR::Node::Subscript')
                     && scalar($inputs[0]->inputs->@*) == 2
@@ -9853,6 +9925,11 @@ class SoN::FromOptree 0.01 {
                     my $lvalue    = ($op->flags & 64);         # OPf_STACKED (store form)
                     my $effectful = !$opmap->is_pure($name) || $lvalue;
                     $void_effect_call = $void && $effectful;
+                    # A VOID SORT IS SKIPPED: perl's pp_sort returns before it
+                    # calls the comparator when no list is wanted (`sort vKS`).
+                    # Its arguments still run; each effectful one is pinned by
+                    # its own op.
+                    $void_effect_call = false if $name eq 'sort';
 
                     # A GLOBAL-STATE OP IS AN EFFECT IN ANY CONTEXT, and
                     # keying on OPf_WANT_VOID silently dropped it. perl
@@ -9992,11 +10069,24 @@ class SoN::FromOptree 0.01 {
                     if ($name eq 'anonlist' || $name eq 'anonhash')
                     && ($op->flags & 3) != 1               # a value is wanted
                     && defined $sim->control;
+                # A SORT WITH A COMPARATOR RUNS CODE, so it is pinned where it
+                # runs, as a call is. Floating, nothing ran it when the result
+                # went unused and it ran once per reader: `sort cn ...` with
+                # `cn` counting its calls left the count at 0, and an element
+                # argument was read after a later store to it. It says it
+                # yields a list, so a merge over it binds an array.
+                my $runs_comparator = $name eq 'sort'
+                    && defined $extra{sort_cmp_body}
+                    && _sort_runs_comparator($op)
+                    && defined $sim->control;
+                $pin_on_control = 1 if $runs_comparator;
+                $extra{want} = 'list' if $runs_comparator;
                 my $node = $factory->make($node_type, inputs => \@inputs, %extra);
                 if ($void_effect_call || $pin_on_control) {
                     $node->set_control_in($sim->control);
                     $sim->set_control($node);
                 }
+                _call_memory_barrier($sim, $node, $ctx) if $runs_comparator;
 
                 # A GLOBAL-STATE OP ALSO ADVANCES MEMORY, and control alone is
                 # not enough. `require X; X->import(...)` is the runtime
@@ -13496,8 +13586,19 @@ class SoN::FromOptree 0.01 {
                 next;
             }
             return 1 if $ADVANCES_CONTROL_OP{$name};
+            return 1 if $name eq 'sort' && _sort_runs_comparator($op);
         }
         return 0;
+    }
+
+    # _sort_runs_comparator($op) -- true when a sort calls code of the
+    # program's: a block or a sub (OPf_STACKED; a folded `{ $b <=> $a }` is
+    # flags), in list context -- perl sorts nothing in any other. Such a sort
+    # is pinned where it runs, so it advances control as a call does.
+    sub _sort_runs_comparator ($op) {
+        return ($op->flags & 64)            # OPf_STACKED
+            && ($op->flags & 3) == 3        # OPf_WANT_LIST
+            ? 1 : 0;
     }
 
     # Does the arm ALLOCATE -- `[...]`, `{...}`, `[]`, `{}` -- which is pinned
@@ -13770,6 +13871,7 @@ class SoN::FromOptree 0.01 {
         my $region = $factory->make_cfg('Region',
             inputs => [$body_sim->control]);
         $region->set_eval_entry($eval_entry) if defined $eval_entry;
+        $region->set_eval_list if ($op->flags & 3) == 3;   # OPf_WANT_LIST
         $sim->set_control($region);
         $sim->set_memory($body_sim->memory);
 
@@ -15268,6 +15370,14 @@ class SoN::FromOptree 0.01 {
 
         my $kind = $inner->name;
 
+        # A BLOCK THAT CALLS A SUB OR DECLARES A `my` GETS A REAL LEAVE, and
+        # the optimizer nulls it: the slot holds `null` with targ OP_LEAVE, so
+        # its name never matches 'leave' below. ONLY the ex-leave is a block --
+        # `our $c; sort $c` is a null too, an ex-rv2sv, and must still reach
+        # the runtime refusal.
+        $kind = 'leave'
+            if $kind eq 'null' && $inner->targ == B::opnumber('leave');
+
         # A NAMED COMPARATOR IS A REFERENCE TO AN ALREADY-TRANSLATED CV. The
         # name rides in the pad on a threaded perl ($inner->sv is a B::SPECIAL),
         # reached by its targ exactly as _anoncode_cv reaches an anon body.
@@ -15301,6 +15411,16 @@ class SoN::FromOptree 0.01 {
             # subtree.
             my $start = $inner;
             $start = $start->first while ($start->flags & 4) && ${ $start->first };
+
+            # A `local` IN THE BLOCK UNWINDS AFTER EVERY COMPARISON, and
+            # nothing on the walked chain says so: perl's sort restores the
+            # save stack itself, so an ex-leave's walk falls off the end with
+            # no scope exit. Measured, `our $x = 5; sort { local $x = $a; ...
+            # }` left $x at the last $a; `local @s` and `local $h{k}` too.
+            die "GAP: a sort comparator block that localises a variable is not"
+              . " yet lowered -- perl unwinds it after each comparison, and the"
+              . " block has no scope exit to restore it at\n"
+                if _subtree_localises($inner);
 
             my $name = _sort_body_name($cv, $op);
             $SORT_BODIES{$name} //= [ $cv, $start ];
