@@ -4220,9 +4220,22 @@ class SoN::FromOptree 0.01 {
                 for my $subject ($args->@*) {
                     push @made, _make_chomp($factory, $sim, $subject, $name);
                 }
-                # The VALUE of a list chomp is the total, which nothing in the
-                # corpus reads; pushing the last keeps the stack balanced.
-                $sim->push_node($made[-1] // $factory->make('Constant',
+                # THE VALUE OF A LIST chomp IS THE TOTAL COUNT; of a list chop,
+                # the LAST character removed. Measured on 5.42.0:
+                #
+                #     chomp("a\n", "b\n")  ->  2      chop("ab", "cd")  ->  "d"
+                my @values = map { _chomp_value($factory, $_) } @made;
+                my $value;
+                if ($name eq 'chop') { $value = $values[-1] }
+                else {
+                    for my $v (@values) {
+                        $value = defined $value
+                            ? $factory->make('Add', inputs => [$value, $v],
+                                stamp => SoN::IR::Stamp->new(type => 'Int'))
+                            : $v;
+                    }
+                }
+                $sim->push_node($value // $factory->make('Constant',
                     value => 0, const_type => 'integer',
                     stamp => SoN::IR::Stamp->new(type => 'Int')));
                 return ($op->next, 'handled');
@@ -4231,7 +4244,13 @@ class SoN::FromOptree 0.01 {
             my $subject = $sim->pop_node;
             my $node = _make_chomp($factory, $sim, $subject, $name);
 
-            $sim->push_node($node);
+            # THE EXPRESSION YIELDS WHAT WAS REMOVED, NOT THE TRIMMED STRING.
+            # Pushing the Chomp made `my $x = chop $k` the shortened string:
+            #
+            #     my $k = "ab"; my $x = chop $k; print $x
+            #       perl : b
+            #       emit : a
+            $sim->push_node(_chomp_value($factory, $node));
             return ($op->next, 'handled');
         }
 
@@ -15542,9 +15561,30 @@ class SoN::FromOptree 0.01 {
         if ($subject->isa('SoN::IR::Node::EntryDef')) {
             # A package scalar needs the EntryWrite as well as the rebind: a
             # read from another sub cannot observe a pad rebind.
-            my $node = $make->($subject);
+            #
+            # THE TRIM READS THE LIVE VALUE, as the lexical case does. The
+            # subject is an lvalue NAME with no memory input, so a ChompValue
+            # reading it was free to float past the write and see the trimmed
+            # string: `our $g = "xy\n"; my $n = chomp $g` gave 0, not 1.
+            #
+            # The binding is forwarded only where the gvsv rvalue read would
+            # forward it: a scalar another sub writes is read through memory,
+            # or `sub f { chomp $g }` trims the value f saw on its first call.
             my $key  = _stash_name_key($subject->sigil,
                                        $subject->package, $subject->symbol);
+            my $existing    = $sim->lookup($key);
+            my $forwardable = (grep { $_ eq $key }
+                                   @ALIAS_BOUND_KEYS, @LOOP_PHI_KEYS)
+                || !_package_scalars_written()->{$key};
+            my $live = $existing && $forwardable ? $existing
+                : $factory->make('EntryDef',
+                    package => $subject->package,
+                    sigil   => $subject->sigil,
+                    symbol  => $subject->symbol,
+                    inputs  => [ $sim->memory ],
+                    ($existing && $existing->can('stamp')
+                        ? (stamp => $existing->stamp) : ()));
+            my $node = $make->($live);
             $sim->define($key, $node);
             _entry_store($factory, $sim, $subject, $node);
             return $node;
@@ -15555,6 +15595,17 @@ class SoN::FromOptree 0.01 {
         # lowered yet -- it trims every element, which is a loop, not a node.
         die "GAP: a chomp/chop whose subject is a `" . ref($subject)
           . "` has no slot to store back into\n";
+    }
+
+    # _chomp_value -- what a chomp/chop expression yields: chomp's count, or
+    # the character chop removed. It reads the Chomp's own input, the subject
+    # BEFORE the trim, since the trimmed string no longer holds what went.
+    sub _chomp_value ($factory, $chomp) {
+        my $kind = $chomp->kind;
+        return $factory->make('ChompValue',
+            inputs => [$chomp->inputs->[0]],
+            kind   => $kind,
+            stamp  => SoN::IR::Stamp->new(type => $kind eq 'chop' ? 'Str' : 'Int'));
     }
 
     sub _tr_decode ($op) {
