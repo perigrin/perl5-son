@@ -363,3 +363,23 @@ else: a silent miscompile is worse than a refusal.
 The sort row is in batch 1 (cluster `sortsub`) because its GAP fix cannot
 be validated without it. Per-cluster reports, with producer sites, are in
 the session scratchpad under gaps/reports/.
+
+### Status at 4c00529 (2026-10-10)
+
+Element-read ordering came first (2bf5c42): `my $z = $a[0]; $a[0] = 1`
+was wrong in the renderer, and `g(\@a)` was wrong in the IR -- a call
+advanced memory only when a written cell existed. Every call is a memory
+barrier now. Eleven of the thirteen rows above then round-trip: eval with
+a guarded die, `$_ *= 2` in a foreach, a bare array's copy and a sub's
+push, countof over a ternary, `wantarray ? @a : []`, `$#x` of a slurpy,
+an array assign in both arms, push in a ternary arm, sort comparators,
+tr/// on a copy, chop's value. Each was verified by an adversarial agent
+against 2bf5c42 before merging.
+
+Still open, on branches mc/postinc, mc/derefassign, mc/hashrefparam
+(each fix introduced a wrong answer its verifier found; repair rounds
+are running): the closure `$n++`, `$$r += 2`, a store through a hashref
+parameter.
+
+Ratchets at 4c00529: corpus 275/275, perl t/ 11, chalk COMPILES 137,
+SKIPPED_GRAPHS 239, INVALID 0, gate 3 SAME 488 / DIFFERS 0 / DEFERRED 59.
