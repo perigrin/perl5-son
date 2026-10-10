@@ -333,3 +333,33 @@ The 59 deferred files at 5948f648 (tools/chalk-gate3.pl, reads_source):
     t/bootstrap/xs-sub-recursion.t
     t/bootstrap/xs-target-c-smoke.t
     t/grammar-conformance.t
+
+## Silent miscompiles found by the GAP investigation (2026-10-10)
+
+Thirteen cluster investigators (the 239 skipped graphs, grouped by GAP)
+reported miscompiles adjacent to their GAPs. Each was re-run through the
+round trip at b6919f7; all thirteen print something other than what perl
+prints, with no GAP. None is caught by gate 3 (488/488), so chalk's tests do
+not exercise them -- but a fix that lowers more graphs can make any of them
+reachable. They are the next batch after the GAP fixes, ahead of nothing
+else: a silent miscompile is worse than a refusal.
+
+| program | perl | emitted |
+|---|---|---|
+| `my $n=0; sub f { my $x = $n++; return $x }` called twice, print `$a $b $n` | `0 1 2` | `1 2 2` |
+| `my $v=1; my $r=\$v; $$r += 2; print $v` | `3` | `1` |
+| `for my $i (1..3) { my $r = eval { die "x\n" if $i==2; 1 }; ... }` | `okEok` | dies `x` |
+| `my @a=(3,4); for (@a) { $_ *= 2 } print "@a"` | `6 8` | `0 0` |
+| `my @a; push @a,1,2; my @b=@a; print scalar(@b)` | `2` | `0` |
+| `my @F=(1,2); sub f { push @F, 3 } f(); print "@F"` | `1 2 3` | `1 2` |
+| `my $n = () = ($c ? 7 : ())` | `1` | `7` |
+| `sub f { wantarray ? @a : [] } my @x = f(); print scalar(@x)` | `2` | `1` |
+| `sub g { my ($k, @x) = @_; return $#x }` | `1` | `1`, via `length(@x)` (right by accident) |
+| `if ($k) { @e = (0,4) } else { @e = (9) }` in a loop | `0 4` | `1`, and a masking `my @e` |
+| `my $x = $c ? push(@a,3) : 0` | `3 1 2 3` | `3 1 2` |
+| `sub f { my ($h)=@_; $h->{p}=2 } f($h); print keys %$h` | `p` | (empty) |
+| `sort { $b <=> $a } (3,1,2)` -- the renderer ignores comparator fields | `3 2 1` | `1 2 3` |
+
+The sort row is in batch 1 (cluster `sortsub`) because its GAP fix cannot
+be validated without it. Per-cluster reports, with producer sites, are in
+the session scratchpad under gaps/reports/.
