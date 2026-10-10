@@ -410,17 +410,20 @@ class SoN::FromOptree 0.01 {
                                         && ($op->flags & 32))) {     # OPf_MOD
                     $agg = $agg->first
                         if $agg->name =~ /\A(?:aelem|helem)\z/ && ($agg->flags & 4);
-                    $slot{ $agg->targ } = 1
+                    $slot{ $agg->targ } ||= 1
                         if $agg->name =~ /\A(?:padav|padhv)\z/ && $agg->targ;
                 }
                 # A REFERENCE TAKEN TO IT lets anything change it -- `add(\%m)`
                 # as surely as `$m{b} = 2`. Through the nulled list wrapper.
+                # Recorded as 'ref' rather than 1, because a whole assign
+                # into such a slot is refused (see the aassign literal path):
+                # the reference names the container, not a version of it.
                 if ($name eq 'srefgen' || $name eq 'refgen') {
                     my @under = ($kid);
                     while (my $u = shift @under) {
                         next unless ref $u && $$u;
                         if ($u->name =~ /\A(?:padav|padhv)\z/) {
-                            $slot{ $u->targ } = 1 if $u->targ;
+                            $slot{ $u->targ } = 'ref' if $u->targ;
                         }
                         elsif ($u->name =~ /\A(?:null|pushmark)\z/) {
                             push @under, $u->first if $u->flags & 4;   # OPf_KIDS
@@ -8670,6 +8673,18 @@ class SoN::FromOptree 0.01 {
                     # than a pad slot, and _stash_key already spells that.
                     # The target already carries its parts; a package
                     # aggregate is named by its stash entry instead.
+                    # A REFERENCE NAMES THE CONTAINER, NOT THIS VERSION. The
+                    # literal below is a fresh aggregate, which is right for a
+                    # `my` and for storage nothing else can see -- but `\@e`
+                    # taken anywhere sees every later assign into @e, and a
+                    # version per assignment cannot say so. Measured on
+                    # `my @e = (1); my $r = \@e; @e = (2,3); print "@$r"`:
+                    # perl 2 3, emitted 1.
+                    die "GAP: a whole assign to a pad aggregate a reference was"
+                      . " taken to is not yet lowered -- the reference would"
+                      . " keep the old contents\n"
+                        if $is_pad && !_aassign_introduces($op)
+                        && ($MUTATED_SLOTS->{ $target->targ } // '') eq 'ref';
                     my $symbol = $is_pad ? $target->symbol : $key;
                     my $node = $factory->make(
                         ($sigil eq '@' ? 'ArrayLiteral' : 'HashLiteral'),

@@ -454,8 +454,7 @@ class SoN::Deparse 0.01 {
             # whatever the container's sigil, so strip the one the symbol
             # carries rather than adding a second.
             if (defined $af->{symbol}) {
-                ( my $bare = $af->{symbol} ) =~ s/\A[\$\@%]//;
-                $bare = $self->_spell_name($bare);
+                my $bare = substr($self->_agg_name($agg), 1);
                 return $kind eq 'ArrayLiteral'
                     ? sprintf('$%s[%s]', $bare, $key)
                     : sprintf('$%s{%s}', $bare, $key);
@@ -1264,6 +1263,14 @@ class SoN::Deparse 0.01 {
             # context bound it to an ARRAY temporary -- which ran the call in
             # list context and gave the elements where perl gives the count.
             my $is_call = ($n->{op} // '') eq 'Call';
+            # A CONDITIONAL REBIND OF A WHOLE AGGREGATE is that aggregate:
+            # `my @e = (1); if ($k) { @e = (0,4) }` is a TernaryExpr stamped
+            # Array, and a `$eff` held its count -- `"@e"` printed 2.
+            my $agg = defined $self->_rebind_arm($n) ? $n->{stamp} // '' : '';
+            if ($agg eq 'Array' || $agg eq 'Hash') {
+                $bound{$id} = sprintf('%seff%d', $agg eq 'Array' ? '@' : '%', $id);
+                next;
+            }
             $bound{$id} = ( $is_call && $want ne ''
                               ? $want eq 'list'
                               : ($n->{stamp} // '') eq 'List' )
@@ -2655,7 +2662,57 @@ class SoN::Deparse 0.01 {
 
         my ($sigil, $bare) = $sym =~ /\A([\$\@%])(.*)\z/s
             ? ($1, $2) : (($af->{sigil} // '@'), $sym);
-        return $sigil . $self->_spell_name($bare);
+        my $name = $sigil . $self->_spell_name($bare);
+        return $self->_agg_versioned->{ $n->{id} // -1 }
+            ? sprintf('%s__%d', $name, $n->{id}) : $name;
+    }
+
+    # _agg_versioned() -- the named pad literals that must be spelled apart,
+    # as { id => 1 }.
+    #
+    # A WHOLE-AGGREGATE ASSIGN IS A FRESH LITERAL WITH THE SAME NAME. Measured
+    # on `my @e; for my $k (0,1) { if ($k) { @e = (0,4) } else { @e = (9) } }`:
+    # PadAccess @e (the empty `my @e`), ArrayLiteral @e (0,4) and ArrayLiteral
+    # @e (9), merged by a Ternary into a loop Phi. Each is a different value,
+    # and spelled `@e` all three were declared as one variable -- `my @e`
+    # twice ("masks earlier declaration"), `$k ? @e : @e`, and the entry read
+    # saw the last literal instead of the empty array. perl printed `0 4`,
+    # the emission `1`.
+    #
+    # So when a name has more than one version in the graph -- two literals,
+    # or a literal beside the bare pad read -- each literal gets its own
+    # variable and the pad read keeps the name. Only an unpinned pad literal:
+    # a pinned one is declared where the chain reaches it, a package one is
+    # observable from other graphs by name, and a slot shared with a sub is
+    # written through its own store.
+    field $agg_versions_for;
+    field %agg_versioned;
+    method _agg_versioned () {
+        return \%agg_versioned
+            if defined $agg_versions_for && $agg_versions_for == $nodes;
+        $agg_versions_for = $nodes;
+        %agg_versioned = ();
+        my (%lits, %pad, %shared);
+        for my $n ($self->_nodes_in_order) {
+            my $op = $n->{op} // '';
+            my $f  = $n->{fields} // {};
+            next unless defined $f->{symbol};
+            my $key = ($f->{sigil} // '') . $f->{symbol};
+            if ($op eq 'PadAccess') {
+                $f->{shared} ? ($shared{$key} = 1) : ($pad{$key} = 1);
+            }
+            elsif ($op =~ /\A(?:Array|Hash)Literal\z/
+                   && !$self->_agg_is_package($n)
+                   && !$self->_is_pinned_aggregate($n)) {
+                push $lits{$key}->@*, $n->{id};
+            }
+        }
+        for my $key (keys %lits) {
+            next if $shared{$key};
+            next unless $lits{$key}->@* + ($pad{$key} ? 1 : 0) > 1;
+            $agg_versioned{$_} = 1 for $lits{$key}->@*;
+        }
+        return \%agg_versioned;
     }
 
     # A PUNCTUATION VARIABLE IS STORED AS ITS CONTROL CHARACTER, package
@@ -2767,10 +2824,36 @@ class SoN::Deparse 0.01 {
 
     method _phi_var ($p) {
         my $st = $p->{stamp} // '';
+        $st = $self->_phi_aggregate_stamp($p) if $st eq 'Unknown';
         return sprintf('@phi%d', $p->{id})
             if $st eq 'Array' || $st eq 'List' || $self->_phi_takes_a_list($p);
         return sprintf('%%phi%d', $p->{id}) if $st eq 'Hash';
         return sprintf('$phi%d', $p->{id});
+    }
+
+    # _phi_aggregate_stamp($phi) -- 'Array' or 'Hash' when an Unknown-stamped
+    # Phi merges whole aggregates, else ''.
+    #
+    # THE BARE PAD READ IS UNSTAMPED. `my @e; ... @e = (9)` in a loop merges
+    # PadAccess @e (Unknown) with an Array literal, so the Phi is Unknown --
+    # and a `$phi` took the array in scalar context: `"@e"` printed its count.
+    # The inputs still say which: the pad read's sigil, an operand's stamp,
+    # or (through a branch join inside the loop) another such Phi.
+    method _phi_aggregate_stamp ($p, $seen = {}) {
+        return '' if $seen->{ $p->{id} }++;
+        for my $id (($p->{inputs} // [])->@*) {
+            my $in = $nodes->{ $id // -1 } // next;
+            my $op = $in->{op} // '';
+            my $st = $in->{stamp} // '';
+            my $sigil = ($in->{fields} // {})->{sigil} // '';
+            return 'Array' if $op eq 'PadAccess' ? $sigil eq '@' : $st eq 'Array';
+            return 'Hash'  if $op eq 'PadAccess' ? $sigil eq '%' : $st eq 'Hash';
+            if ($op eq 'Phi' && $st eq 'Unknown') {
+                my $s = $self->_phi_aggregate_stamp($in, $seen);
+                return $s if $s;
+            }
+        }
+        return '';
     }
 
     # Whether a Region is an eval's join rather than a branch's.
@@ -3350,8 +3433,12 @@ class SoN::Deparse 0.01 {
               . scalar(@pred) . " predecessors is not yet rendered\n"
                 unless @in == @pred && @in;
 
-            my $var = sprintf($self->_phi_takes_a_list($p) ? '@phi%d' : '$phi%d',
-                              $p->{id});
+            # A MERGE OF WHOLE AGGREGATES is an aggregate variable, though the
+            # Phi arrives unstamped -- see _phi_aggregate_stamp.
+            my $agg = ($p->{stamp} // '') eq 'Unknown'
+                ? $self->_phi_aggregate_stamp($p) : '';
+            my $var = sprintf($self->_phi_takes_a_list($p) || $agg eq 'Array' ? '@phi%d'
+                            : $agg eq 'Hash' ? '%%phi%d' : '$phi%d', $p->{id});
 
             # DECLARED AT THE TOP OF THE SUB, NOT BEFORE THIS `if`. A join
             # can OUTLIVE the branch that assigns into it -- measured on a
@@ -4565,6 +4652,9 @@ class SoN::Deparse 0.01 {
             my $st  = $agg->{stamp} // '';
             my $sg  = ($agg->{fields} // {})->{sigil} // '';
             $st = $sg eq '@' ? 'Array' : $sg eq '%' ? 'Hash' : $st;
+            # An unstamped Phi of whole aggregates is one too.
+            $st = $self->_phi_aggregate_stamp($agg) || $st
+                if ($agg->{op} // '') eq 'Phi' && $st eq 'Unknown';
 
             # `scalar(LIST)` IS NOT A COUNT. Perl's `scalar` imposes scalar
             # context rather than counting: `scalar(sort keys %h)` is
@@ -4685,8 +4775,12 @@ class SoN::Deparse 0.01 {
             # and `@{(1, 2)}` is not a dereference of anything -- it emitted an
             # empty slice. The literal IS the list.
             my $st = $agg->{stamp} // '';
+            $st = $self->_phi_aggregate_stamp($agg) || $st
+                if ($agg->{op} // '') eq 'Phi' && $st eq 'Unknown';
+            my $sym = $self->_agg_versioned->{ $agg->{id} // -1 }
+                ? substr($self->_agg_name($agg), 1) : $af->{symbol};
             $text = ($agg->{op} // '') =~ /Literal\z/ && defined $af->{symbol}
-                  ? sprintf('%s%s', $sigil, $af->{symbol})
+                  ? sprintf('%s%s', $sigil, $sym)
                   : ($st eq 'Array' || $st eq 'Hash')
                   ? $self->_expr($in[0])
                   : $self->_postfix_deref($sigil, $self->_expr($in[0]));
@@ -5034,8 +5128,7 @@ class SoN::Deparse 0.01 {
                 # `@@main::E` does not parse.
                 my ($open, $close)
                     = ($af->{sigil} // '@') eq '%' ? ('{', '}') : ('[', ']');
-                ( my $bare = $af->{symbol} ) =~ s/\A[\$\@%]//;
-                $bare = $self->_spell_name($bare);
+                my $bare = substr($self->_agg_name($agg), 1);
                 $text = sprintf('@%s%s%s%s', $bare, $open,
                     join(', ', map { $self->_expr($_) } @in[0 .. $#in - 1]),
                     $close);
