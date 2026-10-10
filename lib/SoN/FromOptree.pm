@@ -6886,6 +6886,23 @@ class SoN::FromOptree 0.01 {
             }
             my $node = _undef_constant($factory);
             if (defined $undef_targ) {
+                # A DEMOTED SLOT IS STORED, as `$h = undef` stores it. `f($h);
+                # undef $h` reads $h from memory afterwards; a rebind alone left
+                # that read at the call's memory version, still the reference.
+                if ($ctx->{addr_taken}{$undef_targ}) {
+                    my $loc = $factory->make('PadAccess',
+                        targ => $undef_targ,
+                        do { my ($sg, $sy) = _padparts($cv, $undef_targ);
+                             (sigil => $sg, symbol => $sy) },
+                        ($ctx->{shared_lexicals}{$undef_targ} ? (shared => 1) : ()),
+                        (defined $sim->memory ? (inputs => [ $sim->memory ]) : ()));
+                    my $store = $factory->make('Assign', inputs => [$loc, $node]);
+                    $store->set_control_in($sim->control);
+                    $sim->set_control($store);
+                    $sim->set_memory($store);
+                    $sim->push_node($node);
+                    return ($op->next, 'handled');
+                }
                 $sim->define($undef_targ, $node);
                 $sim->push_node($node);
                 return ($op->next, 'handled');

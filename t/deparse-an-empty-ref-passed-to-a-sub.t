@@ -72,6 +72,12 @@ my @cases = (
       'inside a sub' ],
     [ q{sub f {1} my $h={}; f($h); print ref($h), "\n";},
       'the reference survives a call that ignores it' ],
+    [ q{sub f { 1 } my $h={}; f($h); undef $h; print defined($h)?1:0, "\n";},
+      q{`undef $h` after the call clears the stored slot} ],
+    [ q{sub f { 1 } my $h={a=>1}; f($h); undef $h; print defined($h)?1:0, "\n";},
+      q{`undef $h` clears a non-empty reference too} ],
+    [ q{sub f { $_[0]{p}=2 } my $h={}; f($h); undef $h; print defined($h)?1:0, "\n";},
+      q{`undef $h` after the callee writes through it} ],
 );
 
 for my $c (@cases) {
