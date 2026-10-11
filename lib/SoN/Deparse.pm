@@ -2380,6 +2380,7 @@ class SoN::Deparse 0.01 {
         }
 
         my %declared_before_walk = %pad_declared;
+        my %subst_before_walk = %subst_count_var;
         my $body = $self->_emit_from($start->{id}, \%next_of, undef);
         $body = $save_prologue . $body;
         my %declared_by_walk = %pad_declared;
@@ -2589,6 +2590,14 @@ class SoN::Deparse 0.01 {
             # pushed each pass gave three references to it.
             delete @pad_declared{ grep { !$declared_before_walk{$_} }
                                    keys %declared_by_walk };
+            # SO DOES A COUNTED s/// IT BOUND. The EntryWrite that emits one
+            # binds it, and the re-walk -- finding it bound -- spelled the store
+            # `$main::warn = $main::warn` and read a `$subst6` never declared
+            # (perl's comp/redef.t and comp/fold.t).
+            for my $id ( grep { !exists $subst_before_walk{$_} } keys %subst_count_var ) {
+                delete $bound{$id};
+                delete $subst_count_var{$id};
+            }
             for my $j ( keys %stale_at_join ) {
                 my %mine = map { $_->{id} => 1 } $stale_at_join{$j}->@*;
                 $after_region{$j} = [ $stale_at_join{$j}->@*,
