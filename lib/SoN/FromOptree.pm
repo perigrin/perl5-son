@@ -13245,6 +13245,25 @@ class SoN::FromOptree 0.01 {
         return !($op->name eq 'aelem' && $op->first->name eq 'padav');
     }
 
+    # Is a key built only from constants and lexical scalars? Any other node
+    # -- an element, a size, a call, a chop -- may read memory a store
+    # changes, or have an effect of its own.
+    # ponytail: an allow-list, so an unlisted pure op refuses rather than
+    # miscompiles; widen it when one is wanted.
+    sub _key_reads_no_memory ($key) {
+        my %seen;
+        my @todo = ($key);
+        while (defined(my $n = shift @todo)) {
+            next if $seen{refaddr $n}++;
+            next if $n->isa('SoN::IR::Node::Constant');
+            next if $n->isa('SoN::IR::Node::PadAccess') && $n->sigil eq '$';
+            return 0 unless $n->isa('SoN::IR::Node::Phi')
+                         || $n->isa('SoN::IR::Node::BinOp');
+            push @todo, grep { defined } $n->inputs->@*;
+        }
+        return 1;
+    }
+
     # Does the arm `local`ize an element (`local $a[0] = 7`)? Bounded like
     # _arm_has_element_store.
     sub _arm_localizes_element ($start, $stop, $join = undef) {
@@ -14197,6 +14216,15 @@ class SoN::FromOptree 0.01 {
                     if ($tgt && $st->inputs->[1] == $$val
                         && $tgt->isa('SoN::IR::Node::Subscript')
                         && scalar($tgt->inputs->@*) == 2) {
+                        # THE REREAD SPELLS THE KEY AGAIN, after the store. A
+                        # key that reads memory reads what the store changed:
+                        # `$a[$a[0]] = 1` re-read $a[1], `$a[scalar @a]` read
+                        # past the end. One with an effect (`chop $k`) runs
+                        # it again.
+                        die "GAP: a consumed ternary arm stores an element whose"
+                          . " key reads memory or has an effect; the merged value"
+                          . " would re-read it after the store\n"
+                            unless _key_reads_no_memory($tgt->inputs->[1]);
                         push @reread, [$val, $tgt, $st];
                         next;
                     }

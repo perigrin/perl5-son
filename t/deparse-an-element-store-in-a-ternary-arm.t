@@ -57,6 +57,7 @@ sub refuses ($src, $cause, $name) {
 }
 
 my $not_const = qr/GAP: a consumed ternary arm stores an element and yields a value that is not a constant/;
+my $key_mem   = qr/GAP: a consumed ternary arm stores an element whose key reads memory or has an effect/;
 
 # A constant stored value merges, in scalar, list and the caller's context.
 # WANT 0 is the caller's context: taken for void, the value was dropped and
@@ -119,17 +120,40 @@ refuses(q{my @a=(1); my $r=\$a[0]; for my $c (1,0) { my $x = $c ? ($a[0] = $$r +
 refuses(q{my @a=(1,2); for my $c (1,0) { for my $e (@a) { my $x = $c ? ($a[0] = $e + 1) : 8; print "$x @a;" } print "\n" }},
     $not_const, 'a stored value reading a foreach alias of the element');
 refuses(q{my %h; my $k="ab"; for my $c (1,0) { my $x = $c ? ($h{chop $k} = $k) : 8; print "$x $k ", join(",", map {"$_=$h{$_}"} sort keys %h), "\n" }},
-    $not_const, 'a chop in the key');
+    $key_mem, 'a chop in the key');
 refuses(q{my %h; my $k="ab\n"; for my $c (1,0) { my $x = $c ? ($h{chomp $k} = $k) : 8; print "[$x] [$k] ", join(",", map {"$_=$h{$_}"} sort keys %h), "\n" }},
-    $not_const, 'a chomp in the key');
+    $key_mem, 'a chomp in the key');
 refuses(q{my %h; my $k="ab"; for my $c (1,0) { my $x = $c ? ($h{undef $k} = $k) : 8; print defined $x ? $x : "u", " ", join(",", map {"$_=".($h{$_}//"u")} sort keys %h), "\n" }},
     $not_const, 'an undef in the key');
 refuses(q{my @a; my $k="ab"; for my $c (1,0) { my $x = $c ? ($a[chop $k] = $k) : 8; print "$x $k\n" }},
-    $not_const, 'a chop in the index');
+    $key_mem, 'a chop in the index');
 refuses(q{my %h; my $k="ab"; for my $c (1,0) { my $x = $c ? ($h{$k =~ tr/a/z/} = $k) : 8; print "$x $k ", join(",", map {"$_=$h{$_}"} sort keys %h), "\n" }},
     $not_const, 'a tr/// in the key');
 refuses(q{sub inc { $_[0]++ } my @a=(0); for my $c (1,0) { my $x = $c ? inc($a[0]) : 5; print "$x @a\n" }},
     $not_const, 'a writing call of a lexical array element');
+
+# The merged value re-reads the element after the store, through the same
+# key. A key that reads memory -- an element, a size, keys -- reads it after
+# the store too, and names another element; a key with an effect (chop,
+# above) runs it again.
+refuses(q{my @a = (0,5); for my $c (1,0) { my $x = $c ? ($a[$a[0]] = 1) : 8; print "$x @a\n" }},
+    $key_mem, 'an index that reads the array');
+refuses(q{my $r = [0,5]; for my $c (1,0) { my $x = $c ? ($r->[$r->[0]] = 1) : 8; print "$x @$r\n" }},
+    $key_mem, 'an arrayref index that reads the array');
+refuses(q{my @a = (0,5); my $c = shift // 1; my $x = $c ? ($a[$a[0]] = 1) : 8; print "$x @a\n"},
+    $key_mem, 'an index that reads the array, outside a loop');
+refuses(q{my %h = (k=>'k', x=>0); for my $c (1,0) { my $x = $c ? ($h{$h{k}} = 'z') : 8; print "$x $h{k}\n" }},
+    $key_mem, 'a key that reads the hash');
+refuses(q{my @a = (0,5); for my $c (1,0) { my $x = $c ? ($a[scalar(@a)] = 1) : 8; print "$x @a\n" }},
+    $key_mem, 'an index that reads the size');
+refuses(q{my %h = (a=>1); for my $c (1,0) { my $x = $c ? ($h{scalar(keys %h)} = 1) : 8; print "$x\n" }},
+    $key_mem, 'a key that counts the keys');
+refuses(q{my @a = (0,5); my @b = (1); for my $c (1,0) { my $x = $c ? ($a[$b[0]] = 1) : 8; print "$x @a\n" }},
+    $key_mem, 'an index that reads another array');
+round_trips(q{my @a = (0,5); my $i = 1; for my $c (1,0) { my $x = $c ? ($a[$i] = 1) : 8; print "$x @a\n" }},
+    'a lexical scalar index');
+round_trips(q{my @a = (0,0); my $i = 0; for my $c (1,0) { my $x = $c ? ($a[$i+1] = 1) : 8; print "$x @a\n" }},
+    'an arithmetic index over a lexical scalar');
 
 # `local` is restored at scope exit, which the store does not model.
 refuses(q{my @a=(0); for my $c (1,0) { my $x = $c ? (local $a[0] = 7) : 8; print "$x $a[0]\n" }},
