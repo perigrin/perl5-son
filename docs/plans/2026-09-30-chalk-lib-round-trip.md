@@ -376,10 +376,18 @@ an array assign in both arms, push in a ternary arm, sort comparators,
 tr/// on a copy, chop's value. Each was verified by an adversarial agent
 against 2bf5c42 before merging.
 
-Still open, on branches mc/postinc, mc/derefassign, mc/hashrefparam
-(each fix introduced a wrong answer its verifier found; repair rounds
-are running): the closure `$n++`, `$$r += 2`, a store through a hashref
-parameter.
+All three remaining rows -- the closure `$n++`, `$$r += 2`, a store
+through a hashref parameter -- landed at bd0e86a, after their merge was
+repaired: postinc's alias refusal counted any call as a store to every
+pad scalar (COMPILES fell to 133, SKIPPED_GRAPHS rose to 280; a call now
+stores only what a closure or reference reaches), and two perl t/
+emissions stopped compiling (fixed; perl t/ invalid emissions are
+guarded by a ratchet ceiling of 2 now).
 
 Ratchets at 4c00529: corpus 275/275, perl t/ 11, chalk COMPILES 137,
 SKIPPED_GRAPHS 239, INVALID 0, gate 3 SAME 488 / DIFFERS 0 / DEFERRED 59.
+
+Ratchets at bd0e86a (2026-10-11): corpus 275/275, perl t/ 11 with 2
+invalid emissions (ceiling 2), chalk COMPILES 137, SKIPPED_GRAPHS 239,
+INVALID 0, gate 3 SAME 488 / DIFFERS 0 / DEFERRED 59. All thirteen rows
+of the table above round-trip.
