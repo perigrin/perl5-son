@@ -33,7 +33,7 @@ my %FLOOR = (
     # ratchet FAILED on every run, which is to say it was never run. An opt-in
     # guard nobody runs is the decorative kind; a floor above the real number is
     # how it got that way.
-    corpus => 275,   # measured on t/corpus/mdtest/pvm (pvm 50cd3b10 + 17 local, 275 cases), 2026-10-07
+    corpus => 279,   # t/corpus/mdtest/pvm (pvm 50cd3b10 + 21 local), measured twice 2026-10-11
     perl_t => 11,    # base/lex.t refuses on a `caller` bound to a list
     # chalk's lib/ at the commit tools/chalk-lib-roundtrip.pl pins (5948f648,
     # 179 modules), measured at d0cb68a and 2d8fb90, 2026-10-06.
@@ -50,8 +50,9 @@ my %FLOOR = (
 # compile with some of its graphs skipped, so COMPILES alone could hold while
 # the parse gate slipped. Lowering this needs no reason; raising it does.
 my %CEILING = (
-    # Measured 229 at 1c8634e, twice, 2026-10-11 (239 at d0cb68a and 2d8fb90).
-    chalk_skipped_graphs => 229,
+    # Measured 226 at d25e6c2, twice, 2026-10-11 (229 at 1c8634e; 239 at
+    # d0cb68a and 2d8fb90).
+    chalk_skipped_graphs => 226,
     # perl t/ emissions perl will not compile. Unguarded until 75d3db8, so
     # two new ones (comp/fold.t, comp/retainedlines.t) arrived unnoticed.
     # Measured 1 at 1c8634e, twice, 2026-10-11: comp/line_debug.t (a
