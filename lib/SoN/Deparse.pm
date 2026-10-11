@@ -1567,6 +1567,47 @@ class SoN::Deparse 0.01 {
             push $consumers{$_}->@*, $c for ( $c->{inputs} // [] )->@*;
         }
 
+        # $used_in_arm->($anchor, $read): is a chain use of $read (through
+        # pure nodes) inside an arm of an `if` that comes after $anchor --
+        # between the arm's Proj and its join? A binding placed at the anchor
+        # would run on the path the arm's test skips, and before anything the
+        # arm declares. A use after the join is not in the arm.
+        my $used_in_arm = sub ($anchor, $read) {
+            my ( @fwd, %reach, %arm ) = ($anchor);
+            while ( defined( my $id = shift @fwd ) ) {
+                next if $reach{$id}++;
+                push @fwd, map { $_->{id} } ( $ctrl_next{$id} // [] )->@*;
+            }
+            for my $if ( grep { ( ( $nodes->{$_} // {} )->{op} // '' ) eq 'If' } keys %reach ) {
+                my @q = map { $_->{id} }
+                    grep { ( $_->{op} // '' ) eq 'Proj' } ( $ctrl_next{$if} // [] )->@*;
+                while ( defined( my $id = shift @q ) ) {
+                    next if $arm{$id}++;
+                    # Up to THIS if's join: a nested if's join is still
+                    # inside the arm.
+                    push @q, map { $_->{id} }
+                        grep { !( ( $_->{op} // '' ) eq 'Region'
+                                  && ( $_->{head} // ( $_->{fields} // {} )->{head} // -1 ) == $if ) }
+                        ( $ctrl_next{$id} // [] )->@*;
+                }
+            }
+            # EVERY use in an arm: one on the path past the join -- `my $y =
+            # $h{a}; if (...) {...} elsif ($y) {...} print $y` -- reads it
+            # unconditionally, and the binding is what keeps it right.
+            my ( @use, %seen, $inside, $outside ) = ($read);
+            while ( defined( my $id = shift @use ) ) {
+                next if $seen{$id}++;
+                for my $c ( ( $consumers{$id} // [] )->@* ) {
+                    if ( defined $c->{control_in} ) {
+                        $arm{ $c->{id} } ? ( $inside = 1 ) : ( $outside = 1 );
+                        next;
+                    }
+                    push @use, $c->{id};
+                }
+            }
+            return $inside && !$outside;
+        };
+
         # A SCALAR READ AT SUB ENTRY AND STORED IN A LOOP IS NOT CARRIED. Inside
         # a named sub, a package scalar or a shared file lexical has no binding
         # for the loop scout to give a header Phi, so the body's read names the
@@ -2036,26 +2077,8 @@ class SoN::Deparse 0.01 {
             # else, read as $caller[1] there), and a store the arm makes is not
             # one the pass before it sees. The anchor's own chain stops at the
             # arm's Proj.
-            unless ( $at_entry ) {
-                my ( @fwd, %reach ) = ( ( $join // $version )->{id} );
-                while ( defined( my $id = shift @fwd ) ) {
-                    next if $reach{$id}++;
-                    push @fwd, map { $_->{id} }
-                        grep { ( $_->{op} // '' ) ne 'Proj' } ( $ctrl_next{$id} // [] )->@*;
-                }
-                my ( @use, %usen, $in_arm ) = ( $n->{id} );
-                while ( defined( my $id = shift @use ) ) {
-                    next if $usen{$id}++;
-                    for my $c ( ( $consumers{$id} // [] )->@* ) {
-                        if ( defined $c->{control_in} ) {
-                            $in_arm = 1 unless $reach{ $c->{id} };
-                            next;
-                        }
-                        push @use, $c->{id};
-                    }
-                }
-                next if $in_arm;
-            }
+            next if !$at_entry
+                && $used_in_arm->( ( $join // $version )->{id}, $n->{id} );
 
             my ( @queue, %seen, $shadowed )
                 = ( $at_entry ? $start->{id} : ( $join // $version )->{id} );
@@ -2132,17 +2155,7 @@ class SoN::Deparse 0.01 {
             # OR GUARDED BY CONTROL: a use in an `if` arm the version's own
             # chain does not reach. `unless (!$r) { print $$r }` was bound
             # before the test and dereferenced undef.
-            # An arm begins at a Proj, so the walk stops there.
-            my ( @fwd, %reach ) = ( $version->{id} );
-            while ( defined( my $id = shift @fwd ) ) {
-                next if $reach{$id}++;
-                push @fwd, map { $_->{id} }
-                    grep { ( $_->{op} // '' ) ne 'Proj' } ( $ctrl_next{$id} // [] )->@*;
-            }
-            next if grep {
-                my $u = $nodes->{$_} // {};
-                defined $u->{control_in} && !$reach{$_}
-            } keys %used;
+            next if $used_in_arm->( $version->{id}, $n->{id} );
 
             my ( @queue, %seen, $shadowed ) = ( $version->{id} );
             while ( @queue && !$shadowed ) {
