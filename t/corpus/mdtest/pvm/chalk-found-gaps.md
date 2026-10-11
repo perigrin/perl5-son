@@ -1612,3 +1612,489 @@ main::__PROGRAM__: {start: 0, returns: [31], nodes: [
   [Print, ~, [29], 20, Scalar], # 30
   [Return, {implicit: true}, [1], 30]]} # 31
 ```
+
+## A block comparator that calls a method
+
+A comparator block that calls a sub or declares a `my` gets a real scope, which perl's optimizer leaves as an ex-leave; it is still a block, not a comparator chosen at runtime.
+
+```perl
+package N { sub new { bless { n => $_[1] }, $_[0] } sub name { $_[0]{n} } }
+my @ns = map { N->new($_) } qw(pear apple fig);
+my @by = sort { $a->name cmp $b->name } @ns;
+print join(" ", map { $_->name } @by), "\n";
+my @len = sort { my $x = length $a->name; $x <=> length $b->name } @ns;
+print join(" ", map { $_->name } @len), "\n";
+```
+
+```behavior
+parses: yes
+```
+
+```output
+apple fig pear
+fig pear apple
+```
+
+```ir
+N::name: {start: 0, returns: [7], nodes: [
+  [Start], # 0
+  [ArgsSource, ~, ~, ~, Array], # 1
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 2
+  [Subscript, {kind: array}, [1, 2], ~, Scalar], # 3
+  [Constant, {const_type: string, value: "n"}, ~, ~, Str], # 4
+  [MemStart], # 5
+  [Subscript, {kind: hash}, [3, 4, 5], ~, Scalar], # 6
+  [Return, {implicit: true}, [6], 0]]} # 7
+N::new: {start: 0, returns: [10], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: "n"}, ~, ~, Str], # 1
+  [ArgsSource, ~, ~, ~, Array], # 2
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 3
+  [MemStart], # 4
+  [Subscript, {kind: array}, [2, 3, 4], ~, Scalar], # 5
+  [HashLiteral, ~, [1, 5], 0, HashRef], # 6
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 7
+  [Subscript, {kind: array}, [2, 7, 4], ~, Scalar], # 8
+  [Call, {dispatch_kind: builtin, name: bless, param_names: []}, [6, 8], ~, Unknown], # 9
+  [Return, {implicit: true}, [9], 6]]} # 10
+main::__PROGRAM__: {start: 0, returns: [25], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 2
+  [ArrayLiteral, ~, ~, ~, Array], # 3
+  [ArrayLiteral, ~, ~, ~, Array], # 4
+  [Loop, {bound: entry}, [0], 0], # 5
+  [Phi, {region: 5}, [4, 41], ~, Array], # 6
+  [ArrayLiteral, ~, ~, ~, Array], # 7
+  [Proj, {index: 1}, [5]], # 8
+  [Region, {head: 5}, [8]], # 9
+  [Call, {dispatch_kind: builtin, name: sort, param_names: [], sort_cmp_body: main::__PROGRAM__::__SORTCMP__:1, sort_package: main, want: list}, [6], 9, List], # 10
+  [Loop, {bound: entry}, [10], 10], # 11
+  [Phi, {region: 11}, [7, 57], ~, Array], # 12
+  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [2, 12], ~, Str], # 13
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 14
+  [Proj, {index: 1}, [11]], # 15
+  [Region, {head: 11}, [15]], # 16
+  [Print, ~, [13, 14], 16, Scalar], # 17
+  [Call, {dispatch_kind: builtin, name: sort, param_names: [], sort_cmp_body: main::__PROGRAM__::__SORTCMP__:2, sort_package: main, want: list}, [6], 17, List], # 18
+  [Loop, {bound: entry}, [18], 18], # 19
+  [Phi, {region: 19}, [3, 46], ~, Array], # 20
+  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [2, 20], ~, Str], # 21
+  [Proj, {index: 1}, [19]], # 22
+  [Region, {head: 19}, [22]], # 23
+  [Print, ~, [21, 14], 23, Scalar], # 24
+  [Return, {implicit: true}, [1], 24], # 25
+  [Constant, {const_type: string, value: pear}, ~, ~, Str], # 26
+  [Constant, {const_type: string, value: apple}, ~, ~, Str], # 27
+  [Constant, {const_type: string, value: fig}, ~, ~, Str], # 28
+  [ArrayLiteral, ~, [26, 27, 28], ~, List], # 29
+  [MemStart], # 30
+  [Count, ~, [29, 30], ~, Int], # 31
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 32
+  [Phi, {region: 5}, [32, 40], ~, Int], # 33
+  [NumGt, ~, [31, 33], 5, Boolean], # 34
+  [Proj, {index: 0}, [5]], # 35
+  [Constant, {const_type: string, value: "N"}, ~, ~, Str], # 36
+  [Subscript, {kind: array}, [29, 33, 30], ~, Str], # 37
+  [Call, {class_name: "N", dispatch_kind: method, name: new, param_names: [], want: list}, [36, 37], 35, Object], # 38
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 39
+  [Add, ~, [33, 39], ~, Int], # 40
+  [ListAppend, {collector: map}, [6, 38], ~, Array], # 41
+  [Phi, {region: 19}, [32, 54], ~, Int], # 42
+  [Subscript, {kind: array}, [18, 42, 18], ~, Scalar], # 43
+  [Proj, {index: 0}, [19]], # 44
+  [Call, {dispatch_kind: method, name: name, param_names: [], want: list}, [43], 44, Unknown], # 45
+  [ListAppend, {collector: map}, [20, 45], ~, Array], # 46
+  [Phi, {region: 11}, [32, 52], ~, Int], # 47
+  [Count, ~, [10, 10], ~, Int], # 48
+  [Subscript, {kind: array}, [10, 47, 10], ~, Scalar], # 49
+  [Count, ~, [18, 18], ~, Int], # 50
+  [NumGt, ~, [50, 42], 19, Boolean], # 51
+  [Add, ~, [47, 39], ~, Int], # 52
+  [NumGt, ~, [48, 47], 11, Boolean], # 53
+  [Add, ~, [42, 39], ~, Int], # 54
+  [Proj, {index: 0}, [11]], # 55
+  [Call, {dispatch_kind: method, name: name, param_names: [], want: list}, [49], 55, Unknown], # 56
+  [ListAppend, {collector: map}, [12, 56], ~, Array]]} # 57
+main::__PROGRAM__::__SORTCMP__:1: {start: 0, returns: [6], nodes: [
+  [Start], # 0
+  [EntryDef, {package: main, sigil: $, symbol: a}, ~, ~, Scalar], # 1
+  [Call, {dispatch_kind: method, name: name, param_names: [], want: scalar}, [1], 0, Unknown], # 2
+  [EntryDef, {package: main, sigil: $, symbol: b}, ~, ~, Scalar], # 3
+  [Call, {dispatch_kind: method, name: name, param_names: [], want: scalar}, [3], 2, Unknown], # 4
+  [StrCmp, ~, [2, 4], ~, Int], # 5
+  [Return, {implicit: true}, [5], 4]]} # 6
+main::__PROGRAM__::__SORTCMP__:2: {start: 0, returns: [8], nodes: [
+  [Start], # 0
+  [EntryDef, {package: main, sigil: $, symbol: a}, ~, ~, Scalar], # 1
+  [Call, {dispatch_kind: method, name: name, param_names: [], want: scalar}, [1], 0, Unknown], # 2
+  [Length, ~, [2], ~, Int], # 3
+  [EntryDef, {package: main, sigil: $, symbol: b}, ~, ~, Scalar], # 4
+  [Call, {dispatch_kind: method, name: name, param_names: [], want: scalar}, [4], 2, Unknown], # 5
+  [Length, ~, [5], ~, Int], # 6
+  [NumCmp, ~, [3, 6], ~, Int], # 7
+  [Return, {implicit: true}, [7], 5]]} # 8
+```
+
+## An in-place sort in one arm
+
+Perl folds `@a = sort ... @a` into the sort. Inside an `if` arm, the join must merge the array, not its count.
+
+```perl
+my @a = (3,1,2);
+if (!@ARGV) { @a = sort { my $t=$a; $t <=> $b } @a }
+print "@a\n";
+```
+
+```behavior
+parses: yes
+```
+
+```output
+1 2 3
+```
+
+```ir
+main::__PROGRAM__: {start: 0, returns: [22], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [MemStart], # 2
+  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 3
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 4
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 5
+  [ArrayLiteral, {sigil: "@", symbol: a}, [3, 4, 5], ~, Array], # 6
+  [EntryDef, {package: main, sigil: "@", symbol: ARGV}, ~, ~, Array], # 7
+  [If, ~, [0, 7], 0], # 8
+  [Proj, {index: 1}, [8]], # 9
+  [Call, {dispatch_kind: builtin, name: sort, param_names: [], sort_cmp_body: main::__PROGRAM__::__SORTCMP__:1, sort_package: main, want: list}, [6], 9, List], # 10
+  [Proj, {index: 0}, [8]], # 11
+  [Region, {head: 8}, [11, 10]], # 12
+  [Phi, {predecessors: [11, 9], region: 12}, [2, 10], ~, Unknown], # 13
+  [EntryDef, {package: main, sigil: $, symbol: "\""}, [13], ~, Scalar], # 14
+  [Coerce, {from_repr: Scalar, to_repr: Str}, [14], ~, Str], # 15
+  [ArrayLiteral, {sigil: "@", symbol: a}, [10], ~, Array], # 16
+  [Phi, {predecessors: [11, 9], region: 12}, [6, 16], ~, Array], # 17
+  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [15, 17], ~, Str], # 18
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 19
+  [Concat, ~, [18, 19], ~, Str], # 20
+  [Print, ~, [20], 12, Scalar], # 21
+  [Return, {implicit: true}, [1], 21]]} # 22
+main::__PROGRAM__::__SORTCMP__:1: {start: 0, returns: [7], nodes: [
+  [Start], # 0
+  [MemStart], # 1
+  [EntryDef, {package: main, sigil: $, symbol: a}, [1], ~, Scalar], # 2
+  [Coerce, {from_repr: Scalar, to_repr: Num}, [2], ~, Num], # 3
+  [EntryDef, {package: main, sigil: $, symbol: b}, [1], ~, Scalar], # 4
+  [Coerce, {from_repr: Scalar, to_repr: Num}, [4], ~, Num], # 5
+  [NumCmp, ~, [3, 5], ~, Int], # 6
+  [Return, {implicit: true}, [6], 0]]} # 7
+```
+
+## A comparator sort on the right of an untaken &&
+
+The sort is pinned in the &&'s arm. The binding of the && value must sit after the join, not inside the arm.
+
+```perl
+sub c { $a <=> $b }
+my @r = @ARGV && sort c 3,1,2;
+print scalar(@r), "\n";
+```
+
+```behavior
+parses: yes
+```
+
+```output
+1
+```
+
+```ir
+main::__PROGRAM__: {start: 0, returns: [19], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [EntryDef, {package: main, sigil: "@", symbol: ARGV}, ~, ~, Array], # 2
+  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 3
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 4
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 5
+  [If, ~, [0, 2], 0], # 6
+  [Proj, {index: 0}, [6]], # 7
+  [Call, {dispatch_kind: builtin, name: sort, param_names: [], sort_cmp_body: main::c, sort_package: main, want: list}, [3, 4, 5], 7, List], # 8
+  [And, ~, [2, 8], ~, List], # 9
+  [ArrayLiteral, {sigil: "@", symbol: r}, [9], ~, Array], # 10
+  [MemStart], # 11
+  [Proj, {index: 1}, [6]], # 12
+  [Region, {head: 6}, [12, 8]], # 13
+  [Phi, {predecessors: [12, 7], region: 13}, [11, 8], ~, Unknown], # 14
+  [Count, ~, [10, 14], ~, Int], # 15
+  [Coerce, {from_repr: Int, to_repr: Str}, [15], ~, Str], # 16
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 17
+  [Print, ~, [16, 17], 13, Scalar], # 18
+  [Return, {implicit: true}, [1], 18]]} # 19
+main::c: {start: 0, returns: [7], nodes: [
+  [Start], # 0
+  [MemStart], # 1
+  [EntryDef, {package: main, sigil: $, symbol: a}, [1], ~, Scalar], # 2
+  [Coerce, {from_repr: Scalar, to_repr: Num}, [2], ~, Num], # 3
+  [EntryDef, {package: main, sigil: $, symbol: b}, [1], ~, Scalar], # 4
+  [Coerce, {from_repr: Scalar, to_repr: Num}, [4], ~, Num], # 5
+  [NumCmp, ~, [3, 5], ~, Int], # 6
+  [Return, {implicit: true}, [6], 0]]} # 7
+```
+
+## Two targets from a ternary of a list call
+
+The value merges two arms of unknown arity. Perl spreads it over the targets at runtime.
+
+```perl
+sub f {(1,2)}
+my ($x,$y) = !@ARGV ? f() : ();
+print "$x $y\n";
+```
+
+```behavior
+parses: yes
+```
+
+```output
+1 2
+```
+
+```ir
+main::__PROGRAM__: {start: 0, returns: [19], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [PadAccess, {sigil: $, symbol: x}, ~, ~, Str], # 2
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [2], ~, Str], # 3
+  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 4
+  [Concat, ~, [3, 4], ~, Str], # 5
+  [PadAccess, {sigil: $, symbol: "y"}, ~, ~, Str], # 6
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
+  [Concat, ~, [5, 7], ~, Str], # 8
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
+  [Concat, ~, [8, 9], ~, Str], # 10
+  [EntryDef, {package: main, sigil: "@", symbol: ARGV}, ~, ~, Array], # 11
+  [Not, ~, [11], ~, Boolean], # 12
+  [If, ~, [0, 12], 0], # 13
+  [Proj, {index: 0}, [13]], # 14
+  [Call, {dispatch_kind: direct, name: main::f, param_names: [], want: list}, ~, 14, List], # 15
+  [Proj, {index: 1}, [13]], # 16
+  [Region, {head: 13}, [15, 16]], # 17
+  [Print, ~, [10], 17, Scalar], # 18
+  [Return, {implicit: true}, [1], 18], # 19
+  [ArrayLiteral, ~, ~, ~, List], # 20
+  [Phi, {predecessors: [14, 16], region: 17}, [15, 20], ~, List], # 21
+  [MemStart], # 22
+  [Phi, {predecessors: [14, 16], region: 17}, [15, 22], ~, Unknown], # 23
+  [Assign, {targets: 2}, [2, 6, 21], ~, List]]} # 24
+main::f: {start: 0, returns: [5], nodes: [
+  [Start], # 0
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 2
+  [ArrayLiteral, ~, [1, 2], ~, List], # 3
+  [Coerce, {from_repr: List, to_repr: Scalar}, [2], ~, Scalar], # 4
+  [Return, {implicit: true}, [3, 4], 0]]} # 5
+```
+
+## A returned eval that may die, called both ways
+
+A list caller gets () when the body dies, and a scalar caller gets undef.
+
+```perl
+sub w { return eval { die "x\n" if $_[0]; 5 } }
+my @r = w(1); my $s = w(1);
+print scalar(@r), " ", defined $s ? "d" : "u", " ", w(0), "\n";
+```
+
+```behavior
+parses: yes
+```
+
+```output
+0 u 5
+```
+
+```ir
+main::__PROGRAM__: {start: 0, returns: [18], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
+  [Call, {dispatch_kind: direct, name: main::w, param_names: [], want: list}, [2], 0, Scalar], # 3
+  [ArrayLiteral, {sigil: "@", symbol: r}, [3], ~, Array], # 4
+  [Call, {dispatch_kind: direct, name: main::w, param_names: [], want: scalar}, [2], 3, Scalar], # 5
+  [Count, ~, [4, 5], ~, Int], # 6
+  [Coerce, {from_repr: Int, to_repr: Str}, [6], ~, Str], # 7
+  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 8
+  [Defined, ~, [5], ~, Boolean], # 9
+  [Constant, {const_type: string, value: d}, ~, ~, Str], # 10
+  [Constant, {const_type: string, value: u}, ~, ~, Str], # 11
+  [TernaryExpr, ~, [9, 10, 11], ~, Str], # 12
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 13
+  [Call, {dispatch_kind: direct, name: main::w, param_names: [], want: list}, [13], 5, Scalar], # 14
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [14], ~, Str], # 15
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 16
+  [Print, ~, [7, 8, 12, 8, 15, 16], 14, Scalar], # 17
+  [Return, {implicit: true}, [1], 17]]} # 18
+main::w: {start: 0, returns: [15], nodes: [
+  [Start], # 0
+  [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 1
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 2
+  [ArgsSource, ~, ~, ~, Array], # 3
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 4
+  [MemStart], # 5
+  [Subscript, {kind: array}, [3, 4, 5], ~, Scalar], # 6
+  [If, ~, [0, 6], 0], # 7
+  [Proj, {index: 1}, [7]], # 8
+  [Constant, {const_type: string, value: "x\n"}, ~, ~, Str], # 9
+  [Proj, {index: 0}, [7]], # 10
+  [Unwind, ~, [9], 10], # 11
+  [Region, {head: 7}, [8, 11]], # 12
+  [Region, {eval_entry: 0, eval_want: runtime}, [12]], # 13
+  [Phi, {region: 13}, [1, 2], ~, Scalar], # 14
+  [Return, ~, [14], 13]]} # 15
+```
+
+## A comparator block that calls a method
+
+Every comparator in chalk's lib/ that refused calls a method on `$a` and `$b`. A block that calls a sub gets a real leave, which perl nulls, so the comparator slot holds an ex-leave rather than a scope. It is still an inline block, and it sorts by what it returns.
+
+```perl
+package Node { sub new { bless { id => $_[1] }, $_[0] } sub id { $_[0]{id} } }
+my %member = map { $_ => Node->new($_) } qw(n3 n1 n2);
+print join(",", map { $_->id } sort { $a->id cmp $b->id } values %member), "\n";
+```
+
+```ir
+Node::id: {start: 0, returns: [7], nodes: [
+  [Start], # 0
+  [ArgsSource, ~, ~, ~, Array], # 1
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 2
+  [Subscript, {kind: array}, [1, 2], ~, Scalar], # 3
+  [Constant, {const_type: string, value: id}, ~, ~, Str], # 4
+  [MemStart], # 5
+  [Subscript, {kind: hash}, [3, 4, 5], ~, Scalar], # 6
+  [Return, {implicit: true}, [6], 0]]} # 7
+Node::new: {start: 0, returns: [10], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: id}, ~, ~, Str], # 1
+  [ArgsSource, ~, ~, ~, Array], # 2
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 3
+  [MemStart], # 4
+  [Subscript, {kind: array}, [2, 3, 4], ~, Scalar], # 5
+  [HashLiteral, ~, [1, 5], 0, HashRef], # 6
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 7
+  [Subscript, {kind: array}, [2, 7, 4], ~, Scalar], # 8
+  [Call, {dispatch_kind: builtin, name: bless, param_names: []}, [6, 8], ~, Unknown], # 9
+  [Return, {implicit: true}, [9], 6]]} # 10
+main::__PROGRAM__: {start: 0, returns: [30], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Constant, {const_type: string, value: ","}, ~, ~, Str], # 2
+  [ArrayLiteral, ~, ~, ~, Array], # 3
+  [ArrayLiteral, ~, ~, ~, Array], # 4
+  [Loop, {bound: entry}, [0], 0], # 5
+  [Phi, {region: 5}, [4, 35], ~, Array], # 6
+  [HashLiteral, {sigil: "%", symbol: member}, [6], ~, Hash], # 7
+  [Constant, {const_type: string, value: Node}, ~, ~, Str], # 8
+  [Constant, {const_type: string, value: n3}, ~, ~, Str], # 9
+  [Constant, {const_type: string, value: n1}, ~, ~, Str], # 10
+  [Constant, {const_type: string, value: n2}, ~, ~, Str], # 11
+  [ArrayLiteral, ~, [9, 10, 11], ~, List], # 12
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 13
+  [Phi, {region: 5}, [13, 34], ~, Int], # 14
+  [MemStart], # 15
+  [Subscript, {kind: array}, [12, 14, 15], ~, Str], # 16
+  [Proj, {index: 0}, [5]], # 17
+  [Call, {class_name: Node, dispatch_kind: method, name: new, param_names: [], want: list}, [8, 16], 17, Object], # 18
+  [Call, {dispatch_kind: builtin, memory_input: true, name: values, param_names: [], want: list}, [7, 18], ~, List], # 19
+  [Proj, {index: 1}, [5]], # 20
+  [Region, {head: 5}, [20]], # 21
+  [Call, {dispatch_kind: builtin, name: sort, param_names: [], sort_cmp_body: main::__PROGRAM__::__SORTCMP__:1, sort_package: main, want: list}, [19], 21, List], # 22
+  [Loop, {bound: entry}, [22], 22], # 23
+  [Phi, {region: 23}, [3, 40], ~, Array], # 24
+  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [2, 24], ~, Str], # 25
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 26
+  [Proj, {index: 1}, [23]], # 27
+  [Region, {head: 23}, [27]], # 28
+  [Print, ~, [25, 26], 28, Scalar], # 29
+  [Return, {implicit: true}, [1], 29], # 30
+  [Count, ~, [12, 15], ~, Int], # 31
+  [NumGt, ~, [31, 14], 5, Boolean], # 32
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 33
+  [Add, ~, [14, 33], ~, Int], # 34
+  [ListAppend, {collector: map}, [6, 16, 18], ~, Array], # 35
+  [Phi, {region: 23}, [13, 43], ~, Int], # 36
+  [Subscript, {kind: array}, [22, 36, 22], ~, Scalar], # 37
+  [Proj, {index: 0}, [23]], # 38
+  [Call, {dispatch_kind: method, name: id, param_names: [], want: list}, [37], 38, Unknown], # 39
+  [ListAppend, {collector: map}, [24, 39], ~, Array], # 40
+  [Count, ~, [22, 22], ~, Int], # 41
+  [NumGt, ~, [41, 36], 23, Boolean], # 42
+  [Add, ~, [36, 33], ~, Int]]} # 43
+main::__PROGRAM__::__SORTCMP__:1: {start: 0, returns: [6], nodes: [
+  [Start], # 0
+  [EntryDef, {package: main, sigil: $, symbol: a}, ~, ~, Scalar], # 1
+  [Call, {dispatch_kind: method, name: id, param_names: [], want: scalar}, [1], 0, Unknown], # 2
+  [EntryDef, {package: main, sigil: $, symbol: b}, ~, ~, Scalar], # 3
+  [Call, {dispatch_kind: method, name: id, param_names: [], want: scalar}, [3], 2, Unknown], # 4
+  [StrCmp, ~, [2, 4], ~, Int], # 5
+  [Return, {implicit: true}, [5], 4]]} # 6
+```
+
+## A sort inside a list-context eval
+
+An eval's value in list context is a list. The sort runs in list context and the eval yields all of it. A die in the comparator is caught, leaves the list empty, and sets `$@`.
+
+```perl
+my @r = eval { sort { die "boom\n" if $a == 2; $a <=> $b } 3, 1, 2 };
+print "[@r] $@";
+```
+
+```behavior
+parses: yes
+```
+
+```output
+[] boom
+```
+
+```ir
+main::__PROGRAM__: {start: 0, returns: [19], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Constant, {const_type: string, value: "["}, ~, ~, Str], # 2
+  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 3
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 4
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 5
+  [Call, {dispatch_kind: builtin, name: sort, param_names: [], sort_cmp_body: main::__PROGRAM__::__SORTCMP__:1, sort_package: main, want: list}, [3, 4, 5], 0, List], # 6
+  [EntryDef, {package: main, sigil: $, symbol: "\""}, [6], ~, Scalar], # 7
+  [Coerce, {from_repr: Scalar, to_repr: Str}, [7], ~, Str], # 8
+  [Region, {eval_entry: 0, eval_want: list}, [6]], # 9
+  [Phi, {region: 9}, [6, 1], ~, List], # 10
+  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [8, 10], ~, Str], # 11
+  [Concat, ~, [2, 11], ~, Str], # 12
+  [Constant, {const_type: string, value: "] "}, ~, ~, Str], # 13
+  [Concat, ~, [12, 13], ~, Str], # 14
+  [EntryDef, {package: main, sigil: $, symbol: "@"}, [6], 9, Scalar], # 15
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [15], ~, Str], # 16
+  [Concat, ~, [14, 16], ~, Str], # 17
+  [Print, ~, [17], 15, Scalar], # 18
+  [Return, {implicit: true}, [1], 18], # 19
+  [ArrayLiteral, {sigil: "@", symbol: r}, [10], ~, Array]]} # 20
+main::__PROGRAM__::__SORTCMP__:1: {start: 0, returns: [15], nodes: [
+  [Start], # 0
+  [MemStart], # 1
+  [EntryDef, {package: main, sigil: $, symbol: a}, [1], ~, Scalar], # 2
+  [Coerce, {from_repr: Scalar, to_repr: Num}, [2], ~, Num], # 3
+  [EntryDef, {package: main, sigil: $, symbol: b}, [1], ~, Scalar], # 4
+  [Coerce, {from_repr: Scalar, to_repr: Num}, [4], ~, Num], # 5
+  [NumCmp, ~, [3, 5], ~, Int], # 6
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 7
+  [NumEq, ~, [3, 7], ~, Boolean], # 8
+  [If, ~, [0, 8], 0], # 9
+  [Proj, {index: 1}, [9]], # 10
+  [Constant, {const_type: string, value: "boom\n"}, ~, ~, Str], # 11
+  [Proj, {index: 0}, [9]], # 12
+  [Unwind, ~, [11], 12], # 13
+  [Region, {head: 9}, [10, 13]], # 14
+  [Return, {implicit: true}, [6], 14]]} # 15
+```
