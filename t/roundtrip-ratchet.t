@@ -50,12 +50,14 @@ my %FLOOR = (
 # compile with some of its graphs skipped, so COMPILES alone could hold while
 # the parse gate slipped. Lowering this needs no reason; raising it does.
 my %CEILING = (
-    # Measured 239 at d0cb68a and 2d8fb90, 2026-10-06.
-    chalk_skipped_graphs => 239,
-    # perl t/ emissions perl will not compile: comp/line_debug.t and
-    # comp/parser_run.t at 75d3db8 (2026-10-11). Unguarded until then, so
+    # Measured 229 at 1c8634e, twice, 2026-10-11 (239 at d0cb68a and 2d8fb90).
+    chalk_skipped_graphs => 229,
+    # perl t/ emissions perl will not compile. Unguarded until 75d3db8, so
     # two new ones (comp/fold.t, comp/retainedlines.t) arrived unnoticed.
-    perl_t_invalid => 2,
+    # Measured 1 at 1c8634e, twice, 2026-10-11: comp/line_debug.t (a
+    # symbolic `@{"_<..."}` the producer drops). comp/parser_run.t now
+    # compiles; it differs instead.
+    perl_t_invalid => 1,
 );
 
 # ONE RUN PER TOOL. The corpus census takes ~3 minutes, and a first draft of
