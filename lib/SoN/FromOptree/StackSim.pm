@@ -33,6 +33,16 @@ class SoN::FromOptree::StackSim 0.01 {
         return @stack ? $stack[-1] : undef;
     }
 
+    # The node at stack position $i, and its replacement: an operand perl reads
+    # by alias is read again once the operands after it have run.
+    method node_at ($i) {
+        return $stack[$i];
+    }
+
+    method replace_at ($i, $node) {
+        $stack[$i] = $node;
+    }
+
     method pop_to_mark () {
         die "No mark on mark stack" unless @marks;
         my $mark = pop @marks;

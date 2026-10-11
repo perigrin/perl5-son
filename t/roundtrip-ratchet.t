@@ -52,6 +52,10 @@ my %FLOOR = (
 my %CEILING = (
     # Measured 239 at d0cb68a and 2d8fb90, 2026-10-06.
     chalk_skipped_graphs => 239,
+    # perl t/ emissions perl will not compile: comp/line_debug.t and
+    # comp/parser_run.t at 75d3db8 (2026-10-11). Unguarded until then, so
+    # two new ones (comp/fold.t, comp/retainedlines.t) arrived unnoticed.
+    perl_t_invalid => 2,
 );
 
 # ONE RUN PER TOOL. The corpus census takes ~3 minutes, and a first draft of
@@ -101,6 +105,11 @@ SKIP: {
 
         ok( ( $n->{ROUNDTRIP} // 0 ) >= $FLOOR{perl_t},
             "ROUNDTRIP $n->{ROUNDTRIP} >= floor $FLOOR{perl_t}" )
+            or diag $out;
+        ok defined $n->{EMITS_INVALID_PERL}, 'the census counted invalid emissions'
+            or diag $out;
+        ok( ( $n->{EMITS_INVALID_PERL} // 9e9 ) <= $CEILING{perl_t_invalid},
+            "EMITS_INVALID_PERL $n->{EMITS_INVALID_PERL} <= ceiling $CEILING{perl_t_invalid}" )
             or diag $out;
     };
 

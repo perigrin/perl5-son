@@ -598,7 +598,7 @@ class SoN::FromOptree 0.01 {
     # Structural, not exec-order: srefgen can sit anywhere in the tree.
     # $root is given for the PROGRAM body, whose tree is B::main_root() rather
     # than $cv->ROOT ($cv is B::main_cv there and its ROOT is not the program).
-    sub _address_taken ($cv, $root = undef) {
+    sub _address_taken ($cv, $root = undef, $skip_call_args = 0) {
         my %taken;
         $root //= eval { $cv->ROOT };
         return \%taken unless $root && $$root;
@@ -668,7 +668,7 @@ class SoN::FromOptree 0.01 {
             # property `\$x` has, and it gets the same demotion. Only a DIRECT
             # argument: `$x + 1` passes a temporary, not $x. The arguments are
             # entersub's ex-list kids between the pushmark and the callee.
-            if ($op->name eq 'entersub' && $op->can('first') && ${$op->first}) {
+            if ($op->name eq 'entersub' && $op->can('first') && ${$op->first} && !$skip_call_args) {
                 my $list = $op->first;
                 if ($$list && $list->can('first') && ${$list->first}) {
                     for (my $k = $list->first; ref($k) && $$k; $k = $k->sibling) {
@@ -4212,6 +4212,8 @@ class SoN::FromOptree 0.01 {
             return ($op->next, 'handled');
         }
 
+        _reread_alias_operand_stored_later($cv, $op, $sim, $factory, $opmap, $ctx);
+
         # chomp AND chop MUTATE IN PLACE, so the graph must record the store.
         # The producer built `Call(schomp, [PadAccess])` consumed by NOBODY,
         # so the mutation was invisible and the following read still named the
@@ -6229,8 +6231,14 @@ class SoN::FromOptree 0.01 {
             # memory and every read of it carries a memory version. A write
             # through $r is a store to that same location, which is what makes
             # it visible to later reads of $v -- and to any alias of $r.
+            #
+            # A READ (no OPf_MOD) IS A LOAD, and a load names the memory it
+            # reads. Unpinned, `my $a = $$r; $$r += 1` let the read float past
+            # the store, and $a came out 2 where perl gives 1. The lvalue stays
+            # 1-input: the store arms recognise the location by that shape.
+            my $is_read = !($op->flags & 32) && defined $sim->memory; # OPf_MOD
             my $node = $factory->make('PostfixDeref',
-                inputs => [$ref],
+                inputs => [$ref, ($is_read ? ($sim->memory) : ())],
                 sigil  => '$',
                 stamp  => SoN::IR::Stamp->new(type => 'Scalar'));
             $sim->push_node($node);
@@ -7151,6 +7159,23 @@ class SoN::FromOptree 0.01 {
             }
             my $node = _undef_constant($factory);
             if (defined $undef_targ) {
+                # A DEMOTED SLOT IS STORED, as `$h = undef` stores it. `f($h);
+                # undef $h` reads $h from memory afterwards; a rebind alone left
+                # that read at the call's memory version, still the reference.
+                if ($ctx->{addr_taken}{$undef_targ}) {
+                    my $loc = $factory->make('PadAccess',
+                        targ => $undef_targ,
+                        do { my ($sg, $sy) = _padparts($cv, $undef_targ);
+                             (sigil => $sg, symbol => $sy) },
+                        ($ctx->{shared_lexicals}{$undef_targ} ? (shared => 1) : ()),
+                        (defined $sim->memory ? (inputs => [ $sim->memory ]) : ()));
+                    my $store = $factory->make('Assign', inputs => [$loc, $node]);
+                    $store->set_control_in($sim->control);
+                    $sim->set_control($store);
+                    $sim->set_memory($store);
+                    $sim->push_node($node);
+                    return ($op->next, 'handled');
+                }
                 $sim->define($undef_targ, $node);
                 $sim->push_node($node);
                 return ($op->next, 'handled');
@@ -7638,6 +7663,23 @@ class SoN::FromOptree 0.01 {
                 # Transform::T2::run never narrowed), and `++$h{k}` added one
                 # twice. Pinned, it is bound before the store, as `$field++`'s
                 # read is.
+                $old->set_control_in($sim->control);
+                $sim->set_control($old);
+            }
+            # `$$r++` IS THE SAME SPLIT through a scalar deref: the 1-input
+            # PostfixDeref matched no arm, the Add reached no store, and `$v`
+            # kept its old value. UNIQUE, because it is pinned: hash-consed with an
+            # earlier read of `$$_` (`push @v, $$_; $$_++`) the push spelled
+            # the binding before the increment made it.
+            elsif ($old->isa('SoN::IR::Node::PostfixDeref')
+                && ($old->sigil // '') eq '$'
+                && scalar($old->inputs->@*) == 1) {
+                $lvalue = $old;
+                $old = $factory->make_unique('PostfixDeref',
+                    inputs => [$lvalue->inputs->[0],
+                               (defined $sim->memory ? ($sim->memory) : ())],
+                    sigil  => '$',
+                    stamp  => SoN::IR::Stamp->new(type => 'Scalar'));
                 $old->set_control_in($sim->control);
                 $sim->set_control($old);
             }
@@ -8645,6 +8687,25 @@ class SoN::FromOptree 0.01 {
             }
             my $targ = $op->targ;
 
+            # A DEMOTED SLOT IS STORED, as sassign and the TARGMY path store
+            # it. `my $h = {}; f($h)` passes $h by alias, so the call reads the
+            # slot from memory; a scope rebind alone left that read at the
+            # slot's old memory version, and the callee wrote into undef.
+            if ($ctx->{addr_taken}{$targ}) {
+                my $loc = $factory->make('PadAccess',
+                    targ => $targ,
+                    do { my ($sg, $sy) = _padparts($cv, $targ);
+                         (sigil => $sg, symbol => $sy) },
+                    ($ctx->{shared_lexicals}{$targ} ? (shared => 1) : ()),
+                    (defined $sim->memory ? (inputs => [ $sim->memory ]) : ()));
+                my $store = $factory->make('Assign', inputs => [$loc, $node]);
+                $store->set_control_in($sim->control);
+                $sim->set_control($store);
+                $sim->set_memory($store);
+                $sim->push_node($node);
+                return ($op->next, 'handled');
+            }
+
             # A field store (TARGMY into a class field slot) threads on control
             # via an explicit Assign, exactly like the generic TARGMY path; a pad
             # slot is an SSA rebind. LVINTRO in main mode wraps the pad in a
@@ -9051,7 +9112,7 @@ class SoN::FromOptree 0.01 {
             unshift @rhs, $sim->pop_node
                 while $sim->stack_depth > $sim->mark_depth;
             my $node = $factory->make('Assign',
-                inputs => [ $lhs->@*, @rhs ]);
+                inputs => [ $lhs->@*, @rhs ], targets => scalar $lhs->@*);
 
             # A DEMOTED TARGET IS STORED, NOT BOUND, here as in sassign: its
             # value lives in memory because a reference to it exists, so the
@@ -9734,6 +9795,24 @@ class SoN::FromOptree 0.01 {
                         inputs => [$elem_lvalue->inputs->[0],
                                    $elem_lvalue->inputs->[1], $sim->memory]);
                 }
+                # A SCALAR DEREF IS THE SAME LOCATION SHAPE (`$$r += 2`): rv2sv
+                # pushed a 1-input PostfixDeref and nothing claimed it, so the
+                # Add was built and reached no store -- `print $v` emitted 1
+                # where perl prints 3. Store through it as sassign does, and
+                # read the pre-store value pinned to the current memory.
+                elsif (!$is_compound && !defined $pkg_lvalue
+                    && @inputs >= 1
+                    && $inputs[0]->isa('SoN::IR::Node::PostfixDeref')
+                    && ($inputs[0]->sigil // '') eq '$'
+                    && scalar($inputs[0]->inputs->@*) == 1
+                    && ($op->flags & 64)) { # OPf_STACKED
+                    $elem_lvalue = $inputs[0];
+                    $inputs[0] = $factory->make('PostfixDeref',
+                        inputs => [$elem_lvalue->inputs->[0],
+                                   (defined $sim->memory ? ($sim->memory) : ())],
+                        sigil  => '$',
+                        stamp  => SoN::IR::Stamp->new(type => 'Scalar'));
+                }
 
                 # A STACKED DESTINATION IS THE STORE, AND THERE IS NO
                 # sassign TO FIND IT. `my $s = <$fh>` compiles with the
@@ -10073,6 +10152,15 @@ class SoN::FromOptree 0.01 {
                     $store->set_control_in($sim->control);
                     $sim->set_control($store);
                     $sim->set_memory($store);
+                    # `$$r += 5` YIELDS `$$r`, the location after the store.
+                    # Pushing the Add gave it a second consumer, and the
+                    # emission spelled `$$r + 5` again after the store:
+                    # `my $w = ($$r += 5)` set $w to 11 where perl sets 6.
+                    $node = $factory->make('PostfixDeref',
+                        inputs => [$elem_lvalue->inputs->[0], $store],
+                        sigil  => '$',
+                        stamp  => SoN::IR::Stamp->new(type => 'Scalar'))
+                        if $elem_lvalue->isa('SoN::IR::Node::PostfixDeref');
                 }
                 elsif (defined $stacked_dest) {
                     # An SSA rebind, and NOTHING MORE -- exactly what sassign
@@ -13324,6 +13412,18 @@ class SoN::FromOptree 0.01 {
         return ($p && $$p && $p->name eq 'null' && ($p->flags & 32)) ? 1 : 0;
     }
 
+    # Does $op store into a DEMOTED SLOT -- a referenced or shared lexical,
+    # which lives in memory? An lvalue padsv (a store target, an increment's
+    # operand), a padsv_store, or a TARGMY op whose target is that slot.
+    sub _stores_demoted_slot ($op) {
+        return 0 unless $ADDR_TAKEN && $op->can('targ') && $op->targ
+            && $ADDR_TAKEN->{ $op->targ };
+        my $name = $op->name;
+        return 1 if $name eq 'padsv_store';
+        return 1 if $name eq 'padsv' && ($op->flags & 32);   # OPf_MOD
+        return ($op->private & 16) ? 1 : 0;                    # OPpTARGET_MY
+    }
+
     sub _arm_has_field_store ($cv, $start, $stop, $join = undef, $fields_only = 0) {
         $stop = _op_addr($stop);
         my $padlist = $cv->PADLIST;   # loop-invariant; the padname table is per-CV
@@ -13336,16 +13436,11 @@ class SoN::FromOptree 0.01 {
             # A STORE INTO A PACKAGE SCALAR is shared state the same way.
             return 1 if !$fields_only && _writes_package_scalar($op);
             # A STORE INTO A DEMOTED SLOT threads on control just as a field
-            # store does: an lvalue padsv (a store target, an increment's
-            # operand) or a padsv_store over a referenced or shared lexical.
-            return 1 if !$fields_only && $ADDR_TAKEN
-                && ($op->name eq 'padsv' || $op->name eq 'padsv_store')
-                && $op->targ && $ADDR_TAKEN->{ $op->targ }
-                && ($op->name eq 'padsv_store' || ($op->flags & 32));   # OPf_MOD
+            # store does.
+            return 1 if !$fields_only && _stores_demoted_slot($op);
             my $is_targmy   = $op->can('targ') && $op->targ && ($op->private & 16);
             my $is_padstore = $op->name eq 'padsv_store' && $op->can('targ') && $op->targ;
             next unless $is_targmy || $is_padstore;
-            return 1 if !$fields_only && $ADDR_TAKEN && $ADDR_TAKEN->{ $op->targ };
             my $pn = $padnames->ARRAYelt($op->targ);
             return 1 if ref $pn eq 'B::PADNAME' && SoN::FieldInfo::is_field($pn);
         }
@@ -13655,6 +13750,9 @@ class SoN::FromOptree 0.01 {
             # shift/pop MUTATE their array (a memory effect), so a loop whose
             # condition or body drains an array carries memory through the header.
             return 1 if $name eq 'shift' || $name eq 'pop';
+            # So does a store into a demoted slot: `my $h = {}; push @r, \$h`
+            # left the post-loop read at the store inside the body.
+            return 1 if _stores_demoted_slot($op);
             if ($name eq 'and' || $name eq 'or') {
                 return 1 if _cond_drains_array($start, $$op);
                 return _body_stores_memory($op->other);
@@ -16307,6 +16405,109 @@ class SoN::FromOptree 0.01 {
             return 0 unless _replacement_is_pure($kid);
         }
         return 1;
+    }
+
+    # AN OPERAND PERL READS BY ALIAS sees a store a later operand makes. padsv
+    # and gvsv push the variable itself, not a copy, so the op that consumes
+    # them reads the value it has when the op runs:
+    #
+    #     my $n = 1; print $n . ($n = 5)      perl 55
+    #
+    # The graph reads the variable where its op stands in the walk -- before
+    # the store -- and gave 15. A lexical operand is READ AGAIN once the later
+    # operands have run: its padsv is stepped a second time and the new read
+    # takes the old one's stack slot. A call in a later operand may store it
+    # too (a shared lexical, a captured one), so a call counts as a store for
+    # a lexical. A package scalar is not read again, and is refused. A branch
+    # condition is consumed before its arm, so a LOGOP is not an alias
+    # consumer; a postinc copies, and is not a padsv.
+    # ponytail: only the direct stores (=, op=, ++/--) and calls are seen;
+    # chomp, s/// or a list assign storing the variable still pass unread.
+    my %OPERAND_DEPTH;      # padsv op address -> the stack slot its read took
+    sub _reread_alias_operand_stored_later ($cv, $op, $sim, $factory, $opmap, $ctx) {
+        $OPERAND_DEPTH{$$op} = $sim->stack_depth if $op->name eq q{padsv};
+        return unless $op->flags & B::OPf_KIDS;
+        return if $op->isa('B::LOGOP');
+        return if $op->name =~ /\A(?:leave|enter|lineseq|scope)/;
+        my $var = sub ($o) {                                # 'p<targ>' | 'g<gv>'
+            return undef unless $o && $$o;
+            # `$n` is rv2sv(gv), or the gvsv rpeep makes of it.
+            my $rv2sv = ( $o->name eq q{rv2sv}
+                || ( $o->name eq q{null} && $o->targ == B::opnumber(q{rv2sv}) ) )
+                && ( $o->flags & B::OPf_KIDS );
+            $o = $o->first if $rv2sv;
+            return "p" . $o->targ if $o->name eq q{padsv};
+            return undef unless $o->name eq q{gvsv}
+                || ( $rv2sv && $o->name eq q{gv} );
+            my $gv = _op_gv($cv, $o);
+            return $gv ? "g" . ${$gv} : undef;
+        };
+        # Slots a reference or a closure reaches -- NOT ones merely passed
+        # to a call, which $ADDR_TAKEN counts too.
+        state %REFERENCED_BY_CV;
+        my $REFERENCED = $REFERENCED_BY_CV{$$cv} //= _address_taken($cv, undef, 1);
+        my $stores;
+        $stores = sub ($o, $key) {
+            return 1 if $o->name eq q{padsv_store} && "p" . $o->targ eq $key;
+            # `$n = $y + 3` is `add[$n]` with OPpTARGET_MY: the op stores
+            # into its own targ, with no sassign to find.
+            return 1 if ( $o->private & B::OPpTARGET_MY() )
+                && "p" . $o->targ eq $key;
+            # A CALL WRITES A PAD SCALAR it can reach: one shared with a
+            # closure or whose address was taken. Any call at all refused 48
+            # of chalk's graphs (`$old->remove_consumer($self)`).
+            # ponytail: a callee assigning `$_[0]` to a scalar it was handed
+            # is not seen; counting every handed scalar refused ordinary code
+            # (`"$r" . f($r)` in chalk's LLVM::Context::_lower_vardecl).
+            if ( $o->name eq q{entersub} && $key =~ /\Ap(\d+)\z/ ) {
+                return 1 if ( $SHARED_SLOTS && $SHARED_SLOTS->{$1} )
+                    || ( $REFERENCED->{$1} );
+            }
+            return 0 unless $o->flags & B::OPf_KIDS;
+            my ( $kid, $first ) = ( $o->first, 1 );
+            my $n = $o->name;
+            while ( $kid && $$kid ) {
+                my $k = $var->($kid);
+                return 1 if defined $k && $k eq $key && (
+                       ( $n eq 'sassign' && !${ $kid->sibling } )
+                    || $n =~ /\A(?:i_)?(?:pre|post)(?:inc|dec)\z/
+                    || ( $first && $n ne q{sassign} && $o->isa(q{B::BINOP})
+                         && ( $o->flags & B::OPf_STACKED ) ) );   # op=
+                return 1 if $stores->($kid, $key);
+                ( $kid, $first ) = ( $kid->sibling, 0 );
+            }
+            return 0;
+        };
+        my ( $kid, $first ) = ( $op->first, 1 );
+        while ( $kid && $$kid ) {
+            my $key = $var->($kid);
+            # A statement in void context is not an operand.
+            undef $key if ( $kid->flags & B::OPf_WANT ) == B::OPf_WANT_VOID;
+            if ( defined $key
+                && grep { $stores->($_, $key) } _later_siblings($kid) ) {
+                my $depth = $OPERAND_DEPTH{$$kid};
+                my $old   = defined $depth && $kid->name eq q{padsv}
+                    && $depth < $sim->stack_depth ? $sim->node_at($depth) : undef;
+                # An op= target is stored, not only read; a declaration
+                # introduces the slot.
+                die "GAP: a scalar operand is read by alias and a later operand stores it\n"
+                    if !$old
+                    || ( $first && ( $op->flags & B::OPf_STACKED ) )
+                    || ( $kid->private & B::OPpLVAL_INTRO );
+                my ( undef, $how ) = _step($cv, $kid, $sim, $factory, $opmap, $ctx);
+                die "GAP: a scalar operand is read by alias and a later operand stores it\n"
+                    unless $how eq 'handled';
+                $sim->replace_at($depth, $sim->pop_node);
+            }
+            ( $kid, $first ) = ( $kid->sibling, 0 );
+        }
+        return;
+    }
+
+    sub _later_siblings ($o) {
+        my @later;
+        for ( my $s = $o->sibling; $s && $$s; $s = $s->sibling ) { push @later, $s }
+        return @later;
     }
 
     sub _find_gv_op ($op) {
