@@ -1523,6 +1523,45 @@ class SoN::Deparse 0.01 {
             return 0;
         };
 
+        # THE LOOPS WHOSE BODY HOLDS A CONTROL NODE, by node id. The producer
+        # threads no memory Phi through a loop, so a read after one names the
+        # body's last version -- a call or store inside it -- and a walk from
+        # there ends with the body. Walked from the body Proj, stopping at the
+        # loop's join.
+        my %in_loop_body;
+        for my $l ( grep { ( $_->{op} // '' ) eq 'Loop' } $self->_nodes_in_order ) {
+            my $join = $self->_loop_join( $l->{id} ) // next;
+            my %seen;
+            my @q = map { $_->{id} }
+                grep { ( $_->{op} // '' ) eq 'Proj'
+                       && ( ( $_->{fields} // {} )->{index} // -1 ) == 0 }
+                ( $cfg_next{ $l->{id} } // [] )->@*;
+            while ( defined( my $id = shift @q ) ) {
+                next if $id == $join || $seen{$id}++;
+                push $in_loop_body{$id}->@*, $l->{id};
+                push @q, map { $_->{id} } ( $cfg_next{$id} // [] )->@*;
+            }
+        }
+        # Does $id feed a Phi of loop $l -- is it read inside that loop?
+        my $feeds_loop_phi = sub ( $id, $l ) {
+            my ( @q, %seen ) = map { ( $_->{inputs} // [] )->@* }
+                grep { ( $_->{op} // '' ) eq 'Phi'
+                       && ( ( $_->{fields} // {} )->{region} // -1 ) == $l }
+                $self->_nodes_in_order;
+            while ( defined( my $m = shift @q ) ) {
+                return 1 if $m == $id;
+                next if $seen{$m}++;
+                push @q, ( ( $nodes->{$m} // {} )->{inputs} // [] )->@*;
+            }
+            return 0;
+        };
+
+        # A read whose version is a merge is bound where the merge happens:
+        # read id -> the join Region. The backward anchor walk below takes the
+        # first write it meets on any arm, and a binding in one arm is undef
+        # on the other -- `if (@ARGV) { $n = 1 } my $m = $n; $n = 2`.
+        my %stale_join;
+
         my @stale_reads;
         for my $n ( sort { $a->{id} <=> $b->{id} } $self->_nodes_in_order ) {
             next unless ( $n->{op} // '' ) eq 'EntryDef';
@@ -1559,9 +1598,31 @@ class SoN::Deparse 0.01 {
             # at the print, after the call. Followed on control, as the lexical
             # pass below does, and only where every consumer just reads: a
             # call handed the read itself aliases it through @_.
-            if ( !$shadowed && $safe_read->( $n->{id} ) ) {
-                my $version = $nodes->{ $in[0] } // {};
-                my $from = defined $version->{control_in} ? $version->{id}
+            #
+            # WHERE THE READ HAPPENS: after its version on the chain; after the
+            # join for a merge (a Phi of an if); after the loop for the body's
+            # last version, unless the loop itself reads it. From there a store
+            # to the name counts too -- one whose memory is a call is not on
+            # the memory walk above.
+            my $version = $nodes->{ $in[0] } // {};
+            my $region  = ( $version->{op} // '' ) eq 'Phi'
+                ? $nodes->{ ( $version->{fields} // {} )->{region} // -1 } : undef;
+            $region = undef
+                unless $region && ( $region->{op} // '' ) eq 'Region';
+            # The outermost loop whose body holds the version, or its merge.
+            my @loops  = ( $in_loop_body{ $region ? $region->{id} : $in[0] }
+                           // [] )->@*;
+            my %inside = map { $_ => 1 } @loops;
+            my ($loop) = grep {
+                !grep { $inside{$_} } ( $in_loop_body{$_} // [] )->@*
+            } @loops;
+            my $join = defined $loop && !$feeds_loop_phi->( $n->{id}, $loop )
+                         ? $self->_loop_join($loop)
+                     : $region ? $region->{id}
+                     : undef;
+            if ( $safe_read->( $n->{id} ) || defined $join ) {
+                my $from = defined $join ? $join
+                         : defined $version->{control_in} ? $version->{id}
                          : ( $version->{op} // '' ) eq 'MemStart' ? $start->{id}
                          : undef;
                 my ( @cq, %cseen ) = ( $from // () );
@@ -1569,12 +1630,15 @@ class SoN::Deparse 0.01 {
                     my $id = shift @cq;
                     next if $cseen{$id}++;
                     for my $c ( ( $cfg_next{$id} // [] )->@* ) {
-                        $shadowed = 1 if $self->_is_barrier_call( $c->{id} );
+                        $shadowed = 1 if $self->_writes_this_name( $c, $f )
+                            || ( $self->_is_barrier_call( $c->{id} )
+                                 && $safe_read->( $n->{id} ) );
                         push @cq, $c->{id};
                     }
                 }
             }
             next unless $shadowed;
+            $stale_join{ $n->{id} } = $join if defined $join;
 
             $bound{ $n->{id} } = sprintf( '$stale%d', $n->{id} );
             push @stale_reads, $n;
@@ -1818,6 +1882,12 @@ class SoN::Deparse 0.01 {
         # With no such write the entry value is still live and the prologue is
         # where it belongs.
         for my $n ( @stale_reads ) {
+            # Filed after the first walk, which flushes %after_region as it
+            # goes: filed now, a re-walk for any other binding dropped it.
+            if ( defined $stale_join{ $n->{id} } ) {
+                $hoisted{ $bound{ $n->{id} } } //= $bound{ $n->{id} };
+                next;
+            }
             my $f = $n->{fields} // {};
             my ( @queue, %seen, $anchor ) = ( ( $n->{inputs} // [] )->[0] );
             while ( @queue ) {
@@ -1849,6 +1919,8 @@ class SoN::Deparse 0.01 {
 
         my $body = $self->_emit_from($start->{id}, \%next_of, undef);
         $body = $save_prologue . $body;
+        push $after_region{ $stale_join{ $_->{id} } }->@*, $_
+            for grep { defined $stale_join{ $_->{id} } } @stale_reads;
 
         # A PAD BINDING IS NOT ON THE CONTROL CHAIN. Measured: `my ($a,$b) =
         # (2,3)` builds an Assign with control_in ABSENT, so a chain walk never
@@ -2043,6 +2115,13 @@ class SoN::Deparse 0.01 {
             $body = $save_prologue
                   . $self->_emit_from($start->{id}, \%next_of, undef);
         }
+        # A READ BOUND AT A JOIN THE WALK NEVER PASSED would be used and never
+        # assigned -- undef, silently.
+        die "GAP: a package read bound after a merge whose join the walk does"
+          . " not reach is not yet lowered -- its binding would never be"
+          . " assigned\n"
+            if grep { exists $after_region{ $stale_join{ $_->{id} } } }
+               grep { defined $stale_join{ $_->{id} } } @stale_reads;
 
         # JOIN-PHI DECLARATIONS FIRST. They are discovered while walking, so
         # they can only be emitted once the walk is done -- and they must come
@@ -2103,6 +2182,11 @@ class SoN::Deparse 0.01 {
             # it -- a guarded die included -- outside the eval as well.
             if ((my $join = $self->_eval_join_entered_at($cur, $next_of))) {
                 $out .= $self->_emit_eval($join, $cur, $next_of);
+                # A BINDING OF THE EVAL'S Phi goes after it, as an If's does:
+                # `my @r = eval { ... }; @r` filed @r's assign at this join,
+                # and the walk resumes past it, so nothing else flushes it.
+                $out .= $self->_emit_statement($_, $next_of)
+                    for (delete($after_region{ $join->{id} }) // [])->@*;
                 $cur = $join->{id};
                 next;
             }
@@ -2142,6 +2226,8 @@ class SoN::Deparse 0.01 {
 
             if ($n->{op} eq 'Region' && $self->_is_eval_join($n)) {
                 $out .= $self->_emit_eval($n, $cur, $next_of);
+                $out .= $self->_emit_statement($_, $next_of)
+                    for (delete($after_region{ $n->{id} }) // [])->@*;
                 $cur = $n->{id};
                 next;
             }
@@ -3251,6 +3337,18 @@ class SoN::Deparse 0.01 {
 
         return "$inner;\n" unless $phi;
 
+        # AN EVAL IN ITS CALLER'S CONTEXT -- `return eval { ... }`, or a sub's
+        # last statement -- yields a list to a list caller and a scalar to a
+        # scalar one, () or undef if it dies. One binding cannot be both:
+        # `sub w { return eval { sort ... } }` ran the sort in scalar context
+        # and a list caller got (undef).
+        die "GAP: a block eval whose value goes back in its caller's context"
+          . " (a sub's return value) is not yet lowered -- it is a list or a"
+          . " scalar depending on the call\n"
+            if ( ($region->{fields} // {})->{eval_want} // '' ) eq 'runtime'
+            && grep { grep { ( $_ // -1 ) == $phi->{id} } ( $_->{inputs} // [] )->@* }
+                    $self->_nodes_in_order;
+
         # The Phi is bound, so every later read names the variable. Registering
         # it here rather than in the %reads scan keeps that scan about VALUES;
         # this binding exists because the eval was placed, not because someone
@@ -3262,10 +3360,17 @@ class SoN::Deparse 0.01 {
         # THE CONTEXT IS THE REGION'S, not the stamp's: a scalar eval of a
         # slice is List-stamped too, and as an array it read back as the count
         # where perl gives the last element.
+        # SO DOES ONE AN AGGREGATE FLATTENS, whatever the value's stamp: a
+        # list eval that dies yields (), and a scalar binding gave the
+        # Phi's undef -- `my @r = eval { die; (1) }` counted 1 for perl's 0.
         my $st = $phi->{stamp} // '';
+        my $flattened = grep {
+            ( $_->{op} // '' ) =~ /\A(?:Array|Hash)Literal\z/
+                && grep { ( $_ // -1 ) == $phi->{id} } ( $_->{inputs} // [] )->@*
+        } $self->_nodes_in_order;
         $bound{ $phi->{id} } = sprintf(
-            ( ($region->{fields} // {})->{eval_list}
-              && ( $st eq 'Array' || $st eq 'List'
+            ( ( ($region->{fields} // {})->{eval_want} // '' ) eq 'list'
+              && ( $st eq 'Array' || $st eq 'List' || $flattened
                    || $self->_phi_takes_a_list($phi) ) )
                 ? '@eval%d' : '$eval%d',
             $phi->{id});

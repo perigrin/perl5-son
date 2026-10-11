@@ -117,6 +117,17 @@ my @cases = (
       'a scalar eval of a slice is its last element' ],
     [ q{sub f {(5,0)} my $x = eval { f() }; print "$x\n";},
       'a scalar eval of a list-returning call' ],
+    # An aggregate assigned from a list eval is placed after the eval.
+    [ q{sub w { my @r = eval { sort { my $q=$a; $q <=> $b } 3,1,2 }; @r } my @r = w(); print "@r\n";},
+      'an array from a list eval returned implicitly' ],
+    [ q{sub w { my @r = eval { reverse 3,1,2 }; @r } my @r = w(); print "@r\n";},
+      'the same over reverse' ],
+    [ q{sub w { my @r = eval { reverse 3,1,2 }; push @r, 0; @r } my @r = w(); print "@r\n";},
+      'the same with a push' ],
+    [ q{sub w { my @r = eval { die "x\n"; (1) }; scalar(@r) . $@ } print w();},
+      'a list eval that dies yields the empty list' ],
+    [ q{my @r = eval { die "x\n"; (1) }; print scalar(@r) . $@;},
+      'the same at the top level' ],
 
     # A SORT'S OPf_STACKED NAMES ITS COMPARATOR, not a destination: a scalar
     # left on the stack by an earlier statement is not a store target.
@@ -160,6 +171,37 @@ my @cases = (
     [ q{our $n = 1; sub bump { $_[0]++ } bump($n); bump($n); print "$n\n";},
       'a package scalar handed to a call is still aliased' ],
 
+    # A READ AFTER A MERGE OR A LOOP: its version is a Phi, or the loop
+    # body's last call, and a walk from there never reached what follows.
+    [ q{package O; our $calls = 0; sub new { bless {v=>$_[1]}, $_[0] } sub v { $calls++; $_[0]{v} } package main; my @o = map { O->new($_) } 3,1; my $before = $O::calls; my @s = sort { $a->v <=> $b->v } @o; print "$before $O::calls\n";},
+      'a package read after a map loop of calls, before a method-calling sort' ],
+    [ q{our $n=0; if (@ARGV) {$n=3} my $m=$n; my @r = sort { my $t=$a; $n++; $t <=> $b } 3,1; print "$m $n\n";},
+      'a package read after a branch, before a counting block sort' ],
+    [ q{our $n=0; sub h{1} sub g{$n=5} my @o = map { h($_) } 3,1; my $m = $n; g(); print "$m $n\n";},
+      'a package read after a map loop of calls, before a call' ],
+    [ q{our $n=0; sub h{1} sub g{$n=5} if (@ARGV) { h() } my $m = $n; g(); print "$m $n\n";},
+      'a package read after a call in an arm' ],
+    [ q{our $n=0; sub h{1} sub g{$n=5} if (@ARGV) { h() } else { $n = 1 } my $m = $n; g(); print "$m $n\n";},
+      'a package read after an if/else' ],
+    [ q{our $n=0; sub h{1} sub g{$n=5} for (1,2) { h() } my $m = $n; g(); print "$m $n\n";},
+      'a package read after a foreach of calls' ],
+    [ q{our $n=0; sub h{1} sub g{$n=5} my $i=0; while ($i++ < 2) { h() } my $m = $n; g(); print "$m $n\n";},
+      'a package read after a while of calls' ],
+    [ q{our $n=0; sub h{$n+=2} for my $i (1,2) { for my $j (1,2) { h() } } my $m = $n; $n = 7; print "$m $n\n";},
+      'a package read after nested loops, before a store' ],
+    [ q{our $n=0; if (@ARGV) { $n = 1 } my $m = $n; $n = 2; print "$m $n\n";},
+      'a package read after a store in an untaken arm' ],
+    [ q{our $n=0; sub h{$n++} if (!@ARGV) { h() } my $m = $n; $n = 9; print "$m $n\n";},
+      'a package read after a call in a taken arm' ],
+    [ q{our $n=0; if (@ARGV) { $n = 1 } my $m = $n; $n = 2; my $q = $n; $n = 3; print "$m $q $n\n";},
+      'a read bound at a join beside one bound at a store' ],
+    [ q{our $n=0; sub g{$n=5} sub f { if ($_[0]) { $n = 1 } my $m = $n; g(); "$m $n" } print f(0), "|", f(1), "\n";},
+      'a package read after a branch, inside a sub' ],
+    [ q{our $n=0; sub g{$n=5} for my $i (1,2) { if ($i == 2) { $n = $i } } my $m = $n; g(); print "$m $n\n";},
+      'a package read after a branch inside a loop' ],
+    [ q{our $n=0; sub g{$n=5} eval { $n = 2; die "x\n" }; my $m = $n; g(); print "$m $n\n";},
+      'a package read after an eval that died' ],
+
     # AN IN-PLACE SORT is an assign perl folded into the sort.
     [ q{my @a = (3,1,2); @a = sort { my $t=$a; $t <=> $b } @a; print "@a\n";},
       'an in-place block sort' ],
@@ -171,6 +213,24 @@ my @cases = (
       'an in-place sort in a sub' ],
     [ q{my @a=(3,1,2); for my $i (1,2) { @a = sort { $a <=> $b } @a; } print "@a\n";},
       'an in-place sort in a loop' ],
+    # ...and the array is still a container afterwards: bound to the sort
+    # itself, each of these was spelled on `sort(...)`, a list value.
+    [ q{my @a = (1,2); @a = sort @a; push @a, 3; print "@a\n";},
+      'a push after an in-place sort' ],
+    [ q{my @a = (2,1); @a = sort @a; shift @a; print "@a\n";},
+      'a shift after an in-place sort' ],
+    [ q{my @a = (3,1,2); @a = sort @a; my @b = splice(@a, 0, 1); print "@a|@b\n";},
+      'a splice after an in-place sort' ],
+    [ q{my @a = (1,2); @a = sort { $a <=> $b } @a; $a[0] = 9; print "@a\n";},
+      'an element store after an in-place folded sort' ],
+    [ q{my @a = (2,1); @a = sort @a; for (@a) { $_++ } print "@a\n";},
+      'a foreach alias after an in-place sort' ],
+    [ q{my @a = (2,1); @a = sort @a; my $r = \@a; push @$r, 7; print "@a ", scalar(@$r), "\n";},
+      'a reference taken after an in-place sort' ],
+    [ q{my @a = (3,1); for my $i (1..3) { push @a, $i; @a = sort { $a <=> $b } @a; } print "@a\n";},
+      'a push and an in-place sort in a loop' ],
+    [ q{sub f { my @a = @_; @a = sort { my $t=$a; $t <=> $b } @a; push @a, 9; shift @a; "@a" } print f(3,1,2), "\n";},
+      'a push and a shift after an in-place block sort in a sub' ],
 
     [ q{my @x=(3,1,2); print scalar(my @y = sort { my $t=$a; $t <=> $b } @x), "\n";},
       'a counted list assign of a block sort' ],
@@ -214,6 +274,24 @@ refuses(q{my ($x, $y) = eval { (5,6) }; print "$x $y\n";},
     $destructure, 'two targets from an eval of a list');
 round_trips(q{my ($x) = eval { 4 }; print "$x\n";}, 'one target from a scalar eval');
 
+my $callers = qr/GAP: a block eval whose value goes back in its caller's context/;
+refuses(q{sub w { return eval { sort { my $q=$a; $q <=> $b } 3,1,2 } } my @r = w(); my $s = w(); print "@r|", defined $s ? "d" : "u", "\n";},
+    $callers, 'a returned eval of a block sort');
+refuses(q{sub w { eval { sort { my $q=$a; $q <=> $b } 3,1,2 } } my @r = w(); print "@r\n";},
+    $callers, 'an eval of a block sort as the last statement');
+refuses(q{sub cn {$a<=>$b} sub w { return eval { sort cn 3,1,2 } } my @r = w(); print "@r\n";},
+    $callers, 'a returned eval of a named sort');
+refuses(q{sub w { return eval { sort { $a <=> $b } 3,1,2 } } my @r = w(); print "@r\n";},
+    $callers, 'a returned eval of a folded sort');
+# A body whose value is its last statement is emitted as that statement,
+# so it falls off the end in the caller's context and needs no binding.
+round_trips(q{sub w { return eval { die "x\n" } } my @r = w(); print scalar(@r), "\n";},
+    'a returned eval that dies');
+round_trips(q{sub w { my $x = eval { 5 }; $x } print w(), "\n";},
+    'a scalar eval inside a sub');
+round_trips(q{sub w { eval { 1 } or return 0; 2 } print w(), "\n";},
+    'a boolean eval inside a sub');
+
 my $runtime = qr/GAP: a sort comparator chosen at runtime/;
 refuses(q{my $c=sub{$b<=>$a}; print join(",", sort $c 3,1,2),"\n";},
     $runtime, 'a lexical subref comparator');
@@ -234,6 +312,12 @@ still_wrong(q{my $n = 0; my @r = eval { $n++; reverse 3,1,2 }; print "@r $n\n";}
     'a lexical store inside a block eval is dropped');
 still_wrong(q{my @r = eval { 1 ? (1,2) : (3) }; print "@r\n";},
     'a list eval of a ternary keeps only its last element');
+still_wrong(q{my %h = eval { (a=>1) }; print join(",", %h), "\n";},
+    'a list eval of a list keeps only its last element');
+still_wrong(q{my @a = (3,1); if (@a) { @a = (1,3); $a[1] = 7 } print "@a\n";},
+    'a whole assign and an element store in one arm merge as a scalar');
+still_wrong(q{our $n=0; sub h{$n+=2} for (1,2) { $n++; h() } my $m = $n; $n = 7; print "$m $n\n";},
+    'a package scalar stored in a loop body is carried past a call that writes it');
 still_wrong(q{my $r = []; my $n = (@$r = (4,5,6)); print "$n @$r\n";},
     'a counted list assign through an array deref loses elements');
 

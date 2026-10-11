@@ -277,8 +277,9 @@ sub _extract_fields ($node, $id_remap) {
         return undef unless defined $entry
                          && defined $id_remap->{ $entry->id };
         return { eval_entry => $id_remap->{ $entry->id },
-                 # A list-context eval, so its value binds a list.
-                 ( $node->eval_list ? ( eval_list => JSON::PP::true ) : () ) };
+                 # A list- or runtime-context eval: how its value binds.
+                 ( defined $node->eval_want
+                     ? ( eval_want => $node->eval_want ) : () ) };
     }
     # tr///'s character sets and flags. `d` is not recoverable from an empty
     # `to` -- `tr/x//` maps x to itself, `tr/x//d` removes it -- so the flags

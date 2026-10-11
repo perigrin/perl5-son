@@ -10111,7 +10111,15 @@ class SoN::FromOptree 0.01 {
                         || $ctx->{shared_lexicals}{$t} || $ctx->{cell_params}{$t}
                         || $ctx->{cells}{$t} || $ctx->{addr_taken}{$t}
                         || _reference_can_see_assign($t);
-                    $sim->define($t, $node);
+                    # A CONTAINER, NOT THE LIST: bound to the sort itself, a
+                    # later `push @a`, `$a[0] = 9` or `\@a` was spelled on
+                    # `sort(...)`, a list value. The literal names @a, as the
+                    # aassign's literal path builds it.
+                    my ($sg, $sy) = _padparts($cv, $t);
+                    my $arr_node = $factory->make('ArrayLiteral',
+                        inputs => [$node], sigil => $sg, symbol => $sy,
+                        stamp  => SoN::IR::Stamp->new(type => 'Array'));
+                    $sim->define($t, $arr_node);
                 }
 
                 # A GLOBAL-STATE OP ALSO ADVANCES MEMORY, and control alone is
@@ -13897,7 +13905,9 @@ class SoN::FromOptree 0.01 {
         my $region = $factory->make_cfg('Region',
             inputs => [$body_sim->control]);
         $region->set_eval_entry($eval_entry) if defined $eval_entry;
-        $region->set_eval_list if ($op->flags & 3) == 3;   # OPf_WANT_LIST
+        # OPf_WANT_LIST, or no OPf_WANT at all: the caller's context.
+        $region->set_eval_want(($op->flags & 3) == 3 ? 'list' : 'runtime')
+            if ($op->flags & 3) == 3 || ($op->flags & 3) == 0;
         $sim->set_control($region);
         $sim->set_memory($body_sim->memory);
 
