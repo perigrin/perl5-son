@@ -106,6 +106,29 @@ render_refuses(q{my @a = (1); for my $c (1,0) { my $y = $a[0]; my $x = $c ? ($a[
     qr/GAP: an element read in a loop is spelled after a store to its aggregate/, 'in a loop');
 render_refuses(q{my @a = (1); for my $c (1,0) { my $y = $a[0]; if ($c) { $a[0] = 7 } print "$y $a[0]\n" }},
     qr/GAP: an element read in a loop is spelled after a store to its aggregate/, 'in a loop, a void if');
+# A READ IN A LOOP AT A STORE MADE IN THE SAME ITERATION -- a join's Phi or
+# the store itself -- is spelled at its use, after any later store to the
+# aggregate. Only a store after the read's version counts: one before it is
+# what the read sees.
+my $loop_after = qr/GAP: an element read in a loop is spelled after a store to its aggregate/;
+render_refuses(q{my @a = (1); for my $c (1,0) { my $x = $c ? ($a[0] = 7) : 8; my $y = $a[0]; $a[0] = 1; print "$x $y\n" }},
+    $loop_after, 'in a loop, a read after a ternary store, then a store');
+render_refuses(q{my %h = (a=>1); for my $c (1,0) { my $x = $c ? ($h{a} = 7) : 8; my $y = $h{a}; $h{a} = 1; print "$x $y\n" }},
+    $loop_after, 'in a loop, a hash read after a ternary store, then a store');
+render_refuses(q{my @a = (1); for my $c (1,0) { if ($c) { $a[0] = 7 } my $y = $a[0]; $a[0] = 1; print "$y\n" }},
+    $loop_after, 'in a loop, a read after a void if store, then a store');
+render_refuses(q{my @a = (1); for my $c (1,0) { $a[0] = 7 unless $c; my $y = $a[0]; $a[0] = 1; print "$y\n" }},
+    $loop_after, 'in a loop, an unless modifier');
+render_refuses(q{sub f { my @a = (1); for my $c (@_) { if ($c) { $a[0] = 7 } my $y = $a[0]; $a[0] = 1; print "$y\n" } } f(1,0)},
+    $loop_after, 'in a loop in a sub');
+render_refuses(q{my %h = (a=>1); for my $c (1,0) { if ($c) { $h{a} = 7 } else { $h{a} = 3 } my $y = $h{a}; $h{a} = 1; print "$y\n" }},
+    $loop_after, 'in a loop, if/else both store');
+render_refuses(q{my @a = (1); for my $c (1,0) { $a[0] = 7; my $y = $a[0]; $a[0] = 1; print "$y\n" }},
+    $loop_after, 'in a loop, a read after a straight-line store, then a store');
+round_trips(q{my @a = (1); for my $c (1,0) { my $x = $c ? ($a[0] = 7) : 8; my $y = $a[0]; print "$x $y\n" }},
+    'in a loop, a read after a ternary store, nothing after');
+round_trips(q{my @a = (1); for my $c (1,0) { if ($c) { $a[0] = 7 } print "$a[0]\n"; $a[0] = 1 }},
+    'in a loop, a read used before the later store');
 round_trips(q{my @a = (1); my $c = shift // 1; my $y = $a[0] + 0; my $x = $c ? ($a[0] = 7) : 8; print "$y $x $a[0]\n";},
     'a prior read in an expression');
 round_trips(q{my %h = (a=>1); my $c = shift // 1; my $y = $h{a}; my $x = $c ? ($h{b} = 7) : 8; print "$y $x $h{a} $h{b}\n";},

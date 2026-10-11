@@ -1619,9 +1619,32 @@ class SoN::Deparse 0.01 {
                 my @in = ( $n->{inputs} // [] )->@*;
                 next unless @in > ( $MEM_MIN_INPUTS{Subscript} // 99 );
                 my $v = $nodes->{ $in[-1] } or next;
-                next unless ( $v->{op} // '' ) eq 'MemStart'
+                # A VERSION MADE IN THIS ITERATION -- a store on the body's
+                # chain, or the Phi of a join in it -- is read where it is
+                # spelled too. Only the stores after it are later than the read:
+                # `if ($c) { $a[0] = 7 } my $y = $a[0]; $a[0] = 1` spelled $y
+                # after the last store and printed 1 for 7.
+                my $from;
+                if ( $seen{ $v->{id} } ) { $from = $v->{id} }
+                elsif ( ( $v->{op} // '' ) eq 'Phi' ) {
+                    my $r = ( $v->{fields} // {} )->{region} // -1;
+                    $from = $r if $r != $loop->{id} && $seen{$r}
+                        && ( ( $nodes->{$r} // {} )->{op} // '' ) eq 'Region';
+                }
+                next unless defined $from
+                    || ( $v->{op} // '' ) eq 'MemStart'
                     || ( ( $v->{op} // '' ) eq 'Phi'
                          && ( ( $v->{fields} // {} )->{region} // -1 ) == $loop->{id} );
+                my @later = @stores;
+                if ( defined $from ) {
+                    my ( @fq, %fseen ) = ( $from );
+                    while ( @fq ) {
+                        my $id = shift @fq;
+                        next if $fseen{$id}++;
+                        push @fq, map { $_->{id} } ( $ctrl_next{$id} // [] )->@*;
+                    }
+                    @later = grep { $fseen{ $_->{id} } && $_->{id} != $from } @stores;
+                }
                 # TWO CONSTANT STRING HASH KEYS THAT DIFFER name two elements.
                 # An array index can alias through a negative one, and a number
                 # key through its spelling (`1` and `"1"`, `1.0`), so neither.
@@ -1657,7 +1680,7 @@ class SoN::Deparse 0.01 {
                               && $plain_hash->($in[0])
                               && defined $str_key->($in[1]) && defined $str_key->($tk)
                               && $str_key->($tk) ne $str_key->($in[1]) )
-                } @stores;
+                } @later;
                 next unless @same;
 
                 # Where the value lands: a loop Phi (the back edge, evaluated
