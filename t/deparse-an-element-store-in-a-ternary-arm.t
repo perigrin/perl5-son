@@ -150,6 +150,13 @@ refuses(q{my %h = (a=>1); for my $c (1,0) { my $x = $c ? ($h{scalar(keys %h)} = 
     $key_mem, 'a key that counts the keys');
 refuses(q{my @a = (0,5); my @b = (1); for my $c (1,0) { my $x = $c ? ($a[$b[0]] = 1) : 8; print "$x @a\n" }},
     $key_mem, 'an index that reads another array');
+# WANT 0 pushes nothing, as for a stored value that is not a constant: an
+# if/else ending a sub (chalk's StructPromotion::_check_subscript_access,
+# keyed on `$i->value()`) still yields its value and translates, as at base.
+round_trips(q{my %h = (k=>'a'); sub f { if ($_[0]) { $h{$h{k}} = 7 } else { $h{z} = 8 } } print f(1), f(0), "\n";},
+    'an if/else ending a sub, a key that reads the hash');
+round_trips(q{package O { sub new { bless {v=>$_[1]}, $_[0] } sub value { $_[0]{v} } } my %s; sub f { my $i = shift; if ($i) { $s{k}{$i->value()} = 1 } else { $s{n} = 1 } } f(O->new("x")); f(0); print join(",", sort keys %s), " ", join(",", keys %{$s{k}}), "\n";},
+    'an if/else ending a sub, a method call in the key');
 round_trips(q{my @a = (0,5); my $i = 1; for my $c (1,0) { my $x = $c ? ($a[$i] = 1) : 8; print "$x @a\n" }},
     'a lexical scalar index');
 round_trips(q{my @a = (0,0); my $i = 0; for my $c (1,0) { my $x = $c ? ($a[$i+1] = 1) : 8; print "$x @a\n" }},
@@ -192,6 +199,9 @@ todo 'DIFF at base: a callee write into a lexical array element is lost' => sub 
 };
 todo 'DIFF at base: a returned stored expression pushes nothing (renders return ())' => sub {
     output_matches(q{my @a = (5); sub f { return $_[0] ? ($a[0] = $_[1]) : 8 } print f(1, 3), f(0), " @a\n"}, 'return of a stored argument');
+};
+todo 'DIFF at base: a ternary ending a sub, whose key reads memory, pushes nothing' => sub {
+    output_matches(q{my %h = (k=>'a'); sub f { $_[0] ? ($h{$h{k}} = 7) : 8 } my @r = (f(1), f(0)); print "@r\n"}, 'a WANT 0 ternary, a key that reads the hash');
 };
 todo 'DIFF at base: a glob alias of an element is not seen' => sub {
     output_matches(q{our $G; my @a=(1); *G = \$a[0]; $a[0] = $G + 1; print "@a\n"}, 'a glob alias');

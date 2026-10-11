@@ -14239,11 +14239,15 @@ class SoN::FromOptree 0.01 {
                         # key that reads memory reads what the store changed:
                         # `$a[$a[0]] = 1` re-read $a[1], `$a[scalar @a]` read
                         # past the end. One with an effect (`chop $k`) runs
-                        # it again.
-                        die "GAP: a consumed ternary arm stores an element whose"
-                          . " key reads memory or has an effect; the merged value"
-                          . " would re-read it after the store\n"
-                            unless _key_reads_no_memory($tgt->inputs->[1]);
+                        # it again. WANT 0 pushes nothing, as before.
+                        unless (_key_reads_no_memory($tgt->inputs->[1])) {
+                            die "GAP: a consumed ternary arm stores an element"
+                              . " whose key reads memory or has an effect; the"
+                              . " merged value would re-read it after the store\n"
+                                unless $is_void;
+                            $alloc_value = 0;
+                            next;
+                        }
                         push @reread, [$val, $tgt, $st];
                         next;
                     }
