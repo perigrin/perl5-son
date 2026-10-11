@@ -14473,8 +14473,11 @@ class SoN::FromOptree 0.01 {
             # stack above base is dead leftover -- drain it so merge() does not
             # build a spurious ill-typed stack Phi over a dead value (bug found in
             # 2b-1 review).
-            $false_sim->pop_node while $false_sim->stack_depth > $base_depth;
-            $true_sim->pop_node  while $true_sim->stack_depth  > $base_depth;
+            # KEPT, not dropped: in a multi-element list arm the leftover is the
+            # front of the arm's list, and a list-context merge below uses it.
+            my (@false_rest, @true_rest);
+            unshift @false_rest, $false_sim->pop_node while $false_sim->stack_depth > $base_depth;
+            unshift @true_rest,  $true_sim->pop_node  while $true_sim->stack_depth  > $base_depth;
             # merge() builds the Region over [true_control, false_control], scope
             # Phis, and the memory-Phi over [true_memory, false_memory]. Adopt the
             # merged control / memory / scope into the main sim (Region-input order
@@ -14516,8 +14519,21 @@ class SoN::FromOptree 0.01 {
             my $alloc_value = $alloc_only && $want != 1;
             # ONE VALUE PER ARM, as the single-value select below demands: the
             # drain above would drop the rest of `wantarray ? (7, 8) : []`.
-            die "GAP: a ternary with a multi-element list arm not yet lowered\n"
-                if $alloc_value && (($true_delta // 0) > 1 || ($false_delta // 0) > 1);
+            # IN LIST CONTEXT each arm's value is its whole list, and a Phi over
+            # two lists is a list. In the CALLER'S context (WANT 0) a scalar
+            # caller would read that merged list as a count, where perl's comma
+            # yields the last element; and an element-store arm's value is
+            # checked below for one value only.
+            if ($alloc_value && (@true_rest || @false_rest)) {
+                die "GAP: a ternary with a multi-element list arm not yet lowered\n"
+                    if !$list_ctx || $elem_branch;
+                $true_arm_val  = $factory->make('ArrayLiteral',
+                    inputs => [ @true_rest, $true_delta ? ($true_arm_val) : () ],
+                    stamp => SoN::IR::Stamp->new(type => 'List'));
+                $false_arm_val = $factory->make('ArrayLiteral',
+                    inputs => [ @false_rest, $false_delta ? ($false_arm_val) : () ],
+                    stamp => SoN::IR::Stamp->new(type => 'List'));
+            }
             # AN ELEMENT-STORE ARM MERGES ONLY A CONSTANT. Its value is the
             # stored node, which the merge may spell after the store: an
             # expression re-reads what the store changed (`$a[0] = $a[0] + 1`

@@ -99,9 +99,27 @@ emits_quietly(q{my ($a, $b) = (5, 6); for my $c (1, 0) { my $x = $c ? ($a, $b) :
 round_trips(q{for my $c (1, 0) { my $n = () = ($c ? (7, 8, 9) : ()); print "$n\n" }},
     'counted through an empty list assign');
 
-# STILL REFUSED: the merge through a Phi spells one value per arm.
+# AN ARM THAT CALLS OR ALLOCATES merges through a Phi, built as a branch so
+# the call runs only in its arm. In LIST context the Phi is the arm's list.
+round_trips(q{sub k { print "k\n"; 3 } for my $c (1, 0) { my @a = $c ? (k(), 4) : (); print scalar(@a), " @a\n" }},
+    'a list arm with a call');
+round_trips(q{sub k { print "k\n"; 3 } for my $c (1, 0) { my @a = $c ? (k(), 4) : (5, 6, 7); print "@a\n" }},
+    'two list arms, one with a call');
+# chalk's _extract_fields: an optional pair whose value is a method call.
+round_trips(q{package N { sub new { bless { v => $_[1] }, $_[0] } sub value { $_[0]{v} } }
+    sub f { my $n = shift; return { k => 1, (defined $n->value ? (value => "${\$n->value}") : ()) } }
+    for my $v (7, undef) { my $h = f(N->new($v)); print join(",", map { "$_=$h->{$_}" } sort keys %$h), "\n" }},
+    'an optional pair with a method call in a hash constructor');
+round_trips(q{for my $c (1, 0) { my @a = $c ? (1, 2) : [3]; print scalar(@a), "\n" }},
+    'a list arm beside an allocating arm, in list context');
+
+# STILL REFUSED: in the CALLER'S context the merged list would be read as a
+# count by a scalar caller, where perl's comma yields the last element.
 refuses(q{sub f { wantarray ? (7, 8) : [] } my @a = f(); print "@a\n";},
     qr/GAP: a ternary with a multi-element list arm not yet lowered/,
-    'a list arm beside an allocating arm');
+    'a list arm beside an allocating arm, in the caller\'s context');
+refuses(q{my @a = (0); for my $c (1, 0) { my @r = ($c ? (($a[0] = 1), 2) : 3); print "@r @a\n" }},
+    qr/GAP: a ternary with a multi-element list arm not yet lowered/,
+    'a list arm that stores an element');
 
 done_testing;
