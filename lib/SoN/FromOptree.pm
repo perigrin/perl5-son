@@ -2388,6 +2388,15 @@ class SoN::FromOptree 0.01 {
                 # with replacement="5", which is $n, not the replacement).
                 my $repl_node = !defined $code_repl && $sim->stack_depth > 0
                     ? $sim->pop_node : undef;
+                # A PACKAGE TARGET IS A STACKED KID: its gvsv pushed the
+                # variable, which nothing popped, so in a list it rode along
+                # -- `f(1, $w =~ s/a//)` passed three arguments, `1 b 1`.
+                # A pad target is the op's own targ and pushes nothing.
+                $sim->pop_node
+                    if !$op->targ && ( $op->flags & B::OPf_STACKED() )
+                    && $sim->stack_depth > 0
+                    && ( $sim->peek_node == $target
+                         || $sim->peek_node == $store_target );
                 my $replacement = '';
                 if ($repl_node && $repl_node->isa('SoN::IR::Node::Constant')) {
                     $replacement = $repl_node->value // '';
