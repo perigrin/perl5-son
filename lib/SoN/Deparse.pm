@@ -1539,8 +1539,9 @@ class SoN::Deparse 0.01 {
                 next if $VALUE_CONSUMER->{$op};
                 # substr at every arity: two or three operands only READ the
                 # string, and the four-operand write spells it by name.
+                # sprintf only reads its arguments.
                 next if $op eq 'Call'
-                    && ( ( $c->{fields} // {} )->{name} // '' ) eq 'substr';
+                    && ( ( $c->{fields} // {} )->{name} // '' ) =~ /\A(?:substr|sprintf)\z/;
                 return 0;
             }
             return 1;
@@ -1606,10 +1607,27 @@ class SoN::Deparse 0.01 {
                 my $id = shift @queue;
                 next if $seen{$id}++;
                 for my $c ( ( $ctrl_next{$id} // [] )->@* ) {
-                    push @stores, $c if ( $c->{op} // '' ) eq 'Assign';
+                    push @stores, $c if ( $c->{op} // '' ) =~ /\A(?:Assign|Call)\z/;
                     push @queue, $c->{id};
                 }
             }
+            # A CALL WRITES AN ELEMENT IT IS PASSED, through $_[0]. Its
+            # element arguments, through the pure nodes that yield them (a
+            # ternary's arms), are its targets.
+            my $targets = sub ($s) {
+                my @in = ( $s->{inputs} // [] )->@*;
+                return $nodes->{ $in[0] // -1 } // {} if ( $s->{op} // '' ) eq 'Assign';
+                my ( @q, %qs, @t ) = @in;
+                while ( @q ) {
+                    my $id = shift @q;
+                    next if !defined $id || $qs{$id}++;
+                    my $x = $nodes->{$id} or next;
+                    next if defined $x->{control_in};
+                    if ( ( $x->{op} // '' ) eq 'Subscript' ) { push @t, $x; next }
+                    push @q, ( $x->{inputs} // [] )->@*;
+                }
+                return @t;
+            };
             for my $n ( $self->_nodes_in_order ) {
                 next unless ( $n->{op} // '' ) eq 'Subscript';
                 # A PINNED READ is bound where it stands and spelled by its
@@ -1631,7 +1649,20 @@ class SoN::Deparse 0.01 {
                     $from = $r if $r != $loop->{id} && $seen{$r}
                         && ( ( $nodes->{$r} // {} )->{op} // '' ) eq 'Region';
                 }
-                next unless defined $from
+                # A VERSION MADE BEFORE THE LOOP -- a package aggregate's
+                # initialising store, when the body makes no memory Phi -- is
+                # the iteration's starting version too, for a read in the body.
+                my $before = !defined $from && $under_loop{ $n->{id} }
+                    && defined $v->{control_in} && !$seen{ $v->{id} } && do {
+                        my ( @bq, %bs ) = ( $v->{id} );
+                        while ( @bq && !$bs{ $loop->{id} } ) {
+                            my $id = shift @bq;
+                            next if $bs{$id}++;
+                            push @bq, map { $_->{id} } ( $ctrl_next{$id} // [] )->@*;
+                        }
+                        $bs{ $loop->{id} };
+                    };
+                next unless defined $from || $before
                     || ( $v->{op} // '' ) eq 'MemStart'
                     || ( ( $v->{op} // '' ) eq 'Phi'
                          && ( ( $v->{fields} // {} )->{region} // -1 ) == $loop->{id} );
@@ -1671,8 +1702,8 @@ class SoN::Deparse 0.01 {
                     }
                     return 1;
                 };
-                my @same = grep {
-                    my $t = $nodes->{ ( $_->{inputs} // [] )->[0] // -1 } // {};
+                my @same = grep { grep {
+                    my $t = $_;
                     my $tk = ( $t->{inputs} // [] )->[1] // -1;
                     ( $t->{op} // '' ) eq 'Subscript'
                         && ( ( $t->{inputs} // [] )->[0] // -1 ) == $in[0]
@@ -1680,7 +1711,7 @@ class SoN::Deparse 0.01 {
                               && $plain_hash->($in[0])
                               && defined $str_key->($in[1]) && defined $str_key->($tk)
                               && $str_key->($tk) ne $str_key->($in[1]) )
-                } @later;
+                } $targets->($_) } @later;
                 next unless @same;
 
                 # Where the value lands: a loop Phi (the back edge, evaluated

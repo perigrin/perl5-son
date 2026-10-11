@@ -90,4 +90,42 @@ refuses(q{sub inc { $_[0]++ } my @a=(0); for my $c (1,0) { my $x = $c ? inc($a[0
     qr/GAP: a consumed ternary arm stores an element and yields a value that is not a constant/,
     'a writing call of a lexical array element in an arm');
 
+# A CALL WRITES ITS ELEMENT ARGUMENT through $_[0]. A read of that element
+# earlier in a loop iteration is spelled at its use, after the call, so the
+# loop pass counts the call as a store to the aggregate it is passed from.
+sub render_refuses ($src, $cause, $name) {
+    my $d = SoN::Deparse->new;
+    my $out = $d->render(graph_of($src) // {});
+    ok !defined $out, "$name: not rendered";
+    like $d->gap // q{}, $cause, "$name: refused, naming its cause";
+}
+my $loop_gap = qr/GAP: an element read in a loop is spelled after a store to its aggregate/;
+render_refuses(q{sub g { $_[0] = 5; 1 } my %h=(a=>1); for my $c (1,0) { my $y = $h{a}; g($c ? $h{a} : my $t); print "$y $h{a}\n" }},
+    $loop_gap, 'a ternary element argument after a read, in a loop');
+render_refuses(q{sub g { $_[0] = 5; 1 } my $r={a=>1}; for my $c (1,0) { my $y = $r->{a}; g($c ? $r->{a} : my $t); print "$y $r->{a}\n" }},
+    $loop_gap, 'a hashref element');
+render_refuses(q{sub g { $_[0] = 5; 1 } our %g=(a=>1); for my $c (1,0) { my $y = $g{a}; g($c ? $g{a} : my $t); print "$y $g{a}\n" }},
+    $loop_gap, 'a package hash element');
+render_refuses(q{sub g { $_[0] = 5; 1 } my %h=(a=>1); for my $c (1,0) { my $y = $h{a}; g($h{a}); print "$y $h{a}\n" }},
+    $loop_gap, 'a plain element argument after a read, in a loop');
+render_refuses(q{sub g { $_[0] = 5 } my %h=(a=>1); for my $c (1,0) { my $x = sprintf("%s", $c ? $h{a} : 8); g($h{a}); print "$x $h{a}\n" }},
+    $loop_gap, 'a sprintf of a ternary element before a writing call, in a loop');
+round_trips(q{sub g { $_[0] = 5; 1 } my %h=(a=>1,b=>2); for my $c (1,0) { my $y = $h{a}; g($c ? $h{b} : my $t); print "$y $h{a} $h{b}\n" }},
+    'a different key passed');
+round_trips(q{sub g { $_[0] = 5; 1 } my %h=(a=>1); for my $c (1,0) { g($h{a}); my $y = $h{a}; print "$y\n" }},
+    'a read after the call');
+
+# A sprintf ARGUMENT IS A READ, not an lvalue: built as an address it took no
+# memory version, and was spelled after a later write to the element.
+round_trips(q{sub g { $_[0] = 5 } my %h=(a=>1); my $c = 1; my $x = sprintf("%s", $c ? $h{a} : 8); g($h{a}); print "$x $h{a}\n"},
+    'a sprintf of a ternary element before a writing call');
+round_trips(q{sub g { $_[0] = 5 } my %h=(a=>1); my $x = sprintf("%s", $h{a}); g($h{a}); print "$x $h{a}\n"},
+    'a sprintf of an element before a writing call');
+round_trips(q{my %h=(a=>1); my $x = sprintf("%s", $h{a}); $h{a} = 5; print "$x $h{a}\n"},
+    'a sprintf of an element before a store');
+round_trips(q{my @a=(1); my $x = sprintf("%d", $a[0]); $a[0] = 5; print "$x @a\n"},
+    'a sprintf of an array element before a store');
+round_trips(q{my $r={a=>1}; my $c = shift // 1; my $x = sprintf("%s", $c ? $r->{a} : 8); $r->{a} = 5; print "$x $r->{a}\n"},
+    'a sprintf of a ternary hashref element before a store');
+
 done_testing;

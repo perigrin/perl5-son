@@ -5472,6 +5472,16 @@ class SoN::FromOptree 0.01 {
         is_bool blessed refaddr reftype is_weak ceil floor stringify is_tainted
     );
 
+    # _operand_consumer($op) -> the name of the op that consumes $op's value,
+    # past the operators that yield an operand (as in _is_call_argument).
+    sub _operand_consumer ($op) {
+        my $p = eval { $op->parent } or return q{};
+        $p = $p->parent
+            while $$p && $p->name =~ /\A(?:null|cond_expr|and|or|dor)\z/
+                && eval { ${ $p->parent } };
+        return $$p ? $p->name : q{};
+    }
+
         if ($name eq 'padsv') {
             my $targ = $op->targ;
             # A deref padsv ($r->[0], $r->{k}) carries OPf_MOD for
@@ -7504,7 +7514,16 @@ class SoN::FromOptree 0.01 {
         if ($name eq 'aelem' || $name eq 'helem') {
             my $index     = $sim->pop_node;
             my $container = $sim->pop_node;
-            my $is_lvalue = ($op->flags & 32); # OPf_MOD
+            # A sprintf ARGUMENT is OPf_MOD with OPpLVAL_DEFER, as a call's
+            # is, but sprintf only reads it -- nor does the multiconcat perl
+            # makes of a "%s"-only sprintf. Built as an address it took no
+            # memory version and was spelled wherever its value landed:
+            # `my $x = sprintf("%s", $h{a}); $h{a} = 5` printed 5 for 1.
+            my $consumer  = ($op->private & B::OPpLVAL_DEFER())
+                ? _operand_consumer($op) : q{};
+            my $is_lvalue = ($op->flags & 32)  # OPf_MOD
+                         && !($READS_ITS_OPERANDS{$consumer}
+                              || $consumer eq 'multiconcat');
 
             # $ENV{KEY}: a helem whose container is the %ENV stash (gv[*ENV] with
             # rv2hv transparent, so the container is the gv-name Constant, which
