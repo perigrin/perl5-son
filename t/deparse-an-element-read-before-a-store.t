@@ -63,4 +63,12 @@ round_trips(q{sub g { return (4, 5) } sub f { my @c = g(); my $z = $c[0]; $c[0] 
 round_trips(q{my @a=(4); my $z = $a[0]; sub h { 1 } h(); $a[0] = 1; print "$z $a[0]\n";},
     q{a call between the copy and the store});
 
+
+# A READ USED ONLY INSIDE AN ARM is not bound ahead of it: perl's
+# comp/our.t reads $caller[1] in an else that declares @caller.
+round_trips(q{my $t = 0; sub is { my ($g) = @_; $t = $t + 1; if ($g) { print "ok $t\n"; return 1 } my @c = (7, 8, 9); print "not ok $t at $c[1] $c[2]\n"; return } is(1); is(0);},
+    q{an element read only in the arm that declares its array});
+round_trips(q{my @a=(1); my $c=1; if ($c) { my $y = $a[0]; $a[0] = 7; print "$y\n" } print "$a[0]\n";},
+    q{a read and its store inside one arm});
+
 done_testing;

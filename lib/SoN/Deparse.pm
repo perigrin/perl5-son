@@ -2031,6 +2031,32 @@ class SoN::Deparse 0.01 {
                 } @in[ 0 .. $#in - 1 ];
             }
 
+            # A READ USED ONLY INSIDE AN `if` ARM is not bound ahead of it: the
+            # arm may declare what it reads (`my @caller = caller(0)` in an
+            # else, read as $caller[1] there), and a store the arm makes is not
+            # one the pass before it sees. The anchor's own chain stops at the
+            # arm's Proj.
+            unless ( $at_entry ) {
+                my ( @fwd, %reach ) = ( ( $join // $version )->{id} );
+                while ( defined( my $id = shift @fwd ) ) {
+                    next if $reach{$id}++;
+                    push @fwd, map { $_->{id} }
+                        grep { ( $_->{op} // '' ) ne 'Proj' } ( $ctrl_next{$id} // [] )->@*;
+                }
+                my ( @use, %usen, $in_arm ) = ( $n->{id} );
+                while ( defined( my $id = shift @use ) ) {
+                    next if $usen{$id}++;
+                    for my $c ( ( $consumers{$id} // [] )->@* ) {
+                        if ( defined $c->{control_in} ) {
+                            $in_arm = 1 unless $reach{ $c->{id} };
+                            next;
+                        }
+                        push @use, $c->{id};
+                    }
+                }
+                next if $in_arm;
+            }
+
             my ( @queue, %seen, $shadowed )
                 = ( $at_entry ? $start->{id} : ( $join // $version )->{id} );
             while ( @queue && !$shadowed ) {
