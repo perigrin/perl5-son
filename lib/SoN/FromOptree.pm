@@ -6604,6 +6604,22 @@ class SoN::FromOptree 0.01 {
             # from its enclosing scope.
             my @captures = _anoncode_capture_info($cv, $op);
 
+            # A CAPTURED FIELD belongs to the instance the method runs on, and
+            # nothing in the graph says which: the anon sub is lifted to file
+            # scope, where `%m` named a stray lexical and `exists $m{a}` was
+            # false (`00` for perl's `10`). chalk's IR::Graph::nodes closes
+            # over its `field %cache` exactly so.
+            {
+                my $outer = eval { $cv->PADLIST->ARRAYelt(0) };
+                for my $c (@captures) {
+                    my $pn = $outer && eval { $outer->ARRAYelt( $c->{outer_idx} ) };
+                    die "GAP: an anonymous sub closing over the field $c->{name}"
+                      . " is not yet lowered -- lifted out of its method it"
+                      . " would not see the instance's field\n"
+                        if ref $pn eq 'B::PADNAME' && SoN::FieldInfo::is_field($pn);
+                }
+            }
+
             # A capture whose enclosing slot could not be resolved closes over
             # something further out than this CV -- refuse rather than bind the
             # wrong slot. _anoncode_capture_info returns () for that case, so

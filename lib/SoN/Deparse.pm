@@ -661,10 +661,16 @@ class SoN::Deparse 0.01 {
     # `class F { }`, where a bare `c()` is F::c.
     method _call_ident ($name) {
         my ($pkg) = ($current_sub // '') =~ /\A(.*)::[^:]+\z/;
+        my $in_package = defined $pkg && $pkg ne 'main';
         return $name
-            if defined $pkg && $pkg ne 'main'
-            && $name =~ /\Amain::[A-Za-z_]\w*\z/;
-        return $self->_sub_ident($name);
+            if $in_package && $name =~ /\Amain::[A-Za-z_]\w*\z/;
+        my $ident = $self->_sub_ident($name);
+        # SO DOES A MANGLED ONE. An anon sub lifted to file scope -- `my
+        # $in_cache = sub {...}` in chalk's IR::Graph::nodes -- is defined in
+        # main under its mangled name, and called bare from inside `class
+        # Chalk::IR::Graph` it resolved there: "Undefined subroutine".
+        return "main::$ident" if $in_package && $ident !~ /::/;
+        return $ident;
     }
 
     # True when the program defines sub $name while it runs rather than by
