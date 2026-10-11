@@ -14639,8 +14639,10 @@ class SoN::FromOptree 0.01 {
         # same construct that refuses at top level dropped the `1` inside a
         # body and `scalar(g())` read 1 where perl says 2. The delta is the
         # real property: it counts what the arm actually pushed.
-        die "GAP: a ternary with a multi-element list arm not yet lowered\n"
-            if $true_delta > 1 || $false_delta > 1;
+        # SO A MULTI-ELEMENT ARM IS ITS WHOLE LIST: everything the arm pushed
+        # above the base, in push order. $walk_arm popped the last value; the
+        # rest are still on the arm's stack, top first, hence the unshift.
+        my $multi = $true_delta > 1 || $false_delta > 1;
 
         # Merge arm pad rebinds in EVERY context -- an assignment inside a
         # value-context arm (`my $y = $c ? ($x = 1) : 2`) is a binding side
@@ -14670,13 +14672,21 @@ class SoN::FromOptree 0.01 {
         # $x : () }` -- chalk's filter idiom -- contributed an undef for every
         # element C rejected. Each arm is then the LIST of its values (none or
         # one), and the ternary picks a list, which flattens where perl does.
-        if ($list_ctx && ($true_delta == 0 || $false_delta == 0)) {
-            my $as_list = sub ($val, $delta) {
-                $factory->make('ArrayLiteral', inputs => [ $delta ? ($val) : () ],
+        if ($multi || ($list_ctx && ($true_delta == 0 || $false_delta == 0))) {
+            my $as_list = sub ($val, $delta, $asim) {
+                my @vals = $delta ? ($val) : ();
+                unshift @vals, $asim->pop_node while $asim->stack_depth > $base_depth;
+                # IN SCALAR CONTEXT the comma yields the last value and runs the
+                # rest for their effects. A constant has none, and spelled ahead
+                # of the last it is a "Useless use of a constant" warning.
+                @vals = ((grep { !$_->isa('SoN::IR::Node::Constant') } @vals[0 .. $#vals - 1]),
+                         $vals[-1])
+                    if @vals > 1 && ($op->flags & 3) == 2;   # OPf_WANT_SCALAR
+                $factory->make('ArrayLiteral', inputs => \@vals,
                     stamp => SoN::IR::Stamp->new(type => 'Array'));
             };
-            $true_val  = $as_list->($true_val,  $true_delta);
-            $false_val = $as_list->($false_val, $false_delta);
+            $true_val  = $as_list->($true_val,  $true_delta,  $true_sim);
+            $false_val = $as_list->($false_val, $false_delta, $false_sim);
         }
         my $node = _make_ternary($factory, $cond, $true_val, $false_val);
         $sim->push_node($node);

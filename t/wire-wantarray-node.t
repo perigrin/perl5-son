@@ -88,19 +88,14 @@ subtest 'each callsite records its own context' => sub {
 
 # THE REAL IDIOM, and the one perl's own t/op/ uses: a ternary on wantarray
 # returning a list or a scalar. Both arms must survive.
-# THE REAL IDIOM, and the honest state of it. `wantarray ? (1,2) : "s"` now
-# reaches a NAMED REFUSAL rather than a silent drop -- the wantarray half is
-# lowered, and what remains unlowered is the multi-element list ARM, which is a
-# separate construct with its own GAP (see the subtest below). Asserted as a
-# refusal rather than as success, because claiming this translates today would
-# be the over-claim this suite exists to prevent.
-subtest 'the ternary idiom refuses on its list arm, not on wantarray' => sub {
-    my (undef, $err) = wire(
+# THE REAL IDIOM: a ternary on wantarray returning a list or a scalar. Both
+# arms survive, the list arm as its whole list; the round trip is asserted in
+# t/deparse-a-ternary-with-a-multi-element-list-arm.t.
+subtest 'the ternary idiom lowers with its list arm' => sub {
+    my ($w, $err) = wire(
         'sub f { wantarray ? (1,2) : "s" } my @l = f(); print scalar(@l);', 'wa_ternary');
-    unlike $err, qr/INTERNAL/, 'no crash';
-    like $err, qr/multi-element list arm/,
-        'it refuses on the LIST ARM -- wantarray itself is lowered';
-    unlike $err, qr/wantarray/, 'and the refusal is not about wantarray';
+    unlike $err, qr/GAP|INTERNAL/, 'no refusal and no crash';
+    ok $w && $w->{methods}{'main::f'}, 'and the callee reaches the wire';
 };
 
 # A SINGLE-VALUE wantarray ternary is the part that fully works today.
@@ -116,16 +111,18 @@ subtest 'a single-value wantarray ternary translates end to end' => sub {
 # marked list-context -- but a sub's return context belongs to its CALLER, so
 # the op carries no want at all:
 #
-#     my @l = $c ? (1,2) : ("s")     cond_expr lK/1   refused
-#     sub g { $c ? (1,2) : ("s") }   cond_expr K/1    SILENTLY DROPPED the 1
+#     my @l = $c ? (1,2) : ("s")     cond_expr lK/1
+#     sub g { $c ? (1,2) : ("s") }   cond_expr K/1
 #
-# perl gives 2 elements both ways. Keyed on the ARM DELTA -- what the arm
-# actually pushed -- rather than on the op's declared context.
-subtest 'a multi-element ternary arm refuses in a sub body too' => sub {
+# perl gives 2 elements both ways. The arm's value is everything it pushed
+# above the base -- the ARM DELTA -- whatever the op's declared context, so
+# both forms lower the same way. That they give perl's answers is asserted
+# by the round trips in t/deparse-a-ternary-with-a-multi-element-list-arm.t.
+subtest 'a multi-element ternary arm lowers in a sub body as at top level' => sub {
     my (undef, $e1) = wire('my $c=1; my @l = $c ? (1,2) : ("s"); print scalar(@l);', 'mt_top');
-    like $e1, qr/GAP/, 'the top-level form still refuses';
+    unlike $e1, qr/GAP|INTERNAL/, 'the top-level form lowers';
     my (undef, $e2) = wire('sub g { my $c=shift; $c ? (1,2) : ("s") } my @l=g(1); print scalar(@l);', 'mt_sub');
-    like $e2, qr/GAP/, 'and the sub-body form no longer drops a value silently';
+    unlike $e2, qr/GAP|INTERNAL/, 'and so does the sub-body form';
 };
 
 # A SINGLE-VALUE TERNARY IS UNAFFECTED -- the delta guard must not refuse the

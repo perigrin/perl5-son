@@ -22,7 +22,8 @@ my $dir  = tempdir( CLEANUP => 1 );
 #
 # THE VEHICLE CHANGED, NOT THE SUBJECT. The glob assignment lowers now, so it no
 # longer produces an absent sub -- this uses a ternary with a multi-element list
-# arm instead, which still skips one. The refusal under test is the DEPARSER's
+# arm beside an allocating arm instead, which still skips one (the list arm
+# alone now lowers, so the vehicle moved a second time). The refusal under test is the DEPARSER's
 # "a call to a sub that is not in the graph", and that is unaffected by which
 # producer GAP left the hole: a test whose setup depends on an unrelated refusal
 # will fail when that refusal is fixed, which is what happened here.
@@ -33,7 +34,7 @@ subtest 'a call to an absent sub is refused, not emitted' => sub {
     my $file = "$dir/missing.pl";
     open my $fh, '>', $file or die "open $file: $!";
     print {$fh} <<'SRC';
-sub helper { wantarray ? (1, 2) : 0 }
+sub helper { wantarray ? (1, 2) : [] }
 my @r = helper();
 print "after\n";
 SRC
