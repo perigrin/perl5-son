@@ -121,7 +121,7 @@ main::__PROGRAM__: {start: 0, returns: [48], nodes: [
   [Ref, {each: true}, [4], ~, List], # 36
   [ArrayLiteral, {sigil: "@", symbol: r}, [36], ~, Array], # 37
   [Subscript, {kind: array}, [37, 19, 6], ~, Scalar], # 38
-  [PostfixDeref, {sigil: $}, [38], ~, Scalar], # 39
+  [PostfixDeref, {sigil: $}, [38, 6], ~, Scalar], # 39
   [Coerce, {from_repr: Scalar, to_repr: Str}, [39], ~, Str], # 40
   [Subscript, {kind: array}, [14, 8, 6], ~, Int], # 41
   [Coerce, {from_repr: Unknown, to_repr: Str}, [41], ~, Str], # 42

@@ -394,5 +394,5 @@ main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Print, ~, [6, 4], 11, Scalar], # 12
   [Print, ~, [3, 4], 12, Scalar], # 13
   [Return, {implicit: true}, [1], 13], # 14
-  [Assign, ~, [5, 2, 11], ~, List]]} # 15
+  [Assign, {targets: 2}, [5, 2, 11], ~, List]]} # 15
 ```

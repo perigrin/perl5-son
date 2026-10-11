@@ -241,13 +241,13 @@ main::add1: {start: 0, returns: [4], nodes: [
   [Add, ~, [1, 2], ~, Num], # 3
   [Return, ~, [3], 0], # 4
   [ArgsSource, ~, ~, ~, Array], # 5
-  [Assign, ~, [1, 5], ~, List]]} # 6
+  [Assign, {targets: 1}, [1, 5], ~, List]]} # 6
 main::add2: {start: 0, returns: [9], nodes: [
   [Start], # 0
   [MemStart], # 1
   [PadAccess, {sigil: $, symbol: x}, [1], ~, Unknown], # 2
   [ArgsSource, ~, ~, ~, Array], # 3
-  [Assign, ~, [2, 3], 0, List], # 4
+  [Assign, {targets: 1}, [2, 3], 0, List], # 4
   [PadAccess, {sigil: $, symbol: x}, [4], ~, Unknown], # 5
   [Call, {dispatch_kind: direct, name: main::add1, param_names: [], want: scalar}, [5], 4, Num], # 6
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 7
@@ -513,7 +513,7 @@ main::add: {start: 0, returns: [4], nodes: [
   [Add, ~, [1, 2], ~, Num], # 3
   [Return, {implicit: true}, [3], 0], # 4
   [ArgsSource, ~, ~, ~, Array], # 5
-  [Assign, ~, [1, 2, 5], ~, List]]} # 6
+  [Assign, {targets: 2}, [1, 2, 5], ~, List]]} # 6
 main::corpus_case: {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 1

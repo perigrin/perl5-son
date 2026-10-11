@@ -222,7 +222,7 @@ main::__PROGRAM__: {start: 0, returns: [105], nodes: [
   [Coerce, {from_repr: Unknown, to_repr: Str}, [102], ~, Str], # 103
   [Print, ~, [95, 98, 99, 101, 103, 48], 93, Scalar], # 104
   [Return, {implicit: true}, [1], 104], # 105
-  [Assign, ~, [100, 102, 93], ~, List], # 106
+  [Assign, {targets: 2}, [100, 102, 93], ~, List], # 106
   [PadAccess, {sigil: $, symbol: tag}, ~, ~, Str], # 107
   [VarDecl, {scope: my}, [107, 84]]]} # 108
 ```

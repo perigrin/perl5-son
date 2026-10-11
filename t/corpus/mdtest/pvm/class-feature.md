@@ -847,7 +847,7 @@ Holder::clear: {start: 0, returns: [4], nodes: [
   [Start], # 0
   [PadAccess, {sigil: $, symbol: self}, ~, ~, Unknown], # 1
   [FieldAccess, {field_index: 1, field_stash: Holder}, ~, ~, Unknown], # 2
-  [Assign, ~, [2], 0, Unknown], # 3
+  [Assign, {targets: 1}, [2], 0, Unknown], # 3
   [Return, ~, [1], 3]]} # 4
 Holder::register: {start: 0, returns: [11], nodes: [
   [Start], # 0
@@ -857,10 +857,10 @@ Holder::register: {start: 0, returns: [11], nodes: [
   [Parameter, {index: 0, name: $graphs, sigil: $}, ~, ~, Unknown], # 4
   [MemStart], # 5
   [PostfixDeref, {sigil: "%"}, [4, 5], ~, Hash], # 6
-  [Assign, ~, [3, 6], 0, List], # 7
+  [Assign, {targets: 1}, [3, 6], 0, List], # 7
   [Call, {dispatch_kind: builtin, memory_input: true, name: keys, param_names: [], want: list}, [3, 7], ~, List], # 8
   [Call, {dispatch_kind: builtin, name: sort, param_names: [], sort_cmp: string, sort_order: ascending}, [8], ~, List], # 9
-  [Assign, ~, [2, 9], 7, List], # 10
+  [Assign, {targets: 1}, [2, 9], 7, List], # 10
   [Return, ~, [1], 10]]} # 11
 Holder::summary: {start: 0, returns: [11], nodes: [
   [Start], # 0

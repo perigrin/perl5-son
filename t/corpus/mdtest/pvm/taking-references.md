@@ -115,12 +115,12 @@ main::__PROGRAM__: {start: 0, returns: [19], nodes: [
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 7
   [MemStart], # 8
   [Subscript, {kind: array}, [6, 7, 8], ~, Scalar], # 9
-  [PostfixDeref, {sigil: $}, [9], ~, Scalar], # 10
+  [PostfixDeref, {sigil: $}, [9, 8], ~, Scalar], # 10
   [Coerce, {from_repr: Scalar, to_repr: Str}, [10], ~, Str], # 11
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 12
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 13
   [Subscript, {kind: array}, [6, 13, 8], ~, Scalar], # 14
-  [PostfixDeref, {sigil: $}, [14], ~, Scalar], # 15
+  [PostfixDeref, {sigil: $}, [14, 8], ~, Scalar], # 15
   [Coerce, {from_repr: Scalar, to_repr: Str}, [15], ~, Str], # 16
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 17
   [Print, ~, [11, 12, 16, 17], 0, Scalar], # 18
@@ -234,7 +234,7 @@ main::__PROGRAM__: {start: 0, returns: [22], nodes: [
   [PadAccess, {sigil: $, symbol: "n"}, [14], ~, Unknown], # 15
   [Ref, ~, [15], ~, Unknown], # 16
   [RefType, ~, [16], ~, Str], # 17
-  [PostfixDeref, {sigil: $}, [16], ~, Scalar], # 18
+  [PostfixDeref, {sigil: $}, [16, 14], ~, Scalar], # 18
   [Coerce, {from_repr: Scalar, to_repr: Str}, [18], ~, Str], # 19
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 20
   [Print, ~, [5, 6, 10, 6, 17, 6, 19, 20], 14, Scalar], # 21

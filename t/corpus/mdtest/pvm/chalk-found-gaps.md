@@ -85,7 +85,7 @@ main::make: {start: 0, returns: [28], nodes: [
   [Phi, {predecessors: [14, 24, 25], region: 26}, [1, 8, 10], ~, Scalar], # 27
   [Return, ~, [27], 26], # 28
   [ArgsSource, ~, ~, ~, Array], # 29
-  [Assign, ~, [4, 29], ~, List]]} # 30
+  [Assign, {targets: 1}, [4, 29], ~, List]]} # 30
 ```
 
 ## A main:: sub and another package's sub, named from a class
@@ -224,7 +224,7 @@ Node::new: {start: 0, returns: [5], nodes: [
   [Call, {dispatch_kind: builtin, name: bless, param_names: []}, [2, 3], ~, Unknown], # 4
   [Return, {implicit: true}, [4], 2], # 5
   [ArgsSource, ~, ~, ~, Array], # 6
-  [Assign, ~, [3, 1, 6], ~, List]]} # 7
+  [Assign, {targets: 2}, [3, 1, 6], ~, List]]} # 7
 Node::owner: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [ArgsSource, ~, ~, ~, Array], # 1
@@ -324,7 +324,7 @@ main::matching: {start: 0, returns: [7], nodes: [
   [Region, {head: 26}, [58, 56]], # 59
   [Phi, {predecessors: [58, 47], region: 59}, [57, 48], ~, Unknown], # 60
   [ArgsSource, ~, ~, ~, Array], # 61
-  [Assign, ~, [19, 8, 61], ~, List], # 62
+  [Assign, {targets: 2}, [19, 8, 61], ~, List], # 62
   [Proj, {index: 1}, [32]], # 63
   [Region, {head: 4}, [59, 63]], # 64
   [Phi, {predecessors: [15, 63], region: 64}, [60, 28], ~, Unknown], # 65
@@ -423,7 +423,7 @@ main::walk: {start: 0, returns: [29], nodes: [
   [Proj, {index: 0}, [24]], # 35
   [Call, {dispatch_kind: builtin, name: push, param_names: []}, [5, 34], 35, Unknown], # 36
   [ArgsSource, ~, ~, ~, Array], # 37
-  [Assign, ~, [9, 30, 37], ~, List], # 38
+  [Assign, {targets: 2}, [9, 30, 37], ~, List], # 38
   [Count, ~, [31, 2], ~, Int], # 39
   [NumGt, ~, [39, 33], 24, Boolean], # 40
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 41
@@ -499,7 +499,7 @@ main::count_of: {start: 0, returns: [10], nodes: [
   [Concat, ~, [4, 8], ~, Str], # 9
   [Return, ~, [9], 0], # 10
   [ArgsSource, ~, ~, ~, Array], # 11
-  [Assign, ~, [1, 5, 11], ~, List]]} # 12
+  [Assign, {targets: 2}, [1, 5, 11], ~, List]]} # 12
 ```
 
 ## A guarded return as the last statement
@@ -553,7 +553,7 @@ main::big: {start: 0, returns: [10], nodes: [
   [Phi, {predecessors: [6, 7], region: 8}, [1, 4], ~, Scalar], # 9
   [Return, ~, [9], 8], # 10
   [ArgsSource, ~, ~, ~, Array], # 11
-  [Assign, ~, [2, 11], ~, List]]} # 12
+  [Assign, {targets: 1}, [2, 11], ~, List]]} # 12
 main::truthy: {start: 0, returns: [9], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: none}, ~, ~, Str], # 1
@@ -566,7 +566,7 @@ main::truthy: {start: 0, returns: [9], nodes: [
   [Phi, {predecessors: [5, 6], region: 7}, [1, 2], ~, Unknown], # 8
   [Return, ~, [8], 7], # 9
   [ArgsSource, ~, ~, ~, Array], # 10
-  [Assign, ~, [2, 10], ~, List]]} # 11
+  [Assign, {targets: 1}, [2, 10], ~, List]]} # 11
 ```
 
 ## A guarded store into shared state after a next
@@ -614,55 +614,55 @@ main::__PROGRAM__: {start: 0, returns: [16], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 14
   [Print, ~, [13, 14], 12, Scalar], # 15
   [Return, {implicit: true}, [1], 15]]} # 16
-main::tally: {start: 0, returns: [44], nodes: [
+main::tally: {start: 0, returns: [13], nodes: [
   [Start], # 0
   [MemStart], # 1
-  [PadAccess, {shared: 1, sigil: $, symbol: seen}, [1], ~, Unknown], # 2
-  [Increment, ~, [2], ~, Scalar], # 3
-  [Loop, {bound: entry}, [0], 0], # 4
-  [Proj, {index: 0}, [4]], # 5
-  [ArgsSource, ~, ~, ~, Array], # 6
-  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 7
-  [Phi, {region: 4}, [7, 47], ~, Int], # 8
-  [Subscript, {kind: array}, [6, 8, 1], ~, Scalar], # 9
-  [Coerce, {from_repr: Scalar, to_repr: Num}, [9], ~, Num], # 10
-  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 11
-  [NumGt, ~, [10, 11], ~, Boolean], # 12
-  [If, ~, [5, 12], 5], # 13
-  [Proj, {index: 0}, [13]], # 14
-  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 15
-  [NumGt, ~, [10, 15], ~, Boolean], # 16
-  [If, ~, [14, 16], 14], # 17
-  [Proj, {index: 0}, [17]], # 18
-  [Assign, ~, [2, 3], 18, Scalar], # 19
-  [Proj, {index: 1}, [17]], # 20
-  [Region, {head: 17}, [20, 19]], # 21
-  [Phi, {predecessors: [20, 18], region: 21}, [1, 19], ~, Unknown], # 22
-  [EntryDef, {package: main, sigil: $, symbol: total}, ~, ~, Scalar], # 23
-  [Coerce, {from_repr: Scalar, to_repr: Num}, [23], ~, Num], # 24
-  [Add, ~, [24, 10], ~, Num], # 25
-  [If, ~, [21, 16], 21], # 26
-  [Proj, {index: 0}, [26]], # 27
-  [EntryWrite, ~, [23, 25, 22], 27, Unknown], # 28
-  [Proj, {index: 1}, [26]], # 29
-  [Region, {head: 26}, [29, 28]], # 30
-  [Phi, {predecessors: [29, 27], region: 30}, [22, 28], ~, Unknown], # 31
-  [Proj, {index: 1}, [13]], # 32
-  [Region, {head: 13}, [32, 30]], # 33
-  [Phi, {predecessors: [32, 14], region: 33}, [1, 31], ~, Unknown], # 34
-  [PadAccess, {shared: 1, sigil: $, symbol: seen}, [34], ~, Str], # 35
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [35], ~, Str], # 36
-  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 37
-  [Concat, ~, [36, 37], ~, Str], # 38
-  [EntryDef, {package: main, sigil: $, symbol: total}, [34], ~, Scalar], # 39
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [39], ~, Str], # 40
-  [Concat, ~, [38, 40], ~, Str], # 41
-  [Proj, {index: 1}, [4]], # 42
-  [Region, {head: 4}, [42]], # 43
-  [Return, ~, [41], 43], # 44
-  [Count, ~, [6, 1], ~, Int], # 45
-  [NumGt, ~, [45, 8], 4, Boolean], # 46
-  [Add, ~, [8, 11], ~, Int]]} # 47
+  [Loop, {bound: entry}, [0], 0], # 2
+  [Phi, {region: 2}, [1, 47], ~, Unknown], # 3
+  [PadAccess, {shared: 1, sigil: $, symbol: seen}, [3], ~, Str], # 4
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [4], ~, Str], # 5
+  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 6
+  [Concat, ~, [5, 6], ~, Str], # 7
+  [EntryDef, {package: main, sigil: $, symbol: total}, [3], ~, Scalar], # 8
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [8], ~, Str], # 9
+  [Concat, ~, [7, 9], ~, Str], # 10
+  [Proj, {index: 1}, [2]], # 11
+  [Region, {head: 2}, [11]], # 12
+  [Return, ~, [10], 12], # 13
+  [ArgsSource, ~, ~, ~, Array], # 14
+  [Count, ~, [14, 1], ~, Int], # 15
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 16
+  [Phi, {region: 2}, [16, 25], ~, Int], # 17
+  [NumGt, ~, [15, 17], 2, Boolean], # 18
+  [Proj, {index: 0}, [2]], # 19
+  [Subscript, {kind: array}, [14, 17, 3], ~, Scalar], # 20
+  [Coerce, {from_repr: Scalar, to_repr: Num}, [20], ~, Num], # 21
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 22
+  [NumGt, ~, [21, 22], ~, Boolean], # 23
+  [If, ~, [19, 23], 19], # 24
+  [Add, ~, [17, 22], ~, Int], # 25
+  [Proj, {index: 1}, [24]], # 26
+  [Proj, {index: 0}, [24]], # 27
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 28
+  [NumGt, ~, [21, 28], ~, Boolean], # 29
+  [EntryDef, {package: main, sigil: $, symbol: total}, ~, ~, Scalar], # 30
+  [Coerce, {from_repr: Scalar, to_repr: Num}, [30], ~, Num], # 31
+  [Add, ~, [31, 21], ~, Num], # 32
+  [If, ~, [27, 29], 27], # 33
+  [Proj, {index: 1}, [33]], # 34
+  [Increment, ~, [4], ~, Scalar], # 35
+  [Proj, {index: 0}, [33]], # 36
+  [Assign, ~, [4, 35], 36, Scalar], # 37
+  [Region, {head: 33}, [34, 37]], # 38
+  [If, ~, [38, 29], 38], # 39
+  [Proj, {index: 1}, [39]], # 40
+  [Phi, {predecessors: [34, 36], region: 38}, [3, 37], ~, Unknown], # 41
+  [Proj, {index: 0}, [39]], # 42
+  [EntryWrite, ~, [30, 32, 41], 42, Unknown], # 43
+  [Region, {head: 39}, [40, 43]], # 44
+  [Region, {head: 24}, [26, 44]], # 45
+  [Phi, {predecessors: [40, 42], region: 44}, [41, 43], ~, Unknown], # 46
+  [Phi, {predecessors: [26, 27], region: 45}, [3, 46], ~, Unknown]]} # 47
 ```
 
 ## A defined-ternary default and a defined-or default agree
@@ -708,26 +708,27 @@ main::__PROGRAM__: {start: 0, returns: [8], nodes: [
   [Add, ~, [13, 2], ~, Int], # 14
   [MemStart], # 15
   [Count, ~, [12, 15], ~, Int], # 16
-  [Subscript, {kind: array}, [12, 13, 15], ~, Scalar], # 17
-  [NumGt, ~, [16, 13], 5, Boolean], # 18
-  [Proj, {index: 0}, [5]], # 19
-  [PadAccess, {sigil: $, symbol: in}, [15], ~, Unknown], # 20
-  [Assign, ~, [20, 17], 19, Scalar], # 21
-  [PadAccess, {sigil: $, symbol: in}, [21], ~, Unknown], # 22
-  [Call, {dispatch_kind: direct, name: main::by_ternary, param_names: [], want: scalar}, [22], 21, Unknown], # 23
-  [PadAccess, {sigil: $, symbol: in}, [23], ~, Unknown], # 24
-  [Call, {dispatch_kind: direct, name: main::by_dor, param_names: [], want: scalar}, [24], 23, Unknown], # 25
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [23], ~, Str], # 26
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [25], ~, Str], # 27
-  [PadAccess, {sigil: $, symbol: in}, [25], ~, Unknown], # 28
-  [Call, {dispatch_kind: direct, name: main::by_dor, param_names: [], want: list}, [28], 25, Unknown], # 29
-  [StrEq, ~, [26, 27], ~, Boolean], # 30
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [29], ~, Str], # 31
-  [Constant, {const_type: string, value: "same "}, ~, ~, Str], # 32
-  [Constant, {const_type: string, value: "differ "}, ~, ~, Str], # 33
-  [TernaryExpr, ~, [30, 32, 33], ~, Str], # 34
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 35
-  [Print, ~, [34, 31, 35], 29, Scalar]]} # 36
+  [Phi, {region: 5}, [15, 28], ~, Unknown], # 17
+  [Subscript, {kind: array}, [12, 13, 17], ~, Scalar], # 18
+  [NumGt, ~, [16, 13], 5, Boolean], # 19
+  [Proj, {index: 0}, [5]], # 20
+  [PadAccess, {sigil: $, symbol: in}, [17], ~, Unknown], # 21
+  [Assign, ~, [21, 18], 20, Scalar], # 22
+  [PadAccess, {sigil: $, symbol: in}, [22], ~, Unknown], # 23
+  [Call, {dispatch_kind: direct, name: main::by_ternary, param_names: [], want: scalar}, [23], 22, Unknown], # 24
+  [PadAccess, {sigil: $, symbol: in}, [24], ~, Unknown], # 25
+  [Call, {dispatch_kind: direct, name: main::by_dor, param_names: [], want: scalar}, [25], 24, Unknown], # 26
+  [PadAccess, {sigil: $, symbol: in}, [26], ~, Unknown], # 27
+  [Call, {dispatch_kind: direct, name: main::by_dor, param_names: [], want: list}, [27], 26, Unknown], # 28
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [28], ~, Str], # 29
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [24], ~, Str], # 30
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [26], ~, Str], # 31
+  [StrEq, ~, [30, 31], ~, Boolean], # 32
+  [Constant, {const_type: string, value: "same "}, ~, ~, Str], # 33
+  [Constant, {const_type: string, value: "differ "}, ~, ~, Str], # 34
+  [TernaryExpr, ~, [32, 33, 34], ~, Str], # 35
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 36
+  [Print, ~, [35, 29, 36], 28, Scalar]]} # 37
 main::by_dor: {start: 0, returns: [19], nodes: [
   [Start], # 0
   [PadAccess, {sigil: $, symbol: v}, ~, ~, Unknown], # 1
@@ -752,7 +753,7 @@ main::by_dor: {start: 0, returns: [19], nodes: [
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 20
   [TernaryExpr, ~, [7, 15, 20], ~, Scalar], # 21
   [ArgsSource, ~, ~, ~, Array], # 22
-  [Assign, ~, [1, 22], ~, List]]} # 23
+  [Assign, {targets: 1}, [1, 22], ~, List]]} # 23
 main::by_ternary: {start: 0, returns: [19], nodes: [
   [Start], # 0
   [PadAccess, {sigil: $, symbol: v}, ~, ~, Unknown], # 1
@@ -777,7 +778,7 @@ main::by_ternary: {start: 0, returns: [19], nodes: [
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 20
   [TernaryExpr, ~, [9, 17, 20], ~, Scalar], # 21
   [ArgsSource, ~, ~, ~, Array], # 22
-  [Assign, ~, [1, 22], ~, List]]} # 23
+  [Assign, {targets: 1}, [1, 22], ~, List]]} # 23
 ```
 
 ## A defined-ternary evaluates its operand twice; defined-or once
@@ -941,7 +942,7 @@ main::collect: {start: 0, returns: [20], nodes: [
   [Concat, ~, [29, 31], ~, Str], # 32
   [ListAppend, {collector: map}, [9, 32], ~, Array], # 33
   [ArgsSource, ~, ~, ~, Array], # 34
-  [Assign, ~, [3, 34], ~, List], # 35
+  [Assign, {targets: 1}, [3, 34], ~, List], # 35
   [Add, ~, [26, 21], ~, Int]]} # 36
 main::pair: {start: 0, returns: [15], nodes: [
   [Start], # 0
@@ -961,7 +962,7 @@ main::pair: {start: 0, returns: [15], nodes: [
   [Phi, {predecessors: [8, 9], region: 10}, [12, 13], ~, Scalar], # 14
   [Return, ~, [11, 14], 10], # 15
   [ArgsSource, ~, ~, ~, Array], # 16
-  [Assign, ~, [2, 16], ~, List]]} # 17
+  [Assign, {targets: 1}, [2, 16], ~, List]]} # 17
 ```
 
 ## An array built from a parameter after a guard
@@ -1012,7 +1013,7 @@ main::range_of: {start: 0, returns: [14], nodes: [
   [Phi, {predecessors: [10, 11], region: 12}, [1, 7], ~, Int], # 13
   [Return, ~, [13], 12], # 14
   [ArgsSource, ~, ~, ~, Array], # 15
-  [Assign, ~, [3, 15], ~, List]]} # 16
+  [Assign, {targets: 1}, [3, 15], ~, List]]} # 16
 ```
 
 ## A list call or the empty list, chosen by a ternary
@@ -1063,7 +1064,7 @@ main::pick: {start: 0, returns: [14], nodes: [
   [Count, ~, [10, 12], ~, Int], # 13
   [Return, ~, [13], 8], # 14
   [ArgsSource, ~, ~, ~, Array], # 15
-  [Assign, ~, [1, 15], ~, List]]} # 16
+  [Assign, {targets: 1}, [1, 15], ~, List]]} # 16
 main::two: {start: 0, returns: [5], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
@@ -1113,7 +1114,7 @@ main::add_key: {start: 0, returns: [6], nodes: [
   [Assign, ~, [4, 1], 0, Int], # 5
   [Return, {implicit: true}, [1], 5], # 6
   [ArgsSource, ~, ~, ~, Array], # 7
-  [Assign, ~, [2, 7], ~, List]]} # 8
+  [Assign, {targets: 1}, [2, 7], ~, List]]} # 8
 main::branch: {start: 0, returns: [17], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: ","}, ~, ~, Str], # 1
@@ -1134,7 +1135,7 @@ main::branch: {start: 0, returns: [17], nodes: [
   [Concat, ~, [12, 15], ~, Str], # 16
   [Return, ~, [16], 7], # 17
   [ArgsSource, ~, ~, ~, Array], # 18
-  [Assign, ~, [2, 18], ~, List]]} # 19
+  [Assign, {targets: 1}, [2, 18], ~, List]]} # 19
 ```
 
 ## A lexical declared bare, set in a branch, passed to a sub
@@ -1185,7 +1186,7 @@ main::find: {start: 0, returns: [13], nodes: [
   [Call, {dispatch_kind: direct, name: main::load, param_names: []}, [11], 9, Str], # 12
   [Return, ~, [12], 12], # 13
   [ArgsSource, ~, ~, ~, Array], # 14
-  [Assign, ~, [4, 14], ~, List]]} # 15
+  [Assign, {targets: 1}, [4, 14], ~, List]]} # 15
 main::load: {start: 0, returns: [10], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "loaded "}, ~, ~, Str], # 1
@@ -1245,33 +1246,34 @@ main::load: {start: 0, returns: [10], nodes: [
   [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
   [Concat, ~, [1, 8], ~, Str], # 9
   [Return, {implicit: true}, [9], 0]]} # 10
-main::search: {start: 0, returns: [20], nodes: [
+main::search: {start: 0, returns: [21], nodes: [
   [Start], # 0
   [MemStart], # 1
-  [PadAccess, {sigil: $, symbol: found}, [1], ~, Unknown], # 2
-  [ArgsSource, ~, ~, ~, Array], # 3
-  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 4
-  [Loop, {bound: entry}, [0], 0], # 5
-  [Phi, {region: 5}, [4, 24], ~, Int], # 6
-  [Subscript, {kind: array}, [3, 6, 1], ~, Scalar], # 7
-  [Proj, {index: 0}, [5]], # 8
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 9
-  [Constant, {const_type: string, value: b}, ~, ~, Str], # 10
-  [StrEq, ~, [9, 10], ~, Boolean], # 11
-  [If, ~, [8, 11], 8], # 12
-  [Proj, {index: 0}, [12]], # 13
-  [Assign, ~, [2, 7], 13, Scalar], # 14
-  [Proj, {index: 1}, [5]], # 15
-  [Region, {head: 5}, [15, 14]], # 16
-  [Phi, {region: 16}, [1, 14], ~, Unknown], # 17
-  [PadAccess, {sigil: $, symbol: found}, [17], ~, Unknown], # 18
-  [Call, {dispatch_kind: direct, name: main::load, param_names: []}, [18], 16, Str], # 19
-  [Return, ~, [19], 19], # 20
-  [Count, ~, [3, 1], ~, Int], # 21
-  [NumGt, ~, [21, 6], 5, Boolean], # 22
-  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 23
-  [Add, ~, [6, 23], ~, Int], # 24
-  [Proj, {index: 1}, [12]]]} # 25
+  [Loop, {bound: entry}, [0], 0], # 2
+  [Phi, {region: 2}, [1, 3], ~, Unknown], # 3
+  [PadAccess, {sigil: $, symbol: found}, [3], ~, Unknown], # 4
+  [ArgsSource, ~, ~, ~, Array], # 5
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 6
+  [Phi, {region: 2}, [6, 25], ~, Int], # 7
+  [Subscript, {kind: array}, [5, 7, 3], ~, Scalar], # 8
+  [Proj, {index: 0}, [2]], # 9
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [8], ~, Str], # 10
+  [Constant, {const_type: string, value: b}, ~, ~, Str], # 11
+  [StrEq, ~, [10, 11], ~, Boolean], # 12
+  [If, ~, [9, 12], 9], # 13
+  [Proj, {index: 0}, [13]], # 14
+  [Assign, ~, [4, 8], 14, Scalar], # 15
+  [Proj, {index: 1}, [2]], # 16
+  [Region, {head: 2}, [16, 15]], # 17
+  [Phi, {region: 17}, [3, 15], ~, Unknown], # 18
+  [PadAccess, {sigil: $, symbol: found}, [18], ~, Unknown], # 19
+  [Call, {dispatch_kind: direct, name: main::load, param_names: []}, [19], 17, Str], # 20
+  [Return, ~, [20], 20], # 21
+  [Count, ~, [5, 1], ~, Int], # 22
+  [NumGt, ~, [22, 7], 2, Boolean], # 23
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 24
+  [Add, ~, [7, 24], ~, Int], # 25
+  [Proj, {index: 1}, [13]]]} # 26
 ```
 
 ## A list repeated, and a string repeated
@@ -1389,6 +1391,224 @@ main::describe: {start: 0, returns: [16], nodes: [
   [Concat, ~, [14, 13], ~, Str], # 15
   [Return, ~, [15], 14], # 16
   [ArgsSource, ~, ~, ~, Array], # 17
-  [Assign, ~, [1, 6, 17], ~, List]]} # 18
+  [Assign, {targets: 2}, [1, 6, 17], ~, List]]} # 18
 ```
 
+
+## An element store in a returned ternary
+
+A ternary whose arm stores an element yields the stored value. Returned, it is in the caller's context, so the value must not be dropped as if it were void.
+
+```perl
+sub f { my @a = (0); return $_[0] ? ($a[0] = 7) : 8 }
+print f(1), f(0), "\n";
+```
+
+```behavior
+parses: yes
+```
+
+```output
+78
+```
+
+```ir
+main::__PROGRAM__: {start: 0, returns: [10], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
+  [Call, {dispatch_kind: direct, name: main::f, param_names: [], want: list}, [2], 0, Int], # 3
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 5
+  [Call, {dispatch_kind: direct, name: main::f, param_names: [], want: list}, [5], 3, Int], # 6
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
+  [Print, ~, [4, 7, 8], 6, Scalar], # 9
+  [Return, {implicit: true}, [1], 9]]} # 10
+main::f: {start: 0, returns: [16], nodes: [
+  [Start], # 0
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 1
+  [ArrayLiteral, {sigil: "@", symbol: a}, [1], ~, Array], # 2
+  [Subscript, {kind: array}, [2, 1], ~, Int], # 3
+  [Constant, {const_type: integer, value: "7"}, ~, ~, Int], # 4
+  [ArgsSource, ~, ~, ~, Array], # 5
+  [MemStart], # 6
+  [Subscript, {kind: array}, [5, 1, 6], ~, Scalar], # 7
+  [If, ~, [0, 7], 0], # 8
+  [Proj, {index: 0}, [8]], # 9
+  [Assign, ~, [3, 4], 9, Int], # 10
+  [Subscript, {kind: array}, [2, 1, 10], ~, Int], # 11
+  [Constant, {const_type: integer, value: "8"}, ~, ~, Int], # 12
+  [Proj, {index: 1}, [8]], # 13
+  [Region, {head: 8}, [10, 13]], # 14
+  [Phi, {predecessors: [9, 13], region: 14}, [11, 12], ~, Int], # 15
+  [Return, ~, [15], 14], # 16
+  [Phi, {predecessors: [9, 13], region: 14}, [10, 6], ~, Unknown]]} # 17
+```
+
+## A hash element chosen by a ternary inside a call's argument list
+
+The element in the arm is a deferred lvalue (the callee could write it). It is not a store, so the ternary is an ordinary value select.
+
+```perl
+sub g { return join ",", @_ }
+sub f { my %o = @_; return g(r => (exists $o{a} ? $o{a} : 'dflt')) }
+print f(a => 1), " ", f(b => 2), "\n";
+```
+
+```behavior
+parses: yes
+```
+
+```output
+r,1 r,dflt
+```
+
+```ir
+main::__PROGRAM__: {start: 0, returns: [13], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Constant, {const_type: string, value: a}, ~, ~, Str], # 2
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 3
+  [Call, {dispatch_kind: direct, name: main::f, param_names: [], want: list}, [2, 3], 0, Str], # 4
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [4], ~, Str], # 5
+  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 6
+  [Constant, {const_type: string, value: b}, ~, ~, Str], # 7
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 8
+  [Call, {dispatch_kind: direct, name: main::f, param_names: [], want: list}, [7, 8], 4, Str], # 9
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [9], ~, Str], # 10
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 11
+  [Print, ~, [5, 6, 10, 11], 9, Scalar], # 12
+  [Return, {implicit: true}, [1], 12]]} # 13
+main::f: {start: 0, returns: [11], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: r}, ~, ~, Str], # 1
+  [ArgsSource, ~, ~, ~, Array], # 2
+  [HashLiteral, {sigil: "%", symbol: o}, [2], ~, Hash], # 3
+  [Constant, {const_type: string, value: a}, ~, ~, Str], # 4
+  [MemStart], # 5
+  [Exists, ~, [3, 4, 5], ~, Boolean], # 6
+  [Subscript, {kind: hash}, [3, 4], ~, Scalar], # 7
+  [Constant, {const_type: string, value: dflt}, ~, ~, Str], # 8
+  [TernaryExpr, ~, [6, 7, 8], ~, Unknown], # 9
+  [Call, {dispatch_kind: direct, name: main::g, param_names: []}, [1, 9], 0, Str], # 10
+  [Return, ~, [10], 10]]} # 11
+main::g: {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: ","}, ~, ~, Str], # 1
+  [ArgsSource, ~, ~, ~, Array], # 2
+  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [1, 2], ~, Str], # 3
+  [Return, ~, [3], 0]]} # 4
+```
+
+## A sprintf of an element, then a call that writes it
+
+A sprintf argument is flagged as a deferred lvalue, but sprintf only reads it. Its value must be the element before the callee writes through `$_[0]`.
+
+```perl
+sub g { $_[0] = 5 }
+my %h = (a => 1);
+my $c = 1;
+my $x = sprintf("%s", $c ? $h{a} : 8);
+g($h{a});
+print "$x $h{a}\n";
+```
+
+```behavior
+parses: yes
+```
+
+```output
+1 5
+```
+
+```ir
+main::__PROGRAM__: {start: 0, returns: [21], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Constant, {const_type: string, value: "%s"}, ~, ~, Str], # 2
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 3
+  [Constant, {const_type: string, value: a}, ~, ~, Str], # 4
+  [HashLiteral, {sigil: "%", symbol: h}, [4, 3], ~, Hash], # 5
+  [MemStart], # 6
+  [Subscript, {kind: hash}, [5, 4, 6], ~, Int], # 7
+  [Constant, {const_type: integer, value: "8"}, ~, ~, Int], # 8
+  [TernaryExpr, ~, [3, 7, 8], ~, Unknown], # 9
+  [Call, {dispatch_kind: builtin, name: sprintf, param_names: []}, [2, 9], ~, Str], # 10
+  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 11
+  [Concat, ~, [10, 11], ~, Str], # 12
+  [Subscript, {kind: hash}, [5, 4], ~, Int], # 13
+  [Call, {dispatch_kind: direct, name: main::g, param_names: [], want: void}, [13], 0, Int], # 14
+  [Subscript, {kind: hash}, [5, 4, 14], ~, Scalar], # 15
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [15], ~, Str], # 16
+  [Concat, ~, [12, 16], ~, Str], # 17
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 18
+  [Concat, ~, [17, 18], ~, Str], # 19
+  [Print, ~, [19], 14, Scalar], # 20
+  [Return, {implicit: true}, [1], 20]]} # 21
+main::g: {start: 0, returns: [6], nodes: [
+  [Start], # 0
+  [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 1
+  [ArgsSource, ~, ~, ~, Array], # 2
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 3
+  [Subscript, {kind: array}, [2, 3], ~, Scalar], # 4
+  [Assign, ~, [4, 1], 0, Int], # 5
+  [Return, {implicit: true}, [1], 5]]} # 6
+```
+
+## sprintf arguments read before a store
+
+A `%s`-only sprintf becomes a multiconcat. Both forms read their element arguments where they stand.
+
+```perl
+my %h = (a => 1);
+my @a = (2);
+my $x = sprintf("%s %d", $h{a}, $a[0]);
+$h{a} = 5;
+$a[0] = 6;
+print "$x $h{a} $a[0]\n";
+```
+
+```behavior
+parses: yes
+```
+
+```output
+1 2 5 6
+```
+
+```ir
+main::__PROGRAM__: {start: 0, returns: [31], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Constant, {const_type: string, value: "%s %d"}, ~, ~, Str], # 2
+  [Constant, {const_type: string, value: a}, ~, ~, Str], # 3
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 4
+  [HashLiteral, {sigil: "%", symbol: h}, [3, 4], ~, Hash], # 5
+  [MemStart], # 6
+  [Subscript, {kind: hash}, [5, 3, 6], ~, Int], # 7
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 8
+  [ArrayLiteral, {sigil: "@", symbol: a}, [8], ~, Array], # 9
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 10
+  [Subscript, {kind: array}, [9, 10, 6], ~, Int], # 11
+  [Call, {dispatch_kind: builtin, name: sprintf, param_names: []}, [2, 7, 11], ~, Str], # 12
+  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 13
+  [Concat, ~, [12, 13], ~, Str], # 14
+  [Subscript, {kind: array}, [9, 10], ~, Int], # 15
+  [Constant, {const_type: integer, value: "6"}, ~, ~, Int], # 16
+  [Subscript, {kind: hash}, [5, 3], ~, Int], # 17
+  [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 18
+  [Assign, ~, [17, 18], 0, Int], # 19
+  [Assign, ~, [15, 16], 19, Int], # 20
+  [Subscript, {kind: hash}, [5, 3, 20], ~, Int], # 21
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [21], ~, Str], # 22
+  [Concat, ~, [14, 22], ~, Str], # 23
+  [Concat, ~, [23, 13], ~, Str], # 24
+  [Subscript, {kind: array}, [9, 10, 20], ~, Int], # 25
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [25], ~, Str], # 26
+  [Concat, ~, [24, 26], ~, Str], # 27
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 28
+  [Concat, ~, [27, 28], ~, Str], # 29
+  [Print, ~, [29], 20, Scalar], # 30
+  [Return, {implicit: true}, [1], 30]]} # 31
+```
