@@ -1530,6 +1530,16 @@ class SoN::Deparse 0.01 {
         for my $c ( $self->_nodes_in_order ) {
             push $ctrl_next{ $c->{control_in} }->@*, $c
                 if defined $c->{control_in};
+            # A BRANCH IS ON THE CHAIN TOO: an If reaches its arms through
+            # their Proj, and each arm reaches the join Region it feeds.
+            # Without these edges a store in an arm was never "later", and
+            # `my $y = $a[0]; if ($c) { $a[0] = 7 }` spelled $y after it.
+            my $op = $c->{op} // q{};
+            my @ci = ( $c->{inputs} // [] )->@*;
+            push $ctrl_next{ $ci[0] }->@*, $c
+                if $op eq q{Proj} && @ci
+                && ( ( $nodes->{ $ci[0] } // {} )->{op} // q{} ) eq q{If};
+            if ( $op eq q{Region} ) { push $ctrl_next{$_}->@*, $c for @ci }
         }
         # A BRANCH ARM IS REACHED THROUGH ITS Proj, and the code after a join
         # through its Region: neither carries a control_in, and a store inside
@@ -1550,7 +1560,7 @@ class SoN::Deparse 0.01 {
         # behaviour this pass replaces rather than a new wrong answer.
         state $VALUE_CONSUMER = { map { $_ => 1 } keys %BINOP, qw(
             Assign Ref Coerce Print Interpolate Length Not Negate Defined
-            DefinedOr And Or TernaryExpr UnaryPlus Increment Return Phi
+            DefinedOr And Or TernaryExpr UnaryPlus Increment Return Phi If
         ) };
         my %consumers;
         for my $c ( $self->_nodes_in_order ) {
@@ -1715,8 +1725,9 @@ class SoN::Deparse 0.01 {
                 next if $VALUE_CONSUMER->{$op};
                 # substr at every arity: two or three operands only READ the
                 # string, and the four-operand write spells it by name.
+                # sprintf only reads its arguments.
                 next if $op eq 'Call'
-                    && ( ( $c->{fields} // {} )->{name} // '' ) eq 'substr';
+                    && ( ( $c->{fields} // {} )->{name} // '' ) =~ /\A(?:substr|sprintf)\z/;
                 # push and unshift copy every operand after the array.
                 next if $op eq 'Call'
                     && ( ( $c->{fields} // {} )->{name} // '' ) =~ /\A(?:push|unshift)\z/
@@ -1810,10 +1821,33 @@ class SoN::Deparse 0.01 {
                 my $id = shift @queue;
                 next if $seen{$id}++;
                 for my $c ( ( $ctrl_next{$id} // [] )->@* ) {
-                    push @stores, $c if ( $c->{op} // '' ) eq 'Assign';
+                    push @stores, $c if ( $c->{op} // '' ) =~ /\A(?:Assign|Call)\z/;
                     push @queue, $c->{id};
                 }
             }
+            # A CALL WRITES AN ELEMENT IT IS PASSED, through $_[0]. Its
+            # element arguments, through the pure nodes that yield them (a
+            # ternary's arms), are its targets -- except the read itself: a
+            # foreach or grep topic passed to a call is an alias, and spelled
+            # after the call it sees the write, as perl's alias does
+            # (`grep { big($_) } @_`, `$c->can(...)`).
+            my $targets = sub ($s, $read) {
+                my @in = ( $s->{inputs} // [] )->@*;
+                return $nodes->{ $in[0] // -1 } // {} if ( $s->{op} // '' ) eq 'Assign';
+                my ( @q, %qs, @t ) = @in;
+                while ( @q ) {
+                    my $id = shift @q;
+                    next if !defined $id || $qs{$id}++;
+                    my $x = $nodes->{$id} or next;
+                    next if defined $x->{control_in};
+                    if ( ( $x->{op} // '' ) eq 'Subscript' ) {
+                        push @t, $x unless $x->{id} == $read;
+                        next;
+                    }
+                    push @q, ( $x->{inputs} // [] )->@*;
+                }
+                return @t;
+            };
             for my $n ( $self->_nodes_in_order ) {
                 next unless ( $n->{op} // '' ) eq 'Subscript';
                 # A PINNED READ is bound where it stands and spelled by its
@@ -1823,14 +1857,81 @@ class SoN::Deparse 0.01 {
                 my @in = ( $n->{inputs} // [] )->@*;
                 next unless @in > ( $MEM_MIN_INPUTS{Subscript} // 99 );
                 my $v = $nodes->{ $in[-1] } or next;
-                next unless ( $v->{op} // '' ) eq 'MemStart'
+                # A VERSION MADE IN THIS ITERATION -- a store on the body's
+                # chain, or the Phi of a join in it -- is read where it is
+                # spelled too. Only the stores after it are later than the read:
+                # `if ($c) { $a[0] = 7 } my $y = $a[0]; $a[0] = 1` spelled $y
+                # after the last store and printed 1 for 7.
+                my $from;
+                if ( $seen{ $v->{id} } ) { $from = $v->{id} }
+                elsif ( ( $v->{op} // '' ) eq 'Phi' ) {
+                    my $r = ( $v->{fields} // {} )->{region} // -1;
+                    $from = $r if $r != $loop->{id} && $seen{$r}
+                        && ( ( $nodes->{$r} // {} )->{op} // '' ) eq 'Region';
+                }
+                # A VERSION MADE BEFORE THE LOOP -- a package aggregate's
+                # initialising store, when the body makes no memory Phi -- is
+                # the iteration's starting version too, for a read in the body.
+                my $before = !defined $from && $under_loop{ $n->{id} }
+                    && defined $v->{control_in} && !$seen{ $v->{id} } && do {
+                        my ( @bq, %bs ) = ( $v->{id} );
+                        while ( @bq && !$bs{ $loop->{id} } ) {
+                            my $id = shift @bq;
+                            next if $bs{$id}++;
+                            push @bq, map { $_->{id} } ( $ctrl_next{$id} // [] )->@*;
+                        }
+                        $bs{ $loop->{id} };
+                    };
+                next unless defined $from || $before
+                    || ( $v->{op} // '' ) eq 'MemStart'
                     || ( ( $v->{op} // '' ) eq 'Phi'
                          && ( ( $v->{fields} // {} )->{region} // -1 ) == $loop->{id} );
-                my @same = grep {
-                    my $t = $nodes->{ ( $_->{inputs} // [] )->[0] // -1 } // {};
+                my @later = @stores;
+                if ( defined $from ) {
+                    my ( @fq, %fseen ) = ( $from );
+                    while ( @fq ) {
+                        my $id = shift @fq;
+                        next if $fseen{$id}++;
+                        push @fq, map { $_->{id} } ( $ctrl_next{$id} // [] )->@*;
+                    }
+                    @later = grep { $fseen{ $_->{id} } && $_->{id} != $from } @stores;
+                }
+                # TWO CONSTANT STRING HASH KEYS THAT DIFFER name two elements.
+                # An array index can alias through a negative one, and a number
+                # key through its spelling (`1` and `"1"`, `1.0`), so neither.
+                my $str_key = sub ($id) {
+                    my $k = $nodes->{$id} // {};
+                    ( $k->{op} // '' ) eq 'Constant'
+                        && ( ( $k->{fields} // {} )->{const_type} // '' ) eq 'string'
+                        ? $k->{fields}{value} // '' : undef;
+                };
+                # ONLY IN A PLAIN HASH: a tie's FETCH and STORE decide which
+                # keys alias (a case-folding tie makes `a` and `A` one), and
+                # a refalias binds two keys to one scalar. So the hash is a
+                # lexical no sub closes over, used by nothing but element
+                # accesses, none of which is taken a reference to.
+                my $plain_hash = sub ($id) {
+                    my $h = $nodes->{$id} // {};
+                    return 0 unless ( $h->{op} // '' ) =~ /\A(?:PadAccess|HashLiteral)\z/
+                        && !( $h->{fields} // {} )->{shared};
+                    for my $c ( ( $consumers{$id} // [] )->@* ) {
+                        return 0 unless ( $c->{op} // '' ) eq 'Subscript'
+                            && ( ( $c->{inputs} // [] )->[0] // -1 ) == $id;
+                        return 0 if grep { ( $_->{op} // '' ) eq 'Ref' }
+                            ( $consumers{ $c->{id} } // [] )->@*;
+                    }
+                    return 1;
+                };
+                my @same = grep { grep {
+                    my $t = $_;
+                    my $tk = ( $t->{inputs} // [] )->[1] // -1;
                     ( $t->{op} // '' ) eq 'Subscript'
                         && ( ( $t->{inputs} // [] )->[0] // -1 ) == $in[0]
-                } @stores;
+                        && !( ( ( $n->{fields} // {} )->{kind} // '' ) eq 'hash'
+                              && $plain_hash->($in[0])
+                              && defined $str_key->($in[1]) && defined $str_key->($tk)
+                              && $str_key->($tk) ne $str_key->($in[1]) )
+                } $targets->($_, $n->{id}) } @later;
                 next unless @same;
 
                 # Where the value lands: a loop Phi (the back edge, evaluated
@@ -1874,6 +1975,7 @@ class SoN::Deparse 0.01 {
         # the save prologue, which runs after the aggregate declarations. Its
         # operands must exist there, so only constants and the aggregates the
         # prologue declares are allowed; anything else is left unbound.
+        my %stale_at_join;   # restored for the re-walk: the first walk deletes what it flushes
         for my $n ( sort { $a->{id} <=> $b->{id} } $self->_nodes_in_order ) {
             next unless ( $n->{op} // '' ) eq 'Subscript';
             next if exists $bound{ $n->{id} };
@@ -1886,7 +1988,19 @@ class SoN::Deparse 0.01 {
             my @in = ( $n->{inputs} // [] )->@*;
             next unless @in > ( $MEM_MIN_INPUTS{Subscript} // 99 );
             my $version = $nodes->{ $in[-1] } or next;
+
+            # A JOIN'S MEMORY Phi IS NOT THE ENTRY VERSION. It has no
+            # control_in either, and taken for entry, `if ($c) { $a[0] = 7 }
+            # print $a[0]` bound the read in the prologue, above the store,
+            # and printed 1 for 7. The read is correct where the branch has
+            # merged, so it is bound at the Region.
+            my $join;
+            if ( ( $version->{op} // q{} ) eq q{Phi} ) {
+                my $r = $nodes->{ ( $version->{fields} // {} )->{region} // -1 } // {};
+                $join = $r if ( $r->{op} // q{} ) eq q{Region};
+            }
             my $at_entry = !defined $version->{control_in};
+            $at_entry = 0 if $join;
             # AN OPERAND MADE ON THE CHAIN -- an anonymous `[4]` -- is the
             # anchor instead: the read is correct right after it exists.
             my @made = grep { defined( ( $nodes->{$_} // {} )->{control_in} ) }
@@ -1903,7 +2017,12 @@ class SoN::Deparse 0.01 {
                     # value is declared after that effect, not in the
                     # prologue (`my @c = caller(0)` was, and the read of
                     # $c[1] landed above it).
+                    # A SHARED AGGREGATE a sub closes over is declared above
+                    # the subs, so it exists in the sub's prologue.
+                    # A PACKAGE one needs no declaration at all.
                     !( $op eq 'Constant'
+                       || ( $op eq 'PadAccess' && ( $c->{fields} // {} )->{shared} )
+                       || $op eq 'EntryDef'
                        || ( $op =~ /\A(?:Array|Hash)Literal\z/
                             && defined( ( $c->{fields} // {} )->{symbol} )
                             && !$self->_is_pinned_aggregate($c)
@@ -1913,7 +2032,7 @@ class SoN::Deparse 0.01 {
             }
 
             my ( @queue, %seen, $shadowed )
-                = ( $at_entry ? $start->{id} : $version->{id} );
+                = ( $at_entry ? $start->{id} : ( $join // $version )->{id} );
             while ( @queue && !$shadowed ) {
                 my $id = shift @queue;
                 next if $seen{$id}++;
@@ -1935,6 +2054,11 @@ class SoN::Deparse 0.01 {
                 next;
             }
             $hoisted{ $bound{ $n->{id} } } //= $bound{ $n->{id} };
+            if ( $join ) {
+                push $after_region{ $join->{id} }->@*, $n;
+                push $stale_at_join{ $join->{id} }->@*, $n;
+                next;
+            }
             push $after_effect{ $version->{id} }->@*, $n;
         }
 
@@ -1979,6 +2103,20 @@ class SoN::Deparse 0.01 {
             next unless @in == 2;
             my $version = $nodes->{ $in[-1] } or next;
             next unless defined $version->{control_in};
+            # OR GUARDED BY CONTROL: a use in an `if` arm the version's own
+            # chain does not reach. `unless (!$r) { print $$r }` was bound
+            # before the test and dereferenced undef.
+            # An arm begins at a Proj, so the walk stops there.
+            my ( @fwd, %reach ) = ( $version->{id} );
+            while ( defined( my $id = shift @fwd ) ) {
+                next if $reach{$id}++;
+                push @fwd, map { $_->{id} }
+                    grep { ( $_->{op} // '' ) ne 'Proj' } ( $ctrl_next{$id} // [] )->@*;
+            }
+            next if grep {
+                my $u = $nodes->{$_} // {};
+                defined $u->{control_in} && !$reach{$_}
+            } keys %used;
 
             my ( @queue, %seen, $shadowed ) = ( $version->{id} );
             while ( @queue && !$shadowed ) {
@@ -2251,6 +2389,11 @@ class SoN::Deparse 0.01 {
             # pushed each pass gave three references to it.
             delete @pad_declared{ grep { !$declared_before_walk{$_} }
                                    keys %declared_by_walk };
+            for my $j ( keys %stale_at_join ) {
+                my %mine = map { $_->{id} => 1 } $stale_at_join{$j}->@*;
+                $after_region{$j} = [ $stale_at_join{$j}->@*,
+                    grep { !$mine{ $_->{id} } } ( $after_region{$j} // [] )->@* ];
+            }
             # THE SAVE PROLOGUE SURVIVES THE RE-WALK. It was prepended to the
             # FIRST walk's text, and assigning the second walk over $body threw
             # it away -- so a `local` save or an entry-version read emitted here

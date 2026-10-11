@@ -5,6 +5,8 @@ use utf8;
 use Test::More;
 use File::Temp qw(tempdir);
 use JSON::PP;
+use lib 'lib';
+use SoN::Deparse;
 
 my $PERL = $^X;
 my $dir  = tempdir( CLEANUP => 1 );
@@ -50,14 +52,19 @@ subtest 'a store after the ternary is not a store in its arm' => sub {
     ok $wire, 'and the program translates';
 };
 
-# THE REFUSAL MUST SURVIVE where the store really IS in an arm. Without this the
-# fix could be "delete the detector", which passes the case above for the wrong
-# reason.
-subtest 'a store genuinely inside a consumed arm still refuses' => sub {
-    my ( undef, $err ) = translate(
-        q{our @a = (1,2); my $c = 1; my $x = $c ? ($a[0] = 7) : ($a[1] = 8); print $x;},
-        'store-inside' );
-    like $err, qr/GAP:/, 'a real branch-guarded element store still refuses';
+# THE DETECTOR MUST STILL FIND a store that really IS in an arm. Without this
+# the fix could be "delete the detector", which passes the case above for the
+# wrong reason. A consumed arm's store now merges its value at the join, so the
+# check is the round trip: the store happens, and the value is the stored one.
+subtest 'a store genuinely inside a consumed arm round-trips' => sub {
+    my $src = q{our @a = (1,2); my $c = 1; my $x = $c ? ($a[0] = 7) : ($a[1] = 8); print "$x @a";};
+    my ( $wire, $err ) = translate( $src, 'store-inside' );
+    ok $wire, 'it translates' or diag($err);
+    my $out = SoN::Deparse->new->render($wire);
+    ok defined $out, 'and renders';
+    my $f = "$dir/store-inside.out.pl";
+    open my $fh, '>', $f or die $!; print {$fh} $out // ''; close $fh;
+    is scalar qx{$PERL $f}, '7 7 2', 'and prints what perl prints';
 };
 
 # AND THE VOID FORM still lowers, as it did before -- it was never the refused
