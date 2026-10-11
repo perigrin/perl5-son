@@ -661,10 +661,16 @@ class SoN::Deparse 0.01 {
     # `class F { }`, where a bare `c()` is F::c.
     method _call_ident ($name) {
         my ($pkg) = ($current_sub // '') =~ /\A(.*)::[^:]+\z/;
+        my $in_package = defined $pkg && $pkg ne 'main';
         return $name
-            if defined $pkg && $pkg ne 'main'
-            && $name =~ /\Amain::[A-Za-z_]\w*\z/;
-        return $self->_sub_ident($name);
+            if $in_package && $name =~ /\Amain::[A-Za-z_]\w*\z/;
+        my $ident = $self->_sub_ident($name);
+        # SO DOES A MANGLED ONE. An anon sub lifted to file scope -- `my
+        # $in_cache = sub {...}` in chalk's IR::Graph::nodes -- is defined in
+        # main under its mangled name, and called bare from inside `class
+        # Chalk::IR::Graph` it resolved there: "Undefined subroutine".
+        return "main::$ident" if $in_package && $ident !~ /::/;
+        return $ident;
     }
 
     # True when the program defines sub $name while it runs rather than by
@@ -1471,14 +1477,143 @@ class SoN::Deparse 0.01 {
                     push @queue, $d->{id}
                         if defined $d->{control_in} && $d->{control_in} == $id;
                     # AND A BRANCH ARM IN THE BODY, through its Proj and its
-                    # join -- but not this loop's own exit Region.
+                    # join -- but never a loop's exit, this one's or an
+                    # enclosing one's: a walk that reached the outer Loop
+                    # through an input left by its exit Proj and marked the
+                    # code after both loops (`for { for { h() } } my $m =
+                    # $n; $n = 7` lost its stale binding).
                     push @queue, $d->{id}
                         if ( $d->{op} // '' ) =~ /\A(?:Proj|Region)\z/
-                        && ( $d->{head} // -1 ) != $n->{id}
+                        && ( ( $nodes->{ $d->{head} // -1 } // {} )->{op} // '' ) ne 'Loop'
+                        && !( ( $d->{op} // '' ) eq 'Proj'
+                              && ( ( $d->{fields} // {} )->{index} // 0 ) == 1
+                              && ( ( $c->{op} // '' ) eq 'Loop' ) )
                         && grep { $_ == $id } ( $d->{inputs} // [] )->@*;
                 }
             }
         }
+
+        my %ctrl_next;
+        for my $c ( $self->_nodes_in_order ) {
+            push $ctrl_next{ $c->{control_in} }->@*, $c
+                if defined $c->{control_in};
+            # A BRANCH IS ON THE CHAIN TOO: an If reaches its arms through
+            # their Proj, and each arm reaches the join Region it feeds.
+            # Without these edges a store in an arm was never "later", and
+            # `my $y = $a[0]; if ($c) { $a[0] = 7 }` spelled $y after it.
+            my $op = $c->{op} // q{};
+            my @ci = ( $c->{inputs} // [] )->@*;
+            push $ctrl_next{ $ci[0] }->@*, $c
+                if $op eq q{Proj} && @ci
+                && ( ( $nodes->{ $ci[0] } // {} )->{op} // q{} ) eq q{If};
+            if ( $op eq q{Region} ) { push $ctrl_next{$_}->@*, $c for @ci }
+        }
+        #
+        # BOUND ONLY WHERE EVERY CONSUMER IS KNOWN TO BE SAFE, because the
+        # failure is asymmetric. A consumer that rewrites its operand in place
+        # -- tr///, s///, chomp, a user sub through @_ -- would rewrite the
+        # TEMPORARY: corpus 191's `$t =~ tr/./Z/` did exactly that, `a.c` for
+        # `aZc`. So the list is of consumers that either read a value or spell
+        # a location by name (Assign's targets, Ref, a 4-argument substr's
+        # string); anything unlisted leaves the read unbound, which is the
+        # behaviour this pass replaces rather than a new wrong answer.
+        state $VALUE_CONSUMER = { map { $_ => 1 } keys %BINOP, qw(
+            Assign Ref Coerce Print Interpolate Length Not Negate Defined
+            DefinedOr And Or TernaryExpr UnaryPlus Increment Return Phi If
+        ) };
+        my %consumers;
+        for my $c ( $self->_nodes_in_order ) {
+            push $consumers{$_}->@*, $c for ( $c->{inputs} // [] )->@*;
+        }
+        my $safe_read = sub ($id) {
+            for my $c ( ( $consumers{$id} // [] )->@* ) {
+                my $op = $c->{op} // '';
+                next if $VALUE_CONSUMER->{$op};
+                # substr at every arity: two or three operands only READ the
+                # string, and the four-operand write spells it by name.
+                # sprintf only reads its arguments.
+                next if $op eq 'Call'
+                    && ( ( $c->{fields} // {} )->{name} // '' ) =~ /\A(?:substr|sprintf)\z/;
+                # push and unshift copy every operand after the array.
+                next if $op eq 'Call'
+                    && ( ( $c->{fields} // {} )->{name} // '' ) =~ /\A(?:push|unshift)\z/
+                    && ( ( $c->{inputs} // [] )->[0] // -1 ) != $id;
+                return 0;
+            }
+            return 1;
+        };
+
+        # THE CONTROL SUCCESSORS, ARMS INCLUDED: a branch's Proj and its
+        # join Region name their predecessor as an input, not as control_in,
+        # so %ctrl_next stops at an If. `my $m = $n; if (...) { g() }` must
+        # see the call in the arm.
+        my %cfg_next = map { $_ => [ $ctrl_next{$_}->@* ] } keys %ctrl_next;
+        for my $c ( $self->_nodes_in_order ) {
+            my $op = $c->{op} // '';
+            next unless $op eq 'Proj' || $op eq 'Region';
+            my @in = ( $c->{inputs} // [] )->@*;
+            push $cfg_next{$_}->@*, $c for $op eq 'Proj' ? ( $in[0] // () ) : @in;
+        }
+
+        # Is this control node inside a block eval's body: reachable from the
+        # eval's entry, and reaching its join?
+        my $reaches = sub ( $from, $to ) {
+            my ( @q, %seen ) = ( $from );
+            while ( defined( my $id = shift @q ) ) {
+                return 1 if $id == $to;
+                next if $seen{$id}++;
+                push @q, map { $_->{id} } ( $cfg_next{$id} // [] )->@*;
+            }
+            return 0;
+        };
+        my $in_eval_body = sub ($id) {
+            for my $r ( $self->_nodes_in_order ) {
+                my $entry = ( $r->{fields} // {} )->{eval_entry};
+                next unless ( $r->{op} // '' ) eq 'Region' && defined $entry;
+                return 1 if $id != $entry
+                    && $reaches->( $entry, $id ) && $reaches->( $id, $r->{id} );
+            }
+            return 0;
+        };
+
+        # THE LOOPS WHOSE BODY HOLDS A CONTROL NODE, by node id. The producer
+        # threads no memory Phi through a loop, so a read after one names the
+        # body's last version -- a call or store inside it -- and a walk from
+        # there ends with the body. Walked from the body Proj, stopping at the
+        # loop's join.
+        my %in_loop_body;
+        for my $l ( grep { ( $_->{op} // '' ) eq 'Loop' } $self->_nodes_in_order ) {
+            my $join = $self->_loop_join( $l->{id} ) // next;
+            my %seen;
+            my @q = map { $_->{id} }
+                grep { ( $_->{op} // '' ) eq 'Proj'
+                       && ( ( $_->{fields} // {} )->{index} // -1 ) == 0 }
+                ( $cfg_next{ $l->{id} } // [] )->@*;
+            while ( defined( my $id = shift @q ) ) {
+                next if $id == $join || $seen{$id}++;
+                push $in_loop_body{$id}->@*, $l->{id};
+                push @q, map { $_->{id} } ( $cfg_next{$id} // [] )->@*;
+            }
+        }
+        # Does $id feed a Phi of loop $l -- is it read inside that loop?
+        my $feeds_loop_phi = sub ( $id, $l ) {
+            my ( @q, %seen ) = map { ( $_->{inputs} // [] )->@* }
+                grep { ( $_->{op} // '' ) eq 'Phi'
+                       && ( ( $_->{fields} // {} )->{region} // -1 ) == $l }
+                $self->_nodes_in_order;
+            while ( defined( my $m = shift @q ) ) {
+                return 1 if $m == $id;
+                next if $seen{$m}++;
+                push @q, ( ( $nodes->{$m} // {} )->{inputs} // [] )->@*;
+            }
+            return 0;
+        };
+
+        # A read whose version is a merge is bound where the merge happens:
+        # read id -> the join Region. The backward anchor walk below takes the
+        # first write it meets on any arm, and a binding in one arm is undef
+        # on the other -- `if (@ARGV) { $n = 1 } my $m = $n; $n = 2`.
+        my %stale_join;
 
         my @stale_reads;
         for my $n ( sort { $a->{id} <=> $b->{id} } $self->_nodes_in_order ) {
@@ -1486,7 +1621,14 @@ class SoN::Deparse 0.01 {
             next if exists $bound{ $n->{id} };
             next if $under_loop{ $n->{id} };
             my @in = ( $n->{inputs} // [] )->@*;
-            next unless @in == 1 && $self->_is_memory( $in[0] );
+            # A barrier call is a version too, made without consuming one --
+            # but not one inside a block eval: the binding lands right after
+            # the call, and a call that dies skips it. `$@` read after
+            # `eval { P->new->run(1); 1 }` was bound there and stayed undef.
+            next unless @in == 1
+                && ( $self->_is_memory( $in[0] )
+                     || ( $self->_is_barrier_call( $in[0] )
+                          && !$in_eval_body->( $in[0] ) ) );
             my $f = $n->{fields} // {};
             next unless defined $f->{symbol};
 
@@ -1503,7 +1645,52 @@ class SoN::Deparse 0.01 {
                 }
                 last if $shadowed;
             }
+            # A CALL MAY WRITE ANY PACKAGE SCALAR, and it advances memory
+            # without consuming a version, so the walk above never reaches it.
+            # `my $m = $n; print "$m|", g()` with g bumping $n spelled the read
+            # at the print, after the call. Followed on control, as the lexical
+            # pass below does, and only where every consumer just reads: a
+            # call handed the read itself aliases it through @_.
+            #
+            # WHERE THE READ HAPPENS: after its version on the chain; after the
+            # join for a merge (a Phi of an if); after the loop for the body's
+            # last version, unless the loop itself reads it. From there a store
+            # to the name counts too -- one whose memory is a call is not on
+            # the memory walk above.
+            my $version = $nodes->{ $in[0] } // {};
+            my $region  = ( $version->{op} // '' ) eq 'Phi'
+                ? $nodes->{ ( $version->{fields} // {} )->{region} // -1 } : undef;
+            $region = undef
+                unless $region && ( $region->{op} // '' ) eq 'Region';
+            # The outermost loop whose body holds the version, or its merge.
+            my @loops  = ( $in_loop_body{ $region ? $region->{id} : $in[0] }
+                           // [] )->@*;
+            my %inside = map { $_ => 1 } @loops;
+            my ($loop) = grep {
+                !grep { $inside{$_} } ( $in_loop_body{$_} // [] )->@*
+            } @loops;
+            my $join = defined $loop && !$feeds_loop_phi->( $n->{id}, $loop )
+                         ? $self->_loop_join($loop)
+                     : $region ? $region->{id}
+                     : undef;            if ( $safe_read->( $n->{id} ) || defined $join ) {
+                my $from = defined $join ? $join
+                         : defined $version->{control_in} ? $version->{id}
+                         : ( $version->{op} // '' ) eq 'MemStart' ? $start->{id}
+                         : undef;
+                my ( @cq, %cseen ) = ( $from // () );
+                while ( @cq && !$shadowed ) {
+                    my $id = shift @cq;
+                    next if $cseen{$id}++;
+                    for my $c ( ( $cfg_next{$id} // [] )->@* ) {
+                        $shadowed = 1 if $self->_writes_this_name( $c, $f )
+                            || ( $self->_is_barrier_call( $c->{id} )
+                                 && $safe_read->( $n->{id} ) );
+                        push @cq, $c->{id};
+                    }
+                }
+            }
             next unless $shadowed;
+            $stale_join{ $n->{id} } = $join if defined $join;
 
             $bound{ $n->{id} } = sprintf( '$stale%d', $n->{id} );
             push @stale_reads, $n;
@@ -1526,21 +1713,6 @@ class SoN::Deparse 0.01 {
         # at one memory version are one hash-consed node. The location sites
         # spell it by name through _location, so the binding reaches only the
         # reads.
-        my %ctrl_next;
-        for my $c ( $self->_nodes_in_order ) {
-            push $ctrl_next{ $c->{control_in} }->@*, $c
-                if defined $c->{control_in};
-            # A BRANCH IS ON THE CHAIN TOO: an If reaches its arms through
-            # their Proj, and each arm reaches the join Region it feeds.
-            # Without these edges a store in an arm was never "later", and
-            # `my $y = $a[0]; if ($c) { $a[0] = 7 }` spelled $y after it.
-            my $op = $c->{op} // q{};
-            my @ci = ( $c->{inputs} // [] )->@*;
-            push $ctrl_next{ $ci[0] }->@*, $c
-                if $op eq q{Proj} && @ci
-                && ( ( $nodes->{ $ci[0] } // {} )->{op} // q{} ) eq q{If};
-            if ( $op eq q{Region} ) { push $ctrl_next{$_}->@*, $c for @ci }
-        }
         # A BRANCH ARM IS REACHED THROUGH ITS Proj, and the code after a join
         # through its Region: neither carries a control_in, and a store inside
         # an `if` arm went unseen by the scalar walk below.
@@ -1548,23 +1720,6 @@ class SoN::Deparse 0.01 {
         for my $c ( $self->_nodes_in_order ) {
             next unless ( $c->{op} // '' ) =~ /\A(?:Proj|Region)\z/;
             push $arm_next{$_}->@*, $c for ( $c->{inputs} // [] )->@*;
-        }
-        #
-        # BOUND ONLY WHERE EVERY CONSUMER IS KNOWN TO BE SAFE, because the
-        # failure is asymmetric. A consumer that rewrites its operand in place
-        # -- tr///, s///, chomp, a user sub through @_ -- would rewrite the
-        # TEMPORARY: corpus 191's `$t =~ tr/./Z/` did exactly that, `a.c` for
-        # `aZc`. So the list is of consumers that either read a value or spell
-        # a location by name (Assign's targets, Ref, a 4-argument substr's
-        # string); anything unlisted leaves the read unbound, which is the
-        # behaviour this pass replaces rather than a new wrong answer.
-        state $VALUE_CONSUMER = { map { $_ => 1 } keys %BINOP, qw(
-            Assign Ref Coerce Print Interpolate Length Not Negate Defined
-            DefinedOr And Or TernaryExpr UnaryPlus Increment Return Phi If
-        ) };
-        my %consumers;
-        for my $c ( $self->_nodes_in_order ) {
-            push $consumers{$_}->@*, $c for ( $c->{inputs} // [] )->@*;
         }
 
         # $used_in_arm->($anchor, $read): is a chain use of $read (through
@@ -1760,23 +1915,6 @@ class SoN::Deparse 0.01 {
             }
         }
 
-        my $safe_read = sub ($id) {
-            for my $c ( ( $consumers{$id} // [] )->@* ) {
-                my $op = $c->{op} // '';
-                next if $VALUE_CONSUMER->{$op};
-                # substr at every arity: two or three operands only READ the
-                # string, and the four-operand write spells it by name.
-                # sprintf only reads its arguments.
-                next if $op eq 'Call'
-                    && ( ( $c->{fields} // {} )->{name} // '' ) =~ /\A(?:substr|sprintf)\z/;
-                # push and unshift copy every operand after the array.
-                next if $op eq 'Call'
-                    && ( ( $c->{fields} // {} )->{name} // '' ) =~ /\A(?:push|unshift)\z/
-                    && ( ( $c->{inputs} // [] )->[0] // -1 ) != $id;
-                return 0;
-            }
-            return 1;
-        };
         for my $n ( sort { $a->{id} <=> $b->{id} } $self->_nodes_in_order ) {
             next unless ( $n->{op} // '' ) eq 'PadAccess';
             next if exists $bound{ $n->{id} };
@@ -2206,13 +2344,22 @@ class SoN::Deparse 0.01 {
         # With no such write the entry value is still live and the prologue is
         # where it belongs.
         for my $n ( @stale_reads ) {
+            # Filed after the first walk, which flushes %after_region as it
+            # goes: filed now, a re-walk for any other binding dropped it.
+            if ( defined $stale_join{ $n->{id} } ) {
+                $hoisted{ $bound{ $n->{id} } } //= $bound{ $n->{id} };
+                next;
+            }
             my $f = $n->{fields} // {};
             my ( @queue, %seen, $anchor ) = ( ( $n->{inputs} // [] )->[0] );
             while ( @queue ) {
                 my $m = shift @queue;
                 next if !defined $m || $seen{$m}++;
                 my $c = $nodes->{$m} or next;
-                if ( $self->_writes_this_name( $c, $f ) ) {
+                # A CALL IS AN ANCHOR TOO: it may have written the name, and
+                # the read is of the value it left.
+                if ( $self->_writes_this_name( $c, $f )
+                     || $self->_is_barrier_call($m) ) {
                     $anchor = $c;
                     last;
                 }
@@ -2236,6 +2383,8 @@ class SoN::Deparse 0.01 {
         my $body = $self->_emit_from($start->{id}, \%next_of, undef);
         $body = $save_prologue . $body;
         my %declared_by_walk = %pad_declared;
+        push $after_region{ $stale_join{ $_->{id} } }->@*, $_
+            for grep { defined $stale_join{ $_->{id} } } @stale_reads;
 
         # A PAD BINDING IS NOT ON THE CONTROL CHAIN. Measured: `my ($a,$b) =
         # (2,3)` builds an Assign with control_in ABSENT, so a chain walk never
@@ -2266,6 +2415,12 @@ class SoN::Deparse 0.01 {
             next if $self->_is_pinned_aggregate($n);
             next if $self->_is_inline_aggregate($n);
             my $vn = $self->_agg_name($n);
+
+            # A SHORT-CIRCUIT OVER AN ARM'S EFFECT settles at the join.
+            if (defined(my $join = $self->_short_circuit_join($n, \%next_of))) {
+                push $after_region{$join}->@*, $n;
+                next;
+            }
 
             # AN AGGREGATE WHOSE CONTENTS ARE A CHAIN-BOUND EFFECT CANNOT
             # FLOAT EITHER. `my @got = <R>` builds ArrayLiteral(sym=got)
@@ -2350,6 +2505,12 @@ class SoN::Deparse 0.01 {
         for my $n (sort { $a->{id} <=> $b->{id} } $self->_nodes_in_order) {
             next unless $n->{op} eq 'Assign';
             next if defined $n->{control_in};   # already emitted in the chain
+
+            # THE AGGREGATE LOOP'S SHORT-CIRCUIT RULE, kept identical.
+            if (defined(my $join = $self->_short_circuit_join($n, \%next_of))) {
+                push $after_region{$join}->@*, $n;
+                next;
+            }
 
             # A BINDING OF A CHAIN-BOUND EFFECT CANNOT FLOAT. The prologue is
             # sound for a pad binding whose value has no control edge -- there
@@ -2445,6 +2606,13 @@ class SoN::Deparse 0.01 {
                         ($after_effect{ $start->{id} } // [])->@*)
                   . $self->_emit_from($start->{id}, \%next_of, undef);
         }
+        # A READ BOUND AT A JOIN THE WALK NEVER PASSED would be used and never
+        # assigned -- undef, silently.
+        die "GAP: a package read bound after a merge whose join the walk does"
+          . " not reach is not yet lowered -- its binding would never be"
+          . " assigned\n"
+            if grep { exists $after_region{ $stale_join{ $_->{id} } } }
+               grep { defined $stale_join{ $_->{id} } } @stale_reads;
 
         # JOIN-PHI DECLARATIONS FIRST. They are discovered while walking, so
         # they can only be emitted once the walk is done -- and they must come
@@ -2505,6 +2673,11 @@ class SoN::Deparse 0.01 {
             # it -- a guarded die included -- outside the eval as well.
             if ((my $join = $self->_eval_join_entered_at($cur, $next_of))) {
                 $out .= $self->_emit_eval($join, $cur, $next_of);
+                # A BINDING OF THE EVAL'S Phi goes after it, as an If's does:
+                # `my @r = eval { ... }; @r` filed @r's assign at this join,
+                # and the walk resumes past it, so nothing else flushes it.
+                $out .= $self->_emit_statement($_, $next_of)
+                    for (delete($after_region{ $join->{id} }) // [])->@*;
                 $cur = $join->{id};
                 next;
             }
@@ -2544,6 +2717,8 @@ class SoN::Deparse 0.01 {
 
             if ($n->{op} eq 'Region' && $self->_is_eval_join($n)) {
                 $out .= $self->_emit_eval($n, $cur, $next_of);
+                $out .= $self->_emit_statement($_, $next_of)
+                    for (delete($after_region{ $n->{id} }) // [])->@*;
                 $cur = $n->{id};
                 next;
             }
@@ -3273,6 +3448,37 @@ class SoN::Deparse 0.01 {
         splice @$list, $at, 0, $decl;
     }
 
+    # _short_circuit_join($n, \%next_of) -- the join of the branch a
+    # short-circuit in $n's value takes, when its right side holds an effect
+    # bound in that branch's arm; else undef.
+    #
+    # A BINDING OVER IT SETTLES AT THE JOIN, not after the effect. The
+    # producer lowers `my @r = @ARGV && sort c 3,1,2` as an If whose arm runs
+    # the sort, and And(@ARGV, sort) for the value; deferred to the sort as
+    # _last_bound_input does, `my @r = ...` landed inside the arm, and the
+    # print after it named an undeclared @r.
+    method _short_circuit_join ($n, $next_of) {
+        my ($join, %seen);
+        my $visit;
+        $visit = sub ($id) {
+            return if defined $join || !defined $id || $seen{$id}++;
+            my $m = $nodes->{$id} or return;
+            return if defined $m->{control_in};
+            return if ($m->{op} // '') =~ /\A(?:Phi|Region|Loop|Proj|If|Start)\z/;
+            if (($m->{op} // '') =~ /\A(?:And|Or|DefinedOr)\z/) {
+                my $eff = $self->_last_bound_input(
+                    { inputs => [ ($m->{inputs} // [])->[1] ] });
+                $join = $self->_lone_arm_join($nodes->{$eff}, $next_of)
+                    if defined $eff;
+                return if defined $join;
+            }
+            $visit->($_) for ($m->{inputs} // [])->@*;
+        };
+        $visit->($_) for ($n->{inputs} // [])->@*;
+        undef $visit;
+        return $join;
+    }
+
     # A named Array/HashLiteral on the control chain: an allocation at that
     # point, which the producer pins for a `my` aggregate in a loop body.
     method _is_pinned_aggregate ($n) {
@@ -3656,7 +3862,7 @@ class SoN::Deparse 0.01 {
                             == $region->{id}) }
                     $self->_nodes_in_order;
 
-        my $inner;
+        my ($inner, $body, $val);
         if (($eff->{op} // '') eq 'Coerce'
                 && ((($eff->{fields} // {})->{to_repr} // '') eq 'Code')) {
             # A STRING EVAL: the operand is the source text, which is what
@@ -3683,7 +3889,7 @@ class SoN::Deparse 0.01 {
             # at the entry, which is exactly the node that identifies the
             # construct, so without it _emit_from recognises the same eval
             # again and recurses forever.
-            my $body = do {
+            $body = do {
                 local $eval_claimed{ $region->{id} } = 1;
                 $self->_emit_from($entry, $next_of, $region->{id});
             };
@@ -3692,7 +3898,7 @@ class SoN::Deparse 0.01 {
             # Rendered again as an expression it ran twice:
             # `eval { push @a, 1 }` pushed two elements.
             my $vid  = $phi ? ($phi->{inputs} // [])->[0] : undef;
-            my $val  = !$phi ? ''
+            $val     = !$phi ? ''
                      : (defined $vid && $vid == $eff->{id}) ? ''
                      : $self->_expr($vid);
             $inner = length $val
@@ -3702,11 +3908,80 @@ class SoN::Deparse 0.01 {
 
         return "$inner;\n" unless $phi;
 
+        # AN EVAL IN ITS CALLER'S CONTEXT -- `return eval { ... }`, or a sub's
+        # last statement -- yields a list to a list caller and a scalar to a
+        # scalar one, () or undef if it dies. One binding cannot be both:
+        # `sub w { return eval { sort ... } }` ran the sort in scalar context
+        # and a list caller got (undef).
+        #
+        # A SCALAR VALUE THE SUB RETURNS DIRECTLY needs only the caller's
+        # context at the return: the eval runs in list context, yielding
+        # (value) or () if it died, and the return gives that list or its
+        # one element -- undef for a scalar caller when it died. The value
+        # is forced scalar, as the Phi says it is. A value that is the body's
+        # last statement has no expression of its own to force, and one
+        # read anywhere but a Return is not in the sub's context.
+        my @readers = grep { grep { ( $_ // -1 ) == $phi->{id} } ( $_->{inputs} // [] )->@* }
+                      $self->_nodes_in_order;
+        if ( ( ($region->{fields} // {})->{eval_want} // '' ) eq 'runtime' && @readers ) {
+            my $st = $phi->{stamp} // '';
+            die "GAP: a block eval whose value goes back in its caller's context"
+              . " (a sub's return value) is not yet lowered -- it is a list or a"
+              . " scalar depending on the call\n"
+                if $inner !~ /\Aeval \{/ || !length $val
+                || $st =~ /\A(?:Array|List|Hash|Unknown)\z/
+                || $self->_phi_takes_a_list($phi)
+                || grep { ( $_->{op} // '' ) ne 'Return' } @readers;
+            my $arr = sprintf( '@eval%d', $phi->{id} );
+            ( my $one = $arr ) =~ s/\A\@/\$/;
+            $bound{ $phi->{id} } = "(wantarray ? $arr : ${one}[0])";
+            $hoisted{$arr} //= $arr;
+            $inner = sprintf( "eval {\n%s%s}",
+                _indent($body), _indent("scalar($val);\n") );
+            return sprintf( "%s = %s;\n", $arr, $inner );
+        }
+
         # The Phi is bound, so every later read names the variable. Registering
         # it here rather than in the %reads scan keeps that scan about VALUES;
         # this binding exists because the eval was placed, not because someone
         # read it.
-        $bound{ $phi->{id} } = sprintf('$eval%d', $phi->{id});
+        #
+        # A LIST-CONTEXT, LIST-VALUED EVAL BINDS AN ARRAY, as a list Phi does
+        # (_phi_var). `my @r = eval { sort ... }` bound to a scalar ran the sort
+        # in scalar context, and @r got undef where perl has the sorted list.
+        # THE CONTEXT IS THE REGION'S, not the stamp's: a scalar eval of a
+        # slice is List-stamped too, and as an array it read back as the count
+        # where perl gives the last element.
+        # SO DOES ONE AN AGGREGATE FLATTENS, whatever the value's stamp: a
+        # list eval that dies yields (), and a scalar binding gave the
+        # Phi's undef -- `my @r = eval { die; (1) }` counted 1 for perl's 0.
+        my $st = $phi->{stamp} // '';
+        my $flattened = grep {
+            ( $_->{op} // '' ) =~ /\A(?:Array|Hash)Literal\z/
+                && grep { ( $_ // -1 ) == $phi->{id} } ( $_->{inputs} // [] )->@*
+        } $self->_nodes_in_order;
+        $bound{ $phi->{id} } = sprintf(
+            ( ( ($region->{fields} // {})->{eval_want} // '' ) eq 'list'
+              && ( $st eq 'Array' || $st eq 'List' || $flattened
+                   || $self->_phi_takes_a_list($phi) ) )
+                ? '@eval%d' : '$eval%d',
+            $phi->{id});
+
+        # A LIST ASSIGN THAT DESTRUCTURES THE EVAL'S VALUE is an Assign over
+        # the Phi with no place on the chain, and nothing emits it. The
+        # producer binds a lone target to a scalar Phi itself (`my ($x) = eval
+        # { 4 }` round-trips), but with two targets, or a list value bound to
+        # an array, the targets are read unassigned: `my ($x, $y) = eval {
+        # sort ... }` printed two undefs. Refused until the assign is placed
+        # at the join.
+        die "GAP: a list assign that destructures a block eval's value is not"
+          . " yet lowered -- nothing places the assign after the eval\n"
+            if grep {
+                   my @in = ( $_->{inputs} // [] )->@*;
+                   ( $_->{op} // '' ) eq 'Assign'
+                       && @in && $in[-1] == $phi->{id}
+                       && ( @in > 2 || $bound{ $phi->{id} } =~ /\A\@/ )
+               } $self->_nodes_in_order;
 
         # A CONDITIONAL eval's VALUE OUTLIVES ITS BLOCK. `A and B and C`
         # renders as nested ifs -- each eval happening only if the previous
@@ -4149,8 +4424,13 @@ class SoN::Deparse 0.01 {
 
             # A MERGE OF WHOLE AGGREGATES is an aggregate variable, though the
             # Phi arrives unstamped -- see _phi_aggregate_stamp.
-            my $agg = ($p->{stamp} // '') eq 'Unknown'
-                ? $self->_phi_aggregate_stamp($p) : '';
+            # ONE STAMPED AS A CONTAINER IS ONE TOO: an in-place sort in an
+            # arm merges two ArrayLiterals, an Array Phi, and as `$phi` the
+            # join read the array's count -- `if (...) { @a = sort ... @a }`
+            # printed 3 for `1 2 3`.
+            my $st  = $p->{stamp} // '';
+            my $agg = $st eq 'Unknown' ? $self->_phi_aggregate_stamp($p)
+                    : $st =~ /\A(?:Array|Hash)\z/ ? $st : '';
             my $var = sprintf($self->_phi_takes_a_list($p) || $agg eq 'Array' ? '@phi%d'
                             : $agg eq 'Hash' ? '%%phi%d' : '$phi%d', $p->{id});
 
@@ -4368,6 +4648,15 @@ class SoN::Deparse 0.01 {
                 ( exists $hoisted{$var} ? '' : 'my ' ), $var, $text )
                 . join '', map { $self->_emit_statement($_, $next_of) }
                     ( $after_effect{ $n->{id} } // [] )->@*;
+        }
+
+        # A SORT PINNED FOR ITS COMPARATOR whose list nothing reads still
+        # sorts: the producer pins a list-context sort, and says so with
+        # want => 'list'. Bare, it is a void sort, which perl skips without
+        # calling the comparator -- so only that want earns the `() =`.
+        if ($op eq 'Call' && (($n->{fields} // {})->{name} // '') eq 'sort'
+            && (($n->{fields} // {})->{want} // '') eq 'list') {
+            return '() = ' . $self->_expr_uncached( $n->{id} ) . ";\n";
         }
 
         # THE SAME, FOR A DEMOTED LEXICAL -- spelled from its name, for the
@@ -6181,6 +6470,19 @@ class SoN::Deparse 0.01 {
             push @queue, @in;
         }
         return $latest;
+    }
+
+    # A CALL THAT RUNS THE PROGRAM'S CODE IS A MEMORY VERSION it makes
+    # without consuming one (the producer's _call_memory_barrier), so
+    # _is_memory, which asks the inputs, does not see it. Those are a sub or
+    # method call and a sort with a comparator; a pinned builtin is not on
+    # the memory chain, and treating `undef *v` as one bound `$v` before it.
+    method _is_barrier_call ($id) {
+        my $n = $nodes->{$id} // {};
+        my $f = $n->{fields} // {};
+        return ( $n->{op} // '' ) eq 'Call' && defined $n->{control_in}
+            && ( ( $f->{dispatch_kind} // '' ) ne 'builtin'
+                 || defined $f->{sort_cmp_body} ) ? 1 : 0;
     }
 
     method _is_memory ($id) {
