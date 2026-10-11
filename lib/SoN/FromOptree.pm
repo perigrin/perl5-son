@@ -9186,8 +9186,13 @@ class SoN::FromOptree 0.01 {
             # and perl performs the distribution at runtime. That is correct
             # for BOTH arities without knowing either.
             my @targets = $lhs->@*;
+            # A SHORT-CIRCUIT OR A MERGE IS ONE TOO: it yields an operand or
+            # an arm, which may be a list. `my ($x, $y) = !@ARGV && reverse
+            # 2,1` bound $x to the And and $y to undef, where perl gives 1 and
+            # 2; `!@ARGV ? f() : ()` did the same through the join's Phi.
             my $single_call = @rhs == 1
-                && $rhs[0]->isa('SoN::IR::Node::Call');
+                && ( $rhs[0]->isa('SoN::IR::Node::Call')
+                     || $rhs[0]->operation =~ /\A(?:And|Or|DefinedOr|Phi)\z/ );
             my $positional =
                    ( !grep { _is_aggregate_node($_) } @targets, @rhs )
                 && ( !$single_call || @targets <= 1 )
@@ -13625,6 +13630,41 @@ class SoN::FromOptree 0.01 {
         return 0;
     }
 
+    # _last_kid($op) -- the last child of a LISTOP (a leavetry's last
+    # statement), or undef.
+    sub _last_kid ($op) {
+        return undef unless $$op && ($op->flags & 4);   # OPf_KIDS
+        my $k = $op->first;
+        $k = $k->sibling while ${ $k->sibling };
+        return $k;
+    }
+
+    # _leaves_a_list($op) -- true when $op, a block's last statement, yields
+    # more than one value in list context: a comma list of two or more, or
+    # a ternary or short-circuit with one as an arm. Read from the optree,
+    # not the stack: an earlier statement's residue deepens the stack too.
+    sub _leaves_a_list ($op) {
+        return 0 unless $op && $$op;
+        my $name = $op->name;
+        $name = B::ppname($op->targ) =~ s/\App_//r
+            if $name eq 'null' && $op->targ;
+        my @kids;
+        if ($op->flags & 4) {   # OPf_KIDS
+            for (my $k = $op->first; $$k; $k = $k->sibling) { push @kids, $k }
+        }
+        if ($name eq 'list') {
+            my @vals = grep { $_->name !~ /pushmark\z/
+                              && !($_->name eq 'null'
+                                   && B::ppname($_->targ) eq 'pp_pushmark') } @kids;
+            return @vals > 1 ? 1 : @vals ? _leaves_a_list($vals[0]) : 0;
+        }
+        return _leaves_a_list($kids[0])           if $name eq 'null';
+        return _leaves_a_list($kids[1]) || _leaves_a_list($kids[2])
+                                                  if $name eq 'cond_expr';
+        return _leaves_a_list($kids[1])           if $name =~ /\A(?:and|or|dor)\z/;
+        return 0;
+    }
+
     # _sort_runs_comparator($op) -- true when a sort calls code of the
     # program's: a block or a sub (OPf_STACKED; a folded `{ $b <=> $a }` is
     # flags), in list context -- perl sorts nothing in any other. Such a sort
@@ -13922,6 +13962,14 @@ class SoN::FromOptree 0.01 {
         #            yields no value -- but the eval still HAS a result,
         #            and perl says it is undef. Push the undef alone: a
         #            Phi would need two arms and there is only one.
+        # A BODY THAT LEAVES MORE THAN ONE VALUE yields them all to a list
+        # (or list-calling) context, and the Phi below keeps only the last:
+        # `my @r = eval { (2,1) }` gave (1), and `sub w { eval { (1,2) } }`
+        # gave a list caller (2).
+        die "GAP: a block eval in list or caller context whose body leaves"
+          . " a list is not yet lowered -- its value merges only the last"
+          . " element\n"
+            if defined $region->eval_want && _leaves_a_list(_last_kid($op->other));
         if ($body_sim->stack_depth > $sim->stack_depth) {
             my $val = $body_sim->pop_node;
 

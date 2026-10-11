@@ -1952,6 +1952,12 @@ class SoN::Deparse 0.01 {
             next if $self->_is_inline_aggregate($n);
             my $vn = $self->_agg_name($n);
 
+            # A SHORT-CIRCUIT OVER AN ARM'S EFFECT settles at the join.
+            if (defined(my $join = $self->_short_circuit_join($n, \%next_of))) {
+                push $after_region{$join}->@*, $n;
+                next;
+            }
+
             # AN AGGREGATE WHOSE CONTENTS ARE A CHAIN-BOUND EFFECT CANNOT
             # FLOAT EITHER. `my @got = <R>` builds ArrayLiteral(sym=got)
             # holding the readline's value -- measured -- and hoisting the
@@ -2036,6 +2042,12 @@ class SoN::Deparse 0.01 {
         for my $n (sort { $a->{id} <=> $b->{id} } $self->_nodes_in_order) {
             next unless $n->{op} eq 'Assign';
             next if defined $n->{control_in};   # already emitted in the chain
+
+            # THE AGGREGATE LOOP'S SHORT-CIRCUIT RULE, kept identical.
+            if (defined(my $join = $self->_short_circuit_join($n, \%next_of))) {
+                push $after_region{$join}->@*, $n;
+                next;
+            }
 
             # A BINDING OF A CHAIN-BOUND EFFECT CANNOT FLOAT. The prologue is
             # sound for a pad binding whose value has no control edge -- there
@@ -2908,6 +2920,37 @@ class SoN::Deparse 0.01 {
         return $last;
     }
 
+    # _short_circuit_join($n, \%next_of) -- the join of the branch a
+    # short-circuit in $n's value takes, when its right side holds an effect
+    # bound in that branch's arm; else undef.
+    #
+    # A BINDING OVER IT SETTLES AT THE JOIN, not after the effect. The
+    # producer lowers `my @r = @ARGV && sort c 3,1,2` as an If whose arm runs
+    # the sort, and And(@ARGV, sort) for the value; deferred to the sort as
+    # _last_bound_input does, `my @r = ...` landed inside the arm, and the
+    # print after it named an undeclared @r.
+    method _short_circuit_join ($n, $next_of) {
+        my ($join, %seen);
+        my $visit;
+        $visit = sub ($id) {
+            return if defined $join || !defined $id || $seen{$id}++;
+            my $m = $nodes->{$id} or return;
+            return if defined $m->{control_in};
+            return if ($m->{op} // '') =~ /\A(?:Phi|Region|Loop|Proj|If|Start)\z/;
+            if (($m->{op} // '') =~ /\A(?:And|Or|DefinedOr)\z/) {
+                my $eff = $self->_last_bound_input(
+                    { inputs => [ ($m->{inputs} // [])->[1] ] });
+                $join = $self->_lone_arm_join($nodes->{$eff}, $next_of)
+                    if defined $eff;
+                return if defined $join;
+            }
+            $visit->($_) for ($m->{inputs} // [])->@*;
+        };
+        $visit->($_) for ($n->{inputs} // [])->@*;
+        undef $visit;
+        return $join;
+    }
+
     # A named Array/HashLiteral on the control chain: an allocation at that
     # point, which the producer pins for a `my` aggregate in a loop body.
     method _is_pinned_aggregate ($n) {
@@ -3291,7 +3334,7 @@ class SoN::Deparse 0.01 {
                             == $region->{id}) }
                     $self->_nodes_in_order;
 
-        my $inner;
+        my ($inner, $body, $val);
         if (($eff->{op} // '') eq 'Coerce'
                 && ((($eff->{fields} // {})->{to_repr} // '') eq 'Code')) {
             # A STRING EVAL: the operand is the source text, which is what
@@ -3318,7 +3361,7 @@ class SoN::Deparse 0.01 {
             # at the entry, which is exactly the node that identifies the
             # construct, so without it _emit_from recognises the same eval
             # again and recurses forever.
-            my $body = do {
+            $body = do {
                 local $eval_claimed{ $region->{id} } = 1;
                 $self->_emit_from($entry, $next_of, $region->{id});
             };
@@ -3327,7 +3370,7 @@ class SoN::Deparse 0.01 {
             # Rendered again as an expression it ran twice:
             # `eval { push @a, 1 }` pushed two elements.
             my $vid  = $phi ? ($phi->{inputs} // [])->[0] : undef;
-            my $val  = !$phi ? ''
+            $val     = !$phi ? ''
                      : (defined $vid && $vid == $eff->{id}) ? ''
                      : $self->_expr($vid);
             $inner = length $val
@@ -3342,12 +3385,33 @@ class SoN::Deparse 0.01 {
         # scalar one, () or undef if it dies. One binding cannot be both:
         # `sub w { return eval { sort ... } }` ran the sort in scalar context
         # and a list caller got (undef).
-        die "GAP: a block eval whose value goes back in its caller's context"
-          . " (a sub's return value) is not yet lowered -- it is a list or a"
-          . " scalar depending on the call\n"
-            if ( ($region->{fields} // {})->{eval_want} // '' ) eq 'runtime'
-            && grep { grep { ( $_ // -1 ) == $phi->{id} } ( $_->{inputs} // [] )->@* }
-                    $self->_nodes_in_order;
+        #
+        # A SCALAR VALUE THE SUB RETURNS DIRECTLY needs only the caller's
+        # context at the return: the eval runs in list context, yielding
+        # (value) or () if it died, and the return gives that list or its
+        # one element -- undef for a scalar caller when it died. The value
+        # is forced scalar, as the Phi says it is. A value that is the body's
+        # last statement has no expression of its own to force, and one
+        # read anywhere but a Return is not in the sub's context.
+        my @readers = grep { grep { ( $_ // -1 ) == $phi->{id} } ( $_->{inputs} // [] )->@* }
+                      $self->_nodes_in_order;
+        if ( ( ($region->{fields} // {})->{eval_want} // '' ) eq 'runtime' && @readers ) {
+            my $st = $phi->{stamp} // '';
+            die "GAP: a block eval whose value goes back in its caller's context"
+              . " (a sub's return value) is not yet lowered -- it is a list or a"
+              . " scalar depending on the call\n"
+                if $inner !~ /\Aeval \{/ || !length $val
+                || $st =~ /\A(?:Array|List|Hash|Unknown)\z/
+                || $self->_phi_takes_a_list($phi)
+                || grep { ( $_->{op} // '' ) ne 'Return' } @readers;
+            my $arr = sprintf( '@eval%d', $phi->{id} );
+            ( my $one = $arr ) =~ s/\A\@/\$/;
+            $bound{ $phi->{id} } = "(wantarray ? $arr : ${one}[0])";
+            $hoisted{$arr} //= $arr;
+            $inner = sprintf( "eval {\n%s%s}",
+                _indent($body), _indent("scalar($val);\n") );
+            return sprintf( "%s = %s;\n", $arr, $inner );
+        }
 
         # The Phi is bound, so every later read names the variable. Registering
         # it here rather than in the %reads scan keeps that scan about VALUES;
@@ -3832,8 +3896,13 @@ class SoN::Deparse 0.01 {
 
             # A MERGE OF WHOLE AGGREGATES is an aggregate variable, though the
             # Phi arrives unstamped -- see _phi_aggregate_stamp.
-            my $agg = ($p->{stamp} // '') eq 'Unknown'
-                ? $self->_phi_aggregate_stamp($p) : '';
+            # ONE STAMPED AS A CONTAINER IS ONE TOO: an in-place sort in an
+            # arm merges two ArrayLiterals, an Array Phi, and as `$phi` the
+            # join read the array's count -- `if (...) { @a = sort ... @a }`
+            # printed 3 for `1 2 3`.
+            my $st  = $p->{stamp} // '';
+            my $agg = $st eq 'Unknown' ? $self->_phi_aggregate_stamp($p)
+                    : $st =~ /\A(?:Array|Hash)\z/ ? $st : '';
             my $var = sprintf($self->_phi_takes_a_list($p) || $agg eq 'Array' ? '@phi%d'
                             : $agg eq 'Hash' ? '%%phi%d' : '$phi%d', $p->{id});
 

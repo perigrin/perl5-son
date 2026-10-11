@@ -232,6 +232,49 @@ my @cases = (
     [ q{sub f { my @a = @_; @a = sort { my $t=$a; $t <=> $b } @a; push @a, 9; shift @a; "@a" } print f(3,1,2), "\n";},
       'a push and a shift after an in-place block sort in a sub' ],
 
+    # ...and in a branch arm the merge is an array, not its count.
+    [ q{my @a = (3,1,2); if (!@ARGV) { @a = sort { my $t=$a; $t <=> $b } @a } print "@a\n";},
+      'an in-place block sort in an arm' ],
+    [ q{my @a = (3,1,2); if (!@ARGV) { @a = sort { my $t=$a; $t <=> $b } @a } else { @a = (9) } print "@a\n";},
+      'an in-place block sort in one arm of two' ],
+    [ q{sub c { $a <=> $b } my @a = (3,1,2); if (!@ARGV) { @a = sort c @a } print "@a\n";},
+      'an in-place named sort in an arm' ],
+    [ q{my @a = (3,1,2); if (!@ARGV) { @a = sort @a; push @a, 0 } print "@a\n";},
+      'an in-place sort and a push in an arm' ],
+    [ q{my %h = (a=>1); if (!@ARGV) { %h = map { $_ => 2 } sort { my $t=$a; $t cmp $b } keys %h } print join(",", %h), "\n";},
+      'a hash rebuilt from a block sort in an arm' ],
+    [ q{my @r; if (@ARGV) { @r = (1) } else { @r = eval { sort { my $q=$a; $q<=>$b } 2,1 } } print "@r\n";},
+      'an eval of a block sort assigned in one arm of two' ],
+    [ q{my @r; if (@ARGV) { @r = (1) } else { @r = eval { sort 2,1 } } print "@r\n";},
+      'an eval of a plain sort assigned in one arm of two' ],
+
+    # A LIST-CONTEXT SORT ON THE RIGHT OF && is pinned in the arm the && takes.
+    [ q{sub c { $a <=> $b } my @r = @ARGV && sort c 3,1,2; print scalar(@r), "\n";},
+      'a named sort on the right of an untaken &&' ],
+    [ q{my @r = @ARGV && sort { my $t=$a; $t <=> $b } 3,1,2; print scalar(@r), "\n";},
+      'a block sort on the right of an untaken &&' ],
+    [ q{my @r = !@ARGV && sort { my $t=$a; $t <=> $b } 3,1,2; print "@r\n";},
+      'a block sort on the right of a taken &&' ],
+    [ q{sub c { $a <=> $b } my @r = @ARGV || sort c 3,1,2; print "@r\n";},
+      'a named sort on the right of ||' ],
+    [ q{sub c { $a <=> $b } my @r; @r = @ARGV && sort c 3,1,2; print scalar(@r), "\n";},
+      'a named sort on the right of && assigned to a declared array' ],
+    [ q{sub f {(1,2)} sub g { my @r = $_[0] && f(); scalar(@r) } print g(0), g(1), "\n";},
+      'a list call on the right of && in a sub' ],
+    # ...and two targets take what perl distributes at runtime.
+    [ q{my ($x,$y) = !@ARGV && sort { my $t=$a; $t <=> $b } 2,1; print "$x $y\n";},
+      'two targets from a block sort on the right of &&' ],
+    [ q{my ($x,$y) = !@ARGV && reverse 2,1; print "$x $y\n";},
+      'two targets from reverse on the right of &&' ],
+    [ q{sub f {(1,2)} my ($x,$y) = @ARGV && f(); print defined $x ? 1 : 0, defined $y ? 1 : 0, "\n";},
+      'two targets from an untaken &&' ],
+    [ q{my ($x,$y) = !@ARGV ? (sort { my $t=$a; $t <=> $b } 2,1) : (); print "$x $y\n";},
+      'two targets from a block sort in a ternary arm' ],
+    [ q{sub f {(1,2)} my ($x,$y) = @ARGV ? f() : (3); print "$x ", $y // "u", "\n";},
+      'two targets from a ternary of a call and a one-element list' ],
+    [ q{my $k = 3; my ($x) = $k && 7; print "$x\n";},
+      'one target from a scalar &&' ],
+
     [ q{my @x=(3,1,2); print scalar(my @y = sort { my $t=$a; $t <=> $b } @x), "\n";},
       'a counted list assign of a block sort' ],
     [ q{my %seen; for my $i (3, 1, 2) { %seen = map { $_ => 1 } sort { my $t = $a; $t <=> $b } keys(%seen), $i; } print join(",", sort keys %seen), "\n";},
@@ -264,6 +307,8 @@ refuses(q{my @a=(3,1,2); my $c = sub { "@a" }; @a = sort { $a <=> $b } @a; print
     $inplace, 'an in-place sort of a captured array');
 
 my $destructure = qr/GAP: a list assign that destructures a block eval's value/;
+# ...and one of a comma list refuses earlier, in the producer.
+my $leaves = qr/GAP: a block eval in list or caller context whose body leaves a list/;
 refuses(q{my ($x, $y) = eval { sort { my $q=$a; $q <=> $b } 3,1,2 }; print "$x $y\n";},
     $destructure, 'two targets from an eval of a block sort');
 refuses(q{my ($x) = eval { sort { my $q=$a; $q <=> $b } 3,1,2 }; print "$x\n";},
@@ -271,7 +316,7 @@ refuses(q{my ($x) = eval { sort { my $q=$a; $q <=> $b } 3,1,2 }; print "$x\n";},
 refuses(q{my ($x, @y) = eval { sort { my $q=$a; $q <=> $b } 3,1,2 }; print "$x @y\n";},
     $destructure, 'a scalar and an array from an eval of a block sort');
 refuses(q{my ($x, $y) = eval { (5,6) }; print "$x $y\n";},
-    $destructure, 'two targets from an eval of a list');
+    $leaves, 'two targets from an eval of a list');
 round_trips(q{my ($x) = eval { 4 }; print "$x\n";}, 'one target from a scalar eval');
 
 my $callers = qr/GAP: a block eval whose value goes back in its caller's context/;
@@ -285,6 +330,37 @@ refuses(q{sub w { return eval { sort { $a <=> $b } 3,1,2 } } my @r = w(); print 
     $callers, 'a returned eval of a folded sort');
 # A body whose value is its last statement is emitted as that statement,
 # so it falls off the end in the caller's context and needs no binding.
+# A SCALAR VALUE returned from an eval reads the caller's context at the
+# return: () to a list caller when the body died, undef to a scalar one.
+round_trips(q{sub w { return eval { 5 } } my $s = w(); print "$s\n";},
+    'a returned eval of a constant');
+round_trips(q{sub w { eval { $_[0]*2 } } my $s = w(4); my @r = w(3); print "$s @r\n";},
+    'an eval of arithmetic as the last statement');
+round_trips(q{my $x = 3; sub w { return eval { $x + 1 } } print w(), "\n";},
+    'a returned eval reading a lexical');
+round_trips(q{sub w { eval { 5 } } my @r = w(); my $s = w(); print "@r $s\n";},
+    'an eval as the last statement, called both ways');
+round_trips(q{sub w { return eval { die "x\n" if $_[0]; 5 } } my @r = w(1); my $s = w(1); print scalar(@r), " ", defined $s ? "d" : "u", " ", w(0), "\n";},
+    'a returned eval that may die, called both ways');
+refuses(q{sub w { eval { (1,2) } } my @r = w(); my $s = w(); print "@r $s\n";},
+    $leaves, 'an eval of a comma list as the last statement');
+refuses(q{my @r; if (@ARGV) { @r = (1) } else { @r = eval { (2,1) } } print "@r\n";},
+    $leaves, 'an eval of a list assigned in one arm of two');
+refuses(q{my @r = eval { 1 ? (1,2) : (3) }; print "@r\n";},
+    $leaves, 'a list eval of a ternary');
+refuses(q{my %h = eval { (a=>1) }; print join(",", %h), "\n";},
+    $leaves, 'a list eval of a list');
+round_trips(q{my $x = eval { (1,2) }; print "$x\n";},
+    'a scalar eval of a list is its last element');
+# A WHOLE ASSIGN IN AN ARM merges as the array, whatever follows it there.
+round_trips(q{my @a = (3,1); if (@a) { @a = (1,3); $a[1] = 7 } print "@a\n";},
+    'a whole assign and an element store in one arm');
+round_trips(q{my %h = (a=>1); if (!@ARGV) { %h = (b=>2) } print join(",", %h), "\n";},
+    'a whole hash assign in one arm');
+refuses(q{sub w { eval { @_ } } my @r = w(4,5); my $s = w(4,5); print "@r $s\n";},
+    $callers, 'an eval of an array as the last statement');
+refuses(q{sub f { (7,8) } sub w { eval { f() } } my @r = w(); my $s = w(); print "@r $s\n";},
+    $callers, 'an eval of a call as the last statement');
 round_trips(q{sub w { return eval { die "x\n" } } my @r = w(); print scalar(@r), "\n";},
     'a returned eval that dies');
 round_trips(q{sub w { my $x = eval { 5 }; $x } print w(), "\n";},
@@ -310,12 +386,6 @@ sub still_wrong ($src, $why) {
 }
 still_wrong(q{my $n = 0; my @r = eval { $n++; reverse 3,1,2 }; print "@r $n\n";},
     'a lexical store inside a block eval is dropped');
-still_wrong(q{my @r = eval { 1 ? (1,2) : (3) }; print "@r\n";},
-    'a list eval of a ternary keeps only its last element');
-still_wrong(q{my %h = eval { (a=>1) }; print join(",", %h), "\n";},
-    'a list eval of a list keeps only its last element');
-still_wrong(q{my @a = (3,1); if (@a) { @a = (1,3); $a[1] = 7 } print "@a\n";},
-    'a whole assign and an element store in one arm merge as a scalar');
 still_wrong(q{our $n=0; sub h{$n+=2} for (1,2) { $n++; h() } my $m = $n; $n = 7; print "$m $n\n";},
     'a package scalar stored in a loop body is carried past a call that writes it');
 still_wrong(q{my $r = []; my $n = (@$r = (4,5,6)); print "$n @$r\n";},
