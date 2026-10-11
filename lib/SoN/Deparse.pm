@@ -1471,10 +1471,17 @@ class SoN::Deparse 0.01 {
                     push @queue, $d->{id}
                         if defined $d->{control_in} && $d->{control_in} == $id;
                     # AND A BRANCH ARM IN THE BODY, through its Proj and its
-                    # join -- but not this loop's own exit Region.
+                    # join -- but never a loop's exit, this one's or an
+                    # enclosing one's: a walk that reached the outer Loop
+                    # through an input left by its exit Proj and marked the
+                    # code after both loops (`for { for { h() } } my $m =
+                    # $n; $n = 7` lost its stale binding).
                     push @queue, $d->{id}
                         if ( $d->{op} // '' ) =~ /\A(?:Proj|Region)\z/
-                        && ( $d->{head} // -1 ) != $n->{id}
+                        && ( ( $nodes->{ $d->{head} // -1 } // {} )->{op} // '' ) ne 'Loop'
+                        && !( ( $d->{op} // '' ) eq 'Proj'
+                              && ( ( $d->{fields} // {} )->{index} // 0 ) == 1
+                              && ( ( $c->{op} // '' ) eq 'Loop' ) )
                         && grep { $_ == $id } ( $d->{inputs} // [] )->@*;
                 }
             }
@@ -1648,8 +1655,7 @@ class SoN::Deparse 0.01 {
             my $join = defined $loop && !$feeds_loop_phi->( $n->{id}, $loop )
                          ? $self->_loop_join($loop)
                      : $region ? $region->{id}
-                     : undef;
-            if ( $safe_read->( $n->{id} ) || defined $join ) {
+                     : undef;            if ( $safe_read->( $n->{id} ) || defined $join ) {
                 my $from = defined $join ? $join
                          : defined $version->{control_in} ? $version->{id}
                          : ( $version->{op} // '' ) eq 'MemStart' ? $start->{id}
