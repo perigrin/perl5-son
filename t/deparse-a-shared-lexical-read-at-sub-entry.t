@@ -302,4 +302,15 @@ for my $c (
     pass "$name: refused";
 }
 
+
+# A CALL IS NOT A STORE TO EVERY PAD SCALAR -- only to one a reference or a
+# closure reaches. These are chalk's shapes the alias refusal must leave
+# alone (LLVM::Context::_lower_vardecl, IR::Node::If::set_control_in).
+round_trips(q{sub f { my $r = shift; my $s = "a$r" . g($r) . " $r"; return $s } sub g { uc $_[0] } print f("x"), "\n";},
+    q{a scalar read and handed to a call in one expression});
+round_trips(q{package N { sub new { bless {i => $_[1]}, $_[0] } sub index { $_[0]{i} } } my %p; my $n = N->new(3); $p{ $n->index } = $n; print ref($p{3}), "\n";},
+    q{a method invocant read and stored by its own key});
+round_trips(q{sub f { my $v = 1; my $r = \$v; my $s = $v . g($r); return $s } sub g { ${$_[0]} = 7; "x" } print f(), "\n";},
+    q{a call reaching the scalar through a reference});
+
 done_testing;

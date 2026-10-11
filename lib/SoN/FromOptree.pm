@@ -598,7 +598,7 @@ class SoN::FromOptree 0.01 {
     # Structural, not exec-order: srefgen can sit anywhere in the tree.
     # $root is given for the PROGRAM body, whose tree is B::main_root() rather
     # than $cv->ROOT ($cv is B::main_cv there and its ROOT is not the program).
-    sub _address_taken ($cv, $root = undef) {
+    sub _address_taken ($cv, $root = undef, $skip_call_args = 0) {
         my %taken;
         $root //= eval { $cv->ROOT };
         return \%taken unless $root && $$root;
@@ -668,7 +668,7 @@ class SoN::FromOptree 0.01 {
             # property `\$x` has, and it gets the same demotion. Only a DIRECT
             # argument: `$x + 1` passes a temporary, not $x. The arguments are
             # entersub's ex-list kids between the pushmark and the callee.
-            if ($op->name eq 'entersub' && $op->can('first') && ${$op->first}) {
+            if ($op->name eq 'entersub' && $op->can('first') && ${$op->first} && !$skip_call_args) {
                 my $list = $op->first;
                 if ($$list && $list->can('first') && ${$list->first}) {
                     for (my $k = $list->first; ref($k) && $$k; $k = $k->sibling) {
@@ -16289,6 +16289,10 @@ class SoN::FromOptree 0.01 {
             my $gv = _op_gv($cv, $o);
             return $gv ? "g" . ${$gv} : undef;
         };
+        # Slots a reference or a closure reaches -- NOT ones merely passed
+        # to a call, which $ADDR_TAKEN counts too.
+        state %REFERENCED_BY_CV;
+        my $REFERENCED = $REFERENCED_BY_CV{$$cv} //= _address_taken($cv, undef, 1);
         my $stores;
         $stores = sub ($o, $key) {
             return 1 if $o->name eq q{padsv_store} && "p" . $o->targ eq $key;
@@ -16296,7 +16300,16 @@ class SoN::FromOptree 0.01 {
             # into its own targ, with no sassign to find.
             return 1 if ( $o->private & B::OPpTARGET_MY() )
                 && "p" . $o->targ eq $key;
-            return 1 if $o->name eq q{entersub} && $key =~ /\Ap/;
+            # A CALL WRITES A PAD SCALAR it can reach: one shared with a
+            # closure or whose address was taken. Any call at all refused 48
+            # of chalk's graphs (`$old->remove_consumer($self)`).
+            # ponytail: a callee assigning `$_[0]` to a scalar it was handed
+            # is not seen; counting every handed scalar refused ordinary code
+            # (`"$r" . f($r)` in chalk's LLVM::Context::_lower_vardecl).
+            if ( $o->name eq q{entersub} && $key =~ /\Ap(\d+)\z/ ) {
+                return 1 if ( $SHARED_SLOTS && $SHARED_SLOTS->{$1} )
+                    || ( $REFERENCED->{$1} );
+            }
             return 0 unless $o->flags & B::OPf_KIDS;
             my ( $kid, $first ) = ( $o->first, 1 );
             my $n = $o->name;
