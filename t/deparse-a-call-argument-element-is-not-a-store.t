@@ -115,6 +115,16 @@ round_trips(q{sub g { $_[0] = 5; 1 } my %h=(a=>1,b=>2); for my $c (1,0) { my $y 
 round_trips(q{sub g { $_[0] = 5; 1 } my %h=(a=>1); for my $c (1,0) { g($h{a}); my $y = $h{a}; print "$y\n" }},
     'a read after the call');
 
+# A TOPIC PASSED TO A CALL is an alias: read after the call it sees the
+# write, as perl's does, so the call is not a store "after" that read.
+round_trips(q{sub g { $_[0] = 5 } my @a=(1,2); for my $e (@a) { g($e); print "$e\n" } print "@a\n"},
+    'a foreach topic passed to a writing call, read after it');
+todo 'DIFF at base: a copy of a foreach topic is the topic read, spelled after the call' => sub {
+    my $src = q{sub g { $_[0] = 5 } my @a=(1,2); for my $e (@a) { my $y = $e; g($e); print "$y $e\n" }};
+    my $out = SoN::Deparse->new->render(graph_of($src) // {});
+    is defined $out ? run_perl($out) : '', run_perl($src), 'a copy of the topic before a writing call';
+};
+
 # A sprintf ARGUMENT IS A READ, not an lvalue: built as an address it took no
 # memory version, and was spelled after a later write to the element.
 round_trips(q{sub g { $_[0] = 5 } my %h=(a=>1); my $c = 1; my $x = sprintf("%s", $c ? $h{a} : 8); g($h{a}); print "$x $h{a}\n"},

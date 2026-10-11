@@ -1613,8 +1613,11 @@ class SoN::Deparse 0.01 {
             }
             # A CALL WRITES AN ELEMENT IT IS PASSED, through $_[0]. Its
             # element arguments, through the pure nodes that yield them (a
-            # ternary's arms), are its targets.
-            my $targets = sub ($s) {
+            # ternary's arms), are its targets -- except the read itself: a
+            # foreach or grep topic passed to a call is an alias, and spelled
+            # after the call it sees the write, as perl's alias does
+            # (`grep { big($_) } @_`, `$c->can(...)`).
+            my $targets = sub ($s, $read) {
                 my @in = ( $s->{inputs} // [] )->@*;
                 return $nodes->{ $in[0] // -1 } // {} if ( $s->{op} // '' ) eq 'Assign';
                 my ( @q, %qs, @t ) = @in;
@@ -1623,7 +1626,10 @@ class SoN::Deparse 0.01 {
                     next if !defined $id || $qs{$id}++;
                     my $x = $nodes->{$id} or next;
                     next if defined $x->{control_in};
-                    if ( ( $x->{op} // '' ) eq 'Subscript' ) { push @t, $x; next }
+                    if ( ( $x->{op} // '' ) eq 'Subscript' ) {
+                        push @t, $x unless $x->{id} == $read;
+                        next;
+                    }
                     push @q, ( $x->{inputs} // [] )->@*;
                 }
                 return @t;
@@ -1711,7 +1717,7 @@ class SoN::Deparse 0.01 {
                               && $plain_hash->($in[0])
                               && defined $str_key->($in[1]) && defined $str_key->($tk)
                               && $str_key->($tk) ne $str_key->($in[1]) )
-                } $targets->($_) } @later;
+                } $targets->($_, $n->{id}) } @later;
                 next unless @same;
 
                 # Where the value lands: a loop Phi (the back edge, evaluated
