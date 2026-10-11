@@ -74,4 +74,10 @@ round_trips('our $g = "aaa"; $g =~ s/a/b/; $g =~ s/b/c/; print "$g\n";',
 round_trips('my $w = "ab"; sub ok { print scalar(@_), " @_\n" } ok(1, $w =~ s/a//);',
     'a lexical subst as a call argument');
 
+
+# A RE-WALK DOES NOT INHERIT THE SUBST THE FIRST WALK BOUND: the later
+# `$warn eq ""` read is bound after the call, which re-walks the chain.
+round_trips(q{our $warn; BEGIN { $warn = "ab\n" } sub ok ($$) { print $_[1] ? "ok " : "not ok ", $_[0], "\n" } ok 1, $warn =~ s/a[^\n]+\n//s; ok 2, $warn eq "";},
+    q{a package subst in a call, then the variable read, in a re-walked chain});
+
 done_testing;
