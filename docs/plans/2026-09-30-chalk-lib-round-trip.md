@@ -391,3 +391,53 @@ Ratchets at bd0e86a (2026-10-11): corpus 275/275, perl t/ 11 with 2
 invalid emissions (ceiling 2), chalk COMPILES 137, SKIPPED_GRAPHS 239,
 INVALID 0, gate 3 SAME 488 / DIFFERS 0 / DEFERRED 59. All thirteen rows
 of the table above round-trip.
+
+## GAP fixes, batch 1 (2026-10-10 to 10-11)
+
+Thirteen investigators reduced the 239 skipped graphs to thirteen
+clusters (reports in the session scratchpad, gaps/reports/). Five were
+fixed by agents, each verified by an adversarial round-trip agent.
+Before the miscompile backlog was fixed no branch converged: every newly
+lowered path met an old miscompile. After it, two clusters landed:
+
+- elemstore (an element store in a ternary arm; an element passed to a
+  call is not a store): 239 -> 229 with the list-builtin container fix.
+- sortsub (a block comparator perl nulled from a leave): 229 -> 226.
+  Landing it exposed a lifted closure called bare inside a class (161
+  chalk tests died once IR::Graph was overlaid) and a re-walk that
+  dropped a counted package s///. Both fixed. A closure over a FIELD
+  now refuses -- chalk's IR::Graph::nodes and one other graph -- until
+  closures over fields are lowered.
+
+Dropped as ports: foreach, stamp, subst. Rebased onto the fixed base,
+none of them unblocked a chalk graph -- each graph met another GAP next.
+
+Known limits recorded as ponytail comments, not refused:
+- a callee assigning `$_[0]` to a scalar it was handed is not seen by
+  the alias check;
+- a tied or overloaded hash key is FETCHed or stringified twice when an
+  element store in a ternary arm re-reads its element (the IR is right;
+  the rendering reads the key twice).
+
+Older defects found and still open:
+- `my @c = caller(0)` renders as `(0, caller())`;
+- a deref read and its store inside one if arm (`if ($v) { my $a = $$r;
+  $$r = 5; print $a }`) prints the new value;
+- `return eval { g() }` refuses (base was right only for a scalar caller).
+
+Ratchets at 5c5d4a4: corpus 279/279, perl t/ 11 with 1 invalid
+emission, chalk COMPILES 137, SKIPPED_GRAPHS 226, INVALID 0, gate 3 SAME
+488 / DIFFERS 0 / DEFERRED 59.
+
+First GAP per skipped graph on this head (173 graphs listed):
+
+| GAP family | graphs |
+|---|---|
+| loop-carried value loses its stamp | 23 |
+| `//=` / dorassign forms | ~22 |
+| void-context `and` arm / modifier in an if/else arm | ~21 |
+| a ternary with a multi-element list arm | 19 |
+| short-circuit / nested and-or in an arm or loop | ~19 |
+| foreach with an unrecognised bounds shape | 20 |
+| enterloop inside a loop body | 9 |
+| a signature default with an effect | 7 |
