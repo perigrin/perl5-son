@@ -1631,12 +1631,30 @@ class SoN::Deparse 0.01 {
                         && ( ( $k->{fields} // {} )->{const_type} // '' ) eq 'string'
                         ? $k->{fields}{value} // '' : undef;
                 };
+                # ONLY IN A PLAIN HASH: a tie's FETCH and STORE decide which
+                # keys alias (a case-folding tie makes `a` and `A` one), and
+                # a refalias binds two keys to one scalar. So the hash is a
+                # lexical no sub closes over, used by nothing but element
+                # accesses, none of which is taken a reference to.
+                my $plain_hash = sub ($id) {
+                    my $h = $nodes->{$id} // {};
+                    return 0 unless ( $h->{op} // '' ) =~ /\A(?:PadAccess|HashLiteral)\z/
+                        && !( $h->{fields} // {} )->{shared};
+                    for my $c ( ( $consumers{$id} // [] )->@* ) {
+                        return 0 unless ( $c->{op} // '' ) eq 'Subscript'
+                            && ( ( $c->{inputs} // [] )->[0] // -1 ) == $id;
+                        return 0 if grep { ( $_->{op} // '' ) eq 'Ref' }
+                            ( $consumers{ $c->{id} } // [] )->@*;
+                    }
+                    return 1;
+                };
                 my @same = grep {
                     my $t = $nodes->{ ( $_->{inputs} // [] )->[0] // -1 } // {};
                     my $tk = ( $t->{inputs} // [] )->[1] // -1;
                     ( $t->{op} // '' ) eq 'Subscript'
                         && ( ( $t->{inputs} // [] )->[0] // -1 ) == $in[0]
                         && !( ( ( $n->{fields} // {} )->{kind} // '' ) eq 'hash'
+                              && $plain_hash->($in[0])
                               && defined $str_key->($in[1]) && defined $str_key->($tk)
                               && $str_key->($tk) ne $str_key->($in[1]) )
                 } @stores;
