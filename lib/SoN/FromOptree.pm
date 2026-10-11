@@ -1882,126 +1882,10 @@ class SoN::FromOptree 0.01 {
                 next;
             }
 
-            # `||=`, `&&=`, `//=`: THE VALUE OPERATOR, THEN A STORE. They are
-            # registered BRANCH, and with no handler the skip below stepped
-            # over them -- the ->other arm and its sassign were never walked,
-            # so `$q ||= 99` vanished with no node and no GAP (corpus 077).
-            #
-            # For a plain variable `$q ||= E` is `$q = $q || E`: the target is
-            # read once either way, and storing $q into itself on the arm that
-            # does not assign is unobservable. Measured shape:
-            #
-            #     orassign(other->a)       kids: padsv[$q] sRM, sassign/BKWARD
-            #       a  const[99]           the arm: E, then the store
-            #       b  sassign
-            #
-            # Handled: an unreferenced lexical target and an arm with no
-            # effects. Anything else refuses by name rather than walking the
-            # arm's sassign, whose BKWARD operand order the stack sim does not
-            # model.
+            # `||=`, `&&=`, `//=`: see _handle_logassign.
             if ($name eq 'orassign' || $name eq 'andassign' || $name eq 'dorassign') {
-                my $spelling = { orassign => '||=', andassign => '&&=',
-                                 dorassign => '//=' }->{$name};
-                my $tgt_op = $op->first;
-                my $store  = $$tgt_op ? $tgt_op->sibling : undef;
-                die "GAP: `$spelling` whose assignment arm is not a scalar store\n"
-                    unless $store && $$store && $store->name eq 'sassign';
-                die "GAP: `$spelling` into something other than a lexical scalar\n"
-                    unless $tgt_op->name eq 'padsv' && $tgt_op->targ;
-                my $targ = $tgt_op->targ;
-                # A CLASS FIELD IS STORED, NOT REBOUND -- the same write form
-                # `$field++` and `$field .= ...` are. Rebinding it as a pad
-                # slot dropped `$s //= $x` with no word, and a right side with
-                # an effect refused (chalk's Node/BinOp.pm ADJUST). It takes
-                # the memory slot's path below, reading the field pinned where
-                # it is read rather than a slot at a memory version.
-                my $field_lvalue = do {
-                    my $lv = _make_pad_or_field($cv, $targ, $factory);
-                    $lv->isa('SoN::IR::Node::FieldAccess') ? $lv : undef;
-                };
-                my $read_field = sub ($s) {
-                    my $read = $factory->make_unique('FieldAccess',
-                        field_index => $field_lvalue->field_index,
-                        field_stash => $field_lvalue->field_stash);
-                    $read->set_control_in($s->control);
-                    $s->set_control($read);
-                    return $read;
-                };
-                # A REFERENCED OR SHARED LEXICAL IS A SLOT IN MEMORY, read and
-                # written like any demoted variable -- and `$C //= make()` is
-                # the memo idiom, whose right side must run ONLY when the test
-                # fails. So: the target padsv already pushed the slot's read;
-                # branch on it, walk the right side on the taken arm and store
-                # it there, merge, and read the slot again for the value.
-                if ($ctx->{addr_taken}{$targ} || $field_lvalue) {
-                    my $current = $sim->pop_node;
-                    $current = $read_field->($sim) if $field_lvalue;
-                    my $test = $name eq 'dorassign'
-                        ? $factory->make('Defined', inputs => [$current])
-                        : $current;
-                    my $if_node = $factory->make_cfg('If',
-                        inputs => [$sim->control, $test]);
-                    # `&&=` assigns when the test holds; `||=` and `//=` when
-                    # it fails.
-                    my ($set_idx, $keep_idx) = $name eq 'andassign' ? (0, 1) : (1, 0);
-                    my $set_sim = $sim->snapshot;
-                    $set_sim->set_control($factory->make_cfg('Proj',
-                        inputs => [$if_node], index => $set_idx));
-                    $sim->set_control($factory->make_cfg('Proj',
-                        inputs => [$if_node], index => $keep_idx));
-                    my $base_depth = $set_sim->stack_depth;
-                    my @arm_exits;
-                    my (undef, $sig) = _walk_branch($cv, $op->other, $set_sim,
-                        $factory, $opmap, \%visited, \@arm_exits, 1, $$store);
-                    die "GAP: `$spelling` whose right side leaves or yields no"
-                      . " single value\n"
-                        if ($sig // '') ne '' || @arm_exits
-                        || $set_sim->stack_depth != $base_depth + 1;
-                    my $rhs = $set_sim->pop_node;
-                    my $slot = sub ($s) {
-                        $factory->make('PadAccess', targ => $targ,
-                            do { my ($sg, $sy) = _padparts($cv, $targ);
-                                 (sigil => $sg, symbol => $sy) },
-                            ($ctx->{shared_lexicals}{$targ} ? (shared => 1) : ()),
-                            (defined $s->memory ? (inputs => [ $s->memory ]) : ()));
-                    };
-                    my $write = $factory->make('Assign',
-                        inputs => [$field_lvalue // $slot->($set_sim), $rhs]);
-                    $write->set_control_in($set_sim->control);
-                    $set_sim->set_control($write);
-                    $set_sim->set_memory($write)
-                        if defined $set_sim->memory && !$field_lvalue;
-                    $sim->merge($set_sim, $factory, $if_node);
-                    # A field read is pinned, and a pinned read nothing uses
-                    # has no rendering: in void context the stack keeps the
-                    # test's read instead of a new one.
-                    $sim->push_node(!$field_lvalue ? $slot->($sim)
-                        : ($op->flags & 3) == 1 ? $current   # OPf_WANT_VOID
-                        : $read_field->($sim));
-                    $op = $op->next;
-                    next;
-                }
-                my $current = $sim->lookup($targ);
-                die "GAP: `$spelling` into a lexical with no binding in this graph\n"
-                    unless defined $current;
-
-                $sim->pop_node;    # the lvalue the target padsv pushed
-                my $rhs_sim = $sim->snapshot;
-                my $base_depth = $rhs_sim->stack_depth;
-                _walk_branch($cv, $op->other, $rhs_sim, $factory, $opmap,
-                    \%visited, undef, 0, $$store);
-                die "GAP: `$spelling` whose right side has an effect\n"
-                    unless $rhs_sim->control == $sim->control
-                        && $rhs_sim->stack_depth == $base_depth + 1;
-                my $rhs = $rhs_sim->pop_node;
-
-                my $node = $factory->make(
-                    { orassign => 'Or', andassign => 'And',
-                      dorassign => 'DefinedOr' }->{$name},
-                    inputs => [$current, $rhs]);
-                $sim->define($targ, $node);
-                $sim->push_node($node);
-                $op = $op->next;
+                $op = _handle_logassign($cv, $op, $sim, $factory, $opmap,
+                    \%visited, $ctx);
                 next;
             }
 
@@ -12373,6 +12257,14 @@ class SoN::FromOptree 0.01 {
                 next;
             }
 
+            # `||=`, `&&=`, `//=` in the body: the main walk's handler.
+            if ($name eq 'orassign' || $name eq 'andassign' || $name eq 'dorassign') {
+                $loop_visited->{$$op}++;
+                $op = _handle_logassign($cv, $op, $sim, $factory, $opmap,
+                    $loop_visited, $ctx);
+                next;
+            }
+
             # Nested control structure in a body is only translated by the
             # MAIN walker; skipping it here emitted corrupt graphs (a nested
             # loop minted Projs on the OUTER Loop and truncated the walk; a
@@ -14205,6 +14097,226 @@ class SoN::FromOptree 0.01 {
         return $next->next;
     }
 
+    # _handle_logassign($cv, $op, $sim, $factory, $opmap, $visited, $ctx)
+    #   -> the op to resume at.
+    #
+    # `||=`, `&&=`, `//=`: THE VALUE OPERATOR, THEN A STORE. They are
+    # registered BRANCH, and with no handler the skip below stepped
+    # over them -- the ->other arm and its sassign were never walked,
+    # so `$q ||= 99` vanished with no node and no GAP (corpus 077).
+    #
+    # For a plain variable `$q ||= E` is `$q = $q || E`: the target is
+    # read once either way, and storing $q into itself on the arm that
+    # does not assign is unobservable. Measured shape:
+    #
+    #     orassign(other->a)       kids: padsv[$q] sRM, sassign/BKWARD
+    #       a  const[99]           the arm: E, then the store
+    #       b  sassign
+    #
+    # Handled: a lexical target, a class field, and an element. A plain
+    # lexical whose arm has no effects is the value operator; every other
+    # form branches, and walks the arm only where the store happens.
+    # Anything else refuses by name rather than walking the arm's sassign,
+    # whose BKWARD operand order the stack sim does not model.
+    #
+    # SHARED BY ALL THREE WALKS, the same reason _handle_entertry is: with
+    # the handler only in the main walk, a loop body refused it as "dorassign
+    # inside a loop body" and an if arm as "arm stopped at `dorassign`" --
+    # chalk's `$in_degree{$name} //= 0` in a for, `$var_name //= $focus` in
+    # an if. Each caller passes its own visited set.
+    sub _handle_logassign ($cv, $op, $sim, $factory, $opmap, $visited, $ctx) {
+        my $name = $op->name;
+        my $spelling = { orassign => '||=', andassign => '&&=',
+                         dorassign => '//=' }->{$name};
+        my $tgt_op = $op->first;
+        my $store  = $$tgt_op ? $tgt_op->sibling : undef;
+        die "GAP: `$spelling` whose assignment arm is not a scalar store\n"
+            unless $store && $$store && $store->name eq 'sassign';
+        my $is_void = ($op->flags & 3) == 1;   # OPf_WANT_VOID
+
+        # Walk the right side on the arm that stores; refuse one that leaves.
+        my $walk_rhs = sub ($set_sim) {
+            my $base_depth = $set_sim->stack_depth;
+            my @arm_exits;
+            my (undef, $sig) = _walk_branch($cv, $op->other, $set_sim,
+                $factory, $opmap, $visited, \@arm_exits, 1, $$store);
+            die "GAP: `$spelling` whose right side leaves or yields no"
+              . " single value\n"
+                if ($sig // '') ne '' || @arm_exits
+                || $set_sim->stack_depth != $base_depth + 1;
+            return $set_sim->pop_node;
+        };
+        # Branch on $test: the store arm's sim, and the If, for merging.
+        # `&&=` assigns when the test holds; `||=` and `//=` when it fails.
+        my $branch = sub ($test, $set_idx = $name eq 'andassign' ? 0 : 1) {
+            my $if_node = $factory->make_cfg('If',
+                inputs => [$sim->control, $test]);
+            my $set_sim = $sim->snapshot;
+            $set_sim->set_control($factory->make_cfg('Proj',
+                inputs => [$if_node], index => $set_idx));
+            $sim->set_control($factory->make_cfg('Proj',
+                inputs => [$if_node], index => 1 - $set_idx));
+            return ($set_sim, $if_node);
+        };
+        my $test_of = sub ($current) {
+            $name eq 'dorassign'
+                ? $factory->make('Defined', inputs => [$current])
+                : $current;
+        };
+
+        # AN ELEMENT IS FETCHED AS AN LVALUE, AND THE FETCH CREATES THE SLOT
+        # before the test runs -- measured, `my %k; $k{x} //= scalar(keys %k)`
+        # gives 1, `$a[3] //= scalar(@a)` gives 4, and `$m{q} &&= 1` on an
+        # absent key leaves it existing though nothing is stored. So
+        # `T = E unless defined T` is NOT the same program. The vivify is
+        # modelled as a store of undef where the slot reads undefined: for a
+        # present slot holding undef that store changes nothing, and for an
+        # absent one it is the creation. For `//=` that is exactly the arm
+        # that stores, so it heads that arm; `||=` and `&&=` test truth, and
+        # a false defined value must reach the right side unchanged, so they
+        # take it as a branch of its own.
+        #
+        # ponytail: a read-only undef element (`$_[0] &&= 1` over a literal
+        # undef) dies on the vivify store where perl does not; an Exists test
+        # would avoid it, but Exists does not yet render a nested element.
+        unless ($tgt_op->name eq 'padsv' && $tgt_op->targ) {
+            my $lvalue = $sim->stack_depth ? $sim->peek_node : undef;
+            die "GAP: `$spelling` into something other than a lexical"
+              . " scalar or an element\n"
+                unless $lvalue && $lvalue->isa('SoN::IR::Node::Subscript')
+                    && scalar($lvalue->inputs->@*) == 2
+                    && defined $sim->memory;
+            $sim->pop_node;
+            my $read = sub ($s) {
+                my $r = $factory->make('Subscript', kind => $lvalue->kind,
+                    inputs => [$lvalue->inputs->[0], $lvalue->inputs->[1],
+                               $s->memory]);
+                $r->set_control_in($s->control);
+                $s->set_control($r);
+                return $r;
+            };
+            my $assign = sub ($s, $value) {
+                my $w = $factory->make('Assign', inputs => [$lvalue, $value]);
+                $w->set_control_in($s->control);
+                $s->set_control($w);
+                $s->set_memory($w);
+            };
+            my $undef = sub () {
+                $factory->make('Constant', value => undef,
+                    const_type => 'undef',
+                    stamp => SoN::IR::Stamp->new(type => 'Undef'));
+            };
+            my $current = $read->($sim);
+            if ($name ne 'dorassign') {
+                my ($viv_sim, $viv_if) = $branch->(
+                    $factory->make('Defined', inputs => [$current]), 1);
+                $assign->($viv_sim, $undef->());
+                $sim->merge($viv_sim, $factory, $viv_if);
+            }
+            my ($set_sim, $if_node) = $branch->($test_of->($current));
+            $assign->($set_sim, $undef->()) if $name eq 'dorassign';
+            $assign->($set_sim, $walk_rhs->($set_sim));
+            $sim->merge($set_sim, $factory, $if_node);
+            $sim->push_node($is_void ? $current : $read->($sim));
+            return $op->next;
+        }
+
+        my $targ = $tgt_op->targ;
+        # A CLASS FIELD IS STORED, NOT REBOUND -- the same write form
+        # `$field++` and `$field .= ...` are. Rebinding it as a pad
+        # slot dropped `$s //= $x` with no word, and a right side with
+        # an effect refused (chalk's Node/BinOp.pm ADJUST). It takes
+        # the memory slot's path below, reading the field pinned where
+        # it is read rather than a slot at a memory version.
+        my $field_lvalue = do {
+            my $lv = _make_pad_or_field($cv, $targ, $factory);
+            $lv->isa('SoN::IR::Node::FieldAccess') ? $lv : undef;
+        };
+        my $read_field = sub ($s) {
+            my $read = $factory->make_unique('FieldAccess',
+                field_index => $field_lvalue->field_index,
+                field_stash => $field_lvalue->field_stash);
+            $read->set_control_in($s->control);
+            $s->set_control($read);
+            return $read;
+        };
+        # A REFERENCED OR SHARED LEXICAL IS A SLOT IN MEMORY, read and
+        # written like any demoted variable -- and `$C //= make()` is
+        # the memo idiom, whose right side must run ONLY when the test
+        # fails. So: the target padsv already pushed the slot's read;
+        # branch on it, walk the right side on the taken arm and store
+        # it there, merge, and read the slot again for the value.
+        if ($ctx->{addr_taken}{$targ} || $field_lvalue) {
+            my $current = $sim->pop_node;
+            $current = $read_field->($sim) if $field_lvalue;
+            my ($set_sim, $if_node) = $branch->($test_of->($current));
+            my $rhs = $walk_rhs->($set_sim);
+            my $slot = sub ($s) {
+                $factory->make('PadAccess', targ => $targ,
+                    do { my ($sg, $sy) = _padparts($cv, $targ);
+                         (sigil => $sg, symbol => $sy) },
+                    ($ctx->{shared_lexicals}{$targ} ? (shared => 1) : ()),
+                    (defined $s->memory ? (inputs => [ $s->memory ]) : ()));
+            };
+            my $write = $factory->make('Assign',
+                inputs => [$field_lvalue // $slot->($set_sim), $rhs]);
+            $write->set_control_in($set_sim->control);
+            $set_sim->set_control($write);
+            $set_sim->set_memory($write)
+                if defined $set_sim->memory && !$field_lvalue;
+            $sim->merge($set_sim, $factory, $if_node);
+            # A field read is pinned, and a pinned read nothing uses
+            # has no rendering: in void context the stack keeps the
+            # test's read instead of a new one.
+            $sim->push_node(!$field_lvalue ? $slot->($sim)
+                : $is_void ? $current
+                : $read_field->($sim));
+            return $op->next;
+        }
+        my $current = $sim->lookup($targ);
+        die "GAP: `$spelling` into a lexical with no binding in this graph\n"
+            unless defined $current;
+
+        $sim->pop_node;    # the lvalue the target padsv pushed
+        # A RIGHT SIDE THAT ADVANCES CONTROL -- `$x ||= f2()`, a call, an
+        # allocation -- must run only when the test says so, so the arm is
+        # a real branch whose store is a rebind, and the merge's Phi is
+        # the variable after it. Asked of the optree BEFORE the walk: a node
+        # built and discarded still hangs off the control it was given.
+        if (_arm_advances_control($op->other, $store)
+            || _arm_has_void_call($op->other, $store)) {
+            my ($set_sim, $if_node) = $branch->($test_of->($current));
+            $set_sim->define($targ, $walk_rhs->($set_sim));
+            $sim->merge($set_sim, $factory, $if_node);
+            $sim->push_node($sim->lookup($targ));
+            return $op->next;
+        }
+        # Otherwise it is the value operator over the two values.
+        my $rhs_sim = $sim->snapshot;
+        my $base_depth = $rhs_sim->stack_depth;
+        _walk_branch($cv, $op->other, $rhs_sim, $factory, $opmap,
+            $visited, undef, 0, $$store);
+        die "GAP: `$spelling` whose right side has an effect\n"
+            unless $rhs_sim->control == $sim->control
+                && $rhs_sim->stack_depth == $base_depth + 1;
+        my $rhs = $rhs_sim->pop_node;
+        # IT YIELDS ONE OF ITS OPERANDS, so its stamp is their join --
+        # a loop that carries it needs one ("unstamped back-edge").
+        my ($ls, $rs) = map { $_->can('stamp') ? $_->stamp : undef }
+            $current, $rhs;
+        my $node = $factory->make(
+            { orassign => 'Or', andassign => 'And',
+              dorassign => 'DefinedOr' }->{$name},
+            inputs => [$current, $rhs],
+            ((defined $ls && defined $rs && $ls->type ne 'Unknown'
+              && $rs->type ne 'Unknown')
+                ? (stamp => SoN::IR::Stamp::join($ls, $rs)) : ()));
+        $sim->define($targ, $node);
+        $sim->push_node($node);
+        return $op->next;
+    }
+
+
     # _arm_has_loop_control($start, $stop) -> true when a `next` or `last` of
     # the ENCLOSING loop lies in the arm: the ops from $start, along ->next and
     # a logop's ->other, up to $stop -- not into a nested loop, whose own are
@@ -15144,6 +15256,14 @@ class SoN::FromOptree 0.01 {
                 $visited->{$$op}++;
                 $op = _handle_entertry($cv, $op, $sim, $factory, $opmap,
                     $visited);
+                next;
+            }
+
+            # `||=`, `&&=`, `//=` in an arm: the main walk's handler.
+            if ($name eq 'orassign' || $name eq 'andassign' || $name eq 'dorassign') {
+                $visited->{$$op}++;
+                $op = _handle_logassign($cv, $op, $sim, $factory, $opmap,
+                    $visited, $ctx);
                 next;
             }
 
