@@ -7649,12 +7649,14 @@ class SoN::FromOptree 0.01 {
             }
             # `$$r++` IS THE SAME SPLIT through a scalar deref: the 1-input
             # PostfixDeref matched no arm, the Add reached no store, and `$v`
-            # kept its old value.
+            # kept its old value. UNIQUE, because it is pinned: hash-consed with an
+            # earlier read of `$$_` (`push @v, $$_; $$_++`) the push spelled
+            # the binding before the increment made it.
             elsif ($old->isa('SoN::IR::Node::PostfixDeref')
                 && ($old->sigil // '') eq '$'
                 && scalar($old->inputs->@*) == 1) {
                 $lvalue = $old;
-                $old = $factory->make('PostfixDeref',
+                $old = $factory->make_unique('PostfixDeref',
                     inputs => [$lvalue->inputs->[0],
                                (defined $sim->memory ? ($sim->memory) : ())],
                     sigil  => '$',

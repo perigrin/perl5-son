@@ -2978,7 +2978,14 @@ class SoN::Deparse 0.01 {
             next if $seen{$id}++;
             my $n = $nodes->{$id} or next;
             if ( !$carries->($id, {}) ) {
-                push @roots, $n if $names->($id, {});
+                # AN AGGREGATE IS NOT A ROOT: the hoist binds a scalar, and
+                # `keys %main::` hoisted as `my $inv4 = %main::` became
+                # `keys($inv4)`, which perl rejects.
+                my $f = $n->{fields} // {};
+                my $agg = ( $f->{sigil} // '' ) =~ /\A[\@%]\z/
+                    || ( $f->{symbol} // '' ) =~ /\A[\@%]/
+                    || ( $n->{stamp} // '' ) =~ /\A(?:Hash|Array|List)\z/;
+                push @roots, $n if $names->($id, {}) && !$agg;
                 next;
             }
             push @queue, ($n->{inputs} // [])->@*;
