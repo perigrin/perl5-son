@@ -2103,6 +2103,20 @@ class SoN::Deparse 0.01 {
             next unless @in == 2;
             my $version = $nodes->{ $in[-1] } or next;
             next unless defined $version->{control_in};
+            # OR GUARDED BY CONTROL: a use in an `if` arm the version's own
+            # chain does not reach. `unless (!$r) { print $$r }` was bound
+            # before the test and dereferenced undef.
+            # An arm begins at a Proj, so the walk stops there.
+            my ( @fwd, %reach ) = ( $version->{id} );
+            while ( defined( my $id = shift @fwd ) ) {
+                next if $reach{$id}++;
+                push @fwd, map { $_->{id} }
+                    grep { ( $_->{op} // '' ) ne 'Proj' } ( $ctrl_next{$id} // [] )->@*;
+            }
+            next if grep {
+                my $u = $nodes->{$_} // {};
+                defined $u->{control_in} && !$reach{$_}
+            } keys %used;
 
             my ( @queue, %seen, $shadowed ) = ( $version->{id} );
             while ( @queue && !$shadowed ) {
