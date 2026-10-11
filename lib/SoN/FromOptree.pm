@@ -120,6 +120,9 @@ class SoN::FromOptree 0.01 {
             && $array->operation eq 'ArrayLiteral';
         my @stamps = map { $_->stamp } $array->inputs->@*;
         return undef if !@stamps || grep { !_is_narrowed($_) } @stamps;
+        # A LIST INPUT FLATTENS, so its stamp is no element's: `my @a = sort
+        # ...` stamped pop's value List, and it was bound as `my @eff = pop`.
+        return undef if grep { $_->type =~ /\A(?:List|Array|Hash)\z/ } @stamps;
         my $acc = shift @stamps;
         $acc = SoN::IR::Stamp::join($acc, $_) for @stamps;
         return $acc;
@@ -8940,12 +8943,17 @@ class SoN::FromOptree 0.01 {
                         # for the list one, something narrower for the scalar.
                         my $scalar_reading = defined $stamp
                             && $stamp->type !~ /\A(?:List|Array|Hash|Unknown)\z/;
+                        # ...AND THE TARGET IS NOT MUTATED. A pop or push needs
+                        # a container to name: bound as the call itself, `my
+                        # @a = sort 3,1,2; pop @a` emitted `pop(sort ...)`,
+                        # which perl rejects.
                         my $is_list_builtin =
                                $only->operation eq 'Call'
                             && $only->can('name')
                             && defined $only->name
                             && $YIELDS_LIST->{ $only->name }
-                            && !$scalar_reading;
+                            && !$scalar_reading
+                            && !( $is_pad && $MUTATED_SLOTS->{ $target->targ } );
 
                         # ...UNLESS IT NAMES STORAGE THE TARGET THEN MUTATES.
                         # `my @q = @_` is a COPY: bound as @_ itself, `shift
