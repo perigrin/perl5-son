@@ -3367,13 +3367,24 @@ class SoN::Deparse 0.01 {
     # `Phi(21) stamp=Int` -- and binding a list to a SCALAR collapses it to
     # the last element: `my $phi7 = ()` then `map { $_*2 } (1,2,3)` printed
     # `6` instead of `2 4 6`.
-    # _loop_phi_join($n) -> the join Region of the loop whose Phi $n reads
-    # directly, or undef. A Phi whose region is a Loop settles only when the
+    # _loop_phi_join($n) -> the join Region of the loop (or the last branch) whose
+    # Phi $n reads, or undef. A Phi whose region is a Loop settles only when the
     # loop ends, so a binding of it belongs right after the loop.
     method _loop_phi_join ($n) {
-        for my $in (($n->{inputs} // [])->@*) {
-            my $src = defined $in ? $nodes->{$in} : undef;
-            next unless $src && ($src->{op} // '') eq 'Phi';
+        my $branch_join;
+        # THROUGH PURE NODES, as _last_bound_input looks: `($c ? f() : 1) + 1`
+        # reads the Phi under an Add, and the declaration floated above the if.
+        my (@queue, %seen) = ($n->{inputs} // [])->@*;
+        while (@queue) {
+            my $in = shift @queue;
+            my $src = defined $in && !$seen{$in}++ ? $nodes->{$in} : undef;
+            next unless $src;
+            if (($src->{op} // '') ne 'Phi') {
+                push @queue, ($src->{inputs} // [])->@*
+                    unless defined $src->{control_in}
+                    || ($src->{op} // '') =~ /\A(?:Region|Loop|Proj|If|Start)\z/;
+                next;
+            }
             my $r = ($src->{fields} // {})->{region} // $src->{region};
             next unless defined $r;
             my $rn = $nodes->{$r};
@@ -3382,9 +3393,16 @@ class SoN::Deparse 0.01 {
             # A BRANCH JOIN'S Phi settles at its Region, and the walk passes
             # that Region: `my @c = $p ? two() : ()` was declared above the
             # if and never assigned.
-            return $r if ($rn->{op} // '') eq 'Region';
+            # THE LAST JOIN, NOT THE FIRST: `my @l = (($h{a} //= 1),
+            # ($h{b} //= 2))` reads a Phi of each branch, and settled at the
+            # first it read the second's temporary before its if assigned it.
+            # ponytail: "last" is the highest Region id -- the producer builds
+            # a join after everything before it; ask the chain if that breaks.
+            $branch_join = $r
+                if ($rn->{op} // '') eq 'Region'
+                && (!defined $branch_join || $r > $branch_join);
         }
-        return undef;
+        return $branch_join;
     }
 
     # _last_bound_input($n) -> the last chain-bound node $n reads, in input

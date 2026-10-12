@@ -289,4 +289,24 @@ refuses('my @a = (5,6); print join(",", %a[0,1]), "\n";',
     qr/GAP: a key\/value slice \(kvaslice\) is not yet lowered/,
     'a key/value array slice refuses');
 
+# AN ELEMENT LOGASSIGN'S VALUE IS NOT A NAME. Pushed as a read of the element,
+# a list assign took `$h{a}` among its sources for one more target.
+round_trips(<<'SRC', 'element logassign values as list-assign sources');
+my %h; my ($a, $b) = (($h{a} //= 1), ($h{b} //= 2)); print "$a$b\n";
+my @w = (0, 7); my ($p, $q, $r) = ($w[0] ||= 3, $w[1] &&= 4, 5); print "$p $q $r @w\n";
+my %g = (k => 0); my ($u, $v); ($u, $v) = ($g{k} //= 9, $g{z} ||= 8); print "$u $v $g{k} $g{z}\n";
+my %c; my @r; for my $i (1, 2, 1) { my ($x, $y) = ($c{$i} //= $i * 10, $i); push @r, "$x$y" } print "@r\n";
+SRC
+
+# A MUTATED LIST OVER TWO BRANCH VALUES is declared after the LAST join it
+# reads, through any pure node over the Phi: it was declared after the first,
+# reading the second's temporary before its if assigned it.
+round_trips(<<'SRC', 'a mutated list over two branch values');
+my %h; my @l = (($h{a} //= 1) . "x", ($h{b} ||= 2) * 3); $l[1]++; print "@l\n";
+my %g; my @m = (($g{a} //= 1), ($g{a} //= 2)); $m[0]++; print "@m $g{a}\n";
+my $n = 0; sub f { $n++; 5 } my ($c, $d) = (1, 0);
+my @t = (($c ? f() : 1), ($d ? f() : 2)); $t[0]++;
+my @u = (($c ? f() : 1) + 1, ($d ? f() : 2) + 1); $u[1]++; print "@t @u $n\n";
+SRC
+
 done_testing;

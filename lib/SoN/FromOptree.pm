@@ -14294,9 +14294,20 @@ class SoN::FromOptree 0.01 {
             }
             my ($set_sim, $if_node) = $branch->($test_of->($current));
             $assign->($set_sim, $undef->()) if $name eq 'dorassign';
-            $assign->($set_sim, $walk_rhs->($set_sim));
+            my $rhs = $walk_rhs->($set_sim);
+            $assign->($set_sim, $rhs);
+            # THE VALUE IS A PHI OF THE TWO ARMS, not a read of the element:
+            # a read spells `$h{a}`, and a list assign took it among its
+            # sources for one more target. The arm that kept the slot yields
+            # what the test read; the arm that stored yields what it stored.
+            # The vivify store above writes undef only where $current is
+            # undef, so $current is still the kept arm's value.
+            unless ($is_void) {
+                $sim->push_node($current);
+                $set_sim->push_node($rhs);
+            }
             $sim->merge($set_sim, $factory, $if_node);
-            $sim->push_node($is_void ? $current : $read->($sim));
+            $sim->push_node($current) if $is_void;
             return $op->next;
         }
 
