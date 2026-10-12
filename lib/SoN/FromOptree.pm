@@ -7832,6 +7832,7 @@ class SoN::FromOptree 0.01 {
                 # (memory-SSA), mirroring the sassign Subscript branch. The store
                 # PRODUCES the new memory value; a following read observes it.
                 # Control is carried on control_in (produce-time control).
+                _note_literal_mutation($lvalue);
                 my $store = $factory->make('Assign',
                     inputs         => [$lvalue, $new]);
                 $store->set_control_in($sim->control);
@@ -10228,6 +10229,7 @@ class SoN::FromOptree 0.01 {
                 elsif (defined $elem_lvalue) {
                     # Store the result back to the element and advance memory
                     # (memory-SSA), mirroring the sassign Subscript branch.
+                    _note_literal_mutation($elem_lvalue);
                     my $store = $factory->make('Assign',
                         inputs         => [$elem_lvalue, $node]);
                     $store->set_control_in($sim->control);
@@ -14168,6 +14170,13 @@ class SoN::FromOptree 0.01 {
         die "GAP: `$spelling` whose assignment arm is not a scalar store\n"
             unless $store && $$store && $store->name eq 'sassign';
         my $is_void = ($op->flags & 3) == 1;   # OPf_WANT_VOID
+        # THE RESULT IS THE TARGET ITSELF, and OPf_MOD on the op says
+        # something writes through it: `($h{a} //= 0)++`, `\($x ||= 5)`, a
+        # sub argument. Every form below yields a fresh read or a value
+        # node, so that write landed nowhere -- `($h{$k} //= 0)++` counted
+        # nothing, `bump($h{a} //= 4)` left 4 for perl's 5.
+        die "GAP: `$spelling` whose result is itself modified\n"
+            if $op->flags & 32;   # OPf_MOD
 
         # Walk the right side on the arm that stores; refuse one that leaves.
         my $walk_rhs = sub ($set_sim) {
@@ -14226,10 +14235,20 @@ class SoN::FromOptree 0.01 {
             # declared `my %h` and every call started empty (`$f->("a", 1),
             # $f->("a", 2)` gave 1 2 where perl gives 1 1). A named sub's
             # shared file lexical is marked `shared` and is right.
+            # Down a nested chain to its root: `$h{a}[0]` is the same capture.
             my $agg = $lvalue->inputs->[0];
-            if ($agg->isa('SoN::IR::Node::PadAccess') && !$agg->shared
-                && $agg->targ) {
-                my $pn = eval { $cv->PADLIST->ARRAYelt(0)->ARRAYelt($agg->targ) };
+            # AN ELEMENT OF @_ ALIASES THE CALLER'S ARGUMENT, and the caller's
+            # graph does not see a write made through it: `f($w[0])` printed
+            # the initialiser after `$_[0] ||= 5`.
+            die "GAP: `$spelling` into an element of \@_, which aliases the"
+              . " caller's argument\n"
+                if $agg->can('operation') && $agg->operation eq 'ArgsSource';
+            my $root = $agg;
+            $root = $root->inputs->[0]
+                while $root->isa('SoN::IR::Node::Subscript');
+            if ($root->isa('SoN::IR::Node::PadAccess') && !$root->shared
+                && $root->targ) {
+                my $pn = eval { $cv->PADLIST->ARRAYelt(0)->ARRAYelt($root->targ) };
                 die "GAP: `$spelling` into an element of an aggregate an anon"
                   . " sub closes over\n"
                     if $pn && $$pn && ($pn->FLAGS & B::PADNAMEf_OUTER());

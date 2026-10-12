@@ -181,6 +181,71 @@ refuses('my %h; my $f = sub { $h{$_[0]} //= $_[1] }; my @r = ($f->("a", 1), $f->
 refuses('my @a = (0); my $f = sub { $a[0] ||= 3 }; $f->(); print "@a\n";',
     qr/GAP: `\|\|=` into an element of an aggregate an anon sub closes over/,
     'an element of a captured array in an anon sub refuses');
+refuses('my %h; my $f = sub { $h{$_[0]}{x} //= $_[1] }; my @r = ($f->("a", 1), $f->("a", 2)); print "@r\n";',
+    qr/GAP: `\/\/=` into an element of an aggregate an anon sub closes over/,
+    'a nested element of a captured hash in an anon sub refuses');
+refuses('my %h; my $f = sub { $h{a}[0] ||= $_[0] }; my @r = ($f->(1), $f->(2)); print "@r\n";',
+    qr/GAP: `\|\|=` into an element of an aggregate an anon sub closes over/,
+    'a hash-of-array element of a captured hash refuses');
+refuses('my @a; my $f = sub { $a[0][0] ||= $_[0] }; my @r = ($f->(3), $f->(4)); print "@r\n";',
+    qr/GAP: `\|\|=` into an element of an aggregate an anon sub closes over/,
+    'an array-of-array element of a captured array refuses');
+refuses('my @a; my $f = sub { $a[0]{x} //= $_[0]; $a[0]{x} }; my @r = ($f->(1), $f->(2)); print "@r\n";',
+    qr/GAP: `\/\/=` into an element of an aggregate an anon sub closes over/,
+    'an array-of-hash element of a captured array refuses');
+
+# THE RESULT IS THE TARGET ITSELF, not a copy of its value: `++`, `\`, a sub
+# argument and `+=` all write through it. The op says so with OPf_MOD.
+refuses('my %h; my $r = ($h{a} //= 0)++; print "$r $h{a}\n";',
+    qr/GAP: `\/\/=` whose result is itself modified/,
+    'an incremented element //= refuses');
+refuses('my %h; for my $k (qw(a a b)) { ($h{$k} //= 0)++ } print join(",", map {"$_=$h{$_}"} sort keys %h), "\n";',
+    qr/GAP: `\/\/=` whose result is itself modified/,
+    'an incremented element //= in a loop refuses');
+refuses('my %h; print join(" ", grep { !($h{$_} //= 0)++ } qw(a b a c b)), "\n";',
+    qr/GAP: `\/\/=` whose result is itself modified/,
+    'the seen-hash idiom over //= in a grep refuses');
+refuses('my %h; my $r = \($h{a} //= 1); $$r = 9; print "$h{a}\n";',
+    qr/GAP: `\/\/=` whose result is itself modified/,
+    'a reference to an element //= refuses');
+refuses('my %h; sub bump { $_[0]++ } bump($h{a} //= 4); print "$h{a}\n";',
+    qr/GAP: `\/\/=` whose result is itself modified/,
+    'an element //= passed to a sub refuses');
+refuses('my @a; sub inc { $_[0] += 10 } inc($a[0] //= 1); print "$a[0]\n";',
+    qr/GAP: `\/\/=` whose result is itself modified/,
+    'an array element //= passed to a sub refuses');
+refuses('my $x; ($x //= 1) += 2; print "$x\n";',
+    qr/GAP: `\/\/=` whose result is itself modified/,
+    'a lexical //= whose result is added to refuses');
+refuses('my $x = 0; my $r = \($x ||= 5); $$r = 9; print "$x\n";',
+    qr/GAP: `\|\|=` whose result is itself modified/,
+    'a reference to a lexical ||= refuses');
+round_trips(<<'SRC', 'an element //= whose result is only read');
+my %h; my $v = $h{a} //= 3; print(($h{b} ||= 7), " $v $h{a}\n");
+my @l = (($h{c} //= 1), ($h{c} //= 2)); print "@l\n";
+SRC
+
+# AN ELEMENT OF @_ ALIASES THE CALLER'S ARGUMENT, and the caller's graph does
+# not see a write the callee makes through it.
+refuses('sub f { $_[0] ||= 5; return } my @w = (0); f($w[0]); print "@w\n";',
+    qr/GAP: `\|\|=` into an element of \@_, which aliases the caller's argument/,
+    '||= into $_[0] refuses');
+refuses('sub f { $_[0] //= 5; return } my @w = (undef); f($w[0]); print "@w\n";',
+    qr/GAP: `\/\/=` into an element of \@_, which aliases the caller's argument/,
+    '//= into $_[0] refuses');
+refuses('sub f { $_[1] &&= 5; return } my @w = (1, 1); f(@w); print "@w\n";',
+    qr/GAP: `&&=` into an element of \@_, which aliases the caller's argument/,
+    '&&= into $_[1] refuses');
+
+# AN ELEMENT WRITE INVALIDATES AN ARRAY'S LITERAL INITIALISER. `"@l"` reads
+# the literal's own values until something writes the array; `++` and `+=`
+# into an element did not say so, and the interpolation printed the old ones.
+round_trips(<<'SRC', 'increments and compound stores into an initialised array');
+my %h; my @l = (($h{a} //= 1), ($h{a} //= 2)); $l[0]++; print "@l $h{a}\n";
+my @m = (1, 1); ++$m[1]; my @n = (1, 1); $n[0] += 4; my @o = (3, 3); $o[1]--;
+my @p = (1, 2); my $i = 1; $p[$i] *= 5; my %q = (a => 1); $q{a}++;
+print "@m @n @o @p $q{a}\n";
+SRC
 refuses('my $v=0; my $r = \$v; $$r //= 4; print "$v\n";',
     qr/GAP: `\/\/=` into something other than a lexical scalar or an element/,
     '//= through a scalar ref refuses');
