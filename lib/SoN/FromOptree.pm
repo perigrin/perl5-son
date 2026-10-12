@@ -197,6 +197,30 @@ class SoN::FromOptree 0.01 {
             %extra);
     }
 
+    # Does this ternary hand a VARIABLE to an alias? OPf_MOD (B::OPf_MOD) marks
+    # a ternary that is a call argument, a reference's list, a foreach or map
+    # list, or an assignment target; each aliases the values its arms yield.
+    # A list arm is an anonymous list of COPIES, so a write through $_[1], a
+    # reference or $_ reached the copy and never the variable. The arms are
+    # searched through their list and nulled wrappers and nested ternaries; an
+    # expression (`$x + 1`) is a temporary and aliases nothing.
+    sub _ternary_aliases_a_variable ($op) {
+        return false unless $op->flags & B::OPf_MOD();
+        my @q = ($op->first->sibling, $op->first->sibling->sibling);
+        while (defined(my $k = shift @q)) {
+            next unless ref($k) && $$k;
+            my $n = $k->name;
+            return true if $n =~ /\A(?:pad[ahs]v|gvsv|rv2[ahs]v|[ah]elem|aelemfast(?:_lex)?)\z/;
+            if ($n eq 'cond_expr') {
+                push @q, $k->first->sibling, $k->first->sibling->sibling;
+                next;
+            }
+            next unless $n =~ /\A(?:null|list)\z/ && ($k->flags & 4);   # OPf_KIDS
+            for (my $j = $k->first; ref($j) && $$j; $j = $j->sibling) { push @q, $j }
+        }
+        return false;
+    }
+
     # Does any of these values compute a regex match off the chain? A match is
     # pinned only on the main walk, so one built inside a branch arm floats:
     # its pos() and captures are effects nothing places, and its read of the
@@ -14585,6 +14609,9 @@ class SoN::FromOptree 0.01 {
             # checked below for one value only.
             my $list_arms = $alloc_value && (@true_rest || @false_rest);
             if ($list_arms) {
+                die "GAP: a ternary list arm passed by alias (a call argument, a"
+                  . " reference or a foreach list) is not yet lowered\n"
+                    if _ternary_aliases_a_variable($op);
                 die "GAP: a ternary with a multi-element list arm not yet lowered\n"
                     if !$list_ctx || $elem_branch;
                 die "GAP: a regex match in a multi-element ternary arm is not yet lowered\n"
@@ -14762,6 +14789,11 @@ class SoN::FromOptree 0.01 {
         # element C rejected. Each arm is then the LIST of its values (none or
         # one), and the ternary picks a list, which flattens where perl does.
         if ($multi || ($list_ctx && ($true_delta == 0 || $false_delta == 0))) {
+            # AN ALIASED LIST ARM is copied into the anonymous list; see
+            # _ternary_aliases_a_variable.
+            die "GAP: a ternary list arm passed by alias (a call argument, a"
+              . " reference or a foreach list) is not yet lowered\n"
+                if _ternary_aliases_a_variable($op);
             my $as_list = sub ($val, $delta, $asim) {
                 my @vals = $delta ? ($val) : ();
                 unshift @vals, $asim->pop_node while $asim->stack_depth > $base_depth;

@@ -246,4 +246,35 @@ for my $src (
     round_trips($src, "\$#a read: $src");
 }
 
+# A TERNARY ARGUMENT PASSES ITS ARMS' VARIABLES BY ALIAS, as a direct argument
+# does: the callee writes them through @_, a reference to the list refers to
+# each, and foreach and map alias $_ to them. A list arm is an anonymous list
+# of copies, so the write vanished or died on a read-only constant. Refused.
+for my $src (
+    q{sub g { $_[1] = 42 } my $c = @ARGV ? 0 : 1; my $s = time % 1 + 5; my $t = $s + 1; g($c ? ($s, $t) : ()); print "$s $t\n";},
+    q{sub g { $_[1] = 42 } my $c = 1; my $s = 5; my $t = 6; g($c ? ($s, $t) : ()); print "$s $t\n";},
+    q{sub g { my @x = @_; $_[0] = 9; "@x" } my $c = 1; my $s = 5; my $r = g($c ? ($s, 6) : ()); print "$r $s\n";},
+    q{sub g { $_[1] = 42; 0 } my $s = 5; my $t = 6; for my $c (1, 0) { g($c ? ($s, $t) : ($t, $s)) } print "$s $t\n";},
+    q{sub g { $_[0] = 42 } my $c = 1; my $s = 5; g($c ? $s : ()); print "$s\n";},
+    q{sub g { $_[0] = 42 } my $s = 5; for my $c (1, 0) { g($c ? $s : ()) } print "$s\n";},
+    q{sub k { 7 } sub g { $_[0] = 42 } my $s = 5; for my $c (1, 0) { g($c ? ($s, k()) : ()) } print "$s\n";},
+    q{sub g { $_[0] = 1 } our $s = 5; my $c = 1; g($c ? ($s, 2) : ()); print "$s\n";},
+    q{sub g { $_[0] = 1 } my @a = (5, 6); my $c = 1; g($c ? (@a) : ()); print "@a\n";},
+    q{sub g { $_[0] = 1 } my %h = (a => 5); my $c = 1; g($c ? ($h{a}, 2) : ()); print "$h{a}\n";},
+    q{my $c = 1; my $s = 5; my $t = 6; my @r = \($c ? ($s, $t) : ()); ${$r[1]} = 0; print "$s $t\n";},
+    q{my $c = 1; my $s = 5; my $t = 6; for ($c ? ($s, $t) : ()) { $_ = 7 } print "$s $t\n";},
+    q{my $s = 5; my $t = 6; for my $c (1, 0) { $_++ for ($c ? ($s, $t) : ($t)) } print "$s $t\n";},
+    q{my $c = 1; my $s = 5; my $t = 6; my @r = map { $_ *= 2 } ($c ? ($s, $t) : ()); print "@r $s $t\n";},
+) {
+    refuses($src, qr/GAP: a ternary list arm passed by alias/,
+        "an aliased ternary list arm: $src");
+}
+# Constants and expressions are temporaries: nothing to alias, so they lower.
+for my $src (
+    q{sub g { "@_" } for my $c (1, 0) { print g($c ? (1, 2) : ()), "\n" }},
+    q{sub g { "@_" } my $s = 4; for my $c (1, 0) { print g($c ? ($s + 1, 2) : (3)), "\n" }},
+) {
+    round_trips($src, "a ternary argument of temporaries: $src");
+}
+
 done_testing;
