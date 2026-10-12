@@ -197,6 +197,21 @@ class SoN::FromOptree 0.01 {
             %extra);
     }
 
+    # Does any of these values compute a regex match off the chain? A match is
+    # pinned only on the main walk, so one built inside a branch arm floats:
+    # its pos() and captures are effects nothing places, and its read of the
+    # subject happens wherever the value is spelled. Chain nodes are not
+    # entered -- a match pinned there earlier is placed.
+    sub _holds_a_floating_match (@nodes) {
+        my %seen;
+        while (defined(my $n = shift @nodes)) {
+            next if $seen{ refaddr $n }++ || defined $n->control_in;
+            return true if $n->operation =~ /\A(?:RegexMatch|Match)\z/;
+            push @nodes, grep { defined } $n->inputs->@*;
+        }
+        return false;
+    }
+
     sub _is_aggregate_node ($node) {
         return false unless defined $node;
         my $op = $node->operation;
@@ -4751,8 +4766,16 @@ class SoN::FromOptree 0.01 {
         # carry OPf_REF (B::OPf_REF, 16; the rvalue `$#a` does not), and the
         # value lowered below is a Count, which no store can write through:
         # the resize vanished and `@a` kept its elements.
-        die "GAP: a store to an array's last index (`\$#a = ...`) is not yet lowered\n"
-            if $name eq 'av2arylen' && ($op->flags & 16);   # OPf_REF
+        # A REFERENCE TO IT (`\$#a`, srefgen/refgen) carries the same flag. A
+        # write through it would resize just the same, and whether one comes
+        # is not on this op, so it is refused by its own name.
+        if ($name eq 'av2arylen' && ($op->flags & 16)) {   # OPf_REF
+            my $p = eval { $op->parent };
+            $p = $p->parent while $p && $$p && $p->name eq 'null';
+            die "GAP: a reference to an array's last index (`\\\$#a`) is not yet lowered\n"
+                if $p && $$p && $p->name =~ /\A(?:s?refgen)\z/;
+            die "GAP: a store to an array's last index (`\$#a = ...`) is not yet lowered\n";
+        }
         my $arylen_kid = $name eq 'av2arylen' && $op->can('first') ? $op->first : undef;
         my $through_ref = $arylen_kid && $$arylen_kid
             && $arylen_kid->name eq 'rv2av'
@@ -14564,6 +14587,9 @@ class SoN::FromOptree 0.01 {
             if ($list_arms) {
                 die "GAP: a ternary with a multi-element list arm not yet lowered\n"
                     if !$list_ctx || $elem_branch;
+                die "GAP: a regex match in a multi-element ternary arm is not yet lowered\n"
+                    if _holds_a_floating_match(@true_rest, @false_rest,
+                        grep { defined } $true_arm_val, $false_arm_val);
                 $true_arm_val  = $factory->make('ArrayLiteral',
                     inputs => [ @true_rest, $true_delta ? ($true_arm_val) : () ],
                     stamp => SoN::IR::Stamp->new(type => 'List'));
@@ -14739,6 +14765,11 @@ class SoN::FromOptree 0.01 {
             my $as_list = sub ($val, $delta, $asim) {
                 my @vals = $delta ? ($val) : ();
                 unshift @vals, $asim->pop_node while $asim->stack_depth > $base_depth;
+                # A MATCH IN THE ARM floats: in scalar context it was dropped
+                # with its pos() and captures, in list context spelled again
+                # at each read of the array it was copied into.
+                die "GAP: a regex match in a multi-element ternary arm is not yet lowered\n"
+                    if $multi && _holds_a_floating_match(@vals);
                 # IN SCALAR CONTEXT the comma yields the last value and runs the
                 # rest for their effects. Those effects are already on the
                 # memory chain (`$i++` is a store, `k()` a call), so the value

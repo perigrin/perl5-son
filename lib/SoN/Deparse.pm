@@ -1529,11 +1529,22 @@ class SoN::Deparse 0.01 {
             for my $c ( ( $consumers{$id} // [] )->@* ) {
                 my $op = $c->{op} // '';
                 next if $VALUE_CONSUMER->{$op};
+                # A LIST IS AS SAFE AS WHAT CONSUMES IT, and a NAMED one is an
+                # array's copy of its elements: `my @b = ($a[0], 5); $a[0] =
+                # 9; print "@b"` spelled `$a[0]` at the print, after the store.
+                # An anonymous one -- a ternary's list arm -- may still be
+                # aliased (`for`, a user sub's @_), so it asks its consumers.
+                if ( $op eq 'ArrayLiteral' ) {
+                    next if defined( ( $c->{fields} // {} )->{symbol} )
+                        || __SUB__->( $c->{id} );
+                    return 0;
+                }
                 # substr at every arity: two or three operands only READ the
                 # string, and the four-operand write spells it by name.
                 # sprintf only reads its arguments.
+                # join reads its separator and its list.
                 next if $op eq 'Call'
-                    && ( ( $c->{fields} // {} )->{name} // '' ) =~ /\A(?:substr|sprintf)\z/;
+                    && ( ( $c->{fields} // {} )->{name} // '' ) =~ /\A(?:substr|sprintf|join)\z/;
                 # push and unshift copy every operand after the array.
                 next if $op eq 'Call'
                     && ( ( $c->{fields} // {} )->{name} // '' ) =~ /\A(?:push|unshift)\z/
@@ -2189,8 +2200,8 @@ class SoN::Deparse 0.01 {
                 $at_entry = 0;
             }
             if ( $at_entry ) {
-                next if grep {
-                    my $c  = $nodes->{$_} // {};
+                my $in_prologue = sub ($id) {
+                    my $c  = $nodes->{$id} // {};
                     my $op = $c->{op} // '';
                     # A literal of constants only: one holding an effect's
                     # value is declared after that effect, not in the
@@ -2199,15 +2210,20 @@ class SoN::Deparse 0.01 {
                     # A SHARED AGGREGATE a sub closes over is declared above
                     # the subs, so it exists in the sub's prologue.
                     # A PACKAGE one needs no declaration at all.
-                    !( $op eq 'Constant'
+                    # A REFERENCE to one of these exists there too: `$r->[0]`
+                    # over `my $r = \@a` is spelled `(\@a)->[0]`.
+                    return ( $op eq 'Constant'
                        || ( $op eq 'PadAccess' && ( $c->{fields} // {} )->{shared} )
                        || $op eq 'EntryDef'
+                       || ( $op eq 'Ref' && ( $c->{inputs} // [] )->@* == 1
+                            && __SUB__->( $c->{inputs}[0] ) )
                        || ( $op =~ /\A(?:Array|Hash)Literal\z/
                             && defined( ( $c->{fields} // {} )->{symbol} )
                             && !$self->_is_pinned_aggregate($c)
                             && !grep { ( ( $nodes->{$_} // {} )->{op} // '' ) ne 'Constant' }
-                                   ( $c->{inputs} // [] )->@* ) )
-                } @in[ 0 .. $#in - 1 ];
+                                   ( $c->{inputs} // [] )->@* ) );
+                };
+                next if grep { !$in_prologue->($_) } @in[ 0 .. $#in - 1 ];
             }
 
             # A READ USED ONLY INSIDE AN `if` ARM is not bound ahead of it: the

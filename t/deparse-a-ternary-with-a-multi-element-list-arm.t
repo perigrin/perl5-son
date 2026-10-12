@@ -199,4 +199,51 @@ for my $src (
     round_trips($src, "a counted call: $src");
 }
 
+# AN ELEMENT READ IN A LIST IS READ WHERE THE LIST IS. Spelled again at each
+# read of the array it was copied into, it saw the store made after the copy.
+for my $src (
+    q{my $c = 1; my %h = (k => 1); my @b = $c ? ($h{k}, 5) : (); $h{k} = 9; print "@b\n";},
+    q{my $c = 1; my @a = (1, 2); my @b = $c ? ($a[0], 5) : (); $a[0] = 9; print "@b\n";},
+    q{my $c = 1; my @a = (1, 2); my $r = \@a; my @b = $c ? ($r->[0], 5) : (); $r->[0] = 9; print "@b\n";},
+    q{my $c = 1; my @a = (1, 2); my @b = $c ? ($a[0], $a[1]) : (); $a[0] = 9; print "@b @a\n";},
+    q{my $c = 1; my @a = (1, 2); my @b = $c ? ($a[0]) : (); $a[0] = 9; print "@b\n";},
+    q{my @a = (1, 2); my @b = ($a[0], $a[1]); $a[0] = 9; print "@b\n";},
+    q{my %h = (k => 1); my @b = ($h{k}, 5); $h{k} = 9; print "@b\n";},
+    q{my @a = (1, 2); sub f { $_[0] = 3 } f($a[0], 5); my @b = ($a[0]); $a[0] = 9; print "@a @b\n";},
+    q{my @a = (1, 2); my $r = [$a[0], 5]; $a[0] = 9; print "@$r\n";},
+) {
+    round_trips($src, "an element read copied: $src");
+}
+
+# A MATCH IN A LIST ARM is an effect (pos(), $1) and a read of its subject
+# at one point. Neither is pinned inside an arm, so it is refused there.
+for my $src (
+    q{my $c = 1; my $s = "xax"; my $x = $c ? ($s =~ /x/g, 7) : 1; print $x, " ", pos($s) // 'u', "\n";},
+    q{my $c = 1; my $s = "xax"; my @x = $c ? (scalar($s =~ /x/g), 7) : 1; print "@x ", pos($s) // "u", "\n";},
+    q{my $c = 1; my $s = "xax"; my @x = $c ? (7, $s =~ /(x)/) : 1; print "@x $1\n";},
+    q{sub k { 3 } my $c = 1; my @x = $c ? (k() =~ /3/, 7) : (); print "@x\n";},
+) {
+    refuses($src, qr/GAP: a regex match in a multi-element ternary arm is not yet lowered/,
+        "a match in a list arm: $src");
+}
+
+# A REFERENCE TO $#a can write through it, which a Count cannot take; it is
+# refused by its own name, not as the store it may never make.
+for my $src (
+    q{my @a = (1, 2); my $r = \$#a; print "$$r\n";},
+    q{my @a = (1, 2); my $r = \$#a; $$r = 0; print "@a\n";},
+    q{my @a = (1, 2); for my $x (\$#a) { print "$$x\n" }},
+    q{my @a = (1, 2); my @r = \($#a, 1); print "${$r[0]}\n";},
+) {
+    refuses($src, qr/GAP: a reference to an array's last index/,
+        "a reference to \$#a: $src");
+}
+for my $src (
+    q{my @a = (1, 2); print $#a, "\n";},
+    q{my $r = [1, 2]; print $#$r, "\n";},
+    q{my @a = (1, 2, 3); print join(",", 0 .. $#a), "\n";},
+) {
+    round_trips($src, "\$#a read: $src");
+}
+
 done_testing;
