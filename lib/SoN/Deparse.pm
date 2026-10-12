@@ -5785,8 +5785,9 @@ class SoN::Deparse 0.01 {
             # THE ARGUMENT COUNT UNDER A SIGNATURE -- a default's presence
             # test. Perl still sets @_ there; reading it is merely
             # experimental, and the warning is the emission's, not the
-            # program's.
-            my $sig_args = ($agg->{op} // '') eq 'ArgsSource'
+            # program's. Only the count the producer marks is quieted; the
+            # program's own `scalar(@_)` keeps perl's warning.
+            my $sig_args = (($n->{fields} // {})->{presence_test} // 0)
                         && $self->_signature_of($current_sub);
             $text = $sig_args
                 ? "do { no warnings 'experimental::args_array_with_signatures';"

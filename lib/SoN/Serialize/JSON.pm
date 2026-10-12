@@ -258,6 +258,10 @@ sub _extract_fields ($node, $id_remap) {
     if ($op eq 'Print') {
         return $node->has_filehandle ? { has_filehandle => JSON::PP::true } : undef;
     }
+    # A Count the producer synthesized says so; emitted only when true.
+    if ($op eq 'Count') {
+        return $node->presence_test ? { presence_test => JSON::PP::true } : undef;
+    }
     if ($op eq 'RegexSubst') {
         return {
             pattern     => $node->pattern,

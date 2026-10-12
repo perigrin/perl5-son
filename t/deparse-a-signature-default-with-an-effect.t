@@ -94,6 +94,26 @@ round_trips(q{use v5.36; my $f = sub ($x, $y = []) { push @$y, $x; scalar @$y };
 round_trips(q{use v5.42; use experimental "class"; class C { method m ($a, $b = []) { push @$b, $a; scalar @$b } } my $c = C->new; print $c->m(1), $c->m(1), $c->m(1,[5]), "\n";},
     'an allocating method default');
 
+# THE PROGRAM'S OWN @_ COUNT keeps perl's experimental warning; only the
+# count the branch synthesizes is quieted.
+sub warns_like_perl ($src, $name) {
+    my $out = SoN::Deparse->new->render(graph_of($src) // {}) // return fail "$name: renders";
+    my $warn = sub ($s) {
+        my $f = "$dir/w." . int(rand 1e9) . ".pl";
+        open my $fh, '>', $f or die $!; print $fh $s; close $fh;
+        my $e = qx(/usr/bin/timeout 10 $^X $f 2>&1 >/dev/null); unlink $f;
+        return [ map { s/ at \S+ line \d+\.\z//r } split /\n/, $e ];
+    };
+    is $warn->($out), $warn->($src), "$name: the same warnings as perl";
+}
+warns_like_perl(q{use v5.36; sub k ($a) { scalar(@_) } print k(1), "\n";},
+    'a counted @_ with no default');
+warns_like_perl(q{use v5.36; sub k ($a = [1]) { scalar(@_) . scalar(@$a) } print k(), k([2,3]), "\n";},
+    'a counted @_ beside an allocating default');
+warns_like_perl(q{use v5.36; sub k ($a, $b = []) { scalar(@_) } print k(1), k(1,2), "\n";},
+    'a counted @_ beside a present test');
+warns_like_perl($alloc, 'an allocating default');
+
 # A `return` IN A DEFAULT leaves the sub; the branch has no exit to record it.
 refuses(q{use v5.36; sub f ($x = return "early") { "late" } print f(), " ", f(1), "\n";},
     qr/GAP: a `return` in an arm with no function exit/,

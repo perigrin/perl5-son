@@ -14936,7 +14936,8 @@ class SoN::FromOptree 0.01 {
             : $when eq 'false'
             ? $raw
             : $factory->make('NumGt', stamp => $bool, inputs => [
-                  _make_count($factory, _args_source($factory), $sim),
+                  _make_count($factory, _args_source($factory), $sim,
+                      presence_test => 1),
                   $factory->make('Constant', value => 0 + $index,
                       const_type => 'integer',
                       stamp => SoN::IR::Stamp->new(type => 'Int'))]);
