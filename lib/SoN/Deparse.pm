@@ -2766,7 +2766,21 @@ class SoN::Deparse 0.01 {
                 my @rphis = grep { ($_->{op} // '') eq 'Phi'
                         && (($_->{fields}{region} // -1) == $n->{id})
                         && !$self->_is_memory($_->{id}) } $self->_nodes_in_order;
+                # A LIST EXIT CARRIES ITS SCALAR READING beside it: the
+                # Return takes [list Phi, scalar Phi], and the caller's
+                # context picks, as the Return's own rule does.
+                my ($ret) = grep { ($_->{op} // '') eq 'Return'
+                        && @rphis == 2 && @{ $_->{inputs} // [] } == 2
+                        && $_->{inputs}[0] == $rphis[0]{id}
+                        && $_->{inputs}[1] == $rphis[1]{id} }
+                    $self->_nodes_in_order;
                 if (@loop_frames) {
+                    if ($ret && defined $k) {
+                        $out .= sprintf("return(wantarray ? %s : %s);\n",
+                            $self->_expr($rphis[0]{inputs}[$k]),
+                            $self->_expr($rphis[1]{inputs}[$k]));
+                        last;
+                    }
                     die "GAP: a return from inside a loop whose exit carries"
                       . " more than one value is not yet rendered\n"
                         unless defined $k && @rphis <= 1;
@@ -2781,13 +2795,16 @@ class SoN::Deparse 0.01 {
                         # BOUND HERE ON AN EARLIER PATH -- an arm that returned
                         # from inside an enclosing if -- this path still pays
                         # its own input; skipping it returned the other's.
-                        if (($bound{ $ph->{id} } // '') =~ /\A\$ret\d+\z/) {
+                        if (($bound{ $ph->{id} } // '') =~ /\A[\$\@]ret\d+\z/) {
                             $out .= sprintf("%s = %s;\n", $bound{ $ph->{id} },
                                             $self->_expr($ph->{inputs}[$k]));
                             next;
                         }
                         next if exists $bound{ $ph->{id} };
-                        my $var = sprintf('$ret%d', $ph->{id});
+                        # The list half of a list exit is an ARRAY: a scalar
+                        # holding `()` returned (undef) to a list caller.
+                        my $sigil = ($ret && $ph == $rphis[0]) ? '@' : '$';
+                        my $var = sprintf('%sret%d', $sigil, $ph->{id});
                         $out .= sprintf("my %s = %s;\n", $var,
                                         $self->_expr($ph->{inputs}[$k]));
                         $bound{ $ph->{id} } = $var;

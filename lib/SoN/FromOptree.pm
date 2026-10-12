@@ -12382,8 +12382,9 @@ class SoN::FromOptree 0.01 {
             if ($name eq 'cond_expr' && $opmap->is_branch($name)
                 && $sim->stack_depth > 0) {
                 $loop_visited->{$$op}++;
+                # A `return` in an arm is a function exit; see $FN_EXITS.
                 $op = _handle_cond_expr($cv, $op, $sim, $factory, $opmap,
-                    $loop_visited, undef,
+                    $loop_visited, _loop_arm_exits($break_projs),
                     { node => $loop_node, breaks => $break_projs });
                 next;
             }
@@ -12865,9 +12866,11 @@ class SoN::FromOptree 0.01 {
                 # into the rest of the body (which belongs to BOTH arms).
                 my $taken_sim = $sim->snapshot;
                 $taken_sim->set_control($taken_proj);
+                # A `return` in the arm -- `if (C) { return X if D }`, or one
+                # that ends it -- is a function exit; see $FN_EXITS.
                 my (undef, $taken_sig) =
                     _walk_branch($cv, $op->other, $taken_sim, $factory, $opmap,
-                        {}, undef, 0, _op_addr($op->next),
+                        {}, _loop_arm_exits($break_projs), 0, _op_addr($op->next),
                         $loop_node, $break_projs, 1);
                 # The guarded statement is a void statement; drain any value it
                 # left so merge() does not build a spurious stack Phi.
@@ -12899,9 +12902,10 @@ class SoN::FromOptree 0.01 {
                     $op = $op->next;
                     next;
                 }
-                # AN ARM THAT ENDED IN `next` has left for the latch; its edge
-                # is already recorded. Continue on the skip arm alone.
-                if (($taken_sig // '') eq 'nexted') {
+                # AN ARM THAT ENDED IN `next` has left for the latch, and one
+                # that ended in `return` has left the sub; either edge is
+                # already recorded. Continue on the skip arm alone.
+                if (($taken_sig // '') eq 'nexted' || ($taken_sig // '') eq 'exited') {
                     $sim->set_control($skip_proj);
                     $op = $op->next;
                     next;
@@ -14270,6 +14274,14 @@ class SoN::FromOptree 0.01 {
 
     # $loop, from a loop-body walk: { node, breaks } -- so an arm's `next` or
     # `last` can leave the loop rather than refuse.
+    # The exit list for an arm walked inside a loop body: the function's own
+    # on a real walk, a throwaway one under a scout (whose nodes are
+    # discarded), and none outside a sub -- where a return keeps its refusal.
+    sub _loop_arm_exits ($break_projs) {
+        return undef unless $FN_EXITS;
+        return (defined $break_projs && !$IN_SCOUT) ? $FN_EXITS : [];
+    }
+
     sub _handle_cond_expr ($cv, $op, $sim, $factory, $opmap, $visited, $exits = undef, $loop = undef) {
         # A LIST-context ternary (`print $c ? "y" : "n"`) whose arms each produce
         # exactly ONE value is the same select shape as a scalar-context ternary:
@@ -14306,8 +14318,11 @@ class SoN::FromOptree 0.01 {
             my ($end, $sig) = _walk_branch($cv, $start, $arm_sim, $factory,
                 $opmap, $visited, $exit_sink, 1, $join_addr,
                 ($loop ? ($loop->{node}, $loop->{breaks}, 1) : ()));
+            # A NESTED exit (`else { return 5 if C }`) lands in the local
+            # list without making the arm itself 'exited': the arm converges
+            # and the list is dropped with the return in it. Refuse that too.
             die "GAP: function exit inside an if/else arm not yet lowered\n"
-                if ($sig // '') eq 'exited' && !defined $exits;
+                if !defined $exits && (($sig // '') eq 'exited' || @arm_exits);
             # An arm stopping anywhere OTHER than the join hit an op the
             # walker cannot translate -- and it marked that op visited, so
             # the main walk would terminate there too, silently dropping
@@ -15397,7 +15412,7 @@ class SoN::FromOptree 0.01 {
                     1, $mod_stop, $loop_node, $break_projs, $in_loop);
                 die "GAP: function exit inside a statement modifier in an"
                   . " if/else arm not yet lowered\n"
-                    if ($mod_sig // '') eq 'exited' && !defined $exits;
+                    if !defined $exits && (($mod_sig // '') eq 'exited' || @mod_exits);
                 # A back-edge (the body re-enters an already-visited op) is a
                 # statement-modifier LOOP, not a rebind -- refuse loudly.
                 #
