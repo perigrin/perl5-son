@@ -236,6 +236,24 @@ class SoN::FromOptree 0.01 {
         return false;
     }
 
+    # Does any of these values read a class field's whole value (`$x`, `@f`)?
+    # A FieldAccess carries no memory version, so it is spelled wherever the
+    # value is, after any later store to the field: `$x = 3; my @b = $c ?
+    # ($x, 2) : (); $x = 5` copied 1, perl 3. An element read (`$f[0]`) is a
+    # Subscript that does carry one, so its aggregate operand is not counted.
+    sub _holds_a_field_read (@nodes) {
+        my %seen;
+        while (defined(my $n = shift @nodes)) {
+            next if $seen{ refaddr $n }++ || defined $n->control_in;
+            return true if $n->isa('SoN::IR::Node::FieldAccess');
+            my @in = grep { defined } $n->inputs->@*;
+            shift @in if $n->operation eq 'Subscript' && @in
+                && $in[0]->isa('SoN::IR::Node::FieldAccess');
+            push @nodes, @in;
+        }
+        return false;
+    }
+
     sub _is_aggregate_node ($node) {
         return false unless defined $node;
         my $op = $node->operation;
@@ -5819,7 +5837,8 @@ class SoN::FromOptree 0.01 {
                     && !$ref_or_mod && !$is_lvintro
                     && !$ctx->{mutated_aggregate}{$targ}
                     && !$MUTATED_LITERALS{ $existing->id // '' }
-                    && $existing->operation eq 'ArrayLiteral') {
+                    && $existing->operation eq 'ArrayLiteral'
+                    && !grep { $_->isa('SoN::IR::Node::TernaryExpr') } $existing->inputs->@*) {
                 $sim->push_node($_) for $existing->inputs->@*;
                 return ($op->next, 'handled');
             }
@@ -9273,7 +9292,18 @@ class SoN::FromOptree 0.01 {
                         $sim->set_control($node);
                     }
                     $store_observable->($node);
-                    $sim->push_node($node);
+                    # IN SCALAR CONTEXT THE ASSIGNMENT IS A COUNT, as for
+                    # the bound value above: `print scalar(my @t = (1, 2, $c))`
+                    # printed the elements. A hash's is of the RHS pairs, which a
+                    # count of the hash does not say. From a ternary of lists it is
+                    # refused: spelled, the count was the pairs themselves (`a1`).
+                    die "GAP: a hash assignment from a ternary counted in scalar context is not yet lowered\n"
+                        if ($op->flags & 3) == 2 && $sigil eq '%'   # OPf_WANT_SCALAR
+                        && grep { $_->isa('SoN::IR::Node::TernaryExpr') } $rhs->@*;
+                    $sim->push_node(
+                        (($op->flags & 3) == 2 && $sigil eq '@') # OPf_WANT_SCALAR
+                            ? _make_count($factory, $node, $sim)
+                            : $node);
                     return ($op->next, 'handled');
                 }
             }
@@ -14617,6 +14647,9 @@ class SoN::FromOptree 0.01 {
                 die "GAP: a regex match in a multi-element ternary arm is not yet lowered\n"
                     if _holds_a_floating_match(@true_rest, @false_rest,
                         grep { defined } $true_arm_val, $false_arm_val);
+                die "GAP: a class field read in a multi-element ternary arm is not yet lowered\n"
+                    if _holds_a_field_read(@true_rest, @false_rest,
+                        grep { defined } $true_arm_val, $false_arm_val);
                 $true_arm_val  = $factory->make('ArrayLiteral',
                     inputs => [ @true_rest, $true_delta ? ($true_arm_val) : () ],
                     stamp => SoN::IR::Stamp->new(type => 'List'));
@@ -14776,6 +14809,20 @@ class SoN::FromOptree 0.01 {
                 next if defined $pre
                     && defined $tv && defined $fv
                     && $tv == $pre && $fv == $pre;
+                # A FIRST READ IN ONE ARM binds the variable's own storage,
+                # which is the same on the other path: merged with undef, a
+                # field `@f` first read as `$f[0]` in an arm became `($c ? @f
+                # : undef)`, and a later `$f[0] = 5` stored through that.
+                my $storage = sub ($v) {
+                    defined $v && ($v->isa('SoN::IR::Node::FieldAccess')
+                        || $v->isa('SoN::IR::Node::PadAccess'));
+                };
+                $fv //= $tv if $storage->($tv);
+                $tv //= $fv if $storage->($fv);
+                if (!defined $pre && defined $tv && defined $fv && $tv == $fv) {
+                    $sim->define($targ, $tv);
+                    next;
+                }
                 $tv //= _undef_constant($factory);
                 $fv //= _undef_constant($factory);
                 $sim->define($targ, _make_ternary($factory, $cond, $tv, $fv));
@@ -14802,6 +14849,8 @@ class SoN::FromOptree 0.01 {
                 # at each read of the array it was copied into.
                 die "GAP: a regex match in a multi-element ternary arm is not yet lowered\n"
                     if $multi && _holds_a_floating_match(@vals);
+                die "GAP: a class field read in a multi-element ternary arm is not yet lowered\n"
+                    if $multi && _holds_a_field_read(@vals);
                 # IN SCALAR CONTEXT the comma yields the last value and runs the
                 # rest for their effects. Those effects are already on the
                 # memory chain (`$i++` is a store, `k()` a call), so the value

@@ -277,4 +277,67 @@ for my $src (
     round_trips($src, "a ternary argument of temporaries: $src");
 }
 
+# AN ARRAY ASSIGNMENT IN SCALAR CONTEXT IS ITS COUNT, whichever path built the
+# array: a ternary of lists makes a literal, which printed its elements.
+for my $src (
+    q{my $c = 1; print scalar(my @t = $c ? (7) : ()), "\n";},
+    q{my $c = 1; my @t; print scalar(@t = $c ? (1, 2, 3) : ()), "\n";},
+    q{my $c = 0; print scalar(my @t = $c ? (1, 2, 3) : ()), "\n";},
+    q{my $c = time; print scalar(my @t = (1, 2, $c)), "\n";},
+    q{my $c = 1; my @t; print 0 + (@t = $c ? (5, 6) : (7)), " @t\n";},
+    q{sub f { my $c = shift; return scalar(my @t = $c ? (1, 2) : ()) } print f(1), f(0), "\n";},
+) {
+    round_trips($src, "an array assignment counted: $src");
+}
+refuses(q{my $c = 1; my %h; print scalar(%h = $c ? (a => 1) : ()), "\n";},
+    qr/GAP: a hash assignment from a ternary counted in scalar context/,
+    'a hash assignment from a ternary counted');
+
+# AN ARRAY OF A LIST ARM IS READ AS THE ARRAY. Its elements were spelled again
+# as the ternary at the read, after a store to what the arm copied.
+for my $src (
+    q{my $c = 1; my @a = (time % 1 + 1, 2); my @b = $c ? ($a[0], 3) : (); $a[0] = 9; print "@b\n";},
+    q{my $c = 1; my %h = (k => time % 1 + 1); my @b = $c ? ($h{k}, 5) : (); $h{k} = 9; print "@b\n";},
+    q{my @a = (time % 1 + 1, 2); for my $c (1, 0) { my @b = $c ? ($a[0], 3) : (4, 5); $a[0] = 9; print "@b\n" }},
+    q{my $c = 1; my @a = (time % 1 + 1, 2); my @b = $c ? ($a[0], 3) : (); $a[0] = 9; my @d = @b; print "@d\n";},
+    q{my $x = time % 1 + 1; my $c = 1; my @b = $c ? ($x, 3) : (); $x = 9; print "@b\n";},
+) {
+    round_trips($src, "a copied list arm read as its array: $src");
+}
+
+# A CLASS FIELD FIRST READ IN ONE ARM is the field on both paths. Merged with
+# undef, `$f[0] = 5` after the ternary stored through `($c ? @f : undef)`.
+for my $src (
+    q{use feature "class"; no warnings; class P { field @f = (1, 2); method m { my $c = 1; my @b = $c ? ($f[0], 2) : (); $f[0] = 5; return "@b" } } print P->new->m, "\n";},
+    q{use feature "class"; no warnings; class P { field %f = (k => 1); method m { my $c = 1; my @b = $c ? ($f{k}, 2) : (); $f{k} = 5; return "@b" } } print P->new->m, "\n";},
+    q{use feature "class"; no warnings; class P { field @f = (1, 2); method m { my $c = 1; my @b = $c ? ($f[0]) : (); $f[0] = 5; return "@b" } } print P->new->m, "\n";},
+    q{use feature "class"; no warnings; class P { field @f = (1, 2); method m ($c) { my $b = $c ? $f[1] : 3; $f[0] = 5; return "$b @f" } } print P->new->m(0), P->new->m(1), "\n";},
+    q{my @a = (1, 2); sub f { my $c = shift; my $b = $c ? $a[0] : 3; $a[1] = 7; "$b @a" } print f(1), f(0), "\n";},
+) {
+    round_trips($src, "a field first read in an arm: $src");
+}
+
+# A CLASS FIELD'S WHOLE VALUE in a list arm has no memory version, so it is
+# spelled after a later store to the field. Refused by name.
+for my $src (
+    q{use feature "class"; no warnings; class P { field $x = 1; method m ($c) { $x = 3; my @b = $c ? ($x, 2) : (3); $x = 5; return "@b $x" } } print P->new->m(0), P->new->m(1), "\n";},
+    q{use feature "class"; no warnings; class P { field $x = 1; method m ($c) { $x = 3; my @b = $c ? ($x + 1, 2) : (3); $x = 5; return "@b $x" } } print P->new->m(0), P->new->m(1), "\n";},
+    q{use feature "class"; no warnings; class P { field @f = (1); method m ($c) { push @f, 3; my @b = $c ? (@f, 2) : (3); push @f, 5; return "@b @f" } } print P->new->m(0), P->new->m(1), "\n";},
+) {
+    refuses($src, qr/GAP: a class field read in a multi-element ternary arm/,
+        "a field read in a list arm: $src");
+}
+
+# PRINT SEPARATES ITS LIST WITH $, as perl's does.
+for my $src (
+    q{my $c = 1; local $, = "-"; print $c ? (1, 2) : (3); print "\n";},
+    q{local $, = "-"; my @x = (1, 2); print @x; print "\n";},
+    q{local $, = ","; print 1, 2, 3; print "\n";},
+    q{local $, = ","; local $\ = "!\n"; print 1, 2;},
+    q{print 1, 2, "\n";},
+    q{local $, = ":"; print STDOUT "a", "b"; print "\n";},
+) {
+    round_trips($src, "print with \$,: $src");
+}
+
 done_testing;

@@ -4612,6 +4612,8 @@ class SoN::Deparse 0.01 {
         # ternary. Measured: the emitted program printed "y\n" where the
         # original printed "n\n". Interposing `join('')` keeps the argument
         # list a list without ever starting it with a paren.
+        # THE SEPARATOR IS $,, which print puts between its items and an
+        # empty join did not: `local $, = "-"; print 1, 2` printed `12`.
         # A DEFERRED AGGREGATE DECLARATION, placed after the effect it holds
         # rather than in the prologue. See _emit_control_chain.
         if ($op =~ /\A(?:Array|Hash)Literal\z/) {
@@ -4750,7 +4752,7 @@ class SoN::Deparse 0.01 {
 
         if ($op eq 'Print') {
             my ($fh, @args) = $self->_print_parts($n);
-            return sprintf("print %sjoin('', %s);\n", $fh, join(', ', @args));
+            return sprintf("print %sjoin(\$, // '', %s);\n", $fh, join(', ', @args));
         }
 
         # A package scalar store. The EntryDef names the slot; emitting the
@@ -5536,11 +5538,11 @@ class SoN::Deparse 0.01 {
             # returns 1 on success. Emit it as the expression it is.
             my ($fh, @a) = $self->_print_parts($n);
             $text = $fh eq ''
-                ? sprintf("print(join('', %s))", join(', ', @a))
+                ? sprintf("print(join(\$, // '', %s))", join(', ', @a))
                 # NO PARENTHESISED FORM WITH A HANDLE. `print(FH LIST)` is a
                 # syntax error; the handle-and-list form takes no parens, so
                 # the whole thing is wrapped instead.
-                : sprintf("(print %sjoin('', %s))", $fh, join(', ', @a));
+                : sprintf("(print %sjoin(\$, // '', %s))", $fh, join(', ', @a));
         }
         elsif ($op eq 'RegexMatch') {
             # THE PATTERN AND FLAGS ARE THE PROGRAM. /i changes what matches,
