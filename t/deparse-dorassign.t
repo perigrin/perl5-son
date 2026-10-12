@@ -309,4 +309,20 @@ my @t = (($c ? f() : 1), ($d ? f() : 2)); $t[0]++;
 my @u = (($c ? f() : 1) + 1, ($d ? f() : 2) + 1); $u[1]++; print "@t @u $n\n";
 SRC
 
+# A LIST OVER A LOOP VALUE AND A BRANCH VALUE is declared after whichever join
+# comes last: it returned the loop join as soon as it met the loop Phi, and
+# read the branch temporary before its if assigned it.
+round_trips(<<'SRC', 'a mutated list over a loop value and a branch value');
+my %h; my $s = 0; for my $i (1..3) { $s += $i } my @l = ($s + 1, ($h{a} //= 4)); $l[1]++; print "@l $h{a}\n";
+my %g; my $t = 0; for my $i (1..3) { $t += $i } my @m = (($g{a} //= 4), $t + 1); $m[1]++; print "@m $g{a}\n";
+my %k; my $u = 0; for my $i (1..3) { $u += $i } my @n = ($u, ($k{a} //= 4)); $n[1]++; print "@n $k{a}\n";
+my %j; my $v = 0; for my $i (1..3) { $v += $i } my @o = ($v * 2, ($j{a} ||= 4) + 1); push @o, 9; print "@o\n";
+SRC
+round_trips(<<'SRC', 'a branch value then a loop, and two loops around a branch');
+my %h; my @w = (($h{a} //= 4)); my $s = 0; for my $i (1..3) { $s += $i } my @l = ($h{a}, $s); $l[0]++; print "@l @w\n";
+my %g; my $t = 0; for my $i (1..3) { $t += $i } my $c = ($g{a} &&= 4) // 0; my $u = 0; for my $i (1..2) { $u += $i }
+my @m = ($t, $c, $u, ($g{b} ||= 7)); $m[3]++; print "@m\n";
+my $n = 0; sub f { $n++; 5 } my $z = 1; my $y = 0; for my $i (1..3) { $y .= $i } my @p = ($y, ($z ? f() : 1) + 1); $p[0]++; print "@p $n\n";
+SRC
+
 done_testing;
