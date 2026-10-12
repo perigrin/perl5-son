@@ -131,7 +131,56 @@ my $one; my $n = 0; sub mk { $n++; "o" }
 sub one { $one //= mk(); return $one } print one(), one(), " $n\n";
 SRC
 
+# THE STORE IS A MUTATION OF THE AGGREGATE: a read after the loop must not
+# take the flatten shortcut back to the initialiser literal.
+round_trips(<<'SRC', '||= and //= into an array initialised from a list, in a for body');
+my @a = (0, 1, undef); for my $i (0..2) { $a[$i] ||= 10 + $i }
+my @b = (5); for my $i (0..3) { $b[$i] //= $i }
+my @c = (1, 0); $c[1] ||= 4; print "@a|@b|@c\n";
+SRC
+
+# EACH READ IS ITS OWN NODE: an earlier read of the same slot at the same
+# memory, or the value read of a first logassign, must not be pinned twice.
+round_trips(<<'SRC', 'a defined test before the //= of the same element');
+my @a = (1, undef); my $c = 0; $c++ unless defined $a[1]; $a[1] //= 0;
+my @b = (1, undef, 3); my $d = 0; for my $i (0..2) { $d++ unless defined $b[$i]; $b[$i] //= 0 }
+print "$c @a|$d @b\n";
+SRC
+round_trips(<<'SRC', 'two logassigns on one slot in one expression');
+my %h; my %g = (a => 0); my %k = (a => 1); my @l;
+push @l, ($h{a} //= 2) + ($h{a} //= 3), ($g{a} ||= 2) + ($g{a} ||= 2);
+push @l, ($k{a} &&= 0) + ($k{a} &&= 5), ($h{b} //= 1), ($h{b} //= 2);
+print "@l\n";
+SRC
+
+# A RIGHT SIDE THAT REBINDS ANOTHER LEXICAL rebinds it only when it runs.
+round_trips(<<'SRC', 'a right side that rebinds a lexical, at top level and in an if arm');
+sub t { my ($c, $x) = @_; my $n = 0; if ($c) { $x //= do { $n++; 4 } } return "$x$n" }
+sub u { my ($c, $x) = @_; my $n = 0; if ($c) { $x ||= ++$n } return "$x$n" }
+sub v { my ($c, $x) = @_; my $n = 0; if ($c) { $x &&= ($n = 5) } return "$x$n" }
+my $x = 0; my $n = 0; $x ||= ($n = 3); my $y = 1; my $m = 0; $y ||= ($m = 3);
+print t(1, undef), t(1, 2), u(1, 0), u(1, 2), v(1, 1), v(1, 0), " $x$n$y$m\n";
+SRC
+
+# BOTH ARMS OF AN IF: one If per logassign, not two successors on one node.
+round_trips(<<'SRC', 'an element logassign in both arms of an if/else');
+sub t { my ($c) = @_; my %h; if ($c) { $h{a} //= 3 } else { $h{a} //= 4 } return $h{a} }
+sub u { my ($c) = @_; my %h; if ($c) { $h{a} ||= 3 } else { $h{a} &&= 4 } return $h{a} // 'u' }
+print t(1), t(0), u(1), u(0), "\n";
+SRC
+round_trips(<<'SRC', 'a class field //= in a one-armed if');
+use experimental 'class';
+class C { field $x; method m ($c) { if ($c) { $x //= 7 } return $x // 'u' } }
+my $o = C->new; print $o->m(0), $o->m(1), "\n";
+SRC
+
 # STILL REFUSED.
+refuses('my %h; my $f = sub { $h{$_[0]} //= $_[1] }; my @r = ($f->("a", 1), $f->("a", 2)); print "@r\n";',
+    qr/GAP: `\/\/=` into an element of an aggregate an anon sub closes over/,
+    'an element of a captured hash in an anon sub refuses');
+refuses('my @a = (0); my $f = sub { $a[0] ||= 3 }; $f->(); print "@a\n";',
+    qr/GAP: `\|\|=` into an element of an aggregate an anon sub closes over/,
+    'an element of a captured array in an anon sub refuses');
 refuses('my $v=0; my $r = \$v; $$r //= 4; print "$v\n";',
     qr/GAP: `\/\/=` into something other than a lexical scalar or an element/,
     '//= through a scalar ref refuses');
@@ -141,5 +190,8 @@ refuses('sub f { my %h; $h{a} //= return 5; 7 } print f(), "\n";',
 refuses('my %h; for my $i (1, 2) { $h{a} //= next } print "x\n";',
     qr/GAP: a loop control \(`next`\) inside a branch arm is not yet lowered/,
     'a right side that leaves the loop refuses');
+refuses('my $h; $h->{x}{y} //= 1; print ref($h), "\n";',
+    qr/GAP: `\/\/=` into an element of undef, which perl would autovivify/,
+    'an element of an undefined lexical, which would autovivify, refuses');
 
 done_testing;

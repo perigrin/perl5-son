@@ -13696,7 +13696,7 @@ class SoN::FromOptree 0.01 {
     my %ADVANCES_CONTROL_OP = map { $_ => 1 }
         qw(entersub enterloop enteriter mapstart grepstart
            entertry entertrycatch entereval
-           anonlist anonhash emptyavhv);
+           anonlist anonhash emptyavhv orassign andassign dorassign);
 
     sub _arm_advances_control_from ($start, $stop, $join, $seen) {
         for (my $op = $start;
@@ -14186,9 +14186,33 @@ class SoN::FromOptree 0.01 {
                 unless $lvalue && $lvalue->isa('SoN::IR::Node::Subscript')
                     && scalar($lvalue->inputs->@*) == 2
                     && defined $sim->memory;
+            # AN ANON SUB'S CAPTURED AGGREGATE IS NOT A CELL: the body graph
+            # reads it as a fresh lexical of its own, so the emitted closure
+            # declared `my %h` and every call started empty (`$f->("a", 1),
+            # $f->("a", 2)` gave 1 2 where perl gives 1 1). A named sub's
+            # shared file lexical is marked `shared` and is right.
+            my $agg = $lvalue->inputs->[0];
+            if ($agg->isa('SoN::IR::Node::PadAccess') && !$agg->shared
+                && $agg->targ) {
+                my $pn = eval { $cv->PADLIST->ARRAYelt(0)->ARRAYelt($agg->targ) };
+                die "GAP: `$spelling` into an element of an aggregate an anon"
+                  . " sub closes over\n"
+                    if $pn && $$pn && ($pn->FLAGS & B::PADNAMEf_OUTER());
+            }
+            # UNDEF IS NO CONTAINER: `my $h; $h->{a} //= 1` folds $h to
+            # undef, and perl's autovivification of it is not modelled -- the
+            # emission died dereferencing undef. Down a nested chain too. A
+            # loop scout's placeholders are string Constants, and pass.
+            for (my $c = $agg; $c; ) {
+                die "GAP: `$spelling` into an element of undef, which"
+                  . " perl would autovivify\n"
+                    if $c->isa('SoN::IR::Node::Constant')
+                        && $c->const_type eq 'undef';
+                $c = $c->isa('SoN::IR::Node::Subscript') ? $c->inputs->[0] : undef;
+            }
             $sim->pop_node;
             my $read = sub ($s) {
-                my $r = $factory->make('Subscript', kind => $lvalue->kind,
+                my $r = $factory->make_unique('Subscript', kind => $lvalue->kind,
                     inputs => [$lvalue->inputs->[0], $lvalue->inputs->[1],
                                $s->memory]);
                 $r->set_control_in($s->control);
@@ -14197,6 +14221,7 @@ class SoN::FromOptree 0.01 {
             };
             my $assign = sub ($s, $value) {
                 my $w = $factory->make('Assign', inputs => [$lvalue, $value]);
+                _note_literal_mutation($lvalue);
                 $w->set_control_in($s->control);
                 $s->set_control($w);
                 $s->set_memory($w);
@@ -14300,6 +14325,21 @@ class SoN::FromOptree 0.01 {
             unless $rhs_sim->control == $sim->control
                 && $rhs_sim->stack_depth == $base_depth + 1;
         my $rhs = $rhs_sim->pop_node;
+        # A RIGHT SIDE THAT REBINDS ANOTHER LEXICAL -- `$x //= do { $n++; 4 }`,
+        # `$x &&= ($n = 5)` -- rebinds it only when the right side runs. The
+        # snapshot's bindings were otherwise dropped with it, so $n kept its
+        # old value either way. Each changed slot is a conditional rebind on
+        # the test, as the and/or statement path does it.
+        my $base_scope = $sim->scope_bindings;
+        my $arm_scope  = $rhs_sim->scope_bindings;
+        for my $t (sort _scope_key_order keys %$arm_scope) {
+            my ($base, $armv) = ($base_scope->{$t}, $arm_scope->{$t});
+            next unless defined $base && defined $armv && $base != $armv;
+            my $runs_when_true = $name eq 'andassign';
+            $sim->define($t, _make_rebind($factory, $sim, $test_of->($current),
+                $runs_when_true ? ($armv, $base) : ($base, $armv),
+                $runs_when_true ? 1 : 2));
+        }
         # IT YIELDS ONE OF ITS OPERANDS, so its stamp is their join --
         # a loop that carries it needs one ("unstamped back-edge").
         my ($ls, $rs) = map { $_->can('stamp') ? $_->stamp : undef }
