@@ -92,6 +92,19 @@ my @cases = (
       'Context::walk_all' ],
     [ q{sub wc { my ($root, $acc, %opts) = @_; my $reverse = $opts{reverse}; my @stack = ($root); while (@stack) { my $node = pop @stack; my $f = $node->{v}; if (defined $f) { $acc = $acc . $f; next; } my @kids = @{ $node->{kids} }; @kids = reverse @kids unless $reverse; push @stack, @kids; } return $acc; } my $t = { kids => [ { v => 1 }, { kids => [ { v => 5 }, { v => 9 } ] } ] }; print wc($t, ""), "|", wc($t, "", reverse => 1), "\n";},
       'Context::walk_acc' ],
+    # THE REVERSED LITERAL IN AN ARM IS A SECOND VERSION OF THE NAME. Declared
+    # `my @a` there, it shadowed the version the reverse reads, and a later
+    # read of the reverse in the arm reversed it twice.
+    [ q{sub f { my $k = shift; my @a=(1,2,3); for my $i (1..3) { if ($i == $k) { @a = reverse @a; return "@a" } } return "@a" } print f(2), "|", f(9), "\n";},
+      'read in a returning arm in a loop' ],
+    [ q{sub g { my ($r) = @_; my @k = (1,2); if (!$r) { @k = reverse @k; return "@k" } "x@k" } print g(0), g(1), "\n";},
+      'read in a returning arm' ],
+    [ q{sub g { my ($r) = @_; my @k = (1,2); if (!$r) { @k = reverse @k; print "@k\n" } print "@k\n" } g(0); g(1);},
+      'read in the arm, then after it' ],
+    [ q{sub g { my @k = (1,2,3); for my $i (1..2) { if ($i == 2) { @k = reverse @k; print scalar(@k), "@k\n" } } print "@k\n" } g();},
+      'read in a loop arm, then after the loop' ],
+    [ q{sub g { my @k = (1,2,3); for my $i (1..3) { @k = reverse @k if $i == 2; return "$i @k" if $i == 2 } "none" } print g(), "\n";},
+      'under a modifier, then returned' ],
     # A REVERSE INTO ANOTHER ARRAY IS NOT IN PLACE, and was never dropped.
     [ q{my @k = (1, 2, 3); my @j = reverse @k; print "@j|@k\n";}, 'into another array' ],
 );

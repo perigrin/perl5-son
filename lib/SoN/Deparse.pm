@@ -3525,6 +3525,15 @@ class SoN::Deparse 0.01 {
             && defined(($n->{fields} // {})->{symbol});
     }
 
+    # A pinned literal over one builtin reverse: the producer's
+    # `@a = reverse @a`.
+    method _is_inplace_reverse ($n) {
+        my @in = ($n->{inputs} // [])->@*;
+        my $c  = @in == 1 ? ($nodes->{ $in[0] } // {}) : {};
+        return ($c->{op} // '') eq 'Call'
+            && (($c->{fields} // {})->{name} // '') eq 'reverse';
+    }
+
     # _is_inline_aggregate($node) -- true for a versioned named literal that
     # only a Phi consumes and whose contents read a loop Phi: spelled as its
     # contents where the Phi is assigned, never declared.
@@ -3615,9 +3624,14 @@ class SoN::Deparse 0.01 {
             if ($op eq 'PadAccess') {
                 $f->{shared} ? ($shared{$key} = 1) : ($pad{$key} = 1);
             }
+            # AN IN-PLACE REVERSE IS PINNED BUT IS NOT A `my`: it rebinds
+            # the name, and declared `my @a` in an arm it shadowed the
+            # version its own Reverse reads -- `@a = reverse @a; return
+            # "@a"` reversed twice. It is a version like any other.
             elsif ($op =~ /\A(?:Array|Hash)Literal\z/
                    && !$self->_agg_is_package($n)
-                   && !$self->_is_pinned_aggregate($n)) {
+                   && (!$self->_is_pinned_aggregate($n)
+                       || $self->_is_inplace_reverse($n))) {
                 push $lits{$key}->@*, $n->{id};
             }
         }

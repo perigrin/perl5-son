@@ -270,4 +270,20 @@ subtest 'a list ternary whose other arm returns' => sub {
         qr/GAP: a ternary whose other arm leaves yields a multi-element list in its caller's context/, q{the sub's last statement});
 };
 
+# A MODIFIER RETURN BEFORE A MUTATION IN A LOOP ARM. The bare `return`
+# gives undef to a scalar caller; printed, the emission warns where the
+# source did not (the target bundle turns warnings on) -- stdout agrees.
+subtest 'a modifier return, then a mutation, in a loop arm' => sub {
+    round_trips(q{sub f { my $k=shift; my @o; for my $i (1..5) { if ($i > 2) { return if $i > $k; pop @o } push @o, $i } return "@o" } print scalar(f(3)), "|", scalar(f(9)), "\n";},
+        'a bare return, then pop');
+    round_trips(q{sub f { my $k=shift; my @o; for my $i (1..5) { if ($i > 2) { return if $i > $k; pop @o } push @o, $i } return "@o" } my @a = f(3); print scalar(@a), "|", scalar(f(9)), "\n";},
+        'a bare return to a list caller');
+    round_trips(q{sub f { my $k=shift; my @o; for my $i (1..5) { if ($i > 2) { return scalar(@o) if $i > $k; shift @o } push @o, $i } return "@o" } print f(3), "|", f(9), "\n";},
+        'a count returned, then shift');
+    round_trips(q{sub f { my $k=shift; my $s=0; my $i=0; while ($i < 5) { $i++; if ($i > 2) { return $s unless $i <= $k; $s -= 1 } $s += $i } return $s } print f(3), "|", f(9), "\n";},
+        'unless, in a while');
+    round_trips(q{sub f { my $k=shift; my @o; for my $i (1..5) { if ($i > 2) { return "@o" if $i > $k; pop @o } else { push @o, 0 } push @o, $i } return "@o" } print f(3), "|", f(9), "\n";},
+        'with an else arm');
+};
+
 done_testing;
