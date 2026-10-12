@@ -1129,12 +1129,17 @@ sub _floor_param_fields {
 # REPRESENTATION change, a different axis and a different layer's decision.
 sub _insert_type_coercions {
     my ( $graphs, $classes ) = @_;
-    my $factory  = SoN::IR::NodeFactory->new;
     my $inserted = 0;
     my %restamp;    # graph name => node id => node, for operands replaced
 
     for my $gname ( sort keys $graphs->%* ) {
         my $graph = $graphs->{$gname} or next;
+        # ONE FACTORY PER GRAPH. Ids are per-graph (`Call#3` exists in main and
+        # in a sub), so a node reading each has one content hash across both;
+        # a factory shared across graphs hash-conses them to ONE Coerce and
+        # hands a sub its caller's nodes -- a `my $k = shift` became the
+        # caller's own `f(3)`, and the emitted f recursed without end.
+        my $factory = SoN::IR::NodeFactory->new;
         for my $node ( $graph->nodes->@* ) {
             my $inputs = $node->inputs or next;
             for my $i ( 0 .. $#$inputs ) {
