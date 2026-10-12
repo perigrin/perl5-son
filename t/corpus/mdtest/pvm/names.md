@@ -365,12 +365,12 @@ main::__PROGRAM__: {start: 0, returns: [20], nodes: [
   [Constant, {const_type: integer, value: "42"}, ~, ~, Int], # 6
   [MemStart], # 7
   [EntryWrite, ~, [5, 6, 7], 0, Unknown], # 8
-  [Exists, ~, [3, 4, 8], ~, Boolean], # 9
+  [Exists, {kind: hash}, [3, 4, 8], ~, Boolean], # 9
   [Coerce, {from_repr: Boolean, to_repr: Str}, [9], ~, Str], # 10
   [Constant, {const_type: string, value: "]\n"}, ~, ~, Str], # 11
   [Constant, {const_type: string, value: "gone: ["}, ~, ~, Str], # 12
   [Constant, {const_type: string, value: nosuch}, ~, ~, Str], # 13
-  [Exists, ~, [3, 13, 8], ~, Boolean], # 14
+  [Exists, {kind: hash}, [3, 13, 8], ~, Boolean], # 14
   [Coerce, {from_repr: Boolean, to_repr: Str}, [14], ~, Str], # 15
   [Constant, {const_type: string, value: "found: ["}, ~, ~, Str], # 16
   [Print, ~, [16, 10, 11], 8, Scalar], # 17

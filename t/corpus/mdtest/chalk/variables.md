@@ -1765,7 +1765,7 @@ main::corpus_case: {start: 0, returns: [11], nodes: [
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
   [HashLiteral, {sigil: "%", symbol: h}, [1, 2], ~, Hash], # 3
   [MemStart], # 4
-  [Exists, ~, [3, 1, 4], ~, Boolean], # 5
+  [Exists, {kind: hash}, [3, 1, 4], ~, Boolean], # 5
   [Constant, {const_type: string, value: "yes"}, ~, ~, Str], # 6
   [Constant, {const_type: string, value: "no"}, ~, ~, Str], # 7
   [TernaryExpr, ~, [5, 6, 7], ~, Str], # 8
@@ -1821,7 +1821,7 @@ main::corpus_case: {start: 0, returns: [12], nodes: [
   [HashLiteral, {sigil: "%", symbol: h}, [1, 2], ~, Hash], # 3
   [Constant, {const_type: string, value: zz}, ~, ~, Str], # 4
   [MemStart], # 5
-  [Exists, ~, [3, 4, 5], ~, Boolean], # 6
+  [Exists, {kind: hash}, [3, 4, 5], ~, Boolean], # 6
   [Constant, {const_type: string, value: "yes"}, ~, ~, Str], # 7
   [Constant, {const_type: string, value: "no"}, ~, ~, Str], # 8
   [TernaryExpr, ~, [6, 7, 8], ~, Str], # 9
@@ -1881,7 +1881,7 @@ main::corpus_case: {start: 0, returns: [12], nodes: [
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 4
   [HashLiteral, {sigil: "%", symbol: h}, [1, 2, 3, 4], ~, Hash], # 5
   [MemStart], # 6
-  [Delete, ~, [5, 1, 6], 0, Scalar], # 7
+  [Delete, {kind: hash}, [5, 1, 6], 0, Scalar], # 7
   [Call, {dispatch_kind: builtin, memory_input: true, name: keys, param_names: [], want: scalar}, [5, 7], ~, Int], # 8
   [Coerce, {from_repr: Int, to_repr: Str}, [8], ~, Str], # 9
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10

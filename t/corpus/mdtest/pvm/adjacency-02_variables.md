@@ -148,7 +148,7 @@ main::__PROGRAM__: {start: 0, returns: [105], nodes: [
   [Constant, {const_type: integer, value: "7"}, ~, ~, Int], # 29
   [Assign, ~, [28, 29], 0, Int], # 30
   [Delete, ~, [18, 14, 30], 30, Scalar], # 31
-  [Delete, ~, [18, 16, 31], 31, Scalar], # 32
+  [Delete, {kind: hash}, [18, 16, 31], 31, Scalar], # 32
   [Subscript, {kind: array}, [5, 6, 32], ~, Scalar], # 33
   [EntryWrite, ~, [27, 33, 32], 32, Unknown], # 34
   [EntryWrite, ~, [23, 26, 34], 34, Unknown], # 35
@@ -165,9 +165,9 @@ main::__PROGRAM__: {start: 0, returns: [105], nodes: [
   [Subscript, {kind: hash}, [22, 20, 36], ~, Scalar], # 46
   [Coerce, {from_repr: Unknown, to_repr: Str}, [46], ~, Str], # 47
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 48
-  [Exists, ~, [18, 10, 36], ~, Boolean], # 49
+  [Exists, {kind: hash}, [18, 10, 36], ~, Boolean], # 49
   [Coerce, {from_repr: Boolean, to_repr: Str}, [49], ~, Str], # 50
-  [Exists, ~, [18, 14, 36], ~, Boolean], # 51
+  [Exists, {kind: hash}, [18, 14, 36], ~, Boolean], # 51
   [Coerce, {from_repr: Boolean, to_repr: Str}, [51], ~, Str], # 52
   [Coerce, {from_repr: Scalar, to_repr: Str}, [32], ~, Str], # 53
   [Constant, {const_type: string, value: x}, ~, ~, Str], # 54
