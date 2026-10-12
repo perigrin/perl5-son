@@ -4747,6 +4747,12 @@ class SoN::FromOptree 0.01 {
         # Length rendered `length($r)`, the length of the ref's address.
         # Any operand but a gv is a reference to dereference here, as for a
         # count.
+        # AS A TARGET IT RESIZES THE ARRAY. `$#a = 0`, `$#a++` and `$#$r -= 1`
+        # carry OPf_REF (B::OPf_REF, 16; the rvalue `$#a` does not), and the
+        # value lowered below is a Count, which no store can write through:
+        # the resize vanished and `@a` kept its elements.
+        die "GAP: a store to an array's last index (`\$#a = ...`) is not yet lowered\n"
+            if $name eq 'av2arylen' && ($op->flags & 16);   # OPf_REF
         my $arylen_kid = $name eq 'av2arylen' && $op->can('first') ? $op->first : undef;
         my $through_ref = $arylen_kid && $$arylen_kid
             && $arylen_kid->name eq 'rv2av'
@@ -8966,6 +8972,13 @@ class SoN::FromOptree 0.01 {
                 if (($op->flags & 3) == 2) {             # OPf_WANT_SCALAR
                     my $count;
                     for my $v (@rhs) {
+                        # A CALL YIELDS AS MANY VALUES AS IT RETURNS, which a
+                        # constant 1 does not say: `() = g()` counted 1 for a
+                        # g returning three or none. Its stamp is not settled
+                        # yet, so it is counted as the list it is.
+                        $v = $factory->make('ArrayLiteral', inputs => [$v],
+                            stamp => SoN::IR::Stamp->new(type => 'Array'))
+                            if $v->operation eq 'Call' && !_is_aggregate_node($v);
                         my $n = _is_aggregate_node($v)
                             ? _make_count($factory, $v, $sim,
                                 stamp => SoN::IR::Stamp->new(type => 'Int'))
@@ -9045,12 +9058,46 @@ class SoN::FromOptree 0.01 {
                     state $YIELDS_LIST = { map { $_ => 1 }
                         qw( keys values sort reverse map grep splice ) };
 
+                    # A PACKAGE AGGREGATE IS OBSERVABLE OUTSIDE THIS GRAPH -- by
+                    # a sub (`our @x = (1,2); sub f { print "@x" }`), by method
+                    # resolution (`our @ISA = ("Base")`) -- so the assignment is
+                    # a STORE, as a package scalar's is. Bound only, it reached
+                    # the wire only if this graph also read it: both examples
+                    # emitted nothing (corpus 050's @ISA).
+                    # A PAD AGGREGATE SHARED WITH A NAMED SUB is observable
+                    # outside this graph for the same reason, so it is stored
+                    # too: an Assign into the shared slot, on the chain. Bound
+                    # only, `my @l = (...)` reached the wire only if the program
+                    # itself read @l (corpus 201 does not).
+                    # BOTH BINDINGS BELOW STORE: a whole value bound as itself
+                    # (`@g = map ...`, `@g = keys %h`) is as observable as a
+                    # literal, and skipping the store left a sub reading @g
+                    # with the old contents.
+                    my $store_observable = sub ($node) {
+                        _entry_store($factory, $sim, $target, $node) unless $is_pad;
+                        return unless $is_pad && $ctx->{shared_lexicals}{ $target->targ };
+                        my $loc = $factory->make('PadAccess',
+                            targ => $target->targ, sigil => $sigil,
+                            symbol => $target->symbol, shared => 1,
+                            (defined $sim->memory ? (inputs => [$sim->memory]) : ()));
+                        my $store = $factory->make('Assign',
+                            inputs => [$loc, $node]);
+                        $store->set_control_in($sim->control);
+                        $sim->set_control($store);
+                        $sim->set_memory($store) if defined $sim->memory;
+                    };
+
                     my $want = $sigil eq '@' ? 'Array' : 'Hash';
                     if ($rhs->@* == 1) {
                         my $only  = $rhs->[0];
                         my $stamp = $only->stamp;
+                        # A LIST-VALUED TERNARY IS A VALUE, NOT A CONTAINER:
+                        # bound as itself, `push @a, 4` was spelled on the
+                        # expression and `\@a` referred to its value. The
+                        # literal below makes the array it is assigned to.
                         my $is_aggregate_value =
-                            defined $stamp && $stamp->type eq $want;
+                            defined $stamp && $stamp->type eq $want
+                            && !$only->isa('SoN::IR::Node::TernaryExpr');
                         # ...UNLESS IT WAS CALLED IN SCALAR CONTEXT. `my $r =
                         # reverse(...); my @d = ($r)` inlines the call, and a
                         # scalar `reverse` is ONE string; taking it as the
@@ -9087,6 +9134,7 @@ class SoN::FromOptree 0.01 {
                         if (($is_aggregate_value && !$names_storage)
                             || $is_list_builtin) {
                             $sim->define($key, $only);
+                            $store_observable->($only);
                             # IN SCALAR CONTEXT THE ASSIGNMENT IS A COUNT.
                             # Pushing the bound value made `my $n = (my @t =
                             # ($c ? 7 : ()))` read the ternary itself, which
@@ -9162,34 +9210,19 @@ class SoN::FromOptree 0.01 {
                         $_->isa('SoN::IR::Node::PadAccess')
                             && ($_->sigil // '') =~ /\A[\@%]\z/
                     } $rhs->@*;
-                    if ($is_pad && _aassign_introduces($op)
+                    # A PACKAGE OR SHARED AGGREGATE ASSIGNED IN A LOOP BODY is
+                    # made there too: its store below writes this literal, and
+                    # floating, the literal was spelled above the loop with the
+                    # store, reading loop values not yet defined (`@g = (1,
+                    # $i)`).
+                    my $observable = !$is_pad
+                        || $ctx->{shared_lexicals}{ $target->targ };
+                    if (($observable ? @LOOP_STACK : _aassign_introduces($op))
                             && (@LOOP_STACK || $copies_container)) {
                         $node->set_control_in($sim->control);
                         $sim->set_control($node);
                     }
-                    # A PACKAGE AGGREGATE IS OBSERVABLE OUTSIDE THIS GRAPH -- by
-                    # a sub (`our @x = (1,2); sub f { print "@x" }`), by method
-                    # resolution (`our @ISA = ("Base")`) -- so the assignment is
-                    # a STORE, as a package scalar's is. Bound only, it reached
-                    # the wire only if this graph also read it: both examples
-                    # emitted nothing (corpus 050's @ISA).
-                    _entry_store($factory, $sim, $target, $node) unless $is_pad;
-                    # A PAD AGGREGATE SHARED WITH A NAMED SUB is observable
-                    # outside this graph for the same reason, so it is stored
-                    # too: an Assign into the shared slot, on the chain. Bound
-                    # only, `my @l = (...)` reached the wire only if the program
-                    # itself read @l (corpus 201 does not).
-                    if ($is_pad && $ctx->{shared_lexicals}{ $target->targ }) {
-                        my $loc = $factory->make('PadAccess',
-                            targ => $target->targ, sigil => $sigil,
-                            symbol => $target->symbol, shared => 1,
-                            (defined $sim->memory ? (inputs => [$sim->memory]) : ()));
-                        my $store = $factory->make('Assign',
-                            inputs => [$loc, $node]);
-                        $store->set_control_in($sim->control);
-                        $sim->set_control($store);
-                        $sim->set_memory($store) if defined $sim->memory;
-                    }
+                    $store_observable->($node);
                     $sim->push_node($node);
                     return ($op->next, 'handled');
                 }

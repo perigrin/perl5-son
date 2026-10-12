@@ -148,4 +148,55 @@ refuses(q{my @a = (0); for my $c (1, 0) { my @r = ($c ? (($a[0] = 1), 2) : 3); p
     qr/GAP: a ternary with a multi-element list arm not yet lowered/,
     'a list arm that stores an element');
 
+# AN ARRAY ASSIGNED A LIST-VALUED TERNARY IS STILL AN ARRAY. Bound as the
+# ternary itself, a later push was spelled on the expression (`push((c ? ..),
+# 4)`, which perl rejects) and a reference took the ternary's value.
+for my $src (
+    q{for my $c (1, 0) { my @a = $c ? (1, 2) : (3); push @a, 4; print "@a\n" }},
+    q{for my $c (1, 0) { my @a = $c ? (1) : (); push @a, 4; print "@a\n" }},
+    q{for my $c (1, 0) { my @a = $c ? (1, 2) : (3); pop @a; print "@a\n" }},
+    q{for my $c (1, 0) { my @a = $c ? (1, 2) : (3); unshift @a, 0; print "@a\n" }},
+    q{for my $c (1, 0) { my @a = $c ? (1, 2) : (3); splice @a, 0, 1; print "@a\n" }},
+    q{for my $c (1, 0) { my @x = (5, 6); my @a = $c ? @x : (3); push @a, 4; print "@a\n" }},
+    q{for my $c (1, 0) { my @a = $c ? (1, 2) : (3); my $r = \@a; push @$r, 5; print "@a\n" }},
+    q{for my $c (1, 0) { my @a = $c ? (1, 2) : (3); print scalar(@a), " @a\n" }},
+) {
+    round_trips($src, "an array of a list arm: $src");
+}
+
+# A STORE TO AN ARRAY'S LAST INDEX truncates or extends it. It reaches the
+# graph as a value (`Count - 1`), not a store, and was dropped silently.
+for my $src (
+    q{for my $c (1, 0) { my @a = $c ? (1, 2) : (3); $#a = 0; print "@a\n" }},
+    q{my @a = (0, 1); $#a = 0; print "@a\n";},
+    q{my @a = (0, 1); $#a++; print scalar(@a), "\n";},
+    q{my $r = [1, 2, 3]; $#$r = 0; print "@$r\n";},
+) {
+    refuses($src, qr/GAP: a store to an array's last index/,
+        "\$#a as a target: $src");
+}
+
+# A PACKAGE OR SHARED ARRAY BOUND TO A WHOLE VALUE IS STORED, as one bound to
+# a literal is: a sub reading @g sees it.
+for my $src (
+    q{our @g; sub sg { scalar @g } for my $c (1, 0) { @g = $c ? (1, 2) : (); print sg(), "\n" }},
+    q{our @g; sub sg { scalar @g } for my $c (1, 0) { @g = $c ? (1) : (); print sg(), "\n" }},
+    q{my @g; sub sg { "@g" } for my $c (1, 0) { @g = $c ? (1, 2) : (); print sg(), "\n" }},
+    q{our @g; sub sg { scalar @g } my $i = 0; while ($i < 2) { @g = (1, $i); $i++; print sg(), "\n" }},
+    q{our @g; sub sg { "@g" } my @x = (1, 2); @g = map { $_ * 2 } @x; print sg(), "\n";},
+    q{our @g; sub sg { "@g" } my %h = (a => 1); @g = keys %h; print sg(), "\n";},
+) {
+    round_trips($src, "a stored aggregate: $src");
+}
+
+# COUNTING A CALL counts what it returns in list context, not one.
+for my $src (
+    q{sub g { $_[0] ? (1, 2, 3) : () } my $n = () = g(1); my $m = () = g(0); print "$n $m\n";},
+    q{sub g { $_[0] ? (1) : () } my $n = () = g(1); my $m = () = g(0); print "$n $m\n";},
+    q{sub g { (1, 2) } my $n = () = g(); print "$n\n";},
+    q{sub g { print "g\n"; (1, 2) } my $n = () = (g(), 5); print "$n\n";},
+) {
+    round_trips($src, "a counted call: $src");
+}
+
 done_testing;
