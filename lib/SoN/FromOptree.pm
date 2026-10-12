@@ -12180,6 +12180,7 @@ class SoN::FromOptree 0.01 {
         # `enter` and, at a `nextstate` inside the do-block, pop leftovers back to
         # that depth -- preserving the OUTER operand ($s) pushed before the enter.
         my @enter_depth;
+        my $body_leave;
         # Count top-level body statement boundaries (nextstate outside a do-block).
         # A `last if COND` is hoistable into the loop header ONLY when it is the
         # FIRST body statement (stmt_count == 1: just its own opening nextstate has
@@ -12210,7 +12211,20 @@ class SoN::FromOptree 0.01 {
             # below reads this loop's own back-edge as unlowerable nesting.
             last if $name eq 'mapwhile' || $name eq 'grepwhile';
 
-            if ($name eq 'enter') {
+            # A LOOP WITH A CONTINUE BLOCK (or a C-style step) wraps its body
+            # in enter/leave, and that leave runs on into the continue start.
+            # That block is the body itself, not a do-block: its statements
+            # are the body's statements, or `if (C) { ... }` as the first of
+            # them is never taken for a guard and falls to the loop-condition
+            # handler.
+            if ($name eq 'enter' && $CONTINUE_START
+                    && ${ $op->parent } && $op->parent->name eq 'leave'
+                    && ${ $op->parent->next } == ${$CONTINUE_START}) {
+                $body_leave = ${ $op->parent };
+            }
+            elsif ($name eq 'leave' && $body_leave && $$op == $body_leave) {
+            }
+            elsif ($name eq 'enter') {
                 push @enter_depth, $sim->stack_depth;
             }
             elsif ($name eq 'leave') {
