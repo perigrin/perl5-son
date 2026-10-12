@@ -146,12 +146,18 @@ my @a = (1, undef); my $c = 0; $c++ unless defined $a[1]; $a[1] //= 0;
 my @b = (1, undef, 3); my $d = 0; for my $i (0..2) { $d++ unless defined $b[$i]; $b[$i] //= 0 }
 print "$c @a|$d @b\n";
 SRC
-round_trips(<<'SRC', 'two logassigns on one slot in one expression');
+round_trips(<<'SRC', 'two logassigns on one slot, each value read in its own statement');
 my %h; my %g = (a => 0); my %k = (a => 1); my @l;
-push @l, ($h{a} //= 2) + ($h{a} //= 3), ($g{a} ||= 2) + ($g{a} ||= 2);
-push @l, ($k{a} &&= 0) + ($k{a} &&= 5), ($h{b} //= 1), ($h{b} //= 2);
+my $p = ($h{a} //= 2); my $q = ($h{a} //= 3); my $r = ($g{a} ||= 2); my $s = ($g{a} ||= 2);
+push @l, $p + $q, $r + $s;
+my $t = ($k{a} &&= 0); my $u = ($k{a} &&= 5); push @l, $t + $u, ($h{b} //= 1); push @l, ($h{b} //= 2);
 print "@l\n";
 SRC
+# In ONE expression the first value is an alias the second may overwrite
+# before the consumer reads it; that refuses (see the alias cases below).
+refuses('my %h; my @l; push @l, ($h{a} //= 2) + ($h{a} //= 3); print "@l\n";',
+    qr/GAP: `\/\/=` into an element whose value is read across another write/,
+    'two logassigns on one slot in one expression refuse');
 
 # A RIGHT SIDE THAT REBINDS ANOTHER LEXICAL rebinds it only when it runs.
 round_trips(<<'SRC', 'a right side that rebinds a lexical, at top level and in an if arm');
@@ -222,7 +228,7 @@ refuses('my $x = 0; my $r = \($x ||= 5); $$r = 9; print "$x\n";',
     'a reference to a lexical ||= refuses');
 round_trips(<<'SRC', 'an element //= whose result is only read');
 my %h; my $v = $h{a} //= 3; print(($h{b} ||= 7), " $v $h{a}\n");
-my @l = (($h{c} //= 1), ($h{c} //= 2)); print "@l\n";
+my @l = (($h{c} //= 1), ($h{d} //= 2)); print "@l\n";
 SRC
 
 # AN ELEMENT OF @_ ALIASES THE CALLER'S ARGUMENT, and the caller's graph does
@@ -241,7 +247,7 @@ refuses('sub f { $_[1] &&= 5; return } my @w = (1, 1); f(@w); print "@w\n";',
 # the literal's own values until something writes the array; `++` and `+=`
 # into an element did not say so, and the interpolation printed the old ones.
 round_trips(<<'SRC', 'increments and compound stores into an initialised array');
-my %h; my @l = (($h{a} //= 1), ($h{a} //= 2)); $l[0]++; print "@l $h{a}\n";
+my %h; my @l = (($h{a} //= 1), ($h{b} //= 2)); $l[0]++; print "@l $h{a}\n";
 my @m = (1, 1); ++$m[1]; my @n = (1, 1); $n[0] += 4; my @o = (3, 3); $o[1]--;
 my @p = (1, 2); my $i = 1; $p[$i] *= 5; my %q = (a => 1); $q{a}++;
 print "@m @n @o @p $q{a}\n";
@@ -303,7 +309,7 @@ SRC
 # reading the second's temporary before its if assigned it.
 round_trips(<<'SRC', 'a mutated list over two branch values');
 my %h; my @l = (($h{a} //= 1) . "x", ($h{b} ||= 2) * 3); $l[1]++; print "@l\n";
-my %g; my @m = (($g{a} //= 1), ($g{a} //= 2)); $m[0]++; print "@m $g{a}\n";
+my %g; my @m = (($g{a} //= 1), ($g{b} //= 2)); $m[0]++; print "@m $g{a}\n";
 my $n = 0; sub f { $n++; 5 } my ($c, $d) = (1, 0);
 my @t = (($c ? f() : 1), ($d ? f() : 2)); $t[0]++;
 my @u = (($c ? f() : 1) + 1, ($d ? f() : 2) + 1); $u[1]++; print "@t @u $n\n";
@@ -323,6 +329,62 @@ my %h; my @w = (($h{a} //= 4)); my $s = 0; for my $i (1..3) { $s += $i } my @l =
 my %g; my $t = 0; for my $i (1..3) { $t += $i } my $c = ($g{a} &&= 4) // 0; my $u = 0; for my $i (1..2) { $u += $i }
 my @m = ($t, $c, $u, ($g{b} ||= 7)); $m[3]++; print "@m\n";
 my $n = 0; sub f { $n++; 5 } my $z = 1; my $y = 0; for my $i (1..3) { $y .= $i } my @p = ($y, ($z ? f() : 1) + 1); $p[0]++; print "@p $n\n";
+SRC
+
+# AN ELEMENT LOGASSIGN YIELDS THE ELEMENT ITSELF, an alias read when the
+# consumer runs. Its value is the Phi of the arms, a snapshot, so a write to
+# the same element later in the expression, or an alias of it pushed before,
+# was not seen: `($h{a} //= 1) + ($h{a} = 5)` is 10 in perl and was 6.
+for my $case (
+    ['my %h; my @l = (($h{a} //= 1), ($h{a} = 2)); print "@l\n";', '//='],
+    ['my %h; my $v = ($h{a} //= 1) + ($h{a} = 5); print "$v\n";', '//='],
+    ['my %h; my $v = ($h{a} //= 0) + ($h{a} ||= 2); print "$v\n";', '//='],
+    ['my @a; my $v = ($a[0] ||= 3) * ($a[0] = 4); print "$v\n";', '||='],
+    ['my %h; my $v = ($h{a} //= 1) + $h{a}++; print "$v $h{a}\n";', '//='],
+    ['my %h; my $v = ($h{a} //= 0) + ($h{a} ||= 2) + ($h{a} &&= 4); print "$v $h{a}\n";', '//='],
+    ['my %h = (a => 0); my $v = $h{a} + ($h{a} ||= 5); print "$v\n";', '||='],
+    ['my %h; my $k = "a"; my $v = ($h{a} //= 1) + ($h{$k} = 5); print "$v\n";', '//='],
+    ['my $r = {}; my $s = $r; my $v = ($r->{a} //= 1) + ($s->{a} = 5); print "$v\n";', '//='],
+    ['my %h; sub f { $h{a} = 7; 0 } my $v = ($h{a} //= 1) + f(); print "$v\n";', '//='],
+    ['my %h; my $v; for my $k (qw(a)) { $v = ($h{$k} //= 1) + ($h{$k} = 5) } print "$v\n";', '//='],
+) {
+    my ($src, $op) = @$case;
+    refuses($src, qr/GAP: `\Q$op\E` into an element whose value is read across another write/,
+        "an alias read across a write refuses: $src");
+}
+round_trips(<<'SRC', 'an element logassign value read before any other write');
+my %h; my $v = ($h{a} //= 1) + ($h{b} = 5); my $w = ($h{c} ||= 2) + $h{c}; print "$v $w\n";
+my @a; my $u = ($a[0] ||= 3) * ($a[1] = 4); print "$u @a\n";
+my $r = {}; push @{ $r->{x} //= [] }, 1, 2; my $t = ($r->{y}{z} //= 3) + ($r->{y}{q} = 1); print "@{$r->{x}} $t\n";
+sub g { my ($k) = @_; my %c; return ($c{$k} //= [$k]) } print g("q")->[0], "\n";
+SRC
+
+# AN AGGREGATE REBOUND IN A LOOP BODY gets a literal that floats out of the
+# loop, so every pass shares one container and `@a = ()` empties nothing:
+# `for (1..2) { @a = (); $a[0] ||= $_ }` printed 1 for perl's 2. The plain
+# store form shares the defect; the logassign form refuses by name.
+for my $case (
+    ['my @a; for my $i (1..2) { @a = (); $a[0] ||= $i } print "@a\n";', '||='],
+    ['my @a = (5); for my $i (1..2) { @a = (); $a[0] //= $i } print "@a\n";', '//='],
+    ['my %h; for (1..2) { %h = (); $h{a} ||= $_ } print $h{a}, "\n";', '||='],
+    ['my %h = (b => 1); for (1..2) { %h = (b => $_); $h{a} //= $_ } print $h{a}, "\n";', '//='],
+    ['my @a; for my $i (1..2) { @a = ($i); $a[1] ||= $i } print "@a\n";', '||='],
+    ['my @a; my $i = 0; while ($i < 2) { $i++; @a = (0); $a[0] &&= $i } print "@a\n";', '&&='],
+    ['my @a; my @r; for my $i (1..3) { $a[0] ||= $i; push @r, $a[0]; @a = () } print "@r\n";', '||='],
+    ['my %h; for my $i (1..2) { %h = (x => 1) if $i == 2; $h{a} //= $i } print join(",", sort keys %h), "\n";', '//='],
+    ['my @a; for my $i (1..3) { @a = () if $i > 1; $a[0] ||= $i } print "@a\n";', '||='],
+    ['my @a; for my $j (1..2) { @a = (); for my $i (1..2) { $a[0] ||= $i + $j } } print "@a\n";', '||='],
+) {
+    my ($src, $op) = @$case;
+    refuses($src, qr/GAP: `\Q$op\E` into an element of an aggregate rebound inside the loop/,
+        "an element of an aggregate rebound in the loop refuses: $src");
+}
+round_trips(<<'SRC', 'element logassigns in a loop over an aggregate it does not rebind');
+for my $i (1..2) { my %h; $h{a} ||= $i; print $h{a} } print "\n";
+for my $i (1..2) { my @b = (0); $b[0] ||= $i; print "@b" } print "\n";
+my @a = (5); for my $i (1..2) { $a[$i] //= $i } print "@a\n";
+my %g; for my $k (qw(a b a)) { $g{$k} //= 0; $g{$k}++ } print join(",", map {"$_=$g{$_}"} sort keys %g), "\n";
+my @c; for my $i (1..3) { push @c, $i; $c[0] ||= 9 } my @d = (0); for my $i (1..3) { $d[0] ||= $i; $d[1] //= 2 } print "@c @d\n";
 SRC
 
 done_testing;

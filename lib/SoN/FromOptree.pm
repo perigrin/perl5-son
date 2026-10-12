@@ -365,6 +365,8 @@ class SoN::FromOptree 0.01 {
     # plain `last if` feeds) and `nexts` (sims merged at the loop's latch).
     # Both collectors are undef while the loop is being scouted, so a scout
     # walk records nothing, exactly as $break_projs undef means for `last`.
+    # `phis` is the loop's header Phi per carried key, for asking whether a
+    # binding was rebound inside the loop.
     our @LOOP_STACK;
 
     # THE FUNCTION'S EXIT LIST, for a `return` inside a loop body: the loop
@@ -11178,7 +11180,7 @@ class SoN::FromOptree 0.01 {
         # @LOOP_PHI_KEYS. `local`, so a nested loop adds to it and the outer
         # loop's set is restored on the way out.
         local @LOOP_PHI_KEYS = (@LOOP_PHI_KEYS, _carried_stash_keys(\%phis));
-        @$frame{qw(loop breaks nexts)} = ($loop_node, \@break_projs, []);
+        @$frame{qw(loop breaks nexts phis)} = ($loop_node, \@break_projs, [], \%phis);
         my $exit_proj = _walk_loop_body($cv, $cond_start, $sim, $factory,
             $opmap, {}, $visited, $loop_node, \@break_projs);
         # A LOOP MAY EXIT BY ITS BREAK ALONE. `while (1) { ... last if C }` has
@@ -11481,7 +11483,7 @@ class SoN::FromOptree 0.01 {
         # FOUR arms on one Loop and the deparser refused ("a Loop with 4 Proj
         # arms"). Only the break collector is wanted.
         my @break_projs;
-        @$frame{qw(loop breaks nexts)} = ($loop_node, \@break_projs, []);
+        @$frame{qw(loop breaks nexts phis)} = ($loop_node, \@break_projs, [], \%phis);
         _walk_loop_body($cv, $body_start, $sim, $factory, $opmap, {}, $visited,
             undef, \@break_projs, 1);
 
@@ -11738,7 +11740,7 @@ class SoN::FromOptree 0.01 {
         # FOUR arms on one Loop and the deparser refused ("a Loop with 4 Proj
         # arms"). Only the break collector is wanted.
         my @break_projs;
-        @$frame{qw(loop breaks nexts)} = ($loop_node, \@break_projs, []);
+        @$frame{qw(loop breaks nexts phis)} = ($loop_node, \@break_projs, [], \%phis);
         _walk_loop_body($cv, $body_start, $sim, $factory, $opmap, {}, $visited,
             undef, \@break_projs, 1);
 
@@ -14264,6 +14266,29 @@ class SoN::FromOptree 0.01 {
                         && $c->const_type eq 'undef';
                 $c = $c->isa('SoN::IR::Node::Subscript') ? $c->inputs->[0] : undef;
             }
+            # AN AGGREGATE REBOUND IN THE LOOP BODY (`@a = ()` of an outer @a)
+            # is a literal with nothing pinning it to the iteration, so it
+            # floats above the loop and every pass shares one container:
+            # `for (1..2) { @a = (); $a[0] ||= $_ }` printed 1 for 2. Read
+            # through the loop's Phi or an if's merge of it, the emission
+            # died on "Can't use an array as a reference". So an element of
+            # any aggregate the loop carries refuses. The plain store shares
+            # the defect; the fix belongs to the reassign.
+            for my $f (@LOOP_STACK) {
+                my $phis = $f->{phis} or next;
+                die "GAP: `$spelling` into an element of an aggregate"
+                  . " rebound inside the loop\n"
+                    if grep { my $b = $sim->lookup($_);
+                              defined $b && $b == $root } keys %$phis;
+            }
+            # THE VALUE IS THE ELEMENT ITSELF, an alias the consumer reads
+            # when it runs; the Phi below is a snapshot of it. That is the
+            # same answer only when nothing between here and the consumer
+            # writes the element, and nothing before it pushed an alias of
+            # it: `($h{a} //= 1) + ($h{a} = 5)` is 10, not 6.
+            die "GAP: `$spelling` into an element whose value is read across"
+              . " another write\n"
+                unless $is_void || _logassign_value_unaliased($cv, $op);
             $sim->pop_node;
             my $read = sub ($s) {
                 my $r = $factory->make_unique('Subscript', kind => $lvalue->kind,
@@ -14421,6 +14446,170 @@ class SoN::FromOptree 0.01 {
         return $op->next;
     }
 
+
+    # _logassign_value_unaliased($cv, $op) -> true when the value an element
+    # logassign yields is read before anything could change the element.
+    #
+    # The op yields the element itself and its consumer reads it when the
+    # consumer runs. Up the parents from $op to that consumer, every sibling
+    # after the path runs in between, and every sibling before it pushed its
+    # value first. A later sibling may not write anything but a provably
+    # different element; an earlier one may not hold any element that is not
+    # provably different (an existing element is pushed as an alias). A
+    # parent passes the value on (a list, parens, a logop's arm) or consumes
+    # it; any other parent refuses, the safe direction for an allow-list.
+    my %LOGASSIGN_PASSES = map { $_ => 1 }
+        qw(null list lineseq scope leave and or dor cond_expr);
+    my %LOGASSIGN_CONSUMES = map { $_ => 1 }
+        qw(sassign padsv_store aassign return leavesub rv2av rv2hv rv2sv
+           print say push unshift join concat multiconcat stringify
+           add subtract multiply divide modulo negate not defined length ref
+           eq ne lt gt le ge ncmp seq sne slt sgt sle sge scmp
+           i_add i_subtract i_multiply i_eq i_ne i_lt i_gt i_le i_ge);
+    # Ops that run without writing; a write's TARGET is judged by its
+    # OPf_MOD flag, so `sassign` and `postinc` are here and their element
+    # kid is compared.
+    my %LOGASSIGN_PURE = (%LOGASSIGN_CONSUMES, map { $_ => 1 }
+        qw(const pushmark padsv padav padhv gv gvsv rv2gv helem aelem
+           multideref aelemfast aelemfast_lex null list scalar
+           orassign andassign dorassign preinc postinc predec postdec));
+    my %LOGASSIGN_ELEM = map { $_ => 1 }
+        qw(multideref helem aelem aelemfast aelemfast_lex aelemfastlex_store);
+    delete @LOGASSIGN_PURE{qw(padsv_store aassign return leavesub rv2sv
+                              print say push unshift)};
+
+    sub _logassign_value_unaliased ($cv, $op) {
+        my $mine = _const_elem_path($cv, $op->first);
+        for (my $o = $op; ; ) {
+            my $p = $o->parent;
+            return 0 unless $p && $$p;
+            my $name = $p->name;
+            return 0 unless $LOGASSIGN_PASSES{$name}
+                || $LOGASSIGN_CONSUMES{$name};
+            my $is_assign = $name eq 'sassign' || $name eq 'aassign';
+            # An earlier STATEMENT left nothing on the stack.
+            my $seen = $name eq 'lineseq' || $name eq 'leave' || $name eq 'scope'
+                ? undef : 0;
+            for my $k (_op_kids($p)) {
+                if ($$k == $$o) { $seen = 1; next }
+                next unless defined $seen;
+                return 0 if _logassign_conflicts($cv, $mine, $k, $seen,
+                    $seen && $is_assign);
+            }
+            return 1 if $LOGASSIGN_CONSUMES{$name};
+            $o = $p;
+        }
+    }
+
+    # _logassign_conflicts($cv, $mine, $o, $after, $lhs) -> true when the
+    # subtree at $o may touch the element $mine names. $after: it runs after
+    # the value was pushed; $lhs: it is the consumer's own assignment target,
+    # whose lvalues are pushed now and written only by the consumer.
+    sub _logassign_conflicts ($cv, $mine, $o, $after, $lhs) {
+        my $name = $o->name;
+        # An op dereferenced for an element (`$r` and `$r->{y}` in
+        # `$r->{y}{q} = 1`) is at most vivified, never written, and pushes
+        # nothing of its own.
+        my $p = $o->parent;
+        my $derefed = $p && $$p && $p->name =~ /\Arv2[ah]v\z/;
+        if ($LOGASSIGN_ELEM{$name}) {
+            my $writes = $name eq 'aelemfastlex_store'
+                || (($o->flags & B::OPf_MOD()) && !$derefed);
+            return 1 if ((!$after && !$derefed) || ($writes && !$lhs))
+                && !_elem_paths_differ($mine, _const_elem_path($cv, $o));
+        }
+        elsif ($after) {
+            return 1 if !$lhs && !$derefed && $name ne 'null'
+                && ($o->flags & B::OPf_MOD());
+            return 1 unless $LOGASSIGN_PURE{$name};
+        }
+        elsif ($name eq 'rv2sv') {
+            return 1;   # `$$r` may alias the element
+        }
+        for my $k (_op_kids($o)) {
+            return 1 if _logassign_conflicts($cv, $mine, $k, $after, $lhs);
+        }
+        return 0;
+    }
+
+    sub _op_kids ($o) {
+        my @k;
+        return @k unless $o->flags & B::OPf_KIDS();
+        for (my $k = $o->first; $$k; $k = $k->sibling) { push @k, $k }
+        return @k;
+    }
+
+    # _const_elem_path($cv, $op) -> `$h{"a"}`, `$a[1]`, `$r->{"x"}{"y"}`:
+    # the element an op names, when its root is a lexical and every subscript
+    # a constant; else undef. The translated optree may still hold the
+    # unoptimised helem/aelem chain, or the multideref the peephole made.
+    sub _const_elem_path ($cv, $op) {
+        $op = $op->first while $op->name eq 'null' && ($op->flags & B::OPf_KIDS());
+        my $name = $op->name;
+        my $padname = sub ($targ, $sigil) {
+            my $pn = eval { $cv->PADLIST->ARRAYelt(0)->ARRAYelt($targ) };
+            my $n = $pn && $$pn ? $pn->PVX : undef;
+            return defined $n && $n =~ /\A\Q$sigil\E(\w+)\z/ ? $1 : undef;
+        };
+        if ($name eq 'multideref') {
+            my $s = eval { $op->string($cv) } // return undef;
+            return $s =~ /\A\$\w+(?:->)?(?:\[\d+\]|\{"[\w ]*"\})+\z/ ? $s : undef;
+        }
+        if ($name eq 'aelemfast_lex' || $name eq 'aelemfastlex_store') {
+            my $idx = $op->private;
+            return undef if $idx > 127;   # a negative index, signed in the byte
+            my $n = $padname->($op->targ, '@') // return undef;
+            return "\$$n\[$idx]";
+        }
+        return undef unless $name eq 'helem' || $name eq 'aelem';
+        my $cont = $op->first;
+        my $key  = $cont->sibling;
+        return undef unless $key && $$key && $key->name eq 'const';
+        my $sv = $key->sv;
+        $sv = eval { $cv->PADLIST->ARRAYelt(1)->ARRAYelt($key->targ) }
+            if !$$sv || $sv->isa('B::SPECIAL');
+        return undef unless $sv && $$sv;
+        my $sub;
+        if ($name eq 'helem') {
+            my $k = $sv->isa('B::PV') ? $sv->PV : undef;
+            return undef unless defined $k && $k =~ /\A[\w ]*\z/;
+            $sub = qq({"$k"});
+        }
+        else {
+            my $k = $sv->isa('B::PV') ? $sv->PV
+                  : $sv->isa('B::IV') ? $sv->IV : undef;
+            return undef unless defined $k && $k =~ /\A(?:0|[1-9]\d*)\z/;
+            $sub = "[$k]";
+        }
+        $cont = $cont->first while $cont->name eq 'null'
+            && ($cont->flags & B::OPf_KIDS());
+        my $cname = $cont->name;
+        if ($cname eq 'padhv' || $cname eq 'padav') {
+            my $n = $padname->($cont->targ, $cname eq 'padhv' ? '%' : '@')
+                // return undef;
+            return "\$$n$sub";
+        }
+        return undef unless $cname eq 'rv2hv' || $cname eq 'rv2av';
+        my $inner = $cont->first;
+        $inner = $inner->first while $inner->name eq 'null'
+            && ($inner->flags & B::OPf_KIDS());
+        if ($inner->name eq 'padsv') {
+            my $n = $padname->($inner->targ, '$') // return undef;
+            return "\$$n->$sub";
+        }
+        my $prefix = _const_elem_path($cv, $inner) // return undef;
+        return "$prefix$sub";
+    }
+
+    # _elem_paths_differ($a, $b) -> true when the two constant paths are
+    # certainly different elements: the same container path, then different
+    # last subscripts. Different roots or prefixes may alias each other.
+    sub _elem_paths_differ ($x, $y) {
+        return 0 unless defined $x && defined $y;
+        my ($px, $lx) = $x =~ /\A(.*)(\[\d+\]|\{"[\w ]*"\})\z/ or return 0;
+        my ($py, $ly) = $y =~ /\A(.*)(\[\d+\]|\{"[\w ]*"\})\z/ or return 0;
+        return $px eq $py && $lx ne $ly;
+    }
 
     # _arm_has_loop_control($start, $stop) -> true when a `next` or `last` of
     # the ENCLOSING loop lies in the arm: the ops from $start, along ->next and
