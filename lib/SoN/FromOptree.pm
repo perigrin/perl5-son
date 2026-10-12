@@ -14405,6 +14405,14 @@ class SoN::FromOptree 0.01 {
         my $elem_true   = _arm_has_element_store($op->other, $op->next, $join_addr);
         my $elem_false  = _arm_has_element_store($op->next, $op->other, $join_addr);
         my $elem_branch = $elem_true || $elem_false;
+        # A RETURN DIRECTLY IN THE ARM leaves from it too: `C ? (return X) : Y`
+        # or `if (C) { return X } else { ... }`. Without the If, the exit hung
+        # off the pre-branch control and ran unconditionally in a loop body.
+        # ONE SUCH ARM: two returning arms meet nowhere, and the value merge
+        # already merges both exits into one Return.
+        my $ret_branch = $exits && 1 == grep {
+            _arm_has_die_from($_->[0], $_->[1], $join_addr, {}, { return => 1 })
+        } [$op->other, ${ $op->next }], [$op->next, ${ $op->other }];
         my $mem_branch  = $elem_branch
                        || _arm_has_field_store($cv, $op->other, $op->next, $join_addr)
                        || _arm_has_field_store($cv, $op->next, $op->other, $join_addr)
@@ -14415,6 +14423,7 @@ class SoN::FromOptree 0.01 {
                        # A RETURN, nested in a modifier or not, leaves from its arm.
                        || _arm_has_return($op->other, $op->next, $join_addr)
                        || _arm_has_return($op->next, $op->other, $join_addr)
+                       || $ret_branch
                        # A PINNED ALLOCATION moves the arm's control: `$c ? 2 : []`
                        # forked the pre-branch control without an If.
                        # SO DOES A CALL WHOSE VALUE THE ARM YIELDS, and a loop or
@@ -14493,7 +14502,7 @@ class SoN::FromOptree 0.01 {
             die "GAP: a consumed value-context ternary whose arms store a class"
               . " field is not yet lowered (the arm residual is unstamped, so"
               . " the merged value would silently be Undef)\n"
-                if !$is_void && !$die_branch && !$alloc_only;   # $elem_branch already died above; here it's a field store
+                if !$is_void && !$die_branch && !$ret_branch && !$alloc_only;   # $elem_branch already died above; here it's a field store
             my $if_node = $factory->make_cfg('If',
                 inputs => [$sim->control, $cond]);
             my $true_proj  = $factory->make_cfg('Proj',
@@ -14504,7 +14513,7 @@ class SoN::FromOptree 0.01 {
             # each arm's residual value (delta > 0) and returns it, so capture
             # each here -- a die-arm branch (below) needs the LIVE arm's value as
             # the merged result, and re-popping from the sim would find nothing.
-            my ($false_arm_val, undef, $false_sim, $false_delta, $false_sig)
+            my ($false_arm_val, $false_end, $false_sim, $false_delta, $false_sig)
                 = $walk_arm->($op->next,  $false_proj);
             my ($true_arm_val, $true_end, $true_sim, $true_delta, $true_sig)
                 = $walk_arm->($op->other, $true_proj);
@@ -14547,7 +14556,7 @@ class SoN::FromOptree 0.01 {
                 my $stay_val = $left{true} ? $false_arm_val : $true_arm_val;
                 $sim->push_node($stay_val)
                     if defined $stay_val && $want != 1;
-                return ($left{true} ? undef : $true_end) // $op->next;
+                return ($left{true} ? $false_end : $true_end) // $op->next;
             }
             # Each arm's value back on its stack, so merge() builds the Phi.
             # WANT 0 IS THE CALLER'S CONTEXT, not void -- `return $c ? 2 : []`

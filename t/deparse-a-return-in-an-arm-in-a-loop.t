@@ -117,4 +117,35 @@ subtest 'a return in an else arm in a loop body is not dropped' => sub {
         'return if, in an else arm');
 };
 
+# A RETURN DIRECTLY IN AN IF/ELSE OR TERNARY ARM: the exit list let it
+# through, but no If was built for it -- only a NESTED return counted -- so
+# the exit hung off the pre-branch control. In a loop body that is a return
+# on the first iteration: `100 100` where perl prints `300 15`. And with the
+# true arm gone, the walk resumed at the false arm's FIRST op rather than its
+# end, so the staying arm's value and stores were lost (`300 0`, `100 0`).
+subtest 'a return directly in an if/else or ternary arm' => sub {
+    round_trips(q{sub f { my $k=shift; my $s=0; for my $i (1..5) { my $v = $i > $k ? (return $i*100) : $i; $s += $v } return $s } print f(2), " ", f(9), "\n";},
+        'my $v = C ? (return X) : Y, in a loop');
+    round_trips(q{sub f { my $k=shift; my $s=0; for my $i (1..5) { $s += $i > $k ? (return $s) : $i } return -$s } print f(2), " ", f(9), "\n";},
+        '$s += C ? (return X) : Y, in a loop');
+    round_trips(q{sub f { my $k=shift; my @o; for my $i (1..5) { push @o, ($i > $k ? (return "r$i") : $i) } return "@o" } print f(2), " ", f(9), "\n";},
+        'push @o, (C ? (return X) : Y), in a loop');
+    round_trips(q{sub f { my $k=shift; my $s=0; for my $i (1..5) { my $v = $i <= $k ? $i : (return $i); $s += $v } return $s } print f(2), " ", f(9), "\n";},
+        'the false arm returns, in a loop');
+    round_trips(q{sub f { my $k=shift; my ($s,$i)=(0,0); while ($i < 5) { $i++; my $v = $i > $k ? (return $i) : $i; $s += $v } return $s } print f(2), " ", f(9), "\n";},
+        'a consumed ternary, in a while body');
+    round_trips(q{sub f { my $k=shift; my $s=0; for my $i (1..5) { $i > $k ? (return $i*100) : ($s += $i); } return $s } print f(2), " ", f(9), "\n";},
+        'a void ternary, in a loop');
+    round_trips(q{sub f { my $k=shift; my $s=0; for my $i (1..5) { if ($i > $k) { return $i*100 } else { $s += $i } } return $s } print f(2), " ", f(9), "\n";},
+        'if/else, the true arm returns, in a loop');
+    round_trips(q{sub f { my $k=shift; my $s=0; for my $i (1..5) { if ($i <= $k) { $s += $i } else { return $s } } return -$s } print f(2), " ", f(9), "\n";},
+        'if/else, the false arm returns, in a loop');
+    round_trips(q{sub f { my $k=shift; my @o; for my $i (1..5) { if ($i > $k) { return @o } else { push @o, $i } } return () } my @a=f(2); my $n=f(2); print "@a|$n\n";},
+        'if/else returning an array, in a loop');
+    round_trips(q{sub f { my $s=0; if ($_[0] > 1) { return 100 } else { $s += 1 } return $s } print f(2), " ", f(0), "\n";},
+        'if/else, the true arm returns, no loop');
+    round_trips(q{sub f { my $v = $_[0] > 1 ? (return 100) : 7; $v + 1 } print f(2), " ", f(0), "\n";},
+        'a consumed ternary, no loop');
+};
+
 done_testing;
