@@ -14429,9 +14429,16 @@ class SoN::FromOptree 0.01 {
         # or `if (C) { return X } else { ... }`. Without the If, the exit hung
         # off the pre-branch control and ran unconditionally in a loop body.
         # ONE SUCH ARM: two returning arms meet nowhere, and the value merge
-        # already merges both exits into one Return.
+        # already merges both exits into one Return. DIRECTLY: a return under
+        # a further branch is _arm_has_return's, and that arm still yields a
+        # value (`C ? (D ? (return 1) : 2) : 3`) -- not this rule's to merge.
         my $ret_branch = $exits && 1 == grep {
-            _arm_has_die_from($_->[0], $_->[1], $join_addr, {}, { return => 1 })
+            my ($stop, $hit) = ($_->[1], 0);
+            for (my $o = $_->[0]; $$o && $$o != $stop
+                     && !(defined $join_addr && $$o == $join_addr); $o = $o->next) {
+                $hit = 1, last if $o->name eq 'return';
+            }
+            $hit;
         } [$op->other, ${ $op->next }], [$op->next, ${ $op->other }];
         my $mem_branch  = $elem_branch
                        || _arm_has_field_store($cv, $op->other, $op->next, $join_addr)

@@ -146,6 +146,16 @@ subtest 'a return directly in an if/else or ternary arm' => sub {
         'if/else, the true arm returns, no loop');
     round_trips(q{sub f { my $v = $_[0] > 1 ? (return 100) : 7; $v + 1 } print f(2), " ", f(0), "\n";},
         'a consumed ternary, no loop');
+    # A RETURN UNDER A FURTHER BRANCH leaves an arm that still yields a value
+    # on its other path; merging that value is not lowered, and counting the
+    # return as the arm's own gave `$s + undef`.
+    my $why = qr/GAP: a consumed value-context ternary/;
+    refuses(q{sub f { my $k=shift; my $s=0; for my $i (1..5) { my $v = $i > $k ? ($i > 4 ? (return 1) : 2) : $i; $s += $v } return $s } print f(2), " ", f(9), " ", f(4), "\n";},
+        $why, 'a nested ternary return, consumed, in a loop');
+    refuses(q{sub f { my $k=shift; my $v = $k > 1 ? ($k > 4 ? (return 1) : 2) : $k; $v + 10 } print f(0), " ", f(2), " ", f(5), "\n";},
+        $why, 'a nested ternary return, consumed, no loop');
+    round_trips(q{sub f { my $k=shift; my $s=0; for my $i (1..5) { if ($i > $k) { if ($i > 4) { return 1 } else { $s += 2 } } else { $s += $i } } return $s } print f(2), " ", f(9), " ", f(4), "\n";},
+        'a nested if/else return, in a loop');
 };
 
 # AN AGGREGATE EXIT FALLING THROUGH A LOOP: `return @o` after a loop that
