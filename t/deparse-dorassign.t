@@ -194,4 +194,34 @@ refuses('my $h; $h->{x}{y} //= 1; print ref($h), "\n";',
     qr/GAP: `\/\/=` into an element of undef, which perl would autovivify/,
     'an element of an undefined lexical, which would autovivify, refuses');
 
+# A SLICE IN SCALAR CONTEXT IS ONE SCALAR. Stored into a scalar inside a loop,
+# its List stamp reached the loop-carried Phi, which then joined to List and
+# was emitted as an array: `$x ||= (...)[1]` printed the array's count.
+round_trips(<<'SRC', '||= of a list slice whose operand has an effect, in a loop');
+my $x = 0; my $s = ""; for my $i (1..3) { $x ||= ($s .= $i, $i > 1 ? $i : 0)[1] } print "$x $s\n";
+SRC
+round_trips(<<'SRC', 'a list slice stored into a scalar in a foreach');
+my $x = 0; for my $i (1..3) { $x = (7, $i)[1] } print "$x\n";
+SRC
+round_trips(<<'SRC', 'a list slice stored into a scalar in a while, and in an arm');
+my $x = 0; my $i = 0; while ($i < 3) { $i++; $x = (7, $i)[1] }
+my $y = 0; for my $j (1..3) { if ($j > 1) { $y = (7, $j)[1] } } print "$x $y\n";
+SRC
+round_trips(<<'SRC', 'an array and a hash slice stored into a scalar in a loop');
+my @a = (4,5,6); my %h = (a=>4, b=>5); my ($x, $y) = (0, 0);
+for my $i (1..3) { $x = @a[0,$i-1] } for my $k (qw(a b)) { $y = @h{"a",$k} } print "$x $y\n";
+SRC
+round_trips(<<'SRC', 'a slice of a sort, into a scalar in a loop; and in list context');
+my $x = 0; my @r; for my $i (1..3) { $x = (sort { $b <=> $a } 1..$i)[0]; push @r, (7, $i)[1] } print "$x @r\n";
+SRC
+
+# A KEY/VALUE SLICE HAS NO IR SPELLING. `%h{...}` and `%a[...]` yield pairs,
+# and Slice says only "values": it was emitted as `@h{...}`, which drops keys.
+refuses('my %h; my @k = qw(a b); for (@k) { $h{$_} //= length } print join(",", %h{sort keys %h}), "\n";',
+    qr/GAP: a key\/value slice \(kvhslice\) is not yet lowered/,
+    'a key/value hash slice refuses');
+refuses('my @a = (5,6); print join(",", %a[0,1]), "\n";',
+    qr/GAP: a key\/value slice \(kvaslice\) is not yet lowered/,
+    'a key/value array slice refuses');
+
 done_testing;

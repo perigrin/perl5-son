@@ -4137,6 +4137,23 @@ class SoN::FromOptree 0.01 {
             if defined $sim->memory;
     }
 
+    # _slice_reading($factory, $op, $slice) -- the value a slice op yields.
+    #
+    # A SLICE IN SCALAR CONTEXT IS ONE SCALAR: the last selected element, or
+    # undef. The Slice node stays a List (see TypeLibrary's row), and the
+    # scalar reading is the same Coerce(List -> Scalar) a list return gets.
+    # Pushed bare, the List stamp reached whatever merged the value: stored
+    # into `$x` in a loop body, the loop Phi joined Int with List to List and
+    # `$x` became an array -- `$x = (7, $i)[1]` printed 1 for 3.
+    sub _slice_reading ($factory, $op, $slice) {
+        return $slice unless ($op->flags & 3) == 2;   # OPf_WANT_SCALAR
+        return $factory->make('Coerce',
+            inputs    => [$slice],
+            from_repr => 'List',
+            to_repr   => 'Scalar',
+            stamp     => SoN::IR::Stamp->new(type => 'Scalar'));
+    }
+
     # Shared op-handler core for all three walkers.
     #
     #   _step($cv, $op, $sim, $factory, $opmap, $ctx) -> ($next_op, $signal)
@@ -4517,7 +4534,25 @@ class SoN::FromOptree 0.01 {
                 inputs      => [$indices->@*, $values->@*],
                 index_count => scalar($indices->@*),
             );
-            $sim->push_node($node);
+            $sim->push_node(_slice_reading($factory, $op, $node));
+            return ($op->next, 'handled');
+        }
+
+        # A KEY/VALUE SLICE YIELDS PAIRS. `%h{'a','b'}` is (a, 1, b, 2) and
+        # `%a[0,1]` is (0, 5, 1, 6); a Slice node says only "the values at
+        # these indices", so OpMap's row built one and the emission read
+        # `@h{...}` -- the keys silently gone. Refused until the IR can say
+        # which half it wants.
+        die "GAP: a key/value slice ($name) is not yet lowered\n"
+            if $name eq 'kvhslice' || $name eq 'kvaslice';
+
+        # A CONTAINER SLICE IN SCALAR CONTEXT takes the same scalar reading
+        # as the list slice above; in list context it is OpMap's generic row.
+        if (($name eq 'aslice' || $name eq 'hslice') && ($op->flags & 3) == 2) {
+            my $inputs = $sim->pop_to_mark;
+            my $node = $factory->make('Slice', inputs => $inputs,
+                stamp => _result_stamp('Slice', $inputs));
+            $sim->push_node(_slice_reading($factory, $op, $node));
             return ($op->next, 'handled');
         }
 
