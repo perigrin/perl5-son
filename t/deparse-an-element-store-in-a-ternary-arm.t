@@ -194,9 +194,9 @@ todo 'DIFF at base: a void refgen does not vivify the element' => sub {
 todo 'DIFF at base: map does not vivify an aliased element' => sub {
     output_matches(q{my %h; my @r = map { $_ } $h{a}; print exists $h{a} ? "e" : "n", "\n"}, 'map over an element');
 };
-todo 'DIFF at base: a callee write into a lexical array element is lost' => sub {
-    output_matches(q{sub set { $_[0] = "w" } my @a=(0,0); for my $c (1,0) { $c && set($a[$c]); print "@a\n" }}, 'set($a[$c]) under &&');
-};
+# A callee write into an element, read back in the loop that makes it:
+# a read in a loop of a slot the sub mutates is not the flatten shortcut.
+output_matches(q{sub set { $_[0] = "w" } my @a=(0,0); for my $c (1,0) { $c && set($a[$c]); print "@a\n" }}, 'set($a[$c]) under &&');
 todo 'DIFF at base: a returned stored expression pushes nothing (renders return ())' => sub {
     output_matches(q{my @a = (5); sub f { return $_[0] ? ($a[0] = $_[1]) : 8 } print f(1, 3), f(0), " @a\n"}, 'return of a stored argument');
 };
