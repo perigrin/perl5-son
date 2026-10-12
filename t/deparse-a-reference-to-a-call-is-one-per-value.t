@@ -56,4 +56,14 @@ round_trips(q{sub two { (4, 5) } my $r = \ two(); print "$$r\n"; my @r = \ two()
 round_trips(q{sub v { 9 } my @a = (v => "${\ v()}"); print "@a\n";},
     'inside a list');
 
+# IN SCALAR CONTEXT THE REFGEN IS ONE REFERENCE, the last value's, and a
+# loop carrying it carries a scalar: stamped as a list, the Phi became an
+# array and `$$r` dereferenced its count ("Can't use string (\"3\")").
+round_trips(q{sub g { (5,6,7) } my $r = 0; for my $i (1,2) { $r = \ g() } print "$$r\n";},
+    'a reference to a list call carried by a for loop');
+round_trips(q{sub g { (5,6,7) } my $r = 0; my $i = 0; while ($i++ < 2) { $r = \ g() } print "$$r\n";},
+    'a reference to a list call carried by a while loop');
+round_trips(q{my @a = (5,6,7); my $r = 0; for my $i (1,2) { $r = \(@a) } print "$$r\n";},
+    'a reference to each element of an array carried by a loop');
+
 done_testing;

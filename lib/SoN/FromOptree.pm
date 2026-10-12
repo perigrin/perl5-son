@@ -5098,12 +5098,15 @@ class SoN::FromOptree 0.01 {
             # the last of them in scalar context (`"${\ $o->m}"`). The Call is
             # one node standing for the whole list, so a plain Ref over it
             # took a reference to the array its result is bound to.
+            # In scalar context it is that one last reference, not a list: a
+            # List stamp there turned a loop-carried $r into an array.
             my @items = $sim->pop_to_mark->@*;
             if (@items == 1 && @kids == 1
                     && ($kids[0]->name eq 'entersub'
                         || $kids[0]->name =~ /\Apad[ah]v\z/ && ($kids[0]->flags & 8))) {
                 $sim->push_node($factory->make('Ref', inputs => [$items[0]],
-                    each => 1, stamp => SoN::IR::Stamp->new(type => 'List')));
+                    each => 1, stamp => SoN::IR::Stamp->new(type =>
+                        ($op->flags & B::OPf_WANT) == B::OPf_WANT_LIST ? 'List' : 'Ref')));
             }
             else {
                 $sim->push_node($factory->make('Ref', inputs => [$_]))
