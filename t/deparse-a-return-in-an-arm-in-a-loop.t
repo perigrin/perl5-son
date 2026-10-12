@@ -172,8 +172,31 @@ subtest 'an aggregate exit after a loop' => sub {
         'return @o, from a while loop');
     round_trips(q{sub f { my $k=shift; my %h=(a=>1); for my $i (1..4) { $h{$i}=1; return %h if $i > $k } return %h } my %a=f(2); my @b=f(9); print scalar(keys %a), "|", scalar(@b), "\n";},
         'return %h, in the body and after the loop');
-    refuses(q{sub f { my $k=shift; my @o; for my $i (1..4) { push @o, $i; return $i if $i > $k } return @o } my @a=f(2); my $n=f(2); my @b=f(9); my $m=f(9); print "@a|$n|@b|$m\n";},
-        qr/GAP: a function exit merges an aggregate with a scalar/, 'return $i in the loop, @o after it');
+    round_trips(q{sub f { my $k=shift; my @o; for my $i (1..4) { push @o, $i; return $i if $i > $k } return @o } my @a=f(2); my $n=f(2); my @b=f(9); my $m=f(9); print "@a|$n|@b|$m\n";},
+        'return $i in the loop, @o after it');
+};
+
+# A RETURN FROM INSIDE THE LOOP IS ITS OWN `return`; only the paths that
+# fall through to the exit share its binding. So `return @o` in the loop
+# beside `return "x"` after it is no merge at all -- base rendered it, and
+# the kind check refused it for an input no binding carries.
+subtest 'an aggregate returned in the loop, a scalar after it' => sub {
+    round_trips(q{sub f { my $k=shift; my @o; for my $i (1..3) { push @o, $i; return @o if $i > $k } return "x" } my @a=f(1); my $n=f(1); my @b=f(9); my $m=f(9); print "@a|$n|@b|$m\n";},
+        'a modifier return of @o, "x" after the loop');
+    round_trips(q{sub f { my $k=shift; my @o; for my $i (1..3) { push @o, $i; if ($i > $k) { return @o } } return "x" } my @a=f(1); my $n=f(1); my @b=f(9); print "@a|$n|@b\n";},
+        'a block-if return of @o, "x" after the loop');
+    round_trips(q{sub f { my $k=shift; my @o; for my $i (1..3) { for my $j (1..2) { push @o, $j; return @o if $j > $k } } return "x" } my @a=f(1); my $n=f(1); my @b=f(9); print "@a|$n|@b\n";},
+        'nested loops');
+    round_trips(q{sub f { my $k=shift; my %h; for my $i (1..3) { $h{$i}=1; return %h if $i > $k } return "x" } my %a=f(1); my @b=f(9); print join(",", sort keys %a), "|@b\n";},
+        'return %h in the loop, "x" after it');
+    round_trips(q{sub f { my $k=shift; my @o; my $i=0; while ($i < 3) { $i++; push @o, $i; return @o if $i > $k } return 7 } my @a=f(1); my $n=f(1); my @b=f(9); print "@a|$n|@b\n";},
+        'a while loop, 7 after it');
+    # Both kinds falling through to the exit is the list exit's pair, and
+    # the caller's context picks there.
+    round_trips(q{sub f { my ($k, $s) = @_; my @o = (1,2); for my $i (1..3) { return 9 if $i > $k } return @o if $s; return "x" } my @a=f(9,1); my $n=f(9,1); my @b=f(9,0); print "@a|$n|@b\n";},
+        '@o and "x" both fall through to the exit');
+    round_trips(q{sub f { my ($x) = @_; my @c=(1); if ($x > 0) { push @c, 2; return "e" if $x > 5; } for my $i (1..2) { push @c, $i } return @c } my @a=f(9); my $n=f(9); my @b=f(1); my $m=f(-1); print "@a|$n|@b|$m\n";},
+        'a guarded "e" in an arm, @c after a loop');
 };
 
 # A RETURNED HASH IS THE HASH AS IT STANDS. The list half of `return %h`

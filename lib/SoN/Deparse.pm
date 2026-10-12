@@ -2795,7 +2795,11 @@ class SoN::Deparse 0.01 {
                         # BOUND HERE ON AN EARLIER PATH -- an arm that returned
                         # from inside an enclosing if -- this path still pays
                         # its own input; skipping it returned the other's.
-                        if (($bound{ $ph->{id} } // '') =~ /\A[\$\@]ret\d+\z/) {
+                        if (($bound{ $ph->{id} } // '') =~ /\A([\$\@%])ret\d+\z/) {
+                            die "GAP: a function exit merges an aggregate with a"
+                              . " scalar from inside a loop; which one the"
+                              . " caller gets depends on its context\n"
+                                if !$ret && $1 ne $self->_exit_input_sigil($ph->{inputs}[$k]);
                             $out .= sprintf("%s = %s;\n", $bound{ $ph->{id} },
                                             $self->_expr($ph->{inputs}[$k]));
                             next;
@@ -2805,20 +2809,13 @@ class SoN::Deparse 0.01 {
                         # holding `()` returned (undef) to a list caller.
                         my $sigil = ($ret && $ph == $rphis[0]) ? '@' : '$';
                         # AN AGGREGATE EXIT is an aggregate: `my $ret = @o`
-                        # returned the count to a list caller. Beside a
-                        # scalar input, only the caller's context could pick.
-                        if (!$ret) {
-                            my @kind = map {
-                                $self->_phi_aggregate_stamp({ id => "in$_", inputs => [$_] })
-                            } ($ph->{inputs} // [])->@*;
-                            if (grep { $_ } @kind) {
-                                die "GAP: a function exit merges an aggregate with a"
-                                  . " scalar from inside a loop; which one the"
-                                  . " caller gets depends on its context\n"
-                                    if grep { $_ ne $kind[0] } @kind;
-                                $sigil = $kind[0] eq 'Hash' ? '%' : '@';
-                            }
-                        }
+                        # returned the count to a list caller. ONLY THE PATHS
+                        # THAT REACH THIS BINDING are its kind: an input from
+                        # inside a loop was its own `return` there. Another
+                        # path of another kind binding here (above) refuses;
+                        # only the caller's context could pick between them.
+                        $sigil = $self->_exit_input_sigil($ph->{inputs}[$k])
+                            unless $ret;
                         my $var = sprintf('%sret%d', $sigil, $ph->{id});
                         $out .= sprintf("my %s = %s;\n", $var,
                                         $self->_expr($ph->{inputs}[$k]));
@@ -3799,6 +3796,12 @@ class SoN::Deparse 0.01 {
             }
         }
         return '';
+    }
+
+    # '@', '%' or '$': how a function exit binds the input it is paid.
+    method _exit_input_sigil ($id) {
+        my $kind = $self->_phi_aggregate_stamp({ id => "in$id", inputs => [$id] });
+        return $kind eq 'Hash' ? '%' : $kind eq 'Array' ? '@' : '$';
     }
 
     # Whether a Region is an eval's join rather than a branch's.
