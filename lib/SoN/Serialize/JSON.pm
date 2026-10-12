@@ -329,7 +329,7 @@ sub _extract_fields ($node, $id_remap) {
             to_repr   => $node->to_repr,
         };
     }
-    if ($op eq 'Subscript') {
+    if ($op eq 'Subscript' || $op eq 'Exists' || $op eq 'Delete') {
         return defined $node->kind ? { kind => $node->kind } : undef;
     }
     return undef;

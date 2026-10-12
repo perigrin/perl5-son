@@ -189,6 +189,16 @@ class SoN::FromOptree 0.01 {
         $ctx->{mutated_aggregate}{ $kid->targ } = 1;
     }
 
+    # (kind => 'hash'|'array') for the element under an exists or a delete,
+    # or () -- the op says what a scalar holding a reference cannot.
+    sub _elem_kind ($op) {
+        return () unless $op->flags & 4;   # OPf_KIDS
+        my $k = $op->first;
+        my $n = $k->name eq 'null' ? substr(B::ppname($k->targ), 3) : $k->name;
+        return $n eq 'helem' ? (kind => 'hash')
+             : $n eq 'aelem' ? (kind => 'array') : ();
+    }
+
     sub _make_count ($factory, $agg, $sim, %extra) {
         $extra{stamp} //= SoN::IR::Stamp->new(type => 'Int');
         return $factory->make('Count',
@@ -7554,7 +7564,7 @@ class SoN::FromOptree 0.01 {
                 if $container->can('operation')
                 && $container->operation =~ /\A(?:Array|Hash)Literal\z/;
 
-            my $node = $factory->make('Delete',
+            my $node = $factory->make('Delete', _elem_kind($op),
                 inputs => [$container, $key,
                     (defined $sim->memory ? ($sim->memory) : ())]);
 
@@ -7625,7 +7635,7 @@ class SoN::FromOptree 0.01 {
 
             my $key       = $sim->pop_node;
             my $container = $sim->pop_node;
-            my $node = $factory->make('Exists',
+            my $node = $factory->make('Exists', _elem_kind($op),
                 inputs => [$container, $key, $sim->memory],
                 stamp  => SoN::IR::Stamp->new(type => 'Boolean'));
             $sim->push_node($node);

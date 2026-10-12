@@ -39,6 +39,8 @@ class SoN::IR::Node::Delete :isa(SoN::IR::Value) {
     # the same device CellWrite and EntryWrite use.
     my $delete_counter = 0;
     field $delete_id :reader;
+    # `hash` or `array`, as on a Subscript; see Exists.
+    field $kind :param :reader = undef;
 
     ADJUST { $delete_id = $delete_counter++; }
 
