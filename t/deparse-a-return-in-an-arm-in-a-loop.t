@@ -148,4 +148,41 @@ subtest 'a return directly in an if/else or ternary arm' => sub {
         'a consumed ternary, no loop');
 };
 
+# AN AGGREGATE EXIT FALLING THROUGH A LOOP: `return @o` after a loop that
+# also returns from inside was bound `my $ret = @o; return $ret` -- the count,
+# to a list caller too. Every input an array (or every one a hash) binds an
+# array (a hash); an aggregate beside a scalar would need the caller's context
+# to pick, and refuses by name.
+subtest 'an aggregate exit after a loop' => sub {
+    round_trips(q{sub f { my $k=shift; my @o; for my $i (1..4) { if ($i > 1) { push @o, $i; return @o if $i > $k } } return @o } my @a=f(2); my $n=f(2); my @b=f(9); print "@a|$n|@b\n";},
+        'return @o, in an arm and after the loop');
+    round_trips(q{sub f { my $k=shift; my @o; for my $i (1..4) { push @o, $i; return @o if $i > $k } return @o } my @a=f(2); my $n=f(2); my @b=f(9); my $m=f(9); print "@a|$n|@b|$m\n";},
+        'return @o, in the body and after the loop');
+    round_trips(q{sub f { my $k=shift; my @o; my $i=0; while ($i < 4) { $i++; push @o, $i; return @o if $i > $k } return @o } my @a=f(2); my @b=f(9); my $m=f(9); print "@a|@b|$m\n";},
+        'return @o, from a while loop');
+    round_trips(q{sub f { my $k=shift; my %h=(a=>1); for my $i (1..4) { $h{$i}=1; return %h if $i > $k } return %h } my %a=f(2); my @b=f(9); print scalar(keys %a), "|", scalar(@b), "\n";},
+        'return %h, in the body and after the loop');
+    refuses(q{sub f { my $k=shift; my @o; for my $i (1..4) { push @o, $i; return $i if $i > $k } return @o } my @a=f(2); my $n=f(2); my @b=f(9); my $m=f(9); print "@a|$n|@b|$m\n";},
+        qr/GAP: a function exit merges an aggregate with a scalar/, 'return $i in the loop, @o after it');
+};
+
+# A RETURNED HASH IS THE HASH AS IT STANDS. The list half of `return %h`
+# flattened the literal's inputs -- the hash as first built -- so a store or
+# a delete since was lost: `my %h=(a=>1); $h{b}=2; return %h` returned a => 1.
+# From inside a loop the list exit reaches the renderer now, and printed it.
+subtest 'a returned hash after a store or a delete' => sub {
+    round_trips(q{sub f { my %h=(a=>1); $h{b}=2; return %h } my %a=f(1); print join(",", sort keys %a), "\n";},
+        'a store, then return %h');
+    round_trips(q{sub f { my %h=(a=>1); $h{b}=2; return %h if $_[0]; $h{c}=3; return %h } my %a=f(1); my %b=f(0); print join(",", sort keys %a), "|", join(",", sort keys %b), "\n";},
+        'two returns of %h around a store');
+    round_trips(q{sub f { my %h=(a=>1); for my $i (1..3) { $h{$i}=1; return %h if $i > $_[0] } return 5 } my %a=f(1); print join(",", sort keys %a), "\n";},
+        'return %h from a loop');
+    round_trips(q{sub f { my %h=(a=>1,b=>2); delete $h{a}; return %h } my %a=f(); print join(",", sort keys %a), "\n";},
+        'a delete, then return %h');
+    round_trips(q{sub f { my %h=(a=>1,b=>2,c=>3); delete @h{qw(a b)}; return %h } my %a=f(); print join(",", sort keys %a), "\n";},
+        'a slice delete, then return %h');
+    round_trips(q{sub f { my $k=shift; my %h=(1=>1,2=>2,3=>3,4=>4); for my $i (1..4) { delete $h{$i}; return %h if $i > $k } return %h } my %a=f(2); my @b=f(9); print join(",", sort keys %a), "|", scalar(@b), "\n";},
+        'a delete in a loop, return %h in and after it');
+};
+
 done_testing;

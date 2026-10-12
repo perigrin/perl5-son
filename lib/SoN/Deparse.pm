@@ -2804,6 +2804,21 @@ class SoN::Deparse 0.01 {
                         # The list half of a list exit is an ARRAY: a scalar
                         # holding `()` returned (undef) to a list caller.
                         my $sigil = ($ret && $ph == $rphis[0]) ? '@' : '$';
+                        # AN AGGREGATE EXIT is an aggregate: `my $ret = @o`
+                        # returned the count to a list caller. Beside a
+                        # scalar input, only the caller's context could pick.
+                        if (!$ret) {
+                            my @kind = map {
+                                $self->_phi_aggregate_stamp({ id => "in$_", inputs => [$_] })
+                            } ($ph->{inputs} // [])->@*;
+                            if (grep { $_ } @kind) {
+                                die "GAP: a function exit merges an aggregate with a"
+                                  . " scalar from inside a loop; which one the"
+                                  . " caller gets depends on its context\n"
+                                    if grep { $_ ne $kind[0] } @kind;
+                                $sigil = $kind[0] eq 'Hash' ? '%' : '@';
+                            }
+                        }
                         my $var = sprintf('%sret%d', $sigil, $ph->{id});
                         $out .= sprintf("my %s = %s;\n", $var,
                                         $self->_expr($ph->{inputs}[$k]));

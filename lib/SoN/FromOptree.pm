@@ -2952,8 +2952,11 @@ class SoN::FromOptree 0.01 {
         my @flat;
         for my $v ($values->@*) {
             my $st = $v->stamp;
+            # NOT ONE STORED INTO since: its inputs are the aggregate as first
+            # built (`my %h=(a=>1); $h{b}=2; return %h` returned a => 1).
             if ( defined $st && ( $st->type eq 'Array' || $st->type eq 'Hash' )
-                 && $v->operation =~ /\A(?:Array|Hash)Literal\z/ ) {
+                 && $v->operation =~ /\A(?:Array|Hash)Literal\z/
+                 && !$MUTATED_LITERALS{ $v->id // '' } ) {
                 push @flat, $v->inputs->@*;
             }
             else {
@@ -7517,6 +7520,10 @@ class SoN::FromOptree 0.01 {
                 die "GAP: a `delete` slice with fewer than two operands is not"
                   . " yet lowered\n" unless $operands->@* >= 2;
                 my $container = pop $operands->@*;
+                # A delete mutates the literal, as an element store does.
+                $MUTATED_LITERALS{ $container->id } = 1
+                    if $container->can('operation')
+                    && $container->operation =~ /\A(?:Array|Hash)Literal\z/;
 
                 my @removed;
                 for my $key ($operands->@*) {
@@ -7543,6 +7550,9 @@ class SoN::FromOptree 0.01 {
 
             my $key       = $sim->pop_node;
             my $container = $sim->pop_node;
+            $MUTATED_LITERALS{ $container->id } = 1
+                if $container->can('operation')
+                && $container->operation =~ /\A(?:Array|Hash)Literal\z/;
 
             my $node = $factory->make('Delete',
                 inputs => [$container, $key,
