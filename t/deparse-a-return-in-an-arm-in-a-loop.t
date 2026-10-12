@@ -195,4 +195,56 @@ subtest 'a returned hash after a store or a delete' => sub {
         'a delete in a loop, return %h in and after it');
 };
 
+# AN AGGREGATE RETURNED FROM INSIDE A LOOP IS THE AGGREGATE AS IT STANDS on
+# that iteration. The return was walked before the loop's own mutations (a
+# push after it, or one on an earlier iteration), so the flatten shortcut
+# returned the literal as first built: `return @o if ...; push @o, $i` gave
+# (1) where perl gives (1, 1, 2).
+subtest 'an aggregate returned from inside a loop that mutates it' => sub {
+    round_trips(q{sub f { my $k=shift; my @o=(1); for my $i (1..5) { if ($i > 1) { return @o if $i > $k; push @o, $i } } return scalar(@o) } my @a=f(2); my @b=f(9); my $n=f(9); print "@a|@b|$n\n";},
+        'return @o in an arm, push after it');
+    round_trips(q{sub f { my $k=shift; my @o=(1); for my $i (1..5) { if ($i > 1) { $o[0]++; return @o if $i > $k } } return 0 } my @a=f(2); my $n=f(2); print "@a|$n\n";},
+        'an element store, then return @o in an arm');
+    round_trips(q{sub f { my $k=shift; my %h=(a=>1); for my $i (1..5) { if ($i > 1) { return %h if $i > $k; $h{$i}=1 } } return 0 } my %a=f(2); print join(",", sort keys %a), "\n";},
+        'return %h in an arm, a store after it');
+    round_trips(q{sub f { my $k=shift; my @o=(1); for my $i (1..5) { return @o if $i > $k; push @o, $i } return 0 } my @a=f(2); my $n=f(2); print "@a|$n\n";},
+        'return @o in the body, push after it');
+    round_trips(q{sub f { my $k=shift; my @o=(1); for my $i (1..5) { $o[0]++; return @o if $i > $k } return 0 } my @a=f(2); my $n=f(2); print "@a|$n\n";},
+        'an element store, then return @o in the body');
+    round_trips(q{sub f { my $k=shift; my @o=(1,2); for my $i (1..5) { if ($i > 1) { return @o if $i > $k; pop @o } } return 0 } my @a=f(2); my $n=f(2); print "@a|$n\n";},
+        'return @o in an arm, pop after it');
+    round_trips(q{sub f { my $k=shift; my @o=(1); my $i=0; while ($i < 5) { $i++; return @o if $i > $k; unshift @o, $i } return 0 } my @a=f(2); print "@a\n";},
+        'return @o from a while loop, unshift after it');
+    round_trips(q{sub f { my $k=shift; my %h=(a=>1); for my $i (1..5) { return %h if $i > $k; delete $h{a} } return 0 } my %a=f(2); print join(",", sort keys %a), "|\n";},
+        q{return %h in the body, a delete after it});
+    round_trips(q{sub f { my $k=shift; my @o=(1,2); for my $i (1..5) { if ($i > 1) { last if $i > $k; pop @o } } return scalar(@o) } print f(2), "\n";},
+        q{last if in an arm, pop after it});
+    round_trips(q{sub f { my $k=shift; my @o=(1,2); for my $i (1..5) { if ($i > 1) { return 7 if $i > $k; shift @o } } return 0 } print f(2), "\n";},
+        q{return a scalar in an arm, shift after it});
+};
+
+# A LIST TERNARY WITH A RETURNING ARM yields the OTHER arm's whole list. The
+# surviving arm was taken as one value, so `my @r = $k > 2 ? (return "x") :
+# (3,4)` bound (4).
+subtest 'a list ternary whose other arm returns' => sub {
+    round_trips(q{sub f { my $k=shift; my @r = $k > 2 ? (return "x") : (3,4); return "@r" } print f(1), f(5), "\n";},
+        'my @r = C ? (return) : (3,4)');
+    round_trips(q{sub f { my $k=shift; my @r = $k > 2 ? (return (1,2)) : (3,4); return scalar(@r) } my @a=f(5); my @b=f(1); print "@a|@b\n";},
+        'a list returned, scalar(@r) after');
+    round_trips(q{sub f { my $k=shift; my @r = ($k>2 ? (return 'x') : (3,4)); return scalar(@r) } print f(1), f(5), "\n";},
+        'parenthesised');
+    round_trips(q{sub f { my $k=shift; my ($a,$b) = $k>2 ? (return 'x') : (3,4); return "$a$b" } print f(1), f(5), "\n";},
+        'my ($a, $b) = ...');
+    round_trips(q{sub f { my $k=shift; my @r = $k>2 ? (5,6) : (return 'y'); return "@r" } print f(1), f(5), "\n";},
+        'the returning arm second');
+    round_trips(q{sub f { my $k=shift; my $r = $k > 2 ? (return "x") : 7; return $r } print f(1), f(5), "\n";},
+        'a scalar ternary still lowers');
+    round_trips(q{sub f { my $k=shift; my %h = $k > 2 ? (return "x") : (a=>1, b=>2); return join(",", sort keys %h) } print f(1), f(5), "\n";},
+        q{my %h = C ? (return) : (a=>1, b=>2)});
+    round_trips(q{sub f { my $k=shift; my @r = (1, ($k > 2 ? (return "x") : (3,4)), 9); return "@r" } print f(1), f(5), "\n";},
+        q{inside a longer list});
+    refuses(q{sub f { $_[0] > 2 ? (return "x") : (3,4) } my @a=f(1); my $s=f(1); print "@a|$s|", f(5), "\n";},
+        qr/GAP: a ternary whose other arm leaves yields a multi-element list in its caller's context/, q{the sub's last statement});
+};
+
 done_testing;

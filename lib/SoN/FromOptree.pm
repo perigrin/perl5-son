@@ -461,8 +461,11 @@ class SoN::FromOptree 0.01 {
                 # level down, through the helem/aelem.
                 if ($MUTATES{$name} || (($name eq 'aelem' || $name eq 'helem')
                                         && ($op->flags & 32))) {     # OPf_MOD
+                    # `delete $h{a}` nulls the helem it reaches through.
+                    my $an = $agg->name eq 'null'
+                        ? substr(B::ppname($agg->targ), 3) : $agg->name;
                     $agg = $agg->first
-                        if $agg->name =~ /\A(?:aelem|helem)\z/ && ($agg->flags & 4);
+                        if $an =~ /\A(?:aelem|helem)\z/ && ($agg->flags & 4);
                     $slot{ $agg->targ } ||= 1
                         if $agg->name =~ /\A(?:padav|padhv)\z/ && $agg->targ;
                 }
@@ -5731,6 +5734,15 @@ class SoN::FromOptree 0.01 {
         if ($name eq 'padav' || $name eq 'padhv') {
             my $targ = $op->targ;
             my $existing = $sim->lookup($targ);
+            # IN A LOOP, A MUTATION LATER IN THE BODY RAN ON AN EARLIER
+            # ITERATION, before this read -- but it is walked after it, so
+            # nothing has marked the literal yet. The sub-wide slot scan
+            # knows: `return @o if C; push @o, $i` returned the literal as
+            # first built.
+            $MUTATED_LITERALS{ $existing->id } = 1
+                if @LOOP_STACK && $existing && $MUTATED_SLOTS->{$targ}
+                && $existing->can('operation')
+                && $existing->operation =~ /\A(?:Array|Hash)Literal\z/;
             # A LIST-context read of an existing array as an assignment SOURCE
             # (`my @b = @a`, `my @b = (@a, 4)`) FLATTENS its elements onto the
             # stack, so the trailing aassign collects the N values and builds @b
@@ -14548,8 +14560,11 @@ class SoN::FromOptree 0.01 {
             # stack above base is dead leftover -- drain it so merge() does not
             # build a spurious ill-typed stack Phi over a dead value (bug found in
             # 2b-1 review).
-            $false_sim->pop_node while $false_sim->stack_depth > $base_depth;
-            $true_sim->pop_node  while $true_sim->stack_depth  > $base_depth;
+            # KEPT, not dropped, for an arm that turns out to be the only one
+            # staying (see %left): its list is all of these.
+            my (@false_rest, @true_rest);
+            unshift @false_rest, $false_sim->pop_node while $false_sim->stack_depth > $base_depth;
+            unshift @true_rest,  $true_sim->pop_node  while $true_sim->stack_depth  > $base_depth;
             # merge() builds the Region over [true_control, false_control], scope
             # Phis, and the memory-Phi over [true_memory, false_memory]. Adopt the
             # merged control / memory / scope into the main sim (Region-input order
@@ -14581,6 +14596,15 @@ class SoN::FromOptree 0.01 {
                 $sim->define($_, $sc->{$_}) for keys %$sc;
                 # The value, when it is used, is the staying arm's alone.
                 my $stay_val = $left{true} ? $false_arm_val : $true_arm_val;
+                # ALL OF IT, IN A LIST: `my @r = C ? (return 1) : (3,4)` is
+                # (3, 4), and the last value alone bound (4). In scalar
+                # context the last value is the comma's answer; in the
+                # caller's, only the caller could pick.
+                my @rest = $left{true} ? @false_rest : @true_rest;
+                die "GAP: a ternary whose other arm leaves yields a"
+                  . " multi-element list in its caller's context\n"
+                    if @rest && $want == 0;
+                $sim->push_node($_) for $want == 3 ? @rest : ();
                 $sim->push_node($stay_val)
                     if defined $stay_val && $want != 1;
                 return ($left{true} ? $false_end : $true_end) // $op->next;

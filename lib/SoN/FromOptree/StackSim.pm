@@ -187,6 +187,25 @@ class SoN::FromOptree::StackSim 0.01 {
         return undef;
     }
 
+    # The arm Proj of $owner itself. An arm can hold a NESTED If with no
+    # Region -- its other arm left by `return` or `last` -- and the first
+    # Proj up the chain is then the inner If's: `if (C) { return if D; pop
+    # @o }` paired the outer join's Phi with the inner arm, and the copy
+    # into it was emitted before the pop it reads. Step up through such an
+    # If to the one being merged; with no owner, or none reached, the
+    # nearest Proj as before.
+    sub _owner_arm_proj ($node, $owner) {
+        my $proj = _arm_proj($node);
+        return $proj unless defined $owner && defined $proj;
+        my ($p, %seen) = ($proj);
+        while (defined $p && !$seen{ $p->id }++) {
+            my $if = $p->inputs->[0];
+            return $p if !defined $if || $if == $owner;
+            $p = $if->can('control_in') ? _arm_proj($if->control_in) : undef;
+        }
+        return $proj;
+    }
+
     # A MERGE YIELDS THE JOIN OF ITS ARMS, when both arms say something. A
     # merge Phi built here was left Unknown until B::SoN's post-pass, but a
     # loop that carries it reads it DURING the walk: _patch_loop_phi refuses an
@@ -220,8 +239,8 @@ class SoN::FromOptree::StackSim 0.01 {
         # search for it. Supplied only when BOTH arms resolve to a Proj: a
         # partial list would be worse than none, since the consumer pairs by
         # position and a missing entry would silently mis-pair.
-        my $mine_proj   = _arm_proj($control);
-        my $theirs_proj = _arm_proj($other->control);
+        my $mine_proj   = _owner_arm_proj($control, $owner);
+        my $theirs_proj = _owner_arm_proj($other->control, $owner);
         my @preds = (defined $mine_proj && defined $theirs_proj)
             ? ($mine_proj, $theirs_proj)
             : ();
