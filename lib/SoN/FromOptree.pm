@@ -14923,9 +14923,24 @@ class SoN::FromOptree 0.01 {
         my $elem = $op->next;
         my ($index) = eval { $elem->aux_list($cv) };
         $index = 0 unless defined $index;
+        my $pname = _padname($cv, $elem->targ);
+        # A CLOSURE OVER THE PARAMETER reads it from a slot the branch's value
+        # never reaches; the anon sub's body saw the raw argument or nothing.
+        my @q = (eval { $cv->ROOT } // ());
+        while (my $o = shift @q) {
+            next unless ref($o) && $$o;
+            die "GAP: a signature default with an effect, on a parameter a"
+              . " closure captures, is not yet lowered\n"
+                if $o->name eq 'anoncode'
+                && grep { $_ eq $pname } _anoncode_captures($cv, $o);
+            next unless $o->flags & 4;    # OPf_KIDS
+            for (my $k = $o->first; ref($k) && $$k; $k = $k->sibling) {
+                push @q, $k;
+            }
+        }
         my $raw = $factory->make('Parameter',
             index => 0 + $index,
-            name  => _padname($cv, $elem->targ),
+            name  => $pname,
             sigil => '$');
         my $when = ($op->private & 128) ? 'undef'
                  : ($op->private & 64)  ? 'false'

@@ -1186,6 +1186,12 @@ class SoN::Deparse 0.01 {
         %after_region = ();
         %hoisted  = ();
         %pad_declared = ();
+        # A SIGNATURE DECLARES ITS PARAMETERS, so a store into a demoted one
+        # (referenced, or passed on to a call) is not a `my`: a second
+        # declaration masks the parameter.
+        if (my $sig = $self->_signature_of($name)) {
+            $pad_declared{ $_->{name} } = 1 for ($sig->{params} // [])->@*;
+        }
         %mem_cache = ();
         %subst_count_var = ();
 

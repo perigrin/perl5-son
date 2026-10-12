@@ -114,6 +114,33 @@ warns_like_perl(q{use v5.36; sub k ($a, $b = []) { scalar(@_) } print k(1), k(1,
     'a counted @_ beside a present test');
 warns_like_perl($alloc, 'an allocating default');
 
+# A DEMOTED PARAMETER -- referenced, or passed on to a call -- is stored
+# into its slot from the branch's value. The signature declares it; a
+# second `my` masks it.
+for my $case (
+    [q{use v5.36; sub f ($x = []) { my $r = \$x; $$r = [7]; "@$x" } print f(), f([0]), "\n";},
+        'a referenced parameter with an allocating default'],
+    [q{use v5.36; sub f ($n, $acc = []) { return $acc if !$n; push @$acc, $n; f($n-1, $acc) } print "@{f(3)}", "\n";},
+        'a recursing parameter with an allocating default'],
+    [q{use v5.36; sub f ($x //= [1]) { my $r = \$x; push @$$r, 2; "@$x" } print f(), f(undef), f([0]), "\n";},
+        'a referenced parameter with an allocating //= default'],
+    [q{use v5.36; our $c = 0; sub g { $c++; 5 } sub f ($x = g()) { my $r = \$x; $$r++; $x } print f(), f(1), " c=$c\n";},
+        'a referenced parameter with a calling default'],
+) {
+    round_trips(@$case);
+    emits_quietly(@$case);
+}
+
+# A CLOSURE OVER THE PARAMETER has nowhere to read the branch's value from.
+for my $src (
+    q{use v5.36; sub f ($x = []) { my $s = sub { push @$x, 1 }; $s->(); "@$x" } print f(), f([0]), "\n";},
+    q{use v5.36; sub f ($y = []) { push @$y, 1; sub { scalar @$y } } print f()->(), f([0])->(), "\n";},
+    q{use v5.36; our $c = 0; sub g { $c++; 5 } sub f ($x = g()) { my $s = sub { $x + 1 }; $s->() } print f(), f(1), "\n";},
+) {
+    refuses($src, qr/GAP: a signature default with an effect, on a parameter a closure captures/,
+        'a captured parameter with an effectful default refuses');
+}
+
 # A `return` IN A DEFAULT leaves the sub; the branch has no exit to record it.
 refuses(q{use v5.36; sub f ($x = return "early") { "late" } print f(), " ", f(1), "\n";},
     qr/GAP: a `return` in an arm with no function exit/,
