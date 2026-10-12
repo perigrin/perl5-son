@@ -10236,11 +10236,32 @@ class SoN::FromOptree 0.01 {
                 # bound it; storage anything else can see -- a package array,
                 # a captured or shared one, one a reference was taken to --
                 # refuses.
-                if ($name eq 'sort' && ($op->private & 8)) {   # OPpSORT_INPLACE
+                # `@a = reverse @a` IS FOLDED THE SAME WAY, with the same bit,
+                # and was dropped: @a kept its order. It is rebound below as
+                # the sort is, and in a loop body or an arm the reversed
+                # literal is PINNED where the assign stands: floating, it was
+                # placed above the loop that declares what it reads, or above
+                # the guard of the arm that protects it (chalk's Context::walk
+                # then read `->@*` of a leaf).
+                #
+                # AN ARRAY A LIST ASSIGN LEFT UNBOUND -- `my ($r, @k) = @_`
+                # binds no literal for @k -- is a bare pad read, and the arm's
+                # literal named @k declared a second `my @k` inside the arm,
+                # leaving the outer one undeclared. Straight-line code has no
+                # arm to shadow; elsewhere it refuses.
+                die "GAP: an in-place reverse (`\@a = reverse \@a`) in a loop"
+                  . " body or an arm, of an array a list assign left unbound,"
+                  . " is not yet lowered -- the reversed literal would shadow"
+                  . " the array it reverses\n"
+                    if $name eq 'reverse' && ($op->private & 8)   # OPpREVERSE_INPLACE
+                    && ($ctx->{mode} // '') ne 'main'
+                    && @inputs && $inputs[-1]->isa('SoN::IR::Node::PadAccess');
+                if (($name eq 'sort' || $name eq 'reverse')
+                        && ($op->private & 8)) {   # OPpSORT_INPLACE, OPpREVERSE_INPLACE
                     my $arr = $op->first;
                     $arr = $arr->sibling while ${ $arr->sibling };
                     my $t = $arr->name eq 'padav' ? $arr->targ : undef;
-                    die "GAP: an in-place sort of an array other than a plain"
+                    die "GAP: an in-place $name of an array other than a plain"
                       . " lexical is not yet lowered -- the sorted list must be"
                       . " stored back where others can see it\n"
                         if !defined $t
@@ -10256,6 +10277,13 @@ class SoN::FromOptree 0.01 {
                         inputs => [$node], sigil => $sg, symbol => $sy,
                         stamp  => SoN::IR::Stamp->new(type => 'Array'));
                     $sim->define($t, $arr_node);
+                    # Straight-line code leaves it floating, where each
+                    # version of the array gets its own name.
+                    if ($name eq 'reverse' && defined $sim->control
+                            && ($ctx->{mode} // '') ne 'main') {
+                        $arr_node->set_control_in($sim->control);
+                        $sim->set_control($arr_node);
+                    }
                 }
 
                 # A GLOBAL-STATE OP ALSO ADVANCES MEMORY, and control alone is
@@ -13821,6 +13849,7 @@ class SoN::FromOptree 0.01 {
             }
             return 1 if $ADVANCES_CONTROL_OP{$name};
             return 1 if $name eq 'sort' && _sort_runs_comparator($op);
+            return 1 if $name eq 'reverse' && ($op->private & 8);   # OPpREVERSE_INPLACE
         }
         return 0;
     }
