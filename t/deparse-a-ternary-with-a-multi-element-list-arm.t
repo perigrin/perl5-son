@@ -113,6 +113,32 @@ round_trips(q{package N { sub new { bless { v => $_[1] }, $_[0] } sub value { $_
 round_trips(q{for my $c (1, 0) { my @a = $c ? (1, 2) : [3]; print scalar(@a), "\n" }},
     'a list arm beside an allocating arm, in list context');
 
+# A COUNT OF THAT PHI is the number of elements in the chosen arm, not 1: the
+# merged value is a list, and counting it as one scalar folded to a constant.
+round_trips(q{for my $c (1, 0) { my $n = () = $c ? ([1], [2], [3]) : (); print "$n\n" }},
+    'a counted list arm that allocates');
+round_trips(q{sub k { print "k\n"; 3 } for my $c (1, 0) { my $n = () = $c ? (k(), 4) : (); print "$n\n" }},
+    'a counted list arm that calls');
+round_trips(q{sub k { 3 } for my $c (1, 0) { my $n = () = $c ? (k(), k()) : (k()); print "$n\n" }},
+    'counted list arms that both call');
+round_trips(q{for my $c (1, 0) { my $n = (() = $c ? ([1], 2) : ()) + 0; print "$n\n" }},
+    'a counted list arm in arithmetic');
+round_trips(q{for my $c (1, 0) { print((() = $c ? ([1], [2]) : ()) == 2 ? "two\n" : "not\n") }},
+    'a counted list arm compared');
+round_trips(q{for my $c (1, 0) { my $n = () = ($c ? (1, 2) : ()); my $m = () = ($c ? ([1], 2) : ()); print "$n $m\n" }},
+    'a constant and an allocating list arm counted side by side');
+
+# SCALAR CONTEXT keeps only the last value. Anything ahead of it ran for its
+# effects, which are already on the memory chain; spelled again it is a
+# "Useless use" warning, whatever kind of node it is.
+for my $src (q{my @x = (1, 2, 3); for my $c (1, 0) { my $n = $c ? (@x, 9) : 1; print "$n\n" }},
+             q{my $i = 0; for my $c (1, 0) { my $x = $c ? ($i++, 7) : 8; print "$x $i\n" }},
+             q{my $i = 0; for my $c (1, 0) { my $x = $c ? ($i++, $i++, $i) : 8; print "$x $i\n" }},
+             q{sub k { print "k\n"; 3 } for my $c (1, 0) { my $x = $c ? (k(), 7) : 8; print "$x\n" }}) {
+    round_trips($src, "scalar context: $src");
+    emits_quietly($src, "scalar context: $src");
+}
+
 # STILL REFUSED: in the CALLER'S context the merged list would be read as a
 # count by a scalar caller, where perl's comma yields the last element.
 refuses(q{sub f { wantarray ? (7, 8) : [] } my @a = f(); print "@a\n";},

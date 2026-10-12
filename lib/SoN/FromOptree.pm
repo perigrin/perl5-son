@@ -14524,7 +14524,8 @@ class SoN::FromOptree 0.01 {
             # caller would read that merged list as a count, where perl's comma
             # yields the last element; and an element-store arm's value is
             # checked below for one value only.
-            if ($alloc_value && (@true_rest || @false_rest)) {
+            my $list_arms = $alloc_value && (@true_rest || @false_rest);
+            if ($list_arms) {
                 die "GAP: a ternary with a multi-element list arm not yet lowered\n"
                     if !$list_ctx || $elem_branch;
                 $true_arm_val  = $factory->make('ArrayLiteral',
@@ -14607,7 +14608,12 @@ class SoN::FromOptree 0.01 {
             }
             $true_sim->merge($false_sim, $factory, $if_node);
             if ($alloc_value) {
-                $sim->push_node($true_sim->pop_node);
+                my $merged = $true_sim->pop_node;
+                # THE PHI OVER TWO LISTS IS A LIST: a count of it (`() = ...`)
+                # counts its elements, where an unstamped Phi counts as one.
+                $merged->set_stamp(SoN::IR::Stamp->new(type => 'List'))
+                    if $list_arms;
+                $sim->push_node($merged);
                 $sim->set_control($true_sim->control);
                 $sim->set_memory($true_sim->memory);
                 my $ms = $true_sim->scope_bindings;
@@ -14698,10 +14704,11 @@ class SoN::FromOptree 0.01 {
                 my @vals = $delta ? ($val) : ();
                 unshift @vals, $asim->pop_node while $asim->stack_depth > $base_depth;
                 # IN SCALAR CONTEXT the comma yields the last value and runs the
-                # rest for their effects. A constant has none, and spelled ahead
-                # of the last it is a "Useless use of a constant" warning.
-                @vals = ((grep { !$_->isa('SoN::IR::Node::Constant') } @vals[0 .. $#vals - 1]),
-                         $vals[-1])
+                # rest for their effects. Those effects are already on the
+                # memory chain (`$i++` is a store, `k()` a call), so the value
+                # nodes ahead of the last carry nothing; spelled ahead of it
+                # they are a "Useless use of ..." warning.
+                @vals = ($vals[-1])
                     if @vals > 1 && ($op->flags & 3) == 2;   # OPf_WANT_SCALAR
                 $factory->make('ArrayLiteral', inputs => \@vals,
                     stamp => SoN::IR::Stamp->new(type => 'Array'));
