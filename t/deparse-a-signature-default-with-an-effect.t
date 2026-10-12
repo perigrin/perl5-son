@@ -1,0 +1,102 @@
+# ABOUTME: A signature default that allocates, calls or dies is a branch on the
+# ABOUTME: argument: it runs only when the argument is absent, undef or false.
+
+use v5.42.0;
+use Test2::V0;
+use JSON::PP;
+use File::Temp qw(tempdir);
+
+use SoN::Deparse;
+
+my $dir = tempdir(CLEANUP => 1);
+
+sub run_perl ($src) {
+    my $f = "$dir/r." . int(rand 1e9) . ".pl";
+    open my $fh, '>', $f or die $!; print $fh $src; close $fh;
+    my $out = qx(/usr/bin/timeout 10 $^X $f 2>/dev/null); unlink $f; return $out;
+}
+
+sub graph_of ($src) {
+    my $f = "$dir/g." . int(rand 1e9) . ".pl";
+    open my $fh, '>', $f or die $!; print $fh $src; close $fh;
+    my $j = qx($^X -Ilib -MO=-q,SoN,json,not_package=SoN $f 2>$dir/err);
+    unlink $f; return eval { JSON::PP->new->decode($j) };
+}
+
+sub producer_stderr () {
+    open my $fh, '<', "$dir/err" or return ''; local $/; return <$fh> =~ s/^\S+ syntax OK\n//mr;
+}
+
+sub round_trips ($src, $name) {
+    my $want = run_perl($src);
+    my $data = graph_of($src);
+    my $err  = producer_stderr();
+    is $err, '', "$name: the producer says nothing";
+    if (!$data) { fail "$name: translates"; return }
+    my $d = SoN::Deparse->new;
+    my $out = $d->render($data);
+    unless (defined $out) {
+        my $g = $d->gap // '(no reason)'; $g =~ s/\n.*//s;
+        fail "$name: renders"; diag $g; return;
+    }
+    my $got = run_perl($out);
+    is $got, $want, $name
+        or diag "--- emitted ---\n$out--- got ---\n$got--- want ---\n$want";
+}
+
+
+# The emission must also be QUIET: a second `my @e` in one scope is a "masks
+# earlier declaration" warning, and the masked variable is the defect.
+sub emits_quietly ($src, $name) {
+    my $d = SoN::Deparse->new;
+    my $out = $d->render(graph_of($src) // {}) // return fail "$name: renders";
+    my $f = "$dir/q." . int(rand 1e9) . ".pl";
+    open my $fh, '>', $f or die $!; print $fh $out; close $fh;
+    my $err = qx(/usr/bin/timeout 10 $^X $f 2>&1 >/dev/null); unlink $f;
+    is $err, '', "$name: the emission warns nothing";
+}
+
+
+sub refuses ($src, $why, $name) {
+    graph_of($src);
+    like producer_stderr(), $why, $name;
+}
+
+# A FRESH ALLOCATION PER CALL: a shared [] would print 123.
+my $alloc = q{use v5.36; sub f ($x, $y = []) { push @$y, $x; scalar @$y } print f(1), f(1), f(1,[2,3]), "\n";};
+round_trips($alloc, 'an allocating default is fresh on each call');
+emits_quietly($alloc, 'an allocating default');
+
+# THE DIE RUNS ON undef AND ON absent, never on a value.
+round_trips(q{use v5.36; sub f ($r //= die "no repr\n") { "<$r>" } print f("Int"), "\n"; print eval { f(undef) } // $@; print eval { f() } // $@;},
+    'a dying //= default');
+
+# AN EXPLICIT undef IS AN ARGUMENT: the call runs once, for f().
+my $call = q{use v5.36; our $calls = 0; sub g { $calls++; 7 } sub f ($x = g()) { $x } print f(), f(1), f(undef) // "u", " calls=$calls\n";};
+round_trips($call, 'a calling default runs only when the argument is absent');
+emits_quietly($call, 'a calling default');
+
+round_trips(q{use v5.36; our $calls = 0; sub g { $calls++; 7 } sub f ($x ||= g()) { $x } print f(0), f(1), f(), " calls=$calls\n";},
+    'a calling ||= default runs on a false argument');
+
+# A LATER DEFAULT READS AN EARLIER PARAMETER, and runs after it is bound.
+round_trips(q{use v5.36; sub f ($x, $y = [$x]) { push @$y, 9; "@$y" } print f(1), " ", f(2, [3]), "\n";},
+    'a default reads an earlier parameter');
+
+round_trips(q{use v5.36; sub f ($x, $y //= [$x]) { "@$y" } print f(1), f(1,undef), f(1,[2]), "\n";},
+    'an allocating //= default');
+
+# AN ANONYMOUS SUB has no declared signature to fold into.
+round_trips(q{use v5.36; my $f = sub ($x, $y = []) { push @$y, $x; scalar @$y }; print $f->(1), $f->(1), $f->(1,[2,3]), "\n";},
+    'an allocating default in an anonymous sub');
+
+# A METHOD'S @_ starts after the invocant.
+round_trips(q{use v5.42; use experimental "class"; class C { method m ($a, $b = []) { push @$b, $a; scalar @$b } } my $c = C->new; print $c->m(1), $c->m(1), $c->m(1,[5]), "\n";},
+    'an allocating method default');
+
+# A `return` IN A DEFAULT leaves the sub; the branch has no exit to record it.
+refuses(q{use v5.36; sub f ($x = return "early") { "late" } print f(), " ", f(1), "\n";},
+    qr/GAP: a `return` in an arm with no function exit/,
+    'a returning default refuses');
+
+done_testing;

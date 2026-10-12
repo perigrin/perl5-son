@@ -1870,6 +1870,16 @@ class SoN::FromOptree 0.01 {
             # 028). Walk the arm as a VALUE and leave it on the stack for the
             # argelem, which carries OPf_STACKED exactly when this ran.
             if ($name eq 'argdefelem') {
+                # AN ARM THAT ALLOCATES, CALLS OR DIES runs only when the
+                # default applies, so it is a branch, not a value input.
+                my $stop = ${ $op->next };
+                if ((_arm_advances_control($op->other, $stop)
+                        || _arm_has_die($op->other, $stop))
+                    && !_arm_has_element_store($op->other, $stop)) {
+                    $op = _signature_default_as_branch($cv, $op, $sim,
+                        $factory, $opmap, \%visited);
+                    next;
+                }
                 my $arm = $sim->snapshot;
                 my $base_depth = $arm->stack_depth;
                 _walk_branch($cv, $op->other, $arm, $factory, $opmap,
@@ -7333,7 +7343,13 @@ class SoN::FromOptree 0.01 {
             # stack (OPf_STACKED, 64), and the kid's private field says when
             # it applies -- asked of B: OPpARG_IF_UNDEF 128, OPpARG_IF_FALSE 64.
             my %default;
-            if ($op->flags & 64) {
+            my $branched;
+            if (delete $SoN::FromOptree::BRANCHED_DEFAULT{$$op}) {
+                # The default was lowered as a branch; its merged value is
+                # the parameter.
+                $branched = $sim->pop_node;
+            }
+            elsif ($op->flags & 64) {
                 my $kid = $op->first;
                 my $when = ($kid->private & 128) ? 'undef'
                          : ($kid->private & 64)  ? 'false'
@@ -7341,7 +7357,7 @@ class SoN::FromOptree 0.01 {
                 %default = (default_when => $when, inputs => [$sim->pop_node]);
             }
 
-            my $node = $factory->make('Parameter',
+            my $node = $branched // $factory->make('Parameter',
                 %default,
                 index => 0 + $index,
                 name  => $varname,
@@ -14891,6 +14907,70 @@ class SoN::FromOptree 0.01 {
             && !_arm_has_element_store($op->other, $stop)
             && (_arm_advances_control($op->other, $stop)
                 || _arm_has_void_call($op->other, $stop));
+    }
+
+    # A SIGNATURE DEFAULT WITH AN EFFECT, as a branch on the argument. The
+    # argument is read raw (a Parameter with no default), tested as perl
+    # tests it -- present (`@_ > i`), defined, or true by the argdefelem's
+    # private flags (OPpARG_IF_UNDEF 128, OPpARG_IF_FALSE 64) -- and the arm
+    # runs on the failing Proj. The two values merge in a Phi, which the
+    # argelem binds in place of a Parameter (%BRANCHED_DEFAULT). An arm that
+    # dies has no value: the parameter is the raw argument past the Region.
+    # Returns the argelem, where the arm converged.
+    our %BRANCHED_DEFAULT;
+    sub _signature_default_as_branch ($cv, $op, $sim, $factory, $opmap,
+                                      $visited) {
+        my $elem = $op->next;
+        my ($index) = eval { $elem->aux_list($cv) };
+        $index = 0 unless defined $index;
+        my $raw = $factory->make('Parameter',
+            index => 0 + $index,
+            name  => _padname($cv, $elem->targ),
+            sigil => '$');
+        my $when = ($op->private & 128) ? 'undef'
+                 : ($op->private & 64)  ? 'false'
+                 :                        'absent';
+        my $bool = SoN::IR::Stamp->new(type => 'Boolean');
+        my $test = $when eq 'undef'
+            ? $factory->make('Defined', inputs => [$raw], stamp => $bool)
+            : $when eq 'false'
+            ? $raw
+            : $factory->make('NumGt', stamp => $bool, inputs => [
+                  _make_count($factory, _args_source($factory), $sim),
+                  $factory->make('Constant', value => 0 + $index,
+                      const_type => 'integer',
+                      stamp => SoN::IR::Stamp->new(type => 'Int'))]);
+        my $if_node = $factory->make_cfg('If',
+            inputs => [$sim->control, $test]);
+        my $base     = $sim->stack_depth;
+        my $keep_sim = $sim->snapshot;
+        my $arm_sim  = $sim->snapshot;
+        $keep_sim->set_control($factory->make_cfg('Proj',
+            inputs => [$if_node], index => 0));
+        $arm_sim->set_control($factory->make_cfg('Proj',
+            inputs => [$if_node], index => 1));
+        my ($end, $sig) = _walk_branch($cv, $op->other, $arm_sim, $factory,
+            $opmap, $visited, undef, 0, $$elem);
+        my $died = $arm_sim->control->operation eq 'Unwind';
+        die "GAP: a signature default whose arm is not a single value is not"
+          . " yet lowered\n"
+            if ($sig // '') ne ''
+            || !(defined $end && ref $end && $$end == $$elem)
+            || $arm_sim->stack_depth != $base + ($died ? 0 : 1);
+        $keep_sim->push_node($raw) unless $died;
+        $keep_sim->merge($arm_sim, $factory, $if_node);
+        my $value = $died ? $raw : $keep_sim->pop_node;
+        my @arm = grep { defined } $value->can('inputs') ? $value->inputs->@* : ();
+        $value->set_stamp(SoN::IR::Stamp::join(map { $_->stamp } @arm))
+            if $value->operation eq 'Phi' && @arm == 2
+            && !grep { !$_->can('stamp') || !_is_narrowed($_->stamp) } @arm;
+        $sim->set_control($keep_sim->control);
+        $sim->set_memory($keep_sim->memory);
+        my $merged = $keep_sim->scope_bindings;
+        $sim->define($_, $merged->{$_}) for keys %$merged;
+        $sim->push_node($value);
+        $BRANCHED_DEFAULT{$$elem} = 1;
+        return $elem;
     }
 
     sub _short_circuit_as_branch ($cv, $op, $sim, $factory, $opmap, $visited,

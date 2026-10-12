@@ -5781,7 +5781,17 @@ class SoN::Deparse 0.01 {
             # AN ANONYMOUS CONSTRUCTOR IS A REFERENCE -- `[1,2,3]`, stamped
             # ArrayRef -- so its count goes through the deref. As a list it
             # was `my @c = [1,2,3]`, one element.
-            $text = $list_ternary
+            #
+            # THE ARGUMENT COUNT UNDER A SIGNATURE -- a default's presence
+            # test. Perl still sets @_ there; reading it is merely
+            # experimental, and the warning is the emission's, not the
+            # program's.
+            my $sig_args = ($agg->{op} // '') eq 'ArgsSource'
+                        && $self->_signature_of($current_sub);
+            $text = $sig_args
+                ? "do { no warnings 'experimental::args_array_with_signatures';"
+                  . " scalar(\@_) }"
+                : $list_ternary
                 ? sprintf('do { my @c%d = %s; scalar(@c%d) }',
                           $id, $self->_expr($in[0]), $id)
                 : $named || (($agg->{op} // '') !~ /Literal\z/
