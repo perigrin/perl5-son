@@ -4375,9 +4375,16 @@ class SoN::Deparse 0.01 {
                 # enclosing loop's exit or latch only through a later edge of
                 # its own, and resuming there emitted the code after the outer
                 # loop inside the inner one.
+                # NOR ANYTHING PAST ONE: a rest arm that only goes round again
+                # first meets the function's exit, through the loop's exit --
+                # `last if A; return X if B` resumed there, and the code after
+                # the loop was emitted inside the body.
                 my $bjoin = $self->_lone_arm_join( $arm{$rest_ix}, $next_of );
                 if ( defined $bjoin
-                     && !grep { $_->{region} == $bjoin } @edges ) {
+                     && !grep { my $r = $_->{region};
+                                grep { $_ == $bjoin }
+                                     $self->_control_reachable( $r, $next_of ) }
+                             @edges ) {
                     my ($bdecl, %bassign)
                         = $self->_join_phis( $bjoin, { $rest_ix => $arm{$rest_ix} } );
                     return ( $bdecl . $text . ( $bassign{$rest_ix} // '' ) . $rest,

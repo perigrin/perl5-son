@@ -286,4 +286,30 @@ subtest 'a modifier return, then a mutation, in a loop arm' => sub {
         'with an else arm');
 };
 
+# A `last` BEFORE THE RETURN, in one loop body. The guarded return's other
+# arm only goes round again, so the first join it reaches is the function's
+# exit, through the loop's exit -- taken for a body merge, the code after the
+# loop (`return "L"`) was emitted inside the body, and the sub returned on the
+# first iteration that got past the `last`. Return before last always worked.
+subtest 'a last, then a return, in one loop body' => sub {
+    round_trips(q{sub f { my $k=shift; for my $i (1..5) { last if $i > 3; return "r$i" if $i == $k } "L" } print f(3), "|", f(9), "\n";},
+        'last if, then return if');
+    round_trips(q{sub f { my $k=shift; for my $i (1..5) { if ($i>3){last} if ($i==$k){return "r$i"} } "L" } print f(3), "|", f(9), "\n";},
+        'block ifs');
+    round_trips(q{sub f { my $k=shift; my $c=0; for my $i (1..5) { if ($i>3){last} $c+=$i; return $c if $i==$k } "L$c" } print f(3), "|", f(9), "\n";},
+        'a store between them');
+    round_trips(q{sub f { my $k=shift; for my $i (1..5) { if ($i > 1) { last if $i > 3; return "r$i" if $i == $k } } "L" } print f(3), "|", f(9), "\n";},
+        'in a loop-body arm, modifiers');
+    round_trips(q{sub f { my $k=shift; for my $i (1..5) { if ($i > 1) { if ($i > 3) { last } return "r$i" if $i == $k } } "L" } print f(3), "|", f(9), "\n";},
+        'in a loop-body arm, a block last');
+    round_trips(q{sub f { my $k=shift; my $c=0; for my $i (1..5) { if ($i>1) { if ($i>3){last} return $c if $i==$k } } "L$c" } print f(3), "|", f(9), "\n";},
+        'in a loop-body arm, the counter returned');
+    round_trips(q{sub f { my $k=shift; my $c=0; for my $i (1..5) { if ($i > 1) { if ($i > 3) { last } $c += $i; return $c if $i == $k } } "L$c" } print f(3), "|", f(9), "\n";},
+        'in a loop-body arm, a store between them');
+    round_trips(q{sub f { my $k=shift; my $c=0; for my $i (1..5) { if ($i > 1) { last if $i > 3; $c += $i; return $c if $i == $k } } "L$c" } print f(3), "|", f(9), "\n";},
+        'in a loop-body arm, last if and a store');
+    round_trips(q{sub f { my $k=shift; my $i=0; while ($i < 9) { $i++; last if $i > 4; return "w$i" if $i == $k } "L$i" } print f(3), "|", f(9), "\n";},
+        'in a while');
+};
+
 done_testing;
