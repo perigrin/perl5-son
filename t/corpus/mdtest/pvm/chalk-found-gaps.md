@@ -77,7 +77,7 @@ main::make: {start: 0, returns: [28], nodes: [
   [Proj, {index: 1}, [16]], # 19
   [Unwind, ~, [18], 19], # 20
   [Region, {head: 16}, [17, 20]], # 21
-  [Exists, ~, [2, 6, 7], ~, Boolean], # 22
+  [Exists, {kind: hash}, [2, 6, 7], ~, Boolean], # 22
   [If, ~, [21, 22], 21], # 23
   [Proj, {index: 0}, [23]], # 24
   [Proj, {index: 1}, [23]], # 25
@@ -476,7 +476,7 @@ main::build: {start: 0, returns: [15], nodes: [
   [HashLiteral, {sigil: "%", symbol: args}, [2], ~, Hash], # 3
   [Constant, {const_type: string, value: values}, ~, ~, Str], # 4
   [MemStart], # 5
-  [Delete, ~, [3, 4, 5], 0, Scalar], # 6
+  [Delete, {kind: hash}, [3, 4, 5], 0, Scalar], # 6
   [Defined, ~, [6], ~, Boolean], # 7
   [If, ~, [6, 7], 6], # 8
   [Proj, {index: 1}, [8]], # 9
@@ -1487,7 +1487,7 @@ main::f: {start: 0, returns: [11], nodes: [
   [HashLiteral, {sigil: "%", symbol: o}, [2], ~, Hash], # 3
   [Constant, {const_type: string, value: a}, ~, ~, Str], # 4
   [MemStart], # 5
-  [Exists, ~, [3, 4, 5], ~, Boolean], # 6
+  [Exists, {kind: hash}, [3, 4, 5], ~, Boolean], # 6
   [Subscript, {kind: hash}, [3, 4], ~, Scalar], # 7
   [Constant, {const_type: string, value: dflt}, ~, ~, Str], # 8
   [TernaryExpr, ~, [6, 7, 8], ~, Unknown], # 9

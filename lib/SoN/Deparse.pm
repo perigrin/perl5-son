@@ -4712,7 +4712,8 @@ class SoN::Deparse 0.01 {
             die "GAP: a Delete with " . scalar(@din) . " inputs is not yet"
               . " rendered\n" unless @din >= 2;
             return sprintf("delete(%s);\n",
-                $self->_element($din[0], $self->_expr($din[1])));
+                $self->_element($din[0], $self->_expr($din[1]),
+                    ($n->{fields} // {})->{kind}));
         }
 
         if ($op eq 'CellWrite') {
@@ -5989,7 +5990,8 @@ class SoN::Deparse 0.01 {
             die "GAP: a Delete with " . scalar(@in) . " inputs is not yet"
               . " rendered\n" unless @in >= 2;
             $text = sprintf('delete(%s)',
-                $self->_element($in[0], $self->_expr($in[1])));
+                $self->_element($in[0], $self->_expr($in[1]),
+                    ($n->{fields} // {})->{kind}));
         }
         elsif ($op eq 'Exists') {
             # MEMBERSHIP, NOT DEFINEDNESS -- the node's own ABOUTME records
@@ -6000,7 +6002,8 @@ class SoN::Deparse 0.01 {
             die "GAP: an Exists with " . scalar(@in) . " inputs is not yet"
               . " rendered\n" unless @in >= 2;
             $text = sprintf('exists(%s)',
-                $self->_element($in[0], $self->_expr($in[1])));
+                $self->_element($in[0], $self->_expr($in[1]),
+                    ($n->{fields} // {})->{kind}));
         }
         elsif ($op eq 'Assign') {
             # AN ASSIGNMENT USED AS A VALUE. Measured on base/lex.t's

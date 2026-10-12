@@ -7521,6 +7521,7 @@ class SoN::FromOptree 0.01 {
                 my @removed;
                 for my $key ($operands->@*) {
                     my $d = $factory->make('Delete',
+                        kind   => _element_kind($op),
                         inputs => [$container, $key,
                             (defined $sim->memory ? ($sim->memory) : ())]);
                     $d->set_control_in($sim->control);
@@ -7545,6 +7546,7 @@ class SoN::FromOptree 0.01 {
             my $container = $sim->pop_node;
 
             my $node = $factory->make('Delete',
+                kind   => _element_kind($op),
                 inputs => [$container, $key,
                     (defined $sim->memory ? ($sim->memory) : ())]);
 
@@ -7616,6 +7618,7 @@ class SoN::FromOptree 0.01 {
             my $key       = $sim->pop_node;
             my $container = $sim->pop_node;
             my $node = $factory->make('Exists',
+                kind   => _element_kind($op),
                 inputs => [$container, $key, $sim->memory],
                 stamp  => SoN::IR::Stamp->new(type => 'Boolean'));
             $sim->push_node($node);
@@ -13246,6 +13249,18 @@ class SoN::FromOptree 0.01 {
             $o = $o->next;
         }
         return $$o ? $o : undef;
+    }
+
+    # _element_kind($op) -> `hash` or `array` for an exists or delete, from the
+    # element or slice op it was built over (nulled to an ex-op, so read by
+    # its targ); undef when that is neither. The container cannot say: it is
+    # often a scalar holding some reference.
+    sub _element_kind ($op) {
+        my $k = $op->first;
+        return undef unless $$k;
+        my $n = $k->name eq 'null' ? B::ppname($k->targ) =~ s/\App_//r : $k->name;
+        return $n =~ /\Ah(?:elem|slice)\z/ ? 'hash'
+             : $n =~ /\Aa(?:elem|slice)\z/ ? 'array' : undef;
     }
 
     # _first_control_after($c, $pre) -> the node on $c's control chain whose
