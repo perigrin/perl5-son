@@ -197,6 +197,63 @@ class SoN::FromOptree 0.01 {
             %extra);
     }
 
+    # Does this ternary hand a VARIABLE to an alias? OPf_MOD (B::OPf_MOD) marks
+    # a ternary that is a call argument, a reference's list, a foreach or map
+    # list, or an assignment target; each aliases the values its arms yield.
+    # A list arm is an anonymous list of COPIES, so a write through $_[1], a
+    # reference or $_ reached the copy and never the variable. The arms are
+    # searched through their list and nulled wrappers and nested ternaries; an
+    # expression (`$x + 1`) is a temporary and aliases nothing.
+    sub _ternary_aliases_a_variable ($op) {
+        return false unless $op->flags & B::OPf_MOD();
+        my @q = ($op->first->sibling, $op->first->sibling->sibling);
+        while (defined(my $k = shift @q)) {
+            next unless ref($k) && $$k;
+            my $n = $k->name;
+            return true if $n =~ /\A(?:pad[ahs]v|gvsv|rv2[ahs]v|[ah]elem|aelemfast(?:_lex)?)\z/;
+            if ($n eq 'cond_expr') {
+                push @q, $k->first->sibling, $k->first->sibling->sibling;
+                next;
+            }
+            next unless $n =~ /\A(?:null|list)\z/ && ($k->flags & 4);   # OPf_KIDS
+            for (my $j = $k->first; ref($j) && $$j; $j = $j->sibling) { push @q, $j }
+        }
+        return false;
+    }
+
+    # Does any of these values compute a regex match off the chain? A match is
+    # pinned only on the main walk, so one built inside a branch arm floats:
+    # its pos() and captures are effects nothing places, and its read of the
+    # subject happens wherever the value is spelled. Chain nodes are not
+    # entered -- a match pinned there earlier is placed.
+    sub _holds_a_floating_match (@nodes) {
+        my %seen;
+        while (defined(my $n = shift @nodes)) {
+            next if $seen{ refaddr $n }++ || defined $n->control_in;
+            return true if $n->operation =~ /\A(?:RegexMatch|Match)\z/;
+            push @nodes, grep { defined } $n->inputs->@*;
+        }
+        return false;
+    }
+
+    # Does any of these values read a class field's whole value (`$x`, `@f`)?
+    # A FieldAccess carries no memory version, so it is spelled wherever the
+    # value is, after any later store to the field: `$x = 3; my @b = $c ?
+    # ($x, 2) : (); $x = 5` copied 1, perl 3. An element read (`$f[0]`) is a
+    # Subscript that does carry one, so its aggregate operand is not counted.
+    sub _holds_a_field_read (@nodes) {
+        my %seen;
+        while (defined(my $n = shift @nodes)) {
+            next if $seen{ refaddr $n }++ || defined $n->control_in;
+            return true if $n->isa('SoN::IR::Node::FieldAccess');
+            my @in = grep { defined } $n->inputs->@*;
+            shift @in if $n->operation eq 'Subscript' && @in
+                && $in[0]->isa('SoN::IR::Node::FieldAccess');
+            push @nodes, @in;
+        }
+        return false;
+    }
+
     sub _is_aggregate_node ($node) {
         return false unless defined $node;
         my $op = $node->operation;
@@ -4690,6 +4747,20 @@ class SoN::FromOptree 0.01 {
         # Length rendered `length($r)`, the length of the ref's address.
         # Any operand but a gv is a reference to dereference here, as for a
         # count.
+        # AS A TARGET IT RESIZES THE ARRAY. `$#a = 0`, `$#a++` and `$#$r -= 1`
+        # carry OPf_REF (B::OPf_REF, 16; the rvalue `$#a` does not), and the
+        # value lowered below is a Count, which no store can write through:
+        # the resize vanished and `@a` kept its elements.
+        # A REFERENCE TO IT (`\$#a`, srefgen/refgen) carries the same flag. A
+        # write through it would resize just the same, and whether one comes
+        # is not on this op, so it is refused by its own name.
+        if ($name eq 'av2arylen' && ($op->flags & 16)) {   # OPf_REF
+            my $p = eval { $op->parent };
+            $p = $p->parent while $p && $$p && $p->name eq 'null';
+            die "GAP: a reference to an array's last index (`\\\$#a`) is not yet lowered\n"
+                if $p && $$p && $p->name =~ /\A(?:s?refgen)\z/;
+            die "GAP: a store to an array's last index (`\$#a = ...`) is not yet lowered\n";
+        }
         my $arylen_kid = $name eq 'av2arylen' && $op->can('first') ? $op->first : undef;
         my $through_ref = $arylen_kid && $$arylen_kid
             && $arylen_kid->name eq 'rv2av'
@@ -5031,11 +5102,19 @@ class SoN::FromOptree 0.01 {
             $REFERENCED_SLOTS->{ $_->targ } = 1
                 for grep { $_->name =~ /\Apad[ah]v\z/ && $_->targ } @kids;
 
+            # SO IS A LIST CALL: `\ f()` is one reference per value returned,
+            # the last of them in scalar context (`"${\ $o->m}"`). The Call is
+            # one node standing for the whole list, so a plain Ref over it
+            # took a reference to the array its result is bound to.
+            # In scalar context it is that one last reference, not a list: a
+            # List stamp there turned a loop-carried $r into an array.
             my @items = $sim->pop_to_mark->@*;
             if (@items == 1 && @kids == 1
-                    && $kids[0]->name =~ /\Apad[ah]v\z/ && ($kids[0]->flags & 8)) {
+                    && ($kids[0]->name eq 'entersub'
+                        || $kids[0]->name =~ /\Apad[ah]v\z/ && ($kids[0]->flags & 8))) {
                 $sim->push_node($factory->make('Ref', inputs => [$items[0]],
-                    each => 1, stamp => SoN::IR::Stamp->new(type => 'List')));
+                    each => 1, stamp => SoN::IR::Stamp->new(type =>
+                        ($op->flags & B::OPf_WANT) == B::OPf_WANT_LIST ? 'List' : 'Ref')));
             }
             else {
                 $sim->push_node($factory->make('Ref', inputs => [$_]))
@@ -5710,7 +5789,8 @@ class SoN::FromOptree 0.01 {
                     && !$ref_or_mod && !$is_lvintro
                     && !$ctx->{mutated_aggregate}{$targ}
                     && !$MUTATED_LITERALS{ $existing->id // '' }
-                    && $existing->operation eq 'ArrayLiteral') {
+                    && $existing->operation eq 'ArrayLiteral'
+                    && !grep { $_->isa('SoN::IR::Node::TernaryExpr') } $existing->inputs->@*) {
                 $sim->push_node($_) for $existing->inputs->@*;
                 return ($op->next, 'handled');
             }
@@ -8934,15 +9014,13 @@ class SoN::FromOptree 0.01 {
                 if (($op->flags & 3) == 2) {             # OPf_WANT_SCALAR
                     my $count;
                     for my $v (@rhs) {
-                        # A LIST-VALUED CALL IS ONE NODE AND ANY NUMBER OF
-                        # VALUES: `() = f()` counted it as 1 for perl's 3. Its
-                        # list is counted at run time, as an array of it.
+                        # A CALL YIELDS AS MANY VALUES AS IT RETURNS, which a
+                        # constant 1 does not say: `() = g()` counted 1 for a
+                        # g returning three or none. Its stamp is not settled
+                        # yet, so it is counted as the list it is.
                         $v = $factory->make('ArrayLiteral', inputs => [$v],
-                                stamp => SoN::IR::Stamp->new(type => 'Array'))
-                            if $v->isa('SoN::IR::Node::Call')
-                            && !_is_aggregate_node($v)
-                            && ( ( $v->can('want') && ( $v->want // '' ) eq 'list' )
-                                 || ( $v->stamp && $v->stamp->type eq 'List' ) );
+                            stamp => SoN::IR::Stamp->new(type => 'Array'))
+                            if $v->operation eq 'Call' && !_is_aggregate_node($v);
                         my $n = _is_aggregate_node($v)
                             ? _make_count($factory, $v, $sim,
                                 stamp => SoN::IR::Stamp->new(type => 'Int'))
@@ -9022,12 +9100,54 @@ class SoN::FromOptree 0.01 {
                     state $YIELDS_LIST = { map { $_ => 1 }
                         qw( keys values sort reverse map grep splice ) };
 
+                    # A PACKAGE AGGREGATE IS OBSERVABLE OUTSIDE THIS GRAPH -- by
+                    # a sub (`our @x = (1,2); sub f { print "@x" }`), by method
+                    # resolution (`our @ISA = ("Base")`) -- so the assignment is
+                    # a STORE, as a package scalar's is. Bound only, it reached
+                    # the wire only if this graph also read it: both examples
+                    # emitted nothing (corpus 050's @ISA).
+                    # A PAD AGGREGATE SHARED WITH A NAMED SUB is observable
+                    # outside this graph for the same reason, so it is stored
+                    # too: an Assign into the shared slot, on the chain. Bound
+                    # only, `my @l = (...)` reached the wire only if the program
+                    # itself read @l (corpus 201 does not).
+                    # BOTH BINDINGS BELOW STORE: a whole value bound as itself
+                    # (`@g = map ...`, `@g = keys %h`) is as observable as a
+                    # literal, and skipping the store left a sub reading @g
+                    # with the old contents.
+                    my $store_observable = sub ($node) {
+                        _entry_store($factory, $sim, $target, $node) unless $is_pad;
+                        return unless $is_pad && $ctx->{shared_lexicals}{ $target->targ };
+                        my $loc = $factory->make('PadAccess',
+                            targ => $target->targ, sigil => $sigil,
+                            symbol => $target->symbol, shared => 1,
+                            (defined $sim->memory ? (inputs => [$sim->memory]) : ()));
+                        my $store = $factory->make('Assign',
+                            inputs => [$loc, $node]);
+                        $store->set_control_in($sim->control);
+                        $sim->set_control($store);
+                        $sim->set_memory($store) if defined $sim->memory;
+                    };
+
                     my $want = $sigil eq '@' ? 'Array' : 'Hash';
                     if ($rhs->@* == 1) {
                         my $only  = $rhs->[0];
                         my $stamp = $only->stamp;
+                        # A LIST-VALUED TERNARY IS A VALUE, NOT A CONTAINER,
+                        # when the target is mutated or the arms read memory:
+                        # bound as itself, `push @a, 4` was spelled on the
+                        # expression and `\@a` referred to its value, and
+                        # `@b = $c ? ($a[0], 3) : ()` re-read $a[0] after a
+                        # later store. The literal below makes the array it is
+                        # assigned to. Constant arms bind as the value: a
+                        # literal there, in `while (@t = $i < 2 ? (1) : ())`,
+                        # was rendered as an undeclared Phi.
+                        my $needs_container = $only->isa('SoN::IR::Node::TernaryExpr')
+                            && ( ( $is_pad && $MUTATED_SLOTS->{ $target->targ } )
+                                 || _reads_memory_cone($only) );
                         my $is_aggregate_value =
-                            defined $stamp && $stamp->type eq $want;
+                            defined $stamp && $stamp->type eq $want
+                            && !$needs_container;
                         # ...UNLESS IT WAS CALLED IN SCALAR CONTEXT. `my $r =
                         # reverse(...); my @d = ($r)` inlines the call, and a
                         # scalar `reverse` is ONE string; taking it as the
@@ -9064,6 +9184,7 @@ class SoN::FromOptree 0.01 {
                         if (($is_aggregate_value && !$names_storage)
                             || $is_list_builtin) {
                             $sim->define($key, $only);
+                            $store_observable->($only);
                             # IN SCALAR CONTEXT THE ASSIGNMENT IS A COUNT.
                             # Pushing the bound value made `my $n = (my @t =
                             # ($c ? 7 : ()))` read the ternary itself, which
@@ -9139,35 +9260,31 @@ class SoN::FromOptree 0.01 {
                         $_->isa('SoN::IR::Node::PadAccess')
                             && ($_->sigil // '') =~ /\A[\@%]\z/
                     } $rhs->@*;
-                    if ($is_pad && _aassign_introduces($op)
+                    # A PACKAGE OR SHARED AGGREGATE ASSIGNED IN A LOOP BODY is
+                    # made there too: its store below writes this literal, and
+                    # floating, the literal was spelled above the loop with the
+                    # store, reading loop values not yet defined (`@g = (1,
+                    # $i)`).
+                    my $observable = !$is_pad
+                        || $ctx->{shared_lexicals}{ $target->targ };
+                    if (($observable ? @LOOP_STACK : _aassign_introduces($op))
                             && (@LOOP_STACK || $copies_container)) {
                         $node->set_control_in($sim->control);
                         $sim->set_control($node);
                     }
-                    # A PACKAGE AGGREGATE IS OBSERVABLE OUTSIDE THIS GRAPH -- by
-                    # a sub (`our @x = (1,2); sub f { print "@x" }`), by method
-                    # resolution (`our @ISA = ("Base")`) -- so the assignment is
-                    # a STORE, as a package scalar's is. Bound only, it reached
-                    # the wire only if this graph also read it: both examples
-                    # emitted nothing (corpus 050's @ISA).
-                    _entry_store($factory, $sim, $target, $node) unless $is_pad;
-                    # A PAD AGGREGATE SHARED WITH A NAMED SUB is observable
-                    # outside this graph for the same reason, so it is stored
-                    # too: an Assign into the shared slot, on the chain. Bound
-                    # only, `my @l = (...)` reached the wire only if the program
-                    # itself read @l (corpus 201 does not).
-                    if ($is_pad && $ctx->{shared_lexicals}{ $target->targ }) {
-                        my $loc = $factory->make('PadAccess',
-                            targ => $target->targ, sigil => $sigil,
-                            symbol => $target->symbol, shared => 1,
-                            (defined $sim->memory ? (inputs => [$sim->memory]) : ()));
-                        my $store = $factory->make('Assign',
-                            inputs => [$loc, $node]);
-                        $store->set_control_in($sim->control);
-                        $sim->set_control($store);
-                        $sim->set_memory($store) if defined $sim->memory;
-                    }
-                    $sim->push_node($node);
+                    $store_observable->($node);
+                    # IN SCALAR CONTEXT THE ASSIGNMENT IS A COUNT, as for
+                    # the bound value above: `print scalar(my @t = (1, 2, $c))`
+                    # printed the elements. A hash's is of the RHS pairs, which a
+                    # count of the hash does not say. From a ternary of lists it is
+                    # refused: spelled, the count was the pairs themselves (`a1`).
+                    die "GAP: a hash assignment from a ternary counted in scalar context is not yet lowered\n"
+                        if ($op->flags & 3) == 2 && $sigil eq '%'   # OPf_WANT_SCALAR
+                        && grep { $_->isa('SoN::IR::Node::TernaryExpr') } $rhs->@*;
+                    $sim->push_node(
+                        (($op->flags & 3) == 2 && $sigil eq '@') # OPf_WANT_SCALAR
+                            ? _make_count($factory, $node, $sim)
+                            : $node);
                     return ($op->next, 'handled');
                 }
             }
@@ -15038,6 +15155,8 @@ class SoN::FromOptree 0.01 {
             # 2b-1 review).
             # KEPT, not dropped, for an arm that turns out to be the only one
             # staying (see %left): its list is all of these.
+            # KEPT, not dropped: in a multi-element list arm the leftover is the
+            # front of the arm's list, and a list-context merge below uses it.
             my (@false_rest, @true_rest);
             unshift @false_rest, $false_sim->pop_node while $false_sim->stack_depth > $base_depth;
             unshift @true_rest,  $true_sim->pop_node  while $true_sim->stack_depth  > $base_depth;
@@ -15091,8 +15210,31 @@ class SoN::FromOptree 0.01 {
             my $alloc_value = $alloc_only && $want != 1;
             # ONE VALUE PER ARM, as the single-value select below demands: the
             # drain above would drop the rest of `wantarray ? (7, 8) : []`.
-            die "GAP: a ternary with a multi-element list arm not yet lowered\n"
-                if $alloc_value && (($true_delta // 0) > 1 || ($false_delta // 0) > 1);
+            # IN LIST CONTEXT each arm's value is its whole list, and a Phi over
+            # two lists is a list. In the CALLER'S context (WANT 0) a scalar
+            # caller would read that merged list as a count, where perl's comma
+            # yields the last element; and an element-store arm's value is
+            # checked below for one value only.
+            my $list_arms = $alloc_value && (@true_rest || @false_rest);
+            if ($list_arms) {
+                die "GAP: a ternary list arm passed by alias (a call argument, a"
+                  . " reference or a foreach list) is not yet lowered\n"
+                    if _ternary_aliases_a_variable($op);
+                die "GAP: a ternary with a multi-element list arm not yet lowered\n"
+                    if !$list_ctx || $elem_branch;
+                die "GAP: a regex match in a multi-element ternary arm is not yet lowered\n"
+                    if _holds_a_floating_match(@true_rest, @false_rest,
+                        grep { defined } $true_arm_val, $false_arm_val);
+                die "GAP: a class field read in a multi-element ternary arm is not yet lowered\n"
+                    if _holds_a_field_read(@true_rest, @false_rest,
+                        grep { defined } $true_arm_val, $false_arm_val);
+                $true_arm_val  = $factory->make('ArrayLiteral',
+                    inputs => [ @true_rest, $true_delta ? ($true_arm_val) : () ],
+                    stamp => SoN::IR::Stamp->new(type => 'List'));
+                $false_arm_val = $factory->make('ArrayLiteral',
+                    inputs => [ @false_rest, $false_delta ? ($false_arm_val) : () ],
+                    stamp => SoN::IR::Stamp->new(type => 'List'));
+            }
             # AN ELEMENT-STORE ARM MERGES ONLY A CONSTANT. Its value is the
             # stored node, which the merge may spell after the store: an
             # expression re-reads what the store changed (`$a[0] = $a[0] + 1`
@@ -15166,7 +15308,12 @@ class SoN::FromOptree 0.01 {
             }
             $true_sim->merge($false_sim, $factory, $if_node);
             if ($alloc_value) {
-                $sim->push_node($true_sim->pop_node);
+                my $merged = $true_sim->pop_node;
+                # THE PHI OVER TWO LISTS IS A LIST: a count of it (`() = ...`)
+                # counts its elements, where an unstamped Phi counts as one.
+                $merged->set_stamp(SoN::IR::Stamp->new(type => 'List'))
+                    if $list_arms;
+                $sim->push_node($merged);
                 $sim->set_control($true_sim->control);
                 $sim->set_memory($true_sim->memory);
                 my $ms = $true_sim->scope_bindings;
@@ -15219,8 +15366,10 @@ class SoN::FromOptree 0.01 {
         # same construct that refuses at top level dropped the `1` inside a
         # body and `scalar(g())` read 1 where perl says 2. The delta is the
         # real property: it counts what the arm actually pushed.
-        die "GAP: a ternary with a multi-element list arm not yet lowered\n"
-            if $true_delta > 1 || $false_delta > 1;
+        # SO A MULTI-ELEMENT ARM IS ITS WHOLE LIST: everything the arm pushed
+        # above the base, in push order. $walk_arm popped the last value; the
+        # rest are still on the arm's stack, top first, hence the unshift.
+        my $multi = $true_delta > 1 || $false_delta > 1;
 
         # Merge arm pad rebinds in EVERY context -- an assignment inside a
         # value-context arm (`my $y = $c ? ($x = 1) : 2`) is a binding side
@@ -15238,6 +15387,20 @@ class SoN::FromOptree 0.01 {
                 next if defined $pre
                     && defined $tv && defined $fv
                     && $tv == $pre && $fv == $pre;
+                # A FIRST READ IN ONE ARM binds the variable's own storage,
+                # which is the same on the other path: merged with undef, a
+                # field `@f` first read as `$f[0]` in an arm became `($c ? @f
+                # : undef)`, and a later `$f[0] = 5` stored through that.
+                my $storage = sub ($v) {
+                    defined $v && ($v->isa('SoN::IR::Node::FieldAccess')
+                        || $v->isa('SoN::IR::Node::PadAccess'));
+                };
+                $fv //= $tv if $storage->($tv);
+                $tv //= $fv if $storage->($fv);
+                if (!defined $pre && defined $tv && defined $fv && $tv == $fv) {
+                    $sim->define($targ, $tv);
+                    next;
+                }
                 $tv //= _undef_constant($factory);
                 $fv //= _undef_constant($factory);
                 $sim->define($targ, _make_ternary($factory, $cond, $tv, $fv));
@@ -15250,13 +15413,34 @@ class SoN::FromOptree 0.01 {
         # $x : () }` -- chalk's filter idiom -- contributed an undef for every
         # element C rejected. Each arm is then the LIST of its values (none or
         # one), and the ternary picks a list, which flattens where perl does.
-        if ($list_ctx && ($true_delta == 0 || $false_delta == 0)) {
-            my $as_list = sub ($val, $delta) {
-                $factory->make('ArrayLiteral', inputs => [ $delta ? ($val) : () ],
+        if ($multi || ($list_ctx && ($true_delta == 0 || $false_delta == 0))) {
+            # AN ALIASED LIST ARM is copied into the anonymous list; see
+            # _ternary_aliases_a_variable.
+            die "GAP: a ternary list arm passed by alias (a call argument, a"
+              . " reference or a foreach list) is not yet lowered\n"
+                if _ternary_aliases_a_variable($op);
+            my $as_list = sub ($val, $delta, $asim) {
+                my @vals = $delta ? ($val) : ();
+                unshift @vals, $asim->pop_node while $asim->stack_depth > $base_depth;
+                # A MATCH IN THE ARM floats: in scalar context it was dropped
+                # with its pos() and captures, in list context spelled again
+                # at each read of the array it was copied into.
+                die "GAP: a regex match in a multi-element ternary arm is not yet lowered\n"
+                    if $multi && _holds_a_floating_match(@vals);
+                die "GAP: a class field read in a multi-element ternary arm is not yet lowered\n"
+                    if $multi && _holds_a_field_read(@vals);
+                # IN SCALAR CONTEXT the comma yields the last value and runs the
+                # rest for their effects. Those effects are already on the
+                # memory chain (`$i++` is a store, `k()` a call), so the value
+                # nodes ahead of the last carry nothing; spelled ahead of it
+                # they are a "Useless use of ..." warning.
+                @vals = ($vals[-1])
+                    if @vals > 1 && ($op->flags & 3) == 2;   # OPf_WANT_SCALAR
+                $factory->make('ArrayLiteral', inputs => \@vals,
                     stamp => SoN::IR::Stamp->new(type => 'Array'));
             };
-            $true_val  = $as_list->($true_val,  $true_delta);
-            $false_val = $as_list->($false_val, $false_delta);
+            $true_val  = $as_list->($true_val,  $true_delta,  $true_sim);
+            $false_val = $as_list->($false_val, $false_delta, $false_sim);
         }
         my $node = _make_ternary($factory, $cond, $true_val, $false_val);
         $sim->push_node($node);
@@ -17627,6 +17811,26 @@ class SoN::FromOptree 0.01 {
     # fallback name is suffixed with the targ. PadAccess identity is keyed on
     # varname (not targ -- see PadAccess::content_hash), so the suffix keeps
     # distinct unnamed slots distinct rather than collapsing them all to '$?'.
+    # _reads_memory_cone($node) -- may the value of $node change when memory
+    # does? True unless its cone is constants, literals and pure operators.
+    # ponytail: an allow-list -- an unlisted node counts as a read, which
+    # only costs a container.
+    sub _reads_memory_cone ($node) {
+        my ( @todo, %seen ) = ($node);
+        while ( defined( my $n = shift @todo ) ) {
+            next if $seen{ refaddr $n }++;
+            next if $n->isa('SoN::IR::Node::Constant');
+            return 1 unless $n->isa('SoN::IR::Node::TernaryExpr')
+                || $n->isa('SoN::IR::Node::ArrayLiteral')
+                || $n->isa('SoN::IR::Node::HashLiteral')
+                || $n->isa('SoN::IR::Node::BinOp')
+                || $n->isa('SoN::IR::Node::Phi')
+                || ( $n->isa('SoN::IR::Node::PadAccess') && !$n->inputs->@* );
+            push @todo, grep { defined } $n->inputs->@*;
+        }
+        return 0;
+    }
+
     sub _padname ($cv, $targ) {
         my $padlist = $cv->PADLIST;
         return "\$?$targ" unless $$padlist;

@@ -273,6 +273,10 @@ class SoN::Deparse 0.01 {
     # The reason the last render() refused, for a caller that wants to report it
     # rather than just see undef.
     field $gap :reader = undef;
+    # How a print joins its items: `$, // ''` when the program names `$,`,
+    # and plain `''` otherwise, which chalk's grammar can read and which
+    # is the same value when nothing sets the separator.
+    field $print_sep = "''";
 
     # render($data) -- the decoded JSON wire, to Perl source for main::__PROGRAM__.
     #
@@ -292,6 +296,9 @@ class SoN::Deparse 0.01 {
         # `methods` entry that must ALSO be emitted -- calling a sub the
         # emitted program never defines is a runtime death, not a wrong value.
         $all_methods = $methods;
+        $print_sep = ( grep { ( ( $_->{fields} // {} )->{symbol} // '' ) eq ',' }
+                map { ( $_->{nodes} // [] )->@* } values %$methods )
+            ? "\$, // ''" : "''";
         $sub_meta = $data->{classes} // {};
 
         # CELLS FIRST, before any sub. A named sub emitted above the program
@@ -1538,11 +1545,22 @@ class SoN::Deparse 0.01 {
             for my $c ( ( $consumers{$id} // [] )->@* ) {
                 my $op = $c->{op} // '';
                 next if $VALUE_CONSUMER->{$op};
+                # A LIST IS AS SAFE AS WHAT CONSUMES IT, and a NAMED one is an
+                # array's copy of its elements: `my @b = ($a[0], 5); $a[0] =
+                # 9; print "@b"` spelled `$a[0]` at the print, after the store.
+                # An anonymous one -- a ternary's list arm -- may still be
+                # aliased (`for`, a user sub's @_), so it asks its consumers.
+                if ( $op eq 'ArrayLiteral' ) {
+                    next if defined( ( $c->{fields} // {} )->{symbol} )
+                        || __SUB__->( $c->{id} );
+                    return 0;
+                }
                 # substr at every arity: two or three operands only READ the
                 # string, and the four-operand write spells it by name.
                 # sprintf only reads its arguments.
+                # join reads its separator and its list.
                 next if $op eq 'Call'
-                    && ( ( $c->{fields} // {} )->{name} // '' ) =~ /\A(?:substr|sprintf)\z/;
+                    && ( ( $c->{fields} // {} )->{name} // '' ) =~ /\A(?:substr|sprintf|join)\z/;
                 # push and unshift copy every operand after the array.
                 next if $op eq 'Call'
                     && ( ( $c->{fields} // {} )->{name} // '' ) =~ /\A(?:push|unshift)\z/
@@ -2210,8 +2228,8 @@ class SoN::Deparse 0.01 {
                 $at_entry = 0;
             }
             if ( $at_entry ) {
-                next if grep {
-                    my $c  = $nodes->{$_} // {};
+                my $in_prologue = sub ($id) {
+                    my $c  = $nodes->{$id} // {};
                     my $op = $c->{op} // '';
                     # A literal of constants only: one holding an effect's
                     # value is declared after that effect, not in the
@@ -2220,15 +2238,20 @@ class SoN::Deparse 0.01 {
                     # A SHARED AGGREGATE a sub closes over is declared above
                     # the subs, so it exists in the sub's prologue.
                     # A PACKAGE one needs no declaration at all.
-                    !( $op eq 'Constant'
+                    # A REFERENCE to one of these exists there too: `$r->[0]`
+                    # over `my $r = \@a` is spelled `(\@a)->[0]`.
+                    return ( $op eq 'Constant'
                        || ( $op eq 'PadAccess' && ( $c->{fields} // {} )->{shared} )
                        || $op eq 'EntryDef'
+                       || ( $op eq 'Ref' && ( $c->{inputs} // [] )->@* == 1
+                            && __SUB__->( $c->{inputs}[0] ) )
                        || ( $op =~ /\A(?:Array|Hash)Literal\z/
                             && defined( ( $c->{fields} // {} )->{symbol} )
                             && !$self->_is_pinned_aggregate($c)
                             && !grep { ( ( $nodes->{$_} // {} )->{op} // '' ) ne 'Constant' }
-                                   ( $c->{inputs} // [] )->@* ) )
-                } @in[ 0 .. $#in - 1 ];
+                                   ( $c->{inputs} // [] )->@* ) );
+                };
+                next if grep { !$in_prologue->($_) } @in[ 0 .. $#in - 1 ];
             }
 
             # A READ USED ONLY INSIDE AN `if` ARM is not bound ahead of it: the
@@ -4803,6 +4826,9 @@ class SoN::Deparse 0.01 {
         # ternary. Measured: the emitted program printed "y\n" where the
         # original printed "n\n". Interposing `join('')` keeps the argument
         # list a list without ever starting it with a paren.
+        # THE SEPARATOR IS $,, which print puts between its items and an
+        # empty join did not: `local $, = "-"; print 1, 2` printed `12`.
+        # See $print_sep.
         # A DEFERRED AGGREGATE DECLARATION, placed after the effect it holds
         # rather than in the prologue. See _emit_control_chain.
         if ($op =~ /\A(?:Array|Hash)Literal\z/) {
@@ -4942,7 +4968,7 @@ class SoN::Deparse 0.01 {
 
         if ($op eq 'Print') {
             my ($fh, @args) = $self->_print_parts($n);
-            return sprintf("print %sjoin('', %s);\n", $fh, join(', ', @args));
+            return sprintf("print %sjoin(%s, %s);\n", $fh, $print_sep, join(', ', @args));
         }
 
         # A package scalar store. The EntryDef names the slot; emitting the
@@ -5750,11 +5776,11 @@ class SoN::Deparse 0.01 {
             # returns 1 on success. Emit it as the expression it is.
             my ($fh, @a) = $self->_print_parts($n);
             $text = $fh eq ''
-                ? sprintf("print(join('', %s))", join(', ', @a))
+                ? sprintf("print(join(%s, %s))", $print_sep, join(', ', @a))
                 # NO PARENTHESISED FORM WITH A HANDLE. `print(FH LIST)` is a
                 # syntax error; the handle-and-list form takes no parens, so
                 # the whole thing is wrapped instead.
-                : sprintf("(print %sjoin('', %s))", $fh, join(', ', @a));
+                : sprintf("(print %sjoin(%s, %s))", $fh, $print_sep, join(', ', @a));
         }
         elsif ($op eq 'RegexMatch') {
             # THE PATTERN AND FLAGS ARE THE PROGRAM. /i changes what matches,

@@ -180,16 +180,14 @@ subtest 'value-context ternary merges arm pad rebinds' => sub {
         '$x reads a conditional merge, not the pre-binding');
 };
 
-subtest 'list-context ternary refuses loudly' => sub {
-    # `my @a = $c ? (1,2) : (3,4)` -- the scalar value path pops exactly one
-    # value per arm and silently mistranslated the list (Int:0 vs Int:2).
-    SoN::OptSuppress::suppress_peep();
-    my $cv = eval 'sub { my $c = 1; my @a = $c ? (1, 2) : (3, 4); $a[1] }';
-    my $err = $@;
-    SoN::OptSuppress::restore_peep();
-    die "compile failed: $err" if $err;
-    like(dies { SoN::FromOptree->translate($cv) }, qr/GAP.*list/i,
-        'list-context cond_expr dies with a GAP message');
+subtest 'a list-context ternary selects between whole lists' => sub {
+    # `my @a = $c ? (1,2) : (3,4)` -- each arm is the LIST it pushed. The
+    # one-value select once kept only the last of each (Int:0 vs Int:2).
+    my $g = graph_of('sub { my $c = 1; my @a = $c ? (1, 2) : (3, 4); $a[1] }');
+    my ($t) = nodes_of($g, 'TernaryExpr');
+    ok $t, 'a TernaryExpr selects' or return;
+    is [ map { scalar $_->inputs->@* } $t->inputs->@[1, 2] ], [2, 2],
+        'and each arm is a two-value list';
 };
 
 done_testing();

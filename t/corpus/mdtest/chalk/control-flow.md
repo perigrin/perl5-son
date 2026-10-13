@@ -2785,7 +2785,7 @@ ternary in LIST context as a print arg. Each arm produces exactly ONE value (a
 single string), so the ternary lowers to a `TernaryExpr(%cond, %y, %n)` selecting
 the printed string — the same select shape as a scalar-context ternary. A
 list-context ternary whose arm produces a genuine multi-element list
-(`$c ? (1,2) : (3,4)`) still GAPs.
+(`$c ? (1,2) : (3,4)`) selects between the two whole lists instead.
 
 ```perl
 # source
