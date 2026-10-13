@@ -92,4 +92,44 @@ for my $case (
     like producer_stderr(), $case->[1], "refuses: $case->[0]";
 }
 
+# AN APPEND TO AN UNDEFINED VARIABLE IS QUIET: perl's `.=` treats undef as
+# the empty string without a warning, where `.` warns. The chalk shape is a
+# class-block lexical declared with no initializer and appended to in a
+# `my sub`.
+for my $src (
+    'use v5.36; my $s; my sub f { $s .= "a" } f(); print "$s\n";',
+    'use v5.36; my $s; my sub f { $s } $s .= "a"; print f(), "\n";',
+    'use v5.36; my $s; my sub f { $s .= "a$_" for 1..2 } f(); print "$s\n";',
+    'use v5.36; my $s; my $t = "q"; my sub f { $s .= $t } f(); f(); print "$s\n";',
+    'use v5.36; my $s; my sub f ($x) { $s .= "<$x>" } f(1); f(2); sub g { $s } print g(), "\n";',
+    'use v5.36; use experimental "class"; class C { my $s; my sub app { $s .= "b" } method m { app(); $s } } print C->new->m, "\n";',
+) {
+    round_trips($src, "appends: $src");
+    emits_quietly($src, "appends: $src");
+}
+
+# A CLOSURE BUILT ONCE PER PASS captures that pass's variable -- a `my` in the
+# loop body, or the foreach variable -- and lifted, its body reads one
+# variable by name: every closure read the last pass (perl's 2 became 3).
+for my $src (
+    'use v5.36; my @a; for my $i (1..3) { my $j = $i; push @a, sub { $j } } my sub f { $a[1]->() } print f(), "\n";',
+    'use v5.36; my @a; for my $i (1..3) { push @a, sub { $i } } my sub f { $a[1]->() } print f(), "\n";',
+    'use v5.36; my @a; my sub f { $a[1]->() } for my $i (1..3) { my $j = $i; push @a, sub { $j } } print f(), "\n";',
+    'use v5.36; my @a; for my $i (1..3) { my $j = $i; push @a, sub { $j } } print $a[1]->(), "\n";',
+    'use v5.36; sub g { my @a; for my $i (1..3) { my $j = $i; push @a, sub { $j } } $a[1]->() } print g(), "\n";',
+    'use v5.36; my @a; my $i = 0; while ($i < 3) { my $j = ++$i; push @a, sub { $j } } print $a[0]->(), "\n";',
+    'use v5.36; my @a = map { my $j = $_; sub { $j } } 1..3; print $a[0]->(), "\n";',
+) {
+    graph_of($src);
+    like producer_stderr(), qr/an anonymous sub closing over \S+ is not yet lowered -- it is built once per pass of a loop/,
+        "refuses: $src";
+}
+
+# A variable declared OUTSIDE the loop is one variable for every pass, and a
+# closure over it is still lowered.
+round_trips('use v5.36; my @a; my $k = 0; for my $i (1..3) { $k += $i; push @a, sub { $k } } print $a[0]->(), "\n";',
+    'closures in a loop over a variable declared outside it');
+round_trips('use v5.36; sub g { my @a; my $k = 5; for (1..3) { push @a, sub { $k } } $a[2]->() } print g(), "\n";',
+    'closures in a loop in a sub over its lexical declared outside the loop');
+
 done_testing;

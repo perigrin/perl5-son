@@ -1137,6 +1137,44 @@ class SoN::FromOptree 0.01 {
         return 1;
     }
 
+    # _captures_renewed_per_pass($cv, $op, @captures) -> the names of the
+    # captures that perl gives a fresh variable on each pass of a loop the
+    # anoncode $op runs in: a `my` (an op on that slot carrying
+    # OPpLVAL_INTRO, 0x80) or a foreach variable (its iter) on a cycle of the
+    # exec order (next, and other for a LOGOP) through $op. A closure built
+    # on each pass keeps that pass's variable.
+    sub _captures_renewed_per_pass ($cv, $op, @captures) {
+        return () unless @captures;
+        my $reach = sub ($from) {
+            my (%seen, @walk); @walk = ($from);
+            while (defined(my $o = shift @walk)) {
+                next unless ref($o) && $$o && !$seen{$$o}++;
+                push @walk, $o->next;
+                push @walk, $o->other if $o->can('other');
+            }
+            return \%seen;
+        };
+        my $after = $reach->($op->next);
+        return () unless $after->{$$op};    # on no cycle: built once
+
+        my $root = $$cv == ${ B::main_cv() } ? B::main_root() : $cv->ROOT;
+        my %renews;    # slot -> [ops that give it a fresh variable]
+        my @q = ($root);
+        while (my $o = shift @q) {
+            next unless ref($o) && $$o;
+            if ($o->name eq 'enteriter') { push $renews{ $o->targ }->@*, $o->next }
+            elsif ($o->name eq 'padrange' && ($o->private & 0x80)) {
+                push $renews{$_}->@*, $o for $o->targ .. $o->targ + ($o->private & 0x7f) - 1;
+            }
+            elsif ($o->targ && ($o->private & 0x80)) { push $renews{ $o->targ }->@*, $o }
+            next unless $o->flags & 4;    # OPf_KIDS
+            for (my $k = $o->first; ref($k) && $$k; $k = $k->sibling) { push @q, $k }
+        }
+        return map { $_->{name} } grep {
+            grep { $after->{$$_} && $reach->($_)->{$$op} } ($renews{ $_->{outer_idx} } // [])->@*
+        } @captures;
+    }
+
     sub _translate_from ($cv, $start_op, %opts) {
         my $program_root = $opts{program_root};
 
@@ -6789,6 +6827,17 @@ class SoN::FromOptree 0.01 {
             }
             my @captures = $name eq 'padcv' ? () : _anoncode_capture_info($cv, $op);
 
+            # A CLOSURE BUILT ONCE PER PASS keeps that pass's variable, and
+            # the lifted body reads one: every closure read the last pass
+            # (`for my $i (1..3) { my $j = $i; push @a, sub { $j } }` -- perl's
+            # $a[1]->() is 2, emitted 3).
+            if (my @renewed = _captures_renewed_per_pass($cv, $op, @captures)) {
+                die "GAP: an anonymous sub closing over " . join(', ', @renewed)
+                  . " is not yet lowered -- it is built once per pass of a loop"
+                  . " that gives it a fresh variable, and its lifted body reads"
+                  . " one\n";
+            }
+
             # A CAPTURED FIELD belongs to the instance the method runs on, and
             # nothing in the graph says which: the anon sub is lifted to file
             # scope, where `%m` named a stray lexical and `exists $m{a}` was
@@ -8848,6 +8897,9 @@ class SoN::FromOptree 0.01 {
                              (sigil => $sg, symbol => $sy) },
                         ($ctx->{shared_lexicals}{$targ} ? (shared => 1) : ()),
                         (defined $sim->memory ? (inputs => [ $sim->memory ]) : ()));
+                # `.=` READS AN UNDEFINED TARGET AS "" WITHOUT A WARNING, where
+                # `.` warns: the seed is the read or the empty string.
+                $acc = $factory->make('DefinedOr', inputs => [$acc, $mkstr->('')]);
                 $acc = $concat->(_coerce_to_str($factory, $acc), $mkstr->($seg[0]))
                     if defined $seg[0];
             }
