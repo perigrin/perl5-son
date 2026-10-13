@@ -382,7 +382,15 @@ class SoN::Deparse 0.01 {
         # _emit_phase_block). perigrin, 2026-09-30: emitted code runs under
         # strict and warnings, and the round trip can bring a program up to
         # the current idioms.
-        return "use $TARGET_BUNDLE;\n" . $out . $body . $ends . $data_section;
+        # A FILE STARTS IN ITS REQUIRER'S PACKAGE, not main -- measured,
+        # `package Foo; require "f.pm"` with `print __PACKAGE__` in f.pm
+        # prints Foo. File-scope subs are called as `main::` from a class or
+        # another package, so an emission that does either says where file
+        # scope is.
+        my $file_package = ( $out . $body ) =~ /\bmain::|^(?:class|package) /m
+            ? "package main;\n" : '';
+        return "use $TARGET_BUNDLE;\n" . $file_package
+            . $out . $body . $ends . $data_section;
     }
 
     # A named sub. Its body is the same control-chain walk the program body
