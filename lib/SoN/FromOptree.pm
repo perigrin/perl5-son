@@ -373,6 +373,8 @@ class SoN::FromOptree 0.01 {
     # walkers have no path to _translate_from's @exits otherwise. `local` per
     # translated CV.
     our $FN_EXITS;
+    # True while an `eval { }` body is walked: see _loop_arm_exits.
+    our $IN_EVAL_BODY = 0;
 
     # The pad slots this graph shares with a named sub (or, in a sub, with
     # the program) -- $ctx->{shared_lexicals}, reachable from the PadAccess
@@ -453,8 +455,11 @@ class SoN::FromOptree 0.01 {
                 # level down, through the helem/aelem.
                 if ($MUTATES{$name} || (($name eq 'aelem' || $name eq 'helem')
                                         && ($op->flags & 32))) {     # OPf_MOD
+                    # `delete $h{a}` nulls the helem it reaches through.
+                    my $an = $agg->name eq 'null'
+                        ? substr(B::ppname($agg->targ), 3) : $agg->name;
                     $agg = $agg->first
-                        if $agg->name =~ /\A(?:aelem|helem)\z/ && ($agg->flags & 4);
+                        if $an =~ /\A(?:aelem|helem)\z/ && ($agg->flags & 4);
                     $slot{ $agg->targ } ||= 1
                         if $agg->name =~ /\A(?:padav|padhv)\z/ && $agg->targ;
                 }
@@ -2845,8 +2850,11 @@ class SoN::FromOptree 0.01 {
         my @flat;
         for my $v ($values->@*) {
             my $st = $v->stamp;
+            # NOT ONE STORED INTO since: its inputs are the aggregate as first
+            # built (`my %h=(a=>1); $h{b}=2; return %h` returned a => 1).
             if ( defined $st && ( $st->type eq 'Array' || $st->type eq 'Hash' )
-                 && $v->operation =~ /\A(?:Array|Hash)Literal\z/ ) {
+                 && $v->operation =~ /\A(?:Array|Hash)Literal\z/
+                 && !$MUTATED_LITERALS{ $v->id // '' } ) {
                 push @flat, $v->inputs->@*;
             }
             else {
@@ -5653,6 +5661,15 @@ class SoN::FromOptree 0.01 {
         if ($name eq 'padav' || $name eq 'padhv') {
             my $targ = $op->targ;
             my $existing = $sim->lookup($targ);
+            # IN A LOOP, A MUTATION LATER IN THE BODY RAN ON AN EARLIER
+            # ITERATION, before this read -- but it is walked after it, so
+            # nothing has marked the literal yet. The sub-wide slot scan
+            # knows: `return @o if C; push @o, $i` returned the literal as
+            # first built.
+            $MUTATED_LITERALS{ $existing->id } = 1
+                if @LOOP_STACK && $existing && $MUTATED_SLOTS->{$targ}
+                && $existing->can('operation')
+                && $existing->operation =~ /\A(?:Array|Hash)Literal\z/;
             # A LIST-context read of an existing array as an assignment SOURCE
             # (`my @b = @a`, `my @b = (@a, 4)`) FLATTENS its elements onto the
             # stack, so the trailing aassign collects the N values and builds @b
@@ -7462,6 +7479,10 @@ class SoN::FromOptree 0.01 {
                 die "GAP: a `delete` slice with fewer than two operands is not"
                   . " yet lowered\n" unless $operands->@* >= 2;
                 my $container = pop $operands->@*;
+                # A delete mutates the literal, as an element store does.
+                $MUTATED_LITERALS{ $container->id } = 1
+                    if $container->can('operation')
+                    && $container->operation =~ /\A(?:Array|Hash)Literal\z/;
 
                 my @removed;
                 for my $key ($operands->@*) {
@@ -7489,6 +7510,9 @@ class SoN::FromOptree 0.01 {
 
             my $key       = $sim->pop_node;
             my $container = $sim->pop_node;
+            $MUTATED_LITERALS{ $container->id } = 1
+                if $container->can('operation')
+                && $container->operation =~ /\A(?:Array|Hash)Literal\z/;
 
             my $node = $factory->make('Delete',
                 kind   => _element_kind($op),
@@ -10194,11 +10218,32 @@ class SoN::FromOptree 0.01 {
                 # bound it; storage anything else can see -- a package array,
                 # a captured or shared one, one a reference was taken to --
                 # refuses.
-                if ($name eq 'sort' && ($op->private & 8)) {   # OPpSORT_INPLACE
+                # `@a = reverse @a` IS FOLDED THE SAME WAY, with the same bit,
+                # and was dropped: @a kept its order. It is rebound below as
+                # the sort is, and in a loop body or an arm the reversed
+                # literal is PINNED where the assign stands: floating, it was
+                # placed above the loop that declares what it reads, or above
+                # the guard of the arm that protects it (chalk's Context::walk
+                # then read `->@*` of a leaf).
+                #
+                # AN ARRAY A LIST ASSIGN LEFT UNBOUND -- `my ($r, @k) = @_`
+                # binds no literal for @k -- is a bare pad read, and the arm's
+                # literal named @k declared a second `my @k` inside the arm,
+                # leaving the outer one undeclared. Straight-line code has no
+                # arm to shadow; elsewhere it refuses.
+                die "GAP: an in-place reverse (`\@a = reverse \@a`) in a loop"
+                  . " body or an arm, of an array a list assign left unbound,"
+                  . " is not yet lowered -- the reversed literal would shadow"
+                  . " the array it reverses\n"
+                    if $name eq 'reverse' && ($op->private & 8)   # OPpREVERSE_INPLACE
+                    && ($ctx->{mode} // '') ne 'main'
+                    && @inputs && $inputs[-1]->isa('SoN::IR::Node::PadAccess');
+                if (($name eq 'sort' || $name eq 'reverse')
+                        && ($op->private & 8)) {   # OPpSORT_INPLACE, OPpREVERSE_INPLACE
                     my $arr = $op->first;
                     $arr = $arr->sibling while ${ $arr->sibling };
                     my $t = $arr->name eq 'padav' ? $arr->targ : undef;
-                    die "GAP: an in-place sort of an array other than a plain"
+                    die "GAP: an in-place $name of an array other than a plain"
                       . " lexical is not yet lowered -- the sorted list must be"
                       . " stored back where others can see it\n"
                         if !defined $t
@@ -10214,6 +10259,13 @@ class SoN::FromOptree 0.01 {
                         inputs => [$node], sigil => $sg, symbol => $sy,
                         stamp  => SoN::IR::Stamp->new(type => 'Array'));
                     $sim->define($t, $arr_node);
+                    # Straight-line code leaves it floating, where each
+                    # version of the array gets its own name.
+                    if ($name eq 'reverse' && defined $sim->control
+                            && ($ctx->{mode} // '') ne 'main') {
+                        $arr_node->set_control_in($sim->control);
+                        $sim->set_control($arr_node);
+                    }
                 }
 
                 # A GLOBAL-STATE OP ALSO ADVANCES MEMORY, and control alone is
@@ -12327,8 +12379,9 @@ class SoN::FromOptree 0.01 {
             if ($name eq 'cond_expr' && $opmap->is_branch($name)
                 && $sim->stack_depth > 0) {
                 $loop_visited->{$$op}++;
+                # A `return` in an arm is a function exit; see $FN_EXITS.
                 $op = _handle_cond_expr($cv, $op, $sim, $factory, $opmap,
-                    $loop_visited, undef,
+                    $loop_visited, _loop_arm_exits($break_projs),
                     { node => $loop_node, breaks => $break_projs });
                 next;
             }
@@ -12825,9 +12878,11 @@ class SoN::FromOptree 0.01 {
                 # into the rest of the body (which belongs to BOTH arms).
                 my $taken_sim = $sim->snapshot;
                 $taken_sim->set_control($taken_proj);
+                # A `return` in the arm -- `if (C) { return X if D }`, or one
+                # that ends it -- is a function exit; see $FN_EXITS.
                 my (undef, $taken_sig) =
                     _walk_branch($cv, $op->other, $taken_sim, $factory, $opmap,
-                        {}, undef, 0, _op_addr($op->next),
+                        {}, _loop_arm_exits($break_projs), 0, _op_addr($op->next),
                         $loop_node, $break_projs, 1);
                 # The guarded statement is a void statement; drain any value it
                 # left so merge() does not build a spurious stack Phi.
@@ -12859,9 +12914,10 @@ class SoN::FromOptree 0.01 {
                     $op = $op->next;
                     next;
                 }
-                # AN ARM THAT ENDED IN `next` has left for the latch; its edge
-                # is already recorded. Continue on the skip arm alone.
-                if (($taken_sig // '') eq 'nexted') {
+                # AN ARM THAT ENDED IN `next` has left for the latch, and one
+                # that ended in `return` has left the sub; either edge is
+                # already recorded. Continue on the skip arm alone.
+                if (($taken_sig // '') eq 'nexted' || ($taken_sig // '') eq 'exited') {
                     $sim->set_control($skip_proj);
                     $op = $op->next;
                     next;
@@ -13824,6 +13880,7 @@ class SoN::FromOptree 0.01 {
             }
             return 1 if $ADVANCES_CONTROL_OP{$name};
             return 1 if $name eq 'sort' && _sort_runs_comparator($op);
+            return 1 if $name eq 'reverse' && ($op->private & 8);   # OPpREVERSE_INPLACE
         }
         return 0;
     }
@@ -14128,6 +14185,7 @@ class SoN::FromOptree 0.01 {
     }
 
     sub _handle_entertry ($cv, $op, $sim, $factory, $opmap, $visited) {
+        local $IN_EVAL_BODY = 1;
         # WHERE THE PROTECTED BODY BEGINS, captured before the walk moves on.
         # The Region below records where the eval JOINS; without this the
         # statements it protects cannot be told from those before it, and a
@@ -14719,6 +14777,19 @@ class SoN::FromOptree 0.01 {
 
     # $loop, from a loop-body walk: { node, breaks } -- so an arm's `next` or
     # `last` can leave the loop rather than refuse.
+    # The exit list for an arm walked inside a loop body: the function's own
+    # on a real walk, a throwaway one under a scout (whose nodes are
+    # discarded), and none outside a sub -- where a return keeps its refusal.
+    # NOT INSIDE AN eval { }: a loop there loses its stores to outer
+    # lexicals once the eval ends (`eval { for (...) { $n++; return ... if
+    # ... } }` printed E20 for perl's E21), an older defect, so an arm's
+    # return there keeps its refusal.
+    sub _loop_arm_exits ($break_projs) {
+        return undef unless $FN_EXITS;
+        return undef if $IN_EVAL_BODY;
+        return (defined $break_projs && !$IN_SCOUT) ? $FN_EXITS : [];
+    }
+
     sub _handle_cond_expr ($cv, $op, $sim, $factory, $opmap, $visited, $exits = undef, $loop = undef) {
         # A LIST-context ternary (`print $c ? "y" : "n"`) whose arms each produce
         # exactly ONE value is the same select shape as a scalar-context ternary:
@@ -14755,8 +14826,11 @@ class SoN::FromOptree 0.01 {
             my ($end, $sig) = _walk_branch($cv, $start, $arm_sim, $factory,
                 $opmap, $visited, $exit_sink, 1, $join_addr,
                 ($loop ? ($loop->{node}, $loop->{breaks}, 1) : ()));
+            # A NESTED exit (`else { return 5 if C }`) lands in the local
+            # list without making the arm itself 'exited': the arm converges
+            # and the list is dropped with the return in it. Refuse that too.
             die "GAP: function exit inside an if/else arm not yet lowered\n"
-                if ($sig // '') eq 'exited' && !defined $exits;
+                if !defined $exits && (($sig // '') eq 'exited' || @arm_exits);
             # An arm stopping anywhere OTHER than the join hit an op the
             # walker cannot translate -- and it marked that op visited, so
             # the main walk would terminate there too, silently dropping
@@ -14839,6 +14913,21 @@ class SoN::FromOptree 0.01 {
         my $elem_true   = _arm_has_element_store($op->other, $op->next, $join_addr);
         my $elem_false  = _arm_has_element_store($op->next, $op->other, $join_addr);
         my $elem_branch = $elem_true || $elem_false;
+        # A RETURN DIRECTLY IN THE ARM leaves from it too: `C ? (return X) : Y`
+        # or `if (C) { return X } else { ... }`. Without the If, the exit hung
+        # off the pre-branch control and ran unconditionally in a loop body.
+        # ONE SUCH ARM: two returning arms meet nowhere, and the value merge
+        # already merges both exits into one Return. DIRECTLY: a return under
+        # a further branch is _arm_has_return's, and that arm still yields a
+        # value (`C ? (D ? (return 1) : 2) : 3`) -- not this rule's to merge.
+        my $ret_branch = $exits && 1 == grep {
+            my ($stop, $hit) = ($_->[1], 0);
+            for (my $o = $_->[0]; $$o && $$o != $stop
+                     && !(defined $join_addr && $$o == $join_addr); $o = $o->next) {
+                $hit = 1, last if $o->name eq 'return';
+            }
+            $hit;
+        } [$op->other, ${ $op->next }], [$op->next, ${ $op->other }];
         my $mem_branch  = $elem_branch
                        || _arm_has_field_store($cv, $op->other, $op->next, $join_addr)
                        || _arm_has_field_store($cv, $op->next, $op->other, $join_addr)
@@ -14849,6 +14938,7 @@ class SoN::FromOptree 0.01 {
                        # A RETURN, nested in a modifier or not, leaves from its arm.
                        || _arm_has_return($op->other, $op->next, $join_addr)
                        || _arm_has_return($op->next, $op->other, $join_addr)
+                       || $ret_branch
                        # A PINNED ALLOCATION moves the arm's control: `$c ? 2 : []`
                        # forked the pre-branch control without an If.
                        # SO DOES A CALL WHOSE VALUE THE ARM YIELDS, and a loop or
@@ -14927,7 +15017,7 @@ class SoN::FromOptree 0.01 {
             die "GAP: a consumed value-context ternary whose arms store a class"
               . " field is not yet lowered (the arm residual is unstamped, so"
               . " the merged value would silently be Undef)\n"
-                if !$is_void && !$die_branch && !$alloc_only;   # $elem_branch already died above; here it's a field store
+                if !$is_void && !$die_branch && !$ret_branch && !$alloc_only;   # $elem_branch already died above; here it's a field store
             my $if_node = $factory->make_cfg('If',
                 inputs => [$sim->control, $cond]);
             my $true_proj  = $factory->make_cfg('Proj',
@@ -14938,7 +15028,7 @@ class SoN::FromOptree 0.01 {
             # each arm's residual value (delta > 0) and returns it, so capture
             # each here -- a die-arm branch (below) needs the LIVE arm's value as
             # the merged result, and re-popping from the sim would find nothing.
-            my ($false_arm_val, undef, $false_sim, $false_delta, $false_sig)
+            my ($false_arm_val, $false_end, $false_sim, $false_delta, $false_sig)
                 = $walk_arm->($op->next,  $false_proj);
             my ($true_arm_val, $true_end, $true_sim, $true_delta, $true_sig)
                 = $walk_arm->($op->other, $true_proj);
@@ -14946,8 +15036,11 @@ class SoN::FromOptree 0.01 {
             # stack above base is dead leftover -- drain it so merge() does not
             # build a spurious ill-typed stack Phi over a dead value (bug found in
             # 2b-1 review).
-            $false_sim->pop_node while $false_sim->stack_depth > $base_depth;
-            $true_sim->pop_node  while $true_sim->stack_depth  > $base_depth;
+            # KEPT, not dropped, for an arm that turns out to be the only one
+            # staying (see %left): its list is all of these.
+            my (@false_rest, @true_rest);
+            unshift @false_rest, $false_sim->pop_node while $false_sim->stack_depth > $base_depth;
+            unshift @true_rest,  $true_sim->pop_node  while $true_sim->stack_depth  > $base_depth;
             # merge() builds the Region over [true_control, false_control], scope
             # Phis, and the memory-Phi over [true_memory, false_memory]. Adopt the
             # merged control / memory / scope into the main sim (Region-input order
@@ -14979,9 +15072,18 @@ class SoN::FromOptree 0.01 {
                 $sim->define($_, $sc->{$_}) for keys %$sc;
                 # The value, when it is used, is the staying arm's alone.
                 my $stay_val = $left{true} ? $false_arm_val : $true_arm_val;
+                # ALL OF IT, IN A LIST: `my @r = C ? (return 1) : (3,4)` is
+                # (3, 4), and the last value alone bound (4). In scalar
+                # context the last value is the comma's answer; in the
+                # caller's, only the caller could pick.
+                my @rest = $left{true} ? @false_rest : @true_rest;
+                die "GAP: a ternary whose other arm leaves yields a"
+                  . " multi-element list in its caller's context\n"
+                    if @rest && $want == 0;
+                $sim->push_node($_) for $want == 3 ? @rest : ();
                 $sim->push_node($stay_val)
                     if defined $stay_val && $want != 1;
-                return ($left{true} ? undef : $true_end) // $op->next;
+                return ($left{true} ? $false_end : $true_end) // $op->next;
             }
             # Each arm's value back on its stack, so merge() builds the Phi.
             # WANT 0 IS THE CALLER'S CONTEXT, not void -- `return $c ? 2 : []`
@@ -16067,7 +16169,7 @@ class SoN::FromOptree 0.01 {
                     1, $mod_stop, $loop_node, $break_projs, $in_loop);
                 die "GAP: function exit inside a statement modifier in an"
                   . " if/else arm not yet lowered\n"
-                    if ($mod_sig // '') eq 'exited' && !defined $exits;
+                    if !defined $exits && (($mod_sig // '') eq 'exited' || @mod_exits);
                 # A back-edge (the body re-enters an already-visited op) is a
                 # statement-modifier LOOP, not a rebind -- refuse loudly.
                 #

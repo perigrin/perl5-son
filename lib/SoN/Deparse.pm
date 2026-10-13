@@ -2893,7 +2893,21 @@ class SoN::Deparse 0.01 {
                 my @rphis = grep { ($_->{op} // '') eq 'Phi'
                         && (($_->{fields}{region} // -1) == $n->{id})
                         && !$self->_is_memory($_->{id}) } $self->_nodes_in_order;
+                # A LIST EXIT CARRIES ITS SCALAR READING beside it: the
+                # Return takes [list Phi, scalar Phi], and the caller's
+                # context picks, as the Return's own rule does.
+                my ($ret) = grep { ($_->{op} // '') eq 'Return'
+                        && @rphis == 2 && @{ $_->{inputs} // [] } == 2
+                        && $_->{inputs}[0] == $rphis[0]{id}
+                        && $_->{inputs}[1] == $rphis[1]{id} }
+                    $self->_nodes_in_order;
                 if (@loop_frames) {
+                    if ($ret && defined $k) {
+                        $out .= sprintf("return(wantarray ? %s : %s);\n",
+                            $self->_expr($rphis[0]{inputs}[$k]),
+                            $self->_expr($rphis[1]{inputs}[$k]));
+                        last;
+                    }
                     die "GAP: a return from inside a loop whose exit carries"
                       . " more than one value is not yet rendered\n"
                         unless defined $k && @rphis <= 1;
@@ -2908,13 +2922,28 @@ class SoN::Deparse 0.01 {
                         # BOUND HERE ON AN EARLIER PATH -- an arm that returned
                         # from inside an enclosing if -- this path still pays
                         # its own input; skipping it returned the other's.
-                        if (($bound{ $ph->{id} } // '') =~ /\A\$ret\d+\z/) {
+                        if (($bound{ $ph->{id} } // '') =~ /\A([\$\@%])ret\d+\z/) {
+                            die "GAP: a function exit merges an aggregate with a"
+                              . " scalar from inside a loop; which one the"
+                              . " caller gets depends on its context\n"
+                                if !$ret && $1 ne $self->_exit_input_sigil($ph->{inputs}[$k]);
                             $out .= sprintf("%s = %s;\n", $bound{ $ph->{id} },
                                             $self->_expr($ph->{inputs}[$k]));
                             next;
                         }
                         next if exists $bound{ $ph->{id} };
-                        my $var = sprintf('$ret%d', $ph->{id});
+                        # The list half of a list exit is an ARRAY: a scalar
+                        # holding `()` returned (undef) to a list caller.
+                        my $sigil = ($ret && $ph == $rphis[0]) ? '@' : '$';
+                        # AN AGGREGATE EXIT is an aggregate: `my $ret = @o`
+                        # returned the count to a list caller. ONLY THE PATHS
+                        # THAT REACH THIS BINDING are its kind: an input from
+                        # inside a loop was its own `return` there. Another
+                        # path of another kind binding here (above) refuses;
+                        # only the caller's context could pick between them.
+                        $sigil = $self->_exit_input_sigil($ph->{inputs}[$k])
+                            unless $ret;
+                        my $var = sprintf('%sret%d', $sigil, $ph->{id});
                         $out .= sprintf("my %s = %s;\n", $var,
                                         $self->_expr($ph->{inputs}[$k]));
                         $bound{ $ph->{id} } = $var;
@@ -3647,6 +3676,15 @@ class SoN::Deparse 0.01 {
             && defined(($n->{fields} // {})->{symbol});
     }
 
+    # A pinned literal over one builtin reverse: the producer's
+    # `@a = reverse @a`.
+    method _is_inplace_reverse ($n) {
+        my @in = ($n->{inputs} // [])->@*;
+        my $c  = @in == 1 ? ($nodes->{ $in[0] } // {}) : {};
+        return ($c->{op} // '') eq 'Call'
+            && (($c->{fields} // {})->{name} // '') eq 'reverse';
+    }
+
     # _is_inline_aggregate($node) -- true for a versioned named literal that
     # only a Phi consumes and whose contents read a loop Phi: spelled as its
     # contents where the Phi is assigned, never declared.
@@ -3737,9 +3775,14 @@ class SoN::Deparse 0.01 {
             if ($op eq 'PadAccess') {
                 $f->{shared} ? ($shared{$key} = 1) : ($pad{$key} = 1);
             }
+            # AN IN-PLACE REVERSE IS PINNED BUT IS NOT A `my`: it rebinds
+            # the name, and declared `my @a` in an arm it shadowed the
+            # version its own Reverse reads -- `@a = reverse @a; return
+            # "@a"` reversed twice. It is a version like any other.
             elsif ($op =~ /\A(?:Array|Hash)Literal\z/
                    && !$self->_agg_is_package($n)
-                   && !$self->_is_pinned_aggregate($n)) {
+                   && (!$self->_is_pinned_aggregate($n)
+                       || $self->_is_inplace_reverse($n))) {
                 push $lits{$key}->@*, $n->{id};
             }
         }
@@ -3918,6 +3961,12 @@ class SoN::Deparse 0.01 {
             }
         }
         return '';
+    }
+
+    # '@', '%' or '$': how a function exit binds the input it is paid.
+    method _exit_input_sigil ($id) {
+        my $kind = $self->_phi_aggregate_stamp({ id => "in$id", inputs => [$id] });
+        return $kind eq 'Hash' ? '%' : $kind eq 'Array' ? '@' : '$';
     }
 
     # Whether a Region is an eval's join rather than a branch's.
@@ -4477,9 +4526,16 @@ class SoN::Deparse 0.01 {
                 # enclosing loop's exit or latch only through a later edge of
                 # its own, and resuming there emitted the code after the outer
                 # loop inside the inner one.
+                # NOR ANYTHING PAST ONE: a rest arm that only goes round again
+                # first meets the function's exit, through the loop's exit --
+                # `last if A; return X if B` resumed there, and the code after
+                # the loop was emitted inside the body.
                 my $bjoin = $self->_lone_arm_join( $arm{$rest_ix}, $next_of );
                 if ( defined $bjoin
-                     && !grep { $_->{region} == $bjoin } @edges ) {
+                     && !grep { my $r = $_->{region};
+                                grep { $_ == $bjoin }
+                                     $self->_control_reachable( $r, $next_of ) }
+                             @edges ) {
                     my ($bdecl, %bassign)
                         = $self->_join_phis( $bjoin, { $rest_ix => $arm{$rest_ix} } );
                     return ( $bdecl . $text . ( $bassign{$rest_ix} // '' ) . $rest,
