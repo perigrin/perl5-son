@@ -58,4 +58,32 @@ sub f { my $x = $_[0]; my $n = 2; while ($n > 0) { $x = pop; $n = $n - 1 } $x }
 print f(10,20,30), "\n";
 SRC
 
+# A PHI READ ONLY BY ANOTHER PHI IS STILL A VALUE when that Phi is. Here the
+# shift-carried slot's sole reader is the next slot's header Phi (or a later
+# loop's), and the reader that finally prints it is past one more Phi.
+round_trips(<<'SRC', 'a shift slot read only by another header Phi');
+sub f { my $x = 0; my $y = 9; my $n = 2; while ($n > 0) { $y = $x; $x = shift; $n-- } return $y }
+print f(7,8), "\n";
+SRC
+
+round_trips(<<'SRC', 'a shift slot read only by a foreach header Phi');
+sub f { my $x = 0; my $s = 0; for my $i (1..2) { $s = $x; $x = shift } return $s }
+print f(7,8), "\n";
+SRC
+
+round_trips(<<'SRC', 'a chain of three header Phis');
+sub f { my $x = 0; my $y = 1; my $z = 2; for my $i (1..3) { $z = $y; $y = $x; $x = shift } return $z }
+print f(7,8,9), "\n";
+SRC
+
+round_trips(<<'SRC', 'a shift slot read only by a later loop');
+sub f { my $x = 0; my $n = 2; while ($n > 0) { $x = shift; $n-- } my $y = 0; for my $i (1..2) { $y = $x } return $y }
+print f(7,8), "\n";
+SRC
+
+round_trips(<<'SRC', 'a pop slot read only by a later loop');
+sub f { my $x = 0; my $n = 2; while ($n > 0) { $x = pop; $n-- } my $z = 5; for my $i (1..1) { $z = $x } return $z }
+print f(7,8), "\n";
+SRC
+
 done_testing;

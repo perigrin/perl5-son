@@ -6813,12 +6813,21 @@ class SoN::Deparse 0.01 {
     # merged as "memory" and was never bound. A memory merge is only ever read
     # where memory goes: the trailing input of a %MEM_MIN_INPUTS node, a
     # call's last input, or another Phi.
-    method _read_as_value ($id) {
+    #
+    # A PHI CONSUMER PASSES THE QUESTION ON. A slot carrying `shift` whose only
+    # reader is the next slot's header Phi (`$y = $x; $x = shift`) or a later
+    # loop's is a value exactly when that Phi is; skipping it dropped the
+    # variable and left the call a bare statement. $seen stops a cycle.
+    method _read_as_value ($id, $seen = {}) {
+        return 0 if $seen->{$id}++;
         for my $c ($self->_nodes_in_order) {
             my @in = ($c->{inputs} // [])->@*;
             my $op = $c->{op} // '';
             for my $i (grep { ($in[$_] // -1) == $id } 0 .. $#in) {
-                next if $op eq 'Phi';
+                if ($op eq 'Phi') {
+                    return 1 if $self->_read_as_value($c->{id}, $seen);
+                    next;
+                }
                 # A CALL SAYS WHETHER ITS LAST INPUT IS MEMORY (memory_input);
                 # without it, the last input is an argument -- `n("i", $c ? $v : [])`.
                 next if $op eq 'Call' && $i == $#in && @in > 1
