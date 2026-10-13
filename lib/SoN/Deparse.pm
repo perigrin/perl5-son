@@ -6246,7 +6246,12 @@ class SoN::Deparse 0.01 {
             my $nm = ($n->{fields} // {})->{name};
             die "GAP: an AnonSub with no name is not yet rendered\n"
                 unless defined $nm && length $nm;
-            $text = sprintf('\\&%s', $self->_sub_ident($nm));
+            # THE BODY IS DEFINED IN main, and a mangled name with no `::`
+            # resolves in whatever package the reference is taken in -- inside
+            # a `class C { }` block, `\&name` was C::name and the call died.
+            my $ident = $self->_sub_ident($nm);
+            $ident = "main::$ident" unless $ident =~ /::/;
+            $text = sprintf('\\&%s', $ident);
         }
         elsif ($op eq 'Delete') {
             # DELETE YIELDS THE REMOVED VALUE, so it is reached as a value as
