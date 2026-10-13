@@ -1488,7 +1488,11 @@ class SoN::Deparse 0.01 {
                 next if !defined $id || $seen{$id}++;
                 $under_loop{$id} = 1;
                 my $c = $nodes->{$id} or next;
-                push @queue, ( $c->{inputs} // [] )->@*;
+                # NOT THE LOOP'S OWN INPUT: that is the control it is entered
+                # from, which runs once, before it -- a package iterator's
+                # restore after one loop was taken for a read under the next.
+                push @queue, ( $c->{inputs} // [] )->@*
+                    unless $id == $n->{id};
                 for my $d ( $self->_nodes_in_order ) {
                     push @queue, $d->{id}
                         if defined $d->{control_in} && $d->{control_in} == $id;

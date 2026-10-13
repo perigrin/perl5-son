@@ -8405,6 +8405,17 @@ class SoN::FromOptree 0.01 {
               . " expression already spent the mark) is not yet lowered\n"
                 unless $sim->has_mark;
             my $bounds = $sim->pop_to_mark;
+            # SEVERAL ITERATORS TAKE SEVERAL ELEMENTS A PASS. `for my ($k, $v)
+            # (@a)` counts its extra variables on the iter op's targ (B says
+            # 1 for two, 2 for three, 0 for one); every lowering below binds
+            # one iterator to one element, which left `$v` undef on each pass.
+            {
+                my $it = $op->next;
+                $it = $it->next while $$it && $it->name ne 'iter';
+                die "GAP: a foreach with several iterator variables not yet"
+                  . " lowered\n"
+                    if $$it && $it->targ;
+            }
             # The depth the loop leaves behind -- see _settle_loop_value.
             $ctx->{loop_floor}{ ${ $op->lastop } } = $sim->stack_depth
                 if $op->can('lastop') && ${ $op->lastop };
@@ -8626,6 +8637,17 @@ class SoN::FromOptree 0.01 {
                 # like a runtime array (Length(field) + Subscript(field,i)).
                 # A `@$r` over an @_-sourced ref (a Subscript bound) stays a
                 # GAP -- its element type is statically unknowable. zhi 019f61ad.
+                _translate_foreach_array($cv, $op, $sim, $factory, $opmap,
+                    $ctx->{visited}, $bounds->[0], $iter_key);
+            }
+            elsif ($IN_SCOUT && $bounds->@* == 1) {
+                # A SCOUT SEEDS EVERY SLOT WITH A PLACEHOLDER, so `@a` arrives
+                # here as a string Constant, not an array. Refusing stopped the
+                # scout at an inner loop the real walk lowers, and the outer
+                # loop built no Phi for what the inner body writes: `$s .= $x`
+                # restarted every outer pass (`11` for perl's `111`). The scout
+                # asks only which slots the body writes, and walking the body
+                # over the placeholder answers that.
                 _translate_foreach_array($cv, $op, $sim, $factory, $opmap,
                     $ctx->{visited}, $bounds->[0], $iter_key);
             }
@@ -10882,6 +10904,53 @@ class SoN::FromOptree 0.01 {
         return grep { /\A[\$\@\%]\w*::/ } keys $phis->%*;
     }
 
+    # _save_package_iterator($factory, $sim, $key, $writes) -> { target, node }
+    # or undef: the pre-loop value of a package iterator, for the loop exit to
+    # store back.
+    #
+    # PERL LOCALIZES A PACKAGE ITERATOR. `our $p = 0; for $p (@a) { $p *= 2 }`
+    # leaves $p at 0, but the body's write is a real store to the stash entry
+    # -- the alias forwards reads, not writes -- so the emission left the last
+    # element in $p. The restore is the `local` restore: an EntryWrite of the
+    # value read before the loop.
+    #
+    # ONLY WHEN THE BODY WRITES IT ($writes, a thunk so the range form scouts
+    # for a write only for a package iterator). An unwritten iterator already
+    # reads its pre-loop value after the loop, and a store perl's program
+    # never needed would order reads that are free to float.
+    sub _save_package_iterator ($factory, $sim, $key, $writes) {
+        return undef unless defined $sim->memory
+            && $key =~ /\A\$(.+)::([^:]+)\z/;
+        my %name = (package => $1, sigil => '$', symbol => $2);
+        return undef unless $writes->();
+        return { target => $factory->make('EntryDef', %name),
+                 node   => $factory->make('EntryDef', %name,
+                                inputs => [ $sim->memory ]) };
+    }
+
+    # _refuse_unscouted_writes($sim, $pre_scope, \%phis, @skip) -- die when the
+    # real body walk rebound a slot the loop header carries no Phi for.
+    #
+    # THE SCOUT IS WHAT DECIDES THE PHIS, and a scout that stops at a refusal
+    # returns the slots it found so far. A slot the body writes after that
+    # point gets no Phi, and its value never crosses the back-edge: measured,
+    # an outer loop whose scout stopped at an inner foreach restarted `$s .=
+    # $x` every pass. The real walk sees every write, so comparing what it
+    # left against what the loop entered with names the miss. @skip is the
+    # loop's own iterator, which the body rebinds by design.
+    sub _refuse_unscouted_writes ($sim, $pre_scope, $phis, @skip) {
+        my %skip = map { $_ => 1 } @skip;
+        my $post = $sim->scope_bindings;
+        for my $key (keys $pre_scope->%*) {
+            next if $phis->{$key} || $skip{$key};
+            next unless defined $post->{$key} && defined $pre_scope->{$key};
+            die "GAP: a loop body writes a variable its scout missed"
+              . " ($key) not yet lowered\n"
+                if $post->{$key} != $pre_scope->{$key};
+        }
+        return;
+    }
+
     sub _restore_iterator_binding ($sim, $targ, $pre_scope) {
         if (exists $pre_scope->{$targ}) {
             $sim->define($targ, $pre_scope->{$targ});
@@ -11471,6 +11540,7 @@ class SoN::FromOptree 0.01 {
         @$frame{qw(loop breaks nexts phis)} = ($loop_node, \@break_projs, [], \%phis);
         my $exit_proj = _walk_loop_body($cv, $cond_start, $sim, $factory,
             $opmap, {}, $visited, $loop_node, \@break_projs);
+        _refuse_unscouted_writes($sim, $pre_scope, \%phis);
         # A LOOP MAY EXIT BY ITS BREAK ALONE. `while (1) { ... last if C }` has
         # NO header test -- perl folds the constant condition away entirely, so
         # `enterloop` carries no condition op and the `last` is the only way
@@ -11619,6 +11689,8 @@ class SoN::FromOptree 0.01 {
         # it gets the induction Phi, not a carried-value Phi).
         my $pre_scope = $sim->scope_bindings;
         my $mutated = _scout_mutated_targs($cv, $body_start, $sim, $opmap, [$i_targ], 1);
+        my $iter_save = _save_package_iterator($factory, $sim, $i_targ,
+            sub { _body_writes_targ($cv, $body_start, $sim, $opmap, $i_targ, 1) });
 
         # Phase 2: header -- induction Phi plus one Phi per mutated slot.
         # A FOREACH FIXES ITS BOUND AT ENTRY. perl evaluates the
@@ -11774,6 +11846,7 @@ class SoN::FromOptree 0.01 {
         @$frame{qw(loop breaks nexts phis)} = ($loop_node, \@break_projs, [], \%phis);
         _walk_loop_body($cv, $body_start, $sim, $factory, $opmap, {}, $visited,
             undef, \@break_projs, 1);
+        _refuse_unscouted_writes($sim, $pre_scope, \%phis, $i_targ);
 
         # Phase 4: back-edges. The induction step is synthesized (+1); the
         # carried slots patch exactly like the while loop.
@@ -11799,6 +11872,8 @@ class SoN::FromOptree 0.01 {
         _bind_break_exit_phis($factory, $sim, $exit_region, \@break_projs);
         $loop_node->set_region($exit_region);
         $sim->set_control($exit_region);
+        _entry_store($factory, $sim, $iter_save->{target}, $iter_save->{node})
+            if $iter_save;
         return;
     }
 
@@ -11864,6 +11939,17 @@ class SoN::FromOptree 0.01 {
         # A LITERAL LIST CANNOT REACH THIS. `for my $y (1,2) { $y = 9 }` dies
         # at runtime with a readonly error, so there is no legal program whose
         # write-back would target a constant.
+        # PERL ITERATES THE LIVE ARRAY: each pass reads the element at the
+        # next index of the array as it stands then, so a shift in the body
+        # moves the elements under the counter. This lowering's element read
+        # floats to its use -- `for my $x (@a) { $s .= $x; shift @a }` spelled
+        # `$a[$i]` after the shift and printed `2|2` for perl's `1|2` -- and a
+        # whole-array assign rebinds the slot the loop no longer reads. Refused
+        # until the element read is pinned to the top of the pass.
+        die "GAP: a foreach whose body reshapes the array it iterates not yet"
+          . " lowered\n"
+            if !$collect && _body_reshapes_iterated_array($enteriter);
+
         my $writes_iter =
             _body_writes_targ($cv, $body_start, $sim, $opmap, $x_targ, 1);
 
@@ -11909,6 +11995,8 @@ class SoN::FromOptree 0.01 {
         # the element binding, not a carried-value Phi, so exclude it.
         my $pre_scope = $sim->scope_bindings;
         my $mutated = _scout_mutated_targs($cv, $body_start, $sim, $opmap, [$x_targ], 1);
+        my $iter_save = _save_package_iterator($factory, $sim, $x_targ,
+            sub { $writes_iter });
 
         # Phase 2: header -- induction Phi (i: 0..len-1) plus one Phi per mutated
         # slot. The induction Phi is NOT bound to $x; $x is the element read below.
@@ -12031,6 +12119,7 @@ class SoN::FromOptree 0.01 {
         @$frame{qw(loop breaks nexts phis)} = ($loop_node, \@break_projs, [], \%phis);
         _walk_loop_body($cv, $body_start, $sim, $factory, $opmap, {}, $visited,
             undef, \@break_projs, 1);
+        _refuse_unscouted_writes($sim, $pre_scope, \%phis, $x_targ);
 
         # PERL RESTORES THE FOREACH VARIABLE AT LOOP EXIT, and so must this --
         # the binding is scoped to the BODY exactly as @ALIAS_BOUND_KEYS is.
@@ -12323,6 +12412,8 @@ class SoN::FromOptree 0.01 {
         _bind_break_exit_phis($factory, $sim, $exit_region, \@break_projs);
         $loop_node->set_region($exit_region);
         $sim->set_control($exit_region);
+        _entry_store($factory, $sim, $iter_save->{target}, $iter_save->{node})
+            if $iter_save;
         if ($collect) {
             $acc_phi->set_backedge($acc_next);
             # MAP AND GREP IN SCALAR CONTEXT ARE COUNTS, not their result list.
@@ -13510,6 +13601,90 @@ class SoN::FromOptree 0.01 {
                     do { my @k; for (my $k = $list->first; $$k; $k = $k->sibling) { push @k, $k } @k };
         return @items == 1 && $items[0]->can('first') && ($items[0]->flags & 4)
             ? $items[0] : undef;
+    }
+
+    # _body_reshapes_iterated_array($enteriter) -> true when the loop body
+    # shifts, pops, pushes, unshifts, splices, undefs, list-assigns or
+    # truncates (`$#a = ...`) the array the foreach iterates.
+    #
+    # A PAD ARRAY MATCHES BY TARG; A DEREFERENCED OR PACKAGE ONE BY THE SHAPE
+    # OF THE EXPRESSION THAT NAMES IT -- `shift @$r` in a loop over `@$r`,
+    # `push $self->{q}->@*` in one over `$self->{q}->@*`. Two different
+    # expressions can still reach one array (`$q = $r`), and that is not
+    # caught: matching every deref the body reshapes refused chalk's common
+    # `for (@$cs) { push @$phis, ... }`, which reshapes another array.
+    sub _body_reshapes_iterated_array ($enteriter) {
+        # The list item, as _foreach_sole_item finds it -- which also wants
+        # kids, and a padav has none.
+        my $list = $enteriter->first;
+        $list = $list->sibling while $$list && $list->name ne 'null'
+            || ($$list && !($list->flags & B::OPf_KIDS()));
+        return 0 unless $$list && ($list->flags & B::OPf_KIDS());
+        my @items;
+        for (my $k = $list->first; $$k; $k = $k->sibling) {
+            push @items, $k unless $k->name eq 'pushmark';
+        }
+        return 0 unless @items == 1;
+        my $item = $items[0];
+        my $iname = $item->name;
+        return 0 unless $iname eq 'padav' || $iname eq 'rv2av';
+        my %RESHAPES = map { $_ => 1 }
+            qw(shift pop push unshift splice undef aassign av2arylen);
+        my $hits = sub ($agg) {
+            return 0 unless ref $agg && $$agg;
+            return $agg->name eq 'padav' && $agg->targ == $item->targ
+                if $iname eq 'padav';
+            return $agg->name eq 'rv2av'
+                && _op_shape($agg->first) eq _op_shape($item->first);
+        };
+        my @todo = (${ $enteriter->sibling } ? $enteriter->sibling : ());
+        while (my $op = shift @todo) {
+            next unless ref $op && $$op;
+            my $name = $op->name;
+            my @kids;
+            if ($op->flags & B::OPf_KIDS()) {
+                for (my $k = $op->first; $$k; $k = $k->sibling) { push @kids, $k }
+            }
+            push @todo, @kids;
+            next unless $RESHAPES{$name};
+            # `$#a` is read as often as it is written; only an lvalue reshapes.
+            next if $name eq 'av2arylen' && !($op->flags & B::OPf_MOD());
+            my @operands;
+            if ($name eq 'aassign') {
+                # The targets are the LAST kid, an ex-list.
+                my $lhs = $kids[-1];
+                if ($lhs && ($lhs->flags & B::OPf_KIDS())) {
+                    for (my $k = $lhs->first; $$k; $k = $k->sibling) {
+                        push @operands, $k;
+                    }
+                }
+            }
+            else {
+                @operands = grep { $_->name ne 'pushmark' } @kids;
+                @operands = ($operands[0] // ());
+            }
+            return 1 if grep { $hits->($_) } @operands;
+        }
+        return 0;
+    }
+
+    # _op_shape($op) -> a string naming an op subtree by its op names, pad
+    # slots and glob names: equal for two spellings of one expression. A
+    # constant's value is left out, which can only make two shapes equal.
+    # Another op's targ is a scratch slot, different for each spelling.
+    sub _op_shape ($op) {
+        return '' unless ref $op && $$op;
+        my $name = $op->name;
+        my $gv = eval { $op->gv->NAME } // '';
+        my @kids;
+        if ($op->flags & B::OPf_KIDS()) {
+            for (my $k = $op->first; $$k; $k = $k->sibling) {
+                push @kids, _op_shape($k);
+            }
+        }
+        return sprintf '%s[%s,%s](%s)', $name,
+            ($name =~ /\Apad/ ? $op->targ : ''), $gv,
+            join ',', @kids;
     }
 
     # _static_goto($op) -> the `goto LABEL` op when $op is one, or is an
