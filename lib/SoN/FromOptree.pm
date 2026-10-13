@@ -11840,28 +11840,215 @@ class SoN::FromOptree 0.01 {
         return;
     }
 
-    # _takes_reference_to($root, $targ) -> bool: does any `\$x` or `\(..., $x)`
-    # under $root name pad slot $targ? Only a reference: _address_taken also
-    # counts a /g match subject and a pos() operand, which alias nothing.
-    sub _takes_reference_to ($root, $targ) {
+    # _subtree_ops($root, $opaque?) -> every op under $root, $root included,
+    # not descending below an op $opaque says yes to.
+    sub _subtree_ops ($root, $opaque = undef) {
+        my @all;
         my @q = ($root);
         while (my $o = shift @q) {
             next unless ref($o) && $$o;
-            if ($o->name eq q{srefgen} && ${$o->first}) {
-                my $k = $o->first;
-                $k = $k->first while $$k && $k->name eq q{null}
-                    && $k->can(q{first}) && ${$k->first};
-                return 1 if $$k && $k->name eq q{padsv} && $k->targ == $targ;
-            }
-            if ($o->name eq q{refgen} && ${$o->first}) {
-                for (my $k = $o->first->first; ref($k) && $$k; $k = $k->sibling) {
-                    return 1 if $k->name eq q{padsv} && $k->targ == $targ;
-                }
-            }
+            push @all, $o;
+            next if $opaque && $opaque->($o);
             next unless $o->flags & 4;    # OPf_KIDS
             for (my $k = $o->first; ref($k) && $$k; $k = $k->sibling) {
                 push @q, $k;
             }
+        }
+        return @all;
+    }
+
+    # _names_iterator($cv, $op, $key) -> does $op read the foreach iterator
+    # $key: a pad targ, or a package scalar's stash key (`$main::x`)?
+    sub _names_iterator ($cv, $op, $key) {
+        return $op->name eq q{padsv} && $op->targ == $key
+            if $key =~ /\A\d+\z/;
+        my $gvop = $op->name eq q{gvsv} ? $op
+                 : $op->name eq q{rv2sv} && ${$op->first}
+                   && $op->first->name eq q{gv} ? $op->first
+                 : undef;
+        my $gv = $gvop && _op_gv($cv, $gvop);
+        return $gv && $$gv
+            && '$' . $gv->STASH->NAME . '::' . $gv->NAME eq $key;
+    }
+
+    # _iterator_references($cv, $root, $key) -> the `\` ops under $root whose
+    # operand reads the foreach iterator $key anywhere in it: `\$x`, `\($x)`,
+    # and `\substr($x, 0, 1)`, an lvalue into the same scalar. Not into a call:
+    # `\f($x)` is a reference to what f returns, a copy -- whether that copy
+    # is itself a reference is the call rule's question. Only a
+    # reference: _address_taken also counts a /g match subject and a pos()
+    # operand, which alias nothing.
+    sub _iterator_references ($cv, $root, $key) {
+        return grep {
+            my $ref = $_;
+            ($ref->name eq q{srefgen} || $ref->name eq q{refgen})
+                && ${$ref->first}
+                && (grep { _names_iterator($cv, $_, $key) }
+                        _subtree_ops($ref->first, sub ($o) {
+                            $o->name eq q{entersub} }))
+                && !_only_as_a_condition($cv, $ref->first, $key)
+        } _subtree_ops($root);
+    }
+
+    # _only_as_a_condition($cv, $root, $key) -> true when every read of the
+    # iterator under $root is inside a ternary's condition, which the `\`
+    # over the ternary does not reach: `\($c ? $a[0] : $z)` refers to an arm.
+    sub _only_as_a_condition ($cv, $root, $key) {
+        my %cond;
+        for my $o (_subtree_ops($root)) {
+            next unless $o->name eq q{cond_expr};
+            $cond{ ${$_} } = 1 for _subtree_ops($o->first);
+        }
+        return !grep { _names_iterator($cv, $_, $key) && !$cond{ ${$_} } }
+            _subtree_ops($root, sub ($o) { $o->name eq q{entersub} });
+    }
+
+    # _reference_dies_with_pass($ref, $root) -> true for `my $r = \$x` whose
+    # $r is only ever dereferenced under $root (`$$r`) -- never copied,
+    # referenced again, captured or passed. The reference then ends with the
+    # pass, and the write-back carries a write through it to the element.
+    sub _reference_dies_with_pass ($ref, $root) {
+        return 0 unless $ref->name eq q{srefgen};
+        my $k = $ref->first;
+        $k = $k->first while $$k && $k->name eq q{null}
+            && $k->can(q{first}) && ${$k->first};
+        return 0 unless $$k && $k->name eq q{padsv};    # `\$x` itself
+        # The `my $r` is the padsv_store itself, or -- as B::SoN sees the
+        # tree -- an sassign's introducing padsv.
+        my $store = $ref->parent;
+        return 0 unless $$store;
+        my $decl = $store->name eq q{sassign} ? $store->last : $store;
+        return 0 unless $$decl && $decl->name =~ /\Apadsv(?:_store)?\z/
+            && ($store->name eq q{sassign} || $decl->name eq q{padsv_store})
+            && $decl->private & B::OPpLVAL_INTRO;
+        my $r = $decl->targ;
+        return 0 if $ADDR_TAKEN && $ADDR_TAKEN->{$r};
+        for my $o (_subtree_ops($root)) {
+            next if $$o == $$decl || $o->name eq q{null}
+                || !$o->can(q{targ}) || $o->targ != $r;
+            return 0 unless $o->name eq q{padsv};
+            my $deref = $o->parent;
+            return 0 unless $$deref && $deref->name eq q{rv2sv};
+            my $up = $deref->parent;
+            $up = $up->parent while $$up && $up->name eq q{null};
+            return 0 if $$up && $up->name =~ /\A(?:s?refgen)\z/;
+        }
+        return 1;
+    }
+
+    # _iterator_call_values($cv, $root, $key) -> the calls under $root that are
+    # passed the iterator $key itself and may leave an alias to it behind. A
+    # callee can return `\$_[0]`, a reference to the element, or keep one. A
+    # named sub whose body cannot do either is clear; a method or a computed
+    # callee is not seen, and is clear only when its value is not kept (see
+    # _value_may_be_kept) -- one that keeps `\$_[0]` itself goes unseen.
+    sub _iterator_call_values ($cv, $root, $key) {
+        return grep {
+            my $call = $_;
+            my $passes = 0;
+            if ($call->name eq q{entersub} && ${$call->first}
+                && $call->first->can(q{first})) {
+                for (my $k = $call->first->first; ref($k) && $$k;
+                     $k = $k->sibling) {
+                    $passes ||= _names_iterator($cv, $k, $key);
+                }
+            }
+            $passes && !_callee_holds_no_alias($cv, $call)
+                && (_entersub_callee_gv($cv, $call)
+                    || _value_may_be_kept($call, $root));
+        } _subtree_ops($root);
+    }
+
+    # _callee_holds_no_alias($cv, $call) -> true when $call names a sub whose
+    # body can neither return nor keep an alias to an argument: it is not
+    # :lvalue, takes no reference, has no `goto`, and hands no @_ element on --
+    # no `&f;`, and no call argument reading @_ (an aelemfast, a multideref, a
+    # shift or pop, or the `_` glob). Measured on the body as compiled.
+    sub _callee_holds_no_alias ($cv, $call) {
+        my $gv = _entersub_callee_gv($cv, $call) or return 0;
+        my $sub = $gv->CV;
+        return 0 unless $sub && $$sub && $sub->isa(q{B::CV})
+            && ${$sub->ROOT};
+        return 0 if $sub->CvFLAGS & B::CVf_LVALUE;
+        for my $o (_subtree_ops($sub->ROOT)) {
+            return 0 if $o->name =~ /\A(?:s?refgen|goto)\z/;
+            next unless $o->name eq q{entersub};
+            return 0 unless $o->flags & 64;    # OPf_STACKED: `&f;` passes @_
+            for my $arg (_subtree_ops($o->first,
+                             sub ($k) { $k->name eq q{entersub} })) {
+                next if $$arg == ${$o->first};
+                return 0 if $arg->name =~ /\A(?:aelemfast|multideref|shift
+                                              |pop|splice)\z/x;
+                next unless $arg->name =~ /\Agvs?v?\z/;
+                my $g = _op_gv($sub, $arg);
+                return 0 if $g && $$g && $g->NAME eq q{_};
+            }
+        }
+        return 1;
+    }
+
+    # _value_may_be_kept($op, $root) -> false when nothing under $root can
+    # keep $op's value as the reference it may be: it is thrown away, tested
+    # (a reference is never false, so the left of `&&` or a condition is only
+    # ever true), used up by an operator that makes a number or a string of
+    # it, or handed to a call -- whose keeping it is no more seen here than a
+    # callee keeping `\$_[0]` itself. A logical operator whose value can be
+    # this one's asks the same of its own reader, and a `my` declared from it
+    # asks it of each of that variable's reads. Anything else -- a store, a
+    # push, a return -- may keep it.
+    sub _value_may_be_kept ($op, $root) {
+        return 0 if ($op->flags & 3) == 1;    # OPf_WANT_VOID
+        my $p = $op->parent;
+        ($op, $p) = ($p, $p->parent) while $$p && $p->name eq q{null};
+        return 1 unless $$p;
+        my $name  = $p->name;
+        my $first = ${$p->first} == $$op;
+        return 0 if $name =~ /\A(?:not|defined|length|ref|stringify|concat
+            |multiconcat|join|print|say|sprintf|uc|lc|ucfirst|lcfirst
+            |entersub)\z/x
+            || $name =~ /\A(?:i_)?(?:lt|gt|le|ge|eq|ne|ncmp|add|subtract
+            |multiply|divide|modulo|negate)\z/x
+            || $name =~ /\As(?:lt|gt|le|ge|eq|ne|cmp)\z/;
+        return 0 if $first && $name =~ /\A(?:cond_expr|and)\z/;
+        # `${\ f($x)}` is f's value again.
+        if ($name =~ /\As?refgen\z/) {
+            my $up = $p->parent;
+            $up = $up->parent while $$up && $up->name =~ /\A(?:null|scope)\z/;
+            return _value_may_be_kept($up, $root)
+                if $$up && $up->name eq q{rv2sv};
+        }
+        return _value_may_be_kept($p, $root)
+            if $name =~ /\A(?:cond_expr|and|or|dor)\z/;
+
+        # `my $v = f($x)` and `my (@l) = f($x)`: the declared slots' reads.
+        my @decl;
+        if ($name eq q{padsv_store} && $p->private & B::OPpLVAL_INTRO) {
+            @decl = ($p);
+        }
+        elsif ($first && $name eq q{sassign}) {
+            @decl = ($p->last);
+        }
+        elsif ($first && $name eq q{aassign}) {
+            for (my $k = $p->last->first; ref($k) && $$k; $k = $k->sibling) {
+                push @decl, $k unless $k->name eq q{pushmark};
+            }
+        }
+        return 1 unless @decl && !grep {
+            $_->name !~ /\Apad(?:[sah]v|range|sv_store)\z/
+                || !($_->private & B::OPpLVAL_INTRO)
+        } @decl;
+        my %slot;
+        for my $d (@decl) {
+            my $n = $d->name eq q{padrange} ? $d->private & 127 : 1;
+            $slot{ $d->targ + $_ } = 1 for 0 .. $n - 1;
+        }
+        for my $use (_subtree_ops($root)) {
+            next if $use->name eq q{null} || !$use->can(q{targ})
+                || !$slot{ $use->targ }
+                || $use->private & B::OPpLVAL_INTRO
+                   && $use->name =~ /\Apad/;
+            return 1 if $use->name !~ /\A(?:pad[sah]v|aelemfast_lex)\z/
+                || _value_may_be_kept($use, $root);
         }
         return 0;
     }
@@ -12062,15 +12249,36 @@ class SoN::FromOptree 0.01 {
         # write-back; one made after the pass reaches only the copy -- measured,
         # `for my $x (@a) { $r = \$x } $$r = 5` left @a alone, and so did a
         # push onto an outer array, a hash store and a sub that kept the
-        # reference. Where the reference goes is not tracked, so any `\$x`
-        # (not a call argument, which the write-back does cover) is refused.
-        # Scanned from the leaveloop, which holds every op the iterator is in
-        # scope for; a program has no CV root to scan from.
-        die "GAP: a reference to a foreach iterator is not yet lowered --"
-          . " the iterator is a copy written back each pass, and"
-          . " the reference can outlive the pass\n"
-            if $demoted_iter
-            && _takes_reference_to($enteriter->parent, $x_targ);
+        # reference. Where the reference goes is not tracked, so a `\` over the
+        # iterator is refused unless it is `my $r = \$x` with $r only
+        # dereferenced. Scanned from the leaveloop, which holds every op the
+        # iterator is in scope for; a program has no CV root to scan from.
+        my $loop_root = $enteriter->parent;
+        if ($x_targ =~ /\A\d+\z/) {
+            die "GAP: a reference to a foreach iterator is not yet lowered --"
+              . " the iterator is a copy written back each pass, and"
+              . " the reference can outlive the pass\n"
+                if grep { !_reference_dies_with_pass($_, $loop_root) }
+                   _iterator_references($cv, $loop_root, $x_targ);
+
+            # A CALL CAN HAND THE SAME REFERENCE BACK: `sub k { \$_[0] }` makes
+            # `$r = k($x)` the reference above, made where nothing shows it.
+            # Measured: perl 1 5, emitted 1 2. So can one that stores it away
+            # (`push @K, \$_[0]`), which is seen only in a named sub's body.
+            die "GAP: a call's value that may alias a foreach iterator is not"
+              . " yet lowered -- the iterator is a copy written back each"
+              . " pass, and the callee can return or keep a reference to it\n"
+                if $demoted_iter
+                && _iterator_call_values($cv, $loop_root, $x_targ);
+        }
+
+        # A PACKAGE ITERATOR'S REFERENCE NAMES THE GLOB'S SCALAR, which the
+        # lowering never writes -- the alias is a binding, not a store. Measured:
+        # `for $x (@A) { my $r = \$x; $$r = 9 }` left @A alone, within the pass.
+        die "GAP: a reference to a package foreach iterator is not yet lowered"
+          . " -- the alias is a binding, and the reference names the global\n"
+            if $x_targ !~ /\A\d+\z/
+            && _iterator_references($cv, $loop_root, $x_targ);
         my $iter_slot = sub {
             $factory->make('PadAccess', targ => $x_targ,
                 do { my ($sg, $sy) = _padparts($cv, $x_targ);
