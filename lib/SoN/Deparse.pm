@@ -343,13 +343,22 @@ class SoN::Deparse 0.01 {
             if $begins =~ /^use experimental\b[^;]*"class"/m;
         $out .= $classes_text;
 
+        # A LIFTED BODY IS DEFINED IN main, where every reference and call
+        # names it -- but a required file is compiled in the REQUIRER'S
+        # package, so emitted bare at file scope it landed there: chalk's
+        # TestPipeline loads TypeInferenceActions and its methods died with
+        # "Undefined subroutine &main::...". A named sub keeps perl's own
+        # behaviour and is emitted as before.
+        my $lifted = '';
         for my $name (sort keys $methods->%*) {
             next if $name eq 'main::__PROGRAM__';
             next if $class_owned->{$name};
             my $sub = eval { $self->_emit_sub($name, $methods->{$name}) };
             if (!defined $sub) { $gap = $@ || "failed to render $name"; return undef }
-            $out .= $sub;
+            if ($self->_sub_ident($name) ne $name =~ s/^main:://r) { $lifted .= $sub }
+            else { $out .= $sub }
         }
+        $out .= "package main {\n$lifted}\n" if length $lifted;
 
         $nodes = { map { $_->{id} => $_ } ($graph->{nodes} // [])->@* };
         %rendered = ();
