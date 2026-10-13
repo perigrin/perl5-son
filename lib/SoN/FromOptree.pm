@@ -9160,13 +9160,21 @@ class SoN::FromOptree 0.01 {
                     if ($rhs->@* == 1) {
                         my $only  = $rhs->[0];
                         my $stamp = $only->stamp;
-                        # A LIST-VALUED TERNARY IS A VALUE, NOT A CONTAINER:
+                        # A LIST-VALUED TERNARY IS A VALUE, NOT A CONTAINER,
+                        # when the target is mutated or the arms read memory:
                         # bound as itself, `push @a, 4` was spelled on the
-                        # expression and `\@a` referred to its value. The
-                        # literal below makes the array it is assigned to.
+                        # expression and `\@a` referred to its value, and
+                        # `@b = $c ? ($a[0], 3) : ()` re-read $a[0] after a
+                        # later store. The literal below makes the array it is
+                        # assigned to. Constant arms bind as the value: a
+                        # literal there, in `while (@t = $i < 2 ? (1) : ())`,
+                        # was rendered as an undeclared Phi.
+                        my $needs_container = $only->isa('SoN::IR::Node::TernaryExpr')
+                            && ( ( $is_pad && $MUTATED_SLOTS->{ $target->targ } )
+                                 || _reads_memory_cone($only) );
                         my $is_aggregate_value =
                             defined $stamp && $stamp->type eq $want
-                            && !$only->isa('SoN::IR::Node::TernaryExpr');
+                            && !$needs_container;
                         # ...UNLESS IT WAS CALLED IN SCALAR CONTEXT. `my $r =
                         # reverse(...); my @d = ($r)` inlines the call, and a
                         # scalar `reverse` is ONE string; taking it as the
@@ -9713,6 +9721,39 @@ class SoN::FromOptree 0.01 {
                 # reading it. Without that, two `each` calls on one hash have
                 # identical inputs and hash-cons into ONE node, which would make
                 # the second call return the first call's pair.
+                # `@b = reverse @b` IS NO LIST ASSIGN. perl rewrites it to a
+                # reverse flagged INPLACE under a nulled aassign, so the assign
+                # handler never ran and the reverse was built and dropped:
+                # `print "@b"` flattened the old literal, `1 2` for `2 1`. The
+                # result is the array's new contents -- a literal of the call,
+                # rebound to the slot, as a whole assign is.
+                if ($node_type eq 'Call' && $name eq 'reverse'
+                        && ($op->private & B::OPpREVERSE_INPLACE())) {
+                    my $kid = $op->first;
+                    $kid = $kid->sibling if $kid && $$kid && $kid->name eq 'pushmark';
+                    die "GAP: an in-place reverse of something other than a"
+                      . " lexical array is not yet lowered\n"
+                        unless $kid && $$kid && $kid->name eq 'padav' && $kid->targ;
+                    # ponytail: in a loop the rebound literal is loop-carried,
+                    # and its Phi rendered undeclared; refuse until it is not.
+                    die "GAP: an in-place reverse inside a loop body is not yet"
+                      . " lowered -- the reversed array is carried round the loop\n"
+                        if @LOOP_STACK;
+                    _note_aggregate_mutation($op, $ctx);
+                    my $call = $factory->make('Call',
+                        inputs        => [@inputs],
+                        dispatch_kind => 'builtin',
+                        name          => 'reverse',
+                        stamp         => SoN::IR::Stamp->new(type => 'List'));
+                    my $lit = $factory->make('ArrayLiteral',
+                        inputs => [$call],
+                        sigil  => '@',
+                        symbol => substr(_padname($cv, $kid->targ), 1),
+                        stamp  => SoN::IR::Stamp->new(type => 'Array'));
+                    $sim->define($kid->targ, $lit);
+                    return ($op->next, 'handled');
+                }
+
                 if ($node_type eq 'Call'
                         && ($name eq 'keys' || $name eq 'values'
                             || $name eq 'each')
@@ -17012,6 +17053,26 @@ class SoN::FromOptree 0.01 {
     # fallback name is suffixed with the targ. PadAccess identity is keyed on
     # varname (not targ -- see PadAccess::content_hash), so the suffix keeps
     # distinct unnamed slots distinct rather than collapsing them all to '$?'.
+    # _reads_memory_cone($node) -- may the value of $node change when memory
+    # does? True unless its cone is constants, literals and pure operators.
+    # ponytail: an allow-list -- an unlisted node counts as a read, which
+    # only costs a container.
+    sub _reads_memory_cone ($node) {
+        my ( @todo, %seen ) = ($node);
+        while ( defined( my $n = shift @todo ) ) {
+            next if $seen{ refaddr $n }++;
+            next if $n->isa('SoN::IR::Node::Constant');
+            return 1 unless $n->isa('SoN::IR::Node::TernaryExpr')
+                || $n->isa('SoN::IR::Node::ArrayLiteral')
+                || $n->isa('SoN::IR::Node::HashLiteral')
+                || $n->isa('SoN::IR::Node::BinOp')
+                || $n->isa('SoN::IR::Node::Phi')
+                || ( $n->isa('SoN::IR::Node::PadAccess') && !$n->inputs->@* );
+            push @todo, grep { defined } $n->inputs->@*;
+        }
+        return 0;
+    }
+
     sub _padname ($cv, $targ) {
         my $padlist = $cv->PADLIST;
         return "\$?$targ" unless $$padlist;
