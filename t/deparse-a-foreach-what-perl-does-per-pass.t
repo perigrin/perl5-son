@@ -93,6 +93,13 @@ round_trips(q{sub f { my @a = (1); my $s=""; for my $k (1..2) { for my $x (@a) {
 round_trips(q{sub f { my @a = (1,2); my $s=""; for my $k (@a) { for my $x (@a) { $s.="$k$x" } } print "$s\n" } f();},
     'an array loop inside an array loop');
 
+# THE SAME MISS WITHOUT AN INNER LOOP: a C-style `for` with nested `next`
+# guards ahead of it kept its scout from reaching the increment of the second
+# loop, which then emitted `$i = $i` and never terminated (chalk's
+# StructPromotion::_rewrite_method_body). The real walk sees the write.
+refuses(q{sub f { my ($b) = @_; my %r; for (my $i = 0; $i < scalar(@$b); $i++) { my $s = $b->[$i]; next unless defined $s; if ($s > 1) { next unless $s > 2; $r{$i} = 1 } } for (my $i = 0; $i < @$b; $i++) { next if $r{$i}; print $i } print "\n" } f([1,2,3,undef,5]);},
+    qr/GAP: a loop body writes a variable its scout missed/, 'a C-style loop whose scout misses its increment');
+
 # PERL LOCALIZES A PACKAGE ITERATOR: whatever the body writes, the variable
 # holds its pre-loop value again after the loop.
 round_trips(q{use v5.42; our $p = 0; sub f($r) { my $s=""; for $p (@$r) { $p *= 2 } "@$r|$p" } print f([1,2]), "\n";},
