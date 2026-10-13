@@ -67,16 +67,8 @@ round_trips('use v5.36; my sub f ($x) { $x + 1 } print f(41), "\n";', 'a lexical
 round_trips('use v5.36; my sub f ($x) { $x + 1 } sub g { f(1) + f(2) } print g(), "\n";', 'a lexical sub called from a named sub');
 round_trips('use v5.36; use experimental "class"; class C { my sub h ($x) { $x * 2 } method m ($y) { h($y) } } print C->new->m(21), "\n";',
     'a lexical sub called from a method, as chalk TypeInferenceActions does');
-# A LEXICAL SUB CLOSING OVER A VARIABLE is refused: its captures belong to
-# the scope it was defined in, not to the sub calling it.
-for my $src (
-    'use v5.36; my $n = 10; my sub add ($x) { $x + $n } print add(1), add(2), "\n";',
-    'use v5.36; my $k = 3; my sub a ($x) { $x + $k } sub g { a(1) } print g(), "\n";',
-) {
-    graph_of($src);
-    like producer_stderr(), qr/a lexical sub closing over \$\w+ is not yet lowered/,
-        "a lexical sub closing over a variable refuses: $src";
-}
+# A LEXICAL SUB CLOSING OVER A VARIABLE: see
+# t/deparse-a-lexical-sub-closing-over-a-file-lexical.t.
 
 # ONE LEXICAL SUB CALLING ANOTHER: the inner name is a capture with no body
 # of its own, found by name in the scope it was defined in.

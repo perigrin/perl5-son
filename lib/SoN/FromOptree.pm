@@ -1056,6 +1056,17 @@ class SoN::FromOptree 0.01 {
                 $shared{$_} = 1 for values %{ _outer_main_slots($sub_cv) };
             }
         }
+        # A LEXICAL SUB DEFINED AT FILE SCOPE is in no stash, but it closes
+        # over the file's lexicals exactly as a named sub does: its body is
+        # the pad name's PROTOCV, lifted and translated as its own graph.
+        my $names = eval { B::main_cv()->PADLIST->ARRAYelt(0) };
+        for my $i ($names ? (1 .. $names->MAX) : ()) {
+            my $pn = $names->ARRAYelt($i);
+            next unless ref($pn) eq 'B::PADNAME' && ($pn->PV // '') =~ /\A&./;
+            my $proto = eval { $pn->PROTOCV };
+            next unless ref($proto) eq 'B::CV';
+            $shared{$_} = 1 for values %{ _outer_main_slots($proto) };
+        }
         return \%shared;
     }
 
@@ -1078,6 +1089,39 @@ class SoN::FromOptree 0.01 {
             $slots{$i} = $parent if $parent;
         }
         return \%slots;
+    }
+
+    # _lexsub_cloned_once($body) -> true when the program's clonecv for the
+    # file-scope lexical sub whose PROTOCV is $body runs at most once: it lies
+    # on no cycle of the exec order (next, and other for a LOGOP), so no loop
+    # -- foreach, while, do-while, map or grep -- re-enters it. False when no
+    # such clonecv is found, which proves nothing.
+    sub _lexsub_cloned_once ($body) {
+        return 0 unless ref($body) eq 'B::CV';
+        my $names = eval { B::main_cv()->PADLIST->ARRAYelt(0) } or return 0;
+        my ($slot) = grep {
+            my $pn = $names->ARRAYelt($_);
+            my $proto = ref($pn) eq 'B::PADNAME' && eval { $pn->PROTOCV };
+            ref($proto) eq 'B::CV' && $$proto == $$body;
+        } 1 .. $names->MAX;
+        return 0 unless $slot;
+        my ($clone, @q) = (undef, B::main_root());
+        while (my $o = shift @q) {
+            next unless ref($o) && $$o;
+            if ($o->name eq 'clonecv' && $o->targ == $slot) { $clone = $o; last }
+            next unless $o->flags & 4;    # OPf_KIDS
+            for (my $k = $o->first; ref($k) && $$k; $k = $k->sibling) { push @q, $k }
+        }
+        return 0 unless $clone;
+        my %seen;
+        my @walk = ($clone->next);
+        while (defined(my $o = shift @walk)) {
+            next unless ref($o) && $$o && !$seen{$$o}++;
+            return 0 if $$o == $$clone;
+            push @walk, $o->next;
+            push @walk, $o->other if $o->can('other');
+        }
+        return 1;
     }
 
     sub _translate_from ($cv, $start_op, %opts) {
@@ -6692,7 +6736,40 @@ class SoN::FromOptree 0.01 {
             # sub calling it here. Another lexical sub (`&a`) needs no cell --
             # the body's own padcv finds it -- and anything else is refused.
             if ($name eq 'padcv') {
-                my @vars = grep { !/\A&/ } _anoncode_captures($cv, $op);
+                # ONE DEFINED AT FILE SCOPE shares the file's lexicals by
+                # name, as a named sub does (_file_lexicals_shared), so those
+                # captures need no cell either.
+                my $body = _anoncode_cv($cv, $op);
+                my %file_slot = map { $_ => 1 } keys %{ _outer_main_slots($body) };
+                my $names = $body && eval { $body->PADLIST->ARRAYelt(0) };
+                my %file_name = map {
+                    my $pn = $names->ARRAYelt($_);
+                    ref($pn) eq 'B::PADNAME' ? ($pn->PV => 1) : ()
+                } keys %file_slot;
+                if (%file_name) {
+                    # SHARED BY NAME IS ONE VARIABLE PER NAME. A second file
+                    # lexical spelled the same (`{ my $x }` shadowing `my
+                    # $x`) would be read as the first: perl's 12 became 22.
+                    my %count;
+                    my $main = eval { B::main_cv()->PADLIST->ARRAYelt(0) };
+                    for my $i ($main ? (1 .. $main->MAX) : ()) {
+                        my $pn = $main->ARRAYelt($i);
+                        $count{ $pn->PV }++ if ref($pn) eq 'B::PADNAME' && defined $pn->PV;
+                    }
+                    my @twice = grep { ($count{$_} // 0) > 1 } sort keys %file_name;
+                    die "GAP: a lexical sub closing over " . join(', ', @twice)
+                      . " is not yet lowered -- the file declares that name more"
+                      . " than once, and its body reads it by name\n" if @twice;
+                    # A CLONE PER PASS IS A VARIABLE PER PASS. A `my sub` in a
+                    # loop is cloned at each entry and a `\&h` taken there keeps
+                    # that pass's variable; read by name, every one read the
+                    # last (perl's 10,20,30 became 30,30,30).
+                    die "GAP: a lexical sub closing over " . join(', ', sort keys %file_name)
+                      . " is not yet lowered -- it is cloned inside a loop, once"
+                      . " per pass, and its body reads the variable by name\n"
+                        unless _lexsub_cloned_once($body);
+                }
+                my @vars = grep { !/\A&/ && !$file_name{$_} } _anoncode_captures($cv, $op);
                 die "GAP: a lexical sub closing over " . join(', ', @vars)
                   . " is not yet lowered -- its captures belong to the scope it"
                   . " was defined in, not to the caller\n" if @vars;
