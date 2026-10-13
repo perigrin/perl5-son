@@ -2674,6 +2674,13 @@ class SoN::FromOptree 0.01 {
         return undef
             unless $cv && ref($cv) && $op && ref($op) && $op->can('targ');
         my $inner = eval { $cv->PADLIST->ARRAYelt(1)->ARRAYelt($op->targ) };
+        # A LEXICAL SUB'S PAD SLOT HOLDS A STUB, with no root; its body is
+        # the pad name's PROTOCV, which clonecv copies at run time.
+        if (ref($inner) eq 'B::CV' && ref($inner->ROOT) eq 'B::NULL') {
+            my $proto = eval {
+                $cv->PADLIST->ARRAYelt(0)->ARRAYelt($op->targ)->PROTOCV };
+            $inner = $proto if ref($proto) eq 'B::CV';
+        }
         return ref($inner) eq 'B::CV' ? $inner : undef;
     }
 
@@ -4263,13 +4270,6 @@ class SoN::FromOptree 0.01 {
         }
 
         # Handle pushmark specially - just record the mark
-        # A LEXICAL SUB (`my sub f`) IS CALLED THROUGH A padcv, which pushed
-        # nothing here, so the call took its first argument for the callee:
-        # chalk's TypeInferenceActions rendered `_get_rightmost_type($ctx)` as
-        # `$ctx->()` and 58 of chalk's tests died. Refused until lowered.
-        die "GAP: a call to a lexical sub (`my sub`) is not yet lowered\n"
-            if $name eq 'padcv';
-
         if ($name eq 'pushmark') {
             $sim->push_mark;
             return ($op->next, 'handled');
@@ -5313,8 +5313,9 @@ class SoN::FromOptree 0.01 {
             }
         }
 
-        # Skip bookkeeping ops
-        if ($opmap->is_skip($name)) {
+        # Skip bookkeeping ops -- not a padcv, which OpMap lists as one: it
+        # is a lexical sub's code, lifted below with anoncode.
+        if ($opmap->is_skip($name) && $name ne 'padcv') {
             return ($op->next, 'handled');
         }
 
@@ -6654,7 +6655,13 @@ class SoN::FromOptree 0.01 {
         # sub becomes its own graph in `methods` referenced by name, and an
         # anonymous one should almost certainly follow that, but it is a wire
         # decision.
-        if ($name eq 'anoncode') {
+        # A LEXICAL SUB (`my sub f`) IS AN ANON SUB WITH A NAME IN THE PAD: its
+        # padcv reaches the CV through the same pad slot, and lifted the same
+        # way, a call to it names its body. Unhandled, the padcv pushed nothing
+        # and the call took its first argument for the callee -- chalk's
+        # TypeInferenceActions rendered `_get_rightmost_type($ctx)` as
+        # `$ctx->()` and 58 of chalk's tests died.
+        if ($name eq 'anoncode' || $name eq 'padcv') {
             # SAY WHICH KIND. Both still refuse, but they need different work
             # and one message hides which one a corpus file actually hit.
             #
@@ -6796,6 +6803,17 @@ class SoN::FromOptree 0.01 {
                 captures => [map { $_->{name} } @captures],
                 stamp    => SoN::IR::Stamp->new(type => 'CodeRef'));
             $sim->push_node($node);
+            # `\&f` OF A LEXICAL SUB is srefgen(rv2cv(padcv)): the AnonSub is
+            # already the code reference, so both are passed over -- taken
+            # again it was `\(\&f)`, a reference to the reference.
+            if ($name eq 'padcv') {
+                # Past the nulls an unpeepholed chain keeps (ex-list).
+                my $past = sub ($o) { $o = $o->next while $$o && $o->name eq 'null'; $o };
+                my $rv  = $past->($op->next);
+                my $ref = $$rv && $rv->name eq 'rv2cv' ? $past->($rv->next) : undef;
+                return ($ref->next, 'handled')
+                    if $ref && $$ref && $ref->name =~ /\As?refgen\z/;
+            }
             return ($op->next, 'handled');
         }
 

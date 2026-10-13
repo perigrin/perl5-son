@@ -1,5 +1,5 @@
-# ABOUTME: A call to a lexical sub (`my sub f`) refuses: its padcv pushed nothing, and the
-# ABOUTME: call took its first argument for the callee -- `f($ctx)` became `$ctx->()`.
+# ABOUTME: A lexical sub (`my sub f`) is lifted like an anonymous sub and called by its
+# ABOUTME: body's name; its padcv once pushed nothing, and `f($ctx)` became `$ctx->()`.
 
 use v5.42.0;
 use Test2::V0;
@@ -63,13 +63,20 @@ sub emits_quietly ($src, $name) {
 }
 
 
-for my $src (
-    'use v5.36; my sub f ($x) { $x + 1 } print f(41), "\n";',
-    'use v5.36; use experimental "class"; class C { my sub h ($x) { $x * 2 } method m ($y) { h($y) } } print C->new->m(21), "\n";',
-) {
-    graph_of($src);
-    like producer_stderr(), qr/a call to a lexical sub \(`my sub`\) is not yet lowered/,
-        "refuses: $src";
+round_trips('use v5.36; my sub f ($x) { $x + 1 } print f(41), "\n";', 'a lexical sub called at top level');
+round_trips('use v5.36; my sub f ($x) { $x + 1 } sub g { f(1) + f(2) } print g(), "\n";', 'a lexical sub called from a named sub');
+round_trips('use v5.36; use experimental "class"; class C { my sub h ($x) { $x * 2 } method m ($y) { h($y) } } print C->new->m(21), "\n";',
+    'a lexical sub called from a method, as chalk TypeInferenceActions does');
+# A LEXICAL SUB CLOSING OVER A LEXICAL is refused by the renderer: its
+# cell is made at the call, not where the sub is introduced.
+{
+    my $d = SoN::Deparse->new;
+    my $g = graph_of('use v5.36; my $n = 10; my sub add ($x) { $x + $n } print add(1), add(2), "\n";');
+    ok $g, 'a lexical sub closing over a lexical: translates';
+    is $d->render($g), undef, '... and does not render';
+    like $d->gap // '', qr/CellParam whose cell cannot be resolved/, '... naming the unresolved cell';
 }
+round_trips('use v5.36; my sub f ($x) { $x * 3 } my $r = \&f; print $r->(2), "\n";', 'a reference to a lexical sub');
+round_trips('use v5.36; my sub f ($x) { [$x, $x] } print scalar(@{ f(4) }), "\n";', 'a lexical sub returning a reference');
 
 done_testing;
