@@ -172,7 +172,11 @@ sub _extract_fields ($node, $id_remap) {
         return %f ? \%f : undef;
     }
     if ($op eq 'Return') {
-        return $node->implicit ? { implicit => JSON::PP::true } : undef;
+        my %f = (
+            ( $node->implicit  ? ( implicit  => JSON::PP::true ) : () ),
+            ( $node->valueless ? ( valueless => JSON::PP::true ) : () ),
+        );
+        return %f ? \%f : undef;
     }
     if ($op eq 'PackageMark') {
         return { package => $node->package };

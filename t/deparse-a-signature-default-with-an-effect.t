@@ -200,4 +200,49 @@ for my $case (
     round_trips(@$case);
 }
 
+# AN INNER `my` SHADOWING A PARAMETER is a new variable on each pass; the
+# signature's declaration of the parameter does not reach into the block.
+for my $case (
+    [q{use v5.36; sub f ($x) { my @r; for my $i (1..3) { my $x = $i; push @r, \$x } join(",", map { $$_ } @r) . "/$x" } print f(9), "\n";},
+        'an inner my shadows a plain parameter'],
+    [q{use v5.36; sub f ($x = 1) { my @r; my $i = 0; while ($i++ < 3) { my $x = $i; push @r, \$x } join(",", map { $$_ } @r) . "/$x" } print f(9), f(), "\n";},
+        'an inner my in a while shadows a defaulted parameter'],
+    [q{use v5.36; sub f ($x) { my $r = \$x; my @l; for (1..2) { my $x = $_; push @l, \$x } $$r = 0; join ",", $x, map { $$_ } @l } print f(5), "\n";},
+        'an inner my shadows a referenced parameter'],
+    [q{use v5.36; our $c=0; sub g { $c++; 7 } sub f ($x = g()) { my @r; for my $i (1..2) { my $x = $i; push @r, \$x } join(",", map { $$_ } @r) . "/$x" } print f(), f(3), " c=$c\n";},
+        'an inner my shadows a parameter with a calling default'],
+    [q{use v5.36; sub f ($x = []) { my $q = \$x; my @r; for my $i (1..2) { my $x = $i; push @r, \$x } join(",", map { $$_ } @r) . "/" . scalar(@$x) } print f(), f([1]), "\n";},
+        'an inner my shadows a referenced parameter with an allocating default'],
+) {
+    round_trips(@$case);
+}
+
+# s///ee EVALUATES ITS REPLACEMENT AS A STRING, by name, with no entereval.
+for my $src (
+    q{use v5.36; our $c=0; sub g { $c++; 3 } sub f ($x = g()) { my $r = '"[$x]"'; my $s = "a"; $s =~ s/a/$r/ee; $s } print f(), f(1), " c=$c\n";},
+    q{use v5.36; sub f ($x = [3]) { my $s = "a"; $s =~ s/a/'$x->[0]'/ee; $s } print f(), f([1]), "\n";},
+    q{use v5.36; sub f ($x //= [3]) { my $s = "ab"; $s =~ s/a/'$x->[0]'/eei; $s } print f(), f([1]), "\n";},
+) {
+    refuses($src, qr/GAP: a signature default with an effect, in a sub with a string eval/,
+        'an s///ee beside an effectful default refuses');
+}
+round_trips(q{use v5.36; sub f ($x = [3]) { my $s = "a"; $s =~ s/a/$x->[0]/e; $s } print f(), f([1]), "\n";},
+    'an s///e beside an allocating default');
+
+# A SUB THAT ENDS ON AN EXPLICIT undef returns it: one element to a list.
+for my $case (
+    [q{use v5.36; our $c=0; sub g { $c++; undef } sub f ($x //= g()) { $x // 'u' } print f(), f(0), f(1), " c=$c\n";},
+        'a //= default calling a sub that ends on undef'],
+    [q{use v5.36; our $c=0; sub g { $c++; undef } sub f ($x = g()) { $x // 'u' } print f(), f(0), f(1), " c=$c\n";},
+        'a calling default whose sub ends on undef'],
+    [q{use v5.36; our $c=0; sub g { $c++; undef } sub f ($x ||= g()) { $x // 'u' } print f(), f(0), f(1), " c=$c\n";},
+        'a ||= default whose sub ends on undef'],
+    [q{use v5.36; our $c=0; sub g { $c++; undef } sub f ($x) { $x // 'u' } print f(g()), " c=$c\n";},
+        'a sub ending on undef passed on'],
+    [q{our $c=0; sub g { $c++; undef } my @a = g(); sub h { } my @b = h(); print scalar(@a), scalar(@b), defined(g()) ? 'd' : 'u', " c=$c\n";},
+        'an explicit undef is one element; an empty body none'],
+) {
+    round_trips(@$case);
+}
+
 done_testing;

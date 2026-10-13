@@ -1186,12 +1186,6 @@ class SoN::Deparse 0.01 {
         %after_region = ();
         %hoisted  = ();
         %pad_declared = ();
-        # A SIGNATURE DECLARES ITS PARAMETERS, so a store into a demoted one
-        # (referenced, or passed on to a call) is not a `my`: a second
-        # declaration masks the parameter.
-        if (my $sig = $self->_signature_of($name)) {
-            $pad_declared{ $_->{name} } = 1 for ($sig->{params} // [])->@*;
-        }
         %mem_cache = ();
         %subst_count_var = ();
 
@@ -4874,6 +4868,23 @@ class SoN::Deparse 0.01 {
                     && $self->_param_as_variable($v)
                     && '$' . (($t->{fields} // {})->{symbol} // '')
                        eq (($v->{fields} // {})->{name} // '');
+
+                # A BRANCHED DEFAULT'S MERGE STORED INTO ITS PARAMETER'S SLOT
+                # -- a Phi over the raw argument of that name -- assigns the
+                # parameter the signature declared. A second `my` masks it.
+                # Not marked declared: an inner `my $x` is another variable.
+                if (($t->{op} // '') eq 'PadAccess'
+                    && ($v->{op} // '') eq 'Phi'
+                    && $self->_signature_of($current_sub)) {
+                    my $pname = '$' . (($t->{fields} // {})->{symbol} // '');
+                    return sprintf("%s = %s;\n",
+                                   $self->_location($in[0]), $self->_expr($in[1]))
+                        if grep {
+                            my $a = $nodes->{ $_ // -1 } // {};
+                            ($a->{op} // '') eq 'Parameter'
+                                && (($a->{fields} // {})->{name} // '') eq $pname
+                        } ($v->{inputs} // [])->@*;
+                }
             }
 
             # A COUNTED s/// STORED THROUGH AN Assign STILL RUNS TWICE. The
@@ -5130,9 +5141,14 @@ class SoN::Deparse 0.01 {
             my $v = $nodes->{ $in[0] };
 
             # The undef Constant every program body ends with is not a value
-            # the source returned.
+            # the source returned. A sub's implicit undef is the source's
+            # unless the producer says it supplied it (`valueless`): `sub {
+            # $c++; undef }` returns undef, not $c.
             return '' if $v && $v->{op} eq 'Constant'
-                      && (($v->{fields} // {})->{const_type} // '') eq 'undef';
+                      && (($v->{fields} // {})->{const_type} // '') eq 'undef'
+                      && !(($n->{fields} // {})->{implicit}
+                           && !($n->{fields} // {})->{valueless}
+                           && defined $current_sub);
 
             # A RETURN BEHIND A die IS NEVER REACHED, and its value is
             # whatever the stack held: `die(...); $ir;` after a signature

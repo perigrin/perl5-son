@@ -3459,11 +3459,16 @@ class SoN::FromOptree 0.01 {
                     _merged_aggregate_return($factory, $sim->pop_node);
             }
         }
+        # NOTHING ON THE STACK: the undef is the producer's, not the
+        # source's. `sub { }` returns no element to a list; `sub { undef }`
+        # returns one, and the two otherwise build the same graph.
+        my $valueless = !defined $value;
         $value //= $factory->make('Constant',
             value      => undef,
             const_type => 'undef',
             stamp      => SoN::IR::Stamp->new(type => 'Undef'));
         return { control => $sim->control, value => $value, kind => $kind,
+                 ( $valueless ? ( valueless => 1 ) : () ),
                  ( defined $scalar_value
                      ? ( scalar_value => $scalar_value ) : () ) };
     }
@@ -3494,7 +3499,8 @@ class SoN::FromOptree 0.01 {
             my $implicit = ($exits->[0]{kind} // '') =~ /\A(?:leavesub|fallthrough)\z/;
             my $ret = $factory->make_cfg('Return',
                 inputs => [$value, (defined $scalar ? ($scalar) : ())],
-                ($implicit ? (implicit => 1) : ()));
+                ($implicit ? (implicit => 1) : ()),
+                ($implicit && $exits->[0]{valueless} ? (valueless => 1) : ()));
             $ret->set_control_in($ctrl) if defined $ctrl;
             return $ret;
         }
@@ -14968,6 +14974,9 @@ class SoN::FromOptree 0.01 {
             die "GAP: a signature default with an effect, in a sub with a"
               . " string eval, is not yet lowered\n"
                 if $o->name eq 'entereval';
+            # s///ee's eval sits in the replacement, which no kid link reaches.
+            push @q, $o->pmreplroot
+                if $o->name eq 'subst' && ref($o->pmreplroot);
             next unless $o->flags & 4;    # OPf_KIDS
             for (my $k = $o->first; ref($k) && $$k; $k = $k->sibling) {
                 push @q, $k;
