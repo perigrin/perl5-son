@@ -921,6 +921,19 @@ class SoN::FromOptree 0.01 {
             }
         };
         $visit->($root);
+
+        # A CLASS FIELD IS NOT A PAD SLOT. Its storage is the instance's, read
+        # and written as a FieldAccess, and a demoted slot is a PadAccess --
+        # which renders as a lexical, so `method m { ok($z) }` (the call
+        # argument marks $z taken) emitted `my $z;` over the field and passed
+        # undef.
+        if (my $names = eval { $cv->PADLIST->ARRAYelt(0) }) {
+            for my $t (grep { /\A\d+\z/ } keys %taken) {
+                my $pn = $names->ARRAYelt($t);
+                delete $taken{$t}
+                    if ref $pn eq 'B::PADNAME' && SoN::FieldInfo::is_field($pn);
+            }
+        }
         return \%taken;
     }
 
