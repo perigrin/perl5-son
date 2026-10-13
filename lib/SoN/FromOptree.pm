@@ -8886,6 +8886,15 @@ class SoN::FromOptree 0.01 {
                 if (($op->flags & 3) == 2) {             # OPf_WANT_SCALAR
                     my $count;
                     for my $v (@rhs) {
+                        # A LIST-VALUED CALL IS ONE NODE AND ANY NUMBER OF
+                        # VALUES: `() = f()` counted it as 1 for perl's 3. Its
+                        # list is counted at run time, as an array of it.
+                        $v = $factory->make('ArrayLiteral', inputs => [$v],
+                                stamp => SoN::IR::Stamp->new(type => 'Array'))
+                            if $v->isa('SoN::IR::Node::Call')
+                            && !_is_aggregate_node($v)
+                            && ( ( $v->can('want') && ( $v->want // '' ) eq 'list' )
+                                 || ( $v->stamp && $v->stamp->type eq 'List' ) );
                         my $n = _is_aggregate_node($v)
                             ? _make_count($factory, $v, $sim,
                                 stamp => SoN::IR::Stamp->new(type => 'Int'))
