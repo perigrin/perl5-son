@@ -67,15 +67,23 @@ round_trips('use v5.36; my sub f ($x) { $x + 1 } print f(41), "\n";', 'a lexical
 round_trips('use v5.36; my sub f ($x) { $x + 1 } sub g { f(1) + f(2) } print g(), "\n";', 'a lexical sub called from a named sub');
 round_trips('use v5.36; use experimental "class"; class C { my sub h ($x) { $x * 2 } method m ($y) { h($y) } } print C->new->m(21), "\n";',
     'a lexical sub called from a method, as chalk TypeInferenceActions does');
-# A LEXICAL SUB CLOSING OVER A LEXICAL is refused by the renderer: its
-# cell is made at the call, not where the sub is introduced.
-{
-    my $d = SoN::Deparse->new;
-    my $g = graph_of('use v5.36; my $n = 10; my sub add ($x) { $x + $n } print add(1), add(2), "\n";');
-    ok $g, 'a lexical sub closing over a lexical: translates';
-    is $d->render($g), undef, '... and does not render';
-    like $d->gap // '', qr/CellParam whose cell cannot be resolved/, '... naming the unresolved cell';
+# A LEXICAL SUB CLOSING OVER A VARIABLE is refused: its captures belong to
+# the scope it was defined in, not to the sub calling it.
+for my $src (
+    'use v5.36; my $n = 10; my sub add ($x) { $x + $n } print add(1), add(2), "\n";',
+    'use v5.36; my $k = 3; my sub a ($x) { $x + $k } sub g { a(1) } print g(), "\n";',
+) {
+    graph_of($src);
+    like producer_stderr(), qr/a lexical sub closing over \$\w+ is not yet lowered/,
+        "a lexical sub closing over a variable refuses: $src";
 }
+
+# ONE LEXICAL SUB CALLING ANOTHER: the inner name is a capture with no body
+# of its own, found by name in the scope it was defined in.
+round_trips('use v5.36; my sub a ($x) { $x + 1 } my sub b ($x) { a($x) * 2 } print b(1), "\n";',
+    'a lexical sub calling another');
+round_trips('use v5.36; use experimental "class"; class C { my sub a ($x) { $x + 1 } my sub b ($x) { a($x) * 2 } method m { b(1) } } print C->new->m, "\n";',
+    'a lexical sub calling another, from a method');
 round_trips('use v5.36; my sub f ($x) { $x * 3 } my $r = \&f; print $r->(2), "\n";', 'a reference to a lexical sub');
 round_trips('use v5.36; my sub f ($x) { [$x, $x] } print scalar(@{ f(4) }), "\n";', 'a lexical sub returning a reference');
 

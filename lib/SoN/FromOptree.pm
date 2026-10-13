@@ -2676,9 +2676,26 @@ class SoN::FromOptree 0.01 {
         my $inner = eval { $cv->PADLIST->ARRAYelt(1)->ARRAYelt($op->targ) };
         # A LEXICAL SUB'S PAD SLOT HOLDS A STUB, with no root; its body is
         # the pad name's PROTOCV, which clonecv copies at run time.
-        if (ref($inner) eq 'B::CV' && ref($inner->ROOT) eq 'B::NULL') {
-            my $proto = eval {
-                $cv->PADLIST->ARRAYelt(0)->ARRAYelt($op->targ)->PROTOCV };
+        if (!(ref($inner) eq 'B::CV' && ref($inner->ROOT) ne 'B::NULL')) {
+            my $pn = eval { $cv->PADLIST->ARRAYelt(0)->ARRAYelt($op->targ) };
+            my $proto = eval { $pn->PROTOCV };
+            # A LEXICAL SUB NAMED FROM INSIDE ANOTHER is a capture there: the
+            # slot and its name hold no body, so the scopes it was defined in
+            # are searched, by name, outward.
+            if (!(ref($proto) eq 'B::CV') && ref($pn) eq 'B::PADNAME') {
+                my $want = $pn->PV;
+                for (my $out = eval { $cv->OUTSIDE }; ref($out) eq 'B::CV' && $$out;
+                     $out = eval { $out->OUTSIDE }) {
+                    my $names = eval { $out->PADLIST->ARRAYelt(0) } or last;
+                    for my $i (1 .. $names->MAX) {
+                        my $n = $names->ARRAYelt($i);
+                        next unless ref($n) eq 'B::PADNAME' && ( $n->PV // '' ) eq $want;
+                        my $p = eval { $n->PROTOCV };
+                        $proto = $p, last if ref($p) eq 'B::CV';
+                    }
+                    last if ref($proto) eq 'B::CV';
+                }
+            }
             $inner = $proto if ref($proto) eq 'B::CV';
         }
         return ref($inner) eq 'B::CV' ? $inner : undef;
@@ -6670,7 +6687,17 @@ class SoN::FromOptree 0.01 {
             # `does the pad have names` is the WRONG test -- it counts
             # `sub { my $y=1; $y }` as a closure when that body needs nothing
             # from its enclosing scope.
-            my @captures = _anoncode_capture_info($cv, $op);
+            #
+            # A LEXICAL SUB'S CAPTURES BELONG TO WHERE IT WAS DEFINED, not to the
+            # sub calling it here. Another lexical sub (`&a`) needs no cell --
+            # the body's own padcv finds it -- and anything else is refused.
+            if ($name eq 'padcv') {
+                my @vars = grep { !/\A&/ } _anoncode_captures($cv, $op);
+                die "GAP: a lexical sub closing over " . join(', ', @vars)
+                  . " is not yet lowered -- its captures belong to the scope it"
+                  . " was defined in, not to the caller\n" if @vars;
+            }
+            my @captures = $name eq 'padcv' ? () : _anoncode_capture_info($cv, $op);
 
             # A CAPTURED FIELD belongs to the instance the method runs on, and
             # nothing in the graph says which: the anon sub is lifted to file
@@ -6692,7 +6719,7 @@ class SoN::FromOptree 0.01 {
             # something further out than this CV -- refuse rather than bind the
             # wrong slot. _anoncode_capture_info returns () for that case, so
             # compare against the NAME-only list, which never fails to resolve.
-            if (!@captures && (my @names = _anoncode_captures($cv, $op))) {
+            if ($name ne 'padcv' && !@captures && (my @names = _anoncode_captures($cv, $op))) {
                 die "GAP: an anonymous sub closing over "
                   . join(', ', @names)
                   . " has a capture that does not resolve to a slot in the"
