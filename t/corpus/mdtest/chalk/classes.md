@@ -1243,7 +1243,7 @@ Counter::bump: {start: 0, returns: [16], nodes: [
   [Proj, {index: 1}, [8]], # 13
   [Assign, ~, [2, 12], 13, Num], # 14
   [Region, {head: 8}, [10, 14]], # 15
-  [Return, {implicit: true}, [1], 15]]} # 16
+  [Return, {implicit: true, valueless: true}, [1], 15]]} # 16
 Counter::val: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [FieldAccess, {field_index: 0, field_stash: Counter}, ~, ~, Scalar], # 1
@@ -1381,7 +1381,7 @@ Counter::bump: {start: 0, returns: [16], nodes: [
   [Proj, {index: 1}, [8]], # 13
   [Assign, ~, [2, 12], 13, Num], # 14
   [Region, {head: 8}, [10, 14]], # 15
-  [Return, {implicit: true}, [1], 15]]} # 16
+  [Return, {implicit: true, valueless: true}, [1], 15]]} # 16
 Counter::val: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [FieldAccess, {field_index: 0, field_stash: Counter}, ~, ~, Scalar], # 1

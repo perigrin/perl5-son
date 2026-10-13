@@ -303,29 +303,30 @@ main::__PROGRAM__: {start: 0, returns: [20], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 18
   [Print, ~, [6, 7, 11, 7, 17, 18], 13, Scalar], # 19
   [Return, {implicit: true}, [1], 19]]} # 20
-main::token_end: {start: 0, returns: [21], nodes: [
+main::token_end: {start: 0, returns: [22], nodes: [
   [Start], # 0
-  [Parameter, {index: 0, name: $input, sigil: $}, ~, ~, Unknown], # 1
+  [PadAccess, {sigil: $, symbol: input}, ~, ~, Unknown], # 1
   [Constant, {const_type: string, value: "\\G("}, ~, ~, Str], # 2
   [Parameter, {index: 2, name: $pattern, sigil: $}, ~, ~, Str], # 3
   [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
   [Concat, ~, [2, 4], ~, Str], # 5
   [Constant, {const_type: string, value: ")"}, ~, ~, Str], # 6
   [Concat, ~, [5, 6], ~, Str], # 7
-  [Match, ~, [1, 7], ~, Boolean], # 8
-  [Parameter, {index: 1, name: $position, sigil: $}, ~, ~, Num], # 9
-  [RegexCapture, {"n": 1}, [8], ~, Str], # 10
-  [Length, ~, [10], ~, Int], # 11
-  [Add, ~, [9, 11], ~, Num], # 12
-  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 13
-  [TernaryExpr, ~, [8, 12, 13], ~, Unknown], # 14
-  [MemStart], # 15
-  [PadAccess, {sigil: $, symbol: input}, [15], ~, Unknown], # 16
-  [Assign, ~, [16, 1], 0, Unknown], # 17
-  [PadAccess, {sigil: $, symbol: input}, [17], ~, Unknown], # 18
-  [Call, {dispatch_kind: builtin, name: pos, param_names: []}, [18], ~, Unknown], # 19
-  [Assign, ~, [19, 9], 17, Num], # 20
-  [Return, ~, [14], 20]]} # 21
+  [MemStart], # 8
+  [PadAccess, {sigil: $, symbol: input}, [8], ~, Unknown], # 9
+  [Parameter, {index: 0, name: $input, sigil: $}, ~, ~, Unknown], # 10
+  [Assign, ~, [9, 10], 0, Unknown], # 11
+  [PadAccess, {sigil: $, symbol: input}, [11], ~, Unknown], # 12
+  [Call, {dispatch_kind: builtin, name: pos, param_names: []}, [12], ~, Unknown], # 13
+  [Parameter, {index: 1, name: $position, sigil: $}, ~, ~, Num], # 14
+  [Assign, ~, [13, 14], 11, Num], # 15
+  [Match, ~, [1, 7], 15, Boolean], # 16
+  [RegexCapture, {"n": 1}, [16], ~, Str], # 17
+  [Length, ~, [17], ~, Int], # 18
+  [Add, ~, [14, 18], ~, Num], # 19
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 20
+  [TernaryExpr, ~, [16, 19, 20], ~, Unknown], # 21
+  [Return, ~, [21], 16]]} # 22
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.036"}, ~, ~, Num], # 1

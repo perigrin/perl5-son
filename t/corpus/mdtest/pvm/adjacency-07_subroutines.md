@@ -243,7 +243,7 @@ main::__PROGRAM__::__ANON__:16:2: {start: 0, returns: [14], nodes: [
 main::__PROGRAM__::__ANON__:21:8: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, {implicit: true}, [1], 0]]} # 2
+  [Return, {implicit: true, valueless: true}, [1], 0]]} # 2
 main::answer: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "42"}, ~, ~, Int], # 1
