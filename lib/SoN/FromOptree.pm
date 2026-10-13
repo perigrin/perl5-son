@@ -7763,6 +7763,13 @@ class SoN::FromOptree 0.01 {
         # cache was here; it was unsound under aliasing and is gone -- the fold is
         # deferred to a later alias-aware optimization pass.)
         if ($name eq 'aelem' || $name eq 'helem') {
+            # A `local` ELEMENT IS RESTORED AT SCOPE EXIT, and the store below
+            # is a plain one: `{ local $a[0] = 5 } print "@a"` printed `5 2`
+            # for perl's `1 2`. The local_saves restore covers names, not
+            # elements.
+            die "GAP: local on an array or hash element (restored at scope"
+              . " exit) not yet lowered\n"
+                if $op->private & B::OPpLVAL_INTRO();
             my $index     = $sim->pop_node;
             my $container = $sim->pop_node;
             # A sprintf ARGUMENT is OPf_MOD with OPpLVAL_DEFER, as a call's
@@ -8381,6 +8388,13 @@ class SoN::FromOptree 0.01 {
             elsif ($target->isa('SoN::IR::Node::Constant')
                 && ($target->const_type // '') eq 'glob') {
                 _glob_bind($factory, $sim, $target, $value);
+            }
+            # AN LVALUE vec WRITES BITS OF ITS STRING, and nothing above
+            # models that: the catch-all dropped `vec($s, 0, 8) = 65`.
+            elsif ($target->isa('SoN::IR::Node::Call')
+                    && ($target->name // '') eq 'vec') {
+                die "GAP: an lvalue vec (a store into bits of a string) not"
+                  . " yet lowered\n";
             }
             else {
                 $sim->push_node($value);
@@ -17764,6 +17778,21 @@ class SoN::FromOptree 0.01 {
         # that now, so the destructive rebind at the call site lands on the real
         # variable instead of on $_.
         if (!$targ) {
+            # A STACKED TARGET THAT IS NOT A NAMED SCALAR -- `$a[0] =~ s///`,
+            # `$h->{k} =~ s///`, `(my $b = $raw) =~ s///` -- is neither of the
+            # two cases below: the GV search found an aggregate's glob or the
+            # assigned-from scalar's, or none, and the substitution ran on $_
+            # or the wrong variable. Only `$g` (gvsv, or rv2sv over a gv with
+            # the peephole suppressed) names the scalar it writes.
+            if ($op->flags & B::OPf_STACKED()) {
+                my $k = $op->first;
+                $k = $k->first if $k->name eq 'null' && ($k->flags & B::OPf_KIDS());
+                die "GAP: s/// on a target that is not a named scalar (an"
+                  . " element, a dereference or an assignment) not yet"
+                  . " lowered\n"
+                    unless $k->name eq 'gvsv'
+                        || ($k->name eq 'rv2sv' && $k->first->name eq 'gv');
+            }
             if (my $gv_op = _find_gv_op($op)) {
                 if (my $gv = _op_gv($cv, $gv_op)) {
                     my $stash = eval { $gv->STASH->NAME } // 'main';

@@ -2188,8 +2188,11 @@ class SoN::Deparse 0.01 {
                 # A BUILTIN WRITES ONLY WHAT IT NAMES as written -- `push @o,
                 # $x` reads $x -- so of the builtins only those that write an
                 # argument in place count; any other call may write anything.
+                # 4-argument substr (and the lvalue form, lowered to it) writes
+                # its string; open and friends write the handle they are given.
                 state $WRITES_ARGS = { map { $_ => 1 }
-                    qw(chomp chop undef read sysread recv) };
+                    qw(chomp chop undef read sysread recv substr
+                       open opendir sysopen socket socketpair accept pipe) };
                 @same = grep {
                     my $f = $_->{fields} // {};
                     ( ( $_->{op} // '' ) eq 'Call'
@@ -4005,6 +4008,17 @@ class SoN::Deparse 0.01 {
                 && ($in->{stamp} // '') eq 'List'
                 && !defined(($in->{fields} // {})->{symbol}))
         } ($p->{inputs} // [])->@*;
+    }
+
+    # _is_foreach_alias_ref($n) -- true when $n is the reference a foreach
+    # takes to its element at the top of each pass: a Ref pinned on the
+    # chain over an element read that carries no memory version.
+    method _is_foreach_alias_ref ($n) {
+        return 0 unless ( $n->{op} // q{} ) eq q{Ref} && defined $n->{control_in};
+        my $e = $nodes->{ ( $n->{inputs} // [] )->[0] // -1 } // {};
+        return ( $e->{op} // q{} ) eq q{Subscript}
+            && ( ( $e->{fields} // {} )->{kind} // q{} ) eq q{array}
+            && ( $e->{inputs} // [] )->@* == 2 ? 1 : 0;
     }
 
     method _phi_var ($p) {
@@ -6189,6 +6203,11 @@ class SoN::Deparse 0.01 {
                 if ($agg->{op} // '') eq 'Phi' && $st eq 'Unknown';
             my $sym = $self->_agg_versioned->{ $agg->{id} // -1 }
                 ? substr($self->_agg_name($agg), 1) : $af->{symbol};
+            # A READ THROUGH A FOREACH ALIAS: the reference is to @_.
+            if ( $sigil eq '$' && $self->_is_foreach_alias_ref($agg) ) {
+                $text = $self->_expr($in[0]) . '->[0]';
+                return $text;
+            }
             $text = ($agg->{op} // '') =~ /Literal\z/ && defined $af->{symbol}
                   ? sprintf('%s%s', $sigil, $sym)
                   : ($st eq 'Array' || $st eq 'Hash')
@@ -6440,6 +6459,17 @@ class SoN::Deparse 0.01 {
             # the parens are the meaning.
             if ( ( $n->{fields} // {} )->{each} ) {
                 $text = '\\(' . $self->_location($in[0]) . ')';
+                return $text;
+            }
+
+            # A FOREACH ALIAS DOES NOT VIVIFY A HOLE, and `\$a[$i]` does:
+            # `exists $a[0]` turned true after a pass over it. A sub
+            # argument is the same deferred alias perl's foreach takes, so
+            # the reference is to @_ and the read is `->[0]` -- see the
+            # PostfixDeref arm. ponytail: a hole read after a shift reads the
+            # index it was at, not the hole; an existing element is exact.
+            if ( $self->_is_foreach_alias_ref($n) ) {
+                $text = sprintf( 'sub { \\@_ }->(%s)', $self->_location($in[0]) );
                 return $text;
             }
 
