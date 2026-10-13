@@ -2653,6 +2653,11 @@ class SoN::Deparse 0.01 {
                 join(', ', map { $self->_expr($_) } (($n->{inputs} // [])->@*)))];
         }
 
+        # THE PROLOGUE IS SPELLED ABOVE THE CHAIN, so it declares against what
+        # stood before the walk. The walk ran first: a loop's `($x, $y) = ...`
+        # had taken the `my` that the prologue's `my ($x, $y) = (0, 0)` owns,
+        # and the emission did not compile.
+        %pad_declared = %declared_before_walk;
         for my $n (sort { $a->{id} <=> $b->{id} } $self->_nodes_in_order) {
             next unless $n->{op} eq 'Assign';
             next if defined $n->{control_in};   # already emitted in the chain
@@ -2722,6 +2727,11 @@ class SoN::Deparse 0.01 {
 
             push @prologue, [$n, $self->_emit_statement($n, \%next_of)];
         }
+        my %declared_by_prologue = map { $_ => 1 }
+            grep { !$declared_before_walk{$_} } keys %pad_declared;
+        my $walk_redeclared = grep { $declared_by_walk{$_} }
+            keys %declared_by_prologue;
+        %pad_declared = (%declared_by_walk, %pad_declared);
         my $prologue = join '', map { $_->[1] } $self->_prologue_order(@prologue);
 
         # A deferred binding is emitted where its effect was placed, so the
@@ -2731,14 +2741,15 @@ class SoN::Deparse 0.01 {
         # %after_region is populated by the same pass and needs the same
         # re-walk: the first walk ran before the entry existed, so without
         # this the binding was silently DROPPED rather than merely misplaced.
-        if (keys %after_effect || keys %after_region) {
+        if (keys %after_effect || keys %after_region || $walk_redeclared) {
             %rendered = ();
             # THE RE-WALK DECLARES WHAT THE FIRST WALK DID. Its text is thrown
             # away, so a demoted slot it declared is undeclared again -- left
             # marked, the re-walk emitted a bare `$h = 5` in a loop body, the
             # `my` went to the top, and every pass shared one variable: `\$h`
             # pushed each pass gave three references to it.
-            delete @pad_declared{ grep { !$declared_before_walk{$_} }
+            delete @pad_declared{ grep { !$declared_before_walk{$_}
+                                       && !$declared_by_prologue{$_} }
                                    keys %declared_by_walk };
             # SO DOES A COUNTED s/// IT BOUND. The EntryWrite that emits one
             # binds it, and the re-walk -- finding it bound -- spelled the store
