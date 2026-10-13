@@ -7386,7 +7386,11 @@ class SoN::FromOptree 0.01 {
                 $sim->set_control($store);
                 $sim->set_memory($store);
             }
-            $sim->define($targ, $node);
+            # AND IT IS STORED, NOT BOUND -- sassign's rule. A lookup of a
+            # demoted slot is empty by design; bound, an s/// on the
+            # parameter took the Parameter as its subject and the rewrite
+            # reached no read: `sub f ($x) { $x =~ s/b/B/; $x }` gave abc.
+            $sim->define($targ, $node) unless $ctx->{addr_taken}{$targ};
             $sim->push_node($node);
             return ($op->next, 'handled');
         }

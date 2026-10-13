@@ -245,4 +245,23 @@ for my $case (
     round_trips(@$case);
 }
 
+# AN s/// ON A PARAMETER rewrites its slot; the parameter is not a value
+# the substitution can leave behind.
+for my $case (
+    [q{use v5.36; our $c=0; sub g { $c++; "abc" } sub f ($x = g()) { $x =~ s/b/B/; $x } print f(), f("bb"), " c=$c\n";},
+        'an s/// on a parameter with a calling default'],
+    [q{use v5.36; sub f ($x) { $x =~ s/b/B/; $x } print f("abc"), "\n";},
+        'an s/// on a plain parameter'],
+    [q{use v5.36; sub f ($x) { $x =~ s/b/B/g; $x } print f("abcb"), "\n";},
+        'an s///g on a plain parameter'],
+    [q{use v5.36; sub f ($x = "A") { $x =~ s/A/B/; $x } print f(), f("xA"), "\n";},
+        'an s/// on a parameter with a constant default'],
+    [q{use v5.36; sub f ($x = [1]) { $x =~ s/A/B/; $x } print f("A"), "\n";},
+        'an s/// on a parameter with an allocating default'],
+    [q{use v5.36; sub f ($x, $y = $x) { $x =~ s/a/b/; "$x$y" } print f("a"), "\n";},
+        'an s/// on a parameter a later default read'],
+) {
+    round_trips(@$case);
+}
+
 done_testing;
