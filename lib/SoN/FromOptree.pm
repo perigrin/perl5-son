@@ -2501,7 +2501,11 @@ class SoN::FromOptree 0.01 {
                 # -- the `/r` copy assigned back, then a second destructive run
                 # over the result. So the pin goes exactly where the ordering is
                 # otherwise absent, which is the pad case.
-                if ($target->isa('SoN::IR::Node::PadAccess')) {
+                # THE SLOT ITSELF, not a pad read that is merely its value:
+                # `(my $t = $s) =~ s///` reads $s and writes $t.
+                my $in_place = $target->isa('SoN::IR::Node::PadAccess')
+                    && ($target->targ // q{}) eq $scope_key;
+                if ($in_place) {
                     $node->set_control_in($sim->control);
                     $sim->set_control($node);
                     $sim->set_memory($node) if defined $sim->memory;
@@ -2521,7 +2525,7 @@ class SoN::FromOptree 0.01 {
                 # $s =~ s/c/y/; $s =~ s/d/w/` kept only the first (corpus 010).
                 unless ($nondestruct) {
                     $sim->define($scope_key, $node)
-                        unless $target->isa('SoN::IR::Node::PadAccess');
+                        unless $in_place;
                     _entry_store($factory, $sim, $store_target, $node);
                 }
                 # The binding above is the substituted subject. In count
@@ -13624,9 +13628,15 @@ class SoN::FromOptree 0.01 {
                     replacement => $replacement,
                     flags       => _pmflags_to_str($op->pmflags),
                     stamp       => SoN::IR::Stamp->new(type => 'Str'));
-                $node->set_control_in($sim->control);
-                $sim->set_control($node);
-                $sim->set_memory($node) if defined $sim->memory;
+                # A PAD READ THAT IS NOT THE SLOT is the subject's value, as
+                # in the main walker: `(my $t = $s) =~ s///` pinned here was
+                # spelled `$s =~ s///`, writing $s.
+                unless ($target->isa('SoN::IR::Node::PadAccess')
+                        && ($target->targ // q{}) ne $scope_key) {
+                    $node->set_control_in($sim->control);
+                    $sim->set_control($node);
+                    $sim->set_memory($node) if defined $sim->memory;
+                }
 
                 # A DESTRUCTIVE s/// REBINDS THE TARGET so a later read of the
                 # same lexical resolves to the substituted value; /r yields a
@@ -17787,6 +17797,15 @@ class SoN::FromOptree 0.01 {
             if ($op->flags & B::OPf_STACKED()) {
                 my $k = $op->first;
                 $k = $k->first if $k->name eq 'null' && ($k->flags & B::OPf_KIDS());
+                # `(my $t = $s) =~ s///` SUBSTITUTES INTO $t, whose binding
+                # the sassign just made: the subject is that value, and the
+                # result rebinds $t. No name to store through (0), so $s and
+                # any package variable it was read from are left alone.
+                if ($k->name eq 'sassign' && ${ $k->last }
+                        && $k->last->name eq 'padsv' && $k->last->targ
+                        && defined(my $v = $sim->lookup($k->last->targ))) {
+                    return ($k->last->targ, $v, 0);
+                }
                 die "GAP: s/// on a target that is not a named scalar (an"
                   . " element, a dereference or an assignment) not yet"
                   . " lowered\n"

@@ -119,8 +119,21 @@ refuses(q{sub f { my $h = { a => 1 }; $h->{a} =~ s/1/z/; print "$h->{a}\n" } f()
     $SUBST, 'an s/// on a hash element through a reference');
 refuses(q{our %h = (a => 1); $h{a} =~ s/1/z/; print "$h{a}\n";},
     $SUBST, 'an s/// on a package hash element');
-refuses(q{sub f { my $raw = $_[0]; (my $b = $raw) =~ s/^x//; print "$b|$raw\n" } f("xy");},
-    $SUBST, 'an s/// on an assignment');
+# `(my $t = $s) =~ s///` writes $t, the slot the assignment just bound.
+round_trips(q{sub f { my $raw = $_[0]; (my $b = $raw) =~ s/^x//; print "$b|$raw\n" } f("xy");},
+    'an s/// on a lexical assignment leaves its source alone');
+round_trips(q{our $g = "xa"; (my $b = $g) =~ s/x/y/; print "$b|$g\n";},
+    'an s/// on an assignment from a package scalar');
+round_trips(q{sub f { my $h = { a => "x1" }; (my $t = $h->{a}) =~ s/1/z/; print "$t|$h->{a}\n" } f();},
+    'an s/// on an assignment from an element');
+round_trips(q{sub f { my @p = qw($a @b); my @o; for my $p (@p) { (my $n = $p) =~ s/^[\$\@]//; push @o, $n } print "@o|@p\n" } f();},
+    'an s/// on an assignment from a foreach alias');
+round_trips(q{sub f { my ($raw) = @_; my $o = ""; for my $i (1..2) { (my $b = $raw) =~ s/^x/y/; $o .= "$i$b" } print "$o|$raw\n" } f("xy");},
+    'an s/// on an assignment in a range loop');
+round_trips(q{sub f { my ($raw) = @_; my $o = ""; my $i = 0; while ($i++ < 2) { (my $b = $raw) =~ s/^x/z/; $o .= $b; $raw .= "x" } print "$o|$raw\n" } f("xy");},
+    'an s/// on an assignment in a while loop');
+round_trips_or_refuses(q{sub f { my $s = "aaa"; my $n = ((my $t = $s) =~ s/a/b/g); print "$n|$t|$s\n" } f();},
+    qr/GAP: a counted s\/\/\/ whose subject/, 'a counted s/// on an assignment');
 round_trips(q{our $g = "a1"; $g =~ s/1/z/; print "$g\n";}, 'an s/// on a package scalar');
 round_trips(q{$_ = "a1"; s/1/z/; print "$_\n";}, 'an s/// on the implicit $_');
 round_trips(q{sub f { my $t = "a1"; $t =~ s/1/z/; print "$t\n" } f();}, 'an s/// on a lexical');
