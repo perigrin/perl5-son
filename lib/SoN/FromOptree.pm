@@ -12029,6 +12029,22 @@ class SoN::FromOptree 0.01 {
         # Its write-back is below, once the body has run.
         my $demoted_iter = $x_targ =~ /\A\d+\z/ && $ADDR_TAKEN
             && $ADDR_TAKEN->{$x_targ};
+
+        # A REFERENCE TO THE ITERATOR IS A REFERENCE TO THE ELEMENT, and the
+        # slot here is a copy written back at the end of each pass. A write
+        # through the reference within the pass reaches the element by that
+        # write-back; one made after the pass reaches only the copy -- measured,
+        # `for my $x (@a) { $r = \$x } $$r = 5` left @a alone, and so did a
+        # push onto an outer array, a hash store and a sub that kept the
+        # reference. Where the reference goes is not tracked, so any `\$x`
+        # (not a call argument, which the write-back does cover) is refused.
+        # Scanned from the leaveloop, which holds every op the iterator is in
+        # scope for; a program has no CV root to scan from.
+        die "GAP: a reference to a foreach iterator is not yet lowered --"
+          . " the iterator is a copy written back each pass, and"
+          . " the reference can outlive the pass\n"
+            if $demoted_iter
+            && _address_taken($cv, $enteriter->parent, 1)->{$x_targ};
         my $iter_slot = sub {
             $factory->make('PadAccess', targ => $x_targ,
                 do { my ($sg, $sy) = _padparts($cv, $x_targ);
