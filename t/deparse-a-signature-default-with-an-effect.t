@@ -162,6 +162,28 @@ for my $src (
 round_trips(q{use v5.36; sub f ($x = [1]) { eval { push @$x, 2 }; "@$x" } print f(), f([0]), "\n";},
     'a block eval beside an allocating default');
 
+# A LIST CONSUMER OF THE MERGED VALUE follows the branch that assigns it.
+for my $case (
+    [q{use v5.36; sub f ($x = [1]) { my @l = ($x) x 2; push @{$l[0]}, 2; "@$x" } print f(), f([0]), "\n";},
+        'a repeated parameter with an allocating default'],
+    [q{use v5.36; our $c=0; sub g { $c++; 4 } sub f ($x = g()) { my @l = (1) x $x; scalar @l } print f(), f(1), " c=$c\n";},
+        'a repeat count from a calling default'],
+    [q{use v5.36; sub f ($x = []) { my @l = reverse($x); push @{$l[0]}, 1; "@$x" } print f(), f([0]), "\n";},
+        'a reversed parameter with an allocating default'],
+    [q{use v5.36; sub f ($t, $x = $t ? [1] : [2]) { my @l = reverse($x); push @{$l[0]}, 1; "@$x" } print f(0), f(1), "\n";},
+        'a reversed parameter with a ternary default'],
+    [q{use v5.36; sub f ($x = [3,1,2]) { my @l = sort { $a <=> $b } @$x; "@l" } print f(), f([9,8]), "\n";},
+        'a sorted deref of an allocating default'],
+    [q{use v5.36; sub f ($x = [1]) { my %h = (k => $x); push @{$h{k}}, 2; "@$x" } print f(), f([0]), "\n";},
+        'a hash holding an allocating default'],
+    [q{use v5.36; sub f ($x = [1]) { my @l = map { $_ } ($x, $x); push @{$l[1]}, 2; "@$x" } print f(), f([0]), "\n";},
+        'a mapped allocating default'],
+    [q{sub g {[2]} sub f { my $x = $_[0] ? [1] : g(); my @l = reverse($x); push @{$l[0]}, 1; "@$x" } print f(0), f(1), "\n";},
+        'a reversed ternary over a call'],
+) {
+    round_trips(@$case);
+}
+
 # A LATER DEFAULT READING A BRANCHED PARAMETER reads the merged value.
 for my $case (
     [q{use v5.36; sub f ($x = [], $y = $x) { push @$y, 1; "@$x" } print f(), f([0]), f([0],[]), "\n";},

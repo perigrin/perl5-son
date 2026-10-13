@@ -3373,13 +3373,25 @@ class SoN::Deparse 0.01 {
     # `Phi(21) stamp=Int` -- and binding a list to a SCALAR collapses it to
     # the last element: `my $phi7 = ()` then `map { $_*2 } (1,2,3)` printed
     # `6` instead of `2 4 6`.
-    # _loop_phi_join($n) -> the join Region of the loop whose Phi $n reads
-    # directly, or undef. A Phi whose region is a Loop settles only when the
-    # loop ends, so a binding of it belongs right after the loop.
+    # _loop_phi_join($n) -> the join Region of the loop whose Phi $n reads,
+    # or undef. A Phi whose region is a Loop settles only when the loop
+    # ends, so a binding of it belongs right after the loop.
+    #
+    # THROUGH PURE NODES, as _last_bound_input looks: `my @l = reverse($x)`
+    # over a branch's Phi holds Call(reverse, Phi), and read only directly it
+    # was declared above the if that assigns the Phi -- @l held undef.
     method _loop_phi_join ($n) {
-        for my $in (($n->{inputs} // [])->@*) {
-            my $src = defined $in ? $nodes->{$in} : undef;
-            next unless $src && ($src->{op} // '') eq 'Phi';
+        my (@queue, %seen) = ($n->{inputs} // [])->@*;
+        while (@queue) {
+            my $in = shift @queue;
+            next if !defined $in || $seen{$in}++;
+            my $src = $nodes->{$in} or next;
+            if (($src->{op} // '') ne 'Phi') {
+                push @queue, ($src->{inputs} // [])->@*
+                    unless defined $src->{control_in}
+                    || ($src->{op} // '') =~ /\A(?:Region|Loop|Proj|If|Start)\z/;
+                next;
+            }
             my $r = ($src->{fields} // {})->{region} // $src->{region};
             next unless defined $r;
             my $rn = $nodes->{$r};
