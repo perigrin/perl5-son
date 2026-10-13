@@ -2185,10 +2185,19 @@ class SoN::Deparse 0.01 {
                               && defined $str_key->($in[1]) && defined $str_key->($tk)
                               && $str_key->($tk) ne $str_key->($in[1]) )
                 } $targets->($_, $n->{id}) } @later;
+                # A BUILTIN WRITES ONLY WHAT IT NAMES as written -- `push @o,
+                # $x` reads $x -- so of the builtins only those that write an
+                # argument in place count; any other call may write anything.
+                state $WRITES_ARGS = { map { $_ => 1 }
+                    qw(chomp chop undef read sysread recv) };
                 @same = grep {
-                    ( $_->{op} // '' ) eq 'Call'
-                        || ( ( $nodes->{ ( $_->{inputs} // [] )->[0] // -1 } // {} )->{op} // '' )
-                           =~ /\A(?:Subscript|PostfixDeref|EntryDef)\z/
+                    my $f = $_->{fields} // {};
+                    ( ( $_->{op} // '' ) eq 'Call'
+                        && ( ( $f->{dispatch_kind} // '' ) ne 'builtin'
+                             || $WRITES_ARGS->{ $f->{name} // '' } ) )
+                        || ( ( $_->{op} // '' ) eq 'Assign'
+                             && ( ( $nodes->{ ( $_->{inputs} // [] )->[0] // -1 } // {} )->{op} // '' )
+                                =~ /\A(?:Subscript|PostfixDeref|EntryDef)\z/ )
                 } @later if $deref;
                 next unless @same;
 
@@ -2209,8 +2218,13 @@ class SoN::Deparse 0.01 {
                     }
                 }
                 for my $s ( @same ) {
+                    # An inner loop the read is itself inside reads again
+                    # each pass, so only the ones it is outside of count.
+                    my %read_in = map { $_ => 1 }
+                        ( defined $from ? $in_loops{$from} // [] : [] )->@*;
                     my ( @aq, %after ) = ( map { $_->{id} } $succ->( $s->{id} ),
-                        map { $succ->($_) } ( $in_loops{ $s->{id} } // [] )->@* );
+                        map { $succ->($_) }
+                        grep { !$read_in{$_} } ( $in_loops{ $s->{id} } // [] )->@* );
                     while ( @aq ) {
                         my $id = shift @aq;
                         next if $after{$id}++;

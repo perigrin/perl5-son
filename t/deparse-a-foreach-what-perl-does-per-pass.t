@@ -145,6 +145,15 @@ refuses_render(q{sub f { my @a = (1,2); my $s=""; for my $x (@a) { $a[0] = 7; $s
     $STALE, 'a carried read between two element stores');
 refuses_render(q{sub f { my @a = (1,2); my $r = \@a; my $s=""; for my $x (@a) { $r->[0] = 7; $s .= $x; $r->[0] = 8 } print "$s|@a\n" } f();},
     $STALE, 'a carried read between two stores through a reference');
+# NOT EVERY LATER STORE COUNTS. A read inside an inner loop is read again each
+# inner pass, and a builtin like push reads its list: chalk's
+# CoreItemIndex::build_from_grammar and Serialize::JSON::_all_nodes_topo.
+round_trips(q{my @o; my $n = 0; sub reg { $n++ } sub f { my @r = ("a","b"); for my $r (@r) { for my $d (0..1) { my $id = reg(); $o[$id] = $r } } print "@o\n" } f();},
+    'an alias read after a call, inside an inner loop that stores it');
+round_trips(q{sub f { my @a = (1,2,1,3); my (%seen, @x, @y); for my $c (@a) { next if $seen{$c}++; push @x, $c; push @y, $c } print "@x|@y\n" } f();},
+    'an alias read after a store, pushed twice');
+refuses_render(q{sub g { $_[0] = 9 } sub f { my @a = (1,2); my $s = ""; for my $x (@a) { $a[0] = 5; $s .= $x; g($a[0]) } print "$s|@a\n" } f();},
+    $STALE, 'a carried alias read before a callee writes the element');
 round_trips(q{sub f { my @a = (1,2); my @b = (5,6); my $s=""; for my $x (@a) { for my $y (@b) { $y .= "z" } $s .= $x; } print "$s|@b\n" } f();},
     'an inner loop writing another array');
 round_trips(q{sub f { my @a = (1,2); my $s=""; for my $x (@a) { for my $k (1..2) { $a[0] = 7 } $s .= $x; } print "$s|@a\n" } f();},
