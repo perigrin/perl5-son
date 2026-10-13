@@ -37,7 +37,8 @@ my %FLOOR = (
     perl_t => 11,    # base/lex.t refuses on a `caller` bound to a list
     # chalk's lib/ at the commit tools/chalk-lib-roundtrip.pl pins (5948f648,
     # 179 modules), measured at d0cb68a and 2d8fb90, 2026-10-06.
-    chalk_compiles => 137,
+    # 140 at 580ca1e and 4c7348c, 2026-10-13.
+    chalk_compiles => 140,
     # chalk's own test files (547 at 5948f648) that give the SAME result
     # against the emitted lib/ -- tools/chalk-gate3.pl. The 59 that read lib/
     # as source are DEFERRED to chalk's own lowering (perigrin, 2026-10-09),
