@@ -1186,6 +1186,13 @@ class SoN::Deparse 0.01 {
         %after_region = ();
         %hoisted  = ();
         %pad_declared = ();
+        # A SIGNATURE PARAMETER IS DECLARED BY THE SIGNATURE. Demoted -- a
+        # reference taken to it -- its first store emitted `my $x = 7` and
+        # masked the parameter, so `\$x` saw the old variable.
+        if ( my $sig = $self->_signature_of($name) ) {
+            $pad_declared{ $_->{name} } = 1
+                for grep { defined $_->{name} } ( $sig->{params} // [] )->@*;
+        }
         %mem_cache = ();
         %subst_count_var = ();
 
