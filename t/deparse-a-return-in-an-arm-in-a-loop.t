@@ -312,4 +312,11 @@ subtest 'a last, then a return, in one loop body' => sub {
         'in a while');
 };
 
+
+# NOT INSIDE AN eval { }: the loop's stores to an outer lexical are lost
+# once the eval ends (an older defect), so an arm's return there refuses.
+graph_of(q{sub f { my $k=shift; my $n=0; my $r = eval { for my $i (1..3) { if ($i > 1) { $n++; return "E$i" if $i == $k } } "L" }; "$r$n" } print f(2), "|", f(9), "\n";});
+like producer_stderr(), qr/function exit inside a statement modifier in an if\/else arm/,
+    q{an arm's return in a loop inside an eval block refuses};
+
 done_testing;

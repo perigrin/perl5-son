@@ -381,6 +381,8 @@ class SoN::FromOptree 0.01 {
     # walkers have no path to _translate_from's @exits otherwise. `local` per
     # translated CV.
     our $FN_EXITS;
+    # True while an `eval { }` body is walked: see _loop_arm_exits.
+    our $IN_EVAL_BODY = 0;
 
     # The pad slots this graph shares with a named sub (or, in a sub, with
     # the program) -- $ctx->{shared_lexicals}, reachable from the PadAccess
@@ -14190,6 +14192,7 @@ class SoN::FromOptree 0.01 {
     }
 
     sub _handle_entertry ($cv, $op, $sim, $factory, $opmap, $visited) {
+        local $IN_EVAL_BODY = 1;
         # WHERE THE PROTECTED BODY BEGINS, captured before the walk moves on.
         # The Region below records where the eval JOINS; without this the
         # statements it protects cannot be told from those before it, and a
@@ -14309,8 +14312,13 @@ class SoN::FromOptree 0.01 {
     # The exit list for an arm walked inside a loop body: the function's own
     # on a real walk, a throwaway one under a scout (whose nodes are
     # discarded), and none outside a sub -- where a return keeps its refusal.
+    # NOT INSIDE AN eval { }: a loop there loses its stores to outer
+    # lexicals once the eval ends (`eval { for (...) { $n++; return ... if
+    # ... } }` printed E20 for perl's E21), an older defect, so an arm's
+    # return there keeps its refusal.
     sub _loop_arm_exits ($break_projs) {
         return undef unless $FN_EXITS;
+        return undef if $IN_EVAL_BODY;
         return (defined $break_projs && !$IN_SCOUT) ? $FN_EXITS : [];
     }
 
