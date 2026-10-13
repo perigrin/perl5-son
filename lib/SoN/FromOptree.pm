@@ -8818,6 +8818,26 @@ class SoN::FromOptree 0.01 {
                 $sim->set_control($acc);
                 $acc = $concat->($acc, $mkstr->($seg[0])) if defined $seg[0];
             }
+            elsif (($op->private & 0x40) && !$pkg_target
+                   && $ctx->{addr_taken}{ $op->targ }) {
+                # A DEMOTED OR CAPTURED SLOT IS READ FROM MEMORY, as padsv
+                # reads it: the scope holds no binding for it to append to.
+                my $targ  = $op->targ;
+                my $param = $ctx->{cell_params}{$targ};
+                $acc = $param
+                    ? $factory->make('CellRead',
+                        inputs => [$param,
+                            (defined $sim->memory ? ($sim->memory) : ())],
+                        stamp  => SoN::IR::Stamp->new(type => 'Unknown'))
+                    : $factory->make('PadAccess',
+                        targ => $targ,
+                        do { my ($sg, $sy) = _padparts($cv, $targ);
+                             (sigil => $sg, symbol => $sy) },
+                        ($ctx->{shared_lexicals}{$targ} ? (shared => 1) : ()),
+                        (defined $sim->memory ? (inputs => [ $sim->memory ]) : ()));
+                $acc = $concat->(_coerce_to_str($factory, $acc), $mkstr->($seg[0]))
+                    if defined $seg[0];
+            }
             elsif ($op->private & 0x40) {
                 $acc = $pkg_target
                     ? $sim->lookup(_stash_key($pkg_target))
@@ -8920,6 +8940,33 @@ class SoN::FromOptree 0.01 {
                 $store->set_control_in($sim->control);
                 $sim->set_control($store);
                 $sim->push_node($acc) unless ($op->flags & 3) == 1;   # void
+                return ($op->next, 'handled');
+            }
+            # A CAPTURED OR DEMOTED SLOT IS STORED, as the TARGMY path stores
+            # it: the storage is not this graph's scope, and a rebind alone
+            # dropped `$s .= "y"` on a lexical a sub or a reference shares.
+            if (my $param = $ctx->{cell_params}{$targ}) {
+                my $write = $factory->make('CellWrite',
+                    inputs => [$param, $acc,
+                        (defined $sim->memory ? ($sim->memory) : ())]);
+                $write->set_control_in($sim->control);
+                $sim->set_control($write);
+                $sim->set_memory($write) if defined $sim->memory;
+                $sim->push_node($acc);
+                return ($op->next, 'handled');
+            }
+            if ($ctx->{addr_taken}{$targ}) {
+                my $loc = $factory->make('PadAccess',
+                    targ => $targ,
+                    do { my ($sg, $sy) = _padparts($cv, $targ);
+                         (sigil => $sg, symbol => $sy) },
+                    ($ctx->{shared_lexicals}{$targ} ? (shared => 1) : ()),
+                    (defined $sim->memory ? (inputs => [ $sim->memory ]) : ()));
+                my $store = $factory->make('Assign', inputs => [$loc, $acc]);
+                $store->set_control_in($sim->control);
+                $sim->set_control($store);
+                $sim->set_memory($store);
+                $sim->push_node($acc);
                 return ($op->next, 'handled');
             }
             # OPpLVAL_INTRO (0x80): a new lexical (`my $c = qq{...}`). The main

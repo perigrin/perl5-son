@@ -686,6 +686,11 @@ class SoN::Deparse 0.01 {
         # main under its mangled name, and called bare from inside `class
         # Chalk::IR::Graph` it resolved there: "Undefined subroutine".
         return "main::$ident" if $in_package && $ident !~ /::/;
+        # A LIFTED BODY IS DEFINED IN main from ANY call site, and the
+        # program's own text may sit under `package P;` or `package P { }`,
+        # where a bare call to the mangled name was P::... and died.
+        return "main::$ident"
+            if $ident !~ /::/ && $ident ne $name =~ s/^main:://r;
         return $ident;
     }
 
@@ -6255,6 +6260,13 @@ class SoN::Deparse 0.01 {
             my $nm = ($n->{fields} // {})->{name};
             die "GAP: an AnonSub with no name is not yet rendered\n"
                 unless defined $nm && length $nm;
+            # A BODY THE PRODUCER REFUSED is absent from the graph, and a
+            # reference to it is a reference to nothing: the emitted program
+            # died at the call where perl ran the body.
+            die "GAP: a reference to the sub body `$nm`, which is not in the"
+              . " graph, cannot be rendered -- the emitted program would die"
+              . " calling it\n"
+                unless exists $all_methods->{$nm};
             # THE BODY IS DEFINED IN main, and a mangled name with no `::`
             # resolves in whatever package the reference is taken in -- inside
             # a `class C { }` block, `\&name` was C::name and the call died.
@@ -6987,7 +6999,11 @@ class SoN::Deparse 0.01 {
             # the call reaches.
             die "GAP: a call to `$name`, which is not in the graph, cannot be"
               . " rendered -- the emitted program would die calling it\n"
-                if $name =~ /\A\w+(?:::\w+)*\z/
+                # A LIFTED BODY -- an anon or `my sub` body named
+                # `<enclosing>::__ANON__:<line>:<targ>` -- is called by that
+                # name too, and is just as absent when it was refused.
+                if ($name =~ /\A\w+(?:::\w+)*\z/
+                    || $name =~ /::__ANON__:\d+:\d+\z/)
                 && !exists $all_methods->{$name}
                 && !$f->{external}
                 && !$self->_defined_at_runtime($name);
