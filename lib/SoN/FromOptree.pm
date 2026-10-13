@@ -14958,6 +14958,23 @@ class SoN::FromOptree 0.01 {
     # argelem binds in place of a Parameter (%BRANCHED_DEFAULT). An arm that
     # dies has no value: the parameter is the raw argument past the Region.
     # Returns the argelem, where the arm converged.
+    # _writes_pad_slot($op, $targ) -- does $op store into pad slot $targ? An
+    # assign's target, an increment's operand, an op= target, a padsv_store,
+    # or an op that stores into its own targ. Not OPf_MOD alone, which perl
+    # also leaves on read operands.
+    sub _writes_pad_slot ($op, $targ) {
+        return 1 if $op->name eq 'padsv_store' && $op->targ == $targ;
+        return 1 if ( $op->private & B::OPpTARGET_MY() ) && $op->targ == $targ;
+        return 0 unless $op->flags & B::OPf_KIDS();
+        my $k = $op->first;
+        my $is = sub ($o) { $o && $$o && $o->name eq 'padsv' && $o->targ == $targ };
+        return 1 if $op->name =~ /\A(?:i_)?(?:pre|post)(?:inc|dec)\z/ && $is->($k);
+        return 1 if $op->name eq 'sassign' && $is->( $k->sibling );
+        return 1 if $op->name ne 'sassign' && ( $op->flags & B::OPf_STACKED() )
+            && $op->isa('B::BINOP') && $is->($k);
+        return 0;
+    }
+
     our %BRANCHED_DEFAULT;
     sub _signature_default_as_branch ($cv, $op, $sim, $factory, $opmap,
                                       $visited) {
@@ -14967,9 +14984,11 @@ class SoN::FromOptree 0.01 {
         my $pname = _padname($cv, $elem->targ);
         # A CLOSURE OVER THE PARAMETER reads it from a slot the branch's value
         # never reaches; the anon sub's body saw the raw argument or nothing.
+        my $written;
         my @q = (eval { $cv->ROOT } // ());
         while (my $o = shift @q) {
             next unless ref($o) && $$o;
+            $written = 1 if _writes_pad_slot($o, $elem->targ);
             die "GAP: a signature default with an effect, on a parameter a"
               . " closure captures, is not yet lowered\n"
                 if $o->name eq 'anoncode'
@@ -14987,6 +15006,14 @@ class SoN::FromOptree 0.01 {
                 push @q, $k;
             }
         }
+        # NOR A PARAMETER A REFERENCE IS TAKEN TO AND THE BODY WRITES. Demoted,
+        # it is stored through its name, and the renderer -- which tracks
+        # declarations by name -- gave that store a `my` masking the
+        # parameter: `sub f ($x = g()) { my $r = \$x; if ($x > 2) { $x = 0 }
+        # "$$r" }` printed 591 for perl's 001.
+        die "GAP: a signature default with an effect, on a parameter a"
+          . " reference is taken to and the body writes, is not yet lowered\n"
+            if $written && _address_taken($cv, undef, 1)->{ $elem->targ };
         my $raw = $factory->make('Parameter',
             index => 0 + $index,
             name  => $pname,
