@@ -3243,7 +3243,11 @@ class SoN::Deparse 0.01 {
         my @phis = sort { $a->{id} <=> $b->{id} }
                    grep { ($_->{op} // '') eq 'Phi'
                        && (($_->{fields}{region} // -1) == $n->{id})
-                       && !$self->_is_memory($_->{id}) }
+                       # A CALL IS BOTH a value and a memory version, so a slot
+                       # carrying `shift` asks _is_memory yes; read as a value,
+                       # it is a variable all the same (as at a join).
+                       && (!$self->_is_memory($_->{id})
+                           || $self->_read_as_value($_->{id})) }
                    $self->_nodes_in_order;
         for my $p (@phis) {
             die "GAP: a loop Phi with " . scalar(($p->{inputs} // [])->@*)
