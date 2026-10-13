@@ -146,4 +146,36 @@ refuses(q{use v5.36; sub f ($x = return "early") { "late" } print f(), " ", f(1)
     qr/GAP: a `return` in an arm with no function exit/,
     'a returning default refuses');
 
+# A STRING EVAL reads the parameter's pad slot by name at run time; the
+# branch's value never reaches it.
+for my $src (
+    q{use v5.36; sub f ($x = []) { eval q{push @$x, 3}; "@$x" } print f(), f([0]), "\n";},
+    q{use v5.36; our $c=0; sub g { $c++; 4 } sub f ($x = g()) { eval '$x' } print f(), f(1), " c=$c\n";},
+    q{use v5.36; sub f ($x = [2]) { my $s='$x->[0]'; eval $s } print f(), f([5]), "\n";},
+    q{use v5.36; sub f ($x //= [2]) { my $s='$x->[0]'; eval $s } print f(), f(undef), f([5]), "\n";},
+    q{use v5.36; sub f ($t, $x = [$t]) { eval { 1 }; eval "\$t" . '+' . "\$x->[0]" } print f(1), f(1,[5]), "\n";},
+) {
+    refuses($src, qr/GAP: a signature default with an effect, in a sub with a string eval/,
+        'a string eval beside an effectful default refuses');
+}
+# A BLOCK eval reads nothing by name.
+round_trips(q{use v5.36; sub f ($x = [1]) { eval { push @$x, 2 }; "@$x" } print f(), f([0]), "\n";},
+    'a block eval beside an allocating default');
+
+# A LATER DEFAULT READING A BRANCHED PARAMETER reads the merged value.
+for my $case (
+    [q{use v5.36; sub f ($x = [], $y = $x) { push @$y, 1; "@$x" } print f(), f([0]), f([0],[]), "\n";},
+        'a plain default over an allocating one'],
+    [q{use v5.36; sub f ($x = [], $y = scalar @$x) { push @$x, 1; "$y@$x" } print f(), f([0]), f([0],5), "\n";},
+        'a counted default over an allocating one'],
+    [q{use v5.36; our $c=0; sub g { $c++; 4 } sub f ($x = g(), $y = $x + 1, $z = $y * 2) { "$x$y$z" } print f(), f(1), f(1,1), " c=$c\n";},
+        'a chain of plain defaults over a calling one'],
+    [q{use v5.36; sub f ($x //= [1], $y //= $x) { push @$y, 2; "@$x" } print f(), f(undef, undef), f([0]), "\n";},
+        'a //= default over an allocating //= one'],
+    [q{use v5.36; sub f ($x = [], $y = 7) { push @$x, $y; "@$x" } print f(), f([0]), f([0], 1), "\n";},
+        'an unrelated plain default after an allocating one'],
+) {
+    round_trips(@$case);
+}
+
 done_testing;

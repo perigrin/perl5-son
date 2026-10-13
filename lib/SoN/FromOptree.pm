@@ -1872,10 +1872,7 @@ class SoN::FromOptree 0.01 {
             if ($name eq 'argdefelem') {
                 # AN ARM THAT ALLOCATES, CALLS OR DIES runs only when the
                 # default applies, so it is a branch, not a value input.
-                my $stop = ${ $op->next };
-                if ((_arm_advances_control($op->other, $stop)
-                        || _arm_has_die($op->other, $stop))
-                    && !_arm_has_element_store($op->other, $stop)) {
+                if (_signature_default_is_branch($cv, $op)) {
                     $op = _signature_default_as_branch($cv, $op, $sim,
                         $factory, $opmap, \%visited);
                     next;
@@ -14909,6 +14906,39 @@ class SoN::FromOptree 0.01 {
                 || _arm_has_void_call($op->other, $stop));
     }
 
+    # _signature_default_is_branch($cv, $argdefelem) -- true for a default
+    # lowered as a branch: its arm allocates, calls or dies, or it reads a
+    # parameter whose own default is a branch. That parameter's value is the
+    # branch's Phi, which a Parameter's default has no place to spell.
+    sub _signature_default_is_branch ($cv, $op) {
+        # One pass over the signature, in order: a default reads only the
+        # parameters before it.
+        my %branched;
+        for (my $o = $cv->START; ref($o) && $$o; $o = $o->next) {
+            next unless $o->name eq 'argdefelem';
+            my $is = _default_arm_is_branch($o, \%branched);
+            return $is if $$o == $$op;
+            $branched{ $o->next->targ } = 1 if $is;
+        }
+        return 0;
+    }
+
+    sub _default_arm_is_branch ($op, $branched) {
+        my $stop = ${ $op->next };
+        return 0 if _arm_has_element_store($op->other, $stop);
+        return 1 if _arm_advances_control($op->other, $stop)
+                 || _arm_has_die($op->other, $stop);
+        return 0 unless %$branched;
+        my (@todo, %seen) = ($op->other);
+        while (my $o = shift @todo) {
+            next unless $$o && $$o != $stop && !$seen{$$o}++;
+            return 1 if $o->name =~ /\Apad/ && $branched->{ $o->targ };
+            push @todo, $o->next;
+            push @todo, $o->other if $o->can('other') && ref($o->other);
+        }
+        return 0;
+    }
+
     # A SIGNATURE DEFAULT WITH AN EFFECT, as a branch on the argument. The
     # argument is read raw (a Parameter with no default), tested as perl
     # tests it -- present (`@_ > i`), defined, or true by the argdefelem's
@@ -14933,6 +14963,11 @@ class SoN::FromOptree 0.01 {
               . " closure captures, is not yet lowered\n"
                 if $o->name eq 'anoncode'
                 && grep { $_ eq $pname } _anoncode_captures($cv, $o);
+            # NOR CAN A STRING EVAL: it finds the parameter by name, in the
+            # same slot, at run time -- and the name may be built there.
+            die "GAP: a signature default with an effect, in a sub with a"
+              . " string eval, is not yet lowered\n"
+                if $o->name eq 'entereval';
             next unless $o->flags & 4;    # OPf_KIDS
             for (my $k = $o->first; ref($k) && $$k; $k = $k->sibling) {
                 push @q, $k;
