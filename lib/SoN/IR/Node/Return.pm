@@ -19,6 +19,11 @@ class SoN::IR::Node::Return :isa(SoN::IR::Node) {
     # the source sees the difference.
     field $implicit :param :reader = false;
 
+    # An implicit Return whose undef the producer supplied: the sub ended
+    # with nothing on the stack. Without it, `sub { $c++; undef }` and a sub
+    # ending on a loop build the same graph, and only the first returns undef.
+    field $valueless :param :reader = false;
+
     method operation() { 'Return' }
 
     # The returned value. Control flows through the control_in decoration

@@ -37,6 +37,19 @@ use SoN::IR::Node::Access;
 # [aggregate] for a computed list and [aggregate, memory] for one that lives
 # in memory.
 class SoN::IR::Node::Count :isa(SoN::IR::Node::Access) {
+    # A PRESENCE TEST is the argument count a signature default's branch
+    # synthesizes (`@_ > i`); the program never wrote it. A consumer that
+    # spells it may quiet what perl says about reading @_ under a signature,
+    # and must not quiet the program's own count. In the content hash, so
+    # the two never merge.
+    field $presence_test :param :reader = 0;
+
+    method content_hash() {
+        return join('|', $self->operation(),
+            ($presence_test ? 'presence_test' : ()),
+            $self->_serialize_inputs());
+    }
+
     method operation() { 'Count' }
     method op_str()    { 'count' }
 }

@@ -172,7 +172,11 @@ sub _extract_fields ($node, $id_remap) {
         return %f ? \%f : undef;
     }
     if ($op eq 'Return') {
-        return $node->implicit ? { implicit => JSON::PP::true } : undef;
+        my %f = (
+            ( $node->implicit  ? ( implicit  => JSON::PP::true ) : () ),
+            ( $node->valueless ? ( valueless => JSON::PP::true ) : () ),
+        );
+        return %f ? \%f : undef;
     }
     if ($op eq 'PackageMark') {
         return { package => $node->package };
@@ -257,6 +261,10 @@ sub _extract_fields ($node, $id_remap) {
     # only when true, so a plain print's node is byte-identical to before.
     if ($op eq 'Print') {
         return $node->has_filehandle ? { has_filehandle => JSON::PP::true } : undef;
+    }
+    # A Count the producer synthesized says so; emitted only when true.
+    if ($op eq 'Count') {
+        return $node->presence_test ? { presence_test => JSON::PP::true } : undef;
     }
     if ($op eq 'RegexSubst') {
         return {

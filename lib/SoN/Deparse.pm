@@ -1337,7 +1337,7 @@ class SoN::Deparse 0.01 {
                 ? sprintf('@eff%d', $id) : sprintf('$eff%d', $id);
         }
 
-        my @local_saves;
+        my ( @local_saves, @late_saves );
         # A `local` RESTORE READS AN EARLIER VALUE OF THE SAME NAME, and a
         # package variable has only one spelling. `local $v = "inner"` in a sub
         # produces
@@ -1400,6 +1400,15 @@ class SoN::Deparse 0.01 {
             # of the sub is exactly where it belongs.
             next if exists $bound{ $val->{id} };
             $bound{ $val->{id} } = sprintf( '$saved%d', $val->{id} );
+            # UNLESS AN EFFECT CAME FIRST: a call may have written the name,
+            # and the save reads what it left. `g(); local $c = 5` saved $c
+            # above g() and the restore undid g's increment. Such a save is
+            # anchored as a stale read is, below.
+            my $ver = $nodes->{ ( $val->{inputs} // [] )->[-1] } // {};
+            if ( defined $ver->{control_in} || ( $ver->{op} // '' ) eq 'Phi' ) {
+                push @late_saves, $val;
+                next;
+            }
             push @local_saves, $val->{id};
         }
 
@@ -1693,6 +1702,18 @@ class SoN::Deparse 0.01 {
             $stale_join{ $n->{id} } = $join if defined $join;
 
             $bound{ $n->{id} } = sprintf( '$stale%d', $n->{id} );
+            push @stale_reads, $n;
+        }
+        # A `local` save behind an effect, placed as a stale read is: after
+        # the nearest write or call, or after the join a merged version
+        # names.
+        for my $n ( @late_saves ) {
+            my $ver = $nodes->{ ( $n->{inputs} // [] )->[-1] } // {};
+            if ( ( $ver->{op} // '' ) eq 'Phi' ) {
+                my $r = $nodes->{ ( $ver->{fields} // {} )->{region} // -1 } // {};
+                $stale_join{ $n->{id} } = $r->{id}
+                    if ( $r->{op} // '' ) eq 'Region';
+            }
             push @stale_reads, $n;
         }
 
@@ -2309,6 +2330,112 @@ class SoN::Deparse 0.01 {
 
             $bound{ $n->{id} } = sprintf( '$stale%d', $n->{id} );
             $hoisted{ $bound{ $n->{id} } } //= $bound{ $n->{id} };
+            push $after_effect{ $version->{id} }->@*, $n;
+        }
+
+        # A LIST READ THROUGH A REFERENCE GOES STALE THE SAME WAY. `my @s =
+        # sort @$x; push @$x, 0; print "@s"` sorted the pushed 0 in: the
+        # PostfixDeref carries the version it read at, and the emission
+        # spelled `$x->@*` at the print. Bound to a list temporary where it
+        # was read -- at its version, after the join a merged version names,
+        # or on entry when the reference is a parameter.
+        #
+        # ONLY READERS THAT COPY: sort, reverse, join, a count, a list, a
+        # stored value. Anything else -- a loop or map aliasing the elements,
+        # a callee aliasing @_ -- keeps the live spelling. A mutator's
+        # container is the aggregate itself and is spelled live (_call_expr).
+        my %copies = map { $_ => 1 } qw(sort reverse join);
+        for my $n ( sort { $a->{id} <=> $b->{id} } $self->_nodes_in_order ) {
+            next unless ( $n->{op} // '' ) eq 'PostfixDeref';
+            next unless ( ( $n->{fields} // {} )->{sigil} // '' ) eq '@';
+            next if exists $bound{ $n->{id} };
+            next if $under_loop{ $n->{id} };
+            my @in = ( $n->{inputs} // [] )->@*;
+            next unless @in == 2;
+            my ( $readers, $other ) = ( 0, 0 );
+            for my $c ( ( $consumers{ $n->{id} } // [] )->@* ) {
+                my $op = $c->{op} // '';
+                my $cf = $c->{fields} // {};
+                my @at = grep { $c->{inputs}[$_] == $n->{id} } 0 .. $#{ $c->{inputs} };
+                if ( $op eq 'Call' && $cf->{memory_input}
+                     && ( $cf->{name} // '' ) =~ /\A(?:push|unshift|splice|pop|shift)\z/
+                     && "@at" eq '0' ) {
+                    next;
+                }
+                if ( ( $op eq 'Call' && ( $cf->{dispatch_kind} // '' ) eq 'builtin'
+                       && $copies{ $cf->{name} // '' } )
+                     || $op eq 'Count' || $op eq 'ArrayLiteral'
+                     || ( $op eq 'Assign' && !grep { $_ == 0 } @at ) ) {
+                    $readers++;
+                    next;
+                }
+                $other++;
+            }
+            next if $other || !$readers;
+            my $version = $nodes->{ $in[-1] } or next;
+            my $join;
+            if ( ( $version->{op} // '' ) eq 'Phi' ) {
+                my $r = $nodes->{ ( $version->{fields} // {} )->{region} // -1 } // {};
+                next unless ( $r->{op} // '' ) eq 'Region';
+                $join = $r;
+            }
+            my $at_entry = !$join && !defined $version->{control_in};
+            # AT THE ENTRY VERSION THE REFERENCE IS THE ANCHOR: a parameter
+            # exists on entry; one made on the chain (`[2,1]`) or merged at a
+            # join (a branched default) is read right after it exists.
+            if ( $at_entry ) {
+                my $ref = $nodes->{ $in[0] } // {};
+                my $rop = $ref->{op} // '';
+                if ( defined $ref->{control_in} ) {
+                    ( $version, $at_entry ) = ( $ref, 0 );
+                }
+                elsif ( $rop eq 'Phi' ) {
+                    my $r = $nodes->{ ( $ref->{fields} // {} )->{region} // -1 } // {};
+                    next unless ( $r->{op} // '' ) eq 'Region';
+                    ( $join, $at_entry ) = ( $r, 0 );
+                }
+                elsif ( $rop ne 'Parameter' ) {
+                    next;
+                }
+            }
+            # PAST ENTRY, a reference made or merged elsewhere may not exist
+            # yet at the version; left live.
+            else {
+                my $ref = $nodes->{ $in[0] } // {};
+                next if ( ( $ref->{op} // '' ) eq 'Phi'
+                          && !( $join && ( ( $ref->{fields} // {} )->{region} // -1 )
+                                         == $join->{id} ) )
+                    || ( defined $ref->{control_in} && $ref->{id} != $version->{id} );
+            }
+            next if !$at_entry
+                && $used_in_arm->( ( $join // $version )->{id}, $n->{id} );
+
+            my ( @queue, %seen, $shadowed )
+                = ( $at_entry ? $start->{id} : ( $join // $version )->{id} );
+            while ( @queue && !$shadowed ) {
+                my $id = shift @queue;
+                next if $seen{$id}++;
+                for my $c ( ( $ctrl_next{$id} // [] )->@* ) {
+                    $shadowed = 1 if ( $c->{op} // '' )
+                        =~ /\A(?:Assign|EntryWrite|CellWrite|Delete|Call)\z/;
+                    push @queue, $c->{id};
+                }
+            }
+            next unless $shadowed;
+
+            $bound{ $n->{id} } = sprintf( '@stale%d', $n->{id} );
+            if ( $at_entry ) {
+                my $var = $bound{ $n->{id} };
+                $save_prologue .= sprintf( "my %s = %s;\n",
+                    $var, $self->_expr_uncached( $n->{id} ) );
+                next;
+            }
+            $hoisted{ $bound{ $n->{id} } } //= $bound{ $n->{id} };
+            if ( $join ) {
+                push $after_region{ $join->{id} }->@*, $n;
+                push $stale_at_join{ $join->{id} }->@*, $n;
+                next;
+            }
             push $after_effect{ $version->{id} }->@*, $n;
         }
 
@@ -3374,6 +3501,8 @@ class SoN::Deparse 0.01 {
         my $last_join;
         # THROUGH PURE NODES, as _last_bound_input looks: `($c ? f() : 1) + 1`
         # reads the Phi under an Add, and the declaration floated above the if.
+        # `my @l = reverse($x)` over a branch's Phi holds Call(reverse, Phi)
+        # likewise, and @l held undef.
         my (@queue, %seen) = ($n->{inputs} // [])->@*;
         while (@queue) {
             my $in = shift @queue;
@@ -4879,6 +5008,23 @@ class SoN::Deparse 0.01 {
                     && $self->_param_as_variable($v)
                     && '$' . (($t->{fields} // {})->{symbol} // '')
                        eq (($v->{fields} // {})->{name} // '');
+
+                # A BRANCHED DEFAULT'S MERGE STORED INTO ITS PARAMETER'S SLOT
+                # -- a Phi over the raw argument of that name -- assigns the
+                # parameter the signature declared. A second `my` masks it.
+                # Not marked declared: an inner `my $x` is another variable.
+                if (($t->{op} // '') eq 'PadAccess'
+                    && ($v->{op} // '') eq 'Phi'
+                    && $self->_signature_of($current_sub)) {
+                    my $pname = '$' . (($t->{fields} // {})->{symbol} // '');
+                    return sprintf("%s = %s;\n",
+                                   $self->_location($in[0]), $self->_expr($in[1]))
+                        if grep {
+                            my $a = $nodes->{ $_ // -1 } // {};
+                            ($a->{op} // '') eq 'Parameter'
+                                && (($a->{fields} // {})->{name} // '') eq $pname
+                        } ($v->{inputs} // [])->@*;
+                }
             }
 
             # A COUNTED s/// STORED THROUGH AN Assign STILL RUNS TWICE. The
@@ -5135,9 +5281,14 @@ class SoN::Deparse 0.01 {
             my $v = $nodes->{ $in[0] };
 
             # The undef Constant every program body ends with is not a value
-            # the source returned.
+            # the source returned. A sub's implicit undef is the source's
+            # unless the producer says it supplied it (`valueless`): `sub {
+            # $c++; undef }` returns undef, not $c.
             return '' if $v && $v->{op} eq 'Constant'
-                      && (($v->{fields} // {})->{const_type} // '') eq 'undef';
+                      && (($v->{fields} // {})->{const_type} // '') eq 'undef'
+                      && !(($n->{fields} // {})->{implicit}
+                           && !($n->{fields} // {})->{valueless}
+                           && defined $current_sub);
 
             # A RETURN BEHIND A die IS NEVER REACHED, and its value is
             # whatever the stack held: `die(...); $ir;` after a signature
@@ -5804,7 +5955,18 @@ class SoN::Deparse 0.01 {
             # AN ANONYMOUS CONSTRUCTOR IS A REFERENCE -- `[1,2,3]`, stamped
             # ArrayRef -- so its count goes through the deref. As a list it
             # was `my @c = [1,2,3]`, one element.
-            $text = $list_ternary
+            #
+            # THE ARGUMENT COUNT UNDER A SIGNATURE -- a default's presence
+            # test. Perl still sets @_ there; reading it is merely
+            # experimental, and the warning is the emission's, not the
+            # program's. Only the count the producer marks is quieted; the
+            # program's own `scalar(@_)` keeps perl's warning.
+            my $sig_args = (($n->{fields} // {})->{presence_test} // 0)
+                        && $self->_signature_of($current_sub);
+            $text = $sig_args
+                ? "do { no warnings 'experimental::args_array_with_signatures';"
+                  . " scalar(\@_) }"
+                : $list_ternary
                 ? sprintf('do { my @c%d = %s; scalar(@c%d) }',
                           $id, $self->_expr($in[0]), $id)
                 : $named || (($agg->{op} // '') !~ /Literal\z/
@@ -6679,6 +6841,11 @@ class SoN::Deparse 0.01 {
         my @in = (($n->{inputs} // [])->@*);
         pop @in if $f->{memory_input};
         my @args = map { $self->_expr($_) } @in;
+        # A MUTATOR'S CONTAINER IS THE AGGREGATE, never a copy bound for a
+        # read of it (the list-deref stale pass).
+        $args[0] = $self->_expr_uncached($in[0])
+            if $f->{memory_input} && @in
+            && ($name // '') =~ /\A(?:push|unshift|splice|pop|shift)\z/;
         # A FOUR-ARGUMENT substr REWRITES ITS FIRST ARGUMENT IN PLACE, so that
         # argument is a location -- see _location.
         $args[0] = $self->_location($in[0])

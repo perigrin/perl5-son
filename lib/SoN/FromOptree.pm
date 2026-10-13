@@ -1872,6 +1872,13 @@ class SoN::FromOptree 0.01 {
             # 028). Walk the arm as a VALUE and leave it on the stack for the
             # argelem, which carries OPf_STACKED exactly when this ran.
             if ($name eq 'argdefelem') {
+                # AN ARM THAT ALLOCATES, CALLS OR DIES runs only when the
+                # default applies, so it is a branch, not a value input.
+                if (_signature_default_is_branch($cv, $op)) {
+                    $op = _signature_default_as_branch($cv, $op, $sim,
+                        $factory, $opmap, \%visited);
+                    next;
+                }
                 my $arm = $sim->snapshot;
                 my $base_depth = $arm->stack_depth;
                 _walk_branch($cv, $op->other, $arm, $factory, $opmap,
@@ -3338,11 +3345,17 @@ class SoN::FromOptree 0.01 {
                     _merged_aggregate_return($factory, $sim->pop_node);
             }
         }
+        # NOTHING ON THE STACK: the undef is the producer's, not the
+        # source's. `sub { }` returns no element to a list; `sub { undef }`
+        # returns one, and the two otherwise build the same graph. A
+        # program returns nothing either way, so it is not marked.
+        my $valueless = !defined $value && !$is_program;
         $value //= $factory->make('Constant',
             value      => undef,
             const_type => 'undef',
             stamp      => SoN::IR::Stamp->new(type => 'Undef'));
         return { control => $sim->control, value => $value, kind => $kind,
+                 ( $valueless ? ( valueless => 1 ) : () ),
                  ( defined $scalar_value
                      ? ( scalar_value => $scalar_value ) : () ) };
     }
@@ -3373,7 +3386,8 @@ class SoN::FromOptree 0.01 {
             my $implicit = ($exits->[0]{kind} // '') =~ /\A(?:leavesub|fallthrough)\z/;
             my $ret = $factory->make_cfg('Return',
                 inputs => [$value, (defined $scalar ? ($scalar) : ())],
-                ($implicit ? (implicit => 1) : ()));
+                ($implicit ? (implicit => 1) : ()),
+                ($implicit && $exits->[0]{valueless} ? (valueless => 1) : ()));
             $ret->set_control_in($ctrl) if defined $ctrl;
             return $ret;
         }
@@ -7254,7 +7268,13 @@ class SoN::FromOptree 0.01 {
             # stack (OPf_STACKED, 64), and the kid's private field says when
             # it applies -- asked of B: OPpARG_IF_UNDEF 128, OPpARG_IF_FALSE 64.
             my %default;
-            if ($op->flags & 64) {
+            my $branched;
+            if (delete $SoN::FromOptree::BRANCHED_DEFAULT{$$op}) {
+                # The default was lowered as a branch; its merged value is
+                # the parameter.
+                $branched = $sim->pop_node;
+            }
+            elsif ($op->flags & 64) {
                 my $kid = $op->first;
                 my $when = ($kid->private & 128) ? 'undef'
                          : ($kid->private & 64)  ? 'false'
@@ -7262,7 +7282,7 @@ class SoN::FromOptree 0.01 {
                 %default = (default_when => $when, inputs => [$sim->pop_node]);
             }
 
-            my $node = $factory->make('Parameter',
+            my $node = $branched // $factory->make('Parameter',
                 %default,
                 index => 0 + $index,
                 name  => $varname,
@@ -7288,7 +7308,11 @@ class SoN::FromOptree 0.01 {
                 $sim->set_control($store);
                 $sim->set_memory($store);
             }
-            $sim->define($targ, $node);
+            # AND IT IS STORED, NOT BOUND -- sassign's rule. A lookup of a
+            # demoted slot is empty by design; bound, an s/// on the
+            # parameter took the Parameter as its subject and the rewrite
+            # reached no read: `sub f ($x) { $x =~ s/b/B/; $x }` gave abc.
+            $sim->define($targ, $node) unless $ctx->{addr_taken}{$targ};
             $sim->push_node($node);
             return ($op->next, 'handled');
         }
@@ -15346,6 +15370,154 @@ class SoN::FromOptree 0.01 {
             && (_arm_has_element_store($op->other, $stop)
                 || _arm_advances_control($op->other, $stop)
                 || _arm_has_void_call($op->other, $stop));
+    }
+
+    # _signature_default_is_branch($cv, $argdefelem) -- true for a default
+    # lowered as a branch: its arm allocates, calls or dies, or it reads a
+    # parameter whose own default is a branch. That parameter's value is the
+    # branch's Phi, which a Parameter's default has no place to spell.
+    sub _signature_default_is_branch ($cv, $op) {
+        # One pass over the signature, in order: a default reads only the
+        # parameters before it.
+        my %branched;
+        for (my $o = $cv->START; ref($o) && $$o; $o = $o->next) {
+            next unless $o->name eq 'argdefelem';
+            my $is = _default_arm_is_branch($o, \%branched);
+            return $is if $$o == $$op;
+            $branched{ $o->next->targ } = 1 if $is;
+        }
+        return 0;
+    }
+
+    sub _default_arm_is_branch ($op, $branched) {
+        my $stop = ${ $op->next };
+        return 0 if _arm_has_element_store($op->other, $stop);
+        return 1 if _arm_advances_control($op->other, $stop)
+                 || _arm_has_die($op->other, $stop);
+        return 0 unless %$branched;
+        my (@todo, %seen) = ($op->other);
+        while (my $o = shift @todo) {
+            next unless $$o && $$o != $stop && !$seen{$$o}++;
+            return 1 if $o->name =~ /\Apad/ && $branched->{ $o->targ };
+            push @todo, $o->next;
+            push @todo, $o->other if $o->can('other') && ref($o->other);
+        }
+        return 0;
+    }
+
+    # A SIGNATURE DEFAULT WITH AN EFFECT, as a branch on the argument. The
+    # argument is read raw (a Parameter with no default), tested as perl
+    # tests it -- present (`@_ > i`), defined, or true by the argdefelem's
+    # private flags (OPpARG_IF_UNDEF 128, OPpARG_IF_FALSE 64) -- and the arm
+    # runs on the failing Proj. The two values merge in a Phi, which the
+    # argelem binds in place of a Parameter (%BRANCHED_DEFAULT). An arm that
+    # dies has no value: the parameter is the raw argument past the Region.
+    # Returns the argelem, where the arm converged.
+    # _writes_pad_slot($op, $targ) -- does $op store into pad slot $targ? An
+    # assign's target, an increment's operand, an op= target, a padsv_store,
+    # or an op that stores into its own targ. Not OPf_MOD alone, which perl
+    # also leaves on read operands.
+    sub _writes_pad_slot ($op, $targ) {
+        return 1 if $op->name eq 'padsv_store' && $op->targ == $targ;
+        return 1 if ( $op->private & B::OPpTARGET_MY() ) && $op->targ == $targ;
+        return 0 unless $op->flags & B::OPf_KIDS();
+        my $k = $op->first;
+        my $is = sub ($o) { $o && $$o && $o->name eq 'padsv' && $o->targ == $targ };
+        return 1 if $op->name =~ /\A(?:i_)?(?:pre|post)(?:inc|dec)\z/ && $is->($k);
+        return 1 if $op->name eq 'sassign' && $is->( $k->sibling );
+        return 1 if $op->name ne 'sassign' && ( $op->flags & B::OPf_STACKED() )
+            && $op->isa('B::BINOP') && $is->($k);
+        return 0;
+    }
+
+    our %BRANCHED_DEFAULT;
+    sub _signature_default_as_branch ($cv, $op, $sim, $factory, $opmap,
+                                      $visited) {
+        my $elem = $op->next;
+        my ($index) = eval { $elem->aux_list($cv) };
+        $index = 0 unless defined $index;
+        my $pname = _padname($cv, $elem->targ);
+        # A CLOSURE OVER THE PARAMETER reads it from a slot the branch's value
+        # never reaches; the anon sub's body saw the raw argument or nothing.
+        my $written;
+        my @q = (eval { $cv->ROOT } // ());
+        while (my $o = shift @q) {
+            next unless ref($o) && $$o;
+            $written = 1 if _writes_pad_slot($o, $elem->targ);
+            die "GAP: a signature default with an effect, on a parameter a"
+              . " closure captures, is not yet lowered\n"
+                if $o->name eq 'anoncode'
+                && grep { $_ eq $pname } _anoncode_captures($cv, $o);
+            # NOR CAN A STRING EVAL: it finds the parameter by name, in the
+            # same slot, at run time -- and the name may be built there.
+            die "GAP: a signature default with an effect, in a sub with a"
+              . " string eval, is not yet lowered\n"
+                if $o->name eq 'entereval';
+            # s///ee's eval sits in the replacement, which no kid link reaches.
+            push @q, $o->pmreplroot
+                if $o->name eq 'subst' && ref($o->pmreplroot);
+            next unless $o->flags & 4;    # OPf_KIDS
+            for (my $k = $o->first; ref($k) && $$k; $k = $k->sibling) {
+                push @q, $k;
+            }
+        }
+        # NOR A PARAMETER A REFERENCE IS TAKEN TO AND THE BODY WRITES. Demoted,
+        # it is stored through its name, and the renderer -- which tracks
+        # declarations by name -- gave that store a `my` masking the
+        # parameter: `sub f ($x = g()) { my $r = \$x; if ($x > 2) { $x = 0 }
+        # "$$r" }` printed 591 for perl's 001.
+        die "GAP: a signature default with an effect, on a parameter a"
+          . " reference is taken to and the body writes, is not yet lowered\n"
+            if $written && _address_taken($cv, undef, 1)->{ $elem->targ };
+        my $raw = $factory->make('Parameter',
+            index => 0 + $index,
+            name  => $pname,
+            sigil => '$');
+        my $when = ($op->private & 128) ? 'undef'
+                 : ($op->private & 64)  ? 'false'
+                 :                        'absent';
+        my $bool = SoN::IR::Stamp->new(type => 'Boolean');
+        my $test = $when eq 'undef'
+            ? $factory->make('Defined', inputs => [$raw], stamp => $bool)
+            : $when eq 'false'
+            ? $raw
+            : $factory->make('NumGt', stamp => $bool, inputs => [
+                  _make_count($factory, _args_source($factory), $sim,
+                      presence_test => 1),
+                  $factory->make('Constant', value => 0 + $index,
+                      const_type => 'integer',
+                      stamp => SoN::IR::Stamp->new(type => 'Int'))]);
+        my $if_node = $factory->make_cfg('If',
+            inputs => [$sim->control, $test]);
+        my $base     = $sim->stack_depth;
+        my $keep_sim = $sim->snapshot;
+        my $arm_sim  = $sim->snapshot;
+        $keep_sim->set_control($factory->make_cfg('Proj',
+            inputs => [$if_node], index => 0));
+        $arm_sim->set_control($factory->make_cfg('Proj',
+            inputs => [$if_node], index => 1));
+        my ($end, $sig) = _walk_branch($cv, $op->other, $arm_sim, $factory,
+            $opmap, $visited, undef, 0, $$elem);
+        my $died = $arm_sim->control->operation eq 'Unwind';
+        die "GAP: a signature default whose arm is not a single value is not"
+          . " yet lowered\n"
+            if ($sig // '') ne ''
+            || !(defined $end && ref $end && $$end == $$elem)
+            || $arm_sim->stack_depth != $base + ($died ? 0 : 1);
+        $keep_sim->push_node($raw) unless $died;
+        $keep_sim->merge($arm_sim, $factory, $if_node);
+        my $value = $died ? $raw : $keep_sim->pop_node;
+        my @arm = grep { defined } $value->can('inputs') ? $value->inputs->@* : ();
+        $value->set_stamp(SoN::IR::Stamp::join(map { $_->stamp } @arm))
+            if $value->operation eq 'Phi' && @arm == 2
+            && !grep { !$_->can('stamp') || !_is_narrowed($_->stamp) } @arm;
+        $sim->set_control($keep_sim->control);
+        $sim->set_memory($keep_sim->memory);
+        my $merged = $keep_sim->scope_bindings;
+        $sim->define($_, $merged->{$_}) for keys %$merged;
+        $sim->push_node($value);
+        $BRANCHED_DEFAULT{$$elem} = 1;
+        return $elem;
     }
 
     sub _short_circuit_as_branch ($cv, $op, $sim, $factory, $opmap, $visited,

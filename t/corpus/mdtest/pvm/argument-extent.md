@@ -330,7 +330,7 @@ main::__PROGRAM__: {start: 0, returns: [19], nodes: [
 main::__PROGRAM__::__ANON__:1:2: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, {implicit: true}, [1], 0]]} # 2
+  [Return, {implicit: true, valueless: true}, [1], 0]]} # 2
 ```
 
 ## `lock` is a named unary with its own op
