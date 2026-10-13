@@ -39,6 +39,9 @@ class SoN::IR::Node::Delete :isa(SoN::IR::Value) {
     # the same device CellWrite and EntryWrite use.
     my $delete_counter = 0;
     field $delete_id :reader;
+    # `hash` or `array`, as the op says: the container, a scalar holding
+    # some reference, often cannot. See Subscript.
+    field $kind :param :reader = undef;
 
     ADJUST { $delete_id = $delete_counter++; }
 
@@ -46,6 +49,7 @@ class SoN::IR::Node::Delete :isa(SoN::IR::Value) {
 
     method content_hash() {
         return join('|', 'Delete', "delete_id=$delete_id",
+            (defined $kind ? "kind=$kind" : ()),
             $self->_serialize_inputs());
     }
 }

@@ -184,10 +184,10 @@ refuses(q{my @a = (0); for my $c (1,0) { my @r = ($c ? (($a[0]=1), 2) : 3); prin
     qr/GAP: a ternary with a multi-element list arm not yet lowered/,
     'a multi-element list arm');
 
+# A short-circuit whose arm stores an element is a guarded effect branch.
+output_matches(q{my %h; for my $c (1,0) { my $x = $c && ($h{k} = 9); print "$x\n" }}, '&& with an element store');
+
 # DIFF at base too, by causes outside this ternary.
-todo 'DIFF at base: a short-circuit drops its lhs value beside an element store' => sub {
-    output_matches(q{my %h; for my $c (1,0) { my $x = $c && ($h{k} = 9); print "$x\n" }}, '&& with an element store');
-};
 todo 'DIFF at base: a void refgen does not vivify the element' => sub {
     output_matches(q{my %h; for my $c (1,0) { $c ? \$h{a} : 0; print exists $h{a} ? "e" : "n", "\n" }}, 'a void refgen arm');
 };

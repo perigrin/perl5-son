@@ -362,7 +362,7 @@ Index::register: {start: 0, returns: [19], nodes: [
   [Parameter, {index: 0, name: $key, sigil: $}, ~, ~, Unknown], # 2
   [MemStart], # 3
   [Subscript, {kind: hash}, [1, 2, 3], ~, Scalar], # 4
-  [Exists, ~, [1, 2, 3], ~, Boolean], # 5
+  [Exists, {kind: hash}, [1, 2, 3], ~, Boolean], # 5
   [If, ~, [0, 5], 0], # 6
   [Proj, {index: 1}, [6]], # 7
   [FieldAccess, {field_index: 1, field_stash: Index}, ~, 7, Int], # 8

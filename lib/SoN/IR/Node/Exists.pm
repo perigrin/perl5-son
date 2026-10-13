@@ -27,9 +27,14 @@ use SoN::IR::Node::Access;
 # `open` there is no failure path yielding undef -- exists always answers. So
 # Boolean rather than the join(Boolean, Undef) = Scalar those two need.
 class SoN::IR::Node::Exists :isa(SoN::IR::Node::Access) {
+    # `hash` or `array`, as the op says: the container, a scalar holding
+    # some reference, often cannot. See Subscript.
+    field $kind :param :reader = undef;
+
     method operation() { 'Exists' }
 
     method content_hash() {
-        return join('|', 'Exists', $self->_serialize_inputs());
+        return join('|', 'Exists', (defined $kind ? "kind=$kind" : ()),
+            $self->_serialize_inputs());
     }
 }

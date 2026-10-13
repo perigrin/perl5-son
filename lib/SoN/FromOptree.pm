@@ -7442,6 +7442,7 @@ class SoN::FromOptree 0.01 {
                 my @removed;
                 for my $key ($operands->@*) {
                     my $d = $factory->make('Delete',
+                        kind   => _element_kind($op),
                         inputs => [$container, $key,
                             (defined $sim->memory ? ($sim->memory) : ())]);
                     $d->set_control_in($sim->control);
@@ -7466,6 +7467,7 @@ class SoN::FromOptree 0.01 {
             my $container = $sim->pop_node;
 
             my $node = $factory->make('Delete',
+                kind   => _element_kind($op),
                 inputs => [$container, $key,
                     (defined $sim->memory ? ($sim->memory) : ())]);
 
@@ -7537,6 +7539,7 @@ class SoN::FromOptree 0.01 {
             my $key       = $sim->pop_node;
             my $container = $sim->pop_node;
             my $node = $factory->make('Exists',
+                kind   => _element_kind($op),
                 inputs => [$container, $key, $sim->memory],
                 stamp  => SoN::IR::Stamp->new(type => 'Boolean'));
             $sim->push_node($node);
@@ -12103,6 +12106,7 @@ class SoN::FromOptree 0.01 {
         # `enter` and, at a `nextstate` inside the do-block, pop leftovers back to
         # that depth -- preserving the OUTER operand ($s) pushed before the enter.
         my @enter_depth;
+        my $body_leave;
         # Count top-level body statement boundaries (nextstate outside a do-block).
         # A `last if COND` is hoistable into the loop header ONLY when it is the
         # FIRST body statement (stmt_count == 1: just its own opening nextstate has
@@ -12133,7 +12137,20 @@ class SoN::FromOptree 0.01 {
             # below reads this loop's own back-edge as unlowerable nesting.
             last if $name eq 'mapwhile' || $name eq 'grepwhile';
 
-            if ($name eq 'enter') {
+            # A LOOP WITH A CONTINUE BLOCK (or a C-style step) wraps its body
+            # in enter/leave, and that leave runs on into the continue start.
+            # That block is the body itself, not a do-block: its statements
+            # are the body's statements, or `if (C) { ... }` as the first of
+            # them is never taken for a guard and falls to the loop-condition
+            # handler.
+            if ($name eq 'enter' && $CONTINUE_START
+                    && ${ $op->parent } && $op->parent->name eq 'leave'
+                    && ${ $op->parent->next } == ${$CONTINUE_START}) {
+                $body_leave = ${ $op->parent };
+            }
+            elsif ($name eq 'leave' && $body_leave && $$op == $body_leave) {
+            }
+            elsif ($name eq 'enter') {
                 push @enter_depth, $sim->stack_depth;
             }
             elsif ($name eq 'leave') {
@@ -12464,7 +12481,7 @@ class SoN::FromOptree 0.01 {
             # condition handler below, which lowered it as the loop's own test
             # and dropped the rest of the body -- silently: `next unless $x > 1;
             # $n++` counted nothing.
-            if (($name eq 'and' || $name eq 'or') && $sim->stack_depth > 0
+            if (($name eq 'and' || $name eq 'or' || $name eq 'dor') && $sim->stack_depth > 0
                     && $op->can('other') && ${$op->other}
                     && _guarded_loop_control($op->other)) {
                 my $kind = _guarded_loop_control($op->other);
@@ -12478,6 +12495,10 @@ class SoN::FromOptree 0.01 {
                 # both. The mid-body break is an independent If split, not a
                 # second loop condition, so it does not conflict.
                 my $cond = $sim->pop_node;
+                # `E // next` IS TAKEN WHEN E IS UNDEFINED: test Defined(E) and take
+                # the `or` polarity.
+                my $guard_val = $cond;
+                $cond = $factory->make('Defined', inputs => [$cond]) if $name eq 'dor';
                 # The guard op's op_next is where the rest-of-body arm converges
                 # back (its first op). Build the If and split the control.
                 my $if_node = $factory->make_cfg('If',
@@ -12485,7 +12506,7 @@ class SoN::FromOptree 0.01 {
                 # Proj 0 = then (C true), Proj 1 = else (C false). The guard is
                 # taken on C true for `if` (and), on C false for `unless` (or);
                 # the rest of the body runs on the other.
-                my ($taken_idx, $rest_idx) = $name eq 'or' ? (1, 0) : (0, 1);
+                my ($taken_idx, $rest_idx) = $name ne 'and' ? (1, 0) : (0, 1);
                 my $taken_proj = $factory->make_cfg('Proj',
                     inputs => [$if_node], index => $taken_idx);
                 my $rest_proj  = $factory->make_cfg('Proj',
@@ -12497,6 +12518,9 @@ class SoN::FromOptree 0.01 {
                 # unhandled op) or a visited op.
                 my $rest_sim = $sim->snapshot;
                 $rest_sim->set_control($rest_proj);
+                # IN VALUE CONTEXT (`my $r = $x || next`) the guard yields E on the
+                # path that goes on; dropped, the rest assigned whatever lay beneath.
+                $rest_sim->push_node($guard_val) if ($op->flags & 3) >= 2;
                 # A `return` in the rest is a function exit; see $FN_EXITS.
                 my $rest_exits = (defined $break_projs && !$IN_SCOUT)
                     ? $FN_EXITS : [];
@@ -12850,8 +12874,11 @@ class SoN::FromOptree 0.01 {
                 # A second and/or here is NOT the loop condition -- it is a
                 # nested logical/modifier construct this walker cannot
                 # translate (it would mint a second Proj pair on the Loop).
+                # A FOREACH CONSUMED ITS TEST before the body walk, so no and/or in
+                # the body is its condition: claimed here, `last if A && $s{$x}++`
+                # became the loop test and the body vanished.
                 die "GAP: nested and/or inside a loop body not yet lowered\n"
-                    if $condition_fired++;
+                    if $cond_consumed || $condition_fired++;
                 my $cond = $sim->pop_node;
                 if (defined $loop_node) {
                     # Wire the condition's control edge to the Loop so the
@@ -13153,6 +13180,18 @@ class SoN::FromOptree 0.01 {
             $o = $o->next;
         }
         return $$o ? $o : undef;
+    }
+
+    # _element_kind($op) -> `hash` or `array` for an exists or delete, from the
+    # element or slice op it was built over (nulled to an ex-op, so read by
+    # its targ); undef when that is neither. The container cannot say: it is
+    # often a scalar holding some reference.
+    sub _element_kind ($op) {
+        my $k = $op->first;
+        return undef unless $$k;
+        my $n = $k->name eq 'null' ? B::ppname($k->targ) =~ s/\App_//r : $k->name;
+        return $n =~ /\Ah(?:elem|slice)\z/ ? 'hash'
+             : $n =~ /\Aa(?:elem|slice)\z/ ? 'array' : undef;
     }
 
     # _first_control_after($c, $pre) -> the node on $c's control chain whose
@@ -13866,7 +13905,7 @@ class SoN::FromOptree 0.01 {
              $$op && $$op != $stop && !(defined $join && $$op == $join)
                  && !$seen{$$op}++;
              $op = $op->next) {
-            next unless $op->name =~ /\A(?:and|or|cond_expr)\z/;
+            next unless $op->name =~ /\A(?:and|or|dor|cond_expr)\z/;
             return 1 if _arm_has_die_from($op->other, $stop, $join, {},
                                           { return => 1 });
         }
@@ -15293,9 +15332,10 @@ class SoN::FromOptree 0.01 {
     sub _short_circuit_runs_effects ($op) {
         return 0 unless $op->can('other') && ${$op->other};
         my $stop = ${ $op->next };
+        # An element store is an effect: it runs only when the guard lets it.
         return !_arm_has_die($op->other, $stop)
-            && !_arm_has_element_store($op->other, $stop)
-            && (_arm_advances_control($op->other, $stop)
+            && (_arm_has_element_store($op->other, $stop)
+                || _arm_advances_control($op->other, $stop)
                 || _arm_has_void_call($op->other, $stop));
     }
 
@@ -15474,13 +15514,77 @@ class SoN::FromOptree 0.01 {
                 my $lhs      = $sim->pop_node;
                 my $base     = $sim->stack_depth;
                 my $stop     = ${ $op->next };
+                # A RIGHT SIDE THAT LEAVES IS A GUARD, NOT A VALUE: `E // next`,
+                # `E || last`, `E // return X`. It is taken when the left side
+                # does not decide -- E for `and`, !E for `or`, !defined E for
+                # `dor` -- and on the path that goes on the value is E. Only a
+                # real value context: in the caller's context (want 0) a
+                # `return 1 if $x` ending an arm is a value merge the renderer
+                # cannot yet draw, so it keeps refusing below.
+                my $want_value = ($op->flags & 3) >= 2;
+                my $make_guard = sub {
+                    my $cond = $name eq 'and' ? $lhs
+                        : $factory->make('Not', inputs => [ $name eq 'dor'
+                            ? $factory->make('Defined', inputs => [$lhs]) : $lhs ]);
+                    return $factory->make_cfg('If',
+                        inputs => [$sim->control, $cond]);
+                };
+                # A loop control is known before the walk, and its edge is
+                # recorded with the arm's control as the walk reaches it -- so
+                # the arm must already stand on the guard's taken Proj.
+                my $loop_ctl = $want_value && $in_loop
+                    && _guarded_loop_control($op->other);
+                my ($guard, $taken);
+                if ($loop_ctl) {
+                    $guard = $make_guard->();
+                    $taken = $factory->make_cfg('Proj',
+                        inputs => [$guard], index => 0);
+                }
                 my $rhs_sim  = $sim->snapshot;
+                $rhs_sim->set_control($taken) if $loop_ctl;
                 my @rhs_exits;
                 my ($rhs_end, $rhs_sig) =
                     _walk_branch($cv, $op->other, $rhs_sim, $factory, $opmap,
                         $visited, \@rhs_exits, 1, $stop,
                         $loop_node, $break_projs, $in_loop);
+                my $sig = $rhs_sig // '';
+                # A return is known only after the walk, which recorded one exit
+                # on the pre-guard control: re-seat it onto the taken Proj.
+                if (!$loop_ctl && $want_value && $exits && $sig eq 'exited'
+                        && @rhs_exits == 1
+                        && $rhs_exits[0]{control} == $sim->control) {
+                    $guard = $make_guard->();
+                    $taken = $rhs_exits[0]{control} = $factory->make_cfg('Proj',
+                        inputs => [$guard], index => 0);
+                    $rhs_sim->set_control($taken);
+                }
+                # The taken arm left by exactly one way, from the guard's own
+                # Proj: a return (one exit record), a `last` (a break edge,
+                # recorded here as the statement-modifier handler does) or a
+                # `next` (its latch edge, recorded by the walk).
+                if ($guard && $rhs_sim->control == $taken
+                        && ( ($sig eq 'exited' && @rhs_exits == 1)
+                             || (($sig eq 'broke' || $sig eq 'nexted')
+                                 && !@rhs_exits) )) {
+                    push @$exits, @rhs_exits;
+                    if ($sig eq 'broke') {
+                        my $frame = _loop_control_frame($rhs_end);
+                        my $sink  = $frame ? $frame->{breaks} : $break_projs;
+                        push @$sink, {
+                            proj     => $taken,
+                            bindings => $rhs_sim->scope_bindings,
+                            memory   => $rhs_sim->memory,
+                        } if defined $sink && defined $break_projs;
+                    }
+                    $sim->set_control($factory->make_cfg('Proj',
+                        inputs => [$guard], index => 1));
+                    $sim->push_node($lhs);
+                    $op = $rhs_end->next;
+                    next;
+                }
                 # An exiting or non-converging RHS is the control-flow form.
+                die "GAP: a short-circuit guard whose arm does not leave by one"
+                  . " exit inside an if/else arm not yet lowered\n" if $guard;
                 die "GAP: short-circuit with a non-value arm inside an if/else"
                   . " arm not yet lowered\n"
                     if ($rhs_sig // '') eq 'exited'

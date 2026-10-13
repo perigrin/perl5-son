@@ -234,14 +234,14 @@ main::__PROGRAM__: {start: 0, returns: [22], nodes: [
   [HashLiteral, {sigil: "%", symbol: h}, [2, 3, 4, 5], ~, Hash], # 6
   [MemStart], # 7
   [Constant, {const_type: string, value: z}, ~, ~, Str], # 8
-  [Exists, ~, [6, 8, 7], ~, Boolean], # 9
+  [Exists, {kind: hash}, [6, 8, 7], ~, Boolean], # 9
   [Coerce, {from_repr: Boolean, to_repr: Str}, [9], ~, Str], # 10
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 11
-  [Exists, ~, [6, 2, 7], ~, Boolean], # 12
+  [Exists, {kind: hash}, [6, 2, 7], ~, Boolean], # 12
   [Coerce, {from_repr: Boolean, to_repr: Str}, [12], ~, Str], # 13
   [Print, ~, [13, 11], 0, Scalar], # 14
   [Print, ~, [10, 11], 14, Scalar], # 15
-  [Delete, ~, [6, 2, 7], 15, Scalar], # 16
+  [Delete, {kind: hash}, [6, 2, 7], 15, Scalar], # 16
   [Call, {dispatch_kind: builtin, memory_input: true, name: keys, param_names: [], want: scalar}, [6, 16], ~, Int], # 17
   [Coerce, {from_repr: Int, to_repr: Str}, [17], ~, Str], # 18
   [Coerce, {from_repr: Scalar, to_repr: Str}, [16], ~, Str], # 19
@@ -289,8 +289,8 @@ main::__PROGRAM__: {start: 0, returns: [19], nodes: [
   [Coerce, {from_repr: List, to_repr: Str}, [9], ~, Str], # 10
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 11
   [MemStart], # 12
-  [Delete, ~, [8, 3, 12], 0, Scalar], # 13
-  [Delete, ~, [8, 5, 13], 13, Scalar], # 14
+  [Delete, {kind: hash}, [8, 3, 12], 0, Scalar], # 13
+  [Delete, {kind: hash}, [8, 5, 13], 13, Scalar], # 14
   [Call, {dispatch_kind: builtin, memory_input: true, name: keys, param_names: [], want: scalar}, [8, 14], ~, Int], # 15
   [Coerce, {from_repr: Int, to_repr: Str}, [15], ~, Str], # 16
   [Print, ~, [16, 11], 14, Scalar], # 17
