@@ -75,11 +75,13 @@ sub refuses ($src, $name) {
     like $d->gap // q(), qr/element read in a loop is spelled after a store/,
         "$name: names the stale element read";
 }
-refuses(q(my @a=(3,4); my $s=0; for (@a) { $_ *= 2; $s += $_ } print "@a $s\n";),
+# A FOREACH'S OWN ELEMENT IS READ AT THE TOP OF THE PASS and bound there, so
+# its store-back no longer overtakes it: these round trip.
+round_trips(q(my @a=(3,4); my $s=0; for (@a) { $_ *= 2; $s += $_ } print "@a $s\n";),
     q(the stored value carried to the next iteration));
-refuses(q(my @a=(3,4); my $s=0; for my $x (@a) { $x *= 2; $s += $x } print "@a $s\n";),
+round_trips(q(my @a=(3,4); my $s=0; for my $x (@a) { $x *= 2; $s += $x } print "@a $s\n";),
     q(the same through a named iterator));
-refuses(q(my @a=(3,4); my $s=0; for (@a) { $_ = $_ * 2; $s += $_ } print "@a $s\n";),
+round_trips(q(my @a=(3,4); my $s=0; for (@a) { $_ = $_ * 2; $s += $_ } print "@a $s\n";),
     q(the same through a plain assignment));
 refuses(q(my @a=(3,4); my $s=0; for my $i (0..1) { my $v = $a[$i]; $a[$i] = 0; $s += $v } print "@a $s\n";),
     q(a saved element read carried past its store));

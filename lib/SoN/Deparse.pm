@@ -2031,6 +2031,21 @@ class SoN::Deparse 0.01 {
         # consumes (`$a[$i] = $a[$i] + 1`) is spelled before it and is fine.
         # ponytail: refusal, not a binding; a per-iteration temporary at the
         # top of the body is the fix once the condition reads are excluded.
+        # AN INNER LOOP IS ON THE BODY'S CHAIN. %ctrl_next stops at a Loop
+        # (its Projs name it as an input, not a control_in), so a store in a
+        # nested loop's body was never "later": `for my $x (@a) { for my $y
+        # (@a) { $y .= "z" } $s .= $x }` spelled the outer element from before
+        # the inner writes. A store in an inner loop is also later than all of
+        # that loop's body, since its next pass follows it.
+        my %loop_projs;
+        for my $p ( $self->_nodes_in_order ) {
+            next unless ( $p->{op} // '' ) eq 'Proj';
+            my $h = $nodes->{ ( $p->{inputs} // [] )->[0] // -1 } // {};
+            push $loop_projs{ $h->{id} }->@*, $p if ( $h->{op} // '' ) eq 'Loop';
+        }
+        my $succ = sub ($id) {
+            ( ( $ctrl_next{$id} // [] )->@*, ( $loop_projs{$id} // [] )->@* );
+        };
         for my $loop ( grep { ( $_->{op} // '' ) eq 'Loop' } $self->_nodes_in_order ) {
             my ($body) = grep {
                 ( $_->{op} // '' ) eq 'Proj'
@@ -2038,13 +2053,18 @@ class SoN::Deparse 0.01 {
                     && ( ( $_->{inputs} // [] )->[0] // -1 ) == $loop->{id}
             } $self->_nodes_in_order;
             next unless $body;
-            my ( @queue, %seen, @stores ) = ( $body->{id} );
+            # %in_loops: the inner Loops each body node sits under.
+            my ( @queue, %seen, @stores, %in_loops ) = ( [ $body->{id}, [] ] );
             while ( @queue ) {
-                my $id = shift @queue;
+                my ( $id, $encl ) = ( shift @queue )->@*;
                 next if $seen{$id}++;
-                for my $c ( ( $ctrl_next{$id} // [] )->@* ) {
+                $in_loops{$id} = $encl;
+                my $here = $nodes->{$id} // {};
+                for my $c ( $succ->($id) ) {
                     push @stores, $c if ( $c->{op} // '' ) =~ /\A(?:Assign|Call)\z/;
-                    push @queue, $c->{id};
+                    my $into = ( $here->{op} // '' ) eq 'Loop'
+                        && ( ( $c->{fields} // {} )->{index} // -1 ) == 0;
+                    push @queue, [ $c->{id}, $into ? [ @$encl, $id ] : $encl ];
                 }
             }
             # A CALL WRITES AN ELEMENT IT IS PASSED, through $_[0]. Its
@@ -2071,13 +2091,24 @@ class SoN::Deparse 0.01 {
                 return @t;
             };
             for my $n ( $self->_nodes_in_order ) {
-                next unless ( $n->{op} // '' ) eq 'Subscript';
+                # A READ THROUGH A FOREACH ALIAS -- `$$ref` of the element
+                # reference a pass takes, read after a store -- is spelled where
+                # it is used too, and a reference reaches whatever any store or
+                # call writes: `$a[0] = 7; $s .= $x; $a[0] = 8` spelled `$x` at
+                # the back edge and gave 8 for perl's 7.
+                my $deref = ( $n->{op} // q{} ) eq q{PostfixDeref}
+                    && ( ( $n->{fields} // {} )->{sigil} // q{} ) eq q{$}
+                    && do {
+                        my $r = $nodes->{ ( $n->{inputs} // [] )->[0] // -1 } // {};
+                        ( $r->{op} // q{} ) eq q{Ref} && defined $r->{control_in};
+                    };
+                next unless ( $n->{op} // '' ) eq 'Subscript' || $deref;
                 # A PINNED READ is bound where it stands and spelled by its
                 # binding, never re-read: `next if $s{$x}++` reads the old
                 # value into `$eff23` before the store, and round-trips.
                 next if defined $n->{control_in} || exists $bound{ $n->{id} };
                 my @in = ( $n->{inputs} // [] )->@*;
-                next unless @in > ( $MEM_MIN_INPUTS{Subscript} // 99 );
+                next unless @in > ( $MEM_MIN_INPUTS{ $n->{op} } // 99 );
                 my $v = $nodes->{ $in[-1] } or next;
                 # A VERSION MADE IN THIS ITERATION -- a store on the body's
                 # chain, or the Phi of a join in it -- is read where it is
@@ -2114,7 +2145,7 @@ class SoN::Deparse 0.01 {
                     while ( @fq ) {
                         my $id = shift @fq;
                         next if $fseen{$id}++;
-                        push @fq, map { $_->{id} } ( $ctrl_next{$id} // [] )->@*;
+                        push @fq, map { $_->{id} } $succ->($id);
                     }
                     @later = grep { $fseen{ $_->{id} } && $_->{id} != $from } @stores;
                 }
@@ -2154,6 +2185,11 @@ class SoN::Deparse 0.01 {
                               && defined $str_key->($in[1]) && defined $str_key->($tk)
                               && $str_key->($tk) ne $str_key->($in[1]) )
                 } $targets->($_, $n->{id}) } @later;
+                @same = grep {
+                    ( $_->{op} // '' ) eq 'Call'
+                        || ( ( $nodes->{ ( $_->{inputs} // [] )->[0] // -1 } // {} )->{op} // '' )
+                           =~ /\A(?:Subscript|PostfixDeref|EntryDef)\z/
+                } @later if $deref;
                 next unless @same;
 
                 # Where the value lands: a loop Phi (the back edge, evaluated
@@ -2173,11 +2209,12 @@ class SoN::Deparse 0.01 {
                     }
                 }
                 for my $s ( @same ) {
-                    my ( @aq, %after ) = ( map { $_->{id} } ( $ctrl_next{ $s->{id} } // [] )->@* );
+                    my ( @aq, %after ) = ( map { $_->{id} } $succ->( $s->{id} ),
+                        map { $succ->($_) } ( $in_loops{ $s->{id} } // [] )->@* );
                     while ( @aq ) {
                         my $id = shift @aq;
                         next if $after{$id}++;
-                        push @aq, map { $_->{id} } ( $ctrl_next{$id} // [] )->@*;
+                        push @aq, map { $_->{id} } $succ->($id);
                     }
                     die "GAP: an element read in a loop is spelled after a store"
                       . " to its aggregate in the same iteration\n"
@@ -4895,6 +4932,12 @@ class SoN::Deparse 0.01 {
                 . join '', map { $self->_emit_statement($_, $next_of) }
                     ( $after_effect{ $n->{id} } // [] )->@*;
         }
+
+        # A PINNED ELEMENT READ OR REFERENCE NOTHING READS has no effect to
+        # keep: a foreach pins both at the top of the pass, `for (@a) { $_ = 0
+        # }` writes the alias without reading it, and a body with no store
+        # never reads through the reference.
+        return '' if $op eq 'Subscript' || $op eq 'Ref';
 
         # A SORT PINNED FOR ITS COMPARATOR whose list nothing reads still
         # sorts: the producer pins a list-context sort, and says so with

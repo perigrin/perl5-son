@@ -76,15 +76,28 @@ subtest 'a while says its condition is re-read' => sub {
         'a while re-reads every pass' );
 };
 
-subtest 'a foreach over an array fixes its bound too' => sub {
+# A NAMED ARRAY IS NOT FIXED AT ENTRY: perl compares the index with the array
+# as it stands each pass, so `foreach my $x (@a) { push @a, 4 if @a < 5 }`
+# over (1,2,3) runs five times. An anonymous list is fixed.
+subtest 'a foreach over an array re-reads its length' => sub {
     my ( $wire, $err ) = graph_of(
         'my @a = (1,2,3); foreach my $x (@a) { print "$x\n" }' );
     ok $wire, 'it translates' or diag($err), return;
 
     my ($loop) = loops($wire)->@*;
     ok $loop, 'a Loop is in the graph' or return;
+    is( ( $loop->{fields}{bound} // '' ), 'each',
+        'the array form re-reads its length every pass' );
+};
+
+subtest 'a foreach over a list fixes its bound' => sub {
+    my ( $wire, $err ) = graph_of( 'my ($p, $q) = (1, 2); foreach my $x ($p, $q, 3) { print "$x\n" }' );
+    ok $wire, 'it translates' or diag($err), return;
+
+    my ($loop) = loops($wire)->@*;
+    ok $loop, 'a Loop is in the graph' or return;
     is( ( $loop->{fields}{bound} // '' ), 'entry',
-        'the array form fixes its length at entry' );
+        'the list form fixes its length at entry' );
 };
 
 done_testing;
