@@ -14434,8 +14434,35 @@ class SoN::FromOptree 0.01 {
         my $eval_entry = $sim->control;
 
         my $body_sim = $sim->snapshot;
-        _walk_branch($cv, $op->next, $body_sim, $factory, $opmap,
+        my ($end) = _walk_branch($cv, $op->next, $body_sim, $factory, $opmap,
             $visited, undef, 1, _op_addr($op->other));
+
+        # A BODY WALK THAT STOPS SHORT OF THE leavetry DROPPED THE REST. The
+        # arm walk returns at an op it has no case for, and resuming after the
+        # leavetry anyway made the remainder vanish -- measured, a `while` in
+        # an eval body printed nothing where perl printed 1 2 3.
+        die "GAP: a block eval body stopped at `" . $end->name
+          . "` before its leavetry is not yet lowered\n"
+            if defined $end && ref $end && $$end
+            && $$end != _op_addr($op->other);
+
+        # A BODY THAT REBINDS AN OUTER VARIABLE IS REFUSED. The body walks a
+        # snapshot and only its memory comes back, so the rebinding was simply
+        # dropped -- measured, `my $n = 0; eval { $n = 5; die }; $n` gave 0 for
+        # perl's 5, and `eval { $x = g(); 1 }` lost the store with no die at
+        # all. Nor is a Phi of the two bindings the answer: after a die the
+        # variable holds whatever the body had stored BY THEN, which may be the
+        # body's last value, the pre-eval one, or one in between.
+        #
+        # A PAD SLOT ONLY. A package variable is stored through memory, which
+        # does come back, and round trips: `our $g = 0; eval { $g = 1; 1 }`.
+        my $outer = $sim->scope_bindings;
+        my $after = $body_sim->scope_bindings;
+        die "GAP: a block eval whose body rebinds a variable from outside it is"
+          . " not yet lowered -- after a die the variable holds what the body"
+          . " had stored by then, which the trap's join does not carry\n"
+            if grep { exists $after->{$_} && ($after->{$_} // 0) != ($outer->{$_} // 0) }
+               grep { /\A\d+\z/ } keys $outer->%*;
 
         my $undef = $factory->make('Constant',
             value      => undef,
