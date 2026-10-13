@@ -10859,7 +10859,57 @@ class SoN::FromOptree 0.01 {
     }
 
 
-    sub _scout_mutated_targs ($cv, $start_op, $sim, $opmap, $extra_targs = [], $cond_consumed = 0) {
+    # _scout_mutated_targs(...) -> ($mutated, $unstamped)
+    #
+    # $mutated is the sorted list of slots the body rebinds; $unstamped is the
+    # set of those whose header Phi must be built WITHOUT its init's stamp --
+    # see _scout_loop_phi_stamps. $extra_stamps gives the stamp each extra slot
+    # (an iterator) will carry in the real walk.
+    sub _scout_mutated_targs ($cv, $start_op, $sim, $opmap, $extra_targs = [], $cond_consumed = 0, $extra_stamps = {}) {
+        my %unstamped;
+        while (1) {
+            my ($mutated, $placeholder, $scout_scope) = _scout_once($cv,
+                $start_op, $sim, $opmap, $extra_targs, $cond_consumed,
+                $extra_stamps, \%unstamped);
+            my @lost = grep {
+                !$unstamped{$_}
+                && _backedge_loses_stamp($scout_scope->{$_}, $placeholder->{$_})
+            } $mutated->@*;
+            return ($mutated, \%unstamped) unless @lost;
+            $unstamped{$_} = 1 for @lost;
+        }
+    }
+
+    # THE HEADER PHI'S STAMP IS DECIDED BEFORE THE BODY WALK. _make_loop_phi
+    # copies a narrowed init stamp onto the Phi, and the body is walked against
+    # it; a back-edge that cannot confirm that stamp would leave every consumer
+    # that read it too narrow, and nothing may unstamp the Phi afterwards (a
+    # stamp is written once, from Unknown). So the scout walks the body with
+    # each placeholder carrying the stamp its Phi WOULD carry, and a slot whose
+    # back-edge comes out unstamped -- and is neither an arithmetic recurrence
+    # over the Phi nor a package variable with a sigil floor, the two shapes
+    # _patch_loop_phi keeps -- gets an unstamped Phi instead. Measured on
+    # chalk: `my $v;` before a loop, conditionally overwritten with an element
+    # or a call result.
+    #
+    # A FIXPOINT, AND A MONOTONE ONE. Unstamping one placeholder can unstamp a
+    # back-edge that reads it, so the scout walks again with the larger set.
+    # The set only grows, so this ends within |mutated|+1 walks; the common
+    # case is one.
+    #
+    # A DISAGREEMENT IS STILL A REFUSAL. The scout runs without a loop node; if
+    # the real walk produces an unstamped back-edge the scout did not predict,
+    # _patch_loop_phi refuses as before rather than keep the stale stamp.
+    sub _backedge_loses_stamp ($post, $ph) {
+        return false unless _is_narrowed($ph->stamp);
+        return false unless blessed($post) && $post->can('stamp');
+        return false if _is_narrowed($post->stamp);
+        return false if _backedge_is_phi_recurrence($post, $ph);
+        return false if _deferred_backedge_floor($post);
+        return true;
+    }
+
+    sub _scout_once ($cv, $start_op, $sim, $opmap, $extra_targs, $cond_consumed, $extra_stamps, $unstamped) {
         my $scout_factory = SoN::IR::NodeFactory->new();
         my $scout_sim     = SoN::FromOptree::StackSim->new(
             control => $scout_factory->make_cfg('Start'),
@@ -10867,9 +10917,18 @@ class SoN::FromOptree 0.01 {
             # a defined memory input during scouting (see _body_writes_targ).
             memory  => $scout_factory->make('MemStart'));
         my %placeholder;
-        for my $targ (keys $sim->scope_bindings->%*, $extra_targs->@*) {
+        my $scope = $sim->scope_bindings;
+        my $unknown = SoN::IR::Stamp->new(type => 'Unknown');
+        for my $targ (keys $scope->%*, $extra_targs->@*) {
+            # The stamp the real walk will see in this slot: an extra slot's
+            # from the caller, a carried slot's as _make_loop_phi would copy it.
+            my $b = $scope->{$targ};
+            my $st = exists $extra_stamps->{$targ} ? $extra_stamps->{$targ}
+                   : !$unstamped->{$targ} && blessed($b) && $b->can('stamp')
+                     && _is_narrowed($b->stamp) ? $b->stamp
+                   : $unknown;
             my $ph = $scout_factory->make_unique('Constant',
-                value => 'scout', const_type => 'string');
+                value => 'scout', const_type => 'string', stamp => $st);
             $placeholder{$targ} = $ph;
             $scout_sim->define($targ, $ph);
         }
@@ -10901,12 +10960,12 @@ class SoN::FromOptree 0.01 {
         } ? undef : ($@ || 'unknown');
         my $scout_scope = $scout_sim->scope_bindings;
         my %extra = map { $_ => 1 } $extra_targs->@*;
-        return [ sort _scope_key_order
+        return ([ sort _scope_key_order
             grep {
                 !$extra{$_}
                 && defined $scout_scope->{$_}
                 && $scout_scope->{$_} != $placeholder{$_}
-            } keys %placeholder ];
+            } keys %placeholder ], \%placeholder, $scout_scope);
     }
 
     # Create a loop header Phi for a slot (make_unique: two Phis with the
@@ -10914,11 +10973,13 @@ class SoN::FromOptree 0.01 {
     # Phi carries its init's stamp so the body's join-stamped nodes, which
     # read the Phi, can derive theirs; _patch_loop_phi verifies the
     # back-edge does not widen it.
-    sub _make_loop_phi ($factory, $loop_node, $init) {
+    # $unstamped: the scout found this slot's back-edge cannot confirm the
+    # init's stamp (_scout_mutated_targs), so the Phi starts unstamped.
+    sub _make_loop_phi ($factory, $loop_node, $init, $unstamped = 0) {
         return $factory->make_unique('Phi',
             inputs => [$init],
             region => $loop_node,
-            (_is_narrowed($init->stamp) ? (stamp => $init->stamp) : ()));
+            (!$unstamped && _is_narrowed($init->stamp) ? (stamp => $init->stamp) : ()));
     }
 
     # _backedge_is_phi_recurrence($post, $phi) -> bool
@@ -11400,14 +11461,15 @@ class SoN::FromOptree 0.01 {
 
         # Phase 1: scout the condition + body for mutated pad slots.
         my $pre_scope = $sim->scope_bindings;
-        my $mutated = _scout_mutated_targs($cv, $cond_start, $sim, $opmap);
+        my ($mutated, $unstamped) = _scout_mutated_targs($cv, $cond_start, $sim, $opmap);
 
         # Phase 2: the loop header and its Phis.
         my $loop_node = $factory->make_cfg('Loop', inputs => [$sim->control]);
         $sim->set_control($loop_node);
         my %phis;
         for my $targ ($mutated->@*) {
-            my $phi = _make_loop_phi($factory, $loop_node, $pre_scope->{$targ});
+            my $phi = _make_loop_phi($factory, $loop_node, $pre_scope->{$targ},
+                $unstamped->{$targ});
             $phis{$targ} = $phi;
             $sim->define($targ, $phi);
         }
@@ -11587,7 +11649,9 @@ class SoN::FromOptree 0.01 {
         # it rides as an extra slot and is excluded from the mutated set --
         # it gets the induction Phi, not a carried-value Phi).
         my $pre_scope = $sim->scope_bindings;
-        my $mutated = _scout_mutated_targs($cv, $body_start, $sim, $opmap, [$i_targ], 1);
+        my ($mutated, $unstamped) = _scout_mutated_targs($cv, $body_start, $sim, $opmap, [$i_targ], 1,
+            { $i_targ => _is_narrowed($low->stamp) ? $low->stamp
+                : SoN::IR::Stamp->new(type => q{Int}) });
 
         # Phase 2: header -- induction Phi plus one Phi per mutated slot.
         # A FOREACH FIXES ITS BOUND AT ENTRY. perl evaluates the
@@ -11616,7 +11680,8 @@ class SoN::FromOptree 0.01 {
         $sim->define($i_targ, $i_phi);
         my %phis;
         for my $targ ($mutated->@*) {
-            my $phi = _make_loop_phi($factory, $loop_node, $pre_scope->{$targ});
+            my $phi = _make_loop_phi($factory, $loop_node, $pre_scope->{$targ},
+                $unstamped->{$targ});
             $phis{$targ} = $phi;
             $sim->define($targ, $phi);
         }
@@ -11877,7 +11942,8 @@ class SoN::FromOptree 0.01 {
         # Phase 1: scout the body. $x rides on enteriter (its own slot) and gets
         # the element binding, not a carried-value Phi, so exclude it.
         my $pre_scope = $sim->scope_bindings;
-        my $mutated = _scout_mutated_targs($cv, $body_start, $sim, $opmap, [$x_targ], 1);
+        my ($mutated, $unstamped) = _scout_mutated_targs($cv, $body_start, $sim, $opmap, [$x_targ], 1,
+            { $x_targ => $elem_stamp // SoN::IR::Stamp->new(type => q{Unknown}) });
 
         # Phase 2: header -- induction Phi (i: 0..len-1) plus one Phi per mutated
         # slot. The induction Phi is NOT bound to $x; $x is the element read below.
@@ -11906,7 +11972,8 @@ class SoN::FromOptree 0.01 {
 
         my %phis;
         for my $targ ($mutated->@*) {
-            my $phi = _make_loop_phi($factory, $loop_node, $pre_scope->{$targ});
+            my $phi = _make_loop_phi($factory, $loop_node, $pre_scope->{$targ},
+                $unstamped->{$targ});
             $phis{$targ} = $phi;
             $sim->define($targ, $phi);
         }

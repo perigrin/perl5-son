@@ -73,10 +73,12 @@ sub f { my $n = 0; for my $x (@_) { my $r = $x || next; $n .= $r } return $n }
 print f(1, 0, 2), "\n";
 SRC
 
-# The carried sum adds an argument element, which has no stamp to join.
-refuses('sub f { my $n = 0; for my $x (@_) { my $r = $x || next; $n += $r } return $n } print f(1, 0, 2), "\n";',
-    qr/GAP: loop-carried value loses its stamp \(unstamped back-edge\)/,
-    'a summed || next refuses for its unstamped back-edge');
+# The carried sum adds an argument element, which has no stamp to join, so
+# the scout leaves the sum's Phi unstamped.
+round_trips(<<'SRC', 'a foreach: a summed my $r = $x || next');
+sub f { my $n = 0; for my $x (@_) { my $r = $x || next; $n += $r } return $n }
+print f(1, 0, 2), "\n";
+SRC
 
 round_trips(<<'SRC', 'a foreach: my $r = $x && last');
 sub f { my $n = 0; for my $x (@_) { my $r = $x && last; $n++ } return $n }

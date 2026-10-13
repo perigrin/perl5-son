@@ -55,16 +55,21 @@ subtest 'an unstamped loop Phi is not a refusal' => sub {
     }
 };
 
-# A STAMPED PHI OVER AN UNSTAMPED BACK-EDGE IS A DIFFERENT CASE and must stay
-# refused: there the init DID assert a type, the body was walked against it,
-# and the back-edge cannot confirm it. `sub f { my ($n)=@_; my $t=0; $t += $n }`
-# is that shape -- init=Constant/Int, phi=Int, post=Add/Unknown.
-subtest 'a stamped Phi over an unstamped back-edge still refuses' => sub {
-    my (undef, $err) = translate(
+# A NARROWED INIT OVER AN UNSTAMPED BACK-EDGE never gets its stamp at all.
+# `sub f { my ($n)=@_; my $t=0; $t += $n }` is init=Constant/Int,
+# post=Add/Unknown: the scout walks the body first, sees the back-edge cannot
+# confirm Int, and the Phi is built unstamped -- so the body is walked against
+# Unknown and there is no stale claim to refuse.
+subtest 'a narrowed init over an unstamped back-edge builds an unstamped Phi' => sub {
+    my ($m, $err) = translate(
         'sub f { my ($n)=@_; my $t=0; for my $i (1,2) { $t += $n } return $t }
          print f(3);');
-    like $err, qr/GAP:/, 'refused';
-    like $err, qr/stamp/, '... naming the stamp';
+    unlike $err, qr/GAP:/, 'not refused' or diag $err;
+    my %by = map { $_->{id} => $_ } ($m->{'main::f'}{nodes} // [])->@*;
+    my ($ret) = grep { $_->{op} eq 'Return' } values %by;
+    my $phi = $by{ $ret->{inputs}[0] };
+    is $phi->{op}, 'Phi', 'the sub returns the carried Phi';
+    is $phi->{stamp} // 'Unknown', 'Unknown', '... which claims nothing';
 };
 
 # NOTHING REACHES THE WIRE CLAIMING MORE THAN IT KNOWS. An unstamped Phi stays
