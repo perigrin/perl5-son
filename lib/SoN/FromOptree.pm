@@ -3461,8 +3461,9 @@ class SoN::FromOptree 0.01 {
         }
         # NOTHING ON THE STACK: the undef is the producer's, not the
         # source's. `sub { }` returns no element to a list; `sub { undef }`
-        # returns one, and the two otherwise build the same graph.
-        my $valueless = !defined $value;
+        # returns one, and the two otherwise build the same graph. A
+        # program returns nothing either way, so it is not marked.
+        my $valueless = !defined $value && !$is_program;
         $value //= $factory->make('Constant',
             value      => undef,
             const_type => 'undef',
