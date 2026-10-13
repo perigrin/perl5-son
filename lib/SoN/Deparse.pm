@@ -2333,6 +2333,112 @@ class SoN::Deparse 0.01 {
             push $after_effect{ $version->{id} }->@*, $n;
         }
 
+        # A LIST READ THROUGH A REFERENCE GOES STALE THE SAME WAY. `my @s =
+        # sort @$x; push @$x, 0; print "@s"` sorted the pushed 0 in: the
+        # PostfixDeref carries the version it read at, and the emission
+        # spelled `$x->@*` at the print. Bound to a list temporary where it
+        # was read -- at its version, after the join a merged version names,
+        # or on entry when the reference is a parameter.
+        #
+        # ONLY READERS THAT COPY: sort, reverse, join, a count, a list, a
+        # stored value. Anything else -- a loop or map aliasing the elements,
+        # a callee aliasing @_ -- keeps the live spelling. A mutator's
+        # container is the aggregate itself and is spelled live (_call_expr).
+        my %copies = map { $_ => 1 } qw(sort reverse join);
+        for my $n ( sort { $a->{id} <=> $b->{id} } $self->_nodes_in_order ) {
+            next unless ( $n->{op} // '' ) eq 'PostfixDeref';
+            next unless ( ( $n->{fields} // {} )->{sigil} // '' ) eq '@';
+            next if exists $bound{ $n->{id} };
+            next if $under_loop{ $n->{id} };
+            my @in = ( $n->{inputs} // [] )->@*;
+            next unless @in == 2;
+            my ( $readers, $other ) = ( 0, 0 );
+            for my $c ( ( $consumers{ $n->{id} } // [] )->@* ) {
+                my $op = $c->{op} // '';
+                my $cf = $c->{fields} // {};
+                my @at = grep { $c->{inputs}[$_] == $n->{id} } 0 .. $#{ $c->{inputs} };
+                if ( $op eq 'Call' && $cf->{memory_input}
+                     && ( $cf->{name} // '' ) =~ /\A(?:push|unshift|splice|pop|shift)\z/
+                     && "@at" eq '0' ) {
+                    next;
+                }
+                if ( ( $op eq 'Call' && ( $cf->{dispatch_kind} // '' ) eq 'builtin'
+                       && $copies{ $cf->{name} // '' } )
+                     || $op eq 'Count' || $op eq 'ArrayLiteral'
+                     || ( $op eq 'Assign' && !grep { $_ == 0 } @at ) ) {
+                    $readers++;
+                    next;
+                }
+                $other++;
+            }
+            next if $other || !$readers;
+            my $version = $nodes->{ $in[-1] } or next;
+            my $join;
+            if ( ( $version->{op} // '' ) eq 'Phi' ) {
+                my $r = $nodes->{ ( $version->{fields} // {} )->{region} // -1 } // {};
+                next unless ( $r->{op} // '' ) eq 'Region';
+                $join = $r;
+            }
+            my $at_entry = !$join && !defined $version->{control_in};
+            # AT THE ENTRY VERSION THE REFERENCE IS THE ANCHOR: a parameter
+            # exists on entry; one made on the chain (`[2,1]`) or merged at a
+            # join (a branched default) is read right after it exists.
+            if ( $at_entry ) {
+                my $ref = $nodes->{ $in[0] } // {};
+                my $rop = $ref->{op} // '';
+                if ( defined $ref->{control_in} ) {
+                    ( $version, $at_entry ) = ( $ref, 0 );
+                }
+                elsif ( $rop eq 'Phi' ) {
+                    my $r = $nodes->{ ( $ref->{fields} // {} )->{region} // -1 } // {};
+                    next unless ( $r->{op} // '' ) eq 'Region';
+                    ( $join, $at_entry ) = ( $r, 0 );
+                }
+                elsif ( $rop ne 'Parameter' ) {
+                    next;
+                }
+            }
+            # PAST ENTRY, a reference made or merged elsewhere may not exist
+            # yet at the version; left live.
+            else {
+                my $ref = $nodes->{ $in[0] } // {};
+                next if ( ( $ref->{op} // '' ) eq 'Phi'
+                          && !( $join && ( ( $ref->{fields} // {} )->{region} // -1 )
+                                         == $join->{id} ) )
+                    || ( defined $ref->{control_in} && $ref->{id} != $version->{id} );
+            }
+            next if !$at_entry
+                && $used_in_arm->( ( $join // $version )->{id}, $n->{id} );
+
+            my ( @queue, %seen, $shadowed )
+                = ( $at_entry ? $start->{id} : ( $join // $version )->{id} );
+            while ( @queue && !$shadowed ) {
+                my $id = shift @queue;
+                next if $seen{$id}++;
+                for my $c ( ( $ctrl_next{$id} // [] )->@* ) {
+                    $shadowed = 1 if ( $c->{op} // '' )
+                        =~ /\A(?:Assign|EntryWrite|CellWrite|Delete|Call)\z/;
+                    push @queue, $c->{id};
+                }
+            }
+            next unless $shadowed;
+
+            $bound{ $n->{id} } = sprintf( '@stale%d', $n->{id} );
+            if ( $at_entry ) {
+                my $var = $bound{ $n->{id} };
+                $save_prologue .= sprintf( "my %s = %s;\n",
+                    $var, $self->_expr_uncached( $n->{id} ) );
+                next;
+            }
+            $hoisted{ $bound{ $n->{id} } } //= $bound{ $n->{id} };
+            if ( $join ) {
+                push $after_region{ $join->{id} }->@*, $n;
+                push $stale_at_join{ $join->{id} }->@*, $n;
+                next;
+            }
+            push $after_effect{ $version->{id} }->@*, $n;
+        }
+
         # DECLARED AT THE TOP, ASSIGNED AT THE VERSION. The assignment has to
         # land where the value is still correct, and that position can be inside
         # a nested block -- an `eval { }` body, a branch arm -- while the READ is
@@ -6720,6 +6826,11 @@ class SoN::Deparse 0.01 {
         my @in = (($n->{inputs} // [])->@*);
         pop @in if $f->{memory_input};
         my @args = map { $self->_expr($_) } @in;
+        # A MUTATOR'S CONTAINER IS THE AGGREGATE, never a copy bound for a
+        # read of it (the list-deref stale pass).
+        $args[0] = $self->_expr_uncached($in[0])
+            if $f->{memory_input} && @in
+            && ($name // '') =~ /\A(?:push|unshift|splice|pop|shift)\z/;
         # A FOUR-ARGUMENT substr REWRITES ITS FIRST ARGUMENT IN PLACE, so that
         # argument is a location -- see _location.
         $args[0] = $self->_location($in[0])
