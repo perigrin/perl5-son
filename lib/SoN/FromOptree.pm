@@ -11840,6 +11840,32 @@ class SoN::FromOptree 0.01 {
         return;
     }
 
+    # _takes_reference_to($root, $targ) -> bool: does any `\$x` or `\(..., $x)`
+    # under $root name pad slot $targ? Only a reference: _address_taken also
+    # counts a /g match subject and a pos() operand, which alias nothing.
+    sub _takes_reference_to ($root, $targ) {
+        my @q = ($root);
+        while (my $o = shift @q) {
+            next unless ref($o) && $$o;
+            if ($o->name eq q{srefgen} && ${$o->first}) {
+                my $k = $o->first;
+                $k = $k->first while $$k && $k->name eq q{null}
+                    && $k->can(q{first}) && ${$k->first};
+                return 1 if $$k && $k->name eq q{padsv} && $k->targ == $targ;
+            }
+            if ($o->name eq q{refgen} && ${$o->first}) {
+                for (my $k = $o->first->first; ref($k) && $$k; $k = $k->sibling) {
+                    return 1 if $k->name eq q{padsv} && $k->targ == $targ;
+                }
+            }
+            next unless $o->flags & 4;    # OPf_KIDS
+            for (my $k = $o->first; ref($k) && $$k; $k = $k->sibling) {
+                push @q, $k;
+            }
+        }
+        return 0;
+    }
+
     # Translate an array foreach (`for my $x (@a)` -- enteriter with OPf_STACKED
     # over a single aggregate) to a counted loop over the array's elements. The
     # skeleton mirrors _translate_foreach_range (Loop/Phi/Proj/Region, the same
@@ -12044,7 +12070,7 @@ class SoN::FromOptree 0.01 {
           . " the iterator is a copy written back each pass, and"
           . " the reference can outlive the pass\n"
             if $demoted_iter
-            && _address_taken($cv, $enteriter->parent, 1)->{$x_targ};
+            && _takes_reference_to($enteriter->parent, $x_targ);
         my $iter_slot = sub {
             $factory->make('PadAccess', targ => $x_targ,
                 do { my ($sg, $sy) = _padparts($cv, $x_targ);
