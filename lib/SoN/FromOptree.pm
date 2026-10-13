@@ -8408,27 +8408,6 @@ class SoN::FromOptree 0.01 {
             # The depth the loop leaves behind -- see _settle_loop_value.
             $ctx->{loop_floor}{ ${ $op->lastop } } = $sim->stack_depth
                 if $op->can('lastop') && ${ $op->lastop };
-            # A DEREFERENCED ARRAY -- `@$r`, `$r->@*`, `$obj->m->@*` -- is the
-            # loop's list, but rv2av in this context leaves the REFERENCE on
-            # the stack, not the array: the walker saw one Call or Subscript
-            # and refused (244 graphs in chalk's lib/). Deref it here, where
-            # the op tree says so: one list item, an rv2av not over a gv (a
-            # package array is its own case). Its elements are the referent's,
-            # so writes through the loop variable reach it.
-            if ($bounds->@* == 1 && !_is_aggregate_node($bounds->[0])
-                    && (my $item = _foreach_sole_item($op))) {
-                my $kid = $item->first;
-                $kid = $kid->first
-                    while $$kid && $kid->name eq 'null' && ($kid->flags & 4);
-                if ($item->name eq 'rv2av' && $$kid && $kid->name ne 'gv'
-                        && defined $sim->memory) {
-                    $bounds->[0] = $factory->make('PostfixDeref',
-                        inputs => [$bounds->[0], $sim->memory],
-                        sigil  => '@',
-                        stamp  => SoN::IR::Stamp->new(type => 'Array'));
-                }
-            }
-
             # THE ITERATOR IS A PAD SLOT OR A PACKAGE SCALAR, and the scope map
             # holds both -- it is a plain hash, keyed by pad targ for a lexical
             # and by `stash::$name` for a package variable, which is how every
@@ -8508,6 +8487,32 @@ class SoN::FromOptree 0.01 {
                 $iter_key = _stash_name_key('$', $stash, $name_node->value);
                 ITER_KEYED: ;
             }
+            # A DEREFERENCED ARRAY -- `@$r`, `$r->@*`, `$obj->m->@*` -- is the
+            # loop's list, but rv2av in this context leaves the REFERENCE on
+            # the stack, not the array: the walker saw one Call or Subscript
+            # and refused (244 graphs in chalk's lib/). Deref it here, where
+            # the op tree says so: one list item, an rv2av not over a gv (a
+            # package array is its own case). Its elements are the referent's,
+            # so writes through the loop variable reach it.
+            #
+            # AFTER THE ITERATOR SPLIT, because the count of one is the test:
+            # an implicit `$_` (`$s{$_} = 1 for $k->@*`) or a package iterator
+            # (`for $p (@$r)`) leaves its glob on the stack as a second
+            # element until the split above removes it.
+            if ($bounds->@* == 1 && !_is_aggregate_node($bounds->[0])
+                    && (my $item = _foreach_sole_item($op))) {
+                my $kid = $item->first;
+                $kid = $kid->first
+                    while $$kid && $kid->name eq 'null' && ($kid->flags & 4);
+                if ($item->name eq 'rv2av' && $$kid && $kid->name ne 'gv'
+                        && defined $sim->memory) {
+                    $bounds->[0] = $factory->make('PostfixDeref',
+                        inputs => [$bounds->[0], $sim->memory],
+                        sigil  => '@',
+                        stamp  => SoN::IR::Stamp->new(type => 'Array'));
+                }
+            }
+
             # A LIST LITERAL: every popped value is an element. Wrap and take
             # the array path. Guarded on there being something to iterate --
             # `for () {}` has no elements and no loop to build.
@@ -8585,6 +8590,32 @@ class SoN::FromOptree 0.01 {
             elsif ($bounds->@* == 1 && _is_aggregate_node($bounds->[0])) {
                 _translate_foreach_array($cv, $op, $sim, $factory, $opmap,
                     $ctx->{visited}, $bounds->[0], $iter_key);
+            }
+            elsif ($bounds->@* == 1
+                    && $bounds->[0]->isa('SoN::IR::Node::PadAccess')
+                    && $bounds->[0]->sigil eq '@') {
+                # A NAMED LEXICAL ARRAY WHOSE BINDING CARRIES NO STAMP --
+                # `my @a; push @a, ...` or a file-scoped `@F` captured by a
+                # sub. The padav says it is an array; only the stamp is
+                # missing, because nothing assigned it a typed value. The
+                # array path needs no more than that: Count(arr) bounds it
+                # and Subscript(arr, i) reads each element.
+                #
+                # KEYED ON THE SIGIL, NOT BY WIDENING _is_aggregate_node,
+                # whose many callers choose Count-vs-Coerce on it.
+                _translate_foreach_array($cv, $op, $sim, $factory, $opmap,
+                    $ctx->{visited}, $bounds->[0], $iter_key);
+            }
+            elsif ($bounds->@* == 1 && $bounds->[0]->operation eq 'Phi'
+                    && grep { defined $_ && $_->isa('SoN::IR::Node::PadAccess')
+                                && $_->sigil eq '@' } $bounds->[0]->inputs->@*) {
+                # A MERGE OF UNSTAMPED ARRAY BINDINGS -- `@l = @n` in one arm.
+                # The array path over this Phi renders wrong rather than
+                # refusing: measured `02` for perl's `aabbab`, and "Can't use
+                # an array as a reference" at runtime. Refuse until the merge
+                # carries an Array stamp.
+                die "GAP: a foreach over a merged binding of unstamped arrays"
+                  . " not yet lowered\n";
             }
             elsif ($bounds->@* == 1
                     && $bounds->[0]->operation eq 'FieldAccess') {
