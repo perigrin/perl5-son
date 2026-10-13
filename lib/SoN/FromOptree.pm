@@ -5651,8 +5651,12 @@ class SoN::FromOptree 0.01 {
                 for (my $o = $op->next; $$o && !$seen{$$o}++; $o = $o->next) {
                     my $m = $o->name;
                     next if $m =~ /^(padsv|padav|padhv|const|gvsv|null)$/;
+                    # A "%s"-only sprintf compiles to a multiconcat that
+                    # keeps sprintf's `sM` operands; OPpMULTICONCAT_FAKE says so.
                     $mod_but_read = _is_comparison_optree_op($m)
-                                 || $READS_ITS_OPERANDS{$m};
+                                 || $READS_ITS_OPERANDS{$m}
+                                 || ($m eq 'multiconcat'
+                                     && ($o->private & B::OPpMULTICONCAT_FAKE()));
                     last;
                 }
             }
