@@ -1337,7 +1337,7 @@ class SoN::Deparse 0.01 {
                 ? sprintf('@eff%d', $id) : sprintf('$eff%d', $id);
         }
 
-        my @local_saves;
+        my ( @local_saves, @late_saves );
         # A `local` RESTORE READS AN EARLIER VALUE OF THE SAME NAME, and a
         # package variable has only one spelling. `local $v = "inner"` in a sub
         # produces
@@ -1400,6 +1400,15 @@ class SoN::Deparse 0.01 {
             # of the sub is exactly where it belongs.
             next if exists $bound{ $val->{id} };
             $bound{ $val->{id} } = sprintf( '$saved%d', $val->{id} );
+            # UNLESS AN EFFECT CAME FIRST: a call may have written the name,
+            # and the save reads what it left. `g(); local $c = 5` saved $c
+            # above g() and the restore undid g's increment. Such a save is
+            # anchored as a stale read is, below.
+            my $ver = $nodes->{ ( $val->{inputs} // [] )->[-1] } // {};
+            if ( defined $ver->{control_in} || ( $ver->{op} // '' ) eq 'Phi' ) {
+                push @late_saves, $val;
+                next;
+            }
             push @local_saves, $val->{id};
         }
 
@@ -1693,6 +1702,18 @@ class SoN::Deparse 0.01 {
             $stale_join{ $n->{id} } = $join if defined $join;
 
             $bound{ $n->{id} } = sprintf( '$stale%d', $n->{id} );
+            push @stale_reads, $n;
+        }
+        # A `local` save behind an effect, placed as a stale read is: after
+        # the nearest write or call, or after the join a merged version
+        # names.
+        for my $n ( @late_saves ) {
+            my $ver = $nodes->{ ( $n->{inputs} // [] )->[-1] } // {};
+            if ( ( $ver->{op} // '' ) eq 'Phi' ) {
+                my $r = $nodes->{ ( $ver->{fields} // {} )->{region} // -1 } // {};
+                $stale_join{ $n->{id} } = $r->{id}
+                    if ( $r->{op} // '' ) eq 'Region';
+            }
             push @stale_reads, $n;
         }
 

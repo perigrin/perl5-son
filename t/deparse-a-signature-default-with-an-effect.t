@@ -264,4 +264,22 @@ for my $case (
     round_trips(@$case);
 }
 
+# A `local` SAVES THE VALUE WHERE IT RUNS, after any call before it.
+for my $case (
+    [q{use v5.36; our $c=0; sub g { $c++; 3 } sub f ($x = g()) { local $c = $x; $c } print f(), f(1), " c=$c\n";},
+        'a local after a calling default'],
+    [q{use v5.36; our $c=0; sub g { $c++; 3 } sub f ($x = 3) { g(); local $c = $x; $c } print f(), f(1), " c=$c\n";},
+        'a local after a call under a constant default'],
+    [q{use v5.36; our $c=0; sub g { $c++; [3] } sub f ($x = g()) { local $c = 5; "$c@$x" } print f(), f([1]), " c=$c\n";},
+        'a local after an allocating call default'],
+    [q{our $c=0; sub g { $c++; 3 } sub f { g(); local $c = 5; $c } print f(), f(), " c=$c\n";},
+        'a local after a call'],
+    [q{our $c=0; sub g { $c++; 3 } sub f { my $x = shift; g() if $x; local $c = 5; $c } print f(1), f(0), " c=$c\n";},
+        'a local after a conditional call'],
+    [q{our $c=0; sub f { $c++; local $c = 5; $c } print f(), f(), " c=$c\n";},
+        'a local after a store to its name'],
+) {
+    round_trips(@$case);
+}
+
 done_testing;
