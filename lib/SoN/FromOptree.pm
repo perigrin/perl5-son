@@ -4263,6 +4263,13 @@ class SoN::FromOptree 0.01 {
         }
 
         # Handle pushmark specially - just record the mark
+        # A LEXICAL SUB (`my sub f`) IS CALLED THROUGH A padcv, which pushed
+        # nothing here, so the call took its first argument for the callee:
+        # chalk's TypeInferenceActions rendered `_get_rightmost_type($ctx)` as
+        # `$ctx->()` and 58 of chalk's tests died. Refused until lowered.
+        die "GAP: a call to a lexical sub (`my sub`) is not yet lowered\n"
+            if $name eq 'padcv';
+
         if ($name eq 'pushmark') {
             $sim->push_mark;
             return ($op->next, 'handled');
