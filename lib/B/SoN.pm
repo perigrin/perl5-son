@@ -190,6 +190,7 @@ sub _discover_and_translate {
     # Inline sort comparator bodies, cleared on the same schedule and for the
     # same reason: a sort inside a named sub registers during that sub's walk.
     %SoN::FromOptree::SORT_BODIES = ();
+    %SoN::FromOptree::SUBST_BODIES = ();
     %SoN::FromOptree::SORT_BODY_SEQ = ();
     # Per-run, like the body registry: a node id from a previous compilation
     # unit must not mark a fresh graph's literal as mutated.
@@ -261,7 +262,8 @@ sub _discover_and_translate {
     while (1) {
         my @pending = grep { !exists $graphs{$_} && !$attempted{$_} }
                       sort keys %SoN::FromOptree::ANON_BODIES,
-                           keys %SoN::FromOptree::SORT_BODIES;
+                           keys %SoN::FromOptree::SORT_BODIES,
+                           keys %SoN::FromOptree::SUBST_BODIES;
         last unless @pending;
         for my $anon_name (@pending) {
             $attempted{$anon_name} = 1;
@@ -272,8 +274,11 @@ sub _discover_and_translate {
                 # kinds share this fixpoint because either can contain the
                 # other -- a sort inside an anon sub, an anon sub inside a
                 # comparator -- and a separate loop would miss the second hop.
+                my $subst = $SoN::FromOptree::SUBST_BODIES{$anon_name};
                 $graphs{$anon_name} = defined $body_cv
                     ? SoN::FromOptree->translate( $body_cv->object_2svref )
+                    : defined $subst
+                    ? SoN::FromOptree->translate_subst_body($subst)
                     : SoN::FromOptree->translate_sort_body(
                           $SoN::FromOptree::SORT_BODIES{$anon_name} );
             }
@@ -465,7 +470,10 @@ sub _refuse_orphan_anon_bodies {
         }
     }
 
-    for my $anon ( sort grep { /__ANON__/ } keys $graphs->%* ) {
+    # AN ANON SUB'S OWN KEY ENDS IN ITS SITE. A comparator or replacement
+    # body nested in one carries `__ANON__` too, and is named by its sort or
+    # substitution rather than by a node's `name`.
+    for my $anon ( sort grep { /__ANON__:\d+:\d+\z/ } keys $graphs->%* ) {
         next if $named{$anon};
         delete $graphs->{$anon};
 

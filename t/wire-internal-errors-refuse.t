@@ -283,21 +283,22 @@ subtest 'a subst in a loop body translates; the iterator case is a known TODO'
 #
 #     s/(x)/ord $1/e    lowers -- the replacement reads its own captures
 #                       through a RegexMatch built before the walk
-#     s/(x)/ord $1/ge   still refuses -- the body runs ONCE PER MATCH with a
-#                       different capture each time, which is a loop
+#     s/(x)/ord $1/ge   lowers as a BODY the substitution names -- it runs
+#                       ONCE PER MATCH with a different capture each time,
+#                       so it is code, not one operand
 #
 # The /g boundary is the load-bearing one and is measured: `s/(\d)/$1*10/ge` on
 # "a1b2c" is a10b20c, while the single-match decomposition gives a10b10c.
-subtest '/e lowers while /ge still refuses' => sub {
+subtest '/e lowers as an operand, /ge as a body' => sub {
     my ($o1, $e1) = translate('my $l="axb"; $l =~ s/(x)/ord $1/e; print $l;', 'e_top');
     unlike $e1, qr/GAP|INTERNAL/, '/e lowers at top level';
     like $o1, qr/"op"\s*:\s*"RegexMatch"/,
         '... via a RegexMatch its capture can read';
 
-    my (undef, $e2) = translate('my $l="axb"; $l =~ s/(x)/ord $1/ge; print $l;', 'ge_top');
-    like $e2, qr/GAP/, '/ge still refuses';
-    like $e2, qr/once per match|loop/,
-        '... because its replacement repeats, which one operand cannot express';
+    my ($o2, $e2) = translate('my $l="axb"; $l =~ s/(x)/ord $1/ge; print $l;', 'ge_top');
+    unlike $e2, qr/GAP|INTERNAL/, '/ge lowers at top level';
+    like $o2, qr/"replacement_body"\s*:\s*"[^"]*__SUBSTREPL__/,
+        '... naming a body, because its replacement repeats per match';
 };
 
 done_testing;

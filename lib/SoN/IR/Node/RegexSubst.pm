@@ -23,12 +23,17 @@ class SoN::IR::Node::RegexSubst :isa(SoN::IR::Node::Regex) {
     # field holds the pattern.
     field $pattern_is_input :param :reader = 0;
 
+    # A s///ge replacement runs once per match, so it is not an input value but
+    # a body the substitution calls: the `methods` key of that graph.
+    field $replacement_body :param :reader = undef;
+
     method operation() { 'RegexSubst' }
 
     method content_hash() {
         return join('|', 'RegexSubst', "pattern=" . $self->pattern,
             "replacement=$replacement", "flags=" . $self->flags,
             "pat_in=$pattern_is_input",
+            (defined $replacement_body ? "body=$replacement_body" : ()),
             $self->_serialize_inputs());
     }
 }

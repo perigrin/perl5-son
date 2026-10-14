@@ -6871,6 +6871,20 @@ class SoN::Deparse 0.01 {
         die "GAP: a RegexSubst with no replacement is not yet rendered\n"
             unless defined $rep;
 
+        # A REPLACEMENT BODY (s///ge) IS CALLED ONCE PER MATCH, and an
+        # interpolated replacement is evaluated once per match too -- so the
+        # call goes in the replacement, where the body reads that match's
+        # captures. Ahead of the inputs test: the body is not an input.
+        if (defined(my $body = $f->{replacement_body})) {
+            die "GAP: a s///ge replacement body `$body`, which is not in the"
+              . " graph, cannot be rendered -- the substitution would call"
+              . " nothing\n"
+                unless exists $all_methods->{$body};
+            my $ident = $self->_sub_ident($body);
+            $ident = "main::$ident" unless $ident =~ /::/;
+            return ($pat, sprintf('${\ (%s()) }', $ident));
+        }
+
         # An EMPTY replacement field means the replacement is a computed value
         # on inputs -- interpolated, or an /e result. Distinguishing it from a
         # genuinely empty replacement (`s/a//`) is the input's presence, once

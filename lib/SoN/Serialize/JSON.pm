@@ -275,6 +275,8 @@ sub _extract_fields ($node, $id_remap) {
             # byte-identical to before. Same rule as Print's has_filehandle.
             ($node->pattern_is_input
                 ? (pattern_is_input => JSON::PP::true) : ()),
+            (defined $node->replacement_body
+                ? (replacement_body => $node->replacement_body) : ()),
         };
     }
     # A ListAppend's inputs do not say whether the last one is a contribution
