@@ -314,24 +314,25 @@ main::matching: {start: 0, returns: [7], nodes: [
   [Defined, ~, [48], ~, Boolean], # 49
   [If, ~, [48, 49], 48], # 50
   [Proj, {index: 0}, [50]], # 51
-  [Call, {dispatch_kind: builtin, name: push, param_names: []}, [2, 48], 51, Unknown], # 52
+  [Call, {dispatch_kind: builtin, memory_input: true, name: push, param_names: []}, [2, 48, 48], 51, Int], # 52
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 53
   [Add, ~, [13, 53], ~, Int], # 54
   [Proj, {index: 1}, [50]], # 55
   [Region, {head: 50}, [55, 52]], # 56
-  [Phi, {predecessors: [21, 23], region: 24}, [22, 9], ~, Unknown], # 57
-  [Proj, {index: 1}, [26]], # 58
-  [Region, {head: 26}, [58, 56]], # 59
-  [Phi, {predecessors: [58, 27], region: 59}, [57, 48], ~, Unknown], # 60
-  [ArgsSource, ~, ~, ~, Array], # 61
-  [Assign, {targets: 2}, [19, 8, 61], ~, List], # 62
-  [Proj, {index: 1}, [32]], # 63
-  [Region, {head: 4}, [59, 63]], # 64
-  [Phi, {predecessors: [15, 63], region: 64}, [60, 28], ~, Unknown], # 65
-  [Phi, {predecessors: [37, 40], region: 41}, [39, 34], ~, Unknown], # 66
-  [Proj, {index: 1}, [46]], # 67
-  [Region, {head: 4}, [64, 67]], # 68
-  [Phi, {region: 68}, [65, 66], ~, Unknown]]} # 69
+  [Phi, {predecessors: [55, 51], region: 56}, [48, 52], ~, Unknown], # 57
+  [Phi, {predecessors: [21, 23], region: 24}, [22, 9], ~, Unknown], # 58
+  [Proj, {index: 1}, [26]], # 59
+  [Region, {head: 26}, [59, 56]], # 60
+  [Phi, {predecessors: [59, 27], region: 60}, [58, 57], ~, Unknown], # 61
+  [ArgsSource, ~, ~, ~, Array], # 62
+  [Assign, {targets: 2}, [19, 8, 62], ~, List], # 63
+  [Proj, {index: 1}, [32]], # 64
+  [Region, {head: 4}, [60, 64]], # 65
+  [Phi, {predecessors: [15, 64], region: 65}, [61, 28], ~, Unknown], # 66
+  [Phi, {predecessors: [37, 40], region: 41}, [39, 34], ~, Unknown], # 67
+  [Proj, {index: 1}, [46]], # 68
+  [Region, {head: 4}, [65, 68]], # 69
+  [Phi, {region: 69}, [66, 67], ~, Unknown]]} # 70
 ```
 
 ## A guarded return inside an if, then a loop
@@ -384,50 +385,53 @@ main::__PROGRAM__: {start: 0, returns: [21], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 19
   [Print, ~, [6, 7, 13, 7, 18, 19], 17, Scalar], # 20
   [Return, {implicit: true}, [1], 20]]} # 21
-main::walk: {start: 0, returns: [29], nodes: [
+main::walk: {start: 0, returns: [39], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "stopped at "}, ~, ~, Str], # 1
-  [MemStart], # 2
-  [EntryDef, {package: main, sigil: $, symbol: "\""}, [2], ~, Scalar], # 3
-  [Coerce, {from_repr: Scalar, to_repr: Str}, [3], ~, Str], # 4
-  [PadAccess, {sigil: "@", symbol: chain}, ~, ~, Unknown], # 5
-  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [4, 5], ~, Str], # 6
-  [Concat, ~, [1, 6], ~, Str], # 7
-  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [4, 5], ~, Str], # 8
-  [PadAccess, {sigil: $, symbol: op}, ~, ~, Str], # 9
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [9], ~, Str], # 10
-  [Constant, {const_type: string, value: If}, ~, ~, Str], # 11
-  [StrEq, ~, [10, 11], ~, Boolean], # 12
-  [Constant, {const_type: string, value: S}, ~, ~, Str], # 13
-  [StrEq, ~, [10, 13], ~, Boolean], # 14
-  [Or, ~, [12, 14], ~, Boolean], # 15
-  [If, ~, [0, 15], 0], # 16
-  [Proj, {index: 0}, [16]], # 17
-  [Call, {dispatch_kind: builtin, name: push, param_names: []}, [5, 9], 17, Unknown], # 18
-  [If, ~, [18, 12], 18], # 19
-  [Proj, {index: 0}, [19]], # 20
-  [Proj, {index: 1}, [16]], # 21
-  [Proj, {index: 1}, [19]], # 22
-  [Region, {head: 16}, [21, 22]], # 23
-  [Loop, {bound: entry}, [23], 23], # 24
-  [Proj, {index: 1}, [24]], # 25
-  [Region, {head: 24}, [25]], # 26
-  [Region, ~, [20, 26]], # 27
-  [Phi, {predecessors: [20, 26], region: 27}, [7, 8], ~, Str], # 28
-  [Return, ~, [28], 27], # 29
-  [PadAccess, {sigil: $, symbol: items}, ~, ~, Unknown], # 30
-  [PostfixDeref, {sigil: "@"}, [30, 2], ~, Array], # 31
-  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 32
-  [Phi, {region: 24}, [32, 42], ~, Int], # 33
-  [Subscript, {kind: array}, [31, 33, 2], ~, Scalar], # 34
-  [Proj, {index: 0}, [24]], # 35
-  [Call, {dispatch_kind: builtin, name: push, param_names: []}, [5, 34], 35, Unknown], # 36
-  [ArgsSource, ~, ~, ~, Array], # 37
-  [Assign, {targets: 2}, [9, 30, 37], ~, List], # 38
-  [Count, ~, [31, 2], ~, Int], # 39
-  [NumGt, ~, [39, 33], 24, Boolean], # 40
-  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 41
-  [Add, ~, [33, 41], ~, Int]]} # 42
+  [PadAccess, {sigil: "@", symbol: chain}, ~, ~, Unknown], # 2
+  [PadAccess, {sigil: $, symbol: op}, ~, ~, Str], # 3
+  [MemStart], # 4
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 5
+  [Constant, {const_type: string, value: If}, ~, ~, Str], # 6
+  [StrEq, ~, [5, 6], ~, Boolean], # 7
+  [Constant, {const_type: string, value: S}, ~, ~, Str], # 8
+  [StrEq, ~, [5, 8], ~, Boolean], # 9
+  [Or, ~, [7, 9], ~, Boolean], # 10
+  [If, ~, [0, 10], 0], # 11
+  [Proj, {index: 0}, [11]], # 12
+  [Call, {dispatch_kind: builtin, memory_input: true, name: push, param_names: []}, [2, 3, 4], 12, Int], # 13
+  [EntryDef, {package: main, sigil: $, symbol: "\""}, [13], ~, Scalar], # 14
+  [Coerce, {from_repr: Scalar, to_repr: Str}, [14], ~, Str], # 15
+  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [15, 2], ~, Str], # 16
+  [Concat, ~, [1, 16], ~, Str], # 17
+  [PadAccess, {sigil: $, symbol: items}, ~, ~, Unknown], # 18
+  [Proj, {index: 1}, [11]], # 19
+  [If, ~, [13, 7], 13], # 20
+  [Proj, {index: 1}, [20]], # 21
+  [Region, {head: 11}, [19, 21]], # 22
+  [Phi, {predecessors: [19, 12], region: 22}, [4, 13], ~, Unknown], # 23
+  [PostfixDeref, {sigil: "@"}, [18, 23], ~, Array], # 24
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 25
+  [Loop, {bound: entry}, [22], 22], # 26
+  [Phi, {region: 26}, [25, 45], ~, Int], # 27
+  [Subscript, {kind: array}, [24, 27, 23], ~, Scalar], # 28
+  [Proj, {index: 0}, [26]], # 29
+  [Call, {dispatch_kind: builtin, memory_input: true, name: push, param_names: []}, [2, 28, 23], 29, Int], # 30
+  [EntryDef, {package: main, sigil: $, symbol: "\""}, [30], ~, Scalar], # 31
+  [Coerce, {from_repr: Scalar, to_repr: Str}, [31], ~, Str], # 32
+  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [32, 2], ~, Str], # 33
+  [Proj, {index: 0}, [20]], # 34
+  [Proj, {index: 1}, [26]], # 35
+  [Region, {head: 26}, [35]], # 36
+  [Region, ~, [34, 36]], # 37
+  [Phi, {predecessors: [34, 36], region: 37}, [17, 33], ~, Str], # 38
+  [Return, ~, [38], 37], # 39
+  [ArgsSource, ~, ~, ~, Array], # 40
+  [Assign, {targets: 2}, [3, 18, 40], ~, List], # 41
+  [Count, ~, [24, 23], ~, Int], # 42
+  [NumGt, ~, [42, 27], 26, Boolean], # 43
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 44
+  [Add, ~, [27, 44], ~, Int]]} # 45
 ```
 
 ## A ternary passed to a sub, its arm reading a lexical
@@ -1170,23 +1174,26 @@ main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
   [Print, ~, [4, 5, 8, 9], 7, Scalar], # 10
   [Return, {implicit: true}, [1], 10]]} # 11
-main::find: {start: 0, returns: [13], nodes: [
+main::find: {start: 0, returns: [16], nodes: [
   [Start], # 0
   [MemStart], # 1
   [PadAccess, {sigil: $, symbol: found}, [1], ~, Unknown], # 2
-  [Constant, {const_type: string, value: it}, ~, ~, Str], # 3
-  [PadAccess, {sigil: $, symbol: want}, ~, ~, Unknown], # 4
-  [If, ~, [0, 4], 0], # 5
-  [Proj, {index: 0}, [5]], # 6
-  [Assign, ~, [2, 3], 6, Str], # 7
-  [Proj, {index: 1}, [5]], # 8
-  [Region, {head: 5}, [8, 7]], # 9
-  [Phi, {predecessors: [8, 6], region: 9}, [1, 7], ~, Unknown], # 10
-  [PadAccess, {sigil: $, symbol: found}, [10], ~, Unknown], # 11
-  [Call, {dispatch_kind: direct, name: main::load, param_names: []}, [11], 9, Str], # 12
-  [Return, ~, [12], 12], # 13
-  [ArgsSource, ~, ~, ~, Array], # 14
-  [Assign, {targets: 1}, [4, 14], ~, List]]} # 15
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 3
+  [Assign, ~, [2, 3], 0, Undef], # 4
+  [PadAccess, {sigil: $, symbol: found}, [4], ~, Unknown], # 5
+  [Constant, {const_type: string, value: it}, ~, ~, Str], # 6
+  [PadAccess, {sigil: $, symbol: want}, ~, ~, Unknown], # 7
+  [If, ~, [4, 7], 4], # 8
+  [Proj, {index: 0}, [8]], # 9
+  [Assign, ~, [5, 6], 9, Str], # 10
+  [Proj, {index: 1}, [8]], # 11
+  [Region, {head: 8}, [11, 10]], # 12
+  [Phi, {predecessors: [11, 9], region: 12}, [4, 10], ~, Scalar], # 13
+  [PadAccess, {sigil: $, symbol: found}, [13], ~, Unknown], # 14
+  [Call, {dispatch_kind: direct, name: main::load, param_names: []}, [14], 12, Str], # 15
+  [Return, ~, [15], 15], # 16
+  [ArgsSource, ~, ~, ~, Array], # 17
+  [Assign, {targets: 1}, [7, 17], ~, List]]} # 18
 main::load: {start: 0, returns: [10], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "loaded "}, ~, ~, Str], # 1
@@ -1246,34 +1253,37 @@ main::load: {start: 0, returns: [10], nodes: [
   [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
   [Concat, ~, [1, 8], ~, Str], # 9
   [Return, {implicit: true}, [9], 0]]} # 10
-main::search: {start: 0, returns: [21], nodes: [
+main::search: {start: 0, returns: [24], nodes: [
   [Start], # 0
   [MemStart], # 1
-  [Loop, {bound: entry}, [0], 0], # 2
-  [Phi, {region: 2}, [1, 3], ~, Unknown], # 3
-  [PadAccess, {sigil: $, symbol: found}, [3], ~, Unknown], # 4
-  [ArgsSource, ~, ~, ~, Array], # 5
-  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 6
-  [Phi, {region: 2}, [6, 25], ~, Int], # 7
-  [Subscript, {kind: array}, [5, 7, 3], ~, Scalar], # 8
-  [Proj, {index: 0}, [2]], # 9
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [8], ~, Str], # 10
-  [Constant, {const_type: string, value: b}, ~, ~, Str], # 11
-  [StrEq, ~, [10, 11], ~, Boolean], # 12
-  [If, ~, [9, 12], 9], # 13
-  [Proj, {index: 0}, [13]], # 14
-  [Assign, ~, [4, 8], 14, Scalar], # 15
-  [Proj, {index: 1}, [2]], # 16
-  [Region, {head: 2}, [16, 15]], # 17
-  [Phi, {region: 17}, [3, 15], ~, Unknown], # 18
-  [PadAccess, {sigil: $, symbol: found}, [18], ~, Unknown], # 19
-  [Call, {dispatch_kind: direct, name: main::load, param_names: []}, [19], 17, Str], # 20
-  [Return, ~, [20], 20], # 21
-  [Count, ~, [5, 1], ~, Int], # 22
-  [NumGt, ~, [22, 7], 2, Boolean], # 23
-  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 24
-  [Add, ~, [7, 24], ~, Int], # 25
-  [Proj, {index: 1}, [13]]]} # 26
+  [PadAccess, {sigil: $, symbol: found}, [1], ~, Unknown], # 2
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 3
+  [Assign, ~, [2, 3], 0, Undef], # 4
+  [Loop, {bound: entry}, [4], 4], # 5
+  [Phi, {region: 5}, [4, 6], ~, Unknown], # 6
+  [PadAccess, {sigil: $, symbol: found}, [6], ~, Unknown], # 7
+  [ArgsSource, ~, ~, ~, Array], # 8
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 9
+  [Phi, {region: 5}, [9, 28], ~, Int], # 10
+  [Subscript, {kind: array}, [8, 10, 6], ~, Scalar], # 11
+  [Proj, {index: 0}, [5]], # 12
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [11], ~, Str], # 13
+  [Constant, {const_type: string, value: b}, ~, ~, Str], # 14
+  [StrEq, ~, [13, 14], ~, Boolean], # 15
+  [If, ~, [12, 15], 12], # 16
+  [Proj, {index: 0}, [16]], # 17
+  [Assign, ~, [7, 11], 17, Scalar], # 18
+  [Proj, {index: 1}, [5]], # 19
+  [Region, {head: 5}, [19, 18]], # 20
+  [Phi, {region: 20}, [6, 18], ~, Unknown], # 21
+  [PadAccess, {sigil: $, symbol: found}, [21], ~, Unknown], # 22
+  [Call, {dispatch_kind: direct, name: main::load, param_names: []}, [22], 20, Str], # 23
+  [Return, ~, [23], 23], # 24
+  [Count, ~, [8, 4], ~, Int], # 25
+  [NumGt, ~, [25, 10], 5, Boolean], # 26
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 27
+  [Add, ~, [10, 27], ~, Int], # 28
+  [Proj, {index: 1}, [16]]]} # 29
 ```
 
 ## A list repeated, and a string repeated
@@ -2461,7 +2471,7 @@ main::pairs: {start: 0, returns: [7], nodes: [
   [RegexCapture, {"n": 1}, [18], ~, Str], # 22
   [Concat, ~, [21, 22], ~, Str], # 23
   [Proj, {index: 0}, [20]], # 24
-  [Call, {dispatch_kind: builtin, name: push, param_names: []}, [2, 23], 24, Unknown], # 25
+  [Call, {dispatch_kind: builtin, memory_input: true, name: push, param_names: []}, [2, 23, 11], 24, Int], # 25
   [Coerce, {from_repr: Unknown, to_repr: Str}, [15], ~, Str], # 26
   [Constant, {const_type: string, value: "="}, ~, ~, Str], # 27
   [Concat, ~, [26, 27], ~, Str], # 28
@@ -2471,12 +2481,13 @@ main::pairs: {start: 0, returns: [7], nodes: [
   [Coerce, {from_repr: Unknown, to_repr: Str}, [31], ~, Str], # 32
   [Concat, ~, [28, 32], ~, Str], # 33
   [Proj, {index: 1}, [20]], # 34
-  [Call, {dispatch_kind: builtin, name: push, param_names: []}, [2, 33], 34, Unknown], # 35
+  [Call, {dispatch_kind: builtin, memory_input: true, name: push, param_names: []}, [2, 33, 11], 34, Int], # 35
   [Subtract, ~, [9, 29], ~, Int], # 36
   [Region, {head: 4}, [35, 25]], # 37
   [Phi, {predecessors: [34, 24], region: 37}, [9, 36], ~, Int], # 38
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 39
-  [Add, ~, [38, 39], ~, Int]]} # 40
+  [Add, ~, [38, 39], ~, Int], # 40
+  [Phi, {predecessors: [34, 24], region: 37}, [35, 25], ~, Int]]} # 41
 ```
 
 ## An exists guard on a hash reached through a reference
@@ -2988,3 +2999,444 @@ main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Return, {implicit: true}, [1], 13], # 14
   [ArrayLiteral, {sigil: "@", symbol: b}, [9], ~, Array]]} # 15
 ```
+
+## A loop Phi stamp decided by the scout
+
+An undef init overwritten by each list element: the Phi's stamp is decided before the body walk, not unstamped after it.
+
+```perl
+sub f { my $s; for my $x (@_) { $s = $x } return $s } print f(3, 4, 5), "\n";
+```
+
+```behavior
+parses: yes
+```
+
+```output
+5
+```
+
+```ir
+main::__PROGRAM__: {start: 0, returns: [9], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 2
+  [Constant, {const_type: integer, value: "4"}, ~, ~, Int], # 3
+  [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 4
+  [Call, {dispatch_kind: direct, name: main::f, param_names: [], want: list}, [2, 3, 4], 0, Scalar], # 5
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [5], ~, Str], # 6
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 7
+  [Print, ~, [6, 7], 5, Scalar], # 8
+  [Return, {implicit: true}, [1], 8]]} # 9
+main::f: {start: 0, returns: [6], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Loop, {bound: entry}, [0], 0], # 2
+  [Phi, {region: 2}, [1, 14], ~, Scalar], # 3
+  [Proj, {index: 1}, [2]], # 4
+  [Region, {head: 2}, [4]], # 5
+  [Return, ~, [3], 5], # 6
+  [ArgsSource, ~, ~, ~, Array], # 7
+  [MemStart], # 8
+  [Count, ~, [7, 8], ~, Int], # 9
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 10
+  [Phi, {region: 2}, [10, 16], ~, Int], # 11
+  [NumGt, ~, [9, 11], 2, Boolean], # 12
+  [Proj, {index: 0}, [2]], # 13
+  [Subscript, {kind: array}, [7, 11, 8], ~, Scalar], # 14
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 15
+  [Add, ~, [11, 15], ~, Int]]} # 16
+```
+
+## A foreach over a bare array with a hash store
+
+A bare-declared array filled by push, iterated while the body stores a hash element read after the loop.
+
+```perl
+sub f { my %h = (a => 1); my @a; push @a, 1, 2; my $s = ""; for my $x (@a) { $h{a} = 9; $s .= $x } print "$s|$h{a}\n" } f();
+```
+
+```behavior
+parses: yes
+```
+
+```output
+12|9
+```
+
+```ir
+main::__PROGRAM__: {start: 0, returns: [3], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Call, {dispatch_kind: direct, name: main::f, param_names: [], want: void}, ~, 0, Scalar], # 2
+  [Return, {implicit: true}, [1], 2]]} # 3
+main::f: {start: 0, returns: [22], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: ""}, ~, ~, Str], # 1
+  [PadAccess, {sigil: "@", symbol: a}, ~, ~, Scalar], # 2
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 3
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 4
+  [MemStart], # 5
+  [Call, {dispatch_kind: builtin, memory_input: true, name: push, param_names: []}, [2, 3, 4, 5], 0, Int], # 6
+  [Loop, {bound: entry}, [6], 6], # 7
+  [Phi, {region: 7}, [1, 34], ~, Str], # 8
+  [Constant, {const_type: string, value: "|"}, ~, ~, Str], # 9
+  [Concat, ~, [8, 9], ~, Str], # 10
+  [Constant, {const_type: string, value: a}, ~, ~, Str], # 11
+  [HashLiteral, {sigil: "%", symbol: h}, [11, 3], ~, Hash], # 12
+  [Phi, {region: 7}, [6, 32], ~, Int], # 13
+  [Subscript, {kind: hash}, [12, 11, 13], ~, Scalar], # 14
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [14], ~, Str], # 15
+  [Concat, ~, [10, 15], ~, Str], # 16
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 17
+  [Concat, ~, [16, 17], ~, Str], # 18
+  [Proj, {index: 1}, [7]], # 19
+  [Region, {head: 7}, [19]], # 20
+  [Print, ~, [18], 20, Scalar], # 21
+  [Return, {implicit: true}, [21], 21], # 22
+  [Count, ~, [2, 6], ~, Int], # 23
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 24
+  [Phi, {region: 7}, [24, 27], ~, Int], # 25
+  [Subscript, {kind: array}, [2, 25, 13], ~, Scalar], # 26
+  [Add, ~, [25, 3], ~, Int], # 27
+  [NumGt, ~, [23, 25], 7, Boolean], # 28
+  [Proj, {index: 0}, [7]], # 29
+  [Subscript, {kind: hash}, [12, 11], ~, Int], # 30
+  [Constant, {const_type: integer, value: "9"}, ~, ~, Int], # 31
+  [Assign, ~, [30, 31], 29, Int], # 32
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [26], ~, Str], # 33
+  [Concat, ~, [8, 33], ~, Str]]} # 34
+```
+
+## A file lexical read in scalar context from a lexical sub
+
+A file-scope my sub sharing a file array by name; scalar @arr is its count, not its elements.
+
+```perl
+use v5.36; my @arr = (1, 2); my sub t { scalar @arr } print t(), "\n";
+```
+
+```behavior
+parses: yes
+```
+
+```output
+2
+```
+
+```ir
+main::__PROGRAM__: {start: 0, returns: [12], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [MemStart], # 2
+  [PadAccess, {shared: 1, sigil: "@", symbol: arr}, [2], ~, Unknown], # 3
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 4
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 5
+  [ArrayLiteral, {sigil: "@", symbol: arr}, [4, 5], ~, Array], # 6
+  [Assign, ~, [3, 6], 0, List], # 7
+  [Call, {dispatch_kind: direct, name: main::__PROGRAM__::__ANON__:1:3, param_names: [], want: list}, ~, 7, Int], # 8
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [8], ~, Str], # 9
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
+  [Print, ~, [9, 10], 8, Scalar], # 11
+  [Return, {implicit: true}, [1], 11]]} # 12
+main::__PROGRAM__::__ANON__:1:3: {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [PadAccess, {shared: 1, sigil: "@", symbol: arr}, ~, ~, Scalar], # 1
+  [MemStart], # 2
+  [Count, ~, [1, 2], ~, Int], # 3
+  [Return, {implicit: true}, [3], 0]]} # 4
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.036"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, {implicit: true}, [3], 3]]} # 4
+```
+
+## A while inside an if arm of a loop body
+
+A nested while in a guarded arm is walked by the arm walk, so the rest of the arm is kept.
+
+```perl
+my $s = 0; my $o = ""; for my $i (1..4) { if ($i > 1) { my $k = 0; while ($k < $i) { $s += $k; $k++ } $o .= $s } } print "$o $s\n";
+```
+
+```behavior
+parses: yes
+```
+
+```output
+1410 10
+```
+
+```ir
+main::__PROGRAM__: {start: 0, returns: [16], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Constant, {const_type: string, value: ""}, ~, ~, Str], # 2
+  [Loop, {bound: entry}, [0], 0], # 3
+  [Phi, {region: 3}, [2, 40], ~, Str], # 4
+  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 5
+  [Concat, ~, [4, 5], ~, Str], # 6
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 7
+  [Phi, {region: 3}, [7, 37], ~, Int], # 8
+  [Coerce, {from_repr: Int, to_repr: Str}, [8], ~, Str], # 9
+  [Concat, ~, [6, 9], ~, Str], # 10
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 11
+  [Concat, ~, [10, 11], ~, Str], # 12
+  [Proj, {index: 1}, [3]], # 13
+  [Region, {head: 3}, [13]], # 14
+  [Print, ~, [12], 14, Scalar], # 15
+  [Return, {implicit: true}, [1], 15], # 16
+  [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 17
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 18
+  [Phi, {region: 3}, [18, 24], ~, Int], # 19
+  [NumGt, ~, [17, 19], 3, Boolean], # 20
+  [Proj, {index: 0}, [3]], # 21
+  [NumGt, ~, [19, 18], ~, Boolean], # 22
+  [If, ~, [21, 22], 21], # 23
+  [Add, ~, [19, 18], ~, Int], # 24
+  [Proj, {index: 0}, [23]], # 25
+  [Loop, {bound: each}, [25], 25], # 26
+  [Phi, {region: 26}, [7, 30], ~, Int], # 27
+  [NumLt, ~, [27, 19], 26, Boolean], # 28
+  [Proj, {index: 1}, [23]], # 29
+  [Add, ~, [27, 18], ~, Int], # 30
+  [Proj, {index: 1}, [26]], # 31
+  [Region, {head: 26}, [31]], # 32
+  [Region, {head: 23}, [32, 29]], # 33
+  [Phi, {region: 26}, [8, 35], ~, Int], # 34
+  [Add, ~, [34, 27], ~, Int], # 35
+  [Proj, {index: 0}, [26]], # 36
+  [Phi, {predecessors: [25, 29], region: 33}, [34, 8], ~, Int], # 37
+  [Coerce, {from_repr: Int, to_repr: Str}, [34], ~, Str], # 38
+  [Concat, ~, [4, 38], ~, Str], # 39
+  [Phi, {predecessors: [25, 29], region: 33}, [39, 4], ~, Str]]} # 40
+```
+
+## A bare block after a next if
+
+The rest of a loop body after a next if reaches the latch through a bare block.
+
+```perl
+my @r; for my $i (1..4) { next if $i % 2; { push @r, $i * 3 } push @r, "x" } print "@r\n";
+```
+
+```behavior
+parses: yes
+```
+
+```output
+6 x 12 x
+```
+
+```ir
+main::__PROGRAM__: {start: 0, returns: [28], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [MemStart], # 2
+  [PadAccess, {sigil: "@", symbol: r}, ~, ~, Unknown], # 3
+  [Constant, {const_type: string, value: x}, ~, ~, Str], # 4
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 5
+  [Loop, {bound: entry}, [0], 0], # 6
+  [Phi, {region: 6}, [5, 31], ~, Int], # 7
+  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 8
+  [Multiply, ~, [7, 8], ~, Int], # 9
+  [Proj, {index: 0}, [6]], # 10
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 11
+  [Modulo, ~, [7, 11], ~, Int], # 12
+  [If, ~, [10, 12], 10], # 13
+  [Proj, {index: 1}, [13]], # 14
+  [Call, {dispatch_kind: builtin, memory_input: true, name: push, param_names: []}, [3, 9, 2], 14, Int], # 15
+  [Call, {dispatch_kind: builtin, memory_input: true, name: push, param_names: []}, [3, 4, 15], 15, Int], # 16
+  [Proj, {index: 0}, [13]], # 17
+  [Region, {head: 13}, [17, 16]], # 18
+  [Phi, {predecessors: [17, 14], region: 18}, [2, 16], ~, Unknown], # 19
+  [EntryDef, {package: main, sigil: $, symbol: "\""}, [19], ~, Scalar], # 20
+  [Coerce, {from_repr: Scalar, to_repr: Str}, [20], ~, Str], # 21
+  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [21, 3], ~, Str], # 22
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 23
+  [Concat, ~, [22, 23], ~, Str], # 24
+  [Proj, {index: 1}, [6]], # 25
+  [Region, {head: 6}, [25]], # 26
+  [Print, ~, [24], 26, Scalar], # 27
+  [Return, {implicit: true}, [1], 27], # 28
+  [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 29
+  [NumGt, ~, [29, 7], 6, Boolean], # 30
+  [Add, ~, [7, 5], ~, Int]]} # 31
+```
+
+## A /ge replacement run once per match
+
+The replacement of s///ge is a body run for each match, seeing that match's capture.
+
+```perl
+my $s = "a1b2c"; $s =~ s/(\d)/$1*10/ge; print "$s\n";
+```
+
+```behavior
+parses: yes
+```
+
+```output
+a10b20c
+```
+
+```ir
+main::__PROGRAM__: {start: 0, returns: [13], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [MemStart], # 2
+  [PadAccess, {sigil: $, symbol: s}, [2], ~, Unknown], # 3
+  [Constant, {const_type: string, value: a1b2c}, ~, ~, Str], # 4
+  [Assign, ~, [3, 4], 0, Str], # 5
+  [PadAccess, {sigil: $, symbol: s}, [5], ~, Unknown], # 6
+  [RegexSubst, {flags: g, pattern: "(\\d)", replacement: "", replacement_body: main::__PROGRAM__::__SUBSTREPL__:1}, [6, 5], 5, Str], # 7
+  [PadAccess, {sigil: $, symbol: s}, [7], ~, Str], # 8
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [8], ~, Str], # 9
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
+  [Concat, ~, [9, 10], ~, Str], # 11
+  [Print, ~, [11], 7, Scalar], # 12
+  [Return, {implicit: true}, [1], 12]]} # 13
+main::__PROGRAM__::__SUBSTREPL__:1: {start: 0, returns: [6], nodes: [
+  [Start], # 0
+  [RegexMatch, {flags: g, pattern: "(\\d)"}, ~, ~, Boolean], # 1
+  [RegexCapture, {"n": 1}, [1], ~, Str], # 2
+  [Coerce, {from_repr: Str, to_repr: Num}, [2], ~, Num], # 3
+  [Constant, {const_type: integer, value: "10"}, ~, ~, Int], # 4
+  [Multiply, ~, [3, 4], ~, Num], # 5
+  [Return, {implicit: true}, [5], 0]]} # 6
+```
+
+## A lexical sub callee mapped over @_
+
+A loop over @_ passing the alias to a my sub that only reads it translates; the callee is judged by its body.
+
+```perl
+use v5.36; my sub c ($s) { $s =~ s/1/9/; "[$s]" } sub e { join ",", map { c($_) } @_ } my @a = ("a1", "b1"); print e(@a), " @a\n";
+```
+
+```behavior
+parses: yes
+```
+
+```output
+[a9],[b9] a1 b1
+```
+
+```ir
+main::__PROGRAM__: {start: 0, returns: [15], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Constant, {const_type: string, value: a1}, ~, ~, Str], # 2
+  [Constant, {const_type: string, value: b1}, ~, ~, Str], # 3
+  [ArrayLiteral, {sigil: "@", symbol: a}, [2, 3], ~, Array], # 4
+  [Call, {dispatch_kind: direct, name: main::e, param_names: [], want: list}, [4], 0, Str], # 5
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [5], ~, Str], # 6
+  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 7
+  [EntryDef, {package: main, sigil: $, symbol: "\""}, [5], ~, Scalar], # 8
+  [Coerce, {from_repr: Scalar, to_repr: Str}, [8], ~, Str], # 9
+  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [9, 2, 3], ~, Str], # 10
+  [Concat, ~, [7, 10], ~, Str], # 11
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 12
+  [Concat, ~, [11, 12], ~, Str], # 13
+  [Print, ~, [6, 13], 5, Scalar], # 14
+  [Return, {implicit: true}, [1], 14]]} # 15
+main::e: {start: 0, returns: [8], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: ","}, ~, ~, Str], # 1
+  [ArrayLiteral, ~, ~, ~, Array], # 2
+  [Loop, {bound: entry}, [0], 0], # 3
+  [Phi, {region: 3}, [2, 18], ~, Array], # 4
+  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [1, 4], ~, Str], # 5
+  [Proj, {index: 1}, [3]], # 6
+  [Region, {head: 3}, [6]], # 7
+  [Return, {implicit: true}, [5], 7], # 8
+  [ArgsSource, ~, ~, ~, Array], # 9
+  [MemStart], # 10
+  [Count, ~, [9, 10], ~, Int], # 11
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 12
+  [Phi, {region: 3}, [12, 20], ~, Int], # 13
+  [NumGt, ~, [11, 13], 3, Boolean], # 14
+  [Proj, {index: 0}, [3]], # 15
+  [Subscript, {kind: array}, [9, 13, 10], ~, Scalar], # 16
+  [Call, {dispatch_kind: direct, name: main::e::__ANON__:1:1, param_names: [], want: list}, [16], 15, Str], # 17
+  [ListAppend, {collector: map}, [4, 17], ~, Array], # 18
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 19
+  [Add, ~, [13, 19], ~, Int]]} # 20
+main::e::__ANON__:1:1: {start: 0, returns: [13], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: "["}, ~, ~, Str], # 1
+  [MemStart], # 2
+  [PadAccess, {sigil: $, symbol: s}, [2], ~, Unknown], # 3
+  [Parameter, {index: 0, name: $s, sigil: $}, ~, ~, Unknown], # 4
+  [Assign, ~, [3, 4], 0, Unknown], # 5
+  [PadAccess, {sigil: $, symbol: s}, [5], ~, Unknown], # 6
+  [RegexSubst, {flags: u, pattern: "1", replacement: "9"}, [6, 5], 5, Str], # 7
+  [PadAccess, {sigil: $, symbol: s}, [7], ~, Str], # 8
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [8], ~, Str], # 9
+  [Concat, ~, [1, 9], ~, Str], # 10
+  [Constant, {const_type: string, value: "]"}, ~, ~, Str], # 11
+  [Concat, ~, [10, 11], ~, Str], # 12
+  [Return, {implicit: true}, [12], 7]]} # 13
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.036"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, {implicit: true}, [3], 3]]} # 4
+```
+
+## A while inside a block eval
+
+A while loop in an eval body is walked like any loop; the eval's value is the block's last statement.
+
+```perl
+sub f { my $r = eval { my $i = 0; while ($i < 3) { $i++; print "$i\n" } 7 }; print "r=$r\n" } f();
+```
+
+```behavior
+parses: yes
+```
+
+```output
+1
+2
+3
+r=7
+```
+
+```ir
+main::__PROGRAM__: {start: 0, returns: [3], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Call, {dispatch_kind: direct, name: main::f, param_names: [], want: void}, ~, 0, Scalar], # 2
+  [Return, {implicit: true}, [1], 2]]} # 3
+main::f: {start: 0, returns: [14], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: "r="}, ~, ~, Str], # 1
+  [Constant, {const_type: integer, value: "7"}, ~, ~, Int], # 2
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 3
+  [Loop, {bound: each}, [0], 0], # 4
+  [Proj, {index: 1}, [4]], # 5
+  [Region, {head: 4}, [5]], # 6
+  [Region, {eval_entry: 0}, [6]], # 7
+  [Phi, {region: 7}, [2, 3], ~, Scalar], # 8
+  [Coerce, {from_repr: Scalar, to_repr: Str}, [8], ~, Str], # 9
+  [Concat, ~, [1, 9], ~, Str], # 10
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 11
+  [Concat, ~, [10, 11], ~, Str], # 12
+  [Print, ~, [12], 7, Scalar], # 13
+  [Return, {implicit: true}, [13], 13], # 14
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 15
+  [Phi, {region: 4}, [15, 21], ~, Int], # 16
+  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 17
+  [NumLt, ~, [16, 17], 4, Boolean], # 18
+  [Proj, {index: 0}, [4]], # 19
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 20
+  [Add, ~, [16, 20], ~, Int], # 21
+  [Coerce, {from_repr: Int, to_repr: Str}, [21], ~, Str], # 22
+  [Concat, ~, [22, 11], ~, Str], # 23
+  [Print, ~, [23], 19, Scalar]]} # 24
+```
+

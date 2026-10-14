@@ -1077,13 +1077,14 @@ Node::hash: {start: 0, returns: [6], nodes: [
   [Call, {class_name: Node, dispatch_kind: method, name: parts, param_names: [], want: list}, [3], 0, Unknown], # 4
   [Call, {dispatch_kind: builtin, name: join, param_names: []}, [1, 2, 4], ~, Str], # 5
   [Return, ~, [5], 4]]} # 6
-Node::parts: {start: 0, returns: [5], nodes: [
+Node::parts: {start: 0, returns: [6], nodes: [
   [Start], # 0
   [PadAccess, {sigil: "@", symbol: p}, ~, ~, Unknown], # 1
   [Constant, {const_type: string, value: a}, ~, ~, Str], # 2
   [Constant, {const_type: string, value: b}, ~, ~, Str], # 3
-  [Call, {dispatch_kind: builtin, name: push, param_names: []}, [1, 2, 3], 0, Unknown], # 4
-  [Return, ~, [1], 4]]} # 5
+  [MemStart], # 4
+  [Call, {dispatch_kind: builtin, memory_input: true, name: push, param_names: []}, [1, 2, 3, 4], 0, Int], # 5
+  [Return, ~, [1], 5]]} # 6
 main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1

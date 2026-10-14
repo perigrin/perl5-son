@@ -305,25 +305,25 @@ main::__PROGRAM__: {start: 0, returns: [20], nodes: [
   [Return, {implicit: true}, [1], 19]]} # 20
 main::token_end: {start: 0, returns: [22], nodes: [
   [Start], # 0
-  [PadAccess, {sigil: $, symbol: input}, ~, ~, Unknown], # 1
-  [Constant, {const_type: string, value: "\\G("}, ~, ~, Str], # 2
-  [Parameter, {index: 2, name: $pattern, sigil: $}, ~, ~, Str], # 3
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
-  [Concat, ~, [2, 4], ~, Str], # 5
-  [Constant, {const_type: string, value: ")"}, ~, ~, Str], # 6
-  [Concat, ~, [5, 6], ~, Str], # 7
-  [MemStart], # 8
+  [MemStart], # 1
+  [PadAccess, {sigil: $, symbol: input}, [1], ~, Unknown], # 2
+  [Parameter, {index: 0, name: $input, sigil: $}, ~, ~, Unknown], # 3
+  [Assign, ~, [2, 3], 0, Unknown], # 4
+  [PadAccess, {sigil: $, symbol: input}, [4], ~, Unknown], # 5
+  [Call, {dispatch_kind: builtin, name: pos, param_names: []}, [5], ~, Unknown], # 6
+  [Parameter, {index: 1, name: $position, sigil: $}, ~, ~, Num], # 7
+  [Assign, ~, [6, 7], 4, Num], # 8
   [PadAccess, {sigil: $, symbol: input}, [8], ~, Unknown], # 9
-  [Parameter, {index: 0, name: $input, sigil: $}, ~, ~, Unknown], # 10
-  [Assign, ~, [9, 10], 0, Unknown], # 11
-  [PadAccess, {sigil: $, symbol: input}, [11], ~, Unknown], # 12
-  [Call, {dispatch_kind: builtin, name: pos, param_names: []}, [12], ~, Unknown], # 13
-  [Parameter, {index: 1, name: $position, sigil: $}, ~, ~, Num], # 14
-  [Assign, ~, [13, 14], 11, Num], # 15
-  [Match, ~, [1, 7], 15, Boolean], # 16
+  [Constant, {const_type: string, value: "\\G("}, ~, ~, Str], # 10
+  [Parameter, {index: 2, name: $pattern, sigil: $}, ~, ~, Str], # 11
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [11], ~, Str], # 12
+  [Concat, ~, [10, 12], ~, Str], # 13
+  [Constant, {const_type: string, value: ")"}, ~, ~, Str], # 14
+  [Concat, ~, [13, 14], ~, Str], # 15
+  [Match, ~, [9, 15], 8, Boolean], # 16
   [RegexCapture, {"n": 1}, [16], ~, Str], # 17
   [Length, ~, [17], ~, Int], # 18
-  [Add, ~, [14, 18], ~, Num], # 19
+  [Add, ~, [7, 18], ~, Num], # 19
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 20
   [TernaryExpr, ~, [16, 19, 20], ~, Unknown], # 21
   [Return, ~, [21], 16]]} # 22

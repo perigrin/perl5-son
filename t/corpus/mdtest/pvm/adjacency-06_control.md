@@ -318,38 +318,40 @@ parses: yes
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [13], nodes: [
+main::__PROGRAM__: {start: 0, returns: [31], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [EntryDef, {package: main, sigil: $, symbol: "\""}, [2], ~, Scalar], # 3
-  [Coerce, {from_repr: Scalar, to_repr: Str}, [3], ~, Str], # 4
-  [PadAccess, {sigil: "@", symbol: out}, ~, ~, Unknown], # 5
-  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [4, 5], ~, Str], # 6
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 7
-  [Concat, ~, [6, 7], ~, Str], # 8
-  [Loop, {bound: entry}, [0], 0], # 9
-  [Proj, {index: 1}, [9]], # 10
-  [Region, {head: 9}, [10]], # 11
-  [Print, ~, [8], 11, Scalar], # 12
-  [Return, {implicit: true}, [1], 12], # 13
-  [Constant, {const_type: integer, value: "7"}, ~, ~, Int], # 14
-  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 15
-  [Phi, {region: 9}, [15, 22], ~, Int], # 16
-  [NumGt, ~, [14, 16], 9, Boolean], # 17
-  [Proj, {index: 0}, [9]], # 18
-  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 19
-  [NumEq, ~, [16, 19], ~, Boolean], # 20
-  [If, ~, [18, 20], 18], # 21
-  [Add, ~, [16, 15], ~, Int], # 22
-  [Constant, {const_type: integer, value: "4"}, ~, ~, Int], # 23
-  [NumEq, ~, [16, 23], ~, Boolean], # 24
-  [Proj, {index: 1}, [21]], # 25
-  [If, ~, [25, 24], 25], # 26
-  [Proj, {index: 1}, [26]], # 27
-  [Call, {dispatch_kind: builtin, name: push, param_names: []}, [5, 16], 27, Unknown], # 28
-  [Proj, {index: 0}, [21]], # 29
-  [Proj, {index: 0}, [26]], # 30
-  [Region, {head: 26}, [30, 28]], # 31
-  [Region, {head: 21}, [29, 31]]]} # 32
+  [PadAccess, {sigil: "@", symbol: out}, ~, ~, Unknown], # 3
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 4
+  [Loop, {bound: entry}, [0], 0], # 5
+  [Phi, {region: 5}, [4, 34], ~, Int], # 6
+  [Proj, {index: 0}, [5]], # 7
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 8
+  [NumEq, ~, [6, 8], ~, Boolean], # 9
+  [If, ~, [7, 9], 7], # 10
+  [Proj, {index: 1}, [10]], # 11
+  [Constant, {const_type: integer, value: "4"}, ~, ~, Int], # 12
+  [NumEq, ~, [6, 12], ~, Boolean], # 13
+  [If, ~, [11, 13], 11], # 14
+  [Proj, {index: 1}, [14]], # 15
+  [Call, {dispatch_kind: builtin, memory_input: true, name: push, param_names: []}, [3, 6, 2], 15, Int], # 16
+  [Proj, {index: 0}, [14]], # 17
+  [Region, {head: 14}, [17, 16]], # 18
+  [Phi, {predecessors: [17, 15], region: 18}, [2, 16], ~, Unknown], # 19
+  [Proj, {index: 0}, [10]], # 20
+  [Region, {head: 10}, [20, 18]], # 21
+  [Phi, {predecessors: [20, 11], region: 21}, [2, 19], ~, Unknown], # 22
+  [EntryDef, {package: main, sigil: $, symbol: "\""}, [22], ~, Scalar], # 23
+  [Coerce, {from_repr: Scalar, to_repr: Str}, [23], ~, Str], # 24
+  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [24, 3], ~, Str], # 25
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 26
+  [Concat, ~, [25, 26], ~, Str], # 27
+  [Proj, {index: 1}, [5]], # 28
+  [Region, {head: 5}, [28]], # 29
+  [Print, ~, [27], 29, Scalar], # 30
+  [Return, {implicit: true}, [1], 30], # 31
+  [Constant, {const_type: integer, value: "7"}, ~, ~, Int], # 32
+  [NumGt, ~, [32, 6], 5, Boolean], # 33
+  [Add, ~, [6, 4], ~, Int]]} # 34
 ```

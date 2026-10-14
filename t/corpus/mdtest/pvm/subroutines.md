@@ -668,7 +668,7 @@ main::last_is_for: {start: 0, returns: [5], nodes: [
   [Coerce, {from_repr: Scalar, to_repr: Num}, [14], ~, Num], # 15
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 16
   [Multiply, ~, [15, 16], ~, Num], # 17
-  [Call, {dispatch_kind: builtin, name: push, param_names: []}, [13, 17], 12, Unknown], # 18
+  [Call, {dispatch_kind: builtin, memory_input: true, name: push, param_names: []}, [13, 17, 7], 12, Int], # 18
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 19
   [Add, ~, [10, 19], ~, Int]]} # 20
 main::last_is_while: {start: 0, returns: [5], nodes: [

@@ -478,7 +478,7 @@ main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
   [Loop, {bound: entry}, [0], 0], # 3
-  [Phi, {region: 3}, [2, 24], ~, Unknown], # 4
+  [Phi, {region: 3}, [2, 25], ~, Unknown], # 4
   [EntryDef, {package: main, sigil: $, symbol: "\""}, [4], ~, Scalar], # 5
   [Coerce, {from_repr: Scalar, to_repr: Str}, [5], ~, Str], # 6
   [PadAccess, {sigil: "@", symbol: r}, ~, ~, Unknown], # 7
@@ -499,7 +499,7 @@ main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Add, ~, [17, 16], ~, Int], # 22
   [PadAccess, {sigil: $, symbol: "n"}, [21], ~, Unknown], # 23
   [Call, {dispatch_kind: direct, name: main::twice, param_names: [], want: list}, [23], 21, Num], # 24
-  [Call, {dispatch_kind: builtin, name: push, param_names: []}, [7, 24], 24, Unknown]]} # 25
+  [Call, {dispatch_kind: builtin, memory_input: true, name: push, param_names: []}, [7, 24, 24], 24, Int]]} # 25
 main::twice: {start: 0, returns: [8], nodes: [
   [Start], # 0
   [ArgsSource, ~, ~, ~, Array], # 1

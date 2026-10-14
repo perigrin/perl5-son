@@ -211,7 +211,7 @@ no operator whose text is "+"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [27], nodes: [
+main::__PROGRAM__: {start: 0, returns: [29], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
@@ -222,23 +222,25 @@ main::__PROGRAM__: {start: 0, returns: [27], nodes: [
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 7
   [Assign, ~, [6, 7], 5, Int], # 8
   [PadAccess, {sigil: $, symbol: s}, [8], ~, Str], # 9
-  [Constant, {const_type: regex, value: "c(?{ $k = $k + length(\"}}\") })"}, ~, ~, Regex], # 10
-  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 11
-  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 12
-  [Add, ~, [11, 12], ~, Int], # 13
-  [RegexSubst, {flags: "", pattern: a, replacement: ""}, [9, 13, 8], 8, Str], # 14
-  [RegexMatch, {flags: "", pattern: "b(?{ $k = length(\"}}}\") })"}, [9], 14, Boolean], # 15
-  [Match, ~, [9, 10], 15, Boolean], # 16
-  [PadAccess, {sigil: $, symbol: s}, [16], ~, Str], # 17
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [17], ~, Str], # 18
-  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 19
-  [Concat, ~, [18, 19], ~, Str], # 20
-  [PadAccess, {sigil: $, symbol: k}, [16], ~, Str], # 21
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [21], ~, Str], # 22
-  [Concat, ~, [20, 22], ~, Str], # 23
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 24
-  [Concat, ~, [23, 24], ~, Str], # 25
-  [Print, ~, [25], 16, Scalar], # 26
-  [Return, {implicit: true}, [1], 26], # 27
-  [RegexMatch, {flags: "", pattern: a}, [9], ~, Boolean]]} # 28
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 10
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 11
+  [Add, ~, [10, 11], ~, Int], # 12
+  [RegexSubst, {flags: "", pattern: a, replacement: ""}, [9, 12, 8], 8, Str], # 13
+  [PadAccess, {sigil: $, symbol: s}, [13], ~, Str], # 14
+  [RegexMatch, {flags: "", pattern: "b(?{ $k = length(\"}}}\") })"}, [14], 13, Boolean], # 15
+  [PadAccess, {sigil: $, symbol: s}, [15], ~, Unknown], # 16
+  [Constant, {const_type: regex, value: "c(?{ $k = $k + length(\"}}\") })"}, ~, ~, Regex], # 17
+  [Match, ~, [16, 17], 15, Boolean], # 18
+  [PadAccess, {sigil: $, symbol: s}, [18], ~, Str], # 19
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [19], ~, Str], # 20
+  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 21
+  [Concat, ~, [20, 21], ~, Str], # 22
+  [PadAccess, {sigil: $, symbol: k}, [18], ~, Str], # 23
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [23], ~, Str], # 24
+  [Concat, ~, [22, 24], ~, Str], # 25
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 26
+  [Concat, ~, [25, 26], ~, Str], # 27
+  [Print, ~, [27], 18, Scalar], # 28
+  [Return, {implicit: true}, [1], 28], # 29
+  [RegexMatch, {flags: "", pattern: a}, [9], ~, Boolean]]} # 30
 ```

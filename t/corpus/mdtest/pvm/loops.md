@@ -528,50 +528,52 @@ one word whose text is "last"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [26], nodes: [
+main::__PROGRAM__: {start: 0, returns: [38], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [MemStart], # 2
-  [EntryDef, {package: main, sigil: $, symbol: "\""}, [2], ~, Scalar], # 3
-  [Coerce, {from_repr: Scalar, to_repr: Str}, [3], ~, Str], # 4
-  [PadAccess, {sigil: "@", symbol: s}, ~, ~, Unknown], # 5
-  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [4, 5], ~, Str], # 6
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 7
-  [Concat, ~, [6, 7], ~, Str], # 8
-  [Loop, {bound: each}, [0], 0], # 9
-  [Proj, {index: 1}, [9]], # 10
-  [Proj, {index: 0}, [9]], # 11
-  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 12
-  [Phi, {region: 9}, [12, 15], ~, Int], # 13
-  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 14
-  [Add, ~, [13, 14], ~, Int], # 15
-  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 16
-  [NumEq, ~, [15, 16], ~, Boolean], # 17
-  [If, ~, [11, 17], 11], # 18
-  [Proj, {index: 1}, [18]], # 19
-  [Constant, {const_type: integer, value: "4"}, ~, ~, Int], # 20
-  [NumEq, ~, [15, 20], ~, Boolean], # 21
-  [If, ~, [19, 21], 19], # 22
-  [Proj, {index: 0}, [22]], # 23
-  [Region, {head: 9}, [10, 23]], # 24
-  [Print, ~, [8], 24, Scalar], # 25
-  [Return, {implicit: true}, [1], 25], # 26
-  [EnvRead, {key: "N"}, ~, ~, Str], # 27
-  [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 28
-  [DefinedOr, ~, [27, 28], ~, Str], # 29
-  [Coerce, {from_repr: Str, to_repr: Num}, [29], ~, Num], # 30
-  [NumLt, ~, [13, 30], 9, Boolean], # 31
-  [Phi, {region: 24}, [13, 15], ~, Int], # 32
-  [Proj, {index: 0}, [18]], # 33
-  [Coerce, {from_repr: Int, to_repr: Str}, [15], ~, Str], # 34
-  [Constant, {const_type: string, value: b}, ~, ~, Str], # 35
-  [Concat, ~, [35, 34], ~, Str], # 36
-  [Proj, {index: 1}, [22]], # 37
-  [Call, {dispatch_kind: builtin, name: push, param_names: []}, [5, 36], 37, Unknown], # 38
-  [Region, {head: 18}, [33, 38]], # 39
-  [Constant, {const_type: string, value: c}, ~, ~, Str], # 40
-  [Concat, ~, [40, 34], ~, Str], # 41
-  [Call, {dispatch_kind: builtin, name: push, param_names: []}, [5, 41], 39, Unknown]]} # 42
+  [PadAccess, {sigil: "@", symbol: s}, ~, ~, Unknown], # 2
+  [Constant, {const_type: string, value: c}, ~, ~, Str], # 3
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 4
+  [Loop, {bound: each}, [0], 0], # 5
+  [Phi, {region: 5}, [4, 8], ~, Int], # 6
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 7
+  [Add, ~, [6, 7], ~, Int], # 8
+  [Coerce, {from_repr: Int, to_repr: Str}, [8], ~, Str], # 9
+  [Concat, ~, [3, 9], ~, Str], # 10
+  [MemStart], # 11
+  [Constant, {const_type: string, value: b}, ~, ~, Str], # 12
+  [Concat, ~, [12, 9], ~, Str], # 13
+  [Proj, {index: 0}, [5]], # 14
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 15
+  [NumEq, ~, [8, 15], ~, Boolean], # 16
+  [If, ~, [14, 16], 14], # 17
+  [Proj, {index: 1}, [17]], # 18
+  [Constant, {const_type: integer, value: "4"}, ~, ~, Int], # 19
+  [NumEq, ~, [8, 19], ~, Boolean], # 20
+  [If, ~, [18, 20], 18], # 21
+  [Proj, {index: 1}, [21]], # 22
+  [Call, {dispatch_kind: builtin, memory_input: true, name: push, param_names: []}, [2, 13, 11], 22, Int], # 23
+  [Proj, {index: 0}, [17]], # 24
+  [Region, {head: 17}, [24, 23]], # 25
+  [Phi, {predecessors: [24, 18], region: 25}, [11, 23], ~, Unknown], # 26
+  [Call, {dispatch_kind: builtin, memory_input: true, name: push, param_names: []}, [2, 10, 26], 25, Int], # 27
+  [Proj, {index: 1}, [5]], # 28
+  [Proj, {index: 0}, [21]], # 29
+  [Region, {head: 5}, [28, 29]], # 30
+  [Phi, {region: 30}, [27, 11], ~, Unknown], # 31
+  [EntryDef, {package: main, sigil: $, symbol: "\""}, [31], ~, Scalar], # 32
+  [Coerce, {from_repr: Scalar, to_repr: Str}, [32], ~, Str], # 33
+  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [33, 2], ~, Str], # 34
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 35
+  [Concat, ~, [34, 35], ~, Str], # 36
+  [Print, ~, [36], 30, Scalar], # 37
+  [Return, {implicit: true}, [1], 37], # 38
+  [EnvRead, {key: "N"}, ~, ~, Str], # 39
+  [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 40
+  [DefinedOr, ~, [39, 40], ~, Str], # 41
+  [Coerce, {from_repr: Str, to_repr: Num}, [41], ~, Num], # 42
+  [NumLt, ~, [6, 42], 5, Boolean], # 43
+  [Phi, {region: 30}, [6, 8], ~, Int]]} # 44
 ```
 
 ## The seen-hash idiom

@@ -177,17 +177,17 @@ no word whose text is "b"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [26], nodes: [
+main::__PROGRAM__: {start: 0, returns: [27], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [PadAccess, {sigil: $, symbol: s}, ~, ~, Str], # 2
-  [MemStart], # 3
-  [PadAccess, {sigil: $, symbol: s}, [3], ~, Unknown], # 4
-  [EnvRead, {key: X}, ~, ~, Str], # 5
-  [Constant, {const_type: string, value: abcabc}, ~, ~, Str], # 6
-  [DefinedOr, ~, [5, 6], ~, Str], # 7
-  [Assign, ~, [4, 7], 0, Str], # 8
-  [RegexMatch, {flags: g, pattern: b}, [2], 8, Boolean], # 9
+  [MemStart], # 2
+  [PadAccess, {sigil: $, symbol: s}, [2], ~, Unknown], # 3
+  [EnvRead, {key: X}, ~, ~, Str], # 4
+  [Constant, {const_type: string, value: abcabc}, ~, ~, Str], # 5
+  [DefinedOr, ~, [4, 5], ~, Str], # 6
+  [Assign, ~, [3, 6], 0, Str], # 7
+  [PadAccess, {sigil: $, symbol: s}, [7], ~, Str], # 8
+  [RegexMatch, {flags: g, pattern: b}, [8], 7, Boolean], # 9
   [PadAccess, {sigil: $, symbol: s}, [9], ~, Unknown], # 10
   [Call, {dispatch_kind: builtin, name: pos, param_names: []}, [10], 9, Unknown], # 11
   [Coerce, {from_repr: Unknown, to_repr: Str}, [11], ~, Str], # 12
@@ -196,13 +196,14 @@ main::__PROGRAM__: {start: 0, returns: [26], nodes: [
   [Call, {dispatch_kind: builtin, name: pos, param_names: []}, [10], ~, Unknown], # 15
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 16
   [Assign, ~, [15, 16], 11, Int], # 17
-  [RegexMatch, {flags: g, pattern: b}, [2], 17, Boolean], # 18
-  [PadAccess, {sigil: $, symbol: s}, [18], ~, Unknown], # 19
-  [Call, {dispatch_kind: builtin, name: pos, param_names: []}, [19], 18, Unknown], # 20
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [20], ~, Str], # 21
-  [Concat, ~, [14, 21], ~, Str], # 22
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 23
-  [Concat, ~, [22, 23], ~, Str], # 24
-  [Print, ~, [24], 20, Scalar], # 25
-  [Return, {implicit: true}, [1], 25]]} # 26
+  [PadAccess, {sigil: $, symbol: s}, [17], ~, Str], # 18
+  [RegexMatch, {flags: g, pattern: b}, [18], 17, Boolean], # 19
+  [PadAccess, {sigil: $, symbol: s}, [19], ~, Unknown], # 20
+  [Call, {dispatch_kind: builtin, name: pos, param_names: []}, [20], 19, Unknown], # 21
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [21], ~, Str], # 22
+  [Concat, ~, [14, 22], ~, Str], # 23
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 24
+  [Concat, ~, [23, 24], ~, Str], # 25
+  [Print, ~, [25], 21, Scalar], # 26
+  [Return, {implicit: true}, [1], 26]]} # 27
 ```

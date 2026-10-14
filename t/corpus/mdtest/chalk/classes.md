@@ -1872,7 +1872,7 @@ Bag::total: {start: 0, returns: [6], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 1
   [Loop, {bound: entry}, [0], 0], # 2
-  [Phi, {region: 2}, [1, 16], ~, Int], # 3
+  [Phi, {region: 2}, [1, 16], ~, Unknown], # 3
   [Proj, {index: 1}, [2]], # 4
   [Region, {head: 2}, [4]], # 5
   [Return, {implicit: true}, [3], 5], # 6
@@ -1885,7 +1885,7 @@ Bag::total: {start: 0, returns: [6], nodes: [
   [Proj, {index: 0}, [2]], # 13
   [Subscript, {kind: array}, [9, 11, 8], ~, Scalar], # 14
   [Coerce, {from_repr: Scalar, to_repr: Num}, [14], ~, Num], # 15
-  [Add, ~, [3, 15], ~, Num], # 16
+  [Add, ~, [3, 15], ~, Unknown], # 16
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 17
   [Add, ~, [11, 17], ~, Int]]} # 18
 main::__PROGRAM__: {start: 0, returns: [3], nodes: [
@@ -1896,7 +1896,7 @@ main::__PROGRAM__: {start: 0, returns: [3], nodes: [
 main::corpus_case: {start: 0, returns: [6], nodes: [
   [Start], # 0
   [Call, {class_name: Bag, dispatch_kind: method, name: new, param_names: [], want: scalar}, ~, 0, Object], # 1
-  [Call, {class_name: Bag, dispatch_kind: method, name: total, param_names: [], want: list}, [1], 1, Int], # 2
+  [Call, {class_name: Bag, dispatch_kind: method, name: total, param_names: [], want: list}, [1], 1, Unknown], # 2
   [Coerce, {from_repr: Unknown, to_repr: Str}, [2], ~, Str], # 3
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
   [Print, ~, [3, 4], 2, Scalar], # 5
