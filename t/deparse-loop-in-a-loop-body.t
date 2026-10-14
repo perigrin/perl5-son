@@ -100,12 +100,25 @@ my $s=0; for my $i (1..3) { for (my $j=0; $j<$i; $j++) { $s += 10 } $s += 1 } pr
 SRC
 
 # A GUARD ARM THAT STOPS SHORT OF THE JOIN IS NOT THE WHOLE ARM. These printed
-# 0, 0 and 12: the rest of the arm vanished.
-refuses(<<'SRC', qr/GAP: untranslatable op inside a guarded arm \(arm stopped at `enterloop`/, 'a bare block in an if arm in a loop body');
+# 0, 0 and 12: the rest of the arm vanished. The arm walk dispatches a loop or
+# bare block through _enterloop, so the whole arm is walked.
+round_trips(<<'SRC', 'a bare block in an if arm in a loop body');
 my $s=0; for my $i (1..3) { if ($i > 1) { { $s += 10 } } } print "$s\n";
 SRC
-refuses(<<'SRC', qr/GAP: untranslatable op inside a guarded arm \(arm stopped at `enterloop`/, 'a while in an if arm in a loop body');
+round_trips(<<'SRC', 'a while in an if arm in a loop body');
 my $s=0; for my $i (1..3) { if ($i > 1) { my $k=0; while ($k<2) { $s += 10; $k++ } } } print "$s\n";
+SRC
+round_trips(<<'SRC', 'a bare block in an if arm, with an else');
+my $s=1; my $o=""; for my $i (1..4) { if ($i % 2) { { $s *= $i; $o .= $s } } else { $o .= "e" } } print "$o $s\n";
+SRC
+round_trips(<<'SRC', 'a while in an if arm bounded by the iterator');
+my $s=0; my $o=""; for my $i (1..4) { if ($i > 1) { my $k=0; while ($k<$i) { $s += $k; $k++ } $o .= $s } } print "$o $s\n";
+SRC
+round_trips(<<'SRC', 'a foreach in an if arm in a loop body');
+my $s=0; for my $i (1..3) { if ($i > 1) { for my $j (1..$i) { $s += $j } } else { $s -= 1 } } print "$s\n";
+SRC
+round_trips(<<'SRC', 'a bare block storing an element in an if arm');
+my %h; for my $i (1..3) { if ($i != 2) { { $h{$i} = $i*$i } } } print join(",", map {"$_=$h{$_}"} sort keys %h), "\n";
 SRC
 refuses(<<'SRC', qr/GAP: untranslatable op inside a guarded arm \(arm stopped at `iter`/, 'a postfix while in a foreach');
 my $s=0; for my $i (1..3) { my $j=0; $j++ while $j < $i; $s += $j } print "$s\n";
@@ -191,18 +204,30 @@ round_trips(<<'SRC', 'a shadowing my read in a bare block in a foreach');
 my $s=1; my $o=""; for my $i (1..2) { { my $s = 7 + $i; $o .= $s } $s *= 2 } print "$o $s\n";
 SRC
 
-# THE REST AFTER A `next if` MUST REACH THE LATCH. Its arm walk stops at a
-# nested loop or bare block, and the body walk resumed there on the merged
-# state -- past the `next` (perl 4, emitted 0).
-my $REST = qr/GAP: the rest of a loop body after a `next if` stops at `enterloop`, not the latch/;
-refuses(<<'SRC', $REST, 'a bare block after a next if');
+# THE REST AFTER A `next if` MUST REACH THE LATCH. An arm walk that stops
+# at a nested loop or bare block resumes the body walk on the merged state --
+# past the `next` (perl 4, emitted 0). The arm walk walks the nested loop
+# itself, so the rest reaches the latch.
+round_trips(<<'SRC', 'a bare block after a next if');
 my $s=0; for my $i (1..3) { next if $i == 2; { $s += $i } } print "$s\n";
 SRC
-refuses(<<'SRC', $REST, 'a bare block after a next if, with a continue');
+round_trips(<<'SRC', 'a bare block after a next if, with a continue');
 my $s=0; for my $i (1..3) { next if $i == 2; { $s += $i } } continue { $s += 100 } print "$s\n";
 SRC
-refuses(<<'SRC', $REST, 'a while after a next if');
+round_trips(<<'SRC', 'a while after a next if');
 my $s=0; for my $i (1..3) { next if $i == 2; my $j=0; while ($j<1) { $j++ } $s += $i } print "$s\n";
+SRC
+round_trips(<<'SRC', 'a bare block after a next if, then a push');
+my @r; for my $i (1..4) { next if $i % 2; { push @r, $i * 3 } push @r, "x" } print "@r\n";
+SRC
+round_trips(<<'SRC', 'a bare block after a next if, with a counting continue');
+my $s=0; my $c=0; for my $i (1..4) { next if $i == 3; { $s += $i } } continue { $c++ } print "$s $c\n";
+SRC
+round_trips(<<'SRC', 'a while bounded by the iterator after a next unless');
+my $s=0; for my $i (1..4) { next unless $i > 1; my $j=0; while ($j<$i) { $s += $j; $j++ } $s .= ""; } print "$s\n";
+SRC
+round_trips(<<'SRC', 'a bare block with its own my after a next if');
+my $s=0; for my $i (1..3) { next if $i == 1; { my $t = $i * 2; $s += $t } $s += 1 } print "$s\n";
 SRC
 round_trips(<<'SRC', 'a next if with a plain rest and a continue');
 my $s=0; for my $i (1..3) { next if $i == 2; $s += $i } continue { $s += 100 } print "$s\n";
