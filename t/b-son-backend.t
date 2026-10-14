@@ -161,15 +161,14 @@ subtest 'a GAP-refused sub is reported on stderr and other subs survive' => sub 
     # deliberate "GAP: ..." die is the translator refusing loudly; hiding it
     # made the sub vanish from the JSON with no trace anywhere.
     # `refused` must exercise a shape that STILL GAPs. (die-in-arm and mid-body
-    # `last if`/`next if` used to GAP here but now lower; a NESTED while loop
-    # inside a loop body remains an honest GAP -- the inner loop would mint Projs
-    # on the outer Loop and truncate the walk.)
+    # `last if`/`next if` used to GAP here but now lower; a bare block holding
+    # a `last` inside a loop body remains an honest GAP -- the `last` targets
+    # the block, and the loop-body walk would bind it to the enclosing loop.)
     my $src = 'sub ok_one { 42 } '
-            . 'sub refused { my $s = 0; my $i = 2; while ($i > 0) { '
-            . 'my $j = 2; while ($j > 0) { $s = $s + 1; $j = $j - 1 } '
-            . '$i = $i - 1 } $s }';
+            . 'sub refused { my $s = 0; for my $i (1..3) { '
+            . '{ $s = $s + $i; last if $i == 2; $s = $s + 100 } } $s }';
     my $stderr = `$perl -Ilib -MO=SoN,json -e '$src' 2>&1 >/dev/null`;
-    like($stderr, qr/B::SoN: skipped main::refused: GAP:/,
+    like($stderr, qr/B::SoN: skipped main::refused: GAP: a bare block with a next\/last\/redo inside a loop body/,
         'the refusal names the sub and the GAP on stderr');
 
     my $json = `$perl -Ilib -MO=SoN,json -e '$src' 2>/dev/null`;

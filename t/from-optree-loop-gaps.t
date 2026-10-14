@@ -139,12 +139,14 @@ subtest 'an UNCONDITIONAL bare last inside a loop body still refuses loudly' => 
         qr/GAP.*loop control \(last\)/i, 'a bare unconditional `last` dies with a GAP message');
 };
 
-subtest 'nested loop inside a loop body refuses loudly' => sub {
-    # Was: inner loop minted Projs on the OUTER Loop, truncated the body walk,
-    # and one variant ran to Int:3 instead of Int:6 silently.
+subtest 'a bare block with a last inside a loop body refuses loudly' => sub {
+    # A nested while lowers now (t/deparse-nested-loop-in-a-loop-body.t); a
+    # bare block's `last` targets the BLOCK, which the loop-body walk would
+    # bind to the enclosing loop, so that shape still refuses.
     like(translate_dies(
-        'sub { my $s = 0; my $i = 2; while ($i > 0) { my $j = 2; while ($j > 0) { $s = $s + 1; $j = $j - 1 } $i = $i - 1 } $s }'),
-        qr/GAP/, 'nested while dies with a GAP message');
+        'sub { my $s = 0; for my $i (1..3) { { $s = $s + $i; last if $i == 2; $s = $s + 100 } } $s }'),
+        qr/GAP: a bare block with a next\/last\/redo inside a loop body/,
+        'a bare block with a last dies with its own GAP message');
 };
 
 subtest 'nested and/or inside a loop body (zhi 019f26a5)' => sub {
