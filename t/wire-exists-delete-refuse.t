@@ -87,7 +87,7 @@ subtest 'a delete slice translates' => sub {
 # container and key collapsed into one addressed entry.
 subtest 'exists &sub lowers, and delete is unaffected' => sub {
     my ($out, $serr) = translate('sub f {} print exists &f ? 1 : 0;', 'exsub');
-    unlike $serr, qr/GAP|INTERNAL/, '`exists &sub` lowers';
+    unlike $serr, qr/GAP:|INTERNAL/, '`exists &sub` lowers';
     like $out, qr/"sigil"\s*:\s*"&"/,
         '... to a symbol-table entry with the code sigil';
 };

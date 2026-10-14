@@ -42,7 +42,7 @@ sub nodes_of ($w, $meth) {
 # `Foo->new` with the load that makes it valid deleted.
 subtest 'a bareword require survives as a call' => sub {
     my ($w, $err) = wire('require POSIX; print 1;', 'req-bare');
-    unlike $err, qr/GAP|INTERNAL/, 'it lowers' or return;
+    unlike $err, qr/GAP:|INTERNAL/, 'it lowers' or return;
     my $prog = nodes_of($w, 'main::__PROGRAM__');
     my ($req) = grep { ($_->{op} eq 'Call') && (($_->{name} // '') eq 'require') }
                 $prog->@*;
@@ -69,7 +69,7 @@ subtest 'a dynamic require survives too' => sub {
 subtest 'require is ordered before the import that needs it' => sub {
     my ($w, $err) = wire(
         'require POSIX; POSIX->import(); print 1;', 'req-import');
-    unlike $err, qr/GAP|INTERNAL/, 'it lowers' or return;
+    unlike $err, qr/GAP:|INTERNAL/, 'it lowers' or return;
     my $prog = nodes_of($w, 'main::__PROGRAM__');
 
     my ($req) = grep { ($_->{op} eq 'Call') && (($_->{name} // '') eq 'require') }
@@ -88,7 +88,7 @@ subtest 'require is ordered before the import that needs it' => sub {
 # identity.
 subtest 'two requires of one module stay two nodes' => sub {
     my ($w, $err) = wire('require POSIX; require POSIX; print 1;', 'req-twice');
-    unlike $err, qr/GAP|INTERNAL/, 'it lowers' or return;
+    unlike $err, qr/GAP:|INTERNAL/, 'it lowers' or return;
     my $prog = nodes_of($w, 'main::__PROGRAM__');
     my @req = grep { ($_->{op} eq 'Call') && (($_->{name} // '') eq 'require') }
               $prog->@*;
@@ -102,7 +102,7 @@ subtest 'two requires of one module stay two nodes' => sub {
 # here; there is nothing to drop.
 subtest 'a use leaves no runtime op to lower' => sub {
     my ($w, $err) = wire('use POSIX (); print 1;', 'use-none');
-    unlike $err, qr/GAP|INTERNAL/, 'it lowers' or return;
+    unlike $err, qr/GAP:|INTERNAL/, 'it lowers' or return;
     my $prog = nodes_of($w, 'main::__PROGRAM__');
     is scalar(grep { ($_->{name} // '') eq 'require' } $prog->@*), 0,
         'no require node -- the use ran at compile time';

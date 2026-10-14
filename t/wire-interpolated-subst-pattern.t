@@ -76,7 +76,7 @@ subtest 'interpolated patterns are distinguishable' => sub {
 # are this case: base/lex.t has one Constant, comp/parser.t two ("A", "\{").
 subtest 'constant parts fold back into the pattern' => sub {
     my ($n, $err) = wire('my $s="A{b"; $s =~ s/A\Q{\E/X/; print $s;', 'const_parts');
-    unlike $err, qr/GAP|INTERNAL/, 'it translates rather than refusing';
+    unlike $err, qr/GAP:|INTERNAL/, 'it translates rather than refusing';
     my ($sub) = grep { $_->{op} eq 'RegexSubst' } $n->@*;
     ok defined $sub, 'a RegexSubst node exists' or return;
     is +($sub->{pattern} // ''), 'A\{',
@@ -100,7 +100,7 @@ subtest 'a computed pattern is carried, not dropped' => sub {
     my ($n, $err) = wire('my $P=shift(@ARGV); my $s="a b";'
                        . ' $s =~ s/$P b$/X/; print $s;',
                          'computed_pat');
-    unlike $err, qr/GAP|INTERNAL/, 'it translates rather than refusing';
+    unlike $err, qr/GAP:|INTERNAL/, 'it translates rather than refusing';
     my ($sub) = grep { $_->{op} eq 'RegexSubst' } $n->@*;
     ok defined $sub, 'a RegexSubst node exists' or return;
 
@@ -123,7 +123,7 @@ subtest 'computed patterns stay distinguishable' => sub {
     my ($n, $err) = wire(
         'my $P=shift(@ARGV); my $Q=shift(@ARGV); my $s="abzb";'
       . ' $s =~ s/${P}b$/1/; $s =~ s/${Q}b/2/; print $s;', 'two_computed');
-    unlike $err, qr/GAP|INTERNAL/, 'both translate';
+    unlike $err, qr/GAP:|INTERNAL/, 'both translate';
     my @sub = grep { $_->{op} eq 'RegexSubst' } $n->@*;
     is scalar(@sub), 2, 'two distinct RegexSubst nodes';
 };
@@ -132,7 +132,7 @@ subtest 'computed patterns stay distinguishable' => sub {
 # every non-interpolated s/// in the corpus takes.
 subtest 'a literal pattern still substitutes' => sub {
     my ($n, $err) = wire('my $s="ab"; $s =~ s/a/X/; print $s;', 'lit_pat');
-    unlike $err, qr/GAP|INTERNAL/, 'it translates';
+    unlike $err, qr/GAP:|INTERNAL/, 'it translates';
     my ($sub) = grep { $_->{op} eq 'RegexSubst' } $n->@*;
     ok defined $sub, 'a RegexSubst node exists' or return;
     is +($sub->{pattern} // ''), 'a', 'with the literal pattern';

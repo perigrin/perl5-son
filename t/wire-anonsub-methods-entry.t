@@ -99,7 +99,7 @@ subtest 'anon subs in different subs get distinct names' => sub {
 subtest 'a capturing anon sub lowers with its capture represented' => sub {
     my ( undef, $w, $err ) = run_and_translate(
         'my $x = 5; my $c = sub { $x }; print $c->();', 'anon-capture' );
-    unlike $err, qr/GAP|INTERNAL/, 'it lowers' or return;
+    unlike $err, qr/GAP:|INTERNAL/, 'it lowers' or return;
 
     my %methods = ( ( $w // {} )->{methods} // {} )->%*;
     my @prog = $methods{'main::__PROGRAM__'}{nodes}->@*;

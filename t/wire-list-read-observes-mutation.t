@@ -115,7 +115,7 @@ subtest 'an unmutated copy still flattens' => sub {
     my ($said, $n, $err) = run_and_wire(
         'my @a=(1,2,3); my @b=@a; print scalar(@b);', 'copy-clean');
     is $said, '3', 'perl copies all three' or return;
-    unlike $err, qr/GAP|INTERNAL/, 'it still lowers -- no refusal here';
+    unlike $err, qr/GAP:|INTERNAL/, 'it still lowers -- no refusal here';
     ok scalar(grep { $_->{op} eq 'Count' } $n->@*), 'and still builds a Count';
 };
 

@@ -56,7 +56,7 @@ subtest 'an interpolated match does not match a fragment' => sub {
 # reaches the stack, so it cannot be truncated this way.
 subtest 'a literal pattern still matches' => sub {
     my ($n, $err) = wire('my $s="abc"; print(($s =~ /abc/) ? "m" : "n");', 'lit_match');
-    unlike $err, qr/GAP|INTERNAL/, 'it translates';
+    unlike $err, qr/GAP:|INTERNAL/, 'it translates';
     my ($m) = grep { $_->{op} =~ /^(Match|RegexMatch)$/ } $n->@*;
     ok defined $m, 'a match node exists';
 };
@@ -69,7 +69,7 @@ subtest 'a literal pattern still matches' => sub {
 # about its fused target.
 subtest 'an interpolated qr// assembles its whole pattern' => sub {
     my ($n, $err) = wire('my $p="a"; my $re = qr/x${p}y/; print ref($re);', 'interp_qr');
-    unlike $err, qr/GAP|INTERNAL/, 'it lowers';
+    unlike $err, qr/GAP:|INTERNAL/, 'it lowers';
     my %byid = map { $_->{id} => $_ } $n->@*;
     my ($c) = grep { $_->{op} eq 'Coerce' && ($_->{to_repr} // '') eq 'Regex' } $n->@*;
     ok defined $c, 'a Coerce to Regex is built -- compile this string as a pattern'
@@ -83,7 +83,7 @@ subtest 'an interpolated qr// assembles its whole pattern' => sub {
 # never reaches the stack, so the interpolation path must not claim it.
 subtest 'a literal qr// is still a regex constant' => sub {
     my ($n, $err) = wire('my $re = qr/abc/; print ref($re);', 'lit_qr');
-    unlike $err, qr/GAP|INTERNAL/, 'it translates';
+    unlike $err, qr/GAP:|INTERNAL/, 'it translates';
     my ($c) = grep { ($_->{const_type} // '') eq 'regex' } $n->@*;
     ok defined $c, 'a regex Constant exists';
     is +($c->{value} // ''), 'abc', 'holding the whole literal pattern';

@@ -41,7 +41,7 @@ sub nodes_of ($w, $meth) {
 #     CellWrite(cell, value, memory)  -> new memory version
 subtest 'a read-only capture builds a cell' => sub {
     my ($w, $err) = wire('my $n = 5; my $g = sub { $n + 1 }; print $g->();', 'ro');
-    unlike $err, qr/GAP|INTERNAL/, 'it lowers' or return;
+    unlike $err, qr/GAP:|INTERNAL/, 'it lowers' or return;
     my $prog = nodes_of($w, 'main::__PROGRAM__');
     ok scalar(grep { $_->{op} eq 'MakeCell' } $prog->@*),
         'a MakeCell is built in the enclosing scope';
@@ -52,7 +52,7 @@ subtest 'a read-only capture builds a cell' => sub {
 # baked-in constant would not be.
 subtest 'the body reads through a CellParam' => sub {
     my ($w, $err) = wire('my $n = 5; my $g = sub { $n + 1 }; print $g->();', 'ro_body');
-    unlike $err, qr/GAP|INTERNAL/, 'it lowers' or return;
+    unlike $err, qr/GAP:|INTERNAL/, 'it lowers' or return;
     my ($body) = grep { /__ANON__/ } keys $w->{methods}->%*;
     ok defined $body, 'the body graph exists' or return;
     my $b = nodes_of($w, $body);
@@ -63,7 +63,7 @@ subtest 'the body reads through a CellParam' => sub {
 # THE CELL IS AN INPUT TO AnonSub, which is what lets two closures share one.
 subtest 'the AnonSub takes the cell as an input' => sub {
     my ($w, $err) = wire('my $n = 5; my $g = sub { $n + 1 }; print $g->();', 'ro_input');
-    unlike $err, qr/GAP|INTERNAL/, 'it lowers' or return;
+    unlike $err, qr/GAP:|INTERNAL/, 'it lowers' or return;
     my $prog = nodes_of($w, 'main::__PROGRAM__');
     my %byid = map { $_->{id} => $_ } $prog->@*;
     my ($anon) = grep { $_->{op} eq 'AnonSub' } $prog->@*;
@@ -79,7 +79,7 @@ subtest 'two closures over one variable share one cell' => sub {
     my ($w, $err) = wire(
         'my $c = 0; my $inc = sub { $c = $c + 1 }; my $rd = sub { $c };'
         . ' print $inc->(), $rd->();', 'shared');
-    unlike $err, qr/GAP|INTERNAL/, 'it lowers' or return;
+    unlike $err, qr/GAP:|INTERNAL/, 'it lowers' or return;
     my $prog = nodes_of($w, 'main::__PROGRAM__');
     my @anons = grep { $_->{op} eq 'AnonSub' } $prog->@*;
     is scalar(@anons), 2, 'two AnonSubs' or return;
@@ -94,7 +94,7 @@ subtest 'two closures over one variable share one cell' => sub {
 # reports "read-only" for the canonical mutation case.
 subtest 'a written capture is marked written' => sub {
     my ($w, $err) = wire('my $c = 0; my $inc = sub { $c = $c + 1 }; print $inc->();', 'written');
-    unlike $err, qr/GAP|INTERNAL/, 'it lowers' or return;
+    unlike $err, qr/GAP:|INTERNAL/, 'it lowers' or return;
     my $prog = nodes_of($w, 'main::__PROGRAM__');
     my ($mc) = grep { $_->{op} eq 'MakeCell' } $prog->@*;
     ok defined $mc, 'the MakeCell exists' or return;
@@ -103,7 +103,7 @@ subtest 'a written capture is marked written' => sub {
 
 subtest 'a read-only capture is marked not written' => sub {
     my ($w, $err) = wire('my $n = 5; my $g = sub { $n + 1 }; print $g->();', 'ro_flag');
-    unlike $err, qr/GAP|INTERNAL/, 'it lowers' or return;
+    unlike $err, qr/GAP:|INTERNAL/, 'it lowers' or return;
     my $prog = nodes_of($w, 'main::__PROGRAM__');
     my ($mc) = grep { $_->{op} eq 'MakeCell' } $prog->@*;
     ok defined $mc, 'the MakeCell exists' or return;
@@ -114,7 +114,7 @@ subtest 'a read-only capture is marked not written' => sub {
 # body needs nothing from the enclosing scope.
 subtest 'a non-capturing anon sub gets no cell' => sub {
     my ($w, $err) = wire('my $c = sub { 42 }; print $c->();', 'noncap');
-    unlike $err, qr/GAP|INTERNAL/, 'it lowers' or return;
+    unlike $err, qr/GAP:|INTERNAL/, 'it lowers' or return;
     my $prog = nodes_of($w, 'main::__PROGRAM__');
     is scalar(grep { $_->{op} eq 'MakeCell' } $prog->@*), 0, 'no MakeCell';
 };

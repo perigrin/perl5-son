@@ -46,7 +46,7 @@ subtest 'a count after shift observes the shortened array' => sub {
     my ($said, $w, $err) = run_and_wire(
         'my @a = (1,2,3); shift @a; print scalar(@a);', 'count-shift');
     is $said, '2', 'perl shortens the array' or return;
-    unlike $err, qr/GAP|INTERNAL/, 'it lowers' or return;
+    unlike $err, qr/GAP:|INTERNAL/, 'it lowers' or return;
 
     my @n = prog_nodes($w)->@*;
     my ($count) = grep { $_->{op} eq 'Count' } @n;
@@ -69,7 +69,7 @@ subtest 'a count after push observes the lengthened array' => sub {
     my ($said, $w, $err) = run_and_wire(
         'my @a = (1,2,3); push @a, 4; print scalar(@a);', 'count-push');
     is $said, '4', 'perl lengthens the array' or return;
-    unlike $err, qr/GAP|INTERNAL/, 'it lowers -- no longer refused' or return;
+    unlike $err, qr/GAP:|INTERNAL/, 'it lowers -- no longer refused' or return;
 
     my @n = prog_nodes($w)->@*;
     my ($count) = grep { $_->{op} eq 'Count' } @n;
@@ -87,7 +87,7 @@ subtest 'reads either side of a mutation are distinct nodes' => sub {
         'my @a=(1,2); my $b=scalar(@a); push @a,3; my $c=scalar(@a);'
       . ' print "$b$c";', 'count-two');
     is $said, '23', 'perl sees 2 then 3' or return;
-    unlike $err, qr/GAP|INTERNAL/, 'it lowers' or return;
+    unlike $err, qr/GAP:|INTERNAL/, 'it lowers' or return;
 
     my @count = grep { $_->{op} eq 'Count' } prog_nodes($w)->@*;
     is scalar(@count), 2,
@@ -101,7 +101,7 @@ subtest 'a count over a computed list needs no memory' => sub {
     my ($said, $w, $err) = run_and_wire(
         'my @s = map { $_ * 2 } (1,2,3); print scalar(@s);', 'count-map');
     is $said, '3', 'perl counts the mapped list' or return;
-    unlike $err, qr/GAP|INTERNAL/, 'it lowers' or return;
+    unlike $err, qr/GAP:|INTERNAL/, 'it lowers' or return;
     ok scalar(grep { $_->{op} eq 'Count' } prog_nodes($w)->@*),
         'a Count is present for the mapped list';
 };

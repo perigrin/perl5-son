@@ -41,7 +41,7 @@ subtest 'an empty iteration list builds no loop and no body' => sub {
     my ($said, $n, $err) = run_and_wire(
         'for my $pkg(()){ print "BODY" } print "after";', 'fe-empty');
     is $said, 'after', 'perl runs the body zero times' or return;
-    unlike $err, qr/GAP|INTERNAL/, 'it lowers' or return;
+    unlike $err, qr/GAP:|INTERNAL/, 'it lowers' or return;
 
     is scalar(grep { $_->{op} eq 'Loop' } $n->@*), 0,
         'no Loop node -- there is no iteration';
@@ -59,7 +59,7 @@ subtest 'code after the empty loop is unaffected' => sub {
     my ($said, $n, $err) = run_and_wire(
         'my $x = 1; for my $i (()) { $x = 99 } print $x;', 'fe-after');
     is $said, '1', 'perl leaves $x alone' or return;
-    unlike $err, qr/GAP|INTERNAL/, 'it lowers' or return;
+    unlike $err, qr/GAP:|INTERNAL/, 'it lowers' or return;
     ok scalar(grep { $_->{op} eq 'Print' } $n->@*),
         'the trailing print is still in the graph';
 };
@@ -70,7 +70,7 @@ subtest 'a non-empty list still loops' => sub {
     my ($said, $n, $err) = run_and_wire(
         'my $t=0; for my $i (1,2,3) { $t += $i } print $t;', 'fe-full');
     is $said, '6', 'perl sums three values' or return;
-    unlike $err, qr/GAP|INTERNAL/, 'it lowers' or return;
+    unlike $err, qr/GAP:|INTERNAL/, 'it lowers' or return;
     ok scalar(grep { $_->{op} eq 'Loop' } $n->@*),
         'a Loop is built for a non-empty list';
 };

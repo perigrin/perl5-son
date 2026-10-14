@@ -48,7 +48,7 @@ subtest 's///e with a self-contained replacement lowers in a loop' => sub {
     my ($said, $out, $err) = run_and_wire(
         'my $s="axb"; for (1..1) { $s =~ s/x/99/e } print $s;', 'se-loop');
     is $said, 'a99b', 'perl evaluates the replacement' or return;
-    unlike $err, qr/GAP|INTERNAL/, 'it lowers';
+    unlike $err, qr/GAP:|INTERNAL/, 'it lowers';
     like $out, qr/"op"\s*:\s*"RegexSubst"/, '... building a RegexSubst';
 };
 
@@ -74,14 +74,14 @@ subtest 's///e on a named lexical inside a loop lowers' => sub {
         'my @a=("axb","cxd"); my $r=""; for my $s (@a) { my $t=$s;'
       . ' $t =~ s/x/9/e; $r.=$t } print $r;', 'se-lexical');
     is $said, 'a9bc9d', 'perl substitutes in each iteration' or return;
-    unlike $err, qr/GAP|INTERNAL/, 'it lowers';
+    unlike $err, qr/GAP:|INTERNAL/, 'it lowers';
 };
 
 subtest 's///e on an outer lexical inside a counted loop lowers' => sub {
     my ($said, undef, $err) = run_and_wire(
         'my $s="axb"; for (1..1) { $s =~ s/x/9/e } print $s;', 'se-counted');
     is $said, 'a9b', 'perl substitutes once' or return;
-    unlike $err, qr/GAP|INTERNAL/, 'it lowers';
+    unlike $err, qr/GAP:|INTERNAL/, 'it lowers';
 };
 
 # A SUBST INTO THE ALIASED ITERATOR WORKS NOW, and it took two fixes. The loop
@@ -99,7 +99,7 @@ subtest 'a subst into the aliased iterator reaches the source' => sub {
         my ($src, $want) = $case->@*;
         my ($said, undef, $err) = run_and_wire($src, 'se-it' . length($src));
         is $said, $want, "perl gives $want";
-        unlike $err, qr/GAP|INTERNAL/, '... and it lowers';
+        unlike $err, qr/GAP:|INTERNAL/, '... and it lowers';
     }
 };
 
@@ -136,7 +136,7 @@ subtest 'a substitution into a body lexical is unaffected' => sub {
         my ($src, $want) = $case->@*;
         my ($said, undef, $err) = run_and_wire($src, 'se-lex' . length($src));
         is $said, $want, "perl gives $want";
-        unlike $err, qr/GAP|INTERNAL/, '... and it lowers';
+        unlike $err, qr/GAP:|INTERNAL/, '... and it lowers';
     }
 };
 

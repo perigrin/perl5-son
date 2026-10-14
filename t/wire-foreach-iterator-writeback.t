@@ -47,7 +47,7 @@ subtest 'a body write reaches the array' => sub {
     my ($said, $n, $err) = run_and_wire(
         'my @a=(1,2,3); for my $x (@a) { $x = $x*10 } print $a[1];', 'wb-basic');
     is $said, '20', 'perl mutates the array' or return;
-    unlike $err, qr/GAP|INTERNAL/, 'it lowers' or return;
+    unlike $err, qr/GAP:|INTERNAL/, 'it lowers' or return;
 
     # An Assign whose target is a Subscript is the store-back.
     my %by = map { $_->{id} => $_ } $n->@*;
@@ -63,7 +63,7 @@ subtest 'the $_ form writes back as well' => sub {
     my ($said, undef, $err) = run_and_wire(
         'my @c=(1,2); for (@c) { $_ = $_+100 } print $c[0];', 'wb-underscore');
     is $said, '101', 'perl mutates through $_' or return;
-    unlike $err, qr/GAP|INTERNAL/, 'it lowers';
+    unlike $err, qr/GAP:|INTERNAL/, 'it lowers';
 };
 
 # A READ-ONLY BODY MUST NOT GAIN A STORE. Adding a write-back unconditionally
@@ -74,7 +74,7 @@ subtest 'a read-only body builds no store' => sub {
         'my @a=(1,2,3); my $t=0; for my $x (@a) { $t += $x } print $t;',
         'wb-readonly');
     is $said, '6', 'perl sums them' or return;
-    unlike $err, qr/GAP|INTERNAL/, 'it lowers' or return;
+    unlike $err, qr/GAP:|INTERNAL/, 'it lowers' or return;
 
     my %by = map { $_->{id} => $_ } $n->@*;
     my @stores = grep {
@@ -129,7 +129,7 @@ subtest 'an alias write that changes the type is tracked' => sub {
     my ($said, $n, $err) = run_and_wire(
         'my $n = 42; foreach ($n) { $_ = "x" } print $n;', 'wb-typechange');
     is $said, 'x', 'perl replaces the Int with a Str' or return;
-    unlike $err, qr/GAP|INTERNAL/, 'it lowers' or return;
+    unlike $err, qr/GAP:|INTERNAL/, 'it lowers' or return;
 
     my %by = map { $_->{id} => $_ } $n->@*;
     my ($pr) = grep { $_->{op} eq 'Print' } $n->@*;

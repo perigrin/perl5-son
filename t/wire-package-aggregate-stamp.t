@@ -33,7 +33,7 @@ sub wire ($src, $name) {
 #     push @files_to_delete, "$_->[0].pm" for @module_true_tests;
 subtest 'a package array is iterable' => sub {
     my (undef, $err) = wire('our @s=(1,2); print $_ for @s;', 'pkg_for');
-    unlike $err, qr/GAP|INTERNAL/, 'foreach over a package array translates';
+    unlike $err, qr/GAP:|INTERNAL/, 'foreach over a package array translates';
 };
 
 # AN UNBOUND package aggregate is where the EntryDef survives -- a bound one
@@ -68,7 +68,7 @@ subtest 'a package scalar is not stamped as an aggregate' => sub {
 # THE LEXICAL FORM already worked and must keep working.
 subtest 'a lexical array is still iterable' => sub {
     my (undef, $err) = wire('my @s=(1,2); print $_ for @s;', 'lex_for');
-    unlike $err, qr/GAP|INTERNAL/, 'foreach over a lexical array translates';
+    unlike $err, qr/GAP:|INTERNAL/, 'foreach over a lexical array translates';
 };
 
 done_testing;

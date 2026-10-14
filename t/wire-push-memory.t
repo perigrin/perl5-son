@@ -55,7 +55,7 @@ sub wire ($src, $name) {
 # t/wire-aggregate-read-observes-mutation.t.
 subtest 'push lowers and threads onto memory' => sub {
     my ($n, $err) = wire('my @a=(1,2); push @a, 3; print scalar(@a);', 'push_basic');
-    unlike $err, qr/GAP|INTERNAL/, 'no longer refused' or return;
+    unlike $err, qr/GAP:|INTERNAL/, 'no longer refused' or return;
     my ($p) = grep { ($_->{name} // '') eq 'push' } $n->@*;
     ok defined $p, 'the push Call exists' or return;
     cmp_ok scalar(($p->{inputs} // [])->@*), '>=', 3,
@@ -67,7 +67,7 @@ subtest 'push lowers and threads onto memory' => sub {
 # memory input must be the push, not MemStart.
 subtest 'a later read observes the push' => sub {
     my ($n, $err) = wire('my @a=(1,2); push @a, 3; print scalar(@a);', 'push_observed');
-    unlike $err, qr/GAP|INTERNAL/, 'it lowers' or return;
+    unlike $err, qr/GAP:|INTERNAL/, 'it lowers' or return;
     {
         my %byid = map { $_->{id} => $_ } $n->@*;
         my ($count) = grep { $_->{op} eq 'Count' } $n->@*;
@@ -88,7 +88,7 @@ subtest 'a later read observes the push' => sub {
 # PUSH YIELDS THE NEW LENGTH, an Int -- not the array and not the pushed value.
 subtest 'push yields an Int length' => sub {
     my ($n, $err) = wire('my @a=(1,2); my $n = push @a, 3; print $n;', 'push_value');
-    unlike $err, qr/GAP|INTERNAL/, 'it lowers' or return;
+    unlike $err, qr/GAP:|INTERNAL/, 'it lowers' or return;
     {
         my ($p) = grep { ($_->{name} // '') eq 'push' } $n->@*;
         ok defined $p, 'the push Call exists' or return;
@@ -98,7 +98,7 @@ subtest 'push yields an Int length' => sub {
 
 subtest 'unshift lowers by the same mechanism' => sub {
     my ($n, $err) = wire('my @a=(2,3); unshift @a, 1; print scalar(@a);', 'unshift');
-    unlike $err, qr/GAP|INTERNAL/, 'no longer refused' or return;
+    unlike $err, qr/GAP:|INTERNAL/, 'no longer refused' or return;
     ok scalar(grep { ($_->{name} // '') eq 'unshift' } $n->@*),
         'the unshift Call exists';
 };
@@ -112,7 +112,7 @@ subtest 'unshift lowers by the same mechanism' => sub {
 # wrong answer rather than a missing one, and it is deliberately left unstamped.
 subtest 'splice lowers too, but is not stamped Int' => sub {
     my ($n, $err) = wire('my @a=(1,2,3); splice(@a,1,1); print scalar(@a);', 'splice');
-    unlike $err, qr/GAP|INTERNAL/, 'no longer refused' or return;
+    unlike $err, qr/GAP:|INTERNAL/, 'no longer refused' or return;
     my ($sp) = grep { ($_->{name} // '') eq 'splice' } $n->@*;
     ok defined $sp, 'the splice Call exists' or return;
     isnt +($sp->{stamp} // ''), 'Int',
@@ -122,9 +122,9 @@ subtest 'splice lowers too, but is not stamped Int' => sub {
 # SHIFT/POP were already modelled and must stay working.
 subtest 'shift and pop are unaffected' => sub {
     my (undef, $e1) = wire('my @a=(1,2); my $x = shift @a; print $x;', 'shift_still');
-    unlike $e1, qr/GAP|INTERNAL/, 'shift still translates';
+    unlike $e1, qr/GAP:|INTERNAL/, 'shift still translates';
     my (undef, $e2) = wire('my @a=(1,2); my $x = pop @a; print $x;', 'pop_still');
-    unlike $e2, qr/GAP|INTERNAL/, 'pop still translates';
+    unlike $e2, qr/GAP:|INTERNAL/, 'pop still translates';
 };
 
 done_testing;

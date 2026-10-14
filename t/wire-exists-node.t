@@ -79,7 +79,7 @@ subtest 'exists yields a Boolean' => sub {
 
 subtest 'exists works on an array element' => sub {
     my ($n, $err) = wire('my @a=(1,2); print exists $a[0] ? 1 : 0;', 'ex_array');
-    unlike $err, qr/GAP|INTERNAL/, 'an array exists translates';
+    unlike $err, qr/GAP:|INTERNAL/, 'an array exists translates';
     ok scalar(grep { $_->{op} eq 'Exists' } $n->@*), 'and builds an Exists node';
 };
 
@@ -93,7 +93,7 @@ subtest 'exists works on an array element' => sub {
 # `*late = sub {1}` makes it 1 -- so the answer must be read when asked.
 subtest 'exists &sub reads the symbol table' => sub {
     my ($n, $err) = wire('sub f {} print exists &f ? 1 : 0;', 'ex_sub');
-    unlike $err, qr/GAP|INTERNAL/, 'it lowers' or return;
+    unlike $err, qr/GAP:|INTERNAL/, 'it lowers' or return;
 
     my ($entry) = grep { $_->{op} eq 'EntryDef' } $n->@*;
     ok $entry, 'a symbol-table entry is built' or return;

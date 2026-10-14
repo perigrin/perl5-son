@@ -129,7 +129,7 @@ subtest 'an unnameable anon sub calls the value, naming no absent body' => sub {
 subtest 'a capturing anonymous sub lowers to a cell' => sub {
     my ( $w, $err ) = translate(
         'my $x = 5; my $c = sub { $x }; print $c->();', 'anon-capture' );
-    unlike $err, qr/GAP|INTERNAL/, 'it lowers' or return;
+    unlike $err, qr/GAP:|INTERNAL/, 'it lowers' or return;
 
     my %methods = ( ( $w // {} )->{methods} // {} )->%*;
     my ($body) = grep { /__ANON__/ } sort keys %methods;

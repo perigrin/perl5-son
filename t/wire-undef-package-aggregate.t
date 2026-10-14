@@ -37,7 +37,7 @@ sub wire ($src, $name) {
 # Measured on 5.42.0: `our @a=(1,2); undef @a; scalar(@a)` is 0.
 subtest 'undef on a package array empties it' => sub {
     my ($n, $err) = wire('our @a=(1,2); undef @a; print scalar(@a);', 'pkg_array');
-    unlike $err, qr/GAP|INTERNAL/, 'it translates';
+    unlike $err, qr/GAP:|INTERNAL/, 'it translates';
     my @lit = grep { $_->{op} eq 'ArrayLiteral' && !(($_->{inputs} // [])->@*) } $n->@*;
     ok scalar(@lit), 'an EMPTY ArrayLiteral is built -- the `@a = ()` shape';
 };
@@ -55,7 +55,7 @@ subtest 'undef on a package array empties it' => sub {
 # someone comes back to strengthen it.
 subtest 'undef on a package hash translates (emptying not yet observable)' => sub {
     my ($n, $err) = wire('our %h=(a=>1); undef %h; print scalar(keys %h);', 'pkg_hash');
-    unlike $err, qr/GAP|INTERNAL/, 'it translates rather than refusing';
+    unlike $err, qr/GAP:|INTERNAL/, 'it translates rather than refusing';
     my @lit = grep { $_->{op} eq 'HashLiteral' && !(($_->{inputs} // [])->@*) } $n->@*;
     is scalar(@lit), 0,
         'the empty HashLiteral is NOT yet reachable from the later keys read'
@@ -66,16 +66,16 @@ subtest 'undef on a package hash translates (emptying not yet observable)' => su
 # reroutes the aggregate arm could take them with it.
 subtest 'lexical aggregates are unaffected' => sub {
     my (undef, $e1) = wire('my @a=(1,2); undef @a; print scalar(@a);', 'lex_array');
-    unlike $e1, qr/GAP|INTERNAL/, 'my @a still translates';
+    unlike $e1, qr/GAP:|INTERNAL/, 'my @a still translates';
     my (undef, $e2) = wire('my %h=(a=>1); undef %h; print scalar(keys %h);', 'lex_hash');
-    unlike $e2, qr/GAP|INTERNAL/, 'my %h still translates';
+    unlike $e2, qr/GAP:|INTERNAL/, 'my %h still translates';
 };
 
 # AND THE PACKAGE SCALAR, which took a different arm already and must not be
 # disturbed by a change to the aggregate one.
 subtest 'a package scalar still rebinds to undef' => sub {
     my (undef, $err) = wire('our $x=5; undef $x; print defined($x)?1:0;', 'pkg_scalar');
-    unlike $err, qr/GAP|INTERNAL/, 'our $x still translates';
+    unlike $err, qr/GAP:|INTERNAL/, 'our $x still translates';
 };
 
 # `undef *GLOB` IS NOT THE SAME OPERATION -- it clears a symbol-table slot

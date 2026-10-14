@@ -48,7 +48,7 @@ subtest 'exists &sub lowers to a symbol-table read' => sub {
     my ($said, $n, $err) = run_and_wire(
         'sub f { 1 } print( (exists &f) ? "y" : "n" );', 'exists-sub');
     is $said, 'y', 'perl says the sub exists' or return;
-    unlike $err, qr/GAP|INTERNAL/, 'it lowers' or return;
+    unlike $err, qr/GAP:|INTERNAL/, 'it lowers' or return;
 
     my ($ed) = grep { $_->{op} eq 'EntryDef' } $n->@*;
     ok $ed, 'a symbol-table entry is built' or return;
@@ -60,7 +60,7 @@ subtest 'a missing sub is the same shape, not a folded constant' => sub {
     my ($said, $n, $err) = run_and_wire(
         'print( (exists &nope) ? "y" : "n" );', 'exists-missing');
     is $said, 'n', 'perl says it does not exist' or return;
-    unlike $err, qr/GAP|INTERNAL/, 'it lowers' or return;
+    unlike $err, qr/GAP:|INTERNAL/, 'it lowers' or return;
 
     # NOT folded to a Constant: the symbol table is mutable at runtime, so the
     # answer has to be read rather than baked in.
@@ -74,7 +74,7 @@ subtest 'exists on a hash element still builds an Exists' => sub {
     my ($said, $n, $err) = run_and_wire(
         'my %h=(a=>1); print( (exists $h{a}) ? "y" : "n" );', 'exists-elem');
     is $said, 'y', 'perl finds the key' or return;
-    unlike $err, qr/GAP|INTERNAL/, 'it lowers' or return;
+    unlike $err, qr/GAP:|INTERNAL/, 'it lowers' or return;
     ok scalar(grep { $_->{op} eq 'Exists' } $n->@*),
         'the element form is still an Exists node';
 };

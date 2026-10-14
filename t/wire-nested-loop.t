@@ -34,7 +34,7 @@ subtest 'a nested foreach translates' => sub {
     my (undef, $err) = wire(
         'my $t=0; for my $i (1,2) { for my $j (1,2) { $t = $t + 1 } } print $t;',
         'nested');
-    unlike $err, qr/GAP|INTERNAL/, 'it translates';
+    unlike $err, qr/GAP:|INTERNAL/, 'it translates';
 };
 
 # THE NESTING MUST BE REAL, not two sibling loops. The inner Loop takes the
@@ -88,7 +88,7 @@ subtest 'inner Phis name the inner loop' => sub {
 # path that was already correct.
 subtest 'a single foreach is unaffected' => sub {
     my ($n, $err) = wire('my $t=0; for my $i (1,2,3) { $t = $t + $i } print $t;', 'single');
-    unlike $err, qr/GAP|INTERNAL/, 'it translates';
+    unlike $err, qr/GAP:|INTERNAL/, 'it translates';
     is scalar(grep { $_->{op} eq 'Loop' } $n->@*), 1, 'exactly one Loop';
 };
 

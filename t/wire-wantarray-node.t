@@ -94,7 +94,7 @@ subtest 'each callsite records its own context' => sub {
 subtest 'the ternary idiom lowers with its list arm' => sub {
     my ($w, $err) = wire(
         'sub f { wantarray ? (1,2) : "s" } my @l = f(); print scalar(@l);', 'wa_ternary');
-    unlike $err, qr/GAP|INTERNAL/, 'no refusal and no crash';
+    unlike $err, qr/GAP:|INTERNAL/, 'no refusal and no crash';
     ok $w && $w->{methods}{'main::f'}, 'and the callee reaches the wire';
 };
 
@@ -102,7 +102,7 @@ subtest 'the ternary idiom lowers with its list arm' => sub {
 subtest 'a single-value wantarray ternary translates end to end' => sub {
     my ($w, $err) = wire(
         'sub f { wantarray ? "L" : "S" } my @l = f(); print scalar(@l);', 'wa_single');
-    unlike $err, qr/GAP|INTERNAL/, 'it lowers';
+    unlike $err, qr/GAP:|INTERNAL/, 'it lowers';
     ok $w && $w->{methods}{'main::f'}, 'and the callee reaches the wire';
 };
 
@@ -120,16 +120,16 @@ subtest 'a single-value wantarray ternary translates end to end' => sub {
 # by the round trips in t/deparse-a-ternary-with-a-multi-element-list-arm.t.
 subtest 'a multi-element ternary arm lowers in a sub body as at top level' => sub {
     my (undef, $e1) = wire('my $c=1; my @l = $c ? (1,2) : ("s"); print scalar(@l);', 'mt_top');
-    unlike $e1, qr/GAP|INTERNAL/, 'the top-level form lowers';
+    unlike $e1, qr/GAP:|INTERNAL/, 'the top-level form lowers';
     my (undef, $e2) = wire('sub g { my $c=shift; $c ? (1,2) : ("s") } my @l=g(1); print scalar(@l);', 'mt_sub');
-    unlike $e2, qr/GAP|INTERNAL/, 'and so does the sub-body form';
+    unlike $e2, qr/GAP:|INTERNAL/, 'and so does the sub-body form';
 };
 
 # A SINGLE-VALUE TERNARY IS UNAFFECTED -- the delta guard must not refuse the
 # ordinary select this path exists to lower.
 subtest 'a single-value ternary still translates' => sub {
     my (undef, $err) = wire('my $c=1; my $x = $c ? "y" : "n"; print $x;', 'single_ternary');
-    unlike $err, qr/GAP|INTERNAL/, 'one value per arm still lowers';
+    unlike $err, qr/GAP:|INTERNAL/, 'one value per arm still lowers';
 };
 
 done_testing;

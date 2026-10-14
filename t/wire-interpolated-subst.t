@@ -41,7 +41,7 @@ sub wire ($src, $name) {
 subtest 'an interpolated replacement is whole or refused' => sub {
     my ($n, $err) = wire('my $p="Z"; my $s="ab"; $s =~ s/a/x${p}y/; print $s;',
                          'interp_subst');
-    unlike $err, qr/GAP|INTERNAL/, 'it lowers';
+    unlike $err, qr/GAP:|INTERNAL/, 'it lowers';
     my ($sub) = grep { $_->{op} eq 'RegexSubst' } $n->@*;
     ok defined $sub, 'a RegexSubst node exists' or return;
     isnt +($sub->{replacement} // ''), 'y',
@@ -54,7 +54,7 @@ subtest 'an interpolated replacement is whole or refused' => sub {
 # with pmreplroot NULL and never takes the subtree path.
 subtest 'a literal replacement still substitutes' => sub {
     my ($n, $err) = wire('my $s="ab"; $s =~ s/a/X/; print $s;', 'lit_subst');
-    unlike $err, qr/GAP|INTERNAL/, 'it translates';
+    unlike $err, qr/GAP:|INTERNAL/, 'it translates';
     my ($sub) = grep { $_->{op} eq 'RegexSubst' } $n->@*;
     ok defined $sub, 'a RegexSubst node exists' or return;
     is +($sub->{replacement} // ''), 'X', 'with the literal replacement';

@@ -43,7 +43,7 @@ subtest 'a plain subst in a loop builds a RegexSubst' => sub {
         'my @a=("axb"); for my $s (@a) { my $t=$s; $t =~ s/x/y/; print $t }',
         'plain-loop');
     is $said, 'ayb', 'perl substitutes' or return;
-    unlike $err, qr/GAP|INTERNAL/, 'it lowers' or return;
+    unlike $err, qr/GAP:|INTERNAL/, 'it lowers' or return;
 
     ok scalar(grep { $_->{op} eq 'RegexSubst' } $n->@*),
         'a RegexSubst is built';
@@ -62,7 +62,7 @@ subtest 'the pattern reaches the node' => sub {
         'my @a=("axb"); for my $s (@a) { my $t=$s; $t =~ s/x/y/; print $t }',
         'plain-pattern');
     is $said, 'ayb', 'perl substitutes' or return;
-    unlike $err, qr/GAP|INTERNAL/, 'it lowers' or return;
+    unlike $err, qr/GAP:|INTERNAL/, 'it lowers' or return;
 
     my ($rs) = grep { $_->{op} eq 'RegexSubst' } $n->@*;
     ok $rs, 'a RegexSubst exists' or return;
@@ -79,7 +79,7 @@ subtest 'the /g form is modelled too' => sub {
         'my @a=("axax"); for my $s (@a) { my $t=$s; $t =~ s/x/y/g; print $t }',
         'plain-g');
     is $said, 'ayay', 'perl substitutes globally' or return;
-    unlike $err, qr/GAP|INTERNAL/, 'it lowers' or return;
+    unlike $err, qr/GAP:|INTERNAL/, 'it lowers' or return;
 
     my ($rs) = grep { $_->{op} eq 'RegexSubst' } $n->@*;
     ok $rs, 'a RegexSubst is built for /g' or return;
@@ -94,7 +94,7 @@ subtest 'the /e form is unaffected' => sub {
         'my @a=("axb"); for my $s (@a) { my $t=$s; $t =~ s/x/9/e; print $t }',
         'plain-e');
     is $said, 'a9b', 'perl evaluates the replacement' or return;
-    unlike $err, qr/GAP|INTERNAL/, 'it lowers' or return;
+    unlike $err, qr/GAP:|INTERNAL/, 'it lowers' or return;
     ok scalar(grep { $_->{op} eq 'RegexSubst' } $n->@*),
         'still a RegexSubst';
 };

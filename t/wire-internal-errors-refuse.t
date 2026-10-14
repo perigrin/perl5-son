@@ -53,7 +53,7 @@ subtest 'wantarray does not crash the translator' => sub {
 # does not use it must still translate.
 subtest 'an ordinary sub is unaffected' => sub {
     my ($out, $err) = translate('sub f { return 7 } print f();', 'plainsub');
-    unlike $err, qr/GAP|INTERNAL/, 'a plain sub still translates';
+    unlike $err, qr/GAP:|INTERNAL/, 'a plain sub still translates';
     like $out, qr/"op"\s*:\s*"Return"/, 'and reaches the wire';
 };
 
@@ -93,7 +93,7 @@ subtest 'the loop forms that already worked still work' => sub {
     ) {
         my ($src, $name) = $case->@*;
         my (undef, $err) = translate($src, $name);
-        unlike $err, qr/GAP|INTERNAL/, "$name still translates";
+        unlike $err, qr/GAP:|INTERNAL/, "$name still translates";
     }
 };
 
@@ -122,7 +122,7 @@ subtest 'one-argument bless translates instead of underflowing' => sub {
 # the defaulted class, not for bless.
 subtest 'two-argument bless still translates' => sub {
     my (undef, $err) = translate('my $x = bless [], "Foo"; print ref($x);', 'bless2');
-    unlike $err, qr/GAP|INTERNAL/, 'bless with an explicit class is unaffected';
+    unlike $err, qr/GAP:|INTERNAL/, 'bless with an explicit class is unaffected';
 };
 
 # FOREACH OVER A MARK-CONSUMING BUILTIN. `foreach (unpack(...))` died "No mark
@@ -167,7 +167,7 @@ subtest 'one-argument select still translates' => sub {
 # unpack refusal.
 subtest 'list-assigned unpack still translates' => sub {
     my (undef, $err) = translate('my @u = unpack("W*","ab"); print scalar(@u);', 'unpack_list');
-    unlike $err, qr/GAP|INTERNAL/, 'unpack in a list assignment is unaffected';
+    unlike $err, qr/GAP:|INTERNAL/, 'unpack in a list assignment is unaffected';
 };
 
 # A PACKAGE-VARIABLE ITERATOR IS NAMEABLE, and the list length has nothing to
@@ -274,7 +274,7 @@ subtest 'a subst in a loop body translates; the iterator case is a known TODO'
     my (undef, $err) = translate(
         'my @a=("axb"); for my $s (@a) { my $t=$s; $t =~ s/x/9/e; print $t }',
         'sub_lexical');
-    unlike $err, qr/GAP|INTERNAL/, 'a subst into a body lexical lowers';
+    unlike $err, qr/GAP:|INTERNAL/, 'a subst into a body lexical lowers';
 };
 
 # /e AND /ge HAVE SEPARATED. This subtest once recorded that both refused, for
@@ -291,12 +291,12 @@ subtest 'a subst in a loop body translates; the iterator case is a known TODO'
 # "a1b2c" is a10b20c, while the single-match decomposition gives a10b10c.
 subtest '/e lowers as an operand, /ge as a body' => sub {
     my ($o1, $e1) = translate('my $l="axb"; $l =~ s/(x)/ord $1/e; print $l;', 'e_top');
-    unlike $e1, qr/GAP|INTERNAL/, '/e lowers at top level';
+    unlike $e1, qr/GAP:|INTERNAL/, '/e lowers at top level';
     like $o1, qr/"op"\s*:\s*"RegexMatch"/,
         '... via a RegexMatch its capture can read';
 
     my ($o2, $e2) = translate('my $l="axb"; $l =~ s/(x)/ord $1/ge; print $l;', 'ge_top');
-    unlike $e2, qr/GAP|INTERNAL/, '/ge lowers at top level';
+    unlike $e2, qr/GAP:|INTERNAL/, '/ge lowers at top level';
     like $o2, qr/"replacement_body"\s*:\s*"[^"]*__SUBSTREPL__/,
         '... naming a body, because its replacement repeats per match';
 };

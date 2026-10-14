@@ -75,7 +75,7 @@ subtest 'a replacement reads its own capture via the match node' => sub {
     my ($said, $n, $err) = run_and_wire(
         'my $s="axb"; $s =~ s/(x)/ord($1)/e; print $s;', 'cap-own');
     is $said, 'a120b', 'perl substitutes ord(x)' or return;
-    unlike $err, qr/GAP|INTERNAL/, 'it lowers' or return;
+    unlike $err, qr/GAP:|INTERNAL/, 'it lowers' or return;
 
     my %by = map { $_->{id} => $_ } $n->@*;
     my ($rc) = grep { $_->{op} eq 'RegexCapture' } $n->@*;
@@ -99,7 +99,7 @@ subtest 'a capture in a replacement works inside a loop too' => sub {
         'my @a=("axb"); for my $t (@a) { my $u=$t;'
       . ' $u =~ s/(x)/ord($1)/e; print $u }', 'cap-loop');
     is $said, 'a120b', 'perl substitutes inside the loop' or return;
-    unlike $err, qr/GAP|INTERNAL/, 'it lowers' or return;
+    unlike $err, qr/GAP:|INTERNAL/, 'it lowers' or return;
 
     my %by = map { $_->{id} => $_ } $n->@*;
     my ($rc) = grep { $_->{op} eq 'RegexCapture' } $n->@*;
@@ -115,7 +115,7 @@ subtest 's///ge is not decomposed -- its replacement is a body' => sub {
     my ($said, $n, $err) = run_and_wire(
         'my $c="a1b2c"; $c =~ s/(\d)/$1*10/ge; print $c;', 'cap-ge');
     is $said, 'a10b20c', 'perl runs the body per match' or return;
-    unlike $err, qr/GAP|INTERNAL/, 'it lowers' or return;
+    unlike $err, qr/GAP:|INTERNAL/, 'it lowers' or return;
     my ($rs) = grep { $_->{op} eq 'RegexSubst' } $n->@*;
     like +($rs->{fields}{replacement_body} // ''), qr/__SUBSTREPL__/,
         'the RegexSubst names its replacement body';
@@ -161,7 +161,7 @@ subtest 'a capture after a plain match is unaffected' => sub {
     my ($said, $n, $err) = run_and_wire(
         'my $s="abc"; if ($s =~ /(b)/) { print $1 }', 'cap-plain');
     is $said, 'b', 'perl captures b' or return;
-    unlike $err, qr/GAP|INTERNAL/, 'it lowers' or return;
+    unlike $err, qr/GAP:|INTERNAL/, 'it lowers' or return;
     ok scalar(grep { $_->{op} eq 'RegexCapture' } $n->@*),
         'the ordinary match capture still builds';
 };

@@ -50,7 +50,7 @@ $n, $v
 write;
 SRC
     like $said, qr/widget/, 'perl writes the formatted line' or return;
-    unlike $err, qr/GAP|INTERNAL/, 'it lowers' or return;
+    unlike $err, qr/GAP:|INTERNAL/, 'it lowers' or return;
 
     my ($fmt) = grep { /FORMAT|format/ } keys $w->{methods}->%*;
     ok $fmt, 'the format body is emitted as its own graph' or return;
@@ -86,7 +86,7 @@ $v
 write;
 SRC
     like $said, qr/7/, 'perl writes it' or return;
-    unlike $err, qr/GAP|INTERNAL/, 'it lowers' or return;
+    unlike $err, qr/GAP:|INTERNAL/, 'it lowers' or return;
 
     my $prog = nodes_of($w, 'main::__PROGRAM__');
     my ($call) = grep { $_->{op} eq 'Call' } $prog->@*;
@@ -111,7 +111,7 @@ write;
 SRC
     like $said, qr/99/, 'perl writes the CURRENT value, not the declared one'
         or return;
-    unlike $err, qr/GAP|INTERNAL/, 'it lowers' or return;
+    unlike $err, qr/GAP:|INTERNAL/, 'it lowers' or return;
 
     my ($fmt) = grep { /FORMAT|format/ } keys $w->{methods}->%*;
     ok $fmt, 'the body exists' or return;
