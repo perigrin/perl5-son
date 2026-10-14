@@ -17791,10 +17791,11 @@ class SoN::FromOptree 0.01 {
             || ($is_body && $op->name eq 'gv');
         return 0 if !$is_body && $op->flags & B::OPf_MOD();
         return 0 if $op->private & B::OPpTARGET_MY();
-        # An ASSIGN-OP (`$n += $1`, `$k .= $1`) is its binop with OPf_STACKED,
-        # and stores into its left operand.
-        return 0 if $is_body && $op->isa('B::BINOP')
-            && $op->flags & B::OPf_STACKED();
+        # A STORE into a stacked target is OPf_STACKED whatever the op's class:
+        # an assign-op (`$n += $1`, `$k .= $1`) is a binop, but a string store
+        # into a package scalar (`$k = "<$1>"`, `$k .= $1 . $1`) is
+        # multiconcat, an UNOP_AUX.
+        return 0 if $is_body && $op->flags & B::OPf_STACKED();
         return 1 unless $op->flags & B::OPf_KIDS();
         for (my $kid = $op->first; ref($kid) && $$kid; $kid = $kid->sibling) {
             return 0 unless _replacement_is_pure($kid, $is_body);

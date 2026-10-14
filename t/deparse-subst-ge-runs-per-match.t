@@ -103,6 +103,22 @@ refuses(q{our $n = 0; my $s = "a1b2"; $s =~ s/(\d)/($n -= $1) . "x"/ge; print "$
 refuses(q{our $z = ""; my $s = "a1b2"; $s =~ s/(\d)/$main::z .= $1; "y"/ge; print "$s $z\n";},
     qr/GAP: s\/\/\/ge whose replacement has an effect/, 'a .= as a statement before the value');
 
+# A string STORE into a package scalar is multiconcat with OPf_STACKED -- an
+# UNOP_AUX, not a binop -- and lowering it read the target where the capture
+# belonged (azxxbzxxx zxx for perl's a1xb2x 2x).
+refuses(q{our $k = "z"; my $s = "a1b2"; $s =~ s/(\d)/$k = $1 . "x"/ge; print "$s $k\n";},
+    qr/GAP: s\/\/\/ge whose replacement has an effect/, 'a string assign into a package scalar');
+refuses(q{our $k = "z"; my $s = "a1b2"; $s =~ s/(\d)/$k = "<$1>"/ge; print "$s $k\n";},
+    qr/GAP: s\/\/\/ge whose replacement has an effect/, 'an interpolated assign into a package scalar');
+refuses(q{our $k = "z"; my $s = "a1b2"; $s =~ s/(\d)/$k .= "<$1>"/ge; print "$s $k\n";},
+    qr/GAP: s\/\/\/ge whose replacement has an effect/, 'an interpolated append into a package scalar');
+refuses(q{our $k = "z"; my $s = "a1b2"; $s =~ s/(\d)/$k .= $1 . $1/ge; print "$s $k\n";},
+    qr/GAP: s\/\/\/ge whose replacement has an effect/, 'a concat append into a package scalar');
+refuses(q{our $k = "z"; my $s = "a1b2"; $s =~ s/(\d)/($k = "[$1]") . "!"/ge; print "$s $k\n";},
+    qr/GAP: s\/\/\/ge whose replacement has an effect/, 'a string assign nested in the value');
+refuses(q{our $k = "z"; my $s = "a1b2"; $s =~ s/(\d)/$main::k = "$1-"/ge; print "$s $k\n";},
+    qr/GAP: s\/\/\/ge whose replacement has an effect/, 'a string assign into a qualified package scalar');
+
 # The SUBJECT must be a plain scalar variable: an element, a deref or a field
 # fell back to $_ (the subject is lost, a1b2 for perl's a3b6).
 my $target = qr/GAP: s\/\/\/ge on a subject that is not a plain scalar variable/;
