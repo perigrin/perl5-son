@@ -3092,7 +3092,17 @@ class SoN::Deparse 0.01 {
                                             $self->_expr($ph->{inputs}[$k]));
                             next;
                         }
-                        next if exists $bound{ $ph->{id} };
+                        # BOUND BY AN ENCLOSING JOIN, as a variable the arms
+                        # assign: this path reaches the exit by an edge of its
+                        # own -- `if (D) { if (E) { return "z3" } } return
+                        # "as"` -- that no arm assignment covers, so it pays
+                        # here. Skipped, the return read the other path's.
+                        if (exists $bound{ $ph->{id} }) {
+                            my $v = $self->_expr($ph->{inputs}[$k]);
+                            $out .= "$bound{ $ph->{id} } = $v;\n"
+                                if $v ne $bound{ $ph->{id} };
+                            next;
+                        }
                         # The list half of a list exit is an ARRAY: a scalar
                         # holding `()` returned (undef) to a list caller.
                         my $sigil = ($ret && $ph == $rphis[0]) ? '@' : '$';
