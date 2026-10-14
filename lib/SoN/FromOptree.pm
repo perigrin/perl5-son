@@ -17685,8 +17685,13 @@ class SoN::FromOptree 0.01 {
             if ($name eq 'cond_expr' && $opmap->is_branch($name)
                 && $sim->stack_depth > 0) {
                 $visited->{$$op}++;
+                # THE ENCLOSING LOOP RIDES ALONG: the final `else { next }` of
+                # an elsif chain is a cond_expr in the outer one's arm, and its
+                # loop control leaves the same loop the outer arm is in.
                 $op = _handle_cond_expr($cv, $op, $sim, $factory, $opmap,
-                    $visited, $exits);
+                    $visited, $exits,
+                    ($in_loop ? { node => $loop_node, breaks => $break_projs }
+                              : undef));
                 next;
             }
 
@@ -17761,6 +17766,27 @@ class SoN::FromOptree 0.01 {
                     $stop_addr, $loop_node, $break_projs, 1);
                 $rest_sim->pop_node
                     while $rest_sim->stack_depth > $sim->stack_depth;
+                # THE REST STOPPED AT THE ARM'S JOIN, NOT THE LATCH: the body
+                # goes on after this if/elsif, and the taken path skips that
+                # too. Merged here, the statements after the join ran on the
+                # skip path (`elsif ($i==2) { next } $s.=$i` gave a1234 for
+                # perl's a134). The taken Proj is an edge to this loop's
+                # latch, as a bare `next` in an arm is, and the walk goes on
+                # along the rest alone.
+                if (defined $stop_addr && ref $rest_end && $$rest_end
+                        && $$rest_end == $stop_addr
+                        && @LOOP_STACK && $LOOP_STACK[-1]{nexts}) {
+                    my $edge = SoN::FromOptree::StackSim->new(
+                        control => $taken, memory => $sim->memory);
+                    my $b = $sim->scope_bindings;
+                    $edge->define($_, $b->{$_}) for keys %$b;
+                    push $LOOP_STACK[-1]{nexts}->@*, $edge;
+                    $sim->set_control($rest_sim->control);
+                    $sim->set_memory($rest_sim->memory);
+                    my $rb = $rest_sim->scope_bindings;
+                    $sim->define($_, $rb->{$_}) for keys %$rb;
+                    return ($rest_end);
+                }
                 my $skip_sim = $sim->snapshot;
                 $skip_sim->set_control($taken);
                 $skip_sim->merge($rest_sim, $factory, $if_node);
@@ -17864,6 +17890,11 @@ class SoN::FromOptree 0.01 {
                     || ( $in_loop
                          && defined _guarded_loop_control($op->other)
                          && _guarded_loop_control($op->other) =~ /\A(?:last|next)\z/ )
+                    # A BLOCK THAT ENDS IN ONE, `if (D) { $e = $p; last }`, which
+                    # the guarded-control test above does not see through: on
+                    # the value merge below the break was dropped (perl 3,
+                    # emitted 9).
+                    || ( $in_loop && _arm_has_loop_control($op->other, $mod_stop) )
                     # A RETURNING ARM TOO: its exit edge must leave from the
                     # taken Proj, or the pre-guard control has two successors
                     # (the guard's continuation and the function exit).
@@ -17980,6 +18011,11 @@ class SoN::FromOptree 0.01 {
                     $op = $op->next;
                     next;
                 }
+                # A BODY THAT LEFT has no If to leave from, and the value
+                # merge below would keep its rebinds and drop the leaving.
+                die "GAP: a loop control or return inside a guarded block in"
+                  . " an if/else arm has no branch to leave from\n"
+                    if ($mod_sig // '') =~ /\A(?:exited|broke|nexted)\z/;
                 my $base_scope = $sim->scope_bindings;
                 my $arm_scope  = $mod_sim->scope_bindings;
                 for my $targ (sort _scope_key_order keys %$arm_scope) {
