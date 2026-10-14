@@ -1496,7 +1496,11 @@ class SoN::Deparse 0.01 {
                 next if !defined $id || $seen{$id}++;
                 $under_loop{$id} = 1;
                 my $c = $nodes->{$id} or next;
-                push @queue, ( $c->{inputs} // [] )->@*;
+                # NOT THE LOOP'S OWN INPUT: that is the control it is entered
+                # from, which runs once, before it -- a package iterator's
+                # restore after one loop was taken for a read under the next.
+                push @queue, ( $c->{inputs} // [] )->@*
+                    unless $id == $n->{id};
                 for my $d ( $self->_nodes_in_order ) {
                     push @queue, $d->{id}
                         if defined $d->{control_in} && $d->{control_in} == $id;
@@ -2229,6 +2233,26 @@ class SoN::Deparse 0.01 {
             if ( ( $version->{op} // q{} ) eq q{Phi} ) {
                 my $r = $nodes->{ ( $version->{fields} // {} )->{region} // -1 } // {};
                 $join = $r if ( $r->{op} // q{} ) eq q{Region};
+                # NOR IS A LOOP'S. A read of it outside the loop happens at the
+                # loop's exit: taken for entry, `push @a, 1; for (...) { $h{a}
+                # = 9 } print $h{a}` bound the read in the prologue, above the
+                # push, and printed the pre-loop value.
+                # A READ INDEXED BY THE LOOP'S OWN Phi is a pass's read -- a
+                # map's element, whose body is no chain -- and stays put.
+                if ( ( $r->{op} // q{} ) eq q{Loop} ) {
+                    my ( @dq, %ds, $per_pass ) = @in[ 0 .. $#in - 1 ];
+                    while ( defined( my $id = shift @dq ) ) {
+                        next if $ds{$id}++;
+                        my $d = $nodes->{$id} // {};
+                        $per_pass = 1, last if ( $d->{op} // q{} ) eq q{Phi}
+                            && ( ( $d->{fields} // {} )->{region} // -1 ) == $r->{id};
+                        push @dq, ( $d->{inputs} // [] )->@* unless defined $d->{control_in};
+                    }
+                    next if $per_pass;
+                    my $exit = $self->_loop_join( $r->{id} );
+                    next unless defined $exit;
+                    $join = $nodes->{$exit};
+                }
             }
             my $at_entry = !defined $version->{control_in};
             $at_entry = 0 if $join;
