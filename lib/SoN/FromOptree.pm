@@ -13826,11 +13826,7 @@ class SoN::FromOptree 0.01 {
                                       bindings => $sim->scope_bindings,
                                       memory   => $sim->memory }
                     if defined $break_projs;
-                my $first = shift $LOOP_STACK[-1]{nexts}->@*;
-                $sim->set_control($first->control);
-                $sim->set_memory($first->memory);
-                my $b = $first->scope_bindings;
-                $sim->define($_, $b->{$_}) for keys %$b;
+                _adopt_first_next($sim);
                 if ($CONTINUE_START && !$loop_visited->{ ${$CONTINUE_START} }) {
                     $op = $CONTINUE_START;
                     next;
@@ -13856,10 +13852,19 @@ class SoN::FromOptree 0.01 {
                 ($op, my $sig) = _handle_cond_expr($cv, $op, $sim, $factory,
                     $opmap, $loop_visited, _loop_arm_exits($break_projs),
                     { node => $loop_node, breaks => $break_projs });
-                # EVERY ARM RETURNED, and the body has no fall-through left to
-                # carry to the latch; the walk below has no dead state to stop on.
-                die "GAP: an if/else in a loop body whose arms all return is"
-                  . " not yet lowered\n" if ($sig // '') eq 'exited';
+                # EVERY ARM LEFT, by a return or a loop control, so the body has
+                # no fall-through: it goes round along the recorded nexts alone.
+                # With none it has no back edge, and that is not lowered.
+                if (($sig // '') =~ /\A(?:exited|left)\z/) {
+                    die "GAP: an if/else in a loop body whose arms all leave,"
+                      . " none by `next`, is not yet lowered\n"
+                        unless _adopt_first_next($sim);
+                    if ($CONTINUE_START && !$loop_visited->{ ${$CONTINUE_START} }) {
+                        $op = $CONTINUE_START;
+                        next;
+                    }
+                    last;
+                }
                 next;
             }
 
@@ -15058,6 +15063,22 @@ class SoN::FromOptree 0.01 {
     # the body's state where the continue block (or the back edge) begins.
     # The Region's head is the Loop -- what tells a consumer this join is a
     # latch, fed from inside a nested loop, and not an if's merge.
+    # A BODY WHOSE FALL-THROUGH IS DEAD -- every path on it left -- reaches
+    # the latch only along the nexts recorded so far: the first is adopted as
+    # the state there, and the rest merge into it at the latch as usual.
+    # False when there is none, and then the body has no back edge at all.
+    sub _adopt_first_next ($sim) {
+        my $f = $LOOP_STACK[-1] or return 0;
+        my $nexts = $f->{nexts};
+        return 0 unless $nexts && @$nexts;
+        my $first = shift @$nexts;
+        $sim->set_control($first->control);
+        $sim->set_memory($first->memory);
+        my $b = $first->scope_bindings;
+        $sim->define($_, $b->{$_}) for keys %$b;
+        return 1;
+    }
+
     sub _merge_labeled_nexts ($sim, $factory) {
         my $f = $LOOP_STACK[-1] or return;
         my $nexts = $f->{nexts} or return;
@@ -16754,6 +16775,10 @@ class SoN::FromOptree 0.01 {
             return ($op->next, 'exited')
                 if defined $exits && ($true_sig // '') eq 'exited'
                     && ($false_sig // '') eq 'exited';
+            # BOTH ARMS LEFT THE LOOP, each by its own recorded edge -- a
+            # break to the exit, a next to the latch, a return. The body walk
+            # takes the latch from the nexts; nothing continues from here.
+            return ($op->next, 'left') if $loop && keys(%left) == 2;
             die "GAP: an if/else whose arms both leave the loop is not yet"
               . " lowered\n" if keys(%left) == 2;
             if (%left) {
@@ -17750,6 +17775,10 @@ class SoN::FromOptree 0.01 {
                               : undef));
                 # Every arm returned: so has this one.
                 return ($op, 'exited') if ($sig // '') eq 'exited';
+                # Every arm left the loop: an outer arm reading a signal would
+                # record a second edge for one already recorded.
+                die "GAP: an if/else whose arms all leave the loop, nested in"
+                  . " an arm, is not yet lowered\n" if ($sig // '') eq 'left';
                 next;
             }
 

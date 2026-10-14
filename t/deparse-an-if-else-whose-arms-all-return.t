@@ -81,7 +81,7 @@ round_trips(q{sub f { my $x = shift; my $r = $x ? do { print "a"; return 1 } : d
 # the body walk has no dead state to stop on: refused by name.
 {
     my $data = graph_of(q{sub f { for my $i (1..3) { if ($i==2) { print "a"; return 1 } else { print "b"; return 2 } } } print f(), "\n";});
-    like producer_stderr(), qr/GAP: an if\/else in a loop body whose arms all return is not yet lowered/,
+    like producer_stderr(), qr/GAP: an if\/else in a loop body whose arms all leave, none by `next`, is not yet lowered/,
         'an if/else in a loop body whose arms both return refuses by name';
 }
 
