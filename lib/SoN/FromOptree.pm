@@ -17942,6 +17942,7 @@ class SoN::FromOptree 0.01 {
         $str .= 'i' if $flags & 4;        # PMf_FOLD (case-insensitive)
         $str .= 'x' if $flags & 8;        # PMf_EXTENDED
         $str .= 'g' if $flags & 8388608;  # PMf_GLOBAL
+        $str .= 'c' if $flags & 16777216; # PMf_CONTINUE (m//gc keeps pos on a miss)
         $str .= 'r' if $flags & PMf_NONDESTRUCT; # s///r
         # THE CHARSET, when it is not perl's default /d -- (pmflags & 896) >> 7
         # is d, l, u, a, aa. Unmarked means /d; see Deparse::_with_charset.
