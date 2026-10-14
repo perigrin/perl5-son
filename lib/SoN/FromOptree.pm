@@ -12714,7 +12714,7 @@ class SoN::FromOptree 0.01 {
     # (aliased, so OPf_MOD) may write. Any array counts, not only @_.
     sub _callee_writes_no_argument ($cv, $call) {
         return 0 unless _callee_holds_no_alias($cv, $call);
-        my $sub = _entersub_callee_gv($cv, $call)->CV;
+        my $sub = _entersub_callee_cv($cv, $call);
         return !grep {
             $_->flags & B::OPf_MOD
                 && $_->name =~ /\A(?:rv2av|aelem|aelemfast|multideref)\z/
@@ -12750,8 +12750,7 @@ class SoN::FromOptree 0.01 {
     # no `&f;`, and no call argument reading @_ (an aelemfast, a multideref, a
     # shift or pop, or the `_` glob). Measured on the body as compiled.
     sub _callee_holds_no_alias ($cv, $call) {
-        my $gv = _entersub_callee_gv($cv, $call) or return 0;
-        my $sub = $gv->CV;
+        my $sub = _entersub_callee_cv($cv, $call) or return 0;
         return 0 unless $sub && $$sub && $sub->isa(q{B::CV})
             && ${$sub->ROOT};
         return 0 if $sub->CvFLAGS & B::CVf_LVALUE;
@@ -19377,6 +19376,31 @@ class SoN::FromOptree 0.01 {
         return undef unless $sv->can('RV') && ($sv->FLAGS & B::SVf_ROK);
         my $rv = $sv->RV;
         return $rv->isa('B::CV') ? $rv : undef;
+    }
+
+    # _entersub_callee_cv($cv, $op) -> the B::CV a direct call runs: a named
+    # sub's through its GV, or a lexical sub's (`my sub f`, called through a
+    # padcv) through _anoncode_cv. undef for a coderef call or a name with no
+    # body -- the caller then assumes the worst.
+    sub _entersub_callee_cv ($cv, $op) {
+        if (my $gv = _entersub_callee_gv($cv, $op)) {
+            my $sub = $gv->CV;
+            return ref($sub) eq 'B::CV' ? $sub : undef;
+        }
+        return undef unless $op->can('first');
+        my $list = $op->first;
+        return undef unless $$list && $list->can('first');
+        my ($callee, $kid) = (undef, $list->first);
+        while ($$kid) {                          # last non-pushmark kid = callee
+            $callee = $kid unless $kid->name eq 'pushmark';
+            last unless $kid->can('sibling');
+            $kid = $kid->sibling;
+        }
+        $callee = $callee->first
+            while $callee && $$callee && $callee->name eq 'null'
+                && $callee->can('first');
+        return undef unless $callee && $$callee && $callee->name eq 'padcv';
+        return _anoncode_cv($cv, $callee);
     }
 
     # Resolve the callee GV of a direct-sub-call entersub op. The callee rides

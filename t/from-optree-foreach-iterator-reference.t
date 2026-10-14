@@ -233,4 +233,18 @@ round_trips(<<'SRC', 'a push from @_');
 sub f { my @c; for my $x (@_) { push @c, $x * 2 } return "@c" } my @a=(1,2); print f(@a), " @a\n";
 SRC
 
+# A LEXICAL SUB CALLEE IS JUDGED BY ITS BODY, as a named one is: one that
+# only reads its argument lets a loop over @_ translate, and one that writes
+# or keeps it refuses.
+round_trips(<<'SRC', 'a lexical sub reading the iterator over @_');
+use v5.36; my sub c { my ($s) = @_; $s * 2 } sub e { my $t = 0; for my $x (@_) { $t += c($x) } $t } my @a = (1, 2); print e(@a), " @a\n";
+SRC
+round_trips(<<'SRC', 'a lexical sub with a signature, mapped over @_');
+use v5.36; my sub c ($s) { $s =~ s/1/9/; "[$s]" } sub e { join ",", map { c($_) } @_ } my @a = ("a1", "b1"); print e(@a), " @a\n";
+SRC
+like +(produce('use v5.36; my sub w { $_[0]++ } sub e { w($_) for @_; 1 } my @a = (1, 2); e(@a); print "@a\n";'))[1],
+    $ARGS, 'a lexical sub writing the iterator over @_: refused by name';
+like +(produce('use v5.36; my sub r { \$_[0] } our $K; sub e { for my $x (@_) { $K = r($x) } 1 } my @a = (1, 2); e(@a); $$K = 7; print "@a\n";'))[1],
+    $CALL, 'a lexical sub returning a reference to the iterator over @_: refused by name';
+
 done_testing;
