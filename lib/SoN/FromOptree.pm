@@ -1677,8 +1677,13 @@ class SoN::FromOptree 0.01 {
             # cond_expr op: ternary / if-else. Handled by _handle_cond_expr
             # (shared with _walk_branch so nesting recurses).
             if ($opmap->is_branch($name) && $name eq 'cond_expr') {
-                $op = _handle_cond_expr($cv, $op, $sim, $factory, $opmap,
-                    \%visited, \@exits);
+                ($op, my $sig) = _handle_cond_expr($cv, $op, $sim, $factory,
+                    $opmap, \%visited, \@exits);
+                # Every arm returned: the path ends here, as at a `return`.
+                if (($sig // '') eq 'exited') {
+                    $main_terminated = 1;
+                    last;
+                }
                 next;
             }
 
@@ -13807,6 +13812,31 @@ class SoN::FromOptree 0.01 {
             # the exit Region needs its edge and the bindings live at that point
             # (which is what @break_projs collects for the guarded form). A `next`
             # rejoins the header and needs neither.
+            # UNLESS AN ARM ALREADY WENT ROUND. `if (C) { ...; next } last`
+            # leaves on this path and loops on the arm's: the `last` is an
+            # edge to the exit, and the latch is what the recorded nexts
+            # carry -- the first one adopted as the state there, the rest
+            # merged into it, as a forward goto's edges replace a dead
+            # fall-through. With no next recorded every path leaves, there
+            # is no back edge, and that keeps refusing.
+            if ($name eq 'last' && !_loop_control_frame($op)
+                    && @LOOP_STACK && $LOOP_STACK[-1]{nexts}
+                    && $LOOP_STACK[-1]{nexts}->@*) {
+                push @$break_projs, { proj     => $sim->control,
+                                      bindings => $sim->scope_bindings,
+                                      memory   => $sim->memory }
+                    if defined $break_projs;
+                my $first = shift $LOOP_STACK[-1]{nexts}->@*;
+                $sim->set_control($first->control);
+                $sim->set_memory($first->memory);
+                my $b = $first->scope_bindings;
+                $sim->define($_, $b->{$_}) for keys %$b;
+                if ($CONTINUE_START && !$loop_visited->{ ${$CONTINUE_START} }) {
+                    $op = $CONTINUE_START;
+                    next;
+                }
+                last;
+            }
             if ($name eq 'last' || $name eq 'redo') {
                 die "GAP: loop control ($name) inside a loop body not yet lowered\n";
             }
@@ -13823,9 +13853,13 @@ class SoN::FromOptree 0.01 {
                 && $sim->stack_depth > 0) {
                 $loop_visited->{$$op}++;
                 # A `return` in an arm is a function exit; see $FN_EXITS.
-                $op = _handle_cond_expr($cv, $op, $sim, $factory, $opmap,
-                    $loop_visited, _loop_arm_exits($break_projs),
+                ($op, my $sig) = _handle_cond_expr($cv, $op, $sim, $factory,
+                    $opmap, $loop_visited, _loop_arm_exits($break_projs),
                     { node => $loop_node, breaks => $break_projs });
+                # EVERY ARM RETURNED, and the body has no fall-through left to
+                # carry to the latch; the walk below has no dead state to stop on.
+                die "GAP: an if/else in a loop body whose arms all return is"
+                  . " not yet lowered\n" if ($sig // '') eq 'exited';
                 next;
             }
 
@@ -14082,9 +14116,22 @@ class SoN::FromOptree 0.01 {
                 # THE REST RETURNED, so it never reaches the latch: the loop
                 # goes on only along the guard-taken arm, with the bindings it
                 # had at the guard. The ops after the return are dead.
-                if (($rest_sig // '') eq 'exited') {
-                    die "GAP: a `last if` whose rest of the body returns is not"
+                # SO DOES A REST THAT LEFT THE LOOP: a `last` is an edge to the
+                # exit, recorded here as the arm walk leaves it to its caller;
+                # a `next` already recorded its own edge to the latch. Merged
+                # as a fall-through instead, `next if C; ...; last` ran the
+                # loop to completion (42 for perl's 3).
+                if (($rest_sig // '') =~ /\A(?:exited|broke|nexted)\z/) {
+                    die "GAP: a `last if` whose rest of the body leaves is not"
                       . " yet lowered\n" unless $kind eq 'next' && !$frame;
+                    if ($rest_sig eq 'broke') {
+                        my $rframe = _loop_control_frame($rest_end);
+                        my $sink   = $rframe ? $rframe->{breaks} : $break_projs;
+                        push @$sink, { proj     => $rest_sim->control,
+                                       bindings => $rest_sim->scope_bindings,
+                                       memory   => $rest_sim->memory }
+                            if defined $sink && defined $break_projs;
+                    }
                     $sim->set_control($taken_proj);
                     $op = $rest_end->next;
                     $op = $op->next
@@ -16550,11 +16597,14 @@ class SoN::FromOptree 0.01 {
         # A RETURN DIRECTLY IN THE ARM leaves from it too: `C ? (return X) : Y`
         # or `if (C) { return X } else { ... }`. Without the If, the exit hung
         # off the pre-branch control and ran unconditionally in a loop body.
-        # ONE SUCH ARM: two returning arms meet nowhere, and the value merge
-        # already merges both exits into one Return. DIRECTLY: a return under
+        # EITHER ARM OR BOTH: two returning arms built no If either, and both
+        # exits hung off the pre-branch control beside the fall-through -- a
+        # control node with 3 successors, which the deparser refused
+        # (`if (C) { return 1 } else { return 2 }`). With the If each leaves
+        # from its own Proj and the caller is told the path ended. DIRECTLY: a return under
         # a further branch is _arm_has_return's, and that arm still yields a
         # value (`C ? (D ? (return 1) : 2) : 3`) -- not this rule's to merge.
-        my $ret_branch = $exits && 1 == grep {
+        my $ret_branch = $exits && 0 < grep {
             my ($stop, $hit) = ($_->[1], 0);
             for (my $o = $_->[0]; $$o && $$o != $stop
                      && !(defined $join_addr && $$o == $join_addr); $o = $o->next) {
@@ -16698,6 +16748,12 @@ class SoN::FromOptree 0.01 {
                                             memory => $asim->memory }
                     if $asig eq 'broke' && $loop && defined $loop->{breaks};
             }
+            # BOTH ARMS RETURNED: each edge is in the function-wide exit list
+            # already, and nothing runs after the if/else on this path. The
+            # caller is told so -- it has no control to go on with.
+            return ($op->next, 'exited')
+                if defined $exits && ($true_sig // '') eq 'exited'
+                    && ($false_sig // '') eq 'exited';
             die "GAP: an if/else whose arms both leave the loop is not yet"
               . " lowered\n" if keys(%left) == 2;
             if (%left) {
@@ -17688,10 +17744,12 @@ class SoN::FromOptree 0.01 {
                 # THE ENCLOSING LOOP RIDES ALONG: the final `else { next }` of
                 # an elsif chain is a cond_expr in the outer one's arm, and its
                 # loop control leaves the same loop the outer arm is in.
-                $op = _handle_cond_expr($cv, $op, $sim, $factory, $opmap,
-                    $visited, $exits,
+                ($op, my $sig) = _handle_cond_expr($cv, $op, $sim, $factory,
+                    $opmap, $visited, $exits,
                     ($in_loop ? { node => $loop_node, breaks => $break_projs }
                               : undef));
+                # Every arm returned: so has this one.
+                return ($op, 'exited') if ($sig // '') eq 'exited';
                 next;
             }
 
@@ -17901,7 +17959,13 @@ class SoN::FromOptree 0.01 {
                     || ( $exits
                          && _is_loop_control_or_exit($op->other)
                          && !defined _guarded_loop_control($op->other)
-                         && $op->other->name ne 'redo' );
+                         && $op->other->name ne 'redo' )
+                    # ...AND ONE WHOSE RETURN ENDS A LONGER BLOCK, `if (D) {
+                    # my $i = $v; return $i }`, which the test above reads
+                    # only the first statement of.
+                    || ( $exits
+                         && _arm_has_die_from($op->other, $mod_stop, undef, {},
+                                              { return => 1 }) );
                 my $guard   = $sim->pop_node;
                 my $mod_sim = $sim->snapshot;
                 my $if_node;
