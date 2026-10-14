@@ -951,6 +951,19 @@ class SoN::FromOptree 0.01 {
             }
         };
         $visit->($root);
+
+        # A CLASS FIELD IS NOT A PAD SLOT. Its storage is the instance's, read
+        # and written as a FieldAccess, and a demoted slot is a PadAccess --
+        # which renders as a lexical, so `method m { ok($z) }` (the call
+        # argument marks $z taken) emitted `my $z;` over the field and passed
+        # undef.
+        if (my $names = eval { $cv->PADLIST->ARRAYelt(0) }) {
+            for my $t (grep { /\A\d+\z/ } keys %taken) {
+                my $pn = $names->ARRAYelt($t);
+                delete $taken{$t}
+                    if ref $pn eq 'B::PADNAME' && SoN::FieldInfo::is_field($pn);
+            }
+        }
         return \%taken;
     }
 
@@ -1086,6 +1099,17 @@ class SoN::FromOptree 0.01 {
                 $shared{$_} = 1 for values %{ _outer_main_slots($sub_cv) };
             }
         }
+        # A LEXICAL SUB DEFINED AT FILE SCOPE is in no stash, but it closes
+        # over the file's lexicals exactly as a named sub does: its body is
+        # the pad name's PROTOCV, lifted and translated as its own graph.
+        my $names = eval { B::main_cv()->PADLIST->ARRAYelt(0) };
+        for my $i ($names ? (1 .. $names->MAX) : ()) {
+            my $pn = $names->ARRAYelt($i);
+            next unless ref($pn) eq 'B::PADNAME' && ($pn->PV // '') =~ /\A&./;
+            my $proto = eval { $pn->PROTOCV };
+            next unless ref($proto) eq 'B::CV';
+            $shared{$_} = 1 for values %{ _outer_main_slots($proto) };
+        }
         return \%shared;
     }
 
@@ -1108,6 +1132,77 @@ class SoN::FromOptree 0.01 {
             $slots{$i} = $parent if $parent;
         }
         return \%slots;
+    }
+
+    # _lexsub_cloned_once($body) -> true when the program's clonecv for the
+    # file-scope lexical sub whose PROTOCV is $body runs at most once: it lies
+    # on no cycle of the exec order (next, and other for a LOGOP), so no loop
+    # -- foreach, while, do-while, map or grep -- re-enters it. False when no
+    # such clonecv is found, which proves nothing.
+    sub _lexsub_cloned_once ($body) {
+        return 0 unless ref($body) eq 'B::CV';
+        my $names = eval { B::main_cv()->PADLIST->ARRAYelt(0) } or return 0;
+        my ($slot) = grep {
+            my $pn = $names->ARRAYelt($_);
+            my $proto = ref($pn) eq 'B::PADNAME' && eval { $pn->PROTOCV };
+            ref($proto) eq 'B::CV' && $$proto == $$body;
+        } 1 .. $names->MAX;
+        return 0 unless $slot;
+        my ($clone, @q) = (undef, B::main_root());
+        while (my $o = shift @q) {
+            next unless ref($o) && $$o;
+            if ($o->name eq 'clonecv' && $o->targ == $slot) { $clone = $o; last }
+            next unless $o->flags & 4;    # OPf_KIDS
+            for (my $k = $o->first; ref($k) && $$k; $k = $k->sibling) { push @q, $k }
+        }
+        return 0 unless $clone;
+        my %seen;
+        my @walk = ($clone->next);
+        while (defined(my $o = shift @walk)) {
+            next unless ref($o) && $$o && !$seen{$$o}++;
+            return 0 if $$o == $$clone;
+            push @walk, $o->next;
+            push @walk, $o->other if $o->can('other');
+        }
+        return 1;
+    }
+
+    # _captures_renewed_per_pass($cv, $op, @captures) -> the names of the
+    # captures that perl gives a fresh variable on each pass of a loop the
+    # anoncode $op runs in: a `my` (an op on that slot carrying
+    # OPpLVAL_INTRO, 0x80) or a foreach variable (its iter) on a cycle of the
+    # exec order (next, and other for a LOGOP) through $op. A closure built
+    # on each pass keeps that pass's variable.
+    sub _captures_renewed_per_pass ($cv, $op, @captures) {
+        return () unless @captures;
+        my $reach = sub ($from) {
+            my (%seen, @walk); @walk = ($from);
+            while (defined(my $o = shift @walk)) {
+                next unless ref($o) && $$o && !$seen{$$o}++;
+                push @walk, $o->next;
+                push @walk, $o->other if $o->can('other');
+            }
+            return \%seen;
+        };
+        my $after = $reach->($op->next);
+        return () unless $after->{$$op};    # on no cycle: built once
+
+        my $root = $$cv == ${ B::main_cv() } ? B::main_root() : $cv->ROOT;
+        my %renews;    # slot -> [ops that give it a fresh variable]
+        my @q = ($root);
+        while (my $o = shift @q) {
+            next unless ref($o) && $$o;
+            if ($o->name eq 'enteriter') { push $renews{ $o->targ }->@*, $o->next }
+            elsif ($o->name eq 'padrange' && ($o->private & 0x80)) {
+                push $renews{$_}->@*, $o for $o->targ .. $o->targ + ($o->private & 0x7f) - 1;
+            }
+            elsif ($o->targ && ($o->private & 0x80)) { push $renews{ $o->targ }->@*, $o }
+            next unless $o->flags & 4;    # OPf_KIDS
+            for (my $k = $o->first; ref($k) && $$k; $k = $k->sibling) { push @q, $k }
+        }
+        return map { $_->{name} } grep {
+            grep { $after->{$$_} && $reach->($_)->{$$op} } ($renews{ $_->{outer_idx} } // [])->@*
+        } @captures;
     }
 
     sub _translate_from ($cv, $start_op, %opts) {
@@ -6046,10 +6141,15 @@ class SoN::FromOptree 0.01 {
                 # count rule above (which needs one) passed it by: `method n {
                 # scalar @l }` returned the array, and a list-context caller
                 # took its elements where perl gives 3. A hash the same way.
+                # A FILE LEXICAL READ FROM A SUB is the same first read: the
+                # shared slot has no binding in the body, so `my @arr=(1,2);
+                # my sub t { scalar @arr } print t()` returned the array and
+                # printed 12 where perl prints 2.
                 $node = _make_count($factory, $node, $sim)
                     if $want == 2 && !$ref_or_mod
                        && !$is_lvintro
-                       && $node->isa('SoN::IR::Node::FieldAccess');
+                       && ($node->isa('SoN::IR::Node::FieldAccess')
+                           || $node->isa('SoN::IR::Node::PadAccess'));
                 $sim->push_node($node);
             }
             return ($op->next, 'handled');
@@ -6778,12 +6878,56 @@ class SoN::FromOptree 0.01 {
             # sub calling it here. Another lexical sub (`&a`) needs no cell --
             # the body's own padcv finds it -- and anything else is refused.
             if ($name eq 'padcv') {
-                my @vars = grep { !/\A&/ } _anoncode_captures($cv, $op);
+                # ONE DEFINED AT FILE SCOPE shares the file's lexicals by
+                # name, as a named sub does (_file_lexicals_shared), so those
+                # captures need no cell either.
+                my $body = _anoncode_cv($cv, $op);
+                my %file_slot = map { $_ => 1 } keys %{ _outer_main_slots($body) };
+                my $names = $body && eval { $body->PADLIST->ARRAYelt(0) };
+                my %file_name = map {
+                    my $pn = $names->ARRAYelt($_);
+                    ref($pn) eq 'B::PADNAME' ? ($pn->PV => 1) : ()
+                } keys %file_slot;
+                if (%file_name) {
+                    # SHARED BY NAME IS ONE VARIABLE PER NAME. A second file
+                    # lexical spelled the same (`{ my $x }` shadowing `my
+                    # $x`) would be read as the first: perl's 12 became 22.
+                    my %count;
+                    my $main = eval { B::main_cv()->PADLIST->ARRAYelt(0) };
+                    for my $i ($main ? (1 .. $main->MAX) : ()) {
+                        my $pn = $main->ARRAYelt($i);
+                        $count{ $pn->PV }++ if ref($pn) eq 'B::PADNAME' && defined $pn->PV;
+                    }
+                    my @twice = grep { ($count{$_} // 0) > 1 } sort keys %file_name;
+                    die "GAP: a lexical sub closing over " . join(', ', @twice)
+                      . " is not yet lowered -- the file declares that name more"
+                      . " than once, and its body reads it by name\n" if @twice;
+                    # A CLONE PER PASS IS A VARIABLE PER PASS. A `my sub` in a
+                    # loop is cloned at each entry and a `\&h` taken there keeps
+                    # that pass's variable; read by name, every one read the
+                    # last (perl's 10,20,30 became 30,30,30).
+                    die "GAP: a lexical sub closing over " . join(', ', sort keys %file_name)
+                      . " is not yet lowered -- it is cloned inside a loop, once"
+                      . " per pass, and its body reads the variable by name\n"
+                        unless _lexsub_cloned_once($body);
+                }
+                my @vars = grep { !/\A&/ && !$file_name{$_} } _anoncode_captures($cv, $op);
                 die "GAP: a lexical sub closing over " . join(', ', @vars)
                   . " is not yet lowered -- its captures belong to the scope it"
                   . " was defined in, not to the caller\n" if @vars;
             }
             my @captures = $name eq 'padcv' ? () : _anoncode_capture_info($cv, $op);
+
+            # A CLOSURE BUILT ONCE PER PASS keeps that pass's variable, and
+            # the lifted body reads one: every closure read the last pass
+            # (`for my $i (1..3) { my $j = $i; push @a, sub { $j } }` -- perl's
+            # $a[1]->() is 2, emitted 3).
+            if (my @renewed = _captures_renewed_per_pass($cv, $op, @captures)) {
+                die "GAP: an anonymous sub closing over " . join(', ', @renewed)
+                  . " is not yet lowered -- it is built once per pass of a loop"
+                  . " that gives it a fresh variable, and its lifted body reads"
+                  . " one\n";
+            }
 
             # A CAPTURED FIELD belongs to the instance the method runs on, and
             # nothing in the graph says which: the anon sub is lifted to file
@@ -8902,6 +9046,29 @@ class SoN::FromOptree 0.01 {
                 $sim->set_control($acc);
                 $acc = $concat->($acc, $mkstr->($seg[0])) if defined $seg[0];
             }
+            elsif (($op->private & 0x40) && !$pkg_target
+                   && $ctx->{addr_taken}{ $op->targ }) {
+                # A DEMOTED OR CAPTURED SLOT IS READ FROM MEMORY, as padsv
+                # reads it: the scope holds no binding for it to append to.
+                my $targ  = $op->targ;
+                my $param = $ctx->{cell_params}{$targ};
+                $acc = $param
+                    ? $factory->make('CellRead',
+                        inputs => [$param,
+                            (defined $sim->memory ? ($sim->memory) : ())],
+                        stamp  => SoN::IR::Stamp->new(type => 'Unknown'))
+                    : $factory->make('PadAccess',
+                        targ => $targ,
+                        do { my ($sg, $sy) = _padparts($cv, $targ);
+                             (sigil => $sg, symbol => $sy) },
+                        ($ctx->{shared_lexicals}{$targ} ? (shared => 1) : ()),
+                        (defined $sim->memory ? (inputs => [ $sim->memory ]) : ()));
+                # `.=` READS AN UNDEFINED TARGET AS "" WITHOUT A WARNING, where
+                # `.` warns: the seed is the read or the empty string.
+                $acc = $factory->make('DefinedOr', inputs => [$acc, $mkstr->('')]);
+                $acc = $concat->(_coerce_to_str($factory, $acc), $mkstr->($seg[0]))
+                    if defined $seg[0];
+            }
             elsif ($op->private & 0x40) {
                 $acc = $pkg_target
                     ? $sim->lookup(_stash_key($pkg_target))
@@ -9004,6 +9171,45 @@ class SoN::FromOptree 0.01 {
                 $store->set_control_in($sim->control);
                 $sim->set_control($store);
                 $sim->push_node($acc) unless ($op->flags & 3) == 1;   # void
+                return ($op->next, 'handled');
+            }
+            # A CAPTURED OR DEMOTED SLOT IS STORED, as the TARGMY path stores
+            # it: the storage is not this graph's scope, and a rebind alone
+            # dropped `$s .= "y"` on a lexical a sub or a reference shares.
+            if (my $param = $ctx->{cell_params}{$targ}) {
+                my $write = $factory->make('CellWrite',
+                    inputs => [$param, $acc,
+                        (defined $sim->memory ? ($sim->memory) : ())]);
+                $write->set_control_in($sim->control);
+                $sim->set_control($write);
+                $sim->set_memory($write) if defined $sim->memory;
+                # THE RESULT IS THE VARIABLE, read after the store. Pushing
+                # $acc gave the append two consumers, and each spelled it:
+                # `print(($s .= "x"))` appended twice (perl's ax, emitted axx).
+                $sim->push_node($factory->make('CellRead',
+                    inputs => [$param,
+                        (defined $sim->memory ? ($sim->memory) : ())],
+                    stamp  => SoN::IR::Stamp->new(type => 'Unknown')));
+                return ($op->next, 'handled');
+            }
+            if ($ctx->{addr_taken}{$targ}) {
+                my $loc = $factory->make('PadAccess',
+                    targ => $targ,
+                    do { my ($sg, $sy) = _padparts($cv, $targ);
+                         (sigil => $sg, symbol => $sy) },
+                    ($ctx->{shared_lexicals}{$targ} ? (shared => 1) : ()),
+                    (defined $sim->memory ? (inputs => [ $sim->memory ]) : ()));
+                my $store = $factory->make('Assign', inputs => [$loc, $acc]);
+                $store->set_control_in($sim->control);
+                $sim->set_control($store);
+                $sim->set_memory($store);
+                # The result is the variable read after the store, as above.
+                $sim->push_node($factory->make('PadAccess',
+                    targ => $targ,
+                    do { my ($sg, $sy) = _padparts($cv, $targ);
+                         (sigil => $sg, symbol => $sy) },
+                    ($ctx->{shared_lexicals}{$targ} ? (shared => 1) : ()),
+                    inputs => [ $store ]));
                 return ($op->next, 'handled');
             }
             # OPpLVAL_INTRO (0x80): a new lexical (`my $c = qq{...}`). The main
@@ -18830,6 +19036,16 @@ class SoN::FromOptree 0.01 {
                 && ( $o->flags & B::OPf_KIDS );
             $o = $o->first if $rv2sv;
             return "p" . $o->targ if $o->name eq q{padsv};
+            # A STORE'S RESULT IS ITS TARGET, not a copy: `($s .= "b",
+            # $s .= "c")` is `abc abc` in perl. The graph snapshots it, so
+            # these are not read again -- they refuse below.
+            require B::Op_private;
+            return "p" . $o->targ if $o->name eq q{padsv_store}
+                || ( ( $o->private & B::OPpTARGET_MY() ) && ( $B::Op_private::bits{ $o->name }{4} // '' ) eq 'OPpTARGET_MY' );
+            return __SUB__->( $o->last ) if $o->name eq q{sassign}
+                && ( $o->flags & B::OPf_KIDS ) && !( $o->private & B::OPpASSIGN_BACKWARDS() );
+            return __SUB__->( $o->first ) if $o->isa(q{B::BINOP})
+                && ( $o->flags & B::OPf_STACKED ) && $o->name ne q{sassign};   # op=
             return undef unless $o->name eq q{gvsv}
                 || ( $rv2sv && $o->name eq q{gv} );
             my $gv = _op_gv($cv, $o);

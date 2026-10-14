@@ -343,13 +343,22 @@ class SoN::Deparse 0.01 {
             if $begins =~ /^use experimental\b[^;]*"class"/m;
         $out .= $classes_text;
 
+        # A LIFTED BODY IS DEFINED IN main, where every reference and call
+        # names it -- but a required file is compiled in the REQUIRER'S
+        # package, so emitted bare at file scope it landed there: chalk's
+        # TestPipeline loads TypeInferenceActions and its methods died with
+        # "Undefined subroutine &main::...". A named sub keeps perl's own
+        # behaviour and is emitted as before.
+        my $lifted = '';
         for my $name (sort keys $methods->%*) {
             next if $name eq 'main::__PROGRAM__';
             next if $class_owned->{$name};
             my $sub = eval { $self->_emit_sub($name, $methods->{$name}) };
             if (!defined $sub) { $gap = $@ || "failed to render $name"; return undef }
-            $out .= $sub;
+            if ($self->_sub_ident($name) ne $name =~ s/^main:://r) { $lifted .= $sub }
+            else { $out .= $sub }
         }
+        $out .= "package main {\n$lifted}\n" if length $lifted;
 
         $nodes = { map { $_->{id} => $_ } ($graph->{nodes} // [])->@* };
         %rendered = ();
@@ -685,6 +694,11 @@ class SoN::Deparse 0.01 {
         # main under its mangled name, and called bare from inside `class
         # Chalk::IR::Graph` it resolved there: "Undefined subroutine".
         return "main::$ident" if $in_package && $ident !~ /::/;
+        # A LIFTED BODY IS DEFINED IN main from ANY call site, and the
+        # program's own text may sit under `package P;` or `package P { }`,
+        # where a bare call to the mangled name was P::... and died.
+        return "main::$ident"
+            if $ident !~ /::/ && $ident ne $name =~ s/^main:://r;
         return $ident;
     }
 
@@ -1967,9 +1981,13 @@ class SoN::Deparse 0.01 {
         }
 
         for my $n ( sort { $a->{id} <=> $b->{id} } $self->_nodes_in_order ) {
-            next unless ( $n->{op} // '' ) eq 'PadAccess';
+            # A CELL READ IS A SHARED LEXICAL READ BY NAME, and goes stale
+            # the same way: `my $v = $s; $s = "z"; "$v $s"` in a closure
+            # printed `z z` for perl's `a z`. Its cell input is not a version.
+            my $is_cell = ( $n->{op} // '' ) eq 'CellRead';
+            next unless $is_cell || ( $n->{op} // '' ) eq 'PadAccess';
             next if exists $bound{ $n->{id} };
-            next unless $safe_read->( $n->{id} );
+            next unless $is_cell || $safe_read->( $n->{id} );
             # A LOCATION ONLY IS NOT A READ: a PadAccess whose every use is a
             # store target or a referent needs no stale temporary -- binding it
             # emitted `$stale6 = $k;` ahead of the `my $k` it named.
@@ -1986,6 +2004,7 @@ class SoN::Deparse 0.01 {
             } ( $consumers{ $n->{id} } // [] )->@*;
             next if $under_loop{ $n->{id} } && !$read_before_loop{ $n->{id} };
             my @in = ( $n->{inputs} // [] )->@*;
+            shift @in if $is_cell;
             # A READ AFTER A CALL takes the call as its version: the callee may
             # have stored a shared lexical, and a store after the read must not
             # reach it. `g(); my $x = $n; $n = 7; $x` returned 7.
@@ -2002,7 +2021,7 @@ class SoN::Deparse 0.01 {
             # shared lexical: it is declared outside the sub, so its name
             # exists at the prologue; the sub's own lexicals do not yet.
             my $at_entry = ( $version->{op} // '' ) eq 'MemStart';
-            next if $at_entry && !( $n->{fields} // {} )->{shared};
+            next if $at_entry && !$is_cell && !( $n->{fields} // {} )->{shared};
             next unless $at_entry || defined $version->{control_in};
 
             my ( @queue, %seen, $shadowed )
@@ -5017,6 +5036,15 @@ class SoN::Deparse 0.01 {
                 ( exists $hoisted{$var} ? '' : 'my ' ),
                 $var, $self->_location( $n->{id} ) );
         }
+        # A CELL READ the same way, spelled from its cell.
+        if ($op eq 'CellRead') {
+            die "GAP: a CellRead reached as a statement with no binding is"
+              . " not yet rendered\n" unless exists $bound{ $n->{id} };
+            my $var = $bound{ $n->{id} };
+            return sprintf( "%s%s = %s;\n",
+                ( exists $hoisted{$var} ? '' : 'my ' ),
+                $var, $self->_expr( ( $n->{inputs} // [] )->[0] ) );
+        }
 
         # AN Unwind IS A `die`. Measured across the three corpus files that
         # refused -- twelve nodes, uniform: no fields, control_in the chain
@@ -5408,6 +5436,27 @@ class SoN::Deparse 0.01 {
                         && !(grep { $cell_slots{$_} } @lhs)
                         && !(grep { $pad_declared{$_} } @lhs))
                 ? 'my ' : '';
+            # A VALUE THAT READS ITS OWN TARGET is not a declaration's value:
+            # `my $u = (($u // "") . "z")` names a $u that does not exist yet.
+            # The slot is declared first, then stored: $decl becomes the whole
+            # declaration statement, which every form below prefixes. A
+            # PadAccess's inputs are memory versions, not reads, so the walk
+            # stops there.
+            if ($decl) {
+                my %target = map { $_ => 1 } @in[0 .. $t-1];
+                my ( %seen, $reads_target );
+                my @queue = @in[$t .. $#in];
+                while ( defined( my $id = shift @queue ) ) {
+                    next if $seen{$id}++;
+                    $reads_target = 1, last if $target{$id};
+                    my $m = $nodes->{$id} or next;
+                    next if ( $m->{op} // '' ) eq 'PadAccess';
+                    push @queue, ( $m->{inputs} // [] )->@*;
+                }
+                $decl = sprintf( "my %s;\n",
+                    @lhs > 1 ? '(' . join(', ', @lhs) . ')' : $lhs[0] )
+                    if $reads_target;
+            }
             $pad_declared{$_} = 1 for @lhs;
             return sprintf("%s(%s) = (%s);\n",
                 $decl, join(', ', @lhs), join(', ', @rhs))
@@ -6352,7 +6401,19 @@ class SoN::Deparse 0.01 {
             my $nm = ($n->{fields} // {})->{name};
             die "GAP: an AnonSub with no name is not yet rendered\n"
                 unless defined $nm && length $nm;
-            $text = sprintf('\\&%s', $self->_sub_ident($nm));
+            # A BODY THE PRODUCER REFUSED is absent from the graph, and a
+            # reference to it is a reference to nothing: the emitted program
+            # died at the call where perl ran the body.
+            die "GAP: a reference to the sub body `$nm`, which is not in the"
+              . " graph, cannot be rendered -- the emitted program would die"
+              . " calling it\n"
+                unless exists $all_methods->{$nm};
+            # THE BODY IS DEFINED IN main, and a mangled name with no `::`
+            # resolves in whatever package the reference is taken in -- inside
+            # a `class C { }` block, `\&name` was C::name and the call died.
+            my $ident = $self->_sub_ident($nm);
+            $ident = "main::$ident" unless $ident =~ /::/;
+            $text = sprintf('\\&%s', $ident);
         }
         elsif ($op eq 'Delete') {
             # DELETE YIELDS THE REMOVED VALUE, so it is reached as a value as
@@ -7088,7 +7149,11 @@ class SoN::Deparse 0.01 {
             # the call reaches.
             die "GAP: a call to `$name`, which is not in the graph, cannot be"
               . " rendered -- the emitted program would die calling it\n"
-                if $name =~ /\A\w+(?:::\w+)*\z/
+                # A LIFTED BODY -- an anon or `my sub` body named
+                # `<enclosing>::__ANON__:<line>:<targ>` -- is called by that
+                # name too, and is just as absent when it was refused.
+                if ($name =~ /\A\w+(?:::\w+)*\z/
+                    || $name =~ /::__ANON__:\d+:\d+\z/)
                 && !exists $all_methods->{$name}
                 && !$f->{external}
                 && !$self->_defined_at_runtime($name);
