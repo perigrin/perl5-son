@@ -192,4 +192,35 @@ round_trips(q{my $s = "a1b2"; my $t = $s =~ s/(\d)/$1*2/ger; print "$t $s\n";},
 round_trips(q{my @a = ("a1", "b2"); s/(\d)/$1*2/ge for @a; print "@a\n";},
     'aliasing the topic in a postfix for');
 
+# A COPY TAKEN BEFORE AN IN-PLACE REWRITE keeps the old string. The subject
+# is a demoted slot, so the copy is a read at the version before the rewrite,
+# and spelled by name after it, it read the rewritten string (a2b4 a2b4).
+round_trips(q{my $s="a1b2"; my $t=$s; $s =~ s/(\d)/$1*2/ge; print "$s $t\n";},
+    'a copy before the substitution');
+round_trips(q{sub f { my $s=shift; my $t=$s; $s =~ s/(\d)/$1*2/ge; "$s $t" } print f("a1b2"),"\n";},
+    'a copy before the substitution in a sub');
+round_trips(q{my $s="a1b2"; my @a=($s); $s =~ s/(\d)/$1*2/ge; print "@a $s\n";},
+    'an array element copied before the substitution');
+round_trips(q{my $s="a1b2"; my $t="$s"; $s =~ s/(\d)/$1*2/ge; print "$s $t\n";},
+    'an interpolated copy before the substitution');
+round_trips(q{my $s="a1b2"; my $t; $t=$s; $s =~ s/(\d)/$1*2/ge; $t .= ""; print "$s $t\n";},
+    'an assigned copy appended to after the substitution');
+round_trips(q{my $s="a1b2"; my $t=$s; $s =~ s/(\d)/X/g; print "$s $t\n";},
+    'a copy before a literal /g substitution');
+round_trips(q{my $s="a1b2"; my $t=$s; $s =~ s/(\d)/$1*2/e; print "$s $t\n";},
+    'a copy before a /e substitution');
+round_trips(q{my $s="a1b2"; my $t=$s; $s =~ tr/a/b/; print "$s $t\n";},
+    'a copy before a transliteration');
+round_trips(q{my $s="a1b2"; my $t=$s; my $u = $s =~ s/(\d)/$1*2/ger; print "$s $t $u\n";},
+    'a copy beside a /r substitution');
+round_trips(q{my @a=("a1","b2"); my @b = map { s/(\d)/$1*2/ge; $_ } @a; print "@a|@b\n";},
+    'map aliasing the topic into the array');
+
+round_trips(q{my $s="a1b2"; my $t=$s; my $u=$s; my $n = ($s =~ s/(\d)/$1*2/ge); print "$n $s $t $u\n";},
+    'two copies before a counted substitution');
+round_trips(q{my $s="a1b2"; my $t=$s; if ($s =~ /(\d)/) { print "$1\n" } $s =~ s/(\d)/X/; print "$s $t\n";},
+    'a copy read past a match before the substitution');
+round_trips(q{my $s="a1"; my $t=$s; $s =~ s/1/X/ if 1; print "$s $t\n";},
+    'a copy before a substitution under a folded condition');
+
 done_testing;

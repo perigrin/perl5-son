@@ -1565,6 +1565,16 @@ class SoN::Deparse 0.01 {
                 next if $op eq 'Call'
                     && ( ( $c->{fields} // {} )->{name} // '' ) =~ /\A(?:push|unshift)\z/
                     && ( ( $c->{inputs} // [] )->[0] // -1 ) != $id;
+                # A s/// OR tr/// ON A PAD SUBJECT spells it by name, through
+                # _subst_lvalue's _location, so a binding never becomes what
+                # the operator rewrites.
+                next if $op =~ /\A(?:RegexSubst|Transliterate)\z/
+                    && ( ( $c->{inputs} // [] )->[0] // -1 ) == $id
+                    && ( ( $nodes->{$id} // {} )->{op} // '' ) eq 'PadAccess';
+                # A MATCH WITHOUT /g only reads: its captures are its own. A /g
+                # match sets pos, which is state on the variable.
+                next if $op eq 'RegexMatch'
+                    && ( ( $c->{fields} // {} )->{flags} // '' ) !~ /g/;
                 return 0;
             }
             return 1;
@@ -1965,7 +1975,8 @@ class SoN::Deparse 0.01 {
                 my $c = $_;
                 my @ci = ( $c->{inputs} // [] )->@*;
                 !( ( $c->{op} // '' ) eq 'Ref'
-                   || ( ( $c->{op} // '' ) eq 'Assign' && @ci && $ci[0] == $n->{id} ) )
+                   || ( ( $c->{op} // '' ) =~ /\A(?:Assign|RegexSubst|Transliterate)\z/
+                        && @ci && $ci[0] == $n->{id} ) )
             } ( $consumers{ $n->{id} } // [] )->@*;
             next if $under_loop{ $n->{id} } && !$read_before_loop{ $n->{id} };
             my @in = ( $n->{inputs} // [] )->@*;
@@ -1994,8 +2005,11 @@ class SoN::Deparse 0.01 {
                 my $id = shift @queue;
                 next if $seen{$id}++;
                 for my $c ( ( $arm_next{$id} // [] )->@* ) {
+                    # A DESTRUCTIVE s/// OR tr/// on a pad subject is a store
+                    # pinned to the chain: `my $t = $s; $s =~ s/1/X/` spelled
+                    # $t as `$s` after it and printed the rewritten string.
                     $shadowed = 1 if ( $c->{op} // '' )
-                        =~ /\A(?:Assign|EntryWrite|CellWrite|Delete|Call)\z/;
+                        =~ /\A(?:Assign|EntryWrite|CellWrite|Delete|Call|RegexSubst|Transliterate)\z/;
                     push @queue, $c->{id};
                 }
             }
@@ -5647,7 +5661,7 @@ class SoN::Deparse 0.01 {
         }
 
         return $self->_slot_name($root) if ($root->{op} // '') eq 'EntryDef';
-        return $self->_expr($root->{id})
+        return $self->_location($root->{id})
             if ($root->{op} // '') eq 'PadAccess';
 
         # AN ELEMENT IS AN LVALUE TOO. `for my $s (@w) { $s =~ s/a/b/g }`
