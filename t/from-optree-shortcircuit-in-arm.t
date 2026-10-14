@@ -74,10 +74,12 @@ subtest 'a genuinely untranslatable arm still refuses' => sub {
     # arm-did-not-reach-the-join refusal this subtest is about, rather than
     # some other GAP the arm walker never sees. (`goto` was tried and is
     # wrong here -- it dies with a stack underflow, not a GAP, which is its
-    # own bug and not what this asserts.)
+    # own bug and not what this asserts.) The `each` loop stopped being one
+    # when the arm walk began dispatching a while loop as the main walk does;
+    # a `state` initialiser's `once` is one still.
     my $err = dies {
-        graph_of('sub { if ($^O eq "os2") { my %h;'
-               . ' while (my ($k,$v) = each %h) { print $k } }'
+        graph_of('use feature "state"; sub { if ($^O eq "os2") {'
+               . ' state $n = 5; print $n }'
                . ' else { print "b" } }')
     };
     like($err, qr/GAP.*if\/else arm/,

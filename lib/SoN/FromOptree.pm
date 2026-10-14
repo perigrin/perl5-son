@@ -1970,127 +1970,8 @@ class SoN::FromOptree 0.01 {
             # through the header Phis (see _translate_while_loop). The
             # condition head is enterloop->next.
             if ($name eq 'enterloop') {
-                # A bare block (`{ ... }`), `package Foo { ... }`, and `class
-                # Foo { ... }` ALSO compile to enterloop -- but with no back
-                # edge: nextop and lastop both point at the same leaveloop. A
-                # real while/until/C-style for has nextop = unstack (a
-                # distinct op from lastop). Keying on this (not on redoop -- a
-                # bare block DOES have redoop set) tells the two apart; only a
-                # genuine back edge goes through _translate_while_loop.
-                # Precedent: _is_postfix_while discriminates the analogous
-                # enter/leave shape the same way.
-                my $nx = $op->can('nextop') ? $op->nextop : undef;
-                my $ls = $op->can('lastop') ? $op->lastop : undef;
-                if (ref $nx && $$nx && ref $ls && $$ls && $$nx == $$ls) {
-                    $op = $op->next;
-                    next;
-                }
-                # A LOOP'S VALUE IS ITS OWN -- see _settle_loop_value. A bare
-                # block above is not a loop: its value is its last statement.
-                $ctx->{loop_floor}{$$ls} = $sim->stack_depth if ref $ls && $$ls;
-                # A BARE BLOCK WITH A `continue` IS NEITHER SHAPE. It compiles
-                # to a real enterloop whose nextop is the CONTINUE BODY rather
-                # than the leaveloop, so the bare-block test above declines and
-                # it fell through to the while-loop translator -- which walked
-                # it as a loop and died "Stack underflow", an INTERNAL ERROR
-                # where a named refusal belongs (perl's own t/cmd/switch.t).
-                #
-                # KEYED ON redoop == enter, which is what says BARE BLOCK.
-                # Measured across every enterloop form:
-                #
-                #     bare              next=leaveloop  redo=nextstate  n==l
-                #     bare + continue   next=pushmark   redo=ENTER      <- this
-                #     while             next=unstack    redo=nextstate
-                #     while + continue  next=stub       redo=padsv
-                #     C-style for       next=padsv      redo=stub
-                #
-                # An earlier version keyed on `nextop is not unstack`, which is
-                # true of `while + continue` and C-style `for` as well -- both
-                # translate correctly today, and both were refused. The redo
-                # target is the property that actually separates a block from a
-                # loop.
-                #
-                # REFUSED because the continue body is real control flow this
-                # walker does not model: it runs AFTER the block, and `last`
-                # SKIPS it where `next` runs it.
-                # A BARE BLOCK ENTERS AT ITS BODY; A REAL LOOP ENTERS AT ITS
-                # CONDITION. `redo` targets the body, so `entry == redoop` IS
-                # the bare-block test -- measured against B on every form:
-                #
-                #     bare + continue        ->next=const      redo=const      SAME
-                #     bare + continue + redo ->next=enter      redo=enter      SAME
-                #     plain bare block       ->next=nextstate  redo=nextstate  SAME
-                #     while + continue       ->next=padsv      redo=pushmark   differ
-                #     C-style for            ->next=padsv      redo=pushmark   differ
-                #     while                  ->next=padsv      redo=nextstate  differ
-                #
-                # The previous test was `redoop == enter`, which means "bare
-                # block WITH AN INNER SCOPE" -- true of the redo form and
-                # false of the straight-line one, so the latter fell through
-                # to the while translator and reported an unrelated GAP. An
-                # attempt to key on the next/redo op NAMES could not separate
-                # the straight-line form from `while+continue` or a C-style
-                # `for`, which both work; the IDENTITY test has no overlap.
-                # AND `while (1)` LOOKS THE SAME FROM THE ENTRY ALONE. perl
-                # folds the constant condition away, so there is no condition
-                # to enter at and entry == redoop holds for it too:
-                #
-                #     { $n=1 } continue {..}   next=padsv     redo=const      entry==redo
-                #     { $n=1 }                 next=leaveloop redo=nextstate  entry==redo
-                #     while (1) { .. }         next=UNSTACK   redo=nextstate  entry==redo
-                #
-                # `nextop` is what tells them apart: an `unstack` IS the back
-                # edge, and a bare block has none. My first version keyed on
-                # the entry alone and broke every while(1) test in the suite
-                # (t/from-optree-while-one.t, t/deparse-infinite-loop-with-last.t,
-                # t/from-optree-loop-gaps.t) -- the six probes I measured all
-                # had a real condition or none, and never the FOLDED case.
-                my $rd    = $op->can('redoop') ? $op->redoop : undef;
-                my $entry = $op->next;
-                if (ref $rd && $$rd && ref $entry && $$entry
-                        && $$entry == $$rd
-                        && !(ref $nx && $$nx && $nx->name eq 'unstack')) {
-                    # A CONTINUE WITH NO LOOP-EXIT IS STRAIGHT-LINE CODE. The
-                    # block runs once, falls into the continue, and leaves --
-                    # measured, the answer matches the same statements written
-                    # in sequence:
-                    #
-                    #     my $n=0; { $n=1 } continue { $n+=10 }   $n is 11
-                    #     my $n=0; $n=1; $n+=10;                  $n is 11
-                    #
-                    # so exec order already walks block, then continue, then
-                    # leaveloop, and stepping into it translates the whole
-                    # thing with no loop vocabulary at all.
-                    #
-                    # WHAT MAKES IT A LOOP IS AN EXIT OP, and the three exits
-                    # have three different destinations -- measured:
-                    #
-                    #     fall off end   continue RUNS
-                    #     next           continue RUNS
-                    #     redo           continue SKIPPED (back to block top)
-                    #     last           continue SKIPPED (past it)
-                    #
-                    #     { $i++; redo if $i<3 } continue { push @o,"c$i" }
-                    #       -> b1,b2,b3,c3   (not c1,c2,c3)
-                    #
-                    # One region, three destinations, which the walker does
-                    # not model -- so those still refuse.
-                    if ( _block_has_loop_exit($op) ) {
-                        die "GAP: a bare block with a `continue` block and a"
-                          . " next/last/redo is not yet lowered -- the three"
-                          . " exits have three different destinations (next"
-                          . " runs the continue, last and redo skip it), which"
-                          . " is control flow the walker does not model\n";
-                    }
-                    $op = $op->next;
-                    next;
-                }
-                # WHERE `next` LANDS: the continue block, or the C-style step,
-                # which perl puts at nextop. See $CONTINUE_START.
-                local $CONTINUE_START = _continue_start($op);
-                _translate_while_loop($cv, $op->next, $sim, $factory, $opmap, \%visited);
-                # Continue after the loop; the B::LOOP op's lastop is leaveloop.
-                $op = $op->can('lastop') ? $op->lastop : $op->next;
+                $op = _handle_enterloop($cv, $op, $sim, $factory, $opmap,
+                    \%visited, $ctx);
                 next;
             }
 
@@ -5549,6 +5430,132 @@ class SoN::FromOptree 0.01 {
     # OPf_REF, and relying on that would key the question on a second
     # incidental bit rather than on what the op does. See
     # docs/plans and the opf-mod-is-not-a-write note.
+    # _handle_enterloop($cv, $enterloop, $sim, $factory, $opmap, $visited, $ctx)
+    # -> $resume_op. A while/until/C-style for, a bare block, or a bare block
+    # with a continue. SHARED BY THE MAIN WALK AND THE ARM WALK: a loop inside
+    # an if/else arm is the same loop as one outside it.
+    sub _handle_enterloop ($cv, $op, $sim, $factory, $opmap, $visited, $ctx) {
+        # A bare block (`{ ... }`), `package Foo { ... }`, and `class
+        # Foo { ... }` ALSO compile to enterloop -- but with no back
+        # edge: nextop and lastop both point at the same leaveloop. A
+        # real while/until/C-style for has nextop = unstack (a
+        # distinct op from lastop). Keying on this (not on redoop -- a
+        # bare block DOES have redoop set) tells the two apart; only a
+        # genuine back edge goes through _translate_while_loop.
+        # Precedent: _is_postfix_while discriminates the analogous
+        # enter/leave shape the same way.
+        my $nx = $op->can('nextop') ? $op->nextop : undef;
+        my $ls = $op->can('lastop') ? $op->lastop : undef;
+        if (ref $nx && $$nx && ref $ls && $$ls && $$nx == $$ls) {
+            return $op->next;
+        }
+        # A LOOP'S VALUE IS ITS OWN -- see _settle_loop_value. A bare
+        # block above is not a loop: its value is its last statement.
+        $ctx->{loop_floor}{$$ls} = $sim->stack_depth if ref $ls && $$ls;
+        # A BARE BLOCK WITH A `continue` IS NEITHER SHAPE. It compiles
+        # to a real enterloop whose nextop is the CONTINUE BODY rather
+        # than the leaveloop, so the bare-block test above declines and
+        # it fell through to the while-loop translator -- which walked
+        # it as a loop and died "Stack underflow", an INTERNAL ERROR
+        # where a named refusal belongs (perl's own t/cmd/switch.t).
+        #
+        # KEYED ON redoop == enter, which is what says BARE BLOCK.
+        # Measured across every enterloop form:
+        #
+        #     bare              next=leaveloop  redo=nextstate  n==l
+        #     bare + continue   next=pushmark   redo=ENTER      <- this
+        #     while             next=unstack    redo=nextstate
+        #     while + continue  next=stub       redo=padsv
+        #     C-style for       next=padsv      redo=stub
+        #
+        # An earlier version keyed on `nextop is not unstack`, which is
+        # true of `while + continue` and C-style `for` as well -- both
+        # translate correctly today, and both were refused. The redo
+        # target is the property that actually separates a block from a
+        # loop.
+        #
+        # REFUSED because the continue body is real control flow this
+        # walker does not model: it runs AFTER the block, and `last`
+        # SKIPS it where `next` runs it.
+        # A BARE BLOCK ENTERS AT ITS BODY; A REAL LOOP ENTERS AT ITS
+        # CONDITION. `redo` targets the body, so `entry == redoop` IS
+        # the bare-block test -- measured against B on every form:
+        #
+        #     bare + continue        ->next=const      redo=const      SAME
+        #     bare + continue + redo ->next=enter      redo=enter      SAME
+        #     plain bare block       ->next=nextstate  redo=nextstate  SAME
+        #     while + continue       ->next=padsv      redo=pushmark   differ
+        #     C-style for            ->next=padsv      redo=pushmark   differ
+        #     while                  ->next=padsv      redo=nextstate  differ
+        #
+        # The previous test was `redoop == enter`, which means "bare
+        # block WITH AN INNER SCOPE" -- true of the redo form and
+        # false of the straight-line one, so the latter fell through
+        # to the while translator and reported an unrelated GAP. An
+        # attempt to key on the next/redo op NAMES could not separate
+        # the straight-line form from `while+continue` or a C-style
+        # `for`, which both work; the IDENTITY test has no overlap.
+        # AND `while (1)` LOOKS THE SAME FROM THE ENTRY ALONE. perl
+        # folds the constant condition away, so there is no condition
+        # to enter at and entry == redoop holds for it too:
+        #
+        #     { $n=1 } continue {..}   next=padsv     redo=const      entry==redo
+        #     { $n=1 }                 next=leaveloop redo=nextstate  entry==redo
+        #     while (1) { .. }         next=UNSTACK   redo=nextstate  entry==redo
+        #
+        # `nextop` is what tells them apart: an `unstack` IS the back
+        # edge, and a bare block has none. My first version keyed on
+        # the entry alone and broke every while(1) test in the suite
+        # (t/from-optree-while-one.t, t/deparse-infinite-loop-with-last.t,
+        # t/from-optree-loop-gaps.t) -- the six probes I measured all
+        # had a real condition or none, and never the FOLDED case.
+        my $rd    = $op->can('redoop') ? $op->redoop : undef;
+        my $entry = $op->next;
+        if (ref $rd && $$rd && ref $entry && $$entry
+                && $$entry == $$rd
+                && !(ref $nx && $$nx && $nx->name eq 'unstack')) {
+            # A CONTINUE WITH NO LOOP-EXIT IS STRAIGHT-LINE CODE. The
+            # block runs once, falls into the continue, and leaves --
+            # measured, the answer matches the same statements written
+            # in sequence:
+            #
+            #     my $n=0; { $n=1 } continue { $n+=10 }   $n is 11
+            #     my $n=0; $n=1; $n+=10;                  $n is 11
+            #
+            # so exec order already walks block, then continue, then
+            # leaveloop, and stepping into it translates the whole
+            # thing with no loop vocabulary at all.
+            #
+            # WHAT MAKES IT A LOOP IS AN EXIT OP, and the three exits
+            # have three different destinations -- measured:
+            #
+            #     fall off end   continue RUNS
+            #     next           continue RUNS
+            #     redo           continue SKIPPED (back to block top)
+            #     last           continue SKIPPED (past it)
+            #
+            #     { $i++; redo if $i<3 } continue { push @o,"c$i" }
+            #       -> b1,b2,b3,c3   (not c1,c2,c3)
+            #
+            # One region, three destinations, which the walker does
+            # not model -- so those still refuse.
+            if ( _block_has_loop_exit($op) ) {
+                die "GAP: a bare block with a `continue` block and a"
+                  . " next/last/redo is not yet lowered -- the three"
+                  . " exits have three different destinations (next"
+                  . " runs the continue, last and redo skip it), which"
+                  . " is control flow the walker does not model\n";
+            }
+            return $op->next;
+        }
+        # WHERE `next` LANDS: the continue block, or the C-style step,
+        # which perl puts at nextop. See $CONTINUE_START.
+        local $CONTINUE_START = _continue_start($op);
+        _translate_while_loop($cv, $op->next, $sim, $factory, $opmap, $visited);
+        # Continue after the loop; the B::LOOP op's lastop is leaveloop.
+        return $op->can('lastop') ? $op->lastop : $op->next;
+    }
+
     # _settle_loop_value($leaveloop, $sim, $factory, $ctx) -- what a foreach
     # leaves on the stack is its OWN value, not its body's. perl returns its
     # shared false from a loop that is a sub's last statement -- the last
@@ -16183,6 +16190,26 @@ class SoN::FromOptree 0.01 {
                 $visited->{$$op}++;
                 $op = _handle_entertry($cv, $op, $sim, $factory, $opmap,
                     $visited);
+                next;
+            }
+
+            # A WHILE LOOP, A C-STYLE FOR OR A BARE BLOCK IN AN ARM is the same
+            # construct as outside one, and so is a runtime range: the main
+            # walk dispatches all of them itself, and without the same dispatch
+            # here the arm stopped at the enterloop / range and the caller
+            # refused "did not converge".
+            if ($name eq 'enterloop') {
+                $visited->{$$op}++;
+                $op = _handle_enterloop($cv, $op, $sim, $factory, $opmap,
+                    $visited, $ctx);
+                next;
+            }
+            # ONLY A RANGE WHOSE CONTEXT IS KNOWN. In the caller's context (want
+            # 0, `wantarray ? (1..3) : []`) perl picks list range or flip-flop
+            # at run time, and a Range rendered there re-parses as the
+            # flip-flop. That arm keeps stopping here and refusing.
+            if ($name eq 'range' && ($op->flags & 3) >= 2) {
+                $op = _handle_range($cv, $op, $sim, $factory, $opmap);
                 next;
             }
 
