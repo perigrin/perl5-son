@@ -15284,6 +15284,14 @@ class SoN::FromOptree 0.01 {
             # A STORE INTO A DEMOTED SLOT threads on control just as a field
             # store does.
             return 1 if !$fields_only && _stores_demoted_slot($op);
+            # SO IS A STORE THROUGH A SCALAR REFERENCE: `$$r-- if $$r > 0`
+            # in an elsif arm hung the decrement off the arm's control beside
+            # the rest of the arm, unguarded, and the deparser refused "a
+            # control node with 2 successors". The lvalue rv2sv over a
+            # non-glob is the write.
+            return 1 if !$fields_only && $op->name eq 'rv2sv'
+                && ($op->flags & 32)   # OPf_MOD
+                && ${$op->first} && $op->first->name ne 'gv';
             my $is_targmy   = $op->can('targ') && $op->targ && ($op->private & 16);
             my $is_padstore = $op->name eq 'padsv_store' && $op->can('targ') && $op->targ;
             next unless $is_targmy || $is_padstore;
