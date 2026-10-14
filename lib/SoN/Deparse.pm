@@ -5330,6 +5330,27 @@ class SoN::Deparse 0.01 {
                         && !(grep { $cell_slots{$_} } @lhs)
                         && !(grep { $pad_declared{$_} } @lhs))
                 ? 'my ' : '';
+            # A VALUE THAT READS ITS OWN TARGET is not a declaration's value:
+            # `my $u = (($u // "") . "z")` names a $u that does not exist yet.
+            # The slot is declared first, then stored: $decl becomes the whole
+            # declaration statement, which every form below prefixes. A
+            # PadAccess's inputs are memory versions, not reads, so the walk
+            # stops there.
+            if ($decl) {
+                my %target = map { $_ => 1 } @in[0 .. $t-1];
+                my ( %seen, $reads_target );
+                my @queue = @in[$t .. $#in];
+                while ( defined( my $id = shift @queue ) ) {
+                    next if $seen{$id}++;
+                    $reads_target = 1, last if $target{$id};
+                    my $m = $nodes->{$id} or next;
+                    next if ( $m->{op} // '' ) eq 'PadAccess';
+                    push @queue, ( $m->{inputs} // [] )->@*;
+                }
+                $decl = sprintf( "my %s;\n",
+                    @lhs > 1 ? '(' . join(', ', @lhs) . ')' : $lhs[0] )
+                    if $reads_target;
+            }
             $pad_declared{$_} = 1 for @lhs;
             return sprintf("%s(%s) = (%s);\n",
                 $decl, join(', ', @lhs), join(', ', @rhs))
