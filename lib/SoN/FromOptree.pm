@@ -5709,8 +5709,12 @@ class SoN::FromOptree 0.01 {
                 for (my $o = $op->next; $$o && !$seen{$$o}++; $o = $o->next) {
                     my $m = $o->name;
                     next if $m =~ /^(padsv|padav|padhv|const|gvsv|null)$/;
+                    # A "%s"-only sprintf compiles to a multiconcat that
+                    # keeps sprintf's `sM` operands; OPpMULTICONCAT_FAKE says so.
                     $mod_but_read = _is_comparison_optree_op($m)
-                                 || $READS_ITS_OPERANDS{$m};
+                                 || $READS_ITS_OPERANDS{$m}
+                                 || ($m eq 'multiconcat'
+                                     && ($o->private & B::OPpMULTICONCAT_FAKE()));
                     last;
                 }
             }
@@ -10931,7 +10935,57 @@ class SoN::FromOptree 0.01 {
     }
 
 
-    sub _scout_mutated_targs ($cv, $start_op, $sim, $opmap, $extra_targs = [], $cond_consumed = 0) {
+    # _scout_mutated_targs(...) -> ($mutated, $unstamped)
+    #
+    # $mutated is the sorted list of slots the body rebinds; $unstamped is the
+    # set of those whose header Phi must be built WITHOUT its init's stamp --
+    # see _scout_loop_phi_stamps. $extra_stamps gives the stamp each extra slot
+    # (an iterator) will carry in the real walk.
+    sub _scout_mutated_targs ($cv, $start_op, $sim, $opmap, $extra_targs = [], $cond_consumed = 0, $extra_stamps = {}) {
+        my %unstamped;
+        while (1) {
+            my ($mutated, $placeholder, $scout_scope) = _scout_once($cv,
+                $start_op, $sim, $opmap, $extra_targs, $cond_consumed,
+                $extra_stamps, \%unstamped);
+            my @lost = grep {
+                !$unstamped{$_}
+                && _backedge_loses_stamp($scout_scope->{$_}, $placeholder->{$_})
+            } $mutated->@*;
+            return ($mutated, \%unstamped) unless @lost;
+            $unstamped{$_} = 1 for @lost;
+        }
+    }
+
+    # THE HEADER PHI'S STAMP IS DECIDED BEFORE THE BODY WALK. _make_loop_phi
+    # copies a narrowed init stamp onto the Phi, and the body is walked against
+    # it; a back-edge that cannot confirm that stamp would leave every consumer
+    # that read it too narrow, and nothing may unstamp the Phi afterwards (a
+    # stamp is written once, from Unknown). So the scout walks the body with
+    # each placeholder carrying the stamp its Phi WOULD carry, and a slot whose
+    # back-edge comes out unstamped -- and is neither an arithmetic recurrence
+    # over the Phi nor a package variable with a sigil floor, the two shapes
+    # _patch_loop_phi keeps -- gets an unstamped Phi instead. Measured on
+    # chalk: `my $v;` before a loop, conditionally overwritten with an element
+    # or a call result.
+    #
+    # A FIXPOINT, AND A MONOTONE ONE. Unstamping one placeholder can unstamp a
+    # back-edge that reads it, so the scout walks again with the larger set.
+    # The set only grows, so this ends within |mutated|+1 walks; the common
+    # case is one.
+    #
+    # A DISAGREEMENT IS STILL A REFUSAL. The scout runs without a loop node; if
+    # the real walk produces an unstamped back-edge the scout did not predict,
+    # _patch_loop_phi refuses as before rather than keep the stale stamp.
+    sub _backedge_loses_stamp ($post, $ph) {
+        return false unless _is_narrowed($ph->stamp);
+        return false unless blessed($post) && $post->can('stamp');
+        return false if _is_narrowed($post->stamp);
+        return false if _backedge_is_phi_recurrence($post, $ph);
+        return false if _deferred_backedge_floor($post);
+        return true;
+    }
+
+    sub _scout_once ($cv, $start_op, $sim, $opmap, $extra_targs, $cond_consumed, $extra_stamps, $unstamped) {
         my $scout_factory = SoN::IR::NodeFactory->new();
         my $scout_sim     = SoN::FromOptree::StackSim->new(
             control => $scout_factory->make_cfg('Start'),
@@ -10939,8 +10993,18 @@ class SoN::FromOptree 0.01 {
             # a defined memory input during scouting (see _body_writes_targ).
             memory  => $scout_factory->make('MemStart'));
         my %placeholder;
-        for my $targ (keys $sim->scope_bindings->%*, $extra_targs->@*) {
-            my $ph = _scout_placeholder($scout_factory, $sim, $targ);
+        my $scope = $sim->scope_bindings;
+        my $unknown = SoN::IR::Stamp->new(type => 'Unknown');
+        for my $targ (keys $scope->%*, $extra_targs->@*) {
+            # The stamp the real walk will see in this slot: an extra slot's
+            # from the caller, a carried slot's as _make_loop_phi would copy it.
+            my $b = $scope->{$targ};
+            my $st = exists $extra_stamps->{$targ} ? $extra_stamps->{$targ}
+                   : !$unstamped->{$targ} && blessed($b) && $b->can('stamp')
+                     && _is_narrowed($b->stamp) ? $b->stamp
+                   : $unknown;
+            my $ph = $scout_factory->make_unique('Constant',
+                value => 'scout', const_type => 'string', stamp => $st);
             $placeholder{$targ} = $ph;
             $scout_sim->define($targ, $ph);
         }
@@ -10972,12 +11036,12 @@ class SoN::FromOptree 0.01 {
         } ? undef : ($@ || 'unknown');
         my $scout_scope = $scout_sim->scope_bindings;
         my %extra = map { $_ => 1 } $extra_targs->@*;
-        return [ sort _scope_key_order
+        return ([ sort _scope_key_order
             grep {
                 !$extra{$_}
                 && defined $scout_scope->{$_}
                 && $scout_scope->{$_} != $placeholder{$_}
-            } keys %placeholder ];
+            } keys %placeholder ], \%placeholder, $scout_scope);
     }
 
     # Create a loop header Phi for a slot (make_unique: two Phis with the
@@ -10985,11 +11049,13 @@ class SoN::FromOptree 0.01 {
     # Phi carries its init's stamp so the body's join-stamped nodes, which
     # read the Phi, can derive theirs; _patch_loop_phi verifies the
     # back-edge does not widen it.
-    sub _make_loop_phi ($factory, $loop_node, $init) {
+    # $unstamped: the scout found this slot's back-edge cannot confirm the
+    # init's stamp (_scout_mutated_targs), so the Phi starts unstamped.
+    sub _make_loop_phi ($factory, $loop_node, $init, $unstamped = 0) {
         return $factory->make_unique('Phi',
             inputs => [$init],
             region => $loop_node,
-            (_is_narrowed($init->stamp) ? (stamp => $init->stamp) : ()));
+            (!$unstamped && _is_narrowed($init->stamp) ? (stamp => $init->stamp) : ()));
     }
 
     # _backedge_is_phi_recurrence($post, $phi) -> bool
@@ -11479,14 +11545,15 @@ class SoN::FromOptree 0.01 {
 
         # Phase 1: scout the condition + body for mutated pad slots.
         my $pre_scope = $sim->scope_bindings;
-        my $mutated = _scout_mutated_targs($cv, $cond_start, $sim, $opmap);
+        my ($mutated, $unstamped) = _scout_mutated_targs($cv, $cond_start, $sim, $opmap);
 
         # Phase 2: the loop header and its Phis.
         my $loop_node = $factory->make_cfg('Loop', inputs => [$sim->control]);
         $sim->set_control($loop_node);
         my %phis;
         for my $targ ($mutated->@*) {
-            my $phi = _make_loop_phi($factory, $loop_node, $pre_scope->{$targ});
+            my $phi = _make_loop_phi($factory, $loop_node, $pre_scope->{$targ},
+                $unstamped->{$targ});
             $phis{$targ} = $phi;
             $sim->define($targ, $phi);
         }
@@ -11666,7 +11733,9 @@ class SoN::FromOptree 0.01 {
         # it rides as an extra slot and is excluded from the mutated set --
         # it gets the induction Phi, not a carried-value Phi).
         my $pre_scope = $sim->scope_bindings;
-        my $mutated = _scout_mutated_targs($cv, $body_start, $sim, $opmap, [$i_targ], 1);
+        my ($mutated, $unstamped) = _scout_mutated_targs($cv, $body_start, $sim, $opmap, [$i_targ], 1,
+            { $i_targ => _is_narrowed($low->stamp) ? $low->stamp
+                : SoN::IR::Stamp->new(type => q{Int}) });
 
         # Phase 2: header -- induction Phi plus one Phi per mutated slot.
         # A FOREACH FIXES ITS BOUND AT ENTRY. perl evaluates the
@@ -11695,7 +11764,8 @@ class SoN::FromOptree 0.01 {
         $sim->define($i_targ, $i_phi);
         my %phis;
         for my $targ ($mutated->@*) {
-            my $phi = _make_loop_phi($factory, $loop_node, $pre_scope->{$targ});
+            my $phi = _make_loop_phi($factory, $loop_node, $pre_scope->{$targ},
+                $unstamped->{$targ});
             $phis{$targ} = $phi;
             $sim->define($targ, $phi);
         }
@@ -11850,6 +11920,267 @@ class SoN::FromOptree 0.01 {
         return;
     }
 
+    # _subtree_ops($root, $opaque?) -> every op under $root, $root included,
+    # not descending below an op $opaque says yes to.
+    sub _subtree_ops ($root, $opaque = undef) {
+        my @all;
+        my @q = ($root);
+        while (my $o = shift @q) {
+            next unless ref($o) && $$o;
+            push @all, $o;
+            next if $opaque && $opaque->($o);
+            next unless $o->flags & 4;    # OPf_KIDS
+            for (my $k = $o->first; ref($k) && $$k; $k = $k->sibling) {
+                push @q, $k;
+            }
+        }
+        return @all;
+    }
+
+    # _names_iterator($cv, $op, $key) -> does $op read the foreach iterator
+    # $key: a pad targ, or a package scalar's stash key (`$main::x`)?
+    sub _names_iterator ($cv, $op, $key) {
+        return $op->name eq q{padsv} && $op->targ == $key
+            if $key =~ /\A\d+\z/;
+        my $gvop = $op->name eq q{gvsv} ? $op
+                 : $op->name eq q{rv2sv} && ${$op->first}
+                   && $op->first->name eq q{gv} ? $op->first
+                 : undef;
+        my $gv = $gvop && _op_gv($cv, $gvop);
+        return $gv && $$gv
+            && '$' . $gv->STASH->NAME . '::' . $gv->NAME eq $key;
+    }
+
+    # _iterator_references($cv, $root, $key) -> the `\` ops under $root whose
+    # operand reads the foreach iterator $key anywhere in it: `\$x`, `\($x)`,
+    # and `\substr($x, 0, 1)`, an lvalue into the same scalar. Not into a call:
+    # `\f($x)` is a reference to what f returns, a copy -- whether that copy
+    # is itself a reference is the call rule's question. Only a
+    # reference: _address_taken also counts a /g match subject and a pos()
+    # operand, which alias nothing.
+    sub _iterator_references ($cv, $root, $key) {
+        return grep {
+            my $ref = $_;
+            ($ref->name eq q{srefgen} || $ref->name eq q{refgen})
+                && ${$ref->first}
+                && (grep { _names_iterator($cv, $_, $key) }
+                        _subtree_ops($ref->first, sub ($o) {
+                            $o->name eq q{entersub} }))
+                && !_only_as_a_condition($cv, $ref->first, $key)
+        } _subtree_ops($root);
+    }
+
+    # _only_as_a_condition($cv, $root, $key) -> true when every read of the
+    # iterator under $root is inside a ternary's condition, which the `\`
+    # over the ternary does not reach: `\($c ? $a[0] : $z)` refers to an arm.
+    sub _only_as_a_condition ($cv, $root, $key) {
+        my %cond;
+        for my $o (_subtree_ops($root)) {
+            next unless $o->name eq q{cond_expr};
+            $cond{ ${$_} } = 1 for _subtree_ops($o->first);
+        }
+        return !grep { _names_iterator($cv, $_, $key) && !$cond{ ${$_} } }
+            _subtree_ops($root, sub ($o) { $o->name eq q{entersub} });
+    }
+
+    # _reference_dies_with_pass($ref, $root) -> true for `my $r = \$x` whose
+    # $r is only ever dereferenced under $root (`$$r`) -- never copied,
+    # referenced again, captured or passed. The reference then ends with the
+    # pass, and the write-back carries a write through it to the element.
+    sub _reference_dies_with_pass ($ref, $root) {
+        return 0 unless $ref->name eq q{srefgen};
+        my $k = $ref->first;
+        $k = $k->first while $$k && $k->name eq q{null}
+            && $k->can(q{first}) && ${$k->first};
+        return 0 unless $$k && $k->name eq q{padsv};    # `\$x` itself
+        # The `my $r` is the padsv_store itself, or -- as B::SoN sees the
+        # tree -- an sassign's introducing padsv.
+        my $store = $ref->parent;
+        return 0 unless $$store;
+        my $decl = $store->name eq q{sassign} ? $store->last : $store;
+        return 0 unless $$decl && $decl->name =~ /\Apadsv(?:_store)?\z/
+            && ($store->name eq q{sassign} || $decl->name eq q{padsv_store})
+            && $decl->private & B::OPpLVAL_INTRO;
+        my $r = $decl->targ;
+        return 0 if $ADDR_TAKEN && $ADDR_TAKEN->{$r};
+        for my $o (_subtree_ops($root)) {
+            next if $$o == $$decl || $o->name eq q{null}
+                || !$o->can(q{targ}) || $o->targ != $r;
+            return 0 unless $o->name eq q{padsv};
+            my $deref = $o->parent;
+            return 0 unless $$deref && $deref->name eq q{rv2sv};
+            my $up = $deref->parent;
+            $up = $up->parent while $$up && $up->name eq q{null};
+            return 0 if $$up && $up->name =~ /\A(?:s?refgen)\z/;
+        }
+        return 1;
+    }
+
+    # _iterator_may_be_written($cv, $root, $key) -> true unless no closure is
+    # made under $root and every modifiable use of the iterator $key -- the iterator
+    # itself, or a `$$r` through the `my $r = \$x` that
+    # _reference_dies_with_pass allows -- is an argument to a call whose
+    # callee writes nothing it was passed (_callee_writes_no_argument). A
+    # `my $r = \$x` is the reference, not a write; its derefs are judged.
+    # A dereference of the iterator (`@$l`) is not a write to it either,
+    # except that perl vivifies an undef one -- not modelled here.
+    # OPf_MOD over-approximates a write, so a false positive only refuses.
+    sub _iterator_may_be_written ($cv, $root, $key) {
+        my %ref_targ;    # each `my $r` holding a `\$x`
+        for my $ref (_iterator_references($cv, $root, $key)) {
+            my $store = $ref->parent;
+            next unless $$store;
+            my $decl = $store->name eq q{sassign} ? $store->last : $store;
+            $ref_targ{ $decl->targ } = 1 if $$decl && $decl->can(q{targ});
+        }
+        for my $o (_subtree_ops($root)) {
+            return 1 if $o->name eq q{anoncode};    # a closure may assign it
+            next unless $o->flags & B::OPf_MOD;
+            my $deref = $o->name eq q{rv2sv} && ${$o->first}
+                && $o->first->name eq q{padsv}
+                && $ref_targ{ $o->first->targ };
+            next unless $deref || _names_iterator($cv, $o, $key);
+            my $up = $o->parent;
+            $up = $up->parent while $$up && $up->name eq q{null};
+            next if !$deref && $$up && $up->name eq q{srefgen};
+            # `@$l`, `$l->[0]`: the iterator is dereferenced, not assigned.
+            next if $$up && $up->name =~ /\Arv2[ahs]v\z/;
+            return 1 unless $$up && $up->name eq q{entersub}
+                && _callee_writes_no_argument($cv, $up);
+        }
+        return 0;
+    }
+
+    # _callee_writes_no_argument($cv, $call) -> true for a named callee that
+    # holds no alias to its arguments (_callee_holds_no_alias) and modifies no
+    # array element or array: `$_[0] * 2` reads, `$_[0]++` and `for (@_)`
+    # (aliased, so OPf_MOD) may write. Any array counts, not only @_.
+    sub _callee_writes_no_argument ($cv, $call) {
+        return 0 unless _callee_holds_no_alias($cv, $call);
+        my $sub = _entersub_callee_gv($cv, $call)->CV;
+        return !grep {
+            $_->flags & B::OPf_MOD
+                && $_->name =~ /\A(?:rv2av|aelem|aelemfast|multideref)\z/
+        } _subtree_ops($sub->ROOT);
+    }
+
+    # _iterator_call_values($cv, $root, $key) -> the calls under $root that are
+    # passed the iterator $key itself and may leave an alias to it behind. A
+    # callee can return `\$_[0]`, a reference to the element, or keep one. A
+    # named sub whose body cannot do either is clear; a method or a computed
+    # callee is not seen, and is clear only when its value is not kept (see
+    # _value_may_be_kept) -- one that keeps `\$_[0]` itself goes unseen.
+    sub _iterator_call_values ($cv, $root, $key) {
+        return grep {
+            my $call = $_;
+            my $passes = 0;
+            if ($call->name eq q{entersub} && ${$call->first}
+                && $call->first->can(q{first})) {
+                for (my $k = $call->first->first; ref($k) && $$k;
+                     $k = $k->sibling) {
+                    $passes ||= _names_iterator($cv, $k, $key);
+                }
+            }
+            $passes && !_callee_holds_no_alias($cv, $call)
+                && (_entersub_callee_gv($cv, $call)
+                    || _value_may_be_kept($call, $root));
+        } _subtree_ops($root);
+    }
+
+    # _callee_holds_no_alias($cv, $call) -> true when $call names a sub whose
+    # body can neither return nor keep an alias to an argument: it is not
+    # :lvalue, takes no reference, has no `goto`, and hands no @_ element on --
+    # no `&f;`, and no call argument reading @_ (an aelemfast, a multideref, a
+    # shift or pop, or the `_` glob). Measured on the body as compiled.
+    sub _callee_holds_no_alias ($cv, $call) {
+        my $gv = _entersub_callee_gv($cv, $call) or return 0;
+        my $sub = $gv->CV;
+        return 0 unless $sub && $$sub && $sub->isa(q{B::CV})
+            && ${$sub->ROOT};
+        return 0 if $sub->CvFLAGS & B::CVf_LVALUE;
+        for my $o (_subtree_ops($sub->ROOT)) {
+            return 0 if $o->name =~ /\A(?:s?refgen|goto)\z/;
+            next unless $o->name eq q{entersub};
+            return 0 unless $o->flags & 64;    # OPf_STACKED: `&f;` passes @_
+            for my $arg (_subtree_ops($o->first,
+                             sub ($k) { $k->name eq q{entersub} })) {
+                next if $$arg == ${$o->first};
+                return 0 if $arg->name =~ /\A(?:aelemfast|multideref|shift
+                                              |pop|splice)\z/x;
+                next unless $arg->name =~ /\Agvs?v?\z/;
+                my $g = _op_gv($sub, $arg);
+                return 0 if $g && $$g && $g->NAME eq q{_};
+            }
+        }
+        return 1;
+    }
+
+    # _value_may_be_kept($op, $root) -> false when nothing under $root can
+    # keep $op's value as the reference it may be: it is thrown away, tested
+    # (a reference is never false, so the left of `&&` or a condition is only
+    # ever true), used up by an operator that makes a number or a string of
+    # it, or handed to a call -- whose keeping it is no more seen here than a
+    # callee keeping `\$_[0]` itself. A logical operator whose value can be
+    # this one's asks the same of its own reader, and a `my` declared from it
+    # asks it of each of that variable's reads. Anything else -- a store, a
+    # push, a return -- may keep it.
+    sub _value_may_be_kept ($op, $root) {
+        return 0 if ($op->flags & 3) == 1;    # OPf_WANT_VOID
+        my $p = $op->parent;
+        ($op, $p) = ($p, $p->parent) while $$p && $p->name eq q{null};
+        return 1 unless $$p;
+        my $name  = $p->name;
+        my $first = ${$p->first} == $$op;
+        return 0 if $name =~ /\A(?:not|defined|length|ref|stringify|concat
+            |multiconcat|join|print|say|sprintf|uc|lc|ucfirst|lcfirst
+            |entersub)\z/x
+            || $name =~ /\A(?:i_)?(?:lt|gt|le|ge|eq|ne|ncmp|add|subtract
+            |multiply|divide|modulo|negate)\z/x
+            || $name =~ /\As(?:lt|gt|le|ge|eq|ne|cmp)\z/;
+        return 0 if $first && $name =~ /\A(?:cond_expr|and)\z/;
+        # `${\ f($x)}` is f's value again.
+        if ($name =~ /\As?refgen\z/) {
+            my $up = $p->parent;
+            $up = $up->parent while $$up && $up->name =~ /\A(?:null|scope)\z/;
+            return _value_may_be_kept($up, $root)
+                if $$up && $up->name eq q{rv2sv};
+        }
+        return _value_may_be_kept($p, $root)
+            if $name =~ /\A(?:cond_expr|and|or|dor)\z/;
+
+        # `my $v = f($x)` and `my (@l) = f($x)`: the declared slots' reads.
+        my @decl;
+        if ($name eq q{padsv_store} && $p->private & B::OPpLVAL_INTRO) {
+            @decl = ($p);
+        }
+        elsif ($first && $name eq q{sassign}) {
+            @decl = ($p->last);
+        }
+        elsif ($first && $name eq q{aassign}) {
+            for (my $k = $p->last->first; ref($k) && $$k; $k = $k->sibling) {
+                push @decl, $k unless $k->name eq q{pushmark};
+            }
+        }
+        return 1 unless @decl && !grep {
+            $_->name !~ /\Apad(?:[sah]v|range|sv_store)\z/
+                || !($_->private & B::OPpLVAL_INTRO)
+        } @decl;
+        my %slot;
+        for my $d (@decl) {
+            my $n = $d->name eq q{padrange} ? $d->private & 127 : 1;
+            $slot{ $d->targ + $_ } = 1 for 0 .. $n - 1;
+        }
+        for my $use (_subtree_ops($root)) {
+            next if $use->name eq q{null} || !$use->can(q{targ})
+                || !$slot{ $use->targ }
+                || $use->private & B::OPpLVAL_INTRO
+                   && $use->name =~ /\Apad/;
+            return 1 if $use->name !~ /\A(?:pad[sah]v|aelemfast_lex)\z/
+                || _value_may_be_kept($use, $root);
+        }
+        return 0;
+    }
+
     # Translate an array foreach (`for my $x (@a)` -- enteriter with OPf_STACKED
     # over a single aggregate) to a counted loop over the array's elements. The
     # skeleton mirrors _translate_foreach_range (Loop/Phi/Proj/Region, the same
@@ -11956,7 +12287,8 @@ class SoN::FromOptree 0.01 {
         # Phase 1: scout the body. $x rides on enteriter (its own slot) and gets
         # the element binding, not a carried-value Phi, so exclude it.
         my $pre_scope = $sim->scope_bindings;
-        my $mutated = _scout_mutated_targs($cv, $body_start, $sim, $opmap, [$x_targ], 1);
+        my ($mutated, $unstamped) = _scout_mutated_targs($cv, $body_start, $sim, $opmap, [$x_targ], 1,
+            { $x_targ => $elem_stamp // SoN::IR::Stamp->new(type => q{Unknown}) });
 
         # Phase 2: header -- induction Phi (i: 0..len-1) plus one Phi per mutated
         # slot. The induction Phi is NOT bound to $x; $x is the element read below.
@@ -11985,7 +12317,8 @@ class SoN::FromOptree 0.01 {
 
         my %phis;
         for my $targ ($mutated->@*) {
-            my $phi = _make_loop_phi($factory, $loop_node, $pre_scope->{$targ});
+            my $phi = _make_loop_phi($factory, $loop_node, $pre_scope->{$targ},
+                $unstamped->{$targ});
             $phis{$targ} = $phi;
             $sim->define($targ, $phi);
         }
@@ -12037,6 +12370,43 @@ class SoN::FromOptree 0.01 {
         # Its write-back is below, once the body has run.
         my $demoted_iter = $x_targ =~ /\A\d+\z/ && $ADDR_TAKEN
             && $ADDR_TAKEN->{$x_targ};
+
+        # A REFERENCE TO THE ITERATOR IS A REFERENCE TO THE ELEMENT, and the
+        # slot here is a copy written back at the end of each pass. A write
+        # through the reference within the pass reaches the element by that
+        # write-back; one made after the pass reaches only the copy -- measured,
+        # `for my $x (@a) { $r = \$x } $$r = 5` left @a alone, and so did a
+        # push onto an outer array, a hash store and a sub that kept the
+        # reference. Where the reference goes is not tracked, so a `\` over the
+        # iterator is refused unless it is `my $r = \$x` with $r only
+        # dereferenced. Scanned from the leaveloop, which holds every op the
+        # iterator is in scope for; a program has no CV root to scan from.
+        my $loop_root = $enteriter->parent;
+        if ($x_targ =~ /\A\d+\z/) {
+            die "GAP: a reference to a foreach iterator is not yet lowered --"
+              . " the iterator is a copy written back each pass, and"
+              . " the reference can outlive the pass\n"
+                if grep { !_reference_dies_with_pass($_, $loop_root) }
+                   _iterator_references($cv, $loop_root, $x_targ);
+
+            # A CALL CAN HAND THE SAME REFERENCE BACK: `sub k { \$_[0] }` makes
+            # `$r = k($x)` the reference above, made where nothing shows it.
+            # Measured: perl 1 5, emitted 1 2. So can one that stores it away
+            # (`push @K, \$_[0]`), which is seen only in a named sub's body.
+            die "GAP: a call's value that may alias a foreach iterator is not"
+              . " yet lowered -- the iterator is a copy written back each"
+              . " pass, and the callee can return or keep a reference to it\n"
+                if $demoted_iter
+                && _iterator_call_values($cv, $loop_root, $x_targ);
+        }
+
+        # A PACKAGE ITERATOR'S REFERENCE NAMES THE GLOB'S SCALAR, which the
+        # lowering never writes -- the alias is a binding, not a store. Measured:
+        # `for $x (@A) { my $r = \$x; $$r = 9 }` left @A alone, within the pass.
+        die "GAP: a reference to a package foreach iterator is not yet lowered"
+          . " -- the alias is a binding, and the reference names the global\n"
+            if $x_targ !~ /\A\d+\z/
+            && _iterator_references($cv, $loop_root, $x_targ);
         my $iter_slot = sub {
             $factory->make('PadAccess', targ => $x_targ,
                 do { my ($sg, $sy) = _padparts($cv, $x_targ);
@@ -12108,6 +12478,22 @@ class SoN::FromOptree 0.01 {
         # foreach's.
         my $post_iter = $sim->lookup($x_targ);
         _restore_iterator_binding($sim, $x_targ, $pre_scope);
+
+        # A WRITE-BACK INTO @_ DOES NOT REACH THE CALLER. Its elements alias
+        # the caller's arguments, and the caller's graph does not see a store
+        # made through them -- measured, `for my $x (@_) { $x *= 2 }` left the
+        # caller's array alone (perl 2 4, emitted 1 2), and so did a write
+        # through `my $r = \$x`. Both write-backs below would be that store,
+        # so either is refused, as an element store into @_ is. So is a write
+        # neither sees -- a callee's `$_[0]++` on an implicit `$_`, a closure
+        # assigning the iterator -- by _iterator_may_be_written; a pass that
+        # only reads the iterator stores nothing, and still translates.
+        die "GAP: a write to a foreach iterator over \@_ is not yet lowered"
+          . " -- \@_ aliases the caller's arguments, which the write-back does"
+          . " not reach\n"
+            if $array->can('operation') && $array->operation eq 'ArgsSource'
+            && ($writes_iter
+                || _iterator_may_be_written($cv, $loop_root, $x_targ));
 
         # AND A DEMOTED ONE WRITES BACK what its slot holds: a callee writing
         # through $_[0] (`bump($x)`) changed the slot, and perl's alias is the
@@ -14519,25 +14905,35 @@ class SoN::FromOptree 0.01 {
         my $eval_entry = $sim->control;
 
         my $body_sim = $sim->snapshot;
-        _walk_branch($cv, $op->next, $body_sim, $factory, $opmap,
+        my ($end) = _walk_branch($cv, $op->next, $body_sim, $factory, $opmap,
             $visited, undef, 1, _op_addr($op->other));
 
-        # A WRITE TO AN OUTER LEXICAL OUTLIVES THE EVAL, die or not, and the
-        # join below takes only the body's control and memory: the bindings
-        # stayed in $body_sim and `my $s = 0; eval { $s++ }; print $s`
-        # printed 0. Carrying them out would claim the write happened on the
-        # path that died before it, so the shape refuses.
-        # A PACKAGE VARIABLE IS NOT ONE: its store is in the memory carried
-        # out below, and a read after the eval goes through it.
+        # A BODY WALK THAT STOPS SHORT OF THE leavetry DROPPED THE REST. The
+        # arm walk returns at an op it has no case for, and resuming after the
+        # leavetry anyway made the remainder vanish -- measured, a `while` in
+        # an eval body printed nothing where perl printed 1 2 3.
+        die "GAP: a block eval body stopped at `" . $end->name
+          . "` before its leavetry is not yet lowered\n"
+            if defined $end && ref $end && $$end
+            && $$end != _op_addr($op->other);
+
+        # A BODY THAT REBINDS AN OUTER VARIABLE IS REFUSED. The body walks a
+        # snapshot and only its memory comes back, so the rebinding was simply
+        # dropped -- measured, `my $n = 0; eval { $n = 5; die }; $n` gave 0 for
+        # perl's 5, and `eval { $x = g(); 1 }` lost the store with no die at
+        # all. Nor is a Phi of the two bindings the answer: after a die the
+        # variable holds whatever the body had stored BY THEN, which may be the
+        # body's last value, the pre-eval one, or one in between.
+        #
+        # A PAD SLOT ONLY. A package variable is stored through memory, which
+        # does come back, and round trips: `our $g = 0; eval { $g = 1; 1 }`.
         my $outer = $sim->scope_bindings;
-        my $inner = $body_sim->scope_bindings;
-        for my $key (sort grep { /\A\d+\z/ } keys %$outer) {
-            next if defined $inner->{$key} && defined $outer->{$key}
-                && $inner->{$key} == $outer->{$key};
-            die "GAP: a block eval that rebinds a lexical declared outside it"
-              . " is not yet lowered -- the write survives a die partway"
-              . " through, and the eval's join carries no bindings\n";
-        }
+        my $after = $body_sim->scope_bindings;
+        die "GAP: a block eval whose body rebinds a variable from outside it is"
+          . " not yet lowered -- after a die the variable holds what the body"
+          . " had stored by then, which the trap's join does not carry\n"
+            if grep { exists $after->{$_} && ($after->{$_} // 0) != ($outer->{$_} // 0) }
+               grep { /\A\d+\z/ } keys $outer->%*;
 
         my $undef = $factory->make('Constant',
             value      => undef,

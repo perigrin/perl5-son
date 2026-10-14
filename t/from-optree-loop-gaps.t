@@ -294,12 +294,20 @@ subtest 'bare-truthiness loop condition synthesizes a comparison (zhi 019f29ed)'
         'the synthesized truthiness test is NumNe(cond, 0)');
 };
 
-subtest 'unstamped back-edge refuses loudly' => sub {
-    # Was: the Phi was silently unstamped but body nodes kept stamps derived
-    # from its optimistic init stamp, contaminating sibling Phi joins.
-    like(translate_dies(
-        'sub { my $x = 1; my $y = 0; my $n = 2; while ($n > 0) { $y = $x + 1; $x = shift; $n = $n - 1 } $y }'),
-        qr/GAP/, 'loop-carried value losing its stamp dies with a GAP message');
+subtest 'an unstamped back-edge leaves its Phi unstamped from the start' => sub {
+    # The body reads $x before `$x = shift` overwrites it. The scout sees the
+    # back-edge cannot confirm the Int init, so the Phi is built unstamped and
+    # `$x + 1` is never stamped against an Int $x does not keep -- the stale
+    # consumer the refusal for this shape existed to prevent.
+    my $graph = graph_of(
+        'sub { my $x = 1; my $y = 0; my $n = 2; while ($n > 0) { $y = $x + 1; $x = shift; $n = $n - 1 } $y }');
+    ok($graph, 'it translates');
+    my ($add) = grep { $_->operation eq 'Add'
+                       && grep { $_->operation eq 'Phi' } $_->inputs->@* }
+                $graph->nodes->@*;
+    my ($phi) = grep { $_->operation eq 'Phi' } $add->inputs->@*;
+    is($phi->stamp->type, 'Unknown', 'the carried Phi claims nothing');
+    isnt($add->stamp->type, 'Int', 'its consumer is not stamped Int');
 };
 
 subtest 'foreach range bound at IV_MAX refuses loudly' => sub {

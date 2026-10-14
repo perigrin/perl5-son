@@ -368,6 +368,11 @@ round_trips(q{sub w { my $x = eval { 5 }; $x } print w(), "\n";},
 round_trips(q{sub w { eval { 1 } or return 0; 2 } print w(), "\n";},
     'a boolean eval inside a sub');
 
+# A LEXICAL STORE INSIDE A BLOCK EVAL is refused rather than dropped.
+refuses(q{my $n = 0; my @r = eval { $n++; reverse 3,1,2 }; print "@r $n\n";},
+    qr/GAP: a block eval whose body rebinds a variable from outside it/,
+    'a lexical store inside a block eval');
+
 my $runtime = qr/GAP: a sort comparator chosen at runtime/;
 refuses(q{my $c=sub{$b<=>$a}; print join(",", sort $c 3,1,2),"\n";},
     $runtime, 'a lexical subref comparator');
@@ -384,9 +389,6 @@ sub still_wrong ($src, $why) {
     my $todo = todo $why;
     is run_perl($out), run_perl($src), $why;
 }
-refuses(q{my $n = 0; my @r = eval { $n++; reverse 3,1,2 }; print "@r $n\n";},
-    qr/GAP: a block eval that rebinds a lexical declared outside it/,
-    'a lexical store inside a block eval');
 still_wrong(q{our $n=0; sub h{$n+=2} for (1,2) { $n++; h() } my $m = $n; $n = 7; print "$m $n\n";},
     'a package scalar stored in a loop body is carried past a call that writes it');
 still_wrong(q{my $r = []; my $n = (@$r = (4,5,6)); print "$n @$r\n";},

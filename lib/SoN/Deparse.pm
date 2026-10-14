@@ -382,7 +382,15 @@ class SoN::Deparse 0.01 {
         # _emit_phase_block). perigrin, 2026-09-30: emitted code runs under
         # strict and warnings, and the round trip can bring a program up to
         # the current idioms.
-        return "use $TARGET_BUNDLE;\n" . $out . $body . $ends . $data_section;
+        # A FILE STARTS IN ITS REQUIRER'S PACKAGE, not main -- measured,
+        # `package Foo; require "f.pm"` with `print __PACKAGE__` in f.pm
+        # prints Foo. File-scope subs are called as `main::` from a class or
+        # another package, so an emission that does either says where file
+        # scope is.
+        my $file_package = ( $out . $body ) =~ /\bmain::|^(?:class|package) /m
+            ? "package main;\n" : '';
+        return "use $TARGET_BUNDLE;\n" . $file_package
+            . $out . $body . $ends . $data_section;
     }
 
     # A named sub. Its body is the same control-chain walk the program body
@@ -2703,6 +2711,11 @@ class SoN::Deparse 0.01 {
                 join(', ', map { $self->_expr($_) } (($n->{inputs} // [])->@*)))];
         }
 
+        # THE PROLOGUE IS SPELLED ABOVE THE CHAIN, so it declares against what
+        # stood before the walk. The walk ran first: a loop's `($x, $y) = ...`
+        # had taken the `my` that the prologue's `my ($x, $y) = (0, 0)` owns,
+        # and the emission did not compile.
+        %pad_declared = %declared_before_walk;
         for my $n (sort { $a->{id} <=> $b->{id} } $self->_nodes_in_order) {
             next unless $n->{op} eq 'Assign';
             next if defined $n->{control_in};   # already emitted in the chain
@@ -2772,6 +2785,11 @@ class SoN::Deparse 0.01 {
 
             push @prologue, [$n, $self->_emit_statement($n, \%next_of)];
         }
+        my %declared_by_prologue = map { $_ => 1 }
+            grep { !$declared_before_walk{$_} } keys %pad_declared;
+        my $walk_redeclared = grep { $declared_by_walk{$_} }
+            keys %declared_by_prologue;
+        %pad_declared = (%declared_by_walk, %pad_declared);
         my $prologue = join '', map { $_->[1] } $self->_prologue_order(@prologue);
 
         # A deferred binding is emitted where its effect was placed, so the
@@ -2781,14 +2799,15 @@ class SoN::Deparse 0.01 {
         # %after_region is populated by the same pass and needs the same
         # re-walk: the first walk ran before the entry existed, so without
         # this the binding was silently DROPPED rather than merely misplaced.
-        if (keys %after_effect || keys %after_region) {
+        if (keys %after_effect || keys %after_region || $walk_redeclared) {
             %rendered = ();
             # THE RE-WALK DECLARES WHAT THE FIRST WALK DID. Its text is thrown
             # away, so a demoted slot it declared is undeclared again -- left
             # marked, the re-walk emitted a bare `$h = 5` in a loop body, the
             # `my` went to the top, and every pass shared one variable: `\$h`
             # pushed each pass gave three references to it.
-            delete @pad_declared{ grep { !$declared_before_walk{$_} }
+            delete @pad_declared{ grep { !$declared_before_walk{$_}
+                                       && !$declared_by_prologue{$_} }
                                    keys %declared_by_walk };
             # SO DOES A COUNTED s/// IT BOUND. The EntryWrite that emits one
             # binds it, and the re-walk -- finding it bound -- spelled the store
@@ -3302,7 +3321,11 @@ class SoN::Deparse 0.01 {
         my @phis = sort { $a->{id} <=> $b->{id} }
                    grep { ($_->{op} // '') eq 'Phi'
                        && (($_->{fields}{region} // -1) == $n->{id})
-                       && !$self->_is_memory($_->{id}) }
+                       # A CALL IS BOTH a value and a memory version, so a slot
+                       # carrying `shift` asks _is_memory yes; read as a value,
+                       # it is a variable all the same (as at a join).
+                       && (!$self->_is_memory($_->{id})
+                           || $self->_read_as_value($_->{id})) }
                    $self->_nodes_in_order;
         for my $p (@phis) {
             die "GAP: a loop Phi with " . scalar(($p->{inputs} // [])->@*)
@@ -6868,12 +6891,21 @@ class SoN::Deparse 0.01 {
     # merged as "memory" and was never bound. A memory merge is only ever read
     # where memory goes: the trailing input of a %MEM_MIN_INPUTS node, a
     # call's last input, or another Phi.
-    method _read_as_value ($id) {
+    #
+    # A PHI CONSUMER PASSES THE QUESTION ON. A slot carrying `shift` whose only
+    # reader is the next slot's header Phi (`$y = $x; $x = shift`) or a later
+    # loop's is a value exactly when that Phi is; skipping it dropped the
+    # variable and left the call a bare statement. $seen stops a cycle.
+    method _read_as_value ($id, $seen = {}) {
+        return 0 if $seen->{$id}++;
         for my $c ($self->_nodes_in_order) {
             my @in = ($c->{inputs} // [])->@*;
             my $op = $c->{op} // '';
             for my $i (grep { ($in[$_] // -1) == $id } 0 .. $#in) {
-                next if $op eq 'Phi';
+                if ($op eq 'Phi') {
+                    return 1 if $self->_read_as_value($c->{id}, $seen);
+                    next;
+                }
                 # A CALL SAYS WHETHER ITS LAST INPUT IS MEMORY (memory_input);
                 # without it, the last input is an argument -- `n("i", $c ? $v : [])`.
                 next if $op eq 'Call' && $i == $#in && @in > 1

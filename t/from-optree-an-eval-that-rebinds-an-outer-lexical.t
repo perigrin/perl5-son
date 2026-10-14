@@ -25,7 +25,7 @@ sub producer ($src) {
     return ($j, $err);
 }
 
-my $WHY = qr/GAP: a block eval that rebinds a lexical declared outside it is not yet lowered/;
+my $WHY = qr/GAP: a block eval whose body rebinds a variable from outside it is not yet lowered/;
 
 # THE BODY'S BINDINGS NEVER LEFT IT. The eval merged only memory and control
 # back, so every write to an outer lexical vanished: perl 1, emitted 0.
