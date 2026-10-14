@@ -11936,6 +11936,54 @@ class SoN::FromOptree 0.01 {
         return 1;
     }
 
+    # _iterator_may_be_written($cv, $root, $key) -> true unless no closure is
+    # made under $root and every modifiable use of the iterator $key -- the iterator
+    # itself, or a `$$r` through the `my $r = \$x` that
+    # _reference_dies_with_pass allows -- is an argument to a call whose
+    # callee writes nothing it was passed (_callee_writes_no_argument). A
+    # `my $r = \$x` is the reference, not a write; its derefs are judged.
+    # A dereference of the iterator (`@$l`) is not a write to it either,
+    # except that perl vivifies an undef one -- not modelled here.
+    # OPf_MOD over-approximates a write, so a false positive only refuses.
+    sub _iterator_may_be_written ($cv, $root, $key) {
+        my %ref_targ;    # each `my $r` holding a `\$x`
+        for my $ref (_iterator_references($cv, $root, $key)) {
+            my $store = $ref->parent;
+            next unless $$store;
+            my $decl = $store->name eq q{sassign} ? $store->last : $store;
+            $ref_targ{ $decl->targ } = 1 if $$decl && $decl->can(q{targ});
+        }
+        for my $o (_subtree_ops($root)) {
+            return 1 if $o->name eq q{anoncode};    # a closure may assign it
+            next unless $o->flags & B::OPf_MOD;
+            my $deref = $o->name eq q{rv2sv} && ${$o->first}
+                && $o->first->name eq q{padsv}
+                && $ref_targ{ $o->first->targ };
+            next unless $deref || _names_iterator($cv, $o, $key);
+            my $up = $o->parent;
+            $up = $up->parent while $$up && $up->name eq q{null};
+            next if !$deref && $$up && $up->name eq q{srefgen};
+            # `@$l`, `$l->[0]`: the iterator is dereferenced, not assigned.
+            next if $$up && $up->name =~ /\Arv2[ahs]v\z/;
+            return 1 unless $$up && $up->name eq q{entersub}
+                && _callee_writes_no_argument($cv, $up);
+        }
+        return 0;
+    }
+
+    # _callee_writes_no_argument($cv, $call) -> true for a named callee that
+    # holds no alias to its arguments (_callee_holds_no_alias) and modifies no
+    # array element or array: `$_[0] * 2` reads, `$_[0]++` and `for (@_)`
+    # (aliased, so OPf_MOD) may write. Any array counts, not only @_.
+    sub _callee_writes_no_argument ($cv, $call) {
+        return 0 unless _callee_holds_no_alias($cv, $call);
+        my $sub = _entersub_callee_gv($cv, $call)->CV;
+        return !grep {
+            $_->flags & B::OPf_MOD
+                && $_->name =~ /\A(?:rv2av|aelem|aelemfast|multideref)\z/
+        } _subtree_ops($sub->ROOT);
+    }
+
     # _iterator_call_values($cv, $root, $key) -> the calls under $root that are
     # passed the iterator $key itself and may leave an alias to it behind. A
     # callee can return `\$_[0]`, a reference to the element, or keep one. A
@@ -12350,6 +12398,22 @@ class SoN::FromOptree 0.01 {
         # foreach's.
         my $post_iter = $sim->lookup($x_targ);
         _restore_iterator_binding($sim, $x_targ, $pre_scope);
+
+        # A WRITE-BACK INTO @_ DOES NOT REACH THE CALLER. Its elements alias
+        # the caller's arguments, and the caller's graph does not see a store
+        # made through them -- measured, `for my $x (@_) { $x *= 2 }` left the
+        # caller's array alone (perl 2 4, emitted 1 2), and so did a write
+        # through `my $r = \$x`. Both write-backs below would be that store,
+        # so either is refused, as an element store into @_ is. So is a write
+        # neither sees -- a callee's `$_[0]++` on an implicit `$_`, a closure
+        # assigning the iterator -- by _iterator_may_be_written; a pass that
+        # only reads the iterator stores nothing, and still translates.
+        die "GAP: a write to a foreach iterator over \@_ is not yet lowered"
+          . " -- \@_ aliases the caller's arguments, which the write-back does"
+          . " not reach\n"
+            if $array->can('operation') && $array->operation eq 'ArgsSource'
+            && ($writes_iter
+                || _iterator_may_be_written($cv, $loop_root, $x_targ));
 
         # AND A DEMOTED ONE WRITES BACK what its slot holds: a callee writing
         # through $_[0] (`bump($x)`) changed the slot, and perl's alias is the

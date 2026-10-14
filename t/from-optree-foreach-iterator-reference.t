@@ -171,4 +171,63 @@ round_trips(<<'SRC', 'a call value held in a body array and joined');
 sub two { ($_[0], $_[0]) } my @a = (1,2); my $o = ""; for my $x (@a) { my @v = two($x); $o .= "@v;" } print "@a $o\n";
 SRC
 
+# A FOREACH OVER @_ ALIASES THE CALLER'S ARGUMENTS, and the caller's graph
+# does not see a write-back into @_. Every write form is refused by name.
+my $ARGS = qr/GAP: a write to a foreach iterator over \@_/;
+for my $case (
+    [ 'a write through a reference to the iterator, then a read',   # perl 4 2 4
+      'sub f { my $v = 0; for my $x (@_) { my $r = \$x; $$r = $x * 2; $v = $x } return $v } my @a=(1,2); print f(@a), " @a\n";' ],
+    [ 'a constant written through a reference',                     # perl 7 7 7
+      'sub f { my $v = 0; for my $x (@_) { my $r = \$x; $$r = 7; $v = $x } return $v } my @a=(1,2); print f(@a), " @a\n";' ],
+    [ 'the iterator assigned',
+      'sub f { for my $x (@_) { $x = $x * 2 } return 1 } my @a=(1,2); print f(@a), " @a\n";' ],
+    [ 'an implicit $_ assigned',
+      'sub f { for (@_) { $_ = $_ + 1 } return 1 } my @a=(1,2); print f(@a), " @a\n";' ],
+    [ 'the iterator incremented',
+      'sub f { for my $x (@_) { $x++ } return 1 } my @a=(1,2); print f(@a), " @a\n";' ],
+    [ 'the iterator written by a callee',
+      'sub g { $_[0]++ } sub f { for my $x (@_) { g($x) } return 1 } my @a=(1,2); print f(@a), " @a\n";' ],
+    [ 'an implicit $_ substituted',
+      'sub f { for (@_) { s/1/9/ } return 1 } my @a=(1,2); print f(@a), " @a\n";' ],
+    [ 'the iterator assigned by a closure',
+      'sub f { for my $x (@_) { sub { $x = 5 }->() } return 1 } my @a=(1,2); print f(@a), " @a\n";' ],
+    [ 'an implicit $_ written by a callee',
+      'sub g { $_[0]++ } sub f { for (@_) { g($_) } return 1 } my @a=(1,2); print f(@a), " @a\n";' ],
+    [ 'a write through a reference, by a callee',
+      'sub t { $_[0]++ } sub f { my $o=""; for my $x (@_) { my $r = \$x; $o .= t($$r) } return $o } my @a=(1,2); print f(@a), " @a\n";' ],
+    [ 'the iterator chopped',
+      'sub f { for my $x (@_) { chop $x } return 1 } my @a=(12,23); print f(@a), " @a\n";' ],
+) {
+    like +(produce($case->[1]))[1], $ARGS, "$case->[0] over \@_: refused by name";
+}
+
+# Reading the iterator over @_ writes nothing back.
+round_trips(<<'SRC', 'a sum over @_');
+sub f { my $s = 0; for my $x (@_) { $s += $x } return $s } my @a=(1,2); print f(@a), " @a\n";
+SRC
+
+round_trips(<<'SRC', 'a reference to the iterator over @_, only read');
+sub f { my @o; for my $x (@_) { my $r = \$x; push @o, $$r + 1 } return "@o" } my @a=(1,2); print f(@a), " @a\n";
+SRC
+
+round_trips(<<'SRC', 'the iterator over @_ passed to a reader');
+sub t { $_[0]*2 } sub f { my $o=""; for my $x (@_) { $o .= t($x) } return $o } my @a=(1,2); print f(@a), " @a\n";
+SRC
+
+round_trips(<<'SRC', 'an implicit $_ over @_ passed to a reader');
+sub t { $_[0]*2 } sub f { my $o=""; for (@_) { $o .= t($_) } return $o } my @a=(1,2); print f(@a), " @a\n";
+SRC
+
+round_trips(<<'SRC', 'a write through the iterator over @_, a reference');
+sub f { for my $l (@_) { $$l = 3 } return 1 } my $z = 1; my @a=(\$z); print f(@a), " $z\n";
+SRC
+
+round_trips(<<'SRC', 'an element of the iterator over @_ read');
+sub f { my $t; for my $l (@_) { my $v = $l->[0]; $t .= $v } return $t } print f([1],[2]), "\n";
+SRC
+
+round_trips(<<'SRC', 'a push from @_');
+sub f { my @c; for my $x (@_) { push @c, $x * 2 } return "@c" } my @a=(1,2); print f(@a), " @a\n";
+SRC
+
 done_testing;
