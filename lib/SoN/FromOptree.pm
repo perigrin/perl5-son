@@ -3123,6 +3123,16 @@ class SoN::FromOptree 0.01 {
             if ($name eq 'index' || $name eq 'rindex')
             && $op->can('private') && ($op->private & 7) >= 2;
         return undef unless $name eq 'substr';
+        # THE PRIVATE FIELD STATES substr's COUNT TOO, and the kid count below
+        # cannot: it skips every `null`, and a short-circuit argument is a
+        # null over its `//` / `||` / `&&`. `substr($v, $n // 1)` counted one
+        # argument, popped the offset alone and left the string on the stack.
+        #
+        #     substr($s,1)           sK/2     substr($s, $n // 1)   sK/2
+        #     substr($s,1,3)         sK/3     substr($s,1,3,"X")    sK/4
+        return $op->private & 7
+            if $op->can('private') && ($op->private & 7) >= 2
+            && ($op->private & 7) <= 4;
         return undef unless $op->can('first');
         my $n = 0;
         my $kid = $op->first;
