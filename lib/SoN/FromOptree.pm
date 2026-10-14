@@ -6519,6 +6519,18 @@ class SoN::FromOptree 0.01 {
             if ($op->flags & 64) {   # OPf_STACKED: subject pushed by a kid op
                 $target = $sim->pop_node;
             }
+            elsif ($targ && $ctx->{addr_taken}{$targ}
+                    && !($ctx->{cell_params}{$targ} // $ctx->{cells}{$targ})) {
+                # A DEMOTED SUBJECT is read at the current memory version, as
+                # padsv reads it: a binding is the version before any store
+                # since, and `$s =~ s/a/z/; $s =~ /z/` matched the old string.
+                $target = $factory->make('PadAccess',
+                    targ => $targ,
+                    do { my ($sg, $sy) = _padparts($cv, $targ);
+                         (sigil => $sg, symbol => $sy) },
+                    ($ctx->{shared_lexicals}{$targ} ? (shared => 1) : ()),
+                    (defined $sim->memory ? (inputs => [ $sim->memory ]) : ()));
+            }
             elsif ($targ) {
                 $target = $sim->lookup($targ);
                 if (!$target) {
@@ -17724,6 +17736,12 @@ class SoN::FromOptree 0.01 {
         }
         my $scope_key = $targ || '$main::_';
         my $target    = $sim->lookup($scope_key);
+        # A DESTRUCTIVE s/// ON A PAD SLOT reads it at the CURRENT memory
+        # version: _address_taken demoted the slot, and a binding left by an
+        # earlier read is the version before any store since. Read through it,
+        # `$s =~ s/a/z/; $s =~ /z/` matched the string before the s///.
+        my $demoted = $targ && !($op->pmflags & PMf_NONDESTRUCT);
+        undef $target if $demoted;
         if (!$target) {
             # A DEMOTED SLOT'S READ CARRIES THE MEMORY IT OBSERVES, the same as
             # every other read of one. `_address_taken` demotes a destructive
@@ -17745,7 +17763,8 @@ class SoN::FromOptree 0.01 {
                     (defined $sim->memory ? (inputs => [ $sim->memory ]) : ()))
                 : $factory->make('EntryDef',
                     package => 'main', sigil => '$', symbol => '_');
-            $sim->define($scope_key, $target);
+            # Bound, the version outlives the store and a later read takes it.
+            $sim->define($scope_key, $target) unless $demoted;
         }
         # THE STORE TARGET IS THE NAME, NOT THE BOUND VALUE. $sim->lookup
         # returns whatever the key is currently bound to, and for $_ that is

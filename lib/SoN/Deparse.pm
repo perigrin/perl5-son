@@ -1983,8 +1983,11 @@ class SoN::Deparse 0.01 {
             # A READ AFTER A CALL takes the call as its version: the callee may
             # have stored a shared lexical, and a store after the read must not
             # reach it. `g(); my $x = $n; $n = 7; $x` returned 7.
+            # So does a read after a pinned s/// or tr///, the store it sees:
+            # `$s =~ s/a/z/; my $t = $s; $s =~ tr/z/q/` spelled $t after the tr.
             next unless @in == 1 && ( $self->_is_memory( $in[0] )
-                || ( ( ( $nodes->{ $in[0] } // {} )->{op} // '' ) eq 'Call'
+                || ( ( ( $nodes->{ $in[0] } // {} )->{op} // '' )
+                         =~ /\A(?:Call|RegexSubst|Transliterate)\z/
                      && defined $nodes->{ $in[0] }{control_in} ) );
             my $version = $nodes->{ $in[0] };
             next unless $version;

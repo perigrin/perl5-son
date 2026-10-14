@@ -223,4 +223,19 @@ round_trips(q{my $s="a1b2"; my $t=$s; if ($s =~ /(\d)/) { print "$1\n" } $s =~ s
 round_trips(q{my $s="a1"; my $t=$s; $s =~ s/1/X/ if 1; print "$s $t\n";},
     'a copy before a substitution under a folded condition');
 
+# A READ AFTER AN IN-PLACE REWRITE sees it. The subject is a demoted slot, so
+# each operator reads it at the current memory version; a binding left by an
+# earlier read named the version before the rewrite, and binding the copy
+# exposed that (corpus 015 lost its `hit`).
+round_trips(q{my $s="abc"; my $t=$s; $s =~ s/a/z/; print "hit\n" if $s =~ /z/; print "$s $t\n";},
+    'a match after the substitution sees it');
+round_trips(q{my $s="abc"; my $t=$s; $s =~ s/a/z/; $s =~ s/(z)/$1 x 2/e; print "$s $t\n";},
+    'a /e substitution after a substitution sees it');
+round_trips(q{my $s="abc"; $s =~ s/a/z/; my $t=$s; $s =~ tr/z/q/; print "$s $t\n";},
+    'a copy between a substitution and a transliteration');
+round_trips(q{my $s="a1b2"; $s =~ s/a/z/; my $t=$s; $s =~ s/(\d)/$1*2/ge; print "$s $t\n";},
+    'a copy between a substitution and a /ge substitution');
+round_trips(q{my $s="abc"; $s =~ tr/a/z/; my @t=($s); $s =~ s/z/Q/; print "$s @t\n";},
+    'an array copy between a transliteration and a substitution');
+
 done_testing;
