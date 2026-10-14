@@ -89,4 +89,43 @@ refuses(q{my $k = 3; my $s = "a1b2"; $s =~ s/(\d)/$1*$k/ge; print "$s\n";},
     qr/GAP: a s\/\/\/ge replacement that reads a lexical of its enclosing scope \(\$k\)/,
     'a replacement reading an enclosing lexical');
 
+# An ASSIGN-OP stores into its operand -- `$n += $1` is add with OPf_STACKED --
+# so it is an effect, and lowering it re-evaluated the sum for the value
+# (a2b5 for perl's a1b3).
+refuses(q{our $n = 0; my $s = "a1b2"; $s =~ s/(\d)/$n += $1/ge; print "$s $n\n";},
+    qr/GAP: s\/\/\/ge whose replacement has an effect/, 'a += into a package scalar');
+refuses(q{our $k = "z"; my $s = "a1b2"; $s =~ s/(\d)/$k .= $1/ge; print "$s $k\n";},
+    qr/GAP: s\/\/\/ge whose replacement has an effect/, 'a .= into a package scalar');
+refuses(q{our $n = 1; my $s = "a1b2"; $s =~ s/(\d)/$main::n *= $1/ge; print "$s $n\n";},
+    qr/GAP: s\/\/\/ge whose replacement has an effect/, 'a *= into a qualified package scalar');
+refuses(q{our $n = 0; my $s = "a1b2"; $s =~ s/(\d)/($n -= $1) . "x"/ge; print "$s $n\n";},
+    qr/GAP: s\/\/\/ge whose replacement has an effect/, 'a -= nested in the value');
+refuses(q{our $z = ""; my $s = "a1b2"; $s =~ s/(\d)/$main::z .= $1; "y"/ge; print "$s $z\n";},
+    qr/GAP: s\/\/\/ge whose replacement has an effect/, 'a .= as a statement before the value');
+
+# The SUBJECT must be a plain scalar variable: an element, a deref or a field
+# fell back to $_ (the subject is lost, a1b2 for perl's a3b6).
+my $target = qr/GAP: s\/\/\/ge on a subject that is not a plain scalar variable/;
+refuses(q{my %h = (x => "a1b2"); $h{x} =~ s/(\d)/$1*3/ge; print "$h{x}\n";},
+    $target, 'a hash element subject');
+refuses(q{my @a = ("a1b2"); $a[0] =~ s/(\d)/$1*3/ge; print "$a[0]\n";},
+    $target, 'an array element subject');
+refuses(q{my $x = "a1b2"; my $r = \$x; $$r =~ s/(\d)/$1*3/ge; print "$x\n";},
+    $target, 'a scalar deref subject');
+refuses(q{our %h = (x => "a1b2"); $main::h{x} =~ s/(\d)/$1*3/ge; print "$h{x}\n";},
+    $target, 'a package hash element subject');
+refuses(q{my $o = {k => "a1b2"}; $o->{k} =~ s/(\d)/$1*3/ge; print "$o->{k}\n";},
+    $target, 'an arrow element subject');
+refuses(q{use v5.38; use experimental 'class'; class C { field $f = "a1b2"; method m { $f =~ s/(\d)/$1*5/ge; return $f } } print C->new->m, "\n";},
+    $target, 'a field subject');
+
+# An INTERPOLATED PATTERN rendered as an empty one, so $1 read nothing.
+my $pat = qr/GAP: s\/\/\/ge with an interpolated pattern/;
+refuses(q{my $re = qr/(\d)/; my $s = "a1b2"; $s =~ s/$re/$1*2/ge; print "$s\n";},
+    $pat, 'a qr// pattern');
+refuses(q{my $d = '\d'; my $s = "a1b2"; $s =~ s/($d)/$1*2/ge; print "$s\n";},
+    $pat, 'a pattern interpolating a lexical');
+refuses(q{our $d = '\d'; my $s = "a1b2"; $s =~ s/x|($d)/$1*2/ge; print "$s\n";},
+    $pat, 'a pattern interpolating a package scalar');
+
 done_testing;

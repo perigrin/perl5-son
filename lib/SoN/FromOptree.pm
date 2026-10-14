@@ -16923,7 +16923,23 @@ class SoN::FromOptree 0.01 {
     # ONLY A PURE BODY. The substitution runs it once per match, and an effect
     # in it would have to be ordered against the caller per run -- measured,
     # `s/a/ $n++ /ge` on "aaa" gives "012" with $n at 3.
+    #
+    # AND ONLY A SUBJECT AND PATTERN THE SUBSTITUTION RENDERS. An element, a
+    # deref or a field subject falls back to $_ in _subst_target, and an
+    # interpolated pattern renders empty -- measured, `$h{x} =~ s/(\d)/$1*3/ge`
+    # printed a1b2 for perl's a3b6. Both are refused before the folded-constant
+    # case too, which would otherwise reach the same rendering.
     sub _subst_ge_body ($cv, $op, $pattern, $flags) {
+        for (my $k = $op->first; ($op->flags & 4) && $$k; $k = $k->sibling) {
+            die "GAP: s///ge with an interpolated pattern is not yet lowered"
+              . " -- the pattern renders empty, and the body's captures would"
+              . " read nothing\n"
+                if $k->name eq 'regcomp';
+        }
+        die "GAP: s///ge on a subject that is not a plain scalar variable is"
+          . " not yet lowered -- an element, deref or field subject is lost"
+          . " to \$_\n"
+            unless _subst_subject_is_plain($cv, $op);
         my $root = $op->pmreplroot;
         return undef unless ref($root) && $$root;
         die "GAP: s///ge whose replacement has an effect is not yet lowered --"
@@ -16935,6 +16951,22 @@ class SoN::FromOptree 0.01 {
         my $name = _sort_body_name($cv, $op, '__SUBSTREPL__');
         $SUBST_BODIES{$name} //= [ $cv, $start, $$root, $pattern, $flags ];
         return $name;
+    }
+
+    # _subst_subject_is_plain($cv, $op) -- true when a subst's subject is $_
+    # (nothing stacked), a lexical scalar that is not a field (its targ), or a
+    # package scalar (a stacked gvsv, or rv2sv over a gv).
+    sub _subst_subject_is_plain ($cv, $op) {
+        if (my $targ = $op->targ) {
+            my $pn = eval { $cv->PADLIST->ARRAYelt(0)->ARRAYelt($targ) };
+            return !( ref($pn) eq 'B::PADNAME'
+                      && $pn->FLAGS & B::PADNAMEf_FIELD() );
+        }
+        return 1 unless $op->flags & B::OPf_STACKED();
+        my $subj = $op->first;
+        return 1 if $subj->name eq 'gvsv';
+        return $subj->name eq 'rv2sv' && ($subj->flags & 4)
+            && $subj->first->name eq 'gv';
     }
 
     # _stash_name_key($sigil, $stash, $name) -- the same spelling from raw parts,
@@ -17750,7 +17782,8 @@ class SoN::FromOptree 0.01 {
     # rv2sv over a gv, reads the match the body is called for, so gv is pure;
     # and OPf_MOD is not taken as a write -- measured, `ord($1)` in
     # chalk's escape carries it, and no op on the list stores its operand (a
-    # `local` is refused by the caller, a TARGMY store below). The inline /e
+    # `local` is refused by the caller, a TARGMY store and an assign-op
+    # below). The inline /e
     # test keeps both, as it was.
     sub _replacement_is_pure ($op, $is_body = 0) {
         return 1 unless ref($op) && $$op;
@@ -17758,6 +17791,10 @@ class SoN::FromOptree 0.01 {
             || ($is_body && $op->name eq 'gv');
         return 0 if !$is_body && $op->flags & B::OPf_MOD();
         return 0 if $op->private & B::OPpTARGET_MY();
+        # An ASSIGN-OP (`$n += $1`, `$k .= $1`) is its binop with OPf_STACKED,
+        # and stores into its left operand.
+        return 0 if $is_body && $op->isa('B::BINOP')
+            && $op->flags & B::OPf_STACKED();
         return 1 unless $op->flags & B::OPf_KIDS();
         for (my $kid = $op->first; ref($kid) && $$kid; $kid = $kid->sibling) {
             return 0 unless _replacement_is_pure($kid, $is_body);
