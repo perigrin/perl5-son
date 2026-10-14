@@ -1668,6 +1668,8 @@ class SoN::FromOptree 0.01 {
                         stamp      => SoN::IR::Stamp->new(type => 'Undef'));
                 }
                 $sim->merge($rhs_sim, $factory, $dor_if) if $dor_if;
+                _merge_rhs_rebinds($factory, $sim, $rhs_sim, $lhs, 'dor')
+                    unless $dor_if;
                 my $node = $factory->make('DefinedOr', inputs => [$lhs, $rhs]);
                 $sim->push_node($node);
                 $op = $rhs_end // $op->next;

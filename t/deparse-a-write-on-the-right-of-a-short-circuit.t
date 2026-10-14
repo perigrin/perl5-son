@@ -72,6 +72,11 @@ sub f { my $n = shift; my $h = 7; my $r = ($n || ($h = 2)); return "$h$r" }
 print f(5), f(0), "\n";
 SRC
 
+round_trips(<<'SRC', 'an assignment on the right of //');
+sub f { my $n = shift; my $h = 7; my $r = ($n // ($h = 2)); return "$h$r" }
+print f(5), f(undef), "\n";
+SRC
+
 round_trips(<<'SRC', 'an increment on the right of && in a loop body');
 sub f { my $n = 0; my $h = 0; for my $i (1..5) { my $r = ($i > 3 && $h++ < 8); $n += $r ? 1 : 0 } return "$h $n" }
 print f(), "\n";
