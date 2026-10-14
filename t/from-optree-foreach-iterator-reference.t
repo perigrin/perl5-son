@@ -189,8 +189,6 @@ for my $case (
       'sub g { $_[0]++ } sub f { for my $x (@_) { g($x) } return 1 } my @a=(1,2); print f(@a), " @a\n";' ],
     [ 'an implicit $_ substituted',
       'sub f { for (@_) { s/1/9/ } return 1 } my @a=(1,2); print f(@a), " @a\n";' ],
-    [ 'the iterator assigned by a closure',
-      'sub f { for my $x (@_) { sub { $x = 5 }->() } return 1 } my @a=(1,2); print f(@a), " @a\n";' ],
     [ 'an implicit $_ written by a callee',
       'sub g { $_[0]++ } sub f { for (@_) { g($_) } return 1 } my @a=(1,2); print f(@a), " @a\n";' ],
     [ 'a write through a reference, by a callee',
@@ -200,6 +198,11 @@ for my $case (
 ) {
     like +(produce($case->[1]))[1], $ARGS, "$case->[0] over \@_: refused by name";
 }
+
+# A closure over the iterator is a fresh variable per pass, refused for that.
+like +(produce('sub f { for my $x (@_) { sub { $x = 5 }->() } return 1 } my @a=(1,2); print f(@a), " @a\n";'))[1],
+    qr/GAP: an anonymous sub closing over \$x is not yet lowered -- it is built once per pass/,
+    'the iterator assigned by a closure over @_: refused by name';
 
 # Reading the iterator over @_ writes nothing back.
 round_trips(<<'SRC', 'a sum over @_');
