@@ -17870,7 +17870,13 @@ class SoN::FromOptree 0.01 {
                     || ( $exits
                          && _is_loop_control_or_exit($op->other)
                          && !defined _guarded_loop_control($op->other)
-                         && $op->other->name ne 'redo' );
+                         && $op->other->name ne 'redo' )
+                    # A RETURN UNDER A FURTHER GUARD (`elsif (C) { return 0
+                    # unless $n }`) leaves from inside the body. Merged as
+                    # values, the body's own If hung off this arm's control
+                    # with C dropped, and that control had 2 successors.
+                    || ( $exits
+                         && _arm_has_return($op->other, $op->next, $mod_stop) );
                 my $guard   = $sim->pop_node;
                 my $mod_sim = $sim->snapshot;
                 my $if_node;
