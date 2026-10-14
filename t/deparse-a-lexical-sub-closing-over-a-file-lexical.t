@@ -70,6 +70,24 @@ round_trips('use v5.36; my $c = 0; my sub bump () { $c++ } bump(); bump(); sub g
 round_trips('use v5.36; my $p = sub ($n) { $n > 1 }; my sub f ($x) { $p->($x) ? "big" : "small" } sub g { f(shift) } print g(1), g(5), "\n";',
     'a lexical sub calling a code reference it closes over');
 
+# A FILE LEXICAL READ IN SCALAR CONTEXT IS ITS COUNT. The body has no binding
+# for the shared slot, so its first read is a bare PadAccess; the lifted body
+# rendered `@arr;` as its last statement and the caller's list context took
+# the elements: perl's 2 became 12.
+for my $src (
+    'use v5.36; my @arr = (1,2); my sub t { scalar @arr } print t(), "\n";',
+    'use v5.36; my @arr = (1,2); my sub t { scalar(@arr) } my @l = t(); print "@l\n";',
+    'use v5.36; my @arr = (1,2); my sub t { return scalar @arr } print t(), "\n";',
+    'use v5.36; my @arr = (1,2); my sub t { 0+@arr } print t(), "\n";',
+    'use v5.36; my @arr = (1,2); my sub t { my $n = @arr; $n } print t(), "\n";',
+    'use v5.36; my %h = (a => 1, b => 2); my sub t { scalar %h } print t(), "\n";',
+    'use v5.36; my @arr = (1,2); my sub t { wantarray ? "L" : "S" } my @l = t(); my $s = t(); print "$l[0]$s\n";',
+    'use v5.36; my @arr = (1,2); my sub t { @arr } my @l = t(); my $n = t(); print "@l $n\n";',
+    'use v5.36; my @arr = (1,2); sub t { scalar @arr } print t(), "\n";',
+) {
+    round_trips($src, "scalar context: $src");
+}
+
 # A LEXICAL SUB DEFINED INSIDE A SUB closes over that sub's lexicals, which
 # have no name at file scope: still refused.
 graph_of('use v5.36; sub g ($m) { my sub a ($x) { $x + $m } a(1) } print g(2), "\n";');

@@ -6055,10 +6055,15 @@ class SoN::FromOptree 0.01 {
                 # count rule above (which needs one) passed it by: `method n {
                 # scalar @l }` returned the array, and a list-context caller
                 # took its elements where perl gives 3. A hash the same way.
+                # A FILE LEXICAL READ FROM A SUB is the same first read: the
+                # shared slot has no binding in the body, so `my @arr=(1,2);
+                # my sub t { scalar @arr } print t()` returned the array and
+                # printed 12 where perl prints 2.
                 $node = _make_count($factory, $node, $sim)
                     if $want == 2 && !$ref_or_mod
                        && !$is_lvintro
-                       && $node->isa('SoN::IR::Node::FieldAccess');
+                       && ($node->isa('SoN::IR::Node::FieldAccess')
+                           || $node->isa('SoN::IR::Node::PadAccess'));
                 $sim->push_node($node);
             }
             return ($op->next, 'handled');
