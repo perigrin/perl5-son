@@ -684,14 +684,16 @@ class SoN::FromOptree 0.01 {
     }
 
     # _subtree_localises($op) -- true when an op under $op carries a `local`:
-    # OPpLVAL_INTRO on an op that is not a pad op (a pad op's is a `my`).
+    # OPpLVAL_INTRO on an op that is not a pad op (a pad op's is a `my`). A
+    # `for my $x` carries it on its enteriter, and that is a `my` too. So does
+    # the pushmark of `my ($a, $b)`; a `local (...)` list marks each element.
     sub _subtree_localises ($op) {
         require B::Op_private;
         my @todo = ($op);
         while (my $o = shift @todo) {
             next unless $$o;
             my $name = $o->name;
-            return 1 if $name !~ /\Apad/
+            return 1 if !_declares_lexical($o) && $name ne 'pushmark'
                 && ( $B::Op_private::bits{$name}{7} // '' ) eq 'OPpLVAL_INTRO'
                 && ( $o->private & B::OPpLVAL_INTRO );
             next unless $o->flags & 4;   # OPf_KIDS
@@ -3946,6 +3948,22 @@ class SoN::FromOptree 0.01 {
         return undef unless ref $nx && $$nx;
         return undef if $nx->name eq 'unstack';
         return $nx;
+    }
+
+    # _runs_into_continue($op) -- true when $op, past any ex-ops (`null`,
+    # `scope`) the exec chain still threads, is the current loop's continue
+    # start. A nested loop that is a body's last statement runs this way:
+    # measured, its leaveloop's ->next is a `scope` whose ->next is the `null`
+    # that nextop names.
+    sub _runs_into_continue ($op) {
+        return 0 unless $CONTINUE_START;
+        my %seen;
+        while (ref $op && $$op && !$seen{$$op}++) {
+            return 1 if $$op == ${$CONTINUE_START};
+            last unless $op->name eq 'null' || $op->name eq 'scope';
+            $op = $op->next;
+        }
+        return 0;
     }
 
     # `$o->SUPER::m()`: the method name qualified by the package in effect,
@@ -12519,8 +12537,20 @@ class SoN::FromOptree 0.01 {
                 # leak made the outer loop emit a store into an anonymous
                 # container, which the deparse refused for an unrelated reason.
                 # Fixing the leak exposed the drop.
+                #
+                # A BODY WITH A CONTINUE BLOCK (or a C-style step) is wrapped
+                # in enter/leave, so a nested loop that ENDS it is followed by
+                # that `leave` -- $body_leave, whose ->next is the continue
+                # start -- and not by a nextstate. A body that is the nested
+                # loop alone has no wrapper, and runs straight into the
+                # continue start. Stopping at either dropped the continue
+                # block: `for (1..2) { { $s += 1 } } continue { $s += 10 }`
+                # printed 2 for 22, and a while whose continue held its step
+                # never ended.
                 if ($$op && $op->next && ${$op->next}
-                    && $op->next->name eq 'nextstate') {
+                    && ($op->next->name eq 'nextstate'
+                        || ($body_leave && ${$op->next} == $body_leave)
+                        || _runs_into_continue($op->next))) {
                     $op = $op->next;
                     next;
                 }
@@ -12641,6 +12671,17 @@ class SoN::FromOptree 0.01 {
                 next;
             }
 
+            # A `local` IN A NESTED BLOCK OR LOOP ends at that construct's
+            # exit, and this walk restores only at its own iteration end: `{
+            # local $g = 9 } $g += $i` printed 0 for 6. A nested loop's own
+            # restore writes back a binding the emission re-reads after the
+            # store (10 for 7), so a nested foreach refuses too.
+            if (($name eq 'enterloop' || $name eq 'enteriter')
+                    && ${ $op->parent } && _subtree_localises($op->parent)) {
+                die "GAP: a `local` inside a block or loop nested in a loop"
+                  . " body is not yet lowered -- it ends at the inner"
+                  . " construct's exit, which this walk does not restore at\n";
+            }
 
             # A NESTED while/until/C-style for OR BARE BLOCK goes through the
             # main walk's own dispatch. The inner loop builds its own Loop on
@@ -12850,6 +12891,25 @@ class SoN::FromOptree 0.01 {
                         while $$op && !($CONTINUE_START && $$op == ${$CONTINUE_START})
                             && $op->name ne 'unstack' && $op->name ne 'leaveloop';
                     next;
+                }
+                # A REST THAT STOPS SHORT OF THE LATCH IS NOT THE WHOLE REST.
+                # The arm walk stops at an op it does not handle -- a nested
+                # loop or bare block -- and the body walk resumed there on the
+                # MERGED state, past the `next`: `next if $i == 2; { $s += $i }`
+                # printed 0 for 4. A `last` has no merge (the rest is the only
+                # path on), so only the `next` form refuses.
+                # A back edge to an op this walk has seen -- the loop head -- is
+                # the latch reached the other way; a nested loop's enterloop is
+                # never the latch, seen or not.
+                if ($kind eq 'next' && !$frame && ref $rest_end && $$rest_end
+                        && ($rest_end->name eq 'enterloop'
+                            || ($rest_end->name ne 'unstack'
+                                && $rest_end->name ne 'leaveloop'
+                                && !$loop_visited->{$$rest_end}
+                                && !_runs_into_continue($rest_end)))) {
+                    die "GAP: the rest of a loop body after a `next if` stops"
+                      . " at `" . $rest_end->name . "`, not the latch, and is"
+                      . " not yet lowered\n";
                 }
                 # Drain any leftover residual the rest-arm pushed (a void
                 # statement value) so merge() does not build a spurious stack Phi.
@@ -14434,6 +14494,23 @@ class SoN::FromOptree 0.01 {
         my $body_sim = $sim->snapshot;
         _walk_branch($cv, $op->next, $body_sim, $factory, $opmap,
             $visited, undef, 1, _op_addr($op->other));
+
+        # A WRITE TO AN OUTER LEXICAL OUTLIVES THE EVAL, die or not, and the
+        # join below takes only the body's control and memory: the bindings
+        # stayed in $body_sim and `my $s = 0; eval { $s++ }; print $s`
+        # printed 0. Carrying them out would claim the write happened on the
+        # path that died before it, so the shape refuses.
+        # A PACKAGE VARIABLE IS NOT ONE: its store is in the memory carried
+        # out below, and a read after the eval goes through it.
+        my $outer = $sim->scope_bindings;
+        my $inner = $body_sim->scope_bindings;
+        for my $key (sort grep { /\A\d+\z/ } keys %$outer) {
+            next if defined $inner->{$key} && defined $outer->{$key}
+                && $inner->{$key} == $outer->{$key};
+            die "GAP: a block eval that rebinds a lexical declared outside it"
+              . " is not yet lowered -- the write survives a die partway"
+              . " through, and the eval's join carries no bindings\n";
+        }
 
         my $undef = $factory->make('Constant',
             value      => undef,

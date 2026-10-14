@@ -384,8 +384,9 @@ sub still_wrong ($src, $why) {
     my $todo = todo $why;
     is run_perl($out), run_perl($src), $why;
 }
-still_wrong(q{my $n = 0; my @r = eval { $n++; reverse 3,1,2 }; print "@r $n\n";},
-    'a lexical store inside a block eval is dropped');
+refuses(q{my $n = 0; my @r = eval { $n++; reverse 3,1,2 }; print "@r $n\n";},
+    qr/GAP: a block eval that rebinds a lexical declared outside it/,
+    'a lexical store inside a block eval');
 still_wrong(q{our $n=0; sub h{$n+=2} for (1,2) { $n++; h() } my $m = $n; $n = 7; print "$m $n\n";},
     'a package scalar stored in a loop body is carried past a call that writes it');
 still_wrong(q{my $r = []; my $n = (@$r = (4,5,6)); print "$n @$r\n";},

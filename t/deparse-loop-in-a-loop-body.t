@@ -122,4 +122,81 @@ round_trips(<<'SRC', 'a chain walk with last-if guards in a foreach');
 my @r = ([1,2,3],[4,5],[6]); my $best = 0; my $bl = -1; for my $r (@r) { my $len = 0; my $i = 0; my %seen; while ($i < @$r) { last if $seen{$r->[$i]}++; $len++; $i++ } if ($len > $bl) { $best = $r; $bl = $len } } print "$bl @$best\n";
 SRC
 
+# THE OUTER LOOP'S continue RUNS AFTER A BODY THAT ENDS IN A NESTED LOOP. A
+# continue wraps the body in enter/leave, so the inner leaveloop is followed by
+# that leave, not a nextstate; the walk stopped there and the continue vanished
+# (perl 22, emitted 2; perl 2, emitted a loop that never ends).
+round_trips(<<'SRC', 'a bare block ending a foreach with a continue');
+my $s=0; for my $i (1..2) { { $s += 1 } } continue { $s += 10 } print "$s\n";
+SRC
+round_trips(<<'SRC', 'a while ending a foreach with a continue');
+my $s=0; for my $i (1..2) { my $j=0; while ($j<2) { $j++ } } continue { $s++ } print "$s\n";
+SRC
+round_trips(<<'SRC', 'continue blocks on both loops');
+my $s=0; for my $i (1..2) { my $j=0; while ($j<2) { $j++ } continue { $s+=1 } } continue { $s+=10 } print "$s\n";
+SRC
+round_trips(<<'SRC', 'a while ending a while whose continue holds the step');
+my $s=0; my $i=0; while ($i<2) { my $j=0; while ($j<2) { $j++ } } continue { $s++; $i++ } print "$s\n";
+SRC
+round_trips(<<'SRC', 'a C-style for ending a C-style for');
+my $s=0; for (my $i=0; $i<3; $i++) { for (my $j=0; $j<2; $j++) { $s += 1 } } print "$s\n";
+SRC
+round_trips(<<'SRC', 'a statement after the inner loop, then a continue');
+my $s=0; for my $i (1..3) { my $j=0; while ($j<2) { $j++ } $s += $j } continue { $s *= 2 } print "$s\n";
+SRC
+
+# A `local` IN A NESTED BLOCK OR LOOP ENDS AT THAT BLOCK'S EXIT, which the
+# loop-body walk does not restore at: `{ local $g = 9 } $g += $i` printed 0
+# for 6, and a local in an inner while leaked out of it (10 for 7).
+my $LOCAL = qr/GAP: a `local` inside a block or loop nested in a loop body is not yet lowered/;
+refuses(<<'SRC', $LOCAL, 'local in a bare block in a foreach');
+our $g=0; for my $i (1..3) { { local $g = 9; } $g += $i } print "$g\n";
+SRC
+refuses(<<'SRC', $LOCAL, 'local in a bare block after a write');
+our $g=0; for my $i (1..3) { $g += 1; { local $g = 9; } } print "$g\n";
+SRC
+refuses(<<'SRC', $LOCAL, 'local of an element in a bare block');
+our @a=(0,2); for my $i (1..3) { { local $a[0] = 9; } $a[0] += 1 } print "@a\n";
+SRC
+refuses(<<'SRC', $LOCAL, 'local in a nested while');
+our $g=1; for my $i (1..3) { my $j=0; while ($j<1) { local $g = 5; $j++ } $g += $i } print "$g\n";
+SRC
+refuses(<<'SRC', $LOCAL, 'local in a nested foreach');
+our $g=1; for my $i (1..3) { for my $k (1..1) { local $g = 5; } $g += $i } print "$g\n";
+SRC
+round_trips(<<'SRC', 'a nested while with no local still lowers');
+our $g=1; for my $i (1..3) { my $j=0; while ($j<1) { $j++ } $g += $i } print "$g\n";
+SRC
+
+# A `my` IN A NESTED BLOCK IS ITS OWN VARIABLE, even when it shadows one.
+round_trips(<<'SRC', 'a shadowing my in a bare block in a foreach');
+my $s=0; for my $i (1..3) { { my $s = 50; } $s += $i } print "$s\n";
+SRC
+round_trips(<<'SRC', 'a shadowing my written in a bare block in a foreach');
+my $s=0; for my $i (1..3) { { my $s = 50; $s += $i } $s += $i } print "$s\n";
+SRC
+round_trips(<<'SRC', 'a shadowing my in a nested while');
+my $s=0; for my $i (1..3) { my $j=0; while ($j<2) { my $s = 9; $s++; $j++ } $s += $i } print "$s\n";
+SRC
+round_trips(<<'SRC', 'a shadowing my read in a bare block in a foreach');
+my $s=1; my $o=""; for my $i (1..2) { { my $s = 7 + $i; $o .= $s } $s *= 2 } print "$o $s\n";
+SRC
+
+# THE REST AFTER A `next if` MUST REACH THE LATCH. Its arm walk stops at a
+# nested loop or bare block, and the body walk resumed there on the merged
+# state -- past the `next` (perl 4, emitted 0).
+my $REST = qr/GAP: the rest of a loop body after a `next if` stops at `enterloop`, not the latch/;
+refuses(<<'SRC', $REST, 'a bare block after a next if');
+my $s=0; for my $i (1..3) { next if $i == 2; { $s += $i } } print "$s\n";
+SRC
+refuses(<<'SRC', $REST, 'a bare block after a next if, with a continue');
+my $s=0; for my $i (1..3) { next if $i == 2; { $s += $i } } continue { $s += 100 } print "$s\n";
+SRC
+refuses(<<'SRC', $REST, 'a while after a next if');
+my $s=0; for my $i (1..3) { next if $i == 2; my $j=0; while ($j<1) { $j++ } $s += $i } print "$s\n";
+SRC
+round_trips(<<'SRC', 'a next if with a plain rest and a continue');
+my $s=0; for my $i (1..3) { next if $i == 2; $s += $i } continue { $s += 100 } print "$s\n";
+SRC
+
 done_testing;
