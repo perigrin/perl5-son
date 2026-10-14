@@ -68,8 +68,9 @@ sub run_and_wire ($src, $name) {
 #     s/(\d)/$1*10/ge on "a1b2c"    direct: a10b20c   decomposed: a10b10c
 #
 # because the replacement runs ONCE PER MATCH with a different capture each
-# time -- a loop, not a value. /ge is already refused for exactly that reason,
-# BEFORE the replacement is walked, so anything reaching here is single-match.
+# time -- a loop, not a value. /ge never reaches the decomposition: its
+# replacement becomes a body of its own, so anything reaching here is
+# single-match.
 subtest 'a replacement reads its own capture via the match node' => sub {
     my ($said, $n, $err) = run_and_wire(
         'my $s="axb"; $s =~ s/(x)/ord($1)/e; print $s;', 'cap-own');
@@ -107,13 +108,19 @@ subtest 'a capture in a replacement works inside a loop too' => sub {
         '... reading a RegexMatch, same shape as at the top level';
 };
 
-# /ge STILL REFUSES, and this is the assertion that keeps the decomposition
-# honest -- it is sound only because the replacement runs once.
-subtest 's///ge still refuses -- its replacement is a loop' => sub {
-    my (undef, undef, $err) = run_and_wire(
+# /ge IS NOT DECOMPOSED, and this is the assertion that keeps the
+# decomposition honest -- it is sound only because the replacement runs once.
+# Under /g the replacement is a body the substitution names, not an operand.
+subtest 's///ge is not decomposed -- its replacement is a body' => sub {
+    my ($said, $n, $err) = run_and_wire(
         'my $c="a1b2c"; $c =~ s/(\d)/$1*10/ge; print $c;', 'cap-ge');
-    like $err, qr/GAP/, 'refused';
-    like $err, qr/once per match|loop/, '... because the body repeats';
+    is $said, 'a10b20c', 'perl runs the body per match' or return;
+    unlike $err, qr/GAP|INTERNAL/, 'it lowers' or return;
+    my ($rs) = grep { $_->{op} eq 'RegexSubst' } $n->@*;
+    like +($rs->{fields}{replacement_body} // ''), qr/__SUBSTREPL__/,
+        'the RegexSubst names its replacement body';
+    ok !(grep { $_->{op} eq 'RegexCapture' } $n->@*),
+        '... and the caller reads no capture of a once-only match';
 };
 
 # THE CAPTURE MUST COME FROM THIS SUBSTITUTION, not from an earlier match. A

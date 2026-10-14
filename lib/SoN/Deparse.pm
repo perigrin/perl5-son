@@ -1591,6 +1591,16 @@ class SoN::Deparse 0.01 {
                 next if $op eq 'Call'
                     && ( ( $c->{fields} // {} )->{name} // '' ) =~ /\A(?:push|unshift)\z/
                     && ( ( $c->{inputs} // [] )->[0] // -1 ) != $id;
+                # A s/// OR tr/// ON A PAD SUBJECT spells it by name, through
+                # _subst_lvalue's _location, so a binding never becomes what
+                # the operator rewrites.
+                next if $op =~ /\A(?:RegexSubst|Transliterate)\z/
+                    && ( ( $c->{inputs} // [] )->[0] // -1 ) == $id
+                    && ( ( $nodes->{$id} // {} )->{op} // '' ) eq 'PadAccess';
+                # A MATCH WITHOUT /g only reads: its captures are its own. A /g
+                # match sets pos, which is state on the variable.
+                next if $op eq 'RegexMatch'
+                    && ( ( $c->{fields} // {} )->{flags} // '' ) !~ /g/;
                 return 0;
             }
             return 1;
@@ -2000,7 +2010,9 @@ class SoN::Deparse 0.01 {
                 !( ( $c->{op} // '' ) eq 'Ref'
                    || ( ( $c->{op} // '' ) eq 'Assign'
                         && grep { ( $ci[$_] // -1 ) == $n->{id} }
-                               0 .. ( $targets < @ci ? $targets : @ci ) - 1 ) )
+                               0 .. ( $targets < @ci ? $targets : @ci ) - 1 )
+                   || ( ( $c->{op} // '' ) =~ /\A(?:RegexSubst|Transliterate)\z/
+                        && @ci && $ci[0] == $n->{id} ) )
             } ( $consumers{ $n->{id} } // [] )->@*;
             next if $under_loop{ $n->{id} } && !$read_before_loop{ $n->{id} };
             my @in = ( $n->{inputs} // [] )->@*;
@@ -2008,8 +2020,11 @@ class SoN::Deparse 0.01 {
             # A READ AFTER A CALL takes the call as its version: the callee may
             # have stored a shared lexical, and a store after the read must not
             # reach it. `g(); my $x = $n; $n = 7; $x` returned 7.
+            # So does a read after a pinned s/// or tr///, the store it sees:
+            # `$s =~ s/a/z/; my $t = $s; $s =~ tr/z/q/` spelled $t after the tr.
             next unless @in == 1 && ( $self->_is_memory( $in[0] )
-                || ( ( ( $nodes->{ $in[0] } // {} )->{op} // '' ) eq 'Call'
+                || ( ( ( $nodes->{ $in[0] } // {} )->{op} // '' )
+                         =~ /\A(?:Call|RegexSubst|Transliterate)\z/
                      && defined $nodes->{ $in[0] }{control_in} ) );
             my $version = $nodes->{ $in[0] };
             next unless $version;
@@ -2030,8 +2045,11 @@ class SoN::Deparse 0.01 {
                 my $id = shift @queue;
                 next if $seen{$id}++;
                 for my $c ( ( $arm_next{$id} // [] )->@* ) {
+                    # A DESTRUCTIVE s/// OR tr/// on a pad subject is a store
+                    # pinned to the chain: `my $t = $s; $s =~ s/1/X/` spelled
+                    # $t as `$s` after it and printed the rewritten string.
                     $shadowed = 1 if ( $c->{op} // '' )
-                        =~ /\A(?:Assign|EntryWrite|CellWrite|Delete|Call)\z/;
+                        =~ /\A(?:Assign|EntryWrite|CellWrite|Delete|Call|RegexSubst|Transliterate)\z/;
                     push @queue, $c->{id};
                 }
             }
@@ -5723,7 +5741,14 @@ class SoN::Deparse 0.01 {
         # can sit in a short-circuit arm while the count is read outside it:
         # `my $n = $k && ($x =~ tr/a/b/)` declared `my $substN` inside the
         # arm, and the `&&` after it named an undeclared variable.
-        if ( $counted && $op eq 'Transliterate' && $subj
+        #
+        # A COUNTED s/// OVER AN ELEMENT is the same shape: a map's topic
+        # aliases the element, the substitution stores back into it, and the
+        # map collects the count. Rendered apart, the count re-ran the s/// on
+        # the stored string -- `map { s/\d/X/g } @a` collected "" for perl's 1.
+        if ( $counted && $subj
+            && ( $op eq 'Transliterate'
+                 || ( $op eq 'RegexSubst' && ( $subj->{op} // '' ) eq 'Subscript' ) )
             && ( $subj->{op} // '' ) ne 'PadAccess' ) {
             my $f = $n->{fields} // {};
             ( my $flags = $f->{flags} // '' ) =~ s/r//g;
@@ -5732,6 +5757,12 @@ class SoN::Deparse 0.01 {
             $bound{ $n->{id} }           = $tmp;
             $subst_count_var{ $n->{id} } = $var;
             $hoisted{$_} //= $_ for $var, $tmp;
+            if ( $op eq 'RegexSubst' ) {
+                my ( $pat, $rep ) = $self->_subst_operands($n);
+                return sprintf( "%s = ((%s = %s) =~ s{%s}{%s}%s);\n",
+                    $var, $tmp, $self->_expr( $n->{inputs}[0] ),
+                    $pat, $rep, _with_charset($flags) );
+            }
             return sprintf( "%s = ((%s = %s) =~ tr[%s][%s]%s);\n",
                 $var, $tmp, $self->_expr( $n->{inputs}[0] ),
                 $f->{from} // '', $f->{to} // '', $flags );
@@ -5789,7 +5820,7 @@ class SoN::Deparse 0.01 {
         }
 
         return $self->_slot_name($root) if ($root->{op} // '') eq 'EntryDef';
-        return $self->_expr($root->{id})
+        return $self->_location($root->{id})
             if ($root->{op} // '') eq 'PadAccess';
 
         # AN ELEMENT IS AN LVALUE TOO. `for my $s (@w) { $s =~ s/a/b/g }`
@@ -7047,6 +7078,20 @@ class SoN::Deparse 0.01 {
         die "GAP: a RegexSubst with no replacement is not yet rendered\n"
             unless defined $rep;
 
+        # A REPLACEMENT BODY (s///ge) IS CALLED ONCE PER MATCH, and an
+        # interpolated replacement is evaluated once per match too -- so the
+        # call goes in the replacement, where the body reads that match's
+        # captures. Ahead of the inputs test: the body is not an input.
+        if (defined(my $body = $f->{replacement_body})) {
+            die "GAP: a s///ge replacement body `$body`, which is not in the"
+              . " graph, cannot be rendered -- the substitution would call"
+              . " nothing\n"
+                unless exists $all_methods->{$body};
+            my $ident = $self->_sub_ident($body);
+            $ident = "main::$ident" unless $ident =~ /::/;
+            return ($pat, sprintf('${\ (%s()) }', $ident));
+        }
+
         # An EMPTY replacement field means the replacement is a computed value
         # on inputs -- interpolated, or an /e result. Distinguishing it from a
         # genuinely empty replacement (`s/a//`) is the input's presence, once
@@ -7136,10 +7181,12 @@ class SoN::Deparse 0.01 {
             # program printed 2 and died. That reads as a successful render,
             # which is the one outcome worse than a GAP.
             #
-            # ANONYMOUS BODIES AND BUILTINS ARE NOT THIS CASE: an anon sub is
-            # reached through a reference rather than a name, and a builtin has
-            # no `methods` entry by construction. Only a name that LOOKS like a
-            # user sub and is absent is a call into nothing.
+            # BUILTINS ARE NOT THIS CASE: a builtin has no `methods` entry by
+            # construction. Only a name that LOOKS like a user sub and is
+            # absent is a call into nothing -- and an anon body called where it
+            # is written (`sub {...}->()`) IS named, `...::__ANON__:1:2`, so its
+            # `:line:targ` tail is part of the shape. One reached through a
+            # reference is refused at its AnonSub instead.
             #
             # UNLESS THE PROGRAM DEFINES IT AT RUNTIME, which the graph says in
             # two ways: a glob assignment into the name's CODE slot (`*sq =

@@ -629,7 +629,32 @@ class SoN::FromOptree 0.01 {
         die "GAP: a sort comparator body with no start op\n"
             unless $cv && $$cv && $start && $$start;
         my $graph = _translate_from($cv, $start);
+        _refuse_outer_reach($graph, $cv, $start, undef, 'a sort comparator block');
+        return $graph;
+    }
 
+    # Translate a s///ge REPLACEMENT BODY -- the fourth caller of the shared
+    # walk. Perl runs the replacement once per match, each time with that
+    # match's captures, so it is not a value but code the substitution calls:
+    # measured, `s/(\d)/$1*10/ge` on "a1b2c" is a10b20c, and a10b10c when the
+    # replacement is evaluated once and reused.
+    #
+    # Like a comparator block it is a subtree in the ENCLOSING cv's pad, so it
+    # takes that cv and its leftmost leaf. Unlike one it does not fall off the
+    # end: its chain runs on to the substcont that closes it, which is where
+    # the walk stops and the value left on the stack becomes the Return.
+    sub translate_subst_body ($class_or_self, $entry) {
+        my ($cv, $start, $stop, $pattern, $flags) = $entry->@*;
+        my $graph = _translate_from($cv, $start,
+            stop => $stop, subst_match => [ $pattern, $flags ]);
+        _refuse_outer_reach($graph, $cv, $start, $stop, 'a s///ge replacement');
+        return $graph;
+    }
+
+    # _refuse_outer_reach($graph, $cv, $start, $stop, $what) -- die unless a
+    # body walked from $start (to $stop) in $cv's pad reaches nothing of the
+    # enclosing scope.
+    sub _refuse_outer_reach ($graph, $cv, $start, $stop, $what_body) {
         # A COMPARATOR BLOCK SHARES ITS ENCLOSING SUB'S PAD, but its body is a
         # graph of its own. A lexical the block declares is bound inside it;
         # one declared OUTSIDE arrives as a PadAccess (or a FieldAccess) with
@@ -648,33 +673,35 @@ class SoN::FromOptree 0.01 {
               # <=> $b) } ... }` read $main::_ unset in the body.
               : ( $n->isa('SoN::IR::Node::EntryDef') && $n->sigil eq '$'
                   && $n->symbol eq '_' )
-                    ? die "GAP: a sort comparator block that reads \$_ is not"
+                    ? die "GAP: $what_body that reads \$_ is not"
                         . " yet lowered -- it is the enclosing topic, and the"
                         . " body graph has no edge to it\n"
               : next;
-            die "GAP: a sort comparator block that reads $what is not yet"
+            die "GAP: $what_body that reads $what is not yet"
               . " lowered -- the body graph has no edge to that variable\n";
         }
         # A WRITE LEAVES NO READ BEHIND: `my $n = 0; sort { $n++; ... }`
         # stores into a binding nothing in the body reads, so the graph holds
         # no PadAccess and the check above passed while the increment
         # vanished. The optree still names the slot.
-        if (defined(my $name = _outer_pad_in_chain($cv, $start))) {
-            die "GAP: a sort comparator block that writes a lexical of its"
+        if (defined(my $name = _outer_pad_in_chain($cv, $start, $stop))) {
+            die "GAP: $what_body that writes a lexical of its"
               . " enclosing scope ($name) is not yet lowered -- the body graph"
               . " has no edge to that variable\n";
         }
-        return $graph;
+        return;
     }
 
     # _outer_pad_in_chain($cv, $start) -> the name of a pad variable the chain
     # from $start uses without declaring it (`my`), or undef. Follows ->other
-    # as well as ->next, so a statement behind an `if` is seen.
-    sub _outer_pad_in_chain ($cv, $start) {
+    # as well as ->next, so a statement behind an `if` is seen. A chain that
+    # runs on past its body (a s///ge replacement) ends at $stop.
+    sub _outer_pad_in_chain ($cv, $start, $stop = undef) {
         my (%seen, %mine, @used);
         my @todo = ($start);
         while (my $o = shift @todo) {
             next unless $$o && !$seen{$$o}++;
+            next if defined $stop && $$o == $stop;
             # Any op naming a pad VARIABLE uses it -- a padsv, and also a
             # TARGMY op writing one directly (`$s .= $a` is `concat[$s]`). A
             # TARG temporary's slot has no name; a nulled op's targ is its
@@ -1214,6 +1241,13 @@ class SoN::FromOptree 0.01 {
         my $mem     = $factory->make('MemStart');
         my $sim     = SoN::FromOptree::StackSim->new(
             control => $start, memory => $mem);
+        # A s///ge REPLACEMENT BODY reads the match it is called for: a capture
+        # in it is that match's group. The match has no subject in this graph
+        # -- the caller's RegexSubst runs it. See translate_subst_body.
+        $sim->set_last_match($factory->make('RegexMatch',
+            pattern => $opts{subst_match}[0], flags => $opts{subst_match}[1],
+            stamp   => SoN::IR::Stamp->new(type => 'Boolean')))
+            if $opts{subst_match};
 
         my %visited;
         my $op = $start_op;
@@ -1337,6 +1371,9 @@ class SoN::FromOptree 0.01 {
         my $prog_pkg = 'main';
 
         while ($$op) {
+            # A replacement body ends at its substcont, which hands the value
+            # back to the substitution.
+            last if defined $opts{stop} && $$op == $opts{stop};
             last if $visited{$$op}++;
 
             my $name = $op->name;
@@ -2269,6 +2306,16 @@ class SoN::FromOptree 0.01 {
                     _subst_runtime_pattern($op, $sim, $factory);
                 my $pattern = $rt_pat // ($op->precomp // '');
 
+                # A /ge BODY IS EXTRACTED BEFORE THE TARGET IS RESOLVED: a lone
+                # variable replacement is stacked on top of the subject, and the
+                # body re-reads it, so it is not an operand here.
+                my ($repl_body, $stacked) = ( $op->pmflags & PMf_EVAL )
+                    && ( $op->pmflags & B::PMf_GLOBAL() )
+                    ? _subst_ge_body($cv, $op, $pattern,
+                        _pmflags_to_str($op->pmflags))
+                    : ();
+                $sim->pop_node if $stacked && $sim->stack_depth;
+
                 # RESOLVED HERE because the /e path needs it: the match half is
                 # built before the replacement is walked, and takes the target
                 # as its operand. Idempotent -- returns the existing binding.
@@ -2296,14 +2343,14 @@ class SoN::FromOptree 0.01 {
                 # ONCE PER MATCH -- measured, `s/a/ $n++ /ge` on "aaa" gives
                 # "012" with $n at 3, while /e alone gives "0aa" with $n at 1.
                 # A repeating side-effecting body is a LOOP, which one operand
-                # cannot express, so /ge stays refused rather than silently
-                # lowered as once-only.
+                # cannot express, and lowering it as once-only is a silent
+                # wrong answer.
+                #
+                # SO /ge IS A BODY THE SUBSTITUTION CALLS, its own graph like a
+                # sort comparator block, and the RegexSubst names it.
                 my $code_repl;
                 if ($op->pmflags & PMf_EVAL) {
-                    die "GAP: s///ge (code replacement run once per match) not"
-                      . " yet lowered -- the replacement body repeats, which is"
-                      . " a loop, not a value\n"
-                        if $op->pmflags & B::PMf_GLOBAL();
+                    goto NO_CODE_REPL if defined $repl_body;
 
                     # A CONSTANT-FOLDED /e REPLACEMENT HAS NO SUBTREE, and
                     # that is not a refusal: perl folds `s/a/ "X" . "Y" /e` at
@@ -2363,7 +2410,8 @@ class SoN::FromOptree 0.01 {
                 # here would pop operands that are not there.
                 $code_repl //= _walk_subst_replacement(
                     $cv, $op, $sim, $factory, $opmap, \%visited,
-                    $target, $pattern, $flags);
+                    $target, $pattern, $flags)
+                    unless defined $repl_body;
                 my $nondestruct = $op->pmflags & PMf_NONDESTRUCT;
                 # In scalar/boolean context a DESTRUCTIVE s/// returns the
                 # match COUNT, not the rewritten string; only /r yields a
@@ -2409,7 +2457,8 @@ class SoN::FromOptree 0.01 {
                 # value and stamp it on the node as a string replacement
                 # contradicting the operand (measured: `s/b/ $n + 1 /e` came out
                 # with replacement="5", which is $n, not the replacement).
-                my $repl_node = !defined $code_repl && $sim->stack_depth > 0
+                my $repl_node = !defined $code_repl && !defined $repl_body
+                    && $sim->stack_depth > 0
                     ? $sim->pop_node : undef;
                 # A PACKAGE TARGET IS A STACKED KID: its gvsv pushed the
                 # variable, which nothing popped, so in a list it rode along
@@ -2450,6 +2499,7 @@ class SoN::FromOptree 0.01 {
                     pattern_is_input => (defined $pat_node ? 1 : 0),
                     pattern     => $pattern,
                     replacement => $replacement,
+                    (defined $repl_body ? (replacement_body => $repl_body) : ()),
                     flags       => $flags,
                     # s/// yields the rewritten subject, always a Str.
                     stamp       => SoN::IR::Stamp->new(type => 'Str'),
@@ -2615,6 +2665,12 @@ class SoN::FromOptree 0.01 {
     # walk needs (the cv supplies the pad, the op is where to start), which is
     # exactly what _translate_from already takes for the bare program.
     our %SORT_BODIES;
+
+    # s///ge REPLACEMENT BODIES, as name => [ enclosing B::CV, start op, the
+    # substcont's address, pattern, flags ] -- a subtree in the enclosing pad
+    # like a comparator block, which also needs to know where it ends and what
+    # match its captures read. See translate_subst_body.
+    our %SUBST_BODIES;
 
     # Per-enclosing-CV site numbering for %SORT_BODIES keys, so a name is
     # stable across runs (an op address is not).
@@ -5866,6 +5922,23 @@ class SoN::FromOptree 0.01 {
                     value      => undef,
                     const_type => 'undef',
                     stamp      => SoN::IR::Stamp->new(type => 'Undef'));
+                # A DEMOTED SLOT IS STORED, not bound -- sassign's rule. Bound,
+                # a later s/// took the Undef as its subject while the store
+                # between went to memory: `my $s; $s = "a"; $s =~ s/a/X/`
+                # printed a.
+                if ($ctx->{addr_taken}{$targ}) {
+                    my $loc = $factory->make('PadAccess',
+                        targ => $targ,
+                        do { my ($sg, $sy) = _padparts($cv, $targ);
+                             (sigil => $sg, symbol => $sy) },
+                        ($ctx->{shared_lexicals}{$targ} ? (shared => 1) : ()),
+                        (defined $sim->memory ? (inputs => [ $sim->memory ]) : ()));
+                    my $store = $factory->make('Assign', inputs => [$loc, $undef]);
+                    $store->set_control_in($sim->control);
+                    $sim->set_control($store);
+                    $sim->set_memory($store);
+                    return ($op->next, 'handled');
+                }
                 $sim->define($targ, $undef);
                 return ($op->next, 'handled');
             }
@@ -6632,6 +6705,18 @@ class SoN::FromOptree 0.01 {
             if ($op->flags & 64) {   # OPf_STACKED: subject pushed by a kid op
                 $target = $sim->pop_node;
             }
+            elsif ($targ && $ctx->{addr_taken}{$targ}
+                    && !($ctx->{cell_params}{$targ} // $ctx->{cells}{$targ})) {
+                # A DEMOTED SUBJECT is read at the current memory version, as
+                # padsv reads it: a binding is the version before any store
+                # since, and `$s =~ s/a/z/; $s =~ /z/` matched the old string.
+                $target = $factory->make('PadAccess',
+                    targ => $targ,
+                    do { my ($sg, $sy) = _padparts($cv, $targ);
+                         (sigil => $sg, symbol => $sy) },
+                    ($ctx->{shared_lexicals}{$targ} ? (shared => 1) : ()),
+                    (defined $sim->memory ? (inputs => [ $sim->memory ]) : ()));
+            }
             elsif ($targ) {
                 $target = $sim->lookup($targ);
                 if (!$target) {
@@ -6685,6 +6770,15 @@ class SoN::FromOptree 0.01 {
             # whatever an earlier match left.
             my $void_capture = ($op->flags & 3) == 1       # OPf_WANT_VOID
                 && ( $op->precomp // '' ) =~ /\((?!\?)/;
+            # A /g MATCH IN LIST CONTEXT YIELDS EVERY MATCH, so it is a List,
+            # not the Boolean a scalar /g match is -- bound as a scalar,
+            # `my @m = $s =~ /\d/g` on "a1b2" kept 1 of perl's (1, 2). One whose
+            # context is the CALLER'S (`return $s =~ /\d/g`) is either, and the
+            # graph cannot say which.
+            die "GAP: a /g match in the caller's context is not yet lowered --"
+              . " it is a list or a Boolean depending on the call\n"
+                if $flags =~ /g/ && ($op->flags & 3) == 0;
+            my $list_g = $flags =~ /g/ && ($op->flags & 3) == 3;
             my $pin = ( $ctx->{mode} // '' ) eq 'main'
                 && ( $demoted_subject || $flags =~ /g/ || $has_code
                      || $void_capture );
@@ -6694,7 +6788,8 @@ class SoN::FromOptree 0.01 {
                     inputs  => [$target],
                     pattern => $pattern,
                     flags   => $flags,
-                    ($pin ? (stamp => SoN::IR::Stamp->new(type => 'Boolean')) : ()),
+                    ($pin ? (stamp => SoN::IR::Stamp->new(type =>
+                        $list_g ? 'List' : 'Boolean')) : ()),
                 );
                 if ($pin) {
                     $node->set_control_in($sim->control);
@@ -6710,7 +6805,7 @@ class SoN::FromOptree 0.01 {
                 my $make = $pin ? 'make_unique' : 'make';
                 $node = $factory->$make('Match',
                     inputs => [$target, $matcher],
-                    stamp  => SoN::IR::Stamp->new(type => 'Boolean'),
+                    stamp  => SoN::IR::Stamp->new(type => $list_g ? 'List' : 'Boolean'),
                 );
                 if ($pin) {
                     $node->set_control_in($sim->control);
@@ -9050,6 +9145,9 @@ class SoN::FromOptree 0.01 {
                    && $ctx->{addr_taken}{ $op->targ }) {
                 # A DEMOTED OR CAPTURED SLOT IS READ FROM MEMORY, as padsv
                 # reads it: the scope holds no binding for it to append to.
+                # A destructive s/// on it, or a reference to it, puts it
+                # there; a scope binding alone is a value nothing reads --
+                # `my $s = "a$y"; $s =~ s/a/X/` printed an undef $s.
                 my $targ  = $op->targ;
                 my $param = $ctx->{cell_params}{$targ};
                 $acc = $param
@@ -9070,9 +9168,8 @@ class SoN::FromOptree 0.01 {
                     if defined $seg[0];
             }
             elsif ($op->private & 0x40) {
-                $acc = $pkg_target
-                    ? $sim->lookup(_stash_key($pkg_target))
-                    : $sim->lookup($op->targ);
+                $acc = $pkg_target ? $sim->lookup(_stash_key($pkg_target))
+                     :               $sim->lookup($op->targ);
                 $acc = $concat->($acc, $mkstr->($seg[0])) if defined $seg[0];
             }
             elsif (defined $seg[0]) { $acc = $mkstr->($seg[0]) }
@@ -9437,9 +9534,12 @@ class SoN::FromOptree 0.01 {
                         # constant 1 does not say: `() = g()` counted 1 for a
                         # g returning three or none. Its stamp is not settled
                         # yet, so it is counted as the list it is.
-                        $v = $factory->make('ArrayLiteral', inputs => [$v],
+                        # A LIST-CONTEXT MATCH TOO: `() = $s =~ /\d/g` counted 1
+                        # for perl's 2.
+                        $v =$factory->make('ArrayLiteral', inputs => [$v],
                             stamp => SoN::IR::Stamp->new(type => 'Array'))
-                            if $v->operation eq 'Call' && !_is_aggregate_node($v);
+                            if ($v->operation eq 'Call' || $v->operation eq 'RegexMatch')
+                                && !_is_aggregate_node($v);
                         my $n = _is_aggregate_node($v)
                             ? _make_count($factory, $v, $sim,
                                 stamp => SoN::IR::Stamp->new(type => 'Int'))
@@ -14432,6 +14532,16 @@ class SoN::FromOptree 0.01 {
                     _subst_runtime_pattern($op, $sim, $factory);
                 my $pattern = $rt_pat // ($op->precomp // '');
 
+                # A /ge BODY IS EXTRACTED BEFORE THE TARGET IS RESOLVED: a lone
+                # variable replacement is stacked on top of the subject, and the
+                # body re-reads it, so it is not an operand here.
+                my ($repl_body, $stacked) = ( $op->pmflags & PMf_EVAL )
+                    && ( $op->pmflags & B::PMf_GLOBAL() )
+                    ? _subst_ge_body($cv, $op, $pattern,
+                        _pmflags_to_str($op->pmflags))
+                    : ();
+                $sim->pop_node if $stacked && $sim->stack_depth;
+
                 # THE TARGET IS RESOLVED, NOT POPPED, and resolved BEFORE the
                 # replacement walk because the walk builds the match half that
                 # the replacement's captures read -- and that match takes the
@@ -14448,7 +14558,8 @@ class SoN::FromOptree 0.01 {
                 # match to read and refuses. Extending the helper without
                 # updating every caller is how `$1` kept refusing inside a loop
                 # while it lowered at the top level.
-                my $repl = _walk_subst_replacement(
+                # /ge IS A BODY THE SUBSTITUTION CALLS, as in the main walker.
+                my $repl = defined $repl_body ? undef : _walk_subst_replacement(
                     $cv, $op, $sim, $factory, $opmap, $loop_visited,
                     $target, $pattern, _pmflags_to_str($op->pmflags));
 
@@ -14458,7 +14569,7 @@ class SoN::FromOptree 0.01 {
                 # take an unrelated value and stamp it on the node as a string
                 # replacement contradicting the operand.
                 my $replacement = '';
-                if (!defined $repl && $sim->stack_depth) {
+                if (!defined $repl && !defined $repl_body && $sim->stack_depth) {
                     my $top = $sim->peek_node;
                     if ($top && $top->isa('SoN::IR::Node::Constant')) {
                         $sim->pop_node;
@@ -14477,6 +14588,7 @@ class SoN::FromOptree 0.01 {
                     pattern_is_input => (defined $pat_node ? 1 : 0),
                     pattern     => $pattern,
                     replacement => $replacement,
+                    (defined $repl_body ? (replacement_body => $repl_body) : ()),
                     flags       => _pmflags_to_str($op->pmflags),
                     stamp       => SoN::IR::Stamp->new(type => 'Str'));
                 # A PAD READ THAT IS NOT THE SLOT is the subject's value, as
@@ -18143,7 +18255,7 @@ class SoN::FromOptree 0.01 {
     # A deterministic per-site name for an inline comparator body, built the way
     # _anon_body_name builds one: the enclosing sub plus the site, so two sorts
     # in one CV do not collide and the same sort is stable across runs.
-    sub _sort_body_name ($cv, $op) {
+    sub _sort_body_name ($cv, $op, $tag = '__SORTCMP__') {
         my $gv = eval { $cv->GV };
         my $enclosing =
             ( ref($gv) eq 'B::GV' && eval { $gv->NAME } )
@@ -18158,7 +18270,82 @@ class SoN::FromOptree 0.01 {
         # so the counter is per enclosing CV and assigned in walk order.
         my $seq = $SORT_BODY_SEQ{$enclosing} //= {};
         my $n = $seq->{ $$op } //= scalar keys %$seq;
-        return sprintf('%s::__SORTCMP__:%d', $enclosing, $n);
+        return sprintf('%s::%s:%d', $enclosing, $tag, $n);
+    }
+
+    # _subst_ge_body($cv, $op, $pattern, $flags) -> the `methods` key of a
+    # s///ge replacement body, registered here; undef when perl folded the
+    # replacement to a constant, which is then the literal case.
+    #
+    # ONLY A PURE BODY. The substitution runs it once per match, and an effect
+    # in it would have to be ordered against the caller per run -- measured,
+    # `s/a/ $n++ /ge` on "aaa" gives "012" with $n at 3.
+    #
+    # AND ONLY A SUBJECT AND PATTERN THE SUBSTITUTION RENDERS. An element, a
+    # deref or a field subject falls back to $_ in _subst_target, and an
+    # interpolated pattern renders empty -- measured, `$h{x} =~ s/(\d)/$1*3/ge`
+    # printed a1b2 for perl's a3b6. Both are refused before the folded-constant
+    # case too, which would otherwise reach the same rendering.
+    sub _subst_ge_body ($cv, $op, $pattern, $flags) {
+        for (my $k = $op->first; ($op->flags & 4) && $$k; $k = $k->sibling) {
+            die "GAP: s///ge with an interpolated pattern is not yet lowered"
+              . " -- the pattern renders empty, and the body's captures would"
+              . " read nothing\n"
+                if $k->name eq 'regcomp';
+        }
+        die "GAP: s///ge on a subject that is not a plain scalar variable is"
+          . " not yet lowered -- an element, deref or field subject is lost"
+          . " to \$_\n"
+            unless _subst_subject_is_plain($cv, $op);
+        my $root = $op->pmreplroot;
+        unless (ref($root) && $$root) {
+            # A LONE VARIABLE REPLACEMENT HAS NO SUBSTCONT: perl stacks it on
+            # the subst (PMf_CONST), its last kid, run once before the match.
+            # It is still read per match -- measured, `s/(\d)/$&/ge` on "a1b2"
+            # is a1b2 -- so it is a body of one op, ending at the subst.
+            return undef unless $op->pmflags & B::PMf_CONST();
+            my $kid = $op->first;
+            $kid = $kid->sibling while ${ $kid->sibling };
+            # perl takes this path for a const, or a variable: rv2Xv over a
+            # gv (gvsv once peeped) or a padXv.
+            my @ops = grep { $_->name !~ /\A(?:null|scope|lineseq)\z/ }
+                _subtree_ops($kid);
+            return undef if @ops == 1 && $ops[0]->name eq 'const';
+            die "GAP: s///ge whose replacement is a lone array or hash is not"
+              . " yet lowered -- only a scalar variable is read as a body\n"
+                if !@ops || grep { $_->name !~ /\A(?:gvsv|padsv|rv2sv|gv)\z/ } @ops;
+            # The body starts at the op no other in it runs into.
+            my %runs_into = map { ${ $_->next } => 1 } @ops;
+            my ($start) = grep { !$runs_into{$$_} } @ops;
+            my $name = _sort_body_name($cv, $op, '__SUBSTREPL__');
+            $SUBST_BODIES{$name} //= [ $cv, $start, $$op, $pattern, $flags ];
+            return wantarray ? ($name, 1) : $name;
+        }
+        die "GAP: s///ge whose replacement has an effect is not yet lowered --"
+          . " it runs once per match, and each run's effect would need its own"
+          . " ordering against the caller\n"
+            unless _replacement_is_pure($root, 1) && !_subtree_localises($root);
+        my $start = $root;
+        $start = $start->first while ($start->flags & 4) && ${ $start->first };
+        my $name = _sort_body_name($cv, $op, '__SUBSTREPL__');
+        $SUBST_BODIES{$name} //= [ $cv, $start, $$root, $pattern, $flags ];
+        return $name;
+    }
+
+    # _subst_subject_is_plain($cv, $op) -- true when a subst's subject is $_
+    # (nothing stacked), a lexical scalar that is not a field (its targ), or a
+    # package scalar (a stacked gvsv, or rv2sv over a gv).
+    sub _subst_subject_is_plain ($cv, $op) {
+        if (my $targ = $op->targ) {
+            my $pn = eval { $cv->PADLIST->ARRAYelt(0)->ARRAYelt($targ) };
+            return !( ref($pn) eq 'B::PADNAME'
+                      && $pn->FLAGS & B::PADNAMEf_FIELD() );
+        }
+        return 1 unless $op->flags & B::OPf_STACKED();
+        my $subj = $op->first;
+        return 1 if $subj->name eq 'gvsv';
+        return $subj->name eq 'rv2sv' && ($subj->flags & 4)
+            && $subj->first->name eq 'gv';
     }
 
     # _stash_name_key($sigil, $stash, $name) -- the same spelling from raw parts,
@@ -18782,6 +18969,10 @@ class SoN::FromOptree 0.01 {
         # package scalars had no store to rebind through -- EntryWrite supplies
         # that now, so the destructive rebind at the call site lands on the real
         # variable instead of on $_.
+        #
+        # THE GV IS THE STACKED SUBJECT'S, the first kid. A lone package
+        # scalar REPLACEMENT is a kid too (`s/(\d)/$x/` stacks rv2sv over a
+        # gv), and searching every kid substituted into $x instead of $_.
         if (!$targ) {
             # A STACKED TARGET THAT IS NOT A NAMED SCALAR -- `$a[0] =~ s///`,
             # `$h->{k} =~ s///`, `(my $b = $raw) =~ s///` -- is neither of the
@@ -18807,7 +18998,8 @@ class SoN::FromOptree 0.01 {
                     unless $k->name eq 'gvsv'
                         || ($k->name eq 'rv2sv' && $k->first->name eq 'gv');
             }
-            if (my $gv_op = _find_gv_op($op)) {
+            if (my $gv_op = ( $op->flags & B::OPf_STACKED() )
+                    ? _find_gv_op($op->first) : undef) {
                 if (my $gv = _op_gv($cv, $gv_op)) {
                     my $stash = eval { $gv->STASH->NAME } // 'main';
                     my $key   = _stash_name_key('$', $stash, $gv->NAME);
@@ -18839,6 +19031,12 @@ class SoN::FromOptree 0.01 {
         }
         my $scope_key = $targ || '$main::_';
         my $target    = $sim->lookup($scope_key);
+        # A DESTRUCTIVE s/// ON A PAD SLOT reads it at the CURRENT memory
+        # version: _address_taken demoted the slot, and a binding left by an
+        # earlier read is the version before any store since. Read through it,
+        # `$s =~ s/a/z/; $s =~ /z/` matched the string before the s///.
+        my $demoted = $targ && !($op->pmflags & PMf_NONDESTRUCT);
+        undef $target if $demoted;
         if (!$target) {
             # A DEMOTED SLOT'S READ CARRIES THE MEMORY IT OBSERVES, the same as
             # every other read of one. `_address_taken` demotes a destructive
@@ -18860,7 +19058,8 @@ class SoN::FromOptree 0.01 {
                     (defined $sim->memory ? (inputs => [ $sim->memory ]) : ()))
                 : $factory->make('EntryDef',
                     package => 'main', sigil => '$', symbol => '_');
-            $sim->define($scope_key, $target);
+            # Bound, the version outlives the store and a later read takes it.
+            $sim->define($scope_key, $target) unless $demoted;
         }
         # THE STORE TARGET IS THE NAME, NOT THE BOUND VALUE. $sim->lookup
         # returns whatever the key is currently bound to, and for $_ that is
@@ -18994,14 +19193,27 @@ class SoN::FromOptree 0.01 {
         ord chr uc lc ucfirst lcfirst length sprintf join
     );
 
-    sub _replacement_is_pure ($op) {
+    # $is_body: the replacement is its own graph (s///ge). There a capture,
+    # rv2sv over a gv, reads the match the body is called for, so gv is pure;
+    # and OPf_MOD is not taken as a write -- measured, `ord($1)` in
+    # chalk's escape carries it, and no op on the list stores its operand (a
+    # `local` is refused by the caller, a TARGMY store and an assign-op
+    # below). The inline /e
+    # test keeps both, as it was.
+    sub _replacement_is_pure ($op, $is_body = 0) {
         return 1 unless ref($op) && $$op;
-        return 0 unless $PURE_REPLACEMENT_OP{$op->name};
-        return 0 if $op->flags & B::OPf_MOD();
+        return 0 unless $PURE_REPLACEMENT_OP{$op->name}
+            || ($is_body && $op->name eq 'gv');
+        return 0 if !$is_body && $op->flags & B::OPf_MOD();
         return 0 if $op->private & B::OPpTARGET_MY();
+        # A STORE into a stacked target is OPf_STACKED whatever the op's class:
+        # an assign-op (`$n += $1`, `$k .= $1`) is a binop, but a string store
+        # into a package scalar (`$k = "<$1>"`, `$k .= $1 . $1`) is
+        # multiconcat, an UNOP_AUX.
+        return 0 if $is_body && $op->flags & B::OPf_STACKED();
         return 1 unless $op->flags & B::OPf_KIDS();
         for (my $kid = $op->first; ref($kid) && $$kid; $kid = $kid->sibling) {
-            return 0 unless _replacement_is_pure($kid);
+            return 0 unless _replacement_is_pure($kid, $is_body);
         }
         return 1;
     }
@@ -19266,6 +19478,7 @@ class SoN::FromOptree 0.01 {
         $str .= 's' if $flags & 2;        # PMf_SINGLELINE
         $str .= 'i' if $flags & 4;        # PMf_FOLD (case-insensitive)
         $str .= 'x' if $flags & 8;        # PMf_EXTENDED
+        $str .= 'n' if $flags & 0x20;     # PMf_NOCAPTURE: $1 reads nothing
         $str .= 'g' if $flags & 8388608;  # PMf_GLOBAL
         $str .= 'c' if $flags & 16777216; # PMf_CONTINUE (m//gc keeps pos on a miss)
         $str .= 'r' if $flags & PMf_NONDESTRUCT; # s///r
