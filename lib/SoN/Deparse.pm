@@ -6276,6 +6276,14 @@ class SoN::Deparse 0.01 {
             my $nm = ($n->{fields} // {})->{name};
             die "GAP: an AnonSub with no name is not yet rendered\n"
                 unless defined $nm && length $nm;
+            # A BODY THE PRODUCER REFUSED IS ABSENT, while the AnonSub that
+            # names it survives in its caller -- so `\&that` named a sub the
+            # emitted program never defines, and the call through it died
+            # "Undefined subroutine" from a render that looked successful.
+            die "GAP: an anonymous sub `$nm`, which is not in the graph,"
+              . " cannot be rendered -- the emitted program would die calling"
+              . " it\n"
+                unless exists $all_methods->{$nm};
             $text = sprintf('\\&%s', $self->_sub_ident($nm));
         }
         elsif ($op eq 'Delete') {
@@ -7004,10 +7012,12 @@ class SoN::Deparse 0.01 {
             # program printed 2 and died. That reads as a successful render,
             # which is the one outcome worse than a GAP.
             #
-            # ANONYMOUS BODIES AND BUILTINS ARE NOT THIS CASE: an anon sub is
-            # reached through a reference rather than a name, and a builtin has
-            # no `methods` entry by construction. Only a name that LOOKS like a
-            # user sub and is absent is a call into nothing.
+            # BUILTINS ARE NOT THIS CASE: a builtin has no `methods` entry by
+            # construction. Only a name that LOOKS like a user sub and is
+            # absent is a call into nothing -- and an anon body called where it
+            # is written (`sub {...}->()`) IS named, `...::__ANON__:1:2`, so its
+            # `:line:targ` tail is part of the shape. One reached through a
+            # reference is refused at its AnonSub instead.
             #
             # UNLESS THE PROGRAM DEFINES IT AT RUNTIME, which the graph says in
             # two ways: a glob assignment into the name's CODE slot (`*sq =
@@ -7017,7 +7027,7 @@ class SoN::Deparse 0.01 {
             # the call reaches.
             die "GAP: a call to `$name`, which is not in the graph, cannot be"
               . " rendered -- the emitted program would die calling it\n"
-                if $name =~ /\A\w+(?:::\w+)*\z/
+                if $name =~ /\A\w+(?:::\w+)*(?::\d+:\d+)?\z/
                 && !exists $all_methods->{$name}
                 && !$f->{external}
                 && !$self->_defined_at_runtime($name);
