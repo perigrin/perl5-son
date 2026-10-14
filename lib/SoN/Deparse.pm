@@ -2429,6 +2429,51 @@ class SoN::Deparse 0.01 {
                           && !( $join && ( ( $ref->{fields} // {} )->{region} // -1 )
                                          == $join->{id} ) )
                     || ( defined $ref->{control_in} && $ref->{id} != $version->{id} );
+                # ...AND SO MAY ONE IT IS COMPUTED FROM. `($d->inputs // [])`
+                # is a DefinedOr over an allocation pinned in the fallback's
+                # arm; anchored at the call, the temporary read that
+                # allocation above the branch that makes it. It is read after
+                # that branch joins -- still before any later effect -- and
+                # left live only when no join can be found.
+                my ( @todo, %seen ) = ( ( $ref->{inputs} // [] )->@* );
+                my $made;
+                while ( defined( my $id = shift @todo ) ) {
+                    next if $seen{$id}++ || $id == $version->{id};
+                    my $m = $nodes->{$id} or next;
+                    if ( defined $m->{control_in} || ( $m->{op} // '' ) eq 'Phi' ) {
+                        $made = $m;
+                        last;
+                    }
+                    push @todo, ( $m->{inputs} // [] )->@*;
+                }
+                # ONLY WHEN THE VERSION COMES FIRST. A join already behind the
+                # version (`my $l = $x // []; push @$l, 9; scalar @$l` reads
+                # after the push) leaves the anchor at the version.
+                if ( $made && !$join ) {
+                    my $made_join;
+                    if ( ( $made->{op} // '' ) eq 'Phi' ) {
+                        $made_join = $nodes->{ ( $made->{fields} // {} )->{region} // -1 };
+                    }
+                    else {
+                        my ( @walk, %been ) = ( $made->{id} );
+                        while ( !$made_join && defined( my $id = shift @walk ) ) {
+                            next if $been{$id}++;
+                            for my $c ( ( $ctrl_next{$id} // [] )->@* ) {
+                                if ( ( $c->{op} // '' ) eq 'Region' ) { $made_join = $c; last }
+                                push @walk, $c->{id};
+                            }
+                        }
+                    }
+                    next unless $made_join && ( $made_join->{op} // '' ) eq 'Region';
+                    my ( @walk, %been ) = ( $made_join->{id} );
+                    my $version_after;
+                    while ( !$version_after && defined( my $id = shift @walk ) ) {
+                        next if $been{$id}++;
+                        $version_after = 1 if $id == $version->{id};
+                        push @walk, map { $_->{id} } ( $ctrl_next{$id} // [] )->@*;
+                    }
+                    $join = $made_join unless $version_after;
+                }
             }
             next if !$at_entry
                 && $used_in_arm->( ( $join // $version )->{id}, $n->{id} );
