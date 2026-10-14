@@ -11183,6 +11183,14 @@ class SoN::FromOptree 0.01 {
     sub _patch_loop_phi ($sim, $targ, $phi, $post) {
         $phi->set_backedge($post);
         $sim->define($targ, $phi);
+        # A SCOUT CHECKS NO STAMPS. It asks which slots a body writes, and its
+        # placeholders only approximate the real bindings' stamps -- the outer
+        # iterator's carries none. An inner loop storing that iterator into a
+        # stamped slot died on the refusal below, the scout returned the slots
+        # found so far, and a slot written after the inner loop got no outer
+        # Phi (perl 6, emitted 3). The real walk makes these checks on the
+        # real stamps.
+        return if $IN_SCOUT;
         my $init = $phi->inputs->[0];
         # "Has a stamp" is not the question -- every Value node carries one
         # now. The question is whether it says anything, and `Unknown` is how

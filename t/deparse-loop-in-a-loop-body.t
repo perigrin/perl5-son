@@ -208,4 +208,28 @@ round_trips(<<'SRC', 'a next if with a plain rest and a continue');
 my $s=0; for my $i (1..3) { next if $i == 2; $s += $i } continue { $s += 100 } print "$s\n";
 SRC
 
+# THE SCOUT MUST FINISH. Its placeholders carry their bindings' stamps, but
+# the outer iterator's does not, so an inner loop that stores the outer
+# iterator built a stamped Phi with an unstamped back-edge, the scout died on
+# the stamp check, and the slots written after the inner loop got no outer Phi
+# (perl 6, emitted 3).
+round_trips(<<'SRC', "a slot written after an inner foreach that stores the outer iterator");
+my $s=0; my $x=0; for my $i (1..3) { for my $j (1..2) { $x = $i } $s += $x } print "$s\n";
+SRC
+round_trips(<<'SRC', "the same, with another init");
+my $s=1; my $x=0; for my $i (1..3) { for my $j (1..2) { $x = $i } $s += $x } print "$s\n";
+SRC
+round_trips(<<'SRC', "the same, spelled \$s = \$s + \$x");
+my $s=0; my $x=7; for my $i (1..3) { for my $j (1..2) { $x = $i } $s = $s + $x } print "$s\n";
+SRC
+round_trips(<<'SRC', "the same, with an inner while");
+my $s=0; my $x=0; for my $i (1..3) { my $j=0; while ($j<2) { $x = $i; $j++ } $s += $x } print "$s\n";
+SRC
+round_trips(<<'SRC', "the same, with an inner while(\$j++ < 2)");
+my $s=0; my $x=0; for my $i (1..3) { my $j=0; while ($j++ < 2) { $x = $i } $s += $x } print "$s\n";
+SRC
+round_trips(<<'SRC', "the same, step first");
+my $s=0; my $x=0; for my $i (1..3) { my $j=0; while ($j<2) { $j++; $x = $i } $s += $x } print "$s\n";
+SRC
+
 done_testing;
