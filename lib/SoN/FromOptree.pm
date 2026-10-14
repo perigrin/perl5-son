@@ -1110,7 +1110,54 @@ class SoN::FromOptree 0.01 {
             next unless ref($proto) eq 'B::CV';
             $shared{$_} = 1 for values %{ _outer_main_slots($proto) };
         }
+        # AN ANONYMOUS SUB WRITES A FILE AGGREGATE behind the program's back
+        # as surely as a named sub does: its body is lifted and reads the
+        # array by name, so the program must not forward the initial value
+        # past a call (`my @a=(1,2,3); my $f = sub { $a[0] = 9 }; $f->();
+        # print "@a"` -- perl's 9 2 3 was emitted 1 2 3). A captured scalar is
+        # carried by its cell instead, so only aggregates are taken here. A
+        # closure nested in one of these captures through it, so the anoncode
+        # ops of the program body are enough.
+        my @q = eval { B::main_root() };
+        while (my $o = shift @q) {
+            next unless ref($o) && $$o;
+            if ($o->name eq 'anoncode') {
+                my $body = _anoncode_cv(B::main_cv(), $o);
+                $shared{$_} = 1 for values %{ _anon_aggregate_main_slots($body) };
+            }
+            next unless $o->flags & 4;    # OPf_KIDS
+            for (my $k = $o->first; ref($k) && $$k; $k = $k->sibling) { push @q, $k }
+        }
         return \%shared;
+    }
+
+    # _anon_aggregate_main_slots($cv) -> { own pad index => main pad index }
+    # for each file-level array or hash the anonymous sub $cv captures, through
+    # any closures it is nested in. Such an aggregate is a location in the
+    # body's graph and in the program's: the body is lifted and names it.
+    sub _anon_aggregate_main_slots ($cv) {
+        my %slots;
+        return \%slots unless ref($cv) && $cv->isa('B::CV')
+            && ($cv->CvFLAGS & B::CVf_ANON());
+        my $names = eval { $cv->PADLIST->ARRAYelt(0) } or return \%slots;
+        my $main = ${ B::main_cv() };
+        SLOT: for my $i (1 .. $names->MAX) {
+            my $pn = $names->ARRAYelt($i);
+            next unless ref($pn) eq 'B::PADNAME' && ($pn->PV // '') =~ /\A[\@%]/;
+            my ($c, $n) = ($cv, $pn);
+            while (1) {
+                next SLOT unless $n->FLAGS & B::PADNAMEf_OUTER();
+                next SLOT if $n->FLAGS & (B::PADNAMEf_FIELD() | B::PADNAMEf_OUR());
+                my $parent = eval { $n->PARENT_PAD_INDEX } or next SLOT;
+                my $out = eval { $c->OUTSIDE };
+                next SLOT unless ref($out) eq 'B::CV' && $$out;
+                if ($$out == $main) { $slots{$i} = $parent; next SLOT }
+                $c = $out;
+                $n = eval { $c->PADLIST->ARRAYelt(0)->ARRAYelt($parent) };
+                next SLOT unless ref($n) eq 'B::PADNAME';
+            }
+        }
+        return \%slots;
     }
 
     # _outer_main_slots($cv) -> { own pad index => main pad index } for a
@@ -1263,7 +1310,8 @@ class SoN::FromOptree 0.01 {
         # the program's slot, and the sub's own index for it.
         $ctx->{shared_lexicals} = $ctx->{is_program}
             ? _file_lexicals_shared()
-            : { map { $_ => 1 } keys %{ _outer_main_slots($cv) } };
+            : { map { $_ => 1 } keys %{ _outer_main_slots($cv) },
+                                keys %{ _anon_aggregate_main_slots($cv) } };
         $ctx->{addr_taken}{$_} = 1 for keys $ctx->{shared_lexicals}->%*;
         local $SHARED_SLOTS = $ctx->{shared_lexicals};
         local $ADDR_TAKEN   = $ctx->{addr_taken};
@@ -15807,7 +15855,10 @@ class SoN::FromOptree 0.01 {
             # reads it as a fresh lexical of its own, so the emitted closure
             # declared `my %h` and every call started empty (`$f->("a", 1),
             # $f->("a", 2)` gave 1 2 where perl gives 1 1). A named sub's
-            # shared file lexical is marked `shared` and is right.
+            # shared file lexical is marked `shared` and is right, and so is
+            # a file aggregate an anon sub closes over
+            # (_anon_aggregate_main_slots); what refuses here is one captured
+            # from a sub's own scope.
             # Down a nested chain to its root: `$h{a}[0]` is the same capture.
             my $agg = $lvalue->inputs->[0];
             # AN ELEMENT OF @_ ALIASES THE CALLER'S ARGUMENT, and the caller's

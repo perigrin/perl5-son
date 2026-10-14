@@ -180,25 +180,25 @@ class C { field $x; method m ($c) { if ($c) { $x //= 7 } return $x // 'u' } }
 my $o = C->new; print $o->m(0), $o->m(1), "\n";
 SRC
 
-# STILL REFUSED.
-refuses('my %h; my $f = sub { $h{$_[0]} //= $_[1] }; my @r = ($f->("a", 1), $f->("a", 2)); print "@r\n";',
+# A FILE AGGREGATE AN ANON SUB CLOSES OVER is a location in both graphs,
+# as one a named sub shares is, so an element logassign into it lowers.
+round_trips('my %h; my $f = sub { $h{$_[0]} //= $_[1] }; my @r = ($f->("a", 1), $f->("a", 2)); print "@r\n";',
+    'an element of a captured hash in an anon sub');
+round_trips('my @a = (0); my $f = sub { $a[0] ||= 3 }; $f->(); print "@a\n";',
+    'an element of a captured array in an anon sub');
+round_trips('my %h; my $f = sub { $h{$_[0]}{x} //= $_[1] }; my @r = ($f->("a", 1), $f->("a", 2)); print "@r\n";',
+    'a nested element of a captured hash in an anon sub');
+round_trips('my %h; my $f = sub { $h{a}[0] ||= $_[0] }; my @r = ($f->(1), $f->(2)); print "@r\n";',
+    'a hash-of-array element of a captured hash');
+round_trips('my @a; my $f = sub { $a[0][0] ||= $_[0] }; my @r = ($f->(3), $f->(4)); print "@r\n";',
+    'an array-of-array element of a captured array');
+round_trips('my @a; my $f = sub { $a[0]{x} //= $_[0]; $a[0]{x} }; my @r = ($f->(1), $f->(2)); print "@r\n";',
+    'an array-of-hash element of a captured array');
+# ONE CAPTURED FROM A NAMED SUB'S OWN SCOPE is still read as a fresh lexical
+# of the lifted body, and refuses.
+refuses('sub mk { my %h; return sub { $h{$_[0]} //= $_[1] } } my $f = mk(); my @r = ($f->("a", 1), $f->("a", 2)); print "@r\n";',
     qr/GAP: `\/\/=` into an element of an aggregate an anon sub closes over/,
-    'an element of a captured hash in an anon sub refuses');
-refuses('my @a = (0); my $f = sub { $a[0] ||= 3 }; $f->(); print "@a\n";',
-    qr/GAP: `\|\|=` into an element of an aggregate an anon sub closes over/,
-    'an element of a captured array in an anon sub refuses');
-refuses('my %h; my $f = sub { $h{$_[0]}{x} //= $_[1] }; my @r = ($f->("a", 1), $f->("a", 2)); print "@r\n";',
-    qr/GAP: `\/\/=` into an element of an aggregate an anon sub closes over/,
-    'a nested element of a captured hash in an anon sub refuses');
-refuses('my %h; my $f = sub { $h{a}[0] ||= $_[0] }; my @r = ($f->(1), $f->(2)); print "@r\n";',
-    qr/GAP: `\|\|=` into an element of an aggregate an anon sub closes over/,
-    'a hash-of-array element of a captured hash refuses');
-refuses('my @a; my $f = sub { $a[0][0] ||= $_[0] }; my @r = ($f->(3), $f->(4)); print "@r\n";',
-    qr/GAP: `\|\|=` into an element of an aggregate an anon sub closes over/,
-    'an array-of-array element of a captured array refuses');
-refuses('my @a; my $f = sub { $a[0]{x} //= $_[0]; $a[0]{x} }; my @r = ($f->(1), $f->(2)); print "@r\n";',
-    qr/GAP: `\/\/=` into an element of an aggregate an anon sub closes over/,
-    'an array-of-hash element of a captured array refuses');
+    'an element of a hash captured from a named sub refuses');
 
 # THE RESULT IS THE TARGET ITSELF, not a copy of its value: `++`, `\`, a sub
 # argument and `+=` all write through it. The op says so with OPf_MOD.

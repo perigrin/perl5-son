@@ -93,12 +93,36 @@ refuses('use v5.36; my $x = 1; my sub a { my sub b { $x } b() + 1 } print a(), "
 # A foreach over a file array inside a lifted body lowers, so these run.
 round_trips('use v5.36; my @a = (1, 2, 3); my sub f { $_ *= 2 for @a } f(); print "@a\n";');
 round_trips('use v5.36; my @a = (1, 2, 3); my sub f { $_ *= 2 for @a } sub g { f() } g(); print "@a\n";');
-# AN ANON SUB WRITING A FILE ARRAY: the program forwards the array's first
-# value past the call (perl 2 4 6, emitted 1 2 3). Base gets `$a[0] = 9` and
-# `push @a, 4` from an anon sub wrong the same way; a scalar is carried.
-{
-    my $todo = todo 'an anon sub writing a file array is not a memory barrier for it';
-    round_trips('use v5.36; my @a = (1, 2, 3); my $f = sub { $_ *= 2 for @a }; my @r = ($f); $r[0]->(); print "@a\n";');
-}
+# AN ANON SUB WRITING A FILE AGGREGATE is a memory barrier for it: the
+# program forwarded the initial value past the call (perl 2 4 6, emitted
+# 1 2 3). A captured scalar was carried by its cell; an aggregate is a
+# location on both sides, as one a named sub shares is.
+round_trips($_) for
+    'use v5.36; my @a = (1, 2, 3); my $f = sub { $_ *= 2 for @a }; my @r = ($f); $r[0]->(); print "@a\n";',
+    'use v5.36; my @a = (1, 2, 3); my $f = sub { $a[0] = 9 }; $f->(); print "@a\n";',
+    'use v5.36; my @a = (1, 2, 3); my $f = sub { push @a, 4 }; my %h = (k => $f); $h{k}->(); print "@a\n";',
+    'use v5.36; my @a = (1, 2, 3); my $f = sub { splice @a, 1, 1 }; $f->(); print "@a\n";',
+    'use v5.36; my @a = (1, 2, 3); my $f = sub { @a = () }; $f->(); print scalar(@a), "\n";',
+    'use v5.36; my %h = (a => 1); my $f = sub { $h{a} = 5 }; $f->(); print "$h{a}\n";',
+    'use v5.36; my %h = (a => 1, b => 2); my $f = sub { delete $h{a} }; $f->(); print exists $h{a} ? "y" : "n", "\n";',
+    'use v5.36; my %h = (a => 1); my $f = sub { %h = () }; $f->(); print scalar(%h) ? "y" : "n", "\n";',
+    'use v5.36; my @a = (1, 2); my $f = sub { push @a, 3 }; my $r = \$f; $$r->(); print "@a\n";',
+    'use v5.36; package K { sub run ($c, $cb) { $cb->() } } my @a = (1); K->run(sub { push @a, 2 }); print "@a\n";',
+    'use v5.36; my @a = (1, 2); my $f = sub { push @a, 3 }; sub g ($c) { $c->() } g($f); print "@a\n";',
+    'use v5.36; my @a = (1, 2, 3); my $f = sub { "@a" }; print $f->(), " @a\n";',
+    'use v5.36; my @a = (1, 2, 3); my $f = sub { sub { $a[1] = 7 } }; $f->()->(); print "@a\n";',
+    'use v5.36; my @a = (1, 2); my $f = sub { push @a, 3 }; print "@a\n"; $f->(); print "@a\n";',
+    'use v5.36; my @a = (1, 2, 3); my $f = sub { scalar @a }; push @a, 4; print $f->(), "\n";';
+
+# THE BODY'S OWN WHOLE-AGGREGATE STORE is a store into the file's array, not
+# a rebind of the body's scope: `@a = sort @a` was emitted as a bare
+# `sort(@a)` and perl's 1 2 3 stayed 3 1 2.
+round_trips($_) for
+    'use v5.36; my @a = (3, 1, 2); my $f = sub { @a = sort @a }; $f->(); print "@a\n";',
+    'use v5.36; my @a = (3, 1, 2); my $f = sub { @a = reverse @a }; $f->(); print "@a\n";',
+    'use v5.36; my @a = (3, 1, 2); my $f = sub { my @b = @a; @a = (@b, 4) }; $f->(); print "@a\n";',
+    'use v5.36; my @a = (3, 1, 2); my $f = sub { sub { @a = sort @a } }; $f->()->(); print "@a\n";',
+    'use v5.36; my @a = (3, 1, 2); sub mk { sub { @a = sort @a } } mk()->(); print "@a\n";',
+    'use v5.36; my %h = (a => 1); my $f = sub { %h = (%h, b => 2) }; $f->(); print join(",", map {"$_=$h{$_}"} sort keys %h), "\n";';
 
 done_testing;
