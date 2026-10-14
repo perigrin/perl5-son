@@ -133,11 +133,6 @@ SRC
     # suspension has to END with the first loop: a read AFTER it must go back to
     # being memory-bound, and the second loop must establish its own carry from
     # wherever the first left the counter.
-    #
-    # (The nested form is the sharper test of the PUSH, but nested loops are a
-    # pre-existing refusal -- `GAP: enterloop inside a loop body not yet
-    # lowered`, measured with only lexicals in play -- so it cannot be written
-    # here yet.)
     subtest 'two sequential loops over one counter accumulate' => sub {
         my $src = <<'SRC';
 our $n = 0;
@@ -157,6 +152,27 @@ SRC
         my ( $out, $why ) = emit($src);
         ok defined $out, 'renders' or do { diag $why; return };
         is runs($out), runs($src), 'the counter reaches 3 then 7'
+            or diag $out;
+    };
+
+    # THE NESTED FORM is the sharper test of the PUSH: the inner loop's carry
+    # starts from the outer loop's, once per outer iteration.
+    subtest 'a counter in a loop nested in a loop body accumulates' => sub {
+        my $src = <<'SRC';
+our $n = 0;
+for my $i (1 .. 3) {
+    my $k = 0;
+    while ($k < $i) {
+        $n++;
+        $k++;
+    }
+    print "$n,";
+}
+print "n=$n\n";
+SRC
+        my ( $out, $why ) = emit($src);
+        ok defined $out, 'renders' or do { diag $why; return };
+        is runs($out), runs($src), 'the counter reaches 1, 3, 6'
             or diag $out;
     };
 

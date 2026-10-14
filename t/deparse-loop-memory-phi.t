@@ -71,9 +71,7 @@ SRC
 
 # NESTED LOOPS, which is comp/retainedlines.t's actual shape -- one memory Phi
 # per header, each naming the one outside it. Asserted against the corpus file
-# rather than a reproduction, because nested loops are a separate PRODUCER gap
-# ("enterloop inside a loop body not yet lowered") and a synthetic case would
-# never reach the emitter at all.
+# rather than a reproduction: the real file is the shape that motivated it.
 subtest 'the corpus shape: three stacked memory Phis' => sub {
     my $path = '/home/perigrin/dev/perl5/t/comp/retainedlines.t';
     skip_all 'perl source tree not available' unless -e $path;

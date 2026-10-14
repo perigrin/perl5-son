@@ -684,14 +684,24 @@ class SoN::FromOptree 0.01 {
     }
 
     # _subtree_localises($op) -- true when an op under $op carries a `local`:
-    # OPpLVAL_INTRO on an op that is not a pad op (a pad op's is a `my`).
+    # OPpLVAL_INTRO on an op that is not a pad op (a pad op's is a `my`). A
+    # `for my $x` carries it on its enteriter, and that is a `my` too. So does
+    # the pushmark of `my ($a, $b)`; a `local (...)` list marks each element.
+    # And a call passed as an argument to another carries it with no `local`
+    # in sight -- measured, `f(\%h, $s->v())` compiles the method call as
+    # `entersub lKRMS/LVINTRO,TARG,INARGS`. An op that stores straight into
+    # a `my` (OPpTARGET_MY) carries it for that `my`: `my $s = "a$b"` is
+    # `multiconcat[$s] vK/LVINTRO,TARGMY`.
     sub _subtree_localises ($op) {
         require B::Op_private;
         my @todo = ($op);
         while (my $o = shift @todo) {
             next unless $$o;
             my $name = $o->name;
-            return 1 if $name !~ /\Apad/
+            return 1 if !_declares_lexical($o)
+                && $name ne 'pushmark' && $name ne 'entersub'
+                && !(( $B::Op_private::bits{$name}{4} // '' ) eq 'OPpTARGET_MY'
+                     && ( $o->private & B::OPpTARGET_MY ))
                 && ( $B::Op_private::bits{$name}{7} // '' ) eq 'OPpLVAL_INTRO'
                 && ( $o->private & B::OPpLVAL_INTRO );
             next unless $o->flags & 4;   # OPf_KIDS
@@ -1970,8 +1980,8 @@ class SoN::FromOptree 0.01 {
             # through the header Phis (see _translate_while_loop). The
             # condition head is enterloop->next.
             if ($name eq 'enterloop') {
-                $op = _handle_enterloop($cv, $op, $sim, $factory, $opmap,
-                    \%visited, $ctx);
+                $op = _enterloop($cv, $op, $sim, $factory, $opmap, \%visited,
+                    $ctx);
                 next;
             }
 
@@ -3809,6 +3819,147 @@ class SoN::FromOptree 0.01 {
     # seen is the enclosing one.
     our $CURRENT_PACKAGE = 'main';
 
+    # _enterloop($cv, $op, $sim, $factory, $opmap, $visited, $ctx,
+    # $in_loop_body) -> the op to resume at. ONE DISPATCH FOR enterloop,
+    # shared by the main walk, the loop-body walk and the arm walk (a loop
+    # inside an if/else arm is the same loop as one outside it): a bare
+    # block is stepped into, a real while/until/C-style for goes through _translate_while_loop,
+    # which builds its own Loop on $sim's control -- so a loop nested in a loop
+    # body is translated exactly as one at the top.
+    sub _enterloop ($cv, $op, $sim, $factory, $opmap, $visited, $ctx, $in_loop_body = 0) {
+        # A bare block (`{ ... }`), `package Foo { ... }`, and `class
+        # Foo { ... }` ALSO compile to enterloop -- but with no back
+        # edge: nextop and lastop both point at the same leaveloop. A
+        # real while/until/C-style for has nextop = unstack (a
+        # distinct op from lastop). Keying on this (not on redoop -- a
+        # bare block DOES have redoop set) tells the two apart; only a
+        # genuine back edge goes through _translate_while_loop.
+        # Precedent: _is_postfix_while discriminates the analogous
+        # enter/leave shape the same way.
+        my $nx = $op->can('nextop') ? $op->nextop : undef;
+        my $ls = $op->can('lastop') ? $op->lastop : undef;
+        if (ref $nx && $$nx && ref $ls && $$ls && $$nx == $$ls) {
+            return _enter_bare_block($op, $in_loop_body);
+        }
+        # A LOOP'S VALUE IS ITS OWN -- see _settle_loop_value. A bare
+        # block above is not a loop: its value is its last statement.
+        $ctx->{loop_floor}{$$ls} = $sim->stack_depth if ref $ls && $$ls;
+        # A BARE BLOCK WITH A `continue` IS NEITHER SHAPE. It compiles
+        # to a real enterloop whose nextop is the CONTINUE BODY rather
+        # than the leaveloop, so the bare-block test above declines and
+        # it fell through to the while-loop translator -- which walked
+        # it as a loop and died "Stack underflow", an INTERNAL ERROR
+        # where a named refusal belongs (perl's own t/cmd/switch.t).
+        #
+        # KEYED ON redoop == enter, which is what says BARE BLOCK.
+        # Measured across every enterloop form:
+        #
+        #     bare              next=leaveloop  redo=nextstate  n==l
+        #     bare + continue   next=pushmark   redo=ENTER      <- this
+        #     while             next=unstack    redo=nextstate
+        #     while + continue  next=stub       redo=padsv
+        #     C-style for       next=padsv      redo=stub
+        #
+        # An earlier version keyed on `nextop is not unstack`, which is
+        # true of `while + continue` and C-style `for` as well -- both
+        # translate correctly today, and both were refused. The redo
+        # target is the property that actually separates a block from a
+        # loop.
+        #
+        # REFUSED because the continue body is real control flow this
+        # walker does not model: it runs AFTER the block, and `last`
+        # SKIPS it where `next` runs it.
+        # A BARE BLOCK ENTERS AT ITS BODY; A REAL LOOP ENTERS AT ITS
+        # CONDITION. `redo` targets the body, so `entry == redoop` IS
+        # the bare-block test -- measured against B on every form:
+        #
+        #     bare + continue        ->next=const      redo=const      SAME
+        #     bare + continue + redo ->next=enter      redo=enter      SAME
+        #     plain bare block       ->next=nextstate  redo=nextstate  SAME
+        #     while + continue       ->next=padsv      redo=pushmark   differ
+        #     C-style for            ->next=padsv      redo=pushmark   differ
+        #     while                  ->next=padsv      redo=nextstate  differ
+        #
+        # The previous test was `redoop == enter`, which means "bare
+        # block WITH AN INNER SCOPE" -- true of the redo form and
+        # false of the straight-line one, so the latter fell through
+        # to the while translator and reported an unrelated GAP. An
+        # attempt to key on the next/redo op NAMES could not separate
+        # the straight-line form from `while+continue` or a C-style
+        # `for`, which both work; the IDENTITY test has no overlap.
+        # AND `while (1)` LOOKS THE SAME FROM THE ENTRY ALONE. perl
+        # folds the constant condition away, so there is no condition
+        # to enter at and entry == redoop holds for it too:
+        #
+        #     { $n=1 } continue {..}   next=padsv     redo=const      entry==redo
+        #     { $n=1 }                 next=leaveloop redo=nextstate  entry==redo
+        #     while (1) { .. }         next=UNSTACK   redo=nextstate  entry==redo
+        #
+        # `nextop` is what tells them apart: an `unstack` IS the back
+        # edge, and a bare block has none. My first version keyed on
+        # the entry alone and broke every while(1) test in the suite
+        # (t/from-optree-while-one.t, t/deparse-infinite-loop-with-last.t,
+        # t/from-optree-loop-gaps.t) -- the six probes I measured all
+        # had a real condition or none, and never the FOLDED case.
+        my $rd    = $op->can('redoop') ? $op->redoop : undef;
+        my $entry = $op->next;
+        if (ref $rd && $$rd && ref $entry && $$entry
+                && $$entry == $$rd
+                && !(ref $nx && $$nx && $nx->name eq 'unstack')) {
+            # A CONTINUE WITH NO LOOP-EXIT IS STRAIGHT-LINE CODE. The
+            # block runs once, falls into the continue, and leaves --
+            # measured, the answer matches the same statements written
+            # in sequence:
+            #
+            #     my $n=0; { $n=1 } continue { $n+=10 }   $n is 11
+            #     my $n=0; $n=1; $n+=10;                  $n is 11
+            #
+            # so exec order already walks block, then continue, then
+            # leaveloop, and stepping into it translates the whole
+            # thing with no loop vocabulary at all.
+            #
+            # WHAT MAKES IT A LOOP IS AN EXIT OP, and the three exits
+            # have three different destinations -- measured:
+            #
+            #     fall off end   continue RUNS
+            #     next           continue RUNS
+            #     redo           continue SKIPPED (back to block top)
+            #     last           continue SKIPPED (past it)
+            #
+            #     { $i++; redo if $i<3 } continue { push @o,"c$i" }
+            #       -> b1,b2,b3,c3   (not c1,c2,c3)
+            #
+            # One region, three destinations, which the walker does
+            # not model -- so those still refuse.
+            if ( _block_has_loop_exit($op) ) {
+                die "GAP: a bare block with a `continue` block and a"
+                  . " next/last/redo is not yet lowered -- the three"
+                  . " exits have three different destinations (next"
+                  . " runs the continue, last and redo skip it), which"
+                  . " is control flow the walker does not model\n";
+            }
+            return _enter_bare_block($op, $in_loop_body);
+        }
+        # WHERE `next` LANDS: the continue block, or the C-style step,
+        # which perl puts at nextop. See $CONTINUE_START.
+        local $CONTINUE_START = _continue_start($op);
+        _translate_while_loop($cv, $op->next, $sim, $factory, $opmap, $visited);
+        # Continue after the loop; the B::LOOP op's lastop is leaveloop.
+        return $op->can('lastop') ? $op->lastop : $op->next;
+    }
+
+    # A BARE BLOCK INSIDE A LOOP BODY CANNOT HOLD next/last/redo: those target
+    # the BLOCK, and the loop-body walk binds them to the ENCLOSING loop --
+    # `for (1..3) { { $s+=$_; last if $_==2; $s+=100 } }` would leave the
+    # foreach where perl leaves only the block.
+    sub _enter_bare_block ($op, $in_loop_body) {
+        die "GAP: a bare block with a next/last/redo inside a loop body is not"
+          . " yet lowered -- the controls target the block, not the enclosing"
+          . " loop\n"
+            if $in_loop_body && _block_has_loop_exit($op);
+        return $op->next;
+    }
+
     # The loop op's continue-block start, or undef: nextop, unless that is
     # the unstack (no continue block).
     sub _continue_start ($loop_op) {
@@ -3816,6 +3967,22 @@ class SoN::FromOptree 0.01 {
         return undef unless ref $nx && $$nx;
         return undef if $nx->name eq 'unstack';
         return $nx;
+    }
+
+    # _runs_into_continue($op) -- true when $op, past any ex-ops (`null`,
+    # `scope`) the exec chain still threads, is the current loop's continue
+    # start. A nested loop that is a body's last statement runs this way:
+    # measured, its leaveloop's ->next is a `scope` whose ->next is the `null`
+    # that nextop names.
+    sub _runs_into_continue ($op) {
+        return 0 unless $CONTINUE_START;
+        my %seen;
+        while (ref $op && $$op && !$seen{$$op}++) {
+            return 1 if $$op == ${$CONTINUE_START};
+            last unless $op->name eq 'null' || $op->name eq 'scope';
+            $op = $op->next;
+        }
+        return 0;
     }
 
     # `$o->SUPER::m()`: the method name qualified by the package in effect,
@@ -5430,132 +5597,6 @@ class SoN::FromOptree 0.01 {
     # OPf_REF, and relying on that would key the question on a second
     # incidental bit rather than on what the op does. See
     # docs/plans and the opf-mod-is-not-a-write note.
-    # _handle_enterloop($cv, $enterloop, $sim, $factory, $opmap, $visited, $ctx)
-    # -> $resume_op. A while/until/C-style for, a bare block, or a bare block
-    # with a continue. SHARED BY THE MAIN WALK AND THE ARM WALK: a loop inside
-    # an if/else arm is the same loop as one outside it.
-    sub _handle_enterloop ($cv, $op, $sim, $factory, $opmap, $visited, $ctx) {
-        # A bare block (`{ ... }`), `package Foo { ... }`, and `class
-        # Foo { ... }` ALSO compile to enterloop -- but with no back
-        # edge: nextop and lastop both point at the same leaveloop. A
-        # real while/until/C-style for has nextop = unstack (a
-        # distinct op from lastop). Keying on this (not on redoop -- a
-        # bare block DOES have redoop set) tells the two apart; only a
-        # genuine back edge goes through _translate_while_loop.
-        # Precedent: _is_postfix_while discriminates the analogous
-        # enter/leave shape the same way.
-        my $nx = $op->can('nextop') ? $op->nextop : undef;
-        my $ls = $op->can('lastop') ? $op->lastop : undef;
-        if (ref $nx && $$nx && ref $ls && $$ls && $$nx == $$ls) {
-            return $op->next;
-        }
-        # A LOOP'S VALUE IS ITS OWN -- see _settle_loop_value. A bare
-        # block above is not a loop: its value is its last statement.
-        $ctx->{loop_floor}{$$ls} = $sim->stack_depth if ref $ls && $$ls;
-        # A BARE BLOCK WITH A `continue` IS NEITHER SHAPE. It compiles
-        # to a real enterloop whose nextop is the CONTINUE BODY rather
-        # than the leaveloop, so the bare-block test above declines and
-        # it fell through to the while-loop translator -- which walked
-        # it as a loop and died "Stack underflow", an INTERNAL ERROR
-        # where a named refusal belongs (perl's own t/cmd/switch.t).
-        #
-        # KEYED ON redoop == enter, which is what says BARE BLOCK.
-        # Measured across every enterloop form:
-        #
-        #     bare              next=leaveloop  redo=nextstate  n==l
-        #     bare + continue   next=pushmark   redo=ENTER      <- this
-        #     while             next=unstack    redo=nextstate
-        #     while + continue  next=stub       redo=padsv
-        #     C-style for       next=padsv      redo=stub
-        #
-        # An earlier version keyed on `nextop is not unstack`, which is
-        # true of `while + continue` and C-style `for` as well -- both
-        # translate correctly today, and both were refused. The redo
-        # target is the property that actually separates a block from a
-        # loop.
-        #
-        # REFUSED because the continue body is real control flow this
-        # walker does not model: it runs AFTER the block, and `last`
-        # SKIPS it where `next` runs it.
-        # A BARE BLOCK ENTERS AT ITS BODY; A REAL LOOP ENTERS AT ITS
-        # CONDITION. `redo` targets the body, so `entry == redoop` IS
-        # the bare-block test -- measured against B on every form:
-        #
-        #     bare + continue        ->next=const      redo=const      SAME
-        #     bare + continue + redo ->next=enter      redo=enter      SAME
-        #     plain bare block       ->next=nextstate  redo=nextstate  SAME
-        #     while + continue       ->next=padsv      redo=pushmark   differ
-        #     C-style for            ->next=padsv      redo=pushmark   differ
-        #     while                  ->next=padsv      redo=nextstate  differ
-        #
-        # The previous test was `redoop == enter`, which means "bare
-        # block WITH AN INNER SCOPE" -- true of the redo form and
-        # false of the straight-line one, so the latter fell through
-        # to the while translator and reported an unrelated GAP. An
-        # attempt to key on the next/redo op NAMES could not separate
-        # the straight-line form from `while+continue` or a C-style
-        # `for`, which both work; the IDENTITY test has no overlap.
-        # AND `while (1)` LOOKS THE SAME FROM THE ENTRY ALONE. perl
-        # folds the constant condition away, so there is no condition
-        # to enter at and entry == redoop holds for it too:
-        #
-        #     { $n=1 } continue {..}   next=padsv     redo=const      entry==redo
-        #     { $n=1 }                 next=leaveloop redo=nextstate  entry==redo
-        #     while (1) { .. }         next=UNSTACK   redo=nextstate  entry==redo
-        #
-        # `nextop` is what tells them apart: an `unstack` IS the back
-        # edge, and a bare block has none. My first version keyed on
-        # the entry alone and broke every while(1) test in the suite
-        # (t/from-optree-while-one.t, t/deparse-infinite-loop-with-last.t,
-        # t/from-optree-loop-gaps.t) -- the six probes I measured all
-        # had a real condition or none, and never the FOLDED case.
-        my $rd    = $op->can('redoop') ? $op->redoop : undef;
-        my $entry = $op->next;
-        if (ref $rd && $$rd && ref $entry && $$entry
-                && $$entry == $$rd
-                && !(ref $nx && $$nx && $nx->name eq 'unstack')) {
-            # A CONTINUE WITH NO LOOP-EXIT IS STRAIGHT-LINE CODE. The
-            # block runs once, falls into the continue, and leaves --
-            # measured, the answer matches the same statements written
-            # in sequence:
-            #
-            #     my $n=0; { $n=1 } continue { $n+=10 }   $n is 11
-            #     my $n=0; $n=1; $n+=10;                  $n is 11
-            #
-            # so exec order already walks block, then continue, then
-            # leaveloop, and stepping into it translates the whole
-            # thing with no loop vocabulary at all.
-            #
-            # WHAT MAKES IT A LOOP IS AN EXIT OP, and the three exits
-            # have three different destinations -- measured:
-            #
-            #     fall off end   continue RUNS
-            #     next           continue RUNS
-            #     redo           continue SKIPPED (back to block top)
-            #     last           continue SKIPPED (past it)
-            #
-            #     { $i++; redo if $i<3 } continue { push @o,"c$i" }
-            #       -> b1,b2,b3,c3   (not c1,c2,c3)
-            #
-            # One region, three destinations, which the walker does
-            # not model -- so those still refuse.
-            if ( _block_has_loop_exit($op) ) {
-                die "GAP: a bare block with a `continue` block and a"
-                  . " next/last/redo is not yet lowered -- the three"
-                  . " exits have three different destinations (next"
-                  . " runs the continue, last and redo skip it), which"
-                  . " is control flow the walker does not model\n";
-            }
-            return $op->next;
-        }
-        # WHERE `next` LANDS: the continue block, or the C-style step,
-        # which perl puts at nextop. See $CONTINUE_START.
-        local $CONTINUE_START = _continue_start($op);
-        _translate_while_loop($cv, $op->next, $sim, $factory, $opmap, $visited);
-        # Continue after the loop; the B::LOOP op's lastop is leaveloop.
-        return $op->can('lastop') ? $op->lastop : $op->next;
-    }
-
     # _settle_loop_value($leaveloop, $sim, $factory, $ctx) -- what a foreach
     # leaves on the stack is its OWN value, not its body's. perl returns its
     # shared false from a loop that is a sub's last statement -- the last
@@ -10778,6 +10819,20 @@ class SoN::FromOptree 0.01 {
     # reports whether the body rebound it -- _scout_mutated_targs cannot answer
     # this for the iterator because it excludes $extra_targs from its result and
     # only seeds slots already in scope (the iterator is not in the outer scope).
+    # A SCOUT PLACEHOLDER CARRIES ITS BINDING'S STAMP. An unstamped string
+    # stands in for every slot, so an inner `for my $y (@b)` in a scouted body
+    # saw a string where an array belongs, died "unrecognized bounds shape",
+    # and the scout returned the slots found so far -- the outer loop then had
+    # no Phi for a slot written after the inner loop, and printed "25,26,"
+    # where perl prints "15,16,25,26,".
+    sub _scout_placeholder ($factory, $sim, $targ) {
+        my $b = $sim->scope_bindings->{$targ};
+        my $stamp = $b ? $b->stamp : undef;
+        return $factory->make_unique('Constant',
+            value => 'scout', const_type => 'string',
+            (defined $stamp ? (stamp => $stamp) : ()));
+    }
+
     sub _body_writes_targ ($cv, $start_op, $sim, $opmap, $targ, $cond_consumed = 0) {
         my $scout_factory = SoN::IR::NodeFactory->new();
         my $scout_sim     = SoN::FromOptree::StackSim->new(
@@ -10790,8 +10845,8 @@ class SoN::FromOptree 0.01 {
         # Seed the current scope so body reads resolve, plus a placeholder for
         # the iterator slot so a write to it is detectable.
         for my $t (keys $sim->scope_bindings->%*) {
-            $scout_sim->define($t, $scout_factory->make_unique('Constant',
-                value => 'scout', const_type => 'string'));
+            $scout_sim->define($t,
+                _scout_placeholder($scout_factory, $sim, $t));
         }
         my $ph = $scout_factory->make_unique('Constant',
             value => 'scout-iter', const_type => 'string');
@@ -10885,8 +10940,7 @@ class SoN::FromOptree 0.01 {
             memory  => $scout_factory->make('MemStart'));
         my %placeholder;
         for my $targ (keys $sim->scope_bindings->%*, $extra_targs->@*) {
-            my $ph = $scout_factory->make_unique('Constant',
-                value => 'scout', const_type => 'string');
+            my $ph = _scout_placeholder($scout_factory, $sim, $targ);
             $placeholder{$targ} = $ph;
             $scout_sim->define($targ, $ph);
         }
@@ -11140,6 +11194,14 @@ class SoN::FromOptree 0.01 {
     sub _patch_loop_phi ($sim, $targ, $phi, $post) {
         $phi->set_backedge($post);
         $sim->define($targ, $phi);
+        # A SCOUT CHECKS NO STAMPS. It asks which slots a body writes, and its
+        # placeholders only approximate the real bindings' stamps -- the outer
+        # iterator's carries none. An inner loop storing that iterator into a
+        # stamped slot died on the refusal below, the scout returned the slots
+        # found so far, and a slot written after the inner loop got no outer
+        # Phi (perl 6, emitted 3). The real walk makes these checks on the
+        # real stamps.
+        return if $IN_SCOUT;
         my $init = $phi->inputs->[0];
         # "Has a stamp" is not the question -- every Value node carries one
         # now. The question is whether it says anything, and `Unknown` is how
@@ -12444,6 +12506,16 @@ class SoN::FromOptree 0.01 {
             # every binding this body replaced before leaving. Without it a
             # read after the loop resolved to the localised value and the graph
             # said "iter" where perl says "outer".
+            # A C-STYLE FOR'S INIT ENDS IN AN unstack TOO -- flagged
+            # OPf_SPECIAL, and its ->next is the loop's own enterloop. That one
+            # closes the init statement's scope, not an iteration of THIS body;
+            # stopping at it dropped the inner loop and every statement after
+            # it (`for (1..3) { for (my $j=0;..) {..} $s += 1 }` printed 0).
+            if ($name eq 'unstack' && ($op->flags & B::OPf_SPECIAL())
+                    && ${$op->next} && $op->next->name eq 'enterloop') {
+                $op = $op->next;
+                next;
+            }
             if ($name eq 'unstack') {
                 _restore_locals($sim, $ctx, $factory);
                 last;
@@ -12492,8 +12564,20 @@ class SoN::FromOptree 0.01 {
                 # leak made the outer loop emit a store into an anonymous
                 # container, which the deparse refused for an unrelated reason.
                 # Fixing the leak exposed the drop.
+                #
+                # A BODY WITH A CONTINUE BLOCK (or a C-style step) is wrapped
+                # in enter/leave, so a nested loop that ENDS it is followed by
+                # that `leave` -- $body_leave, whose ->next is the continue
+                # start -- and not by a nextstate. A body that is the nested
+                # loop alone has no wrapper, and runs straight into the
+                # continue start. Stopping at either dropped the continue
+                # block: `for (1..2) { { $s += 1 } } continue { $s += 10 }`
+                # printed 2 for 22, and a while whose continue held its step
+                # never ended.
                 if ($$op && $op->next && ${$op->next}
-                    && $op->next->name eq 'nextstate') {
+                    && ($op->next->name eq 'nextstate'
+                        || ($body_leave && ${$op->next} == $body_leave)
+                        || _runs_into_continue($op->next))) {
                     $op = $op->next;
                     next;
                 }
@@ -12593,7 +12677,8 @@ class SoN::FromOptree 0.01 {
                 next;
             }
 
-            # Nested control structure in a body is only translated by the
+            # Nested control structure in a body other than a loop (dispatched
+            # below through _enterloop) is only translated by the
             # MAIN walker; skipping it here emitted corrupt graphs (a nested
             # loop minted Projs on the OUTER Loop and truncated the walk; a
             # skipped if/else dropped its arms entirely). Refuse loudly. The
@@ -12613,9 +12698,30 @@ class SoN::FromOptree 0.01 {
                 next;
             }
 
+            # A `local` IN A NESTED BLOCK OR LOOP ends at that construct's
+            # exit, and this walk restores only at its own iteration end: `{
+            # local $g = 9 } $g += $i` printed 0 for 6. A nested loop's own
+            # restore writes back a binding the emission re-reads after the
+            # store (10 for 7), so a nested foreach refuses too.
+            if (($name eq 'enterloop' || $name eq 'enteriter')
+                    && ${ $op->parent } && _subtree_localises($op->parent)) {
+                die "GAP: a `local` inside a block or loop nested in a loop"
+                  . " body is not yet lowered -- it ends at the inner"
+                  . " construct's exit, which this walk does not restore at\n";
+            }
+
+            # A NESTED while/until/C-style for OR BARE BLOCK goes through the
+            # main walk's own dispatch. The inner loop builds its own Loop on
+            # this body's control and resumes at its leaveloop, which the
+            # handler above walks past or stops at.
+            if ($name eq 'enterloop') {
+                $op = _enterloop($cv, $op, $sim, $factory, $opmap,
+                    $outer_visited // {}, $ctx, 1);
+                next;
+            }
+
             # A VALUE-CONTEXT `//` is the value handler's, below.
-            if ($name eq 'enterloop'
-                || ($opmap->is_branch($name) && $name ne 'and' && $name ne 'or'
+            if (($opmap->is_branch($name) && $name ne 'and' && $name ne 'or'
                     && !($name eq 'dor' && ($op->flags & 3) != 1))) {
                 die "GAP: $name inside a loop body not yet lowered\n";
             }
@@ -12812,6 +12918,25 @@ class SoN::FromOptree 0.01 {
                         while $$op && !($CONTINUE_START && $$op == ${$CONTINUE_START})
                             && $op->name ne 'unstack' && $op->name ne 'leaveloop';
                     next;
+                }
+                # A REST THAT STOPS SHORT OF THE LATCH IS NOT THE WHOLE REST.
+                # The arm walk stops at an op it does not handle -- a nested
+                # loop or bare block -- and the body walk resumed there on the
+                # MERGED state, past the `next`: `next if $i == 2; { $s += $i }`
+                # printed 0 for 4. A `last` has no merge (the rest is the only
+                # path on), so only the `next` form refuses.
+                # A back edge to an op this walk has seen -- the loop head -- is
+                # the latch reached the other way; a nested loop's enterloop is
+                # never the latch, seen or not.
+                if ($kind eq 'next' && !$frame && ref $rest_end && $$rest_end
+                        && ($rest_end->name eq 'enterloop'
+                            || ($rest_end->name ne 'unstack'
+                                && $rest_end->name ne 'leaveloop'
+                                && !$loop_visited->{$$rest_end}
+                                && !_runs_into_continue($rest_end)))) {
+                    die "GAP: the rest of a loop body after a `next if` stops"
+                      . " at `" . $rest_end->name . "`, not the latch, and is"
+                      . " not yet lowered\n";
                 }
                 # Drain any leftover residual the rest-arm pushed (a void
                 # statement value) so merge() does not build a spurious stack Phi.
@@ -13066,10 +13191,24 @@ class SoN::FromOptree 0.01 {
                 $taken_sim->set_control($taken_proj);
                 # A `return` in the arm -- `if (C) { return X if D }`, or one
                 # that ends it -- is a function exit; see $FN_EXITS.
-                my (undef, $taken_sig) =
+                my ($taken_end, $taken_sig) =
                     _walk_branch($cv, $op->other, $taken_sim, $factory, $opmap,
                         {}, _loop_arm_exits($break_projs), 0, _op_addr($op->next),
                         $loop_node, $break_projs, 1);
+                # AN ARM THAT STOPS SHORT OF THE JOIN IS NOT THE WHOLE ARM. The
+                # walk stops at an op it does not handle -- a loop or a bare
+                # block in the arm -- and merging there dropped the rest of the
+                # arm: `if ($i > 1) { { $s += 10 } }` in a foreach printed 0.
+                # Same check as the if/else arm's.
+                unless (($taken_sig // '') =~ /\A(?:exited|nexted|broke)\z/
+                        || (ref $taken_end && $$taken_end
+                            && $$taken_end == ${$op->next})) {
+                    my $where = (ref $taken_end && $$taken_end)
+                        ? $taken_end->name : 'end-of-chain';
+                    die "GAP: untranslatable op inside a guarded arm"
+                      . " (arm stopped at `$where`, not the join) not yet"
+                      . " lowered\n";
+                }
                 # The guarded statement is a void statement; drain any value it
                 # left so merge() does not build a spurious stack Phi.
                 $taken_sim->pop_node while $taken_sim->stack_depth > $sim->stack_depth;
@@ -14382,6 +14521,23 @@ class SoN::FromOptree 0.01 {
         my $body_sim = $sim->snapshot;
         _walk_branch($cv, $op->next, $body_sim, $factory, $opmap,
             $visited, undef, 1, _op_addr($op->other));
+
+        # A WRITE TO AN OUTER LEXICAL OUTLIVES THE EVAL, die or not, and the
+        # join below takes only the body's control and memory: the bindings
+        # stayed in $body_sim and `my $s = 0; eval { $s++ }; print $s`
+        # printed 0. Carrying them out would claim the write happened on the
+        # path that died before it, so the shape refuses.
+        # A PACKAGE VARIABLE IS NOT ONE: its store is in the memory carried
+        # out below, and a read after the eval goes through it.
+        my $outer = $sim->scope_bindings;
+        my $inner = $body_sim->scope_bindings;
+        for my $key (sort grep { /\A\d+\z/ } keys %$outer) {
+            next if defined $inner->{$key} && defined $outer->{$key}
+                && $inner->{$key} == $outer->{$key};
+            die "GAP: a block eval that rebinds a lexical declared outside it"
+              . " is not yet lowered -- the write survives a die partway"
+              . " through, and the eval's join carries no bindings\n";
+        }
 
         my $undef = $factory->make('Constant',
             value      => undef,
@@ -16209,7 +16365,7 @@ class SoN::FromOptree 0.01 {
             # refused "did not converge".
             if ($name eq 'enterloop') {
                 $visited->{$$op}++;
-                $op = _handle_enterloop($cv, $op, $sim, $factory, $opmap,
+                $op = _enterloop($cv, $op, $sim, $factory, $opmap,
                     $visited, $ctx);
                 next;
             }

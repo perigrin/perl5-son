@@ -415,7 +415,18 @@ class SoN::IR::NodeFactory {
         my $hash = $tmp->content_hash();
 
         # Return cached node if one exists with this hash
-        return $cache{$hash} if exists $cache{$hash};
+        # ...UNLESS IT IS ANOTHER PAD SLOT. PadAccess identity leaves the pad
+        # index out (one variable is at two indices in two subs), but one
+        # factory builds one sub, where two indices are two variables: an
+        # inner `my $s` shadowing an outer one hash-consed to the outer's
+        # node, and `{ my $s = 50; $s += 1 } $s += 1` rebound the OUTER slot
+        # (perl 1, emitted 2).
+        if (exists $cache{$hash}) {
+            my $hit = $cache{$hash};
+            return $hit unless $op_name eq 'PadAccess'
+                && defined $args{targ} && ($hit->targ // '') ne $args{targ};
+            return $self->make_unique($op_name, %args);
+        }
 
         # On miss: re-create with content hash as id
         my $node = $class->new( id => $hash, %args );
