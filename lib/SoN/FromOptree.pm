@@ -15613,7 +15613,9 @@ class SoN::FromOptree 0.01 {
     # merge, the outer guard was dropped and the return ran off the sub's
     # Start. A return directly in the arm (`return X if C` itself, or
     # `if (C) { ...; return X }`) has its own path and is not counted.
-    sub _arm_has_return ($start, $stop, $join = undef) {
+    # $names widens the search to other ops that leave -- a `last` or `next`
+    # under a further guard leaves the arm the same way.
+    sub _arm_has_return ($start, $stop, $join = undef, $names = { return => 1 }) {
         ($stop, $join) = (_op_addr($stop), _op_addr($join));
         my %seen;
         for (my $op = $start;
@@ -15622,7 +15624,7 @@ class SoN::FromOptree 0.01 {
              $op = $op->next) {
             next unless $op->name =~ /\A(?:and|or|dor|cond_expr)\z/;
             return 1 if _arm_has_die_from($op->other, $stop, $join, {},
-                                          { return => 1 });
+                                          $names);
         }
         return 0;
     }
@@ -17897,7 +17899,13 @@ class SoN::FromOptree 0.01 {
                     # values, the body's own If hung off this arm's control
                     # with C dropped, and that control had 2 successors.
                     || ( $exits
-                         && _arm_has_return($op->other, $op->next, $mod_stop) );
+                         && _arm_has_return($op->other, $op->next, $mod_stop) )
+                    # SO DOES A BREAK UNDER A FURTHER GUARD (`if (C) { last
+                    # unless D }`): its If hung off this arm's control with C
+                    # dropped, and the loop left whenever D was false.
+                    || ( $in_loop
+                         && _arm_has_return($op->other, $op->next, $mod_stop,
+                                            { last => 1, next => 1 }) );
                 my $guard   = $sim->pop_node;
                 my $mod_sim = $sim->snapshot;
                 my $if_node;

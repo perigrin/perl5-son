@@ -4984,7 +4984,14 @@ class SoN::Deparse 0.01 {
 
     method _join_region ($true_proj, $false_proj, $next_of) {
         my %from_true = map { $_ => 1 } $self->_control_reachable($true_proj->{id}, $next_of);
+        # A LOOP'S EXIT IS NOT AN ARM JOIN. An arm whose nested guard breaks
+        # (`if (C) { last unless D; ... }`) reaches the exit before the join,
+        # and the other arm reaches it too, through the rest of the body --
+        # taken for the join, the exit's Phis were read as the If's.
+        my %exit = map { $_ => 1 } grep { defined }
+                   $loop_exit_region, map { $_->{exit} } @loop_frames;
         for my $id ($self->_control_reachable($false_proj->{id}, $next_of)) {
+            next if $exit{$id};
             my $n = $nodes->{$id} or next;
             next unless $n->{op} eq 'Region';
             my @ins = ($n->{inputs} // [])->@*;
