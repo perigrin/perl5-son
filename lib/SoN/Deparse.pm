@@ -3328,6 +3328,16 @@ class SoN::Deparse 0.01 {
         # Effects pinned on the loop that are not the test: they run once per
         # iteration, before it.
         my @pre_cond;
+        # A BRANCH IN THE TEST is pinned on the Loop too: `while ($n &&
+        # $n->op eq "C" && $h++ < 8)` calls on the right of `&&`, so the call
+        # gets an If of its own, and the test reads that diamond's join Phis.
+        # It is control, not a value -- no Phi consumes it -- so it is not a
+        # candidate for the test, and it is emitted, like an effect, at the
+        # top of each pass.
+        my @pre_ctl = grep { ($_->{op} // '') eq 'If' } @cond;
+        @cond = grep { ($_->{op} // '') ne 'If' } @cond;
+        die "GAP: a Loop whose only pinned node is a branch is not yet"
+          . " rendered\n" unless @cond;
 
         # MORE THAN ONE PINNED NODE IS AN EFFECT PLUS A TEST, not two tests.
         # Measured on `while (my $line = <R>) { ... }`:
@@ -3581,6 +3591,12 @@ class SoN::Deparse 0.01 {
             latch  => \%latch,
         };
         push @loop_frames, $frame;
+        # Before the body: the body and the step read the diamond's Phis.
+        my $pre_ctl = '';
+        for my $if (@pre_ctl) {
+            my ($t) = $self->_emit_if($if, $next_of);
+            $pre_ctl .= $t;
+        }
         my $body = $self->_emit_from($arm{0}{id}, $next_of, undef);
         pop @loop_frames;
         $loop_exit_region = $save_exit;
@@ -3603,8 +3619,8 @@ class SoN::Deparse 0.01 {
         # sit in a `while (COND)` header -- and a bottom-tested loop would run
         # the body once before testing, a different program.
         my $text;
-        if (@pre_cond) {
-            my $pre = '';
+        if (@pre_cond || @pre_ctl) {
+            my $pre = $pre_ctl;
             for my $e (@pre_cond) {
                 my $var = $bound{ $e->{id} };
                 $pre .= defined $var

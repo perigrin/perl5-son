@@ -2023,6 +2023,8 @@ class SoN::FromOptree 0.01 {
                 # does minus the value.
                 $sim->merge($rhs_sim, $factory, $if_node)
                     if $effect_value_branch && $if_node;
+                _merge_rhs_rebinds($factory, $sim, $rhs_sim, $lhs, $name)
+                    unless $effect_value_branch && $if_node;
 
                 my $node_op = $name eq 'and' ? 'And' : 'Or';
                 my $node = $factory->make($node_op, inputs => [$lhs, $rhs]);
@@ -12194,6 +12196,11 @@ class SoN::FromOptree 0.01 {
                 && $probe->name ne 'and' && $probe->name ne 'or';
         return [] unless $$probe
             && ($probe->name eq 'and' || $probe->name eq 'or');
+        # A COMPOUND CONDITION CLOSES AT ITS OUTERMOST and/or. The first one
+        # in exec order is the left operand's -- `while ($n > 3 && $h++ < 8)`
+        # stopped the scout at `$n > 3`, so the increment on the right was
+        # not a condition write and the loop exited with the value before it.
+        $probe = _loop_closing_logop($cond_start) // $probe;
 
         die "GAP: side-effecting loop condition with a memory store not yet lowered\n"
             if _cond_stores_memory($cond_start);
@@ -12214,6 +12221,21 @@ class SoN::FromOptree 0.01 {
         return [ sort _scope_key_order
             grep { defined $after->{$_} && $after->{$_} != $placeholder{$_} }
             keys %placeholder ];
+    }
+
+    # The and/or that closes a loop's condition: the outermost one between the
+    # condition's first op and its leaveloop, found by climbing parents. undef
+    # when the condition does not sit under a leaveloop.
+    sub _loop_closing_logop ($op) {
+        my ($last, %seen);
+        while ($$op && !$seen{$$op}++) {
+            my $p = eval { $op->parent } or return undef;
+            return undef unless $$p;
+            return $last if $p->name eq 'leaveloop';
+            $last = $p if $p->name eq 'and' || $p->name eq 'or';
+            $op = $p;
+        }
+        return undef;
     }
 
     # Does a loop CONDITION store to memory (an lvalue element `$a[$i]++` /
@@ -14256,6 +14278,7 @@ class SoN::FromOptree 0.01 {
                 # IT YIELDS ONE OF ITS OPERANDS, so its stamp is their join --
                 # a loop that carries it needs one ("unstamped back-edge").
                 my $rhs = $rhs_sim->pop_node;
+                _merge_rhs_rebinds($factory, $sim, $rhs_sim, $lhs, $name);
                 my ($ls, $rs) = map { $_->can('stamp') ? $_->stamp : undef } $lhs, $rhs;
                 $sim->push_node($factory->make(
                     { and => 'And', or => 'Or', dor => 'DefinedOr' }->{$name},
@@ -15707,6 +15730,30 @@ class SoN::FromOptree 0.01 {
         $node->set_control_in($sim->control);
         $sim->set_control($node);
         return $node;
+    }
+
+    # A VALUE-CONTEXT SHORT-CIRCUIT'S RIGHT SIDE RUNS ONLY SOMETIMES, and a
+    # variable it writes keeps the write only then: `($n > 3 && $h++ < 8)`
+    # leaves $h alone when $n is small. The right side is walked on a
+    # snapshot, so its rebinds were simply dropped -- $h never moved, on
+    # either path. Each slot the right side rebound, that was bound before
+    # it, is merged here as a select on whether the right side ran.
+    sub _merge_rhs_rebinds ($factory, $sim, $rhs_sim, $lhs, $name) {
+        my $base_scope = $sim->scope_bindings;
+        my $arm_scope  = $rhs_sim->scope_bindings;
+        my $ran;   # the select's condition: true when the right side ran
+        for my $targ (sort _scope_key_order keys %$arm_scope) {
+            my $base = $base_scope->{$targ};
+            my $armv = $arm_scope->{$targ};
+            next unless defined $base && defined $armv && $base != $armv;
+            $ran //= $name eq 'dor'
+                ? $factory->make('Defined', inputs => [$lhs],
+                      stamp => SoN::IR::Stamp->new(type => 'Boolean'))
+                : $lhs;
+            my @arms = $name eq 'and' ? ($armv, $base) : ($base, $armv);
+            $sim->define($targ, _make_ternary($factory, $ran, @arms));
+        }
+        return;
     }
 
     sub _make_ternary ($factory, $cond, $true_val, $false_val) {
@@ -17618,6 +17665,7 @@ class SoN::FromOptree 0.01 {
                   . " an if/else arm not yet lowered\n"
                     unless $rhs_sim->stack_depth == $base + 1;
                 my $rhs = $rhs_sim->pop_node;
+                _merge_rhs_rebinds($factory, $sim, $rhs_sim, $lhs, $name);
                 $sim->push_node($factory->make(
                     { and => 'And', or => 'Or', dor => 'DefinedOr' }->{$name},
                     inputs => [$lhs, $rhs]));
