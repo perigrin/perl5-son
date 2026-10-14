@@ -2300,6 +2300,16 @@ class SoN::FromOptree 0.01 {
                     _subst_runtime_pattern($op, $sim, $factory);
                 my $pattern = $rt_pat // ($op->precomp // '');
 
+                # A /ge BODY IS EXTRACTED BEFORE THE TARGET IS RESOLVED: a lone
+                # variable replacement is stacked on top of the subject, and the
+                # body re-reads it, so it is not an operand here.
+                my ($repl_body, $stacked) = ( $op->pmflags & PMf_EVAL )
+                    && ( $op->pmflags & B::PMf_GLOBAL() )
+                    ? _subst_ge_body($cv, $op, $pattern,
+                        _pmflags_to_str($op->pmflags))
+                    : ();
+                $sim->pop_node if $stacked && $sim->stack_depth;
+
                 # RESOLVED HERE because the /e path needs it: the match half is
                 # built before the replacement is walked, and takes the target
                 # as its operand. Idempotent -- returns the existing binding.
@@ -2332,12 +2342,9 @@ class SoN::FromOptree 0.01 {
                 #
                 # SO /ge IS A BODY THE SUBSTITUTION CALLS, its own graph like a
                 # sort comparator block, and the RegexSubst names it.
-                my ($code_repl, $repl_body);
+                my $code_repl;
                 if ($op->pmflags & PMf_EVAL) {
-                    if ($op->pmflags & B::PMf_GLOBAL()) {
-                        $repl_body = _subst_ge_body($cv, $op, $pattern, $flags);
-                        goto NO_CODE_REPL;
-                    }
+                    goto NO_CODE_REPL if defined $repl_body;
 
                     # A CONSTANT-FOLDED /e REPLACEMENT HAS NO SUBTREE, and
                     # that is not a refusal: perl folds `s/a/ "X" . "Y" /e` at
@@ -13330,6 +13337,16 @@ class SoN::FromOptree 0.01 {
                     _subst_runtime_pattern($op, $sim, $factory);
                 my $pattern = $rt_pat // ($op->precomp // '');
 
+                # A /ge BODY IS EXTRACTED BEFORE THE TARGET IS RESOLVED: a lone
+                # variable replacement is stacked on top of the subject, and the
+                # body re-reads it, so it is not an operand here.
+                my ($repl_body, $stacked) = ( $op->pmflags & PMf_EVAL )
+                    && ( $op->pmflags & B::PMf_GLOBAL() )
+                    ? _subst_ge_body($cv, $op, $pattern,
+                        _pmflags_to_str($op->pmflags))
+                    : ();
+                $sim->pop_node if $stacked && $sim->stack_depth;
+
                 # THE TARGET IS RESOLVED, NOT POPPED, and resolved BEFORE the
                 # replacement walk because the walk builds the match half that
                 # the replacement's captures read -- and that match takes the
@@ -13347,11 +13364,6 @@ class SoN::FromOptree 0.01 {
                 # updating every caller is how `$1` kept refusing inside a loop
                 # while it lowered at the top level.
                 # /ge IS A BODY THE SUBSTITUTION CALLS, as in the main walker.
-                my $repl_body = ( $op->pmflags & PMf_EVAL )
-                    && ( $op->pmflags & B::PMf_GLOBAL() )
-                    ? _subst_ge_body($cv, $op, $pattern,
-                        _pmflags_to_str($op->pmflags))
-                    : undef;
                 my $repl = defined $repl_body ? undef : _walk_subst_replacement(
                     $cv, $op, $sim, $factory, $opmap, $loop_visited,
                     $target, $pattern, _pmflags_to_str($op->pmflags));
@@ -16941,7 +16953,29 @@ class SoN::FromOptree 0.01 {
           . " to \$_\n"
             unless _subst_subject_is_plain($cv, $op);
         my $root = $op->pmreplroot;
-        return undef unless ref($root) && $$root;
+        unless (ref($root) && $$root) {
+            # A LONE VARIABLE REPLACEMENT HAS NO SUBSTCONT: perl stacks it on
+            # the subst (PMf_CONST), its last kid, run once before the match.
+            # It is still read per match -- measured, `s/(\d)/$&/ge` on "a1b2"
+            # is a1b2 -- so it is a body of one op, ending at the subst.
+            return undef unless $op->pmflags & B::PMf_CONST();
+            my $kid = $op->first;
+            $kid = $kid->sibling while ${ $kid->sibling };
+            # perl takes this path for a const, or a variable: rv2Xv over a
+            # gv (gvsv once peeped) or a padXv.
+            my @ops = grep { $_->name !~ /\A(?:null|scope|lineseq)\z/ }
+                _subtree_ops($kid);
+            return undef if @ops == 1 && $ops[0]->name eq 'const';
+            die "GAP: s///ge whose replacement is a lone array or hash is not"
+              . " yet lowered -- only a scalar variable is read as a body\n"
+                if !@ops || grep { $_->name !~ /\A(?:gvsv|padsv|rv2sv|gv)\z/ } @ops;
+            # The body starts at the op no other in it runs into.
+            my %runs_into = map { ${ $_->next } => 1 } @ops;
+            my ($start) = grep { !$runs_into{$$_} } @ops;
+            my $name = _sort_body_name($cv, $op, '__SUBSTREPL__');
+            $SUBST_BODIES{$name} //= [ $cv, $start, $$op, $pattern, $flags ];
+            return wantarray ? ($name, 1) : $name;
+        }
         die "GAP: s///ge whose replacement has an effect is not yet lowered --"
           . " it runs once per match, and each run's effect would need its own"
           . " ordering against the caller\n"
@@ -16951,6 +16985,16 @@ class SoN::FromOptree 0.01 {
         my $name = _sort_body_name($cv, $op, '__SUBSTREPL__');
         $SUBST_BODIES{$name} //= [ $cv, $start, $$root, $pattern, $flags ];
         return $name;
+    }
+
+    # _subtree_ops($op) -> $op and every op under it, in tree order.
+    sub _subtree_ops ($op) {
+        my @ops = ($op);
+        return @ops unless $op->flags & B::OPf_KIDS();
+        for (my $k = $op->first; ref($k) && $$k; $k = $k->sibling) {
+            push @ops, _subtree_ops($k);
+        }
+        return @ops;
     }
 
     # _subst_subject_is_plain($cv, $op) -- true when a subst's subject is $_
@@ -17590,8 +17634,13 @@ class SoN::FromOptree 0.01 {
         # package scalars had no store to rebind through -- EntryWrite supplies
         # that now, so the destructive rebind at the call site lands on the real
         # variable instead of on $_.
+        #
+        # THE GV IS THE STACKED SUBJECT'S, the first kid. A lone package
+        # scalar REPLACEMENT is a kid too (`s/(\d)/$x/` stacks rv2sv over a
+        # gv), and searching every kid substituted into $x instead of $_.
         if (!$targ) {
-            if (my $gv_op = _find_gv_op($op)) {
+            if (my $gv_op = ( $op->flags & B::OPf_STACKED() )
+                    ? _find_gv_op($op->first) : undef) {
                 if (my $gv = _op_gv($cv, $gv_op)) {
                     my $stash = eval { $gv->STASH->NAME } // 'main';
                     my $key   = _stash_name_key('$', $stash, $gv->NAME);

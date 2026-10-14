@@ -81,6 +81,36 @@ round_trips(q{my $f = sub { my $s = shift; $s =~ s/(\d)/$1*10/ge; $s }; print $f
 round_trips(q{my $f = sub { join ",", sort { my $x = $a; $x <=> $b } @_ }; print $f->(3,1,2), "\n";},
     'a comparator block inside an anon sub');
 
+# A LONE VARIABLE REPLACEMENT has no substcont: perl stacks it on the subst
+# (PMf_CONST), and it was dropped -- ab for perl's aQbQ. It is still read once
+# per match: a match variable gives that match's value.
+round_trips(q{our $x = "Q"; my $s = "a1b2"; $s =~ s/(\d)/$x/ge; print "$s\n";},
+    'a lone package scalar replacement');
+round_trips(q{our $x = "Q"; my $s = "a1b2"; my $t = $s =~ s/(\d)/$x/ger; print "$t $s\n";},
+    'a lone package scalar replacement under /r');
+round_trips(q{our $x = "Q"; sub f { my $s = shift; $s =~ s/(\d)/$x/ge; $s } print f("a1b2"), "\n";},
+    'a lone package scalar replacement in a sub');
+round_trips(q{our $x = "Q"; our $s = "a1b2"; $s =~ s/(\d)/$x/ge; print "$s\n";},
+    'a lone package scalar replacement on a package subject');
+round_trips(q{our $s = "a1b2"; $s =~ s/(\d)/$s/ge; print "$s\n";},
+    'the subject as its own replacement');
+round_trips(q{my $s = "a1b2"; $s =~ s/(\d)/$&/ge; print "$s\n";},
+    'a lone $& replacement');
+round_trips(q{my $s = "a1b2"; $s =~ s/(\d)/$`/ge; print "$s\n";},
+    'a lone prematch replacement');
+refuses(q{my $s = "a1b2"; $s =~ s/(\d)/$1/ge; print "$s\n";},
+    qr/GAP: capture \$1 inside a s\/\/\/e replacement reads the substitution's OWN match/,
+    'a lone capture replacement, read by the main chain before the subst');
+round_trips(q{our $x = "Q"; my @l = ("a1", "b2"); for (@l) { s/(\d)/$x/ge } print "@l\n";},
+    'a lone package scalar replacement in a loop');
+round_trips(q{our $x = "Q"; $_ = "a1b2"; s/(\d)/$x/ge; print "$_\n";},
+    'a lone package scalar replacement on $_, which is not the subject');
+refuses(q{my $y = "Q"; my $s = "a1b2"; $s =~ s/(\d)/$y/ge; print "$s\n";},
+    qr/GAP: a s\/\/\/ge replacement that reads a lexical of its enclosing scope \(\$y\)/,
+    'a lone enclosing lexical replacement');
+refuses(q{our @a = (1, 2); my $s = "a1b2"; $s =~ s/(\d)/@a/ge; print "$s\n";},
+    qr/GAP: s\/\/\/ge whose replacement is a lone array or hash/, 'a lone array replacement');
+
 # What the body cannot reach yet refuses rather than reading the wrong thing.
 refuses(q{my $s = "aaa"; my $n = 0; $s =~ s/a/ $n++ /ge; print "$s $n\n";},
     qr/GAP: s\/\/\/ge whose replacement has an effect/,
