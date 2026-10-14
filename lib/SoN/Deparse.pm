@@ -1961,11 +1961,16 @@ class SoN::Deparse 0.01 {
             # A LOCATION ONLY IS NOT A READ: a PadAccess whose every use is a
             # store target or a referent needs no stale temporary -- binding it
             # emitted `$stale6 = $k;` ahead of the `my $k` it named.
+            # EVERY TARGET OF A LIST ASSIGN IS A LOCATION, not only the first:
+            # `my ($c, $i) = @{g()}` bound `$i` and read it above its `my`.
             next unless grep {
                 my $c = $_;
                 my @ci = ( $c->{inputs} // [] )->@*;
+                my $targets = ( $c->{fields} // {} )->{targets} // 1;
                 !( ( $c->{op} // '' ) eq 'Ref'
-                   || ( ( $c->{op} // '' ) eq 'Assign' && @ci && $ci[0] == $n->{id} ) )
+                   || ( ( $c->{op} // '' ) eq 'Assign'
+                        && grep { ( $ci[$_] // -1 ) == $n->{id} }
+                               0 .. ( $targets < @ci ? $targets : @ci ) - 1 ) )
             } ( $consumers{ $n->{id} } // [] )->@*;
             next if $under_loop{ $n->{id} } && !$read_before_loop{ $n->{id} };
             my @in = ( $n->{inputs} // [] )->@*;
