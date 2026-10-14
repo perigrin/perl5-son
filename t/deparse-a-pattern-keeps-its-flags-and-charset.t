@@ -55,4 +55,19 @@ my $m = "\x{663}" =~ $r ? "y" : "n";
 print "$r $m\n";
 SRC
 
+# /n MAKES EVERY GROUP NON-CAPTURING, so $1 reads nothing. The flag string
+# had no `n`: `s/(\d)/<$1>/gn` on "a1b2" gave a<1>b<1> for perl's a<>b<>.
+round_trips(q{my $s = "a1"; $s =~ /(\d)/n; print defined $1 ? "d\n" : "u\n";},
+    'a match under /n captures nothing');
+round_trips(q{my $s = "a1b2"; $s =~ s/(\d)/<$1>/gn; print "[$s]\n";},
+    'a substitution under /n captures nothing');
+round_trips(q{my $s = "a1b2"; $s =~ s/(\d)/$1*2/gen; print "[$s]\n";},
+    'a /ge body under /n reads no capture');
+round_trips(q{my $s = "a1b2"; $s =~ s/(\d)/"<$1>"/gen; print "[$s]\n";},
+    'an interpolating /ge body under /n');
+round_trips(q{my $s = "a1b2"; my $t = $s =~ s/(\d)/$1*2/genr; print "[$t][$s]\n";},
+    'a /ger body under /n');
+round_trips(q{my $s = "a1b2"; $s =~ s/(?:(\d))/<$1>/gn; print "[$s]\n";},
+    '/n leaves an explicit non-capturing group alone');
+
 done_testing;

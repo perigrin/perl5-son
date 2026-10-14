@@ -6572,6 +6572,15 @@ class SoN::FromOptree 0.01 {
             # whatever an earlier match left.
             my $void_capture = ($op->flags & 3) == 1       # OPf_WANT_VOID
                 && ( $op->precomp // '' ) =~ /\((?!\?)/;
+            # A /g MATCH IN LIST CONTEXT YIELDS EVERY MATCH, so it is a List,
+            # not the Boolean a scalar /g match is -- bound as a scalar,
+            # `my @m = $s =~ /\d/g` on "a1b2" kept 1 of perl's (1, 2). One whose
+            # context is the CALLER'S (`return $s =~ /\d/g`) is either, and the
+            # graph cannot say which.
+            die "GAP: a /g match in the caller's context is not yet lowered --"
+              . " it is a list or a Boolean depending on the call\n"
+                if $flags =~ /g/ && ($op->flags & 3) == 0;
+            my $list_g = $flags =~ /g/ && ($op->flags & 3) == 3;
             my $pin = ( $ctx->{mode} // '' ) eq 'main'
                 && ( $demoted_subject || $flags =~ /g/ || $has_code
                      || $void_capture );
@@ -6581,7 +6590,8 @@ class SoN::FromOptree 0.01 {
                     inputs  => [$target],
                     pattern => $pattern,
                     flags   => $flags,
-                    ($pin ? (stamp => SoN::IR::Stamp->new(type => 'Boolean')) : ()),
+                    ($pin ? (stamp => SoN::IR::Stamp->new(type =>
+                        $list_g ? 'List' : 'Boolean')) : ()),
                 );
                 if ($pin) {
                     $node->set_control_in($sim->control);
@@ -6597,7 +6607,7 @@ class SoN::FromOptree 0.01 {
                 my $make = $pin ? 'make_unique' : 'make';
                 $node = $factory->$make('Match',
                     inputs => [$target, $matcher],
-                    stamp  => SoN::IR::Stamp->new(type => 'Boolean'),
+                    stamp  => SoN::IR::Stamp->new(type => $list_g ? 'List' : 'Boolean'),
                 );
                 if ($pin) {
                     $node->set_control_in($sim->control);
@@ -9165,9 +9175,12 @@ class SoN::FromOptree 0.01 {
                         # constant 1 does not say: `() = g()` counted 1 for a
                         # g returning three or none. Its stamp is not settled
                         # yet, so it is counted as the list it is.
-                        $v = $factory->make('ArrayLiteral', inputs => [$v],
+                        # A LIST-CONTEXT MATCH TOO: `() = $s =~ /\d/g` counted 1
+                        # for perl's 2.
+                        $v =$factory->make('ArrayLiteral', inputs => [$v],
                             stamp => SoN::IR::Stamp->new(type => 'Array'))
-                            if $v->operation eq 'Call' && !_is_aggregate_node($v);
+                            if ($v->operation eq 'Call' || $v->operation eq 'RegexMatch')
+                                && !_is_aggregate_node($v);
                         my $n = _is_aggregate_node($v)
                             ? _make_count($factory, $v, $sim,
                                 stamp => SoN::IR::Stamp->new(type => 'Int'))
@@ -18141,6 +18154,7 @@ class SoN::FromOptree 0.01 {
         $str .= 's' if $flags & 2;        # PMf_SINGLELINE
         $str .= 'i' if $flags & 4;        # PMf_FOLD (case-insensitive)
         $str .= 'x' if $flags & 8;        # PMf_EXTENDED
+        $str .= 'n' if $flags & 0x20;     # PMf_NOCAPTURE: $1 reads nothing
         $str .= 'g' if $flags & 8388608;  # PMf_GLOBAL
         $str .= 'r' if $flags & PMf_NONDESTRUCT; # s///r
         # THE CHARSET, when it is not perl's default /d -- (pmflags & 896) >> 7

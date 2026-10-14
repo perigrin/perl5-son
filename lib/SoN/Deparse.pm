@@ -5568,7 +5568,14 @@ class SoN::Deparse 0.01 {
         # can sit in a short-circuit arm while the count is read outside it:
         # `my $n = $k && ($x =~ tr/a/b/)` declared `my $substN` inside the
         # arm, and the `&&` after it named an undeclared variable.
-        if ( $counted && $op eq 'Transliterate' && $subj
+        #
+        # A COUNTED s/// OVER AN ELEMENT is the same shape: a map's topic
+        # aliases the element, the substitution stores back into it, and the
+        # map collects the count. Rendered apart, the count re-ran the s/// on
+        # the stored string -- `map { s/\d/X/g } @a` collected "" for perl's 1.
+        if ( $counted && $subj
+            && ( $op eq 'Transliterate'
+                 || ( $op eq 'RegexSubst' && ( $subj->{op} // '' ) eq 'Subscript' ) )
             && ( $subj->{op} // '' ) ne 'PadAccess' ) {
             my $f = $n->{fields} // {};
             ( my $flags = $f->{flags} // '' ) =~ s/r//g;
@@ -5577,6 +5584,12 @@ class SoN::Deparse 0.01 {
             $bound{ $n->{id} }           = $tmp;
             $subst_count_var{ $n->{id} } = $var;
             $hoisted{$_} //= $_ for $var, $tmp;
+            if ( $op eq 'RegexSubst' ) {
+                my ( $pat, $rep ) = $self->_subst_operands($n);
+                return sprintf( "%s = ((%s = %s) =~ s{%s}{%s}%s);\n",
+                    $var, $tmp, $self->_expr( $n->{inputs}[0] ),
+                    $pat, $rep, _with_charset($flags) );
+            }
             return sprintf( "%s = ((%s = %s) =~ tr[%s][%s]%s);\n",
                 $var, $tmp, $self->_expr( $n->{inputs}[0] ),
                 $f->{from} // '', $f->{to} // '', $flags );

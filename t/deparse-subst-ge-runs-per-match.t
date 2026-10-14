@@ -174,4 +174,22 @@ refuses(q{my $d = '\d'; my $s = "a1b2"; $s =~ s/($d)/$1*2/ge; print "$s\n";},
 refuses(q{our $d = '\d'; my $s = "a1b2"; $s =~ s/x|($d)/$1*2/ge; print "$s\n";},
     $pat, 'a pattern interpolating a package scalar');
 
+# A /ge BODY UNDER /n: the flag reaches the substitution, so the body's $1
+# reads nothing (a2b4 for perl's a0b0). More /n cases sit with the other
+# pattern flags.
+round_trips(q{my $s = "a1b2"; $s =~ s/(\d)/$1*2/gen; print "[$s]\n";},
+    'a body under /n');
+
+# A PRECEDING MATCH leaves pos and captures that the /ge does not read.
+round_trips(q{my $s = "a1b2"; $s =~ /(\d)/; $s =~ s/(\d)/$1*2/ge; print "$1 $s\n";},
+    'after a match that set $1');
+round_trips(q{my $s = "a1b2"; $s =~ /\d/g; $s =~ s/(\d)/$1*2/ge; print pos($s) // "u", " $s\n";},
+    'after a /g match that set pos');
+round_trips(q{my $s = "a1b2"; my @r = ($s =~ s/(\d)/$1*2/ge); print "@r $s\n";},
+    'in list context');
+round_trips(q{my $s = "a1b2"; my $t = $s =~ s/(\d)/$1*2/ger; print "$t $s\n";},
+    'under /r');
+round_trips(q{my @a = ("a1", "b2"); s/(\d)/$1*2/ge for @a; print "@a\n";},
+    'aliasing the topic in a postfix for');
+
 done_testing;

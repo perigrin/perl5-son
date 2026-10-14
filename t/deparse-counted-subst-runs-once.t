@@ -72,4 +72,33 @@ subtest 'the /r form does not mutate its subject' => sub {
     is run_perl($emitted), run_perl($src), 'it agrees with perl';
 };
 
+
+# AN ELEMENT SUBJECT HAS NO NAME TO BIND THE COUNT THROUGH. In a map the topic
+# aliases an element, so the substitution stores back into it and the map
+# collects the count -- and the count re-ran the s/// on the stored string:
+# `map { s/\d/X/g } @a` collected "" where perl collects 1, and a /ge body
+# doubled twice (a4 for perl's a2).
+for my $case (
+    [ q{my @a = ("a1", "b2"); my @r = map { s/\d/X/g } @a; print "@r|@a\n";},
+      'a counted s/// over a map element' ],
+    [ q{my @a = ("a1", "b2"); map { s/(\d)/<$1>/g } @a; print "@a\n";},
+      'a void-map s/// over an element' ],
+    [ q{my @a = ("a1"); map { s/(\d)/$1*2/ge } @a; print "@a\n";},
+      'a void-map s///ge over an element' ],
+    [ q{my @a = ("a1", "b2"); my @r = map { s/(\d)/$1*2/ge } @a; print "@r|@a\n";},
+      'a counted s///ge over a map element' ],
+    [ q{my @a = ("a1b2"); my @r = map { scalar s/(\d)/$1*2/ge } @a; print "@r|@a\n";},
+      'a scalar s///ge over a map element with two matches' ],
+    [ q{my @a = ("a1", "b2"); my @r = map { s/(\d)/$1 x 0/e } @a; print "@r|@a\n";},
+      'a counted s///e that removes what it matched' ],
+) {
+    my ($src, $name) = @$case;
+    subtest $name => sub {
+        my $emitted = emit($src);
+        ok defined $emitted, 'it renders' or return;
+        is run_perl($emitted), run_perl($src), 'it agrees with perl'
+            or diag $emitted;
+    };
+}
+
 done_testing;
