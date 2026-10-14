@@ -245,9 +245,10 @@ class SoN::FromOptree::StackSim 0.01 {
             ? ($mine_proj, $theirs_proj)
             : ();
 
-        # Create Phi nodes for scope variables that differ
+        # Create Phi nodes for scope variables that differ, in a fixed order:
+        # hash order made the node ids, and so the IR, differ between runs.
         my $other_scope = $other->scope_bindings;
-        for my $targ (keys %scope) {
+        for my $targ (sort keys %scope) {
             if (exists $other_scope->{$targ}
                 && $scope{$targ} != $other_scope->{$targ}) {
                 my $phi = $factory->make('Phi',
