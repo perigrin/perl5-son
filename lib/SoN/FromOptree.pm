@@ -689,7 +689,9 @@ class SoN::FromOptree 0.01 {
     # the pushmark of `my ($a, $b)`; a `local (...)` list marks each element.
     # And a call passed as an argument to another carries it with no `local`
     # in sight -- measured, `f(\%h, $s->v())` compiles the method call as
-    # `entersub lKRMS/LVINTRO,TARG,INARGS`.
+    # `entersub lKRMS/LVINTRO,TARG,INARGS`. An op that stores straight into
+    # a `my` (OPpTARGET_MY) carries it for that `my`: `my $s = "a$b"` is
+    # `multiconcat[$s] vK/LVINTRO,TARGMY`.
     sub _subtree_localises ($op) {
         require B::Op_private;
         my @todo = ($op);
@@ -698,6 +700,8 @@ class SoN::FromOptree 0.01 {
             my $name = $o->name;
             return 1 if !_declares_lexical($o)
                 && $name ne 'pushmark' && $name ne 'entersub'
+                && !(( $B::Op_private::bits{$name}{4} // '' ) eq 'OPpTARGET_MY'
+                     && ( $o->private & B::OPpTARGET_MY ))
                 && ( $B::Op_private::bits{$name}{7} // '' ) eq 'OPpLVAL_INTRO'
                 && ( $o->private & B::OPpLVAL_INTRO );
             next unless $o->flags & 4;   # OPf_KIDS
