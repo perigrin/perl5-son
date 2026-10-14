@@ -15714,17 +15714,20 @@ class SoN::FromOptree 0.01 {
     # a loop, an allocation -- runs that side only on one arm, so it is a
     # branch: an If on the left operand (Defined for `//`), the right side
     # walked on its Proj, and the two values merged in a stack Phi stamped from
-    # its arms. Returns the op the right side converged on. A die or an
-    # element store in the arm is not this shape; the caller checks
+    # its arms. Returns the op the right side converged on. The caller checks
     # _short_circuit_runs_effects first.
+    #
+    # A RIGHT SIDE THAT DIES -- `E // die`, `E || die` -- is the same branch:
+    # the die ends its Proj in an Unwind and never yields, so the value that
+    # reaches the merge is E.
     sub _short_circuit_runs_effects ($op) {
         return 0 unless $op->can('other') && ${$op->other};
         my $stop = ${ $op->next };
         # An element store is an effect: it runs only when the guard lets it.
-        return !_arm_has_die($op->other, $stop)
-            && (_arm_has_element_store($op->other, $stop)
-                || _arm_advances_control($op->other, $stop)
-                || _arm_has_void_call($op->other, $stop));
+        return _arm_has_die($op->other, $stop)
+            || _arm_has_element_store($op->other, $stop)
+            || _arm_advances_control($op->other, $stop)
+            || _arm_has_void_call($op->other, $stop);
     }
 
     # _signature_default_is_branch($cv, $argdefelem) -- true for a default
@@ -15901,6 +15904,12 @@ class SoN::FromOptree 0.01 {
             _walk_branch($cv, $op->other, $run_sim, $factory, $opmap,
                 $visited, \@rhs_exits, 1, $stop,
                 $loop_node, $break_projs, $in_loop);
+        # The dead arm's value: nothing reads it, since the Unwind never
+        # reaches the merge. E itself, so the merged value is E with E's
+        # stamp -- a loop carrying it needs one.
+        $run_sim->push_node($lhs)
+            if $run_sim->control->operation eq 'Unwind'
+            && $run_sim->stack_depth == $base;
         die "GAP: a short-circuit whose arm is not a single value is not yet"
           . " lowered\n"
             if ($rhs_sig // '') ne ''

@@ -141,10 +141,13 @@ refuses('sub f { my ($p, $x) = @_; if ($p) { return 1 if $x } else { 2 } } print
     qr/GAP: short-circuit with a non-value arm inside an if\/else arm not yet lowered/,
     'a want-0 return-if ending an arm refuses');
 
-# A die arm is not an exit record; it keeps its own refusal.
-refuses('sub f { my ($h, $p) = @_; if ($p) { my $a = $h->{a} // die "none\n"; return $a } return 0 } print f({a=>2},1), f({},0), "\n";',
-    qr/GAP: void-context 'and' arm did not converge/,
-    'a // die in an if arm refuses');
+# A die arm is not an exit record: it is a branch whose Proj ends in an
+# Unwind, and the value that reaches the merge is the left side.
+round_trips(<<'SRC', 'a // die in an if arm');
+sub f { my ($h, $p) = @_; if ($p) { my $a = $h->{a} // die "none\n"; return $a } return 0 }
+print f({a=>2},1), f({},0), "\n";
+print eval { f({}, 1) } // $@;
+SRC
 
 # An element store in the arm is an effect: it runs only when the guard lets it.
 round_trips(<<'SRC', 'a foreach: a value && whose right side increments an element');
