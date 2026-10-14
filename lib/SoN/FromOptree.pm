@@ -9017,7 +9017,13 @@ class SoN::FromOptree 0.01 {
                 $write->set_control_in($sim->control);
                 $sim->set_control($write);
                 $sim->set_memory($write) if defined $sim->memory;
-                $sim->push_node($acc);
+                # THE RESULT IS THE VARIABLE, read after the store. Pushing
+                # $acc gave the append two consumers, and each spelled it:
+                # `print(($s .= "x"))` appended twice (perl's ax, emitted axx).
+                $sim->push_node($factory->make('CellRead',
+                    inputs => [$param,
+                        (defined $sim->memory ? ($sim->memory) : ())],
+                    stamp  => SoN::IR::Stamp->new(type => 'Unknown')));
                 return ($op->next, 'handled');
             }
             if ($ctx->{addr_taken}{$targ}) {
@@ -9031,7 +9037,13 @@ class SoN::FromOptree 0.01 {
                 $store->set_control_in($sim->control);
                 $sim->set_control($store);
                 $sim->set_memory($store);
-                $sim->push_node($acc);
+                # The result is the variable read after the store, as above.
+                $sim->push_node($factory->make('PadAccess',
+                    targ => $targ,
+                    do { my ($sg, $sy) = _padparts($cv, $targ);
+                         (sigil => $sg, symbol => $sy) },
+                    ($ctx->{shared_lexicals}{$targ} ? (shared => 1) : ()),
+                    inputs => [ $store ]));
                 return ($op->next, 'handled');
             }
             # OPpLVAL_INTRO (0x80): a new lexical (`my $c = qq{...}`). The main

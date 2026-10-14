@@ -1969,9 +1969,13 @@ class SoN::Deparse 0.01 {
         }
 
         for my $n ( sort { $a->{id} <=> $b->{id} } $self->_nodes_in_order ) {
-            next unless ( $n->{op} // '' ) eq 'PadAccess';
+            # A CELL READ IS A SHARED LEXICAL READ BY NAME, and goes stale
+            # the same way: `my $v = $s; $s = "z"; "$v $s"` in a closure
+            # printed `z z` for perl's `a z`. Its cell input is not a version.
+            my $is_cell = ( $n->{op} // '' ) eq 'CellRead';
+            next unless $is_cell || ( $n->{op} // '' ) eq 'PadAccess';
             next if exists $bound{ $n->{id} };
-            next unless $safe_read->( $n->{id} );
+            next unless $is_cell || $safe_read->( $n->{id} );
             # A LOCATION ONLY IS NOT A READ: a PadAccess whose every use is a
             # store target or a referent needs no stale temporary -- binding it
             # emitted `$stale6 = $k;` ahead of the `my $k` it named.
@@ -1983,6 +1987,7 @@ class SoN::Deparse 0.01 {
             } ( $consumers{ $n->{id} } // [] )->@*;
             next if $under_loop{ $n->{id} } && !$read_before_loop{ $n->{id} };
             my @in = ( $n->{inputs} // [] )->@*;
+            shift @in if $is_cell;
             # A READ AFTER A CALL takes the call as its version: the callee may
             # have stored a shared lexical, and a store after the read must not
             # reach it. `g(); my $x = $n; $n = 7; $x` returned 7.
@@ -1999,7 +2004,7 @@ class SoN::Deparse 0.01 {
             # shared lexical: it is declared outside the sub, so its name
             # exists at the prologue; the sub's own lexicals do not yet.
             my $at_entry = ( $version->{op} // '' ) eq 'MemStart';
-            next if $at_entry && !( $n->{fields} // {} )->{shared};
+            next if $at_entry && !$is_cell && !( $n->{fields} // {} )->{shared};
             next unless $at_entry || defined $version->{control_in};
 
             my ( @queue, %seen, $shadowed )
@@ -4924,6 +4929,15 @@ class SoN::Deparse 0.01 {
             return sprintf( "%s%s = %s;\n",
                 ( exists $hoisted{$var} ? '' : 'my ' ),
                 $var, $self->_location( $n->{id} ) );
+        }
+        # A CELL READ the same way, spelled from its cell.
+        if ($op eq 'CellRead') {
+            die "GAP: a CellRead reached as a statement with no binding is"
+              . " not yet rendered\n" unless exists $bound{ $n->{id} };
+            my $var = $bound{ $n->{id} };
+            return sprintf( "%s%s = %s;\n",
+                ( exists $hoisted{$var} ? '' : 'my ' ),
+                $var, $self->_expr( ( $n->{inputs} // [] )->[0] ) );
         }
 
         # AN Unwind IS A `die`. Measured across the three corpus files that

@@ -55,6 +55,30 @@ round_trips($_) for
     'use v5.36; my $s = "a"; my $r = \$s; $s .= "y"; print $$r, "\n";',
     'use v5.36; my $s = ""; my sub f ($k) { $s .= "[$k]" for 1..$k; } f(2); f(1); print "$s\n";';
 
+# THE APPEND'S VALUE IS READ ONCE. The stored value feeds both the store and
+# the expression around it; rendered once per consumer it appended twice:
+# perl's "ax" was emitted as "axx".
+round_trips($_) for
+    'use v5.36; my $s = "a"; my $f = sub { print(($s .= "x"), "\n") }; $f->();',
+    'use v5.36; my $s = "a"; my $f = sub { $s .= "x" }; my $v = $f->(); print "$v $s\n";',
+    'use v5.36; my $s = "a"; my $f = sub { return $s .= "x" }; my $v = $f->(); print "$v $s\n";',
+    'use v5.36; my $s = "a"; my $f = sub { my $v = ($s .= "x"); print "$v $s\n" }; $f->();',
+    'use v5.36; my $s = "a"; my $n = 3; my $f = sub { $s .= "x$n" }; print $f->(), " $s\n";',
+    'use v5.36; my $s = "a"; my $f = sub { $s .= "x"; $s .= "y" }; print $f->(), " $s\n";',
+    'use v5.36; my $s = "a"; my sub f { $s .= "x" } print f(), f(), " $s\n";',
+    'use v5.36; my $s = "a"; sub g { $s .= "x" } my $v = g(); print "$v $s\n";',
+    'use v5.36; my $s = "a"; my $r = \$s; my $v = ($s .= "x"); print "$v $s $$r\n";';
+
+# A CAPTURED LEXICAL READ BEFORE A LATER STORE keeps the value it read: the
+# read is spelled by name, and spelled after the store it read `z` for `a`.
+round_trips($_) for
+    'use v5.36; my $s = "a"; my $f = sub { my $v = $s; $s = "z"; "$v $s" }; print $f->(), "\n";',
+    'use v5.36; my $s = "a"; my $f = sub { $s = "q"; my $v = $s; $s = "z"; "$v $s" }; print $f->(), "\n";',
+    'use v5.36; my $s = "a"; my $f = sub { my $v = ($s .= "x"); $s = "z"; "$v $s" }; print $f->(), "\n";',
+    'use v5.36; my $c = 1; my $f = sub { my $v = ($c = $c + 1); print "$v $c\n" }; $f->();',
+    'use v5.36; my $s = "a"; my $f = sub ($k) { my $v = $s; if ($k) { $s = "z" } "$v $s" }; print $f->(1), $f->(0), "\n";',
+    'use v5.36; my $c = 0; my $f = sub { my @r; for (1..3) { push @r, $c; $c++ } "@r $c" }; print $f->(), "\n";';
+
 # A LIFTED BODY IS DEFINED IN main, and called from under a package.
 round_trips($_) for
     'use v5.36; package P { my $x = 1; my sub f { $x + 1 } print f(), "\n"; }',
