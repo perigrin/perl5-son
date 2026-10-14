@@ -3223,6 +3223,15 @@ class SoN::Deparse 0.01 {
             @pre_cond = grep { $_->{id} != $root[0]{id} } @cond;
             @cond = @root;
         }
+        # A TEST WHOSE VALUE IS ALSO READ ELSEWHERE IS BOUND TO A VARIABLE --
+        # `while ($s =~ /(\w)/g) { push @p, $1 }`, whose capture reads the
+        # match -- and the header rendered that variable without ever
+        # assigning it: `while ($eff15)`, a loop that never ran. It is the
+        # per-iteration effect above with no separate test: assign it at the
+        # top of each pass and test the variable.
+        elsif (defined $bound{ $cond[0]{id} }) {
+            @pre_cond = @cond;
+        }
 
         # A MEMORY PHI CARRIES THE CHAIN, NOT A VALUE. Measured on
         # comp/retainedlines.t, three nested loops each with one:
