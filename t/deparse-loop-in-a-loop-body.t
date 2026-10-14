@@ -164,6 +164,11 @@ SRC
 refuses(<<'SRC', $LOCAL, 'local in a nested foreach');
 our $g=1; for my $i (1..3) { for my $k (1..1) { local $g = 5; } $g += $i } print "$g\n";
 SRC
+# A CALL PASSED TO A CALL is flagged LVINTRO with no `local` anywhere.
+round_trips(<<'SRC', 'a method call as an argument in a nested loop');
+package O { sub new { bless {v=>$_[1]}, $_[0] } sub v { $_[0]{v} } }
+sub f { $_[0]{$_[1]}++ } my %h; for my $r (1..2) { for my $s (O->new(1), O->new(2)) { f(\%h, $s->v()) } } print join(",", map {"$_=$h{$_}"} sort keys %h), "\n";
+SRC
 round_trips(<<'SRC', 'a nested while with no local still lowers');
 our $g=1; for my $i (1..3) { my $j=0; while ($j<1) { $j++ } $g += $i } print "$g\n";
 SRC

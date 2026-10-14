@@ -687,13 +687,17 @@ class SoN::FromOptree 0.01 {
     # OPpLVAL_INTRO on an op that is not a pad op (a pad op's is a `my`). A
     # `for my $x` carries it on its enteriter, and that is a `my` too. So does
     # the pushmark of `my ($a, $b)`; a `local (...)` list marks each element.
+    # And a call passed as an argument to another carries it with no `local`
+    # in sight -- measured, `f(\%h, $s->v())` compiles the method call as
+    # `entersub lKRMS/LVINTRO,TARG,INARGS`.
     sub _subtree_localises ($op) {
         require B::Op_private;
         my @todo = ($op);
         while (my $o = shift @todo) {
             next unless $$o;
             my $name = $o->name;
-            return 1 if !_declares_lexical($o) && $name ne 'pushmark'
+            return 1 if !_declares_lexical($o)
+                && $name ne 'pushmark' && $name ne 'entersub'
                 && ( $B::Op_private::bits{$name}{7} // '' ) eq 'OPpLVAL_INTRO'
                 && ( $o->private & B::OPpLVAL_INTRO );
             next unless $o->flags & 4;   # OPf_KIDS
