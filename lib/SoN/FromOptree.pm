@@ -1140,14 +1140,15 @@ class SoN::FromOptree 0.01 {
         return \%shared;
     }
 
-    # _outer_main_slots($cv) -> { own pad index => main pad index } for a
-    # named sub whose outside is the main CV; empty for anything else.
-    sub _outer_main_slots ($cv) {
+    # _outer_main_slots($cv, $file) -> { own pad index => $file's pad index }
+    # for a named sub whose outside is $file, the main CV unless another is
+    # given; empty for anything else.
+    sub _outer_main_slots ($cv, $file = B::main_cv()) {
         my %slots;
         return \%slots unless ref($cv) && $cv->isa('B::CV')
             && !($cv->CvFLAGS & B::CVf_ANON());
         my $out = eval { $cv->OUTSIDE };
-        return \%slots unless $out && $$out && $$out == ${ B::main_cv() };
+        return \%slots unless $out && $$out && $$out == $$file;
         my $names = eval { $cv->PADLIST->ARRAYelt(0) } or return \%slots;
         for my $i (1 .. $names->MAX) {
             my $pn = $names->ARRAYelt($i);
@@ -1159,6 +1160,17 @@ class SoN::FromOptree 0.01 {
             $slots{$i} = $parent if $parent;
         }
         return \%slots;
+    }
+
+    # _required_file_cv($cv) -> true when $cv is the CV perl compiled a
+    # `require`d, `use`d or `do`ne FILE into: unique, like every eval, but
+    # with nothing outside it -- a string eval's outside is the code that ran
+    # it. Measured: flags 0x400100 (UNIQUE|EVAL_COMPILED) for both, OUTSIDE
+    # null for the file and the main CV for `eval q{...}`.
+    sub _required_file_cv ($cv) {
+        return 0 unless ref($cv) eq 'B::CV' && ($cv->CvFLAGS & B::CVf_UNIQUE());
+        my $out = eval { $cv->OUTSIDE };
+        return !(ref($out) eq 'B::CV' && $$out);
     }
 
     # _lexsub_cloned_once($body) -> true when the program's clonecv for the
@@ -2742,7 +2754,12 @@ class SoN::FromOptree 0.01 {
         my $inner = eval { $cv->PADLIST->ARRAYelt(1)->ARRAYelt($op->targ) };
         # A LEXICAL SUB'S PAD SLOT HOLDS A STUB, with no root; its body is
         # the pad name's PROTOCV, which clonecv copies at run time.
-        if (!(ref($inner) eq 'B::CV' && ref($inner->ROOT) ne 'B::NULL')) {
+        #
+        # OR THAT COPY, once it has run: a method of a module the program
+        # `use`s holds the clone its file made, whose outside is gone. The
+        # body is still the PROTOCV, the one whose outside is the file.
+        if (!(ref($inner) eq 'B::CV' && ref($inner->ROOT) ne 'B::NULL')
+            || ($inner->CvFLAGS & B::CVf_CLONED()) && ($inner->CvFLAGS & B::CVf_LEXICAL())) {
             my $pn = eval { $cv->PADLIST->ARRAYelt(0)->ARRAYelt($op->targ) };
             my $proto = eval { $pn->PROTOCV };
             # A LEXICAL SUB NAMED FROM INSIDE ANOTHER is a capture there: the
@@ -6976,8 +6993,22 @@ class SoN::FromOptree 0.01 {
                 # ONE DEFINED AT FILE SCOPE shares the file's lexicals by
                 # name, as a named sub does (_file_lexicals_shared), so those
                 # captures need no cell either.
+                #
+                # SO DOES ONE AT THE TOP OF A MODULE the program loads: its
+                # outside is that file's CV, not the main one. Only named code
+                # of the module is translated then -- the methods and subs of a
+                # class the program uses, and what they lift -- never the
+                # module's own top level, which ran during the `use` and whose
+                # ops perl has freed. Named code binds the module's lexicals at
+                # compile time, one instance per name, so a clone per pass of
+                # a loop there is unseen by every caller this graph can have
+                # (a named `sub g { h() }` beside a looped `my sub h { $j }`
+                # reads the first pass's $j, as perl does) and the clone check,
+                # which needs the freed ops, is not asked.
                 my $body = _anoncode_cv($cv, $op);
-                my %file_slot = map { $_ => 1 } keys %{ _outer_main_slots($body) };
+                my $outside = $body && eval { $body->OUTSIDE };
+                my $file = $outside && _required_file_cv($outside) ? $outside : B::main_cv();
+                my %file_slot = map { $_ => 1 } keys %{ _outer_main_slots($body, $file) };
                 my $names = $body && eval { $body->PADLIST->ARRAYelt(0) };
                 my %file_name = map {
                     my $pn = $names->ARRAYelt($_);
@@ -6988,7 +7019,7 @@ class SoN::FromOptree 0.01 {
                     # lexical spelled the same (`{ my $x }` shadowing `my
                     # $x`) would be read as the first: perl's 12 became 22.
                     my %count;
-                    my $main = eval { B::main_cv()->PADLIST->ARRAYelt(0) };
+                    my $main = eval { $file->PADLIST->ARRAYelt(0) };
                     for my $i ($main ? (1 .. $main->MAX) : ()) {
                         my $pn = $main->ARRAYelt($i);
                         $count{ $pn->PV }++ if ref($pn) eq 'B::PADNAME' && defined $pn->PV;
@@ -7004,7 +7035,7 @@ class SoN::FromOptree 0.01 {
                     die "GAP: a lexical sub closing over " . join(', ', sort keys %file_name)
                       . " is not yet lowered -- it is cloned inside a loop, once"
                       . " per pass, and its body reads the variable by name\n"
-                        unless _lexsub_cloned_once($body);
+                        unless $$file != ${ B::main_cv() } || _lexsub_cloned_once($body);
                 }
                 my @vars = grep { !/\A&/ && !$file_name{$_} } _anoncode_captures($cv, $op);
                 die "GAP: a lexical sub closing over " . join(', ', @vars)

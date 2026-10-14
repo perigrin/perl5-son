@@ -830,6 +830,14 @@ class SoN::Deparse 0.01 {
                 ( @{ $c->{adjusts} // [] } ),
                 ( map { $_->{default_ref} } @{ $c->{fields} // [] } );
         }
+        # AND WHAT THOSE GRAPHS LIFT: an anon or `my sub` body is keyed
+        # under the graph it was lifted from, and reads that file's lexicals
+        # by name, which this file does not declare. The loaded module
+        # defines it; emitted here it was a dead sub over a stray `my`.
+        if (%owned) {
+            my $lifted = join '|', map { quotemeta } keys %owned;
+            $owned{$_} = 1 for grep { /\A(?:$lifted)::__ANON__:/ } keys $all_methods->%*;
+        }
         my %cls = map { $_->{name} => $_ }
                   grep { ref $_ eq 'HASH' && $_->{is_class} && defined $_->{name}
                          && !$_->{external} }
