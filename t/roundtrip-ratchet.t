@@ -33,12 +33,15 @@ my %FLOOR = (
     # ratchet FAILED on every run, which is to say it was never run. An opt-in
     # guard nobody runs is the decorative kind; a floor above the real number is
     # how it got that way.
-    corpus => 279,   # t/corpus/mdtest/pvm (pvm 50cd3b10 + 21 local), measured twice 2026-10-11
+    # t/corpus/mdtest/pvm (pvm 50cd3b10 + local cases). 279 measured twice
+    # 2026-10-11; 298 at 4c7348c and every batch-3 merge, 2026-10-13 to 10-14.
+    corpus => 298,
     perl_t => 11,    # base/lex.t refuses on a `caller` bound to a list
     # chalk's lib/ at the commit tools/chalk-lib-roundtrip.pl pins (5948f648,
     # 179 modules), measured at d0cb68a and 2d8fb90, 2026-10-06.
-    # 140 at 580ca1e and 4c7348c, 2026-10-13.
-    chalk_compiles => 140,
+    # 140 at 580ca1e and 4c7348c, 2026-10-13. 143 at b9c9b82, 1bcd4a1,
+    # e8fb329 and e4b98ec, 2026-10-14.
+    chalk_compiles => 143,
     # chalk's own test files (547 at 5948f648) that give the SAME result
     # against the emitted lib/ -- tools/chalk-gate3.pl. The 59 that read lib/
     # as source are DEFERRED to chalk's own lowering (perigrin, 2026-10-09),
@@ -52,8 +55,8 @@ my %FLOOR = (
 # the parse gate slipped. Lowering this needs no reason; raising it does.
 my %CEILING = (
     # Measured 226 at d25e6c2, twice, 2026-10-11 (229 at 1c8634e; 239 at
-    # d0cb68a and 2d8fb90).
-    chalk_skipped_graphs => 226,
+    # d0cb68a and 2d8fb90). 94 at e8fb329 and e4b98ec, 2026-10-14.
+    chalk_skipped_graphs => 94,
     # perl t/ emissions perl will not compile. Unguarded until 75d3db8, so
     # two new ones (comp/fold.t, comp/retainedlines.t) arrived unnoticed.
     # Measured 1 at 1c8634e, twice, 2026-10-11: comp/line_debug.t (a

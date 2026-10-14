@@ -441,3 +441,95 @@ First GAP per skipped graph on this head (173 graphs listed):
 | foreach with an unrecognised bounds shape | 20 |
 | enterloop inside a loop body | 9 |
 | a signature default with an effect | 7 |
+
+## GAP fixes, batch 2 (2026-10-12)
+
+Six clusters, each fixed test-first by an agent and then verified by an
+adversarial agent. Five landed: dorassign (`//=` forms), listarm (a ternary
+with a list arm, and the count of a list call), modifier (a modifier in an
+if/else arm, and in-place reverse), shortcirc (nested and/or in an arm or
+loop), and sigdefault (a signature default with an effect; one that is both
+referenced and written refuses). nestedloop did not land: its verifier
+found an over-refusal of `f($x ||= 3)`. It is left unmerged on
+gap3/nestedloop, and batch 3's enterloop branch covers the same graphs.
+
+Integration found three regressions, each fixed before landing: an
+over-broad postinc alias refusal; invalid perl t/ emissions; and lexical
+subs miscompiled as `$ctx->()`, which failed 75 chalk test files under
+gate 3. Lexical subs are now lifted as anonymous subs. One that closes over
+a variable refuses.
+
+Ratchets at 4c7348c: chalk COMPILES 140, SKIPPED_GRAPHS 176, gate 3 SAME
+488, corpus 298/298, perl t/ 11 with 1 invalid emission.
+
+## GAP fixes, batch 3 (2026-10-13 to 10-14)
+
+Six clusters: stamp, foreach, lexcap, voidand, enterloop, substge. Each
+went through fix, adversarial verify, and up to three repair rounds. voidand
+and enterloop came back sound. The other four needed a further repair pass
+(and lexcap and substge a fifth round each) before their verifiers found
+nothing introduced. foreach was then narrowed rather than extended: three
+repair rounds had not converged, so the new lowering refuses any body that
+can reach the list other than through its iterator.
+
+Merged one at a time on wip/chalk-lib-roundtrip-2. Each merge was measured
+with the full suite and `SON_RATCHET=1`:
+
+| after merging | COMPILES | SKIPPED_GRAPHS | gate 3 SAME |
+|---|---|---|---|
+| (start, e6b462b) | 140 | 176 | 488 |
+| voidand | 141 | 161 | 488 |
+| enterloop | 141 | 156 | 488 |
+| stamp | 141 | 133 | 488 |
+| foreach | 142 | 129 | 488 |
+| lexcap | 143 | 116 | 488 |
+| substge | 143 | 107 | 488 |
+| lexreq + lexical callee | 143 | 94 | 488 |
+| anonagg + corpus (e4b98ec) | 143 | 94 | 488 |
+
+Corpus 298/298 and perl t/ 11 with 1 invalid emission throughout; the
+corpus is 306/306 with the eight batch-3 cases. Ratchets tightened from
+two agreeing measurements each: corpus floor 298, chalk COMPILES floor 143,
+SKIPPED_GRAPHS ceiling 94.
+
+Found while integrating, and fixed:
+- **Lexical subs in a used module** (gap5/lexreq): 12 TypeInferenceActions
+  graphs translated when the module was the top-level file but not when
+  TypeInference.pm `use`d it. The file-lexical sharing only knew main's
+  file CV, and by B time a module's `my sub` slot holds the clone, not the
+  PROTOCV. The is-it-cloned-in-a-loop check cannot run for a module (perl
+  has freed its top-level ops). It is skipped there, which is sound because
+  only a module's named code is translated.
+- **An anon sub writing a file array** (gap5/anonagg): the program
+  forwarded the array's first value past the call (`push @a, 4` from
+  `$f->()` printed `1 2 3`), and a whole-aggregate store inside the body
+  was dropped. Both were wrong on base. A merge only exposed them.
+- **A lexical sub callee is judged by its body**: a loop over `@_` passing
+  the alias to a `my sub` refused. The callee lookup only followed a GV.
+- **A join made its Phis in hash order**: the IR differed from run to run.
+  This surfaced as a corpus case that drifted straight after filling.
+- **A flaky refusal regex**: 24 test files matched `qr/GAP|INTERNAL/`
+  against output holding a random tempdir path (`/tmp/K9fbWSGAPp`). They
+  now match `GAP:`.
+- **Stale expectations**: once voidand's arm walk dispatches enterloop,
+  nine tests that pinned a refusal at a nested loop round-trip. Each was
+  re-checked against perl, with variants, before being changed.
+
+Still open, recorded rather than fixed:
+- a method call to a method the producer refused emits `P->m(...)`, which
+  dies at run time (loud, not silent; TODO in
+  t/deparse-a-refused-anon-body-refuses-its-caller.t). The fix needs the
+  producer to resolve `can()` at the call site;
+- a sub whose value is a `/g` match in its caller's context refuses, even
+  for scalar callers base got right (base was silently wrong for list
+  callers);
+- `our $x; $_ = "a1"; s/(\d)/$x/` is wrong on base and branch alike;
+- `$h{a}++` in a loop body over a typed array or a range, then read after
+  the loop, prints the pre-loop value plus one; it refuses only over an
+  unproven list;
+- a callee writing the caller's `$_` over a typed array, and a carried read
+  between two `$r->[0]` stores, are TODO in
+  t/deparse-a-foreach-what-perl-does-per-pass.t;
+- `@a = map {...} @a` in an anon sub renders right but warns "Useless use
+  of private array";
+- an anon sub capturing an aggregate from a named sub's own scope refuses.
