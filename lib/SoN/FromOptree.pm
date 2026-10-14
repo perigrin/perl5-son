@@ -12411,18 +12411,28 @@ class SoN::FromOptree 0.01 {
     # See the block comment at the call site for what the Phi means; this is
     # that code unchanged, with the loop's own variables passed in.
     sub _bind_break_exit_phis ($factory, $sim, $exit_region, $break_projs) {
-        for my $brk (@$break_projs) {
-            my $brk_bindings = $brk->{bindings};
-            for my $targ (sort _scope_key_order keys %$brk_bindings) {
-                my $header = $sim->scope_bindings->{$targ};   # header Phi (patched)
-                my $bval   = $brk_bindings->{$targ};
-                next unless defined $header && defined $bval && $header != $bval;
-                my $exit_phi = $factory->make('Phi',
-                    inputs => [$header, $bval],
-                    region => $exit_region,
-                    (_is_narrowed($header->stamp) ? (stamp => $header->stamp) : ()));
-                $sim->define($targ, $exit_phi);
-            }
+        # ONE PHI PER SLOT, ONE INPUT PER EXIT, in the Region's order: the
+        # header exit when there is one, then each break -- a break that left
+        # the slot alone contributes the header's value. A Phi per BREAK,
+        # chained over [previous, this break], had two inputs on a Region
+        # with three: measured on `$n++; last if A; $n += 10; last if B`,
+        # the second break's value was paid on the first, and perl's 23
+        # came out 34.
+        my $header_exit = $exit_region->inputs->@* > @$break_projs;
+        my $scope = $sim->scope_bindings;
+        my %seen;
+        for my $targ (sort _scope_key_order
+                      grep { !$seen{$_}++ }
+                      map { keys $_->{bindings}->%* } @$break_projs) {
+            my $header = $scope->{$targ};   # header Phi (patched)
+            next unless defined $header;
+            my @bvals = map { $_->{bindings}{$targ} // $header } @$break_projs;
+            next unless grep { $_ != $header } @bvals;
+            my $exit_phi = $factory->make('Phi',
+                inputs => [ ($header_exit ? ($header) : ()), @bvals ],
+                region => $exit_region,
+                (_is_narrowed($header->stamp) ? (stamp => $header->stamp) : ()));
+            $sim->define($targ, $exit_phi);
         }
         # MEMORY MERGES AT THE EXIT TOO. A store into a demoted slot on the
         # breaking arm -- `$so = $i; last` with $so passed to a sub -- lives
@@ -12431,7 +12441,6 @@ class SoN::FromOptree 0.01 {
         # header exit when there is one, then each break.
         my $mem = $sim->memory;
         if (grep { defined $_->{memory} && $_->{memory} != $mem } @$break_projs) {
-            my $header_exit = $exit_region->inputs->@* > @$break_projs;
             $sim->set_memory($factory->make('Phi',
                 inputs => [ ($header_exit ? ($mem) : ()),
                             map { $_->{memory} // $mem } @$break_projs ],

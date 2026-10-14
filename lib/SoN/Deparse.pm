@@ -3483,14 +3483,29 @@ class SoN::Deparse 0.01 {
         # COMPUTED BEFORE THE BODY WALK because the `last` is emitted during
         # it. Without this the Phi reached _expr, found no variable for a
         # non-Loop-regioned Phi, and refused.
+        #
+        # ONE INPUT PER EXIT, in the Region's order: input 0 is the
+        # header-false edge, and each later input is what ITS break pays --
+        # so a payment is keyed on the Region input the break arrives by, and
+        # a `last` pays only its own. A Phi whose inputs do not line up with
+        # the Region's is left unbound, and reading it refuses.
         %break_assign = ();
         if ($exit_rgn) {
+            my @preds = ($exit_rgn->{inputs} // [])->@*;
+            # AN EXIT PHI NOTHING READS IS OWED NOTHING. A `my` in the body
+            # gets one too, over the value it last held in the body -- and
+            # seeding a variable with that, before the loop, read a join the
+            # body had not reached yet.
+            my %read = map { $_ => 1 } grep { defined }
+                       map { ($_->{inputs} // [])->@* } $self->_nodes_in_order;
             for my $ph ($self->_nodes_in_order) {
                 next unless ($ph->{op} // '') eq 'Phi';
                 next unless (($ph->{fields} // {})->{region} // -1)
                             == $exit_rgn->{id};
+                next unless $read{ $ph->{id} };
                 my @pin = ($ph->{inputs} // [])->@*;
-                next unless @pin == 2;
+                next unless @pin == @preds && @pin >= 2
+                    && $preds[0] == $arm{1}{id};
                 # A MEMORY Phi merges the exit's chains, not a value: the store
                 # before the `last` is already on its path.
                 next if $self->_is_memory($ph->{id});
@@ -3517,9 +3532,12 @@ class SoN::Deparse 0.01 {
                     $init .= sprintf("my %s = %s;\n",
                         $var, $self->_expr($pin[0]));
                 }
-                $bound{ $ph->{id} }        = $var;
-                $break_assign{ $ph->{id} } = sprintf("%s = %s;\n",
-                    $var, $self->_expr($pin[1]));
+                $bound{ $ph->{id} } = $var;
+                for my $k (1 .. $#pin) {
+                    next if $pin[$k] == $pin[0];
+                    $break_assign{ $preds[$k] }{ $ph->{id} }
+                        = [ $var, $pin[$k] ];
+                }
             }
         }
 
@@ -4496,6 +4514,44 @@ class SoN::Deparse 0.01 {
         return 0;
     }
 
+    # _break_payment(\%payments, $arm, $region_id, $next_of) -> source
+    #
+    # What a `last` owes the exit Phis, for the exit it arrives by. The
+    # payments are keyed on the exit Region's input -- the node the break
+    # arm's chain ends on -- so the arm is followed exactly as
+    # _reaches_region follows it, to the node the Region consumes.
+    #
+    # THE VALUES ARE READ BEFORE ANY IS WRITTEN. A payment reuses the loop's
+    # own variable, and a second payment's value may read the first's: each
+    # goes to a temporary first, as the step at the latch does.
+    method _break_payment ($payments, $arm, $region_id, $next_of) {
+        return '' unless $payments->%*;
+        my ($pred, %seen);
+        my @todo = ( $arm );
+        while (my $n = shift @todo) {
+            next if $seen{ $n->{id} }++;
+            my @succ = ( $next_of->{ $n->{id} } // [] )->@*;
+            if ( grep { $_->{id} == $region_id } @succ ) { $pred = $n->{id}; last }
+            next if ( $n->{op} // '' ) eq 'Region';
+            next if ( $n->{op} // '' ) eq 'If' && $n->{id} != $arm->{id};
+            push @todo, @succ;
+        }
+        die "GAP: a break whose exit edge the walk cannot find is not yet"
+          . " rendered\n" unless defined $pred;
+        my $owed = $payments->{$pred} // return '';
+        my @phi = sort { $a <=> $b } keys %$owed;
+        return sprintf("%s = %s;\n", $owed->{ $phi[0] }[0],
+                       $self->_expr($owed->{ $phi[0] }[1])) if @phi == 1;
+        my ($tmp, $set) = ('', '');
+        for my $ph (@phi) {
+            my ($var, $id) = $owed->{$ph}->@*;
+            my $t = substr($var, 0, 1) . "pay$ph";
+            $tmp .= sprintf("my %s = %s;\n", $t, $self->_expr($id));
+            $set .= "$var = $t;\n";
+        }
+        return $tmp . $set;
+    }
+
     # A Region whose control goes on to the Return: the function's exit join.
     method _is_fn_exit ($r, $next_of) {
         return scalar grep { ($_->{op} // '') eq 'Return' }
@@ -4594,16 +4650,16 @@ class SoN::Deparse 0.01 {
         # the innermost loop's exit is the plain `last` below.
         my @edges;
         push @edges, { region => $loop_exit_region, word => 'last',
-                       pay => sub { join '', map { $break_assign{$_} }
-                                             sort { $a <=> $b } keys %break_assign } }
+                       pay => sub ($arm) { $self->_break_payment(\%break_assign,
+                           $arm, $loop_exit_region, $next_of) } }
             if defined $loop_exit_region;
         for my $fi ( 0 .. $#loop_frames ) {
             my $f = $loop_frames[$fi];
             my $inner = $fi == $#loop_frames;
             push @edges, { region => $f->{exit}, word => "last $f->{label}",
                            frame => $f,
-                           pay => sub { join '', map { $f->{breaks}{$_} }
-                                                 sort { $a <=> $b } keys $f->{breaks}->%* } }
+                           pay => sub ($arm) { $self->_break_payment($f->{breaks},
+                               $arm, $f->{exit}, $next_of) } }
                 if defined $f->{exit} && !$inner;
             # The innermost loop's latch too: a `next` ending an arm of its
             # own body. Plain `next` there; the label only for an outer loop.
@@ -4665,7 +4721,7 @@ class SoN::Deparse 0.01 {
                 # THE EXIT PHIS ARE PAID HERE. Each records what the loop
                 # variable must hold on this path; assigning before the `last`
                 # is what makes a post-loop read correct on both exits.
-                my $pay  = $edge->{pay}->();
+                my $pay  = $edge->{pay}->($arm{$ix});
                 # WHAT THE ARM DOES BEFORE IT LEAVES runs before the jump: a
                 # store pinned between the arm's Proj and the exit Region --
                 # `$so = $i; last` into a demoted slot -- was left out, and
