@@ -69,7 +69,10 @@ refuses($_) for
     'use v5.36; my $s = "a"; sub foo { print "@_\n" } my $f = sub { foo($s .= "b", $s .= "c") }; $f->();',
     'use v5.36; my $s = "a"; my $r = \$s; my @x = ($s .= "b", $s = "z"); print "@x\n";',
     'use v5.36; my $s = "a"; my @x = ($s .= "b", $s .= "c"); print "@x\n";',
-    'use v5.36; my $s = "a"; my $r = \$s; my @x = ($s = "b", $s = "c"); print "@x\n";';
+    'use v5.36; my $s = "a"; my $r = \$s; my @x = ($s = "b", $s = "c"); print "@x\n";',
+    'use v5.36; my $s = "a"; my $f = sub { my $v = ($s .= "b") . ($s .= "c"); print "$v\n" }; $f->();',
+    'use v5.36; my $s = 1; my $r = \$s; my @x = ($s = $s + 1, $s = 5); print "@x\n";',
+    'use v5.36; my $s = "a"; my @x = ($s = "b", $s = "c"); print "@x\n";';
 
 # ONE STORE RESULT ALONE is still its value.
 round_trips($_) for

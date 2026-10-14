@@ -17912,6 +17912,16 @@ class SoN::FromOptree 0.01 {
                 && ( $o->flags & B::OPf_KIDS );
             $o = $o->first if $rv2sv;
             return "p" . $o->targ if $o->name eq q{padsv};
+            # A STORE'S RESULT IS ITS TARGET, not a copy: `($s .= "b",
+            # $s .= "c")` is `abc abc` in perl. The graph snapshots it, so
+            # these are not read again -- they refuse below.
+            require B::Op_private;
+            return "p" . $o->targ if $o->name eq q{padsv_store}
+                || ( ( $o->private & B::OPpTARGET_MY() ) && ( $B::Op_private::bits{ $o->name }{4} // '' ) eq 'OPpTARGET_MY' );
+            return __SUB__->( $o->last ) if $o->name eq q{sassign}
+                && ( $o->flags & B::OPf_KIDS ) && !( $o->private & B::OPpASSIGN_BACKWARDS() );
+            return __SUB__->( $o->first ) if $o->isa(q{B::BINOP})
+                && ( $o->flags & B::OPf_STACKED ) && $o->name ne q{sassign};   # op=
             return undef unless $o->name eq q{gvsv}
                 || ( $rv2sv && $o->name eq q{gv} );
             my $gv = _op_gv($cv, $o);
