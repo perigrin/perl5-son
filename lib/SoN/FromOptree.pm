@@ -12125,7 +12125,19 @@ class SoN::FromOptree 0.01 {
 
     # Synthesize an explicit truthiness test NumNe($value, 0) for a bare-scalar
     # loop condition (`while ($n)`), so the control-wired condition is an icmp.
+    #
+    # ONLY A NUMBER IS TRUE EXACTLY WHEN IT IS NOT 0. A string or a reference
+    # is not: `while ($s)` over "abc" ran no passes, because "abc" != 0 is
+    # false, and a blessed object's class name compared the same way. Anything
+    # not stamped numeric is tested as perl tests it, `!!$value` -- a Not is
+    # already a Boolean the header accepts.
     sub _truthiness_test ($value, $factory) {
+        my $type = $value->can('stamp') && $value->stamp ? $value->stamp->type : '';
+        unless ($type eq 'Int' || $type eq 'Num') {
+            my $bool = SoN::IR::Stamp->new(type => 'Boolean');
+            my $not = $factory->make('Not', inputs => [$value], stamp => $bool);
+            return $factory->make('Not', inputs => [$not], stamp => $bool);
+        }
         my $zero = $factory->make('Constant',
             value      => 0,
             const_type => 'integer',
