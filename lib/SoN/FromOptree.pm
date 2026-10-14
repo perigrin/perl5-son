@@ -5741,6 +5741,23 @@ class SoN::FromOptree 0.01 {
                     value      => undef,
                     const_type => 'undef',
                     stamp      => SoN::IR::Stamp->new(type => 'Undef'));
+                # A DEMOTED SLOT IS STORED, not bound -- sassign's rule. Bound,
+                # a later s/// took the Undef as its subject while the store
+                # between went to memory: `my $s; $s = "a"; $s =~ s/a/X/`
+                # printed a.
+                if ($ctx->{addr_taken}{$targ}) {
+                    my $loc = $factory->make('PadAccess',
+                        targ => $targ,
+                        do { my ($sg, $sy) = _padparts($cv, $targ);
+                             (sigil => $sg, symbol => $sy) },
+                        ($ctx->{shared_lexicals}{$targ} ? (shared => 1) : ()),
+                        (defined $sim->memory ? (inputs => [ $sim->memory ]) : ()));
+                    my $store = $factory->make('Assign', inputs => [$loc, $undef]);
+                    $store->set_control_in($sim->control);
+                    $sim->set_control($store);
+                    $sim->set_memory($store);
+                    return ($op->next, 'handled');
+                }
                 $sim->define($targ, $undef);
                 return ($op->next, 'handled');
             }
@@ -8788,6 +8805,20 @@ class SoN::FromOptree 0.01 {
                 $field_lvalue = $lv if $lv->isa('SoN::IR::Node::FieldAccess');
             }
 
+            # A DEMOTED SLOT LIVES IN MEMORY, read and stored like any other
+            # demoted variable: a destructive s/// on it, or a reference to
+            # it, puts it there. A scope binding alone is a value nothing
+            # reads -- `my $s = "a$y"; $s =~ s/a/X/` printed an undef $s.
+            my $demoted = !$pkg_target && !$field_lvalue
+                && !($op->flags & 64) && $ctx->{addr_taken}{ $op->targ };
+            my $slot = sub {
+                $factory->make('PadAccess', targ => $op->targ,
+                    do { my ($sg, $sy) = _padparts($cv, $op->targ);
+                         (sigil => $sg, symbol => $sy) },
+                    ($ctx->{shared_lexicals}{ $op->targ } ? (shared => 1) : ()),
+                    (defined $sim->memory ? (inputs => [ $sim->memory ]) : ()));
+            };
+
             my $acc;
             if (($op->private & 0x40) && $field_lvalue) {
                 $acc = $factory->make_unique('FieldAccess',
@@ -8798,9 +8829,9 @@ class SoN::FromOptree 0.01 {
                 $acc = $concat->($acc, $mkstr->($seg[0])) if defined $seg[0];
             }
             elsif ($op->private & 0x40) {
-                $acc = $pkg_target
-                    ? $sim->lookup(_stash_key($pkg_target))
-                    : $sim->lookup($op->targ);
+                $acc = $pkg_target ? $sim->lookup(_stash_key($pkg_target))
+                     : $demoted    ? $slot->()
+                     :               $sim->lookup($op->targ);
                 $acc = $concat->($acc, $mkstr->($seg[0])) if defined $seg[0];
             }
             elsif (defined $seg[0]) { $acc = $mkstr->($seg[0]) }
@@ -8899,6 +8930,14 @@ class SoN::FromOptree 0.01 {
                 $store->set_control_in($sim->control);
                 $sim->set_control($store);
                 $sim->push_node($acc) unless ($op->flags & 3) == 1;   # void
+                return ($op->next, 'handled');
+            }
+            if ($demoted) {
+                my $store = $factory->make('Assign', inputs => [$slot->(), $acc]);
+                $store->set_control_in($sim->control);
+                $sim->set_control($store);
+                $sim->set_memory($store);
+                $sim->push_node($acc);
                 return ($op->next, 'handled');
             }
             # OPpLVAL_INTRO (0x80): a new lexical (`my $c = qq{...}`). The main
