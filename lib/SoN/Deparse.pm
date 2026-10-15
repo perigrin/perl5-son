@@ -4818,15 +4818,21 @@ class SoN::Deparse 0.01 {
         # nodes, so it is the join. Find it by looking for the Region that both
         # arms reach.
         my $join = $self->_join_region($arm{0}, $arm{1}, $next_of);
-        # ONE ARM RETURNS, THE OTHER FALLS THROUGH TO THE ENCLOSING JOIN:
+        # ONE ARM LEAVES, THE OTHER FALLS THROUGH TO THE ENCLOSING JOIN:
         # `if (A) { if (B) { return 1 } return 2 }` inside an enclosing arm
         # meets its sibling only at the function's exit. The enclosing join
         # is where the walk stops, so it is this If's join as well -- taken
         # as the exit, the code after the enclosing join was emitted inside
         # this If's other arm and again after it, and a value bound in one
         # copy was unset in the other.
+        # SO DOES ONE THAT MEETS ITS SIBLING AT THE LATCH, past the enclosing
+        # join: `next if A; if (!defined $o) { return if B; next }` inside the
+        # `next if`'s fall-through. Taken for the join, the latch's variables
+        # were renamed under the loop that declared them.
         if (defined $join && defined $outer_stop && $nodes->{$outer_stop}
-            && $self->_is_fn_exit($nodes->{$join}, $next_of)
+            && $join != $outer_stop
+            && ($self->_is_fn_exit($nodes->{$join}, $next_of)
+                || grep { $_ == $join } $self->_control_reachable($outer_stop, $next_of))
             && !$self->_is_fn_exit($nodes->{$outer_stop}, $next_of)
             && grep { my $p = $_;
                       grep { $_ == $outer_stop } $self->_control_reachable($p->{id}, $next_of) }
@@ -5060,7 +5066,18 @@ class SoN::Deparse 0.01 {
         # return -- `if (!$o) { return 1 if $s } return 2 if $o > 5`. Taken
         # for the join, the rest of the body ran inside both arms.
         my @inner = grep { !$self->_is_fn_exit($nodes->{$_}, $next_of) } @cand;
-        return ( @inner ? $inner[0] : $cand[0] );
+        @cand = @inner if @inner;
+        # AND THE NEAREST MERGE, NOT THE FIRST ONE FOUND. `next if A && B;
+        # next unless C; ...` merges the first `next` with the fall-through,
+        # then that with the second `next` at the latch; the walk from the
+        # false arm meets the latch first, through the second `next`. Taken
+        # for the join, the fall-through's values never reached the latch
+        # variables. A merge another candidate leads to is past that one.
+        for my $id (@cand) {
+            return $id unless grep { my $c = $_; $c != $id
+                && grep { $_ == $id } $self->_control_reachable($c, $next_of) } @cand;
+        }
+        return $cand[0];
     }
 
     # Every control node reachable forward from $id, including Region inputs

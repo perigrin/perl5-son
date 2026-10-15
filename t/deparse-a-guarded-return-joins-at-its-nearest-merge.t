@@ -98,4 +98,48 @@ sub f {
 print f(0, 1), f(0, 0), f(7, 0), f(1, 1), "\n";
 P
 
+# TWO `next`s MERGE IN TWO STEPS: the first with the fall-through, then that
+# with the second at the latch. The false arm of the first meets the latch
+# first, through the second `next`; taken for the join, the fall-through's
+# values never reached the latch variables -- every call returned the entry
+# value. Silent on base.
+round_trips(<<'P', 'two nexts and an if/elsif that returns');
+sub f {
+    my $same = 0;
+    my $seen = 0;
+    for my $o (@_) {
+        next if defined $o && $o == 5;
+        next if !defined $o;
+        if (!$seen) { $same = $o; $seen = 1; }
+        elsif ($same != $o) { return "P"; }
+    }
+    return $same;
+}
+print join(",", f(1, 1), f(1, 2), f(5, 1), f(undef, 1), f(1, undef), f(5), f()), "\n";
+P
+
+# The second `next` inside an arm that also returns, nested in the first
+# `next`'s fall-through: its If meets its sibling only at the latch, past the
+# enclosing join. chalk's Bindings::_remove_trivial_phi, which returned
+# undef for every input once it stopped refusing.
+round_trips(<<'P', 'a trivial-phi scan');
+use v5.42.0;
+sub f {
+    my ($phi, @in) = @_;
+    my $same;
+    my $seen = 0;
+    for my $o (@in) {
+        next if defined $o && ref($o) && refaddr($o) == refaddr($phi);
+        if (!defined $o) { return $phi if $seen; next; }
+        if (!$seen) { $same = $o; $seen = 1; }
+        elsif (refaddr($same) != refaddr($o)) { return $phi; }
+    }
+    return $same // $phi;
+}
+my ($p, $a, $b) = ([1], [2], [3]);
+sub nm ($x) { $x == $p ? "p" : $x == $a ? "a" : "b" }
+print nm(f($p, $a, $a)), nm(f($p, $p, $a)), nm(f($p, $a, $p, $a)), nm(f($p, $a, $b)),
+      nm(f($p, undef, $a)), nm(f($p, $a, undef)), nm(f($p, $p)), nm(f($p)), "\n";
+P
+
 done_testing;
