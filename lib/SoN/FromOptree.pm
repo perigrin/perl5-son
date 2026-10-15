@@ -13869,6 +13869,9 @@ class SoN::FromOptree 0.01 {
                 # unhandled op) or a visited op.
                 my $rest_sim = $sim->snapshot;
                 $rest_sim->set_control($rest_proj);
+                # The latch edges the rest records, for a rest that breaks.
+                my $own_nexts = @LOOP_STACK ? $LOOP_STACK[-1]{nexts} : undef;
+                my $nexts_before = $own_nexts ? scalar @$own_nexts : 0;
                 # IN VALUE CONTEXT (`my $r = $x || next`) the guard yields E on the
                 # path that goes on; dropped, the rest assigned whatever lay beneath.
                 $rest_sim->push_node($guard_val) if ($op->flags & 3) >= 2;
@@ -13886,6 +13889,45 @@ class SoN::FromOptree 0.01 {
                     die "GAP: a `last if` whose rest of the body returns is not"
                       . " yet lowered\n" unless $kind eq 'next' && !$frame;
                     $sim->set_control($taken_proj);
+                    $op = $rest_end->next;
+                    $op = $op->next
+                        while $$op && !($CONTINUE_START && $$op == ${$CONTINUE_START})
+                            && $op->name ne 'unstack' && $op->name ne 'leaveloop';
+                    next;
+                }
+                # THE REST BROKE OUT, so it never reaches the latch either: its
+                # `last` is an edge to the loop's exit, and the loop goes on
+                # only along the guard-taken arm. Merged instead, the `last`
+                # was dropped and the loop ran on.
+                # A `last if` sends its taken arm to the exit as well, and the
+                # loop goes on only along a `next` the rest recorded.
+                if (($rest_sig // '') eq 'broke') {
+                    die "GAP: a labeled `$kind if` whose rest of the body breaks"
+                      . " is not yet lowered\n" if $frame;
+                    die "GAP: a `last if` whose rest of the body breaks with no"
+                      . " `next` is not yet lowered\n"
+                        if $kind eq 'last'
+                        && !($own_nexts && @$own_nexts > $nexts_before);
+                    my $bf = _loop_control_frame($rest_end);
+                    my $sink = $bf ? $bf->{breaks} : $break_projs;
+                    push @$sink, { proj => $rest_sim->control,
+                                   bindings => $rest_sim->scope_bindings,
+                                   memory => $rest_sim->memory }
+                        if defined $sink && defined $break_projs;
+                    if ($kind eq 'next') {
+                        $sim->set_control($taken_proj);
+                    }
+                    else {
+                        push @$break_projs,
+                            { proj => $taken_proj, bindings => $sim->scope_bindings,
+                              memory => $sim->memory }
+                            if defined $break_projs;
+                        my $edge = pop @$own_nexts;
+                        $sim->set_control($edge->control);
+                        $sim->set_memory($edge->memory);
+                        my $eb = $edge->scope_bindings;
+                        $sim->define($_, $eb->{$_}) for keys %$eb;
+                    }
                     $op = $rest_end->next;
                     $op = $op->next
                         while $$op && !($CONTINUE_START && $$op == ${$CONTINUE_START})
@@ -17570,10 +17612,11 @@ class SoN::FromOptree 0.01 {
             # every `elsif` -- not just the modifier idiom it was named for.
             # Build the control flow here rather than refusing.
             #
-            # A `next if C` IN AN ARM joins the loop at its latch exactly as it
-            # does in the body: If(C), the rest of the arm walked on the
-            # not-taken Proj, and the taken Proj -- which skips that rest --
-            # merged with it. The body walker has done this since the start; an
+            # A `next if C` IN AN ARM joins the loop at its latch: If(C), the
+            # taken Proj an edge to the latch (see $LOOP_STACK nexts), and the
+            # walk going on along the not-taken Proj. With no loop frame the
+            # rest of the arm is walked on the not-taken Proj and the taken
+            # Proj merged with it. The body walker has done this since the start; an
             # arm refused it ("a loop control (`next`) inside a branch arm"),
             # and a second `next if` IS in an arm -- the first one's rest.
             # Corpus 007. The rest stops at the latch (see $CONTINUE_START).
@@ -17590,9 +17633,15 @@ class SoN::FromOptree 0.01 {
                 # A `next LABEL` NAMING AN OUTER LOOP leaves this one: the taken
                 # Proj is an edge to that loop's latch, and this walk goes on
                 # along the rest.
-                if (my $frame = _loop_control_frame(
-                        _guarded_loop_control_op($op->other))) {
-                    if ($frame->{nexts} && defined $break_projs) {
+                # A PLAIN `next` IN AN ARM is the same edge, to this loop's
+                # latch: merged at the arm's end, the code after the arm ran
+                # on the taken path too.
+                # Its own loop's list takes it on a scout too (see the bare
+                # `next` below); a labeled loop's only on the real walk.
+                my $labeled = _loop_control_frame(
+                        _guarded_loop_control_op($op->other));
+                if (my $frame = $labeled // $LOOP_STACK[-1]) {
+                    if ($frame->{nexts} && (defined $break_projs || !$labeled)) {
                         my $edge = SoN::FromOptree::StackSim->new(
                             control => $taken, memory => $sim->memory);
                         my $b = $sim->scope_bindings;

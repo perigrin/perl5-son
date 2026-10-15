@@ -3086,11 +3086,13 @@ class SoN::Deparse 0.01 {
                     die "GAP: a return from inside a loop whose exit carries"
                       . " more than one value is not yet rendered\n"
                         unless defined $k && @rphis <= 1;
-                    $out .= @rphis
-                        ? sprintf("return %s;\n",
-                                  $self->_expr($rphis[0]{inputs}[$k]))
-                        : "return;\n";
-                    last;
+                    # NO PHI: the Return reads one value on every path, and
+                    # the walk goes on to it.
+                    if (@rphis) {
+                        $out .= sprintf("return %s;\n",
+                                        $self->_expr($rphis[0]{inputs}[$k]));
+                        last;
+                    }
                 }
                 if (defined $k) {
                     for my $ph (@rphis) {
@@ -4501,7 +4503,24 @@ class SoN::Deparse 0.01 {
 
         # THE ITERATING ARM IS INDEX 1, and whatever it holds runs after the
         # `last` on every pass that does not exit.
+        # A LOOP THAT LEAVES BY THE FUNCTION'S EXIT is a frame for its arms: an
+        # arm landing there is a `return`, and an arm whose other path falls
+        # into the latch has no join there. Without one, `if (C) { last unless
+        # D; next } last` took the exit for its join, and the `next` path
+        # returned too.
+        my ($exit_rgn) = grep { ($_->{op} // '') eq 'Region' }
+                         (($next_of->{ $arm{0}{id} } // [])->@*);
+        my $frame = $exit_rgn && $self->_is_fn_exit($exit_rgn, $next_of)
+            ? { loop => $n->{id}, exit => $exit_rgn->{id},
+                label => sprintf('LOOP%d', $n->{id}), used => 0,
+                breaks => {}, latch => {} }
+            : undef;
+        push @loop_frames, $frame if $frame;
         my $more = $self->_emit_from($arm{1}{id}, $next_of, undef);
+        pop @loop_frames if $frame;
+        # Its breaks pay nothing, so one from a nested loop is not spelled.
+        die "GAP: a `last LABEL` out of an endless loop that leaves by the"
+          . " function's exit is not yet rendered\n" if $frame && $frame->{used};
 
         my $step = '';
         if (@phis) {
@@ -4522,7 +4541,10 @@ class SoN::Deparse 0.01 {
         my $after = $arm{0}{id};
         my ($region) = grep { ($_->{op} // '') eq 'Region' }
                        (($next_of->{ $arm{0}{id} } // [])->@*);
-        $after = $region->{id} if $region;
+        # NOT THE FUNCTION'S EXIT: the walk meets that Region from the arm,
+        # so this path pays the exit's Phis there. Stepped over, the return
+        # read a variable only a `return` inside the loop assigned.
+        $after = $region->{id} if $region && !$self->_is_fn_exit($region, $next_of);
 
         return ($text, $after);
     }
