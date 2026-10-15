@@ -3051,9 +3051,12 @@ class SoN::Deparse 0.01 {
             if ($n->{op} eq 'Region' && $self->_is_fn_exit($n, $next_of)) {
                 my @in = ($n->{inputs} // [])->@*;
                 my ($k) = grep { $in[$_] == $cur } 0 .. $#in;
+                # A RETURNED `shift` is a value as well as a memory version
+                # (as at a loop header and a join): the Return reads it.
                 my @rphis = grep { ($_->{op} // '') eq 'Phi'
                         && (($_->{fields}{region} // -1) == $n->{id})
-                        && !$self->_is_memory($_->{id}) } $self->_nodes_in_order;
+                        && (!$self->_is_memory($_->{id})
+                            || $self->_read_as_value($_->{id})) } $self->_nodes_in_order;
                 # A LIST EXIT CARRIES ITS SCALAR READING beside it: the
                 # Return takes [list Phi, scalar Phi], and the caller's
                 # context picks, as the Return's own rule does.
@@ -3355,9 +3358,16 @@ class SoN::Deparse 0.01 {
         # id would be a guess; this is the graph saying which is the root of
         # the expression.
         if (@cond > 1) {
+            # CONSUMED THROUGH A VALUE TOO: `while (my $n = shift @q)` tests
+            # Not(Not(shift)), and only the outer Not is pinned -- the shift
+            # is read through the inner one.
             my %consumed;
-            for my $c (@cond) {
-                $consumed{$_} = 1 for (($c->{inputs} // [])->@*);
+            my @todo = map { (($_->{inputs} // [])->@*) } @cond;
+            while (defined(my $id = shift @todo)) {
+                next if $consumed{$id}++;
+                my $v = $nodes->{$id} or next;
+                next if defined $v->{control_in} || ($v->{op} // '') eq 'Phi';
+                push @todo, (($v->{inputs} // [])->@*);
             }
             my @root = grep { !$consumed{ $_->{id} } } @cond;
             die "GAP: a Loop with " . scalar(@cond) . " pinned nodes and "
