@@ -3092,6 +3092,17 @@ class SoN::Deparse 0.01 {
                                             $self->_expr($ph->{inputs}[$k]));
                             next;
                         }
+                        # BOUND AS A JOIN VARIABLE, this path pays it too: the
+                        # if that bound it pays only the arms it owns, and a
+                        # return reached along the chain inside a copy of a
+                        # tail emitted in another arm is none of them -- it
+                        # returned the variable unset (chalk's
+                        # Semiring::Structural::add, undef for 4).
+                        if (($bound{ $ph->{id} } // '') =~ /\A\$phi\d+\z/) {
+                            $out .= sprintf("%s = %s;\n", $bound{ $ph->{id} },
+                                            $self->_expr($ph->{inputs}[$k]));
+                            next;
+                        }
                         next if exists $bound{ $ph->{id} };
                         # The list half of a list exit is an ARRAY: a scalar
                         # holding `()` returned (undef) to a list caller.
@@ -4624,7 +4635,7 @@ class SoN::Deparse 0.01 {
             # declaration seeds the variable with it and the present arm
             # overwrites -- the empty arm has no block to assign in.
             my ($decl, %assign) = $self->_join_phis($join, { $idx => $present },
-                                                    $idx);
+                                                    $idx, $next_of);
             $body .= $assign{$idx} // '';
 
             my $text = $idx == 0
@@ -4770,7 +4781,7 @@ class SoN::Deparse 0.01 {
                                      $self->_control_reachable( $r, $next_of ) }
                              @edges ) {
                     my ($bdecl, %bassign)
-                        = $self->_join_phis( $bjoin, { $rest_ix => $arm{$rest_ix} } );
+                        = $self->_join_phis( $bjoin, { $rest_ix => $arm{$rest_ix} }, undef, $next_of );
                     return ( $bdecl . $text . ( $bassign{$rest_ix} // '' ) . $rest,
                              $bjoin );
                 }
@@ -4795,7 +4806,7 @@ class SoN::Deparse 0.01 {
         # `predecessors`, the Proj ids in the same order as its inputs --
         # measured, `Phi(18) in=[1,2] predecessors=[10,15]`. Pairing by
         # position against %arm would be a guess; this is the graph saying so.
-        my ($decl, %assign) = $self->_join_phis($join, \%arm);
+        my ($decl, %assign) = $self->_join_phis($join, \%arm, undef, $next_of);
         $t .= $assign{0} // '';
         $f .= $assign{1} // '';
 
@@ -4836,6 +4847,30 @@ class SoN::Deparse 0.01 {
         return undef;
     }
 
+    # The predecessor of $join an arm's fall-through reaches it by, or undef.
+    # The fall-through steps over a nested If to that If's own merge (the
+    # Region whose head it is) -- the paths inside the nested If are its arms'
+    # to pay -- and ends where it reaches $join. A nested If with no merge, or
+    # a node with more than one way on, leaves no single fall-through.
+    # ponytail: a linear scan for the merge per nested If; index heads if slow.
+    method _arm_spine_pred ($proj, $join, $next_of) {
+        my ($n, %seen) = ($proj);
+        while ($n && !$seen{ $n->{id} }++) {
+            my $op = $n->{op} // '';
+            return undef if $op eq 'Loop';
+            if ($op eq 'If') {
+                ($n) = grep { ($_->{op} // '') eq 'Region' && ($_->{head} // -1) == $n->{id} }
+                       values %$nodes;
+                next;
+            }
+            my @succ = ($next_of->{ $n->{id} } // [])->@*;
+            return $n->{id} if grep { $_->{id} == $join } @succ;
+            return undef unless @succ == 1;
+            $n = $succ[0];
+        }
+        return undef;
+    }
+
     # _join_phis($join, \%arm, $lone_idx) -> ($declaration, %per_arm_assignment)
     #
     # The VALUE Phis merging at $join, as a variable each arm assigns. A Phi's
@@ -4850,7 +4885,7 @@ class SoN::Deparse 0.01 {
     # declaration is seeded with ITS input and the present arm overwrites. The
     # declaration must come BEFORE the `if`, because a `my` inside the block
     # goes out of scope exactly where the join needs it.
-    method _join_phis ($join, $arm, $lone_idx = undef) {
+    method _join_phis ($join, $arm, $lone_idx = undef, $next_of = {}) {
         return ('') unless defined $join;
 
         my @phis = sort { $a->{id} <=> $b->{id} }
@@ -4930,10 +4965,22 @@ class SoN::Deparse 0.01 {
                 : $var;
 
             for my $i (0 .. $#in) {
-                my $a = $proj_arm{ $pred[$i] };
-                next unless defined $a;
-                $assign{$a} .= sprintf("%s = %s;\n", $var,
-                                       $self->_expr($in[$i]));
+                # AN ARM PAYS THE PREDECESSOR ITS FALL-THROUGH ENDS ON, which
+                # is not always its own Proj. `if (!C) { if (D) { return X } }
+                # return E` binds the exit join twice, inner if then outer, and
+                # E comes in by a Region joining the outer true arm and the
+                # inner false one -- a predecessor neither if had an arm for.
+                # The outer if found that path under its own arms and wrote no
+                # seed, so no path assigned E and the sub returned undef.
+                # The arm's own Proj still names it: the producer records an
+                # arm's Proj as the predecessor even where a nested merge is
+                # the Region's actual input.
+                my @arms = grep { my $sp;
+                                  $arm->{$_}{id} == $pred[$i]
+                                  || (defined($sp = $self->_arm_spine_pred($arm->{$_}, $join, $next_of))
+                                      && $sp == $pred[$i]) } sort keys $arm->%*;
+                $assign{$_} .= sprintf("%s = %s;\n", $var, $self->_expr($in[$i]))
+                    for @arms;
             }
             $bound{ $p->{id} } = $var;
         }
