@@ -10637,6 +10637,20 @@ class SoN::FromOptree 0.01 {
                     push @inputs, $sim->memory;
                     $extra{memory_input} = 1;   # see Call's memory_input
                 }
+                # A WHOLE ARRAY OR HASH OPERAND IS READ AT A MEMORY VERSION, as
+                # `keys` reads its hash above: `push @r, $_ for 1..3; my @b =
+                # reverse @r` took @r and nothing else, so the graph did not
+                # say the reverse comes after the pushes -- placed above the
+                # loop, it reversed an empty array. The call reads the memory;
+                # it does not advance it.
+                elsif ($node_type eq 'Call' && !$extra{memory_input}
+                    && defined $sim->memory
+                    && grep { _is_array_operand($_)
+                              || ($_->isa('SoN::IR::Node::PadAccess')
+                                  && ($_->sigil // '') eq '%') } @inputs) {
+                    push @inputs, $sim->memory;
+                    $extra{memory_input} = 1;
+                }
 
                 %extra = (%extra, _bitwise_flavor($name));
                 # AN ANONYMOUS CONSTRUCTOR IS AN ALLOCATION, pinned where it

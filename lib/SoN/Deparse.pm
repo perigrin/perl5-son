@@ -2752,6 +2752,17 @@ class SoN::Deparse 0.01 {
             }
 
             if (defined(my $store = $self->_latest_store_read($n))) {
+                # A STORE INSIDE A LOOP settles when the loop ends: `push @r,
+                # $_ for 1..3; my @b = reverse @r` read the push, and placed
+                # after it the `my @b` was declared inside the loop body.
+                # ponytail: the outermost loop around the store; an aggregate
+                # declared inside an outer loop is pinned, not placed here.
+                if (defined(my $loop = $self->_outermost_loop($store))) {
+                    if (defined(my $join = $self->_loop_join($loop))) {
+                        push $after_region{$join}->@*, $n;
+                        next;
+                    }
+                }
                 # AHEAD OF THE READS ALREADY ANCHORED HERE, as above: a stale
                 # read through `${$rs[0]}` placed at the same store read
                 # `$rs[0]` above the `my @rs` it names.
@@ -5028,6 +5039,29 @@ class SoN::Deparse 0.01 {
             return 0 if $op eq 'Start' || $op eq 'Region';
             $id = $op =~ /\A(?:Proj|If)\z/ ? ($n->{inputs} // [])->[0]
                                              : $n->{control_in};
+    # The outermost Loop whose body holds control node $id, or undef. Walked
+    # back along control: a join through the If or Loop that opened it, a
+    # Loop's body Proj into the Loop, and on out from the Loop's entry.
+    method _outermost_loop ($id) {
+        my (%seen, $loop);
+        while (defined $id && !$seen{$id}++) {
+            my $n = $nodes->{$id} or last;
+            my $op = $n->{op} // '';
+            last if $op eq 'Start';
+            if ($op eq 'Proj') {
+                my $src = $nodes->{ ($n->{inputs} // [])->[0] // -1 } or last;
+                $loop = $src->{id} if ($src->{op} // '') eq 'Loop'
+                                   && (($n->{fields} // {})->{index} // 0) == 0;
+                $id = $src->{id};
+                next;
+            }
+            $id = $op eq 'Region' && defined $n->{head} ? $n->{head}
+                : $op =~ /\A(?:If|Loop|Region)\z/ ? ($n->{inputs} // [])->[0]
+                :                                    $n->{control_in};
+        }
+        return $loop;
+    }
+
         }
         return 0;
     }
