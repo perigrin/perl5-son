@@ -3118,7 +3118,10 @@ class SoN::Deparse 0.01 {
                         $sigil = $self->_exit_input_sigil($ph->{inputs}[$k])
                             unless $ret;
                         my $var = sprintf('%sret%d', $sigil, $ph->{id});
-                        $out .= sprintf("my %s = %s;\n", $var,
+                        # DECLARED AT THE TOP: a path inside an arm may bind
+                        # it, and another path assign it outside that arm.
+                        $hoisted{$var} //= $var;
+                        $out .= sprintf("%s = %s;\n", $var,
                                         $self->_expr($ph->{inputs}[$k]));
                         $bound{ $ph->{id} } = $var;
                     }
@@ -4815,6 +4818,21 @@ class SoN::Deparse 0.01 {
         # nodes, so it is the join. Find it by looking for the Region that both
         # arms reach.
         my $join = $self->_join_region($arm{0}, $arm{1}, $next_of);
+        # ONE ARM RETURNS, THE OTHER FALLS THROUGH TO THE ENCLOSING JOIN:
+        # `if (A) { if (B) { return 1 } return 2 }` inside an enclosing arm
+        # meets its sibling only at the function's exit. The enclosing join
+        # is where the walk stops, so it is this If's join as well -- taken
+        # as the exit, the code after the enclosing join was emitted inside
+        # this If's other arm and again after it, and a value bound in one
+        # copy was unset in the other.
+        if (defined $join && defined $outer_stop && $nodes->{$outer_stop}
+            && $self->_is_fn_exit($nodes->{$join}, $next_of)
+            && !$self->_is_fn_exit($nodes->{$outer_stop}, $next_of)
+            && grep { my $p = $_;
+                      grep { $_ == $outer_stop } $self->_control_reachable($p->{id}, $next_of) }
+                    $arm{0}, $arm{1}) {
+            $join = $outer_stop;
+        }
 
         my $t = $self->_emit_from($arm{0}{id}, $next_of, $join);
         my $f = $self->_emit_from($arm{1}{id}, $next_of, $join);
