@@ -1607,9 +1607,14 @@ class SoN::FromOptree 0.01 {
                 # is pinned -- runs on its own Proj, as the and/or handler's
                 # effect branch does: the If tests definedness, the fallback
                 # takes the false arm, and the arms merge before the value.
+                # SO DOES ONE THAT DIES -- `my $c = shift // die "none"` -- in
+                # any context: walked on the operator's own control, its Unwind
+                # hung off the shift beside the rest of the sub, with no If to
+                # choose between them.
                 my $dor_if;
-                if (($op->flags & 3) != 1
-                        && _arm_advances_control($op->other, $stop_addr)) {
+                if ((($op->flags & 3) != 1
+                        && _arm_advances_control($op->other, $stop_addr))
+                    || _arm_has_die($op->other, $stop_addr)) {
                     $dor_if = $factory->make_cfg('If', inputs => [$sim->control,
                         $factory->make('Defined', inputs => [$lhs])]);
                     $rhs_sim->set_control($factory->make_cfg('Proj',
