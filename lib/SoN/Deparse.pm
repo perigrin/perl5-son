@@ -4752,8 +4752,15 @@ class SoN::Deparse 0.01 {
                 # `next if` merge -- and emitted the continue block inside the
                 # else arm, before the enclosing walk emitted it again (corpus
                 # 137 printed c1 twice).
+                # UNLESS IT FALLS STRAIGHT INTO THE LATCH: `last unless
+                # defined $h; $cur = $h; next` reaches the latch by its own
+                # chain, and stops there to pay what it computed on the way.
+                my $latch_join = $self->_lone_arm_join( $arm{$rest_ix}, $next_of );
+                $latch_join = undef unless defined $latch_join
+                    && ( grep { exists $_->{latch}{$latch_join} } @loop_frames )
+                    && $self->_reaches_region( $arm{$rest_ix}, $latch_join, $next_of );
                 my $rest = $self->_emit_from( $arm{$rest_ix}{id}, $next_of,
-                                              $outer_stop // $loop_exit_region );
+                                              $latch_join // $outer_stop // $loop_exit_region );
                 # The condition is written so the BREAKING arm is the one that
                 # runs: an index-1 break means the loop leaves when the test is
                 # FALSE, so the spelling negates.
@@ -4799,6 +4806,16 @@ class SoN::Deparse 0.01 {
                 # first meets the function's exit, through the loop's exit --
                 # `last if A; return X if B` resumed there, and the code after
                 # the loop was emitted inside the body.
+                # A REST THAT FELL INTO THE LATCH pays it after what it ran,
+                # since that is where its values come from. Skipped, the latch
+                # variables kept the other arm's values and the loop never
+                # moved on. Silent on base: a hang.
+                if ( defined $latch_join ) {
+                    my ($bdecl, %bassign)
+                        = $self->_join_phis( $latch_join, { $rest_ix => $arm{$rest_ix} } );
+                    return ( $bdecl . $text . $rest . ( $bassign{$rest_ix} // '' ),
+                             $latch_join );
+                }
                 my $bjoin = $self->_lone_arm_join( $arm{$rest_ix}, $next_of );
                 if ( defined $bjoin
                      && !grep { my $r = $_->{region};
