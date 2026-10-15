@@ -5107,14 +5107,25 @@ class SoN::Deparse 0.01 {
 
     method _join_region ($true_proj, $false_proj, $next_of) {
         my %from_true = map { $_ => 1 } $self->_control_reachable($true_proj->{id}, $next_of);
+        my @found;
         for my $id ($self->_control_reachable($false_proj->{id}, $next_of)) {
             my $n = $nodes->{$id} or next;
             next unless $n->{op} eq 'Region';
             my @ins = ($n->{inputs} // [])->@*;
-            return $id if (grep { $from_true{$_} } @ins)
-                       && (grep { !$from_true{$_} } @ins);
+            push @found, $n if (grep { $from_true{$_} } @ins)
+                            && (grep { !$from_true{$_} } @ins);
         }
-        return undef;
+        # A LATCH IS THE JOIN ONLY WHEN NOTHING NEARER IS. A `next` in a
+        # nested arm reaches the latch in fewer steps than its sibling reaches
+        # the If's own merge, and the latch -- which the other arm reaches
+        # too -- was taken for the join: the fall-through then paid neither
+        # the merge nor the latch (`next if A; if (B) { next } ...` lost
+        # every value but B's). A latch has no successor in the body, so
+        # any other candidate comes before it.
+        my ($own) = grep { (($nodes->{ $_->{head} // -1 } // {})->{op} // '') ne 'Loop'
+                            || ($next_of->{ $_->{id} } // [])->@* } @found;
+        my $join = $own // $found[0];
+        return $join ? $join->{id} : undef;
     }
 
     # Every control node reachable forward from $id, including Region inputs
