@@ -7211,8 +7211,15 @@ class SoN::Deparse 0.01 {
         # genuinely empty replacement (`s/a//`) is the input's presence, once
         # the pattern and the memory edge are accounted for.
         if (!length $rep && @in && !$self->_is_memory($in[0])) {
-            $rep = sprintf('${\ (%s) }', $self->_expr(shift @in));
+            return ($pat, sprintf('${\ (%s) }', $self->_expr(shift @in)));
         }
+
+        # A CONSTANT REPLACEMENT IS ITS VALUE, and the replacement half of
+        # s{}{} interpolates: spelled raw, the value `\\` yielded one
+        # backslash and `\n` a newline (chalk's BNF::Target::C::_c_string,
+        # whose C then failed to compile). Escaped, it spells itself. An /e
+        # replacement is code, and stays as it is.
+        $rep =~ s/([\\\$\@{}])/\\$1/g unless ($f->{flags} // '') =~ /e/;
 
         return ($pat, $rep);
     }
