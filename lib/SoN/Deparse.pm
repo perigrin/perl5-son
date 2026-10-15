@@ -5036,19 +5036,26 @@ class SoN::Deparse 0.01 {
                 ? sprintf('%s = %s', $var, $self->_expr($in[$seed]))
                 : $var;
 
-            # A RETURNED LIST BESIDE A SCALAR: `if ($x) { return g() }
-            # return 7` runs g in the caller's context, and the exit's scalar
-            # variable took the COUNT of the list g's binding holds. Which
-            # one the caller gets is decided at run time.
+            # A RETURNED CALL BESIDE A SCALAR: `if ($x) { return g() }
+            # return 7` runs g in the caller's context -- a Call with no
+            # `want` -- and the exit's scalar variable took g's count, or its
+            # last value alone for a method. Which one the caller gets is
+            # decided at run time.
             my $exit = $var =~ /\A\$/ && grep { ($_->{op} // '') eq 'Return'
                 && ($_->{control_in} // -1) == $join } $self->_nodes_in_order;
             for my $i (0 .. $#in) {
                 my $a = $proj_arm{ $pred[$i] };
                 next unless defined $a;
                 my $e = $self->_expr($in[$i]);
+                # NOT AN ARRAY: `return @o` in scalar context IS its count.
+                # ONLY A CALLEE THIS GRAPH SET SHOWS RETURNING A LIST: one
+                # whose body is not here is taken for a scalar, as before.
+                my $c = $nodes->{ $in[$i] };
                 die "GAP: a function exit merges a returned list with a scalar;"
-                  . " which one the caller gets depends on its context\n"
-                    if $exit && $e =~ /\A\@/;
+                  . " a call returned in the caller's context is bound to one\n"
+                    if $exit && $c && ($c->{op} // '') eq 'Call'
+                    && !defined(($c->{fields} // {})->{want})
+                    && $self->_callee_returns_list($c);
                 $assign{$a} .= sprintf("%s = %s;\n", $var, $e);
             }
             $bound{ $p->{id} } = $var;
@@ -5061,6 +5068,40 @@ class SoN::Deparse 0.01 {
     # nodes, so a Region naming a node reachable from each arm is the join.
     # Is this control node inside a loop's body? Walked back along control to
     # the first Loop (yes) or Start, or a merge, which says no single path.
+    # Does the sub or method this Call names, if its graph is in this set,
+    # return a list -- a Return carrying [list, scalar], or an aggregate?
+    method _callee_returns_list ($c) {
+        my $f = $c->{fields} // {};
+        my $kind = $f->{dispatch_kind} // '';
+        my $name = $f->{name} // return 0;
+        # A METHOD ON AN INVOCANT OF NO KNOWN CLASS is looked for in this
+        # sub's package: a wrong guess only refuses.
+        my ($pkg) = ($current_sub // '') =~ /\A(.*)::[^:]+\z/;
+        my $key = $kind eq 'direct' ? $name
+                : $kind eq 'method' && defined($f->{class_name} // $pkg)
+                    ? ($f->{class_name} // $pkg) . "::$name"
+                : return 0;
+        my $g = $all_methods->{$key} or return 0;
+        my %by = map { $_->{id} => $_ } ($g->{nodes} // [])->@*;
+        my (%seen, @todo);
+        for my $r (grep { ($_->{op} // '') eq 'Return' } values %by) {
+            my @in = ($r->{inputs} // [])->@*;
+            return 1 if @in == 2;
+            push @todo, @in;
+        }
+        # THROUGH THE EXIT'S PHIS, to what each path returns.
+        while (defined(my $id = shift @todo)) {
+            next if $seen{$id}++;
+            my $v = $by{$id} or next;
+            my $op = $v->{op} // '';
+            my $sig = ($v->{fields} // {})->{sigil} // '';
+            return 1 if $op =~ /\A(?:ArrayLiteral|HashLiteral|ArgsSource)\z/
+                || ($op =~ /\A(?:PostfixDeref|PadAccess)\z/ && $sig =~ /\A[\@%]\z/);
+            push @todo, ($v->{inputs} // [])->@* if $op eq 'Phi';
+        }
+        return 0;
+    }
+
     # The outermost Loop whose body holds control node $id, or undef. Walked
     # back along control: a join through the If or Loop that opened it, a
     # Loop's body Proj into the Loop, and on out from the Loop's entry.
