@@ -12234,6 +12234,10 @@ class SoN::FromOptree 0.01 {
             my $p = eval { $op->parent } or return undef;
             return undef unless $$p;
             return $last if $p->name eq 'leaveloop';
+            # A STATEMENT BOUNDARY MEANS THIS IS NOT ITS LOOP'S CONDITION: a
+            # postfix `EXPR while COND` has no leaveloop of its own, and the
+            # climb went on to an enclosing foreach's and scouted its body.
+            return undef if $p->name =~ /\A(?:lineseq|scope|leave\w*)\z/;
             $last = $p if $p->name eq 'and' || $p->name eq 'or';
             $op = $p;
         }
