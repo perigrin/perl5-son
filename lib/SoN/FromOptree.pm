@@ -18877,7 +18877,7 @@ class SoN::FromOptree 0.01 {
         return ('', $pat);
     }
 
-    sub _subst_target ($cv, $op, $sim, $factory) {
+    sub _subst_target ($cv, $op, $sim, $factory, $r_value_ok = 0) {
         my $targ      = $op->targ;
         # NO TARG DOES NOT MEAN $_. It means the target is not a pad slot, and
         # that covers two different things: the implicit $_, and a PACKAGE
@@ -18919,6 +18919,15 @@ class SoN::FromOptree 0.01 {
                         && $k->last->name eq 'padsv' && $k->last->targ
                         && defined(my $v = $sim->lookup($k->last->targ))) {
                     return ($k->last->targ, $v, 0);
+                }
+                # A /r SUBSTITUTION WRITES NOTHING: its subject is a value,
+                # stacked below the literal replacement --
+                # `my $n = $f->{name} =~ s/^\$//r`. No name to rebind or store
+                # through. (Only for a caller that pops the stacked subject.)
+                if ($r_value_ok && ($op->pmflags & PMf_NONDESTRUCT)
+                        && !($op->pmflags & PMf_EVAL)
+                        && $sim->stack_depth >= 2) {
+                    return ('', $sim->node_at(-2), undef);
                 }
                 die "GAP: s/// on a target that is not a named scalar (an"
                   . " element, a dereference or an assignment) not yet"
@@ -19041,7 +19050,7 @@ class SoN::FromOptree 0.01 {
             # $store_target is the NAME to store through when the
             # binding resolved to a bare value -- see _subst_target.
             my ($scope_key, $target, $store_target) =
-                _subst_target($cv, $op, $sim, $factory);
+                _subst_target($cv, $op, $sim, $factory, 1);
             $store_target //= $target;
             # s///e: the replacement is a code SUBTREE rather than a
             # literal, and it is walkable. It hangs off pmreplroot and is

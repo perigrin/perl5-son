@@ -91,4 +91,20 @@ sub f { my ($p) = @_; $p =~ s/^\^// if $p =~ /^\^/; return $p }
 print f("^ab"), f("ab"), "\n";
 P
 
+# A /r ON AN ELEMENT writes nothing, so its subject is a value: refused as
+# "not a named scalar", which the arm walk now reached where it used to drop
+# the s/// whole (chalk's IR::Analysis strips sigils from `$f->{name}` so).
+round_trips(<<'P', 'an s///r on an element, in an arm');
+sub f { my ($f) = @_; if ($f) { my $x = $f->{name} =~ s/^[\$\@\%]//r; return "$x $f->{name}" } "-" }
+print f({name => "\$ab"}), f(0), "\n";
+P
+
+round_trips(<<'P', 'an s///r on an element and on an array element, straight-line');
+my $h = {n => "aXa"};
+my @a = ("xa");
+my $c = ($h->{n} =~ s/a/b/gr) . "!";
+my $y = uc($a[0] =~ s/x//r);
+print "$c $h->{n} $y @a\n";
+P
+
 done_testing;
