@@ -5014,11 +5014,20 @@ class SoN::Deparse 0.01 {
                 ? sprintf('%s = %s', $var, $self->_expr($in[$seed]))
                 : $var;
 
+            # A RETURNED LIST BESIDE A SCALAR: `if ($x) { return g() }
+            # return 7` runs g in the caller's context, and the exit's scalar
+            # variable took the COUNT of the list g's binding holds. Which
+            # one the caller gets is decided at run time.
+            my $exit = $var =~ /\A\$/ && grep { ($_->{op} // '') eq 'Return'
+                && ($_->{control_in} // -1) == $join } $self->_nodes_in_order;
             for my $i (0 .. $#in) {
                 my $a = $proj_arm{ $pred[$i] };
                 next unless defined $a;
-                $assign{$a} .= sprintf("%s = %s;\n", $var,
-                                       $self->_expr($in[$i]));
+                my $e = $self->_expr($in[$i]);
+                die "GAP: a function exit merges a returned list with a scalar;"
+                  . " which one the caller gets depends on its context\n"
+                    if $exit && $e =~ /\A\@/;
+                $assign{$a} .= sprintf("%s = %s;\n", $var, $e);
             }
             $bound{ $p->{id} } = $var;
         }
@@ -5030,15 +5039,6 @@ class SoN::Deparse 0.01 {
     # nodes, so a Region naming a node reachable from each arm is the join.
     # Is this control node inside a loop's body? Walked back along control to
     # the first Loop (yes) or Start, or a merge, which says no single path.
-    method _inside_loop ($id) {
-        my %seen;
-        while (defined $id && !$seen{$id}++) {
-            my $n = $nodes->{$id} or return 0;
-            my $op = $n->{op} // '';
-            return 1 if $op eq 'Loop';
-            return 0 if $op eq 'Start' || $op eq 'Region';
-            $id = $op =~ /\A(?:Proj|If)\z/ ? ($n->{inputs} // [])->[0]
-                                             : $n->{control_in};
     # The outermost Loop whose body holds control node $id, or undef. Walked
     # back along control: a join through the If or Loop that opened it, a
     # Loop's body Proj into the Loop, and on out from the Loop's entry.
@@ -5062,6 +5062,15 @@ class SoN::Deparse 0.01 {
         return $loop;
     }
 
+    method _inside_loop ($id) {
+        my %seen;
+        while (defined $id && !$seen{$id}++) {
+            my $n = $nodes->{$id} or return 0;
+            my $op = $n->{op} // '';
+            return 1 if $op eq 'Loop';
+            return 0 if $op eq 'Start' || $op eq 'Region';
+            $id = $op =~ /\A(?:Proj|If)\z/ ? ($n->{inputs} // [])->[0]
+                                             : $n->{control_in};
         }
         return 0;
     }
