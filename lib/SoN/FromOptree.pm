@@ -14490,11 +14490,14 @@ class SoN::FromOptree 0.01 {
                 # statements), unlike the guarded-`last` case above where the
                 # taken arm is empty and the main sim's bindings are correct.
                 if (($taken_sig // '') eq 'broke') {
-                    push @$break_projs, {
+                    # `last LABEL` feeds the named loop's exit.
+                    my $frame = _loop_control_frame($taken_end);
+                    my $sink  = $frame ? $frame->{breaks} : $break_projs;
+                    push @$sink, {
                         proj     => $taken_sim->control,
                         bindings => $taken_sim->scope_bindings,
                         memory   => $taken_sim->memory,
-                    } if defined $break_projs;
+                    } if defined $sink && defined $break_projs;
                     # Continue on the skip arm alone: the taken arm has left.
                     $sim->set_control($skip_proj);
                     $op = $op->next;
@@ -16796,14 +16799,20 @@ class SoN::FromOptree 0.01 {
             # NOR ONE THAT RETURNED: its edge to the function exit is recorded,
             # and merging it too gave its Proj two successors.
             my %left;
-            for my $arm ([ true => $true_sim, $true_sig ], [ false => $false_sim, $false_sig ]) {
-                my ($which, $asim, $asig) = @$arm;
+            for my $arm ([ true => $true_sim, $true_sig, $true_end ],
+                         [ false => $false_sim, $false_sig, $false_end ]) {
+                my ($which, $asim, $asig, $aend) = @$arm;
                 next unless ($asig // '') =~ /\A(?:nexted|broke|exited)\z/;
                 $left{$which} = 1;
-                push $loop->{breaks}->@*, { proj => $asim->control,
-                                            bindings => $asim->scope_bindings,
-                                            memory => $asim->memory }
-                    if $asig eq 'broke' && $loop && defined $loop->{breaks};
+                next unless $asig eq 'broke' && $loop && defined $loop->{breaks};
+                # `last LABEL` feeds the named loop's exit, not this one's:
+                # recorded here, the outer loop ran on (11 21 31 for perl's 11).
+                my $frame = _loop_control_frame($aend);
+                next if $frame && !defined $frame->{breaks};
+                push(($frame ? $frame->{breaks} : $loop->{breaks})->@*,
+                     { proj => $asim->control,
+                       bindings => $asim->scope_bindings,
+                       memory => $asim->memory });
             }
             # BOTH ARMS RETURNED: each edge is in the function-wide exit list
             # already, and nothing runs after the if/else on this path. The
