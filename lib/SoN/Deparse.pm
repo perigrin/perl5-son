@@ -5016,15 +5016,23 @@ class SoN::Deparse 0.01 {
         # taken for the join, the exit's Phis were read as the If's.
         my %exit = map { $_ => 1 } grep { defined }
                    $loop_exit_region, map { $_->{exit} } @loop_frames;
+        my @cand;
         for my $id ($self->_control_reachable($false_proj->{id}, $next_of)) {
             next if $exit{$id};
             my $n = $nodes->{$id} or next;
             next unless $n->{op} eq 'Region';
             my @ins = ($n->{inputs} // [])->@*;
-            return $id if (grep { $from_true{$_} } @ins)
-                       && (grep { !$from_true{$_} } @ins);
+            push @cand, $id if (grep { $from_true{$_} } @ins)
+                            && (grep { !$from_true{$_} } @ins);
         }
-        return undef;
+        # THE FUNCTION'S EXIT IS A NESTED GUARD'S EDGE, NOT THIS IF'S JOIN,
+        # when the arms also meet somewhere else. A guarded return in one arm
+        # reaches the exit in fewer steps than its fall-through reaches the
+        # arms' merge, and the other arm reaches the exit too, through a later
+        # return -- `if (!$o) { return 1 if $s } return 2 if $o > 5`. Taken
+        # for the join, the rest of the body ran inside both arms.
+        my @inner = grep { !$self->_is_fn_exit($nodes->{$_}, $next_of) } @cand;
+        return ( @inner ? $inner[0] : $cand[0] );
     }
 
     # Every control node reachable forward from $id, including Region inputs
