@@ -4916,9 +4916,17 @@ class SoN::Deparse 0.01 {
                 # $join: the code after it runs on that arm alone. Unpaid,
                 # the latch lost every value on the path (`next if A; $s .=
                 # $i; last if B; next` printed 3 for perl's 23).
-                my %sp = map { defined($_) ? ($_ => 1) : () }
-                         map { $self->_arm_spine_pred($_, $join, $next_of) }
-                         ($next_of->{ $if->{id} } // [])->@*;
+                # THE OTHERS MUST NOT REACH $join AT ALL: an arm that reaches
+                # it by more than one way (a nested if/else whose arms each
+                # return) leaves no single fall-through, and paying the one
+                # found ran after every way (`$phi = $b` after the else).
+                my %sp;
+                for my $a (($next_of->{ $if->{id} } // [])->@*) {
+                    my $sp = $self->_arm_spine_pred($a, $join, $next_of);
+                    if (defined $sp) { $sp{$sp} = 1; next }
+                    return undef if grep { $_ == $join }
+                        $self->_control_reachable($a->{id}, $next_of);
+                }
                 return keys(%sp) == 1 ? (keys %sp)[0] : undef;
             }
             my @succ = ($next_of->{ $n->{id} } // [])->@*;
