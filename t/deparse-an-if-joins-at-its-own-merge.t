@@ -67,6 +67,14 @@ round_trips(q{my $s=''; my $i=0; while ($i < 7) { $i++; next unless $i % 2; if (
     'next-unless in a while');
 round_trips(q{my ($s,$n)=('',0); for my $i (1..6) { next if $i == 2; $n++; if ($i == 4) { $s .= 'N'; next } $s .= $n } continue { $s .= ',' } print "$s $n\n";},
     'next-if, an if ending in next, a continue block');
+# Two nexts merge into chained latches: the latch nearer the walk is
+# still not the join (T3FT6 for perl's 2.T34FT67.8.).
+round_trips(q{my $s=''; for my $i (1..8) { next if $i == 1; if ($i % 3 == 0) { $s .= "T$i"; next } elsif ($i == 5) { $s .= 'F'; next } $s .= $i; next if $i == 4; $s .= '.' } print "$s\n";},
+    'next-if, an if/elsif both ending in next, a second next-if');
+round_trips(q{my $s=""; for my $i (1..8) { next if $i == 1; if ($i % 3 == 0) { $s .= "T$i"; next } if ($i == 5) { $s .= "F"; next } $s .= $i } print "$s\n";},
+    'next-if, then two ifs ending in next');
+round_trips(q{my $s=""; for my $i (1..4) { for my $j (1..3) { next if $j == 1; if ($i == $j) { $s .= "="; next } $s .= "$i$j" } $s .= ";" } print "$s\n";},
+    'the same shape in an inner loop');
 emits_quietly(q{my $s=''; for my $i (1..6) { next if $i == 1; if ($i == 3) { $s .= 'N'; next } $s .= 'b'; next if $i == 4; $s .= '-' } print "$s\n";},
     'next-if, then an if ending in next');
 

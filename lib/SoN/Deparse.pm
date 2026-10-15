@@ -5120,10 +5120,10 @@ class SoN::Deparse 0.01 {
         # the If's own merge, and the latch -- which the other arm reaches
         # too -- was taken for the join: the fall-through then paid neither
         # the merge nor the latch (`next if A; if (B) { next } ...` lost
-        # every value but B's). A latch has no successor in the body, so
-        # any other candidate comes before it.
-        my ($own) = grep { (($nodes->{ $_->{head} // -1 } // {})->{op} // '') ne 'Loop'
-                            || ($next_of->{ $_->{id} } // [])->@* } @found;
+        # every value but B's). A latch leads only to later latches, so any
+        # other candidate comes before it.
+        my %latch = map { $_ => 1 } map { keys $_->{latch}->%* } @loop_frames;
+        my ($own) = grep { !$latch{ $_->{id} } } @found;
         my $join = $own // $found[0];
         return $join ? $join->{id} : undef;
     }
