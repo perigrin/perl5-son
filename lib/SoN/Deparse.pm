@@ -3485,15 +3485,49 @@ class SoN::Deparse 0.01 {
         # non-Loop-regioned Phi, and refused.
         %break_assign = ();
         if ($exit_rgn) {
+            # TWO OR MORE BREAKS GIVE A PHI AN INPUT PER PREDECESSOR, in the
+            # Region's order, and each `last` pays the input of the
+            # predecessor its arm reaches. A loop with no header exit (every
+            # way out is a break) has no header input: its variable is the
+            # Phi's own, declared before the loop, and every break pays it.
+            my @rin = ($exit_rgn->{inputs} // [])->@*;
+            my $r0  = $nodes->{ $rin[0] // -1 };
+            my $has_header = $r0 && ($r0->{op} // '') eq 'Proj'
+                && (($r0->{inputs} // [])->[0] // -1) == $n->{id};
             for my $ph ($self->_nodes_in_order) {
                 next unless ($ph->{op} // '') eq 'Phi';
                 next unless (($ph->{fields} // {})->{region} // -1)
                             == $exit_rgn->{id};
                 my @pin = ($ph->{inputs} // [])->@*;
-                next unless @pin == 2;
+                # ONE BREAK: [header, break], whatever the Region holds.
+                my $one = @pin == 2 && @rin == ($has_header ? 2 : 1);
+                next unless $one || (@pin == @rin && @pin > 1);
                 # A MEMORY Phi merges the exit's chains, not a value: the store
                 # before the `last` is already on its path.
                 next if $self->_is_memory($ph->{id});
+                if (!$one) {
+                    my ($var, $first) = (sprintf('$exit%d', $ph->{id}), 0);
+                    if ($has_header) {
+                        my $header = $nodes->{ $pin[0] // -1 } or next;
+                        if (($header->{op} // '') eq 'Phi') {
+                            $var = $self->_phi_var($header);
+                        }
+                        else {
+                            $init .= sprintf("my %s = %s;\n",
+                                $var, $self->_expr($pin[0]));
+                        }
+                        $first = 1;
+                    }
+                    else {
+                        $init .= "my $var;\n";
+                    }
+                    my %pay = map { ($_ => sprintf("%s = %s;\n",
+                                        $var, $self->_expr($pin[$_]))) }
+                              $first .. $#pin;
+                    $bound{ $ph->{id} }        = $var;
+                    $break_assign{ $ph->{id} } = sub ($k) { $pay{ $k // -1 } // '' };
+                    next;
+                }
                 my $header = $nodes->{ $pin[0] // -1 } or next;
 
                 # A LOOP-CARRIED SLOT REUSES ITS OWN VARIABLE. When input 0 is
@@ -3518,8 +3552,8 @@ class SoN::Deparse 0.01 {
                         $var, $self->_expr($pin[0]));
                 }
                 $bound{ $ph->{id} }        = $var;
-                $break_assign{ $ph->{id} } = sprintf("%s = %s;\n",
-                    $var, $self->_expr($pin[1]));
+                my $pay = sprintf("%s = %s;\n", $var, $self->_expr($pin[1]));
+                $break_assign{ $ph->{id} } = sub ($k) { $pay };
             }
         }
 
@@ -4476,6 +4510,30 @@ class SoN::Deparse 0.01 {
     # Bounded by the first Region encountered, because a nested diamond inside
     # the arm converges at its own join and anything past that is no longer
     # this arm's edge.
+    # Which of a Region's predecessors an arm reaches it by: the index of the
+    # last node on the arm's control path before the Region, walked with
+    # _reaches_region's bounds. Undef when the arm does not reach it.
+    method _region_pred_index ($proj, $region, $next_of) {
+        return undef unless defined $proj && $region;
+        my @rin = ($region->{inputs} // [])->@*;
+        my %seen;
+        my @todo = ( $proj );
+        while (@todo) {
+            my $n = shift @todo;
+            next unless $n && !$seen{ $n->{id} }++;
+            next if ( $n->{op} // '' ) eq 'Region';
+            next if ( $n->{op} // '' ) eq 'If' && $n->{id} != $proj->{id};
+            my @succ = ( $next_of->{ $n->{id} } // [] )->@*;
+            if (grep { $_->{id} == $region->{id} } @succ) {
+                for my $k (0 .. $#rin) {
+                    return $k if $rin[$k] == $n->{id};
+                }
+            }
+            push @todo, @succ;
+        }
+        return undef;
+    }
+
     method _reaches_region ($proj, $region_id, $next_of) {
         return 0 unless defined $proj && defined $region_id;
         my %seen;
@@ -4594,7 +4652,7 @@ class SoN::Deparse 0.01 {
         # the innermost loop's exit is the plain `last` below.
         my @edges;
         push @edges, { region => $loop_exit_region, word => 'last',
-                       pay => sub { join '', map { $break_assign{$_} }
+                       pay => sub ($k = undef) { join '', map { $break_assign{$_}->($k) }
                                              sort { $a <=> $b } keys %break_assign } }
             if defined $loop_exit_region;
         for my $fi ( 0 .. $#loop_frames ) {
@@ -4602,7 +4660,7 @@ class SoN::Deparse 0.01 {
             my $inner = $fi == $#loop_frames;
             push @edges, { region => $f->{exit}, word => "last $f->{label}",
                            frame => $f,
-                           pay => sub { join '', map { $f->{breaks}{$_} }
+                           pay => sub ($k = undef) { join '', map { $f->{breaks}{$_}->($k) }
                                                  sort { $a <=> $b } keys $f->{breaks}->%* } }
                 if defined $f->{exit} && !$inner;
             # The innermost loop's latch too: a `next` ending an arm of its
@@ -4611,7 +4669,7 @@ class SoN::Deparse 0.01 {
                 push @edges, { region => $r,
                                word => $inner ? 'next' : "next $f->{label}",
                                frame => $f,
-                               pay => sub { join '', map {
+                               pay => sub ($k = undef) { join '', map {
                                    sprintf("%s = %s;\n", $bound{ $_->{id} },
                                        $self->_expr($_->{inputs}[1])) }
                                    $f->{latch}{$r}->@* } };
@@ -4632,7 +4690,7 @@ class SoN::Deparse 0.01 {
                 my $r = $arm{$ix} && $self->_arm_fn_exit( $arm{$ix}, $next_of )
                     or next;
                 push @edges, { region => $r, word => 'return',
-                               pay => sub { '' } };
+                               pay => sub ($k = undef) { '' } };
             }
         }
         for my $edge (@edges) {
@@ -4665,7 +4723,8 @@ class SoN::Deparse 0.01 {
                 # THE EXIT PHIS ARE PAID HERE. Each records what the loop
                 # variable must hold on this path; assigning before the `last`
                 # is what makes a post-loop read correct on both exits.
-                my $pay  = $edge->{pay}->();
+                my $pay  = $edge->{pay}->( $self->_region_pred_index(
+                    $arm{$ix}, $nodes->{ $edge->{region} }, $next_of ) );
                 # WHAT THE ARM DOES BEFORE IT LEAVES runs before the jump: a
                 # store pinned between the arm's Proj and the exit Region --
                 # `$so = $i; last` into a demoted slot -- was left out, and

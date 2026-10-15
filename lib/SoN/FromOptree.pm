@@ -12404,7 +12404,28 @@ class SoN::FromOptree 0.01 {
     # See the block comment at the call site for what the Phi means; this is
     # that code unchanged, with the loop's own variables passed in.
     sub _bind_break_exit_phis ($factory, $sim, $exit_region, $break_projs) {
-        for my $brk (@$break_projs) {
+        # TWO OR MORE BREAKS MAKE ONE PHI PER SLOT, an input per Region
+        # predecessor in its order -- as the memory Phi below does. A Phi per
+        # break, each over [header, that break], chained two-input Phis onto
+        # a Region with three predecessors, and the deparser gave each break
+        # the wrong one's values: `last if $i > 4; ...; last if $i % 2 == 0`
+        # printed `eoe 3` for perl's `eoe 2`.
+        if (@$break_projs >= 2) {
+            my $header_exit = $exit_region->inputs->@* > @$break_projs;
+            my $scope = $sim->scope_bindings;
+            my %targs = map { %{ $_->{bindings} } } @$break_projs;
+            for my $targ (sort _scope_key_order keys %targs) {
+                my $header = $scope->{$targ};
+                next unless defined $header;
+                my @vals = map { $_->{bindings}{$targ} // $header } @$break_projs;
+                next unless grep { $_ != $header } @vals;
+                $sim->define($targ, $factory->make('Phi',
+                    inputs => [ ($header_exit ? ($header) : ()), @vals ],
+                    region => $exit_region,
+                    (_is_narrowed($header->stamp) ? (stamp => $header->stamp) : ())));
+            }
+        }
+        for my $brk (@$break_projs >= 2 ? () : @$break_projs) {
             my $brk_bindings = $brk->{bindings};
             for my $targ (sort _scope_key_order keys %$brk_bindings) {
                 my $header = $sim->scope_bindings->{$targ};   # header Phi (patched)
@@ -14127,8 +14148,8 @@ class SoN::FromOptree 0.01 {
                 # as a fall-through instead, `next if C; ...; last` ran the
                 # loop to completion (42 for perl's 3).
                 if (($rest_sig // '') =~ /\A(?:exited|broke|nexted)\z/) {
-                    die "GAP: a `last if` whose rest of the body leaves is not"
-                      . " yet lowered\n" unless $kind eq 'next' && !$frame;
+                    die "GAP: a labeled loop control whose rest of the body"
+                      . " leaves is not yet lowered\n" if $frame;
                     if ($rest_sig eq 'broke') {
                         my $rframe = _loop_control_frame($rest_end);
                         my $sink   = $rframe ? $rframe->{breaks} : $break_projs;
@@ -14137,7 +14158,22 @@ class SoN::FromOptree 0.01 {
                                        memory   => $rest_sim->memory }
                             if defined $sink && defined $break_projs;
                     }
-                    $sim->set_control($taken_proj);
+                    if ($kind eq 'next') {
+                        $sim->set_control($taken_proj);
+                    }
+                    else {
+                        # `last unless C; ...; next`: the guard-taken path
+                        # leaves too, so nothing falls through to the latch but
+                        # the nexts recorded -- adopted there, as a body ending
+                        # in a bare `last` adopts them.
+                        push @$break_projs, { proj     => $taken_proj,
+                                              bindings => $sim->scope_bindings,
+                                              memory   => $sim->memory }
+                            if defined $break_projs;
+                        die "GAP: a `last if` whose rest of the body leaves,"
+                          . " none by `next`, is not yet lowered\n"
+                            unless _adopt_first_next($sim);
+                    }
                     $op = $rest_end->next;
                     $op = $op->next
                         while $$op && !($CONTINUE_START && $$op == ${$CONTINUE_START})
