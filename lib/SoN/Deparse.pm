@@ -3532,11 +3532,10 @@ class SoN::Deparse 0.01 {
                     else {
                         $init .= "my $var;\n";
                     }
-                    my %pay = map { ($_ => sprintf("%s = %s;\n",
-                                        $var, $self->_expr($pin[$_]))) }
+                    my %pay = map { ($_ => [ $var, $self->_expr($pin[$_]) ]) }
                               $first .. $#pin;
                     $bound{ $ph->{id} }        = $var;
-                    $break_assign{ $ph->{id} } = sub ($k) { $pay{ $k // -1 } // '' };
+                    $break_assign{ $ph->{id} } = sub ($k) { $pay{ $k // -1 } // () };
                     next;
                 }
                 my $header = $nodes->{ $pin[0] // -1 } or next;
@@ -3563,7 +3562,7 @@ class SoN::Deparse 0.01 {
                         $var, $self->_expr($pin[0]));
                 }
                 $bound{ $ph->{id} }        = $var;
-                my $pay = sprintf("%s = %s;\n", $var, $self->_expr($pin[1]));
+                my $pay = [ $var, $self->_expr($pin[1]) ];
                 $break_assign{ $ph->{id} } = sub ($k) { $pay };
             }
         }
@@ -4663,16 +4662,16 @@ class SoN::Deparse 0.01 {
         # the innermost loop's exit is the plain `last` below.
         my @edges;
         push @edges, { region => $loop_exit_region, word => 'last',
-                       pay => sub ($k = undef) { join '', map { $break_assign{$_}->($k) }
-                                             sort { $a <=> $b } keys %break_assign } }
+                       pay => sub ($k = undef) { _pay_at_once( map { $break_assign{$_}->($k) }
+                                             sort { $a <=> $b } keys %break_assign ) } }
             if defined $loop_exit_region;
         for my $fi ( 0 .. $#loop_frames ) {
             my $f = $loop_frames[$fi];
             my $inner = $fi == $#loop_frames;
             push @edges, { region => $f->{exit}, word => "last $f->{label}",
                            frame => $f,
-                           pay => sub ($k = undef) { join '', map { $f->{breaks}{$_}->($k) }
-                                                 sort { $a <=> $b } keys $f->{breaks}->%* } }
+                           pay => sub ($k = undef) { _pay_at_once( map { $f->{breaks}{$_}->($k) }
+                                                 sort { $a <=> $b } keys $f->{breaks}->%* ) } }
                 if defined $f->{exit} && !$inner;
             # The innermost loop's latch too: a `next` ending an arm of its
             # own body. Plain `next` there; the label only for an outer loop.
@@ -5146,6 +5145,18 @@ class SoN::Deparse 0.01 {
     # and a literal is never touched.
     sub _indent ($text) {
         return $text;
+    }
+
+    # A BREAK'S EXIT VALUES ARE PAID AT ONCE, as one list assignment. Each
+    # is what its slot holds on the break path, and one may read another's
+    # variable -- paid one after another, `$q = $q + $p*2` read the $p just
+    # paid (16 47 for perl's 16 31). Perl's list assign reads every right
+    # side before it writes.
+    sub _pay_at_once (@pairs) {
+        return '' unless @pairs;
+        return sprintf("%s = %s;\n", $pairs[0]->@*) if @pairs == 1;
+        return sprintf("(%s) = (%s);\n", join(', ', map { $_->[0] } @pairs),
+                                         join(', ', map { $_->[1] } @pairs));
     }
 
     method _emit_statement ($n, $next_of) {
