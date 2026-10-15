@@ -57,4 +57,11 @@ round_trips(q{my $s=''; for my $i (1..5) { next unless $i > 1; $s .= $i; last un
 round_trips(q{my ($s,$n)=('',0); for my $i (1..6) { next if $i == 1; $s .= $i; $n += $i; last if $i == 4; $n++; next } print "$s $n\n";},
     'two values, one changed after the break');
 
+# The latch is also the outer if's join; the `next` paid one name for its
+# value and the latch read another (r3 for perl's r23).
+round_trips(q{sub f { my $s=''; for my $i (@_) { next if $i == 1; $s .= $i; return "r$s" if $i == 3; next } return $s } print f(1..5), " ", f(1,2), "\n";},
+    'a return if in the rest, then next');
+round_trips(q{sub f { my $s=''; for my $i (@_) { next if $i == 1; $s .= $i; if ($i == 3) { return "r$s" } $s .= "-"; next } return $s } print f(1..5), " ", f(1,2), "\n";},
+    'a return block in the rest, then more, then next');
+
 done_testing;

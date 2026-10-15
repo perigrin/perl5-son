@@ -4680,10 +4680,32 @@ class SoN::Deparse 0.01 {
                 push @edges, { region => $r,
                                word => $inner ? 'next' : "next $f->{label}",
                                frame => $f,
-                               pay => sub ($k = undef) { join '', map {
-                                   sprintf("%s = %s;\n", $bound{ $_->{id} },
-                                       $self->_expr($_->{inputs}[1])) }
-                                   $f->{latch}{$r}->@* } };
+                               pay => sub ($k = undef) {
+                                   my $out = join '', map {
+                                       sprintf("%s = %s;\n", $bound{ $_->{id} },
+                                           $self->_expr($_->{inputs}[$k // 1])) }
+                                       $f->{latch}{$r}->@*;
+                                   # A LATCH REGION THAT FEEDS ANOTHER -- the
+                                   # nexts merge in one at a time -- is paid
+                                   # on through each later one, by the input
+                                   # it enters that one by. Stopped at the
+                                   # first, the latch read a later next's
+                                   # value (1-3-4b for perl's 1-2a3-4b).
+                                   my ($cur, %seen) = ($r);
+                                   while (!$seen{$cur}++) {
+                                       my ($r2, $j);
+                                       for my $c (sort { $a <=> $b } keys $f->{latch}->%*) {
+                                           my @in = ($nodes->{$c}{inputs} // [])->@*;
+                                           ($j) = grep { $in[$_] == $cur } 0 .. $#in;
+                                           $r2 = $c, last if defined $j;
+                                       }
+                                       last unless defined $r2;
+                                       $out .= sprintf("%s = %s;\n", $bound{ $_->{id} },
+                                           $self->_expr($_->{inputs}[$j]))
+                                           for $f->{latch}{$r2}->@*;
+                                       $cur = $r2;
+                                   }
+                                   $out } };
             }
         }
         # AN ARM THAT RETURNS FROM INSIDE A LOOP lands on the function's exit
@@ -4750,6 +4772,32 @@ class SoN::Deparse 0.01 {
                 my $text = $ix == 0
                     ? sprintf("if (%s) {\n%s}\n", $cond, _indent($leave))
                     : sprintf("if (!(%s)) {\n%s}\n", $cond, _indent($leave));
+
+                # THE REST GOES ROUND TOO when it reaches a later latch Region
+                # than the enclosing join -- `next if A; ...; if (B) { next }
+                # ...; next` -- and then it is a `next` of its own. Run on as
+                # a fall-through, it went on past the enclosing join, whose
+                # code paid the latch the other path's values (2!3!4!5! for
+                # perl's 2-3-4!5-).
+                my ($redge) = grep {
+                    $_->{word} =~ /\Anext\b/
+                    && $_->{region} != ($outer_stop // -1)
+                    && $self->_reaches_region( $arm{$rest_ix}, $_->{region}, $next_of )
+                    && !$self->_reaches_region( $arm{$rest_ix},
+                           $nodes->{ $_->{region} }{inputs}[0], $next_of )
+                } @edges;
+                if ( $redge && defined $outer_stop ) {
+                    if ( my $f = $redge->{frame} ) {
+                        $f->{used} = 1 if $redge->{word} =~ / /;
+                        $f->{nexted} = 1;
+                    }
+                    my $rpay = $redge->{pay}->( $self->_region_pred_index(
+                        $arm{$rest_ix}, $nodes->{ $redge->{region} }, $next_of ) );
+                    return ( $text
+                             . $self->_emit_from( $arm{$rest_ix}{id}, $next_of,
+                                                  $redge->{region} )
+                             . $rpay . "$redge->{word};\n", undef );
+                }
 
                 # THE REST ARM MAY STILL REACH A BODY MERGE. With a `next`
                 # earlier in the same body, the bottom of the body is a Region
@@ -4927,6 +4975,13 @@ class SoN::Deparse 0.01 {
                     : $st =~ /\A(?:Array|Hash)\z/ ? $st : '';
             my $var = sprintf($self->_phi_takes_a_list($p) || $agg eq 'Array' ? '@phi%d'
                             : $agg eq 'Hash' ? '%%phi%d' : '$phi%d', $p->{id});
+            # A LATCH THAT IS ALSO THIS IF'S JOIN keeps the latch's variable,
+            # declared with the loop: a `next` in a nested arm has paid it
+            # already, and renamed here the latch read the other name (r3
+            # for perl's r23). Its inputs are all inside the loop, so it has
+            # no seed to hoist.
+            my $latch = ($bound{ $p->{id} } // '') =~ /\A\$latch\d+\z/;
+            $var = $bound{ $p->{id} } if $latch;
 
             # DECLARED AT THE TOP OF THE SUB, NOT BEFORE THIS `if`. A join
             # can OUTLIVE the branch that assigns into it -- measured on a
@@ -4936,7 +4991,7 @@ class SoN::Deparse 0.01 {
             # `return $phi18` was out of scope and the sub returned undef.
             #
             # The ASSIGNMENTS stay in their arms; only the declaration moves.
-            $hoisted{$var} //= $var;
+            $hoisted{$var} //= $var unless $latch;
 
             # Seed with whichever input has no arm to assign in: the lone
             # case's absent arm, or the first input when every arm is present
@@ -4972,7 +5027,8 @@ class SoN::Deparse 0.01 {
                                 && !$self->_under_proj($pred[$_], \%proj_arm) } 0 .. $#in;
             $hoisted{$var} = defined $seed
                 ? sprintf('%s = %s', $var, $self->_expr($in[$seed]))
-                : $var;
+                : $var
+                unless $latch;
 
             for my $i (0 .. $#in) {
                 # AN ARM PAYS THE PREDECESSOR ITS FALL-THROUGH ENDS ON, which
