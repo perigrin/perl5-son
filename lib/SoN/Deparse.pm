@@ -4552,7 +4552,16 @@ class SoN::Deparse 0.01 {
                 breaks => {}, latch => {} }
             : undef;
         push @loop_frames, $frame if $frame;
+        # ANY OTHER EXIT IS THIS LOOP'S, as a headed loop's is: an arm landing
+        # there is a `last`. Unset, `if (C) { next } last` walked on into the
+        # code after the loop inside the arm, and the loop ran on.
+        my $save_exit = $loop_exit_region;
+        $loop_exit_region = $exit_rgn && !$frame ? $exit_rgn->{id} : undef;
+        my %save_break = %break_assign;
+        %break_assign = ();
         my $more = $self->_emit_from($arm{1}{id}, $next_of, undef);
+        $loop_exit_region = $save_exit;
+        %break_assign = %save_break;
         pop @loop_frames if $frame;
         # Its breaks pay nothing, so one from a nested loop is not spelled.
         die "GAP: a `last LABEL` out of an endless loop that leaves by the"

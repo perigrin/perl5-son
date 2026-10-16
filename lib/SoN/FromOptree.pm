@@ -17805,7 +17805,15 @@ class SoN::FromOptree 0.01 {
                     # dropped, and the loop left whenever D was false.
                     || ( $in_loop
                          && _arm_has_return($op->other, $op->next, $mod_stop,
-                                            { last => 1, next => 1 }) );
+                                            { last => 1, next => 1 }) )
+                    # AN ARM THAT ENDS IN A BARE `next` OR `last` after its
+                    # statements -- `if ($c) { $c--; next }` -- leaves too.
+                    # Taken for a value arm, its store became a ternary and its
+                    # edge left from the guard's own control, so the path that
+                    # did not take the arm went round the loop as well.
+                    || ( $in_loop
+                         && _arm_has_die_from($op->other, ${ $op->next },
+                                $mod_stop, {}, { last => 1, next => 1 }) );
                 my $guard   = $sim->pop_node;
                 my $mod_sim = $sim->snapshot;
                 my $if_node;
