@@ -4989,6 +4989,12 @@ class SoN::Deparse 0.01 {
                     : $st =~ /\A(?:Array|Hash)\z/ ? $st : '';
             my $var = sprintf($self->_phi_takes_a_list($p) || $agg eq 'Array' ? '@phi%d'
                             : $agg eq 'Hash' ? '%%phi%d' : '$phi%d', $p->{id});
+            # A LATCH PHI KEEPS THE VARIABLE ITS LOOP DECLARED: a `next`
+            # already pays it by that name, and renamed here the continue
+            # block read a variable only the fall-through assigned.
+            my $latch = ($bound{ $p->{id} } // '') =~ /\A\$latch\d+\z/
+                ? $bound{ $p->{id} } : undef;
+            $var = $latch if defined $latch;
 
             # DECLARED AT THE TOP OF THE SUB, NOT BEFORE THIS `if`. A join
             # can OUTLIVE the branch that assigns into it -- measured on a
@@ -4998,7 +5004,7 @@ class SoN::Deparse 0.01 {
             # `return $phi18` was out of scope and the sub returned undef.
             #
             # The ASSIGNMENTS stay in their arms; only the declaration moves.
-            $hoisted{$var} //= $var;
+            $hoisted{$var} //= $var unless defined $latch;
 
             # Seed with whichever input has no arm to assign in: the lone
             # case's absent arm, or the first input when every arm is present
@@ -5034,7 +5040,8 @@ class SoN::Deparse 0.01 {
                                 && !$self->_under_proj($pred[$_], \%proj_arm) } 0 .. $#in;
             $hoisted{$var} = defined $seed
                 ? sprintf('%s = %s', $var, $self->_expr($in[$seed]))
-                : $var;
+                : $var
+                unless defined $latch;
 
             # A RETURNED CALL BESIDE A SCALAR: `if ($x) { return g() }
             # return 7` runs g in the caller's context -- a Call with no
@@ -5188,18 +5195,17 @@ class SoN::Deparse 0.01 {
         # arms' merge, and the other arm reaches the exit too, through a later
         # return -- `if (!$o) { return 1 if $s } return 2 if $o > 5`. Taken
         # for the join, the rest of the body ran inside both arms.
-        my @inner = grep { !$self->_is_fn_exit($nodes->{$_}, $next_of) } @cand;
-        @cand = @inner if @inner;
-        # AND THE NEAREST MERGE, NOT THE FIRST ONE FOUND. `next if A && B;
+        # SO IS A LOOP'S LATCH, a nested `next`'s edge: `next if A && B;
         # next unless C; ...` merges the first `next` with the fall-through,
-        # then that with the second `next` at the latch; the walk from the
-        # false arm meets the latch first, through the second `next`. Taken
-        # for the join, the fall-through's values never reached the latch
-        # variables. A merge another candidate leads to is past that one.
-        for my $id (@cand) {
-            return $id unless grep { my $c = $_; $c != $id
-                && grep { $_ == $id } $self->_control_reachable($c, $next_of) } @cand;
-        }
+        # then that with the second `next` at the latch, and the walk from
+        # the false arm meets the latch first. Taken for the join, the first
+        # merge's values never reached the latch variables.
+        my %latch = map { map { $_ => 1 } keys $_->{latch}->%* } @loop_frames;
+        # Only when the arms meet somewhere else: a latch both reach is the
+        # join, before the function's exit.
+        my @inner = grep { !$self->_is_fn_exit($nodes->{$_}, $next_of) } @cand;
+        my @plain = grep { !$latch{$_} } @inner;
+        @cand = @plain ? @plain : @inner ? @inner : @cand;
         return $cand[0];
     }
 
