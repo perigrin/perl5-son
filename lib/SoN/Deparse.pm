@@ -3088,6 +3088,39 @@ class SoN::Deparse 0.01 {
                         unless defined $k && @rphis <= 1;
                     # NO PHI: the Return reads one value on every path, and
                     # the walk goes on to it.
+                    # THE Return MAY READ AN EXPRESSION OVER THE Phi --
+                    # `return "<$y>"`, or `my $r = $n * 2; return $r` --
+                    # and then this path binds the Phi and returns that
+                    # expression. Returning the Phi's input bare dropped it.
+                    my ($fret) = grep { ($_->{op} // '') eq 'Return' }
+                                 ($next_of->{ $n->{id} } // [])->@*;
+                    if (@rphis && $fret
+                        && join(',', @{ $fret->{inputs} // [] }) ne $rphis[0]{id}) {
+                        my @rv = map { $nodes->{$_} } @{ $fret->{inputs} // [] };
+                        die "GAP: a return from inside a loop whose exit runs"
+                          . " code before its Return is not yet rendered\n"
+                            if ($fret->{control_in} // -1) != $n->{id}
+                            || grep { !$_ || defined $_->{control_in} } @rv;
+                        die "GAP: a return from inside a loop whose exit Phi"
+                          . " holds an aggregate under an expression is not"
+                          . " yet rendered\n"
+                            if $self->_exit_input_sigil($rphis[0]{inputs}[$k]) ne '$';
+                        my $var = $bound{ $rphis[0]{id} } //= do {
+                            my $v = sprintf('$ret%d', $rphis[0]{id});
+                            $hoisted{$v} //= $v;
+                            $v;
+                        };
+                        # The Return's own rendering, with the word: one that
+                        # fell off the function's end says it bare.
+                        my $r = $self->_emit_statement($fret, $next_of);
+                        die "GAP: a return from inside a loop whose Return"
+                          . " renders as nothing is not yet rendered\n"
+                            unless length $r;
+                        $r = "return $r" unless $r =~ /\Areturn\b/;
+                        $out .= sprintf("%s = %s;\n%s", $var,
+                            $self->_expr($rphis[0]{inputs}[$k]), $r);
+                        last;
+                    }
                     if (@rphis) {
                         $out .= sprintf("return %s;\n",
                                         $self->_expr($rphis[0]{inputs}[$k]));
@@ -4489,7 +4522,10 @@ class SoN::Deparse 0.01 {
         my @phis = sort { $a->{id} <=> $b->{id} }
                    grep { ($_->{op} // '') eq 'Phi'
                        && (($_->{fields}{region} // -1) == $n->{id})
-                       && !$self->_is_memory($_->{id}) }
+                       # A slot carrying `shift` is a variable here too, as
+                       # in _emit_loop: left out, it was never assigned.
+                       && (!$self->_is_memory($_->{id})
+                           || $self->_read_as_value($_->{id})) }
                    $self->_nodes_in_order;
 
         my $init = '';
