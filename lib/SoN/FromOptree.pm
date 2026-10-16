@@ -10707,7 +10707,11 @@ class SoN::FromOptree 0.01 {
                   . " the array it reverses\n"
                     if $name eq 'reverse' && ($op->private & 8)   # OPpREVERSE_INPLACE
                     && ($ctx->{mode} // '') ne 'main'
-                    && @inputs && $inputs[-1]->isa('SoN::IR::Node::PadAccess');
+                    && @inputs
+                    # The array is the operand before the memory it is read at.
+                    && $inputs[ $extra{memory_input} ? -2 : -1 ]
+                    && $inputs[ $extra{memory_input} ? -2 : -1 ]
+                        ->isa('SoN::IR::Node::PadAccess');
                 if (($name eq 'sort' || $name eq 'reverse')
                         && ($op->private & 8)) {   # OPpSORT_INPLACE, OPpREVERSE_INPLACE
                     my $arr = $op->first;
