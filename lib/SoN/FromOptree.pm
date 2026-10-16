@@ -9655,8 +9655,16 @@ class SoN::FromOptree 0.01 {
             # end, as perl's runtime distribution gives). Without this the
             # positional binding below skipped the aggregate RHS, and a later
             # read of the target saw its old value.
+            # A `my (...) = @_` needs none of this: its targets are fresh
+            # slots, and a read of one reads that slot.
+            my $introduces = 0;
+            for (my $k = $op->last->first; $k && $$k; $k = $k->sibling) {
+                $introduces = 1 if $k->name eq 'padsv'
+                    && ($k->private & B::OPpLVAL_INTRO());
+            }
             my @args_elems;
             if (@rhs == 1 && $rhs[0]->isa('SoN::IR::Node::ArgsSource')
+                && !$introduces
                 && $lhs->@* && !grep { !_is_scalar_rebind_target($_) } $lhs->@*) {
                 my $args = $rhs[0];
                 @args_elems = map {
