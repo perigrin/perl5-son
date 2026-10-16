@@ -1584,7 +1584,8 @@ class SoN::Deparse 0.01 {
                 # 9; print "@b"` spelled `$a[0]` at the print, after the store.
                 # An anonymous one -- a ternary's list arm -- may still be
                 # aliased (`for`, a user sub's @_), so it asks its consumers.
-                if ( $op eq 'ArrayLiteral' ) {
+                # A HASH LITERAL IS THE SAME: `{ id => $n }` copies its values.
+                if ( $op =~ /\A(?:Array|Hash)Literal\z/ ) {
                     next if defined( ( $c->{fields} // {} )->{symbol} )
                         || __SUB__->( $c->{id} );
                     return 0;
@@ -2255,18 +2256,29 @@ class SoN::Deparse 0.01 {
         # the save prologue, which runs after the aggregate declarations. Its
         # operands must exist there, so only constants and the aggregates the
         # prologue declares are allowed; anything else is left unbound.
+        #
+        # SO DOES A COUNT. `my $id = scalar @states; push @states, {...};
+        # return $id` returned one more than perl: spelled at the return the
+        # Count counted the push (chalk's LR0DFA::_register_state). A field
+        # aggregate exists in the prologue too, spelled `@states`, and
+        # counting it cannot die.
         my %stale_at_join;   # restored for the re-walk: the first walk deletes what it flushes
         for my $n ( sort { $a->{id} <=> $b->{id} } $self->_nodes_in_order ) {
-            next unless ( $n->{op} // '' ) eq 'Subscript';
+            my $rop = $n->{op} // '';
+            next unless $rop eq 'Subscript' || $rop eq 'Count';
+            # A COUNT OVER A DEREFERENCE is the list-read pass's, below: it
+            # binds the list, and the count reads that.
+            next if $rop eq 'Count'
+                && ( ( $nodes->{ ( $n->{inputs} // [] )->[0] // -1 } // {} )->{op} // '' )
+                    eq 'PostfixDeref';
             next if exists $bound{ $n->{id} };
             next unless $safe_read->( $n->{id} );
-            next if $under_loop{ $n->{id} };
             # MEMORY BY POSITION, as %MEM_MIN_INPUTS says: a call that is a
             # memory barrier produces a version without consuming one, so
             # _is_memory does not recognise it, and a read after it is
             # exactly the read that goes stale.
             my @in = ( $n->{inputs} // [] )->@*;
-            next unless @in > ( $MEM_MIN_INPUTS{Subscript} // 99 );
+            next unless @in > ( $MEM_MIN_INPUTS{$rop} // 99 );
             my $version = $nodes->{ $in[-1] } or next;
 
             # A JOIN'S MEMORY Phi IS NOT THE ENTRY VERSION. It has no
@@ -2309,6 +2321,11 @@ class SoN::Deparse 0.01 {
                 $version  = $nodes->{ $made[0] };
                 $at_entry = 0;
             }
+            # A COUNT AT THE ENTRY VERSION IS THE SAME ON EVERY PASS: no store
+            # has happened by then, and its operand is an aggregate. A loop
+            # after it reads the store that took it as a memory version, and
+            # that marked the Count as read under the loop.
+            next if $under_loop{ $n->{id} } && !($rop eq 'Count' && $at_entry);
             if ( $at_entry ) {
                 my $in_prologue = sub ($id) {
                     my $c  = $nodes->{$id} // {};
@@ -2322,6 +2339,8 @@ class SoN::Deparse 0.01 {
                     # A PACKAGE one needs no declaration at all.
                     # A REFERENCE to one of these exists there too: `$r->[0]`
                     # over `my $r = \@a` is spelled `(\@a)->[0]`.
+                    return 1 if $rop eq 'Count' && $op eq 'FieldAccess'
+                        && $self->_expr($id) =~ /\A[\@%]\w+\z/;
                     return ( $op eq 'Constant'
                        || ( $op eq 'PadAccess' && ( $c->{fields} // {} )->{shared} )
                        || $op eq 'EntryDef'
@@ -2350,8 +2369,14 @@ class SoN::Deparse 0.01 {
                 my $id = shift @queue;
                 next if $seen{$id}++;
                 for my $c ( ( $ctrl_next{$id} // [] )->@* ) {
+                    # A COUNT IS SHADOWED ONLY BY A CALL ON THE CHAIN. A call
+                    # with no memory input is not one the Count's version
+                    # orders it against: `undef *v` carries none, and bound
+                    # before it `scalar(@v)` counted the array it cleared.
                     $shadowed = 1 if ( $c->{op} // '' )
-                        =~ /\A(?:Assign|EntryWrite|CellWrite|Delete|Call)\z/;
+                        =~ /\A(?:Assign|EntryWrite|CellWrite|Delete|Call)\z/
+                        && !( $rop eq 'Count' && ( $c->{op} // '' ) eq 'Call'
+                               && !( $c->{fields} // {} )->{memory_input} );
                     push @queue, $c->{id};
                 }
             }
@@ -5488,10 +5513,11 @@ class SoN::Deparse 0.01 {
             return $self->_expr_uncached( $n->{id} ) . ";\n";
         }
 
-        # A DEFERRED STALE ELEMENT READ, OR A READ THROUGH A SCALAR REFERENCE
-        # -- see the stale-read pass. Spelled uncached: _expr would return the
-        # temporary's own name.
-        if (($op eq 'Subscript' || $op eq 'PostfixDeref') && exists $bound{ $n->{id} }) {
+        # A DEFERRED STALE ELEMENT READ OR COUNT, OR A READ THROUGH A SCALAR
+        # REFERENCE -- see the stale-read pass. Spelled uncached: _expr would
+        # return the temporary's own name.
+        if (($op eq 'Subscript' || $op eq 'Count' || $op eq 'PostfixDeref')
+            && exists $bound{ $n->{id} }) {
             my $var  = $bound{ $n->{id} };
             my $text = $self->_expr_uncached( $n->{id} );
             # WHAT WAS ANCHORED TO THIS READ FOLLOWS IT. The read is itself
