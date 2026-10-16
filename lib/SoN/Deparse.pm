@@ -3573,38 +3573,24 @@ class SoN::Deparse 0.01 {
         %break_assign = ();
         if ($exit_rgn) {
             my @preds = ($exit_rgn->{inputs} // [])->@*;
-            # A LOOP WITH NO HEADER EXIT (every way out is a break) has no
-            # header input: its variable is the Phi's own, declared before
-            # the loop, and every break pays it.
-            my $r0 = $nodes->{ $preds[0] // -1 };
-            my $has_header = $r0 && ($r0->{op} // '') eq 'Proj'
-                && (($r0->{inputs} // [])->[0] // -1) == $n->{id};
-            # AN EXIT PHI NOTHING READS IS OWED NOTHING. A `my` in the body
-            # gets one too, over the value it last held in the body -- and
-            # seeding a variable with that, before the loop, read a join the
-            # body had not reached yet.
-            my %read = map { $_ => 1 } grep { defined }
-                       map { ($_->{inputs} // [])->@* } $self->_nodes_in_order;
+            # AN EXIT PHI NOTHING READS AS A VALUE IS OWED NOTHING. A `my` in
+            # the body gets one too, over the value it last held in the body --
+            # and seeding a variable with that, before the loop, read a join
+            # the body had not reached yet. So does a merge of method calls
+            # that only memory merges read: a call is a memory version too,
+            # and chalk's LR0DFA::_compute_prediction_closure seeded `my
+            # $exit87 = $eff82` above `my $eff82`.
             for my $ph ($self->_nodes_in_order) {
                 next unless ($ph->{op} // '') eq 'Phi';
                 next unless (($ph->{fields} // {})->{region} // -1)
                             == $exit_rgn->{id};
-                next unless $read{ $ph->{id} };
+                next unless $self->_read_as_value($ph->{id});
                 my @pin = ($ph->{inputs} // [])->@*;
-                next unless @pin == @preds
-                    && ($has_header ? @pin >= 2 && $preds[0] == $arm{1}{id}
-                                    : @pin >= 1);
+                next unless @pin == @preds && @pin >= 2
+                    && $preds[0] == $arm{1}{id};
                 # A MEMORY Phi merges the exit's chains, not a value: the store
                 # before the `last` is already on its path.
                 next if $self->_is_memory($ph->{id});
-                if (!$has_header) {
-                    my $var = sprintf('$exit%d', $ph->{id});
-                    $init .= "my $var;\n";
-                    $bound{ $ph->{id} } = $var;
-                    $break_assign{ $preds[$_] }{ $ph->{id} } = [ $var, $pin[$_] ]
-                        for 0 .. $#pin;
-                    next;
-                }
                 my $header = $nodes->{ $pin[0] // -1 } or next;
 
                 # A LOOP-CARRIED SLOT REUSES ITS OWN VARIABLE. When input 0 is
