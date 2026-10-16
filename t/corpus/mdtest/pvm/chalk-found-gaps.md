@@ -3440,3 +3440,238 @@ main::f: {start: 0, returns: [14], nodes: [
   [Print, ~, [23], 19, Scalar]]} # 24
 ```
 
+## A break in the rest after a next if
+
+After a next if, the rest of the body holds a last if and a trailing next; the break leaves with the value the rest built.
+
+```perl
+my $s=''; for my $i (1..5) { next if $i == 1; $s .= $i; last if $i == 3; next } print "$s\n";
+```
+
+```behavior
+parses: yes
+```
+
+```output
+23
+```
+
+```ir
+main::__PROGRAM__: {start: 0, returns: [23], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Constant, {const_type: string, value: ""}, ~, ~, Str], # 2
+  [Loop, {bound: entry}, [0], 0], # 3
+  [Phi, {region: 3}, [2, 30], ~, Str], # 4
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 5
+  [Phi, {region: 3}, [5, 26], ~, Int], # 6
+  [Coerce, {from_repr: Int, to_repr: Str}, [6], ~, Str], # 7
+  [Concat, ~, [4, 7], ~, Str], # 8
+  [Proj, {index: 1}, [3]], # 9
+  [Proj, {index: 0}, [3]], # 10
+  [NumEq, ~, [6, 5], ~, Boolean], # 11
+  [If, ~, [10, 11], 10], # 12
+  [Proj, {index: 1}, [12]], # 13
+  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 14
+  [NumEq, ~, [6, 14], ~, Boolean], # 15
+  [If, ~, [13, 15], 13], # 16
+  [Proj, {index: 0}, [16]], # 17
+  [Region, {head: 3}, [9, 17]], # 18
+  [Phi, {region: 18}, [4, 8], ~, Str], # 19
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 20
+  [Concat, ~, [19, 20], ~, Str], # 21
+  [Print, ~, [21], 18, Scalar], # 22
+  [Return, {implicit: true}, [1], 22], # 23
+  [Constant, {const_type: integer, value: "6"}, ~, ~, Int], # 24
+  [NumGt, ~, [24, 6], 3, Boolean], # 25
+  [Add, ~, [6, 5], ~, Int], # 26
+  [Proj, {index: 0}, [12]], # 27
+  [Proj, {index: 1}, [16]], # 28
+  [Region, {head: 3}, [27, 28]], # 29
+  [Phi, {predecessors: [27, 28], region: 29}, [4, 8], ~, Str]]} # 30
+```
+
+## A labeled last in an if/else arm
+
+last O in one arm and next in the other: the labeled last leaves the outer loop, not the inner one.
+
+```perl
+my $s=''; O: for my $i (1..3) { for my $j (1..3) { $s .= "$i$j "; if ($j == 2) { last O } else { next } } } print "$s\n";
+```
+
+```behavior
+parses: yes
+```
+
+```output
+11 12 
+```
+
+```ir
+main::__PROGRAM__: {start: 0, returns: [28], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Constant, {const_type: string, value: ""}, ~, ~, Str], # 2
+  [Loop, {bound: entry}, [0], 0], # 3
+  [Phi, {region: 3}, [2, 7], ~, Str], # 4
+  [Proj, {index: 0}, [3]], # 5
+  [Loop, {bound: entry}, [5], 5], # 6
+  [Phi, {region: 6}, [4, 16], ~, Str], # 7
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 8
+  [Phi, {region: 3}, [8, 32], ~, Int], # 9
+  [Coerce, {from_repr: Int, to_repr: Str}, [9], ~, Str], # 10
+  [Concat, ~, [7, 10], ~, Str], # 11
+  [Phi, {region: 6}, [8, 34], ~, Int], # 12
+  [Coerce, {from_repr: Int, to_repr: Str}, [12], ~, Str], # 13
+  [Concat, ~, [11, 13], ~, Str], # 14
+  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 15
+  [Concat, ~, [14, 15], ~, Str], # 16
+  [Proj, {index: 1}, [3]], # 17
+  [Proj, {index: 0}, [6]], # 18
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 19
+  [NumEq, ~, [12, 19], ~, Boolean], # 20
+  [If, ~, [18, 20], 18], # 21
+  [Proj, {index: 0}, [21]], # 22
+  [Region, {head: 3}, [17, 22]], # 23
+  [Phi, {region: 23}, [4, 16], ~, Str], # 24
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 25
+  [Concat, ~, [24, 25], ~, Str], # 26
+  [Print, ~, [26], 23, Scalar], # 27
+  [Return, {implicit: true}, [1], 27], # 28
+  [Constant, {const_type: integer, value: "4"}, ~, ~, Int], # 29
+  [NumGt, ~, [29, 9], 3, Boolean], # 30
+  [NumGt, ~, [29, 12], 6, Boolean], # 31
+  [Add, ~, [9, 8], ~, Int], # 32
+  [Proj, {index: 1}, [6]], # 33
+  [Add, ~, [12, 8], ~, Int], # 34
+  [Region, {head: 6}, [33]], # 35
+  [Proj, {index: 1}, [21]]]} # 36
+```
+
+## Two next blocks before a fall-through
+
+Each if block ending in next reaches the latch on its own edge; the fall-through reaches it on a third.
+
+```perl
+my $s=''; for my $i (1..6) { $s .= $i; if ($i == 2) { $s .= "a"; next } if ($i == 4) { $s .= "b"; next } $s .= "-" } print "$s\n";
+```
+
+```behavior
+parses: yes
+```
+
+```output
+1-2a3-4b5-6-
+```
+
+```ir
+main::__PROGRAM__: {start: 0, returns: [10], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Constant, {const_type: string, value: ""}, ~, ~, Str], # 2
+  [Loop, {bound: entry}, [0], 0], # 3
+  [Phi, {region: 3}, [2, 38], ~, Str], # 4
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
+  [Concat, ~, [4, 5], ~, Str], # 6
+  [Proj, {index: 1}, [3]], # 7
+  [Region, {head: 3}, [7]], # 8
+  [Print, ~, [6], 8, Scalar], # 9
+  [Return, {implicit: true}, [1], 9], # 10
+  [Constant, {const_type: integer, value: "7"}, ~, ~, Int], # 11
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 12
+  [Phi, {region: 3}, [12, 19], ~, Int], # 13
+  [NumGt, ~, [11, 13], 3, Boolean], # 14
+  [Proj, {index: 0}, [3]], # 15
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 16
+  [NumEq, ~, [13, 16], ~, Boolean], # 17
+  [If, ~, [15, 17], 15], # 18
+  [Add, ~, [13, 12], ~, Int], # 19
+  [Coerce, {from_repr: Int, to_repr: Str}, [13], ~, Str], # 20
+  [Constant, {const_type: integer, value: "4"}, ~, ~, Int], # 21
+  [NumEq, ~, [13, 21], ~, Boolean], # 22
+  [Proj, {index: 0}, [18]], # 23
+  [Proj, {index: 1}, [18]], # 24
+  [Concat, ~, [4, 20], ~, Str], # 25
+  [Constant, {const_type: string, value: "-"}, ~, ~, Str], # 26
+  [Concat, ~, [25, 26], ~, Str], # 27
+  [Constant, {const_type: string, value: a}, ~, ~, Str], # 28
+  [Concat, ~, [25, 28], ~, Str], # 29
+  [If, ~, [24, 22], 24], # 30
+  [Proj, {index: 1}, [30]], # 31
+  [Region, {head: 3}, [31, 23]], # 32
+  [Phi, {predecessors: [31, 23], region: 32}, [27, 29], ~, Str], # 33
+  [Constant, {const_type: string, value: b}, ~, ~, Str], # 34
+  [Concat, ~, [25, 34], ~, Str], # 35
+  [Proj, {index: 0}, [30]], # 36
+  [Region, {head: 3}, [32, 36]], # 37
+  [Phi, {region: 37}, [33, 35], ~, Str]]} # 38
+```
+
+## Next blocks in a while loop carrying two values
+
+A while loop whose next blocks carry different updates of two variables to the latch.
+
+```perl
+my ($s,$n)=('',0); my $i=0; while ($i < 6) { $i++; $n++; if ($i == 2) { $s .= "a"; next } if ($i == 4) { $n += 10; next } $s .= "-" } print "$s $n\n";
+```
+
+```behavior
+parses: yes
+```
+
+```output
+-a--- 16
+```
+
+```ir
+main::__PROGRAM__: {start: 0, returns: [16], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Constant, {const_type: string, value: ""}, ~, ~, Str], # 2
+  [Loop, {bound: each}, [0], 0], # 3
+  [Phi, {region: 3}, [2, 47], ~, Str], # 4
+  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 5
+  [Concat, ~, [4, 5], ~, Str], # 6
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 7
+  [Phi, {region: 3}, [7, 41], ~, Int], # 8
+  [Coerce, {from_repr: Int, to_repr: Str}, [8], ~, Str], # 9
+  [Concat, ~, [6, 9], ~, Str], # 10
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 11
+  [Concat, ~, [10, 11], ~, Str], # 12
+  [Proj, {index: 1}, [3]], # 13
+  [Region, {head: 3}, [13]], # 14
+  [Print, ~, [12], 14, Scalar], # 15
+  [Return, {implicit: true}, [1], 15], # 16
+  [Phi, {region: 3}, [7, 22], ~, Int], # 17
+  [Constant, {const_type: integer, value: "6"}, ~, ~, Int], # 18
+  [NumLt, ~, [17, 18], 3, Boolean], # 19
+  [Proj, {index: 0}, [3]], # 20
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 21
+  [Add, ~, [17, 21], ~, Int], # 22
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 23
+  [NumEq, ~, [22, 23], ~, Boolean], # 24
+  [If, ~, [20, 24], 20], # 25
+  [Proj, {index: 0}, [25]], # 26
+  [Proj, {index: 1}, [25]], # 27
+  [PadAccess, {sigil: $, symbol: s}, ~, ~, Unknown], # 28
+  [PadAccess, {sigil: $, symbol: "n"}, ~, ~, Unknown], # 29
+  [Assign, {targets: 2}, [28, 29, 2, 7], ~, List], # 30
+  [Constant, {const_type: integer, value: "4"}, ~, ~, Int], # 31
+  [NumEq, ~, [22, 31], ~, Boolean], # 32
+  [If, ~, [27, 32], 27], # 33
+  [Proj, {index: 1}, [33]], # 34
+  [Region, {head: 3}, [34, 26]], # 35
+  [Add, ~, [8, 21], ~, Int], # 36
+  [Constant, {const_type: integer, value: "10"}, ~, ~, Int], # 37
+  [Add, ~, [36, 37], ~, Int], # 38
+  [Proj, {index: 0}, [33]], # 39
+  [Region, {head: 3}, [35, 39]], # 40
+  [Phi, {region: 40}, [36, 38], ~, Int], # 41
+  [Constant, {const_type: string, value: "-"}, ~, ~, Str], # 42
+  [Concat, ~, [4, 42], ~, Str], # 43
+  [Constant, {const_type: string, value: a}, ~, ~, Str], # 44
+  [Concat, ~, [4, 44], ~, Str], # 45
+  [Phi, {predecessors: [34, 26], region: 35}, [43, 45], ~, Str], # 46
+  [Phi, {region: 40}, [46, 4], ~, Str]]} # 47
+```
+

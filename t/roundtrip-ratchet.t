@@ -41,7 +41,8 @@ my %FLOOR = (
     # 179 modules), measured at d0cb68a and 2d8fb90, 2026-10-06.
     # 140 at 580ca1e and 4c7348c, 2026-10-13. 143 at b9c9b82, 1bcd4a1,
     # e8fb329 and e4b98ec, 2026-10-14.
-    chalk_compiles => 143,
+    # 146 at 255a021 (gap6/loopexit) and 15af845, 2026-10-16.
+    chalk_compiles => 146,
     # chalk's own test files (547 at 5948f648) that give the SAME result
     # against the emitted lib/ -- tools/chalk-gate3.pl. The 59 that read lib/
     # as source are DEFERRED to chalk's own lowering (perigrin, 2026-10-09),
@@ -56,7 +57,8 @@ my %FLOOR = (
 my %CEILING = (
     # Measured 226 at d25e6c2, twice, 2026-10-11 (229 at 1c8634e; 239 at
     # d0cb68a and 2d8fb90). 94 at e8fb329 and e4b98ec, 2026-10-14.
-    chalk_skipped_graphs => 94,
+    # 76 at 255a021 (gap6/loopexit) and 15af845, 2026-10-16.
+    chalk_skipped_graphs => 76,
     # perl t/ emissions perl will not compile. Unguarded until 75d3db8, so
     # two new ones (comp/fold.t, comp/retainedlines.t) arrived unnoticed.
     # Measured 1 at 1c8634e, twice, 2026-10-11: comp/line_debug.t (a
