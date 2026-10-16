@@ -9649,6 +9649,25 @@ class SoN::FromOptree 0.01 {
             my @rhs;
             unshift @rhs, $sim->pop_node
                 while $sim->stack_depth > $sim->mark_depth;
+            # `($x, $P) = @_` INTO DECLARED SCALARS takes @_ element by element,
+            # as the padrange form `my (...) = @_` does. The Assign keeps @_ as
+            # its value; each target is BOUND to its own $_[i] (undef past the
+            # end, as perl's runtime distribution gives). Without this the
+            # positional binding below skipped the aggregate RHS, and a later
+            # read of the target saw its old value.
+            my @args_elems;
+            if (@rhs == 1 && $rhs[0]->isa('SoN::IR::Node::ArgsSource')
+                && $lhs->@* && !grep { !_is_scalar_rebind_target($_) } $lhs->@*) {
+                my $args = $rhs[0];
+                @args_elems = map {
+                    $factory->make('Subscript', kind => 'array',
+                        inputs => [$args,
+                            $factory->make('Constant', value => $_,
+                                const_type => 'integer',
+                                stamp => SoN::IR::Stamp->new(type => 'Int')),
+                            $sim->memory]);
+                } 0 .. $lhs->$#*;
+            }
             my $node = $factory->make('Assign',
                 inputs => [ $lhs->@*, @rhs ], targets => scalar $lhs->@*);
 
@@ -9744,8 +9763,9 @@ class SoN::FromOptree 0.01 {
             my $single_call = @rhs == 1
                 && ( $rhs[0]->isa('SoN::IR::Node::Call')
                      || $rhs[0]->operation =~ /\A(?:And|Or|DefinedOr|Phi)\z/ );
+            my @vals = @args_elems ? @args_elems : @rhs;
             my $positional =
-                   ( !grep { _is_aggregate_node($_) } @targets, @rhs )
+                   ( !grep { _is_aggregate_node($_) } @targets, @vals )
                 && ( !$single_call || @targets <= 1 )
                 && ( grep { _is_scalar_rebind_target($_) } @targets );
             if ($positional) {
@@ -9755,7 +9775,7 @@ class SoN::FromOptree 0.01 {
                 for my $i (0 .. $#targets) {
                     my $t = $targets[$i];
                     next unless _is_scalar_rebind_target($t);
-                    my $v = $rhs[$i] // $factory->make('Constant',
+                    my $v = $vals[$i] // $factory->make('Constant',
                         value      => undef,
                         const_type => 'undef',
                         stamp      => SoN::IR::Stamp->new(type => 'Undef'));
@@ -14964,9 +14984,10 @@ class SoN::FromOptree 0.01 {
     # The aassign TARGET's sigil is not on the node the LHS pushed (that node
     # is built by the read site, which stamps its own), so it comes
     # from the op that pushed the target: rv2av for an array, rv2hv for a hash.
-    # Walk the aassign's subtree for the first of either.
+    # Walk the aassign's LHS subtree for the first of either. Only the LHS:
+    # the RHS's `@_` in `($P) = @_` is an rv2av too, and made $P an array.
     sub _stash_target_sigil ($aassign) {
-        my @queue = ($aassign);
+        my @queue = ($aassign->last);
         my %seen;
         while (my $op = shift @queue) {
             next unless $op && ref($op) && $$op && !$seen{$$op}++;
