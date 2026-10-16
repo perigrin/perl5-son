@@ -2752,6 +2752,17 @@ class SoN::Deparse 0.01 {
             }
 
             if (defined(my $store = $self->_latest_store_read($n))) {
+                # A STORE INSIDE A LOOP settles when the loop ends: `push @r,
+                # $_ for 1..3; my @b = reverse @r` read the push, and placed
+                # after it the `my @b` was declared inside the loop body.
+                # ponytail: the outermost loop around the store; an aggregate
+                # declared inside an outer loop is pinned, not placed here.
+                if (defined(my $loop = $self->_outermost_loop($store))) {
+                    if (defined(my $join = $self->_loop_join($loop))) {
+                        push $after_region{$join}->@*, $n;
+                        next;
+                    }
+                }
                 # AHEAD OF THE READS ALREADY ANCHORED HERE, as above: a stale
                 # read through `${$rs[0]}` placed at the same store read
                 # `$rs[0]` above the `my @rs` it names.
@@ -3051,9 +3062,12 @@ class SoN::Deparse 0.01 {
             if ($n->{op} eq 'Region' && $self->_is_fn_exit($n, $next_of)) {
                 my @in = ($n->{inputs} // [])->@*;
                 my ($k) = grep { $in[$_] == $cur } 0 .. $#in;
+                # A RETURNED `shift` is a value as well as a memory version
+                # (as at a loop header and a join): the Return reads it.
                 my @rphis = grep { ($_->{op} // '') eq 'Phi'
                         && (($_->{fields}{region} // -1) == $n->{id})
-                        && !$self->_is_memory($_->{id}) } $self->_nodes_in_order;
+                        && (!$self->_is_memory($_->{id})
+                            || $self->_read_as_value($_->{id})) } $self->_nodes_in_order;
                 # A LIST EXIT CARRIES ITS SCALAR READING beside it: the
                 # Return takes [list Phi, scalar Phi], and the caller's
                 # context picks, as the Return's own rule does.
@@ -3072,11 +3086,46 @@ class SoN::Deparse 0.01 {
                     die "GAP: a return from inside a loop whose exit carries"
                       . " more than one value is not yet rendered\n"
                         unless defined $k && @rphis <= 1;
-                    $out .= @rphis
-                        ? sprintf("return %s;\n",
-                                  $self->_expr($rphis[0]{inputs}[$k]))
-                        : "return;\n";
-                    last;
+                    # NO PHI: the Return reads one value on every path, and
+                    # the walk goes on to it.
+                    # THE Return MAY READ AN EXPRESSION OVER THE Phi --
+                    # `return "<$y>"`, or `my $r = $n * 2; return $r` --
+                    # and then this path binds the Phi and returns that
+                    # expression. Returning the Phi's input bare dropped it.
+                    my ($fret) = grep { ($_->{op} // '') eq 'Return' }
+                                 ($next_of->{ $n->{id} } // [])->@*;
+                    if (@rphis && $fret
+                        && join(',', @{ $fret->{inputs} // [] }) ne $rphis[0]{id}) {
+                        my @rv = map { $nodes->{$_} } @{ $fret->{inputs} // [] };
+                        die "GAP: a return from inside a loop whose exit runs"
+                          . " code before its Return is not yet rendered\n"
+                            if ($fret->{control_in} // -1) != $n->{id}
+                            || grep { !$_ || defined $_->{control_in} } @rv;
+                        die "GAP: a return from inside a loop whose exit Phi"
+                          . " holds an aggregate under an expression is not"
+                          . " yet rendered\n"
+                            if $self->_exit_input_sigil($rphis[0]{inputs}[$k]) ne '$';
+                        my $var = $bound{ $rphis[0]{id} } //= do {
+                            my $v = sprintf('$ret%d', $rphis[0]{id});
+                            $hoisted{$v} //= $v;
+                            $v;
+                        };
+                        # The Return's own rendering, with the word: one that
+                        # fell off the function's end says it bare.
+                        my $r = $self->_emit_statement($fret, $next_of);
+                        die "GAP: a return from inside a loop whose Return"
+                          . " renders as nothing is not yet rendered\n"
+                            unless length $r;
+                        $r = "return $r" unless $r =~ /\Areturn\b/;
+                        $out .= sprintf("%s = %s;\n%s", $var,
+                            $self->_expr($rphis[0]{inputs}[$k]), $r);
+                        last;
+                    }
+                    if (@rphis) {
+                        $out .= sprintf("return %s;\n",
+                                        $self->_expr($rphis[0]{inputs}[$k]));
+                        last;
+                    }
                 }
                 if (defined $k) {
                     for my $ph (@rphis) {
@@ -3092,18 +3141,19 @@ class SoN::Deparse 0.01 {
                                             $self->_expr($ph->{inputs}[$k]));
                             next;
                         }
-                        # BOUND AS A JOIN VARIABLE, this path pays it too: the
-                        # if that bound it pays only the arms it owns, and a
-                        # return reached along the chain inside a copy of a
-                        # tail emitted in another arm is none of them -- it
-                        # returned the variable unset (chalk's
-                        # Semiring::Structural::add, undef for 4).
-                        if (($bound{ $ph->{id} } // '') =~ /\A\$phi\d+\z/) {
-                            $out .= sprintf("%s = %s;\n", $bound{ $ph->{id} },
-                                            $self->_expr($ph->{inputs}[$k]));
+                        # BOUND BY AN ENCLOSING JOIN, as a variable the arms
+                        # assign: this path reaches the exit by an edge of its
+                        # own -- `if (D) { if (E) { return "z3" } } return
+                        # "as"` -- that no arm assignment covers, so it pays
+                        # here. Skipped, the return read the other path's.
+                        # (chalk's Semiring::Structural::add returned undef for
+                        # 4 the same way, along a copy of a tail in another arm.)
+                        if (exists $bound{ $ph->{id} }) {
+                            my $v = $self->_expr($ph->{inputs}[$k]);
+                            $out .= "$bound{ $ph->{id} } = $v;\n"
+                                if $v ne $bound{ $ph->{id} };
                             next;
                         }
-                        next if exists $bound{ $ph->{id} };
                         # The list half of a list exit is an ARRAY: a scalar
                         # holding `()` returned (undef) to a list caller.
                         my $sigil = ($ret && $ph == $rphis[0]) ? '@' : '$';
@@ -3116,7 +3166,10 @@ class SoN::Deparse 0.01 {
                         $sigil = $self->_exit_input_sigil($ph->{inputs}[$k])
                             unless $ret;
                         my $var = sprintf('%sret%d', $sigil, $ph->{id});
-                        $out .= sprintf("my %s = %s;\n", $var,
+                        # DECLARED AT THE TOP: a path inside an arm may bind
+                        # it, and another path assign it outside that arm.
+                        $hoisted{$var} //= $var;
+                        $out .= sprintf("%s = %s;\n", $var,
                                         $self->_expr($ph->{inputs}[$k]));
                         $bound{ $ph->{id} } = $var;
                     }
@@ -3329,6 +3382,16 @@ class SoN::Deparse 0.01 {
         # Effects pinned on the loop that are not the test: they run once per
         # iteration, before it.
         my @pre_cond;
+        # A BRANCH IN THE TEST is pinned on the Loop too: `while ($n &&
+        # $n->op eq "C" && $h++ < 8)` calls on the right of `&&`, so the call
+        # gets an If of its own, and the test reads that diamond's join Phis.
+        # It is control, not a value -- no Phi consumes it -- so it is not a
+        # candidate for the test, and it is emitted, like an effect, at the
+        # top of each pass.
+        my @pre_ctl = grep { ($_->{op} // '') eq 'If' } @cond;
+        @cond = grep { ($_->{op} // '') ne 'If' } @cond;
+        die "GAP: a Loop whose only pinned node is a branch is not yet"
+          . " rendered\n" unless @cond;
 
         # MORE THAN ONE PINNED NODE IS AN EFFECT PLUS A TEST, not two tests.
         # Measured on `while (my $line = <R>) { ... }`:
@@ -3346,9 +3409,16 @@ class SoN::Deparse 0.01 {
         # id would be a guess; this is the graph saying which is the root of
         # the expression.
         if (@cond > 1) {
+            # CONSUMED THROUGH A VALUE TOO: `while (my $n = shift @q)` tests
+            # Not(Not(shift)), and only the outer Not is pinned -- the shift
+            # is read through the inner one.
             my %consumed;
-            for my $c (@cond) {
-                $consumed{$_} = 1 for (($c->{inputs} // [])->@*);
+            my @todo = map { (($_->{inputs} // [])->@*) } @cond;
+            while (defined(my $id = shift @todo)) {
+                next if $consumed{$id}++;
+                my $v = $nodes->{$id} or next;
+                next if defined $v->{control_in} || ($v->{op} // '') eq 'Phi';
+                push @todo, (($v->{inputs} // [])->@*);
             }
             my @root = grep { !$consumed{ $_->{id} } } @cond;
             die "GAP: a Loop with " . scalar(@cond) . " pinned nodes and "
@@ -3494,48 +3564,45 @@ class SoN::Deparse 0.01 {
         # COMPUTED BEFORE THE BODY WALK because the `last` is emitted during
         # it. Without this the Phi reached _expr, found no variable for a
         # non-Loop-regioned Phi, and refused.
+        #
+        # ONE INPUT PER EXIT, in the Region's order: input 0 is the
+        # header-false edge, and each later input is what ITS break pays --
+        # so a payment is keyed on the Region input the break arrives by, and
+        # a `last` pays only its own. A Phi whose inputs do not line up with
+        # the Region's is left unbound, and reading it refuses.
         %break_assign = ();
         if ($exit_rgn) {
-            # TWO OR MORE BREAKS GIVE A PHI AN INPUT PER PREDECESSOR, in the
-            # Region's order, and each `last` pays the input of the
-            # predecessor its arm reaches. A loop with no header exit (every
-            # way out is a break) has no header input: its variable is the
-            # Phi's own, declared before the loop, and every break pays it.
-            my @rin = ($exit_rgn->{inputs} // [])->@*;
-            my $r0  = $nodes->{ $rin[0] // -1 };
+            my @preds = ($exit_rgn->{inputs} // [])->@*;
+            # A LOOP WITH NO HEADER EXIT (every way out is a break) has no
+            # header input: its variable is the Phi's own, declared before
+            # the loop, and every break pays it.
+            my $r0 = $nodes->{ $preds[0] // -1 };
             my $has_header = $r0 && ($r0->{op} // '') eq 'Proj'
                 && (($r0->{inputs} // [])->[0] // -1) == $n->{id};
+            # AN EXIT PHI NOTHING READS IS OWED NOTHING. A `my` in the body
+            # gets one too, over the value it last held in the body -- and
+            # seeding a variable with that, before the loop, read a join the
+            # body had not reached yet.
+            my %read = map { $_ => 1 } grep { defined }
+                       map { ($_->{inputs} // [])->@* } $self->_nodes_in_order;
             for my $ph ($self->_nodes_in_order) {
                 next unless ($ph->{op} // '') eq 'Phi';
                 next unless (($ph->{fields} // {})->{region} // -1)
                             == $exit_rgn->{id};
+                next unless $read{ $ph->{id} };
                 my @pin = ($ph->{inputs} // [])->@*;
-                # ONE BREAK: [header, break], whatever the Region holds.
-                my $one = @pin == 2 && @rin == ($has_header ? 2 : 1);
-                next unless $one || (@pin == @rin && @pin > 1);
+                next unless @pin == @preds
+                    && ($has_header ? @pin >= 2 && $preds[0] == $arm{1}{id}
+                                    : @pin >= 1);
                 # A MEMORY Phi merges the exit's chains, not a value: the store
                 # before the `last` is already on its path.
                 next if $self->_is_memory($ph->{id});
-                if (!$one) {
-                    my ($var, $first) = (sprintf('$exit%d', $ph->{id}), 0);
-                    if ($has_header) {
-                        my $header = $nodes->{ $pin[0] // -1 } or next;
-                        if (($header->{op} // '') eq 'Phi') {
-                            $var = $self->_phi_var($header);
-                        }
-                        else {
-                            $init .= sprintf("my %s = %s;\n",
-                                $var, $self->_expr($pin[0]));
-                        }
-                        $first = 1;
-                    }
-                    else {
-                        $init .= "my $var;\n";
-                    }
-                    my %pay = map { ($_ => [ $var, $self->_expr($pin[$_]) ]) }
-                              $first .. $#pin;
-                    $bound{ $ph->{id} }        = $var;
-                    $break_assign{ $ph->{id} } = sub ($k) { $pay{ $k // -1 } // () };
+                if (!$has_header) {
+                    my $var = sprintf('$exit%d', $ph->{id});
+                    $init .= "my $var;\n";
+                    $bound{ $ph->{id} } = $var;
+                    $break_assign{ $preds[$_] }{ $ph->{id} } = [ $var, $pin[$_] ]
+                        for 0 .. $#pin;
                     next;
                 }
                 my $header = $nodes->{ $pin[0] // -1 } or next;
@@ -3561,9 +3628,12 @@ class SoN::Deparse 0.01 {
                     $init .= sprintf("my %s = %s;\n",
                         $var, $self->_expr($pin[0]));
                 }
-                $bound{ $ph->{id} }        = $var;
-                my $pay = [ $var, $self->_expr($pin[1]) ];
-                $break_assign{ $ph->{id} } = sub ($k) { $pay };
+                $bound{ $ph->{id} } = $var;
+                for my $k (1 .. $#pin) {
+                    next if $pin[$k] == $pin[0];
+                    $break_assign{ $preds[$k] }{ $ph->{id} }
+                        = [ $var, $pin[$k] ];
+                }
             }
         }
 
@@ -3597,6 +3667,12 @@ class SoN::Deparse 0.01 {
             latch  => \%latch,
         };
         push @loop_frames, $frame;
+        # Before the body: the body and the step read the diamond's Phis.
+        my $pre_ctl = '';
+        for my $if (@pre_ctl) {
+            my ($t) = $self->_emit_if($if, $next_of);
+            $pre_ctl .= $t;
+        }
         my $body = $self->_emit_from($arm{0}{id}, $next_of, undef);
         pop @loop_frames;
         $loop_exit_region = $save_exit;
@@ -3619,8 +3695,8 @@ class SoN::Deparse 0.01 {
         # sit in a `while (COND)` header -- and a bottom-tested loop would run
         # the body once before testing, a different program.
         my $text;
-        if (@pre_cond) {
-            my $pre = '';
+        if (@pre_cond || @pre_ctl) {
+            my $pre = $pre_ctl;
             for my $e (@pre_cond) {
                 my $var = $bound{ $e->{id} };
                 $pre .= defined $var
@@ -4463,7 +4539,10 @@ class SoN::Deparse 0.01 {
         my @phis = sort { $a->{id} <=> $b->{id} }
                    grep { ($_->{op} // '') eq 'Phi'
                        && (($_->{fields}{region} // -1) == $n->{id})
-                       && !$self->_is_memory($_->{id}) }
+                       # A slot carrying `shift` is a variable here too, as
+                       # in _emit_loop: left out, it was never assigned.
+                       && (!$self->_is_memory($_->{id})
+                           || $self->_read_as_value($_->{id})) }
                    $self->_nodes_in_order;
 
         my $init = '';
@@ -4477,7 +4556,33 @@ class SoN::Deparse 0.01 {
 
         # THE ITERATING ARM IS INDEX 1, and whatever it holds runs after the
         # `last` on every pass that does not exit.
+        # A LOOP THAT LEAVES BY THE FUNCTION'S EXIT is a frame for its arms: an
+        # arm landing there is a `return`, and an arm whose other path falls
+        # into the latch has no join there. Without one, `if (C) { last unless
+        # D; next } last` took the exit for its join, and the `next` path
+        # returned too.
+        my ($exit_rgn) = grep { ($_->{op} // '') eq 'Region' }
+                         (($next_of->{ $arm{0}{id} } // [])->@*);
+        my $frame = $exit_rgn && $self->_is_fn_exit($exit_rgn, $next_of)
+            ? { loop => $n->{id}, exit => $exit_rgn->{id},
+                label => sprintf('LOOP%d', $n->{id}), used => 0,
+                breaks => {}, latch => {} }
+            : undef;
+        push @loop_frames, $frame if $frame;
+        # ANY OTHER EXIT IS THIS LOOP'S, as a headed loop's is: an arm landing
+        # there is a `last`. Unset, `if (C) { next } last` walked on into the
+        # code after the loop inside the arm, and the loop ran on.
+        my $save_exit = $loop_exit_region;
+        $loop_exit_region = $exit_rgn && !$frame ? $exit_rgn->{id} : undef;
+        my %save_break = %break_assign;
+        %break_assign = ();
         my $more = $self->_emit_from($arm{1}{id}, $next_of, undef);
+        $loop_exit_region = $save_exit;
+        %break_assign = %save_break;
+        pop @loop_frames if $frame;
+        # Its breaks pay nothing, so one from a nested loop is not spelled.
+        die "GAP: a `last LABEL` out of an endless loop that leaves by the"
+          . " function's exit is not yet rendered\n" if $frame && $frame->{used};
 
         my $step = '';
         if (@phis) {
@@ -4498,7 +4603,10 @@ class SoN::Deparse 0.01 {
         my $after = $arm{0}{id};
         my ($region) = grep { ($_->{op} // '') eq 'Region' }
                        (($next_of->{ $arm{0}{id} } // [])->@*);
-        $after = $region->{id} if $region;
+        # NOT THE FUNCTION'S EXIT: the walk meets that Region from the arm,
+        # so this path pays the exit's Phis there. Stepped over, the return
+        # read a variable only a `return` inside the loop assigned.
+        $after = $region->{id} if $region && !$self->_is_fn_exit($region, $next_of);
 
         return ($text, $after);
     }
@@ -4562,6 +4670,44 @@ class SoN::Deparse 0.01 {
             push @todo, ( $next_of->{ $n->{id} } // [] )->@*;
         }
         return 0;
+    }
+
+    # _break_payment(\%payments, $arm, $region_id, $next_of) -> source
+    #
+    # What a `last` owes the exit Phis, for the exit it arrives by. The
+    # payments are keyed on the exit Region's input -- the node the break
+    # arm's chain ends on -- so the arm is followed exactly as
+    # _reaches_region follows it, to the node the Region consumes.
+    #
+    # THE VALUES ARE READ BEFORE ANY IS WRITTEN. A payment reuses the loop's
+    # own variable, and a second payment's value may read the first's: each
+    # goes to a temporary first, as the step at the latch does.
+    method _break_payment ($payments, $arm, $region_id, $next_of) {
+        return '' unless $payments->%*;
+        my ($pred, %seen);
+        my @todo = ( $arm );
+        while (my $n = shift @todo) {
+            next if $seen{ $n->{id} }++;
+            my @succ = ( $next_of->{ $n->{id} } // [] )->@*;
+            if ( grep { $_->{id} == $region_id } @succ ) { $pred = $n->{id}; last }
+            next if ( $n->{op} // '' ) eq 'Region';
+            next if ( $n->{op} // '' ) eq 'If' && $n->{id} != $arm->{id};
+            push @todo, @succ;
+        }
+        die "GAP: a break whose exit edge the walk cannot find is not yet"
+          . " rendered\n" unless defined $pred;
+        my $owed = $payments->{$pred} // return '';
+        my @phi = sort { $a <=> $b } keys %$owed;
+        return sprintf("%s = %s;\n", $owed->{ $phi[0] }[0],
+                       $self->_expr($owed->{ $phi[0] }[1])) if @phi == 1;
+        my ($tmp, $set) = ('', '');
+        for my $ph (@phi) {
+            my ($var, $id) = $owed->{$ph}->@*;
+            my $t = substr($var, 0, 1) . "pay$ph";
+            $tmp .= sprintf("my %s = %s;\n", $t, $self->_expr($id));
+            $set .= "$var = $t;\n";
+        }
+        return $tmp . $set;
     }
 
     # A Region whose control goes on to the Return: the function's exit join.
@@ -4662,16 +4808,16 @@ class SoN::Deparse 0.01 {
         # the innermost loop's exit is the plain `last` below.
         my @edges;
         push @edges, { region => $loop_exit_region, word => 'last',
-                       pay => sub ($k = undef) { _pay_at_once( map { $break_assign{$_}->($k) }
-                                             sort { $a <=> $b } keys %break_assign ) } }
+                       pay => sub ($arm) { $self->_break_payment(\%break_assign,
+                           $arm, $loop_exit_region, $next_of) } }
             if defined $loop_exit_region;
         for my $fi ( 0 .. $#loop_frames ) {
             my $f = $loop_frames[$fi];
             my $inner = $fi == $#loop_frames;
             push @edges, { region => $f->{exit}, word => "last $f->{label}",
                            frame => $f,
-                           pay => sub ($k = undef) { _pay_at_once( map { $f->{breaks}{$_}->($k) }
-                                                 sort { $a <=> $b } keys $f->{breaks}->%* ) } }
+                           pay => sub ($arm) { $self->_break_payment($f->{breaks},
+                               $arm, $f->{exit}, $next_of) } }
                 if defined $f->{exit} && !$inner;
             # The innermost loop's latch too: a `next` ending an arm of its
             # own body. Plain `next` there; the label only for an outer loop.
@@ -4679,7 +4825,10 @@ class SoN::Deparse 0.01 {
                 push @edges, { region => $r,
                                word => $inner ? 'next' : "next $f->{label}",
                                frame => $f,
-                               pay => sub ($k = undef) {
+                               pay => sub ($arm = undef) {
+                                   # The input this arm enters the latch by.
+                                   my $k = $self->_region_pred_index(
+                                       $arm, $nodes->{$r}, $next_of );
                                    my $out = join '', map {
                                        sprintf("%s = %s;\n", $bound{ $_->{id} },
                                            $self->_expr($_->{inputs}[$k // 1])) }
@@ -4722,7 +4871,7 @@ class SoN::Deparse 0.01 {
                 my $r = $arm{$ix} && $self->_arm_fn_exit( $arm{$ix}, $next_of )
                     or next;
                 push @edges, { region => $r, word => 'return',
-                               pay => sub ($k = undef) { '' } };
+                               pay => sub ($arm = undef) { '' } };
             }
         }
         for my $edge (@edges) {
@@ -4747,16 +4896,22 @@ class SoN::Deparse 0.01 {
                 # `next if` merge -- and emitted the continue block inside the
                 # else arm, before the enclosing walk emitted it again (corpus
                 # 137 printed c1 twice).
+                # UNLESS IT FALLS STRAIGHT INTO THE LATCH: `last unless
+                # defined $h; $cur = $h; next` reaches the latch by its own
+                # chain, and stops there to pay what it computed on the way.
+                my $latch_join = $self->_lone_arm_join( $arm{$rest_ix}, $next_of );
+                $latch_join = undef unless defined $latch_join
+                    && ( grep { exists $_->{latch}{$latch_join} } @loop_frames )
+                    && $self->_reaches_region( $arm{$rest_ix}, $latch_join, $next_of );
                 my $rest = $self->_emit_from( $arm{$rest_ix}{id}, $next_of,
-                                              $outer_stop // $loop_exit_region );
+                                              $latch_join // $outer_stop // $loop_exit_region );
                 # The condition is written so the BREAKING arm is the one that
                 # runs: an index-1 break means the loop leaves when the test is
                 # FALSE, so the spelling negates.
                 # THE EXIT PHIS ARE PAID HERE. Each records what the loop
                 # variable must hold on this path; assigning before the `last`
                 # is what makes a post-loop read correct on both exits.
-                my $pay  = $edge->{pay}->( $self->_region_pred_index(
-                    $arm{$ix}, $nodes->{ $edge->{region} }, $next_of ) );
+                my $pay  = $edge->{pay}->($arm{$ix});
                 # WHAT THE ARM DOES BEFORE IT LEAVES runs before the jump: a
                 # store pinned between the arm's Proj and the exit Region --
                 # `$so = $i; last` into a demoted slot -- was left out, and
@@ -4790,8 +4945,7 @@ class SoN::Deparse 0.01 {
                         $f->{used} = 1 if $redge->{word} =~ / /;
                         $f->{nexted} = 1;
                     }
-                    my $rpay = $redge->{pay}->( $self->_region_pred_index(
-                        $arm{$rest_ix}, $nodes->{ $redge->{region} }, $next_of ) );
+                    my $rpay = $redge->{pay}->( $arm{$rest_ix} );
                     return ( $text
                              . $self->_emit_from( $arm{$rest_ix}{id}, $next_of,
                                                   $redge->{region} )
@@ -4821,6 +4975,16 @@ class SoN::Deparse 0.01 {
                 # first meets the function's exit, through the loop's exit --
                 # `last if A; return X if B` resumed there, and the code after
                 # the loop was emitted inside the body.
+                # A REST THAT FELL INTO THE LATCH pays it after what it ran,
+                # since that is where its values come from. Skipped, the latch
+                # variables kept the other arm's values and the loop never
+                # moved on. Silent on base: a hang.
+                if ( defined $latch_join ) {
+                    my ($bdecl, %bassign)
+                        = $self->_join_phis( $latch_join, { $rest_ix => $arm{$rest_ix} }, undef, $next_of );
+                    return ( $bdecl . $text . $rest . ( $bassign{$rest_ix} // '' ),
+                             $latch_join );
+                }
                 my $bjoin = $self->_lone_arm_join( $arm{$rest_ix}, $next_of );
                 if ( defined $bjoin
                      && !grep { my $r = $_->{region};
@@ -4840,6 +5004,27 @@ class SoN::Deparse 0.01 {
         # nodes, so it is the join. Find it by looking for the Region that both
         # arms reach.
         my $join = $self->_join_region($arm{0}, $arm{1}, $next_of);
+        # ONE ARM LEAVES, THE OTHER FALLS THROUGH TO THE ENCLOSING JOIN:
+        # `if (A) { if (B) { return 1 } return 2 }` inside an enclosing arm
+        # meets its sibling only at the function's exit. The enclosing join
+        # is where the walk stops, so it is this If's join as well -- taken
+        # as the exit, the code after the enclosing join was emitted inside
+        # this If's other arm and again after it, and a value bound in one
+        # copy was unset in the other.
+        # SO DOES ONE THAT MEETS ITS SIBLING AT THE LATCH, past the enclosing
+        # join: `next if A; if (!defined $o) { return if B; next }` inside the
+        # `next if`'s fall-through. Taken for the join, the latch's variables
+        # were renamed under the loop that declared them.
+        if (defined $join && defined $outer_stop && $nodes->{$outer_stop}
+            && $join != $outer_stop
+            && ($self->_is_fn_exit($nodes->{$join}, $next_of)
+                || grep { $_ == $join } $self->_control_reachable($outer_stop, $next_of))
+            && !$self->_is_fn_exit($nodes->{$outer_stop}, $next_of)
+            && grep { my $p = $_;
+                      grep { $_ == $outer_stop } $self->_control_reachable($p->{id}, $next_of) }
+                    $arm{0}, $arm{1}) {
+            $join = $outer_stop;
+        }
 
         my $t = $self->_emit_from($arm{0}{id}, $next_of, $join);
         my $f = $self->_emit_from($arm{1}{id}, $next_of, $join);
@@ -4982,13 +5167,14 @@ class SoN::Deparse 0.01 {
                     : $st =~ /\A(?:Array|Hash)\z/ ? $st : '';
             my $var = sprintf($self->_phi_takes_a_list($p) || $agg eq 'Array' ? '@phi%d'
                             : $agg eq 'Hash' ? '%%phi%d' : '$phi%d', $p->{id});
-            # A LATCH THAT IS ALSO THIS IF'S JOIN keeps the latch's variable,
-            # declared with the loop: a `next` in a nested arm has paid it
-            # already, and renamed here the latch read the other name (r3
-            # for perl's r23). Its inputs are all inside the loop, so it has
-            # no seed to hoist.
-            my $latch = ($bound{ $p->{id} } // '') =~ /\A\$latch\d+\z/;
-            $var = $bound{ $p->{id} } if $latch;
+            # A LATCH PHI KEEPS THE VARIABLE ITS LOOP DECLARED, also where the
+            # latch is this if's join: a `next` already pays it by that name,
+            # and renamed here the continue block read a variable only the
+            # fall-through assigned (r3 for perl's r23). Its inputs are all
+            # inside the loop, so it has no seed to hoist.
+            my $latch = ($bound{ $p->{id} } // '') =~ /\A\$latch\d+\z/
+                ? $bound{ $p->{id} } : undef;
+            $var = $latch if defined $latch;
 
             # DECLARED AT THE TOP OF THE SUB, NOT BEFORE THIS `if`. A join
             # can OUTLIVE the branch that assigns into it -- measured on a
@@ -4998,7 +5184,7 @@ class SoN::Deparse 0.01 {
             # `return $phi18` was out of scope and the sub returned undef.
             #
             # The ASSIGNMENTS stay in their arms; only the declaration moves.
-            $hoisted{$var} //= $var unless $latch;
+            $hoisted{$var} //= $var unless defined $latch;
 
             # Seed with whichever input has no arm to assign in: the lone
             # case's absent arm, or the first input when every arm is present
@@ -5029,14 +5215,32 @@ class SoN::Deparse 0.01 {
             # input when that branch is emitted. Seeded here, its value was
             # spelled ahead of the guard -- `my $phi = $c->[0]` above
             # `unless (ref $c eq 'ARRAY')`, which died under strict refs.
+            # NOR FROM A PATH THAT NEVER MEETS THIS IF: a `return` from an
+            # earlier if pays the exit itself, and seeded here its value was
+            # spelled at the top of the sub, ahead of the `my` it reads
+            # (`my $phi72 = $r;` above `my ($l, $r) = @_`, chalk's
+            # Semiring::Structural::add).
+            my $if_id = (map { ($_->{inputs} // [])->[0] } values $arm->%*)[0];
+            my %below = defined $if_id
+                ? map { $_ => 1 } $self->_control_reachable($if_id, $next_of) : ();
             my ($seed) = grep { !exists $proj_arm{ $pred[$_] }
                                 && !$self->_inside_loop($pred[$_])
-                                && !$self->_under_proj($pred[$_], \%proj_arm) } 0 .. $#in;
+                                && !$self->_under_proj($pred[$_], \%proj_arm)
+                                && (!defined $if_id || $below{ $pred[$_] }
+                                    || grep { $_ == $if_id }
+                                       $self->_control_reachable($pred[$_], $next_of)) } 0 .. $#in;
             $hoisted{$var} = defined $seed
                 ? sprintf('%s = %s', $var, $self->_expr($in[$seed]))
                 : $var
-                unless $latch;
+                unless defined $latch;
 
+            # A RETURNED CALL BESIDE A SCALAR: `if ($x) { return g() }
+            # return 7` runs g in the caller's context -- a Call with no
+            # `want` -- and the exit's scalar variable took g's count, or its
+            # last value alone for a method. Which one the caller gets is
+            # decided at run time.
+            my $exit = $var =~ /\A\$/ && grep { ($_->{op} // '') eq 'Return'
+                && ($_->{control_in} // -1) == $join } $self->_nodes_in_order;
             for my $i (0 .. $#in) {
                 # AN ARM PAYS THE PREDECESSOR ITS FALL-THROUGH ENDS ON, which
                 # is not always its own Proj. `if (!C) { if (D) { return X } }
@@ -5052,8 +5256,18 @@ class SoN::Deparse 0.01 {
                                   $arm->{$_}{id} == $pred[$i]
                                   || (defined($sp = $self->_arm_spine_pred($arm->{$_}, $join, $next_of))
                                       && $sp == $pred[$i]) } sort keys $arm->%*;
-                $assign{$_} .= sprintf("%s = %s;\n", $var, $self->_expr($in[$i]))
-                    for @arms;
+                next unless @arms;
+                my $e = $self->_expr($in[$i]);
+                # NOT AN ARRAY: `return @o` in scalar context IS its count.
+                # ONLY A CALLEE THIS GRAPH SET SHOWS RETURNING A LIST: one
+                # whose body is not here is taken for a scalar, as before.
+                my $c = $nodes->{ $in[$i] };
+                die "GAP: a function exit merges a returned list with a scalar;"
+                  . " a call returned in the caller's context is bound to one\n"
+                    if $exit && $c && ($c->{op} // '') eq 'Call'
+                    && !defined(($c->{fields} // {})->{want})
+                    && $self->_callee_returns_list($c);
+                $assign{$_} .= sprintf("%s = %s;\n", $var, $e) for @arms;
             }
             $bound{ $p->{id} } = $var;
         }
@@ -5065,6 +5279,63 @@ class SoN::Deparse 0.01 {
     # nodes, so a Region naming a node reachable from each arm is the join.
     # Is this control node inside a loop's body? Walked back along control to
     # the first Loop (yes) or Start, or a merge, which says no single path.
+    # Does the sub or method this Call names, if its graph is in this set,
+    # return a list -- a Return carrying [list, scalar], or an aggregate?
+    method _callee_returns_list ($c) {
+        my $f = $c->{fields} // {};
+        my $kind = $f->{dispatch_kind} // '';
+        my $name = $f->{name} // return 0;
+        # A METHOD ON AN INVOCANT OF NO KNOWN CLASS is looked for in this
+        # sub's package: a wrong guess only refuses.
+        my ($pkg) = ($current_sub // '') =~ /\A(.*)::[^:]+\z/;
+        my $key = $kind eq 'direct' ? $name
+                : $kind eq 'method' && defined($f->{class_name} // $pkg)
+                    ? ($f->{class_name} // $pkg) . "::$name"
+                : return 0;
+        my $g = $all_methods->{$key} or return 0;
+        my %by = map { $_->{id} => $_ } ($g->{nodes} // [])->@*;
+        my (%seen, @todo);
+        for my $r (grep { ($_->{op} // '') eq 'Return' } values %by) {
+            my @in = ($r->{inputs} // [])->@*;
+            return 1 if @in == 2;
+            push @todo, @in;
+        }
+        # THROUGH THE EXIT'S PHIS, to what each path returns.
+        while (defined(my $id = shift @todo)) {
+            next if $seen{$id}++;
+            my $v = $by{$id} or next;
+            my $op = $v->{op} // '';
+            my $sig = ($v->{fields} // {})->{sigil} // '';
+            return 1 if $op =~ /\A(?:ArrayLiteral|HashLiteral|ArgsSource)\z/
+                || ($op =~ /\A(?:PostfixDeref|PadAccess)\z/ && $sig =~ /\A[\@%]\z/);
+            push @todo, ($v->{inputs} // [])->@* if $op eq 'Phi';
+        }
+        return 0;
+    }
+
+    # The outermost Loop whose body holds control node $id, or undef. Walked
+    # back along control: a join through the If or Loop that opened it, a
+    # Loop's body Proj into the Loop, and on out from the Loop's entry.
+    method _outermost_loop ($id) {
+        my (%seen, $loop);
+        while (defined $id && !$seen{$id}++) {
+            my $n = $nodes->{$id} or last;
+            my $op = $n->{op} // '';
+            last if $op eq 'Start';
+            if ($op eq 'Proj') {
+                my $src = $nodes->{ ($n->{inputs} // [])->[0] // -1 } or last;
+                $loop = $src->{id} if ($src->{op} // '') eq 'Loop'
+                                   && (($n->{fields} // {})->{index} // 0) == 0;
+                $id = $src->{id};
+                next;
+            }
+            $id = $op eq 'Region' && defined $n->{head} ? $n->{head}
+                : $op =~ /\A(?:If|Loop|Region)\z/ ? ($n->{inputs} // [])->[0]
+                :                                    $n->{control_in};
+        }
+        return $loop;
+    }
+
     method _inside_loop ($id) {
         my %seen;
         while (defined $id && !$seen{$id}++) {
@@ -5107,25 +5378,39 @@ class SoN::Deparse 0.01 {
 
     method _join_region ($true_proj, $false_proj, $next_of) {
         my %from_true = map { $_ => 1 } $self->_control_reachable($true_proj->{id}, $next_of);
-        my @found;
+        # A LOOP'S EXIT IS NOT AN ARM JOIN. An arm whose nested guard breaks
+        # (`if (C) { last unless D; ... }`) reaches the exit before the join,
+        # and the other arm reaches it too, through the rest of the body --
+        # taken for the join, the exit's Phis were read as the If's.
+        my %exit = map { $_ => 1 } grep { defined }
+                   $loop_exit_region, map { $_->{exit} } @loop_frames;
+        my @cand;
         for my $id ($self->_control_reachable($false_proj->{id}, $next_of)) {
+            next if $exit{$id};
             my $n = $nodes->{$id} or next;
             next unless $n->{op} eq 'Region';
             my @ins = ($n->{inputs} // [])->@*;
-            push @found, $n if (grep { $from_true{$_} } @ins)
+            push @cand, $id if (grep { $from_true{$_} } @ins)
                             && (grep { !$from_true{$_} } @ins);
         }
-        # A LATCH IS THE JOIN ONLY WHEN NOTHING NEARER IS. A `next` in a
-        # nested arm reaches the latch in fewer steps than its sibling reaches
-        # the If's own merge, and the latch -- which the other arm reaches
-        # too -- was taken for the join: the fall-through then paid neither
-        # the merge nor the latch (`next if A; if (B) { next } ...` lost
-        # every value but B's). A latch leads only to later latches, so any
-        # other candidate comes before it.
-        my %latch = map { $_ => 1 } map { keys $_->{latch}->%* } @loop_frames;
-        my ($own) = grep { !$latch{ $_->{id} } } @found;
-        my $join = $own // $found[0];
-        return $join ? $join->{id} : undef;
+        # THE FUNCTION'S EXIT IS A NESTED GUARD'S EDGE, NOT THIS IF'S JOIN,
+        # when the arms also meet somewhere else. A guarded return in one arm
+        # reaches the exit in fewer steps than its fall-through reaches the
+        # arms' merge, and the other arm reaches the exit too, through a later
+        # return -- `if (!$o) { return 1 if $s } return 2 if $o > 5`. Taken
+        # for the join, the rest of the body ran inside both arms.
+        # SO IS A LOOP'S LATCH, a nested `next`'s edge: `next if A && B;
+        # next unless C; ...` merges the first `next` with the fall-through,
+        # then that with the second `next` at the latch, and the walk from
+        # the false arm meets the latch first. Taken for the join, the first
+        # merge's values never reached the latch variables.
+        my %latch = map { map { $_ => 1 } keys $_->{latch}->%* } @loop_frames;
+        # Only when the arms meet somewhere else: a latch both reach is the
+        # join, before the function's exit.
+        my @inner = grep { !$self->_is_fn_exit($nodes->{$_}, $next_of) } @cand;
+        my @plain = grep { !$latch{$_} } @inner;
+        @cand = @plain ? @plain : @inner ? @inner : @cand;
+        return $cand[0];
     }
 
     # Every control node reachable forward from $id, including Region inputs
@@ -5156,18 +5441,6 @@ class SoN::Deparse 0.01 {
     # and a literal is never touched.
     sub _indent ($text) {
         return $text;
-    }
-
-    # A BREAK'S EXIT VALUES ARE PAID AT ONCE, as one list assignment. Each
-    # is what its slot holds on the break path, and one may read another's
-    # variable -- paid one after another, `$q = $q + $p*2` read the $p just
-    # paid (16 47 for perl's 16 31). Perl's list assign reads every right
-    # side before it writes.
-    sub _pay_at_once (@pairs) {
-        return '' unless @pairs;
-        return sprintf("%s = %s;\n", $pairs[0]->@*) if @pairs == 1;
-        return sprintf("(%s) = (%s);\n", join(', ', map { $_->[0] } @pairs),
-                                         join(', ', map { $_->[1] } @pairs));
     }
 
     method _emit_statement ($n, $next_of) {

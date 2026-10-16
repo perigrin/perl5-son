@@ -1607,9 +1607,14 @@ class SoN::FromOptree 0.01 {
                 # is pinned -- runs on its own Proj, as the and/or handler's
                 # effect branch does: the If tests definedness, the fallback
                 # takes the false arm, and the arms merge before the value.
+                # SO DOES ONE THAT DIES -- `my $c = shift // die "none"` -- in
+                # any context: walked on the operator's own control, its Unwind
+                # hung off the shift beside the rest of the sub, with no If to
+                # choose between them.
                 my $dor_if;
-                if (($op->flags & 3) != 1
-                        && _arm_advances_control($op->other, $stop_addr)) {
+                if ((($op->flags & 3) != 1
+                        && _arm_advances_control($op->other, $stop_addr))
+                    || _arm_has_die($op->other, $stop_addr)) {
                     $dor_if = $factory->make_cfg('If', inputs => [$sim->control,
                         $factory->make('Defined', inputs => [$lhs])]);
                     $rhs_sim->set_control($factory->make_cfg('Proj',
@@ -1668,6 +1673,8 @@ class SoN::FromOptree 0.01 {
                         stamp      => SoN::IR::Stamp->new(type => 'Undef'));
                 }
                 $sim->merge($rhs_sim, $factory, $dor_if) if $dor_if;
+                _merge_rhs_rebinds($factory, $sim, $rhs_sim, $lhs, 'dor')
+                    unless $dor_if;
                 my $node = $factory->make('DefinedOr', inputs => [$lhs, $rhs]);
                 $sim->push_node($node);
                 $op = $rhs_end // $op->next;
@@ -2028,6 +2035,8 @@ class SoN::FromOptree 0.01 {
                 # does minus the value.
                 $sim->merge($rhs_sim, $factory, $if_node)
                     if $effect_value_branch && $if_node;
+                _merge_rhs_rebinds($factory, $sim, $rhs_sim, $lhs, $name)
+                    unless $effect_value_branch && $if_node;
 
                 my $node_op = $name eq 'and' ? 'And' : 'Or';
                 my $node = $factory->make($node_op, inputs => [$lhs, $rhs]);
@@ -2363,275 +2372,7 @@ class SoN::FromOptree 0.01 {
 
             # Handle subst - regex substitution op: s/pattern/replacement/flags
             if ($name eq 'subst' && $op->isa('B::PMOP')) {
-                my $flags   = _pmflags_to_str($op->pmflags);
-                # BEFORE ANYTHING POPS. The pattern parts sit ABOVE the
-                # replacement on the stack, so any pop that runs first takes a
-                # pattern piece and calls it something else.
-                my ($rt_pat, $pat_node) =
-                    _subst_runtime_pattern($op, $sim, $factory);
-                my $pattern = $rt_pat // ($op->precomp // '');
-
-                # A /ge BODY IS EXTRACTED BEFORE THE TARGET IS RESOLVED: a lone
-                # variable replacement is stacked on top of the subject, and the
-                # body re-reads it, so it is not an operand here.
-                my ($repl_body, $stacked) = ( $op->pmflags & PMf_EVAL )
-                    && ( $op->pmflags & B::PMf_GLOBAL() )
-                    ? _subst_ge_body($cv, $op, $pattern,
-                        _pmflags_to_str($op->pmflags))
-                    : ();
-                $sim->pop_node if $stacked && $sim->stack_depth;
-
-                # RESOLVED HERE because the /e path needs it: the match half is
-                # built before the replacement is walked, and takes the target
-                # as its operand. Idempotent -- returns the existing binding.
-                # $store_target is the NAME to store through when the
-                # binding resolved to a bare value -- see _subst_target.
-                my ($scope_key, $target, $store_target) =
-                    _subst_target($cv, $op, $sim, $factory);
-                $store_target //= $target;
-                # s///e: the replacement is a code SUBTREE rather than a
-                # literal, and it is walkable. It hangs off pmreplroot and is
-                # intact even under the rpeep suppression this walker runs with
-                # (B::SoN.pm BEGIN):
-                #
-                #   substcont -> null -> scope -> { ex-nextstate,
-                #                                   add -> padsv $n, const 1 }
-                #
-                # What rpeep suppression DOES null is `pmreplstart`, the
-                # computed exec shortcut into that subtree -- which is why
-                # looking there found nothing and the construct read as opaque.
-                # The tree was always there; the entry is its leftmost leaf,
-                # and ->next from that leaf walks the body to the substcont
-                # that closes it.
-                #
-                # /g IS THE LINE, and it is a real one. The replacement runs
-                # ONCE PER MATCH -- measured, `s/a/ $n++ /ge` on "aaa" gives
-                # "012" with $n at 3, while /e alone gives "0aa" with $n at 1.
-                # A repeating side-effecting body is a LOOP, which one operand
-                # cannot express, and lowering it as once-only is a silent
-                # wrong answer.
-                #
-                # SO /ge IS A BODY THE SUBSTITUTION CALLS, its own graph like a
-                # sort comparator block, and the RegexSubst names it.
-                my $code_repl;
-                if ($op->pmflags & PMf_EVAL) {
-                    goto NO_CODE_REPL if defined $repl_body;
-
-                    # A CONSTANT-FOLDED /e REPLACEMENT HAS NO SUBTREE, and
-                    # that is not a refusal: perl folds `s/a/ "X" . "Y" /e` at
-                    # compile time and leaves pmreplroot NULL with PMf_EVAL
-                    # still set. What reaches the stack is then an ordinary
-                    # Constant -- the literal case -- so fall through to it
-                    # rather than treating the absence as unreachable code.
-                    my $rr = $op->pmreplroot;
-                    goto NO_CODE_REPL unless ref($rr) && $$rr;
-
-                    # The leftmost leaf is where execution of the subtree
-                    # begins; ->next from it runs the body.
-                    # ONE WALK, SHARED. This was the THIRD copy of the same
-                    # subtree walk -- main /e, main interpolated, loop body --
-                    # and the capture fix has to land in all of them, so they
-                    # now go through one helper. Passing the target/pattern/
-                    # flags is what lets it build the match half the
-                    # replacement's captures read.
-                    $code_repl = _walk_subst_replacement(
-                        $cv, $op, $sim, $factory, $opmap, \%visited,
-                        $target, $pattern, $flags);
-                    NO_CODE_REPL: ;
-                }
-                # An interpolated (multi-part) replacement -- `s/a/$y$z/`,
-                # `s/a/x$y/` -- is a runtime substcont subtree (pmreplroot set),
-                # NOT a single folded const. The handler below pops ONE stack
-                # Constant and uses it as the whole replacement, silently
-                # dropping every other part. A single interpolated variable
-                # (`s/a/$y/`) folds to a compile-time Constant under
-                # rpeep-suppression (pmreplroot NULL) and stays correct; only a
-                # genuine subtree GAPs. Refuse loudly until it is lowered.
-                # NOT FOR /e, whose pmreplroot IS the replacement subtree and
-                # was consumed above. This guard is about an INTERPOLATED
-                # literal (`s/a/x$y/`), where the subtree is a substcont chain
-                # the handler below would silently reduce to one popped
-                # Constant.
-                # AN INTERPOLATED REPLACEMENT IS A COMPUTED VALUE, exactly as
-                # an /e replacement is -- and RegexSubst already carries one,
-                # on inputs, which is how /e passes its result. The refusal
-                # said the handler "pops ONE stack Constant and uses it as the
-                # whole replacement, silently dropping every other part": true
-                # of the pop, and never a reason the parts could not be WALKED.
-                #
-                # Measured under suppress_peep:
-                #
-                #     s/a/x${p}y/   pmreplroot -> substcont -> multiconcat -> padsv
-                #
-                # so the subtree is walked with the /e machinery above --
-                # descend to the leftmost leaf, walk on a snapshot sim, take
-                # the single value it leaves. multiconcat already has a handler
-                # that assembles the parts, so nothing new is needed to read
-                # them.
-                #
-                # DIFFERENT FROM THE INTERPOLATED MATCH PATTERN (dd9d5ab),
-                # whose parts are mark-delimited ON THE STACK. Same construct
-                # family, two different recoveries; assuming the match shape
-                # here would pop operands that are not there.
-                $code_repl //= _walk_subst_replacement(
-                    $cv, $op, $sim, $factory, $opmap, \%visited,
-                    $target, $pattern, $flags)
-                    unless defined $repl_body;
-                my $nondestruct = $op->pmflags & PMf_NONDESTRUCT;
-                # In scalar/boolean context a DESTRUCTIVE s/// returns the
-                # match COUNT, not the rewritten string; only /r yields a
-                # string. The two roles of the node separate here: the TARGET
-                # is still rebound to the substituted subject (the mutation
-                # happened either way), while the VALUE that reaches the stack
-                # is the count.
-                #
-                # THE COUNT IS Str, NOT Int AND NOT Boolean. Measured on
-                # 5.42.0:
-                #
-                #     "aaa" =~ s/a/b/g   ->  3
-                #     "xxx" =~ s/a/b/g   ->  ""   the EMPTY STRING, defined
-                #     "aaa" =~ s/a/b/    ->  1
-                #
-                # Zero matches is "" rather than 0, so `defined` does not
-                # separate the two cases and only truth does. Int is wrong
-                # about the zero case. Boolean is not available either: the
-                # lattice has Boolean => Scalar rather than Boolean => Str, on
-                # the two-factor subtyping test recorded in Stamp.pm, so
-                # stamping the count Boolean would claim something perl
-                # contradicts. Int-or-empty-string is exactly Str.
-                my $count_context = !$nondestruct && ($op->flags & 3) != 1;
-                # The target is keyed on the pad targ. targ 0 means an implicit
-                # $_ or a package/global target (the GV is on the stack, not a
-                # pad slot) -- the handler cannot name it, so it used to
-                # fabricate a slot-0 rebind and silently drop the substitution.
-                # GAP loudly until non-pad targets are lowered.
-                # NO TARG MEANS $_, and $_ is nameable: it is the package
-                # scalar main::_, an ordinary SSA binding in the scope map. The
-                # MATCH handler beside this one already resolves it exactly this
-                # way, keyed with the SIGIL because `$_` and `@_` share a glob
-                # name and a name-only key hash-consed them into one node.
-                #
-                # Reads of $_ have always worked -- a match, a bare `print`, a
-                # builtin defaulting to it. Only the WRITE was refused, and the
-                # message blamed "implicit" when in fact `$_ =~ s///` was
-                # refused too: the handler could key NEITHER form.
-                # The replacement string is on the stack (pushed by const op
-                # before subst) -- but ONLY for a literal replacement. Under
-                # /e there is no such push: the replacement was walked from the
-                # subtree above, and popping here would take an unrelated stack
-                # value and stamp it on the node as a string replacement
-                # contradicting the operand (measured: `s/b/ $n + 1 /e` came out
-                # with replacement="5", which is $n, not the replacement).
-                my $repl_node = !defined $code_repl && !defined $repl_body
-                    && $sim->stack_depth > 0
-                    ? $sim->pop_node : undef;
-                # A PACKAGE TARGET IS A STACKED KID: its gvsv pushed the
-                # variable, which nothing popped, so in a list it rode along
-                # -- `f(1, $w =~ s/a//)` passed three arguments, `1 b 1`.
-                # A pad target is the op's own targ and pushes nothing.
-                $sim->pop_node
-                    if !$op->targ && ( $op->flags & B::OPf_STACKED() )
-                    && $sim->stack_depth > 0
-                    && ( $sim->peek_node == $target
-                         || $sim->peek_node == $store_target );
-                my $replacement = '';
-                if ($repl_node && $repl_node->isa('SoN::IR::Node::Constant')) {
-                    $replacement = $repl_node->value // '';
-                }
-                # THE COMPUTED REPLACEMENT IS A SECOND OPERAND. RegexSubst
-                # is a Value node and already carries inputs, so no new node
-                # kind is needed: a literal replacement keeps the string field
-                # and one input, a computed one adds the value beside it.
-                # INPUT ORDER IS [target, pattern?, replacement?] and the flag
-                # says whether the pattern slot is filled. Without it a
-                # computed pattern and an /e replacement are the same position.
-                # A DESTRUCTIVE s/// STORES INTO ITS TARGET, so it advances
-                # the memory chain (below) and must therefore CARRY one --
-                # every other memory point names the version it supersedes,
-                # and that is what lets a consumer recognise the chain
-                # structurally rather than by name. Without it,
-                # `$g =~ s/a/b/; $g =~ s/b/c/` chained only through the TARGET
-                # data edge, so nothing marked either as a memory point.
-                #
-                # MEMORY GOES LAST AND THE ARITY IS RECOVERABLE. The two
-                # optional slots are each determined by a field already on the
-                # wire: pattern-present IFF `pattern_is_input`, and
-                # replacement-present IFF the `replacement` string is empty.
-                my $node = $factory->make('RegexSubst',
-                    inputs      => [$target, ($pat_node // ()),
-                                    ($code_repl // ()),
-                                    (defined $sim->memory ? ($sim->memory) : ())],
-                    pattern_is_input => (defined $pat_node ? 1 : 0),
-                    pattern     => $pattern,
-                    replacement => $replacement,
-                    (defined $repl_body ? (replacement_body => $repl_body) : ()),
-                    flags       => $flags,
-                    # s/// yields the rewritten subject, always a Str.
-                    stamp       => SoN::IR::Stamp->new(type => 'Str'),
-                );
-                # PINNED TO ITS STATEMENT -- BUT ONLY FOR A PAD SUBJECT.
-                #
-                # A destructive s/// mutates, so it needs an ordering, and the
-                # loop-body construction of this same node has always set one.
-                # This site never did ("one operator, two declaration sites"),
-                # and without the pin the node cannot be BOUND, so its mutation
-                # renders wherever its value is first read.
-                #
-                # A PACKAGE SUBJECT ALREADY HAS ITS ORDERING, through the
-                # EntryWrite the destructive branch below emits -- and that
-                # write is what the deparser keys on to render the substitution
-                # ONCE (Deparse.pm, the EntryWrite arm). Pinning here as well
-                # makes the node independently bindable, the generic path
-                # renders the binding with `/r`, and the emission runs the
-                # substitution TWICE:
-                #
-                #     our $s = "aaa"; my $n = ($s =~ s/a/b/g); print "$n $s"
-                #       perl    3 bbb
-                #       pinned  $main::s = "aaa";
-                #               my $eff6 = ("aaa" =~ s{a}{b}gr);
-                #               $main::s = $eff6;
-                #               print(($main::s =~ s{a}{b}g) . " " . $main::s)
-                #
-                # -- the `/r` copy assigned back, then a second destructive run
-                # over the result. So the pin goes exactly where the ordering is
-                # otherwise absent, which is the pad case.
-                # THE SLOT ITSELF, not a pad read that is merely its value:
-                # `(my $t = $s) =~ s///` reads $s and writes $t.
-                my $in_place = $target->isa('SoN::IR::Node::PadAccess')
-                    && ($target->targ // q{}) eq $scope_key;
-                if ($in_place) {
-                    $node->set_control_in($sim->control);
-                    $sim->set_control($node);
-                    $sim->set_memory($node) if defined $sim->memory;
-                }
-                # A destructive s/// mutates the target pad in place: rebind
-                # $targ so a later read of the same lexical resolves to the
-                # substituted value, not the pre-subst binding (mirrors
-                # padsv_store / TARGMY). The /r form (PMf_NONDESTRUCT) yields a
-                # NEW string and leaves the source untouched, so it must NOT
-                # rebind -- only push the result value ($nondestruct above).
-                #
-                # NOT FOR A PAD SUBJECT. _address_taken demotes every destructive
-                # s///'s pad target, so its value lives in memory -- this node is
-                # the new memory version -- and later reads go through memory.
-                # Rebinding the slot to this node made the NEXT s/// on it take
-                # this one's result as its subject, unpinned: `$s =~ s/a/z/;
-                # $s =~ s/c/y/; $s =~ s/d/w/` kept only the first (corpus 010).
-                unless ($nondestruct) {
-                    $sim->define($scope_key, $node)
-                        unless $in_place;
-                    _entry_store($factory, $sim, $store_target, $node);
-                }
-                # The binding above is the substituted subject. In count
-                # context the VALUE is a different thing over the same
-                # operation, so push a node that says so rather than the
-                # subject -- pushing $node here is the silent value+type
-                # miscompile this used to refuse rather than commit.
-                $sim->push_node($count_context
-                    ? $factory->make('RegexSubstCount',
-                        inputs => [$node],
-                        stamp  => SoN::IR::Stamp->new(type => 'Str'))
-                    : $node);
+                _translate_subst($cv, $op, $sim, $factory, $opmap, \%visited);
                 $op = $op->next;
                 next;
             }
@@ -9913,6 +9654,33 @@ class SoN::FromOptree 0.01 {
             my @rhs;
             unshift @rhs, $sim->pop_node
                 while $sim->stack_depth > $sim->mark_depth;
+            # `($x, $P) = @_` INTO DECLARED SCALARS takes @_ element by element,
+            # as the padrange form `my (...) = @_` does. The Assign keeps @_ as
+            # its value; each target is BOUND to its own $_[i] (undef past the
+            # end, as perl's runtime distribution gives). Without this the
+            # positional binding below skipped the aggregate RHS, and a later
+            # read of the target saw its old value.
+            # A `my (...) = @_` needs none of this: its targets are fresh
+            # slots, and a read of one reads that slot.
+            my $introduces = 0;
+            for (my $k = $op->last->first; $k && $$k; $k = $k->sibling) {
+                $introduces = 1 if $k->name eq 'padsv'
+                    && ($k->private & B::OPpLVAL_INTRO());
+            }
+            my @args_elems;
+            if (@rhs == 1 && $rhs[0]->isa('SoN::IR::Node::ArgsSource')
+                && !$introduces
+                && $lhs->@* && !grep { !_is_scalar_rebind_target($_) } $lhs->@*) {
+                my $args = $rhs[0];
+                @args_elems = map {
+                    $factory->make('Subscript', kind => 'array',
+                        inputs => [$args,
+                            $factory->make('Constant', value => $_,
+                                const_type => 'integer',
+                                stamp => SoN::IR::Stamp->new(type => 'Int')),
+                            $sim->memory]);
+                } 0 .. $lhs->$#*;
+            }
             my $node = $factory->make('Assign',
                 inputs => [ $lhs->@*, @rhs ], targets => scalar $lhs->@*);
 
@@ -10008,8 +9776,9 @@ class SoN::FromOptree 0.01 {
             my $single_call = @rhs == 1
                 && ( $rhs[0]->isa('SoN::IR::Node::Call')
                      || $rhs[0]->operation =~ /\A(?:And|Or|DefinedOr|Phi)\z/ );
+            my @vals = @args_elems ? @args_elems : @rhs;
             my $positional =
-                   ( !grep { _is_aggregate_node($_) } @targets, @rhs )
+                   ( !grep { _is_aggregate_node($_) } @targets, @vals )
                 && ( !$single_call || @targets <= 1 )
                 && ( grep { _is_scalar_rebind_target($_) } @targets );
             if ($positional) {
@@ -10019,7 +9788,7 @@ class SoN::FromOptree 0.01 {
                 for my $i (0 .. $#targets) {
                     my $t = $targets[$i];
                     next unless _is_scalar_rebind_target($t);
-                    my $v = $rhs[$i] // $factory->make('Constant',
+                    my $v = $vals[$i] // $factory->make('Constant',
                         value      => undef,
                         const_type => 'undef',
                         stamp      => SoN::IR::Stamp->new(type => 'Undef'));
@@ -10901,6 +10670,20 @@ class SoN::FromOptree 0.01 {
                     push @inputs, $sim->memory;
                     $extra{memory_input} = 1;   # see Call's memory_input
                 }
+                # A WHOLE ARRAY OR HASH OPERAND IS READ AT A MEMORY VERSION, as
+                # `keys` reads its hash above: `push @r, $_ for 1..3; my @b =
+                # reverse @r` took @r and nothing else, so the graph did not
+                # say the reverse comes after the pushes -- placed above the
+                # loop, it reversed an empty array. The call reads the memory;
+                # it does not advance it.
+                elsif ($node_type eq 'Call' && !$extra{memory_input}
+                    && defined $sim->memory
+                    && grep { _is_array_operand($_)
+                              || ($_->isa('SoN::IR::Node::PadAccess')
+                                  && ($_->sigil // '') eq '%') } @inputs) {
+                    push @inputs, $sim->memory;
+                    $extra{memory_input} = 1;
+                }
 
                 %extra = (%extra, _bitwise_flavor($name));
                 # AN ANONYMOUS CONSTRUCTOR IS AN ALLOCATION, pinned where it
@@ -10957,7 +10740,11 @@ class SoN::FromOptree 0.01 {
                   . " the array it reverses\n"
                     if $name eq 'reverse' && ($op->private & 8)   # OPpREVERSE_INPLACE
                     && ($ctx->{mode} // '') ne 'main'
-                    && @inputs && $inputs[-1]->isa('SoN::IR::Node::PadAccess');
+                    && @inputs
+                    # The array is the operand before the memory it is read at.
+                    && $inputs[ $extra{memory_input} ? -2 : -1 ]
+                    && $inputs[ $extra{memory_input} ? -2 : -1 ]
+                        ->isa('SoN::IR::Node::PadAccess');
                 if (($name eq 'sort' || $name eq 'reverse')
                         && ($op->private & 8)) {   # OPpSORT_INPLACE, OPpREVERSE_INPLACE
                     my $arr = $op->first;
@@ -12130,7 +11917,19 @@ class SoN::FromOptree 0.01 {
 
     # Synthesize an explicit truthiness test NumNe($value, 0) for a bare-scalar
     # loop condition (`while ($n)`), so the control-wired condition is an icmp.
+    #
+    # ONLY A NUMBER IS TRUE EXACTLY WHEN IT IS NOT 0. A string or a reference
+    # is not: `while ($s)` over "abc" ran no passes, because "abc" != 0 is
+    # false, and a blessed object's class name compared the same way. Anything
+    # not stamped numeric is tested as perl tests it, `!!$value` -- a Not is
+    # already a Boolean the header accepts.
     sub _truthiness_test ($value, $factory) {
+        my $type = $value->can('stamp') && $value->stamp ? $value->stamp->type : '';
+        unless ($type eq 'Int' || $type eq 'Num') {
+            my $bool = SoN::IR::Stamp->new(type => 'Boolean');
+            my $not = $factory->make('Not', inputs => [$value], stamp => $bool);
+            return $factory->make('Not', inputs => [$not], stamp => $bool);
+        }
         my $zero = $factory->make('Constant',
             value      => 0,
             const_type => 'integer',
@@ -12187,6 +11986,11 @@ class SoN::FromOptree 0.01 {
                 && $probe->name ne 'and' && $probe->name ne 'or';
         return [] unless $$probe
             && ($probe->name eq 'and' || $probe->name eq 'or');
+        # A COMPOUND CONDITION CLOSES AT ITS OUTERMOST and/or. The first one
+        # in exec order is the left operand's -- `while ($n > 3 && $h++ < 8)`
+        # stopped the scout at `$n > 3`, so the increment on the right was
+        # not a condition write and the loop exited with the value before it.
+        $probe = _loop_closing_logop($cond_start) // $probe;
 
         die "GAP: side-effecting loop condition with a memory store not yet lowered\n"
             if _cond_stores_memory($cond_start);
@@ -12207,6 +12011,25 @@ class SoN::FromOptree 0.01 {
         return [ sort _scope_key_order
             grep { defined $after->{$_} && $after->{$_} != $placeholder{$_} }
             keys %placeholder ];
+    }
+
+    # The and/or that closes a loop's condition: the outermost one between the
+    # condition's first op and its leaveloop, found by climbing parents. undef
+    # when the condition does not sit under a leaveloop.
+    sub _loop_closing_logop ($op) {
+        my ($last, %seen);
+        while ($$op && !$seen{$$op}++) {
+            my $p = eval { $op->parent } or return undef;
+            return undef unless $$p;
+            return $last if $p->name eq 'leaveloop';
+            # A STATEMENT BOUNDARY MEANS THIS IS NOT ITS LOOP'S CONDITION: a
+            # postfix `EXPR while COND` has no leaveloop of its own, and the
+            # climb went on to an enclosing foreach's and scouted its body.
+            return undef if $p->name =~ /\A(?:lineseq|scope|leave\w*)\z/;
+            $last = $p if $p->name eq 'and' || $p->name eq 'or';
+            $op = $p;
+        }
+        return undef;
     }
 
     # Does a loop CONDITION store to memory (an lvalue element `$a[$i]++` /
@@ -12404,39 +12227,30 @@ class SoN::FromOptree 0.01 {
     # See the block comment at the call site for what the Phi means; this is
     # that code unchanged, with the loop's own variables passed in.
     sub _bind_break_exit_phis ($factory, $sim, $exit_region, $break_projs) {
-        # TWO OR MORE BREAKS MAKE ONE PHI PER SLOT, an input per Region
-        # predecessor in its order -- as the memory Phi below does. A Phi per
-        # break, each over [header, that break], chained two-input Phis onto
-        # a Region with three predecessors, and the deparser gave each break
-        # the wrong one's values: `last if $i > 4; ...; last if $i % 2 == 0`
-        # printed `eoe 3` for perl's `eoe 2`.
-        if (@$break_projs >= 2) {
-            my $header_exit = $exit_region->inputs->@* > @$break_projs;
-            my $scope = $sim->scope_bindings;
-            my %targs = map { %{ $_->{bindings} } } @$break_projs;
-            for my $targ (sort _scope_key_order keys %targs) {
-                my $header = $scope->{$targ};
-                next unless defined $header;
-                my @vals = map { $_->{bindings}{$targ} // $header } @$break_projs;
-                next unless grep { $_ != $header } @vals;
-                $sim->define($targ, $factory->make('Phi',
-                    inputs => [ ($header_exit ? ($header) : ()), @vals ],
-                    region => $exit_region,
-                    (_is_narrowed($header->stamp) ? (stamp => $header->stamp) : ())));
-            }
-        }
-        for my $brk (@$break_projs >= 2 ? () : @$break_projs) {
-            my $brk_bindings = $brk->{bindings};
-            for my $targ (sort _scope_key_order keys %$brk_bindings) {
-                my $header = $sim->scope_bindings->{$targ};   # header Phi (patched)
-                my $bval   = $brk_bindings->{$targ};
-                next unless defined $header && defined $bval && $header != $bval;
-                my $exit_phi = $factory->make('Phi',
-                    inputs => [$header, $bval],
-                    region => $exit_region,
-                    (_is_narrowed($header->stamp) ? (stamp => $header->stamp) : ()));
-                $sim->define($targ, $exit_phi);
-            }
+        # ONE PHI PER SLOT, ONE INPUT PER EXIT, in the Region's order: the
+        # header exit when there is one, then each break -- a break that left
+        # the slot alone contributes the header's value. A Phi per BREAK,
+        # chained over [previous, this break], had two inputs on a Region
+        # with three: measured on `$n++; last if A; $n += 10; last if B`,
+        # the second break's value was paid on the first, and perl's 23
+        # came out 34.
+        # (`last if $i > 4; $s .= "e"; last if $i % 2 == 0` printed `eoe 3`
+        # for perl's `eoe 2` the same way.)
+        my $header_exit = $exit_region->inputs->@* > @$break_projs;
+        my $scope = $sim->scope_bindings;
+        my %seen;
+        for my $targ (sort _scope_key_order
+                      grep { !$seen{$_}++ }
+                      map { keys $_->{bindings}->%* } @$break_projs) {
+            my $header = $scope->{$targ};   # header Phi (patched)
+            next unless defined $header;
+            my @bvals = map { $_->{bindings}{$targ} // $header } @$break_projs;
+            next unless grep { $_ != $header } @bvals;
+            my $exit_phi = $factory->make('Phi',
+                inputs => [ ($header_exit ? ($header) : ()), @bvals ],
+                region => $exit_region,
+                (_is_narrowed($header->stamp) ? (stamp => $header->stamp) : ()));
+            $sim->define($targ, $exit_phi);
         }
         # MEMORY MERGES AT THE EXIT TOO. A store into a demoted slot on the
         # breaking arm -- `$so = $i; last` with $so passed to a sub -- lives
@@ -12445,7 +12259,6 @@ class SoN::FromOptree 0.01 {
         # header exit when there is one, then each break.
         my $mem = $sim->memory;
         if (grep { defined $_->{memory} && $_->{memory} != $mem } @$break_projs) {
-            my $header_exit = $exit_region->inputs->@* > @$break_projs;
             $sim->set_memory($factory->make('Phi',
                 inputs => [ ($header_exit ? ($mem) : ()),
                             map { $_->{memory} // $mem } @$break_projs ],
@@ -14323,6 +14136,7 @@ class SoN::FromOptree 0.01 {
                 # IT YIELDS ONE OF ITS OPERANDS, so its stamp is their join --
                 # a loop that carries it needs one ("unstamped back-edge").
                 my $rhs = $rhs_sim->pop_node;
+                _merge_rhs_rebinds($factory, $sim, $rhs_sim, $lhs, $name);
                 my ($ls, $rs) = map { $_->can('stamp') ? $_->stamp : undef } $lhs, $rhs;
                 $sim->push_node($factory->make(
                     { and => 'And', or => 'Or', dor => 'DefinedOr' }->{$name},
@@ -15224,9 +15038,10 @@ class SoN::FromOptree 0.01 {
     # The aassign TARGET's sigil is not on the node the LHS pushed (that node
     # is built by the read site, which stamps its own), so it comes
     # from the op that pushed the target: rv2av for an array, rv2hv for a hash.
-    # Walk the aassign's subtree for the first of either.
+    # Walk the aassign's LHS subtree for the first of either. Only the LHS:
+    # the RHS's `@_` in `($P) = @_` is an rv2av too, and made $P an array.
     sub _stash_target_sigil ($aassign) {
-        my @queue = ($aassign);
+        my @queue = ($aassign->last);
         my %seen;
         while (my $op = shift @queue) {
             next unless $op && ref($op) && $$op && !$seen{$$op}++;
@@ -15370,6 +15185,14 @@ class SoN::FromOptree 0.01 {
             # A STORE INTO A DEMOTED SLOT threads on control just as a field
             # store does.
             return 1 if !$fields_only && _stores_demoted_slot($op);
+            # SO IS A STORE THROUGH A SCALAR REFERENCE: `$$r-- if $$r > 0`
+            # in an elsif arm hung the decrement off the arm's control beside
+            # the rest of the arm, unguarded, and the deparser refused "a
+            # control node with 2 successors". The lvalue rv2sv over a
+            # non-glob is the write.
+            return 1 if !$fields_only && $op->name eq 'rv2sv'
+                && ($op->flags & 32)   # OPf_MOD
+                && ${$op->first} && $op->first->name ne 'gv';
             my $is_targmy   = $op->can('targ') && $op->targ && ($op->private & 16);
             my $is_padstore = $op->name eq 'padsv_store' && $op->can('targ') && $op->targ;
             next unless $is_targmy || $is_padstore;
@@ -15571,10 +15394,13 @@ class SoN::FromOptree 0.01 {
     # AN ALLOCATION ADVANCES CONTROL TOO: anonlist, anonhash and emptyavhv
     # are pinned where they run (one aggregate, however many names hold it),
     # so `$x // []` and `$c ? 2 : []` forked control without an If.
+    #
+    # SO IS AN s/// INTO ITS OWN SLOT (_translate_subst pins it), and
+    # `$p =~ s/c$// if C` hung it off the control before the guard.
     my %ADVANCES_CONTROL_OP = map { $_ => 1 }
         qw(entersub enterloop enteriter mapstart grepstart
            entertry entertrycatch entereval
-           anonlist anonhash emptyavhv orassign andassign dorassign);
+           anonlist anonhash emptyavhv orassign andassign dorassign subst);
 
     sub _arm_advances_control_from ($start, $stop, $join, $seen) {
         for (my $op = $start;
@@ -15699,7 +15525,9 @@ class SoN::FromOptree 0.01 {
     # merge, the outer guard was dropped and the return ran off the sub's
     # Start. A return directly in the arm (`return X if C` itself, or
     # `if (C) { ...; return X }`) has its own path and is not counted.
-    sub _arm_has_return ($start, $stop, $join = undef) {
+    # $names widens the search to other ops that leave -- a `last` or `next`
+    # under a further guard leaves the arm the same way.
+    sub _arm_has_return ($start, $stop, $join = undef, $names = { return => 1 }) {
         ($stop, $join) = (_op_addr($stop), _op_addr($join));
         my %seen;
         for (my $op = $start;
@@ -15708,7 +15536,7 @@ class SoN::FromOptree 0.01 {
              $op = $op->next) {
             next unless $op->name =~ /\A(?:and|or|dor|cond_expr)\z/;
             return 1 if _arm_has_die_from($op->other, $stop, $join, {},
-                                          { return => 1 });
+                                          $names);
         }
         return 0;
     }
@@ -15783,6 +15611,30 @@ class SoN::FromOptree 0.01 {
         $node->set_control_in($sim->control);
         $sim->set_control($node);
         return $node;
+    }
+
+    # A VALUE-CONTEXT SHORT-CIRCUIT'S RIGHT SIDE RUNS ONLY SOMETIMES, and a
+    # variable it writes keeps the write only then: `($n > 3 && $h++ < 8)`
+    # leaves $h alone when $n is small. The right side is walked on a
+    # snapshot, so its rebinds were simply dropped -- $h never moved, on
+    # either path. Each slot the right side rebound, that was bound before
+    # it, is merged here as a select on whether the right side ran.
+    sub _merge_rhs_rebinds ($factory, $sim, $rhs_sim, $lhs, $name) {
+        my $base_scope = $sim->scope_bindings;
+        my $arm_scope  = $rhs_sim->scope_bindings;
+        my $ran;   # the select's condition: true when the right side ran
+        for my $targ (sort _scope_key_order keys %$arm_scope) {
+            my $base = $base_scope->{$targ};
+            my $armv = $arm_scope->{$targ};
+            next unless defined $base && defined $armv && $base != $armv;
+            $ran //= $name eq 'dor'
+                ? $factory->make('Defined', inputs => [$lhs],
+                      stamp => SoN::IR::Stamp->new(type => 'Boolean'))
+                : $lhs;
+            my @arms = $name eq 'and' ? ($armv, $base) : ($base, $armv);
+            $sim->define($targ, _make_ternary($factory, $ran, @arms));
+        }
+        return;
     }
 
     sub _make_ternary ($factory, $cond, $true_val, $false_val) {
@@ -17713,6 +17565,7 @@ class SoN::FromOptree 0.01 {
                   . " an if/else arm not yet lowered\n"
                     unless $rhs_sim->stack_depth == $base + 1;
                 my $rhs = $rhs_sim->pop_node;
+                _merge_rhs_rebinds($factory, $sim, $rhs_sim, $lhs, $name);
                 $sim->push_node($factory->make(
                     { and => 'And', or => 'Or', dor => 'DefinedOr' }->{$name},
                     inputs => [$lhs, $rhs]));
@@ -17796,6 +17649,16 @@ class SoN::FromOptree 0.01 {
                 next;
             }
 
+            # AN s/// IN AN ARM is the main walk's: stepped, it fell to the
+            # generic builtin Call -- the replacement string and nothing else,
+            # no pattern and no target.
+            if ($name eq 'subst' && $op->isa('B::PMOP')) {
+                $visited->{$$op}++;
+                _translate_subst($cv, $op, $sim, $factory, $opmap, $visited);
+                $op = $op->next;
+                next;
+            }
+
             # `||=`, `&&=`, `//=` in an arm: the main walk's handler.
             if ($name eq 'orassign' || $name eq 'andassign' || $name eq 'dorassign') {
                 $visited->{$$op}++;
@@ -17858,10 +17721,11 @@ class SoN::FromOptree 0.01 {
             # every `elsif` -- not just the modifier idiom it was named for.
             # Build the control flow here rather than refusing.
             #
-            # A `next if C` IN AN ARM joins the loop at its latch exactly as it
-            # does in the body: If(C), the rest of the arm walked on the
-            # not-taken Proj, and the taken Proj -- which skips that rest --
-            # merged with it. The body walker has done this since the start; an
+            # A `next if C` IN AN ARM joins the loop at its latch: If(C), the
+            # taken Proj an edge to the latch (see $LOOP_STACK nexts), and the
+            # walk going on along the not-taken Proj. With no loop frame the
+            # rest of the arm is walked on the not-taken Proj and the taken
+            # Proj merged with it. The body walker has done this since the start; an
             # arm refused it ("a loop control (`next`) inside a branch arm"),
             # and a second `next if` IS in an arm -- the first one's rest.
             # Corpus 007. The rest stops at the latch (see $CONTINUE_START).
@@ -17878,9 +17742,15 @@ class SoN::FromOptree 0.01 {
                 # A `next LABEL` NAMING AN OUTER LOOP leaves this one: the taken
                 # Proj is an edge to that loop's latch, and this walk goes on
                 # along the rest.
-                if (my $frame = _loop_control_frame(
-                        _guarded_loop_control_op($op->other))) {
-                    if ($frame->{nexts} && defined $break_projs) {
+                # A PLAIN `next` IN AN ARM is the same edge, to this loop's
+                # latch: merged at the arm's end, the code after the arm ran
+                # on the taken path too.
+                # Its own loop's list takes it on a scout too (see the bare
+                # `next` below); a labeled loop's only on the real walk.
+                my $labeled = _loop_control_frame(
+                        _guarded_loop_control_op($op->other));
+                if (my $frame = $labeled // $LOOP_STACK[-1]) {
+                    if ($frame->{nexts} && (defined $break_projs || !$labeled)) {
                         my $edge = SoN::FromOptree::StackSim->new(
                             control => $taken, memory => $sim->memory);
                         my $b = $sim->scope_bindings;
@@ -17898,27 +17768,6 @@ class SoN::FromOptree 0.01 {
                     $stop_addr, $loop_node, $break_projs, 1);
                 $rest_sim->pop_node
                     while $rest_sim->stack_depth > $sim->stack_depth;
-                # THE REST STOPPED AT THE ARM'S JOIN, NOT THE LATCH: the body
-                # goes on after this if/elsif, and the taken path skips that
-                # too. Merged here, the statements after the join ran on the
-                # skip path (`elsif ($i==2) { next } $s.=$i` gave a1234 for
-                # perl's a134). The taken Proj is an edge to this loop's
-                # latch, as a bare `next` in an arm is, and the walk goes on
-                # along the rest alone.
-                if (defined $stop_addr && ref $rest_end && $$rest_end
-                        && $$rest_end == $stop_addr
-                        && @LOOP_STACK && $LOOP_STACK[-1]{nexts}) {
-                    my $edge = SoN::FromOptree::StackSim->new(
-                        control => $taken, memory => $sim->memory);
-                    my $b = $sim->scope_bindings;
-                    $edge->define($_, $b->{$_}) for keys %$b;
-                    push $LOOP_STACK[-1]{nexts}->@*, $edge;
-                    $sim->set_control($rest_sim->control);
-                    $sim->set_memory($rest_sim->memory);
-                    my $rb = $rest_sim->scope_bindings;
-                    $sim->define($_, $rb->{$_}) for keys %$rb;
-                    return ($rest_end);
-                }
                 my $skip_sim = $sim->snapshot;
                 $skip_sim->set_control($taken);
                 $skip_sim->merge($rest_sim, $factory, $if_node);
@@ -18039,7 +17888,27 @@ class SoN::FromOptree 0.01 {
                     # only the first statement of.
                     || ( $exits
                          && _arm_has_die_from($op->other, $mod_stop, undef, {},
-                                              { return => 1 }) );
+                                              { return => 1 }) )
+                    # A RETURN UNDER A FURTHER GUARD (`elsif (C) { return 0
+                    # unless $n }`) leaves from inside the body. Merged as
+                    # values, the body's own If hung off this arm's control
+                    # with C dropped, and that control had 2 successors.
+                    || ( $exits
+                         && _arm_has_return($op->other, $op->next, $mod_stop) )
+                    # SO DOES A BREAK UNDER A FURTHER GUARD (`if (C) { last
+                    # unless D }`): its If hung off this arm's control with C
+                    # dropped, and the loop left whenever D was false.
+                    || ( $in_loop
+                         && _arm_has_return($op->other, $op->next, $mod_stop,
+                                            { last => 1, next => 1 }) )
+                    # AN ARM THAT ENDS IN A BARE `next` OR `last` after its
+                    # statements -- `if ($c) { $c--; next }` -- leaves too.
+                    # Taken for a value arm, its store became a ternary and its
+                    # edge left from the guard's own control, so the path that
+                    # did not take the arm went round the loop as well.
+                    || ( $in_loop
+                         && _arm_has_die_from($op->other, ${ $op->next },
+                                $mod_stop, {}, { last => 1, next => 1 }) );
                 my $guard   = $sim->pop_node;
                 my $mod_sim = $sim->snapshot;
                 my $if_node;
@@ -19204,7 +19073,7 @@ class SoN::FromOptree 0.01 {
         return ('', $pat);
     }
 
-    sub _subst_target ($cv, $op, $sim, $factory) {
+    sub _subst_target ($cv, $op, $sim, $factory, $r_value_ok = 0) {
         my $targ      = $op->targ;
         # NO TARG DOES NOT MEAN $_. It means the target is not a pad slot, and
         # that covers two different things: the implicit $_, and a PACKAGE
@@ -19246,6 +19115,15 @@ class SoN::FromOptree 0.01 {
                         && $k->last->name eq 'padsv' && $k->last->targ
                         && defined(my $v = $sim->lookup($k->last->targ))) {
                     return ($k->last->targ, $v, 0);
+                }
+                # A /r SUBSTITUTION WRITES NOTHING: its subject is a value,
+                # stacked below the literal replacement --
+                # `my $n = $f->{name} =~ s/^\$//r`. No name to rebind or store
+                # through. (Only for a caller that pops the stacked subject.)
+                if ($r_value_ok && ($op->pmflags & PMf_NONDESTRUCT)
+                        && !($op->pmflags & PMf_EVAL)
+                        && $sim->stack_depth >= 2) {
+                    return ('', $sim->node_at(-2), undef);
                 }
                 die "GAP: s/// on a target that is not a named scalar (an"
                   . " element, a dereference or an assignment) not yet"
@@ -19339,6 +19217,282 @@ class SoN::FromOptree 0.01 {
         return ($scope_key, $target);
     }
 
+
+    # _translate_subst(...) -- an s/// at $op: its RegexSubst, the rebind of
+    # its target, and the value it leaves on the stack. The main walk and an
+    # arm walk both take an s/// this way.
+    sub _translate_subst ($cv, $op, $sim, $factory, $opmap, $visited) {
+            my $flags   = _pmflags_to_str($op->pmflags);
+            # BEFORE ANYTHING POPS. The pattern parts sit ABOVE the
+            # replacement on the stack, so any pop that runs first takes a
+            # pattern piece and calls it something else.
+            my ($rt_pat, $pat_node) =
+                _subst_runtime_pattern($op, $sim, $factory);
+            my $pattern = $rt_pat // ($op->precomp // '');
+
+            # A /ge BODY IS EXTRACTED BEFORE THE TARGET IS RESOLVED: a lone
+            # variable replacement is stacked on top of the subject, and the
+            # body re-reads it, so it is not an operand here.
+            my ($repl_body, $stacked) = ( $op->pmflags & PMf_EVAL )
+                && ( $op->pmflags & B::PMf_GLOBAL() )
+                ? _subst_ge_body($cv, $op, $pattern,
+                    _pmflags_to_str($op->pmflags))
+                : ();
+            $sim->pop_node if $stacked && $sim->stack_depth;
+
+            # RESOLVED HERE because the /e path needs it: the match half is
+            # built before the replacement is walked, and takes the target
+            # as its operand. Idempotent -- returns the existing binding.
+            # $store_target is the NAME to store through when the
+            # binding resolved to a bare value -- see _subst_target.
+            my ($scope_key, $target, $store_target) =
+                _subst_target($cv, $op, $sim, $factory, 1);
+            $store_target //= $target;
+            # s///e: the replacement is a code SUBTREE rather than a
+            # literal, and it is walkable. It hangs off pmreplroot and is
+            # intact even under the rpeep suppression this walker runs with
+            # (B::SoN.pm BEGIN):
+            #
+            #   substcont -> null -> scope -> { ex-nextstate,
+            #                                   add -> padsv $n, const 1 }
+            #
+            # What rpeep suppression DOES null is `pmreplstart`, the
+            # computed exec shortcut into that subtree -- which is why
+            # looking there found nothing and the construct read as opaque.
+            # The tree was always there; the entry is its leftmost leaf,
+            # and ->next from that leaf walks the body to the substcont
+            # that closes it.
+            #
+            # /g IS THE LINE, and it is a real one. The replacement runs
+            # ONCE PER MATCH -- measured, `s/a/ $n++ /ge` on "aaa" gives
+            # "012" with $n at 3, while /e alone gives "0aa" with $n at 1.
+            # A repeating side-effecting body is a LOOP, which one operand
+            # cannot express, and lowering it as once-only is a silent
+            # wrong answer.
+            #
+            # SO /ge IS A BODY THE SUBSTITUTION CALLS, its own graph like a
+            # sort comparator block, and the RegexSubst names it.
+            my $code_repl;
+            if ($op->pmflags & PMf_EVAL) {
+                goto NO_CODE_REPL if defined $repl_body;
+
+                # A CONSTANT-FOLDED /e REPLACEMENT HAS NO SUBTREE, and
+                # that is not a refusal: perl folds `s/a/ "X" . "Y" /e` at
+                # compile time and leaves pmreplroot NULL with PMf_EVAL
+                # still set. What reaches the stack is then an ordinary
+                # Constant -- the literal case -- so fall through to it
+                # rather than treating the absence as unreachable code.
+                my $rr = $op->pmreplroot;
+                goto NO_CODE_REPL unless ref($rr) && $$rr;
+
+                # The leftmost leaf is where execution of the subtree
+                # begins; ->next from it runs the body.
+                # ONE WALK, SHARED. This was the THIRD copy of the same
+                # subtree walk -- main /e, main interpolated, loop body --
+                # and the capture fix has to land in all of them, so they
+                # now go through one helper. Passing the target/pattern/
+                # flags is what lets it build the match half the
+                # replacement's captures read.
+                $code_repl = _walk_subst_replacement(
+                    $cv, $op, $sim, $factory, $opmap, $visited,
+                    $target, $pattern, $flags);
+                NO_CODE_REPL: ;
+            }
+            # An interpolated (multi-part) replacement -- `s/a/$y$z/`,
+            # `s/a/x$y/` -- is a runtime substcont subtree (pmreplroot set),
+            # NOT a single folded const. The handler below pops ONE stack
+            # Constant and uses it as the whole replacement, silently
+            # dropping every other part. A single interpolated variable
+            # (`s/a/$y/`) folds to a compile-time Constant under
+            # rpeep-suppression (pmreplroot NULL) and stays correct; only a
+            # genuine subtree GAPs. Refuse loudly until it is lowered.
+            # NOT FOR /e, whose pmreplroot IS the replacement subtree and
+            # was consumed above. This guard is about an INTERPOLATED
+            # literal (`s/a/x$y/`), where the subtree is a substcont chain
+            # the handler below would silently reduce to one popped
+            # Constant.
+            # AN INTERPOLATED REPLACEMENT IS A COMPUTED VALUE, exactly as
+            # an /e replacement is -- and RegexSubst already carries one,
+            # on inputs, which is how /e passes its result. The refusal
+            # said the handler "pops ONE stack Constant and uses it as the
+            # whole replacement, silently dropping every other part": true
+            # of the pop, and never a reason the parts could not be WALKED.
+            #
+            # Measured under suppress_peep:
+            #
+            #     s/a/x${p}y/   pmreplroot -> substcont -> multiconcat -> padsv
+            #
+            # so the subtree is walked with the /e machinery above --
+            # descend to the leftmost leaf, walk on a snapshot sim, take
+            # the single value it leaves. multiconcat already has a handler
+            # that assembles the parts, so nothing new is needed to read
+            # them.
+            #
+            # DIFFERENT FROM THE INTERPOLATED MATCH PATTERN (dd9d5ab),
+            # whose parts are mark-delimited ON THE STACK. Same construct
+            # family, two different recoveries; assuming the match shape
+            # here would pop operands that are not there.
+            $code_repl //= _walk_subst_replacement(
+                $cv, $op, $sim, $factory, $opmap, $visited,
+                $target, $pattern, $flags)
+                unless defined $repl_body;
+            my $nondestruct = $op->pmflags & PMf_NONDESTRUCT;
+            # In scalar/boolean context a DESTRUCTIVE s/// returns the
+            # match COUNT, not the rewritten string; only /r yields a
+            # string. The two roles of the node separate here: the TARGET
+            # is still rebound to the substituted subject (the mutation
+            # happened either way), while the VALUE that reaches the stack
+            # is the count.
+            #
+            # THE COUNT IS Str, NOT Int AND NOT Boolean. Measured on
+            # 5.42.0:
+            #
+            #     "aaa" =~ s/a/b/g   ->  3
+            #     "xxx" =~ s/a/b/g   ->  ""   the EMPTY STRING, defined
+            #     "aaa" =~ s/a/b/    ->  1
+            #
+            # Zero matches is "" rather than 0, so `defined` does not
+            # separate the two cases and only truth does. Int is wrong
+            # about the zero case. Boolean is not available either: the
+            # lattice has Boolean => Scalar rather than Boolean => Str, on
+            # the two-factor subtyping test recorded in Stamp.pm, so
+            # stamping the count Boolean would claim something perl
+            # contradicts. Int-or-empty-string is exactly Str.
+            my $count_context = !$nondestruct && ($op->flags & 3) != 1;
+            # The target is keyed on the pad targ. targ 0 means an implicit
+            # $_ or a package/global target (the GV is on the stack, not a
+            # pad slot) -- the handler cannot name it, so it used to
+            # fabricate a slot-0 rebind and silently drop the substitution.
+            # GAP loudly until non-pad targets are lowered.
+            # NO TARG MEANS $_, and $_ is nameable: it is the package
+            # scalar main::_, an ordinary SSA binding in the scope map. The
+            # MATCH handler beside this one already resolves it exactly this
+            # way, keyed with the SIGIL because `$_` and `@_` share a glob
+            # name and a name-only key hash-consed them into one node.
+            #
+            # Reads of $_ have always worked -- a match, a bare `print`, a
+            # builtin defaulting to it. Only the WRITE was refused, and the
+            # message blamed "implicit" when in fact `$_ =~ s///` was
+            # refused too: the handler could key NEITHER form.
+            # The replacement string is on the stack (pushed by const op
+            # before subst) -- but ONLY for a literal replacement. Under
+            # /e there is no such push: the replacement was walked from the
+            # subtree above, and popping here would take an unrelated stack
+            # value and stamp it on the node as a string replacement
+            # contradicting the operand (measured: `s/b/ $n + 1 /e` came out
+            # with replacement="5", which is $n, not the replacement).
+            my $repl_node = !defined $code_repl && !defined $repl_body
+                && $sim->stack_depth > 0
+                ? $sim->pop_node : undef;
+            # A PACKAGE TARGET IS A STACKED KID: its gvsv pushed the
+            # variable, which nothing popped, so in a list it rode along
+            # -- `f(1, $w =~ s/a//)` passed three arguments, `1 b 1`.
+            # A pad target is the op's own targ and pushes nothing.
+            $sim->pop_node
+                if !$op->targ && ( $op->flags & B::OPf_STACKED() )
+                && $sim->stack_depth > 0
+                && ( $sim->peek_node == $target
+                     || $sim->peek_node == $store_target );
+            my $replacement = '';
+            if ($repl_node && $repl_node->isa('SoN::IR::Node::Constant')) {
+                $replacement = $repl_node->value // '';
+            }
+            # THE COMPUTED REPLACEMENT IS A SECOND OPERAND. RegexSubst
+            # is a Value node and already carries inputs, so no new node
+            # kind is needed: a literal replacement keeps the string field
+            # and one input, a computed one adds the value beside it.
+            # INPUT ORDER IS [target, pattern?, replacement?] and the flag
+            # says whether the pattern slot is filled. Without it a
+            # computed pattern and an /e replacement are the same position.
+            # A DESTRUCTIVE s/// STORES INTO ITS TARGET, so it advances
+            # the memory chain (below) and must therefore CARRY one --
+            # every other memory point names the version it supersedes,
+            # and that is what lets a consumer recognise the chain
+            # structurally rather than by name. Without it,
+            # `$g =~ s/a/b/; $g =~ s/b/c/` chained only through the TARGET
+            # data edge, so nothing marked either as a memory point.
+            #
+            # MEMORY GOES LAST AND THE ARITY IS RECOVERABLE. The two
+            # optional slots are each determined by a field already on the
+            # wire: pattern-present IFF `pattern_is_input`, and
+            # replacement-present IFF the `replacement` string is empty.
+            my $node = $factory->make('RegexSubst',
+                inputs      => [$target, ($pat_node // ()),
+                                ($code_repl // ()),
+                                (defined $sim->memory ? ($sim->memory) : ())],
+                pattern_is_input => (defined $pat_node ? 1 : 0),
+                pattern     => $pattern,
+                replacement => $replacement,
+                (defined $repl_body ? (replacement_body => $repl_body) : ()),
+                flags       => $flags,
+                # s/// yields the rewritten subject, always a Str.
+                stamp       => SoN::IR::Stamp->new(type => 'Str'),
+            );
+            # PINNED TO ITS STATEMENT -- BUT ONLY FOR A PAD SUBJECT.
+            #
+            # A destructive s/// mutates, so it needs an ordering, and the
+            # loop-body construction of this same node has always set one.
+            # This site never did ("one operator, two declaration sites"),
+            # and without the pin the node cannot be BOUND, so its mutation
+            # renders wherever its value is first read.
+            #
+            # A PACKAGE SUBJECT ALREADY HAS ITS ORDERING, through the
+            # EntryWrite the destructive branch below emits -- and that
+            # write is what the deparser keys on to render the substitution
+            # ONCE (Deparse.pm, the EntryWrite arm). Pinning here as well
+            # makes the node independently bindable, the generic path
+            # renders the binding with `/r`, and the emission runs the
+            # substitution TWICE:
+            #
+            #     our $s = "aaa"; my $n = ($s =~ s/a/b/g); print "$n $s"
+            #       perl    3 bbb
+            #       pinned  $main::s = "aaa";
+            #               my $eff6 = ("aaa" =~ s{a}{b}gr);
+            #               $main::s = $eff6;
+            #               print(($main::s =~ s{a}{b}g) . " " . $main::s)
+            #
+            # -- the `/r` copy assigned back, then a second destructive run
+            # over the result. So the pin goes exactly where the ordering is
+            # otherwise absent, which is the pad case.
+            # THE SLOT ITSELF, not a pad read that is merely its value:
+            # `(my $t = $s) =~ s///` reads $s and writes $t.
+            my $in_place = $target->isa('SoN::IR::Node::PadAccess')
+                && ($target->targ // q{}) eq $scope_key;
+            if ($in_place) {
+                $node->set_control_in($sim->control);
+                $sim->set_control($node);
+                $sim->set_memory($node) if defined $sim->memory;
+            }
+            # A destructive s/// mutates the target pad in place: rebind
+            # $targ so a later read of the same lexical resolves to the
+            # substituted value, not the pre-subst binding (mirrors
+            # padsv_store / TARGMY). The /r form (PMf_NONDESTRUCT) yields a
+            # NEW string and leaves the source untouched, so it must NOT
+            # rebind -- only push the result value ($nondestruct above).
+            #
+            # NOT FOR A PAD SUBJECT. _address_taken demotes every destructive
+            # s///'s pad target, so its value lives in memory -- this node is
+            # the new memory version -- and later reads go through memory.
+            # Rebinding the slot to this node made the NEXT s/// on it take
+            # this one's result as its subject, unpinned: `$s =~ s/a/z/;
+            # $s =~ s/c/y/; $s =~ s/d/w/` kept only the first (corpus 010).
+            unless ($nondestruct) {
+                $sim->define($scope_key, $node)
+                    unless $in_place;
+                _entry_store($factory, $sim, $store_target, $node);
+            }
+            # The binding above is the substituted subject. In count
+            # context the VALUE is a different thing over the same
+            # operation, so push a node that says so rather than the
+            # subject -- pushing $node here is the silent value+type
+            # miscompile this used to refuse rather than commit.
+            $sim->push_node($count_context
+                ? $factory->make('RegexSubstCount',
+                    inputs => [$node],
+                    stamp  => SoN::IR::Stamp->new(type => 'Str'))
+                : $node);
+        return;
+    }
 
     sub _walk_subst_replacement ($cv, $op, $sim, $factory, $opmap, $visited,
                                  $target = undef, $pattern = undef,
