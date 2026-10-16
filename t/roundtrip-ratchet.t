@@ -35,14 +35,16 @@ my %FLOOR = (
     # how it got that way.
     # t/corpus/mdtest/pvm (pvm 50cd3b10 + local cases). 279 measured twice
     # 2026-10-11; 298 at 4c7348c and every batch-3 merge, 2026-10-13 to 10-14.
-    corpus => 298,
+    # 310 at 45aebb1, measured twice, 2026-10-16.
+    corpus => 310,
     perl_t => 11,    # base/lex.t refuses on a `caller` bound to a list
     # chalk's lib/ at the commit tools/chalk-lib-roundtrip.pl pins (5948f648,
     # 179 modules), measured at d0cb68a and 2d8fb90, 2026-10-06.
     # 140 at 580ca1e and 4c7348c, 2026-10-13. 143 at b9c9b82, 1bcd4a1,
     # e8fb329 and e4b98ec, 2026-10-14.
     # 146 at 255a021 (gap6/loopexit) and 15af845, 2026-10-16.
-    chalk_compiles => 146,
+    # 150 at 45aebb1 (integ8/renderctl), measured twice, 2026-10-16.
+    chalk_compiles => 150,
     # chalk's own test files (547 at 5948f648) that give the SAME result
     # against the emitted lib/ -- tools/chalk-gate3.pl. The 59 that read lib/
     # as source are DEFERRED to chalk's own lowering (perigrin, 2026-10-09),
