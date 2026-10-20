@@ -6,7 +6,7 @@ set -euo pipefail
 PREFIX=/home/runner/.local/share/pvm/versions/5.42.0   # the prebuilt perl's RUNPATH and @INC are fixed to this
 DEV=/home/perigrin/dev                                  # 4 tests name /home/perigrin/dev/perl5 directly
 CHALK_PIN=5948f648                                      # tools/chalk-lib-roundtrip.pl's pinned commit
-PERL5_PIN=94e5086608                                    # the perl5 blead commit perl t/ was measured at
+PERL5_PIN=94e5086608bcf1d01cd2d836f11ca8378a3320b6                              # full SHA: GitHub will not fetch an abbreviated one; the blead commit perl t/ was measured at
 REPO=$(pwd)
 
 # perl 5.42.0, prebuilt by pvm. It is not relocatable, so it goes at its own prefix.
