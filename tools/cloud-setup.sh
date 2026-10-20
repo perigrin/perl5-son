@@ -19,8 +19,11 @@ export PATH="$PREFIX/bin:$PATH"
 perl -e 'die "wrong perl $^V\n" unless $^V eq v5.42.0'
 
 # cpanfile deps: only YAML::PP is not core; chalk needs nothing beyond core.
-curl -fsSL https://cpanmin.us | perl - --notest App::cpanminus
-"$PREFIX/bin/cpanm" --notest YAML::PP Module::Build
+# cpanm from apt: the cloud network allows package mirrors but not cpanmin.us. It is one
+# self-contained script, so running it with 5.42.0 installs into 5.42.0, not the system perl.
+apt-get update -q && apt-get install -yq cpanminus
+perl /usr/bin/cpanm --notest YAML::PP Module::Build
+perl -MYAML::PP -MModule::Build -e 1   # fails here if cpanm installed into the wrong perl
 
 # SoN's XS (FieldInfo.xs). Tests load SoN.so from site_perl, so it is installed, not left in blib.
 command -v cc >/dev/null || { apt-get update -q && apt-get install -yq build-essential; }
