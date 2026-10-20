@@ -33,15 +33,22 @@ perl -MYAML::PP -MModule::Build -e 1   # fails here if cpanm installed into the 
 command -v cc >/dev/null || { apt-get update -q && apt-get install -yq build-essential; }
 perl Makefile.PL && make && make install && make clean
 
-# chalk at the pin, and perl5's t/ at the commit the perl_t census uses.
+# chalk at the pin, and perl5's t/ at the commit the perl_t census uses. A rerun
+# keeps the clones and only re-checks the pins.
 mkdir -p "$DEV"
-git clone -q --branch bson/roundtrip-pin https://github.com/perigrin/chalk.git "$DEV/chalk"
+[ -d "$DEV/chalk/.git" ] ||
+  git clone -q --branch bson/roundtrip-pin https://github.com/perigrin/chalk.git "$DEV/chalk"
 git -C "$DEV/chalk" cat-file -e "$CHALK_PIN^{commit}"
-git init -q "$DEV/perl5"
-git -C "$DEV/perl5" remote add origin https://github.com/Perl/perl5.git
-git -C "$DEV/perl5" sparse-checkout set t
-git -C "$DEV/perl5" fetch -q --depth 1 origin "$PERL5_PIN"
-git -C "$DEV/perl5" checkout -q FETCH_HEAD
+[ -d "$DEV/perl5/.git" ] || {
+  git init -q "$DEV/perl5"
+  git -C "$DEV/perl5" remote add origin https://github.com/Perl/perl5.git
+}
+# lib/ too: run from perl5/t, tests put ../lib first in @INC and load its
+# strict.pm, warnings.pm and B/Op_private.pm (t/wire-qr-mark-ownership.t).
+git -C "$DEV/perl5" sparse-checkout set t lib
+git -C "$DEV/perl5" cat-file -e "$PERL5_PIN^{commit}" 2>/dev/null ||
+  git -C "$DEV/perl5" fetch -q --depth 1 origin "$PERL5_PIN"
+git -C "$DEV/perl5" checkout -q "$PERL5_PIN"
 
 # Plugins do not load in cloud sessions, but a repo's .claude/skills does. Copy each
 # plugin's skills in from its public repo; they stay untracked and never reach a commit.
