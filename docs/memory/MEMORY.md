@@ -1,0 +1,50 @@
+- [t/base is the producer corpus](tbase-coverage-is-the-producer-corpus.md) — how to measure B::SoN coverage without the two counting traps
+- [Verify graphs against the optree](graph-correctness-needs-the-optree-not-the-source.md) — perl folds code before B::SoN sees it; node counts prove nothing
+- [OPf_MOD is not a write](opf-mod-is-not-a-write.md) — stale lvalue flag on comparison operands; caused a 111-for-123 miscompile
+- [Crashes mask GAPs](crashes-mask-gaps.md) — internal errors that fire before the honest refusal; two root causes, same symptom
+- [Allium instruction sets](allium-instruction-sets.md) — perl opcode metadata as data; use operation_types, never prototype as pop_count
+- [perl t/ coverage 2026-08-30](perl-t-coverage-2026-08-30.md) — 98/548 files; survey must run from t/ or it reports phantom crashes
+- [One operator, five declaration sites](one-operator-five-declaration-sites.md) — the IR ergonomics problem, its gates, and the plan
+- [Blocks split: loops vs callees](perl-blocks-split-loops-vs-callees.md) — map/grep/bare/postfix-for are loops; sort + anon subs are callees
+- [Allow-lists fail asymmetrically](allow-lists-fail-asymmetrically.md) — a phantom name silently drops a valid case
+- [map/grep contributions are keyed on arity](the-discriminating-property-is-arity.md) — three fixes, three wrong properties, and why
+- [Read generated output, not just tests](read-generated-output-not-tests.md) — four bugs the green suite missed, and how each was actually found
+- [t/base is 9/9](tbase-9-of-9.md) — lex.t took four fixes, only one of which its GAP named
+- [CLEAN counts don't measure progress](clean-counts-cannot-measure-progress.md) — a GAP count is a first-failure report; rank by defects fixed
+- [Unknown is write-once, not a sentinel](unknown-is-write-once-not-a-sentinel.md) — the 18 `eq 'Unknown'` guards are a monotonicity/termination guard; never unstamp to force recomputation
+- [Encoding claims need the round trip](encoding-claims-need-the-round-trip.md) — three wrong claims in one session; inspect nothing, run the encode/decode and compare the VALUE
+- [One node, two consumers, two runs](one-node-two-consumers-runs-twice.md) — a side-effecting node read twice is emitted twice; bind it at its store, and keep the two results in two maps
+- [lookup returns a value, not a name](a-lookup-returns-a-value-not-a-name.md) — a store target from sim->lookup fails the EntryDef guard and the write vanishes silently
+- [Op names are not Perl spellings](op-names-are-not-perl-spellings.md) — prtf/ftis/dofile emit undefined sub calls; test with prototype("CORE::name"), not a list
+- [Assign targets are positional](assign-targets-are-positional.md) — ArgsSource, PostfixDeref and undef appear on both sides; kind cannot split them
+- [The memory table must be scraped](the-memory-table-must-be-scraped.md) — %MEM_MIN_INPUTS duplicates a producer fact and drifted; a test scrapes it now
+- [A sweep's absence is not evidence](a-sweeps-absence-is-not-evidence.md) — timeout, crash and pass all print nothing; re-measure before quoting a sweep
+- [A list is not a reference or an array](a-list-is-not-a-reference-or-an-array.md) — count, index and scalar-context each need a different spelling; split is the sharp case
+- [Unknown arity means leave the bindings alone](unknown-arity-means-leave-the-bindings-alone.md) — a list assign from one Call cannot be distributed positionally; perl does it at runtime
+- [Fused stores guard on the wrong kind](fused-stores-guard-on-the-wrong-kind.md) — OPf_STACKED is the signal; a PadAccess-only guard drops the package form
+- [A silent drop is worse than a refusal](a-silent-drop-is-worse-than-a-refusal.md) — the sassign catch-all swallows unmodelled targets; measure the corpus cost, then refuse
+- [Truncated output manufactures facts](truncated-output-manufactures-facts.md) — head -1 on a multi-line error invents a distinction; never truncate to decide a negative
+- [Removing a GAP can create a miscompile](removing-a-gap-can-create-a-miscompile.md) — a consumer with no rule may render wrong rather than refuse; run the round trip
+- [A guard can measure the wrong quantity](a-guard-can-measure-the-wrong-quantity.md) — stack-depth refusal keyed on body residue; vary the body, and bypass the guard once
+- [Never write an optree constant from memory](never-write-an-optree-constant-from-memory.md) — OPf_* recalled wrong three times in one fix; ask B, then confirm with Concise
+- [A refusal test must name its cause](a-refusal-test-must-name-its-cause.md) — three tests passed for the wrong reason when the cause moved; match the message, not qr/GAP:/
+- [A shell loop can eat its own input](a-shell-loop-can-eat-its-own-input.md) — `while read` + inner perl reported 986/986 clean; the real number was 857
+- [A T2 difficulty is not a T1 refusal](a-t2-difficulty-is-not-a-t1-refusal.md) — three goto FACTs dissolved; a GAP means the program doesn't say, not that lowering is hard
+- [Verify the harness before reading its output](verify-the-harness-before-reading-its-output.md) — three censuses measured the wrong thing; check denominator, filters, and a known case
+- [Landing work in a peer's repo needs a commit](landing-work-in-a-peers-repo-needs-a-commit.md) — an uncommitted file in their tree is theirs to sweep up; and run their whole suite, not a -run subset
+- [Compiling is not running](compiling-is-not-running.md) — a fix that clears the compile error has cleared the loudest check, not the real one
+- [A checkout reverts more than the experiment](a-checkout-reverts-more-than-the-experiment.md) — git checkout on a file discards every uncommitted change in it; diff --stat before committing
+- [Concise is a rendering, not the optree](concise-is-a-rendering-not-the-optree.md) — it drops pmflags; two ops that print identically can differ
+- [A shape assertion outlives the shape](a-shape-assertion-outlives-the-shape.md) — graph-structure tests fail when the producer gets better; assert the fact, not the shape
+- [A refusal test that only translates](a-refusal-test-that-only-translates.md) — asserting a GAP fires cannot show it is needed; run the alternative and diff against perl
+- [The triage has two questions](the-triage-has-two-questions.md) — after "does the program say?" ask "who needs to know?"; a lattice position is not a missing answer
+- [Make the guard fail on purpose](make-the-guard-fail-on-purpose.md) — five instruments passed while measuring the wrong thing; falsify a ratchet when you add it
+- [A new binding can refreeze a loop](a-new-binding-can-refreeze-a-loop.md) — a temporary IS a hoist; a frozen condition presents as a slow suite, not a failing test
+- ["TODO passed" is not a pass](todo-passed-is-not-a-pass.md) — a todo-wrapped subtest reports passed while its inner assertion fails; look for "with amnesty"
+- [A snapshot walk keeps only its value](a-snapshot-walk-keeps-only-its-value.md) — s///e effects and a return after `next if` both vanished; ask what the walk DOES besides push
+- [A newly compiling module can regress gate 3](a-newly-compiling-module-can-regress-gate3.md) — COMPILES up, SAME down: the new module exposed an old miscompile
+- [B::SoN emits IR; Perl is validation](bson-emits-ir-perl-is-validation.md) — judge renderer work by soundness of the check, not by resemblance to the source
+- [Worktrees share one stash](worktrees-share-one-stash.md) — parallel agents using git stash pop swapped each other's work; tell fan-outs never to stash
+- [The census tally is capped](the-census-tally-is-capped-and-double-counts.md) — top 12 causes only, and a package's skip counts once per loader; 94 lines were 70 graphs
+- [env on PATH is a stub](env-on-path-is-a-stub.md) — ~/.local/bin/env runs nothing, exits 0; use /usr/bin/env, check for "Result:"
+- [Batch 4 paused 2026-10-17](batch4-paused-2026-10-17.md) — where each branch stood at the pause; resume Monday from integ9 verify
