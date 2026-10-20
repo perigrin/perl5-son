@@ -6,7 +6,7 @@ use utf8;
 use Test2::V0;
 use JSON::PP ();
 
-my $perl = "$ENV{HOME}/.local/share/pvm/versions/5.42.0/bin/perl";
+my $perl = $^X;
 
 # A NEW dependency i1 vendored in (SoN::IR::*) is now walked by B::SoN's
 # unfiltered whole-symbol-table discovery (_discover_and_translate walks

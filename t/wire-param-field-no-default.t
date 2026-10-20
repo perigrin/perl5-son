@@ -3,8 +3,9 @@
 use v5.42.0;
 use Test2::V0;
 use JSON::PP;
+use File::Temp ();
 
-my $SCRATCH = '/tmp/claude-1001/-home-perigrin-dev-perl5-son/03347934-6f4e-47de-b925-06eaae0f6389/scratchpad';
+my $SCRATCH = File::Temp::tempdir(CLEANUP => 1);
 
 sub wire ($src) {
     my $file = "$SCRATCH/t-param-$$.pl";
