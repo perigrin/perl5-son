@@ -98,4 +98,60 @@ open my $mo, '>', $marker or die $!; print $mo $mout; close $mo;
 is scalar qx($^X -I$dir/lib -e 'use Marker; print ref(Marker->new(name => "x")), "\n"' 2>&1),
    "Marker\n", '... so a program loading it gets the class';
 
+# NOR WHAT ITS METHODS LIFT: a sort comparator block, like an anon sub, is
+# a graph of its own under the method's name. Emitted here, each module
+# that loaded chalk's Chalk::IR::Graph defined Graph::nodes's comparator
+# again in main -- "Subroutine ... redefined" in every MOP module.
+open my $rpm, '>', "$dir/lib/Ranker.pm" or die $!;
+print $rpm <<'PM';
+use v5.42.0;
+use experimental 'class';
+class Ranker {
+    method order (@w) { return sort { length($a) <=> length($b) or $a cmp $b } @w }
+}
+1;
+PM
+close $rpm;
+my $rsrc = <<'SRC';
+use v5.42.0;
+use experimental 'class';
+use Ranker;
+print join(",", Ranker->new->order(qw(ccc a bb aa))), "\n";
+SRC
+my $rf = "$dir/ranker.pl";
+open my $rh, '>', $rf or die $!; print $rh $rsrc; close $rh;
+my $rjson = qx($^X -Ilib -I$dir/lib -MO=-q,SoN,json,not_package=SoN $rf 2>$dir/err);
+my $rdata = JSON::PP->new->utf8->decode($rjson);
+ok scalar(grep { /Ranker::order::__SORTCMP__/ } keys $rdata->{methods}->%*),
+    'the loaded method\'s comparator is on the wire';
+my $rout = SoN::Deparse->new->render($rdata) // '';
+unlike $rout, qr/^\s*sub \S*SORTCMP/m, '... and not emitted with the program';
+is run_perl($rout), run_perl($rsrc), '... which runs as the source does' or diag $rout;
+
+# A METHOD OF A LOADED CLASS CLOSING OVER ITS FILE'S LEXICAL shares it, as a
+# named sub of the program shares the program's: its OUTSIDE is the loaded
+# file's CV, not the main one, and the `//=` into the class-scope cache was
+# refused as an aggregate an anon sub closes over. chalk's SemanticAction
+# hash-conses its Contexts so, in every module that loads it.
+open my $cpm, '>', "$dir/lib/Cacher.pm" or die $!;
+print $cpm <<'PM';
+use v5.42.0;
+use experimental 'class';
+class Cacher {
+    my %cache;
+    method get ($k) { return ($cache{"k:$k"} //= [$k]) }
+    method reset { %cache = () }
+}
+1;
+PM
+close $cpm;
+my $cf = "$dir/cacher.pl";
+open my $ch, '>', $cf or die $!;
+print $ch "use v5.42.0;\nuse experimental 'class';\nuse Cacher;\nmy \$c = Cacher->new; print \$c->get(1) == \$c->get(1) ? \"same\\n\" : \"diff\\n\";\n";
+close $ch;
+qx($^X -Ilib -I$dir/lib -MO=-q,SoN,json,not_package=SoN $cf 2>$dir/err >/dev/null);
+my $cerr = do { open my $e, '<', "$dir/err"; local $/; <$e> } // '';
+unlike $cerr, qr/skipped Cacher::/, 'a loaded method\'s //= into its file\'s hash translates'
+    or diag $cerr;
+
 done_testing;

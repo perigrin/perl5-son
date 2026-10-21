@@ -77,14 +77,23 @@ SRC
     }
     ok $read, 'the print reads the package scalar' or return;
 
-    my $mem = $by{ ($read->{inputs} // [])->[0] // -1 };
-    ok $mem && $mem->{op} eq 'EntryWrite',
+    # THE STORES IT CAN OBSERVE, through the loop's memory merges: the
+    # version is the loop exit's merge, over the header's, whose inputs are
+    # the store before the loop and the restore at the end of each pass.
+    my (@stores, %seen);
+    my @mq = ( ($read->{inputs} // [])->[0] // () );
+    while (defined(my $m = shift @mq)) {
+        next if $seen{$m}++;
+        my $n = $by{$m} or next;
+        if ($n->{op} eq 'Phi') { push @mq, ($n->{inputs} // [])->@*; next }
+        push @stores, $n;
+    }
+    ok @stores && !grep({ $_->{op} ne 'EntryWrite' } @stores),
         'and reads it at a store' or return;
-
-    my $stored = $by{ $mem->{inputs}[1] };
-    is $stored->{fields}{value}, 'outer',
-        'the store it reads is the RESTORE, not the localised one'
-        or diag "read observes: " . ($stored->{fields}{value} // '?');
+    my @values = map { $by{ $_->{inputs}[1] }{fields}{value} // '?' } @stores;
+    is [ grep { $_ ne 'outer' } @values ], [],
+        'every store it can read is the outer value, none the localised one'
+        or diag "read observes: @values";
 };
 
 # while and foreach reach the loop-body walker by different routes.

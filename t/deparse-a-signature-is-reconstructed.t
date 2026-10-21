@@ -129,4 +129,18 @@ package O { sub collapse ($, $phi) { return "c$phi" } }
 print O->collapse(7), "\n";
 SRC
 
+# AN ANONYMOUS SUB'S SLURPY PARAMETER: chalk's Dominators makes its blocks
+# with `sub ($id, @ctrl_nodes) { ... }`, refused as a Parameter with sigil
+# `@` -- the anon sub's signature was not the one rendered.
+round_trips(<<'SRC', 'an anonymous sub with a slurpy array');
+use v5.42;
+sub f { my @seen; my $mk = sub ($id, @rest) { push @seen, "$id:@rest"; return scalar @rest }; my $n = $mk->(1, 2, 3) + $mk->(4); return "$n @seen" }
+print f(), "\n";
+SRC
+round_trips(<<'SRC', 'an anonymous sub with a slurpy hash');
+use v5.42;
+my $mk = sub ($id, %o) { return join ",", $id, map { "$_=$o{$_}" } sort keys %o };
+print $mk->(1, b => 2, a => 1), "\n";
+SRC
+
 done_testing;

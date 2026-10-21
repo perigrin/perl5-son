@@ -78,4 +78,15 @@ class R { field @a = (1, 2); method clear { @a = (); return $self } method n { r
 print R->new->n, R->new->clear->n, "\n";
 SRC
 
+# A METHOD ENDING IN A WHOLE-FIELD ASSIGNMENT returns its value, and the
+# renderer had no rule for an Assign whose target is a field: chalk's
+# Earley::reset_parse_state (`@_errors = ()`) and EmitHelpers'
+# `%_class_scope_vars = ()` refused their whole modules.
+round_trips(<<'SRC', 'a method that ends by clearing its field aggregates');
+use v5.42; use experimental 'class';
+class K { field %h = (a => 1, b => 2); field @l = (1, 2, 3);
+  method reset_h { %h = () } method reset_l { @l = (9) } method n { scalar(keys %h) . scalar(@l) } }
+my $k = K->new; my $a = $k->reset_h; my @b = $k->reset_l; print $a, scalar(@b), $k->n, "\n";
+SRC
+
 done_testing;

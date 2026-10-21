@@ -26,10 +26,17 @@ class SoN::IR::Node::Phi :isa(SoN::IR::Value) {
     # than a predecessor list, so absent reads as "not recorded".
     field $predecessors :param :reader = undef;
 
+    # A MERGE OF MEMORY STATES, not of values. Said by the producer that
+    # built it: from its inputs alone a consumer cannot tell -- a call is a
+    # value and a memory version both, so a loop's memory Phi over calls
+    # read as a loop-carried value.
+    field $memory :param :reader = 0;
+
     method operation() { 'Phi' }
 
     method content_hash() {
-        return join('|', 'Phi', "region=" . $region->id(), $self->_serialize_inputs());
+        return join('|', 'Phi', "region=" . $region->id(),
+            ($memory ? ('memory') : ()), $self->_serialize_inputs());
     }
 
     method set_backedge($value) {

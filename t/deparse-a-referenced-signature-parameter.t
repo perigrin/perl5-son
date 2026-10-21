@@ -71,4 +71,18 @@ round_trips('use v5.36; our $c=0; sub g { $c++; 5 } sub f ($x = g()) { $x + 1 } 
 round_trips('use v5.36; our $c=0; sub g { $c++; 5 } sub f ($x = g()) { my @r; for my $i (1..2) { my $x = $i; push @r, $x } "@r $x" } print f(), " c=$c\n";',
     'an inner my shadowing a defaulted parameter');
 
+# A PARAMETER PASSED TO A CALL is demoted, and its entry store is the
+# signature's: a later store into it is no declaration (`my $c` masked the
+# parameter; chalk's IR::Analysis::_element_repr).
+round_trips('use v5.42; sub g ($x) { "g$x" } sub f ($c) { $c = g($c); return g($c) } print f(1), "\n";',
+    'a demoted parameter stored into again');
+{
+    my $out = SoN::Deparse->new->render(
+        graph_of('use v5.42; sub g ($x) { "g$x" } sub f ($c) { $c = g($c); return g($c) } print f(1), "\n";')) // '';
+    my $f = "$dir/m.pl";
+    open my $fh, '>', $f or die $!; print $fh $out; close $fh;
+    unlike scalar(qx($^X -c $f 2>&1)), qr/masks earlier declaration/,
+        'a demoted parameter stored into again: no second my';
+}
+
 done_testing;

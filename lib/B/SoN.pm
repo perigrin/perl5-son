@@ -689,9 +689,13 @@ sub _floor_subscripts {
             # input. Scalar was not WRONG -- an element is one scalar slot --
             # it was the weakest true answer where a stronger one was present.
             my $mem = @in >= 3 ? $in[2] : undef;
-            if ( $mem && $mem->isa('SoN::IR::Node::Assign') ) {
+            # ONLY AN ELEMENT STORE says what an element holds: a whole
+            # `@F = (...)` is stamped Array, and an element took it.
+            if ( $mem && $mem->isa('SoN::IR::Node::Assign')
+                 && ( $mem->inputs->[0] // 0 )->isa('SoN::IR::Node::Subscript') ) {
                 my $st = $mem->stamp;
-                if ( $st && $st->type ne 'Unknown' ) {
+                if ( $st && $st->type ne 'Unknown'
+                     && $st->type !~ /\A(?:Array|Hash|List)\z/ ) {
                     $node->set_stamp( SoN::IR::Stamp->new( type => $st->type ) );
                     next;
                 }
@@ -3083,11 +3087,15 @@ sub _wire_field_defaults {
     # Each field produces one initfield op, in declaration (fieldix) order.
     my @defaults;   # fieldix => default const op (or undef)
     my @unmodeled;  # fieldix => 1 when a default exists that is not modeled
+    my @expr;       # fieldix => the op computing an unmodeled default
     # The same first index _extract_fields numbers from.
     my ($idx) = sort { $a <=> $b } map { $_->{fieldix} } @$fields;
     $idx //= 0;
-    _walk_initfields( $cv->ROOT, sub ($default_op, $has_default) {
-        $unmodeled[$idx] = 1 if $has_default && !defined $default_op;
+    _walk_initfields( $cv->ROOT, sub ($default_op, $has_default, $expr) {
+        if ( $has_default && !defined $default_op ) {
+            $unmodeled[$idx] = 1;
+            $expr[$idx] = $expr;
+        }
         $defaults[$idx++] = $default_op;
     });
 
@@ -3095,10 +3103,23 @@ sub _wire_field_defaults {
     for my $f (@$fields) {
         my $fix = $f->{fieldix};
         my $dop = $defaults[$fix];
-        # A DEFAULT THE WIRE CANNOT CARRY -- computed, `field $t = time` -- is
-        # said so, for a consumer to refuse, rather than dropped.
+        # A COMPUTED DEFAULT -- `field $t = time` -- is a graph of its own,
+        # run at each construction. One that reaches outside it (an earlier
+        # field, a file lexical) is said so, for a consumer to refuse, rather
+        # than dropped.
         if ( !defined $dop && $unmodeled[$fix] ) {
-            $f->{default_unmodeled} = 1;
+            my $g = eval { SoN::FromOptree->translate_field_default( $cv, $expr[$fix] ) };
+            unless ($g) {
+                $f->{default_unmodeled} = 1;
+                next;
+            }
+            my $key = "${pkg_name}::__DEFAULT_${fix}";
+            $graphs->{$key}   = $g;
+            $f->{has_default} = 1;
+            $f->{default_ref} = $key;
+            # Typed by what `:param` admits, as a constant default is below:
+            # the graph's value is no promise about a caller's argument.
+            $f->{type} = $f->{is_param} ? 'Scalar' : _graph_return_type($g);
             next;
         }
         next unless defined $dop;
@@ -3230,7 +3251,8 @@ sub _walk_initfields {
     my ( $op, $cb ) = @_;
     return unless $$op;
     if ( $op->name eq 'initfield' ) {
-        $cb->( _initfield_default($op), _initfield_has_default($op) );
+        $cb->( _initfield_default($op), _initfield_has_default($op),
+               _initfield_default_expr($op) );
         return;
     }
     if ( $op->can('first') ) {
@@ -3263,6 +3285,21 @@ sub _initfield_has_default {
 sub _is_default_value_op {
     my ($o) = @_;
     return $o && $$o && $o->name =~ /\A(?:const|undef|emptyavhv|anonlist|anonhash)\z/;
+}
+
+# _initfield_default_expr($initfield_op) -- the op computing the field's
+# default, constant or not: a :param's else-arm, or initfield's own child.
+# Only meaningful when _initfield_has_default says there is one.
+sub _initfield_default_expr {
+    my ($op) = @_;
+    my $child = $op->can('first') ? $op->first : undef;
+    return undef unless $child && $$child;    # a bare field
+    $child = $child->first while $child->name eq 'null' && $child->can('first') && ${ $child->first }
+                              && $child->first->name ne 'pushmark';
+    return $child unless $child->name eq 'helemexistsor';
+    my $last;
+    for ( my $k = $child->first; $$k; $k = $k->sibling ) { $last = $k }
+    return $last;
 }
 
 # _initfield_default($initfield_op) — the op node holding the field's default

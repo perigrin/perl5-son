@@ -179,7 +179,7 @@ main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 4
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 5
   [ArrayLiteral, {sigil: "@", symbol: a}, [4, 3, 5], ~, Array], # 6
-  [Slice, ~, [2, 3, 6], ~, List], # 7
+  [Slice, {kind: array}, [2, 3, 6], ~, List], # 7
   [Coerce, {from_repr: List, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
   [Print, ~, [8, 9], 0, Scalar], # 10

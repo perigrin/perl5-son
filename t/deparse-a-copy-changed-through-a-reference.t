@@ -74,4 +74,14 @@ sub f { my ($v) = @_; my %m = %$v; my $r = \%m; $r->{b} = 2; return join(",", so
 print f({a => 1}), "\n";
 SRC
 
+# KEYS READ BEFORE A CALL that writes the hash through a reference are the keys
+# before it: spelled at the use, `keys %pre` counted the callee's new key.
+round_trips(q{sub add { my ($h) = @_; $h->{b} = 2; 2 } sub f { my %pre = (a => 1); my $s = join(",", sort keys %pre); add(\%pre); return "$s|" . join(",", sort keys %pre) } print f(), "\n";},
+    'keys of a named hash read before a call writes it');
+
+# ...ONLY AT ENTRY: after a store the binding was spelled as the call's own
+# statement and its list never assigned (corpus adjacency-02_variables).
+round_trips(q{my %h = (a => 1, c => 3); delete $h{c}; my @v = sort values %h; $h{d} = 4; print "@v ", scalar(keys %h), "\n";},
+    'values of a hash read after a delete, before a store');
+
 done_testing;

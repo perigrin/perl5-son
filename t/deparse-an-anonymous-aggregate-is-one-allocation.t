@@ -111,4 +111,11 @@ round_trips(<<'SRC', 'a ternary with an allocation in each arm');
 sub f { my $r = $_[0] ? [1] : {}; return ref($r) } print f(1), f(0), "\n";
 SRC
 
+# A DEFINED-OR DEFAULTING TO AN ALLOCATION IN A TERNARY ARM: the walk that asks
+# whether an arm advances control passed over the `//`'s right side, so the
+# arm's If hung off the control before the ternary, beside what came after
+# (chalk's LLVM::_emit_class_registry_ir, `$e ? @{ $reg->{subs} // [] } : ()`).
+round_trips(q{sub f { my ($r, $e) = @_; my $o = ""; for my $s ($e ? @{ $r->{s} // [] } : ()) { $o .= $s } return $o } print f({s=>[1,2]}, 1), f({}, 1), f({s=>[3]}, 0), "\n";},
+    'a defined-or defaulting to an allocation in a ternary arm');
+
 done_testing;

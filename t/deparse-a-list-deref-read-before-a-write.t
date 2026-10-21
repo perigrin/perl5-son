@@ -73,4 +73,22 @@ for my $case (
     round_trips(@$case);
 }
 
+# A HASH'S KEYS READ THROUGH A REFERENCE go stale the same way: `keys %$h`
+# was spelled after a later store and counted its key (`a,b` for `a`).
+round_trips(q{sub f { my $h = {a=>1}; my $k = join ",", sort keys %$h; $h->{b} = 2; return $k } print f(), "\n";},
+    'the keys of a referenced hash, read before a store');
+round_trips(q{sub f { my ($self) = @_; my $r = ""; { local $self->{k} = 5; $r = join ",", sort keys %$self } return "$r / " . join(",", sort keys %$self) } print f({ a => 1 }), "\n";},
+    'the keys read inside a block whose local is restored');
+
+# A REFERENCE A LIST ASSIGNMENT BINDS -- `my ($x) = @_` -- is a pad variable
+# the chain's Assign gives its value, neither a parameter nor made on the
+# chain itself: the read was left live and spelled after the push (`123`
+# for perl's `12`, a count of 3 for 2). `my $x = shift` was right.
+round_trips(q{sub f { my ($x) = @_; my $s = join "", @$x; push @$x, 3; return "$s|@$x" } print f([1,2]), "\n";},
+    'a list read through a reference a list assignment bound, before a push');
+round_trips(q{sub f { my ($x) = @_; my $n = scalar(@$x); push @$x, 3; return "$n|@$x" } print f([1,2]), "\n";},
+    'a count through a reference a list assignment bound, before a push');
+round_trips(q{sub g { $_[0] = 9 } sub f { my ($x) = @_; my $s = join "", @$x; g($$x[0]); return "$s|@$x" } print f([1,2]), "\n";},
+    'a list read through a reference a list assignment bound, before a callee writes an element');
+
 done_testing;

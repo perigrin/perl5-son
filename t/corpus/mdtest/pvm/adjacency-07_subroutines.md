@@ -259,16 +259,17 @@ main::bump: {start: 0, returns: [9], nodes: [
   [Increment, ~, [4], ~, Scalar], # 7
   [Assign, ~, [6, 7], 4, Scalar], # 8
   [Return, {implicit: true}, [5], 8]]} # 9
-main::f: {start: 0, returns: [8], nodes: [
+main::f: {start: 0, returns: [9], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "f["}, ~, ~, Str], # 1
   [Constant, {const_type: string, value: "-"}, ~, ~, Str], # 2
   [ArgsSource, ~, ~, ~, Array], # 3
-  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [2, 3], ~, Str], # 4
-  [Concat, ~, [1, 4], ~, Str], # 5
-  [Constant, {const_type: string, value: "]"}, ~, ~, Str], # 6
-  [Concat, ~, [5, 6], ~, Str], # 7
-  [Return, ~, [7], 0]]} # 8
+  [MemStart], # 4
+  [Call, {dispatch_kind: builtin, memory_input: true, name: join, param_names: []}, [2, 3, 4], ~, Str], # 5
+  [Concat, ~, [1, 5], ~, Str], # 6
+  [Constant, {const_type: string, value: "]"}, ~, ~, Str], # 7
+  [Concat, ~, [6, 7], ~, Str], # 8
+  [Return, ~, [8], 0]]} # 9
 main::g: {start: 0, returns: [10], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "g["}, ~, ~, Str], # 1

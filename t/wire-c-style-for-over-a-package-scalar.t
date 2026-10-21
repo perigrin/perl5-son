@@ -125,7 +125,16 @@ subtest 'the loop Phi carries an honest stamp, never Unknown' => sub {
 
     my @n = ( $data->{methods}{'main::__PROGRAM__'}{nodes} // [] )->@*;
     my %by_id = map { $_->{id} => $_ } @n;
-    my @phi = grep { ( $_->{op} // '' ) eq 'Phi' } @n;
+    # A MEMORY Phi merges stores, not values, and carries no stamp: the
+    # loop's own (the body stores $i) and its exit's. Known by what it merges.
+    my %mem;
+    my $is_mem; $is_mem = sub ($id) {
+        my $s = $by_id{$id} or return 0;
+        return $mem{$id} //= ( $s->{op} // '' ) =~ /\A(?:MemStart|EntryWrite)\z/
+            || ( ( $s->{op} // '' ) eq 'Phi'
+                 && $is_mem->( ( $s->{inputs} // [] )->[0] // -1 ) ) ? 1 : 0;
+    };
+    my @phi = grep { ( $_->{op} // '' ) eq 'Phi' && !$is_mem->( $_->{id} ) } @n;
     ok scalar(@phi), 'a loop Phi exists' or return;
 
     for my $p (@phi) {

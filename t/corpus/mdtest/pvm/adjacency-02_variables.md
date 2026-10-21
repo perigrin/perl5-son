@@ -175,7 +175,7 @@ main::__PROGRAM__: {start: 0, returns: [105], nodes: [
   [ArrayLiteral, {sigil: "@", symbol: w}, [54, 55], ~, Array], # 56
   [Count, ~, [56, 36], ~, Int], # 57
   [Coerce, {from_repr: Int, to_repr: Str}, [57], ~, Str], # 58
-  [Slice, ~, [6, 11, 5], ~, List], # 59
+  [Slice, {kind: array}, [6, 11, 5], ~, List], # 59
   [Coerce, {from_repr: List, to_repr: Str}, [59], ~, Str], # 60
   [Subscript, {kind: hash}, [18, 10, 36], ~, Scalar], # 61
   [Coerce, {from_repr: Unknown, to_repr: Str}, [61], ~, Str], # 62
@@ -183,7 +183,7 @@ main::__PROGRAM__: {start: 0, returns: [105], nodes: [
   [Subscript, {kind: array}, [63, 6, 36], ~, Scalar], # 64
   [Subscript, {kind: hash}, [18, 64, 36], ~, Scalar], # 65
   [Coerce, {from_repr: Unknown, to_repr: Str}, [65], ~, Str], # 66
-  [Slice, ~, [10, 18], ~, List], # 67
+  [Slice, {kind: hash}, [10, 18], ~, List], # 67
   [Coerce, {from_repr: List, to_repr: Str}, [67], ~, Str], # 68
   [Call, {dispatch_kind: builtin, memory_input: true, name: keys, param_names: [], want: scalar}, [18, 36], ~, Int], # 69
   [Coerce, {from_repr: Int, to_repr: Str}, [69], ~, Str], # 70

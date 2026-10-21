@@ -65,11 +65,29 @@ sub emits_quietly ($src, $name) {
 
 round_trips(q{use v5.38; use experimental "class"; class C { method run { my $f = sub ($x) { $x * 2 }; return $f->(21) } } print C->new->run, "\n";},
     'a closure called inside a class method');
-# A CLOSURE OVER A FIELD refuses: lifted out of its method, the field names
-# nothing (a stray file lexical gave `00` for perl's `10`).
-graph_of(q{use v5.38; use experimental "class"; class C { field %m; method n { $m{a} = 1; my $in = sub ($k) { exists $m{$k} ? 1 : 0 }; return $in->("a") . $in->("b") } } print C->new->n, "\n";});
-like producer_stderr(), qr/anonymous sub closing over the field %m is not yet lowered/,
-    'a closure over a field refuses, as chalk IR::Graph::nodes does';
+# A CLOSURE OVER A FIELD sees the instance its method runs on. Lifted out of
+# the method the field named nothing (a stray file lexical gave `00` for
+# perl's `10`), so it was refused -- and that held chalk's IR::Graph::nodes,
+# which closes over its `field %cache`, out of the round trip. Two instances,
+# so a closure reading the first one's field is caught.
+round_trips(q{use v5.38; use experimental "class"; class C { field %m; method add ($k) { $m{$k} = 1 } method n { my $in = sub ($k) { exists $m{$k} ? 1 : 0 }; return $in->("a") . $in->("b") } } my ($x, $y); $x = C->new; $y = C->new; $x->add("a"); $y->add("b"); print $x->n, $y->n, $x->n, "\n";},
+    'a closure over a hash field reads its own instance');
+round_trips(q{use v5.38; use experimental "class"; class C { field $n = 0; method bump { my $inc = sub { $n = $n + 1 }; $inc->(); $inc->(); return $n } } my $x = C->new; my $y = C->new; print $x->bump, $y->bump, $x->bump, "\n";},
+    'a closure that writes a scalar field writes its own instance');
+round_trips(q{use v5.38; use experimental "class"; class C { field $n = 0; method bump { my $inc = sub { $n = $n + 1 }; my $r = $inc->(); return "$r$n" } } my $x = C->new; print $x->bump, $x->bump, "\n";},
+    'a closure returns the value it stored into a field');
+# A CLOSURE OVER ITS METHOD'S OWN PARAMETER. The capture was declared at
+# file scope for the lifted body, and the signature declared its own: the
+# body read the one nothing assigned. chalk's Context::leaves passes such a
+# closure to walk_all, and its class filter let every node through.
+round_trips(q{use v5.38; use experimental "class"; class C { method pick ($cls = undef) { my @r = grep { defined } map { $self->test($cls)->($_) } (1, 2, 3); return scalar @r } method test ($c) { return sub ($n) { !$c || $n == $c ? $n : undef } } method each_ ($want) { return $self->walk(sub ($n) { $n == $want ? $n : undef }) } method walk ($cb) { return join ",", grep { defined } map { $cb->($_) } (1, 2, 3) } } my $o = C->new; print $o->pick, $o->pick(2), " ", $o->each_(3), "\n";},
+    'a closure over its method\'s own parameter');
+round_trips(q{use v5.38; sub walk ($cb) { join ",", grep { defined } map { $cb->($_) } (1, 2, 3) } sub only ($want) { walk(sub ($n) { $n == $want ? $n : undef }) } print only(2), only(3), "\n";},
+    'a closure over a sub\'s own parameter');
+# A CLOSURE THAT OUTLIVES ITS METHOD keeps the instance it was made on, as
+# perl's does: each call of the method makes its own.
+round_trips(q{use v5.38; use experimental "class"; class C { field $v :param; method getter { return sub { $v } } } my $g = C->new(v => 1)->getter; my $h = C->new(v => 2)->getter; print $g->(), $h->(), $g->(), "\n";},
+    'a closure over a field that escapes its method keeps its instance');
 round_trips(q{package P; sub run { my $f = sub { $_[0] + 1 }; $f->(1) } package main; print P::run(), "\n";},
     'a closure called inside a package sub');
 round_trips(q{sub f { my $g = sub { 5 }; $g->() } print f(), "\n";},

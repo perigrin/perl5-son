@@ -292,9 +292,15 @@ refuses(q{our %h; print join(",", sort { local $h{k} = $a; $a <=> $b } 3,1,2), "
 refuses(q{my $n = 0; my @r = sort { $n++; my $t=$a; $t <=> $b } 3,1,2; print "$n @r\n";},
     qr/GAP: a sort comparator block that writes a lexical of its enclosing scope \(\$n\)/,
     'a block writing an outer lexical');
-refuses(q{my @k=(3,1,2); print join(",", sort { my $t=$a; $k[$t] <=> $k[$b] } 0,1,2), "\n";},
-    qr/GAP: a sort comparator block that reads a lexical of its enclosing scope \(\@k\)/,
-    'a block reading an outer lexical');
+# AN AGGREGATE OF THE ENCLOSING SCOPE is shared with the comparator, as a
+# closure's is: one variable, declared above both.
+round_trips(q{my @k=(3,1,2); print join(",", sort { my $t=$a; $k[$t] <=> $k[$b] } 0,1,2), "\n";},
+    'a block reading an outer array');
+round_trips(q{sub order { my @blocks = @_; my %rpo; my $i = 0; $rpo{$_} = $i++ for reverse @blocks; return join ",", sort { $rpo{$a} <=> $rpo{$b} } @blocks } print order(qw(x y z)), " ", order(qw(p q)), "\n";},
+    'a block reading a hash of its sub');
+refuses(q{my $m = 2; print join(",", sort { ($a % $m) <=> ($b % $m) or $a <=> $b } 4,3,2,1), "\n";},
+    qr/GAP: a sort comparator block that reads a lexical of its enclosing scope \(\$m\)/,
+    'a block reading an outer scalar');
 refuses(q{for (1,-1) { print join(",", sort { $_*($a <=> $b) } 3,1,2),"\n" }},
     qr/GAP: a sort comparator block that reads \$_/, 'a block reading $_');
 
@@ -368,9 +374,8 @@ round_trips(q{sub w { my $x = eval { 5 }; $x } print w(), "\n";},
 round_trips(q{sub w { eval { 1 } or return 0; 2 } print w(), "\n";},
     'a boolean eval inside a sub');
 
-# A LEXICAL STORE INSIDE A BLOCK EVAL is refused rather than dropped.
-refuses(q{my $n = 0; my @r = eval { $n++; reverse 3,1,2 }; print "@r $n\n";},
-    qr/GAP: a block eval whose body rebinds a variable from outside it/,
+# A LEXICAL STORE INSIDE A BLOCK EVAL lives in memory and rides it out.
+round_trips(q{my $n = 0; my @r = eval { $n++; reverse 3,1,2 }; print "@r $n\n";},
     'a lexical store inside a block eval');
 
 my $runtime = qr/GAP: a sort comparator chosen at runtime/;

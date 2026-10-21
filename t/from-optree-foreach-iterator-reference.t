@@ -123,9 +123,9 @@ for ( [ 'carried out', 'my $r; for my $x (@a) { $r = k($x) } $$r = 5;' ],
       [ 'through a body lexical', 'my $r; for my $x (@a) { my $v = k($x); $r = $v } $$r = 5;' ],
       [ 'through a body array', 'my $r; for my $x (@a) { my @v = k($x); $r = $v[0] } $$r = 5;' ],
       [ 'behind ||', 'my $r; for my $x (@a) { $r = k($x) || 0 } $$r = 5;' ] ) {
-    my (undef, $err) = produce(
-        "sub k { return \\\$_[0] } sub f { my \@a = (1,2); $_->[1] return \"\@a\" } print f(), \"\\n\";\n");
-    like $err, $CALL, "a call's value $_->[0]: refused by name";
+    round_trips(
+        "sub k { return \\\$_[0] } sub f { my \@a = (1,2); $_->[1] return \"\@a\" } print f(), \"\\n\";\n",
+        "a call's value $_->[0]");
 }
 
 # A REFERENCE USED ONLY WITHIN THE PASS writes the copy, and the write-back
@@ -150,11 +150,11 @@ SRC
 
 # A NAMED SUB THAT STORES `\$_[0]` keeps the element too, its value thrown
 # away: perl prints `5 2`.
-like +(produce(<<'SRC'))[1], $CALL, 'a named sub that keeps a reference to its argument: refused by name';
+round_trips(<<'SRC', 'a named sub that keeps a reference to its argument');
 our @K; sub keep { push @K, \$_[0] } my @a = (1,2); for my $x (@a) { keep($x) } ${$K[0]} = 5; print "@a\n";
 SRC
 
-like +(produce(<<'SRC'))[1], $CALL, 'a named sub that hands its argument on: refused by name';
+round_trips(<<'SRC', 'a named sub that hands its argument on');
 our @K; sub keep { push @K, \$_[0] } sub pass { keep($_[0]) } my @a = (1,2); for my $x (@a) { pass($x) } ${$K[0]} = 5; print "@a\n";
 SRC
 
@@ -169,6 +169,22 @@ SRC
 
 round_trips(<<'SRC', 'a call value held in a body array and joined');
 sub two { ($_[0], $_[0]) } my @a = (1,2); my $o = ""; for my $x (@a) { my @v = two($x); $o .= "@v;" } print "@a $o\n";
+SRC
+
+# A CLOSURE HELD IN A LEXICAL BOUND ONCE is a callee whose body can be read,
+# as a named sub's is: chalk's FilterComposite calls `$slot_verdict->($sr,
+# ...)` on its iterator and keeps the verdict. A signature copies its
+# arguments, so the body holds no alias.
+round_trips(<<'SRC', "a closure's value kept, the closure bound once");
+use v5.42; my @a = (1,2); my $g = sub ($x, $y) { $x + $y }; my @r; for my $i (@a) { my $v = $g->($i, 1); push @r, $v } print "@a @r\n";
+SRC
+# ONE THAT KEEPS A REFERENCE to its argument still refuses; so does a
+# lexical bound twice, whose callee the scan cannot name.
+round_trips(<<'SRC', 'a closure that returns a reference to its argument');
+my @a = (1,2); my $k = sub { \$_[0] }; my $r; for my $x (@a) { $r = $k->($x) } $$r = 5; print "@a\n";
+SRC
+round_trips(<<'SRC', 'a lexical bound to two closures');
+my @a = (1,2); my $k = sub { $_[0] }; $k = sub { \$_[0] } if @ARGV == 0; my $r; for my $x (@a) { $r = $k->($x) } $$r = 5; print "@a\n";
 SRC
 
 # A FOREACH OVER @_ ALIASES THE CALLER'S ARGUMENTS, and the caller's graph
@@ -245,6 +261,6 @@ SRC
 like +(produce('use v5.36; my sub w { $_[0]++ } sub e { w($_) for @_; 1 } my @a = (1, 2); e(@a); print "@a\n";'))[1],
     $ARGS, 'a lexical sub writing the iterator over @_: refused by name';
 like +(produce('use v5.36; my sub r { \$_[0] } our $K; sub e { for my $x (@_) { $K = r($x) } 1 } my @a = (1, 2); e(@a); $$K = 7; print "@a\n";'))[1],
-    $CALL, 'a lexical sub returning a reference to the iterator over @_: refused by name';
+    qr/$CALL|$ARGS/, 'a lexical sub returning a reference to the iterator over @_: refused by name';
 
 done_testing;

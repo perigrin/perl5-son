@@ -259,7 +259,7 @@ main::__PROGRAM__: {start: 0, returns: [28], nodes: [
   [Constant, {const_type: string, value: c}, ~, ~, Str], # 12
   [ArrayLiteral, {sigil: "@", symbol: l}, [10, 11, 12], ~, Array], # 13
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 14
-  [Phi, {region: 6}, [14, 39], ~, Int], # 15
+  [Phi, {region: 6}, [14, 38], ~, Int], # 15
   [MemStart], # 16
   [Subscript, {kind: array}, [13, 15, 16], ~, Scalar], # 17
   [Coerce, {from_repr: Unknown, to_repr: Str}, [17], ~, Str], # 18
@@ -279,12 +279,11 @@ main::__PROGRAM__: {start: 0, returns: [28], nodes: [
   [NumGt, ~, [29, 15], 6, Boolean], # 32
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 33
   [Add, ~, [30, 33], ~, Int], # 34
-  [Subscript, {kind: array}, [13, 30, 16], ~, Scalar], # 35
-  [Proj, {index: 1}, [6]], # 36
-  [Region, {head: 6}, [36]], # 37
-  [Proj, {index: 1}, [24]], # 38
-  [Add, ~, [15, 33], ~, Int], # 39
-  [Proj, {index: 0}, [20]], # 40
-  [Region, {head: 3}, [37, 40]], # 41
-  [Print, ~, [18], 38, Scalar]]} # 42
+  [Proj, {index: 1}, [6]], # 35
+  [Region, {head: 6}, [35]], # 36
+  [Proj, {index: 1}, [24]], # 37
+  [Add, ~, [15, 33], ~, Int], # 38
+  [Proj, {index: 0}, [20]], # 39
+  [Region, {head: 3}, [36, 39]], # 40
+  [Print, ~, [18], 37, Scalar]]} # 41
 ```

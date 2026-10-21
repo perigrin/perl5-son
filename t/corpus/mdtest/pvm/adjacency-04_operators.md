@@ -294,8 +294,8 @@ main::__PROGRAM__: {start: 0, returns: [211], nodes: [
   [Call, {dispatch_kind: builtin, name: substr, param_names: []}, [149, 7, 7], ~, Str], # 150
   [Constant, {const_type: string, value: ","}, ~, ~, Str], # 151
   [Call, {dispatch_kind: builtin, name: sort, param_names: [], sort_cmp: string, sort_order: ascending}, [44, 7, 45], ~, List], # 152
-  [Call, {dispatch_kind: builtin, name: reverse, param_names: []}, [152], ~, List], # 153
-  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [151, 153], ~, Str], # 154
+  [Call, {dispatch_kind: builtin, memory_input: true, name: reverse, param_names: []}, [152, 17], ~, List], # 153
+  [Call, {dispatch_kind: builtin, memory_input: true, name: join, param_names: []}, [151, 153, 17], ~, Str], # 154
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 155
   [NumGe, ~, [49, 44], ~, Boolean], # 156
   [NumLe, ~, [49, 44], ~, Boolean], # 157

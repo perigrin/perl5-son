@@ -1,5 +1,5 @@
-# ABOUTME: A block eval whose body rebinds a variable from outside it is refused by
-# ABOUTME: name: the trap's join does not carry what the body stored before a die.
+# ABOUTME: A block eval whose body rebinds a variable from outside it keeps what the
+# ABOUTME: body stored before a die: the variable lives in memory, as perl's does.
 
 use v5.42.0;
 use Test2::V0;
@@ -26,13 +26,6 @@ sub produce ($src) {
     return (eval { JSON::PP->new->decode($j) }, $err);
 }
 
-my $GAP = qr/GAP: a block eval whose body rebinds a variable from outside it/;
-
-sub refused ($src, $name) {
-    my (undef, $err) = produce($src);
-    like $err, $GAP, "$name: refused by name";
-}
-
 sub round_trips ($src, $name) {
     my $want = run_perl($src);
     my ($data, $err) = produce($src);
@@ -44,25 +37,25 @@ sub round_trips ($src, $name) {
     is run_perl($out), $want, $name or diag $out;
 }
 
-# perl prints b: the store before the die survives the unwind.
-refused(<<'SRC', 'a loop in an eval carries a value out past a die');
+# perl prints b: the store before the die survives the unwind. The rebound
+# lexical lives in memory, so the emitted eval keeps it as perl's does.
+round_trips(<<'SRC', 'a loop in an eval carries a value out past a die');
 sub f { my $n = 0; eval { for my $x (@_) { $n = $x; die "d\n" if $x eq "b" } }; return $n }
 print f("a","b","c"), "\n";
 SRC
 
-refused(<<'SRC', 'an Unknown init, the same loop');
+round_trips(<<'SRC', 'an Unknown init, the same loop');
 sub f { my $n = $_[9]; eval { for my $x (@_) { $n = $x; die "d\n" if $x eq "b" } }; return $n // "u" }
 print f("a","b","c"), "\n";
 SRC
 
-refused(<<'SRC', 'a range loop');
+round_trips(<<'SRC', 'a range loop');
 sub f { my $n = 0; eval { for my $i (1..3) { $n = $i; die "d\n" if $i == 2 } }; return $n }
 print f(), "\n";
 SRC
 
-# A while in the body is walked like any loop, so what refuses is the rebinding
-# of $n -- perl prints 2.
-refused(<<'SRC1', 'a while loop');
+# A while in the body is walked like any loop -- perl prints 2.
+round_trips(<<'SRC1', 'a while loop');
 sub f { my $n = 0; eval { my $i = 0; while ($i < 3) { $i++; $n = $i; die "d\n" if $i == 2 } }; return $n }
 print f(), "\n";
 SRC1
@@ -79,13 +72,13 @@ sub f { my @a; eval { my $i = 0; while ($i < 3) { $i++; push @a, $i } 1 }; print
 SRC2
 
 # No loop at all: perl prints 5.
-refused(<<'SRC', 'a straight-line store then die');
+round_trips(<<'SRC', 'a straight-line store then die');
 sub f { my $n = 0; eval { $n = 5; die "d\n" }; return $n }
 print f(), "\n";
 SRC
 
 # The common idiom, and no die: perl prints 7.
-refused(<<'SRC', 'a store from a call, then a true value');
+round_trips(<<'SRC', 'a store from a call, then a true value');
 sub g { 7 } sub f { my $x = 0; eval { $x = g(); 1 }; return $x }
 print f(), "\n";
 SRC

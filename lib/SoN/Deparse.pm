@@ -70,6 +70,10 @@ class SoN::Deparse 0.01 {
     # Pad bindings whose value is a chain-bound effect: effect id => [nodes to
     # emit right after it]. See _emit_control_chain.
     field %after_effect;
+    # Reads bound at the top of each pass of a loop: loop id => [nodes]. See
+    # the stale-read pass, and _emit_loop.
+    field %loop_top_bind;
+    field %pass_top_node;
     # Each class's pieces from _emit_classes, and which were placed at
     # their own statements' region (_place_package_regions).
     field %class_parts;
@@ -93,6 +97,12 @@ class SoN::Deparse 0.01 {
     # Variables already declared as cells, so the chain does not re-declare
     # them: a second `my` would shadow the captured lexical.
     field %cell_slots;
+    # A LIFTED BODY THAT READS A FIELD, keyed by its graph name, to the
+    # variable its enclosing method holds it in -- see _field_closures.
+    field %closure_var;
+    # A CALL IN THE CALLER'S CONTEXT that the Return after it returns, by id:
+    # spelled inside that `return`, never bound -- see _emit_control_chain.
+    field %inline_return;
 
     # Demoted pad variables this graph has already declared: the first store
     # is the `my`, a later one assigns the same variable.
@@ -161,6 +171,8 @@ class SoN::Deparse 0.01 {
         # assign ending in a `shift` or `each` -- a memory point, and a VALUE
         # -- had that value taken for an edge: unbound, it ran twice.
         Delete       => 2,   # [container, key, memory]
+        # A `local` element's restore at its block's exit.
+        ElemRestore  => 4,   # [container, key, saved, existed, memory]
         # THE SAME SHAPE AS Delete, one operator over, and it was missing --
         # so `exists $h{k}` counted its memory edge as a VALUE, bound the
         # EntryWrite that produced it, and then asked to render a store as an
@@ -177,6 +189,8 @@ class SoN::Deparse 0.01 {
         # gives `PadAccess(6) in=[Assign]`, the store it observes. Counting
         # that as a value bound the Assign and asked to render it as one.
         PadAccess    => 0,   # [memory] -- ordering only
+        # A class field's read: the field store before it is its version.
+        FieldAccess  => 0,   # [memory] -- ordering only
         # A destructive s/// stores into its target, so it advances the chain
         # and carries it. Its optional slots make the operand count vary, so
         # the table cannot express it -- _subst_operands resolves those from
@@ -240,6 +254,7 @@ class SoN::Deparse 0.01 {
     # for the same node -- one substitution, two different results, and a
     # single map would hand a reader whichever was written last.
     field %subst_count_var;   # RegexSubst id => variable holding its count
+    field %spine_memo;        # _arm_spine_pred answers, per graph
 
     # THE ENCLOSING LOOP'S EXIT REGION, while its body is being emitted.
     #
@@ -304,6 +319,7 @@ class SoN::Deparse 0.01 {
         # CELLS FIRST, before any sub. A named sub emitted above the program
         # body can only close over a lexical already in scope, and the cell is
         # exactly that shared lexical.
+        return undef unless $self->_field_closures;
         my $out = $self->_emit_cell_declarations;
 
         # BEGIN BLOCKS FIRST, in source order -- they ran before anything else
@@ -353,6 +369,7 @@ class SoN::Deparse 0.01 {
         for my $name (sort keys $methods->%*) {
             next if $name eq 'main::__PROGRAM__';
             next if $class_owned->{$name};
+            next if exists $closure_var{$name};    # inside its maker
             my $sub = eval { $self->_emit_sub($name, $methods->{$name}) };
             if (!defined $sub) { $gap = $@ || "failed to render $name"; return undef }
             if ($self->_sub_ident($name) ne $name =~ s/^main:://r) { $lifted .= $sub }
@@ -364,6 +381,8 @@ class SoN::Deparse 0.01 {
         %rendered = ();
         %bound    = ();
         %after_effect = ();
+        %loop_top_bind = ();
+        %pass_top_node = ();
         %after_region = ();
         %hoisted  = ();
         %pad_declared = ();
@@ -459,7 +478,7 @@ class SoN::Deparse 0.01 {
     # container an aggregate or a reference, and which bracket does it take.
     # Three copies of that decision is how one operator ends up meaning two
     # things; see the Subscript rule for the measurements behind each branch.
-    method _element ($container_id, $key, $sub_kind = undef) {
+    method _element ($container_id, $key, $sub_kind = undef, $read = 0) {
         my $agg  = $nodes->{$container_id};
         my $af   = ($agg->{fields} // {});
         my $kind = $agg->{op} // '';
@@ -499,14 +518,25 @@ class SoN::Deparse 0.01 {
         # A FIELD AGGREGATE carries no sigil and no stamp -- its name comes
         # from the class record, so the spelling (`%m`, `@a`) is the fact.
         # Without it `$m{$k}` fell to the reference branch: `(%m)->[$k]`.
+        # SO DOES ONE BOUND TO A NAMED AGGREGATE -- a merge of an array's
+        # bindings is `@phi10`, and `(@phi10)->[$i]` died "Can't use an
+        # array as a reference".
         $st = $1 eq '@' ? 'Array' : 'Hash'
-            if $kind eq 'FieldAccess' && $spelling =~ /\A([\@%])\w/;
+            if ($kind eq 'FieldAccess' && $spelling =~ /\A([\@%])\w/)
+            || $spelling =~ /\A([\@%])[A-Za-z_]\w*\z/;
 
         if ($st eq 'Array' || $st eq 'Hash') {
             # A POSTFIX DEREFERENCE (see _postfix_deref) is indexed through
             # the arrow: `$r->@*` gives `$r->[$i]`.
             return $st eq 'Array' ? "$1\->[$key]" : "$1\->{$key}"
                 if $spelling =~ /\A(.*)->[\@%]\*\z/s;
+            # A READ OF A MERGED BINDING -- `@c = $c[0]->@* if ...` spelled
+            # as a ternary -- is a slice of its value; only a store needs a
+            # container to name (chalk's TypedInvariant::check_nodes).
+            if ($read && $spelling !~ /\A[\@\%]/) {
+                return $st eq 'Array' ? sprintf('(%s)[%s]', $spelling, $key)
+                                      : sprintf('+{%s}->{%s}', $spelling, $key);
+            }
             die "GAP: an element of a `$kind` spelled `$spelling` has no"
               . " aggregate sigil to switch\n"
                 unless $spelling =~ s/\A[\@\%]/\$/;
@@ -624,6 +654,78 @@ class SoN::Deparse 0.01 {
     }
 
 
+    # Fill %closure_var: every lifted anon body that reads a FIELD, and the
+    # variable it is held in. Returns false, with $gap set, for one this
+    # cannot place.
+    #
+    # A FIELD IS THE INSTANCE'S, and a body lifted to file scope has none:
+    # `%m` there named nothing (or a stray lexical, `00` for perl's `10`).
+    # So the body stays a closure, made at the top of the method that
+    # creates it -- once per call, over that call's instance, as perl's is --
+    # and its calls and references go through the variable.
+    #
+    # SO DOES ONE CLOSING OVER ITS SUB'S OWN PARAMETER. A captured lexical is
+    # declared at file scope for the lifted body to share, and the sub's own
+    # `my` of it is suppressed -- but a signature's cannot be: `method
+    # leaves($node_class = undef)` declared its own, and the lifted body read
+    # the file-scope one nothing assigned (chalk's Context::leaves; its class
+    # filter let every node through).
+    method _field_closures () {
+        %closure_var = ();
+        my %method_key = map {
+            my $c = $_;
+            map { ($_ => 1) } values(($c->{methods} // {})->%*)
+        } grep { ref $_ eq 'HASH' && $_->{is_class} } values $sub_meta->%*;
+        for my $k (sort keys $all_methods->%*) {
+            my ($outer) = $k =~ /\A(.+)::__ANON__:\d+:\d+\z/ or next;
+            my $og = $all_methods->{$outer} or next;
+            my $field = grep { ($_->{op} // '') eq 'FieldAccess' }
+                (($all_methods->{$k}{nodes} // [])->@*);
+            if ($field && !$method_key{$outer}) {
+                $gap = "GAP: the anonymous sub `$k` reads a field, and is not"
+                     . " made directly in a method of its class\n";
+                return 0;
+            }
+            my $param = !$field && $outer ne 'main::__PROGRAM__'
+                && $outer !~ /::__(?:ANON|SORTCMP|SUBSTREPL)__:/
+                && $self->_captures_a_parameter($k, $og);
+            next unless $field || $param;
+            ( my $v = $self->_sub_ident($k) ) =~ s/\A.*__ANON__/closure/;
+            $closure_var{$k} = '$' . $v;
+        }
+        return 1;
+    }
+
+    # Does the anon body $k, made in graph $og, capture one of $og's own
+    # parameters -- a cell named as a Parameter of $og is?
+    method _captures_a_parameter ($k, $og) {
+        my @n = (($og->{nodes} // [])->@*);
+        my %by = map { $_->{id} => $_ } @n;
+        my %param = map { ((($_->{fields} // {})->{name} // '') => 1) }
+                    grep { ($_->{op} // '') eq 'Parameter' } @n;
+        for my $a (grep { ($_->{op} // '') eq 'AnonSub'
+                          && (($_->{fields} // {})->{name} // '') eq $k } @n) {
+            for my $c (map { $by{$_} // () } (($a->{inputs} // [])->@*)) {
+                return 1 if ($c->{op} // '') eq 'MakeCell'
+                    && $param{ ($c->{fields} // {})->{cell_name} // '' };
+            }
+        }
+        return 0;
+    }
+
+    # The closures graph $key makes, each `my $var = sub {...};`, in the
+    # order of their names -- emitted at the top of $key's body.
+    method _closures_for ($key) {
+        my $out = '';
+        for my $anon (sort grep { /\A\Q$key\E::__ANON__:\d+:\d+\z/ } keys %closure_var) {
+            my $sub = $self->_emit_sub($anon, $all_methods->{$anon});
+            $sub =~ s/\Asub \S+/my $closure_var{$anon} = sub/;
+            $sub =~ s/\n\z/;\n/;
+            $out .= $sub;
+        }
+        return $out;
+    }
+
     method _sub_ident ($name) {
         ( my $short = $name ) =~ s/^main:://;
 
@@ -723,6 +825,16 @@ class SoN::Deparse 0.01 {
         return 0;
     }
 
+    # Does this program define anything in $name's package -- a graph, or
+    # subs and methods the producer recorded for it?
+    method _package_defined_here ($name) {
+        my ($pkg) = $name =~ /\A(.*)::[^:]+\z/ or return 1;
+        return 1 if grep { /\A\Q$pkg\E::[^:]+\z/ } keys $all_methods->%*;
+        my $c = $sub_meta->{$pkg};
+        return ref $c eq 'HASH'
+            && ( ( $c->{subs} // {} )->%* || ( $c->{methods} // {} )->%* ) ? 1 : 0;
+    }
+
     # ` :prototype(PROTO)` for a sub the source declared with a prototype,
     # else ''. The ATTRIBUTE, not `(PROTO)`: under a bundle with signatures
     # on -- every emission's -- `sub g ($)` is a signature.
@@ -736,7 +848,8 @@ class SoN::Deparse 0.01 {
     }
 
     method _emit_sub ($name, $graph) {
-        my $body = $self->_render_graph_body($name, $graph);
+        my $body = $self->_closures_for($name)
+                 . $self->_render_graph_body($name, $graph);
         my ($pkg, $short) = $name =~ /\A(.*)::([^:]+)\z/;
         my $lvalue = defined $short
             && ((($sub_meta->{$pkg} // {})->{subs} // {})->{$short} // {})->{lvalue}
@@ -836,7 +949,10 @@ class SoN::Deparse 0.01 {
         # defines it; emitted here it was a dead sub over a stray `my`.
         if (%owned) {
             my $lifted = join '|', map { quotemeta } keys %owned;
-            $owned{$_} = 1 for grep { /\A(?:$lifted)::__ANON__:/ } keys $all_methods->%*;
+            # A sort comparator or s///e replacement body is lifted the same
+            # way, under its own marker.
+            $owned{$_} = 1 for grep { /\A(?:$lifted)::__(?:ANON|SORTCMP|SUBSTREPL)__:/ }
+                keys $all_methods->%*;
         }
         my %cls = map { $_->{name} => $_ }
                   grep { ref $_ eq 'HASH' && $_->{is_class} && defined $_->{name}
@@ -904,6 +1020,12 @@ class SoN::Deparse 0.01 {
                 my $b = eval { $self->_render_graph_body($key,
                                    $all_methods->{$key} // {}) };
                 unless (defined $b) { $gap = $@ || "failed to render $key"; return (undef) }
+                # ITS CLOSURES FIRST, made afresh on each call, so each closes
+                # over the instance and the parameters this call has.
+                $owned{$_} = 1 for grep { /\A\Q$key\E::__ANON__:/ } keys %closure_var;
+                my $cl = eval { $self->_closures_for($key) };
+                unless (defined $cl) { $gap = $@ || "failed to render $key"; return (undef) }
+                $b = $cl . $b;
                 my $sig = $self->_signature_for($key, $all_methods->{$key} // {});
                 $body .= "method $m$sig {\n" . _indent($b) . "}\n";
             }
@@ -1089,7 +1211,14 @@ class SoN::Deparse 0.01 {
         my %temps;
         $temps{$1} = $names{$1} = 1
             while $text =~ /([\$\@%](?:phi|eff|stale|ret|latch|exit|inv)\d+)\b(?!_)/g;
-        delete $names{'$self'};
+        # A CLASS BODY'S, that is -- a method's, an ADJUST's: a plain sub's
+        # `$self` is its own lexical.
+        delete $names{'$self'} unless do {
+            my ($pkg, $short) = ($current_sub // '') =~ /\A(.*)::([^:]+)\z/;
+            my $s = defined $short
+                ? ((($sub_meta->{$pkg} // {})->{subs} // {})->{$short}) : undef;
+            ref $s eq 'HASH' && ($s->{graph} // '') eq $current_sub;
+        };
         delete @names{ keys %cell_slots };
         # A signature's parameters are declared by the signature.
         if (my $sig = $self->_signature_of($current_sub)) {
@@ -1143,7 +1272,10 @@ class SoN::Deparse 0.01 {
             my $scope = join '/', @open;
             for my $t (sort keys %hoistable) {
                 next unless $l =~ /\Q$t\E\b(?!_)/;
-                if (!exists $decl_scope{$t} && $l =~ /\bmy\s+\Q$t\E\b(?!_)/) {
+                # `my ($a, $b)` DECLARES TOO: a list assign pinned in one arm
+                # declared both there, and the other arm's was undeclared.
+                if (!exists $decl_scope{$t}
+                    && $l =~ /\bmy\s+\Q$t\E\b(?!_)|\bmy\s*\([^)]*\Q$t\E\b(?!_)/) {
                     ($decl_scope{$t}, $decl_line{$t}) = ($scope, $i);
                     if (my $u = $first_use{$t}) {
                         if ($u->[0] eq $scope) { $early{$t} = $u->[1] }
@@ -1162,10 +1294,19 @@ class SoN::Deparse 0.01 {
             push @open, ++$next_block if $l =~ /\{\s*\z/;
         }
         my @hoist = sort keys %escapes;
+        my %hoisted = map { $_ => 1 } @hoist;
         for my $t (@hoist) {
             for my $i (grep { $lines[$_] =~ /\bmy\s+\Q$t\E\b(?!_)/ } 0 .. $#lines) {
                 $lines[$i] =~ s/\bmy\s+(\Q$t\E\b)(?!_)/$1/;
                 $lines[$i] = '' if $lines[$i] =~ /\A\s*\Q$t\E\s*;\s*\z/;
+            }
+            # A LIST DECLARATION loses its `my` whole, so every name in it is
+            # hoisted with the one that escaped.
+            for my $i (grep { $lines[$_] =~ /\bmy\s*\([^)]*\Q$t\E\b(?!_)/ } 0 .. $#lines) {
+                $lines[$i] =~ s/\bmy\s*(\([^)]*\Q$t\E\b(?!_)[^)]*\))/$1/;
+                my ($list) = $lines[$i] =~ /\(([^)]*\Q$t\E\b(?!_)[^)]*)\)/;
+                $hoisted{$_}++ or push @hoist, $_ for ($list // '') =~ /([\$\@%]\w+)/g;
+                $lines[$i] = '' if $lines[$i] =~ /\A\s*\([^)]*\)\s*;\s*\z/;
             }
         }
         my @early = grep { !$escapes{$_} } sort keys %early;
@@ -1185,7 +1326,26 @@ class SoN::Deparse 0.01 {
     # to the graph.
     method _render_graph_body ($name, $graph) {
         return $self->_in_graph($name, $graph,
-            sub { $self->_declare_undeclared($self->_emit_control_chain($graph)) });
+            sub { $self->_declare_undeclared($self->_slurpy_params($graph)
+                                              . $self->_emit_control_chain($graph)) });
+    }
+
+    # A SLURPY PARAMETER OUTSIDE A RENDERED SIGNATURE -- an anonymous sub's
+    # `sub ($id, @rest)` -- is what perl lowers it to: `my @rest` from the
+    # rest of @_, declared first. Its Parameter then reads as the name.
+    method _slurpy_params ($graph) {
+        return '' if $self->_signature_of($current_sub);
+        my $text = '';
+        for my $n (sort { ($a->{fields}{index} // 0) <=> ($b->{fields}{index} // 0) }
+                   grep { ($_->{op} // '') eq 'Parameter'
+                          && (($_->{fields} // {})->{sigil} // '$') ne '$' }
+                   ($graph->{nodes} // [])->@*) {
+            my $f = $n->{fields};
+            die "GAP: a slurpy Parameter with no name is not yet rendered\n"
+                unless ($f->{name} // '') =~ /\A[\@%]\w+\z/;
+            $text .= sprintf("my %s = \@_[%d .. \$#_];\n", $f->{name}, $f->{index} // 0);
+        }
+        return $text;
     }
 
     # A graph whose job is ONE VALUE -- a field's default initialiser --
@@ -1210,21 +1370,29 @@ class SoN::Deparse 0.01 {
         # `my shift(@_) = shift(@_)`, the caller's binding read as this sub's.
         my %save_bound = %bound;
         my %save_after = %after_effect;
+        my %save_top   = %loop_top_bind;
+        my %save_ptn   = %pass_top_node;
         my %save_region = %after_region;
         my %save_hoist = %hoisted;
         my %save_declared = %pad_declared;
         my %save_mem   = %mem_cache;
+        my %save_inline = %inline_return;
+        my %save_spine = %spine_memo;
         my $save_sub = $current_sub;
         $current_sub = $name;
         $nodes = { map { $_->{id} => $_ } ($graph->{nodes} // [])->@* };
         %rendered = ();
         %bound    = ();
         %after_effect = ();
+        %loop_top_bind = ();
+        %pass_top_node = ();
         %after_region = ();
         %hoisted  = ();
         %pad_declared = ();
         %mem_cache = ();
+        %inline_return = ();
         %subst_count_var = ();
+        %spine_memo = ();
 
         my $body = eval { $code->() };
         my $err = $@;
@@ -1233,10 +1401,14 @@ class SoN::Deparse 0.01 {
         %rendered = %save_rendered;
         %bound    = %save_bound;
         %after_effect = %save_after;
+        %loop_top_bind = %save_top;
+        %pass_top_node = %save_ptn;
         %after_region = %save_region;
         %hoisted  = %save_hoist;
         %pad_declared = %save_declared;
         %mem_cache = %save_mem;
+        %inline_return = %save_inline;
+        %spine_memo = %save_spine;
         die $err unless defined $body;
         return $body;
     }
@@ -1360,6 +1532,38 @@ class SoN::Deparse 0.01 {
             # context bound it to an ARRAY temporary -- which ran the call in
             # list context and gave the elements where perl gives the count.
             my $is_call = ($n->{op} // '') eq 'Call';
+            # A CALL IN THE CALLER'S CONTEXT, RETURNED AT ONCE, IS NOT BOUND:
+            # a temporary has one context, and the call has whichever the
+            # caller gives. `my $eff = $self->walk_all(...); return $eff` gave
+            # a list caller the last element (chalk's Context::leaves). Read
+            # only by the Return that follows it, it is spelled in that
+            # `return`, where perl ran it.
+            if ($is_call && !defined(($n->{fields} // {})->{want})) {
+                # A Region or Loop names it as a predecessor, not a value.
+                my @readers = grep {
+                    ($_->{op} // '') !~ /\A(?:Region|Loop|Proj|If)\z/
+                    && grep { defined && $_ == $id } ($_->{inputs} // [])->@*
+                } $self->_nodes_in_order;
+                # SO IS ONE AN ARM ENDS ON, merged at a join the function's
+                # Return follows at once: the arm returns it there itself
+                # (_join_phis), and the path has nothing after it to skip.
+                my $exit_merge = sub ($p) {
+                    return 0 unless ($p->{op} // '') eq 'Phi';
+                    my $r = $nodes->{ ($p->{fields} // {})->{region} // -1 } // {};
+                    return 0 unless ($r->{op} // '') eq 'Region'
+                        && grep { defined && $_ == $id } ($r->{inputs} // [])->@*;
+                    return scalar grep { ($_->{op} // '') eq 'Return'
+                        && ($_->{control_in} // -1) == $r->{id}
+                        && grep { defined && $_ == $p->{id} } ($_->{inputs} // [])->@*
+                    } $self->_nodes_in_order;
+                };
+                if (@readers && !grep { !( ( ($_->{op} // '') eq 'Return'
+                            && ($_->{control_in} // -1) == $id )
+                        || $exit_merge->($_) ) } @readers) {
+                    $inline_return{$id} = 1;
+                    next;
+                }
+            }
             # A CONDITIONAL REBIND OF A WHOLE AGGREGATE is that aggregate:
             # `my @e = (1); if ($k) { @e = (0,4) }` is a TernaryExpr stamped
             # Array, and a `$eff` held its count -- `"@e"` printed 2.
@@ -1578,6 +1782,13 @@ class SoN::Deparse 0.01 {
         my $safe_read = sub ($id) {
             for my $c ( ( $consumers{$id} // [] )->@* ) {
                 my $op = $c->{op} // '';
+                # A TERNARY HANDS ON ITS ARMS, so an arm is as safe as what
+                # consumes the ternary: a call's argument is its alias.
+                if ( $op eq 'TernaryExpr'
+                     && ( ( $c->{inputs} // [] )->[0] // -1 ) != $id ) {
+                    next if __SUB__->( $c->{id} );
+                    return 0;
+                }
                 next if $VALUE_CONSUMER->{$op};
                 # A LIST IS AS SAFE AS WHAT CONSUMES IT, and a NAMED one is an
                 # array's copy of its elements: `my @b = ($a[0], 5); $a[0] =
@@ -1593,9 +1804,10 @@ class SoN::Deparse 0.01 {
                 # substr at every arity: two or three operands only READ the
                 # string, and the four-operand write spells it by name.
                 # sprintf only reads its arguments.
-                # join reads its separator and its list.
+                # join reads its separator and its list; keys and values
+                # read the aggregate; sort and reverse copy their list.
                 next if $op eq 'Call'
-                    && ( ( $c->{fields} // {} )->{name} // '' ) =~ /\A(?:substr|sprintf|join)\z/;
+                    && ( ( $c->{fields} // {} )->{name} // '' ) =~ /\A(?:substr|sprintf|join|keys|values|sort|reverse)\z/;
                 # push and unshift copy every operand after the array.
                 next if $op eq 'Call'
                     && ( ( $c->{fields} // {} )->{name} // '' ) =~ /\A(?:push|unshift)\z/
@@ -1688,8 +1900,10 @@ class SoN::Deparse 0.01 {
         my %stale_join;
 
         my @stale_reads;
+        # A CLASS FIELD'S READ is versioned the same way, and goes stale on
+        # an Assign into the same field or a call.
         for my $n ( sort { $a->{id} <=> $b->{id} } $self->_nodes_in_order ) {
-            next unless ( $n->{op} // '' ) eq 'EntryDef';
+            next unless ( $n->{op} // '' ) =~ /\A(?:EntryDef|FieldAccess)\z/;
             next if exists $bound{ $n->{id} };
             next if $under_loop{ $n->{id} };
             my @in = ( $n->{inputs} // [] )->@*;
@@ -1702,7 +1916,7 @@ class SoN::Deparse 0.01 {
                      || ( $self->_is_barrier_call( $in[0] )
                           && !$in_eval_body->( $in[0] ) ) );
             my $f = $n->{fields} // {};
-            next unless defined $f->{symbol};
+            next unless defined $f->{symbol} || defined $f->{field_index};
 
             # Walk forward from the read's version looking for a store to this
             # same name. Anything else on the chain cannot change what this
@@ -2006,6 +2220,13 @@ class SoN::Deparse 0.01 {
             my $is_cell = ( $n->{op} // '' ) eq 'CellRead';
             next unless $is_cell || ( $n->{op} // '' ) eq 'PadAccess';
             next if exists $bound{ $n->{id} };
+            # A READ UNDER A LOOP is bound at the top of its pass, or not at
+            # all -- see _bind_at_pass_top, which asks its own consumers.
+            if ( $under_loop{ $n->{id} } ) {
+                $self->_bind_at_pass_top($n, $is_cell, \%arm_next)
+                    unless $read_before_loop{ $n->{id} };
+                next if !$read_before_loop{ $n->{id} };
+            }
             next unless $is_cell || $safe_read->( $n->{id} );
             # A LOCATION ONLY IS NOT A READ: a PadAccess whose every use is a
             # store target or a referent needs no stale temporary -- binding it
@@ -2023,7 +2244,6 @@ class SoN::Deparse 0.01 {
                    || ( ( $c->{op} // '' ) =~ /\A(?:RegexSubst|Transliterate)\z/
                         && @ci && $ci[0] == $n->{id} ) )
             } ( $consumers{ $n->{id} } // [] )->@*;
-            next if $under_loop{ $n->{id} } && !$read_before_loop{ $n->{id} };
             my @in = ( $n->{inputs} // [] )->@*;
             shift @in if $is_cell;
             # A READ AFTER A CALL takes the call as its version: the callee may
@@ -2032,11 +2252,19 @@ class SoN::Deparse 0.01 {
             # So does a read after a pinned s/// or tr///, the store it sees:
             # `$s =~ s/a/z/; my $t = $s; $s =~ tr/z/q/` spelled $t after the tr.
             next unless @in == 1 && ( $self->_is_memory( $in[0] )
+                || ( ( $nodes->{ $in[0] } // {} )->{op} // '' ) eq 'MakeCell'
                 || ( ( ( $nodes->{ $in[0] } // {} )->{op} // '' )
                          =~ /\A(?:Call|RegexSubst|Transliterate)\z/
                      && defined $nodes->{ $in[0] }{control_in} ) );
             my $version = $nodes->{ $in[0] };
             next unless $version;
+            # A CELL'S ALLOCATION IS A VERSION WITH NO PLACE: the read is at
+            # the store the MakeCell follows (`my %h = (a => 1); my $c = sub
+            # {...}; keys %h` read after the closure's later store).
+            $version = $nodes->{ ( $version->{inputs} // [] )->[-1] // -1 } // $version
+                while ( $version->{op} // '' ) eq 'MakeCell'
+                    && !defined $version->{control_in}
+                    && @{ $version->{inputs} // [] } > 1;
             # A SHARED LEXICAL READ AT THE ENTRY VERSION -- a file lexical a
             # named sub reads before storing it -- has no effect to follow, so
             # it is bound in the save prologue, as an element read is. Measured
@@ -2049,7 +2277,7 @@ class SoN::Deparse 0.01 {
             next unless $at_entry || defined $version->{control_in};
 
             my ( @queue, %seen, $shadowed )
-                = ( $at_entry ? $start->{id} : $in[0] );
+                = ( $at_entry ? $start->{id} : $version->{id} );
             while ( @queue && !$shadowed ) {
                 my $id = shift @queue;
                 next if $seen{$id}++;
@@ -2058,13 +2286,17 @@ class SoN::Deparse 0.01 {
                     # pinned to the chain: `my $t = $s; $s =~ s/1/X/` spelled
                     # $t as `$s` after it and printed the rewritten string.
                     $shadowed = 1 if ( $c->{op} // '' )
-                        =~ /\A(?:Assign|EntryWrite|CellWrite|Delete|Call|RegexSubst|Transliterate)\z/;
+                        =~ /\A(?:Assign|EntryWrite|CellWrite|Delete|ElemRestore|Call|RegexSubst|Transliterate)\z/;
                     push @queue, $c->{id};
                 }
             }
             next unless $shadowed;
 
-            $bound{ $n->{id} } = sprintf( '$stale%d', $n->{id} );
+            # AN AGGREGATE'S READ IS HELD IN AN AGGREGATE: `$stale = @p` kept
+            # its count, and the join after it printed `2` for `5 1 2`.
+            my $sg = ( ( $n->{fields} // {} )->{sigil} // '$' ) =~ /\A[\@%]\z/
+                ? $n->{fields}{sigil} : '$';
+            $bound{ $n->{id} } = sprintf( '%sstale%d', $sg, $n->{id} );
             if ( $at_entry ) {
                 # READ OUT FIRST, as for an element read: _expr_uncached
                 # unbinds the node while it spells it.
@@ -2088,8 +2320,8 @@ class SoN::Deparse 0.01 {
         # perl's sum is 14; the back edge spelled `$phi + ($a[$i] * 2)` after
         # `$a[$i] = ($a[$i] * 2)` and summed 28. A read the store alone
         # consumes (`$a[$i] = $a[$i] + 1`) is spelled before it and is fine.
-        # ponytail: refusal, not a binding; a per-iteration temporary at the
-        # top of the body is the fix once the condition reads are excluded.
+        # Where it can, such a read is bound to a per-iteration temporary at
+        # the top of the body instead (see $top below); the rest refuse.
         for my $loop ( grep { ( $_->{op} // '' ) eq 'Loop' } $self->_nodes_in_order ) {
             my ($body) = grep {
                 ( $_->{op} // '' ) eq 'Proj'
@@ -2125,6 +2357,10 @@ class SoN::Deparse 0.01 {
                         push @t, $x unless $x->{id} == $read;
                         next;
                     }
+                    # A DEREFERENCE hands the call the array's elements, not
+                    # the slot holding the reference: `sort { } @{ $r->{f} }`
+                    # writes no `$r->{f}` (chalk's LLVM::_emit_class_registry_ir).
+                    next if ( $x->{op} // '' ) eq 'PostfixDeref';
                     push @q, ( $x->{inputs} // [] )->@*;
                 }
                 return @t;
@@ -2137,6 +2373,19 @@ class SoN::Deparse 0.01 {
                 next if defined $n->{control_in} || exists $bound{ $n->{id} };
                 my @in = ( $n->{inputs} // [] )->@*;
                 next unless @in > ( $MEM_MIN_INPUTS{Subscript} // 99 );
+                # A FOREACH ALIAS'S READ BY INDEX -- the arm a hole takes, an
+                # `exists` over the same element choosing it -- is perl's alias
+                # read where it is used: `$h{ k($x) } = $x` reads the right side
+                # after k() changed the element (`1!=1!`), as the emission does
+                # (chalk's LLVM::Context::_collect_positional_arg_reads).
+                my @uses = ( $consumers{ $n->{id} } // [] )->@*;
+                next if @uses && !grep {
+                    my $e = $nodes->{ ( $_->{inputs} // [] )->[0] // -1 } // {};
+                    !( ( $_->{op} // '' ) eq 'TernaryExpr'
+                       && ( $e->{op} // '' ) eq 'Exists'
+                       && ( $e->{inputs}[0] // -1 ) == $in[0]
+                       && ( $e->{inputs}[1] // -1 ) == $in[1] )
+                } @uses;
                 my $v = $nodes->{ $in[-1] } or next;
                 # A VERSION MADE IN THIS ITERATION -- a store on the body's
                 # chain, or the Phi of a join in it -- is read where it is
@@ -2227,10 +2476,14 @@ class SoN::Deparse 0.01 {
                             $carried = 1 if ( ( $c->{fields} // {} )->{region} // -1 )
                                 == $loop->{id};
                         }
+                        # A `local` element's restore spells none of its
+                        # inputs: the saved value is perl's to put back.
+                        elsif ( ( $c->{op} // '' ) eq 'ElemRestore' ) { next }
                         elsif ( defined $c->{control_in} ) { push @roots, $c->{id} }
                         else                               { push @vq, $c->{id} }
                     }
                 }
+                my $late;
                 for my $s ( @same ) {
                     my ( @aq, %after ) = ( map { $_->{id} } ( $ctrl_next{ $s->{id} } // [] )->@* );
                     while ( @aq ) {
@@ -2238,10 +2491,98 @@ class SoN::Deparse 0.01 {
                         next if $after{$id}++;
                         push @aq, map { $_->{id} } ( $ctrl_next{$id} // [] )->@*;
                     }
-                    die "GAP: an element read in a loop is spelled after a store"
-                      . " to its aggregate in the same iteration\n"
-                        if $carried || grep { $after{$_} } @roots;
+                    $late ||= $carried || grep { $after{$_} } @roots;
                 }
+                next unless $late;
+                # SO IT IS READ AT THE TOP OF THE BODY, into a per-iteration
+                # temporary, when it reads the iteration's starting version
+                # off a plain aggregate by operands that exist there: hoisted
+                # out of a guard, a dereference could die, and an operand
+                # made in the body is not made yet. NOR WHEN THE LOOP'S TEST
+                # READS IT TOO: that runs before the body, and read the
+                # temporary of the pass before (`while ($a[0] < 3)` ran once
+                # more).
+                # NOR WHEN IT IS AN ALIAS'S VALUE, written back to the
+                # aggregate, beside another store into it: perl's alias sees
+                # that store, the carried value does not (`$x .= "y"; $a[0] =
+                # "q"; $s .= $x` gave 1y for q). Any store: one through a
+                # reference is the same aggregate too. AN ALIAS IS ALSO THE
+                # READ A FOREACH MAKES of the array it counts, by its counter:
+                # a `substr($a[0], ...)` before `$s .= $x` is perl's to see.
+                my $writeback = sub ($s) { ( $s->{op} // '' ) eq 'Assign'
+                    && $vseen{ ( $s->{inputs} // [] )->[1] // -1 } };
+                my $alias = ( grep { $writeback->($_) } @same )
+                    || ( ( ( $nodes->{ $in[1] // -1 } // {} )->{op} // '' ) eq 'Phi'
+                         && ( $nodes->{ $in[1] }{fields}{region} // -1 ) == $loop->{id}
+                         && grep { ( $_->{op} // '' ) eq 'Count'
+                                   && ( $_->{inputs}[0] // -1 ) == $in[0] }
+                            map { $nodes->{$_} // {} }
+                            map { ( $_->{inputs} // [] )->@* }
+                            grep { ( $_->{control_in} // -1 ) == $loop->{id} }
+                            $self->_nodes_in_order );
+                # AND ONLY OVER A PLAIN AGGREGATE, through its merges: one
+                # tied, refaliased or referenced reads elsewhere than its
+                # elements say (`\$h{b} = \$h{a}` arrives as a whole-hash
+                # store).
+                my $plain = do {
+                    my ( @pq, %ps, $ok ) = ( $in[0] );
+                    $ok = 1;
+                    while ( $ok && defined( my $id = shift @pq ) ) {
+                        next if $ps{$id}++;
+                        my $p = $nodes->{$id} // {};
+                        $ok = 0, last if ( $p->{fields} // {} )->{shared};
+                        push @pq, ( $p->{inputs} // [] )->@* if ( $p->{op} // '' ) eq 'Phi';
+                        for my $c ( ( $consumers{$id} // [] )->@* ) {
+                            my $cop = $c->{op} // '';
+                            if ( $cop eq 'Phi' ) { push @pq, $c->{id}; next }
+                            next if $cop =~ /\A(?:Count|ListAppend)\z/;
+                            $ok = 0, last unless $cop eq 'Subscript'
+                                && ( $c->{inputs}[0] // -1 ) == $id
+                                && !grep { ( $_->{op} // '' ) eq 'Ref' }
+                                       ( $consumers{ $c->{id} } // [] )->@*;
+                        }
+                    }
+                    $ok;
+                };
+                # A VERSION MADE IN THIS ITERATION anchors it instead: right
+                # after that store (or join), where an operand made before it
+                # exists too.
+                my %past;
+                if ( defined $from ) {
+                    my ( @fq, %fs ) = ( $from );
+                    while ( defined( my $id = shift @fq ) ) {
+                        next if $fs{$id}++;
+                        push @fq, map { $_->{id} } ( $ctrl_next{$id} // [] )->@*;
+                    }
+                    %past = map { $_ => 1 } grep { !$fs{$_} } keys %seen;
+                    $past{$from} = 1;
+                }
+                my $top = !( grep { !$seen{$_} } @roots )
+                    && !( $alias && grep { !$writeback->($_) } @stores )
+                    && $plain && ( ( $nodes->{ $in[0] } // {} )->{op} // '' )
+                        =~ /\A(?:PadAccess|ArrayLiteral|HashLiteral|Phi)\z/
+                    && !grep {
+                        my ( @oq, %os, $made ) = ( $_ );
+                        while ( defined( my $id = shift @oq ) ) {
+                            next if $os{$id}++;
+                            my $o = $nodes->{$id} // {};
+                            $made = 1, last if defined $o->{control_in} && $seen{$id}
+                                && !$past{$id};
+                            push @oq, ( $o->{inputs} // [] )->@*
+                                unless defined $o->{control_in}
+                                    || ( $o->{op} // '' ) eq 'Phi';
+                        }
+                        $made
+                    } @in[ 0 .. $#in - 1 ];
+                die "GAP: an element read in a loop is spelled after a store"
+                  . " to its aggregate in the same iteration\n" unless $top;
+                $bound{ $n->{id} } = sprintf( '$stale%d', $n->{id} );
+                $hoisted{ $bound{ $n->{id} } } //= $bound{ $n->{id} };
+                if ( defined $from
+                     && ( ( $nodes->{$from} // {} )->{op} // '' ) eq 'Region' ) {
+                    push $after_region{$from}->@*, $n;
+                }
+                else { push $after_effect{ $from // $body->{id} }->@*, $n }
             }
         }
 
@@ -2265,20 +2606,32 @@ class SoN::Deparse 0.01 {
         my %stale_at_join;   # restored for the re-walk: the first walk deletes what it flushes
         for my $n ( sort { $a->{id} <=> $b->{id} } $self->_nodes_in_order ) {
             my $rop = $n->{op} // '';
-            next unless $rop eq 'Subscript' || $rop eq 'Count';
+            # SO DOES A KEYS OR VALUES OF A NAMED AGGREGATE, a list: `my $s =
+            # join ",", sort keys %h; add(\%h)` spelled the keys after the
+            # call wrote through its reference (a dereference is the list
+            # pass's, below).
+            my $list_call = $rop eq 'Call'
+                && ( $n->{fields} // {} )->{memory_input}
+                && ( ( $n->{fields} // {} )->{name} // '' ) =~ /\A(?:keys|values)\z/
+                && ( ( ( $nodes->{ ( $n->{inputs} // [] )->[0] // -1 } // {} )->{op} // '' )
+                     =~ /\A(?:Array|Hash)Literal\z/ );
+            next unless $rop eq 'Subscript' || $rop eq 'Count' || $list_call;
             # A COUNT OVER A DEREFERENCE is the list-read pass's, below: it
             # binds the list, and the count reads that.
             next if $rop eq 'Count'
                 && ( ( $nodes->{ ( $n->{inputs} // [] )->[0] // -1 } // {} )->{op} // '' )
                     eq 'PostfixDeref';
             next if exists $bound{ $n->{id} };
+            # A READ NOTHING CONSUMES is dead: bound, its temporary was spelled
+            # where its aggregate does not exist.
+            next unless ( $consumers{ $n->{id} } // [] )->@*;
             next unless $safe_read->( $n->{id} );
             # MEMORY BY POSITION, as %MEM_MIN_INPUTS says: a call that is a
             # memory barrier produces a version without consuming one, so
             # _is_memory does not recognise it, and a read after it is
             # exactly the read that goes stale.
             my @in = ( $n->{inputs} // [] )->@*;
-            next unless @in > ( $MEM_MIN_INPUTS{$rop} // 99 );
+            next unless $list_call || @in > ( $MEM_MIN_INPUTS{$rop} // 99 );
             my $version = $nodes->{ $in[-1] } or next;
 
             # A JOIN'S MEMORY Phi IS NOT THE ENTRY VERSION. It has no
@@ -2374,7 +2727,7 @@ class SoN::Deparse 0.01 {
                     # orders it against: `undef *v` carries none, and bound
                     # before it `scalar(@v)` counted the array it cleared.
                     $shadowed = 1 if ( $c->{op} // '' )
-                        =~ /\A(?:Assign|EntryWrite|CellWrite|Delete|Call)\z/
+                        =~ /\A(?:Assign|EntryWrite|CellWrite|Delete|ElemRestore|Call)\z/
                         && !( $rop eq 'Count' && ( $c->{op} // '' ) eq 'Call'
                                && !( $c->{fields} // {} )->{memory_input} );
                     push @queue, $c->{id};
@@ -2382,7 +2735,11 @@ class SoN::Deparse 0.01 {
             }
             next unless $shadowed;
 
-            $bound{ $n->{id} } = sprintf( '$stale%d', $n->{id} );
+            # AN AGGREGATE'S READ IS HELD IN AN AGGREGATE: `$stale = @p` kept
+            # its count, and the join after it printed `2` for `5 1 2`.
+            my $sg = ( ( $n->{fields} // {} )->{sigil} // '$' ) =~ /\A[\@%]\z/
+                ? $n->{fields}{sigil} : $list_call ? '@' : '$';
+            $bound{ $n->{id} } = sprintf( '%sstale%d', $sg, $n->{id} );
             if ( $at_entry ) {
                 # READ OUT FIRST: _expr_uncached unbinds the node while it
                 # spells it, and sprintf would see the alias change.
@@ -2452,13 +2809,17 @@ class SoN::Deparse 0.01 {
                 next if $seen{$id}++;
                 for my $c ( ( $ctrl_next{$id} // [] )->@* ) {
                     $shadowed = 1 if ( $c->{op} // '' )
-                        =~ /\A(?:Assign|EntryWrite|CellWrite|Delete|Call)\z/;
+                        =~ /\A(?:Assign|EntryWrite|CellWrite|Delete|ElemRestore|Call)\z/;
                     push @queue, $c->{id};
                 }
             }
             next unless $shadowed;
 
-            $bound{ $n->{id} } = sprintf( '$stale%d', $n->{id} );
+            # AN AGGREGATE'S READ IS HELD IN AN AGGREGATE: `$stale = @p` kept
+            # its count, and the join after it printed `2` for `5 1 2`.
+            my $sg = ( ( $n->{fields} // {} )->{sigil} // '$' ) =~ /\A[\@%]\z/
+                ? $n->{fields}{sigil} : '$';
+            $bound{ $n->{id} } = sprintf( '%sstale%d', $sg, $n->{id} );
             $hoisted{ $bound{ $n->{id} } } //= $bound{ $n->{id} };
             push $after_effect{ $version->{id} }->@*, $n;
         }
@@ -2474,15 +2835,22 @@ class SoN::Deparse 0.01 {
         # stored value. Anything else -- a loop or map aliasing the elements,
         # a callee aliasing @_ -- keeps the live spelling. A mutator's
         # container is the aggregate itself and is spelled live (_call_expr).
+        # A HASH READ THROUGH ONE TOO, by `keys` -- a copy of the keys: `my
+        # $k = join ",", sort keys %$h; $h->{b} = 2` spelled the keys after
+        # the store (`a,b` for perl's `a`). Not `values`, whose results a
+        # loop may alias.
         my %copies = map { $_ => 1 } qw(sort reverse join);
         for my $n ( sort { $a->{id} <=> $b->{id} } $self->_nodes_in_order ) {
             next unless ( $n->{op} // '' ) eq 'PostfixDeref';
-            next unless ( ( $n->{fields} // {} )->{sigil} // '' ) eq '@';
+            my $dsig = ( ( $n->{fields} // {} )->{sigil} // '' );
+            next unless $dsig eq '@' || $dsig eq '%';
+            local $copies{keys} = 1 if $dsig eq '%';
+            local @copies{qw(sort reverse join)} = () if $dsig eq '%';
             next if exists $bound{ $n->{id} };
             next if $under_loop{ $n->{id} };
             my @in = ( $n->{inputs} // [] )->@*;
             next unless @in == 2;
-            my ( $readers, $other ) = ( 0, 0 );
+            my ( $readers, $other, @arm_lists ) = ( 0, 0 );
             for my $c ( ( $consumers{ $n->{id} } // [] )->@* ) {
                 my $op = $c->{op} // '';
                 my $cf = $c->{fields} // {};
@@ -2490,6 +2858,16 @@ class SoN::Deparse 0.01 {
                 if ( $op eq 'Call' && $cf->{memory_input}
                      && ( $cf->{name} // '' ) =~ /\A(?:push|unshift|splice|pop|shift)\z/
                      && "@at" eq '0' ) {
+                    next;
+                }
+                # A TERNARY'S ARM LIST is no copy: handed to a call or a loop,
+                # it is spelled in place and aliased (`g($c ? @$x : ())`; a
+                # snapshot lost the callee's `$_[0] = 9`). It is read where
+                # the ternary is, so it keeps the live dereference (below).
+                if ( $op eq 'ArrayLiteral'
+                     && grep { ( $_->{op} // '' ) eq 'TernaryExpr' }
+                             ( $consumers{ $c->{id} } // [] )->@* ) {
+                    push @arm_lists, $c;
                     next;
                 }
                 if ( ( $op eq 'Call' && ( $cf->{dispatch_kind} // '' ) eq 'builtin'
@@ -2523,6 +2901,18 @@ class SoN::Deparse 0.01 {
                     my $r = $nodes->{ ( $ref->{fields} // {} )->{region} // -1 } // {};
                     next unless ( $r->{op} // '' ) eq 'Region';
                     ( $join, $at_entry ) = ( $r, 0 );
+                }
+                # A PAD VARIABLE A LIST ASSIGNMENT BINDS (`my ($x) = @_`) has
+                # its value from the one Assign into it: read after it on the
+                # chain, or -- floating, so spelled in the prologue ahead of
+                # the save prologue -- at entry, as a parameter is.
+                elsif ( $rop eq 'PadAccess' ) {
+                    my @def = grep { ( $_->{op} // '' ) eq 'Assign'
+                                     && ( $_->{inputs}[0] // -1 ) == $ref->{id} }
+                              ( $consumers{ $ref->{id} } // [] )->@*;
+                    next unless @def == 1;
+                    ( $version, $at_entry ) = ( $def[0], 0 )
+                        if defined $def[0]{control_in};
                 }
                 elsif ( $rop ne 'Parameter' ) {
                     next;
@@ -2592,13 +2982,18 @@ class SoN::Deparse 0.01 {
                 next if $seen{$id}++;
                 for my $c ( ( $ctrl_next{$id} // [] )->@* ) {
                     $shadowed = 1 if ( $c->{op} // '' )
-                        =~ /\A(?:Assign|EntryWrite|CellWrite|Delete|Call)\z/;
+                        =~ /\A(?:Assign|EntryWrite|CellWrite|Delete|ElemRestore|Call)\z/;
                     push @queue, $c->{id};
                 }
             }
             next unless $shadowed;
 
-            $bound{ $n->{id} } = sprintf( '@stale%d', $n->{id} );
+            for my $l ( grep { !exists $bound{ $_->{id} } } @arm_lists ) {
+                $bound{ $l->{id} } = sprintf( '(%s)', join ', ', map {
+                    $_ == $n->{id} ? $self->_expr_uncached($_) : $self->_expr($_)
+                } ( $l->{inputs} // [] )->@* );
+            }
+            $bound{ $n->{id} } = sprintf( '%sstale%d', $dsig, $n->{id} );
             if ( $at_entry ) {
                 my $var = $bound{ $n->{id} };
                 $save_prologue .= sprintf( "my %s = %s;\n",
@@ -2676,8 +3071,11 @@ class SoN::Deparse 0.01 {
                 push $after_effect{ $anchor->{id} }->@*, $n;
             }
             else {
+                # COPIED FIRST: spelling a field read unbinds it for the
+                # while, and an argument aliases the hash element.
+                my $var = $bound{ $n->{id} };
                 $save_prologue .= sprintf( "my %s = %s;\n",
-                    $bound{ $n->{id} }, $self->_slot_name($n) );
+                    $var, $self->_slot_name($n) );
             }
         }
 
@@ -2749,6 +3147,14 @@ class SoN::Deparse 0.01 {
             # The literal must follow EVERY binding it reads, so the latest one
             # is the only safe anchor.
             my $defer = $self->_last_bound_input($n);
+            # UNLESS A LOOP OR BRANCH IT HOLDS SETTLES LATER: `@in[grep {...}
+            # 0 .. $#in]` in an elsif reads the grep's Phi, and placed after
+            # the bound `inputs()` call the slice named it above its loop
+            # (chalk's IR::Analysis::_element_repr, `@phi102` undeclared).
+            if (defined $defer && defined(my $lj = $self->_loop_phi_join($n))) {
+                undef $defer unless grep { $_ == $defer }
+                    $self->_control_reachable($lj, \%next_of);
+            }
             if (defined $defer) {
                 # AHEAD OF THE READS ALREADY ANCHORED HERE, after any other
                 # declaration: a stale element read placed at the same effect
@@ -2981,6 +3387,11 @@ class SoN::Deparse 0.01 {
     # the chain ends or reaches $stop (the Region that joins branch arms).
     method _emit_from ($id, $next_of, $stop) {
         my $out = '';
+        # A BINDING ANCHORED TO THE Proj THE WALK STARTS FROM -- a loop body's
+        # per-iteration read -- comes first: no walk emits the Proj itself.
+        $out .= $self->_emit_statement($_, $next_of)
+            for ( ( ( $nodes->{$id} // {} )->{op} // '' ) eq 'Proj'
+                  ? ( $after_effect{$id} // [] )->@* : () );
         my $cur = $id;
         while (defined $cur) {
             my $succ = $next_of->{$cur} // [];
@@ -2989,6 +3400,16 @@ class SoN::Deparse 0.01 {
               . " successors is not yet rendered\n" if $succ->@* > 1;
             my $n = $succ->[0];
             last if defined $stop && $n->{id} == $stop;
+            # THE BODY WALK REACHING ITS LOOP'S EXIT IS A BREAK. An If whose
+            # arms both leave meets at a region that only feeds the exit, and
+            # taken for its join the walk ran on through the exit -- the code
+            # after the loop spelled inside the body, an arm's `next` falling
+            # into it (chalk's Earley::_run_parse error recovery).
+            if (@loop_frames && defined $loop_exit_region
+                    && $n->{id} == $loop_exit_region) {
+                $out .= $self->_pay_owed(\%break_assign, $cur) . "last;\n";
+                last;
+            }
 
             # CLAIMED AT THE ENTRY, NOT AT THE JOIN. A block eval's body is
             # ordinary chain between the two, so by the time the walk ARRIVES
@@ -3232,6 +3653,12 @@ class SoN::Deparse 0.01 {
                 my $join = $self->_loop_join($n->{id});
                 $out .= $self->_emit_statement($_, $next_of)
                     for (delete($after_region{ $join // -1 }) // [])->@*;
+                # SO DOES ONE PINNED TO THE EXIT the walk resumes from, which
+                # it steps over too: a `while (1)` left only by a `last` has
+                # no join of its own Projs, and a read after it, at the
+                # exit's memory merge, was bound there and never assigned.
+                $out .= $self->_emit_statement($_, $next_of)
+                    for (delete($after_region{ $after // -1 }) // [])->@*;
                 last unless defined $after;
                 last if defined $stop && $after == $stop;
                 $cur = $after;
@@ -3473,7 +3900,10 @@ class SoN::Deparse 0.01 {
         # assigning it: `while ($eff15)`, a loop that never ran. It is the
         # per-iteration effect above with no separate test: assign it at the
         # top of each pass and test the variable.
-        elsif (defined $bound{ $cond[0]{id} }) {
+        # NOT A JOIN: a Phi's binding is the variable its diamond assigns at
+        # the top of each pass (@pre_ctl), and a second walk of the body
+        # found it bound by the first -- spelled as an effect, it refused.
+        elsif (defined $bound{ $cond[0]{id} } && ($cond[0]{op} // '') ne 'Phi') {
             @pre_cond = @cond;
         }
 
@@ -3662,7 +4092,8 @@ class SoN::Deparse 0.01 {
                     && (($_->{fields}{region} // -1) == $r->{id})
                     && !$self->_is_memory($_->{id}) } $self->_nodes_in_order;
             for my $ph (@lphis) {
-                my $var = sprintf('$latch%d', $ph->{id});
+                # AN ARRAY'S LATCH IS AN ARRAY: `$latchN = @phi` took a count.
+                my $var = $self->_phi_var($ph) =~ s/phi/latch/r;
                 $init .= "my $var;\n";
                 $bound{ $ph->{id} } = $var;
             }
@@ -3685,6 +4116,12 @@ class SoN::Deparse 0.01 {
             $pre_ctl .= $t;
         }
         my $body = $self->_emit_from($arm{0}{id}, $next_of, undef);
+        # A READ AT THE TOP OF THE PASS that a later store in it shadows is
+        # read first, each pass (see _bind_at_pass_top).
+        $body = join('', map {
+            my $var = $bound{ $_->{id} };
+            sprintf("%s = %s;\n", $var, $self->_expr_uncached($_->{id}))
+        } ( $loop_top_bind{ $n->{id} } // [] )->@*) . $body;
         pop @loop_frames;
         $loop_exit_region = $save_exit;
         # An inner loop resets the break payments for its own body; the
@@ -3705,6 +4142,25 @@ class SoN::Deparse 0.01 {
         # effect must run before each test, including the first, so it cannot
         # sit in a `while (COND)` header -- and a bottom-tested loop would run
         # the body once before testing, a different program.
+        # AN EFFECT CHAINED ON A CONDITION EFFECT runs with it, each pass: the
+        # store of `while (my $n = shift @w)` into a demoted $n hangs off the
+        # shift, not the Loop, and the body read a $n nothing assigned.
+        my @chained;
+        {
+            my %on = map { $_->{id} => 1 } @pre_cond;
+            my %skip = map { $_->{id} => 1 } @cond, @pre_cond;
+            my $grew = 1;
+            while ($grew) {
+                $grew = 0;
+                for my $c ($self->_nodes_in_order) {
+                    next if $skip{ $c->{id} } || !defined $c->{control_in}
+                        || !$on{ $c->{control_in} }
+                        || ($c->{op} // '') =~ /\A(?:Proj|If|Region|Loop|Phi)\z/;
+                    push @chained, $c;
+                    $on{ $c->{id} } = $skip{ $c->{id} } = $grew = 1;
+                }
+            }
+        }
         my $text;
         if (@pre_cond || @pre_ctl) {
             my $pre = $pre_ctl;
@@ -3712,13 +4168,14 @@ class SoN::Deparse 0.01 {
                 my $var = $bound{ $e->{id} };
                 $pre .= defined $var
                     ? sprintf("my %s = %s;\n", $var,
-                              $self->_expr_uncached($e->{id}))
-                    : sprintf("%s;\n", $self->_expr_uncached($e->{id}));
+                              $self->_pass_top_free($n->{id}, sub { $self->_expr_uncached($e->{id}) }))
+                    : sprintf("%s;\n", $self->_pass_top_free($n->{id}, sub { $self->_expr_uncached($e->{id}) }));
             }
+            $pre .= $self->_emit_statement($_, $next_of) for @chained;
             # The effect sits at the top, so a `next` still reaches it after
             # the continue block; only the step moves.
             my $top = $pre . sprintf("last unless %s;\n",
-                                     $self->_expr($cond[0]{id}));
+                                     $self->_pass_top_free($n->{id}, sub { $self->_expr($cond[0]{id}) }));
             $text = $frame->{nexted}
                 ? $init . $label . sprintf("while (1) {\n%s} continue {\n%s}\n",
                     _indent($top . $body), _indent($step))
@@ -3726,14 +4183,23 @@ class SoN::Deparse 0.01 {
                     _indent($top . $body . $step));
         }
         else {
+            # A TEST THAT READS A VALUE THE BODY BINDS reads it before its
+            # `my`: a condition reading an element the body then stores was
+            # bound at the top of the body, after the test (`while
+            # ((!(!$eff23)))` over `my $eff23 = $h{"n"}` inside).
+            my $test = $self->_pass_top_free($n->{id}, sub { $self->_expr($cond[0]{id}) });
+            for my $v ($test =~ /(\$(?:eff|stale)\d+)\b/g) {
+                die "GAP: a loop condition reads a value its body binds, ahead"
+                  . " of the binding\n" if $body =~ /^\s*my \Q$v\E\b/m;
+            }
             # A `next LABEL` INTO THIS LOOP SKIPS THE REST OF ITS BODY, and
             # the step is not the rest of the body: it is what perl's own
             # latch runs, so it goes where a `next` still reaches it.
             $text = $frame->{nexted}
                 ? $init . $label . sprintf("while (%s) {\n%s} continue {\n%s}\n",
-                    $self->_expr($cond[0]{id}), _indent($body), _indent($step))
+                    $self->_pass_top_free($n->{id}, sub { $self->_expr($cond[0]{id}) }), _indent($body), _indent($step))
                 : $init . $label . sprintf("while (%s) {\n%s}\n",
-                    $self->_expr($cond[0]{id}), _indent($body . $step));
+                    $self->_pass_top_free($n->{id}, sub { $self->_expr($cond[0]{id}) }), _indent($body . $step));
         }
 
         for my $id (sort { $a <=> $b } keys %save_inv) {
@@ -3752,6 +4218,101 @@ class SoN::Deparse 0.01 {
         $after = $exit_region->{id} if $exit_region;
 
         return ($text, $after);
+    }
+
+    # _bind_at_pass_top($n, $is_cell, \%arm_next) -- bind read $n to a
+    # temporary assigned at the top of each pass of the loop whose header
+    # memory it reads, when a store later in the pass shadows it.
+    #
+    # A READ UNDER A LOOP IS LEFT UNBOUND by the stale pass, because one
+    # temporary assigned before the loop froze a re-read condition. A read in
+    # the BODY, at the version the pass starts from, is the value before any
+    # store of the pass -- and spelled where it is used, after `$pos++`, it
+    # read the next one (`=1;` for `x=1;`). Bound at the top of the pass it is
+    # read once each pass, where its version is. The condition's own reads are
+    # not bound here: the condition runs before the body's top.
+    method _bind_at_pass_top ($n, $is_cell, $arm_next) {
+        my @in = ( $n->{inputs} // [] )->@*;
+        shift @in if $is_cell;
+        return unless @in == 1;
+        my $v = $nodes->{ $in[0] } or return;
+        return unless ( $v->{op} // '' ) eq 'Phi' && ( $v->{fields} // {} )->{memory};
+        my $loop = $nodes->{ $v->{fields}{region} // -1 } or return;
+        return unless ( $loop->{op} // '' ) eq 'Loop';
+        # NOT A READ THE CONDITION MAKES: the nodes pinned on the Loop and
+        # every value they read.
+        my ( @q, %cond ) = map { $_->{id} } grep {
+            ( $_->{control_in} // -1 ) == $loop->{id} && ( $_->{op} // '' ) ne 'Proj'
+        } $self->_nodes_in_order;
+        while ( defined( my $id = shift @q ) ) {
+            next if $cond{$id}++;
+            push @q, ( ( $nodes->{$id} // {} )->{inputs} // [] )->@*;
+        }
+        # A CONSUMER THAT ALIASES the variable needs it by name, and a value
+        # use may take the binding: a user call's argument is spelled by name
+        # (see _call_expr), a store's target is a location. A reference, an
+        # anonymous list (a foreach's or a call's), an s/// or tr///, a /g
+        # match all alias, and are not spelled by name: no binding.
+        for my $c ( $self->_consumers_of( $n->{id} ) ) {
+            my $op = $c->{op} // '';
+            return if $op =~ /\A(?:Ref|RegexSubst|Transliterate)\z/;
+            return if $op =~ /\A(?:Array|Hash)Literal\z/
+                && !defined( ( $c->{fields} // {} )->{symbol} );
+            return if $op eq 'RegexMatch'
+                && ( ( $c->{fields} // {} )->{flags} // '' ) =~ /g/;
+        }
+        # SOME USE IN THE BODY, beyond the condition's own -- and beyond a
+        # store's target, which is the location, not a read.
+        return unless grep { !$cond{ $_->{id} }
+                             && !( ( $_->{op} // '' ) eq 'Assign'
+                                   && ( $_->{inputs}[0] // -1 ) == $n->{id} ) }
+                           $self->_consumers_of( $n->{id} );
+        my ($body) = grep {
+            ( $_->{op} // '' ) eq 'Proj' && ( ( $_->{fields} // {} )->{index} // -1 ) == 0
+                && ( ( $_->{inputs} // [] )->[0] // -1 ) == $loop->{id}
+        } $self->_nodes_in_order;
+        return unless $body;
+        # SHADOWED: a store on the pass's own control after the top.
+        my ( @queue, %seen, $shadowed ) = ( $body->{id} );
+        while ( @queue && !$shadowed ) {
+            my $id = shift @queue;
+            next if $seen{$id}++;
+            for my $c ( ( $arm_next->{$id} // [] )->@* ) {
+                next if ( $c->{op} // '' ) eq 'Loop';
+                $shadowed = 1 if ( $c->{op} // '' )
+                    =~ /\A(?:Assign|EntryWrite|CellWrite|Delete|ElemRestore|Call|RegexSubst|Transliterate)\z/;
+                push @queue, $c->{id};
+            }
+        }
+        return unless $shadowed;
+        my $sg = ( ( $n->{fields} // {} )->{sigil} // '$' ) =~ /\A[\@%]\z/
+            ? $n->{fields}{sigil} : '$';
+        $bound{ $n->{id} } = sprintf( '%sstale%d', $sg, $n->{id} );
+        $hoisted{ $bound{ $n->{id} } } //= $bound{ $n->{id} };
+        push $loop_top_bind{ $loop->{id} }->@*, $n;
+        $pass_top_node{ $n->{id} } = 1;
+        return;
+    }
+
+    # _pass_top_free($loop_id, $code) -> what $code renders with this loop's
+    # pass-top bindings lifted: the condition runs before the body's top, and
+    # re-reads the variable each pass. Rendered fresh, and not cached for the
+    # body after.
+    method _pass_top_free ($loop_id, $code) {
+        my @ids = map { $_->{id} } ( $loop_top_bind{$loop_id} // [] )->@*;
+        return $code->() unless @ids;
+        delete local @bound{@ids};
+        my %save = %rendered;
+        %rendered = ();
+        my $t = $code->();
+        %rendered = %save;
+        return $t;
+    }
+
+    # The nodes whose consumer list names $id.
+    method _consumers_of ($id) {
+        return grep { grep { $_ == $id } ( $_->{inputs} // [] )->@* }
+               $self->_nodes_in_order;
     }
 
     # _loop_invariant_roots($test, $loop_id) -- the maximal subtrees of a
@@ -3815,7 +4376,17 @@ class SoN::Deparse 0.01 {
                 push @roots, $n if $names->($id, {}) && !$agg;
                 next;
             }
-            push @queue, ($n->{inputs} // [])->@*;
+            # A MEMORY EDGE IS ORDERING, NOT A VALUE TO HOIST. It makes the
+            # read carried when the loop stores (so the read stays in the
+            # test), but the version itself is no root: an outer loop's
+            # memory Phi led to the store before it, hoisted as a value.
+            next if $self->_is_memory($id) && !$self->_read_as_value($id);
+            my @in = ($n->{inputs} // [])->@*;
+            pop @in if @in > ($MEM_MIN_INPUTS{ $n->{op} // '' } // 99)
+                    && (($n->{op} // '') eq 'Call'
+                        ? (($n->{fields} // {})->{memory_input})
+                        : $self->_is_memory($in[-1]));
+            push @queue, @in;
         }
         return @roots;
     }
@@ -3894,7 +4465,7 @@ class SoN::Deparse 0.01 {
             # from the start; one placed after a store's effect would need the
             # binding spliced behind it in that list, which is not done.
             if (exists $bound{$id} && !defined $m->{control_in}
-                && $bound{$id} =~ /\A\$(?:stale|saved)\d+\z/) {
+                && $bound{$id} =~ /\A[\$\@%](?:stale|saved)\d+\z/) {
                 # ONE PLACED AFTER A STORE anchors the reader to that store;
                 # _splice_declaration puts it behind the binding in the list.
                 my ($effect) = grep { grep { $_->{id} == $id } $after_effect{$_}->@* }
@@ -4006,6 +4577,15 @@ class SoN::Deparse 0.01 {
             && $self->_agg_versioned->{ $n->{id} // -1 };
         my @users = grep { grep { $_ == $n->{id} } ($_->{inputs} // [])->@* }
             values %$nodes;
+        # A TERNARY'S ARM is evaluated only when chosen. Declared ahead of
+        # it, `my @body__89 = ($focus->@*)` died on a $focus the condition
+        # had ruled out ("Not an ARRAY reference"; chalk's
+        # Perl::Actions::MethodDefinition). Spelled in the arm, it is not.
+        return 1 if @users
+            && !(grep { ($_->{op} // '') !~ /\A(?:Phi|TernaryExpr)\z/ } @users)
+            && (grep { ($_->{op} // '') eq 'TernaryExpr' } @users)
+            && !(grep { ($_->{op} // '') eq 'TernaryExpr'
+                        && ($_->{inputs}[0] // -1) == $n->{id} } @users);
         return 0 unless @users && !grep { ($_->{op} // '') ne 'Phi' } @users;
         my (@queue, %seen) = ($n->{inputs} // [])->@*;
         while (@queue) {
@@ -4087,7 +4667,10 @@ class SoN::Deparse 0.01 {
             elsif ($op =~ /\A(?:Array|Hash)Literal\z/
                    && !$self->_agg_is_package($n)
                    && (!$self->_is_pinned_aggregate($n)
-                       || $self->_is_inplace_reverse($n))) {
+                       || $self->_is_inplace_reverse($n)
+                       # A PINNED COPY THAT IS NO `my` (`@l = @n` in an arm)
+                       # rebinds the name the same way.
+                       || ($n->{fields} // {})->{rebinds})) {
                 push $lits{$key}->@*, $n->{id};
             }
         }
@@ -4663,6 +5246,46 @@ class SoN::Deparse 0.01 {
         return undef;
     }
 
+    # Is Region $n the exit of a Loop the walk ($seen) has already entered?
+    method _exits_a_loop_seen ($n, $seen) {
+        return scalar grep {
+            my $p = $nodes->{$_} // {};
+            ( $p->{op} // '' ) eq 'Proj'
+                && ( ( $p->{fields} // {} )->{index} // -1 ) == 1
+                && $seen->{ ( $p->{inputs} // [] )->[0] // -1 }
+                && ( ( $nodes->{ $p->{inputs}[0] } // {} )->{op} // '' ) eq 'Loop'
+        } ( $n->{inputs} // [] )->@*;
+    }
+
+    # Is control node $id on the sub's top-level chain -- under no arm and no
+    # loop body? Walked back by control, a merge stepping to what it closes.
+    method _at_top_level ($id) {
+        my ($cur, %seen) = ( ( $nodes->{$id} // {} )->{control_in} );
+        while ( defined $cur && !$seen{$cur}++ ) {
+            my $n = $nodes->{$cur} or return 0;
+            my $op = $n->{op} // '';
+            return 1 if $op eq 'Start';
+            return 0 if $op eq 'Proj';
+            if ( $op eq 'Region' ) {
+                my $h = $n->{head} // return 0;
+                $cur = ( $nodes->{$h} // {} )->{control_in};
+                next;
+            }
+            $cur = $n->{control_in};
+        }
+        return 0;
+    }
+
+    # The Region where both arms of $if meet again -- a two-input merge that
+    # names it as its head -- or undef when one arm leaves.
+    method _diamond_merge ($if) {
+        my ($merge) = grep { ( $_->{op} // '' ) eq 'Region'
+                             && ( $_->{head} // -1 ) == $if->{id}
+                             && ( $_->{inputs} // [] )->@* == 2 }
+                      $self->_nodes_in_order;
+        return $merge;
+    }
+
     method _reaches_region ($proj, $region_id, $next_of) {
         return 0 unless defined $proj && defined $region_id;
         my %seen;
@@ -4671,13 +5294,49 @@ class SoN::Deparse 0.01 {
             my $n = shift @todo;
             next unless $n && !$seen{ $n->{id} }++;
             return 1 if $n->{id} == $region_id;
-            next if ( $n->{op} // '' ) eq 'Region' && $n->{id} != $region_id;
+            # A LOOP THE ARM RUNS is passed over: its exit Region is the far
+            # side of it, not a join of this arm's. Bounded there, an arm that
+            # loops before its `next` never found the latch.
+            next if ( $n->{op} // '' ) eq 'Region' && $n->{id} != $region_id
+                && !$self->_exits_a_loop_seen($n, \%seen);
             # BOUNDED BY A NESTED `If` TOO. Reaching the exit THROUGH another
             # branch is that branch's break, not this arm's -- measured on
             # `next if $i==2; last if $i==4`, where the next-guard's arm
             # Proj 15 -> If 18 -> Proj 19 -> Region 20 found the exit
             # transitively and the `next` was emitted as `last`.
-            next if ( $n->{op} // '' ) eq 'If' && $n->{id} != $proj->{id};
+            # UNLESS BOTH ITS ARMS MEET AGAIN -- a `die if C` diamond, whose
+            # merge Region names it as its head: then the arm goes on past
+            # that merge, and a `next` after it was never found (chalk's
+            # LLVM::Context::_compile_regex_pattern).
+            if ( ( $n->{op} // '' ) eq 'If' && $n->{id} != $proj->{id} ) {
+                my $merge = $self->_diamond_merge($n);
+                if ( $merge && !$seen{ $merge->{id} }++ ) {
+                    return 1 if $merge->{id} == $region_id;
+                    push @todo, ( $next_of->{ $merge->{id} } // [] )->@*;
+                }
+                # NOR WHEN EVERY ARM OF IT GETS THERE: `if (C) { next } ...;
+                # next` has no merge, but both ways go round, so the arm
+                # holding it does too (chalk's LLVM::Context, whose latch was
+                # taken as such an If's join). An arm may get there through a
+                # Region that feeds it -- the nexts merge in one at a time --
+                # but BY A JUMP: entering one by its input 0 is falling
+                # through the body, and every body goes round that way.
+                elsif ( !$merge ) {
+                    my @a = ( $next_of->{ $n->{id} } // [] )->@*;
+                    my @to = ( $region_id );
+                    for (my $k = 0; $k < @to; $k++) {
+                        push @to, grep { ( ( $nodes->{$_} // {} )->{op} // '' ) eq 'Region'
+                                         && ( $nodes->{$_}{head} // -1 )
+                                            == ( $nodes->{$region_id}{head} // -2 ) }
+                                       ( $nodes->{ $to[$k] }{inputs} // [] )->@*;
+                    }
+                    return 1 if @a == 2 && !grep { my $arm = $_;
+                        !grep { $self->_reaches_region( $arm, $_, $next_of )
+                                && !$self->_reaches_region( $arm,
+                                       $nodes->{$_}{inputs}[0], $next_of ) } @to } @a;
+                }
+                next;
+            }
             push @todo, ( $next_of->{ $n->{id} } // [] )->@*;
         }
         return 0;
@@ -4701,12 +5360,25 @@ class SoN::Deparse 0.01 {
             next if $seen{ $n->{id} }++;
             my @succ = ( $next_of->{ $n->{id} } // [] )->@*;
             if ( grep { $_->{id} == $region_id } @succ ) { $pred = $n->{id}; last }
-            next if ( $n->{op} // '' ) eq 'Region';
-            next if ( $n->{op} // '' ) eq 'If' && $n->{id} != $arm->{id};
+            next if ( $n->{op} // '' ) eq 'Region'
+                && !$self->_exits_a_loop_seen($n, \%seen);
+            # PAST A DIAMOND, as _reaches_region goes: `$b = 1 if C; last`
+            # leaves by the diamond's merge, which is what the exit consumes.
+            if ( ( $n->{op} // '' ) eq 'If' && $n->{id} != $arm->{id} ) {
+                my $merge = $self->_diamond_merge($n);
+                push @todo, $merge if $merge && !$seen{ $merge->{id} };
+                next;
+            }
             push @todo, @succ;
         }
         die "GAP: a break whose exit edge the walk cannot find is not yet"
           . " rendered\n" unless defined $pred;
+        return $self->_pay_owed($payments, $pred);
+    }
+
+    # _pay_owed($payments, $pred) -> the assignments an exit's Phis are owed
+    # by the edge from $pred.
+    method _pay_owed ($payments, $pred) {
         my $owed = $payments->{$pred} // return '';
         my @phi = sort { $a <=> $b } keys %$owed;
         return sprintf("%s = %s;\n", $owed->{ $phi[0] }[0],
@@ -4922,7 +5594,6 @@ class SoN::Deparse 0.01 {
                 # THE EXIT PHIS ARE PAID HERE. Each records what the loop
                 # variable must hold on this path; assigning before the `last`
                 # is what makes a post-loop read correct on both exits.
-                my $pay  = $edge->{pay}->($arm{$ix});
                 # WHAT THE ARM DOES BEFORE IT LEAVES runs before the jump: a
                 # store pinned between the arm's Proj and the exit Region --
                 # `$so = $i; last` into a demoted slot -- was left out, and
@@ -4930,10 +5601,19 @@ class SoN::Deparse 0.01 {
                 # THE ARM FIRST, THEN THE PAYMENT: the exit values are what
                 # the variables hold on leaving, and the arm still reads them
                 # as they were -- paid first, `$so = $i + 1` read the paid $i.
-                my $leave = $edge->{word} eq 'return'
-                    ? $pay . $self->_emit_from( $arm{$ix}{id}, $next_of, undef )
-                    : $self->_emit_from( $arm{$ix}{id}, $next_of, $edge->{region} )
-                      . $pay . "$edge->{word};\n";
+                # AND RENDERED AFTER IT TOO: a payment may read a join inside
+                # the arm, bound only when the arm is emitted (`$j = $k + 1 +
+                # $hi_used` after an `if` that sets $hi_used; chalk's
+                # LLVM::Context::_compile_regex_pattern).
+                my $leave;
+                if ( $edge->{word} eq 'return' ) {
+                    my $pay = $edge->{pay}->($arm{$ix});
+                    $leave = $pay . $self->_emit_from( $arm{$ix}{id}, $next_of, undef );
+                }
+                else {
+                    my $body = $self->_emit_from( $arm{$ix}{id}, $next_of, $edge->{region} );
+                    $leave = $body . $edge->{pay}->($arm{$ix}) . "$edge->{word};\n";
+                }
                 my $text = $ix == 0
                     ? sprintf("if (%s) {\n%s}\n", $cond, _indent($leave))
                     : sprintf("if (!(%s)) {\n%s}\n", $cond, _indent($leave));
@@ -5036,6 +5716,16 @@ class SoN::Deparse 0.01 {
                     $arm{0}, $arm{1}) {
             $join = $outer_stop;
         }
+        # ONE ARM LEAVES AND THEY MEET NOWHERE -- a try whose catch dies --
+        # and the other falls through to the enclosing join. Unbounded, that
+        # arm was emitted on through the join into the exit, which read the
+        # join's value before the enclosing if bound it.
+        if (!defined $join && defined $outer_stop && $nodes->{$outer_stop}
+            && grep { my $p = $_;
+                      grep { $_ == $outer_stop } $self->_control_reachable($p->{id}, $next_of) }
+                    $arm{0}, $arm{1}) {
+            $join = $outer_stop;
+        }
 
         my $t = $self->_emit_from($arm{0}{id}, $next_of, $join);
         my $f = $self->_emit_from($arm{1}{id}, $next_of, $join);
@@ -5096,7 +5786,15 @@ class SoN::Deparse 0.01 {
     # to pay -- and ends where it reaches $join. A nested If with no merge, or
     # a node with more than one way on, leaves no single fall-through.
     # ponytail: a linear scan for the merge per nested If; index heads if slow.
+    # ONE ANSWER PER ARM AND JOIN: asked again for every Phi of every nested
+    # If, a dispatch of guarded returns re-walked the whole chain each time.
     method _arm_spine_pred ($proj, $join, $next_of) {
+        my $key = join ':', $proj->{id}, $join, 0 + $next_of;
+        return $spine_memo{$key} if exists $spine_memo{$key};
+        return $spine_memo{$key} = $self->_arm_spine_pred_walk($proj, $join, $next_of);
+    }
+
+    method _arm_spine_pred_walk ($proj, $join, $next_of) {
         my ($n, %seen) = ($proj);
         while ($n && !$seen{ $n->{id} }++) {
             my $op = $n->{op} // '';
@@ -5160,9 +5858,15 @@ class SoN::Deparse 0.01 {
         my %proj_arm = map { $arm->{$_}{id} => $_ } keys $arm->%*;
 
         my ($decl, %assign) = ('');
+        my %returned;   # call id -> arm -> the arm already returns it
         for my $p (@phis) {
             my @in   = ($p->{inputs} // [])->@*;
             my @pred = ((($p->{fields} // {})->{predecessors}) // [])->@*;
+            # A JOIN OF JOINS carries no `predecessors`: its Region's inputs
+            # are those predecessors, in the same order (latch Regions that
+            # merge the nexts one at a time).
+            @pred = ( $nodes->{$join}{inputs} // [] )->@*
+                if !@pred && ( $nodes->{$join}{inputs} // [] )->@* == @in;
             die "GAP: a join Phi with " . scalar(@in) . " inputs and "
               . scalar(@pred) . " predecessors is not yet rendered\n"
                 unless @in == @pred && @in;
@@ -5183,7 +5887,7 @@ class SoN::Deparse 0.01 {
             # and renamed here the continue block read a variable only the
             # fall-through assigned (r3 for perl's r23). Its inputs are all
             # inside the loop, so it has no seed to hoist.
-            my $latch = ($bound{ $p->{id} } // '') =~ /\A\$latch\d+\z/
+            my $latch = ($bound{ $p->{id} } // '') =~ /\A[\$\@%]latch\d+\z/
                 ? $bound{ $p->{id} } : undef;
             $var = $latch if defined $latch;
 
@@ -5273,6 +5977,14 @@ class SoN::Deparse 0.01 {
                 # ONLY A CALLEE THIS GRAPH SET SHOWS RETURNING A LIST: one
                 # whose body is not here is taken for a scalar, as before.
                 my $c = $nodes->{ $in[$i] };
+                # THE ARM RETURNS THE CALL ITSELF, in the caller's context:
+                # once, though the exit merges it twice (value and scalar
+                # reading).
+                if ($c && $inline_return{ $c->{id} }) {
+                    $assign{$_} .= sprintf("return %s;\n", $e)
+                        for grep { !$returned{ $c->{id} }{$_}++ } @arms;
+                    next;
+                }
                 die "GAP: a function exit merges a returned list with a scalar;"
                   . " a call returned in the caller's context is bound to one\n"
                     if $exit && $c && ($c->{op} // '') eq 'Call'
@@ -5367,16 +6079,20 @@ class SoN::Deparse 0.01 {
     # `or die` inside the arm joins its live path and its Unwind before the
     # arm goes on, and stopping there took the rest of the arm for no arm's --
     # its value was seeded at the top of the sub, ahead of what it reads.
-    method _under_proj ($id, $projs, $seen = {}) {
+    # ONE ANSWER PER MERGE ($memo): walked afresh, each merge doubled the walk,
+    # and a dispatch of a hundred guarded returns never finished.
+    method _under_proj ($id, $projs, $seen = {}, $memo = {}) {
         while (defined $id && !$seen->{$id}++) {
             return 1 if exists $projs->{$id};
             my $n = $nodes->{$id} or return 0;
             my $op = $n->{op} // '';
             if ($op eq 'Region') {
+                return $memo->{$id} if exists $memo->{$id};
                 my @in = grep { defined } ($n->{inputs} // [])->@*;
                 # Each predecessor walks its own path; they meet again above
                 # the merge, so one seen-set would stop the second walk there.
-                return @in && !grep { !$self->_under_proj($_, $projs, {%$seen}) } @in;
+                return $memo->{$id} = ( @in
+                    && !grep { !$self->_under_proj($_, $projs, {%$seen}, $memo) } @in ) ? 1 : 0;
             }
             return 0 if $op eq 'Start';
             # A LOOP IS ENTERED ONE WAY, its first input: one inside the arm
@@ -5456,6 +6172,8 @@ class SoN::Deparse 0.01 {
 
     method _emit_statement ($n, $next_of) {
         my $op = $n->{op};
+        # Spelled in the `return` that follows it -- see %inline_return.
+        return '' if $inline_return{ $n->{id} };
 
         # `print (EXPR)` IS NOT `print EXPR`. Perl parses a leading open paren
         # as the complete argument list and discards whatever follows -- the
@@ -5484,7 +6202,15 @@ class SoN::Deparse 0.01 {
         # node that produced its memory version -- see _emit_control_chain's
         # stale-read pass. Spelled from the SLOT: _expr would return the
         # temporary's own name, the same trap the `local` save prologue notes.
-        if ($op eq 'EntryDef') {
+        # A class field's versioned read is deferred the same way; one pinned
+        # on the chain is an ordinary bound effect, below.
+        if ($op eq 'EntryDef'
+            || ($op eq 'FieldAccess' && !defined $n->{control_in})) {
+            # A PINNED READ NOTHING READS is no effect: a catch that leaves
+            # by `last` or `return` without naming its error pins the `$@`
+            # read where the eval ends, and nothing consumes it.
+            return '' if $op eq 'EntryDef' && !exists $bound{ $n->{id} }
+                && !$self->_consumers_of($n->{id});
             die "GAP: an EntryDef reached as a statement with no binding is"
               . " not yet rendered\n" unless exists $bound{ $n->{id} };
             my $var = $bound{ $n->{id} };
@@ -5516,7 +6242,10 @@ class SoN::Deparse 0.01 {
         # A DEFERRED STALE ELEMENT READ OR COUNT, OR A READ THROUGH A SCALAR
         # REFERENCE -- see the stale-read pass. Spelled uncached: _expr would
         # return the temporary's own name.
-        if (($op eq 'Subscript' || $op eq 'Count' || $op eq 'PostfixDeref')
+        # SO IS A KEYS OR VALUES bound to a list temporary.
+        if ((($op eq 'Subscript' || $op eq 'Count' || $op eq 'PostfixDeref')
+             || ($op eq 'Call' && !defined $n->{control_in}
+                 && ($bound{ $n->{id} } // '') =~ /\A\@stale\d+\z/))
             && exists $bound{ $n->{id} }) {
             my $var  = $bound{ $n->{id} };
             my $text = $self->_expr_uncached( $n->{id} );
@@ -5587,6 +6316,29 @@ class SoN::Deparse 0.01 {
         # which is what makes a sibling closure's read observe it.
         # A DELETE REMOVES A KEY, and advances memory so a later `exists`
         # sees it gone. Same [container, key, memory] shape as Exists.
+        # A `local` ELEMENT'S RESTORE IS PERL'S OWN: the store was spelled
+        # `local` in a block of its own, and this closes it -- the block's
+        # end is where perl puts the element back.
+        return "}\n" if $op eq 'ElemRestore';
+
+        # A FOREACH PASS'S TOPIC is aliased for the pass, as perl's foreach
+        # aliases it: a callee reads and writes it by name. Restored at the
+        # end of the loop body's block. Over a hole the reference is undef,
+        # and a fresh undef stands in rather than creating the element.
+        if ($op eq 'LocalAlias') {
+            my ($ref) = ($n->{inputs} // [])->@*;
+            my $name = ($n->{fields} // {})->{name} // '_';
+            my $rhs = $self->_expr($ref);
+            my $rop = $nodes->{$ref}{op} // '';
+            # A RANGE PASS'S VALUE is no element: a fresh copy, so a callee's
+            # write does not move the counter.
+            $rhs = $rop eq 'TernaryExpr' ? sprintf('%s // \(my $hole%d)', $rhs, $n->{id})
+                 : $rop eq 'Ref'         ? $rhs
+                 :                         sprintf('\(my $topic%d = %s)', $n->{id}, $rhs);
+            return "use feature 'refaliasing'; no warnings 'experimental::refaliasing';"
+                 . " \\local \$$name = $rhs;\n";
+        }
+
         if ($op eq 'Delete') {
             my @din = ($n->{inputs} // [])->@*;
             die "GAP: a Delete with " . scalar(@din) . " inputs is not yet"
@@ -5732,11 +6484,15 @@ class SoN::Deparse 0.01 {
                 # A PARAMETER STORED INTO ITS OWN SLOT -- a demoted parameter's
                 # entry store -- is the prologue's `my $v = $_[N]`; spelled
                 # again here it is a second `my $v`.
-                return '' if ($t->{op} // '') eq 'PadAccess'
+                # AND IT DECLARES THE SLOT: a later store is no second `my`.
+                if (($t->{op} // '') eq 'PadAccess'
                     && ($v->{op} // '') eq 'Parameter'
                     && $self->_param_as_variable($v)
                     && '$' . (($t->{fields} // {})->{symbol} // '')
-                       eq (($v->{fields} // {})->{name} // '');
+                       eq (($v->{fields} // {})->{name} // '')) {
+                    $pad_declared{ $v->{fields}{name} } = 'param';
+                    return '';
+                }
 
                 # A BRANCHED DEFAULT'S MERGE STORED INTO ITS PARAMETER'S SLOT
                 # -- a Phi over the raw argument of that name -- assigns the
@@ -5897,14 +6653,64 @@ class SoN::Deparse 0.01 {
             # An undef value is only a placeholder taken for one, and is
             # given back; a named read is refused -- the targets' later reads
             # spell it by name, after the assign has moved it.
+            # A TARGET LIST WITH NO SCALAR -- `@$r = ($b, $a)` -- binds no
+            # variable to those reads, so the count stands.
             my $counted = ( $n->{fields} // {} )->{targets};
+            my %post_bind;
             if ( defined $counted && $t > $counted ) {
+                my $scalar_target = grep {
+                    ( $nodes->{$_}{op} // '' ) eq 'PadAccess'
+                        && ( ( $nodes->{$_}{fields} // {} )->{sigil} // '' ) eq '$'
+                } @in[ 0 .. $counted - 1 ];
+                # A TARGET IN MEMORY -- a PadAccess with a memory input, the
+                # slot demoted -- is read back through memory, never as the
+                # value node, so the value it takes is safe to spell by name:
+                # chalk's FilterComposite `($correct, $rejected) = ($left, $right)`.
+                my $in_memory = sub ($i) {
+                    my $tg = $nodes->{ $in[$i] // -1 } // {};
+                    ( $tg->{op} // '' ) eq 'PadAccess'
+                        && ( ( $tg->{fields} // {} )->{sigil} // '' ) eq '$'
+                        && ( $tg->{inputs} // [] )->@*;
+                };
                 die "GAP: a list assign's value reads a named scalar, which"
                   . " the target list would take for a target\n"
-                    if grep {
-                        ( $nodes->{$_}{op} // '' ) ne 'Constant'
-                        || ( ( $nodes->{$_}{fields} // {} )->{const_type} // '' ) ne 'undef'
-                    } @in[ $counted .. $t - 1 ];
+                    # AN ELEMENT READ IS NO NAMED SCALAR: the walk counts a
+                    # Subscript as a target, but the value names no variable.
+                    if $scalar_target && grep {
+                        ( $nodes->{ $in[$_] }{op} // '' ) =~ /\A(?:PadAccess|EntryDef)\z/
+                        && !( $_ - $counted < $counted && $in_memory->( $_ - $counted ) )
+                    } $counted .. $t - 1;
+                # THE TARGET'S LATER READS ARE THE VALUE NODE, spelled again
+                # where they are read -- after a store to its container they
+                # saw the new element (`9 2 9` for perl's `1 2 9`). So the
+                # value is bound to the target's name, which holds it for
+                # good only if nothing writes the target again.
+                for my $i ($counted .. $t - 1) {
+                    my $j = $i - $counted;
+                    next if $j >= $counted || $in_memory->($j);
+                    my $tg = $nodes->{ $in[$j] } // {};
+                    my $tf = $tg->{fields} // {};
+                    next unless ( $tg->{op} // '' ) eq 'PadAccess'
+                        && ( $tf->{sigil} // '' ) eq '$';
+                    my $name = '$' . ( $tf->{symbol} // '' );
+                    # BOUND ELSEWHERE, it keeps that spelling; bound to this
+                    # name by an earlier rendering of this statement, it is
+                    # still this statement's value.
+                    next if exists $bound{ $in[$i] } && $bound{ $in[$i] } ne $name;
+                    my $rewritten = grep {
+                        my $w = $_;
+                        ( $w->{op} // '' ) eq 'Assign' && $w->{id} != $n->{id}
+                            && grep {
+                                my $p = $nodes->{$_} // {};
+                                ( $p->{op} // '' ) eq 'PadAccess'
+                                    && '$' . ( ( $p->{fields} // {} )->{symbol} // '' ) eq $name
+                                    && ( ( $p->{fields} // {} )->{sigil} // '' ) eq '$'
+                            } ( $w->{inputs} // [] )->@*
+                    } values %$nodes;
+                    die "GAP: a list assign's value is read again as its"
+                      . " target $name, which is written later\n" if $rewritten;
+                    $post_bind{ $in[$i] } = $name;
+                }
                 $t = $counted;
             }
 
@@ -5914,7 +6720,15 @@ class SoN::Deparse 0.01 {
                 unless $t;
 
             my @lhs = map { $self->_location($_) } @in[0 .. $t-1];
-            my @rhs = map { $self->_expr($_) } @in[$t .. $#in];
+            # THE VALUES ARE SPELLED, NOT THEIR TARGETS' NAMES: a statement
+            # rendered twice found its own post-binding, and emitted
+            # `($lv, $val) = ($lv, $val)`.
+            my @rhs = do {
+                delete local @bound{ keys %post_bind };
+                map { $post_bind{$_} ? $self->_expr_uncached($_) : $self->_expr($_) }
+                    @in[$t .. $#in];
+            };
+            $bound{$_} = $post_bind{$_} for keys %post_bind;
             # A FIELD AGGREGATE EMPTIED -- `@a = ()` -- has no values to name.
             return sprintf("%s = ();\n", $lhs[0])
                 if !@rhs && @lhs == 1 && $lhs[0] =~ /\A[\@%]\w+\z/
@@ -5947,7 +6761,11 @@ class SoN::Deparse 0.01 {
             # sub sharing it -- would no longer see the writes.
             my $decl = ($all_slots && (grep { /^\$/ } @lhs) == @lhs
                         && !(grep { $cell_slots{$_} } @lhs)
-                        && !(grep { $pad_declared{$_} } @lhs))
+                        # A PARAMETER'S NAME is the parameter at the sub's
+                        # top level; under an arm or a loop body an inner `my`
+                        # may shadow it, and keeps its own.
+                        && !(grep { my $d = $pad_declared{$_};
+                                    $d && ($d ne 'param' || $self->_at_top_level($n->{id})) } @lhs))
                 ? 'my ' : '';
             # A VALUE THAT READS ITS OWN TARGET is not a declaration's value:
             # `my $u = (($u // "") . "z")` names a $u that does not exist yet.
@@ -5970,7 +6788,7 @@ class SoN::Deparse 0.01 {
                     @lhs > 1 ? '(' . join(', ', @lhs) . ')' : $lhs[0] )
                     if $reads_target;
             }
-            $pad_declared{$_} = 1 for @lhs;
+            $pad_declared{$_} //= 1 for @lhs;
             return sprintf("%s(%s) = (%s);\n",
                 $decl, join(', ', @lhs), join(', ', @rhs))
                 if @lhs > 1;
@@ -6004,10 +6822,17 @@ class SoN::Deparse 0.01 {
             # assignment's VALUE from the right-hand side into a count
             # wherever the source is an aggregate.
             my $src = $nodes->{ $in[$t] // -1 };
+            # A LIST ASSIGN FROM A CALL is one whatever the call is stamped:
+            # `($r) = k($x)` with k returning `\$_[0]` (ScalarRef) took the
+            # count of its list.
             return sprintf("%s(%s) = (%s);\n", $decl, $lhs[0], $rhs[0])
                 if @rhs == 1 && $src
                 && (($src->{op} // '') eq 'ArgsSource'
-                    || ($src->{stamp} // '') =~ /\A(?:List|Array)\z/);
+                    || ($src->{stamp} // '') =~ /\A(?:List|Array)\z/
+                    # SO IS ONE FROM A MATCH: `my ($x) = $s =~ /z/` is its
+                    # captures, or nothing; `my $x = ...` is its truth.
+                    || (defined(($n->{fields} // {})->{targets})
+                        && ($src->{op} // '') =~ /\A(?:Call|RegexMatch)\z/));
 
             # A WRITE-BACK THAT STORES ONLY A CHANGED VALUE (if_changed): an
             # unchanged one may sit in a read-only element perl never wrote.
@@ -6016,6 +6841,22 @@ class SoN::Deparse 0.01 {
                            $lhs[0], $rhs[0], $lhs[0], $rhs[0], $lhs[0],
                            $lhs[0], $rhs[0])
                 if ($n->{fields} // {})->{if_changed} && !length $decl;
+            # A `local` ELEMENT STORE is spelled `local`: perl restores it at
+            # the block's exit, by any way out, which the ElemRestore records.
+            # ITS BLOCK OPENS HERE when the graph restores it (a block that
+            # leaves by return has no restore, and needs none): a bare block
+            # does not survive into the graph, so the ElemRestore says where
+            # its end was.
+            if (($n->{fields} // {})->{local}) {
+                my ($tc, $tk) = ($nodes->{ $in[0] }{inputs} // [])->@*;
+                my $restored = grep {
+                    ( $_->{op} // '' ) eq 'ElemRestore'
+                        && ( $_->{inputs}[0] // -1 ) == ( $tc // -2 )
+                        && ( $_->{inputs}[1] // -1 ) == ( $tk // -2 )
+                } $self->_nodes_in_order;
+                return sprintf("%slocal %s = %s;\n",
+                    ( $restored ? "{\n" : '' ), $lhs[0], $rhs[0]);
+            }
             return sprintf("%s%s = %s;\n", $decl, $lhs[0], $rhs[0]);
         }
 
@@ -6057,6 +6898,10 @@ class SoN::Deparse 0.01 {
             # `my $i = $c++; return $i` binds the field's old value and then
             # stores -- fallen off, the method returned the store's value.
             # Bound, the temporary is the value and naming it re-runs nothing.
+            # A CALL IN THE CALLER'S CONTEXT is spelled here, where it runs in
+            # whatever context the caller gives -- see %inline_return.
+            return sprintf("return %s;\n", $self->_expr($in[0]))
+                if $v && $inline_return{ $v->{id} };
             return '' if $v && defined $v->{control_in}
                       && !exists $bound{ $v->{id} };
 
@@ -6084,6 +6929,14 @@ class SoN::Deparse 0.01 {
             return sprintf("%s%s%s\n", $PKG_SENTINEL,
                            ($n->{fields} // {})->{package} // 'main', $PKG_SENTINEL);
         }
+
+        # A PINNED PURE VALUE NOTHING READS has no effect to keep: a foreach
+        # iterator aliased by reference whose body never reads it leaves its
+        # reference and the element's existence unread. A loop or region that
+        # follows it holds it as its control input, which is not a read.
+        return '' if $op =~ /\A(?:TernaryExpr|Exists|Ref)\z/
+            && !exists $bound{ $n->{id} }
+            && !grep { $_->{op} !~ /\A(?:Loop|Region)\z/ } $self->_consumers_of($n->{id});
 
         die "GAP: no rule for control node `$op`\n";
     }
@@ -6338,6 +7191,8 @@ class SoN::Deparse 0.01 {
     }
 
     method _slot_name ($n) {
+        # A FIELD READ's slot is the field, spelled by its name.
+        return $self->_expr_uncached($n->{id}) if $n->{op} eq 'FieldAccess';
         die "GAP: expected an EntryDef, got `$n->{op}`\n"
             unless $n->{op} eq 'EntryDef';
         my $f = $n->{fields} // {};
@@ -6433,6 +7288,19 @@ class SoN::Deparse 0.01 {
     # `\($stale8)` in place of `\$x`.
     method _location ($id) {
         my $n = $nodes->{$id};
+        # A TERNARY'S LOCATION IS ITS ARMS': `\($c ? $v : 0)` refers to $v.
+        if ( $n && ( $n->{op} // '' ) eq 'TernaryExpr' && ( $n->{inputs} // [] )->@* == 3 ) {
+            my @in = $n->{inputs}->@*;
+            return sprintf( '(%s ? %s : %s)', $self->_expr( $in[0] ),
+                $self->_location( $in[1] ), $self->_location( $in[2] ) );
+        }
+        # AND A LIST ARM'S, ITS ITEMS': `\($c ? ($s, $t) : ())`.
+        if ( $n && ( $n->{op} // '' ) eq 'ArrayLiteral'
+             && !defined( ( $n->{fields} // {} )->{symbol} )
+             && ( $n->{stamp} // '' ) !~ /Ref\z/ ) {
+            return '(' . join( ', ', map { $self->_location($_) }
+                                     ( $n->{inputs} // [] )->@* ) . ')';
+        }
         return $n && ( $n->{op} // '' ) eq 'PadAccess'
             ? $self->_expr_uncached($id)
             : $self->_expr($id);
@@ -6638,8 +7506,9 @@ class SoN::Deparse 0.01 {
             # this oracle exists to check.
             die "GAP: a Subscript with " . scalar(@in) . " inputs is not yet"
               . " rendered\n" if @in < 2;
+            # A READ HAS ITS MEMORY INPUT; a store's target has none.
             $text = $self->_element($in[0], $self->_expr($in[1]),
-                                    ($n->{fields} // {})->{kind});
+                                    ($n->{fields} // {})->{kind}, @in > 2);
         }
         elsif ($op eq 'Count') {
             # scalar(@a) -- the element count, and a memory-dependent read like
@@ -6714,6 +7583,13 @@ class SoN::Deparse 0.01 {
             # source's list assignment does.
             my $list_ternary = ($agg->{op} // '') eq 'TernaryExpr'
                             && $st eq 'Array';
+            # SO IS A DEREFERENCE OF AN ANONYMOUS LIST, spelled as the list:
+            # a map over `0 .. 2` counted `scalar((0, 1, 2))`, which is 2.
+            $list_ternary ||= ($agg->{op} // '') eq 'PostfixDeref'
+                && $self->_expr($in[0]) =~ /\A\(/
+                && do { my $l = $nodes->{ ($agg->{inputs} // [])->[0] // -1 } // {};
+                        ($l->{op} // '') eq 'ArrayLiteral'
+                            && !defined(($l->{fields} // {})->{symbol}) };
 
             # AN ANONYMOUS CONSTRUCTOR IS A REFERENCE -- `[1,2,3]`, stamped
             # ArrayRef -- so its count goes through the deref. As a list it
@@ -6934,12 +7810,15 @@ class SoN::Deparse 0.01 {
               . " graph, cannot be rendered -- the emitted program would die"
               . " calling it\n"
                 unless exists $all_methods->{$nm};
+            if (exists $closure_var{$nm}) { $text = $closure_var{$nm} }
+            else {
             # THE BODY IS DEFINED IN main, and a mangled name with no `::`
             # resolves in whatever package the reference is taken in -- inside
             # a `class C { }` block, `\&name` was C::name and the call died.
             my $ident = $self->_sub_ident($nm);
             $ident = "main::$ident" unless $ident =~ /::/;
             $text = sprintf('\\&%s', $ident);
+            }
         }
         elsif ($op eq 'Delete') {
             # DELETE YIELDS THE REMOVED VALUE, so it is reached as a value as
@@ -6979,15 +7858,20 @@ class SoN::Deparse 0.01 {
             #
             # PARENTHESISED, because `my $n = $a = $b, 1` binds the comma
             # before the assignment.
+            # A FIELD IS A TARGET TOO: a method ending `%h = ()` returns it.
             my $t = 0;
             $t++ while $t < @in
                 && ($nodes->{ $in[$t] }{op} // '')
-                     =~ /\A(?:PadAccess|EntryDef|Subscript|PostfixDeref)\z/;
+                     =~ /\A(?:PadAccess|EntryDef|Subscript|PostfixDeref|FieldAccess)\z/;
+            # AN EMPTY LIST HAS NO VALUE INPUT: `%h = ()` is [target] alone,
+            # and its `targets` says the one input is a target.
+            my $empty = $t && $t == @in
+                && (($n->{fields} // {})->{targets} // 0) == $t;
             die "GAP: an Assign value with no target slots is not yet"
-              . " rendered\n" unless $t && $t < @in;
+              . " rendered\n" unless $t && ($t < @in || $empty);
 
             my @lhs = map { $self->_expr($_) } @in[0 .. $t-1];
-            my @rhs = map { $self->_expr($_) } @in[$t .. $#in];
+            my @rhs = $empty ? ('()') : map { $self->_expr($_) } @in[$t .. $#in];
 
             # THE TARGET LIST KEEPS ITS PARENS. `($a,$b) = LIST` is a list
             # assign and `$a = LIST` is a scalar one -- they yield different
@@ -7157,25 +8041,56 @@ class SoN::Deparse 0.01 {
                     unless @in >= 2;
                 my $agg = $nodes->{ $in[-1] };
                 my $af  = ($agg->{fields} // {});
-                die "GAP: a Slice over an anonymous `" . ($agg->{op} // '?')
-                  . "` has no container to name\n"
-                    unless defined $af->{symbol};
-                # A HASH SLICE SUBSCRIPTS WITH BRACES. `@h{'k1','k2'}` and
-                # `@a[0,2]` are both Slice nodes with an `@` sigil of their
-                # own; only the CONTAINER's sigil says which brackets to use,
-                # and emitting `@h[...]` would index the array `@h` -- a
-                # different variable that need not even exist.
-                #
-                # A SLICE ALWAYS TAKES `@`, whatever the container's sigil, so
-                # the symbol's own sigil is stripped rather than kept: a
-                # package aggregate records the qualified spelling and
-                # `@@main::E` does not parse.
-                my ($open, $close)
-                    = ($af->{sigil} // '@') eq '%' ? ('{', '}') : ('[', ']');
-                my $bare = substr($self->_agg_name($agg), 1);
-                $text = sprintf('@%s%s%s%s', $bare, $open,
-                    join(', ', map { $self->_expr($_) } @in[0 .. $#in - 1]),
-                    $close);
+                # A CONTAINER WITHOUT A SYMBOL may still be spelled as a
+                # variable -- a Phi of arrays is declared `@phiN` -- and that
+                # variable is the container to slice.
+                my $spelled = defined $af->{symbol} ? undef : $self->_expr($agg->{id});
+                # A SCALAR HOLDING THE REFERENCE is spelled as the scalar, and
+                # slices postfix: `@{$c}[...]` is `$c->@[...]`, not `@c[...]`.
+                $spelled = $self->_expr($agg->{id})
+                    if ($agg->{op} // '') eq 'PadAccess' && ($af->{sigil} // '') eq '$';
+                my @idx = map { $self->_expr($_) } @in[0 .. $#in - 1];
+                if (defined $spelled && $spelled =~ /\A([\@%])(\w+)\z/) {
+                    my ($open, $close) = $1 eq '%' ? ('{', '}') : ('[', ']');
+                    $text = sprintf('@%s%s%s%s', $2, $open, join(', ', @idx), $close);
+                }
+                # A DEREFERENCE SLICES POSTFIX: `$r->@[...]`, `$h->@{...}`.
+                elsif (defined $spelled && $spelled =~ /\A(.+)->([\@%])\*\z/s) {
+                    my ($open, $close) = $2 eq '%' ? ('{', '}') : ('[', ']');
+                    $text = sprintf('%s->@%s%s%s', $1, $open, join(', ', @idx), $close);
+                }
+                # SO DOES A REFERENCE, which the node says the kind of.
+                elsif (defined $spelled && defined $f->{kind} && $spelled =~ /\A\$/) {
+                    my ($open, $close) = $f->{kind} eq 'hash' ? ('{', '}') : ('[', ']');
+                    $text = sprintf('%s->@%s%s%s', $spelled, $open, join(', ', @idx), $close);
+                }
+                # AND ONE THE PROGRAM COMPUTED -- `$n->{in} // []` -- off the
+                # parenthesised expression: no aggregate is spelled that way.
+                elsif (defined $spelled && defined $f->{kind}
+                       && ($agg->{stamp} // '') !~ /\A(?:Array|Hash|List)\z/
+                       && ($agg->{op} // '') !~ /Literal\z/) {
+                    my ($open, $close) = $f->{kind} eq 'hash' ? ('{', '}') : ('[', ']');
+                    $text = sprintf('(%s)->@%s%s%s', $spelled, $open, join(', ', @idx), $close);
+                }
+                else {
+                    die "GAP: a Slice over an anonymous `" . ($agg->{op} // '?')
+                      . "` has no container to name\n"
+                        unless defined $af->{symbol};
+                    # A HASH SLICE SUBSCRIPTS WITH BRACES. `@h{'k1','k2'}` and
+                    # `@a[0,2]` are both Slice nodes with an `@` sigil of their
+                    # own; only the CONTAINER's sigil says which brackets to use,
+                    # and emitting `@h[...]` would index the array `@h` -- a
+                    # different variable that need not even exist.
+                    #
+                    # A SLICE ALWAYS TAKES `@`, whatever the container's sigil, so
+                    # the symbol's own sigil is stripped rather than kept: a
+                    # package aggregate records the qualified spelling and
+                    # `@@main::E` does not parse.
+                    my ($open, $close)
+                        = ($af->{sigil} // '@') eq '%' ? ('{', '}') : ('[', ']');
+                    my $bare = substr($self->_agg_name($agg), 1);
+                    $text = sprintf('@%s%s%s%s', $bare, $open, join(', ', @idx), $close);
+                }
             }
         }
         elsif ($op eq 'Match') {
@@ -7272,9 +8187,9 @@ class SoN::Deparse 0.01 {
         elsif ($op eq 'Parameter') {
             my $ix  = ( $n->{fields} // {} )->{index} // 0;
             my $sig = ( $n->{fields} // {} )->{sigil} // '$';
-            die "GAP: a Parameter with sigil `$sig` is not yet rendered"
-              . " -- only a scalar parameter reads as one \@_ element\n"
-                unless $sig eq '$';
+            # Declared by _slurpy_params.
+            if ($sig ne '$') { $text = $n->{fields}{name} }
+            else {
             $text = sprintf('$_[%d]', $ix);
 
             # A DEFAULT, applied where perl applies it. `= E` only when the
@@ -7295,6 +8210,7 @@ class SoN::Deparse 0.01 {
                 $text = $when eq 'absent' ? "(\@_ > $ix ? $text : ($d))"
                       : $when eq 'undef'  ? "($text // ($d))"
                       :                     "($text || ($d))";
+            }
             }
         }
         elsif ($op eq 'Range') {
@@ -7358,7 +8274,7 @@ class SoN::Deparse 0.01 {
             my $region = $nodes->{ ($n->{fields} // {})->{region} // -1 };
             die "GAP: a Phi whose region is a `"
               . (($region->{op}) // 'missing') . "` rather than a Loop is not"
-              . " yet rendered\n"
+              . " yet rendered (Phi $id)\n"
                 unless $region && ($region->{op} // '') eq 'Loop';
             $text = $self->_phi_var($n);
         }
@@ -7408,6 +8324,14 @@ class SoN::Deparse 0.01 {
     # the store to anchor the temporary after) and a copy of a four-part name
     # comparison is exactly the shape this file has lost days to.
     method _writes_this_name ($n, $f) {
+        if ( defined $f->{field_index} ) {
+            return 0 unless $n && ( $n->{op} // '' ) eq 'Assign';
+            my $t = $nodes->{ ( $n->{inputs} // [] )->[0] // -1 } or return 0;
+            my $tf = $t->{fields} // {};
+            return ( $t->{op} // '' ) eq 'FieldAccess'
+                && ( $tf->{field_index} // -1 ) == $f->{field_index}
+                && ( $tf->{field_stash} // '' ) eq ( $f->{field_stash} // '' ) ? 1 : 0;
+        }
         return 0 unless $n && ( $n->{op} // '' ) eq 'EntryWrite';
         my $t = $nodes->{ ( $n->{inputs} // [] )->[0] // -1 } or return 0;
         my $tf = $t->{fields} // {};
@@ -7459,40 +8383,41 @@ class SoN::Deparse 0.01 {
     method _is_memory ($id) {
         return $mem_cache{$id} if exists $mem_cache{$id};
 
-        my (@stack, %pending) = ($id);
-        @stack = ($id);
-        while (@stack) {
-            my $cur = $stack[-1];
-            if (exists $mem_cache{$cur}) { pop @stack; next }
-
-            my $n = $nodes->{$cur};
-            unless ($n) { $mem_cache{$cur} = 0; pop @stack; next }
-            my $op = $n->{op} // '';
-
-            if ($op =~ /\A(?:MemStart|EntryWrite|CellWrite|Delete|Assign)\z/) {
-                $mem_cache{$cur} = 1; pop @stack; next;
+        # THE LEAST FIXPOINT OVER THE GRAPH, not a walk from $id. A Phi is a
+        # memory point when any input is one, and memory Phis form cycles --
+        # a loop's header over its back-edge, an inner loop's over the
+        # outer's. A walk that answered 0 for a node still pending on the
+        # cycle cached that 0 for every node it decided through it: an inner
+        # loop's memory Phi over [the outer's Phi, a call] read as a value,
+        # and rendered as a loop variable whose init was a store.
+        my @all = values $nodes->%*;
+        # A PHI THE PRODUCER MARKED is one whatever its inputs are.
+        my %m = map { ( $_->{id} => 1 ) }
+                grep { ( $_->{op} // '' )
+                       =~ /\A(?:MemStart|EntryWrite|CellWrite|Delete|ElemRestore|Assign)\z/
+                       || ( ( $_->{op} // '' ) eq 'Phi'
+                            && ( $_->{fields} // {} )->{memory} ) } @all;
+        my $changed = 1;
+        while ($changed) {
+            $changed = 0;
+            for my $n (@all) {
+                next if $m{ $n->{id} };
+                my $op = $n->{op} // '';
+                # The inputs that could make THIS node a memory point: the last
+                # for a memory-carrying Call. NOT a Phi's: the producer marks
+                # every memory Phi, and a call is a value too, so inferring it
+                # from the inputs made `$cur = shift`'s latch merge a memory
+                # one, and its loop lost the variable.
+                my @in = ($n->{inputs} // [])->@*;
+                my @ask = $op eq 'Call' ? (($n->{fields} // {})->{memory_input} ? ($in[-1]) : ())
+                        :                 ();
+                next unless grep { defined && $m{$_} } @ask;
+                $m{ $n->{id} } = 1;
+                $changed = 1;
             }
-
-            # The inputs that could make THIS node a memory point: every one
-            # for a Phi, the last for a memory-carrying Call, none otherwise.
-            my @in = ($n->{inputs} // [])->@*;
-            my @ask = $op eq 'Phi'  ? @in
-                    : $op eq 'Call' ? (($n->{fields} // {})->{memory_input} ? ($in[-1]) : ())
-                    :                 ();
-            unless (@ask) { $mem_cache{$cur} = 0; pop @stack; next }
-
-            # Anything not yet decided goes on the stack first. A node already
-            # pending is a cycle and answers 0 for this question.
-            my @todo = grep { defined $_ && $_ != $cur
-                           && !exists $mem_cache{$_} && !$pending{$_} } @ask;
-            if (@todo) { $pending{$cur} = 1; push @stack, @todo; next }
-
-            $mem_cache{$cur} = (grep { $mem_cache{$_} } grep { defined } @ask)
-                ? 1 : 0;
-            delete $pending{$cur};
-            pop @stack;
         }
-        return $mem_cache{$id} // 0;
+        $mem_cache{ $_->{id} } = $m{ $_->{id} } // 0 for @all;
+        return $mem_cache{$id} //= 0;
     }
 
     # Is this node read as a VALUE anywhere -- at an input position that
@@ -7645,12 +8570,24 @@ class SoN::Deparse 0.01 {
         # rendered `push(@o)`.
         my @in = (($n->{inputs} // [])->@*);
         pop @in if $f->{memory_input};
-        my @args = map { $self->_expr($_) } @in;
+        # A READ BOUND AT THE TOP OF ITS PASS is passed to a user call by
+        # name: the argument is an alias, which the binding is not.
+        my $by_alias = ( ( $n->{fields} // {} )->{dispatch_kind} // '' ) ne 'builtin';
+        my @args = map {
+            my $id = $_;
+            $by_alias && $pass_top_node{$id}
+                ? do { delete local $bound{$id}; $self->_expr_uncached($id) }
+                : $self->_expr($id)
+        } @in;
         # A MUTATOR'S CONTAINER IS THE AGGREGATE, never a copy bound for a
         # read of it (the list-deref stale pass).
+        # ONLY FOR SUCH A COPY: a join Phi's binding is the join variable,
+        # which IS the aggregate, and uncached it refused.
         $args[0] = $self->_expr_uncached($in[0])
             if $f->{memory_input} && @in
-            && ($name // '') =~ /\A(?:push|unshift|splice|pop|shift)\z/;
+            && ($name // '') =~ /\A(?:push|unshift|splice|pop|shift)\z/
+            && !( ( $nodes->{ $in[0] }{op} // '' ) eq 'Phi'
+                  && ( $bound{ $in[0] } // '' ) !~ /(?:stale|saved)\d+\z/ );
         # A FOUR-ARGUMENT substr REWRITES ITS FIRST ARGUMENT IN PLACE, so that
         # argument is a location -- see _location.
         $args[0] = $self->_location($in[0])
@@ -7705,7 +8642,14 @@ class SoN::Deparse 0.01 {
                     || $name =~ /::__ANON__:\d+:\d+\z/)
                 && !exists $all_methods->{$name}
                 && !$f->{external}
-                && !$self->_defined_at_runtime($name);
+                && !$self->_defined_at_runtime($name)
+                # A PACKAGE THIS PROGRAM NEVER DEFINES is another module's,
+                # the way an import is: LLVM.pm and its Context call into
+                # each other, each loaded at run time.
+                && $self->_package_defined_here($name);
+
+            return sprintf('%s->(%s)', $closure_var{$name}, join(', ', @args))
+                if exists $closure_var{$name};
 
             my $ident = $self->_call_ident($name);
 

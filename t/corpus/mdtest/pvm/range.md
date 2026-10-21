@@ -73,7 +73,7 @@ main::__PROGRAM__: {start: 0, returns: [15], nodes: [
   [ArrayLiteral, {sigil: "@", symbol: a}, [5, 6, 7], ~, Array], # 8
   [Count, ~, [8, 2], ~, Int], # 9
   [Range, ~, [5, 9], ~, List], # 10
-  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [4, 10], ~, Str], # 11
+  [Call, {dispatch_kind: builtin, memory_input: true, name: join, param_names: []}, [4, 10, 2], ~, Str], # 11
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 12
   [Concat, ~, [11, 12], ~, Str], # 13
   [Print, ~, [13], 0, Scalar], # 14
@@ -131,7 +131,7 @@ main::__PROGRAM__: {start: 0, returns: [21], nodes: [
   [Constant, {const_type: string, value: bb}, ~, ~, Str], # 10
   [Coerce, {from_repr: Str, to_repr: Int}, [10], ~, Int], # 11
   [Range, ~, [9, 11], ~, List], # 12
-  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [4, 12], ~, Str], # 13
+  [Call, {dispatch_kind: builtin, memory_input: true, name: join, param_names: []}, [4, 12, 2], ~, Str], # 13
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 14
   [Concat, ~, [13, 14], ~, Str], # 15
   [ArrayLiteral, {sigil: "@", symbol: r}, [12], ~, Array], # 16
@@ -196,7 +196,7 @@ main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [ArrayLiteral, ~, ~, ~, Array], # 5
   [Loop, {bound: entry}, [0], 0], # 6
   [Phi, {region: 6}, [5, 48], ~, Array], # 7
-  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [4, 7], ~, Str], # 8
+  [Call, {dispatch_kind: builtin, memory_input: true, name: join, param_names: []}, [4, 7, 2], ~, Str], # 8
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
   [Concat, ~, [8, 9], ~, Str], # 10
   [Proj, {index: 1}, [6]], # 11

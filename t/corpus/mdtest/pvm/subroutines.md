@@ -185,7 +185,7 @@ main::answer: {start: 0, returns: [10], nodes: [
   [EntryDef, {package: main, sigil: $, symbol: "\""}, [2], ~, Scalar], # 3
   [Coerce, {from_repr: Scalar, to_repr: Str}, [3], ~, Str], # 4
   [ArgsSource, ~, ~, ~, Array], # 5
-  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [4, 5], ~, Str], # 6
+  [Call, {dispatch_kind: builtin, memory_input: true, name: join, param_names: []}, [4, 5, 2], ~, Str], # 6
   [Concat, ~, [1, 6], ~, Str], # 7
   [Constant, {const_type: string, value: "]"}, ~, ~, Str], # 8
   [Concat, ~, [7, 8], ~, Str], # 9
@@ -276,7 +276,7 @@ main::__PROGRAM__::__ANON__:1:2: {start: 0, returns: [10], nodes: [
   [EntryDef, {package: main, sigil: $, symbol: "\""}, [2], ~, Scalar], # 3
   [Coerce, {from_repr: Scalar, to_repr: Str}, [3], ~, Str], # 4
   [ArgsSource, ~, ~, ~, Array], # 5
-  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [4, 5], ~, Str], # 6
+  [Call, {dispatch_kind: builtin, memory_input: true, name: join, param_names: []}, [4, 5, 2], ~, Str], # 6
   [Concat, ~, [1, 6], ~, Str], # 7
   [Constant, {const_type: string, value: "]"}, ~, ~, Str], # 8
   [Concat, ~, [7, 8], ~, Str], # 9
@@ -455,7 +455,7 @@ main::__PROGRAM__::__ANON__:1:2: {start: 0, returns: [10], nodes: [
   [EntryDef, {package: main, sigil: $, symbol: "\""}, [2], ~, Scalar], # 3
   [Coerce, {from_repr: Scalar, to_repr: Str}, [3], ~, Str], # 4
   [ArgsSource, ~, ~, ~, Array], # 5
-  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [4, 5], ~, Str], # 6
+  [Call, {dispatch_kind: builtin, memory_input: true, name: join, param_names: []}, [4, 5, 2], ~, Str], # 6
   [Concat, ~, [1, 6], ~, Str], # 7
   [Constant, {const_type: string, value: "]"}, ~, ~, Str], # 8
   [Concat, ~, [7, 8], ~, Str], # 9
@@ -541,8 +541,8 @@ main::__PROGRAM__: {start: 0, returns: [31], nodes: [
   [Constant, {const_type: string, value: a}, ~, ~, Str], # 5
   [DefinedOr, ~, [4, 5], ~, Str], # 6
   [Constant, {const_type: string, value: b}, ~, ~, Str], # 7
-  [ArrayLiteral, {sigil: "@", symbol: l}, [6, 7], ~, Array], # 8
-  [Assign, ~, [3, 8], 0, List], # 9
+  [ArrayLiteral, {sigil: "@", symbol: l}, [6, 7], 0, Array], # 8
+  [Assign, ~, [3, 8], 8, List], # 9
   [Call, {dispatch_kind: direct, name: main::pair, param_names: [], want: list}, ~, 9, List], # 10
   [Call, {dispatch_kind: direct, name: main::group, param_names: [], want: list}, ~, 10, List], # 11
   [Call, {dispatch_kind: direct, name: main::one, param_names: [], want: list}, ~, 11, Scalar], # 12
@@ -660,17 +660,26 @@ main::last_is_for: {start: 0, returns: [5], nodes: [
   [MemStart], # 7
   [Count, ~, [6, 7], ~, Int], # 8
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 9
-  [Phi, {region: 2}, [9, 20], ~, Int], # 10
+  [Phi, {region: 2}, [9, 17], ~, Int], # 10
   [NumGt, ~, [8, 10], 2, Boolean], # 11
   [Proj, {index: 0}, [2]], # 12
-  [PadAccess, {sigil: "@", symbol: seen}, ~, ~, Unknown], # 13
-  [Subscript, {kind: array}, [6, 10, 7], ~, Scalar], # 14
-  [Coerce, {from_repr: Scalar, to_repr: Num}, [14], ~, Num], # 15
-  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 16
-  [Multiply, ~, [15, 16], ~, Num], # 17
-  [Call, {dispatch_kind: builtin, memory_input: true, name: push, param_names: []}, [13, 17, 7], 12, Int], # 18
-  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 19
-  [Add, ~, [10, 19], ~, Int]]} # 20
+  [Phi, {memory: true, region: 2}, [7, 29], ~, Unknown], # 13
+  [Phi, {memory: true, region: 4}, [13], ~, Unknown], # 14
+  [Exists, {kind: array}, [6, 10, 7], 12, Boolean], # 15
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 16
+  [Add, ~, [10, 16], ~, Int], # 17
+  [Subscript, {kind: array}, [6, 10], ~, Scalar], # 18
+  [Subscript, {kind: array}, [6, 10, 7], ~, Scalar], # 19
+  [Ref, ~, [18], ~, ScalarRef], # 20
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 21
+  [TernaryExpr, ~, [15, 20, 21], 15, Scalar], # 22
+  [PostfixDeref, {sigil: $}, [22, 7], ~, Scalar], # 23
+  [TernaryExpr, ~, [15, 23, 19], 22, Scalar], # 24
+  [PadAccess, {sigil: "@", symbol: seen}, ~, ~, Unknown], # 25
+  [Coerce, {from_repr: Scalar, to_repr: Num}, [24], ~, Num], # 26
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 27
+  [Multiply, ~, [26, 27], ~, Num], # 28
+  [Call, {dispatch_kind: builtin, memory_input: true, name: push, param_names: []}, [25, 28, 7], 24, Int]]} # 29
 main::last_is_while: {start: 0, returns: [5], nodes: [
   [Start], # 0
   [Constant, {const_type: boolean, value: ""}, ~, ~, Boolean], # 1
@@ -789,7 +798,7 @@ parses: yes
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [31], nodes: [
+main::__PROGRAM__: {start: 0, returns: [21], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: ""}, ~, ~, Str], # 2
@@ -798,37 +807,40 @@ main::__PROGRAM__: {start: 0, returns: [31], nodes: [
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 5
   [Assign, ~, [4, 5], 0, Int], # 6
   [Loop, {bound: entry}, [6], 6], # 7
-  [Phi, {region: 7}, [2, 38], ~, Str], # 8
+  [Phi, {region: 7}, [2, 41], ~, Str], # 8
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 9
   [Concat, ~, [8, 9], ~, Str], # 10
-  [Proj, {index: 0}, [7]], # 11
-  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 12
-  [ArrayLiteral, ~, [1, 12, 1], ~, Array], # 13
-  [Phi, {region: 7}, [5, 36], ~, Int], # 14
-  [Subscript, {kind: array}, [13, 14, 6], ~, Scalar], # 15
-  [Defined, ~, [15], ~, Boolean], # 16
-  [If, ~, [11, 16], 11], # 17
-  [Proj, {index: 1}, [17]], # 18
-  [Call, {dispatch_kind: direct, name: main::fallback, param_names: [], want: scalar}, ~, 18, Int], # 19
-  [Proj, {index: 0}, [17]], # 20
-  [Region, {head: 17}, [20, 19]], # 21
-  [Phi, {predecessors: [20, 18], region: 21}, [6, 19], ~, Int], # 22
-  [PadAccess, {shared: 1, sigil: $, symbol: calls}, [22], ~, Str], # 23
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [23], ~, Str], # 24
-  [Concat, ~, [10, 24], ~, Str], # 25
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 26
-  [Concat, ~, [25, 26], ~, Str], # 27
-  [Proj, {index: 1}, [7]], # 28
-  [Region, {head: 7}, [28]], # 29
-  [Print, ~, [27], 29, Scalar], # 30
-  [Return, {implicit: true}, [1], 30], # 31
-  [Count, ~, [13, 6], ~, Int], # 32
-  [NumGt, ~, [32, 14], 7, Boolean], # 33
-  [Phi, {predecessors: [20, 18], region: 21}, [15, 19], ~, Scalar], # 34
-  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 35
-  [Add, ~, [14, 35], ~, Int], # 36
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [34], ~, Str], # 37
-  [Concat, ~, [8, 37], ~, Str]]} # 38
+  [Phi, {memory: true, region: 7}, [6, 36], ~, Unknown], # 11
+  [Proj, {index: 1}, [7]], # 12
+  [Region, {head: 7}, [12]], # 13
+  [Phi, {memory: true, region: 13}, [11], ~, Unknown], # 14
+  [PadAccess, {shared: 1, sigil: $, symbol: calls}, [14], ~, Str], # 15
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [15], ~, Str], # 16
+  [Concat, ~, [10, 16], ~, Str], # 17
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 18
+  [Concat, ~, [17, 18], ~, Str], # 19
+  [Print, ~, [19], 13, Scalar], # 20
+  [Return, {implicit: true}, [1], 20], # 21
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 22
+  [ArrayLiteral, ~, [1, 22, 1], ~, Array], # 23
+  [Count, ~, [23, 6], ~, Int], # 24
+  [Phi, {region: 7}, [5, 38], ~, Int], # 25
+  [Count, ~, [23, 11], ~, Int], # 26
+  [NumGt, ~, [26, 25], 7, Boolean], # 27
+  [Proj, {index: 0}, [7]], # 28
+  [Subscript, {kind: array}, [23, 25, 11], ~, Scalar], # 29
+  [Defined, ~, [29], ~, Boolean], # 30
+  [If, ~, [28, 30], 28], # 31
+  [Proj, {index: 1}, [31]], # 32
+  [Call, {dispatch_kind: direct, name: main::fallback, param_names: [], want: scalar}, ~, 32, Int], # 33
+  [Proj, {index: 0}, [31]], # 34
+  [Region, {head: 31}, [34, 33]], # 35
+  [Phi, {memory: true, predecessors: [34, 32], region: 35}, [11, 33], ~, Unknown], # 36
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 37
+  [Add, ~, [25, 37], ~, Int], # 38
+  [Phi, {predecessors: [34, 32], region: 35}, [29, 33], ~, Scalar], # 39
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [39], ~, Str], # 40
+  [Concat, ~, [8, 40], ~, Str]]} # 41
 main::fallback: {start: 0, returns: [6], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "7"}, ~, ~, Int], # 1
@@ -863,7 +875,7 @@ parses: yes
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [20], nodes: [
+main::__PROGRAM__: {start: 0, returns: [21], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: ""}, ~, ~, Str], # 2
@@ -872,62 +884,64 @@ main::__PROGRAM__: {start: 0, returns: [20], nodes: [
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 5
   [Assign, ~, [4, 5], 0, Int], # 6
   [Loop, {bound: entry}, [6], 6], # 7
-  [Phi, {region: 7}, [2, 63], ~, Str], # 8
+  [Phi, {region: 7}, [2, 65], ~, Str], # 8
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 9
   [Concat, ~, [8, 9], ~, Str], # 10
-  [Phi, {region: 7}, [6, 51], ~, Scalar], # 11
-  [PadAccess, {shared: 1, sigil: $, symbol: calls}, [11], ~, Str], # 12
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [12], ~, Str], # 13
-  [Concat, ~, [10, 13], ~, Str], # 14
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 15
-  [Concat, ~, [14, 15], ~, Str], # 16
-  [Proj, {index: 1}, [7]], # 17
-  [Region, {head: 7}, [17]], # 18
-  [Print, ~, [16], 18, Scalar], # 19
-  [Return, {implicit: true}, [1], 19], # 20
-  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 21
-  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 22
-  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 23
-  [Constant, {const_type: integer, value: "9"}, ~, ~, Int], # 24
-  [ArrayLiteral, ~, [21, 22, 23, 24], ~, Array], # 25
-  [Count, ~, [25, 6], ~, Int], # 26
-  [Phi, {region: 7}, [5, 52], ~, Int], # 27
-  [NumGt, ~, [26, 27], 7, Boolean], # 28
-  [Proj, {index: 0}, [7]], # 29
-  [PadAccess, {sigil: $, symbol: x}, [11], ~, Unknown], # 30
-  [Subscript, {kind: array}, [25, 27, 11], ~, Int], # 31
-  [Assign, ~, [30, 31], 29, Int], # 32
-  [PadAccess, {sigil: $, symbol: x}, [32], ~, Unknown], # 33
-  [Call, {dispatch_kind: direct, name: main::id, param_names: [], want: scalar}, [33], 32, Scalar], # 34
+  [Phi, {memory: true, region: 7}, [6, 53], ~, Scalar], # 11
+  [Proj, {index: 1}, [7]], # 12
+  [Region, {head: 7}, [12]], # 13
+  [Phi, {memory: true, region: 13}, [11], ~, Scalar], # 14
+  [PadAccess, {shared: 1, sigil: $, symbol: calls}, [14], ~, Str], # 15
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [15], ~, Str], # 16
+  [Concat, ~, [10, 16], ~, Str], # 17
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 18
+  [Concat, ~, [17, 18], ~, Str], # 19
+  [Print, ~, [19], 13, Scalar], # 20
+  [Return, {implicit: true}, [1], 20], # 21
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 22
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 23
+  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 24
+  [Constant, {const_type: integer, value: "9"}, ~, ~, Int], # 25
+  [ArrayLiteral, ~, [22, 23, 24, 25], ~, Array], # 26
+  [Count, ~, [26, 6], ~, Int], # 27
+  [Phi, {region: 7}, [5, 54], ~, Int], # 28
+  [Count, ~, [26, 11], ~, Int], # 29
+  [NumGt, ~, [29, 28], 7, Boolean], # 30
+  [Proj, {index: 0}, [7]], # 31
+  [PadAccess, {sigil: $, symbol: x}, [11], ~, Unknown], # 32
+  [Subscript, {kind: array}, [26, 28, 11], ~, Int], # 33
+  [Assign, ~, [32, 33], 31, Int], # 34
   [PadAccess, {sigil: $, symbol: x}, [34], ~, Unknown], # 35
-  [If, ~, [34, 34], 34], # 36
-  [Proj, {index: 0}, [36]], # 37
-  [Call, {dispatch_kind: direct, name: main::id, param_names: [], want: scalar}, [35], 37, Scalar], # 38
-  [Proj, {index: 1}, [36]], # 39
-  [Region, {head: 36}, [38, 39]], # 40
-  [Phi, {predecessors: [37, 39], region: 40}, [38, 34], ~, Scalar], # 41
-  [PadAccess, {sigil: $, symbol: x}, [41], ~, Unknown], # 42
-  [Coerce, {from_repr: Scalar, to_repr: Num}, [38], ~, Num], # 43
-  [NumGt, ~, [43, 21], ~, Boolean], # 44
-  [Phi, {predecessors: [37, 39], region: 40}, [44, 34], ~, Scalar], # 45
-  [If, ~, [40, 45], 40], # 46
-  [Proj, {index: 0}, [46]], # 47
-  [Call, {dispatch_kind: direct, name: main::id, param_names: [], want: scalar}, [42], 47, Scalar], # 48
-  [Proj, {index: 1}, [46]], # 49
-  [Region, {head: 46}, [48, 49]], # 50
-  [Phi, {predecessors: [47, 49], region: 50}, [48, 41], ~, Scalar], # 51
-  [Add, ~, [27, 21], ~, Int], # 52
-  [PadAccess, {sigil: $, symbol: x}, [51], ~, Str], # 53
-  [Coerce, {from_repr: Scalar, to_repr: Num}, [48], ~, Num], # 54
-  [NumLt, ~, [54, 24], ~, Boolean], # 55
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [53], ~, Str], # 56
-  [Phi, {predecessors: [47, 49], region: 50}, [55, 45], ~, Scalar], # 57
-  [If, ~, [50, 57], 50], # 58
-  [Concat, ~, [8, 56], ~, Str], # 59
-  [Proj, {index: 1}, [58]], # 60
-  [Proj, {index: 0}, [58]], # 61
-  [Region, {head: 58}, [60, 61]], # 62
-  [Phi, {predecessors: [60, 61], region: 62}, [8, 59], ~, Str]]} # 63
+  [Call, {dispatch_kind: direct, name: main::id, param_names: [], want: scalar}, [35], 34, Scalar], # 36
+  [PadAccess, {sigil: $, symbol: x}, [36], ~, Unknown], # 37
+  [If, ~, [36, 36], 36], # 38
+  [Proj, {index: 0}, [38]], # 39
+  [Call, {dispatch_kind: direct, name: main::id, param_names: [], want: scalar}, [37], 39, Scalar], # 40
+  [Proj, {index: 1}, [38]], # 41
+  [Region, {head: 38}, [40, 41]], # 42
+  [Phi, {memory: true, predecessors: [39, 41], region: 42}, [40, 36], ~, Scalar], # 43
+  [PadAccess, {sigil: $, symbol: x}, [43], ~, Unknown], # 44
+  [Coerce, {from_repr: Scalar, to_repr: Num}, [40], ~, Num], # 45
+  [NumGt, ~, [45, 22], ~, Boolean], # 46
+  [Phi, {predecessors: [39, 41], region: 42}, [46, 36], ~, Scalar], # 47
+  [If, ~, [42, 47], 42], # 48
+  [Proj, {index: 0}, [48]], # 49
+  [Call, {dispatch_kind: direct, name: main::id, param_names: [], want: scalar}, [44], 49, Scalar], # 50
+  [Proj, {index: 1}, [48]], # 51
+  [Region, {head: 48}, [50, 51]], # 52
+  [Phi, {memory: true, predecessors: [49, 51], region: 52}, [50, 43], ~, Scalar], # 53
+  [Add, ~, [28, 22], ~, Int], # 54
+  [PadAccess, {sigil: $, symbol: x}, [53], ~, Str], # 55
+  [Coerce, {from_repr: Scalar, to_repr: Num}, [50], ~, Num], # 56
+  [NumLt, ~, [56, 25], ~, Boolean], # 57
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [55], ~, Str], # 58
+  [Phi, {predecessors: [49, 51], region: 52}, [57, 47], ~, Scalar], # 59
+  [If, ~, [52, 59], 52], # 60
+  [Concat, ~, [8, 58], ~, Str], # 61
+  [Proj, {index: 1}, [60]], # 62
+  [Proj, {index: 0}, [60]], # 63
+  [Region, {head: 60}, [62, 63]], # 64
+  [Phi, {predecessors: [62, 63], region: 64}, [8, 61], ~, Str]]} # 65
 main::id: {start: 0, returns: [8], nodes: [
   [Start], # 0
   [ArgsSource, ~, ~, ~, Array], # 1
@@ -1004,8 +1018,8 @@ main::f: {start: 0, returns: [17], nodes: [
   [Region, {head: 4}, [15, 12]], # 16
   [Return, {implicit: true}, [14], 16], # 17
   [MemStart], # 18
-  [Phi, {predecessors: [9, 11], region: 12}, [10, 18], ~, Unknown], # 19
-  [Phi, {predecessors: [15, 5], region: 16}, [18, 19], ~, Unknown], # 20
+  [Phi, {memory: true, predecessors: [9, 11], region: 12}, [10, 18], ~, Unknown], # 19
+  [Phi, {memory: true, predecessors: [15, 5], region: 16}, [18, 19], ~, Unknown], # 20
   [ArgsSource, ~, ~, ~, Array], # 21
   [Assign, {targets: 2}, [1, 6, 21], ~, List]]} # 22
 main::helper: {start: 0, returns: [7], nodes: [
@@ -1081,6 +1095,8 @@ main::report: {start: 0, returns: [26], nodes: [
   [Proj, {index: 1}, [14]], # 24
   [Region, {head: 14}, [24, 21]], # 25
   [Return, {implicit: true}, [23], 25], # 26
-  [ArgsSource, ~, ~, ~, Array], # 27
-  [Assign, {targets: 2}, [1, 9, 27], ~, List]]} # 28
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 27
+  [Phi, {predecessors: [24, 15], region: 25}, [27, 13], ~, Scalar], # 28
+  [ArgsSource, ~, ~, ~, Array], # 29
+  [Assign, {targets: 2}, [1, 9, 29], ~, List]]} # 30
 ```

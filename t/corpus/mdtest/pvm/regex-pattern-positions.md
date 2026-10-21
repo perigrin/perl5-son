@@ -93,7 +93,7 @@ main::__PROGRAM__: {start: 0, returns: [27], nodes: [
   [Constant, {const_type: string, value: " ["}, ~, ~, Str], # 11
   [EntryDef, {package: main, sigil: $, symbol: "\""}, [8], ~, Scalar], # 12
   [Coerce, {from_repr: Scalar, to_repr: Str}, [12], ~, Str], # 13
-  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [13, 7], ~, Str], # 14
+  [Call, {dispatch_kind: builtin, memory_input: true, name: join, param_names: []}, [13, 7, 8], ~, Str], # 14
   [Concat, ~, [11, 14], ~, Str], # 15
   [Constant, {const_type: string, value: "] "}, ~, ~, Str], # 16
   [Concat, ~, [15, 16], ~, Str], # 17
@@ -101,7 +101,7 @@ main::__PROGRAM__: {start: 0, returns: [27], nodes: [
   [Call, {dispatch_kind: builtin, name: split, param_names: []}, [18, 5, 6], ~, List], # 19
   [Count, ~, [19, 8], ~, Int], # 20
   [Coerce, {from_repr: Int, to_repr: Str}, [20], ~, Str], # 21
-  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [13, 19], ~, Str], # 22
+  [Call, {dispatch_kind: builtin, memory_input: true, name: join, param_names: []}, [13, 19, 8], ~, Str], # 22
   [Concat, ~, [11, 22], ~, Str], # 23
   [Constant, {const_type: string, value: "]\n"}, ~, ~, Str], # 24
   [Concat, ~, [23, 24], ~, Str], # 25

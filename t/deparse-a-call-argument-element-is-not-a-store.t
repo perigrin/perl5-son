@@ -93,6 +93,8 @@ refuses(q{sub inc { $_[0]++ } my @a=(0); for my $c (1,0) { my $x = $c ? inc($a[0
 # A CALL WRITES ITS ELEMENT ARGUMENT through $_[0]. A read of that element
 # earlier in a loop iteration is spelled at its use, after the call, so the
 # loop pass counts the call as a store to the aggregate it is passed from.
+# A plain lexical aggregate's read is then read at the top of the body; one
+# through a reference or a package aggregate still refuses.
 sub render_refuses ($src, $cause, $name) {
     my $d = SoN::Deparse->new;
     my $out = $d->render(graph_of($src) // {});
@@ -100,16 +102,16 @@ sub render_refuses ($src, $cause, $name) {
     like $d->gap // q{}, $cause, "$name: refused, naming its cause";
 }
 my $loop_gap = qr/GAP: an element read in a loop is spelled after a store to its aggregate/;
-render_refuses(q{sub g { $_[0] = 5; 1 } my %h=(a=>1); for my $c (1,0) { my $y = $h{a}; g($c ? $h{a} : my $t); print "$y $h{a}\n" }},
-    $loop_gap, 'a ternary element argument after a read, in a loop');
+round_trips(q{sub g { $_[0] = 5; 1 } my %h=(a=>1); for my $c (1,0) { my $y = $h{a}; g($c ? $h{a} : my $t); print "$y $h{a}\n" }},
+    'a ternary element argument after a read, in a loop');
 render_refuses(q{sub g { $_[0] = 5; 1 } my $r={a=>1}; for my $c (1,0) { my $y = $r->{a}; g($c ? $r->{a} : my $t); print "$y $r->{a}\n" }},
     $loop_gap, 'a hashref element');
 render_refuses(q{sub g { $_[0] = 5; 1 } our %g=(a=>1); for my $c (1,0) { my $y = $g{a}; g($c ? $g{a} : my $t); print "$y $g{a}\n" }},
     $loop_gap, 'a package hash element');
-render_refuses(q{sub g { $_[0] = 5; 1 } my %h=(a=>1); for my $c (1,0) { my $y = $h{a}; g($h{a}); print "$y $h{a}\n" }},
-    $loop_gap, 'a plain element argument after a read, in a loop');
-render_refuses(q{sub g { $_[0] = 5 } my %h=(a=>1); for my $c (1,0) { my $x = sprintf("%s", $c ? $h{a} : 8); g($h{a}); print "$x $h{a}\n" }},
-    $loop_gap, 'a sprintf of a ternary element before a writing call, in a loop');
+round_trips(q{sub g { $_[0] = 5; 1 } my %h=(a=>1); for my $c (1,0) { my $y = $h{a}; g($h{a}); print "$y $h{a}\n" }},
+    'a plain element argument after a read, in a loop');
+round_trips(q{sub g { $_[0] = 5 } my %h=(a=>1); for my $c (1,0) { my $x = sprintf("%s", $c ? $h{a} : 8); g($h{a}); print "$x $h{a}\n" }},
+    'a sprintf of a ternary element before a writing call, in a loop');
 round_trips(q{sub g { $_[0] = 5; 1 } my %h=(a=>1,b=>2); for my $c (1,0) { my $y = $h{a}; g($c ? $h{b} : my $t); print "$y $h{a} $h{b}\n" }},
     'a different key passed');
 round_trips(q{sub g { $_[0] = 5; 1 } my %h=(a=>1); for my $c (1,0) { g($h{a}); my $y = $h{a}; print "$y\n" }},
@@ -137,5 +139,25 @@ round_trips(q{my @a=(1); my $x = sprintf("%d", $a[0]); $a[0] = 5; print "$x @a\n
     'a sprintf of an array element before a store');
 round_trips(q{my $r={a=>1}; my $c = shift // 1; my $x = sprintf("%s", $c ? $r->{a} : 8); $r->{a} = 5; print "$x $r->{a}\n"},
     'a sprintf of a ternary hashref element before a store');
+
+# A DEREFERENCE PASSED TO A CALL hands it the array's elements, never the
+# slot that holds the reference: a sort over `@{ $reg->{fields} }` was
+# taken for a store to `$reg->{fields}`, so a read of `$reg->{is_class}`
+# spelled after it refused (chalk's LLVM::_emit_class_registry_ir).
+round_trips(<<'SRC', 'a sort over a dereferenced element, before a read of a sibling key');
+sub f {
+    my ($registry) = @_;
+    my @lines;
+    for my $cname (sort keys %$registry) {
+        my $reg = $registry->{$cname};
+        my $fields = $reg->{fields} // [];
+        my $is = $reg->{is_class} ? 1 : 0;
+        my @sorted = sort { $a->{i} <=> $b->{i} } @$fields;
+        push @lines, "$cname:" . join(",", map { $_->{i} } @sorted) if $is;
+    }
+    return "@lines";
+}
+print f({ A => { is_class => 1, fields => [{ i => 2 }, { i => 1 }] }, B => { fields => [] } }), "\n";
+SRC
 
 done_testing;

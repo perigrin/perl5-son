@@ -2176,28 +2176,30 @@ main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Return, {implicit: true}, [1], 0]]} # 2
-main::corpus_case: {start: 0, returns: [17], nodes: [
+main::corpus_case: {start: 0, returns: [12], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "10"}, ~, ~, Int], # 1
   [Constant, {const_type: integer, value: "20"}, ~, ~, Int], # 2
   [ArrayLiteral, {sigil: "@", symbol: a}, [1, 2], ~, Array], # 3
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 4
-  [Loop, {bound: entry}, [0], 0], # 5
-  [Phi, {region: 5}, [4, 20], ~, Int], # 6
-  [Subscript, {kind: array}, [3, 6], ~, Scalar], # 7
-  [MemStart], # 8
-  [Subscript, {kind: array}, [3, 6, 8], ~, Int], # 9
-  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 10
-  [Add, ~, [9, 10], ~, Int], # 11
-  [Proj, {index: 0}, [5]], # 12
-  [Assign, ~, [7, 11], 12, Int], # 13
-  [Subscript, {kind: array}, [3, 4, 13], ~, Int], # 14
-  [Proj, {index: 1}, [5]], # 15
-  [Region, {head: 5}, [15]], # 16
-  [Return, {implicit: true}, [14], 16], # 17
-  [Count, ~, [3, 8], ~, Int], # 18
-  [NumGt, ~, [18, 6], 5, Boolean], # 19
-  [Add, ~, [6, 10], ~, Int]]} # 20
+  [MemStart], # 5
+  [Loop, {bound: entry}, [0], 0], # 6
+  [Phi, {memory: true, region: 6}, [5, 21], ~, Unknown], # 7
+  [Proj, {index: 1}, [6]], # 8
+  [Region, {head: 6}, [8]], # 9
+  [Phi, {memory: true, region: 9}, [7], ~, Unknown], # 10
+  [Subscript, {kind: array}, [3, 4, 10], ~, Scalar], # 11
+  [Return, {implicit: true}, [11], 9], # 12
+  [Count, ~, [3, 5], ~, Int], # 13
+  [Phi, {region: 6}, [4, 22], ~, Int], # 14
+  [NumGt, ~, [13, 14], 6, Boolean], # 15
+  [Proj, {index: 0}, [6]], # 16
+  [Subscript, {kind: array}, [3, 14], ~, Scalar], # 17
+  [Subscript, {kind: array}, [3, 14, 5], ~, Int], # 18
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 19
+  [Add, ~, [18, 19], ~, Int], # 20
+  [Assign, ~, [17, 20], 16, Int], # 21
+  [Add, ~, [14, 19], ~, Int]]} # 22
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
@@ -2597,14 +2599,33 @@ main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Return, {implicit: true}, [1], 0]]} # 2
-main::corpus_case: {start: 0, returns: [5], nodes: [
+main::corpus_case: {start: 0, returns: [24], nodes: [
   [Start], # 0
-  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
-  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 2
-  [Region, ~, [0, 0]], # 3
-  [Phi, {region: 3}, [1, 2], ~, Int], # 4
-  [Return, {implicit: true}, [4], 3], # 5
-  [Phi, {region: 3}, [1, 2], ~, Int]]} # 6
+  [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar], # 1
+  [MemStart], # 2
+  [PadAccess, {sigil: $, symbol: x}, [2], ~, Unknown], # 3
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 4
+  [Assign, ~, [3, 4], 0, Int], # 5
+  [EntryDef, {package: main, sigil: $, symbol: "@"}, [5], ~, Scalar], # 6
+  [PadAccess, {sigil: $, symbol: x}, [5], ~, Unknown], # 7
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 8
+  [Assign, ~, [7, 8], 5, Int], # 9
+  [Region, {eval_entry: 5}, [9]], # 10
+  [EntryDef, {package: main, sigil: $, symbol: "@"}, [9], 10, Scalar], # 11
+  [EntryWrite, ~, [1, 6, 9], 11, Unknown], # 12
+  [PadAccess, {sigil: $, symbol: x}, [12], ~, Unknown], # 13
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 14
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 15
+  [Phi, {region: 10}, [8, 15], ~, Scalar], # 16
+  [If, ~, [12, 16], 12], # 17
+  [Proj, {index: 1}, [17]], # 18
+  [Assign, ~, [13, 14], 18, Int], # 19
+  [Proj, {index: 0}, [17]], # 20
+  [Region, {head: 17}, [20, 19]], # 21
+  [Phi, {memory: true, predecessors: [20, 18], region: 21}, [12, 19], ~, Unknown], # 22
+  [PadAccess, {sigil: $, symbol: x}, [22], ~, Unknown], # 23
+  [Return, {implicit: true}, [23], 21], # 24
+  [Phi, {predecessors: [20, 18], region: 21}, [8, 14], ~, Int]]} # 25
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
@@ -2679,16 +2700,35 @@ main::__PROGRAM__: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Return, {implicit: true}, [1], 0]]} # 2
-main::corpus_case: {start: 0, returns: [7], nodes: [
+main::corpus_case: {start: 0, returns: [26], nodes: [
   [Start], # 0
-  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
-  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 2
-  [Constant, {const_type: string, value: "in\n"}, ~, ~, Str], # 3
-  [Print, ~, [3], 0, Scalar], # 4
-  [Region, ~, [4, 0]], # 5
-  [Phi, {region: 5}, [1, 2], ~, Int], # 6
-  [Return, {implicit: true}, [6], 5], # 7
-  [Phi, {region: 5}, [1, 2], ~, Int]]} # 8
+  [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar], # 1
+  [MemStart], # 2
+  [PadAccess, {sigil: $, symbol: x}, [2], ~, Unknown], # 3
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 4
+  [Assign, ~, [3, 4], 0, Int], # 5
+  [EntryDef, {package: main, sigil: $, symbol: "@"}, [5], ~, Scalar], # 6
+  [PadAccess, {sigil: $, symbol: x}, [5], ~, Unknown], # 7
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 8
+  [Constant, {const_type: string, value: "in\n"}, ~, ~, Str], # 9
+  [Print, ~, [9], 5, Scalar], # 10
+  [Assign, ~, [7, 8], 10, Int], # 11
+  [Region, {eval_entry: 5}, [11]], # 12
+  [EntryDef, {package: main, sigil: $, symbol: "@"}, [11], 12, Scalar], # 13
+  [EntryWrite, ~, [1, 6, 11], 13, Unknown], # 14
+  [PadAccess, {sigil: $, symbol: x}, [14], ~, Unknown], # 15
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 16
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 17
+  [Phi, {region: 12}, [8, 17], ~, Scalar], # 18
+  [If, ~, [14, 18], 14], # 19
+  [Proj, {index: 1}, [19]], # 20
+  [Assign, ~, [15, 16], 20, Int], # 21
+  [Proj, {index: 0}, [19]], # 22
+  [Region, {head: 19}, [22, 21]], # 23
+  [Phi, {memory: true, predecessors: [22, 20], region: 23}, [14, 21], ~, Unknown], # 24
+  [PadAccess, {sigil: $, symbol: x}, [24], ~, Unknown], # 25
+  [Return, {implicit: true}, [25], 23], # 26
+  [Phi, {predecessors: [22, 20], region: 23}, [8, 16], ~, Int]]} # 27
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1

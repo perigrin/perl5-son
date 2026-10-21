@@ -247,27 +247,56 @@ for my $src (
 }
 
 # A TERNARY ARGUMENT PASSES ITS ARMS' VARIABLES BY ALIAS, as a direct argument
-# does: the callee writes them through @_, a reference to the list refers to
-# each, and foreach and map alias $_ to them. A list arm is an anonymous list
-# of copies, so the write vanished or died on a read-only constant. Refused.
+# does: the callee writes them through @_. A pad scalar named in an arm of a
+# call's argument is demoted as a direct argument is, so the arm spells the
+# variable and the alias stands. chalk's Dominators passes `$proj0 ? ($proj0)
+# : ()` so, and StructPromotion, Analysis and LLVM much the same.
 for my $src (
     q{sub g { $_[1] = 42 } my $c = @ARGV ? 0 : 1; my $s = time % 1 + 5; my $t = $s + 1; g($c ? ($s, $t) : ()); print "$s $t\n";},
     q{sub g { $_[1] = 42 } my $c = 1; my $s = 5; my $t = 6; g($c ? ($s, $t) : ()); print "$s $t\n";},
-    q{sub g { my @x = @_; $_[0] = 9; "@x" } my $c = 1; my $s = 5; my $r = g($c ? ($s, 6) : ()); print "$r $s\n";},
     q{sub g { $_[1] = 42; 0 } my $s = 5; my $t = 6; for my $c (1, 0) { g($c ? ($s, $t) : ($t, $s)) } print "$s $t\n";},
     q{sub g { $_[0] = 42 } my $c = 1; my $s = 5; g($c ? $s : ()); print "$s\n";},
     q{sub g { $_[0] = 42 } my $s = 5; for my $c (1, 0) { g($c ? $s : ()) } print "$s\n";},
+    q{my $w = sub { $_[1] // "n" }; sub f { my ($p) = @_; return $w->("i", $p ? ($p) : ()) } print f(3), f(0), "\n";},
+    q{sub g { $_[0] = "x$_[0]" } for my $i (1 .. 2) { my $p = $i; g(1 ? ($p) : ()); print $p } print "\n";},
+    # A REFERENCE TO THE LIST takes one to each pad scalar an arm names.
+    q{my $c = 1; my $s = 5; my $t = 6; my @r = \($c ? ($s, $t) : ()); ${$r[1]} = 0; print "$s $t\n";},
+) {
+    round_trips($src, "an aliased ternary argument of pad scalars: $src");
+}
+# ANYTHING ELSE AN ARM ALIASES is still a copy: a package scalar, an
+# aggregate, an element, a foreach or map alias --
+# and an arm that calls, which merges on a Phi of copies. So does a callee
+# that copies @_ before writing it (`my @x = @_; $_[0] = 9`), whose copy is
+# bound as @_ itself: a defect of its own, not the ternary's.
+for my $src (
     q{sub k { 7 } sub g { $_[0] = 42 } my $s = 5; for my $c (1, 0) { g($c ? ($s, k()) : ()) } print "$s\n";},
     q{sub g { $_[0] = 1 } our $s = 5; my $c = 1; g($c ? ($s, 2) : ()); print "$s\n";},
+) {
+    refuses($src, qr/GAP: a ternary list arm passed by alias/,
+        "an aliased ternary list arm: $src");
+}
+# HANDED TO A CALL, A FOREACH, OR A MAP, the ternary is spelled where it
+# stands -- a list slice of it where indexed -- and a list slice yields the
+# elements themselves: a callee's write lands
+# (t/deparse-a-ternary-list-arm-passed-by-alias.t), and a store through the
+# alias has no container to name and refuses in the deparser.
+for my $src (
     q{sub g { $_[0] = 1 } my @a = (5, 6); my $c = 1; g($c ? (@a) : ()); print "@a\n";},
     q{sub g { $_[0] = 1 } my %h = (a => 5); my $c = 1; g($c ? ($h{a}, 2) : ()); print "$h{a}\n";},
-    q{my $c = 1; my $s = 5; my $t = 6; my @r = \($c ? ($s, $t) : ()); ${$r[1]} = 0; print "$s $t\n";},
+) {
+    round_trips($src, "a call's ternary list arm aliasing an aggregate: $src");
+}
+for my $src (
     q{my $c = 1; my $s = 5; my $t = 6; for ($c ? ($s, $t) : ()) { $_ = 7 } print "$s $t\n";},
     q{my $s = 5; my $t = 6; for my $c (1, 0) { $_++ for ($c ? ($s, $t) : ($t)) } print "$s $t\n";},
     q{my $c = 1; my $s = 5; my $t = 6; my @r = map { $_ *= 2 } ($c ? ($s, $t) : ()); print "@r $s $t\n";},
 ) {
-    refuses($src, qr/GAP: a ternary list arm passed by alias/,
-        "an aliased ternary list arm: $src");
+    my $d = SoN::Deparse->new;
+    my $out = $d->render(graph_of($src) // {});
+    ok !defined $out, "an aliased ternary list arm written: $src: not rendered";
+    like $d->gap // producer_stderr(), qr/GAP: (?:a ternary list arm passed by alias|an element (?:store into an anonymous container|read in a loop is spelled after a store))/,
+        "an aliased ternary list arm written: $src: refused, naming its cause";
 }
 # Constants and expressions are temporaries: nothing to alias, so they lower.
 for my $src (

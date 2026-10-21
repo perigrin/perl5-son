@@ -85,14 +85,20 @@ subtest 'the body store advances memory OFF the header Phi' => sub {
         'the store is a statement-effect on the loop control chain (control_in set)');
 };
 
-subtest 'the post-loop read takes the header memory-Phi' => sub {
+subtest 'the post-loop read takes the loop exit memory' => sub {
     my $g = graph_of($WHILE);
     my $mem = loop_mem_phi($g);
     ok(defined $mem, 'loop-header memory-Phi exists') or return;
     my ($ret) = of_op($g, 'Return');
     my $read = $ret->inputs->[-1];
     is($read->operation, 'Subscript', 'the return value is a Subscript (the read)') or return;
-    is($read->inputs->[2], $mem, 'the post-loop read memory is the header memory-Phi');
+    # THE EXIT'S MERGE OF IT, not the header Phi itself: read at the header's
+    # version, the read after the loop was the body's own read at the top of
+    # the last pass -- one node, a pass behind (`$h{a}++`: 2 for perl's 3).
+    my $exit = $read->inputs->[2];
+    ok($exit->operation eq 'Phi' && $exit->region->operation eq 'Region'
+        && $exit->inputs->[0] == $mem,
+        'the post-loop read memory is the loop exit\'s merge of the header memory-Phi');
 };
 
 # The foreach-range body store is a SEPARATE producer code path
@@ -118,7 +124,13 @@ subtest 'a foreach-range body store threads the same loop-header memory-Phi' => 
     my ($ret) = of_op($g, 'Return');
     my $read = $ret->inputs->[-1];
     is($read->operation, 'Subscript', 'the return value is a Subscript (the read)') or return;
-    is($read->inputs->[2], $mem, 'the post-loop read memory is the header memory-Phi');
+    # THE EXIT'S MERGE OF IT, not the header Phi itself: read at the header's
+    # version, the read after the loop was the body's own read at the top of
+    # the last pass -- one node, a pass behind (`$h{a}++`: 2 for perl's 3).
+    my $exit = $read->inputs->[2];
+    ok($exit->operation eq 'Phi' && $exit->region->operation eq 'Region'
+        && $exit->inputs->[0] == $mem,
+        'the post-loop read memory is the loop exit\'s merge of the header memory-Phi');
 };
 
 done_testing();

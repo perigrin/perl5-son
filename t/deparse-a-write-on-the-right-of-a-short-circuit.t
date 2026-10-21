@@ -101,4 +101,34 @@ my $deep = $x; $deep = N->new("Coerce", [$deep]) for 1 .. 12;
 print th($c)->operation, th($x)->operation, th($deep)->operation, "\n";
 SRC
 
+# A `my` DECLARED ON THE RIGHT OF && has no binding before it, and the merge
+# of the arm's rebinds passed it by: the variable was declared and never
+# assigned (`none` for perl's `5`, at base too). Where the right side did
+# not run it is undef. chalk's Earley::_complete tests `$_leo_enabled &&
+# (my $leo = $leo_items{...}{...})`.
+round_trips(<<'SRC', 'a my declared on the right of && in an if condition');
+my %h = (a => { v => 5 }); sub f { my ($k, $on) = @_; my $r = "none"; if ($on && (my $x = $h{$k})) { $r = $x->{v} } return $r } print f("a", 1), f("b", 1), f("a", 0), "\n";
+SRC
+# A FIELD ON THE LEFT builds the && as real control flow, which merged the
+# arm's bindings only where both sides had one -- the same loss, one path
+# over. Earley::_complete's own shape.
+round_trips(<<'SRC', 'a my declared on the right of && after a field');
+use v5.42; no warnings; use experimental 'class';
+class K { field $on :param = 1; field $items :param;
+  method c ($rule, $origin) { my $r = "none"; if ($on && (my $leo = $items->{$rule}{$origin})) { $r = $leo->{value} } return $r } }
+my $it = { r => { 7 => { value => "V" } } };
+my $k = K->new(items => $it); print $k->c("r", 7), $k->c("r", 8), K->new(on => 0, items => $it)->c("r", 7), "\n";
+SRC
+# A FIELD FIRST READ IN THE ARM binds its slot to the field: no `my`, and
+# no undef for it on the other path -- `$phi = %h` stored through a number.
+round_trips(<<'SRC', 'a field hash first read on the right of &&, stored after');
+use v5.42; no warnings; use experimental 'class';
+class K { field $on :param = 1; field %leo;
+  method c ($r, $o) { my $v = "none"; if ($on && (my $l = $leo{$r}{$o})) { $v = $l } $leo{$r}{$o} = "L$o"; return $v } }
+my $k = K->new; print $k->c("a", 1), $k->c("a", 1), $k->c("a", 2), K->new(on => 0)->c("a", 1), "\n";
+SRC
+round_trips(<<'SRC', '... read in the else, where the right side may not have run');
+sub f { my ($a, $b) = @_; my $r; if ($a && (my $x = $b)) { $r = "t$x" } else { $r = defined $x ? "d$x" : "u" } return $r } print f(1, 2), f(0, 2), f(1, 0), "\n";
+SRC
+
 done_testing;

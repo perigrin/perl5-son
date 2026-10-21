@@ -115,12 +115,13 @@ Bar::FETCH: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: fetched}, ~, ~, Str], # 1
   [Return, ~, [1], 0]]} # 2
-Bar::TIESCALAR: {start: 0, returns: [4], nodes: [
+Bar::TIESCALAR: {start: 0, returns: [5], nodes: [
   [Start], # 0
   [HashLiteral, ~, ~, 0, HashRef], # 1
   [Constant, {const_type: string, value: Bar}, ~, ~, Str], # 2
-  [Call, {dispatch_kind: builtin, name: bless, param_names: []}, [1, 2], ~, Unknown], # 3
-  [Return, ~, [3], 1]]} # 4
+  [MemStart], # 3
+  [Call, {dispatch_kind: builtin, memory_input: true, name: bless, param_names: []}, [1, 2, 3], ~, Unknown], # 4
+  [Return, ~, [4], 1]]} # 5
 Bar::hi: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: bar}, ~, ~, Str], # 1
@@ -135,10 +136,11 @@ Foo::__DEFAULT_0: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
   [Return, ~, [1], 0]]} # 2
-Foo::m: {start: 0, returns: [2], nodes: [
+Foo::m: {start: 0, returns: [3], nodes: [
   [Start], # 0
-  [FieldAccess, {field_index: 0, field_stash: Foo}, ~, ~, Int], # 1
-  [Return, {implicit: true}, [1], 0]]} # 2
+  [MemStart], # 1
+  [FieldAccess, {field_index: 0, field_stash: Foo}, [1], ~, Int], # 2
+  [Return, {implicit: true}, [2], 0]]} # 3
 main::__PROGRAM__: {start: 0, returns: [37], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
@@ -151,7 +153,7 @@ main::__PROGRAM__: {start: 0, returns: [37], nodes: [
   [Constant, {const_type: string, value: arg}, ~, ~, Str], # 8
   [PadAccess, {sigil: $, symbol: b}, [4], ~, Unknown], # 9
   [HashLiteral, ~, ~, 4, HashRef], # 10
-  [Call, {dispatch_kind: builtin, name: bless, param_names: []}, [10, 7], ~, Unknown], # 11
+  [Call, {dispatch_kind: builtin, memory_input: true, name: bless, param_names: []}, [10, 7, 4], ~, Unknown], # 11
   [Assign, ~, [9, 11], 10, Unknown], # 12
   [PadAccess, {sigil: $, symbol: b}, [12], ~, Scalar], # 13
   [Constant, {const_type: string, value: hi}, ~, ~, Str], # 14

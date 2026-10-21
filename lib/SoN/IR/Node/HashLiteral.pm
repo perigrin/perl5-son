@@ -38,6 +38,10 @@ class SoN::IR::Node::HashLiteral :isa(SoN::IR::Node::Aggregate) {
     # no gain.
     field $sigil  :param :reader = undef;
     field $symbol :param :reader = undef;
+    # A PINNED WHOLE ASSIGN THAT IS NO `my` -- `@l = @n` -- rebinds the name:
+    # a version of it, not a declaration (the deparser's _agg_versioned).
+    field $rebinds :param :reader = undef;
+    method set_rebinds ($v) { $rebinds = $v }
 
     method operation() { 'HashLiteral' }
 }

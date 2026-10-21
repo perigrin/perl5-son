@@ -91,7 +91,7 @@ main::f: {start: 0, returns: [10], nodes: [
   [EntryDef, {package: main, sigil: $, symbol: "\""}, [2], ~, Scalar], # 3
   [Coerce, {from_repr: Scalar, to_repr: Str}, [3], ~, Str], # 4
   [ArgsSource, ~, ~, ~, Array], # 5
-  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [4, 5], ~, Str], # 6
+  [Call, {dispatch_kind: builtin, memory_input: true, name: join, param_names: []}, [4, 5, 2], ~, Str], # 6
   [Concat, ~, [1, 6], ~, Str], # 7
   [Constant, {const_type: string, value: "]"}, ~, ~, Str], # 8
   [Concat, ~, [7, 8], ~, Str], # 9
@@ -173,7 +173,7 @@ main::g: {start: 0, returns: [10], nodes: [
   [EntryDef, {package: main, sigil: $, symbol: "\""}, [2], ~, Scalar], # 3
   [Coerce, {from_repr: Scalar, to_repr: Str}, [3], ~, Str], # 4
   [ArgsSource, ~, ~, ~, Array], # 5
-  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [4, 5], ~, Str], # 6
+  [Call, {dispatch_kind: builtin, memory_input: true, name: join, param_names: []}, [4, 5, 2], ~, Str], # 6
   [Concat, ~, [1, 6], ~, Str], # 7
   [Constant, {const_type: string, value: "]"}, ~, ~, Str], # 8
   [Concat, ~, [7, 8], ~, Str], # 9

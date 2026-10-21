@@ -100,21 +100,71 @@ class K { field $s :param :reader = false; field $t :param :reader = true; }
 my $o = K->new; print $o->s ? "s" : "-", $o->t ? "t" : "-", K->new(s => 1)->s ? "S" : "-", "\n";
 SRC
 
-# A DEFAULT THE WIRE CANNOT CARRY -- a computed one -- was dropped just as
-# silently. It refuses now, naming the field, rather than emitting a class
-# whose field starts undef.
-{
-    my $src = <<'SRC';
+# A COMPUTED DEFAULT IS A GRAPH, run at each construction. It was refused
+# as one the wire could not carry, which held chalk's four MOP classes
+# (`field $graph :param :reader = Chalk::IR::Graph->new`) out of the round
+# trip. Each object gets its own: two objects' defaults are two calls.
+round_trips(<<'SRC', 'a computed default, run once per object');
 use v5.42; use experimental 'class';
 class K { field $t = time; method has { defined $t ? "y" : "n" } }
 print K->new->has, "\n";
 SRC
+
+round_trips(<<'SRC', 'a :param default that constructs an object');
+use v5.42; use experimental 'class';
+my $made = 0;
+package Box { sub new ($c) { $made++; bless { n => $made }, $c } sub n ($s) { $s->{n} } }
+class K { field $b :param :reader = Box->new; }
+my $x = K->new;
+my $y = K->new;
+my $z = K->new(b => bless { n => 9 }, 'Box');
+print $x->b->n, $y->b->n, $z->b->n, " $made\n";
+SRC
+
+# A BARE FIELD HAS NO INITIALISER AT ALL, and reading one as an expression
+# crashed the producer for every class beside it -- chalk's MOP::Class.
+round_trips(<<'SRC', 'a computed default beside a bare field');
+use v5.42; use experimental 'class';
+class K { field @l; field $t = time; method has { push @l, 1; (defined $t ? "y" : "n") . scalar @l } }
+print K->new->has, "\n";
+SRC
+
+# AN AGGREGATE'S COMPUTED DEFAULT IS ITS WHOLE LIST. Holding an anonymous
+# hash it is computed, not constant, and the graph returned the top of the
+# stack alone: `field %items = {7, "V"}`, an odd-sized hash and no key `r`.
+round_trips(<<'SRC', 'a hash field whose list holds an anonymous hash');
+use v5.42; use experimental 'class';
+class K { field %items = (r => { 7 => "V" }, s => [1, 2]); method g { $items{r}{7} . scalar($items{s}->@*) . join(",", sort keys %items) } }
+print K->new->g, "\n";
+SRC
+round_trips(<<'SRC', 'an array field whose list holds references');
+use v5.42; use experimental 'class';
+class K { field @l = ([1], { a => 2 }, 3); method g { scalar(@l) . $l[0][0] . $l[1]{a} . $l[2] } }
+print K->new->g, "\n";
+SRC
+
+# A DEFAULT THAT READS AN EARLIER FIELD -- or any lexical -- reaches outside
+# its own graph, which has no edge to it. Refused by name, not emitted
+# reading an undeclared variable.
+for my $case (
+    [ 'an earlier field', <<'SRC', qr/GAP: the default of field `\$b` in class K/ ],
+use v5.42; use experimental 'class';
+class K { field $a = 1; field $b = $a + 1; method b { $b } }
+print K->new->b, "\n";
+SRC
+    [ 'a file lexical', <<'SRC', qr/GAP: the default of field `\$b` in class K/ ],
+use v5.42; use experimental 'class';
+my $base = 5;
+class K { field $b = $base * 2; method b { $b } }
+print K->new->b, "\n";
+SRC
+) {
+    my ($what, $src, $want) = @$case;
     my $data = graph_of($src);
     my $d = SoN::Deparse->new;
     my $out = $d->render($data);
-    ok !defined $out, 'a computed field default refuses';
-    like $d->gap // '', qr/GAP: the default of field `\$t` in class K/,
-        '... naming the field and its class';
+    ok !defined $out, "a default that reads $what refuses";
+    like $d->gap // '', $want, '... naming the field and its class';
 }
 
 done_testing;

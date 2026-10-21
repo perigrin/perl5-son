@@ -84,12 +84,14 @@ refuses(q{use v5.42; sub f($r) { my $s=""; for (@$r) { $_ .= "y"; $r->[0] = "q";
     $UNPROVEN, 'a topic deref: the element store through the reference');
 
 # A read of the iterator on both sides of an element store.
-refuses_render(q{sub f { my @a = (1,2); my $s = ""; for my $x (@a) { $s .= sprintf("%s", $x); $a[0] = 9; $s .= "$x" } print "$s\n" } f();},
-    $STALE, 'a typed array: a read, an element store, a read');
-refuses(q{sub f { my @a; push @a, 1, 2; my $s = ""; for my $x (@a) { $s .= sprintf("%s", $x); $a[0] = 9; $s .= "$x" } print "$s\n" } f();},
-    $UNPROVEN, 'a bare array: a read, an element store, a read');
-refuses(q{sub f { my @a; push @a, 1, 2; my $s = ""; for my $x (@a) { $s .= "$x"; $a[0] = 9; $s .= "$x" } print "$s\n" } f();},
-    $UNPROVEN, 'a bare array: two interpolated reads around an element store');
+# NOW LOWERED: the iterator is aliased by reference -- see
+# t/deparse-a-foreach-alias-is-a-reference.t.
+round_trips(q{sub f { my @a = (1,2); my $s = ""; for my $x (@a) { $s .= sprintf("%s", $x); $a[0] = 9; $s .= "$x" } print "$s\n" } f();},
+    'a typed array: a read, an element store, a read');
+round_trips(q{sub f { my @a; push @a, 1, 2; my $s = ""; for my $x (@a) { $s .= sprintf("%s", $x); $a[0] = 9; $s .= "$x" } print "$s\n" } f();},
+    'a bare array: a read, an element store, a read');
+round_trips(q{sub f { my @a; push @a, 1, 2; my $s = ""; for my $x (@a) { $s .= "$x"; $a[0] = 9; $s .= "$x" } print "$s\n" } f();},
+    'a bare array: two interpolated reads around an element store');
 refuses(q{use v5.42; sub f($r) { my $s = ""; for (@$r) { $s .= $_; $r->[0] = 9; $s .= $_ } $s } print f([1,2]), "\n";},
     $UNPROVEN, 'a topic deref: two reads around an element store');
 
@@ -98,12 +100,13 @@ refuses(q{use v5.42; sub f($r) { my $s = ""; for (@$r) { $s .= $_; $r->[0] = 9; 
 # version: the post-loop read was bound ahead of the push (`12|1`).
 round_trips(q{sub f { my %h = (a => 1); my @a; push @a, 1, 2; my $s=""; for my $x (@a) { $h{a} = 9; $s .= $x } print "$s|$h{a}\n" } f();},
     'a bare array: a constant-key hash store, read after the loop');
-# A READ OF THE SAME ELEMENT in the body is one node with the read after the
-# loop, in every loop form (`2` for perl's `3`), so a read and a store refuse.
-refuses(q{sub f { my %h = (a => 1); my @a; push @a, 1, 2; my $s=""; for my $x (@a) { $h{a}++; $s .= $x } print "$s|$h{a}\n" } f();},
-    $UNPROVEN, 'a bare array: a hash increment, read after the loop');
-refuses(q{sub f { my %h = (a => 1); my @a; push @a, 1, 2; for my $x (@a) { $h{a} .= $x } print "$h{a}\n" } f();},
-    $UNPROVEN, 'a bare array: a hash append, read after the loop');
+# A READ OF THE SAME ELEMENT in the body was one node with the read after
+# the loop, in every loop form (`2` for perl's `3`), and refused. The loop
+# carries its memory through its exit now, and the read after it is its own.
+round_trips(q{sub f { my %h = (a => 1); my @a; push @a, 1, 2; my $s=""; for my $x (@a) { $h{a}++; $s .= $x } print "$s|$h{a}\n" } f();},
+    'a bare array: a hash increment, read after the loop');
+round_trips(q{sub f { my %h = (a => 1); my @a; push @a, 1, 2; for my $x (@a) { $h{a} .= $x } print "$h{a}\n" } f();},
+    'a bare array: a hash append, read after the loop');
 round_trips(q{sub f { my %h; my @a; push @a, 1, 2; for my $x (@a) { $h{$x} = 9 } print join(",", map { "$_=$h{$_}" } sort keys %h), "\n" } f();},
     'a bare array: a hash store keyed by the iterator');
 round_trips(q{sub f { my %h = (a => 1); my @a = (1, 2); my $s=""; for my $x (@a) { $h{a} = 9; $s .= $x } print "$s|$h{a}\n" } f();},
@@ -119,30 +122,33 @@ round_trips(q{sub f { my %h = (a => 1); my @a = (1); push @a, 2; my $k = 0; whil
 round_trips(q{sub f { my %h = (a => 1); my @a = (1); push @a, 2; my $k = 0; while ($k++ < 2) { $h{a} = 9 } my $z = $h{a}; $h{a} = 3; print "$z|$h{a}\n" } f();},
     'a while: a read after the loop, then a store');
 
-# A NESTED map, grep OR foreach aliases elements of its own list -- the
-# iterated array's, perhaps -- and under `$_` shadows the outer iterator.
-refuses(q{sub f { $_ = 9; my @a; push @a, 1, 2; my @c = (3); my $s = ""; for (@a) { my @b = map { $_ * 2 } @c; $s .= "$_@b" } print "$s|$_\n" } f();},
-    $UNPROVEN, 'a bare array under $_: a nested map');
-refuses(q{sub f { $_ = 9; my @a; push @a, 1, 2; my @c = (3); my $s = ""; for (@a) { my @b = grep { $_ > 1 } @c; $s .= "$_@b" } print "$s|$_\n" } f();},
-    $UNPROVEN, 'a bare array under $_: a nested grep');
-refuses(q{sub f { $_ = 9; my @a; push @a, 1, 2; my @c = (3); my $s = ""; for (@a) { for (@c) { $s .= $_ } $s .= $_ } print "$s|$_\n" } f();},
-    $UNPROVEN, 'a bare array under $_: a nested foreach');
-refuses(q{sub f { $_ = 9; my @a; push @a, 1, 2; my @c = (3); my $s = ""; for my $x (@a) { my @b = map { $_ * 2 } @c; $s .= "$x@b" } print "$s|$_\n" } f();},
-    $UNPROVEN, 'a bare array: a nested map');
+# A NESTED map, grep OR foreach over ANOTHER list, inside one no call can
+# reach: it aliases only its own list's elements, and under `$_` it
+# localises the outer iterator and restores it -- measured, each
+# round-trips. One over the outer list still refuses (per-pass tests).
+round_trips(q{sub f { $_ = 9; my @a; push @a, 1, 2; my @c = (3); my $s = ""; for (@a) { my @b = map { $_ * 2 } @c; $s .= "$_@b" } print "$s|$_\n" } f();},
+    'a bare array under $_: a nested map');
+round_trips(q{sub f { $_ = 9; my @a; push @a, 1, 2; my @c = (3); my $s = ""; for (@a) { my @b = grep { $_ > 1 } @c; $s .= "$_@b" } print "$s|$_\n" } f();},
+    'a bare array under $_: a nested grep');
+round_trips(q{sub f { $_ = 9; my @a; push @a, 1, 2; my @c = (3); my $s = ""; for (@a) { for (@c) { $s .= $_ } $s .= $_ } print "$s|$_\n" } f();},
+    'a bare array under $_: a nested foreach');
+round_trips(q{sub f { $_ = 9; my @a; push @a, 1, 2; my @c = (3); my $s = ""; for my $x (@a) { my @b = map { $_ * 2 } @c; $s .= "$x@b" } print "$s|$_\n" } f();},
+    'a bare array: a nested map');
 round_trips(q{sub f { $_ = 9; my @a; push @a, 1, 2; my $s = ""; for (@a) { $s .= "$_" } print "$s|$_\n" } f();},
     'a bare array under $_ after a store to $_');
 
-# A SHIFT, POP, UNSHIFT OR SPLICE moves the elements under the index.
-refuses(q{sub f { my @a; $a[1] = 5; my $s=""; for my $x (@a) { shift @a; $s .= defined $x ? $x : "u" } print "$s|", scalar(@a), "\n" } f();},
-    $UNPROVEN, 'a bare array with a hole: a shift');
-refuses(q{sub f { my @a; push @a, 1, 2, 3; my $s=""; for my $x (@a) { pop @a; $s .= $x } print "$s|@a\n" } f();},
-    $UNPROVEN, 'a bare array: a pop');
-refuses(q{sub f { my @a; push @a, 1, 2, 3; my $s=""; for my $x (@a) { splice @a, 1, 1; $s .= $x } print "$s|@a\n" } f();},
-    $UNPROVEN, 'a bare array: a splice');
-refuses(q{sub f { my @a; push @a, 1, 2; my $s=""; for my $x (@a) { unshift @a, 0 if @a < 4; $s .= $x } print "$s|@a\n" } f();},
-    $UNPROVEN, 'a bare array: an unshift');
-refuses(q{sub f { my @a; push @a, 1, 2; my @q = (7, 8); my $s=""; for my $x (@a) { $s .= $x . shift @q } print "$s|@a\n" } f();},
-    $UNPROVEN, 'a bare array: a shift of another array');
+# A SHIFT, POP, UNSHIFT OR SPLICE OF THE LIST moves the elements under the
+# index; one of another array cannot, over a list nothing else reaches.
+round_trips(q{sub f { my @a; $a[1] = 5; my $s=""; for my $x (@a) { shift @a; $s .= defined $x ? $x : "u" } print "$s|", scalar(@a), "\n" } f();},
+    'a bare array with a hole: a shift');
+round_trips(q{sub f { my @a; push @a, 1, 2, 3; my $s=""; for my $x (@a) { pop @a; $s .= $x } print "$s|@a\n" } f();},
+    'a bare array: a pop');
+round_trips(q{sub f { my @a; push @a, 1, 2, 3; my $s=""; for my $x (@a) { splice @a, 1, 1; $s .= $x } print "$s|@a\n" } f();},
+    'a bare array: a splice');
+round_trips(q{sub f { my @a; push @a, 1, 2; my $s=""; for my $x (@a) { unshift @a, 0 if @a < 4; $s .= $x } print "$s|@a\n" } f();},
+    'a bare array: an unshift');
+round_trips(q{sub f { my @a; push @a, 1, 2; my @q = (7, 8); my $s=""; for my $x (@a) { $s .= $x . shift @q } print "$s|@a\n" } f();},
+    'a bare array: a shift of another array');
 
 # AN ITERATOR WRITE GOES BACK TO THE INDEX, which a later element store
 # overwrites in perl and not here (`55|5 5` for `57|5 7`).
@@ -151,7 +157,7 @@ refuses(q{sub f { my @a; push @a, 1, 2; my $s=""; for my $x (@a) { $x = 5; $a[1]
 refuses(q{sub f { my @a; push @a, 1, 2; my $s=""; for my $x (@a) { my $g = sub { $x }; $a[0] = 5; $s .= $g->() } print "$s|@a\n" } f();},
     $UNPROVEN, 'a bare array: a closure over the alias and an element store');
 refuses(q{sub f { my @a; push @a, 1, 2; my $s=""; for my $x (@a) { my $g = sub { $x }; shift @a; $s .= $g->() } print "$s|@a\n" } f();},
-    $UNPROVEN, 'a bare array: a closure over the alias and a shift');
+    qr/$UNPROVEN|an anonymous sub closing over \$x|a foreach whose body reshapes the array it iterates/, 'a bare array: a closure over the alias and a shift');
 refuses(q{sub f { my @a; push @a, 1, 2; my $s=""; for my $x (@a) { $x = 5; @a[1] = (7); $s .= $x } print "$s|@a\n" } f();},
     $UNPROVEN, 'a bare array: an alias write, then a slice store');
 refuses(q{sub f { my @a; push @a, 1, 2; my $s=""; for my $x (@a) { $x = 5; $s .= "@a" } print "$s|@a\n" } f();},
@@ -161,21 +167,25 @@ refuses(q{sub f { my @a; push @a, 1, 2; my $s=""; for my $x (@a) { $x = 5; $s .=
 # through it after the loop reaches perl's element (`1 2` for `9 2`), and a
 # closure saw the last pass (`2,2` for `1,2`).
 refuses(q{sub f { my @a; push @a, 1, 2; my @r; for my $x (@a) { push @r, \$x } ${$r[0]} = 9; print "@a\n" } f();},
-    $UNPROVEN, 'a bare array: a reference to the iterator, written after the loop');
+    qr/$UNPROVEN|a reference to a foreach iterator is not yet lowered/, 'a bare array: a reference to the iterator, written after the loop');
 refuses(q{sub f { my @a; push @a, 1, 2; my %h; for my $x (@a) { $h{$x} = \$x } ${$h{1}} = 9; print "@a\n" } f();},
-    $UNPROVEN, 'a bare array: a reference to the iterator stored in a hash');
+    qr/$UNPROVEN|a reference to a foreach iterator is not yet lowered/, 'a bare array: a reference to the iterator stored in a hash');
 refuses(q{sub f { my @a; push @a, 1, 2; my @s; for my $x (@a) { push @s, sub { $x } } print join(",", map { $_->() } @s), "\n" } f();},
     $UNPROVEN, 'a bare array: a closure over the iterator');
 
-# A CALL may write `$_`, the array, or its elements.
-refuses(q{sub g { $_ = 100 } sub f { my @a; push @a, 1, 2; for (@a) { g() } print "|@a\n" } f();},
-    $UNPROVEN, 'a bare array under $_: a callee writing $_');
-refuses(q{my @F = (1, 2); sub g { $F[0] = 9 } sub f { my $s = ""; for my $x (@F) { g(); $s .= $x } print "$s|@F\n" } f();},
-    $UNPROVEN, 'a captured file array: a callee storing an element');
-refuses(q{sub f { my @a; push @a, 1, 2; my $s = ""; my $g = sub { $a[1] = 9 }; for my $x (@a) { $g->(); $s .= $x } print "$s|@a\n" } f();},
-    $UNPROVEN, 'a bare array: a closure call storing an element');
-refuses(q{use v5.42; sub g { $_ = 100 } sub f($r) { for (@$r) { g() } "@$r" } print f([1,2]), "\n";},
-    $UNPROVEN, 'a topic deref: a callee writing $_');
+# A CALL may write `$_`, the array, or its elements. `$_` is aliased to the
+# element each pass (t/deparse-a-callee-reads-the-topic-by-name.t), so a
+# callee's write to it lands there.
+round_trips(q{sub g { $_ = 100 } sub f { my @a; push @a, 1, 2; for (@a) { g() } print "|@a\n" } f();},
+    'a bare array under $_: a callee writing $_');
+round_trips(q{my @F = (1, 2); sub g { $F[0] = 9 } sub f { my $s = ""; for my $x (@F) { g(); $s .= $x } print "$s|@F\n" } f();},
+    'a captured file array: a callee storing an element');
+round_trips(q{sub f { my @a; push @a, 1, 2; my $s = ""; my $g = sub { $a[1] = 9 }; for my $x (@a) { $g->(); $s .= $x } print "$s|@a\n" } f();},
+    'a bare array: a closure call storing an element');
+# The topic is aliased each pass, and the body reads it before no call:
+# the callee's write lands in the element.
+round_trips(q{use v5.42; sub g { $_ = 100 } sub f($r) { for (@$r) { g() } "@$r" } print f([1,2]), "\n";},
+    'a topic deref: a callee writing $_');
 
 # WHAT STILL LOWERS: the list reached through the iterator alone.
 round_trips(q{sub f { my @a; push @a, 1, 2; my $s=""; for my $x (@a) { $s .= $x } print "$s|@a\n" } f();},

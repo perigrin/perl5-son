@@ -203,6 +203,31 @@ todo 'DIFF at base: a returned stored expression pushes nothing (renders return 
 todo 'DIFF at base: a ternary ending a sub, whose key reads memory, pushes nothing' => sub {
     output_matches(q{my %h = (k=>'a'); sub f { $_[0] ? ($h{$h{k}} = 7) : 8 } my @r = (f(1), f(0)); print "@r\n"}, 'a WANT 0 ternary, a key that reads the hash');
 };
+# AN IF/ELSE THAT ENDS A SUB yields its arms' values to the caller. An arm
+# that stores an element and THEN yields a constant merged nothing: the
+# value was not the store's, so the re-read could not stand for it, and
+# the Return took a stale stack slot -- the sub's last argument, `XY` for
+# perl's `12`. chalk's Earley::_scan ends so. A constant a later statement
+# yields reads nothing, and merges as itself.
+round_trips(q{use v5.42; no warnings; my %h; sub g ($k, $x) { if ($k) { 1 } else { $h{$k} = 3; 2 } } print g(1, "X"), g(0, "Y"), "\n";},
+    'an if/else ending a sub, an arm storing then yielding a constant');
+round_trips(q{use v5.42; no warnings; sub g ($k) { my %h; if ($k) { $h{a} = 3; 1 } else { 2 } } print g(1), g(0), "\n";},
+    '... the store in the true arm');
+round_trips(q{use v5.42; no warnings; my %c; sub g ($k, $v, $e, $p, $ag) { if (exists $c{$k}) { $c{$k} .= $v; if ($e == $p && $ag) { push $ag->@*, 1 } } else { $c{$k} = $v; if ($e == $p && $ag) { push $ag->@*, 2 } } } my @ag; print join("|", map { $_ // "u" } scalar(g("a", "x", 1, 1, \@ag)), scalar(g("a", "y", 1, 2, \@ag)), scalar(g("c", "w", 2, 2, \@ag))), "\n";},
+    '... each arm ending in an if of its own');
+# SO IS A PARAMETER: it reads no memory.
+round_trips(q{use v5.42; no warnings; my %h; sub g ($k, $x) { if ($k) { 1 } else { $h{$k} = 3; $x } } print g(1, "X"), g(0, "Y"), "\n";},
+    'an if/else ending a sub, an arm storing then yielding a parameter');
+# AN ELSIF ARM yields its nested if's merge, which the sub's last statement
+# spells whole: no refusal. chalk's Desugar::_create_helpers and
+# EagerPinning::_expand_elsif_chain end so.
+round_trips(q{package R { sub new { shift; bless {@_}, "R" } } sub ch { my ($h, $q, $b) = @_; if ($q eq '+') { my $n = "${b}p"; $h->{$n} = R->new(name => $n) } elsif ($q eq '*') { my $n = "${b}s"; $h->{$n} = R->new(name => $n) } } my %h; ch(\%h, '+', 'x'); ch(\%h, '*', 'y'); ch(\%h, '?', 'z'); print join(",", sort keys %h), "\n";},
+    'an if/elsif ending a sub, each arm storing a constructed object');
+# ONE THAT READS MEMORY refuses, rather than return a stale slot: spelled as
+# the sub's last statement, the arm ended at its store and the read was lost.
+refuses(q{use v5.42; no warnings; my %h = (z => 5); sub g ($k) { if ($k) { 1 } else { $h{$k} = 3; $h{z} } } print g(1), g(0), "\n";},
+    qr/GAP: an if\/else in its caller's context whose arm stores an element, then yields another value/, 'an if/else ending a sub, an arm storing then yielding an element');
+
 todo 'DIFF at base: a glob alias of an element is not seen' => sub {
     output_matches(q{our $G; my @a=(1); *G = \$a[0]; $a[0] = $G + 1; print "@a\n"}, 'a glob alias');
 };

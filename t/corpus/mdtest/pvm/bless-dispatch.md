@@ -48,16 +48,17 @@ Foo
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [8], nodes: [
+main::__PROGRAM__: {start: 0, returns: [9], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [HashLiteral, ~, ~, 0, HashRef], # 2
   [Constant, {const_type: string, value: Foo}, ~, ~, Str], # 3
-  [Call, {dispatch_kind: builtin, name: bless, param_names: []}, [2, 3], ~, Unknown], # 4
-  [RefType, ~, [4], ~, Str], # 5
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 6
-  [Print, ~, [5, 6], 2, Scalar], # 7
-  [Return, {implicit: true}, [1], 7]]} # 8
+  [MemStart], # 4
+  [Call, {dispatch_kind: builtin, memory_input: true, name: bless, param_names: []}, [2, 3, 4], ~, Unknown], # 5
+  [RefType, ~, [5], ~, Str], # 6
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 7
+  [Print, ~, [6, 7], 2, Scalar], # 8
+  [Return, {implicit: true}, [1], 8]]} # 9
 ```
 
 ## bless of a POPULATED anonymous hash
@@ -94,7 +95,7 @@ Foo
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [11], nodes: [
+main::__PROGRAM__: {start: 0, returns: [12], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: "n"}, ~, ~, Str], # 2
@@ -102,11 +103,12 @@ main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [HashLiteral, {sigil: "%", symbol: a}, [2, 3], ~, Hash], # 4
   [HashLiteral, ~, [4], 0, HashRef], # 5
   [Constant, {const_type: string, value: Foo}, ~, ~, Str], # 6
-  [Call, {dispatch_kind: builtin, name: bless, param_names: []}, [5, 6], ~, Unknown], # 7
-  [RefType, ~, [7], ~, Str], # 8
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
-  [Print, ~, [8, 9], 5, Scalar], # 10
-  [Return, {implicit: true}, [1], 10]]} # 11
+  [MemStart], # 7
+  [Call, {dispatch_kind: builtin, memory_input: true, name: bless, param_names: []}, [5, 6, 7], ~, Unknown], # 8
+  [RefType, ~, [8], ~, Str], # 9
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
+  [Print, ~, [9, 10], 5, Scalar], # 11
+  [Return, {implicit: true}, [1], 11]]} # 12
 ```
 
 ## A method name written out
@@ -158,17 +160,18 @@ Foo::hi: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: hi}, ~, ~, Str], # 1
   [Return, ~, [1], 0]]} # 2
-main::__PROGRAM__: {start: 0, returns: [9], nodes: [
+main::__PROGRAM__: {start: 0, returns: [10], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [HashLiteral, ~, ~, 0, HashRef], # 2
   [Constant, {const_type: string, value: Foo}, ~, ~, Str], # 3
-  [Call, {dispatch_kind: builtin, name: bless, param_names: []}, [2, 3], ~, Unknown], # 4
-  [Call, {dispatch_kind: method, name: hi, param_names: [], want: list}, [4], 2, Unknown], # 5
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [5], ~, Str], # 6
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 7
-  [Print, ~, [6, 7], 5, Scalar], # 8
-  [Return, {implicit: true}, [1], 8]]} # 9
+  [MemStart], # 4
+  [Call, {dispatch_kind: builtin, memory_input: true, name: bless, param_names: []}, [2, 3, 4], ~, Unknown], # 5
+  [Call, {dispatch_kind: method, name: hi, param_names: [], want: list}, [5], 2, Unknown], # 6
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
+  [Print, ~, [7, 8], 6, Scalar], # 9
+  [Return, {implicit: true}, [1], 9]]} # 10
 ```
 
 ## A method name in a scalar
@@ -207,18 +210,19 @@ Foo::hi: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: hi}, ~, ~, Str], # 1
   [Return, ~, [1], 0]]} # 2
-main::__PROGRAM__: {start: 0, returns: [10], nodes: [
+main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [HashLiteral, ~, ~, 0, HashRef], # 2
   [Constant, {const_type: string, value: Foo}, ~, ~, Str], # 3
-  [Call, {dispatch_kind: builtin, name: bless, param_names: []}, [2, 3], ~, Unknown], # 4
-  [Constant, {const_type: string, value: hi}, ~, ~, Str], # 5
-  [Call, {dispatch_kind: dynamic_method, name: "", param_names: []}, [4, 5], ~, Unknown], # 6
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
-  [Print, ~, [7, 8], 2, Scalar], # 9
-  [Return, {implicit: true}, [1], 9]]} # 10
+  [MemStart], # 4
+  [Call, {dispatch_kind: builtin, memory_input: true, name: bless, param_names: []}, [2, 3, 4], ~, Unknown], # 5
+  [Constant, {const_type: string, value: hi}, ~, ~, Str], # 6
+  [Call, {dispatch_kind: dynamic_method, name: "", param_names: []}, [5, 6], ~, Unknown], # 7
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
+  [Print, ~, [8, 9], 2, Scalar], # 10
+  [Return, {implicit: true}, [1], 10]]} # 11
 ```
 
 ## SUPER:: dispatch
@@ -272,7 +276,7 @@ main::__PROGRAM__: {start: 0, returns: [15], nodes: [
   [EntryWrite, ~, [2, 4, 5], 6, Unknown], # 7
   [HashLiteral, ~, ~, 7, HashRef], # 8
   [Constant, {const_type: string, value: Derived}, ~, ~, Str], # 9
-  [Call, {dispatch_kind: builtin, name: bless, param_names: []}, [8, 9], ~, Unknown], # 10
+  [Call, {dispatch_kind: builtin, memory_input: true, name: bless, param_names: []}, [8, 9, 7], ~, Unknown], # 10
   [Call, {dispatch_kind: method, name: Derived::SUPER::hi, param_names: [], want: list}, [10], 8, Unknown], # 11
   [Coerce, {from_repr: Unknown, to_repr: Str}, [11], ~, Str], # 12
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 13
@@ -323,7 +327,7 @@ Foo::new: {start: 0, returns: [6], nodes: [
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, memory_input: true, name: shift, param_names: []}, [1, 2], 0, Scalar], # 3
   [HashLiteral, ~, ~, 3, HashRef], # 4
-  [Call, {dispatch_kind: builtin, name: bless, param_names: []}, [4, 3], ~, Unknown], # 5
+  [Call, {dispatch_kind: builtin, memory_input: true, name: bless, param_names: []}, [4, 3, 3], ~, Unknown], # 5
   [Return, ~, [5], 4]]} # 6
 main::__PROGRAM__: {start: 0, returns: [6], nodes: [
   [Start], # 0
@@ -394,24 +398,25 @@ one string literal whose text is "\"Foo\""
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [16], nodes: [
+main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [HashLiteral, ~, ~, 0, HashRef], # 2
   [EnvRead, {key: X}, ~, ~, Str], # 3
   [Constant, {const_type: string, value: Foo}, ~, ~, Str], # 4
   [DefinedOr, ~, [3, 4], ~, Str], # 5
-  [Call, {dispatch_kind: builtin, name: bless, param_names: []}, [2, 5], ~, Unknown], # 6
-  [IsaOp, ~, [6, 4], ~, Boolean], # 7
-  [Coerce, {from_repr: Boolean, to_repr: Str}, [7], ~, Str], # 8
-  [Constant, {const_type: string, value: Bar}, ~, ~, Str], # 9
-  [IsaOp, ~, [6, 9], ~, Boolean], # 10
-  [Coerce, {from_repr: Boolean, to_repr: Str}, [10], ~, Str], # 11
-  [Concat, ~, [8, 11], ~, Str], # 12
-  [Constant, {const_type: string, value: "|\n"}, ~, ~, Str], # 13
-  [Concat, ~, [12, 13], ~, Str], # 14
-  [Print, ~, [14], 2, Scalar], # 15
-  [Return, {implicit: true}, [1], 15]]} # 16
+  [MemStart], # 6
+  [Call, {dispatch_kind: builtin, memory_input: true, name: bless, param_names: []}, [2, 5, 6], ~, Unknown], # 7
+  [IsaOp, ~, [7, 4], ~, Boolean], # 8
+  [Coerce, {from_repr: Boolean, to_repr: Str}, [8], ~, Str], # 9
+  [Constant, {const_type: string, value: Bar}, ~, ~, Str], # 10
+  [IsaOp, ~, [7, 10], ~, Boolean], # 11
+  [Coerce, {from_repr: Boolean, to_repr: Str}, [11], ~, Str], # 12
+  [Concat, ~, [9, 12], ~, Str], # 13
+  [Constant, {const_type: string, value: "|\n"}, ~, ~, Str], # 14
+  [Concat, ~, [13, 14], ~, Str], # 15
+  [Print, ~, [15], 2, Scalar], # 16
+  [Return, {implicit: true}, [1], 16]]} # 17
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.036"}, ~, ~, Num], # 1
@@ -491,7 +496,7 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [EnvRead, {key: X}, ~, ~, Str], # 5
   [Constant, {const_type: string, value: Foo}, ~, ~, Str], # 6
   [DefinedOr, ~, [5, 6], ~, Str], # 7
-  [Call, {dispatch_kind: builtin, name: bless, param_names: []}, [4, 7], ~, Unknown], # 8
+  [Call, {dispatch_kind: builtin, memory_input: true, name: bless, param_names: []}, [4, 7, 2], ~, Unknown], # 8
   [Assign, ~, [3, 8], 4, Unknown], # 9
   [PadAccess, {sigil: $, symbol: o}, [9], ~, Unknown], # 10
   [Constant, {const_type: string, value: hi}, ~, ~, Str], # 11

@@ -48,3 +48,31 @@
 - [The census tally is capped](the-census-tally-is-capped-and-double-counts.md) — top 12 causes only, and a package's skip counts once per loader; 94 lines were 70 graphs
 - [env on PATH is a stub](env-on-path-is-a-stub.md) — ~/.local/bin/env runs nothing, exits 0; use /usr/bin/env, check for "Result:"
 - [Batch 4 paused 2026-10-17](batch4-paused-2026-10-17.md) — where each branch stood at the pause; resume Monday from integ9 verify
+- [A read after a loop needs the exit's memory](a-read-after-a-loop-needs-the-exits-memory.md) — `$h{a}++` in a loop, `$h{a}` after: 2 for 3; scout decides the header Phi, the exit merges memory
+- [A memory Phi must be marked](a-memory-phi-must-be-marked.md) — a call is a value and a memory version; Phi carries `memory`, the deparser does not infer it
+- [A lifted closure loses its maker's parameters](a-lifted-closure-loses-its-makers-parameters.md) — field and signature captures emit as closures in their maker; two-instance closures still wrong
+- [A closure's aggregate is shared with its maker](a-closures-aggregate-is-shared-with-its-maker.md) — captured @/% read past a call was the old value; shared lexical, container binding, count re-read per pass
+- [A void op must not push](a-void-op-must-not-push.md) — a leftover Parameter became the return value of an if/else that pushed nothing (`XY` for `12`)
+- [A method call has no ex-list](a-method-call-has-no-ex-list.md) — method args were never demoted; `$_[1] = 9` died read-only. Two entersub shapes; keep the invocant a value
+- [A trap body's write lives in memory](a-trap-body-write-lives-in-memory.md) — eval/try body writes demoted, as package vars round-trip; demotion turns write-backs on, so the iterated array must be a container
+- [A new module overlaid finds old deparser holes](a-new-module-overlaid-finds-old-deparser-holes.md) — Earley: 488→374 SAME, six base-level defects; bisect the overlay, confess at the crash, minimize
+- [A call into declared scalars rebinds them](a-call-into-declared-scalars-rebinds-them.md) — `($a,$b) = g()` after `my ($a,$b)` kept undef; `($lo) = g()` took the list; split into an array skips aassign's rules
+- [Every scope exit restores its locals](every-scope-exit-restores-its-locals.md) — an if arm's and a folded block's `leave` restored nothing; element `local` = marked Assign + ElemRestore
+- [One name, two aggregates](one-name-two-aggregates.md) — sibling `my @n`s were one array; PAD_SYMBOL renames per CV; a merge of arrays is Array; a pinned copy `rebinds`
+- [A background run reads a snapshot](a-background-run-reads-a-snapshot.md) — never edit what a running census reads; kill by PID, `pgrep -f` matches your own shell (exit 144)
+- [Check every count line](check-every-count-line.md) — `tail -2` hid DIFFERS 1 for five batches; compare ROUNDTRIP to cases. `keys %$h` had no stale rule
+- [The foreach alias is a reference](the-foreach-alias-is-a-reference.md) — a body that may reach its list reads the iterator through `\$a[$i]` taken per pass; pin reads only at statement level, never in a scout
+- [An argument is an alias for an array too](an-argument-is-an-alias-for-an-array-too.md) — `g($n[0])`/`g(@n)`/`g($_) for @n` with a `$_[0]` write: later "@n" flattened the literal; mark on entersub only; never `git checkout` a session file
+- [A dead node still rides in](a-dead-node-still-rides-in.md) — unread foreach copy hung on consumers and got a stale snapshot before its loop; a loop moving memory unforeseen needs a late header memory Phi
+- [The topic is a global a callee reads](the-topic-is-a-global-a-callee-reads.md) — lowered foreach/map/grep never set `$_`: `grep { is_x() } @a` matched undef; `\local $_ = \$a[$i]` per pass (LocalAlias)
+- [An array keeps its sigil through every merge](an-array-keeps-its-sigil-through-every-merge.md) — ternary stamp, `next` latch, named version hoisted past its elsif, `my ($x)=@_` deref read: four holes behind 60 chalk DIFFs
+- [A lone replacement is a value](a-lone-replacement-is-a-value.md) — `s/a/$y/` deleted the match, `s/(y)/$1/` read the wrong match; both s/// sites took only a Constant
+- [A guard must spell where it stands](a-guard-must-spell-where-it-stands.md) — topic-alias `exists` over a call list was invalid Perl; one module, 16 INVALID
+- [A lifted refusal shows what it hid](a-lifted-refusal-shows-what-it-hid.md) — in-loop stale element read bound per pass; alias write-back, refalias, while-test cases came through wrong; one guard each, refcheck every converted test
+- [A render can hang without refusing](a-render-can-hang-without-refusing.md) — Context's 100-return dispatch: _under_proj and _arm_spine_pred went exponential; SIGALRM + confess, memoize, alarm test
+- [Pop only what the arm pushed](pop-only-what-the-arm-pushed.md) — `E // die` after a void list assign popped residue as the fallback; compare depth to the snapshot, not 0
+- [Mutually loaded modules each refuse for the other](mutually-loaded-modules-each-refuse-for-the-other.md) — LLVM.pm ⇄ Context: a package the file never defines is an import; glob bind took main for B's glob
+- [A parameter's name at top level is the parameter](a-parameter-name-at-top-level-is-the-parameter.md) — `$c = g($c)` on a demoted param got `my`; name-declared broke an inner shadowing `my $x`; decide by top-level chain
+- [Count a call as a store only where it reaches](count-a-call-as-a-store-only-where-it-reaches.md) — every-call-is-a-store and `%$h`-copy fixes spread past their target; reverted, logged with repros
+- [A statement boundary clears the stack](a-statement-boundary-clears-the-stack.md) — do-block value, `// die` fallback, merge Phi all read void residue; trim to the enter/snapshot depth, in every walker
+- [A whole store is no element stamp](a-whole-store-is-no-element-stamp.md) — `@F = (...)`'s Array stamp floored onto `$F[$i]`; `$_->{name}` spelled `(...)["name"]`; take only an element store's scalar type

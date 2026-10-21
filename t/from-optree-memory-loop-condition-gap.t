@@ -1,5 +1,5 @@
-# ABOUTME: A loop whose CONDITION reads memory ($a[$i] while ...) GAPs loudly, never underflows/crashes (zhi 019f35f1).
-# ABOUTME: Memory-reading loop conditions are not yet lowered; the producer must refuse with a specific GAP, not a silent swallow.
+# ABOUTME: A loop whose CONDITION reads memory ($a[$i] while ...) translates, never underflows/crashes (zhi 019f35f1).
+# ABOUTME: It read at the loop-header memory version; it was refused until loops carried one for every store.
 
 use v5.42.0;
 use utf8;
@@ -9,13 +9,12 @@ use SoN::OptSuppress;
 use SoN::FromOptree;
 
 # `$i=$i+1 while $a[$i]` and `while($a[$i]){...}` -- the loop CONDITION reads an
-# array element. Memory-reading loop conditions are not yet lowered (memory-SSA
-# through a loop-header memory-Phi for a condition read is unimplemented), so the
-# producer must GAP LOUDLY with a specific message -- never underflow the stack
-# sim (fused multideref path) and never build a Subscript with undef memory
-# (unfused aelem path, "consumers on an undefined value"). A silent swallow drops
-# the whole sub from the JSON with no diagnostic; B::SoN only re-emits GAP:-prefixed
-# refusals, so the message MUST carry the GAP: prefix to surface.
+# array element. It was refused while a condition read had no loop-header memory
+# Phi to go through; the loop builds one whenever its body moves memory now
+# (t/deparse-a-loop-carries-its-stores.t), and a body that moves none reads the
+# same version every pass. What this file guarded stands: never underflow the
+# stack sim (fused multideref path) and never build a Subscript with undef memory
+# (unfused aelem path, "consumers on an undefined value").
 
 sub translate_err ($code) {
     SoN::OptSuppress::suppress_peep();
@@ -27,28 +26,25 @@ sub translate_err ($code) {
     return $err // '';
 }
 
-subtest 'statement-modifier while with a memory-reading condition GAPs' => sub {
+subtest 'statement-modifier while with a memory-reading condition translates' => sub {
     my $err = translate_err('sub { my @a=(1,2,3); my $i=0; $i=$i+1 while $a[$i]; $i }');
-    like($err, qr/^GAP: memory-reading loop condition/,
-        'memory-reading modifier-while condition produces a specific GAP') or diag($err);
+    is($err, '', 'it translates') or diag($err);
     unlike($err, qr/underflow/i, 'not a stack underflow');
     unlike($err, qr/consumers on an undefined/,
         'not the undef-memory crash');
 };
 
-subtest 'block while with a memory-reading condition GAPs' => sub {
+subtest 'block while with a memory-reading condition translates' => sub {
     my $err = translate_err('sub { my @a=(0,1,2); my $i=0; while($a[$i]){$i=$i+1} $i }');
-    like($err, qr/^GAP: memory-reading loop condition/,
-        'memory-reading block-while condition produces a specific GAP') or diag($err);
+    is($err, '', 'it translates') or diag($err);
     unlike($err, qr/underflow/i, 'not a stack underflow');
     unlike($err, qr/consumers on an undefined/,
         'not the undef-memory crash');
 };
 
-subtest 'a hash-element loop condition GAPs' => sub {
+subtest 'a hash-element loop condition translates' => sub {
     my $err = translate_err('sub { my %h=(a=>1); my $k="a"; while($h{$k}){$k=""} $k }');
-    like($err, qr/^GAP: memory-reading loop condition/,
-        'memory-reading helem condition produces a specific GAP') or diag($err);
+    is($err, '', 'it translates') or diag($err);
     unlike($err, qr/consumers on an undefined/, 'not the undef-memory crash');
 };
 

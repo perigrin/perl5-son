@@ -64,4 +64,20 @@ sub f ($s, $at = 0) { pos($s) = $at; $s =~ /\G(.)/; return $1 }
 print f("xyz"), f("xyz", 2), "\n";
 SRC
 
+# A MATCH AS THE RIGHT ARM OF AN `&&` sets the captures the guarded body
+# reads; walked on the arm's snapshot it was lost, outside a loop, and `$1`
+# refused (chalk's EmitHelpers::_emit_hash_ref_expr).
+round_trips(q{sub f { my ($v) = @_; if (defined $v && $v =~ /^%\$(\w+)$/) { my $s = $1; return $s } return "-" } print f(q{%$abc}), f("x"), f(undef), "\n";},
+    'a capture after a match on the right of an and');
+round_trips(q{sub f { my ($v, $c) = @_; my $r = "-"; if ($c) { if (length $v && $v =~ /(b+)/) { $r = $1 } } return $r } print f("abbc", 1), f("ac", 1), f("b", 0), "\n";},
+    'a capture after an and-guarded match inside an if arm');
+
+# AN ARM WITH A CALL IS A BRANCH, and perl scopes `$1` to the arm's block:
+# the capture is read inside it and merged out, the skip path keeping the
+# capture it had (chalk's EmitHelpers::_emit_hash_ref_expr, `$k->value =~`).
+round_trips(q{package K { sub new { bless { v => $_[1] }, $_[0] } sub v { $_[0]{v} } } sub mk { (K->new($_[0]), K->new($_[1])) } sub f { my @p = mk(@_); my @r; for (my $i = 0; $i < @p; $i++) { my $k = $p[$i]; if (ref($k) && $k->v =~ /^%\$(\w+)$/) { push @r, $1 } push @r, "."; } return "@r" } print f(q{%$abc}, "x"), "\n";},
+    'a capture after an and whose arm calls');
+round_trips(q{package K { sub new { bless { v => $_[1] }, $_[0] } sub v { $_[0]{v} } } sub f { my ($k) = @_; "zz" =~ /(z)/; my $r = ""; if (ref($k) && $k->v =~ /^(a)(b)?/) { $r = "$1" . ($2 // "-") } return "$r|$1" } print f(K->new("ab")), " ", f(K->new("x")), " ", f(1), "\n";},
+    'captures after a branch-form and, matched or not');
+
 done_testing;

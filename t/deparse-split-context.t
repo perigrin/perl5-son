@@ -59,4 +59,27 @@ subtest 'an array target still gets the fields' => sub {
         qq{sub f { my \@l = split(/,/, "p,q,r"); print "\@l\\n" }\nf();\n};
 };
 
+# A SPLIT ASSIGNS ITS TARGET ITSELF -- no aassign -- and bound the array to
+# the call, so `\@c` was a reference to the call's list (`\(split ...)`,
+# "Not an ARRAY reference") and `push @c` pushed onto it, which perl will
+# not compile. chalk's LLVM::Context passes `\@chars` so.
+subtest 'a split array that is mutated or referenced is a container' => sub {
+    round_trips 'a reference to it, passed',
+        q{sub g { scalar @{$_[0]} } sub f { my @c = split //, $_[0]; my $n = g(\@c); "$n $c[0]" } print f("abc"), "\n";};
+    round_trips 'pushed and popped',
+        q{sub f { my @c = split /,/, $_[0]; push @c, "z"; my $l = pop @c; "$l @c" } print f("a,b"), "\n";};
+};
+
+# A SPLIT INTO A PACKAGE ARRAY was dropped -- the array stayed empty -- and is
+# refused until it is stored as an aassign into one is.
+subtest 'a split into a package array is refused' => sub {
+    my $file = __FILE__ . ".pkg.$$.pl";
+    open my $fh, '>', $file or die $!;
+    print $fh q{our @c; sub f { @c = split /,/, $_[0]; "@c" } print f("a,b"), "\n";};
+    close $fh;
+    my $err = qx($^X -Ilib -MO=SoN,json,not_package=SoN $file 2>&1 >/dev/null);
+    unlink $file;
+    like $err, qr/GAP: a split into a package array is not yet lowered/, 'the producer refuses it';
+};
+
 done_testing;

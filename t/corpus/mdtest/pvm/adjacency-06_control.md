@@ -336,15 +336,15 @@ main::__PROGRAM__: {start: 0, returns: [31], nodes: [
   [If, ~, [11, 13], 11], # 14
   [Proj, {index: 1}, [14]], # 15
   [Call, {dispatch_kind: builtin, memory_input: true, name: push, param_names: []}, [3, 6, 2], 15, Int], # 16
-  [Proj, {index: 0}, [14]], # 17
-  [Region, {head: 14}, [17, 16]], # 18
-  [Phi, {predecessors: [17, 15], region: 18}, [2, 16], ~, Unknown], # 19
-  [Proj, {index: 0}, [10]], # 20
-  [Region, {head: 10}, [20, 18]], # 21
-  [Phi, {predecessors: [20, 11], region: 21}, [2, 19], ~, Unknown], # 22
+  [Proj, {index: 0}, [10]], # 17
+  [Region, {head: 10}, [17, 16]], # 18
+  [Phi, {memory: true, predecessors: [17, 11], region: 18}, [2, 16], ~, Unknown], # 19
+  [Proj, {index: 0}, [14]], # 20
+  [Region, {head: 5}, [18, 20]], # 21
+  [Phi, {memory: true, predecessors: [7, 20], region: 21}, [19, 2], ~, Unknown], # 22
   [EntryDef, {package: main, sigil: $, symbol: "\""}, [22], ~, Scalar], # 23
   [Coerce, {from_repr: Scalar, to_repr: Str}, [23], ~, Str], # 24
-  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [24, 3], ~, Str], # 25
+  [Call, {dispatch_kind: builtin, memory_input: true, name: join, param_names: []}, [24, 3, 22], ~, Str], # 25
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 26
   [Concat, ~, [25, 26], ~, Str], # 27
   [Proj, {index: 1}, [5]], # 28

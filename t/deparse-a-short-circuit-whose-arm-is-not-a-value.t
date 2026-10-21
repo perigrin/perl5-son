@@ -167,10 +167,12 @@ sub f { my %s; my $c = 0; for my $x (@_) { if ($x > 0) { last if $x > 1 && $s{$x
 print f(1,2,3,2,5), "\n";
 SRC
 
-# Ending a sub, the arm takes the caller's context: its store and its return
-# are not one value, so it refuses rather than drop the store.
-refuses('my %t; sub f { my ($c, $a, $b) = @_; if ($c) { if ($a && $b) { $t{$b} = $a; return } } } f(1, "P", 3); print join(",", map {"$_=$t{$_}"} keys %t), "\n";',
-    qr/GAP: a short-circuit whose arm is not a single value is not yet lowered/,
-    'a store-and-return arm ending a sub refuses');
+# Ending a sub, the arm takes the caller's context. Its return is an exit
+# and the path that skipped it goes on with the condition's value, as perl's
+# does -- see t/deparse-an-if-without-else-that-returns-ending-an-arm.t,
+# which also keeps the if/else form refusing.
+round_trips(<<'SRC', 'a store-and-return arm ending a sub');
+my %t; sub f { my ($c, $a, $b) = @_; if ($c) { if ($a && $b) { $t{$b} = $a; return } } } my @r = map { scalar(f(@$_)) // "u" } [1,"P",3],[1,"P",0],[1,"",4],[0,1,1]; my @l = f(1,"Q",0); print "@r|", scalar(@l), "|", join(",", map {"$_=$t{$_}"} sort keys %t), "\n";
+SRC
 
 done_testing;

@@ -124,10 +124,11 @@ Foo::__DEFAULT_0: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 1
   [Return, ~, [1], 0]]} # 2
-Foo::m: {start: 0, returns: [2], nodes: [
+Foo::m: {start: 0, returns: [3], nodes: [
   [Start], # 0
-  [FieldAccess, {field_index: 0, field_stash: Foo}, ~, ~, Int], # 1
-  [Return, {implicit: true}, [1], 0]]} # 2
+  [MemStart], # 1
+  [FieldAccess, {field_index: 0, field_stash: Foo}, [1], ~, Int], # 2
+  [Return, {implicit: true}, [2], 0]]} # 3
 main::__PROGRAM__: {start: 0, returns: [9], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
@@ -471,16 +472,19 @@ Log::add: {start: 0, returns: [12], nodes: [
   [Concat, ~, [8, 9], ~, Str], # 10
   [Assign, ~, [2, 10], 3, Str], # 11
   [Return, ~, [1], 11]]} # 12
-Log::close: {start: 0, returns: [8], nodes: [
+Log::close: {start: 0, returns: [11], nodes: [
   [Start], # 0
   [FieldAccess, {field_index: 0, field_stash: Log}, ~, ~, Str], # 1
   [Constant, {const_type: string, value: "["}, ~, ~, Str], # 2
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [1], ~, Str], # 3
-  [Concat, ~, [2, 3], ~, Str], # 4
-  [Constant, {const_type: string, value: "]"}, ~, ~, Str], # 5
-  [Concat, ~, [4, 5], ~, Str], # 6
-  [Assign, ~, [1, 6], 0, Str], # 7
-  [Return, ~, [1], 7]]} # 8
+  [MemStart], # 3
+  [FieldAccess, {field_index: 0, field_stash: Log}, [3], ~, Str], # 4
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [4], ~, Str], # 5
+  [Concat, ~, [2, 5], ~, Str], # 6
+  [Constant, {const_type: string, value: "]"}, ~, ~, Str], # 7
+  [Concat, ~, [6, 7], ~, Str], # 8
+  [Assign, ~, [1, 8], 0, Str], # 9
+  [FieldAccess, {field_index: 0, field_stash: Log}, [9], ~, Str], # 10
+  [Return, ~, [10], 9]]} # 11
 main::__PROGRAM__: {start: 0, returns: [13], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
@@ -565,7 +569,7 @@ Node::__ADJUST_0: {start: 0, returns: [12], nodes: [
   [FieldAccess, {field_index: 1, field_stash: Node}, ~, 10, Scalar], # 11
   [Return, {implicit: true}, [11], 11], # 12
   [MemStart], # 13
-  [Phi, {predecessors: [4, 7], region: 10}, [13, 8], ~, Unknown]]} # 14
+  [Phi, {memory: true, predecessors: [4, 7], region: 10}, [13, 9], ~, Unknown]]} # 14
 Node::__DEFAULT_1: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
@@ -574,25 +578,26 @@ Node::__DEFAULT_2: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 1
   [Return, ~, [1], 0]]} # 2
-Node::calls: {start: 0, returns: [2], nodes: [
+Node::calls: {start: 0, returns: [3], nodes: [
+  [Start], # 0
+  [MemStart], # 1
+  [FieldAccess, {field_index: 2, field_stash: Node}, [1], ~, Int], # 2
+  [Return, ~, [2], 0]]} # 3
+Node::first: {start: 0, returns: [8], nodes: [
   [Start], # 0
   [FieldAccess, {field_index: 2, field_stash: Node}, ~, ~, Int], # 1
-  [Return, ~, [1], 0]]} # 2
-Node::first: {start: 0, returns: [9], nodes: [
+  [FieldAccess, {field_index: 2, field_stash: Node}, ~, 0, Int], # 2
+  [Increment, ~, [2], ~, Scalar], # 3
+  [Assign, ~, [1, 3], 2, Scalar], # 4
+  [FieldAccess, {field_index: 0, field_stash: Node}, [4], ~, Unknown], # 5
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 6
+  [Subscript, {kind: array}, [5, 6, 4], ~, Scalar], # 7
+  [Return, ~, [7], 4]]} # 8
+Node::left: {start: 0, returns: [3], nodes: [
   [Start], # 0
-  [FieldAccess, {field_index: 0, field_stash: Node}, ~, ~, Unknown], # 1
-  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 2
-  [MemStart], # 3
-  [Subscript, {kind: array}, [1, 2, 3], ~, Scalar], # 4
-  [FieldAccess, {field_index: 2, field_stash: Node}, ~, ~, Int], # 5
-  [FieldAccess, {field_index: 2, field_stash: Node}, ~, 0, Int], # 6
-  [Increment, ~, [6], ~, Scalar], # 7
-  [Assign, ~, [5, 7], 6, Scalar], # 8
-  [Return, ~, [4], 8]]} # 9
-Node::left: {start: 0, returns: [2], nodes: [
-  [Start], # 0
-  [FieldAccess, {field_index: 1, field_stash: Node}, ~, ~, Scalar], # 1
-  [Return, ~, [1], 0]]} # 2
+  [MemStart], # 1
+  [FieldAccess, {field_index: 1, field_stash: Node}, [1], ~, Scalar], # 2
+  [Return, ~, [2], 0]]} # 3
 main::__PROGRAM__: {start: 0, returns: [19], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
@@ -689,10 +694,11 @@ Base::mark: {start: 0, returns: [9], nodes: [
   [Concat, ~, [4, 6], ~, Str], # 7
   [Assign, ~, [3, 7], 4, Str], # 8
   [Return, ~, [1, 2], 8]]} # 9
-Base::trail: {start: 0, returns: [2], nodes: [
+Base::trail: {start: 0, returns: [3], nodes: [
   [Start], # 0
-  [FieldAccess, {field_index: 0, field_stash: Base}, ~, ~, Str], # 1
-  [Return, ~, [1], 0]]} # 2
+  [MemStart], # 1
+  [FieldAccess, {field_index: 0, field_stash: Base}, [1], ~, Str], # 2
+  [Return, ~, [2], 0]]} # 3
 Derived::__ADJUST_0: {start: 0, returns: [4], nodes: [
   [Start], # 0
   [PadAccess, {sigil: $, symbol: self}, ~, ~, Object], # 1
@@ -859,7 +865,7 @@ Holder::register: {start: 0, returns: [11], nodes: [
   [PostfixDeref, {sigil: "%"}, [4, 5], ~, Hash], # 6
   [Assign, {targets: 1}, [3, 6], 0, List], # 7
   [Call, {dispatch_kind: builtin, memory_input: true, name: keys, param_names: [], want: list}, [3, 7], ~, List], # 8
-  [Call, {dispatch_kind: builtin, name: sort, param_names: [], sort_cmp: string, sort_order: ascending}, [8], ~, List], # 9
+  [Call, {dispatch_kind: builtin, memory_input: true, name: sort, param_names: [], sort_cmp: string, sort_order: ascending}, [8, 7], ~, List], # 9
   [Assign, {targets: 1}, [2, 9], 7, List], # 10
   [Return, ~, [1], 10]]} # 11
 Holder::summary: {start: 0, returns: [11], nodes: [
@@ -940,10 +946,11 @@ parses: yes
 ```
 
 ```ir
-Node::id: {start: 0, returns: [2], nodes: [
+Node::id: {start: 0, returns: [3], nodes: [
   [Start], # 0
-  [FieldAccess, {field_index: 0, field_stash: Node}, ~, ~, Unknown], # 1
-  [Return, ~, [1], 0]]} # 2
+  [MemStart], # 1
+  [FieldAccess, {field_index: 0, field_stash: Node}, [1], ~, Unknown], # 2
+  [Return, ~, [2], 0]]} # 3
 main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
@@ -981,38 +988,47 @@ main::fib: {start: 0, returns: [15], nodes: [
   [Phi, {predecessors: [12, 7], region: 13}, [1, 11], ~, Unknown], # 14
   [Return, ~, [14], 13], # 15
   [MemStart], # 16
-  [Phi, {predecessors: [12, 7], region: 13}, [16, 10], ~, Unknown]]} # 17
-main::ids: {start: 0, returns: [8], nodes: [
+  [Phi, {memory: true, predecessors: [12, 7], region: 13}, [16, 10], ~, Unknown]]} # 17
+main::ids: {start: 0, returns: [11], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: ","}, ~, ~, Str], # 1
   [ArrayLiteral, ~, ~, ~, Array], # 2
   [Loop, {bound: entry}, [0], 0], # 3
-  [Phi, {region: 3}, [2, 26], ~, Array], # 4
-  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [1, 4], ~, Str], # 5
-  [Proj, {index: 1}, [3]], # 6
-  [Region, {head: 3}, [6]], # 7
-  [Return, ~, [5], 7], # 8
-  [Parameter, {index: 0, name: $in, sigil: $}, ~, ~, Unknown], # 9
-  [MemStart], # 10
-  [PostfixDeref, {sigil: "@"}, [9, 10], ~, Array], # 11
-  [Count, ~, [11, 10], ~, Int], # 12
-  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 13
-  [Phi, {region: 3}, [13, 28], ~, Int], # 14
-  [NumGt, ~, [12, 14], 3, Boolean], # 15
-  [Proj, {index: 0}, [3]], # 16
-  [Subscript, {kind: array}, [11, 14, 10], ~, Scalar], # 17
-  [Defined, ~, [17], ~, Boolean], # 18
-  [If, ~, [16, 18], 16], # 19
-  [Proj, {index: 0}, [19]], # 20
-  [Call, {dispatch_kind: method, name: id, param_names: [], want: list}, [17], 20, Unknown], # 21
-  [Constant, {const_type: string, value: undef}, ~, ~, Str], # 22
-  [Proj, {index: 1}, [19]], # 23
-  [Region, {head: 19}, [21, 23]], # 24
-  [Phi, {predecessors: [20, 23], region: 24}, [21, 22], ~, Unknown], # 25
-  [ListAppend, {collector: map}, [4, 25], ~, Array], # 26
-  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 27
-  [Add, ~, [14, 27], ~, Int], # 28
-  [Phi, {predecessors: [20, 23], region: 24}, [21, 10], ~, Unknown]]} # 29
+  [Phi, {region: 3}, [2, 34], ~, Array], # 4
+  [MemStart], # 5
+  [Phi, {memory: true, region: 3}, [5, 37], ~, Unknown], # 6
+  [Proj, {index: 1}, [3]], # 7
+  [Region, {head: 3}, [7]], # 8
+  [Phi, {memory: true, region: 8}, [6], ~, Unknown], # 9
+  [Call, {dispatch_kind: builtin, memory_input: true, name: join, param_names: []}, [1, 4, 9], ~, Str], # 10
+  [Return, ~, [10], 8], # 11
+  [Parameter, {index: 0, name: $in, sigil: $}, ~, ~, Unknown], # 12
+  [PostfixDeref, {sigil: "@"}, [12, 5], ~, Array], # 13
+  [Count, ~, [13, 6], ~, Int], # 14
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 15
+  [Phi, {region: 3}, [15, 36], ~, Int], # 16
+  [NumGt, ~, [14, 16], 3, Boolean], # 17
+  [Proj, {index: 0}, [3]], # 18
+  [Exists, {kind: array}, [13, 16, 6], 18, Boolean], # 19
+  [Subscript, {kind: array}, [13, 16, 6], ~, Scalar], # 20
+  [Subscript, {kind: array}, [13, 16], ~, Scalar], # 21
+  [Ref, ~, [21], ~, ScalarRef], # 22
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 23
+  [TernaryExpr, ~, [19, 22, 23], ~, Scalar], # 24
+  [LocalAlias, {name: _}, [24], 19, Unknown], # 25
+  [Defined, ~, [20], ~, Boolean], # 26
+  [If, ~, [25, 26], 25], # 27
+  [Proj, {index: 0}, [27]], # 28
+  [Call, {dispatch_kind: method, name: id, param_names: [], want: list}, [20], 28, Unknown], # 29
+  [Constant, {const_type: string, value: undef}, ~, ~, Str], # 30
+  [Proj, {index: 1}, [27]], # 31
+  [Region, {head: 27}, [29, 31]], # 32
+  [Phi, {predecessors: [28, 31], region: 32}, [29, 30], ~, Unknown], # 33
+  [ListAppend, {collector: map}, [4, 33], ~, Array], # 34
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 35
+  [Add, ~, [16, 35], ~, Int], # 36
+  [Phi, {memory: true, predecessors: [28, 31], region: 32}, [29, 6], ~, Unknown], # 37
+  [Count, ~, [13, 5], ~, Int]]} # 38
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.036"}, ~, ~, Num], # 1

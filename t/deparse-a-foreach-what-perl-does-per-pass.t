@@ -70,32 +70,34 @@ sub refuses ($src, $cause, $name) {
 my $RESHAPE  = qr/GAP: a foreach whose body reshapes the array it iterates/;
 my $UNPROVEN = qr/GAP: a foreach over an unproven list .* whose body may reach the list other than through its iterator/;
 my $STALE    = qr/GAP: an element read in a loop is spelled after a store/;
-refuses(q{sub f { my @a; push @a, 1, 2; my $s=""; for my $x (@a) { $s .= $x; shift @a } print "$s|@a\n" } f();},
-    $UNPROVEN, 'a shift of a bare-declared array in its own loop');
-refuses(q{sub f { my @a = (1, 2); my $s=""; for my $x (@a) { $s .= $x; shift @a } print "$s|@a\n" } f();},
-    $RESHAPE, 'a shift of an assigned array in its own loop');
+round_trips(q{sub f { my @a; push @a, 1, 2; my $s=""; for my $x (@a) { $s .= $x; shift @a } print "$s|@a\n" } f();},
+    'a shift of a bare-declared array in its own loop');
+round_trips(q{sub f { my @a = (1, 2); my $s=""; for my $x (@a) { $s .= $x; shift @a } print "$s|@a\n" } f();},
+    'a shift of an assigned array in its own loop');
 refuses(q{use v5.42; sub f($r) { my $s=""; for (@$r) { $s .= $_; shift @$r } "$s|@$r" } print f([1,2]), "\n";},
     $UNPROVEN, 'a shift of a dereferenced array in its own loop');
 round_trips(q{sub f { my @a = (1, 2); my $s=""; for my $x (@a) { $s .= $x; push @a, 3 if $x == 1 } print "$s|@a\n" } f();},
     'a push onto the array in its own loop');
-refuses(q{sub f { my @a = (1, 2, 3); my $s=""; for my $x (@a) { $s .= $x; splice @a, 1, 1 } print "$s|@a\n" } f();},
-    $RESHAPE, 'a splice of the array in its own loop');
+round_trips(q{sub f { my @a = (1, 2, 3); my $s=""; for my $x (@a) { $s .= $x; splice @a, 1, 1 } print "$s|@a\n" } f();},
+    'a splice of the array in its own loop');
 refuses(q{use v5.42; sub f($h) { my $s = ""; for ($h->{q}->@*) { $s .= $_; push $h->{q}->@*, 3 if $_ == 1 } $s } print f({q => [1,2]}), "\n";},
     $UNPROVEN, 'a push onto the same field deref inside its loop');
-refuses(q{sub f { my @a; push @a, 1, 2; my $r = \@a; my $s=""; for my $x (@a) { $s .= $x; shift @$r } print "$s|@a\n" } f();},
-    $UNPROVEN, 'a shift through a reference to the iterated array');
-refuses(q{sub f { my @a; push @a, 1, 2; my $s=""; my $g = sub { shift @a }; for my $x (@a) { $s .= $x; $g->() } print "$s|@a\n" } f();},
-    $UNPROVEN, 'a shift in a closure called from the body');
-refuses(q{my @F = (1, 2); sub g { shift @F } sub f { my $s=""; for my $x (@F) { $s .= $x; g() } print "$s|@F\n" } f();},
-    $UNPROVEN, 'a shift in a named sub over a captured file lexical');
-refuses(q{my @F = (1, 2, 3); sub g { pop @F } sub f { my $s=""; for my $x (@F) { $s .= $x; g() } print "$s|@F\n" } f();},
-    $UNPROVEN, 'a pop in a named sub over a captured file lexical');
+# NOW LOWERED: the iterator is aliased by reference -- see
+# t/deparse-a-foreach-alias-is-a-reference.t.
+round_trips(q{sub f { my @a; push @a, 1, 2; my $r = \@a; my $s=""; for my $x (@a) { $s .= $x; shift @$r } print "$s|@a\n" } f();},
+    'a shift through a reference to the iterated array');
+round_trips(q{sub f { my @a; push @a, 1, 2; my $s=""; my $g = sub { shift @a }; for my $x (@a) { $s .= $x; $g->() } print "$s|@a\n" } f();},
+    'a shift in a closure called from the body');
+round_trips(q{my @F = (1, 2); sub g { shift @F } sub f { my $s=""; for my $x (@F) { $s .= $x; g() } print "$s|@F\n" } f();},
+    'a shift in a named sub over a captured file lexical');
+round_trips(q{my @F = (1, 2, 3); sub g { pop @F } sub f { my $s=""; for my $x (@F) { $s .= $x; g() } print "$s|@F\n" } f();},
+    'a pop in a named sub over a captured file lexical');
 refuses(q{use v5.42; sub f($r, $q) { my $s=""; for (@$r) { $s .= $_; shift @$q } "$s|@$r" } my $x = [1,2]; print f($x, $x), "\n";},
     $UNPROVEN, 'a shift through a second reference to the same array');
 refuses(q{use v5.42; sub f($r) { my $s = ""; my $q = $r->{a}; for (@{$r->{a}}) { $s .= $_; shift @$q } $s } print f({a=>[1,2]}), "\n";},
     $UNPROVEN, 'a shift through a copied reference to the iterated deref');
-refuses(q{use v5.42; sub f($r) { my $s=""; for my $x (@$r) { $s .= $x; @$r = sort { $b <=> $a } @$r } "$s|@$r" } print f([1,3,2]), "\n";},
-    $RESHAPE, 'a sort assigned back through the reference');
+round_trips(q{use v5.42; sub f($r) { my $s=""; for my $x (@$r) { $s .= $x; @$r = sort { $b <=> $a } @$r } "$s|@$r" } print f([1,3,2]), "\n";},
+    'a sort assigned back through the reference');
 round_trips(q{sub f { my @a = (1, 2, 3); my $s=""; for my $x (@a) { $s .= $x; push @a, 9 if $x == 1 } print "$s|@a\n" } f();},
     'a push that adds a pass');
 
@@ -104,11 +106,11 @@ round_trips(q{sub f { my @a = (1, 2, 3); my $s=""; for my $x (@a) { $s .= $x; pu
 # which perl does in place, gave `312` for `323`.
 my $REASSIGN = qr/GAP: a foreach whose body reassigns the array it iterates/;
 refuses(q{sub f { my @a; push @a, 3, 1, 2; my $s=""; for my $x (@a) { $s .= $x; @a = sort @a } print "$s|@a\n" } f();},
-    $UNPROVEN, 'an in-place sort of the iterated array');
+    $REASSIGN, 'an in-place sort of the iterated array');
 refuses(q{sub f { my @a; push @a, 1, 2; my $s=""; for my $x (@a) { $s .= $x; @a = () if $x == 1 } print "$s|@a\n" } f();},
-    $UNPROVEN, 'a clear of the array in its own loop');
+    $REASSIGN, 'a clear of the array in its own loop');
 refuses(q{sub f { my @a = (1, 2, 3); my $s=""; for my $x (@a) { $s .= $x; undef @a } print "$s|@a\n" } f();},
-    $RESHAPE, 'an undef of the array in its own loop');
+    $REASSIGN, 'an undef of the array in its own loop');
 refuses(q{sub f { my @a = (1, 2, 3); my $s=""; for my $x (@a) { $s .= $x; @a = reverse @a } print "$s|@a\n" } f();},
     $REASSIGN, 'an in-place reverse of the iterated array');
 
@@ -116,16 +118,16 @@ refuses(q{sub f { my @a = (1, 2, 3); my $s=""; for my $x (@a) { $s .= $x; @a = r
 # reference, a callee -- is seen by perl's alias. The index read is spelled
 # where it is used, which sees a store made before that point; the renderer
 # refuses a read whose value is carried past a later store to its aggregate.
-refuses(q{sub f { my @a; push @a, 1, 2; my $s=""; for my $x (@a) { $s .= $x; $_ = 0 for @a } print "$s|@a\n" } f();},
-    $UNPROVEN, 'an inner loop zeroing the elements after the read');
-refuses(q{sub f { my @a; push @a, 1, 2; my $s=""; for my $x (@a) { $s .= $x; s/1/5/ for @a } print "$s|@a\n" } f();},
-    $UNPROVEN, 'an inner s/// through its alias after the read');
+round_trips(q{sub f { my @a; push @a, 1, 2; my $s=""; for my $x (@a) { $s .= $x; $_ = 0 for @a } print "$s|@a\n" } f();},
+    'an inner loop zeroing the elements after the read');
+round_trips(q{sub f { my @a; push @a, 1, 2; my $s=""; for my $x (@a) { $s .= $x; s/1/5/ for @a } print "$s|@a\n" } f();},
+    'an inner s/// through its alias after the read');
 round_trips(q{sub f { my @a = (3,4); for my $x (@a) { print $x; $a[1] = 1; } print "|@a\n" } f();},
     'an element store after a printed read');
-refuses_render(q{sub f { my @a = (1,2); my $s=""; for my $x (@a) { $s .= $x; $a[0] = 7; } print "$s|@a\n" } f();},
-    $STALE, 'an element store after a carried read');
-refuses_render(q{sub f { my @a = (1,2); my $s=""; for my $x (@a) { $a[0] = 7; $s .= $x; } print "$s|@a\n" } f();},
-    $STALE, 'an element store before the read');
+round_trips(q{sub f { my @a = (1,2); my $s=""; for my $x (@a) { $s .= $x; $a[0] = 7; } print "$s|@a\n" } f();},
+    'an element store after a carried read');
+round_trips(q{sub f { my @a = (1,2); my $s=""; for my $x (@a) { $a[0] = 7; $s .= $x; } print "$s|@a\n" } f();},
+    'an element store before the read');
 round_trips(q{sub f { my @a = (1,2); my $s=""; for my $x (@a) { for my $y (@a) { $y .= "z" } $s .= $x; } print "$s|@a\n" } f();},
     'an inner loop writing the elements before the read');
 round_trips(q{sub f { my @a = (1,2); for my $x (@a) { for my $y (@a) { $y .= "z" } print $x; } print "|@a\n" } f();},
@@ -134,28 +136,26 @@ round_trips(q{sub f { my @a = (1,2); my $s=""; for my $x (@a) { s/1/5/ for @a; $
     'an inner s/// before the read');
 round_trips(q{sub f { my @a = (1,2); my $r = \@a; my $s=""; for my $x (@a) { $r->[0] = 9; $s .= $x } print "$s|@a\n" } f();},
     'a store through a reference before the read');
-refuses(q{my @F=(1,2); sub g { $F[0] = 9 } sub f { for my $x (@F) { g(); print $x } print "|@F\n" } f();},
-    $UNPROVEN, 'a callee storing into the element before the read');
-refuses_render(q{sub g { $_[0] = 9 } sub f { my @a = (1,2); for my $x (@a) { g($a[0]); print $x } print "|@a\n" } f();},
-    $STALE, 'a callee writing the element through @_ before the read');
-refuses(q{sub f { my @a = (1,2,3); my $s=""; for my $x (@a) { $s .= $x; shift @a; $s .= $x; } print "$s|@a\n" } f();},
-    $RESHAPE, 'a read on both sides of a shift');
-refuses(q{my @F=(1,2,3); sub g { shift @F } sub f { my $s=""; for my $x (@F) { g(); $s .= $x } print "$s|@F\n" } f();},
-    $UNPROVEN, 'a read after a callee shifts');
+round_trips(q{my @F=(1,2); sub g { $F[0] = 9 } sub f { for my $x (@F) { g(); print $x } print "|@F\n" } f();},
+    'a callee storing into the element before the read');
+round_trips(q{sub g { $_[0] = 9 } sub f { my @a = (1,2); for my $x (@a) { g($a[0]); print $x } print "|@a\n" } f();},
+    'a callee writing the element through @_ before the read');
+round_trips(q{sub f { my @a = (1,2,3); my $s=""; for my $x (@a) { $s .= $x; shift @a; $s .= $x; } print "$s|@a\n" } f();},
+    'a read on both sides of a shift');
+round_trips(q{my @F=(1,2,3); sub g { shift @F } sub f { my $s=""; for my $x (@F) { g(); $s .= $x } print "$s|@F\n" } f();},
+    'a read after a callee shifts');
 round_trips(q{sub f { my @a = ([1],[2]); my $s = ""; for my $x (@a) { push @$x, 5; $s .= scalar(@$x) . $x->[0] } print "$s\n" } f();},
     'a push through the element itself');
 # A READ BETWEEN TWO STORES whose value only reaches the back edge has lost its
 # place in the pass: spelled there, it read the second store.
-refuses_render(q{sub f { my @a = (1,2); my $s=""; for my $x (@a) { $a[0] = 7; $s .= $x; $a[0] = 8 } print "$s|@a\n" } f();},
-    $STALE, 'a carried read between two element stores');
-# A STORE THROUGH A REFERENCE is not one the renderer matches to the read's
-# aggregate, so the read is spelled at the back edge after the second store:
-# `82` for perl's `72`, as on the base this branched from.
-{
-    my $todo = todo q{a carried read past a store through a reference is not refused};
-    refuses_render(q{sub f { my @a = (1,2); my $r = \@a; my $s=""; for my $x (@a) { $r->[0] = 7; $s .= $x; $r->[0] = 8 } print "$s|@a\n" } f();},
-        $STALE, 'a carried read between two stores through a reference');
-}
+round_trips(q{sub f { my @a = (1,2); my $s=""; for my $x (@a) { $a[0] = 7; $s .= $x; $a[0] = 8 } print "$s|@a\n" } f();},
+    'a carried read between two element stores');
+# A STORE THROUGH A REFERENCE was not one the renderer matched to the read's
+# aggregate, so the read was spelled at the back edge after the second store:
+# `82` for perl's `72`. The iterator is now a reference to its element, read
+# where the body reads it -- see t/deparse-a-foreach-alias-is-a-reference.t.
+round_trips(q{sub f { my @a = (1,2); my $r = \@a; my $s=""; for my $x (@a) { $r->[0] = 7; $s .= $x; $r->[0] = 8 } print "$s|@a\n" } f();},
+    'a carried read between two stores through a reference');
 # NOT EVERY LATER STORE COUNTS: a read inside an inner loop that stores it, and
 # a read pushed twice -- chalk's CoreItemIndex::build_from_grammar and
 # Serialize::JSON::_all_nodes_topo.
@@ -163,8 +163,8 @@ round_trips(q{my @o; my $n = 0; sub reg { $n++ } sub f { my @r = ("a","b"); for 
     'an alias read after a call, inside an inner loop that stores it');
 round_trips(q{sub f { my @a = (1,2,1,3); my (%seen, @x, @y); for my $c (@a) { next if $seen{$c}++; push @x, $c; push @y, $c } print "@x|@y\n" } f();},
     'an alias read after a store, pushed twice');
-refuses_render(q{sub g { $_[0] = 9 } sub f { my @a = (1,2); my $s = ""; for my $x (@a) { $a[0] = 5; $s .= $x; g($a[0]) } print "$s|@a\n" } f();},
-    $STALE, 'a carried alias read before a callee writes the element');
+round_trips(q{sub g { $_[0] = 9 } sub f { my @a = (1,2); my $s = ""; for my $x (@a) { $a[0] = 5; $s .= $x; g($a[0]) } print "$s|@a\n" } f();},
+    'a carried alias read before a callee writes the element');
 round_trips(q{sub f { my @a = (1,2); my @b = (5,6); my $s=""; for my $x (@a) { for my $y (@b) { $y .= "z" } $s .= $x; } print "$s|@b\n" } f();},
     'an inner loop writing another array');
 round_trips(q{sub f { my @a = (1,2); my $s=""; for my $x (@a) { for my $k (1..2) { $a[0] = 7 } $s .= $x; } print "$s|@a\n" } f();},
@@ -183,8 +183,10 @@ refuses(q{sub f { my @a = (1, 2, 3); for my $x (@a) { shift @a; $x .= "y" } prin
     $WRITE_RESHAPE, 'a shift then an alias write');
 refuses(q{sub f { my @a = (1, 2, 3); my $r = \@a; for my $x (@a) { $x .= "y"; shift @$r } print "@a\n" } f();},
     $WRITE_RESHAPE, 'an alias write then a shift through a reference');
+# The closure's array is shared with it, a container like a bare-declared
+# one, so the unproven-list rule may refuse it first, for the call.
 refuses(q{sub f { my @a = (1, 2, 3); my $g = sub { shift @a }; for my $x (@a) { $x .= "y"; $g->() } print "@a\n" } f();},
-    $WRITE_RESHAPE, 'an alias write then a closure call');
+    qr/$WRITE_RESHAPE|unproven list.*\(a call\)/, 'an alias write then a closure call');
 refuses(q{sub f { my @a = (1, 2, 3); for my $x (@a) { $x .= "y"; unshift @a, 0 if @a < 4 } print "@a\n" } f();},
     $WRITE_RESHAPE, 'an alias write then an unshift');
 round_trips(q{sub f { my @a = (1, 2, 3); for my $x (@a) { $x .= "y" } print "@a\n" } f();},
@@ -257,12 +259,11 @@ refuses(q{our $p = 7; sub g { print $p } sub f { my @a = (1,2); for $p (@a) { g(
 refuses(q{our $p = 7; sub g { $p = 100 } sub f { for $p (1..2) { g() } print "$p\n" } f();},
     $CALLEE, 'a callee writing a package range iterator');
 # THE IMPLICIT `$_` IS SPARED THE CALL REFUSAL (`f($_) for @x` is everywhere),
-# so a callee that writes the caller's topic unpassed is a known miscompile.
-{
-    my $todo = todo q{a callee writing the caller's $_ is not modelled};
-    round_trips(q{sub g { $_ = 100 } sub f { my @a = (1, 2); for (@a) { g() } print "|@a\n" } f();},
-        'a callee writing the implicit $_');
-}
+# so a callee that writes the caller's topic unpassed was a miscompile. The
+# topic is now aliased to the element each pass -- see
+# t/deparse-a-callee-reads-the-topic-by-name.t.
+round_trips(q{sub g { $_ = 100 } sub f { my @a = (1, 2); for (@a) { g() } print "|@a\n" } f();},
+    'a callee writing the implicit $_');
 round_trips(q{sub g { "<$_[0]>" } sub f { my @a = (1, 2); my $s = ""; for (@a) { $s .= g($_) } print "$s\n" } f();},
     'the implicit $_ passed to a callee');
 my $UNWIND = qr/GAP: a foreach over a package variable whose body writes it and can die/;

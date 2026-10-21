@@ -17,6 +17,9 @@ class SoN::FromOptree::StackSim 0.01 {
     field $memory :param :reader = undef;
     # The most recent regex match node; $N capture reads resolve to it.
     field $last_match :reader;
+    # The match whose captures were merged out of a branch's block under the
+    # `#captureN` keys; they stand for it while it is still $last_match.
+    field $capture_merge :reader;
 
     method push_node ($node) {
         push @stack, $node;
@@ -93,6 +96,10 @@ class SoN::FromOptree::StackSim 0.01 {
         $last_match = $node;
     }
 
+    method set_capture_merge ($node) {
+        $capture_merge = $node;
+    }
+
     # Scope: immutable-style variable bindings
     method define ($targ, $node) {
         $scope{$targ} = $node;
@@ -117,6 +124,7 @@ class SoN::FromOptree::StackSim 0.01 {
             $copy->define($targ, $scope{$targ});
         }
         $copy->set_last_match($last_match);
+        $copy->set_capture_merge($capture_merge);
         return $copy;
     }
 
@@ -219,6 +227,34 @@ class SoN::FromOptree::StackSim 0.01 {
     # in _walk_loop_body already stamped its merges this way; this is the same
     # rule at the one place every merge Phi is built.
     sub _joined_stamp ($x, $y) {
+        # TWO ARRAYS MERGE TO AN ARRAY, two hashes to a hash, though a pad
+        # array bound by push carries no stamp: joined as a List, the
+        # renderer declared the merge a scalar (`02` for `aabbab`).
+        # THROUGH AN UNSTAMPED MERGE TOO: a loop's Phi of `@body`, or a
+        # ternary over one, carries the pad array it started from, and
+        # `@body = $s->@* if defined $s` in a loop merged to `$phi71` --
+        # the array's last element (chalk's Perl::Actions::MethodDefinition).
+        my %seen;
+        my $walk = sub ($n) {
+            return '' if !defined $n || $seen{ builtin::refaddr($n) }++;
+            return $n->sigil if $n->isa('SoN::IR::Node::PadAccess')
+                && ($n->sigil // '') =~ /\A[\@%]\z/;
+            my $t = $n->can('stamp') && $n->stamp ? $n->stamp->type : '';
+            return $t eq 'Array' ? '@' : $t eq 'Hash' ? '%' : ''
+                if $t ne '' && $t ne 'Unknown';
+            my @in = $n->isa('SoN::IR::Node::Phi') ? ($n->inputs // [])->@*
+                   : $n->isa('SoN::IR::Node::TernaryExpr') ? (($n->inputs // [])->@*)[1, 2]
+                   : ();
+            for my $i (@in) {
+                my $s = __SUB__->($i);
+                return $s if $s;
+            }
+            return '';
+        };
+        my $agg = sub ($n) { %seen = (); $walk->($n) };
+        my $ax = $agg->($x);
+        return (stamp => SoN::IR::Stamp->new(type => $ax eq '@' ? 'Array' : 'Hash'))
+            if $ax && $ax eq $agg->($y);
         return () unless $x->can('stamp') && $y->can('stamp');
         my ($sx, $sy) = ($x->stamp, $y->stamp);
         return () unless defined $sx && defined $sy
@@ -290,6 +326,7 @@ class SoN::FromOptree::StackSim 0.01 {
                 inputs => [$memory, $other_memory],
                 region => $region,
                 (@preds ? (predecessors => [@preds]) : ()),
+                memory => 1,
             );
         }
 

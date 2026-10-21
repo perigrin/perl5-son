@@ -129,10 +129,11 @@ L: GREEN
 ```
 
 ```son
-Animal::name: {start: 0, returns: [2], nodes: [
+Animal::name: {start: 0, returns: [3], nodes: [
   [Start], # 0
-  [FieldAccess, {field_index: 0, field_stash: Animal}, ~, ~, Unknown], # 1
-  [Return, ~, [1], 0]]} # 2
+  [MemStart], # 1
+  [FieldAccess, {field_index: 0, field_stash: Animal}, [1], ~, Unknown], # 2
+  [Return, ~, [2], 0]]} # 3
 main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
@@ -230,10 +231,11 @@ Greeter::__DEFAULT_0: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: hi}, ~, ~, Str], # 1
   [Return, ~, [1], 0]]} # 2
-Greeter::hello: {start: 0, returns: [2], nodes: [
+Greeter::hello: {start: 0, returns: [3], nodes: [
   [Start], # 0
-  [FieldAccess, {field_index: 0, field_stash: Greeter}, ~, ~, Scalar], # 1
-  [Return, ~, [1], 0]]} # 2
+  [MemStart], # 1
+  [FieldAccess, {field_index: 0, field_stash: Greeter}, [1], ~, Scalar], # 2
+  [Return, ~, [2], 0]]} # 3
 main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
@@ -661,10 +663,11 @@ Counter::inc: {start: 0, returns: [6], nodes: [
   [Add, ~, [2, 3], ~, Num], # 4
   [Assign, ~, [1, 4], 0, Num], # 5
   [Return, {implicit: true}, [4], 5]]} # 6
-Counter::val: {start: 0, returns: [2], nodes: [
+Counter::val: {start: 0, returns: [3], nodes: [
   [Start], # 0
-  [FieldAccess, {field_index: 0, field_stash: Counter}, ~, ~, Scalar], # 1
-  [Return, ~, [1], 0]]} # 2
+  [MemStart], # 1
+  [FieldAccess, {field_index: 0, field_stash: Counter}, [1], ~, Scalar], # 2
+  [Return, ~, [2], 0]]} # 3
 main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
@@ -771,10 +774,11 @@ Counter::inc: {start: 0, returns: [6], nodes: [
   [Add, ~, [2, 3], ~, Num], # 4
   [Assign, ~, [1, 4], 0, Num], # 5
   [Return, {implicit: true}, [4], 5]]} # 6
-Counter::val: {start: 0, returns: [2], nodes: [
+Counter::val: {start: 0, returns: [3], nodes: [
   [Start], # 0
-  [FieldAccess, {field_index: 0, field_stash: Counter}, ~, ~, Scalar], # 1
-  [Return, ~, [1], 0]]} # 2
+  [MemStart], # 1
+  [FieldAccess, {field_index: 0, field_stash: Counter}, [1], ~, Scalar], # 2
+  [Return, ~, [2], 0]]} # 3
 main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
@@ -964,23 +968,25 @@ L: GREEN
 ```
 
 ```son
-Box::__ADJUST_0: {start: 0, returns: [7], nodes: [
+Box::__ADJUST_0: {start: 0, returns: [8], nodes: [
   [Start], # 0
-  [FieldAccess, {field_index: 0, field_stash: Box}, ~, ~, Scalar], # 1
-  [Coerce, {from_repr: Scalar, to_repr: Num}, [1], ~, Num], # 2
-  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 3
-  [Multiply, ~, [2, 3], ~, Num], # 4
-  [FieldAccess, {field_index: 1, field_stash: Box}, ~, ~, Unknown], # 5
-  [Assign, ~, [5, 4], 0, Num], # 6
-  [Return, {implicit: true}, [4], 6]]} # 7
+  [MemStart], # 1
+  [FieldAccess, {field_index: 0, field_stash: Box}, [1], ~, Scalar], # 2
+  [Coerce, {from_repr: Scalar, to_repr: Num}, [2], ~, Num], # 3
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 4
+  [Multiply, ~, [3, 4], ~, Num], # 5
+  [FieldAccess, {field_index: 1, field_stash: Box}, ~, ~, Unknown], # 6
+  [Assign, ~, [6, 5], 0, Num], # 7
+  [Return, {implicit: true}, [5], 7]]} # 8
 Box::__DEFAULT_0: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 1
   [Return, ~, [1], 0]]} # 2
-Box::double: {start: 0, returns: [2], nodes: [
+Box::double: {start: 0, returns: [3], nodes: [
   [Start], # 0
-  [FieldAccess, {field_index: 1, field_stash: Box}, ~, ~, Unknown], # 1
-  [Return, ~, [1], 0]]} # 2
+  [MemStart], # 1
+  [FieldAccess, {field_index: 1, field_stash: Box}, [1], ~, Unknown], # 2
+  [Return, ~, [2], 0]]} # 3
 main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
@@ -1088,18 +1094,21 @@ Counter::__DEFAULT_0: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 1
   [Return, ~, [1], 0]]} # 2
-Counter::inc: {start: 0, returns: [6], nodes: [
+Counter::inc: {start: 0, returns: [8], nodes: [
   [Start], # 0
-  [FieldAccess, {field_index: 0, field_stash: Counter}, ~, ~, Scalar], # 1
-  [Coerce, {from_repr: Scalar, to_repr: Num}, [1], ~, Num], # 2
-  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 3
-  [Add, ~, [2, 3], ~, Num], # 4
-  [Assign, ~, [1, 4], 0, Num], # 5
-  [Return, {implicit: true}, [4], 5]]} # 6
-Counter::val: {start: 0, returns: [2], nodes: [
+  [MemStart], # 1
+  [FieldAccess, {field_index: 0, field_stash: Counter}, [1], ~, Scalar], # 2
+  [Coerce, {from_repr: Scalar, to_repr: Num}, [2], ~, Num], # 3
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 4
+  [Add, ~, [3, 4], ~, Num], # 5
+  [FieldAccess, {field_index: 0, field_stash: Counter}, ~, ~, Scalar], # 6
+  [Assign, ~, [6, 5], 0, Num], # 7
+  [Return, {implicit: true}, [5], 7]]} # 8
+Counter::val: {start: 0, returns: [3], nodes: [
   [Start], # 0
-  [FieldAccess, {field_index: 0, field_stash: Counter}, ~, ~, Scalar], # 1
-  [Return, ~, [1], 0]]} # 2
+  [MemStart], # 1
+  [FieldAccess, {field_index: 0, field_stash: Counter}, [1], ~, Scalar], # 2
+  [Return, ~, [2], 0]]} # 3
 main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
@@ -1122,7 +1131,7 @@ main::corpus_case: {start: 0, returns: [15], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 13
   [Print, ~, [12, 13], 11, Scalar], # 14
   [Return, {implicit: true}, [14], 14], # 15
-  [Phi, {predecessors: [7, 8], region: 10}, [2, 9], ~, Scalar]]} # 16
+  [Phi, {memory: true, predecessors: [7, 8], region: 10}, [2, 9], ~, Scalar]]} # 16
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
@@ -1226,28 +1235,32 @@ Counter::__DEFAULT_0: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 1
   [Return, ~, [1], 0]]} # 2
-Counter::bump: {start: 0, returns: [16], nodes: [
+Counter::bump: {start: 0, returns: [18], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [FieldAccess, {field_index: 0, field_stash: Counter}, ~, ~, Scalar], # 2
-  [Coerce, {from_repr: Scalar, to_repr: Num}, [2], ~, Num], # 3
-  [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 4
-  [Add, ~, [3, 4], ~, Num], # 5
-  [Constant, {const_type: integer, value: "100"}, ~, ~, Int], # 6
-  [NumLt, ~, [3, 6], ~, Boolean], # 7
-  [If, ~, [0, 7], 0], # 8
-  [Proj, {index: 0}, [8]], # 9
-  [Assign, ~, [2, 5], 9, Num], # 10
-  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 11
-  [Add, ~, [3, 11], ~, Num], # 12
-  [Proj, {index: 1}, [8]], # 13
-  [Assign, ~, [2, 12], 13, Num], # 14
-  [Region, {head: 8}, [10, 14]], # 15
-  [Return, {implicit: true, valueless: true}, [1], 15]]} # 16
-Counter::val: {start: 0, returns: [2], nodes: [
+  [MemStart], # 3
+  [FieldAccess, {field_index: 0, field_stash: Counter}, [3], ~, Scalar], # 4
+  [Coerce, {from_repr: Scalar, to_repr: Num}, [4], ~, Num], # 5
+  [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 6
+  [Add, ~, [5, 6], ~, Num], # 7
+  [Constant, {const_type: integer, value: "100"}, ~, ~, Int], # 8
+  [NumLt, ~, [5, 8], ~, Boolean], # 9
+  [If, ~, [0, 9], 0], # 10
+  [Proj, {index: 0}, [10]], # 11
+  [Assign, ~, [2, 7], 11, Num], # 12
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 13
+  [Add, ~, [5, 13], ~, Num], # 14
+  [Proj, {index: 1}, [10]], # 15
+  [Assign, ~, [2, 14], 15, Num], # 16
+  [Region, {head: 10}, [12, 16]], # 17
+  [Return, {implicit: true, valueless: true}, [1], 17], # 18
+  [Phi, {memory: true, predecessors: [11, 15], region: 17}, [12, 16], ~, Num]]} # 19
+Counter::val: {start: 0, returns: [3], nodes: [
   [Start], # 0
-  [FieldAccess, {field_index: 0, field_stash: Counter}, ~, ~, Scalar], # 1
-  [Return, {implicit: true}, [1], 0]]} # 2
+  [MemStart], # 1
+  [FieldAccess, {field_index: 0, field_stash: Counter}, [1], ~, Scalar], # 2
+  [Return, {implicit: true}, [2], 0]]} # 3
 main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
@@ -1364,28 +1377,32 @@ Counter::__DEFAULT_0: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 1
   [Return, ~, [1], 0]]} # 2
-Counter::bump: {start: 0, returns: [16], nodes: [
+Counter::bump: {start: 0, returns: [18], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [FieldAccess, {field_index: 0, field_stash: Counter}, ~, ~, Scalar], # 2
-  [Coerce, {from_repr: Scalar, to_repr: Num}, [2], ~, Num], # 3
-  [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 4
-  [Add, ~, [3, 4], ~, Num], # 5
-  [Constant, {const_type: integer, value: "100"}, ~, ~, Int], # 6
-  [NumLt, ~, [3, 6], ~, Boolean], # 7
-  [If, ~, [0, 7], 0], # 8
-  [Proj, {index: 0}, [8]], # 9
-  [Assign, ~, [2, 5], 9, Num], # 10
-  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 11
-  [Add, ~, [3, 11], ~, Num], # 12
-  [Proj, {index: 1}, [8]], # 13
-  [Assign, ~, [2, 12], 13, Num], # 14
-  [Region, {head: 8}, [10, 14]], # 15
-  [Return, {implicit: true, valueless: true}, [1], 15]]} # 16
-Counter::val: {start: 0, returns: [2], nodes: [
+  [MemStart], # 3
+  [FieldAccess, {field_index: 0, field_stash: Counter}, [3], ~, Scalar], # 4
+  [Coerce, {from_repr: Scalar, to_repr: Num}, [4], ~, Num], # 5
+  [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 6
+  [Add, ~, [5, 6], ~, Num], # 7
+  [Constant, {const_type: integer, value: "100"}, ~, ~, Int], # 8
+  [NumLt, ~, [5, 8], ~, Boolean], # 9
+  [If, ~, [0, 9], 0], # 10
+  [Proj, {index: 0}, [10]], # 11
+  [Assign, ~, [2, 7], 11, Num], # 12
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 13
+  [Add, ~, [5, 13], ~, Num], # 14
+  [Proj, {index: 1}, [10]], # 15
+  [Assign, ~, [2, 14], 15, Num], # 16
+  [Region, {head: 10}, [12, 16]], # 17
+  [Return, {implicit: true, valueless: true}, [1], 17], # 18
+  [Phi, {memory: true, predecessors: [11, 15], region: 17}, [12, 16], ~, Num]]} # 19
+Counter::val: {start: 0, returns: [3], nodes: [
   [Start], # 0
-  [FieldAccess, {field_index: 0, field_stash: Counter}, ~, ~, Scalar], # 1
-  [Return, {implicit: true}, [1], 0]]} # 2
+  [MemStart], # 1
+  [FieldAccess, {field_index: 0, field_stash: Counter}, [1], ~, Scalar], # 2
+  [Return, {implicit: true}, [2], 0]]} # 3
 main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
@@ -1667,15 +1684,16 @@ Tagged::__DEFAULT_1: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Return, ~, [1], 0]]} # 2
-Tagged::render: {start: 0, returns: [7], nodes: [
+Tagged::render: {start: 0, returns: [8], nodes: [
   [Start], # 0
-  [FieldAccess, {field_index: 1, field_stash: Tagged}, ~, ~, Scalar], # 1
-  [Defined, ~, [1], ~, Boolean], # 2
-  [FieldAccess, {field_index: 0, field_stash: Tagged}, ~, ~, Str], # 3
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [1], ~, Str], # 4
-  [Concat, ~, [3, 4], ~, Str], # 5
-  [TernaryExpr, {rebind_arm: 1}, [2, 5, 3], 0, Unknown], # 6
-  [Return, {implicit: true}, [6], 6]]} # 7
+  [MemStart], # 1
+  [FieldAccess, {field_index: 1, field_stash: Tagged}, [1], ~, Scalar], # 2
+  [Defined, ~, [2], ~, Boolean], # 3
+  [FieldAccess, {field_index: 0, field_stash: Tagged}, [1], ~, Str], # 4
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [2], ~, Str], # 5
+  [Concat, ~, [4, 5], ~, Str], # 6
+  [TernaryExpr, {rebind_arm: 1}, [3, 6, 4], 0, Unknown], # 7
+  [Return, {implicit: true}, [7], 7]]} # 8
 main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
@@ -1768,10 +1786,10 @@ Bag::__DEFAULT_0: {start: 0, returns: [5], nodes: [
   [Return, ~, [4], 0]]} # 5
 Bag::first: {start: 0, returns: [5], nodes: [
   [Start], # 0
-  [FieldAccess, {field_index: 0, field_stash: Bag}, ~, ~, ArrayRef], # 1
-  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 2
-  [MemStart], # 3
-  [Subscript, {kind: array}, [1, 2, 3], ~, Scalar], # 4
+  [MemStart], # 1
+  [FieldAccess, {field_index: 0, field_stash: Bag}, [1], ~, ArrayRef], # 2
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 3
+  [Subscript, {kind: array}, [2, 3, 1], ~, Scalar], # 4
   [Return, {implicit: true}, [4], 0]]} # 5
 main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
@@ -1876,14 +1894,14 @@ Bag::total: {start: 0, returns: [6], nodes: [
   [Proj, {index: 1}, [2]], # 4
   [Region, {head: 2}, [4]], # 5
   [Return, {implicit: true}, [3], 5], # 6
-  [FieldAccess, {field_index: 0, field_stash: Bag}, ~, ~, ArrayRef], # 7
-  [MemStart], # 8
-  [PostfixDeref, {sigil: "@"}, [7, 8], ~, Array], # 9
-  [Count, ~, [9, 8], ~, Int], # 10
+  [MemStart], # 7
+  [FieldAccess, {field_index: 0, field_stash: Bag}, [7], ~, ArrayRef], # 8
+  [PostfixDeref, {sigil: "@"}, [8, 7], ~, Array], # 9
+  [Count, ~, [9, 7], ~, Int], # 10
   [Phi, {region: 2}, [1, 18], ~, Int], # 11
   [NumGt, ~, [10, 11], 2, Boolean], # 12
   [Proj, {index: 0}, [2]], # 13
-  [Subscript, {kind: array}, [9, 11, 8], ~, Scalar], # 14
+  [Subscript, {kind: array}, [9, 11, 7], ~, Scalar], # 14
   [Coerce, {from_repr: Scalar, to_repr: Num}, [14], ~, Num], # 15
   [Add, ~, [3, 15], ~, Unknown], # 16
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 17
@@ -1988,10 +2006,11 @@ Counter::__DEFAULT_0: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 1
   [Return, ~, [1], 0]]} # 2
-Counter::get: {start: 0, returns: [2], nodes: [
+Counter::get: {start: 0, returns: [3], nodes: [
   [Start], # 0
-  [FieldAccess, {field_index: 0, field_stash: Counter}, ~, ~, Scalar], # 1
-  [Return, {implicit: true}, [1], 0]]} # 2
+  [MemStart], # 1
+  [FieldAccess, {field_index: 0, field_stash: Counter}, [1], ~, Scalar], # 2
+  [Return, {implicit: true}, [2], 0]]} # 3
 main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
@@ -2076,13 +2095,14 @@ Counter::__DEFAULT_0: {start: 0, returns: [2], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 1
   [Return, ~, [1], 0]]} # 2
-Counter::plus: {start: 0, returns: [5], nodes: [
+Counter::plus: {start: 0, returns: [6], nodes: [
   [Start], # 0
-  [FieldAccess, {field_index: 0, field_stash: Counter}, ~, ~, Scalar], # 1
-  [Coerce, {from_repr: Scalar, to_repr: Num}, [1], ~, Num], # 2
-  [Parameter, {index: 0, name: $k, sigil: $}, ~, ~, Num], # 3
-  [Add, ~, [2, 3], ~, Num], # 4
-  [Return, {implicit: true}, [4], 0]]} # 5
+  [MemStart], # 1
+  [FieldAccess, {field_index: 0, field_stash: Counter}, [1], ~, Scalar], # 2
+  [Coerce, {from_repr: Scalar, to_repr: Num}, [2], ~, Num], # 3
+  [Parameter, {index: 0, name: $k, sigil: $}, ~, ~, Num], # 4
+  [Add, ~, [3, 4], ~, Num], # 5
+  [Return, {implicit: true}, [5], 0]]} # 6
 main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1

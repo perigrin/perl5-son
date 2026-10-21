@@ -194,11 +194,12 @@ round_trips('my @a; my $f = sub { $a[0][0] ||= $_[0] }; my @r = ($f->(3), $f->(4
     'an array-of-array element of a captured array');
 round_trips('my @a; my $f = sub { $a[0]{x} //= $_[0]; $a[0]{x} }; my @r = ($f->(1), $f->(2)); print "@r\n";',
     'an array-of-hash element of a captured array');
-# ONE CAPTURED FROM A NAMED SUB'S OWN SCOPE is still read as a fresh lexical
-# of the lifted body, and refuses.
-refuses('sub mk { my %h; return sub { $h{$_[0]} //= $_[1] } } my $f = mk(); my @r = ($f->("a", 1), $f->("a", 2)); print "@r\n";',
-    qr/GAP: `\/\/=` into an element of an aggregate an anon sub closes over/,
-    'an element of a hash captured from a named sub refuses');
+# ONE CAPTURED FROM A NAMED SUB'S OWN SCOPE was read as a fresh lexical of
+# the lifted body, and refused. It is shared with the sub now, declared once
+# above both -- as a captured scalar's cell is, with the same limit: two live
+# closures from two calls of `mk` share it.
+round_trips('sub mk { my %h; return sub { $h{$_[0]} //= $_[1] } } my $f = mk(); my @r = ($f->("a", 1), $f->("a", 2)); print "@r\n";',
+    'an element of a hash captured from a named sub');
 
 # THE RESULT IS THE TARGET ITSELF, not a copy of its value: `++`, `\`, a sub
 # argument and `+=` all write through it. The op says so with OPf_MOD.

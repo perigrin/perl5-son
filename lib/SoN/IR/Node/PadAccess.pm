@@ -35,6 +35,11 @@ class SoN::IR::Node::PadAccess :isa(SoN::IR::Node::Access) {
     # than a contract -- the chalk deserializer dies on a sigil-less
     # PadAccess, so the producer should not be able to emit one.
     ADJUST {
+        # A SECOND LEXICAL AGGREGATE OF THE SAME NAME in this sub is spelled
+        # apart -- see %SoN::FromOptree::PAD_SYMBOL.
+        $symbol = $SoN::FromOptree::PAD_SYMBOL{$targ}
+            if defined $targ && defined $sigil && $sigil ne '$'
+            && defined $SoN::FromOptree::PAD_SYMBOL{$targ};
         die "PadAccess: a sigil is required (\$_ and \@_ are different"
           . " variables, and this node is hash-consed by content)\n"
             unless defined $sigil && length $sigil;

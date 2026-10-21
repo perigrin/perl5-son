@@ -16,6 +16,15 @@ class SoN::IR::Node::Assign :isa(SoN::IR::Node::BinOp) {
     # a named scalar spells like a target, so the kinds cannot say.
     field $targets :param :reader = undef;
 
+    # A `local` ON AN ELEMENT: the store is the new value, restored at the
+    # block's exit by an ElemRestore. Spelled `local` so perl restores it.
+    field $local :param :reader = false;
+
     method operation() { 'Assign' }
+
+    # A local store and a plain one of the same value are different writes.
+    method content_hash() {
+        return join('|', $self->SUPER::content_hash(), ($local ? 'local' : ()));
+    }
     method op_str()    { '=' }
 }

@@ -93,6 +93,7 @@ sub _extract_fields ($node, $id_remap) {
         return {
             ( defined $node->sigil  ? ( sigil  => $node->sigil )  : () ),
             ( defined $node->symbol ? ( symbol => $node->symbol ) : () ),
+            ( $node->rebinds ? ( rebinds => JSON::PP::true ) : () ),
         };
     }
 
@@ -159,6 +160,7 @@ sub _extract_fields ($node, $id_remap) {
         return {
             region => $id_remap->{ $node->region->id },
             (@pred_ids ? (predecessors => \@pred_ids) : ()),
+            ($node->memory ? (memory => JSON::PP::true()) : ()),
         };
     }
     if ($op eq 'Proj') {
@@ -168,6 +170,7 @@ sub _extract_fields ($node, $id_remap) {
         my %f = (
             ( $node->if_changed ? ( if_changed => JSON::PP::true ) : () ),
             ( defined $node->targets ? ( targets => 0 + $node->targets ) : () ),
+            ( $node->local ? ( local => JSON::PP::true ) : () ),
         );
         return %f ? \%f : undef;
     }
@@ -319,7 +322,9 @@ sub _extract_fields ($node, $id_remap) {
     # byte-identical: every input but the last is an index there.
     if ($op eq 'Slice') {
         my $n = $node->can('index_count') ? $node->index_count : 0;
-        return $n ? { index_count => $n } : undef;
+        my $k = $node->can('kind') ? $node->kind : undef;
+        my %f = (($n ? (index_count => $n) : ()), (defined $k ? (kind => $k) : ()));
+        return %f ? \%f : undef;
     }
     if ($op eq 'RegexCapture') {
         return { n => $node->n };
@@ -339,11 +344,14 @@ sub _extract_fields ($node, $id_remap) {
             to_repr   => $node->to_repr,
         };
     }
-    if ($op eq 'Exists' || $op eq 'Delete') {
+    if ($op eq 'Exists' || $op eq 'Delete' || $op eq 'ElemRestore') {
         return defined $node->kind ? { kind => $node->kind } : undef;
     }
     if ($op eq 'Subscript') {
         return defined $node->kind ? { kind => $node->kind } : undef;
+    }
+    if ($op eq 'LocalAlias') {
+        return { name => $node->name };
     }
     return undef;
 }

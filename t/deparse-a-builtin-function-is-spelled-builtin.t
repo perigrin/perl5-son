@@ -75,4 +75,19 @@ use v5.42; my $r = {}; my $s = $r;
 print builtin::refaddr($r) == builtin::refaddr($s) ? "same" : "diff", "\n";
 SRC
 
+# THE TOPIC IN A map OR grep, handed to one: its `$_` is OPf_MOD like a
+# call argument, and the gvsv handler took it for a name token -- the
+# builtin read the global `$main::_`, never set in the lowered loop. chalk's
+# FilterComposite greps `blessed($_) && $_->can(...)` and kept none (0 for
+# 2), picking the wrong parse of `1 + 2 * 3`.
+round_trips(<<'SRC', 'blessed of the topic in a grep');
+use Scalar::Util qw(blessed); package K { sub new { bless {}, shift } sub ok { 1 } } my @a = (K->new, 3, K->new); my @g = grep { blessed($_) && $_->ok } @a; print scalar(@g), "\n";
+SRC
+round_trips(<<'SRC', 'reftype of the topic in a map');
+use Scalar::Util qw(reftype); my @a = ([], 3, {}); my @g = map { reftype($_) // "u" } @a; print "@g\n";
+SRC
+round_trips(<<'SRC', 'blessed of the topic in a sub\'s grep over a slice');
+use Scalar::Util qw(blessed); sub f { my $r = [bless({}, "K"), 3, bless({}, "K"), 4]; my @g = grep { blessed($_) } $r->@[0 .. $#{$r} - 1]; return scalar(@g) } print f(), "\n";
+SRC
+
 done_testing;

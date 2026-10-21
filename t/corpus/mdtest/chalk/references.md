@@ -934,8 +934,8 @@ main::corpus_case: {start: 0, returns: [12], nodes: [
   [HashLiteral, {sigil: "%", symbol: h}, [2, 3, 4, 5], ~, Hash], # 6
   [MemStart], # 7
   [Call, {dispatch_kind: builtin, memory_input: true, name: keys, param_names: [], want: list}, [6, 7], ~, List], # 8
-  [Call, {dispatch_kind: builtin, name: sort, param_names: [], sort_cmp: string, sort_order: ascending}, [8], ~, List], # 9
-  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [1, 9], ~, Str], # 10
+  [Call, {dispatch_kind: builtin, memory_input: true, name: sort, param_names: [], sort_cmp: string, sort_order: ascending}, [8, 7], ~, List], # 9
+  [Call, {dispatch_kind: builtin, memory_input: true, name: join, param_names: []}, [1, 9, 7], ~, Str], # 10
   [Print, ~, [10], 0, Scalar], # 11
   [Return, {implicit: true}, [11], 11]]} # 12
 "BEGIN 1": {start: 0, returns: [4], nodes: [
@@ -1665,7 +1665,7 @@ main::corpus_case: {start: 0, returns: [29], nodes: [
   [Assign, ~, [8, 9], 12, Int], # 13
   [Proj, {index: 1}, [11]], # 14
   [Region, {head: 11}, [14, 13]], # 15
-  [Phi, {predecessors: [14, 12], region: 15}, [7, 13], ~, Unknown], # 16
+  [Phi, {memory: true, predecessors: [14, 12], region: 15}, [7, 13], ~, Unknown], # 16
   [Subscript, {kind: array}, [5, 6, 16], ~, Scalar], # 17
   [Coerce, {from_repr: Unknown, to_repr: Str}, [17], ~, Str], # 18
   [Concat, ~, [1, 18], ~, Str], # 19
@@ -1762,7 +1762,7 @@ main::corpus_case: {start: 0, returns: [29], nodes: [
   [Assign, ~, [8, 9], 12, Int], # 13
   [Proj, {index: 1}, [11]], # 14
   [Region, {head: 11}, [14, 13]], # 15
-  [Phi, {predecessors: [14, 12], region: 15}, [7, 13], ~, Unknown], # 16
+  [Phi, {memory: true, predecessors: [14, 12], region: 15}, [7, 13], ~, Unknown], # 16
   [Subscript, {kind: array}, [5, 6, 16], ~, Scalar], # 17
   [Coerce, {from_repr: Unknown, to_repr: Str}, [17], ~, Str], # 18
   [Concat, ~, [1, 18], ~, Str], # 19
@@ -1857,7 +1857,7 @@ main::corpus_case: {start: 0, returns: [28], nodes: [
   [Assign, ~, [6, 7], 11, Int], # 12
   [Proj, {index: 1}, [10]], # 13
   [Region, {head: 10}, [13, 12]], # 14
-  [Phi, {predecessors: [13, 11], region: 14}, [5, 12], ~, Unknown], # 15
+  [Phi, {memory: true, predecessors: [13, 11], region: 14}, [5, 12], ~, Unknown], # 15
   [Subscript, {kind: hash}, [4, 2, 15], ~, Scalar], # 16
   [Coerce, {from_repr: Unknown, to_repr: Str}, [16], ~, Str], # 17
   [Concat, ~, [1, 17], ~, Str], # 18
@@ -1947,7 +1947,7 @@ main::corpus_case: {start: 0, returns: [28], nodes: [
   [Assign, ~, [6, 7], 11, Int], # 12
   [Proj, {index: 1}, [10]], # 13
   [Region, {head: 10}, [13, 12]], # 14
-  [Phi, {predecessors: [13, 11], region: 14}, [5, 12], ~, Unknown], # 15
+  [Phi, {memory: true, predecessors: [13, 11], region: 14}, [5, 12], ~, Unknown], # 15
   [Subscript, {kind: hash}, [4, 2, 15], ~, Scalar], # 16
   [Coerce, {from_repr: Unknown, to_repr: Str}, [16], ~, Str], # 17
   [Concat, ~, [1, 17], ~, Str], # 18
@@ -2071,10 +2071,10 @@ main::corpus_case: {start: 0, returns: [35], nodes: [
   [Proj, {index: 1}, [12]], # 16
   [Assign, ~, [8, 15], 16, Int], # 17
   [Region, {head: 12}, [14, 17]], # 18
-  [Phi, {predecessors: [13, 16], region: 18}, [14, 17], ~, Int], # 19
+  [Phi, {memory: true, predecessors: [13, 16], region: 18}, [14, 17], ~, Int], # 19
   [Proj, {index: 1}, [10]], # 20
   [Region, {head: 10}, [20, 18]], # 21
-  [Phi, {predecessors: [20, 11], region: 21}, [7, 19], ~, Unknown], # 22
+  [Phi, {memory: true, predecessors: [20, 11], region: 21}, [7, 19], ~, Unknown], # 22
   [Subscript, {kind: array}, [5, 6, 22], ~, Scalar], # 23
   [Coerce, {from_repr: Unknown, to_repr: Str}, [23], ~, Str], # 24
   [Concat, ~, [1, 24], ~, Str], # 25
@@ -2181,10 +2181,10 @@ main::corpus_case: {start: 0, returns: [35], nodes: [
   [Proj, {index: 1}, [12]], # 16
   [Assign, ~, [8, 15], 16, Int], # 17
   [Region, {head: 12}, [14, 17]], # 18
-  [Phi, {predecessors: [13, 16], region: 18}, [14, 17], ~, Int], # 19
+  [Phi, {memory: true, predecessors: [13, 16], region: 18}, [14, 17], ~, Int], # 19
   [Proj, {index: 1}, [10]], # 20
   [Region, {head: 10}, [20, 18]], # 21
-  [Phi, {predecessors: [20, 11], region: 21}, [7, 19], ~, Unknown], # 22
+  [Phi, {memory: true, predecessors: [20, 11], region: 21}, [7, 19], ~, Unknown], # 22
   [Subscript, {kind: array}, [5, 6, 22], ~, Scalar], # 23
   [Coerce, {from_repr: Unknown, to_repr: Str}, [23], ~, Str], # 24
   [Concat, ~, [1, 24], ~, Str], # 25
@@ -2291,10 +2291,10 @@ main::corpus_case: {start: 0, returns: [35], nodes: [
   [Proj, {index: 1}, [12]], # 16
   [Assign, ~, [8, 15], 16, Int], # 17
   [Region, {head: 12}, [14, 17]], # 18
-  [Phi, {predecessors: [13, 16], region: 18}, [14, 17], ~, Int], # 19
+  [Phi, {memory: true, predecessors: [13, 16], region: 18}, [14, 17], ~, Int], # 19
   [Proj, {index: 1}, [10]], # 20
   [Region, {head: 10}, [20, 18]], # 21
-  [Phi, {predecessors: [20, 11], region: 21}, [7, 19], ~, Unknown], # 22
+  [Phi, {memory: true, predecessors: [20, 11], region: 21}, [7, 19], ~, Unknown], # 22
   [Subscript, {kind: array}, [5, 6, 22], ~, Scalar], # 23
   [Coerce, {from_repr: Unknown, to_repr: Str}, [23], ~, Str], # 24
   [Concat, ~, [1, 24], ~, Str], # 25

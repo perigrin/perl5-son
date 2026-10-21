@@ -186,10 +186,11 @@ L: GREEN
 ```
 
 ```son
-_A5Tmp::val: {start: 0, returns: [2], nodes: [
+_A5Tmp::val: {start: 0, returns: [3], nodes: [
   [Start], # 0
-  [FieldAccess, {field_index: 0, field_stash: _A5Tmp}, ~, ~, Unknown], # 1
-  [Return, {implicit: true}, [1], 0]]} # 2
+  [MemStart], # 1
+  [FieldAccess, {field_index: 0, field_stash: _A5Tmp}, [1], ~, Unknown], # 2
+  [Return, {implicit: true}, [2], 0]]} # 3
 main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1

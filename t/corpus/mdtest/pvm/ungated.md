@@ -156,20 +156,24 @@ one word whose text is "field"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [12], nodes: [
+main::__PROGRAM__: {start: 0, returns: [16], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
-  [Call, {dispatch_kind: method, name: field, param_names: [], want: void}, [1], 0, Unknown], # 3
-  [Region, {eval_entry: 0}, [3]], # 4
-  [Phi, {region: 4}, [2, 1], ~, Scalar], # 5
-  [Defined, ~, [5], ~, Boolean], # 6
-  [Constant, {const_type: string, value: ran}, ~, ~, Str], # 7
-  [Constant, {const_type: string, value: died}, ~, ~, Str], # 8
-  [TernaryExpr, ~, [6, 7, 8], ~, Str], # 9
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
-  [Print, ~, [9, 10], 4, Scalar], # 11
-  [Return, {implicit: true}, [1], 11]]} # 12
+  [MemStart], # 3
+  [PadAccess, {sigil: $, symbol: x}, [3], ~, Unknown], # 4
+  [Assign, ~, [4, 1], 0, Undef], # 5
+  [PadAccess, {sigil: $, symbol: x}, [5], ~, Unknown], # 6
+  [Call, {dispatch_kind: method, name: field, param_names: [], want: void}, [6], 5, Unknown], # 7
+  [Region, {eval_entry: 5}, [7]], # 8
+  [Phi, {region: 8}, [2, 1], ~, Scalar], # 9
+  [Defined, ~, [9], ~, Boolean], # 10
+  [Constant, {const_type: string, value: ran}, ~, ~, Str], # 11
+  [Constant, {const_type: string, value: died}, ~, ~, Str], # 12
+  [TernaryExpr, ~, [10, 11, 12], ~, Str], # 13
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 14
+  [Print, ~, [13, 14], 8, Scalar], # 15
+  [Return, {implicit: true}, [1], 15]]} # 16
 ```
 
 ## `__CLASS__` without the feature is a filehandle

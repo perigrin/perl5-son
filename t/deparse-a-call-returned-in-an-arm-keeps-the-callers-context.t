@@ -67,49 +67,43 @@ sub render_gap ($src) {
 # exit's variable was a scalar, so the arm bound g's list and assigned its
 # COUNT -- a list caller got (3), not (1, 2, 3). Silent on base. chalk's
 # EagerPinning::_expand_node returns _expand_if's items so.
-like render_gap(<<'P'), qr/a call returned in the caller.s context is bound to one/,
-sub g { return (1, 2, 3) }
+#
+# REFUSED UNTIL THE ARM RETURNED THE CALL ITSELF. The join leads straight to
+# the function's exit, so `return g();` in the arm is the path's whole rest,
+# and g runs in whatever context the caller gave -- list, scalar or void.
+round_trips(<<'P', 'a returned call beside a returned scalar');
+sub g { if (wantarray) { return (1, 2, 3) } if (defined wantarray) { return "s" } print "v"; return }
 sub f { my ($x) = @_; if ($x) { return g(); } return 7; }
-my @a = f(1); my @b = f(0);
-print scalar(@a), scalar(@b), "\n";
+my @a = f(1); my @b = f(0); my $s = f(1);
+print scalar(@a), scalar(@b), $s, "\n";
 P
-    'a returned call beside a returned scalar refuses, naming its cause';
-
-like render_gap(<<'P'), qr/a call returned in the caller.s context is bound to one/,
+round_trips(<<'P', 'the statement-modifier spelling');
 sub g { return (1, 2, 3) }
 sub f { my ($x) = @_; return g() if $x; return 7; }
-my @a = f(1);
-print scalar(@a), "\n";
+my @a = f(1); my $s = f(1); my $t = f(0);
+print scalar(@a), $s, $t, "\n";
 P
-    'the statement-modifier spelling refuses too';
-
 # BESIDE A LIST TOO: the exit's scalar reading of the call's path took the
 # list's count, where perl's scalar call of g gives its last value -- 3
 # against 6. It matched only while g's list was (1, 2, 3).
-like render_gap(<<'P'), qr/a call returned in the caller.s context is bound to one/,
+round_trips(<<'P', 'a returned call beside a returned list, in both contexts');
 sub g { return (4, 5, 6) }
 sub f { my ($x) = @_; if ($x) { return g(); } return (7, 8); }
-my @a = f(1); my $s = f(1);
-print scalar(@a), $s, "\n";
+my @a = f(1); my $s = f(1); my @b = f(0); my $t = f(0);
+print scalar(@a), $s, scalar(@b), $t, "\n";
 P
-    'a returned call beside a returned list refuses for its scalar reading';
-
 # A METHOD CALL RETURNED IN AN ARM is bound to the exit's scalar too: no
 # `want` on the Call says it runs in the caller's context, and a list caller
-# got its last value alone. chalk's EagerPinning::_expand_node. Only a callee
-# whose graph is here and returns a list refuses; one that is not here is
-# taken for a scalar, as it was.
-like render_gap(<<'P'), qr/a call returned in the caller's context is bound to one/,
+# got its last value alone. chalk's EagerPinning::_expand_node.
+round_trips(<<'P', 'a returned method call beside a returned scalar');
 package O {
     sub new { bless {}, shift }
     sub items { return (4, 5, 6) }
     sub f { my ($o, $x) = @_; if ($x) { return $o->items } return 7 }
 }
-my @a = O->new->f(1); my $s = O->new->f(1);
-print scalar(@a), $s, "\n";
+my @a = O->new->f(1); my $s = O->new->f(1); my $t = O->new->f(0);
+print scalar(@a), $s, $t, "\n";
 P
-    'a returned method call beside a returned scalar refuses, naming its cause';
-
 # A call whose context the program states is a value like any other.
 round_trips(<<'P', 'a scalar method call returned beside a scalar');
 package O { sub new { bless {}, shift } sub n { return 4 } }
@@ -123,6 +117,28 @@ sub g { return (1, 2, 3) }
 sub f { return g() }
 my @a = f(1); my $s = f(1);
 print scalar(@a), $s, "\n";
+P
+
+# A METHOD CALL RETURNED AS THE LAST STATEMENT was bound to a scalar first --
+# `my $eff3 = $self->walk_all(...); return $eff3` -- because the callee's
+# return was not stamped a list. It runs in the caller's context, which a
+# temporary cannot carry: a list caller got a count. chalk's
+# Context::leaves, whose callers then called ->extract on `3`.
+round_trips(<<'P', 'a method call returned last, its list unstamped');
+use v5.42; use experimental 'class';
+class C {
+    field $kids :param = [];
+    method children { $kids }
+    method walk_all ($cb) {
+        my @results; my @stack = ($self);
+        while (@stack) { my $node = pop @stack; push @results, $cb->($node); push @stack, $node->children()->@*; }
+        return @results;
+    }
+    method leaves { return $self->walk_all(sub ($n) { return $n }) }
+}
+my $c = C->new(kids => [C->new, C->new]);
+my @l = $c->leaves; my $n = $c->leaves;
+print scalar(@l), " $n\n";
 P
 
 done_testing;

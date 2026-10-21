@@ -185,7 +185,7 @@ main::__PROGRAM__: {start: 0, returns: [18], nodes: [
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 11
   [EntryDef, {package: main, sigil: $, symbol: "\""}, [7], ~, Scalar], # 12
   [Coerce, {from_repr: Scalar, to_repr: Str}, [12], ~, Str], # 13
-  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [13, 8], ~, Str], # 14
+  [Call, {dispatch_kind: builtin, memory_input: true, name: join, param_names: []}, [13, 8, 7], ~, Str], # 14
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 15
   [Concat, ~, [14, 15], ~, Str], # 16
   [Print, ~, [10, 11, 16], 0, Scalar], # 17

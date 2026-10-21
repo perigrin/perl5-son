@@ -77,16 +77,18 @@ sub round_trips_or_refuses ($src, $cause, $name) {
 # element without creating it. An array with holes is bare-declared, an
 # unproven list, and a body that stores into it refuses.
 my $UNPROVEN = qr/GAP: a foreach over an unproven list .* whose body may reach the list other than through its iterator/;
-refuses(q{sub f { my @a; $a[2] = 1; my $s = ""; for my $x (@a) { $s .= defined $x ? 1 : 0; $a[5] = 1; $s .= defined $x ? 1 : 0 } print $s, (exists $a[0] ? "e" : "n"), scalar(@a), "\n" } f();},
-    $UNPROVEN, 'a hole the alias passes over stays a hole');
-refuses(q{sub f { my @a; $a[1] = 1; my $s = ""; for my $x (@a) { $a[3] = 2; $s .= $x // "u" } print $s, (exists $a[0] ? "e" : "n"), "\n" } f();},
-    $UNPROVEN, 'a hole read after a store elsewhere');
-refuses(q{sub f { my @a; $a[1] = 1; my $s = ""; for my $x (@a) { $a[0] = 5; $s .= $x // "u" } print $s, (exists $a[0] ? "e" : "n"), "\n" } f();},
-    $UNPROVEN, 'a hole the body fills is seen through the alias');
+# NOW LOWERED: the iterator is aliased by reference -- see
+# t/deparse-a-foreach-alias-is-a-reference.t.
+round_trips(q{sub f { my @a; $a[2] = 1; my $s = ""; for my $x (@a) { $s .= defined $x ? 1 : 0; $a[5] = 1; $s .= defined $x ? 1 : 0 } print $s, (exists $a[0] ? "e" : "n"), scalar(@a), "\n" } f();},
+    'a hole the alias passes over stays a hole');
+round_trips(q{sub f { my @a; $a[1] = 1; my $s = ""; for my $x (@a) { $a[3] = 2; $s .= $x // "u" } print $s, (exists $a[0] ? "e" : "n"), "\n" } f();},
+    'a hole read after a store elsewhere');
+round_trips(q{sub f { my @a; $a[1] = 1; my $s = ""; for my $x (@a) { $a[0] = 5; $s .= $x // "u" } print $s, (exists $a[0] ? "e" : "n"), "\n" } f();},
+    'a hole the body fills is seen through the alias');
 round_trips_or_refuses(q{sub f { my $r = []; $r->[1] = 1; my $s = ""; for my $x (@$r) { $r->[3] = 2; $s .= $x // "u" } print $s, (exists $r->[0] ? "e" : "n"), "\n" } f();},
     qr/GAP: an element read in a loop is spelled after a store/, 'a hole in a dereferenced array');
-refuses(q{sub f { my @a = (1, 2); my $s = ""; for my $x (@a) { $a[1] = 5; $s .= $x; shift @a if @a > 1 } print "$s|@a\n" } f();},
-    qr/GAP: a foreach whose body reshapes the array it iterates/, 'an existing element read after a shift');
+round_trips(q{sub f { my @a = (1, 2); my $s = ""; for my $x (@a) { $a[1] = 5; $s .= $x; shift @a if @a > 1 } print "$s|@a\n" } f();},
+    'an existing element read after a shift');
 
 # A BUILTIN THAT WRITES ITS FIRST ARGUMENT IN PLACE overtakes an alias read.
 my $STALE = qr/GAP: an element read in a loop is spelled after a store/;
@@ -100,27 +102,26 @@ round_trips_or_refuses(q{sub f { my @a = ("ab","cd"); my $s = ""; for my $x (@a)
     $STALE, 'a reading substr of the alias');
 
 # A LOCAL ON AN ELEMENT restores it at scope exit; a plain store does not.
-my $LOCAL = qr/GAP: local on an array or hash element/;
-refuses(q{sub f { my @a = (1,2); my $s = ""; for my $x (@a) { $s .= $x; local $a[0] = 5; $s .= $x } print "$s|@a\n" } f();},
-    $LOCAL, 'a local element in a foreach body');
-refuses(q{sub f { my @a = (1,2); { local $a[0] = 5; print "@a\n" } print "@a\n" } f();},
-    $LOCAL, 'a local array element in a block');
-refuses(q{sub f { my %h = (a => 1); { local $h{a} = 5; print "$h{a}\n" } print "$h{a}\n" } f();},
-    $LOCAL, 'a local hash element in a block');
-refuses(q{sub f { my $s = { c => 1 }; { local $s->{c} = 2; print $s->{c} } print $s->{c}, "\n" } f();},
-    $LOCAL, 'a local element through a reference');
-# AT PROGRAM SCOPE THE RESTORE IS AT PROGRAM END, after every statement, so a
-# plain store says what the program can see: pvm's corpus silences `warn`
-# with `local $SIG{__WARN__} = sub { }` this way. A block, a loop body or a
-# sub still restores before the program ends.
+# A local ELEMENT is stored, spelled `local` in a block of its own, and
+# restored by perl at the block's end; the graph's ElemRestore says where.
+# In a foreach body the read of the alias after it is the stale-read rule's.
+my $STALE_ELEM = qr/GAP: an element read in a loop is spelled after a store/;
+round_trips_or_refuses(q{sub f { my @a = (1,2); my $s = ""; for my $x (@a) { $s .= $x; local $a[0] = 5; $s .= $x } print "$s|@a\n" } f();},
+    $STALE_ELEM, 'a local element in a foreach body');
+round_trips(q{sub f { my @a = (1,2); { local $a[0] = 5; print "@a\n" } print "@a\n" } f();},
+    'a local array element in a block');
+round_trips(q{sub f { my %h = (a => 1); { local $h{a} = 5; print "$h{a}\n" } print "$h{a}\n" } f();},
+    'a local hash element in a block');
+round_trips(q{sub f { my $s = { c => 1 }; { local $s->{c} = 2; print $s->{c} } print $s->{c}, "\n" } f();},
+    'a local element through a reference');
 round_trips(q{local $SIG{__WARN__} = sub { }; my $n = warn "a"; print "$n\n";},
     'a local element at program scope');
 round_trips(q{our %h = (a => 1); local $h{a} = 5; print "$h{a}\n";},
     'a local package hash element at program scope');
-refuses(q{our %h = (a => 1); if (1) { local $h{a} = 5; print "$h{a}\n" } print "$h{a}\n";},
-    $LOCAL, 'a local element in an if block at program scope');
-refuses(q{our %h = (a => 1); for my $k (1) { local $h{a} = 5 } print "$h{a}\n";},
-    $LOCAL, 'a local element in a loop at program scope');
+round_trips(q{our %h = (a => 1); if (1) { local $h{a} = 5; print "$h{a}\n" } print "$h{a}\n";},
+    'a local element in an if block at program scope');
+round_trips(q{our %h = (a => 1); for my $k (1) { local $h{a} = 5 } print "$h{a}\n";},
+    'a local element in a loop at program scope');
 
 # AN s/// ON ANYTHING BUT A NAMED SCALAR was bound to $_.
 my $SUBST = qr/GAP: s\/\/\/ on a target that is not a named scalar/;

@@ -108,9 +108,6 @@ my $CAPTURE = 'is not yet lowered -- the body graph has no edge to that variable
 body_refuses(q{for my $i (1..2) { print join(",", sort { ($a % $i) <=> ($b % $i) or $a <=> $b } 4,3,2,1), "\n" }},
     "GAP: a sort comparator block that reads a lexical of its enclosing scope (\$i) $CAPTURE",
     'a loop variable');
-body_refuses(q{my @k = (3, 1, 2); print join(",", sort { $k[$a] <=> $k[$b] } 0 .. 2), "\n";},
-    "GAP: a sort comparator block that reads a lexical of its enclosing scope (\@k) $CAPTURE",
-    'an outer array');
 body_refuses(q{for (1, -1) { print join(",", sort { $_ * ($a <=> $b) } 1, 3, 2), "\n" }},
     'GAP: a sort comparator block that reads $_ is not yet lowered -- it is the enclosing topic, and the body graph has no edge to it',
     'the enclosing topic');

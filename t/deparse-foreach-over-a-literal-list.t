@@ -93,4 +93,10 @@ print "@a\n";
 SRC
 };
 
+# A MAP OVER A RANGE counts a dereference of the folded list, spelled as the
+# list itself: `scalar((0, 1, 2))` is the comma operator, 2, and the map
+# stopped one short (`L0 L1` for `L0 L1 L2`).
+round_trips(q{my @t = map { "L$_" } 0 .. 2; print "@t\n";},
+    "a map over a range counts the range");
+
 done_testing;

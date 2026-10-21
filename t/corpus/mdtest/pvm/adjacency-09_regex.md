@@ -196,7 +196,7 @@ main::__PROGRAM__: {start: 0, returns: [89], nodes: [
   [Constant, {const_type: string, value: "p q"}, ~, ~, Str], # 76
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 77
   [Call, {dispatch_kind: builtin, name: split, param_names: []}, [75, 76, 77], ~, List], # 78
-  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [74, 78], ~, Str], # 79
+  [Call, {dispatch_kind: builtin, memory_input: true, name: join, param_names: []}, [74, 78, 56], ~, Str], # 79
   [Concat, ~, [72, 79], ~, Str], # 80
   [Concat, ~, [80, 9], ~, Str], # 81
   [PadAccess, {sigil: $, symbol: pos}, [56], ~, Unknown], # 82

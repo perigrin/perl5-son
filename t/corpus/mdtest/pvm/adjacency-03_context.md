@@ -144,7 +144,7 @@ main::__PROGRAM__: {start: 0, returns: [115], nodes: [
   [Concat, ~, [18, 20], ~, Str], # 21
   [Concat, ~, [21, 9], ~, Str], # 22
   [Call, {dispatch_kind: builtin, name: sort, param_names: [], sort_cmp: string, sort_order: ascending}, [2, 3, 4], ~, List], # 23
-  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [12, 23], ~, Str], # 24
+  [Call, {dispatch_kind: builtin, memory_input: true, name: join, param_names: []}, [12, 23, 6], ~, Str], # 24
   [Concat, ~, [22, 24], ~, Str], # 25
   [Concat, ~, [25, 9], ~, Str], # 26
   [Call, {dispatch_kind: builtin, name: sort, param_names: [], sort_cmp: string, sort_order: ascending}, [2, 3, 4], ~, List], # 27
@@ -159,7 +159,7 @@ main::__PROGRAM__: {start: 0, returns: [115], nodes: [
   [Concat, ~, [9, 35], ~, Str], # 36
   [Concat, ~, [36, 9], ~, Str], # 37
   [Call, {dispatch_kind: builtin, name: reverse, param_names: []}, [2, 3, 4], ~, List], # 38
-  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [12, 38], ~, Str], # 39
+  [Call, {dispatch_kind: builtin, memory_input: true, name: join, param_names: []}, [12, 38, 6], ~, Str], # 39
   [Concat, ~, [37, 39], ~, Str], # 40
   [Concat, ~, [40, 9], ~, Str], # 41
   [Call, {dispatch_kind: builtin, name: localtime, param_names: []}, ~, ~, List], # 42
@@ -180,7 +180,7 @@ main::__PROGRAM__: {start: 0, returns: [115], nodes: [
   [ArrayLiteral, ~, ~, ~, Array], # 57
   [Loop, {bound: entry}, [53], 53], # 58
   [Phi, {region: 58}, [57, 165], ~, Array], # 59
-  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [12, 59], ~, Str], # 60
+  [Call, {dispatch_kind: builtin, memory_input: true, name: join, param_names: []}, [12, 59, 6], ~, Str], # 60
   [Concat, ~, [9, 60], ~, Str], # 61
   [Concat, ~, [61, 9], ~, Str], # 62
   [ArrayLiteral, ~, ~, ~, Array], # 63
@@ -197,7 +197,7 @@ main::__PROGRAM__: {start: 0, returns: [115], nodes: [
   [Region, {head: 66}, [73]], # 74
   [Loop, {bound: entry}, [74], 74], # 75
   [Phi, {region: 75}, [72, 167], ~, Array], # 76
-  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [12, 76], ~, Str], # 77
+  [Call, {dispatch_kind: builtin, memory_input: true, name: join, param_names: []}, [12, 76, 6], ~, Str], # 77
   [Concat, ~, [71, 77], ~, Str], # 78
   [Concat, ~, [78, 9], ~, Str], # 79
   [ArrayLiteral, ~, ~, ~, Array], # 80
@@ -209,7 +209,7 @@ main::__PROGRAM__: {start: 0, returns: [115], nodes: [
   [Coerce, {from_repr: Int, to_repr: Str}, [85], ~, Str], # 86
   [Concat, ~, [79, 86], ~, Str], # 87
   [Range, ~, [3, 7], ~, List], # 88
-  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [12, 88], ~, Str], # 89
+  [Call, {dispatch_kind: builtin, memory_input: true, name: join, param_names: []}, [12, 88, 6], ~, Str], # 89
   [Concat, ~, [9, 89], ~, Str], # 90
   [Concat, ~, [90, 9], ~, Str], # 91
   [Constant, {const_type: string, value: az}, ~, ~, Str], # 92
@@ -220,7 +220,7 @@ main::__PROGRAM__: {start: 0, returns: [115], nodes: [
   [Constant, {const_type: string, value: bb}, ~, ~, Str], # 97
   [Coerce, {from_repr: Str, to_repr: Int}, [97], ~, Int], # 98
   [Range, ~, [96, 98], ~, List], # 99
-  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [12, 99], ~, Str], # 100
+  [Call, {dispatch_kind: builtin, memory_input: true, name: join, param_names: []}, [12, 99, 6], ~, Str], # 100
   [Concat, ~, [91, 100], ~, Str], # 101
   [Concat, ~, [101, 9], ~, Str], # 102
   [ArrayLiteral, ~, ~, ~, Array], # 103
@@ -228,7 +228,7 @@ main::__PROGRAM__: {start: 0, returns: [115], nodes: [
   [Region, {head: 83}, [104]], # 105
   [Loop, {bound: entry}, [105], 105], # 106
   [Phi, {region: 106}, [103, 144], ~, Array], # 107
-  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [12, 107], ~, Str], # 108
+  [Call, {dispatch_kind: builtin, memory_input: true, name: join, param_names: []}, [12, 107, 6], ~, Str], # 108
   [Concat, ~, [102, 108], ~, Str], # 109
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 110
   [Concat, ~, [109, 110], ~, Str], # 111

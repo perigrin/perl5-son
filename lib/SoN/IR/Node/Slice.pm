@@ -20,5 +20,14 @@ class SoN::IR::Node::Slice :isa(SoN::IR::Node::Aggregate) {
     # That keeps an aslice/hslice node's wire byte-identical to before.
     field $index_count :param :reader = 0;
 
+    # WHICH BRACKETS: 'array' for aslice, 'hash' for hslice. The container
+    # alone cannot say when it is a reference -- `$r->@[1,2]` and
+    # `$h->@{qw(x y)}` both slice a plain scalar.
+    field $kind :param :reader = undef;
+
     method operation() { 'Slice' }
+
+    method content_hash() {
+        return join('|', $self->SUPER::content_hash(), $index_count, $kind // '');
+    }
 }

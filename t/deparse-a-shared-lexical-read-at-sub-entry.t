@@ -148,6 +148,36 @@ refuses_list('my $n=1; sub f { my ($a,$b) = ($n, $n = 5); "$a-$b" } print f(), "
     'a list assign reading a shared lexical a later value stores');
 refuses_list('my $n=1; sub f { my ($a,$b); ($a,$b) = ($n, 7); "$a-$b" } print f(), " $n\n";',
     'a list assign reading a shared lexical first');
+# A SIGNATURE PARAMETER THE SUB NEVER WRITES is its name throughout, so a
+# list assign reading it is safe: chalk's FilterComposite::_add_unpacked
+# picks `($correct, $rejected) = ($left, $right)` or the reverse.
+round_trips('use v5.42; sub f ($l, $r, $v) { my ($c, $j); if ($v) { ($c, $j) = ($l, $r) } else { ($c, $j) = ($r, $l) } return "$c>$j" } print f(1, 2, 1), f(1, 2, 0), "\n";',
+    'a list assign of signature parameters');
+round_trips('use v5.42; sub f ($l, $r) { my ($c, $j) = ($r, $l); $l = 9; return "$c>$j>$l" } print f(1, 2), "\n";',
+    'a list assign of parameters, one written after');
+# PASSED TO A CALL, a parameter lives in memory and reads as a PadAccess,
+# which spells like a target. Into targets that live in memory too (passed
+# on to a call, as FilterComposite passes both to `on_merge`), the targets
+# are read back from memory, never as the value read, so it is safe.
+round_trips('use v5.42; package O { sub m { $_[1] } } sub f ($l, $r, $v) { O->m($l); O->m($r); my ($c, $j); if ($v) { ($c, $j) = ($l, $r) } else { ($c, $j) = ($r, $l) } O->m($c, $j); return "$c>$j" } print f(1, 2, 1), f(1, 2, 0), "\n";',
+    'a list assign of parameters passed to a call');
+# ELEMENT READS are no named scalar, though the walk counts a Subscript as
+# a target: chalk's Analysis takes `my ($lv, $val) = ($n->inputs->[0],
+# $n->inputs->[1])`. The store to the container after it must not reach them.
+round_trips('sub f { my $r = [[1, 2]]; my ($lv, $val) = ($r->[0][0], $r->[0][1]); $r->[0][0] = 9; return "$lv $val $r->[0][0]" } print f(), "\n";',
+    'a list assign of element reads, the container written after');
+round_trips('package N { sub new { bless { i => [$_[1], $_[2]] }, $_[0] } sub inputs { $_[0]{i} } } sub f { my $s = ""; for my $n (N->new(1, 2), N->new(3, 4)) { my ($lv, $val) = ($n->inputs->[0], $n->inputs->[1]); next unless $lv > 1; $s .= "$lv:$val" } $s } print f(), "\n";',
+    'a list assign of elements of a call\'s result, in a loop');
+# BOUND TO A TARGET WRITTEN LATER, the name would not hold the value.
+{
+    my $data = graph_of('sub f { my $r = [[1, 2]]; my ($lv, $val) = ($r->[0][0], $r->[0][1]); $lv = 5; return "$lv $val " . ($r->[0][0] + 1) } print f(), "\n";');
+    my $d = SoN::Deparse->new;
+    my $out = $d->render($data);
+    if (defined $out) { is run_perl($out), "5 2 2\n", 'a list assign target written later: agrees with perl' }
+    else { like $d->gap, qr/read again as its target \$lv, which is written later/, 'a list assign target written later: refused' }
+}
+refuses_list('use v5.42; package O { sub m { $_[1] = 7 } } sub f ($l, $r) { O->m($l); my ($c, $j) = ($l, $r); O->m($l); return "$c>$j>$l" } print f(1, 2), "\n";',
+    'a list assign of a parameter a call may write');
 refuses_list('our $n=1; sub f { my ($a,$b) = ($n, 7); "$a-$b" } print f(), " $n\n";',
     'a list assign reading a package scalar first');
 round_trips('my $n=1; sub f { my ($a,$b,$c) = (7, $n, 8); "$a-$b-$c" } print f(), " $n\n";',

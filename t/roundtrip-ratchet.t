@@ -36,7 +36,14 @@ my %FLOOR = (
     # t/corpus/mdtest/pvm (pvm 50cd3b10 + local cases). 279 measured twice
     # 2026-10-11; 298 at 4c7348c and every batch-3 merge, 2026-10-13 to 10-14.
     # 310 at 45aebb1, measured twice, 2026-10-16.
-    corpus => 310,
+    # 322 with chalk-found-gaps' twelve cases from the chalk-lib goal's first
+    # batch (field defaults, field closures and reads, loop memory, private
+    # lists, returned calls), 2026-10-20.
+    # 351 -- every case -- with the second batch's 29 (closures over their
+    # sub's aggregates, try/catch, trap-body writes, ternary and method
+    # arguments by alias, loop-condition and && `my`s, pass-top reads),
+    # 2026-10-20.
+    corpus => 351,
     perl_t => 11,    # base/lex.t refuses on a `caller` bound to a list
     # chalk's lib/ at the commit tools/chalk-lib-roundtrip.pl pins (5948f648,
     # 179 modules), measured at d0cb68a and 2d8fb90, 2026-10-06.
@@ -44,7 +51,10 @@ my %FLOOR = (
     # e8fb329 and e4b98ec, 2026-10-14.
     # 146 at 255a021 (gap6/loopexit) and 15af845, 2026-10-16.
     # 150 at 45aebb1 (integ8/renderctl), measured twice, 2026-10-16.
-    chalk_compiles => 150,
+    # 163 after that first batch, by the ratchet and gate 3 apart, 2026-10-20.
+    # 167 after the second (Earley among them), gate 3 488 of 488 with 167
+    # overlaid, 2026-10-20.
+    chalk_compiles => 167,
     # chalk's own test files (547 at 5948f648) that give the SAME result
     # against the emitted lib/ -- tools/chalk-gate3.pl. The 59 that read lib/
     # as source are DEFERRED to chalk's own lowering (perigrin, 2026-10-09),
@@ -60,7 +70,9 @@ my %CEILING = (
     # Measured 226 at d25e6c2, twice, 2026-10-11 (229 at 1c8634e; 239 at
     # d0cb68a and 2d8fb90). 94 at e8fb329 and e4b98ec, 2026-10-14.
     # 76 at 255a021 (gap6/loopexit) and 15af845, 2026-10-16.
-    chalk_skipped_graphs => 76,
+    # 52 after the chalk-lib goal's first batch, 2026-10-20.
+    # 36 after its second, 2026-10-20.
+    chalk_skipped_graphs => 36,
     # perl t/ emissions perl will not compile. Unguarded until 75d3db8, so
     # two new ones (comp/fold.t, comp/retainedlines.t) arrived unnoticed.
     # Measured 1 at 1c8634e, twice, 2026-10-11: comp/line_debug.t (a

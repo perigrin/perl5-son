@@ -285,7 +285,7 @@ main::__PROGRAM__: {start: 0, returns: [19], nodes: [
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 6
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 7
   [HashLiteral, {sigil: "%", symbol: h}, [3, 4, 5, 6, 2, 7], ~, Hash], # 8
-  [Slice, ~, [2, 8], ~, List], # 9
+  [Slice, {kind: hash}, [2, 8], ~, List], # 9
   [Coerce, {from_repr: List, to_repr: Str}, [9], ~, Str], # 10
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 11
   [MemStart], # 12
