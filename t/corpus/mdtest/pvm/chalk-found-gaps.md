@@ -14003,3 +14003,406 @@ main::ix: {start: 0, returns: [7], nodes: [
   [Subscript, {kind: hash}, [1, 5, 4], ~, Scalar], # 6
   [Return, {implicit: true}, [6], 0]]} # 7
 ```
+
+## A length under use bytes
+
+A do block holding `use bytes` counts octets; the pragma is part of the length, not of the block.
+
+```perl
+my $s = "\x{e9}"; utf8::upgrade($s);
+print length($s), " ", do { use bytes; length($s) }, "\n";
+```
+
+```behavior
+parses: yes
+```
+
+```output
+1 2
+```
+
+```ir
+main::__PROGRAM__: {start: 0, returns: [16], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [MemStart], # 2
+  [PadAccess, {sigil: $, symbol: s}, [2], ~, Unknown], # 3
+  [Constant, {const_type: string, value: "\u00e9"}, ~, ~, Str], # 4
+  [Assign, ~, [3, 4], 0, Str], # 5
+  [PadAccess, {sigil: $, symbol: s}, [5], ~, Unknown], # 6
+  [Call, {dispatch_kind: direct, external: true, name: utf8::upgrade, param_names: [], want: void}, [6], 5, Unknown], # 7
+  [PadAccess, {sigil: $, symbol: s}, [7], ~, Str], # 8
+  [Length, ~, [8], ~, Int], # 9
+  [Coerce, {from_repr: Int, to_repr: Str}, [9], ~, Str], # 10
+  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 11
+  [Length, {bytes: 1}, [8], ~, Int], # 12
+  [Coerce, {from_repr: Int, to_repr: Str}, [12], ~, Str], # 13
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 14
+  [Print, ~, [10, 11, 13, 14], 7, Scalar], # 15
+  [Return, {implicit: true}, [1], 15]]} # 16
+"BEGIN 1": {start: 0, returns: [6], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: bytes}, ~, ~, Str], # 1
+  [Constant, {const_type: string, value: bytes.pm}, ~, ~, Str], # 2
+  [MemStart], # 3
+  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [2, 3], 0, Unknown], # 4
+  [Call, {class_name: bytes, dispatch_kind: method, name: import, param_names: []}, [1], 4, Unknown], # 5
+  [Return, {implicit: true}, [5], 5]]} # 6
+```
+
+## A count through an element before a push
+
+A count of an array reached through a hash element is taken where it is read, not after a later push into the same array.
+
+```perl
+sub f { my ($self, $t) = @_; my $g = scalar @{ $self->{s} }; push $self->{s}->@*, $t; return "x$g" }
+my $o = { s => [] }; print f($o, "a"), f($o, "b"), "\n";
+```
+
+```behavior
+parses: yes
+```
+
+```output
+x0x1
+```
+
+```ir
+main::__PROGRAM__: {start: 0, returns: [18], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [MemStart], # 2
+  [PadAccess, {sigil: $, symbol: o}, [2], ~, Unknown], # 3
+  [Constant, {const_type: string, value: s}, ~, ~, Str], # 4
+  [ArrayLiteral, ~, ~, 0, ArrayRef], # 5
+  [HashLiteral, ~, [4, 5], 5, HashRef], # 6
+  [Assign, ~, [3, 6], 6, HashRef], # 7
+  [PadAccess, {sigil: $, symbol: o}, [7], ~, Unknown], # 8
+  [Constant, {const_type: string, value: a}, ~, ~, Str], # 9
+  [Call, {dispatch_kind: direct, name: main::f, param_names: [], want: list}, [8, 9], 7, Str], # 10
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [10], ~, Str], # 11
+  [PadAccess, {sigil: $, symbol: o}, [10], ~, Unknown], # 12
+  [Constant, {const_type: string, value: b}, ~, ~, Str], # 13
+  [Call, {dispatch_kind: direct, name: main::f, param_names: [], want: list}, [12, 13], 10, Str], # 14
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [14], ~, Str], # 15
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 16
+  [Print, ~, [11, 15, 16], 14, Scalar], # 17
+  [Return, {implicit: true}, [1], 17]]} # 18
+main::f: {start: 0, returns: [14], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: x}, ~, ~, Str], # 1
+  [PadAccess, {sigil: $, symbol: self}, ~, ~, Unknown], # 2
+  [Constant, {const_type: string, value: s}, ~, ~, Str], # 3
+  [MemStart], # 4
+  [Subscript, {kind: hash}, [2, 3, 4], ~, Scalar], # 5
+  [PostfixDeref, {sigil: "@"}, [5, 4], ~, Array], # 6
+  [Count, ~, [6, 4], ~, Int], # 7
+  [Coerce, {from_repr: Int, to_repr: Str}, [7], ~, Str], # 8
+  [Concat, ~, [1, 8], ~, Str], # 9
+  [Subscript, {kind: hash}, [2, 3], ~, Scalar], # 10
+  [PostfixDeref, {sigil: "@"}, [10, 4], ~, Array], # 11
+  [PadAccess, {sigil: $, symbol: t}, ~, ~, Unknown], # 12
+  [Call, {dispatch_kind: builtin, memory_input: true, name: push, param_names: []}, [11, 12, 4], 0, Int], # 13
+  [Return, ~, [9], 13], # 14
+  [ArgsSource, ~, ~, ~, Array], # 15
+  [Assign, {targets: 2}, [2, 12, 15], ~, List]]} # 16
+```
+
+## A grep calling a method over an array a sort filled
+
+The array holds the sorted list; a method call in the grep body does not make the sort result a reference.
+
+```perl
+use v5.42; use experimental "class";
+class K { method isn($x) { $x =~ /a/ }
+  method f(@g) { my @r = sort @g; my @n = grep { $self->isn($_) } @r; return "@n" } }
+print K->new->f(qw(ba x aa)), "\n";
+```
+
+```behavior
+parses: yes
+```
+
+```output
+aa ba
+```
+
+```ir
+K::f: {start: 0, returns: [12], nodes: [
+  [Start], # 0
+  [MemStart], # 1
+  [Loop, {bound: entry}, [0], 0], # 2
+  [Phi, {memory: true, region: 2}, [1, 25], ~, Unknown], # 3
+  [Proj, {index: 1}, [2]], # 4
+  [Region, {head: 2}, [4]], # 5
+  [Phi, {memory: true, region: 5}, [3], ~, Unknown], # 6
+  [EntryDef, {package: main, sigil: $, symbol: "\""}, [6], ~, Scalar], # 7
+  [Coerce, {from_repr: Scalar, to_repr: Str}, [7], ~, Str], # 8
+  [ArrayLiteral, ~, ~, ~, Array], # 9
+  [Phi, {region: 2}, [9, 26], ~, Array], # 10
+  [Call, {dispatch_kind: builtin, memory_input: true, name: join, param_names: []}, [8, 10, 6], ~, Str], # 11
+  [Return, ~, [11], 5], # 12
+  [Parameter, {index: 0, name: "@g", sigil: "@"}, ~, ~, Array], # 13
+  [Call, {dispatch_kind: builtin, memory_input: true, name: sort, param_names: [], sort_cmp: string, sort_order: ascending}, [13, 1], ~, List], # 14
+  [Count, ~, [14, 3], ~, Int], # 15
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 16
+  [Phi, {region: 2}, [16, 28], ~, Int], # 17
+  [NumGt, ~, [15, 17], 2, Boolean], # 18
+  [Proj, {index: 0}, [2]], # 19
+  [Subscript, {kind: array}, [14, 17], ~, Scalar], # 20
+  [Ref, ~, [20], ~, ScalarRef], # 21
+  [LocalAlias, {name: _}, [21], 19, Unknown], # 22
+  [Subscript, {kind: array}, [14, 17, 3], ~, Scalar], # 23
+  [PadAccess, {sigil: $, symbol: self}, ~, ~, Object], # 24
+  [Call, {class_name: K, dispatch_kind: method, name: isn, param_names: [], want: scalar}, [24, 23], 22, Boolean], # 25
+  [ListAppend, {collector: grep}, [10, 23, 25], ~, Array], # 26
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 27
+  [Add, ~, [17, 27], ~, Int], # 28
+  [Count, ~, [14, 1], ~, Int]]} # 29
+K::isn: {start: 0, returns: [3], nodes: [
+  [Start], # 0
+  [Parameter, {index: 0, name: $x, sigil: $}, ~, ~, Str], # 1
+  [RegexMatch, {flags: u, pattern: a}, [1], ~, Boolean], # 2
+  [Return, {implicit: true}, [2], 0]]} # 3
+main::__PROGRAM__: {start: 0, returns: [10], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Call, {class_name: K, dispatch_kind: method, name: new, param_names: [], want: scalar}, ~, 0, Object], # 2
+  [Constant, {const_type: string, value: ba}, ~, ~, Str], # 3
+  [Constant, {const_type: string, value: x}, ~, ~, Str], # 4
+  [Constant, {const_type: string, value: aa}, ~, ~, Str], # 5
+  [Call, {class_name: K, dispatch_kind: method, name: f, param_names: [], want: list}, [2, 3, 4, 5], 2, Str], # 6
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
+  [Print, ~, [7, 8], 6, Scalar], # 9
+  [Return, {implicit: true}, [1], 9]]} # 10
+"BEGIN 1": {start: 0, returns: [4], nodes: [
+  [Start], # 0
+  [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
+  [Return, {implicit: true}, [3], 3]]} # 4
+"BEGIN 2": {start: 0, returns: [7], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: experimental}, ~, ~, Str], # 1
+  [Constant, {const_type: string, value: class}, ~, ~, Str], # 2
+  [Constant, {const_type: string, value: experimental.pm}, ~, ~, Str], # 3
+  [MemStart], # 4
+  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
+  [Call, {class_name: experimental, dispatch_kind: method, name: import, param_names: []}, [1, 2], 5, Unknown], # 6
+  [Return, {implicit: true}, [6], 6]]} # 7
+```
+
+## An element read through a reference before a call passed the reference
+
+A sub handed the hash reference may store into it; the element read before the call keeps the value it read.
+
+```perl
+my %v = (a => {n => "x"}, b => {n => "y"}); sub vars { \%v } sub emit { my $h = $_[0]; $h->{n} = "z"; "e" }
+sub f { my @l; for my $k (sort keys vars()->%*) { my $info = vars()->{$k}; my $s = $info->{n}; my $e = emit($info); push @l, "$s=$e" } "@l" }
+print f(), "\n";
+```
+
+```behavior
+parses: yes
+```
+
+```output
+x=e y=e
+```
+
+```ir
+main::__PROGRAM__: {start: 0, returns: [17], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [MemStart], # 2
+  [PadAccess, {shared: 1, sigil: "%", symbol: v}, [2], ~, Unknown], # 3
+  [Constant, {const_type: string, value: a}, ~, ~, Str], # 4
+  [Constant, {const_type: string, value: "n"}, ~, ~, Str], # 5
+  [Constant, {const_type: string, value: x}, ~, ~, Str], # 6
+  [HashLiteral, ~, [5, 6], 0, HashRef], # 7
+  [Constant, {const_type: string, value: b}, ~, ~, Str], # 8
+  [Constant, {const_type: string, value: "y"}, ~, ~, Str], # 9
+  [HashLiteral, ~, [5, 9], 7, HashRef], # 10
+  [HashLiteral, {sigil: "%", symbol: v}, [4, 7, 8, 10], 10, Hash], # 11
+  [Assign, ~, [3, 11], 11, List], # 12
+  [Call, {dispatch_kind: direct, name: main::f, param_names: [], want: list}, ~, 12, Str], # 13
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [13], ~, Str], # 14
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 15
+  [Print, ~, [14, 15], 13, Scalar], # 16
+  [Return, {implicit: true}, [1], 16]]} # 17
+main::emit: {start: 0, returns: [10], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: e}, ~, ~, Str], # 1
+  [ArgsSource, ~, ~, ~, Array], # 2
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 3
+  [MemStart], # 4
+  [Subscript, {kind: array}, [2, 3, 4], ~, Scalar], # 5
+  [Constant, {const_type: string, value: "n"}, ~, ~, Str], # 6
+  [Subscript, {kind: hash}, [5, 6], ~, Scalar], # 7
+  [Constant, {const_type: string, value: z}, ~, ~, Str], # 8
+  [Assign, ~, [7, 8], 0, Str], # 9
+  [Return, {implicit: true}, [1], 9]]} # 10
+main::f: {start: 0, returns: [11], nodes: [
+  [Start], # 0
+  [Call, {dispatch_kind: direct, name: main::vars, param_names: [], want: scalar}, ~, 0, Unknown], # 1
+  [Loop, {bound: entry}, [1], 1], # 2
+  [Phi, {memory: true, region: 2}, [1, 38], ~, Unknown], # 3
+  [Proj, {index: 1}, [2]], # 4
+  [Region, {head: 2}, [4]], # 5
+  [Phi, {memory: true, region: 5}, [3], ~, Unknown], # 6
+  [EntryDef, {package: main, sigil: $, symbol: "\""}, [6], ~, Scalar], # 7
+  [Coerce, {from_repr: Scalar, to_repr: Str}, [7], ~, Str], # 8
+  [PadAccess, {sigil: "@", symbol: l}, ~, ~, Unknown], # 9
+  [Call, {dispatch_kind: builtin, memory_input: true, name: join, param_names: []}, [8, 9, 6], ~, Str], # 10
+  [Return, {implicit: true}, [10], 5], # 11
+  [PostfixDeref, {sigil: "%"}, [1, 1], ~, Hash], # 12
+  [Call, {dispatch_kind: builtin, memory_input: true, name: keys, param_names: [], want: list}, [12, 1], ~, List], # 13
+  [Call, {dispatch_kind: builtin, memory_input: true, name: sort, param_names: [], sort_cmp: string, sort_order: ascending}, [13, 1], ~, List], # 14
+  [ArrayLiteral, ~, [14], ~, Array], # 15
+  [Count, ~, [15, 1], ~, Int], # 16
+  [Count, ~, [15, 3], ~, Int], # 17
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 18
+  [Phi, {region: 2}, [18, 41], ~, Int], # 19
+  [NumGt, ~, [17, 19], 2, Boolean], # 20
+  [Proj, {index: 0}, [2]], # 21
+  [Subscript, {kind: array}, [15, 19], ~, Scalar], # 22
+  [Ref, ~, [22], 21, ScalarRef], # 23
+  [Call, {dispatch_kind: direct, name: main::vars, param_names: [], want: scalar}, ~, 23, Unknown], # 24
+  [PadAccess, {sigil: $, symbol: info}, [24], ~, Unknown], # 25
+  [PostfixDeref, {sigil: $}, [23, 24], 24, Scalar], # 26
+  [Subscript, {kind: hash}, [24, 26, 24], ~, Scalar], # 27
+  [Assign, ~, [25, 27], 26, Scalar], # 28
+  [PadAccess, {sigil: $, symbol: info}, [28], ~, Unknown], # 29
+  [Constant, {const_type: string, value: "n"}, ~, ~, Str], # 30
+  [Subscript, {kind: hash}, [29, 30, 28], ~, Scalar], # 31
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [31], ~, Str], # 32
+  [Constant, {const_type: string, value: "="}, ~, ~, Str], # 33
+  [Concat, ~, [32, 33], ~, Str], # 34
+  [Call, {dispatch_kind: direct, name: main::emit, param_names: [], want: scalar}, [29], 28, Str], # 35
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [35], ~, Str], # 36
+  [Concat, ~, [34, 36], ~, Str], # 37
+  [Call, {dispatch_kind: builtin, memory_input: true, name: push, param_names: []}, [9, 37, 35], 35, Int], # 38
+  [Subscript, {kind: array}, [15, 19, 24], ~, Scalar], # 39
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 40
+  [Add, ~, [19, 40], ~, Int]]} # 41
+main::vars: {start: 0, returns: [3], nodes: [
+  [Start], # 0
+  [PadAccess, {shared: 1, sigil: "%", symbol: v}, ~, ~, Unknown], # 1
+  [Ref, ~, [1], ~, Unknown], # 2
+  [Return, {implicit: true}, [2], 0]]} # 3
+```
+
+## An element read before a call, used in an arm after it
+
+The read comes before the call though its only use is guarded by a test after the call.
+
+```perl
+my %v = (a => {n => "x"}, b => {n => "y"}); sub vars { \%v } sub emit { my $h = $_[0]; $h->{n} = "z"; $_[1] }
+sub f { my @l; for my $k (sort keys vars()->%*) { my $info = vars()->{$k}; my $s = $info->{n}; my $e = emit($info, $k eq "a" ? 1 : undef); push @l, "$s=$e" if defined $e } "@l" }
+print f(), "\n";
+```
+
+```behavior
+parses: yes
+```
+
+```output
+x=1
+```
+
+```ir
+main::__PROGRAM__: {start: 0, returns: [17], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [MemStart], # 2
+  [PadAccess, {shared: 1, sigil: "%", symbol: v}, [2], ~, Unknown], # 3
+  [Constant, {const_type: string, value: a}, ~, ~, Str], # 4
+  [Constant, {const_type: string, value: "n"}, ~, ~, Str], # 5
+  [Constant, {const_type: string, value: x}, ~, ~, Str], # 6
+  [HashLiteral, ~, [5, 6], 0, HashRef], # 7
+  [Constant, {const_type: string, value: b}, ~, ~, Str], # 8
+  [Constant, {const_type: string, value: "y"}, ~, ~, Str], # 9
+  [HashLiteral, ~, [5, 9], 7, HashRef], # 10
+  [HashLiteral, {sigil: "%", symbol: v}, [4, 7, 8, 10], 10, Hash], # 11
+  [Assign, ~, [3, 11], 11, List], # 12
+  [Call, {dispatch_kind: direct, name: main::f, param_names: [], want: list}, ~, 12, Str], # 13
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [13], ~, Str], # 14
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 15
+  [Print, ~, [14, 15], 13, Scalar], # 16
+  [Return, {implicit: true}, [1], 16]]} # 17
+main::emit: {start: 0, returns: [11], nodes: [
+  [Start], # 0
+  [ArgsSource, ~, ~, ~, Array], # 1
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 3
+  [MemStart], # 4
+  [Subscript, {kind: array}, [1, 3, 4], ~, Scalar], # 5
+  [Constant, {const_type: string, value: "n"}, ~, ~, Str], # 6
+  [Subscript, {kind: hash}, [5, 6], ~, Scalar], # 7
+  [Constant, {const_type: string, value: z}, ~, ~, Str], # 8
+  [Assign, ~, [7, 8], 0, Str], # 9
+  [Subscript, {kind: array}, [1, 2, 9], ~, Str], # 10
+  [Return, {implicit: true}, [10], 9]]} # 11
+main::f: {start: 0, returns: [11], nodes: [
+  [Start], # 0
+  [Call, {dispatch_kind: direct, name: main::vars, param_names: [], want: scalar}, ~, 0, Unknown], # 1
+  [Loop, {bound: entry}, [1], 1], # 2
+  [Phi, {memory: true, region: 2}, [1, 51], ~, Unknown], # 3
+  [Proj, {index: 1}, [2]], # 4
+  [Region, {head: 2}, [4]], # 5
+  [Phi, {memory: true, region: 5}, [3], ~, Unknown], # 6
+  [EntryDef, {package: main, sigil: $, symbol: "\""}, [6], ~, Scalar], # 7
+  [Coerce, {from_repr: Scalar, to_repr: Str}, [7], ~, Str], # 8
+  [PadAccess, {sigil: "@", symbol: l}, ~, ~, Unknown], # 9
+  [Call, {dispatch_kind: builtin, memory_input: true, name: join, param_names: []}, [8, 9, 6], ~, Str], # 10
+  [Return, {implicit: true}, [10], 5], # 11
+  [PostfixDeref, {sigil: "%"}, [1, 1], ~, Hash], # 12
+  [Call, {dispatch_kind: builtin, memory_input: true, name: keys, param_names: [], want: list}, [12, 1], ~, List], # 13
+  [Call, {dispatch_kind: builtin, memory_input: true, name: sort, param_names: [], sort_cmp: string, sort_order: ascending}, [13, 1], ~, List], # 14
+  [ArrayLiteral, ~, [14], ~, Array], # 15
+  [Count, ~, [15, 1], ~, Int], # 16
+  [Count, ~, [15, 3], ~, Int], # 17
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 18
+  [Phi, {region: 2}, [18, 54], ~, Int], # 19
+  [NumGt, ~, [17, 19], 2, Boolean], # 20
+  [Proj, {index: 0}, [2]], # 21
+  [Subscript, {kind: array}, [15, 19], ~, Scalar], # 22
+  [Ref, ~, [22], 21, ScalarRef], # 23
+  [Call, {dispatch_kind: direct, name: main::vars, param_names: [], want: scalar}, ~, 23, Unknown], # 24
+  [PadAccess, {sigil: $, symbol: info}, [24], ~, Unknown], # 25
+  [PostfixDeref, {sigil: $}, [23, 24], 24, Scalar], # 26
+  [Subscript, {kind: hash}, [24, 26, 24], ~, Scalar], # 27
+  [Assign, ~, [25, 27], 26, Scalar], # 28
+  [PadAccess, {sigil: $, symbol: info}, [28], ~, Unknown], # 29
+  [Constant, {const_type: string, value: "n"}, ~, ~, Str], # 30
+  [Subscript, {kind: hash}, [29, 30, 28], ~, Scalar], # 31
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [31], ~, Str], # 32
+  [Constant, {const_type: string, value: "="}, ~, ~, Str], # 33
+  [Concat, ~, [32, 33], ~, Str], # 34
+  [PostfixDeref, {sigil: $}, [23, 28], 28, Scalar], # 35
+  [Coerce, {from_repr: Scalar, to_repr: Str}, [35], ~, Str], # 36
+  [Constant, {const_type: string, value: a}, ~, ~, Str], # 37
+  [StrEq, ~, [36, 37], ~, Boolean], # 38
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 39
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 40
+  [TernaryExpr, ~, [38, 39, 40], ~, Scalar], # 41
+  [Call, {dispatch_kind: direct, name: main::emit, param_names: [], want: scalar}, [29, 41], 35, Str], # 42
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [42], ~, Str], # 43
+  [Concat, ~, [34, 43], ~, Str], # 44
+  [Defined, ~, [42], ~, Boolean], # 45
+  [If, ~, [42, 45], 42], # 46
+  [Proj, {index: 0}, [46]], # 47
+  [Call, {dispatch_kind: builtin, memory_input: true, name: push, param_names: []}, [9, 44, 42], 47, Int], # 48
+  [Proj, {index: 1}, [46]], # 49
+  [Region, {head: 46}, [48, 49]], # 50
+  [Phi, {memory: true, predecessors: [47, 49], region: 50}, [48, 42], ~, Str], # 51
+  [Subscript, {kind: array}, [15, 19, 24], ~, Scalar], # 52
+  [Subscript, {kind: array}, [15, 19, 28], ~, Scalar], # 53
+  [Add, ~, [19, 39], ~, Int]]} # 54
+main::vars: {start: 0, returns: [3], nodes: [
+  [Start], # 0
+  [PadAccess, {shared: 1, sigil: "%", symbol: v}, ~, ~, Unknown], # 1
+  [Ref, ~, [1], ~, Unknown], # 2
+  [Return, {implicit: true}, [2], 0]]} # 3
+```

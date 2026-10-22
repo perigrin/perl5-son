@@ -107,4 +107,24 @@ SRC
         "a read the while test shares is not read from the pass before";
 }
 
+# A CALL PASSED A REFERENCE writes through it: `$info->{n}` read before
+# `emit($info)` was spelled after it, and printed the call's `z` for perl's
+# `x` (chalk's Perl::Target::C::_generate_c_files reads
+# `$info->{static_name}` before `_emit_init_expr`). Read where it is: right
+# after the container is made in the iteration.
+round_trips(<<'SRC', 'an element read through a reference, before a call passed the reference');
+my %v = (a => {n => "x"}, b => {n => "y"}); sub vars { \%v } sub emit { my $h = $_[0]; $h->{n} = "z"; "e" }
+sub f { my @l; for my $k (sort keys vars()->%*) { next unless exists vars()->{$k}; my $info = vars()->{$k}; my $s = $info->{n}; my $e = emit($info); push @l, "$s=$e" } "@l" }
+print f(), "\n";
+SRC
+
+# USED ONLY IN AN ARM AFTER THE CALL, it is still read before the call: its
+# version says so, and no `if` comes first (chalk's _generate_c_files pushes
+# `"$sname = $init_expr"` only `if defined $init_expr`).
+round_trips(<<'SRC', 'an element read through a reference, used in an arm after the call');
+my %v = (a => {n => "x"}, b => {n => "y"}); sub vars { \%v } sub emit { my $h = $_[0]; $h->{n} = "z"; $_[1] }
+sub f { my @l; for my $k (sort keys vars()->%*) { my $info = vars()->{$k}; my $s = $info->{n}; my $e = emit($info, $k eq "a" ? 1 : undef); push @l, "$s=$e" if defined $e } "@l" }
+print f(), "\n";
+SRC
+
 done_testing;

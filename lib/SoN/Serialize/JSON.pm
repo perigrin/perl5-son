@@ -353,6 +353,9 @@ sub _extract_fields ($node, $id_remap) {
     if ($op eq 'LocalAlias') {
         return { name => $node->name };
     }
+    if ($op eq 'Length') {
+        return $node->bytes ? { bytes => 1 } : undef;
+    }
     return undef;
 }
 

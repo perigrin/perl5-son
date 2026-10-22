@@ -189,6 +189,25 @@ class SoN::FromOptree 0.01 {
         $ctx->{mutated_aggregate}{ $kid->targ } = 1;
     }
 
+    # Is $op compiled under `use bytes`? The pragma is a hint on the
+    # statement's COP (HINT_BYTES, 0x8): the nearest nextstate before $op,
+    # found up its parent chain.
+    sub _under_use_bytes ($op) {
+        my $kid = $op;
+        while (my $p = eval { $kid->parent }) {
+            last unless $$p;
+            my $cop;
+            if ($p->flags & 4) {   # OPf_KIDS
+                for (my $k = $p->first; ref($k) && $$k && $$k != $$kid; $k = $k->sibling) {
+                    $cop = $k if $k->name =~ /\A(?:next|db)state\z/;
+                }
+            }
+            return ($cop->hints & 0x8) ? 1 : 0 if $cop;
+            $kid = $p;
+        }
+        return 0;
+    }
+
     sub _make_count ($factory, $agg, $sim, %extra) {
         $extra{stamp} //= SoN::IR::Stamp->new(type => 'Int');
         return $factory->make('Count',
@@ -6315,6 +6334,10 @@ class SoN::FromOptree 0.01 {
                             && _operand_consumer($op) =~ /\A(?:grepstart|mapstart)\z/))
                     && !$is_lvintro
                     && !$existing->isa('SoN::IR::Node::PadAccess')
+                    # NOR OVER A CALL: the list it made is no reference, and
+                    # dereferenced (`(sort(@x))->@*`) it died (chalk's
+                    # BNF::Target::C::_emit_nullable_set).
+                    && !$existing->isa('SoN::IR::Node::Call')
                     && ($ctx->{mutated_aggregate}{$targ}
                         || $MUTATED_LITERALS{ $existing->id // '' })) {
                 die "GAP: a list-context read of an array mutated in place"
@@ -11261,6 +11284,7 @@ class SoN::FromOptree 0.01 {
                     && defined $sim->control;
                 $pin_on_control = 1 if $runs_comparator;
                 $extra{want} = 'list' if $runs_comparator;
+                $extra{bytes} = 1 if $name eq 'length' && _under_use_bytes($op);
                 my $node = $factory->make($node_type, inputs => \@inputs, %extra);
                 if ($void_effect_call || $pin_on_control) {
                     $node->set_control_in($sim->control);

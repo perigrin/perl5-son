@@ -76,3 +76,7 @@
 - [Count a call as a store only where it reaches](count-a-call-as-a-store-only-where-it-reaches.md) — every-call-is-a-store and `%$h`-copy fixes spread past their target; reverted, logged with repros
 - [A statement boundary clears the stack](a-statement-boundary-clears-the-stack.md) — do-block value, `// die` fallback, merge Phi all read void residue; trim to the enter/snapshot depth, in every walker
 - [A whole store is no element stamp](a-whole-store-is-no-element-stamp.md) — `@F = (...)`'s Array stamp floored onto `$F[$i]`; `$_->{name}` spelled `(...)["name"]`; take only an element store's scalar type
+- [A call result is no reference](a-call-result-is-no-reference.md) — "mutated" `@r = sort ...` read as `(sort(@x))->@*`; guard the one consumer, not the ten markers
+- [A source reader hides in qw](a-source-reader-hides-in-qw.md) — gate3 regex needs a quote; 6 tests list `lib/Chalk/*.pm` in qw and read source; widening changes the 488, perigrin's call
+- [Count through an element anchors at its root](count-through-an-element-anchors-at-its-root.md) — `scalar @{$self->{s}}` before push spelled after; walk Subscripts to their variable; also `use bytes` length
+- [A call writes through what it is handed](a-call-writes-through-what-it-is-handed.md) — `$s = $info->{n}; emit($info)` silently read after the call; reference-reached containers count every user call; version pins the read before a later `if`

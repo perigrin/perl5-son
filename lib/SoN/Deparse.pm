@@ -333,6 +333,10 @@ class SoN::Deparse 0.01 {
         for my $block (($data->{phase_blocks} // [])->@*) {
             my $text = eval { $self->_emit_phase_block($block->{phase}, $block) };
             if (!defined $text) { $gap = $@ || "failed to render a $block->{phase} block"; return undef }
+            # `use bytes` IS LEXICAL, and hoisted here it covered the whole
+            # file: every length counted bytes. The length it governs carries
+            # the pragma itself (a Length node's `bytes`).
+            $text =~ s/^use bytes;\n//mg;
             my $phase = $block->{phase} eq 'BEGIN' ? 'BEGIN' : 'END';
             my $pkg = $block->{package} // 'main';
             if (length $text && $pkg ne $in{$phase}) {
@@ -2452,7 +2456,44 @@ class SoN::Deparse 0.01 {
                     }
                     return 1;
                 };
-                my @same = grep { grep {
+                # A CONTAINER REACHED BY REFERENCE -- an element of an element,
+                # a scalar holding one, an aggregate shared or referenced -- is
+                # written by any sub called, through whatever it was handed:
+                # `$s = $info->{n}; emit($info)` spelled `$info->{n}` after the
+                # call (chalk's Perl::Target::C::_generate_c_files).
+                # NOR THE ELEMENT A FOREACH OR GREP READS BY ITS COUNTER: that
+                # is perl's alias, and a call writing it through `$_` is seen
+                # where it is used (`grep { ok1() } @$x`).
+                my $iter_elem = ( ( ( $nodes->{ $in[1] // -1 } // {} )->{op} // '' ) eq 'Phi'
+                         && ( $nodes->{ $in[1] }{fields}{region} // -1 ) == $loop->{id}
+                         && grep { ( $_->{op} // '' ) eq 'Count'
+                                   && ( $_->{inputs}[0] // -1 ) == $in[0] }
+                            map { $nodes->{$_} // {} }
+                            map { ( $_->{inputs} // [] )->@* }
+                            grep { ( $_->{control_in} // -1 ) == $loop->{id} }
+                            $self->_nodes_in_order );
+                my $cont = $nodes->{ $in[0] } // {};
+                my $by_ref = !$iter_elem && ( ( $cont->{fields} // {} )->{shared}
+                    || !( ( ( $cont->{op} // '' ) =~ /\A(?:ArrayLiteral|HashLiteral|Phi)\z/ )
+                          || ( ( $cont->{op} // '' ) eq 'PadAccess'
+                               && ( ( $cont->{fields} // {} )->{sigil} // '' ) =~ /\A[\@%]\z/ ) )
+                    || grep { ( $_->{op} // '' ) eq 'Ref' } ( $consumers{ $in[0] } // [] )->@* );
+                # NOT A CALL PASSED THE READ ITSELF: that is perl's alias, as
+                # for $targets (`$x->[$i]->kind` reads the element it calls).
+                my $passed_read = sub ($s) {
+                    my ( @q, %qs ) = ( $s->{inputs} // [] )->@*;
+                    while ( defined( my $id = shift @q ) ) {
+                        next if $qs{$id}++;
+                        return 1 if $id == $n->{id};
+                        my $x = $nodes->{$id} or next;
+                        push @q, ( $x->{inputs} // [] )->@* unless defined $x->{control_in};
+                    }
+                    0;
+                };
+                my @same = grep { ( $by_ref && ( $_->{op} // '' ) eq 'Call'
+                                    && ( ( $_->{fields} // {} )->{dispatch_kind} // '' ) ne 'builtin'
+                                    && !$passed_read->($_) )
+                    || grep {
                     my $t = $_;
                     my $tk = ( $t->{inputs} // [] )->[1] // -1;
                     ( $t->{op} // '' ) eq 'Subscript'
@@ -2511,15 +2552,7 @@ class SoN::Deparse 0.01 {
                 # a `substr($a[0], ...)` before `$s .= $x` is perl's to see.
                 my $writeback = sub ($s) { ( $s->{op} // '' ) eq 'Assign'
                     && $vseen{ ( $s->{inputs} // [] )->[1] // -1 } };
-                my $alias = ( grep { $writeback->($_) } @same )
-                    || ( ( ( $nodes->{ $in[1] // -1 } // {} )->{op} // '' ) eq 'Phi'
-                         && ( $nodes->{ $in[1] }{fields}{region} // -1 ) == $loop->{id}
-                         && grep { ( $_->{op} // '' ) eq 'Count'
-                                   && ( $_->{inputs}[0] // -1 ) == $in[0] }
-                            map { $nodes->{$_} // {} }
-                            map { ( $_->{inputs} // [] )->@* }
-                            grep { ( $_->{control_in} // -1 ) == $loop->{id} }
-                            $self->_nodes_in_order );
+                my $alias = ( grep { $writeback->($_) } @same ) || $iter_elem;
                 # AND ONLY OVER A PLAIN AGGREGATE, through its merges: one
                 # tied, refaliased or referenced reads elsewhere than its
                 # elements say (`\$h{b} = \$h{a}` arrives as a whole-hash
@@ -2574,6 +2607,53 @@ class SoN::Deparse 0.01 {
                         }
                         $made
                     } @in[ 0 .. $#in - 1 ];
+                # OR WHERE ITS LAST OPERAND IS MADE in the iteration, when that
+                # is no earlier than its version and no arm stands between:
+                # perl reads it there, unguarded, so a dereference that dies
+                # dies on perl's path too.
+                if ( !$top && !( grep { !$seen{$_} } @roots )
+                     && !( $alias && grep { !$writeback->($_) } @stores ) ) {
+                    my ( @oq, %os, @made ) = @in[ 0 .. $#in - 1 ];
+                    while ( defined( my $id = shift @oq ) ) {
+                        next if $os{$id}++;
+                        my $o = $nodes->{$id} // {};
+                        if ( defined $o->{control_in} ) {
+                            push @made, $id if $seen{$id} && !$past{$id};
+                            next;
+                        }
+                        push @oq, ( $o->{inputs} // [] )->@* unless ( $o->{op} // '' ) eq 'Phi';
+                    }
+                    push @made, $from if defined $from && !@made;
+                    my $reach = sub ($a) {
+                        my ( @rq, %rs ) = ( $a );
+                        while ( defined( my $id = shift @rq ) ) {
+                            next if $rs{$id}++;
+                            push @rq, map { $_->{id} } ( $ctrl_next{$id} // [] )->@*;
+                        }
+                        \%rs;
+                    };
+                    my ($last) = grep { my $m = $_; !grep { !$reach->($_)->{$m} } @made } @made;
+                    # ITS VERSION COMES BEFORE THE STORES, so perl read it
+                    # before them too: an `if` after the first is no guard of
+                    # it, though its use is in the arm (`push @l, "$s = $e" if
+                    # defined $e`).
+                    my %stop = map { $_->{id} => 1 } @same;
+                    my $if_first = defined $last && do {
+                        my ( @iq, %is, $hit ) = ( $last );
+                        while ( !$hit && defined( my $id = shift @iq ) ) {
+                            next if $is{$id}++ || $stop{$id};
+                            $hit = 1 if ( ( $nodes->{$id} // {} )->{op} // '' ) eq 'If';
+                            push @iq, map { $_->{id} } ( $ctrl_next{$id} // [] )->@*;
+                        }
+                        $hit;
+                    };
+                    if ( defined $last && ( ( $nodes->{$last} // {} )->{op} // '' ) ne 'Region'
+                         && ( !$if_first || !$used_in_arm->( $last, $n->{id} ) )
+                         && !grep { !$reach->($last)->{$_} } @roots ) {
+                        $top  = 1;
+                        $from = $last;
+                    }
+                }
                 die "GAP: an element read in a loop is spelled after a store"
                   . " to its aggregate in the same iteration\n" unless $top;
                 $bound{ $n->{id} } = sprintf( '$stale%d', $n->{id} );
@@ -2893,6 +2973,12 @@ class SoN::Deparse 0.01 {
             # join (a branched default) is read right after it exists.
             if ( $at_entry ) {
                 my $ref = $nodes->{ $in[0] } // {};
+                # AN ELEMENT OF ONE (`@{ $self->{s} }`) is read where its
+                # container is: an entry-version element read floats.
+                $ref = $nodes->{ $ref->{inputs}[0] } // {}
+                    while ( $ref->{op} // '' ) eq 'Subscript'
+                       && !defined $ref->{control_in}
+                       && !defined( ( $nodes->{ $ref->{inputs}[-1] } // {} )->{control_in} );
                 my $rop = $ref->{op} // '';
                 if ( defined $ref->{control_in} ) {
                     ( $version, $at_entry ) = ( $ref, 0 );
@@ -7623,7 +7709,10 @@ class SoN::Deparse 0.01 {
         elsif ($op eq 'Length') {
             die "GAP: a Length with " . scalar(@in) . " inputs is not yet"
               . " rendered\n" unless @in == 1;
-            $text = sprintf('length(%s)', $self->_expr($in[0]));
+            # UNDER `use bytes`, spelled with the pragma where it is taken.
+            $text = (($n->{fields} // {})->{bytes})
+                ? sprintf('do { use bytes; length(%s) }', $self->_expr($in[0]))
+                : sprintf('length(%s)', $self->_expr($in[0]));
         }
         elsif ($op eq 'ArrayLiteral' || $op eq 'HashLiteral') {
             # A NAMED AGGREGATE IS ITS VARIABLE. The node represents the
