@@ -47,6 +47,17 @@ my %h = (a=>1,b=>2); for my $k (sort keys %h) { print "$k=$h{$k}\n" }
 a=1
 b=2
 ```
+
+## a BEGIN block that prints
+
+```perl
+BEGIN { print "b\n" } print "m\n";
+```
+
+```output
+b
+m
+```
 MD
 close $fh;
 
@@ -54,10 +65,11 @@ my $out = qx(SON_CORPUS=$dir SON_CHALK=$chalk $^X $FindBin::Bin/../tools/corpus-
 my %n;
 $n{$1} = $2 while $out =~ /^(\w+)\s+(\d+)$/mg;
 
-like $out, qr/^cases: 3$/m, 'it reads the three cases';
+like $out, qr/^cases: 4$/m, 'it reads the four cases';
 is $n{ROUNDTRIP}, 1, 'the program lli runs to perl\'s output round-trips' or diag $out;
 is $n{DIFFERS},   1, 'the one recorded wrong differs' or diag $out;
-is $n{GAP},       1, 'the one chalk will not lower is a gap' or diag $out;
+is $n{GAP},       2, 'the one chalk will not lower is a gap, and so is one it refuses as it loads' or diag $out;
+is $n{LOAD_FAIL}, 0, 'a refusal by name at load is no load failure' or diag $out;
 like $out, qr/^GAP_CAUSE\s+1\s+sort with a STRING comparator/m,
     'the gap is ranked by its cause';
 unlike $out, qr/^(?:GAP|LOAD)_CAUSE.* at \S+ line \d/m, 'a cause carries no source location';

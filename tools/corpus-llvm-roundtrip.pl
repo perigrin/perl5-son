@@ -19,7 +19,9 @@
 #   DIFFERS    lli ran to completion and printed something else
 #   LLI_FAIL   lli exited non-zero or timed out
 #   GAP        chalk refused to lower it, naming why
-#   LOAD_FAIL  chalk could not load the graph
+#   LOAD_FAIL  chalk could not load the graph (an op it does not know, a
+#              malformed wire) -- a GAP it raises by name while loading, a
+#              BEGIN block it will not drop, is a GAP
 #   NOJSON     B::SoN produced no graph
 use v5.42.0;
 use FindBin;
@@ -65,6 +67,7 @@ sub run_case ($id, $c) {
     my $why = qx(timeout $timeout $^X -I$snap/lib -I$snap/t/lib $FindBin::Bin/chalk-lower.pl $base.json $base.ll 2>/dev/null);
     chomp $why;
     if ($?) {
+        return ('GAP', $1)       if $why =~ /^LOAD: ((?:from_json failed: )?GAP:.*)/;
         return ('LOAD_FAIL', $1) if $why =~ /^LOAD: (.*)/;
         return ('GAP', $1)       if $why =~ /^GAP: (.*)/;
         return ('GAP', 'chalk timed out or died lowering it');
