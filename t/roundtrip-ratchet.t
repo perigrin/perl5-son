@@ -48,9 +48,9 @@ my %FLOOR = (
     # reference), measured 2026-10-22.
     corpus => 430,
     perl_t => 12,    # 12 measured 2026-10-22 at the chalk-lib goal's close (11 before)
-    # THE CORPUS THROUGH LLVM (tools/corpus-llvm-roundtrip.pl, chalk at
-    # 5948f648): 58 of 430, measured 2026-10-22 -- rung 1 of lowering perl's t/.
-    corpus_llvm => 58,
+    # THE CORPUS THROUGH LLVM (tools/corpus-llvm-roundtrip.pl): 58 of 430 at
+    # chalk 5948f648, 70 at 485f8e70 (bson/llvm-corpus), measured 2026-10-22.
+    corpus_llvm => 70,
     # chalk's lib/ at the commit tools/chalk-lib-roundtrip.pl pins (5948f648,
     # 179 modules), measured at d0cb68a and 2d8fb90, 2026-10-06.
     # 140 at 580ca1e and 4c7348c, 2026-10-13. 143 at b9c9b82, 1bcd4a1,
@@ -91,9 +91,10 @@ my %CEILING = (
     # symbolic `@{"_<..."}` the producer drops). comp/parser_run.t now
     # compiles; it differs instead.
     perl_t_invalid => 1,
-    # Corpus cases lli runs to a WRONG answer (DIFFERS + LLI_FAIL): 10 + 4,
-    # measured 2026-10-22. Lowering this needs no reason; raising it does.
-    corpus_llvm_wrong => 14,
+    # Corpus cases lli runs to a WRONG answer (DIFFERS + LLI_FAIL): 14 at
+    # chalk 5948f648, 0 at 485f8e70, measured 2026-10-22. Raising it needs a
+    # reason; a wrong answer is fixed or refused by name.
+    corpus_llvm_wrong => 0,
 );
 
 # ONE RUN PER TOOL. The corpus census takes ~3 minutes, and a first draft of

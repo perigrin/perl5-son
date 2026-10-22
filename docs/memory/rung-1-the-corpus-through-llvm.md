@@ -12,7 +12,7 @@ corpus case goes through B::SoN's wire JSON, then chalk's
 case's recorded output. Chalk is read at a pinned commit through
 `git archive`, so only moving the pin moves the number.
 
-Measured 2026-10-22: ROUNDTRIP 58, DIFFERS 10, LLI_FAIL 4, GAP 240,
+Measured 2026-10-22 at the pin: ROUNDTRIP 58, DIFFERS 10, LLI_FAIL 4, GAP 240,
 LOAD_FAIL 118.
 - The top causes: inlining a callee with effects (70), Call (33),
   Assign to a non-pad lhs (29).
@@ -30,3 +30,17 @@ The machine environment:
 **How to apply:** pick backend work from the top of the GAP_CAUSE and
 LOAD_CAUSE lists. Treat a DIFFERS or LLI_FAIL before any gap, because a
 wrong answer hides its cause.
+
+**Wrong answers to zero (2026-10-22), on chalk branch bson/llvm-corpus
+(485f8e70, pushed; the census pins it):**
+- An unset `$ENV{K}` read as defined. 13 cases use `$ENV{X} // K`, so
+  one fix covered them.
+- An `if` handed a `%Str` condition straight to `br i1`.
+- `next OUTER` and `last OUTER` ran as the inner loop's own next. They
+  are now refused, because a latch with extra predecessors is needed.
+- `phase_blocks` were dropped. A BEGIN or END with effects is now
+  refused; `use`/`no` (require/import/unimport) is not an effect.
+
+Result: 70 ROUNDTRIP, 0 wrong. The ratchet now has floor 70 and
+wrong-answer ceiling 0. Chalk's other tests that call from_json fail
+identically at the pin (pre-existing; compared one at a time).

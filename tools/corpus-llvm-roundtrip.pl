@@ -29,7 +29,9 @@ use lib "$FindBin::Bin/lib";
 use PvmCorpus qw(read_cases);
 use CorpusLlvmCause;
 
-my $COMMIT  = '5948f648';
+# chalk's bson/llvm-corpus branch, where the backend work for this census
+# lands -- not the chalk-lib census's 5948f648, which stays put.
+my $COMMIT  = '485f8e70';
 my $jobs    = 8;
 my $verbose = 0;
 my $timeout = 60;
