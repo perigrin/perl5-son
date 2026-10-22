@@ -43,7 +43,10 @@ my %FLOOR = (
     # sub's aggregates, try/catch, trap-body writes, ternary and method
     # arguments by alias, loop-condition and && `my`s, pass-top reads),
     # 2026-10-20.
-    corpus => 351,
+    # 430 -- every case -- with the chalk-lib goal's closing batches (stale
+    # counts, use bytes, calls handed their container, copies through a
+    # reference), measured 2026-10-22.
+    corpus => 430,
     perl_t => 11,    # base/lex.t refuses on a `caller` bound to a list
     # chalk's lib/ at the commit tools/chalk-lib-roundtrip.pl pins (5948f648,
     # 179 modules), measured at d0cb68a and 2d8fb90, 2026-10-06.
@@ -54,7 +57,9 @@ my %FLOOR = (
     # 163 after that first batch, by the ratchet and gate 3 apart, 2026-10-20.
     # 167 after the second (Earley among them), gate 3 488 of 488 with 167
     # overlaid, 2026-10-20.
-    chalk_compiles => 167,
+    # 179 of 179, SKIPPED_GRAPHS 0, at the goal's close, 2026-10-22; gate 3
+    # 482 of 482 with all 179 overlaid.
+    chalk_compiles => 179,
     # chalk's own test files (547 at 5948f648) that give the SAME result
     # against the emitted lib/ -- tools/chalk-gate3.pl. The 59 that read lib/
     # as source are DEFERRED to chalk's own lowering (perigrin, 2026-10-09),
@@ -75,7 +80,8 @@ my %CEILING = (
     # 76 at 255a021 (gap6/loopexit) and 15af845, 2026-10-16.
     # 52 after the chalk-lib goal's first batch, 2026-10-20.
     # 36 after its second, 2026-10-20.
-    chalk_skipped_graphs => 36,
+    # 0 at the chalk-lib goal's close, 2026-10-22.
+    chalk_skipped_graphs => 0,
     # perl t/ emissions perl will not compile. Unguarded until 75d3db8, so
     # two new ones (comp/fold.t, comp/retainedlines.t) arrived unnoticed.
     # Measured 1 at 1c8634e, twice, 2026-10-11: comp/line_debug.t (a
