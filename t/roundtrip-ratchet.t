@@ -48,6 +48,9 @@ my %FLOOR = (
     # reference), measured 2026-10-22.
     corpus => 430,
     perl_t => 12,    # 12 measured 2026-10-22 at the chalk-lib goal's close (11 before)
+    # THE CORPUS THROUGH LLVM (tools/corpus-llvm-roundtrip.pl, chalk at
+    # 5948f648): 58 of 430, measured 2026-10-22 -- rung 1 of lowering perl's t/.
+    corpus_llvm => 58,
     # chalk's lib/ at the commit tools/chalk-lib-roundtrip.pl pins (5948f648,
     # 179 modules), measured at d0cb68a and 2d8fb90, 2026-10-06.
     # 140 at 580ca1e and 4c7348c, 2026-10-13. 143 at b9c9b82, 1bcd4a1,
@@ -88,6 +91,9 @@ my %CEILING = (
     # symbolic `@{"_<..."}` the producer drops). comp/parser_run.t now
     # compiles; it differs instead.
     perl_t_invalid => 1,
+    # Corpus cases lli runs to a WRONG answer (DIFFERS + LLI_FAIL): 10 + 4,
+    # measured 2026-10-22. Lowering this needs no reason; raising it does.
+    corpus_llvm_wrong => 14,
 );
 
 # ONE RUN PER TOOL. The corpus census takes ~3 minutes, and a first draft of
@@ -157,6 +163,29 @@ SKIP: {
             or do { diag $out; return };
         is $n->{EMITS_INVALID_PERL}, 0,
             'EMITS_INVALID_PERL is zero' or diag $out;
+    };
+
+    # THE CORPUS THROUGH LLVM -- rung 1 of lowering perl's t/ to LLVM IR
+    # (perigrin, 2026-10-22). B::SoN's graph, lowered by chalk at its pinned
+    # commit, run by lli. ROUNDTRIP is a floor; a WRONG answer -- lli printing
+    # something else, or crashing -- has a ceiling of its own, because a
+    # refusal names its gap and a wrong answer hides one.
+    subtest 'the corpus through LLVM does not regress' => sub {
+        my ( $n, $out ) = census('corpus-llvm-roundtrip.pl');
+
+        ok $n->{_cases}, "the census found its cases ($n->{_cases})"
+            or do { diag $out; return };
+        my $sum = 0;
+        $sum += $n->{$_} // 0 for qw(ROUNDTRIP DIFFERS LLI_FAIL GAP LOAD_FAIL NOJSON);
+        is $sum, $n->{_cases}, 'every case landed in exactly one bucket'
+            or diag $out;
+        ok( ( $n->{ROUNDTRIP} // 0 ) >= $FLOOR{corpus_llvm},
+            "ROUNDTRIP $n->{ROUNDTRIP} >= floor $FLOOR{corpus_llvm}" )
+            or diag $out;
+        my $wrong = ( $n->{DIFFERS} // 9e9 ) + ( $n->{LLI_FAIL} // 9e9 );
+        ok( $wrong <= $CEILING{corpus_llvm_wrong},
+            "DIFFERS + LLI_FAIL $wrong <= ceiling $CEILING{corpus_llvm_wrong}" )
+            or diag $out;
     };
 
     # CHALK'S lib/, one module at a time. The census reads a pinned commit from
