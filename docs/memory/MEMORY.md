@@ -82,3 +82,4 @@
 - [A call writes through what it is handed](a-call-writes-through-what-it-is-handed.md) — `$s = $info->{n}; emit($info)` read after the call; count calls handed the container (any-call refused 12 modules); anchor after last made operand; version pins the read before a later `if`
 - [A copy through a reference is marked, not rebound](a-copy-through-a-reference-is-marked-not-rebound.md) — `my %p = %$h` read live; PostfixDeref `copy` + snapshot pass run before the element pass; rebinding broke 7 files
 - [Rung 1: the corpus through LLVM](rung-1-the-corpus-through-llvm.md) — corpus-llvm-roundtrip.pl: 58/430 via chalk+lli, 14 wrong; GAP/LOAD_CAUSE rank the backend work; set SON_CHALK and SON_PERL_T here
+- [gate3 under load drops files](gate3-under-load-drops-files.md) — ratchet overlapping an 8-job census gave SAME 476; alone 482 twice; run measurement jobs on an idle machine
