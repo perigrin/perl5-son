@@ -170,7 +170,7 @@ no variable whose text is "@{$r}"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [18], nodes: [
+main::__PROGRAM__: {start: 0, returns: [19], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: integer, value: "10"}, ~, ~, Int], # 2
@@ -179,17 +179,18 @@ main::__PROGRAM__: {start: 0, returns: [18], nodes: [
   [ArrayLiteral, {sigil: "@", symbol: a}, [2, 3, 4], ~, Array], # 5
   [Ref, ~, [5], ~, ArrayRef], # 6
   [MemStart], # 7
-  [PostfixDeref, {sigil: "@"}, [6, 7], ~, Array], # 8
+  [PostfixDeref, {copy: 1, sigil: "@"}, [6, 7], ~, Array], # 8
   [Count, ~, [8, 7], ~, Int], # 9
   [Coerce, {from_repr: Int, to_repr: Str}, [9], ~, Str], # 10
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 11
   [EntryDef, {package: main, sigil: $, symbol: "\""}, [7], ~, Scalar], # 12
   [Coerce, {from_repr: Scalar, to_repr: Str}, [12], ~, Str], # 13
-  [Call, {dispatch_kind: builtin, memory_input: true, name: join, param_names: []}, [13, 8, 7], ~, Str], # 14
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 15
-  [Concat, ~, [14, 15], ~, Str], # 16
-  [Print, ~, [10, 11, 16], 0, Scalar], # 17
-  [Return, {implicit: true}, [1], 17]]} # 18
+  [PostfixDeref, {sigil: "@"}, [6, 7], ~, Array], # 14
+  [Call, {dispatch_kind: builtin, memory_input: true, name: join, param_names: []}, [13, 14, 7], ~, Str], # 15
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 16
+  [Concat, ~, [15, 16], ~, Str], # 17
+  [Print, ~, [10, 11, 17], 0, Scalar], # 18
+  [Return, {implicit: true}, [1], 18]]} # 19
 ```
 
 ## The sigil-only `@$r` dereference
@@ -257,7 +258,7 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [ArrayLiteral, {sigil: "@", symbol: a}, [2, 3, 4], ~, Array], # 5
   [Ref, ~, [5], ~, ArrayRef], # 6
   [MemStart], # 7
-  [PostfixDeref, {sigil: "@"}, [6, 7], ~, Array], # 8
+  [PostfixDeref, {copy: 1, sigil: "@"}, [6, 7], ~, Array], # 8
   [Count, ~, [8, 7], ~, Int], # 9
   [Coerce, {from_repr: Int, to_repr: Str}, [9], ~, Str], # 10
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 11
@@ -266,7 +267,8 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [Coerce, {from_repr: Unknown, to_repr: Str}, [13], ~, Str], # 14
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 15
   [Print, ~, [10, 11, 14, 15], 0, Scalar], # 16
-  [Return, {implicit: true}, [1], 16]]} # 17
+  [Return, {implicit: true}, [1], 16], # 17
+  [PostfixDeref, {sigil: "@"}, [6, 7], ~, Array]]} # 18
 ```
 
 ## The postfix `$r->@*` dereference
@@ -329,7 +331,7 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [ArrayLiteral, {sigil: "@", symbol: a}, [2, 3, 4], ~, Array], # 5
   [Ref, ~, [5], ~, ArrayRef], # 6
   [MemStart], # 7
-  [PostfixDeref, {sigil: "@"}, [6, 7], ~, Array], # 8
+  [PostfixDeref, {copy: 1, sigil: "@"}, [6, 7], ~, Array], # 8
   [Count, ~, [8, 7], ~, Int], # 9
   [Coerce, {from_repr: Int, to_repr: Str}, [9], ~, Str], # 10
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 11
@@ -338,7 +340,8 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [Coerce, {from_repr: Unknown, to_repr: Str}, [13], ~, Str], # 14
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 15
   [Print, ~, [10, 11, 14, 15], 0, Scalar], # 16
-  [Return, {implicit: true}, [1], 16]]} # 17
+  [Return, {implicit: true}, [1], 16], # 17
+  [PostfixDeref, {sigil: "@"}, [6, 7], ~, Array]]} # 18
 ```
 
 ## The `%{ }` and `${ }{ }` hash dereferences
@@ -387,7 +390,7 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [HashLiteral, {sigil: "%", symbol: h}, [2, 3, 4, 5], ~, Hash], # 6
   [Ref, ~, [6], ~, HashRef], # 7
   [MemStart], # 8
-  [PostfixDeref, {sigil: "%"}, [7, 8], ~, Hash], # 9
+  [PostfixDeref, {copy: 1, sigil: "%"}, [7, 8], ~, Hash], # 9
   [Call, {dispatch_kind: builtin, memory_input: true, name: keys, param_names: [], want: scalar}, [9, 8], ~, Int], # 10
   [Coerce, {from_repr: Int, to_repr: Str}, [10], ~, Str], # 11
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 12
@@ -395,7 +398,8 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [Coerce, {from_repr: Unknown, to_repr: Str}, [13], ~, Str], # 14
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 15
   [Print, ~, [11, 12, 14, 15], 0, Scalar], # 16
-  [Return, {implicit: true}, [1], 16]]} # 17
+  [Return, {implicit: true}, [1], 16], # 17
+  [PostfixDeref, {sigil: "%"}, [7, 8], ~, Hash]]} # 18
 ```
 
 ## The last index through a reference, three ways

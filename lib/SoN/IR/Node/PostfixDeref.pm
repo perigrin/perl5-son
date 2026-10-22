@@ -8,10 +8,14 @@ use SoN::IR::Value;
 
 class SoN::IR::Node::PostfixDeref :isa(SoN::IR::Value) {
     field $sigil :param :reader;
+    # A COPY: `my %p = %$h` bound to the dereference reads the referent as
+    # it was at this version, whatever is stored through $h after it. A
+    # foreach's dereference, unmarked, is the live array it walks.
+    field $copy :param :reader = 0;
 
     method operation() { 'PostfixDeref' }
 
     method content_hash() {
-        return join('|', 'PostfixDeref', "sigil=$sigil", $self->_serialize_inputs());
+        return join('|', 'PostfixDeref', "sigil=$sigil", ($copy ? 'copy' : ()), $self->_serialize_inputs());
     }
 }

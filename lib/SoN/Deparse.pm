@@ -1213,8 +1213,13 @@ class SoN::Deparse 0.01 {
             $names{$v} = 1 if $v =~ /\A[\$\@%][A-Za-z]\w*\z/;
         }
         my %temps;
-        $temps{$1} = $names{$1} = 1
-            while $text =~ /([\$\@%](?:phi|eff|stale|ret|latch|exit|inv)\d+)\b(?!_)/g;
+        # AN ELEMENT NAMES ITS AGGREGATE: `$stale3{a}` is `%stale3`, and read
+        # as `$stale3` it declared a stray scalar beside the hash.
+        while ( $text =~ /([\$\@%])((?:phi|eff|stale|ret|latch|exit|inv)\d+)\b(?!_)(?=(\s*[\[{])?)/g ) {
+            my ( $sg, $name, $sub ) = ( $1, $2, $3 );
+            my $v = ( $sg eq '$' && defined $sub ? ( $sub =~ /\{/ ? '%' : '@' ) : $sg ) . $name;
+            $temps{$v} = $names{$v} = 1;
+        }
         # A CLASS BODY'S, that is -- a method's, an ADJUST's: a plain sub's
         # `$self` is its own lexical.
         delete $names{'$self'} unless do {
@@ -2313,6 +2318,221 @@ class SoN::Deparse 0.01 {
             push $after_effect{ $version->{id} }->@*, $n;
         }
 
+        my %stale_at_join;   # restored for the re-walk: the first walk deletes what it flushes
+        # A LIST READ THROUGH A REFERENCE GOES STALE THE SAME WAY. `my @s =
+        # sort @$x; push @$x, 0; print "@s"` sorted the pushed 0 in: the
+        # PostfixDeref carries the version it read at, and the emission
+        # spelled `$x->@*` at the print. Bound to a list temporary where it
+        # was read -- at its version, after the join a merged version names,
+        # or on entry when the reference is a parameter.
+        #
+        # ONLY READERS THAT COPY: sort, reverse, join, a count, a list, a
+        # stored value. Anything else -- a loop or map aliasing the elements,
+        # a callee aliasing @_ -- keeps the live spelling. A mutator's
+        # container is the aggregate itself and is spelled live (_call_expr).
+        # A HASH READ THROUGH ONE TOO, by `keys` -- a copy of the keys: `my
+        # $k = join ",", sort keys %$h; $h->{b} = 2` spelled the keys after
+        # the store (`a,b` for perl's `a`). Not `values`, whose results a
+        # loop may alias.
+        # RUN TWICE: COPIES FIRST, ahead of the element-in-loop pass, so an
+        # element read of `my %p = %$h` it binds reads the copy's temporary
+        # (chalk's Elaborate::_elaborate_if); everything else where it was.
+        my $list_deref_pass = sub ($copies_only) {
+        my %copies = map { $_ => 1 } qw(sort reverse join);
+        for my $n ( sort { $a->{id} <=> $b->{id} } $self->_nodes_in_order ) {
+            next if $copies_only && !( $n->{fields} // {} )->{copy};
+            next unless ( $n->{op} // '' ) eq 'PostfixDeref';
+            my $dsig = ( ( $n->{fields} // {} )->{sigil} // '' );
+            next unless $dsig eq '@' || $dsig eq '%';
+            local $copies{keys} = 1 if $dsig eq '%';
+            local @copies{qw(sort reverse join)} = () if $dsig eq '%';
+            next if exists $bound{ $n->{id} };
+            my @in = ( $n->{inputs} // [] )->@*;
+            next unless @in == 2;
+            # A COPY IS TAKEN ONCE, at its version: read in a loop after it, it
+            # is still the one copy. Not one taken at a loop's own version,
+            # which is taken again each pass.
+            next if $under_loop{ $n->{id} }
+                && !( ( $n->{fields} // {} )->{copy}
+                      && !( ( ( $nodes->{ $in[-1] } // {} )->{op} // '' ) eq 'Phi'
+                            && ( ( ( $nodes->{ $nodes->{ $in[-1] }{fields}{region} // -1 } // {} )->{op} // '' ) eq 'Loop' ) ) );
+            my ( $readers, $other, @arm_lists ) = ( 0, 0 );
+            for my $c ( ( $consumers{ $n->{id} } // [] )->@* ) {
+                my $op = $c->{op} // '';
+                my $cf = $c->{fields} // {};
+                my @at = grep { $c->{inputs}[$_] == $n->{id} } 0 .. $#{ $c->{inputs} };
+                if ( $op eq 'Call' && $cf->{memory_input}
+                     && ( $cf->{name} // '' ) =~ /\A(?:push|unshift|splice|pop|shift)\z/
+                     && "@at" eq '0' ) {
+                    next;
+                }
+                # A TERNARY'S ARM LIST is no copy: handed to a call or a loop,
+                # it is spelled in place and aliased (`g($c ? @$x : ())`; a
+                # snapshot lost the callee's `$_[0] = 9`). It is read where
+                # the ternary is, so it keeps the live dereference (below).
+                if ( $op eq 'ArrayLiteral'
+                     && grep { ( $_->{op} // '' ) eq 'TernaryExpr' }
+                             ( $consumers{ $c->{id} } // [] )->@* ) {
+                    push @arm_lists, $c;
+                    next;
+                }
+                # A COPY'S ELEMENT is read from the copy: `my %p = %$h` read
+                # `$p{a}` after `$h->{a} = 2` (chalk's Elaborate::_elaborate_if).
+                # Not one taken a reference to, which would name the copy.
+                my $copy_elem = ( $n->{fields} // {} )->{copy}
+                    && $op =~ /\A(?:Subscript|Exists)\z/ && "@at" eq '0'
+                    && !grep { ( $_->{op} // '' ) eq 'Ref' } ( $consumers{ $c->{id} } // [] )->@*;
+                if ( $copy_elem
+                     || ( ( $n->{fields} // {} )->{copy} && $op eq 'HashLiteral' )
+                     || ( $op eq 'Call' && ( $cf->{dispatch_kind} // '' ) eq 'builtin'
+                       && $copies{ $cf->{name} // '' } )
+                     || $op eq 'Count' || $op eq 'ArrayLiteral'
+                     || ( $op eq 'Assign' && !grep { $_ == 0 } @at ) ) {
+                    $readers++;
+                    next;
+                }
+                $other++;
+            }
+            next if $other || !$readers;
+            my $version = $nodes->{ $in[-1] } or next;
+            my $join;
+            if ( ( $version->{op} // '' ) eq 'Phi' ) {
+                my $r = $nodes->{ ( $version->{fields} // {} )->{region} // -1 } // {};
+                next unless ( $r->{op} // '' ) eq 'Region';
+                $join = $r;
+            }
+            my $at_entry = !$join && !defined $version->{control_in};
+            # AT THE ENTRY VERSION THE REFERENCE IS THE ANCHOR: a parameter
+            # exists on entry; one made on the chain (`[2,1]`) or merged at a
+            # join (a branched default) is read right after it exists.
+            if ( $at_entry ) {
+                my $ref = $nodes->{ $in[0] } // {};
+                # AN ELEMENT OF ONE (`@{ $self->{s} }`) is read where its
+                # container is: an entry-version element read floats.
+                $ref = $nodes->{ $ref->{inputs}[0] } // {}
+                    while ( $ref->{op} // '' ) eq 'Subscript'
+                       && !defined $ref->{control_in}
+                       && !defined( ( $nodes->{ $ref->{inputs}[-1] } // {} )->{control_in} );
+                my $rop = $ref->{op} // '';
+                if ( defined $ref->{control_in} ) {
+                    ( $version, $at_entry ) = ( $ref, 0 );
+                }
+                elsif ( $rop eq 'Phi' ) {
+                    my $r = $nodes->{ ( $ref->{fields} // {} )->{region} // -1 } // {};
+                    next unless ( $r->{op} // '' ) eq 'Region';
+                    ( $join, $at_entry ) = ( $r, 0 );
+                }
+                # A PAD VARIABLE A LIST ASSIGNMENT BINDS (`my ($x) = @_`) has
+                # its value from the one Assign into it: read after it on the
+                # chain, or -- floating, so spelled in the prologue ahead of
+                # the save prologue -- at entry, as a parameter is.
+                elsif ( $rop eq 'PadAccess' ) {
+                    my @def = grep { ( $_->{op} // '' ) eq 'Assign'
+                                     && ( $_->{inputs}[0] // -1 ) == $ref->{id} }
+                              ( $consumers{ $ref->{id} } // [] )->@*;
+                    next unless @def == 1;
+                    ( $version, $at_entry ) = ( $def[0], 0 )
+                        if defined $def[0]{control_in};
+                }
+                elsif ( $rop ne 'Parameter' ) {
+                    next;
+                }
+            }
+            # PAST ENTRY, a reference made or merged elsewhere may not exist
+            # yet at the version; left live.
+            else {
+                my $ref = $nodes->{ $in[0] } // {};
+                next if ( ( $ref->{op} // '' ) eq 'Phi'
+                          && !( $join && ( ( $ref->{fields} // {} )->{region} // -1 )
+                                         == $join->{id} ) )
+                    || ( defined $ref->{control_in} && $ref->{id} != $version->{id} );
+                # ...AND SO MAY ONE IT IS COMPUTED FROM. `($d->inputs // [])`
+                # is a DefinedOr over an allocation pinned in the fallback's
+                # arm; anchored at the call, the temporary read that
+                # allocation above the branch that makes it. It is read after
+                # that branch joins -- still before any later effect -- and
+                # left live only when no join can be found.
+                my ( @todo, %seen ) = ( ( $ref->{inputs} // [] )->@* );
+                my $made;
+                while ( defined( my $id = shift @todo ) ) {
+                    next if $seen{$id}++ || $id == $version->{id};
+                    my $m = $nodes->{$id} or next;
+                    if ( defined $m->{control_in} || ( $m->{op} // '' ) eq 'Phi' ) {
+                        $made = $m;
+                        last;
+                    }
+                    push @todo, ( $m->{inputs} // [] )->@*;
+                }
+                # ONLY WHEN THE VERSION COMES FIRST. A join already behind the
+                # version (`my $l = $x // []; push @$l, 9; scalar @$l` reads
+                # after the push) leaves the anchor at the version.
+                if ( $made && !$join ) {
+                    my $made_join;
+                    if ( ( $made->{op} // '' ) eq 'Phi' ) {
+                        $made_join = $nodes->{ ( $made->{fields} // {} )->{region} // -1 };
+                    }
+                    else {
+                        my ( @walk, %been ) = ( $made->{id} );
+                        while ( !$made_join && defined( my $id = shift @walk ) ) {
+                            next if $been{$id}++;
+                            for my $c ( ( $ctrl_next{$id} // [] )->@* ) {
+                                if ( ( $c->{op} // '' ) eq 'Region' ) { $made_join = $c; last }
+                                push @walk, $c->{id};
+                            }
+                        }
+                    }
+                    next unless $made_join && ( $made_join->{op} // '' ) eq 'Region';
+                    my ( @walk, %been ) = ( $made_join->{id} );
+                    my $version_after;
+                    while ( !$version_after && defined( my $id = shift @walk ) ) {
+                        next if $been{$id}++;
+                        $version_after = 1 if $id == $version->{id};
+                        push @walk, map { $_->{id} } ( $ctrl_next{$id} // [] )->@*;
+                    }
+                    $join = $made_join unless $version_after;
+                }
+            }
+            next if !$at_entry
+                && $used_in_arm->( ( $join // $version )->{id}, $n->{id} );
+
+            # A COPY IS SHADOWED BY A STORE ANYWHERE AFTER IT, in an arm or a
+            # loop's body too: `my %p = %$h; for (...) { $h->{$k} = ... }`.
+            my $next = ( $n->{fields} // {} )->{copy} ? \%arm_next : \%ctrl_next;
+            my ( @queue, %seen, $shadowed )
+                = ( $at_entry ? $start->{id} : ( $join // $version )->{id} );
+            while ( @queue && !$shadowed ) {
+                my $id = shift @queue;
+                next if $seen{$id}++;
+                for my $c ( ( $next->{$id} // [] )->@* ) {
+                    $shadowed = 1 if ( $c->{op} // '' )
+                        =~ /\A(?:Assign|EntryWrite|CellWrite|Delete|ElemRestore|Call)\z/;
+                    push @queue, $c->{id};
+                }
+            }
+            next unless $shadowed;
+
+            for my $l ( grep { !exists $bound{ $_->{id} } } @arm_lists ) {
+                $bound{ $l->{id} } = sprintf( '(%s)', join ', ', map {
+                    $_ == $n->{id} ? $self->_expr_uncached($_) : $self->_expr($_)
+                } ( $l->{inputs} // [] )->@* );
+            }
+            $bound{ $n->{id} } = sprintf( '%sstale%d', $dsig, $n->{id} );
+            if ( $at_entry ) {
+                my $var = $bound{ $n->{id} };
+                $save_prologue .= sprintf( "my %s = %s;\n",
+                    $var, $self->_expr_uncached( $n->{id} ) );
+                next;
+            }
+            $hoisted{ $bound{ $n->{id} } } //= $bound{ $n->{id} };
+            if ( $join ) {
+                push $after_region{ $join->{id} }->@*, $n;
+                push $stale_at_join{ $join->{id} }->@*, $n;
+                next;
+            }
+            push $after_effect{ $version->{id} }->@*, $n;
+        }        };
+        $list_deref_pass->(1);
+
         # AN ELEMENT READ IN A LOOP, SPELLED AFTER A STORE, IS REFUSED. The
         # pass below leaves reads under a loop alone (binding one to a single
         # temporary froze a `while` condition), so a read at the iteration's
@@ -2480,9 +2700,16 @@ class SoN::Deparse 0.01 {
                         next if $qs{$id}++;
                         return 1 if $id == $in[0];
                         my $x = $nodes->{$id} or next;
-                        next if defined $x->{control_in}
-                            || ( $x->{op} // '' ) =~ /\A(?:Subscript|PostfixDeref)\z/;
-                        push @q, ( $x->{inputs} // [] )->@*;
+                        # ONLY THROUGH WHAT HANDS ITS OPERAND ON: a reference,
+                        # a list, a ternary's arms, a merge, a lexical. An
+                        # `exists` or count of it hands on a number.
+                        next if defined $x->{control_in};
+                        my $xop = $x->{op} // '';
+                        my @xin = ( $x->{inputs} // [] )->@*;
+                        if    ( $xop eq 'TernaryExpr' ) { push @q, @xin[ 1 .. $#xin ] }
+                        elsif ( $xop =~ /\A(?:Ref|ArrayLiteral|HashLiteral|ListAppend|Phi|PadAccess)\z/ ) {
+                            push @q, @xin;
+                        }
                     }
                     0;
                 };
@@ -2555,7 +2782,11 @@ class SoN::Deparse 0.01 {
                 # tied, refaliased or referenced reads elsewhere than its
                 # elements say (`\$h{b} = \$h{a}` arrives as a whole-hash
                 # store).
-                my $plain = do {
+                # $plain_with->(1) ALSO PASSES THE CONTAINER, OR A REFERENCE TO
+                # IT, HANDED STRAIGHT TO A CALL COUNTED ABOVE (`esc(\@chars)`):
+                # its stores are that call's. One handed anywhere else may
+                # have tied it (`t(\%h)` before the loop).
+                my $plain_with = sub ($whole_ref) {
                     my ( @pq, %ps, $ok ) = ( $in[0] );
                     $ok = 1;
                     while ( $ok && defined( my $id = shift @pq ) ) {
@@ -2567,6 +2798,28 @@ class SoN::Deparse 0.01 {
                             my $cop = $c->{op} // '';
                             if ( $cop eq 'Phi' ) { push @pq, $c->{id}; next }
                             next if $cop =~ /\A(?:Count|ListAppend)\z/;
+                            next if $whole_ref && $cop =~ /\A(?:Loop|Region|Proj|PostfixDeref)\z/;
+                            # ...NOR A COPY OF IT (`my %then = %pre`) or a read of
+                            # its keys or values.
+                            next if $whole_ref && $id == $in[0]
+                                && ( $cop =~ /\A(?:Array|Hash)Literal\z/
+                                     || ( $cop eq 'Call'
+                                          && ( ( $c->{fields} // {} )->{dispatch_kind} // '' ) eq 'builtin'
+                                          && ( ( $c->{fields} // {} )->{name} // '' ) =~ /\A(?:keys|values)\z/ ) );
+                            # ...NOR A STATEMENT FOLLOWING IT ON THE CHAIN, nor a
+                            # pure node only a counted call takes.
+                            next if $whole_ref && $id == $in[0]
+                                && ( ( ( $c->{control_in} // -1 ) == $id
+                                       && !grep { $_ == $id } ( $c->{inputs} // [] )->@* )
+                                     || ( !defined $c->{control_in}
+                                          && ( $consumers{ $c->{id} } // [] )->@*
+                                          && !grep { !$container_call{ $_->{id} } }
+                                                ( $consumers{ $c->{id} } // [] )->@* ) );
+                            next if $whole_ref && $id == $in[0]
+                                && ( $container_call{ $c->{id} }
+                                     || ( $cop eq 'Ref'
+                                          && !grep { !$container_call{ $_->{id} } }
+                                                ( $consumers{ $c->{id} } // [] )->@* ) );
                             $ok = 0, last unless $cop eq 'Subscript'
                                 && ( $c->{inputs}[0] // -1 ) == $id
                                 && !grep { ( $_->{op} // '' ) eq 'Ref' }
@@ -2575,6 +2828,7 @@ class SoN::Deparse 0.01 {
                     }
                     $ok;
                 };
+                my $plain = $plain_with->(0);
                 # A VERSION MADE IN THIS ITERATION anchors it instead: right
                 # after that store (or join), where an operand made before it
                 # exists too.
@@ -2619,8 +2873,8 @@ class SoN::Deparse 0.01 {
                     }
                     \%rs;
                 };
-                if ( !$top && !( grep { !$reach->( $body->{id} )->{$_} } @roots )
-                     && !( $alias && grep { !$writeback->($_) } @stores ) ) {
+                if ( !$top && !$alias && $plain_with->(1)
+                     && !( grep { !$reach->( $body->{id} )->{$_} } @roots ) ) {
                     my ( @oq, %os, @made ) = @in[ 0 .. $#in - 1 ];
                     while ( defined( my $id = shift @oq ) ) {
                         next if $os{$id}++;
@@ -2701,7 +2955,6 @@ class SoN::Deparse 0.01 {
         # Count counted the push (chalk's LR0DFA::_register_state). A field
         # aggregate exists in the prologue too, spelled `@states`, and
         # counting it cannot die.
-        my %stale_at_join;   # restored for the re-walk: the first walk deletes what it flushes
         for my $n ( sort { $a->{id} <=> $b->{id} } $self->_nodes_in_order ) {
             my $rop = $n->{op} // '';
             # SO DOES A KEYS OR VALUES OF A NAMED AGGREGATE, a list: `my $s =
@@ -2922,196 +3175,7 @@ class SoN::Deparse 0.01 {
             push $after_effect{ $version->{id} }->@*, $n;
         }
 
-        # A LIST READ THROUGH A REFERENCE GOES STALE THE SAME WAY. `my @s =
-        # sort @$x; push @$x, 0; print "@s"` sorted the pushed 0 in: the
-        # PostfixDeref carries the version it read at, and the emission
-        # spelled `$x->@*` at the print. Bound to a list temporary where it
-        # was read -- at its version, after the join a merged version names,
-        # or on entry when the reference is a parameter.
-        #
-        # ONLY READERS THAT COPY: sort, reverse, join, a count, a list, a
-        # stored value. Anything else -- a loop or map aliasing the elements,
-        # a callee aliasing @_ -- keeps the live spelling. A mutator's
-        # container is the aggregate itself and is spelled live (_call_expr).
-        # A HASH READ THROUGH ONE TOO, by `keys` -- a copy of the keys: `my
-        # $k = join ",", sort keys %$h; $h->{b} = 2` spelled the keys after
-        # the store (`a,b` for perl's `a`). Not `values`, whose results a
-        # loop may alias.
-        my %copies = map { $_ => 1 } qw(sort reverse join);
-        for my $n ( sort { $a->{id} <=> $b->{id} } $self->_nodes_in_order ) {
-            next unless ( $n->{op} // '' ) eq 'PostfixDeref';
-            my $dsig = ( ( $n->{fields} // {} )->{sigil} // '' );
-            next unless $dsig eq '@' || $dsig eq '%';
-            local $copies{keys} = 1 if $dsig eq '%';
-            local @copies{qw(sort reverse join)} = () if $dsig eq '%';
-            next if exists $bound{ $n->{id} };
-            next if $under_loop{ $n->{id} };
-            my @in = ( $n->{inputs} // [] )->@*;
-            next unless @in == 2;
-            my ( $readers, $other, @arm_lists ) = ( 0, 0 );
-            for my $c ( ( $consumers{ $n->{id} } // [] )->@* ) {
-                my $op = $c->{op} // '';
-                my $cf = $c->{fields} // {};
-                my @at = grep { $c->{inputs}[$_] == $n->{id} } 0 .. $#{ $c->{inputs} };
-                if ( $op eq 'Call' && $cf->{memory_input}
-                     && ( $cf->{name} // '' ) =~ /\A(?:push|unshift|splice|pop|shift)\z/
-                     && "@at" eq '0' ) {
-                    next;
-                }
-                # A TERNARY'S ARM LIST is no copy: handed to a call or a loop,
-                # it is spelled in place and aliased (`g($c ? @$x : ())`; a
-                # snapshot lost the callee's `$_[0] = 9`). It is read where
-                # the ternary is, so it keeps the live dereference (below).
-                if ( $op eq 'ArrayLiteral'
-                     && grep { ( $_->{op} // '' ) eq 'TernaryExpr' }
-                             ( $consumers{ $c->{id} } // [] )->@* ) {
-                    push @arm_lists, $c;
-                    next;
-                }
-                if ( ( $op eq 'Call' && ( $cf->{dispatch_kind} // '' ) eq 'builtin'
-                       && $copies{ $cf->{name} // '' } )
-                     || $op eq 'Count' || $op eq 'ArrayLiteral'
-                     || ( $op eq 'Assign' && !grep { $_ == 0 } @at ) ) {
-                    $readers++;
-                    next;
-                }
-                $other++;
-            }
-            next if $other || !$readers;
-            my $version = $nodes->{ $in[-1] } or next;
-            my $join;
-            if ( ( $version->{op} // '' ) eq 'Phi' ) {
-                my $r = $nodes->{ ( $version->{fields} // {} )->{region} // -1 } // {};
-                next unless ( $r->{op} // '' ) eq 'Region';
-                $join = $r;
-            }
-            my $at_entry = !$join && !defined $version->{control_in};
-            # AT THE ENTRY VERSION THE REFERENCE IS THE ANCHOR: a parameter
-            # exists on entry; one made on the chain (`[2,1]`) or merged at a
-            # join (a branched default) is read right after it exists.
-            if ( $at_entry ) {
-                my $ref = $nodes->{ $in[0] } // {};
-                # AN ELEMENT OF ONE (`@{ $self->{s} }`) is read where its
-                # container is: an entry-version element read floats.
-                $ref = $nodes->{ $ref->{inputs}[0] } // {}
-                    while ( $ref->{op} // '' ) eq 'Subscript'
-                       && !defined $ref->{control_in}
-                       && !defined( ( $nodes->{ $ref->{inputs}[-1] } // {} )->{control_in} );
-                my $rop = $ref->{op} // '';
-                if ( defined $ref->{control_in} ) {
-                    ( $version, $at_entry ) = ( $ref, 0 );
-                }
-                elsif ( $rop eq 'Phi' ) {
-                    my $r = $nodes->{ ( $ref->{fields} // {} )->{region} // -1 } // {};
-                    next unless ( $r->{op} // '' ) eq 'Region';
-                    ( $join, $at_entry ) = ( $r, 0 );
-                }
-                # A PAD VARIABLE A LIST ASSIGNMENT BINDS (`my ($x) = @_`) has
-                # its value from the one Assign into it: read after it on the
-                # chain, or -- floating, so spelled in the prologue ahead of
-                # the save prologue -- at entry, as a parameter is.
-                elsif ( $rop eq 'PadAccess' ) {
-                    my @def = grep { ( $_->{op} // '' ) eq 'Assign'
-                                     && ( $_->{inputs}[0] // -1 ) == $ref->{id} }
-                              ( $consumers{ $ref->{id} } // [] )->@*;
-                    next unless @def == 1;
-                    ( $version, $at_entry ) = ( $def[0], 0 )
-                        if defined $def[0]{control_in};
-                }
-                elsif ( $rop ne 'Parameter' ) {
-                    next;
-                }
-            }
-            # PAST ENTRY, a reference made or merged elsewhere may not exist
-            # yet at the version; left live.
-            else {
-                my $ref = $nodes->{ $in[0] } // {};
-                next if ( ( $ref->{op} // '' ) eq 'Phi'
-                          && !( $join && ( ( $ref->{fields} // {} )->{region} // -1 )
-                                         == $join->{id} ) )
-                    || ( defined $ref->{control_in} && $ref->{id} != $version->{id} );
-                # ...AND SO MAY ONE IT IS COMPUTED FROM. `($d->inputs // [])`
-                # is a DefinedOr over an allocation pinned in the fallback's
-                # arm; anchored at the call, the temporary read that
-                # allocation above the branch that makes it. It is read after
-                # that branch joins -- still before any later effect -- and
-                # left live only when no join can be found.
-                my ( @todo, %seen ) = ( ( $ref->{inputs} // [] )->@* );
-                my $made;
-                while ( defined( my $id = shift @todo ) ) {
-                    next if $seen{$id}++ || $id == $version->{id};
-                    my $m = $nodes->{$id} or next;
-                    if ( defined $m->{control_in} || ( $m->{op} // '' ) eq 'Phi' ) {
-                        $made = $m;
-                        last;
-                    }
-                    push @todo, ( $m->{inputs} // [] )->@*;
-                }
-                # ONLY WHEN THE VERSION COMES FIRST. A join already behind the
-                # version (`my $l = $x // []; push @$l, 9; scalar @$l` reads
-                # after the push) leaves the anchor at the version.
-                if ( $made && !$join ) {
-                    my $made_join;
-                    if ( ( $made->{op} // '' ) eq 'Phi' ) {
-                        $made_join = $nodes->{ ( $made->{fields} // {} )->{region} // -1 };
-                    }
-                    else {
-                        my ( @walk, %been ) = ( $made->{id} );
-                        while ( !$made_join && defined( my $id = shift @walk ) ) {
-                            next if $been{$id}++;
-                            for my $c ( ( $ctrl_next{$id} // [] )->@* ) {
-                                if ( ( $c->{op} // '' ) eq 'Region' ) { $made_join = $c; last }
-                                push @walk, $c->{id};
-                            }
-                        }
-                    }
-                    next unless $made_join && ( $made_join->{op} // '' ) eq 'Region';
-                    my ( @walk, %been ) = ( $made_join->{id} );
-                    my $version_after;
-                    while ( !$version_after && defined( my $id = shift @walk ) ) {
-                        next if $been{$id}++;
-                        $version_after = 1 if $id == $version->{id};
-                        push @walk, map { $_->{id} } ( $ctrl_next{$id} // [] )->@*;
-                    }
-                    $join = $made_join unless $version_after;
-                }
-            }
-            next if !$at_entry
-                && $used_in_arm->( ( $join // $version )->{id}, $n->{id} );
-
-            my ( @queue, %seen, $shadowed )
-                = ( $at_entry ? $start->{id} : ( $join // $version )->{id} );
-            while ( @queue && !$shadowed ) {
-                my $id = shift @queue;
-                next if $seen{$id}++;
-                for my $c ( ( $ctrl_next{$id} // [] )->@* ) {
-                    $shadowed = 1 if ( $c->{op} // '' )
-                        =~ /\A(?:Assign|EntryWrite|CellWrite|Delete|ElemRestore|Call)\z/;
-                    push @queue, $c->{id};
-                }
-            }
-            next unless $shadowed;
-
-            for my $l ( grep { !exists $bound{ $_->{id} } } @arm_lists ) {
-                $bound{ $l->{id} } = sprintf( '(%s)', join ', ', map {
-                    $_ == $n->{id} ? $self->_expr_uncached($_) : $self->_expr($_)
-                } ( $l->{inputs} // [] )->@* );
-            }
-            $bound{ $n->{id} } = sprintf( '%sstale%d', $dsig, $n->{id} );
-            if ( $at_entry ) {
-                my $var = $bound{ $n->{id} };
-                $save_prologue .= sprintf( "my %s = %s;\n",
-                    $var, $self->_expr_uncached( $n->{id} ) );
-                next;
-            }
-            $hoisted{ $bound{ $n->{id} } } //= $bound{ $n->{id} };
-            if ( $join ) {
-                push $after_region{ $join->{id} }->@*, $n;
-                push $stale_at_join{ $join->{id} }->@*, $n;
-                next;
-            }
-            push $after_effect{ $version->{id} }->@*, $n;
-        }
+        $list_deref_pass->(0);
 
         # DECLARED AT THE TOP, ASSIGNED AT THE VERSION. The assignment has to
         # land where the value is still correct, and that position can be inside

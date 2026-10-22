@@ -81,7 +81,10 @@ refuses(q(my @a=(3,4); my $s=0; for my $x (@a) { $x *= 2; $s += $x } print "@a $
     q(the same through a named iterator));
 refuses(q(my @a=(3,4); my $s=0; for (@a) { $_ = $_ * 2; $s += $_ } print "@a $s\n";),
     q(the same through a plain assignment));
-refuses(q(my @a=(3,4); my $s=0; for my $i (0..1) { my $v = $a[$i]; $a[$i] = 0; $s += $v } print "@a $s\n";),
+# A SAVED READ, NO ALIAS, is bound at the top of the body now: nothing it
+# reads is made in the iteration, and a whole-list read of @a after the loop
+# is no tie.
+round_trips(q(my @a=(3,4); my $s=0; for my $i (0..1) { my $v = $a[$i]; $a[$i] = 0; $s += $v } print "@a $s\n";),
     q(a saved element read carried past its store));
 # The guard must not fire on a read the store consumes and nothing reads after.
 round_trips(q(my @a=(3,4); for my $i (0..1) { $a[$i] = $a[$i] + 1 } print "@a\n";),

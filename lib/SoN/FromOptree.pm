@@ -10069,6 +10069,20 @@ class SoN::FromOptree 0.01 {
                                 qw(ArgsSource PadAccess EntryDef FieldAccess PostfixDeref);
                         if (($is_aggregate_value && !$names_storage)
                             || $is_list_builtin) {
+                            # A DEREFERENCE BOUND AS A NAMED AGGREGATE IS A
+                            # COPY, marked so: bound as the live one, `my %p =
+                            # %$h; $h->{a} = 2; $p{a}` read 2 for perl's 1
+                            # (chalk's Elaborate::_elaborate_if, `my %pre =
+                            # %$val_map`). The renderer snapshots it when a
+                            # store through the source follows.
+                            $only = $factory->make('PostfixDeref',
+                                inputs => [ $only->inputs->@* ],
+                                sigil  => $only->sigil,
+                                stamp  => $only->stamp,
+                                copy   => 1)
+                                if $only->isa('SoN::IR::Node::PostfixDeref')
+                                && ($only->sigil // '') =~ /\A[\@%]\z/
+                                && !$only->copy;
                             $sim->define($key, $only);
                             $store_observable->($only);
                             # IN SCALAR CONTEXT THE ASSIGNMENT IS A COUNT.

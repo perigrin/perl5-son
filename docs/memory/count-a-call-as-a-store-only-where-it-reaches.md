@@ -12,7 +12,7 @@ element of the container. Counting every user call for a container
 reached through a reference fixed it, but refused two working renders
 (a deref read whose uses sit outside the body).
 
-Also reverted: copying `my %p = %$h` instead of binding the deref
+Also reverted: copying `my %p = %$h` instead of binding the deref (since solved another way: a-copy-through-a-reference-is-marked-not-rebound)
 (right, and broke 7 files through readers that relied on the binding).
 Both are logged in followups with repros.
 

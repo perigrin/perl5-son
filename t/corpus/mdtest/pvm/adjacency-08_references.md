@@ -89,7 +89,7 @@ main::__PROGRAM__: {start: 0, returns: [48], nodes: [
   [ArrayLiteral, {sigil: "@", symbol: a}, [2, 3], ~, Array], # 4
   [Ref, ~, [4], ~, ArrayRef], # 5
   [MemStart], # 6
-  [PostfixDeref, {sigil: "@"}, [5, 6], ~, Array], # 7
+  [PostfixDeref, {copy: 1, sigil: "@"}, [5, 6], ~, Array], # 7
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 8
   [Constant, {const_type: code, value: main::twice}, ~, ~, Code], # 9
   [Ref, ~, [9], ~, CodeRef], # 10
@@ -107,7 +107,7 @@ main::__PROGRAM__: {start: 0, returns: [48], nodes: [
   [Constant, {const_type: string, value: k}, ~, ~, Str], # 22
   [HashLiteral, {sigil: "%", symbol: h}, [22, 19], ~, Hash], # 23
   [Ref, ~, [23], ~, HashRef], # 24
-  [PostfixDeref, {sigil: "%"}, [24, 6], ~, Hash], # 25
+  [PostfixDeref, {copy: 1, sigil: "%"}, [24, 6], ~, Hash], # 25
   [Subscript, {kind: hash}, [25, 22, 15], ~, Scalar], # 26
   [Coerce, {from_repr: Unknown, to_repr: Str}, [26], ~, Str], # 27
   [Constant, {const_type: code, value: main::one}, ~, ~, Code], # 28
@@ -130,7 +130,9 @@ main::__PROGRAM__: {start: 0, returns: [48], nodes: [
   [Coerce, {from_repr: Unknown, to_repr: Str}, [15], ~, Str], # 45
   [Print, ~, [33, 18, 35, 18, 40, 18, 42, 18, 44, 18, 45, 32], 15, Scalar], # 46
   [Print, ~, [17, 18, 21, 18, 17, 18, 27, 18, 31, 32], 46, Scalar], # 47
-  [Return, {implicit: true}, [1], 47]]} # 48
+  [Return, {implicit: true}, [1], 47], # 48
+  [PostfixDeref, {sigil: "@"}, [5, 6], ~, Array], # 49
+  [PostfixDeref, {sigil: "%"}, [24, 6], ~, Hash]]} # 50
 main::one: {start: 0, returns: [5], nodes: [
   [Start], # 0
   [ArgsSource, ~, ~, ~, Array], # 1

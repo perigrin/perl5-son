@@ -1166,7 +1166,7 @@ main::branch: {start: 0, returns: [17], nodes: [
   [Constant, {const_type: string, value: ","}, ~, ~, Str], # 1
   [PadAccess, {sigil: $, symbol: src}, ~, ~, Unknown], # 2
   [MemStart], # 3
-  [PostfixDeref, {sigil: "%"}, [2, 3], ~, Hash], # 4
+  [PostfixDeref, {copy: 1, sigil: "%"}, [2, 3], ~, Hash], # 4
   [HashLiteral, {sigil: "%", symbol: then}, [4], ~, Hash], # 5
   [Ref, ~, [5], ~, HashRef], # 6
   [Call, {dispatch_kind: direct, name: main::add_key, param_names: [], want: void}, [6], 0, Int], # 7
@@ -1181,7 +1181,8 @@ main::branch: {start: 0, returns: [17], nodes: [
   [Concat, ~, [12, 15], ~, Str], # 16
   [Return, ~, [16], 7], # 17
   [ArgsSource, ~, ~, ~, Array], # 18
-  [Assign, {targets: 1}, [2, 18], ~, List]]} # 19
+  [Assign, {targets: 1}, [2, 18], ~, List], # 19
+  [PostfixDeref, {sigil: "%"}, [2, 3], ~, Hash]]} # 20
 ```
 
 ## A lexical declared bare, set in a branch, passed to a sub
@@ -12678,7 +12679,7 @@ main::f: {start: 0, returns: [21], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Loop, {bound: entry}, [0], 0], # 2
-  [Phi, {region: 2}, [1, 77], ~, Unknown], # 3
+  [Phi, {region: 2}, [1, 79], ~, Unknown], # 3
   [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
   [Constant, {const_type: string, value: "|"}, ~, ~, Str], # 5
   [Concat, ~, [4, 5], ~, Str], # 6
@@ -12686,7 +12687,7 @@ main::f: {start: 0, returns: [21], nodes: [
   [EntryDef, {package: main, sigil: $, symbol: "\""}, [7], ~, Scalar], # 8
   [Coerce, {from_repr: Scalar, to_repr: Str}, [8], ~, Str], # 9
   [PadAccess, {sigil: "@", symbol: params}, ~, ~, Unknown], # 10
-  [Phi, {region: 2}, [10, 80], ~, Unknown], # 11
+  [Phi, {region: 2}, [10, 82], ~, Unknown], # 11
   [Call, {dispatch_kind: builtin, name: join, param_names: []}, [9, 11], ~, Str], # 12
   [Concat, ~, [6, 12], ~, Str], # 13
   [Concat, ~, [13, 5], ~, Str], # 14
@@ -12731,7 +12732,7 @@ main::f: {start: 0, returns: [21], nodes: [
   [Constant, {const_type: string, value: ARRAY}, ~, ~, Str], # 53
   [StrEq, ~, [52, 53], ~, Boolean], # 54
   [Count, ~, [11, 7], ~, Int], # 55
-  [PostfixDeref, {sigil: "@"}, [47, 7], ~, Array], # 56
+  [PostfixDeref, {copy: 1, sigil: "@"}, [47, 7], ~, Array], # 56
   [TernaryExpr, ~, [55, 56, 16], ~, Array], # 57
   [TernaryExpr, ~, [54, 57, 16], ~, Array], # 58
   [RefType, ~, [41], ~, Str], # 59
@@ -12750,12 +12751,14 @@ main::f: {start: 0, returns: [21], nodes: [
   [Region, {head: 2}, [69, 71]], # 72
   [Phi, {predecessors: [27, 71], region: 72}, [70, 16], ~, Array], # 73
   [PostfixDeref, {sigil: "@"}, [45, 7], ~, Array], # 74
-  [Phi, {predecessors: [62, 68], region: 69}, [51, 3], ~, Unknown], # 75
-  [TernaryExpr, ~, [55, 11, 74], ~, Array], # 76
-  [Phi, {predecessors: [27, 71], region: 72}, [75, 3], ~, Unknown], # 77
-  [TernaryExpr, ~, [54, 76, 11], ~, Array], # 78
-  [Phi, {predecessors: [62, 68], region: 69}, [11, 78], ~, Array], # 79
-  [Phi, {predecessors: [27, 71], region: 72}, [79, 11], ~, Array]]} # 80
+  [PostfixDeref, {copy: 1, sigil: "@"}, [45, 7], ~, Array], # 75
+  [PostfixDeref, {sigil: "@"}, [47, 7], ~, Array], # 76
+  [Phi, {predecessors: [62, 68], region: 69}, [51, 3], ~, Unknown], # 77
+  [TernaryExpr, ~, [55, 11, 75], ~, Array], # 78
+  [Phi, {predecessors: [27, 71], region: 72}, [77, 3], ~, Unknown], # 79
+  [TernaryExpr, ~, [54, 78, 11], ~, Array], # 80
+  [Phi, {predecessors: [62, 68], region: 69}, [11, 80], ~, Array], # 81
+  [Phi, {predecessors: [27, 71], region: 72}, [81, 11], ~, Array]]} # 82
 ```
 
 ## A push onto an array merged at a join
@@ -13233,7 +13236,7 @@ main::f: {start: 0, returns: [36], nodes: [
   [Call, {dispatch_kind: direct, name: main::inputs, param_names: [], want: scalar}, [8], 7, Scalar], # 9
   [EntryDef, {package: main, sigil: $, symbol: "\""}, [9], ~, Scalar], # 10
   [Coerce, {from_repr: Scalar, to_repr: Str}, [10], ~, Str], # 11
-  [PostfixDeref, {sigil: "@"}, [9, 9], ~, Array], # 12
+  [PostfixDeref, {copy: 1, sigil: "@"}, [9, 9], ~, Array], # 12
   [ArrayLiteral, ~, ~, ~, Array], # 13
   [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 14
   [Constant, {const_type: string, value: A}, ~, ~, Str], # 15
@@ -13245,7 +13248,7 @@ main::f: {start: 0, returns: [36], nodes: [
   [If, ~, [18, 20], 18], # 21
   [Proj, {index: 0}, [21]], # 22
   [Loop, {bound: entry}, [22], 22], # 23
-  [Phi, {region: 23}, [13, 49], ~, Array], # 24
+  [Phi, {region: 23}, [13, 50], ~, Array], # 24
   [Slice, {kind: array}, [24, 12], ~, List], # 25
   [ArrayLiteral, {sigil: "@", symbol: e}, [25], ~, Array], # 26
   [Proj, {index: 0}, [17]], # 27
@@ -13258,21 +13261,22 @@ main::f: {start: 0, returns: [36], nodes: [
   [Region, ~, [33, 30]], # 34
   [Phi, {predecessors: [33, 30], region: 34}, [1, 32], ~, Str], # 35
   [Return, ~, [35], 34], # 36
-  [Count, ~, [12, 9], ~, Int], # 37
-  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 38
-  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 39
-  [Subtract, ~, [37, 39], ~, Int], # 40
-  [Range, ~, [38, 40], ~, List], # 41
-  [Count, ~, [41, 9], ~, Int], # 42
-  [Phi, {region: 23}, [38, 50], ~, Int], # 43
-  [Subscript, {kind: array}, [41, 43, 9], ~, Scalar], # 44
-  [NumGt, ~, [42, 43], 23, Boolean], # 45
-  [Coerce, {from_repr: Scalar, to_repr: Num}, [44], ~, Num], # 46
-  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 47
-  [Modulo, ~, [46, 47], ~, Int], # 48
-  [ListAppend, {collector: grep}, [24, 44, 48], ~, Array], # 49
-  [Add, ~, [43, 39], ~, Int], # 50
-  [Proj, {index: 0}, [23]]]} # 51
+  [PostfixDeref, {sigil: "@"}, [9, 9], ~, Array], # 37
+  [Count, ~, [12, 9], ~, Int], # 38
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 39
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 40
+  [Subtract, ~, [38, 40], ~, Int], # 41
+  [Range, ~, [39, 41], ~, List], # 42
+  [Count, ~, [42, 9], ~, Int], # 43
+  [Phi, {region: 23}, [39, 51], ~, Int], # 44
+  [Subscript, {kind: array}, [42, 44, 9], ~, Scalar], # 45
+  [NumGt, ~, [43, 44], 23, Boolean], # 46
+  [Coerce, {from_repr: Scalar, to_repr: Num}, [45], ~, Num], # 47
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 48
+  [Modulo, ~, [47, 48], ~, Int], # 49
+  [ListAppend, {collector: grep}, [24, 45, 49], ~, Array], # 50
+  [Add, ~, [44, 40], ~, Int], # 51
+  [Proj, {index: 0}, [23]]]} # 52
 main::inputs: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [ArgsSource, ~, ~, ~, Array], # 1
@@ -14484,4 +14488,177 @@ main::w: {start: 0, returns: [10], nodes: [
   [Constant, {const_type: string, value: z}, ~, ~, Str], # 8
   [Assign, ~, [7, 8], 0, Str], # 9
   [Return, {implicit: true}, [1], 9]]} # 10
+```
+
+## A hash copied through a reference, then stored through it
+
+The copy holds the values as they were; a store through the source reference after it is not seen.
+
+```perl
+sub f { my ($h) = @_; my %p = %$h; $h->{a} = 2; return "$p{a} $h->{a}" } print f({a=>1}), "\n";
+```
+
+```behavior
+parses: yes
+```
+
+```output
+1 2
+```
+
+```ir
+main::__PROGRAM__: {start: 0, returns: [9], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Constant, {const_type: string, value: a}, ~, ~, Str], # 2
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 3
+  [HashLiteral, ~, [2, 3], 0, HashRef], # 4
+  [Call, {dispatch_kind: direct, name: main::f, param_names: [], want: list}, [4], 4, Str], # 5
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [5], ~, Str], # 6
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 7
+  [Print, ~, [6, 7], 5, Scalar], # 8
+  [Return, {implicit: true}, [1], 8]]} # 9
+main::f: {start: 0, returns: [15], nodes: [
+  [Start], # 0
+  [PadAccess, {sigil: $, symbol: h}, ~, ~, Unknown], # 1
+  [MemStart], # 2
+  [PostfixDeref, {copy: 1, sigil: "%"}, [1, 2], ~, Hash], # 3
+  [Constant, {const_type: string, value: a}, ~, ~, Str], # 4
+  [Subscript, {kind: hash}, [1, 4], ~, Scalar], # 5
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 6
+  [Assign, ~, [5, 6], 0, Int], # 7
+  [Subscript, {kind: hash}, [3, 4, 7], ~, Int], # 8
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [8], ~, Str], # 9
+  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 10
+  [Concat, ~, [9, 10], ~, Str], # 11
+  [Subscript, {kind: hash}, [1, 4, 7], ~, Int], # 12
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [12], ~, Str], # 13
+  [Concat, ~, [11, 13], ~, Str], # 14
+  [Return, ~, [14], 7], # 15
+  [ArgsSource, ~, ~, ~, Array], # 16
+  [Assign, {targets: 1}, [1, 16], ~, List], # 17
+  [PostfixDeref, {sigil: "%"}, [1, 2], ~, Hash]]} # 18
+```
+
+## An array copied through a reference, then stored through it
+
+The same for an array: the copy keeps the element the store replaced.
+
+```perl
+sub f { my ($h) = @_; my @p = @$h; $h->[0] = 2; return "$p[0] $h->[0]" } print f([1]), "\n";
+```
+
+```behavior
+parses: yes
+```
+
+```output
+1 2
+```
+
+```ir
+main::__PROGRAM__: {start: 0, returns: [8], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
+  [ArrayLiteral, ~, [2], 0, ArrayRef], # 3
+  [Call, {dispatch_kind: direct, name: main::f, param_names: [], want: list}, [3], 3, Str], # 4
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [4], ~, Str], # 5
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 6
+  [Print, ~, [5, 6], 4, Scalar], # 7
+  [Return, {implicit: true}, [1], 7]]} # 8
+main::f: {start: 0, returns: [15], nodes: [
+  [Start], # 0
+  [PadAccess, {sigil: $, symbol: h}, ~, ~, Unknown], # 1
+  [MemStart], # 2
+  [PostfixDeref, {copy: 1, sigil: "@"}, [1, 2], ~, Array], # 3
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 4
+  [Subscript, {kind: array}, [1, 4], ~, Scalar], # 5
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 6
+  [Assign, ~, [5, 6], 0, Int], # 7
+  [Subscript, {kind: array}, [3, 4, 7], ~, Int], # 8
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [8], ~, Str], # 9
+  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 10
+  [Concat, ~, [9, 10], ~, Str], # 11
+  [Subscript, {kind: array}, [1, 4, 7], ~, Int], # 12
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [12], ~, Str], # 13
+  [Concat, ~, [11, 13], ~, Str], # 14
+  [Return, ~, [14], 7], # 15
+  [ArgsSource, ~, ~, ~, Array], # 16
+  [Assign, {targets: 1}, [1, 16], ~, List], # 17
+  [PostfixDeref, {sigil: "@"}, [1, 2], ~, Array]]} # 18
+```
+
+## A copy read in a loop that stores through its source
+
+The copy is taken once, before the loop; the loop stores through the source and keeps reading the copy.
+
+```perl
+sub f { my ($h) = @_; my %p = %$h; for my $k (sort keys %p) { my $v = $p{$k}; $h->{$k} = $v + 10; print "$v $p{$k};" } return "" } print f({a=>1, b=>2}), "\n";
+```
+
+```behavior
+parses: yes
+```
+
+```output
+1 1;2 2;
+```
+
+```ir
+main::__PROGRAM__: {start: 0, returns: [11], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Constant, {const_type: string, value: a}, ~, ~, Str], # 2
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 3
+  [Constant, {const_type: string, value: b}, ~, ~, Str], # 4
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 5
+  [HashLiteral, ~, [2, 3, 4, 5], 0, HashRef], # 6
+  [Call, {dispatch_kind: direct, name: main::f, param_names: [], want: list}, [6], 6, Str], # 7
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
+  [Print, ~, [8, 9], 7, Scalar], # 10
+  [Return, {implicit: true}, [1], 10]]} # 11
+main::f: {start: 0, returns: [5], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: ""}, ~, ~, Str], # 1
+  [Loop, {bound: entry}, [0], 0], # 2
+  [Proj, {index: 1}, [2]], # 3
+  [Region, {head: 2}, [3]], # 4
+  [Return, ~, [1], 4], # 5
+  [PadAccess, {sigil: $, symbol: h}, ~, ~, Unknown], # 6
+  [MemStart], # 7
+  [PostfixDeref, {copy: 1, sigil: "%"}, [6, 7], ~, Hash], # 8
+  [Call, {dispatch_kind: builtin, memory_input: true, name: keys, param_names: [], want: list}, [8, 7], ~, List], # 9
+  [Call, {dispatch_kind: builtin, memory_input: true, name: sort, param_names: [], sort_cmp: string, sort_order: ascending}, [9, 7], ~, List], # 10
+  [ArrayLiteral, ~, [10], ~, Array], # 11
+  [Phi, {memory: true, region: 2}, [7, 25], ~, Unknown], # 12
+  [Count, ~, [11, 12], ~, Int], # 13
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 14
+  [Phi, {region: 2}, [14, 27], ~, Int], # 15
+  [NumGt, ~, [13, 15], 2, Boolean], # 16
+  [Proj, {index: 0}, [2]], # 17
+  [Phi, {memory: true, region: 4}, [12], ~, Unknown], # 18
+  [Subscript, {kind: array}, [11, 15, 12], ~, Scalar], # 19
+  [Subscript, {kind: hash}, [6, 19], ~, Scalar], # 20
+  [Subscript, {kind: hash}, [8, 19, 12], ~, Scalar], # 21
+  [Coerce, {from_repr: Scalar, to_repr: Num}, [21], ~, Num], # 22
+  [Constant, {const_type: integer, value: "10"}, ~, ~, Int], # 23
+  [Add, ~, [22, 23], ~, Num], # 24
+  [Assign, ~, [20, 24], 17, Num], # 25
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 26
+  [Add, ~, [15, 26], ~, Int], # 27
+  [Subscript, {kind: hash}, [8, 19, 25], ~, Scalar], # 28
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [21], ~, Str], # 29
+  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 30
+  [Concat, ~, [29, 30], ~, Str], # 31
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [28], ~, Str], # 32
+  [Concat, ~, [31, 32], ~, Str], # 33
+  [Constant, {const_type: string, value: ";"}, ~, ~, Str], # 34
+  [Concat, ~, [33, 34], ~, Str], # 35
+  [Print, ~, [35], 25, Scalar], # 36
+  [Count, ~, [11, 7], ~, Int], # 37
+  [PostfixDeref, {sigil: "%"}, [6, 7], ~, Hash], # 38
+  [ArgsSource, ~, ~, ~, Array], # 39
+  [Assign, {targets: 1}, [6, 39], ~, List]]} # 40
 ```
