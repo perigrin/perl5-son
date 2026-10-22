@@ -233,7 +233,7 @@ SKIP: {
         # THE DEFERRED SET IS A FACT OF THE PINNED COMMIT: the tests that read
         # lib/ as source. A change in the classifier would move files in or
         # out of the measured set silently; this makes it loud.
-        is $n->{DEFERRED}, 59, 'the 59 tests that read lib/ as source are deferred'
+        is $n->{DEFERRED}, 65, 'the 65 tests that read lib/ as source are deferred'
             or diag $out;
 
         my $matching = $n->{SAME} // 0;
