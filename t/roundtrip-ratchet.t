@@ -60,7 +60,10 @@ my %FLOOR = (
     # as source are DEFERRED to chalk's own lowering (perigrin, 2026-10-09),
     # so 488 are measured; files that time out against the ORIGINAL are SLOW
     # and left out. Measured 488 of 488 at eddfaa3, twice, 2026-10-09.
-    chalk_gate3_matching => 488,
+    # 65 DEFERRED from 2026-10-22 (perigrin): six more name lib/Chalk paths
+    # unquoted -- in qw() lists or on the repo root -- and grep that text,
+    # which the regex needing a quote had missed; so 482 are measured.
+    chalk_gate3_matching => 482,
 );
 
 # A CEILING, NOT A FLOOR: graphs B::SoN skipped in chalk's lib/. A module can

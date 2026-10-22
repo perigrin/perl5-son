@@ -1660,12 +1660,13 @@ main::corpus_case: {start: 0, returns: [10], nodes: [
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
   [HashLiteral, ~, [1, 2], 0, HashRef], # 3
   [MemStart], # 4
-  [PostfixDeref, {sigil: "%"}, [3, 4], ~, Hash], # 5
+  [PostfixDeref, {copy: 1, sigil: "%"}, [3, 4], ~, Hash], # 5
   [Subscript, {kind: hash}, [5, 1, 4], ~, Scalar], # 6
   [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
   [Print, ~, [7, 8], 3, Scalar], # 9
-  [Return, {implicit: true}, [9], 9]]} # 10
+  [Return, {implicit: true}, [9], 9], # 10
+  [PostfixDeref, {sigil: "%"}, [3, 4], ~, Hash]]} # 11
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1

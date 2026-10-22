@@ -8,6 +8,8 @@ use File::Path qw(make_path);
 use File::Basename qw(dirname);
 use File::Copy qw(copy);
 use Getopt::Long;
+use lib "$FindBin::Bin/lib";
+use ChalkGate3 qw(reads_source_text);
 
 # THE SAME PINNED COMMIT as tools/chalk-lib-roundtrip.pl, read the same way:
 # `git archive` from a clone, so chalk's working tree never enters.
@@ -59,12 +61,12 @@ my @tests = sort split /\n/, `cd '$orig' && find t -name '*.t'`;
 # only our check that the IR is right, and a check on that text's shape
 # validates nothing. perigrin (2026-10-09): these wait for chalk to lower
 # its own modules to LLVM IR, where their output is the thing compared. A
-# test reads the source when it names a lib/Chalk module path or walks lib/.
+# test reads the source when it names a lib/Chalk module path or walks lib/
+# (ChalkGate3::reads_source_text says how).
 sub reads_source ($t) {
     open my $fh, '<', "$orig/$t" or return 0;
     local $/;
-    my $src = <$fh>;
-    return $src =~ m{['"]lib/Chalk[A-Za-z0-9/_:]*\.pm|lib/Chalk/['"]|File::Find|glob\(.*lib} ? 1 : 0;
+    return reads_source_text(scalar <$fh>);
 }
 my %deferred = map { $_ => 1 } grep { reads_source($_) } @tests;
 

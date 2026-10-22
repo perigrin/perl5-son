@@ -563,12 +563,13 @@ main::corpus_case: {start: 0, returns: [12], nodes: [
   [Constant, {const_type: integer, value: "4"}, ~, ~, Int], # 4
   [ArrayLiteral, ~, [1, 2, 3, 4], ~, Array], # 5
   [MemStart], # 6
-  [PostfixDeref, {sigil: "@"}, [5, 6], ~, Array], # 7
+  [PostfixDeref, {copy: 1, sigil: "@"}, [5, 6], ~, Array], # 7
   [Count, ~, [7, 6], ~, Int], # 8
   [Coerce, {from_repr: Int, to_repr: Str}, [8], ~, Str], # 9
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
   [Print, ~, [9, 10], 0, Scalar], # 11
-  [Return, {implicit: true}, [11], 11]]} # 12
+  [Return, {implicit: true}, [11], 11], # 12
+  [PostfixDeref, {sigil: "@"}, [5, 6], ~, Array]]} # 13
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
@@ -845,12 +846,13 @@ main::corpus_case: {start: 0, returns: [11], nodes: [
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 3
   [ArrayLiteral, ~, [1, 2, 3], 0, ArrayRef], # 4
   [MemStart], # 5
-  [PostfixDeref, {sigil: "@"}, [4, 5], ~, Array], # 6
+  [PostfixDeref, {copy: 1, sigil: "@"}, [4, 5], ~, Array], # 6
   [Count, ~, [6, 5], ~, Int], # 7
   [Coerce, {from_repr: Int, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
   [Print, ~, [8, 9], 4, Scalar], # 10
-  [Return, {implicit: true}, [10], 10]]} # 11
+  [Return, {implicit: true}, [10], 10], # 11
+  [PostfixDeref, {sigil: "@"}, [4, 5], ~, Array]]} # 12
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
@@ -1021,9 +1023,10 @@ main::corpus_case: {start: 0, returns: [9], nodes: [
   [ArrayLiteral, {sigil: "@", symbol: a}, [1, 2, 3], ~, Array], # 4
   [Ref, ~, [4], ~, ArrayRef], # 5
   [MemStart], # 6
-  [PostfixDeref, {sigil: "@"}, [5, 6], ~, Array], # 7
+  [PostfixDeref, {copy: 1, sigil: "@"}, [5, 6], ~, Array], # 7
   [Count, ~, [7, 6], ~, Int], # 8
-  [Return, {implicit: true}, [8], 0]]} # 9
+  [Return, {implicit: true}, [8], 0], # 9
+  [PostfixDeref, {sigil: "@"}, [5, 6], ~, Array]]} # 10
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
