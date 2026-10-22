@@ -127,4 +127,12 @@ sub f { my @l; for my $k (sort keys vars()->%*) { my $info = vars()->{$k}; my $s
 print f(), "\n";
 SRC
 
+# A CALL HANDED `\@a` writes its elements: `$a[$i + 1]`, read before
+# `w(\@a, ...)` and used after it, printed the call's `z` (`zz` for perl's
+# `bc`). Nothing it reads is made in the iteration, so it is read at the top
+# of the body -- an element of a named array neither dies nor autovivifies.
+round_trips(<<'SRC', 'an element of a named array read before a call handed a reference to it');
+sub w { $_[0][$_[1]] = "z"; 1 } sub f { my @a = qw(a b c); my $s = ""; my $i = 0; while ($i < 2) { my $v = $a[$i + 1]; if ($v ne "q") { w(\@a, $i + 1) } $s .= $v; $i++ } "$s @a" } print f(), "\n";
+SRC
+
 done_testing;

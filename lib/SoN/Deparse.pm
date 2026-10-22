@@ -2456,11 +2456,12 @@ class SoN::Deparse 0.01 {
                     }
                     return 1;
                 };
-                # A CONTAINER REACHED BY REFERENCE -- an element of an element,
-                # a scalar holding one, an aggregate shared or referenced -- is
-                # written by any sub called, through whatever it was handed:
-                # `$s = $info->{n}; emit($info)` spelled `$info->{n}` after the
-                # call (chalk's Perl::Target::C::_generate_c_files).
+                # A CALL HANDED THE CONTAINER ITSELF -- the reference, `\@a`, the
+                # flattened array -- may write any element through it: `$s =
+                # $info->{n}; emit($info)` spelled `$info->{n}` after the call,
+                # and printed what the call stored. An element passed is the
+                # $targets rule's; a call merely reaching the container some
+                # other way is not counted, as before.
                 # NOR THE ELEMENT A FOREACH OR GREP READS BY ITS COUNTER: that
                 # is perl's alias, and a call writing it through `$_` is seen
                 # where it is used (`grep { ok1() } @$x`).
@@ -2473,27 +2474,20 @@ class SoN::Deparse 0.01 {
                             grep { ( $_->{control_in} // -1 ) == $loop->{id} }
                             $self->_nodes_in_order );
                 my $cont = $nodes->{ $in[0] } // {};
-                my $by_ref = !$iter_elem && ( ( $cont->{fields} // {} )->{shared}
-                    || !( ( ( $cont->{op} // '' ) =~ /\A(?:ArrayLiteral|HashLiteral|Phi)\z/ )
-                          || ( ( $cont->{op} // '' ) eq 'PadAccess'
-                               && ( ( $cont->{fields} // {} )->{sigil} // '' ) =~ /\A[\@%]\z/ ) )
-                    || grep { ( $_->{op} // '' ) eq 'Ref' } ( $consumers{ $in[0] } // [] )->@* );
-                # NOT A CALL PASSED THE READ ITSELF: that is perl's alias, as
-                # for $targets (`$x->[$i]->kind` reads the element it calls).
-                my $passed_read = sub ($s) {
+                my $passes_container = sub ($s) {
                     my ( @q, %qs ) = ( $s->{inputs} // [] )->@*;
                     while ( defined( my $id = shift @q ) ) {
                         next if $qs{$id}++;
-                        return 1 if $id == $n->{id};
+                        return 1 if $id == $in[0];
                         my $x = $nodes->{$id} or next;
-                        push @q, ( $x->{inputs} // [] )->@* unless defined $x->{control_in};
+                        next if defined $x->{control_in}
+                            || ( $x->{op} // '' ) =~ /\A(?:Subscript|PostfixDeref)\z/;
+                        push @q, ( $x->{inputs} // [] )->@*;
                     }
                     0;
                 };
-                my @same = grep { ( $by_ref && ( $_->{op} // '' ) eq 'Call'
-                                    && ( ( $_->{fields} // {} )->{dispatch_kind} // '' ) ne 'builtin'
-                                    && !$passed_read->($_) )
-                    || grep {
+                my %container_call;
+                my @same = grep { ( grep {
                     my $t = $_;
                     my $tk = ( $t->{inputs} // [] )->[1] // -1;
                     ( $t->{op} // '' ) eq 'Subscript'
@@ -2502,7 +2496,11 @@ class SoN::Deparse 0.01 {
                               && $plain_hash->($in[0])
                               && defined $str_key->($in[1]) && defined $str_key->($tk)
                               && $str_key->($tk) ne $str_key->($in[1]) )
-                } $targets->($_, $n->{id}) } @later;
+                } $targets->($_, $n->{id}) )
+                    || ( !$iter_elem && ( $_->{op} // '' ) eq 'Call'
+                         && ( ( $_->{fields} // {} )->{dispatch_kind} // '' ) ne 'builtin'
+                         && $passes_container->($_)
+                         && ++$container_call{ $_->{id} } ) } @later;
                 next unless @same;
 
                 # Where the value lands: a loop Phi (the back edge, evaluated
@@ -2611,7 +2609,17 @@ class SoN::Deparse 0.01 {
                 # is no earlier than its version and no arm stands between:
                 # perl reads it there, unguarded, so a dereference that dies
                 # dies on perl's path too.
-                if ( !$top && !( grep { !$seen{$_} } @roots )
+                # REACHED THROUGH ARMS AND NESTED LOOPS: a use in a grep's body
+                # inside this one comes after the anchor too.
+                my $reach = sub ($a) {
+                    my ( @rq, %rs ) = ( $a );
+                    while ( defined( my $id = shift @rq ) ) {
+                        next if $rs{$id}++;
+                        push @rq, map { $_->{id} } ( $arm_next{$id} // [] )->@*;
+                    }
+                    \%rs;
+                };
+                if ( !$top && !( grep { !$reach->( $body->{id} )->{$_} } @roots )
                      && !( $alias && grep { !$writeback->($_) } @stores ) ) {
                     my ( @oq, %os, @made ) = @in[ 0 .. $#in - 1 ];
                     while ( defined( my $id = shift @oq ) ) {
@@ -2624,14 +2632,17 @@ class SoN::Deparse 0.01 {
                         push @oq, ( $o->{inputs} // [] )->@* unless ( $o->{op} // '' ) eq 'Phi';
                     }
                     push @made, $from if defined $from && !@made;
-                    my $reach = sub ($a) {
-                        my ( @rq, %rs ) = ( $a );
-                        while ( defined( my $id = shift @rq ) ) {
-                            next if $rs{$id}++;
-                            push @rq, map { $_->{id} } ( $ctrl_next{$id} // [] )->@*;
-                        }
-                        \%rs;
-                    };
+                    # NOTHING MADE IN THE ITERATION, over a named lexical
+                    # aggregate: read at the top of the body. An element of
+                    # one neither dies nor autovivifies, so no guard need
+                    # come first (`$chars[$k+1]` before `esc(\@chars, ...)`).
+                    if ( !@made && !( $cont->{fields} // {} )->{shared}
+                         && ( ( ( $cont->{op} // '' ) eq 'PadAccess'
+                                && ( ( $cont->{fields} // {} )->{sigil} // '' ) =~ /\A[\@%]\z/ )
+                              || ( ( $cont->{op} // '' ) =~ /\A(?:Array|Hash)Literal\z/
+                                   && defined( ( $cont->{fields} // {} )->{symbol} ) ) ) ) {
+                        $top = 1;
+                    }
                     my ($last) = grep { my $m = $_; !grep { !$reach->($_)->{$m} } @made } @made;
                     # ITS VERSION COMES BEFORE THE STORES, so perl read it
                     # before them too: an `if` after the first is no guard of
@@ -2654,6 +2665,13 @@ class SoN::Deparse 0.01 {
                         $from = $last;
                     }
                 }
+                # WITH NO ANCHOR, A CALL HANDED THE CONTAINER is left as it was
+                # before the rule existed: such a call more often changes what
+                # the element refers to than the element (`$self->{var_table}`
+                # read beside `$self->_emit`), and refusing every one took a
+                # dozen of chalk's modules out. Only a store or an element
+                # passed refuses.
+                next if !$top && !grep { !$container_call{ $_->{id} } } @same;
                 die "GAP: an element read in a loop is spelled after a store"
                   . " to its aggregate in the same iteration\n" unless $top;
                 $bound{ $n->{id} } = sprintf( '$stale%d', $n->{id} );

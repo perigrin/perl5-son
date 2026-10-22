@@ -14406,3 +14406,82 @@ main::vars: {start: 0, returns: [3], nodes: [
   [Ref, ~, [1], ~, Unknown], # 2
   [Return, {implicit: true}, [2], 0]]} # 3
 ```
+
+## An element of a named array read before a call handed a reference to it
+
+The call writes the array through the reference; the element read before the call keeps the value it read.
+
+```perl
+sub w { $_[0][$_[1]] = "z"; 1 } sub f { my @a = qw(a b c); my $s = ""; my $i = 0; while ($i < 2) { my $v = $a[$i + 1]; if ($v ne "q") { w(\@a, $i + 1) } $s .= $v; $i++ } "$s @a" } print f(), "\n";
+```
+
+```behavior
+parses: yes
+```
+
+```output
+bc a z z
+```
+
+```ir
+main::__PROGRAM__: {start: 0, returns: [6], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Call, {dispatch_kind: direct, name: main::f, param_names: [], want: list}, ~, 0, Str], # 2
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [2], ~, Str], # 3
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
+  [Print, ~, [3, 4], 2, Scalar], # 5
+  [Return, {implicit: true}, [1], 5]]} # 6
+main::f: {start: 0, returns: [20], nodes: [
+  [Start], # 0
+  [Constant, {const_type: string, value: ""}, ~, ~, Str], # 1
+  [Loop, {bound: each}, [0], 0], # 2
+  [Phi, {region: 2}, [1, 34], ~, Str], # 3
+  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 4
+  [Concat, ~, [3, 4], ~, Str], # 5
+  [MemStart], # 6
+  [Phi, {memory: true, region: 2}, [6, 38], ~, Unknown], # 7
+  [Proj, {index: 1}, [2]], # 8
+  [Region, {head: 2}, [8]], # 9
+  [Phi, {memory: true, region: 9}, [7], ~, Unknown], # 10
+  [EntryDef, {package: main, sigil: $, symbol: "\""}, [10], ~, Scalar], # 11
+  [Coerce, {from_repr: Scalar, to_repr: Str}, [11], ~, Str], # 12
+  [Constant, {const_type: string, value: a}, ~, ~, Str], # 13
+  [Constant, {const_type: string, value: b}, ~, ~, Str], # 14
+  [Constant, {const_type: string, value: c}, ~, ~, Str], # 15
+  [ArrayLiteral, {sigil: "@", symbol: a}, [13, 14, 15], ~, Array], # 16
+  [PostfixDeref, {sigil: "@"}, [16, 10], ~, Array], # 17
+  [Call, {dispatch_kind: builtin, memory_input: true, name: join, param_names: []}, [12, 17, 10], ~, Str], # 18
+  [Concat, ~, [5, 18], ~, Str], # 19
+  [Return, {implicit: true}, [19], 9], # 20
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 21
+  [Phi, {region: 2}, [21, 27], ~, Int], # 22
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 23
+  [NumLt, ~, [22, 23], 2, Boolean], # 24
+  [Proj, {index: 0}, [2]], # 25
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 26
+  [Add, ~, [22, 26], ~, Int], # 27
+  [Subscript, {kind: array}, [16, 27, 7], ~, Str], # 28
+  [Constant, {const_type: string, value: q}, ~, ~, Str], # 29
+  [StrNe, ~, [28, 29], ~, Boolean], # 30
+  [If, ~, [25, 30], 25], # 31
+  [Proj, {index: 0}, [31]], # 32
+  [Proj, {index: 1}, [31]], # 33
+  [Concat, ~, [3, 28], ~, Str], # 34
+  [Ref, ~, [16], ~, ArrayRef], # 35
+  [Call, {dispatch_kind: direct, name: main::w, param_names: [], want: void}, [35, 27], 32, Int], # 36
+  [Region, {head: 31}, [36, 33]], # 37
+  [Phi, {memory: true, predecessors: [32, 33], region: 37}, [36, 7], ~, Unknown]]} # 38
+main::w: {start: 0, returns: [10], nodes: [
+  [Start], # 0
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
+  [ArgsSource, ~, ~, ~, Array], # 2
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 3
+  [Subscript, {kind: array}, [2, 3], ~, Scalar], # 4
+  [MemStart], # 5
+  [Subscript, {kind: array}, [2, 1, 5], ~, Scalar], # 6
+  [Subscript, {kind: array}, [4, 6], ~, Scalar], # 7
+  [Constant, {const_type: string, value: z}, ~, ~, Str], # 8
+  [Assign, ~, [7, 8], 0, Str], # 9
+  [Return, {implicit: true}, [1], 9]]} # 10
+```

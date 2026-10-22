@@ -79,4 +79,4 @@
 - [A call result is no reference](a-call-result-is-no-reference.md) — "mutated" `@r = sort ...` read as `(sort(@x))->@*`; guard the one consumer, not the ten markers
 - [A source reader hides in qw](a-source-reader-hides-in-qw.md) — gate3 regex needs a quote; 6 tests list `lib/Chalk/*.pm` in qw and read source; widening changes the 488, perigrin's call
 - [Count through an element anchors at its root](count-through-an-element-anchors-at-its-root.md) — `scalar @{$self->{s}}` before push spelled after; walk Subscripts to their variable; also `use bytes` length
-- [A call writes through what it is handed](a-call-writes-through-what-it-is-handed.md) — `$s = $info->{n}; emit($info)` silently read after the call; reference-reached containers count every user call; version pins the read before a later `if`
+- [A call writes through what it is handed](a-call-writes-through-what-it-is-handed.md) — `$s = $info->{n}; emit($info)` read after the call; count calls handed the container (any-call refused 12 modules); anchor after last made operand; version pins the read before a later `if`
