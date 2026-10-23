@@ -7,7 +7,7 @@ use Test2::V0;
 use B;
 no warnings 'experimental::class';
 
-use SoN::ClassAux;
+use SoN;
 
 # A feature-class class stores its field initializers and ADJUST blocks as
 # separate CVs on the HvAUX struct (not in the built-in `new` XSUB). ClassAux

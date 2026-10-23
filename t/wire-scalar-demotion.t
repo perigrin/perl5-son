@@ -63,7 +63,7 @@ subtest 'taking a reference no longer refuses' => sub {
 # failure: the graph looks well-formed and observes the wrong value.
 subtest 'a demoted write is a store, and the next read observes it' => sub {
     require B;
-    require SoN::OptSuppress;
+    require SoN;
     require SoN::FromOptree;
 
     SoN::OptSuppress::suppress_peep();
@@ -87,7 +87,7 @@ subtest 'a demoted write is a store, and the next read observes it' => sub {
 # StackSim::merge already builds memory Phis, none of it aggregate-specific.
 subtest 'the address-taken pre-pass finds exactly the referenced variables' => sub {
     require B;
-    require SoN::OptSuppress;
+    require SoN;
     require SoN::FromOptree;
 
     SoN::OptSuppress::suppress_peep();

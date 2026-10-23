@@ -5,7 +5,7 @@ use v5.42.0;
 use utf8;
 use Test2::V0;
 
-use SoN::OptSuppress;
+use SoN;
 use SoN::FromOptree;
 
 # `if($c){ if($d){$a[0]=9} } $a[0]` -- the OUTER if's arm contains an inner if.

@@ -28,6 +28,16 @@ extract_padname(pTHX_ SV *sv)
     return INT2PTR(PADNAME *, SvIV(SvRV(sv)));
 }
 
+/* The class stash a reference names, or NULL if it is not a feature class's. */
+static HV *
+class_stash(pTHX_ SV *ref)
+{
+    if (!SvROK(ref) || SvTYPE(SvRV(ref)) != SVt_PVHV)
+        return NULL;
+    HV *stash = (HV *)SvRV(ref);
+    return HvSTASH_IS_CLASS(stash) ? stash : NULL;
+}
+
 MODULE = SoN  PACKAGE = SoN::FieldInfo
 
 PROTOTYPES: DISABLE
@@ -37,9 +47,7 @@ is_field(sv)
     SV *sv
     CODE:
         PADNAME *pn = extract_padname(aTHX_ sv);
-        if (!pn)
-            XSRETURN_NO;
-        RETVAL = PadnameIsFIELD(pn) ? TRUE : FALSE;
+        RETVAL = pn && PadnameIsFIELD(pn);
     OUTPUT:
         RETVAL
 
@@ -55,14 +63,10 @@ field_info(sv)
             XSRETURN_EMPTY;
         EXTEND(SP, 4);
         mPUSHu(info->fieldix);
-        if (info->fieldstash && HvNAME(info->fieldstash))
-            mPUSHp(HvNAME(info->fieldstash), HvNAMELEN(info->fieldstash));
-        else
-            PUSHs(&PL_sv_undef);
-        if (info->paramname)
-            mPUSHs(newSVsv(info->paramname));
-        else
-            PUSHs(&PL_sv_undef);
+        HV *fstash = info->fieldstash;
+        PUSHs(fstash && HvNAME(fstash)
+              ? sv_2mortal(newSVpvn(HvNAME(fstash), HvNAMELEN(fstash))) : &PL_sv_undef);
+        PUSHs(info->paramname ? sv_mortalcopy(info->paramname) : &PL_sv_undef);
         mPUSHi(info->def_if_undef | (info->def_if_false << 1));
 
 MODULE = SoN  PACKAGE = SoN::ClassAux
@@ -78,10 +82,7 @@ bool
 is_class(stashref)
     SV *stashref
     CODE:
-        if (!SvROK(stashref) || SvTYPE(SvRV(stashref)) != SVt_PVHV)
-            XSRETURN_NO;
-        HV *stash = (HV *)SvRV(stashref);
-        RETVAL = HvSTASH_IS_CLASS(stash) ? TRUE : FALSE;
+        RETVAL = class_stash(aTHX_ stashref) != NULL;
     OUTPUT:
         RETVAL
 
@@ -89,10 +90,8 @@ SV *
 initfields_cv(stashref)
     SV *stashref
     CODE:
-        if (!SvROK(stashref) || SvTYPE(SvRV(stashref)) != SVt_PVHV)
-            XSRETURN_UNDEF;
-        HV *stash = (HV *)SvRV(stashref);
-        if (!HvSTASH_IS_CLASS(stash))
+        HV *stash = class_stash(aTHX_ stashref);
+        if (!stash)
             XSRETURN_UNDEF;
         CV *cv = HvAUX(stash)->xhv_class_initfields_cv;
         if (!cv)
@@ -105,10 +104,8 @@ void
 adjust_cvs(stashref)
     SV *stashref
     PPCODE:
-        if (!SvROK(stashref) || SvTYPE(SvRV(stashref)) != SVt_PVHV)
-            XSRETURN_EMPTY;
-        HV *stash = (HV *)SvRV(stashref);
-        if (!HvSTASH_IS_CLASS(stash))
+        HV *stash = class_stash(aTHX_ stashref);
+        if (!stash)
             XSRETURN_EMPTY;
         AV *blocks = HvAUX(stash)->xhv_class_adjust_blocks;
         if (!blocks)
@@ -125,10 +122,8 @@ SV *
 superclass_name(stashref)
     SV *stashref
     CODE:
-        if (!SvROK(stashref) || SvTYPE(SvRV(stashref)) != SVt_PVHV)
-            XSRETURN_UNDEF;
-        HV *stash = (HV *)SvRV(stashref);
-        if (!HvSTASH_IS_CLASS(stash))
+        HV *stash = class_stash(aTHX_ stashref);
+        if (!stash)
             XSRETURN_UNDEF;
         HV *super = HvAUX(stash)->xhv_class_superclass;
         if (!super || !HvNAME(super))
@@ -147,10 +142,8 @@ void
 class_field_names(stashref)
     SV *stashref
     PPCODE:
-        if (!SvROK(stashref) || SvTYPE(SvRV(stashref)) != SVt_PVHV)
-            XSRETURN_EMPTY;
-        HV *stash = (HV *)SvRV(stashref);
-        if (!HvSTASH_IS_CLASS(stash))
+        HV *stash = class_stash(aTHX_ stashref);
+        if (!stash)
             XSRETURN_EMPTY;
         PADNAMELIST *fields = HvAUX(stash)->xhv_class_fields;
         if (!fields)

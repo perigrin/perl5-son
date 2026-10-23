@@ -99,7 +99,7 @@ subtest '$_ still resolves on its own' => sub {
 # the other. This asserts the NODES, which is where the identity lives.
 subtest '$g and @g are different nodes' => sub {
     require SoN::FromOptree;
-    require SoN::OptSuppress;
+    require SoN;
     SoN::OptSuppress::suppress_peep();
     my $cv = eval 'sub { my $s = $main::g; my $n = scalar @main::g; $s . $n }';
     SoN::OptSuppress::restore_peep();

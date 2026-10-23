@@ -82,7 +82,7 @@ print $n;', 'while-connected' );
 # subtest above -- by taking the statement-modifier path and refusing there.
 subtest 'the back-edge detector distinguishes a loop from a modifier' => sub {
     require B;
-    require SoN::OptSuppress;
+    require SoN;
     require SoN::FromOptree;
 
     SoN::OptSuppress::suppress_peep();

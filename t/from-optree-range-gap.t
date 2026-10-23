@@ -4,7 +4,7 @@
 use v5.42.0;
 use Test2::V0;
 
-use SoN::OptSuppress;
+use SoN;
 use SoN::FromOptree;
 
 # A constant range (1..4) constant-folds to a const[AV] and is expanded to its N

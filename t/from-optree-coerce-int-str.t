@@ -5,7 +5,7 @@ use v5.42.0;
 use utf8;
 use Test2::V0;
 
-use SoN::OptSuppress;
+use SoN;
 use SoN::FromOptree;
 
 # In Chalk "ok $n" is COERCION, not interpolation: the non-Str operand $n is

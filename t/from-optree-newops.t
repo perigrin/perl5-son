@@ -210,7 +210,7 @@ subtest 'anon-ref deref resolves the container to the bound aggregate (R4)' => s
     # carries OPf_MOD for autovivification) must resolve to the bound ArrayRef,
     # not emit a fresh unbound PadAccess. Otherwise the Subscript container has
     # no aggregate and reaches the backend with no repr.
-    require SoN::OptSuppress;
+    require SoN;
     SoN::OptSuppress::suppress_peep();
     my $cv = eval 'sub { my $r = [1,2,3]; $r->[0] }';
     SoN::OptSuppress::restore_peep();

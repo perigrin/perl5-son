@@ -4,7 +4,7 @@
 use v5.42.0;
 use Test2::V0;
 
-use SoN::OptSuppress;
+use SoN;
 use SoN::FromOptree;
 
 # The real producer flow (-MO=SoN) suppresses the peephole optimizer so element

@@ -4,7 +4,7 @@
 use v5.42.0;
 use Test2::V0;
 
-use SoN::OptSuppress;
+use SoN;
 use SoN::FromOptree;
 
 # Per corpus/mdtest/logical.md L1/L2, `$a && $b` lowers to a single operand-

@@ -7,7 +7,7 @@ use Test2::V0;
 use B;
 no warnings 'experimental::class';
 
-use SoN::OptSuppress;
+use SoN;
 use SoN::FromOptree;
 
 # `Class->new` and `$obj->meth` are method dispatch: pushmark, invocant,

@@ -15,7 +15,7 @@ class SoN::FromOptree 0.01 {
     use B::SoN::TypeLibrary;
     use SoN::FromOptree::OpMap;
     use SoN::FromOptree::StackSim;
-    use SoN::FieldInfo;
+    use SoN;
 
     # Subst PMOP pmflags bits. /r (non-destructive) returns a new string and
     # leaves the source untouched, so it must not rebind the pad. /e (eval)

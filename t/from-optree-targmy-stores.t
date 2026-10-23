@@ -6,7 +6,7 @@ use feature 'class';
 no warnings 'experimental::class';
 use Test2::V0;
 
-use SoN::OptSuppress;
+use SoN;
 use SoN::FromOptree;
 
 # An op with OPpTARGET_MY writes its result in-place to its targ slot -- the

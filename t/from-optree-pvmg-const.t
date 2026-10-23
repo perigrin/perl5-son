@@ -4,7 +4,7 @@
 use v5.42.0;
 use Test2::V0;
 
-use SoN::OptSuppress;
+use SoN;
 use SoN::FromOptree;
 
 # B's SV classes nest: PVMG isa PV, isa NV, isa IV. So a dispatch chain that

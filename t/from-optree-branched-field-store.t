@@ -8,7 +8,7 @@ use Test2::V0;
 # AFTER Test2::V0, which re-enables all warnings on import.
 no warnings 'experimental::class';
 
-use SoN::OptSuppress;
+use SoN;
 use SoN::FromOptree;
 use SoN::Render::Text;
 

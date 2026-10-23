@@ -8,7 +8,7 @@ use Test2::V0;
 no warnings 'experimental::class';
 use B;
 
-use SoN::FieldInfo;
+use SoN;
 
 # A test class with fields
 class TestFieldInfo {

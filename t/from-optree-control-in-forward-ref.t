@@ -7,7 +7,7 @@ use Test2::V0;
 use B;
 no warnings 'experimental::class';
 
-use SoN::OptSuppress;
+use SoN;
 use SoN::FromOptree;
 use SoN::Serialize::JSON ();
 use JSON::PP ();

@@ -4,7 +4,7 @@
 use v5.42.0;
 use Test2::V0;
 
-use SoN::OptSuppress;
+use SoN;
 use SoN::FromOptree;
 
 # `$cond ? A : B` lowers to TernaryExpr(cond, A, B) where inputs[1] is the
