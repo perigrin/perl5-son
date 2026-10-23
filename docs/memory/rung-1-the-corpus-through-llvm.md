@@ -44,3 +44,19 @@ wrong answer hides its cause.
 Result: 70 ROUNDTRIP, 0 wrong. The ratchet now has floor 70 and
 wrong-answer ceiling 0. Chalk's other tests that call from_json fail
 identically at the pin (pre-existing; compared one at a time).
+
+**Every op loads (2026-10-23, chalk 59e7b915, pinned):** B::SoN emits 13
+ops chalk's factory did not know. All now load, at 75 ROUNDTRIP, 0 wrong
+and 0 LOAD_FAIL.
+- Loading exposed hidden chalk bugs, because programs reached the
+  backend for the first time. Unknown control-chain nodes were silently
+  ignored, so EntryWrite was dropped and `$g = 2` printed 0. Field reads
+  were lowered at their use rather than at their memory version. List
+  returns emitted `ret i64`.
+- Lesson: when you widen what a stage accepts, rerun the wrong-answer
+  count at once. Make a dispatcher's fallback refuse effects
+  (is_fixed), not ignore them.
+- The census now counts a named GAP raised while loading (the BEGIN/END
+  refusal) as GAP, not LOAD_FAIL.
+- Never name a test class `B`: `-MO=SoN` loads perl's B module, and the
+  name collides.
