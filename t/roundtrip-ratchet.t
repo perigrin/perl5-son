@@ -50,7 +50,7 @@ my %FLOOR = (
     perl_t => 12,    # 12 measured 2026-10-22 at the chalk-lib goal's close (11 before)
     # THE CORPUS THROUGH LLVM (tools/corpus-llvm-roundtrip.pl): 58 of 430 at
     # chalk 5948f648, 70 at 485f8e70, 75 at 59e7b915 (bson/llvm-corpus: every
-    # node op B::SoN emits loads), measured 2026-10-23; 76 at 4e1e9969 (a
+    # node op B::SoN emits loads), measured 2026-10-23; 76 at 4e1e9969 and 4182d850 (a
     # callee that branches, loops or stores is inlined whole).
     corpus_llvm => 76,
     # chalk's lib/ at the commit tools/chalk-lib-roundtrip.pl pins (5948f648,
