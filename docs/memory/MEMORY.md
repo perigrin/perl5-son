@@ -84,3 +84,4 @@
 - [Rung 1: the corpus through LLVM](rung-1-the-corpus-through-llvm.md) — corpus-llvm-roundtrip.pl at chalk bson/llvm-corpus: 75/430, 0 wrong, 0 LOAD_FAIL; widening a stage exposes hidden backend bugs; fallbacks must refuse effects; set SON_CHALK, SON_PERL_T
 - [gate3 under load drops files](gate3-under-load-drops-files.md) — SUPERSEDED: the cause was nondeterministic emission, not load (a-shared-visited-set-makes-order-matter)
 - [A shared visited set makes order matter](a-shared-visited-set-makes-order-matter.md) — gate3 476/482 flip: $used_in_arm shared one %arm across ifs in hash order; per-walk sets; test renders a fixed graph under 6 seeds
+- [A census of zero wrong is only its cases](a-census-of-zero-wrong-is-only-its-cases.md) — 0 DIFFERS on the corpus while class methods had 3 wrong answers and 3 chalk tests red; probe a newly loadable class; diff the whole other suite; ratchet skips without SON_RATCHET=1
