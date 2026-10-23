@@ -575,6 +575,11 @@ class SoN::FromOptree 0.01 {
         return \%rename;
     }
 
+    # The main walk's demoted slots (referenced or shared lexicals), for the
+    # arm and loop-body walkers, whose contexts are built fresh: without it a
+    # store in an arm was an SSA rebind nothing outside the arm could see.
+    # The renames below read it too.
+    our $ADDR_TAKEN;
     sub _pad_aggregate_renames ($cv) {
         my %rename;
         my $names = eval { $cv->PADLIST->ARRAYelt(0) } or return \%rename;
@@ -583,7 +588,11 @@ class SoN::FromOptree 0.01 {
             my $pn = $names->ARRAYelt($i);
             next unless ref $pn eq 'B::PADNAME';
             my $pv = $pn->PVX // next;
-            next unless $pv =~ /\A[\@%]\w+\z/;
+            # A SCALAR KEPT IN MEMORY (address taken -- handed to a call, so
+            # `@_` aliases it) is named on the wire by its symbol alone, as an
+            # aggregate is: a shadowing `my $x` was the outer `$x`.
+            next unless $pv =~ /\A[\@%]\w+\z/
+                || ($pv =~ /\A\$\w+\z/ && $ADDR_TAKEN && $ADDR_TAKEN->{$i});
             next if $pn->FLAGS & (B::PADNAMEf_OUTER() | B::PADNAMEf_OUR());
             next if $SHARED_SLOTS && $SHARED_SLOTS->{$i};
             push $by_name{$pv}->@*, $i;
@@ -604,10 +613,6 @@ class SoN::FromOptree 0.01 {
     # _scout_mutated_targs, read by the loop that ran it to decide on a
     # header memory Phi. See _body_stores_memory.
     our $SCOUT_MOVED_MEMORY = 0;
-    # The main walk's demoted slots (referenced or shared lexicals), for the
-    # arm and loop-body walkers, whose contexts are built fresh: without it a
-    # store in an arm was an SSA rebind nothing outside the arm could see.
-    our $ADDR_TAKEN;
 
     # The pad aggregates the walked sub MUTATES -- shift, pop, push, unshift,
     # splice, delete, or an element store -- by targ. A list assign whose

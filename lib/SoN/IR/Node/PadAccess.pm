@@ -36,9 +36,10 @@ class SoN::IR::Node::PadAccess :isa(SoN::IR::Node::Access) {
     # PadAccess, so the producer should not be able to emit one.
     ADJUST {
         # A SECOND LEXICAL AGGREGATE OF THE SAME NAME in this sub is spelled
-        # apart -- see %SoN::FromOptree::PAD_SYMBOL.
+        # apart, and a second scalar kept in memory -- see
+        # %SoN::FromOptree::PAD_SYMBOL.
         $symbol = $SoN::FromOptree::PAD_SYMBOL{$targ}
-            if defined $targ && defined $sigil && $sigil ne '$'
+            if defined $targ && defined $sigil
             && defined $SoN::FromOptree::PAD_SYMBOL{$targ};
         # A SECOND SHARED FILE SCALAR OF THE SAME NAME, likewise -- see
         # SoN::FromOptree::_shared_scalar_renames.
