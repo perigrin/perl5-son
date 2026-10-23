@@ -11,6 +11,8 @@ fullcmp comparison both gave 482 of 482, and a clean ratchet rerun with
 the machine otherwise idle passed at 482. Some chalk tests are
 timing-sensitive, and per-file results shift when the box is loaded.
 
+**Superseded (2026-10-23):** the drop was not load. Emission was nondeterministic (see a-shared-visited-set-makes-order-matter); a clean idle run reproduced it.
+
 **How to apply:** run the ratchet, gate3 and fullcmp with nothing else
 heavy running. When a SAME count drops, rerun gate3 alone with -v
 before chasing the drop as a regression.

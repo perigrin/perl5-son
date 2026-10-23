@@ -2040,11 +2040,17 @@ class SoN::Deparse 0.01 {
                 next if $reach{$id}++;
                 push @fwd, map { $_->{id} } ( $ctrl_next{$id} // [] )->@*;
             }
+            # EACH IF WALKS ITS OWN ARMS, with its own visited set. One set
+            # shared across them, taken in hash order, let an inner `if`
+            # walked first stop the enclosing one at its arm, so what follows
+            # the inner join was in or out of the outer arm by PERL_HASH_SEED.
             for my $if ( grep { ( ( $nodes->{$_} // {} )->{op} // '' ) eq 'If' } keys %reach ) {
                 my @q = map { $_->{id} }
                     grep { ( $_->{op} // '' ) eq 'Proj' } ( $ctrl_next{$if} // [] )->@*;
+                my %walked;
                 while ( defined( my $id = shift @q ) ) {
-                    next if $arm{$id}++;
+                    next if $walked{$id}++;
+                    $arm{$id} = 1;
                     # Up to THIS if's join: a nested if's join is still
                     # inside the arm.
                     push @q, map { $_->{id} }

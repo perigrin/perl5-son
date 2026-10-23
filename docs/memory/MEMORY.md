@@ -82,4 +82,5 @@
 - [A call writes through what it is handed](a-call-writes-through-what-it-is-handed.md) — `$s = $info->{n}; emit($info)` read after the call; count calls handed the container (any-call refused 12 modules); anchor after last made operand; version pins the read before a later `if`
 - [A copy through a reference is marked, not rebound](a-copy-through-a-reference-is-marked-not-rebound.md) — `my %p = %$h` read live; PostfixDeref `copy` + snapshot pass run before the element pass; rebinding broke 7 files
 - [Rung 1: the corpus through LLVM](rung-1-the-corpus-through-llvm.md) — corpus-llvm-roundtrip.pl at chalk bson/llvm-corpus: 75/430, 0 wrong, 0 LOAD_FAIL; widening a stage exposes hidden backend bugs; fallbacks must refuse effects; set SON_CHALK, SON_PERL_T
-- [gate3 under load drops files](gate3-under-load-drops-files.md) — ratchet overlapping an 8-job census gave SAME 476; alone 482 twice; run measurement jobs on an idle machine
+- [gate3 under load drops files](gate3-under-load-drops-files.md) — SUPERSEDED: the cause was nondeterministic emission, not load (a-shared-visited-set-makes-order-matter)
+- [A shared visited set makes order matter](a-shared-visited-set-makes-order-matter.md) — gate3 476/482 flip: $used_in_arm shared one %arm across ifs in hash order; per-walk sets; test renders a fixed graph under 6 seeds
