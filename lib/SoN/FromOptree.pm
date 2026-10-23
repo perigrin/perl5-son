@@ -20063,6 +20063,27 @@ class SoN::FromOptree 0.01 {
                 stamp  => SoN::IR::Stamp->new(type => 'Str'));
         };
 
+        if ($subject->isa('SoN::IR::Node::PadAccess')
+                && $ADDR_TAKEN && $ADDR_TAKEN->{ $subject->targ }) {
+            # A DEMOTED SLOT IS STORED, not bound -- sassign's rule. Its reads
+            # go through memory, so a bound trim reached none of them and
+            # floated with no consumer: `chop($s)` on a scalar handed to a
+            # call printed abcabc for perl's abcab. The subject is the read
+            # at the current memory version; the trim is stored back there.
+            my $node = $make->($subject);
+            my $loc  = $factory->make('PadAccess',
+                targ   => $subject->targ,
+                sigil  => $subject->sigil,
+                symbol => $subject->symbol,
+                ($subject->shared ? (shared => 1) : ()),
+                (defined $sim->memory ? (inputs => [ $sim->memory ]) : ()));
+            my $store = $factory->make('Assign', inputs => [$loc, $node]);
+            $store->set_control_in($sim->control);
+            $sim->set_control($store);
+            $sim->set_memory($store);
+            return $node;
+        }
+
         if ($subject->isa('SoN::IR::Node::PadAccess')) {
             # THE SUBJECT IS THE SLOT'S LIVE VALUE, NOT A FRESH READ. chomp's
             # operand carries OPf_MOD (`padsv sRM`) -- genuinely, since chomp
