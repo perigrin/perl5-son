@@ -115,4 +115,15 @@ $x++; my $y = $x++; ++$x; $x += 2;
 print "$$r $y\n";
 SRC
 
+# TWO FILE LEXICALS OF ONE NAME ARE TWO VARIABLES. Each block's `my $c` is
+# shared with its own sub, and both reached the wire as `$c`: the emission
+# declared one `$c`, and a() and b() counted on the same one (11 12 13 for
+# perl's 2 11 3). The second is spelled apart, as a second lexical aggregate
+# of one name in one sub already is.
+round_trips(<<'SRC', 'two file lexicals of one name, each shared with a sub');
+{ my $c = 1; sub a { $c = $c + 1; return $c } }
+{ my $c = 10; sub b { $c = $c + 1; return $c } }
+print a(), " ", b(), " ", a(), "\n";
+SRC
+
 done_testing;

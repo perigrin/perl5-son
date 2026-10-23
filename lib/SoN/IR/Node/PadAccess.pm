@@ -40,6 +40,11 @@ class SoN::IR::Node::PadAccess :isa(SoN::IR::Node::Access) {
         $symbol = $SoN::FromOptree::PAD_SYMBOL{$targ}
             if defined $targ && defined $sigil && $sigil ne '$'
             && defined $SoN::FromOptree::PAD_SYMBOL{$targ};
+        # A SECOND SHARED FILE SCALAR OF THE SAME NAME, likewise -- see
+        # SoN::FromOptree::_shared_scalar_renames.
+        $symbol = $SoN::FromOptree::SHARED_SYMBOL{$targ}
+            if $shared && defined $targ && defined $sigil && $sigil eq '$'
+            && defined $SoN::FromOptree::SHARED_SYMBOL{$targ};
         die "PadAccess: a sigil is required (\$_ and \@_ are different"
           . " variables, and this node is hash-consed by content)\n"
             unless defined $sigil && length $sigil;

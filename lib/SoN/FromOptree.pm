@@ -531,6 +531,8 @@ class SoN::FromOptree 0.01 {
     # a name are spelled `n__2`, ... (see SoN::IR::Node::PadAccess). Not a
     # slot shared by name with another graph: a closure, a named sub, a file.
     our %PAD_SYMBOL;
+    # The same for a file's shared scalars -- see _shared_scalar_renames.
+    our %SHARED_SYMBOL;
 
     # A FOREACH ITERATOR ALIASED BY REFERENCE: pad targ => the Ref its pass
     # took to the element. A read of the iterator is a read through it, where
@@ -541,6 +543,38 @@ class SoN::FromOptree 0.01 {
     # (`s/(b)/$1/`): its placeholder, keyed by address, to the group number.
     # perl reads the magic $1 inside the substitution, after its own match.
     our %SUBST_OWN_CAPTURE;
+    # TWO FILE LEXICALS OF ONE NAME, BOTH SHARED WITH SUBS, are two variables
+    # -- `{ my $c; sub a {...} } { my $c; sub b {...} }` -- and a PadAccess is
+    # spelled by its name, so both were `$c` on the wire and in the emission
+    # (a() and b() counted on one: 11 12 13 for perl's 2 11 3). The second and
+    # later of a name are spelled `c__2`, ..., in the program and in every sub
+    # that closes over them -- %PAD_SYMBOL's rule for aggregates, applied to
+    # the scalars a file shares. Returns { this CV's pad index => spelling }.
+    sub _shared_scalar_renames ($cv, $is_program) {
+        my %rename;
+        my $main  = B::main_cv();
+        my $names = eval { $main->PADLIST->ARRAYelt(0) } or return \%rename;
+        my $shared = _file_lexicals_shared();
+        my (%by_name, %main_rename);
+        for my $i (sort { $a <=> $b } keys %$shared) {
+            my $pn = $names->ARRAYelt($i);
+            next unless ref $pn eq 'B::PADNAME';
+            my $pv = $pn->PVX // next;
+            next unless $pv =~ /\A\$\w+\z/;
+            push $by_name{$pv}->@*, $i;
+        }
+        for my $pv (keys %by_name) {
+            my @t = $by_name{$pv}->@*;
+            $main_rename{ $t[$_] } = substr($pv, 1) . '__' . ($_ + 1) for 1 .. $#t;
+        }
+        return \%main_rename if $is_program;
+        my $outer = _outer_main_slots($cv);
+        for my $i (keys %$outer) {
+            $rename{$i} = $main_rename{ $outer->{$i} } if defined $main_rename{ $outer->{$i} };
+        }
+        return \%rename;
+    }
+
     sub _pad_aggregate_renames ($cv) {
         my %rename;
         my $names = eval { $cv->PADLIST->ARRAYelt(0) } or return \%rename;
@@ -1676,6 +1710,7 @@ class SoN::FromOptree 0.01 {
         local $SHARED_SLOTS = $ctx->{shared_lexicals};
         local $ADDR_TAKEN   = $ctx->{addr_taken};
         local %PAD_SYMBOL   = _pad_aggregate_renames($cv)->%*;
+        local %SHARED_SYMBOL = _shared_scalar_renames($cv, $ctx->{is_program})->%*;
         # A SLOT ANOTHER SUB SHARES is written behind this graph's back, so
         # it reads as mutated from the start.
         local $MUTATED_AGGREGATE = $ctx->{mutated_aggregate}
