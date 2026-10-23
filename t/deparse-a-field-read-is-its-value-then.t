@@ -70,6 +70,20 @@ class K { field $n = 2; method f($c) { my $a = $n; if ($c) { $n = $n * 10 } else
 my $k = K->new; print $k->f(1), " ", $k->f(0), "\n";
 SRC
 
+# A COMPOUND STORE ADVANCES MEMORY TOO. `$n += 1` threaded its store on
+# control but left memory where it was, so the read after it was the read
+# before it: `$n += 1; my $old = $n` gave 15 for perl's 25.
+round_trips(<<'SRC', 'a read after a compound store');
+use v5.42; use experimental 'class';
+class K { field $n = 1; method m { $n += 1; my $old = $n; $n = 5; return "$old$n" } }
+print K->new->m, "\n";
+SRC
+round_trips(<<'SRC', 'a read in each arm after a compound store');
+use v5.42; use experimental 'class';
+class K { field $n = 1; method m ($c) { $n += $c; if ($c > 1) { print $n, "\n" } else { print $n, "!\n" } return 0 } }
+K->new->m(1); K->new->m(2);
+SRC
+
 # chalk's NodeFactory::make_unique: a guarded lookup, a counted id read
 # back after the increment, and a call between the read and its use.
 round_trips(<<'SRC', 'an increment, then a read of the field, then a call');

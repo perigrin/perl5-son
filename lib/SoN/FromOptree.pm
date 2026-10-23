@@ -11414,6 +11414,9 @@ class SoN::FromOptree 0.01 {
                     my $store = $factory->make('Assign', inputs => [$lv, $node]);
                     $store->set_control_in($sim->control);
                     $sim->set_control($store);
+                    # And it is a memory version, as the `=` store is: left
+                    # at the old one, `$n += 1; my $old = $n` read before it.
+                    $sim->set_memory($store) if defined $sim->memory;
                 }
                 elsif (defined $elem_lvalue) {
                     # Store the result back to the element and advance memory
