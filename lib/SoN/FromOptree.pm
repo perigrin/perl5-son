@@ -518,6 +518,10 @@ class SoN::FromOptree 0.01 {
     our $FN_EXITS;
     # True while an `eval { }` body is walked: see _loop_arm_exits.
     our $IN_EVAL_BODY = 0;
+    # Inside a block eval's (or try's) body, that eval's id: each Unwind
+    # built there carries it, as does the eval's Region.
+    our $EVAL_ID;
+    my $EVAL_COUNT = 0;
 
     # The pad slots this graph shares with a named sub (or, in a sub, with
     # the program) -- $ctx->{shared_lexicals}, reachable from the PadAccess
@@ -1911,6 +1915,7 @@ class SoN::FromOptree 0.01 {
                     stamp  => SoN::IR::Stamp->new(type => 'Str'));
                 my $unwind = $factory->make_cfg('Unwind', inputs => [[$msg]]);
                 $unwind->set_control_in($sim->control);
+                $unwind->set_eval_id($EVAL_ID) if defined $EVAL_ID;
                 $sim->set_control($unwind);
                 $op = $op->next;
                 next;
@@ -2719,6 +2724,7 @@ class SoN::FromOptree 0.01 {
                 my $unwind = $factory->make_cfg('Unwind',
                     inputs => [$args]);
                 $unwind->set_control_in($sim->control);
+                $unwind->set_eval_id($EVAL_ID) if defined $EVAL_ID;
                 $sim->set_control($unwind);
                 $op = $op->next;
                 next;
@@ -16893,6 +16899,11 @@ class SoN::FromOptree 0.01 {
 
     sub _handle_entertry ($cv, $op, $sim, $factory, $opmap, $visited) {
         local $IN_EVAL_BODY = 1;
+        # Set by the factory when the body makes a value that may die
+        # (SoN::IR::NodeFactory::MAY_DIE); see Region's eval_may_die.
+        my $may_die = 0;
+        local $SoN::IR::NodeFactory::MAY_DIE = \$may_die;
+        local $EVAL_ID = ++$EVAL_COUNT;
         # WHERE THE PROTECTED BODY BEGINS, captured before the walk moves on.
         # The Region below records where the eval JOINS; without this the
         # statements it protects cannot be told from those before it, and a
@@ -16901,6 +16912,14 @@ class SoN::FromOptree 0.01 {
         my $eval_entry = $sim->control;
 
         my $body_sim = $sim->snapshot;
+        # PERL CLEARS $@ AS THE EVAL BEGINS, with no op of its own. Stated as
+        # the store it is, a read of $@ in the body is ordered after it.
+        _entry_store($factory, $body_sim,
+            $factory->make('EntryDef', package => 'main', sigil => '$', symbol => '@',
+                inputs => [$body_sim->memory]),
+            $factory->make('Constant', value => '', const_type => 'string',
+                stamp => SoN::IR::Stamp->new(type => 'Str')))
+            if defined $body_sim->memory;
         my ($end) = _walk_branch($cv, $op->next, $body_sim, $factory, $opmap,
             $visited, undef, 1, _op_addr($op->other));
 
@@ -16938,6 +16957,8 @@ class SoN::FromOptree 0.01 {
         my $region = $factory->make_cfg('Region',
             inputs => [$body_sim->control]);
         $region->set_eval_entry($eval_entry) if defined $eval_entry;
+        $region->set_eval_may_die(1) if $may_die;
+        $region->set_eval_id($EVAL_ID);
         # OPf_WANT_LIST, or no OPf_WANT at all: the caller's context.
         $region->set_eval_want(($op->flags & 3) == 3 ? 'list' : 'runtime')
             if ($op->flags & 3) == 3 || ($op->flags & 3) == 0;
@@ -17053,8 +17074,11 @@ class SoN::FromOptree 0.01 {
 
         my $eval_entry = $sim->control;
         my $body_sim = $sim->snapshot;
+        my $try_id = ++$EVAL_COUNT;
         {
             local $IN_EVAL_BODY = 1;
+            # A die in the try body is the try's, not an enclosing eval's.
+            local $EVAL_ID = $try_id;
             my ($end) = _walk_branch($cv, $op->next, $body_sim, $factory,
                 $opmap, $visited, undef, 1, _op_addr($poptry));
             die "GAP: a try body stopped at `" . $end->name . "` before its"
@@ -17067,6 +17091,7 @@ class SoN::FromOptree 0.01 {
             const_type => 'undef', stamp => SoN::IR::Stamp->new(type => 'Undef'));
         my $region = $factory->make_cfg('Region', inputs => [$body_sim->control]);
         $region->set_eval_entry($eval_entry) if defined $eval_entry;
+        $region->set_eval_id($try_id);
         $sim->set_control($region);
         $sim->set_memory($body_sim->memory);
         my $ok = $factory->make_unique('Phi', inputs => [$one, $undef],
@@ -18980,6 +19005,7 @@ class SoN::FromOptree 0.01 {
                 my $unwind = $factory->make_cfg('Unwind',
                     inputs => [$args]);
                 $unwind->set_control_in($sim->control);
+                $unwind->set_eval_id($EVAL_ID) if defined $EVAL_ID;
                 $sim->set_control($unwind);
                 $op = $op->next;
                 next;

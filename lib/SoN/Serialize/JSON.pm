@@ -286,6 +286,10 @@ sub _extract_fields ($node, $id_remap) {
     # (map) or a predicate (grep), and the stamps cannot separate them.
     # A block eval's Region names where the protected body began. Emitted only
     # when set, so every other Region's wire is unchanged.
+    # A die names the block eval that lexically holds it; emitted only then.
+    if ($op eq 'Unwind') {
+        return defined $node->eval_id ? { eval_id => $node->eval_id } : undef;
+    }
     if ($op eq 'Region') {
         my $entry = $node->can('eval_entry') ? $node->eval_entry : undef;
         # As a node INDEX, like `region` and `predecessors`. An entry outside
@@ -296,7 +300,9 @@ sub _extract_fields ($node, $id_remap) {
         return { eval_entry => $id_remap->{ $entry->id },
                  # A list- or runtime-context eval: how its value binds.
                  ( defined $node->eval_want
-                     ? ( eval_want => $node->eval_want ) : () ) };
+                     ? ( eval_want => $node->eval_want ) : () ),
+                 ( $node->eval_may_die ? ( eval_may_die => JSON::PP::true ) : () ),
+                 ( defined $node->eval_id ? ( eval_id => $node->eval_id ) : () ) };
     }
     # tr///'s character sets and flags. `d` is not recoverable from an empty
     # `to` -- `tr/x//` maps x to itself, `tr/x//d` removes it -- so the flags

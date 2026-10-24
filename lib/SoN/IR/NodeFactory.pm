@@ -5,6 +5,7 @@ use utf8;
 use experimental 'class';
 no warnings 'experimental::class';
 
+use Scalar::Util qw(blessed);
 use SoN::IR::Stamp;
 use B::SoN::TypeLibrary;
 use SoN::IR::Node::Constant;
@@ -163,6 +164,31 @@ my %INPUT_SPECS = (
     # Phi has its own handler at make() top
 );
 
+# A ref to a flag a block eval's walk sets (FromOptree's _handle_entertry):
+# made while it is set, a value that may die marks the eval -- if unused it
+# is dropped from the graph, and perl would still have died making it.
+$SoN::IR::NodeFactory::MAY_DIE = undef;
+
+# _may_die($op, \@inputs) -- a division or modulus by what may be zero, or a
+# reference to an array element (one before the start dies).
+sub SoN::IR::NodeFactory::_may_die ($op, $in) {
+    return 0 unless ref $in eq 'ARRAY';
+    if ($op eq 'Divide' || $op eq 'Modulo') {
+        my $d = $in->[1];
+        $d = $d->inputs->[0] while blessed($d) && $d->isa('SoN::IR::Node::Coerce');
+        return !( blessed($d) && $d->isa('SoN::IR::Node::Constant')
+            && ($d->const_type // '') =~ /\A(?:integer|number)\z/ && ($d->value // 0) != 0 );
+    }
+    if ($op eq 'Ref') {
+        my $e = $in->[0];
+        return 0 unless blessed($e) && $e->isa('SoN::IR::Node::Subscript');
+        my $c = $e->inputs->[0];
+        my $t = blessed($c) && $c->can('stamp') && $c->stamp ? $c->stamp->type : '';
+        return $t !~ /\AHash/;
+    }
+    return 0;
+}
+
 class SoN::IR::NodeFactory {
     # Statement-effect ops: ops whose occurrences are distinct side effects
     # (a store, a call, a substitution, a guarded block — and a MATCH: it
@@ -288,6 +314,8 @@ class SoN::IR::NodeFactory {
     # factory without distinguishing between make() and make_cfg() shapes.
     method make($op_name, %args) {
         %args = $self->_default_stamp($op_name, %args);
+        $$SoN::IR::NodeFactory::MAY_DIE = 1
+            if $SoN::IR::NodeFactory::MAY_DIE && SoN::IR::NodeFactory::_may_die($op_name, $args{inputs});
 
         # Phi has historical CFG-style identity in Bootstrap (never
         # deduplicated) but SoN::IR::Node::Phi takes `region` as a

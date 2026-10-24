@@ -59,9 +59,11 @@ SRC
     my @ops = map { $_->{op} } $g->{nodes}->@*;
     ok scalar(grep { $_ eq 'Loop' } @ops), 'the loop is in the graph';
 
-    # No Phi in the graph may be left at the lattice top: that is the state
-    # the refusal existed to prevent reaching the wire.
-    my @unstamped = grep { $_->{op} eq 'Phi' && ($_->{stamp} // '') eq 'Unknown' }
+    # No VALUE Phi in the graph may be left at the lattice top: that is the
+    # state the refusal existed to prevent reaching the wire. (A memory Phi
+    # carries no value -- the eval's `$@ = ""` store makes one in the loop.)
+    my @unstamped = grep { $_->{op} eq 'Phi' && ($_->{stamp} // '') eq 'Unknown'
+                           && !($_->{fields} // {})->{memory} }
                     $g->{nodes}->@*;
     is scalar(@unstamped), 0, 'no Phi reaches the wire unstamped'
         or diag join ' ', map { "$_->{id}:$_->{stamp}" } @unstamped;

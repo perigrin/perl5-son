@@ -43,6 +43,24 @@ class SoN::IR::Node::Region :isa(SoN::IR::Node) {
     # `return eval { ... }`). Unset for scalar and void.
     field $eval_want :reader = undef;
 
+    # A BLOCK EVAL WHOSE BODY MAKES A VALUE THAT MAY DIE (a division by what
+    # may be zero, a reference to an array element): perl dies there
+    # even when the value is unused, and an unused one is not in the graph.
+    field $eval_may_die :reader = 0;
+
+    # This eval's identity in its graph: each die it catches carries it.
+    field $eval_id :reader = undef;
+
+    method set_eval_id($id) {
+        $eval_id = $id;
+        return;
+    }
+
+    method set_eval_may_die($v) {
+        $eval_may_die = $v;
+        return;
+    }
+
     method operation() { 'Region' }
 
     method set_eval_want($want) {

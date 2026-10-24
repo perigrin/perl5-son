@@ -73,14 +73,15 @@ SRC
         or diag "chain: @back  entry: $entry";
 
     # THE BODY IS WHAT LIES BETWEEN THEM, and it must be exactly the one store
-    # the eval protects -- not the three before it.
+    # the eval protects -- not the three before it -- after the `$@ = ""` the
+    # eval itself makes as it begins (see wire-an-eval-clears-its-error-first.t).
     my @body;
     for my $id (@back) {
         last if $id == $entry;
         push @body, $id;
     }
-    is scalar(@body), 1,
-        'and the body between entry and join is one statement'
+    is scalar(@body), 2,
+        'and the body between entry and join is the clear and one statement'
         or diag "body: @body";
 };
 
