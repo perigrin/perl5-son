@@ -3709,6 +3709,47 @@ class SoN::FromOptree 0.01 {
             $ret->set_control_in($ctrl) if defined $ctrl;
             return $ret;
         }
+        # EXITS MERGE TWO AT A TIME. `return A if C1; return B if C2; return D`
+        # is three exits, and one Region over all three has no owner: no one If
+        # owns them, so the Region had no head and its Phi no structure to be
+        # found by (chalk: "Phi node encountered ... before its enclosing
+        # if/loop structure", 17 pvm cases). The two arms of one If are a
+        # merge of their own -- that If's -- and the merge is then one exit,
+        # on the outer If's arm. Folded until two remain or no pair is left.
+        $exits = [@$exits];
+        while (@$exits > 2) {
+            my @p = map { SoN::FromOptree::StackSim::arm_proj($_->{control}) } @$exits;
+            my ($i, $j);
+            PAIR: for my $x (0 .. $#p) {
+                next unless defined $p[$x];
+                for my $y ($x + 1 .. $#p) {
+                    next unless defined $p[$y];
+                    my $if = $p[$x]->inputs->[0];
+                    next unless defined $if && $if == $p[$y]->inputs->[0];
+                    next if $p[$x]->index == $p[$y]->index;
+                    next if $if->can('region') && defined $if->region;
+                    ($i, $j) = ($x, $y);
+                    last PAIR;
+                }
+            }
+            last unless defined $i;
+            my ($a, $b) = @$exits[$i, $j];
+            my $if     = $p[$i]->inputs->[0];
+            my $merge  = $factory->make_cfg('Region',
+                inputs => [$a->{control}, $b->{control}]);
+            $if->set_region($merge) if $if->can('set_region');
+            my %phi = (region => $merge, predecessors => [ $p[$i], $p[$j] ]);
+            my $value = $factory->make('Phi',
+                inputs => [$a->{value}, $b->{value}], %phi);
+            my $scalar = (defined $a->{scalar_value} || defined $b->{scalar_value})
+                ? $factory->make('Phi', inputs => [
+                      $a->{scalar_value} // $a->{value},
+                      $b->{scalar_value} // $b->{value} ], %phi)
+                : undef;
+            splice @$exits, $j, 1;
+            $exits->[$i] = { control => $merge, value => $value,
+                             (defined $scalar ? (scalar_value => $scalar) : ()) };
+        }
         my $region = $factory->make_cfg('Region',
             inputs => [map { $_->{control} } @$exits]);
         # This Region merges independent function exits, not a single If/

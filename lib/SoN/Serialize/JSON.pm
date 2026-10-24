@@ -496,6 +496,10 @@ sub _all_nodes_topo ($graph_or_nodes) {
 
     my $visit;
     $visit = sub ($n) {
+        # A deep graph is a deep walk: forty nested merges (a dispatch of
+        # guarded returns) pass perl's 100-frame warning, and the warning on
+        # the producer's stderr is all it costs.
+        no warnings 'recursion';
         return unless blessed($n);
         return if $visited{ $n->id };
         return if $in_progress{ $n->id };   # cycle guard
