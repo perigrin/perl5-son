@@ -44,3 +44,15 @@ treat any single DIFFERS as a real bug until shown otherwise.
 
 **Round-tripped:** 154 -> 161 (158, 181, 218, 237, 283, 149, 249 and
 others).
+
+**Follow-up (a934d567, 161 -> 164):** "a list with a List in it" (11)
+was my own refusal in the flattening path. A direct call's value now
+flattens: an Array element by element, a scalar as one. A probe found a
+wrong answer: `sub g { () }` falls off its end on an empty list, and
+the wire marks its Return `valueless`. The loader dropped that flag, so
+`() = g()` counted 1 instead of 0. It's now carried, and such a call is
+no element in a list. An explicit `return` is different: it carries an
+empty ArrayLiteral as its list reading, so it already worked. A sub
+whose returns merge different list readings (`return if $x; return 5`)
+is refused by name. The rest of this cause: Slice (3), `\(...)` (2),
+Range, Repeat.

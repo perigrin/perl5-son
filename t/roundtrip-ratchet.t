@@ -68,8 +68,9 @@ my %FLOOR = (
     # the producer's string-eval refusal counted as a GAP); 142 at 80cfbcbe
     # (a package's method is its sub); 149 at 80fbca8e (shared aggregates;
     # a package method typed by its sub); 154 at 21594732 (sort by tag);
-    # 161 at 30931f3f (list flattening; three census runs agree).
-    corpus_llvm => 161,
+    # 161 at 30931f3f (list flattening; three census runs agree); 164 at
+    # a934d567 (a list holds what a sub returns).
+    corpus_llvm => 164,
     # chalk's lib/ at the commit tools/chalk-lib-roundtrip.pl pins (5948f648,
     # 179 modules), measured at d0cb68a and 2d8fb90, 2026-10-06.
     # 140 at 580ca1e and 4c7348c, 2026-10-13. 143 at b9c9b82, 1bcd4a1,
