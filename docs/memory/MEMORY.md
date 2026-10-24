@@ -1,3 +1,4 @@
+- [Cause: string builtins](census-cause-string-builtins.md) — uc family and substr as IR helpers; non-ASCII constants refused (bytes vs characters); 136 -> 139
 - [Cause: LocalAlias](census-cause-local-alias.md) — $_ through a pointer global, loop saves and restores; undef elements; 130 -> 136
 - [Cause: Scalar ternary is a foreach alias](census-cause-ternary-scalar-is-foreach-alias.md) — branched ternary, element refs; store past end overflowed the heap; 128 -> 130
 - [Cause: callee writes $_[N]](census-cause-callee-writes-args.md) — copy-in/copy-out @_; list-assign `targets` and stored misses were silently wrong; 125 -> 128
