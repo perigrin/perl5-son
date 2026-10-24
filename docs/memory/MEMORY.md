@@ -1,3 +1,4 @@
+- [Cause: Phi before structure](census-cause-phi-before-structure.md) — early returns fold pairwise; a value phi over a call is not memory; 109 -> 111
 - [Runtime needs are refused; tie is MOP](runtime-needs-are-refused-tie-is-mop.md) — string eval and friends GAP by name; tie goes through the metaclass
 - [t/base is the producer corpus](tbase-coverage-is-the-producer-corpus.md) — how to measure B::SoN coverage without the two counting traps
 - [Verify graphs against the optree](graph-correctness-needs-the-optree-not-the-source.md) — perl folds code before B::SoN sees it; node counts prove nothing
