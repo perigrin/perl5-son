@@ -24,3 +24,12 @@ apart from the real misses. Plan tie with the MOP method-dispatch causes.
 the Bson session by the time we get there." Don't write string eval off
 as permanently refused. Leave its cases at a named GAP, and check what
 the Bson session has landed before the final count.
+
+**Formats are open, not refused (perigrin, 2026-10-24):** "We will need
+to discuss how much runtime support formats need when we get there …
+they feel pretty static to me." Don't class `format`/`write` as
+runtime-needing. The picture lines are fixed at compile time; only the
+values flowing in vary. Discuss with perigrin before building or
+refusing them (cases 292, 293).
+`write` to a filehandle other than STDOUT is the same problem as `print`
+or `say` to one (perigrin): a filehandle question, not a format one.
