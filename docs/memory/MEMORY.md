@@ -1,3 +1,4 @@
+- [Cause: Scalar ternary is a foreach alias](census-cause-ternary-scalar-is-foreach-alias.md) — branched ternary, element refs; store past end overflowed the heap; 128 -> 130
 - [Cause: callee writes $_[N]](census-cause-callee-writes-args.md) — copy-in/copy-out @_; list-assign `targets` and stored misses were silently wrong; 125 -> 128
 - [Cause: no resolved callee](census-cause-no-resolved-callee.md) — anon subs: the graph is the metaobject's source; @_ of nothing; 122 -> 125
 - [Cause: Assign Scalar is ++](census-cause-assign-scalar-is-increment.md) — perl's ++ by tag, magic increment measured; non-Str hash keys; 111 -> 122
