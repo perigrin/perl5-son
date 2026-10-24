@@ -31,3 +31,5 @@ they feel pretty static to me." Don't class `format`/`write` as
 runtime-needing. The picture lines are fixed at compile time; only the
 values flowing in vary. Discuss with perigrin before building or
 refusing them (cases 292, 293).
+`write` to a filehandle other than STDOUT is the same problem as `print`
+or `say` to one (perigrin): a filehandle question, not a format one.
