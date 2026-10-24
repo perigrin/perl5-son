@@ -1,3 +1,4 @@
+- [Runtime needs are refused; tie is MOP](runtime-needs-are-refused-tie-is-mop.md) — string eval and friends GAP by name; tie goes through the metaclass
 - [t/base is the producer corpus](tbase-coverage-is-the-producer-corpus.md) — how to measure B::SoN coverage without the two counting traps
 - [Verify graphs against the optree](graph-correctness-needs-the-optree-not-the-source.md) — perl folds code before B::SoN sees it; node counts prove nothing
 - [OPf_MOD is not a write](opf-mod-is-not-a-write.md) — stale lvalue flag on comparison operands; caused a 111-for-123 miscompile
