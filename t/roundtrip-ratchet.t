@@ -58,8 +58,8 @@ my %FLOOR = (
     # package scalar is one %Slot global); 95 at 69ea0c0f (@ARGV); 109 at c8f72658 (references, aggregates);
     # 111 at 4f87f780 (early returns merge two at a time); 122 at 29c1f540 (++);
     # 125 at bb10747b (code-ref calls); 128 at 38da3e57 ($_[N] writes back);
-    # 130 at 9f7e363d (a foreach over @_ aliases).
-    corpus_llvm => 130,
+    # 130 at 9f7e363d (a foreach over @_ aliases); 136 at 83ed09e2 ($_ aliased).
+    corpus_llvm => 136,
     # chalk's lib/ at the commit tools/chalk-lib-roundtrip.pl pins (5948f648,
     # 179 modules), measured at d0cb68a and 2d8fb90, 2026-10-06.
     # 140 at 580ca1e and 4c7348c, 2026-10-13. 143 at b9c9b82, 1bcd4a1,
