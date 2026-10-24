@@ -64,8 +64,9 @@ subtest 'a valued eval still yields its value' => sub {
         qq{my \$r = eval { 42 };\nprint "\$r\\n";\n};
     round_trips 'a block eval that dies',
         qq{my \$r = eval { die "z\\n"; 1 };\nprint defined \$r ? "def\\n" : "undef\\n";\n};
+    # No lexical in scope, which would make a string eval refuse.
     round_trips 'a string eval',
-        qq{my \$r = eval "2+3";\nprint "\$r\\n";\n};
+        qq{print eval("2+3"), "\\n";\n};
 };
 
 done_testing;

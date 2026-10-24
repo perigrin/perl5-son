@@ -92,9 +92,10 @@ SRC
 # A STRING EVAL STILL RENDERS -- its Region's input IS the eval, so the body
 # needs no delimiting. That is what makes this about the BLOCK form.
 subtest 'a string eval still round-trips' => sub {
+    # No lexical in scope: one would make the eval refuse
+    # (t/from-optree-a-string-eval-sees-the-lexicals.t).
     round_trips(<<'SRC', 'a value-producing string eval');
-my $v = eval "1+1";
-print "[$v]\n";
+print "[", eval("1+1"), "]\n";
 SRC
 };
 

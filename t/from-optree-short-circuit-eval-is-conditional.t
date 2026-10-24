@@ -47,12 +47,14 @@ sub forks ($g) {
     return grep { $succ{$_}->@* > 1 } sort { $a <=> $b } keys %succ;
 }
 
+# Package variables throughout: a lexical in scope makes a string eval
+# refuse (t/from-optree-a-string-eval-sees-the-lexicals.t).
 subtest 'a short-circuited eval is conditional' => sub {
     my $src = <<'SRC';
-our $n = 0;
-sub bump { $n++; 1 }
-my $r = (eval q{bump(); 0} and eval q{bump(); 1});
-print "n=$n\n";
+$main::n = 0;
+sub bump { $main::n++; 1 }
+$main::r = (eval q{bump(); 0} and eval q{bump(); 1});
+print "n=$main::n\n";
 SRC
     is run_perl($src), "n=1\n", 'perl runs only the first' or return;
 
@@ -67,12 +69,12 @@ SRC
 # defect rather than eval in general.
 subtest 'sequential evals chain' => sub {
     my $src = <<'SRC';
-our $n = 0;
-sub bump { $n++; 1 }
+$main::n = 0;
+sub bump { $main::n++; 1 }
 eval q{bump()};
 eval q{bump()};
 eval q{bump()};
-print "n=$n\n";
+print "n=$main::n\n";
 SRC
     is run_perl($src), "n=3\n", 'perl runs all three' or return;
 
@@ -118,17 +120,17 @@ sub round_trips ($src, $name) {
 }
 
 subtest 'the side effect count, all three polarities' => sub {
-    round_trips('our $n=0; sub bump { $n++; 1 }'
-              . ' my $r = (eval q{bump(); 0} and eval q{bump(); 1});'
-              . ' print "n=$n\n";', 'and, short-circuiting');
+    round_trips('$main::n = 0; sub bump { $main::n++; 1 }'
+              . ' $main::r = (eval q{bump(); 0} and eval q{bump(); 1});'
+              . ' print "n=$main::n r=$main::r\n";', 'and, short-circuiting');
 
-    round_trips('our $n=0; sub bump { $n++; 1 }'
-              . ' my $r = (eval q{bump(); 1} and eval q{bump(); 1});'
-              . ' print "n=$n\n";', 'and, running both');
+    round_trips('$main::n = 0; sub bump { $main::n++; 1 }'
+              . ' $main::r = (eval q{bump(); 1} and eval q{bump(); 1});'
+              . ' print "n=$main::n r=$main::r\n";', 'and, running both');
 
-    round_trips('our $n=0; sub bump { $n++; 1 }'
-              . ' my $r = (eval q{bump(); 1} or eval q{bump(); 1});'
-              . ' print "n=$n\n";', 'or, short-circuiting');
+    round_trips('$main::n = 0; sub bump { $main::n++; 1 }'
+              . ' $main::r = (eval q{bump(); 1} or eval q{bump(); 1});'
+              . ' print "n=$main::n r=$main::r\n";', 'or, short-circuiting');
 };
 
 done_testing;

@@ -28,8 +28,10 @@ sub ops_of ($g, $op) { return grep { $_->operation eq $op } $g->nodes->@* }
 # t/base/lex.t translated 10 nodes and stopped. Now the graph exists and
 # exactly one node in it is un-lowerable, which is strictly more information
 # and the shape the rest of the producer already uses.
+# No lexical in any sub here: one in scope makes a string eval refuse
+# (t/from-optree-a-string-eval-sees-the-lexicals.t).
 subtest 'string eval builds a Str -> Code coercion' => sub {
-    my $g = graph_of('sub { my $x = eval "1+1"; $x }');
+    my $g = graph_of('sub { eval "1+1" }');
     ok($g, 'the graph exists rather than the file being refused') or return;
 
     my ($c) = grep {
@@ -41,7 +43,7 @@ subtest 'string eval builds a Str -> Code coercion' => sub {
 # THE OPERAND IS THE SOURCE STRING, not something invented. `eval $s` and
 # `eval "literal"` differ only in what feeds the coercion.
 subtest 'the coercion reads the eval source' => sub {
-    my $g = graph_of('sub { my $x = eval "1+1"; $x }');
+    my $g = graph_of('sub { eval "1+1" }');
     my ($c) = grep {
         ($_->from_repr // '') eq 'Str' && ($_->to_repr // '') eq 'Code'
     } ops_of($g, 'Coerce');
@@ -53,7 +55,7 @@ subtest 'the coercion reads the eval source' => sub {
 };
 
 subtest 'a variable eval operand works the same way' => sub {
-    my $g = graph_of('sub { my $s = "1+1"; my $x = eval $s; $x }');
+    my $g = graph_of('sub { $main::s = "1+1"; eval $main::s }');
     my ($c) = grep {
         ($_->from_repr // '') eq 'Str' && ($_->to_repr // '') eq 'Code'
     } ops_of($g, 'Coerce');
@@ -73,7 +75,7 @@ subtest 'a variable eval operand works the same way' => sub {
 # describe a refusal, and would misattribute the blocker: the gate would name
 # the wrapper when the unsupported thing is the conversion.
 subtest 'the trap is modelled, and the coercion is what fails to lower' => sub {
-    my $g = graph_of('sub { my $x = eval "1+1"; $x }');
+    my $g = graph_of('sub { eval "1+1" }');
     is(scalar(ops_of($g, 'TryCatch')), 0,
         'no TryCatch node -- chalk cannot lower one');
     ok(scalar(ops_of($g, 'Region')),

@@ -55,17 +55,17 @@ sub round_trips ($src, $name) {
 # the Region needs no spelling of its own: it is discharged by the closing
 # brace, like an If's join.
 subtest 'a string eval round-trips' => sub {
+    # No lexical in scope in either program: one would make the eval refuse
+    # (t/from-optree-a-string-eval-sees-the-lexicals.t).
     round_trips(<<'SRC', 'a value-producing eval');
-my $v = eval "1+1";
-print "[$v]\n";
+print "[", eval("1+1"), "]\n";
 SRC
 
     # THE FAILURE PATH IS THE POINT. An eval that dies must yield undef and
     # leave $@ set, not propagate -- a renderer that dropped the eval would
     # abort here rather than print.
     round_trips(<<'SRC', 'an eval that dies');
-my $v = eval "die qq(boom\\n)";
-print "[", (defined $v ? $v : "undef"), "][$@]";
+print "[", (defined(eval "die qq(boom\\n)") ? "def" : "undef"), "][$@]";
 SRC
 };
 

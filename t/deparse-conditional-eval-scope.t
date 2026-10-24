@@ -58,7 +58,8 @@ subtest 'a conditional eval is readable after its block' => sub {
 # An unconditional eval must keep working -- it was never scoped wrongly.
 subtest 'a plain eval is unchanged' => sub {
     round_trips 'a block eval',  qq{my \$r = eval { 42 };\nprint "\$r\\n";\n};
-    round_trips 'a string eval', qq{my \$r = eval "2+3";\nprint "\$r\\n";\n};
+    # No lexical in scope, which would make a string eval refuse.
+    round_trips 'a string eval', qq{print eval("2+3"), "\\n";\n};
     round_trips 'one that dies',
         qq{my \$r = eval { die "x\\n"; 1 };\nprint defined \$r ? "def\\n" : "undef\\n";\n};
 };

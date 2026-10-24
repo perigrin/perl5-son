@@ -42,8 +42,10 @@ sub graph_of ($src) {
 # Two DISTINCT eval strings were always correct -- two Coerces, properly
 # chained -- which is what makes this a hash-consing defect rather than an
 # eval defect.
+# No lexical in any program here: one in scope makes a string eval refuse
+# (t/from-optree-a-string-eval-sees-the-lexicals.t).
 subtest 'two identical evals are two nodes' => sub {
-    my $g = graph_of('my $a = eval q{1+1}; my $b = eval q{1+1}; print "$a $b\n";');
+    my $g = graph_of('print eval(q{1+1}), " ", eval(q{1+1}), "\n";');
     ok $g, 'it translates' or return;
 
     my @eval = grep { ($_->{op} // '') eq 'Coerce'
@@ -65,11 +67,11 @@ subtest 'two identical evals are two nodes' => sub {
 # nodes would pass a graph that has two Coerces wired to one effect.
 subtest 'both eval bodies run' => sub {
     my $src = <<'SRC';
-our $n = 0;
-sub bump { $n++; 1 }
+$main::n = 0;
+sub bump { $main::n++; 1 }
 eval q{bump()};
 eval q{bump()};
-print "n=$n\n";
+print "n=$main::n\n";
 SRC
     is run_perl($src), "n=2\n", 'perl runs both' or return;
 
@@ -84,7 +86,7 @@ SRC
 # DISTINCT STRINGS MUST NOT REGRESS -- they were always correct, and they are
 # what shows this is about identity rather than about eval.
 subtest 'distinct evals still lower' => sub {
-    my $g = graph_of('my $a = eval q{1+1}; my $b = eval q{2+2}; print "$a $b\n";');
+    my $g = graph_of('print eval(q{1+1}), " ", eval(q{2+2}), "\n";');
     ok $g, 'it translates' or return;
     my @eval = grep { ($_->{op} // '') eq 'Coerce'
                    && ((($_->{fields} // {})->{to_repr} // '') eq 'Code') }

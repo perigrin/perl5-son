@@ -60,12 +60,13 @@ SRC
 
 # s///ee IS `s/.../eval(EXPR)/e`: the string eval's Coerce was pinned to the
 # snapshot's control and left hanging, "a control node with 2 successors".
-# Corpus 100 and 015.
+# Corpus 100 and 015. Package variables, since a lexical in scope makes a
+# string eval refuse (t/from-optree-a-string-eval-sees-the-lexicals.t).
 round_trips(<<'SRC', 'a string eval in the replacement (s///ee)');
-my $s = "abc";
-my $c = q{3*4};
-$s =~ s/b/$c/ee;
-print "$s\n";
+$main::s = "abc";
+$main::c = q{3*4};
+$main::s =~ s/b/$main::c/ee;
+print "$main::s\n";
 SRC
 
 round_trips(<<'SRC', 'a replacement that reads its own capture and writes');
@@ -85,11 +86,12 @@ SRC
 # THE SAME TRAP IN ANY ARM. A string eval closes over a one-input Region, and
 # the arm-identity walk stopped there, so an if/else whose arm evals had no
 # predecessors for its join: "a join Phi with 2 inputs and 0 predecessors".
+# Package variables, for the same reason as above.
 round_trips(<<'SRC', 'a string eval inside an if arm');
-my $c = q{3*4};
-my $x = 1;
-if ($ENV{HOME}) { $x = eval $c }
-print "$x\n";
+$main::c = q{3*4};
+$main::x = 1;
+if ($ENV{HOME}) { $main::x = eval $main::c }
+print "$main::x\n";
 SRC
 
 done_testing;

@@ -87,7 +87,7 @@ SRC
 # A STRING EVAL NEEDS NO ENTRY -- its Region's input IS the eval, one node, so
 # there is nothing to delimit. It must not grow a spurious one.
 subtest 'a string eval needs no entry' => sub {
-    my $g = graph_of('my $v = eval "1+1"; print "[$v]\n";');
+    my $g = graph_of('print "[", eval("1+1"), "]\n";');
     ok $g, 'it translates' or return;
 
     my ($coerce) = grep { ($_->{op} // '') eq 'Coerce'
