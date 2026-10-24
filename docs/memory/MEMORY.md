@@ -94,3 +94,4 @@
 - [Census cause: s/// on a location](census-cause-s-on-a-location.md) — cause 6: s/// stores back to the %Slot; ROUNDTRIP 81->84; the arm walk's third ownership bug (reached-by-data-first); a computed replacement is an operand, not the field
 - [Census cause: @_ as a list](census-cause-at-underscore-as-a-list.md) — cause 7: @_ is an %Array of the call's args; ROUNDTRIP 84->89; loop phi edges and mixed literals were read by the wrong stamp; coerce or refuse wherever node type and reading can differ
 - [Census cause: EntryWrite](census-cause-entrywrite.md) — cause 8: a package scalar is one %Slot global (chalk's Part H5), typed families deleted; ROUNDTRIP 89->94; the plan had the fix already -- read docs/plans first
+- [Feature: references and real aggregates](feature-references-and-real-aggregates.md) — refs, tagged hash entries + insert, reads by stored tag, exists, copy-deref, grep truth; 95->108; 114 chalk lli tests had been silently skipping (hardcoded lli path)
