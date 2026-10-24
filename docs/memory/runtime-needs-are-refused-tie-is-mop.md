@@ -19,3 +19,8 @@ treat tie as dispatch through the metaclass, not as a runtime need.
 **How to apply:** when ranking census causes, set the runtime-needing
 cases aside as done once their refusal names the feature. Count them
 apart from the real misses. Plan tie with the MOP method-dispatch causes.
+
+**Update (perigrin, 2026-10-24):** "String eval may be taken care of by
+the Bain session by the time we get there." Don't write string eval off
+as permanently refused. Leave its cases at a named GAP, and check what
+the Bain session has landed before the final count.
