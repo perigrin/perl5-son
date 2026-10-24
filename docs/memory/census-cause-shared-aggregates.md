@@ -28,7 +28,7 @@ plain local array the read came out right anyway; behind one shared
 cell, a read lowered at its use sees later stores. `_freeze_memory_reads`
 covers them now.
 
-**Producer fix along the way (B::SoN 1fa…, `_callee_return_type`):** a
+**Producer fix along the way (B::SoN a524be3, `_callee_return_type`):** a
 method call on a package is typed by the package's sub of that name.
 chalk doesn't re-derive a node the producer stamped Unknown, so the
 typing has to happen there. A chalk-side attempt didn't help and was
