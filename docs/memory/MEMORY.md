@@ -1,3 +1,4 @@
+- [Cause: sort by tag](census-cause-sort-by-tag.md) — comparator reads each element by tag; numeric sort was silently wrong; MemStart freeze in straight-line inlining; 149 -> 154
 - [Cause: shared aggregates](census-cause-shared-aggregates.md) — @x/%x behind a global pointer; whole-aggregate reads frozen (wrong answer by probe); 142 -> 149
 - [Cause: package methods](census-cause-package-methods.md) — blessed-hash OO methods are package subs; slurpy @_; Int->Str does not keep; 140 -> 142
 - [Cause: arity](census-cause-arity.md) — undef/defaults/extras; `&name` shares_args was dropped (silently wrong); producer refusals are GAPs; 140 of 431

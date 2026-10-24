@@ -67,8 +67,8 @@ my %FLOOR = (
     # 139 at ddb38e93 (uc, substr); 140 of 431 at 8beb4a2a (perl's arity;
     # the producer's string-eval refusal counted as a GAP); 142 at 80cfbcbe
     # (a package's method is its sub); 149 at 80fbca8e (shared aggregates;
-    # a package method typed by its sub).
-    corpus_llvm => 149,
+    # a package method typed by its sub); 154 at 21594732 (sort by tag).
+    corpus_llvm => 154,
     # chalk's lib/ at the commit tools/chalk-lib-roundtrip.pl pins (5948f648,
     # 179 modules), measured at d0cb68a and 2d8fb90, 2026-10-06.
     # 140 at 580ca1e and 4c7348c, 2026-10-13. 143 at b9c9b82, 1bcd4a1,
