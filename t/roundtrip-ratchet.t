@@ -65,8 +65,9 @@ my %FLOOR = (
     # 125 at bb10747b (code-ref calls); 128 at 38da3e57 ($_[N] writes back);
     # 130 at 9f7e363d (a foreach over @_ aliases); 136 at 83ed09e2 ($_ aliased);
     # 139 at ddb38e93 (uc, substr); 140 of 431 at 8beb4a2a (perl's arity;
-    # the producer's string-eval refusal counted as a GAP).
-    corpus_llvm => 140,
+    # the producer's string-eval refusal counted as a GAP); 142 at 80cfbcbe
+    # (a package's method is its sub).
+    corpus_llvm => 142,
     # chalk's lib/ at the commit tools/chalk-lib-roundtrip.pl pins (5948f648,
     # 179 modules), measured at d0cb68a and 2d8fb90, 2026-10-06.
     # 140 at 580ca1e and 4c7348c, 2026-10-13. 143 at b9c9b82, 1bcd4a1,
