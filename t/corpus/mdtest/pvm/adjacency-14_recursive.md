@@ -81,55 +81,6 @@ no numeric literal whose text is "5"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [48], nodes: [
-  [Start], # 0
-  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [MemStart], # 2
-  [PadAccess, {sigil: $, symbol: s}, [2], ~, Unknown], # 3
-  [Constant, {const_type: string, value: abc}, ~, ~, Str], # 4
-  [Assign, ~, [3, 4], 0, Str], # 5
-  [PadAccess, {sigil: $, symbol: s}, [5], ~, Str], # 6
-  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 7
-  [Add, ~, [7, 7], ~, Int], # 8
-  [RegexSubst, {flags: "", pattern: a, replacement: ""}, [6, 8, 5], 5, Str], # 9
-  [PadAccess, {sigil: $, symbol: s}, [9], ~, Str], # 10
-  [Constant, {const_type: string, value: "3*4"}, ~, ~, Str], # 11
-  [RegexMatch, {flags: "", pattern: b}, [10], ~, Boolean], # 12
-  [If, ~, [9, 12], 9], # 13
-  [Proj, {index: 0}, [13]], # 14
-  [Coerce, {from_repr: Str, to_repr: Code}, [11], 14, Code], # 15
-  [Region, ~, [15]], # 16
-  [Phi, {region: 16}, [15, 1], ~, Unknown], # 17
-  [Proj, {index: 1}, [13]], # 18
-  [Region, {head: 13}, [16, 18]], # 19
-  [Phi, {predecessors: [14, 18], region: 19}, [17, 1], ~, Unknown], # 20
-  [RegexSubst, {flags: "", pattern: b, replacement: ""}, [10, 20, 9], 19, Str], # 21
-  [PadAccess, {sigil: $, symbol: k}, [21], ~, Unknown], # 22
-  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 23
-  [Assign, ~, [22, 23], 21, Int], # 24
-  [PadAccess, {sigil: $, symbol: s}, [24], ~, Str], # 25
-  [RegexMatch, {flags: "", pattern: "2(?{ $k = 5 })"}, [25], 24, Boolean], # 26
-  [PadAccess, {sigil: $, symbol: i}, [26], ~, Unknown], # 27
-  [Constant, {const_type: regex, value: c}, ~, ~, Regex], # 28
-  [Assign, ~, [27, 28], 26, Regex], # 29
-  [PadAccess, {sigil: $, symbol: s}, [29], ~, Str], # 30
-  [RegexMatch, {flags: "", pattern: "(??{ $i })"}, [30], 29, Boolean], # 31
-  [PadAccess, {sigil: $, symbol: s}, [31], ~, Str], # 32
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [32], ~, Str], # 33
-  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 34
-  [Concat, ~, [33, 34], ~, Str], # 35
-  [PadAccess, {sigil: $, symbol: k}, [31], ~, Str], # 36
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [36], ~, Str], # 37
-  [Concat, ~, [35, 37], ~, Str], # 38
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 39
-  [Concat, ~, [38, 39], ~, Str], # 40
-  [If, ~, [31, 31], 31], # 41
-  [Proj, {index: 1}, [41]], # 42
-  [Constant, {const_type: string, value: "hit\n"}, ~, ~, Str], # 43
-  [Proj, {index: 0}, [41]], # 44
-  [Print, ~, [43], 44, Scalar], # 45
-  [Region, {head: 41}, [42, 45]], # 46
-  [Print, ~, [40], 46, Scalar], # 47
-  [Return, {implicit: true}, [1], 47], # 48
-  [RegexMatch, {flags: "", pattern: a}, [6], ~, Boolean]]} # 49
+refused: [
+  "skipped main::__PROGRAM__: GAP: a string eval with a lexical in scope ($s) can read or write it unseen by the graph"]
 ```

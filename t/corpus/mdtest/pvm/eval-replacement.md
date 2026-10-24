@@ -119,31 +119,8 @@ no operator whose text is "*"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [23], nodes: [
-  [Start], # 0
-  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [MemStart], # 2
-  [PadAccess, {sigil: $, symbol: s}, [2], ~, Unknown], # 3
-  [Constant, {const_type: string, value: abc}, ~, ~, Str], # 4
-  [Assign, ~, [3, 4], 0, Str], # 5
-  [PadAccess, {sigil: $, symbol: s}, [5], ~, Str], # 6
-  [Constant, {const_type: string, value: "3*4"}, ~, ~, Str], # 7
-  [RegexMatch, {flags: "", pattern: b}, [6], ~, Boolean], # 8
-  [If, ~, [5, 8], 5], # 9
-  [Proj, {index: 0}, [9]], # 10
-  [Coerce, {from_repr: Str, to_repr: Code}, [7], 10, Code], # 11
-  [Region, ~, [11]], # 12
-  [Phi, {region: 12}, [11, 1], ~, Unknown], # 13
-  [Proj, {index: 1}, [9]], # 14
-  [Region, {head: 9}, [12, 14]], # 15
-  [Phi, {predecessors: [10, 14], region: 15}, [13, 1], ~, Unknown], # 16
-  [RegexSubst, {flags: "", pattern: b, replacement: ""}, [6, 16, 5], 15, Str], # 17
-  [PadAccess, {sigil: $, symbol: s}, [17], ~, Str], # 18
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [18], ~, Str], # 19
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 20
-  [Concat, ~, [19, 20], ~, Str], # 21
-  [Print, ~, [21], 17, Scalar], # 22
-  [Return, {implicit: true}, [1], 22]]} # 23
+refused: [
+  "skipped main::__PROGRAM__: GAP: a string eval with a lexical in scope ($s) can read or write it unseen by the graph"]
 ```
 
 ## `eval STRING`: the re-entry with no delimiter
@@ -204,21 +181,34 @@ no operator whose text is "+"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [15], nodes: [
-  [Start], # 0
-  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [EnvRead, {key: X}, ~, ~, Str], # 2
-  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 3
-  [DefinedOr, ~, [2, 3], ~, Str], # 4
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [4], ~, Str], # 5
-  [Constant, {const_type: string, value: " + 1"}, ~, ~, Str], # 6
-  [Concat, ~, [5, 6], ~, Str], # 7
-  [Coerce, {from_repr: Str, to_repr: Code}, [7], 0, Code], # 8
-  [Region, ~, [8]], # 9
-  [Phi, {region: 9}, [8, 1], ~, Unknown], # 10
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [10], ~, Str], # 11
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 12
-  [Concat, ~, [11, 12], ~, Str], # 13
-  [Print, ~, [13], 9, Scalar], # 14
-  [Return, {implicit: true}, [1], 14]]} # 15
+refused: [
+  "skipped main::__PROGRAM__: GAP: a string eval with a lexical in scope ($n) can read or write it unseen by the graph"]
+```
+
+## `eval STRING` writes the lexical it shares a frame with
+
+The evaluated string runs in the enclosing frame, so it can assign any
+lexical in scope -- here `$i` -- and the read after it must see the write.
+Nothing in the optree before the eval says the write happens: the store
+exists only in source the compiler sees at run time. B::SoN refuses an
+eval with a lexical in scope rather than forward `$i`'s value from before
+it, which printed `i=0`.
+
+```perl
+my $i = 0;
+eval q{$i = 1};
+print "i=$i\n";
+```
+
+```behavior
+parses: yes
+```
+
+```output
+i=1
+```
+
+```ir
+refused: [
+  "skipped main::__PROGRAM__: GAP: a string eval with a lexical in scope ($i) can read or write it unseen by the graph"]
 ```

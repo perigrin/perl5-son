@@ -4674,6 +4674,7 @@ class SoN::FromOptree 0.01 {
         }
 
         _reread_alias_operand_stored_later($cv, $op, $sim, $factory, $opmap, $ctx);
+        _refuse_unseen_lexical_access($cv, $op, $name);
 
         # chomp AND chop MUTATE IN PLACE, so the graph must record the store.
         # The producer built `Call(schomp, [PadAccess])` consumed by NOBODY,
@@ -21143,6 +21144,47 @@ class SoN::FromOptree 0.01 {
     # sub's through its GV, or a lexical sub's (`my sub f`, called through a
     # padcv) through _anoncode_cv. undef for a coderef call or a name with no
     # body -- the caller then assumes the worst.
+    # _refuse_unseen_lexical_access($cv, $op, $name) -- dies with a GAP where
+    # code outside the graph can read or write this frame's lexicals.
+    #
+    # A STRING EVAL SHARES ITS FRAME. `my $i = 0; eval q{$i = 1}; print $i`
+    # printed 1 in perl and 0 emitted: the eval wrote $i with no store in the
+    # graph, so the read after it took the binding from before. Any lexical
+    # in the pad counts -- the sub's own, an `our` alias, one it closes over --
+    # since a computed string can name any of them. Package variables are
+    # already demoted for every eval, and an eval with no lexical stays.
+    # PadWalker does the same from a call, the caller's frame included.
+    #
+    # ONE SITE ON PURPOSE: these are where compiled code would hand off to a
+    # runtime, with the scope bindings here as the state to write back.
+    # ponytail: every pad name counts, not only those in scope at the eval;
+    # narrow to the eval's cop range if a real program needs it.
+    sub _refuse_unseen_lexical_access ($cv, $op, $name) {
+        if ($name eq 'entereval') {
+            my $names = eval { $cv->PADLIST->ARRAYelt(0) } or return;
+            my ($seen) = grep { ref($_) eq 'B::PADNAME' && ($_->PV // '') =~ /\A[\$\@%]/ }
+                $names->ARRAY;
+            die "GAP: a string eval with a lexical in scope (" . $seen->PV
+              . ") can read or write it unseen by the graph\n" if $seen;
+        }
+        elsif ($name eq 'gv') {
+            # The callee's gv, which the walk meets before the entersub it
+            # feeds (a call never reaches _step as an entersub). Naming a
+            # PadWalker sub at all counts, `\&PadWalker::peek_my` included.
+            my $gv = _op_gv($cv, $op);
+            return unless $gv && $gv->isa('B::GV');
+            # An imported `peek_my` is main::peek_my; its CV still names
+            # the package that defined it.
+            my $own = eval { my $c = $gv->CV; ref($c) eq 'B::CV' ? $c->GV : undef } // $gv;
+            $gv = $own if $own->isa('B::GV');
+            my $pkg = eval { $gv->STASH->NAME } // '';
+            die "GAP: PadWalker::" . $gv->NAME
+              . " reads or writes lexicals the graph cannot see\n"
+                if $pkg eq 'PadWalker';
+        }
+        return;
+    }
+
     sub _entersub_callee_cv ($cv, $op) {
         if (my $gv = _entersub_callee_gv($cv, $op)) {
             my $sub = $gv->CV;

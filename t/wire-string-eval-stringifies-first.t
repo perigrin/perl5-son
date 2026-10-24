@@ -41,9 +41,7 @@ sub nodes ( $wire ) {
 # half it is refusing.
 subtest 'an eval of a non-Str operand stringifies first' => sub {
     my $wire = translate( <<'SRC', 'ext' );
-my $c = <STDIN>;
-my $r = eval $c;
-print "$r\n";
+print eval(scalar <STDIN>), "\n";
 SRC
     ok $wire, 'it translates' or return;
 
@@ -68,7 +66,7 @@ SRC
 # A Str OPERAND NEEDS NO STRINGIFICATION, and inserting one would be noise.
 # `eval "1 + 2"` is already a string; there is nothing to convert.
 subtest 'an eval of a Str operand gets no extra Coerce' => sub {
-    my $wire = translate( 'my $r = eval "1 + 2"; print "$r\n";', 'lit' );
+    my $wire = translate( 'print eval("1 + 2"), "\n";', 'lit' );
     ok $wire, 'it translates' or return;
 
     my @n = nodes($wire)->@*;
@@ -90,9 +88,7 @@ subtest 'an eval of a Str operand gets no extra Coerce' => sub {
 # extra Coerce is one more hop, not a lost distinction.
 subtest 'the source is still reachable through the nesting' => sub {
     my $wire = translate( <<'SRC', 'reach' );
-my $c = <STDIN>;
-my $r = eval $c;
-print "$r\n";
+print eval(scalar <STDIN>), "\n";
 SRC
     ok $wire, 'it translates' or return;
 
