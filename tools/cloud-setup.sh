@@ -33,6 +33,11 @@ perl -MYAML::PP -MModule::Build -e 1   # fails here if cpanm installed into the 
 command -v cc >/dev/null || { apt-get update -q && apt-get install -yq build-essential; }
 perl Makefile.PL && make && make install && make clean
 
+# LLVM 15. chalk's LLVM tests name /usr/lib/llvm-15/bin/lli and skip_all without
+# it -- in BOTH of gate 3's trees, so 64 files counted SAME having run nothing.
+[ -x /usr/lib/llvm-15/bin/lli ] || { apt-get update -q && apt-get install -yq llvm-15; }
+/usr/lib/llvm-15/bin/lli --version >/dev/null
+
 # chalk at the pin, and perl5's t/ at the commit the perl_t census uses. A rerun
 # keeps the clones and only re-checks the pins.
 mkdir -p "$DEV"
