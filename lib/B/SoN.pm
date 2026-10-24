@@ -1942,7 +1942,13 @@ sub _callee_return_type {
     if ( $kind eq 'method' ) {
         my $cname = $call->class_name // return undef;
         my $cls   = $classes->{$cname} or return undef;
-        return ( $cls->{method_return_types} // {} )->{$name};
+        my $t     = ( $cls->{method_return_types} // {} )->{$name};
+        return $t if defined $t;
+        # A PACKAGE'S METHOD IS ITS SUB: blessed-hash OO declares no `method`,
+        # so a name the class does not have as one is its sub of that name
+        # (its own, not inherited -- as chalk resolves it).
+        my $rec = ( $cls->{subs} // {} )->{$name};
+        return $rec ? $rec->{return_type} : undef;
     }
 
     # A direct sub call names the callee fully qualified (main::f). The sub
