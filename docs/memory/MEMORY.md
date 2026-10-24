@@ -1,3 +1,11 @@
+- [Cause: string builtins](census-cause-string-builtins.md) — uc family and substr as IR helpers; non-ASCII constants refused (bytes vs characters); 136 -> 139
+- [Cause: LocalAlias](census-cause-local-alias.md) — $_ through a pointer global, loop saves and restores; undef elements; 130 -> 136
+- [Cause: Scalar ternary is a foreach alias](census-cause-ternary-scalar-is-foreach-alias.md) — branched ternary, element refs; store past end overflowed the heap; 128 -> 130
+- [Cause: callee writes $_[N]](census-cause-callee-writes-args.md) — copy-in/copy-out @_; list-assign `targets` and stored misses were silently wrong; 125 -> 128
+- [Cause: no resolved callee](census-cause-no-resolved-callee.md) — anon subs: the graph is the metaobject's source; @_ of nothing; 122 -> 125
+- [Cause: Assign Scalar is ++](census-cause-assign-scalar-is-increment.md) — perl's ++ by tag, magic increment measured; non-Str hash keys; 111 -> 122
+- [Cause: Phi before structure](census-cause-phi-before-structure.md) — early returns fold pairwise; a value phi over a call is not memory; 109 -> 111
+- [Runtime needs are refused; tie is MOP](runtime-needs-are-refused-tie-is-mop.md) — string eval and friends GAP by name; tie goes through the metaclass
 - [t/base is the producer corpus](tbase-coverage-is-the-producer-corpus.md) — how to measure B::SoN coverage without the two counting traps
 - [Verify graphs against the optree](graph-correctness-needs-the-optree-not-the-source.md) — perl folds code before B::SoN sees it; node counts prove nothing
 - [OPf_MOD is not a write](opf-mod-is-not-a-write.md) — stale lvalue flag on comparison operands; caused a 111-for-123 miscompile
@@ -89,3 +97,9 @@
 - [Census cause: sub arguments](census-cause-sub-arguments.md) — 430 goal cause 1: bind my (...) = @_, ordered shifts, dense $_[N]; 56->21 aggregate, ROUNDTRIP 76->76; next layer: sub ending in an if (48); coerce only along _keeps_value arrows
 - [Census cause: a sub ending in an if](census-cause-a-sub-ending-in-an-if.md) — cause 2: void calls lower no value; the arm guard walks control back to a Proj; 48->16, ROUNDTRIP 76->77; an over-strict guard cost 2, so measure a refusal both ways
 - [Census cause: shared file lexicals](census-cause-shared-file-lexicals.md) — cause 3: a shared `my` is one %Slot global, reads frozen at their version; Assign lhs 67->47, ROUNDTRIP 77; defined over a Scalar and a bare return were silent wrong answers
+- [Census cause: push](census-cause-push.md) — cause 4: push + join over a flattened list + `$"`; ROUNDTRIP 77->81; a sub's `my @p` built at program entry was shared across calls (entry means the graph's entry); push/shift in an arm pre-lowered like an element store's container
+- [Census cause: a scalar handed to a call](census-cause-a-scalar-handed-to-a-call.md) — cause 5: memory-form `my $x` is an alloca %Slot per graph instance; 38 -> next layer, ROUNDTRIP 81; arm ownership is the control chain; expected output comes from perl, never memory
+- [Census cause: s/// on a location](census-cause-s-on-a-location.md) — cause 6: s/// stores back to the %Slot; ROUNDTRIP 81->84; the arm walk's third ownership bug (reached-by-data-first); a computed replacement is an operand, not the field
+- [Census cause: @_ as a list](census-cause-at-underscore-as-a-list.md) — cause 7: @_ is an %Array of the call's args; ROUNDTRIP 84->89; loop phi edges and mixed literals were read by the wrong stamp; coerce or refuse wherever node type and reading can differ
+- [Census cause: EntryWrite](census-cause-entrywrite.md) — cause 8: a package scalar is one %Slot global (chalk's Part H5), typed families deleted; ROUNDTRIP 89->94; the plan had the fix already -- read docs/plans first
+- [Feature: references and real aggregates](feature-references-and-real-aggregates.md) — refs, tagged hash entries + insert, reads by stored tag, exists, copy-deref, grep truth; 95->108; 114 chalk lli tests had been silently skipping (hardcoded lli path)

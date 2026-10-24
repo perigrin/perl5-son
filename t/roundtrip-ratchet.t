@@ -56,8 +56,16 @@ my %FLOOR = (
     # THE CORPUS THROUGH LLVM (tools/corpus-llvm-roundtrip.pl): 58 of 430 at
     # chalk 5948f648, 70 at 485f8e70, 75 at 59e7b915 (bson/llvm-corpus: every
     # node op B::SoN emits loads), measured 2026-10-23; 76 at 4e1e9969, 4182d850 and e1a15d3a (a
-    # callee that branches, loops or stores is inlined whole).
-    corpus_llvm => 76,
+    # callee that branches, loops or stores is inlined whole); 81 at b019b022
+    # (void calls, shared file lexicals, push); 84 at 0a54e6c0 (a scalar
+    # handed to a call is a location; s/// on one stores back); 89 at
+    # 46b6f7db (an inlined callee reads @_ as a list); 94 at 82b35dd7 (a
+    # package scalar is one %Slot global); 95 at 69ea0c0f (@ARGV); 109 at c8f72658 (references, aggregates);
+    # 111 at 4f87f780 (early returns merge two at a time); 122 at 29c1f540 (++);
+    # 125 at bb10747b (code-ref calls); 128 at 38da3e57 ($_[N] writes back);
+    # 130 at 9f7e363d (a foreach over @_ aliases); 136 at 83ed09e2 ($_ aliased);
+    # 139 at ddb38e93 (uc, substr).
+    corpus_llvm => 139,
     # chalk's lib/ at the commit tools/chalk-lib-roundtrip.pl pins (5948f648,
     # 179 modules), measured at d0cb68a and 2d8fb90, 2026-10-06.
     # 140 at 580ca1e and 4c7348c, 2026-10-13. 143 at b9c9b82, 1bcd4a1,

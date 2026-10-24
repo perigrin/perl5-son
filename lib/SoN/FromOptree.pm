@@ -575,6 +575,11 @@ class SoN::FromOptree 0.01 {
         return \%rename;
     }
 
+    # The main walk's demoted slots (referenced or shared lexicals), for the
+    # arm and loop-body walkers, whose contexts are built fresh: without it a
+    # store in an arm was an SSA rebind nothing outside the arm could see.
+    # The renames below read it too.
+    our $ADDR_TAKEN;
     sub _pad_aggregate_renames ($cv) {
         my %rename;
         my $names = eval { $cv->PADLIST->ARRAYelt(0) } or return \%rename;
@@ -583,7 +588,11 @@ class SoN::FromOptree 0.01 {
             my $pn = $names->ARRAYelt($i);
             next unless ref $pn eq 'B::PADNAME';
             my $pv = $pn->PVX // next;
-            next unless $pv =~ /\A[\@%]\w+\z/;
+            # A SCALAR KEPT IN MEMORY (address taken -- handed to a call, so
+            # `@_` aliases it) is named on the wire by its symbol alone, as an
+            # aggregate is: a shadowing `my $x` was the outer `$x`.
+            next unless $pv =~ /\A[\@%]\w+\z/
+                || ($pv =~ /\A\$\w+\z/ && $ADDR_TAKEN && $ADDR_TAKEN->{$i});
             next if $pn->FLAGS & (B::PADNAMEf_OUTER() | B::PADNAMEf_OUR());
             next if $SHARED_SLOTS && $SHARED_SLOTS->{$i};
             push $by_name{$pv}->@*, $i;
@@ -604,10 +613,6 @@ class SoN::FromOptree 0.01 {
     # _scout_mutated_targs, read by the loop that ran it to decide on a
     # header memory Phi. See _body_stores_memory.
     our $SCOUT_MOVED_MEMORY = 0;
-    # The main walk's demoted slots (referenced or shared lexicals), for the
-    # arm and loop-body walkers, whose contexts are built fresh: without it a
-    # store in an arm was an SSA rebind nothing outside the arm could see.
-    our $ADDR_TAKEN;
 
     # The pad aggregates the walked sub MUTATES -- shift, pop, push, unshift,
     # splice, delete, or an element store -- by targ. A list assign whose
@@ -3703,6 +3708,47 @@ class SoN::FromOptree 0.01 {
                 ($implicit && $exits->[0]{valueless} ? (valueless => 1) : ()));
             $ret->set_control_in($ctrl) if defined $ctrl;
             return $ret;
+        }
+        # EXITS MERGE TWO AT A TIME. `return A if C1; return B if C2; return D`
+        # is three exits, and one Region over all three has no owner: no one If
+        # owns them, so the Region had no head and its Phi no structure to be
+        # found by (chalk: "Phi node encountered ... before its enclosing
+        # if/loop structure", 17 pvm cases). The two arms of one If are a
+        # merge of their own -- that If's -- and the merge is then one exit,
+        # on the outer If's arm. Folded until two remain or no pair is left.
+        $exits = [@$exits];
+        while (@$exits > 2) {
+            my @p = map { SoN::FromOptree::StackSim::arm_proj($_->{control}) } @$exits;
+            my ($i, $j);
+            PAIR: for my $x (0 .. $#p) {
+                next unless defined $p[$x];
+                for my $y ($x + 1 .. $#p) {
+                    next unless defined $p[$y];
+                    my $if = $p[$x]->inputs->[0];
+                    next unless defined $if && $if == $p[$y]->inputs->[0];
+                    next if $p[$x]->index == $p[$y]->index;
+                    next if $if->can('region') && defined $if->region;
+                    ($i, $j) = ($x, $y);
+                    last PAIR;
+                }
+            }
+            last unless defined $i;
+            my ($a, $b) = @$exits[$i, $j];
+            my $if     = $p[$i]->inputs->[0];
+            my $merge  = $factory->make_cfg('Region',
+                inputs => [$a->{control}, $b->{control}]);
+            $if->set_region($merge) if $if->can('set_region');
+            my %phi = (region => $merge, predecessors => [ $p[$i], $p[$j] ]);
+            my $value = $factory->make('Phi',
+                inputs => [$a->{value}, $b->{value}], %phi);
+            my $scalar = (defined $a->{scalar_value} || defined $b->{scalar_value})
+                ? $factory->make('Phi', inputs => [
+                      $a->{scalar_value} // $a->{value},
+                      $b->{scalar_value} // $b->{value} ], %phi)
+                : undef;
+            splice @$exits, $j, 1;
+            $exits->[$i] = { control => $merge, value => $value,
+                             (defined $scalar ? (scalar_value => $scalar) : ()) };
         }
         my $region = $factory->make_cfg('Region',
             inputs => [map { $_->{control} } @$exits]);
@@ -20058,6 +20104,27 @@ class SoN::FromOptree 0.01 {
                 kind   => $kind,
                 stamp  => SoN::IR::Stamp->new(type => 'Str'));
         };
+
+        if ($subject->isa('SoN::IR::Node::PadAccess')
+                && $ADDR_TAKEN && $ADDR_TAKEN->{ $subject->targ }) {
+            # A DEMOTED SLOT IS STORED, not bound -- sassign's rule. Its reads
+            # go through memory, so a bound trim reached none of them and
+            # floated with no consumer: `chop($s)` on a scalar handed to a
+            # call printed abcabc for perl's abcab. The subject is the read
+            # at the current memory version; the trim is stored back there.
+            my $node = $make->($subject);
+            my $loc  = $factory->make('PadAccess',
+                targ   => $subject->targ,
+                sigil  => $subject->sigil,
+                symbol => $subject->symbol,
+                ($subject->shared ? (shared => 1) : ()),
+                (defined $sim->memory ? (inputs => [ $sim->memory ]) : ()));
+            my $store = $factory->make('Assign', inputs => [$loc, $node]);
+            $store->set_control_in($sim->control);
+            $sim->set_control($store);
+            $sim->set_memory($store);
+            return $node;
+        }
 
         if ($subject->isa('SoN::IR::Node::PadAccess')) {
             # THE SUBJECT IS THE SLOT'S LIVE VALUE, NOT A FRESH READ. chomp's

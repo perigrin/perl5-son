@@ -1780,9 +1780,12 @@ class SoN::Deparse 0.01 {
         # a location by name (Assign's targets, Ref, a 4-argument substr's
         # string); anything unlisted leaves the read unbound, which is the
         # behaviour this pass replaces rather than a new wrong answer.
+        # Chomp and ChompValue trim or measure a COPY (`do { my $c = $t;
+        # chop($c) }`); the store back is an Assign of their own.
         state $VALUE_CONSUMER = { map { $_ => 1 } keys %BINOP, qw(
             Assign Ref Coerce Print Interpolate Length Not Negate Defined
             DefinedOr And Or TernaryExpr UnaryPlus Increment Return Phi If
+            Chomp ChompValue
         ) };
         my %consumers;
         for my $c ( $self->_nodes_in_order ) {
