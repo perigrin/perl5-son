@@ -4468,6 +4468,16 @@ class SoN::FromOptree 0.01 {
                 && defined $invocant->class_name) {
                 $class_name = $invocant->class_name;
             }
+            # $obj = bless REF, "Class": a literal class is as static as Class->new.
+            elsif ($invocant
+                && $invocant->isa('SoN::IR::Node::Call')
+                && ($invocant->dispatch_kind // '') eq 'builtin'
+                && ($invocant->name // '') eq 'bless'
+                && (my $cls = $invocant->inputs->[1])) {
+                $class_name = $cls->value
+                    if $cls->isa('SoN::IR::Node::Constant')
+                    && ($cls->const_type // '') eq 'string';
+            }
             # Class->new(k => v, ...): the args after the invocant are a
             # param=>value kv-list. Split the keys onto param_names and
             # the values onto inputs, so the backend binds each value to
