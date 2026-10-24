@@ -54,8 +54,9 @@ my %FLOOR = (
     # callee that branches, loops or stores is inlined whole); 81 at b019b022
     # (void calls, shared file lexicals, push); 84 at 0a54e6c0 (a scalar
     # handed to a call is a location; s/// on one stores back); 89 at
-    # 46b6f7db (an inlined callee reads @_ as a list).
-    corpus_llvm => 89,
+    # 46b6f7db (an inlined callee reads @_ as a list); 94 at 82b35dd7 (a
+    # package scalar is one %Slot global).
+    corpus_llvm => 94,
     # chalk's lib/ at the commit tools/chalk-lib-roundtrip.pl pins (5948f648,
     # 179 modules), measured at d0cb68a and 2d8fb90, 2026-10-06.
     # 140 at 580ca1e and 4c7348c, 2026-10-13. 143 at b9c9b82, 1bcd4a1,
