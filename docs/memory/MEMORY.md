@@ -1,3 +1,4 @@
+- [Cause: no resolved callee](census-cause-no-resolved-callee.md) — anon subs: the graph is the metaobject's source; @_ of nothing; 122 -> 125
 - [Cause: Assign Scalar is ++](census-cause-assign-scalar-is-increment.md) — perl's ++ by tag, magic increment measured; non-Str hash keys; 111 -> 122
 - [Cause: Phi before structure](census-cause-phi-before-structure.md) — early returns fold pairwise; a value phi over a call is not memory; 109 -> 111
 - [Runtime needs are refused; tie is MOP](runtime-needs-are-refused-tie-is-mop.md) — string eval and friends GAP by name; tie goes through the metaclass
