@@ -58,6 +58,16 @@ BEGIN { print "b\n" } print "m\n";
 b
 m
 ```
+
+## a string eval the producer refuses
+
+```perl
+my $n = 2; my $r = eval "\$n + 1"; print "$r\n";
+```
+
+```output
+3
+```
 MD
 close $fh;
 
@@ -65,14 +75,19 @@ my $out = qx(SON_CORPUS=$dir SON_CHALK=$chalk $^X $FindBin::Bin/../tools/corpus-
 my %n;
 $n{$1} = $2 while $out =~ /^(\w+)\s+(\d+)$/mg;
 
-like $out, qr/^cases: 4$/m, 'it reads the four cases';
+like $out, qr/^cases: 5$/m, 'it reads the five cases';
 is $n{ROUNDTRIP}, 1, 'the program lli runs to perl\'s output round-trips' or diag $out;
 is $n{DIFFERS},   1, 'the one recorded wrong differs' or diag $out;
-is $n{GAP},       2, 'the one chalk will not lower is a gap, and so is one it refuses as it loads' or diag $out;
+is $n{GAP},       3, 'the one chalk will not lower is a gap, as are one it refuses as it loads and one the producer refuses' or diag $out;
 is $n{LOAD_FAIL}, 0, 'a refusal by name at load is no load failure' or diag $out;
 like $out, qr/^GAP_CAUSE\s+1\s+sort with a STRING comparator/m,
     'the gap is ranked by its cause';
 unlike $out, qr/^(?:GAP|LOAD)_CAUSE.* at \S+ line \d/m, 'a cause carries no source location';
+# A PROGRAM THE PRODUCER REFUSES never reaches chalk as a program: B::SoN
+# skips its graph and says why on stderr. That is a refusal by name -- a GAP
+# with the producer's reason -- not a load failure.
+like $out, qr/^STATUS 005 GAP\s+cases\.md: producer: .*string eval with a lexical in scope/m,
+    'a program the producer refuses is a gap with its reason' or diag $out;
 like $out, qr/^STATUS 003 GAP\s+cases\.md: .*sort with a STRING comparator/m,
     '-v names each case\'s outcome';
 

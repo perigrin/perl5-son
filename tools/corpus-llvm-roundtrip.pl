@@ -33,7 +33,7 @@ use CorpusLlvmCause;
 
 # chalk's bson/llvm-corpus branch, where the backend work for this census
 # lands -- not the chalk-lib census's 5948f648, which stays put.
-my $COMMIT  = 'ddb38e93';
+my $COMMIT  = '8beb4a2a';
 my $jobs    = 8;
 my $verbose = 0;
 my $timeout = 60;
@@ -62,12 +62,19 @@ printf "cases: %d\n", scalar @cases;
 sub run_case ($id, $c) {
     my $base = "$dir/c$id";
     open my $o, '>', "$base.pl" or die $!; print $o $c->{src}; close $o;
-    qx($^X -I$FindBin::Bin/../lib -MO=-q,SoN,json,not_package=SoN $base.pl > $base.json 2>/dev/null);
+    qx($^X -I$FindBin::Bin/../lib -MO=-q,SoN,json,not_package=SoN $base.pl > $base.json 2> $base.err);
+    # A PROGRAM THE PRODUCER REFUSES is skipped, and B::SoN says why on
+    # stderr: a refusal by name, so a GAP with that reason -- not the load
+    # failure chalk reports for a graph set with no program in it.
+    my ($refused) = do { local (@ARGV, $/) = "$base.err"; -e "$base.err" ? <> : '' }
+        =~ /skipped main::__PROGRAM__: (GAP: .*)/;
     return ('NOJSON', 'B::SoN produced no graph') unless -s "$base.json";
     my $why = qx(timeout $timeout $^X -I$snap/lib -I$snap/t/lib $FindBin::Bin/chalk-lower.pl $base.json $base.ll 2>/dev/null);
     chomp $why;
     if ($?) {
         return ('GAP', $1)       if $why =~ /^LOAD: ((?:from_json failed: )?GAP:.*)/;
+        return ('GAP', "producer: $refused")
+            if defined $refused && $why =~ /^LOAD: no program graph/;
         return ('LOAD_FAIL', $1) if $why =~ /^LOAD: (.*)/;
         return ('GAP', $1)       if $why =~ /^GAP: (.*)/;
         return ('GAP', 'chalk timed out or died lowering it');
