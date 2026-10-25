@@ -1,3 +1,4 @@
+- [Cause: sprintf and array conditions](census-cause-sprintf-and-array-conditions.md) — snprintf per conversion; array truthiness by count; frozen element read re-read for its Slot after a store (miscompile); 214 -> 218
 - [Cause: delete](census-cause-delete.md) — hash delete + values; Delete freezes reads; producer typed a read by ANOTHER slot's store (0=0 miscompile); rm of tmp files hit a tracked file; 210 -> 214
 - [Cause: reverse and sort blocks](census-cause-reverse-and-sort-blocks.md) — reverse both contexts; sort inlines its comparator per comparison; <=>/cmp were unlowered; bitwise left refused (B::SoN coerces string operands); 206 -> 210
 - [Cause: closures](census-cause-closures.md) — a code ref passed down is called through its binding; captures are the maker frame's locations; CellWrite was silently dropped; Num/Undef ternary boxes to Scalar ; 203 -> 206
