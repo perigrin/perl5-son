@@ -689,8 +689,13 @@ sub _floor_subscripts {
             my $mem = @in >= 3 ? $in[2] : undef;
             # ONLY AN ELEMENT STORE says what an element holds: a whole
             # `@F = (...)` is stamped Array, and an element took it.
+            # AND ONLY OF THIS SLOT: the store being this read's memory
+            # version says it came first, not that it wrote here. `$h{d} = 4`
+            # then a read of each sorted key took Int for the keys (another
+            # container) and for $h{$_} (another key).
             if ( $mem && $mem->isa('SoN::IR::Node::Assign')
-                 && ( $mem->inputs->[0] // 0 )->isa('SoN::IR::Node::Subscript') ) {
+                 && ( $mem->inputs->[0] // 0 )->isa('SoN::IR::Node::Subscript')
+                 && _same_slot( $mem->inputs->[0], $node ) ) {
                 my $st = $mem->stamp;
                 if ( $st && $st->type ne 'Unknown'
                      && $st->type !~ /\A(?:Array|Hash|List)\z/ ) {
@@ -706,6 +711,31 @@ sub _floor_subscripts {
         }
     }
     return;
+}
+
+# _same_slot($target, $read) -- do a store target and a read name one slot:
+# the same container and the same index, each the same node, an equal
+# constant, or a variable of the same name.
+sub _same_slot {
+    my ( $t, $r ) = @_;
+    for my $i ( 0, 1 ) {
+        my ( $a, $b ) = ( $t->inputs->[$i], $r->inputs->[$i] );
+        return 0 unless defined $a && defined $b;
+        next if $a == $b;
+        if ( $a->isa('SoN::IR::Node::Constant') && $b->isa('SoN::IR::Node::Constant') ) {
+            next if defined $a->value && defined $b->value && $a->value eq $b->value;
+            return 0;
+        }
+        my $name = sub ($n) {
+            return $n->can('symbol') && $n->can('sigil') && defined $n->symbol
+                ? ( $n->can('package') ? ( $n->package // '' ) : '' ) . ( $n->sigil // '' ) . $n->symbol
+                : undef;
+        };
+        my ( $na, $nb ) = ( $name->($a), $name->($b) );
+        next if defined $na && defined $nb && $na eq $nb && ref($a) eq ref($b);
+        return 0;
+    }
+    return 1;
 }
 
 # _floor_list_assigns(\%graphs) -- a list assignment says what its two contexts
