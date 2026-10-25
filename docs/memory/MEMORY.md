@@ -1,4 +1,6 @@
 - [Cause: list flattening](census-cause-list-flattening.md) — a call's array flattens; freeze holes (MemStart in loops, MakeCell); an unterminated string made the census flaky; 154 -> 161
+- [Cause: next in an arm](census-cause-next-in-an-arm.md) — a latch every pass-ending path meets; one latch Region per next, nested; 170 -> 175
+- [Cause: a list with a List](census-cause-list-with-a-list.md) — integer ranges flatten; range bounds read through the producer's Int coercion; 168 -> 170
 - [Cause: block eval](census-cause-block-eval.md) — eval as a branch (every die is inlined); $@ explicit; dying values dropped from the graph; 166 -> 168
 - [Cause: drained array](census-cause-drained-array.md) — versioned reads of a loop-drained array are frozen, so allowed; 164 -> 166
 - [Cause: sort by tag](census-cause-sort-by-tag.md) — comparator reads each element by tag; numeric sort was silently wrong; MemStart freeze in straight-line inlining; 149 -> 154
