@@ -1,3 +1,4 @@
+- [Cause: reverse and sort blocks](census-cause-reverse-and-sort-blocks.md) — reverse both contexts; sort inlines its comparator per comparison; <=>/cmp were unlowered; bitwise left refused (B::SoN coerces string operands); 206 -> 210
 - [Cause: closures](census-cause-closures.md) — a code ref passed down is called through its binding; captures are the maker frame's locations; CellWrite was silently dropped; Num/Undef ternary boxes to Scalar ; 203 -> 206
 - [Cause: method on a non-object](census-cause-method-on-a-non-object.md) — `state $n` with no feature is `$n->state`, which dies; lowered where nothing reads $@; consumers miss value uses; 200 -> 203
 - [Cause: in-memory handles](census-cause-in-memory-handles.md) — open/readline/eof/close/print/select on strings in memory; handle builtins advance memory in B::SoN; one handle cell per inlined sub; 192 -> 200
