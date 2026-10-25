@@ -36,3 +36,19 @@ touched every %Array/%Hash allocation site.
 bless family: dispatch on a runtime class (055, 180's grep), @ISA (056),
 isa (058), blessed() (180), an object in a shared lexical (012, 059), an
 object passed as an argument read through $_[0] typed Scalar (204).
+
+**Follow-on (chalk 84b56f66): an object passed as an argument.** A method
+on a parameter resolves through its invocant's static class and the MOP;
+a reference can be stored in a Scalar slot and a shared lexical. No new
+round-trips (190 holds). 204 now stops at "ListAppend elem has
+repr=Unknown", and 012/059 stop at `can`.
+
+**Lesson: allowing a new store exposes old aliasing.** Once refs could
+live in shared lexicals, pvm 185 (`for my $x (@$l) { g($l) }`, where g
+shifts) went DIFFERS: B::SoN reads `$x` by index at each memory version,
+but perl's `$x` aliases the element. Refusing every reaching call cost
+132, a closure that only pushes. The rule that holds: refuse when the call
+can reach the array (it is passed the array or its reference, or the same
+variable by name, since each read is its own node, or the array is
+shared or global) AND its callee graph, followed through its own direct
+calls, has a shift/unshift/splice/pop, a whole-array Assign, or no graph.
