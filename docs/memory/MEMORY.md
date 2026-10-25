@@ -5,7 +5,7 @@
 - [Cause: loop truth condition](census-cause-loop-truth-condition.md) — any Boolean pinned to the Loop is its condition; Str/Scalar truthiness; 176 -> 181
 - [Cause: return from a loop](census-cause-return-from-a-loop.md) — a headless jump merge: one way in, arms jumping in from inside; 175 -> 176
 - [Cause: next in an arm](census-cause-next-in-an-arm.md) — a latch every pass-ending path meets; one latch Region per next, nested; 170 -> 175
-- [Cause: a list with a List](census-cause-list-with-a-list.md) — integer ranges flatten; range bounds read through the producer's Int coercion; 168 -> 170
+- [Cause: a list with a List](census-cause-list-with-a-list.md) — integer ranges flatten; range bounds read through the producer's Int coercion; 168 -> 170; slices and \(@a) 190 -> 192
 - [Cause: block eval](census-cause-block-eval.md) — eval as a branch (every die is inlined); $@ explicit; dying values dropped from the graph; 166 -> 168
 - [Cause: drained array](census-cause-drained-array.md) — versioned reads of a loop-drained array are frozen, so allowed; 164 -> 166
 - [Cause: sort by tag](census-cause-sort-by-tag.md) — comparator reads each element by tag; numeric sort was silently wrong; MemStart freeze in straight-line inlining; 149 -> 154

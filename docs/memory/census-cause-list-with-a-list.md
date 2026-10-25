@@ -31,3 +31,25 @@ cause, by shape:
 **How to apply:** when a producer coerces an operand "for" a consumer,
 the consumer must still read the original's type where perl's semantics
 depend on it.
+
+**Second round (chalk 7bcb1010): 190 -> 192.** The cause held 7 cases,
+which turned out to be four shapes:
+- **array slices** (159, 192, 213): a Slice's inputs are its indices, then
+  the array LAST. Lowered as a copy of each indexed element (negative
+  indices count from the end, an index past either end gives undef), in a
+  list and in a join. 159 round-trips. 192 is refused by name: B::SoN
+  walks `for (@n[1..1])` as a fresh ArrayLiteral of the slice, so an
+  element passed to a sub or referenced would be a copy where perl's is
+  the array's own. 213 moved on to "ListAppend elem has repr=Scalar"
+  (grep's collector).
+- **`\(@a)`** (412, 009): the wire's Ref carries `each`, which the loader
+  had dropped. It is now in the Ref's content_hash, so it can't hash-cons
+  with `\@a`. Each element's reference is its slot, as `\$a[$i]` is. 412
+  round-trips; 009 moved on to an indirect call.
+- **`(LIST) x N`** (081): B::SoN gives Repeat a Coerce(List->Str) operand.
+  That's a producer question, unbuilt.
+- **a string range with a runtime bound** (372): needs magic string
+  increment, unbuilt.
+
+**How to apply:** one GAP message can cover several unrelated shapes. Dump
+each case before calling the cause one feature.
