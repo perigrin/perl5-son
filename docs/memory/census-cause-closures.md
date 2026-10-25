@@ -1,6 +1,6 @@
 ---
 name: census-cause-closures
-description: 430/430 goal, "cannot lower op=AnonSub" (5) -- a closure called while the sub that made it runs; CellWrite was silently dropped; ternary of a number and undef boxes to Scalar
+description: 430/430 goal, "cannot lower op=AnonSub" (5) -- a closure called while the sub that made it runs; CellWrite was silently dropped; ternary of a number and undef boxes to Scalar ; 203 -> 206 of 431
 metadata:
   type: project
 ---
@@ -50,3 +50,9 @@ through process_control_node silently logged. Only value nodes appeared
 (ArrayLiteral/HashLiteral pinned as allocations, Subscript, TernaryExpr,
 Coerce, FieldAccess), which are lowered at their use. CellWrite was the
 only dropped effect.
+
+**Result (chalk 795c82e8):** 203 -> 206 (128, 206, 213). 213 had been
+hiding a PRE-EXISTING LLI_FAIL behind its ListAppend refusal: `//`'s right
+side was cached past its arm (fixed and tested). The same pattern in
+&&/|| and the second DefinedOr lowering is untested (their probes are
+refused earlier) and was left as it was: a backlog item.

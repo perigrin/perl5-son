@@ -1,4 +1,4 @@
-- [Cause: closures](census-cause-closures.md) — a code ref passed down is called through its binding; captures are the maker frame's locations; CellWrite was silently dropped; Num/Undef ternary boxes to Scalar
+- [Cause: closures](census-cause-closures.md) — a code ref passed down is called through its binding; captures are the maker frame's locations; CellWrite was silently dropped; Num/Undef ternary boxes to Scalar ; 203 -> 206
 - [Cause: method on a non-object](census-cause-method-on-a-non-object.md) — `state $n` with no feature is `$n->state`, which dies; lowered where nothing reads $@; consumers miss value uses; 200 -> 203
 - [Cause: in-memory handles](census-cause-in-memory-handles.md) — open/readline/eof/close/print/select on strings in memory; handle builtins advance memory in B::SoN; one handle cell per inlined sub; 192 -> 200
 - [Cause: list flattening](census-cause-list-flattening.md) — a call's array flattens; freeze holes (MemStart in loops, MakeCell); an unterminated string made the census flaky; 154 -> 161
