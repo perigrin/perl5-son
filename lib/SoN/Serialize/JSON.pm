@@ -61,6 +61,8 @@ sub _extract_fields ($node, $id_remap) {
                 : () ),
             # `&name;`: the call hands on the caller's @_.
             ( $node->shares_args ? ( shares_args => JSON::PP::true ) : () ),
+            # The eval whose body the call is in (see Unwind's).
+            ( defined $node->eval_id ? ( eval_id => $node->eval_id ) : () ),
             ( $node->external ? ( external => JSON::PP::true ) : () ),
             ( $node->memory_input ? ( memory_input => JSON::PP::true ) : () ),
             # The statically-known class for a method dispatch (Class->new).

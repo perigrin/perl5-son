@@ -33,6 +33,16 @@ is $msg_of{"in\n"},  $inner, 'the inner die names the inner eval';
 is $msg_of{"out\n"}, $outer, 'the outer die names the outer eval';
 is $msg_of{"top\n"}, undef,  'a die in no eval names none';
 
+# A CALL IN AN EVAL'S BODY names the eval too: the sub's own die is in the
+# sub's graph and names none, so a consumer needs to know the call is caught.
+{
+    my $n = nodes_of(q{sub g { die "x\n" if $_[0]; 1 } my $r = eval { g(1) }; g(0);});
+    my ($region) = grep { $_->{op} eq 'Region' && defined $_->{fields}{eval_id} } @$n;
+    my @calls = grep { $_->{op} eq 'Call' && ($_->{fields}{name} // '') eq 'main::g' } @$n;
+    is [ sort map { $_->{fields}{eval_id} // 'none' } @calls ],
+        [ sort($region->{fields}{eval_id}, 'none') ], 'the call in the eval names it; the one outside, none';
+}
+
 # $@ AFTER AN EVAL is what the eval left: on the main walk its read is a
 # node of its own, pinned where it is, never the read inside the body at the
 # same memory version (a guard: chalk relies on it to order the two).

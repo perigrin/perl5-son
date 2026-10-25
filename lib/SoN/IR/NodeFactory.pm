@@ -433,6 +433,11 @@ class SoN::IR::NodeFactory {
             my $id = "${op_name}#${cfg_counter}";
             my $node = $class->new( id => $id, %args );
             $self->_register_consumers($node, %args);
+            # A SUB CALLED IN AN EVAL'S BODY: its die is in its own graph and
+            # names no eval, so the call names the one it is caught by.
+            $node->set_eval_id($SoN::FromOptree::EVAL_ID)
+                if $op_name eq 'Call' && defined $SoN::FromOptree::EVAL_ID
+                && ( $args{dispatch_kind} // '' ) ne 'builtin';
             $cache{$id} = $node;
             return $node;
         }

@@ -53,6 +53,16 @@ class SoN::IR::Node::Call :isa(SoN::IR::Value) {
     # (sKS vs lKS). Absent for a call whose context was not recorded.
     field $want :param :reader = undef;
 
+    # THE BLOCK EVAL (or try) whose body this call is in, in its graph, or
+    # undef: the callee's own die names no eval, so the call says which
+    # catches it (as an Unwind's eval_id does for a die in this graph).
+    field $eval_id :reader = undef;
+
+    method set_eval_id($id) {
+        $eval_id = $id;
+        return;
+    }
+
     # THE LAST INPUT IS A MEMORY EDGE, appended by the producer (keys, values,
     # each; push, unshift, splice; shift, pop). Said here because the input
     # alone cannot say it: a `shift` result passed as the last ARGUMENT is a
