@@ -1,3 +1,4 @@
+- [Cause: in-memory handles](census-cause-in-memory-handles.md) — open/readline/eof/close/print/select on strings in memory; handle builtins advance memory in B::SoN; one handle cell per inlined sub; 192 -> 199
 - [Cause: list flattening](census-cause-list-flattening.md) — a call's array flattens; freeze holes (MemStart in loops, MakeCell); an unterminated string made the census flaky; 154 -> 161
 - [Cause: bless](census-cause-bless.md) — a bless table keyed by address; ref() reads it; a package new is its sub, keeping its invocant; 186 -> 190
 - [Cause: value made in an arm](census-cause-value-made-in-an-arm.md) — loop exit in an arm; push by tag; loop body cache dropped; calls carry eval_id; plain prove loads installed SoN; 184 -> 186

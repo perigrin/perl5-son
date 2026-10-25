@@ -3924,6 +3924,13 @@ class SoN::FromOptree 0.01 {
     # then the `import` half is an ordinary method call that already lowers.
     my %GLOBAL_STATE_BUILTIN = map { $_ => 1 } qw(require dofile);
 
+    # A HANDLE'S STATE IS MEMORY: open, a read, eof and close change or
+    # observe it, so each advances the memory chain as a global-state op
+    # does. Ordered by control alone, `my @l = <$fh>; print scalar(@l)` read
+    # @l at the memory from before the open, and a consumer ordering reads by
+    # memory built @l from an unopened handle.
+    my %HANDLE_MEMORY_BUILTIN = map { $_ => 1 } qw(open close readline eof);
+
     # Handle reads whose EFFECT IS ON THE HANDLE. Reading advances the file
     # position, so two calls on one handle return different things and the
     # order between them is the value -- that ordering is carried by the
@@ -11358,7 +11365,8 @@ class SoN::FromOptree 0.01 {
                 # `Phi(1190) in=[Call(require), EntryWrite]` -- a merge of two
                 # memory chains -- look like a VALUE Phi, which bound the
                 # EntryWrite and then asked to render a store as an expression.
-                if ($node_type eq 'Call' && $GLOBAL_STATE_BUILTIN{$name}
+                if ($node_type eq 'Call'
+                    && ( $GLOBAL_STATE_BUILTIN{$name} || $HANDLE_MEMORY_BUILTIN{$name} )
                     && defined $sim->memory) {
                     push @inputs, $sim->memory;
                     $extra{memory_input} = 1;   # see Call's memory_input
@@ -11475,7 +11483,8 @@ class SoN::FromOptree 0.01 {
                 # require -- calling POSIX->import before POSIX is loaded is a
                 # different program. Only a shared chain expresses an ordering
                 # that no data edge carries.
-                if ($GLOBAL_STATE_BUILTIN{$name} && defined $sim->memory) {
+                if (( $GLOBAL_STATE_BUILTIN{$name} || $HANDLE_MEMORY_BUILTIN{$name} )
+                    && defined $sim->memory) {
                     $sim->set_memory($node);
                 }
                 # ...and is the new memory version of that string, which
