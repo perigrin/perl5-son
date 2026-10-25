@@ -1,4 +1,5 @@
 - [Cause: list flattening](census-cause-list-flattening.md) — a call's array flattens; freeze holes (MemStart in loops, MakeCell); an unterminated string made the census flaky; 154 -> 161
+- [Cause: if on a parameter](census-cause-if-on-a-parameter.md) — If.cond reads an untyped parameter as the caller's value; Slot deref and merge-flattening exposed; 181 -> 184
 - [Cause: loop truth condition](census-cause-loop-truth-condition.md) — any Boolean pinned to the Loop is its condition; Str/Scalar truthiness; 176 -> 181
 - [Cause: return from a loop](census-cause-return-from-a-loop.md) — a headless jump merge: one way in, arms jumping in from inside; 175 -> 176
 - [Cause: next in an arm](census-cause-next-in-an-arm.md) — a latch every pass-ending path meets; one latch Region per next, nested; 170 -> 175
