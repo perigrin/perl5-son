@@ -1,3 +1,4 @@
+- [Cause: run-time dispatch](census-cause-runtime-dispatch.md) — dispatch by bless table over packages declaring the sub; refuse classes lacking it; producer memory flag wholesale miscompiled 124; 220 -> 222
 - [Cause: split](census-cause-split.md) — literal/awk/chars split as views, trailing empties dropped by a keep count; regex refused; 218 -> 220
 - [Cause: sprintf and array conditions](census-cause-sprintf-and-array-conditions.md) — snprintf per conversion; array truthiness by count; frozen element read re-read for its Slot after a store (miscompile); 214 -> 218
 - [Cause: delete](census-cause-delete.md) — hash delete + values; Delete freezes reads; producer typed a read by ANOTHER slot's store (0=0 miscompile); rm of tmp files hit a tracked file; 210 -> 214
