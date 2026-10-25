@@ -1,6 +1,6 @@
 ---
 name: census-cause-in-memory-handles
-description: 430/430 goal, "Call builtin open" (6) + readline (4) + select -- in-memory handles; handle builtins advance memory in B::SoN; 192 -> 199 of 431
+description: 430/430 goal, "Call builtin open" (6) + readline (4) + select -- in-memory handles; handle builtins advance memory in B::SoN; 192 -> 200 of 431
 metadata:
   type: project
 ---
@@ -42,6 +42,6 @@ takes and advances memory, the same way require/dofile do
 **Also fixed:** _str_const_parts wrote the raw text into an IR comment, and
 a newline in it broke the .ll.
 
-**Result:** 192 -> 199 (295 296 297 298 428 430 431). Next: 011 (AnonSub,
+**Result:** 192 -> 200 (295 296 297 298 428 429 430 431). Next: 011 (AnonSub,
 glob assign, AUTOLOAD), 363/364 (`<DATA>`, a bareword handle whose text
 B::SoN would have to carry).
