@@ -4493,7 +4493,11 @@ class SoN::FromOptree 0.01 {
             # keys; anything else stays a generic dispatch.
             my @call_inputs = ($invocant, $args->@*);
             my $param_names;
-            if (defined $class_name && $pending_method eq 'new'
+            # ONLY A `class` CONSTRUCTOR takes its args as field values; a
+            # package's `new` is a sub that reads its invocant from $_[0].
+            my $is_class = defined $class_name && defined &SoN::ClassAux::is_class
+                && do { no strict 'refs'; SoN::ClassAux::is_class(\%{"${class_name}::"}) };
+            if (defined $class_name && $pending_method eq 'new' && $is_class
                 && (($args->@*) % 2 == 0)) {
                 my (@keys, @vals, $ok);
                 $ok = 1;

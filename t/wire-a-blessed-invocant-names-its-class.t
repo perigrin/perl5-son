@@ -41,4 +41,20 @@ my $o = bless {}, $c;
 print $o->hi, "\n";
 SRC
 
+# A PACKAGE'S new IS A SUB, which reads its invocant from $_[0]: only a
+# `class` constructor takes its args as field values with the invocant
+# dropped. `Foo->new` (no args, an even count) had its "Foo" dropped too.
+{
+    my $f = "$dir/g." . int(rand 1e9) . ".pl";
+    open my $fh, '>', $f or die $!;
+    print $fh q{package Foo; sub new { bless {}, $_[0] } sub hi { 1 } package main; my $o = Foo->new; my $p = Foo->new(a => 1); print $o->hi;};
+    close $fh;
+    my $j = qx($^X -Ilib -MO=-q,SoN,json,not_package=SoN $f 2>/dev/null); unlink $f;
+    my $nodes = JSON::PP->new->decode($j)->{methods}{'main::__PROGRAM__'}{nodes};
+    my %by = map { $_->{id} => $_ } @$nodes;
+    my @news = grep { $_->{op} eq 'Call' && ($_->{fields}{name} // '') eq 'new' } @$nodes;
+    is [ map { scalar @{ $_->{inputs} } } @news ], [1, 3], 'each keeps its invocant and its args';
+    is [ map { $by{ $_->{inputs}[0] }{fields}{value} } @news ], ['Foo', 'Foo'], 'the invocant is the class name';
+}
+
 done_testing;
