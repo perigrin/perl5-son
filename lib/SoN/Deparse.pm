@@ -3024,6 +3024,37 @@ class SoN::Deparse 0.01 {
                     $join = $nodes->{$exit};
                 }
             }
+            # NOR IS ONE INDEXED BY A LOOP'S Phi read above that loop. At a
+            # store before the loop -- one in an eval body -- `$l[$i]` of a
+            # foreach was spelled where $i does not exist, and corpus 006 did
+            # not compile. Read in the loop, where its index is, unless the
+            # version itself is in that loop's body.
+            unless ( $join ) {
+                my ( @lq, %ls, @loops ) = @in[ 0 .. $#in - 1 ];
+                while ( defined( my $id = shift @lq ) ) {
+                    next if $ls{$id}++;
+                    my $d = $nodes->{$id} // {};
+                    if ( ( $d->{op} // q{} ) eq q{Phi} ) {
+                        my $lr = $nodes->{ ( $d->{fields} // {} )->{region} // -1 } // {};
+                        push @loops, $lr->{id} if ( $lr->{op} // q{} ) eq q{Loop};
+                        next;
+                    }
+                    push @lq, ( $d->{inputs} // [] )->@* unless defined $d->{control_in};
+                }
+                if ( @loops ) {
+                    # Behind the version, along control: the loops it is inside.
+                    my ( @bq, %bs, %behind ) = ( $version->{id} );
+                    while ( defined( my $id = shift @bq ) ) {
+                        next if $bs{$id}++;
+                        my $b = $nodes->{$id} // {};
+                        $behind{$id} = 1;
+                        push @bq, $b->{control_in} if defined $b->{control_in};
+                        push @bq, ( $b->{inputs} // [] )->@*
+                            if ( $b->{op} // q{} ) =~ /\A(?:Proj|Region)\z/;
+                    }
+                    next if grep { !$behind{$_} } @loops;
+                }
+            }
             my $at_entry = !defined $version->{control_in};
             $at_entry = 0 if $join;
             # AN OPERAND MADE ON THE CHAIN -- an anonymous `[4]` -- is the
