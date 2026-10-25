@@ -1,4 +1,5 @@
 - [Cause: list flattening](census-cause-list-flattening.md) — a call's array flattens; freeze holes (MemStart in loops, MakeCell); an unterminated string made the census flaky; 154 -> 161
+- [Cause: bless](census-cause-bless.md) — a bless table keyed by address; ref() reads it; a package new is its sub, keeping its invocant; 186 -> 190
 - [Cause: value made in an arm](census-cause-value-made-in-an-arm.md) — loop exit in an arm; push by tag; loop body cache dropped; calls carry eval_id; plain prove loads installed SoN; 184 -> 186
 - [Cause: if on a parameter](census-cause-if-on-a-parameter.md) — If.cond reads an untyped parameter as the caller's value; Slot deref and merge-flattening exposed; 181 -> 184
 - [Cause: loop truth condition](census-cause-loop-truth-condition.md) — any Boolean pinned to the Loop is its condition; Str/Scalar truthiness; 176 -> 181
