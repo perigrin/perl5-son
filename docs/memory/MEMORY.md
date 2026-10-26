@@ -146,3 +146,4 @@
 - [Census cause: builtin memory phi](census-cause-builtin-memory-phi.md) — a loop memory phi over a push/sort was read as a value phi (TOP); `$s // []` as a reference by tag; 124 217
 - [Census cause: bitwise & | ^](census-cause-bitwise.md) — numeric only when the feature says so or an operand is a numeric literal; string bitwise and ~ refused; unsigned past i64 stops; 046 051
 - [Census cause: stores through a tagged reference](census-cause-scalar-container-stores.md) — autoviv into element/location; older wrong: loop-phi reads unfrozen; pending tag reads refuse a later store through a ref; local store refused; 232
+- [Census cause: Phi before its structure](census-cause-phi-before-structure.md) — loop-invariant store roots; nested-loop stores (older wrong); drive a made, effect-free loop from its phi only; labeled jump named; 220

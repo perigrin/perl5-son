@@ -1,35 +1,31 @@
 ---
 name: census-cause-phi-before-structure
-description: 430/430 goal, cause "Phi node encountered before its enclosing if/loop structure" (17 cases) — early returns built one headless N-way Region; folded pairwise in the producer, plus a value phi misread as memory; ROUNDTRIP 109 -> 111; most remaining cases are eval
+description: 430/430 goal, "Phi node encountered in lower_value before its enclosing structure" (115 210 220) -- three roots: a loop phi read after its arm dropped it (fixed, 220), a back-edge reaching an inner loop's phi (115, now named), a loop driven early (fill1, refused); 257 -> 258
 metadata:
   type: project
 ---
 
-**Cause:** "Phi node encountered in lower_value before its enclosing
-if/loop structure" held 17 cases at c8f72658.
+**Cause:** "Phi node encountered in lower_value before its enclosing if/loop
+structure" (115 210 220). One message, several roots.
 
-**What it was, three things:**
-- `return A if C1; return B if C2; return D` built one Region over three
-  exits. No one If owns three, so it had no head and chalk could not
-  find the structure. `_build_single_exit` (FromOptree) now folds two
-  sibling arms of one If into their own merge until two remain.
-- chalk then refused the inner merge's phi as "made inside one of its
-  arms". An inner merge that has an If for its head is lowered with its
-  arm.
-- `$p ? one() : 4`: `_is_memory_phi` took any phi with a direct-call
-  input for memory, so the value phi was never wired. B::SoN flags its
-  memory phis (`memory: true`); chalk's Phi now carries that flag, and an
-  unflagged stamped phi is a value.
+**Built (chalk d75ad368, 355349a7):**
+- `_prelower_loop_store_operands`: a store container the pass makes
+  (`$r[$i]`) reached the loop phi in the preheader -> lower its
+  loop-invariant root; and walk nested loop bodies and arms (older silent
+  wrong: `$m[$i][$j] = ...` stores lost, aggregate made again after the loop).
+- `_lower_phi` forcing: a loop's OWN phi has the Loop as region (no head).
+  Driven only when the loop is ALREADY MADE and carries no memory (220: a
+  grep in an arm's value, its phi dropped with the arm's cache). A loop not
+  yet made is NOT driven: forced from an early read it ran out of place and
+  again in place (probe fill1: pushes twice, "A A C A C"). fill1 stays
+  refused -- why its second loop's phi is read early is open.
+- `_prelower_condition_mutation_backedges`: a back-edge reaching an
+  unlowered (inner-loop) phi is not a condition mutation (115's `last O`
+  merge read it); 115 is now refused by its real name -- a jump to an
+  enclosing loop (needs cross-level phi wiring).
 
-**Side effect:** forty nested merges make SoN::Serialize::JSON's recursive
-walk exceed perl's 100-frame warning. The warning is silenced there,
-caught by t/deparse-many-guarded-returns-render-in-time.t.
+**Result:** 220 round-trips; 257 -> 258. 115 refused by name (labeled jump),
+210 is a string eval (permanent GAP, agreed with perigrin), fill1 open.
 
-**Round-tripped:** 109 -> 111. 14 left under the same message.
-
-**What they hit next:**
-- Mostly `eval` (block and string). String eval needs a runtime and is
-  a named GAP (see runtime-needs-are-refused-tie-is-mop).
-- `my @c = two()`: list-returning subs don't lower at all ("ArrayRef
-  elem has repr=List").
-- A Str ternary condition: "_ensure_i1 cannot convert repr=Str".
+**Lesson:** "drive the structure from its phi" is only safe for a structure
+that has run and has no effects; re-running effects is a silent wrong.
