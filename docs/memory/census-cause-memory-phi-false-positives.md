@@ -1,6 +1,6 @@
 ---
 name: census-cause-memory-phi-false-positives
-description: 430/430 goal, "element read across a branch-guarded store needs a memory-Phi" (6) -- two of them were not branch-guarded at all (a list assign READING elements was taken for an element store); unblocked, 123 then showed two older invalid-IR derefs; also 071 (an untyped Region Phi typed by its arms)
+description: 430/430 goal, 227 -> 231 (pinned chalk 5f7254d2), "element read across a branch-guarded store needs a memory-Phi" (6) -- two of them were not branch-guarded at all (a list assign READING elements was taken for an element store); unblocked, 123 then showed two older invalid-IR derefs; also 071 (an untyped Region Phi typed by its arms)
 metadata:
   type: project
 ---
@@ -37,3 +37,5 @@ its arms' `_repr_of` per lowering (cache `repr:<id>`, as And/Or), and
 
 **Still refused:** 125 and 191 (true branch-/loop-guarded stores), 232 and
 233 (a Subscript container typed Unknown: `vars()->{$k}` through a call).
+
+**Result (chalk 5f7254d2):** 071 123 165 166 round-trip; 227 -> 231.
