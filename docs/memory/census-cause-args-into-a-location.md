@@ -38,3 +38,20 @@ typed.
   refusal used to cover.
 - Freezing runs after stores and at MemStart; a loop memory Phi is a
   version too, and nothing froze reads at it.
+
+**Follow-ups in the same group (chalk 597aa371, c5351b72; ROUNDTRIP stays 248):**
+- 102 (signature default): a no-argument call bound nothing (Parameter
+  "outside an emitted function body"); it now binds through the argument
+  path. Arity: a default that runs code has no `default_when` -- perl's
+  `mandatory` counts EVERY scalar and the last `optional` take defaults.
+  **Wrong answer fixed:** defaults were lowered before the inline frame's
+  cache snapshot, so one call's `$y = $x * 3` served the next. Still GAP:
+  the merge of an untyped parameter with `g()` is TOP.
+- 203 (`\$_[0]`): `_arg_binding` takes a location argument's pointer in the
+  CALLER's frame; `\$_[N]` is that. **Caught while building:** resolved in
+  the callee's frame (`_local_slots` is per frame) it made a fresh `my`
+  and the write was lost. Elements/values refused -- 203 passes a foreach
+  alias, so it is refused by name now.
+- Lesson: anything an inlined body needs from the caller's frame (a
+  location, an aggregate) must be captured at bind time; the frame
+  localizes var_table and _local_slots.
