@@ -133,3 +133,4 @@
 - [SESSION BUG: interned pinned nodes](session-bug-interned-pinned-nodes.md) — silent wrong answer from chalk 43ba40ea: two pinned reads of one content interned to one node, the loop body dropped; loader now builds make_unique; bisect by worktree
 - [SESSION BUGS: loop-arm store, closure op-assign](session-bugs-loop-store-and-closure-op-assign.md) — store in a loop arm hit a per-pass copy (hoist named aggregates, not seeds); closure `$t += 1` lost (producer shape, refused); sweep shape-variation probes after every cause
 - [Census cause: glob-assigned code ref](census-cause-glob-assigned-code-ref.md) — *name = sub {...} bound statically only when certain (one write, no named sub, no captures, every call after it); 407
+- [Census cause: methods returning $self](census-cause-methods-returning-self.md) — class method returning $self chains (Object); a package method returning a blessed $self read as a %Slot (older invalid IR); a stale-stamp risk recorded
