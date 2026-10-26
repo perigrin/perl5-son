@@ -141,3 +141,4 @@
 - [Census cause: tr///](census-cause-tr.md) — tr/// had no lowering; 256-byte map/set + @chalk_tr, location stored back; flags refused; 374 375 390
 - [Census cause: push of a reference](census-cause-push-of-a-reference.md) — push boxes refs by tag; older wrongs: named array in a list, ref read by tag as ""/0, `\$x` of a loop-renewed my (producer marks fresh_each_pass, chalk refuses); 194
 - [Census cause: `my (...) = @_` into a location](census-cause-args-into-a-location.md) — ArgsSource group; store bound args into locations; 3-arg substr reads; older wrong: location read at a loop memory Phi re-read after the pass's store (frozen in the header now); 154
+- [Census cause: hash from a list](census-cause-hash-from-a-list.md) — hash literal with a list among its pairs built by upsert over the flattened list; hash in a list flattens; older wrong: repeated literal keys kept every pair; 084 228
