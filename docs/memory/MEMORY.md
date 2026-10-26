@@ -136,3 +136,4 @@
 - [Census cause: methods returning $self](census-cause-methods-returning-self.md) — class method returning $self chains (Object); a package method returning a blessed $self read as a %Slot (older invalid IR); a stale-stamp risk recorded
 - [Census cause: s/// computed replacement](census-cause-s-computed-replacement.md) — the producer computes it in the match arm; chalk splices the value; phis name the block that ends the matched path; 200 289
 - [Producer bug: push loop memory](producer-bug-push-loop-memory.md) — push/unshift loops had no header memory-Phi; chalk drain check now shift/pop only; the census reads the producer live, so re-pin after any producer change
+- [Census cause: arm ends, C-style step](census-cause-arm-ends-and-c-style-step.md) — step over the latch merge; next/last found from the arm's last statement; SILENT WRONG: last after a statement ignored (fixed); 097
