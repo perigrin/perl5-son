@@ -143,3 +143,4 @@
 - [Census cause: `my (...) = @_` into a location](census-cause-args-into-a-location.md) — ArgsSource group; store bound args into locations; 3-arg substr reads; older wrong: location read at a loop memory Phi re-read after the pass's store (frozen in the header now); 154
 - [Census cause: hash from a list](census-cause-hash-from-a-list.md) — hash literal with a list among its pairs built by upsert over the flattened list; hash in a list flattens; older wrong: repeated literal keys kept every pair; 084 228
 - [Census cause: time()](census-cause-time.md) — producer stamps time Int, chalk lowers it; lesson: a wire Unknown cannot be narrowed in chalk Analysis, fix the stamp at the producer; Scalar-container stores deferred (autoviv); 065 331
+- [Census cause: builtin memory phi](census-cause-builtin-memory-phi.md) — a loop memory phi over a push/sort was read as a value phi (TOP); `$s // []` as a reference by tag; 124 217
