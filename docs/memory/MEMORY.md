@@ -145,3 +145,4 @@
 - [Census cause: time()](census-cause-time.md) — producer stamps time Int, chalk lowers it; lesson: a wire Unknown cannot be narrowed in chalk Analysis, fix the stamp at the producer; Scalar-container stores deferred (autoviv); 065 331
 - [Census cause: builtin memory phi](census-cause-builtin-memory-phi.md) — a loop memory phi over a push/sort was read as a value phi (TOP); `$s // []` as a reference by tag; 124 217
 - [Census cause: bitwise & | ^](census-cause-bitwise.md) — numeric only when the feature says so or an operand is a numeric literal; string bitwise and ~ refused; unsigned past i64 stops; 046 051
+- [Census cause: stores through a tagged reference](census-cause-scalar-container-stores.md) — autoviv into element/location; older wrong: loop-phi reads unfrozen; pending tag reads refuse a later store through a ref; local store refused; 232
