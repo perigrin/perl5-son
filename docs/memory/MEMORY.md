@@ -138,3 +138,4 @@
 - [Producer bug: push loop memory](producer-bug-push-loop-memory.md) — push/unshift loops had no header memory-Phi; chalk drain check now shift/pop only; the census reads the producer live, so re-pin after any producer change
 - [Census cause: arm ends, C-style step](census-cause-arm-ends-and-c-style-step.md) — step over the latch merge; next/last found from the arm's last statement; SILENT WRONG: last after a statement ignored (fixed); 097
 - [Census cause: eval in a loop body](census-cause-eval-in-a-loop-body.md) — loop body through process_control_node; try body value at the catch merge (older invalid IR); coercion opening blocks in an arm tail (older); a dead may-die value printed x (older WRONG, open)
+- [Census cause: tr///](census-cause-tr.md) — tr/// had no lowering; 256-byte map/set + @chalk_tr, location stored back; flags refused; 374 375 390
