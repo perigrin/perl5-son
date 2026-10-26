@@ -139,3 +139,4 @@
 - [Census cause: arm ends, C-style step](census-cause-arm-ends-and-c-style-step.md) — step over the latch merge; next/last found from the arm's last statement; SILENT WRONG: last after a statement ignored (fixed); 097
 - [Census cause: eval in a loop body](census-cause-eval-in-a-loop-body.md) — loop body through process_control_node; try body value at the catch merge (older invalid IR); coercion opening blocks in an arm tail (older); a dead may-die value printed x (older WRONG, open)
 - [Census cause: tr///](census-cause-tr.md) — tr/// had no lowering; 256-byte map/set + @chalk_tr, location stored back; flags refused; 374 375 390
+- [Census cause: push of a reference](census-cause-push-of-a-reference.md) — push boxes refs by tag; older wrongs: named array in a list, ref read by tag as ""/0, `\$x` of a loop-renewed my (producer marks fresh_each_pass, chalk refuses); 194
