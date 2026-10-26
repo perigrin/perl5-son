@@ -33,6 +33,19 @@ is now kept in the lowering's cache (`repr:<id>`, read first by `_repr_of`)
 and handed to the call site as `_inlined_value_repr` before the callee's
 cache is dropped. Any `set_stamp` inside a callee graph is suspect.
 
+**A third older bug, invalid IR:** `&&`/`||` cached what their right side
+made past its block. Two `&&` sharing one right side (a folded `2 < 1`,
+hash-consed) -- the second used the first's value from a block that does
+not dominate it; lli refused the module ("Instruction does not dominate all
+uses"). Wrong at the committed HEAD too, with Boolean sides. The right side
+is now arm-local, as an if arm's, `?:`'s and `//`'s are. The census never
+saw it -- no corpus case has the shape; a probe built to test the guard
+test's new expectation did.
+
+**Guard test updated:** llvm-bool-truthiness-guard.t asserted And/Or(Int,
+Boolean) was refused; it now merges as a Scalar (`phi %Slot`), and
+llvm-and-or-test-any-scalar-for-truth.t checks perl's answers for it.
+
 **Also here -- `C ? @a : @b` in list context (199's first refusal):** both
 arms Array is branched, each arm lowered in its own block, and the %Array*
 pointers merged: the list IS the taken arm's array (aliased, as perl's is).
