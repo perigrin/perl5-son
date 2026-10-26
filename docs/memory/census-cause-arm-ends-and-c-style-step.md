@@ -25,8 +25,14 @@ push @o, "B"; last }` ran on as an ordinary arm: `a B c` for perl's `a B`.
 The arm-chain walk now serves the exit check too, and the exit is never
 taken for the latch (the loop heads both Regions).
 
-**Result:** 097 round-trips; 238 -> 239. 115 is `last LABEL` to an outer
-loop; 155 a nested `if` with `next` in a `while`; 210 a string eval.
+**Result:** 097 round-trips; 238 -> 239 (pinned b0b982dc).
+
+**155 (chalk 373d2620):** a loop inside a `next` arm. The arm-chain walk
+now steps past a nested If/Loop to its merge; and `_process_branch_from_if`
+records what a `next`/`last` arm carries BEFORE dropping the arm's cached
+values -- the inner loop's phis were dropped first, and reading them
+refused. 239 -> 240. Left: 115 (`last LABEL` to an outer loop), 210 (a
+string eval).
 
 **Lesson (again):** the shape sweep, not the census, finds the silent
 wrongs -- five of them this session. Sweep `next` AND `last`, with and
