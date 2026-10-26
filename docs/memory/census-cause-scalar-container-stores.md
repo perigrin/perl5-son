@@ -43,3 +43,18 @@ moved to `Coerce[HashRef->Str]` (a ref as a hash key).
   reasoning of the form "no later memory version" is blind to stores an
   inlined callee makes. The proper fix is producer-side (a call to a sub
   that stores through its arguments is a memory version).
+
+**Follow-up (chalk 7cb… see git log, "A store whose container the pass makes"):**
+- `_prelower_loop_store_operands` lowered a body store's container in the
+  preheader as loop-invariant; `$r[$i]` / `$v{$k}` reached the loop phi
+  first ("Phi node encountered ... before its enclosing structure"). Now
+  the container's loop-invariant ROOT (walk Subscript/PostfixDeref down
+  while it reaches an unlowered phi) is lowered there.
+- **Older silent wrong:** only the loop's own statements were scanned, so a
+  store in a nested loop or an arm left its aggregate to be made inside the
+  body -- dropped with the body's cache and made AGAIN after the loop
+  (`$m[$i][$j] = ...` -> "0 0;0 0"). Nested Loop bodies and If arms are walked.
+- Not changed, recorded: a READ through an undef element (`$c{a}{n}`,
+  `$c{$w}{n}++`) exits 255 where perl autovivifies even on fetch. Making
+  reads autovivify is unsafe while reads through a tag can be frozen ahead
+  of their guard -- they would create entries perl never makes.
