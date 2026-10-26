@@ -33,7 +33,13 @@ does the same. 171 172 173 round-trip (240 -> 243).
 `my $z = 0; my $q = 1 / $z; print "x\n"` and `my @a = (1, 2); my $p =
 \$a[-5]; print "x\n"` print `x` where perl dies -- a dead value that may
 die is dropped. They were probes outside allprobes.txt, so no sweep saw
-them. Task: report (task #6) and fix.
+them. FIXED in the producer (perl5-son 763659c): NodeFactory::make records
+each may-die node, and _translate_from refuses a graph missing one. The
+first cut counted every element reference -- the walk's unused foreach
+alias references (`\$a[$i]`) -- and five deparse tests went red; a
+reference now counts only with a negative constant index. Census held 243.
+Lesson: a producer check over "what was made" must exclude what the walk
+makes for itself.
 
 **Test updated:** llvm-an-eval-catches-its-die.t asserted an eval in a
 loop is refused; it now accepts perl's answer or a named refusal.
