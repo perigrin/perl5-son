@@ -58,5 +58,5 @@ an aggregate among its inputs has no static elements now. 199 next hits
 downstream. Probe the new shape with values that take EVERY path (152 was
 only wrong for f("a",0) and f("b",1)).
 
-**Result:** 152 round-trips; 225 -> 226. Next: 071 hits a Region Phi
+**Result:** 101 and 152 round-trip; 225 -> 227 (pinned at chalk 6fe1b788). Next: 071 hits a Region Phi
 Str->Unknown arm; 199 a ternary of two Arrays (list-context ?:).
