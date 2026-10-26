@@ -1645,6 +1645,8 @@ class SoN::FromOptree 0.01 {
 
         my $factory = SoN::IR::NodeFactory->new();
         my $opmap   = SoN::FromOptree::OpMap->new();
+        # What may die, as it is made: checked against the finished graph.
+        local $SoN::IR::NodeFactory::MADE_MAY_DIE = {};
         my $start   = $factory->make_cfg('Start');
         my $mem     = $factory->make('MemStart');
         my $sim     = SoN::FromOptree::StackSim->new(
@@ -2768,7 +2770,17 @@ class SoN::FromOptree 0.01 {
         }
 
         my $ret = _build_single_exit($factory, \@exits);
-        return _graph_of_reachable($start, $ret);
+        my $graph = _graph_of_reachable($start, $ret);
+        # A VALUE THAT MAY DIE AND IS NEVER USED is still evaluated by perl,
+        # which dies: `my $q = 1 / $z` with nothing reading $q. Built and then
+        # reached by nothing, it fell out of the graph, and the program ran on
+        # past where perl stops. Refused by name instead.
+        my %present = map { ( Scalar::Util::refaddr($_) => 1 ) } grep { blessed($_) } $graph->members->@*;
+        die "GAP: a value that may die (a division by what may be zero, a reference before "
+          . "an array's start) is never used -- perl evaluates it and dies; the graph would "
+          . "drop it\n"
+            if grep { !$present{$_} } keys $SoN::IR::NodeFactory::MADE_MAY_DIE->%*;
+        return $graph;
     }
 
     # _exit_record($sim, $factory, $kind) -> { control, value }

@@ -169,6 +169,17 @@ my %INPUT_SPECS = (
 # is dropped from the graph, and perl would still have died making it.
 $SoN::IR::NodeFactory::MAY_DIE = undef;
 
+sub SoN::IR::NodeFactory::_negative_constant_index ($in) {
+    my $e = ref $in eq 'ARRAY' ? $in->[0] : undef;
+    my $i = blessed($e) && $e->isa('SoN::IR::Node::Subscript') ? $e->inputs->[1] : undef;
+    $i = $i->inputs->[0] while blessed($i) && $i->isa('SoN::IR::Node::Coerce');
+    return blessed($i) && $i->isa('SoN::IR::Node::Constant') && ( $i->value // 0 ) =~ /\A-\d+\z/;
+}
+
+# $MADE_MAY_DIE: when set (a hashref), every may-die node make() returns is
+# recorded (refaddr => node), so the walk can tell whether one was dropped.
+$SoN::IR::NodeFactory::MADE_MAY_DIE = undef;
+
 # _may_die($op, \@inputs) -- a division or modulus by what may be zero, or a
 # reference to an array element (one before the start dies).
 sub SoN::IR::NodeFactory::_may_die ($op, $in) {
@@ -313,6 +324,20 @@ class SoN::IR::NodeFactory {
     # behavior so Actions.pm can route every call through the typed
     # factory without distinguishing between make() and make_cfg() shapes.
     method make($op_name, %args) {
+        # A reference to an element counts only with an index before the start
+        # (`\$a[-5]`): the walk makes alias references (`\$a[$i]` for a
+        # foreach) it may not use, and those cannot die.
+        my $may_die = SoN::IR::NodeFactory::_may_die($op_name, $args{inputs})
+            && ( $op_name ne 'Ref' || SoN::IR::NodeFactory::_negative_constant_index($args{inputs}) );
+        my $node = $self->_make($op_name, %args);
+        # Remembered as made, so a walk that never reaches it can refuse the
+        # graph rather than drop a die perl would run.
+        $SoN::IR::NodeFactory::MADE_MAY_DIE->{ Scalar::Util::refaddr($node) } = $node
+            if $may_die && $SoN::IR::NodeFactory::MADE_MAY_DIE && blessed($node);
+        return $node;
+    }
+
+    method _make($op_name, %args) {
         %args = $self->_default_stamp($op_name, %args);
         $$SoN::IR::NodeFactory::MAY_DIE = 1
             if $SoN::IR::NodeFactory::MAY_DIE && SoN::IR::NodeFactory::_may_die($op_name, $args{inputs});
