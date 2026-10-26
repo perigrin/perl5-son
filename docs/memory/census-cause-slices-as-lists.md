@@ -24,5 +24,5 @@ passed to a sub is refused by name. Measured each with a probe.
 returning the %Slot (undef on a miss); `_emit_hash_slice_into` pushes one
 per key in order. A key list that is itself a list (`@h{@k}`) is refused.
 
-**Result:** 164 and 223 round-trip. 075 is another shape: `return ()`
+**Result (pinned chalk df948a28, 232 -> 234 with 160):** 164 and 223 round-trip. 075 is another shape: `return ()`
 beside `return @c` -- "a list with a List in it is not lowered".
