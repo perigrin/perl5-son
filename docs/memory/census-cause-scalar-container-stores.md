@@ -44,7 +44,7 @@ moved to `Coerce[HashRef->Str]` (a ref as a hash key).
   inlined callee makes. The proper fix is producer-side (a call to a sub
   that stores through its arguments is a memory version).
 
-**Follow-up (chalk 7cb… see git log, "A store whose container the pass makes"):**
+**Follow-up (chalk d75ad368):**
 - `_prelower_loop_store_operands` lowered a body store's container in the
   preheader as loop-invariant; `$r[$i]` / `$v{$k}` reached the loop phi
   first ("Phi node encountered ... before its enclosing structure"). Now
