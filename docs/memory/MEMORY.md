@@ -140,3 +140,4 @@
 - [Census cause: eval in a loop body](census-cause-eval-in-a-loop-body.md) — loop body through process_control_node; try body value at the catch merge (older invalid IR); coercion opening blocks in an arm tail (older); a dead may-die value printed x (older WRONG, open)
 - [Census cause: tr///](census-cause-tr.md) — tr/// had no lowering; 256-byte map/set + @chalk_tr, location stored back; flags refused; 374 375 390
 - [Census cause: push of a reference](census-cause-push-of-a-reference.md) — push boxes refs by tag; older wrongs: named array in a list, ref read by tag as ""/0, `\$x` of a loop-renewed my (producer marks fresh_each_pass, chalk refuses); 194
+- [Census cause: `my (...) = @_` into a location](census-cause-args-into-a-location.md) — ArgsSource group; store bound args into locations; 3-arg substr reads; older wrong: location read at a loop memory Phi re-read after the pass's store (frozen in the header now); 154
