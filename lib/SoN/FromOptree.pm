@@ -16689,6 +16689,9 @@ class SoN::FromOptree 0.01 {
             # shift/pop MUTATE their array (a memory effect), so a loop whose
             # condition or body drains an array carries memory through the header.
             return 1 if $name eq 'shift' || $name eq 'pop';
+            # So do push and unshift: `for (...) { push @o, $_ } join ",", @o`
+            # read @o at the push inside the body, with no header memory-Phi.
+            return 1 if $name eq 'push' || $name eq 'unshift';
             # So does a store into a demoted slot: `my $h = {}; push @r, \$h`
             # left the post-loop read at the store inside the body.
             return 1 if _stores_demoted_slot($op);
