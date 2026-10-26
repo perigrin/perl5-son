@@ -77,7 +77,9 @@ sub _extract_fields ($node, $id_remap) {
     }
     # `\(@a)` -- a reference to each element, a List -- rather than `\@a`.
     if ($op eq 'Ref') {
-        return $node->each ? { each => JSON::PP::true } : undef;
+        my %f = ( ($node->each ? (each => JSON::PP::true) : ()),
+                  ($node->fresh_each_pass ? (fresh_each_pass => JSON::PP::true) : ()) );
+        return %f ? \%f : undef;
     }
     # A BITWISE OP UNDER THE `bitwise` FEATURE says which operator it is:
     # 'numeric' (& | ^ ~) or 'string' (&. |. ^. ~.). Absent for the dual

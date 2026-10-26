@@ -1609,6 +1609,13 @@ class SoN::FromOptree 0.01 {
     # exec order (next, and other for a LOGOP) through $op. A closure built
     # on each pass keeps that pass's variable.
     sub _captures_renewed_per_pass ($cv, $op, @captures) {
+        return _renewed_per_pass($cv, $op, 1, @captures);
+    }
+
+    # _renewed_per_pass($cv, $op, $with_iter, @captures): as above; a foreach
+    # variable counts only with $with_iter (a reference to one is to the
+    # element it aliases, not to a fresh variable).
+    sub _renewed_per_pass ($cv, $op, $with_iter, @captures) {
         return () unless @captures;
         my $reach = sub ($from) {
             my (%seen, @walk); @walk = ($from);
@@ -1627,7 +1634,7 @@ class SoN::FromOptree 0.01 {
         my @q = ($root);
         while (my $o = shift @q) {
             next unless ref($o) && $$o;
-            if ($o->name eq 'enteriter') { push $renews{ $o->targ }->@*, $o->next }
+            if ($o->name eq 'enteriter') { push $renews{ $o->targ }->@*, $o->next if $with_iter }
             elsif ($o->name eq 'padrange' && ($o->private & 0x80)) {
                 push $renews{$_}->@*, $o for $o->targ .. $o->targ + ($o->private & 0x7f) - 1;
             }
@@ -5639,7 +5646,16 @@ class SoN::FromOptree 0.01 {
                 # the walk, its reads carry the current memory version, and its
                 # writes are Assign stores on the memory chain. Fall through and
                 # let srefgen build the reference over the location.
-                ()
+                #
+                # ONE LOCATION IS NOT ONE VARIABLE PER PASS: perl gives a `my`
+                # in a loop body a fresh $x each pass, and each pass's \$x keeps
+                # its own. Said on the Ref (fresh_each_pass) for a consumer that
+                # keeps one location per lexical: over one, every reference
+                # named the last pass's (chalk, pvm 219 printed 2,2 for 1,2).
+                $ctx->{fresh_each_pass}{$$op} = 1
+                    if $kid->name eq 'padsv' && $kid->targ
+                    && _renewed_per_pass($cv, $op, 0,
+                           { name => _padname($cv, $kid->targ), outer_idx => $kid->targ });
             }
             # `\@a` MAKES THE ARRAY STORABLE THROUGH THE REFERENCE, and the
             # flatten shortcut would then read it as first constructed --
@@ -11421,6 +11437,7 @@ class SoN::FromOptree 0.01 {
                 $pin_on_control = 1 if $runs_comparator;
                 $extra{want} = 'list' if $runs_comparator;
                 $extra{bytes} = 1 if $name eq 'length' && _under_use_bytes($op);
+                $extra{fresh_each_pass} = 1 if $name eq 'srefgen' && $ctx->{fresh_each_pass}{$$op};
                 my $node = $factory->make($node_type, inputs => \@inputs, %extra);
                 if ($void_effect_call || $pin_on_control) {
                     $node->set_control_in($sim->control);

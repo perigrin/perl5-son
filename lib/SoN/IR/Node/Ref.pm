@@ -13,12 +13,15 @@ class SoN::IR::Node::Ref :isa(SoN::IR::Node::UnaryOp) {
     # is the aggregate's at runtime. In the content hash, since `\@a` and
     # `\(@a)` over one array are two different values.
     field $each :param :reader = 0;
+    # `\$x` OF A `my` THAT A LOOP RENEWS EACH PASS: perl's \$x on each pass is
+    # to that pass's variable. A consumer with one location per lexical refuses.
+    field $fresh_each_pass :param :reader = 0;
 
     method operation() { 'Ref' }
     method op_str()    { '\\' }
 
     method content_hash() {
-        return join('|', 'Ref', ($each ? 'each' : ()),
+        return join('|', 'Ref', ($each ? 'each' : ()), ($fresh_each_pass ? 'fresh' : ()),
             $self->_serialize_inputs());
     }
 }
