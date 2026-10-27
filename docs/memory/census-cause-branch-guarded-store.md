@@ -28,9 +28,13 @@ and every memory-Phi. Two walks in the scan missed stores that *were* ordered:
   trips it, every read in the graph refuses, so one fix can free several cases.
 - A Loop's back edge is not among its inputs (the loader does not rebuild it), so
   "data-reachable from the Return" excludes every loop body. Any rule keyed on it
-  misfires in loops: the read-modify-write rule (`$h{a} = $h{a} + $i` in a loop)
-  is the next one to fix, flagging only a store-back that is neither on the
-  chain nor merged.
+  misfires in loops: the read-modify-write rule refuses `$h{a} = $h{a} + $i` in
+  a loop. **But do not relax it alone:** narrowed to "a store-back neither on
+  the chain nor merged", it let through `for (...) { my @o = (0); $o[0] += 1;
+  print $o[0] }`, which printed 12 for perl's 11. Chalk keeps one `@o` across
+  passes where perl makes a fresh one each pass. The rule was the only thing
+  refusing that. Make a loop-declared aggregate fresh each pass (or refuse it by
+  name) first, then narrow the rule.
 - `_is_memory_phi` does not know ElemRestore, so a loop that restores a `local`
   has a "value" phi for its memory (lo8): open.
 
