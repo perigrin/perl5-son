@@ -35,3 +35,24 @@ The loader now keeps `replacement_body`, and any s/// with one is refused.
   RegexCapture outside the loop): refused, not per-match.
 
 Test: chalk `t/bootstrap/ir/llvm-s-g-replaces-every-match.t`.
+
+## m//g and pos() (pin after 283)
+
+**Round-tripped:** 388. 010 has more in it (`tr`, `split`, etc.); recheck.
+
+- Each variable a scalar m//g matches (pre-scanned into `%POS_VARS`) keeps an
+  i64 pos cell (-1 = undef), keyed like handle cells. The match runs on the
+  slice from pos, writes pos = start + m0e on a hit or -1 on a miss, and
+  captures are relative to the slice (`subj_ptr` = slice pointer).
+- `pos($s)` reads the cell as a Slot (undef bit). `pos($s) = N` stores it. An
+  Assign or s/// to the variable clears it.
+- Producer: `pos => 'Scalar'`. Unknown made `defined pos($s)` always true
+  ("d" for perl's "u").
+- **A wrong answer found by a probe:** an m//g is a memory version, so the s///
+  after it lists it as an input. Chalk's `_is_memory_version` did not know it,
+  took it for a computed replacement, and replaced with the match's 1 ("1XbX").
+- Refused: list context; a start-anchored or empty-matching pattern; a variable
+  not assigned in the program (a foreach alias, whose pos is its element's) or
+  changed by tr/chomp/chop/++/op-assign.
+- Lesson: a node that becomes a memory version (here, newly lowered) must be
+  known to `_is_memory_version`, or every operand-position heuristic misreads it.
