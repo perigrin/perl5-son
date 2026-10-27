@@ -8336,6 +8336,17 @@ class SoN::FromOptree 0.01 {
                 unless ref($form) && $$form && $form->isa('B::CV')
                     && ${ $form->ROOT };
 
+            # A TOP-OF-PAGE FORMAT (`HANDLE_TOP`, perl's default $^) is printed
+            # before the first write; the graph would print the body alone.
+            {
+                no strict 'refs';
+                my $stash = \%{ $gv->STASH->NAME . '::' };
+                my $top = $stash->{ $gv->NAME . '_TOP' };
+                die "GAP: `write` on a handle with a top-of-page format is not"
+                  . " yet lowered -- perl prints that format first\n"
+                    if $top && ref(\$top) eq 'GLOB' && *{$top}{FORMAT};
+            }
+
             my $fmt_name = 'main::__FORMAT__:' . $gv->STASH->NAME
                          . '::' . $gv->NAME;
             $ANON_BODIES{$fmt_name} //= $form;
