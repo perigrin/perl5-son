@@ -156,3 +156,4 @@
 - [Census cause: aggregate fields](census-cause-aggregate-fields.md) — field %h/@a typed HashRef/ArrayRef, made empty by new; a field read pinned on the chain is frozen there (arms too); a lowering cache shares per-construction defaults across objects (evict); 119 242
 - [Census cause: a call through \&name](census-cause-named-sub-ref-call.md) — indirect Call of Ref(Constant code) resolved to that sub and typed as it returns; a method returning it had no type; 067 250
 - [Census cause: <DATA>](census-cause-data-handle.md) — DATA is an in-memory read handle on data_section; print of a list made at run time printed its count (pre-existing); Analysis overwrites wire from_repr, keep wire_from; 045 363 364
+- [Census cause: regex forms](census-cause-regex-forms.md) — literal braces ({b}, lone }), {,m}, blanks in counts; a constant string is a pattern with the Match flags (producer sends them); empty s/// pattern refused; 379 384
