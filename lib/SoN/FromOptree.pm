@@ -516,6 +516,9 @@ class SoN::FromOptree 0.01 {
     # walkers have no path to _translate_from's @exits otherwise. `local` per
     # translated CV.
     our $FN_EXITS;
+    # The `local_saves` of every walk under way, outermost first: a `return`
+    # restores them all (_restore_locals_for_return).
+    our @SAVES_STACK;
     # True while an `eval { }` body is walked: see _loop_arm_exits.
     our $IN_EVAL_BODY = 0;
     # Inside a block eval's (or try's) body, that eval's id: each Unwind
@@ -1712,6 +1715,8 @@ class SoN::FromOptree 0.01 {
                     cells => {}, cells_written => {},
                     mutated_aggregate => {},
                     is_program => (defined $program_root ? 1 : 0) };
+        # A `return` restores the `local`s of every walk it leaves.
+        local @SAVES_STACK = (@SAVES_STACK, $ctx->{local_saves});
 
         # A FILE LEXICAL SHARED WITH A NAMED SUB is a location in both graphs:
         # the program's slot, and the sub's own index for it.
@@ -2653,6 +2658,7 @@ class SoN::FromOptree 0.01 {
             # the same way.
             if ($name eq 'return') {
                 # Pass the CV's ROOT: the scalar reading of a multi-value
+                _restore_locals_for_return($sim, $ctx, $factory);
                 # return is its LAST OPERAND, which only the OPTREE still
                 # records -- by the time the values reach the stack they are
                 # flattened and the operand boundary is gone.
@@ -11714,6 +11720,17 @@ class SoN::FromOptree 0.01 {
     #
     # LIFO, because `local` nests: the innermost save is the most recent, and
     # restoring in reverse gives each scope the binding its own entry saw.
+    # _restore_locals_for_return($sim, $ctx, $factory) -- a `return` leaves every
+    # scope: put back every `local` made so far, on this path only. From a copy
+    # of the saves, so the paths that do not return still have them to restore
+    # (pvm 176: `local $self->{c} = ...; return h($self)` kept the store).
+    sub _restore_locals_for_return ($sim, $ctx, $factory) {
+        return if $IN_SCOUT;    # a scout records no exit; its restore would be an orphan node
+        local $ctx->{local_saves} = [ map { $_->@* } @SAVES_STACK ];
+        _restore_locals($sim, $ctx, $factory);
+        return;
+    }
+
     sub _restore_locals ($sim, $ctx, $factory = undef, $mark = 0) {
         my $saves = $ctx->{local_saves} or return;
         while ($saves->@* > $mark) {
@@ -14571,6 +14588,8 @@ class SoN::FromOptree 0.01 {
                     mutated_aggregate => $MUTATED_AGGREGATE // {},
                     addr_taken => $ADDR_TAKEN // {},
                     shared_lexicals => $SHARED_SLOTS // {} };
+        # A `return` restores the `local`s of every walk it leaves.
+        local @SAVES_STACK = (@SAVES_STACK, $ctx->{local_saves});
         my $exit_proj;
         # A foreach's iteration `and` is consumed by its caller before the body
         # walk begins, so its body has NO loop condition left to find: the first
@@ -14753,6 +14772,7 @@ class SoN::FromOptree 0.01 {
             # of the body ends with it. Recorded only on a real walk -- a
             # scout's nodes are throwaway.
             if ($name eq 'return' && $FN_EXITS) {
+                _restore_locals_for_return($sim, $ctx, $factory);
                 my $rec = _exit_record($sim, $factory, 'return', $op);
                 push @$FN_EXITS, $rec if defined $break_projs && !$IN_SCOUT;
                 # THE BODY GOES ROUND BY AN EARLIER `next`, as a `last` after
@@ -18801,6 +18821,8 @@ class SoN::FromOptree 0.01 {
                     mutated_aggregate => $MUTATED_AGGREGATE // {},
                     addr_taken => $ADDR_TAKEN // {},
                     shared_lexicals => $SHARED_SLOTS // {} };
+        # A `return` restores the `local`s of every walk it leaves.
+        local @SAVES_STACK = (@SAVES_STACK, $ctx->{local_saves});
         # The arm's ENTRY op, kept because $op is mutated by the walk below. A
         # back-edge test needs it: "did this unstack jump to something on the
         # path we have already walked" is the question, and the path starts
@@ -18858,6 +18880,7 @@ class SoN::FromOptree 0.01 {
                 && ($name eq 'return' || (!$stop_at_exit && $is_leavesub));
             if ($exit_here) {
                 $visited->{$$op}++;
+                _restore_locals_for_return($sim, $ctx, $factory) if $name eq 'return';
                 push @$exits, _exit_record($sim, $factory,
                     $name eq 'return' ? 'return' : 'leavesub', $op);
                 return ($op, 'exited');
