@@ -151,3 +151,4 @@
 - [Census cause: small operators](census-cause-small-operators.md) — ** x << >> unary minus; older wrong: float -0 printed "-0"; 038 039 041 048 264 266
 - [Census cause: local restore](census-cause-local-restore.md) — `local $h{k}` put back by ElemRestore (upsert or delete); a return restores the locals of every walk it leaves (@SAVES_STACK); a scout must not restore; 176 178
 - [Census cause: branch-guarded store](census-cause-branch-guarded-store.md) — graph-wide unsafe flag: follow all Region inputs; stores before a merged store in its arm count as merged; Loop back edge not in inputs so loop bodies are never data-reachable; 125 177 191
+- [Census cause: AUTOLOAD](census-cause-autoload.md) — undefined direct call runs the package AUTOLOAD with $AUTOLOAD stored first; refused if anything can define subs at run time or $AUTOLOAD is read outside AUTOLOAD (no memory edge); 409
