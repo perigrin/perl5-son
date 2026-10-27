@@ -3512,6 +3512,8 @@ class SoN::FromOptree 0.01 {
             # time: whole seconds since the epoch. Untyped, all it touched
             # was TOP (pvm 331's `1 + time() * 0`).
             time      => 'Int',
+            # pos: undef, or the offset the last m//g ended at.
+            pos       => 'Scalar',
 
             # sqrt IS Num, NOT Int, and this is why the family was measured
             # rather than reasoned about: sqrt(16) observes Int and sqrt(2)
