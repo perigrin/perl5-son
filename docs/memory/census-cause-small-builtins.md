@@ -29,3 +29,20 @@
 
 Tests: chalk `llvm-string-order-comparisons.t`, `llvm-index-finds-a-substring.t`,
 `llvm-chr-makes-a-one-byte-string.t`, `llvm-unshift-puts-values-first.t`.
+
+## blessed() and isa (pin 291)
+
+**Round-tripped:** 058. 180 next hits a method call on a run-time class stamped
+Unknown (`blessed($_) && $_->ok`).
+
+- `_class_of_value`: a reference's class from the bless table, or a Scalar's by
+  its tag. Not a reference: not blessed. A class's object stops (as ref()).
+- blessed: that class, boxed, or undef. Producer: `blessed => 'Scalar'`.
+- isa: blessed && class eq C (memcmp).
+- **A wrong answer found by a probe:** `use parent -norequire, "A"` sets @ISA
+  in a use block, which the loader drops ("n" for perl's "y"). The loader now
+  records `%USED_MODULES` from the use blocks it lets through. isa refuses with
+  `parent`/`base` used, or any @ISA named in the program.
+- Lesson: a dropped `use` block is not nothing. Anything it sets up
+  (inheritance, exports, pragmas) is invisible downstream, so record which
+  modules were used and let consumers refuse on them.
