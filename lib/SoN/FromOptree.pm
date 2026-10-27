@@ -3514,6 +3514,8 @@ class SoN::FromOptree 0.01 {
             time      => 'Int',
             # pos: undef, or the offset the last m//g ended at.
             pos       => 'Scalar',
+            # blessed: a class name, or undef.
+            blessed   => 'Scalar',
 
             # sqrt IS Num, NOT Int, and this is why the family was measured
             # rather than reasoned about: sqrt(16) observes Int and sqrt(2)
