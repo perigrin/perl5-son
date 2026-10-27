@@ -34,7 +34,7 @@ Analysis), so the Coerce stayed and the literal was read as a scalar.
 
 Tests: chalk `llvm-a-list-repeated.t`, `llvm-a-reference-as-a-string.t`.
 
-## A range of strings (pending check g154)
+## A range of strings (pin 297)
 
 **Round-tripped:** 372 (`$seed[0] .. "bb"`). Constant bounds were already
 folded by B::SoN.
