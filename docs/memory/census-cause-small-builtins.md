@@ -46,3 +46,17 @@ Unknown (`blessed($_) && $_->ok`).
 - Lesson: a dropped `use` block is not nothing. Anything it sets up
   (inheritance, exports, pragmas) is invisible downstream, so record which
   modules were used and let consumers refuse on them.
+
+## Hash slice as a value, chomp/chop (pin after 291)
+
+**Round-tripped:** 303 (hash slice), 137 (chomp). 291 -> 293 at check g150.
+
+- A hash slice used as a list value (`@h{qw(a b)}`) is its values in key order:
+  `_emit_flattened_array_of([$slice])`, the same path a list of an array takes.
+- chomp removes one trailing "\n", chop the last character. chomp's value
+  (ChompValue) is the count removed (0 or 1). chop's value is the removed
+  character, which is refused.
+- Tests: chalk `llvm-a-hash-slice-is-its-values.t`, `llvm-chomp-takes-one-newline.t`.
+- Note: the check script's census reports the string-eval cases and 015 as
+  LOAD_FAIL ("no program graph with a return"); the pin census counts them as
+  GAP. Not new; compare with the previous check, not with zero.
