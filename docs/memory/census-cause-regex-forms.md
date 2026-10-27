@@ -28,3 +28,21 @@
   syntax error and perl printed nothing. Use q() for patterns in tests.
 - Producer bugs found: an internal "Stack underflow" on two matches in one print
   list; `s/$p/X/` with the pattern lost (both in the report list).
+
+## qr// flags and stringification (pin 286)
+
+**Round-tripped:** 389, 010 (284 -> 286).
+
+- A qr// printed is `(?^FLAGS:pattern)`. The Coerce Regex->Str of a regex
+  Constant is that text as a constant.
+- **Wrong answers found (pre-existing):**
+  - `"a" =~ qr/A/i` gave 0. B::SoN sends a qr Constant's flags, but the chalk
+    loader dropped them and the match compiled with "". Constant now has
+    `flags` (in its hash), and the match uses them (and refuses /i, which the
+    G6 compiler lacks).
+  - `split /x/i` split by "x" alone (2 for 3). The producer sent no flags on
+    split's pattern. The producer now sends them (absent = none, as for qr//),
+    and chalk refuses split by a flagged regex.
+- Lesson: a flag is part of the pattern. Every place a pattern is read
+  (RegexMatch, Match through qr, split, s///) must take its flags or refuse.
+  Audit them together, not one at a time.
