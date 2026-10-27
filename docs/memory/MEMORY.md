@@ -28,6 +28,7 @@
 - [Cause: no resolved callee](census-cause-no-resolved-callee.md) — anon subs: the graph is the metaobject's source; @_ of nothing; 122 -> 125
 - [Cause: Assign Scalar is ++](census-cause-assign-scalar-is-increment.md) — perl's ++ by tag, magic increment measured; non-Str hash keys; 111 -> 122
 - [Cause: Phi before structure](census-cause-phi-before-structure.md) — early returns fold pairwise; a value phi over a call is not memory; 109 -> 111
+- [Census cause: small operators](census-cause-small-operators.md) — ** x << >> unary minus; older wrong: float -0 printed "-0"; 038 039 041 048 264 266
 - [Runtime needs are refused; tie is MOP](runtime-needs-are-refused-tie-is-mop.md) — string eval and friends GAP by name; tie goes through the metaclass
 - [t/base is the producer corpus](tbase-coverage-is-the-producer-corpus.md) — how to measure B::SoN coverage without the two counting traps
 - [Verify graphs against the optree](graph-correctness-needs-the-optree-not-the-source.md) — perl folds code before B::SoN sees it; node counts prove nothing
@@ -147,3 +148,4 @@
 - [Census cause: bitwise & | ^](census-cause-bitwise.md) — numeric only when the feature says so or an operand is a numeric literal; string bitwise and ~ refused; unsigned past i64 stops; 046 051
 - [Census cause: stores through a tagged reference](census-cause-scalar-container-stores.md) — autoviv into element/location; older wrong: loop-phi reads unfrozen; pending tag reads refuse a later store through a ref; local store refused; 232
 - [Census cause: Phi before its structure](census-cause-phi-before-structure.md) — loop-invariant store roots; nested-loop stores (older wrong); drive a made, effect-free loop from its phi only; labeled jump named; 220
+- [Census cause: small operators](census-cause-small-operators.md) — ** x << >> unary minus; older wrong: float -0 printed "-0"; 038 039 041 048 264 266
