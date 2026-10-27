@@ -159,3 +159,4 @@
 - [Census cause: regex forms](census-cause-regex-forms.md) — literal braces ({b}, lone }), {,m}, blanks in counts; a constant string is a pattern with the Match flags (producer sends them); empty s/// pattern refused; 379 384
 - [Census cause: s///g](census-cause-s-g.md) — s///g loop over slices with a %Str phi; RegexSubstCount had no lowering; /ge replacement_body was dropped by the loader (DIFFERS caught it) -- now refused; 376
 - [Census cause: small builtins](census-cause-small-builtins.md) — lt/gt/le/ge by cmp; index via @chalk_index helper (_need_X + _X_lines pattern); chr/ord (chr > 255 stops); unshift rebuilds the array header; 017 253 334 335
+- [Census cause: Scalar fields and ADJUST](census-cause-scalar-fields.md) — a ref in a Scalar field (read keeps ref tags); undef default = no default; a field that may start undef is never narrowed; ADJUST lowered along its control chain (a branch store was lost: pre-existing WRONG); 244
