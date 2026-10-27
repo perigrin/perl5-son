@@ -149,3 +149,4 @@
 - [Census cause: stores through a tagged reference](census-cause-scalar-container-stores.md) — autoviv into element/location; older wrong: loop-phi reads unfrozen; pending tag reads refuse a later store through a ref; local store refused; 232
 - [Census cause: Phi before its structure](census-cause-phi-before-structure.md) — loop-invariant store roots; nested-loop stores (older wrong); drive a made, effect-free loop from its phi only; labeled jump named; 220
 - [Census cause: small operators](census-cause-small-operators.md) — ** x << >> unary minus; older wrong: float -0 printed "-0"; 038 039 041 048 264 266
+- [Census cause: local restore](census-cause-local-restore.md) — `local $h{k}` put back by ElemRestore (upsert or delete); a return restores the locals of every walk it leaves (@SAVES_STACK); a scout must not restore; 176 178
