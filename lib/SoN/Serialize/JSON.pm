@@ -258,6 +258,9 @@ sub _extract_fields ($node, $id_remap) {
     if ($op eq 'PostfixDeref') {
         return { sigil => $node->sigil, ($node->copy ? (copy => 1) : ()) };
     }
+    if ($op eq 'Match') {
+        return { flags => $node->flags };
+    }
     if ($op eq 'RegexMatch') {
         return {
             pattern => $node->pattern,

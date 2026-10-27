@@ -7230,6 +7230,7 @@ class SoN::FromOptree 0.01 {
                 my $make = $pin ? 'make_unique' : 'make';
                 $node = $factory->$make('Match',
                     inputs => [$target, $matcher],
+                    flags  => $flags,
                     stamp  => SoN::IR::Stamp->new(type => $list_g ? 'List' : 'Boolean'),
                 );
                 if ($pin) {
