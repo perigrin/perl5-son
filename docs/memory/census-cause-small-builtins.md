@@ -60,3 +60,15 @@ Unknown (`blessed($_) && $_->ok`).
 - Note: the check script's census reports the string-eval cases and 015 as
   LOAD_FAIL ("no program graph with a return"); the pin census counts them as
   GAP. Not new; compare with the previous check, not with zero.
+
+## ref() of a glob reference, localtime (pin 300)
+
+**Round-tripped:** 408, 312, 011 (297 -> 300).
+
+- `ref(\*FH)` is GLOB. A GlobRef has no machine type, so the bless table
+  cannot key on one: refused where the program blesses a GlobRef.
+- `localtime(TIME)` through libc `localtime_r`: a list is struct tm's first
+  nine ints (perl's order); a scalar is `strftime("%a %b %e %H:%M:%S %Y")`,
+  perl's ctime text. Tests use fixed times (same libc and TZ as perl).
+
+Tests: chalk `llvm-ref-of-a-glob.t`, `llvm-localtime.t`.
