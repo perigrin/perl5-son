@@ -4,7 +4,7 @@
 PadAccess that is not a scalar kept in memory is not lowered" (090, 167, 168,
 and any `my ($a, $b) = f()`).
 
-**Round-tripped:** 090 (chalk side pending check g156).
+**Round-tripped:** 090, 167 (pin 302).
 
 ## What was done
 
