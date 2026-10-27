@@ -3,7 +3,7 @@
 **Cause:** "cannot lower Region.Phi.then/else[Array->List]" / "[Int->List]"
 (077, 090, 129, 144).
 
-**Round-tripped:** 077 (chalk work pending check g152; pinned when it passes). 090 is a producer gap: `my ($x,$y) = $c ? f() : ()`
+**Round-tripped:** 077 (pin 295). 090 is a producer gap: `my ($x,$y) = $c ? f() : ()`
 leaves the list Assign off the control chain, and the `$x`/`$y` reads carry
 no VarDecl (chalk refuses by name). 129 and 144 next hit a sub's list return
 read in scalar context (`Coerce[List->Str]`): `return g()` takes the CALLER's
