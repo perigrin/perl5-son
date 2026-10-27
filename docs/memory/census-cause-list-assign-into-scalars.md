@@ -49,3 +49,18 @@ printed "3 4 4 1" for perl's "2 4 1".
 Tests: chalk `llvm-a-list-assign-from-a-flattening-list.t`; producer
 `from-optree-a-my-list-from-a-call-is-on-the-chain.t`,
 `deparse-an-elided-return-is-its-own-list.t`.
+
+## A sub called in list context, read as its list (chalk ebff3eae)
+
+Found by probing the shapes around this cause; no corpus case moved.
+
+- `print f(4)` (f shifts and returns a list) printed the count: print read
+  the call through its stamp, which Analysis had narrowed to the sub's scalar
+  face. `"@a"` after `my @a = f(4)` emitted invalid IR: join walked the
+  callee's list statically and lowered an element as the array. Both now
+  flatten what the inlined sub returned when the call's `want` is list.
+- Lesson: a call's STAMP after Analysis is its scalar reading; its `want`
+  (from the wire) is what says which context it is in. Read `want` where the
+  context matters.
+
+Test: chalk `llvm-a-join-over-a-subs-list.t`.
