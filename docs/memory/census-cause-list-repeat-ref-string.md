@@ -33,3 +33,19 @@ Analysis), so the Coerce stayed and the literal was read as a scalar.
   the wire field, or it sees the narrowed shape instead.
 
 Tests: chalk `llvm-a-list-repeated.t`, `llvm-a-reference-as-a-string.t`.
+
+## A range of strings (pending check g154)
+
+**Round-tripped:** 372 (`$seed[0] .. "bb"`). Constant bounds were already
+folded by B::SoN.
+
+- `@chalk_str_range` is perl's pp_flop for strings: push the string; stop at
+  END, or once longer than END; else magic-increment (z->a, Z->A carry; a carry
+  off the front grows it by its new first letter). `"b" .. "a"` is b..z.
+- Only a start of letters is lowered. A start with digits, or one that may be
+  "inf"/"nan" (first letter i or n; looks_like_number makes those numeric),
+  stops the program (exit 255), the rare-shape runtime stop.
+- Probe-tested: wraps (zy..aab), mixed case (aZ..bB), growth (Zz..AAb), an
+  empty END, START eq END.
+
+Test: chalk `llvm-a-range-of-strings.t`.
