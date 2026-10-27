@@ -7777,6 +7777,9 @@ class SoN::FromOptree 0.01 {
                 : $factory->make('Constant',
                     value      => $pattern,
                     const_type => 'regex',
+                    # ITS FLAGS, as a qr//'s: `split /x/i` without its i is a
+                    # different separator.
+                    do { my $sf = _pmflags_to_str($op->pmflags); length $sf ? (flags => $sf) : () },
                     stamp      => SoN::IR::Stamp->new(type => 'Regex'));
 
             my $node = $factory->make('Call',
