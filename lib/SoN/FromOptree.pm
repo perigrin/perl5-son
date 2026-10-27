@@ -3101,13 +3101,24 @@ class SoN::FromOptree 0.01 {
         return false
             unless $last && ($last->name eq 'list' || $last->name eq 'return');
         # Count value-producing children (skip the leading pushmark). >1 => list.
+        return _leavesub_list_arity($leave_op) > 1 ? true : false;
+    }
+
+    # _leavesub_list_arity($leave_op) -> how many operands the sub's trailing
+    # list (or return) has, each one value on the simulated stack; 0 if it is
+    # not a list.
+    sub _leavesub_list_arity ($leave_op) {
+        return 0 unless $leave_op && ref($leave_op) && $$leave_op;
+        my $lineseq = $leave_op->first;
+        return 0 unless $lineseq && $$lineseq && $lineseq->name eq 'lineseq';
+        my ($last, $kid) = (undef, $lineseq->first);
+        while ($kid && $$kid) { $last = $kid; $kid = $kid->sibling; }
+        return 0 unless $last && ($last->name eq 'list' || $last->name eq 'return');
         my $n = 0;
-        my $c = $last->first;
-        while ($c && $$c) {
+        for (my $c = $last->first; $c && $$c; $c = $c->sibling) {
             $n++ if $c->name ne 'pushmark';
-            $c = $c->sibling;
         }
-        return $n > 1 ? true : false;
+        return $n;
     }
 
     # _last_return_operand_is_aggregate($exit_op) -- does the return's LAST
@@ -3690,9 +3701,13 @@ class SoN::FromOptree 0.01 {
             # branch above.
             if (_leavesub_returns_list($exit_op)) {
                 # The peephole optimizer elided the `return`, so every value is
-                # already on the stack; recover them in source order.
+                # already on the stack; recover them in source order -- the
+                # list's own operands, not what an earlier statement left
+                # there in void context (perl resets the stack at each
+                # statement): `my $n = shift; ($n, 1)` returned ($n, $n, 1).
                 my @vals;
-                unshift @vals, $sim->pop_node while $sim->stack_depth > 0;
+                my $n = _leavesub_list_arity($exit_op);
+                unshift @vals, $sim->pop_node while $sim->stack_depth > 0 && $n-- > 0;
                 ($value, $scalar_value) =
                     _list_return_value($factory, \@vals, $exit_op);
             }
@@ -10555,6 +10570,16 @@ class SoN::FromOptree 0.01 {
                         $sim->set_control($node);
                     }
                     $sim->define($_->targ, $_) for @pad;
+                }
+            }
+            # A `my (...)` FROM A VALUE WITH NO POSITIONS is bound by the Assign
+            # too: each slot is its own PadAccess, which reads what the Assign
+            # stored. Floating, nothing reached it -- a consumer walking the
+            # chain never bound the targets, and a call's effects had no place.
+            elsif ($introduces && $single_call && !grep { _is_aggregate_node($_) } @targets) {
+                unless (defined $node->control_in) {
+                    $node->set_control_in($sim->control);
+                    $sim->set_control($node);
                 }
             }
 
