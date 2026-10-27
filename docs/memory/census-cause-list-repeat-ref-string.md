@@ -4,7 +4,7 @@
 372 a string range; 225 a nested ternary) and "Coerce[HashRef->Str] is not
 lowered" (225, 141).
 
-**Round-tripped:** 081 (pending check g153). 225 next hits the List
+**Round-tripped:** 081 (pin 296). 225 next hits the List
 ternary; 372 needs perl's magic string increment; 141 is the aggregate-field
 list assign.
 
