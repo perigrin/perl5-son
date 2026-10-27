@@ -4,7 +4,7 @@
 "field X value repr=Hash/Array cannot be stored in an i64 payload" (141, 153,
 161). Both are one cause: chalk had no aggregate fields.
 
-**Round-tripped so far:** 119, 242 (pin 274); 161 (next pin).
+**Round-tripped so far:** 119, 242 (pin 274); 161 (pin 275).
 - 141 next hits `Coerce[HashRef->Str]` (`%h = ()` in a method's value).
 - 153 next hits a Subscript over a List (a nested default).
 - 246 next hits a method returning `values %h` (TOP).
