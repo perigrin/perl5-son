@@ -11363,6 +11363,13 @@ class SoN::FromOptree 0.01 {
                     $pin_on_control = 1
                         if $GLOBAL_STATE_BUILTIN{$name} && !$void;
 
+                    # AN exit LEAVES IN ANY CONTEXT. As a sub's last statement
+                    # it runs in the caller's context (`exit sK`), so neither
+                    # gate above held it: `sub f { print "e\n"; exit 4 } f();
+                    # print "after\n"` printed "after" and exited 0. It has no
+                    # value to push -- it does not return.
+                    $void_effect_call = 1 if $name eq 'exit';
+
                     # A HANDLE READ IS AN EFFECT IN ANY CONTEXT, for the same
                     # reason and by the same mechanism. See
                     # %HANDLE_READ_BUILTIN.
