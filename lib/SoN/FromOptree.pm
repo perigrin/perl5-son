@@ -189,6 +189,31 @@ class SoN::FromOptree 0.01 {
         $ctx->{mutated_aggregate}{ $kid->targ } = 1;
     }
 
+    # _cop_for($op) -- the COP (nextstate) of the statement $op is in: the
+    # nearest one before it, up its parent chain. Undef where none is found.
+    sub _cop_for ($op) {
+        my $kid = $op;
+        while (my $p = eval { $kid->parent }) {
+            last unless $$p;
+            my $cop;
+            if ($p->flags & 4) {   # OPf_KIDS
+                for (my $k = $p->first; ref($k) && $$k && $$k != $$kid; $k = $k->sibling) {
+                    $cop = $k if $k->name =~ /\A(?:next|db)state\z/;
+                }
+            }
+            return $cop if $cop;
+            $kid = $p;
+        }
+        return undef;
+    }
+
+    # _set_die_site($unwind, $op) -- the file and line perl's message names.
+    sub _set_die_site ($unwind, $op) {
+        my $cop = _cop_for($op) or return;
+        $unwind->set_site($cop->file, $cop->line);
+        return;
+    }
+
     # Is $op compiled under `use bytes`? The pragma is a hint on the
     # statement's COP (HINT_BYTES, 0x8): the nearest nextstate before $op,
     # found up its parent chain.
@@ -1930,6 +1955,7 @@ class SoN::FromOptree 0.01 {
                 my $unwind = $factory->make_cfg('Unwind', inputs => [[$msg]]);
                 $unwind->set_control_in($sim->control);
                 $unwind->set_eval_id($EVAL_ID) if defined $EVAL_ID;
+                _set_die_site($unwind, $op);
                 $sim->set_control($unwind);
                 $op = $op->next;
                 next;
@@ -2740,6 +2766,7 @@ class SoN::FromOptree 0.01 {
                     inputs => [$args]);
                 $unwind->set_control_in($sim->control);
                 $unwind->set_eval_id($EVAL_ID) if defined $EVAL_ID;
+                _set_die_site($unwind, $op);
                 $sim->set_control($unwind);
                 $op = $op->next;
                 next;
@@ -19140,6 +19167,7 @@ class SoN::FromOptree 0.01 {
                     inputs => [$args]);
                 $unwind->set_control_in($sim->control);
                 $unwind->set_eval_id($EVAL_ID) if defined $EVAL_ID;
+                _set_die_site($unwind, $op);
                 $sim->set_control($unwind);
                 $op = $op->next;
                 next;

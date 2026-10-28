@@ -19,6 +19,16 @@ class SoN::IR::Node::Unwind :isa(SoN::IR::Node) {
         return;
     }
 
+    # THE FILE AND LINE OF ITS STATEMENT: perl's message names them when it
+    # does not end in a newline ("MSG at FILE line N.").
+    field $file :reader = undef;
+    field $line :reader = undef;
+
+    method set_site($f, $l) {
+        ($file, $line) = ($f, $l);
+        return;
+    }
+
     # The exception arguments (an arrayref). Control flows through the
     # control_in decoration (set via set_control_in), not through inputs.
     method value() { return $self->inputs->[0] }

@@ -295,7 +295,11 @@ sub _extract_fields ($node, $id_remap) {
     # when set, so every other Region's wire is unchanged.
     # A die names the block eval that lexically holds it; emitted only then.
     if ($op eq 'Unwind') {
-        return defined $node->eval_id ? { eval_id => $node->eval_id } : undef;
+        my %f = (
+            ( defined $node->eval_id ? ( eval_id => $node->eval_id ) : () ),
+            ( defined $node->line ? ( file => $node->file, line => $node->line ) : () ),
+        );
+        return %f ? \%f : undef;
     }
     if ($op eq 'Region') {
         my $entry = $node->can('eval_entry') ? $node->eval_entry : undef;
