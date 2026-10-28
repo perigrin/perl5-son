@@ -31,7 +31,7 @@
 Tests: chalk `llvm-lock-is-a-no-op.t`, `llvm-exit-of-a-string.t`,
 `llvm-print-to-an-unopened-handle.t`, `llvm-perls-own-variables.t`.
 
-## prototype, wantarray, caller (pending check g161)
+## prototype, wantarray, caller (pin 314)
 
 **Round-tripped:** 251, 271, 272, 003.
 
