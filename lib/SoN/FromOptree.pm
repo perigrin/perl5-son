@@ -10580,6 +10580,9 @@ class SoN::FromOptree 0.01 {
                 unless (defined $node->control_in) {
                     $node->set_control_in($sim->control);
                     $sim->set_control($node);
+                    # ...and the memory version a later read takes, so a
+                    # floating read (a join over `($s) x $n`) is placed after it.
+                    $sim->set_memory($node) if defined $sim->memory;
                 }
             }
 

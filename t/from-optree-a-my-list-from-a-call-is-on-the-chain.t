@@ -32,4 +32,15 @@ for my $case (
     ok defined( $assign->{control_in} // $assign->{control} ), "$name: it is on the control chain";
 }
 
+# AND THE MEMORY VERSION A LATER READ TAKES: a floating read of a target (a
+# join over `($s) x $n`) was placed by its memory input, the call, ahead of
+# the assignment that binds $s.
+{
+    my $data = graph_of(q{sub q2 { (3, "a") } my ($n, $s) = q2(); my @r = ($s) x $n; print "@r\n";});
+    my $nodes = $data->{methods}{'main::__PROGRAM__'}{nodes} // [];
+    my ($assign) = grep { $_->{op} eq 'Assign' && ( $_->{fields}{targets} // 0 ) > 1 } @$nodes;
+    my ($join)   = grep { $_->{op} eq 'Call' && ( $_->{fields}{name} // '' ) eq 'join' } @$nodes;
+    ok $assign && $join && $join->{inputs}[-1] == $assign->{id}, 'a later read takes the assignment as its memory';
+}
+
 done_testing;
