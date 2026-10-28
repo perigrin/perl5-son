@@ -26,6 +26,11 @@ use SoN::IR::Stamp;
 # rpeep is an optimization, not a correctness pass: the optree still executes.
 BEGIN { SoN::OptSuppress::suppress_peep(); }
 
+# The keys of %main:: once this backend has loaded, before the program
+# compiles: what the toolchain made there, which plain perl would not have.
+# A key the program then adds is its own (%SoN::Serialize::JSON::STASH_KEYS).
+our %LOADED_KEYS = map { $_ => 1 } keys %main::;
+
 # _make_package_filter(\%include, \@exclude_prefixes) -> coderef
 #
 # One predicate answering "emit this package?". An INCLUDE list, when
@@ -104,6 +109,9 @@ sub compile {
     }
 
     return sub {
+        # At CHECK the program has compiled: these are its keys, imports and all.
+        local %SoN::Serialize::JSON::STASH_KEYS =
+            map { $_ => ( $LOADED_KEYS{$_} ? undef : 1 ) } keys %main::;
         my ( $graphs, $classes ) = _discover_and_translate($filter);
 
         if ( $format eq 'json' ) {

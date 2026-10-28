@@ -12,6 +12,22 @@ our @EXPORT_OK = qw(to_json);
 use JSON::PP ();
 use Scalar::Util qw(blessed);
 
+# %main::'s keys at CHECK (B::SoN::compile): 1 where the program made one,
+# undef where the toolchain did. A constant-key read of the stash carries
+# whether its key was there (stash_has); chalk decides when that holds.
+our %STASH_KEYS;
+
+sub _stash_has ($node) {
+    return () unless %STASH_KEYS;    # serialized outside B::SoN::compile: not known
+    my ($h, $k) = $node->inputs->@*;
+    return () unless blessed($h) && $h->isa('SoN::IR::Node::EntryDef')
+        && $h->sigil eq '%' && $h->symbol eq 'main::'
+        && blessed($k) && $k->isa('SoN::IR::Node::Constant')
+        && $k->const_type eq 'string' && ( $k->value // '' ) =~ /\A[A-Za-z_]\w*\z/;
+    return () if exists $STASH_KEYS{ $k->value } && !$STASH_KEYS{ $k->value };
+    return ( stash_has => $STASH_KEYS{ $k->value } ? 1 : 0 );
+}
+
 # -----------------------------------------------------------------------
 # _extract_fields($node, \%id_remap) — returns a hashref of extra fields
 # for nodes that carry them, or undef if no extra fields.
@@ -366,10 +382,12 @@ sub _extract_fields ($node, $id_remap) {
         };
     }
     if ($op eq 'Exists' || $op eq 'Delete' || $op eq 'ElemRestore') {
-        return defined $node->kind ? { kind => $node->kind } : undef;
+        my %f = ( ( defined $node->kind ? ( kind => $node->kind ) : () ), ( $op eq 'Exists' ? _stash_has($node) : () ) );
+        return %f ? \%f : undef;
     }
     if ($op eq 'Subscript') {
-        return defined $node->kind ? { kind => $node->kind } : undef;
+        my %f = ( ( defined $node->kind ? ( kind => $node->kind ) : () ), _stash_has($node) );
+        return %f ? \%f : undef;
     }
     if ($op eq 'LocalAlias') {
         return { name => $node->name };
