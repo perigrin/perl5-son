@@ -70,3 +70,17 @@ Tests: chalk `llvm-prototype-of-a-sub.t`, `llvm-wantarray-is-the-calls-context.t
 
 Tests: chalk `llvm-a-file-exists-test.t`, `llvm-pack-c-bytes.t`,
 `llvm-print-keeps-nul-bytes.t`; producer `wire-a-file-test-is-a-scalar.t`.
+
+## 4-argument / lvalue substr on a variable kept in memory (chalk e708f796)
+
+**Round-tripped:** 338 (316 -> 317). 004 next hits a bitwise & over two
+`$ENV{..} // N` values -- perl does it on numbers or strings by what each
+value IS at run time, and chalk types the `//` Str.
+
+- The part replaced is 3-argument substr's read (`@chalk_substr`); the
+  variable becomes before . replacement . after, stored back to its cell.
+  An offset past the end stops the program (perl dies, exit 255 both).
+- The in-place-write refusal no longer names substr; a 4-argument substr on
+  anything but a location is still refused by _lower_substr.
+
+Test: chalk `llvm-substr-replaces-in-place.t`.
