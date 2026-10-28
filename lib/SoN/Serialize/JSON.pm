@@ -294,6 +294,10 @@ sub _extract_fields ($node, $id_remap) {
     # A block eval's Region names where the protected body began. Emitted only
     # when set, so every other Region's wire is unchanged.
     # A die names the block eval that lexically holds it; emitted only then.
+    if (( $op eq 'Divide' || $op eq 'Modulo' ) && defined $node->line) {
+        return { ( defined $node->eval_id ? ( eval_id => $node->eval_id ) : () ),
+                 file => $node->file, line => $node->line };
+    }
     if ($op eq 'Unwind') {
         my %f = (
             ( defined $node->eval_id ? ( eval_id => $node->eval_id ) : () ),

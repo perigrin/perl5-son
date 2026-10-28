@@ -4814,6 +4814,7 @@ class SoN::FromOptree 0.01 {
             my $pkg = eval { $op->stashpv } // eval { $op->stash->NAME };
             $CURRENT_PACKAGE = $pkg if defined $pkg && length $pkg;
             $STMT_LABEL = $op->label;
+            $SoN::IR::NodeFactory::SITE = [ $op->file, $op->line ];
         }
 
         # Handle pushmark specially - just record the mark
@@ -17061,6 +17062,7 @@ class SoN::FromOptree 0.01 {
         # (SoN::IR::NodeFactory::MAY_DIE); see Region's eval_may_die.
         my $may_die = 0;
         local $SoN::IR::NodeFactory::MAY_DIE = \$may_die;
+        my %made_before = map { $_ => 1 } keys %{ $SoN::IR::NodeFactory::MADE_MAY_DIE // {} };
         local $EVAL_ID = ++$EVAL_COUNT;
         # WHERE THE PROTECTED BODY BEGINS, captured before the walk moves on.
         # The Region below records where the eval JOINS; without this the
@@ -17115,6 +17117,25 @@ class SoN::FromOptree 0.01 {
         my $region = $factory->make_cfg('Region',
             inputs => [$body_sim->control]);
         $region->set_eval_entry($eval_entry) if defined $eval_entry;
+        # A DIVISION THE BODY MADE BUT NOTHING REACHES (`my $q = 1 / $z` with
+        # $q unread) is not in the graph, and perl still dies making it: the
+        # eval is marked, as for any other hazard. One the body's control,
+        # memory or value reaches names its eval and dies there (Divide's).
+        {
+            my @made = grep { !$made_before{$_} } keys %{ $SoN::IR::NodeFactory::MADE_MAY_DIE // {} };
+            if (@made) {
+                my (%seen, @q);
+                @q = grep { defined } ( $body_sim->control, $body_sim->memory,
+                    ( $body_sim->stack_depth > $sim->stack_depth ? $body_sim->peek_node : () ) );
+                while (defined(my $n = shift @q)) {
+                    if (ref $n eq 'ARRAY') { push @q, @$n; next }
+                    next unless Scalar::Util::blessed($n) && !$seen{ Scalar::Util::refaddr($n) }++;
+                    push @q, ( $n->inputs // [] )->@*;
+                    push @q, $n->control_in if $n->can('control_in') && defined $n->control_in;
+                }
+                $may_die = 1 if grep { !$seen{$_} } @made;
+            }
+        }
         $region->set_eval_may_die(1) if $may_die;
         $region->set_eval_id($EVAL_ID);
         # OPf_WANT_LIST, or no OPf_WANT at all: the caller's context.

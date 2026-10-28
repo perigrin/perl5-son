@@ -180,6 +180,10 @@ sub SoN::IR::NodeFactory::_negative_constant_index ($in) {
 # recorded (refaddr => node), so the walk can tell whether one was dropped.
 $SoN::IR::NodeFactory::MADE_MAY_DIE = undef;
 
+# $SITE: [file, line] of the statement the walk is in (FromOptree's _step),
+# for a node that names where it dies.
+$SoN::IR::NodeFactory::SITE = undef;
+
 # _may_die($op, \@inputs) -- a division or modulus by what may be zero, or a
 # reference to an array element (one before the start dies).
 sub SoN::IR::NodeFactory::_may_die ($op, $in) {
@@ -339,8 +343,19 @@ class SoN::IR::NodeFactory {
 
     method _make($op_name, %args) {
         %args = $self->_default_stamp($op_name, %args);
+        # A DIVISION THAT MAY DIE names its eval and its site (Divide's).
+        if (( $op_name eq 'Divide' || $op_name eq 'Modulo' )
+                && SoN::IR::NodeFactory::_may_die($op_name, $args{inputs})) {
+            $args{eval_id} //= $SoN::FromOptree::EVAL_ID
+                if $SoN::FromOptree::IN_EVAL_BODY && defined $SoN::FromOptree::EVAL_ID;
+            @args{qw(file line)} = $SoN::IR::NodeFactory::SITE->@*
+                if $SoN::IR::NodeFactory::SITE && !defined $args{line};
+        }
+        # A division names its own eval (below), which catches its die there:
+        # only what does not (an element reference) marks the eval.
         $$SoN::IR::NodeFactory::MAY_DIE = 1
-            if $SoN::IR::NodeFactory::MAY_DIE && SoN::IR::NodeFactory::_may_die($op_name, $args{inputs});
+            if $SoN::IR::NodeFactory::MAY_DIE && SoN::IR::NodeFactory::_may_die($op_name, $args{inputs})
+            && $op_name ne 'Divide' && $op_name ne 'Modulo';
 
         # Phi has historical CFG-style identity in Bootstrap (never
         # deduplicated) but SoN::IR::Node::Phi takes `region` as a
