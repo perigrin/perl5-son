@@ -50,3 +50,23 @@ Tests: chalk `llvm-lock-is-a-no-op.t`, `llvm-exit-of-a-string.t`,
   names the caller's package, file and line: refused.
 
 Tests: chalk `llvm-prototype-of-a-sub.t`, `llvm-wantarray-is-the-calls-context.t`.
+
+## -e, pack of C items, NUL bytes in print (pin 316, chalk 5e0c9341)
+
+**Round-tripped:** 420, 367 (314 -> 316).
+
+- **-e PATH** through access(2): 1, or undef (perl's false file test is
+  undef, not ""). The producer stamps ftis Scalar (with pos and blessed):
+  Unknown, `defined(-e $missing)` read as always defined -- a wrong answer
+  the chalk test caught.
+- **pack** with a constant template of C items (C, C3, C*): one byte per
+  value, wrapped mod 256 (337 is "Q", -1 is 255). Other templates refused.
+- **A pre-existing wrong answer found by a pack probe:** print wrote a Str
+  with printf("%.*s"), which stops at a NUL -- `print "a\0b"` printed "a",
+  a folded pack("N", 1) printed nothing. Print now fwrites exactly len bytes
+  to the same stdout (so output order is kept).
+- Lesson: a probe whose output has NUL bytes cannot be compared through a
+  shell `$(...)` (bash drops them); compare with od or in Perl.
+
+Tests: chalk `llvm-a-file-exists-test.t`, `llvm-pack-c-bytes.t`,
+`llvm-print-keeps-nul-bytes.t`; producer `wire-a-file-test-is-a-scalar.t`.
