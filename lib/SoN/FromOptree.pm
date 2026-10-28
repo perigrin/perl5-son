@@ -4804,6 +4804,27 @@ class SoN::FromOptree 0.01 {
     # Returns ($op->next-or-equivalent, 'handled') when it consumed the op, or
     # ($op, 'unhandled') for any op the common core does not own so the caller's
     # mode-specific switch runs.
+    # A TIE OF A LEXICAL THE SUB ALSO WRITES (or refers to) is refused: the
+    # walk folds a lexical's stored value into its reads -- `tie my $x, C;
+    # $x = 5; print $x` reached the wire as `print 5`, where perl calls
+    # STORE and FETCH -- and nothing on the wire says a read is a FETCH.
+    sub _refuse_tie_of_a_stored_lexical ($cv, $op) {
+        my ($var) = grep { $_->name ne 'pushmark' }
+            map { my @k; for (my $k = $op->first; $$k; $k = $k->sibling) { push @k, $k } @k }
+            grep { $op->flags & B::OPf_KIDS() } $op;
+        return unless $var && $var->name eq 'padsv' && $var->targ;
+        my $root = $$cv == ${ B::main_cv() } ? B::main_root() : eval { $cv->ROOT };
+        return unless $root && $$root;
+        my @ops = _subtree_ops($root);
+        # tied() takes its operand as an lvalue, and does not store it.
+        my %in_tied = map { my @k; for (my $k = $_->first; $$k; $k = $k->sibling) { push @k, $$k } map { $_ => 1 } @k }
+            grep { $_->name eq 'tied' && ( $_->flags & B::OPf_KIDS() ) } @ops;
+        die "GAP: a tie of a lexical the sub also stores, or refers to, is not lowered\n"
+            if grep { $_->name eq 'padsv' && $_->targ == $var->targ && $$_ != $$var
+                      && ( $_->flags & B::OPf_MOD() ) && !$in_tied{ $$_ } } @ops;
+        return;
+    }
+
     sub _step ($cv, $op, $sim, $factory, $opmap, $ctx) {
         my $name = $op->name;
         my $mode = $ctx->{mode};
@@ -4825,6 +4846,7 @@ class SoN::FromOptree 0.01 {
 
         _reread_alias_operand_stored_later($cv, $op, $sim, $factory, $opmap, $ctx);
         _refuse_unseen_lexical_access($cv, $op, $name);
+        _refuse_tie_of_a_stored_lexical($cv, $op) if $name eq 'tie';
 
         # chomp AND chop MUTATE IN PLACE, so the graph must record the store.
         # The producer built `Call(schomp, [PadAccess])` consumed by NOBODY,
