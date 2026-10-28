@@ -171,3 +171,4 @@
 - [Census causes: untyped merges, loop phis](census-cause-untyped-merges.md) — an Unknown merge is what its arms are at this lowering (Scalar if they differ); list-context match was a miscompile; 018 073 140 221 226
 - [Census causes: a die's site, require/%INC, \constant](census-cause-sites-and-consumers.md) — Unwind carries its COP's file/line; remove_consumer was by id (content hash) and dropped readers; 063 138 215 318 319
 - [Census cause: a division in a block eval](census-cause-division-in-eval.md) — Divide/Modulo name their eval and site; chalk dies into its own open eval frame with perl's message; an eval is may-die only through what its body cannot reach; 006 062
+- [Census cause: a read of the stash %main::](census-cause-main-stash.md) — stash_has from CHECK (minus the toolchain's own keys), lowered only where nothing may change the stash; %INC walk follows control past a call with no memory; 013 316 317 346

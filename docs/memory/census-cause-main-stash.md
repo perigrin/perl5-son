@@ -1,4 +1,4 @@
-# Census cause: a read of the stash %main:: (341 -> 345, if the check holds)
+# Census cause: a read of the stash %main:: (341 -> 345, pin 97642a3a)
 
 **Cause:** "a package variable %main:: that is not a scalar is not lowered"
 held 4 cases: 013, 316, 317 and 346. All four round-trip in probes. Case 013
@@ -35,7 +35,7 @@ then hit an %INC read, fixed in the same batch.
 
 ## What they hit next
 
-Nothing in probes. The pin census confirms.
+Nothing: all four round-trip (pin 97642a3a, three censuses at 345).
 
 ## Lessons
 
