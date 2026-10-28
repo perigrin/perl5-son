@@ -8,6 +8,7 @@ use utf8;
 
 use B qw(svref_2object);
 use JSON::PP ();
+use Scalar::Util ();
 use SoN::FromOptree;
 use SoN::Render::Text;
 use SoN::Serialize::JSON qw(to_json);
@@ -1786,6 +1787,12 @@ sub _count_unknown_stamps {
     return $n;
 }
 
+# The consumers that take a value as it is AND can tell an undef from the
+# "" or 0 a typed reading makes of it: they test it, or hand it on to one
+# that may. An Increment, a print, a concat read it as their reading does.
+our %SEES_UNDEF = map { $_ => 1 } qw(
+    Defined DefinedOr Call Return Phi ArrayLiteral HashLiteral Assign VarDecl);
+
 # _infer_backward(\%graphs) -- type a value from what its USES require.
 #
 # WHAT WAS MISSING. Every other pass runs FORWARD: operands to result, refusing
@@ -1825,12 +1832,43 @@ sub _infer_backward {
 
             # Collect, per value node, the requirements its consumers impose.
             my %required;    # node id => Stamp
+            # ...and which values a consumer takes AS THEY ARE: `defined`, a
+            # call's argument, a return, a store, a merge (%SEES_UNDEF) -- no
+            # requirement at all. Typed by its other uses, such a read claimed a reading the
+            # value need not have: `$v =~ /x/` made $v Str, and the undef a
+            # caller passed reached `g($v)` as "", defined (chalk printed "-d"
+            # for perl's "-u"). A Coerce is transparent, as below, and an
+            # Assign's or VarDecl's target slot is not a use of the value.
+            my %raw;         # node id => 1
+            # ...for a PARAMETER: what a caller passed, which may be undef --
+            # a Parameter, or a variable `my (...) = @_` or `shift` binds.
+            my %param;       # symbol => 1
+            for my $node ( $graph->nodes->@* ) {
+                next unless $node->operation eq 'Assign';
+                my @in = ( $node->inputs // [] )->@*;
+                my $src = $in[-1];
+                my $from_args = Scalar::Util::blessed($src) && ( $src->operation eq 'ArgsSource'
+                    || ( $src->operation eq 'Call' && ( $src->name // '' ) eq 'shift'
+                         && grep { Scalar::Util::blessed($_) && $_->operation eq 'ArgsSource' } ( $src->inputs // [] )->@* ) );
+                next unless $from_args;
+                $param{ $_->symbol // '' } = 1
+                    for grep { Scalar::Util::blessed($_) && $_->operation eq 'PadAccess' } @in[ 0 .. $#in - 1 ];
+            }
             for my $node ( $graph->nodes->@* ) {
                 my $op_name = B::SoN::TypeLibrary::type_key($node);
                 my @inputs  = ( $node->inputs // [] )->@*;
+                my $targets = $node->operation eq 'Assign'
+                    ? ( ( $node->can('targets') ? $node->targets : undef ) // 1 )
+                    : $node->operation eq 'VarDecl' ? 1 : 0;
                 for my $i ( 0 .. $#inputs ) {
-                    my $want = B::SoN::TypeLibrary::operand_type( $op_name, $i )
-                        // next;
+                    my $want = B::SoN::TypeLibrary::operand_type( $op_name, $i );
+                    unless (defined $want) {
+                        my $raw = $inputs[$i];
+                        $raw{ $raw->id } = 1
+                            if Scalar::Util::blessed($raw) && $raw->isa('SoN::IR::Value')
+                            && $SEES_UNDEF{ $node->operation } && $i >= $targets;
+                        next;
+                    }
                     my $operand = $inputs[$i] or next;
                     next unless $operand->isa('SoN::IR::Value');
 
@@ -1876,6 +1914,9 @@ sub _infer_backward {
                 next unless $node->isa('SoN::IR::Value');
                 next unless ( $node->stamp ? $node->stamp->type : '' ) eq 'Unknown';
                 next unless _is_backward_inferable($node);
+                next if $raw{ $node->id }
+                    && ( $node->operation eq 'Parameter'
+                         || ( $node->operation eq 'PadAccess' && $param{ $node->symbol // '' } ) );
                 my $want = $required{ $node->id } or next;
                 next if $want->type eq 'Unknown';
 
