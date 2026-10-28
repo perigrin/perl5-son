@@ -3527,6 +3527,8 @@ class SoN::FromOptree 0.01 {
             pos       => 'Scalar',
             # blessed: a class name, or undef.
             blessed   => 'Scalar',
+            # -e: 1, or undef for a path that is not there.
+            ftis      => 'Scalar',
 
             # sqrt IS Num, NOT Int, and this is why the family was measured
             # rather than reasoned about: sqrt(16) observes Int and sqrt(2)
