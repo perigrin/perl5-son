@@ -64,3 +64,30 @@ Found by probing the shapes around this cause; no corpus case moved.
   context matters.
 
 Test: chalk `llvm-a-join-over-a-subs-list.t`.
+
+## Typing the targets and the merges over them (chalk 3a659d43)
+
+**Round-tripped:** 070, 168, 214 (302 -> 305).
+
+- A list-assign target with no VarDecl is stamped Scalar in Analysis (its
+  cell holds any scalar); Unknown, every consumer refused it.
+- Producer: the pinned `my (...) = CALL` is also the memory version, so a
+  floating read (a join over `($s) x $n`) is placed after it.
+- A phi / `//` left Unknown boxes to Scalar when its scalar arms include a
+  reference, a list-assign target, or a merge so boxed. A phi in a cycle
+  starts from its typed operands.
+- **A regression caught by the check (g158), not committed:** boxing EVERY
+  merge with a Scalar arm broke 085 and dozens of probes -- an inlined
+  sub's merge over `shift` is resolved per call site by the backend from
+  the caller's values; typed Scalar up front, an Int return became Unknown.
+  Found by bisecting the Analysis diff hunk by hunk (`patch` per hunk on
+  HEAD's file), after toggling by sed silently failed to apply.
+- Lesson: a rule in Analysis runs for every call site at once; a merge whose
+  arms depend on an inlined argument must be left for the backend, which
+  sees each site's values.
+- Lesson: when toggling code to bisect, confirm the toggle applied (grep the
+  file) -- two of three toggles here did not match and misled the search.
+
+Test: chalk `llvm-a-merge-with-a-scalar-arm.t`, more cases in
+`llvm-a-list-assign-from-a-flattening-list.t`; producer
+`from-optree-a-my-list-from-a-call-is-on-the-chain.t` (memory version).
