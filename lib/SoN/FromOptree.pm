@@ -5526,6 +5526,13 @@ class SoN::FromOptree 0.01 {
             # `local @x` restores exactly as `local $g` does -- same key, sigil
             # included -- so it records the same save for the scope exit below.
             if ($op->private & 128) {   # OPpLVAL_INTRO
+                # RESTORED AT A SCOPE'S EXIT it is refused: the save is the
+                # name's SSA binding (none at all inside a sub) and the restore
+                # rebinds the name with no store, so a reader of the package's
+                # storage saw the local contents after the scope ("5 5" for
+                # perl's "5 1"). At program scope the restore is at its end.
+                die "GAP: local on a package array or hash (restored at scope exit) not yet lowered\n"
+                    unless _restored_at_program_end($cv, $op);
                 # `local @x` in a loop body restores at the ITERATION boundary,
                 # exactly as the scalar site does -- see there.
                 push $ctx->{local_saves}->@*, { key => $key, node => $existing };

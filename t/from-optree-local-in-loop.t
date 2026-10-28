@@ -102,12 +102,16 @@ subtest 'local lowers in every loop kind' => sub {
         ['while',   'our $g=1; my $i=0; while ($i<2) { local $g = $i; $i++; }'],
         ['foreach', 'our $g=1; my @a=(1,2); for my $x (@a) { local $g = $x; }'],
         ['special', 'for my $i (1,2) { local $^W = $i; }'],
-        ['aggregate','our @a=(1); for my $i (1,2) { local @a = ($i); }'],
     ) {
         my ($name, $src) = $case->@*;
         my (undef, $err) = translate($src);
         unlike $err, qr/GAP:/, "$name: not refused" or diag $err;
     }
+    # AN AGGREGATE's restore rebinds the name and stores nothing, so a reader
+    # of the package's storage saw the local contents after the scope (chalk
+    # printed "5 5" for perl's "5 1"): refused by name.
+    my (undef, $err) = translate('our @a=(1); for my $i (1,2) { local @a = ($i); }');
+    like $err, qr/GAP: local on a package array or hash/, 'aggregate: refused by name';
 };
 
 done_testing;
