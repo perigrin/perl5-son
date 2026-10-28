@@ -30,3 +30,23 @@
 
 Tests: chalk `llvm-lock-is-a-no-op.t`, `llvm-exit-of-a-string.t`,
 `llvm-print-to-an-unopened-handle.t`, `llvm-perls-own-variables.t`.
+
+## prototype, wantarray, caller (pending check g161)
+
+**Round-tripped:** 251, 271, 272, 003.
+
+- **prototype(\&f)** of a sub the program defines: the loader records each
+  sub's prototype from `classes/<pkg>/subs/<name>/prototype`
+  (`%Chalk::IR::Serialize::JSON::PROTOTYPES`, the `%USED_MODULES` pattern);
+  undef for one with none. A builtin (`CORE::push`), an anon sub, or a name
+  the program does not define is refused by name.
+- **wantarray** is the context of the call being inlined (the Call's `want`:
+  1, false, undef), and undef at the program's top level. Refused in a body
+  lowered out of line. The want is set at the top of `_lower_call_direct`:
+  set at ONE of its inlining paths, a call through another read "void" for
+  both a list and a scalar call ("void void" for "list scalar") -- caught by
+  the test before commit.
+- **caller** at the top level: undef, or the empty list. Inside a sub it
+  names the caller's package, file and line: refused.
+
+Tests: chalk `llvm-prototype-of-a-sub.t`, `llvm-wantarray-is-the-calls-context.t`.
