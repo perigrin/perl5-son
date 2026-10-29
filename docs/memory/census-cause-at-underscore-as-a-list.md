@@ -1,4 +1,4 @@
-# Census cause: @_ read as a list, an alias that is only read, and an inert /u (357 -> ?)
+# Census cause: @_ read as a list, an alias that is only read, and an inert /u (357 -> 358, pin 1d0a4f52)
 
 **Cause:** "direct call to X: callee writes $_[N]" held 112:
 `sub e { join ",", map { c($_) } @_ } e(@a)` under `use v5.36`.
