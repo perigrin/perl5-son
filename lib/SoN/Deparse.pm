@@ -5014,7 +5014,10 @@ class SoN::Deparse 0.01 {
     # the count of the call's array temporary.
     # A LIST RETURN VALUE does the same: `return ()` beside `return @c` is a
     # merge of two lists, and as a scalar it held the count.
-    method _phi_takes_a_list ($p) {
+    # EXITS MERGE TWO AT A TIME, so an exit Phi's input can be the inner
+    # merge's Phi: a list under it makes this one a list too.
+    method _phi_takes_a_list ($p, $seen = {}) {
+        return 0 if $seen->{ $p->{id} // -1 }++;
         return scalar grep {
             my $in = $nodes->{$_ // -1} // {};
             (($in->{op} // '') eq 'Call'
@@ -5022,6 +5025,8 @@ class SoN::Deparse 0.01 {
             || (($in->{op} // '') eq 'ArrayLiteral'
                 && ($in->{stamp} // '') eq 'List'
                 && !defined(($in->{fields} // {})->{symbol}))
+            || (($in->{op} // '') eq 'Phi'
+                && $self->_phi_takes_a_list($in, $seen))
         } ($p->{inputs} // [])->@*;
     }
 
