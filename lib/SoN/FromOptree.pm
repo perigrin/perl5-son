@@ -3782,8 +3782,9 @@ class SoN::FromOptree 0.01 {
         my $dies;
         $dies = sub ($c, $seen = {}) {
             return 0 if !blessed($c) || $seen->{ refaddr($c) }++;
-            return 1 if $c->operation eq 'Unwind';
-            return 0 unless $c->operation eq 'Region';
+            # A die an eval catches goes on at the eval's join, which dies no more.
+            return !defined $c->eval_id if $c->operation eq 'Unwind';
+            return 0 unless $c->operation eq 'Region' && !defined $c->eval_entry;
             my @in = grep { defined } ( $c->inputs // [] )->@*;
             return @in && !grep { !$dies->($_, { %$seen }) } @in;   # per path: a shared set made order matter
         };
