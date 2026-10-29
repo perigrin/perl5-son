@@ -1,42 +1,34 @@
----
-name: census-cause-at-underscore-as-a-list
-description: 430/430 goal, cause 7 — "callee accesses @_ as an aggregate" (21): @_ read as a list is an %Array of the call's arguments; ROUNDTRIP 84 -> 89; three wrong answers (loop phi values not read as the phi; Int/Num and Int/Str array literals read raw)
-metadata:
-  type: project
----
+# Census cause: @_ read as a list, an alias that is only read, and an inert /u (357 -> ?)
 
-**Cause:** an inlined callee reading `@_` as a list: `for my $x (@_)`,
-`"@_"`, `scalar(@_)`, `join`. Cause 1 had bound only positions.
+**Cause:** "direct call to X: callee writes $_[N]" held 112:
+`sub e { join ",", map { c($_) } @_ } e(@a)` under `use v5.36`.
+- It needed three things, and round-trips in probes once all are in place.
+- It is the triage's row 6. W1's refusal had moved its next refusal to
+  "flattens into @_".
 
-**Cases held:** 21.
+## What changed (chalk only)
 
-**Fix (chalk 46b6f7db):**
-- Read as a list, `@_` is an `%Array` of the call's arguments, built at
-  the call.
-- A copy can't carry a write back to the caller, nor a shift out of the
-  list. So a store to `$_[N]`, a reference to one, a shift before the
-  list read, a builtin that may write it, and an argument that would
-  flatten are all refused by name.
+- **@_ read only as a list is built flattened.** Read only as a list means
+  no position, no slurpy and no write. An array argument, or a list a
+  call returns, is its elements (`_emit_flattened_array_of`). A hash is
+  still refused, because that helper does not flatten one. W1's guard
+  skips exactly this shape.
+- **A LocalAlias of `$_` to an `@_` element** (`for (@_)`, `map {...} @_`)
+  counts as a write only where `_may_write_topic($graph)` holds. That
+  helper looks for a store to `$_` (EntryWrite, Assign), or an s///,
+  tr/// or chomp of it, in the callee or any direct callee, recursively.
+  Any method, indirect or dynamic call counts as one, since its body is
+  not known. The producer turns reads of `$_` in such a loop into reads of
+  the `@_` element, so a write through the alias would appear as a store
+  there, and is still refused.
+- **`/u` (unicode_strings, set by `use v5.12`+) is dropped where it changes
+  nothing** (`_without_inert_u`). It decides only how `\w \s \d` and their
+  negations, POSIX classes and `/i` treat a byte past ASCII. A pattern
+  with none of those, and flags without `i`, matches the same bytes either
+  way. Every regex in a `use v5.36` program was refused before; `/\w/u` is
+  still refused.
 
-**Round-tripped:** 5 of the 21. ROUNDTRIP 84 -> 89.
+## Lessons
 
-**What they hit next:**
-- 6 stop at an `Exists` consumer of `@_`.
-- 3 stop at a sub ending in an if.
-- 2 stop at `my %o = @_` (a HashLiteral).
-- The rest are one each.
-
-**Wrong answers found on the way, each red first:**
-- A loop phi's two values weren't read as the phi is. An Int 0 went into
-  a double phi, and an undef's defined bit and an i64 counter went into a
-  `%Slot` phi (backlog 22f3248c, pvm case 106). Both ends are now coerced;
-  a mismatch with no exact coercion is refused.
-- Mixed array literals were read raw by the join's stamp. `(1.5, 2)` read
-  the 2 as 9.88e-324, and `(1, "x")` read the 1 as a string pointer and
-  crashed. Ints are now stored as the join (exact); Nums among Strs are
-  refused. This is pre-existing, and the hash version was found in cause 5.
-
-**Lesson:** a value's machine type comes from its own node, and its
-reading from its consumer's stamp. Wherever the two can differ (a phi
-edge, a literal's element, a hash entry), coerce or refuse. Each time I
-looked at one, the other side was wrong too.
+- A refusal can hide two more behind it. Probe the case after each step;
+  the triage's "next refusal" column is a first guess.
