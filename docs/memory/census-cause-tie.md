@@ -56,3 +56,6 @@ tied() takes its operand as an lvalue but does not store it.
   a tied variable was gone from the wire. Refuse where it is folded.
 - Count a variable's read occurrences, not its reader nodes:
   `print $x, $x` is one reader.
+- chalk's t/bootstrap/no-tie-in-the-subset.t greps lib/ for the tie
+  operators, comments included. Write "a tie of x" and "a tied() of x",
+  not the call forms.
