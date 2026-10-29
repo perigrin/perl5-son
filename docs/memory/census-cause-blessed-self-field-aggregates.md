@@ -1,4 +1,4 @@
-# Census causes: a blessed hash read as Object; a field aggregate assigned whole (354 -> ?)
+# Census causes: a blessed hash read as Object; a field aggregate assigned whole (354 -> 356, pin 5c60242f)
 
 **Causes and cases**
 - **"an inlined argument is a HashRef where the callee reads a Object"**
@@ -40,7 +40,16 @@
 
   The fix is the sub's two faces: stamp the Assign List, give the Return a
   scalar reading (the right-hand count), and have chalk choose by the
-  call's `want`. Until then 141 is refused.
+  call's `want`. Both halves are needed:
+  - the producer already builds the two faces for a list `return`
+    (`_list_return_value`: an ArrayLiteral stamped List, and a Coerce to
+    Scalar of the last operand or its Count);
+  - chalk chooses only for inlined subs (`return_reading_for_want`). A
+    `class` method is one vtable function with one return type, so it needs
+    either two entry points (list face and scalar face, picked at the call
+    by `want`) or to be inlined when its class is static.
+
+  That is larger than one case justifies now, so 141 is refused until then.
 - **`_memory_input_of` and `_value_readers`** are now shared with the
   `can`-as-truth check. A value reader excludes a use as a memory version,
   a memory Phi, and a Region/Loop control input.
