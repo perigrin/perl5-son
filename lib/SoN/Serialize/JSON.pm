@@ -383,6 +383,7 @@ sub _extract_fields ($node, $id_remap) {
     }
     if ($op eq 'Exists' || $op eq 'Delete' || $op eq 'ElemRestore') {
         my %f = ( ( defined $node->kind ? ( kind => $node->kind ) : () ), ( $op eq 'Exists' ? _stash_has($node) : () ) );
+        $f{at_return} = 1 if $op eq 'ElemRestore' && $node->at_return;
         return %f ? \%f : undef;
     }
     if ($op eq 'Subscript') {

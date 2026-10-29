@@ -2750,7 +2750,8 @@ class SoN::FromOptree 0.01 {
                 # BEFORE _exit_record, because the restore is a WRITE and must
                 # be ordered ahead of the exit. The return value is already on
                 # the simulated stack, so restoring first cannot change it.
-                _restore_locals($sim, $ctx, $factory);
+                # A sub's end puts its `local`s back itself, as a return does.
+                _restore_locals($sim, $ctx, $factory, 0, !$is_program_exit);
 
                 push @exits, _exit_record($sim, $factory, 'leavesub', $op,
                                          $is_program_exit);
@@ -11849,11 +11850,11 @@ class SoN::FromOptree 0.01 {
     sub _restore_locals_for_return ($sim, $ctx, $factory) {
         return if $IN_SCOUT;    # a scout records no exit; its restore would be an orphan node
         local $ctx->{local_saves} = [ map { $_->@* } @SAVES_STACK ];
-        _restore_locals($sim, $ctx, $factory);
+        _restore_locals($sim, $ctx, $factory, 0, 1);
         return;
     }
 
-    sub _restore_locals ($sim, $ctx, $factory = undef, $mark = 0) {
+    sub _restore_locals ($sim, $ctx, $factory = undef, $mark = 0, $at_return = 0) {
         my $saves = $ctx->{local_saves} or return;
         while ($saves->@* > $mark) {
             my $save = pop $saves->@*;
@@ -11863,6 +11864,7 @@ class SoN::FromOptree 0.01 {
             if (my $e = $save->{elem}) {
                 next unless $factory && defined $sim->memory;
                 my $r = $factory->make('ElemRestore', kind => $e->{kind},
+                    at_return => $at_return,
                     inputs => [ @$e{qw(container index saved existed)}, $sim->memory ]);
                 $r->set_control_in($sim->control);
                 $sim->set_control($r);

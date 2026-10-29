@@ -35,3 +35,27 @@ a branch-guarded store needs a memory-Phi" (the 125 / 191 cause).
 Tests: chalk `t/bootstrap/ir/llvm-local-on-a-hash-element-is-put-back.t`;
 producer `t/wire-a-return-puts-back-what-local-replaced.t`.
 Probes: lo9 and lo10 ROUNDTRIP; lr3, lo7, lo8 refused by the memory-Phi cause.
+
+## Follow-up: the restore on a way out spells no `}` (found by SON_RATCHET)
+
+The return's restore broke the deparsed Perl of chalk's own lib.
+- **Symptom.** Context.pm's `_lower_call_direct` (a sub-level `local`, then an
+  `unless (@args) { return ... }`) rendered "syntax error near } else". Lib
+  COMPILES fell 179 -> 177 and gate3 SAME fell 482 -> 368.
+- **Bisect.** The first bad commit was f3328f3.
+- **Cause.** Deparse spells every ElemRestore as the `}` that closes the
+  `local`'s block, so a second restore on the return path closed the block
+  twice.
+- **Fix.** An ElemRestore made on a way out of the sub (a return, or the sub's
+  end; not the program's end) carries `at_return`. Deparse spells nothing for
+  it and opens no block for it, because perl's own exit puts the element back.
+  Chalk still lowers the restore.
+- **Pre-existing, not fixed.** A block-level `local` whose block holds a
+  returning `if` still puts the `}` of its leave restore inside the
+  fall-through arm. `sub f { my $r = 0; { local $h{a} = 2; if ($_[0]) { return 7 }
+  $r = $h{a} } $r + $h{a} }` prints 731 under perl and 441 deparsed, both
+  before f3328f3 and after. Deparse only; it is in the report to perigrin.
+
+Test: `t/deparse-a-local-left-by-a-return-closes-once.t`.
+Lesson: a producer change that adds nodes must also be checked by rendering
+chalk's lib (the SON_RATCHET lib census), not only by the corpus census.

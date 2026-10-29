@@ -6527,7 +6527,8 @@ class SoN::Deparse 0.01 {
         # A `local` ELEMENT'S RESTORE IS PERL'S OWN: the store was spelled
         # `local` in a block of its own, and this closes it -- the block's
         # end is where perl puts the element back.
-        return "}\n" if $op eq 'ElemRestore';
+        # One made on a `return`'s path spells nothing: the return puts it back.
+        return ( ($n->{fields} // {})->{at_return} ? '' : "}\n" ) if $op eq 'ElemRestore';
 
         # A FOREACH PASS'S TOPIC is aliased for the pass, as perl's foreach
         # aliases it: a callee reads and writes it by name. Restored at the
@@ -7059,6 +7060,7 @@ class SoN::Deparse 0.01 {
                 my ($tc, $tk) = ($nodes->{ $in[0] }{inputs} // [])->@*;
                 my $restored = grep {
                     ( $_->{op} // '' ) eq 'ElemRestore'
+                        && !( $_->{fields} // {} )->{at_return}
                         && ( $_->{inputs}[0] // -1 ) == ( $tc // -2 )
                         && ( $_->{inputs}[1] // -1 ) == ( $tk // -2 )
                 } $self->_nodes_in_order;

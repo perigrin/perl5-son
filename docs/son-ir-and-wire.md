@@ -117,7 +117,7 @@ serializes (§2.4). The rest are internal to the producer.
 | MakeCell | Value | **cell_name**, **captured_written** |
 | AnonSub | Value | **name** (the `methods` key of its body), **captures** |
 | LocalAlias | Value | **name** |
-| ElemRestore | Value | **kind** |
+| ElemRestore | Value | **kind**, **at_return** |
 | Wantarray | Access | — |
 | EnvRead | Value | **key** |
 | **Aggregates** | | |
@@ -534,7 +534,7 @@ CLASS, as observed:
 - **EnvRead** `{key}`
 - **VarDecl** `{scope}`
 - **Coerce** `{from_repr, to_repr}`
-- **Exists/Delete/ElemRestore** `{kind?, stash_has?}`
+- **Exists/Delete/ElemRestore** `{kind?, stash_has?}`; ElemRestore also `{at_return?}`: made on a way out of the sub (a `return`, or the sub's end), where perl puts the element back by itself, so a deparser spells no block end for it
 - **Subscript** `{kind?, stash_has?}`
 - **LocalAlias** `{name}`
 - **Length** `{bytes?}`
