@@ -32,7 +32,19 @@ direct inputs: the List under the inner Phi was missed. The outer Phi became
 **Fix.** `_phi_takes_a_list` looks through Phi inputs, with a seen set because
 loop Phis cycle.
 
-Test: `t/deparse-a-nested-exit-merge-keeps-its-list.t`.
+**Second cause, same commit.** A `return CALL` whose call has no `want`
+runs in the caller's context. Deparse spells it inline in the arm only when
+its exit merge is "one a Return reads" (`$exit_merge` in the `%inline_return`
+pass). Under the nested merges, the inner Phi is read by the outer Phi, not
+the Return. So the call was bound to a scalar temporary, and a list came back
+as its count. chalk's EagerPinning::_expand_node hit this: "Can't locate
+object method kind via package 3" in the scheduler-* tests.
+
+**Fix.** `$exit_merge` recurses: a Phi read only by exit-merge Phis whose
+region takes this one's region is an exit merge too. The seen set is copied
+per path, because a shared one made order matter.
+
+Test: `t/deparse-a-nested-exit-merge-keeps-its-list.t` (3 cases).
 
 ## Lessons
 

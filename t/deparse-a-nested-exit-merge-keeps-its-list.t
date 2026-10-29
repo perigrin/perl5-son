@@ -38,6 +38,14 @@ for my $src (
       my @a = g(1); my @b = g(2); my @c = g(3); my @d = g(4);
       my $e = g(1); my $f = g(2); my $h = g(3); my $i = g(4);
       print join("|", scalar(@a), scalar(@b), scalar(@c), scalar(@d), map { $_ // 'u' } $e, $f, $h, $i), "\n";},
+    # chalk's EagerPinning::_expand_node: every exit returns a call, in the
+    # caller's context. Bound to a scalar Phi under the inner merge, the
+    # list a call returned arrived as its count ("method kind via package 3").
+    q{sub two { (1, 2) } sub one { 'x' }
+      sub en { my $k = shift; if ($k == 1) { return two() } if ($k == 2) { return two() }
+               if ($k == 3) { return one() } return two() }
+      my @a = en(1); my @b = en(2); my @c = en(3); my @d = en(4); my $s = en(2);
+      print join("|", scalar(@a), scalar(@b), scalar(@c), scalar(@d), $s), "\n";},
 ) {
     my $want = run_perl($src);
     my $data = graph_of($src);

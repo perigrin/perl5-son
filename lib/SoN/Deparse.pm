@@ -1556,15 +1556,22 @@ class SoN::Deparse 0.01 {
                 # SO IS ONE AN ARM ENDS ON, merged at a join the function's
                 # Return follows at once: the arm returns it there itself
                 # (_join_phis), and the path has nothing after it to skip.
-                my $exit_merge = sub ($p) {
-                    return 0 unless ($p->{op} // '') eq 'Phi';
+                # EXITS MERGE TWO AT A TIME: an inner merge read only by the
+                # outer exit merge (its region an input of the outer's) is
+                # an exit merge as well.
+                my $exit_merge;
+                $exit_merge = sub ($p, $ctrl = $id, $seen = {}) {
+                    return 0 unless ($p->{op} // '') eq 'Phi' && !$seen->{ $p->{id} }++;
                     my $r = $nodes->{ ($p->{fields} // {})->{region} // -1 } // {};
                     return 0 unless ($r->{op} // '') eq 'Region'
-                        && grep { defined && $_ == $id } ($r->{inputs} // [])->@*;
-                    return scalar grep { ($_->{op} // '') eq 'Return'
+                        && grep { defined && $_ == $ctrl } ($r->{inputs} // [])->@*;
+                    return 1 if grep { ($_->{op} // '') eq 'Return'
                         && ($_->{control_in} // -1) == $r->{id}
                         && grep { defined && $_ == $p->{id} } ($_->{inputs} // [])->@*
                     } $self->_nodes_in_order;
+                    my @up = grep { grep { defined && $_ == $p->{id} } ($_->{inputs} // [])->@* }
+                        $self->_nodes_in_order;
+                    return @up && !grep { !$exit_merge->($_, $r->{id}, { %$seen }) } @up;   # per path: a shared set made order matter
                 };
                 if (@readers && !grep { !( ( ($_->{op} // '') eq 'Return'
                             && ($_->{control_in} // -1) == $id )
