@@ -10597,6 +10597,15 @@ class SoN::FromOptree 0.01 {
                 && ( $rhs[0]->isa('SoN::IR::Node::Call')
                      || $rhs[0]->operation =~ /\A(?:And|Or|DefinedOr|Phi|RegexMatch)\z/ );
             my @vals = @args_elems ? @args_elems : @rhs;
+            # AMONG SEVERAL VALUES TOO: `my ($a, $b, $c) = (two(), 5)` bound
+            # $a to the call and $b to 5 (perl 1 2 5). Any one of them that
+            # may yield other than one element moves every position after it.
+            my $unsized = !@args_elems && grep {
+                ( $_->isa('SoN::IR::Node::Call')
+                  && ( ( $_->can('want') && $_->want ) // '' ) ne 'scalar' )
+                || $_->operation =~ /\A(?:And|Or|DefinedOr|Phi|RegexMatch)\z/
+            } @rhs;
+            $single_call ||= $unsized;
             my $positional =
                    ( !grep { _is_aggregate_node($_) } @targets, @vals )
                 # ONE TARGET IS NO EXCEPTION: `($lo) = g()` takes the first

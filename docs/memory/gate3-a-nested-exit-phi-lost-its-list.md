@@ -54,3 +54,18 @@ Test: `t/deparse-a-nested-exit-merge-keeps-its-list.t` (3 cases).
   commit's emission in today's environment.
 - Bisect with a 5-line probe, not with gate3. A gate3 run takes about 1.5
   hours; the probe takes seconds.
+
+## After the two fixes: 438, and what the remaining 44 hold
+
+- **gate3 SAME 438** (DIFFERS 44). 43 of the 44 also differ against the floor
+  commit's emission. The 44th, `llvm-mop-classes.t`, fails against the
+  original lib too and only its ok count moved; it looks unstable.
+- **One cause among the 43 is a producer wrong answer**, now fixed:
+  `my ($a, $b, $c) = (f(), f(), f())` was bound by position. Each call runs in
+  list context and can yield any number of values. Perl prints `1 2 5` for
+  `(two(), 5)`, and the deparsed code printed `2 5` and undef. Context.pm's
+  `"  " . @eff354` (`%Str 1` in lli) came from this.
+  - **Fix.** A call (want not scalar), And, Or, DefinedOr, Phi or RegexMatch
+    anywhere among several RHS values turns off positional binding, as it
+    already did when it was the only value.
+  - **Test:** `t/deparse-a-call-among-list-assign-values-has-no-position.t`.
