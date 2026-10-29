@@ -90,3 +90,11 @@ Test: `t/deparse-a-nested-exit-merge-keeps-its-list.t` (3 cases).
   - `$S/blame-sub2.pl` with `$S/hook/SubSwap.pm` bisects which emitted sub:
     it loads the original source under a renamed package, so its file
     lexicals stay its own, and points every other sub at it.
+
+## All 44 cleared (2026-10-29)
+
+- After 534be3d (an eval-caught die is not a dying exit), the last 18
+  DIFFERS match the original against the emitted lib.
+- **Lesson.** "Every path dies" must not count a die an eval catches. Its
+  Unwind carries an eval_id and goes on at the eval's join.
+  `t/from-optree-eval-body-rebinds-outer.t` caught this.
