@@ -1,4 +1,4 @@
-# Three wrong answers the census missed, found by triaging its refusals (356 -> ?)
+# Three wrong answers the census missed, found by triaging its refusals (356 -> 357, pin efde5f52)
 
 A read-only triage of the 66 remaining refusals ran probes next to each
 case and found three shapes the census does not cover where chalk or the
