@@ -3777,8 +3777,18 @@ class SoN::FromOptree 0.01 {
         # walk back from the Return reaches the die through it), but its value
         # never arrives. The `()` it carried made the merge a list, and a
         # scalar caller got a count (chalk's Context::_lower_constant).
+        # ...OR A MERGE OF PATHS THAT ALL DIE: `if (C) { die } die` ends on a
+        # Region of two Unwinds (chalk's Context::lower_value).
+        my $dies;
+        $dies = sub ($c, $seen = {}) {
+            return 0 if !blessed($c) || $seen->{ refaddr($c) }++;
+            return 1 if $c->operation eq 'Unwind';
+            return 0 unless $c->operation eq 'Region';
+            my @in = grep { defined } ( $c->inputs // [] )->@*;
+            return @in && !grep { !$dies->($_, { %$seen }) } @in;   # per path: a shared set made order matter
+        };
         $exits = [ map {
-            ( blessed($_->{control}) && $_->{control}->operation eq 'Unwind' )
+            $dies->($_->{control})
                 ? { control => $_->{control}, kind => $_->{kind},
                     value => $factory->make('Constant', value => undef,
                         const_type => 'undef',

@@ -72,3 +72,21 @@ Test: `t/deparse-a-nested-exit-merge-keeps-its-list.t` (3 cases).
 
 **perigrin (2026-10-29): keep fixing the 44; do not lower the gate3 floor.**
 482 stays the floor even though this container now runs the LLVM tests.
+
+## The die path (26 of 44 cleared, then lower_value)
+
+- **Producer (cb7e2cd, then generalised).** A sub's exit reachable only
+  through a die carried `()` into the exit merge, which made the merge a list.
+  In Context.pm, `_lower_constant` and `lower_value` (`$ret = @phi`) handed
+  scalar callers a 1. An exit now carries undef when its control dies: an
+  Unwind, or a Region all of whose inputs die (`if (C && D) { die } die`).
+- **Chalk (195d3836, then extended).**
+  - A merge's phi gets no entry from a dying arm.
+  - `_find_unwind_consumer` continues past an arm's own If at its merge.
+    Before this, `else { if (C) { die } die }` branched on to the merge and the
+    sub RETURNED where perl dies: a silent wrong answer.
+- **Tools.**
+  - `$S/blame-module.pl` bisects which emitted module breaks a test.
+  - `$S/blame-sub2.pl` with `$S/hook/SubSwap.pm` bisects which emitted sub:
+    it loads the original source under a renamed package, so its file
+    lexicals stay its own, and points every other sub at it.
