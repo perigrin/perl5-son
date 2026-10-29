@@ -175,3 +175,4 @@
 - [Census cause: can and class objects](census-cause-can-and-class-objects.md) — `->can("m")->(ARGS)` as a run-time dispatch; a method on a Scalar holding an object of the one `class` (Analysis::_the_class_with); uncaught dies exit 255 without stderr (the convention); 059
 - [Census cause: aliases and growth](census-cause-aliases-and-growth.md) — a foreach alias lives one pass (only growth in its loop body moves it); a read through an alias was made after a later element store (miscompile, fixed: _make_pending_reads_before); 187 190
 - [Census cause: tie](census-cause-tie.md) — a tie of a lexical read at most once after it: TIESCALAR by class-string dispatch, the read a FETCH; producer folded a tied variable's stores (refused); 415 416
+- [Census causes: dynamic methods, slurpy hash, can as truth](census-cause-dynamic-methods-slurpy-hash.md) — $o->$m by a constant name; my ($c, %o) = @_; ->can read only as a truth; a package new typed by its body; 012 055 068 127

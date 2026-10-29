@@ -1,4 +1,4 @@
-# Census causes: a method named by a value, a slurpy hash, `can` as a truth (350 -> ?)
+# Census causes: a method named by a value, a slurpy hash, `can` as a truth (350 -> 354, pin fcaa7224)
 
 **Causes and cases**
 - "cannot lower op=Call dynamic_method" held 012 and 055. Both round-trip
