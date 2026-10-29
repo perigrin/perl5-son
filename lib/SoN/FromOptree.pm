@@ -2430,6 +2430,12 @@ class SoN::FromOptree 0.01 {
                 # `$a && $b` always pushes a value, so the undef Constant is a
                 # defensive floor (matching the dor / cond_expr handlers), not an
                 # expected path.
+                # A LIST RIGHT SIDE (`@a && (3, 4, 5)` in list context) left
+                # several values; the top one alone was kept -- one element
+                # for perl's three.
+                die "GAP: a short-circuit whose right side is a list of several values "
+                  . "is not lowered\n"
+                    if $rhs_sim->stack_depth > $base_depth + 1;
                 my $rhs = $rhs_sim->stack_depth > $base_depth
                     ? $rhs_sim->pop_node
                     : $factory->make('Constant',
@@ -4552,9 +4558,12 @@ class SoN::FromOptree 0.01 {
                 && ($invocant->const_type // '') eq 'string') {
                 $class_name = $invocant->value;
             }
+            # ...A CONSTRUCTOR's: what another method returns is not of its
+            # class (`$x->b->n`, ->b returning a Box, was named K::n).
             elsif ($invocant
                 && $invocant->isa('SoN::IR::Node::Call')
-                && defined $invocant->class_name) {
+                && defined $invocant->class_name
+                && ( $invocant->name // '' ) eq 'new') {
                 $class_name = $invocant->class_name;
             }
             # $obj = bless REF, "Class": a literal class is as static as Class->new.
