@@ -35,6 +35,14 @@ would have called the wrong method. The class now propagates only from a
 constructor invocant (`->new`). A method on another method's value has no
 class_name and goes through run-time dispatch or a refusal.
 
+**W3's cost, measured by check g185.** 118 newly round-trips, but 243 and
+247 regressed: a fluent chain (`Log->new->add("a")->add("b")`) lost its
+class after the first call. Those chains were right only because the
+methods return `$self`. The class is restored in chalk's Analysis for
+exactly that shape: a method call with no class_name, whose invocant is a
+`class` method call of class C returning `$self`, takes C. This repeats to
+a fixpoint, so a chain resolves link by link.
+
 ## Triage (for picking the next causes)
 
 Groups by cases unblocked per effort, from the triage agent:
