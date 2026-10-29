@@ -98,3 +98,8 @@ Test: `t/deparse-a-nested-exit-merge-keeps-its-list.t` (3 cases).
 - **Lesson.** "Every path dies" must not count a die an eval catches. Its
   Unwind carries an eval_id and goes on at the eval's join.
   `t/from-optree-eval-body-rebinds-outer.t` caught this.
+
+**SON_RATCHET PASSES (2026-10-29), every number at its floor.** gate3 SAME 482,
+COMPILES 179, corpus 427, perl t/ 11, LLVM ROUNDTRIP 358 with DIFFERS and
+LLI_FAIL at 0. Run it with SON_PERL_T=/home/perigrin/dev/perl5/t; perl's t/
+moved from /root/dev.
