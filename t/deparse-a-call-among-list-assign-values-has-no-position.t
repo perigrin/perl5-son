@@ -33,6 +33,8 @@ for my $src (
     q{my $n = 0; sub fresh { $n++; "%t$n" }
       sub go { my ($a, $b, $c) = (fresh(), fresh(), fresh()); print "  $a = x\n  $b = $a\n"; return $c }
       print go(), "\n";},
+    # A merge is unsized only when what it merges is: an arm that is a call.
+    q{sub two { (1, 2) } sub go { my ($a, $b) = ($_[0] ? two() : 3, 9); print "$a $b\n" } go(1); go(0);},
 ) {
     my $want = run_perl($src);
     my $data = graph_of($src);

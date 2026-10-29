@@ -10600,11 +10600,20 @@ class SoN::FromOptree 0.01 {
             # AMONG SEVERAL VALUES TOO: `my ($a, $b, $c) = (two(), 5)` bound
             # $a to the call and $b to 5 (perl 1 2 5). Any one of them that
             # may yield other than one element moves every position after it.
-            my $unsized = !@args_elems && grep {
-                ( $_->isa('SoN::IR::Node::Call')
-                  && ( ( $_->can('want') && $_->want ) // '' ) ne 'scalar' )
-                || $_->operation =~ /\A(?:And|Or|DefinedOr|Phi|RegexMatch)\z/
-            } @rhs;
+            # A merge or short-circuit only when what it merges may be: a loop
+            # Phi of a scalar is one value (`($a, $b) = ($b, $a)` in a loop).
+            my %seen;
+            my $unsized_v;
+            $unsized_v = sub ($v) {
+                return 0 if !blessed($v) || $seen{ refaddr($v) }++;
+                return ( ( $v->can('want') && $v->want ) // '' ) ne 'scalar'
+                    if $v->isa('SoN::IR::Node::Call');
+                return 1 if $v->operation eq 'RegexMatch';
+                return 1 if $v->can('stamp') && $v->stamp && ( $v->stamp->type // '' ) eq 'List';
+                return 0 unless $v->operation =~ /\A(?:And|Or|DefinedOr|Phi)\z/;
+                return scalar grep { $unsized_v->($_) } ( $v->inputs // [] )->@*;
+            };
+            my $unsized = !@args_elems && grep { $unsized_v->($_) } @rhs;
             $single_call ||= $unsized;
             my $positional =
                    ( !grep { _is_aggregate_node($_) } @targets, @vals )
