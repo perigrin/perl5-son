@@ -69,3 +69,6 @@ Test: `t/deparse-a-nested-exit-merge-keeps-its-list.t` (3 cases).
     anywhere among several RHS values turns off positional binding, as it
     already did when it was the only value.
   - **Test:** `t/deparse-a-call-among-list-assign-values-has-no-position.t`.
+
+**perigrin (2026-10-29): keep fixing the 44; do not lower the gate3 floor.**
+482 stays the floor even though this container now runs the LLVM tests.

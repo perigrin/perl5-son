@@ -3773,6 +3773,18 @@ class SoN::FromOptree 0.01 {
     # Region, then one Return -- the single-exit shape the LLVM backend's
     # _method_body_root requires.
     sub _build_single_exit ($factory, $exits) {
+        # AN EXIT THAT DIES YIELDS NOTHING: its Unwind stays a predecessor (a
+        # walk back from the Return reaches the die through it), but its value
+        # never arrives. The `()` it carried made the merge a list, and a
+        # scalar caller got a count (chalk's Context::_lower_constant).
+        $exits = [ map {
+            ( blessed($_->{control}) && $_->{control}->operation eq 'Unwind' )
+                ? { control => $_->{control}, kind => $_->{kind},
+                    value => $factory->make('Constant', value => undef,
+                        const_type => 'undef',
+                        stamp => SoN::IR::Stamp->new(type => 'Undef')) }
+                : $_
+        } @$exits ];
         if (@$exits == 1) {
             my ($ctrl, $value) = $exits->[0]->@{qw(control value)};
             # Produce-time control: control is carried on control_in, never
