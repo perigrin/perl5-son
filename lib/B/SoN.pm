@@ -3202,7 +3202,11 @@ sub _wire_field_defaults {
             $f->{default_ref} = $key;
             # Typed by what `:param` admits, as a constant default is below:
             # the graph's value is no promise about a caller's argument.
-            $f->{type} = $f->{is_param} ? 'Scalar' : _graph_return_type($g);
+            # AN AGGREGATE FIELD IS ITS SIGIL: `field %items = (...)` returns a
+            # list from its graph, but the field is a Hash (pvm 153).
+            my %agg = ( '%' => 'Hash', '@' => 'Array' );
+            $f->{type} = $f->{is_param} ? 'Scalar'
+                       : $agg{ substr( $f->{name} // '', 0, 1 ) } // _graph_return_type($g);
             next;
         }
         next unless defined $dop;
