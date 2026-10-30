@@ -1,4 +1,4 @@
-# Census cause: a loop with no header test (`while (1)`)
+# Census cause: a loop with no header test (`while (1)`) (368 -> 369, pin 2fd778f4)
 
 **Cause:** "could not find loop condition". It held 122:
 `while (1) { $x = $x + 1; last if $x == 3 }`.
