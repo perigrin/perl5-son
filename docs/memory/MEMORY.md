@@ -183,3 +183,4 @@
 - [Census cause: flattened arguments](census-cause-flattened-arguments.md) — @_ read by position from a flattened arg; untyped Concat operand coerced; nested untyped short-circuit; unbuilt non-scalar jump-merge Phi; 145/199 writes through @_, 174 list face of a bare return still refused
 - [Census cause: arithmetic nothing typed](census-cause-untyped-arithmetic.md) — untyped arithmetic on a loop phi back edge is a Num; untyped Add/Sub/Mul lowered as Int of Ints else Num; 326, 102; 360
 - [Census cause: short-circuit nothing typed](census-cause-short-circuit-nothing-typed.md) — reference and method-call arms boxed to Scalar (_held_as); an && whose rhs ran in an if arm is a phi at that if merge (compare node ids, not refaddrs); 180; 361
+- [Census cause: arm walk cycle](census-cause-arm-walk-cycle.md) — an unpinned read after a merge (directly or through values) is not an arm statement; aggregate ternary cached (silent wrong answer, push lost); 216; 362
