@@ -189,3 +189,4 @@
 - [Census cause: bitwise on strings](census-cause-bitwise-on-strings.md) — & | ^ ~ decided at run time (bytes when no number); one bitwise reader, no loop (the producer merges equal nodes, so no per-variable flag); 049, 050; 047 refused; 368
 - [Census cause: headless loop](census-cause-headless-loop.md) — `while (1)`: no exit Proj means the condition is true and the body hangs off the Loop; the producer took a body `STMT if C` as the condition (other != redoop means a guard); 122; lp6 was a silent wrong answer
 - [Census cause: slurpy signature](census-cause-slurpy-signature.md) — a trailing @rest/%opts Parameter bound by the inliner to the arguments past the scalars; 163; 231 method slurpy as an %Array* formal (371)
+- [Census cause: lvalue sub](census-cause-lvalue-sub.md) — a store to an argument-less :lvalue call whose body returns a file lexical is a store to it; 398; 385 (regex) and 141 (context face) looked at, not worked
