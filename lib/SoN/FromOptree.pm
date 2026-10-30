@@ -525,6 +525,15 @@ class SoN::FromOptree 0.01 {
     # skipped it (corpus 137). `local` per loop, so a nested loop restores it.
     our $CONTINUE_START;
 
+    # THE REDO OP OF THE WHILE LOOP BEING WALKED -- where its body begins. A
+    # written condition's `and` enters the body through `other`, so its other
+    # IS this op; `while (1)` has no condition (perl folds it away), and an
+    # `and` whose other is elsewhere is a statement's guard. Set by the
+    # enterloop translator through $NEXT_LOOP_REDO, which
+    # _translate_while_loop takes and clears, so a postfix loop (no enterloop)
+    # nested in the body sees none.
+    our ($LOOP_REDO, $NEXT_LOOP_REDO);
+
     # THE LOOPS A LABELED `next`/`last` CAN NAME, innermost last. Each loop
     # translator pushes a frame (`local`, so it pops on the way out) holding
     # its label -- read off the statement that opens it, see $STMT_LABEL --
@@ -4431,6 +4440,7 @@ class SoN::FromOptree 0.01 {
         # WHERE `next` LANDS: the continue block, or the C-style step,
         # which perl puts at nextop. See $CONTINUE_START.
         local $CONTINUE_START = _continue_start($op);
+        local $NEXT_LOOP_REDO = $rd;
         _translate_while_loop($cv, $op->next, $sim, $factory, $opmap, $visited);
         # Continue after the loop; the B::LOOP op's lastop is leaveloop.
         return $op->can('lastop') ? $op->lastop : $op->next;
@@ -13174,6 +13184,9 @@ class SoN::FromOptree 0.01 {
     }
 
     sub _translate_while_loop ($cv, $cond_start, $sim, $factory, $opmap, $visited) {
+        # This loop's redo op, when an enterloop opened it; see $LOOP_REDO.
+        local $LOOP_REDO = $NEXT_LOOP_REDO;
+        local $NEXT_LOOP_REDO;
         # nexts from creation: a scout records this loop's own `next`
         # edges too, so a variable changed only on a path that `next`s is
         # still seen as loop-carried. The real walk starts a fresh list.
@@ -15709,6 +15722,16 @@ class SoN::FromOptree 0.01 {
 
             # Handle the loop condition (and/or) - walk body via other
             if (($name eq 'and' || $name eq 'or') && $sim->stack_depth > 0) {
+                # A HEADLESS `while (1)`: this `and` does not enter the body
+                # (see $LOOP_REDO), so it is a statement's guard. There is no
+                # condition to take; the guard handlers above build it. Taken
+                # for the condition, `$s .= "a" if $x < 2` ended the loop.
+                if (!$cond_consumed && !$condition_fired && ref $LOOP_REDO && ${$LOOP_REDO}
+                        && $op->can('other') && ${$op->other} && ${$op->other} != ${$LOOP_REDO}) {
+                    $condition_fired = 1;
+                    delete $loop_visited->{$$op};
+                    redo;
+                }
                 # A second and/or here is NOT the loop condition -- it is a
                 # nested logical/modifier construct this walker cannot
                 # translate (it would mint a second Proj pair on the Loop).

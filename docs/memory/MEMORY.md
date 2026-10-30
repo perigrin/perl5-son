@@ -187,3 +187,4 @@
 - [Census cause: returned lists](census-cause-returned-lists.md) — Length of a List; undef range bound; untyped list element / scalar reading / scalar call read as lowered; 075; 129 needs a scalar face for a returned call; 364
 - [Census cause: aggregate field defaults](census-cause-aggregate-field-defaults.md) — `%`/`@` field typed by sigil; a hash field list default lowered as a hash of pairs; 153; 366
 - [Census cause: bitwise on strings](census-cause-bitwise-on-strings.md) — & | ^ ~ decided at run time (bytes when no number); one bitwise reader, no loop (the producer merges equal nodes, so no per-variable flag); 049, 050; 047 refused; 368
+- [Census cause: headless loop](census-cause-headless-loop.md) — `while (1)`: no exit Proj means the condition is true and the body hangs off the Loop; the producer took a body `STMT if C` as the condition (other != redoop means a guard); 122; lp6 was a silent wrong answer
