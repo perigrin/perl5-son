@@ -34,3 +34,12 @@ or Hash-stamped ternary is one container, so it is cached. Reported.
 - A memory-flagged Phi of list assignments is a memory Phi.
 - Untyped arithmetic lowers its operands before reading their reprs.
 - A Scalar argument read bound to a reference passes the reference on.
+
+## 169 round-trips (362 -> 363, pin fad1ec84)
+
+The last refusal was "an array index with repr=Unknown". `_index_i64` read
+the index's repr before lowering it, and an Add nothing typed is typed only
+by its lowering. It now lowers first. **Lesson:** every reader of
+`_repr_of` on a node nothing typed must lower that node first. This ordering
+bit four times this stretch: binop operands, Concat operands, grep tests,
+and indexes.
