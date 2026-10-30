@@ -29,3 +29,18 @@
 
 **Lesson (again):** `_repr_of` on a node nothing typed is right only after
 `lower_value`.
+
+## A list return's scalar reading is not a trailing effect (364 -> 365, pin f5e8018f)
+
+**Cause:** "callee has effect(s) carried as extra Return inputs". It held 188
+and 195.
+
+`sub subs { (S->new("a"), S->new("b")) }`: the Return's second input is the
+list's scalar reading, its last value, which is a call. Chalk refused that
+input as a trailing statement-effect. An extra input that is (a Coerce of)
+one of the list's own values is already threaded with the list.
+
+**Round-tripped:** 195.
+
+**Still refused:** 188 goes on to `root` reading `@_` in mixed styles, plus a
+`\$_[0]`.
