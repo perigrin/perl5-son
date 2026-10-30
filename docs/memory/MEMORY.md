@@ -191,3 +191,4 @@
 - [Census cause: slurpy signature](census-cause-slurpy-signature.md) — a trailing @rest/%opts Parameter bound by the inliner to the arguments past the scalars; 163; 231 method slurpy as an %Array* formal (371)
 - [Census cause: lvalue sub](census-cause-lvalue-sub.md) — a store to an argument-less :lvalue call whose body returns a file lexical is a store to it; 398; 385 (regex) and 141 (context face) looked at, not worked
 - [Census cause: recursive sub](census-cause-recursive-sub.md) — a sub calling itself is a define, called not inlined; params from outside callers (unresolved in-body arms deferred); return settled by trial; untyped if-merge decided after lowering arms; 248
+- [Census cause: value made in an arm](census-cause-value-made-in-an-arm.md) — the inline main-path walk goes through a block eval join (one input); 156; 205 (nested while/next) is another shape
