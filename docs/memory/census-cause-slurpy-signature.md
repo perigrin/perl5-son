@@ -30,3 +30,17 @@ It held 163: `my $mk = sub ($id, @rest) {...}; $mk->(4)`.
 - **231**, `method f(@g)`: methods are emitted functions with fixed
   formals, and the slurpy was dropped from `param_reprs` ("declares 0").
   Lowering it needs an array formal and a caller-built array.
+
+## A method's slurpy (370 -> 371, pin 1f4c0367)
+
+231 `method f(@g)` lowers now.
+
+- `Analysis.pm` keeps a declared signature's trailing `@` param as the
+  last formal.
+- `_method_param_reprs` types it Array, and `_method_slurpy` flags it
+  on the minfo.
+- The method call builds `_emit_array_of` from the arguments past the
+  scalars.
+- **Still refused by name:** too few for the scalars, and an argument
+  that would flatten into the slurpy.
+- **Not done:** a method's slurpy `%`.
