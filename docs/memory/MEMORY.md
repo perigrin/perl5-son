@@ -185,3 +185,4 @@
 - [Census cause: short-circuit nothing typed](census-cause-short-circuit-nothing-typed.md) — reference and method-call arms boxed to Scalar (_held_as); an && whose rhs ran in an if arm is a phi at that if merge (compare node ids, not refaddrs); 180; 361
 - [Census cause: arm walk cycle](census-cause-arm-walk-cycle.md) — an unpinned read after a merge (directly or through values) is not an arm statement; aggregate ternary cached (silent wrong answer, push lost); 216, 169 (index read after lowering: _repr_of only after lower_value); 363
 - [Census cause: returned lists](census-cause-returned-lists.md) — Length of a List; undef range bound; untyped list element / scalar reading / scalar call read as lowered; 075; 129 needs a scalar face for a returned call; 364
+- [Census cause: aggregate field defaults](census-cause-aggregate-field-defaults.md) — `%`/`@` field typed by sigil; a hash field list default lowered as a hash of pairs; 153; 366
