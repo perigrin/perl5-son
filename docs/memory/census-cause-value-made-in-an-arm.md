@@ -23,3 +23,18 @@ held 156 and 205.
 ## Still refused
 
 - **205:** a nested `while` with `next` and no eval: a different shape.
+
+## 205: a push in a loop with a `next` latch (producer, not worked)
+
+Minimal: `while (...) { if (...) { ...; next } push @o, $x; ... } return "@o"`.
+
+- **The bug.** The read after the loop (`join`) takes @o's memory from
+  Phi 20, whose region is the loop's LATCH merge (the `next` arm and the
+  body's end), which is inside the loop. There is no memory Phi on the
+  loop header for @o, so the producer has dropped the loop-carried
+  memory version. A zero-pass loop would need it: memory would be the
+  entry's.
+- **Chalk.** Refusing this is the sound answer.
+- **The fix belongs in FromOptree's loop memory threading** (a loop
+  whose body has a next-latch).
+- **Without the next latch** (probe id1) the same nesting lowers.
