@@ -32,6 +32,11 @@ should have the basics of a very simple Perl static compiler."
 - **A general boxed-Scalar path.** chalk's code is mostly untyped
   hashes and arrays of nodes. This is likely where the deferred T2
   refactor stops being optional.
+  - Fold into it: %Slot's `defined` field is redundant with tag 0
+    (Undef). It predates the tag (6101b9ef, 2026-08-31). Two sources of
+    truth can disagree silently. Derive defined from the tag. First check
+    that no Opaque (tag 9) path relies on the two differing. perigrin:
+    "that's a later refactor".
 - **A native runtime.** Scalar::Util's `refaddr`/`blessed` (771 uses in
   the lowering) and other XS functions must be provided.
 
