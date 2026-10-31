@@ -11,6 +11,10 @@ migrating tests to Test::Chalk -> B::SoN + LLVM round tripping the tests
 -> Chalk Parser replaces B::SoN". T1/T2 is not a milestone. It fires on
 a trigger (see below).
 
+0. **Real calls.** perigrin: "real calls should definitely come before
+   use/require step 1". A direct call to a user sub lowers to a real
+   `define` + `call`, grown from the recursive-sub path. See
+   decision-real-calls-not-inlining.md.
 1. **B::SoN follows `use`/`require`.** It reads `%INC` after compile
    time and includes those files' subs transitively. Pragmas are
    skipped. XS modules are provided by chalk's runtime. Run-time
