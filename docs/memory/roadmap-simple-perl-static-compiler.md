@@ -38,6 +38,17 @@ T1/T2 refactor". The trigger is a measured stall in the chalk-t census,
 not a forecast. Until then, work the census by largest cause in the
 current backend.
 
+perigrin: "T1/T2 is also triggered by maintainability ... and
+optimization". There are three triggers, and any one of them is enough:
+- **Coverage.** The chalk-t census stalls on untyped values.
+- **Maintainability.** Per-site decisions in Context.pm get too tangled
+  to change safely. Signs: one fix keeps needing edits at many sites,
+  and the same rule is re-derived at each site (the `_repr_of`-after-
+  `lower_value` lesson is an early example).
+- **Optimization.** Per-site choices block whole-function
+  representation decisions, such as unboxing across a loop or keeping a
+  value typed across calls.
+
 - **Real define/call everywhere.** Today every direct call is inlined,
   except a sub that calls itself.
 - **A general boxed-Scalar path.** chalk's code is mostly untyped
