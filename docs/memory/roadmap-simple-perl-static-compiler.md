@@ -37,6 +37,14 @@ a trigger (see below).
    session scratchpad, which is lost with the container. Each test pulls in the lowering it tests, so a clean
    run means the lowering compiles. Optional strong check: an IR fixed
    point.
+   **Reuse tools/chalk-gate3.pl.** It already runs chalk's 547 test
+   files against B::SoN's emitted Perl and matches 482 of 482 measured.
+   Its 65 DEFERRED files read lib/ as source text, which the emitted
+   lib/ replaced on disk. perigrin: through LLVM "we don't have that
+   problem and we could pick up those 65 as well". The source tree stays
+   in place and the compiled test reads it. They need run-time file I/O
+   (open, readline, readdir, glob, run-time regex). Their gaps rank in
+   the census like any other cause.
 5. **Chalk's parser replaces B::SoN.** perigrin: "That'll drop the
    dependency on Perl itself." Done when chalk's parser parses the
    lowering and its tests into IR that passes the same census.
