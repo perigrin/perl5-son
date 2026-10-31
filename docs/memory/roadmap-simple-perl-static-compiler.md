@@ -25,7 +25,12 @@ a trigger (see below).
    compile it (and the modules it loads) through B::SoN -> chalk -> lli,
    and compare the two outputs (TAP and exit code). Its summary counts
    (round-trip, GAP by cause, differs) are the census. Work it by
-   largest cause. Each test pulls in the lowering it tests, so a clean
+   largest cause. **Every failing idiom becomes a corpus case**
+   (perigrin): cut a minimal program that reproduces it into an idioms
+   corpus, separate from the pvm corpus so the goal's 430 stays fixed.
+   Through 2026-10-31 this was NOT done. Shapes went into chalk unit
+   tests (t/bootstrap/ir/*.t), and about 1053 probe programs sat in the
+   session scratchpad, which is lost with the container. Each test pulls in the lowering it tests, so a clean
    run means the lowering compiles. Optional strong check: an IR fixed
    point.
 5. **Chalk's parser replaces B::SoN.** perigrin: "That'll drop the
