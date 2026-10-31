@@ -206,3 +206,4 @@
 - [Census cause: unpack C](census-cause-unpack-c.md) — constant C/Cn/C* template → %Array of Int via @chalk_unpack_c; wired like glob; 368; elements stamped Unknown by producer; 381
 - [Finding: plain-package inheritance](finding-plain-package-inheritance.md) — 056 needs producer class records + parent for plain packages (use parent / constant @ISA) and chalk dispatch through parents/SUPER; even use parent fails today
 - [Census cause: plain-package inheritance](census-cause-plain-package-inheritance.md) — producer records parent (use parent / constant main-line @ISA, own packages only, transitive); chalk resolves package subs + SUPER through superclass chain; 056; 382
+- [Plan: per-context typing](plan-per-context-typing.md) — step 1 done (caller-context eval → call site want); step 2 blocked: list-context values need List types per call site; shared inlined graphs forbid restamping, so type per context in Analysis
