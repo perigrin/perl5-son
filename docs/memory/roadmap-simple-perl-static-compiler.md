@@ -33,6 +33,11 @@ with us as an oracle." The oracle only has to run and report. Early
 GAPs are its data. Revisit T2 only if the chalk-t census shows the
 per-site backend stalling on untyped values.
 
+perigrin: "push that oracle as far as we can before we trigger the
+T1/T2 refactor". The trigger is a measured stall in the chalk-t census,
+not a forecast. Until then, work the census by largest cause in the
+current backend.
+
 - **Real define/call everywhere.** Today every direct call is inlined,
   except a sub that calls itself.
 - **A general boxed-Scalar path.** chalk's code is mostly untyped
