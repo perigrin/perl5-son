@@ -38,3 +38,19 @@ Minimal: `while (...) { if (...) { ...; next } push @o, $x; ... } return "@o"`.
 - **The fix belongs in FromOptree's loop memory threading** (a loop
   whose body has a next-latch).
 - **Without the next latch** (probe id1) the same nesting lowers.
+
+# Census cause: shift of an Int array read by an Assign (151, not round-tripped)
+
+- **What lowers now** (chalk, after 82d8c69a): an Int shift is lowered
+  as its Slot when every value use keeps the undef. Those uses are a
+  Coerce, a Defined, a numeric compare, or a store to a location
+  variable. `while (my $n = shift @w)` at top level and a shift past
+  the end now give perl's answer.
+- **A plain (non-location) variable stays refused.** Allowing it gave a
+  silent wrong answer, `<><>` for perl's `<1><2>`. The rebind stored the
+  Slot, and the untyped read of it (passed to an inlined `g`) took it
+  for an Int.
+  - **The fix:** record the stored repr for the VarDecl (`_vd_repr`) so
+    the read knows. 151 is exactly this shape, inside a sub.
+- **Also fixed:** `_lower_icmp_int` read its operands' reprs before
+  lowering them. That was the same lesson a fourth time.
