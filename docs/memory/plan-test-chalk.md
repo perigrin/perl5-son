@@ -40,3 +40,20 @@ when that path is live.
 **Order:** finish the qx/glob pin, then the producer `with=` and alias
 resolution, then Test::Chalk function by function, then the 559-file
 swap, then the chalk-t-through-LLVM census.
+
+## Checking Test::Chalk against Test::More's own tests (perigrin: do this too)
+
+Test-Simple's suite is in the perl checkout's git (`/home/perigrin/dev/perl5`,
+not checked out): 394 files under `cpan/Test-Simple/t`. Read them with
+`git show HEAD:<path>`.
+
+- **The 29 public-API tests.** Of the 127 Legacy tests, 29 use only the
+  public API. Run them with a shim that maps Test::More to Test::Chalk;
+  each must pass as it does under Test::More.
+- **A differential harness for the rest.** The other ~98 test through
+  internals (Test::Builder, Test::Builder::Tester `test_out`/`test_err`,
+  Test2). Lift their inputs and expected output into a harness that runs
+  the same calls under both modules and compares stdout (the TAP)
+  exactly, and stderr (failure diagnostics) too.
+- **The swap.** Every converted chalk test must print identical TAP
+  under Test::More and under Test::Chalk.
