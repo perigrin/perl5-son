@@ -192,4 +192,4 @@
 - [Census cause: lvalue sub](census-cause-lvalue-sub.md) — a store to an argument-less :lvalue call whose body returns a file lexical is a store to it; 398; 385 (regex) and 141 (context face) looked at, not worked
 - [Census cause: recursive sub](census-cause-recursive-sub.md) — a sub calling itself is a define, called not inlined; params from outside callers (unresolved in-body arms deferred); return settled by trial; untyped if-merge decided after lowering arms; 248
 - [Census cause: value made in an arm](census-cause-value-made-in-an-arm.md) — the inline main-path walk goes through a block eval join (one input); 156; 205 (nested while/next) is another shape
-- [Decision: keep the current backend](decision-keep-the-current-backend.md) — perigrin chose to keep lowering census causes in Context.pm rather than build T2 (the functor design) first
+- [Decision: continue on the current backend](decision-keep-the-current-backend.md) — perigrin: keep lowering census causes in Context.pm for now, possibly refactor onto T2 (the functor design) later; not a ruling that the current backend is the design
