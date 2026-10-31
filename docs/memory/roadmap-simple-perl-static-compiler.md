@@ -6,28 +6,30 @@ should have the basics of a very simple Perl static compiler."
 
 ## Milestones, in order
 
+perigrin's ordering: "B::SoN following use/require -> Test::Chalk ->
+migrating tests to Test::Chalk -> B::SoN + LLVM round tripping the tests
+-> Chalk Parser replaces B::SoN". T1/T2 is not a milestone. It fires on
+a trigger (see below).
+
 1. **B::SoN follows `use`/`require`.** It reads `%INC` after compile
    time and includes those files' subs transitively. Pragmas are
    skipped. XS modules are provided by chalk's runtime. Run-time
    `require $x` is a GAP. See plan-test-chalk.md.
 2. **Test::Chalk.** The Test::More subset that compiles through LLVM.
    Checked against Test::More's own suite plus a differential harness.
-   Chalk's 559 tests are swapped onto it.
-3. **The chalk-t-through-LLVM census.** Chalk's tests become the
-   oracle, as perl's `t/` is.
-4. **The lowering self-hosts.** The strong form is a fixed point:
-   chalk's lowering, compiled through LLVM, emits the same IR for the
-   corpus as the perl-run lowering.
-5. **Back to chalk's own parser.** perigrin: "pivot back to the parser
-   to make sure it can *parse* the lowering tests and build an IR that
-   lowers properly and we'll have the actual start of a self-hosting
-   compiler ... That'll drop the dependency on Perl itself." Done when
-   chalk's parser, not B::SoN, parses the lowering and its tests into
-   IR that lowers and passes the same oracle.
+3. **Migrate chalk's tests to Test::Chalk.** 559 files.
+4. **B::SoN + LLVM round-trips the tests.** This is the chalk-t census,
+   worked by largest cause until it is clean. Each test pulls in the
+   lowering it tests, so a clean census means the lowering compiles.
+   Optional strong check: a fixed point (the compiled lowering emits the
+   same IR for the corpus as the perl-run lowering).
+5. **Chalk's parser replaces B::SoN.** perigrin: "That'll drop the
+   dependency on Perl itself." Done when chalk's parser parses the
+   lowering and its tests into IR that passes the same census.
 
 ## Expected large pieces (judgment, not measured)
 
-These gate milestone 4 (self-hosting), not milestone 3. perigrin: "I
+These are expected inside milestone 4, not before it. perigrin: "I
 don't think we need the full T2 refactor to get the tests playing nice
 with us as an oracle." The oracle only has to run and report. Early
 GAPs are its data. Revisit T2 only if the chalk-t census shows the
