@@ -205,3 +205,4 @@
 - [Census cause: shift then list](census-cause-shift-then-list.md) — `shift; bless {@_}`: list read ordered after shifts (control or memory) binds args past k, flattened; 147; `my %a = @_` HashLiteral unordered (producer gap); 380
 - [Census cause: unpack C](census-cause-unpack-c.md) — constant C/Cn/C* template → %Array of Int via @chalk_unpack_c; wired like glob; 368; elements stamped Unknown by producer; 381
 - [Finding: plain-package inheritance](finding-plain-package-inheritance.md) — 056 needs producer class records + parent for plain packages (use parent / constant @ISA) and chalk dispatch through parents/SUPER; even use parent fails today
+- [Census cause: plain-package inheritance](census-cause-plain-package-inheritance.md) — producer records parent (use parent / constant main-line @ISA, own packages only, transitive); chalk resolves package subs + SUPER through superclass chain; 056; 382
