@@ -198,3 +198,4 @@
 - [Roadmap: simple Perl static compiler](roadmap-simple-perl-static-compiler.md) — real calls → use/require → Test::Chalk → migrate tests → round-trip tests via B::SoN+LLVM → chalk parser replaces B::SoN; T1/T2 fires on coverage/maintainability/optimization triggers, not a milestone
 - [Census cause: qx and glob](census-cause-qx-and-glob.md) — popen/glob(3) helpers; 014 365 366 370; producer drops unused qx (report); glob elements untyped
 - [Decision: real calls, not inlining](decision-real-calls-not-inlining.md) — inline-everything was an unasked premature optimization by another session; direct calls should be real define+call (grow from the recursive-sub path); inlining later, opt-in
+- [Gap: census ignores stderr](gap-census-ignores-stderr.md) — lli stderr is dropped, so a die in an if branch losing its message (exit 255 only) round-trips silently; compare stderr (rule for "at FILE line N"), then fix
