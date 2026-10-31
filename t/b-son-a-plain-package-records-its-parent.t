@@ -50,6 +50,15 @@ for my $case (
     ok(!defined(($d->{classes}{Derived} // {})->{parent}), "$name: no parent claimed");
 }
 
+# A parent from another file (Exporter) is not the program's: not claimed,
+# or a consumer would need its declaration.
+{
+    my $d = son_json(q{package B2; use Exporter; our @ISA = ('Exporter'); sub new { bless {}, shift } sub m { "m" }
+        package main; print B2->new->m, "\n";});
+    ok(exists $d->{classes}{B2}, 'Exporter parent: the program was translated');
+    ok(!defined(($d->{classes}{B2} // {})->{parent}), 'Exporter parent: not claimed');
+}
+
 # Not one constant parent: no parent is claimed.
 {
     my $d = son_json(q{package Base; sub hi { "b" } package Other; sub hi { "o" }

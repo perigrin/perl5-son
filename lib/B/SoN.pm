@@ -2163,6 +2163,15 @@ sub _record_plain_parents {
 # More than one parent, or one computed at run time, is not claimed.
 sub _plain_parent {
     my ( $graphs, $pkg ) = @_;
+    my $p = _plain_parent_named( $graphs, $pkg ) // return undef;
+    # THE PROGRAM'S OWN PACKAGE ONLY: one from another file (Exporter) has
+    # no declaration a consumer could resolve through.
+    no strict 'refs';
+    return _stash_is_other_file( $p, \%{"${p}::"} ) ? undef : $p;
+}
+
+sub _plain_parent_named {
+    my ( $graphs, $pkg ) = @_;
     no strict 'refs';
     my @isa = @{"${pkg}::ISA"};
     return @isa == 1 ? $isa[0] : undef if @isa;
