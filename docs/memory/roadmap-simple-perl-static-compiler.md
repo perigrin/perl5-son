@@ -18,6 +18,12 @@ should have the basics of a very simple Perl static compiler."
 4. **The lowering self-hosts.** The strong form is a fixed point:
    chalk's lowering, compiled through LLVM, emits the same IR for the
    corpus as the perl-run lowering.
+5. **Back to chalk's own parser.** perigrin: "pivot back to the parser
+   to make sure it can *parse* the lowering tests and build an IR that
+   lowers properly and we'll have the actual start of a self-hosting
+   compiler ... That'll drop the dependency on Perl itself." Done when
+   chalk's parser, not B::SoN, parses the lowering and its tests into
+   IR that lowers and passes the same oracle.
 
 ## Expected large pieces (judgment, not measured)
 
