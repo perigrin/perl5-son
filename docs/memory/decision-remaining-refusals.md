@@ -33,4 +33,10 @@ question?" and "List|Scalar is equivalent to List".
   their own). So the call site's `want` must choose the op's behavior.
   That means compiling (monomorphizing) a sub per calling context in
   chalk's analysis, not a producer-side "two faces" node.
+- perigrin corrected: `sub f { %h = () }` returns Hash. Measured on
+  perl 5.42 with `%h = (a => 1, a => 2)`: list context gives `(a 2)`
+  (the hash's contents, so Hash is right), but scalar context gives 4,
+  the right side's element count. `scalar(%h)` would give 1. So the type
+  is Hash, and scalar context still follows the op's own rule, not the
+  type's.
 - Status: proposed, awaiting perigrin's go-ahead (asked 2026-10-31).
