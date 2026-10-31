@@ -27,6 +27,12 @@ should have the basics of a very simple Perl static compiler."
 
 ## Expected large pieces (judgment, not measured)
 
+These gate milestone 4 (self-hosting), not milestone 3. perigrin: "I
+don't think we need the full T2 refactor to get the tests playing nice
+with us as an oracle." The oracle only has to run and report. Early
+GAPs are its data. Revisit T2 only if the chalk-t census shows the
+per-site backend stalling on untyped values.
+
 - **Real define/call everywhere.** Today every direct call is inlined,
   except a sub that calls itself.
 - **A general boxed-Scalar path.** chalk's code is mostly untyped
