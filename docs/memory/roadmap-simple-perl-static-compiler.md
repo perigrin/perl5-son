@@ -21,7 +21,14 @@ a trigger (see below).
    `require $x` is a GAP. See plan-test-chalk.md.
 2. **Test::Chalk.** The Test::More subset that compiles through LLVM.
    Checked against Test::More's own suite plus a differential harness.
-3. **Migrate chalk's tests to Test::Chalk.** 559 files.
+3. **Migrate chalk's tests to Test::Chalk.** 559 files. While touching
+   each file, drop the hard-coded `use lib 'lib'` (412 files have
+   `use lib 'lib', 't/lib'`, 330 have `use lib 'lib'`) and let
+   `prove -l` / `prove -b` choose. perigrin: gate3 should install the
+   emitted modules to blib/, not overlay lib/. That only works once no
+   test unshifts lib/ ahead of blib/. Then gate3 runs `prove -b`, the
+   source stays in lib/, and its 65 deferred tests become measurable for
+   the Perl target too.
 4. **A `prove` alternative that compiles first.** perigrin: "really just
    an alternate test::harness to `prove` that compiles everything
    through B::SoN + LLVM first and then runs the test file and compares
