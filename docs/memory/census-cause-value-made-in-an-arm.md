@@ -54,3 +54,19 @@ Minimal: `while (...) { if (...) { ...; next } push @o, $x; ... } return "@o"`.
     the read knows. 151 is exactly this shape, inside a sub.
 - **Also fixed:** `_lower_icmp_int` read its operands' reprs before
   lowering them. That was the same lesson a fourth time.
+
+## 151 round-trips (374 -> 375, chalk 86e91463)
+
+The real cause was a **dropped store**. In `while (my $n = shift @w)` the
+Assign to $n hangs off the loop test, and only the test was lowered.
+With $n kept in memory (it is passed to `g`), the store never happened:
+`<><>`.
+
+- The header's Assigns are processed each pass.
+- A location store takes the value's lowered repr.
+- An untyped plain read takes what the variable holds.
+- The stored-Slot rule extends to a scalar `my` target.
+
+**For a later T2 refactor**, these are hand-written repr decisions:
+- Slot-boxing an Int shift;
+- the store and read reprs taken as lowered.
