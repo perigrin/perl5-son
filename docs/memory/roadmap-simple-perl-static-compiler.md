@@ -1,0 +1,35 @@
+# Roadmap: a very simple Perl static compiler (perigrin, 2026-10-31)
+
+perigrin: "getting use/require working and the test suite using
+Test::Chalk ... and then making sure the lowering can self-host ... we
+should have the basics of a very simple Perl static compiler."
+
+## Milestones, in order
+
+1. **B::SoN follows `use`/`require`.** It reads `%INC` after compile
+   time and includes those files' subs transitively. Pragmas are
+   skipped. XS modules are provided by chalk's runtime. Run-time
+   `require $x` is a GAP. See plan-test-chalk.md.
+2. **Test::Chalk.** The Test::More subset that compiles through LLVM.
+   Checked against Test::More's own suite plus a differential harness.
+   Chalk's 559 tests are swapped onto it.
+3. **The chalk-t-through-LLVM census.** Chalk's tests become the
+   oracle, as perl's `t/` is.
+4. **The lowering self-hosts.** The strong form is a fixed point:
+   chalk's lowering, compiled through LLVM, emits the same IR for the
+   corpus as the perl-run lowering.
+
+## Expected large pieces (judgment, not measured)
+
+- **Real define/call everywhere.** Today every direct call is inlined,
+  except a sub that calls itself.
+- **A general boxed-Scalar path.** chalk's code is mostly untyped
+  hashes and arrays of nodes. This is likely where the deferred T2
+  refactor stops being optional.
+- **A native runtime.** Scalar::Util's `refaddr`/`blessed` (771 uses in
+  the lowering) and other XS functions must be provided.
+
+## Still depends on perl
+
+B::SoN uses perl's parser. Independence needs chalk's own parser end to
+end, and that parser must also parse Test::Chalk (plan-test-chalk.md).
