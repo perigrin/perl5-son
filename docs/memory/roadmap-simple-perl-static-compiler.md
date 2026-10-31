@@ -18,11 +18,16 @@ a trigger (see below).
 2. **Test::Chalk.** The Test::More subset that compiles through LLVM.
    Checked against Test::More's own suite plus a differential harness.
 3. **Migrate chalk's tests to Test::Chalk.** 559 files.
-4. **B::SoN + LLVM round-trips the tests.** This is the chalk-t census,
-   worked by largest cause until it is clean. Each test pulls in the
-   lowering it tests, so a clean census means the lowering compiles.
-   Optional strong check: a fixed point (the compiled lowering emits the
-   same IR for the corpus as the perl-run lowering).
+4. **A `prove` alternative that compiles first.** perigrin: "really just
+   an alternate test::harness to `prove` that compiles everything
+   through B::SoN + LLVM first and then runs the test file and compares
+   it to the pure-perl version". For each test file: run it under perl,
+   compile it (and the modules it loads) through B::SoN -> chalk -> lli,
+   and compare the two outputs (TAP and exit code). Its summary counts
+   (round-trip, GAP by cause, differs) are the census. Work it by
+   largest cause. Each test pulls in the lowering it tests, so a clean
+   run means the lowering compiles. Optional strong check: an IR fixed
+   point.
 5. **Chalk's parser replaces B::SoN.** perigrin: "That'll drop the
    dependency on Perl itself." Done when chalk's parser parses the
    lowering and its tests into IR that passes the same census.
