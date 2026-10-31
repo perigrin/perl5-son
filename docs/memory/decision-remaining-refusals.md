@@ -18,3 +18,19 @@ All other refusals are chalk lowering work with no decision needed.
 
 **Ceiling:** 430 minus 6 accepted GAPs = **424**, or 427 once regex compiles
 to IR.
+
+## Update 2026-10-31: context is a type question (perigrin)
+
+perigrin, on 091/092/129/141/144: "Isn't this a type inference
+question?" and "List|Scalar is equivalent to List".
+
+- Values: a scalar is a one-element list, so the join of List and
+  Scalar is List. A sub returning either is typed List. No intersection
+  type is needed.
+- Scalar context over a List isn't a function of the type: it's the
+  producing op's rule (an array gives its count, a comma list its last
+  element, a hash assign the right side's count, sort/grep/reverse
+  their own). So the call site's `want` must choose the op's behavior.
+  That means compiling (monomorphizing) a sub per calling context in
+  chalk's analysis, not a producer-side "two faces" node.
+- Status: proposed, awaiting perigrin's go-ahead (asked 2026-10-31).
