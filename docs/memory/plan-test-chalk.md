@@ -25,8 +25,21 @@ their TAP with perl's.
 Seen on probe tc1 (`use Test::Chalk; ok(...)`).
 
 - **Used modules are invisible.** `_cv_is_user_code` counts only subs
-  compiled from the program's own file. A `with=MODULE` option must
-  include named modules; later `with=Chalk::*` for the census.
+  compiled from the program's own file.
+  - **Fix (perigrin):** B::SoN follows `use`/`require` as other languages
+    follow imports (Go, Rust, Julia). By the time B::SoN walks, perl has
+    run every `use` and every literal `require`, so `%INC` names the
+    files. Include every sub from those files, transitively, and list the
+    modules included in the wire.
+  - **The boundary is the standard library.** Pragmas are switches, not
+    code. XS modules (Scalar::Util, List::Util, POSIX) are C, so chalk's
+    runtime provides them, as libc provides print. Pure-perl modules are
+    compiled like the program; the hard ones (Carp's `caller`, Exporter's
+    glob assignment) are refused by name or replaced by a chalk-provided
+    version, which is what Test::Chalk is for Test::More.
+  - **`require $name` at run time** cannot be followed: a known GAP, the
+    same class as run-time string eval.
+  - This replaces the earlier `with=MODULE` idea.
 - **Imported aliases don't resolve.** `main::ok` is an alias created at
   import. The call must name the CV's real home, `Test::Chalk::ok`.
 
@@ -37,7 +50,7 @@ B::SoN), that parser must parse Test::Chalk and the converted tests.
 Keep Test::Chalk to syntax chalk's grammar covers, and check it there
 when that path is live.
 
-**Order:** finish the qx/glob pin, then the producer `with=` and alias
+**Order:** finish the qx/glob pin, then the producer following use/require plus alias
 resolution, then Test::Chalk function by function, then the 559-file
 swap, then the chalk-t-through-LLVM census.
 
