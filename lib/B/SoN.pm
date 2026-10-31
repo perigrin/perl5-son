@@ -240,6 +240,7 @@ sub _discover_and_translate {
     # SoN class. A newly-emitted method graph may reference further classes, so
     # fixpoint until no new class appears.
     _emit_referenced_classes( \%graphs, \%classes, $filter ) if $filter;
+    _record_plain_parents( \%graphs, \%classes );
 
     # AN ANON SUB'S BODY IS ITS OWN GRAPH, beside every other sub in %graphs
     # rather than nested inside the AnonSub node -- a nested graph has no
@@ -2128,6 +2129,76 @@ sub _emit_referenced_classes {
         last unless $added;   # fixpoint: no new class this round
     }
     return;
+}
+
+# _record_plain_parents(\%graphs, \%classes) -- A PLAIN PACKAGE THAT INHERITS
+# (`use parent`, or `our @ISA = ("Base")` on the main line) is a class to a
+# consumer: its methods resolve through its parent (pvm 056). One a method
+# call names gets a record even with no subs of its own; one recorded for its
+# subs gets its parent.
+sub _record_plain_parents {
+    my ( $graphs, $classes ) = @_;
+    no strict 'refs';
+    my %scanned;
+    # Its parents too, transitively: a consumer resolves through each.
+    my @work = _referenced_class_names( $graphs, \%scanned );
+    while ( defined( my $cname = shift @work ) ) {
+        next if exists $classes->{$cname} || SoN::ClassAux::is_class( \%{"${cname}::"} );
+        my $parent = _plain_parent( $graphs, $cname ) // next;
+        $classes->{$cname} = _empty_class($cname);
+        $classes->{$cname}{parent} = $parent;
+        push @work, $parent;
+    }
+    for my $cname ( keys $classes->%* ) {
+        next if defined $classes->{$cname}{parent}
+            || SoN::ClassAux::is_class( \%{"${cname}::"} );
+        $classes->{$cname}{parent} = _plain_parent( $graphs, $cname );
+    }
+    return;
+}
+
+# _plain_parent(\%graphs, $pkg) -> the one package a plain package inherits
+# from, or undef: its @ISA as compiled (`use parent`), else a constant
+# one-element `our @ISA = ("Base")` the program writes on its main line.
+# More than one parent, or one computed at run time, is not claimed.
+sub _plain_parent {
+    my ( $graphs, $pkg ) = @_;
+    no strict 'refs';
+    my @isa = @{"${pkg}::ISA"};
+    return @isa == 1 ? $isa[0] : undef if @isa;
+    my $prog = $graphs->{'main::__PROGRAM__'} or return undef;
+    # The main line: the control chain walked back from the program's Return.
+    my %main;
+    for my $r ( ( eval { $prog->returns } // [] )->@* ) {
+        for ( my $c = $r; $c; $c = eval { $c->control_in } ) {
+            last if $main{ Scalar::Util::refaddr($c) }++;
+        }
+    }
+    my @found;
+    for my $node ( $prog->nodes->@* ) {
+        next unless $node->operation eq 'EntryWrite';
+        my ( $entry, $value ) = ( $node->inputs // [] )->@*;
+        next unless $entry && $entry->operation eq 'EntryDef'
+            && ( eval { $entry->sigil } // '' ) eq '@'
+            && ( eval { $entry->symbol } // '' ) eq 'ISA'
+            && ( eval { $entry->package } // '' ) eq $pkg;
+        my @el = $value && $value->operation eq 'ArrayLiteral' ? ( $value->inputs // [] )->@* : ();
+        return undef unless @el == 1 && $el[0]->operation eq 'Constant'
+            && defined( my $v = eval { $el[0]->value } );
+        return undef unless $main{ Scalar::Util::refaddr($node) };
+        # ON THE STRAIGHT MAIN LINE, BEFORE ANY METHOD CALL: perl sets @ISA
+        # when the statement runs, so a call before it, or a write under a
+        # branch or loop, depends on when -- not claimed.
+        my %seen;
+        for ( my $c = eval { $node->control_in }; $c; $c = eval { $c->control_in } ) {
+            last if $seen{ Scalar::Util::refaddr($c) }++;
+            my $op = $c->operation;
+            return undef if $op =~ /\A(?:Proj|Region|If|Loop)\z/
+                || ( $op eq 'Call' && ( eval { $c->dispatch_kind } // '' ) eq 'method' );
+        }
+        push @found, $v;
+    }
+    return @found == 1 ? $found[0] : undef;
 }
 
 # _translate_class_subs(\%graphs, \%classes, $pkg_name, $stash) -- translate and
