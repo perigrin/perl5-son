@@ -44,3 +44,27 @@ This is infrastructure.
 **Seen on the way:** a `die` in an if branch outside an eval loses its
 message (bare exit 255). It is silent because the census drops stderr.
 See gap-census-ignores-stderr.md.
+
+## @_ subs (chalk 3fd39658)
+
+- The graph already connects @_ reads to their arguments. `my (...) =
+  @_` is an Assign from ArgsSource. The shifts form a memory chain that
+  keeps their order. `$_[N]` is Subscript(ArgsSource, Constant N). The
+  Context.pm comment claiming otherwise was stale. No producer change
+  was needed.
+- `_args_from_reads` runs the inliner's `_collect_positional_arg_reads`
+  on the sub's graph. It accepts when nothing writes @_, reads it as a
+  list, takes a slurpy or leaves a hole, and each read has a scalar repr:
+  its own stamp, or the one type its Coerce readers convert to. Count
+  only value readers: the next shift takes a shift as memory, and that
+  isn't a read.
+- `_bind_define_args` sets the define body's `_arg_bind` to %argN. It's
+  the inliner's own substitution, consulted before the cache.
+- **A define's result takes its call's type.** Callers were typed from
+  the call's stamp. `g($_[0] + 1)` was stamped Num while g returned Int,
+  and lli refused an i64 in an fadd. llvm-a-call-to-a-sub-with-effects.t
+  caught it.
+- Still inlined: writes to `$_[N]` (they alias the caller), calls with
+  a different argument count (perl does no arity check for @_ subs), and
+  `shift // default` (refused before and after).
+- Census: 379, unchanged, with no case lost.
