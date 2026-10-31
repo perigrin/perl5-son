@@ -4,7 +4,7 @@ perigrin: "inlining is/was a premature optimization" and "real calls
 should definitely come before use/require". See
 decision-real-calls-not-inlining.md.
 
-## What changed (chalk, uncommitted as of this note)
+## What changed (chalk 5cf77a6a)
 
 - **One decision, shared.** `_sub_has_define` (LLVM.pm) decides whether
   a sub has a define, and caches the answer in its registry entry. The
