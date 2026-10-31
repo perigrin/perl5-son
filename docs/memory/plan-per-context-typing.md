@@ -28,3 +28,25 @@ returns Hash. See decision-remaining-refusals.md (Update 2026-10-31).
 ## Also
 - B::SoN refuses an eval body that leaves several values ("its value
   merges only the last element"): a producer gap for list eval bodies.
+
+## Decision (perigrin, 2026-10-31): copy per context in the chalk loader
+
+The chalk loader clones a sub's graph once per context it's called in
+(list, scalar; void counts as scalar), before Analysis runs. Each call
+names its copy, and each copy is stamped for its context. The type
+decision stays in chalk. The alternatives were B::SoN emitting variants,
+or parking the five cases.
+
+### Steps
+1. A graph clone in chalk: nodes, inputs, control_in, regions, phis,
+   memory chains, ids fresh per copy. Test: a clone lowers and runs the
+   same as its original.
+2. In the loader: for each sub called in more than one context, clone
+   it per context and point each Call's target at its context's copy.
+   The copy records its context.
+3. In Analysis: within a copy, a `runtime`-context node (an eval, a
+   return's value, a call in return position) takes the copy's
+   context. In list context its value is List/Array-typed; in scalar
+   context it follows the producing op's scalar rule.
+4. Lowering: list-context eval yields an empty array on a die (the
+   blocked step 2); 129, 141 and 144 per their ops' rules.
