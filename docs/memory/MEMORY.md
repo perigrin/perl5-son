@@ -194,3 +194,4 @@
 - [Census cause: value made in an arm](census-cause-value-made-in-an-arm.md) — the inline main-path walk goes through a block eval join (one input); 156; 205 (nested while/next) is another shape
 - [Decision: continue on the current backend](decision-keep-the-current-backend.md) — perigrin: keep lowering census causes in Context.pm for now, possibly refactor onto T2 (the functor design) later; not a ruling that the current backend is the design
 - [Decisions: remaining refusals](decision-remaining-refusals.md) — run-time string eval GAP; (?{}) GAP until regex→IR; qx/glob via libc targets; literal string eval = block eval; scalar/list faces and 205 fixed in producer; enc honoured; @ISA and computed goto supported; ceiling 424
+- [Plan: Test::Chalk](plan-test-chalk.md) — Test::More subset that compiles through LLVM; chalk tests as an LLVM oracle; producer needs with=MODULE + imported-alias resolution; chalk own parser must parse it later
