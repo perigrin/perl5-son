@@ -1,0 +1,1 @@
+package K { sub new { bless { n => $_[1] }, $_[0] } sub n { $_[0]{n} } } my $k = K->new("x"); my $e = K->new(""); print(( ($ARGV[0] // 1) && $k->n ) ? "t" : "f", ( ($ARGV[0] // 1) && $e->n ) ? "t" : "f", "\n");

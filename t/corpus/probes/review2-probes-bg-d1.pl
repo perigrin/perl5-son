@@ -1,0 +1,1 @@
+ my $v1 = shift(@ARGV) // 1; $v1 = $v1 + 1; print $v1; sub f { my $n = shift; my $y = $n * 2; my $z = 3; for my $i (1..$n) { $z = $z + $y } if ($n > 1) { $y = $z } return $y } print "|", f(2), "|", f(1), "\n";

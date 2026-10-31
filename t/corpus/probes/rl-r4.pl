@@ -1,0 +1,1 @@
+my %cache; sub f { my $n = 0; while ($n < 5) { $n++; if ($n == $_[0]) { $cache{$_[0]} = "hit"; return "at $n" } $cache{$_[0]} = "miss" } return "out" } print f(3), " ", f(9), " ", join(",", map { "$_=$cache{$_}" } sort keys %cache), "\n";

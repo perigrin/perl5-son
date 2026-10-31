@@ -1,0 +1,1 @@
+sub f { my $n = shift; if ($n > 1) { print "b" } return $n }  my $v1 = 0; foreach my $i1 (1, 2) { $v1 = $v1 + $i1 } print $v1; my $v2 = 0; foreach my $i2 (1, 2) { $v2 = $v2 + $i2 } print $v2; my $v3 = 0; foreach my $i3 (1, 2) { $v3 = $v3 + $i3 } print $v3; my $v4 = 0; foreach my $i4 (1, 2) { $v4 = $v4 + $i4 } print $v4; print "|", f(3), "|", f(1), "\n";

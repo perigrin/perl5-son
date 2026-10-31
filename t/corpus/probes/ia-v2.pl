@@ -1,0 +1,1 @@
+sub walk { my ($op, $items) = @_; my @chain; if ($op eq "If") { push @chain, 7; return "stopped at @chain" if $op eq "If"; } for my $item (@$items) { push @chain, $item } return "@chain"; } print walk("If", [1]), " | ", walk("S", [2, 3]), "\n";

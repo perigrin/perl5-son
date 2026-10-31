@@ -1,0 +1,1 @@
+ my $v1 = 0; foreach my $i1 (1, 2) { $v1 = $v1 + $i1 } print $v1; my $v2 = 0; foreach my $i2 (1, 2) { $v2 = $v2 + $i2 } print $v2; sub f { my $n = shift; my $z = 0; if ($n > 1) { $z = $n * 5 } print $z; return 0 } f(2); f(1); print "\n";
