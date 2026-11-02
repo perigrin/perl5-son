@@ -50,3 +50,23 @@ or parking the five cases.
    context it follows the producing op's scalar rule.
 4. Lowering: list-context eval yields an empty array on a die (the
    blocked step 2); 129, 141 and 144 per their ops' rules.
+
+## Step 2 landed (chalk 72e38a77; 382 -> 383)
+- Serialize::JSON: `%CONTEXT_COPY`. A sub with a `runtime`-context node,
+  called somewhere in list context, is deserialized again as
+  "NAME@list". The copy's runtime eval Region becomes `list`. After
+  Analysis, its eval phis are stamped List (the passes join the arms to
+  Scalar first).
+- Analysis `_attach_call_targets`: a direct call with want=list of such
+  a sub targets a MOP::Sub on the copy (field `context => 'list'`), and
+  the call (its site's own node) is stamped List.
+- close_eval: when every phi is typed List or Array, a list eval that
+  can die is built as %Array* (the body's value, or empty when caught).
+  A shared node is never retyped while lowering.
+- Round-tripped: 091.
+- Found: a `die` in a sort comparator was dropped (`[1 2 3]` where perl
+  dies), pre-existing and masked in 092 by the list-eval refusal. Now
+  refused by name (llvm-a-sort-comparator-that-dies.t). Added to the
+  report list.
+- Next: 129, 141, 144 (scalar-context faces of a returned list or hash
+  assign), 092 (a comparator's die reaching its eval).
