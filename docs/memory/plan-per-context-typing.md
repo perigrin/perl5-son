@@ -90,3 +90,21 @@ or parking the five cases.
   `defined ->stamp`.
 - Round-tripped: 129. Next: 141 and 144 (a hash-assign or bare-return
   scalar face), 092 (a comparator's die).
+
+## Step 4: a scalar-context call's type (chalk 467a6e6d; 384 -> 385)
+- pvm 144: `scalar(g("z")) // "u"`, where g's Return already has a scalar
+  face (a Scalar phi) that lowering reads. But the producer typed the
+  call List, and call typing reads the list face only, inside a pass
+  that runs just when argument seeding iterates. So a new pass sets a
+  scalar-context direct call typed List to its callee's scalar-face type.
+  A `//` typed List over two non-aggregate sides becomes their join.
+- Both passes run BEFORE the final `_narrow_unknown_coercions`. After
+  it, a Coerce's from_repr is already fixed at the stale List
+  ("Coerce[List->Str]").
+- A first try made the face rule global inside `_resolve_direct_calls`
+  instead; the guard there needs a narrowed face, which a Scalar isn't.
+  Simpler as its own pass.
+- A print-a-list Coerce branch looked necessary and wasn't: 144 passed
+  without it, so it was dropped.
+- Round-tripped: 144. Remaining context cases: 141 (a method's hash
+  assign in scalar context), 092 (a comparator's die).
