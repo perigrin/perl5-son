@@ -70,3 +70,23 @@ or parking the five cases.
   report list.
 - Next: 129, 141, 144 (scalar-context faces of a returned list or hash
   assign), 092 (a comparator's die reaching its eval).
+
+## Step 3: scalar copies (chalk 40fb3bc7; 383 -> 384)
+- A sub that returns a direct call with no context of its own (`return
+  g()`, made in f's caller's context, so f's Return has no scalar face)
+  gets a copy per context it's called in. Scalar always. List only when
+  the callee doesn't itself return such a call; ev/od, calling each
+  other, broke when every list call got a copy.
+- In the copy that call takes the context (`Call::set_want`). In a scalar
+  copy, the call and the Phis to its Return are left untyped by the
+  loader. A pass over the copies only (`_resolve_direct_calls(...,
+  per_context)`) types them from the callee's scalar face
+  (return_reading_for_want), Scalar included.
+- Only a copy made for a caller's-context eval (`%CONTEXT_COPY_EVAL`)
+  types its list-context call List. Forcing List on a returned-call copy
+  broke 070, 079, 080, 084 and 176 (`build` returns a string). Making
+  the face rules global changed nothing for them; the forced List did.
+- is-narrowed-guards.t: a guard uses `_stamp_is_absent`, never
+  `defined ->stamp`.
+- Round-tripped: 129. Next: 141 and 144 (a hash-assign or bare-return
+  scalar face), 092 (a comparator's die).
