@@ -108,3 +108,26 @@ or parking the five cases.
   without it, so it was dropped.
 - Round-tripped: 144. Remaining context cases: 141 (a method's hash
   assign in scalar context), 092 (a comparator's die).
+
+## Step 5: methods called in one context (385 -> 386)
+- pvm 141: `class K { method reset_h { %h = () } method reset_l { @l =
+  (9) } }`, reset_h read in scalar and reset_l in list. A method is one
+  function (a vtable slot, not inlined), so a copy per context doesn't
+  fit. Instead, when every call naming Class::method uses one context,
+  the method takes it.
+- Analysis: `%SCALAR_ONLY_METHOD` (a returned list assignment to a
+  field Hash/Array returns the right side's count, Int) and
+  `%LIST_ONLY_METHOD` (a field Array's assignment returns the array).
+  Every call of it is stamped Int or Array.
+- LLVM.pm registry: the method's return repr is Int or Array. The
+  method-return emitter accepts a body lowered as an Array, though the
+  producer typed it Int.
+- Context.pm `_lower_field_aggregate_assign`: the count is the flattened
+  right side's length, so `(a => 1, a => 3)` is 4.
+- Stamps set on the Assign are re-derived by later passes, so the
+  registry recognizes the shape (an Assign to a FieldAccess) instead of
+  reading the Assign's stamp.
+- Called in both contexts: still refused.
+- Limit: calls are matched by `class_name::name`. A call through a
+  subclass name, or dynamic dispatch, isn't counted.
+- Remaining context case: 092 (a die in a sort comparator).
