@@ -187,3 +187,7 @@ at least); the scalar-only-method pass restamps calls in shared graphs.
   don't think we need a shared intermediate layer"). One T1->T2
   translator per target; the representation solver runs inside it, in
   that target's types.
+- Shape, not just types (perigrin): "the graph can change shape to better
+  fit LLVM's shape." The T2 builder restructures freely: basic blocks,
+  explicit phis, a Perl op split into several target ops, runtime-helper
+  calls, box/unbox as their own nodes. T2 is not a re-labelled copy of T1.
