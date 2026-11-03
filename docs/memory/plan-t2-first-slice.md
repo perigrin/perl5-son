@@ -85,3 +85,20 @@ type, so no consumer has to guess.
   - a sub returning a number or a string
   - a sub called in a loop
   - a sub that prints
+
+## Done: chalk a9628f32 (slice 3: subs, if/else, my in memory)
+- A direct sub is `%Slot (%Slot args)`. A sub's argument and its result
+  are %Slot, because T1 types them per call site (add(2,3) is Int though
+  add(0.5,1) is 1.5).
+- %Slot arithmetic is perl's: Ints stay Ints until they overflow. Numify
+  parses integers whole (strtoll). Both keep 2^53+ digits.
+- if/else: each arm's memo is kept for its phi inputs, so a call in an arm
+  isn't made twice.
+- my in memory: an alloca %Slot. Each read is made before any store that
+  replaces its version, before an if, and at loop headers. Lesson: a
+  node's consumers don't list every value use, and B::SoN makes the store
+  target and the read at one version a single node. So read them all.
+- ++/-- are perl's, including the magic string increment.
+- Refused: optional signature parameters (pvm 030 went DIFFERS until
+  refused), a call of another arity.
+- 54 corpus cases go through T2 (was 38). Census 391, 0 DIFFERS.
