@@ -54,3 +54,21 @@ every step. Each step test-first.
 - The census at every step (>= 386, DIFFERS 0).
 - The count of repr-conditioned refusals, which should fall.
 - The chalk suite: no file newly failing.
+
+## Principle (perigrin, 2026-11-03): type and representation are orthogonal
+- "The two are orthogonal but tangential to each other." A type is what
+  a value is semantically; a representation is what it is mechanically.
+  "They have no real relationship to each other except that the mapping
+  should be optimal for translating between the two as effortlessly as
+  possible."
+- So the mapping is a choice, not a constraint: even "a Str can't live
+  in an i64" is just an encoding we don't pick. T2 is an optimization:
+  per value, choose the encoding that minimizes the total cost of
+  conversions at its boundaries (producers, consumers, merges, calls).
+  The boxed %Slot is always available; narrow encodings win where
+  neighbours agree.
+- In code: a read asks one axis or the other, never both. `->stamp` with
+  `# static type` asks the type; `_repr_of` asks the representation.
+  Where both are compared (inlined-argument binding, coercions), the
+  mapping lives; step 2 routes those through the T2 map, not ad hoc
+  comparisons.
