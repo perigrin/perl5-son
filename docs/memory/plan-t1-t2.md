@@ -88,3 +88,24 @@ every step. Each step test-first.
   `add i64` over an i1 (llvm-a-use-typed-parameter.t case 5). Kept on
   the stamp, marked `# static type`, for step 2: the mapping needs an
   Undef -> numeric arrow (0), not a zext of the defined bit.
+
+## Step 1 done (chalk 804c3edc, 807204d0, 1c894bd4, and batch 4)
+- t/bootstrap/ir/repr-reads-go-through-repr-of.t ratchets direct
+  `->stamp` reads in Context.pm: 213 -> 0. Every read now either goes
+  through `_repr_of` or is marked `# static type`.
+- About 38 reads asked how a value is held (converted); about 175
+  deliberately ask the type (marked). So the seam was narrower than 213
+  suggested: most reads ask what the analysis proved. Most of the real
+  T1/T2 work is the mapping itself (step 2).
+- The marked reads cluster into kinds, which step 2 should meet:
+  - a node's own result type read at the start of its lowering, before
+    it picks a repr (that's where the T2 decision belongs);
+  - operands fed to arithmetic, coercions and slot building (the arrows:
+    the Undef->numeric gap found in batch 1 is one);
+  - argument binding: a declared type against a bound repr (the mapping
+    in miniature);
+  - "nothing typed" Unknown checks (become "boxed" once T2 decides);
+  - producer-kind checks (Array/List/Hash literal), which are genuinely
+    type questions and stay.
+- Census held at 386, DIFFERS 0, across all four batches. Sonnet did
+  the batches; each was reviewed and fully checked.
