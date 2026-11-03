@@ -1,4 +1,4 @@
-# Census cause: recursive closures (387 -> 388)
+# Census cause: recursive closures (387 -> 389)
 
 **Cause:** "a closure that writes what it captured is not lowered". It held
 134 and 135, both the `my $w; $w = sub { ... $w->(...) }` idiom. The closure
@@ -23,15 +23,18 @@ doesn't write anything there; the frame writes its own `$w`. Behind it were
 - Tests: wire-closure-cells.t (3 new), llvm-a-closure-writes-its-capture.t,
   llvm-a-recursive-closure.t.
 
-**Round-tripped:** 134.
+**Round-tripped:** 134 and 135. 135 came with chalk d239588b: signature
+parameters bind as shifts do (a call of another arity is refused by name),
+and a closure called only in void context returns undef without making its
+value (its body ends in a loop, a list).
 
 **Miscompile found on the way:** 09d7158e dropped a closure's store to a
 capture inside an `if` arm (printed 0 for 5). It was pinned for one
 commit. Fixed in dde44926, which is now pinned.
 
 **Still refused, by name:**
-- 135: its closure takes its argument through a signature.
-- A bare `return` in a recursive closure: its value becomes a list.
+- A bare `return` in a recursive closure whose calls are not all known to
+  be void (the last statement's call takes its caller's context).
 - `$k += 2` on a capture.
 - A code value that escapes the sub that made it: needs a runtime
   {fnptr, env}; a later step.
