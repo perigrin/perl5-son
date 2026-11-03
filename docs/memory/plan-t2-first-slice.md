@@ -54,3 +54,14 @@ type, so no consumer has to guess.
   why incur the technical debt?" CHALK_T2 is removed. A program in T2's
   slices always goes through T2. Context.pm is only the fallback for what
   no slice takes yet, and each slice shrinks it.
+
+## Done: chalk 4e523b59 (slice 2: loops)
+- Forward walk from Start. A Loop is a header of phis plus the condition,
+  then the body back to the header, then the exit. A statement kind T2
+  lacks makes the program fall back. Only the program's own Return ends
+  the walk.
+- The memo is scoped to each ?: arm and loop body (slice 1's limit is
+  fixed). Modulo has perl's sign and dies on zero.
+- 38 corpus cases go through T2 (was 34). Census 391, 0 DIFFERS.
+- perigrin: a missing conversion is added, not fallen back from. The
+  table is complete over i64/double/%Str/i1/%Slot.
