@@ -119,4 +119,26 @@ subtest 'a non-capturing anon sub gets no cell' => sub {
     is scalar(grep { $_->{op} eq 'MakeCell' } $prog->@*), 0, 'no MakeCell';
 };
 
+# A CAPTURE READ IN AN ARM is still a cell read. A conditional arm and a loop
+# body are walked with their own ctx, which carried addr_taken but not the
+# closure's cells -- so `$w` in an arm became a PadAccess naming a slot the
+# closure does not own. A recursive closure reads itself exactly there.
+for my $case (
+    [ 'my $w; $w = sub { return $_[0] ? $w->(0) : 5 }; print $w->(1);', 'arm_ternary' ],
+    [ 'my $n = 3; my $g = sub { if ($_[0]) { return $n } return 0 }; print $g->(1);', 'arm_if' ],
+    [ 'my $n = 3; my $g = sub { my $t = 0; for my $i (1..2) { $t += $n } return $t }; print $g->();', 'loop_body' ],
+) {
+    my ($src, $name) = @$case;
+    subtest "a capture read in an arm or loop goes through its cell ($name)" => sub {
+        my ($w, $err) = wire($src, $name);
+        unlike $err, qr/GAP:|INTERNAL/, 'it lowers' or return;
+        my ($body) = grep { /__ANON__/ } keys $w->{methods}->%*;
+        ok defined $body, 'the body graph exists' or return;
+        my $b = nodes_of($w, $body);
+        ok scalar(grep { $_->{op} eq 'CellRead' } $b->@*), 'the capture is read through its cell';
+        is scalar(grep { $_->{op} eq 'PadAccess' && ($_->{symbol} // '') =~ /\A[wn]\z/ } $b->@*), 0,
+            'and never as a pad slot the closure does not own';
+    };
+}
+
 done_testing;

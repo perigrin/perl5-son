@@ -621,6 +621,16 @@ class SoN::FromOptree 0.01 {
     # store in an arm was an SSA rebind nothing outside the arm could see.
     # The renames below read it too.
     our $ADDR_TAKEN;
+    # The main walk's closure cells, for the same walkers: a capture read in an
+    # arm or loop body is a cell read, and a fresh ctx without them made it a
+    # PadAccess naming a slot the closure does not own (`$w` in a recursive
+    # closure's `?:` arm). One hash each, shared, so a cell made in an arm is
+    # the variable's cell after it too.
+    our $CELLS;
+    sub _cell_ctx () {
+        return $CELLS ? ( cells => $CELLS->{cells}, cell_params => $CELLS->{cell_params},
+                          cells_written => $CELLS->{cells_written} ) : ();
+    }
     sub _pad_aggregate_renames ($cv) {
         my %rename;
         my $names = eval { $cv->PADLIST->ARRAYelt(0) } or return \%rename;
@@ -1746,7 +1756,7 @@ class SoN::FromOptree 0.01 {
                     local_saves => [],
                     # Capture cells, keyed on the ENCLOSING pad slot -- one
                     # cell per variable, shared by every closure over it.
-                    cells => {}, cells_written => {},
+                    cells => {}, cells_written => {}, cell_params => {},
                     mutated_aggregate => {},
                     is_program => (defined $program_root ? 1 : 0) };
         # A `return` restores the `local`s of every walk it leaves.
@@ -1766,6 +1776,7 @@ class SoN::FromOptree 0.01 {
         $ctx->{addr_taken}{$_} = 1 for keys $ctx->{shared_lexicals}->%*;
         local $SHARED_SLOTS = $ctx->{shared_lexicals};
         local $ADDR_TAKEN   = $ctx->{addr_taken};
+        local $CELLS        = { map { $_ => $ctx->{$_} } qw(cells cell_params cells_written) };
         local %PAD_SYMBOL   = _pad_aggregate_renames($cv)->%*;
         local %SHARED_SYMBOL = _shared_scalar_renames($cv, $ctx->{is_program})->%*;
         # A SLOT ANOTHER SUB SHARES is written behind this graph's back, so
@@ -12057,6 +12068,10 @@ class SoN::FromOptree 0.01 {
     }
 
     sub _body_writes_targ ($cv, $start_op, $sim, $opmap, $targ, $cond_consumed = 0) {
+        # A SCOUT DOES NOT SEE THE CELLS: a CellRead it built would be a
+        # consumer of the real CellParam, and its throwaway nodes reachable
+        # from the real graph (a stray call at Start).
+        local $CELLS;
         my $scout_factory = SoN::IR::NodeFactory->new();
         my $scout_sim     = SoN::FromOptree::StackSim->new(
             control => $scout_factory->make_cfg('Start'),
@@ -12619,6 +12634,7 @@ class SoN::FromOptree 0.01 {
     }
 
     sub _scout_once ($cv, $start_op, $sim, $opmap, $extra_targs, $cond_consumed, $extra_stamps, $unstamped) {
+        local $CELLS;   # see _body_writes_targ
         my $scout_factory = SoN::IR::NodeFactory->new();
         my $scout_mem     = $scout_factory->make('MemStart');
         my $scout_sim     = SoN::FromOptree::StackSim->new(
@@ -14765,7 +14781,7 @@ class SoN::FromOptree 0.01 {
         my $ctx = { mode => 'loop', local_saves => [], in_loop_body => 1,
                     mutated_aggregate => $MUTATED_AGGREGATE // {},
                     addr_taken => $ADDR_TAKEN // {},
-                    shared_lexicals => $SHARED_SLOTS // {} };
+                    shared_lexicals => $SHARED_SLOTS // {}, _cell_ctx() };
         # A `return` restores the `local`s of every walk it leaves.
         local @SAVES_STACK = (@SAVES_STACK, $ctx->{local_saves});
         my $exit_proj;
@@ -19028,7 +19044,7 @@ class SoN::FromOptree 0.01 {
                     local_saves => [],
                     mutated_aggregate => $MUTATED_AGGREGATE // {},
                     addr_taken => $ADDR_TAKEN // {},
-                    shared_lexicals => $SHARED_SLOTS // {} };
+                    shared_lexicals => $SHARED_SLOTS // {}, _cell_ctx() };
         # A `return` restores the `local`s of every walk it leaves.
         local @SAVES_STACK = (@SAVES_STACK, $ctx->{local_saves});
         # The arm's ENTRY op, kept because $op is mutated by the walk below. A
