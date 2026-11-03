@@ -154,8 +154,13 @@ at least); the scalar-only-method pass restamps calls in shared graphs.
   Subscript is the `$` form. Where B::SoN drops the sigil or the
   element/slice distinction, that's a producer fix.
 - A call's context bounds its result: list -> List (a scalar is a
-  one-element list); scalar -> at least Scalar; void -> None (bottom: no
-  value, no reader, the join identity). `want` on a Call is a type
-  bound, not just a lowering hint. Void propagates into the callee
+  one-element list); scalar -> at least Scalar; void -> Void. `want` on
+  a Call is a type bound, not just a lowering hint.
+  CORRECTED (perigrin): not None. TypeLibrary has both. None is the
+  bottom, "doesn't return" (`die` returns None; the join identity).
+  Void is "returns nothing": arity 0, the empty list, Scalar's sibling
+  under List (List = 0..n values, Scalar = exactly 1, Void = exactly 0).
+  A void-context call returns, yielding no value, so it is Void. None
+  would claim it never returns and would vanish from joins. Void propagates into the callee
   (`return (f(), g())` evaluates f and g in void; wantarray is undef),
   so a void call could get a void per-context copy.
