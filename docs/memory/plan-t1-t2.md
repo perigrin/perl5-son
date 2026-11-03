@@ -82,3 +82,9 @@ every step. Each step test-first.
   step 2. Caveats: bytes aren't characters (UTF-8), so length and
   encoding must ride somewhere (spare tag bits?); every Str consumer
   needs a short/heap branch.
+- Step 1 batch 1 found a T2 seam: `_lower_as_repr` (an arithmetic
+  operand) read via `_repr_of` sees a `Constant(undef)` held as Undef
+  (its defined bit, i1) and has no Undef->Int conversion, so lli refused
+  `add i64` over an i1 (llvm-a-use-typed-parameter.t case 5). Kept on
+  the stamp, marked `# static type`, for step 2: the mapping needs an
+  Undef -> numeric arrow (0), not a zext of the defined bit.
