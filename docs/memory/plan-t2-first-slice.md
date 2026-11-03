@@ -33,7 +33,7 @@ type, so no consumer has to guess.
 - Done when the slice's tests pass through T2, the census holds (fallback
   covers the rest), and mg2 round-trips.
 
-## Done: chalk 6ae4c4a3 (slice 1, behind CHALK_T2=1)
+## Done: chalk adf5b627 (slice 1, behind CHALK_T2=1)
 - lib/Chalk/Target/LLVM/T2.pm has three parts.
   - Node: immutable, each carrying its LLVM type.
   - Builder: chooses the repr once. A merge of different arm types is a
