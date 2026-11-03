@@ -164,3 +164,26 @@ at least); the scalar-only-method pass restamps calls in shared graphs.
   would claim it never returns and would vanish from joins. Void propagates into the callee
   (`return (f(), g())` evaluates f and g in void; wantarray is undef),
   so a void call could get a void per-context copy.
+
+## T2 is the target's graph (perigrin, 2026-11-03)
+- "T1 is the Perl version of the graph ... T2 is the Target (LLVM IR, XS,
+  x86 assembly, WASM) version of the graph ... nodes are typed in the
+  *target* language types."
+- So T1 and T2 are two languages, not one graph with two labels. Types
+  are orthogonal across them: Perl types (Scalar, Str, Int, List, Hash)
+  versus target types (LLVM i64/double/ptr/%Slot; XS SV*/IV/NV; WASM
+  i32/i64/f64). They meet only at the translation, which is chosen to be
+  cheap.
+- Consequences:
+  1. T2 is a new graph; T1 is never mutated.
+  2. T2's structure can differ: one Perl op can become several target
+     ops (unbox/add/box, a runtime-helper call, zext/sitofp). The design
+     doc's O10 ("only Coerce inserted") is too strict for this.
+  3. "Boxed" is a target notion (%Slot for LLVM-chalk, SV for XS). T1
+     only says "at least Scalar".
+  4. Emitting is printing T2. Today's Context.pm translates T1 straight
+     to text, deciding as it goes; those decisions move into building T2.
+- No shared intermediate layer between T1 and the targets ("Currently I
+  don't think we need a shared intermediate layer"). One T1->T2
+  translator per target; the representation solver runs inside it, in
+  that target's types.
