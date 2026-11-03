@@ -4301,7 +4301,14 @@ class SoN::FromOptree 0.01 {
             return ("$nv", SoN::IR::Stamp->new(type => 'Str'), 'string')
                 if $is_nan || $is_inf;
 
-            return ($nv, SoN::IR::Stamp->new(type => 'Num'), 'number');
+            # WRITTEN SO IT READS BACK AS THIS DOUBLE. perl prints 15
+            # digits, which do not always say which double: 0.1 + 0.2 folds
+            # to 0.30000000000000004 and printed as 0.3, so a reader of the
+            # wire compared `$x == 0.3` true. 17 digits always do; used only
+            # where 15 do not, so 0.5 stays 0.5.
+            my $text = "$nv";
+            $text = sprintf('%.17g', $nv) if $text + 0 != $nv;
+            return ($text, SoN::IR::Stamp->new(type => 'Num'), 'number');
         }
         if ($flags & B::SVf_POK()) {
             return ($sv->PV, SoN::IR::Stamp->new(type => 'Str'), 'string');

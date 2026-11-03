@@ -1552,11 +1552,17 @@ sub _literal_element_type {
 
     # Rule 2: join, do not sample.
     my $joined;
+    my %seen;
     for my $v (@values) {
         my $st = $v ? $v->stamp : undef;
         return undef unless $st;
+        $seen{ $st->type } = 1;
         $joined = defined $joined ? SoN::IR::Stamp::join( $joined, $st ) : $st;
     }
+    # NUMBERS AMONG STRINGS ARE EACH WHAT THEY ARE. Num joined with Str is Str,
+    # and a Num read as a Str is its 15 printed digits -- `(0.1 + 0.2, "x")`
+    # then compared equal to 0.3. A slot holds its own; read it as a Scalar.
+    return 'Scalar' if $seen{Num} && $seen{Str};
     return $joined ? $joined->type : undef;
 }
 
