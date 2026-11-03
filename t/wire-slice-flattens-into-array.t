@@ -60,6 +60,18 @@ subtest 'a slot of a slice-fed array is never plural' => sub {
     }
 };
 
+# AN UNKNOWN INPUT HAS UNKNOWN ARITY TOO. `my @c = unpack("C*", "hi!")` is
+# ArrayLiteral(Call unpack) and the call is stamped Unknown -- not List, so the
+# guard above let it count as one element and `$c[2]` was claimed Undef: chalk
+# printed "104 " where perl prints "104 33". Unknown could be a list, so it is
+# no more countable than one.
+subtest 'a read past an Unknown-fed array is not claimed Undef' => sub {
+    my $nodes = nodes_of('my @c = unpack("C*", "hi!"); print "$c[0] $c[2]\n";', 'unpackarr');
+    my @subs = grep { $_->{op} eq 'Subscript' } $nodes->@*;
+    ok scalar(@subs) >= 2, 'both element reads exist' or return;
+    isnt $_->{stamp}, 'Undef', 'an Unknown-fed array is not read as out of bounds' for @subs;
+};
+
 # THE ORDINARY LITERAL MUST STILL NARROW. This is the guard that a fix does not
 # simply switch off element typing: a plain literal array has countable inputs
 # and its bounds and element join both still apply.

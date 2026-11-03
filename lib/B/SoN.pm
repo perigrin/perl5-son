@@ -1502,9 +1502,11 @@ sub _literal_element_type {
     # which is true of any single slot. (Array and Hash are List's children and
     # flatten the same way; a plain literal's inputs are one element each and
     # are unaffected, which is what keeps `(1,2,3)[1]` narrowing to Int.)
+    # Unknown is no more countable: a call stamped Unknown (`unpack`) may
+    # return many elements.
     for my $e (@elems) {
         my $et = ( $e && $e->can('stamp') && $e->stamp ) ? $e->stamp->type : '';
-        return undef if $et eq 'List' || $et eq 'Array' || $et eq 'Hash';
+        return undef if $et eq 'List' || $et eq 'Array' || $et eq 'Hash' || $et eq 'Unknown';
     }
 
     my @values;
