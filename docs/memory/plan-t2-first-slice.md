@@ -50,3 +50,7 @@ type, so no consumer has to guess.
 - Next: perigrin decides when CHALK_T2 goes on by default. Then slice 2
   widens scope (if/else statements, `my` variables kept in memory, subs as
   defines).
+- perigrin, 2026-11-03: no off switch. "T2 is the preferred architecture,
+  why incur the technical debt?" CHALK_T2 is removed. A program in T2's
+  slices always goes through T2. Context.pm is only the fallback for what
+  no slice takes yet, and each slice shrinks it.
