@@ -210,3 +210,4 @@
 - [Plan: per-context typing](plan-per-context-typing.md) — steps 1-5 landed: 091 (list copies), 129 (scalar copies), 144 (scalar face), 141 (one-context methods); 092 remains
 - [Decision: start T1/T2](decision-start-t1-t2.md) — 2026-11-03 at 386: coverage trigger fired (untyped values); boxed-by-default representation layer + emitter; plan first, census held >=386
 - [Census cause: element read left Unknown](census-cause-unknown-element.md) — floor at Scalar, Unknown arity; 143; call bound backed out
+- [Ratchet needs SON_PERL_T here](env-son-perl-t.md) — HOME=/root hides perl's t/; the subtest fails on 0 files
