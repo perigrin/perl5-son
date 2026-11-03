@@ -109,3 +109,25 @@ every step. Each step test-first.
     type questions and stay.
 - Census held at 386, DIFFERS 0, across all four batches. Sonnet did
   the batches; each was reviewed and fully checked.
+
+## Step 2 design: open question for perigrin (2026-11-03)
+chalk's T2 design (docs/plans/2026-09-04-t2-functor-architecture.md, s.4)
+does NOT overwrite stamps in place. It builds an IMAGE graph (a deep
+copy) whose stamps are representations, inserting Coerce nodes where a
+value changes encoding. The source graph keeps its types untouched, and
+lowering becomes transcription. T2.pm (unwired) is the older,
+overwrite-in-place version.
+
+Options put to perigrin:
+- A: overwrite in place. Poor fit: 171 backend reads need the type.
+- B: a separate per-node repr decision read by `_repr_of`. Closest to
+  today's backend; a small step from step 1.
+- C: the image graph (the design). Cleanest separation; lowering is pure
+  transcription; the 171 type reads must look up the source node.
+- Recommendation: B now, aiming at C.
+
+Conflict to settle: the design REFUSES Unknown ("T2 refuses to guess a
+representation for a value nothing constrains"). Under perigrin's
+orthogonality principle the box is just the most general encoding, so
+the recommendation is Unknown -> %Slot. That is what the coverage
+trigger (decision-start-t1-t2.md) needs.
