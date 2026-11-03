@@ -212,3 +212,4 @@
 - [Census cause: element read left Unknown](census-cause-unknown-element.md) — floor at Scalar, Unknown arity; 143; call bound backed out
 - [Ratchet needs SON_PERL_T here](env-son-perl-t.md) — HOME=/root hides perl's t/; the subtest fails on 0 files
 - [Plan: recursive closures](plan-recursive-closures.md) — lambda-lift with cell pointers; steps 1-2 done (013da8c, 09d7158e)
+- [Census cause: recursive closures](census-cause-recursive-closures.md) — 134 via a boxed define; arm-store miscompile fixed; 135 next (signature closure)
