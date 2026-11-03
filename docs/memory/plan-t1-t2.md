@@ -191,3 +191,15 @@ at least); the scalar-only-method pass restamps calls in shared graphs.
   fit LLVM's shape." The T2 builder restructures freely: basic blocks,
   explicit phis, a Perl op split into several target ops, runtime-helper
   calls, box/unbox as their own nodes. T2 is not a re-labelled copy of T1.
+
+## Tried and backed out: bounding Unknown calls by context (2026-11-03)
+- Stamping an Unknown Call by its want (scalar -> Scalar, list -> List,
+  void -> Void) broke 12 round-trips (386 -> 375, 3 LLI_FAIL) and fixed
+  none. The emitter already types some calls the analysis leaves Unknown:
+  `can` lowers to i1, a direct or anon-sub call takes its callee's Str. The
+  stamp contradicted those, so phis came out %Slot against i1/%Str uses.
+- Lesson for T2: today the call's real type lives partly in the emitter,
+  not in T1. In T2 the builder has to own that decision in one place.
+- Kept: the element floor (`_element_repr` Unknown -> Scalar), which alone
+  round-trips 143. 175 and 188 are still refused for Unknown (a Subscript
+  container, an ArrayRef element); they're plain-package method results.
