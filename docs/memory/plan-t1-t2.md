@@ -203,3 +203,17 @@ at least); the scalar-only-method pass restamps calls in shared graphs.
 - Kept: the element floor (`_element_repr` Unknown -> Scalar), which alone
   round-trips 143. 175 and 188 are still refused for Unknown (a Subscript
   container, an ArrayRef element); they're plain-package method results.
+
+## Num ⊔ Str: T1 says Str, T2 boxes it (perigrin, 2026-11-03)
+- Found: `my $v = $c ? 0.1 + 0.2 : "x"; $v == 0.3` gave eq (perl: ne). The
+  merge was stamped Str (the lattice join, which is right as a type), and the
+  stamp doubled as the repr: %Str holds a Num's 15 printed digits.
+- perigrin: "This looks clearly like the distinction between T1 (Str) and
+  T2 (Boxed %Str possibly narrowed after further analysis)."
+- So: the T1 stamp stays Str. The repr is a %Slot (boxed), narrowed to %Str
+  only once analysis proves no Num reaches it. Until T2 exists, chalk makes
+  this choice in the repr seam (_repr_of), not by restamping T1.
+- Correction to my earlier fix: 5c89120 (B::SoN) and ac7d7b32 (chalk)
+  restamped a Num+Str literal's elements Scalar, at the type level. That's
+  the same conflation. Move it to the repr seam. The 17-digit constant fix
+  in 5c89120 is a wire bug and stays.
