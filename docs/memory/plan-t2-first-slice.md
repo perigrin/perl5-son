@@ -32,3 +32,21 @@ type, so no consumer has to guess.
   - A program out of scope falls back with identical output.
 - Done when the slice's tests pass through T2, the census holds (fallback
   covers the rest), and mg2 round-trips.
+
+## Done: chalk 6ae4c4a3 (slice 1, behind CHALK_T2=1)
+- lib/Chalk/Target/LLVM/T2.pm has three parts.
+  - Node: immutable, each carrying its LLVM type.
+  - Builder: chooses the repr once. A merge of different arm types is a
+    %Slot. EnvRead and // are %Slot (they may be undef).
+  - Printer: prints, with a small runtime of t2_* helpers.
+- t/bootstrap/ir/t2-slice1-straight-line.t: 12 tests, red first.
+  `$c ? 0.1+0.2 : "x"; == 0.3` gives ne.
+- With T2 on, the corpus census is unchanged (391, 0 DIFFERS, 0 LLI_FAIL),
+  and 34 cases go through T2.
+- Known limit: a T1 node is built once, so a node first built inside a ?:
+  arm and used after the join won't dominate its use. That gives invalid IR,
+  not a wrong answer, and no corpus case has it. Fix in slice 2 (scope the
+  memo to the block, or hoist).
+- Next: perigrin decides when CHALK_T2 goes on by default. Then slice 2
+  widens scope (if/else statements, `my` variables kept in memory, subs as
+  defines).
