@@ -65,3 +65,23 @@ type, so no consumer has to guess.
 - 38 corpus cases go through T2 (was 34). Census 391, 0 DIFFERS.
 - perigrin: a missing conversion is added, not fallen back from. The
   table is complete over i64/double/%Str/i1/%Slot.
+
+## Slice 3: direct subs (planned 2026-11-03)
+- Why: across the corpus, the first statement T2 can't take is a Call in
+  141 programs. By kind, programs making each kind of statement call:
+  direct 167, method 53, push 46, shift 16, indirect 10.
+- Scope: a `sub f` called directly becomes a T2 function. Its arguments
+  are its scalar @_ reads (shifts, $_[N]) or its signature; it returns a
+  scalar.
+  - Representation is chosen once per function: each parameter gets the
+    join of what its callers pass. If those differ, it's a %Slot; the
+    return gets the same treatment.
+  - Recursion works because the function is defined before its body is
+    built.
+- Out: arrays, hashes and lists in or out, @_ written, wantarray.
+- Tests (red first):
+  - fact(5) recursive
+  - a sub with a signature
+  - a sub returning a number or a string
+  - a sub called in a loop
+  - a sub that prints
