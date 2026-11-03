@@ -208,3 +208,4 @@
 - [Census cause: plain-package inheritance](census-cause-plain-package-inheritance.md) — producer records parent (use parent / constant main-line @ISA, own packages only, transitive); chalk resolves package subs + SUPER through superclass chain; 056; 382
 - [Plan: per-context typing](plan-per-context-typing.md) — step 1 done (caller-context eval → call site want); step 2 blocked: list-context values need List types per call site; shared inlined graphs forbid restamping, so type per context in Analysis
 - [Plan: per-context typing](plan-per-context-typing.md) — steps 1-5 landed: 091 (list copies), 129 (scalar copies), 144 (scalar face), 141 (one-context methods); 092 remains
+- [Decision: start T1/T2](decision-start-t1-t2.md) — 2026-11-03 at 386: coverage trigger fired (untyped values); boxed-by-default representation layer + emitter; plan first, census held >=386
