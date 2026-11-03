@@ -72,3 +72,13 @@ every step. Each step test-first.
   Where both are compared (inlined-argument binding, coercions), the
   mapping lives; step 2 routes those through the T2 map, not ad hoc
   comparisons.
+- perigrin, 2026-11-03: "i64 is just a 64 bit segment of memory ...
+  that's an 8 character string; average word length in English is a
+  little under 5 characters." The small-string optimization (C++
+  std::string, Rust compact_str): a Str of <= 8 bytes lives in the %Slot
+  payload under a "short Str" tag. No malloc, no %Str header (today
+  _box_payload mallocs a 24-byte %Str per boxed Str). It's the same
+  type with a cheaper encoding, a candidate for the T2 solver after
+  step 2. Caveats: bytes aren't characters (UTF-8), so length and
+  encoding must ride somewhere (spare tag bits?); every Str consumer
+  needs a short/heap branch.
