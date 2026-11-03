@@ -213,3 +213,4 @@
 - [Ratchet needs SON_PERL_T here](env-son-perl-t.md) — HOME=/root hides perl's t/; the subtest fails on 0 files
 - [Plan: recursive closures](plan-recursive-closures.md) — lambda-lift with cell pointers; steps 1-2 done (013da8c, 09d7158e)
 - [Census cause: recursive closures](census-cause-recursive-closures.md) — 134, 135 via a boxed define; arm-store miscompile fixed
+- [Census cause: each](census-cause-each.md) — per-variable iterator; keys reset needs producer ordering; while-each loop shape open
