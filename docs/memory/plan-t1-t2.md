@@ -126,8 +126,21 @@ Options put to perigrin:
   transcription; the 171 type reads must look up the source node.
 - Recommendation: B now, aiming at C.
 
-Conflict to settle: the design REFUSES Unknown ("T2 refuses to guess a
-representation for a value nothing constrains"). Under perigrin's
-orthogonality principle the box is just the most general encoding, so
-the recommendation is Unknown -> %Slot. That is what the coverage
-trigger (decision-start-t1-t2.md) needs.
+Settled (perigrin, 2026-11-03): Unknown does NOT map to %Slot. "Unknown
+can't map to %Slot because %Slot is at least partially known ... Unknown
+means we couldn't derive any type information ... Slot says we knew it
+was at least a Scalar." Unknown is the lattice top (scalar, array, hash,
+code, glob...); %Slot represents Scalar. So the design's refusal is
+right, and the coverage trigger is a T1 gap: the analysis must derive
+"at least Scalar" (or Array/Hash) where the producing op guarantees it
+(a $ sigil, an element read, a scalar-context call). Then T2 maps
+Scalar -> %Slot.
+
+Also (perigrin): "I'm not sure a node should mutate itself." Nodes stay
+immutable. The analysis decides types and T2 decides representations;
+each publishes a table, not writes into nodes. Step 2 = a T2 side table
+(node -> repr) built before lowering and read-only during it (option B
+done this way, a lighter C). Debt to unwind: the backend writes
+cache{'repr:'} during lowering; the analysis calls set_stamp widely; the
+per-context copies call set_want/set_eval_want/set_stamp (fresh nodes,
+at least); the scalar-only-method pass restamps calls in shared graphs.
