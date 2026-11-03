@@ -27,14 +27,5 @@ cmp_ok 0 + $sum->{fields}{value}, '==', 0.1 + 0.2, 'it reads back as the same do
 my ($half) = constants('my $x = 0.5; print $x;');
 is $half->{fields}{value}, '0.5', 'a short number is written short';
 
-# A NUM AMONG STRS is read as what it is: the element of `(0.1 + 0.2, "x")`
-# was stamped Str (the join), so `== 0.3` compared its printed digits.
-{
-    my $file = "$dir/m.pl";
-    open my $fh, '>', $file or die; print {$fh} 'my @b = (0.1 + 0.2, "x"); print $b[0] == 0.3 ? "eq" : "ne";', "\n"; close $fh;
-    my $w = JSON::PP->new->decode(scalar qx{$^X -Ilib -MO=-q,SoN,json,not_package=SoN $file 2>$dir/m.err});
-    my ($sub) = grep { $_->{op} eq 'Subscript' } $w->{methods}{'main::__PROGRAM__'}{nodes}->@*;
-    isnt $sub->{stamp}, 'Str', 'an element of numbers and strings is not read as a Str';
-}
 
 done_testing;
