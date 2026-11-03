@@ -144,3 +144,18 @@ done this way, a lighter C). Debt to unwind: the backend writes
 cache{'repr:'} during lowering; the analysis calls set_stamp widely; the
 per-context copies call set_want/set_eval_want/set_stamp (fresh nodes,
 at least); the scalar-only-method pass restamps calls in shared graphs.
+
+## T1 rules that bound Unknown (perigrin, 2026-11-03)
+- The sigil says what an expression yields: `$` means at least Scalar
+  (a variable, an element `$a[0]`/`$h{k}`, a deref `$r->[0]`); `@` means
+  a list (an array, or a slice `@a[..]`/`@h{..}`); `%` means a hash.
+  ("An Array or Hash element starts with $, which falls back to rule 1.")
+  In the graph the sigil isn't always on the node: a single-element
+  Subscript is the `$` form. Where B::SoN drops the sigil or the
+  element/slice distinction, that's a producer fix.
+- A call's context bounds its result: list -> List (a scalar is a
+  one-element list); scalar -> at least Scalar; void -> None (bottom: no
+  value, no reader, the join identity). `want` on a Call is a type
+  bound, not just a lowering hint. Void propagates into the callee
+  (`return (f(), g())` evaluates f and g in void; wantarray is undef),
+  so a void call could get a void per-context copy.
