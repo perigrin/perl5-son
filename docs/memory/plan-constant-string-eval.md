@@ -67,3 +67,8 @@ ceiling is 429 unless perigrin later chooses to embed libperl.
   call took AUTOLOAD (chalk's autoload test caught it). A refusal is
   cached and re-raised, and the shared-slot scan swallows it so other
   subs still translate.
+
+## BACKED OUT (2026-11-04, perigrin's choice after review 2)
+See review-2026-11-04-evals-code-blocks.md. A string eval with a lexical in
+scope is refused again. Before trying again, build it on T2 or on a real
+trap: its die must be caught, its stores typed, and its operands re-read.

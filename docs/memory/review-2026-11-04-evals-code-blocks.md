@@ -34,3 +34,25 @@ reviewers, each finding backed by a probe (scratchpad review3/).
   They're logged in scratchpad report-to-perigrin.txt.
 - Not fixed (Minor): T2 store-die message has no " at FILE line N." (the
   producer gives a store no site); a T2 index of 1e20 reads undef.
+
+## Second review (fresh verifier, after the fixes)
+More silent wrong answers, so perigrin chose to back out constant evals
+and fix code blocks:
+- Evals were backed out (producer and chalk reverts): stale operand reads,
+  string stores read back as 0, doubles in the body, a read-only foreach
+  alias written, FATAL warnings, a brace trick. All of that for one case
+  (pvm 292). The census goes 395 -> 394, and the floor was lowered with
+  approval.
+- C1 fixed (producer): _reread_alias_operand_stored_later counts a
+  code-block match as a store of a shared lexical, as it does a call.
+- C2 fixed (chalk), and older than code blocks (named subs too):
+  _widen_shared_scalar_reads joins each shared scalar read with every
+  store into that name from any graph. _lower_as_repr numifies a
+  Str/Scalar operand rather than `sitofp %Str`.
+- C3 left as a TODO test: arithmetic on a shared lexical goes through a
+  double, losing digits past 2**53. It's older than this branch (named
+  subs) and was logged.
+- LESSON: a feature that shares variables between graphs by name inherits
+  every weakness of that sharing. Check the named-sub equivalent first;
+  if it's already wrong there, the root is in the sharing, not the
+  feature.
