@@ -117,7 +117,7 @@ type, so no consumer has to guess.
   splice, sort, slices, wantarray.
 - Tests are red first.
 
-### Slice 4 as built (chalk, uncommitted until the check passes)
+### Slice 4 as built: chalk cb301529
 - An array is `%Array* = { len, cap, %Slot* }` on the heap. An array whose
   literal holds only constants is made in the entry block. An array first
   made in an arm or a loop body is refused, because it would be made again
@@ -133,3 +133,12 @@ type, so no consumer has to guess.
   through the subscript. Follow-up: B::SoN gives a store no file and line
   (only Divide and Modulo have a site), so the " at FILE line N." tail is
   missing.
+- Result: 67 corpus cases go through T2 (was 54). The census stays at 391
+  with 0 DIFFERS: the cases T2 took newly were already round-tripping
+  through the fallback. No pin.
+- Next first blockers in T2: statement ArrayLiteral 33, an array that is
+  not a `my` array 30, a statement Call 44, EntryWrite 26, HashLiteral 23,
+  PackageMark 21, a phi stamped Array 11.
+- Found: s2 (`for my $x ("x".."z")` prints only x). B::SoN builds a
+  string range as a numeric count. It's a producer bug, pre-existing at
+  a9628f32.
