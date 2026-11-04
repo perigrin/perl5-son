@@ -214,6 +214,7 @@
 - [Plan: recursive closures](plan-recursive-closures.md) — lambda-lift with cell pointers; steps 1-2 done (013da8c, 09d7158e)
 - [Plan: T2 slices](plan-t2-first-slice.md) — slices 1-4 (straight line, loops, subs, arrays); my @a fresh each pass (3bc53c06)
 - [Cause: regex code blocks](plan-regex-code-blocks.md) — (?{...}) lifted as bodies; only all-literal patterns (perl's optimizer decides run counts); 391 -> 394 (b7beaa9e)
+- [Cause: constant eval STRING](plan-constant-string-eval.md) — compiled at produce time, lexicals shared by name; only where the pad has a lexical; 394 -> 395 (875955e3); 291 runtime string is the 429 ceiling
 - [Census cause: recursive closures](census-cause-recursive-closures.md) — 134, 135 via a boxed define; arm-store miscompile fixed
 - [Census cause: each](census-cause-each.md) — per-variable iterator; keys reset needs producer ordering; while-each loop shape open
 - [Census cause: mixed literal](census-cause-mixed-literal.md) — Num+Str elements are Scalars; 17-digit number constants (miscompile)

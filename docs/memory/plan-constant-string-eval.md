@@ -51,7 +51,8 @@ ceiling is 429 unless perigrin later chooses to embed libperl.
     - an eval in a sub.
 - Chalk: Analysis::_attach_evals gives `::__EVAL__:N` calls a MOP::Sub
   target, so the existing direct-call inlining runs the body.
-- Result: pvm 292 round-trips.
+- Result: pvm 292 round-trips. Census 394 -> 395 at chalk 875955e3 (3 runs
+  agree, 0 DIFFERS, 0 LLI_FAIL); floor raised to 395; ratchet passes 6/6.
 - 290 and 015 are `s/b/$c/ee`: an eval of $c's value (a padsv), not a
   const op, run per match. Still refused by name.
 - 210 defines `Other::g` in its eval: chalk has no callee for it.
