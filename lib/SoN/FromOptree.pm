@@ -967,42 +967,60 @@ class SoN::FromOptree 0.01 {
             or die "GAP: an eval of a constant string with no statement around it\n";
         my $seq = $cop->cop_seq;
         my $names = $cv->PADLIST->ARRAYelt(0);
-        my (%slot_of, @twice);
+        my %slot_of;
         for my $i (1 .. $names->MAX) {
             my $pn = $names->ARRAYelt($i);
             next unless ref($pn) eq 'B::PADNAME' && ( $pn->PV // '' ) =~ /\A[\$\@%]\w/;
-            next if $pn->FLAGS & ( B::PADNAMEf_FIELD() | B::PADNAMEf_OUR() );
+            next if $pn->FLAGS & B::PADNAMEf_FIELD();
             next unless $pn->COP_SEQ_RANGE_LOW < $seq && $seq <= $pn->COP_SEQ_RANGE_HIGH;
-            push @twice, $pn->PV if exists $slot_of{ $pn->PV };
+            # AN `our` IN SCOPE is a package variable of ITS package, and it masks
+            # a `my` of the name: the wrapper below would bind neither right.
+            die "GAP: an eval of a constant string with an `our` in scope (" . $pn->PV
+              . ") is not yet lowered -- it names a package variable the body would not\n"
+                if $pn->FLAGS & B::PADNAMEf_OUR();
             $slot_of{ $pn->PV } = $i;
         }
-        die "GAP: an eval of a constant string where a lexical name is declared twice ("
-          . join(', ', @twice) . ") is not yet lowered -- its body names it\n" if @twice;
-        my $pkg  = eval { $cop->stashpv } // 'main';
-        my $decl = %slot_of ? 'my (' . join(', ', sort keys %slot_of) . ');' : '';
-        my $wrap = do {
-            no strict; no warnings;
-            local $@;
-            eval "package $pkg; no strict; no warnings; sub { $decl sub {\n$text\n} }";
-        };
-        die "GAP: an eval whose constant string does not compile is not yet lowered"
-          . " -- perl sets \$@ at run time\n" unless ref $wrap eq 'CODE';
+        # WHAT RUNS AT COMPILE TIME would run here, in B::SoN, not when the
+        # eval runs: a BEGIN printed into the graph, a `use` was lost.
+        die "GAP: an eval of a constant string with compile-time code (BEGIN, use, no,"
+          . " require) is not yet lowered -- it would run where B::SoN runs\n"
+            if $text =~ /(?:\A|[;{}])\s*(?:BEGIN|UNITCHECK|CHECK|INIT|END|use|no|require)\b/;
+        # WHERE IT IS, perl names as `(eval N)` line 1: compiled here, the
+        # wrapper's file and line.
+        die "GAP: an eval of a constant string that names its own place (__FILE__, __LINE__,"
+          . " caller, warn) is not yet lowered\n"
+            if $text =~ /\b(?:__FILE__|__LINE__|caller|warn)\b/;
         # A SUB IT DEFINES, perl defines when the eval runs: compiled here it
         # went unseen, and a call of it took AUTOLOAD.
         die "GAP: an eval of a constant string that defines a sub is not yet lowered"
           . " -- perl defines it when the eval runs\n"
             if $text =~ /\bsub\s+[\w:']/;
+        my $pkg  = eval { $cop->stashpv } // 'main';
+        my $decl = %slot_of ? 'my (' . join(', ', sort keys %slot_of) . ');' : '';
+        # THE SCOPE'S STRICTURES: under `use strict`, `$y = 5` does not compile.
+        my $h = $cop->hints;
+        my @strict = ( ( $h & 0x2 ? 'refs' : () ), ( $h & 0x200 ? 'subs' : () ), ( $h & 0x400 ? 'vars' : () ) );
+        my $use = @strict ? "use strict qw(@strict);" : 'no strict;';
+        # AND ITS ARITHMETIC: under `use integer`, 7 * 1.5 is 7 -- which chalk does
+        # not yet honour anywhere (a plain `use integer` program is wrong too), so
+        # an eval under it is refused rather than made newly wrong.
+        die "GAP: an eval of a constant string under `use integer` is not yet lowered\n" if $h & 0x1;
+        my $wrap = do {
+            no strict; no warnings;
+            local $@;
+            eval "package $pkg; $use no warnings; sub { $decl sub {\n$text\n} }";
+        };
+        die "GAP: an eval whose constant string does not compile is not yet lowered"
+          . " -- perl sets \$@ at run time\n" unless ref $wrap eq 'CODE';
+        # THE STRING IS ONE BODY: its braces must not close the wrapper's. One
+        # anon sub at the wrapper's top level -- `1 }; sub { $x = 5` made two.
+        my $wcv = B::svref_2object($wrap);
+        die "GAP: an eval of a constant string whose braces close the code around it is"
+          . " not yet lowered -- perl would not compile it\n"
+            unless 1 == grep { $_->name eq 'anoncode' } _subtree_ops($wcv->ROOT);
         my $code = $wrap->();
         my $icv  = B::svref_2object($code);
-        die "GAP: an eval of a constant string that defines a sub is not yet lowered"
-          . " -- a glob it assigns, perl assigns when the eval runs\n"
-            if grep { $_->name eq 'rv2gv' } _subtree_ops($icv->ROOT);
-        # ITS DIE IS THE EVAL'S TO CATCH: perl sets $@ and yields undef. Not yet
-        # built here, so code that can die -- a die, a division, a call -- is refused.
-        die "GAP: an eval of a constant string whose code can die is not yet lowered"
-          . " -- the eval would catch it, setting \$@\n"
-            if grep { $_->name =~ /\A(?:die|croak|divide|i_divide|modulo|i_modulo|entersub|method\w*|require|dofile|entereval)\z/ }
-               _subtree_ops($icv->ROOT);
+        _refuse_unless_straight_line($icv->ROOT, 'an eval of a constant string');
         my $inames = $icv->PADLIST->ARRAYelt(0);
         my (%shared, %slots);
         for my $i (1 .. $inames->MAX) {
@@ -1012,9 +1030,56 @@ class SoN::FromOptree 0.01 {
             $shared{$i} = 1;
             $slots{$slot} = 1;
         }
+        _refuse_twice_declared(\%slots, 'an eval of a constant string');
         my $name = _sort_body_name($cv, $op, '__EVAL__');
         $CODE_BODIES{$name} //= [ $icv, $icv->START, \%shared, 'an eval of a constant string' ];
         return { name => $name, slots => \%slots, code => $code };
+    }
+
+    # _refuse_twice_declared(\%slots, $what) -- dies unless each program slot a
+    # body shares names a variable the file declares once. Shared by NAME, a
+    # second `my $x` is spelled apart (x__2) in the program and not in the
+    # body, which bound the other one.
+    sub _refuse_twice_declared ($slots, $what) {
+        my $names = B::main_cv()->PADLIST->ARRAYelt(0);
+        my %count;
+        for my $i (1 .. $names->MAX) {
+            my $pn = $names->ARRAYelt($i);
+            $count{ $pn->PV }++ if ref($pn) eq 'B::PADNAME' && ( $pn->PV // '' ) =~ /\A[\$\@%]\w/;
+        }
+        for my $slot (sort keys %$slots) {
+            my $pn = $names->ARRAYelt($slot);
+            next unless ref($pn) eq 'B::PADNAME';
+            die "GAP: $what naming " . $pn->PV . ", which the file declares more than once,"
+              . " is not yet lowered -- the body shares it by name\n" if ( $count{ $pn->PV } // 0 ) > 1;
+        }
+        return;
+    }
+
+    # A BODY THAT RUNS STRAIGHT THROUGH and cannot die: the ops an eval of a
+    # constant string or a regex code block may hold. A loop came out of the
+    # walk as an empty body; a die (a substr past the end, a store before an
+    # array's start, a strict deref) is the eval's to catch; a bare shift is
+    # @ARGV's at file scope and @_'s in the wrapper sub.
+    my %STRAIGHT_LINE_OP = map { $_ => 1 } qw(
+        nextstate dbstate null lineseq scope enter leave leavesub stub pushmark
+        const padsv padav padhv padrange gvsv gv rv2av rv2hv
+        sassign aassign add subtract multiply negate i_add i_subtract i_multiply
+        concat multiconcat stringify join length lc uc lcfirst ucfirst not
+        eq ne lt gt le ge seq sne slt sgt sle sge i_eq i_ne i_lt i_gt i_le i_ge
+        preinc predec postinc postdec i_preinc i_predec i_postinc i_postdec
+        push defined undef list return
+    );
+    sub _refuse_unless_straight_line ($root, $what) {
+        for my $o (_subtree_ops($root)) {
+            my $n = $o->name;
+            # AN ELEMENT READ cannot die; one stored into can (before the start).
+            next if $n =~ /\A(?:aelem|helem)\z/ && !( $o->flags & 32 );   # OPf_MOD
+            next if $STRAIGHT_LINE_OP{$n};
+            die "GAP: $what holding a $n is not yet lowered -- only code that runs"
+              . " straight through and cannot die is\n";
+        }
+        return;
     }
 
     # _code_list_slots($list) -> { slot => 1 } for each program variable a
@@ -1048,6 +1113,8 @@ class SoN::FromOptree 0.01 {
         my $shared = $$run_cv == $main
             ? _code_list_slots($list)
             : { map { $_ => 1 } keys %{ _outer_main_slots($run_cv, B::main_cv(), 1) } };
+        _refuse_twice_declared($$run_cv == $main ? $shared
+            : { map { $_ => 1 } values %{ _outer_main_slots($run_cv, B::main_cv(), 1) } }, 'a regex code block');
         my @names;
         my $i = 0;
         my $site;
@@ -1055,6 +1122,7 @@ class SoN::FromOptree 0.01 {
         # text, a null over the ops for a block.
         for (my $k = $list->first; ref($k) && $$k; $k = $k->sibling) {
             next unless $k->name eq 'null' && ( $k->flags & 4 );
+            _refuse_unless_straight_line($k, 'a regex code block');
             my @ops = grep { $_->name ne 'null' } _subtree_ops($k);
             next unless @ops;
             # The body starts at the op no other in it runs into.

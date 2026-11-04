@@ -54,8 +54,10 @@ refuses(q{sub f { my $i = 0; eval q{$i = 1}; return $i } print f(), "\n";},
     'an eval writing a sub lexical');
 refuses(q{sub f { my @a = (1); eval q{push @a, 2}; return scalar @a } print f(), "\n";},
     'an eval pushing onto a lexical array');
-round_trips(q{our $p = 0; eval q{$p = 1}; print "p=$p\n";},
-    'an eval of a constant string writing through an our alias');
+# AN `our` IN SCOPE names a package variable of its package, and may mask a
+# `my`: refused (review, 2026-11-04).
+refuses(q{our $p = 0; eval q{$p = 1}; print "p=$p\n";},
+    'an eval writing through an our alias', qr/GAP: an eval of a constant string with an `our` in scope/);
 refuses(q{my $i = 0; sub f { $i; eval q{$i = 1} } f(); print "i=$i\n";},
     'an eval writing a lexical the sub closes over');
 refuses(q{my $i = 0; my $c = "\$i = 1"; eval $c; print "i=$i\n";},

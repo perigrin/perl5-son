@@ -53,9 +53,9 @@ sub nodes ($w, $m) { ( $w->{methods}{$m}{nodes} // [] )->@* }
 # Not yet lowered: refused by name, not left to exit.
 {
     my ($w, $err) = wire(q{my $n = 9; my $r = eval q{die "no\n" if $n > 5; $n * 2}; print defined $r ? "d" : "u", "\n";}, 'dies');
-    like($err, qr/GAP: an eval of a constant string whose code can die/, 'a body that can die: refused by name');
+    like($err, qr/GAP: an eval of a constant string holding a \w+/, 'a body that can die: refused by name');
     ($w, $err) = wire(q{my $n = 0; my $r = eval q{6 / $n}; print defined $r ? "d" : "u", "\n";}, 'divides');
-    like($err, qr/GAP: an eval of a constant string whose code can die/, 'a division in the body: refused by name');
+    like($err, qr/GAP: an eval of a constant string holding a \w+/, 'a division in the body: refused by name');
 }
 
 # AN EVAL THAT DEFINES A SUB defines it when it runs; compiled here, the
