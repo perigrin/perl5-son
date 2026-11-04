@@ -32,3 +32,26 @@ ceiling is 429 unless perigrin later chooses to embed libperl.
   later), and a non-constant source (291).
 - Tests red first: a producer wire test, chalk probes, and 290/292
   end to end.
+
+## As built (2026-11-04)
+- Producer: _constant_eval compiles a const-op string in
+  `sub { my (<visible names>); sub { STRING } }`.
+  - Visible means COP_SEQ_RANGE_LOW < the eval's cop_seq <= HIGH.
+  - The inner sub's OUTER names map to program slots by name. A name
+    declared twice is refused, because chalk shares by name and would
+    merge them.
+  - The body goes in %CODE_BODIES under `<enclosing>::__EVAL__:N`. The
+    eval becomes a pinned direct Call, then an EntryWrite of "" to $@.
+  - _file_lexicals_shared marks the slots it names.
+  - Refused by name:
+    - a string made at runtime (291);
+    - a body with die/division/call/require/eval (its die would need
+      $@ catching);
+    - a string that doesn't compile;
+    - an eval in a sub.
+- Chalk: Analysis::_attach_evals gives `::__EVAL__:N` calls a MOP::Sub
+  target, so the existing direct-call inlining runs the body.
+- Result: pvm 292 round-trips.
+- 290 and 015 are `s/b/$c/ee`: an eval of $c's value (a padsv), not a
+  const op, run per match. Still refused by name.
+- 210 defines `Other::g` in its eval: chalk has no callee for it.
