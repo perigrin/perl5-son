@@ -1,0 +1,34 @@
+# Plan: constant `eval STRING` (perigrin chose "constant evals now", 2026-11-04)
+
+Census cases: pvm 290 (`s/b/$c/ee`, with $c = q{3*4}), 292
+(`eval q{$i = 1}`), maybe 210 (`eval 'package Other; sub g {...} 1'`),
+and 015 (a mix). pvm 291 evals a string built from %ENV at runtime: no
+runtime-free binary can run it. It stays refused by name, so the honest
+ceiling is 429 unless perigrin later chooses to embed libperl.
+
+## Today
+- The producer refuses any entereval while ANY lexical is in the pad
+  (_refuse_unseen_lexical_access, FromOptree ~21678).
+- Otherwise it builds a pinned Coerce(Str -> Code) plus a Region/Phi
+  with undef. Chalk refuses that.
+
+## Design
+- When the eval's source is a Constant string, compile it at produce
+  time, as
+  `package P; no strict; sub { my (<names visible at the eval>); sub { CODE } }`.
+  - The names are pad names whose COP_SEQ range covers the eval's
+    nextstate cop_seq (B::PADNAME COP_SEQ_RANGE_LOW/HIGH).
+  - Call the outer sub to get the inner CV. Its OUTER-flagged pad names
+    are the lexicals it uses; match them by name to the program's
+    visible slots, and refuse if a name is ambiguous.
+- Lift the inner CV as a body graph (a %CODE_BODIES-like registry) that
+  shares those lexicals by name with the program. Mark the program's
+  slots shared (as for regex code blocks).
+- The eval becomes a direct Call to the body (chalk inlines direct calls
+  and shares lexicals by name). Its value is the body's Return; a
+  successful eval also sets $@ to "".
+- Refuse by name: a compile error in the string (perl sets $@ at runtime
+  then), a body that may die (leave that to the block-eval machinery
+  later), and a non-constant source (291).
+- Tests red first: a producer wire test, chalk probes, and 290/292
+  end to end.
