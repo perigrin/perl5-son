@@ -102,3 +102,17 @@ type, so no consumer has to guess.
 - Refused: optional signature parameters (pvm 030 went DIFFERS until
   refused), a call of another arity.
 - 54 corpus cases go through T2 (was 38). Census 391, 0 DIFFERS.
+
+## Slice 4: arrays (perigrin chose, 2026-11-04)
+- The slice-3 ratchet passed (6/6).
+- Why: the corpus's first blockers include push 46, ArrayLiteral 23,
+  Count 26, Subscript 9. Methods (53) need arrays later anyway (@_ and
+  objects).
+- Scope:
+  - a `my @a` is an %Array of %Slot, by pointer, in T2 (alloca'd header
+    or heap);
+  - literals, push/shift/pop, $a[i] reads and stores (negative indexes and
+    growth), scalar(@a), "@a" (join with " "), foreach over an array.
+- Out: arrays passed to or returned from subs, nested arrays and refs,
+  splice, sort, slices, wantarray.
+- Tests are red first.
