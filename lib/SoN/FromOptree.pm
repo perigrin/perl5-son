@@ -21608,6 +21608,13 @@ class SoN::FromOptree 0.01 {
                 return 1 if ( $SHARED_SLOTS && $SHARED_SLOTS->{$1} )
                     || ( $REFERENCED->{$1} );
             }
+            # SO DOES A MATCH WHOSE PATTERN RUNS CODE: a `(?{ ... })` block writes
+            # the file lexicals it names, shared (a qr's, applied at run time, too).
+            if ( $o->name eq q{match} && $key =~ /\Ap(\d+)\z/ && $SHARED_SLOTS && $SHARED_SLOTS->{$1} ) {
+                my $list = eval { $o->code_list };
+                return 1 if ( $list && $$list ) || !defined $o->precomp
+                    || $o->precomp =~ /\(\?\??\{/;
+            }
             return 0 unless $o->flags & B::OPf_KIDS;
             my ( $kid, $first ) = ( $o->first, 1 );
             my $n = $o->name;
