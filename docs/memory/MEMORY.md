@@ -212,6 +212,8 @@
 - [Census cause: element read left Unknown](census-cause-unknown-element.md) — floor at Scalar, Unknown arity; 143; call bound backed out
 - [Ratchet needs SON_PERL_T here](env-son-perl-t.md) — HOME=/root hides perl's t/; the subtest fails on 0 files
 - [Plan: recursive closures](plan-recursive-closures.md) — lambda-lift with cell pointers; steps 1-2 done (013da8c, 09d7158e)
+- [Plan: T2 slices](plan-t2-first-slice.md) — slices 1-4 (straight line, loops, subs, arrays); my @a fresh each pass (3bc53c06)
+- [Cause: regex code blocks](plan-regex-code-blocks.md) — (?{...}) lifted as bodies; only all-literal patterns (perl's optimizer decides run counts); 391 -> 394 (b7beaa9e)
 - [Census cause: recursive closures](census-cause-recursive-closures.md) — 134, 135 via a boxed define; arm-store miscompile fixed
 - [Census cause: each](census-cause-each.md) — per-variable iterator; keys reset needs producer ordering; while-each loop shape open
 - [Census cause: mixed literal](census-cause-mixed-literal.md) — Num+Str elements are Scalars; 17-digit number constants (miscompile)

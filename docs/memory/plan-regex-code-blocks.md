@@ -57,6 +57,7 @@ the block's code, keeping only the pattern text.
   - The minimum match length counted the zero-width atom.
   - The Match(qr) subject wasn't read as a Str when held in memory
     (shared _regex_subject_str).
-- Result: pvm 286, 287, 288 lower. Census count after: see the pin.
+- Result: pvm 286, 287, 288 round-trip. Census 391 -> 394 at chalk b7beaa9e
+  (3 runs agree; 0 DIFFERS, 0 LLI_FAIL). Floor raised to 394.
 - Next: a block in a loop body (needs the producer to pin the match
   there), or in a sub over its own lexicals.
