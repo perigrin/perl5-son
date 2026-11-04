@@ -11796,7 +11796,21 @@ class SoN::FromOptree 0.01 {
                 $extra{want} = 'list' if $runs_comparator;
                 $extra{bytes} = 1 if $name eq 'length' && _under_use_bytes($op);
                 $extra{fresh_each_pass} = 1 if $name eq 'srefgen' && $ctx->{fresh_each_pass}{$$op};
-                my $node = $factory->make($node_type, inputs => \@inputs, %extra);
+                # A BITWISE OR SHIFT OP ON WHAT MAY BE A STRING numifies that
+                # string where it runs: pinned to its statement, made once per
+                # occurrence. Floating, a backend lowered it where it was used
+                # -- `my $x = $s & 5; my $y = $s & "10"; print "$y $x"` ran the
+                # second first (perl 8 4, emitted 10 4).
+                my $pin_bit = $node_type =~ /\A(?:Bit(?:And|Or|Xor)|Complement|LeftShift|RightShift)\z/
+                    && defined $sim->control && ( $ctx->{mode} // '' ) eq 'main'
+                    && grep {
+                        my $in = $_;
+                        $in = $in->inputs->[0] while $in->isa('SoN::IR::Node::Coerce') && $in->inputs->[0];
+                        ( $in->stamp ? $in->stamp->type : 'Unknown' ) !~ /\A(?:Int|Num|Boolean)\z/
+                    } @inputs;
+                $pin_on_control = 1 if $pin_bit;
+                my $make = $pin_bit ? 'make_unique' : 'make';
+                my $node = $factory->$make($node_type, inputs => \@inputs, %extra);
                 if ($void_effect_call || $pin_on_control) {
                     $node->set_control_in($sim->control);
                     $sim->set_control($node);
