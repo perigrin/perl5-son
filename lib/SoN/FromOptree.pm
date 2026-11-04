@@ -925,117 +925,6 @@ class SoN::FromOptree 0.01 {
         return $graph;
     }
 
-    # AN EVAL OF A CONSTANT STRING, compiled where B::SoN runs: by entereval
-    # op address, { name => its body, slots => the program slots it names,
-    # code => the compiled sub (kept: its ops must outlive the walk) }.
-    our %EVAL_COMPILED;
-
-    # _constant_eval($cv, $op) -> that record for an entereval of the program
-    # whose string is a constant, or undef. The string is compiled inside
-    # `sub { my (<each lexical in scope at the eval>); sub { STRING } }`, so a
-    # lexical it names is a capture of the inner sub, matched to the program's
-    # by name -- one variable, read and written by name in both graphs (see
-    # translate_regex_code_body), as perl's eval shares its frame.
-    sub _constant_eval ($cv, $op) {
-        # A REFUSAL IS REMEMBERED TOO: asked again (the walk after the shared-
-        # slot scan), it refuses again rather than reading as "not constant".
-        if (exists $EVAL_COMPILED{$$op}) {
-            my $r = $EVAL_COMPILED{$$op};
-            die $r->{gap} if ref $r && defined $r->{gap};
-            return $r;
-        }
-        my $r = eval { _compile_constant_eval($cv, $op) };
-        if (my $e = $@) { $EVAL_COMPILED{$$op} = { gap => $e }; die $e }
-        return $EVAL_COMPILED{$$op} = $r;
-    }
-
-    sub _compile_constant_eval ($cv, $op) {
-        return undef unless $$cv == ${ B::main_cv() };
-        # ONLY WHERE A LEXICAL IS IN THE PAD: with none, the eval is the opaque
-        # Coerce(Str -> Code) it always was, which Deparse renders back as
-        # source -- this replaces only what was refused.
-        my $pad = $cv->PADLIST->ARRAYelt(0);
-        return undef unless grep { ref($_) eq 'B::PADNAME' && ( $_->PV // '' ) =~ /\A[\$\@%]/ } $pad->ARRAY;
-        my $k = $op->first;
-        $k = $k->first while $$k && $k->name eq 'null' && ( $k->flags & 4 );
-        return undef unless $$k && $k->name eq 'const';
-        my $sv = $k->sv;
-        $sv = $cv->PADLIST->ARRAYelt(1)->ARRAYelt($k->targ) if ( !$$sv || $sv->isa('B::SPECIAL') ) && $k->targ;
-        return undef unless $$sv && $sv->can('PV') && ( $sv->FLAGS & B::SVf_POK() );
-        my $text = $sv->PV;
-        my $cop = _cop_for($op)
-            or die "GAP: an eval of a constant string with no statement around it\n";
-        my $seq = $cop->cop_seq;
-        my $names = $cv->PADLIST->ARRAYelt(0);
-        my %slot_of;
-        for my $i (1 .. $names->MAX) {
-            my $pn = $names->ARRAYelt($i);
-            next unless ref($pn) eq 'B::PADNAME' && ( $pn->PV // '' ) =~ /\A[\$\@%]\w/;
-            next if $pn->FLAGS & B::PADNAMEf_FIELD();
-            next unless $pn->COP_SEQ_RANGE_LOW < $seq && $seq <= $pn->COP_SEQ_RANGE_HIGH;
-            # AN `our` IN SCOPE is a package variable of ITS package, and it masks
-            # a `my` of the name: the wrapper below would bind neither right.
-            die "GAP: an eval of a constant string with an `our` in scope (" . $pn->PV
-              . ") is not yet lowered -- it names a package variable the body would not\n"
-                if $pn->FLAGS & B::PADNAMEf_OUR();
-            $slot_of{ $pn->PV } = $i;
-        }
-        # WHAT RUNS AT COMPILE TIME would run here, in B::SoN, not when the
-        # eval runs: a BEGIN printed into the graph, a `use` was lost.
-        die "GAP: an eval of a constant string with compile-time code (BEGIN, use, no,"
-          . " require) is not yet lowered -- it would run where B::SoN runs\n"
-            if $text =~ /(?:\A|[;{}])\s*(?:BEGIN|UNITCHECK|CHECK|INIT|END|use|no|require)\b/;
-        # WHERE IT IS, perl names as `(eval N)` line 1: compiled here, the
-        # wrapper's file and line.
-        die "GAP: an eval of a constant string that names its own place (__FILE__, __LINE__,"
-          . " caller, warn) is not yet lowered\n"
-            if $text =~ /\b(?:__FILE__|__LINE__|caller|warn)\b/;
-        # A SUB IT DEFINES, perl defines when the eval runs: compiled here it
-        # went unseen, and a call of it took AUTOLOAD.
-        die "GAP: an eval of a constant string that defines a sub is not yet lowered"
-          . " -- perl defines it when the eval runs\n"
-            if $text =~ /\bsub\s+[\w:']/;
-        my $pkg  = eval { $cop->stashpv } // 'main';
-        my $decl = %slot_of ? 'my (' . join(', ', sort keys %slot_of) . ');' : '';
-        # THE SCOPE'S STRICTURES: under `use strict`, `$y = 5` does not compile.
-        my $h = $cop->hints;
-        my @strict = ( ( $h & 0x2 ? 'refs' : () ), ( $h & 0x200 ? 'subs' : () ), ( $h & 0x400 ? 'vars' : () ) );
-        my $use = @strict ? "use strict qw(@strict);" : 'no strict;';
-        # AND ITS ARITHMETIC: under `use integer`, 7 * 1.5 is 7 -- which chalk does
-        # not yet honour anywhere (a plain `use integer` program is wrong too), so
-        # an eval under it is refused rather than made newly wrong.
-        die "GAP: an eval of a constant string under `use integer` is not yet lowered\n" if $h & 0x1;
-        my $wrap = do {
-            no strict; no warnings;
-            local $@;
-            eval "package $pkg; $use no warnings; sub { $decl sub {\n$text\n} }";
-        };
-        die "GAP: an eval whose constant string does not compile is not yet lowered"
-          . " -- perl sets \$@ at run time\n" unless ref $wrap eq 'CODE';
-        # THE STRING IS ONE BODY: its braces must not close the wrapper's. One
-        # anon sub at the wrapper's top level -- `1 }; sub { $x = 5` made two.
-        my $wcv = B::svref_2object($wrap);
-        die "GAP: an eval of a constant string whose braces close the code around it is"
-          . " not yet lowered -- perl would not compile it\n"
-            unless 1 == grep { $_->name eq 'anoncode' } _subtree_ops($wcv->ROOT);
-        my $code = $wrap->();
-        my $icv  = B::svref_2object($code);
-        _refuse_unless_straight_line($icv->ROOT, 'an eval of a constant string');
-        my $inames = $icv->PADLIST->ARRAYelt(0);
-        my (%shared, %slots);
-        for my $i (1 .. $inames->MAX) {
-            my $pn = $inames->ARRAYelt($i);
-            next unless ref($pn) eq 'B::PADNAME' && ( $pn->FLAGS & B::PADNAMEf_OUTER() );
-            my $slot = $slot_of{ $pn->PV // '' } // next;
-            $shared{$i} = 1;
-            $slots{$slot} = 1;
-        }
-        _refuse_twice_declared(\%slots, 'an eval of a constant string');
-        my $name = _sort_body_name($cv, $op, '__EVAL__');
-        $CODE_BODIES{$name} //= [ $icv, $icv->START, \%shared, 'an eval of a constant string' ];
-        return { name => $name, slots => \%slots, code => $code };
-    }
-
     # _refuse_twice_declared(\%slots, $what) -- dies unless each program slot a
     # body shares names a variable the file declares once. Shared by NAME, a
     # second `my $x` is spelled apart (x__2) in the program and not in the
@@ -1056,11 +945,10 @@ class SoN::FromOptree 0.01 {
         return;
     }
 
-    # A BODY THAT RUNS STRAIGHT THROUGH and cannot die: the ops an eval of a
-    # constant string or a regex code block may hold. A loop came out of the
-    # walk as an empty body; a die (a substr past the end, a store before an
-    # array's start, a strict deref) is the eval's to catch; a bare shift is
-    # @ARGV's at file scope and @_'s in the wrapper sub.
+    # A BODY THAT RUNS STRAIGHT THROUGH and cannot die: the ops a regex code
+    # block may hold. A loop came out of the walk as an empty body, and a die
+    # (a substr past the end, a store before an array's start) has no eval
+    # around it to land in.
     my %STRAIGHT_LINE_OP = map { $_ => 1 } qw(
         nextstate dbstate null lineseq scope enter leave leavesub stub pushmark
         const padsv padav padhv padrange gvsv gv rv2av rv2hv
@@ -1718,11 +1606,6 @@ class SoN::FromOptree 0.01 {
             # A REGEX CODE BLOCK OF THE PROGRAM is a body of its own over the
             # file's lexicals, by name (translate_regex_code_body): a literal
             # pattern's, in this pad; a qr's, captured by the qr's anon CV.
-            # AN EVAL OF A CONSTANT STRING is a body over the lexicals it names.
-            # One refused is the program walk's to report: here it shares nothing.
-            if ($o->name eq 'entereval' && (my $ev = eval { _constant_eval(B::main_cv(), $o) })) {
-                $shared{$_} = 1 for keys $ev->{slots}->%*;
-            }
             if ($o->name =~ /\A(?:match|qr|subst)\z/ && $o->isa('B::PMOP')) {
                 my $list = eval { $o->code_list };
                 if ($list && $$list) {
@@ -6355,24 +6238,6 @@ class SoN::FromOptree 0.01 {
         # thing is the conversion.
         if ($name eq 'entereval') {
             my $src = $sim->pop_node;
-            # A CONSTANT STRING'S CODE IS A BODY (_constant_eval), called here.
-            # Its value is the body's; a successful eval leaves $@ empty.
-            if (my $ev = _constant_eval($cv, $op)) {
-                my $call = $factory->make_unique('Call',
-                    inputs        => [],
-                    dispatch_kind => 'direct',
-                    name          => $ev->{name},
-                    want          => _want_of($op));
-                $call->set_control_in($sim->control);
-                $sim->set_control($call);
-                $sim->set_memory($call) if defined $sim->memory;
-                _entry_store($factory, $sim,
-                    $factory->make('EntryDef', package => 'main', sigil => '$', symbol => '@'),
-                    $factory->make('Constant', value => '', const_type => 'string',
-                        stamp => SoN::IR::Stamp->new(type => 'Str')));
-                $sim->push_node($call) unless ($op->flags & 3) == 1;   # not void
-                return ($op->next, 'handled');
-            }
             # AN EVAL BODY IS AN EFFECT, AND EFFECTS DO NOT SHARE. `make`
             # dedupes by content_hash, and SoN::IR::Node deliberately excludes
             # control_in from that hash so a side-effect and a pure-data use of
@@ -21859,15 +21724,11 @@ class SoN::FromOptree 0.01 {
     # narrow to the eval's cop range if a real program needs it.
     sub _refuse_unseen_lexical_access ($cv, $op, $name) {
         if ($name eq 'entereval') {
-            # A CONSTANT STRING IS COMPILED HERE (_constant_eval), its lexicals
-            # shared by name: seen.
-            return if _constant_eval($cv, $op);
             my $names = eval { $cv->PADLIST->ARRAYelt(0) } or return;
             my ($seen) = grep { ref($_) eq 'B::PADNAME' && ($_->PV // '') =~ /\A[\$\@%]/ }
                 $names->ARRAY;
             die "GAP: a string eval with a lexical in scope (" . $seen->PV
-              . ") can read or write it unseen by the graph -- its string is made at run time,"
-              . " or it is in a sub\n" if $seen;
+              . ") can read or write it unseen by the graph\n" if $seen;
         }
         elsif ($name eq 'gv') {
             # The callee's gv, which the walk meets before the entersub it

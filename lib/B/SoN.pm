@@ -200,7 +200,6 @@ sub _discover_and_translate {
     %SoN::FromOptree::SUBST_BODIES = ();
     %SoN::FromOptree::CODE_BODIES = ();
     %SoN::FromOptree::QR_CODE_BODIES = ();
-    %SoN::FromOptree::EVAL_COMPILED = ();
     %SoN::FromOptree::SORT_BODY_SEQ = ();
     # Per-run, like the body registry: a node id from a previous compilation
     # unit must not mark a fresh graph's literal as mutated.
