@@ -274,13 +274,17 @@ sub _extract_fields ($node, $id_remap) {
     if ($op eq 'PostfixDeref') {
         return { sigil => $node->sigil, ($node->copy ? (copy => 1) : ()) };
     }
+    # A MATCH WITH CODE BLOCKS names their bodies, in pattern order; emitted
+    # only then, so every other match's wire is unchanged.
+    my @code = ( $op =~ /\A(?:Regex)?Match\z/ && $node->code_bodies ) ? ( code_bodies => [ $node->code_bodies->@* ] ) : ();
     if ($op eq 'Match') {
-        return { flags => $node->flags };
+        return { flags => $node->flags, @code };
     }
     if ($op eq 'RegexMatch') {
         return {
             pattern => $node->pattern,
             flags   => $node->flags,
+            @code,
         };
     }
     # A Print states whether its operand 0 is an explicit filehandle. Emitted

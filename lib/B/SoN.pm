@@ -198,6 +198,8 @@ sub _discover_and_translate {
     # same reason: a sort inside a named sub registers during that sub's walk.
     %SoN::FromOptree::SORT_BODIES = ();
     %SoN::FromOptree::SUBST_BODIES = ();
+    %SoN::FromOptree::CODE_BODIES = ();
+    %SoN::FromOptree::QR_CODE_BODIES = ();
     %SoN::FromOptree::SORT_BODY_SEQ = ();
     # Per-run, like the body registry: a node id from a previous compilation
     # unit must not mark a fresh graph's literal as mutated.
@@ -271,7 +273,8 @@ sub _discover_and_translate {
         my @pending = grep { !exists $graphs{$_} && !$attempted{$_} }
                       sort keys %SoN::FromOptree::ANON_BODIES,
                            keys %SoN::FromOptree::SORT_BODIES,
-                           keys %SoN::FromOptree::SUBST_BODIES;
+                           keys %SoN::FromOptree::SUBST_BODIES,
+                           keys %SoN::FromOptree::CODE_BODIES;
         last unless @pending;
         for my $anon_name (@pending) {
             $attempted{$anon_name} = 1;
@@ -285,6 +288,8 @@ sub _discover_and_translate {
                 my $subst = $SoN::FromOptree::SUBST_BODIES{$anon_name};
                 $graphs{$anon_name} = defined $body_cv
                     ? SoN::FromOptree->translate( $body_cv->object_2svref )
+                    : $SoN::FromOptree::CODE_BODIES{$anon_name}
+                    ? SoN::FromOptree->translate_regex_code_body( $SoN::FromOptree::CODE_BODIES{$anon_name} )
                     : defined $subst
                     ? SoN::FromOptree->translate_subst_body($subst)
                     : SoN::FromOptree->translate_sort_body(

@@ -844,6 +844,7 @@ class SoN::FromOptree 0.01 {
     our $STMT_LABEL;
 
     our %ANON_CAPTURES;
+    our (%CODE_BODIES, %QR_CODE_BODIES);   # see their note below
 
     # Format bodies, keyed by the same deterministic name their `write` Call
     # carries. Kept in %ANON_BODIES so B::SoN's existing drain emits them --
@@ -911,6 +912,71 @@ class SoN::FromOptree 0.01 {
         return $graph;
     }
 
+    # Translate a REGEX CODE BLOCK -- `(?{ ... })` -- the body a match calls
+    # each time it passes the block. A subtree in the pad it runs in (the
+    # enclosing CV's for a literal pattern, the qr's anon CV for a qr), walked
+    # from its leftmost leaf to the end of its chain. A file lexical it uses is
+    # one variable with the program's, by name (see _file_lexicals_shared);
+    # any other lexical of the scope it runs in has no edge, and refuses.
+    sub translate_regex_code_body ($class_or_self, $entry) {
+        my ($cv, $start, $shared) = $entry->@*;
+        my $graph = _translate_from($cv, $start, shared_lexicals => $shared);
+        _refuse_outer_reach($graph, $cv, $start, undef, 'a regex code block', $shared);
+        return $graph;
+    }
+
+    # _code_list_slots($list) -> { slot => 1 } for each program variable a
+    # literal pattern's code blocks name: a padsv, or an op writing one by its
+    # targ (`$t .= "x"` is concat[$t]). A temporary's slot has no name.
+    sub _code_list_slots ($list) {
+        my $names = B::main_cv()->PADLIST->ARRAYelt(0);
+        return { map { ( $_->targ => 1 ) } grep {
+            my $pn = $_->can('targ') && $_->targ && $_->name ne 'null' ? $names->ARRAYelt($_->targ) : undef;
+            ref($pn) eq 'B::PADNAME' && ( $pn->PV // '' ) =~ /\A[\$\@%]\w/
+        } _subtree_ops($list) };
+    }
+
+    # _regex_code_bodies($cv, $pmop) -> the names of a match's or a qr's code
+    # block bodies, in pattern order, each registered in %CODE_BODIES.
+    sub _regex_code_bodies ($cv, $pmop) {
+        my ($run_cv, $list) = ($cv, eval { $pmop->code_list });
+        # A QR'S BLOCKS ARE IN ITS OWN ANON CV, on that CV's qr op.
+        unless ($list && $$list) {
+            my $acv = eval { $pmop->pmregexp->qr_anoncv };
+            return () unless $acv && $$acv;
+            my ($qr) = grep { $_->name eq 'qr' } _subtree_ops($acv->ROOT);
+            $list = $qr && eval { $qr->code_list };
+            return () unless $list && $$list;
+            $run_cv = $acv;
+        }
+        # The slots its own pad shares with the file: the program's own
+        # lexicals for the program's pattern, a sub's (or a qr's) captures of
+        # them otherwise.
+        my $main = ${ B::main_cv() };
+        my $shared = $$run_cv == $main
+            ? _code_list_slots($list)
+            : { map { $_ => 1 } keys %{ _outer_main_slots($run_cv, B::main_cv(), 1) } };
+        my @names;
+        my $i = 0;
+        my $site;
+        # THE LIST IS pushmark, then each piece of the pattern: a const for
+        # text, a null over the ops for a block.
+        for (my $k = $list->first; ref($k) && $$k; $k = $k->sibling) {
+            next unless $k->name eq 'null' && ( $k->flags & 4 );
+            my @ops = grep { $_->name ne 'null' } _subtree_ops($k);
+            next unless @ops;
+            # The body starts at the op no other in it runs into.
+            my %runs_into = map { ${ $_->next } => 1 } @ops;
+            my ($start) = grep { !$runs_into{$$_} } @ops;
+            # ONE SITE NAME PER PATTERN, a block number within it.
+            $site //= _sort_body_name($cv, $pmop, '__REGEXCODE__');
+            my $name = "$site." . $i++;
+            $CODE_BODIES{$name} //= [ $run_cv, $start, $shared ];
+            push @names, $name;
+        }
+        return @names;
+    }
+
     # Translate a FIELD DEFAULT that is not a constant -- `field $g =
     # Graph->new` -- the fifth caller of the shared walk. perl runs it once per
     # construction, so it is a graph of its own, like a replacement body.
@@ -936,7 +1002,7 @@ class SoN::FromOptree 0.01 {
     # _refuse_outer_reach($graph, $cv, $start, $stop, $what) -- die unless a
     # body walked from $start (to $stop) in $cv's pad reaches nothing of the
     # enclosing scope.
-    sub _refuse_outer_reach ($graph, $cv, $start, $stop, $what_body) {
+    sub _refuse_outer_reach ($graph, $cv, $start, $stop, $what_body, $file_shared = {}) {
         # A COMPARATOR BLOCK SHARES ITS ENCLOSING SUB'S PAD, but its body is a
         # graph of its own. A lexical the block declares is bound inside it;
         # one declared OUTSIDE arrives as a PadAccess (or a FieldAccess) with
@@ -947,6 +1013,8 @@ class SoN::FromOptree 0.01 {
             # A SHARED AGGREGATE is one variable in both graphs, named.
             next if $n->isa('SoN::IR::Node::PadAccess') && $n->shared
                 && ($n->sigil // '') =~ /\A[\@%]\z/;
+            # A FILE LEXICAL A CODE BLOCK SHARES is the program's, by name.
+            next if $n->isa('SoN::IR::Node::PadAccess') && $n->shared && $file_shared->{ $n->targ };
             my $what =
                 $n->isa('SoN::IR::Node::PadAccess')
                     ? 'a lexical of its enclosing scope ('
@@ -973,6 +1041,7 @@ class SoN::FromOptree 0.01 {
             $_->isa('SoN::IR::Node::PadAccess') && $_->shared
                 && ($_->sigil // '') =~ /\A[\@%]\z/
         } $graph->nodes->@*;
+        $shared{$_} = 1 for keys %$file_shared;
         if (defined(my $name = _outer_pad_in_chain($cv, $start, $stop, \%shared))) {
             die "GAP: $what_body that writes a lexical of its"
               . " enclosing scope ($name) is not yet lowered -- the body graph"
@@ -1486,6 +1555,18 @@ class SoN::FromOptree 0.01 {
                 my $body = _anoncode_cv(B::main_cv(), $o);
                 $shared{$_} = 1 for values %{ _anon_aggregate_main_slots($body) };
             }
+            # A REGEX CODE BLOCK OF THE PROGRAM is a body of its own over the
+            # file's lexicals, by name (translate_regex_code_body): a literal
+            # pattern's, in this pad; a qr's, captured by the qr's anon CV.
+            if ($o->name =~ /\A(?:match|qr|subst)\z/ && $o->isa('B::PMOP')) {
+                my $list = eval { $o->code_list };
+                if ($list && $$list) {
+                    $shared{$_} = 1 for keys %{ _code_list_slots($list) };
+                }
+                elsif (my $acv = eval { $o->pmregexp->qr_anoncv }) {
+                    $shared{$_} = 1 for $$acv ? values %{ _outer_main_slots($acv, B::main_cv(), 1) } : ();
+                }
+            }
             next unless $o->flags & 4;    # OPf_KIDS
             for (my $k = $o->first; ref($k) && $$k; $k = $k->sibling) { push @q, $k }
         }
@@ -1586,10 +1667,12 @@ class SoN::FromOptree 0.01 {
     # _outer_main_slots($cv, $file) -> { own pad index => $file's pad index }
     # for a named sub whose outside is $file, the main CV unless another is
     # given; empty for anything else.
-    sub _outer_main_slots ($cv, $file = B::main_cv()) {
+    # $anon_too: a qr's anon CV (its code blocks) counts -- it is made once,
+    # where the qr is, and captures the file's variables as a named sub does.
+    sub _outer_main_slots ($cv, $file = B::main_cv(), $anon_too = 0) {
         my %slots;
         return \%slots unless ref($cv) && $cv->isa('B::CV')
-            && !($cv->CvFLAGS & B::CVf_ANON());
+            && ( $anon_too || !($cv->CvFLAGS & B::CVf_ANON()) );
         my $out = eval { $cv->OUTSIDE };
         return \%slots unless $out && $$out && $$out == $$file;
         my $names = eval { $cv->PADLIST->ARRAYelt(0) } or return \%slots;
@@ -1764,7 +1847,7 @@ class SoN::FromOptree 0.01 {
 
         # A FILE LEXICAL SHARED WITH A NAMED SUB is a location in both graphs:
         # the program's slot, and the sub's own index for it.
-        $ctx->{shared_lexicals} = $ctx->{is_program}
+        $ctx->{shared_lexicals} = $opts{shared_lexicals} // ( $ctx->{is_program}
             ? _file_lexicals_shared()
             # A NAMED SUB OF A LOADED FILE shares that file's lexicals, as
             # one of the program shares the program's (see the padcv arm).
@@ -1772,7 +1855,7 @@ class SoN::FromOptree 0.01 {
                     do { my $o = eval { $cv->OUTSIDE };
                          $o && $$o && _required_file_cv($o) ? $o : B::main_cv() }) },
                                 keys %{ _anon_aggregate_main_slots($cv) },
-                                _captured_own_aggregates($cv) };
+                                _captured_own_aggregates($cv) } );
         $ctx->{addr_taken}{$_} = 1 for keys $ctx->{shared_lexicals}->%*;
         local $SHARED_SLOTS = $ctx->{shared_lexicals};
         local $ADDR_TAKEN   = $ctx->{addr_taken};
@@ -2904,6 +2987,15 @@ class SoN::FromOptree 0.01 {
     # like a comparator block, which also needs to know where it ends and what
     # match its captures read. See translate_subst_body.
     our %SUBST_BODIES;
+
+    # REGEX CODE BLOCK BODIES, as name => [ B::CV whose pad it runs in, start
+    # op ] -- `(?{ ... })`, which the match calls each time it passes the
+    # block. A literal pattern's blocks are a subtree of the enclosing CV (its
+    # code_list); a qr's are in the qr's own anon CV. See
+    # translate_regex_code_body.
+    # The code bodies of a qr's Constant (by address), for the match that
+    # applies it.
+    # (Both declared with %ANON_CAPTURES, above.)
 
     # Per-enclosing-CV site numbering for %SORT_BODIES keys, so a name is
     # stable across runs (an op address is not).
@@ -7346,12 +7438,21 @@ class SoN::FromOptree 0.01 {
             my $pin = ( $ctx->{mode} // '' ) eq 'main'
                 && ( $demoted_subject || $flags =~ /g/ || $has_code
                      || $void_capture );
+            # A CODE BLOCK IS AN EFFECT, and only a pinned match is ordered:
+            # unpinned (a loop body's walk), its block's write floated free
+            # of the loop, and a read after it saw the value before.
+            die "GAP: a match with a regex code block off the main walk is not yet lowered"
+              . " -- its block's effect would not be ordered\n"
+                if $has_code && !$pin;
             if (defined $pattern) {
                 my $make = $pin ? 'make_unique' : 'make';
+                # ITS CODE BLOCKS ARE BODIES it calls, named in pattern order.
+                my @code = $has_code ? _regex_code_bodies($cv, $op) : ();
                 $node = $factory->$make('RegexMatch',
                     inputs  => [$target],
                     pattern => $pattern,
                     flags   => $flags,
+                    (@code ? (code_bodies => \@code) : ()),
                     ($pin ? (stamp => SoN::IR::Stamp->new(type =>
                         $list_g ? 'List' : 'Boolean')) : ()),
                 );
@@ -7367,9 +7468,12 @@ class SoN::FromOptree 0.01 {
             }
             else {
                 my $make = $pin ? 'make_unique' : 'make';
+                # A QR'S CODE BLOCKS ride on its Constant to the match applying it.
+                my $code = blessed($matcher) ? $QR_CODE_BODIES{ refaddr($matcher) } : undef;
                 $node = $factory->$make('Match',
                     inputs => [$target, $matcher],
                     flags  => $flags,
+                    ($code ? (code_bodies => [@$code]) : ()),
                     stamp  => SoN::IR::Stamp->new(type => $list_g ? 'List' : 'Boolean'),
                 );
                 if ($pin) {
@@ -7395,11 +7499,16 @@ class SoN::FromOptree 0.01 {
                 # ITS FLAGS TOO: precomp is the pattern alone, and `qr/a/i`
                 # without its `i` is a different matcher.
                 my $qflags = _pmflags_to_str($op->pmflags);
-                $sim->push_node($factory->make('Constant',
+                my $re = $factory->make('Constant',
                     value      => $pattern,
                     const_type => 'regex',
                     (length $qflags ? (flags => $qflags) : ()),
-                    stamp      => SoN::IR::Stamp->new(type => 'Regex')));
+                    stamp      => SoN::IR::Stamp->new(type => 'Regex'));
+                # ITS CODE BLOCKS are bodies the match applying it calls.
+                if (( $pattern =~ /\(\?\??\{/ ) && (my @code = _regex_code_bodies($cv, $op))) {
+                    $QR_CODE_BODIES{ refaddr($re) } = \@code;
+                }
+                $sim->push_node($re);
                 return ($op->next, 'handled');
             }
 

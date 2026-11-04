@@ -28,3 +28,35 @@ the block's code, keeping only the pattern text.
 - Tests red first: producer (the graph carries the bodies, the shared
   marking) and chalk (a code atom is called; a backtracking case counts
   calls as perl does).
+
+## As built (2026-11-04)
+- Producer:
+  - _regex_code_bodies lifts each block as `<site>.<n>`.
+  - A literal pattern's blocks come from code_list in the enclosing CV.
+  - A qr's blocks come from `$qr->pmregexp->qr_anoncv`, the anon CV's qr
+    op's code_list. Its captures go through _outer_main_slots(..., 1)
+    (anon allowed).
+  - A qr's names ride on its Constant (%QR_CODE_BODIES) to the Match
+    that applies it.
+  - Program slots: _code_list_slots counts any op whose targ names a
+    variable (`$t .= "x"` is concat[$t]).
+  - A code-block match the walk can't pin (a loop body) is refused by
+    name.
+- Chalk:
+  - The loader keeps %CODE_GRAPHS.
+  - The parser makes a zero-width `code` atom; quoted strings in the
+    block are skipped.
+  - Each body is `@chalk_rxcode_N`, emitted like an END block.
+- HOW OFTEN A BLOCK RUNS IS PERL'S OPTIMIZER'S. perl searches for the
+  fixed text first and runs a block on each try that reaches it.
+  `/a(?{$t++})b/` on "aab" runs it once, not twice, and on "xay" never.
+  So only an all-literal pattern is lowered: its blocks run on the hit,
+  once each, in order. A class, a quantifier, or (??{}) is refused by
+  name.
+- Bugs found on the way:
+  - The minimum match length counted the zero-width atom.
+  - The Match(qr) subject wasn't read as a Str when held in memory
+    (shared _regex_subject_str).
+- Result: pvm 286, 287, 288 lower. Census count after: see the pin.
+- Next: a block in a loop body (needs the producer to pin the match
+  there), or in a sub over its own lexicals.

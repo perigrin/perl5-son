@@ -9,8 +9,11 @@ use SoN::IR::Value;
 class SoN::IR::Node::Regex :isa(SoN::IR::Value) {
     field $pattern :param :reader = '';
     field $flags   :param :reader = '';
+    # The bodies of its `(?{ ... })` blocks, in pattern order (a match only).
+    field $code_bodies :param :reader = undef;
 
     method content_hash() {
-        return join('|', $self->operation(), "pattern=$pattern", "flags=$flags", $self->_serialize_inputs());
+        return join('|', $self->operation(), "pattern=$pattern", "flags=$flags",
+            ( $code_bodies ? "code=" . join(',', @$code_bodies) : () ), $self->_serialize_inputs());
     }
 }

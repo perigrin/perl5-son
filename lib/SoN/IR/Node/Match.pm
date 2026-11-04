@@ -10,10 +10,13 @@ class SoN::IR::Node::Match :isa(SoN::IR::Node::BinOp) {
     # The match's flags: a pattern made at run time has no qr// to carry them
     # (`$s =~ /$p/i`). In the hash: /$p/ and /$p/i are different matches.
     field $flags :param :reader = '';
+    # The bodies of its pattern's `(?{ ... })` blocks (a qr's), in order.
+    field $code_bodies :param :reader = undef;
 
     method operation() { 'Match' }
     method op_str()    { '=~' }
     method content_hash() {
-        return join('|', $self->SUPER::content_hash(), "flags=$flags");
+        return join('|', $self->SUPER::content_hash(), "flags=$flags",
+            ( $code_bodies ? "code=" . join(',', @$code_bodies) : () ));
     }
 }
