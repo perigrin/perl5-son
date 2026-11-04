@@ -116,3 +116,20 @@ type, so no consumer has to guess.
 - Out: arrays passed to or returned from subs, nested arrays and refs,
   splice, sort, slices, wantarray.
 - Tests are red first.
+
+### Slice 4 as built (chalk, uncommitted until the check passes)
+- An array is `%Array* = { len, cap, %Slot* }` on the heap. An array whose
+  literal holds only constants is made in the entry block. An array first
+  made in an arm or a loop body is refused, because it would be made again
+  on each pass.
+- B::SoN folds a constant literal into its uses: `"@a"` reaches chalk as
+  `join($", "x", 1.5, 2)`. So join takes scalars into a fresh array.
+- Lesson: a read that needs a phi not yet made (`$a[$i]` in a foreach)
+  can't be hoisted by reads_before; it is made where it is. And a loop's
+  exit Region has its own one-input memory phis. A read after the loop is
+  at that phi, so it is a passed version too. (Without it, `my $s = $a[0];
+  $a[0] = 6` after a loop printed 6 6.)
+- `$a[-N] = v` past the start dies with exit 255. Perl's text is printed
+  through the subscript. Follow-up: B::SoN gives a store no file and line
+  (only Divide and Modulo have a site), so the " at FILE line N." tail is
+  missing.
