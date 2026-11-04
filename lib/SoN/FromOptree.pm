@@ -937,9 +937,25 @@ class SoN::FromOptree 0.01 {
     # by name -- one variable, read and written by name in both graphs (see
     # translate_regex_code_body), as perl's eval shares its frame.
     sub _constant_eval ($cv, $op) {
-        return $EVAL_COMPILED{$$op} if exists $EVAL_COMPILED{$$op};
-        $EVAL_COMPILED{$$op} = undef;
+        # A REFUSAL IS REMEMBERED TOO: asked again (the walk after the shared-
+        # slot scan), it refuses again rather than reading as "not constant".
+        if (exists $EVAL_COMPILED{$$op}) {
+            my $r = $EVAL_COMPILED{$$op};
+            die $r->{gap} if ref $r && defined $r->{gap};
+            return $r;
+        }
+        my $r = eval { _compile_constant_eval($cv, $op) };
+        if (my $e = $@) { $EVAL_COMPILED{$$op} = { gap => $e }; die $e }
+        return $EVAL_COMPILED{$$op} = $r;
+    }
+
+    sub _compile_constant_eval ($cv, $op) {
         return undef unless $$cv == ${ B::main_cv() };
+        # ONLY WHERE A LEXICAL IS IN THE PAD: with none, the eval is the opaque
+        # Coerce(Str -> Code) it always was, which Deparse renders back as
+        # source -- this replaces only what was refused.
+        my $pad = $cv->PADLIST->ARRAYelt(0);
+        return undef unless grep { ref($_) eq 'B::PADNAME' && ( $_->PV // '' ) =~ /\A[\$\@%]/ } $pad->ARRAY;
         my $k = $op->first;
         $k = $k->first while $$k && $k->name eq 'null' && ( $k->flags & 4 );
         return undef unless $$k && $k->name eq 'const';
@@ -971,8 +987,16 @@ class SoN::FromOptree 0.01 {
         };
         die "GAP: an eval whose constant string does not compile is not yet lowered"
           . " -- perl sets \$@ at run time\n" unless ref $wrap eq 'CODE';
+        # A SUB IT DEFINES, perl defines when the eval runs: compiled here it
+        # went unseen, and a call of it took AUTOLOAD.
+        die "GAP: an eval of a constant string that defines a sub is not yet lowered"
+          . " -- perl defines it when the eval runs\n"
+            if $text =~ /\bsub\s+[\w:']/;
         my $code = $wrap->();
         my $icv  = B::svref_2object($code);
+        die "GAP: an eval of a constant string that defines a sub is not yet lowered"
+          . " -- a glob it assigns, perl assigns when the eval runs\n"
+            if grep { $_->name eq 'rv2gv' } _subtree_ops($icv->ROOT);
         # ITS DIE IS THE EVAL'S TO CATCH: perl sets $@ and yields undef. Not yet
         # built here, so code that can die -- a die, a division, a call -- is refused.
         die "GAP: an eval of a constant string whose code can die is not yet lowered"
@@ -990,7 +1014,7 @@ class SoN::FromOptree 0.01 {
         }
         my $name = _sort_body_name($cv, $op, '__EVAL__');
         $CODE_BODIES{$name} //= [ $icv, $icv->START, \%shared, 'an eval of a constant string' ];
-        return $EVAL_COMPILED{$$op} = { name => $name, slots => \%slots, code => $code };
+        return { name => $name, slots => \%slots, code => $code };
     }
 
     # _code_list_slots($list) -> { slot => 1 } for each program variable a
@@ -1627,7 +1651,8 @@ class SoN::FromOptree 0.01 {
             # file's lexicals, by name (translate_regex_code_body): a literal
             # pattern's, in this pad; a qr's, captured by the qr's anon CV.
             # AN EVAL OF A CONSTANT STRING is a body over the lexicals it names.
-            if ($o->name eq 'entereval' && (my $ev = _constant_eval(B::main_cv(), $o))) {
+            # One refused is the program walk's to report: here it shares nothing.
+            if ($o->name eq 'entereval' && (my $ev = eval { _constant_eval(B::main_cv(), $o) })) {
                 $shared{$_} = 1 for keys $ev->{slots}->%*;
             }
             if ($o->name =~ /\A(?:match|qr|subst)\z/ && $o->isa('B::PMOP')) {
@@ -21772,8 +21797,9 @@ class SoN::FromOptree 0.01 {
             my $names = eval { $cv->PADLIST->ARRAYelt(0) } or return;
             my ($seen) = grep { ref($_) eq 'B::PADNAME' && ($_->PV // '') =~ /\A[\$\@%]/ }
                 $names->ARRAY;
-            die "GAP: an eval of a string made at runtime, with a lexical in scope (" . $seen->PV
-              . "), can read or write it unseen by the graph\n" if $seen;
+            die "GAP: a string eval with a lexical in scope (" . $seen->PV
+              . ") can read or write it unseen by the graph -- its string is made at run time,"
+              . " or it is in a sub\n" if $seen;
         }
         elsif ($name eq 'gv') {
             # The callee's gv, which the walk meets before the entersub it

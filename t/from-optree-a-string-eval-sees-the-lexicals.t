@@ -46,14 +46,16 @@ sub round_trips ($src, $name) {
 
 # The read after the eval was the binding from before it: perl printed i=1,
 # the emitted program i=0, and nothing refused.
-refuses(q{my $i = 0; eval q{$i = 1}; print "i=$i\n";},
-    'an eval writing a file lexical');
+# A CONSTANT STRING OF THE PROGRAM is compiled where B::SoN runs, its
+# lexicals shared by name (t/wire-constant-string-eval.t): it lowers.
+round_trips(q{my $i = 0; eval q{$i = 1}; print "i=$i\n";},
+    'an eval of a constant string writing a file lexical');
 refuses(q{sub f { my $i = 0; eval q{$i = 1}; return $i } print f(), "\n";},
     'an eval writing a sub lexical');
 refuses(q{sub f { my @a = (1); eval q{push @a, 2}; return scalar @a } print f(), "\n";},
     'an eval pushing onto a lexical array');
-refuses(q{our $p = 0; eval q{$p = 1}; print "p=$p\n";},
-    'an eval writing through an our alias');
+round_trips(q{our $p = 0; eval q{$p = 1}; print "p=$p\n";},
+    'an eval of a constant string writing through an our alias');
 refuses(q{my $i = 0; sub f { $i; eval q{$i = 1} } f(); print "i=$i\n";},
     'an eval writing a lexical the sub closes over');
 refuses(q{my $i = 0; my $c = "\$i = 1"; eval $c; print "i=$i\n";},

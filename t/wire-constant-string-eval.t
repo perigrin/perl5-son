@@ -46,7 +46,7 @@ sub nodes ($w, $m) { ( $w->{methods}{$m}{nodes} // [] )->@* }
 # A STRING MADE AT RUNTIME is code no one has seen: refused by name.
 {
     my ($w, $err) = wire(q{my $n = $ENV{X} // 2; my $r = eval "$n + 1"; print "$r\n";}, 'runtime');
-    like($err, qr/GAP: an eval of a string made at runtime/, 'a runtime string: refused by name');
+    like($err, qr/GAP: a string eval with a lexical in scope .* its string is made at run time/, 'a runtime string: refused by name');
 }
 
 # A BODY THAT CAN DIE is caught by the eval -- perl sets $@ and yields undef.
@@ -56,6 +56,13 @@ sub nodes ($w, $m) { ( $w->{methods}{$m}{nodes} // [] )->@* }
     like($err, qr/GAP: an eval of a constant string whose code can die/, 'a body that can die: refused by name');
     ($w, $err) = wire(q{my $n = 0; my $r = eval q{6 / $n}; print defined $r ? "d" : "u", "\n";}, 'divides');
     like($err, qr/GAP: an eval of a constant string whose code can die/, 'a division in the body: refused by name');
+}
+
+# AN EVAL THAT DEFINES A SUB defines it when it runs; compiled here, the
+# sub went unseen and a call took AUTOLOAD instead. Refused by name.
+{
+    my ($w, $err) = wire(q{my $x = 1; eval q{sub zed { 42 }}; sub AUTOLOAD { "auto" } print zed(), "\n";}, 'defsub');
+    like($err, qr/GAP: an eval of a constant string that defines a sub/, 'a sub definition: refused by name');
 }
 
 done_testing;

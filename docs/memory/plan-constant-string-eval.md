@@ -55,3 +55,14 @@ ceiling is 429 unless perigrin later chooses to embed libperl.
 - 290 and 015 are `s/b/$c/ee`: an eval of $c's value (a padsv), not a
   const op, run per match. Still refused by name.
 - 210 defines `Other::g` in its eval: chalk has no callee for it.
+- LESSON: Deparse consumes the same graphs. An eval with no lexical in
+  the pad was already round-tripping through Deparse as an opaque
+  Coerce(Str -> Code). Replacing every constant eval broke 9 producer
+  test files. The new path now runs only where the pad has a lexical
+  (what was refused before). Deparse renders the new call as a sub over
+  the shared lexicals, correctly.
+- Also refused: a constant string that defines a sub (`sub NAME`, or a
+  glob it assigns). Compiled at produce time, the sub went unseen and a
+  call took AUTOLOAD (chalk's autoload test caught it). A refusal is
+  cached and re-raised, and the shared-slot scan swallows it so other
+  subs still translate.
