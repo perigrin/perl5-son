@@ -142,3 +142,13 @@ type, so no consumer has to guess.
 - Found: s2 (`for my $x ("x".."z")` prints only x). B::SoN builds a
   string range as a numeric count. It's a producer bug, pre-existing at
   a9628f32.
+- Fixed (chalk 3bc53c06): a `my @a` in a loop body or an arm is fresh on
+  each pass. B::SoN already pins the declaration (it has a control_in). My
+  first diagnosis ("identical graphs, a producer bug") was wrong: my dump
+  didn't print control edges, so print control_in before blaming the
+  graph. Context's _prelower_loop_drain_operands hoisted a pushed array
+  out of the loop even when it was pinned. T2 now makes a pinned literal
+  where it stands.
+- Lesson: never `git stash` to see the base. With a clean tree it saves
+  nothing, and `pop` then applies an old stash. Use a worktree
+  ($S/wt-s3 is at a9628f32).
