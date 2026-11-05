@@ -43,6 +43,7 @@
 - [Cause: 212, partial](census-cause-212-partial.md) — ${\ EXPR} read as its value; a store through \(c ? $v : 0) still refused
 - [Cause: a reference where a Str is read](census-cause-ref-where-str-read.md) — bound as the caller's ref, readers coerce; 082; 410 -> 411 (c45e86b4)
 - [Cause: 136, partial](census-cause-136-partial.md) — eval value untyped -> Scalar; dispatch death caught or refused in an eval; 136 still refused ($@ read)
+- [Recursive subs/methods with object params](recursive-methods-object-params.md) — Scalar define params for recursive subs; method self-calls; 225 still refused (33a09e83)
 - [Census cause: small operators](census-cause-small-operators.md) — ** x << >> unary minus; older wrong: float -0 printed "-0"; 038 039 041 048 264 266
 - [Runtime needs are refused; tie is MOP](runtime-needs-are-refused-tie-is-mop.md) — string eval and friends GAP by name; tie goes through the metaclass
 - [t/base is the producer corpus](tbase-coverage-is-the-producer-corpus.md) — how to measure B::SoN coverage without the two counting traps
@@ -178,6 +179,7 @@
 - [Cause: 212, partial](census-cause-212-partial.md) — ${\ EXPR} read as its value; a store through \(c ? $v : 0) still refused
 - [Cause: a reference where a Str is read](census-cause-ref-where-str-read.md) — bound as the caller's ref, readers coerce; 082; 410 -> 411 (c45e86b4)
 - [Cause: 136, partial](census-cause-136-partial.md) — eval value untyped -> Scalar; dispatch death caught or refused in an eval; 136 still refused ($@ read)
+- [Recursive subs/methods with object params](recursive-methods-object-params.md) — Scalar define params for recursive subs; method self-calls; 225 still refused (33a09e83)
 - [Census cause: small operators](census-cause-small-operators.md) — ** x << >> unary minus; older wrong: float -0 printed "-0"; 038 039 041 048 264 266
 - [Census cause: local restore](census-cause-local-restore.md) — `local $h{k}` put back by ElemRestore (upsert or delete); a return restores the locals of every walk it leaves (@SAVES_STACK); a scout must not restore; 176 178; a restore on a way out carries at_return so Deparse spells no `}` (SON_RATCHET lib regression)
 - [Census cause: branch-guarded store](census-cause-branch-guarded-store.md) — graph-wide unsafe flag: follow all Region inputs; stores before a merged store in its arm count as merged; Loop back edge not in inputs so loop bodies are never data-reachable; 125 177 191
@@ -265,6 +267,7 @@
 - [Cause: 212, partial](census-cause-212-partial.md) — ${\ EXPR} read as its value; a store through \(c ? $v : 0) still refused
 - [Cause: a reference where a Str is read](census-cause-ref-where-str-read.md) — bound as the caller's ref, readers coerce; 082; 410 -> 411 (c45e86b4)
 - [Cause: 136, partial](census-cause-136-partial.md) — eval value untyped -> Scalar; dispatch death caught or refused in an eval; 136 still refused ($@ read)
+- [Recursive subs/methods with object params](recursive-methods-object-params.md) — Scalar define params for recursive subs; method self-calls; 225 still refused (33a09e83)
 - [Cause: bitwise op leaf read by two ops](census-cause-bitwise-shared-leaf.md) — REVERTED: flag assumed lowering order = run order (pure values lower at use); 395 -> 394 — REDONE via statement order (plan-statement-order.md): 004, 047; 394 -> 396 (91be0c1d)
 - [Census cause: recursive closures](census-cause-recursive-closures.md) — 134, 135 via a boxed define; arm-store miscompile fixed
 - [Census cause: each](census-cause-each.md) — per-variable iterator; keys reset needs producer ordering; while-each loop shape open
