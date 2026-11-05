@@ -5038,6 +5038,15 @@ class SoN::FromOptree 0.01 {
             $STMT_LABEL = $op->label;
             $SoN::IR::NodeFactory::SITE = [ $op->file, $op->line ];
         }
+        # `use integer` ARITHMETIC IS ITS OWN: perl truncates operands and wraps
+        # (i_add, i_multiply, ...), and a bitwise op under it is signed. Mapped
+        # onto the plain ops, `7 * 1.5` was 10.5 for perl's 7 -- refused, by
+        # the op name or the statement's HINT_INTEGER (0x1).
+        die "GAP: `use integer` arithmetic ($name) is not yet lowered -- perl truncates and wraps\n"
+            if $name =~ /\Ai_/;
+        die "GAP: a bitwise op under `use integer` ($name) is not yet lowered -- its result is signed\n"
+            if $name =~ /\A(?:[ns]?bit_(?:and|or|xor)|[ns]?complement|left_shift|right_shift)\z/
+            && do { my $cop = _cop_for($op); $cop && ( $cop->hints & 0x1 ) };
 
         # Handle pushmark specially - just record the mark
         if ($name eq 'pushmark') {
