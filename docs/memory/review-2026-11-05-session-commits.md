@@ -34,4 +34,4 @@
   Probe the refused neighbour shapes, not just the target.
 - A fix that makes a value early (freeze) or collects a node as a statement
   must exclude eval bodies and if-arm values.
-- Still open (pre-existing, not fixed): family A inside an eval body.
+- Family A inside an eval body: fixed by holding the merge Phis on the eval frame until the next store (chalk 9b3df42f).
