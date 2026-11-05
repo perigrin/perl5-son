@@ -32,6 +32,7 @@
 - [Cause: next after an inner loop](census-cause-next-after-inner-loop.md) — loop exit off the main chain; latch path via inner loop exit; 205; 402 -> 403 (2df9149f)
 - [Cause: write-back through a foreach alias](census-cause-write-back-through-foreach-alias.md) — store along the alias arm; pinned [...] made where it stands (MISCOMPILE fixed); 186; 403 -> 404 (973477de)
 - [Cause: an array argument written](census-cause-array-argument-written.md) — @_ copy + store-back by index; unlink synthesized nodes (graph pollution); 199; 404 -> 405 (5f40cdf0)
+- [Cause: 175, partial](census-cause-175-partial.md) — method value as container; callee waiting reads scoped; _inline_value_repr by refaddr (LLI_FAIL); 175 still refused (List merge, join over hash)
 - [Census cause: small operators](census-cause-small-operators.md) — ** x << >> unary minus; older wrong: float -0 printed "-0"; 038 039 041 048 264 266
 - [Runtime needs are refused; tie is MOP](runtime-needs-are-refused-tie-is-mop.md) — string eval and friends GAP by name; tie goes through the metaclass
 - [t/base is the producer corpus](tbase-coverage-is-the-producer-corpus.md) — how to measure B::SoN coverage without the two counting traps
@@ -156,6 +157,7 @@
 - [Cause: next after an inner loop](census-cause-next-after-inner-loop.md) — loop exit off the main chain; latch path via inner loop exit; 205; 402 -> 403 (2df9149f)
 - [Cause: write-back through a foreach alias](census-cause-write-back-through-foreach-alias.md) — store along the alias arm; pinned [...] made where it stands (MISCOMPILE fixed); 186; 403 -> 404 (973477de)
 - [Cause: an array argument written](census-cause-array-argument-written.md) — @_ copy + store-back by index; unlink synthesized nodes (graph pollution); 199; 404 -> 405 (5f40cdf0)
+- [Cause: 175, partial](census-cause-175-partial.md) — method value as container; callee waiting reads scoped; _inline_value_repr by refaddr (LLI_FAIL); 175 still refused (List merge, join over hash)
 - [Census cause: small operators](census-cause-small-operators.md) — ** x << >> unary minus; older wrong: float -0 printed "-0"; 038 039 041 048 264 266
 - [Census cause: local restore](census-cause-local-restore.md) — `local $h{k}` put back by ElemRestore (upsert or delete); a return restores the locals of every walk it leaves (@SAVES_STACK); a scout must not restore; 176 178; a restore on a way out carries at_return so Deparse spells no `}` (SON_RATCHET lib regression)
 - [Census cause: branch-guarded store](census-cause-branch-guarded-store.md) — graph-wide unsafe flag: follow all Region inputs; stores before a merged store in its arm count as merged; Loop back edge not in inputs so loop bodies are never data-reachable; 125 177 191
@@ -232,6 +234,7 @@
 - [Cause: next after an inner loop](census-cause-next-after-inner-loop.md) — loop exit off the main chain; latch path via inner loop exit; 205; 402 -> 403 (2df9149f)
 - [Cause: write-back through a foreach alias](census-cause-write-back-through-foreach-alias.md) — store along the alias arm; pinned [...] made where it stands (MISCOMPILE fixed); 186; 403 -> 404 (973477de)
 - [Cause: an array argument written](census-cause-array-argument-written.md) — @_ copy + store-back by index; unlink synthesized nodes (graph pollution); 199; 404 -> 405 (5f40cdf0)
+- [Cause: 175, partial](census-cause-175-partial.md) — method value as container; callee waiting reads scoped; _inline_value_repr by refaddr (LLI_FAIL); 175 still refused (List merge, join over hash)
 - [Cause: bitwise op leaf read by two ops](census-cause-bitwise-shared-leaf.md) — REVERTED: flag assumed lowering order = run order (pure values lower at use); 395 -> 394 — REDONE via statement order (plan-statement-order.md): 004, 047; 394 -> 396 (91be0c1d)
 - [Census cause: recursive closures](census-cause-recursive-closures.md) — 134, 135 via a boxed define; arm-store miscompile fixed
 - [Census cause: each](census-cause-each.md) — per-variable iterator; keys reset needs producer ordering; while-each loop shape open
