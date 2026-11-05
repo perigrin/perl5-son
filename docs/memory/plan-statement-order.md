@@ -46,3 +46,13 @@ statement node to anchor it.
   branch (base wrong too) and are in the scratchpad report: a string
   result read by most consumers gives 0; &. |. under feature bitwise;
   string->int through a double.
+- Review5's older bugs, fixed (chalk f9db1c16):
+  - C1: a string bitwise result read by anything but a stringify, a
+    numeric read or a bitwise op is now refused.
+  - C3: the feature flavour forces bytes or numbers; Complement's
+    flavour is now loaded.
+  - C4: @chalk_str_to_int reads an integer string exactly (strtoll when
+    it's the whole numeric prefix and fits).
+  - Run-time stops print "chalk: refused at run time: ..." on stderr.
+  - Still open: `use integer` signed bitwise (chalk ignores
+    `use integer`); `~` results past an i64 stop at run time (now named).
