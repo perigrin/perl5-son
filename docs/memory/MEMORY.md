@@ -29,6 +29,7 @@
 - [Cause: Assign Scalar is ++](census-cause-assign-scalar-is-increment.md) — perl's ++ by tag, magic increment measured; non-Str hash keys; 111 -> 122
 - [Cause: Phi before structure](census-cause-phi-before-structure.md) — early returns fold pairwise; a value phi over a call is not memory; 109 -> 111
 - [Cause: read waiting at a call](census-cause-read-waiting-at-a-call.md) — waiting reads made before a direct call (call = memory version); 184, 233; 400 -> 402 (11889bf5)
+- [Cause: next after an inner loop](census-cause-next-after-inner-loop.md) — loop exit off the main chain; latch path via inner loop exit; 205; 402 -> 403 (2df9149f)
 - [Census cause: small operators](census-cause-small-operators.md) — ** x << >> unary minus; older wrong: float -0 printed "-0"; 038 039 041 048 264 266
 - [Runtime needs are refused; tie is MOP](runtime-needs-are-refused-tie-is-mop.md) — string eval and friends GAP by name; tie goes through the metaclass
 - [t/base is the producer corpus](tbase-coverage-is-the-producer-corpus.md) — how to measure B::SoN coverage without the two counting traps
@@ -150,6 +151,7 @@
 - [Census cause: stores through a tagged reference](census-cause-scalar-container-stores.md) — autoviv into element/location; older wrong: loop-phi reads unfrozen; pending tag reads refuse a later store through a ref; local store refused; 232
 - [Census cause: Phi before its structure](census-cause-phi-before-structure.md) — loop-invariant store roots; nested-loop stores (older wrong); drive a made, effect-free loop from its phi only; labeled jump named; 220
 - [Cause: read waiting at a call](census-cause-read-waiting-at-a-call.md) — waiting reads made before a direct call (call = memory version); 184, 233; 400 -> 402 (11889bf5)
+- [Cause: next after an inner loop](census-cause-next-after-inner-loop.md) — loop exit off the main chain; latch path via inner loop exit; 205; 402 -> 403 (2df9149f)
 - [Census cause: small operators](census-cause-small-operators.md) — ** x << >> unary minus; older wrong: float -0 printed "-0"; 038 039 041 048 264 266
 - [Census cause: local restore](census-cause-local-restore.md) — `local $h{k}` put back by ElemRestore (upsert or delete); a return restores the locals of every walk it leaves (@SAVES_STACK); a scout must not restore; 176 178; a restore on a way out carries at_return so Deparse spells no `}` (SON_RATCHET lib regression)
 - [Census cause: branch-guarded store](census-cause-branch-guarded-store.md) — graph-wide unsafe flag: follow all Region inputs; stores before a merged store in its arm count as merged; Loop back edge not in inputs so loop bodies are never data-reachable; 125 177 191
@@ -223,6 +225,7 @@
 - [Cause: a call on a ?: of two lists](census-cause-call-on-ternary-of-lists.md) — call made per arm; 145; 199 open (@_ aliasing an array); 398 -> 399 (c55bfaad)
 - [Cause: Phi before its structure](census-cause-phi-before-structure.md) — 224 (store key in a loop in an arm); `local` read-after-merge MISCOMPILE fixed; 210 is eval; 399 -> 400 (a5f14544)
 - [Cause: read waiting at a call](census-cause-read-waiting-at-a-call.md) — waiting reads made before a direct call (call = memory version); 184, 233; 400 -> 402 (11889bf5)
+- [Cause: next after an inner loop](census-cause-next-after-inner-loop.md) — loop exit off the main chain; latch path via inner loop exit; 205; 402 -> 403 (2df9149f)
 - [Cause: bitwise op leaf read by two ops](census-cause-bitwise-shared-leaf.md) — REVERTED: flag assumed lowering order = run order (pure values lower at use); 395 -> 394 — REDONE via statement order (plan-statement-order.md): 004, 047; 394 -> 396 (91be0c1d)
 - [Census cause: recursive closures](census-cause-recursive-closures.md) — 134, 135 via a boxed define; arm-store miscompile fixed
 - [Census cause: each](census-cause-each.md) — per-variable iterator; keys reset needs producer ordering; while-each loop shape open
