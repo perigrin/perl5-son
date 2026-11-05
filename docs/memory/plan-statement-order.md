@@ -20,3 +20,29 @@ statement node to anchor it.
 - Tests red first: "two statements, used in the other order" (already
   in llvm-a-bitwise-op-on-strings.t), 047, 004 with arguments, a reader
   in an arm, a dead op.
+
+## As built (2026-11-04/05)
+- Producer: pin_bit. On the main walk, & | ^ ~ << >> whose operand (looked
+  through Coerce) isn't typed Int/Num/Boolean is made with make_unique
+  and pinned to the chain. It is NOT pinned when an operand's node is
+  bound to more than one variable, or its variable is stored more than
+  once (_stores_of_slot; the program's ops hang off main_root, not
+  main_cv->ROOT). Numifying belongs to the variable, and a copy, merged
+  identical `//`s, or a reassignment share one node (review5 C2).
+- Chalk:
+  - process_control_node lowers a pinned bit/shift op in place.
+    _pinned_made serves later uses, since a pure value over a read
+    re-lowers at each use and ran AFTER a later shift.
+  - _bit_numified_slot is set by every op done on numbers, shifts
+    included.
+  - Readers are found by scanning the program's inputs
+    (_bit_readers_of, via $ctx->{_program_return}). More than one
+    reader is allowed only if all are pinned.
+  - _value_users ignores the next statement that names a pinned op
+    through control_in.
+  - An @ARGV element `//` a default is a leaf (_argv_element).
+- Result: pvm 004 and 047 round-trip. Census 394 -> 396 (chalk 91be0c1d).
+- The review5 reviewer found C1/C3/C4 too. All are older than this
+  branch (base wrong too) and are in the scratchpad report: a string
+  result read by most consumers gives 0; &. |. under feature bitwise;
+  string->int through a double.

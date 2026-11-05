@@ -216,7 +216,7 @@
 - [Cause: regex code blocks](plan-regex-code-blocks.md) — (?{...}) lifted as bodies; only all-literal patterns (perl's optimizer decides run counts); 391 -> 394 (b7beaa9e)
 - [Cause: constant eval STRING](plan-constant-string-eval.md) — BACKED OUT after review 2 (silent wrongs for +1 case); 395 -> 394
 - [Review 2026-11-04](review-2026-11-04-evals-code-blocks.md) — 5 Critical fixed (shared-by-name binding, our, strict, allow-list, code-block memory version); deny-list lesson
-- [Cause: bitwise op leaf read by two ops](census-cause-bitwise-shared-leaf.md) — REVERTED: flag assumed lowering order = run order (pure values lower at use); 395 -> 394
+- [Cause: bitwise op leaf read by two ops](census-cause-bitwise-shared-leaf.md) — REVERTED: flag assumed lowering order = run order (pure values lower at use); 395 -> 394 — REDONE via statement order (plan-statement-order.md): 004, 047; 394 -> 396 (91be0c1d)
 - [Census cause: recursive closures](census-cause-recursive-closures.md) — 134, 135 via a boxed define; arm-store miscompile fixed
 - [Census cause: each](census-cause-each.md) — per-variable iterator; keys reset needs producer ordering; while-each loop shape open
 - [Census cause: mixed literal](census-cause-mixed-literal.md) — Num+Str elements are Scalars; 17-digit number constants (miscompile)
