@@ -38,4 +38,17 @@ sub nodes_of ($src) {
     ok(( !grep { $_->{op} eq 'BitAnd' && defined $_->{control_in} } @n ), 'an op on Ints is not pinned');
 }
 
+# ONE NODE, TWO VARIABLES: a copy, two identical `//`s merged, a reassignment.
+# Numifying one is not numifying the other, and the graph cannot tell them
+# apart -- such an op is left floating, so a backend refuses to track it
+# (review, 2026-11-04).
+for my $src (
+    q{my $a = $ENV{X} // "ab"; my $b = $a; my $x = $a & 5; my $y = $b | "  "; print "$x [$y]\n";},
+    q{my $a = $ENV{X} // "ab"; my $b = $ENV{X} // "ab"; my $x = $a & 5; my $y = $b | "  "; print "$x [$y]\n";},
+    q{my $a = $ENV{X} // "ab"; my $x = $a & 5; $a = $ENV{X} // "ab"; my $y = $a | "  "; print "$x [$y]\n";},
+) {
+    my @n = nodes_of($src);
+    ok(( grep { $_->{op} =~ /\ABit/ && !defined $_->{control_in} } @n ), "not every op is pinned: $src");
+}
+
 done_testing;

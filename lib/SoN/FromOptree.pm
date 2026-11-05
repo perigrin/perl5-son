@@ -11808,6 +11808,18 @@ class SoN::FromOptree 0.01 {
                         $in = $in->inputs->[0] while $in->isa('SoN::IR::Node::Coerce') && $in->inputs->[0];
                         ( $in->stamp ? $in->stamp->type : 'Unknown' ) !~ /\A(?:Int|Num|Boolean)\z/
                     } @inputs;
+                # ONE VARIABLE PER OPERAND, ASSIGNED ONCE: numifying is the
+                # variable's, and a node a copy, a second `my` of the same
+                # expression or a reassignment shares stands for two. Such an op
+                # is left floating, and a backend tracking numification refuses.
+                $pin_bit &&= !grep {
+                    my $in = $_;
+                    $in = $in->inputs->[0] while $in->isa('SoN::IR::Node::Coerce') && $in->inputs->[0];
+                    my $b = $sim->scope_bindings;
+                    my @vars = grep { /\A\d+\z/ && blessed($b->{$_}) && $b->{$_} == $in } keys %$b;
+                    ( $in->stamp ? $in->stamp->type : 'Unknown' ) !~ /\A(?:Int|Num|Boolean)\z/
+                        && ( @vars > 1 || ( @vars == 1 && _stores_of_slot($cv, $vars[0]) > 1 ) );
+                } @inputs;
                 $pin_on_control = 1 if $pin_bit;
                 my $make = $pin_bit ? 'make_unique' : 'make';
                 my $node = $factory->$make($node_type, inputs => \@inputs, %extra);
@@ -21668,6 +21680,18 @@ class SoN::FromOptree 0.01 {
             ( $kid, $first ) = ( $kid->sibling, 0 );
         }
         return;
+    }
+
+    # _stores_of_slot($cv, $targ) -> how many places in $cv store pad slot $targ:
+    # a padsv_store, an sassign into its padsv, an op writing it by its targ.
+    sub _stores_of_slot ($cv, $targ) {
+        state %memo;
+        my $k = ${$cv} . ":$targ";
+        return $memo{$k} //= scalar grep {
+            ( $_->name eq 'padsv_store' && $_->targ == $targ )
+            || ( $_->name eq 'sassign' && $_->can('last') && ( $_->flags & 4 ) && ${ $_->last } && $_->last->name eq 'padsv' && $_->last->targ == $targ )
+            || ( ( $_->private & B::OPpTARGET_MY() ) && $_->can('targ') && $_->targ == $targ && $_->name ne 'padsv' )
+        } _subtree_ops( $$cv == ${ B::main_cv() } ? B::main_root() : $cv->ROOT );   # the program's ops hang off main_root
     }
 
     sub _later_siblings ($o) {
