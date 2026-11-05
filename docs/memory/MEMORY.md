@@ -219,6 +219,7 @@
 - [Cause: method returning values/keys of a field](census-cause-method-returning-values.md) — list or count by call context; 246; 396 -> 397 (15a3064f)
 - [Cause: `@a && LIST` in list context](census-cause-and-of-arrays.md) — (0) or the list; element reads flatten; 089; 397 -> 398 (836bb242)
 - [Cause: a call on a ?: of two lists](census-cause-call-on-ternary-of-lists.md) — call made per arm; 145; 199 open (@_ aliasing an array); 398 -> 399 (c55bfaad)
+- [Cause: Phi before its structure](census-cause-phi-before-structure.md) — 224 (store key in a loop in an arm); `local` read-after-merge MISCOMPILE fixed; 210 is eval; 399 -> 400 (a5f14544)
 - [Cause: bitwise op leaf read by two ops](census-cause-bitwise-shared-leaf.md) — REVERTED: flag assumed lowering order = run order (pure values lower at use); 395 -> 394 — REDONE via statement order (plan-statement-order.md): 004, 047; 394 -> 396 (91be0c1d)
 - [Census cause: recursive closures](census-cause-recursive-closures.md) — 134, 135 via a boxed define; arm-store miscompile fixed
 - [Census cause: each](census-cause-each.md) — per-variable iterator; keys reset needs producer ordering; while-each loop shape open
