@@ -37,6 +37,7 @@
 - [Cause: a dispatch called for nothing](census-cause-dispatch-for-nothing.md) — void call's untyped value merges undef; 198; 406 -> 407 (5fe682b5)
 - [Cause: a method on a loop-carried object](census-cause-method-on-loop-carried-object.md) — run-time method typed Scalar; $" walk over candidates; no header hoist of a call back-edge; 204; 407 -> 408 (c57cab4e)
 - [Cause: 225, partial](census-cause-225-partial.md) — ?: of lists in a list; next: recursive method needs object params in defines
+- [Cause: a bare return merged for a list](census-cause-bare-return-in-list-context.md) — arms made arrays, call flattened; 174; 408 -> 409 (7a7476b3)
 - [Census cause: small operators](census-cause-small-operators.md) — ** x << >> unary minus; older wrong: float -0 printed "-0"; 038 039 041 048 264 266
 - [Runtime needs are refused; tie is MOP](runtime-needs-are-refused-tie-is-mop.md) — string eval and friends GAP by name; tie goes through the metaclass
 - [t/base is the producer corpus](tbase-coverage-is-the-producer-corpus.md) — how to measure B::SoN coverage without the two counting traps
@@ -166,6 +167,7 @@
 - [Cause: a dispatch called for nothing](census-cause-dispatch-for-nothing.md) — void call's untyped value merges undef; 198; 406 -> 407 (5fe682b5)
 - [Cause: a method on a loop-carried object](census-cause-method-on-loop-carried-object.md) — run-time method typed Scalar; $" walk over candidates; no header hoist of a call back-edge; 204; 407 -> 408 (c57cab4e)
 - [Cause: 225, partial](census-cause-225-partial.md) — ?: of lists in a list; next: recursive method needs object params in defines
+- [Cause: a bare return merged for a list](census-cause-bare-return-in-list-context.md) — arms made arrays, call flattened; 174; 408 -> 409 (7a7476b3)
 - [Census cause: small operators](census-cause-small-operators.md) — ** x << >> unary minus; older wrong: float -0 printed "-0"; 038 039 041 048 264 266
 - [Census cause: local restore](census-cause-local-restore.md) — `local $h{k}` put back by ElemRestore (upsert or delete); a return restores the locals of every walk it leaves (@SAVES_STACK); a scout must not restore; 176 178; a restore on a way out carries at_return so Deparse spells no `}` (SON_RATCHET lib regression)
 - [Census cause: branch-guarded store](census-cause-branch-guarded-store.md) — graph-wide unsafe flag: follow all Region inputs; stores before a merged store in its arm count as merged; Loop back edge not in inputs so loop bodies are never data-reachable; 125 177 191
@@ -247,6 +249,7 @@
 - [Cause: a dispatch called for nothing](census-cause-dispatch-for-nothing.md) — void call's untyped value merges undef; 198; 406 -> 407 (5fe682b5)
 - [Cause: a method on a loop-carried object](census-cause-method-on-loop-carried-object.md) — run-time method typed Scalar; $" walk over candidates; no header hoist of a call back-edge; 204; 407 -> 408 (c57cab4e)
 - [Cause: 225, partial](census-cause-225-partial.md) — ?: of lists in a list; next: recursive method needs object params in defines
+- [Cause: a bare return merged for a list](census-cause-bare-return-in-list-context.md) — arms made arrays, call flattened; 174; 408 -> 409 (7a7476b3)
 - [Cause: bitwise op leaf read by two ops](census-cause-bitwise-shared-leaf.md) — REVERTED: flag assumed lowering order = run order (pure values lower at use); 395 -> 394 — REDONE via statement order (plan-statement-order.md): 004, 047; 394 -> 396 (91be0c1d)
 - [Census cause: recursive closures](census-cause-recursive-closures.md) — 134, 135 via a boxed define; arm-store miscompile fixed
 - [Census cause: each](census-cause-each.md) — per-variable iterator; keys reset needs producer ordering; while-each loop shape open
