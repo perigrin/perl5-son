@@ -119,3 +119,12 @@
   context (246), then `return scalar(keys %h)` over-applied.
 - Pre-existing Context.pm miscompile (TODO): a missing required :param
   makes the object where perl dies.
+
+## Slice 19: closures (chalk, after a7c137e0)
+- Cells are the captured variable's location, heap-allocated when this
+  function captures it. First check: 3 DIFFERS -- accepting every shared
+  pad let a named sub's view of an outer lexical become its own cell.
+- B::SoN gap (producer, this repo): `$t += 1` on a capture has no
+  CellWrite (the add is dead); T2 and Context.pm refuse it. Fix belongs in
+  FromOptree.
+- perigrin: uncaught die needs no eval (stderr + exit). Next slice: die.
