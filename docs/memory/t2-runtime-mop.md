@@ -84,3 +84,15 @@
 - The cause is structural: _memory_input and _is_version are hand lists.
   Next: make them generic (any input that is a version; every statement
   on the chain a version) so a new store kind cannot be missed.
+
+## Guard and slice 16 (chalk 5ffd81aa, 95f7f528)
+- Guard: a statement a read takes as memory must be in _is_version, else
+  refuse. Audit of the corpus graphs: readers and versions T2 handles are
+  all listed; RegexSubst/Transliterate/Match/ElemRestore/CellWrite are not
+  yet T2's and must be added to _is_version when they are.
+- $_ is a package scalar (B::SoN desugars foreach aliasing to stores and
+  write-backs); map/grep are ListAppend loops; their accumulator must be
+  fresh per loop entry (a constant empty literal made at entry was shared:
+  wrong answer, caught by an existing suite test).
+- A printing death escaped T2's fallback (eval only wrapped build): one
+  census case went ROUNDTRIP -> GAP. print_module is under eval now.
