@@ -67,3 +67,12 @@
   recounts them (t2-runtime-strings-are-sized.t).
 - Reads through a reference stay where they are and are refused if still
   pending at a store/call (_through_ref); see slice 5's guard lesson.
+
+## Slice 14: named hashes (chalk 22f322aa)
+- First check: 8 suite fails, LLI_FAIL 2, census 410. Causes: a hash in a
+  list (flatten = pairs), a store through foreach into a flattened list
+  (perl aliases), IR tests' Length-of-array = count, and an OLD if_stmt
+  bug newly reached: building a phi input in an arm can make blocks (a
+  folded ?:), so the arm's end block must be re-read after it.
+- Lesson: the full check is the only thing that catches these; each slice
+  so far needed one or two rounds. Budget for it.
