@@ -43,7 +43,7 @@
 - [Cause: 212, partial](census-cause-212-partial.md) — ${\ EXPR} read as its value; a store through \(c ? $v : 0) still refused
 - [Cause: a reference where a Str is read](census-cause-ref-where-str-read.md) — bound as the caller's ref, readers coerce; 082; 410 -> 411 (c45e86b4)
 - [Cause: 136, partial](census-cause-136-partial.md) — eval value untyped -> Scalar; dispatch death caught or refused in an eval; 136 still refused ($@ read)
-- [T2 slices 6-7: objects and a run-time MOP](t2-runtime-mop.md) — stashes, @ISA, run-time method lookup; function per sub (68724d69)
+- [T2 slices 6-21: objects, run-time MOP, class, closures, die, eval](t2-runtime-mop.md) — stashes, @ISA, run-time lookup; die as a flag checked after calls; an eval end is a memory version
 - [T2 slice 5: hash references](t2-slice5-hashes.md) — {...} as %Slot tag 5, $h->{k}, `!`, early-exit joins; pvm 093; 411 -> 412 (4bd2ca8e)
 - [Recursive subs/methods with object params](recursive-methods-object-params.md) — Scalar define params for recursive subs; method self-calls; 225 still refused (33a09e83)
 - [Census cause: small operators](census-cause-small-operators.md) — ** x << >> unary minus; older wrong: float -0 printed "-0"; 038 039 041 048 264 266

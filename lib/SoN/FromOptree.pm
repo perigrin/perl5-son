@@ -17454,7 +17454,7 @@ class SoN::FromOptree 0.01 {
         $region->set_eval_want(($op->flags & 3) == 3 ? 'list' : 'runtime')
             if ($op->flags & 3) == 3 || ($op->flags & 3) == 0;
         $sim->set_control($region);
-        $sim->set_memory($body_sim->memory);
+        _eval_join_memory($factory, $sim, $region, $body_sim->memory);
 
         # The body's value, or undef if it died. Three cases, and the
         # depth tells them apart:
@@ -17584,7 +17584,7 @@ class SoN::FromOptree 0.01 {
         $region->set_eval_entry($eval_entry) if defined $eval_entry;
         $region->set_eval_id($try_id);
         $sim->set_control($region);
-        $sim->set_memory($body_sim->memory);
+        _eval_join_memory($factory, $sim, $region, $body_sim->memory);
         my $ok = $factory->make_unique('Phi', inputs => [$one, $undef],
             region => $region);
 
@@ -20888,6 +20888,18 @@ class SoN::FromOptree 0.01 {
                 if $p->can('other') && ref $p->other && ${ $p->other };
         }
         return 0;
+    }
+
+    # _eval_join_memory($factory, $sim, $region, $memory): the memory after a
+    # block eval or a try is a version of its own, a memory Phi at its join.
+    # A caught die sets $@ with no store on the chain, so a read of $@ after
+    # the eval took the body's memory -- the same version as a read in it, and
+    # a consumer merging nodes by their inputs made the two one read (the
+    # outer eval's message printed as the inner's).
+    sub _eval_join_memory ($factory, $sim, $region, $memory) {
+        $sim->set_memory($memory);
+        return unless defined $memory;
+        $sim->set_memory($factory->make_unique('Phi', inputs => [$memory], region => $region, memory => 1));
     }
 
     sub _entry_store ($factory, $sim, $target, $value, $binds = 0) {

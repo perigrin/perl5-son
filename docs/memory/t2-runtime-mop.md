@@ -136,3 +136,21 @@
   whole program (computed in lower_program; a func's $b->{ret} is its own).
 - The container restarted mid-check once: the base worktree dir came back
   empty, but check.sh only needs the saved g217-base.txt.
+
+## Slice 21: eval and try (chalk + producer)
+- A die is an error flag, not a longjmp: t2_die_unwind sets $@ and
+  @t2_dying when an eval is open (depth > 0); every call checks the flag
+  after it returns and branches to the open eval's catch, or returns up.
+- Producer fix (perigrin: "both my repo, just fix it"): an eval's end is
+  its own memory version (a memory Phi on its Region). Without it B::SoN
+  made two `$@` reads after nested evals one node, and the outer printed
+  the inner's message. Deparse and Context.pm skip that memory Phi as a
+  value; the deparser's element-read pass treats it like an if's merge
+  (an element read indexed by a later loop stays in the loop).
+- Dominance trap: a value made in an eval body after its first block need
+  not dominate the join. close_eval poisons those memo entries: constants
+  are remade, anything else is refused. The catch block gets a local memo.
+- Refused while a program has an eval (perl dies where T2 would not):
+  method calls (not `new`), divide/modulo, any scalar deref (even dead:
+  `my $v = $$x` unused still dies), eval in list/caller context.
+- `$@` starts ""; a normal eval end sets it ""; `die ""` is "Died at ...".

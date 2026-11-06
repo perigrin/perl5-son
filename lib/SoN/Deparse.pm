@@ -3006,10 +3006,11 @@ class SoN::Deparse 0.01 {
             # print $a[0]` bound the read in the prologue, above the store,
             # and printed 1 for 7. The read is correct where the branch has
             # merged, so it is bound at the Region.
-            my $join;
+            my ($join, $merge);
             if ( ( $version->{op} // q{} ) eq q{Phi} ) {
                 my $r = $nodes->{ ( $version->{fields} // {} )->{region} // -1 } // {};
                 $join = $r if ( $r->{op} // q{} ) eq q{Region};
+                $merge = 1 if $join;
                 # NOR IS A LOOP'S. A read of it outside the loop happens at the
                 # loop's exit: taken for entry, `push @a, 1; for (...) { $h{a}
                 # = 9 } print $h{a}` bound the read in the prologue, above the
@@ -3036,7 +3037,9 @@ class SoN::Deparse 0.01 {
             # foreach was spelled where $i does not exist, and corpus 006 did
             # not compile. Read in the loop, where its index is, unless the
             # version itself is in that loop's body.
-            unless ( $join ) {
+            # (At an if's or an eval's merge too: an eval's end is a memory
+            # version of its own, and the read was bound there, above the loop.)
+            if ( !$join || $merge ) {
                 my ( @lq, %ls, @loops ) = @in[ 0 .. $#in - 1 ];
                 while ( defined( my $id = shift @lq ) ) {
                     next if $ls{$id}++;
@@ -5130,7 +5133,8 @@ class SoN::Deparse 0.01 {
         return 1 if defined(($n->{fields} // {})->{eval_entry});
 
         my ($phi) = grep { ($_->{op} // '') eq 'Phi'
-                        && ((($_->{fields} // {})->{region} // -1) == $n->{id}) }
+                        && ((($_->{fields} // {})->{region} // -1) == $n->{id})
+                        && !(($_->{fields} // {})->{memory}) }   # (the join's memory version is not its value)
                     $self->_nodes_in_order;
         return 0 unless $phi;
         my @pin = ($phi->{inputs} // [])->@*;
@@ -5176,7 +5180,11 @@ class SoN::Deparse 0.01 {
         my $eff = $nodes->{ $region->{inputs}[0] };
         my ($phi) = grep { ($_->{op} // '') eq 'Phi'
                         && ((($_->{fields} // {})->{region} // -1)
-                            == $region->{id}) }
+                            == $region->{id})
+                        # THE JOIN'S MEMORY VERSION (a caught die's $@) is
+                        # not the eval's value: taken for it, a void eval
+                        # rendered its memory, a store, as a value.
+                        && !(($_->{fields} // {})->{memory}) }
                     $self->_nodes_in_order;
 
         my ($inner, $body, $val);
