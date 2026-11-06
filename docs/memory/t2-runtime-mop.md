@@ -39,3 +39,16 @@
 - T2 takes 76 of 430 corpus cases outright; the rest fall back. Plan
   (perigrin agreed): arrays/lists, sub calling convention, package
   variables, builtins, class feature, regex; then delete the fallback.
+
+## Slices 10-12 (chalk ee1281ab, 6d25d545)
+- `my @a` declared once per sub (unpinned PadAccess) is one %Array made at
+  function entry; one in a loop body/arm is a pinned ArrayLiteral already.
+  Arrays/hashes are lists wherever lists are refused (_is_list): their
+  PadAccess is stamped Unknown, so stamp checks alone missed them.
+- @ARGV from main's argc/argv, one global array. An array as a scalar is
+  its count. && / || are values.
+- List convention: a sub reading @_ as a list takes one %Array.
+  `&f;` shares the caller's @_ -- it passed an empty one ("[]" for "[x y]")
+  until an existing suite test caught it.
+- Test-writing trap: subs named `s`, `m`, `y`, `q`, `tr` are operators.
+- T2 takes 86 of 430 corpus programs outright (before slice 12).
