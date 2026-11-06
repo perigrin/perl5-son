@@ -23,3 +23,19 @@
     10-minute default killed one mid-suite).
 - Next: `our @ISA = (...)` at run time, AUTOLOAD, SUPER::; then the five
   object cases (136, 175, 188, 212, 225) and what they hit next.
+
+## Follow-up (chalk aeedc509)
+- `our @ISA = (...)` writes the MOP; string comparisons; hash element
+  stores. Census 412.
+- Hash stores reopen slice 5's "hash reads are left in place": a pending
+  hash read across a store OR A CALL (a sub may store) read the new value
+  (22 for 12, 55 for 15). Refused now (hash_reads_settled). Settling it
+  safely needs the read made where perl makes it, not hoisted above a guard.
+- Pre-existing Context.pm miscompile (also on the baseline): a method
+  storing through its invocant, a read kept before the call: 55 for 15.
+  TODO test in t2-slice9-hash-stores.t. Not in the corpus.
+- One census run showed 176 GAP ("a store to an element while a read
+  waits"); not reproduced in 60 hash seeds or 2 more censuses. Watch it.
+- T2 takes 76 of 430 corpus cases outright; the rest fall back. Plan
+  (perigrin agreed): arrays/lists, sub calling convention, package
+  variables, builtins, class feature, regex; then delete the fallback.
