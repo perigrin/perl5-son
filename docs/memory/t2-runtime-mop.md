@@ -96,3 +96,14 @@
   wrong answer, caught by an existing suite test).
 - A printing death escaped T2's fallback (eval only wrapped build): one
   census case went ROUNDTRIP -> GAP. print_module is under eval now.
+
+## Slice 17: list returns (chalk e436df5e, test 3c...)
+- Four check rounds. A call's context must come from its USE (element of
+  a list, print/push/join/call argument, map value, a return's list) --
+  not B::SoN's want (`$o->m || "x"` says list) nor its stamp (`my $n =
+  f()` stamped List). Memory positions are not uses.
+- Perl traps hit: `for my $x (@{$node->inputs}) { $x = ... }` writes the
+  graph (aliasing) -- T2 then handed a mutated graph to the fallback (two
+  GAPs); now tested (t2-never-mutates-the-graph.t). A bare `grep {...}
+  @pos` inside an || chain swallows the rest of the condition.
+- T2 takes ~124+ of 430 outright; census 412 throughout slices 6-17.
