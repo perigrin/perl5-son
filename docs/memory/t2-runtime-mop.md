@@ -128,3 +128,11 @@
   CellWrite (the add is dead); T2 and Context.pm refuse it. Fix belongs in
   FromOptree.
 - perigrin: uncaught die needs no eval (stderr + exit). Next slice: die.
+
+## Slice 20: uncaught die (chalk, after 58a9eabc)
+- STDERR + " at FILE line N.\n" + exit 255; dead arms skip the join.
+- Wrong answer caught building it: try/catch exited. A die in a sub that a
+  caller's try wraps has no eval_id, so the eval/try check must scan the
+  whole program (computed in lower_program; a func's $b->{ret} is its own).
+- The container restarted mid-check once: the base worktree dir came back
+  empty, but check.sh only needs the saved g217-base.txt.
