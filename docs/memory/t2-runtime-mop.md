@@ -52,3 +52,18 @@
   until an existing suite test caught it.
 - Test-writing trap: subs named `s`, `m`, `y`, `q`, `tr` are operators.
 - T2 takes 86 of 430 corpus programs outright (before slice 12).
+
+## Slice 13: array references (chalk 5cac8982)
+- First full check: DIFFERS 1, 6 suite fails, 5 wrong probes. Each was a
+  shape T2 now reached for the first time:
+  - `my @p = @$h` is PostfixDeref{copy=1}: aliased instead of copied.
+  - PostfixDeref{sigil=$} (`${\ ...}`) taken as an array deref.
+  - A read kept across a CALL that stores through a reference: arrays
+    can alias now, so calls need reads_before too (9 for 1).
+  - Refs as str/num stopped; perl gives ARRAY(0x..) / the address.
+- Lesson: every new aggregate kind reopens read ordering (stores, calls)
+  and every operator's handling of the new tag. Grep the runtime switches.
+- Lesson: hand-counted [N x i8] sizes were wrong 4 times; a test now
+  recounts them (t2-runtime-strings-are-sized.t).
+- Reads through a reference stay where they are and are refused if still
+  pending at a store/call (_through_ref); see slice 5's guard lesson.
