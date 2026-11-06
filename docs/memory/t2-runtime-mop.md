@@ -107,3 +107,15 @@
   GAPs); now tested (t2-never-mutates-the-graph.t). A bare `grep {...}
   @pos` inside an || chain swallows the rest of the condition.
 - T2 takes ~124+ of 430 outright; census 412 throughout slices 6-17.
+
+## Slice 18: the class feature (chalk a7c137e0)
+- perigrin chose it next. Methods join the run-time MOP's stashes; `new`
+  is built at its call (fields root-first under :isa, then ADJUST).
+- Traps: FieldAccess.field_index is perl's (a child's after its parents'),
+  the MOP's fieldix starts at 0 per class; B::SoN stamps array fields
+  Scalar; a class named B collides with perl's B:: (test bug); `sort { $a
+  <=> $b }` inside a Builder method uses the builder for $b.
+- Wrong answers caught by the full check: `return values %h` in list
+  context (246), then `return scalar(keys %h)` over-applied.
+- Pre-existing Context.pm miscompile (TODO): a missing required :param
+  makes the object where perl dies.
