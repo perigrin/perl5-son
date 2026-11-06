@@ -76,3 +76,11 @@
   folded ?:), so the arm's end block must be re-read after it.
 - Lesson: the full check is the only thing that catches these; each slice
   so far needed one or two rounds. Budget for it.
+
+## Slice 15: package scalars (chalk 56105fd3)
+- Read ordering bit three more times: exists not a memory read; EntryWrite
+  and Delete not versions (two slice-14 wrong answers shipped, found by a
+  probe of slice 15); B::SoN's version-less read of a write's target node.
+- The cause is structural: _memory_input and _is_version are hand lists.
+  Next: make them generic (any input that is a version; every statement
+  on the chain a version) so a new store kind cannot be missed.
