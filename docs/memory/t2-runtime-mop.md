@@ -184,3 +184,14 @@
   only those called by name. Code values are {fn, env}: a trampoline
   (t2_stash_tramp) carries a stash method's pointer in env.
 - Not yet: VERSION, `push @Pkg::ISA` (assignment works).
+
+## Slice 25: @ISA is the MOP's parent list (chalk)
+- perigrin suggested a tied @ISA; built as a view instead (the variable
+  resolves to the stash's @ISA array, t2_mop_isa_arr), which perigrin
+  accepted. Their framing: a tie swaps a container's default metaclass
+  hooks for a new set -- @ISA is one container with a built-in metaobject.
+  `tie` itself is queued after VERSION.
+- unshift added for any array (t2_aunshift).
+- Trap: t/bootstrap/no-tie-in-the-subset.t greps lib/ for the tie/tied
+  operators -- a comment saying "a tied @ISA" fails it. That test guards
+  chalk's own source (the bootstrap subset), not what T2 compiles.
