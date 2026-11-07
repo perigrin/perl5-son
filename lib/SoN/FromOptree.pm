@@ -2832,6 +2832,11 @@ class SoN::FromOptree 0.01 {
                 $op = $op->next;
                 next;
             }
+            if ($name eq 'method_redir' || $name eq 'method_redir_super') {
+                _handle_method_redir($cv, $op, $ctx);
+                $op = $op->next;
+                next;
+            }
 
             # Handle return / leavesub: record an exit and STOP this linear
             # path. The final single Return is built from @exits below (plus
@@ -4652,6 +4657,26 @@ class SoN::FromOptree 0.01 {
         return;
     }
 
+    # `$o->A::m()` (method_redir): the method name qualified by its package,
+    # `A::m`, from which perl starts the lookup; `$o->A::SUPER::m()`
+    # (method_redir_super) is `A::SUPER::m`. The package is the op's rclass
+    # (on a threaded perl a pad index, as the name is). It had no handler,
+    # so the Call was a direct one named `unknown`.
+    sub _handle_method_redir ($cv, $op, $ctx) {
+        _handle_method_named($cv, $op, $ctx);
+        return if $ctx->{pending_method} eq 'unknown';
+        my $rc = $op->rclass;
+        unless (ref $rc) {
+            my $padl = $cv->PADLIST;
+            $rc = $$padl ? $padl->ARRAYelt(1)->ARRAYelt($rc) : undef;
+        }
+        my $pkg = ref $rc && $$rc && $rc->can('PV') ? $rc->PV : undef;
+        $ctx->{pending_method} = defined $pkg
+            ? $pkg . ( $op->name eq 'method_redir_super' ? '::SUPER::' : '::' ) . $ctx->{pending_method}
+            : 'unknown';
+        return;
+    }
+
     sub _handle_method_named ($cv, $op, $ctx) {
         my $meth_sv = $op->meth_sv;
         if ((!$$meth_sv || $meth_sv->isa('B::SPECIAL')) && $op->targ) {
@@ -5446,6 +5471,10 @@ class SoN::FromOptree 0.01 {
         }
         if ($name eq 'method_super') {
             _handle_method_super($cv, $op, $ctx);
+            return ($op->next, 'handled');
+        }
+        if ($name eq 'method_redir' || $name eq 'method_redir_super') {
+            _handle_method_redir($cv, $op, $ctx);
             return ($op->next, 'handled');
         }
         # THE DYNAMIC FORM TAKES ITS NAME FROM THE STACK. perl has two ops:
