@@ -5128,7 +5128,11 @@ class SoN::FromOptree 0.01 {
 
     sub _step ($cv, $op, $sim, $factory, $opmap, $ctx) {
         # (not a store's target: `$a[1] = 1` is a STORE, not a FETCH)
-        local $SoN::IR::NodeFactory::ON_VALUE = %TIED_AGG && !( $op->flags & B::OPf_MOD() ) ? sub ($n) { _pin_tied_read($sim, $n) } : undef;
+        # (NOR IN A BRANCH ARM, as a $@ read is not: a ternary's arms merge no
+        # control, and pinned there the read forked the chain -- "a control
+        # node with 2 successors". shortcut: an if arm's tied read floats, as
+        # before; merge a select's control to pin there too.)
+        local $SoN::IR::NodeFactory::ON_VALUE = %TIED_AGG && !( $op->flags & B::OPf_MOD() ) && ( $ctx->{mode} // '' ) ne 'branch' ? sub ($n) { _pin_tied_read($sim, $n) } : undef;
         my $name = $op->name;
         my $mode = $ctx->{mode};
 
@@ -10033,7 +10037,7 @@ class SoN::FromOptree 0.01 {
             # what remains on the stack, and for the plain assignment the arg
             # pop has already taken it (measured: args=EntryDef, and the stack
             # top was an unrelated Constant from the previous statement).
-            my $pkg_target;
+            my ($pkg_target, $elem_dest);
             if ($op->flags & 64) {   # OPf_STACKED
                 if ($op->private & 0x40) {       # APPEND: still on the stack
                     $pkg_target = $sim->pop_node if $sim->stack_depth;
@@ -10048,9 +10052,40 @@ class SoN::FromOptree 0.01 {
                     # while the print showed Concat("", "\n").
                     $pkg_target = $args[0];
                 }
+                # (an APPENDED element is kept: the append branch below stores it)
+                $elem_dest = $pkg_target
+                    if ($op->private & 0x40) && $pkg_target && $pkg_target->isa('SoN::IR::Node::Subscript');
                 $pkg_target = undef
                     unless $pkg_target
                         && $pkg_target->isa('SoN::IR::Node::EntryDef');
+            }
+
+            # AN ELEMENT DESTINATION, APPENDED TO (`$h->{log} .= "F$k"`, APPEND).
+            # perl pushes the element FIRST, below the operands, as an lvalue:
+            # the stacked-destination pop above took it ($elem_dest). The value is the element's current
+            # contents -- read at this memory, as `$a[0] .= $k`'s concat reads
+            # it -- then the strings and operands in order, stored back as
+            # sassign stores an element.
+            if ($elem_dest) {
+                my $dest = $elem_dest;
+                my @din = $dest->inputs->@*;
+                my $old = $factory->make('Subscript',
+                    inputs => [ @din[0, 1], ( defined $sim->memory ? ($sim->memory) : () ) ],
+                    kind   => $dest->kind);
+                # (`.=` reads an undefined element as "", without a warning)
+                my $val = _coerce_to_str($factory, $factory->make('DefinedOr', inputs => [$old, $mkstr->('')]));
+                $val = $concat->($val, $mkstr->($seg[0])) if defined $seg[0];
+                for my $i (0 .. $#args) {
+                    $val = $concat->($val, _coerce_to_str($factory, $args[$i]));
+                    $val = $concat->($val, $mkstr->($seg[$i + 1])) if defined $seg[$i + 1];
+                }
+                _note_literal_mutation($dest);
+                my $store = $factory->make('Assign', inputs => [$dest, $val]);
+                $store->set_control_in($sim->control);
+                $sim->set_control($store);
+                $sim->set_memory($store) if defined $sim->memory;
+                $sim->push_node($val) unless ($op->flags & 3) == 1;   # void
+                return ($op->next, 'handled');
             }
 
             # A FIELD TARGET IS A FIELD STORE, not a pad rebind -- the same
@@ -18307,6 +18342,7 @@ class SoN::FromOptree 0.01 {
     }
 
     sub _handle_cond_expr ($cv, $op, $sim, $factory, $opmap, $visited, $exits = undef, $loop = undef) {
+        local $SoN::IR::NodeFactory::ON_VALUE;   # (a select merges no control: see _step)
         # A LIST-context ternary (`print $c ? "y" : "n"`) whose arms each produce
         # exactly ONE value is the same select shape as a scalar-context ternary:
         # each arm pops one value and the TernaryExpr picks between them. The
@@ -19257,6 +19293,7 @@ class SoN::FromOptree 0.01 {
 
     sub _short_circuit_as_branch ($cv, $op, $sim, $factory, $opmap, $visited,
                                   $loop_node, $break_projs, $in_loop, $exits = undef) {
+        local $SoN::IR::NodeFactory::ON_VALUE;   # (a select merges no control: see _step)
         my $name = $op->name;
         my $lhs  = $sim->pop_node;
         my $base = $sim->stack_depth;

@@ -73,16 +73,19 @@ round_trips(q{my %h = (a => 1); for my $c (1, 0) { my $y = $h{a}; my $x = $c ? (
 # STORE which keys alias, and a refalias binds two keys to one scalar, so the
 # key-disjointness exemption holds only for a lexical hash used by nothing but
 # its element reads and stores.
+# A TIED HASH'S READS ARE NOW ORDERED as the calls they are (B::SoN pins
+# each, a memory version): the case-folding and key-ignoring ties render, and
+# give perl's answer, where they were refused.
 round_trips(q{my %h = (a => 0); my $x = ""; for my $i (1..3) { my $y = $h{a}; $h{b} = $i; $x .= $y } print "$x\n";},
     'in a loop, a plain hash, a straight-line store to another key');
 my $ci = q{package CI; sub TIEHASH { bless {}, shift } sub STORE { $_[0]{lc $_[1]} = $_[2] } sub FETCH { $_[0]{lc $_[1]} } package main; };
 my $loop_gap = qr/GAP: an element read in a loop is spelled after a store to its aggregate/;
-render_refuses($ci . q{tie my %h, 'CI'; $h{a} = 0; my $x = ""; for my $i (1..3) { my $y = $h{a}; $h{A} = $i; $x .= $y } print "$x\n";},
-    $loop_gap, 'a case-folding tie, keys a and A');
-render_refuses($ci . q{tie my %h, 'CI'; $h{a} = 0; my $x = 0; for my $i (1..2) { $x += $h{a}; $h{A} = $i } print "$x\n";},
-    $loop_gap, 'a case-folding tie, an accumulator');
-render_refuses(q{package K; sub TIEHASH { bless [0], shift } sub STORE { $_[0][0] = $_[2] } sub FETCH { $_[0][0] } package main; tie my %h, 'K'; my $x = 0; for my $i (1..2) { $x += $h{a}; $h{b} = $i } print "$x\n";},
-    $loop_gap, 'a tie that ignores the key');
+round_trips($ci . q{tie my %h, 'CI'; $h{a} = 0; my $x = ""; for my $i (1..3) { my $y = $h{a}; $h{A} = $i; $x .= $y } print "$x\n";},
+    'a case-folding tie, keys a and A');
+round_trips($ci . q{tie my %h, 'CI'; $h{a} = 0; my $x = 0; for my $i (1..2) { $x += $h{a}; $h{A} = $i } print "$x\n";},
+    'a case-folding tie, an accumulator');
+round_trips(q{package K; sub TIEHASH { bless [0], shift } sub STORE { $_[0][0] = $_[2] } sub FETCH { $_[0][0] } package main; tie my %h, 'K'; my $x = 0; for my $i (1..2) { $x += $h{a}; $h{b} = $i } print "$x\n";},
+    'a tie that ignores the key');
 render_refuses($ci . q{sub t { tie %{$_[0]}, 'CI' } my %h; t(\%h); $h{a} = 0; my $x = ""; for my $i (1..3) { my $y = $h{a}; $h{A} = $i; $x .= $y } print "$x\n";},
     $loop_gap, 'tied through a reference');
 render_refuses($ci . q{my %h; sub t { tie %h, 'CI' } t(); $h{a} = 0; my $x = ""; for my $i (1..3) { my $y = $h{a}; $h{A} = $i; $x .= $y } print "$x\n";},
