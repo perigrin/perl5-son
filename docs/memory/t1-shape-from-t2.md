@@ -30,7 +30,6 @@ test there that failed first.
 | A select (ternary) merges control when an arm pins | tie (27) | open |
 
 ## T2/Context.pm side (not T1)
-- `$_[N]` binder (Context::_collect_positional_arg_reads) keeps one node per
-  index and refuses a gap (reads $_[1], not $_[0]).
+- `$_[N]` binder: fixed in T2 (every read binds to its argument; an unread position is a placeholder).
 - `my ($c, @x) = @_` slurpy; `@_` read as a list after a shift.
 - A hash read whose version precedes a package store but used after it.
