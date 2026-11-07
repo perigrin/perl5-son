@@ -32,6 +32,9 @@ test there that failed first.
 ## T2/Context.pm side (not T1)
 - `$_[N]` binder: fixed in T2 (every read binds to its argument; an unread position is a placeholder).
 - Slurpy tails: fixed in T2 -- `my ($c, @x) = @_` and `sub f ($c, @x)` alike (perigrin: identical) take @_ as one array; the slurpy target a copy from k. `@_` after shifts already worked.
-- `sort` over a list value (`sort keys %o`) is refused by T2: "a value stamped Array (Call)".
+- `sort` (string/numeric, either order) and list `reverse`: fixed in T2. A sort with its own comparator block is still refused.
 - A hash read whose version precedes a package store but used after it.
-- `keys %$r` (keys of a hash through a reference) is refused by T2: "a value stamped Hash (PostfixDeref)".
+- `keys %$r` / `values %$r`: fixed in T2 (an undef reference reads as an empty hash). A store through `%$r` (autovivify) still refused.
+
+## Flakes to watch
+- pvm 176 (a local hash element, chalk-found-gaps.md) was GAP once in a census (Context: "a store to an element while a read through a reference waits") and ROUNDTRIP in 52 reruns: a rare order dependence, not yet found.
