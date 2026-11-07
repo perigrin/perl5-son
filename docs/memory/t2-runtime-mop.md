@@ -195,3 +195,12 @@
 - Trap: t/bootstrap/no-tie-in-the-subset.t greps lib/ for the tie/tied
   operators -- a comment saying "a tied @ISA" fails it. That test guards
   chalk's own source (the bootstrap subset), not what T2 compiles.
+
+## Slice 26: VERSION (chalk)
+- Each package's $VERSION global is registered in its stash ("$VERSION",
+  a pointer) after the classes are made (making a class's stash empties
+  it). t2_vnum: decimal via numify, dotted (2+ dots or a leading v) part
+  by part in thousandths. Wrapper dies read the site from t2_call_at,
+  which t2_mresolve stores.
+- Gap: a package with no subs and no $VERSION has no stash, so it gets
+  "defines neither" where perl says "does not define".
