@@ -154,3 +154,15 @@
   method calls (not `new`), divide/modulo, any scalar deref (even dead:
   `my $v = $$x` unused still dies), eval in list/caller context.
 - `$@` starts ""; a normal eval end sets it ""; `die ""` is "Died at ...".
+
+## Slice 22: perl's own dies (chalk, producer 0c978df)
+- t2_div/t2_mod raise through t2_die_unwind; the builder checks the dying
+  flag after them as after a call. Trap: close_eval popped the frame
+  before making the body's value, so a divide there saw no open eval.
+- t2_mresolve(invocant, name, at) replaces classof + mfind: perl's
+  messages for undef / unblessed / empty / no method / package not loaded
+  ("perhaps you forgot to load"). Method Calls carry file/line from B::SoN.
+- Trap: un-refusing undefined method names let `Derived::SUPER::hi`
+  through (pvm 056); qualified names stay refused.
+- Mishap: `perl -0pi` that reads another file with <> inside the loop
+  empties the target. Use a script that opens files itself.
