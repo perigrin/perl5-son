@@ -636,6 +636,9 @@ class SoN::FromOptree 0.01 {
     # one is a method call (FETCH, FETCHSIZE, FIRSTKEY, ...) that may change
     # anything, so it is ordered as a call is: see _pin_tied_read.
     our %TIED_AGG;
+    # $ARM_PINS: the arm being walked has its own Proj (an if's), so a read
+    # may be pinned there; a select's arm has none.
+    our $ARM_PINS = 0;
     sub _tied_aggregates ($cv, $root) {
         my %t;
         return \%t unless $root && $$root;
@@ -5132,7 +5135,7 @@ class SoN::FromOptree 0.01 {
         # control, and pinned there the read forked the chain -- "a control
         # node with 2 successors". shortcut: an if arm's tied read floats, as
         # before; merge a select's control to pin there too.)
-        local $SoN::IR::NodeFactory::ON_VALUE = %TIED_AGG && !( $op->flags & B::OPf_MOD() ) && ( $ctx->{mode} // '' ) ne 'branch' ? sub ($n) { _pin_tied_read($sim, $n) } : undef;
+        local $SoN::IR::NodeFactory::ON_VALUE = %TIED_AGG && !( $op->flags & B::OPf_MOD() ) && ( ( $ctx->{mode} // '' ) ne 'branch' || $ARM_PINS ) ? sub ($n) { _pin_tied_read($sim, $n) } : undef;
         my $name = $op->name;
         my $mode = $ctx->{mode};
 
@@ -10748,10 +10751,6 @@ class SoN::FromOptree 0.01 {
                     # 2 3, emitted 1 -- refused, until now).
                     if (($TIED_AGG{$key} || $is_pad && _reference_can_see_assign($target->targ))
                             && !_aassign_introduces($op)) {
-                        # (IN AN ARM OF AN IF IN A LOOP the pinned store forked the
-                        # chain -- "a control node with 2 successors": refused there)
-                        die "GAP: a whole assign in place, in an arm of a branch in a loop, is not yet lowered\n"
-                            if ( $ctx->{mode} // '' ) eq 'branch' && @LOOP_STACK;
                         my $container = $sim->lookup($key) // _make_pad_or_field($cv, $target->targ, $factory);
                         my $list = $factory->make(($sigil eq '@' ? 'ArrayLiteral' : 'HashLiteral'),
                             inputs => [$rhs->@*],
@@ -17183,6 +17182,13 @@ class SoN::FromOptree 0.01 {
             return 1 if $ADVANCES_CONTROL_OP{$name};
             return 1 if $name eq 'sort' && _sort_runs_comparator($op);
             return 1 if $name eq 'reverse' && ($op->private & 8);   # OPpREVERSE_INPLACE
+            # AN ARM THAT PINS -- a read of a tied aggregate (a call), a whole assign
+            # made in place (a store into a tied or referenced container) -- needs
+            # its own control: a select merges none, and the pin forked the chain.
+            # (Over-approximated where the aggregate is not named on the op.)
+            return 1 if %TIED_AGG && ( $name =~ /\A(?:padav|padhv|aelemfast_lex)\z/ && $TIED_AGG{ $op->targ }
+                                  || $name =~ /\A(?:multideref|rv2av|rv2hv)\z/ );
+            return 1 if $name eq 'aassign' && ( %TIED_AGG || $REFERENCED_SLOTS && %$REFERENCED_SLOTS );
         }
         return 0;
     }
@@ -18379,6 +18385,8 @@ class SoN::FromOptree 0.01 {
             # in that arm) and its memory advance is per-arm. The scalar/value
             # path passes no control and keeps the snapshot's pre-branch control.
             $arm_sim->set_control($arm_control) if defined $arm_control;
+            # (ON ITS OWN Proj an arm may pin: its control merges at a Region)
+            local $ARM_PINS = defined $arm_control ? 1 : 0;
             # A local exit accumulator so an explicit `return` in the arm is
             # DETECTED (with none, the walk stepped through it and silently
             # dropped the exit -- the function then returned the merge).

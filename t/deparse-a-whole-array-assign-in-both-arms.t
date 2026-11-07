@@ -94,10 +94,8 @@ for my $c (@cases) {
 # A REFERENCE SEES EVERY VERSION. `\@e` is one container whatever is later
 # assigned into it: the assign is a store into that container (it was refused,
 # the reference keeping the first contents -- perl `2 3`, emitted `1`).
-# IN AN ARM OF AN IF IN A LOOP the store forked the control chain: refused there.
-graph_of(q{my @e; my $r = \@e; for my $k (0,1) { if ($k) { @e = (0,4) } else { @e = (9) } } print "@$r\n";});
-like producer_stderr(), qr/GAP: a whole assign in place, in an arm of a branch in a loop/,
-    'refused: a whole assign in place in a loop arm';
+# IN AN ARM OF AN IF IN A LOOP too: the arm, having a store, takes the control path.
+round_trips(q{my @e; my $r = \@e; for my $k (0,1) { if ($k) { @e = (0,4) } else { @e = (9) } } print "@$r\n";}, 'a whole assign in place in a loop arm');
 for my $src (
     q{my @e = (1); my $r = \@e; @e = (2,3); print "@$r\n";},
     # Taken under a branch, the reference is lowered out of execution order,
