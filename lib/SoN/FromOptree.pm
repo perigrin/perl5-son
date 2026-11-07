@@ -10738,10 +10738,22 @@ class SoN::FromOptree 0.01 {
                     # already lowered (exec order), or, in a loop, one a
                     # later statement of the body takes for the next pass.
                     # Taken after the last assign, it sees that version only.
-                    # A TIED ONE takes CLEAR and a STORE per element, not a new
-                    # aggregate: refused until the assign is made in place.
-                    die "GAP: a whole assign to a tied aggregate is not yet lowered -- perl calls CLEAR and STORE on it\n"
-                        if $TIED_AGG{$key} && !_aassign_introduces($op);
+                    # A TIED ONE IS ASSIGNED IN PLACE: perl calls CLEAR, then STORE
+                    # per element, on the aggregate the tie named -- a new value
+                    # would leave the tie behind. The store is into the variable's
+                    # container (its binding, unchanged); the list is the value.
+                    if ($TIED_AGG{$key} && !_aassign_introduces($op)) {
+                        my $container = $sim->lookup($key) // _make_pad_or_field($cv, $target->targ, $factory);
+                        my $list = $factory->make(($sigil eq '@' ? 'ArrayLiteral' : 'HashLiteral'),
+                            inputs => [$rhs->@*],
+                            stamp  => SoN::IR::Stamp->new(type => ($sigil eq '@' ? 'Array' : 'Hash')));
+                        my $store = $factory->make('Assign', inputs => [$container, $list]);
+                        $store->set_control_in($sim->control);
+                        $sim->set_control($store);
+                        $sim->set_memory($store) if defined $sim->memory;
+                        $sim->push_node($container) unless ($op->flags & 3) == 1;   # void
+                        return ($op->next, 'handled');
+                    }
                     die "GAP: a whole assign to a pad aggregate a reference was"
                       . " taken to is not yet lowered -- the reference would"
                       . " keep the old contents\n"

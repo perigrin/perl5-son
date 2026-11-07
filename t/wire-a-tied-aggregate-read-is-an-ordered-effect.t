@@ -39,8 +39,9 @@ my $TA = q{package TA; sub TIEARRAY { bless {}, shift } sub FETCH { "e" } sub FE
     my ($l) = grep { $_->{op} eq 'EntryDef' && ( $_->{fields}{symbol} // '' ) eq 'L' } values %$n;
     is($l->{inputs}[0], $read->{id}, 'a later package read is at the FETCH\'s memory version');
 }
-{   # a whole assign to a tied hash is refused by name (CLEAR and STOREs, not a new hash)
+{   # a whole assign to a tied hash is a store into it (CLEAR and STOREs), not refused --
+    # see wire-a-whole-assign-to-a-tied-aggregate-is-in-place.t
     my (undef, $err) = graph(q{package TH; sub TIEHASH { bless {}, shift } package main; my %h; tie %h, "TH"; %h = (x => 1); print "ok\n";});
-    like($err, qr/GAP: a whole assign to a tied aggregate/, 'a list assigned to a tied hash is refused by name');
+    unlike($err, qr/GAP|skipped/, 'a list assigned to a tied hash is translated, in place');
 }
 done_testing;
