@@ -174,3 +174,13 @@
 - Producer: method_redir / method_redir_super had no handler (a direct
   Call named `unknown`); rclass is a pad index on threaded perl. Dropped
   from every-op-has-a-disposition's allowlist (the ratchet catches it).
+
+## Slice 24: UNIVERSAL (chalk)
+- perigrin: "put them in a UNIVERSAL class that is the root of
+  inheritance; isa is method isa ($other) { $self isa $other }". Done so:
+  t2_universal_setup makes the stash; t2_mfind_u falls back to it.
+- Traps: runtime wrappers must honour @t2_want (t2_list_of) or a list
+  context reads past the value; `can` needs every sub in the stash, not
+  only those called by name. Code values are {fn, env}: a trampoline
+  (t2_stash_tramp) carries a stash method's pointer in env.
+- Not yet: VERSION, `push @Pkg::ISA` (assignment works).
