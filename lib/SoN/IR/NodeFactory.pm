@@ -478,6 +478,9 @@ class SoN::IR::NodeFactory {
             $node->set_eval_id($SoN::FromOptree::EVAL_ID)
                 if $op_name eq 'Call' && defined $SoN::FromOptree::EVAL_ID
                 && ( $args{dispatch_kind} // '' ) ne 'builtin';
+            $node->set_site($SoN::IR::NodeFactory::SITE->@*)
+                if $op_name eq 'Call' && ( $args{dispatch_kind} // '' ) eq 'method'
+                && $SoN::IR::NodeFactory::SITE;
             $cache{$id} = $node;
             return $node;
         }
