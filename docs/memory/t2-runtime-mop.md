@@ -166,3 +166,11 @@
   through (pvm 056); qualified names stay refused.
 - Mishap: `perl -0pi` that reads another file with <> inside the loop
   empties the target. Use a script that opens files itself.
+
+## Slice 23: qualified method names (chalk 94f3a9e5, producer 6ed2b9a)
+- perigrin: "include other qualified names too". `Pkg::m` starts at Pkg,
+  `Pkg::SUPER::m` at Pkg's @ISA (B::SoN puts the compiling package in
+  front of SUPER::). t2_mresolve(inv, m, at, start, mode); t2_mfind1 skip.
+- Producer: method_redir / method_redir_super had no handler (a direct
+  Call named `unknown`); rclass is a pad index on threaded perl. Dropped
+  from every-op-has-a-disposition's allowlist (the ratchet catches it).
