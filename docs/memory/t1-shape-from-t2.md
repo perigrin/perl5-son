@@ -31,6 +31,7 @@ test there that failed first.
 
 ## T2/Context.pm side (not T1)
 - `$_[N]` binder: fixed in T2 (every read binds to its argument; an unread position is a placeholder).
-- `my ($c, @x) = @_` slurpy; `@_` read as a list after a shift.
+- Slurpy tails: fixed in T2 -- `my ($c, @x) = @_` and `sub f ($c, @x)` alike (perigrin: identical) take @_ as one array; the slurpy target a copy from k. `@_` after shifts already worked.
+- `sort` over a list value (`sort keys %o`) is refused by T2: "a value stamped Array (Call)".
 - A hash read whose version precedes a package store but used after it.
 - `keys %$r` (keys of a hash through a reference) is refused by T2: "a value stamped Hash (PostfixDeref)".
