@@ -631,6 +631,61 @@ class SoN::FromOptree 0.01 {
         return $CELLS ? ( cells => $CELLS->{cells}, cell_params => $CELLS->{cell_params},
                           cells_written => $CELLS->{cells_written} ) : ();
     }
+    # %TIED_AGG: the aggregates a `tie` in this sub names -- a pad slot by its
+    # targ, a package aggregate by its stash key ("@main::a"). Every read of
+    # one is a method call (FETCH, FETCHSIZE, FIRSTKEY, ...) that may change
+    # anything, so it is ordered as a call is: see _pin_tied_read.
+    our %TIED_AGG;
+    sub _tied_aggregates ($cv, $root) {
+        my %t;
+        return \%t unless $root && $$root;
+        my @ops = _subtree_ops($root);
+        for my $op (grep { $_->name eq 'tie' && ( $_->flags & B::OPf_KIDS() ) } @ops) {
+            my ($var) = grep { $_->name ne 'pushmark' }
+                map { my @k; for (my $k = $op->first; $$k; $k = $k->sibling) { push @k, $k } @k } $op;
+            next unless $var;
+            my $n = $var->name;
+            if ($n =~ /\Apad[ah]v\z/ && $var->targ) { $t{ $var->targ } = 1; next }
+            if ($n =~ /\Arv2([ah])v\z/) {
+                my $g = $var->can('first') ? $var->first : undef;
+                if ($g && $$g && $g->name eq 'gv') {
+                    my $gv = _op_gv($cv, $g);
+                    $t{ ( $1 eq 'a' ? '@' : '%' ) . $gv->STASH->NAME . '::' . $gv->NAME } = 1 if $gv && $$gv;
+                    next;
+                }
+                die "GAP: a tie of an aggregate through a reference is not yet lowered -- its reads could not be ordered as the calls they are\n";
+            }
+        }
+        # A REFERENCE TO ONE reads it where nothing here can order the calls.
+        for my $op (grep { $_->name =~ /\A(?:s?refgen)\z/ } @ops) {
+            for my $k (grep { $$_ } map { my @k; my $c = $_->first; $c = $c->first while $$c && $c->name eq 'null' && ${ $c->first }; for (; $$c; $c = $c->sibling) { push @k, $c } @k } grep { $_->can('first') && ${ $_->first } } $op) {
+                die "GAP: a reference to a tied aggregate is not yet lowered -- reads through it could not be ordered as the calls they are\n"
+                    if $k->name =~ /\Apad[ah]v\z/ && $t{ $k->targ };
+            }
+        }
+        return \%t;
+    }
+
+    # _pin_tied_read($sim, $node): a value node that reads a tied aggregate is
+    # a call -- on the control chain, and the memory version after it (FETCH may
+    # write anything a later read sees; FETCHSIZE answers anew each pass).
+    sub _pin_tied_read ($sim, $node) {
+        return unless %TIED_AGG && $node->can('inputs');
+        return if $node->operation =~ /\A(?:PadAccess|ArrayLiteral|HashLiteral|EntryDef|Constant|MemStart|Phi|Delete)\z/;   # (a delete the walk orders itself, as a store)
+        return if defined $node->control_in;
+        return unless grep { _names_tied($_) } grep { blessed($_) } $node->inputs->@*;
+        $node->set_control_in($sim->control);
+        $sim->set_control($node);
+        $sim->set_memory($node) if defined $sim->memory;
+        return;
+    }
+    sub _names_tied ($n) {
+        my $op = $n->operation;
+        return $TIED_AGG{ $n->targ } if $op eq 'PadAccess' && $n->can('targ') && defined $n->targ && ( $n->sigil // '' ) =~ /\A[\@%]\z/;
+        return $TIED_AGG{ $n->sigil . $n->package . '::' . $n->symbol } if $op eq 'EntryDef' && $n->can('package') && defined $n->package;
+        return 0;
+    }
+
     sub _pad_aggregate_renames ($cv) {
         my %rename;
         my $names = eval { $cv->PADLIST->ARRAYelt(0) } or return \%rename;
@@ -1524,13 +1579,30 @@ class SoN::FromOptree 0.01 {
 
         # EVERY SUB, not just the program body -- the writer is normally in a
         # sub and the reader in the program, which is the whole point.
-        for my $name (sort keys %main::) {
-            next unless $name =~ /^[A-Za-z_]\w*$/;
-            my $glob = $main::{$name};
-            next unless ref(\$glob) eq 'GLOB';
-            my $code = *{$glob}{CODE} or next;
+        # IN EVERY PACKAGE the program's own file defines, not main's alone: a
+        # tie class's FETCH logging to $main::L wrote it unseen, and a read
+        # after the FETCH was the read before it.
+        my $file = $0;   # (the program perl compiled: its subs' FILE)
+        my @stashes = ('main::');
+        my %seen_stash;
+        my @subs;
+        while (defined( my $st = shift @stashes )) {
+            next if $seen_stash{$st}++;
+            no strict 'refs';
+            for my $name (sort keys %{$st}) {
+                if ($name =~ /\A[A-Za-z_]\w*::\z/ && $st ne 'main::' . $name) { push @stashes, $st eq 'main::' ? $name : $st . $name; next }
+                next unless $name =~ /^[A-Za-z_]\w*$/;
+                my $glob = ${$st}{$name};
+                next unless ref(\$glob) eq 'GLOB';
+                my $code = *{$glob}{CODE} or next;
+                push @subs, [ $st, $code ];
+            }
+        }
+        for my $pair (@subs) {
+            my ($st, $code) = @$pair;
             my $sub_cv = eval { B::svref_2object($code) } or next;
             next unless ref($sub_cv) && $sub_cv->isa('B::CV');
+            next if $st ne 'main::' && !( defined $file && ( eval { $sub_cv->FILE } // '' ) eq $file );
             my $sub_root = eval { $sub_cv->ROOT };
             next unless $sub_root && $$sub_root;
             $visit->($sub_root, $sub_cv, 0);
@@ -1917,6 +1989,7 @@ class SoN::FromOptree 0.01 {
         local $REFERENCED_SLOTS = {};
         local $MUTATED_SLOTS = _mutated_aggregate_slots($cv,
             defined $program_root ? B::main_root() : undef);
+        local %TIED_AGG = _tied_aggregates($cv, defined $program_root ? B::main_root() : eval { $cv->ROOT })->%*;
 
         # A FLIP-FLOP'S STATE SLOT STARTS UNDEF, as every pad slot does, and
         # is bound so here: a loop's scout finds carried slots by comparing
@@ -4193,7 +4266,9 @@ class SoN::FromOptree 0.01 {
     # no node: it is these same ops, already run before B::SoN is invoked,
     # leaving nothing in the optree. Only the RUNTIME spelling reaches us, and
     # then the `import` half is an ordinary method call that already lowers.
-    my %GLOBAL_STATE_BUILTIN = map { $_ => 1 } qw(require dofile);
+    # (tie and untie too: they change what every later access of the container
+    # does -- a count read across an untie was the count before it.)
+    my %GLOBAL_STATE_BUILTIN = map { $_ => 1 } qw(require dofile tie untie);
 
     # A HANDLE'S STATE IS MEMORY: open, a read, eof and close change or
     # observe it, so each advances the memory chain as a global-state op
@@ -5052,6 +5127,8 @@ class SoN::FromOptree 0.01 {
     }
 
     sub _step ($cv, $op, $sim, $factory, $opmap, $ctx) {
+        # (not a store's target: `$a[1] = 1` is a STORE, not a FETCH)
+        local $SoN::IR::NodeFactory::ON_VALUE = %TIED_AGG && !( $op->flags & B::OPf_MOD() ) ? sub ($n) { _pin_tied_read($sim, $n) } : undef;
         my $name = $op->name;
         my $mode = $ctx->{mode};
 
@@ -10626,6 +10703,10 @@ class SoN::FromOptree 0.01 {
                     # already lowered (exec order), or, in a loop, one a
                     # later statement of the body takes for the next pass.
                     # Taken after the last assign, it sees that version only.
+                    # A TIED ONE takes CLEAR and a STORE per element, not a new
+                    # aggregate: refused until the assign is made in place.
+                    die "GAP: a whole assign to a tied aggregate is not yet lowered -- perl calls CLEAR and STORE on it\n"
+                        if $TIED_AGG{$key} && !_aassign_introduces($op);
                     die "GAP: a whole assign to a pad aggregate a reference was"
                       . " taken to is not yet lowered -- the reference would"
                       . " keep the old contents\n"
@@ -11204,6 +11285,9 @@ class SoN::FromOptree 0.01 {
                         # taking this branch must not change the answer.
                         do { my $st = _context_builtin_stamp($op, $name);
                              defined $st ? (stamp => $st) : () });
+                    # (a TIED hash's keys and values call FIRSTKEY, NEXTKEY and FETCH:
+                    # ordered as each is)
+                    $mutates = 1 if %TIED_AGG && grep { blessed($_) && _names_tied($_) } @inputs;
                     if ($mutates && defined $sim->control) {
                         $call->set_control_in($sim->control);
                         $sim->set_control($call);
@@ -11864,6 +11948,15 @@ class SoN::FromOptree 0.01 {
                 if ($void_effect_call || $pin_on_control) {
                     $node->set_control_in($sim->control);
                     $sim->set_control($node);
+                }
+                # A BUILTIN READING A TIED AGGREGATE (keys, values, join ...) calls
+                # its methods: ordered as a call, and the memory version after it.
+                if (%TIED_AGG && grep { blessed($_) && _names_tied($_) } @inputs) {
+                    unless ($void_effect_call || $pin_on_control) {
+                        $node->set_control_in($sim->control);
+                        $sim->set_control($node);
+                    }
+                    $sim->set_memory($node) if defined $sim->memory;
                 }
                 _call_memory_barrier($sim, $node, $ctx) if $runs_comparator;
 
@@ -14346,7 +14439,10 @@ class SoN::FromOptree 0.01 {
         # the one this write-back answers.
 
         # The loop bound is the array's element count.
-        my $len = _make_count($factory, $array, $sim);
+        # A TIED ARRAY is counted each pass, in the header (FETCHSIZE before every
+        # element, as perl calls it), and not once before the loop.
+        my $tied = %TIED_AGG && _names_tied($array);
+        my $len = $tied ? undef : _make_count($factory, $array, $sim);
         my $zero = $factory->make('Constant',
             value => 0, const_type => 'integer',
             stamp => SoN::IR::Stamp->new(type => 'Int'));
@@ -14407,13 +14503,15 @@ class SoN::FromOptree 0.01 {
         # A body element store advances memory; seed a header memory-Phi from the
         # pre-loop memory (same as the range form).
         my $mem_phi;
-        if ($SCOUT_MOVED_MEMORY || _body_stores_memory($body_start)) {
+        if ($SCOUT_MOVED_MEMORY || _body_stores_memory($body_start) || $tied) {
             $mem_phi = $factory->make_unique('Phi',
                 inputs => [$sim->memory], region => $loop_node, memory => 1);
             $sim->set_memory($mem_phi);
             # PERL RE-READS THE LENGTH EACH PASS, and a body that moves memory
             # may grow the array -- through a closure, out of sight: counted
             # at entry, `$c->($x)` pushing onto @p ran one pass for four.
+            # (unpinned: the header makes it each pass)
+            local $SoN::IR::NodeFactory::ON_VALUE;
             $len = _make_count($factory, $array, $sim);
         }
         my $pre_body_memory = $sim->memory;

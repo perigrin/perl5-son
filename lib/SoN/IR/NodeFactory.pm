@@ -184,6 +184,9 @@ $SoN::IR::NodeFactory::MADE_MAY_DIE = undef;
 # for a node that names where it dies.
 $SoN::IR::NodeFactory::SITE = undef;
 
+# $ON_VALUE: a hook FromOptree sets per step, given each new value node.
+$SoN::IR::NodeFactory::ON_VALUE = undef;
+
 # _may_die($op, \@inputs) -- a division or modulus by what may be zero, or a
 # reference to an array element (one before the start dies).
 sub SoN::IR::NodeFactory::_may_die ($op, $in) {
@@ -510,6 +513,8 @@ class SoN::IR::NodeFactory {
         my $node = $class->new( id => $hash, %args );
         $self->_register_consumers($node, %args);
         $cache{$hash} = $node;
+        # (a read of a tied aggregate is ordered as a call: FromOptree's hook)
+        $SoN::IR::NodeFactory::ON_VALUE->($node) if $SoN::IR::NodeFactory::ON_VALUE;
         return $node;
     }
 
