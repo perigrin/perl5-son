@@ -10742,7 +10742,16 @@ class SoN::FromOptree 0.01 {
                     # per element, on the aggregate the tie named -- a new value
                     # would leave the tie behind. The store is into the variable's
                     # container (its binding, unchanged); the list is the value.
-                    if ($TIED_AGG{$key} && !_aassign_introduces($op)) {
+                    # SO IS ONE A REFERENCE CAN SEE: `\@e` names the container,
+                    # and a new value per assignment left $r on the old one
+                    # (`my @e = (1); my $r = \@e; @e = (2,3); print "@$r"`: perl
+                    # 2 3, emitted 1 -- refused, until now).
+                    if (($TIED_AGG{$key} || $is_pad && _reference_can_see_assign($target->targ))
+                            && !_aassign_introduces($op)) {
+                        # (IN AN ARM OF AN IF IN A LOOP the pinned store forked the
+                        # chain -- "a control node with 2 successors": refused there)
+                        die "GAP: a whole assign in place, in an arm of a branch in a loop, is not yet lowered\n"
+                            if ( $ctx->{mode} // '' ) eq 'branch' && @LOOP_STACK;
                         my $container = $sim->lookup($key) // _make_pad_or_field($cv, $target->targ, $factory);
                         my $list = $factory->make(($sigil eq '@' ? 'ArrayLiteral' : 'HashLiteral'),
                             inputs => [$rhs->@*],
@@ -10754,11 +10763,6 @@ class SoN::FromOptree 0.01 {
                         $sim->push_node($container) unless ($op->flags & 3) == 1;   # void
                         return ($op->next, 'handled');
                     }
-                    die "GAP: a whole assign to a pad aggregate a reference was"
-                      . " taken to is not yet lowered -- the reference would"
-                      . " keep the old contents\n"
-                        if $is_pad && !_aassign_introduces($op)
-                        && _reference_can_see_assign($target->targ);
                     my $symbol = $is_pad ? $target->symbol : $key;
                     my $node = $factory->make(
                         ($sigil eq '@' ? 'ArrayLiteral' : 'HashLiteral'),

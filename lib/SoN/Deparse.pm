@@ -6841,6 +6841,12 @@ class SoN::Deparse 0.01 {
             # took the element VALUE for a store into the list.
             $t = 1 if @in == 2 && ( $n->{stamp} // '' ) ne 'List'
                 && ( $t == 0 || $t == 2 );
+            # A WHOLE ASSIGN INTO A NAMED AGGREGATE'S CONTAINER (B::SoN, for one a
+            # reference or a tie can see): `@e = (...)`, the literal @e was
+            # declared with as its one target.
+            $t = 1 if @in == 2 && !$t
+                && ( $nodes->{ $in[0] }{op} // '' ) =~ /\A(?:ArrayLiteral|HashLiteral)\z/
+                && defined( ( $nodes->{ $in[0] }{fields} // {} )->{symbol} );
 
             # AN ELEMENT STORE NEEDS A NAMED CONTAINER. `my @a = (1,2,3)`
             # leaves NO variable in the graph -- measured, the array exists

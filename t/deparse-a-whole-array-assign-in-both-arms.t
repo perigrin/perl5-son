@@ -92,12 +92,14 @@ for my $c (@cases) {
 }
 
 # A REFERENCE SEES EVERY VERSION. `\@e` is one container whatever is later
-# assigned into it, and a version per assignment cannot say so -- the
-# reference kept the first contents (perl `2 3`, emitted `1`). Refused until
-# the container is modelled as storage.
+# assigned into it: the assign is a store into that container (it was refused,
+# the reference keeping the first contents -- perl `2 3`, emitted `1`).
+# IN AN ARM OF AN IF IN A LOOP the store forked the control chain: refused there.
+graph_of(q{my @e; my $r = \@e; for my $k (0,1) { if ($k) { @e = (0,4) } else { @e = (9) } } print "@$r\n";});
+like producer_stderr(), qr/GAP: a whole assign in place, in an arm of a branch in a loop/,
+    'refused: a whole assign in place in a loop arm';
 for my $src (
     q{my @e = (1); my $r = \@e; @e = (2,3); print "@$r\n";},
-    q{my @e; my $r = \@e; for my $k (0,1) { if ($k) { @e = (0,4) } else { @e = (9) } } print "@$r\n";},
     # Taken under a branch, the reference is lowered out of execution order,
     # so where it stands against the assign is not known: refused.
     q{my @e = (1); my $r; my $k = shift // 1; if ($k) { $r = \@e } @e = (2); print "@$r\n";},
@@ -105,10 +107,7 @@ for my $src (
     # In a loop, a reference taken later in the body reaches the next pass.
     q{my @e; for my $k (0,1) { @e = ($k); my $r = \@e; print "@$r\n" }},
 ) {
-    graph_of($src);
-    like producer_stderr(),
-        qr/GAP: a whole assign to a pad aggregate a reference was taken to/,
-        "refused: $src";
+    round_trips($src, "a store through its container: $src");
 }
 
 # A REFERENCE TAKEN AFTER THE LAST ASSIGN sees only that version, so nothing
