@@ -23,6 +23,7 @@ WRONG lines (the `w299c` baseline), each re-run 2026-11-08 and attributed by
 | g06, g10, g13 | `use warnings` (FATAL too) | warning / die | silent | warnings are not emitted |
 | h16, k10 (review4) | `18446744073709551615 + 1`, `2**62 * 2` | NV result | wraps | integer overflow does not go to a double |
 | n2, n2b | `s/a(?{ $t = 1 })/x/r` | `1 0` | `0 0` | a code block in a s///r does not run |
+| g5 (mine) | `use strict; eval { "str"->{a} }` | dies: Can't use string ("str") as a HASH ref | stops the program | a hash or array read through a non-reference stops at run time; perl dies (its eval catches) -- needs the site and strict refs on the deref, as `$$r` has |
 | q_interp, y1, y3 | a code block in an interpolated / chosen qr | runs | does not run | code blocks through a qr value |
 
 ## Context.pm (fallback) gets these wrong
