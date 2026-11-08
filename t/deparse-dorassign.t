@@ -262,9 +262,10 @@ refuses('sub f { my %h; $h{a} //= return 5; 7 } print f(), "\n";',
 refuses('my %h; for my $i (1, 2) { $h{a} //= next } print "x\n";',
     qr/GAP: a loop control \(`next`\) inside a branch arm is not yet lowered/,
     'a right side that leaves the loop refuses');
-refuses('my $h; $h->{x}{y} //= 1; print ref($h), "\n";',
-    qr/GAP: `\/\/=` into an element of undef, which perl would autovivify/,
-    'an element of an undefined lexical, which would autovivify, refuses');
+# AN UNDEFINED LEXICAL dereferenced for a write is made a hash first (B::SoN's
+# autovivify), so its element's //= is an ordinary one.
+round_trips('my $h; $h->{x}{y} //= 1; print ref($h), " ", $h->{x}{y}, "\n";',
+    'an element of an undefined lexical, autovivified');
 
 # A SLICE IN SCALAR CONTEXT IS ONE SCALAR. Stored into a scalar inside a loop,
 # its List stamp reached the loop-carried Phi, which then joined to List and

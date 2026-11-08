@@ -639,6 +639,9 @@ class SoN::FromOptree 0.01 {
     # $ARM_PINS: the arm being walked has its own Proj (an if's), so a read
     # may be pinned there; a select's arm has none.
     our $ARM_PINS = 0;
+    # $IN_LOOP_BODY: a loop body is being walked (an element is not made
+    # there by a deref for a write: see the aelem/helem handler).
+    our $IN_LOOP_BODY = 0;
     # How many reads _pin_tied_read has pinned: an arm that pinned one gives
     # its short-circuit a Phi for a value (its read is made once, in the arm).
     our $PINS_MADE = 0;
@@ -682,8 +685,7 @@ class SoN::FromOptree 0.01 {
         # A READ THROUGH A REFERENCE may die (no HASH or ARRAY reference there),
         # as may a scalar deref: made where it stands, as a may-die divide is.
         return unless ( grep { _names_tied($_) } grep { blessed($_) } $node->inputs->@* )
-            || ( $node->operation eq 'Subscript' && _through_ref_container($node->inputs->[0]) )
-            || ( $node->operation eq 'PostfixDeref' && ( $node->sigil // '' ) eq '$' );
+            || ( $IN_EVAL_BODY && $node->operation eq 'PostfixDeref' && ( $node->sigil // '' ) eq '$' );   # (in an eval its die is caught mid-way: there it stands)
         $node->set_control_in($sim->control);
         $sim->set_control($node);
         $sim->set_memory($node) if defined $sim->memory;
@@ -707,6 +709,8 @@ class SoN::FromOptree 0.01 {
                 next if $o->private & 48;   # another intermediate
                 return $o->flags & 32;
             }
+            # shortcut: a foreach over an undef element does not make it (perl's does); it iterates nothing either way.
+            return 0 if $name eq 'enteriter';
             next if $name =~ /\A(?:const|padsv|padav|padhv|gvsv|gv|null|scope|pushmark|rv2sv|aelemfast|aelemfast_lex)\z/;   # (a `@{ ... }` block is a scope)
             return $mod;
         }
@@ -9173,10 +9177,17 @@ class SoN::FromOptree 0.01 {
             my $deref = $op->private & 48;   # OPpDEREF_AV 16, OPpDEREF_HV 32
             if ($is_lvalue && ( $deref == 16 || $deref == 32 ) && defined $sim->memory && !$local
                     && _deref_chain_writes($op)
+                    # shortcut: not in a loop body (a store each pass, which the deparser
+                    # orders against the pass's reads); the consumer refuses a write there.
+                    && !$IN_LOOP_BODY
+                    # (not through @_: an element of it is the caller's variable, aliased)
+                    && !( blessed($container) && $container->isa('SoN::IR::Node::ArgsSource') )
                     && !( grep { blessed($_) && _names_tied($_) } $container )) {
                 my $kind = $name eq 'helem' ? 'hash' : 'array';
                 my $read = $factory->make('Subscript', kind => $kind,
                     inputs => [ $container, $index, $sim->memory ]);
+                # (where it stands: floating, it was read before the array it is of was made)
+                if (!defined $read->control_in) { $read->set_control_in($sim->control); $sim->set_control($read) }
                 my $lit = $factory->make($deref == 32 ? 'HashLiteral' : 'ArrayLiteral',
                     inputs => [], stamp => SoN::IR::Stamp->new(type => $deref == 32 ? 'HashRef' : 'ArrayRef'));
                 $lit->set_control_in($sim->control);
@@ -15285,6 +15296,7 @@ class SoN::FromOptree 0.01 {
     # the binding effects are identical either way, which is all the scout
     # measures.
     sub _walk_loop_body ($cv, $op, $sim, $factory, $opmap, $loop_visited, $outer_visited, $loop_node = undef, $break_projs = undef, $cond_consumed = 0) {
+        local $IN_LOOP_BODY = 1;
         # A `local` in the body restores at the ITERATION boundary -- measured,
         # `for (1..3) { print $g; local $g = $g+1; print $g }` prints 121212,
         # so every pass starts from the OUTER binding. This walk models exactly

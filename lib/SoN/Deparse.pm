@@ -7170,7 +7170,7 @@ class SoN::Deparse 0.01 {
         # iterator aliased by reference whose body never reads it leaves its
         # reference and the element's existence unread. A loop or region that
         # follows it holds it as its control input, which is not a read.
-        return '' if $op =~ /\A(?:TernaryExpr|Exists|Ref)\z/
+        return '' if $op =~ /\A(?:TernaryExpr|Exists|Ref|PostfixDeref)\z/
             && !exists $bound{ $n->{id} }
             && !grep { $_->{op} !~ /\A(?:Loop|Region)\z/ } $self->_consumers_of($n->{id});
 
