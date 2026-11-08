@@ -15,3 +15,12 @@ makes that node, not just the probes that motivated it.
 **How to apply:** before porting a scratch B::SoN, run its whole `t/` (the
 xargs -P 3 form) to completion; a killed run is no run. If the census must not
 be disturbed, wait for it rather than skipping the suite.
+
+**And the probe set lives partly at the scratchpad ROOT** (`allprobes.txt`
+lists 21 `$S/*.pl`). Session probes written there with short names
+(sh1, sh2, lp1, lp3, lv1, lv2 -- 2026-11-08) overwrote baseline probes; the
+originals are lost (sh1 was a baseline wrong answer, a 2**53+1 integer kept as
+a double -- the class k07/h16 still cover). New probes go in a subdirectory
+(`$S/mine/`), never the root. The wrong-probe baseline after this is
+`$S/w362-baseline` (w299c, sh1 out, lv1 in -- lv1 is the pre-existing Context
+push-in-a-loop miscompile in wrong-answers-2026-11-08.md).
