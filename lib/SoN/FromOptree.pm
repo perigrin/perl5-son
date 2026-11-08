@@ -2828,10 +2828,14 @@ class SoN::FromOptree 0.01 {
                 # A DEFINED GUARD NARROWS ITS ARM: `defined X && X` reads X only
                 # where it is defined, so there X is T, not Maybe[T]; the && is
                 # join(Boolean, T) -- its false is the guard's, never undef.
-                if ( $node_op eq 'And' && !$value_phi && $rhs->stamp
-                    && _guarded_stamp($lhs, $rhs) != $rhs->stamp ) {
+                # `!defined X || X` alike: the || reads X only where its
+                # left side is false, so where X is defined.
+                my $guard = $node_op eq 'And' ? $lhs
+                    : $lhs->operation eq 'Not' ? $lhs->inputs->[0] : undef;
+                if ( $guard && !$value_phi && $rhs->stamp
+                    && _guarded_stamp($guard, $rhs) != $rhs->stamp ) {
                     $node->set_stamp( SoN::IR::Stamp::join(
-                        SoN::IR::Stamp->new(type => 'Boolean'), _guarded_stamp($lhs, $rhs) ) );
+                        SoN::IR::Stamp->new(type => 'Boolean'), _guarded_stamp($guard, $rhs) ) );
                 }
                 $sim->push_node($node);
                 $op = $rhs_end // $op->next;

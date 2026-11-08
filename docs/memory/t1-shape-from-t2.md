@@ -80,5 +80,5 @@ All eight items fixed or narrowed. perigrin accepted these remaining refusals by
   arm of `defined X ? X : Y` is T (`_guarded_stamp`). Third: an `if (defined X)` body
   reads X through a pi node, Coerce(X : Maybe[T] -> T), made unique and dropped if
   unread; bindings put back after. Few census programs reach it (only print makes a
-  Maybe today). Open:
-  `!defined X || X`.
+  Maybe today). Fourth: `!defined X || X` is join(Boolean, T), as the && is. All four
+  forms done; guards by early exit (`defined X or return`) are not.

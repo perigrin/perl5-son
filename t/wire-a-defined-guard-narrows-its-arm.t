@@ -49,4 +49,10 @@ is_deeply [ coerce_froms('my $r = print NOWHERE "x"; if (defined $r) { print "[$
 is_deeply [ coerce_froms('my $r = print NOWHERE "x"; if (defined $r) { print "in\n" } print "[$r]\n";') ],
     [ 'Maybe[Boolean]->Str' ], 'after the if, X keeps its Maybe';
 
+# `!defined X || X` returns X only where it is defined: join(Boolean, T).
+is_deeply [ stamps_of( 'my $r = print NOWHERE "x"; my $x = !defined $r || $r; print defined($x) ? "d" : "u";', 'Or' ) ],
+    ['Boolean'], '!defined X || X, X a Maybe[Boolean]: Boolean';
+is_deeply [ stamps_of( 'my $r = print NOWHERE "x"; my $q = print NOWHERE "y"; my $x = !defined $q || $r; print defined($x) ? "d" : "u";', 'Or' ) ],
+    ['Maybe[Boolean]'], '!defined Y || X: X keeps its Maybe';
+
 done_testing;
