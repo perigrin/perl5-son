@@ -20,10 +20,13 @@ class SoN::IR::Node::PostfixDeref :isa(SoN::IR::Value) {
     field $file    :param :reader = undef;
     field $line    :param :reader = undef;
     field $strict  :param :reader = 0;
+    # ...and the package it is in: without strict refs a string there names
+    # that package's variable.
+    field $package :param :reader = undef;
 
     method operation() { 'PostfixDeref' }
 
     method content_hash() {
-        return join('|', 'PostfixDeref', "sigil=$sigil", ($copy ? 'copy' : ()), ( defined $line ? ( 'site', $eval_id // '', $file, $line, $strict ? 'strict' : '' ) : () ), $self->_serialize_inputs());
+        return join('|', 'PostfixDeref', "sigil=$sigil", ($copy ? 'copy' : ()), ( defined $line ? ( 'site', $eval_id // '', $file, $line, $strict ? 'strict' : '', $package // '' ) : () ), $self->_serialize_inputs());
     }
 }

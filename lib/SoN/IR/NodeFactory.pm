@@ -363,6 +363,7 @@ class SoN::IR::NodeFactory {
             @args{qw(file line)} = $SoN::IR::NodeFactory::SITE->@*
                 if $SoN::IR::NodeFactory::SITE && !defined $args{line};
             $args{strict} //= $SoN::IR::NodeFactory::STRICT_REFS ? 1 : 0;
+            $args{package} //= $SoN::FromOptree::CURRENT_PACKAGE // 'main';
         }
         # A division names its own eval (below), which catches its die there:
         # only what does not (an element reference) marks the eval.

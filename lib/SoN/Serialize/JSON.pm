@@ -277,7 +277,7 @@ sub _extract_fields ($node, $id_remap) {
     }
     if ($op eq 'PostfixDeref') {
         return { sigil => $node->sigil, ($node->copy ? (copy => 1) : ()),
-            ( defined $node->line ? ( eval_id => $node->eval_id, file => $node->file, line => $node->line, strict => ( $node->strict ? JSON::PP::true : JSON::PP::false ) ) : () ) };
+            ( defined $node->line ? ( eval_id => $node->eval_id, file => $node->file, line => $node->line, strict => ( $node->strict ? JSON::PP::true : JSON::PP::false ), package => $node->package ) : () ) };
     }
     # A MATCH WITH CODE BLOCKS names their bodies, in pattern order; emitted
     # only then, so every other match's wire is unchanged.

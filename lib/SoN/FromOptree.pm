@@ -1616,6 +1616,12 @@ class SoN::FromOptree 0.01 {
                     _stash_name_key('$', $gv->STASH->NAME, $gv->NAME) } = 1
                     if $gv && $$gv;
             }
+            # A STORE THROUGH A NAME: without strict refs `$$n = 7` writes the
+            # package scalar $n's string names -- any of them, so all are written.
+            elsif ($mod && $name eq 'rv2sv' && $op->can('first') && ${$op->first} && $op->first->name ne 'gv'
+                    && do { my $cop = _cop_for($op); $cop && !( $cop->hints & 0x2 ) }) {   # not HINT_STRICT_REFS
+                $PKG_SCALAR_WRITTEN{'*'} = 1;
+            }
 
             # OPf_MOD propagates through the NULLED wrappers only. A real op
             # (the RHS of an assignment, a nested call) starts fresh, or every
@@ -7457,7 +7463,7 @@ class SoN::FromOptree 0.01 {
                 # `$@` NEVER FORWARDS: every eval rewrites it without a store
                 # the graph can see, so no earlier read or binding is current.
                 my $forwardable = ( $aliased || $carried
-                    || !_package_scalars_written()->{$key} ) && $gv_name ne '@';
+                    || !( _package_scalars_written()->{$key} || _package_scalars_written()->{"*"} ) ) && $gv_name ne '@';
                 # A CALL ARGUMENT IS OPf_MOD AND A READ. Perl passes arguments
                 # by alias, so it marks them as potential lvalues -- the padsv
                 # handler's trap one op over. For a lexical the name token is
@@ -21046,7 +21052,7 @@ class SoN::FromOptree 0.01 {
             my $existing    = $sim->lookup($key);
             my $forwardable = (grep { $_ eq $key }
                                    @ALIAS_BOUND_KEYS, @LOOP_PHI_KEYS)
-                || !_package_scalars_written()->{$key};
+                || !( _package_scalars_written()->{$key} || _package_scalars_written()->{"*"} );
             my $live = $existing && $forwardable ? $existing
                 : $factory->make('EntryDef',
                     package => $subject->package,
