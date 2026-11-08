@@ -298,12 +298,11 @@ round_trips(q{my @k=(3,1,2); print join(",", sort { my $t=$a; $k[$t] <=> $k[$b] 
     'a block reading an outer array');
 round_trips(q{sub order { my @blocks = @_; my %rpo; my $i = 0; $rpo{$_} = $i++ for reverse @blocks; return join ",", sort { $rpo{$a} <=> $rpo{$b} } @blocks } print order(qw(x y z)), " ", order(qw(p q)), "\n";},
     'a block reading a hash of its sub');
-# A SCALAR OF THE PROGRAM the block only reads is shared by name, as its
-# aggregates are (a sub's own still refuses; one the block writes too).
+# A SCALAR the block only reads is shared by name, as its aggregates are --
+# the program's or its sub's (one the block writes still refuses).
 round_trips(q{my $m = 2; print join(",", sort { ($a % $m) <=> ($b % $m) or $a <=> $b } 4,3,2,1), "\n";},
     'a block reading an outer scalar of the program');
-refuses(q{sub s3 { my $m = 2; join(",", sort { ($a % $m) <=> ($b % $m) or $a <=> $b } 4,3,2,1) } print s3(), "\n";},
-    qr/GAP: a sort comparator block that reads a lexical of its enclosing scope \(\$m\)/,
+round_trips(q{sub s3 { my $m = 2; join(",", sort { ($a % $m) <=> ($b % $m) or $a <=> $b } 4,3,2,1) } print s3(), s3(), "\n";},
     'a block reading an outer scalar of a sub');
 refuses(q{for (1,-1) { print join(",", sort { $_*($a <=> $b) } 3,1,2),"\n" }},
     qr/GAP: a sort comparator block that reads \$_/, 'a block reading $_');

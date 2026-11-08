@@ -986,9 +986,19 @@ class SoN::FromOptree 0.01 {
         my ($cv, $start) = $pair->@*;
         die "GAP: a sort comparator body with no start op\n"
             unless $cv && $$cv && $start && $$start;
-        # THE PROGRAM'S BLOCK reads the file's lexicals by name (_file_lexicals_shared).
-        my $shared = $$cv == ${ B::main_cv() } ? _file_lexicals_shared() : undef;
-        my $graph = _translate_from($cv, $start, ( $shared ? ( shared_lexicals => $shared ) : () ));
+        # THE PROGRAM'S BLOCK reads the file's lexicals by name (_file_lexicals_shared);
+        # A SUB'S reads what its sub shares -- its own aggregates and the scalars
+        # its sort blocks only read (one variable in both graphs, the sub's),
+        # and the file's it reaches out to -- of which only the last are the file's.
+        my ($shared, $file);
+        if ($$cv == ${ B::main_cv() }) { $shared = _file_lexicals_shared() }
+        else {
+            my $o = eval { $cv->OUTSIDE };
+            my $file_cv = $o && $$o && ( $$o == ${ B::main_cv() } || _required_file_cv($o) ) ? $o : undef;
+            $file = $file_cv ? { map { $_ => 1 } keys %{ _outer_main_slots($cv, $file_cv) }, keys %{ _anon_aggregate_main_slots($cv) } } : {};
+            $shared = { %$file, map { $_ => 1 } _captured_own_aggregates($cv) };
+        }
+        my $graph = _translate_from($cv, $start, shared_lexicals => $shared, ( $file ? ( file_slots => $file ) : () ));
         _refuse_outer_reach($graph, $cv, $start, undef, 'a sort comparator block', $shared // {});
         return $graph;
     }
@@ -1786,7 +1796,7 @@ class SoN::FromOptree 0.01 {
         my $root = $$cv == ${ B::main_cv() } ? B::main_root() : eval { $cv->ROOT };
         return () unless $root && $$root;
         my $names = eval { $cv->PADLIST->ARRAYelt(0) } or return ();
-        my %own = map { $_ => 1 } _sort_block_aggregates($cv, $root);
+        my %own = map { $_ => 1 } _sort_block_aggregates($cv, $root, 1);   # (and the scalars its sort blocks only read)
         for my $op (_subtree_ops($root)) {
             next unless $op->name eq 'anoncode';
             for my $cap (_anoncode_capture_info($cv, $op)) {
@@ -2032,7 +2042,8 @@ class SoN::FromOptree 0.01 {
                                 _captured_own_aggregates($cv) } );
         # THE FILE'S among them: all, in the program or a body given its set (a
         # sort or code block); in a sub, those it reaches outward to.
-        $ctx->{file_slots} = ( $opts{shared_lexicals} || $ctx->{is_program} ) ? { $ctx->{shared_lexicals}->%* }
+        $ctx->{file_slots} = $opts{file_slots} ? { $opts{file_slots}->%* }
+            : ( $opts{shared_lexicals} || $ctx->{is_program} ) ? { $ctx->{shared_lexicals}->%* }
             : do {
                 # (only a scope whose outside IS the file: a closure in a sub
                 # captures that sub's own, made anew each call)
