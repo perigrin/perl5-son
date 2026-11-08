@@ -33,4 +33,20 @@ is_deeply [ stamps_of( 'my $r = print NOWHERE "x"; my $x = defined $r ? $r : !1;
 is_deeply [ stamps_of( 'my $r = print NOWHERE "x"; my $q = print NOWHERE "y"; my $x = defined $q ? $r : !1; print defined($x) ? "d" : "u";', 'TernaryExpr' ) ],
     ['Maybe[Boolean]', 'Str'], 'defined Y ? X : !1: X keeps its Maybe';
 
+# An if's body reads X where it is defined: B::SoN rebinds X in the body to
+# Coerce(X : Maybe[T] -> T), so a read there is T (a pi node, as SSA has).
+sub coerce_froms ($src) {
+    my $file = "$dir/c.pl";
+    open my $fh, '>', $file or die $!;
+    print {$fh} $src;
+    close $fh;
+    my $w = JSON::PP->new->decode( scalar qx{$^X -Ilib -MO=-q,SoN,json $file 2>/dev/null} );
+    return sort map { "$_->{fields}{from_repr}->$_->{fields}{to_repr}" }
+        grep { ( $_->{op} // '' ) eq 'Coerce' } $w->{methods}{'main::__PROGRAM__'}{nodes}->@*;
+}
+is_deeply [ coerce_froms('my $r = print NOWHERE "x"; if (defined $r) { print "[$r]\n" } print "end\n";') ],
+    [ 'Boolean->Str', 'Maybe[Boolean]->Boolean' ], 'if (defined X) { X }: X is T in the body';
+is_deeply [ coerce_froms('my $r = print NOWHERE "x"; if (defined $r) { print "in\n" } print "[$r]\n";') ],
+    [ 'Maybe[Boolean]->Str' ], 'after the if, X keeps its Maybe';
+
 done_testing;

@@ -2540,12 +2540,45 @@ class SoN::FromOptree 0.01 {
 
                 my %pre_arm_visited = %visited;
                 my $pins_before = $PINS_MADE;
+                # A DEFINED GUARD NARROWS ITS BODY (a pi node): in `if (defined
+                # X) { ... }` X is defined, so the body reads X through
+                # Coerce(X : Maybe[T] -> T). Bindings left on it are put back
+                # after, or the merge would read them as the body's stores.
+                my %pi;
+                if ( $if_node && $name eq 'and' && $lhs->operation eq 'Defined' ) {
+                    my $x = $lhs->inputs->[0];
+                    my $t = _guarded_stamp($lhs, $x);
+                    if ( $x->stamp && $t != $x->stamp ) {
+                        # unique: never hash-consed with another body's, so
+                        # dropping an unread one below drops only this one
+                        my $narrow = $factory->make_unique('Coerce', from_repr => $x->stamp->type,
+                            to_repr => $t->type, inputs => [$x], stamp => $t);
+                        my $b = $rhs_sim->scope_bindings;
+                        for my $targ (grep { ref $b->{$_} && $b->{$_} == $x } keys %$b) {
+                            $rhs_sim->define($targ, $narrow);
+                            $pi{$targ} = [ $x, $narrow ];
+                        }
+                    }
+                }
                 my ($rhs_end, $rhs_sig)
                     = do {
                         # An arm on its own Proj may pin a read (see _step).
                         local $ARM_PINS = defined $if_node ? 1 : 0;
                         _walk_branch($cv, $op->other, $rhs_sim, $factory, $opmap, \%visited, \@exits, 1, $stop_addr);
                     };
+                for my $targ (keys %pi) {
+                    $rhs_sim->define($targ, $pi{$targ}[0])
+                        if ( $rhs_sim->lookup($targ) // 0 ) == $pi{$targ}[1];
+                }
+                # A body that never read X leaves the Coerce unread: drop it,
+                # or the wire (which walks consumers) carries a dead node.
+                if ( my ($p) = values %pi ) {
+                    my ($x, $narrow) = @$p;
+                    unless ( $narrow->consumers->@* ) {
+                        $x->remove_consumer($narrow);
+                        $factory->remove_node($narrow->id);
+                    }
+                }
 
                 if (($rhs_sig // '') eq 'exited') {
                     # Statement-modifier / guarded exit: the op->other arm left

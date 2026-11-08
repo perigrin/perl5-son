@@ -77,5 +77,8 @@ All eight items fixed or narrowed. perigrin accepted these remaining refusals by
   to be measured case by case.
 - Defined-guard narrowing, first form (2026-11-08): `defined X && X` is stamped
   join(Boolean, T) when X is Maybe[T] (Boolean for a print). Second form: the true
-  arm of `defined X ? X : Y` is T (`_guarded_stamp`). Open:
-  `if (defined X) { X }`, `!defined X || X`.
+  arm of `defined X ? X : Y` is T (`_guarded_stamp`). Third: an `if (defined X)` body
+  reads X through a pi node, Coerce(X : Maybe[T] -> T), made unique and dropped if
+  unread; bindings put back after. Few census programs reach it (only print makes a
+  Maybe today). Open:
+  `!defined X || X`.
