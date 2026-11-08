@@ -17,7 +17,12 @@ a trigger (see below).
    decision-real-calls-not-inlining.md.
 1. **B::SoN follows `use`/`require`.** It reads `%INC` after compile
    time and includes those files' subs transitively. Pragmas are
-   skipped. XS modules are provided by chalk's runtime. Run-time
+   skipped. XS (perigrin, 2026-11-08, PerlOnJava's model): a module with a
+   native chalk implementation gets it; otherwise B::SoN makes
+   `XSLoader::load`/`DynaLoader::bootstrap` die with PerlOnJava's wording
+   ("Can't load loadable object for module X: ...") while it compiles, so
+   the module's own pure-Perl fallback loads and is what `%INC` names;
+   with no fallback the call is refused as XS (T2: "<name> is XS"). Run-time
    `require $x` is a GAP. See plan-test-chalk.md.
 2. **Test::Chalk.** The Test::More subset that compiles through LLVM.
    Checked against Test::More's own suite plus a differential harness.
