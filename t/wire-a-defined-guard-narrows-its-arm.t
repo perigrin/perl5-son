@@ -27,4 +27,10 @@ is_deeply [ stamps_of( 'my $r = print NOWHERE "x"; my $x = defined $r && $r; pri
 is_deeply [ stamps_of( 'my $r = print NOWHERE "x"; my $q = print NOWHERE "y"; my $x = defined $q && $r; print defined($x) ? "d" : "u";', 'And' ) ],
     ['Maybe[Boolean]'], 'defined Y && X: X keeps its Maybe';
 
+# The true arm of a ternary reads X where it is defined: join(T, else).
+is_deeply [ stamps_of( 'my $r = print NOWHERE "x"; my $x = defined $r ? $r : !1; print defined($x) ? "d" : "u";', 'TernaryExpr' ) ],
+    ['Boolean', 'Str'], 'defined X ? X : !1, X a Maybe[Boolean]: Boolean';
+is_deeply [ stamps_of( 'my $r = print NOWHERE "x"; my $q = print NOWHERE "y"; my $x = defined $q ? $r : !1; print defined($x) ? "d" : "u";', 'TernaryExpr' ) ],
+    ['Maybe[Boolean]', 'Str'], 'defined Y ? X : !1: X keeps its Maybe';
+
 done_testing;

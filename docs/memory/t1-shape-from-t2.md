@@ -76,5 +76,6 @@ All eight items fixed or narrowed. perigrin accepted these remaining refusals by
   Making it `Maybe[T]` is global (every undef-or-value merge) and its fallout is
   to be measured case by case.
 - Defined-guard narrowing, first form (2026-11-08): `defined X && X` is stamped
-  join(Boolean, T) when X is Maybe[T] (Boolean for a print). Open: `defined X ? X : ...`,
+  join(Boolean, T) when X is Maybe[T] (Boolean for a print). Second form: the true
+  arm of `defined X ? X : Y` is T (`_guarded_stamp`). Open:
   `if (defined X) { X }`, `!defined X || X`.

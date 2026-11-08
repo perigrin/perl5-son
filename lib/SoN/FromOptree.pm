@@ -2795,11 +2795,10 @@ class SoN::FromOptree 0.01 {
                 # A DEFINED GUARD NARROWS ITS ARM: `defined X && X` reads X only
                 # where it is defined, so there X is T, not Maybe[T]; the && is
                 # join(Boolean, T) -- its false is the guard's, never undef.
-                if ( $node_op eq 'And' && !$value_phi
-                    && $lhs->operation eq 'Defined' && $lhs->inputs->[0] == $rhs
-                    && $rhs->stamp && $rhs->stamp->type =~ /\AMaybe\[(.+)\]\z/ ) {
+                if ( $node_op eq 'And' && !$value_phi && $rhs->stamp
+                    && _guarded_stamp($lhs, $rhs) != $rhs->stamp ) {
                     $node->set_stamp( SoN::IR::Stamp::join(
-                        SoN::IR::Stamp->new(type => 'Boolean'), SoN::IR::Stamp->new(type => $1) ) );
+                        SoN::IR::Stamp->new(type => 'Boolean'), _guarded_stamp($lhs, $rhs) ) );
                 }
                 $sim->push_node($node);
                 $op = $rhs_end // $op->next;
@@ -17617,11 +17616,20 @@ class SoN::FromOptree 0.01 {
         return;
     }
 
+    # _guarded_stamp($cond, $val) -> $val's stamp where $cond holds: a Maybe[T]
+    # read under `defined` of itself is T (a defined guard narrows its arm).
+    sub _guarded_stamp ($cond, $val) {
+        my $st = $val->stamp;
+        return $st unless $st && $cond->operation eq 'Defined'
+            && $cond->inputs->[0] == $val && $st->type =~ /\AMaybe\[(.+)\]\z/;
+        return SoN::IR::Stamp->new(type => $1);
+    }
+
     sub _make_ternary ($factory, $cond, $true_val, $false_val) {
         my %args = (inputs => [$cond, $true_val, $false_val]);
         if (_is_narrowed($true_val->stamp) && _is_narrowed($false_val->stamp)) {
             $args{stamp} = SoN::IR::Stamp::join(
-                $true_val->stamp, $false_val->stamp);
+                _guarded_stamp($cond, $true_val), $false_val->stamp);
         }
         # TWO ARMS OF ONE ARRAY OR HASH select an aggregate, as a merge
         # Phi of them does (StackSim::_joined_stamp): unstamped, the slot's
