@@ -289,8 +289,7 @@ refuses(q{our @s; print join(",", sort { local @s = ($a); $a <=> $b } 3,1,2), "\
     $local, 'a block localising an array');
 refuses(q{our %h; print join(",", sort { local $h{k} = $a; $a <=> $b } 3,1,2), "\n";},
     $local, 'a block localising an element');
-refuses(q{my $n = 0; my @r = sort { $n++; my $t=$a; $t <=> $b } 3,1,2; print "$n @r\n";},
-    qr/GAP: a sort comparator block that writes a lexical of its enclosing scope \(\$n\)/,
+round_trips(q{my $n = 0; my @r = sort { $n++; my $t=$a; $t <=> $b } 3,1,2; print "$n @r\n";},
     'a block writing an outer lexical');
 # AN AGGREGATE OF THE ENCLOSING SCOPE is shared with the comparator, as a
 # closure's is: one variable, declared above both.

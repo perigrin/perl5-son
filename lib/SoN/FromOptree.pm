@@ -1788,7 +1788,7 @@ class SoN::FromOptree 0.01 {
             for my $o (_subtree_ops($block)) {
                 my $n = $o->name;
                 $slot{ $o->targ } = 1
-                    if $n =~ /\Apad[sah]v\z/ && $o->targ && !$own{ $o->targ } && !( $n eq 'padsv' && $written{ $o->targ } ) && $agg->($o->targ);
+                    if $n =~ /\Apad[sah]v\z/ && $o->targ && !$own{ $o->targ } && $agg->($o->targ);
                 next unless $n eq 'multideref';
                 $slot{$_} = 1 for grep { !ref && /\A\d+\z/ && $_ && $agg->($_) }
                                        eval { $o->aux_list($cv) };
