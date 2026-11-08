@@ -45,6 +45,7 @@
 - [Cause: 136, partial](census-cause-136-partial.md) — eval value untyped -> Scalar; dispatch death caught or refused in an eval; 136 still refused ($@ read)
 - [T2 slices 6-21: objects, run-time MOP, class, closures, die, eval](t2-runtime-mop.md) — stashes, @ISA, run-time lookup; die as a flag checked after calls; an eval end is a memory version
 - [The shape of T1 that T2 needs](t1-shape-from-t2.md) — perigrin: a T1 shortage T2 finds is fixed in B::SoN; the ledger
+- [Wrong answers still in the probe sweep](wrong-answers-2026-11-08.md) — goal item 8: each WRONG probe, T2 or Context, its cause; fixed today: k1, push onto an element, read through undef
 - [T2 slice 5: hash references](t2-slice5-hashes.md) — {...} as %Slot tag 5, $h->{k}, `!`, early-exit joins; pvm 093; 411 -> 412 (4bd2ca8e)
 - [Recursive subs/methods with object params](recursive-methods-object-params.md) — Scalar define params for recursive subs; method self-calls; 225 still refused (33a09e83)
 - [Census cause: small operators](census-cause-small-operators.md) — ** x << >> unary minus; older wrong: float -0 printed "-0"; 038 039 041 048 264 266

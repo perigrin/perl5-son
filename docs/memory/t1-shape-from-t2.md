@@ -20,23 +20,31 @@ test there that failed first.
 | A method call carries file/line | perl's dies (22) | fixed |
 | `$o->A::m` is a method Call named A::m (method_redir) | qualified names (23) | fixed |
 | tie/untie are ordered memory effects | tie (27) | fixed |
-| A tied aggregate's read is a pinned memory version | tie (27) | fixed (main walk, loops, if/ternary arms; not yet a short-circuit arm -- see below) |
+| A tied aggregate's read is a pinned memory version | tie (27) | fixed (main walk, loops, if/ternary/short-circuit arms) |
 | foreach over a tied array counts each pass | tie (27) | fixed |
 | A package scalar written by a sub in ANY package is read anew | tie (27) | fixed (was main:: subs only) |
 | `$h->{k} .= "x$i"` (multiconcat APPEND to an element) | tie test classes | fixed |
 | Context.pm's TIESCALAR skips the tie's memory input | tie (27) | fixed (chalk) |
 | Whole assign to a tied aggregate is a store into it | tie (27) | fixed (Assign into its container; T2 t2_aassign/t2_hassign) |
-| Whole assign to a referenced pad aggregate is a store into it | tie (27) | refused by name -- next |
+| Whole assign to a referenced pad aggregate is a store into it | tie (27) | fixed (in place, as a tied one; T2 t2_aassign/t2_hassign; confirmed 2026-11-08) |
 | A select (ternary) merges control when an arm pins | tie (27) | fixed (an arm that pins takes the If/Region path, 4172672) |
-| A short-circuit (&&, ||, //) arm merges control when it pins | tie (27) | open (_short_circuit_as_branch drops ON_VALUE) |
+| A short-circuit (&&, ||, //) arm merges control when it pins | tie (27) | fixed (the arm on its own Proj pins; its value is a Phi at the join -- an And over the arm's value FETCHed twice) |
 | A call to an XS sub says so (Call `xs`) | PadWalker (perigrin: no Perl source) | fixed -- T2 refuses "<name> is XS"; B::SoN's PadWalker-specific refusal deleted |
+| A read through a reference (`$r->{k}`, `$r->[i]`, `$$r`) stands where it is | hash read across a package store (goal 3) | fixed -- pinned on the chain: it may die (no such reference), so T2 makes it there |
+| A deref for a write autovivifies | `%$r` store (goal 5) | fixed -- a `my` scalar undef there becomes a fresh `{}`/`[]`; an element dereferenced for a write is `elem //= {}`/`[]` stored back (perl's OPpDEREF_HV/AV under OPf_MOD, ending in a write). shortcut: a read through an undef intermediate does not make it, as perl's does |
+| A scalar deref names its site and strict refs | `$$r` in an eval (goal 6) | fixed -- PostfixDeref `$` carries eval_id/file/line/strict, as a may-die divide; an eval or try body may pin (it runs on the chain) |
+| A shared variable says whether it is the file's | comparator over a program lexical (goal 4) | fixed -- PadAccess `file`: the program's, or one a named sub or the program's sort block reaches out to; a sub's own a closure captures is not. A program sort block shares the scalars it only reads (one it writes stays refused: perl's comparison order would show) |
 
 ## T2/Context.pm side (not T1)
 - `$_[N]` binder: fixed in T2 (every read binds to its argument; an unread position is a placeholder).
 - Slurpy tails: fixed in T2 -- `my ($c, @x) = @_` and `sub f ($c, @x)` alike (perigrin: identical) take @_ as one array; the slurpy target a copy from k. `@_` after shifts already worked.
-- `sort` (string/numeric, either order) and list `reverse`: fixed in T2. A sort with its own comparator block is still refused.
-- A hash read whose version precedes a package store but used after it.
-- `keys %$r` / `values %$r`: fixed in T2 (an undef reference reads as an empty hash). A store through `%$r` (autovivify) still refused.
+- `sort` (string/numeric, either order) and list `reverse`: fixed in T2. A comparator (a block, a named sub) is a function of no arguments called per pair with the sort package's `$a`/`$b` set (t2_asort_by); `<=>` lowered (shortcut: a NaN gives 0, perl's undef). A comparator with an effect (a die, a print, a store, a call, a % or / that may die) is refused: its comparisons are perl's merge order, not this sort's (it was lowered and compared other pairs: `k1`). A comparator reading a lexical of the program: fixed (file lexicals, below); of a sub: B::SoN refuses (a closure's cells, not yet).
+- A read through a reference waiting across a package store: fixed by the pin above.
+- `keys %$r` / `values %$r`: fixed in T2 (an undef reference reads as an empty hash). A store through `%$r`: fixed by autovivify above.
+- Nested data in T2 (an element holding a reference): `$h{x}{y}`, `$a[0][1]`, `@{$h{l}}` -- the element's reference; a read through undef is undef (t2_hget, t2_aderef_r); a push's own array through a reference is made before it.
+- bless in T2: the class in the aggregate's header (%Array field 4), so an array blesses as a hash does; `bless` as a statement; `blessed`. Scalar and code references: refused by name.
+- Scalar references in T2: `\$x` is the variable's heap cell (tag 9), `$$r` reads/stores through it; perl's dies (undef under strict, `Not a SCALAR reference`, a string under strict cut at 32) at the deref's site, its eval's to catch. Without strict a string is a name: a stop. A store through undef (perl vivifies): a stop.
+- File lexicals in T2: one global each -- a scalar's slot, a hash's or array's reference made at first use (t2_ghash/t2_garray); `my $n; sub f { $n++ }` and a program sort block over `%h` lower. shortcut: a file lexical made anew in a loop is one variable here.
 
 ## Open questions
 - Our own PadWalker? PerlOnJava ships one (Perl facade over Java runtime lexical metadata, for Reply and Devel::Cycle; checked 2026-11-08 at 6a83374). It costs a runtime that keeps lexical metadata. perigrin to decide; until then T2 refuses it as XS.

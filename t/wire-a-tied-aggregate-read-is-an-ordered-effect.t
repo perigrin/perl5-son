@@ -44,4 +44,12 @@ my $TA = q{package TA; sub TIEARRAY { bless {}, shift } sub FETCH { "e" } sub FE
     my (undef, $err) = graph(q{package TH; sub TIEHASH { bless {}, shift } package main; my %h; tie %h, "TH"; %h = (x => 1); print "ok\n";});
     unlike($err, qr/GAP|skipped/, 'a list assigned to a tied hash is translated, in place');
 }
+{   # a read in a short-circuit arm is on the arm's control chain too (as a ternary's is)
+    for my $op (q{&&}, q{||}, q{//}) {
+        my ($n) = graph($TA . qq{my \@a; tie \@a, "TA"; my \$c = shift; my \$x = \$c $op \$a[0]; print "\$x\\n";});
+        my @reads = grep { $_->{op} eq 'Subscript' } values %$n;
+        is(scalar @reads, 1, "one read in the $op arm");
+        ok(@reads && defined $reads[0]{control_in}, "it is on the control chain ($op)");
+    }
+}
 done_testing;

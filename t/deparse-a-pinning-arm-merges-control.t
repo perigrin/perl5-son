@@ -1,4 +1,4 @@
-# ABOUTME: a ternary or an if whose arm pins (a tied read, an in-place whole assign) takes the
+# ABOUTME: a ternary, an if, or a short-circuit (a ternary or an ifa ternary or an if, ||, //) whose arm pins (a tied read, an in-place whole assign) takes the
 # ABOUTME: control path -- If, a Proj per arm, a Region -- and round-trips with perl's order.
 
 use v5.42.0;
@@ -49,5 +49,10 @@ round_trips($th . q{my $c = shift // 1; my $x = $c ? $h{a} : $h{b}; print "$x $m
 round_trips($th . q{for my $c (1, 0) { my $x = $c ? $h{a} : $h{b}; print "$x $main::L\n" }}, 'a tied read in a ternary arm, in a loop');
 round_trips($th . q{my $c = shift // 1; if ($c) { print $h{a} } else { print $h{b} } print " $main::L\n";}, 'a tied read in an if arm');
 round_trips(q{my @e; my $r = \@e; for my $k (0,1) { if ($k) { @e = (0,4) } else { @e = (9) } } print "@$r\n";}, 'an in-place whole assign in an if arm in a loop');
+
+round_trips($th . q{my $c = shift // 1; my $x = $c && $h{a}; print "$x $main::L\n";}, 'a tied read in an && arm');
+round_trips($th . q{my $c = shift // 0; my $x = $c || $h{b}; print "$x $main::L\n";}, 'a tied read in an || arm');
+round_trips($th . q{my $c = shift; my $x = $c // $h{b}; print "$x $main::L\n";}, 'a tied read in a // arm');
+round_trips($th . q{for my $c (1, 0) { my $x = $c && $h{a}; print "$x $main::L\n" }}, 'a tied read in an && arm, in a loop');
 
 done_testing;

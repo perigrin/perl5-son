@@ -183,6 +183,8 @@ $SoN::IR::NodeFactory::MADE_MAY_DIE = undef;
 # $SITE: [file, line] of the statement the walk is in (FromOptree's _step),
 # for a node that names where it dies.
 $SoN::IR::NodeFactory::SITE = undef;
+# $STRICT_REFS: whether `strict refs` holds at the statement being walked.
+$SoN::IR::NodeFactory::STRICT_REFS = 0;
 
 # $ON_VALUE: a hook FromOptree sets per step, given each new value node.
 $SoN::IR::NodeFactory::ON_VALUE = undef;
@@ -353,6 +355,14 @@ class SoN::IR::NodeFactory {
                 if $SoN::FromOptree::IN_EVAL_BODY && defined $SoN::FromOptree::EVAL_ID;
             @args{qw(file line)} = $SoN::IR::NodeFactory::SITE->@*
                 if $SoN::IR::NodeFactory::SITE && !defined $args{line};
+        }
+        # A SCALAR DEREF names them too, and strict refs (PostfixDeref's).
+        if ($op_name eq 'PostfixDeref' && ( $args{sigil} // '' ) eq '$') {
+            $args{eval_id} //= $SoN::FromOptree::EVAL_ID
+                if $SoN::FromOptree::IN_EVAL_BODY && defined $SoN::FromOptree::EVAL_ID;
+            @args{qw(file line)} = $SoN::IR::NodeFactory::SITE->@*
+                if $SoN::IR::NodeFactory::SITE && !defined $args{line};
+            $args{strict} //= $SoN::IR::NodeFactory::STRICT_REFS ? 1 : 0;
         }
         # A division names its own eval (below), which catches its die there:
         # only what does not (an element reference) marks the eval.

@@ -639,6 +639,9 @@ class SoN::FromOptree 0.01 {
     # $ARM_PINS: the arm being walked has its own Proj (an if's), so a read
     # may be pinned there; a select's arm has none.
     our $ARM_PINS = 0;
+    # How many reads _pin_tied_read has pinned: an arm that pinned one gives
+    # its short-circuit a Phi for a value (its read is made once, in the arm).
+    our $PINS_MADE = 0;
     sub _tied_aggregates ($cv, $root) {
         my %t;
         return \%t unless $root && $$root;
@@ -673,14 +676,48 @@ class SoN::FromOptree 0.01 {
     # a call -- on the control chain, and the memory version after it (FETCH may
     # write anything a later read sees; FETCHSIZE answers anew each pass).
     sub _pin_tied_read ($sim, $node) {
-        return unless %TIED_AGG && $node->can('inputs');
+        return unless $node->can('inputs');
         return if $node->operation =~ /\A(?:PadAccess|ArrayLiteral|HashLiteral|EntryDef|Constant|MemStart|Phi|Delete)\z/;   # (a delete the walk orders itself, as a store)
         return if defined $node->control_in;
-        return unless grep { _names_tied($_) } grep { blessed($_) } $node->inputs->@*;
+        # A READ THROUGH A REFERENCE may die (no HASH or ARRAY reference there),
+        # as may a scalar deref: made where it stands, as a may-die divide is.
+        return unless ( grep { _names_tied($_) } grep { blessed($_) } $node->inputs->@* )
+            || ( $node->operation eq 'Subscript' && _through_ref_container($node->inputs->[0]) )
+            || ( $node->operation eq 'PostfixDeref' && ( $node->sigil // '' ) eq '$' );
         $node->set_control_in($sim->control);
         $sim->set_control($node);
         $sim->set_memory($node) if defined $sim->memory;
+        $PINS_MADE++;
         return;
+    }
+    # _deref_chain_writes($elem) -> true when the element $elem holds is
+    # dereferenced for a write: the chain of derefs after it ends in a store
+    # to an element (OPf_MOD on the last), or in a container op that may
+    # change it (push @{...}, keys %{...}: OPf_MOD on the rv2av/rv2hv). perl
+    # marks every intermediate of a READ chain too (`$h{x}{$_}`); one only
+    # read is left as it was.
+    # shortcut: a read through an undef intermediate does not vivify it here, as perl's does.
+    sub _deref_chain_writes ($elem) {
+        my $mod = 0;
+        my $n = 0;
+        for (my $o = $elem->next; ref($o) && $$o && $n++ < 32; $o = $o->next) {
+            my $name = $o->name;
+            if ($name eq 'rv2av' || $name eq 'rv2hv') { $mod = $o->flags & 32; next }
+            if ($name eq 'aelem' || $name eq 'helem') {
+                next if $o->private & 48;   # another intermediate
+                return $o->flags & 32;
+            }
+            next if $name =~ /\A(?:const|padsv|padav|padhv|gvsv|gv|null|scope|pushmark|rv2sv|aelemfast|aelemfast_lex)\z/;   # (a `@{ ... }` block is a scope)
+            return $mod;
+        }
+        return $mod;
+    }
+    sub _through_ref_container ($c) {
+        return 0 unless blessed($c) && $c->can('operation');
+        my $op = $c->operation;
+        return 0 if $op =~ /\A(?:PadAccess|EntryDef)\z/ && ( $c->sigil // '' ) =~ /\A[\@%]\z/;
+        return 0 if $op =~ /\A(?:ArrayLiteral|HashLiteral|ArgsSource)\z/;
+        return 1;
     }
     sub _names_tied ($n) {
         my $op = $n->operation;
@@ -947,8 +984,10 @@ class SoN::FromOptree 0.01 {
         my ($cv, $start) = $pair->@*;
         die "GAP: a sort comparator body with no start op\n"
             unless $cv && $$cv && $start && $$start;
-        my $graph = _translate_from($cv, $start);
-        _refuse_outer_reach($graph, $cv, $start, undef, 'a sort comparator block');
+        # THE PROGRAM'S BLOCK reads the file's lexicals by name (_file_lexicals_shared).
+        my $shared = $$cv == ${ B::main_cv() } ? _file_lexicals_shared() : undef;
+        my $graph = _translate_from($cv, $start, ( $shared ? ( shared_lexicals => $shared ) : () ));
+        _refuse_outer_reach($graph, $cv, $start, undef, 'a sort comparator block', $shared // {});
         return $graph;
     }
 
@@ -1670,7 +1709,8 @@ class SoN::FromOptree 0.01 {
         # closure nested in one of these captures through it, so the anoncode
         # ops of the program body are enough.
         # A SORT BLOCK OF THE PROGRAM reads the file's aggregates by name.
-        $shared{$_} = 1 for _sort_block_aggregates(B::main_cv(), B::main_root());
+        # ...and its scalars: one variable with the program's, by name.
+        $shared{$_} = 1 for _sort_block_aggregates(B::main_cv(), B::main_root(), 1);
         my @q = eval { B::main_root() };
         while (my $o = shift @q) {
             next unless ref($o) && $$o;
@@ -1704,11 +1744,13 @@ class SoN::FromOptree 0.01 {
     # _sort_block_aggregates($cv, $root) -> the pad indexes of arrays and
     # hashes a sort comparator BLOCK under $root reads. The block is a graph
     # of its own in the same pad, and names them, as a closure's body does.
-    sub _sort_block_aggregates ($cv, $root) {
+    # With $scalars, its `my` scalars too (the program's: file lexicals), but
+    # not one the block declares itself.
+    sub _sort_block_aggregates ($cv, $root, $scalars = 0) {
         my $names = eval { $cv->PADLIST->ARRAYelt(0) } or return ();
         my $agg = sub ($t) {
             my $pn = $names->ARRAYelt($t);
-            ref($pn) eq 'B::PADNAME' && ($pn->PV // '') =~ /\A[\@%]/
+            ref($pn) eq 'B::PADNAME' && ($pn->PV // '') =~ ( $scalars ? qr/\A[\$\@%]\w/ : qr/\A[\@%]/ )
                 && !($pn->FLAGS & (B::PADNAMEf_FIELD() | B::PADNAMEf_OUR()));
         };
         my %slot;
@@ -1718,10 +1760,17 @@ class SoN::FromOptree 0.01 {
                 && ($op->first->sibling->flags & 4);
             my $block = $op->first->sibling->first;
             next unless $block && $$block;
+            my %own = map { ( $_->targ => 1 ) } grep { $_->name =~ /\Apad[sah]v\z/ && ( $_->private & 128 ) } _subtree_ops($block);   # OPpLVAL_INTRO
+            # A SCALAR THE BLOCK WRITES is not shared: perl's comparison order
+            # would show (`$n++` counts them), so it stays refused.
+            my %written = map { ( $_->targ => 1 ) } grep {
+                $_->targ && ( $_->name eq 'padsv' ? ( $_->flags & 32 ) && !( $_->private & 48 )   # OPf_MOD, not a deref
+                                                  : $_->name !~ /\Apad[ah]v\z/ && ( $_->private & 16 ) )   # OPpTARGET_MY
+            } _subtree_ops($block);
             for my $o (_subtree_ops($block)) {
                 my $n = $o->name;
                 $slot{ $o->targ } = 1
-                    if $n =~ /\Apad[ah]v\z/ && $o->targ && $agg->($o->targ);
+                    if $n =~ /\Apad[sah]v\z/ && $o->targ && !$own{ $o->targ } && !( $n eq 'padsv' && $written{ $o->targ } ) && $agg->($o->targ);
                 next unless $n eq 'multideref';
                 $slot{$_} = 1 for grep { !ref && /\A\d+\z/ && $_ && $agg->($_) }
                                        eval { $o->aux_list($cv) };
@@ -1979,6 +2028,17 @@ class SoN::FromOptree 0.01 {
                          $o && $$o && _required_file_cv($o) ? $o : B::main_cv() }) },
                                 keys %{ _anon_aggregate_main_slots($cv) },
                                 _captured_own_aggregates($cv) } );
+        # THE FILE'S among them: all, in the program or a body given its set (a
+        # sort or code block); in a sub, those it reaches outward to.
+        $ctx->{file_slots} = ( $opts{shared_lexicals} || $ctx->{is_program} ) ? { $ctx->{shared_lexicals}->%* }
+            : do {
+                # (only a scope whose outside IS the file: a closure in a sub
+                # captures that sub's own, made anew each call)
+                my $o = eval { $cv->OUTSIDE };
+                my $file_cv = $o && $$o && ( $$o == ${ B::main_cv() } || _required_file_cv($o) ) ? $o : undef;
+                $file_cv ? { map { $_ => 1 } keys %{ _outer_main_slots($cv, $file_cv) },
+                                            keys %{ _anon_aggregate_main_slots($cv) } } : {};
+            };
         $ctx->{addr_taken}{$_} = 1 for keys $ctx->{shared_lexicals}->%*;
         local $SHARED_SLOTS = $ctx->{shared_lexicals};
         local $ADDR_TAKEN   = $ctx->{addr_taken};
@@ -2257,9 +2317,14 @@ class SoN::FromOptree 0.01 {
                     $sim->set_control($factory->make_cfg('Proj',
                         inputs => [$dor_if], index => 0));
                 }
+                my $pins_before = $PINS_MADE;
                 my ($rhs_end, $rhs_sig)
-                    = _walk_branch($cv, $op->other, $rhs_sim, $factory, $opmap,
+                    = do {
+                        # A fallback on its own Proj may pin a read (see _step).
+                        local $ARM_PINS = defined $dor_if ? 1 : 0;
+                        _walk_branch($cv, $op->other, $rhs_sim, $factory, $opmap,
                         \%visited, \@exits, 1, $stop_addr);
+                    };
                 die "GAP: a `//` whose fallback both moves control and leaves"
                   . " the function is not yet lowered\n"
                     if $dor_if && ($rhs_sig // '') eq 'exited';
@@ -2309,10 +2374,14 @@ class SoN::FromOptree 0.01 {
                         const_type => 'undef',
                         stamp      => SoN::IR::Stamp->new(type => 'Undef'));
                 }
+                # An arm that pinned a read: the value is a Phi at the join (see the
+                # and/or handler).
+                my $value_phi = $dor_if && $PINS_MADE != $pins_before;
+                if ($value_phi) { $rhs_sim->push_node($rhs); $sim->push_node($lhs) }
                 $sim->merge($rhs_sim, $factory, $dor_if) if $dor_if;
                 _merge_rhs_rebinds($factory, $sim, $rhs_sim, $lhs, 'dor')
                     unless $dor_if;
-                my $node = $factory->make('DefinedOr', inputs => [$lhs, $rhs]);
+                my $node = $value_phi ? $sim->pop_node : $factory->make('DefinedOr', inputs => [$lhs, $rhs]);
                 $sim->push_node($node);
                 $op = $rhs_end // $op->next;
                 next;
@@ -2451,8 +2520,13 @@ class SoN::FromOptree 0.01 {
                 }
 
                 my %pre_arm_visited = %visited;
+                my $pins_before = $PINS_MADE;
                 my ($rhs_end, $rhs_sig)
-                    = _walk_branch($cv, $op->other, $rhs_sim, $factory, $opmap, \%visited, \@exits, 1, $stop_addr);
+                    = do {
+                        # An arm on its own Proj may pin a read (see _step).
+                        local $ARM_PINS = defined $if_node ? 1 : 0;
+                        _walk_branch($cv, $op->other, $rhs_sim, $factory, $opmap, \%visited, \@exits, 1, $stop_addr);
+                    };
 
                 if (($rhs_sig // '') eq 'exited') {
                     # Statement-modifier / guarded exit: the op->other arm left
@@ -2676,8 +2750,14 @@ class SoN::FromOptree 0.01 {
                 # merge() builds the Region and the memory-Phi; the value node
                 # is then built on the merged control, exactly as the void form
                 # does minus the value.
+                my $value_phi = $effect_value_branch && $if_node && $PINS_MADE != $pins_before;
                 if ($effect_value_branch && $if_node) {
                     _bind_arm_mys_undef($factory, $sim, $rhs_sim);
+                    # AN ARM THAT PINNED A READ: the value is a Phi at the join -- the
+                    # arm's value where it ran, the left side where it was skipped.
+                    # An And over the arm's value read it again on the merged path
+                    # (a tied FETCH twice).
+                    if ($value_phi) { $rhs_sim->push_node($rhs); $sim->push_node($lhs) }
                     $sim->merge($rhs_sim, $factory, $if_node);
                 }
                 # A MATCH IN AN `and`'S ARM sets the captures a later `$1`
@@ -2691,7 +2771,8 @@ class SoN::FromOptree 0.01 {
                     unless $effect_value_branch && $if_node;
 
                 my $node_op = $name eq 'and' ? 'And' : 'Or';
-                my $node = $factory->make($node_op, inputs => [$lhs, $rhs]);
+                my $node = $value_phi ? $sim->pop_node
+                    : $factory->make($node_op, inputs => [$lhs, $rhs]);
                 $sim->push_node($node);
                 $op = $rhs_end // $op->next;
                 next;
@@ -3059,6 +3140,7 @@ class SoN::FromOptree 0.01 {
           . "an array's start) is never used -- perl evaluates it and dies; the graph would "
           . "drop it\n"
             if grep { !$present{$_} } keys $SoN::IR::NodeFactory::MADE_MAY_DIE->%*;
+        $_->set_file(1) for grep { $_->isa('SoN::IR::Node::PadAccess') && $_->shared && $ctx->{file_slots}{ $_->targ // '' } } $graph->members->@*;
         return $graph;
     }
 
@@ -5134,11 +5216,11 @@ class SoN::FromOptree 0.01 {
 
     sub _step ($cv, $op, $sim, $factory, $opmap, $ctx) {
         # (not a store's target: `$a[1] = 1` is a STORE, not a FETCH)
-        # (NOR IN A BRANCH ARM, as a $@ read is not: a ternary's arms merge no
-        # control, and pinned there the read forked the chain -- "a control
-        # node with 2 successors". shortcut: an if arm's tied read floats, as
-        # before; merge a select's control to pin there too.)
-        local $SoN::IR::NodeFactory::ON_VALUE = %TIED_AGG && !( $op->flags & B::OPf_MOD() ) && ( ( $ctx->{mode} // '' ) ne 'branch' || $ARM_PINS ) ? sub ($n) { _pin_tied_read($sim, $n) } : undef;
+        # (NOR IN A BRANCH ARM WITHOUT ITS OWN PROJ: a select merges no control,
+        # and pinned there the read forked the chain -- "a control node with 2
+        # successors". An arm on its own Proj -- if, ternary, &&, ||, // that
+        # pins -- sets $ARM_PINS.)
+        local $SoN::IR::NodeFactory::ON_VALUE = !( $op->flags & B::OPf_MOD() ) && ( ( $ctx->{mode} // '' ) ne 'branch' || $ARM_PINS ) ? sub ($n) { _pin_tied_read($sim, $n) } : undef;
         my $name = $op->name;
         my $mode = $ctx->{mode};
 
@@ -5149,6 +5231,7 @@ class SoN::FromOptree 0.01 {
             $CURRENT_PACKAGE = $pkg if defined $pkg && length $pkg;
             $STMT_LABEL = $op->label;
             $SoN::IR::NodeFactory::SITE = [ $op->file, $op->line ];
+            $SoN::IR::NodeFactory::STRICT_REFS = ( $op->hints & 0x2 ) ? 1 : 0;   # HINT_STRICT_REFS
         }
         # `use integer` ARITHMETIC IS ITS OWN: perl truncates operands and wraps
         # (i_add, i_multiply, ...), and a bitwise op under it is signed. Mapped
@@ -6584,6 +6667,30 @@ class SoN::FromOptree 0.01 {
             my $is_lvalue = ($op->flags & 32) && !$is_deref
                                               && !$mod_but_read;    # OPf_MOD
             my $existing = $sim->lookup($targ);
+            # AUTOVIVIFIED: a deref for a store (or any lvalue use: push onto
+            # `@{$r->{l}}`, `keys %$r`) of a scalar that is undef HERE makes it a
+            # new hash or array first -- perl's OPpDEREF_HV/AV under OPf_MOD.
+            # Known undef (a bare `my $r;`), that is `$r = {}` / `$r = []`: the
+            # graph says so, as an allocation pinned where it runs.
+            # shortcut: only a binding undef here; one undef on some path only
+            # (a Phi) is left to the consumer, which stops loudly.
+            if (($op->flags & 32) && ( $is_deref == 16 || $is_deref == 32 )
+                    && !( $ctx->{cell_params}{$targ} // $ctx->{cells}{$targ} ) && !$ITER_ALIAS_REF{$targ}) {
+                my $cur = $existing;
+                $cur = undef if $ctx->{addr_taken}{$targ};   # (in memory: its binding is not its value)
+                if (blessed($cur) && $cur->operation eq 'Constant' && ( $cur->const_type // '' ) eq 'undef') {
+                    my $is_hash = $is_deref == 32;
+                    my $node = $factory->make($is_hash ? 'HashLiteral' : 'ArrayLiteral',
+                        inputs => [], stamp => SoN::IR::Stamp->new(type => $is_hash ? 'HashRef' : 'ArrayRef'));
+                    if (defined $sim->control) {
+                        $node->set_control_in($sim->control);
+                        $sim->set_control($node);
+                    }
+                    $sim->define($targ, $node);
+                    $sim->push_node($node);
+                    return ($op->next, 'handled');
+                }
+            }
             # AN ITERATOR ALIASED BY REFERENCE reads its element now: a call
             # before this read may have changed it in place, as perl's alias
             # sees, and a shift does not move it.
@@ -9056,6 +9163,32 @@ class SoN::FromOptree 0.01 {
                 kind   => ($name eq 'helem' ? 'hash' : 'array'),
                 inputs => \@sub_inputs,
                 (defined $elem_stamp ? (stamp => $elem_stamp) : ()));
+            # AN ELEMENT AUTOVIVIFIED: dereferenced for a store (`push
+            # @{$h{l}}, 4`, `$h{x}{y} = 6`) -- perl's OPpDEREF_AV/HV on it under
+            # OPf_MOD -- an undef element becomes a new array or hash, stored
+            # into it, before the deref. The graph says `$h{l} //= []`: a read,
+            # a fresh allocation for the undef case (unseen otherwise), and the
+            # store. (Measured before: `my %h; push @{$h{l}}, 4` printed nothing.)
+            # Not for a tied container (a STORE perl does not make).
+            my $deref = $op->private & 48;   # OPpDEREF_AV 16, OPpDEREF_HV 32
+            if ($is_lvalue && ( $deref == 16 || $deref == 32 ) && defined $sim->memory && !$local
+                    && _deref_chain_writes($op)
+                    && !( grep { blessed($_) && _names_tied($_) } $container )) {
+                my $kind = $name eq 'helem' ? 'hash' : 'array';
+                my $read = $factory->make('Subscript', kind => $kind,
+                    inputs => [ $container, $index, $sim->memory ]);
+                my $lit = $factory->make($deref == 32 ? 'HashLiteral' : 'ArrayLiteral',
+                    inputs => [], stamp => SoN::IR::Stamp->new(type => $deref == 32 ? 'HashRef' : 'ArrayRef'));
+                $lit->set_control_in($sim->control);
+                $sim->set_control($lit);
+                my $viv = $factory->make('DefinedOr', inputs => [ $read, $lit ]);
+                my $store = $factory->make('Assign', inputs => [ $sub, $viv ]);
+                $store->set_control_in($sim->control);
+                $sim->set_control($store);
+                $sim->set_memory($store);
+                $sim->push_node($viv);
+                return ($op->next, 'handled');
+            }
             $sim->push_node($sub);
             return ($op->next, 'handled');
         }
@@ -17557,6 +17690,8 @@ class SoN::FromOptree 0.01 {
 
     sub _handle_entertry ($cv, $op, $sim, $factory, $opmap, $visited) {
         local $IN_EVAL_BODY = 1;
+        # (the body runs on the chain: a read in it may be pinned where it stands)
+        local $ARM_PINS = 1;
         # Set by the factory when the body makes a value that may die
         # (SoN::IR::NodeFactory::MAY_DIE); see Region's eval_may_die.
         my $may_die = 0;
@@ -17756,6 +17891,7 @@ class SoN::FromOptree 0.01 {
         {
             local $IN_EVAL_BODY = 1;
             # A die in the try body is the try's, not an enclosing eval's.
+            local $ARM_PINS = 1;
             local $EVAL_ID = $try_id;
             my ($end) = _walk_branch($cv, $op->next, $body_sim, $factory,
                 $opmap, $visited, undef, 1, _op_addr($poptry));

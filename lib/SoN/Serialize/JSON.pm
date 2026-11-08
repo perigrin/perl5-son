@@ -223,6 +223,7 @@ sub _extract_fields ($node, $id_remap) {
             ( defined $node->sigil  ? ( sigil  => $node->sigil )  : () ),
             ( defined $node->symbol ? ( symbol => $node->symbol ) : () ),
             ( $node->shared ? ( shared => 1 ) : () ),
+            ( $node->file ? ( file => 1 ) : () ),
         };
     }
     if ($op eq 'FieldAccess') {
@@ -275,7 +276,8 @@ sub _extract_fields ($node, $id_remap) {
         return { op => $node->op };
     }
     if ($op eq 'PostfixDeref') {
-        return { sigil => $node->sigil, ($node->copy ? (copy => 1) : ()) };
+        return { sigil => $node->sigil, ($node->copy ? (copy => 1) : ()),
+            ( defined $node->line ? ( eval_id => $node->eval_id, file => $node->file, line => $node->line, strict => ( $node->strict ? JSON::PP::true : JSON::PP::false ) ) : () ) };
     }
     # A MATCH WITH CODE BLOCKS names their bodies, in pattern order; emitted
     # only then, so every other match's wire is unchanged.

@@ -105,9 +105,12 @@ sub body_refuses ($src, $gap, $name) {
 
 my $CAPTURE = 'is not yet lowered -- the body graph has no edge to that variable';
 
-body_refuses(q{for my $i (1..2) { print join(",", sort { ($a % $i) <=> ($b % $i) or $a <=> $b } 4,3,2,1), "\n" }},
+# A LOOP VARIABLE OF THE PROGRAM is one of its lexicals, shared by name; a sub's refuses.
+round_trips(q{for my $i (1..2) { print join(",", sort { ($a % $i) <=> ($b % $i) or $a <=> $b } 4,3,2,1), "\n" }},
+    'a loop variable of the program');
+body_refuses(q{sub s4 { for my $i (1..2) { print join(",", sort { ($a % $i) <=> ($b % $i) or $a <=> $b } 4,3,2,1), "\n" } } s4();},
     "GAP: a sort comparator block that reads a lexical of its enclosing scope (\$i) $CAPTURE",
-    'a loop variable');
+    'a loop variable of a sub');
 body_refuses(q{for (1, -1) { print join(",", sort { $_ * ($a <=> $b) } 1, 3, 2), "\n" }},
     'GAP: a sort comparator block that reads $_ is not yet lowered -- it is the enclosing topic, and the body graph has no edge to it',
     'the enclosing topic');

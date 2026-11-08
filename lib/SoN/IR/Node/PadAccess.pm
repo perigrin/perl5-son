@@ -23,6 +23,11 @@ class SoN::IR::Node::PadAccess :isa(SoN::IR::Node::Access) {
     # variable itself, declared once above every sub. See
     # docs/plans/2026-09-29-a-named-sub-shares-the-file-lexical.md.
     field $shared :param :reader = 0;
+    # ...and of those, the FILE's (the program's own, or one a named sub reaches
+    # out to) -- not a sub's own aggregate a closure in it captures, which is
+    # made anew each call. Set once the graph is built (FromOptree).
+    field $file :reader = 0;
+    method set_file($v) { $file = $v ? 1 : 0; return }
 
     # BOTH REQUIRED, and the sigil is the load-bearing half. This node is
     # hash-consed by content, so two PadAccess nodes with the same symbol and

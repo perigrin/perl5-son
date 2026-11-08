@@ -13,9 +13,17 @@ class SoN::IR::Node::PostfixDeref :isa(SoN::IR::Value) {
     # foreach's dereference, unmarked, is the live array it walks.
     field $copy :param :reader = 0;
 
+    # A SCALAR DEREF MAY DIE (no SCALAR reference there): like a may-die
+    # division it names its block eval, its statement's file and line, and
+    # whether `strict refs` holds there (without it a string is a name).
+    field $eval_id :param :reader = undef;
+    field $file    :param :reader = undef;
+    field $line    :param :reader = undef;
+    field $strict  :param :reader = 0;
+
     method operation() { 'PostfixDeref' }
 
     method content_hash() {
-        return join('|', 'PostfixDeref', "sigil=$sigil", ($copy ? 'copy' : ()), $self->_serialize_inputs());
+        return join('|', 'PostfixDeref', "sigil=$sigil", ($copy ? 'copy' : ()), ( defined $line ? ( 'site', $eval_id // '', $file, $line, $strict ? 'strict' : '' ) : () ), $self->_serialize_inputs());
     }
 }
