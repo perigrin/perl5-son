@@ -54,3 +54,12 @@ test there that failed first.
 
 ## Flakes to watch
 - pvm 176 (a local hash element, chalk-found-gaps.md) was GAP once in a census (Context: "a store to an element while a read through a reference waits") and ROUNDTRIP in 52 reruns: a rare order dependence, not yet found.
+
+## T2-completion goal closed 2026-11-08 (perigrin's OK)
+
+All eight items fixed or narrowed. perigrin accepted these remaining refusals by name; they stay open T2 work:
+
+- Item 3: a hash read across a package store when the store is not the statement just before, or the read flows into ?:, &&, ||, // or a phi.
+- Items 5/6: a store through an element not made a hash or array first; an array read whole through an element; a reference to a scalar in a loop body or an arm; a scalar deref where a reference T2 does not make may reach it.
+- An && or || of a list; an & call of a code value sharing @_.
+- Context (T1) lowers a comparator calling a sub with an effect in its own order (only where T2 refuses the unit).
