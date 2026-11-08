@@ -45,6 +45,8 @@ test there that failed first.
 - bless in T2: the class in the aggregate's header (%Array field 4), so an array blesses as a hash does; `bless` as a statement; `blessed`. Scalar and code references: refused by name.
 - Scalar references in T2: `\$x` is the variable's heap cell (tag 9), `$$r` reads/stores through it; perl's dies (undef under strict, `Not a SCALAR reference`, a string under strict cut at 32) at the deref's site, its eval's to catch. Without strict a string is a name: a stop. A store through undef (perl vivifies): a stop.
 - File lexicals in T2: one global each -- a scalar's slot, a hash's or array's reference made at first use (t2_ghash/t2_garray); `my $n; sub f { $n++ }` and a program sort block over `%h` lower. shortcut: a file lexical made anew in a loop is one variable here.
+- Refused by name in T2 (acb609c9), where it once stopped at run time or answered wrong: a `$$r` where a reference T2 does not make may reach it (`\(@a)`, `\$_[0]`); a `\$x` in a loop body or an arm; a store through an element not made a hash or array first; an element's array read whole; an `&&`/`||` of a list; an `&$code;` sharing @_.
+- Element autovivify (B::SoN) only in a `my %h`/`my @a` or a hash/array just made, found up the op tree.
 
 ## Open questions
 - Our own PadWalker? PerlOnJava ships one (Perl facade over Java runtime lexical metadata, for Reply and Devel::Cycle; checked 2026-11-08 at 6a83374). It costs a runtime that keeps lexical metadata. perigrin to decide; until then T2 refuses it as XS.
