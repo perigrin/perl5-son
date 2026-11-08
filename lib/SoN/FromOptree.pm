@@ -2792,6 +2792,15 @@ class SoN::FromOptree 0.01 {
                 my $node_op = $name eq 'and' ? 'And' : 'Or';
                 my $node = $value_phi ? $sim->pop_node
                     : $factory->make($node_op, inputs => [$lhs, $rhs]);
+                # A DEFINED GUARD NARROWS ITS ARM: `defined X && X` reads X only
+                # where it is defined, so there X is T, not Maybe[T]; the && is
+                # join(Boolean, T) -- its false is the guard's, never undef.
+                if ( $node_op eq 'And' && !$value_phi
+                    && $lhs->operation eq 'Defined' && $lhs->inputs->[0] == $rhs
+                    && $rhs->stamp && $rhs->stamp->type =~ /\AMaybe\[(.+)\]\z/ ) {
+                    $node->set_stamp( SoN::IR::Stamp::join(
+                        SoN::IR::Stamp->new(type => 'Boolean'), SoN::IR::Stamp->new(type => $1) ) );
+                }
                 $sim->push_node($node);
                 $op = $rhs_end // $op->next;
                 next;

@@ -75,5 +75,6 @@ All eight items fixed or narrowed. perigrin accepted these remaining refusals by
 - Stage 2, open: `join(T, Undef)` with no Maybe on either side is still Scalar.
   Making it `Maybe[T]` is global (every undef-or-value merge) and its fallout is
   to be measured case by case.
-- Next: defined-guard narrowing in B::SoN (in the arm where `defined X` holds,
-  X loses its Undef; `defined X && X` is Boolean|T, so Boolean for a print).
+- Defined-guard narrowing, first form (2026-11-08): `defined X && X` is stamped
+  join(Boolean, T) when X is Maybe[T] (Boolean for a print). Open: `defined X ? X : ...`,
+  `if (defined X) { X }`, `!defined X || X`.
