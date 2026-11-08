@@ -278,3 +278,4 @@
 - [Census cause: recursive closures](census-cause-recursive-closures.md) — 134, 135 via a boxed define; arm-store miscompile fixed
 - [Census cause: each](census-cause-each.md) — per-variable iterator; keys reset needs producer ordering; while-each loop shape open
 - [Census cause: mixed literal](census-cause-mixed-literal.md) — Num+Str elements are Scalars; 17-digit number constants (miscompile)
+- [Future: value types](future-value-types.md) — TypeScript-style literal types (True/False, string enums); deferred 2026-11-08, revisit with truthiness narrowing
