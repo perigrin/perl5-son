@@ -68,10 +68,14 @@ round_trips(q{$main::p = 0; eval q{$main::p = 1}; print "p=$main::p\n";},
 
 # PadWalker reads and rewrites lexicals -- the caller's too -- from outside
 # the graph, which is the eval's hazard by another name.
-my $PW = qr/GAP: PadWalker::\w+ reads or writes lexicals the graph cannot see/;
-refuses(q{use PadWalker qw(peek_my); sub f { my $i = 0; ${ peek_my(0)->{'$i'} } = 1; return $i } print f(), "\n";},
-    'PadWalker::peek_my', $PW);
-refuses(q{use PadWalker (); sub f { my $i = 0; my $h = PadWalker::peek_my(0); ${ $h->{'$i'} } = 1; return $i } print f(), "\n";},
-    'PadWalker::peek_my by its full name', $PW);
+SKIP: {
+    skip q{PadWalker is not installed: the program cannot compile to be refused}, 2
+        unless eval { require PadWalker; 1 };
+    my $PW = qr/GAP: PadWalker::\w+ reads or writes lexicals the graph cannot see/;
+    refuses(q{use PadWalker qw(peek_my); sub f { my $i = 0; ${ peek_my(0)->{'$i'} } = 1; return $i } print f(), "\n";},
+        'PadWalker::peek_my', $PW);
+    refuses(q{use PadWalker (); sub f { my $i = 0; my $h = PadWalker::peek_my(0); ${ $h->{'$i'} } = 1; return $i } print f(), "\n";},
+        'PadWalker::peek_my by its full name', $PW);
+}
 
 done_testing;
