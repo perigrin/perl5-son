@@ -5735,7 +5735,10 @@ class SoN::FromOptree 0.01 {
             # scalar Constant on the stack; Length-wrapping it would take a
             # string byte-length -- a miscompile. Fall through to SKIP (leaving
             # the value in place) unless the operand is an aggregate.
-            if (_is_aggregate_node($agg)) {
+            if (_is_aggregate_node($agg)
+                # (or a `my @a` / `my %h` binding with no stamp yet: `my %h; $h{x} = 1;
+                # scalar(%h)` printed the pairs, x1, where perl counts the keys)
+                || blessed($agg) && $agg->isa('SoN::IR::Node::PadAccess') && ( $agg->sigil // '' ) =~ /\A[\@%]\z/) {
                 my $stamp = _result_stamp('Count', [$agg]);
                 my %extra = defined $stamp ? (stamp => $stamp) : ();
                 $sim->push_node(_make_count($factory, $agg, $sim, %extra));
@@ -11511,7 +11514,10 @@ class SoN::FromOptree 0.01 {
                 if ($node_type eq 'Call'
                         && ($name eq 'push' || $name eq 'unshift'
                             || $name eq 'splice')
-                        && @inputs && _is_array_operand($inputs[0])
+                        && @inputs && ( _is_array_operand($inputs[0])
+                             # (A FIELD ARRAY too: what is pushed onto is an array -- unversioned,
+                             # a count after the push read the method's entry, 1 for perl's 2)
+                             || blessed($inputs[0]) && $inputs[0]->isa('SoN::IR::Node::FieldAccess') )
                         && defined $sim->control && defined $sim->memory) {
                     # SAME SHAPE AS shift/pop BELOW. These mutate the array's
                     # length, so the Call becomes the new memory version and a
