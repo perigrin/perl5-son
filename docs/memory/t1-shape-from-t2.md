@@ -63,3 +63,17 @@ All eight items fixed or narrowed. perigrin accepted these remaining refusals by
 - Items 5/6: a store through an element not made a hash or array first; an array read whole through an element; a reference to a scalar in a loop body or an arm; a scalar deref where a reference T2 does not make may reach it.
 - An && or || of a list; an & call of a code value sharing @_.
 - Context (T1) lowers a comparator calling a sub with an effect in its own order (only where T2 refuses the unit).
+
+## Maybe[T] = T|Undef, stage 1 (2026-11-08)
+
+- Both lattices know `Maybe[T]` as rules, not tree edges (chalk `TypeLibrary`,
+  producer `SoN::IR::Stamp`): T and Undef below it, it below Scalar, covariant;
+  a join keeps a Maybe and absorbs Undef; a meet with T narrows to T.
+- B::SoN stamps Print `Maybe[Boolean]` (perl: `&PL_sv_yes` or `&PL_sv_undef`).
+  Chalk's loader keeps it; Context and T2 hold any `Maybe[...]` as a %Slot.
+  Fixed: `defined(print NOWHERE ...)` read defined.
+- Stage 2, open: `join(T, Undef)` with no Maybe on either side is still Scalar.
+  Making it `Maybe[T]` is global (every undef-or-value merge) and its fallout is
+  to be measured case by case.
+- Next: defined-guard narrowing in B::SoN (in the arm where `defined X` holds,
+  X loses its Undef; `defined X && X` is Boolean|T, so Boolean for a print).

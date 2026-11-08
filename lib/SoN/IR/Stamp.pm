@@ -94,7 +94,39 @@ class SoN::IR::Stamp 0.01 {
     field $type :param :reader;
 
     ADJUST {
+        # MAYBE[T] IS T|Undef. Rules, not %PARENTS edges: edges would make
+        # join(T, Undef) Maybe[T] everywhere, which is stage 2 (chalk's
+        # t1-shape-from-t2.md); here only a stamp that says Maybe is one.
+        if (defined( my $t = _maybe_of($type) )) {
+            die "Unknown stamp type: $type"
+                unless exists $PARENTS{$t} && $t !~ /\A(?:None|Unknown)\z/
+                    && !_below('Undef', $t);
+            return;
+        }
         die "Unknown stamp type: $type" unless exists $PARENTS{$type};
+    }
+
+    sub _maybe_of ($t) { return $t =~ /\AMaybe\[(.+)\]\z/ ? $1 : undef }
+
+    # _below($child, $parent) -> $child <: $parent, by name, Maybe included.
+    sub _below ($c, $p) {
+        return true if $c eq $p || $c eq 'None';
+        if (defined( my $pt = _maybe_of($p) )) {
+            return true if $c eq 'Undef';
+            return _below(_maybe_of($c) // $c, $pt);
+        }
+        if (defined( my $ct = _maybe_of($c) )) {
+            return _below('Undef', $p) && _below($ct, $p) ? true : false;
+        }
+        return exists _ancestors($c)->{$p} ? true : false;
+    }
+
+    # _maybe_type($t) -> T|Undef by name: a type already holding undef is itself.
+    sub _maybe_type ($t) {
+        return 'Unknown' if $t eq 'Unknown';
+        return 'Undef'   if $t eq 'None' || $t eq 'Undef';
+        return $t if defined _maybe_of($t) || _below('Undef', $t);
+        return "Maybe[$t]";
     }
 
     method is_subtype_of ($other) {
@@ -104,6 +136,9 @@ class SoN::IR::Stamp 0.01 {
         # None is below everything; nothing but None is below None.
         return true  if $type eq 'None';
         return false if $other_type eq 'None';
+
+        return _below($type, $other_type)
+            if defined _maybe_of($type) || defined _maybe_of($other_type);
 
         my $ancestors = _ancestors($type);
         return exists $ancestors->{$other_type} ? true : false;
@@ -123,6 +158,16 @@ class SoN::IR::Stamp 0.01 {
         # If one is subtype of the other, that's the meet
         return $left  if $left->is_subtype_of($right);
         return $right if $right->is_subtype_of($left);
+
+        # Maybe[A] meets B in two parts: A with B, and Undef with B.
+        for my $pair ([ $left, $right ], [ $right, $left ]) {
+            my ($m, $other) = @$pair;
+            my $t = _maybe_of($m->type) // next;
+            my $d = meet(SoN::IR::Stamp->new(type => $t), $other)->type;
+            my $u = meet(SoN::IR::Stamp->new(type => 'Undef'), $other)->type;
+            return SoN::IR::Stamp->new(type =>
+                $d eq 'None' ? $u : $u eq 'None' ? $d : _maybe_type($d));
+        }
 
         # Look for a type below both, deepest first, so the result is the
         # GREATEST such lower bound rather than merely a lower bound.
@@ -149,6 +194,15 @@ class SoN::IR::Stamp 0.01 {
         # pass, so join(Int, None) is Int rather than a widening to the top.
         return $right if $lt eq 'None';
         return $left  if $rt eq 'None';
+
+        # A Maybe absorbs Undef and joins its T with the other side's.
+        my ($lm, $rm) = (_maybe_of($lt), _maybe_of($rt));
+        if (defined $lm || defined $rm) {
+            my ($l, $r) = ($lm // $lt, $rm // $rt);
+            my $t = $r eq 'Undef' ? $l : $l eq 'Undef' ? $r
+                  : SoN::IR::Stamp::join(SoN::IR::Stamp->new(type => $l), SoN::IR::Stamp->new(type => $r))->type;
+            return SoN::IR::Stamp->new(type => _maybe_type($t));
+        }
 
         # If one is subtype of the other, the supertype is the join
         return $right if $left->is_subtype_of($right);

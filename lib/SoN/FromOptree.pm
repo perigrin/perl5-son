@@ -11314,13 +11314,13 @@ class SoN::FromOptree 0.01 {
             # while the stamp was right.)
             #
             # Measured: `print ""` yields 1; printing to a read-only handle
-            # yields undef. So the honest type is join(Boolean,Undef), which
-            # the lattice puts at Scalar -- the same derivation `open` and
-            # `binmode` use. Boolean ALONE would be wrong rather than narrow,
-            # since Boolean does not admit undef.
+            # yields undef. So the honest type is Boolean|Undef: Maybe[Boolean]
+            # (it was Scalar, which lost that it is never a number or a string).
+            # Boolean ALONE would be wrong rather than narrow, since Boolean
+            # does not admit undef.
             my $node = $factory->make('Print', inputs => \@inputs,
                 has_filehandle => $has_fh,
-                stamp => SoN::IR::Stamp->new(type => 'Scalar'));
+                stamp => SoN::IR::Stamp->new(type => 'Maybe[Boolean]'));
             if ($is_effect) {
                 $node->set_control_in($sim->control);
                 $sim->set_control($node);
