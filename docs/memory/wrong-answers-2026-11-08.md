@@ -33,6 +33,7 @@ WRONG lines (the `w299c` baseline), each re-run 2026-11-08 and attributed by
 | k2 | `package Foo; eval q{ h() }` | Foo::h | nothing | a string eval's package |
 | x1, x3 | `sub f { eval q{ ... @_ ... } }` | the args | nothing | `@_` inside a string eval |
 | k07 | `9007199254740993 + 0` in a code block | exact | 9.00719925474099e+15 | an integer kept as a double |
+| lv1, ne6 | `my %h; for (1,2) { push @{$h{l}}, $_ }`; `for (@{$h{l}}) {} exists $h{l}` | `1 2`; `v` | empty; `n` | a push onto, or a foreach over, an element left undef in a loop (B::SoN does not vivify there; T2 refuses) |
 
 ## Fixed today
 - `k1`: a sort comparator that dies was lowered by T2 without perl's comparison

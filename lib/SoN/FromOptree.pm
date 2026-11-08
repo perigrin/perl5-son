@@ -700,21 +700,19 @@ class SoN::FromOptree 0.01 {
     # read is left as it was.
     # shortcut: a read through an undef intermediate does not vivify it here, as perl's does.
     sub _deref_chain_writes ($elem) {
-        my $mod = 0;
-        my $n = 0;
-        for (my $o = $elem->next; ref($o) && $$o && $n++ < 32; $o = $o->next) {
-            my $name = $o->name;
-            if ($name eq 'rv2av' || $name eq 'rv2hv') { $mod = $o->flags & 32; next }
-            if ($name eq 'aelem' || $name eq 'helem') {
-                next if $o->private & 48;   # another intermediate
-                return $o->flags & 32;
-            }
-            # shortcut: a foreach over an undef element does not make it (perl's does); it iterates nothing either way.
-            return 0 if $name eq 'enteriter';
-            next if $name =~ /\A(?:const|padsv|padav|padhv|gvsv|gv|null|scope|pushmark|rv2sv|aelemfast|aelemfast_lex)\z/;   # (a `@{ ... }` block is a scope)
-            return $mod;
+        # UP THE TREE, not along the run order: a key computed by a call
+        # (`$self->{t}{ $n->op } = 1`) runs between the deref and its store.
+        my $up = sub ($o) { my $p = eval { $o->parent }; $p = eval { $p->parent } while $p && $$p && $p->name =~ /\A(?:null|scope|leave)\z/; $p && $$p ? $p : undef };
+        my $rv = $up->($elem) or return 0;
+        return 0 unless $rv->name eq 'rv2av' || $rv->name eq 'rv2hv';
+        my $use = $up->($rv);
+        if ($use && ( $use->name eq 'aelem' || $use->name eq 'helem' )) {
+            return _deref_chain_writes($use) if $use->private & 48;   # another intermediate
+            return $use->flags & 32;                                   # the element stored into
         }
-        return $mod;
+        # shortcut: a foreach over an undef element does not make it (perl's does); it iterates nothing either way.
+        return 0 if $use && $use->name =~ /\A(?:enteriter|iter|leaveloop)\z/;
+        return $rv->flags & 32;                                        # push @{...}, keys %{...}
     }
     sub _through_ref_container ($c) {
         return 0 unless blessed($c) && $c->can('operation');
@@ -9181,7 +9179,12 @@ class SoN::FromOptree 0.01 {
                     # orders against the pass's reads); the consumer refuses a write there.
                     && !$IN_LOOP_BODY
                     # (not through @_: an element of it is the caller's variable, aliased)
-                    && !( blessed($container) && $container->isa('SoN::IR::Node::ArgsSource') )
+                    # ONLY A CONTAINER KNOWN HERE: a `my %h`/`my @a`, or a hash or array just
+                    # made. Through a reference from elsewhere (`$self->{s}`) the store
+                    # before a read waiting on it is refused downstream -- left as it was.
+                    # (not @_ either: an element of it is the caller's variable, aliased)
+                    && blessed($container) && ( $container->isa('SoN::IR::Node::HashLiteral') || $container->isa('SoN::IR::Node::ArrayLiteral')
+                         || $container->isa('SoN::IR::Node::PadAccess') && ( $container->sigil // '' ) =~ /\A[\@%]\z/ )
                     && !( grep { blessed($_) && _names_tied($_) } $container )) {
                 my $kind = $name eq 'helem' ? 'hash' : 'array';
                 my $read = $factory->make('Subscript', kind => $kind,

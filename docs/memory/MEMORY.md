@@ -47,6 +47,7 @@
 - [The shape of T1 that T2 needs](t1-shape-from-t2.md) — perigrin: a T1 shortage T2 finds is fixed in B::SoN; the ledger
 - [Wrong answers still in the probe sweep](wrong-answers-2026-11-08.md) — goal item 8: each WRONG probe, T2 or Context, its cause; fixed today: k1, push onto an element, read through undef
 - [A scratch copy needs its full suite](a-scratch-copy-needs-its-full-suite.md) — ported and pushed on the touched tests only; 19 deparse tests broke; run all of t/ on the copy first
+- [CPS for the call model](design-cps-call-model.md) — perigrin: T2 runtime calls explicitly, the compiler's own ultimately; die/eval as an escape continuation; a cycle still needs an in-progress mark
 - [T2 slice 5: hash references](t2-slice5-hashes.md) — {...} as %Slot tag 5, $h->{k}, `!`, early-exit joins; pvm 093; 411 -> 412 (4bd2ca8e)
 - [Recursive subs/methods with object params](recursive-methods-object-params.md) — Scalar define params for recursive subs; method self-calls; 225 still refused (33a09e83)
 - [Census cause: small operators](census-cause-small-operators.md) — ** x << >> unary minus; older wrong: float -0 printed "-0"; 038 039 041 048 264 266
