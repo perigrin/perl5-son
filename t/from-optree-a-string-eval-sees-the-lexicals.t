@@ -1,5 +1,5 @@
 # ABOUTME: A string eval shares its frame and can write any lexical in scope unseen, so it
-# ABOUTME: refuses whenever one is; PadWalker calls refuse the same way, at the same site.
+# ABOUTME: refuses whenever one is.
 
 use v5.42.0;
 use Test2::V0;
@@ -66,16 +66,5 @@ round_trips(q{sub h { return eval "1+1" } print h(), "\n";},
 round_trips(q{$main::p = 0; eval q{$main::p = 1}; print "p=$main::p\n";},
     'an eval writing a package scalar still lowers');
 
-# PadWalker reads and rewrites lexicals -- the caller's too -- from outside
-# the graph, which is the eval's hazard by another name.
-SKIP: {
-    skip q{PadWalker is not installed: the program cannot compile to be refused}, 2
-        unless eval { require PadWalker; 1 };
-    my $PW = qr/GAP: PadWalker::\w+ reads or writes lexicals the graph cannot see/;
-    refuses(q{use PadWalker qw(peek_my); sub f { my $i = 0; ${ peek_my(0)->{'$i'} } = 1; return $i } print f(), "\n";},
-        'PadWalker::peek_my', $PW);
-    refuses(q{use PadWalker (); sub f { my $i = 0; my $h = PadWalker::peek_my(0); ${ $h->{'$i'} } = 1; return $i } print f(), "\n";},
-        'PadWalker::peek_my by its full name', $PW);
-}
 
 done_testing;

@@ -82,6 +82,7 @@ sub _extract_fields ($node, $id_remap) {
             # A method call's site: perl's message names it where no class answers.
             ( defined $node->line ? ( file => $node->file, line => $node->line ) : () ),
             ( $node->external ? ( external => JSON::PP::true ) : () ),
+            ( $node->xs ? ( xs => JSON::PP::true ) : () ),
             ( $node->memory_input ? ( memory_input => JSON::PP::true ) : () ),
             # The statically-known class for a method dispatch (Class->new).
             ( defined $node->class_name

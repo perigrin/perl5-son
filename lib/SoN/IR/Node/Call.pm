@@ -87,6 +87,8 @@ class SoN::IR::Node::Call :isa(SoN::IR::Value) {
     # import, XS. Not in this wire, and not missing: the program that loads
     # this one also loads it.
     field $external :param :reader = false;
+    # ...and is XS: there is no Perl source for any backend to compile.
+    field $xs :param :reader = false;
 
     # Resolved callee handle (a chalk MOP Method or Sub).
     # Per Phase 4, CallExpression resolves the symbolic name via
@@ -138,6 +140,7 @@ class SoN::IR::Node::Call :isa(SoN::IR::Value) {
             ($paren_form ? "paren_form=1" : ()),
             ($shares_args ? "shares_args=1" : ()),
             ($external ? "external=1" : ()),
+            ($xs ? "xs=1" : ()),
             $self->_serialize_inputs());
     }
 
