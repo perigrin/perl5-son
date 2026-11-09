@@ -72,9 +72,14 @@ All eight items fixed or narrowed. perigrin accepted these remaining refusals by
 - B::SoN stamps Print `Maybe[Boolean]` (perl: `&PL_sv_yes` or `&PL_sv_undef`).
   Chalk's loader keeps it; Context and T2 hold any `Maybe[...]` as a %Slot.
   Fixed: `defined(print NOWHERE ...)` read defined.
-- Stage 2, open: `join(T, Undef)` with no Maybe on either side is still Scalar.
-  Making it `Maybe[T]` is global (every undef-or-value merge) and its fallout is
-  to be measured case by case.
+- Stage 2 done (2026-11-09): join(T, Undef) is Maybe[T] for a scalar T in both
+  lattices. First fallout: census 412 -> 384, 28 chalk tests. Causes: Context reads
+  stamps by name (`eq 'Scalar'`, ~78 sites) -- answered with a SHIM, not by teaching
+  Context (perigrin: Context is being retired): LLVM.pm _context_sees_maybe_as_scalar
+  shows Context Scalar for every Maybe (nodes, Coerce ends, closure bodies, MOP return
+  types) and puts it back. Delete it with Context. Two real Analysis gaps fixed:
+  _is_narrowed treated Maybe as settled (invalid IR), _narrow_unknown_coercions did not
+  take a Maybe operand. Builtin rows open / binmode / -c -d -f -l are Maybe now.
 - Defined-guard narrowing, first form (2026-11-08): `defined X && X` is stamped
   join(Boolean, T) when X is Maybe[T] (Boolean for a print). Second form: the true
   arm of `defined X ? X : Y` is T (`_guarded_stamp`). Third: an `if (defined X)` body

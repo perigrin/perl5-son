@@ -22,7 +22,7 @@ subtest 'open is Scalar: an Int pid or undef' => sub {
         SoN::IR::Stamp->new( type => 'Int' ),
         SoN::IR::Stamp->new( type => 'Undef' ),
     )->type;
-    is $lub, 'Scalar', 'the lattice puts join(Int,Undef) at Scalar';
+    is $lub, 'Maybe[Int]', 'the lattice puts join(Int,Undef) at Maybe[Int] (Scalar until 2026-11-09)';
     is $r->( [ 'Call', 'open' ] ), $lub, 'and open is typed to exactly that';
 };
 
@@ -123,8 +123,8 @@ subtest 'Boolean and Undef are siblings, so their join is Scalar' => sub {
 
     ok !$bool->is_subtype_of( $undef ), 'Boolean is not <: Undef';
     ok !$undef->is_subtype_of( $bool ), '... and Undef is not <: Boolean';
-    is SoN::IR::Stamp::join( $bool, $undef )->type, 'Scalar',
-        'so an op that can return undef is Scalar, never Boolean';
+    is SoN::IR::Stamp::join( $bool, $undef )->type, 'Maybe[Boolean]',
+        'so an op that can return undef is Maybe[Boolean], never Boolean';
 };
 
 # chdir IS a true Boolean: is_bool on BOTH paths, 1 and "", never undef. The

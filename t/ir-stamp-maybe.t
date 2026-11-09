@@ -25,7 +25,9 @@ is J('Maybe[Boolean]', 'Undef'),   'Maybe[Boolean]', 'a join absorbs Undef';
 is J('Maybe[Boolean]', 'Boolean'), 'Maybe[Boolean]', 'a join absorbs T';
 is J('Maybe[Int]', 'Num'),         'Maybe[Num]',     'a join joins the T parts';
 is J('Maybe[Boolean]', 'Str'),     'Scalar',         'Maybe[Scalar] is Scalar';
-is J('Boolean', 'Undef'),          'Scalar',         'stage 1: join(T, Undef) with no Maybe is still Scalar';
+is J('Boolean', 'Undef'),          'Maybe[Boolean]', 'stage 2: join(T, Undef) is Maybe[T]';
+is J('Undef', 'Int'),              'Maybe[Int]',     '... either side';
+is J('Array', 'Undef'),            'List',           'an aggregate with Undef keeps the tree join';
 
 is M('Maybe[Boolean]', 'Boolean'), 'Boolean', 'a meet with T is T';
 is M('Maybe[Boolean]', 'Undef'),   'Undef',   'a meet with Undef is Undef';

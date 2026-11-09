@@ -78,7 +78,7 @@ subtest 'joins reflect the corrected placement' => sub {
             'Scalar', "join(Boolean,$t) is Scalar, not Str";
     }
     is SoN::IR::Stamp::join( $bool, SoN::IR::Stamp->new( type => 'Undef' ) )->type,
-        'Scalar', 'join(Boolean,Undef) stays Scalar, as the file tests need';
+        'Maybe[Boolean]', 'join(Boolean,Undef) is Maybe[Boolean], as the file tests need (Scalar until 2026-11-09)';
     is SoN::IR::Stamp::join( $bool, $bool )->type,
         'Boolean', 'and a Boolean joined with itself is still Boolean';
 };

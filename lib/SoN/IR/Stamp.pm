@@ -195,6 +195,14 @@ class SoN::IR::Stamp 0.01 {
         return $right if $lt eq 'None';
         return $left  if $rt eq 'None';
 
+        # A SCALAR T WITH UNDEF IS Maybe[T] (stage 2, 2026-11-08), the least
+        # upper bound, below Scalar. An aggregate keeps the DAG join.
+        for ([ $lt, $rt ], [ $rt, $lt ]) {
+            my ($u, $t) = @$_;
+            return SoN::IR::Stamp->new(type => _maybe_type($t))
+                if $u eq 'Undef' && $t ne 'Unknown' && _below($t, 'Scalar');
+        }
+
         # A Maybe absorbs Undef and joins its T with the other side's.
         my ($lm, $rm) = (_maybe_of($lt), _maybe_of($rt));
         if (defined $lm || defined $rm) {

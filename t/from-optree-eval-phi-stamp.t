@@ -40,7 +40,7 @@ subtest 'an eval Phi is stamped from its arms' => sub {
     # join(Int, Undef) is Scalar: the value is an Int when the body returned
     # and undef when it died, and Scalar is the narrowest thing that covers
     # both. NOT Unknown, which is the top and asserts nothing.
-    is $phi->{stamp}, 'Scalar',
+    is $phi->{stamp}, 'Maybe[Int]',   # Scalar until Maybe[T], 2026-11-09
         'the Phi carries the join of its arms, not the lattice top';
 };
 

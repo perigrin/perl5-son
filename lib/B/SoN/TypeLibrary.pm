@@ -312,7 +312,7 @@ my %BUILTIN_SIGNATURES = (
     # UNDEF ON FAILURE, so the honest answer is the JOIN and the lattice states
     # it -- join(Boolean, Undef) = Scalar, the same derivation `open` uses.
     # Boolean descends from Str here, so it is the wrong answer on its own.
-    binmode => { operands => [], result => 'Scalar' },
+    binmode => { operands => [], result => 'Maybe[Boolean]' },   # join(Boolean, Undef), 2026-11-09
 
     # tr/// COUNTS what it changed; tr///r RETURNS THE NEW STRING. perl gives
     # them separate op names (verified with B::Concise: `trans` vs `transr`),
@@ -351,7 +351,7 @@ my %BUILTIN_SIGNATURES = (
     # THE HANDLE IS POSITION 0 in all three, which is what lets one declaration
     # type every spelling: `open(my $T, ...)`, `<$T>` and `close($T)` all read
     # the SAME PadAccess node, so seeding it once types the whole chain.
-    open   => { operands => [], result => 'Scalar' },
+    open   => { operands => [], result => 'Maybe[Int]' },   # join(Int, Undef), 2026-11-09
 
     # A line, or undef at EOF, or the whole file in list context. A
     # context-sensitive op is still table-eligible at the JOIN of its results:
@@ -374,10 +374,10 @@ my %BUILTIN_SIGNATURES = (
     # Their siblings are still NOT typed with them: -s is an Int byte count,
     # -M a Num of days. The family gets no blanket row; each member earns its
     # own or none.
-    ftchr  => { operands => [], result => 'Scalar' },
-    ftdir  => { operands => [], result => 'Scalar' },
-    ftfile => { operands => [], result => 'Scalar' },
-    ftlink => { operands => [], result => 'Scalar' },
+    ftchr  => { operands => [], result => 'Maybe[Boolean]' },
+    ftdir  => { operands => [], result => 'Maybe[Boolean]' },
+    ftfile => { operands => [], result => 'Maybe[Boolean]' },
+    ftlink => { operands => [], result => 'Maybe[Boolean]' },
 
     # chdir IS a true Boolean, and the distinction from the file tests above is
     # measured rather than assumed: is_bool on BOTH paths, 1 and "", never
