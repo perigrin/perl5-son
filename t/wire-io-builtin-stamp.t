@@ -79,11 +79,15 @@ subtest 'the file tests that can miss are join(Boolean,Undef)' => sub {
 # measures pp_close the way pp_open was measured, rather than assuming a
 # Boolean." Measured, it IS perl's canonical Boolean -- 1 and "" -- so the
 # assumption was right and now has evidence behind it.
-subtest 'close and rmdir are Boolean -- 1 or false, never undef' => sub {
-    for my $op (qw( close rmdir )) {
-        is $r->( [ 'Call', $op ] ), 'Boolean',
-            "$op yields perl's true/false pair";
-    }
+subtest 'close is Boolean -- 1 or false, never undef' => sub {
+    is $r->( [ 'Call', 'close' ] ), 'Boolean', "close yields perl's true/false pair";
+};
+
+# rmdir's 1 and 0 are integers, not perl's true/false (is_bool is false for
+# both; pp_rmdir pushes an IV). It sat with close as Boolean until 2026-11-09,
+# when pvm's CORE.tpm said Int and the measurement agreed.
+subtest 'rmdir is Int -- 1 or 0, never undef, never a bool' => sub {
+    is $r->( [ 'Call', 'rmdir' ] ), 'Int', 'rmdir yields an integer 1 or 0';
 };
 
 # `unlink` COUNTS what it removed. `unlink @files` returning 2 is not a

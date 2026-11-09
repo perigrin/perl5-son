@@ -303,7 +303,7 @@ my %BUILTIN_SIGNATURES = (
     # Boolean". Measured, it IS perl's canonical true/false pair, so the
     # assumption was right and now carries evidence.
     close  => { operands => [], result => 'Boolean' },
-    rmdir  => { operands => ['Str'], result => 'Boolean' },
+    rmdir  => { operands => ['Str'], result => 'Int' },   # 1 or 0, IVs, not bools (2026-11-09)
 
     # A COUNT, not a boolean that happens to be true: `unlink @files` yields 2
     # for two files removed, and typing it Boolean would discard that.
