@@ -101,6 +101,10 @@ All eight items fixed or narrowed. perigrin accepted these remaining refusals by
   taking them gave 5 wrong answers and 5 invalid modules).
 - Measured and fixed: rmdir is Int (B::SoN said Boolean); eof is Boolean and
   prototype is Maybe[Str] (both had been left untyped).
+- BlessedRef (2026-11-09, perigrin): any blessed reference, under Ref; Object
+  (the class feature's instance, reftype OBJECT) and Regex (qr//, reftype REGEXP)
+  under it. CORE.tpm's Object is read as BlessedRef (pvm still says Object).
+  bless stays declined: it returns its first argument, typed per call (HashRef
+  for `bless {}`), and a fixed BlessedRef row stopped chalk narrowing it.
 - Open: Optional[T] is T|None -- for parameters (value T, the argument may be
-  absent); parameter types are not loaded yet. Object's two meanings want one
-  name each before bless can take a type.
+  absent); parameter types are not loaded yet.

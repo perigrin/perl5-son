@@ -101,15 +101,16 @@ subtest 'Void and List are siblings of Scalar under Unknown' => sub {
     ok(!$scalar->is_subtype_of($void),   'Scalar is not < Void');
 };
 
-subtest 'Regex is under Object; Glob is NOT a reference' => sub {
+subtest 'Regex is under BlessedRef; Glob is NOT a reference' => sub {
     my $regex   = SoN::IR::Stamp->new(type => 'Regex');
-    my $object  = SoN::IR::Stamp->new(type => 'Object');
+    my $object  = SoN::IR::Stamp->new(type => 'BlessedRef');
     my $glob    = SoN::IR::Stamp->new(type => 'Glob');
     my $globref = SoN::IR::Stamp->new(type => 'GlobRef');
     my $ref     = SoN::IR::Stamp->new(type => 'Ref');
 
-    # A compiled pattern is blessed into Regexp, so it is an Object first.
-    ok($regex->is_subtype_of($object), 'Regex < Object');
+    # A compiled pattern is blessed into Regexp (reftype REGEXP): a BlessedRef,
+    # not an Object, which is the class feature's instance (2026-11-09).
+    ok($regex->is_subtype_of($object), 'Regex < BlessedRef');
     ok($regex->is_subtype_of($ref),    'Regex < Ref (transitively)');
 
     # A glob (*STDOUT, a symbol-table entry) is not a reference; a GlobRef is.

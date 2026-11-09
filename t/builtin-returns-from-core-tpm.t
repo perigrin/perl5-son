@@ -22,8 +22,6 @@ subtest 'a measured row wins over CORE.tpm' => sub {
 
 subtest 'a type the lattice does not have, or that says nothing, is not loaded' => sub {
     is $r->('exit'), undef, 'None (exit never returns) is not a row';
-    is $r->('bless'),   undef, "bless: CORE.tpm's Object is any blessed ref; chalk's is a class instance";
-    is $r->('dbmopen'), undef, 'dbmopen: likewise';
     is $r->('caller'),  undef, 'caller: one type cannot say both contexts';
     ok !grep( { ( $r->($_) // '' ) =~ /Inf|Optional|\|/ } B::SoN::TypeLibrary::core_builtins() ),
         'no Inf, Optional or bare union reached the table';

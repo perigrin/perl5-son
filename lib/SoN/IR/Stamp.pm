@@ -40,8 +40,12 @@ class SoN::IR::Stamp 0.01 {
         VString   => [qw(Str)],
         DualVar   => [qw(Scalar)],
         Ref       => [qw(Scalar)],
-        Object    => [qw(Ref)],
-        Regex     => [qw(Object)],
+        # BlessedRef: any blessed reference. Object: the class feature's
+        # instance (reftype OBJECT) under it. qr// is blessed Regexp, reftype
+        # REGEXP -- a BlessedRef, not an Object. (2026-11-09)
+        BlessedRef => [qw(Ref)],
+        Object    => [qw(BlessedRef)],
+        Regex     => [qw(BlessedRef)],
         ScalarRef => [qw(Ref)],
         LValueRef => [qw(ScalarRef)],
         ArrayRef  => [qw(Ref)],

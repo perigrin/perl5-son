@@ -586,10 +586,14 @@ my %DECLARED;
 # (Inf, Optional, a wider union, List[T]) is left out.
 my %CORE;
 # NOT FROM CORE.tpm, though it types them (2026-11-09): caller's two contexts
-# have no one type (t/wire-builtin-stamp.t's declines); bless and dbmopen say
-# `Object`, meaning any blessed reference, where chalk's Object is a class
-# instance -- taking it gave five wrong answers and five invalid modules.
-my %NOT_FROM_CORE = map { $_ => 1 } qw( caller bless dbmopen );
+# have no one type (t/wire-builtin-stamp.t's declines); bless returns its
+# first argument, typed per call (a HashRef for `bless {}`), so a fixed row --
+# even the right BlessedRef -- is wider, and stopped chalk narrowing it.
+#
+# CORE.tpm's `Object` MEANS ANY BLESSED REFERENCE -- this lattice's BlessedRef.
+# Here Object is the class feature's instance (reftype OBJECT), under it; read
+# as Object, bless and dbmopen gave five wrong answers and five invalid modules.
+my %NOT_FROM_CORE = map { $_ => 1 } qw( caller bless );
 sub core_tpm_path () {
     ( my $dir = __FILE__ ) =~ s{TypeLibrary\.pm\z}{};
     return "${dir}CORE.tpm";
@@ -598,6 +602,7 @@ sub core_tpm_path () {
     open my $fh, '<', core_tpm_path() or die "TypeLibrary: " . core_tpm_path() . ": $!\n";
     while ( my $line = <$fh> ) {
         my ( $name, $type ) = $line =~ /\Asub (\w+)\b.*\)\s*([^;()\s]+(?:\[\w+\])?)\s*;\s*\z/ or next;
+        $type =~ s/\bObject\b/BlessedRef/g;
         $type = "Maybe[$1]" if $type =~ /\A(\w+)\|Undef\z/;
         next if $type =~ /\A(?:Any|None|Unknown)\z/ || $NOT_FROM_CORE{$name};
         next unless eval { SoN::IR::Stamp->new( type => $type ); 1 };
