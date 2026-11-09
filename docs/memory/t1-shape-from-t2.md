@@ -87,3 +87,20 @@ All eight items fixed or narrowed. perigrin accepted these remaining refusals by
   unread; bindings put back after. Few census programs reach it (only print makes a
   Maybe today). Fourth: `!defined X || X` is join(Boolean, T), as the && is. All four
   forms done; guards by early exit (`defined X or return`) are not.
+
+## Builtin return types from pvm's CORE.tpm (2026-11-09)
+
+- B::SoN carries a copy, lib/B/SoN/CORE.tpm (pvm 03e4097b), read by
+  B::SoN::TypeLibrary as a fallback: a measured row wins, then CORE.tpm, then a
+  user declaration. 179 builtins typed; `T|Undef` is Maybe[T], Any/None skipped,
+  Inf / List[T] not in the lattice. 31 callable rows measured against perl
+  (t/builtin-returns-from-core-tpm.t); the rest (fork, exec, I/O, sockets) are
+  CORE.tpm's word.
+- Declined (NOT_FROM_CORE): caller (two contexts, no one type); bless and
+  dbmopen (CORE.tpm's Object is any blessed ref, chalk's is a class instance --
+  taking them gave 5 wrong answers and 5 invalid modules).
+- Measured and fixed: rmdir is Int (B::SoN said Boolean); eof is Boolean and
+  prototype is Maybe[Str] (both had been left untyped).
+- Open: Optional[T] is T|None -- for parameters (value T, the argument may be
+  absent); parameter types are not loaded yet. Object's two meanings want one
+  name each before bless can take a type.

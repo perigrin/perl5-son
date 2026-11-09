@@ -577,6 +577,37 @@ sub _result_is_join ($ir_op) {
 # but only for a consumer that can tell which kind of fact it holds.
 my %DECLARED;
 
+# THE REST OF PERL'S BUILTINS, from pvm's CORE.tpm (a copy: lib/B/SoN/CORE.tpm,
+# from perigrin/pvm internal/parse/declarations/CORE.tpm at 03e4097b,
+# 2026-11-07). Each `sub NAME (...) TYPE;` line gives a return type; a measured
+# row above wins, and t/builtin-returns-from-core-tpm.t checks every row it
+# can call against perl. `T|Undef` is Maybe[T]; `Any` (Unknown) and `None`
+# (never returns) say nothing a stamp can use, and a type this lattice lacks
+# (Inf, Optional, a wider union, List[T]) is left out.
+my %CORE;
+# NOT FROM CORE.tpm, though it types them (2026-11-09): caller's two contexts
+# have no one type (t/wire-builtin-stamp.t's declines); bless and dbmopen say
+# `Object`, meaning any blessed reference, where chalk's Object is a class
+# instance -- taking it gave five wrong answers and five invalid modules.
+my %NOT_FROM_CORE = map { $_ => 1 } qw( caller bless dbmopen );
+sub core_tpm_path () {
+    ( my $dir = __FILE__ ) =~ s{TypeLibrary\.pm\z}{};
+    return "${dir}CORE.tpm";
+}
+{
+    open my $fh, '<', core_tpm_path() or die "TypeLibrary: " . core_tpm_path() . ": $!\n";
+    while ( my $line = <$fh> ) {
+        my ( $name, $type ) = $line =~ /\Asub (\w+)\b.*\)\s*([^;()\s]+(?:\[\w+\])?)\s*;\s*\z/ or next;
+        $type = "Maybe[$1]" if $type =~ /\A(\w+)\|Undef\z/;
+        next if $type =~ /\A(?:Any|None|Unknown)\z/ || $NOT_FROM_CORE{$name};
+        next unless eval { SoN::IR::Stamp->new( type => $type ); 1 };
+        $CORE{$name} = $type;
+    }
+}
+
+# core_builtins() -> the builtins CORE.tpm typed (a measured row may win).
+sub core_builtins () { return sort keys %CORE }
+
 # declare($name, \%signature) -- assert a signature for a function we do not
 # compile. Same row shape as a builtin: { operands => [...], result => '...' }.
 sub declare ($name, $sig) {
@@ -613,7 +644,9 @@ sub result_for ($ir_op, @operands) {
         # because this is the direction that turns a wrong claim into a wrong
         # program.
         my $sig = defined $builtin
-            ? ( $BUILTIN_SIGNATURES{$builtin} // $DECLARED{$builtin} )
+            ? ( $BUILTIN_SIGNATURES{$builtin}
+                // ( exists $CORE{$builtin} ? { result => $CORE{$builtin} } : undef )
+                // $DECLARED{$builtin} )
             : undef;
         $result  = ( $sig // return undef )->{result};
 

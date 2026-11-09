@@ -133,7 +133,6 @@ subtest 'the table declines what it cannot say soundly' => sub {
         # canonical true/false pair, never undef) and is typed Boolean. This
         # entry said "not yet measured", which is a statement about our
         # knowledge rather than about the op, and it stopped being true.
-        eof   => 'undef at a closed handle, and pp_eof is not yet measured',
 
         # The value belongs to the program, not to the operator.
         require   => 'a do-FILE returns the file last expression',
@@ -141,7 +140,6 @@ subtest 'the table declines what it cannot say soundly' => sub {
         tie       => 'returns the tied object',
         mapstart  => 'a list whose size depends on the block',
         grepstart => 'likewise',
-        prototype => 'a Str, or undef when there is no prototype',
     );
 
     for my $builtin ( sort keys %why ) {
@@ -151,6 +149,15 @@ subtest 'the table declines what it cannot say soundly' => sub {
         ok !defined $fixed && !defined $join,
             "$builtin is left Unknown: $why{$builtin}";
     }
+};
+
+# eof AND prototype LEFT THIS LIST 2026-11-09, measured: eof is perl's bool
+# open, at end, closed, or never opened (pvm's CORE.tpm says Boolean); prototype
+# is a Str, or undef for a sub without one -- Maybe[Str] now that the lattice
+# has it.
+subtest 'eof and prototype, measured' => sub {
+    is B::SoN::TypeLibrary::result_for( [ 'Call', 'eof' ] ), 'Boolean', 'eof is Boolean';
+    is B::SoN::TypeLibrary::result_for( [ 'Call', 'prototype' ] ), 'Maybe[Str]', 'prototype is Maybe[Str]';
 };
 
 # THE BOOLEAN QUESTION, SETTLED. Several refusals above rest on it, so it is
