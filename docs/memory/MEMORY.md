@@ -279,4 +279,4 @@
 - [Census cause: each](census-cause-each.md) — per-variable iterator; keys reset needs producer ordering; while-each loop shape open
 - [Census cause: mixed literal](census-cause-mixed-literal.md) — Num+Str elements are Scalars; 17-digit number constants (miscompile)
 - [Future: value types](future-value-types.md) — TypeScript-style literal types (True/False, string enums); deferred 2026-11-08, revisit with truthiness narrowing
-- [B::SoN follows use/require](use-require-following.md) — %INC delta minus pragmas and builtins' modules; program-code vs followed-code predicates; `module` tag on the wire; chalk loads only reachable module subs; Context names quoted
+- [B::SoN follows use/require](use-require-following.md) — %INC delta minus pragmas and builtins' modules; program-code vs followed-code predicates; `module` tag on the wire; chalk loads only reachable module subs (sure/maybe); XS fallbacks; preloaded modules; `refused` on the wire; milestone 1 closed

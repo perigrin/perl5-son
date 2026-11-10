@@ -51,4 +51,9 @@ module's code is reached, then whether it is a builtin's module.
 - **Exporter (done):** `use Foo qw(f)` with Foo on Exporter follows Foo and
   Exporter; Exporter's subs are pruned (nothing sure calls them); the call
   names Foo::f; deparse leaves both to the `use`.
-Next: run-time `require $x` stays a named GAP.
+- **Run-time `require $x` (done):** refused as "a require of a name computed
+  at run time is not followed" (chalk Context's require lowering; T2 declines
+  any require). Milestone 1 closed 2026-11-10.
+Next (not milestone 1): a literal top-level `require Foo` of a module not
+loaded at compile time is not followed (it runs after CHECK); module subs
+reached only by a computed name are not loaded.
