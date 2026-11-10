@@ -17,9 +17,10 @@ sub compile_src ($src) {
 my ( $w, $err ) = compile_src(
     qq{use Data::Dumper;\nBEGIN { warn defined &Data::Dumper::Dumpxs ? "mode xs\\n" : "mode pp\\n" }\nprint Dumper([1]);\n} );
 like $err, qr/^mode pp$/m, 'the XS load died while compiling: the fallback loaded';
-# Dumpperl is compiled: on the wire, or refused by name (today: its `local @x`).
-ok $w->{methods}{'Data::Dumper::Dumpperl'} || $err =~ /skipped Data::Dumper::Dumpperl: GAP/,
-    'the fallback\'s pure-Perl sub is compiled: on the wire or refused by name';
+# The pure-Perl path's own subs are compiled (Dumpperl itself is refused for
+# its `local @x`, silently: a module's gap is reported where it is called).
+ok $w->{methods}{'Data::Dumper::Dumper'} && $w->{methods}{'Data::Dumper::_quote'},
+    'the fallback\'s pure-Perl subs are on the wire';
 ok( ( grep { $_->{name} eq 'Data::Dumper' } @{ $w->{modules} // [] } ), 'and Data::Dumper is followed' );
 
 # POSIX loads its XS bare: no fallback, so it loads and a call to it says xs.

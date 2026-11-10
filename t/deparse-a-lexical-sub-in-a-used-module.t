@@ -86,10 +86,12 @@ class N { my $x = 100; my sub f ($v) { $v * $x } method m ($v) { f($v) } }
 # BY NAME IS ONE VARIABLE PER NAME IN THE FILE: a module declaring the name
 # twice still refuses, in the module's own words.
 {
-    my (undef, $err) = translate({ M => 'use v5.36; use experimental "class";
+    my ($w, $err) = translate({ M => 'use v5.36; use experimental "class";
 class M { my $x = 1; my sub f { $x } { my $x = 2; my sub g { $x } method n { g() } } method m ($v) { f() + $v } }
 1;' }, $main);
-    like $err, qr/a lexical sub closing over \$x is not yet lowered -- the file declares that name more than once/,
+    # A FOLLOWED MODULE'S REFUSAL rides the wire, where a consumer reaching
+    # the sub refuses in its words; the producer does not print it.
+    like $w->{refused}{'M::m'} // '', qr/a lexical sub closing over \$x is not yet lowered -- the file declares that name more than once/,
         'a module declaring the captured name twice refuses';
 }
 

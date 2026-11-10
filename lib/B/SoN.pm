@@ -52,6 +52,7 @@ our %LOADED_INC = %INC;
 # lowers itself; the program never named it (perlvar, perlfunc): glob loads
 # File::Glob, %! Errno, %+ and %- Tie::Hash::NamedCapture.
 our %BUILTIN_MODULE = map { $_ => 1 } qw(File::Glob Errno Tie::Hash::NamedCapture);
+our %REFUSED;    # { sub name => GAP } for a followed module's refused subs
 our $FOLLOWED;   # set at CHECK, before the walk can load anything (B::Op_private)
 sub _followed_modules {
     return $FOLLOWED if $FOLLOWED;
@@ -64,7 +65,43 @@ sub _followed_modules {
         my $file = $INC{$key};
         $m{$name} = $file if defined $file && !ref $file;
     }
+    # A MODULE THE COMPILER HAD ALREADY LOADED (Carp, Exporter) is in
+    # %LOADED_INC, so the delta misses it: follow it when a `use` in the
+    # program or in a followed file names it.
+    # shortcut: such a module's own `use`s ran before B::SoN saved BEGIN
+    # blocks, so what it loads in turn is followed only if named elsewhere.
+    my %ours = ( _compilation_file() => 1, map { $_ => 1 } values %m );
+    my $begins = B::begin_av();
+    for my $cv ( ref($begins) && $begins->isa('B::AV') ? $begins->ARRAY : () ) {
+        next unless ref($cv) && $cv->isa('B::CV') && $ours{ eval { $cv->FILE } // '' };
+        for my $key ( _required_files($cv) ) {
+            next unless exists $LOADED_INC{$key} && $key =~ /\.pm\z/;
+            ( my $name = $key ) =~ s{\.pm\z}{};
+            $name =~ s{/}{::}g;
+            next if $name =~ /\A[a-z]/ || $BUILTIN_MODULE{$name}
+                 || $name =~ /\A(?:B|O|SoN)(?:::|\z)/;   # the compiler itself
+            my $file = $INC{$key};
+            $m{$name} = $file if defined $file && !ref $file;
+        }
+    }
     return \%m;
+}
+
+# _required_files($cv) -> the files a `require` of a constant names in this
+# CV's own ops ("Carp.pm": a `use Carp` is a BEGIN of that require).
+sub _required_files {
+    my ($cv) = @_;
+    my @files;
+    for ( my $op = eval { $cv->START }; $op && $$op; $op = eval { $op->next } ) {
+        next unless $op->name eq 'require';
+        my $k = eval { $op->first } or next;
+        next unless $$k && $k->name eq 'const';
+        my $sv = eval { $k->sv };
+        $sv = eval { $cv->PADLIST->ARRAYelt(1)->ARRAYelt( $k->targ ) } unless $sv && $$sv;
+        my $pv = eval { $sv->PV };
+        push @files, $pv if defined $pv;
+    }
+    return @files;
 }
 
 # _graph_modules(\%graphs) -> { graph name => module } for the subs that came
@@ -74,7 +111,10 @@ sub _graph_modules {
     my ($graphs) = @_;
     my %m;
     no strict 'refs';
-    for my $name ( keys %$graphs ) {
+    for my $key ( keys %$graphs ) {
+        # A BODY LIFTED FROM A SUB (an anon sub, a sort comparator, an s///e
+        # replacement) is keyed under that sub's name: it is that sub's file's.
+        ( my $name = $key ) =~ s/::__(?:ANON|SORTCMP|SUBSTREPL)__:.*\z//s;
         my ( $pkg, $sub ) = $name =~ /\A(.+)::(\w+)\z/ or next;
         my $glob = ${"${pkg}::"}{$sub} // next;
         my $gv = eval { svref_2object( \$glob ) };
@@ -82,7 +122,7 @@ sub _graph_modules {
         my $cv = eval { $gv->CV };
         next unless $cv && $$cv && !$cv->isa('B::SPECIAL');
         my $mod = _cv_module($cv);
-        $m{$name} = $mod if defined $mod;
+        $m{$key} = $mod if defined $mod;
     }
     return \%m;
 }
@@ -211,6 +251,7 @@ sub compile {
     return sub {
         # ...and these its modules, taken before the walk loads its own.
         local $FOLLOWED = _followed_modules();
+        local %REFUSED;
         # At CHECK the program has compiled: these are its keys, imports and all.
         local %SoN::Serialize::JSON::STASH_KEYS =
             map { $_ => ( $LOADED_KEYS{$_} ? undef : 1 ) } keys %main::;
@@ -221,7 +262,7 @@ sub compile {
             print to_json( $graphs, $classes, _data_section(),
                 _phase_blocks(),
                 [ map { { name => $_, file => $mods->{$_} } } sort keys %$mods ],
-                _graph_modules($graphs) );
+                _graph_modules($graphs), \%REFUSED );
         }
         else {
             for my $name ( sort keys $graphs->%* ) {
@@ -2369,7 +2410,7 @@ sub _translate_class_subs {
         }
         catch ($e) {
             if ( $e =~ /^GAP:/ ) {
-                warn "B::SoN: skipped $full_name: $e";
+                _warn_skipped( $cv, $full_name, $e );
             }
             else {
                 warn "B::SoN: INTERNAL ERROR translating $full_name (masked as "
@@ -2577,7 +2618,7 @@ sub _walk_package {
             # noise (a builtin/XS optree with no chance of lowering) also lands
             # here, so this is a warn, not a die.
             if ($e =~ /^GAP:/) {
-                warn "B::SoN: skipped $full_name: $e";
+                _warn_skipped( $cv, $full_name, $e );
             }
             else {
                 warn "B::SoN: INTERNAL ERROR translating $full_name (masked as "
@@ -2666,6 +2707,16 @@ sub _stash_is_other_file {
     }
     ( my $pm = "$name.pm" ) =~ s{::}{/}g;
     return exists $INC{$pm} ? 1 : 0;
+}
+
+# _warn_skipped($cv, $name, $gap) -- say a sub was refused. THE PROGRAM'S GAPS
+# ARE PRINTED: a followed module's sub the program never calls is none of its
+# business (List::Util::import's goto). Its refusal rides the wire (`refused`),
+# so a consumer that reaches the sub refuses in the module's own words.
+sub _warn_skipped {
+    my ( $cv, $name, $e ) = @_;
+    if ( defined _cv_module($cv) ) { chomp( $REFUSED{$name} = $e ) }
+    else { warn "B::SoN: skipped $name: $e" }
 }
 
 # _stash_is_followed($name, $stash) -- did this package come from a followed

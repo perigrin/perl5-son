@@ -682,7 +682,7 @@ sub _serialize_graph ($graph) {
 # to_json(\%named_graphs) — serialize named graphs to a JSON string.
 # -----------------------------------------------------------------------
 sub to_json ($named_graphs, $classes = undef, $data_section = undef,
-             $phase_blocks = [], $modules = [], $graph_module = {}) {
+             $phase_blocks = [], $modules = [], $graph_module = {}, $refused = {}) {
     my %methods;
     for my $name (sort keys $named_graphs->%*) {
         $methods{$name} = _serialize_graph($named_graphs->{$name});
@@ -720,6 +720,9 @@ sub to_json ($named_graphs, $classes = undef, $data_section = undef,
     # The modules the program loaded and whose subs are on this wire
     # (B::SoN::_followed_modules), [{ name, file }], sorted. Absent when none.
     $data->{modules} = $modules if $modules && @$modules;
+    # A followed module's subs B::SoN refused, { name => "GAP: ..." }: a
+    # consumer that reaches one refuses in the module's words. Absent: none.
+    $data->{refused} = $refused if $refused && %$refused;
 
     # The program's BEGIN and END blocks, in source order, each a graph like a
     # method's. Kept out of `methods` because a method is emitted as a named

@@ -34,5 +34,21 @@ module's code is reached, then whether it is a builtin's module.
   dies with PerlOnJava's wording, so the fallback loads (Data::Dumper ->
   $Useperl). A bare load (POSIX) loads; its calls carry `xs`; T2 refuses
   "<name> is XS".
-Next: modules the
-compiler preloaded (Carp, Scalar::Util) are not followed yet, Exporter as a real module.
+- **Preloaded modules (done):** a module already in %LOADED_INC (Carp,
+  Exporter, Scalar::Util) is followed when a saved BEGIN (a `use`) in the
+  program or a followed file requires it (`_required_files`). shortcut: a
+  preloaded module's own uses ran before save_BEGINs, so its deps follow only
+  if named elsewhere.
+- **A module's refusals ride the wire:** B::SoN prints GAPs for the program's
+  own subs only; a followed module's go into `refused` {name => GAP}. Bodies
+  lifted from a module sub (`M::g::__SUBSTREPL__:1`) carry `module` too --
+  untagged, Carp's became program seeds and dragged POSIX::import in.
+- **chalk reach is SURE or MAYBE:** program graphs, direct calls, named-class
+  method calls and lifted bodies are sure; a method name on an unknown invocant
+  only may. A sure reach of a refused sub refuses the program in the module's
+  words; a maybe never does (pvm does not read this wire: additive keys are
+  safe).
+- **Exporter (done):** `use Foo qw(f)` with Foo on Exporter follows Foo and
+  Exporter; Exporter's subs are pruned (nothing sure calls them); the call
+  names Foo::f; deparse leaves both to the `use`.
+Next: run-time `require $x` stays a named GAP.
