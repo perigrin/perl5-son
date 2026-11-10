@@ -947,6 +947,11 @@ class SoN::Deparse 0.01 {
                 ( @{ $c->{adjusts} // [] } ),
                 ( map { $_->{default_ref} } @{ $c->{fields} // [] } );
         }
+        # A SUB FROM A FOLLOWED MODULE (its wire entry names the module) is
+        # the module's to define: the source's `use` loads it.
+        $owned{$_} = 1 for grep { ref $all_methods->{$_} eq 'HASH'
+                                  && defined $all_methods->{$_}{module} }
+                           keys $all_methods->%*;
         # AND WHAT THOSE GRAPHS LIFT: an anon or `my sub` body is keyed
         # under the graph it was lifted from, and reads that file's lexicals
         # by name, which this file does not declare. The loaded module

@@ -31,6 +31,62 @@ BEGIN { SoN::OptSuppress::suppress_peep(); }
 # A key the program then adds is its own (%SoN::Serialize::JSON::STASH_KEYS).
 our %LOADED_KEYS = map { $_ => 1 } keys %main::;
 
+# The files in %INC once this backend has loaded, before the program compiles:
+# the compiler's own modules. A file the program's `use` or literal `require`
+# then loads is followed (_followed_modules).
+our %LOADED_INC = %INC;
+
+# _followed_modules() -> { Module::Name => file } -- the modules the program
+# loaded, whose subs are compiled with it (perigrin, 2026-10-31: B::SoN follows
+# use/require as other languages follow imports). By the time B::SoN walks,
+# perl has run every `use` and literal `require`, so %INC names them.
+#
+# A PRAGMA IS A SWITCH, NOT CODE: a module named in lower case (strict, lib,
+# warnings, feature) is not followed (perlmodlib's convention).
+#
+# shortcut: a module the compiler itself had loaded (Carp, Scalar::Util) is in
+# %LOADED_INC and so not followed even when the program uses it too; follow it
+# when a program needs one of those compiled rather than provided.
+#
+# A MODULE PERL LOADS TO IMPLEMENT A BUILTIN is that builtin, which a backend
+# lowers itself; the program never named it (perlvar, perlfunc): glob loads
+# File::Glob, %! Errno, %+ and %- Tie::Hash::NamedCapture.
+our %BUILTIN_MODULE = map { $_ => 1 } qw(File::Glob Errno Tie::Hash::NamedCapture);
+our $FOLLOWED;   # set at CHECK, before the walk can load anything (B::Op_private)
+sub _followed_modules {
+    return $FOLLOWED if $FOLLOWED;
+    my %m;
+    for my $key ( keys %INC ) {
+        next if exists $LOADED_INC{$key} || $key !~ /\.pm\z/;
+        ( my $name = $key ) =~ s{\.pm\z}{};
+        $name =~ s{/}{::}g;
+        next if $name =~ /\A[a-z]/ || $BUILTIN_MODULE{$name};
+        my $file = $INC{$key};
+        $m{$name} = $file if defined $file && !ref $file;
+    }
+    return \%m;
+}
+
+# _graph_modules(\%graphs) -> { graph name => module } for the subs that came
+# from a followed module: an emitter loads that module rather than re-emitting
+# its subs, which a backend that compiles the whole program still reads.
+sub _graph_modules {
+    my ($graphs) = @_;
+    my %m;
+    no strict 'refs';
+    for my $name ( keys %$graphs ) {
+        my ( $pkg, $sub ) = $name =~ /\A(.+)::(\w+)\z/ or next;
+        my $glob = ${"${pkg}::"}{$sub} // next;
+        my $gv = eval { svref_2object( \$glob ) };
+        next unless $gv && $gv->isa('B::GV');
+        my $cv = eval { $gv->CV };
+        next unless $cv && $$cv && !$cv->isa('B::SPECIAL');
+        my $mod = _cv_module($cv);
+        $m{$name} = $mod if defined $mod;
+    }
+    return \%m;
+}
+
 # _make_package_filter(\%include, \@exclude_prefixes) -> coderef
 #
 # One predicate answering "emit this package?". An INCLUDE list, when
@@ -109,14 +165,19 @@ sub compile {
     }
 
     return sub {
+        # ...and these its modules, taken before the walk loads its own.
+        local $FOLLOWED = _followed_modules();
         # At CHECK the program has compiled: these are its keys, imports and all.
         local %SoN::Serialize::JSON::STASH_KEYS =
             map { $_ => ( $LOADED_KEYS{$_} ? undef : 1 ) } keys %main::;
         my ( $graphs, $classes ) = _discover_and_translate($filter);
 
         if ( $format eq 'json' ) {
+            my $mods = _followed_modules();
             print to_json( $graphs, $classes, _data_section(),
-                _phase_blocks() );
+                _phase_blocks(),
+                [ map { { name => $_, file => $mods->{$_} } } sort keys %$mods ],
+                _graph_modules($graphs) );
         }
         else {
             for my $name ( sort keys $graphs->%* ) {
@@ -147,7 +208,7 @@ sub _phase_blocks {
         my ( $phase, $av ) = @$pair;
         next unless ref($av) && $av->isa('B::AV');
         for my $cv ( $av->ARRAY ) {
-            next unless ref($cv) && $cv->isa('B::CV') && _cv_is_user_code($cv);
+            next unless ref($cv) && $cv->isa('B::CV') && _cv_is_program_code($cv);
             my $graph = eval { SoN::FromOptree->translate( $cv->object_2svref ) };
             if ( !$graph ) {
                 warn "B::SoN: skipped a $phase block: $@";
@@ -2395,9 +2456,14 @@ sub _walk_package {
     # sub of its own and is still this file's to declare (chalk's
     # Chalk::IR::Value). Ours unless demonstrably another file's -- the
     # same positive-evidence test the referenced-class walk uses.
-    if ( $emit_cvs && SoN::ClassAux::is_class($stash)
-             && !_stash_is_other_file( $pkg_name, $stash ) ) {
-        $classes->{$pkg_name} = _extract_class( $graphs, $pkg_name, $stash );
+    if ( $emit_cvs && SoN::ClassAux::is_class($stash) ) {
+        # A FOLLOWED MODULE'S CLASS is described, marked as the module's: the
+        # emission loads it, a whole-program backend reads its methods.
+        my $other = _stash_is_other_file( $pkg_name, $stash );
+        if ( !$other || _stash_is_followed( $pkg_name, $stash ) ) {
+            $classes->{$pkg_name} = _extract_class( $graphs, $pkg_name, $stash );
+            $classes->{$pkg_name}{external} = 1 if $other;
+        }
     }
 
     for my $name ( sort keys %$stash ) {
@@ -2528,7 +2594,9 @@ sub _stash_is_user_code {
         next unless $b && $b->isa('B::GV');
         my $cv = eval { $b->CV };
         next unless $cv && $$cv && !$cv->isa('B::SPECIAL');
-        return 1 if _cv_is_user_code($cv);
+        # THE PROGRAM'S OWN FILE: a followed module's class is still another
+        # file's to declare, its subs on the wire all the same.
+        return 1 if _cv_is_program_code($cv);
     }
     return 0;
 }
@@ -2554,6 +2622,22 @@ sub _stash_is_other_file {
     }
     ( my $pm = "$name.pm" ) =~ s{::}{/}g;
     return exists $INC{$pm} ? 1 : 0;
+}
+
+# _stash_is_followed($name, $stash) -- did this package come from a followed
+# module: a sub of its from one, or (an empty class) its own .pm followed?
+sub _stash_is_followed {
+    my ( $name, $stash ) = @_;
+    return 1 if exists _followed_modules()->{$name};
+    for my $k ( keys %$stash ) {
+        next if $k =~ /::$/ || $k =~ /^[^a-zA-Z_]/;
+        my $b = eval { svref_2object( \$stash->{$k} ) };
+        next unless $b && $b->isa('B::GV');
+        my $cv = eval { $b->CV };
+        next unless $cv && $$cv && !$cv->isa('B::SPECIAL');
+        return 1 if defined _cv_module($cv);
+    }
+    return 0;
 }
 
 # _cv_is_user_code($cv) -- was this sub compiled from the file under
@@ -2602,6 +2686,24 @@ sub _compilation_file {
 # Excluding by package name would look equivalent and silently break
 # self-hosting: when Chalk compiles B::SoN, those ARE the user's subs.
 sub _cv_is_user_code {
+    my ($cv) = @_;
+    return 1 if _cv_is_program_code($cv);
+    # A file a module the program loaded came from: its subs are compiled too.
+    return defined _cv_module($cv) ? 1 : 0;
+}
+
+# _cv_module($cv) -> the followed module whose file this CV came from, or undef.
+sub _cv_module {
+    my ($cv) = @_;
+    my $file = eval { $cv->FILE };
+    return undef unless defined $file && length $file;
+    state %followed_file;
+    %followed_file = reverse %{ _followed_modules() } unless %followed_file;
+    return $followed_file{$file};
+}
+
+# Was this CV compiled from the program's own file (not a followed module)?
+sub _cv_is_program_code {
     my ($cv) = @_;
     my $file = eval { $cv->FILE };
     return 0 unless defined $file && length $file;
@@ -2853,7 +2955,10 @@ sub _record_sub {
     # name -- that would break self-hosting, which is the whole point.
     return unless exists $classes->{$pkg_name}
         || _cv_is_user_code($cv);
-    $classes->{$pkg_name} //= _empty_class($pkg_name);
+    # A PACKAGE FIRST SEEN THROUGH A FOLLOWED MODULE'S SUB is that module's:
+    # described here, loaded by the emission.
+    $classes->{$pkg_name} //= { %{ _empty_class($pkg_name) },
+        ( defined _cv_module($cv) ? ( external => 1 ) : () ) };
 
     # A METHOD is not a sub. _extract_class records methods separately; without
     # this guard a `method get` was dual-listed under BOTH keys (measured on a

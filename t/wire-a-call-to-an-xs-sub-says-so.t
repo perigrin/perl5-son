@@ -23,6 +23,8 @@ ok($c->{'main::sum'}, 'the XS call is there');
 ok($c->{'main::sum'}{xs}, 'and says it is XS');
 
 $c = calls(qq{use Text::Wrap qw(wrap);\nprint wrap('', '', \$ENV{X} // 'a b'), "\\n";\n});
-ok($c->{'main::wrap'}, 'the pure-Perl external call is there');
-ok(!$c->{'main::wrap'}{xs}, 'and is not XS');
+# A PURE-PERL MODULE IS FOLLOWED: its sub is on the wire, so the imported
+# call names the sub's home (wire-a-used-module-s-subs-are-included.t).
+ok($c->{'Text::Wrap::wrap'}, 'the pure-Perl call is there, by its home name');
+ok(!$c->{'Text::Wrap::wrap'}{xs}, 'and is not XS');
 done_testing;

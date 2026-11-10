@@ -5119,6 +5119,14 @@ class SoN::FromOptree 0.01 {
             $external = 1 if $mine && $ccv && $$ccv && !$ccv->isa('B::SPECIAL')
                 && !$mine->($ccv);
             $xs = 1 if $external && $ccv->XSUB;
+            # AN IMPORTED NAME IS AN ALIAS: `use MyExp qw(g)` makes main::g the
+            # same CV as MyExp::g, and the sub is keyed by its CV's home. A sub
+            # made anonymous and stored (`*g = sub {...}`) has no home by name.
+            if ( !$external && $ccv && $$ccv && !$ccv->isa('B::SPECIAL') ) {
+                my $home = eval { $ccv->GV };
+                $call_name = $home->STASH->NAME . '::' . $home->NAME
+                    if $home && $$home && !$home->isa('B::SPECIAL') && $home->NAME ne '__ANON__';
+            }
         }
         # Every call is a control-chain effect, void or not (R1.0
         # effect-by-default): pin control_in unconditionally so it is ordered

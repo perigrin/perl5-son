@@ -682,10 +682,13 @@ sub _serialize_graph ($graph) {
 # to_json(\%named_graphs) — serialize named graphs to a JSON string.
 # -----------------------------------------------------------------------
 sub to_json ($named_graphs, $classes = undef, $data_section = undef,
-             $phase_blocks = []) {
+             $phase_blocks = [], $modules = [], $graph_module = {}) {
     my %methods;
     for my $name (sort keys $named_graphs->%*) {
         $methods{$name} = _serialize_graph($named_graphs->{$name});
+        # A sub from a followed module says which: an emitter loads it.
+        $methods{$name}{module} = $graph_module->{$name}
+            if defined $graph_module->{$name};
     }
 
     my $data = {
@@ -713,6 +716,10 @@ sub to_json ($named_graphs, $classes = undef, $data_section = undef,
     # The text after __DATA__ / __END__, verbatim. Absent when the source has
     # none, so a consumer never mistakes an empty section for a missing one.
     $data->{data_section} = $data_section if defined $data_section;
+
+    # The modules the program loaded and whose subs are on this wire
+    # (B::SoN::_followed_modules), [{ name, file }], sorted. Absent when none.
+    $data->{modules} = $modules if $modules && @$modules;
 
     # The program's BEGIN and END blocks, in source order, each a graph like a
     # method's. Kept out of `methods` because a method is emitted as a named
