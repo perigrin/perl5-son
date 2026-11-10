@@ -87,6 +87,48 @@ sub _graph_modules {
     return \%m;
 }
 
+# XS WHILE THE PROGRAM COMPILES (perigrin, 2026-11-08: PerlOnJava's model).
+# B::SoN compiles Perl, not C. A module that loads its XS inside an eval of its
+# own has a pure-Perl fallback (Data::Dumper sets $Useperl): the load dies with
+# PerlOnJava's wording, the fallback loads, and that is what is followed. A
+# bare load has no fallback: it loads, and a call into it carries `xs` on the
+# wire, which a backend refuses by name.
+my %XS_REAL;
+sub _xs_loads_die_in_an_eval {
+    require XSLoader;
+    require DynaLoader;
+    no strict 'refs';
+    no warnings 'redefine';
+    for my $name (qw(XSLoader::load DynaLoader::bootstrap)) {
+        my $real = $XS_REAL{$name} //= \&{$name};
+        *{$name} = sub {
+            my $module = $_[0] // caller;
+            die "Can't load loadable object for module $module: B::SoN compiles Perl, not XS\n"
+                if _in_a_fallback_eval();
+            goto &$real;
+        };
+    }
+}
+
+# Driven by O, B::SoN loads before the program compiles: install them now.
+_xs_loads_die_in_an_eval() if $INC{'O.pm'};
+
+sub _xs_loads_restored {
+    no strict 'refs';
+    no warnings 'redefine';
+    *{$_} = $XS_REAL{$_} for keys %XS_REAL;
+}
+
+# Is the XS load inside an eval of the loading module's own -- an eval frame
+# met before the require that is loading that module?
+sub _in_a_fallback_eval {
+    for ( my $i = 2; my @f = caller $i; $i++ ) {
+        next unless $f[3] eq '(eval)';
+        return $f[7] ? 0 : 1;   # [7] is_require: reached the module's require first
+    }
+    return 0;
+}
+
 # _make_package_filter(\%include, \@exclude_prefixes) -> coderef
 #
 # One predicate answering "emit this package?". An INCLUDE list, when
@@ -125,6 +167,8 @@ sub _emit_package {
 # compile(\@opts) — called by O.pm; returns a CODE ref that O.pm invokes
 # after the program has been compiled and the full optree is available.
 sub compile {
+    # O calls this at CHECK: the program has compiled, its XS loads are done.
+    _xs_loads_restored();
     my @opts   = @_;
     my $format = 'text';
     $format    = 'json' if grep { $_ eq 'json' } @opts;

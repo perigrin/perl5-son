@@ -27,5 +27,12 @@ B::SoN follows `use`/literal `require` (perigrin, 2026-10-31; roadmap milestone 
 **Why:** perigrin wants imports followed the way other languages follow them.
 **How to apply:** a new failure after a program `use`s something: ask whether the
 module's code is reached, then whether it is a builtin's module.
-Next: XS (XSLoader dies at compile so the pure-Perl fallback loads), modules the
+- **XS (done, 2026-11-10):** under O, B::SoN wraps XSLoader::load and
+  DynaLoader::bootstrap when it loads (O calls compile() at CHECK, too late) and
+  restores them in compile(). A load inside the module's own eval (an eval frame
+  met before its require frame; `$^S` is no help, it is true inside any require)
+  dies with PerlOnJava's wording, so the fallback loads (Data::Dumper ->
+  $Useperl). A bare load (POSIX) loads; its calls carry `xs`; T2 refuses
+  "<name> is XS".
+Next: modules the
 compiler preloaded (Carp, Scalar::Util) are not followed yet, Exporter as a real module.
