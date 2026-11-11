@@ -56,11 +56,13 @@ class SoN::IR::Node::Call :isa(SoN::IR::Value) {
     # THE BLOCK EVAL (or try) whose body this call is in, in its graph, or
     # undef: the callee's own die names no eval, so the call says which
     # catches it (as an Unwind's eval_id does for a die in this graph).
-    # A METHOD CALL'S SITE, its statement's file and line: perl's message
-    # names it where no class answers ("Can't locate object method ...").
+    # A CALL'S SITE, its statement's file, line and package: what `caller`
+    # in the callee answers, and perl's message where no class answers a
+    # method ("Can't locate object method ...").
     field $file :reader = undef;
     field $line :reader = undef;
-    method set_site($f, $l) { ($file, $line) = ($f, $l) }
+    field $site_package :reader = undef;
+    method set_site($f, $l, $p = undef) { ($file, $line, $site_package) = ($f, $l, $p) }
 
     field $eval_id :reader = undef;
 

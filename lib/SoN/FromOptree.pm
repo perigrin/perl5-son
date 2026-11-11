@@ -3733,6 +3733,11 @@ class SoN::FromOptree 0.01 {
         return ($op->flags & 4) ? 1 : 0
             if $name eq 'localtime' || $name eq 'gmtime';
 
+        # caller TAKES AN OPTIONAL FRAME, the same shape: `caller(1)` has a
+        # child, `caller` none. At a fixed 0 the frame was left on the stack and
+        # dropped, so caller(1) read as caller on the wire.
+        return ($op->flags & 4) ? 1 : 0 if $name eq 'caller';
+
         # `exit` TAKES AN OPTIONAL STATUS, defaulting to 0 -- effectively
         # `sub exit($status = 0)`. So its arity is 0 OR 1 and the op says
         # which, in its child count:
@@ -3752,17 +3757,11 @@ class SoN::FromOptree 0.01 {
         # real control-flow work -- because the first case I reduced happened
         # to contain a loop. It needs neither a loop nor a branch: `exit;`
         # alone crashes, and every one of those files simply contains one.
-        if ($name eq 'exit') {
-            my $n = 0;
-            if ($op->can('first')) {
-                my $kid = $op->first;
-                while (ref($kid) && $$kid) {
-                    $n++ unless $kid->name eq 'pushmark' || $kid->name eq 'null';
-                    $kid = $kid->sibling;
-                }
-            }
-            return $n;
-        }
+        #
+        # OPf_KIDS DECIDES, as for localtime and caller. Counting children and
+        # skipping `null` ops dropped a status whose expression sits under a
+        # null (a ternary, a `//`): `exit($f > 254 ? 254 : $f)` exited 0.
+        return ($op->flags & 4) ? 1 : 0 if $name eq 'exit';
 
         # `binmode` TAKES AN OPTIONAL LAYER: `binmode FH` or
         # `binmode FH, ":utf8"`. Measured, the op states which:
@@ -5302,7 +5301,7 @@ class SoN::FromOptree 0.01 {
             my $pkg = eval { $op->stashpv } // eval { $op->stash->NAME };
             $CURRENT_PACKAGE = $pkg if defined $pkg && length $pkg;
             $STMT_LABEL = $op->label;
-            $SoN::IR::NodeFactory::SITE = [ $op->file, $op->line ];
+            $SoN::IR::NodeFactory::SITE = [ $op->file, $op->line, $CURRENT_PACKAGE ];
             $SoN::IR::NodeFactory::STRICT_REFS = ( $op->hints & 0x2 ) ? 1 : 0;   # HINT_STRICT_REFS
         }
         # `use integer` ARITHMETIC IS ITS OWN: perl truncates operands and wraps

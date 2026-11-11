@@ -70,3 +70,33 @@ not checked out): 394 files under `cpan/Test-Simple/t`. Read them with
   exactly, and stderr (failure diagnostics) too.
 - **The swap.** Every converted chalk test must print identical TAP
   under Test::More and under Test::Chalk.
+
+## Progress (2026-11-11, milestone 2 goal)
+
+- **Harness:** chalk `t/lib/Chalk/CodeGen/Harness/TapDiff.pm` (modulino):
+  perl vs B::SoN+T2+lli, stdout + stderr + exit byte for byte; only the T2
+  path counts (a fallback is REFUSED with T2's reason).
+- **Easy tier done:** `t/lib/Test/Chalk.pm` -- ok is isnt pass fail diag note
+  plan done_testing BAIL_OUT, proved against Test::More's own bytes
+  (`t/bootstrap/ir/test-chalk-gives-test-more-s-tap.t`, under prove and not).
+- **What it took in T2:** print STDOUT/STDERR by name, exit, caller (a frame
+  stack pushed around each call when the program reads caller; caller(N) only
+  where at most 3 values are read), a general list assign, a pinned ternary,
+  substr (perl's offset rules; outside the string stops, exit 255, as the
+  fallback does) and index, a sub ended by exit/die.
+- **Producer bugs found:** caller(N) dropped its N (fixed arity 0); exit's
+  status under a null op (a ternary, //) dropped -- exit 0 for 2 (both now
+  OPf_KIDS, as localtime). Every sub call now carries file/line/package.
+- **Rules learned:**
+  - A module's top-level code runs at compile time, never in the program:
+    Test::Chalk keeps no initialised state, and `use Test::Chalk tests => N`
+    cannot print its plan (named gap; use `plan(tests => N)`).
+  - No END: done_testing prints the "Looks like you failed" summary; a plan
+    with failures and no done_testing gives none (named gap).
+  - Under a harness Test::More puts "\n" on STDERR before "#   Failed test".
+  - `while (1) { ... return }` is a producer GAP ("loop without a lowerable
+    condition"); Test::Chalk loops on a condition instead.
+  - A T2 that fails to compile makes every program "T2 not tried" -- check
+    `perl -c lib/Chalk/Target/LLVM/T2.pm` when everything falls back at once.
+  - The .ll must not contain "Perl_" anywhere, comments included (libperl-free tests).
+- Side effect: corpus T2 gate-green 196 -> 202.

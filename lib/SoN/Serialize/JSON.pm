@@ -79,8 +79,10 @@ sub _extract_fields ($node, $id_remap) {
             ( $node->shares_args ? ( shares_args => JSON::PP::true ) : () ),
             # The eval whose body the call is in (see Unwind's).
             ( defined $node->eval_id ? ( eval_id => $node->eval_id ) : () ),
-            # A method call's site: perl's message names it where no class answers.
+            # A call's site: what `caller` answers in the callee, and what
+            # perl's message names where no class answers a method.
             ( defined $node->line ? ( file => $node->file, line => $node->line ) : () ),
+            ( defined $node->site_package ? ( package => $node->site_package ) : () ),
             ( $node->external ? ( external => JSON::PP::true ) : () ),
             ( $node->xs ? ( xs => JSON::PP::true ) : () ),
             ( $node->memory_input ? ( memory_input => JSON::PP::true ) : () ),
