@@ -2205,6 +2205,12 @@ class SoN::FromOptree 0.01 {
             #
             # The walk goes on along the die arm, which never returns, so what
             # follows the goto is in the graph but never runs.
+            # A LOOP CONTROL WITH NO LOOP OF THIS SUB OPEN leaves the sub, to
+            # its caller's loop or block (Test::More's skip: `last SKIP`). It
+            # was walked past as a no-op: the skipped tests ran.
+            die "GAP: a `$name` with no loop of its sub to leave (it leaves the"
+              . " sub, to its caller's loop or block) is not yet lowered\n"
+                if $name =~ /\A(?:last|next|redo)\z/ && !@LOOP_STACK;
             if ($name eq 'goto' && _is_computed_goto($op)) {
                 my $t = $sim->pop_node;
                 my $t_type = _goto_operand_type($t);
