@@ -129,8 +129,10 @@ not checked out): 394 files under `cpan/Test-Simple/t`. Read them with
   ref is true -- but it points at an empty stub, so a program that calls a
   code value while unloaded names exist is refused.
   - LATER (perigrin, "note it for later"): NARROW instead of refusing --
-    `R->can($m)` only needs R's chain compiled, not every module sub; or
-    compile on demand (ties into the per-module compilation cache).
+    `R->can($m)` only needs R's chain compiled, not every module sub. Or
+    (perigrin) LINK ON DEMAND BEFORE DCE: not compile on demand, but keep
+    every module sub linkable and let dead-code elimination drop what is
+    unreached after linking, instead of the loader pruning bodies up front.
 - Also from item 5: three `eval {...; 1} or $e = ...` in a row gave invalid
   LLVM (a constant the first eval made, re-made inside an arm's copy of the
   value cache, leaked to the next eval). Fixed: close_eval drops them.
