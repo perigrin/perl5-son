@@ -122,3 +122,15 @@ not checked out): 394 files under `cpan/Test-Simple/t`. Read them with
   (a Ref to the list element). Test::Chalk reads through references in tiny
   helpers and loops on a condition with a flag.
 - like/unlike: T2 has no regex engine (no RegexMatch/Match at all): NAMED GAP.
+- **can() and module subs (2026-11-11, from item 5):** chalk pruned a followed
+  module's unreached subs, so `R->can("name")` answered false through T2
+  (a silent wrong answer). Now a constant name reaches its subs; any other
+  unreached sub stays in its stash by name (MOP `unloaded`), so can()'s code
+  ref is true -- but it points at an empty stub, so a program that calls a
+  code value while unloaded names exist is refused.
+  - LATER (perigrin, "note it for later"): NARROW instead of refusing --
+    `R->can($m)` only needs R's chain compiled, not every module sub; or
+    compile on demand (ties into the per-module compilation cache).
+- Also from item 5: three `eval {...; 1} or $e = ...` in a row gave invalid
+  LLVM (a constant the first eval made, re-made inside an arm's copy of the
+  value cache, leaked to the next eval). Fixed: close_eval drops them.
