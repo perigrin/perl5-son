@@ -25,3 +25,11 @@ which the node graph is (today flattened to id remaps both ends).
 **How to apply:** none of this is milestone 2. Milestone 3 (running chalk's
 tests through T2) needs 1-2; pvm does not read this wire, so the format is
 perl5-son + chalk's to change.
+
+**Later angle (perigrin, 2026-11-11: "not right now ... interesting"):** a
+queryable store for the cached IR, especially the newer embedded,
+SQLite-like graph databases. Prior art: Code Property Graphs (Yamaguchi et
+al., IEEE S&P 2014; Joern), CodeQL (relational), Glean, Kythe, Doop/Souffle;
+rustc and salsa persist their query dependency graphs between builds. It would
+pay for cross-module queries (what reaches this sub) across cached modules
+without loading them all. A plain per-module cache doesn't need it.
