@@ -1662,7 +1662,12 @@ class SoN::FromOptree 0.01 {
             my ($st, $code) = @$pair;
             my $sub_cv = eval { B::svref_2object($code) } or next;
             next unless ref($sub_cv) && $sub_cv->isa('B::CV');
-            next if $st ne 'main::' && !( defined $file && ( eval { $sub_cv->FILE } // '' ) eq $file );
+            # (AND EVERY FOLLOWED MODULE'S: its subs are compiled with the
+            # program, so a write in one is a write the program makes --
+            # Test::Chalk's subtest saving and restoring its counters.)
+            my $ours = B::SoN->can('_cv_is_user_code');
+            next if $st ne 'main::' && !( $ours ? $ours->($sub_cv)
+                : defined $file && ( eval { $sub_cv->FILE } // '' ) eq $file );
             my $sub_root = eval { $sub_cv->ROOT };
             next unless $sub_root && $$sub_root;
             $visit->($sub_root, $sub_cv, 0);
@@ -7496,7 +7501,13 @@ class SoN::FromOptree 0.01 {
                 # array to the same slot.
                 my $key       = _stash_name_key('$', $gv->STASH->NAME, $gv_name);
                 my $is_deref  = ($op->private & 48);            # OPpDEREF
-                my $is_lvalue = ($op->flags & 32) && !$is_deref; # OPf_MOD
+                # AN ARGUMENT IS NOT A STORE TARGET: perl marks one OPf_MOD (it
+                # is passed as an alias), and read as a target it took no
+                # memory version -- `w(); r($G); w(); r($G)` read $G once,
+                # before either w (Test::Chalk's is_deeply printed the previous
+                # difference).
+                my $is_lvalue = ($op->flags & 32) && !$is_deref  # OPf_MOD
+                             && !_is_sub_argument($op);
                 my $existing  = $sim->lookup($key);
                 # A WRITTEN PACKAGE SCALAR IS NEVER VALUE-FORWARDED. The scope
                 # binding is correct only while nothing outside this graph can
@@ -10234,6 +10245,12 @@ class SoN::FromOptree 0.01 {
                 else { push @seg, substr($plain, $pos, $len); $pos += $len }
             }
 
+            # A STACKED PLAIN ASSIGNMENT's destination is pushed LAST, on top of
+            # its operands (`padsv $x; gvsv $G; multiconcat`): taken off first.
+            # (An APPEND's is pushed first, under them: see below.)
+            my $stacked_dest = ( $op->flags & 64 ) && !( $op->private & 0x40 )
+                ? $sim->pop_node : undef;
+
             # Pop the dynamic operands: argN is on top, arg0 deepest.
             my @args;
             unshift @args, $sim->pop_node for 1 .. $nargs;
@@ -10261,27 +10278,22 @@ class SoN::FromOptree 0.01 {
             # THE TWO STACKED FORMS PUT THE DESTINATION IN DIFFERENT PLACES,
             # and taking the wrong end silently stores to something else:
             #
-            #   $g .= "x"       gvsv(dest)             nargs=1, dest NOT an arg
-            #   $g = $g . "x"   gvsv(dest) gvsv(read)  nargs=1, dest IS args[0]
+            #   $g .= $x        gvsv(dest) padsv(x)    APPEND: dest first, under the args
+            #   $g = $x . "x"   padsv(x) gvsv(dest)    plain: dest LAST, on top
             #
-            # perl pushes the destination first in both, so for APPEND it is
-            # what remains on the stack, and for the plain assignment the arg
-            # pop has already taken it (measured: args=EntryDef, and the stack
-            # top was an unrelated Constant from the previous statement).
+            # The plain form's destination was taken as args[0]: right only
+            # when the first operand is the destination itself (`$g = $g .
+            # "x"`), and `$g = $x . "ab"` stored $g . "ab". It is popped
+            # first now ($stacked_dest).
             my ($pkg_target, $elem_dest);
             if ($op->flags & 64) {   # OPf_STACKED
                 if ($op->private & 0x40) {       # APPEND: still on the stack
                     $pkg_target = $sim->pop_node if $sim->stack_depth;
                 }
-                elsif (@args) {
-                    # PLAIN ASSIGNMENT: args[0] IS the destination AND the read.
-                    # `$g = $g . "x"` compiles to two gvsv[*g] ops, but they are
-                    # the same variable and resolve to ONE EntryDef, which the
-                    # arg pop already took. Naming it as the destination must
-                    # NOT remove it from @args -- doing that dropped the read,
-                    # and the store landed an empty string ("" instead of "ax")
-                    # while the print showed Concat("", "\n").
-                    $pkg_target = $args[0];
+                else {
+                    # PLAIN ASSIGNMENT: the destination popped above, before
+                    # the operands.
+                    $pkg_target = $stacked_dest;
                 }
                 # (an APPENDED element is kept: the append branch below stores it)
                 $elem_dest = $pkg_target
@@ -10426,18 +10438,14 @@ class SoN::FromOptree 0.01 {
             # A STACKED multiconcat whose destination is not a package scalar
             # is not modelled: storing to the op's targ would drop it.
             # AN ELEMENT DESTINATION, PLAIN ASSIGNMENT. perl evaluates the
-            # element last, so it is the TOP of the stack and the arg pop took
-            # it: measured on `$a[0] = "$ENV{M}a"`, args=[Subscript] with the
-            # real operand still below. Hand it back as the destination, take
-            # the operand, rebuild the value, and store it as sassign stores an
-            # element. The append form (`.=`) leaves a different shape and
-            # still refuses below. Corpus 122.
-            if (($op->flags & 64) && !($op->private & 0x40) && @args
-                    && ($args[-1]->isa('SoN::IR::Node::Subscript')
-                        || $args[-1]->isa('SoN::IR::Node::PostfixDeref'))
-                    && $sim->stack_depth) {
-                my $dest = pop @args;
-                unshift @args, $sim->pop_node;
+            # element last, so it is the TOP of the stack -- popped first, as
+            # $stacked_dest, before the operands. Rebuild the value and store
+            # it as sassign stores an element. The append form (`.=`) leaves a
+            # different shape and still refuses below. Corpus 122.
+            if (($op->flags & 64) && !($op->private & 0x40) && $stacked_dest
+                    && ($stacked_dest->isa('SoN::IR::Node::Subscript')
+                        || $stacked_dest->isa('SoN::IR::Node::PostfixDeref'))) {
+                my $dest = $stacked_dest;
                 my $val;
                 $val = $mkstr->($seg[0]) if defined $seg[0];
                 for my $i (0 .. $#args) {
@@ -16891,6 +16899,14 @@ class SoN::FromOptree 0.01 {
     # A label naming no enclosing loop translated here refuses: it is a
     # dynamic exit (a loop in a caller, or no loop at all) and binding it to
     # the innermost loop is the silent miscompile this exists to end.
+    # _is_sub_argument($op) -> true when $op is an argument of a sub call: its
+    # parent, through null (ex-list) ops, is the entersub.
+    sub _is_sub_argument ($op) {
+        my $p = eval { $op->parent };
+        $p = eval { $p->parent } while $p && $$p && $p->name eq 'null';
+        return $p && $$p && $p->name eq 'entersub' ? 1 : 0;
+    }
+
     sub _loop_control_frame ($op) {
         return undef unless $op && $op->isa('B::PVOP');
         my $label = $op->pv;

@@ -106,3 +106,19 @@ not checked out): 394 files under `cpan/Test-Simple/t`. Read them with
   its sub open (the skipped tests ran); it now refuses it, and the refusal
   reaches the program through `refused`. (A same-sub `last SKIP if C` in a
   bare block is also a GAP today: a loop control in a branch arm.)
+- **Hard tier:** is_deeply and subtest byte for byte. Three PRODUCER WRONG
+  ANSWERS found on the way, all pre-existing:
+  - a package scalar passed to a sub (OPf_MOD: an alias) was taken for a
+    store target and read with no version -- `w(); r($G); w(); r($G)` read $G
+    once (_is_sub_argument);
+  - `$G = $x . "ab"` stored `$G . "ab"`: a stacked plain multiconcat pushes
+    its destination LAST (on top), an APPEND's first; it is popped first now;
+  - writes in a followed module's subs were not in _package_scalars_written
+    (FILE ne $0), so its package reads could forward a stale binding.
+- **T2 limits met (Test::Chalk written around them, plainly):** a read through
+  a reference whose value feeds a ?: and waits across a call is refused (a
+  read in a ?: arm and one before it look alike in the graph); an early return
+  from inside a loop body ("an if whose arms do not meet"); `foreach` aliasing
+  (a Ref to the list element). Test::Chalk reads through references in tiny
+  helpers and loops on a condition with a flag.
+- like/unlike: T2 has no regex engine (no RegexMatch/Match at all): NAMED GAP.
