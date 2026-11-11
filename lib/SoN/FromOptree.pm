@@ -7711,9 +7711,20 @@ class SoN::FromOptree 0.01 {
             # are MARK-DELIMITED -- measured, depth 5 with the mark at 2. The
             # parts are concatenated into the pattern exactly as string
             # interpolation builds any other runtime string.
+            # PARTS ONLY WHERE THE OP TREE HAS THEM: a regcomp whose kid is a
+            # list (pushmark, parts...). A mark still open from an enclosing
+            # list (`my $ok = $s =~ $re ? 1 : 0`) is not the pattern's: popping
+            # to it made $re's pattern "$got-ternary . $s . $re" (Test::Chalk's like).
+            my $listed = 0;
+            for (my $k = $op->first; $$k; $k = $k->sibling) {
+                next unless $k->name eq 'regcomp' && ($k->flags & B::OPf_KIDS);
+                my $f = $k->first;
+                $listed = ($f->flags & B::OPf_KIDS) && $f->first->name eq 'pushmark' ? 1 : 0;
+                last;
+            }
             my $matcher;
             if (!defined $pattern) {
-                my $parts = $sim->has_mark && $sim->stack_depth > $sim->mark_depth + 1
+                my $parts = $listed && $sim->has_mark && $sim->stack_depth > $sim->mark_depth + 1
                     ? $sim->pop_to_mark
                     : [ $sim->pop_node ];
                 $matcher = shift $parts->@*;
