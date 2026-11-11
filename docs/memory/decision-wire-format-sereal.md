@@ -40,3 +40,8 @@ types and effects (stamps, the memory/control chain). Prior art: IR2Vec
 control/data/call graph for GNNs), code2vec (AST paths); none uses an effect
 system that I know of. Uses: similarity search in the cached-IR store, finding
 the gaps that refuse most, optimization heuristics.
+
+**And (perigrin):** the same store as LLM training data for code generation:
+source <-> typed, effect-annotated IR <-> LLVM, each pair checked against
+perl by TapDiff; refusals labelled with their reason. Mind the sources'
+licenses (CPAN is mixed): keep provenance with every example.
