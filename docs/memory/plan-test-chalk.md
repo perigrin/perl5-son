@@ -136,3 +136,33 @@ not checked out): 394 files under `cpan/Test-Simple/t`. Read them with
 - Also from item 5: three `eval {...; 1} or $e = ...` in a row gave invalid
   LLVM (a constant the first eval made, re-made inside an arm's copy of the
   value cache, leaked to the next eval). Fixed: close_eval drops them.
+
+## Measurements (items 5-6, 2026-11-11)
+
+**Item 5 -- chalk's easy-tier files with `use Test::More` swapped for
+`use Test::Chalk`** (temp copies; not migrated). The selector (Test::More,
+none of the hard-tier names) finds 279 files today, not 215. Through
+TapDiff, 240s each, 4 at a time:
+- SAME 1 (after the fixes below), DIFFERS 0 (was 1), REFUSED 70, TIMEOUT 208.
+- TIMEOUT is the top cause by far: each file follows ~130 modules / ~1000
+  subs through B::SoN (~50s alone, far more 4-wide). The compile cost, not
+  T2, is what stops chalk's own tests -- the per-module cache (decision-
+  wire-format-sereal.md) is the lever.
+- Refusals: 32 "a scalar deref where a reference T2 does not make may reach
+  it" (a program-wide check: any $$x plus any foreign \ anywhere); 16 string
+  eval with a lexical in scope; 5 a method parameter past its declared ones
+  (Chalk::MOP::declare_class); 4 a value stamped Hash (PostfixDeref); 3
+  from_json refused in its module; 2 Exists; then singles.
+- The 1 DIFFERS (optimizer/pass-contract.t) was TWO T2 bugs, both fixed with
+  tests: can() false for a module's sub; a constant leaking across evals
+  (invalid LLVM).
+
+**Item 6 -- Test-Simple's own t/ (perl5 git HEAD), with Test::Chalk swapped in:**
+364 files; 264 not Test::More, 76 drive Test::Builder/Test2, 11 use a
+function Test::Chalk lacks (explain, use_ok, require_ok, new_ok, like, skip,
+eq_*). 13 run: SAME 1 (subtest/implicit_done.t), DIFFERS 0, REFUSED 12:
+3 a phase block (BEGIN with effects); 4 import-time plan (`use Test::More
+tests => N` -- the named gap: module top-level runs at compile time, read
+by Exporter as a version or an unknown export); 1 string eval with a
+lexical; 1 a die handler; 1 ftis (-e); 1 EntryWrite statement; 1 no reason
+given by the producer (789-read-only.t).
