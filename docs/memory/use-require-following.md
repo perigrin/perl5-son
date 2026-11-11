@@ -54,6 +54,6 @@ module's code is reached, then whether it is a builtin's module.
 - **Run-time `require $x` (done):** refused as "a require of a name computed
   at run time is not followed" (chalk Context's require lowering; T2 declines
   any require). Milestone 1 closed 2026-11-10.
-Next (not milestone 1): a literal top-level `require Foo` of a module not
-loaded at compile time is not followed (it runs after CHECK); module subs
-reached only by a computed name are not loaded.
+Stays a GAP (perigrin, 2026-11-11: "runtime require Foo is gonna remain a gap
+for now"): a literal `require Foo` that runs after CHECK is not followed. Also
+not loaded: module subs reached only by a computed name.
