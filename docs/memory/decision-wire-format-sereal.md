@@ -33,3 +33,10 @@ al., IEEE S&P 2014; Joern), CodeQL (relational), Glean, Kythe, Doop/Souffle;
 rustc and salsa persist their query dependency graphs between builds. It would
 pay for cross-module queries (what reaches this sub) across cached modules
 without loading them all. A plain per-module cache doesn't need it.
+
+**And (perigrin, same day):** a custom embedding of blocks that weights
+types and effects (stamps, the memory/control chain). Prior art: IR2Vec
+(seed vectors for opcode/type/argument, flow-aware), ProGraML (LLVM IR as a
+control/data/call graph for GNNs), code2vec (AST paths); none uses an effect
+system that I know of. Uses: similarity search in the cached-IR store, finding
+the gaps that refuse most, optimization heuristics.
