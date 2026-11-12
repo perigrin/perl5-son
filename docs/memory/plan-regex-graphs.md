@@ -332,3 +332,23 @@ B::SoN 17.6s (187 subs, 17 packages, 8866 nodes) and chalk refuses it by name
 Lesson: a "too slow" with flat memory and one hot frame is a loop, not a
 cost. Sample the perl stack (a $SIG{USR1} caller dump) before designing a
 cache. Any scan that follows ->next needs a seen-set.
+
+## Package aggregates and `local @x` (2026-11-12)
+
+The 300 Carp-blocked files needed `local @CARP_NOT`, and T2 had no package
+arrays at all. Now: B::SoN swaps a fresh aggregate in at `local @a` (a glob
+bind of an empty anon literal), saves a Ref to the old one, binds it back at
+scope exit, and names the aggregate again by a read after the restore. T2
+keeps each package aggregate in a GArray/GHash global; a whole store refills
+it in place; a local's swap and restore are GStores of the slot.
+
+Lessons:
+- B::SoN gives a later read of a package aggregate as the LITERAL last stored
+  into it. Anything that copies or caches that literal (T2's entry-block
+  constant arrays, a memoized target load) reads the wrong aggregate once a
+  local swaps it. Read it where it is used.
+- Perl's own names (%SIG, %::, %ENV...) are not ordinary package hashes: the
+  first cut treated them so and gave wrong answers. Whitelist identifiers.
+- Deparse: a value read from a local aggregate and returned is spelled after
+  the restore; refused by name. The deparser is a second backend (see the
+  Target::Perl note to write), not a pretty-printer.

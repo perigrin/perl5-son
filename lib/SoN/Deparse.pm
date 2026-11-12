@@ -1639,6 +1639,8 @@ class SoN::Deparse 0.01 {
             # replaced and rebinds it to itself.
             if ( ( $val->{op} // '' ) eq 'Ref' ) {
                 my $inner = $nodes->{ ( $val->{inputs} // [] )->[0] // -1 };
+                # AN AGGREGATE'S SAVE is taken at its swap (see EntryWrite).
+                next if $inner && ( ( $inner->{fields} // {} )->{sigil} // '' ) =~ /\A[\@%]\z/;
                 $val = $inner if $inner;
             }
             next unless ( $val->{op} // '' ) eq 'EntryDef';
@@ -3346,7 +3348,7 @@ class SoN::Deparse 0.01 {
             # `@main::a = (5); @main::a = (1);` -- 1 for perl's 5.
             if ($self->_agg_is_package($n)
                 && defined(my $w = $self->_own_store_of($n, $vn))) {
-                push $after_effect{$w}->@*, $n;
+                unshift $after_effect{$w}->@*, $n;   # the store itself: ahead of reads anchored there
                 next;
             }
 
@@ -6707,13 +6709,31 @@ class SoN::Deparse 0.01 {
                 # the one that knows it is emitting a glob assignment. Changing
                 # `_constant` would put a star on every bareword filehandle.
                 my $rhs = $nodes->{ $n->{inputs}[1] };
+                # A `local @a` / `local %h` SWAP: the old aggregate's reference
+                # is saved here, where it is still in the slot, for the
+                # restore that binds it back -- the Ref over a read of this
+                # name at this store's memory version.
+                my $save = '';
+                if ( $rhs && ( $rhs->{op} // '' ) =~ /\A(?:Array|Hash)Literal\z/
+                     && !defined( ( $rhs->{fields} // {} )->{symbol} ) ) {
+                    my $mem = $n->{inputs}[2] // -1;
+                    for my $r ( $self->_nodes_in_order ) {
+                        next unless ( $r->{op} // '' ) eq 'Ref';
+                        my $in = $nodes->{ ( $r->{inputs} // [] )->[0] // -1 } // next;
+                        next unless ( $in->{op} // '' ) eq 'EntryDef'
+                            && ( ( $in->{inputs} // [] )->[-1] // -2 ) == $mem
+                            && $self->_slot_name($in) eq $self->_slot_name($slot);
+                        $bound{ $r->{id} } //= sprintf( '$saved%d', $r->{id} );
+                        $save = sprintf( "my %s = \\%s;\n", $bound{ $r->{id} }, $self->_slot_name($in) );
+                    }
+                }
                 my $val = ( $rhs && ( $rhs->{op} // '' ) eq 'Constant'
                             && ( ( $rhs->{fields} // {} )->{const_type} // '' )
                                eq 'glob' )
                     ? '*' . ( $rhs->{fields} // {} )->{value}
                     : $self->_expr( $n->{inputs}[1] );
 
-                return sprintf( "*%s = %s;\n", $name, $val );
+                return sprintf( "%s*%s = %s;\n", $save, $name, $val );
             }
 
             return sprintf("%s = %s;\n",
@@ -7133,6 +7153,27 @@ class SoN::Deparse 0.01 {
             my @in = ($n->{inputs} // [])->@*;
             return '' unless @in;
             my $v = $nodes->{ $in[0] };
+
+            # A VALUE READ FROM A `local` AGGREGATE is spelled here, after the
+            # restore put the old one back: by name it would read that one
+            # (`sub g { local @a = (5); "@a" }` returned the outer @a). Bound
+            # reads (a stale temporary) are already made; any other refused.
+            if ( my %restored = map { $self->_slot_name( $nodes->{ $_->{inputs}[0] } ) => 1 }
+                     grep { ( $_->{op} // '' ) eq 'EntryWrite' && ( $_->{fields} // {} )->{binds}
+                            && ( ( $nodes->{ $_->{inputs}[1] } // {} )->{op} // '' ) eq 'Ref'
+                            && ( ( ( $nodes->{ $_->{inputs}[0] } // {} )->{fields} // {} )->{sigil} // '' ) =~ /\A[\@%]\z/ }
+                     $self->_nodes_in_order ) {
+                my ( @q, %seen ) = ( $in[0] );
+                while ( defined( my $id = shift @q ) ) {
+                    next if $seen{$id}++ || exists $bound{$id};
+                    my $c = $nodes->{$id} or next;
+                    my $name = ( $c->{op} // '' ) =~ /\A(?:Array|Hash)Literal\z/ ? $self->_agg_name($c)
+                             : ( $c->{op} // '' ) eq 'EntryDef' ? $self->_slot_name($c) : undef;
+                    die "GAP: a value read from a local aggregate, returned past its restore\n"
+                        if defined $name && $restored{$name};
+                    push @q, grep { !$self->_is_memory($_) } ( $c->{inputs} // [] )->@*;
+                }
+            }
 
             # The undef Constant every program body ends with is not a value
             # the source returned. A sub's implicit undef is the source's

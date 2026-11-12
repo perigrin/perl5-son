@@ -6070,16 +6070,36 @@ class SoN::FromOptree 0.01 {
             # `local @x` restores exactly as `local $g` does -- same key, sigil
             # included -- so it records the same save for the scope exit below.
             if ($op->private & 128) {   # OPpLVAL_INTRO
-                # RESTORED AT A SCOPE'S EXIT it is refused: the save is the
-                # name's SSA binding (none at all inside a sub) and the restore
-                # rebinds the name with no store, so a reader of the package's
-                # storage saw the local contents after the scope ("5 5" for
-                # perl's "5 1"). At program scope the restore is at its end.
-                die "GAP: local on a package array or hash (restored at scope exit) not yet lowered\n"
-                    unless _restored_at_program_end($cv, $op);
+                # At program scope the restore is at its end: nothing sees it.
                 # `local @x` in a loop body restores at the ITERATION boundary,
                 # exactly as the scalar site does -- see there.
-                push $ctx->{local_saves}->@*, { key => $key, node => $existing };
+                if (_restored_at_program_end($cv, $op)) {
+                    push $ctx->{local_saves}->@*, { key => $key, node => $existing };
+                }
+                # RESTORED AT A SCOPE'S EXIT it is `local *v`'s shape: perl
+                # swaps a fresh aggregate into the slot, so the save is a REF
+                # to the old one and the restore a glob bind pointing the name
+                # back. Restoring only the name's SSA binding (none inside a
+                # sub) let a reader of the package's storage see the local
+                # contents after the scope: "5 5" for perl's "5 1".
+                else {
+                    my %ent = (package => $gv->STASH->NAME, sigil => $agg_sigil, symbol => $gv_name,
+                               stamp => SoN::IR::Stamp->new(type => $agg_sigil eq '%' ? 'Hash' : 'Array'));
+                    my $prior = $factory->make('EntryDef', %ent,
+                        (defined $sim->memory ? (inputs => [ $sim->memory ]) : ()));
+                    push $ctx->{local_saves}->@*,
+                        { key       => $key,
+                          node      => $factory->make('Ref', inputs => [$prior]),
+                          ent       => \%ent,     # after the restore, a read of the name there
+                          target    => $factory->make('EntryDef', %ent),
+                          glob_bind => 1 };
+                    # THE SWAP: a fresh, empty aggregate bound into the slot,
+                    # which the assign after it fills in place. A reference
+                    # taken to the old one keeps its contents.
+                    my $fresh = $factory->make($agg_sigil eq '%' ? 'HashLiteral' : 'ArrayLiteral',
+                        stamp => SoN::IR::Stamp->new(type => $agg_sigil eq '%' ? 'HashRef' : 'ArrayRef'));
+                    _entry_store($factory, $sim, $factory->make('EntryDef', %ent), $fresh, 1);
+                }
             }
 
             # An LVINTRO target (`our @x = ...`) or an OPf_MOD use is a
@@ -12559,7 +12579,7 @@ class SoN::FromOptree 0.01 {
             # binding is simply left as the local set it. Measured as rare and
             # not what rs.t does (`local @INC` has an @INC to restore).
             next unless defined $save->{node};
-            $sim->define($save->{key}, $save->{node});
+            $sim->define($save->{key}, $save->{node}) unless $save->{ent};
 
             # ...AND A STORE, because the RESTORE IS A WRITE. The scope map
             # alone expressed it only while a package-scalar read was
@@ -12587,6 +12607,11 @@ class SoN::FromOptree 0.01 {
             _entry_store($factory, $sim, $save->{target}, $save->{node},
                          $save->{glob_bind} ? 1 : 0)
                 if $factory && $save->{target};
+            # AN AGGREGATE IS NAMED AGAIN BY A READ AFTER ITS RESTORE: the one
+            # taken before the swap is of a version the swap made stale.
+            $sim->define($save->{key}, $factory->make('EntryDef', $save->{ent}->%*,
+                (defined $sim->memory ? (inputs => [ $sim->memory ]) : ())))
+                if $factory && $save->{ent};
         }
     }
 

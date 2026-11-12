@@ -107,11 +107,10 @@ subtest 'local lowers in every loop kind' => sub {
         my (undef, $err) = translate($src);
         unlike $err, qr/GAP:/, "$name: not refused" or diag $err;
     }
-    # AN AGGREGATE's restore rebinds the name and stores nothing, so a reader
-    # of the package's storage saw the local contents after the scope (chalk
-    # printed "5 5" for perl's "5 1"): refused by name.
+    # AN AGGREGATE swaps a fresh one in and binds the old back at the
+    # iteration boundary, as the scalar restores there.
     my (undef, $err) = translate('our @a=(1); for my $i (1,2) { local @a = ($i); }');
-    like $err, qr/GAP: local on a package array or hash/, 'aggregate: refused by name';
+    unlike $err, qr/GAP:/, 'aggregate: not refused' or diag $err;
 };
 
 done_testing;
