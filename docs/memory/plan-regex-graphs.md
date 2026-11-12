@@ -317,3 +317,18 @@ Item 7's like/unlike: test-chalk-gives-test-more-s-tap.t ('like and unlike',
   like/unlike files (3 `use` each) at 1500s instead of 240s. Three still timed
   out; one was REFUSED at 281s (scalar deref, not a regex). Compile cost, not
   regexes, is what stops chalk's own test files.
+
+## The compile wall was a hang (2026-11-12)
+
+Item 7's TIMEOUTs were not compile cost. B::SoN spun forever on
+`if (C) {...} else { for (;;) { ... last } }`: the `$ret_branch` scan in
+_handle_cond_expr walked ->next from the arm, and an endless loop's ops are a
+cycle that reaches neither the stop op nor the join. File::Path::_rmtree has
+the shape, so every program loading File::Path hung (2h+ at full CPU, 55MB).
+Fix: the house `!$seen{$$o}++` guard. After it, the profiled test file takes
+B::SoN 17.6s (187 subs, 17 packages, 8866 nodes) and chalk refuses it by name
+(Carp::shortmess: `local` on a package array/hash).
+
+Lesson: a "too slow" with flat memory and one hot frame is a loop, not a
+cost. Sample the perl stack (a $SIG{USR1} caller dump) before designing a
+cache. Any scan that follows ->next needs a seen-set.

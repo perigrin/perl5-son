@@ -18771,8 +18771,9 @@ class SoN::FromOptree 0.01 {
         # a further branch is _arm_has_return's, and that arm still yields a
         # value (`C ? (D ? (return 1) : 2) : 3`) -- not this rule's to merge.
         my $ret_branch = $exits && 0 < grep {
-            my ($stop, $hit) = ($_->[1], 0);
-            for (my $o = $_->[0]; $$o && $$o != $stop
+            my ($stop, $hit, %seen) = ($_->[1], 0);
+            # An endless loop in the arm is a cycle of ->next: stop where it has been.
+            for (my $o = $_->[0]; $$o && !$seen{$$o}++ && $$o != $stop
                      && !(defined $join_addr && $$o == $join_addr); $o = $o->next) {
                 $hit = 1, last if $o->name eq 'return';
             }
