@@ -244,3 +244,62 @@ perl with T2. The tool is `swap-one.pl`, 240s a file.
 - Next lever, not regexes: compile cost. Link on demand before DCE, plus the
   per-module cache (decision-wire-format-sereal.md). The cache pays within ONE
   sweep: 396 files share the same ~130 modules.
+
+## Closing check (2026-11-12): each item's evidence
+
+Census, recounted over every file (one `--rows` per file):
+- Run-time-built patterns: 69 (lib 20, t 49). This is the goal's 69; the
+  table's 67/68 above came from runs before this goal's own tests added theirs.
+- 22 are `\Q` of a variable: an rlit, which compiles.
+- 2 are a whole qr value (Test::Chalk's `$s =~ $re`): QrMatch, which compiles.
+- At most 45 interpolate a variable into a bigger pattern. That is the named
+  GAP "a pattern built at run time", except where B::SoN folds the variable to
+  a constant.
+
+Item 4, one probe file per feature (chalk t/bootstrap/regex/; each compares
+with perl and failed first):
+
+| feature | probes |
+|---|---|
+| alternation, (?:..), \b \B, /i /m /s /x, lazy, lookahead, lookbehind, posix | t2-regex-features.t |
+| possessive, atomic, backrefs, named, \p.. | t2-regex-features.t (REFUSED BY NAME) |
+| non-ASCII under \d\w\s, /i, posix: stop, exit 255 | t2-a-regex-is-a-graph.t, t2-regex-features.t |
+| \Q..\E (constant; a variable: rlit) | t2-regex-quotemeta.t |
+
+Item 5, the ops:
+
+| op | probes |
+|---|---|
+| m// scalar, captures | t2-a-regex-is-a-graph.t |
+| m//g list, list context | t2-regex-list.t |
+| /g scalar + pos(), /gc + \G | t2-regex-pos.t |
+| s/// /g /r, in place or a value | t2-regex-subst.t |
+| s///e, s///er | t2-regex-subst.t (added 2026-11-12: already SAME, pinned) |
+| s///ge (a replacement per match) | REFUSED by name: B::SoN computes it once (producer, open) |
+| split | t2-regex-split.t |
+| tr/// (/r; /c /d /s refused) | t2-regex-tr.t |
+| qr values, like/unlike | t2-regex-qr.t, test-chalk-gives-test-more-s-tap.t |
+| (?{ }) code blocks | t2-regex-code-block.t (2026-11-12) |
+
+Code blocks through T2 (were refused): Parse reads `(?{..})` as a zero-width
+`code` node. T2 passes each body B::SoN lifted (CODE_GRAPHS) to the matcher
+as a code value (CodeOfFn). The graph calls them in order on the hit
+(`accept`). This happens only where perl's optimizer finds the whole text
+first: an all-literal pattern (groups allowed, no flags) in scalar context.
+Anywhere else, how often a block runs is the optimizer's, so it is REFUSED by
+name ("how often it runs is perl's optimizer's"), as Context did.
+
+Open producer bugs above are each a named refusal or GAP, never a wrong
+answer.
+- Lesson (found by verify, not by my new test): a match whose code blocks run
+  is a STORE. B::SoN pins it as a memory version, and a read of the version
+  before it must be made before it (`reads_before` over `passed`). Without
+  that, `my $u = $t + 1` between two block-running matches read the second
+  block's value: "10 11" for "10 2". The old Context-path test
+  (llvm-a-regex-code-block-runs-where-matching-passes.t) caught it. Probe a new
+  feature with the old feature's tests too, not only your own.
+- Lesson 2 (verify's probes): a matcher made WITHOUT the bodies (a qr value
+  matched elsewhere, a qr interpolated into a pattern) silently ran no block
+  once Parse accepted them. That was 7 new WRONG probes. Graph now refuses
+  unless the caller passes one body for each block (`codes`). When the reader
+  learns a construct, every builder that reads it must agree on what it needs.
