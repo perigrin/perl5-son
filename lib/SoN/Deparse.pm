@@ -3340,6 +3340,16 @@ class SoN::Deparse 0.01 {
             next if $self->_is_inline_aggregate($n);
             my $vn = $self->_agg_name($n);
 
+            # A PACKAGE AGGREGATE'S STORE OF ITS OWN LITERAL is where it is
+            # spelled: the EntryWrite says nothing (see there), so placed by
+            # the rules below `our @a = (1); @a = (5)` came out as
+            # `@main::a = (5); @main::a = (1);` -- 1 for perl's 5.
+            if ($self->_agg_is_package($n)
+                && defined(my $w = $self->_own_store_of($n, $vn))) {
+                push $after_effect{$w}->@*, $n;
+                next;
+            }
+
             # A SHORT-CIRCUIT OVER AN ARM'S EFFECT settles at the join.
             if (defined(my $join = $self->_short_circuit_join($n, \%next_of))) {
                 push $after_region{$join}->@*, $n;
@@ -4765,6 +4775,18 @@ class SoN::Deparse 0.01 {
         $visit->($_) for ($n->{inputs} // [])->@*;
         undef $visit;
         return $join;
+    }
+
+    # _own_store_of($literal, $name) -- the id of the chain EntryWrite that
+    # stores this named literal into its own name, or undef.
+    method _own_store_of ($n, $vn) {
+        for my $c (values %$nodes) {
+            next unless ($c->{op} // '') eq 'EntryWrite' && defined $c->{control_in};
+            next unless ($c->{inputs}[1] // -1) == $n->{id};
+            my $slot = $nodes->{ $c->{inputs}[0] } // next;
+            return $c->{id} if ($slot->{op} // '') eq 'EntryDef' && $self->_slot_name($slot) eq $vn;
+        }
+        return undef;
     }
 
     # A named Array/HashLiteral on the control chain: an allocation at that
