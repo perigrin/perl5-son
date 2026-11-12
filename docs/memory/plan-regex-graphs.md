@@ -303,3 +303,13 @@ answer.
   once Parse accepted them. That was 7 new WRONG probes. Graph now refuses
   unless the caller passes one body for each block (`codes`). When the reader
   learns a construct, every builder that reads it must agree on what it needs.
+
+Failing-first, shown after the fact (2026-11-12): today's ten t2-regex
+probe files were run against chalk BEFORE this goal (cfa6154b, the parent of
+72a2acbb). 159 of 180 assertions FAIL there. Every feature's SAME-with-perl
+probe fails, because T2 then had no regex at all. The 21 that pass are "not
+DIFFERS / refused by name" checks, which hold either way.
+- a-regex-is-a-graph 33/38, features 32/37, list 15/16, pos 9/9, qr 20/21,
+  quotemeta 5/6, split 13/14, subst 14/15, tr 5/8, code-block 13/16.
+Item 7's like/unlike: test-chalk-gives-test-more-s-tap.t ('like and unlike',
+'like with flags') is SAME with Test::More's bytes through T2, in the suite.
