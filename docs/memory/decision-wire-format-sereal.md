@@ -15,7 +15,8 @@ which the node graph is (today flattened to id remaps both ends).
 
 **Order (Go/Rust model: compile a unit once, cache it, prune at link time):**
 1. Compact JSON (pretty-printed today: ~3x the bytes and decode time).
-2. Per-module cache: B::SoN translates a module once, keyed by a hash of its
+2. Per-module cache (pays within one run too: item 7's 396 test files share
+   ~130 modules): B::SoN translates a module once, keyed by a hash of its
    file, its followed deps' keys, and B::SoN's version; chalk's reachability
    pruning stays the "linker". Perl caveat: a module whose BEGIN/import changes
    its own subs or globals per caller needs the `use` args in the key, or no cache.

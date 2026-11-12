@@ -225,3 +225,22 @@ alternation, quantified groups, \b, any flag, (?..) but (?: and (?{, mid
   - Tests that pinned the fallback's shape (Coerce[Boolean->Str], "not T2")
     were retargeted to perl's answer + "T2's" -- after checking T2's answer
     equals perl's for each.
+
+### Chalk's test files with Test::Chalk (2026-11-12)
+
+The 396 files are the 279 easy tier plus 117 that use like/unlike. Each runs as
+a copy with `use Test::More` swapped for Test::Chalk, then TapDiff compares
+perl with T2. The tool is `swap-one.pl`, 240s a file.
+- SAME 0, DIFFERS 0, REFUSED 99, TIMEOUT 297.
+  - TIMEOUT means over 240s OR no output (crash); see
+    a-sweeps-absence-is-not-evidence.md. It is the compile-cost wall of
+    milestone 2: each file follows ~130 modules.
+- REFUSED top causes: a scalar deref of a reference T2 doesn't make 32,
+  a method call with no invocant 21, a string eval with a lexical in scope 19,
+  a direct call with no sub 7, `local` on a package array or hash 5,
+  from_json refused in its module 3, a statement `require` 3.
+- Regex-related: 1. The producer GAP "s///ge on a subject that is not a plain
+  scalar variable", a named refusal. No refusal comes from Chalk::Regex or T2's matcher.
+- Next lever, not regexes: compile cost. Link on demand before DCE, plus the
+  per-module cache (decision-wire-format-sereal.md). The cache pays within ONE
+  sweep: 396 files share the same ~130 modules.
