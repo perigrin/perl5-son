@@ -313,3 +313,7 @@ DIFFERS / refused by name" checks, which hold either way.
   quotemeta 5/6, split 13/14, subst 14/15, tr 5/8, code-block 13/16.
 Item 7's like/unlike: test-chalk-gives-test-more-s-tap.t ('like and unlike',
 'like with flags') is SAME with Test::More's bytes through T2, in the suite.
+- Item 7, retried with a longer limit (2026-11-12): four of the smallest
+  like/unlike files (3 `use` each) at 1500s instead of 240s. Three still timed
+  out; one was REFUSED at 281s (scalar deref, not a regex). Compile cost, not
+  regexes, is what stops chalk's own test files.
