@@ -62,3 +62,20 @@ loader's reach -- not in the loader (perigrin: "it should be an optimization
 pass"). Next: chalk docs/plans/2026-11-13-the-loader-only-loads.md (reach,
 refusal and pruning out of the loader too). The 300 Carp-blocked files now
 pass ret_summary and stop on Carp::caller_info.
+
+## Carp, continued (2026-11-13)
+
+- map/grep block of statements is the loop body (its leave runs on into the
+  mapwhile past nulls); leftovers between its statements are still dropped.
+- `$#a = N`: Call `arylen` target -> pinned `set_arylen` write; T2 models
+  holes (absent = undef slot, payload 1) and routes exists / set-length
+  through the container metaobject (tie: EXISTS / STORESIZE).
+- `return` in `eval { }` leaves the EVAL: its own exit list, one way into
+  the join per return; only the body's `local`s are undone. Chalk refuses it
+  by name for now (T2 and fallback).
+- Lesson: probes compiled with peep ON (plain `perl -MO=Concise`) show a
+  different optree than B::SoN walks (nulls kept); check `->next` past nulls.
+- Lesson: memory is tight -- a deparser runaway during a verify got another
+  test killed (a false "new fail"); run probes under `ulimit -v`.
+- Next: Carp::_fetch_sub / _univ_mod_loaded / trusts_directly read the
+  symbol table as data (`for ($::{$p}) { ref \$_ eq 'GLOB' && *$_{HASH} }`).
