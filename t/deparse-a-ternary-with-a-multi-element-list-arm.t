@@ -164,13 +164,20 @@ for my $src (
     round_trips($src, "an array of a list arm: $src");
 }
 
-# A STORE TO AN ARRAY'S LAST INDEX truncates or extends it. It reaches the
-# graph as a value (`Count - 1`), not a store, and was dropped silently.
+# A STORE TO AN ARRAY'S LAST INDEX truncates or extends it: a write
+# (set_arylen) where it stands. Extending leaves elements that do not exist.
 for my $src (
     q{for my $c (1, 0) { my @a = $c ? (1, 2) : (3); $#a = 0; print "@a\n" }},
     q{my @a = (0, 1); $#a = 0; print "@a\n";},
-    q{my @a = (0, 1); $#a++; print scalar(@a), "\n";},
     q{my $r = [1, 2, 3]; $#$r = 0; print "@$r\n";},
+    q{my @a = (0, 1); $#a = 3; print scalar(@a), exists $a[3] ? "e" : "n", defined $a[1] ? "d" : "u", "\n";},
+    q{my @a = (1 .. 5); my $n = $ENV{NOPE} // 1; $#a = $n; print "@a\n";},
+) {
+    round_trips($src, "\$#a as a target: $src");
+}
+# AN UPDATE OF IT (`$#a++`) is a read and a store: not yet.
+for my $src (
+    q{my @a = (0, 1); $#a++; print scalar(@a), "\n";},
 ) {
     refuses($src, qr/GAP: a store to an array's last index/,
         "\$#a as a target: $src");

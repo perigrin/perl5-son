@@ -137,6 +137,10 @@ class SoN::Deparse 0.01 {
     # here refuses rather than emitting an undefined sub call -- the failure
     # this table exists to stop.
     our %BUILTIN_SPELLING = (
+        # `$#a = N`: B::SoN's write of an array's last index (its first
+        # argument rendered as a location, see the call site).
+        # (an array, `@a`, gets a reference taken; a reference is one already)
+        set_arylen => sub { sprintf('$#{%s} = %s', ( $_[0] =~ /\A\@/ ? "\\ $_[0]" : $_[0] ), $_[1]) },
         prtf   => 'printf',
         # `times` is the op `tms`. Four values (user/system, and the same for
         # children), so the same op-name-vs-keyword trap one builtin over.
@@ -8914,6 +8918,7 @@ class SoN::Deparse 0.01 {
         # argument is a location -- see _location.
         $args[0] = $self->_location($in[0])
             if ( $f->{name} // '' ) eq 'substr' && @in == 4;
+        $args[0] = $self->_location($in[0]) if ( $f->{name} // '' ) eq 'set_arylen';
 
         if ($kind eq 'direct') {
             # PARENTHESISED ALWAYS. `f $x` is a syntax error unless f was

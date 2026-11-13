@@ -63,9 +63,9 @@ caller_refuses(q{sub byg { "$a" =~ /3/g } my @r = sort byg 3,1,2; print "@r\n";}
 
 # ANY REFUSAL, not only the /g one: an anon body refused for an unrelated
 # cause left the same dangling call.
-caller_refuses(q{my $f = sub { my @a = (1,2); $#a = 0; scalar @a }; print $f->(), "\n";},
+caller_refuses(q{my $f = sub { my @a = (1,2); $#a++; scalar @a }; print $f->(), "\n";},
     $last, $anon, 'an anon sub refused for another cause');
-caller_refuses(q{my %h = (k => sub { my @a = (1,2); $#a = 0; scalar @a }); print $h{k}->(), "\n";},
+caller_refuses(q{my %h = (k => sub { my @a = (1,2); $#a++; scalar @a }); print $h{k}->(), "\n";},
     $last, $anon, 'an anon sub stored in a hash');
 
 # A METHOD IS RESOLVED AT RUNTIME, through @ISA, and the Call carries only the

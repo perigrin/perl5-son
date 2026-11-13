@@ -907,8 +907,10 @@ class SoN::FromOptree 0.01 {
                 my $agg = $k;
                 # `delete $h{k}` and an element store reach the aggregate one
                 # level down, through the helem/aelem.
+                # (`$#a = N` resizes @a: av2arylen as a target, OPf_REF)
                 if ($MUTATES{$name} || (($name eq 'aelem' || $name eq 'helem')
-                                        && ($op->flags & 32))) {     # OPf_MOD
+                                        && ($op->flags & 32))     # OPf_MOD
+                    || $name eq 'av2arylen' && ($op->flags & 16)) {
                     # `delete $h{a}` nulls the helem it reaches through.
                     my $an = $agg->name eq 'null'
                         ? substr(B::ppname($agg->targ), 3) : $agg->name;
@@ -6111,7 +6113,19 @@ class SoN::FromOptree 0.01 {
             $p = $p->parent while $p && $$p && $p->name eq 'null';
             die "GAP: a reference to an array's last index (`\\\$#a`) is not yet lowered\n"
                 if $p && $$p && $p->name =~ /\A(?:s?refgen)\z/;
-            die "GAP: a store to an array's last index (`\$#a = ...`) is not yet lowered\n";
+            # A STORE TO IT (`$#a = N`): the target is the array's length as a
+            # location, written by the assignment (set_arylen), as an lvalue
+            # substr is. An update of it (`$#a++`, `$#a += 2`) is not yet.
+            die "GAP: a store to an array's last index (`\$#a = ...`) is not yet lowered\n"
+                unless $p && $$p && $p->name eq 'sassign' && ${ $p->last } == $$op
+                    && $sim->stack_depth > 0;
+            my $kid = $op->first;
+            my $agg = $sim->pop_node;
+            $agg = _deref_read($factory, $sim, $agg, '@')
+                if $kid->name eq 'rv2av' && _deref_operand($kid)->name ne 'gv' && !_is_aggregate_node($agg);
+            $sim->push_node($factory->make('Call', inputs => [$agg], dispatch_kind => 'builtin',
+                name => 'arylen', stamp => SoN::IR::Stamp->new(type => 'Int')));
+            return ($op->next, 'handled');
         }
         my $arylen_kid = $name eq 'av2arylen' && $op->can('first') ? $op->first : undef;
         my $through_ref = $arylen_kid && $$arylen_kid
@@ -10021,6 +10035,24 @@ class SoN::FromOptree 0.01 {
                 $store->set_control_in($sim->control);
                 $sim->set_control($store);
                 $sim->set_memory($store) if defined $sim->memory;
+                $sim->push_node($value);
+            }
+            # `$#a = N` RESIZES @a: set_arylen, pinned where it stands, the
+            # array's new memory version.
+            elsif ($target->isa('SoN::IR::Node::Call')
+                    && ( $target->name // '' ) eq 'arylen') {
+                # (a later read of the array is of the array as it now is)
+                my $arr = $target->inputs->[0];
+                $MUTATED_LITERALS{ $arr->id } = 1
+                    if $arr->can('operation') && $arr->operation =~ /\A(?:Array|Hash)Literal\z/;
+                my $write = $factory->make('Call',
+                    inputs        => [ $target->inputs->[0], $value ],
+                    dispatch_kind => 'builtin',
+                    name          => 'set_arylen',
+                    stamp         => SoN::IR::Stamp->new(type => 'Int'));
+                $write->set_control_in($sim->control);
+                $sim->set_control($write);
+                $sim->set_memory($write) if defined $sim->memory;
                 $sim->push_node($value);
             }
             # AN LVALUE substr (`substr($s, o, l) = X`) IS THE FOUR-ARGUMENT
