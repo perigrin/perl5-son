@@ -60,6 +60,16 @@ round_trips(q{eval 'sub late { 1 }'; print defined &late ? "y\n" : "n\n";}, 'an 
 round_trips(q{sub here { 1 } eval 'undef &here'; print defined &here ? "y\n" : "n\n";}, 'an eval that undefines one');
 round_trips(q{$main::c = "sub late { 1 }"; eval $main::c; print defined &late ? "y\n" : "n\n";}, 'an eval of code not known here');
 
+# A GLOB'S SCALAR OR HASH SLOT written (File::Temp::new's `${*$fh} = $path`,
+# `%{*$fh} = %$args`) changes no sub: the answer is known as compiled.
+{
+    my $f = write_src(q{my $fh = \*FOO; ${*$fh} = 1; %{*$fh} = (a => 1); print defined &nope ? "y" : "n", "\n";});
+    my $d = JSON::PP->new->decode(scalar qx($^X -Ilib -MO=-q,SoN,json $f 2>/dev/null));
+    my $n = $d->{methods}{'main::__PROGRAM__'}{nodes};
+    ok !( grep { $_->{op} eq 'SubDefined' } ( ref $n eq 'HASH' ? values %$n : @$n ) ),
+        'a glob slot store leaves defined &NAME known';
+}
+
 # ON THE WIRE: the answer as compiled, and the graphs whose run may change it
 # -- here f's eval of code not known, inside an anonymous sub (scanned too).
 {

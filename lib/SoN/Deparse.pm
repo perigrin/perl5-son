@@ -137,6 +137,8 @@ class SoN::Deparse 0.01 {
     # here refuses rather than emitting an undefined sub call -- the failure
     # this table exists to stop.
     our %BUILTIN_SPELLING = (
+        # `ref \$x`: what kind of thing $x is (B::SoN made no reference).
+        reftype_of_ref => sub { sprintf('ref(\\(%s))', $_[0]) },
         # `$#a = N`: B::SoN's write of an array's last index (its first
         # argument rendered as a location, see the call site).
         # (an array, `@a`, gets a reference taken; a reference is one already)

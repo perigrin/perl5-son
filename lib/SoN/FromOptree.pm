@@ -927,7 +927,7 @@ class SoN::FromOptree 0.01 {
                 # 'ref' when every such reference is taken in straight-line
                 # code, 'ref-branch' when one sits under a branch or loop:
                 # only a straight-line one is lowered in execution order.
-                if ($name eq 'srefgen' || $name eq 'refgen') {
+                if (($name eq 'srefgen' || $name eq 'refgen') && !_kind_only_ref($op)) {
                     my $mark = _in_straight_line($op) ? 'ref' : 'ref-branch';
                     my @under = ($kid);
                     while (my $u = shift @under) {
@@ -1365,7 +1365,7 @@ class SoN::FromOptree 0.01 {
                         _anoncode_capture_info($cv, $op);
             }
 
-            if ($op->name eq 'srefgen' && $op->can('first') && ${$op->first}) {
+            if ($op->name eq 'srefgen' && !_kind_only_ref($op) && $op->can('first') && ${$op->first}) {
                 # The referent sits under NULLED ex-list wrappers -- measured,
                 # `\$x` is srefgen -> null -> padsv and `\$g` is
                 # srefgen -> null -> null -> gvsv -- so descend through them.
@@ -1784,6 +1784,10 @@ class SoN::FromOptree 0.01 {
                 $t = $t->sibling while ${ $t->sibling };
                 my @targets = $name eq 'aassign' && $t->can('first') ? _subtree_ops($t) : ($t);
                 for my $tg (@targets) {
+                    # (a glob's SCALAR, ARRAY or HASH slot -- `${*$fh} = ...`,
+                    # `%{*$fh} = ...` -- is not its sub)
+                    next if do { my $p = eval { $tg->parent }; $p = $p->parent while $p && $$p && $p->name =~ /\A(?:null|scope|lineseq)\z/;
+                                 $p && $$p && $p->name =~ /\Arv2[sah]v\z/ };
                     my $g = $tg->name eq 'gv' ? $tg
                           : $tg->name eq 'rv2gv' && ($tg->flags & 4) && ${ $tg->first } && $tg->first->name eq 'gv' ? $tg->first
                           : undef;
@@ -6517,6 +6521,25 @@ class SoN::FromOptree 0.01 {
             return ($op->next, 'handled');
         }
 
+        # `ref \$x` ASKS WHAT KIND OF THING $x IS (_kind_only_ref): the value,
+        # asked by reftype_of_ref; the `ref` over it is that question.
+        if ($name eq 'srefgen' && _kind_only_ref($op) && $sim->stack_depth > 0) {
+            my $v = $sim->pop_node;
+            # (under a `\` the operand pushed the variable, not its value: its
+            # value is what it is bound to here -- a foreach alias's element)
+            if ($v->isa('SoN::IR::Node::PadAccess') && defined $v->targ) {
+                $v = $sim->lookup($v->targ) // $v;
+            }
+            elsif ($v->isa('SoN::IR::Node::EntryDef')) {
+                $v = $sim->lookup(_stash_key($v)) // $v;
+            }
+            $sim->push_node($factory->make('Call', inputs => [$v], dispatch_kind => 'builtin',
+                name => 'reftype_of_ref', stamp => SoN::IR::Stamp->new(type => 'Str')));
+            return ($op->next, 'handled');
+        }
+        if ($name eq 'ref' && $op->can('first') && do { my $k = $op->first; $k = $k->first while $$k && $k->name eq 'null' && $k->can('first') && ${$k->first}; $$k && _kind_only_ref($k) }) {
+            return ($op->next, 'handled');
+        }
         if ($name eq 'srefgen' && $op->can('first') && ${$op->first}) {
             # The referent sits under one or more NULLED ex-list wrappers
             # (measured: `\$x` is srefgen -> null -> padsv, `\$g` is
@@ -14620,16 +14643,47 @@ class SoN::FromOptree 0.01 {
     # is itself a reference is the call rule's question. Only a
     # reference: _address_taken also counts a /g match subject and a pos()
     # operand, which alias nothing.
+    # _kind_only_ref($srefgen) -> true for `ref \$x`: a reference only `ref`
+    # reads, which asks what kind of thing $x is (reftype_of_ref) and makes
+    # none -- nothing can outlive a pass or reach the variable through it.
+    sub _kind_only_ref ($op) {
+        return 0 unless $op->name eq q{srefgen};
+        # (of a scalar: an array's or a reference's kind is its own answer)
+        my $k = $op->first;
+        $k = $k->first while $$k && $k->name eq q{null} && $k->can(q{first}) && ${$k->first};
+        return 0 unless $$k && $k->name =~ /\A(?:padsv|gvsv|rv2sv)\z/;
+        my $p = eval { $op->parent };
+        $p = $p->parent while $p && $$p && $p->name eq q{null};
+        return $p && $$p && $p->name eq q{ref};
+    }
+
     sub _iterator_references ($cv, $root, $key) {
         return grep {
             my $ref = $_;
             ($ref->name eq q{srefgen} || $ref->name eq q{refgen})
+                && !_kind_only_ref($ref)
                 && ${$ref->first}
                 && (grep { _names_iterator($cv, $_, $key) }
                         _subtree_ops($ref->first, sub ($o) {
                             $o->name eq q{entersub} }))
                 && !_only_as_a_condition($cv, $ref->first, $key)
+                && !_only_as_a_subscript($cv, $ref->first, $key)
         } _subtree_ops($root);
+    }
+
+    # _only_as_a_subscript($cv, $root, $key) -> true when every read of the
+    # iterator under $root is an element's key or index -- `\$h{$x}` refers to
+    # the element, not to $x (Carp::trusts_directly's `ref \$stash->{$var}`).
+    sub _only_as_a_subscript ($cv, $root, $key) {
+        my @reads = grep { _names_iterator($cv, $_, $key) }
+            _subtree_ops($root, sub ($o) { $o->name eq q{entersub} });
+        return 0 unless @reads;
+        return !grep {
+            my $o = $_;
+            my $p = eval { $o->parent };
+            ($o, $p) = ($p, $p->parent) while $p && $$p && $p->name eq q{null};
+            !( $p && $$p && $p->name =~ /\A(?:helem|aelem)\z/ && ${ $p->first } != $$o )
+        } @reads;
     }
 
     # _only_as_a_condition($cv, $root, $key) -> true when every read of the

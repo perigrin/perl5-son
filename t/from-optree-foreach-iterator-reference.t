@@ -263,4 +263,16 @@ like +(produce('use v5.36; my sub w { $_[0]++ } sub e { w($_) for @_; 1 } my @a 
 like +(produce('use v5.36; my sub r { \$_[0] } our $K; sub e { for my $x (@_) { $K = r($x) } 1 } my @a = (1, 2); e(@a); $$K = 7; print "@a\n";'))[1],
     qr/$CALL|$ARGS/, 'a lexical sub returning a reference to the iterator over @_: refused by name';
 
+# AN ITERATOR USED ONLY AS A KEY is not what the `\` refers to: `\$h{$x}` is a
+# reference to the element, not to $x (Carp::trusts_directly).
+round_trips(<<'SRC', 'the iterator as a key under a reference');
+my %h = (a => 1, b => [2]); my @o; for my $k (qw(a b)) { push @o, ref \$h{$k} } print "@o\n";
+SRC
+round_trips(<<'SRC', 'the iterator as an index under a reference');
+my @a = (5, 6); my $s = 0; for my $i (0, 1) { my $r = \$a[$i]; $s += $$r } print "$s\n";
+SRC
+refused(<<'SRC', 'the iterator itself under a reference, beside a key');
+my %h = (a => 1); my $r; for my $k (qw(a)) { $r = [ \$h{$k}, \$k ] } ${ $r->[1] } = 9; print "ok\n";
+SRC
+
 done_testing;
