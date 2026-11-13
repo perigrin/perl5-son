@@ -13,7 +13,8 @@ class SoN::IR::Node::ElemRestore :isa(SoN::IR::Value) {
     my $restore_counter = 0;
     field $restore_id :reader;
     field $kind :param :reader = undef;
-    # Made on a `return`'s path: perl's return puts the element back itself.
+    # Made on a path that leaves the block -- a `return`, `next` or `last`:
+    # perl's leaving puts the element back itself.
     field $at_return :param :reader = 0;
 
     ADJUST { $restore_id = $restore_counter++; }

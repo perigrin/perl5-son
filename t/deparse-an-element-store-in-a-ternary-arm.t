@@ -157,6 +157,13 @@ round_trips(q{my %h = (k=>'a'); sub f { if ($_[0]) { $h{$h{k}} = 7 } else { $h{z
     'an if/else ending a sub, a key that reads the hash');
 round_trips(q{package O { sub new { bless {v=>$_[1]}, $_[0] } sub value { $_[0]{v} } } my %s; sub f { my $i = shift; if ($i) { $s{k}{$i->value()} = 1 } else { $s{n} = 1 } } f(O->new("x")); f(0); print join(",", sort keys %s), " ", join(",", keys %{$s{k}}), "\n";},
     'an if/else ending a sub, a method call in the key');
+# A READ THROUGH AN AUTOVIVIFYING ELEMENT (`$u->[0]{k}`: `$u->[0]` is an
+# lvalue) stores nothing after it: it reads the arm's last memory, so the
+# merge reads the same.
+round_trips(q{sub g { my ($u, $c) = @_; my $l = $c ? $u->[0]{ll} : 5; print defined $l ? "d" : "u", scalar(@$u), "\n" } g([], $_) for 1, 0;},
+    'an arm that reads through an autovivifying element');
+round_trips(q{sub f { ([], $_[0]) } my ($u, $e) = f(0); my $l = !$e && $u->[0]{ok} ? $u->[0]{ll} : undef; print defined $l ? "d" : "u", scalar(@$u), "\n";},
+    'the same read after an autovivifying condition');
 round_trips(q{my @a = (0,5); my $i = 1; for my $c (1,0) { my $x = $c ? ($a[$i] = 1) : 8; print "$x @a\n" }},
     'a lexical scalar index');
 round_trips(q{my @a = (0,0); my $i = 0; for my $c (1,0) { my $x = $c ? ($a[$i+1] = 1) : 8; print "$x @a\n" }},

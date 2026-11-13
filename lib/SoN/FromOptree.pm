@@ -582,6 +582,9 @@ class SoN::FromOptree 0.01 {
     # The `local_saves` of every walk under way, outermost first: a `return`
     # restores them all (_restore_locals_for_return).
     our @SAVES_STACK;
+    # The index in @SAVES_STACK of the innermost loop body's saves: a next or
+    # last restores the elements localized from there on.
+    our $LOOP_SAVES_BASE;
     # True while an `eval { }` body is walked: see _loop_arm_exits.
     our $IN_EVAL_BODY = 0;
     # Inside a block eval's (or try's) body, that eval's id: each Unwind
@@ -12887,6 +12890,20 @@ class SoN::FromOptree 0.01 {
         return;
     }
 
+    # _restore_local_elems_on_edge($sim, $factory) -- a next or last leaves the
+    # loop body: put back, on this path only, the elements it localized so far
+    # (_loop_controls_follow_local_elems allowed only those). From a copy, as
+    # for a return; a restore the iteration's end repeats puts back the same.
+    sub _restore_local_elems_on_edge ($sim, $factory) {
+        return if $IN_SCOUT || !defined $LOOP_SAVES_BASE;
+        my %seen;
+        my @elems = grep { $_->{elem} && !$seen{ refaddr $_ }++ }
+                    map { $_->@* } @SAVES_STACK[ $LOOP_SAVES_BASE .. $#SAVES_STACK ];
+        # at_return: on a path that leaves the block, as a return's.
+        _restore_locals($sim, { local_saves => \@elems }, $factory, 0, 1) if @elems;
+        return;
+    }
+
     sub _restore_locals ($sim, $ctx, $factory = undef, $mark = 0, $at_return = 0) {
         my $saves = $ctx->{local_saves} or return;
         while ($saves->@* > $mark) {
@@ -13275,8 +13292,38 @@ class SoN::FromOptree 0.01 {
         die "GAP: local on an array or hash element in a block a loop"
           . " control leaves is not yet lowered -- its edge skips the restore\n"
             if grep { $_->name =~ /\A(?:next|last|redo|goto|dump)\z/ }
-               _subtree_ops($block);
+               _subtree_ops($block)
+            and !_loop_controls_follow_local_elems($block);
         return $block;
+    }
+
+    # _loop_controls_follow_local_elems($leaveloop) -- may each loop control
+    # in this loop's body restore, on its own edge, the elements localized
+    # before it (_restore_local_elems_on_edge)? Only an unlabeled next or last
+    # of this loop, with no element localized after it in source order -- a
+    # `next` before the local would restore one its path never made.
+    sub _loop_controls_follow_local_elems ($block) {
+        return 0 unless $block->name eq 'leaveloop';
+        my $control_seen = 0;
+        my $walk; $walk = sub ($o, $nested) {
+            my $n = $o->name;
+            if ($n =~ /\A(?:next|last|redo|goto|dump)\z/) {
+                return 0 if $nested || $n !~ /\A(?:next|last)\z/ || ref($o) eq 'B::PVOP'
+                    || !($o->flags & B::OPf_SPECIAL());
+                $control_seen = 1;
+            }
+            return 0 if $control_seen && ($n eq 'aelem' || $n eq 'helem')
+                && $o->private & B::OPpLVAL_INTRO();
+            $nested ||= $n eq 'leaveloop' && $$o != $$block;
+            return 1 unless $o->flags & B::OPf_KIDS();
+            for (my $k = $o->first; ref($k) && $$k; $k = $k->sibling) {
+                $walk->($k, $nested) or return 0;
+            }
+            return 1;
+        };
+        my $ok = $walk->($block, 0);
+        undef $walk;
+        return $ok;
     }
 
     sub _restored_at_program_end ($cv, $op) {
@@ -15800,6 +15847,7 @@ class SoN::FromOptree 0.01 {
                     shared_lexicals => $SHARED_SLOTS // {}, _cell_ctx() };
         # A `return` restores the `local`s of every walk it leaves.
         local @SAVES_STACK = (@SAVES_STACK, $ctx->{local_saves});
+        local $LOOP_SAVES_BASE = $#SAVES_STACK;
         my $exit_proj;
         # A BARE BLOCK'S LOOP HAS NO CONDITION: its first and/or is a guard, as
         # a foreach body's is (`return 0 unless defined $x` took it for an until).
@@ -16030,6 +16078,7 @@ class SoN::FromOptree 0.01 {
                     $op = $CONTINUE_START;
                     next;
                 }
+                _restore_local_elems_on_edge($sim, $factory);
                 last;
             }
 
@@ -16053,6 +16102,7 @@ class SoN::FromOptree 0.01 {
             if ($name eq 'last' && !_loop_control_frame($op)
                     && @LOOP_STACK && $LOOP_STACK[-1]{nexts}
                     && $LOOP_STACK[-1]{nexts}->@*) {
+                _restore_local_elems_on_edge($sim, $factory);
                 push @$break_projs, { proj     => $sim->control,
                                       bindings => $sim->scope_bindings,
                                       memory   => $sim->memory }
@@ -16432,6 +16482,7 @@ class SoN::FromOptree 0.01 {
                     # merge Phi's arm 0 = skip (pre-guard) and arm 1 = rest.
                     my $skip_sim = $sim->snapshot;
                     $skip_sim->set_control($taken_proj);
+                    _restore_local_elems_on_edge($skip_sim, $factory);
                     my $pre = $sim->scope_bindings;
                     $skip_sim->merge($rest_sim, $factory, $if_node);
                     # Adopt the merged control / memory / scope into the main sim.
@@ -16478,9 +16529,12 @@ class SoN::FromOptree 0.01 {
                     }
                     else {
                         my $sink = $frame ? $frame->{breaks} : $break_projs;
+                        my $edge = $sim->snapshot;
+                        $edge->set_control($taken_proj);
+                        _restore_local_elems_on_edge($edge, $factory);
                         push @$sink,
-                            { proj => $taken_proj, bindings => $sim->scope_bindings,
-                              memory => $sim->memory }
+                            { proj => $edge->control, bindings => $sim->scope_bindings,
+                              memory => $edge->memory }
                             if defined $sink && defined $break_projs;
                     }
                     # Continue the main walk on the rest arm's merged state.
@@ -16492,6 +16546,10 @@ class SoN::FromOptree 0.01 {
 
                 # Resume the outer walk at the op the rest-arm converged on (the
                 # body's unstack / leaveloop) so the loop-body loop terminates.
+                # A REST THAT CAME BACK TO THE LOOP HEAD crossed the iteration's
+                # end, whose restore this walk then never reaches.
+                _restore_local_elems_on_edge($sim, $factory)
+                    if ref $rest_end && $$rest_end && $loop_visited->{$$rest_end};
                 $op = (defined $rest_end && ref $rest_end) ? $rest_end : $op->next;
                 next;
             }
@@ -19443,7 +19501,10 @@ class SoN::FromOptree 0.01 {
                     # the same wherever it is spelled. The store's own value
                     # keeps the constant rule: its key may change it.
                     my $mem = $asim->memory;
-                    next if $val && _value_reads_no_memory($val)
+                    # One reading only the arm's LAST memory (a read through an
+                    # autovivifying `$u->[0]{k}`) reads the same at the merge.
+                    # Not in the caller's context (WANT 0), which spells no merge.
+                    next if $val && _value_reads_no_memory($val, $want == 0 ? undef : $mem)
                         && !($mem && $mem->isa('SoN::IR::Node::Assign')
                              && $mem->inputs->[1] == $val);
                     $unsound = 1;
@@ -19482,7 +19543,7 @@ class SoN::FromOptree 0.01 {
                     # A CONSTANT A LATER STATEMENT YIELDS (`{ $h{$k} = 3; 2 }`)
                     # is not the store's value and reads nothing: it merges as
                     # itself, where the re-read below could not stand for it.
-                    next if $$val && _value_reads_no_memory($$val)
+                    next if $$val && _value_reads_no_memory($$val, $want == 0 ? undef : $st)
                         && !($tgt && $st->inputs->[1] == $$val);
                     if ($tgt && $st->inputs->[1] == $$val
                         && $tgt->isa('SoN::IR::Node::Subscript')
@@ -20563,6 +20624,7 @@ class SoN::FromOptree 0.01 {
                             control => $taken, memory => $sim->memory);
                         my $b = $sim->scope_bindings;
                         $edge->define($_, $b->{$_}) for keys %$b;
+                        _restore_local_elems_on_edge($edge, $factory) unless $labeled;
                         push $frame->{nexts}->@*, $edge;
                     }
                     $sim->set_control($rest);
@@ -20578,6 +20640,7 @@ class SoN::FromOptree 0.01 {
                     while $rest_sim->stack_depth > $sim->stack_depth;
                 my $skip_sim = $sim->snapshot;
                 $skip_sim->set_control($taken);
+                _restore_local_elems_on_edge($skip_sim, $factory);
                 $skip_sim->merge($rest_sim, $factory, $if_node);
                 $sim->set_control($skip_sim->control);
                 $sim->set_memory($skip_sim->memory);
@@ -20918,7 +20981,10 @@ class SoN::FromOptree 0.01 {
                 # reaching a value arm or a cond_expr keeps refusing -- which
                 # is right: an arm that leaves contributes no value, whichever
                 # way it left.
-                return ($op, 'broke') if $name eq 'last' && $in_loop;
+                if ($name eq 'last' && $in_loop) {
+                    _restore_local_elems_on_edge($sim, $factory) unless _loop_control_frame($op);
+                    return ($op, 'broke');
+                }
 
                 # A BARE `next` ENDS THE ARM TOO -- `if (C) { ...; next }` --
                 # as an edge to this loop's latch, the same edge a `next
@@ -20927,6 +20993,7 @@ class SoN::FromOptree 0.01 {
                 if ($name eq 'next' && $in_loop && !_loop_control_frame($op)
                         && @LOOP_STACK) {
                     my $frame = $LOOP_STACK[-1];
+                    _restore_local_elems_on_edge($sim, $factory);
                     # Scout or real: this loop's OWN list either way (see the
                     # frame's creation).
                     if ($frame->{nexts}) {
@@ -22952,10 +23019,17 @@ class SoN::FromOptree 0.01 {
     # unversioned pad reads -- and calls, whose value is fixed where the call
     # is pinned. Such a value reads the same wherever it is spelled, so an
     # element-store arm may merge it.
-    sub _value_reads_no_memory ($node) {
+    # With $at, an element read at memory $at (and nothing older) counts too.
+    sub _value_reads_no_memory ($node, $at = undef) {
         my ( @todo, %seen ) = ($node);
         while ( defined( my $n = shift @todo ) ) {
             next if $seen{ refaddr $n }++;
+            if ( $at && $n->isa('SoN::IR::Node::Subscript') ) {
+                my ( $c, $k, $m ) = $n->inputs->@*;
+                return 0 if defined $m && $m != $at;
+                push @todo, grep { defined } $c, $k;
+                next;
+            }
             # A SUB CALL MAY HAND BACK AN ALIAS (`$_[0]`), a builtin's value
             # is its own.
             next if $n->isa('SoN::IR::Node::Constant')

@@ -99,4 +99,24 @@ sub f { my ($self, @args) = @_;
 package main; my $o = C->new; print $o->f(), "|", $o->f(qw(a b)), "|", $o->inner, "\n";
 SRC
 
+# A LOOP CONTROL LEAVES THE BODY, and its edge restores the elements the body
+# localized so far, as the iteration's end does.
+round_trips(q{our %h = (k => 0); for my $i (1..3) { local $h{k} = $i; next if $i == 2; print "$h{k} " } print "$h{k}\n";},
+    'next if, after a local element');
+round_trips(q{our %h = (k => 0); for my $i (1..3) { local $h{k} = $i; print "$h{k} "; next } print "$h{k}\n";},
+    'a bare next, after a local element');
+round_trips(q{our %h = (k => 0); my $s = ""; for my $i (1..3) { local $h{k} = $i; last if $i == 2; $s .= $h{k} } print "$s $h{k}\n";},
+    'last if, after a local element');
+round_trips(q{my %h = (k => 0); for my $i (1..3) { local $h{k} = $i; local $h{j} = $i; next if $i == 2; print "$h{k}$h{j} " } print "$h{k} ", exists $h{j} ? "j" : "-", "\n";},
+    'two local elements, one a new key, then next');
+my $lc = qr/GAP: local on an array or hash element in a block a loop control leaves/;
+sub refuses ($src, $cause, $name) {
+    graph_of($src);
+    like producer_stderr(), $cause, "$name: refused, naming its cause";
+}
+refuses(q{our %h = (k => 0); for my $i (1..3) { next if $i == 2; local $h{k} = $i; print "$h{k} " } print "$h{k}\n";},
+    $lc, 'a next before the local');
+refuses(q{our %h = (k => 0); O: for my $i (1..3) { local $h{k} = $i; next O if $i == 2; print "$h{k} " } print "$h{k}\n";},
+    $lc, 'a labeled next');
+
 done_testing;
