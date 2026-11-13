@@ -68,7 +68,11 @@ subtest 'result_for answers, at every arity, capped' => sub {
     is($r->('Add', 'Scalar', 'Int'), 'Num',
         'a join that escaped above the cap comes back down to it');
     is($r->('Negate', 'Int'), 'Int', 'a UNARY join fires -- Negate preserves Int');
-    is($r->('Negate', 'Scalar'), 'Num', 'and is capped like any other join');
+    # NOT CAPPED AT Num: -"abc" is "-abc" (pp_negate), so only a number's
+    # negation is known to be a number.
+    is($r->('Negate', 'Num'), 'Num', 'Negate preserves Num');
+    is($r->('Negate', 'Scalar'), 'Scalar', 'a scalar\'s negation may be a string');
+    is($r->('Negate', 'Str'), 'Scalar', 'so may a string\'s (-"7" is the number -7)');
     is($r->('Concat', 'Int', 'Int'), 'Str', 'concat is Str whatever arrives');
     is($r->('NumEq', 'Str', 'Str'), 'Boolean', 'comparison is Boolean whatever arrives');
     is($r->('Add', 'Unknown', 'Int'), undef, 'an unnarrowed operand is an honest GAP');

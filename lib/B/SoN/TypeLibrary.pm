@@ -78,7 +78,10 @@ my %SIGNATURES = (
     Divide     => { operands => ['Num', 'Num'], result => 'Num' },
     Modulo     => { operands => ['Num', 'Num'], result => 'Int' },
     Power      => { operands => ['Num', 'Num'], result => 'Num' },
-    Negate     => { operands => ['Num'],        result => 'Num' },
+    # NOT NUMERIC ON A STRING: -"abc" is "-abc", -"+x" "-x" (pp_negate), so
+    # its operand is not coerced; a number's negation is the same kind of
+    # number, anything else's a Scalar (result_for).
+    Negate     => { operands => ['Scalar'],     result => 'Scalar' },
 
     # SHORT-CIRCUITS RETURN AN OPERAND, NOT A BOOLEAN. `0 || "hello"` is
     # "hello", `"x" && 7` is 7, `undef // 5` is 5 -- so the result is the join
@@ -673,6 +676,9 @@ sub result_for ($ir_op, @operands) {
     $joined = SoN::IR::Stamp::join( $joined, SoN::IR::Stamp->new( type => $_ ) )
         for @operands;
     return undef if !$joined || $joined->type eq 'Unknown';
+    # (-"7" is the number -7 and -"abc" the string "-abc": only a number's
+    # negation is known to be a number)
+    return $joined->type =~ /\A(?:Int|Num)\z/ ? $joined->type : 'Scalar' if !ref $ir_op && $ir_op eq 'Negate';
 
     # A MEET, not a replacement: the join is right about the operands and says
     # nothing about the operator, so it can escape upward. Bring it down to

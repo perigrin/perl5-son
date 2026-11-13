@@ -93,6 +93,26 @@ sub _followed_modules {
     return \%m;
 }
 
+# _recompile_preloaded(\%modules): a followed module the compiler had loaded
+# before B::SoN (Carp, Exporter) was compiled with perl's peephole optimizer
+# on -- multideref, padrange, aelemfast, ops the walk does not take (Carp's
+# trusts: "Stack underflow"). Compiled again here, peep suppressed as for every
+# other file, its subs are the canonical ops. Not a module that loads XS of its own,
+# which would bootstrap again.
+sub _recompile_preloaded {
+    my ($mods) = @_;
+    for my $name ( sort keys %$mods ) {
+        ( my $key = $name ) =~ s{::}{/}g;
+        next unless exists $LOADED_INC{"$key.pm"};
+        my $src = do { open my $fh, '<', $mods->{$name} or next; local $/; <$fh> };
+        next if $src =~ /\b(?:XSLoader|DynaLoader|bootstrap)\b/;   # (its own XS; aliased core XS is fine)
+        local $SIG{__WARN__} = sub { };   # (each sub is redefined)
+        local $@;
+        do $mods->{$name};
+        die "B::SoN: compiling $mods->{$name} again: $@" if $@;
+    }
+}
+
 # _required_files($cv) -> the files a `require` of a constant names in this
 # CV's own ops ("Carp.pm": a `use Carp` is a BEGIN of that require).
 sub _required_files {
@@ -257,6 +277,7 @@ sub compile {
     return sub {
         # ...and these its modules, taken before the walk loads its own.
         local $FOLLOWED = _followed_modules();
+        _recompile_preloaded($FOLLOWED);
         local %REFUSED;
         # At CHECK the program has compiled: these are its keys, imports and all.
         local %SoN::Serialize::JSON::STASH_KEYS =

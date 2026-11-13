@@ -96,4 +96,14 @@ $u =~ s/./Z/;
 print "$t $n $u\n";
 SRC
 
+# WITHOUT A LENGTH it runs to the end: the 4-argument write with length($s),
+# which perl clamps to the end from any offset (Carp's str_len_trim).
+round_trips(<<'SRC', 'an lvalue substr without a length');
+my $c = $ENV{X} // "hello world";
+substr($c, 5) = "...";
+my $d = $ENV{X} // "abcdef";
+substr($d, -2) = "!";
+print "[$c][$d]\n";
+SRC
+
 done_testing;

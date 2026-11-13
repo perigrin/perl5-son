@@ -257,4 +257,16 @@ round_trips(q{my $e = "\\z"; my $p = "abXX"; $p =~ s/X(?=X*$e)/lc($&)/ge; print 
 round_trips(q{my $e = ($] >= 5.006 ? "\\z" : "\\Z"); my $p = "aXX"; $p =~ s/X(?=X*$e)/"q" . lc($&)/ge; print "$p\n";},
     'a pattern holding a choice of two constants');
 
+# A `my` ARRAY READ IN THE BODY (File::Temp's _replace_XX: a file lexical
+# @CHARS, indexed by rand) is a read, no effect: one variable in both graphs.
+round_trips(q{my @C = qw/Q/; sub r { my $p = shift; $p =~ s/X(?=X*\z)/$C[ int( rand( @C ) ) ]/ge; $p } print r("aXbXX"), "\n";},
+    'a file lexical array indexed in the body');
+# One no named sub shares has no edge into the body yet: refused by name.
+refuses(q{sub r { my @C = qw/Q R/; my $p = shift; $p =~ s/X/$C[1]/ge; $p } print r("aXX"), "\n";},
+    qr/GAP: a s\/\/\/ge replacement that reads a lexical of its enclosing scope \(\@C\)/,
+    'a sub\'s own array read in the body');
+refuses(q{my @C = qw/a b c/; my $s = "0 2 1"; $s =~ s/(\d)/$C[$1]/ge; print "$s\n";},
+    qr/GAP: a s\/\/\/ge replacement that reads a lexical of its enclosing scope \(\@C\)/,
+    'a main-line array indexed by a capture');
+
 done_testing;

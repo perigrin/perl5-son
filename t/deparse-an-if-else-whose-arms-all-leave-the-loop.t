@@ -72,11 +72,11 @@ round_trips(q{my $s=""; my $i=0; while ($i < 5) { $i++; if ($i % 2) { $s .= "o";
     like producer_stderr(), qr/GAP: an if\/else in a loop body whose arms all leave, none by `next`, is not yet lowered/,
         'arms that return and last refuse by name';
 }
-# Nested in an arm, an outer arm reading the signal would record its edges twice.
-{
-    graph_of(q{my $s=""; for my $i (1..5) { if ($i == 1) { $s.="x" } elsif ($i % 2) { $s .= "o"; next } else { $s .= "e"; last } $s.="-" } print "$s\n";});
-    like producer_stderr(), qr/GAP: an if\/else whose arms all leave the loop, nested in an arm, is not yet lowered/,
-        'an elsif chain whose inner arms all leave refuses by name';
-}
+# NESTED IN AN ARM, the arm has left too: each edge recorded once, by the
+# inner if/else; the outer arm carries on with none.
+round_trips(q{my $s=""; for my $i (1..5) { if ($i == 1) { $s.="x" } elsif ($i % 2) { $s .= "o"; next } else { $s .= "e"; last } $s.="-" } print "$s\n";},
+    'an elsif chain whose inner arms all leave');
+round_trips(q{my $s=""; for my $i (1..6) { if ($i > 1) { if ($i % 2) { $s .= "o"; next } else { $s .= "e"; last if $i > 3; next } } $s.="-" } print "$s\n";},
+    'a nested if/else whose arms next and last');
 
 done_testing;

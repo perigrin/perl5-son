@@ -668,6 +668,9 @@ class SoN::FromOptree 0.01 {
     # $ARM_PINS: the arm being walked has its own Proj (an if's), so a read
     # may be pinned there; a select's arm has none.
     our $ARM_PINS = 0;
+    # $LEFT_OK: the caller is an if/else arm walk, which takes an arm that
+    # LEFT THE LOOP by a nested if/else (its edges recorded there) as left.
+    our $LEFT_OK = 0;
     # $IN_LOOP_BODY: a loop body is being walked (an element is not made
     # there by a deref for a write: see the aelem/helem handler).
     our $IN_LOOP_BODY = 0;
@@ -9950,6 +9953,10 @@ class SoN::FromOptree 0.01 {
             elsif ($target->isa('SoN::IR::Node::Call')
                     && ($target->name // '') eq 'substr') {
                 my @args = $target->inputs->@*;
+                # WITHOUT A LENGTH it runs to the end: length($s), which perl
+                # clamps to the end from any offset.
+                push @args, $factory->make('Length', inputs => [ $args[0] ],
+                    stamp => SoN::IR::Stamp->new(type => 'Int')) if @args == 2;
                 die "GAP: an lvalue substr without a length is not yet lowered\n"
                     unless @args == 3;
                 my $write = $factory->make('Call',
@@ -16489,16 +16496,17 @@ class SoN::FromOptree 0.01 {
                 $taken_sim->set_control($taken_proj);
                 # A `return` in the arm -- `if (C) { return X if D }`, or one
                 # that ends it -- is a function exit; see $FN_EXITS.
-                my ($taken_end, $taken_sig) =
+                my ($taken_end, $taken_sig) = do {
+                    local $LEFT_OK = 1;   # a nested if/else may leave for it (below)
                     _walk_branch($cv, $op->other, $taken_sim, $factory, $opmap,
                         {}, _loop_arm_exits($break_projs), 0, _op_addr($op->next),
-                        $loop_node, $break_projs, 1);
+                        $loop_node, $break_projs, 1) };
                 # AN ARM THAT STOPS SHORT OF THE JOIN IS NOT THE WHOLE ARM. The
                 # walk stops at an op it does not handle -- a loop or a bare
                 # block in the arm -- and merging there dropped the rest of the
                 # arm: `if ($i > 1) { { $s += 10 } }` in a foreach printed 0.
                 # Same check as the if/else arm's.
-                unless (($taken_sig // '') =~ /\A(?:exited|nexted|broke)\z/
+                unless (($taken_sig // '') =~ /\A(?:exited|nexted|broke|left)\z/
                         || (ref $taken_end && $$taken_end
                             && $$taken_end == ${$op->next})) {
                     my $where = (ref $taken_end && $$taken_end)
@@ -16543,7 +16551,7 @@ class SoN::FromOptree 0.01 {
                 # AN ARM THAT ENDED IN `next` has left for the latch, and one
                 # that ended in `return` has left the sub; either edge is
                 # already recorded. Continue on the skip arm alone.
-                if (($taken_sig // '') eq 'nexted' || ($taken_sig // '') eq 'exited') {
+                if (($taken_sig // '') eq 'nexted' || ($taken_sig // '') eq 'exited' || ($taken_sig // '') eq 'left') {
                     $sim->set_control($skip_proj);
                     $op = $op->next;
                     next;
@@ -18891,6 +18899,7 @@ class SoN::FromOptree 0.01 {
             # dropping one would be silent.
             my @arm_exits;
             my $exit_sink = $exits // \@arm_exits;
+            local $LEFT_OK = 1;
             my ($end, $sig) = _walk_branch($cv, $start, $arm_sim, $factory,
                 $opmap, $visited, $exit_sink, 1, $join_addr,
                 ($loop ? ($loop->{node}, $loop->{breaks}, 1) : ()));
@@ -18908,7 +18917,7 @@ class SoN::FromOptree 0.01 {
             # already recorded in the exit list, so there is nothing to merge
             # at the join and nothing after it in this arm to drop.
             if (defined $join_addr
-                && ($sig // '') !~ /\A(?:exited|nexted|broke)\z/
+                && ($sig // '') !~ /\A(?:exited|nexted|broke|left)\z/
                 && !(defined $end && ref $end && $$end == $join_addr)) {
                 my $where = (defined $end && ref $end && $$end)
                     ? $end->name : 'end-of-chain';
@@ -19130,7 +19139,7 @@ class SoN::FromOptree 0.01 {
             for my $arm ([ true => $true_sim, $true_sig, $true_end ],
                          [ false => $false_sim, $false_sig, $false_end ]) {
                 my ($which, $asim, $asig, $aend) = @$arm;
-                next unless ($asig // '') =~ /\A(?:nexted|broke|exited)\z/;
+                next unless ($asig // '') =~ /\A(?:nexted|broke|exited|left)\z/;
                 $left{$which} = 1;
                 next unless $asig eq 'broke' && $loop && defined $loop->{breaks};
                 # `last LABEL` feeds the named loop's exit, not this one's:
@@ -19916,6 +19925,9 @@ class SoN::FromOptree 0.01 {
     }
 
     sub _walk_branch ($cv, $op, $sim, $factory, $opmap, $visited, $exits = undef, $stop_at_exit = 0, $stop_addr = undef, $loop_node = undef, $break_projs = undef, $in_loop = 0) {
+        # (an if/else arm walk's own: no walk it starts inherits it)
+        my $left_ok = $LEFT_OK;
+        local $LEFT_OK = 0;
         # VISITED RIDES ON THE CTX so a handler that walks a nested structure --
         # a foreach body, say -- marks the same op set the caller does. Without
         # it the arm and the main walk keep separate views and an op walked in
@@ -20267,10 +20279,15 @@ class SoN::FromOptree 0.01 {
                               : undef));
                 # Every arm returned: so has this one.
                 return ($op, 'exited') if ($sig // '') eq 'exited';
-                # Every arm left the loop: an outer arm reading a signal would
-                # record a second edge for one already recorded.
-                die "GAP: an if/else whose arms all leave the loop, nested in"
-                  . " an arm, is not yet lowered\n" if ($sig // '') eq 'left';
+                # EVERY ARM LEFT THE LOOP, each edge recorded by the inner
+                # if/else: so has this arm, with no edge of its own. Only an
+                # if/else arm walk takes that (it records nothing for 'left');
+                # any other walk would read it as converging.
+                if (($sig // '') eq 'left') {
+                    return ($op, 'left') if $left_ok;
+                    die "GAP: an if/else whose arms all leave the loop, nested in"
+                      . " an arm, is not yet lowered\n";
+                }
                 next;
             }
 
@@ -21044,6 +21061,26 @@ class SoN::FromOptree 0.01 {
     # _subst_subject_is_plain($cv, $op) -- true when a subst's subject is $_
     # (nothing stacked), a lexical scalar that is not a field (its targ), or a
     # package scalar (a stacked gvsv, or rv2sv over a gv).
+    # _subst_substr_subject($op, $sim) -> the substr Call an s/// substitutes
+    # into -- `substr($s, o, l) =~ s///`, three arguments, $s a `my` scalar --
+    # on the top of the stack, or undef.
+    sub _subst_substr_subject ($op, $sim) {
+        return undef if $op->targ || !( $op->flags & B::OPf_STACKED() );
+        my $k = $op->first;
+        $k = $k->first if $k->name eq 'null' && ( $k->flags & B::OPf_KIDS() );
+        return undef unless $k->name eq 'substr';
+        my $s = $k->first;
+        $s = $s->sibling while $s->name =~ /\A(?:pushmark|null)\z/ && !( $s->flags & B::OPf_KIDS() );
+        die "GAP: s/// into a substr of other than a `my` scalar, or without a length, is not yet lowered\n"
+            unless $s->name eq 'padsv' && $sim->stack_depth > 0;
+        # (a literal replacement rides above it)
+        my ($c) = grep { $_->isa('SoN::IR::Node::Call') && ( $_->name // '' ) eq 'substr' }
+            map { $sim->node_at($_) } grep { $sim->stack_depth >= -$_ } -1, -2;
+        die "GAP: s/// into a substr of other than a `my` scalar, or without a length, is not yet lowered\n"
+            unless $c && $c->inputs->@* == 3;
+        return $c;
+    }
+
     sub _subst_subject_is_plain ($cv, $op) {
         if (my $targ = $op->targ) {
             my $pn = eval { $cv->PADLIST->ARRAYelt(0)->ARRAYelt($targ) };
@@ -21052,6 +21089,9 @@ class SoN::FromOptree 0.01 {
         }
         return 1 unless $op->flags & B::OPf_STACKED();
         my $subj = $op->first;
+        # (a substr of a `my` scalar: substituted into, and written back)
+        { my $k = $subj; $k = $k->first if $k->name eq 'null' && ( $k->flags & B::OPf_KIDS() );
+          return 1 if $k->name eq 'substr'; }
         return 1 if $subj->name eq 'gvsv';
         return $subj->name eq 'rv2sv' && ($subj->flags & 4)
             && $subj->first->name eq 'gv';
@@ -21891,8 +21931,13 @@ class SoN::FromOptree 0.01 {
             # as its operand. Idempotent -- returns the existing binding.
             # $store_target is the NAME to store through when the
             # binding resolved to a bare value -- see _subst_target.
-            my ($scope_key, $target, $store_target) =
-                _subst_target($cv, $op, $sim, $factory, 1);
+            # A substr SUBJECT -- `substr($s, o, l) =~ s///` -- is the part read,
+            # substituted, and written back by the four-argument substr (as
+            # `substr($s, o, l) = X` is): the Call is the value on the stack.
+            my $substr_subj = _subst_substr_subject($op, $sim);
+            my ($scope_key, $target, $store_target) = $substr_subj
+                ? ('', $substr_subj, 0)
+                : _subst_target($cv, $op, $sim, $factory, 1);
             $store_target //= $target;
             # s///e: the replacement is a code SUBTREE rather than a
             # literal, and it is walkable. It hangs off pmreplroot and is
@@ -22121,7 +22166,17 @@ class SoN::FromOptree 0.01 {
             # Rebinding the slot to this node made the NEXT s/// on it take
             # this one's result as its subject, unpinned: `$s =~ s/a/z/;
             # $s =~ s/c/y/; $s =~ s/d/w/` kept only the first (corpus 010).
-            unless ($nondestruct) {
+            if ($substr_subj && !$nondestruct) {
+                my $write = $factory->make('Call',
+                    inputs        => [ $substr_subj->inputs->@*, $node ],
+                    dispatch_kind => 'builtin',
+                    name          => 'substr',
+                    stamp         => SoN::IR::Stamp->new(type => 'Str'));
+                $write->set_control_in($sim->control);
+                $sim->set_control($write);
+                $sim->set_memory($write) if defined $sim->memory;
+            }
+            elsif (!$nondestruct) {
                 $sim->define($scope_key, $node)
                     unless $in_place;
                 _entry_store($factory, $sim, $store_target, $node);
@@ -22247,6 +22302,7 @@ class SoN::FromOptree 0.01 {
         ord chr uc lc ucfirst lcfirst length sprintf join
         defined cond_expr and or int
         aelemfast aelem rv2av
+        padav aelemfast_lex
         rand
     );
     # (rand advances only its generator: no program can compare that state
@@ -22265,6 +22321,8 @@ class SoN::FromOptree 0.01 {
             || ($is_body && $op->name eq 'gv');
         return 0 if !$is_body && $op->flags & B::OPf_MOD();
         return 0 if $op->private & B::OPpTARGET_MY();
+        # (a `my @x` in the body declares one: not a read)
+        return 0 if $op->name eq 'padav' && $op->private & B::OPpLVAL_INTRO();
         # A STORE into a stacked target is OPf_STACKED whatever the op's class:
         # an assign-op (`$n += $1`, `$k .= $1`) is a binop, but a string store
         # into a package scalar (`$k = "<$1>"`, `$k .= $1 . $1`) is
