@@ -546,6 +546,35 @@ class SoN::FromOptree 0.01 {
     # binding was rebound inside the loop.
     our @LOOP_STACK;
 
+    # A BARE BLOCK HOLDING ITS OWN `redo` IS A LOOP THAT RUNS ONCE (Carp's
+    # short_error_loc): its frame is `bare`, and in it a `redo` goes round as a
+    # `next` does in a `while (1)`, while `next`, `last` and the block's end
+    # all leave it as a `last` does. $BARE_LOOP is the block's enterloop while
+    # the walker sets up its frame. _lc_kind($name, $op) is the control a name
+    # means where it stands; the block's own leaveloop is its `last`.
+    our $BARE_LOOP;
+    sub _lc_kind ($name, $op = undef) {
+        my $f = $LOOP_STACK[-1];
+        return $name unless $f && $f->{bare};
+        return 'last' if $op && ref $op && $$op == $f->{bare_leave};
+        return $name if $op && _loop_control_frame($op);   # a labelled one keeps its target's meaning
+        return { redo => 'next', next => 'last', last => 'last' }->{$name} // $name;
+    }
+    # _bare_block_redoes($enterloop) -- true when a `redo` in the block targets
+    # it: the first loop op above it is this block's leaveloop.
+    sub _bare_block_redoes ($enter) {
+        my $leave = $enter->parent;
+        for my $o ( _subtree_ops($leave) ) {
+            next unless $o->name eq 'redo';
+            for (my $p = $o->parent; ref $p && $$p; $p = $p->parent) {
+                next unless $p->name eq 'leaveloop';
+                return 1 if $$p == $$leave;
+                last;
+            }
+        }
+        return 0;
+    }
+
     # THE FUNCTION'S EXIT LIST, for a `return` inside a loop body: the loop
     # walkers have no path to _translate_from's @exits otherwise. `local` per
     # translated CV.
@@ -4733,6 +4762,11 @@ class SoN::FromOptree 0.01 {
         my $nx = $op->can('nextop') ? $op->nextop : undef;
         my $ls = $op->can('lastop') ? $op->lastop : undef;
         if (ref $nx && $$nx && ref $ls && $$ls && $$nx == $$ls) {
+            if (_bare_block_redoes($op)) {
+                local $BARE_LOOP = $op;
+                _translate_while_loop($cv, $op->next, $sim, $factory, $opmap, $visited);
+                return $op->parent;
+            }
             return _enter_bare_block($op, $in_loop_body);
         }
         # A LOOP'S VALUE IS ITS OWN -- see _settle_loop_value. A bare
@@ -13852,7 +13886,9 @@ class SoN::FromOptree 0.01 {
         # nexts from creation: a scout records this loop's own `next`
         # edges too, so a variable changed only on a path that `next`s is
         # still seen as loop-carried. The real walk starts a fresh list.
-        my $frame = { label => $STMT_LABEL, nexts => [] };
+        my $frame = { label => $STMT_LABEL, nexts => [],
+                      ( $BARE_LOOP ? ( bare => 1, bare_leave => ${ $BARE_LOOP->parent } ) : () ) };
+        local $BARE_LOOP;   # (a loop inside it is not the bare block)
         local @LOOP_STACK = (@LOOP_STACK, $frame);
         # Which pad slots does the CONDITION mutate? These run once more than the
         # body (the failing N+1th eval), so post-loop they read their Phi back-edge
@@ -15437,6 +15473,9 @@ class SoN::FromOptree 0.01 {
         # A `return` restores the `local`s of every walk it leaves.
         local @SAVES_STACK = (@SAVES_STACK, $ctx->{local_saves});
         my $exit_proj;
+        # A BARE BLOCK'S LOOP HAS NO CONDITION: its first and/or is a guard, as
+        # a foreach body's is (`return 0 unless defined $x` took it for an until).
+        $cond_consumed = 1 if @LOOP_STACK && $LOOP_STACK[-1]{bare};
         # A foreach's iteration `and` is consumed by its caller before the body
         # walk begins, so its body has NO loop condition left to find: the first
         # top-level `and` here is already a guard. $cond_consumed says so.
@@ -15478,6 +15517,7 @@ class SoN::FromOptree 0.01 {
             last if $loop_visited->{$$op}++;
 
             my $name = $op->name;
+            $name = _lc_kind($name, $op) if $name =~ /\A(?:next|last|redo|leaveloop)\z/;   # (a bare block's: see _lc_kind)
 
             # A map/grep BODY ends by jumping back to its own mapwhile/grepwhile
             # -- that op IS the loop, reached along the back-edge, so the body is
@@ -15814,7 +15854,7 @@ class SoN::FromOptree 0.01 {
             # into a body that opens with `redo;`.
             if ($name eq 'and' && $sim->stack_depth > 0
                     && $op->can('other') && ${$op->other}
-                    && $op->other->name eq 'redo') {
+                    && _lc_kind($op->other->name, $op->other) eq 'redo') {
                 my $ctl = $op->other;
                 my %now = $sim->scope_bindings->%*;
                 die "GAP: loop control (redo) after the body has done"
@@ -15861,7 +15901,7 @@ class SoN::FromOptree 0.01 {
             # slots -- it just does no control wiring.
             if ($name eq 'and' && $sim->stack_depth > 0
                     && $op->can('other') && ${$op->other}
-                    && $op->other->name eq 'last'
+                    && _lc_kind($op->other->name, $op->other) eq 'last'
                     && $stmt_count == 1
                     # NOT WHEN THE HEADER CONDITION IS ALREADY CONSUMED. This
                     # hoist is for a HEADLESS `while (1)` body, where the exit
@@ -16018,6 +16058,9 @@ class SoN::FromOptree 0.01 {
                     $op = $op->next
                         while $$op && !($CONTINUE_START && $$op == ${$CONTINUE_START})
                             && $op->name ne 'unstack' && $op->name ne 'leaveloop';
+                    # (a bare block's own end, reached here, is where the walk
+                    # stops -- every path has left -- not its fall-through `last`)
+                    last if $$op && $$op == ( ( $LOOP_STACK[-1] // {} )->{bare_leave} // 0 );
                     next;
                 }
                 # A REST THAT STOPS SHORT OF THE LATCH IS NOT THE WHOLE REST.
@@ -16714,7 +16757,7 @@ class SoN::FromOptree 0.01 {
     # not a control transfer, and must keep its own handler.
     sub _guarded_loop_control ($other) {
         my $o = _guarded_loop_control_op($other) or return undef;
-        my $n = $o->name;
+        my $n = _lc_kind($o->name, $o);
         return ($n eq 'last' || $n eq 'next') ? $n : undef;
     }
 
@@ -19764,6 +19807,7 @@ class SoN::FromOptree 0.01 {
             return $op if $visited->{$$op};
 
             my $name = $op->name;
+            $name = _lc_kind($name, $op) if $name =~ /\A(?:next|last|redo|leaveloop)\z/;   # (a bare block's: see _lc_kind)
             if ($name eq 'enter') {
                 push @enter_depth, $sim->stack_depth;
                 push @enter_saves, scalar $ctx->{local_saves}->@*;

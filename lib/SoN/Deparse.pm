@@ -5386,6 +5386,15 @@ class SoN::Deparse 0.01 {
         my %arm = map { ($_->{fields}{index} // 0) => $_ } @projs;
         die "GAP: an endless loop whose exit If lacks both arms is not yet"
           . " rendered\n" unless exists $arm{0} && exists $arm{1};
+        # ITS TRUE ARM MUST LEAVE (`last if C`). One that goes round instead --
+        # `next if C`, a bare block's `redo` -- reaches no Region with a way
+        # on: spelled as `last if` it ran inverted. Refused; T2 runs it.
+        {
+            my @s = ( $next_of->{ $arm{0}{id} } // [] )->@*;
+            my ($r) = grep { ( $_->{op} // '' ) eq 'Region' } @s;
+            die "GAP: an endless loop whose test goes round on its true arm (`next if`, a bare block's `redo`) is not yet rendered\n"
+                if !@s || ( $r && !( $next_of->{ $r->{id} } // [] )->@* );
+        }
 
         my @phis = sort { $a->{id} <=> $b->{id} }
                    grep { ($_->{op} // '') eq 'Phi'
