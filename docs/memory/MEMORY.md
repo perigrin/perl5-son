@@ -282,3 +282,4 @@
 - [Future: value types](future-value-types.md) — TypeScript-style literal types (True/False, string enums); deferred 2026-11-08, revisit with truthiness narrowing
 - [B::SoN follows use/require](use-require-following.md) — %INC delta minus pragmas and builtins' modules; program-code vs followed-code predicates; `module` tag on the wire; chalk loads only reachable module subs (sure/maybe); XS fallbacks; preloaded modules; `refused` on the wire; milestone 1 closed
 - [Decision: Sereal wire + per-module cache](decision-wire-format-sereal.md) — B::SoN re-translation is ~90% of per-file time; compact JSON, then a per-module cache, then Sereal with a chalk-compliant decoder (self-hosting)
+- [T2 alias reads; test header](t2-alias-reads-and-test-header.md) — foreach over @_ reads elements only when @_ is never reshaped (a14 lesson); -d/chdir/require for t/test.pl; a refusal test that flips: find why, probe two orders
