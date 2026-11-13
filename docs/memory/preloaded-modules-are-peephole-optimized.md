@@ -34,3 +34,20 @@ Also this round:
   result Int/Num only for a number, else Scalar. Chalk's fallback had to box it.
 - A file lexical array read in an s///ge body is a pure read (padav,
   aelemfast_lex); an unshared one is refused by name.
+
+## A string eval of known code (task #47, 2026-11-13)
+
+`defined &NAME` folds unless the program may change the sub. A string eval
+used to count as "may change any undefined sub" -- and left a DEFINED one
+folded true even when the eval undefined it (`eval 'undef &here'`: a silent
+wrong answer). Now: an eval of unknown code is `*` (any sub, either way); an
+eval of a constant string is compiled once as `sub { CODE }` in a probe
+package, every stash diffed before/after and PUT BACK at once, its body walked
+with the same scan. Only-defines -> `+Name` (or `+` for an unqualified name):
+a defined sub stays known defined, an undefined one is unknown.
+
+Still blocked (2026-11-13): the 300 Carp-blocked files stop on Carp's
+`defined &threads::tid` because Test::More / IO / File::Spec carry evals of
+UNKNOWN code (`eval "require $module"`). Proposed to perigrin, awaiting a
+go-ahead (wire change): the producer folds and lists the subs holding those
+evals (`defined_unless`); chalk refuses only if one is reachable.

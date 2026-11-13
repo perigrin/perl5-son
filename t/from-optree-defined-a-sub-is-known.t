@@ -52,4 +52,16 @@ like producer_stderr(q{*late = sub { 1 }; print defined &late ? "y\n" : "n\n";})
 like producer_stderr(q{sub here { 1 } undef &here; print defined &here ? "y\n" : "n\n";}),
     qr/GAP: `defined &here`/, 'a sub undefined';
 
+# A STRING EVAL OF KNOWN CODE changes only the subs that code defines or
+# changes: Carp's `*_StrVal = eval 'sub { ... }'` defines none, so a
+# `defined &other` is still known.
+round_trips(q{sub here { 1 } $main::f = eval 'sub { 2 }'; print defined &nope ? "y" : "n", $main::f->(), "\n";},
+    'an eval of an anonymous sub defines no named one');
+like producer_stderr(q{eval 'sub late { 1 }'; print defined &late ? "y\n" : "n\n";}),
+    qr/GAP: `defined &late`/, 'an eval that defines a named sub';
+like producer_stderr(q{sub here { 1 } eval 'undef &here'; print defined &here ? "y\n" : "n\n";}),
+    qr/GAP: `defined &here`/, 'an eval that undefines one';
+like producer_stderr(q{$main::c = "sub late { 1 }"; eval $main::c; print defined &late ? "y\n" : "n\n";}),
+    qr/GAP: `defined &late`/, 'an eval of code not known here';
+
 done_testing;

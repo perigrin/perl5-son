@@ -1730,8 +1730,8 @@ class SoN::FromOptree 0.01 {
         my $full = "${stash}::$name";
         return undef if $ch->{$full} || $ch->{'*'};
         my $code = do { no strict 'refs'; defined &{$full} ? \&{$full} : undef };
-        return 1 if $code;
-        return $ch->{eval} ? undef : '';
+        return 1 if $code;   # (an eval that only defines subs cannot undefine it)
+        return $ch->{'+'} || $ch->{"+$full"} ? undef : '';
     }
 
     # _subs_changed() -> { 'Stash::name' => 1 } for each sub the program undefines
@@ -1747,7 +1747,13 @@ class SoN::FromOptree 0.01 {
         $visit = sub ($op, $cv) {
             return unless ref($op) && $$op;
             my $name = $op->name;
-            $SUBS_CHANGED{eval} = 1 if $name eq 'entereval';
+            # A STRING EVAL may change any sub -- unless its code is known here and
+            # only defines (_known_eval_defines): defining one never undefines it.
+            if ($name eq 'entereval') {
+                my $defines = _known_eval_defines($op, $cv, $visit);
+                if ($defines) { $SUBS_CHANGED{"+$_"} = 1 for @$defines }
+                else { $SUBS_CHANGED{'*'} = 1 }
+            }
             # undef &NAME, *NAME = ...: the gv under it names the sub.
             if ($name eq 'undef' && ($op->flags & 4)) {
                 my @kids = _subtree_ops($op);
@@ -1801,6 +1807,64 @@ class SoN::FromOptree 0.01 {
         }
         return \%SUBS_CHANGED;
     }
+
+    # _known_eval_defines($entereval, $cv, $visit) -> [ the subs it may define ]
+    # when the eval's code is a constant string that only defines subs -- no
+    # `undef &`, glob bind or eval in it -- else undef (any sub may change).
+    # Compiled here once, as an anonymous sub in a package of its own: a named
+    # sub it declares appears in the stashes (put back at once: the compiler's
+    # own subs stay its own); one in that package names the eval's, so any
+    # (''). Carp's `*_StrVal = eval 'sub { no overloading; "$_[0]" }'`
+    # defines none; t/test.pl's `eval 'sub re::is_regexp { ... }'` that one.
+    sub _known_eval_defines ($op, $cv, $visit) {
+        return 0 unless $op->flags & B::OPf_KIDS();
+        my $k = $op->first;
+        $k = $k->first while $k->name eq 'null' && ( $k->flags & B::OPf_KIDS() );
+        return 0 unless $k->name eq 'const';
+        my $sv = eval { $k->sv };
+        $sv = eval { $cv->PADLIST->ARRAYelt(1)->ARRAYelt( $k->targ ) } unless $sv && $$sv;
+        my $code = eval { $sv->PV } // return 0;
+        my $before = _named_subs();
+        my $anon = do { no strict; no warnings; local $@; eval "package SoN::FromOptree::EvalProbe; sub {\n$code\n}" };
+        my $after = _named_subs();
+        my @new = grep { !$before->{$_} || $before->{$_} != $after->{$_} } keys %$after;
+        {   no strict 'refs'; no warnings;
+            for my $n (@new) {
+                if ( $before->{$n} ) { *{$n} = $before->{$n} }
+                else { undef &{$n}; my ($st, $s) = $n =~ /\A(.*::)(\w+)\z/; delete ${$st}{$s} }
+            }
+        }
+        return undef unless ref $anon eq 'CODE' && keys %$before <= keys %$after;
+        my %outer = %SUBS_CHANGED;
+        %SUBS_CHANGED = ();
+        my $acv = B::svref_2object($anon);
+        my $root = eval { $acv->ROOT };
+        $visit->($root, $acv) if $root && $$root;
+        my $only = !%SUBS_CHANGED;
+        %SUBS_CHANGED = %outer;
+        return undef unless $only;
+        return [ map { /\ASoN::FromOptree::EvalProbe::/ ? '' : s/\Amain::(?=.*::)//r } @new ];
+    }
+
+    # _named_subs() -> { 'Stash::name' => its CODE ref } over every stash.
+    sub _named_subs () {
+        my %s;
+        my @stashes = ('main::');
+        my %seen;
+        no strict 'refs';
+        while ( defined( my $st = shift @stashes ) ) {
+            next if $seen{$st}++;
+            for my $n ( keys %{$st} ) {
+                if ( $n =~ /::\z/ ) { push @stashes, $st eq 'main::' ? $n : $st . $n unless $st eq "main::$n"; next }
+                my $g = ${$st}{$n};
+                next unless ref( \$g ) eq 'GLOB';
+                my $c = *{$g}{CODE} or next;
+                $s{"$st$n"} = $c;
+            }
+        }
+        return \%s;
+    }
+
 
     # _file_lexicals_shared() -> { main pad index => 1 } for every file-level
     # lexical a named sub in main:: closes over. perl records it on the sub's
