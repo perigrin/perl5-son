@@ -58,6 +58,12 @@ sub _followed_modules {
     return $FOLLOWED if $FOLLOWED;
     my %m;
     for my $key ( keys %INC ) {
+        # A .pl FILE THE PROGRAM REQUIRED (perl's t/test.pl) is followed as a
+        # module is, by its path: its subs are the program's library.
+        if ( !exists $LOADED_INC{$key} && $key =~ /\.pl\z/ && defined $INC{$key} && !ref $INC{$key} ) {
+            $m{$key} = $INC{$key};
+            next;
+        }
         next if exists $LOADED_INC{$key} || $key !~ /\.pm\z/;
         ( my $name = $key ) =~ s{\.pm\z}{};
         $name =~ s{/}{::}g;

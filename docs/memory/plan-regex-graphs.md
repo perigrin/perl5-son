@@ -372,3 +372,24 @@ File::Temp::_replace_XX blocked every test file: `s/X(?=X*$end)/$CHARS[int(rand(
   replacement and leaves the pattern empty (T2 refuses empty patterns).
 - Container restarts killed two hour-long verifies: verify-r.sh in the
   scratchpad marks each stage done so a rerun resumes.
+
+## Compiling perl's own t/test.pl (2026-11-13)
+
+perigrin's turn: compile t/test.pl itself before any test using it. B::SoN now
+translates its main line (16 subs still refused by name). What it took:
+- A required .pl file is followed as a module is (by path).
+- A string eval whose code is one of a few known pure literals (an escape
+  table built over the characters of a constant) is folded at compile time.
+- `defined &NAME` asks whether the sub exists. It WAS Defined(the name
+  string): always true -- `defined &nope` printed y through T2 for perl's n.
+  Known when nothing can change it as the program runs (_subs_changed:
+  undef &NAME, an assignment to *NAME, a glob made by name, a string eval);
+  otherwise refused by name.
+- An arm a FOLDED condition never runs is skipped (test.pl's old-perl
+  `eval 'sub re::is_regexp ...' if !defined &re::is_regexp`). Only folded
+  ones: a value-forwarded constant keeps its branch (five shape tests pin it).
+- Chalk: a call inference leaves untyped is Scalar/List by its context (a sub
+  returning what its caller gave it, called with an untyped argument).
+Next: T2 phase blocks (test.pl's END blocks print the plan).
+Lesson: a test harness that drops the producer's stderr turns a named
+refusal into an empty "lower:" -- keep the producer's words.

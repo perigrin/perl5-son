@@ -1705,6 +1705,100 @@ class SoN::FromOptree 0.01 {
         return \%PKG_SCALAR_WRITTEN;
     }
 
+    # _known_truth($node) -> the truth of a condition this producer folded at
+    # compile time (a `defined &NAME`, %FOLDED_TRUTH), its negation's through a
+    # Not; undef for anything else. Only those: a value-forwarded constant
+    # (`my $c = 0; ... if $c`) keeps its branch, as the graph has always shown.
+    my %FOLDED_TRUTH;
+    sub _known_truth ($n) {
+        return undef unless blessed($n);
+        if ($n->operation eq 'Not') { my $t = _known_truth($n->inputs->[0]); return defined $t ? 1 - $t : undef }
+        return $FOLDED_TRUTH{ Scalar::Util::refaddr($n) };
+    }
+
+    # _sub_defined_known($stash, $name) -> 1 or '' when `defined &NAME` is known
+    # here, undef when the program may change it as it runs. B::SoN sees the
+    # symbol table whole at CHECK: a sub with a body or perl's own (XS) is
+    # there; one without is not -- unless something can make or unmake it
+    # (_subs_changed): `undef &NAME`, an assignment to *NAME, a glob made by
+    # name at run time, or (for one not there yet) a string eval.
+    sub _sub_defined_known ($stash, $name) {
+        my $ch = _subs_changed();
+        my $full = "${stash}::$name";
+        return undef if $ch->{$full} || $ch->{'*'};
+        my $code = do { no strict 'refs'; defined &{$full} ? \&{$full} : undef };
+        return 1 if $code;
+        return $ch->{eval} ? undef : '';
+    }
+
+    # _subs_changed() -> { 'Stash::name' => 1 } for each sub the program undefines
+    # or binds by glob, '*' when it binds a glob made by name, 'eval' when it
+    # has a string eval. Read once over the program and the subs compiled with
+    # it, as _package_scalars_written is.
+    my %SUBS_CHANGED;
+    my $SUBS_SCANNED = 0;
+    sub _subs_changed () {
+        return \%SUBS_CHANGED if $SUBS_SCANNED;
+        $SUBS_SCANNED = 1;
+        my $visit;
+        $visit = sub ($op, $cv) {
+            return unless ref($op) && $$op;
+            my $name = $op->name;
+            $SUBS_CHANGED{eval} = 1 if $name eq 'entereval';
+            # undef &NAME, *NAME = ...: the gv under it names the sub.
+            if ($name eq 'undef' && ($op->flags & 4)) {
+                my @kids = _subtree_ops($op);
+                if (grep { $_->name eq 'rv2cv' } @kids) {
+                    for my $g (grep { $_->name eq 'gv' } @kids) {
+                        my $gv = eval { _op_gv($cv, $g) } or next;
+                        $SUBS_CHANGED{ $gv->STASH->NAME . '::' . $gv->NAME } = 1 if $$gv;
+                    }
+                }
+            }
+            # *NAME = ...: the assignment's TARGET (its last kid) is the glob --
+            # a gv (`*dbl = \&two`), or an rv2gv over one, or over a name made
+            # at run time (any sub may then change).
+            if (($name eq 'sassign' || $name eq 'aassign') && ($op->flags & 4)) {
+                my $t = $op->first;
+                $t = $t->sibling while ${ $t->sibling };
+                my @targets = $name eq 'aassign' && $t->can('first') ? _subtree_ops($t) : ($t);
+                for my $tg (@targets) {
+                    my $g = $tg->name eq 'gv' ? $tg
+                          : $tg->name eq 'rv2gv' && ($tg->flags & 4) && ${ $tg->first } && $tg->first->name eq 'gv' ? $tg->first
+                          : undef;
+                    $SUBS_CHANGED{'*'} = 1 if $tg->name eq 'rv2gv' && !$g;
+                    next unless $g;
+                    my $gv = eval { _op_gv($cv, $g) } or next;
+                    $SUBS_CHANGED{ $gv->STASH->NAME . '::' . $gv->NAME } = 1 if $$gv;
+                }
+            }
+            return unless $op->flags & 4;
+            for (my $k = $op->first; ref($k) && $$k; $k = $k->sibling) { $visit->($k, $cv) }
+        };
+        my $root = eval { B::main_root() };
+        $visit->($root, B::main_cv) if $root && $$root;
+        my @stashes = ('main::');
+        my %seen_stash;
+        while (defined( my $st = shift @stashes )) {
+            next if $seen_stash{$st}++;
+            no strict 'refs';
+            for my $n (sort keys %{$st}) {
+                if ($n =~ /\A[A-Za-z_]\w*::\z/ && $st ne 'main::' . $n) { push @stashes, $st eq 'main::' ? $n : $st . $n; next }
+                next unless $n =~ /^[A-Za-z_]\w*$/;
+                my $glob = ${$st}{$n};
+                next unless ref(\$glob) eq 'GLOB';
+                my $code = *{$glob}{CODE} or next;
+                my $sub_cv = eval { B::svref_2object($code) } or next;
+                next unless ref($sub_cv) && $sub_cv->isa('B::CV');
+                my $ours = B::SoN->can('_cv_is_user_code');
+                next if $st ne 'main::' && !( $ours && $ours->($sub_cv) );
+                my $sub_root = eval { $sub_cv->ROOT };
+                $visit->($sub_root, $sub_cv) if $sub_root && $$sub_root;
+            }
+        }
+        return \%SUBS_CHANGED;
+    }
+
     # _file_lexicals_shared() -> { main pad index => 1 } for every file-level
     # lexical a named sub in main:: closes over. perl records it on the sub's
     # pad: the name carries PADNAMEf_OUTER and PARENT_PAD_INDEX is main's slot,
@@ -2479,6 +2573,16 @@ class SoN::FromOptree 0.01 {
             # op fires; the RIGHT arm is reached via op->other. We walk op->other
             # on a snapshot with @exits so an exit there is recorded; the 'exited'
             # signal selects control flow (case 2), otherwise a value node (case 1).
+            # AN ARM A KNOWN CONDITION NEVER RUNS is not walked: `X or ARM` of a
+            # true X, `X and ARM` of a false one, is X (test.pl's old-perl
+            # fallback, `eval '...' if !defined &re::is_regexp`).
+            if ($opmap->is_branch($name) && ($name eq 'and' || $name eq 'or')
+                    && $sim->stack_depth
+                    && do { my $t = _known_truth($sim->peek_node); defined $t && ( $name eq 'or' ? $t : !$t ) }) {
+                $sim->pop_node if ($op->flags & 3) == 1;   # (void: no value)
+                $op = $op->next;
+                next;
+            }
             if ($opmap->is_branch($name) && ($name eq 'and' || $name eq 'or')) {
                 my $lhs = $sim->pop_node;
                 my $rhs_sim = $sim->snapshot;
@@ -5366,6 +5470,46 @@ class SoN::FromOptree 0.01 {
         }
 
         _reread_alias_operand_stored_later($cv, $op, $sim, $factory, $opmap, $ctx);
+        # `defined &NAME` ASKS WHETHER THE SUB EXISTS, known here when the
+        # program cannot change it (_sub_defined_known). It was Defined(the
+        # name string): always true -- `defined &nope` printed y for perl's n.
+        if ($name eq 'defined' && ($op->flags & 4) && $op->first->name eq 'rv2cv'
+                && (my ($gvop) = grep { $_->name eq 'gv' } _subtree_ops($op->first))) {
+            my $gv = _op_gv($cv, $gvop);
+            if ($gv && $$gv) {
+                my $known = _sub_defined_known($gv->STASH->NAME, $gv->NAME);
+                die "GAP: `defined &" . $gv->NAME . "` of a sub the program may define or"
+                  . " undefine as it runs is not yet lowered\n" unless defined $known;
+                $sim->pop_node if $sim->stack_depth;
+                my $k = $factory->make_unique('Constant', value => $known, const_type => 'boolean',
+                    stamp => SoN::IR::Stamp->new(type => 'Boolean'));
+                $FOLDED_TRUTH{ Scalar::Util::refaddr($k) } = $known ? 1 : 0;
+                $sim->push_node($k);
+                return ($op->next, 'handled');
+            }
+        }
+        # A STRING EVAL OF CODE KNOWN HERE (one of a few pure literals) is its
+        # value, folded: it reads and writes nothing, so no lexical is seen.
+        # (A SCOUT'S PLACEHOLDER VALUES ARE NOT THE CODE: it builds no graph, so
+        # its eval is opaque; the real walk folds it or refuses.)
+        if ($name eq 'entereval' && $IN_SCOUT && !defined _fold_string_eval($sim, $factory)) {
+            $sim->pop_node;
+            $sim->push_node($factory->make('Constant', value => '', const_type => 'string',
+                stamp => SoN::IR::Stamp->new(type => 'Str'))) unless ($op->flags & 3) == 1;
+            return ($op->next, 'handled');
+        }
+        if ($name eq 'entereval' && defined(my $folded = _fold_string_eval($sim, $factory))) {
+            $sim->pop_node;
+            # (eval STRING clears $@ as it succeeds, as a block eval does)
+            _entry_store($factory, $sim,
+                $factory->make('EntryDef', package => 'main', sigil => '$', symbol => '@',
+                    inputs => [$sim->memory]),
+                $factory->make('Constant', value => '', const_type => 'string',
+                    stamp => SoN::IR::Stamp->new(type => 'Str')))
+                if defined $sim->memory;
+            $sim->push_node($folded) unless ($op->flags & 3) == 1;   # OPf_WANT_VOID
+            return ($op->next, 'handled');
+        }
         _refuse_unseen_lexical_access($cv, $op, $name);
         _refuse_tie_of_a_stored_lexical($cv, $op) if $name eq 'tie';
 
@@ -22324,6 +22468,81 @@ class SoN::FromOptree 0.01 {
     # runtime, with the scope bindings here as the state to write back.
     # ponytail: every pad name counts, not only those in scope at the eval;
     # narrow to the eval's cop range if a real program needs it.
+    # _fold_string_eval($sim, $factory) -> the value of the string eval whose
+    # code is on top of the stack, folded at compile time, or undef: its code is
+    # one of a few strings known here (_known_strings), each a pure
+    # double-quoted literal -- escapes only, no interpolation -- which perl
+    # evaluates here, in a package of its own. A choice of more than one is a
+    # ?: chain on the code. t/test.pl builds its escape table this way:
+    # `eval "\"\\$x\""` over the characters of a constant.
+    sub _fold_string_eval ($sim, $factory) {
+        my $src = $sim->peek_node // return undef;
+        my @codes = _known_strings($src) or return undef;
+        return undef if @codes > 32;
+        my %val;
+        for my $c (@codes) {
+            return undef unless $c =~ /\A"(?:[^"\\\$\@]|\\.)*"\z/s;
+            my $v = eval "package SoN::FromOptree::Folded; no strict; no warnings; $c";
+            return undef if $@ || !defined $v || ref $v;
+            $val{$c} = $v;
+        }
+        my $str = sub ($s) { $factory->make('Constant', value => $s, const_type => 'string',
+                                 stamp => SoN::IR::Stamp->new(type => 'Str')) };
+        my @c = sort keys %val;
+        my $node = $str->( $val{ $c[-1] } );
+        for my $c ( reverse @c[ 0 .. $#c - 1 ] ) {
+            my $eq = $factory->make('StrEq', inputs => [ _coerce_to_str($factory, $src), $str->($c) ],
+                stamp => SoN::IR::Stamp->new(type => 'Boolean'));
+            $node = $factory->make('TernaryExpr', inputs => [ $eq, $str->( $val{$c} ), $node ],
+                stamp => SoN::IR::Stamp->new(type => 'Str'));
+        }
+        return $node;
+    }
+
+    # _known_strings($node) -> every string a value node can be, when that is
+    # known here: a constant, a concatenation of such, an element of an array
+    # literal of constants and split()s of constants (a foreach's iterator).
+    # () for anything else.
+    sub _known_strings ($n) {
+        return () unless blessed($n);
+        my $op = $n->operation;
+        if ($op eq 'Constant') {
+            my $t = $n->const_type // '';
+            return $t =~ /\A(?:string|integer)\z/ && defined $n->value ? ($n->value) : ();
+        }
+        return _known_strings($n->inputs->[0]) if $op eq 'Coerce';
+        # (a foreach iterator: an alias, the element through a reference to it)
+        return _known_strings($n->inputs->[0]->inputs->[0])
+            if $op eq 'PostfixDeref' && ($n->sigil // '') eq '$' && blessed($n->inputs->[0]) && $n->inputs->[0]->operation eq 'Ref';
+        if ($op eq 'Concat') {
+            my @a = _known_strings($n->inputs->[0]) or return ();
+            my @z = _known_strings($n->inputs->[1]) or return ();
+            my %seen;
+            return grep { !$seen{$_}++ } map { my $x = $_; map { "$x$_" } @z } @a;
+        }
+        if ($op eq 'Subscript' && ($n->can('kind') ? $n->kind // '' : '') eq 'array') {
+            my $arr = $n->inputs->[0];
+            return () unless blessed($arr) && $arr->operation eq 'ArrayLiteral';
+            my @all;
+            for my $e ($arr->inputs->@*) {
+                return () unless blessed($e);
+                if ($e->operation eq 'Constant') { push @all, _known_strings($e) or return () }
+                elsif ($e->operation eq 'Call' && ($e->name // '') eq 'split') {
+                    my ($re, $s, $lim) = $e->inputs->@*;
+                    return () unless blessed($re) && $re->operation eq 'Constant' && ($re->const_type // '') eq 'regex'
+                        && blessed($s) && $s->operation eq 'Constant' && defined $s->value
+                        && (!blessed($lim) || $lim->operation eq 'Constant');
+                    my $pat = $re->value // '';
+                    push @all, split /$pat/, $s->value, ( blessed($lim) ? $lim->value // 0 : 0 );
+                }
+                else { return () }
+            }
+            my %seen;
+            return grep { !$seen{$_}++ } @all;
+        }
+        return ();
+    }
+
     sub _refuse_unseen_lexical_access ($cv, $op, $name) {
         if ($name eq 'entereval') {
             my $names = eval { $cv->PADLIST->ARRAYelt(0) } or return;
