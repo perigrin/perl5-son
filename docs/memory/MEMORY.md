@@ -284,3 +284,4 @@
 - [Decision: Sereal wire + per-module cache](decision-wire-format-sereal.md) — B::SoN re-translation is ~90% of per-file time; compact JSON, then a per-module cache, then Sereal with a chalk-compliant decoder (self-hosting)
 - [T2 alias reads; test header](t2-alias-reads-and-test-header.md) — foreach over @_ reads elements only when @_ is never reshaped (a14 lesson); -d/chdir/require for t/test.pl; a refusal test that flips: find why, probe two orders
 - [Preloaded modules are peephole-optimized](preloaded-modules-are-peephole-optimized.md) — Carp/Exporter compiled before B::SoN suppresses peep: multideref underflows; recompile at CHECK; probe in the module, not a copy; plus nested redo, substr s///, Negate typing
+- [A late typing step must propagate](a-late-typing-step-must-propagate.md) — `_type_calls_by_context` stamped calls after the last propagation; a Phi merging one stayed untyped and refused the load; propagate after any late stamp

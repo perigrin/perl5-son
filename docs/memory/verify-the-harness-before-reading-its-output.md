@@ -24,6 +24,13 @@ Three in one project, each caught only because a result looked wrong:
 - "11 of 29 sampled, 18 remain" -- the done-list held 12, so 17 remained, and
   18 was also the unrelated count of the other two failure modes. Two
   populations, one number, reported for two turns.
+- (2026-11-13) Rerunning one of the 300 swap files "did not reproduce" -- the
+  rerun lacked the sweep's `HOME=/home/runner PERL5_SON_LIB=/home/user/repo/lib`,
+  so no producer was found and every file refused at the test's own `-x` skip
+  check (`Call builtin fteexec`). Same verdict for all, plausible, wrong. Rerun
+  with the sweep's exact env, and debug output from `swap-one.pl` must go to a
+  file (it sends stderr to /dev/null). Faster still: save the wire once
+  (`-MO=-q,SoN,json`) and replay only the load step.
 
 **Why:** a harness produces a number, and a number reads as evidence. Nothing
 in the output says which question was asked, so a wrong question yields a
