@@ -1856,6 +1856,15 @@ class SoN::FromOptree 0.01 {
         # ops of the program body are enough.
         # A SORT BLOCK OF THE PROGRAM reads the file's aggregates by name.
         # ...and its scalars: one variable with the program's, by name.
+        # A PHASE BLOCK closes over the file's lexicals as a named sub does:
+        # t/test.pl's END reads $planned and the count its subs keep.
+        for my $av ( map { eval { B->can($_)->() } } qw(begin_av init_av check_av unitcheck_av end_av) ) {
+            next unless ref($av) && $av->isa('B::AV');
+            for my $pcv ( $av->ARRAY ) {
+                next unless ref($pcv) && $pcv->isa('B::CV');
+                $shared{$_} = 1 for values %{ _outer_main_slots($pcv) };
+            }
+        }
         $shared{$_} = 1 for _sort_block_aggregates(B::main_cv(), B::main_root(), 1);
         my @q = eval { B::main_root() };
         while (my $o = shift @q) {

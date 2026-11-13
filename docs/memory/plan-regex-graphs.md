@@ -393,3 +393,19 @@ translates its main line (16 subs still refused by name). What it took:
 Next: T2 phase blocks (test.pl's END blocks print the plan).
 Lesson: a test harness that drops the producer's stderr turns a named
 refusal into an empty "lower:" -- keep the producer's words.
+
+## T2 phase blocks (2026-11-13)
+
+BEGIN and END through T2, each compiled as a sub is. BEGIN runs at the start
+(pvm 258's model, as the fallback did); END runs at every way out, last
+defined first. Lessons:
+- lli does NOT run atexit(3) handlers when the program calls exit() itself:
+  T2 keeps its own END list (t2_run_ends) and runs it before every exit in
+  its runtime and at the main line's end.
+- B::SoN's phase list is already in run order (last END first).
+- Re-running BEGIN at startup is wrong for one touching a main-line lexical:
+  `my $x; BEGIN { $x = 5 }` is 5 in perl (the run-time `my` leaves it), was
+  undef in T2. Refused by name. An END reading one shares it like a sub
+  (B::SoN's _file_lexicals_shared now walks begin/init/check/end AVs).
+- T2's whole-program scans (_all_nodes) must include phase graphs: a BEGIN's
+  method call found no MOP.
