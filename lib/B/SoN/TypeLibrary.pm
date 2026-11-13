@@ -159,6 +159,7 @@ my %SIGNATURES = (
     # node on the not-yet-declared list.
     Match      => { operands => [], result => 'Boolean' },
     IsaOp      => { operands => ['Scalar', 'Str'], result => 'Boolean' },
+    SubDefined => { operands => [], result => 'Boolean' },   # `defined &NAME`
 
     # MEMBERSHIP ALWAYS ANSWERS. `exists` reports whether a key or index is
     # PRESENT, and measured on 5.42.0 `is_bool(exists $h{a})` is true -- so

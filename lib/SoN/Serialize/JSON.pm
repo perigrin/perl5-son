@@ -380,6 +380,9 @@ sub _extract_fields ($node, $id_remap) {
     if ($op eq 'EnvRead') {
         return { key => $node->key };
     }
+    if ($op eq 'SubDefined') {
+        return { name => $node->name, answer => ( $node->answer ? 1 : 0 ), unless => [ $node->unless->@* ] };
+    }
     if ($op eq 'VarDecl') {
         return { scope => $node->scope };
     }

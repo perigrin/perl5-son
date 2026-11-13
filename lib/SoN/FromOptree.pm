@@ -1725,18 +1725,23 @@ class SoN::FromOptree 0.01 {
     # there; one without is not -- unless something can make or unmake it
     # (_subs_changed): `undef &NAME`, an assignment to *NAME, a glob made by
     # name at run time, or (for one not there yet) a string eval.
+    # ... and WHERE: (answer, [graphs]) -- the answer as compiled, and the
+    # graphs whose run may change it (none: the answer holds).
     sub _sub_defined_known ($stash, $name) {
         my $ch = _subs_changed();
         my $full = "${stash}::$name";
-        return undef if $ch->{$full} || $ch->{'*'};
         my $code = do { no strict 'refs'; defined &{$full} ? \&{$full} : undef };
-        return 1 if $code;   # (an eval that only defines subs cannot undefine it)
-        return $ch->{'+'} || $ch->{"+$full"} ? undef : '';
+        # (an eval that only defines subs cannot undefine one)
+        my @keys = ( $full, '*', $code ? () : ( '+', "+$full" ) );
+        my %at = map { %{ $ch->{$_} // {} } } @keys;
+        return ( $code ? 1 : '', [ sort keys %at ] );
     }
 
-    # _subs_changed() -> { 'Stash::name' => 1 } for each sub the program undefines
-    # or binds by glob, '*' when it binds a glob made by name, 'eval' when it
-    # has a string eval. Read once over the program and the subs compiled with
+    # _subs_changed() -> { 'Stash::name' => { graph => 1 } } for each sub the
+    # program undefines or binds by glob, '*' when it binds a glob made by name
+    # or has an eval of code not known here, '+Stash::name' ('+': any) when a
+    # known eval defines it -- each with the graphs (subs, the program) whose run
+    # does it. An anonymous sub's is its enclosing graph's: made only as it runs. Read once over the program and the subs compiled with
     # it, as _package_scalars_written is.
     my %SUBS_CHANGED;
     my $SUBS_SCANNED = 0;
@@ -1744,15 +1749,20 @@ class SoN::FromOptree 0.01 {
         return \%SUBS_CHANGED if $SUBS_SCANNED;
         $SUBS_SCANNED = 1;
         my $visit;
-        $visit = sub ($op, $cv) {
+        $visit = sub ($op, $cv, $site) {
             return unless ref($op) && $$op;
             my $name = $op->name;
+            my $mark = sub ($k) { $SUBS_CHANGED{$k}{$site} = 1 };
+            if ($name eq 'anoncode' && ( my $acv = _anoncode_cv($cv, $op) )) {
+                my $aroot = eval { $acv->ROOT };
+                $visit->($aroot, $acv, $site) if $aroot && $$aroot;
+            }
             # A STRING EVAL may change any sub -- unless its code is known here and
             # only defines (_known_eval_defines): defining one never undefines it.
             if ($name eq 'entereval') {
-                my $defines = _known_eval_defines($op, $cv, $visit);
-                if ($defines) { $SUBS_CHANGED{"+$_"} = 1 for @$defines }
-                else { $SUBS_CHANGED{'*'} = 1 }
+                my $defines = _known_eval_defines($op, $cv, $visit, $site);
+                if ($defines) { $mark->("+$_") for @$defines }
+                else { $mark->('*') }
             }
             # undef &NAME, *NAME = ...: the gv under it names the sub.
             if ($name eq 'undef' && ($op->flags & 4)) {
@@ -1760,7 +1770,7 @@ class SoN::FromOptree 0.01 {
                 if (grep { $_->name eq 'rv2cv' } @kids) {
                     for my $g (grep { $_->name eq 'gv' } @kids) {
                         my $gv = eval { _op_gv($cv, $g) } or next;
-                        $SUBS_CHANGED{ $gv->STASH->NAME . '::' . $gv->NAME } = 1 if $$gv;
+                        $mark->( $gv->STASH->NAME . '::' . $gv->NAME ) if $$gv;
                     }
                 }
             }
@@ -1775,17 +1785,17 @@ class SoN::FromOptree 0.01 {
                     my $g = $tg->name eq 'gv' ? $tg
                           : $tg->name eq 'rv2gv' && ($tg->flags & 4) && ${ $tg->first } && $tg->first->name eq 'gv' ? $tg->first
                           : undef;
-                    $SUBS_CHANGED{'*'} = 1 if $tg->name eq 'rv2gv' && !$g;
+                    $mark->('*') if $tg->name eq 'rv2gv' && !$g;
                     next unless $g;
                     my $gv = eval { _op_gv($cv, $g) } or next;
-                    $SUBS_CHANGED{ $gv->STASH->NAME . '::' . $gv->NAME } = 1 if $$gv;
+                    $mark->( $gv->STASH->NAME . '::' . $gv->NAME ) if $$gv;
                 }
             }
             return unless $op->flags & 4;
-            for (my $k = $op->first; ref($k) && $$k; $k = $k->sibling) { $visit->($k, $cv) }
+            for (my $k = $op->first; ref($k) && $$k; $k = $k->sibling) { $visit->($k, $cv, $site) }
         };
         my $root = eval { B::main_root() };
-        $visit->($root, B::main_cv) if $root && $$root;
+        $visit->($root, B::main_cv, 'main::__PROGRAM__') if $root && $$root;
         my @stashes = ('main::');
         my %seen_stash;
         while (defined( my $st = shift @stashes )) {
@@ -1802,7 +1812,7 @@ class SoN::FromOptree 0.01 {
                 my $ours = B::SoN->can('_cv_is_user_code');
                 next if $st ne 'main::' && !( $ours && $ours->($sub_cv) );
                 my $sub_root = eval { $sub_cv->ROOT };
-                $visit->($sub_root, $sub_cv) if $sub_root && $$sub_root;
+                $visit->($sub_root, $sub_cv, ( $st =~ s/::\z//r ) . "::$n") if $sub_root && $$sub_root;
             }
         }
         return \%SUBS_CHANGED;
@@ -1816,7 +1826,7 @@ class SoN::FromOptree 0.01 {
     # own subs stay its own); one in that package names the eval's, so any
     # (''). Carp's `*_StrVal = eval 'sub { no overloading; "$_[0]" }'`
     # defines none; t/test.pl's `eval 'sub re::is_regexp { ... }'` that one.
-    sub _known_eval_defines ($op, $cv, $visit) {
+    sub _known_eval_defines ($op, $cv, $visit, $site) {
         return 0 unless $op->flags & B::OPf_KIDS();
         my $k = $op->first;
         $k = $k->first while $k->name eq 'null' && ( $k->flags & B::OPf_KIDS() );
@@ -1839,7 +1849,7 @@ class SoN::FromOptree 0.01 {
         %SUBS_CHANGED = ();
         my $acv = B::svref_2object($anon);
         my $root = eval { $acv->ROOT };
-        $visit->($root, $acv) if $root && $$root;
+        $visit->($root, $acv, $site) if $root && $$root;
         my $only = !%SUBS_CHANGED;
         %SUBS_CHANGED = %outer;
         return undef unless $only;
@@ -5553,10 +5563,16 @@ class SoN::FromOptree 0.01 {
                 && (my ($gvop) = grep { $_->name eq 'gv' } _subtree_ops($op->first))) {
             my $gv = _op_gv($cv, $gvop);
             if ($gv && $$gv) {
-                my $known = _sub_defined_known($gv->STASH->NAME, $gv->NAME);
-                die "GAP: `defined &" . $gv->NAME . "` of a sub the program may define or"
-                  . " undefine as it runs is not yet lowered\n" unless defined $known;
+                my ($known, $unless) = _sub_defined_known($gv->STASH->NAME, $gv->NAME);
                 $sim->pop_node if $sim->stack_depth;
+                # THE PROGRAM MAY CHANGE IT AS IT RUNS: asked where it runs, with
+                # the graphs whose run may change it -- which of them run, the
+                # backend knows (its reach), not this walk.
+                if (@$unless) {
+                    $sim->push_node($factory->make('SubDefined', name => $gv->STASH->NAME . '::' . $gv->NAME,
+                        answer => $known, unless => $unless, stamp => SoN::IR::Stamp->new(type => 'Boolean')));
+                    return ($op->next, 'handled');
+                }
                 my $k = $factory->make_unique('Constant', value => $known, const_type => 'boolean',
                     stamp => SoN::IR::Stamp->new(type => 'Boolean'));
                 $FOLDED_TRUTH{ Scalar::Util::refaddr($k) } = $known ? 1 : 0;
@@ -15520,6 +15536,7 @@ class SoN::FromOptree 0.01 {
                     RegexSubst   Repeat       RightShift   StrCmp
                     StrEq        StrGe        StrGt        StrLe
                     StrLt        StrNe        StructFieldAccess
+                    SubDefined
                     StructRef    Subscript    Subtract     TernaryExpr
                     UnaryPlus    Xor
                 ) };

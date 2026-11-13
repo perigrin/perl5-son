@@ -8228,6 +8228,12 @@ class SoN::Deparse 0.01 {
                     join(', ', map { $self->_expr($_) } @in));
             }
         }
+        elsif ($op eq 'SubDefined') {
+            # `defined &NAME`, asked as it runs (perl answers it there too).
+            my $nm = ($n->{fields} // {})->{name};
+            die "GAP: a SubDefined with no name is not yet rendered\n" unless defined $nm;
+            $text = "defined(&$nm)";
+        }
         elsif ($op eq 'EnvRead') {
             # `$ENV{KEY}` -- the key is a compile-time literal on the node,
             # which is why env reads hash-cons: the read is constant per

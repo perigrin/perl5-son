@@ -52,7 +52,7 @@ use SoN::IR::NodeFactory;
 
 my @VALUE_CLASSES = qw(
     Access Aggregate AnonSub BacktickExpr BinOp Call Coerce CompoundAssign
-    Constant EnvRead ExpressionList Phi PostfixDeref Regex RegexCapture
+    Constant EnvRead ExpressionList Phi PostfixDeref Regex RegexCapture SubDefined
     StructFieldAccess StructRef TernaryExpr UnaryOp
 );
 
@@ -130,7 +130,7 @@ my @KNOWN_AT_98 = qw(
     RefType Regex RegexCapture RegexMatch RegexSubst RegexSubstCount Transliterate TransliterateCount Chomp ChompValue
     Region Repeat Return
     RightShift Slice Start StrCmp StrEq StrGe StrGt StrLe StrLt StrNe
-    StructFieldAccess StructRef Subscript Subtract TernaryExpr TryCatch
+    StructFieldAccess StructRef SubDefined Subscript Subtract TernaryExpr TryCatch
     UnaryOp UnaryPlus Unwind VarDecl Wantarray Xor Yada
 );
 
@@ -150,7 +150,7 @@ subtest 'every node class is one or the other, never neither' => sub {
     # is stale" -- and only one of those is interesting. chalk hit the second
     # running this suite against a lib/ snapshot taken one commit before an
     # Exists node landed, and nearly attributed the red to its own change.
-    my $EXPECTED = 107;
+    my $EXPECTED = 108;
     if (scalar @names != $EXPECTED) {
         my %known = map { $_ => 1 } @KNOWN_AT_98;
         my @extra   = grep { !$known{$_} } @names;

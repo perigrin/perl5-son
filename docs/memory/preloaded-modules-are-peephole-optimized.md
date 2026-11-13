@@ -51,3 +51,14 @@ Still blocked (2026-11-13): the 300 Carp-blocked files stop on Carp's
 UNKNOWN code (`eval "require $module"`). Proposed to perigrin, awaiting a
 go-ahead (wire change): the producer folds and lists the subs holding those
 evals (`defined_unless`); chalk refuses only if one is reachable.
+
+## SubDefined: the question goes to the backend (2026-11-13, perigrin: "fix the producer and refuse in the appropriate place")
+
+`defined &NAME` the producer cannot settle is no longer refused: it emits
+SubDefined { name, answer (as compiled), unless [graphs whose run may change
+it] }. The scan records WHERE each change is (`undef &`, glob bind, eval) and
+now walks anonymous subs too. Chalk answers it in an Analysis pass from the
+loader's reach -- not in the loader (perigrin: "it should be an optimization
+pass"). Next: chalk docs/plans/2026-11-13-the-loader-only-loads.md (reach,
+refusal and pruning out of the loader too). The 300 Carp-blocked files now
+pass ret_summary and stop on Carp::caller_info.
