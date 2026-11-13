@@ -5145,7 +5145,25 @@ class SoN::Deparse 0.01 {
         return $found;
     }
 
+    # _eval_return_edge($arm, $next_of) -> (join id, "return VALUE;\n") when
+    # the arm reaches the join of an eval being rendered (%eval_claimed) by a
+    # way in other than the body's end -- a `return` in the body -- else ().
+    method _eval_return_edge ($arm, $next_of) {
+        for my $j ( keys %eval_claimed ) {
+            my $r = $nodes->{$j} or next;
+            my $k = $self->_region_pred_index( $arm, $r, $next_of );
+            next unless defined $k && $k > 0;
+            my ($vphi) = grep { ( $_->{op} // '' ) eq 'Phi'
+                                && ( ( $_->{fields} // {} )->{region} // -1 ) == $j
+                                && !$self->_is_memory( $_->{id} ) } $self->_nodes_in_order;
+            return ( $j, $vphi ? sprintf( "return %s;\n", $self->_expr( $vphi->{inputs}[$k] ) ) : "return;\n" );
+        }
+        return;
+    }
+
     method _is_eval_join ($n) {
+        # (named by the producer: one way in, or more where the body returns)
+        return 1 if defined( ( $n->{fields} // {} )->{eval_entry} );
         my @in = ($n->{inputs} // [])->@*;
         return 0 unless @in == 1;
 
@@ -5878,7 +5896,15 @@ class SoN::Deparse 0.01 {
                 my $leave;
                 if ( $edge->{word} eq 'return' ) {
                     my $pay = $edge->{pay}->($arm{$ix});
-                    $leave = $pay . $self->_emit_from( $arm{$ix}{id}, $next_of, undef );
+                    # A RETURN FROM INSIDE AN EVAL being rendered leaves the EVAL:
+                    # walked unbounded it reached the eval's join and rendered the
+                    # eval again, without end.
+                    if ( my ($ej, $ret) = $self->_eval_return_edge( $arm{$ix}, $next_of ) ) {
+                        $leave = $pay . $self->_emit_from( $arm{$ix}{id}, $next_of, $ej ) . $ret;
+                    }
+                    else {
+                        $leave = $pay . $self->_emit_from( $arm{$ix}{id}, $next_of, undef );
+                    }
                 }
                 else {
                     my $body = $self->_emit_from( $arm{$ix}{id}, $next_of, $edge->{region} );
@@ -6116,6 +6142,26 @@ class SoN::Deparse 0.01 {
     # goes out of scope exactly where the join needs it.
     method _join_phis ($join, $arm, $lone_idx = undef, $next_of = {}) {
         return ('') unless defined $join;
+
+        # AN EVAL'S JOIN, reached from inside its body: an arm arriving by any
+        # way in but the first (the body's end) is a `return` in the body,
+        # which leaves the EVAL with its value -- `return VALUE` inside the
+        # block says exactly that. The body's own end is the eval's value, the
+        # eval's rendering's to emit; nothing is declared.
+        if ( defined( ( $nodes->{$join}{fields} // {} )->{eval_entry} ) ) {
+            my ($vphi) = grep { ( $_->{op} // '' ) eq 'Phi'
+                                && ( ( $_->{fields} // {} )->{region} // -1 ) == $join
+                                && !$self->_is_memory( $_->{id} ) } $self->_nodes_in_order;
+            my %assign;
+            for my $ix ( keys $arm->%* ) {
+                my $k = $self->_region_pred_index( $arm->{$ix}, $nodes->{$join}, $next_of );
+                next unless defined $k && $k > 0;
+                $assign{$ix} = $vphi
+                    ? sprintf( "return %s;\n", $self->_expr( $vphi->{inputs}[$k] ) )
+                    : "return;\n";
+            }
+            return ( '', %assign );
+        }
 
         my @phis = sort { $a->{id} <=> $b->{id} }
                    grep { ($_->{op} // '') eq 'Phi'

@@ -4380,6 +4380,7 @@ class SoN::FromOptree 0.01 {
             const_type => 'undef',
             stamp      => SoN::IR::Stamp->new(type => 'Undef'));
         return { control => $sim->control, value => $value, kind => $kind,
+                 memory => $sim->memory, bindings => $sim->scope_bindings,
                  ( $valueless ? ( valueless => 1 ) : () ),
                  ( defined $scalar_value
                      ? ( scalar_value => $scalar_value ) : () ) };
@@ -18199,8 +18200,27 @@ class SoN::FromOptree 0.01 {
             $factory->make('Constant', value => '', const_type => 'string',
                 stamp => SoN::IR::Stamp->new(type => 'Str')))
             if defined $body_sim->memory;
-        my ($end) = _walk_branch($cv, $op->next, $body_sim, $factory, $opmap,
-            $visited, undef, 1, _op_addr($op->other));
+        # A `return` IN THE BODY LEAVES THE EVAL, with its value (perlfunc:
+        # eval): an exit of the eval, recorded here -- in a loop in the body
+        # too ($FN_EXITS) -- and a way into the eval's join below.
+        my @ev_exits;
+        my ($end, $sig) = do {
+            local $FN_EXITS = \@ev_exits;
+            # (and undoes only the `local`s made in the body: the eval's scope)
+            local @SAVES_STACK = ();
+            _walk_branch($cv, $op->next, $body_sim, $factory, $opmap,
+                $visited, \@ev_exits, 1, _op_addr($op->other));
+        };
+        # EVERY PATH RETURNED: the body itself never reaches the join.
+        my $body_left = ( $sig // '' ) eq 'exited';
+        # A LIST RETURN (a bare `return` is one: the empty list) in a scalar
+        # or void eval is its scalar reading -- undef for the bare one. In a
+        # list or the caller's context it is the list: not yet.
+        if ( grep { defined $_->{scalar_value} } @ev_exits ) {
+            die "GAP: a return of a list from a block eval in list or caller context is not yet lowered\n"
+                unless ( $op->flags & 3 ) == 2 || ( $op->flags & 3 ) == 1;
+            $_->{value} = $_->{scalar_value} for grep { defined $_->{scalar_value} } @ev_exits;
+        }
 
         # A BODY WALK THAT STOPS SHORT OF THE leavetry DROPPED THE REST. The
         # arm walk returns at an op it has no case for, and resuming after the
@@ -18208,7 +18228,7 @@ class SoN::FromOptree 0.01 {
         # an eval body printed nothing where perl printed 1 2 3.
         die "GAP: a block eval body stopped at `" . $end->name
           . "` before its leavetry is not yet lowered\n"
-            if defined $end && ref $end && $$end
+            if !$body_left && defined $end && ref $end && $$end
             && $$end != _op_addr($op->other);
 
         # A BODY THAT REBINDS AN OUTER VARIABLE IS REFUSED. The body walks a
@@ -18222,19 +18242,21 @@ class SoN::FromOptree 0.01 {
         # A PAD SLOT ONLY. A package variable is stored through memory, which
         # does come back, and round trips: `our $g = 0; eval { $g = 1; 1 }`.
         my $outer = $sim->scope_bindings;
-        my $after = $body_sim->scope_bindings;
         die "GAP: a block eval whose body rebinds a variable from outside it is"
           . " not yet lowered -- after a die the variable holds what the body"
           . " had stored by then, which the trap's join does not carry\n"
-            if grep { exists $after->{$_} && ($after->{$_} // 0) != ($outer->{$_} // 0) }
-               grep { /\A\d+\z/ } keys $outer->%*;
+            if grep { my $after = $_; grep { exists $after->{$_} && ($after->{$_} // 0) != ($outer->{$_} // 0) }
+                                     grep { /\A\d+\z/ } keys $outer->%* }
+               ( $body_left ? () : $body_sim->scope_bindings ), map { $_->{bindings} // {} } @ev_exits;
 
         my $undef = $factory->make('Constant',
             value      => undef,
             const_type => 'undef',
             stamp      => SoN::IR::Stamp->new(type => 'Undef'));
+        # ITS WAYS IN: the body's end (unless every path returned), then each
+        # return, in order; the value Phi below takes their values the same way.
         my $region = $factory->make_cfg('Region',
-            inputs => [$body_sim->control]);
+            inputs => [ ( $body_left ? () : $body_sim->control ), map { $_->{control} } @ev_exits ]);
         $region->set_eval_entry($eval_entry) if defined $eval_entry;
         # A DIVISION THE BODY MADE BUT NOTHING REACHES (`my $q = 1 / $z` with
         # $q unread) is not in the graph, and perl still dies making it: the
@@ -18261,7 +18283,8 @@ class SoN::FromOptree 0.01 {
         $region->set_eval_want(($op->flags & 3) == 3 ? 'list' : 'runtime')
             if ($op->flags & 3) == 3 || ($op->flags & 3) == 0;
         $sim->set_control($region);
-        _eval_join_memory($factory, $sim, $region, $body_sim->memory);
+        _eval_join_memory($factory, $sim, $region,
+            ( $body_left ? () : $body_sim->memory ), map { $_->{memory} } @ev_exits);
 
         # The body's value, or undef if it died. Three cases, and the
         # depth tells them apart:
@@ -18282,8 +18305,12 @@ class SoN::FromOptree 0.01 {
           . " a list is not yet lowered -- its value merges only the last"
           . " element\n"
             if defined $region->eval_want && _leaves_a_list(_last_kid($op->other));
-        if ($body_sim->stack_depth > $sim->stack_depth) {
-            my $val = $body_sim->pop_node;
+        if (@ev_exits || $body_sim->stack_depth > $sim->stack_depth) {
+            # ONE VALUE PER WAY IN: the body's last (undef if it left none),
+            # then each return's.
+            my @vals = ( ( $body_left ? () : ( $body_sim->stack_depth > $sim->stack_depth ? $body_sim->pop_node : $undef ) ),
+                         map { $_->{value} } @ev_exits );
+            my $val = $vals[0];
 
             # STAMP IT HERE, from the join of the two arms. B::SoN's
             # _stamp_merges would compute the same join, but it is a POST-PASS:
@@ -18301,11 +18328,13 @@ class SoN::FromOptree 0.01 {
             # so there is nothing to record, and the scout pre-pass builds
             # placeholder Constants that are honestly Unknown.
             my $stamp;
-            $stamp = SoN::IR::Stamp::join($val->stamp, $undef->stamp)
-                if _is_narrowed($val->stamp) && _is_narrowed($undef->stamp);
+            if ( !grep { !_is_narrowed($_->stamp) } @vals, $undef ) {
+                $stamp = $undef->stamp;
+                $stamp = SoN::IR::Stamp::join($stamp, $_->stamp) for @vals;
+            }
 
             $sim->push_node($factory->make_unique('Phi',
-                inputs => [$val, $undef], region => $region,
+                inputs => [@vals, $undef], region => $region,
                 (defined $stamp ? (stamp => $stamp) : ())));
         }
         elsif (($op->flags & 3) != 1) {   # not OPf_WANT_VOID
@@ -21743,10 +21772,11 @@ class SoN::FromOptree 0.01 {
     # the eval took the body's memory -- the same version as a read in it, and
     # a consumer merging nodes by their inputs made the two one read (the
     # outer eval's message printed as the inner's).
-    sub _eval_join_memory ($factory, $sim, $region, $memory) {
-        $sim->set_memory($memory);
-        return unless defined $memory;
-        $sim->set_memory($factory->make_unique('Phi', inputs => [$memory], region => $region, memory => 1));
+    # (one memory per way in: the body's end, then each return's)
+    sub _eval_join_memory ($factory, $sim, $region, @memory) {
+        $sim->set_memory($memory[0]);
+        return unless grep { defined } @memory;
+        $sim->set_memory($factory->make_unique('Phi', inputs => [@memory], region => $region, memory => 1));
     }
 
     sub _entry_store ($factory, $sim, $target, $value, $binds = 0) {
