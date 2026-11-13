@@ -166,13 +166,13 @@ refuses(q{use v5.38; use experimental 'class'; class C { field $f = "a1b2"; meth
     $target, 'a field subject');
 
 # An INTERPOLATED PATTERN rendered as an empty one, so $1 read nothing.
-my $pat = qr/GAP: s\/\/\/ge with an interpolated pattern/;
+my $pat = qr/GAP: s\/\/\/ge with an interpolated pattern not recovered/;
 refuses(q{my $re = qr/(\d)/; my $s = "a1b2"; $s =~ s/$re/$1*2/ge; print "$s\n";},
     $pat, 'a qr// pattern');
-refuses(q{my $d = '\d'; my $s = "a1b2"; $s =~ s/($d)/$1*2/ge; print "$s\n";},
-    $pat, 'a pattern interpolating a lexical');
-refuses(q{our $d = '\d'; my $s = "a1b2"; $s =~ s/x|($d)/$1*2/ge; print "$s\n";},
-    $pat, 'a pattern interpolating a package scalar');
+round_trips(q{my $d = '\d'; my $s = "a1b2"; $s =~ s/($d)/$1*2/ge; print "$s\n";},
+    'a pattern interpolating a lexical');
+round_trips(q{our $d = '\d'; my $s = "a1b2"; $s =~ s/x|($d)/$1*2/ge; print "$s\n";},
+    'a pattern interpolating a package scalar');
 
 # A /ge BODY UNDER /n: the flag reaches the substitution, so the body's $1
 # reads nothing (a2b4 for perl's a0b0). More /n cases sit with the other
@@ -237,5 +237,24 @@ round_trips(q{my $s="a1b2"; $s =~ s/a/z/; my $t=$s; $s =~ s/(\d)/$1*2/ge; print 
     'a copy between a substitution and a /ge substitution');
 round_trips(q{my $s="abc"; $s =~ tr/a/z/; my @t=($s); $s =~ s/z/Q/; print "$s @t\n";},
     'an array copy between a transliteration and a substitution');
+
+
+# A BODY THAT ONLY READS: a choice on a group that took part, an element of a
+# package array, File::Temp's `$CHARS[ int( rand( @CHARS ) ) ]` (rand moves no state
+# a program can compare with perl's: its numbers are not perl's anyway).
+round_trips(q{my $s = "abzb"; $s =~ s/(b)|(z)/defined $2 ? "Z" : uc $1/ge; print "$s\n";},
+    'a choice on which group took part');
+round_trips(q{our @C = ("p", "q"); my $s = "XaX"; $s =~ s/X/$C[1]/ge; print "$s\n";},
+    'an element of a package array');
+round_trips(q{our @C = ("p", "q"); my $s = "XXaX"; $s =~ s/X/$C[ int( rand( @C ) ) ]/ge; print length($s), " ", ($s =~ tr/pq//), "\n";},
+    'a random element of a package array');
+
+
+# AN INTERPOLATED PATTERN with a body: the pattern an input, as a plain s///'s
+# (File::Temp's `s/X(?=X*$end)/.../ge`, $end one of two constants).
+round_trips(q{my $e = "\\z"; my $p = "abXX"; $p =~ s/X(?=X*$e)/lc($&)/ge; print "$p\n";},
+    'a pattern with a variable in it');
+round_trips(q{my $e = ($] >= 5.006 ? "\\z" : "\\Z"); my $p = "aXX"; $p =~ s/X(?=X*$e)/"q" . lc($&)/ge; print "$p\n";},
+    'a pattern holding a choice of two constants');
 
 done_testing;

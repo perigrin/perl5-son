@@ -16558,7 +16558,7 @@ class SoN::FromOptree 0.01 {
                 my ($repl_body, $stacked) = ( $op->pmflags & PMf_EVAL )
                     && ( $op->pmflags & B::PMf_GLOBAL() )
                     ? _subst_ge_body($cv, $op, $pattern,
-                        _pmflags_to_str($op->pmflags))
+                        _pmflags_to_str($op->pmflags), $pat_node)
                     : ();
                 $sim->pop_node if $stacked && $sim->stack_depth;
 
@@ -20797,11 +20797,12 @@ class SoN::FromOptree 0.01 {
     # interpolated pattern renders empty -- measured, `$h{x} =~ s/(\d)/$1*3/ge`
     # printed a1b2 for perl's a3b6. Both are refused before the folded-constant
     # case too, which would otherwise reach the same rendering.
-    sub _subst_ge_body ($cv, $op, $pattern, $flags) {
-        for (my $k = $op->first; ($op->flags & 4) && $$k; $k = $k->sibling) {
-            die "GAP: s///ge with an interpolated pattern is not yet lowered"
-              . " -- the pattern renders empty, and the body's captures would"
-              . " read nothing\n"
+    sub _subst_ge_body ($cv, $op, $pattern, $flags, $pat_node = undef) {
+        # AN INTERPOLATED PATTERN IS AN INPUT (as a plain s///'s); one not
+        # recovered as one (a qr// value) would render empty, and the body's
+        # captures read nothing.
+        for (my $k = $op->first; !defined $pat_node && !length($pattern) && ($op->flags & 4) && $$k; $k = $k->sibling) {
+            die "GAP: s///ge with an interpolated pattern not recovered as an input (a qr// value) is not yet lowered\n"
                 if $k->name eq 'regcomp';
         }
         die "GAP: s///ge on a subject that is not a plain scalar variable is"
@@ -21684,7 +21685,7 @@ class SoN::FromOptree 0.01 {
             my ($repl_body, $stacked) = ( $op->pmflags & PMf_EVAL )
                 && ( $op->pmflags & B::PMf_GLOBAL() )
                 ? _subst_ge_body($cv, $op, $pattern,
-                    _pmflags_to_str($op->pmflags))
+                    _pmflags_to_str($op->pmflags), $pat_node)
                 : ();
             $sim->pop_node if $stacked && $sim->stack_depth;
 
@@ -22047,7 +22048,12 @@ class SoN::FromOptree 0.01 {
         add subtract multiply divide modulo negate
         concat multiconcat stringify
         ord chr uc lc ucfirst lcfirst length sprintf join
+        defined cond_expr and or int
+        aelemfast aelem rv2av
+        rand
     );
+    # (rand advances only its generator: no program can compare that state
+    # with perl's, whose numbers it does not give anyway.)
 
     # $is_body: the replacement is its own graph (s///ge). There a capture,
     # rv2sv over a gv, reads the match the body is called for, so gv is pure;

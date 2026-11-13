@@ -352,3 +352,23 @@ Lessons:
 - Deparse: a value read from a local aggregate and returned is spelled after
   the restore; refused by name. The deparser is a second backend (see the
   Target::Perl note to write), not a pretty-printer.
+
+## s///ge through T2 (2026-11-13)
+
+File::Temp::_replace_XX blocked every test file: `s/X(?=X*$end)/$CHARS[int(rand(@CHARS))]/ge`.
+- The body runs per match: the subst graph (percall) stores the match's $&
+  $1.. in @T2::SubstCaps -- perl's own model, match vars are globals of the
+  match -- and calls the body; a capture read in the body reads that array.
+- An interpolated pattern that is one of a few constant strings (a ?: of
+  constants, concatenated) gets a matcher per string, picked at run time by
+  comparing the pattern; anything else stays refused by name.
+- Chalk ignored `pattern_is_input` on the wire: a pattern input read as an
+  empty pattern (refused), and the plain path would have taken it for a
+  computed replacement. Now read.
+- Purity list for bodies gains defined/?:/and/or/int/aelem(fast)/rv2av/rand
+  (rand: its state is not comparable with perl's anyway).
+- $] is the compiling perl's version, as its exact text ("5.042000").
+- Found, not fixed: `s/$re/X/g` with a qr value -- B::SoN takes the qr as the
+  replacement and leaves the pattern empty (T2 refuses empty patterns).
+- Container restarts killed two hour-long verifies: verify-r.sh in the
+  scratchpad marks each stage done so a rerun resumes.
