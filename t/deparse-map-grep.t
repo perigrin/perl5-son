@@ -88,4 +88,18 @@ print scalar(@s), " [@s]\n";
 SRC
 };
 
+# A MAP BLOCK OF STATEMENTS is the loop body itself, not a do-block: a guard
+# among them is a guard (Carp::caller_info's `eval {...} or do {...}`), not a
+# second loop condition.
+round_trips(<<'SRC', 'a guarded statement in a map block');
+my @a = (1, 2, 3);
+my @r = map { my $x = $_; $x > 1 or do { $x = "s" }; $x } @a;
+print "@r\n";
+SRC
+round_trips(<<'SRC', 'an eval or do in a map block');
+my @a = (1, 2);
+my @r = map { my $x; eval { $x = $_; 1 } or do { $x = "no" }; $x } @a;
+print "@r\n";
+SRC
+
 done_testing;

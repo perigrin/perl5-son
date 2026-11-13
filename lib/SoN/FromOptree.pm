@@ -15738,6 +15738,7 @@ class SoN::FromOptree 0.01 {
         # that depth -- preserving the OUTER operand ($s) pushed before the enter.
         my @enter_depth;
         my $body_leave;
+        my $map_base;   # the stack depth a map/grep block's statements start from
         # Count top-level body statement boundaries (nextstate outside a do-block).
         # A `last if COND` is hoistable into the loop header ONLY when it is the
         # FIRST body statement (stmt_count == 1: just its own opening nextstate has
@@ -15779,13 +15780,22 @@ class SoN::FromOptree 0.01 {
             # the loop's own unstack: `while (my $n = $P{$c}) { if (C) {
             # return } ... }` took the block for a do-block, counted none of
             # its statements, and read the `if` as a second loop condition.
+            # AND A map/grep BLOCK OF STATEMENTS, whose leave runs on into its own
+            # mapwhile/grepwhile (Carp::caller_info's `eval {...} or do {...}`).
             if ($name eq 'enter'
                     && ${ $op->parent } && $op->parent->name eq 'leave'
                     && ${ $op->parent->next }
                     && (($CONTINUE_START
                          && ${ $op->parent->next } == ${$CONTINUE_START})
-                        || $op->parent->next->name eq 'unstack')) {
+                        || $op->parent->next->name eq 'unstack'
+                        || do {   # (past the nulls the peephole would have removed)
+                            my $w = $op->parent->next;
+                            $w = $w->next while $$w && $w->name eq 'null';
+                            $$w && $w->name =~ /\A(?:mapwhile|grepwhile)\z/;
+                        })) {
                 $body_leave = ${ $op->parent };
+                # (a map's statements leave values; only its last one's counts)
+                $map_base = $sim->stack_depth if $op->parent->next->name ne 'unstack' && !( $CONTINUE_START && ${ $op->parent->next } == ${$CONTINUE_START} );
             }
             elsif ($name eq 'leave' && $body_leave && $$op == $body_leave) {
             }
@@ -15802,6 +15812,7 @@ class SoN::FromOptree 0.01 {
                 $sim->pop_node while $sim->stack_depth > $base;
             }
             elsif ($name eq 'nextstate') {
+                $sim->pop_node while defined $map_base && $sim->stack_depth > $map_base;
                 $stmt_count++;
                 ($stmt_ctrl, $stmt_mem, $stmt_scope) =
                     ($sim->control, $sim->memory, $sim->scope_bindings);
