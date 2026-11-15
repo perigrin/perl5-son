@@ -99,7 +99,9 @@ sub _extract_fields ($node, $id_remap) {
     # `\(@a)` -- a reference to each element, a List -- rather than `\@a`.
     if ($op eq 'Ref') {
         my %f = ( ($node->each ? (each => JSON::PP::true) : ()),
-                  ($node->fresh_each_pass ? (fresh_each_pass => JSON::PP::true) : ()) );
+                  ($node->fresh_each_pass ? (fresh_each_pass => JSON::PP::true) : ()),
+                  # One that may die names its statement (Unwind's two fields).
+                  ( defined $node->line ? ( file => $node->file, line => $node->line ) : () ) );
         return %f ? \%f : undef;
     }
     # A BITWISE OP UNDER THE `bitwise` FEATURE says which operator it is:

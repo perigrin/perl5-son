@@ -84,6 +84,43 @@ sub round_trips ($src, $name) {
     ok $r && $r->{inputs}->@* == 2 && is_memory($n, $r->{inputs}[1]), 'a reference to each element reads memory too';
 }
 
+# ONE THAT MAY DIE NAMES ITS SITE: `\$a[$i]` with $i before the start dies
+# "Modification of non-creatable array value attempted, subscript -N at FILE
+# line N.", its statement's -- the two fields an Unwind and a warn Call carry.
+# One that cannot die (a hash's element, an index a constant not before the
+# start, each element) names none.
+{
+    my $n = nodes(wire(qq{my \@a = (1, 2);\nmy \$i = -5;\n\$i++ if \@ARGV;\nmy \$r = \\\$a[\$i];\nprint "x\\n";\n}));
+    my ($r) = elem_refs($n);
+    ok $r, 'a reference to an element at an index not a constant' or last;
+    is $r->{fields}{line}, 4, 'it names its statement\'s line';
+    like $r->{fields}{file} // '', qr/\.pl\z/, 'and its file';
+}
+{
+    my $n = nodes(wire(qq{my \@a = (1, 2);\nmy \$r = \\\$a[-5];\nprint "x\\n";\n}));
+    my ($r) = elem_refs($n);
+    is $r && $r->{fields}{line}, 2, 'an index a constant before the start: its line';
+}
+for my $src (q{my %h = (k => 1); my $r = \$h{k}; print "$$r\n";},
+             q{my @a = (1, 2); my $r = \$a[1]; print "$$r\n";},
+             q{my @a = (1, 2); my @r = \(@a); print ${$r[0]}, "\n";}) {
+    my $n = nodes(wire($src));
+    my @r = grep { $_->{op} eq 'Ref' } values %$n;
+    ok @r && !grep({ defined $_->{fields}{line} } @r), "one that cannot die names no site: $src";
+}
+
+# IN AN EVAL'S BODY it stands on the body's chain, where it dies: the eval
+# catches it there, so it does not mark the eval (eval_may_die is for a die
+# the graph would drop). In a loop, at the index the loop counts.
+{
+    my $w = wire(q{my @a = (1, 2); my $i = -9; $i++ if @ARGV; eval { my $q = \$a[$i]; print "no\n"; 1 } or print "caught\n"; print "@a\n";});
+    my $n = nodes($w);
+    my ($r) = grep { $_->{op} eq 'Region' && defined $_->{fields}{eval_id} } values %$n;
+    ok $r && !$r->{fields}{eval_may_die}, 'an eval whose body takes one is not marked as one that may die unseen';
+}
+round_trips(q{my @a = (1, 2); my $i = -9; $i++ if @ARGV; eval { my $q = \$a[$i]; print "no\n"; 1 } or print "caught: ", $@ =~ /\A(Modification of non-creatable array value attempted, subscript -9) at /, "\n"; print "@a\n";}, 'its die caught by an eval');
+round_trips(q{my @a = (1, 2, 3); for my $i (0 .. 2) { my $r = \$a[$i]; $$r *= 10 } print "@a\n";}, 'at an index a loop counts');
+
 # A STORE THROUGH IT IS A STORE TO THE AGGREGATE. Before, `print "@a"` folded to
 # what @a was made with.
 round_trips(q{my @a = (1, 2); my $r = \$a[0]; $$r = 5; print "@a\n";}, 'a store through an element reference');

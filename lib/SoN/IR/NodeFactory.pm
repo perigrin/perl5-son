@@ -177,6 +177,15 @@ sub SoN::IR::NodeFactory::_negative_constant_index ($in) {
     return blessed($i) && $i->isa('SoN::IR::Node::Constant') && ( $i->value // 0 ) =~ /\A-\d+\z/;
 }
 
+# _index_not_before_start(\@inputs) -- a Ref's element is at an index that is
+# a constant not before the start (`\$a[0]`): it cannot die.
+sub SoN::IR::NodeFactory::_index_not_before_start ($in) {
+    my $e = ref $in eq 'ARRAY' ? $in->[0] : undef;
+    my $i = blessed($e) && $e->isa('SoN::IR::Node::Subscript') ? $e->inputs->[1] : undef;
+    $i = $i->inputs->[0] while blessed($i) && $i->isa('SoN::IR::Node::Coerce');
+    return blessed($i) && $i->isa('SoN::IR::Node::Constant') && ( $i->const_type // '' ) eq 'integer' && ( $i->value // '' ) =~ /\A\+?\d+\z/;
+}
+
 # $MADE_MAY_DIE: when set (a hashref), every may-die node make() returns is
 # recorded (refaddr => node), so the walk can tell whether one was dropped.
 $SoN::IR::NodeFactory::MADE_MAY_DIE = undef;
@@ -357,6 +366,15 @@ class SoN::IR::NodeFactory {
             @args{qw(file line)} = $SoN::IR::NodeFactory::SITE->@*
                 if $SoN::IR::NodeFactory::SITE && !defined $args{line};
         }
+        # A REFERENCE TO AN ELEMENT THAT MAY DIE (an array's, at an index
+        # that may be before the start), taken where it stands, names its
+        # site (Ref's).
+        if ($op_name eq 'Ref' && ref $args{inputs} eq 'ARRAY' && $args{inputs}->@* == 2
+                && SoN::IR::NodeFactory::_may_die($op_name, $args{inputs})
+                && !SoN::IR::NodeFactory::_index_not_before_start($args{inputs})) {
+            @args{qw(file line)} = $SoN::IR::NodeFactory::SITE->@[0, 1]
+                if $SoN::IR::NodeFactory::SITE && !defined $args{line};
+        }
         # A SCALAR DEREF names them too, and strict refs (PostfixDeref's).
         if ($op_name eq 'PostfixDeref' && ( $args{sigil} // '' ) eq '$') {
             $args{eval_id} //= $SoN::FromOptree::EVAL_ID
@@ -367,10 +385,13 @@ class SoN::IR::NodeFactory {
             $args{package} //= $SoN::FromOptree::CURRENT_PACKAGE // 'main';
         }
         # A division names its own eval (below), which catches its die there:
-        # only what does not (an element reference) marks the eval.
+        # only what does not (an element reference no site names) marks the
+        # eval. One that names its site stands on the body's chain, where it
+        # dies, and the eval catches it there.
         $$SoN::IR::NodeFactory::MAY_DIE = 1
             if $SoN::IR::NodeFactory::MAY_DIE && SoN::IR::NodeFactory::_may_die($op_name, $args{inputs})
-            && $op_name ne 'Divide' && $op_name ne 'Modulo';
+            && $op_name ne 'Divide' && $op_name ne 'Modulo'
+            && !( $op_name eq 'Ref' && defined $args{line} );
 
         # Phi has historical CFG-style identity in Bootstrap (never
         # deduplicated) but SoN::IR::Node::Phi takes `region` as a

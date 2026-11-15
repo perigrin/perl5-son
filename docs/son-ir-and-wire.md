@@ -150,7 +150,7 @@ serializes (§2.4). The rest are internal to the producer.
 | Length | UnaryOp | **bytes** |
 | Coerce | Value | **from_repr**, **to_repr** |
 | **Binary ops** (BinOp: left, right) | | Add, Subtract, Multiply, Divide (**eval_id**, **file**, **line**), Modulo (same three), Power, Concat, Repeat, NumEq, NumNe, NumLt, NumGt, NumLe, NumGe, NumCmp, StrEq, StrNe, StrLt, StrGt, StrLe, StrGe, StrCmp, And, Or, Xor, DefinedOr, BitAnd/BitOr/BitXor (**flavor**), LeftShift, RightShift, Range, IsaOp, Yada |
-| **Unary ops** (UnaryOp: operand) | | Not, Negate, Complement (**flavor**), Defined, UnaryPlus, Increment, Ref (**each**, **fresh_each_pass**), RefType, Length |
+| **Unary ops** (UnaryOp: operand) | | Not, Negate, Complement (**flavor**), Defined, UnaryPlus, Increment, Ref (**each**, **fresh_each_pass**, **file**, **line**), RefType, Length |
 
 ### 1.3 Control flow
 
@@ -307,7 +307,10 @@ inputs `[invocant, method-name value, args...]`.
 There are **no general spans and no columns.** What does exist:
 
 - **`file` and `line` on Unwind, on a `warn` Call (2026-11-15: the same
-  two fields, from the same statement), and on Divide/Modulo when they may die.**
+  two fields, from the same statement), on a Ref that may die (2026-11-15,
+  the same two again: `\$a[$i]` at an index that may be before the start,
+  where perl dies "Modification of non-creatable array value attempted,
+  subscript -N at FILE line N."), and on Divide/Modulo when they may die.**
   `Divide.pm`: *"ONE THAT MAY DIE (by what may be zero) names the block eval
   whose body made it, and its statement's file and line, which perl's
   message names. Part of its content."* `Unwind.pm` (`set_site`): *"THE FILE
@@ -500,12 +503,16 @@ CLASS, as observed:
 - **Call** `{dispatch_kind, name, sort_cmp?, sort_order?, sort_cmp_body?,
   sort_package?, want?, shares_args?, eval_id?, external?, memory_input?,
   class_name?, param_names?}`
-- **Ref** `{each?, fresh_each_pass?}`
+- **Ref** `{each?, fresh_each_pass?, file?, line?}`
   Inputs `[operand]`, or `[location, memory]` for a reference to an
   aggregate's element (`\$a[i]`, `\$h{k}`, `\$r->[i]`, `\(@a)`, `\($a[0],
   ...)`): the element at its index where it is taken, read at that memory
   version; pinned on control there and the memory version after it (taking
   it may make the element). A slice's references (`\(@a[0, 1])`) are refused.
+  `file` and `line` (its statement's, as an Unwind's) only on one that may
+  die: a reference to an array's element at an index not a constant not
+  before the start (`\$a[$i]`, `\$a[-5]`). Part of its content, as a
+  Divide's site is.
 - **BitAnd/BitOr/BitXor/Complement** `{flavor?}`
 - **ArrayLiteral/HashLiteral** `{sigil?, symbol?, rebinds?}`
 - **AnonSub** `{name?, captures?}`

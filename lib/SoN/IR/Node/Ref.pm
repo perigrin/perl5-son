@@ -17,11 +17,21 @@ class SoN::IR::Node::Ref :isa(SoN::IR::Node::UnaryOp) {
     # to that pass's variable. A consumer with one location per lexical refuses.
     field $fresh_each_pass :param :reader = 0;
 
+    # ONE THAT MAY DIE -- a reference to an array element at an index that
+    # may be before the start (`\$a[$i]`, `\$a[-5]`): perl dies "Modification
+    # of non-creatable array value attempted, subscript -N at FILE line N." --
+    # names its statement's file and line, the two an Unwind and a warn Call
+    # carry. Part of its content, as a Divide's: at another line it dies
+    # differently.
+    field $file :param :reader = undef;
+    field $line :param :reader = undef;
+
     method operation() { 'Ref' }
     method op_str()    { '\\' }
 
     method content_hash() {
         return join('|', 'Ref', ($each ? 'each' : ()), ($fresh_each_pass ? 'fresh' : ()),
+            ( defined $line ? ( 'site', $file // '', $line ) : () ),
             $self->_serialize_inputs());
     }
 }

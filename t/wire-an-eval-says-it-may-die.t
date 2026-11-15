@@ -25,8 +25,18 @@ is eval_regions(q{my $z = $ENV{NO_SUCH_VAR} // 0; my $r = eval { my $q = 1 / $z;
     [1], 'an unused division by a variable';
 is eval_regions(q{my $z = $ENV{NO_SUCH_VAR} // 0; my $r = eval { my $q = 7 % $z; 1 }; print defined $r ? 1 : 0;}),
     [1], 'and a modulus';
+# AN UNUSED REFERENCE TO AN ARRAY ELEMENT is in the graph: it stands where it
+# is taken, on the body's chain, naming its site, and dies there -- the eval
+# catches it as it catches a die. Nothing is dropped, so nothing is marked.
 is eval_regions(q{my @a = (1, 2); my $r = eval { my $p = \$a[-5]; 1 }; print defined $r ? 1 : 0;}),
-    [1], 'an unused reference to an array element';
+    [0], 'an unused reference to an array element stands on the chain';
+{
+    my $f = "$dir/r.pl";
+    open my $fh, '>', $f or die $!; print $fh q{my @a = (1, 2); my $r = eval { my $p = \$a[-5]; 1 }; print defined $r ? 1 : 0;}; close $fh;
+    my $data = JSON::PP->new->decode(scalar qx($^X -Ilib -MO=-q,SoN,json,not_package=SoN $f 2>/dev/null));
+    my @r = grep { $_->{op} eq 'Ref' } $data->{methods}{'main::__PROGRAM__'}{nodes}->@*;
+    ok @r == 1 && defined $r[0]{control_in} && defined $r[0]{fields}{line}, 'on the chain, naming its site';
+}
 is eval_regions(q{my %h = (a => 1); my $r = eval { my $p = \$h{b}; 1 }; print defined $r ? 1 : 0;}),
     [0], 'a reference to a hash element cannot die';
 # A literal nonzero divisor cannot die; nor can an eval with no division.
