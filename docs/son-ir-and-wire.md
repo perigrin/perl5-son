@@ -27,7 +27,9 @@ Repos:
   - `version`: always 1, and nothing checks it;
   - `source`: always null;
   - `methods`: one graph per sub;
-  - optionally `classes`, `data_section` and `phase_blocks`.
+  - optionally `classes`, `data_section` and `phase_blocks`;
+  - `dowarn`: perl's warning switches for the run, `{on, all_on, all_off}`
+    (-w or a compile-time `$^W`, -W, -X), each a boolean (2026-11-15).
 - **Each graph is a flat array of nodes in topological order.** A node's
   id is its index in that array. A node is
   `{id, op, inputs:[idx…], fields?:{…}, stamp?, control_in?, head?}`. The
@@ -304,7 +306,8 @@ inputs `[invocant, method-name value, args...]`.
 
 There are **no general spans and no columns.** What does exist:
 
-- **`file` and `line` on Unwind, and on Divide/Modulo when they may die.**
+- **`file` and `line` on Unwind, on a `warn` Call (2026-11-15: the same
+  two fields, from the same statement), and on Divide/Modulo when they may die.**
   `Divide.pm`: *"ONE THAT MAY DIE (by what may be zero) names the block eval
   whose body made it, and its statement's file and line, which perl's
   message names. Part of its content."* `Unwind.pm` (`set_site`): *"THE FILE
@@ -461,7 +464,8 @@ sub to_json ($named_graphs, $classes = undef, $data_section = undef,
   },
   "classes": { PKG: CLASS, ... },      # optional
   "data_section": "text after __DATA__",   # optional
-  "phase_blocks": [ { "phase": "BEGIN"|"END", "package": "main", ...GRAPH }, ... ]  # optional
+  "phase_blocks": [ { "phase": "BEGIN"|"END", "package": "main", ...GRAPH }, ... ],  # optional
+  "dowarn": { "on": BOOL, "all_on": BOOL, "all_off": BOOL }   # -w/$^W, -W, -X
 }
 GRAPH = { "nodes": [NODE...], "start": <idx>, "returns": [<idx>...] }
 NODE  = { "id": <idx == array position>, "op": "<Op>", "inputs": [<idx>...],

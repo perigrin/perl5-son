@@ -687,7 +687,8 @@ sub _serialize_graph ($graph) {
 # to_json(\%named_graphs) — serialize named graphs to a JSON string.
 # -----------------------------------------------------------------------
 sub to_json ($named_graphs, $classes = undef, $data_section = undef,
-             $phase_blocks = [], $modules = [], $graph_module = {}, $refused = {}) {
+             $phase_blocks = [], $modules = [], $graph_module = {}, $refused = {},
+             $dowarn = undef) {
     my %methods;
     for my $name (sort keys $named_graphs->%*) {
         $methods{$name} = _serialize_graph($named_graphs->{$name});
@@ -728,6 +729,14 @@ sub to_json ($named_graphs, $classes = undef, $data_section = undef,
     # A followed module's subs B::SoN refused, { name => "GAP: ..." }: a
     # consumer that reaches one refuses in the module's words. Absent: none.
     $data->{refused} = $refused if $refused && %$refused;
+
+    # PERL'S WARNING SWITCHES for the program, a fact of the whole run:
+    # { on => -w or $^W, all_on => -W, all_off => -X }, each a boolean. A
+    # __WARN__ handler is called for perl's own warnings, and whether perl
+    # raises any outside a `use warnings` is these. (A run-time `$^W = 1` is a
+    # store on the graph; this is the value the run starts with.)
+    $data->{dowarn} = { map { ( $_ => ( $dowarn->{$_} ? JSON::PP::true : JSON::PP::false ) ) } keys %$dowarn }
+        if $dowarn;
 
     # The program's BEGIN and END blocks, in source order, each a graph like a
     # method's. Kept out of `methods` because a method is emitted as a named

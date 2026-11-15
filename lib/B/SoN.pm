@@ -275,6 +275,13 @@ sub compile {
     }
 
     return sub {
+        # HOW PERL RUNS THE PROGRAM'S WARNINGS, read before anything here runs:
+        # -w (or $^W set at compile time), -W, -X -- PL_dowarn's G_WARN_ON,
+        # G_WARN_ALL_ON and G_WARN_ALL_OFF. A __WARN__ handler is called for
+        # perl's own warnings, and outside a `use warnings` this decides
+        # whether there are any.
+        my $dowarn = B::dowarn();
+        my %switch = ( on => $dowarn & 1, all_on => $dowarn & 2, all_off => $dowarn & 4 );
         # ...and these its modules, taken before the walk loads its own.
         local $FOLLOWED = _followed_modules();
         _recompile_preloaded($FOLLOWED);
@@ -289,7 +296,7 @@ sub compile {
             print to_json( $graphs, $classes, _data_section(),
                 _phase_blocks(),
                 [ map { { name => $_, file => $mods->{$_} } } sort keys %$mods ],
-                _graph_modules($graphs), \%REFUSED );
+                _graph_modules($graphs), \%REFUSED, \%switch );
         }
         else {
             for my $name ( sort keys $graphs->%* ) {

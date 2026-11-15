@@ -207,10 +207,12 @@ class SoN::FromOptree 0.01 {
         return undef;
     }
 
-    # _set_die_site($unwind, $op) -- the file and line perl's message names.
-    sub _set_die_site ($unwind, $op) {
+    # _set_message_site($node, $op) -- the file and line perl's message names
+    # when it does not end in a newline: a die's (an Unwind) or a warn's (its
+    # Call). Both are perl's mess(), which names the running statement.
+    sub _set_message_site ($node, $op) {
         my $cop = _cop_for($op) or return;
-        $unwind->set_site($cop->file, $cop->line);
+        $node->set_site($cop->file, $cop->line);
         return;
     }
 
@@ -2566,7 +2568,7 @@ class SoN::FromOptree 0.01 {
                 my $unwind = $factory->make_cfg('Unwind', inputs => [[$msg]]);
                 $unwind->set_control_in($sim->control);
                 $unwind->set_eval_id($EVAL_ID) if defined $EVAL_ID;
-                _set_die_site($unwind, $op);
+                _set_message_site($unwind, $op);
                 $sim->set_control($unwind);
                 $op = $op->next;
                 next;
@@ -3465,7 +3467,7 @@ class SoN::FromOptree 0.01 {
                     inputs => [$args]);
                 $unwind->set_control_in($sim->control);
                 $unwind->set_eval_id($EVAL_ID) if defined $EVAL_ID;
-                _set_die_site($unwind, $op);
+                _set_message_site($unwind, $op);
                 $sim->set_control($unwind);
                 $op = $op->next;
                 next;
@@ -4803,6 +4805,16 @@ class SoN::FromOptree 0.01 {
     # ...` came out `print ...; select(select($out))` (corpus 224). The
     # four-argument form is the op `sselect` and changes nothing.
     my %HANDLE_SELECT_BUILTIN = map { $_ => 1 } qw(select);
+
+    # A WARN IS OUTPUT, as print is: it writes STDERR or calls a __WARN__
+    # handler, and returns true. Pinned only in void, a warn inside an
+    # expression had no place on the control chain -- when it ran was not said
+    # (`my @g = (warn "a", "b")`, pvm argument-extent:3), and one whose value
+    # nothing read (`my $x = 1 + warn "q"`) vanished. Print is pinned in any
+    # context; so is this. AND ITS HANDLER IS CODE, which may store: the warn
+    # is a memory version, as a call is -- `$SIG{__WARN__} = sub { $n++ };
+    # warn "a\n"; print $n` read $n before the warn.
+    my %HANDLER_BUILTIN = map { $_ => 1 } qw(warn);
 
     # `pos $s` READS STATE ON THE VARIABLE that a /g match and `pos($s) = N`
     # write. Unpinned, three reads between matches collapsed to one and
@@ -12530,6 +12542,9 @@ class SoN::FromOptree 0.01 {
                         if $HANDLE_SELECT_BUILTIN{$name} && !$void;
 
                     $pin_on_control = 1
+                        if $HANDLER_BUILTIN{$name} && !$void;
+
+                    $pin_on_control = 1
                         if $VARIABLE_STATE_READ_BUILTIN{$name} && !$void
                         # NOT the lvalue form: `pos($s) = 0` is the store's
                         # target (OPf_MOD, 32), and pinned it became a
@@ -12603,7 +12618,7 @@ class SoN::FromOptree 0.01 {
                 # memory chains -- look like a VALUE Phi, which bound the
                 # EntryWrite and then asked to render a store as an expression.
                 if ($node_type eq 'Call'
-                    && ( $GLOBAL_STATE_BUILTIN{$name} || $HANDLE_MEMORY_BUILTIN{$name} )
+                    && ( $GLOBAL_STATE_BUILTIN{$name} || $HANDLE_MEMORY_BUILTIN{$name} || $HANDLER_BUILTIN{$name} )
                     && defined $sim->memory) {
                     push @inputs, $sim->memory;
                     $extra{memory_input} = 1;   # see Call's memory_input
@@ -12674,6 +12689,9 @@ class SoN::FromOptree 0.01 {
                 $pin_on_control = 1 if $pin_bit;
                 my $make = $pin_bit ? 'make_unique' : 'make';
                 my $node = $factory->$make($node_type, inputs => \@inputs, %extra);
+                # A WARN NAMES ITS FILE AND LINE, as a die does: perl appends
+                # " at FILE line N." to a message not ending in a newline.
+                _set_message_site($node, $op) if $node_type eq 'Call' && $name eq 'warn';
                 if ($void_effect_call || $pin_on_control) {
                     $node->set_control_in($sim->control);
                     $sim->set_control($node);
@@ -12756,7 +12774,7 @@ class SoN::FromOptree 0.01 {
                 # require -- calling POSIX->import before POSIX is loaded is a
                 # different program. Only a shared chain expresses an ordering
                 # that no data edge carries.
-                if (( $GLOBAL_STATE_BUILTIN{$name} || $HANDLE_MEMORY_BUILTIN{$name} )
+                if (( $GLOBAL_STATE_BUILTIN{$name} || $HANDLE_MEMORY_BUILTIN{$name} || $HANDLER_BUILTIN{$name} )
                     && defined $sim->memory) {
                     $sim->set_memory($node);
                 }
@@ -20548,7 +20566,7 @@ class SoN::FromOptree 0.01 {
                     inputs => [$args]);
                 $unwind->set_control_in($sim->control);
                 $unwind->set_eval_id($EVAL_ID) if defined $EVAL_ID;
-                _set_die_site($unwind, $op);
+                _set_message_site($unwind, $op);
                 $sim->set_control($unwind);
                 $op = $op->next;
                 next;
