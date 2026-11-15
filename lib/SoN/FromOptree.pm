@@ -11462,6 +11462,16 @@ class SoN::FromOptree 0.01 {
                             && $MUTATED_SLOTS->{ $target->targ }
                             && grep { $only->isa("SoN::IR::Node::$_") }
                                 qw(ArgsSource PadAccess EntryDef FieldAccess PostfixDeref);
+                        # ...OR A `my` HASH THE PROGRAM WRITES (an element
+                        # store, a delete, a reference to an element): bound
+                        # as its literal, the copy was the hash itself -- `my
+                        # %g = %h; $h{a} = 5; print $g{a}` read 5 for perl's 1.
+                        # Its pairs are read where the copy is made (the
+                        # literal below, pinned there).
+                        my $copies_written_hash = $only->isa('SoN::IR::Node::HashLiteral')
+                            && defined $only->symbol
+                            && _copies_written_pad_hash($op);
+                        $names_storage ||= $copies_written_hash;
                         if (($is_aggregate_value && !$names_storage)
                             || $is_list_builtin) {
                             # A DEREFERENCE BOUND AS A NAMED AGGREGATE IS A
@@ -11571,6 +11581,9 @@ class SoN::FromOptree 0.01 {
                         $_->isa('SoN::IR::Node::PadAccess')
                             && ($_->sigil // '') =~ /\A[\@%]\z/
                     } $rhs->@*;
+                    # (a `my` hash the program writes, copied: read here too)
+                    $copies_container ||= $rhs->@* == 1 && $rhs->[0]->isa('SoN::IR::Node::HashLiteral')
+                        && defined $rhs->[0]->symbol && _copies_written_pad_hash($op);
                     # A PACKAGE OR SHARED AGGREGATE ASSIGNED IN A LOOP BODY is
                     # made there too: its store below writes this literal, and
                     # floating, the literal was spelled above the loop with the
@@ -19282,6 +19295,17 @@ class SoN::FromOptree 0.01 {
     # its own.
     # _aassign_introduces($aassign) -> true when the list assignment's target
     # is a `my` aggregate: a padav/padhv on its LHS carries OPpLVAL_INTRO.
+    # _copies_written_pad_hash($aassign) -> its right side is one `my` hash
+    # (`... = %h`) the sub writes somewhere ($MUTATED_SLOTS: an element store,
+    # a delete, a reference to an element).
+    sub _copies_written_pad_hash ($aassign) {
+        my $rhs = $aassign->first;
+        return 0 unless $rhs && $$rhs && $rhs->can('first');
+        my @k = grep { $_->name ne 'pushmark' && !( $_->name eq 'null' && $_->targ == B::opnumber('pushmark') ) }
+            map { my @l; for (my $c = $_; $c && $$c; $c = $c->sibling) { push @l, $c } @l } ( $rhs->flags & 4 ? $rhs->first : () );
+        return @k == 1 && $k[0]->name eq 'padhv' && $k[0]->targ && $MUTATED_SLOTS && $MUTATED_SLOTS->{ $k[0]->targ } ? 1 : 0;
+    }
+
     sub _aassign_introduces ($aassign) {
         my $lhs = $aassign->last;
         return 0 unless $lhs && $$lhs && $lhs->can('first');

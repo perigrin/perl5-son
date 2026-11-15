@@ -133,6 +133,12 @@ round_trips(q{my @a = (1, 2, 3); my $r = \$a[0]; shift @a; $$r = 9; print "@a $$
 round_trips(q{my @a = (1, 2, 3); shift @a; my $r = \$a[0]; $$r = 9; print "@a $$r\n";}, 'a shift before it: the element now first');
 round_trips(q{my @a = (1, 2); for my $i (1, 2) { print "@a\n"; my $r = \$a[0]; $$r += $i }}, 'in a loop, read before it is taken');
 round_trips(q{my %h; my $r = \$h{x}; print exists $h{x} ? "yes\n" : "no\n";}, 'taking it makes the hash element');
+# A COPY OF A `my` HASH THE PROGRAM WRITES (an element store, a reference to
+# an element) is of its pairs where it is made: bound as the hash's literal,
+# `my %g = %h` was %h itself, and a later store to %h showed through %g.
+round_trips(q{my %h = (a => 1); my %g = %h; $h{a} = 5; print "$g{a} $h{a}\n";}, 'a copy of a written hash, then a store');
+round_trips(q{my %h = (a => 1); my $r = \$h{a}; my %g = %h; $$r = 5; print "$g{a} $h{a}\n";}, 'a copy of a hash an element reference is taken of');
+round_trips(q{my %h = (a => 1); my %g = %h; print "$g{a}\n";}, 'a copy of a hash nothing writes');
 round_trips(q{my @a = (1); my $r = \$a[3]; print scalar(@a), "\n";}, 'taking it makes the array element');
 round_trips(q{my @a = (1, 2, 3); my ($p, $q) = \($a[0], $a[1]); shift @a; $$q = 5; print "@a\n";}, 'references to elements named in a list');
 round_trips(q{my @a = (1, 2); my @r = \(@a); ${$r[1]} = 5; print "@a\n";}, 'a reference to each element');
