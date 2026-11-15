@@ -1599,6 +1599,16 @@ class SoN::Deparse 0.01 {
                 $bound{$id} = sprintf('%seff%d', $agg eq 'Array' ? '@' : '%', $id);
                 next;
             }
+            # A WHOLE ARRAY OR HASH READ THROUGH A REFERENCE, pinned where it
+            # stands (it may die), is an aggregate: a `$eff` held its count. A
+            # copy, as the read at that version is (keys read inside a block
+            # a `local` restores are the keys there).
+            # shortcut: `keys %$r` of an undef $r makes it a hash in perl; the
+            # copy of an undef reference dies under strict refs instead.
+            if (($n->{op} // '') eq 'PostfixDeref' && (my $sg = ($n->{fields} // {})->{sigil} // '') =~ /\A[\@%]\z/) {
+                $bound{$id} = sprintf('%seff%d', $sg, $id);
+                next;
+            }
             $bound{$id} = ( $is_call && $want ne ''
                               ? $want eq 'list'
                               : ($n->{stamp} // '') eq 'List' )
@@ -3013,6 +3023,17 @@ class SoN::Deparse 0.01 {
             my @in = ( $n->{inputs} // [] )->@*;
             next unless $list_call || @in > ( $MEM_MIN_INPUTS{$rop} // 99 );
             my $version = $nodes->{ $in[-1] } or next;
+            # A READ PINNED WHERE IT STANDS (it may die) is a memory version
+            # that changes nothing: the memory it reads is the memory after it.
+            # (`my $k = join ",", @$ids; my $n = scalar @states` reads @states
+            # at the entry still.)
+            # (Not a tied aggregate's, a `my` or package one's: its FETCH is a call.)
+            while ( ( $version->{op} // '' ) =~ /\A(?:Subscript|Exists|PostfixDeref|Count)\z/
+                    && defined $version->{control_in}
+                    && ( ( $nodes->{ ( $version->{inputs} // [] )->[0] // -1 } // {} )->{op} // '' ) !~ /\A(?:PadAccess|EntryDef)\z/ ) {
+                my $before = $nodes->{ ( $version->{inputs} // [] )->[-1] // -1 } or last;
+                $version = $before;
+            }
 
             # A JOIN'S MEMORY Phi IS NOT THE ENTRY VERSION. It has no
             # control_in either, and taken for entry, `if ($c) { $a[0] = 7 }
@@ -7302,6 +7323,12 @@ class SoN::Deparse 0.01 {
         return '' if $op =~ /\A(?:TernaryExpr|Exists|Ref|PostfixDeref)\z/
             && !exists $bound{ $n->{id} }
             && !grep { $_->{op} !~ /\A(?:Loop|Region)\z/ } $self->_consumers_of($n->{id});
+        # A READ PINNED WHERE IT STANDS (it may die) that nothing reads as a
+        # value: what follows takes it as its control or its memory only.
+        # shortcut: its die is not spelled -- a read nothing uses is dropped,
+        # as an unpinned one always was here.
+        return '' if $op =~ /\A(?:Subscript|Exists|PostfixDeref|Count)\z/
+            && !exists $bound{ $n->{id} } && !$self->_read_as_value_not_control($n->{id});
 
         die "GAP: no rule for control node `$op`\n";
     }
@@ -8770,7 +8797,13 @@ class SoN::Deparse 0.01 {
                 grep { ( $_->{op} // '' )
                        =~ /\A(?:MemStart|EntryWrite|CellWrite|Delete|ElemRestore|Assign)\z/
                        || ( ( $_->{op} // '' ) eq 'Phi'
-                            && ( $_->{fields} // {} )->{memory} ) } @all;
+                            && ( $_->{fields} // {} )->{memory} )
+                       # A READ PINNED WHERE IT STANDS (one through a
+                       # reference may die; a tied one is a call) is the
+                       # memory version after it, as a call is: a value and
+                       # a memory point both.
+                       || ( ( $_->{op} // '' ) =~ /\A(?:Subscript|Exists|PostfixDeref|Count)\z/
+                            && defined $_->{control_in} ) } @all;
         my $changed = 1;
         while ($changed) {
             $changed = 0;
@@ -8792,6 +8825,30 @@ class SoN::Deparse 0.01 {
         }
         $mem_cache{ $_->{id} } = $m{ $_->{id} } // 0 for @all;
         return $mem_cache{$id} //= 0;
+    }
+
+    # _read_as_value_not_control($id) -- _read_as_value, a Loop, Region, If
+    # or Proj taking the node as its control not counted.
+    method _read_as_value_not_control ($id) {
+        return scalar grep {
+            my $c = $_;
+            ( $c->{op} // '' ) !~ /\A(?:Loop|Region|If|Proj)\z/
+                && $self->_reads_at_value($c, $id)
+        } $self->_consumers_of($id);
+    }
+    method _reads_at_value ($c, $id) {
+        my @in = ($c->{inputs} // [])->@*;
+        my $op = $c->{op} // '';
+        for my $i (grep { ($in[$_] // -1) == $id } 0 .. $#in) {
+            return 1 if $op eq 'Phi' && $self->_read_as_value($c->{id});
+            next if $op eq 'Phi';
+            next if $op eq 'Call' && $i == $#in && @in > 1 && (($c->{fields} // {})->{memory_input});
+            return 1 if $op eq 'Call';
+            my $min = $MEM_MIN_INPUTS{$op};
+            next if defined $min && $i >= $min;
+            return 1;
+        }
+        return 0;
     }
 
     # Is this node read as a VALUE anywhere -- at an input position that

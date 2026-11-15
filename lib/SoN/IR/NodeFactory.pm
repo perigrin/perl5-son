@@ -518,6 +518,16 @@ class SoN::IR::NodeFactory {
         # (perl 1, emitted 2).
         if (exists $cache{$hash}) {
             my $hit = $cache{$hash};
+            # A READ PINNED WHERE IT STANDS ELSEWHERE -- one through a
+            # reference, in the other arm of an if, at the same memory -- is
+            # not this one: made there, it is not made here (`$$r` read in
+            # two arms spelled the second as the first's, out of its scope).
+            if ( $SoN::IR::NodeFactory::ON_VALUE && defined $hit->control_in
+                 && $SoN::FromOptree::PINNED_MAY_DIE{ Scalar::Util::refaddr($hit) } ) {
+                my $node = $self->make_unique($op_name, %args);
+                $SoN::IR::NodeFactory::ON_VALUE->($node);
+                return $node;
+            }
             return $hit unless $op_name eq 'PadAccess'
                 && defined $args{targ} && ($hit->targ // '') ne $args{targ};
             return $self->make_unique($op_name, %args);

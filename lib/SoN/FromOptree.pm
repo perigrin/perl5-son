@@ -680,6 +680,11 @@ class SoN::FromOptree 0.01 {
     # How many reads _pin_tied_read has pinned: an arm that pinned one gives
     # its short-circuit a Phi for a value (its read is made once, in the arm).
     our $PINS_MADE = 0;
+    # $PIN_OP: the op whose step made the node _pin_tied_read is given.
+    our $PIN_OP;
+    # %PINNED_MAY_DIE: the reads pinned only because they may die (by
+    # refaddr) -- memory versions that change nothing, unlike a tied FETCH.
+    our %PINNED_MAY_DIE;
     sub _tied_aggregates ($cv, $root) {
         my %t;
         return \%t unless $root && $$root;
@@ -719,8 +724,11 @@ class SoN::FromOptree 0.01 {
         return if defined $node->control_in;
         # A READ THROUGH A REFERENCE may die (no HASH or ARRAY reference there),
         # as may a scalar deref: made where it stands, as a may-die divide is.
-        return unless ( grep { _names_tied($_) } grep { blessed($_) } $node->inputs->@* )
-            || ( $IN_EVAL_BODY && $node->operation eq 'PostfixDeref' && ( $node->sigil // '' ) eq '$' );   # (in an eval its die is caught mid-way: there it stands)
+        my $tied = grep { _names_tied($_) } grep { blessed($_) } $node->inputs->@*;
+        return unless $tied
+            || ( $IN_EVAL_BODY && $node->operation eq 'PostfixDeref' && ( $node->sigil // '' ) eq '$' )   # (in an eval its die is caught mid-way: there it stands)
+            || _may_die_through_ref($node);
+        $PINNED_MAY_DIE{ refaddr $node } = 1 unless $tied;
         $node->set_control_in($sim->control);
         $sim->set_control($node);
         $sim->set_memory($node) if defined $sim->memory;
@@ -748,6 +756,71 @@ class SoN::FromOptree 0.01 {
         # shortcut: a foreach over an undef element does not make it (perl's does); it iterates nothing either way.
         return 0 if $use && $use->name =~ /\A(?:enteriter|iter|leaveloop)\z/;
         return $rv->flags & 32;                                        # push @{...}, keys %{...}
+    }
+    # _may_die_through_ref($node) -> true for a READ THROUGH A REFERENCE that
+    # may die where it stands -- no HASH or ARRAY reference there (perlref):
+    # an element, an exists, a whole hash or array (`keys %$h`, `@$r`) of what
+    # a scalar holds. It is versioned by memory, so it stands after the store
+    # or call before it and before the one after: a consumer need not guess
+    # whether a store between moved what the reference points at.
+    # Not a read through what is never other than its kind: a `my` aggregate,
+    # a fresh [...] or {...}, @_ (_through_ref_container); nor a scalar deref
+    # of a reference just made (`${ \ $a[i] }`, a foreach alias's read).
+    sub _may_die_through_ref ($node) {
+        my $op = $node->operation;
+        return 0 unless $op =~ /\A(?:Subscript|Exists|PostfixDeref)\z/;
+        # ONLY WHERE THE PROGRAM READS: the op stepped is the deref, the
+        # element or the exists. A foreach's or a map's own reads of its list
+        # (made stepping enteriter, mapstart) are its iteration -- the list
+        # it walks live, each element aliased -- not a read standing here.
+        return 0 unless $PIN_OP && _op_derefs($PIN_OP);
+        # (A READ names the memory it reads; one with none is a location -- the
+        # element a `\$a[i]` refers to, a foreach alias's -- not a read)
+        return 0 unless $node->inputs->@* > ( $op eq 'PostfixDeref' ? 1 : 2 );
+        my $c = $node->inputs->[0];
+        return 0 unless _through_ref_container($c);
+        return 1 unless $op eq 'PostfixDeref' && ( $node->sigil // '' ) eq '$';
+        $c = $c->inputs->[1] if $c->operation eq 'TernaryExpr';   # (the alias's guard: c ? \$a[i] : undef)
+        return !( blessed($c) && $c->operation eq 'Ref' );
+    }
+    # _op_derefs($op) -> true for an op that reads through a reference by the
+    # optree: an rv2av, rv2hv or rv2sv of what is not a glob, and an element,
+    # exists or last index of one (`$r->{k}` is helem over rv2hv; `$h{k}` of
+    # a `my %h` or a field is helem over padhv, which cannot die).
+    sub _op_derefs ($op) {
+        my $name = $op->name;
+        my $kid = ( $op->flags & B::OPf_KIDS() ) ? $op->first : undef;
+        return 0 unless $kid && $$kid;
+        $kid = $kid->first while $kid->name eq 'null' && ( $kid->flags & B::OPf_KIDS() ) && ${ $kid->first };
+        return $kid->name ne 'gv' if $name =~ /\A(?:rv2av|rv2hv|rv2sv)\z/;
+        return _op_derefs($kid) if $name eq 'exists' || $name eq 'av2arylen';
+        return $kid->name =~ /\A(?:rv2av|rv2hv)\z/ && _op_derefs($kid) if $name =~ /\A(?:aelem|helem)\z/;
+        return 0;
+    }
+    # _op_pins_a_read($op) -> true for an op whose step makes a read through a
+    # reference that _may_die_through_ref pins: an element or exists of a
+    # deref, or a scalar deref, read (not an lvalue -- a call's argument, a
+    # store's target); a whole deref read (_op_reads_through_ref) that is no
+    # element op's container.
+    sub _op_pins_a_read ($op) {
+        my $name = $op->name;
+        return 0 unless $name =~ /\A(?:aelem|helem|exists|rv2av|rv2hv|rv2sv)\z/ && _op_derefs($op);
+        if ($name =~ /\A(?:rv2av|rv2hv)\z/) {
+            my $p = eval { $op->parent };
+            return 0 if $p && $$p && $p->name =~ /\A(?:aelem|helem|exists|delete)\z/;
+            return _op_reads_through_ref($op);
+        }
+        return !( $op->flags & B::OPf_MOD() );
+    }
+    # _op_reads_through_ref($op) -> true for an rv2av or rv2hv of what is not a glob
+    # (`@$r`, `%{ $h->{k} }`) that READS: not marked for a write, or marked
+    # only by keys or values (which reset the iterator, and read). Not each:
+    # its hash is the one it walks, pass after pass, no read of it standing.
+    sub _op_reads_through_ref ($op) {
+        return 0 unless $op->name =~ /\A(?:rv2av|rv2hv)\z/ && ( $op->flags & B::OPf_KIDS() ) && ${ $op->first } && $op->first->name ne 'gv';
+        return 1 unless $op->flags & B::OPf_MOD();
+        my $p = eval { $op->parent };
+        return $p && $$p && $p->name =~ /\A(?:keys|values)\z/ ? 1 : 0;
     }
     sub _through_ref_container ($c) {
         return 0 unless blessed($c) && $c->can('operation');
@@ -5536,7 +5609,7 @@ class SoN::FromOptree 0.01 {
         # and pinned there the read forked the chain -- "a control node with 2
         # successors". An arm on its own Proj -- if, ternary, &&, ||, // that
         # pins -- sets $ARM_PINS.)
-        local $SoN::IR::NodeFactory::ON_VALUE = !( $op->flags & B::OPf_MOD() ) && ( ( $ctx->{mode} // '' ) ne 'branch' || $ARM_PINS ) ? sub ($n) { _pin_tied_read($sim, $n) } : undef;
+        local $SoN::IR::NodeFactory::ON_VALUE = ( !( $op->flags & B::OPf_MOD() ) || _op_reads_through_ref($op) ) && ( ( $ctx->{mode} // '' ) ne 'branch' || $ARM_PINS ) ? sub ($n) { local $PIN_OP = $op; _pin_tied_read($sim, $n) } : undef;
         my $name = $op->name;
         my $mode = $ctx->{mode};
 
@@ -17914,6 +17987,9 @@ class SoN::FromOptree 0.01 {
             return 1 if %TIED_AGG && ( $name =~ /\A(?:padav|padhv|aelemfast_lex)\z/ && $TIED_AGG{ $op->targ }
                                   || $name =~ /\A(?:multideref|rv2av|rv2hv)\z/ );
             return 1 if $name eq 'aassign' && ( %TIED_AGG || $REFERENCED_SLOTS && %$REFERENCED_SLOTS );
+            # SO DOES A READ THROUGH A REFERENCE (`exists $v->{a}`, `$$r`): it may
+            # die, so it is pinned where it stands (_may_die_through_ref).
+            return 1 if _op_pins_a_read($op);
         }
         return 0;
     }
@@ -19501,6 +19577,10 @@ class SoN::FromOptree 0.01 {
                     # the same wherever it is spelled. The store's own value
                     # keeps the constant rule: its key may change it.
                     my $mem = $asim->memory;
+                    # (A READ PINNED WHERE IT STANDS -- through a reference, it may
+                    # die -- is the memory after it and changes nothing: the
+                    # arm's last memory is the one it read.)
+                    $mem = $mem->inputs->[-1] while $mem && $PINNED_MAY_DIE{ refaddr $mem };
                     # One reading only the arm's LAST memory (a read through an
                     # autovivifying `$u->[0]{k}`) reads the same at the merge.
                     # Not in the caller's context (WANT 0), which spells no merge.
@@ -19539,6 +19619,7 @@ class SoN::FromOptree 0.01 {
                     my ($val, $asim, $stores) = @$arm;
                     next unless $alloc_value && $stores;
                     my $st  = $asim->memory;
+                    $st = $st->inputs->[-1] while $st && $PINNED_MAY_DIE{ refaddr $st };   # (see above)
                     my $tgt = $st && $st->isa('SoN::IR::Node::Assign') && $st->inputs->[0];
                     # A CONSTANT A LATER STATEMENT YIELDS (`{ $h{$k} = 3; 2 }`)
                     # is not the store's value and reads nothing: it merges as
