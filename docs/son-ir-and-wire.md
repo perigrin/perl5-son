@@ -501,6 +501,11 @@ CLASS, as observed:
   sort_package?, want?, shares_args?, eval_id?, external?, memory_input?,
   class_name?, param_names?}`
 - **Ref** `{each?, fresh_each_pass?}`
+  Inputs `[operand]`, or `[location, memory]` for a reference to an
+  aggregate's element (`\$a[i]`, `\$h{k}`, `\$r->[i]`, `\(@a)`, `\($a[0],
+  ...)`): the element at its index where it is taken, read at that memory
+  version; pinned on control there and the memory version after it (taking
+  it may make the element). A slice's references (`\(@a[0, 1])`) are refused.
 - **BitAnd/BitOr/BitXor/Complement** `{flavor?}`
 - **ArrayLiteral/HashLiteral** `{sigil?, symbol?, rebinds?}`
 - **AnonSub** `{name?, captures?}`

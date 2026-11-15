@@ -729,7 +729,11 @@ class SoN::FromOptree 0.01 {
         my $tied = grep { _names_tied($_) } grep { blessed($_) } $node->inputs->@*;
         return unless $tied
             || ( $IN_EVAL_BODY && $node->operation eq 'PostfixDeref' && ( $node->sigil // '' ) eq '$' )   # (in an eval its die is caught mid-way: there it stands)
-            || _may_die_through_ref($node);
+            || _may_die_through_ref($node)
+            # A REFERENCE TO AN ELEMENT is to the one at its index where it is
+            # taken (_op_takes_an_element): it stands there, the memory version
+            # after it -- one that changes no value, as a pinned read is.
+            || ( $PIN_OP && _op_takes_an_element($PIN_OP) && _takes_an_element($node) );
         $PINNED_MAY_DIE{ refaddr $node } = 1 unless $tied;
         $node->set_control_in($sim->control);
         $sim->set_control($node);
@@ -826,6 +830,35 @@ class SoN::FromOptree 0.01 {
         return 1 unless $op->flags & B::OPf_MOD();
         my $p = eval { $op->parent };
         return $p && $$p && $p->name =~ /\A(?:keys|values)\z/ ? 1 : 0;
+    }
+    # _op_takes_an_element($op) -> true for an op that takes a reference to
+    # an aggregate's ELEMENT: `\$a[i]`, `\$h{k}`, `\$r->[i]` (srefgen over an
+    # aelem or helem), `\(@a)` (refgen over one parenthesised array or hash).
+    # Perl's array holds pointers to separate scalars: which one is at index i
+    # is the array's layout, which a shift, push, splice or `$#a =` changes.
+    # The reference is to the one there NOW, so it reads the aggregate where
+    # it is taken -- and taking it may make the element (`\$h{new}`).
+    sub _op_takes_an_element ($op) {
+        my $name = $op->name;
+        return 0 unless $name eq 'srefgen' || $name eq 'refgen';
+        return 0 unless ( $op->flags & B::OPf_KIDS() ) && ${ $op->first };
+        my $k = $op->first;
+        $k = $k->first while $$k && $k->name eq 'null' && ( $k->flags & B::OPf_KIDS() ) && ${ $k->first };
+        return $$k && $k->name =~ /\A(?:aelem|helem)\z/ ? 1 : 0 if $name eq 'srefgen';
+        my @kids = grep { $_->name !~ /\A(?:pushmark|padrange)\z/ && !( $_->name eq 'null' && $_->targ == B::opnumber('pushmark') ) }
+            map { my @k; for (my $c = $_; $$c; $c = $c->sibling) { push @k, $c } @k } $k;
+        return 1 if @kids == 1 && $kids[0]->name =~ /\Apad[ah]v\z/ && ( $kids[0]->flags & 8 );   # OPf_PARENS
+        # (`\($a[0], $a[1])`: a reference to each element named)
+        return ( grep { my $e = $_; $e = $e->first while $$e && $e->name eq 'null' && ( $e->flags & B::OPf_KIDS() ) && ${ $e->first }; $$e && $e->name =~ /\A(?:aelem|helem)\z/ } @kids ) ? 1 : 0;
+    }
+    # _takes_an_element($node) -> true for a Ref that takes an element (a
+    # location Subscript, or each element: _op_takes_an_element) at the
+    # memory version it reads: its last input.
+    sub _takes_an_element ($node) {
+        return 0 unless $node->operation eq 'Ref' && $node->inputs->@* == 2;
+        my $x = $node->inputs->[0];
+        return 1 if $node->can('each') && $node->each;
+        return blessed($x) && $x->operation eq 'Subscript' && $x->inputs->@* == 2 ? 1 : 0;
     }
     sub _through_ref_container ($c) {
         return 0 unless blessed($c) && $c->can('operation');
@@ -1021,6 +1054,16 @@ class SoN::FromOptree 0.01 {
                         }
                         elsif ($u->name =~ /\A(?:null|pushmark)\z/) {
                             push @under, $u->first if $u->flags & 4;   # OPf_KIDS
+                        }
+                        # A REFERENCE TO AN ELEMENT OF IT lets a store through
+                        # it change it, as an element store does -- a mutation,
+                        # not 'ref': a whole assign gives new elements, which
+                        # the reference does not see, as in perl.
+                        elsif ($u->name =~ /\A(?:aelem|helem)\z/ && ($u->flags & 4)) {
+                            my $agg = $u->first;
+                            $agg = $agg->first while $$agg && $agg->name eq 'null' && ($agg->flags & 4) && ${ $agg->first };
+                            $slot{ $agg->targ } ||= 1
+                                if $$agg && $agg->name =~ /\A(?:padav|padhv)\z/ && $agg->targ;
                         }
                         push @under, $u->sibling if ${ $u->sibling };
                     }
@@ -5624,7 +5667,7 @@ class SoN::FromOptree 0.01 {
         # and pinned there the read forked the chain -- "a control node with 2
         # successors". An arm on its own Proj -- if, ternary, &&, ||, // that
         # pins -- sets $ARM_PINS.)
-        local $SoN::IR::NodeFactory::ON_VALUE = ( !( $op->flags & B::OPf_MOD() ) || _op_reads_through_ref($op) ) && ( ( $ctx->{mode} // '' ) ne 'branch' || $ARM_PINS ) ? sub ($n) { local $PIN_OP = $op; _pin_tied_read($sim, $n) } : undef;
+        local $SoN::IR::NodeFactory::ON_VALUE = ( !( $op->flags & B::OPf_MOD() ) || _op_reads_through_ref($op) || _op_takes_an_element($op) ) && ( ( $ctx->{mode} // '' ) ne 'branch' || $ARM_PINS ) ? sub ($n) { local $PIN_OP = $op; _pin_tied_read($sim, $n) } : undef;
         my $name = $op->name;
         my $mode = $ctx->{mode};
 
@@ -6586,6 +6629,19 @@ class SoN::FromOptree 0.01 {
             # literal it was built from -- the rule a push or shift triggers.
             $ctx->{mutated_aggregate}{ $_->targ } = 1
                 for grep { $_->name eq 'padav' && $_->targ } @kids;
+            # A SLICE'S REFERENCES ARE ONE PER ELEMENT, and the graph has no
+            # node for that: a Ref over the Slice is one reference, so `my @r =
+            # \(@a[0, 1])` held one, and a store through it went unseen.
+            die "GAP: a reference to each element of a slice is not yet lowered\n"
+                if grep { $_->name =~ /\A(?:aslice|hslice|kvaslice|kvhslice)\z/ } @kids;
+            # SO MAY ONE AN ELEMENT OF IT IS REFERENCED: `\($a[0], $a[1])`.
+            for my $e (@kids) {
+                $e = $e->first while $$e && $e->name eq 'null' && ( $e->flags & 4 ) && ${ $e->first };
+                next unless $$e && $e->name eq 'aelem';
+                my $agg = $e->first;
+                $agg = $agg->first while $$agg && $agg->name eq 'null' && ( $agg->flags & 4 ) && ${ $agg->first };
+                $ctx->{mutated_aggregate}{ $agg->targ } = 1 if $$agg && $agg->name eq 'padav' && $agg->targ;
+            }
             # A whole assign lowered after this point is refused (see the
             # aassign literal path): the reference now exists to see it.
             $REFERENCED_SLOTS->{ $_->targ } = 1
@@ -6601,12 +6657,19 @@ class SoN::FromOptree 0.01 {
             if (@items == 1 && @kids == 1
                     && ($kids[0]->name eq 'entersub'
                         || $kids[0]->name =~ /\Apad[ah]v\z/ && ($kids[0]->flags & 8))) {
-                $sim->push_node($factory->make('Ref', inputs => [$items[0]],
+                # (EACH ELEMENT is the one there now, as `\$a[i]`'s is: read at
+                # the memory version where it is taken -- _op_takes_an_element)
+                $sim->push_node($factory->make('Ref', inputs => [$items[0],
+                        ( _op_takes_an_element($op) && defined $sim->memory ? ($sim->memory) : () )],
                     each => 1, stamp => SoN::IR::Stamp->new(type =>
                         ($op->flags & B::OPf_WANT) == B::OPf_WANT_LIST ? 'List' : 'Ref')));
             }
             else {
-                $sim->push_node($factory->make('Ref', inputs => [$_]))
+                # (an element named among them is the one there now, as
+                # `\$a[i]`'s is: read at the memory where it is taken)
+                $sim->push_node($factory->make('Ref', inputs => [$_,
+                        ( _op_takes_an_element($op) && defined $sim->memory
+                          && $_->isa('SoN::IR::Node::Subscript') && $_->inputs->@* == 2 ? ($sim->memory) : () )]))
                     for @items;
             }
             return ($op->next, 'handled');
@@ -6666,6 +6729,28 @@ class SoN::FromOptree 0.01 {
             }
             $REFERENCED_SLOTS->{ $kid->targ } = 1
                 if $$kid && $kid->name =~ /\Apad[ah]v\z/ && $kid->targ;
+
+            # `\$a[i]` IS THE ELEMENT AT INDEX i NOW (_op_takes_an_element):
+            # the aggregate's layout -- which scalar sits at which index -- is
+            # in memory, so the reference reads it there, as an element read
+            # does, and stands where it is taken (_pin_tied_read). Without the
+            # memory, `my $r = \$a[0]; shift @a` and `shift @a; my $r =
+            # \$a[0]` were one graph.
+            #
+            # AND A STORE THROUGH IT IS A STORE TO THE AGGREGATE: a later list
+            # read of a `my` array observes memory rather than flattening the
+            # literal it was made with (`my $r = \$a[0]; $$r = 5; print "@a"`
+            # printed `1 2` for `5 2`) -- `\@a`'s rule above. (A hash's reads
+            # already observe memory.)
+            if (_op_takes_an_element($op) && $sim->stack_depth > 0 && defined $sim->memory) {
+                my $agg = $kid->first;
+                $agg = $agg->first while $$agg && $agg->name eq 'null' && ( $agg->flags & 4 ) && ${ $agg->first };
+                $ctx->{mutated_aggregate}{ $agg->targ } = 1
+                    if $$agg && $agg->name eq 'padav' && $agg->targ;
+                my $loc = $sim->pop_node;
+                $sim->push_node($factory->make('Ref', inputs => [ $loc, $sim->memory ]));
+                return ($op->next, 'handled');
+            }
         }
 
         # rv2gv MEANS "THE GLOB ITSELF IS THE VALUE HERE", and that is the one
@@ -18012,6 +18097,8 @@ class SoN::FromOptree 0.01 {
             # SO DOES A READ THROUGH A REFERENCE (`exists $v->{a}`, `$$r`): it may
             # die, so it is pinned where it stands (_may_die_through_ref).
             return 1 if _op_pins_a_read($op);
+            # AND A REFERENCE TO AN ELEMENT: it stands where it is taken.
+            return 1 if _op_takes_an_element($op);
         }
         return 0;
     }

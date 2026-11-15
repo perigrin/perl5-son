@@ -46,6 +46,7 @@
 - [T2 slices 6-21: objects, run-time MOP, class, closures, die, eval](t2-runtime-mop.md) — stashes, @ISA, run-time lookup; die as a flag checked after calls; an eval end is a memory version
 - [The shape of T1 that T2 needs](t1-shape-from-t2.md) — perigrin: a T1 shortage T2 finds is fixed in B::SoN; the ledger
 - [Wrong answers still in the probe sweep](wrong-answers-2026-11-08.md) — goal item 8: each WRONG probe, T2 or Context, its cause; fixed today: k1, push onto an element, read through undef
+- [A reference to an element reads memory](a-reference-to-an-element-reads-memory.md) — `\$a[i]` is Ref [location, memory], pinned (perigrin); a shift before/after differ; a store through it marks the `my` array mutated; slice refs refused
 - [A pinned read changes no memory](a-pinned-read-changes-no-memory.md) — may-die reads through references pinned (perigrin); every "which store is this memory" walk steps through them; the op stepped says whether the program reads
 - [A scratch copy needs its full suite](a-scratch-copy-needs-its-full-suite.md) — ported and pushed on the touched tests only; 19 deparse tests broke; run all of t/ on the copy first
 - [CPS for the call model](design-cps-call-model.md) — perigrin: T2 runtime calls explicitly, the compiler's own ultimately; die/eval as an escape continuation; a cycle still needs an in-progress mark

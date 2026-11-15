@@ -189,6 +189,8 @@ class SoN::Deparse 0.01 {
         Subscript    => 2,   # [container, index, memory]
         Count        => 1,   # [aggregate, memory]
         PostfixDeref => 1,   # [container, memory]
+        # A reference to an element is to the one there where it is taken.
+        Ref          => 1,   # [location, memory]
         EntryDef     => 0,   # [memory] -- ordering only
         # A pad slot that is address-taken lives in memory, so its READ
         # carries a memory version too -- measured, `my $x=1; my $r=\$x`
@@ -3028,7 +3030,7 @@ class SoN::Deparse 0.01 {
             # (`my $k = join ",", @$ids; my $n = scalar @states` reads @states
             # at the entry still.)
             # (Not a tied aggregate's, a `my` or package one's: its FETCH is a call.)
-            while ( ( $version->{op} // '' ) =~ /\A(?:Subscript|Exists|PostfixDeref|Count)\z/
+            while ( ( $version->{op} // '' ) =~ /\A(?:Subscript|Exists|PostfixDeref|Count|Ref)\z/
                     && defined $version->{control_in}
                     && ( ( $nodes->{ ( $version->{inputs} // [] )->[0] // -1 } // {} )->{op} // '' ) !~ /\A(?:PadAccess|EntryDef)\z/ ) {
                 my $before = $nodes->{ ( $version->{inputs} // [] )->[-1] // -1 } or last;
@@ -7320,6 +7322,12 @@ class SoN::Deparse 0.01 {
         # iterator aliased by reference whose body never reads it leaves its
         # reference and the element's existence unread. A loop or region that
         # follows it holds it as its control input, which is not a read.
+        # A REFERENCE TO AN ELEMENT taken where it stands (it reads memory)
+        # makes the element if it is not there -- `\$h{x};` does, in perl --
+        # so it is kept, a statement of its own.
+        my $takes_element = $op eq 'Ref' && ( $n->{inputs} // [] )->@* == 2;
+        return sprintf("%s;\n", $self->_expr($n->{id}))
+            if $takes_element && !exists $bound{ $n->{id} } && !$self->_read_as_value_not_control($n->{id});
         return '' if $op =~ /\A(?:TernaryExpr|Exists|Ref|PostfixDeref)\z/
             && !exists $bound{ $n->{id} }
             && !grep { $_->{op} !~ /\A(?:Loop|Region)\z/ } $self->_consumers_of($n->{id});
@@ -7327,7 +7335,7 @@ class SoN::Deparse 0.01 {
         # value: what follows takes it as its control or its memory only.
         # shortcut: its die is not spelled -- a read nothing uses is dropped,
         # as an unpinned one always was here.
-        return '' if $op =~ /\A(?:Subscript|Exists|PostfixDeref|Count)\z/
+        return '' if $op =~ /\A(?:Subscript|Exists|PostfixDeref|Count|Ref)\z/
             && !exists $bound{ $n->{id} } && !$self->_read_as_value_not_control($n->{id});
 
         die "GAP: no rule for control node `$op`\n";
@@ -8327,6 +8335,9 @@ class SoN::Deparse 0.01 {
             # `\EXPR` -- a unary whose op_str is already the backslash.
             # Parenthesised because `\$x . "y"` takes a reference to the
             # CONCATENATION, a different value.
+            # (A REFERENCE TO AN ELEMENT reads the memory where it is taken:
+            # spelled where it stands, the element is the one there.)
+            pop @in if @in == 2;
             die "GAP: a Ref with " . scalar(@in) . " inputs is not yet"
               . " rendered\n" unless @in == 1;
 
@@ -8802,7 +8813,7 @@ class SoN::Deparse 0.01 {
                        # reference may die; a tied one is a call) is the
                        # memory version after it, as a call is: a value and
                        # a memory point both.
-                       || ( ( $_->{op} // '' ) =~ /\A(?:Subscript|Exists|PostfixDeref|Count)\z/
+                       || ( ( $_->{op} // '' ) =~ /\A(?:Subscript|Exists|PostfixDeref|Count|Ref)\z/
                             && defined $_->{control_in} ) } @all;
         my $changed = 1;
         while ($changed) {

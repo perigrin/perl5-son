@@ -4,6 +4,7 @@
 use v5.42.0;
 use Test2::V0;
 use File::Temp qw(tempdir);
+use JSON::PP;
 
 my $dir = tempdir(CLEANUP => 1);
 
@@ -19,7 +20,6 @@ sub son_json ($src) {
 # and the program printed "x" where perl dies (an older wrong answer).
 for my $src (
     q{my $z = 0; my $q = 1 / $z; print "x\n";},
-    q{my @a = (1, 2); my $p = \$a[-5]; print "x\n";},
     q{my $z = $ENV{NOPE} // 0; my $q = 7 % $z; print "x\n";},
 ) {
     like son_json($src), qr/GAP: .*may die.*never used|GAP: .*never used.*may die/, "refused: $src";
@@ -33,6 +33,18 @@ for my $src (
     q{my @a = (1, 2); my $p = \$a[-1]; print $$p, "\n";},
 ) {
     unlike son_json($src), qr/GAP: /, "not refused: $src";
+}
+
+# A REFERENCE TO AN ELEMENT IS NO DEAD VALUE: it stands where it is taken, on
+# the control chain (the element at its index then), so a consumer makes it
+# there -- and dies there, before the start, as perl does.
+{
+    my $src = q{my @a = (1, 2); my $p = \$a[-5]; print "x\n";};
+    my $out = son_json($src);
+    unlike $out, qr/GAP: /, "not refused: $src";
+    my $w = eval { JSON::PP->new->decode($out =~ s/\A[^{]*//r) };
+    my @r = grep { $_->{op} eq 'Ref' } ( $w->{methods}{'main::__PROGRAM__'}{nodes} // [] )->@*;
+    ok @r == 1 && defined $r[0]{control_in}, 'the reference is on the control chain';
 }
 
 done_testing;
