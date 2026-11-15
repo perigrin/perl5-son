@@ -50,3 +50,10 @@ until proven otherwise. All three above were found that way, not by review.
 Related: [[a-sweeps-absence-is-not-evidence]],
 [[truncated-output-manufactures-facts]],
 [[clean-counts-cannot-measure-progress]]
+
+- 2026-11-15: once chalk compiled its own implementation classes (Chalk::Impl,
+  for %SIG/%INC) by running B::SoN at compile time, the census stage -- the one
+  stage of verify-r.sh that did not set PERL5_SON_LIB -- turned seven
+  ROUNDTRIPs into "GAP: Chalk::Impl::SIG cannot be compiled in". ROUNDTRIP read
+  407, which looked like a regression. Every stage of a verify sets the same
+  env; a new compile-time dependency on the producer is one more reason.
