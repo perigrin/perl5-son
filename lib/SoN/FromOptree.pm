@@ -10832,9 +10832,14 @@ class SoN::FromOptree 0.01 {
                     # the operands.
                     $pkg_target = $stacked_dest;
                 }
-                # (an APPENDED element is kept: the append branch below stores it)
+                # (an APPENDED element is kept: the append branch below stores
+                # it -- and so is a scalar deref, `$$r .= "x"`, the same
+                # location shape: the store goes through the reference)
                 $elem_dest = $pkg_target
-                    if ($op->private & 0x40) && $pkg_target && $pkg_target->isa('SoN::IR::Node::Subscript');
+                    if ($op->private & 0x40) && $pkg_target
+                    && ( $pkg_target->isa('SoN::IR::Node::Subscript')
+                         || $pkg_target->isa('SoN::IR::Node::PostfixDeref') && ( $pkg_target->sigil // '' ) eq '$'
+                            && $pkg_target->inputs->@* == 1 );
                 $pkg_target = undef
                     unless $pkg_target
                         && $pkg_target->isa('SoN::IR::Node::EntryDef');
@@ -10849,9 +10854,16 @@ class SoN::FromOptree 0.01 {
             if ($elem_dest) {
                 my $dest = $elem_dest;
                 my @din = $dest->inputs->@*;
-                my $old = $factory->make('Subscript',
-                    inputs => [ @din[0, 1], ( defined $sim->memory ? ($sim->memory) : () ) ],
-                    kind   => $dest->kind);
+                # (through a scalar deref, its value read at this memory, as
+                # `$$r .= $x`'s concat reads it)
+                my $old = $dest->isa('SoN::IR::Node::PostfixDeref')
+                    ? $factory->make('PostfixDeref',
+                        inputs => [ $din[0], ( defined $sim->memory ? ($sim->memory) : () ) ],
+                        sigil  => '$',
+                        stamp  => SoN::IR::Stamp->new(type => 'Scalar'))
+                    : $factory->make('Subscript',
+                        inputs => [ @din[0, 1], ( defined $sim->memory ? ($sim->memory) : () ) ],
+                        kind   => $dest->kind);
                 # (`.=` reads an undefined element as "", without a warning)
                 my $val = _coerce_to_str($factory, $factory->make('DefinedOr', inputs => [$old, $mkstr->('')]));
                 $val = $concat->($val, $mkstr->($seg[0])) if defined $seg[0];

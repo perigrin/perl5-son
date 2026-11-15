@@ -112,15 +112,15 @@ round_trips(q{my $v=1; my $r; my $x=0; $x=1; unless (!$r) { print $$r, "\n" } $r
 round_trips(q{my $v=1; my $r; my $x=0; $x=1; my $a = $r // 0 ? $$r : "n"; $v = 2; print "[$a] $v\n";},
     q{a guarded read with a plain store after it});
 
-# `.=` and `||=` through a ref are separate shapes (multiconcat, a
-# short-circuit over sassign); they refuse rather than drop the store.
+# `.=` of a constant through a ref is perl's multiconcat appending into the
+# deref: a store through it, as `$$r .= $x`'s concat is. `||=` (a
+# short-circuit over sassign) refuses rather than drop the store.
+round_trips('my $v="a"; my $r = \$v; $$r .= "x"; print "$v\n";',
+    q{.= of a constant through a ref});
 sub refuses ($src, $why, $name) {
     graph_of($src);
     like producer_stderr(), $why, $name;
 }
-refuses('my $v="a"; my $r = \$v; $$r .= "x"; print "$v\n";',
-    qr/GAP: multiconcat storing into a stacked destination that is not a package scalar/,
-    '.= through a ref refuses');
 refuses('my $v=0; my $r = \$v; $$r ||= 4; print "$v\n";',
     qr/GAP: `\|\|=` into something other than a lexical scalar/,
     '||= through a ref refuses');
