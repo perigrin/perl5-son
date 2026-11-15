@@ -798,17 +798,20 @@ class SoN::FromOptree 0.01 {
         return 0;
     }
     # _op_pins_a_read($op) -> true for an op whose step makes a read through a
-    # reference that _may_die_through_ref pins: an element or exists of a
-    # deref, or a scalar deref, read (not an lvalue -- a call's argument, a
-    # store's target); a whole deref read (_op_reads_through_ref) that is no
-    # element op's container.
+    # reference that _may_die_through_ref pins, where an arm holding it must
+    # merge control: an element or exists of a deref, or a scalar deref, read
+    # (not an lvalue -- a call's argument, a store's target); a whole deref
+    # counted (_op_reads_through_ref), no element op's container. A whole one
+    # read as a list in an arm is not pinned there (a select's arm pins none).
     sub _op_pins_a_read ($op) {
         my $name = $op->name;
         return 0 unless $name =~ /\A(?:aelem|helem|exists|rv2av|rv2hv|rv2sv)\z/ && _op_derefs($op);
         if ($name =~ /\A(?:rv2av|rv2hv)\z/) {
             my $p = eval { $op->parent };
             return 0 if $p && $$p && $p->name =~ /\A(?:aelem|helem|exists|delete)\z/;
-            return _op_reads_through_ref($op);
+            # (Only a count -- `defined $r && @$r`: a list an arm yields merges
+            # as a select, and as a Phi it was a list no merge can hold.)
+            return _op_reads_through_ref($op) && ( $op->flags & 3 ) == 2;   # OPf_WANT_SCALAR
         }
         return !( $op->flags & B::OPf_MOD() );
     }
@@ -16655,10 +16658,11 @@ class SoN::FromOptree 0.01 {
                 my $stop = ${ $op->next };
                 my $rhs_sim = $sim->snapshot;
                 my @rhs_exits;
-                my ($rhs_end, $rhs_sig) =
+                my ($rhs_end, $rhs_sig) = do {
+                    local $ARM_PINS = 0;   # (a value's arm, on no Proj of its own)
                     _walk_branch($cv, $op->other, $rhs_sim, $factory, $opmap,
                         $loop_visited, \@rhs_exits, 1, $stop,
-                        $loop_node, $break_projs, 1);
+                        $loop_node, $break_projs, 1) };
                 die "GAP: a short-circuit in a loop body whose arm is not a"
                   . " value not yet lowered\n"
                     if ($rhs_sig // '') ne ''
@@ -20439,10 +20443,11 @@ class SoN::FromOptree 0.01 {
                 my $rhs_sim  = $sim->snapshot;
                 $rhs_sim->set_control($taken) if $loop_ctl;
                 my @rhs_exits;
-                my ($rhs_end, $rhs_sig) =
+                my ($rhs_end, $rhs_sig) = do {
+                    local $ARM_PINS = $loop_ctl ? 1 : 0;   # (see the modifier's arm)
                     _walk_branch($cv, $op->other, $rhs_sim, $factory, $opmap,
                         $visited, \@rhs_exits, 1, $stop,
-                        $loop_node, $break_projs, $in_loop);
+                        $loop_node, $break_projs, $in_loop) };
                 my $sig = $rhs_sig // '';
                 # A return is known only after the walk, which recorded one exit
                 # on the pre-guard control: re-seat it onto the taken Proj.
@@ -20884,6 +20889,10 @@ class SoN::FromOptree 0.01 {
                 # dropped it, which left refusing as the only honest option.
                 my @mod_exits;
                 my $mod_sink = $exits // \@mod_exits;
+                # (AN ARM ON ITS OWN Proj may pin a read; one merged as a value
+                # may not -- an outer arm's leave to pin is not this one's, and
+                # a pin here forked the chain: "a control node with 2 successors")
+                local $ARM_PINS = $if_node ? 1 : 0;
                 my ($mod_end, $mod_sig) = _walk_branch($cv, $op->other,
                     $mod_sim, $factory, $opmap, $visited, $mod_sink,
                     1, $mod_stop, $loop_node, $break_projs, $in_loop);

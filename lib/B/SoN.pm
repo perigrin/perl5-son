@@ -875,6 +875,7 @@ sub _floor_subscripts {
             # input. Scalar was not WRONG -- an element is one scalar slot --
             # it was the weakest true answer where a stronger one was present.
             my $mem = @in >= 3 ? $in[2] : undef;
+            $mem = _before_pinned_reads($mem);
             # ONLY AN ELEMENT STORE says what an element holds: a whole
             # `@F = (...)` is stamped Array, and an element took it.
             # AND ONLY OF THIS SLOT: the store being this read's memory
@@ -1646,11 +1647,22 @@ sub _stamp_literal_subscripts {
 # yields, it is a real lattice member, and it is knowable statically here. That
 # keeps a fact rather than discarding it, and join(Undef, Int) widens correctly
 # to Scalar if the read later merges with a defined arm.
+# _before_pinned_reads($mem) -> the memory before any reads pinned only
+# because they may die (FromOptree's %PINNED_MAY_DIE): such a read is the
+# version after it, and changes nothing.
+sub _before_pinned_reads {
+    my ($mem) = @_;
+    $mem = $mem->inputs->[-1]
+        while $mem && $SoN::FromOptree::PINNED_MAY_DIE{ Scalar::Util::refaddr($mem) };
+    return $mem;
+}
+
 sub _literal_element_type {
     my ($node) = @_;
     my $inputs = $node->inputs // [];
     my ( $agg, $index, $mem ) = $inputs->@[ 0, 1, 2 ];
     return undef unless defined $agg && defined $index;
+    $mem = _before_pinned_reads($mem);
 
     # Rule 1: an aggregate that has been stored through is no longer described
     # by its literal. Only an unwritten one (memory still at MemStart, or no
