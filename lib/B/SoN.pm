@@ -423,6 +423,7 @@ sub _discover_and_translate {
     # fixpoint until no new class appears.
     _emit_referenced_classes( \%graphs, \%classes, $filter ) if $filter;
     _record_plain_parents( \%graphs, \%classes );
+    _record_main_package( \%classes );
 
     # AN ANON SUB'S BODY IS ITS OWN GRAPH, beside every other sub in %graphs
     # rather than nested inside the AnonSub node -- a nested graph has no
@@ -2335,6 +2336,48 @@ sub _emit_referenced_classes {
 # consumer: its methods resolve through its parent (pvm 056). One a method
 # call names gets a record even with no subs of its own; one recorded for its
 # subs gets its parent.
+# _record_main_package(\%classes) -- MAIN IS A PACKAGE LIKE ANY OTHER
+# (perigrin, 2026-11-15: "Create a Class/Package for main"): it always has a
+# record, and the record names its SYMBOLS at CHECK -- each key the program
+# put in %main:: (an `our`, a sub, an import: `use POSIX` makes floor), with
+# the slots its glob fills (code, scalar, array, hash, io) and, for an
+# imported sub, the package that defines it (code_from); a nested package
+# `Foo::` as package. A key the toolchain made before the program compiled
+# (%LOADED_KEYS: SIG, INC, STDOUT, ...) is symbols_unknown: plain perl may or
+# may not have it, so its record claims neither. A consumer reads main's
+# stash from this, as it reads any package's subs from its record.
+sub _record_main_package {
+    my ($classes) = @_;
+    no strict 'refs';
+    my $m = $classes->{main} //= _empty_class('main');
+    # (serialized outside the compile: what the stash held is not known --
+    # no symbols claimed, as _stash_has gives no fact then)
+    return unless %SoN::Serialize::JSON::STASH_KEYS;
+    my ( %sym, @unknown );
+    for my $k ( sort keys %SoN::Serialize::JSON::STASH_KEYS ) {
+        unless ( $SoN::Serialize::JSON::STASH_KEYS{$k} ) { push @unknown, $k; next }
+        if ( $k =~ /::\z/ ) { $sym{$k} = { package => 1 }; next }
+        my $gv = eval { svref_2object( \*{"main::$k"} ) };
+        next unless $gv && $gv->isa('B::GV');
+        my %slot;
+        my $cv = $gv->CV;
+        if ( $$cv && !$cv->isa('B::SPECIAL') ) {
+            $slot{code} = 1;
+            my $from = eval { $cv->GV->STASH->NAME } // '';
+            $slot{code_from} = $from if length $from && $from ne 'main';
+        }
+        for ( [ scalar => 'SV' ], [ array => 'AV' ], [ hash => 'HV' ], [ io => 'IO' ] ) {
+            my ( $name, $m ) = @$_;
+            my $x = $gv->$m;
+            $slot{$name} = 1 if $$x && !$x->isa('B::SPECIAL');
+        }
+        $sym{$k} = \%slot;
+    }
+    $m->{symbols} = \%sym;
+    $m->{symbols_unknown} = \@unknown;
+    return;
+}
+
 sub _record_plain_parents {
     my ( $graphs, $classes ) = @_;
     no strict 'refs';
