@@ -703,9 +703,6 @@ class SoN::FromOptree 0.01 {
     # $LEFT_OK: the caller is an if/else arm walk, which takes an arm that
     # LEFT THE LOOP by a nested if/else (its edges recorded there) as left.
     our $LEFT_OK = 0;
-    # $IN_LOOP_BODY: a loop body is being walked (an element is not made
-    # there by a deref for a write: see the aelem/helem handler).
-    our $IN_LOOP_BODY = 0;
     # How many reads _pin_tied_read has pinned: an arm that pinned one gives
     # its short-circuit a Phi for a value (its read is made once, in the arm).
     our $PINS_MADE = 0;
@@ -786,8 +783,6 @@ class SoN::FromOptree 0.01 {
             return _deref_chain_writes($use) if $use->private & 48;   # another intermediate
             return $use->flags & 32;                                   # the element stored into
         }
-        # shortcut: a foreach over an undef element does not make it (perl's does); it iterates nothing either way.
-        return 0 if $use && $use->name =~ /\A(?:enteriter|iter|leaveloop)\z/;
         return $rv->flags & 32;                                        # push @{...}, keys %{...}
     }
     # _may_die_through_ref($node) -> true for a READ THROUGH A REFERENCE that
@@ -9876,22 +9871,23 @@ class SoN::FromOptree 0.01 {
             my $deref = $op->private & 48;   # OPpDEREF_AV 16, OPpDEREF_HV 32
             if ($is_lvalue && ( $deref == 16 || $deref == 32 ) && defined $sim->memory && !$local
                     && _deref_chain_writes($op)
-                    # shortcut: not in a loop body (a store each pass, which the deparser
-                    # orders against the pass's reads); the consumer refuses a write there.
-                    && !$IN_LOOP_BODY
-                    # (not through @_: an element of it is the caller's variable, aliased)
-                    # ONLY A CONTAINER KNOWN HERE: a `my %h`/`my @a`, or a hash or array just
-                    # made. Through a reference from elsewhere (`$self->{s}`) the store
-                    # before a read waiting on it is refused downstream -- left as it was.
-                    # (not @_ either: an element of it is the caller's variable, aliased)
-                    && blessed($container) && ( $container->isa('SoN::IR::Node::HashLiteral') || $container->isa('SoN::IR::Node::ArrayLiteral')
-                         || $container->isa('SoN::IR::Node::PadAccess') && ( $container->sigil // '' ) =~ /\A[\@%]\z/ )
+                    # WHEREVER THE CONTAINER CAME FROM: a `my %h`/`my @a`, a hash or
+                    # array just made, or one through a reference from elsewhere
+                    # (`$self->{t}{$k} = v` with $self an argument) -- and in a loop
+                    # body, a store each pass. (A read through a reference is pinned
+                    # where it stands, so the store is ordered against it.)
+                    # Not through @_: an element of it is the caller's variable, aliased.
+                    && blessed($container) && !$container->isa('SoN::IR::Node::ArgsSource')
                     && !( grep { blessed($_) && _names_tied($_) } $container )) {
                 my $kind = $name eq 'helem' ? 'hash' : 'array';
-                my $read = $factory->make('Subscript', kind => $kind,
+                # (WHERE IT STANDS: floating, it was read before the array it is of
+                # was made. ITS OWN: hash-consed with a floating read of the same
+                # element at the same memory -- `ref $h{$k} ? keys %{$h{$k}} : ...`
+                # -- pinning it here moved that read into the arm)
+                my $read = $factory->make_unique('Subscript', kind => $kind,
                     inputs => [ $container, $index, $sim->memory ]);
-                # (where it stands: floating, it was read before the array it is of was made)
-                if (!defined $read->control_in) { $read->set_control_in($sim->control); $sim->set_control($read) }
+                $read->set_control_in($sim->control);
+                $sim->set_control($read);
                 my $lit = $factory->make($deref == 32 ? 'HashLiteral' : 'ArrayLiteral',
                     inputs => [], stamp => SoN::IR::Stamp->new(type => $deref == 32 ? 'HashRef' : 'ArrayRef'));
                 $lit->set_control_in($sim->control);
@@ -16168,7 +16164,6 @@ class SoN::FromOptree 0.01 {
     # the binding effects are identical either way, which is all the scout
     # measures.
     sub _walk_loop_body ($cv, $op, $sim, $factory, $opmap, $loop_visited, $outer_visited, $loop_node = undef, $break_projs = undef, $cond_consumed = 0) {
-        local $IN_LOOP_BODY = 1;
         # A `local` in the body restores at the ITERATION boundary -- measured,
         # `for (1..3) { print $g; local $g = $g+1; print $g }` prints 121212,
         # so every pass starts from the OUTER binding. This walk models exactly
