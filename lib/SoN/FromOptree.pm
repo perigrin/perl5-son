@@ -1488,6 +1488,10 @@ class SoN::FromOptree 0.01 {
                     for grep { $_->{outer_idx} }
                         _anoncode_capture_info($cv, $op);
             }
+            # (an eval string compiled here captures as a closure does)
+            if ($op->name eq 'entereval') {
+                $taken{ $_->{outer_idx} } = 1 for _const_eval_captures($cv, $op);
+            }
 
             if ($op->name eq 'srefgen' && !_kind_only_ref($op) && $op->can('first') && ${$op->first}) {
                 # The referent sits under NULLED ex-list wrappers -- measured,
@@ -5597,6 +5601,104 @@ class SoN::FromOptree 0.01 {
         return;
     }
 
+    # _lower_const_eval($op, $sim, $factory, $ctx, $ev) -> ($op->next,
+    # 'handled'): the string eval as a block eval whose body is one direct
+    # call of its compiled code. The cells of the lexicals it names are made
+    # (or found) first, outside the trap, so a read after the eval reaches
+    # them; then, as _handle_entertry does, $@ is cleared as the eval begins,
+    # and the trap joins after the call with the call's value or undef.
+    sub _lower_const_eval ($op, $sim, $factory, $ctx, $ev) {
+        $sim->pop_node;    # the code: known, and compiled
+        my @caps  = $ev->{captures}->@*;
+        my @cells = _capture_cells($sim, $factory, $ctx, @caps);
+        $factory->make('AnonSub',
+            inputs   => \@cells,
+            name     => $ev->{name},
+            captures => [ map { $_->{name} } @caps ],
+            stamp    => SoN::IR::Stamp->new(type => 'CodeRef'));
+        local $IN_EVAL_BODY = 1;
+        local $EVAL_ID = ++$EVAL_COUNT;
+        my $eval_entry = $sim->control;
+        _entry_store($factory, $sim,
+            $factory->make('EntryDef', package => 'main', sigil => '$', symbol => '@',
+                inputs => [$sim->memory]),
+            $factory->make('Constant', value => '', const_type => 'string',
+                stamp => SoN::IR::Stamp->new(type => 'Str')))
+            if defined $sim->memory;
+        my $void = ( $op->flags & 3 ) == 1;
+        my $call = $factory->make('Call',
+            inputs        => [],
+            dispatch_kind => 'direct',
+            name          => $ev->{name},
+            want          => _want_of($op),
+            string_eval   => 1);
+        $call->set_control_in($sim->control);
+        $sim->set_control($call);
+        _call_memory_barrier($sim, $call, $ctx);
+        my $region = $factory->make_cfg('Region', inputs => [$call]);
+        $region->set_eval_entry($eval_entry) if defined $eval_entry;
+        $region->set_eval_id($EVAL_ID);
+        $sim->set_control($region);
+        _eval_join_memory($factory, $sim, $region, $sim->memory);
+        unless ($void) {
+            my $undef = $factory->make('Constant', value => undef, const_type => 'undef',
+                stamp => SoN::IR::Stamp->new(type => 'Undef'));
+            $sim->push_node($factory->make_unique('Phi', inputs => [ $call, $undef ], region => $region));
+        }
+        return ($op->next, 'handled');
+    }
+
+    # _capture_cells($sim, $factory, $ctx, @captures) -> the cell of each
+    # capture (_anoncode_capture_info's records), in order: the one this scope
+    # already made for that variable, or a MakeCell made now. An anonymous
+    # sub's AnonSub takes them, and so does an eval string's compiled body.
+    sub _capture_cells ($sim, $factory, $ctx, @captures) {
+        my @cell_inputs;
+        for my $cap (@captures) {
+            my $slot = $cap->{outer_idx};
+
+            # ONE CELL PER VARIABLE PER SCOPE ENTRY. Reusing the node for a
+            # second closure over the same variable is what makes them
+            # share; allocating a second would give each its own counter.
+            my $cell = $ctx->{cells}{$slot};
+
+            if (!$cell) {
+                # The cell's initial value is whatever the slot holds NOW.
+                # An undefined binding means the anoncode precedes the
+                # declaration in exec order, which perl allows only for a
+                # slot that is still undef.
+                my $init = $sim->lookup($slot);
+                $init //= $factory->make('Constant',
+                    value      => undef,
+                    const_type => 'undef',
+                    stamp      => SoN::IR::Stamp->new(type => 'Undef'));
+
+                $cell = $factory->make('MakeCell',
+                    inputs           => [$init,
+                        (defined $sim->memory ? ($sim->memory) : ())],
+                    cell_name        => $cap->{name},
+                    captured_written => $cap->{written},
+                    stamp            => SoN::IR::Stamp->new(type => 'Ref'));
+
+                # The allocation is a memory effect: it must be ordered
+                # against the stores that follow, or a later CellWrite
+                # could be scheduled before the cell exists.
+                $sim->set_memory($cell) if defined $sim->memory;
+                $ctx->{cells}{$slot} = $cell;
+            }
+            elsif ($cap->{written} && !$cell->captured_written) {
+                # A SECOND closure may write a cell the FIRST only read.
+                # The flag must end up true for the variable, not for
+                # whichever closure was seen first -- otherwise a consumer
+                # elides a cell that `$rd` reads and `$inc` writes.
+                $ctx->{cells_written}{$slot} = 1;
+            }
+
+            push @cell_inputs, $cell;
+        }
+        return @cell_inputs;
+    }
+
     # _call_memory_barrier($sim, $call, $ctx) -- advance memory across every
     # call: the callee may write a capture cell, a package scalar, a file
     # lexical, or an element reached through a reference or @_. See the
@@ -5742,6 +5844,11 @@ class SoN::FromOptree 0.01 {
                 if defined $sim->memory;
             $sim->push_node($folded) unless ($op->flags & 3) == 1;   # OPf_WANT_VOID
             return ($op->next, 'handled');
+        }
+        # A STRING EVAL OF CODE KNOWN HERE, compiled here (_const_eval): a
+        # block eval whose body calls it. One known and refused dies there.
+        if ($name eq 'entereval' && ( my $ev = _const_eval($cv, $op) )) {
+            return _lower_const_eval($op, $sim, $factory, $ctx, $ev);
         }
         _refuse_unseen_lexical_access($cv, $op, $name);
         _refuse_tie_of_a_stored_lexical($cv, $op) if $name eq 'tie';
@@ -8681,49 +8788,7 @@ class SoN::FromOptree 0.01 {
             # `my $c=0; my $inc=sub{$c++}; my $rd=sub{$c}; $inc->(); $rd->()`
             # is 1, so both closures must receive the SAME cell. %CELLS is
             # keyed on the enclosing slot, which is exactly "one variable".
-            my @cell_inputs;
-            for my $cap (@captures) {
-                my $slot = $cap->{outer_idx};
-
-                # ONE CELL PER VARIABLE PER SCOPE ENTRY. Reusing the node for a
-                # second closure over the same variable is what makes them
-                # share; allocating a second would give each its own counter.
-                my $cell = $ctx->{cells}{$slot};
-
-                if (!$cell) {
-                    # The cell's initial value is whatever the slot holds NOW.
-                    # An undefined binding means the anoncode precedes the
-                    # declaration in exec order, which perl allows only for a
-                    # slot that is still undef.
-                    my $init = $sim->lookup($slot);
-                    $init //= $factory->make('Constant',
-                        value      => undef,
-                        const_type => 'undef',
-                        stamp      => SoN::IR::Stamp->new(type => 'Undef'));
-
-                    $cell = $factory->make('MakeCell',
-                        inputs           => [$init,
-                            (defined $sim->memory ? ($sim->memory) : ())],
-                        cell_name        => $cap->{name},
-                        captured_written => $cap->{written},
-                        stamp            => SoN::IR::Stamp->new(type => 'Ref'));
-
-                    # The allocation is a memory effect: it must be ordered
-                    # against the stores that follow, or a later CellWrite
-                    # could be scheduled before the cell exists.
-                    $sim->set_memory($cell) if defined $sim->memory;
-                    $ctx->{cells}{$slot} = $cell;
-                }
-                elsif ($cap->{written} && !$cell->captured_written) {
-                    # A SECOND closure may write a cell the FIRST only read.
-                    # The flag must end up true for the variable, not for
-                    # whichever closure was seen first -- otherwise a consumer
-                    # elides a cell that `$rd` reads and `$inc` writes.
-                    $ctx->{cells_written}{$slot} = 1;
-                }
-
-                push @cell_inputs, $cell;
-            }
+            my @cell_inputs = _capture_cells($sim, $factory, $ctx, @captures);
 
             my $node = $factory->make('AnonSub',
                 inputs   => \@cell_inputs,
@@ -22889,7 +22954,12 @@ class SoN::FromOptree 0.01 {
         # Slots a reference or a closure reaches -- NOT ones merely passed
         # to a call, which $ADDR_TAKEN counts too.
         state %REFERENCED_BY_CV;
-        my $REFERENCED = $REFERENCED_BY_CV{$$cv} //= _address_taken($cv, undef, 1);
+        # (THE PROGRAM'S CV HAS NO ROOT: its ops hang off main_root. Asked of
+        # its ROOT, nothing in the program was referenced, and a read before a
+        # call of a closure that stores it was not read again: `my $x = 1;
+        # my $f = sub { $x = 5; 0 }; print $x + $f->()` printed 1 for 5.)
+        my $REFERENCED = $REFERENCED_BY_CV{$$cv} //= _address_taken($cv,
+            $$cv == ${ B::main_cv() } ? B::main_root() : undef, 1);
         my $stores;
         $stores = sub ($o, $key) {
             return 1 if $o->name eq q{padsv_store} && "p" . $o->targ eq $key;
@@ -22906,6 +22976,12 @@ class SoN::FromOptree 0.01 {
             if ( $o->name eq q{entersub} && $key =~ /\Ap(\d+)\z/ ) {
                 return 1 if ( $SHARED_SLOTS && $SHARED_SLOTS->{$1} )
                     || ( $REFERENCED->{$1} );
+            }
+            # SO DOES AN EVAL STRING compiled here, of what it captures and
+            # writes (_const_eval).
+            if ( $o->name eq q{entereval} && $key =~ /\Ap(\d+)\z/ ) {
+                my $slot = $1;
+                return 1 if grep { $_->{outer_idx} == $slot && $_->{written} } _const_eval_captures($cv, $o);
             }
             # SO DOES A MATCH WHOSE PATTERN RUNS CODE: a `(?{ ... })` block writes
             # the file lexicals it names, shared (a qr's, applied at run time, too).
@@ -23116,13 +23192,379 @@ class SoN::FromOptree 0.01 {
         return ();
     }
 
+    # A STRING EVAL OF CODE KNOWN HERE IS COMPILED HERE (perigrin, 2026-11-16):
+    # a string eval whose string is known at compile time is compiled by
+    # B::SoN into a body that captures the outer lexicals; a string built at
+    # run time stays refused by name.
+    #
+    # perl compiles the string when the eval runs, in the eval's lexical
+    # scope, and runs it there: its lexicals are the program's. So here the
+    # string is compiled as the body of an anonymous sub, inside a sub that
+    # declares each lexical in scope at the eval under its own name --
+    #
+    #     package P; no warnings; BEGIN { (the eval's $^H, %^H) }
+    #     sub { my $i; our $p; ...; sub {
+    #     #line 1 "(B::SoN eval string)"
+    #     STRING
+    #     ;} }
+    #
+    # -- and the names the inner sub closes over are the program's lexicals,
+    # matched by name to the slot in scope at the eval. That inner sub is the
+    # body: its graph is lifted as an anonymous sub's (%ANON_BODIES), its
+    # captures are cells as a closure's are, and the eval is a block eval
+    # whose body calls it -- `eval { (sub { STRING })->() }`, which in what
+    # is let through here means what `eval STRING` does: the value of the
+    # last statement in the eval's context, a return leaving the eval, a die
+    # setting $@ and the eval undef, success clearing $@.
+    #
+    # WHAT IS NOT THE SAME IS REFUSED BY NAME, before the string runs here:
+    #   - a string that does not compile: perl sets $@ when the eval runs,
+    #     naming "(eval N)" -- a count of the evals run, not known here;
+    #   - a die whose message names its place, a warn, caller, __FILE__ --
+    #     each names "(eval N)" too; so does a warning: an eval where
+    #     warnings are on;
+    #   - @_ (and a bare shift or pop): the eval's is its sub's, the body's
+    #     its own; `use integer` (chalk keeps none);
+    #   - code run as it compiles (BEGIN, use, no, sub, package ...): it would
+    #     run here, not when the eval runs;
+    #   - an eval in a sub, in a loop, in list or the caller's context, or in
+    #     a replacement over a lexical, and a string naming an array, a hash
+    #     or a state variable: not yet lowered;
+    #   - an op the body may die at with perl's own message (a division, an
+    #     element store, a dereference): only those in %EVAL_BODY_OP are let
+    #     through.
+    # Where no lexical is in the pad the eval stays the Coerce(Str -> Code)
+    # it was (see entereval): nothing there can be read unseen.
+    our %EVAL_COMPILED;    # entereval address => { name, body, captures, keep } | { gap }
+    our %EVAL_ORDINAL;     # entereval address => its number among the program's
+    our %REPLROOT_OF;      # a replacement's root address => its subst op
+    our $EVAL_SCANNED = 0;
+    my $EVAL_FILE = '(B::SoN eval string)';
+
+    # The ops an eval string's body may hold: those that run straight through
+    # and cannot die or warn, and a choice between them. A die is let through
+    # only with one constant message ending in a newline (_eval_body_refusal).
+    my %EVAL_BODY_OP = ( %STRAIGHT_LINE_OP, map { $_ => 1 } qw(
+        padsv_store cond_expr and or dor xor print say die pow repeat int abs
+        not i_negate
+    ) );
+
+    # _eval_scan() -- number the program's string evals, and note each
+    # replacement's subst (a replacement's root has no parent to climb to).
+    sub _eval_scan () {
+        return if $EVAL_SCANNED;
+        $EVAL_SCANNED = 1;
+        my $n = 0;
+        my @q = ( eval { B::main_root() } // () );
+        while (my $o = shift @q) {
+            next unless ref($o) && $$o;
+            $EVAL_ORDINAL{$$o} = ++$n if $o->name eq 'entereval';
+            if ($o->name eq 'subst' && ref($o->pmreplroot) && ${ $o->pmreplroot }) {
+                $REPLROOT_OF{ ${ $o->pmreplroot } } = $o;
+                push @q, $o->pmreplroot;
+            }
+            next unless $o->flags & 4;
+            for (my $k = $o->first; ref($k) && $$k; $k = $k->sibling) { push @q, $k }
+        }
+        return;
+    }
+
+    # _op_up($op) -> the op $op is a kid of, or the subst a replacement root
+    # belongs to; undef at the top.
+    sub _op_up ($o) {
+        my $p = eval { $o->parent };
+        return $p if $p && $$p;
+        return $REPLROOT_OF{$$o};
+    }
+
+    # _cop_before($op) -> the statement (nextstate) $op is part of.
+    sub _cop_before ($op) {
+        for (my $o = $op; $o && $$o; $o = _op_up($o)) {
+            my $p = _op_up($o) or last;
+            next unless ( $p->flags & 4 ) && eval { $o->parent } && ${ $o->parent } == $$p;
+            my $cop;
+            for (my $k = $p->first; ref($k) && $$k && $$k != $$o; $k = $k->sibling) {
+                $cop = $k if $k->name =~ /\A(?:next|db)state\z/;
+            }
+            return $cop if $cop;
+        }
+        return undef;
+    }
+
+    # _eval_code_op($op) -> the op whose value is the eval's code: past the
+    # null and scope wrappers (s///ee's eval is of a block).
+    sub _eval_code_op ($op) {
+        return undef unless $op->flags & 4;
+        my $k = $op->first;
+        $k = $k->can('last') ? $k->last : $k->first
+            while ref($k) && $$k && $k->name =~ /\A(?:null|scope)\z/ && ( $k->flags & 4 );
+        return ref($k) && $$k ? $k : undef;
+    }
+
+    sub _const_op_pv ($cv, $k) {
+        return undef unless $k->name eq 'const';
+        my $sv = eval { $k->sv };
+        $sv = eval { $cv->PADLIST->ARRAYelt(1)->ARRAYelt( $k->targ ) } unless $sv && $$sv && !$sv->isa('B::SPECIAL');
+        return undef unless $sv && $$sv && $sv->can('FLAGS') && ( $sv->FLAGS & B::SVf_POK() ) && !$sv->isa('B::AV') && !$sv->isa('B::HV');
+        return $sv->PV;
+    }
+
+    # _eval_code_string($cv, $op) -> the eval's code when it is known here: a
+    # constant, or a lexical whose only store is `my $c = CONSTANT`, made
+    # before the eval in a block around it, and that nothing else can change
+    # (no other store, reference, closure, or eval). undef otherwise.
+    sub _eval_code_string ($cv, $op) {
+        my $k = _eval_code_op($op) // return undef;
+        return _const_op_pv($cv, $k) if $k->name eq 'const';
+        # (a lexical's stores are looked for in the program's ops: the program's own)
+        return undef unless $k->name eq 'padsv' && $k->targ && !( $k->flags & B::OPf_MOD() )
+            && $$cv == ${ B::main_cv() };
+        my $t = $k->targ;
+        my ($store, $pv);
+        my @q = ( B::main_root() );
+        while (my $o = shift @q) {
+            next unless ref($o) && $$o;
+            my $name = $o->name;
+            if ($name eq 'subst' && ref($o->pmreplroot) && ${ $o->pmreplroot }) { push @q, $o->pmreplroot }
+            if ($o->flags & 4) { for (my $c = $o->first; ref($c) && $$c; $c = $c->sibling) { push @q, $c } }
+            return undef if $name eq 'entereval' && $$o != $$op;
+            return undef if $name eq 'anoncode' && grep { ( $_->{outer_idx} // -1 ) == $t } _anoncode_capture_info($cv, $o);
+            return undef if $name eq 'padrange' && $t >= $o->targ && $t < $o->targ + ( $o->private & 127 );
+            # `my $c = CONST`: a padsv_store, or (peephole off) an sassign
+            # into the declaring padsv.
+            if ($name eq 'sassign' && ( $o->flags & 4 ) && ${ $o->last } && $o->last->name eq 'padsv'
+                    && $o->last->targ == $t) {
+                return undef if $store || !( $o->last->private & B::OPpLVAL_INTRO() );
+                ( $store, $pv ) = ( $o, _const_op_pv($cv, $o->first) );
+                next;
+            }
+            next unless $o->can('targ') && $o->targ == $t && $name ne 'null';
+            if ($name eq 'padsv' && $$o == $$k) { next }
+            if ($name eq 'padsv' && $store && $store->name eq 'sassign' && ${ $store->last } == $$o) { next }
+            if ($name eq 'padsv_store' && ( $o->private & B::OPpLVAL_INTRO() )) {
+                return undef if $store;
+                ( $store, $pv ) = ( $o, _const_op_pv($cv, $o->first) );
+                next;
+            }
+            if ($name eq 'padsv' && !( $o->flags & B::OPf_MOD() )) {
+                my $p = eval { $o->parent };
+                return undef if $p && $$p && $p->name =~ /\A(?:s?refgen)\z/;
+                next;
+            }
+            return undef;    # any other op naming the slot: a store, an alias, a declaration
+        }
+        return undef unless $store && defined $pv;
+        # MADE BEFORE THE EVAL, each time it runs: a statement of a block
+        # around the eval, ahead of the eval's own statement.
+        my $at = eval { $store->parent } or return undef;
+        $at = $at->parent while $$at && $at->name eq 'null';
+        return undef unless $$at && $at->name =~ /\A(?:lineseq|leave|scope)\z/;
+        my $mine;
+        for (my $o = $op; $o && $$o; $o = _op_up($o)) {
+            my $p = _op_up($o) or last;
+            if ($$p == $$at) { $mine = $o; last }
+        }
+        return undef unless $mine;
+        my $s = $store;
+        $s = $s->parent while ${ $s->parent } != $$at;
+        for (my $c = $at->first; ref($c) && $$c; $c = $c->sibling) {
+            return $pv if $$c == $$s;
+            return undef if $$c == $$mine;
+        }
+        return undef;
+    }
+
+    # _in_a_loop($op) -> true when $op runs inside a loop, or a map, grep
+    # or sort block. A bare block is a leaveloop that runs once -- its
+    # enterloop's sibling is its block, not a condition -- unless a redo in
+    # it runs it again.
+    sub _in_a_loop ($op) {
+        for (my $o = _op_up($op); $o && $$o; $o = _op_up($o)) {
+            my $n = $o->name;
+            return 1 if $n =~ /\A(?:mapwhile|grepwhile|sort)\z/;
+            next unless $n eq 'leaveloop';
+            my $body = $o->first->sibling;
+            return 1 unless $o->first->name eq 'enterloop' && $$body && $body->name =~ /\A(?:lineseq|scope|leave)\z/;
+            return 1 if grep { $_->name eq 'redo' } _subtree_ops($o);
+        }
+        return 0;
+    }
+
+    sub _in_a_replacement ($op) {
+        for (my $o = $op; $o && $$o; $o = _op_up($o)) {
+            return 1 if $o->name eq 'substcont';
+        }
+        return 0;
+    }
+
+    # _pad_has_lexical($cv) -> the first lexical's name in $cv's pad, if any:
+    # an eval of code made at run time may name it.
+    sub _pad_has_lexical ($cv) {
+        my $names = eval { $cv->PADLIST->ARRAYelt(0) } or return undef;
+        my ($seen) = grep { ref($_) eq 'B::PADNAME' && ($_->PV // '') =~ /\A[\$\@%]/ } $names->ARRAY;
+        return $seen ? $seen->PV : undef;
+    }
+
+    # _const_eval($cv, $op) -> the record of a string eval compiled here, or
+    # undef when its code is not known here, or where no lexical is in the
+    # pad (it stays what it was). Dies with a GAP for one that is known and
+    # refused -- each time it is asked.
+    sub _const_eval ($cv, $op) {
+        return undef unless $op->name eq 'entereval';
+        if (my $r = $EVAL_COMPILED{$$op}) {
+            die $r->{gap} if defined $r->{gap};
+            return $r->{name} ? $r : undef;
+        }
+        my $r = eval { _compile_const_eval($cv, $op) };
+        if (my $e = $@) {
+            die $e unless $e =~ /\AGAP:/;
+            $EVAL_COMPILED{$$op} = { gap => $e };
+            die $e;
+        }
+        $EVAL_COMPILED{$$op} = $r // {};
+        return $r;
+    }
+
+    # _const_eval_captures($cv, $op) -> the program slots a string eval
+    # compiled here captures; () for any other (a refused one dies at its
+    # walk).
+    sub _const_eval_captures ($cv, $op) {
+        my $r = eval { _const_eval($cv, $op) } or return ();
+        return ( $r->{captures} // [] )->@*;
+    }
+
+    sub _compile_const_eval ($cv, $op) {
+        return undef unless defined _pad_has_lexical($cv);
+        _eval_scan();
+        my $code = _eval_code_string($cv, $op) // return undef;
+        my $what = 'a string eval of code known here';
+        die "GAP: $what, inside a sub, is not yet lowered -- only the program's own\n"
+            unless $$cv == ${ B::main_cv() } && $EVAL_ORDINAL{$$op};
+        die "GAP: $what, run in a loop, is not yet lowered\n" if _in_a_loop($op);
+        my $want = _want_of($op) // 'runtime';
+        die "GAP: $what, in $want context, is not yet lowered -- only a scalar or void one\n"
+            unless $want eq 'scalar' || $want eq 'void';
+        my $cop = _cop_before($op) or die "GAP: $what, with no statement found around it, is not yet lowered\n";
+        # A WARNING NAMES (eval N): warnings must be off where it runs.
+        my $w = $cop->warnings;
+        die "GAP: $what, where warnings are on, is not yet lowered -- a warning names (eval N)\n"
+            unless ref($w) eq 'B::SPECIAL'
+            && ( $B::specialsv_name[$$w] =~ /pWARN_NONE/ || $B::specialsv_name[$$w] =~ /pWARN_STD/ && !$^W );
+        my $hints = $op->targ;
+        die "GAP: $what, under use integer, is not yet lowered\n" if $hints & 1;    # HINT_INTEGER
+        # CODE THAT RUNS AS IT COMPILES would run here, not when the eval
+        # does: a phase block, a `use` or `no` (a statement's first word), a
+        # named sub, a package, a format. Looked for in the text, so such a
+        # word in a quoted string refuses too. __FILE__ and its kin are folded
+        # as the string compiles (to "(eval N)" and the eval's package).
+        for my $word ( $code =~ /\b(BEGIN|UNITCHECK|CHECK|INIT|END|sub|package|format|__FILE__|__LINE__|__PACKAGE__|__SUB__|__END__|__DATA__)\b/,
+                       $code =~ /(?:\A|^|[;{}:])\s*(use|no)\b/m ) {
+            die "GAP: $what, holding `$word`, is not yet lowered\n";
+        }
+        my %hh;
+        if ($op->private & B::OPpEVAL_HAS_HH()) {
+            my $k = $op->first->sibling;
+            my $sv = $k && $$k && $k->name eq 'const' ? ( eval { $k->sv } // undef ) : undef;
+            $sv = eval { $cv->PADLIST->ARRAYelt(1)->ARRAYelt( $k->targ ) } if $sv && $sv->isa('B::SPECIAL');
+            my $h = $sv && $$sv && $sv->isa('B::HV') ? $sv->object_2svref : undef;
+            die "GAP: $what, whose %^H could not be read, is not yet lowered\n" unless ref $h eq 'HASH';
+            %hh = %$h;
+        }
+        # THE LEXICALS IN SCOPE AT THE EVAL, by name: of two in scope, the
+        # later declared (perl's lookup goes from the pad's end).
+        my $seq = $cop->cop_seq;
+        my $names = $cv->PADLIST->ARRAYelt(0);
+        my %slot_of;
+        for my $i (1 .. $names->MAX) {
+            my $pn = $names->ARRAYelt($i);
+            next unless ref($pn) eq 'B::PADNAME' && ( $pn->PV // '' ) =~ /\A[\$\@%&]\w*\z/;
+            next if $pn->FLAGS & B::PADNAMEf_OUTER();
+            next unless $seq > $pn->COP_SEQ_RANGE_LOW && $seq <= $pn->COP_SEQ_RANGE_HIGH;
+            $slot_of{ $pn->PV } = $i;
+        }
+        my $pkg = $cop->stashpv // 'main';
+        my $decls = '';
+        for my $nm (sort keys %slot_of) {
+            my $pn = $names->ARRAYelt( $slot_of{$nm} );
+            if ($pn->FLAGS & B::PADNAMEf_OUR()) {
+                my $st = eval { $pn->OURSTASH->NAME } // die "GAP: $what, with an our ($nm) of no package in scope, is not yet lowered\n";
+                $decls .= "package $st; our $nm; package $pkg; ";
+            }
+            elsif ($nm =~ /\A&/) { $decls .= 'my sub ' . substr($nm, 1) . '; ' }
+            else { $decls .= "my $nm; " }
+        }
+        local our ($EV_H, %EV_HH) = ($hints, %hh);
+        my $wrapper = "package $pkg; no warnings; BEGIN { \$^H = \$SoN::FromOptree::EV_H; %^H = %SoN::FromOptree::EV_HH }"
+            . " sub { $decls sub {\n#line 1 \"$EVAL_FILE\"\n$code\n;} }";
+        my $outer = do { local $@; local $SIG{__WARN__} = sub {}; local $SIG{__DIE__}; my $c = eval $wrapper; $@ ? ( $@ =~ s/\n.*//sr ) : $c };
+        die "GAP: a string eval whose code does not compile is refused -- perl sets \$@ as it runs,"
+          . " naming (eval N), a count of the evals run: $outer\n" unless ref $outer eq 'CODE';
+        # THE STRING STAYS IN ITS SUB: the wrapper holds the declarations and
+        # one anonymous sub, nothing else (a brace in the string can close it).
+        my $ocv = B::svref_2object($outer);
+        my @ops = _subtree_ops($ocv->ROOT);
+        my @anon = grep { $_->name eq 'anoncode' } @ops;
+        die "GAP: $what, whose braces leave its body, is not yet lowered\n"
+            if @anon != 1 || grep { $_->name !~ /\A(?:leavesub|lineseq|nextstate|padsv|padav|padhv|padcv|introcv|clonecv|padrange|pushmark|list|null|anoncode|srefgen|refgen|gvsv|gv|rv2sv|rv2av|rv2hv|rv2gv|stub|scope|enter|leave)\z/ } @ops;
+        my $body = _anoncode_cv($ocv, $anon[0]) or die "GAP: $what, whose body could not be reached, is not yet lowered\n";
+        if (my $why = _eval_body_refusal($body)) { die "GAP: $what, holding $why, is not yet lowered\n" }
+        # ITS CAPTURES, by name to the program's slots in scope at the eval.
+        my $bnames = $body->PADLIST->ARRAYelt(0);
+        my @captures;
+        for my $i (1 .. $bnames->MAX) {
+            my $pn = $bnames->ARRAYelt($i);
+            next unless ref($pn) eq 'B::PADNAME' && ( $pn->FLAGS & B::PADNAMEf_OUTER() );
+            my $nm = $pn->PV // next;
+            next if $pn->FLAGS & B::PADNAMEf_OUR();
+            my $slot = $slot_of{$nm} // die "GAP: $what, naming $nm from outside the program's scope, is not yet lowered\n";
+            my $opn = $names->ARRAYelt($slot);
+            next if $opn->FLAGS & B::PADNAMEf_OUR();
+            die "GAP: $what, naming the lexical array or hash $nm, is not yet lowered\n" if $nm =~ /\A[\@%]/;
+            die "GAP: $what, naming the lexical sub $nm, is not yet lowered\n" if $nm =~ /\A&/;
+            die "GAP: $what, naming the state variable $nm, is not yet lowered\n" if $opn->FLAGS & B::PADNAMEf_STATE();
+            push @captures, { name => $nm, inner_idx => $i, outer_idx => $slot, written => _body_writes_pad($body, $i) ? 1 : 0 };
+        }
+        die "GAP: $what, in a replacement, naming $captures[0]{name}, is not yet lowered\n"
+            if @captures && _in_a_replacement($op);
+        _refuse_twice_declared({ map { ( $_->{outer_idx} => 1 ) } @captures }, $what);
+        my $name = sprintf('main::__PROGRAM__::__EVAL__:%d:%d', $cop->line, $EVAL_ORDINAL{$$op});
+        $ANON_BODIES{$name} //= $body;
+        $ANON_CAPTURES{$$body} //= [@captures] if @captures;
+        return { name => $name, body => $body, captures => \@captures, keep => $outer };
+    }
+
+    # _eval_body_refusal($body) -> what an eval string's body holds that is
+    # not let through (%EVAL_BODY_OP), or undef.
+    sub _eval_body_refusal ($body) {
+        my @q = ( $body->ROOT );
+        while (my $o = shift @q) {
+            next unless ref($o) && $$o;
+            my $n = $o->name;
+            if ($o->flags & 4) { for (my $k = $o->first; ref($k) && $$k; $k = $k->sibling) { push @q, $k } }
+            # @_ IS THE EVAL'S SUB'S, not the body's.
+            return 'a use of @_' if $n eq 'gv' && ( eval { _op_gv($body, $o)->NAME } // '' ) eq '_';
+            return "a $n" if $n =~ /\Arv2[sah]v\z/ && !( ${ $o->first } && $o->first->name eq 'gv' );
+            next if $n eq 'rv2sv';
+            next if $n =~ /\A(?:aelem|helem)\z/ && !( $o->flags & 32 );    # a read; a store may die
+            if ($n eq 'die') {
+                my @k = grep { $_->name !~ /\A(?:pushmark|null)\z/ } map { my @a; for (my $k = $o->first; ref($k) && $$k; $k = $k->sibling) { push @a, $k } @a } $o;
+                my $m = @k == 1 && $k[0]->name eq 'const' ? _const_op_pv($body, $k[0]) : undef;
+                return 'a die whose message names its place, (eval N)' unless defined $m && $m =~ /\n\z/;
+                next;
+            }
+            next if $EVAL_BODY_OP{$n};
+            return "a $n";
+        }
+        return undef;
+    }
+
     sub _refuse_unseen_lexical_access ($cv, $op, $name) {
         if ($name eq 'entereval') {
             my $names = eval { $cv->PADLIST->ARRAYelt(0) } or return;
             my ($seen) = grep { ref($_) eq 'B::PADNAME' && ($_->PV // '') =~ /\A[\$\@%]/ }
                 $names->ARRAY;
-            die "GAP: a string eval with a lexical in scope (" . $seen->PV
-              . ") can read or write it unseen by the graph\n" if $seen;
+            die "GAP: a string eval of code made at run time, with a lexical in scope (" . $seen->PV
+              . "), can read or write it unseen by the graph\n" if $seen;
         }
         return;
     }
@@ -23189,6 +23631,9 @@ class SoN::FromOptree 0.01 {
             }
             return undef if $name eq 'anoncode'
                 && grep { ($_->{outer_idx} // -1) == $targ } _anoncode_capture_info($cv, $op);
+            # AN EVAL STRING may store any lexical in scope; compiled here,
+            # those it captures.
+            return undef if $name eq 'entereval';
         }
         return undef unless $writes == 1 && $code;
         return _anoncode_cv($cv, $code);

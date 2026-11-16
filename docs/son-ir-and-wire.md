@@ -134,7 +134,7 @@ serializes (§2.4). The rest are internal to the producer.
 | ExpressionList, StructRef, StructFieldAccess, BacktickExpr | Value | — |
 | TernaryExpr | Value | **rebind_arm** |
 | **Calls and effects** | | |
-| Call | Value | **dispatch_kind** (`builtin`, `direct`, `method`, `dynamic_method`, `indirect`), **name**, **want**, **memory_input**, **class_name**, **param_names**, **shares_args**, **eval_id**, **external**, **sort_cmp**, **sort_order**, **sort_cmp_body**, **sort_package**. Internal only: paren_form, target, resolved_graph. |
+| Call | Value | **dispatch_kind** (`builtin`, `direct`, `method`, `dynamic_method`, `indirect`), **name**, **want**, **memory_input**, **class_name**, **param_names**, **shares_args**, **string_eval**, **eval_id**, **external**, **sort_cmp**, **sort_order**, **sort_cmp_body**, **sort_package**. Internal only: paren_form, target, resolved_graph. |
 | Print | Node | **has_filehandle** |
 | Assign | BinOp | **targets**, **if_changed**, **local** |
 | CompoundAssign | Value | **op** |
@@ -229,6 +229,45 @@ There are no basic blocks. Control is carried by CFG nodes and by a
   `eval_entry` and the Region itself."* Each die in the body is an Unwind
   with the same `eval_id`. A Call or a may-die Divide/Modulo in the body
   carries `eval_id` too.
+- **String eval of code known when B::SoN runs** (2026-11-16, perigrin's
+  design): a block eval whose body is one direct Call, `string_eval: true`,
+  of the body B::SoN compiled from the string. The string is known when it
+  is a constant, or a `my` lexical whose one store is `my $c = CONSTANT`
+  made before the eval in a block around it, that nothing else stores,
+  refers to, closes over or evals. B::SoN compiles it, in the eval's
+  package and with its `$^H`/`%^H`, as an anonymous sub inside a sub that
+  declares each lexical in scope at the eval; the names it closes over are
+  matched to the program's slots in scope there. The body is a `methods`
+  key named `main::__PROGRAM__::__EVAL__:LINE:N` (N: the eval's number
+  among the program's), and an AnonSub of that name in the program holds
+  the cells of the lexicals it names (`captures`, as a closure's); a read
+  after the eval goes through the cell. Shape:
+
+  ```
+  MakeCell($i) ... EntryWrite($@ = "") -> Call(direct, string_eval, eval_id=K)
+     -> Region([Call], eval_entry, eval_id=K) ; Phi(memory) ; Phi([Call, undef]) (unless void)
+  AnonSub([cells], name=__EVAL__:LINE:N, captures)
+  ```
+
+  So it means `eval { (sub { STRING })->() }`: the last statement's value
+  in the eval's context, a `return` leaving the eval, a die setting `$@`
+  and the eval undef, success clearing `$@`. Where that would differ,
+  B::SoN refuses by name (a GAP that skips the program): a string that
+  does not compile (perl sets `$@` as the eval runs, naming "(eval N)", a
+  count of evals run); a die whose message names its place, a warn,
+  caller, `__FILE__` and its kin, or warnings on (each names "(eval N)");
+  `@_`; `use integer`; code that runs as it compiles (BEGIN, `use`/`no`,
+  `sub`, `package`, `format`); an eval inside a sub, in a loop, in list or
+  caller context, or in an s///e replacement naming a lexical; a string
+  naming a lexical array, hash, state variable or lexical sub, or a name
+  the file declares twice; and any op outside the body's allow-list (ops
+  that run straight through and cannot die, a choice, print, and a die of
+  one constant message ending in a newline). An eval of code made at run
+  time with a lexical in scope stays refused by name ("a string eval of
+  code made at run time, with a lexical in scope ($x), can read or write
+  it unseen by the graph"); with none in scope it is the Coerce(Str ->
+  Code) it was. chalk lowers the call in T2 as a closure's; its fallback
+  refuses it by name.
 
 ### 1.4 Data flow
 
@@ -501,8 +540,9 @@ CLASS, as observed:
 
 - **Constant** `{const_type, value, flags?}`
 - **Call** `{dispatch_kind, name, sort_cmp?, sort_order?, sort_cmp_body?,
-  sort_package?, want?, shares_args?, eval_id?, external?, memory_input?,
-  class_name?, param_names?}`
+  sort_package?, want?, shares_args?, string_eval?, eval_id?, external?,
+  memory_input?, class_name?, param_names?}` -- `string_eval` (true, or
+  absent) on the direct call of an eval string's compiled body (§1.3).
 - **Ref** `{each?, fresh_each_pass?, file?, line?}`
   Inputs `[operand]`, or `[location, memory]` for a reference to an
   aggregate's element (`\$a[i]`, `\$h{k}`, `\$r->[i]`, `\(@a)`, `\($a[0],

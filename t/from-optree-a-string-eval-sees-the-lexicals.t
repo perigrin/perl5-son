@@ -1,5 +1,5 @@
-# ABOUTME: A string eval shares its frame and can write any lexical in scope unseen, so it
-# ABOUTME: refuses whenever one is.
+# ABOUTME: A string eval shares its frame and can write any lexical in scope unseen: it refuses
+# ABOUTME: whenever one is, unless its code is known here and compiled over them (the program's).
 
 use v5.42.0;
 use Test2::V0;
@@ -27,7 +27,7 @@ sub produce ($src) {
     return (eval { JSON::PP->new->decode($j) }, $err);
 }
 
-my $GAP = qr/GAP: a string eval with a lexical in scope/;
+my $GAP = qr/GAP: a string eval of code made at run time, with a lexical in scope/;
 
 sub refuses ($src, $name, $why = $GAP) {
     my ($data, $err) = produce($src);
@@ -45,19 +45,26 @@ sub round_trips ($src, $name) {
 }
 
 # The read after the eval was the binding from before it: perl printed i=1,
-# the emitted program i=0, and nothing refused.
-refuses(q{my $i = 0; eval q{$i = 1}; print "i=$i\n";},
-    'an eval writing a file lexical');
+# the emitted program i=0, and nothing refused. The program's own eval of
+# code known here is compiled over the lexicals it names (see
+# t/wire-a-string-eval-of-known-code-is-a-body-over-its-lexicals.t).
+round_trips(q{my $i = 0; eval q{$i = 1}; print "i=$i\n";},
+    'an eval of known code writing a file lexical');
+round_trips(q{our $p = 0; eval q{$p = 1}; print "p=$p\n";},
+    'an eval of known code writing through an our alias');
+round_trips(q{my $i = 0; my $c = "\$i = 1"; eval $c; print "i=$i\n";},
+    'an eval of a lexical holding known code');
+my $IN_SUB = qr/GAP: a string eval of code known here, inside a sub, is not yet lowered/;
 refuses(q{sub f { my $i = 0; eval q{$i = 1}; return $i } print f(), "\n";},
-    'an eval writing a sub lexical');
+    'an eval writing a sub lexical', $IN_SUB);
 refuses(q{sub f { my @a = (1); eval q{push @a, 2}; return scalar @a } print f(), "\n";},
-    'an eval pushing onto a lexical array');
-refuses(q{our $p = 0; eval q{$p = 1}; print "p=$p\n";},
-    'an eval writing through an our alias');
+    'an eval pushing onto a lexical array', $IN_SUB);
 refuses(q{my $i = 0; sub f { $i; eval q{$i = 1} } f(); print "i=$i\n";},
-    'an eval writing a lexical the sub closes over');
-refuses(q{my $i = 0; my $c = "\$i = 1"; eval $c; print "i=$i\n";},
+    'an eval writing a lexical the sub closes over', $IN_SUB);
+refuses(q{my $i = 0; my $c = '$i' . ($ENV{NO_SUCH_VAR} // ' = 1'); eval $c; print "i=$i\n";},
     'an eval of a computed string');
+refuses(q{sub f { my $i = 0; my $c = $_[0]; eval $c; return $i } print f('$i = 1'), "\n";},
+    'an eval of a string a sub is handed');
 
 # NO LEXICAL, NOTHING TO HIDE: the eval stays lowered, as do package variables
 # it writes (the program-wide demotion already treats them as written).

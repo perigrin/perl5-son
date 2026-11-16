@@ -379,6 +379,11 @@ sub _discover_and_translate {
     %SoN::FromOptree::SORT_BODIES = ();
     %SoN::FromOptree::SUBST_BODIES = ();
     %SoN::FromOptree::CODE_BODIES = ();
+    # String evals compiled here, per run (a record holds a body it registered).
+    %SoN::FromOptree::EVAL_COMPILED = ();
+    %SoN::FromOptree::EVAL_ORDINAL = ();
+    %SoN::FromOptree::REPLROOT_OF = ();
+    $SoN::FromOptree::EVAL_SCANNED = 0;
     %SoN::FromOptree::QR_CODE_BODIES = ();
     %SoN::FromOptree::SORT_BODY_SEQ = ();
     # Per-run, like the body registry: a node id from a previous compilation

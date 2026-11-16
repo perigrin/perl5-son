@@ -80,11 +80,11 @@ round_trips(q{my @a; my $c = sub { push @a, 1 }; $c->(); $c->(); print "@a\n";},
     q{a closure pushing to a bare-declared array});
 round_trips(q{my @a; my $c = sub { $a[0] = 1 }; $c->(); print "@a\n";},
     q{a closure storing an element of a bare-declared array});
-# A string eval with a lexical in scope refuses outright: it can write any of
-# them unseen (t/from-optree-a-string-eval-sees-the-lexicals.t).
+# A string eval naming a lexical array refuses by name: compiled here it would
+# capture the array, not yet lowered (t/from-optree-a-string-eval-sees-the-lexicals.t).
 graph_of(q{my @a; eval 'push @a, 5'; print "@a\n";});
 my $eval_err = producer_stderr();
-like $eval_err, qr/GAP: a string eval with a lexical in scope [(]\@a[)]/,
+like $eval_err, qr/GAP: a string eval of code known here, naming the lexical array or hash \@a/,
     'a string eval pushing to a bare-declared array refuses';
 round_trips(q{my @a; ($a[0],$a[1])=(3,4); print "@a\n";},
     q{an element list-assign into a bare-declared array});

@@ -85,6 +85,13 @@ class SoN::IR::Node::Call :isa(SoN::IR::Value) {
     # a no-argument call; a consumer must pass @_ through.
     field $shares_args :param :reader = false;
 
+    # A direct call that RUNS AN EVAL STRING: perl's `eval STRING` whose code
+    # B::SoN knew and compiled where it runs, as the body this call names (an
+    # anonymous sub over the lexicals the code names, whose cells the AnonSub
+    # of that name holds). It stands inside the eval's trap -- a Region with
+    # eval_entry and eval_id -- as a block eval's body would.
+    field $string_eval :param :reader = false;
+
     # The callee exists and was compiled elsewhere -- another module, an
     # import, XS. Not in this wire, and not missing: the program that loads
     # this one also loads it.
@@ -141,6 +148,7 @@ class SoN::IR::Node::Call :isa(SoN::IR::Value) {
             (defined $sort_package ? "sort_package=$sort_package" : ()),
             ($paren_form ? "paren_form=1" : ()),
             ($shares_args ? "shares_args=1" : ()),
+            ($string_eval ? "string_eval=1" : ()),
             ($external ? "external=1" : ()),
             ($xs ? "xs=1" : ()),
             $self->_serialize_inputs());

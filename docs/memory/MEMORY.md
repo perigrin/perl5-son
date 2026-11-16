@@ -256,6 +256,7 @@
 - [Plan: T2 slices](plan-t2-first-slice.md) — slices 1-4 (straight line, loops, subs, arrays); my @a fresh each pass (3bc53c06)
 - [Cause: regex code blocks](plan-regex-code-blocks.md) — (?{...}) lifted as bodies; only all-literal patterns (perl's optimizer decides run counts); 391 -> 394 (b7beaa9e)
 - [Cause: constant eval STRING](plan-constant-string-eval.md) — BACKED OUT after review 2 (silent wrongs for +1 case); 395 -> 394
+- [Cause: constant string eval, on cells](cause-constant-string-eval-on-cells.md) — perigrin 2026-11-16: compiled by B::SoN as a closure called in a block eval (string_eval Call); 290, 292 T2-SAME; stale operand before a closure call fixed
 - [Review 2026-11-04](review-2026-11-04-evals-code-blocks.md) — 5 Critical fixed (shared-by-name binding, our, strict, allow-list, code-block memory version); deny-list lesson
 - [Cause: method returning values/keys of a field](census-cause-method-returning-values.md) — list or count by call context; 246; 396 -> 397 (15a3064f)
 - [Cause: `@a && LIST` in list context](census-cause-and-of-arrays.md) — (0) or the list; element reads flatten; 089; 397 -> 398 (836bb242)

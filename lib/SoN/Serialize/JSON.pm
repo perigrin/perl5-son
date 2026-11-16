@@ -77,6 +77,8 @@ sub _extract_fields ($node, $id_remap) {
                 : () ),
             # `&name;`: the call hands on the caller's @_.
             ( $node->shares_args ? ( shares_args => JSON::PP::true ) : () ),
+            # A call that runs an eval string's compiled body.
+            ( $node->string_eval ? ( string_eval => JSON::PP::true ) : () ),
             # The eval whose body the call is in (see Unwind's).
             ( defined $node->eval_id ? ( eval_id => $node->eval_id ) : () ),
             # A call's site: what `caller` answers in the callee, and what
