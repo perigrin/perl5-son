@@ -5950,6 +5950,11 @@ class SoN::FromOptree 0.01 {
             # pushed for it, and popping took whatever an earlier op left --
             # measured, `$t .= ($x =~ tr/a/Z/r)` transliterated $t's "q".
             my $stacked = $op->flags & 64;   # OPf_STACKED
+            # A LEXICAL THE CLOSURE CAPTURED is its cell (s///'s rule, in
+            # _subst_target): the targ names the body's own pad slot.
+            die "GAP: tr/// on a lexical the closure captured, inside that closure,"
+              . " is not yet lowered -- the new string must be stored through its cell\n"
+                if $name eq 'trans' && $op->targ && $ctx->{cell_params}{ $op->targ };
             my $target;
             if ($stacked) {
                 $target = $sim->pop_node;
@@ -9912,8 +9917,13 @@ class SoN::FromOptree 0.01 {
             # Same split the element RMW below makes: the arithmetic must read
             # the PRE-store value, so the read is a separate CellRead pinned to
             # the current memory, and the CellParam stays the store target.
+            # SO IS ONE IN THE SCOPE THAT MADE THE CELL, after the closure is
+            # built: the lvalue padsv pushed the MakeCell, which matched no
+            # arm, and the Add over the cell itself stored nothing --
+            # `my $f = sub { $n }; $n++; print $f->()` printed 1 for perl's 2.
             my $cell_lvalue;
-            if ($old->isa('SoN::IR::Node::CellParam')) {
+            if ($old->isa('SoN::IR::Node::CellParam')
+                || $old->isa('SoN::IR::Node::MakeCell')) {
                 $cell_lvalue = $old;
                 $old = $factory->make('CellRead',
                     inputs => [$cell_lvalue,
@@ -12387,7 +12397,7 @@ class SoN::FromOptree 0.01 {
                          || (   ($op->flags & 64)
                              && !$inputs[0]->isa('SoN::IR::Node::FieldAccess') ) );
 
-                my $lvalue_targ;
+                my ($lvalue_targ, $cell_compound);
                 if ($is_compound) {
                     # The targ comes from the OPTREE when the PadAccess did not
                     # survive: $inputs[0]->targ is unavailable precisely in the
@@ -12395,8 +12405,27 @@ class SoN::FromOptree 0.01 {
                     $lvalue_targ = $inputs[0]->isa('SoN::IR::Node::PadAccess')
                         ? $inputs[0]->targ
                         : $op->first->targ;
-                    my $bound = $sim->lookup($lvalue_targ);
-                    $inputs[0] = $bound if defined $bound;
+                    # A CAPTURED SLOT IS ITS CELL: the lvalue padsv pushed the
+                    # handle (the CellParam in the body, the MakeCell in the
+                    # scope that made it). Taken as the operand, `$n *= 3`
+                    # multiplied the cell itself and stored nothing -- in a
+                    # string eval's body the statement then fell out of the
+                    # graph and `eval q{$n *= 3; 1}` left $n at 1 (perl 3);
+                    # after a closure, the rebind below bound the slot while
+                    # every read went through the cell. The operand is the
+                    # cell's value at this memory version and the result is
+                    # written back through it, as `++` and `=` do.
+                    if (my $handle = $ctx->{cell_params}{$lvalue_targ} // $ctx->{cells}{$lvalue_targ}) {
+                        $cell_compound = $handle;
+                        $inputs[0] = $factory->make('CellRead',
+                            inputs => [$handle,
+                                (defined $sim->memory ? ($sim->memory) : ())],
+                            stamp  => SoN::IR::Stamp->new(type => 'Unknown'));
+                    }
+                    else {
+                        my $bound = $sim->lookup($lvalue_targ);
+                        $inputs[0] = $bound if defined $bound;
+                    }
                 }
 
                 # Field compound assignment (`$n += 1` in a method): the FIRST
@@ -12964,7 +12993,15 @@ class SoN::FromOptree 0.01 {
                 # A DEMOTED SLOT IS STORED, as sassign and `++` store it: the
                 # compound's first operand is the memory-carrying read, which
                 # is also the location.
-                if ($is_compound && $ctx->{addr_taken}{$lvalue_targ}
+                if ($cell_compound) {
+                    my $write = $factory->make('CellWrite',
+                        inputs => [$cell_compound, $node,
+                            (defined $sim->memory ? ($sim->memory) : ())]);
+                    $write->set_control_in($sim->control);
+                    $sim->set_control($write);
+                    $sim->set_memory($write) if defined $sim->memory;
+                }
+                elsif ($is_compound && $ctx->{addr_taken}{$lvalue_targ}
                     && $inputs[0]->isa('SoN::IR::Node::PadAccess')) {
                     my $store = $factory->make('Assign',
                         inputs => [$inputs[0], $node]);
@@ -19105,6 +19142,31 @@ class SoN::FromOptree 0.01 {
         # fails. So: the target padsv already pushed the slot's read;
         # branch on it, walk the right side on the taken arm and store
         # it there, merge, and read the slot again for the value.
+        # A CAPTURED LEXICAL IS ITS CELL, in the closure (the CellParam) and
+        # in the scope that made it (the MakeCell): the target padsv pushed
+        # that handle, and tested as the value and stored as a pad slot,
+        # `$n ||= 5` branched on the cell itself and wrote a slot nobody
+        # reads. Read and written through the cell, as `=` and `++` are.
+        if (my $cell = $ctx->{cell_params}{$targ} // $ctx->{cells}{$targ}) {
+            $sim->pop_node;   # the handle the target padsv pushed
+            my $read = sub ($s) {
+                $factory->make('CellRead',
+                    inputs => [$cell, (defined $s->memory ? ($s->memory) : ())],
+                    stamp  => SoN::IR::Stamp->new(type => 'Unknown'));
+            };
+            my $current = $read->($sim);
+            my ($set_sim, $if_node) = $branch->($test_of->($current));
+            my $rhs = $walk_rhs->($set_sim);
+            my $write = $factory->make('CellWrite',
+                inputs => [$cell, $rhs,
+                    (defined $set_sim->memory ? ($set_sim->memory) : ())]);
+            $write->set_control_in($set_sim->control);
+            $set_sim->set_control($write);
+            $set_sim->set_memory($write) if defined $set_sim->memory;
+            $sim->merge($set_sim, $factory, $if_node);
+            $sim->push_node($read->($sim));
+            return $op->next;
+        }
         if ($ctx->{addr_taken}{$targ} || $field_lvalue) {
             my $current = $sim->pop_node;
             $current = $read_field->($sim) if $field_lvalue;
@@ -22391,6 +22453,13 @@ class SoN::FromOptree 0.01 {
                   . " substitution\n";
             }
         }
+        # A LEXICAL THE CLOSURE CAPTURED is its cell, and the op's targ names
+        # the body's own pad slot: substituted there, the caller's variable
+        # kept its value (`sub { $n =~ s/b/X/ }` left $n at abc). Refused until
+        # the new string is stored through the cell.
+        die "GAP: s/// on a lexical the closure captured, inside that closure,"
+          . " is not yet lowered -- the new string must be stored through its cell\n"
+            if $targ && $CELLS && $CELLS->{cell_params} && $CELLS->{cell_params}{$targ};
         my $scope_key = $targ || '$main::_';
         my $target    = $sim->lookup($scope_key);
         # A DESTRUCTIVE s/// ON A PAD SLOT reads it at the CURRENT memory
