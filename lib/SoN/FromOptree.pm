@@ -924,12 +924,18 @@ class SoN::FromOptree 0.01 {
             next unless $pv =~ /\A[\@%]\w+\z/
                 || ($pv =~ /\A\$\w+\z/ && $ADDR_TAKEN && $ADDR_TAKEN->{$i});
             next if $pn->FLAGS & (B::PADNAMEf_OUTER() | B::PADNAMEf_OUR());
-            next if $SHARED_SLOTS && $SHARED_SLOTS->{$i};
             push $by_name{$pv}->@*, $i;
         }
         for my $pv (keys %by_name) {
             my @t = $by_name{$pv}->@*;
-            $rename{ $t[$_] } = substr($pv, 1) . '__' . ($_ + 1) for 1 .. $#t;
+            # A SLOT SHARED BY NAME with another graph keeps its name, which
+            # that graph reads; the others are spelled apart. Left out of the
+            # count, a second `my @a` beside a shared one kept the name too,
+            # and the two were one array: `my @a = (5); my $f = sub { "@a" };
+            # my @a = (1)` read 5 2 for perl's 5.
+            my ($keep) = grep { $SHARED_SLOTS && $SHARED_SLOTS->{ $t[$_] } } 0 .. $#t;
+            $keep //= 0;
+            $rename{ $t[$_] } = substr($pv, 1) . '__' . ($_ + 1) for grep { $_ != $keep } 0 .. $#t;
         }
         return \%rename;
     }
@@ -2497,7 +2503,7 @@ class SoN::FromOptree 0.01 {
                 my $param = $factory->make('CellParam',
                     inputs => [],
                     index  => $i,
-                    name   => $cap->{name},
+                    name   => $cap->{spelled} // $cap->{name},
                     stamp  => SoN::IR::Stamp->new(type => 'Ref'));
                 # The slot holds the CELL, and reads of it go through memory --
                 # the same demotion an address-taken slot gets, for the same
@@ -3808,9 +3814,13 @@ class SoN::FromOptree 0.01 {
     # inner_idx=1 while their outer_idx are 1 and 2 -- keying the enclosing
     # binding on inner_idx would hand the second closure $n's value.
     #
-    # The inner->outer mapping is BY NAME. A pad name is unique within a scope,
-    # and PADNAMEt_OUTER is exactly the flag saying "this name resolves in an
-    # enclosing pad", so the name is the link perl itself used.
+    # THE INNER->OUTER MAPPING IS PERL'S OWN: a captured name's pad entry
+    # (PADNAMEt_OUTER) records the index of the variable in the enclosing pad
+    # it closes over (PARENT_PAD_INDEX). By name it was not one: the file's
+    # `my $i = 1; { my $i = 5; my $f = sub { $i = 7 } ... }` named two `$i`s,
+    # and the first won -- the closure wrote the outer one (perl's 7/1 came
+    # out 5/7). A capture whose entry names no such variable in the enclosing
+    # pad (one further out) is refused rather than guessed.
     sub _anoncode_capture_info ($cv, $op) {
         my $inner = _anoncode_cv($cv, $op);
         return () unless $inner;
@@ -3818,18 +3828,6 @@ class SoN::FromOptree 0.01 {
         return () unless ref($names);
         my $outer_names = eval { $cv->PADLIST->ARRAYelt(0) };
         return () unless ref($outer_names);
-
-        # name -> index in the ENCLOSING pad.
-        my %outer_of;
-        for my $i (0 .. $outer_names->MAX) {
-            my $pn = $outer_names->ARRAYelt($i);
-            next unless ref($pn) && $$pn && $pn->can('PVX');
-            my $nm = $pn->PVX;
-            next unless defined $nm && length $nm;
-            # First wins: an inner block may reuse a name in a later slot, and
-            # the OUTERMOST binding is the one an anon sub at this level sees.
-            $outer_of{$nm} //= $i;
-        }
 
         my $PADNAMEt_OUTER = 0x1000000;
         my @info;
@@ -3839,14 +3837,13 @@ class SoN::FromOptree 0.01 {
             my $nm = $pn->PVX;
             next unless defined $nm && length $nm;
             next unless $pn->can('FLAGS') && ($pn->FLAGS & $PADNAMEt_OUTER);
-            # A capture whose name is not in the enclosing pad closes over
-            # something FURTHER out (a nested anon sub's grandparent capture).
-            # Refuse rather than guess an index.
-            return () unless defined $outer_of{$nm};
+            my $outer = eval { $pn->PARENT_PAD_INDEX } // 0;
+            my $opn = $outer ? eval { $outer_names->ARRAYelt($outer) } : undef;
+            return () unless ref($opn) && $$opn && $opn->can('PVX') && ( $opn->PVX // '' ) eq $nm;
             push @info, {
                 name      => $nm,
                 inner_idx => $i,
-                outer_idx => $outer_of{$nm},
+                outer_idx => $outer,
                 written   => _body_writes_pad($inner, $i) ? 1 : 0,
             };
         }
@@ -5646,11 +5643,12 @@ class SoN::FromOptree 0.01 {
     sub _lower_const_eval ($op, $sim, $factory, $ctx, $ev) {
         $sim->pop_node;    # the code: known, and compiled
         my @caps  = $ev->{captures}->@*;
+        _spell_captures($ctx, @caps);
         my @cells = _capture_cells($sim, $factory, $ctx, @caps);
         $factory->make('AnonSub',
             inputs   => \@cells,
             name     => $ev->{name},
-            captures => [ map { $_->{name} } @caps ],
+            captures => [ map { $_->{spelled} // $_->{name} } @caps ],
             stamp    => SoN::IR::Stamp->new(type => 'CodeRef'));
         local $IN_EVAL_BODY = 1;
         local $EVAL_ID = ++$EVAL_COUNT;
@@ -5684,6 +5682,23 @@ class SoN::FromOptree 0.01 {
         return ($op->next, 'handled');
     }
 
+    # _spell_captures($ctx, @captures): each capture (_anoncode_capture_info's
+    # records) is given the name its variable is SPELLED by in the scope that
+    # makes the closure -- a second `my $x` there is `$x__2` (%PAD_SYMBOL,
+    # %SHARED_SYMBOL) -- for its cell, the AnonSub and the body's CellParam.
+    # By the pad name alone two closures over two `$x`s named one variable,
+    # and a consumer binding a cell by name bound both to the first.
+    sub _spell_captures ($ctx, @captures) {
+        for my $cap (@captures) {
+            my $i = $cap->{outer_idx};
+            my ($sg, $sym) = $cap->{name} =~ /\A([\$\@%&])(.*)\z/s or next;
+            $sym = $PAD_SYMBOL{$i} if defined $i && defined $PAD_SYMBOL{$i};
+            $sym = $SHARED_SYMBOL{$i} if defined $i && $sg eq '$' && $ctx->{shared_lexicals}{$i} && defined $SHARED_SYMBOL{$i};
+            $cap->{spelled} //= $sg . $sym;
+        }
+        return;
+    }
+
     # _capture_cells($sim, $factory, $ctx, @captures) -> the cell of each
     # capture (_anoncode_capture_info's records), in order: the one this scope
     # already made for that variable, or a MakeCell made now. An anonymous
@@ -5712,7 +5727,7 @@ class SoN::FromOptree 0.01 {
                 $cell = $factory->make('MakeCell',
                     inputs           => [$init,
                         (defined $sim->memory ? ($sim->memory) : ())],
-                    cell_name        => $cap->{name},
+                    cell_name        => $cap->{spelled} // $cap->{name},
                     captured_written => $cap->{written},
                     stamp            => SoN::IR::Stamp->new(type => 'Ref'));
 
@@ -8805,6 +8820,7 @@ class SoN::FromOptree 0.01 {
             @captures = grep { !$field_slot{ $_->{outer_idx} } } @captures;
 
             my $anon_name = _anon_body_name($cv, $op);
+            _spell_captures($ctx, @captures);
             $ANON_BODIES{$anon_name} //= $body;
             $ANON_CAPTURES{$$body} //= [@captures] if @captures;
 
@@ -8835,7 +8851,7 @@ class SoN::FromOptree 0.01 {
             my $node = $factory->make('AnonSub',
                 inputs   => \@cell_inputs,
                 name     => $anon_name,
-                captures => [map { $_->{name} } @captures],
+                captures => [map { $_->{spelled} // $_->{name} } @captures],
                 stamp    => SoN::IR::Stamp->new(type => 'CodeRef'));
             $sim->push_node($node);
             # `\&f` OF A LEXICAL SUB is srefgen(rv2cv(padcv)): the AnonSub is
