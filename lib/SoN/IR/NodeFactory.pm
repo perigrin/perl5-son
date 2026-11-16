@@ -195,6 +195,9 @@ $SoN::IR::NodeFactory::MADE_MAY_DIE = undef;
 $SoN::IR::NodeFactory::SITE = undef;
 # $STRICT_REFS: whether `strict refs` holds at the statement being walked.
 $SoN::IR::NodeFactory::STRICT_REFS = 0;
+# $WHOLE_DEREF_DIES: the op being walked reads a whole array or hash through
+# a reference where perl may die (FromOptree's _op_whole_deref_may_die).
+$SoN::IR::NodeFactory::WHOLE_DEREF_DIES = 0;
 
 # $ON_VALUE: a hook FromOptree sets per step, given each new value node.
 $SoN::IR::NodeFactory::ON_VALUE = undef;
@@ -375,8 +378,14 @@ class SoN::IR::NodeFactory {
             @args{qw(file line)} = $SoN::IR::NodeFactory::SITE->@[0, 1]
                 if $SoN::IR::NodeFactory::SITE && !defined $args{line};
         }
-        # A SCALAR DEREF names them too, and strict refs (PostfixDeref's).
-        if ($op_name eq 'PostfixDeref' && ( $args{sigil} // '' ) eq '$') {
+        # A SCALAR DEREF names them too, and strict refs (PostfixDeref's). So
+        # does a WHOLE ARRAY OR HASH read through a reference where perl may
+        # die -- `@$a > 0`, `my %c = %$h` of an undef under strict refs:
+        # "Can't use an undefined value as an ARRAY reference at FILE line N."
+        # (in an lvalue context -- foreach, keys, a call's argument -- perl
+        # makes the array instead, and dies of nothing).
+        if ($op_name eq 'PostfixDeref' && ( ( $args{sigil} // '' ) eq '$'
+                || $SoN::IR::NodeFactory::WHOLE_DEREF_DIES && ( $args{sigil} // '' ) =~ /\A[\@%]\z/ )) {
             $args{eval_id} //= $SoN::FromOptree::EVAL_ID
                 if $SoN::FromOptree::IN_EVAL_BODY && defined $SoN::FromOptree::EVAL_ID;
             @args{qw(file line)} = $SoN::IR::NodeFactory::SITE->@*

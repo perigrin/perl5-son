@@ -825,6 +825,20 @@ class SoN::FromOptree 0.01 {
         return $kid->name =~ /\A(?:rv2av|rv2hv)\z/ && _op_derefs($kid) if $name =~ /\A(?:aelem|helem)\z/;
         return 0;
     }
+    # _op_whole_deref_may_die($op) -> true for an rv2av or rv2hv of what is not
+    # a glob that reads the WHOLE array or hash in an rvalue context -- neither
+    # OPf_REF (an element's container, a slice's, $#) nor OPf_MOD (foreach,
+    # map, grep, keys, values, each, a call's argument: perl makes the
+    # aggregate there). Measured: `@$x > 0`, `"@$x"`, `my @c = @$x`, `%$h ?
+    # 1 : 0`, `sort @$x`, `return @$x` die of an undef $x under strict refs
+    # ("Can't use an undefined value as an ARRAY reference"), and of a string
+    # ("Can't use string ("3") as an ARRAY ref while "strict refs" in use");
+    # without strict an undef reads as empty and is left undef.
+    sub _op_whole_deref_may_die ($op) {
+        return 0 unless $op->name =~ /\A(?:rv2av|rv2hv)\z/ && ( $op->flags & B::OPf_KIDS() ) && ${ $op->first };
+        return 0 if $op->flags & ( B::OPf_REF() | B::OPf_MOD() );
+        return _deref_operand($op)->name ne 'gv';
+    }
     # _op_pins_a_read($op) -> true for an op whose step makes a read through a
     # reference that _may_die_through_ref pins, where an arm holding it must
     # merge control: an element or exists of a deref, or a scalar deref, read
@@ -5791,6 +5805,7 @@ class SoN::FromOptree 0.01 {
         # and pinned there the read forked the chain -- "a control node with 2
         # successors". An arm on its own Proj -- if, ternary, &&, ||, // that
         # pins -- sets $ARM_PINS.)
+        local $SoN::IR::NodeFactory::WHOLE_DEREF_DIES = _op_whole_deref_may_die($op);
         local $SoN::IR::NodeFactory::ON_VALUE = ( !( $op->flags & B::OPf_MOD() ) || _op_reads_through_ref($op) || _op_takes_an_element($op) ) && ( ( $ctx->{mode} // '' ) ne 'branch' || $ARM_PINS ) ? sub ($n) { local $PIN_OP = $op; _pin_tied_read($sim, $n) } : undef;
         my $name = $op->name;
         my $mode = $ctx->{mode};
@@ -11582,7 +11597,9 @@ class SoN::FromOptree 0.01 {
                                 inputs => [ $only->inputs->@* ],
                                 sigil  => $only->sigil,
                                 stamp  => $only->stamp,
-                                copy   => 1)
+                                copy   => 1,
+                                # (the same read: where perl may die, its site)
+                                ( defined $only->line ? ( map { $_ => $only->$_ } qw(eval_id file line strict package) ) : () ))
                                 if $only->isa('SoN::IR::Node::PostfixDeref')
                                 && ($only->sigil // '') =~ /\A[\@%]\z/
                                 && !$only->copy;
@@ -17064,6 +17081,10 @@ class SoN::FromOptree 0.01 {
                 # that ends it -- is a function exit; see $FN_EXITS.
                 my ($taken_end, $taken_sig) = do {
                     local $LEFT_OK = 1;   # a nested if/else may leave for it (below)
+                    # (ON ITS OWN Proj the arm may pin a read where it stands, as
+                    # an if's arm outside a loop does: `if (ref $c) { my $a =
+                    # $c->{a}; ... @$a ... }` left the reads that may die floating)
+                    local $ARM_PINS = 1;
                     _walk_branch($cv, $op->other, $taken_sim, $factory, $opmap,
                         {}, _loop_arm_exits($break_projs), 0, _op_addr($op->next),
                         $loop_node, $break_projs, 1) };
