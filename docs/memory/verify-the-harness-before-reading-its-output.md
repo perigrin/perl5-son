@@ -57,3 +57,14 @@ Related: [[a-sweeps-absence-is-not-evidence]],
   ROUNDTRIPs into "GAP: Chalk::Impl::SIG cannot be compiled in". ROUNDTRIP read
   407, which looked like a regression. Every stage of a verify sets the same
   env; a new compile-time dependency on the producer is one more reason.
+
+- 2026-11-16: t/bootstrap/element-memory-ssa.t failed in four verifies and was
+  pushed. Two harness holes hid it. (1) The "NEW FAILS" diff is against a
+  107-entry baseline from long ago that still lists this file, so a fresh
+  failure of a file once red reads as "not new". The head-failure LIST is the
+  measure: anything there but perl-recognize-phase5.t is a failure until shown
+  otherwise. (2) The solo rerun that "passed" ran without PERL5_SON_LIB and
+  HOME, and printed `Tests=0 ... NOTESTS` -- zero tests run, read as a pass. A
+  solo rerun sets the same env as the suite, and NOTESTS is never a pass. (The
+  failure itself was a stale expectation: T2 now lowers a shape the test
+  required it to refuse, with perl's answer.)
