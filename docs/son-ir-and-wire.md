@@ -349,7 +349,9 @@ inputs `[invocant, method-name value, args...]`.
   body, merged at the join or the loop's head) -- takes the memory it runs at
   as its last input (`memory_input`), is the memory version after it, and
   merges at the next join and round the loop's back edge, as one on a `my`
-  array does. A count after it reads at it (pvm c140).
+  array does. A count after it reads at it (pvm c140). One onto a merge
+  B::SoN cannot tell is an array's is refused (a GAP), never left off the
+  chain.
 - **Autovivification is spelled.** An element dereferenced for a write --
   a store through it (`$s->{t}{$k} = v`), a push onto its array, a foreach,
   map or grep walking it (`for (@{$h{k}})`), keys or values of it -- is made a
@@ -373,7 +375,9 @@ inputs `[invocant, method-name value, args...]`.
   the program reads it (on the control chain, the memory version after it)
   when what it reads through is a scalar's. In an lvalue context (foreach,
   map, grep, keys, values, each, a slice, `$#`, a call's argument) perl makes
-  the aggregate and dies of nothing: no site.
+  the aggregate and dies of nothing: no site; nor of what is never other
+  than the aggregate (a list perl folded to a constant array, a fresh
+  `[...]` or `{...}`, a reference just taken).
 
 ### 1.6 Source positions
 

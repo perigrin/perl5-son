@@ -38,6 +38,14 @@ for my $case (
     my $n = graph($src);
     ok(!grep({ defined $_->{fields}{line} } derefs($n, '@'), derefs($n, '%')), "$name: perl makes it there, and dies of nothing: no site");
 }
+for my $case (
+    [ q{use strict; sub f { my @r = ("Zy" .. "AAb"); scalar(@r) } print f(), "\n";}, 'a list perl folded to a constant array' ],
+    [ q{use strict; sub f { my $n = @{[1, 2]}; $n } print f(), "\n";}, 'a fresh [...]' ],
+) {
+    my ($src, $name) = @$case;
+    my $n = graph($src);
+    ok(!grep({ defined $_->{fields}{line} } derefs($n, '@'), derefs($n, '%')), "$name: never other than an array: no site");
+}
 {   # AN ARM IN A LOOP BODY on its own Proj pins it where it stands (pvm c221)
     my $n = graph(q{sub f { my ($c) = @_; my $n = 0; while ($n < 3) { if (ref $c) { my $a = $c->{a}; $n = 7 if @$a > 0 } $n++ } $n } print f({a => [1]}), "\n";});
     my @d = derefs($n, '@');

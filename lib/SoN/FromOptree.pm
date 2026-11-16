@@ -834,10 +834,13 @@ class SoN::FromOptree 0.01 {
     # ("Can't use an undefined value as an ARRAY reference"), and of a string
     # ("Can't use string ("3") as an ARRAY ref while "strict refs" in use");
     # without strict an undef reads as empty and is left undef.
+    # Not of what is never other than the aggregate: a glob (`@P`), a list
+    # perl folded to a constant array (`("a" .. "c")`), a fresh [...] or {...},
+    # a reference just taken.
     sub _op_whole_deref_may_die ($op) {
         return 0 unless $op->name =~ /\A(?:rv2av|rv2hv)\z/ && ( $op->flags & B::OPf_KIDS() ) && ${ $op->first };
         return 0 if $op->flags & ( B::OPf_REF() | B::OPf_MOD() );
-        return _deref_operand($op)->name ne 'gv';
+        return _deref_operand($op)->name !~ /\A(?:gv|const|anonlist|anonhash|s?refgen)\z/;
     }
     # _op_pins_a_read($op) -> true for an op whose step makes a read through a
     # reference that _may_die_through_ref pins, where an arm holding it must
