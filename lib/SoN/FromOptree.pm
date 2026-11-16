@@ -356,8 +356,35 @@ class SoN::FromOptree 0.01 {
     # Count-vs-Coerce on it.
     sub _is_array_operand ($node) {
         return true if _is_aggregate_node($node);
-        return defined $node && $node->isa('SoN::IR::Node::PadAccess')
+        return true if defined $node && $node->isa('SoN::IR::Node::PadAccess')
             && ($node->sigil // '') eq '@';
+        return _is_array_merge($node);
+    }
+    # _is_array_merge($node) -- true for a MERGE OF AN ARRAY'S VERSIONS: a
+    # value Phi (at a join, or round a loop) whose every input is an array
+    # (_is_array_operand) or another such merge, as `my @p; ... @p = ()` in
+    # an arm or a loop body makes. A push onto it changes the array the way
+    # taken holds, in place: without this it took no memory input and was no
+    # memory version, and a count after it read the version before it (`@p
+    # > 1` at the loop's head: "2| 1" for perl's "1 3| 5"). A loop Phi's
+    # back edge not yet set is no evidence either way.
+    sub _is_array_merge ($node) {
+        return false unless blessed($node) && $node->isa('SoN::IR::Node::Phi') && !$node->memory;
+        my (%seen, $array);
+        my @q = ($node);
+        while (defined(my $n = shift @q)) {
+            next if $seen{ refaddr $n }++;
+            if ($n->isa('SoN::IR::Node::Phi')) {
+                return false if $n->memory;
+                push @q, grep { defined } $n->inputs->@*;
+                next;
+            }
+            # (an array, not a reference to one: `$c ? [1] : [2]` is a scalar)
+            return false unless $n->stamp && $n->stamp->type =~ /\A(?:Array|List)\z/
+                || $n->isa('SoN::IR::Node::PadAccess') && ($n->sigil // '') eq '@';
+            $array = 1;
+        }
+        return $array ? true : false;
     }
 
     sub _is_aggregate_node ($node) {
