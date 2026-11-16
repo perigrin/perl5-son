@@ -129,7 +129,7 @@ serializes (§2.4). The rest are internal to the producer.
 | Subscript | Access | **kind**, **stash_has** |
 | Exists, Delete | Access/Value | **kind**; **stash_has** (Exists) |
 | Count | Access | **presence_test** |
-| PostfixDeref | Value | **sigil**, **copy** |
+| PostfixDeref | Value | **sigil**, **copy**; **file**, **line**, **eval_id**, **strict**, **package** where it may die |
 | ListAppend (map, grep) | Value | **collector** |
 | ExpressionList, StructRef, StructFieldAccess, BacktickExpr | Value | — |
 | TernaryExpr | Value | **rebind_arm** |
@@ -339,7 +339,41 @@ inputs `[invocant, method-name value, args...]`.
   whose input is a memory version rather than a VarDecl.
 - **Closures** use MakeCell, CellParam, CellRead and CellWrite.
   `AnonSub.captures[N]` pairs with input N, which the body reads as
-  `CellParam(index=N)`.
+  `CellParam(index=N)`. A capture is the variable perl closes over -- the
+  inner pad entry's `PARENT_PAD_INDEX`, not the first of its name -- and
+  `AnonSub.captures`, `MakeCell.cell_name` and `CellParam.name` spell it as
+  the making scope does: of two `my $x` there, the second is `$x__2`, as its
+  PadAccess is (`my $i = 1; { my $i = 5; sub { $i = 7 } }` writes the inner).
+- **A write in place to a merged aggregate** -- push, unshift, splice, shift
+  or pop on a value Phi of an array's versions (`@p = ()` in an arm or a loop
+  body, merged at the join or the loop's head) -- takes the memory it runs at
+  as its last input (`memory_input`), is the memory version after it, and
+  merges at the next join and round the loop's back edge, as one on a `my`
+  array does. A count after it reads at it (pvm c140).
+- **Autovivification is spelled.** An element dereferenced for a write --
+  a store through it (`$s->{t}{$k} = v`), a push onto its array, a foreach,
+  map or grep walking it (`for (@{$h{k}})`), keys or values of it -- is made a
+  hash or array first where it is undef: a Subscript read pinned where it
+  stands (never hash-consed with another read of it), a fresh ArrayLiteral or
+  HashLiteral pinned after it, `DefinedOr(read, fresh)`, and an Assign of that
+  into the element; the deref then reads the DefinedOr. Whatever the outer
+  container is (a `my` aggregate, one just made, one through a reference an
+  argument holds), and in a loop body too. Not through @_ (an element of it is
+  the caller's variable) nor a tied container. A `my` scalar known undef
+  dereferenced for a write is bound to a fresh one. Left as perl's: a read
+  through an undef intermediate (`$x->[0]` makes `$x` an array) and a scalar
+  not known undef (`my $x = shift; for (@$x)`).
+- **A whole read through a reference may die.** An rvalue `@$x`, `%$x`
+  (rv2av/rv2hv with neither OPf_REF nor OPf_MOD: a count, a copy, a list, a
+  truth, `"@$x"`) dies of an undef under strict refs ("Can't use an undefined
+  value as an ARRAY reference at FILE line N."), of a string under them, of
+  another kind of reference; without strict refs an undef reads empty (its
+  count undef) and is left undef. Such a PostfixDeref names `file`, `line`,
+  `eval_id`, `package` and `strict`, as a scalar deref does, and stands where
+  the program reads it (on the control chain, the memory version after it)
+  when what it reads through is a scalar's. In an lvalue context (foreach,
+  map, grep, keys, values, each, a slice, `$#`, a call's argument) perl makes
+  the aggregate and dies of nothing: no site.
 
 ### 1.6 Source positions
 
@@ -571,7 +605,7 @@ CLASS, as observed:
 - **Loop** `{bound}`
 - **EntryDef** `{package, sigil, symbol}`
 - **CompoundAssign** `{op}`
-- **PostfixDeref** `{sigil, copy?}`
+- **PostfixDeref** `{sigil, copy?, eval_id?, file?, line?, strict?, package?}` (the site: a `$` deref always, a whole `@`/`%` read where perl may die)
 - **Match** `{flags}`
 - **RegexMatch** `{pattern, flags}`
 - **Print** `{has_filehandle?}`
