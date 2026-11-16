@@ -12947,6 +12947,14 @@ class SoN::FromOptree 0.01 {
                         && ( @vars > 1 || ( @vars == 1 && _stores_of_slot($cv, $vars[0]) > 1 ) );
                 } @inputs;
                 $pin_on_control = 1 if $pin_bit;
+                # A WRITE IN PLACE TO A MERGE B::SoN cannot tell is an array's
+                # versions (_is_array_merge) would be on no memory chain, a
+                # count after it reading the version before: refused, not
+                # left for a consumer to order.
+                die "GAP: a $name onto a merge of versions not known to be an array's is not yet lowered -- it would be on no memory chain\n"
+                    if $node_type eq 'Call' && $name =~ /\A(?:push|unshift|splice|shift|pop)\z/
+                    && !$extra{memory_input} && defined $sim->memory
+                    && @inputs && blessed($inputs[0]) && $inputs[0]->isa('SoN::IR::Node::Phi');
                 my $make = $pin_bit ? 'make_unique' : 'make';
                 my $node = $factory->$make($node_type, inputs => \@inputs, %extra);
                 # A WARN NAMES ITS FILE AND LINE, as a die does: perl appends
