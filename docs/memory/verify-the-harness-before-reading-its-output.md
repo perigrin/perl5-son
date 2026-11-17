@@ -68,3 +68,11 @@ Related: [[a-sweeps-absence-is-not-evidence]],
   solo rerun sets the same env as the suite, and NOTESTS is never a pass. (The
   failure itself was a stale expectation: T2 now lowers a shape the test
   required it to refuse, with perl's answer.)
+
+- 2026-11-17: verify-r.sh's suite stage ran `t/bootstrap/*.t` and
+  `t/bootstrap/ir/*.t` only, so 13 red files in mop/, regex/, scheduler/,
+  corpus/ and t/ itself never showed, and "chalk suite 0 failures" was claimed
+  over two directories. An agent found them by running the whole tree. The
+  suite stage is now `find t -name '*.t'` (minus mode2-extractor.t, which needs
+  ~/dev/perl5), with a 40-minute per-file limit since the own-source test takes
+  17. Check the DENOMINATOR of the suite too, not only of a census.
