@@ -27,9 +27,20 @@ Two causes, two layers:
    ESCAPES -- refuses -- where it cannot say (closure cells, `local`, die, a
    builtin that may keep it, a store through a reference, a tie).
 
+Measured on the 192 saved wires: 177 still refuse by this check -- every
+one at Carp's `(_fetch_sub B => 'svref_2object')->($func)->GV`: Carp has a
+call through a code value and calls to subs no program defines, so any sub
+may be the code called (the walk's shortcut), gensym's glob reference may
+be its value, and `->GV` hands it to a sub no program defines: escape. With
+the check bypassed, those programs refuse next at "a reference to a sub not
+here (CORE::GLOBAL::caller)" -- the check is not what keeps them out. 11
+now refuse at the field Ref T2 builds, 2 at "a read through a reference
+waiting across a method call", 1 genuinely reaches (StructPromotion.pm:425),
+1 escapes at a store into a Call.
+
 **Why:** a check that asks "is X anywhere?" over the whole MOP refuses every
-program that LOADS a module with X. The refusal count looked like 192
-programs needing glob support; most needed neither globs nor fields.
+program that LOADS a module with X, and names X as the blocker when the
+next blocker (CORE::GLOBAL::caller here) is something else entirely.
 
 **How to apply:** when a program-wide refusal fires on most of a corpus, list
 the offending nodes per file (a probe wrapping `Builder::out`) before
