@@ -76,3 +76,12 @@ Related: [[a-sweeps-absence-is-not-evidence]],
   suite stage is now `find t -name '*.t'` (minus mode2-extractor.t, which needs
   ~/dev/perl5), with a 40-minute per-file limit since the own-source test takes
   17. Check the DENOMINATOR of the suite too, not only of a census.
+
+- 2026-11-18: the %INC audit credited each require to the file that ran it,
+  and for `use parent` that is parent.pm. One `use parent` in chalk lib made
+  parent.pm "reached from chalk", and with it everything parent.pm loaded for
+  the TESTS (File::Temp's IO::Handle, IO::Seekable, Symbol), so artifacts read
+  53 -> 7 instead of 58 -> 12. Found by asking "who imports Symbol?" of a
+  module the audit called under test, and finding no lib file did. A require
+  hook walks past parent.pm/base.pm to the real caller; any "reached from X"
+  closure must check that its edges name the module that ASKED.
