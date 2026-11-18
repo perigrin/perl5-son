@@ -51,7 +51,11 @@ fallback, an array or hash target BY SIGIL pins the Assign and makes it the
 memory version (as the demoted-target branch does), rebinding the slot to the
 target PadAccess where it was bound to a literal; and the positional rebind
 must treat a `@`/`%` PadAccess (target or value) as an aggregate by sigil.
-Tried in a scratch copy only -- see the report of 2026-11-18.
+Tried in a scratch copy only (6 lines: the sigil test in the pin branch and in
+`$positional`): the three programs and the literal / array / branch /
+scalar-context / hash shapes round-trip through chalk 23be7c09, 0 wrong; a
+declared-earlier `($x, @r) = ...` still refuses (it needs the memory version
+too). Not run against the producer's own suite or the census.
 
 ## Lessons
 
