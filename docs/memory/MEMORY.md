@@ -86,6 +86,7 @@
 - [A refusal test must name its cause](a-refusal-test-must-name-its-cause.md) — three tests passed for the wrong reason when the cause moved; match the message, not qr/GAP:/
 - [A shell loop can eat its own input](a-shell-loop-can-eat-its-own-input.md) — `while read` + inner perl reported 986/986 clean; the real number was 857
 - [A T2 difficulty is not a T1 refusal](a-t2-difficulty-is-not-a-t1-refusal.md) — three goto FACTs dissolved; a GAP means the program doesn't say, not that lowering is hard
+- [A timeout can be a hang](a-timeout-can-be-a-hang.md) — the 11-17 swap TIMEOUTs were B::SoN looping in _required_files (op_next cycle from a conditionless loop in a BEGIN); flat RSS at 100% CPU is a spin
 - [Verify the harness before reading its output](verify-the-harness-before-reading-its-output.md) — three censuses measured the wrong thing; check denominator, filters, and a known case
 - [Landing work in a peer's repo needs a commit](landing-work-in-a-peers-repo-needs-a-commit.md) — an uncommitted file in their tree is theirs to sweep up; and run their whole suite, not a -run subset
 - [Compiling is not running](compiling-is-not-running.md) — a fix that clears the compile error has cleared the loudest check, not the real one
@@ -288,3 +289,4 @@
 - [T2 alias reads; test header](t2-alias-reads-and-test-header.md) — foreach over @_ reads elements only when @_ is never reshaped (a14 lesson); -d/chdir/require for t/test.pl; a refusal test that flips: find why, probe two orders
 - [Preloaded modules are peephole-optimized](preloaded-modules-are-peephole-optimized.md) — Carp/Exporter compiled before B::SoN suppresses peep: multideref underflows; recompile at CHECK; probe in the module, not a copy; plus nested redo, substr s///, Negate typing
 - [A late typing step must propagate](a-late-typing-step-must-propagate.md) — `_type_calls_by_context` stamped calls after the last propagation; a Phi merging one stayed untyped and refused the load; propagate after any late stamp
+- [Test::More's $TODO is the caller's](test-more-s-todo-is-the-caller-s.md) — Test::Chalk migration: read $TODO by caller package (local breaks an exported alias); honour $Test::Builder::Level; T2 reads a global stale after eval { $code->() }
