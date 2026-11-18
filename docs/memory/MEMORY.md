@@ -86,7 +86,7 @@
 - [A refusal test must name its cause](a-refusal-test-must-name-its-cause.md) — three tests passed for the wrong reason when the cause moved; match the message, not qr/GAP:/
 - [A shell loop can eat its own input](a-shell-loop-can-eat-its-own-input.md) — `while read` + inner perl reported 986/986 clean; the real number was 857
 - [A T2 difficulty is not a T1 refusal](a-t2-difficulty-is-not-a-t1-refusal.md) — three goto FACTs dissolved; a GAP means the program doesn't say, not that lowering is hard
-- [A timeout can be a hang](a-timeout-can-be-a-hang.md) — the 11-17 swap TIMEOUTs were B::SoN looping in _required_files (op_next cycle from a conditionless loop in a BEGIN); flat RSS at 100% CPU is a spin
+- [A timeout can be a hang](a-timeout-can-be-a-hang.md) — the 11-17 swap TIMEOUTs were B::SoN looping in _required_files (op_next cycle from a conditionless loop in a BEGIN); flat RSS at 100% CPU is a spin; fixed 11-18 with a visited set
 - [Verify the harness before reading its output](verify-the-harness-before-reading-its-output.md) — three censuses measured the wrong thing; check denominator, filters, and a known case
 - [Landing work in a peer's repo needs a commit](landing-work-in-a-peers-repo-needs-a-commit.md) — an uncommitted file in their tree is theirs to sweep up; and run their whole suite, not a -run subset
 - [Compiling is not running](compiling-is-not-running.md) — a fix that clears the compile error has cleared the loudest check, not the real one

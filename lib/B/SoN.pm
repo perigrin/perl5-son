@@ -115,10 +115,14 @@ sub _recompile_preloaded {
 
 # _required_files($cv) -> the files a `require` of a constant names in this
 # CV's own ops ("Carp.pm": a `use Carp` is a BEGIN of that require).
+# The walk follows op_next, which CYCLES: a loop with no condition (`while (1)`,
+# `for (...; ; ...)`, as in Math::BigInt::Calc's BEGIN) leaves only by `last`,
+# through the loop's lastop, so its chain comes back round. It stops at an op
+# it has seen; a chain with no cycle is walked exactly as before.
 sub _required_files {
     my ($cv) = @_;
-    my @files;
-    for ( my $op = eval { $cv->START }; $op && $$op; $op = eval { $op->next } ) {
+    my ( @files, %seen );
+    for ( my $op = eval { $cv->START }; $op && $$op && !$seen{$$op}++; $op = eval { $op->next } ) {
         next unless $op->name eq 'require';
         my $k = eval { $op->first } or next;
         next unless $$k && $k->name eq 'const';
@@ -2854,7 +2858,8 @@ my $COMPILATION_FILE;
 sub _compilation_file {
     return $COMPILATION_FILE if defined $COMPILATION_FILE;
     my $op = eval { B::main_start() };
-    while ( ref($op) && $$op ) {
+    my %seen;   # (op_next can cycle: see _required_files)
+    while ( ref($op) && $$op && !$seen{ $$op }++ ) {
         if ( $op->isa('B::COP') ) {
             my $f = eval { $op->file };
             return $COMPILATION_FILE = $f if defined $f && length $f;

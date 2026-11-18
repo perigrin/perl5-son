@@ -24,3 +24,11 @@ here all five, and only those five, loaded Math::BigInt at compile time.
 Also from that day: `grep -v 'e.g.'` is a regex, and it dropped "unseen by the
 graph" from a cause table. Summing the table back to the verdict count
 caught it.
+
+2026-11-18: fixed. `_required_files` (and `_compilation_file`, the same
+op_next walk over main_start) keep a visited set and stop at an op seen
+before; a chain with no cycle returns exactly what it did. Pinned in
+t/wire-a-begin-with-an-endless-loop-is-walked-in-time.t (while (1),
+`for (...; ; ...)`, `use Math::BigInt`; producer under timeout(1)). Still a
+shortcut: a require after a conditionless loop in the same BEGIN is not seen
+(the walk never took `last`'s exit), as a require in an untaken branch is not.
