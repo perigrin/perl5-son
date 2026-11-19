@@ -43,18 +43,45 @@ subtest 'a clean program: stores and reads in one chain' => sub {
         or diag explain_v( $r->{violations} );
 };
 
+# HAND-BUILT GRAPHS for the rules the producer does not break (any more): a
+# rule with no failing case is a rule nobody has seen fail. A class the
+# producer has since fixed keeps its rule tested here by hand, and its probe
+# is asserted clean beside it.
+sub graph (@nodes) {
+    return { methods => { g => { returns => [ $nodes[-1]{id} ], nodes => \@nodes } } };
+}
+sub nd ( $id, $op, $in, %rest ) {
+    my $ctl = delete $rest{ctl};
+    return { id => $id, op => $op, inputs => $in, ( defined $ctl ? ( control_in => $ctl ) : () ),
+        ( %rest ? ( fields => {%rest} ) : () ) };
+}
+
+# `@a[0,1] = (5,6)` as the producer made it until 2026-11-19: a slice Assign
+# with no control_in and no reader.
+sub floating_slice_assign () {
+    return graph(
+        nd( 0, 'Start', [] ), nd( 1, 'Constant', [] ), nd( 2, 'MemStart', [] ),
+        nd( 3, 'PadAccess', [], sigil => '@', symbol => 'a' ),
+        nd( 4, 'Slice', [ 1, 3 ], kind => 'array' ),
+        nd( 5, 'Assign', [ 4, 1 ], targets => 1 ),
+        nd( 6, 'Return', [1], ctl => 0 ),
+    );
+}
+
 subtest 'every violation names its node, kind, rule and graph' => sub {
-    my $r = rules('my @a = (0,0,0); @a[0,1] = (5,6); print "@a\n";');
+    my $r = rules( floating_slice_assign() );
     my ($v) = $r->{'write-floating'}->@*;
-    is $v->{graph}, 'main::__PROGRAM__', 'graph';
-    is $v->{op},    'Assign',            'kind';
+    is $v->{graph}, 'g',      'graph';
+    is $v->{op},    'Assign', 'kind';
     like $v->{node}, qr/^\d+$/, 'node id';
     like $v->{detail}, qr/slice|element/, 'detail says what it writes';
 };
 
 subtest 'write-floating: a store with no control_in and no reader (slice2)' => sub {
-    my $r = rules('my @a = (0,0,0); @a[0,1] = (5,6); print "@a\n";');
-    is ops( $r->{'write-floating'} ), ['Assign'], 'the slice assign floats';
+    is ops( rules( floating_slice_assign() )->{'write-floating'} ), ['Assign'], 'the slice assign floats';
+    # The producer places it now (t/wire-list-assign-places-by-storage.t).
+    is rules('my @a = (0,0,0); @a[0,1] = (5,6); print "@a\n";')->{'write-floating'}, undef,
+        'and the producer no longer makes one';
 };
 
 subtest 'effect-rides-value: a call off the chain (dyn1)' => sub {
@@ -66,7 +93,22 @@ P
         ( $r->{'effect-rides-value'} // [] )->@*;
     is scalar(@dyn), 1, 'the dynamic method call is not on the chain';
     my @bless = grep { $_->{detail} =~ /bless/ } ( $r->{'effect-rides-value'} // [] )->@*;
-    is scalar(@bless), 1, 'bless used for its value rides the value edge';
+    is scalar(@bless), 0, 'the producer pins a bless used for its value now (B::SoN::EffectTable)';
+    # ...the shape it made: a bless with no control_in, read by the Return.
+    my $old = rules( graph(
+        nd( 0, 'Start', [] ), nd( 1, 'Constant', [] ),
+        nd( 2, 'Call', [ 1, 1 ], dispatch_kind => 'builtin', name => 'bless' ),
+        nd( 3, 'Return', [2], ctl => 0 ),
+    ) );
+    is [ map { $_->{detail} } ( $old->{'effect-rides-value'} // [] )->@* ], ['builtin bless'],
+        'bless used for its value rides the value edge';
+    # `prtf` is the wire's name for printf: the verifier's own list said printf.
+    my $prtf = rules( graph(
+        nd( 0, 'Start', [] ), nd( 1, 'Constant', [] ),
+        nd( 2, 'Call', [1], dispatch_kind => 'builtin', name => 'prtf' ),
+        nd( 3, 'Return', [2], ctl => 0 ),
+    ) );
+    is [ map { $_->{detail} } ( $prtf->{'effect-rides-value'} // [] )->@* ], ['builtin prtf'], 'a floating printf is seen';
 };
 
 subtest q{s///r stores nothing: it is a value, not a floating write} => sub {
@@ -104,7 +146,16 @@ our $total = 0;
 sub tally { for my $x (@_) { if ($x > 2) { $total += $x } } return $total }
 print tally(1, 3, 5), "\n";
 P
-    is ops( $r->{'read-unversioned:package'} ), ['EntryDef'], '$total += reads $total with no memory';
+    is $r->{'read-unversioned:package'}, undef, 'the producer reads `$total +=` at a memory version now';
+    # ...as it did not: the bare name was the `+=`'s operand.
+    my $old = rules( graph(
+        nd( 0, 'Start', [] ), nd( 1, 'Constant', [] ), nd( 2, 'MemStart', [] ),
+        nd( 3, 'EntryDef', [], sigil => '$', symbol => 'total', package => 'main' ),
+        nd( 4, 'Add', [ 3, 1 ] ),
+        nd( 5, 'EntryWrite', [ 3, 4, 2 ], ctl => 0 ),
+        nd( 6, 'Return', [4], ctl => 5 ),
+    ) );
+    is ops( $old->{'read-unversioned:package'} ), ['EntryDef'], 'a bare name read as a value has no version';
 };
 
 subtest 'phi-arity:eval-join: the eval join has one way in, two-input Phis' => sub {
@@ -122,19 +173,24 @@ subtest 'fault-floating: a division that may die has no control (fl1)' => sub {
 
 subtest 'package-scalar-loop-value: $g carried round a loop as a value (pg1)' => sub {
     my $r = rules('our $g = 0; sub bump { $g += 10 } for my $i (1..3) { $g = $g + 1; bump(); } print "$g\n";');
-    is ops( $r->{'package-scalar-loop-value'} ), ['Phi'], 'the value Phi a callee cannot reach';
+    is $r->{'package-scalar-loop-value'}, undef, 'the producer reads $g through the loop memory now';
+    # ...the shape it made: a header Phi of the two values stored to $g.
+    my $old = rules( graph(
+        nd( 0, 'Start', [] ), nd( 1, 'Constant', [] ), nd( 2, 'MemStart', [] ),
+        nd( 3, 'EntryDef', [], sigil => '$', symbol => 'g', package => 'main' ),
+        nd( 4, 'EntryWrite', [ 3, 1, 2 ], ctl => 0 ),
+        nd( 5, 'Loop', [4], ctl => 4 ),
+        nd( 6, 'Phi', [ 4, 10 ], region => 5, memory => 1 ),
+        nd( 7, 'Phi', [ 1, 8 ], region => 5 ),
+        nd( 8, 'Add', [ 7, 1 ] ),
+        nd( 9, 'Proj', [5], index => 0 ),
+        nd( 10, 'EntryWrite', [ 3, 8, 6 ], ctl => 9 ),
+        nd( 11, 'Proj', [5], index => 1 ),
+        nd( 12, 'Return', [1], ctl => 11 ),
+    ) );
+    is [ map { $_->{node} } ( $old->{'package-scalar-loop-value'} // [] )->@* ], [7],
+        'the value Phi a callee cannot reach';
 };
-
-# HAND-BUILT GRAPHS for the rules the producer does not break today: a rule
-# with no failing case is a rule nobody has seen fail.
-sub graph (@nodes) {
-    return { methods => { g => { returns => [ $nodes[-1]{id} ], nodes => \@nodes } } };
-}
-sub nd ( $id, $op, $in, %rest ) {
-    my $ctl = delete $rest{ctl};
-    return { id => $id, op => $op, inputs => $in, ( defined $ctl ? ( control_in => $ctl ) : () ),
-        ( %rest ? ( fields => {%rest} ) : () ) };
-}
 
 subtest 'phi-arity: a Phi must pair with its Region\'s ways in' => sub {
     my $r = rules( graph(

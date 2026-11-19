@@ -90,7 +90,21 @@ SRC
     }
     ok @stores && !grep({ $_->{op} ne 'EntryWrite' } @stores),
         'and reads it at a store' or return;
-    my @values = map { $by{ $_->{inputs}[1] }{fields}{value} // '?' } @stores;
+    # (a restore stores a READ of the scalar at the version before the
+    # `local`, since 2026-11-19: the value is what that version stored)
+    # Every constant such a value can be: through the read to the store its
+    # version is, and through the loop's memory Phi to each store it merges.
+    my $value_of;
+    $value_of = sub ($id, $seen = {}) {
+        my $n = $by{$id} or return '?';
+        return () if $seen->{$id}++;                      # round the loop: nothing new
+        return $n->{fields}{value} // '?' if $n->{op} eq 'Constant';
+        return $value_of->( $n->{inputs}[0], $seen ) if $n->{op} eq 'EntryDef' && @{ $n->{inputs} };
+        return $value_of->( $n->{inputs}[1], $seen ) if $n->{op} eq 'EntryWrite';
+        return map { $value_of->( $_, $seen ) } $n->{inputs}->@* if $n->{op} eq 'Phi';
+        return '?';
+    };
+    my @values = map { $value_of->( $_->{inputs}[1] ) } @stores;
     is [ grep { $_ ne 'outer' } @values ], [],
         'every store it can read is the outer value, none the localised one'
         or diag "read observes: @values";

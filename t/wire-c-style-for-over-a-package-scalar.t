@@ -118,39 +118,30 @@ SRC
 # So the assertion is the fact: the carried Phi's stamp must be a type the
 # back-edge satisfies, and never Unknown. Both Int and Scalar pass; a Str or an
 # unstamped Phi does not.
-subtest 'the loop Phi carries an honest stamp, never Unknown' => sub {
+# SINCE 2026-11-19 THERE IS NO SUCH PHI. A package scalar the program writes
+# lives in memory (audit W1: a value Phi is a copy no callee's store reaches),
+# so the loop carries it on its MEMORY Phi and each read is an EntryDef at a
+# memory version. What this test held still holds, moved to where the value
+# now is: the read in the loop is stamped honestly, never Unknown.
+subtest 'the loop reads $i through memory, with an honest stamp' => sub {
     my ( $data, $err ) = graph_of(
         'for ($i = 0; $i <= 3; $i++) { print "i=$i\n" }' );
     ok $data, 'it translates' or diag($err), return;
 
     my @n = ( $data->{methods}{'main::__PROGRAM__'}{nodes} // [] )->@*;
     my %by_id = map { $_->{id} => $_ } @n;
-    # A MEMORY Phi merges stores, not values, and carries no stamp: the
-    # loop's own (the body stores $i) and its exit's. Known by what it merges.
-    my %mem;
-    my $is_mem; $is_mem = sub ($id) {
-        my $s = $by_id{$id} or return 0;
-        return $mem{$id} //= ( $s->{op} // '' ) =~ /\A(?:MemStart|EntryWrite)\z/
-            || ( ( $s->{op} // '' ) eq 'Phi'
-                 && $is_mem->( ( $s->{inputs} // [] )->[0] // -1 ) ) ? 1 : 0;
-    };
-    my @phi = grep { ( $_->{op} // '' ) eq 'Phi' && !$is_mem->( $_->{id} ) } @n;
-    ok scalar(@phi), 'a loop Phi exists' or return;
+    my ($loop) = grep { $_->{op} eq 'Loop' } @n;
+    my @phi = grep { $_->{op} eq 'Phi' && ( $_->{fields}{region} // -1 ) == $loop->{id} } @n;
+    is [ grep { !$_->{fields}{memory} } @phi ], [], 'no value Phi carries $i';
+    my ($mem) = grep { $_->{fields}{memory} } @phi;
+    ok $mem, 'the loop has a memory Phi' or return;
 
-    for my $p (@phi) {
-        my $st = $p->{stamp} // 'Unknown';
-        ok $st ne 'Unknown',
-            "Phi $p->{id} is stamped, not Unknown (got $st)";
-
-        # AND NOT NARROWER THAN AN INPUT. A Phi claiming Int over a Str arm is
-        # the miscompile this guards; the stamp has to admit every input.
-        for my $in ( ( $p->{inputs} // [] )->@* ) {
-            my $src = $by_id{$in} or next;
-            my $ss = $src->{stamp} // 'Unknown';
-            next if $ss eq 'Unknown' || $ss eq $st;
-            ok( ( $st eq 'Scalar' || $st eq 'Num' ),
-                "Phi $p->{id} stamped $st admits its $ss input $in" );
-        }
+    my @reads = grep { $_->{op} eq 'EntryDef' && ( $_->{fields}{symbol} // '' ) eq 'i'
+                       && ( $_->{inputs} // [] )->@* && $_->{inputs}[0] == $mem->{id} } @n;
+    ok scalar(@reads), '$i is read at the loop\'s memory Phi' or return;
+    for my $r (@reads) {
+        my $st = $r->{stamp} // 'Unknown';
+        ok $st ne 'Unknown', "read $r->{id} is stamped, not Unknown (got $st)";
     }
 };
 

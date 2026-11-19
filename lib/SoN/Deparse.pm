@@ -1950,6 +1950,9 @@ class SoN::Deparse 0.01 {
             next unless ( $n->{op} // '' ) =~ /\A(?:EntryDef|FieldAccess)\z/;
             next if exists $bound{ $n->{id} };
             next if $under_loop{ $n->{id} };
+            # (a read at a loop's memory Phi is the value its pass starts
+            # from: bound at the top of the pass, below, or spelled by name)
+            next if $self->_reads_loop_memory($n);
             my @in = ( $n->{inputs} // [] )->@*;
             # A barrier call is a version too, made without consuming one --
             # but not one inside a block eval: the binding lands right after
@@ -2030,6 +2033,19 @@ class SoN::Deparse 0.01 {
         # names.
         for my $n ( @late_saves ) {
             my $ver = $nodes->{ ( $n->{inputs} // [] )->[-1] } // {};
+            # A SAVE MADE IN A LOOP BODY, of a scalar the loop carries in
+            # memory, reads the loop's memory Phi: the value the pass starts
+            # from. It is taken at the top of each pass. Anchored as a stale
+            # read, with no join to stand at, it was assigned at the END of
+            # the pass -- `for (1..2) { local $g = $g + $i; ... }` computed
+            # the local from an undefined `$saved` and restored one.
+            if ( $self->_reads_loop_memory($n) ) {
+                my $loop = $nodes->{ $ver->{fields}{region} };
+                $hoisted{ $bound{ $n->{id} } } //= $bound{ $n->{id} };
+                push $loop_top_bind{ $loop->{id} }->@*, $n;
+                $pass_top_node{ $n->{id} } = 1;
+                next;
+            }
             if ( ( $ver->{op} // '' ) eq 'Phi' ) {
                 my $r = $nodes->{ ( $ver->{fields} // {} )->{region} // -1 } // {};
                 $stale_join{ $n->{id} } = $r->{id}
@@ -2059,6 +2075,15 @@ class SoN::Deparse 0.01 {
         # through its Region: neither carries a control_in, and a store inside
         # an `if` arm went unseen by the scalar walk below.
         my %arm_next = map { $_ => [ $ctrl_next{$_}->@* ] } keys %ctrl_next;
+        # A PACKAGE SCALAR READ AT A LOOP'S MEMORY Phi -- what a written package
+        # scalar's read in a loop body is, now that no loop carries one on a
+        # value Phi (audit 2026-11-19, W1) -- is the value its pass starts
+        # from. A store later in the pass shadows it, so it is read once at
+        # the top of the pass, as a shared lexical's is (_bind_at_pass_top).
+        for my $n ( sort { $a->{id} <=> $b->{id} } $self->_nodes_in_order ) {
+            next unless ( $n->{op} // '' ) eq 'EntryDef' && !exists $bound{ $n->{id} };
+            $self->_bind_at_pass_top( $n, 0, \%arm_next ) if $self->_reads_loop_memory($n);
+        }
         for my $c ( $self->_nodes_in_order ) {
             next unless ( $c->{op} // '' ) =~ /\A(?:Proj|Region)\z/;
             push $arm_next{$_}->@*, $c for ( $c->{inputs} // [] )->@*;
@@ -2173,6 +2198,7 @@ class SoN::Deparse 0.01 {
             my $f  = $n->{fields} // {};
             next unless ( $op eq 'PadAccess' && $f->{shared} )
                      || ( $op eq 'EntryDef' && defined $f->{package} );
+            next if $pass_top_node{ $n->{id} };   # (read once at the top of its pass)
             next unless $under_loop{ $n->{id} };
             my @in = ( $n->{inputs} // [] )->@*;
             next unless @in == 1 && $self->_is_memory( $in[0] );
@@ -2206,6 +2232,15 @@ class SoN::Deparse 0.01 {
                 $store{ $_->{id} } = 1 for grep {
                     $in_body{ $_->{id} } && $self->_writes_this_name( $_, $f )
                 } $self->_nodes_in_order;
+            }
+            # A READ AT A LOOP'S MEMORY Phi is shadowed only by a store in THAT
+            # loop's body: an earlier loop's store is behind it, not ahead.
+            # `while (1) { $x = $x + 1; last if ... } $x = 0; while ($x != 3)
+            # { $x = $x + 1 }` took the first loop's store for one the second
+            # loop's condition read past, and refused.
+            if ( $at_loop_phi ) {
+                my $body = $body_of{ ( $version->{fields} // {} )->{region} // -1 } // {};
+                delete @store{ grep { !$body->{$_} } keys %store };
             }
             next unless %store;
             # A loop that DOES carry it -- the read is a header Phi's init.
@@ -4510,7 +4545,8 @@ class SoN::Deparse 0.01 {
         } $self->_nodes_in_order;
         while ( defined( my $id = shift @q ) ) {
             next if $cond{$id}++;
-            push @q, ( ( $nodes->{$id} // {} )->{inputs} // [] )->@*;
+            my $m = $nodes->{$id} // {};
+            push @q, ( $m->{inputs} // [] )->@*;
         }
         # A CONSUMER THAT ALIASES the variable needs it by name, and a value
         # use may take the binding: a user call's argument is spelled by name
@@ -4542,7 +4578,8 @@ class SoN::Deparse 0.01 {
             my $id = shift @queue;
             next if $seen{$id}++;
             for my $c ( ( $arm_next->{$id} // [] )->@* ) {
-                next if ( $c->{op} // '' ) eq 'Loop';
+                # (through a nested loop and past its exit: a store after it
+                # is later in this pass too)
                 $shadowed = 1 if ( $c->{op} // '' )
                     =~ /\A(?:Assign|EntryWrite|CellWrite|Delete|ElemRestore|Call|RegexSubst|Transliterate)\z/;
                 push @queue, $c->{id};
@@ -4556,6 +4593,17 @@ class SoN::Deparse 0.01 {
         push $loop_top_bind{ $loop->{id} }->@*, $n;
         $pass_top_node{ $n->{id} } = 1;
         return;
+    }
+
+    # _reads_loop_memory($n) -> true for a one-input read whose memory version
+    # is a Loop's memory Phi: the value the loop's pass starts from.
+    method _reads_loop_memory ($n) {
+        my @in = ( $n->{inputs} // [] )->@*;
+        return 0 unless @in == 1;
+        my $v = $nodes->{ $in[0] } or return 0;
+        return 0 unless ( $v->{op} // '' ) eq 'Phi' && ( $v->{fields} // {} )->{memory};
+        my $loop = $nodes->{ $v->{fields}{region} // -1 } or return 0;
+        return ( $loop->{op} // '' ) eq 'Loop' ? 1 : 0;
     }
 
     # _pass_top_free($loop_id, $code) -> what $code renders with this loop's

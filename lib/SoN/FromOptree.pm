@@ -13,6 +13,7 @@ class SoN::FromOptree 0.01 {
     use SoN::IR::Graph;
     use SoN::IR::Stamp;
     use B::SoN::TypeLibrary;
+    use B::SoN::EffectTable;
     use SoN::FromOptree::OpMap;
     use SoN::FromOptree::StackSim;
     use SoN;
@@ -536,13 +537,21 @@ class SoN::FromOptree 0.01 {
     # the literal is what the shortcut ultimately tests, and the container is
     # already an input of the Subscript.
     sub _note_literal_mutation ($target) {
-        return unless $target && $target->isa('SoN::IR::Node::Subscript');
-        my $container = ($target->inputs // [])->[0] or return;
+        return unless $target && $target->can('operation');
+        # (a slice is a store to several elements; its container is its last
+        # input. A named literal assigned whole is itself the container.)
+        my $kind = $target->operation;
+        return unless $kind =~ /\A(?:Subscript|Slice|ArrayLiteral|HashLiteral)\z/;
+        my $container = $kind eq 'Subscript' ? ($target->inputs // [])->[0]
+                      : $kind eq 'Slice'     ? ($target->inputs // [])->[-1]
+                      :                          $target;
+        return unless $container;
         return unless $container->can('operation');
         return unless $container->operation =~ /\A(?:Array|Hash)Literal\z/;
         $MUTATED_LITERALS{ $container->id } = 1 if $container->can('id');
         return;
     }
+
 
 
     # WHERE A `next` JOINS THE LOOP it is in: the first op of the continue
@@ -711,6 +720,32 @@ class SoN::FromOptree 0.01 {
     # %PINNED_MAY_DIE: the reads pinned only because they may die (by
     # refaddr) -- memory versions that change nothing, unlike a tied FETCH.
     our %PINNED_MAY_DIE;
+    # _refuse_fatal_warnings($root) -- die when a statement under $root runs
+    # with a warning category made FATAL.
+    #
+    # UNDER `use warnings FATAL`, AN OP THAT WOULD WARN DIES: `"abc" + 1` is
+    # an exception there and an Add everywhere else, and the lexical warning
+    # bits are on the statement's COP, reaching no node. The wire of such a
+    # program was the wire of one without the pragma (audit 2026-11-19, probe
+    # fl14), and a consumer made the Add. A fault needs a control edge this
+    # wire does not have for it, so the graph is refused.
+    #
+    # The bits: B gives a COP's warnings as a string when they are not one of
+    # perl's three shared sets (all, none, default); each category has two
+    # bits, and the odd one is FATAL.
+    sub _refuse_fatal_warnings ($root) {
+        return unless $root && $$root;
+        for my $cop (grep { $_->name eq 'nextstate' || $_->name eq 'dbstate' } _subtree_ops($root)) {
+            my $w = eval { $cop->warnings } or next;
+            next if ref($w) eq 'B::SPECIAL' || !$w->can('PV');
+            my $bits = $w->PV // next;
+            next unless grep { vec($bits, 2 * $_ + 1, 1) } 0 .. length($bits) * 4 - 1;
+            die "GAP: code under `use warnings FATAL` is not yet lowered -- a"
+              . " warning there is a die, which the graph has no place for\n";
+        }
+        return;
+    }
+
     sub _tied_aggregates ($cv, $root) {
         my %t;
         return \%t unless $root && $$root;
@@ -741,6 +776,32 @@ class SoN::FromOptree 0.01 {
         return \%t;
     }
 
+    # THE ONE PLACE A NODE IS PUT ON THE CHAIN (audit 2026-11-19, departure 5).
+    #
+    # _place($sim, $node) puts a node that reads or writes memory where the
+    # walk stands: its control_in is the current control, it becomes the
+    # current control, and -- being a write, or a read that stands as a
+    # version -- the current memory. Every handler that makes an effect calls
+    # this; none sets the three by hand, so a store cannot be made the control
+    # and not the memory, or the memory and not the control. On this wire a
+    # write names the version it follows by control_in alone; the kinds that
+    # also carry it as an input (EntryWrite, CellWrite, Delete, a flagged
+    # builtin) take $sim->memory when they are built, immediately before.
+    #
+    # _pin($sim, $node) is the same for a node that is ORDERED but makes no
+    # version: a may-die read, a Print, an Unwind, a call whose barrier is
+    # decided by _call_memory_barrier.
+    sub _place ($sim, $node) {
+        _pin($sim, $node);
+        $sim->set_memory($node) if defined $sim->memory;
+        return $node;
+    }
+    sub _pin ($sim, $node) {
+        $node->set_control_in($sim->control);
+        $sim->set_control($node);
+        return $node;
+    }
+
     # _pin_tied_read($sim, $node): a value node that reads a tied aggregate is
     # a call -- on the control chain, and the memory version after it (FETCH may
     # write anything a later read sees; FETCHSIZE answers anew each pass).
@@ -759,9 +820,7 @@ class SoN::FromOptree 0.01 {
             # after it -- one that changes no value, as a pinned read is.
             || ( $PIN_OP && _op_takes_an_element($PIN_OP) && _takes_an_element($node) );
         $PINNED_MAY_DIE{ refaddr $node } = 1 unless $tied;
-        $node->set_control_in($sim->control);
-        $sim->set_control($node);
-        $sim->set_memory($node) if defined $sim->memory;
+        _place($sim, $node);
         $PINS_MADE++;
         return;
     }
@@ -2465,6 +2524,10 @@ class SoN::FromOptree 0.01 {
         local $MUTATED_SLOTS = _mutated_aggregate_slots($cv,
             defined $program_root ? B::main_root() : undef);
         local %TIED_AGG = _tied_aggregates($cv, defined $program_root ? B::main_root() : eval { $cv->ROOT })->%*;
+        # (not a BEGIN block: it has run, as perl compiled the program, and
+        # what it would have died of it has)
+        _refuse_fatal_warnings(defined $program_root ? B::main_root() : eval { $cv->ROOT })
+            unless !defined $program_root && ( eval { $cv->GV->NAME } // '' ) eq 'BEGIN';
 
         # A FLIP-FLOP'S STATE SLOT STARTS UNDEF, as every pad slot does, and
         # is bound so here: a loop's scout finds carried slots by comparing
@@ -2546,8 +2609,7 @@ class SoN::FromOptree 0.01 {
                 my $pkg = eval { $op->stashpv } // 'main';
                 if (length $pkg && $pkg ne $prog_pkg) {
                     my $mark = $factory->make_cfg('PackageMark', package => $pkg);
-                    $mark->set_control_in($sim->control);
-                    $sim->set_control($mark);
+                    _pin($sim, $mark);
                     $prog_pkg = $pkg;
                 }
             }
@@ -2658,10 +2720,9 @@ class SoN::FromOptree 0.01 {
                     inputs => [$label_const->("Can't find label "), $t],
                     stamp  => SoN::IR::Stamp->new(type => 'Str'));
                 my $unwind = $factory->make_cfg('Unwind', inputs => [[$msg]]);
-                $unwind->set_control_in($sim->control);
                 $unwind->set_eval_id($EVAL_ID) if defined $EVAL_ID;
                 _set_message_site($unwind, $op);
-                $sim->set_control($unwind);
+                _pin($sim, $unwind);
                 $op = $op->next;
                 next;
             }
@@ -3557,10 +3618,9 @@ class SoN::FromOptree 0.01 {
                 my $args = $sim->pop_to_mark;
                 my $unwind = $factory->make_cfg('Unwind',
                     inputs => [$args]);
-                $unwind->set_control_in($sim->control);
                 $unwind->set_eval_id($EVAL_ID) if defined $EVAL_ID;
                 _set_message_site($unwind, $op);
-                $sim->set_control($unwind);
+                _pin($sim, $unwind);
                 $op = $op->next;
                 next;
             }
@@ -4817,14 +4877,14 @@ class SoN::FromOptree 0.01 {
     # then the `import` half is an ordinary method call that already lowers.
     # (tie and untie too: they change what every later access of the container
     # does -- a count read across an untie was the count before it.)
-    my %GLOBAL_STATE_BUILTIN = map { $_ => 1 } qw(require dofile tie untie);
+    # (B::SoN::EffectTable has these rows now: require dofile tie untie)
 
     # A HANDLE'S STATE IS MEMORY: open, a read, eof and close change or
     # observe it, so each advances the memory chain as a global-state op
     # does. Ordered by control alone, `my @l = <$fh>; print scalar(@l)` read
     # @l at the memory from before the open, and a consumer ordering reads by
     # memory built @l from an unopened handle.
-    my %HANDLE_MEMORY_BUILTIN = map { $_ => 1 } qw(open close readline eof);
+    # (B::SoN::EffectTable has these rows now: open close readline eof)
 
     # Handle reads whose EFFECT IS ON THE HANDLE. Reading advances the file
     # position, so two calls on one handle return different things and the
@@ -4847,7 +4907,7 @@ class SoN::FromOptree 0.01 {
     # chain. These only need ordering against each other and against the
     # open/close that bracket them; claiming they store would be a second,
     # stronger assertion than the measurement supports.
-    my %HANDLE_READ_BUILTIN = map { $_ => 1 } qw(readline eof tell);
+    # (B::SoN::EffectTable has these rows now: readline eof tell)
 
     # Builtins that READ STATE OUTSIDE THE EXPRESSION, so WHERE they happen is
     # part of what they mean. They store nothing -- no memory edge -- but they
@@ -4871,7 +4931,7 @@ class SoN::FromOptree 0.01 {
     # those must order against the open/close that bracket them, these only
     # against the statements around them. Same mechanism, and the distinction
     # is worth keeping in the names.
-    my %STACK_READ_BUILTIN = map { $_ => 1 } qw(caller);
+    # (B::SoN::EffectTable has these rows now: caller)
 
     # ITS STAMP IS READ FROM THE OP, as TypeLibrary prescribes under WHAT IS
     # DELIBERATELY ABSENT -- `$op->flags` here, the trade `readline` takes.
@@ -4887,7 +4947,7 @@ class SoN::FromOptree 0.01 {
     # moved it past the print it redirects: `my $prev = select($out); print
     # ...` came out `print ...; select(select($out))` (corpus 224). The
     # four-argument form is the op `sselect` and changes nothing.
-    my %HANDLE_SELECT_BUILTIN = map { $_ => 1 } qw(select);
+    # (B::SoN::EffectTable has these rows now: select)
 
     # A WARN IS OUTPUT, as print is: it writes STDERR or calls a __WARN__
     # handler, and returns true. Pinned only in void, a warn inside an
@@ -4897,12 +4957,12 @@ class SoN::FromOptree 0.01 {
     # context; so is this. AND ITS HANDLER IS CODE, which may store: the warn
     # is a memory version, as a call is -- `$SIG{__WARN__} = sub { $n++ };
     # warn "a\n"; print $n` read $n before the warn.
-    my %HANDLER_BUILTIN = map { $_ => 1 } qw(warn);
+    # (B::SoN::EffectTable has these rows now: warn)
 
     # `pos $s` READS STATE ON THE VARIABLE that a /g match and `pos($s) = N`
     # write. Unpinned, three reads between matches collapsed to one and
     # floated to their use: `2 2 2` where perl says `2 5 2` (corpus 189).
-    my %VARIABLE_STATE_READ_BUILTIN = map { $_ => 1 } qw(pos);
+    # (B::SoN::EffectTable has these rows now: pos)
 
     # Ops that are an EFFECT in their own right rather than a call. The void
     # branch-arm scan needs this: it asked "is this arm an entersub in void
@@ -5484,8 +5544,7 @@ class SoN::FromOptree 0.01 {
                 (defined $param_names ? (param_names => $param_names) : ()),
                 ($ctor ? (stamp => SoN::IR::Stamp->new(type => 'Object')) : ()),
             );
-            $node->set_control_in($sim->control);
-            $sim->set_control($node);
+            _pin($sim, $node);
             _call_memory_barrier($sim, $node, $ctx);
             $sim->push_node($node) unless $void;
             $ctx->{pending_method} = undef;
@@ -5587,8 +5646,7 @@ class SoN::FromOptree 0.01 {
             external      => $external,
             xs            => $xs,
         );
-        $node->set_control_in($sim->control);
-        $sim->set_control($node);
+        _pin($sim, $node);
 
         # A CALL IS A MEMORY BARRIER ONCE A WRITTEN CELL EXISTS. The callee may
         # be a closure over it, and its write has to be ordered before any
@@ -5669,8 +5727,7 @@ class SoN::FromOptree 0.01 {
             name          => $ev->{name},
             want          => _want_of($op),
             string_eval   => 1);
-        $call->set_control_in($sim->control);
-        $sim->set_control($call);
+        _pin($sim, $call);
         _call_memory_barrier($sim, $call, $ctx);
         my $region = $factory->make_cfg('Region', inputs => [$call]);
         $region->set_eval_entry($eval_entry) if defined $eval_entry;
@@ -6137,9 +6194,7 @@ class SoN::FromOptree 0.01 {
             # `/r` mutates nothing, so it needs no ordering and stays a pure
             # value.
             if ($name ne 'transr') {
-                $node->set_control_in($sim->control);
-                $sim->set_control($node);
-                $sim->set_memory($node) if defined $sim->memory;
+                _place($sim, $node);
             }
 
             # A DESTRUCTIVE tr/// STORES INTO ITS TARGET, exactly as s/// does
@@ -6197,9 +6252,7 @@ class SoN::FromOptree 0.01 {
                     _note_literal_mutation($store)
                         if $store->isa('SoN::IR::Node::Subscript');
                     my $w = $factory->make('Assign', inputs => [$store, $node]);
-                    $w->set_control_in($sim->control);
-                    $sim->set_control($w);
-                    $sim->set_memory($w) if defined $sim->memory;
+                    _place($sim, $w);
                 }
             }
             elsif ($name ne 'transr' && !($stacked && $counts_only)) {
@@ -7273,8 +7326,7 @@ class SoN::FromOptree 0.01 {
             # VANISHED from the graph, leaving a bare Region -- the same silent
             # drop `write` and `goto` are refused for. An eval can die and can
             # define subs; it happens whether or not anyone reads its value.
-            $code->set_control_in($sim->control);
-            $sim->set_control($code);
+            _pin($sim, $code);
             my $region = $factory->make_cfg('Region', inputs => [$code]);
             $sim->set_control($region);
             my $value = $factory->make_unique('Phi',
@@ -7439,8 +7491,7 @@ class SoN::FromOptree 0.01 {
                     my $node = $factory->make($is_hash ? 'HashLiteral' : 'ArrayLiteral',
                         inputs => [], stamp => SoN::IR::Stamp->new(type => $is_hash ? 'HashRef' : 'ArrayRef'));
                     if (defined $sim->control) {
-                        $node->set_control_in($sim->control);
-                        $sim->set_control($node);
+                        _pin($sim, $node);
                     }
                     $sim->define($targ, $node);
                     $sim->push_node($node);
@@ -7474,8 +7525,7 @@ class SoN::FromOptree 0.01 {
                 # pins there gave it two successors. A floating read is held
                 # in order by the deparser's stale-read rules, or refused.
                 if (!_is_call_argument($op) && !_under_a_branch($op)) {
-                    $read->set_control_in($sim->control);
-                    $sim->set_control($read);
+                    _pin($sim, $read);
                 }
                 $sim->push_node($read);
                 return ($op->next, 'handled');
@@ -7513,9 +7563,7 @@ class SoN::FromOptree 0.01 {
                         ($ctx->{shared_lexicals}{$targ} ? (shared => 1) : ()),
                         (defined $sim->memory ? (inputs => [ $sim->memory ]) : ()));
                     my $store = $factory->make('Assign', inputs => [$loc, $undef]);
-                    $store->set_control_in($sim->control);
-                    $sim->set_control($store);
-                    $sim->set_memory($store);
+                    _place($sim, $store);
                     return ($op->next, 'handled');
                 }
                 $sim->define($targ, $undef);
@@ -7825,9 +7873,7 @@ class SoN::FromOptree 0.01 {
                         targ => $targ, sigil => $sigil, symbol => $slot->symbol,
                         shared => 1, inputs => [$sim->memory]);
                     my $store = $factory->make('Assign', inputs => [$loc, $empty]);
-                    $store->set_control_in($sim->control);
-                    $sim->set_control($store);
-                    $sim->set_memory($store);
+                    _place($sim, $store);
                     $sim->define($targ, $slot);
                     $sim->push_node($slot) unless ($op->flags & 3) == 1;   # not void
                     return ($op->next, 'handled');
@@ -7846,8 +7892,7 @@ class SoN::FromOptree 0.01 {
                         symbol => $slot->symbol,
                         stamp  => SoN::IR::Stamp->new(
                             type => ($sigil eq '@' ? 'Array' : 'Hash')));
-                    $node->set_control_in($sim->control);
-                    $sim->set_control($node);
+                    _pin($sim, $node);
                     $sim->define($targ, $node);
                     $sim->push_node($node);
                     return ($op->next, 'handled');
@@ -8152,14 +8197,12 @@ class SoN::FromOptree 0.01 {
                         package => $gv->STASH->NAME,
                         sigil   => '$',
                         symbol  => $gv->NAME);
-                    my $prior = $sim->lookup($key);
-                    if (!defined $prior && defined $sim->memory) {
-                        $prior = $factory->make('EntryDef',
-                            package => $gv->STASH->NAME,
-                            sigil   => '$',
-                            symbol  => $gv->NAME,
-                            inputs  => [ $sim->memory ]);
-                    }
+                    # THE VALUE IT HOLDS NOW, not what this graph last bound
+                    # it to: a scalar some sub writes is read from memory
+                    # (_entry_live_value), or `b(); { local $g = 2 }` put back
+                    # what $g held before b() changed it.
+                    my $prior = _entry_live_value($factory, $sim, $entry);
+                    $prior = undef if $prior == $entry;   # (no memory to read: nothing to put back)
                     push $ctx->{local_saves}->@*,
                         { key    => $key,
                           node   => $prior,
@@ -8284,8 +8327,7 @@ class SoN::FromOptree 0.01 {
                         (!$is_lvalue && defined $read_stamp
                             ? (stamp => $read_stamp) : ()));
                     if ($errsv_read) {
-                        $node->set_control_in($sim->control);
-                        $sim->set_control($node);
+                        _pin($sim, $node);
                     }
                     # Seed only when unbound: an lvalue over an already-bound
                     # name must not clobber it (`$g += 2` reads first).
@@ -8510,8 +8552,7 @@ class SoN::FromOptree 0.01 {
                         $list_g ? 'List' : 'Boolean')) : ()),
                 );
                 if ($pin) {
-                    $node->set_control_in($sim->control);
-                    $sim->set_control($node);
+                    _pin($sim, $node);
                     # A /g MATCH WRITES pos(), so it is a new memory version
                     # of its subject: a pos() read either side of it is then
                     # two reads, not one hash-consed node.
@@ -8530,8 +8571,7 @@ class SoN::FromOptree 0.01 {
                     stamp  => SoN::IR::Stamp->new(type => $list_g ? 'List' : 'Boolean'),
                 );
                 if ($pin) {
-                    $node->set_control_in($sim->control);
-                    $sim->set_control($node);
+                    _pin($sim, $node);
                     $sim->set_memory($node)
                         if $has_code && defined $sim->memory;
                 }
@@ -9077,8 +9117,7 @@ class SoN::FromOptree 0.01 {
                 my $lit = $factory->make('ArrayLiteral', inputs => [$node],
                     sigil => '@', symbol => $1,
                     stamp => SoN::IR::Stamp->new(type => 'Array'));
-                $lit->set_control_in($sim->control);
-                $sim->set_control($lit);
+                _pin($sim, $lit);
                 $sim->define($targ, $lit);
                 $sim->push_node($lit);
                 return ($op->next, 'handled');
@@ -9373,8 +9412,7 @@ class SoN::FromOptree 0.01 {
                         inputs        => [$glob],
                         dispatch_kind => 'builtin',
                         name          => 'undef');
-                    $call->set_control_in($sim->control) if defined $sim->control;
-                    $sim->set_control($call) if defined $sim->control;
+                    _pin($sim, $call) if defined $sim->control;
                     $sim->push_node($call) unless ($op->flags & 3) == 1;
                     return ($op->next, 'handled');
                 }
@@ -9401,9 +9439,7 @@ class SoN::FromOptree 0.01 {
                         ($ctx->{shared_lexicals}{$undef_targ} ? (shared => 1) : ()),
                         (defined $sim->memory ? (inputs => [ $sim->memory ]) : ()));
                     my $store = $factory->make('Assign', inputs => [$loc, $node]);
-                    $store->set_control_in($sim->control);
-                    $sim->set_control($store);
-                    $sim->set_memory($store);
+                    _place($sim, $store);
                     $sim->push_node($node);
                     return ($op->next, 'handled');
                 }
@@ -9505,9 +9541,7 @@ class SoN::FromOptree 0.01 {
                     ($ctx->{shared_lexicals}{$targ} ? (shared => 1) : ()),
                     (defined $sim->memory ? (inputs => [ $sim->memory ]) : ()));
                 my $store = $factory->make('Assign', inputs => [$loc, $node]);
-                $store->set_control_in($sim->control);
-                $sim->set_control($store);
-                $sim->set_memory($store);
+                _place($sim, $store);
             }
             # AND IT IS STORED, NOT BOUND -- sassign's rule. A lookup of a
             # demoted slot is empty by design; bound, an s/// on the
@@ -9620,9 +9654,7 @@ class SoN::FromOptree 0.01 {
                 dispatch_kind => 'direct',
                 name          => $fmt_name,
                 want          => _want_of($op));
-            $node->set_control_in($sim->control);
-            $sim->set_control($node);
-            $sim->set_memory($node) if defined $sim->memory;
+            _place($sim, $node);
             $sim->push_node($node) unless ($op->flags & 3) == 1;  # not void
             return ($op->next, 'handled');
         }
@@ -9688,9 +9720,7 @@ class SoN::FromOptree 0.01 {
                         kind   => _element_kind($op),
                         inputs => [$container, $key,
                             (defined $sim->memory ? ($sim->memory) : ())]);
-                    $d->set_control_in($sim->control);
-                    $sim->set_control($d);
-                    $sim->set_memory($d) if defined $sim->memory;
+                    _place($sim, $d);
                     push @removed, $d;
                 }
 
@@ -9720,9 +9750,7 @@ class SoN::FromOptree 0.01 {
             # PINNED AND THREADED, because the removal is an effect. Without the
             # control edge DCE deletes a void `delete $h{a}` outright; without
             # advancing memory a later read still sees the key.
-            $node->set_control_in($sim->control);
-            $sim->set_control($node);
-            $sim->set_memory($node) if defined $sim->memory;
+            _place($sim, $node);
 
             # The removed value is the result, and a void delete has no reader.
             $sim->push_node($node) unless ($op->flags & 3) == 1;  # OPf_WANT_VOID
@@ -9920,17 +9948,13 @@ class SoN::FromOptree 0.01 {
                 # -- pinning it here moved that read into the arm)
                 my $read = $factory->make_unique('Subscript', kind => $kind,
                     inputs => [ $container, $index, $sim->memory ]);
-                $read->set_control_in($sim->control);
-                $sim->set_control($read);
+                _pin($sim, $read);
                 my $lit = $factory->make($deref == 32 ? 'HashLiteral' : 'ArrayLiteral',
                     inputs => [], stamp => SoN::IR::Stamp->new(type => $deref == 32 ? 'HashRef' : 'ArrayRef'));
-                $lit->set_control_in($sim->control);
-                $sim->set_control($lit);
+                _pin($sim, $lit);
                 my $viv = $factory->make('DefinedOr', inputs => [ $read, $lit ]);
                 my $store = $factory->make('Assign', inputs => [ $sub, $viv ]);
-                $store->set_control_in($sim->control);
-                $sim->set_control($store);
-                $sim->set_memory($store);
+                _place($sim, $store);
                 $sim->push_node($viv);
                 return ($op->next, 'handled');
             }
@@ -10002,8 +10026,7 @@ class SoN::FromOptree 0.01 {
                 # Transform::T2::run never narrowed), and `++$h{k}` added one
                 # twice. Pinned, it is bound before the store, as `$field++`'s
                 # read is.
-                $old->set_control_in($sim->control);
-                $sim->set_control($old);
+                _pin($sim, $old);
             }
             # `$$r++` IS THE SAME SPLIT through a scalar deref: the 1-input
             # PostfixDeref matched no arm, the Add reached no store, and `$v`
@@ -10019,8 +10042,7 @@ class SoN::FromOptree 0.01 {
                                (defined $sim->memory ? ($sim->memory) : ())],
                     sigil  => '$',
                     stamp  => SoN::IR::Stamp->new(type => 'Scalar'));
-                $old->set_control_in($sim->control);
-                $sim->set_control($old);
+                _pin($sim, $old);
             }
 
             # `$n++` ON A PACKAGE SCALAR IS A FIFTH WRITE FORM, and it reached
@@ -10110,8 +10132,7 @@ class SoN::FromOptree 0.01 {
                 $old = $factory->make_unique('FieldAccess',
                     field_index => $field_lvalue->field_index,
                     field_stash => $field_lvalue->field_stash);
-                $old->set_control_in($sim->control);
-                $sim->set_control($old);
+                _pin($sim, $old);
             }
 
             my $one = $factory->make('Constant',
@@ -10141,17 +10162,13 @@ class SoN::FromOptree 0.01 {
             elsif (defined $field_lvalue) {
                 my $store = $factory->make('Assign',
                     inputs => [$field_lvalue, $new]);
-                $store->set_control_in($sim->control);
-                $sim->set_control($store);
-                $sim->set_memory($store) if defined $sim->memory;
+                _place($sim, $store);
             }
             elsif (defined $cell_lvalue) {
                 my $write = $factory->make('CellWrite',
                     inputs => [$cell_lvalue, $new,
                         (defined $sim->memory ? ($sim->memory) : ())]);
-                $write->set_control_in($sim->control);
-                $sim->set_control($write);
-                $sim->set_memory($write) if defined $sim->memory;
+                _place($sim, $write);
             }
             elsif (defined $lvalue) {
                 # Store the new value back to the element and advance memory
@@ -10161,9 +10178,7 @@ class SoN::FromOptree 0.01 {
                 _note_literal_mutation($lvalue);
                 my $store = $factory->make('Assign',
                     inputs         => [$lvalue, $new]);
-                $store->set_control_in($sim->control);
-                $sim->set_control($store);
-                $sim->set_memory($store);
+                _place($sim, $store);
             }
 
             # A DEMOTED SLOT IS STORED, NOT BOUND -- sassign's rule, and the
@@ -10175,9 +10190,7 @@ class SoN::FromOptree 0.01 {
             elsif (defined $targ && $ctx->{addr_taken}{$targ}
                    && $old->isa('SoN::IR::Node::PadAccess')) {
                 my $store = $factory->make('Assign', inputs => [$old, $new]);
-                $store->set_control_in($sim->control);
-                $sim->set_control($store);
-                $sim->set_memory($store);
+                _place($sim, $store);
                 $targ = undef;
             }
 
@@ -10237,9 +10250,7 @@ class SoN::FromOptree 0.01 {
                 my $write = $factory->make('CellWrite',
                     inputs => [$target, $value,
                         (defined $sim->memory ? ($sim->memory) : ())]);
-                $write->set_control_in($sim->control);
-                $sim->set_control($write);
-                $sim->set_memory($write) if defined $sim->memory;
+                _place($sim, $write);
                 # The assignment's VALUE is the stored value, as everywhere else.
                 $sim->push_node($value);
                 return ($op->next, 'handled');
@@ -10282,9 +10293,7 @@ class SoN::FromOptree 0.01 {
                 if ($ctx->{addr_taken}{$ttarg}) {
                     my $store = $factory->make('Assign',
                         inputs => [$target, $value]);
-                    $store->set_control_in($sim->control);
-                    $sim->set_control($store);
-                    $sim->set_memory($store);
+                    _place($sim, $store);
                     $sim->push_node($value);
                     return ($op->next, 'handled');
                 }
@@ -10317,12 +10326,10 @@ class SoN::FromOptree 0.01 {
                 _note_literal_mutation($target);
                 my $node = $factory->make('Assign', inputs => [$target, $value],
                     (delete $SoN::FromOptree::LOCAL_ELEM_STORE{$$op} ? (local => 1) : ()));
-                $node->set_control_in($sim->control);
-                $sim->set_control($node);
                 # The store PRODUCES a new memory value (memory-SSA): the store
                 # node IS its memory-out, so a following element read takes it as
                 # the read's memory input and observes the post-store state.
-                $sim->set_memory($node);
+                _place($sim, $node);
                 $sim->push_node($value);
             }
             # A field store (`$name = "hi"` inside a method, where $name is a
@@ -10333,9 +10340,7 @@ class SoN::FromOptree 0.01 {
             # (zhi 019f2dee).
             elsif ($target->isa('SoN::IR::Node::FieldAccess')) {
                 my $store = $factory->make('Assign', inputs => [$target, $value]);
-                $store->set_control_in($sim->control);
-                $sim->set_control($store);
-                $sim->set_memory($store) if defined $sim->memory;
+                _place($sim, $store);
                 $sim->push_node($value);
             }
             # `pos($s) = N` SETS THE MATCH POSITION, and the target arrives as
@@ -10346,9 +10351,7 @@ class SoN::FromOptree 0.01 {
                     && ($target->name // '') eq 'pos') {
                 my $store = $factory->make_unique('Assign',
                     inputs => [$target, $value]);
-                $store->set_control_in($sim->control);
-                $sim->set_control($store);
-                $sim->set_memory($store) if defined $sim->memory;
+                _place($sim, $store);
                 $sim->push_node($value);
             }
             # AN :lvalue SUB CALLED AS A TARGET -- `slot() = 42` -- stores
@@ -10364,9 +10367,7 @@ class SoN::FromOptree 0.01 {
                 }
                 my $store = $factory->make_unique('Assign',
                     inputs => [$target, $value]);
-                $store->set_control_in($sim->control);
-                $sim->set_control($store);
-                $sim->set_memory($store) if defined $sim->memory;
+                _place($sim, $store);
                 $sim->push_node($value);
             }
             # `$#a = N` RESIZES @a: set_arylen, pinned where it stands, the
@@ -10382,9 +10383,7 @@ class SoN::FromOptree 0.01 {
                     dispatch_kind => 'builtin',
                     name          => 'set_arylen',
                     stamp         => SoN::IR::Stamp->new(type => 'Int'));
-                $write->set_control_in($sim->control);
-                $sim->set_control($write);
-                $sim->set_memory($write) if defined $sim->memory;
+                _place($sim, $write);
                 $sim->push_node($value);
             }
             # AN LVALUE substr (`substr($s, o, l) = X`) IS THE FOUR-ARGUMENT
@@ -10408,9 +10407,7 @@ class SoN::FromOptree 0.01 {
                     dispatch_kind => 'builtin',
                     name          => 'substr',
                     stamp         => SoN::IR::Stamp->new(type => 'Str'));
-                $write->set_control_in($sim->control);
-                $sim->set_control($write);
-                $sim->set_memory($write) if defined $sim->memory;
+                _place($sim, $write);
                 $sim->push_node($value);
             }
             # A package-scalar store (`our $g = 5`, where $g is a stash entry):
@@ -10461,9 +10458,7 @@ class SoN::FromOptree 0.01 {
                     # reaches -- so DCE deletes the write and the global is
                     # silently never assigned. Measured: main::poke emitted the
                     # EntryWrite AFTER its Return, with no edge to it.
-                    $write->set_control_in($sim->control);
-                    $sim->set_control($write);
-                    $sim->set_memory($write);
+                    _place($sim, $write);
                 }
                 $sim->push_node($value);
             }
@@ -11005,9 +11000,7 @@ class SoN::FromOptree 0.01 {
                 }
                 _note_literal_mutation($dest);
                 my $store = $factory->make('Assign', inputs => [$dest, $val]);
-                $store->set_control_in($sim->control);
-                $sim->set_control($store);
-                $sim->set_memory($store) if defined $sim->memory;
+                _place($sim, $store);
                 $sim->push_node($val) unless ($op->flags & 3) == 1;   # void
                 return ($op->next, 'handled');
             }
@@ -11028,8 +11021,7 @@ class SoN::FromOptree 0.01 {
                 $acc = $factory->make_unique('FieldAccess',
                     field_index => $field_lvalue->field_index,
                     field_stash => $field_lvalue->field_stash);
-                $acc->set_control_in($sim->control);
-                $sim->set_control($acc);
+                _pin($sim, $acc);
                 $acc = $concat->($acc, $mkstr->($seg[0])) if defined $seg[0];
             }
             elsif (($op->private & 0x40) && !$pkg_target
@@ -11059,7 +11051,9 @@ class SoN::FromOptree 0.01 {
                     if defined $seg[0];
             }
             elsif ($op->private & 0x40) {
-                $acc = $pkg_target ? $sim->lookup(_stash_key($pkg_target))
+                # (a package target's old value is read where it stands: its
+                # binding is what this graph last stored, not what a callee did)
+                $acc = $pkg_target ? _entry_live_value($factory, $sim, $pkg_target)
                      :               $sim->lookup($op->targ);
                 $acc = $concat->($acc, $mkstr->($seg[0])) if defined $seg[0];
             }
@@ -11109,9 +11103,7 @@ class SoN::FromOptree 0.01 {
                 if (defined $sim->memory) {
                     my $write = $factory->make('EntryWrite',
                         inputs => [$pkg_target, $acc, $sim->memory]);
-                    $write->set_control_in($sim->control);
-                    $sim->set_control($write);
-                    $sim->set_memory($write);
+                    _place($sim, $write);
                 }
                 $sim->push_node($acc) unless ($op->flags & 3) == 1;   # void
                 return ($op->next, 'handled');
@@ -11138,9 +11130,7 @@ class SoN::FromOptree 0.01 {
                 $val //= $mkstr->('');
                 _note_literal_mutation($dest);
                 my $store = $factory->make('Assign', inputs => [$dest, $val]);
-                $store->set_control_in($sim->control);
-                $sim->set_control($store);
-                $sim->set_memory($store) if defined $sim->memory;
+                _place($sim, $store);
                 $sim->push_node($val) unless ($op->flags & 3) == 1;   # void
                 return ($op->next, 'handled');
             }
@@ -11152,9 +11142,7 @@ class SoN::FromOptree 0.01 {
             if ($field_lvalue) {
                 my $store = $factory->make('Assign',
                     inputs => [$field_lvalue, $acc]);
-                $store->set_control_in($sim->control);
-                $sim->set_control($store);
-                $sim->set_memory($store) if defined $sim->memory;
+                _place($sim, $store);
                 $sim->push_node($acc) unless ($op->flags & 3) == 1;   # void
                 return ($op->next, 'handled');
             }
@@ -11165,9 +11153,7 @@ class SoN::FromOptree 0.01 {
                 my $write = $factory->make('CellWrite',
                     inputs => [$param, $acc,
                         (defined $sim->memory ? ($sim->memory) : ())]);
-                $write->set_control_in($sim->control);
-                $sim->set_control($write);
-                $sim->set_memory($write) if defined $sim->memory;
+                _place($sim, $write);
                 # THE RESULT IS THE VARIABLE, read after the store. Pushing
                 # $acc gave the append two consumers, and each spelled it:
                 # `print(($s .= "x"))` appended twice (perl's ax, emitted axx).
@@ -11185,9 +11171,7 @@ class SoN::FromOptree 0.01 {
                     ($ctx->{shared_lexicals}{$targ} ? (shared => 1) : ()),
                     (defined $sim->memory ? (inputs => [ $sim->memory ]) : ()));
                 my $store = $factory->make('Assign', inputs => [$loc, $acc]);
-                $store->set_control_in($sim->control);
-                $sim->set_control($store);
-                $sim->set_memory($store);
+                _place($sim, $store);
                 # The result is the variable read after the store, as above.
                 $sim->push_node($factory->make('PadAccess',
                     targ => $targ,
@@ -11234,8 +11218,7 @@ class SoN::FromOptree 0.01 {
                     type => $is_hash ? 'HashRef' : 'ArrayRef'));
             # AN ALLOCATION, pinned where it runs -- see anonlist/anonhash.
             if (defined $sim->control) {
-                $node->set_control_in($sim->control);
-                $sim->set_control($node);
+                _pin($sim, $node);
             }
             my $targ = $op->targ;
 
@@ -11251,9 +11234,7 @@ class SoN::FromOptree 0.01 {
                     ($ctx->{shared_lexicals}{$targ} ? (shared => 1) : ()),
                     (defined $sim->memory ? (inputs => [ $sim->memory ]) : ()));
                 my $store = $factory->make('Assign', inputs => [$loc, $node]);
-                $store->set_control_in($sim->control);
-                $sim->set_control($store);
-                $sim->set_memory($store);
+                _place($sim, $store);
                 $sim->push_node($node);
                 return ($op->next, 'handled');
             }
@@ -11266,9 +11247,7 @@ class SoN::FromOptree 0.01 {
             my $is_field = $lv->isa('SoN::IR::Node::FieldAccess');
             if ($is_field) {
                 my $store = $factory->make('Assign', inputs => [$lv, $node]);
-                $store->set_control_in($sim->control);
-                $sim->set_control($store);
-                $sim->set_memory($store) if defined $sim->memory;
+                _place($sim, $store);
             }
             else {
                 if ($mode eq 'main' && ($op->private & 0x80)) {  # OPpLVAL_INTRO
@@ -11345,9 +11324,7 @@ class SoN::FromOptree 0.01 {
                     my $write = $factory->make('CellWrite',
                         inputs => [$param, $node,
                             (defined $sim->memory ? ($sim->memory) : ())]);
-                    $write->set_control_in($sim->control);
-                    $sim->set_control($write);
-                    $sim->set_memory($write) if defined $sim->memory;
+                    _place($sim, $write);
                     $sim->push_node($node);
                     return ($op->next, 'handled');
                 }
@@ -11362,9 +11339,7 @@ class SoN::FromOptree 0.01 {
                         ($ctx->{shared_lexicals}{ $op->targ } ? (shared => 1) : ()),
                         (defined $sim->memory ? (inputs => [ $sim->memory ]) : ()));
                     my $store = $factory->make('Assign', inputs => [$loc, $node]);
-                    $store->set_control_in($sim->control);
-                    $sim->set_control($store);
-                    $sim->set_memory($store);
+                    _place($sim, $store);
                     $sim->push_node($node);
                     return ($op->next, 'handled');
                 }
@@ -11373,9 +11348,7 @@ class SoN::FromOptree 0.01 {
                 my $is_field = $lv->isa('SoN::IR::Node::FieldAccess');
                 if ($is_field) {
                     my $store = $factory->make('Assign', inputs => [$lv, $node]);
-                    $store->set_control_in($sim->control);
-                    $sim->set_control($store);
-                    $sim->set_memory($store) if defined $sim->memory;
+                    _place($sim, $store);
                 }
 
                 # A pad self-assign rebinds the slot in SSA scope so a later read
@@ -11537,9 +11510,7 @@ class SoN::FromOptree 0.01 {
                             (defined $sim->memory ? (inputs => [$sim->memory]) : ()));
                         my $store = $factory->make('Assign',
                             inputs => [$loc, $node]);
-                        $store->set_control_in($sim->control);
-                        $sim->set_control($store);
-                        $sim->set_memory($store) if defined $sim->memory;
+                        _place($sim, $store);
                     };
 
                     my $want = $sigil eq '@' ? 'Array' : 'Hash';
@@ -11685,9 +11656,7 @@ class SoN::FromOptree 0.01 {
                             inputs => [$rhs->@*],
                             stamp  => SoN::IR::Stamp->new(type => ($sigil eq '@' ? 'Array' : 'Hash')));
                         my $store = $factory->make('Assign', inputs => [$container, $list]);
-                        $store->set_control_in($sim->control);
-                        $sim->set_control($store);
-                        $sim->set_memory($store) if defined $sim->memory;
+                        _place($sim, $store);
                         $sim->push_node($container) unless ($op->flags & 3) == 1;   # void
                         return ($op->next, 'handled');
                     }
@@ -11736,8 +11705,7 @@ class SoN::FromOptree 0.01 {
                     if ($shared_pad || ($is_pad && $copies_container)
                         || (($observable ? @LOOP_STACK : _aassign_introduces($op))
                             && (@LOOP_STACK || $copies_container))) {
-                        $node->set_control_in($sim->control);
-                        $sim->set_control($node);
+                        _pin($sim, $node);
                     }
                     $node->set_rebinds(1)
                         if $is_pad && $copies_container && !$shared_pad
@@ -11793,9 +11761,14 @@ class SoN::FromOptree 0.01 {
                 $introduces = 1 if $k->name eq 'padsv'
                     && ($k->private & B::OPpLVAL_INTRO());
             }
+            # AN ARRAY VARIABLE IS TAKEN THE SAME WAY, declared here or not:
+            # `my ($f) = @r` COPIES element 0. Left to the positional rule,
+            # $f was bound to the array @r itself and read whatever @r held
+            # later (`pop @r; print $f` printed the count). Each element is
+            # read at the memory version the assignment stands at.
             my @args_elems;
-            if (@rhs == 1 && $rhs[0]->isa('SoN::IR::Node::ArgsSource')
-                && !$introduces
+            if (@rhs == 1
+                && ( $rhs[0]->isa('SoN::IR::Node::ArgsSource') ? !$introduces : _is_array_variable($rhs[0]) )
                 && $lhs->@* && !grep { !_is_scalar_rebind_target($_) } $lhs->@*) {
                 my $args = $rhs[0];
                 @args_elems = map {
@@ -11807,8 +11780,14 @@ class SoN::FromOptree 0.01 {
                             $sim->memory]);
                 } 0 .. $lhs->$#*;
             }
+            # (the record of a copy from an array variable names the elements
+            # it copied, each at its version -- not the array at none. In
+            # scalar context the assignment counts the array, so it keeps it.)
+            my $by_element = @args_elems && !$rhs[0]->isa('SoN::IR::Node::ArgsSource')
+                && ($op->flags & 3) != 2;   # OPf_WANT_SCALAR
             my $node = $factory->make('Assign',
-                inputs => [ $lhs->@*, @rhs ], targets => scalar $lhs->@*);
+                inputs => [ $lhs->@*, ( $by_element ? @args_elems : @rhs ) ],
+                targets => scalar $lhs->@*);
 
             # A DEMOTED TARGET IS STORED, NOT BOUND, here as in sassign: its
             # value lives in memory because a reference to it exists, so the
@@ -11828,15 +11807,17 @@ class SoN::FromOptree 0.01 {
             # AND A CLASS FIELD, which the object carries past this graph:
             # floating, `%registry = $graphs->%*` reached nothing and vanished
             # (chalk's Chalk::MOP kept an empty registry).
-            if (@LOOP_STACK
-                || grep { ( $_->isa('SoN::IR::Node::PadAccess') && $_->targ
-                           && $ctx->{addr_taken}{ $_->targ } )
-                       || $_->isa('SoN::IR::Node::PostfixDeref')
-                       || $_->isa('SoN::IR::Node::FieldAccess') } $lhs->@*) {
-                $node->set_control_in($sim->control);
-                $sim->set_control($node);
-                $sim->set_memory($node) if defined $sim->memory;
-            }
+            #
+            # BY WHERE EACH TARGET LIVES (_target_storage), not by a list of
+            # node kinds: the list named four and missed an element, a slice,
+            # a captured cell, `@_`, a package aggregate and a bare `my @a`,
+            # and each one missed was a store nothing reached (audit
+            # 2026-11-19, W2: 15 wrong answers). Decided below, once the
+            # targets' positions are known.
+            my @storage = map { _target_storage($_, $ctx) } $lhs->@*;
+            # (and a store into a literal-bound aggregate ends the shortcut that
+            # reads it as first constructed, as a scalar element store does.)
+            _note_literal_mutation($_) for $lhs->@*;
 
             # THE ASSIGN IS NOT THE REBIND. Building the node records WHAT was
             # assigned; nothing in it re-points the SSA scope keys, so every
@@ -11924,12 +11905,38 @@ class SoN::FromOptree 0.01 {
             };
             my $unsized = !@args_elems && grep { $unsized_v->($_) } @rhs;
             $single_call ||= $unsized;
+            # AN AGGREGATE IS ONE BY ITS SIGIL. Asked of the stamp, a bare `my
+            # @rest` (unstamped, or stamped by whatever used it) was a scalar:
+            # `my (@rest, $f) = (1,2,3)` bound $f to the constant 2, and `my
+            # ($f) = @r` bound $f to the array @r itself.
             my $positional =
-                   ( !grep { _is_aggregate_node($_) } @targets, @vals )
+                   ( !grep { $_ eq 'aggregate' } @storage )
+                && ( !grep { _flattens($_) } @vals )
                 # ONE TARGET IS NO EXCEPTION: `($lo) = g()` takes the first
                 # element, and bound to the call it read the list (`52`).
                 && !$single_call
                 && ( grep { _is_scalar_rebind_target($_) } @targets );
+            # THE ASSIGN IS A STORE when a target lives in memory: placed, the
+            # memory version every later read of that target takes. It is
+            # placed in a loop body too, where it binds on each pass. With
+            # only SSA `my` scalars to fill (and package scalars bound by
+            # position, which _entry_store stores below) it is a record of
+            # the rebinding, pinned further down where a slot is read by name.
+            #
+            # A PARAMETER BIND IS THE OTHER RECORD: `my ($self, %opts) = @_`
+            # declares its targets and fills them from @_ as the sub is
+            # entered. Both consumers bind it where the sub starts (chalk as
+            # ArgsFrom, the deparser as the sub's first statement), and the
+            # wire has no flag yet to tell it from a store (wire v2), so it
+            # stays unplaced, as SoN::Verify allows (`param-bind`).
+            my $param_bind = $introduces && @rhs == 1
+                && $rhs[0]->isa('SoN::IR::Node::ArgsSource')
+                && !grep { !$_->isa('SoN::IR::Node::PadAccess') } $lhs->@*;
+            my $stores = grep { !/\A(?:ssa|skip)\z/
+                               && !( $positional && $_ eq 'package' )
+                               && !( $param_bind && $_ eq 'aggregate' ) } @storage;
+            _place($sim, $node)
+                if $stores || @LOOP_STACK;
             if ($positional) {
                 # READ EVERY VALUE BEFORE WRITING ANY KEY. `($a,$b) = ($b,$a)`
                 # has the OLD bindings on the RHS already (@rhs was popped
@@ -11956,15 +11963,14 @@ class SoN::FromOptree 0.01 {
             # 3, emitted 1). It is rebound to the target, which reads the slot
             # by name -- so the Assign is pinned where it stands, ahead of
             # every read of that name.
-            elsif (!$introduces && !grep { _is_aggregate_node($_) } @targets) {
+            # (an aggregate among the targets changes nothing for the scalars
+            # beside it: `($x, @r) = f()` left $x at its old value.)
+            elsif (!$introduces) {
                 my @pad = grep { $_->isa('SoN::IR::Node::PadAccess')
                                  && ($_->sigil // '') eq '$' && $_->targ
                                  && !$ctx->{addr_taken}{ $_->targ } } @targets;
                 if (@pad) {
-                    unless (defined $node->control_in) {
-                        $node->set_control_in($sim->control);
-                        $sim->set_control($node);
-                    }
+                    _pin($sim, $node) unless defined $node->control_in;
                     $sim->define($_->targ, $_) for @pad;
                 }
             }
@@ -11972,14 +11978,10 @@ class SoN::FromOptree 0.01 {
             # too: each slot is its own PadAccess, which reads what the Assign
             # stored. Floating, nothing reached it -- a consumer walking the
             # chain never bound the targets, and a call's effects had no place.
-            elsif ($introduces && $single_call && !grep { _is_aggregate_node($_) } @targets) {
-                unless (defined $node->control_in) {
-                    $node->set_control_in($sim->control);
-                    $sim->set_control($node);
-                    # ...and the memory version a later read takes, so a
-                    # floating read (a join over `($s) x $n`) is placed after it.
-                    $sim->set_memory($node) if defined $sim->memory;
-                }
+            elsif ($introduces && $single_call) {
+                # ...and the memory version a later read takes, so a
+                # floating read (a join over `($s) x $n`) is placed after it.
+                _place($sim, $node) unless defined $node->control_in;
             }
 
             $sim->push_node($node);
@@ -12084,8 +12086,7 @@ class SoN::FromOptree 0.01 {
                 has_filehandle => $has_fh,
                 stamp => SoN::IR::Stamp->new(type => 'Maybe[Boolean]'));
             if ($is_effect) {
-                $node->set_control_in($sim->control);
-                $sim->set_control($node);
+                _pin($sim, $node);
             }
 
             # print returns 1; push it so a value context (`my $ok = print ...`)
@@ -12271,9 +12272,7 @@ class SoN::FromOptree 0.01 {
                     # ordered as each is)
                     $mutates = 1 if %TIED_AGG && grep { blessed($_) && _names_tied($_) } @inputs;
                     if ($mutates && defined $sim->control) {
-                        $call->set_control_in($sim->control);
-                        $sim->set_control($call);
-                        $sim->set_memory($call);
+                        _place($sim, $call);
                     }
                     $sim->push_node($call) if $push_count;
                     return ($op->next, 'handled');
@@ -12315,9 +12314,7 @@ class SoN::FromOptree 0.01 {
                         name          => $name,
                         memory_input  => 1,
                         (defined $ret_stamp ? (stamp => $ret_stamp) : ()));
-                    $call->set_control_in($sim->control);
-                    $sim->set_control($call);
-                    $sim->set_memory($call);
+                    _place($sim, $call);
                     $sim->push_node($call) if $push_count;
                     return ($op->next, 'handled');
                 }
@@ -12349,9 +12346,7 @@ class SoN::FromOptree 0.01 {
                         name           => $name,
                         memory_input   => 1,
                         (defined $elem_stamp ? (stamp => $elem_stamp) : ()));
-                    $call->set_control_in($sim->control);
-                    $sim->set_control($call);
-                    $sim->set_memory($call);
+                    _place($sim, $call);
                     $sim->push_node($call) if $push_count;
                     return ($op->next, 'handled');
                 }
@@ -12552,10 +12547,12 @@ class SoN::FromOptree 0.01 {
                     # and printed 0 0 for perl's 6 8. The alias binding is the
                     # element, so the read is that binding; the store is
                     # unchanged.
-                    my $key   = _stash_key($pkg_lvalue);
-                    my $bound = $sim->lookup($key);
-                    $inputs[0] = $bound
-                        if defined $bound && grep { $_ eq $key } @ALIAS_BOUND_KEYS;
+                    #
+                    # ANY OTHER READS THE VARIABLE WHERE IT STANDS, at the
+                    # current memory version (_entry_live_value): the name
+                    # token is no version, and one node served the `+=` either
+                    # side of a call that wrote the scalar.
+                    $inputs[0] = _entry_live_value($factory, $sim, $pkg_lvalue);
                 }
 
                 # Element compound assignment (`$a[0] += 5`): the FIRST operand
@@ -12780,7 +12777,7 @@ class SoN::FromOptree 0.01 {
                     # `do "x.do" or die $@` is the same bug; perl's own
                     # t/comp/require.t has it as `sub dofile`.
                     $pin_on_control = 1
-                        if $GLOBAL_STATE_BUILTIN{$name} && !$void;
+                        if B::SoN::EffectTable::on_chain($name, lvalue => ($op->flags & 32)) && !$void;   # OPf_MOD
 
                     # AN exit LEAVES IN ANY CONTEXT. As a sub's last statement
                     # it runs in the caller's context (`exit sK`), so neither
@@ -12792,27 +12789,16 @@ class SoN::FromOptree 0.01 {
                     # A HANDLE READ IS AN EFFECT IN ANY CONTEXT, for the same
                     # reason and by the same mechanism. See
                     # %HANDLE_READ_BUILTIN.
-                    $pin_on_control = 1
-                        if $HANDLE_READ_BUILTIN{$name} && !$void;
 
                     # A STACK READ IS AN EFFECT IN ANY CONTEXT, for the same
                     # reason and by the same mechanism. See
                     # %STACK_READ_BUILTIN.
-                    $pin_on_control = 1
-                        if $STACK_READ_BUILTIN{$name} && !$void;
 
-                    $pin_on_control = 1
-                        if $HANDLE_SELECT_BUILTIN{$name} && !$void;
 
-                    $pin_on_control = 1
-                        if $HANDLER_BUILTIN{$name} && !$void;
 
-                    $pin_on_control = 1
-                        if $VARIABLE_STATE_READ_BUILTIN{$name} && !$void
                         # NOT the lvalue form: `pos($s) = 0` is the store's
                         # target (OPf_MOD, 32), and pinned it became a
                         # temporary the store then assigned to.
-                        && !($op->flags & 32);
 
                     # A FOUR-ARGUMENT substr WRITES ITS STRING, in any context
                     # -- `my $old = substr($b, 0, 1, "J")` is want=SCALAR and
@@ -12881,7 +12867,7 @@ class SoN::FromOptree 0.01 {
                 # memory chains -- look like a VALUE Phi, which bound the
                 # EntryWrite and then asked to render a store as an expression.
                 if ($node_type eq 'Call'
-                    && ( $GLOBAL_STATE_BUILTIN{$name} || $HANDLE_MEMORY_BUILTIN{$name} || $HANDLER_BUILTIN{$name} )
+                    && B::SoN::EffectTable::is_version($name)
                     && defined $sim->memory) {
                     push @inputs, $sim->memory;
                     $extra{memory_input} = 1;   # see Call's memory_input
@@ -12964,15 +12950,13 @@ class SoN::FromOptree 0.01 {
                 # " at FILE line N." to a message not ending in a newline.
                 _set_message_site($node, $op) if $node_type eq 'Call' && $name eq 'warn';
                 if ($void_effect_call || $pin_on_control) {
-                    $node->set_control_in($sim->control);
-                    $sim->set_control($node);
+                    _pin($sim, $node);
                 }
                 # A BUILTIN READING A TIED AGGREGATE (keys, values, join ...) calls
                 # its methods: ordered as a call, and the memory version after it.
                 if (%TIED_AGG && grep { blessed($_) && _names_tied($_) } @inputs) {
                     unless ($void_effect_call || $pin_on_control) {
-                        $node->set_control_in($sim->control);
-                        $sim->set_control($node);
+                        _pin($sim, $node);
                     }
                     $sim->set_memory($node) if defined $sim->memory;
                 }
@@ -13034,8 +13018,7 @@ class SoN::FromOptree 0.01 {
                     # version of the array gets its own name.
                     if ($name eq 'reverse' && defined $sim->control
                             && ($ctx->{mode} // '') ne 'main') {
-                        $arr_node->set_control_in($sim->control);
-                        $sim->set_control($arr_node);
+                        _pin($sim, $arr_node);
                     }
                 }
 
@@ -13045,7 +13028,7 @@ class SoN::FromOptree 0.01 {
                 # require -- calling POSIX->import before POSIX is loaded is a
                 # different program. Only a shared chain expresses an ordering
                 # that no data edge carries.
-                if (( $GLOBAL_STATE_BUILTIN{$name} || $HANDLE_MEMORY_BUILTIN{$name} || $HANDLER_BUILTIN{$name} )
+                if (B::SoN::EffectTable::is_version($name)
                     && defined $sim->memory) {
                     $sim->set_memory($node);
                 }
@@ -13064,17 +13047,13 @@ class SoN::FromOptree 0.01 {
                     my $write = $factory->make('CellWrite',
                         inputs => [$cell_compound, $node,
                             (defined $sim->memory ? ($sim->memory) : ())]);
-                    $write->set_control_in($sim->control);
-                    $sim->set_control($write);
-                    $sim->set_memory($write) if defined $sim->memory;
+                    _place($sim, $write);
                 }
                 elsif ($is_compound && $ctx->{addr_taken}{$lvalue_targ}
                     && $inputs[0]->isa('SoN::IR::Node::PadAccess')) {
                     my $store = $factory->make('Assign',
                         inputs => [$inputs[0], $node]);
-                    $store->set_control_in($sim->control);
-                    $sim->set_control($store);
-                    $sim->set_memory($store);
+                    _place($sim, $store);
                 }
                 elsif ($is_compound) {
                     $sim->define($lvalue_targ, $node);
@@ -13093,11 +13072,9 @@ class SoN::FromOptree 0.01 {
                     # FieldAccess for the same field (the first operand's padsv).
                     my $lv = _make_pad_or_field($cv, $op->first->targ, $factory);
                     my $store = $factory->make('Assign', inputs => [$lv, $node]);
-                    $store->set_control_in($sim->control);
-                    $sim->set_control($store);
                     # And it is a memory version, as the `=` store is: left
                     # at the old one, `$n += 1; my $old = $n` read before it.
-                    $sim->set_memory($store) if defined $sim->memory;
+                    _place($sim, $store);
                 }
                 elsif (defined $elem_lvalue) {
                     # Store the result back to the element and advance memory
@@ -13105,9 +13082,7 @@ class SoN::FromOptree 0.01 {
                     _note_literal_mutation($elem_lvalue);
                     my $store = $factory->make('Assign',
                         inputs         => [$elem_lvalue, $node]);
-                    $store->set_control_in($sim->control);
-                    $sim->set_control($store);
-                    $sim->set_memory($store);
+                    _place($sim, $store);
                     # `$$r += 5` YIELDS `$$r`, the location after the store.
                     # Pushing the Add gave it a second consumer, and the
                     # emission spelled `$$r + 5` again after the store:
@@ -13270,7 +13245,12 @@ class SoN::FromOptree 0.01 {
     sub _restore_local_elems_on_edge ($sim, $factory) {
         return if $IN_SCOUT || !defined $LOOP_SAVES_BASE;
         my %seen;
-        my @elems = grep { $_->{elem} && !$seen{ refaddr $_ }++ }
+        # A NAME'S TOO (audit 2026-11-19, W6, probe lo3): `local $g` in a loop
+        # body is put back as the pass ends, by whatever way it ends. Only
+        # the elements were restored here, so a `last` or `next` after a
+        # `local $g = ...` left the loop with the local's value in $g --
+        # and the wire was a plain store's, byte for byte.
+        my @elems = grep { !$seen{ refaddr $_ }++ }
                     map { $_->@* } @SAVES_STACK[ $LOOP_SAVES_BASE .. $#SAVES_STACK ];
         # at_return: on a path that leaves the block, as a return's.
         _restore_locals($sim, { local_saves => \@elems }, $factory, 0, 1) if @elems;
@@ -13289,9 +13269,7 @@ class SoN::FromOptree 0.01 {
                 my $r = $factory->make('ElemRestore', kind => $e->{kind},
                     at_return => $at_return,
                     inputs => [ @$e{qw(container index saved existed)}, $sim->memory ]);
-                $r->set_control_in($sim->control);
-                $sim->set_control($r);
-                $sim->set_memory($r);
+                _place($sim, $r);
                 next;
             }
             # A `local` on a name with NO prior binding leaves the name unbound
@@ -13324,9 +13302,14 @@ class SoN::FromOptree 0.01 {
             # local had bound and died `Modification of a read-only value`.
             # `binds` is the field the deparser already reads to spell a glob
             # assignment, one path over.
+            # (once: an edge's restore and the pass end's after it are the
+            # same store, and the second would only repeat the first)
+            my $m = $sim->memory;
+            my $done = $m && $m->operation eq 'EntryWrite' && $save->{target}
+                && $m->inputs->[0] == $save->{target} && $m->inputs->[1] == $save->{node};
             _entry_store($factory, $sim, $save->{target}, $save->{node},
                          $save->{glob_bind} ? 1 : 0)
-                if $factory && $save->{target};
+                if $factory && $save->{target} && !$done;
             # AN AGGREGATE IS NAMED AGAIN BY A READ AFTER ITS RESTORE: the one
             # taken before the swap is of a version the swap made stale.
             $sim->define($save->{key}, $factory->make('EntryDef', $save->{ent}->%*,
@@ -13588,8 +13571,7 @@ class SoN::FromOptree 0.01 {
             $now = $factory->${\ ($nested ? 'make_unique' : 'make')}('EntryDef',
                 %name, inputs => [ $sim->memory ]);
             if ($nested) {
-                $now->set_control_in($sim->control);
-                $sim->set_control($now);
+                _pin($sim, $now);
             }
         }
         return { target => $factory->make('EntryDef', %name), node => $now };
@@ -13947,6 +13929,45 @@ class SoN::FromOptree 0.01 {
         return undef;
     }
 
+    # _entry_live_value($factory, $sim, $entry) -> the value the package
+    # scalar $entry names holds where the walk stands: what a read-modify-
+    # write (`.=`, `+=`, `||=`) reads before it stores.
+    #
+    # THE SAME RULE AS THE gvsv READ, in one place for every `op=`: a foreach
+    # alias or a loop-carried binding is the value; so is the binding of a
+    # scalar nothing writes; anything else is read from memory at the current
+    # version. The handlers used the binding (`.=`) or the bare name (`+=`),
+    # so `our $s; sub ap { $s .= $_[0] } $s .= "-"; ap("a"); $s .= "-"`
+    # appended to what $s held before the call (perl -a-, the wire --).
+    sub _entry_live_value ($factory, $sim, $entry) {
+        my $key   = _stash_key($entry);
+        my $bound = $sim->lookup($key);
+        my $w     = _package_scalars_written();
+        my $forwardable = ( grep { $_ eq $key } @ALIAS_BOUND_KEYS, @LOOP_PHI_KEYS )
+            || !( $w->{$key} || $w->{'*'} );
+        return $bound if defined $bound && $forwardable;
+        return $bound // $entry unless defined $sim->memory;
+        my $stamp = $bound && $bound->can('stamp') ? $bound->stamp
+                  : $entry->can('stamp')           ? $entry->stamp : undef;
+        return $factory->make('EntryDef',
+            package => $entry->package,
+            sigil   => $entry->sigil,
+            symbol  => $entry->symbol,
+            inputs  => [ $sim->memory ],
+            ( defined $stamp ? ( stamp => $stamp ) : () ));
+    }
+
+    # _key_lives_in_memory($key) -> true for the scope key of a package scalar
+    # some sub writes (_package_scalars_written): its value is in memory, read
+    # at a memory version, and no loop carries it on a Phi. ONE DEFINITION for
+    # the scout that decides the Phis and the check that the walk agreed.
+    sub _key_lives_in_memory ($key) {
+        return 0 unless $key =~ /\A\$\w*::/;
+        return 0 if grep { $_ eq $key } @ALIAS_BOUND_KEYS;
+        my $w = _package_scalars_written();
+        return $w->{$key} || $w->{'*'} ? 1 : 0;
+    }
+
     # _refuse_unscouted_writes($sim, $pre_scope, \%phis, @skip) -- die when the
     # real body walk rebound a slot the loop header carries no Phi for.
     #
@@ -13962,6 +13983,9 @@ class SoN::FromOptree 0.01 {
         my $post = $sim->scope_bindings;
         for my $key (keys $pre_scope->%*) {
             next if $phis->{$key} || $skip{$key};
+            # (a written package scalar has no Phi by design: it is read
+            # through the loop's memory, _key_lives_in_memory)
+            next if _key_lives_in_memory($key);
             next unless defined $post->{$key} && defined $pre_scope->{$key};
             die "GAP: a loop body writes a variable its scout missed"
               . " ($key) not yet lowered\n"
@@ -14098,11 +14122,19 @@ class SoN::FromOptree 0.01 {
         $SCOUT_MOVED_MEMORY ||= defined $scout_died
             || !defined $scout_sim->memory || $scout_sim->memory != $scout_mem;
         my %extra = map { $_ => 1 } $extra_targs->@*;
+        # A WRITTEN PACKAGE SCALAR IS NOT CARRIED (audit 2026-11-19, W1). It
+        # lives in memory, where a sub the body calls can write it, and a
+        # header Phi is a value no callee's store reaches: `our $g; sub bump
+        # { $g += 10 } for (1..3) { $g = $g + 1; bump() }` read the Phi each
+        # pass and ended at 13 for perl's 33. Its store moved the scout's
+        # memory, so the loop has a memory Phi, and the body reads it there.
+        # (A foreach's alias of the name is this loop's own binding and stays.)
         return ([ sort _scope_key_order
             grep {
                 !$extra{$_}
                 && defined $scout_scope->{$_}
                 && $scout_scope->{$_} != $placeholder{$_}
+                && !_key_lives_in_memory($_)
             } keys %placeholder ], \%placeholder, $scout_scope);
     }
 
@@ -14801,6 +14833,15 @@ class SoN::FromOptree 0.01 {
         # still seen as loop-carried. The real walk starts a fresh list.
         my $frame = { label => $STMT_LABEL, nexts => [] };
         local @LOOP_STACK = (@LOOP_STACK, $frame);
+        # A RANGE OF STRINGS STEPS BY THE MAGIC INCREMENT ("a".."c", "aa".."ad"),
+        # which the count below does not: it coerces each bound to a number
+        # and ran "a".."c" as 0..0, one pass. Known only of constants.
+        for my $b ($low, $high) {
+            die "GAP: a foreach over a range of strings (perl's magic increment) is not yet lowered\n"
+                if !$IN_SCOUT   # (a scout's placeholder is a string Constant, not the program's)
+                && $b->isa('SoN::IR::Node::Constant') && ( $b->const_type // '' ) eq 'string'
+                && !Scalar::Util::looks_like_number( $b->value );
+        }
         my $i_targ = $iter_key // $enteriter->targ;
 
         # Locate the body: enteriter->next is the iteration unstack, followed
@@ -14946,9 +14987,7 @@ class SoN::FromOptree 0.01 {
                 ($SHARED_SLOTS && $SHARED_SLOTS->{$i_targ} ? (shared => 1) : ()),
                 (defined $sim->memory ? (inputs => [ $sim->memory ]) : ()));
             my $store = $factory->make('Assign', inputs => [$slot, $i_phi]);
-            $store->set_control_in($sim->control);
-            $sim->set_control($store);
-            $sim->set_memory($store) if defined $sim->memory;
+            _place($sim, $store);
         }
 
         # THE TOPIC A CALLEE READS BY NAME, as the array form aliases it: here
@@ -14959,8 +14998,7 @@ class SoN::FromOptree 0.01 {
                 && grep({ $_->name eq 'entersub' } _subtree_ops($enteriter->parent))
                 && !_body_writes_targ($cv, $body_start, $sim, $opmap, $i_targ, 1)) {
             my $alias = $factory->make('LocalAlias', name => '_', inputs => [$i_phi]);
-            $alias->set_control_in($sim->control);
-            $sim->set_control($alias);
+            _pin($sim, $alias);
         }
 
         # AND THE STASH KEYS THIS LOOP CARRIES, for the same reason and the same
@@ -15658,8 +15696,7 @@ class SoN::FromOptree 0.01 {
                 $exists = $factory->make_unique('Exists', kind => 'array',
                     inputs => [$array, $i_phi, (defined $sim->memory ? ($sim->memory) : ())],
                     stamp => SoN::IR::Stamp->new(type => 'Boolean'));
-                $exists->set_control_in($sim->control);
-                $sim->set_control($exists);
+                _pin($sim, $exists);
             }
             my $lv = $factory->make('Subscript', kind => 'array',
                 inputs => [$array, $i_phi]);
@@ -15670,8 +15707,7 @@ class SoN::FromOptree 0.01 {
                     $factory->make('Constant', value => undef, const_type => 'undef',
                         stamp => SoN::IR::Stamp->new(type => 'Undef')))
                 : $ref;
-            $aref->set_control_in($sim->control);
-            $sim->set_control($aref);
+            _pin($sim, $aref);
             $aref = { ref => $aref, exists => $exists, array => $array, index => $i_phi };
         }
         local $ITER_ALIAS_REF{$x_targ} = $aref if $aref;
@@ -15701,8 +15737,7 @@ class SoN::FromOptree 0.01 {
             $topic_alias = $factory->make('LocalAlias', name => '_', inputs => [
                 $factory->make('Ref', inputs => [$elem_read],
                     stamp => SoN::IR::Stamp->new(type => 'ScalarRef'))]);
-            $topic_alias->set_control_in($sim->control);
-            $sim->set_control($topic_alias);
+            _pin($sim, $topic_alias);
         }
         elsif ($topic_ok) {
             # ONLY A CONTAINER HAS HOLES, and only a container is an operand
@@ -15715,8 +15750,7 @@ class SoN::FromOptree 0.01 {
                 $exists = $factory->make_unique('Exists', kind => 'array',
                     inputs => [$array, $i_phi, (defined $sim->memory ? ($sim->memory) : ())],
                     stamp => SoN::IR::Stamp->new(type => 'Boolean'));
-                $exists->set_control_in($sim->control);
-                $sim->set_control($exists);
+                _pin($sim, $exists);
             }
             my $ref = $factory->make('Ref', inputs => [
                 $factory->make('Subscript', kind => 'array', inputs => [$array, $i_phi])],
@@ -15726,8 +15760,7 @@ class SoN::FromOptree 0.01 {
                     stamp => SoN::IR::Stamp->new(type => 'Undef')))
                 if $exists;
             $topic_alias = $factory->make('LocalAlias', name => '_', inputs => [$ref]);
-            $topic_alias->set_control_in($sim->control);
-            $sim->set_control($topic_alias);
+            _pin($sim, $topic_alias);
             # Any callee may now write the element through it.
             $MUTATED_LITERALS{ $array->id } = 1 if $array->can('id');
         }
@@ -15802,9 +15835,7 @@ class SoN::FromOptree 0.01 {
         };
         if ($demoted_iter) {
             my $store = $factory->make('Assign', inputs => [$iter_slot->(), $elem]);
-            $store->set_control_in($sim->control);
-            $sim->set_control($store);
-            $sim->set_memory($store) if defined $sim->memory;
+            _place($sim, $store);
         }
 
         # AND THE STASH KEYS THIS LOOP CARRIES, for the same reason and the same
@@ -15907,9 +15938,7 @@ class SoN::FromOptree 0.01 {
                 inputs => [$array, $i_phi]);
             my $store = $factory->make('Assign',
                 inputs => [$lvalue, $iter_slot->()], if_changed => 1);
-            $store->set_control_in($sim->control);
-            $sim->set_control($store);
-            $sim->set_memory($store);
+            _place($sim, $store);
             $MUTATED_LITERALS{ $array->id } = 1 if $array->can('id');
         }
 
@@ -15948,9 +15977,7 @@ class SoN::FromOptree 0.01 {
                     inputs => [$array, $i_phi]);
                 my $store = $factory->make('Assign',
                     inputs => [$lvalue, $new_val]);
-                $store->set_control_in($sim->control);
-                $sim->set_control($store);
-                $sim->set_memory($store);
+                _place($sim, $store);
 
                 # RECORD THE MUTATION, or a later LIST read of this array takes
                 # the flatten shortcut and reads the ORIGINAL elements.
@@ -17433,9 +17460,7 @@ class SoN::FromOptree 0.01 {
                 # spelled `$s =~ s///`, writing $s.
                 unless ($target->isa('SoN::IR::Node::PadAccess')
                         && ($target->targ // q{}) ne $scope_key) {
-                    $node->set_control_in($sim->control);
-                    $sim->set_control($node);
-                    $sim->set_memory($node) if defined $sim->memory;
+                    _place($sim, $node);
                 }
 
                 # A DESTRUCTIVE s/// REBINDS THE TARGET so a later read of the
@@ -17473,6 +17498,20 @@ class SoN::FromOptree 0.01 {
                 next;
             }
             $op = $next;
+        }
+        # THE PASS ENDS HERE TOO. The `unstack` above is where a body that
+        # runs straight through ends; one whose last statements follow a
+        # guarded `next` or `last` is finished by the arm walk of what
+        # follows the guard, which stops at the unstack without this walk's
+        # saves -- and the `local`s made before the guard were never put
+        # back (`local $g = $g + $i; last if ...; ...` carried one pass's
+        # local into the next).
+        # (A NAME'S. A localized element keeps the restores its own rules
+        # place -- _local_elem_scope, _restore_local_elems_on_edge -- which
+        # the deparser reads the block's end from; a second one here closed
+        # the block before the statements after the guard.)
+        if (my @names = grep { !$_->{elem} } $ctx->{local_saves}->@*) {
+            _restore_locals($sim, { local_saves => \@names }, $factory);
         }
         _merge_labeled_nexts($sim, $factory);
         return $exit_proj;
@@ -18489,8 +18528,7 @@ class SoN::FromOptree 0.01 {
                 $true_val->stamp, $false_val->stamp);
         }
         my $node = $factory->make_unique('TernaryExpr', %args);
-        $node->set_control_in($sim->control);
-        $sim->set_control($node);
+        _pin($sim, $node);
         return $node;
     }
 
@@ -18924,8 +18962,7 @@ class SoN::FromOptree 0.01 {
         # it was one node with the read before it.
         my $exc = $factory->make_unique('EntryDef', package => 'main',
             sigil => '$', symbol => '@', inputs => [$sim->memory]);
-        $exc->set_control_in($sim->control);
-        $sim->set_control($exc);
+        _pin($sim, $exc);
         _entry_store($factory, $sim, $at_name->(), $saved);
 
         my $if_node = $factory->make_cfg('If', inputs => [$sim->control, $ok]);
@@ -19145,16 +19182,13 @@ class SoN::FromOptree 0.01 {
                 my $r = $factory->make_unique('Subscript', kind => $lvalue->kind,
                     inputs => [$lvalue->inputs->[0], $lvalue->inputs->[1],
                                $s->memory]);
-                $r->set_control_in($s->control);
-                $s->set_control($r);
+                _pin($s, $r);
                 return $r;
             };
             my $assign = sub ($s, $value) {
                 my $w = $factory->make('Assign', inputs => [$lvalue, $value]);
                 _note_literal_mutation($lvalue);
-                $w->set_control_in($s->control);
-                $s->set_control($w);
-                $s->set_memory($w);
+                _place($s, $w);
             };
             my $undef = sub () {
                 $factory->make('Constant', value => undef,
@@ -19202,8 +19236,7 @@ class SoN::FromOptree 0.01 {
             my $read = $factory->make_unique('FieldAccess',
                 field_index => $field_lvalue->field_index,
                 field_stash => $field_lvalue->field_stash);
-            $read->set_control_in($s->control);
-            $s->set_control($read);
+            _pin($s, $read);
             return $read;
         };
         # A REFERENCED OR SHARED LEXICAL IS A SLOT IN MEMORY, read and
@@ -19230,9 +19263,7 @@ class SoN::FromOptree 0.01 {
             my $write = $factory->make('CellWrite',
                 inputs => [$cell, $rhs,
                     (defined $set_sim->memory ? ($set_sim->memory) : ())]);
-            $write->set_control_in($set_sim->control);
-            $set_sim->set_control($write);
-            $set_sim->set_memory($write) if defined $set_sim->memory;
+            _place($set_sim, $write);
             $sim->merge($set_sim, $factory, $if_node);
             $sim->push_node($read->($sim));
             return $op->next;
@@ -19251,9 +19282,7 @@ class SoN::FromOptree 0.01 {
             };
             my $write = $factory->make('Assign',
                 inputs => [$field_lvalue // $slot->($set_sim), $rhs]);
-            $write->set_control_in($set_sim->control);
-            $set_sim->set_control($write);
-            $set_sim->set_memory($write) if defined $set_sim->memory;
+            _place($set_sim, $write);
             $sim->merge($set_sim, $factory, $if_node);
             # A field read is pinned, and a pinned read nothing uses
             # has no rendering: in void context the stack keeps the
@@ -20576,15 +20605,13 @@ class SoN::FromOptree 0.01 {
             # THE MATCH FIRST: floating, it was spelled at the arm's end,
             # after the reads of its captures.
             if (!defined $arm_match->control_in) {
-                $arm_match->set_control_in($run_sim->control);
-                $run_sim->set_control($arm_match);
+                _pin($run_sim, $arm_match);
             }
             for my $n (1 .. _capture_group_count($arm_match->pattern // '')) {
                 my $in_arm = $factory->make_unique('RegexCapture',
                     inputs => [$arm_match], n => $n,
                     stamp  => SoN::IR::Stamp->new(type => 'Str'));
-                $in_arm->set_control_in($run_sim->control);
-                $run_sim->set_control($in_arm);
+                _pin($run_sim, $in_arm);
                 $run_sim->define("#capture$n", $in_arm);
                 $skip_sim->define("#capture$n", defined $prev
                     ? $factory->make('RegexCapture', inputs => [$prev], n => $n,
@@ -20884,10 +20911,9 @@ class SoN::FromOptree 0.01 {
                 my $args = $sim->pop_to_mark;
                 my $unwind = $factory->make_cfg('Unwind',
                     inputs => [$args]);
-                $unwind->set_control_in($sim->control);
                 $unwind->set_eval_id($EVAL_ID) if defined $EVAL_ID;
                 _set_message_site($unwind, $op);
-                $sim->set_control($unwind);
+                _pin($sim, $unwind);
                 $op = $op->next;
                 next;
             }
@@ -21818,6 +21844,56 @@ class SoN::FromOptree 0.01 {
         return $node->sigil . $node->package . '::' . $node->symbol;
     }
 
+    # _target_storage($node, $ctx) -> where a list-assignment target LIVES:
+    #
+    #   ssa        a `my` scalar the walk carries as a scope binding
+    #   memory     a scalar kept in memory: address-taken or shared `my`, a
+    #              captured cell, `$$r`, a class field
+    #   aggregate  an array or hash, whole: `my @a`, `our %h`, `@_`, `@$r`
+    #   element    an element or a slice of one
+    #   package    a package scalar
+    #   skip       `undef` in the list
+    #
+    # READ FROM THE NODE THAT NAMES THE PLACE -- the pad entry's sigil, the
+    # node kind -- never from a stamp: a stamp says what a VALUE is, and a
+    # bare `my @a` has none until something uses it (and then has that use's:
+    # `my %h; my $n = %h` stamps the hash Str). A kind this does not know is
+    # `memory`: an unknown place is stored to, never dropped.
+    sub _target_storage ($node, $ctx) {
+        my $op    = $node->operation;
+        my $sigil = $node->can('sigil') ? ( $node->sigil // '' ) : '';
+        return 'skip'      if $op eq 'Constant';
+        return 'element'   if $op eq 'Subscript' || $op eq 'Slice';
+        return 'aggregate' if $op =~ /\A(?:ArrayLiteral|HashLiteral|ArgsSource)\z/;
+        return 'aggregate' if $sigil eq '@' || $sigil eq '%';
+        return 'package'   if $op eq 'EntryDef';
+        if ($op eq 'PadAccess') {
+            return 'memory' if $node->shared || ( $node->inputs // [] )->@*;
+            return 'memory' if $node->targ && $ctx->{addr_taken}{ $node->targ };
+            return 'ssa';
+        }
+        return 'memory';
+    }
+
+    # _is_array_variable($node) -> true for a node that NAMES an array: a `my
+    # @a` (its pad entry, or the literal it is bound to), an `our @a`.
+    sub _is_array_variable ($node) {
+        my $op = $node->operation;
+        return 0 unless $op eq 'PadAccess' || $op eq 'EntryDef'
+            || ( $op eq 'ArrayLiteral' && defined $node->symbol );
+        return ( $node->sigil // '' ) eq '@' ? 1 : 0;
+    }
+
+    # _flattens($node) -> true when a list-assignment VALUE may yield other
+    # than one element. A variable says so by its sigil; anything else by
+    # what it is stamped (_is_aggregate_node).
+    sub _flattens ($node) {
+        my $sigil = $node->can('sigil') ? ( $node->sigil // '' ) : '';
+        return 1 if ( $sigil eq '@' || $sigil eq '%' )
+            && $node->operation =~ /\A(?:PadAccess|EntryDef|PostfixDeref)\z/;
+        return _is_aggregate_node($node) ? 1 : 0;
+    }
+
     # _is_scalar_rebind_target($node) -> bool
     #
     # True when a list-assign LHS operand names ONE scalar whose new value is
@@ -22076,9 +22152,7 @@ class SoN::FromOptree 0.01 {
                 ($subject->shared ? (shared => 1) : ()),
                 (defined $sim->memory ? (inputs => [ $sim->memory ]) : ()));
             my $store = $factory->make('Assign', inputs => [$loc, $node]);
-            $store->set_control_in($sim->control);
-            $sim->set_control($store);
-            $sim->set_memory($store);
+            _place($sim, $store);
             return $node;
         }
 
@@ -22335,9 +22409,7 @@ class SoN::FromOptree 0.01 {
         my $write = $factory->make('EntryWrite',
             binds  => $binds,
             inputs => [$target, $value, $sim->memory]);
-        $write->set_control_in($sim->control);
-        $sim->set_control($write);
-        $sim->set_memory($write);
+        _place($sim, $write);
         return;
     }
 
@@ -22859,9 +22931,7 @@ class SoN::FromOptree 0.01 {
             my $in_place = $target->isa('SoN::IR::Node::PadAccess')
                 && ($target->targ // q{}) eq $scope_key;
             if ($in_place) {
-                $node->set_control_in($sim->control);
-                $sim->set_control($node);
-                $sim->set_memory($node) if defined $sim->memory;
+                _place($sim, $node);
             }
             # A destructive s/// mutates the target pad in place: rebind
             # $targ so a later read of the same lexical resolves to the
@@ -22882,9 +22952,7 @@ class SoN::FromOptree 0.01 {
                     dispatch_kind => 'builtin',
                     name          => 'substr',
                     stamp         => SoN::IR::Stamp->new(type => 'Str'));
-                $write->set_control_in($sim->control);
-                $sim->set_control($write);
-                $sim->set_memory($write) if defined $sim->memory;
+                _place($sim, $write);
             }
             elsif (!$nondestruct) {
                 $sim->define($scope_key, $node)
@@ -23144,6 +23212,108 @@ class SoN::FromOptree 0.01 {
             }
             return 0;
         };
+        # AN ELEMENT OPERAND IS THE ELEMENT, NOT A COPY, as a variable is the
+        # variable: `$a[0] + ($a[0] = 10)` is 20, because `+` reads the element
+        # when `+` runs. The walk reads it where its op stands -- a Subscript at
+        # the memory before the store -- and the wire of that was the wire of
+        # a right program byte for byte (audit 2026-11-19, probe vp5).
+        #
+        # REFUSED, NOT READ AGAIN as a lexical is: an element is an alias only
+        # if it EXISTED when it was read. `$h{new} . ($h{new} = "q")` pushes
+        # undef, and a second read would see "q". The walk cannot know which.
+        #
+        # THE CONTAINER, as far as the optree names it: an element operand is
+        # an (ex-)aelem or (ex-)helem over aelemfast_lex, aelemfast or a
+        # multideref, whose text up to its first subscript (`$a[`, `$h{`,
+        # `$r->[`) says which container. A later sibling that holds an lvalue
+        # element of the same text stores into it.
+        # ponytail: two references to one array are two containers here, and a
+        # call in a later operand that stores the element is not seen.
+        my $elem_key = sub ($o) {
+            return undef unless $o && $$o;
+            $o = $o->first while $o->name eq 'null' && ( $o->flags & B::OPf_KIDS ) && ${ $o->first };
+            my $n = $o->name;
+            if ( $n eq 'aelemfast_lex' || $n eq 'aelemfastlex_store' ) {
+                my ( $sg, $sy ) = _padparts( $cv, $o->targ );
+                return "\$$sy\[";
+            }
+            if ( $n eq 'aelemfast' ) {
+                my $gv = _op_gv( $cv, $o ) or return undef;
+                return '$' . $gv->NAME . '[';
+            }
+            # B::SoN COMPILES WITH THE PEEPHOLE OFF, so an element is usually a
+            # real aelem or helem over its container: a pad aggregate, a
+            # package one (rv2av or rv2hv of a gv), or a reference in a pad
+            # scalar. Any other container has no name to compare.
+            if ( $n eq 'aelem' || $n eq 'helem' ) {
+                my $open = $n eq 'aelem' ? '[' : '{';
+                my $c = $o->first;
+                return undef unless $c && $$c;
+                if ( $c->name =~ /\Apad[ah]v\z/ ) {
+                    my ( $sg, $sy ) = _padparts( $cv, $c->targ );
+                    return '$' . $sy . $open;
+                }
+                return undef unless $c->name =~ /\Arv2[ah]v\z/ && ( $c->flags & B::OPf_KIDS );
+                my $r = $c->first;
+                if ( $r->name eq 'gv' ) {
+                    my $gv = _op_gv( $cv, $r ) or return undef;
+                    return '$' . $gv->NAME . $open;
+                }
+                if ( $r->name eq 'padsv' ) {
+                    my ( $sg, $sy ) = _padparts( $cv, $r->targ );
+                    return '$' . $sy . '->' . $open;
+                }
+                return undef;
+            }
+            return undef unless $n eq 'multideref' && $o->can('string');
+            my $text = eval { $o->string($cv) } // return undef;
+            return $text =~ /\A(\$\$?[\w:]+(?:->)?[\[{])/ ? $1 =~ s/\A\$main::/\$/r : undef;
+        };
+        my $elem_stored;
+        # A STORE IS AN ASSIGNMENT'S TARGET, not whatever perl marks OPf_MOD:
+        # a call's argument is marked (it is passed as an alias), as is an
+        # element dereferenced on the way to a store (`$_[0][$_[1]] = ...`
+        # vivifies `$_[0]`). So the target is found from the op that stores:
+        # the last kid of an sassign, the first of an `op=` or `++`/`--`, any
+        # element in a list assign's left side, an s///, tr/// or chomp's.
+        my $names = sub ( $t, $key ) {
+            return 0 unless $t && $$t;
+            return ( $elem_key->($t) // '' ) eq $key ? 1 : 0;
+        };
+        $elem_stored = sub ( $o, $key ) {
+            return 0 unless $o && $$o;
+            my $n = $o->name;
+            return 1 if $n eq 'aelemfastlex_store' && $names->( $o, $key );
+            return 0 unless $o->flags & B::OPf_KIDS;
+            my @kids;
+            for ( my $k = $o->first; $k && $$k; $k = $k->sibling ) { push @kids, $k }
+            my @targets =
+                  $n eq 'sassign'                                        ? ( $kids[-1] )
+                : $n eq 'aassign'                                        ? ( _subtree_ops( $kids[-1] ) )
+                : $n =~ /\A(?:i_)?(?:pre|post)(?:inc|dec)\z/            ? ( $kids[0] )
+                : $n =~ /\A(?:subst|trans|transr|chomp|chop|schomp|schop)\z/ ? ( $kids[0] )
+                : ( $o->isa('B::BINOP') && ( $o->flags & B::OPf_STACKED ) ) ? ( $kids[0] )   # op=
+                : $n eq 'multiconcat' && ( $o->flags & B::OPf_STACKED )   ? ( $kids[-1] )
+                :                                                          ();
+            return 1 if grep { $names->( $_, $key ) } @targets;
+            return scalar grep { $elem_stored->( $_, $key ) } @kids;
+        };
+        for ( my $k = $op->first; $k && $$k; $k = $k->sibling ) {
+            next if ( $k->flags & B::OPf_WANT ) == B::OPf_WANT_VOID;   # a statement, not an operand
+            next if $k->flags & B::OPf_MOD;                           # a store's own target
+            my $was = $k->name eq 'null' && $k->targ ? ( B::ppname( $k->targ ) =~ s/\App_//r ) : $k->name;
+            next unless $was =~ /\A(?:aelem|helem|aelemfast_lex|aelemfast|multideref)\z/;
+            my $ekey = $elem_key->($k) // next;
+            # (AN ASSIGNMENT'S OWN TARGET is not a later operand: `$a[0] =
+            # $a[1]` reads its value and then stores, and that is what the
+            # Assign says. sassign's and a storing multiconcat's is the last kid.)
+            my @later = _later_siblings($k);
+            pop @later if $op->name =~ /\A(?:sassign|multiconcat)\z/;
+            die "GAP: an element operand is read by alias and a later operand"
+              . " stores into its container -- not yet lowered\n"
+                if grep { $elem_stored->( $_, $ekey ) } @later;
+        }
+        undef $elem_stored;
         my ( $kid, $first ) = ( $op->first, 1 );
         while ( $kid && $$kid ) {
             my $key = $var->($kid);
