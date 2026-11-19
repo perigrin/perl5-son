@@ -2220,6 +2220,15 @@ class SoN::Deparse 0.01 {
                     $in_body{ $_->{id} } && $self->_writes_this_name( $_, $f )
                 } $self->_nodes_in_order;
             }
+            # A READ AT A LOOP'S MEMORY Phi is shadowed only by a store in THAT
+            # loop's body: an earlier loop's store is behind it, not ahead.
+            # `while (1) { $x = $x + 1; last if ... } $x = 0; while ($x != 3)
+            # { $x = $x + 1 }` took the first loop's store for one the second
+            # loop's condition read past, and refused.
+            if ( $at_loop_phi ) {
+                my $body = $body_of{ ( $version->{fields} // {} )->{region} // -1 } // {};
+                delete @store{ grep { !$body->{$_} } keys %store };
+            }
             next unless %store;
             # A loop that DOES carry it -- the read is a header Phi's init.
             next if grep {
@@ -4523,11 +4532,7 @@ class SoN::Deparse 0.01 {
         } $self->_nodes_in_order;
         while ( defined( my $id = shift @q ) ) {
             next if $cond{$id}++;
-            # (not through the memory the read is of: a memory Phi's inputs
-            # are the stores of the body, and their values are not the
-            # condition's)
             my $m = $nodes->{$id} // {};
-            next if ( $m->{op} // '' ) eq 'Phi' && ( $m->{fields} // {} )->{memory};
             push @q, ( $m->{inputs} // [] )->@*;
         }
         # A CONSUMER THAT ALIASES the variable needs it by name, and a value
