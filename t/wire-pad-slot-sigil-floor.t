@@ -1,4 +1,4 @@
-# ABOUTME: A pad slot's declared type is supplied by _declared_slot_type, NOT stamped.
+# ABOUTME: A scalar pad slot's declared type is supplied by _declared_slot_type, NOT stamped.
 # ABOUTME: Stamping it pre-empts the backward-inference meet and widens parameters.
 use 5.42.0;
 use utf8;
@@ -58,16 +58,21 @@ subtest 'a parameter is narrowed by its use, not floored at its sigil' => sub {
         'Num from `$x + 1` -- meet(Scalar, Num), not the bare Scalar floor';
 };
 
-# A SLOT WITH NO USE-SITE CONSTRAINT STAYS Unknown, and that is the handshake
-# doing its job rather than a gap: nothing in the body decides it.
-subtest 'an unconstrained slot stays Unknown for the meet to fill' => sub {
+# AN AGGREGATE SLOT IS TYPED BY ITS DECLARATION. This read "stays Unknown ...
+# _declared_slot_type supplies Hash to the meet instead" until 2026-11-19 --
+# but _declared_slot_type supplied Scalar for every PadAccess, so a use typed
+# the container (`!@a` made `my @a` a Scalar and `\@a` a ScalarRef). Nothing
+# sits below Array or Hash in the lattice, so for `@` and `%` the declaration
+# IS the answer and is written; a `$` slot is still left for the meet, above.
+# See t/wire-declared-type-is-the-pad-entrys.t.
+subtest 'an aggregate slot is typed by its sigil' => sub {
     my $p = pads_of(
         'my %t; $t{a}=1; sub u { my %c = %t; scalar keys %c } print u();',
         'sf-hash');
     my @hp = grep { (($_->{fields} // {})->{sigil} // '') eq '%' } $p->@*;
     ok scalar(@hp), 'a % pad node is built' or return;
-    ok +(grep { ($_->{stamp} // 'NONE') eq 'Unknown' } @hp),
-        'left Unknown -- _declared_slot_type supplies Hash to the meet instead';
+    is_deeply [ grep { ($_->{stamp} // 'NONE') ne 'Hash' } @hp ], [],
+        'every % pad node is a Hash';
 };
 
 # A DECLARED VALUE STILL NARROWS THE TARGET. The declaration-target stamp

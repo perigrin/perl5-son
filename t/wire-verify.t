@@ -43,18 +43,45 @@ subtest 'a clean program: stores and reads in one chain' => sub {
         or diag explain_v( $r->{violations} );
 };
 
+# HAND-BUILT GRAPHS for the rules the producer does not break (any more): a
+# rule with no failing case is a rule nobody has seen fail. A class the
+# producer has since fixed keeps its rule tested here by hand, and its probe
+# is asserted clean beside it.
+sub graph (@nodes) {
+    return { methods => { g => { returns => [ $nodes[-1]{id} ], nodes => \@nodes } } };
+}
+sub nd ( $id, $op, $in, %rest ) {
+    my $ctl = delete $rest{ctl};
+    return { id => $id, op => $op, inputs => $in, ( defined $ctl ? ( control_in => $ctl ) : () ),
+        ( %rest ? ( fields => {%rest} ) : () ) };
+}
+
+# `@a[0,1] = (5,6)` as the producer made it until 2026-11-19: a slice Assign
+# with no control_in and no reader.
+sub floating_slice_assign () {
+    return graph(
+        nd( 0, 'Start', [] ), nd( 1, 'Constant', [] ), nd( 2, 'MemStart', [] ),
+        nd( 3, 'PadAccess', [], sigil => '@', symbol => 'a' ),
+        nd( 4, 'Slice', [ 1, 3 ], kind => 'array' ),
+        nd( 5, 'Assign', [ 4, 1 ], targets => 1 ),
+        nd( 6, 'Return', [1], ctl => 0 ),
+    );
+}
+
 subtest 'every violation names its node, kind, rule and graph' => sub {
-    my $r = rules('my @a = (0,0,0); @a[0,1] = (5,6); print "@a\n";');
+    my $r = rules( floating_slice_assign() );
     my ($v) = $r->{'write-floating'}->@*;
-    is $v->{graph}, 'main::__PROGRAM__', 'graph';
-    is $v->{op},    'Assign',            'kind';
+    is $v->{graph}, 'g',      'graph';
+    is $v->{op},    'Assign', 'kind';
     like $v->{node}, qr/^\d+$/, 'node id';
     like $v->{detail}, qr/slice|element/, 'detail says what it writes';
 };
 
 subtest 'write-floating: a store with no control_in and no reader (slice2)' => sub {
-    my $r = rules('my @a = (0,0,0); @a[0,1] = (5,6); print "@a\n";');
-    is ops( $r->{'write-floating'} ), ['Assign'], 'the slice assign floats';
+    is ops( rules( floating_slice_assign() )->{'write-floating'} ), ['Assign'], 'the slice assign floats';
+    # The producer places it now (t/wire-list-assign-places-by-storage.t).
+    is rules('my @a = (0,0,0); @a[0,1] = (5,6); print "@a\n";')->{'write-floating'}, undef,
+        'and the producer no longer makes one';
 };
 
 subtest 'effect-rides-value: a call off the chain (dyn1)' => sub {
@@ -124,17 +151,6 @@ subtest 'package-scalar-loop-value: $g carried round a loop as a value (pg1)' =>
     my $r = rules('our $g = 0; sub bump { $g += 10 } for my $i (1..3) { $g = $g + 1; bump(); } print "$g\n";');
     is ops( $r->{'package-scalar-loop-value'} ), ['Phi'], 'the value Phi a callee cannot reach';
 };
-
-# HAND-BUILT GRAPHS for the rules the producer does not break today: a rule
-# with no failing case is a rule nobody has seen fail.
-sub graph (@nodes) {
-    return { methods => { g => { returns => [ $nodes[-1]{id} ], nodes => \@nodes } } };
-}
-sub nd ( $id, $op, $in, %rest ) {
-    my $ctl = delete $rest{ctl};
-    return { id => $id, op => $op, inputs => $in, ( defined $ctl ? ( control_in => $ctl ) : () ),
-        ( %rest ? ( fields => {%rest} ) : () ) };
-}
 
 subtest 'phi-arity: a Phi must pair with its Region\'s ways in' => sub {
     my $r = rules( graph(

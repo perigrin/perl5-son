@@ -536,8 +536,15 @@ class SoN::FromOptree 0.01 {
     # the literal is what the shortcut ultimately tests, and the container is
     # already an input of the Subscript.
     sub _note_literal_mutation ($target) {
-        return unless $target && $target->isa('SoN::IR::Node::Subscript');
-        my $container = ($target->inputs // [])->[0] or return;
+        return unless $target && $target->can('operation');
+        # (a slice is a store to several elements; its container is its last
+        # input. A named literal assigned whole is itself the container.)
+        my $kind = $target->operation;
+        return unless $kind =~ /\A(?:Subscript|Slice|ArrayLiteral|HashLiteral)\z/;
+        my $container = $kind eq 'Subscript' ? ($target->inputs // [])->[0]
+                      : $kind eq 'Slice'     ? ($target->inputs // [])->[-1]
+                      :                          $target;
+        return unless $container;
         return unless $container->can('operation');
         return unless $container->operation =~ /\A(?:Array|Hash)Literal\z/;
         $MUTATED_LITERALS{ $container->id } = 1 if $container->can('id');
@@ -11722,9 +11729,14 @@ class SoN::FromOptree 0.01 {
                 $introduces = 1 if $k->name eq 'padsv'
                     && ($k->private & B::OPpLVAL_INTRO());
             }
+            # AN ARRAY VARIABLE IS TAKEN THE SAME WAY, declared here or not:
+            # `my ($f) = @r` COPIES element 0. Left to the positional rule,
+            # $f was bound to the array @r itself and read whatever @r held
+            # later (`pop @r; print $f` printed the count). Each element is
+            # read at the memory version the assignment stands at.
             my @args_elems;
-            if (@rhs == 1 && $rhs[0]->isa('SoN::IR::Node::ArgsSource')
-                && !$introduces
+            if (@rhs == 1
+                && ( $rhs[0]->isa('SoN::IR::Node::ArgsSource') ? !$introduces : _is_array_variable($rhs[0]) )
                 && $lhs->@* && !grep { !_is_scalar_rebind_target($_) } $lhs->@*) {
                 my $args = $rhs[0];
                 @args_elems = map {
@@ -11736,8 +11748,14 @@ class SoN::FromOptree 0.01 {
                             $sim->memory]);
                 } 0 .. $lhs->$#*;
             }
+            # (the record of a copy from an array variable names the elements
+            # it copied, each at its version -- not the array at none. In
+            # scalar context the assignment counts the array, so it keeps it.)
+            my $by_element = @args_elems && !$rhs[0]->isa('SoN::IR::Node::ArgsSource')
+                && ($op->flags & 3) != 2;   # OPf_WANT_SCALAR
             my $node = $factory->make('Assign',
-                inputs => [ $lhs->@*, @rhs ], targets => scalar $lhs->@*);
+                inputs => [ $lhs->@*, ( $by_element ? @args_elems : @rhs ) ],
+                targets => scalar $lhs->@*);
 
             # A DEMOTED TARGET IS STORED, NOT BOUND, here as in sassign: its
             # value lives in memory because a reference to it exists, so the
@@ -11757,13 +11775,17 @@ class SoN::FromOptree 0.01 {
             # AND A CLASS FIELD, which the object carries past this graph:
             # floating, `%registry = $graphs->%*` reached nothing and vanished
             # (chalk's Chalk::MOP kept an empty registry).
-            if (@LOOP_STACK
-                || grep { ( $_->isa('SoN::IR::Node::PadAccess') && $_->targ
-                           && $ctx->{addr_taken}{ $_->targ } )
-                       || $_->isa('SoN::IR::Node::PostfixDeref')
-                       || $_->isa('SoN::IR::Node::FieldAccess') } $lhs->@*) {
-                _place($sim, $node);
-            }
+            #
+            # BY WHERE EACH TARGET LIVES (_target_storage), not by a list of
+            # node kinds: the list named four and missed an element, a slice,
+            # a captured cell, `@_`, a package aggregate and a bare `my @a`,
+            # and each one missed was a store nothing reached (audit
+            # 2026-11-19, W2: 15 wrong answers). Decided below, once the
+            # targets' positions are known.
+            my @storage = map { _target_storage($_, $ctx) } $lhs->@*;
+            # (and a store into a literal-bound aggregate ends the shortcut that
+            # reads it as first constructed, as a scalar element store does.)
+            _note_literal_mutation($_) for $lhs->@*;
 
             # THE ASSIGN IS NOT THE REBIND. Building the node records WHAT was
             # assigned; nothing in it re-points the SSA scope keys, so every
@@ -11851,12 +11873,38 @@ class SoN::FromOptree 0.01 {
             };
             my $unsized = !@args_elems && grep { $unsized_v->($_) } @rhs;
             $single_call ||= $unsized;
+            # AN AGGREGATE IS ONE BY ITS SIGIL. Asked of the stamp, a bare `my
+            # @rest` (unstamped, or stamped by whatever used it) was a scalar:
+            # `my (@rest, $f) = (1,2,3)` bound $f to the constant 2, and `my
+            # ($f) = @r` bound $f to the array @r itself.
             my $positional =
-                   ( !grep { _is_aggregate_node($_) } @targets, @vals )
+                   ( !grep { $_ eq 'aggregate' } @storage )
+                && ( !grep { _flattens($_) } @vals )
                 # ONE TARGET IS NO EXCEPTION: `($lo) = g()` takes the first
                 # element, and bound to the call it read the list (`52`).
                 && !$single_call
                 && ( grep { _is_scalar_rebind_target($_) } @targets );
+            # THE ASSIGN IS A STORE when a target lives in memory: placed, the
+            # memory version every later read of that target takes. It is
+            # placed in a loop body too, where it binds on each pass. With
+            # only SSA `my` scalars to fill (and package scalars bound by
+            # position, which _entry_store stores below) it is a record of
+            # the rebinding, pinned further down where a slot is read by name.
+            #
+            # A PARAMETER BIND IS THE OTHER RECORD: `my ($self, %opts) = @_`
+            # declares its targets and fills them from @_ as the sub is
+            # entered. Both consumers bind it where the sub starts (chalk as
+            # ArgsFrom, the deparser as the sub's first statement), and the
+            # wire has no flag yet to tell it from a store (wire v2), so it
+            # stays unplaced, as SoN::Verify allows (`param-bind`).
+            my $param_bind = $introduces && @rhs == 1
+                && $rhs[0]->isa('SoN::IR::Node::ArgsSource')
+                && !grep { !$_->isa('SoN::IR::Node::PadAccess') } $lhs->@*;
+            my $stores = grep { !/\A(?:ssa|skip)\z/
+                               && !( $positional && $_ eq 'package' )
+                               && !( $param_bind && $_ eq 'aggregate' ) } @storage;
+            _place($sim, $node)
+                if $stores || @LOOP_STACK;
             if ($positional) {
                 # READ EVERY VALUE BEFORE WRITING ANY KEY. `($a,$b) = ($b,$a)`
                 # has the OLD bindings on the RHS already (@rhs was popped
@@ -11883,14 +11931,14 @@ class SoN::FromOptree 0.01 {
             # 3, emitted 1). It is rebound to the target, which reads the slot
             # by name -- so the Assign is pinned where it stands, ahead of
             # every read of that name.
-            elsif (!$introduces && !grep { _is_aggregate_node($_) } @targets) {
+            # (an aggregate among the targets changes nothing for the scalars
+            # beside it: `($x, @r) = f()` left $x at its old value.)
+            elsif (!$introduces) {
                 my @pad = grep { $_->isa('SoN::IR::Node::PadAccess')
                                  && ($_->sigil // '') eq '$' && $_->targ
                                  && !$ctx->{addr_taken}{ $_->targ } } @targets;
                 if (@pad) {
-                    unless (defined $node->control_in) {
-                        _pin($sim, $node);
-                    }
+                    _pin($sim, $node) unless defined $node->control_in;
                     $sim->define($_->targ, $_) for @pad;
                 }
             }
@@ -11898,12 +11946,10 @@ class SoN::FromOptree 0.01 {
             # too: each slot is its own PadAccess, which reads what the Assign
             # stored. Floating, nothing reached it -- a consumer walking the
             # chain never bound the targets, and a call's effects had no place.
-            elsif ($introduces && $single_call && !grep { _is_aggregate_node($_) } @targets) {
-                unless (defined $node->control_in) {
-                    # ...and the memory version a later read takes, so a
-                    # floating read (a join over `($s) x $n`) is placed after it.
-                    _place($sim, $node);
-                }
+            elsif ($introduces && $single_call) {
+                # ...and the memory version a later read takes, so a
+                # floating read (a join over `($s) x $n`) is placed after it.
+                _place($sim, $node) unless defined $node->control_in;
             }
 
             $sim->push_node($node);
@@ -21690,6 +21736,56 @@ class SoN::FromOptree 0.01 {
         # a correctness one -- but a key nobody can paste into perl is a key
         # that misleads whoever is reading a scope dump.
         return $node->sigil . $node->package . '::' . $node->symbol;
+    }
+
+    # _target_storage($node, $ctx) -> where a list-assignment target LIVES:
+    #
+    #   ssa        a `my` scalar the walk carries as a scope binding
+    #   memory     a scalar kept in memory: address-taken or shared `my`, a
+    #              captured cell, `$$r`, a class field
+    #   aggregate  an array or hash, whole: `my @a`, `our %h`, `@_`, `@$r`
+    #   element    an element or a slice of one
+    #   package    a package scalar
+    #   skip       `undef` in the list
+    #
+    # READ FROM THE NODE THAT NAMES THE PLACE -- the pad entry's sigil, the
+    # node kind -- never from a stamp: a stamp says what a VALUE is, and a
+    # bare `my @a` has none until something uses it (and then has that use's:
+    # `my %h; my $n = %h` stamps the hash Str). A kind this does not know is
+    # `memory`: an unknown place is stored to, never dropped.
+    sub _target_storage ($node, $ctx) {
+        my $op    = $node->operation;
+        my $sigil = $node->can('sigil') ? ( $node->sigil // '' ) : '';
+        return 'skip'      if $op eq 'Constant';
+        return 'element'   if $op eq 'Subscript' || $op eq 'Slice';
+        return 'aggregate' if $op =~ /\A(?:ArrayLiteral|HashLiteral|ArgsSource)\z/;
+        return 'aggregate' if $sigil eq '@' || $sigil eq '%';
+        return 'package'   if $op eq 'EntryDef';
+        if ($op eq 'PadAccess') {
+            return 'memory' if $node->shared || ( $node->inputs // [] )->@*;
+            return 'memory' if $node->targ && $ctx->{addr_taken}{ $node->targ };
+            return 'ssa';
+        }
+        return 'memory';
+    }
+
+    # _is_array_variable($node) -> true for a node that NAMES an array: a `my
+    # @a` (its pad entry, or the literal it is bound to), an `our @a`.
+    sub _is_array_variable ($node) {
+        my $op = $node->operation;
+        return 0 unless $op eq 'PadAccess' || $op eq 'EntryDef'
+            || ( $op eq 'ArrayLiteral' && defined $node->symbol );
+        return ( $node->sigil // '' ) eq '@' ? 1 : 0;
+    }
+
+    # _flattens($node) -> true when a list-assignment VALUE may yield other
+    # than one element. A variable says so by its sigil; anything else by
+    # what it is stamped (_is_aggregate_node).
+    sub _flattens ($node) {
+        my $sigil = $node->can('sigil') ? ( $node->sigil // '' ) : '';
+        return 1 if ( $sigil eq '@' || $sigil eq '%' )
+            && $node->operation =~ /\A(?:PadAccess|EntryDef|PostfixDeref)\z/;
+        return _is_aggregate_node($node) ? 1 : 0;
     }
 
     # _is_scalar_rebind_target($node) -> bool

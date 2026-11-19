@@ -224,7 +224,10 @@ my %SIGNATURES = (
     # nothing (the cell arrives on the call edge, like Wantarray's context) and
     # yields the same Ref; `CellWrite` yields the value it stored, which is what
     # an assignment yields everywhere else in this library.
-    MakeCell   => { operands => ['Scalar'], result => 'Ref' },
+    # A CELL HOLDS THE CAPTURED VARIABLE -- a scalar, an array or a hash -- so
+    # its operand is a List (the parent of all three), not a Scalar: with
+    # Scalar, an honestly typed `my @a` was coerced to a scalar on its way in.
+    MakeCell   => { operands => ['List'], result => 'Ref' },
     CellParam  => { operands => [],         result => 'Ref' },
     CellRead   => { operands => ['Ref'],    result => 'Scalar' },
     CellWrite  => { operands => ['Ref', 'Scalar'], result => 'Scalar' },

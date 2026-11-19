@@ -2135,13 +2135,22 @@ sub _infer_backward {
                 next if $raw{ $node->id }
                     && ( $node->operation eq 'Parameter'
                          || ( $node->operation eq 'PadAccess' && $param{ $node->symbol // '' } ) );
+                # AN AGGREGATE'S DECLARATION IS ITS TYPE: nothing sits below
+                # Array or Hash, so no requirement narrows it, and one that
+                # contradicts it (a hash read as a string) is a coercion at
+                # the use, not a fact about the container.
+                my $declared = _declared_slot_type($node);
+                if ( $declared && $declared->type =~ /\A(?:Array|Hash)\z/ ) {
+                    $node->set_stamp($declared);
+                    $changed++;
+                    next;
+                }
                 my $want = $required{ $node->id } or next;
                 next if $want->type eq 'Unknown';
 
                 # The declared type of a scalar-slot read is `Scalar`; meeting it
                 # with the requirement is what narrows. A node whose declaration
                 # says nothing takes the requirement directly.
-                my $declared = _declared_slot_type($node);
                 my $result   = $declared
                     ? SoN::IR::Stamp::meet( $declared, $want )
                     : $want;
@@ -2206,13 +2215,22 @@ sub _thread_through_coerce {
 # independent of any use. A scalar slot holds a Scalar; that excludes Array,
 # Hash, Code and Glob, so it is a real constraint and not a placeholder.
 #
+# THE DECLARATION IS THE PAD ENTRY, and its sigil is part of it: `my @a`
+# holds an Array and `my %h` a Hash. Answering Scalar for every PadAccess let
+# a use type the container -- `!@a` requires a List, meet(Scalar, List) is
+# Scalar, and `\@a` became a ScalarRef; `my $n = %h` stamped the hash Str.
+#
 # Returns undef when the node kind carries no declaration to speak of, in which
 # case the use-site requirement stands alone.
 sub _declared_slot_type {
     my ($node) = @_;
     my $op = $node->operation;
-    return SoN::IR::Stamp->new( type => 'Scalar' )
-        if $op eq 'PadAccess' || $op eq 'FieldAccess';
+    if ( $op eq 'PadAccess' ) {
+        my $sigil = $node->sigil // '$';
+        return SoN::IR::Stamp->new(
+            type => $sigil eq '@' ? 'Array' : $sigil eq '%' ? 'Hash' : 'Scalar' );
+    }
+    return SoN::IR::Stamp->new( type => 'Scalar' ) if $op eq 'FieldAccess';
     return undef;
 }
 
