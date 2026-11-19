@@ -1,0 +1,3 @@
+my @a=(0); my $n=0;
+for my $i1 (1..2) { for my $i2 (1..2) { for my $i3 (1..2) { for my $i4 (1..2) { for my $i5 (1..2) { for my $i6 (1..2) { for my $i7 (1..2) { for my $i8 (1..2) { for my $i9 (1..2) { for my $i10 (1..2) { for my $i11 (1..2) { for my $i12 (1..2) { for my $i13 (1..2) { for my $i14 (1..2) { $n++; $a[0] += $n; }}}}}}}}}}}}}}
+print "$n $a[0]\n";

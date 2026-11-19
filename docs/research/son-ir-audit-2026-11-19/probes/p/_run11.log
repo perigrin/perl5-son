@@ -1,0 +1,22 @@
+ar1.pl: ROUNDTRIP
+ar10.pl: ROUNDTRIP
+ar11.pl: ROUNDTRIP
+ar12.pl: WRONG got=[3] want=[1]
+ar13.pl: REFUSED GAP: T2: out of its slices (sub main::f reads @_ other than by shifts, $_[N] or a signature) 
+ar14.pl: ROUNDTRIP
+ar15.pl: ROUNDTRIP
+ar16.pl: REFUSED GAP: T2: out of its slices (the value of a list assignment to scalars) 
+ar17.pl: WRONG got=[chalk: refused at run time: a hash element read through no HASH reference] want=[HASH]
+ar18.pl: REFUSED GAP: T2: out of its slices (a direct call with no sub) 
+ar19.pl: REFUSED GAP: T2: out of its slices (a direct call with no sub) 
+ar2.pl: ROUNDTRIP
+ar20.pl: REFUSED GAP: T2: out of its slices (a direct call with no sub) 
+ar21.pl: WRONG got=[1] want=[5]
+ar22.pl: WRONG got=[0] want=[3]
+ar3.pl: ROUNDTRIP
+ar4.pl: REFUSED GAP: T2: out of its slices (a direct call with no sub) 
+ar5.pl: REFUSED GAP: T2: out of its slices (an argument perl aliases (PostfixDeref) passed where a sub writes @_) 
+ar6.pl: ROUNDTRIP
+ar7.pl: ROUNDTRIP
+ar8.pl: REFUSED GAP: T2: out of its slices (an argument perl aliases (Subscript) passed where a sub writes @_) 
+ar9.pl: ROUNDTRIP

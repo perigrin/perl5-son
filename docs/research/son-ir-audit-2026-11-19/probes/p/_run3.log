@@ -1,0 +1,28 @@
+lp1.pl: ROUNDTRIP
+lp10.pl: ROUNDTRIP
+lp11.pl: ROUNDTRIP
+lp12.pl: ROUNDTRIP
+lp13.pl: ROUNDTRIP
+lp14.pl: ROUNDTRIP
+lp15.pl: ROUNDTRIP
+lp16.pl: ROUNDTRIP
+lp17.pl: ROUNDTRIP
+lp18.pl: ROUNDTRIP
+lp19.pl: ROUNDTRIP
+lp2.pl: ROUNDTRIP
+lp20.pl: ROUNDTRIP
+lp21.pl: ROUNDTRIP
+lp22.pl: ROUNDTRIP
+lp23.pl: ROUNDTRIP
+lp24.pl: ROUNDTRIP
+lp25.pl: ROUNDTRIP
+lp26.pl: REFUSED LOAD: no program graph with a return
+lp27.pl: ROUNDTRIP
+lp28.pl: REFUSED GAP: T2: out of its slices (an array through an element read whole) 
+lp3.pl: REFUSED LOAD: no program graph with a return
+lp4.pl: ROUNDTRIP
+lp5.pl: ROUNDTRIP
+lp6.pl: ROUNDTRIP
+lp7.pl: ROUNDTRIP
+lp8.pl: REFUSED LOAD: no program graph with a return
+lp9.pl: REFUSED LOAD: no program graph with a return

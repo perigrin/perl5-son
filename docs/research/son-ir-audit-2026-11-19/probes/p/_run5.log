@@ -1,0 +1,30 @@
+im1.pl: REFUSED LOAD: from_json failed: GAP: a BEGIN block with effects of its own is not lowered (a BEGIN or END block runs outside the main program) 
+im10.pl: REFUSED GAP: T2: out of its slices (a statement EntryWrite) 
+im11.pl: REFUSED GAP: T2: out of its slices (a statement EntryWrite) 
+im12.pl: REFUSED GAP: T2: out of its slices (a capture read where its match may have failed (perl reads the last match that succeeded)) 
+im13.pl: ROUNDTRIP
+im14.pl: ROUNDTRIP
+im15.pl: ROUNDTRIP
+im16.pl: ROUNDTRIP
+im17.pl: ROUNDTRIP
+im18.pl: ROUNDTRIP
+im19.pl: ROUNDTRIP
+im2.pl: REFUSED LOAD: from_json failed: GAP: a BEGIN block with effects of its own is not lowered (a BEGIN or END block runs outside the main program) 
+im20.pl: ROUNDTRIP
+im21.pl: ROUNDTRIP
+im22.pl: ROUNDTRIP
+im23.pl: WRONG got=[chalk: refused at run time: a store through an undefined scalar reference] want=[5 3]
+im24.pl: ROUNDTRIP
+im25.pl: ROUNDTRIP
+im26.pl: ROUNDTRIP
+im27.pl: ROUNDTRIP
+im28.pl: ROUNDTRIP
+im29.pl: ROUNDTRIP
+im3.pl: REFUSED LOAD: from_json failed: GAP: a BEGIN block with effects of its own is not lowered (a BEGIN or END block runs outside the main program) 
+im30.pl: ROUNDTRIP
+im4.pl: REFUSED GAP: T2: out of its slices (a tie of a scalar) 
+im5.pl: ROUNDTRIP
+im6.pl: WRONG got=[] want=[d]
+im7.pl: ROUNDTRIP
+im8.pl: ROUNDTRIP
+im9.pl: ROUNDTRIP

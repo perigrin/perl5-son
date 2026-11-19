@@ -1,0 +1,15 @@
+pl1.pl: ROUNDTRIP
+pl10.pl: WRONG got=[] want=[6 4]
+pl11.pl: WRONG got=[13] want=[23]
+pl12.pl: REFUSED LOAD: no program graph with a return
+pl13.pl: REFUSED GAP: T2: out of its slices (the value of a list assignment to scalars) 
+pl14.pl: ROUNDTRIP
+pl15.pl: ROUNDTRIP
+pl2.pl: ROUNDTRIP
+pl3.pl: ROUNDTRIP
+pl4.pl: WRONG got=[13] want=[33]
+pl5.pl: WRONG got=[13] want=[33]
+pl6.pl: WRONG got=[3] want=[33]
+pl7.pl: ROUNDTRIP
+pl8.pl: WRONG got=[13] want=[33]
+pl9.pl: REFUSED LOAD: no program graph with a return

@@ -1,0 +1,16 @@
+pg1.pl: WRONG got=[13] want=[33]
+pg10.pl: ROUNDTRIP
+pg11.pl: REFUSED GAP: T2: out of its slices (a scalar deref where a reference T2 does not make may reach it) 
+pg12.pl: ROUNDTRIP
+pg13.pl: ROUNDTRIP
+pg14.pl: REFUSED GAP: T2: out of its slices (a reference to what is not an array) 
+pg15.pl: ROUNDTRIP
+pg16.pl: ROUNDTRIP
+pg2.pl: WRONG got=[1,2,3,] want=[11,22,33,]
+pg3.pl: REFUSED GAP: T2: out of its slices (a package scalar read of no one version) 
+pg4.pl: ROUNDTRIP
+pg5.pl: ROUNDTRIP
+pg6.pl: REFUSED LOAD: no program graph with a return
+pg7.pl: ROUNDTRIP
+pg8.pl: ROUNDTRIP
+pg9.pl: ROUNDTRIP

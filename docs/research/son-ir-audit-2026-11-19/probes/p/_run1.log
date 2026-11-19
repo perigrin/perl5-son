@@ -1,0 +1,21 @@
+bless1.pl: ROUNDTRIP
+bless2.pl: WRONG got=[HASH K] want=[K K]
+bt1.pl: ROUNDTRIP
+chop1.pl: ROUNDTRIP
+chop2.pl: REFUSED LOAD: no program graph with a return
+chop3.pl: REFUSED LOAD: no program graph with a return
+dyn1.pl: WRONG got=[0] want=[1]
+dyn2.pl: WRONG got=[5 0] want=[5 1]
+la1.pl: REFUSED GAP: T2: out of its slices (a list assignment to an array or hash) 
+la2.pl: WRONG got=[0 0] want=[3 4]
+la3.pl: WRONG got=[0 0] want=[3 4]
+la4.pl: REFUSED GAP: T2: out of its slices (a value stamped List (Assign)) 
+la5.pl: WRONG got=[] want=[1]
+la6.pl: WRONG got=[0 0 2] want=[8 9 2]
+la7.pl: ROUNDTRIP
+slice1.pl: WRONG got=[ ] want=[1 2]
+slice2.pl: WRONG got=[0 0 0] want=[5 6 0]
+slice3.pl: WRONG got=[a=0] want=[a=7,b=8]
+swap1.pl: WRONG got=[1 2] want=[2 1]
+swap2.pl: ROUNDTRIP
+swap3.pl: WRONG got=[1 2] want=[2 1]

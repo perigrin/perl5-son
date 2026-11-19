@@ -1,0 +1,26 @@
+wa1.pl: ROUNDTRIP
+wa10.pl: ROUNDTRIP
+wa11.pl: ROUNDTRIP
+wa12.pl: ROUNDTRIP
+wa13.pl: ROUNDTRIP
+wa14.pl: ROUNDTRIP
+wa15.pl: ROUNDTRIP
+wa16.pl: ROUNDTRIP
+wa17.pl: ROUNDTRIP
+wa18.pl: WRONG got=[1 2 3] want=[2 1 3]
+wa19.pl: REFUSED GAP: T2: out of its slices (Call builtin splice) 
+wa2.pl: ROUNDTRIP
+wa20.pl: ROUNDTRIP
+wa21.pl: ROUNDTRIP
+wa22.pl: ROUNDTRIP
+wa23.pl: ROUNDTRIP
+wa24.pl: ROUNDTRIP
+wa25.pl: REFUSED GAP: T2: out of its slices (a list assignment to an array or hash) 
+wa26.pl: ROUNDTRIP
+wa3.pl: ROUNDTRIP
+wa4.pl: ROUNDTRIP
+wa5.pl: ROUNDTRIP
+wa6.pl: ROUNDTRIP
+wa7.pl: ROUNDTRIP
+wa8.pl: ROUNDTRIP
+wa9.pl: ROUNDTRIP

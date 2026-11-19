@@ -1,0 +1,30 @@
+ca1.pl: ROUNDTRIP
+ca10.pl: ROUNDTRIP
+ca11.pl: ROUNDTRIP
+ca12.pl: REFUSED GAP: T2: out of its slices (a method no package defines (foo)) 
+ca13.pl: ROUNDTRIP
+ca14.pl: ROUNDTRIP
+ca15.pl: ROUNDTRIP
+ca16.pl: ROUNDTRIP
+ca17.pl: REFUSED GAP: T2: out of its slices (a slice taken as a scalar (Coerce)) 
+ca18.pl: ROUNDTRIP
+ca19.pl: ROUNDTRIP
+ca2.pl: REFUSED GAP: T2: out of its slices (wantarray in a sub (T2 has no void context)) 
+ca20.pl: ROUNDTRIP
+ca21.pl: ROUNDTRIP
+ca22.pl: ROUNDTRIP
+ca23.pl: ROUNDTRIP
+ca24.pl: ROUNDTRIP
+ca25.pl: ROUNDTRIP
+ca26.pl: ROUNDTRIP
+ca27.pl: REFUSED GAP: T2: out of its slices (a direct call with no sub) 
+ca28.pl: ROUNDTRIP
+ca29.pl: WRONG got=[] want=[d]
+ca3.pl: ROUNDTRIP
+ca30.pl: ROUNDTRIP
+ca4.pl: ROUNDTRIP
+ca5.pl: ROUNDTRIP
+ca6.pl: ROUNDTRIP
+ca7.pl: ROUNDTRIP
+ca8.pl: ROUNDTRIP
+ca9.pl: ROUNDTRIP

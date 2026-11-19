@@ -1,0 +1,22 @@
+fl1.pl: WRONG got=[before
+Illegal division by zero at /tmp/claude-0/audit/p/fl1.pl line 1.] want=[Illegal division by zero at /tmp/claude-0/audit/p/fl1.pl line 1.]
+fl10.pl: WRONG got=[substr outside of string: stopped (chalk, T2)] want=[u]
+fl11.pl: WRONG got=[none] want=[viv]
+fl12.pl: ROUNDTRIP
+fl13.pl: REFUSED GAP: T2: out of its slices (Call builtin log) 
+fl14.pl: WRONG got=[num] want=[died]
+fl2.pl: REFUSED LOAD: no program graph with a return
+fl3.pl: ROUNDTRIP
+fl4.pl: ROUNDTRIP
+fl5.pl: WRONG got=[a
+b] want=[Can't use an undefined value as an ARRAY reference at /tmp/claude-0/audit/p/fl5.pl line 1.
+a]
+fl6.pl: WRONG got=[before
+Illegal modulus zero at /tmp/claude-0/audit/p/fl6.pl line 1.] want=[Illegal modulus zero at /tmp/claude-0/audit/p/fl6.pl line 1.]
+fl7.pl: ROUNDTRIP
+fl8.pl: REFUSED LOAD: no program graph with a return
+fl9.pl: ROUNDTRIP
+m4.pl: WRONG got=[ 10] want=[9 10]
+ht1.pl: WRONG got=[ne] want=[e
+ne]
+ht2.pl: WRONG got=[n=HASH(0x55ca265420d0)] want=[n=0]

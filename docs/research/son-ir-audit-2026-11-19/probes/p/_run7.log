@@ -1,0 +1,28 @@
+ef1.pl: REFUSED GAP: T2: out of its slices (a statement Call builtin prtf) 
+ef10.pl: WRONG got=[A A] want=[A B]
+ef11.pl: ROUNDTRIP
+ef12.pl: ROUNDTRIP
+ef13.pl: ROUNDTRIP
+ef14.pl: ROUNDTRIP
+ef15.pl: ROUNDTRIP
+ef16.pl: ROUNDTRIP
+ef17.pl: ROUNDTRIP
+ef18.pl: ROUNDTRIP
+ef19.pl: ROUNDTRIP
+ef2.pl: REFUSED GAP: T2: out of its slices (Call builtin prtf) 
+ef20.pl: ROUNDTRIP
+ef21.pl: REFUSED GAP: T2: out of its slices (a statement EntryWrite) 
+ef22.pl: REFUSED GAP: T2: out of its slices (a open B::SoN does not place on the chain) 
+ef23.pl: ROUNDTRIP
+ef24.pl: ROUNDTRIP
+ef25.pl: REFUSED GAP: T2: out of its slices (a scalar deref where a reference T2 does not make may reach it) 
+ef26.pl: ROUNDTRIP
+ef27.pl: REFUSED GAP: T2: out of its slices (a reference to what is not an array) 
+ef28.pl: REFUSED GAP: T2: out of its slices (a local aggregate restored with no save made) 
+ef3.pl: REFUSED GAP: T2: out of its slices (a statement Call builtin unlink) 
+ef4.pl: ROUNDTRIP
+ef5.pl: ROUNDTRIP
+ef6.pl: REFUSED GAP: T2: out of its slices (an each in a program with a keys or values (which reset it, B::SoN places them nowhere)) 
+ef7.pl: ROUNDTRIP
+ef8.pl: ROUNDTRIP
+ef9.pl: WRONG got=[K K] want=[HASH K]

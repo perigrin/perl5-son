@@ -1,0 +1,391 @@
+al1.pl: REFUSED GAP: T2: out of its slices (a loop phi with other than two ways in) 
+al10.pl: ROUNDTRIP
+al11.pl: ROUNDTRIP
+al12.pl: ROUNDTRIP
+al13.pl: ROUNDTRIP
+al14.pl: ROUNDTRIP
+al15.pl: ROUNDTRIP
+al16.pl: ROUNDTRIP
+al17.pl: ROUNDTRIP
+al18.pl: ROUNDTRIP
+al19.pl: ROUNDTRIP
+al2.pl: REFUSED GAP: T2: out of its slices (a loop phi with other than two ways in) 
+al20.pl: ROUNDTRIP
+al21.pl: ROUNDTRIP
+al22.pl: ROUNDTRIP
+al23.pl: ROUNDTRIP
+al24.pl: ROUNDTRIP
+al25.pl: ROUNDTRIP
+al26.pl: ROUNDTRIP
+al27.pl: ROUNDTRIP
+al28.pl: ROUNDTRIP
+al29.pl: ROUNDTRIP
+al3.pl: REFUSED GAP: T2: out of its slices (PadAccess) 
+al30.pl: REFUSED GAP: T2: out of its slices (a list perl may alias (Phi) passed where a sub writes @_) 
+al4.pl: ROUNDTRIP
+al5.pl: ROUNDTRIP
+al6.pl: ROUNDTRIP
+al7.pl: ROUNDTRIP
+al8.pl: ROUNDTRIP
+al9.pl: ROUNDTRIP
+ar1.pl: ROUNDTRIP
+ar10.pl: ROUNDTRIP
+ar11.pl: ROUNDTRIP
+ar12.pl: WRONG got=[3] want=[1]
+ar13.pl: REFUSED GAP: T2: out of its slices (sub main::f reads @_ other than by shifts, $_[N] or a signature) 
+ar14.pl: ROUNDTRIP
+ar15.pl: ROUNDTRIP
+ar16.pl: REFUSED GAP: T2: out of its slices (the value of a list assignment to scalars) 
+ar17.pl: WRONG got=[chalk: refused at run time: a hash element read through no HASH reference] want=[HASH]
+ar18.pl: REFUSED GAP: T2: out of its slices (a direct call with no sub) 
+ar19.pl: REFUSED GAP: T2: out of its slices (a direct call with no sub) 
+ar2.pl: ROUNDTRIP
+ar20.pl: REFUSED GAP: T2: out of its slices (a direct call with no sub) 
+ar21.pl: WRONG got=[1] want=[5]
+ar22.pl: WRONG got=[0] want=[3]
+ar3.pl: ROUNDTRIP
+ar4.pl: REFUSED GAP: T2: out of its slices (a direct call with no sub) 
+ar5.pl: REFUSED GAP: T2: out of its slices (an argument perl aliases (PostfixDeref) passed where a sub writes @_) 
+ar6.pl: ROUNDTRIP
+ar7.pl: ROUNDTRIP
+ar8.pl: REFUSED GAP: T2: out of its slices (an argument perl aliases (Subscript) passed where a sub writes @_) 
+ar9.pl: ROUNDTRIP
+bless1.pl: ROUNDTRIP
+bless2.pl: WRONG got=[HASH K] want=[K K]
+bt1.pl: ROUNDTRIP
+ca1.pl: ROUNDTRIP
+ca10.pl: ROUNDTRIP
+ca11.pl: ROUNDTRIP
+ca12.pl: REFUSED GAP: T2: out of its slices (a method no package defines (foo)) 
+ca13.pl: ROUNDTRIP
+ca14.pl: ROUNDTRIP
+ca15.pl: ROUNDTRIP
+ca16.pl: ROUNDTRIP
+ca17.pl: REFUSED GAP: T2: out of its slices (a slice taken as a scalar (Coerce)) 
+ca18.pl: ROUNDTRIP
+ca19.pl: ROUNDTRIP
+ca2.pl: REFUSED GAP: T2: out of its slices (wantarray in a sub (T2 has no void context)) 
+ca20.pl: ROUNDTRIP
+ca21.pl: ROUNDTRIP
+ca22.pl: ROUNDTRIP
+ca23.pl: ROUNDTRIP
+ca24.pl: ROUNDTRIP
+ca25.pl: ROUNDTRIP
+ca26.pl: ROUNDTRIP
+ca27.pl: REFUSED GAP: T2: out of its slices (a direct call with no sub) 
+ca28.pl: ROUNDTRIP
+ca29.pl: WRONG got=[] want=[d]
+ca3.pl: ROUNDTRIP
+ca30.pl: ROUNDTRIP
+ca4.pl: ROUNDTRIP
+ca5.pl: ROUNDTRIP
+ca6.pl: ROUNDTRIP
+ca7.pl: ROUNDTRIP
+ca8.pl: ROUNDTRIP
+ca9.pl: ROUNDTRIP
+chop1.pl: ROUNDTRIP
+chop2.pl: REFUSED LOAD: no program graph with a return
+chop3.pl: REFUSED LOAD: no program graph with a return
+cl1.pl: WRONG got=[1] want=[7]
+cl10.pl: ROUNDTRIP
+cl11.pl: REFUSED GAP: T2: out of its slices (a captured variable that is not one kept in memory) 
+cl12.pl: ROUNDTRIP
+cl13.pl: REFUSED GAP: T2: out of its slices (a conversion %Slot* -> %Slot) 
+cl14.pl: REFUSED LOAD: no program graph with a return
+cl15.pl: WRONG got=[a1,b2] want=[a1,b2,c3]
+cl16.pl: ROUNDTRIP
+cl17.pl: ROUNDTRIP
+cl18.pl: REFUSED GAP: T2: out of its slices (a scalar deref where a reference T2 does not make may reach it) 
+cl19.pl: REFUSED GAP: T2: out of its slices (a conversion %Slot* -> %Slot) 
+cl2.pl: WRONG got=[1] want=[7]
+cl20.pl: REFUSED GAP: T2: out of its slices (a conversion %Slot* -> %Slot) 
+cl21.pl: REFUSED GAP: T2: out of its slices (a list assignment to an array or hash) 
+cl22.pl: ROUNDTRIP
+cl23.pl: WRONG got=[1] want=[12]
+cl24.pl: REFUSED GAP: T2: out of its slices (a conversion %Slot* -> %Slot) 
+cl25.pl: WRONG got=[5] want=[6]
+cl3.pl: ROUNDTRIP
+cl4.pl: ROUNDTRIP
+cl5.pl: REFUSED GAP: T2: out of its slices (a conversion %Slot* -> %Slot) 
+cl6.pl: REFUSED GAP: T2: out of its slices (CellWrite) 
+cl7.pl: ROUNDTRIP
+cl8.pl: REFUSED LOAD: no program graph with a return
+cl9.pl: REFUSED LOAD: no program graph with a return
+dyn1.pl: WRONG got=[0] want=[1]
+dyn2.pl: WRONG got=[5 0] want=[5 1]
+ef1.pl: REFUSED GAP: T2: out of its slices (a statement Call builtin prtf) 
+ef10.pl: WRONG got=[A A] want=[A B]
+ef11.pl: ROUNDTRIP
+ef12.pl: ROUNDTRIP
+ef13.pl: ROUNDTRIP
+ef14.pl: ROUNDTRIP
+ef15.pl: ROUNDTRIP
+ef16.pl: ROUNDTRIP
+ef17.pl: ROUNDTRIP
+ef18.pl: ROUNDTRIP
+ef19.pl: ROUNDTRIP
+ef2.pl: REFUSED GAP: T2: out of its slices (Call builtin prtf) 
+ef20.pl: ROUNDTRIP
+ef21.pl: REFUSED GAP: T2: out of its slices (a statement EntryWrite) 
+ef22.pl: REFUSED GAP: T2: out of its slices (a open B::SoN does not place on the chain) 
+ef23.pl: ROUNDTRIP
+ef24.pl: ROUNDTRIP
+ef25.pl: REFUSED GAP: T2: out of its slices (a scalar deref where a reference T2 does not make may reach it) 
+ef26.pl: ROUNDTRIP
+ef27.pl: REFUSED GAP: T2: out of its slices (a reference to what is not an array) 
+ef28.pl: REFUSED GAP: T2: out of its slices (a local aggregate restored with no save made) 
+ef3.pl: REFUSED GAP: T2: out of its slices (a statement Call builtin unlink) 
+ef4.pl: ROUNDTRIP
+ef5.pl: ROUNDTRIP
+ef6.pl: REFUSED GAP: T2: out of its slices (an each in a program with a keys or values (which reset it, B::SoN places them nowhere)) 
+ef7.pl: ROUNDTRIP
+ef8.pl: ROUNDTRIP
+ef9.pl: WRONG got=[K K] want=[HASH K]
+ev1.pl: ROUNDTRIP
+ev10.pl: ROUNDTRIP
+ev11.pl: ROUNDTRIP
+ev12.pl: ROUNDTRIP
+ev13.pl: ROUNDTRIP
+ev14.pl: ROUNDTRIP
+ev15.pl: ROUNDTRIP
+ev16.pl: ROUNDTRIP
+ev17.pl: REFUSED GAP: T2: out of its slices (an eval closed at another depth) 
+ev18.pl: REFUSED LOAD: no program graph with a return
+ev2.pl: ROUNDTRIP
+ev3.pl: ROUNDTRIP
+ev4.pl: ROUNDTRIP
+ev5.pl: ROUNDTRIP
+ev6.pl: WRONG got=[5] want=[12]
+ev7.pl: ROUNDTRIP
+ev8.pl: REFUSED LOAD: no program graph with a return
+ev9.pl: ROUNDTRIP
+ex1.pl: WRONG got=[ str] want=[HASH 7]
+ex2.pl: WRONG got=[str] want=[ref]
+ex3.pl: WRONG got=[str:E=HASH(0x5577a383e640) at /tmp/claude-0/audit/p/ex3.pl line 1.] want=[oops]
+ex4.pl: WRONG got=[] want=[HASH]
+fl1.pl: WRONG got=[before
+Illegal division by zero at /tmp/claude-0/audit/p/fl1.pl line 1.] want=[Illegal division by zero at /tmp/claude-0/audit/p/fl1.pl line 1.]
+fl10.pl: WRONG got=[substr outside of string: stopped (chalk, T2)] want=[u]
+fl11.pl: WRONG got=[none] want=[viv]
+fl12.pl: ROUNDTRIP
+fl13.pl: REFUSED GAP: T2: out of its slices (Call builtin log) 
+fl14.pl: WRONG got=[num] want=[died]
+fl2.pl: REFUSED LOAD: no program graph with a return
+fl3.pl: ROUNDTRIP
+fl4.pl: ROUNDTRIP
+fl5.pl: WRONG got=[a
+b] want=[Can't use an undefined value as an ARRAY reference at /tmp/claude-0/audit/p/fl5.pl line 1.
+a]
+fl6.pl: WRONG got=[before
+Illegal modulus zero at /tmp/claude-0/audit/p/fl6.pl line 1.] want=[Illegal modulus zero at /tmp/claude-0/audit/p/fl6.pl line 1.]
+fl7.pl: ROUNDTRIP
+fl8.pl: REFUSED LOAD: no program graph with a return
+fl9.pl: ROUNDTRIP
+go1.pl: ROUNDTRIP
+go2.pl: ROUNDTRIP
+go3.pl: REFUSED LOAD: no program graph with a return
+go4.pl: REFUSED GAP: T2: out of its slices (an if whose arms do not meet) 
+ht1.pl: WRONG got=[ne] want=[e
+ne]
+ht2.pl: WRONG got=[n=HASH(0x563eb16c24e0)] want=[n=0]
+im1.pl: REFUSED LOAD: from_json failed: GAP: a BEGIN block with effects of its own is not lowered (a BEGIN or END block runs outside the main program) 
+im10.pl: REFUSED GAP: T2: out of its slices (a statement EntryWrite) 
+im11.pl: REFUSED GAP: T2: out of its slices (a statement EntryWrite) 
+im12.pl: REFUSED GAP: T2: out of its slices (a capture read where its match may have failed (perl reads the last match that succeeded)) 
+im13.pl: ROUNDTRIP
+im14.pl: ROUNDTRIP
+im15.pl: ROUNDTRIP
+im16.pl: ROUNDTRIP
+im17.pl: ROUNDTRIP
+im18.pl: ROUNDTRIP
+im19.pl: ROUNDTRIP
+im2.pl: REFUSED LOAD: from_json failed: GAP: a BEGIN block with effects of its own is not lowered (a BEGIN or END block runs outside the main program) 
+im20.pl: ROUNDTRIP
+im21.pl: ROUNDTRIP
+im22.pl: ROUNDTRIP
+im23.pl: WRONG got=[chalk: refused at run time: a store through an undefined scalar reference] want=[5 3]
+im24.pl: ROUNDTRIP
+im25.pl: ROUNDTRIP
+im26.pl: ROUNDTRIP
+im27.pl: ROUNDTRIP
+im28.pl: ROUNDTRIP
+im29.pl: ROUNDTRIP
+im3.pl: REFUSED LOAD: from_json failed: GAP: a BEGIN block with effects of its own is not lowered (a BEGIN or END block runs outside the main program) 
+im30.pl: ROUNDTRIP
+im4.pl: REFUSED GAP: T2: out of its slices (a tie of a scalar) 
+im5.pl: ROUNDTRIP
+im6.pl: WRONG got=[] want=[d]
+im7.pl: ROUNDTRIP
+im8.pl: ROUNDTRIP
+im9.pl: ROUNDTRIP
+io1.pl: REFUSED GAP: T2: out of its slices (a variable a handle writes, read other than after a close) 
+io10.pl: REFUSED GAP: T2: out of its slices (a statement EntryWrite) 
+io2.pl: REFUSED GAP: T2: out of its slices (a variable a handle writes, read other than after a close) 
+io3.pl: REFUSED GAP: T2: out of its slices (a four-argument select of handles or a wait) 
+io4.pl: REFUSED GAP: T2: out of its slices (a statement Call builtin sleep) 
+io5.pl: REFUSED GAP: T2: out of its slices (a four-argument select of handles or a wait) 
+io6.pl: REFUSED GAP: T2: out of its slices (an open of a file (or of what is not a reference to a constant string)) 
+io7.pl: REFUSED GAP: T2: out of its slices (a variable a handle writes, read other than after a close) 
+io8.pl: WRONG got=[aw
+b] want=[w
+ab]
+io9.pl: ROUNDTRIP
+la1.pl: REFUSED GAP: T2: out of its slices (a list assignment to an array or hash) 
+la2.pl: WRONG got=[0 0] want=[3 4]
+la3.pl: WRONG got=[0 0] want=[3 4]
+la4.pl: REFUSED GAP: T2: out of its slices (a value stamped List (Assign)) 
+la5.pl: WRONG got=[] want=[1]
+la6.pl: WRONG got=[0 0 2] want=[8 9 2]
+la7.pl: ROUNDTRIP
+lo1.pl: ROUNDTRIP
+lo10.pl: ROUNDTRIP
+lo11.pl: ROUNDTRIP
+lo12.pl: ROUNDTRIP
+lo13.pl: ROUNDTRIP
+lo14.pl: WRONG got=[11] want=[21]
+lo15.pl: REFUSED GAP: T2: out of its slices (a statement EntryWrite) 
+lo16.pl: WRONG got=[2331] want=[2321]
+lo2.pl: WRONG got=[2] want=[1]
+lo3.pl: WRONG got=[4] want=[1]
+lo4.pl: ROUNDTRIP
+lo5.pl: REFUSED GAP: T2: out of its slices (a local) 
+lo6.pl: ROUNDTRIP
+lo7.pl: ROUNDTRIP
+lo8.pl: REFUSED GAP: T2: out of its slices (a scalar deref where a reference T2 does not make may reach it) 
+lo9.pl: REFUSED LOAD: no program graph with a return
+lp1.pl: ROUNDTRIP
+lp10.pl: ROUNDTRIP
+lp11.pl: ROUNDTRIP
+lp12.pl: ROUNDTRIP
+lp13.pl: ROUNDTRIP
+lp14.pl: ROUNDTRIP
+lp15.pl: ROUNDTRIP
+lp16.pl: ROUNDTRIP
+lp17.pl: ROUNDTRIP
+lp18.pl: ROUNDTRIP
+lp19.pl: ROUNDTRIP
+lp2.pl: ROUNDTRIP
+lp20.pl: ROUNDTRIP
+lp21.pl: ROUNDTRIP
+lp22.pl: ROUNDTRIP
+lp23.pl: ROUNDTRIP
+lp24.pl: ROUNDTRIP
+lp25.pl: ROUNDTRIP
+lp26.pl: REFUSED LOAD: no program graph with a return
+lp27.pl: ROUNDTRIP
+lp28.pl: REFUSED GAP: T2: out of its slices (an array through an element read whole) 
+lp3.pl: REFUSED LOAD: no program graph with a return
+lp4.pl: ROUNDTRIP
+lp5.pl: ROUNDTRIP
+lp6.pl: ROUNDTRIP
+lp7.pl: ROUNDTRIP
+lp8.pl: REFUSED LOAD: no program graph with a return
+lp9.pl: REFUSED LOAD: no program graph with a return
+m4.pl: WRONG got=[ 10] want=[9 10]
+pg1.pl: WRONG got=[13] want=[33]
+pg10.pl: ROUNDTRIP
+pg11.pl: REFUSED GAP: T2: out of its slices (a scalar deref where a reference T2 does not make may reach it) 
+pg12.pl: ROUNDTRIP
+pg13.pl: ROUNDTRIP
+pg14.pl: REFUSED GAP: T2: out of its slices (a reference to what is not an array) 
+pg15.pl: ROUNDTRIP
+pg16.pl: ROUNDTRIP
+pg1b.pl: ROUNDTRIP
+pg2.pl: WRONG got=[1,2,3,] want=[11,22,33,]
+pg3.pl: REFUSED GAP: T2: out of its slices (a package scalar read of no one version) 
+pg4.pl: ROUNDTRIP
+pg5.pl: ROUNDTRIP
+pg6.pl: REFUSED LOAD: no program graph with a return
+pg7.pl: ROUNDTRIP
+pg8.pl: ROUNDTRIP
+pg9.pl: ROUNDTRIP
+pl1.pl: ROUNDTRIP
+pl10.pl: WRONG got=[] want=[6 4]
+pl11.pl: WRONG got=[13] want=[23]
+pl12.pl: REFUSED LOAD: no program graph with a return
+pl13.pl: REFUSED GAP: T2: out of its slices (the value of a list assignment to scalars) 
+pl14.pl: ROUNDTRIP
+pl15.pl: ROUNDTRIP
+pl2.pl: ROUNDTRIP
+pl3.pl: ROUNDTRIP
+pl4.pl: WRONG got=[13] want=[33]
+pl5.pl: WRONG got=[13] want=[33]
+pl6.pl: WRONG got=[3] want=[33]
+pl7.pl: ROUNDTRIP
+pl8.pl: WRONG got=[13] want=[33]
+pl9.pl: REFUSED LOAD: no program graph with a return
+rn1.pl: REFUSED LOAD: no program graph with a return
+rn10.pl: ROUNDTRIP
+rn2.pl: REFUSED GAP: T2: out of its slices (a statement Call builtin srand) 
+rn3.pl: ROUNDTRIP
+rn4.pl: ROUNDTRIP
+rn5.pl: ROUNDTRIP
+rn6.pl: ROUNDTRIP
+rn7.pl: ROUNDTRIP
+rn8.pl: REFUSED GAP: T2: out of its slices (an open for writing of a file (or of what is not a `my` scalar)) 
+rn9.pl: REFUSED GAP: T2: out of its slices (a require of Cwd.pm, not compiled in) 
+slice1.pl: WRONG got=[ ] want=[1 2]
+slice2.pl: WRONG got=[0 0 0] want=[5 6 0]
+slice3.pl: WRONG got=[a=0] want=[a=7,b=8]
+sm1.pl: ROUNDTRIP
+sm2.pl: ROUNDTRIP
+sm3.pl: ROUNDTRIP
+sm4.pl: ROUNDTRIP
+st1.pl: REFUSED GAP: T2: out of its slices (a hash element of a named hash) 
+st10.pl: WRONG got=[11] want=[01]
+st11.pl: ROUNDTRIP
+st12.pl: ROUNDTRIP
+st13.pl: ROUNDTRIP
+st14.pl: WRONG got=[CODE Z Z] want=[CODE HASH Z]
+st15.pl: REFUSED GAP: T2: out of its slices (a control node with 2 successors) 
+st16.pl: ROUNDTRIP
+st17.pl: ROUNDTRIP
+st2.pl: WRONG got=[K K] want=[u K]
+st3.pl: REFUSED LOAD: no program graph with a return
+st4.pl: ROUNDTRIP
+st5.pl: REFUSED LOAD: from_json failed: GAP: `defined &main::foo` may change as the program runs (main::__PROGRAM__ may run) 
+st6.pl: WRONG got=[B B] want=[A B]
+st7.pl: WRONG got=[B B] want=[A B]
+st8.pl: ROUNDTRIP
+st9.pl: ROUNDTRIP
+swap1.pl: WRONG got=[1 2] want=[2 1]
+swap2.pl: ROUNDTRIP
+swap3.pl: WRONG got=[1 2] want=[2 1]
+tp1.pl: ROUNDTRIP
+tp10.pl: ROUNDTRIP
+tp11.pl: REFUSED GAP: T2: out of its slices (a package scalar read of no one version) 
+tp12.pl: REFUSED GAP: T2: out of its slices (a package scalar read of no one version) 
+tp2.pl: ROUNDTRIP
+tp3.pl: ROUNDTRIP
+tp4.pl: ROUNDTRIP
+tp5.pl: WRONG got=[3] want=[5]
+tp6.pl: WRONG got=[0] want=[10]
+tp7.pl: WRONG got=[-a] want=[-a-b-c]
+tp8.pl: ROUNDTRIP
+tp9.pl: ROUNDTRIP
+wa1.pl: ROUNDTRIP
+wa10.pl: ROUNDTRIP
+wa11.pl: ROUNDTRIP
+wa12.pl: ROUNDTRIP
+wa13.pl: ROUNDTRIP
+wa14.pl: ROUNDTRIP
+wa15.pl: ROUNDTRIP
+wa16.pl: ROUNDTRIP
+wa17.pl: ROUNDTRIP
+wa18.pl: WRONG got=[1 2 3] want=[2 1 3]
+wa19.pl: REFUSED GAP: T2: out of its slices (Call builtin splice) 
+wa2.pl: ROUNDTRIP
+wa20.pl: ROUNDTRIP
+wa21.pl: ROUNDTRIP
+wa22.pl: ROUNDTRIP
+wa23.pl: ROUNDTRIP
+wa24.pl: ROUNDTRIP
+wa25.pl: REFUSED GAP: T2: out of its slices (a list assignment to an array or hash) 
+wa26.pl: ROUNDTRIP
+wa3.pl: ROUNDTRIP
+wa4.pl: ROUNDTRIP
+wa5.pl: ROUNDTRIP
+wa6.pl: ROUNDTRIP
+wa7.pl: ROUNDTRIP
+wa8.pl: ROUNDTRIP
+wa9.pl: ROUNDTRIP

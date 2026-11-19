@@ -1,0 +1,12 @@
+tp1.pl: ROUNDTRIP
+tp10.pl: ROUNDTRIP
+tp11.pl: REFUSED GAP: T2: out of its slices (a package scalar read of no one version) 
+tp12.pl: REFUSED GAP: T2: out of its slices (a package scalar read of no one version) 
+tp2.pl: ROUNDTRIP
+tp3.pl: ROUNDTRIP
+tp4.pl: ROUNDTRIP
+tp5.pl: WRONG got=[3] want=[5]
+tp6.pl: WRONG got=[0] want=[10]
+tp7.pl: WRONG got=[-a] want=[-a-b-c]
+tp8.pl: ROUNDTRIP
+tp9.pl: ROUNDTRIP

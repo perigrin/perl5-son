@@ -1,0 +1,18 @@
+ev1.pl: ROUNDTRIP
+ev10.pl: ROUNDTRIP
+ev11.pl: ROUNDTRIP
+ev12.pl: ROUNDTRIP
+ev13.pl: ROUNDTRIP
+ev14.pl: ROUNDTRIP
+ev15.pl: ROUNDTRIP
+ev16.pl: ROUNDTRIP
+ev17.pl: REFUSED GAP: T2: out of its slices (an eval closed at another depth) 
+ev18.pl: REFUSED LOAD: no program graph with a return
+ev2.pl: ROUNDTRIP
+ev3.pl: ROUNDTRIP
+ev4.pl: ROUNDTRIP
+ev5.pl: ROUNDTRIP
+ev6.pl: WRONG got=[5] want=[12]
+ev7.pl: ROUNDTRIP
+ev8.pl: REFUSED LOAD: no program graph with a return
+ev9.pl: ROUNDTRIP

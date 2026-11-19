@@ -1,0 +1,14 @@
+nv1.pl: WRONG got=[2] want=[1 2]
+nv10.pl: ROUNDTRIP
+nv11.pl: ROUNDTRIP
+nv12.pl: ROUNDTRIP
+nv13.pl: ROUNDTRIP
+nv14.pl: ROUNDTRIP
+nv2.pl: ROUNDTRIP
+nv3.pl: ROUNDTRIP
+nv4.pl: WRONG got=[0 7|7] want=[0 1 2|7]
+nv5.pl: WRONG got=[0] want=[2]
+nv6.pl: ROUNDTRIP
+nv7.pl: WRONG got=[10] want=[30]
+nv8.pl: WRONG got=[11] want=[21]
+nv9.pl: REFUSED GAP: T2: out of its slices (PadAccess) 

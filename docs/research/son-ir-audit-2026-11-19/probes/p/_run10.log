@@ -1,0 +1,25 @@
+cl1.pl: WRONG got=[1] want=[7]
+cl10.pl: ROUNDTRIP
+cl11.pl: REFUSED GAP: T2: out of its slices (a captured variable that is not one kept in memory) 
+cl12.pl: ROUNDTRIP
+cl13.pl: REFUSED GAP: T2: out of its slices (a conversion %Slot* -> %Slot) 
+cl14.pl: REFUSED LOAD: no program graph with a return
+cl15.pl: WRONG got=[a1,b2] want=[a1,b2,c3]
+cl16.pl: ROUNDTRIP
+cl17.pl: ROUNDTRIP
+cl18.pl: REFUSED GAP: T2: out of its slices (a scalar deref where a reference T2 does not make may reach it) 
+cl19.pl: REFUSED GAP: T2: out of its slices (a conversion %Slot* -> %Slot) 
+cl2.pl: WRONG got=[1] want=[7]
+cl20.pl: REFUSED GAP: T2: out of its slices (a conversion %Slot* -> %Slot) 
+cl21.pl: REFUSED GAP: T2: out of its slices (a list assignment to an array or hash) 
+cl22.pl: ROUNDTRIP
+cl23.pl: WRONG got=[1] want=[12]
+cl24.pl: REFUSED GAP: T2: out of its slices (a conversion %Slot* -> %Slot) 
+cl25.pl: WRONG got=[5] want=[6]
+cl3.pl: ROUNDTRIP
+cl4.pl: ROUNDTRIP
+cl5.pl: REFUSED GAP: T2: out of its slices (a conversion %Slot* -> %Slot) 
+cl6.pl: REFUSED GAP: T2: out of its slices (CellWrite) 
+cl7.pl: ROUNDTRIP
+cl8.pl: REFUSED LOAD: no program graph with a return
+cl9.pl: REFUSED LOAD: no program graph with a return

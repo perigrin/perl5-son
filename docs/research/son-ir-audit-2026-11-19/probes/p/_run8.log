@@ -1,0 +1,17 @@
+st1.pl: REFUSED GAP: T2: out of its slices (a hash element of a named hash) 
+st10.pl: WRONG got=[11] want=[01]
+st11.pl: ROUNDTRIP
+st12.pl: ROUNDTRIP
+st13.pl: ROUNDTRIP
+st14.pl: WRONG got=[CODE Z Z] want=[CODE HASH Z]
+st15.pl: REFUSED GAP: T2: out of its slices (a control node with 2 successors) 
+st16.pl: ROUNDTRIP
+st17.pl: ROUNDTRIP
+st2.pl: WRONG got=[K K] want=[u K]
+st3.pl: REFUSED LOAD: no program graph with a return
+st4.pl: ROUNDTRIP
+st5.pl: REFUSED LOAD: from_json failed: GAP: `defined &main::foo` may change as the program runs (main::__PROGRAM__ may run) 
+st6.pl: WRONG got=[B B] want=[A B]
+st7.pl: WRONG got=[B B] want=[A B]
+st8.pl: ROUNDTRIP
+st9.pl: ROUNDTRIP

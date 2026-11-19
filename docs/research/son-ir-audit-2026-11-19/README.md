@@ -1,0 +1,22 @@
+# Audit of the SoN IR against the SSA literature (2026-11-19)
+
+- [REPORT.md](REPORT.md): the audit. Findings, the four areas (memory chain,
+  loops, calls, cross-cutting), a table of every departure from the theory
+  with a verdict, 59 new silent wrong answers in 10 classes, and a
+  recommended order of work marking which steps change the wire format.
+- `wrong_W*.md`: script-generated listings of each wrong-answer class.
+- `probes/p/`, `probes/q/`: the 418 probe programs (perl in, compared with
+  chalk's output), with the run logs (`_all.log`, `_run*.log`).
+  `probes/w/`: programs whose wires the report quotes.
+- `tools/`: the audit's scripts -- `ch.sh`/`runp.sh` (run a probe: B::SoN,
+  then chalk T2, then lli, against perl), `d.pl`/`dump.pl` (compact wire
+  dump), `census.pl` (which effects are on the memory chain),
+  `memcheck.pl` (memory-version kinds, Phi arity, agreement of the two
+  orderings), `stats.pl`, `ti.pl`/`ti2.pl` (TypedInvariant on a wire),
+  `gen_corpus.pl`/`gen_chalklib.sh` (make the wires).
+
+The tools were run from `/tmp/claude-0/audit/` and still name paths there;
+point them at a working directory before rerunning. Generated wires (`.json`)
+and LLVM output (`.ll`) are not committed: the tools regenerate them.
+
+Theory: [docs/research/ssa/](../ssa/README.md).

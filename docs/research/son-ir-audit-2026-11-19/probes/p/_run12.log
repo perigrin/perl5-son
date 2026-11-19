@@ -1,0 +1,24 @@
+lo1.pl: ROUNDTRIP
+lo10.pl: ROUNDTRIP
+lo11.pl: ROUNDTRIP
+lo12.pl: ROUNDTRIP
+lo13.pl: ROUNDTRIP
+lo14.pl: WRONG got=[11] want=[21]
+lo15.pl: REFUSED GAP: T2: out of its slices (a statement EntryWrite) 
+lo16.pl: WRONG got=[2331] want=[2321]
+lo2.pl: WRONG got=[2] want=[1]
+lo3.pl: WRONG got=[4] want=[1]
+lo4.pl: ROUNDTRIP
+lo5.pl: REFUSED GAP: T2: out of its slices (a local) 
+lo6.pl: ROUNDTRIP
+lo7.pl: ROUNDTRIP
+lo8.pl: REFUSED GAP: T2: out of its slices (a scalar deref where a reference T2 does not make may reach it) 
+lo9.pl: REFUSED LOAD: no program graph with a return
+go1.pl: ROUNDTRIP
+go2.pl: ROUNDTRIP
+go3.pl: REFUSED LOAD: no program graph with a return
+go4.pl: REFUSED GAP: T2: out of its slices (an if whose arms do not meet) 
+sm1.pl: ROUNDTRIP
+sm2.pl: ROUNDTRIP
+sm3.pl: ROUNDTRIP
+sm4.pl: ROUNDTRIP

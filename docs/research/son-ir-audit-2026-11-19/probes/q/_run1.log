@@ -1,0 +1,20 @@
+vp1.pl: ROUNDTRIP
+vp10.pl: REFUSED LOAD: no program graph with a return
+vp11.pl: ROUNDTRIP
+vp12.pl: ROUNDTRIP
+vp13.pl: REFUSED GAP: T2: out of its slices (a slice taken as a scalar (Coerce)) 
+vp14.pl: ROUNDTRIP
+vp15.pl: ROUNDTRIP
+vp16.pl: ROUNDTRIP
+vp17.pl: ROUNDTRIP
+vp18.pl: ROUNDTRIP
+vp19.pl: WRONG got=[HASH K HASH] want=[HASH K K]
+vp2.pl: ROUNDTRIP
+vp20.pl: ROUNDTRIP
+vp3.pl: ROUNDTRIP
+vp4.pl: ROUNDTRIP
+vp5.pl: WRONG got=[21] want=[30]
+vp6.pl: ROUNDTRIP
+vp7.pl: ROUNDTRIP
+vp8.pl: ROUNDTRIP
+vp9.pl: ROUNDTRIP
