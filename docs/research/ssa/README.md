@@ -10,8 +10,10 @@ paper; each opens with a note saying how it was read (text, or page images
 for OCR'd scans). Anything that is the summariser's own reading rather than
 the paper's is marked as an inference.
 
-The papers themselves are not in this repository (publisher copyright); the
-links point to the public copies Max hosts.
+Copies of the papers are in [papers/](papers/) as a research reference.
+**Copyright in each belongs to its original authors** (and their publishers),
+not to this repository; see [papers/COPYRIGHT.md](papers/COPYRIGHT.md). The
+links below point to the public copies Max hosts.
 
 ## The list, in the page's order
 
