@@ -10,7 +10,7 @@ corpus	#graphs	1082
 corpus	#wires	431
 corpus	allowed:param-bind	8
 corpus	allowed:record	57
-corpus	effect-rides-value	52
+corpus	effect-rides-value	7
 corpus	fault-floating	4
 corpus	memory-input-not-version	0
 corpus	memory-order-disagrees	5
@@ -31,10 +31,10 @@ probes	#graphs	631
 probes	#wires	449
 probes	allowed:param-bind	1
 probes	allowed:record	12
-probes	effect-rides-value	30
+probes	effect-rides-value	8
 probes	fault-floating	5
-probes	memory-input-not-version	3
-probes	memory-order-disagrees	7
+probes	memory-input-not-version	0
+probes	memory-order-disagrees	6
 probes	phi-arity	3
 probes	phi-arity:eval-join	25
 probes	read-unversioned:args	1
@@ -46,7 +46,7 @@ probes	read-unversioned:object-class	23
 probes	read-unversioned:package	7
 probes	read-unversioned:package-aggregate-literal	5
 probes	read-unversioned:through-ref	1
-probes	write-floating	9
+probes	write-floating	6
 chalk	#cases	218
 chalk	#graphs	24215
 chalk	#wires	218

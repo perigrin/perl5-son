@@ -93,7 +93,22 @@ P
         ( $r->{'effect-rides-value'} // [] )->@*;
     is scalar(@dyn), 1, 'the dynamic method call is not on the chain';
     my @bless = grep { $_->{detail} =~ /bless/ } ( $r->{'effect-rides-value'} // [] )->@*;
-    is scalar(@bless), 1, 'bless used for its value rides the value edge';
+    is scalar(@bless), 0, 'the producer pins a bless used for its value now (B::SoN::EffectTable)';
+    # ...the shape it made: a bless with no control_in, read by the Return.
+    my $old = rules( graph(
+        nd( 0, 'Start', [] ), nd( 1, 'Constant', [] ),
+        nd( 2, 'Call', [ 1, 1 ], dispatch_kind => 'builtin', name => 'bless' ),
+        nd( 3, 'Return', [2], ctl => 0 ),
+    ) );
+    is [ map { $_->{detail} } ( $old->{'effect-rides-value'} // [] )->@* ], ['builtin bless'],
+        'bless used for its value rides the value edge';
+    # `prtf` is the wire's name for printf: the verifier's own list said printf.
+    my $prtf = rules( graph(
+        nd( 0, 'Start', [] ), nd( 1, 'Constant', [] ),
+        nd( 2, 'Call', [1], dispatch_kind => 'builtin', name => 'prtf' ),
+        nd( 3, 'Return', [2], ctl => 0 ),
+    ) );
+    is [ map { $_->{detail} } ( $prtf->{'effect-rides-value'} // [] )->@* ], ['builtin prtf'], 'a floating printf is seen';
 };
 
 subtest q{s///r stores nothing: it is a value, not a floating write} => sub {

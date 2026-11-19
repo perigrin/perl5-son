@@ -13,6 +13,7 @@ class SoN::FromOptree 0.01 {
     use SoN::IR::Graph;
     use SoN::IR::Stamp;
     use B::SoN::TypeLibrary;
+    use B::SoN::EffectTable;
     use SoN::FromOptree::OpMap;
     use SoN::FromOptree::StackSim;
     use SoN;
@@ -4845,14 +4846,14 @@ class SoN::FromOptree 0.01 {
     # then the `import` half is an ordinary method call that already lowers.
     # (tie and untie too: they change what every later access of the container
     # does -- a count read across an untie was the count before it.)
-    my %GLOBAL_STATE_BUILTIN = map { $_ => 1 } qw(require dofile tie untie);
+    # (B::SoN::EffectTable has these rows now: require dofile tie untie)
 
     # A HANDLE'S STATE IS MEMORY: open, a read, eof and close change or
     # observe it, so each advances the memory chain as a global-state op
     # does. Ordered by control alone, `my @l = <$fh>; print scalar(@l)` read
     # @l at the memory from before the open, and a consumer ordering reads by
     # memory built @l from an unopened handle.
-    my %HANDLE_MEMORY_BUILTIN = map { $_ => 1 } qw(open close readline eof);
+    # (B::SoN::EffectTable has these rows now: open close readline eof)
 
     # Handle reads whose EFFECT IS ON THE HANDLE. Reading advances the file
     # position, so two calls on one handle return different things and the
@@ -4875,7 +4876,7 @@ class SoN::FromOptree 0.01 {
     # chain. These only need ordering against each other and against the
     # open/close that bracket them; claiming they store would be a second,
     # stronger assertion than the measurement supports.
-    my %HANDLE_READ_BUILTIN = map { $_ => 1 } qw(readline eof tell);
+    # (B::SoN::EffectTable has these rows now: readline eof tell)
 
     # Builtins that READ STATE OUTSIDE THE EXPRESSION, so WHERE they happen is
     # part of what they mean. They store nothing -- no memory edge -- but they
@@ -4899,7 +4900,7 @@ class SoN::FromOptree 0.01 {
     # those must order against the open/close that bracket them, these only
     # against the statements around them. Same mechanism, and the distinction
     # is worth keeping in the names.
-    my %STACK_READ_BUILTIN = map { $_ => 1 } qw(caller);
+    # (B::SoN::EffectTable has these rows now: caller)
 
     # ITS STAMP IS READ FROM THE OP, as TypeLibrary prescribes under WHAT IS
     # DELIBERATELY ABSENT -- `$op->flags` here, the trade `readline` takes.
@@ -4915,7 +4916,7 @@ class SoN::FromOptree 0.01 {
     # moved it past the print it redirects: `my $prev = select($out); print
     # ...` came out `print ...; select(select($out))` (corpus 224). The
     # four-argument form is the op `sselect` and changes nothing.
-    my %HANDLE_SELECT_BUILTIN = map { $_ => 1 } qw(select);
+    # (B::SoN::EffectTable has these rows now: select)
 
     # A WARN IS OUTPUT, as print is: it writes STDERR or calls a __WARN__
     # handler, and returns true. Pinned only in void, a warn inside an
@@ -4925,12 +4926,12 @@ class SoN::FromOptree 0.01 {
     # context; so is this. AND ITS HANDLER IS CODE, which may store: the warn
     # is a memory version, as a call is -- `$SIG{__WARN__} = sub { $n++ };
     # warn "a\n"; print $n` read $n before the warn.
-    my %HANDLER_BUILTIN = map { $_ => 1 } qw(warn);
+    # (B::SoN::EffectTable has these rows now: warn)
 
     # `pos $s` READS STATE ON THE VARIABLE that a /g match and `pos($s) = N`
     # write. Unpinned, three reads between matches collapsed to one and
     # floated to their use: `2 2 2` where perl says `2 5 2` (corpus 189).
-    my %VARIABLE_STATE_READ_BUILTIN = map { $_ => 1 } qw(pos);
+    # (B::SoN::EffectTable has these rows now: pos)
 
     # Ops that are an EFFECT in their own right rather than a call. The void
     # branch-arm scan needs this: it asked "is this arm an entersub in void
@@ -12747,7 +12748,7 @@ class SoN::FromOptree 0.01 {
                     # `do "x.do" or die $@` is the same bug; perl's own
                     # t/comp/require.t has it as `sub dofile`.
                     $pin_on_control = 1
-                        if $GLOBAL_STATE_BUILTIN{$name} && !$void;
+                        if B::SoN::EffectTable::on_chain($name, lvalue => ($op->flags & 32)) && !$void;   # OPf_MOD
 
                     # AN exit LEAVES IN ANY CONTEXT. As a sub's last statement
                     # it runs in the caller's context (`exit sK`), so neither
@@ -12759,27 +12760,16 @@ class SoN::FromOptree 0.01 {
                     # A HANDLE READ IS AN EFFECT IN ANY CONTEXT, for the same
                     # reason and by the same mechanism. See
                     # %HANDLE_READ_BUILTIN.
-                    $pin_on_control = 1
-                        if $HANDLE_READ_BUILTIN{$name} && !$void;
 
                     # A STACK READ IS AN EFFECT IN ANY CONTEXT, for the same
                     # reason and by the same mechanism. See
                     # %STACK_READ_BUILTIN.
-                    $pin_on_control = 1
-                        if $STACK_READ_BUILTIN{$name} && !$void;
 
-                    $pin_on_control = 1
-                        if $HANDLE_SELECT_BUILTIN{$name} && !$void;
 
-                    $pin_on_control = 1
-                        if $HANDLER_BUILTIN{$name} && !$void;
 
-                    $pin_on_control = 1
-                        if $VARIABLE_STATE_READ_BUILTIN{$name} && !$void
                         # NOT the lvalue form: `pos($s) = 0` is the store's
                         # target (OPf_MOD, 32), and pinned it became a
                         # temporary the store then assigned to.
-                        && !($op->flags & 32);
 
                     # A FOUR-ARGUMENT substr WRITES ITS STRING, in any context
                     # -- `my $old = substr($b, 0, 1, "J")` is want=SCALAR and
@@ -12848,7 +12838,7 @@ class SoN::FromOptree 0.01 {
                 # memory chains -- look like a VALUE Phi, which bound the
                 # EntryWrite and then asked to render a store as an expression.
                 if ($node_type eq 'Call'
-                    && ( $GLOBAL_STATE_BUILTIN{$name} || $HANDLE_MEMORY_BUILTIN{$name} || $HANDLER_BUILTIN{$name} )
+                    && B::SoN::EffectTable::is_version($name)
                     && defined $sim->memory) {
                     push @inputs, $sim->memory;
                     $extra{memory_input} = 1;   # see Call's memory_input
@@ -13009,7 +12999,7 @@ class SoN::FromOptree 0.01 {
                 # require -- calling POSIX->import before POSIX is loaded is a
                 # different program. Only a shared chain expresses an ordering
                 # that no data edge carries.
-                if (( $GLOBAL_STATE_BUILTIN{$name} || $HANDLE_MEMORY_BUILTIN{$name} || $HANDLER_BUILTIN{$name} )
+                if (B::SoN::EffectTable::is_version($name)
                     && defined $sim->memory) {
                     $sim->set_memory($node);
                 }

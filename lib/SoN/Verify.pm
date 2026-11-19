@@ -3,6 +3,7 @@
 package SoN::Verify;
 use v5.42.0;
 use SoN::Deparse ();    # %MEM_MIN_INPUTS: where each kind's memory input stands
+use B::SoN::EffectTable ();
 
 # WHAT THIS IS. The audit of 2026-11-19 (docs/research/son-ir-audit-2026-11-19)
 # found the memory model sound -- one chain from MemStart, each effectful node
@@ -78,32 +79,16 @@ use SoN::Deparse ();    # %MEM_MIN_INPUTS: where each kind's memory input stands
 #   - place versus value: an unversioned Subscript is a place when every use
 #     is a store target, a container, or an argument, and a read otherwise;
 #     the roles are listed in _is_place_use, by kind and position.
-#   - a builtin's effect: the producer has no effect table, so %WRITES and
-#     %READS_STATE below are this module's own statement of it.
 #   - may-die reads other than Divide/Modulo, `local` restores on every exit,
 #     DESTROY, autovivifying reads, and the missing catch edge of an eval
 #     whose Phis happen to have one input.
 #   - package-scalar-loop-value cannot see whether the loop holds a call, nor
 #     tell `$g = $x` (a lexical also stored to $g) from $g itself.
 
-# Builtins that write memory or the world. Taken from the audit's census.
-my %WRITES = map { $_ => 1 } qw(
-    push pop shift unshift splice delete each undef local chomp chop reset
-    bless tie untie lock study vec formline write
-    open close binmode print printf say syswrite sysread read readline eof seek
-    truncate unlink mkdir rmdir rename chdir chmod chown utime link symlink
-    opendir readdir closedir sysopen flock select srand
-    socket connect bind listen accept send recv shutdown dbmopen dbmclose
-    require do eval exit die warn system exec fork wait waitpid kill sleep
-    syscall alarm umask setpgrp set_arylen
-);
-
-# Builtins whose VALUE is of state a later write may change, by where it lives.
-my %READS_STATE = (
-    ( map { $_ => 'object-class' } qw(blessed ref reftype reftype_of_ref) ),
-    ( map { $_ => 'external' } qw(time rand localtime gmtime glob pos tied
-        ftis ftsize ftdir ftfile ftlink ftzero ftchr ftmtime fteread fteexec) ),
-);
+# WHAT A BUILTIN WRITES, AND WHAT STATE ITS VALUE IS OF, is B::SoN::EffectTable's
+# to say: the table the producer places by. This module kept lists of its own
+# while the producer had none; two lists is one too many (and this one said
+# `printf` where the wire says `prtf`, so a floating printf was never seen).
 
 my %STATEMENT = map { $_ => 1 } qw(
     EntryWrite CellWrite Delete ElemRestore LocalAlias RegexSubst Transliterate
@@ -196,7 +181,7 @@ sub _graph ( $name, $g, $res ) {
         my ( $op, $f, $in ) = ( $n->{op}, _fields($n), $n->{inputs} // [] );
         my @written =
               $op eq 'Assign' ? @$in[ 0 .. ( $f->{targets} // 1 ) - 1 ]
-            : $op eq 'Call' ? ( ( $f->{dispatch_kind} // '' ) ne 'builtin' || $WRITES{ $f->{name} // '' } ? @$in : () )
+            : $op eq 'Call' ? ( ( $f->{dispatch_kind} // '' ) ne 'builtin' || B::SoN::EffectTable::writes( $f->{name} ) ? @$in : () )
             : $op =~ /^(?:Ref|LocalAlias|Delete|ElemRestore|MakeCell|EntryWrite|CellWrite|Chomp)$/ ? ( $in->[0] )
             : $op =~ /^(?:AnonSub|RegexSubst|Transliterate)$/ ? @$in
             :                                                   ();
@@ -269,7 +254,7 @@ sub _graph ( $name, $g, $res ) {
         elsif ( $op eq 'Call' ) {
             my $dk = $f->{dispatch_kind} // '?';
             if    ( $dk ne 'builtin' )               { $effect = "Call:$dk" . ( length( $f->{name} // '' ) ? " $f->{name}" : '' ) }
-            elsif ( $WRITES{ $f->{name} // '' } )    { $effect = "builtin $f->{name}" }
+            elsif ( B::SoN::EffectTable::writes( $f->{name} ) )    { $effect = "builtin $f->{name}" }
             elsif ( ( $f->{name} // '' ) eq 'substr' && @$in >= 4 ) { $effect = 'builtin substr (4-arg)' }
         }
         # s///r and tr///r make a value and store nothing.
@@ -293,7 +278,7 @@ sub _graph ( $name, $g, $res ) {
             }
             elsif ( $op eq 'RefType' ) { $class = 'object-class' }
             elsif ( $op eq 'Call' && ( $f->{dispatch_kind} // '' ) eq 'builtin' ) {
-                $class = $READS_STATE{ $f->{name} // '' };
+                $class = B::SoN::EffectTable::reads_state( $f->{name} );
             }
             $bad->( $n, "read-unversioned:$class", _describe( $n, \%by ) ) if $class && $value_used->($n);
         }
