@@ -54,7 +54,7 @@ my %ROW;
 
 sub _rows ( $fact, @names ) {
     for my $name (@names) {
-        $ROW{$name} = { ( $ROW{$name} // {} )->%*, %$fact };
+        $ROW{$name} = { ( $ROW{$name} // {} )->%*, $fact->%* };
     }
     return;
 }

@@ -1,6 +1,6 @@
 ---
 name: a-pin-the-consumer-cannot-lower-is-held-back
-description: "Pinning the dynamic method call and a may-fault Divide/Modulo is written and tested but not on branch placement: chalk c1a48dfe refuses both as statements, costing census cases and SAME probes. It waits on branch placement-pins"
+description: "Pinning the dynamic method call and a may-fault Divide/Modulo is written and tested but not on branch placement: chalk c1a48dfe refuses both as statements (census 426 -> 421, two SAME probes lost). It waits on branch placement-pins"
 metadata:
   type: project
 ---
@@ -22,10 +22,11 @@ Both are on branch `placement-pins` (off `placement`), with their tests
 statement and has no arm for these two. Measured:
 
 - dynamic method call pinned: dyn1, dyn2 WRONG -> REFUSED ("a statement Call
-  dynamic_method"), and corpus cases 012 and 055 ROUNDTRIP -> GAP: census
-  426 -> 424.
-- Divide/Modulo pinned: fl1, fl6 WRONG -> REFUSED, and fl3, im20 SAME ->
-  REFUSED ("a statement Divide").
+  dynamic_method"), and corpus cases 012 and 055 ROUNDTRIP -> GAP.
+- Divide/Modulo pinned: fl1, fl6 WRONG -> REFUSED; fl3, im20 SAME ->
+  REFUSED; corpus cases 006, 038, 062 ROUNDTRIP -> GAP ("a statement
+  Divide").
+- Both: census 426 -> 421. Deparse corpus unchanged (430).
 
 The goal's gate is census >= 426 and no SAME probe lost, so the two wait
 for chalk to grow the arms. Then: merge `placement-pins`, rerun the census.

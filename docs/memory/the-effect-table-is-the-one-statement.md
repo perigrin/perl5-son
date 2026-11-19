@@ -23,6 +23,10 @@ close, bless, printf, mkdir, chdir, unlink, system and the rest.
   68 to 50: the table had no row for `reftype_of_ref` (the walk's name for
   `ref \$x`), which the verifier's own list had. Diff every row that moves,
   not only the ones you meant to move.
+- **And a count can rise because it started looking.** chalk-lib
+  `read-unversioned:external` went 57 -> 87: the table's `external` rows
+  name stat, lstat, readlink, fileno, telldir, tms and getlogin, which the
+  verifier's list did not. The producer emits those reads as it did.
 - **Two lists drift.** The verifier's said `printf`; the wire says `prtf`. A
   floating printf was never flagged in three weeks of counts.
 - **chalk c1a48dfe takes a pinned `bless` or `open` used for its value**

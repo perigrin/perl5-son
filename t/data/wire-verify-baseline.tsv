@@ -14,6 +14,7 @@ corpus	effect-rides-value	7
 corpus	fault-floating	4
 corpus	memory-input-not-version	0
 corpus	memory-order-disagrees	5
+corpus	package-scalar-loop-value	0
 corpus	phi-arity	1
 corpus	phi-arity:eval-join	32
 corpus	read-unversioned:args	0
@@ -35,6 +36,7 @@ probes	effect-rides-value	8
 probes	fault-floating	5
 probes	memory-input-not-version	0
 probes	memory-order-disagrees	6
+probes	package-scalar-loop-value	0
 probes	phi-arity	3
 probes	phi-arity:eval-join	25
 probes	read-unversioned:args	1
@@ -52,16 +54,16 @@ chalk	#graphs	24215
 chalk	#wires	218
 chalk	allowed:param-bind	18
 chalk	allowed:record	389
-chalk	effect-rides-value	163
-chalk	memory-input-not-version	50
-chalk	memory-order-disagrees	230
+chalk	effect-rides-value	64
+chalk	memory-input-not-version	0
+chalk	memory-order-disagrees	228
 chalk	phi-arity:eval-join	40
 chalk	read-unversioned:args	3
-chalk	read-unversioned:external	57
+chalk	read-unversioned:external	87
 chalk	read-unversioned:field	3560
 chalk	read-unversioned:my-aggregate	379
 chalk	read-unversioned:object-class	4451
 chalk	read-unversioned:package	17
 chalk	read-unversioned:package-aggregate-literal	1
 chalk	read-unversioned:through-ref	215
-chalk	write-floating	28
+chalk	write-floating	6
