@@ -11,7 +11,7 @@ Step 1 of the IR audit's plan (docs/research/son-ir-audit-2026-11-19) is done
 in chalk, branch `refuse-floating` (off bson/llvm-corpus c1a48dfe, not
 pushed). `Chalk::IR::Serialize::WireCheck` runs in `from_json` on the wire's
 run set, before any graph is made, and dies `GAP: ...` by name. Probes:
-WRONG 65 -> 3, REFUSED 95 -> 163, SAME 255 -> 249. Census unchanged.
+WRONG 65 -> 3, REFUSED 95 -> 162, SAME 255 -> 250. Census unchanged (426).
 
 **Why the raw wire:** the loader drops what control does not reach, so a
 store B::SoN left floating is not in the loaded graph. A check there says
@@ -25,6 +25,19 @@ store B::SoN left floating is not in the loaded graph. A check there says
   returns a constant). The rule that survived: a floating call is fine if
   every sub it can reach is inert (no pinned node but Return, MemStart unread,
   no Call), or it is only the place of pinned stores (`slot() = 42`, 398).
+- **Run chalk's whole suite before believing a rule.** The probes and the
+  census were green while 18 suite files failed: hand-built graphs and
+  to_json round trips float what they like (check only a wire with `dowarn`),
+  an old fixture carried Config's empty DESTROY, Test::Chalk's subtest has a
+  `local` beside calls that may die, `$r->{a}{b} = 3; print $r->{a}{b}` reads
+  through an element stamped `Undef`. Each rule was narrowed, never a test
+  deleted.
+- **Some existing tests were right only by where the statement stood.**
+  `print "a"; print 1 / $z` (right) has the wire of `my $q = 1 / $z; print
+  "a"; print $q` (fl1, wrong). The same for blessed() printed after a bless,
+  and `%h ? :` (T2 read every hash as true). Six tests now take perl's answer
+  or the named refusal. This is the one place a right program was traded for
+  a refusal on purpose: perigrin may prefer the other trade.
 - **A floating bless is everywhere.** All 33 in the corpus bless a fresh `{}`
   only the bless holds. That shape is safe; any other (`bless $h` with `$h`
   read elsewhere) is refused.
@@ -34,6 +47,10 @@ store B::SoN left floating is not in the loaded graph. A check there says
   nodes the division is computed from; refuse only if an effect lies between.
   An eval's entry `$@ = ""` is not an effect for this walk, and a Divide
   marked `eval_id` is made after its eval's entry.
+- **The same walk serves calls, blesses and `ref()`.** With "any pinned
+  node" as the effect it passes `print $o->$m(2, 3)` and refuses dyn2 (a
+  pinned read of `$o->{n}` stands between). With "a bless or a call" it
+  passes `ref(C->new)` and refuses ef9.
 - **A versioned operand does not make `ref()` safe.** `ref($o)` of an `$o`
   kept in memory is `RefType[PadAccess[v]]`, a new node per version, and st7
   was still wrong: bless changes the object, not the variable, and the
@@ -47,7 +64,8 @@ store B::SoN left floating is not in the loaded graph. A check there says
   (`$a[0] + ($a[0] = 10) + $a[0]`) and fl14 (`use warnings FATAL`) have wires
   byte-identical to programs chalk compiles right. No chalk-side rule can
   split them. lo16's shape is narrow (a package store in an eval block that
-  dies), so both are refused and ev12 went SAME -> REFUSED. The other three
+  dies), so both are refused and ev12 went SAME -> REFUSED (with wa21, ef11,
+  bless1, st16). The other three
   stay WRONG, listed in chalk's `t/bootstrap/ir/audit-probes.t`.
 
 **How to apply:** when the producer fixes a class (pins the list assign,
@@ -56,7 +74,9 @@ rule and rerun `tools/audit-probes.pl`; the probes it refused should turn
 SAME, and `--update` records it. The probe test fails on any verdict that
 leaves `t/data/audit-probes/BASELINE.tsv`, in either direction.
 
-**Not closed by this:** W9 is refused only where B::SoN stamps the inner
+**Not closed by this:** a `local` whose scope a *called* sub dies out of; a
+DESTROY reached only by inheritance; a floating `close`/`open` whose value is
+taken (T2's own refusals cover some). W9 is refused only where B::SoN stamps the inner
 element `Undef`; a nested read of a key that happens to be missing at run
 time still does not autovivify. `qx` still floats (3 corpus cases). A die
 of a scalar whose stamp is unknown is refused whenever the program has an
