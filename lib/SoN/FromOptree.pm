@@ -802,6 +802,20 @@ class SoN::FromOptree 0.01 {
         return $node;
     }
 
+    # _may_fault($node) -> true for a Divide or Modulo that can die "Illegal
+    # division by zero" / "Illegal modulus zero": any whose divisor is not a
+    # constant known to be non-zero. `%` works on integers, so a constant
+    # divisor that truncates to zero (0.5) faults too.
+    sub _may_fault ($node) {
+        my $kind = $node->operation;
+        return 0 unless $kind eq 'Divide' || $kind eq 'Modulo';
+        my $d = $node->inputs->[1] or return 1;
+        $d = $d->inputs->[0] while $d->isa('SoN::IR::Node::Coerce') && $d->inputs->[0];
+        return 1 unless $d->isa('SoN::IR::Node::Constant')
+            && Scalar::Util::looks_like_number( $d->value // '' );
+        return ( $kind eq 'Modulo' ? int( $d->value ) : $d->value ) == 0 ? 1 : 0;
+    }
+
     # _pin_tied_read($sim, $node): a value node that reads a tied aggregate is
     # a call -- on the control chain, and the memory version after it (FETCH may
     # write anything a later read sees; FETCHSIZE answers anew each pass).
@@ -809,6 +823,15 @@ class SoN::FromOptree 0.01 {
         return unless $node->can('inputs');
         return if $node->operation =~ /\A(?:PadAccess|ArrayLiteral|HashLiteral|EntryDef|Constant|MemStart|Phi|Delete)\z/;   # (a delete the walk orders itself, as a store)
         return if defined $node->control_in;
+        # A DIVISION THAT MAY FAULT dies where it stands (audit 2026-11-19,
+        # departure 23): ordered on the control chain, and no memory version
+        # -- it reads none and writes none. Floating, `my $q = 1 / $d; print
+        # "before\n"` printed before it died.
+        if (_may_fault($node)) {
+            _pin($sim, $node);
+            $PINS_MADE++;
+            return;
+        }
         # A READ THROUGH A REFERENCE may die (no HASH or ARRAY reference there),
         # as may a scalar deref: made where it stands, as a may-die divide is.
         my $tied = grep { _names_tied($_) } grep { blessed($_) } $node->inputs->@*;
@@ -5417,12 +5440,21 @@ class SoN::FromOptree 0.01 {
                     $invocant = $bound if $bound;
                 }
                 delete $ctx->{pending_method};
-                $sim->push_node($factory->make('Call',
+                # IT IS A CALL, placed as every other is (audit 2026-11-19,
+                # W3): on the control chain where it stands and the memory
+                # version after it, void or not. Pushed as a bare value, a
+                # void `$o->$m()` reached nothing and never ran, and one used
+                # for its value ran at its first use.
+                my $node = $factory->make('Call',
                     inputs        => [$invocant, $pending_method, $args->@*],
                     dispatch_kind => 'dynamic_method',
                     name          => '',
+                    want          => _want_of($op),
                     param_names   => [],
-                    stamp => SoN::IR::Stamp->new(type => 'Unknown')));
+                    stamp => SoN::IR::Stamp->new(type => 'Unknown'));
+                _pin($sim, $node);
+                _call_memory_barrier($sim, $node, $ctx);
+                $sim->push_node($node) unless ($op->flags & 3) == 1;   # OPf_WANT_VOID
                 return;
             }
             # Method dispatch: the first stack arg is the invocant, the
