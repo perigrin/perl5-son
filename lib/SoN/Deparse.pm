@@ -2033,6 +2033,19 @@ class SoN::Deparse 0.01 {
         # names.
         for my $n ( @late_saves ) {
             my $ver = $nodes->{ ( $n->{inputs} // [] )->[-1] } // {};
+            # A SAVE MADE IN A LOOP BODY, of a scalar the loop carries in
+            # memory, reads the loop's memory Phi: the value the pass starts
+            # from. It is taken at the top of each pass. Anchored as a stale
+            # read, with no join to stand at, it was assigned at the END of
+            # the pass -- `for (1..2) { local $g = $g + $i; ... }` computed
+            # the local from an undefined `$saved` and restored one.
+            if ( $self->_reads_loop_memory($n) ) {
+                my $loop = $nodes->{ $ver->{fields}{region} };
+                $hoisted{ $bound{ $n->{id} } } //= $bound{ $n->{id} };
+                push $loop_top_bind{ $loop->{id} }->@*, $n;
+                $pass_top_node{ $n->{id} } = 1;
+                next;
+            }
             if ( ( $ver->{op} // '' ) eq 'Phi' ) {
                 my $r = $nodes->{ ( $ver->{fields} // {} )->{region} // -1 } // {};
                 $stale_join{ $n->{id} } = $r->{id}

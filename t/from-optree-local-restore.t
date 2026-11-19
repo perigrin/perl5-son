@@ -81,7 +81,14 @@ subtest 'the read after the scope sees the restored binding' => sub {
         my $mem = $by{ ( $vals[1]{inputs} // [] )->[0] // -1 };
         ok $mem && $mem->{op} eq 'EntryWrite',
             'the second print reads the scalar at a store' or return;
-        is $by{ $mem->{inputs}[1] }{fields}{value}, 1,
+        # THE RESTORE STORES WHAT THE SCALAR HELD AT THE `local` -- a read of
+        # it at the version before the local's own store, since 2026-11-19
+        # (it was the constant this graph had last bound, which a call made
+        # in between left stale). That read's version is the `our $g = 1`.
+        my $saved = $by{ $mem->{inputs}[1] };
+        $saved = $by{ $saved->{inputs}[0] } if ( $saved->{op} // '' ) eq 'EntryDef';
+        $saved = $by{ $saved->{inputs}[1] } if ( $saved->{op} // '' ) eq 'EntryWrite';
+        is $saved->{fields}{value}, 1,
             'and the store it reads is the restore of the pre-local value';
     }
 };

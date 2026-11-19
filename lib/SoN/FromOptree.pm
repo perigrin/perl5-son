@@ -553,6 +553,7 @@ class SoN::FromOptree 0.01 {
     }
 
 
+
     # WHERE A `next` JOINS THE LOOP it is in: the first op of the continue
     # block (a C-style for's step is one), or undef when there is none and the
     # latch is the unstack. `next` runs the continue block -- perl's own rule
@@ -719,6 +720,32 @@ class SoN::FromOptree 0.01 {
     # %PINNED_MAY_DIE: the reads pinned only because they may die (by
     # refaddr) -- memory versions that change nothing, unlike a tied FETCH.
     our %PINNED_MAY_DIE;
+    # _refuse_fatal_warnings($root) -- die when a statement under $root runs
+    # with a warning category made FATAL.
+    #
+    # UNDER `use warnings FATAL`, AN OP THAT WOULD WARN DIES: `"abc" + 1` is
+    # an exception there and an Add everywhere else, and the lexical warning
+    # bits are on the statement's COP, reaching no node. The wire of such a
+    # program was the wire of one without the pragma (audit 2026-11-19, probe
+    # fl14), and a consumer made the Add. A fault needs a control edge this
+    # wire does not have for it, so the graph is refused.
+    #
+    # The bits: B gives a COP's warnings as a string when they are not one of
+    # perl's three shared sets (all, none, default); each category has two
+    # bits, and the odd one is FATAL.
+    sub _refuse_fatal_warnings ($root) {
+        return unless $root && $$root;
+        for my $cop (grep { $_->name eq 'nextstate' || $_->name eq 'dbstate' } _subtree_ops($root)) {
+            my $w = eval { $cop->warnings } or next;
+            next if ref($w) eq 'B::SPECIAL' || !$w->can('PV');
+            my $bits = $w->PV // next;
+            next unless grep { vec($bits, 2 * $_ + 1, 1) } 0 .. length($bits) * 4 - 1;
+            die "GAP: code under `use warnings FATAL` is not yet lowered -- a"
+              . " warning there is a die, which the graph has no place for\n";
+        }
+        return;
+    }
+
     sub _tied_aggregates ($cv, $root) {
         my %t;
         return \%t unless $root && $$root;
@@ -2497,6 +2524,10 @@ class SoN::FromOptree 0.01 {
         local $MUTATED_SLOTS = _mutated_aggregate_slots($cv,
             defined $program_root ? B::main_root() : undef);
         local %TIED_AGG = _tied_aggregates($cv, defined $program_root ? B::main_root() : eval { $cv->ROOT })->%*;
+        # (not a BEGIN block: it has run, as perl compiled the program, and
+        # what it would have died of it has)
+        _refuse_fatal_warnings(defined $program_root ? B::main_root() : eval { $cv->ROOT })
+            unless !defined $program_root && ( eval { $cv->GV->NAME } // '' ) eq 'BEGIN';
 
         # A FLIP-FLOP'S STATE SLOT STARTS UNDEF, as every pad slot does, and
         # is bound so here: a loop's scout finds carried slots by comparing
@@ -8166,14 +8197,12 @@ class SoN::FromOptree 0.01 {
                         package => $gv->STASH->NAME,
                         sigil   => '$',
                         symbol  => $gv->NAME);
-                    my $prior = $sim->lookup($key);
-                    if (!defined $prior && defined $sim->memory) {
-                        $prior = $factory->make('EntryDef',
-                            package => $gv->STASH->NAME,
-                            sigil   => '$',
-                            symbol  => $gv->NAME,
-                            inputs  => [ $sim->memory ]);
-                    }
+                    # THE VALUE IT HOLDS NOW, not what this graph last bound
+                    # it to: a scalar some sub writes is read from memory
+                    # (_entry_live_value), or `b(); { local $g = 2 }` put back
+                    # what $g held before b() changed it.
+                    my $prior = _entry_live_value($factory, $sim, $entry);
+                    $prior = undef if $prior == $entry;   # (no memory to read: nothing to put back)
                     push $ctx->{local_saves}->@*,
                         { key    => $key,
                           node   => $prior,
@@ -13216,7 +13245,12 @@ class SoN::FromOptree 0.01 {
     sub _restore_local_elems_on_edge ($sim, $factory) {
         return if $IN_SCOUT || !defined $LOOP_SAVES_BASE;
         my %seen;
-        my @elems = grep { $_->{elem} && !$seen{ refaddr $_ }++ }
+        # A NAME'S TOO (audit 2026-11-19, W6, probe lo3): `local $g` in a loop
+        # body is put back as the pass ends, by whatever way it ends. Only
+        # the elements were restored here, so a `last` or `next` after a
+        # `local $g = ...` left the loop with the local's value in $g --
+        # and the wire was a plain store's, byte for byte.
+        my @elems = grep { !$seen{ refaddr $_ }++ }
                     map { $_->@* } @SAVES_STACK[ $LOOP_SAVES_BASE .. $#SAVES_STACK ];
         # at_return: on a path that leaves the block, as a return's.
         _restore_locals($sim, { local_saves => \@elems }, $factory, 0, 1) if @elems;
@@ -13268,9 +13302,14 @@ class SoN::FromOptree 0.01 {
             # local had bound and died `Modification of a read-only value`.
             # `binds` is the field the deparser already reads to spell a glob
             # assignment, one path over.
+            # (once: an edge's restore and the pass end's after it are the
+            # same store, and the second would only repeat the first)
+            my $m = $sim->memory;
+            my $done = $m && $m->operation eq 'EntryWrite' && $save->{target}
+                && $m->inputs->[0] == $save->{target} && $m->inputs->[1] == $save->{node};
             _entry_store($factory, $sim, $save->{target}, $save->{node},
                          $save->{glob_bind} ? 1 : 0)
-                if $factory && $save->{target};
+                if $factory && $save->{target} && !$done;
             # AN AGGREGATE IS NAMED AGAIN BY A READ AFTER ITS RESTORE: the one
             # taken before the swap is of a version the swap made stale.
             $sim->define($save->{key}, $factory->make('EntryDef', $save->{ent}->%*,
@@ -17459,6 +17498,20 @@ class SoN::FromOptree 0.01 {
                 next;
             }
             $op = $next;
+        }
+        # THE PASS ENDS HERE TOO. The `unstack` above is where a body that
+        # runs straight through ends; one whose last statements follow a
+        # guarded `next` or `last` is finished by the arm walk of what
+        # follows the guard, which stops at the unstack without this walk's
+        # saves -- and the `local`s made before the guard were never put
+        # back (`local $g = $g + $i; last if ...; ...` carried one pass's
+        # local into the next).
+        # (A NAME'S. A localized element keeps the restores its own rules
+        # place -- _local_elem_scope, _restore_local_elems_on_edge -- which
+        # the deparser reads the block's end from; a second one here closed
+        # the block before the statements after the guard.)
+        if (my @names = grep { !$_->{elem} } $ctx->{local_saves}->@*) {
+            _restore_locals($sim, { local_saves => \@names }, $factory);
         }
         _merge_labeled_nexts($sim, $factory);
         return $exit_proj;
@@ -23159,6 +23212,108 @@ class SoN::FromOptree 0.01 {
             }
             return 0;
         };
+        # AN ELEMENT OPERAND IS THE ELEMENT, NOT A COPY, as a variable is the
+        # variable: `$a[0] + ($a[0] = 10)` is 20, because `+` reads the element
+        # when `+` runs. The walk reads it where its op stands -- a Subscript at
+        # the memory before the store -- and the wire of that was the wire of
+        # a right program byte for byte (audit 2026-11-19, probe vp5).
+        #
+        # REFUSED, NOT READ AGAIN as a lexical is: an element is an alias only
+        # if it EXISTED when it was read. `$h{new} . ($h{new} = "q")` pushes
+        # undef, and a second read would see "q". The walk cannot know which.
+        #
+        # THE CONTAINER, as far as the optree names it: an element operand is
+        # an (ex-)aelem or (ex-)helem over aelemfast_lex, aelemfast or a
+        # multideref, whose text up to its first subscript (`$a[`, `$h{`,
+        # `$r->[`) says which container. A later sibling that holds an lvalue
+        # element of the same text stores into it.
+        # ponytail: two references to one array are two containers here, and a
+        # call in a later operand that stores the element is not seen.
+        my $elem_key = sub ($o) {
+            return undef unless $o && $$o;
+            $o = $o->first while $o->name eq 'null' && ( $o->flags & B::OPf_KIDS ) && ${ $o->first };
+            my $n = $o->name;
+            if ( $n eq 'aelemfast_lex' || $n eq 'aelemfastlex_store' ) {
+                my ( $sg, $sy ) = _padparts( $cv, $o->targ );
+                return "\$$sy\[";
+            }
+            if ( $n eq 'aelemfast' ) {
+                my $gv = _op_gv( $cv, $o ) or return undef;
+                return '$' . $gv->NAME . '[';
+            }
+            # B::SoN COMPILES WITH THE PEEPHOLE OFF, so an element is usually a
+            # real aelem or helem over its container: a pad aggregate, a
+            # package one (rv2av or rv2hv of a gv), or a reference in a pad
+            # scalar. Any other container has no name to compare.
+            if ( $n eq 'aelem' || $n eq 'helem' ) {
+                my $open = $n eq 'aelem' ? '[' : '{';
+                my $c = $o->first;
+                return undef unless $c && $$c;
+                if ( $c->name =~ /\Apad[ah]v\z/ ) {
+                    my ( $sg, $sy ) = _padparts( $cv, $c->targ );
+                    return '$' . $sy . $open;
+                }
+                return undef unless $c->name =~ /\Arv2[ah]v\z/ && ( $c->flags & B::OPf_KIDS );
+                my $r = $c->first;
+                if ( $r->name eq 'gv' ) {
+                    my $gv = _op_gv( $cv, $r ) or return undef;
+                    return '$' . $gv->NAME . $open;
+                }
+                if ( $r->name eq 'padsv' ) {
+                    my ( $sg, $sy ) = _padparts( $cv, $r->targ );
+                    return '$' . $sy . '->' . $open;
+                }
+                return undef;
+            }
+            return undef unless $n eq 'multideref' && $o->can('string');
+            my $text = eval { $o->string($cv) } // return undef;
+            return $text =~ /\A(\$\$?[\w:]+(?:->)?[\[{])/ ? $1 =~ s/\A\$main::/\$/r : undef;
+        };
+        my $elem_stored;
+        # A STORE IS AN ASSIGNMENT'S TARGET, not whatever perl marks OPf_MOD:
+        # a call's argument is marked (it is passed as an alias), as is an
+        # element dereferenced on the way to a store (`$_[0][$_[1]] = ...`
+        # vivifies `$_[0]`). So the target is found from the op that stores:
+        # the last kid of an sassign, the first of an `op=` or `++`/`--`, any
+        # element in a list assign's left side, an s///, tr/// or chomp's.
+        my $names = sub ( $t, $key ) {
+            return 0 unless $t && $$t;
+            return ( $elem_key->($t) // '' ) eq $key ? 1 : 0;
+        };
+        $elem_stored = sub ( $o, $key ) {
+            return 0 unless $o && $$o;
+            my $n = $o->name;
+            return 1 if $n eq 'aelemfastlex_store' && $names->( $o, $key );
+            return 0 unless $o->flags & B::OPf_KIDS;
+            my @kids;
+            for ( my $k = $o->first; $k && $$k; $k = $k->sibling ) { push @kids, $k }
+            my @targets =
+                  $n eq 'sassign'                                        ? ( $kids[-1] )
+                : $n eq 'aassign'                                        ? ( _subtree_ops( $kids[-1] ) )
+                : $n =~ /\A(?:i_)?(?:pre|post)(?:inc|dec)\z/            ? ( $kids[0] )
+                : $n =~ /\A(?:subst|trans|transr|chomp|chop|schomp|schop)\z/ ? ( $kids[0] )
+                : ( $o->isa('B::BINOP') && ( $o->flags & B::OPf_STACKED ) ) ? ( $kids[0] )   # op=
+                : $n eq 'multiconcat' && ( $o->flags & B::OPf_STACKED )   ? ( $kids[-1] )
+                :                                                          ();
+            return 1 if grep { $names->( $_, $key ) } @targets;
+            return scalar grep { $elem_stored->( $_, $key ) } @kids;
+        };
+        for ( my $k = $op->first; $k && $$k; $k = $k->sibling ) {
+            next if ( $k->flags & B::OPf_WANT ) == B::OPf_WANT_VOID;   # a statement, not an operand
+            next if $k->flags & B::OPf_MOD;                           # a store's own target
+            my $was = $k->name eq 'null' && $k->targ ? ( B::ppname( $k->targ ) =~ s/\App_//r ) : $k->name;
+            next unless $was =~ /\A(?:aelem|helem|aelemfast_lex|aelemfast|multideref)\z/;
+            my $ekey = $elem_key->($k) // next;
+            # (AN ASSIGNMENT'S OWN TARGET is not a later operand: `$a[0] =
+            # $a[1]` reads its value and then stores, and that is what the
+            # Assign says. sassign's and a storing multiconcat's is the last kid.)
+            my @later = _later_siblings($k);
+            pop @later if $op->name =~ /\A(?:sassign|multiconcat)\z/;
+            die "GAP: an element operand is read by alias and a later operand"
+              . " stores into its container -- not yet lowered\n"
+                if grep { $elem_stored->( $_, $ekey ) } @later;
+        }
+        undef $elem_stored;
         my ( $kid, $first ) = ( $op->first, 1 );
         while ( $kid && $$kid ) {
             my $key = $var->($kid);

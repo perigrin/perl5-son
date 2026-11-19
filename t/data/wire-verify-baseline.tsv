@@ -26,9 +26,9 @@ corpus	read-unversioned:package	13
 corpus	read-unversioned:package-aggregate-literal	0
 corpus	read-unversioned:through-ref	35
 corpus	write-floating	0
-probes	#cases	449
-probes	#graphs	631
-probes	#wires	449
+probes	#cases	458
+probes	#graphs	641
+probes	#wires	458
 probes	allowed:param-bind	1
 probes	allowed:record	12
 probes	effect-rides-value	8
