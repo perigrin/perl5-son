@@ -1,0 +1,69 @@
+# SoN::Verify's counts per rule per source, 2026-11-19: `tools/wire-verify.pl --tsv`
+# (corpus, probes) and `--tsv --chalk ~/dev/chalk` (chalk). t/wire-verify-ratchet.t
+# fails if a rule's count RISES above its row here, or `#wires` falls below it.
+# Lower a row when a fix lowers the count; raising one needs its reason in the commit.
+# A wire holds the graphs of every module it loads, so library graphs (Carp, POSIX,
+# chalk's own) are counted once per wire that loads them.
+# chalk at c1a48dfe
+corpus	#cases	431
+corpus	#graphs	1082
+corpus	#wires	431
+corpus	allowed:param-bind	8
+corpus	allowed:record	57
+corpus	effect-rides-value	52
+corpus	fault-floating	4
+corpus	memory-input-not-version	0
+corpus	memory-order-disagrees	5
+corpus	package-scalar-loop-value	2
+corpus	phi-arity	1
+corpus	phi-arity:eval-join	32
+corpus	read-unversioned:args	0
+corpus	read-unversioned:cell	0
+corpus	read-unversioned:external	14
+corpus	read-unversioned:field	5
+corpus	read-unversioned:my-aggregate	23
+corpus	read-unversioned:object-class	68
+corpus	read-unversioned:package	15
+corpus	read-unversioned:package-aggregate-literal	0
+corpus	read-unversioned:through-ref	35
+corpus	write-floating	9
+probes	#cases	440
+probes	#graphs	621
+probes	#wires	440
+probes	allowed:param-bind	1
+probes	allowed:record	11
+probes	effect-rides-value	32
+probes	fault-floating	5
+probes	memory-input-not-version	3
+probes	memory-order-disagrees	7
+probes	package-scalar-loop-value	19
+probes	phi-arity	3
+probes	phi-arity:eval-join	25
+probes	read-unversioned:args	1
+probes	read-unversioned:cell	1
+probes	read-unversioned:external	14
+probes	read-unversioned:field	0
+probes	read-unversioned:my-aggregate	3
+probes	read-unversioned:object-class	23
+probes	read-unversioned:package	26
+probes	read-unversioned:package-aggregate-literal	6
+probes	read-unversioned:through-ref	1
+probes	write-floating	31
+chalk	#cases	218
+chalk	#graphs	24215
+chalk	#wires	218
+chalk	allowed:param-bind	18
+chalk	allowed:record	389
+chalk	effect-rides-value	163
+chalk	memory-input-not-version	50
+chalk	memory-order-disagrees	230
+chalk	phi-arity:eval-join	40
+chalk	read-unversioned:args	3
+chalk	read-unversioned:external	57
+chalk	read-unversioned:field	3560
+chalk	read-unversioned:my-aggregate	379
+chalk	read-unversioned:object-class	4451
+chalk	read-unversioned:package	17
+chalk	read-unversioned:package-aggregate-literal	1
+chalk	read-unversioned:through-ref	215
+chalk	write-floating	28

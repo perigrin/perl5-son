@@ -1,0 +1,113 @@
+#!/usr/bin/env perl
+# ABOUTME: Runs SoN::Verify (the memory-chain rules) over the pvm corpus, the audit's
+# ABOUTME: probes and, optionally, chalk's lib; prints counts per rule per source.
+use v5.42.0;
+use FindBin;
+use lib "$FindBin::Bin/../lib", "$FindBin::Bin/lib";
+use JSON::PP;
+use File::Temp qw(tempdir);
+use File::Path qw(make_path);
+use File::Basename qw(basename);
+use Getopt::Long;
+use PvmCorpus qw(read_cases);
+use SoN::Verify;
+
+# usage: wire-verify.pl [--corpus] [--probes] [--chalk DIR] [--list] [--tsv]
+#                       [--wires DIR]
+#   no source named: --corpus --probes.
+#   --chalk DIR   every lib/**/*.pm of a chalk checkout (its working tree: the
+#                 commit is printed, and the numbers are that commit's).
+#   --list        every violation, after the counts.
+#   --tsv         only `source<TAB>rule<TAB>count` lines -- the format of
+#                 t/data/wire-verify-baseline.tsv, which t/wire-verify-ratchet.t
+#                 holds these numbers to. Rules are sorted; `#wires` and
+#                 `#graphs` are the denominators, `allowed:*` the floating
+#                 Assigns that are records or parameter binds.
+#   --wires DIR   keep each wire as DIR/SOURCE/NAME.json and reuse one that is
+#                 there. A STALE CACHE LIES: empty the directory after any
+#                 change to the producer.
+my ( $corpus, $probes, $chalk, $list, $tsv, $wires );
+GetOptions( 'corpus' => \$corpus, 'probes' => \$probes, 'chalk=s' => \$chalk,
+    'list' => \$list, 'tsv' => \$tsv, 'wires=s' => \$wires )
+    or die "usage: $0 [--corpus] [--probes] [--chalk DIR] [--list] [--tsv] [--wires DIR]\n";
+$corpus = $probes = 1 unless $corpus || $probes || $chalk;
+
+my $root = "$FindBin::Bin/..";
+my $tmp  = tempdir( CLEANUP => 1 );
+$wires //= "$tmp/wires";
+my $json = JSON::PP->new->utf8;
+
+# wire($source, $name, $file, $cwd) -> the decoded wire of $file, or undef.
+sub wire ( $source, $name, $file, $cwd = undef ) {
+    my $cache = "$wires/$source/" . ( $name =~ s{[/:]}{__}gr ) . '.json';
+    unless ( -e $cache ) {
+        make_path("$wires/$source");
+        my $cd = defined $cwd ? "cd '$cwd' && " : '';
+        my $inc = defined $cwd ? '-Ilib' : '';
+        # 300 s and 4 GB: a producer that spins or balloons is a missing wire
+        # (counted below), not a hung census.
+        system( "ulimit -v 4000000; $cd/usr/bin/timeout 300 $^X -I$root/lib $inc "
+                . "-MO=-q,SoN,json,not_package=SoN '$file' > '$cache.tmp' 2>/dev/null" );
+        rename "$cache.tmp", $cache or die "$cache: $!";
+    }
+    return undef unless -s $cache;
+    open my $fh, '<', $cache or die "$cache: $!";
+    local $/;
+    return eval { $json->decode(<$fh>) };
+}
+
+my ( %count, @violations, @sources );
+
+sub run ( $source, @cases ) {    # each case: [name, file, cwd]
+    push @sources, $source;
+    $count{$source}{$_} = 0 for '#cases', '#wires', '#graphs';
+    for my $c (@cases) {
+        $count{$source}{'#cases'}++;
+        my $w = wire( $source, @$c ) or next;
+        $count{$source}{'#wires'}++;
+        my $r = SoN::Verify::verify($w);
+        $count{$source}{'#graphs'} += $r->{graphs};
+        $count{$source}{"allowed:$_"} += $r->{allowed}{$_} for keys $r->{allowed}->%*;
+        for my $v ( $r->{violations}->@* ) {
+            $count{$source}{ $v->{rule} }++;
+            push @violations, [ $source, "$c->[0]:$v->{graph}#$v->{node}", @$v{qw(op rule detail)} ];
+        }
+    }
+}
+
+if ($corpus) {
+    my $i = 0;
+    my @cases;
+    for my $c ( read_cases("$root/t/corpus/mdtest/pvm") ) {
+        my $id = sprintf '%03d', ++$i;
+        open my $o, '>', "$tmp/$id.pl" or die $!;
+        print $o $c->{src};
+        close $o;
+        push @cases, [ $id, "$tmp/$id.pl" ];
+    }
+    run( corpus => @cases );
+}
+if ($probes) {
+    my $dir = "$root/docs/research/son-ir-audit-2026-11-19/probes";
+    run( probes => map { [ $_ =~ s{^\Q$dir\E/|\.pl$}{}gr, $_ ] } sort glob "$dir/*/*.pl" );
+}
+if ($chalk) {
+    -d "$chalk/lib" or die "no lib/ under $chalk\n";
+    chomp( my $at = `git -C '$chalk' rev-parse --short HEAD 2>/dev/null` );
+    say "# chalk at $at" unless $tsv;
+    chomp( my @mods = `cd '$chalk' && find lib -name '*.pm' | sort` );
+    run( chalk => map { [ $_ =~ s{^lib/|\.pm$}{}gr, $_, $chalk ] } @mods );
+}
+
+my %rules = map { $_ => 1 } map { keys %$_ } values %count;
+my @rules = sort keys %rules;
+if ($tsv) {
+    for my $s (@sources) { say join "\t", $s, $_, $count{$s}{$_} // 0 for @rules }
+    exit 0;
+}
+printf "%-44s" . ( ' %8s' x @sources ) . "\n", 'rule', @sources;
+for my $r (@rules) { printf "%-44s" . ( ' %8d' x @sources ) . "\n", $r, map { $count{$_}{$r} // 0 } @sources }
+if ($list) {
+    say '';
+    say join "\t", @$_ for @violations;
+}
