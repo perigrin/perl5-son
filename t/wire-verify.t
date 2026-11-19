@@ -131,7 +131,16 @@ our $total = 0;
 sub tally { for my $x (@_) { if ($x > 2) { $total += $x } } return $total }
 print tally(1, 3, 5), "\n";
 P
-    is ops( $r->{'read-unversioned:package'} ), ['EntryDef'], '$total += reads $total with no memory';
+    is $r->{'read-unversioned:package'}, undef, 'the producer reads `$total +=` at a memory version now';
+    # ...as it did not: the bare name was the `+=`'s operand.
+    my $old = rules( graph(
+        nd( 0, 'Start', [] ), nd( 1, 'Constant', [] ), nd( 2, 'MemStart', [] ),
+        nd( 3, 'EntryDef', [], sigil => '$', symbol => 'total', package => 'main' ),
+        nd( 4, 'Add', [ 3, 1 ] ),
+        nd( 5, 'EntryWrite', [ 3, 4, 2 ], ctl => 0 ),
+        nd( 6, 'Return', [4], ctl => 5 ),
+    ) );
+    is ops( $old->{'read-unversioned:package'} ), ['EntryDef'], 'a bare name read as a value has no version';
 };
 
 subtest 'phi-arity:eval-join: the eval join has one way in, two-input Phis' => sub {
@@ -149,7 +158,23 @@ subtest 'fault-floating: a division that may die has no control (fl1)' => sub {
 
 subtest 'package-scalar-loop-value: $g carried round a loop as a value (pg1)' => sub {
     my $r = rules('our $g = 0; sub bump { $g += 10 } for my $i (1..3) { $g = $g + 1; bump(); } print "$g\n";');
-    is ops( $r->{'package-scalar-loop-value'} ), ['Phi'], 'the value Phi a callee cannot reach';
+    is $r->{'package-scalar-loop-value'}, undef, 'the producer reads $g through the loop memory now';
+    # ...the shape it made: a header Phi of the two values stored to $g.
+    my $old = rules( graph(
+        nd( 0, 'Start', [] ), nd( 1, 'Constant', [] ), nd( 2, 'MemStart', [] ),
+        nd( 3, 'EntryDef', [], sigil => '$', symbol => 'g', package => 'main' ),
+        nd( 4, 'EntryWrite', [ 3, 1, 2 ], ctl => 0 ),
+        nd( 5, 'Loop', [4], ctl => 4 ),
+        nd( 6, 'Phi', [ 4, 10 ], region => 5, memory => 1 ),
+        nd( 7, 'Phi', [ 1, 8 ], region => 5 ),
+        nd( 8, 'Add', [ 7, 1 ] ),
+        nd( 9, 'Proj', [5], index => 0 ),
+        nd( 10, 'EntryWrite', [ 3, 8, 6 ], ctl => 9 ),
+        nd( 11, 'Proj', [5], index => 1 ),
+        nd( 12, 'Return', [1], ctl => 11 ),
+    ) );
+    is [ map { $_->{node} } ( $old->{'package-scalar-loop-value'} // [] )->@* ], [7],
+        'the value Phi a callee cannot reach';
 };
 
 subtest 'phi-arity: a Phi must pair with its Region\'s ways in' => sub {

@@ -11021,7 +11021,9 @@ class SoN::FromOptree 0.01 {
                     if defined $seg[0];
             }
             elsif ($op->private & 0x40) {
-                $acc = $pkg_target ? $sim->lookup(_stash_key($pkg_target))
+                # (a package target's old value is read where it stands: its
+                # binding is what this graph last stored, not what a callee did)
+                $acc = $pkg_target ? _entry_live_value($factory, $sim, $pkg_target)
                      :               $sim->lookup($op->targ);
                 $acc = $concat->($acc, $mkstr->($seg[0])) if defined $seg[0];
             }
@@ -12515,10 +12517,12 @@ class SoN::FromOptree 0.01 {
                     # and printed 0 0 for perl's 6 8. The alias binding is the
                     # element, so the read is that binding; the store is
                     # unchanged.
-                    my $key   = _stash_key($pkg_lvalue);
-                    my $bound = $sim->lookup($key);
-                    $inputs[0] = $bound
-                        if defined $bound && grep { $_ eq $key } @ALIAS_BOUND_KEYS;
+                    #
+                    # ANY OTHER READS THE VARIABLE WHERE IT STANDS, at the
+                    # current memory version (_entry_live_value): the name
+                    # token is no version, and one node served the `+=` either
+                    # side of a call that wrote the scalar.
+                    $inputs[0] = _entry_live_value($factory, $sim, $pkg_lvalue);
                 }
 
                 # Element compound assignment (`$a[0] += 5`): the FIRST operand
@@ -13896,6 +13900,45 @@ class SoN::FromOptree 0.01 {
         return undef;
     }
 
+    # _entry_live_value($factory, $sim, $entry) -> the value the package
+    # scalar $entry names holds where the walk stands: what a read-modify-
+    # write (`.=`, `+=`, `||=`) reads before it stores.
+    #
+    # THE SAME RULE AS THE gvsv READ, in one place for every `op=`: a foreach
+    # alias or a loop-carried binding is the value; so is the binding of a
+    # scalar nothing writes; anything else is read from memory at the current
+    # version. The handlers used the binding (`.=`) or the bare name (`+=`),
+    # so `our $s; sub ap { $s .= $_[0] } $s .= "-"; ap("a"); $s .= "-"`
+    # appended to what $s held before the call (perl -a-, the wire --).
+    sub _entry_live_value ($factory, $sim, $entry) {
+        my $key   = _stash_key($entry);
+        my $bound = $sim->lookup($key);
+        my $w     = _package_scalars_written();
+        my $forwardable = ( grep { $_ eq $key } @ALIAS_BOUND_KEYS, @LOOP_PHI_KEYS )
+            || !( $w->{$key} || $w->{'*'} );
+        return $bound if defined $bound && $forwardable;
+        return $bound // $entry unless defined $sim->memory;
+        my $stamp = $bound && $bound->can('stamp') ? $bound->stamp
+                  : $entry->can('stamp')           ? $entry->stamp : undef;
+        return $factory->make('EntryDef',
+            package => $entry->package,
+            sigil   => $entry->sigil,
+            symbol  => $entry->symbol,
+            inputs  => [ $sim->memory ],
+            ( defined $stamp ? ( stamp => $stamp ) : () ));
+    }
+
+    # _key_lives_in_memory($key) -> true for the scope key of a package scalar
+    # some sub writes (_package_scalars_written): its value is in memory, read
+    # at a memory version, and no loop carries it on a Phi. ONE DEFINITION for
+    # the scout that decides the Phis and the check that the walk agreed.
+    sub _key_lives_in_memory ($key) {
+        return 0 unless $key =~ /\A\$\w*::/;
+        return 0 if grep { $_ eq $key } @ALIAS_BOUND_KEYS;
+        my $w = _package_scalars_written();
+        return $w->{$key} || $w->{'*'} ? 1 : 0;
+    }
+
     # _refuse_unscouted_writes($sim, $pre_scope, \%phis, @skip) -- die when the
     # real body walk rebound a slot the loop header carries no Phi for.
     #
@@ -13911,6 +13954,9 @@ class SoN::FromOptree 0.01 {
         my $post = $sim->scope_bindings;
         for my $key (keys $pre_scope->%*) {
             next if $phis->{$key} || $skip{$key};
+            # (a written package scalar has no Phi by design: it is read
+            # through the loop's memory, _key_lives_in_memory)
+            next if _key_lives_in_memory($key);
             next unless defined $post->{$key} && defined $pre_scope->{$key};
             die "GAP: a loop body writes a variable its scout missed"
               . " ($key) not yet lowered\n"
@@ -14047,11 +14093,19 @@ class SoN::FromOptree 0.01 {
         $SCOUT_MOVED_MEMORY ||= defined $scout_died
             || !defined $scout_sim->memory || $scout_sim->memory != $scout_mem;
         my %extra = map { $_ => 1 } $extra_targs->@*;
+        # A WRITTEN PACKAGE SCALAR IS NOT CARRIED (audit 2026-11-19, W1). It
+        # lives in memory, where a sub the body calls can write it, and a
+        # header Phi is a value no callee's store reaches: `our $g; sub bump
+        # { $g += 10 } for (1..3) { $g = $g + 1; bump() }` read the Phi each
+        # pass and ended at 13 for perl's 33. Its store moved the scout's
+        # memory, so the loop has a memory Phi, and the body reads it there.
+        # (A foreach's alias of the name is this loop's own binding and stays.)
         return ([ sort _scope_key_order
             grep {
                 !$extra{$_}
                 && defined $scout_scope->{$_}
                 && $scout_scope->{$_} != $placeholder{$_}
+                && !_key_lives_in_memory($_)
             } keys %placeholder ], \%placeholder, $scout_scope);
     }
 
@@ -14750,6 +14804,14 @@ class SoN::FromOptree 0.01 {
         # still seen as loop-carried. The real walk starts a fresh list.
         my $frame = { label => $STMT_LABEL, nexts => [] };
         local @LOOP_STACK = (@LOOP_STACK, $frame);
+        # A RANGE OF STRINGS STEPS BY THE MAGIC INCREMENT ("a".."c", "aa".."ad"),
+        # which the count below does not: it coerces each bound to a number
+        # and ran "a".."c" as 0..0, one pass. Known only of constants.
+        for my $b ($low, $high) {
+            die "GAP: a foreach over a range of strings (perl's magic increment) is not yet lowered\n"
+                if $b->isa('SoN::IR::Node::Constant') && ( $b->const_type // '' ) eq 'string'
+                && !Scalar::Util::looks_like_number( $b->value );
+        }
         my $i_targ = $iter_key // $enteriter->targ;
 
         # Locate the body: enteriter->next is the iteration unstack, followed
