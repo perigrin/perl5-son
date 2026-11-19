@@ -96,8 +96,11 @@ sub refuses ($src, $name) {
 }
 refuses('my $n=0; sub f { my @r; for (1..3) { push @r, $n++ } return "@r" } print f(), " $n\n";',
     'a shared lexical post-incremented in a loop, value used');
-refuses('our $n=0; sub f { my @r; for (1..3) { push @r, $n++ } return "@r" } print f(), " $n\n";',
-    'the package-scalar form');
+# THE PACKAGE-SCALAR FORM RENDERS since 2026-11-19: the loop carries memory,
+# the read is of the loop's memory Phi, and it is read once at the top of
+# each pass (_bind_at_pass_top), where its version is.
+round_trips('our $n=0; sub f { my @r; for (1..3) { push @r, $n++ } return "@r" } print f(), " $n\n";',
+    'a package scalar post-incremented in a loop in a sub, value used');
 refuses('my $n=0; sub f { my $s=""; for (1..3) { $s .= $n; $n += 2 } return $s } print f(), " $n\n";',
     'a read before a compound store in a loop');
 

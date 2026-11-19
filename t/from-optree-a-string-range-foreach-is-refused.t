@@ -30,4 +30,11 @@ unlike translate('for my $c ("1".."3") { print $c } print "\n";'),
 unlike translate('for my $c (1..3) { print $c } print "\n";'),
     qr/GAP/, 'a numeric range is lowered';
 
+# THE SCOUT WALKS A LOOP BODY AGAINST PLACEHOLDERS, and a placeholder is a
+# string Constant ("scout"): a range bounded by a variable an outer loop
+# carries looked like a range of strings there, the refusal stopped the scout
+# early, and the real walk refused a write "its scout missed".
+unlike translate('my $s=0; for my $i (1..3) { if ($i > 1) { for my $j (1..$i) { $s += $j } } else { $s -= 1 } } print "$s\n";'),
+    qr/GAP/, 'a range bounded by a loop-carried variable is not a string range';
+
 done_testing;

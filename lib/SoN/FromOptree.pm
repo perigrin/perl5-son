@@ -14809,7 +14809,8 @@ class SoN::FromOptree 0.01 {
         # and ran "a".."c" as 0..0, one pass. Known only of constants.
         for my $b ($low, $high) {
             die "GAP: a foreach over a range of strings (perl's magic increment) is not yet lowered\n"
-                if $b->isa('SoN::IR::Node::Constant') && ( $b->const_type // '' ) eq 'string'
+                if !$IN_SCOUT   # (a scout's placeholder is a string Constant, not the program's)
+                && $b->isa('SoN::IR::Node::Constant') && ( $b->const_type // '' ) eq 'string'
                 && !Scalar::Util::looks_like_number( $b->value );
         }
         my $i_targ = $iter_key // $enteriter->targ;
