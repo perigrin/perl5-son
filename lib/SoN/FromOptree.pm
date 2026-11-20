@@ -5055,14 +5055,15 @@ class SoN::FromOptree 0.01 {
     # impure. Keying on it would pin every arithmetic op in every branch arm.
     # See docs/plans/2026-09-03-effect-by-default-had-a-hole.md, which makes the
     # same argument for the same reason.
+    #
+    # ONLY THE OPS B::SoN::EffectTable DOES NOT PIN IN EVERY CONTEXT are named
+    # here. warn, open, close, binmode, chdir, mkdir, rmdir, unlink, rename,
+    # symlink, link, system, exec and prtf stood in this list too; the arm scan
+    # asks the table's on_chain for those now, as it must for every builtin
+    # the table pins (bless was in the table and not here: probe cr8).
     my %EFFECT_OP = map { $_ => 1 } qw(
-        warn
         push unshift pop shift splice
-        open close binmode
-        chdir mkdir rmdir unlink rename symlink link
-        system exec
         delete
-        prtf
     );
     # `prtf` IS `printf`, and it writes -- the same effect `print` and `say`
     # have, which are pre-empted by their own branch and so never reach this
@@ -18116,8 +18117,47 @@ class SoN::FromOptree 0.01 {
             return 1 if ($name eq 'aelem' || $name eq 'helem')
                      && $op->flags & B::OPf_MOD()   # an lvalue element target
                      && !_is_deferred_call_argument($op);
+            return 1 if _op_places_a_store($op);
             push @todo, $op->next;
             push @todo, $op->other if $op->can('other') && ref($op->other);
+        }
+        return 0;
+    }
+
+    # _op_places_a_store($op) -- the stores the walk places on the chain that
+    # no other arm predicate names. Each was found by the verifier's
+    # control-fork rule: its arm got no If, so the store followed the control
+    # before the test, beside the next statement, and ran whether or not the
+    # condition held.
+    #
+    #   `$#a = N`           av2arylen as an lvalue (Carp::caller_info has one)
+    #   `$s =~ tr/a/b/`     trans (transr makes a value and stores nothing)
+    #   `@a[0, 1] = ...`    a slice as an lvalue
+    #   `($x, @r) = LIST`   a list assignment with a `my` aggregate among
+    #                       its targets
+    #   `@g = ()`, `@$r = ()`   a whole assignment to an aggregate reached
+    #                       through a glob or a reference (rv2av / rv2hv on
+    #                       the left; a `my` aggregate's is a rebinding, and
+    #                       the two arms' values merge without control)
+    #
+    # THIS IS A LIST, and a list is what lost the bless (probe cr8). What
+    # holds it is the rule that found these: t/wire-verify-ratchet.t fails on
+    # a control-fork the corpus, the probes or chalk's lib did not have.
+    sub _op_places_a_store ($op) {
+        my $name = $op->name;
+        return 1 if $name eq 'trans';
+        return 1 if $name =~ /\A(?:av2arylen|aslice|hslice)\z/ && $op->flags & B::OPf_MOD();
+        return 1 if $name eq 'aassign' && defined _stash_target_sigil($op);
+        # `($x, @r) = LIST`: a `my` aggregate among several targets is
+        # stored into where it stands (_target_storage), not rebound.
+        if ($name eq 'aassign' && $op->last->can('first')) {
+            my ($targets, $aggregate) = (0, 0);
+            for (my $k = $op->last->first; $k && $$k; $k = $k->sibling) {
+                next if $k->name eq 'pushmark';
+                $targets++;
+                $aggregate ||= $k->name eq 'padav' || $k->name eq 'padhv';
+            }
+            return 1 if $aggregate && $targets > 1;
         }
         return 0;
     }
@@ -18317,6 +18357,13 @@ class SoN::FromOptree 0.01 {
             # as a statement is not marked void -- so the presence of the op in
             # the arm is itself the answer.
             return 1 if $EFFECT_OP{$name};
+            # AND A BUILTIN THE EFFECT TABLE PINS: the walk places it on the
+            # control chain in every context (B::SoN::EffectTable::on_chain),
+            # so an arm holding one needs a control of its own. The list above
+            # did not know `bless` when it became a memory version, and `if (C)
+            # { bless $o, "X" }` lost its If (probe cr8). The table that
+            # decides the pin answers the question the pin raises.
+            return 1 if B::SoN::EffectTable::on_chain($name);
             # A void entersub is the effect -- a method call (method_named
             # recorded the name earlier) OR a bare direct call (`helper()`);
             # both thread through _handle_entersub. OPf_WANT_VOID marks the
@@ -18453,6 +18500,9 @@ class SoN::FromOptree 0.01 {
                 next;
             }
             return 1 if $ADVANCES_CONTROL_OP{$name};
+            # A builtin the effect table pins advances control as a call does.
+            return 1 if B::SoN::EffectTable::on_chain($name);
+            return 1 if _op_places_a_store($op);
             return 1 if $name eq 'sort' && _sort_runs_comparator($op);
             return 1 if $name eq 'reverse' && ($op->private & 8);   # OPpREVERSE_INPLACE
             # AN ARM THAT PINS -- a read of a tied aggregate (a call), a whole assign

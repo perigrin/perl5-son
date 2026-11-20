@@ -7,12 +7,17 @@
 # 2026-11-20 (class-reads): corpus and probes rows re-counted after ref/blessed/reftype
 # and scalar-context hash and package-array reads took a memory input (22 new probes:
 # cr1-9, hs1-9, pa1-4). The chalk rows are still c1a48dfe's, not re-run.
+# 2026-11-20 (wire v2, stage 1): `control-fork` is new -- a node other than an If or a
+# Loop with two control successors. It counted 3 on the corpus (one graph,
+# Carp::caller_info, in three wires: `$#args = N` alone in an arm) and 1 on the probes
+# (cr8) before the arm scan learned what the walk pins; both are 0 and must stay 0.
 # chalk at c1a48dfe
 corpus	#cases	431
 corpus	#graphs	1082
 corpus	#wires	431
 corpus	allowed:param-bind	8
 corpus	allowed:record	57
+corpus	control-fork	0
 corpus	effect-rides-value	5
 corpus	fault-floating	0
 corpus	memory-input-not-version	0
@@ -35,6 +40,7 @@ probes	#graphs	693
 probes	#wires	486
 probes	allowed:param-bind	1
 probes	allowed:record	12
+probes	control-fork	0
 probes	effect-rides-value	7
 probes	fault-floating	1
 probes	memory-input-not-version	0

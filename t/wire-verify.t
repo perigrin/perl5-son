@@ -269,6 +269,38 @@ subtest 'memory-order-disagrees: the two orderings name different versions' => s
     is [ map { $_->{node} } $r->{'memory-order-disagrees'}->@* ], [5], 'control says 4, the input says MemStart';
 };
 
+subtest 'control-fork: a control node other than If or Loop has one successor' => sub {
+    # cr8 as the producer made it: a bless and the next statement both
+    # following one node, with no If between them.
+    my $r = rules(
+        graph(
+            nd( 0, 'Start', [] ),
+            nd( 1, 'MemStart',    [] ),
+            nd( 2, 'HashLiteral', [], ctl => 0 ),
+            nd( 3, 'Constant',    [] ),
+            nd( 4, 'Call',  [ 2, 3, 1 ], ctl => 2, dispatch_kind => 'builtin', name => 'bless', memory_input => 1 ),
+            nd( 5, 'Print', [3],         ctl => 2 ),
+            nd( 6, 'Return', [3], ctl => 5 ),
+        )
+    );
+    is [ map { $_->{node} } ( $r->{'control-fork'} // [] )->@* ], [2], 'the forked node is named';
+    like $r->{'control-fork'}[0]{detail}, qr/2 successors/, '... with its successor count';
+
+    # An If's two Projs, and a Loop's Projs and pinned test, are not forks.
+    my $ok = rules(
+        graph(
+            nd( 0, 'Start',    [] ),
+            nd( 1, 'Constant', [] ),
+            nd( 2, 'If',     [ 0, 1 ] ),
+            nd( 3, 'Proj',   [2], index => 0 ),
+            nd( 4, 'Proj',   [2], index => 1 ),
+            nd( 5, 'Region', [ 3, 4 ] ),
+            nd( 6, 'Return', [1], ctl => 5 ),
+        )
+    );
+    is $ok->{'control-fork'}, undef, 'an If is not a fork';
+};
+
 subtest 'return-off-chain: a graph whose Return is not reached from Start' => sub {
     my $r = rules( graph( nd( 0, 'Start', [] ), nd( 1, 'Constant', [] ), nd( 2, 'Return', [1] ) ) );
     is [ map { $_->{node} } $r->{'return-off-chain'}->@* ], [2], 'an unpinned Return';

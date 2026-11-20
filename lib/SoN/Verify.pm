@@ -51,6 +51,11 @@ use B::SoN::EffectTable ();
 #   memory-order-disagrees    the two orderings differ: a pinned node's
 #                        memory input is not the nearest version back along
 #                        its control chain.
+#   control-fork         a node other than an If or a Loop has more than one
+#                        control successor: two things claim to run next,
+#                        and nothing says which (wire v2's rule V9). An If
+#                        has its Projs; a Loop its Projs and, on this wire,
+#                        the test pinned to it.
 #   fault-floating       a Divide/Modulo with no control_in whose divisor is
 #                        not a non-zero constant: a fault with no place.
 #   package-scalar-loop-value  a Loop's VALUE Phi both of whose inputs are
@@ -166,6 +171,15 @@ sub _graph ( $name, $g, $res ) {
         push $res->{violations}->@*,
             { graph => $name, node => $n->{id}, op => $n->{op}, rule => $rule, detail => $detail };
     };
+
+    # (0) ONE CONTROL SUCCESSOR, except for the two kinds that branch.
+    for my $n (@nodes) {
+        next if $n->{op} eq 'If' || $n->{op} eq 'Loop';
+        my %s = map { $_ => 1 } ( $succ{ $n->{id} } // [] )->@*;
+        next if keys %s < 2;
+        $bad->( $n, 'control-fork', scalar( keys %s ) . ' successors: '
+                . join( ', ', map { "$by{$_}{op}#$_" } sort { $a <=> $b } keys %s ) );
+    }
     my $pinned = sub ($n) { defined $n->{control_in} };
 
     # THE NAMES THIS GRAPH WRITES: a `my` aggregate ("@a") some node stores
