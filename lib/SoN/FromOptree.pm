@@ -6843,8 +6843,22 @@ class SoN::FromOptree 0.01 {
             # GAPped on Length.operand for every array size.
             my $is_target = ($op->private & 0x80)      # OPpLVAL_INTRO
                          || ($op->flags & 0x20);       # OPf_MOD
+            # A PACKAGE HASH OR ARRAY READ IN SCALAR CONTEXT IS ITS COUNT, at
+            # a memory version, as a lexical one is (the padav/padhv
+            # handler): `%g ? :`, `if (@g)`, `!@g`, `@g + 1`, `my $n = %g`.
+            # OPf_REF says the aggregate itself is wanted (an element's
+            # container, `$#g`, `exists`, `delete`); `keys %g` is a target
+            # above (OPf_MOD) and carries OPpRV2HV_ISKEYS. Pushed bare, the
+            # aggregate reached the TernaryExpr or the If with no read node
+            # and so no version: `print @g ? "t" : "f"; shift @g; print @g ?
+            # "t" : "f"` shared one ternary and said "tt".
+            my $counts_it = !$is_target
+                && ($op->flags & 3) == 2              # OPf_WANT_SCALAR
+                && !($op->flags & 0x10)               # OPf_REF
+                && !($name eq 'rv2hv' && ($op->private & B::OPpRV2HV_ISKEYS()));
             if ($existing && !$is_target) {
-                $sim->push_node($existing);
+                $sim->push_node($counts_it
+                    ? _make_count($factory, $existing, $sim) : $existing);
             }
             else {
                 # THE SIGIL ALREADY SAYS WHAT IT IS. This EntryDef was built
@@ -6865,7 +6879,8 @@ class SoN::FromOptree 0.01 {
                     stamp      => SoN::IR::Stamp->new(
                         type => $agg_sigil eq '%' ? 'Hash' : 'Array' ));
                 $sim->define(_stash_key($node), $node) unless defined $existing;
-                $sim->push_node($node);
+                $sim->push_node($counts_it
+                    ? _make_count($factory, $node, $sim) : $node);
             }
             return ($op->next, 'handled');
         }
@@ -7846,6 +7861,21 @@ class SoN::FromOptree 0.01 {
             my $is_ref = $op->flags & 0x10;    # OPf_REF
             if ($name eq 'padav' && $existing && $want == 2
                     && !$is_ref && !$is_lvintro) {
+                $sim->push_node(_make_count($factory, $existing, $sim));
+                return ($op->next, 'handled');
+            }
+
+            # A HASH READ IN SCALAR CONTEXT IS ITS COUNT TOO -- its truth in
+            # a condition (`%h ? :`, `if (%h)`, `!%h`: padhv s/BOOL) and `my
+            # $n = %h` -- and the count is read at a memory version. Pushed
+            # bare, the hash itself reached the TernaryExpr or the If: no
+            # read node, so no version, and `print %h ? "t" : "f"; delete
+            # $h{a}; print %h ? "t" : "f"` shared one ternary and said "tt".
+            # `keys %h` marks its operand OPpPADHV_ISKEYS (and OPf_MOD
+            # without OPf_REF): that one is the hash keys counts.
+            if ($name eq 'padhv' && $existing && $want == 2
+                    && !$is_ref && !$is_lvintro
+                    && !($op->private & B::OPpPADHV_ISKEYS())) {
                 $sim->push_node(_make_count($factory, $existing, $sim));
                 return ($op->next, 'handled');
             }

@@ -3209,10 +3209,15 @@ class SoN::Deparse 0.01 {
                     # with no memory input is not one the Count's version
                     # orders it against: `undef *v` carries none, and bound
                     # before it `scalar(@v)` counted the array it cleared.
+                    # (A SUB CALL carries none either and IS a version -- the
+                    # producer's _call_memory_barrier: `my $a = %g ? 1 : 0;
+                    # add("k"); my $b = %g ? 1 : 0` counted %g twice after
+                    # the call that stores into it.)
                     $shadowed = 1 if ( $c->{op} // '' )
                         =~ /\A(?:Assign|EntryWrite|CellWrite|Delete|ElemRestore|Call)\z/
                         && !( $rop eq 'Count' && ( $c->{op} // '' ) eq 'Call'
-                               && !( $c->{fields} // {} )->{memory_input} );
+                               && !( $c->{fields} // {} )->{memory_input}
+                               && !$self->_is_barrier_call( $c->{id} ) );
                     push @queue, $c->{id};
                 }
             }
