@@ -18365,9 +18365,17 @@ class SoN::FromOptree 0.01 {
         return 0 unless $$padlist;
         my $padnames = $padlist->ARRAYelt(0);
         my %seen;
-        for (my $op = $start; $$op && $$op != $stop && !$seen{$$op}; $op = $op->next) {
-            last if defined $join && $$op == $join;
+        # A NESTED BRANCH'S ARMS ARE IN THE ARM TOO, as _arm_has_element_store
+        # says: `elsif ($y) { if ($y > 1) { $has = 1 } else { ... } }` puts the
+        # store on the inner if's ->other, which a ->next walk steps over; the
+        # elsif got no If and the inner one forked the else-Proj.
+        my @todo = ($start);
+        while (my $op = shift @todo) {
+            next unless $$op && $$op != $stop && !$seen{$$op};
+            next if defined $join && $$op == $join;
             $seen{$$op} = 1;
+            push @todo, $op->next;
+            push @todo, $op->other if $op->can('other') && ref($op->other);
             # A STORE INTO A PACKAGE SCALAR is shared state the same way.
             return 1 if !$fields_only && _writes_package_scalar($op);
             # A STORE INTO A DEMOTED SLOT threads on control just as a field
