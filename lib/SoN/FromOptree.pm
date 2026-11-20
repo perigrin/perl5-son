@@ -628,7 +628,7 @@ class SoN::FromOptree 0.01 {
     # Inside a block eval's (or try's) body, that eval's id: each Unwind
     # built there carries it, as does the eval's Region.
     our $EVAL_ID;
-    my $EVAL_COUNT = 0;
+    our $EVAL_COUNT = 0;   # (reset by B::SoN for each pass over the program)
 
     # The pad slots this graph shares with a named sub (or, in a sub, with
     # the program) -- $ctx->{shared_lexicals}, reachable from the PadAccess
@@ -1849,59 +1849,98 @@ class SoN::FromOptree 0.01 {
     # keeps its value binding and constant-folds as before; only one that some
     # sub assigns is forced through memory. A pad slot is untouched: it is
     # private to its sub and no call can reach it.
+    #
+    # EVERY GRAPH ON THE WIRE, NOT THE NAMED SUBS ALONE. The first answer reads
+    # the program, the named subs of its packages and its followed modules',
+    # the anon subs inside them, and its phase blocks. The wire holds more:
+    # a class's ADJUST block, a field default, a lexical sub, the methods of a
+    # class from a file that is not followed (a lower-case module) and is
+    # emitted because the program calls it. Which of those there are is known
+    # only as the walk meets them, so every body the walk translates is read
+    # as it starts (_scan_run_set_cv) -- its own stores are then always known
+    # to it -- and a name found that way, after another graph may have asked,
+    # is counted (package_writes_found_late): B::SoN translates again until a
+    # pass finds none. Measured before this, `my $f = sub { $main::g += 10 };
+    # my $x = $main::g; for (1..3) { print "$main::g\n"; $f->() }` printed four
+    # empty lines for perl's "", 10, 20, 30: the anon sub was not read.
     my %PKG_SCALAR_WRITTEN;
     my $PKG_SCALAR_SCANNED = 0;
+    my %PKG_SCALAR_CV;          # CV address => 1: its ops have been read
+    my $PKG_SCALAR_LATE = 0;    # names found after the first answer was given
+    sub package_writes_found_late () { $PKG_SCALAR_LATE }
+
+    # _scan_run_set_cv($cv) -- read a body the walk is about to translate,
+    # unless the scan has. A subtree body (a sort block, a replacement, a
+    # field default) is read with the CV whose pad it runs in.
+    sub _scan_run_set_cv ($cv) {
+        return unless ref($cv) && $$cv && !$PKG_SCALAR_CV{$$cv};
+        my $before = keys %PKG_SCALAR_WRITTEN;
+        _scan_cv_package_writes($cv);
+        $PKG_SCALAR_LATE += keys(%PKG_SCALAR_WRITTEN) - $before if $PKG_SCALAR_SCANNED;
+        return;
+    }
+
+    sub _scan_cv_package_writes ($cv) {
+        return unless ref($cv) && $$cv && !$PKG_SCALAR_CV{$$cv}++;
+        my $root = $$cv == ${ B::main_cv() } ? eval { B::main_root() } : eval { $cv->ROOT };
+        _scan_op_package_writes($root, $cv, 0) if ref($root) && $$root;
+        return;
+    }
+
+    # A WRITE IS OPf_MOD ON THE NAME, not a list of assignment op names.
+    # perl spells the mutation four different ways -- sassign, a STACKED
+    # `op=` binop, preinc/predec, multiconcat -- and marks the destination
+    # the same way in all of them. Measured on `our $n = 4`:
+    #
+    #     $n = 1     gvsv flags=0x22            OPf_MOD on the gvsv
+    #     $n += 3    null flags=0x36 -> gvsv    OPf_MOD on the ex-rv2sv
+    #     $n++       null flags=0x36 -> gvsv    OPf_MOD on the ex-rv2sv
+    #
+    # so the flag is sometimes on the gvsv and sometimes on the nulled
+    # rv2sv wrapper above it -- carry it DOWN through nulls rather than
+    # testing only the gvsv, or `$n++` and `$n += 3` are both missed.
+    sub _scan_op_package_writes ($op, $cv, $mod) {
+        return unless ref($op) && $$op;
+        my $name = $op->name;
+        $mod ||= ($op->flags & 32) ? 1 : 0;   # OPf_MOD
+
+        if ($mod && ($name eq 'gvsv'
+                     || ($name eq 'rv2sv' && $op->can('first')
+                         && ${$op->first} && $op->first->name eq 'gv'))) {
+            my $gv_op = $name eq 'gvsv' ? $op : $op->first;
+            my $gv = eval { _op_gv($cv, $gv_op) };
+            $PKG_SCALAR_WRITTEN{
+                _stash_name_key('$', $gv->STASH->NAME, $gv->NAME) } = 1
+                if $gv && $$gv;
+        }
+        # A STORE THROUGH A NAME: without strict refs `$$n = 7` writes the
+        # package scalar $n's string names -- any of them, so all are written.
+        elsif ($mod && $name eq 'rv2sv' && $op->can('first') && ${$op->first} && $op->first->name ne 'gv'
+                && do { my $cop = _cop_for($op); $cop && !( $cop->hints & 0x2 ) }) {   # not HINT_STRICT_REFS
+            $PKG_SCALAR_WRITTEN{'*'} = 1;
+        }
+        # AN ANON SUB'S BODY is a CV of its own, on the wire beside the sub
+        # that makes it: read with it, before any graph is walked.
+        elsif ($name eq 'anoncode' && ( my $acv = _anoncode_cv($cv, $op) )) {
+            _scan_cv_package_writes($acv);
+        }
+
+        # OPf_MOD propagates through the NULLED wrappers only. A real op
+        # (the RHS of an assignment, a nested call) starts fresh, or every
+        # read inside a store's value expression would be taken for a
+        # write.
+        my $kid_mod = ($name eq 'null' || $name eq 'ex-rv2sv') ? $mod : 0;
+        return unless $op->flags & 4;   # OPf_KIDS
+        for (my $k = $op->first; ref($k) && $$k; $k = $k->sibling) {
+            _scan_op_package_writes($k, $cv, $kid_mod);
+        }
+        return;
+    }
+
     sub _package_scalars_written () {
         return \%PKG_SCALAR_WRITTEN if $PKG_SCALAR_SCANNED;
-        $PKG_SCALAR_SCANNED = 1;
 
-        # A WRITE IS OPf_MOD ON THE NAME, not a list of assignment op names.
-        # perl spells the mutation four different ways -- sassign, a STACKED
-        # `op=` binop, preinc/predec, multiconcat -- and marks the destination
-        # the same way in all of them. Measured on `our $n = 4`:
-        #
-        #     $n = 1     gvsv flags=0x22            OPf_MOD on the gvsv
-        #     $n += 3    null flags=0x36 -> gvsv    OPf_MOD on the ex-rv2sv
-        #     $n++       null flags=0x36 -> gvsv    OPf_MOD on the ex-rv2sv
-        #
-        # so the flag is sometimes on the gvsv and sometimes on the nulled
-        # rv2sv wrapper above it -- carry it DOWN through nulls rather than
-        # testing only the gvsv, or `$n++` and `$n += 3` are both missed.
-        my $visit;
-        $visit = sub ($op, $cv, $mod) {
-            return unless ref($op) && $$op;
-            my $name = $op->name;
-            $mod ||= ($op->flags & 32) ? 1 : 0;   # OPf_MOD
-
-            if ($mod && ($name eq 'gvsv'
-                         || ($name eq 'rv2sv' && $op->can('first')
-                             && ${$op->first} && $op->first->name eq 'gv'))) {
-                my $gv_op = $name eq 'gvsv' ? $op : $op->first;
-                my $gv = eval { _op_gv($cv, $gv_op) };
-                $PKG_SCALAR_WRITTEN{
-                    _stash_name_key('$', $gv->STASH->NAME, $gv->NAME) } = 1
-                    if $gv && $$gv;
-            }
-            # A STORE THROUGH A NAME: without strict refs `$$n = 7` writes the
-            # package scalar $n's string names -- any of them, so all are written.
-            elsif ($mod && $name eq 'rv2sv' && $op->can('first') && ${$op->first} && $op->first->name ne 'gv'
-                    && do { my $cop = _cop_for($op); $cop && !( $cop->hints & 0x2 ) }) {   # not HINT_STRICT_REFS
-                $PKG_SCALAR_WRITTEN{'*'} = 1;
-            }
-
-            # OPf_MOD propagates through the NULLED wrappers only. A real op
-            # (the RHS of an assignment, a nested call) starts fresh, or every
-            # read inside a store's value expression would be taken for a
-            # write.
-            my $kid_mod = ($name eq 'null' || $name eq 'ex-rv2sv') ? $mod : 0;
-            return unless $op->flags & 4;   # OPf_KIDS
-            for (my $k = $op->first; ref($k) && $$k; $k = $k->sibling) {
-                $visit->($k, $cv, $kid_mod);
-            }
-        };
-
-        my $root = eval { B::main_root() };
-        $visit->($root, B::main_cv, 0) if $root && $$root;
+        _scan_cv_package_writes(B::main_cv());
 
         # EVERY SUB, not just the program body -- the writer is normally in a
         # sub and the reader in the program, which is the whole point.
@@ -1925,7 +1964,7 @@ class SoN::FromOptree 0.01 {
             }
         }
         for my $pair (@subs) {
-            my ($st, $code) = @$pair;
+            my ($st, $code) = $pair->@*;
             my $sub_cv = eval { B::svref_2object($code) } or next;
             next unless ref($sub_cv) && $sub_cv->isa('B::CV');
             # (AND EVERY FOLLOWED MODULE'S: its subs are compiled with the
@@ -1934,11 +1973,23 @@ class SoN::FromOptree 0.01 {
             my $ours = B::SoN->can('_cv_is_user_code');
             next if $st ne 'main::' && !( $ours ? $ours->($sub_cv)
                 : defined $file && ( eval { $sub_cv->FILE } // '' ) eq $file );
-            my $sub_root = eval { $sub_cv->ROOT };
-            next unless $sub_root && $$sub_root;
-            $visit->($sub_root, $sub_cv, 0);
+            _scan_cv_package_writes($sub_cv);
         }
 
+        # THE PROGRAM'S BEGIN AND END BLOCKS are on the wire and in no stash
+        # (B::SoN's _phase_blocks, the same test).
+        if (my $ours = B::SoN->can('_cv_is_program_code')) {
+            for my $av ( eval { B::begin_av() }, eval { B::end_av() } ) {
+                next unless ref($av) && $av->isa('B::AV');
+                for my $pcv ($av->ARRAY) {
+                    _scan_cv_package_writes($pcv)
+                        if ref($pcv) && $pcv->isa('B::CV') && $ours->($pcv);
+                }
+            }
+        }
+
+        # (set last: a name found above is part of the first answer, not late)
+        $PKG_SCALAR_SCANNED = 1;
         return \%PKG_SCALAR_WRITTEN;
     }
 
@@ -2421,6 +2472,8 @@ class SoN::FromOptree 0.01 {
 
     sub _translate_from ($cv, $start_op, %opts) {
         my $program_root = $opts{program_root};
+        # Its stores of package scalars are known before it is walked.
+        _scan_run_set_cv($cv);
 
         my $factory = SoN::IR::NodeFactory->new();
         my $opmap   = SoN::FromOptree::OpMap->new();

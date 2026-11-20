@@ -293,12 +293,12 @@ sub compile {
         # At CHECK the program has compiled: these are its keys, imports and all.
         local %SoN::Serialize::JSON::STASH_KEYS =
             map { $_ => ( $LOADED_KEYS{$_} ? undef : 1 ) } keys %main::;
-        my ( $graphs, $classes ) = _discover_and_translate($filter);
+        my ( $graphs, $classes, $phases ) = _translate_until_settled($filter);
 
         if ( $format eq 'json' ) {
             my $mods = _followed_modules();
             print to_json( $graphs, $classes, _data_section(),
-                _phase_blocks(),
+                $phases,
                 [ map { { name => $_, file => $mods->{$_} } } sort keys %$mods ],
                 _graph_modules($graphs), \%REFUSED, \%switch );
         }
@@ -311,6 +311,35 @@ sub compile {
             }
         }
     };
+}
+
+# _translate_until_settled($filter) -> ($graphs, $classes, $phase_blocks): the
+# whole wire, translated until no pass learns of a package scalar's writer.
+#
+# WHICH PACKAGE SCALARS ARE WRITTEN decides how every graph reads them
+# (FromOptree's _package_scalars_written), and some writers are met only as
+# the walk goes: a class the program calls from a file that is not followed,
+# an ADJUST block. A graph translated before such a writer was read may have
+# forwarded a value the writer changes, so the pass is not the wire: it is
+# run again with what it learned, which only ever grows. One pass for nearly
+# every program; warnings are those of the pass that is kept.
+sub _translate_until_settled {
+    my ($filter) = @_;
+    while (1) {
+        my $late = SoN::FromOptree::package_writes_found_late();
+        my ( @warned, $graphs, $classes, $phases );
+        my $ok = eval {
+            local $SIG{__WARN__} = sub { push @warned, @_ };
+            ( $graphs, $classes ) = _discover_and_translate($filter);
+            $phases = _phase_blocks();
+            1;
+        };
+        my $settled = SoN::FromOptree::package_writes_found_late() == $late;
+        if ( !$ok || $settled ) { warn $_ for @warned }
+        die $@ unless $ok;
+        return ( $graphs, $classes, $phases ) if $settled;
+        %REFUSED = ();
+    }
 }
 
 # _phase_blocks() -- the program's own BEGIN and END blocks, in order, as
@@ -388,6 +417,9 @@ sub _discover_and_translate {
     %SoN::FromOptree::EVAL_ORDINAL = ();
     %SoN::FromOptree::REPLROOT_OF = ();
     $SoN::FromOptree::EVAL_SCANNED = 0;
+    # Evals are numbered from 1 in each pass (_translate_until_settled): a
+    # second pass over the program is the same wire, byte for byte.
+    $SoN::FromOptree::EVAL_COUNT = 0;
     %SoN::FromOptree::QR_CODE_BODIES = ();
     %SoN::FromOptree::SORT_BODY_SEQ = ();
     # Per-run, like the body registry: a node id from a previous compilation

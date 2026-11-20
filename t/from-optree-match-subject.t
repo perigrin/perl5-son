@@ -70,11 +70,14 @@ subtest 'a package-scalar subject is popped from the stack (OPf_STACKED)' => sub
 
     is(scalar nodes_of($g, 'PadAccess'), 0, 'no fabricated PadAccess');
 
+    # A package scalar this body stores is read through memory: the subject
+    # is the read at that store's version, and the store holds the value.
     my ($match) = nodes_of($g, 'RegexMatch');
     my $subject = $match->inputs->[0];
-    is($subject->operation, 'Constant',
-        'the pushed subject resolves to its reaching definition');
-    is($subject->value, 'test', '... not a read of pad slot 0');
+    is($subject->operation, 'EntryDef', 'the pushed subject is the read of the package scalar');
+    my ($store) = grep { ref $_ && $_->operation eq 'EntryWrite' } $subject->inputs->@*;
+    ok($store, '... at the version its store made') or return;
+    is($store->inputs->[1]->value, 'test', '... not a read of pad slot 0');
 };
 
 subtest 'an UNASSIGNED $_ is the entry definition' => sub {
@@ -118,7 +121,11 @@ subtest 'a runtime pattern on a pushed subject pops in push order' => sub {
     is(scalar($match->inputs->@*), 2, 'a binop: two operands');
 
     my ($subject, $pattern) = $match->inputs->@*;
-    is($subject->value, 'abc', 'operand 0 is the SUBJECT');
+    # (the subject is the read of $ps at its store: a written package scalar
+    # is read through memory, and the store holds "abc")
+    my ($store) = grep { ref $_ && $_->operation eq 'EntryWrite' } $subject->inputs->@*;
+    ok($store, 'operand 0 is a read at the store of $ps') or return;
+    is($store->inputs->[1]->value, 'abc', 'operand 0 is the SUBJECT');
     is($pattern->value, 'b',   'operand 1 is the PATTERN');
     is($pattern->const_type, 'regex', '... and it is the compiled regex');
 };

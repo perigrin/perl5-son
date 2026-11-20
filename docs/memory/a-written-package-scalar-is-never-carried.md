@@ -18,8 +18,9 @@ callee's store reaches. The exception predated loop memory Phis.
   NOT in the audit: outside any loop, `.=` read the scope binding and `+=`
   the bare unversioned name, so `$s .= "-"; ap("a"); $s .= "-"` appended to
   what `$s` held before the call (perl `-a-b`, the wire `--b`).
-- `@LOOP_PHI_KEYS` is now empty for user code; it still holds keys of
-  scalars only non-user library code writes.
+- `@LOOP_PHI_KEYS` is now empty for user code; it still held keys of
+  scalars only code outside the scan wrote, until the scan covered the run
+  set: [[the-write-scan-covers-the-run-set]].
 
 **Lessons:**
 
