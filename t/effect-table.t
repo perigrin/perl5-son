@@ -20,8 +20,11 @@ subtest 'the table: facts and what follows from them' => sub {
     ok $t->can('on_chain')->($_), "$_ is pinned in every context"
         for qw(open close bless mkdir chdir exec system prtf readdir require tie warn select caller tell pos readline);
     ok !$t->can('on_chain')->( 'pos', lvalue => 1 ), 'pos as a store target is not a read';
-    ok $t->can('is_version')->($_),  "$_ is a memory version" for qw(require dofile tie untie open close readline eof warn);
-    ok !$t->can('is_version')->($_), "$_ is not"              for qw(bless mkdir caller tell pos select);
+    # (bless is one since ref/blessed/reftype read the class at a version)
+    ok $t->can('is_version')->($_),  "$_ is a memory version" for qw(require dofile tie untie open close readline eof warn bless);
+    ok !$t->can('is_version')->($_), "$_ is not"              for qw(mkdir caller tell pos select);
+    ok $t->can('reads_at_version')->($_),  "$_ reads at a memory version" for qw(ref blessed reftype reftype_of_ref);
+    ok !$t->can('reads_at_version')->($_), "$_ does not"                  for qw(time rand caller tell bless keys);
     ok !$t->can('on_chain')->($_),   "$_ is not pinned by the table" for qw(push time ref length uc join);
     ok $t->can('writes')->($_),      "$_ writes"              for qw(push chomp print bless open prtf);
     is $t->can('reads_state')->('ref'),  'object-class', 'ref reads an object\'s class';

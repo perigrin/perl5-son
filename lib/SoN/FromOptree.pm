@@ -6992,7 +6992,11 @@ class SoN::FromOptree 0.01 {
             elsif ($v->isa('SoN::IR::Node::EntryDef')) {
                 $v = $sim->lookup(_stash_key($v)) // $v;
             }
-            $sim->push_node($factory->make('Call', inputs => [$v], dispatch_kind => 'builtin',
+            # (read at a memory version, as every class read is: EffectTable)
+            $sim->push_node($factory->make('Call',
+                inputs => [$v, (defined $sim->memory ? ($sim->memory) : ())],
+                (defined $sim->memory ? (memory_input => 1) : ()),
+                dispatch_kind => 'builtin',
                 name => 'reftype_of_ref', stamp => SoN::IR::Stamp->new(type => 'Str')));
             return ($op->next, 'handled');
         }
@@ -12956,6 +12960,19 @@ class SoN::FromOptree 0.01 {
                     && defined $sim->memory) {
                     push @inputs, $sim->memory;
                     $extra{memory_input} = 1;   # see Call's memory_input
+                }
+                # A READ OF AN OBJECT'S CLASS IS AT A MEMORY VERSION: `ref`
+                # (a RefType, [reference, memory]), `blessed` and `reftype`
+                # (a Call, [args..., memory]). A bless is the version after
+                # it, so `bless $h, "K"; print ref($h)` reads the bless, and
+                # `my $r = ref($h); bless $h, "K"; print $r` the memory before
+                # it. With no memory input the two were one wire, and the
+                # consumer had to guess which side the read stood on.
+                elsif (($node_type eq 'RefType' || $node_type eq 'Call')
+                    && B::SoN::EffectTable::reads_at_version($name)
+                    && defined $sim->memory) {
+                    push @inputs, $sim->memory;
+                    $extra{memory_input} = 1 if $node_type eq 'Call';
                 }
                 # A WHOLE ARRAY OR HASH OPERAND IS READ AT A MEMORY VERSION, as
                 # `keys` reads its hash above: `push @r, $_ for 1..3; my @b =

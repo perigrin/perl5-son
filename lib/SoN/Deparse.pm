@@ -3,6 +3,7 @@
 use v5.42.0;
 use utf8;
 use experimental 'class';
+use B::SoN::EffectTable ();    # which builtins read at a memory version
 
 # WHY THIS EXISTS. Every correctness check on the producer is otherwise
 # STRUCTURAL -- read the graph and reason about whether it says what perl says.
@@ -188,6 +189,8 @@ class SoN::Deparse 0.01 {
         Exists       => 2,   # [container, key, memory]
         Subscript    => 2,   # [container, index, memory]
         Count        => 1,   # [aggregate, memory]
+        # `ref EXPR` reads the referent's class, which a bless changes.
+        RefType      => 1,   # [reference, memory]
         PostfixDeref => 1,   # [container, memory]
         # A reference to an element is to the one there where it is taken.
         Ref          => 1,   # [location, memory]
@@ -3042,7 +3045,14 @@ class SoN::Deparse 0.01 {
                 && ( ( $n->{fields} // {} )->{name} // '' ) =~ /\A(?:keys|values)\z/
                 && ( ( ( $nodes->{ ( $n->{inputs} // [] )->[0] // -1 } // {} )->{op} // '' )
                      =~ /\A(?:Array|Hash)Literal\z/ );
-            next unless $rop eq 'Subscript' || $rop eq 'Count' || $list_call;
+            # SO DOES A READ OF A REFERENT'S CLASS: `my $r = ref($h); bless $h,
+            # "K"; print $r` spelled `ref($h)` at the print, after the bless,
+            # and printed K for perl's HASH. The RefType, or the `blessed` or
+            # `reftype` Call, carries the memory it read at.
+            my $class_read = $rop eq 'RefType'
+                || $rop eq 'Call' && ( $n->{fields} // {} )->{memory_input}
+                   && B::SoN::EffectTable::reads_at_version( ( $n->{fields} // {} )->{name} );
+            next unless $rop eq 'Subscript' || $rop eq 'Count' || $list_call || $class_read;
             # A COUNT OVER A DEREFERENCE is the list-read pass's, below: it
             # binds the list, and the count reads that.
             next if $rop eq 'Count'
@@ -3052,13 +3062,14 @@ class SoN::Deparse 0.01 {
             # A READ NOTHING CONSUMES is dead: bound, its temporary was spelled
             # where its aggregate does not exist.
             next unless ( $consumers{ $n->{id} } // [] )->@*;
-            next unless $safe_read->( $n->{id} );
+            # (a class name is a string of its own: nothing aliases it)
+            next unless $class_read || $safe_read->( $n->{id} );
             # MEMORY BY POSITION, as %MEM_MIN_INPUTS says: a call that is a
             # memory barrier produces a version without consuming one, so
             # _is_memory does not recognise it, and a read after it is
             # exactly the read that goes stale.
             my @in = ( $n->{inputs} // [] )->@*;
-            next unless $list_call || @in > ( $MEM_MIN_INPUTS{$rop} // 99 );
+            next unless $list_call || $class_read && $rop eq 'Call' || @in > ( $MEM_MIN_INPUTS{$rop} // 99 );
             my $version = $nodes->{ $in[-1] } or next;
             # A READ PINNED WHERE IT STANDS (it may die) is a memory version
             # that changes nothing: the memory it reads is the memory after it.
@@ -4760,10 +4771,21 @@ class SoN::Deparse 0.01 {
     # constructor under a PostfixDeref, and a direct-inputs-only search let
     # the binding float above the line declaring it. A bound node is where
     # the search stops -- it is what the binding must follow.
+    #
+    # NEVER BACK TO AN EARLIER ONE. A read that names its memory reaches two
+    # bound nodes, its operand and its version, and input order is not chain
+    # order: `my @r = (ref($o), ref(bless $o, "K"), ref($o))` holds
+    # RefType(the bless's value, the bless) and then RefType($o, the bless);
+    # the second's `$o` moved the anchor back to the `{}`, and `my @r` was
+    # spelled above the bless it reads.
     method _last_bound_input ($n) {
         my ($last, %seen);
         my ($start_id) = map { $_->{id} }
             grep { ($_->{op} // '') eq 'Start' } values %$nodes;
+        my $anchor = sub ($id) {
+            $last = $id unless defined $last && $self->_chain_follows($last, $id);
+            return;
+        };
         my $visit;
         $visit = sub ($id) {
             return unless defined $id && !$seen{$id}++;
@@ -4782,15 +4804,15 @@ class SoN::Deparse 0.01 {
                 # _splice_declaration puts it behind the binding in the list.
                 my ($effect) = grep { grep { $_->{id} == $id } $after_effect{$_}->@* }
                     keys %after_effect;
-                if (defined $effect) { $last = $effect; return }
+                if (defined $effect) { $anchor->($effect); return }
                 $last //= $start_id;
                 return;
             }
-            if (exists $bound{$id}) { $last = $id; return }
+            if (exists $bound{$id}) { $anchor->($id); return }
             # A PINNED AGGREGATE is declared where the chain reaches it, so a
             # reader must follow it just as it follows a binding: hoisted,
             # `my @c = (scalar(@b))` came above `my @b = (@a)`.
-            if ($self->_is_pinned_aggregate($m)) { $last = $id; return }
+            if ($self->_is_pinned_aggregate($m)) { $anchor->($id); return }
             return if defined $m->{control_in};
             return if ($m->{op} // '') =~ /\A(?:Phi|Region|Loop|Proj|If|Start)\z/;
             $visit->($_) for ($m->{inputs} // [])->@*;
@@ -4798,6 +4820,25 @@ class SoN::Deparse 0.01 {
         $visit->($_) for ($n->{inputs} // [])->@*;
         undef $visit;
         return $last;
+    }
+
+    # _chain_follows($later, $earlier) -> true when control reaches $later
+    # from $earlier: walking back from $later by control_in, through every
+    # way into a Region and the first input of a Proj, an If or a Loop.
+    method _chain_follows ($later, $earlier) {
+        return 0 if $later == $earlier;
+        my ( @queue, %seen ) = ($later);
+        while ( defined( my $id = shift @queue ) ) {
+            next if $seen{$id}++;
+            return 1 if $id == $earlier;
+            my $m  = $nodes->{$id} or next;
+            my $op = $m->{op} // '';
+            my @in = ( $m->{inputs} // [] )->@*;
+            push @queue, grep { defined }
+                $m->{control_in},
+                ( $op eq 'Region' ? @in : $op =~ /\A(?:Proj|If|Loop)\z/ ? ( $in[0] ) : () );
+        }
+        return 0;
     }
 
     # _splice_declaration(\@list, $decl) -- file a deferred aggregate
@@ -6632,9 +6673,12 @@ class SoN::Deparse 0.01 {
         # REFERENCE -- see the stale-read pass. Spelled uncached: _expr would
         # return the temporary's own name.
         # SO IS A KEYS OR VALUES bound to a list temporary.
-        if ((($op eq 'Subscript' || $op eq 'Count' || $op eq 'PostfixDeref')
+        # SO IS A CLASS READ (`ref`, `blessed`, `reftype`) bound to a scalar one.
+        if ((($op eq 'Subscript' || $op eq 'Count' || $op eq 'PostfixDeref' || $op eq 'RefType')
              || ($op eq 'Call' && !defined $n->{control_in}
-                 && ($bound{ $n->{id} } // '') =~ /\A\@stale\d+\z/))
+                 && ( ($bound{ $n->{id} } // '') =~ /\A\@stale\d+\z/
+                      || ( ($bound{ $n->{id} } // '') =~ /\A\$stale\d+\z/
+                           && B::SoN::EffectTable::reads_at_version( ($n->{fields} // {})->{name} ) ) )))
             && exists $bound{ $n->{id} }) {
             my $var  = $bound{ $n->{id} };
             my $text = $self->_expr_uncached( $n->{id} );
@@ -8437,8 +8481,9 @@ class SoN::Deparse 0.01 {
             # `ref EXPR` -- a unary whose op_str is already `ref`.
             # Parenthesised because `ref $x . "y"` parses as `ref($x . "y")`,
             # a different question.
+            # (its second input is the memory it reads: %MEM_MIN_INPUTS)
             die "GAP: a RefType with " . scalar(@in) . " inputs is not yet"
-              . " rendered\n" unless @in == 1;
+              . " rendered\n" unless @in == 1 || @in == 2;
             $text = sprintf('ref(%s)', $self->_expr($in[0]));
         }
         elsif ($op eq 'RegexCapture') {

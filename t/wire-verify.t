@@ -138,8 +138,28 @@ P
 };
 
 subtest 'read-unversioned:object-class: ref() either side of a bless (ef9)' => sub {
+    # As the producer made it until 2026-11-20: one RefType of the reference
+    # and nothing else, read by both prints, the bless between them.
+    my $old = rules( graph(
+        nd( 0, 'Start', [] ), nd( 1, 'HashLiteral', [], ctl => 0 ), nd( 2, 'Constant', [] ), nd( 3, 'MemStart', [] ),
+        nd( 4, 'RefType', [1] ),
+        nd( 5, 'Call', [ 1, 2, 3 ], ctl => 1, dispatch_kind => 'builtin', name => 'bless', memory_input => 1 ),
+        nd( 6, 'Print', [4], ctl => 5 ),
+        nd( 7, 'Return', [2], ctl => 6 ),
+    ) );
+    is ops( $old->{'read-unversioned:object-class'} ), ['RefType'], 'a RefType with no memory input is seen';
+    my $blessed = rules( graph(
+        nd( 0, 'Start', [] ), nd( 1, 'HashLiteral', [], ctl => 0 ),
+        nd( 2, 'Call', [1], dispatch_kind => 'builtin', name => 'blessed' ),
+        nd( 3, 'Print', [2], ctl => 1 ),
+        nd( 4, 'Return', [1], ctl => 3 ),
+    ) );
+    is ops( $blessed->{'read-unversioned:object-class'} ), ['Call'], 'so is a blessed() with none';
+    # The producer gives each read the memory it reads, and the bless is the
+    # version after it.
     my $r = rules('my $o = {}; my $c = ref($o); bless $o, "K"; my $d = ref($o); print "$c $d\n";');
-    is ops( $r->{'read-unversioned:object-class'} ), ['RefType'], 'one RefType, no memory input';
+    is $r->{'read-unversioned:object-class'}, undef, 'the producer\'s ef9 has none';
+    is $r->{'memory-input-not-version'}, undef, 'and each names a version';
 };
 
 subtest 'read-unversioned:package-aggregate-literal: a flattened package array (nv1)' => sub {

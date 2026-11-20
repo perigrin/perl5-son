@@ -45,10 +45,15 @@ package B::SoN::EffectTable;
 #     and every sub call: each has its own handler or node kind that places
 #     it. Their rows are in %OWN_HANDLER so that `writes` answers for them
 #     (SoN::Verify asks), and on_chain leaves them to their handlers.
-#   - `object-class` and `external` reads (ref, blessed, time, rand, -e):
-#     reads of changeable state with nowhere on this wire to name a version
-#     (a RefType has one input). They are listed, flagged by the verifier
-#     (read-unversioned:*), and wait for wire v2's `mem_in`.
+#   - `external` reads (time, rand, -e): reads of changeable state that take
+#     no memory input yet. They are listed, flagged by the verifier
+#     (read-unversioned:external), and wait for wire v2's `mem_in`.
+#
+# AN `object-class` READ NAMES ITS VERSION (reads_at_version): `ref`,
+# `blessed` and `reftype` take the memory they read as their last input, the
+# way a Count or a Subscript does, and float. `bless` is the version after it.
+# Without the pair, `bless $h, "K"; print ref($h)` and `my $r = ref($h); bless
+# $h, "K"; print $r` were one wire (K and HASH).
 
 my %ROW;
 
@@ -74,7 +79,11 @@ _rows { writes => 1 }, qw(
 # what the next rand answers; formline the format accumulator; reset and study
 # the variables they name; lock, weaken and unweaken the referent's flags;
 # vec in lvalue form is a store handled as one, in rvalue form a pure read.
-_rows { writes => 1 }, qw(bless srand formline reset study lock weaken unweaken);
+_rows { writes => 1 }, qw(srand formline reset study lock weaken unweaken);
+
+# A BLESS IS A STORE TO THE REFERENT'S CLASS, and `ref`, `blessed` and
+# `reftype` in this graph read it: a version, so a read after it names it.
+_rows { writes => 1, version => 1 }, qw(bless);
 
 # A GLOBAL-STATE OP ALSO ADVANCES MEMORY: `require X; X->import(...)` must not
 # be reordered, and nothing but the memory chain says so. tie and untie change
@@ -124,8 +133,9 @@ sub writes ($name) {
 sub reads_state ($name) { return ( $ROW{ $name // '' } // {} )->{reads} }
 
 # The state classes a read of which is ORDERED BY CONTROL on this wire: a
-# handle's position, the call stack, a variable's pos(). The others have no
-# place to name a version yet and are left to float (and to the verifier).
+# handle's position, the call stack, a variable's pos(). An object-class read
+# names its version instead (reads_at_version); an external one floats, and
+# is the verifier's to count.
 my %ORDERED_READ = map { $_ => 1 } qw(handle stack variable);
 
 # on_chain($name, lvalue => bool) -> true when the walk must pin this builtin
@@ -139,6 +149,11 @@ sub on_chain ( $name, %opt ) {
     return 0 if $reads eq 'variable' && $opt{lvalue};
     return 1;
 }
+
+# reads_at_version($name) -> true when the builtin's value is of state it
+# reads at a memory version: its Call (or RefType, for `ref`) takes the
+# current memory as its last input and is left to float.
+sub reads_at_version ($name) { return ( ( $ROW{ $name // '' } // {} )->{reads} // '' ) eq 'object-class' ? 1 : 0 }
 
 # is_version($name) -> true when the builtin's Call carries the memory it
 # follows and is the memory after it.
