@@ -19,6 +19,10 @@
 # control-fork 1 is Chalk::Bootstrap::Perl::Actions::SubroutineDefinition (an elsif arm in a
 # foreach whose inner if builds control; not reduced yet). `#graphs` is held by the ratchet
 # now, as `#wires` is: a refused sub takes its violations out of every row.
+# 2026-11-20 (wire v2, stage 3): chalk control-fork 1 -> 0. Chalk::Bootstrap::Perl::Actions::
+# SubroutineDefinition's fork was an elsif arm whose only store sat in a nested if's true
+# arm (t/wire-an-elsif-whose-inner-if-stores-keeps-its-if.t). Every other chalk row is
+# unchanged (re-counted at 315dd03 with every wire compiled).
 # chalk at 45a1b8d5
 corpus	#cases	431
 corpus	#graphs	1082
@@ -71,7 +75,7 @@ chalk	#graphs	24521
 chalk	#wires	219
 chalk	allowed:param-bind	18
 chalk	allowed:record	392
-chalk	control-fork	1
+chalk	control-fork	0
 chalk	effect-rides-value	58
 chalk	fault-floating	0
 chalk	memory-order-disagrees	291
