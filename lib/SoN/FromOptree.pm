@@ -844,6 +844,13 @@ class SoN::FromOptree 0.01 {
         return $node;
     }
     sub _pin ($sim, $node) {
+        # A node already on the chain elsewhere would be MOVED, and what follows
+        # it in its first place would follow a node no longer there (a
+        # hash-consed read made in two arms: control_in is not in the hash).
+        my $was = $node->control_in;
+        die sprintf "GAP: a node already on the control chain is pinned again (%s after %s, now after %s)\n",
+            $node->id, $was->id, $sim->control->id
+            if defined $was && $was != $sim->control;
         $node->set_control_in($sim->control);
         $sim->set_control($node);
         return $node;
