@@ -9296,7 +9296,9 @@ class SoN::FromOptree 0.01 {
                 $sim->push_node($lit);
                 return ($op->next, 'handled');
             }
-            $sim->define($targ, $node);
+            # (no target, no binding: targ 0 is no slot, and binding it made
+            # every targetless split rebind one shared scope key)
+            $sim->define($targ, $node) if $targ;
             $sim->push_node($node);
             return ($op->next, 'handled');
         }
@@ -14186,6 +14188,66 @@ class SoN::FromOptree 0.01 {
         return;
     }
 
+
+    # _loop_cycle_ops($start) -- the ops on a loop's cycle: reachable from its
+    # first op by `next` / `other`, and reaching it again (`next` and `redo`
+    # are edges back to it; `last`, `return` and `die` leave).
+    sub _loop_cycle_ops ($start) {
+        my ( %fwd, %pred, @q );
+        @q = ($start);
+        while ( my $op = shift @q ) {
+            next unless ref $op && $$op && !$fwd{$$op};
+            $fwd{$$op} = $op;
+            my $name = $op->name;
+            my @succ = ( $op->next );
+            push @succ, $op->other if $op->can('other') && ref $op->other;
+            @succ = ($start) if $name eq 'next';
+            push @succ, $start if $name eq 'redo';
+            @succ = () if $name eq 'last' || $name eq 'return' || $name eq 'die';
+            for my $s ( grep { ref && $$_ } @succ ) { push $pred{$$s}->@*, $$op; push @q, $s }
+        }
+        my ( %back, @b );
+        @b = ($$start);
+        while ( defined( my $a = shift @b ) ) { next if $back{$a}++; push @b, ( $pred{$a} // [] )->@* }
+        return map { $fwd{$_} } grep { $back{$_} } keys %fwd;
+    }
+
+    # _may_write_targs($start) -> { targ => 1 } -- the pad slots a loop body MAY
+    # write, read off its ops with no node built (wire v2 plan, 5.2: the set W
+    # a Braun header makes its Phis for). An over-approximation: a slot the
+    # body never writes costs a trivial Phi. A slot it misses is caught by
+    # _refuse_unscouted_writes. t/loop-may-write-scan-covers-the-scout.t holds
+    # it to the scout's answer.
+    sub _may_write_targs ($start) {
+        my %w;
+        my $pads;
+        $pads = sub ($op) {
+            return unless ref $op && $$op;
+            $w{ $op->targ } = 1 if $op->name =~ /\A(?:pad(?:sv|av|hv|any)|aelemfast_lex)\z/;
+            return unless $op->flags & B::OPf_KIDS();
+            for ( my $k = $op->first; ref $k && $$k; $k = $k->sibling ) { $pads->($k) }
+        };
+        for my $op ( _loop_cycle_ops($start) ) {
+            my $name  = $op->name;
+            my $mod   = $op->flags & B::OPf_MOD();
+            my $intro = $op->private & B::OPpLVAL_INTRO();
+            $w{ $op->targ } = 1 if $name =~ /\Apad(?:sv|av|hv|any)\z/ && ( $mod || $intro );
+            $w{ $op->targ } = 1 if $name =~ /\A(?:padsv_store|aelemfastlex_store|enteriter|iter)\z/ && $op->targ;
+            $w{ $op->targ } = 1 if ( $op->private & B::OPpTARGET_MY() ) && $op->targ && $name !~ /\Apad/;
+            # a scalar-context range (flip-flop) keeps its state in its own slot
+            $w{ $op->targ } = 1 if $name =~ /\A(?:flip|flop|range)\z/ && $op->targ;
+            if ( $name eq 'padrange' && $intro ) { $w{$_} = 1 for $op->targ .. $op->targ + ( $op->private & B::OPpPADRANGE_COUNTMASK() ) - 1 }
+            $pads->($op) if $mod;    # an lvalue's subtree: `$a[$i] = ...` writes @a
+            $pads->( $op->last ) if $name =~ /\A[sa]assign\z/ && ( $op->flags & B::OPf_KIDS() );
+            $pads->( $op->first )
+                if ( $name =~ /\A(?:i_)?(?:pre|post)(?:inc|dec)\z/ || $name =~ /assign\z/ && $name !~ /\A[sa]assign\z/ )
+                && ( $op->flags & B::OPf_KIDS() );
+            # writers through an operand perl does not flag OPf_MOD on the pad op
+            $pads->($op)
+                if $name =~ /\A(?:push|unshift|pop|shift|splice|chomp|chop|schomp|schop|subst|trans|undef|delete|each|keys|values|read|sysread|open|sprintf|substr|vec|pos|local|refgen|srefgen|entersub|sort|reverse)\z/;
+        }
+        return \%w;
+    }
 
     # _scout_mutated_targs(...) -> ($mutated, $unstamped)
     #
