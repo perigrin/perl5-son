@@ -10184,7 +10184,11 @@ class SoN::FromOptree 0.01 {
             if ($old->isa('SoN::IR::Node::Subscript')
                 && scalar($old->inputs->@*) == 2) {
                 $lvalue = $old;
-                $old = $factory->make('Subscript', kind => $lvalue->kind,
+                # (make_unique: it is pinned HERE, below. Hash-consed, the
+                # same increment in the other arm of an if found this node --
+                # one container, key and memory -- pinned it again, and both
+                # arms' stores followed one read.)
+                $old = $factory->make_unique('Subscript', kind => $lvalue->kind,
                     inputs => [$lvalue->inputs->[0], $lvalue->inputs->[1],
                                $sim->memory]);
                 # AND PLACED: the read is at the pre-store memory, but nothing
@@ -18304,7 +18308,14 @@ class SoN::FromOptree 0.01 {
                 && ${$op->first} && $op->first->name ne 'gv';
             my $is_targmy   = $op->can('targ') && $op->targ && ($op->private & 16);
             my $is_padstore = $op->name eq 'padsv_store' && $op->can('targ') && $op->targ;
-            next unless $is_targmy || $is_padstore;
+            # ...AND THE UNOPTIMIZED FORM, which is the one this walk sees:
+            # B::SoN suppresses the peephole, so `$field = 1` is an sassign
+            # onto a padsv with OPf_MOD, never a padsv_store. Unknown here,
+            # `$any = 1 if $m > 1` in a method got no If and stored always.
+            # A field array or hash assigned whole is the same (padav / padhv).
+            my $is_lvalue_pad = $op->name =~ /\Apad(?:sv|av|hv)\z/
+                && ($op->flags & 32) && $op->targ;   # OPf_MOD
+            next unless $is_targmy || $is_padstore || $is_lvalue_pad;
             my $pn = $padnames->ARRAYelt($op->targ);
             return 1 if ref $pn eq 'B::PADNAME' && SoN::FieldInfo::is_field($pn);
         }

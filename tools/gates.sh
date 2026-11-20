@@ -27,7 +27,8 @@
 # t/wire-verify-ratchet.t (ratchet, here with chalk's lib).
 #
 # ENVIRONMENT: LLI (default /usr/bin/lli); SON_CHALK (the default for --chalk,
-# else ~/dev/chalk). PERL5_SON_LIB is set here, to the producer's snapshot.
+# else ~/dev/chalk). PERL5_SON_LIB is set here, to the producer's snapshot,
+# and CHALK_WORKLIST_OUT to a file under DIR.
 set -u
 
 ROUNDTRIP_MIN=426
@@ -86,11 +87,11 @@ suite_line() {    # name dir
         printf '%-15s PEND  %d of %d files, %d failing\n' "$name" "$done" "$total" "$fail"; return 1
     fi
     if [ "$fail" -gt 0 ]; then
-        printf '%-15s MISS  %d files, %d failing:\n' "$name" "$total" "$fail"
+        printf '%-15s MISS  %d files, %d failing%s:\n' "$name" "$total" "$fail" "$(secs "$2")"
         for f in $(grep -Lx 0 "$d"/rc/* | head -12); do echo "                  $(basename "$f" | sed 's/__/\//g')"; done
         return 1
     fi
-    printf '%-15s PASS  %d files, 0 failing\n' "$name" "$total"
+    printf '%-15s PASS  %d files, 0 failing%s\n' "$name" "$total" "$(secs "$2")"
 }
 
 census_line() {
@@ -102,8 +103,8 @@ census_line() {
     ld=$(awk '$1=="LOAD_FAIL"{print $2}' "$f"); nj=$(awk '$1=="NOJSON"{print $2}' "$f")
     local v=PASS
     [ "${rt:-0}" -ge $ROUNDTRIP_MIN ] && [ "${df:-1}" -eq 0 ] && [ "${lf:-1}" -eq 0 ] || v=MISS
-    printf '%-15s %s  ROUNDTRIP %s (>= %d) DIFFERS %s LLI_FAIL %s; GAP %s LOAD_FAIL %s NOJSON %s\n' \
-        census $v "${rt:-?}" $ROUNDTRIP_MIN "${df:-?}" "${lf:-?}" "${gap:-?}" "${ld:-?}" "${nj:-?}"
+    printf '%-15s %s  ROUNDTRIP %s (>= %d) DIFFERS %s LLI_FAIL %s; GAP %s LOAD_FAIL %s NOJSON %s%s\n' \
+        census $v "${rt:-?}" $ROUNDTRIP_MIN "${df:-?}" "${lf:-?}" "${gap:-?}" "${ld:-?}" "${nj:-?}" "$(secs census)"
     [ $v = PASS ]
 }
 
@@ -113,11 +114,10 @@ corpus_gate_line() {
     local gg rc wl v=PASS
     gg=$(grep -o 'TOTAL: gate-green=[0-9]*' "$f" | tail -1 | grep -o '[0-9]*$')
     rc=$(cat "$OUT/corpus-gate.rc")
-    wl=untouched
-    ( cd "$C" && git diff --quiet -- paad/worklist.json ) || wl=MODIFIED
+    wl=$(cat "$OUT/corpus-gate.worklist" 2>/dev/null || echo unknown)
     [ "$rc" -eq 0 ] && [ "${gg:-0}" -ge $GATE_GREEN_MIN ] && [ $wl = untouched ] || v=MISS
-    printf '%-15s %s  gate-green %s (>= %d), prove exit %s, paad/worklist.json %s\n' \
-        corpus-gate $v "${gg:-?}" $GATE_GREEN_MIN "$rc" $wl
+    printf '%-15s %s  gate-green %s (>= %d), prove exit %s, paad/worklist.json %s%s\n' \
+        corpus-gate $v "${gg:-?}" $GATE_GREEN_MIN "$rc" $wl "$(secs corpus-gate)"
     [ $v = PASS ]
 }
 
@@ -130,8 +130,8 @@ probes_line() {
     timeout=$(echo "$counts" | grep -o 'TIMEOUT=[0-9]*' | cut -d= -f2)
     lost=$(grep -c '(was SAME)' "$f")
     [ -n "$counts" ] && [ "${wrong:-0}" -eq 0 ] && [ "${timeout:-0}" -eq 0 ] && [ "$lost" -eq 0 ] || v=MISS
-    printf '%-15s %s  %s; WRONG %s, SAME lost %s, changed %s\n' \
-        probes $v "${counts:-no counts}" "${wrong:-0}" "$lost" "$(grep -c '(was ' "$f")"
+    printf '%-15s %s  %s; WRONG %s, SAME lost %s, changed %s%s\n' \
+        probes $v "${counts:-no counts}" "${wrong:-0}" "$lost" "$(grep -c '(was ' "$f")" "$(secs probes)"
     [ $v = PASS ] || grep '(was SAME)\|^[a-z0-9]* *WRONG\|^[a-z0-9]* *TIMEOUT' "$f" | head -12 | sed 's/^/                  /'
     [ $v = PASS ]
 }
@@ -144,9 +144,16 @@ ratchet_line() {
     chalk="chalk's lib compared"
     grep -q 'not compared\|chalk lib not checked' "$f" && { chalk="CHALK'S LIB NOT COMPARED ($(grep -o 'chalk is at.*' "$f" | head -1))"; v=MISS; }
     [ "$rc" -eq 0 ] || v=MISS
-    printf '%-15s %s  prove exit %s; %s; rows that fell: %s\n' ratchet $v "$rc" "$chalk" "$(grep -c ' fell ' "$f")"
+    printf '%-15s %s  prove exit %s; %s; rows that fell: %s%s\n' ratchet $v "$rc" "$chalk" "$(grep -c ' fell ' "$f")" "$(secs ratchet)"
     [ $v = PASS ] || grep '^not ok\|^ *not ok' "$f" | head -12 | sed 's/^/                  /'
     [ $v = PASS ]
+}
+
+# secs(gate) -> " [12m34s]" once the gate has run, else nothing.
+secs() {
+    local t
+    t=$(cat "$OUT/$1.secs" 2>/dev/null) || return 0
+    printf ' [%dm%02ds]' $((t / 60)) $((t % 60))
 }
 
 summary() {
@@ -188,6 +195,9 @@ if [ ! -d "$C" ]; then
 fi
 
 export PERL5_SON_LIB=$P/lib
+# chalk's corpus gate, and the suite tests that run it, write a worklist:
+# here, never into a tree's paad/worklist.json.
+export CHALK_WORKLIST_OUT=$OUT/worklist.json
 export LLI=${LLI:-/usr/bin/lli}
 case ":$PATH:" in *":$(dirname "$LLI"):"*) ;; *) PATH=$(dirname "$LLI"):$PATH ;; esac
 ulimit -v 4000000
@@ -222,8 +232,11 @@ census() {
 
 corpus_gate() {
     [ -f "$OUT/corpus-gate.out" ] && return 0
-    ( cd "$C" && CHALK_WORKLIST_OUT=$OUT/worklist.json timeout 3600 prove -Ilib -It/lib t/bootstrap/corpus/son-corpus-wide.t ) > "$OUT/corpus-gate.tmp" 2>&1
+    ( cd "$C" && timeout 3600 prove -Ilib -It/lib t/bootstrap/corpus/son-corpus-wide.t ) > "$OUT/corpus-gate.tmp" 2>&1
     echo $? > "$OUT/corpus-gate.rc"
+    # The gate writes its worklist where CHALK_WORKLIST_OUT says; the copy of
+    # paad/worklist.json in the snapshot must be as it was committed.
+    if ( cd "$C" && git diff --quiet -- paad/worklist.json ); then echo untouched; else echo MODIFIED; fi > "$OUT/corpus-gate.worklist"
     mv "$OUT/corpus-gate.tmp" "$OUT/corpus-gate.out"
 }
 
@@ -245,17 +258,27 @@ ratchet() {
     mv "$OUT/ratchet.tmp" "$OUT/ratchet.out"
 }
 
+# timed(gate, command...): run it, and add its seconds to $OUT/GATE.secs (a
+# resumed gate adds to what it had; a gate with nothing left to do adds 0).
+timed() {
+    local g=$1 t0=$SECONDS was
+    shift
+    "$@"
+    was=$(cat "$OUT/$g.secs" 2>/dev/null || echo 0)
+    echo $((was + SECONDS - t0)) > "$OUT/$g.secs"
+}
+
 # The corpus gate (one process) and the ratchet (two) run beside the suites,
 # which take every job: for their first minutes the machine is asked for
 # three more than it has, and after that for exactly what it has.
 bg=""
-if wanted corpus-gate; then corpus_gate & bg="$bg $!"; fi
-if wanted ratchet;     then ratchet 2 & bg="$bg $!"; fi
+if wanted corpus-gate; then timed corpus-gate corpus_gate & bg="$bg $!"; fi
+if wanted ratchet;     then timed ratchet ratchet 2 & bg="$bg $!"; fi
 sj=$JOBS
-wanted producer-suite && suite producer-suite "$P" -l "$sj" '^t/wire-verify-ratchet\.t$'
-wanted chalk-suite    && suite chalk-suite "$C" '-Ilib -It/lib' "$sj" '^t/bootstrap/(corpus/son-corpus-wide|ir/audit-probes)\.t$'
-wanted census         && census "$sj"
-wanted probes         && probes "$sj"
+wanted producer-suite && timed producer-suite suite producer-suite "$P" -l "$sj" '^t/wire-verify-ratchet\.t$'
+wanted chalk-suite    && timed chalk-suite suite chalk-suite "$C" '-Ilib -It/lib' "$sj" '^t/bootstrap/(corpus/son-corpus-wide|ir/audit-probes)\.t$'
+wanted census         && timed census census "$sj"
+wanted probes         && timed probes probes "$sj"
 [ -z "$bg" ] || wait $bg
 
 summary

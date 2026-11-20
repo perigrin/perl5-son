@@ -108,5 +108,50 @@ for my $c (
     };
 }
 
+# A PINNED READ IS MADE WHERE IT IS PINNED, not found in the other arm. The
+# element read of `$st->{i}++` was hash-consed: the second arm got the first
+# arm's node (the same container, key and memory), pinned it again, and both
+# arms' stores followed one read (chalk's Regex::Parse::_quant has three such
+# arms; chalk and the deparser both refused the graph).
+subtest 'the same increment of an element in two arms' => sub {
+    for my $src (
+        q{my $st = { i => 0 }; if (@ARGV) { $st->{i}++ } else { $st->{i}++ } print $st->{i}, "\n";},
+        q{my $st = { i => 0 }; my $c = @ARGV ? "*" : "+"; if ($c eq "*") { $st->{i}++ } elsif ($c eq "+") { $st->{i}++ } print $st->{i}, "\n";},
+        q{my @a = (1, 2); my $r = \@a; if (@ARGV) { --$r->[0] } else { --$r->[0] } print "@a\n";},
+    ) {
+        my $w  = wire($src);
+        my @n  = nodes($w);
+        my %by = map { $_->{id} => $_ } @n;
+        is forks($w), [], "no fork: $src";
+        my @stores = grep { $_->{op} eq 'Assign' && defined $_->{control_in} && $by{ $_->{control_in} }{op} eq 'Subscript' } @n;
+        is scalar(@stores), 2, '... two stores, each after a read';
+        my %reads = map { $_->{control_in} => 1 } @stores;
+        is scalar( keys %reads ), 2, '... of its own';
+    }
+};
+
+# A FIELD STORED IN AN ARM, AND NOTHING ELSE. The arm scan knew a field store
+# as `padsv_store` or a TARGMY op -- the forms perl's peephole makes, which
+# B::SoN suppresses. Unoptimized it is an sassign onto a padsv with OPf_MOD,
+# and `$any = 1 if $m > 1` stored whatever $m was (chalk's
+# ReferenceFlow ADJUST has two such statements).
+subtest 'a field store alone in an arm' => sub {
+    for my $body (
+        q{$any = 1 if $m > 1; return},
+        q{if ($m > 1) { $any = 1 } return},
+        q{$m > 1 and $any = 1; return},
+        q{$any = 1 unless $m > 1; return 5},
+        q{@list = () if $m > 1; return},
+        q{%map = () if $m > 1; return},
+    ) {
+        my $w = wire(qq{use v5.38; use experimental "class"; class C { field \$any = 0; field \@list; field %map; method set (\$m) { $body } method any { \$any } } my \$o = C->new; \$o->set(2); print \$o->any, "\n";});
+        my $g = $w->{methods}{'C::set'} or do { fail "a graph for: $body"; diag `cat $dir/err`; next };
+        ok scalar( grep { $_->{op} eq 'If' } $g->{nodes}->@* ), "an If: $body";
+        is [ grep { $_->{rule} eq 'control-fork' && $_->{graph} eq 'C::set' } SoN::Verify::verify($w)->{violations}->@* ], [], '... and no fork';
+    }
+};
+
 done_testing;
+
+
 
