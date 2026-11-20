@@ -1,5 +1,5 @@
 # ABOUTME: a value that may die (a division by what may be zero, a reference before an
-# ABOUTME: array's start) and is never used is refused by name, not dropped from the graph.
+# ABOUTME: array's start) and is never used is pinned on the chain, not dropped from the graph.
 
 use v5.42.0;
 use Test2::V0;
@@ -16,13 +16,19 @@ sub son_json ($src) {
 }
 
 # perl evaluates `1 / $z` even with nothing reading it, and dies. The walk
-# built the Divide and nothing reached it: the graph was the print alone,
-# and the program printed "x" where perl dies (an older wrong answer).
+# once built the Divide and nothing reached it (the program printed "x" where
+# perl dies), then refused it by name. Now a division that may fault is pinned
+# where it stands, like an element reference below: on the control chain,
+# not refused, so a consumer makes it there and dies there.
 for my $src (
     q{my $z = 0; my $q = 1 / $z; print "x\n";},
     q{my $z = $ENV{NOPE} // 0; my $q = 7 % $z; print "x\n";},
 ) {
-    like son_json($src), qr/GAP: .*may die.*never used|GAP: .*never used.*may die/, "refused: $src";
+    my $out = son_json($src);
+    unlike $out, qr/GAP: /, "not refused: $src";
+    my $w = eval { JSON::PP->new->decode($out =~ s/\A[^{]*//r) };
+    my @d = grep { $_->{op} =~ /\A(?:Divide|Modulo)\z/ } ( $w->{methods}{'main::__PROGRAM__'}{nodes} // [] )->@*;
+    ok @d == 1 && defined $d[0]{control_in}, "the division is on the control chain: $src";
 }
 
 # Used, or not able to die, it is graphed as before.

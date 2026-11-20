@@ -20,11 +20,12 @@ sub eval_regions ($src) {
 }
 
 # AN UNUSED DIVISION STILL DIES. `eval { my $q = 1 / $z; 1 }` is undef for a
-# zero $z, but $q is never read, so the Divide is not in the graph at all.
+# zero $z. A division that may fault is pinned where it stands, on the body's
+# chain, so it is in the graph and dies there: nothing dropped, nothing marked.
 is eval_regions(q{my $z = $ENV{NO_SUCH_VAR} // 0; my $r = eval { my $q = 1 / $z; 1 }; print defined $r ? 1 : 0;}),
-    [1], 'an unused division by a variable';
+    [0], 'an unused division by a variable stands on the chain';
 is eval_regions(q{my $z = $ENV{NO_SUCH_VAR} // 0; my $r = eval { my $q = 7 % $z; 1 }; print defined $r ? 1 : 0;}),
-    [1], 'and a modulus';
+    [0], 'and a modulus';
 # AN UNUSED REFERENCE TO AN ARRAY ELEMENT is in the graph: it stands where it
 # is taken, on the body's chain, naming its site, and dies there -- the eval
 # catches it as it catches a die. Nothing is dropped, so nothing is marked.
