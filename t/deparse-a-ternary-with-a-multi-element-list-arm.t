@@ -325,9 +325,16 @@ for my $src (
 ) {
     round_trips($src, "an array assignment counted: $src");
 }
-refuses(q{my $c = 1; my %h; print scalar(%h = $c ? (a => 1) : ()), "\n";},
-    qr/GAP: a hash assignment from a ternary counted in scalar context/,
-    'a hash assignment from a ternary counted');
+# A HASH'S IS THE COUNT OF THE LIST ASSIGNED, the ternary's: it was refused
+# while the wire pushed the hash itself (t/wire-a-hash-list-assign-as-a-scalar-
+# is-its-rhs-count.t).
+for my $src (
+    q{my $c = 1; my %h; print scalar(%h = $c ? (a => 1) : ()), "\n";},
+    q{my $c = 0; my %h; print scalar(%h = $c ? (a => 1) : ()), "\n";},
+    q{my $c = 1; my %h; print scalar(%h = $c ? (a => 1, a => 2) : ()), " ", scalar(keys %h), "\n";},
+) {
+    round_trips($src, "a hash assignment from a ternary counted: $src");
+}
 
 # AN ARRAY OF A LIST ARM IS READ AS THE ARRAY. Its elements were spelled again
 # as the ternary at the read, after a store to what the arm copied.

@@ -244,6 +244,53 @@ class SoN::FromOptree 0.01 {
             %extra);
     }
 
+    # _list_count($factory, $sim, @values) -> an Int node: how many elements
+    # the list of these values holds, which is what a list assignment yields
+    # in scalar context (`my $n = () = LIST`, `if (%h = LIST)`). Call it BEFORE
+    # the assignment's store: each Count reads at the sim's memory, and
+    # `%g = (%g, b => 2)` counts the %g it read, not the one it wrote.
+    #
+    #   a scalar, a reference          1 (`($r, $r)` counted @$r twice: 6 for 2)
+    #   an array, a list-valued value  its Count
+    #   a hash                         twice its Count: it flattens to its keys
+    #                                  AND its values (`() = %h` said 2 for 4)
+    #   a sub call, a match            as many as it returns: counted as the
+    #                                  list it is, whatever its stamp says yet
+    sub _list_count ($factory, $sim, @values) {
+        my $int = SoN::IR::Stamp->new(type => 'Int');
+        my $const = sub ($k) {
+            $factory->make('Constant', value => $k, const_type => 'integer', stamp => $int);
+        };
+        my ($scalars, @counts) = (0);
+        for my $v (@values) {
+            my $op = $v->operation;
+            my $t  = defined $v->stamp ? $v->stamp->type : 'Unknown';
+            my $builtin = $op eq 'Call' && ($v->dispatch_kind // '') eq 'builtin';
+            if (($op eq 'Call' && !$builtin)
+                || (($builtin || $op eq 'RegexMatch') && $t !~ /\A(?:List|Array|Hash)\z/)) {
+                push @counts, _make_count($factory,
+                    $factory->make('ArrayLiteral', inputs => [$v],
+                        stamp => SoN::IR::Stamp->new(type => 'Array')),
+                    $sim, stamp => $int);
+            }
+            elsif ($t eq 'ArrayRef' || $t eq 'HashRef') { $scalars++ }
+            elsif ($t eq 'Hash' || $op eq 'HashLiteral') {
+                push @counts, $factory->make('Multiply',
+                    inputs => [ _make_count($factory, $v, $sim, stamp => $int), $const->(2) ],
+                    stamp  => $int);
+            }
+            elsif (_is_aggregate_node($v)) { push @counts, _make_count($factory, $v, $sim, stamp => $int) }
+            # A TERNARY WHOSE ARMS MAY BE LISTS, with no stamp to say so.
+            elsif ($op eq 'TernaryExpr' && $t eq 'Unknown') {
+                die "GAP: a list assignment from a ternary of unknown shape counted in scalar context is not yet lowered\n";
+            }
+            else { $scalars++ }
+        }
+        my $count = $scalars || !@counts ? $const->($scalars) : shift @counts;
+        $count = $factory->make('Add', inputs => [$count, $_], stamp => $int) for @counts;
+        return $count;
+    }
+
     # Does this ternary hand a VARIABLE to an alias? OPf_MOD (B::OPf_MOD) marks
     # a ternary that is a call argument, a reference's list, a foreach or map
     # list, or an assignment target; each aliases the values its arms yield.
@@ -11511,32 +11558,10 @@ class SoN::FromOptree 0.01 {
                 return ($op->next, 'handled') unless $sim->has_mark;
                 my @rhs = $sim->pop_to_mark->@*;
                 if (($op->flags & 3) == 2) {             # OPf_WANT_SCALAR
-                    my $count;
-                    for my $v (@rhs) {
-                        # A CALL YIELDS AS MANY VALUES AS IT RETURNS, which a
-                        # constant 1 does not say: `() = g()` counted 1 for a
-                        # g returning three or none. Its stamp is not settled
-                        # yet, so it is counted as the list it is.
-                        # A LIST-CONTEXT MATCH TOO: `() = $s =~ /\d/g` counted 1
-                        # for perl's 2.
-                        $v =$factory->make('ArrayLiteral', inputs => [$v],
-                            stamp => SoN::IR::Stamp->new(type => 'Array'))
-                            if ($v->operation eq 'Call' || $v->operation eq 'RegexMatch')
-                                && !_is_aggregate_node($v);
-                        my $n = _is_aggregate_node($v)
-                            ? _make_count($factory, $v, $sim,
-                                stamp => SoN::IR::Stamp->new(type => 'Int'))
-                            : $factory->make('Constant', value => 1,
-                                const_type => 'integer',
-                                stamp => SoN::IR::Stamp->new(type => 'Int'));
-                        $count = defined $count
-                            ? $factory->make('Add', inputs => [$count, $n],
-                                stamp => SoN::IR::Stamp->new(type => 'Int'))
-                            : $n;
-                    }
-                    $sim->push_node($count // $factory->make('Constant',
-                        value => 0, const_type => 'integer',
-                        stamp => SoN::IR::Stamp->new(type => 'Int')));
+                    # (A CALL YIELDS AS MANY VALUES AS IT RETURNS, a match in
+                    # list context too, a hash its keys and values, a
+                    # reference one: _list_count.)
+                    $sim->push_node(_list_count($factory, $sim, @rhs));
                 }
                 return ($op->next, 'handled');
             }
@@ -11577,6 +11602,18 @@ class SoN::FromOptree 0.01 {
 
                 if (defined $sigil && ($sigil eq '@' || $sigil eq '%')) {
                     my $rhs = $sim->pop_to_mark;
+
+                    # A LIST ASSIGNMENT TO A HASH, READ AS A SCALAR, IS THE
+                    # COUNT OF ITS RIGHT SIDE: `(%h = (a => 1, a => 2))` is 4
+                    # and the hash holds one key, so no count of the hash says
+                    # it. The hash itself was pushed, and an If, a Not, a
+                    # TernaryExpr or a Coerce read it as its truth or its text
+                    # (`our %g; sub f { () } (%g = f()) ? "t" : "f"` said `t`
+                    # in chalk until it refused the shape). Counted HERE,
+                    # before the store below moves memory. (An array's count
+                    # is the array's own, taken where it is pushed.)
+                    my $hash_count = ($op->flags & 3) == 2 && $sigil eq '%'   # OPf_WANT_SCALAR
+                        ? _list_count($factory, $sim, $rhs->@*) : undef;
 
                     # AN AGGREGATE RHS IS THE VALUE, NOT AN ELEMENT OF ONE. The
                     # wrap below makes each popped value one ELEMENT, which is
@@ -11720,10 +11757,11 @@ class SoN::FromOptree 0.01 {
                             # ($c ? 7 : ()))` read the ternary itself, which
                             # in scalar context is its element: perl 1,
                             # emitted 7. A hash target's count is of the RHS
-                            # pairs, which Count over the hash does not say,
-                            # so only the array form is counted here.
+                            # pairs, which Count over the hash does not say:
+                            # $hash_count, taken above.
                             $sim->push_node(
-                                (($op->flags & 3) == 2 && $sigil eq '@') # OPf_WANT_SCALAR
+                                defined $hash_count ? $hash_count
+                                : (($op->flags & 3) == 2 && $sigil eq '@') # OPf_WANT_SCALAR
                                     ? _make_count($factory, $only, $sim)
                                     : $only);
                             return ($op->next, 'handled');
@@ -11777,7 +11815,7 @@ class SoN::FromOptree 0.01 {
                             stamp  => SoN::IR::Stamp->new(type => ($sigil eq '@' ? 'Array' : 'Hash')));
                         my $store = $factory->make('Assign', inputs => [$container, $list]);
                         _place($sim, $store);
-                        $sim->push_node($container) unless ($op->flags & 3) == 1;   # void
+                        $sim->push_node($hash_count // $container) unless ($op->flags & 3) == 1;   # void
                         return ($op->next, 'handled');
                     }
                     my $symbol = $is_pad ? $target->symbol : $key;
@@ -11834,13 +11872,10 @@ class SoN::FromOptree 0.01 {
                     # IN SCALAR CONTEXT THE ASSIGNMENT IS A COUNT, as for
                     # the bound value above: `print scalar(my @t = (1, 2, $c))`
                     # printed the elements. A hash's is of the RHS pairs, which a
-                    # count of the hash does not say. From a ternary of lists it is
-                    # refused: spelled, the count was the pairs themselves (`a1`).
-                    die "GAP: a hash assignment from a ternary counted in scalar context is not yet lowered\n"
-                        if ($op->flags & 3) == 2 && $sigil eq '%'   # OPf_WANT_SCALAR
-                        && grep { $_->isa('SoN::IR::Node::TernaryExpr') } $rhs->@*;
+                    # count of the hash does not say: $hash_count, taken above.
                     $sim->push_node(
-                        (($op->flags & 3) == 2 && $sigil eq '@') # OPf_WANT_SCALAR
+                        defined $hash_count ? $hash_count
+                        : (($op->flags & 3) == 2 && $sigil eq '@') # OPf_WANT_SCALAR
                             ? _make_count($factory, $node, $sim)
                             : $node);
                     return ($op->next, 'handled');
