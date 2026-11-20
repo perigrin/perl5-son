@@ -18310,12 +18310,35 @@ class SoN::FromOptree 0.01 {
             my $is_padstore = $op->name eq 'padsv_store' && $op->can('targ') && $op->targ;
             # ...AND THE UNOPTIMIZED FORM, which is the one this walk sees:
             # B::SoN suppresses the peephole, so `$field = 1` is an sassign
-            # onto a padsv with OPf_MOD, never a padsv_store. Unknown here,
-            # `$any = 1 if $m > 1` in a method got no If and stored always.
-            # A field array or hash assigned whole is the same (padav / padhv).
-            my $is_lvalue_pad = $op->name =~ /\Apad(?:sv|av|hv)\z/
-                && ($op->flags & 32) && $op->targ;   # OPf_MOD
-            next unless $is_targmy || $is_padstore || $is_lvalue_pad;
+            # whose last child is the padsv, never a padsv_store. Unknown
+            # here, `$any = 1 if $m > 1` in a method got no If and stored
+            # always. A field array or hash assigned whole is an aassign with
+            # the padav / padhv in its left list.
+            # THE ASSIGNMENT'S TARGET, NOT ANY PAD OP WITH OPf_MOD: perl sets
+            # that on a field passed to a sub and on one dereferenced for a
+            # write, and taking those for stores refused every ternary with a
+            # field in a call's arguments (15 of chalk's graphs, for a day).
+            my @targets;
+            if ($op->name eq 'sassign' && ($op->flags & 4)        # OPf_KIDS
+                && !($op->private & 64)) {                        # OPpASSIGN_BACKWARDS
+                @targets = ($op->last);
+            }
+            elsif ($op->name eq 'aassign' && ($op->flags & 4) && $op->last->can('first')) {
+                for (my $k = $op->last->first; $k && $$k; $k = $k->sibling) { push @targets, $k }
+            }
+            # `$field++`, `$field += 2`, `$field .= "x"`: the operand an
+            # increment or an assignment operator (OPf_STACKED) writes back to.
+            elsif (($op->flags & 4)
+                   && ( $op->name =~ /\A(?:i_)?(?:pre|post)(?:inc|dec)\z/
+                        || ($op->flags & 64)                      # OPf_STACKED
+                           && $op->name =~ /\A(?:[isn]_?)?(?:add|subtract|multiply|divide|modulo|pow|concat|repeat|left_shift|right_shift|bit_and|bit_or|bit_xor)\z/ )) {
+                @targets = ($op->first);
+            }
+            for my $t (grep { $_->name =~ /\Apad(?:sv|av|hv)\z/ && $_->targ } @targets) {
+                my $tn = $padnames->ARRAYelt($t->targ);
+                return 1 if ref $tn eq 'B::PADNAME' && SoN::FieldInfo::is_field($tn);
+            }
+            next unless $is_targmy || $is_padstore;
             my $pn = $padnames->ARRAYelt($op->targ);
             return 1 if ref $pn eq 'B::PADNAME' && SoN::FieldInfo::is_field($pn);
         }

@@ -142,12 +142,30 @@ subtest 'a field store alone in an arm' => sub {
         q{$m > 1 and $any = 1; return},
         q{$any = 1 unless $m > 1; return 5},
         q{@list = () if $m > 1; return},
+        q{$any++ if $m > 1; return},
+        q{$m > 1 and --$any; return},
+        q{$any += 2 if $m > 1; return},
+        q{if ($m > 1) { $any .= "x" } return},
         q{%map = () if $m > 1; return},
     ) {
         my $w = wire(qq{use v5.38; use experimental "class"; class C { field \$any = 0; field \@list; field %map; method set (\$m) { $body } method any { \$any } } my \$o = C->new; \$o->set(2); print \$o->any, "\n";});
         my $g = $w->{methods}{'C::set'} or do { fail "a graph for: $body"; diag `cat $dir/err`; next };
         ok scalar( grep { $_->{op} eq 'If' } $g->{nodes}->@* ), "an If: $body";
         is [ grep { $_->{rule} eq 'control-fork' && $_->{graph} eq 'C::set' } SoN::Verify::verify($w)->{violations}->@* ], [], '... and no fork';
+    }
+};
+
+# ONLY A STORE IS A STORE. perl sets OPf_MOD on a field passed to a sub and on
+# one dereferenced for a write; neither stores the field, and a ternary with
+# one in an arm must not be refused as "arms store a class field".
+subtest 'a field in an arm that is not stored' => sub {
+    for my $body (
+        q{my $r = $m ? f($any) : 0; return $r},
+        q{return C->new(any => ($m ? $m : $any))},
+        q{my $r = $m ? ($map{$m} // 0) : $any; return $r},
+    ) {
+        my $w = wire(qq{use v5.38; use experimental "class"; class C { field \$any :param = 0; field %map; sub f { \$_[0] } method set (\$m) { $body } } my \$o = C->new; \$o->set(2); print "ok\n";});
+        ok $w->{methods}{'C::set'}, "a graph: $body" or diag `cat $dir/err`;
     }
 };
 
