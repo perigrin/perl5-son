@@ -21,6 +21,7 @@ use Test2::V0;
 # ~/dev/chalk at the commit the baseline names -- because it is another
 # repository's working tree and takes half an hour.
 # SON_WIRE_CACHE=DIR reuses wires (see the tool: a stale cache lies).
+# SON_WIRE_JOBS=N compiles N wires at a time.
 
 my $baseline = 't/data/wire-verify-baseline.tsv';
 my ( %want, $chalk_at );
@@ -37,12 +38,15 @@ close $fh;
 my @args  = ( '--corpus', '--probes' );
 my $chalk = $ENV{SON_CHALK} // "$ENV{HOME}/dev/chalk";
 if ( $ENV{SON_RATCHET} && -d "$chalk/lib" ) {
-    chomp( my $at = `git -C '$chalk' rev-parse --short HEAD 2>/dev/null` );
+    # SON_CHALK_AT names the commit of a copy that is not a checkout
+    # (tools/gates.sh runs this on snapshots).
+    chomp( my $at = $ENV{SON_CHALK_AT} // `git -C '$chalk' rev-parse --short=8 HEAD 2>/dev/null` );
     if   ( $at eq ( $chalk_at // '' ) ) { push @args, '--chalk', $chalk }
     else                                { note "chalk is at $at, the baseline at $chalk_at: not compared" }
 }
 else { note 'chalk lib not checked: SON_RATCHET=1 (and SON_CHALK) runs it' }
 push @args, '--wires', $ENV{SON_WIRE_CACHE} if $ENV{SON_WIRE_CACHE};
+push @args, '--jobs',  $ENV{SON_WIRE_JOBS}  if $ENV{SON_WIRE_JOBS};
 
 my %got;
 for ( split /\n/, qx($^X tools/wire-verify.pl --tsv @args) ) {

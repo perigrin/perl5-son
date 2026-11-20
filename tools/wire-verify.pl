@@ -13,7 +13,7 @@ use PvmCorpus qw(read_cases);
 use SoN::Verify;
 
 # usage: wire-verify.pl [--corpus] [--probes] [--chalk DIR] [--list] [--tsv]
-#                       [--wires DIR]
+#                       [--wires DIR] [--jobs N]
 #   no source named: --corpus --probes.
 #   --chalk DIR   every lib/**/*.pm of a chalk checkout (its working tree: the
 #                 commit is printed, and the numbers are that commit's).
@@ -26,10 +26,13 @@ use SoN::Verify;
 #   --wires DIR   keep each wire as DIR/SOURCE/NAME.json and reuse one that is
 #                 there. A STALE CACHE LIES: empty the directory after any
 #                 change to the producer.
-my ( $corpus, $probes, $chalk, $list, $tsv, $wires );
+#   --jobs N      compile N wires at a time (default 1). The verifying is one
+#                 process either way; the compiles are where the time goes.
+my ( $corpus, $probes, $chalk, $list, $tsv, $wires, $jobs );
 GetOptions( 'corpus' => \$corpus, 'probes' => \$probes, 'chalk=s' => \$chalk,
-    'list' => \$list, 'tsv' => \$tsv, 'wires=s' => \$wires )
-    or die "usage: $0 [--corpus] [--probes] [--chalk DIR] [--list] [--tsv] [--wires DIR]\n";
+    'list' => \$list, 'tsv' => \$tsv, 'wires=s' => \$wires, 'jobs=i' => \$jobs )
+    or die "usage: $0 [--corpus] [--probes] [--chalk DIR] [--list] [--tsv] [--wires DIR] [--jobs N]\n";
+$jobs //= 1;
 $corpus = $probes = 1 unless $corpus || $probes || $chalk;
 
 my $root = "$FindBin::Bin/..";
@@ -56,11 +59,25 @@ sub wire ( $source, $name, $file, $cwd = undef ) {
     return eval { $json->decode(<$fh>) };
 }
 
+# compile_ahead($source, @cases): fill the cache for these cases, $jobs
+# compiles at a time. wire() then finds each file there.
+sub compile_ahead ( $source, @cases ) {
+    my %kids;
+    for my $c (@cases) {
+        if ( keys %kids >= $jobs ) { delete $kids{ waitpid -1, 0 } }
+        my $pid = fork // die "fork: $!";
+        if ( !$pid ) { wire( $source, @$c ); exec '/bin/true' }
+        $kids{$pid} = 1;
+    }
+    waitpid $_, 0 for keys %kids;
+}
+
 my ( %count, @violations, @sources );
 
 sub run ( $source, @cases ) {    # each case: [name, file, cwd]
     push @sources, $source;
     $count{$source}{$_} = 0 for '#cases', '#wires', '#graphs';
+    compile_ahead( $source, @cases ) if $jobs > 1;
     for my $c (@cases) {
         $count{$source}{'#cases'}++;
         my $w = wire( $source, @$c ) or next;
@@ -93,7 +110,7 @@ if ($probes) {
 }
 if ($chalk) {
     -d "$chalk/lib" or die "no lib/ under $chalk\n";
-    chomp( my $at = `git -C '$chalk' rev-parse --short HEAD 2>/dev/null` );
+    chomp( my $at = $ENV{SON_CHALK_AT} // `git -C '$chalk' rev-parse --short=8 HEAD 2>/dev/null` );
     say "# chalk at $at" unless $tsv;
     chomp( my @mods = `cd '$chalk' && find lib -name '*.pm' | sort` );
     run( chalk => map { [ $_ =~ s{^lib/|\.pm$}{}gr, $_, $chalk ] } @mods );
