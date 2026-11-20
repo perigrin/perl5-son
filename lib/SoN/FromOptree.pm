@@ -14140,10 +14140,82 @@ class SoN::FromOptree 0.01 {
     # set of those whose header Phi must be built WITHOUT its init's stamp --
     # see _scout_loop_phi_stamps. $extra_stamps gives the stamp each extra slot
     # (an iterator) will carry in the real walk.
+    # ---- MEASUREMENT ONLY (branch v2-s01-measure; never merged) -------------
+    # One line per loop the real walk translates, appended to $ENV{SON_MEASURE}:
+    #   translator, _scout_once calls, mutated keys, keys the syntactic
+    #   may-write scan missed, where the loop is.
+    sub _measure_body_ops ($start) {
+        # every op reachable from $start, then those of them that reach $start
+        # again: the ops on the loop's cycle.
+        my (%fwd, %pred, @q);
+        @q = ($start);
+        while (my $op = shift @q) {
+            next unless ref $op && $$op && !$fwd{$$op};
+            $fwd{$$op} = $op;
+            my @succ = ($op->next);
+            push @succ, $op->other if $op->can('other') && ref $op->other;
+            # `next` and `redo` go round: an edge back to the start.
+            push @succ, $start if $op->name eq 'next' || $op->name eq 'redo';
+            @succ = ($start) if $op->name eq 'next';
+            @succ = () if $op->name eq 'last' || $op->name eq 'return' || $op->name eq 'die';
+            for my $s (grep { ref && $$_ } @succ) { push $pred{$$s}->@*, $$op; push @q, $s }
+        }
+        my (%back, @b);
+        @b = ($$start);
+        while (defined(my $a = shift @b)) { next if $back{$a}++; push @b, ($pred{$a} // [])->@* }
+        return map { $fwd{$_} } grep { $back{$_} } keys %fwd;
+    }
+    sub _measure_may_write ($start) {
+        my %w;
+        my $pads; $pads = sub ($op) {
+            return unless ref $op && $$op;
+            $w{ $op->targ } = 1 if $op->name =~ /\Apad(?:sv|av|hv|any)\z/ || $op->name =~ /\Aaelemfast_lex\z/;
+            return unless $op->flags & 4;   # OPf_KIDS
+            for (my $k = $op->first; ref $k && $$k; $k = $k->sibling) { $pads->($k) }
+        };
+        for my $op (_measure_body_ops($start)) {
+            my $name = $op->name;
+            my $mod  = $op->flags & B::OPf_MOD();
+            my $intro = $op->private & B::OPpLVAL_INTRO();
+            $w{ $op->targ } = 1 if $name =~ /\Apad(?:sv|av|hv|any)\z/ && ($mod || $intro);
+            $w{ $op->targ } = 1 if $name =~ /\A(?:padsv_store|aelemfastlex_store|enteriter|iter)\z/ && $op->targ;
+            $w{ $op->targ } = 1 if ($op->private & 16) && $op->targ && $name !~ /\Apad/;   # OPpTARGET_MY
+            if ($name eq 'padrange' && $intro) { $w{$_} = 1 for $op->targ .. $op->targ + ($op->private & 127) - 1 }
+            $pads->($op) if $mod;   # an lvalue's subtree: `$a[$i] = ...` writes @a
+            # an assignment's target subtree, an op-assign's, an inc/dec's
+            if ($name eq 'sassign' && ($op->flags & 4)) { $pads->($op->last) }
+            if ($name eq 'aassign' && ($op->flags & 4)) { $pads->($op->last) }
+            if ($name =~ /\A(?:i_)?(?:pre|post)(?:inc|dec)\z/ || $name =~ /assign\z/ && $name !~ /\A[sa]assign\z/) {
+                $pads->($op->first) if $op->flags & 4;
+            }
+            # writers through an operand perl does not mark OPf_MOD on the pad op
+            if ($name =~ /\A(?:push|unshift|pop|shift|splice|chomp|chop|schomp|schop|subst|trans|undef|delete|each|keys|values|read|sysread|open|sprintf|substr|vec|pos|local|refgen|srefgen|entersub|sort|reverse)\z/) {
+                $pads->($op);
+            }
+        }
+        return \%w;
+    }
+    sub _measure_where ($op) {
+        my %seen;
+        while (ref $op && $$op && !$seen{$$op}++) {
+            return $op->file . ':' . $op->line if $op->isa('B::COP');
+            $op = $op->next;
+        }
+        return '?';
+    }
+    sub _measure_log (@f) {
+        my $out = $ENV{SON_MEASURE} or return;
+        open my $fh, '>>', $out or return;
+        syswrite $fh, join("\t", @f) . "\n";
+        close $fh;
+    }
+
     sub _scout_mutated_targs ($cv, $start_op, $sim, $opmap, $extra_targs = [], $cond_consumed = 0, $extra_stamps = {}) {
         my %unstamped;
         $SCOUT_MOVED_MEMORY = 0;
+        my $scouts = 0;
         while (1) {
+            $scouts++;
             my ($mutated, $placeholder, $scout_scope) = _scout_once($cv,
                 $start_op, $sim, $opmap, $extra_targs, $cond_consumed,
                 $extra_stamps, \%unstamped);
@@ -14151,7 +14223,20 @@ class SoN::FromOptree 0.01 {
                 !$unstamped{$_}
                 && _backedge_loses_stamp($scout_scope->{$_}, $placeholder->{$_})
             } $mutated->@*;
-            return ($mutated, \%unstamped) unless @lost;
+            if (!@lost) {
+                if (!$IN_SCOUT && $ENV{SON_MEASURE}) {
+                    my $w = _measure_may_write($start_op);
+                    my @missed = grep { !$w->{$_} } $mutated->@*;
+                    my %why = map {
+                        my $b = $sim->scope_bindings->{$_};
+                        ( $_ => (blessed($b) ? ref($b) =~ s/.*:://r : 'undef') . '>' . (blessed($scout_scope->{$_}) ? ref($scout_scope->{$_}) =~ s/.*:://r : 'undef') )
+                    } @missed;
+                    _measure_log('LOOP', ((caller(1))[3] =~ s/.*:://r), $scouts, scalar($mutated->@*),
+                        join(',', map { "$_=$why{$_}" } @missed) || '-', _measure_where($start_op),
+                        join(',', sort keys %unstamped) || '-');
+                }
+                return ($mutated, \%unstamped);
+            }
             $unstamped{$_} = 1 for @lost;
         }
     }
@@ -14716,9 +14801,15 @@ class SoN::FromOptree 0.01 {
         _walk_branch($cv, $cond_start, $cond_sim, $cond_factory, $opmap,
             {}, undef, 0, $$probe);
         my $after = $cond_sim->scope_bindings;
-        return [ sort _scope_key_order
+        my @cm = sort _scope_key_order
             grep { defined $after->{$_} && $after->{$_} != $placeholder{$_} }
-            keys %placeholder ];
+            keys %placeholder;
+        if (!$IN_SCOUT && $ENV{SON_MEASURE}) {
+            my $w = _measure_may_write($cond_start);
+            my @missed = grep { !$w->{$_} && !_key_lives_in_memory($_) } @cm;
+            _measure_log('COND', 'cond', 1, scalar(@cm), join(',', @missed) || '-', _measure_where($cond_start), '-');
+        }
+        return [ @cm ];
     }
 
     # The and/or that closes a loop's condition: the outermost one between the
