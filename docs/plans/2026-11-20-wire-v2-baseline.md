@@ -169,3 +169,47 @@ The three refused probes the stage was asked to look at:
 9. **Q7 is the journal; Q6's scan needs two more rules** (section 4). The scan and the cycle walk are on branch `v2-s01-measure`.
 10. **chalk does not lower a hash made of a call's list** (`my %h = f()`: "a {...} of an odd list"; with its count: "a call used both as a list and as a scalar"). The stage-1 wire is right and counted; the refusal is T2's.
 
+
+## 9. After stage 3
+
+Heads: producer `v2-s3` (commits 1a004ac to 9307e25 on 148d296), chalk 45a1b8d5 (unchanged). Wire v1 is the default and is, byte for byte, what 315dd03 (the commit before the v2 work) wrote: every probe, the corpus and chalk's 219 modules, compared graph by graph under one hash seed (t/wire-v2-downgrades-to-v1.t). chalk's Target/LLVM/Lower.pm is the one input the producer is not deterministic on (Builder::read_as_a_truth's shape and Builder::go_round's refusal flip from run to run, under either commit).
+
+The v2 rules (wire=2), per set:
+
+| rule | corpus2 | probes2 | chalk2 |
+|---|---|---|---|
+| `#wires` / `#graphs` | 431 / 1082 | 486 / 693 | 219 / 24521 |
+| V1 mem-in-not-version | 0 | 0 | 0 |
+| V2 version-off-chain | 14 (13 MakeCell, 1 builtin version left unpinned) | 34 (MakeCell) | 642 (MakeCell) |
+| V3 write-unreachable | 0 | 0 | 7 |
+| V4 control-sink | 0 | 0 | 0 |
+| V5 memory-order-disagrees | 17 | 31 | 518 |
+| V7 record | 0 | 5 | 6 |
+| V8 phi:memory-as-value | 0 | 0 | 25 |
+| V8 phi-arity, :eval-join | 1, 32 | 3, 25 | 0, 40 |
+| V9 control-fork | 0 | 0 | 0 |
+| V6 read-unversioned (all classes) | 89 | 28 | 4325 |
+
+v1's chalk `control-fork` is 0 (it was 1); every other v1 row is unchanged.
+
+`tools/gates.sh` at 63397a0 (the stage's last code commit; 9307e25 after it moved the downgrade proof into the ratchet gate and touched no code):
+
+```
+producer-suite  PASS  748 files, 0 failing [22m30s]
+chalk-suite     917 files, 1 failing: t/bootstrap/gates-script.t (the seventh gate the run's gates.sh listed; 9307e25 folds it into the ratchet, and the file passes there)
+census          PASS  ROUNDTRIP 426 (>= 426) DIFFERS 0 LLI_FAIL 0; GAP 5 LOAD_FAIL 0 NOJSON 0
+corpus-gate     PASS  gate-green 222 (>= 222), prove exit 0, paad/worklist.json untouched
+probes          PASS  LOUD=2 REFUSED=112 SAME=361; WRONG 0, SAME lost 0, changed 0
+ratchet         PASS  prove exit 0; chalk's lib compared; rows that fell: 0 (wire 1 and wire 2)
+downgrade       PASS  t/wire-v2-downgrades-to-v1.t, SON_DOWNGRADE_FULL with chalk's lib, at 9307e25: 0 wires differ
+```
+
+What stages 4 and 5 should know:
+
+1. **MakeCell is a version made off the control chain** (V2: every chalk2 violation, 13 of 14 corpus2, all 34 probes2; most of V5). `_place`-ing it is one line and breaks the deparser's closure round trips (t/wire-a-write-to-a-captured-lexical-goes-through-its-cell.t, 50 cases): the deparser (stage 4's adapter, or before it) and chalk must accept a pinned MakeCell first. Then V2 and most of V5 fall.
+2. **A sub's exits merge their memory in a Phi only v2 writes** (`v2_only`): chalk reading v2 meets a memory Phi at a function-exit Region, with predecessors, named only by the Return's `mem_in`.
+3. **`record` is derived by the writer** (an Assign on neither chain). V7's 5 + 6 are `($p, my $q) = LIST` with a package target: the store is a separate EntryWrite and the Assign floats (v1's `write-floating`).
+4. **phi:memory-as-value 25 and write-unreachable 7, chalk's lib only**, are new findings of the v2 rules and unexplained.
+5. **`v1_inputs`** is how the walker still asks its questions; `%MEM_MIN_INPUTS` stays in SoN::Deparse (stage 4's `as_v1` can take it from there or put `mem_in` back by `mem_operand`'s rule, which the v1 writer uses).
+6. **The producer is not deterministic on chalk's Target/LLVM/Lower.pm** (two graph shapes, two refusals, run to run). The downgrade proof sets one hash seed; the ratchet's chalk rows may move by it.
+7. **An elsif that is a sub's last statement, with its only store in a nested if's true arm, still forks** (none in the three sets): the value short-circuit handler does not ask the field-store question, and asking it there refused chalk graphs.
