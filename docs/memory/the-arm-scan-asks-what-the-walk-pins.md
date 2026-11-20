@@ -51,6 +51,39 @@ list.
   left list. A sole `my` aggregate target is a REBINDING, merged as a value
   with no control, and must not be given an If for nothing.
 
+- **Run the rule on chalk's lib too; it found three more classes there.**
+  (1) A FIELD stored alone in an arm (`$any = 1 if C`, `$n++ if C`, `$n +=
+  2 if C` in a method): the scan knew `padsv_store` and TARGMY, the forms
+  perl's peephole makes, and B::SoN suppresses the peephole. (2) `$st->{i}++`
+  in two arms of one if shared ONE pinned read: the Subscript was
+  hash-consed (same container, key and memory in both arms), pinned twice,
+  and both stores followed it; it is `make_unique` now, as the scalar-deref
+  and field forms beside it were. Any `make` followed by `_pin` is suspect
+  for the same reason: `control_in` is not in the content hash. (3)
+  `Chalk::Bootstrap::Perl::Actions::SubroutineDefinition`: an elsif arm
+  deep in a foreach whose inner if builds control while the arm itself got
+  none. NOT fixed and not reduced to a small program (six tries); the chalk
+  `control-fork` row is 1 for it. chalk and the deparser both refuse such a
+  graph by name ("a control node with 2 successors").
+- **OPf_MOD on a pad op is not a store.** The first field fix took any field
+  `padsv` with OPf_MOD as a store. perl sets that flag on a field passed to a
+  sub and on one dereferenced for a write, and the existing refusal "a
+  consumed value-context ternary whose arms store a class field" then fired
+  on every ternary with a field in a call's arguments: 15 of chalk's lib
+  graphs gone. The test reads the sassign's last child, the aassign's left
+  list, the operand of an increment or an OPf_STACKED operator.
+- **What caught that was `#graphs`, a number nothing held.** The re-counted
+  chalk rows showed four rows FALLING between the base producer and this one
+  -- good news, read alone -- and `#graphs` 24521 -> 24478. A refused sub
+  takes its violations out of every row. The ratchet holds `#graphs` now, as
+  it held `#wires`. Compare the graph NAMES of two wire caches before
+  believing a count that fell (`scratchpad/v2s01/gnames.pl DIR1 DIR2`).
+- **A fork that was a silent wrong wire is a refusal now in value
+  context.** `my $n = C ? ($s =~ tr/a//) : 0`, a slice or package array
+  assigned inside a consumed ternary, a field stored in one: each was a fork
+  and is "a consumed ternary arm stores ..." (the existing refusals; their
+  message says "an element" for all of them). Statement forms get their If.
+
 **Not done:** the producer does not refuse a fork it builds. Stage 3's V9
 ("0 from stage 3") is where that becomes a hard rule; until then the ratchet
 row is the guard.

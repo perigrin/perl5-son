@@ -6,12 +6,20 @@
 # chalk's own) are counted once per wire that loads them.
 # 2026-11-20 (class-reads): corpus and probes rows re-counted after ref/blessed/reftype
 # and scalar-context hash and package-array reads took a memory input (22 new probes:
-# cr1-9, hs1-9, pa1-4). The chalk rows are still c1a48dfe's, not re-run.
+# cr1-9, hs1-9, pa1-4). (The chalk rows were still c1a48dfe's then; re-counted below.)
 # 2026-11-20 (wire v2, stage 1): `control-fork` is new -- a node other than an If or a
 # Loop with two control successors. It counted 3 on the corpus (one graph,
 # Carp::caller_info, in three wires: `$#args = N` alone in an arm) and 1 on the probes
 # (cr8) before the arm scan learned what the walk pins; both are 0 and must stay 0.
-# chalk at c1a48dfe
+# 2026-11-20 (wire v2, stage 0): the chalk rows re-counted at chalk 45a1b8d5 with this
+# producer (they were c1a48dfe's, from before class reads). read-unversioned:object-class
+# 4451 -> 0 and :package 17 -> 5 are the class-read work; memory-order-disagrees is 291
+# where the stale row said 228, and it is 291 under the producer before this stage too
+# (6d212cc): the rise is older than stage 1 and was hidden while the rows were not compared.
+# control-fork 1 is Chalk::Bootstrap::Perl::Actions::SubroutineDefinition (an elsif arm in a
+# foreach whose inner if builds control; not reduced yet). `#graphs` is held by the ratchet
+# now, as `#wires` is: a refused sub takes its violations out of every row.
+# chalk at 45a1b8d5
 corpus	#cases	431
 corpus	#graphs	1082
 corpus	#wires	431
@@ -58,21 +66,23 @@ probes	read-unversioned:package	4
 probes	read-unversioned:package-aggregate-literal	5
 probes	read-unversioned:through-ref	1
 probes	write-floating	4
-chalk	#cases	218
-chalk	#graphs	24215
-chalk	#wires	218
+chalk	#cases	219
+chalk	#graphs	24521
+chalk	#wires	219
 chalk	allowed:param-bind	18
-chalk	allowed:record	389
-chalk	effect-rides-value	64
-chalk	memory-input-not-version	0
-chalk	memory-order-disagrees	228
+chalk	allowed:record	392
+chalk	control-fork	1
+chalk	effect-rides-value	58
+chalk	fault-floating	0
+chalk	memory-order-disagrees	291
+chalk	phi-arity	0
 chalk	phi-arity:eval-join	40
 chalk	read-unversioned:args	3
+chalk	read-unversioned:cell	0
 chalk	read-unversioned:external	87
 chalk	read-unversioned:field	3560
-chalk	read-unversioned:my-aggregate	379
-chalk	read-unversioned:object-class	4451
-chalk	read-unversioned:package	17
+chalk	read-unversioned:my-aggregate	373
+chalk	read-unversioned:package	5
 chalk	read-unversioned:package-aggregate-literal	1
 chalk	read-unversioned:through-ref	215
 chalk	write-floating	6

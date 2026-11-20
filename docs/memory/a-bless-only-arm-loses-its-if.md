@@ -5,6 +5,9 @@ metadata:
   type: project
 ---
 
+**FIXED 2026-11-20** (branch v2-s01): see [[the-arm-scan-asks-what-the-walk-pins]].
+The arm scans ask the effect table; probe cr8 is SAME.
+
 Found from chalk (branch chalk-arms, 2026-11-20) while testing class reads
 across a bless. Producer cc9d970; placement-pins 9d66925 gives the same wire,
 so it is older than the class-read work.

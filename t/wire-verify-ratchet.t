@@ -14,7 +14,11 @@ use Test2::V0;
 # baseline in the same commit, or the next rise back to the old number passes.
 #
 # THE DENOMINATOR IS HELD TOO. A count also falls when wires stop being
-# produced, so `#wires` may not drop below the baseline's.
+# produced, so `#wires` may not drop below the baseline's -- nor `#graphs`: a
+# sub the producer starts to refuse leaves its wire standing and takes its
+# violations out of every row. (An arm-scan change refused 15 of chalk's
+# graphs and four rows "fell"; only this number said why.) A change that
+# removes graphs on purpose lowers the row with its reason.
 #
 # RUNS BY DEFAULT (about three minutes: 870 compiles). An opt-in guard is the
 # kind nobody runs. chalk's lib is opt-in -- SON_RATCHET=1, with SON_CHALK or
@@ -59,6 +63,7 @@ for my $source ( sort keys %got ) {
         ok exists $want{$source}, 'the baseline has this source' or return;
         my ( $g, $w ) = ( $got{$source}, $want{$source} );
         cmp_ok $g->{'#wires'}, '>=', $w->{'#wires'}, 'no fewer wires than the baseline';
+        cmp_ok $g->{'#graphs'}, '>=', $w->{'#graphs'}, 'no fewer graphs than the baseline';
         for my $rule ( sort grep { !/^#|^allowed:/ } keys %{ { %$g, %$w } } ) {
             my ( $now, $was ) = ( $g->{$rule} // 0, $w->{$rule} // 0 );
             cmp_ok $now, '<=', $was, "$rule: $now, baseline $was";
