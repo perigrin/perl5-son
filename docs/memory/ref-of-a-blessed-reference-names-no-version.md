@@ -39,3 +39,5 @@ consumer rule can be narrowed; do not try.
 The same holds for a hash as a condition (`%h ? :`): HashLiteral feeds the
 TernaryExpr at no memory version; chalk's `_hashes_read_as_scalars` stays,
 and `llvm-an-array-as-a-condition-is-its-count.t` keeps its refused case.
+
+**Done in the producer** (branch `class-reads`): [[a-class-read-names-its-memory-version]].

@@ -4,6 +4,9 @@
 # Lower a row when a fix lowers the count; raising one needs its reason in the commit.
 # A wire holds the graphs of every module it loads, so library graphs (Carp, POSIX,
 # chalk's own) are counted once per wire that loads them.
+# 2026-11-20 (class-reads): corpus and probes rows re-counted after ref/blessed/reftype
+# and scalar-context hash and package-array reads took a memory input (22 new probes:
+# cr1-9, hs1-9, pa1-4). The chalk rows are still c1a48dfe's, not re-run.
 # chalk at c1a48dfe
 corpus	#cases	431
 corpus	#graphs	1082
@@ -22,20 +25,20 @@ corpus	read-unversioned:cell	0
 corpus	read-unversioned:external	14
 corpus	read-unversioned:field	5
 corpus	read-unversioned:my-aggregate	23
-corpus	read-unversioned:object-class	68
-corpus	read-unversioned:package	13
+corpus	read-unversioned:object-class	0
+corpus	read-unversioned:package	7
 corpus	read-unversioned:package-aggregate-literal	0
 corpus	read-unversioned:through-ref	35
 corpus	write-floating	0
-probes	#cases	464
-probes	#graphs	662
-probes	#wires	464
+probes	#cases	486
+probes	#graphs	693
+probes	#wires	486
 probes	allowed:param-bind	1
 probes	allowed:record	12
 probes	effect-rides-value	7
 probes	fault-floating	1
 probes	memory-input-not-version	0
-probes	memory-order-disagrees	6
+probes	memory-order-disagrees	5
 probes	package-scalar-loop-value	0
 probes	phi-arity	3
 probes	phi-arity:eval-join	25
@@ -43,9 +46,9 @@ probes	read-unversioned:args	1
 probes	read-unversioned:cell	1
 probes	read-unversioned:external	14
 probes	read-unversioned:field	0
-probes	read-unversioned:my-aggregate	3
-probes	read-unversioned:object-class	23
-probes	read-unversioned:package	7
+probes	read-unversioned:my-aggregate	2
+probes	read-unversioned:object-class	0
+probes	read-unversioned:package	4
 probes	read-unversioned:package-aggregate-literal	5
 probes	read-unversioned:through-ref	1
 probes	write-floating	4

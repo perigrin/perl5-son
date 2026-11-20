@@ -35,9 +35,11 @@ close, bless, printf, mkdir, chdir, unlink, system and the rest.
   and the 418 probes had no such program. A new pin is a new statement kind
   to the consumer: probe each one.
 - **Not on the chain yet:** a backtick, chomp or s/// used for its value
-  (their own node kinds, their own handlers), `ref`/`blessed`/`time` reads
-  (no place for a version on this wire), and the dynamic method call (see
-  [[a-pin-the-consumer-cannot-lower-is-held-back]]).
+  (their own node kinds, their own handlers), `time`-like external reads,
+  and the dynamic method call (see
+  [[a-pin-the-consumer-cannot-lower-is-held-back]]). `ref`/`blessed` reads
+  were listed here as having "no place for a version on this wire"; they
+  had one: [[a-class-read-names-its-memory-version]].
 - `mkdir($d)` with one argument is an INTERNAL ERROR (OpMap says it pops
   two): older than this work, loud, not fixed here.
 
