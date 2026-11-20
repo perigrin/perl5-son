@@ -91,7 +91,15 @@ package main; my $o = C->new; my $m = "inc"; $o->$m(); print $o->{n}, "\n";
 P
     my @dyn = grep { $_->{detail} =~ /dynamic_method/ } ( $r->{'write-floating'} // [] )->@*,
         ( $r->{'effect-rides-value'} // [] )->@*;
-    is scalar(@dyn), 1, 'the dynamic method call is not on the chain';
+    is scalar(@dyn), 0, 'the producer pins the dynamic method call now';
+    # ...the shape it made: the call with no control_in and no reader.
+    my $dyn = rules( graph(
+        nd( 0, 'Start', [] ), nd( 1, 'Constant', [] ),
+        nd( 2, 'Call', [ 1, 1 ], dispatch_kind => 'dynamic_method', name => '' ),
+        nd( 3, 'Return', [1], ctl => 0 ),
+    ) );
+    is [ map { $_->{detail} } ( $dyn->{'write-floating'} // [] )->@* ], ['Call:dynamic_method'],
+        'a dynamic method call off the chain is a floating write';
     my @bless = grep { $_->{detail} =~ /bless/ } ( $r->{'effect-rides-value'} // [] )->@*;
     is scalar(@bless), 0, 'the producer pins a bless used for its value now (B::SoN::EffectTable)';
     # ...the shape it made: a bless with no control_in, read by the Return.
@@ -166,7 +174,16 @@ subtest 'phi-arity:eval-join: the eval join has one way in, two-input Phis' => s
 
 subtest 'fault-floating: a division that may die has no control (fl1)' => sub {
     my $r = rules('my $d = @ARGV; my $q = 1 / $d; print "before\n"; print "$q\n";');
-    is ops( $r->{'fault-floating'} ), ['Divide'], 'Divide floats';
+    is $r->{'fault-floating'}, undef, 'the producer pins a division that may fault now';
+    # ...the shape it made: a Divide by a variable with no control_in.
+    my $old = rules( graph(
+        nd( 0, 'Start', [] ), nd( 1, 'Constant', [], value => 1 ),
+        nd( 2, 'PadAccess', [], sigil => '$', symbol => 'd' ),
+        nd( 3, 'Divide', [ 1, 2 ] ),
+        nd( 4, 'Print', [3], ctl => 0 ),
+        nd( 5, 'Return', [1], ctl => 4 ),
+    ) );
+    is ops( $old->{'fault-floating'} ), ['Divide'], 'Divide floats';
     is rules('my $d = @ARGV; my $q = $d / 2; print "$q\n";')->{'fault-floating'}, undef,
         'a constant non-zero divisor cannot fault';
 };
