@@ -242,6 +242,11 @@ sub compile {
     my @opts   = @_;
     my $format = 'text';
     $format    = 'json' if grep { $_ eq 'json' } @opts;
+    # wire=N: the JSON wire's version (SoN::Serialize::JSON's $WIRE). 1 is the
+    # default until chalk reads 2 (docs/plans/2026-11-20-wire-v2.md, stage 6).
+    my ($wire) = map { /\Awire=(.*)\z/ ? $1 : () } @opts;
+    $wire //= 1;
+    die "B::SoN: wire=$wire: the wire versions are 1 and 2\n" unless $wire eq '1' || $wire eq '2';
 
     # Two filters, and the difference is which way they fail.
     #
@@ -296,6 +301,7 @@ sub compile {
         my ( $graphs, $classes, $phases ) = _translate_until_settled($filter);
 
         if ( $format eq 'json' ) {
+            local $SoN::Serialize::JSON::WIRE = $wire;
             my $mods = _followed_modules();
             print to_json( $graphs, $classes, _data_section(),
                 $phases,
@@ -604,7 +610,7 @@ sub _resolve_glob_slots {
 
         for my $node ( $graph->nodes->@* ) {
             next unless $node->operation eq 'EntryWrite';
-            my @in = ( $node->inputs // [] )->@*;
+            my @in = ( $node->v1_inputs // [] )->@*;
             my $entry = $in[0] or next;
             next unless $entry->operation eq 'EntryDef';
             next unless ( eval { $entry->sigil } // '' ) eq '*';
@@ -903,7 +909,7 @@ sub _floor_subscripts {
         for my $node ( $graph->nodes->@* ) {
             next unless $node->isa('SoN::IR::Node::Subscript');
             next unless ( $node->stamp ? $node->stamp->type : '' ) eq 'Unknown';
-            my @in = ( $node->inputs // [] )->@*;
+            my @in = ( $node->v1_inputs // [] )->@*;
 
             # ARITY IS NOT THE QUESTION. `$x[0] = 'foo'` compiles to a single
             # `aelemfast[*x] sM` with no separate memory operand, so its
@@ -932,8 +938,8 @@ sub _floor_subscripts {
             # then a read of each sorted key took Int for the keys (another
             # container) and for $h{$_} (another key).
             if ( $mem && $mem->isa('SoN::IR::Node::Assign')
-                 && ( $mem->inputs->[0] // 0 )->isa('SoN::IR::Node::Subscript')
-                 && _same_slot( $mem->inputs->[0], $node ) ) {
+                 && ( $mem->v1_inputs->[0] // 0 )->isa('SoN::IR::Node::Subscript')
+                 && _same_slot( $mem->v1_inputs->[0], $node ) ) {
                 my $st = $mem->stamp;
                 if ( $st && $st->type ne 'Unknown'
                      && $st->type !~ /\A(?:Array|Hash|List)\z/ ) {
@@ -957,7 +963,7 @@ sub _floor_subscripts {
 sub _same_slot {
     my ( $t, $r ) = @_;
     for my $i ( 0, 1 ) {
-        my ( $a, $b ) = ( $t->inputs->[$i], $r->inputs->[$i] );
+        my ( $a, $b ) = ( $t->v1_inputs->[$i], $r->v1_inputs->[$i] );
         return 0 unless defined $a && defined $b;
         next if $a == $b;
         if ( $a->isa('SoN::IR::Node::Constant') && $b->isa('SoN::IR::Node::Constant') ) {
@@ -1036,7 +1042,7 @@ sub _floor_list_assigns {
             # A LIST ASSIGN IS RECOGNISED BY ITS RHS being an aggregate the
             # targets are distributed FROM. A scalar assign's RHS is the value
             # itself, so its stamp is the answer and is left alone above.
-            my @in = ( $node->inputs // [] )->@*;
+            my @in = ( $node->v1_inputs // [] )->@*;
             next unless @in >= 2;
             if ( @in == 2 ) {
                 my $rhs = $in[1] or next;
@@ -1701,14 +1707,14 @@ sub _stamp_literal_subscripts {
 # version after it, and changes nothing.
 sub _before_pinned_reads {
     my ($mem) = @_;
-    $mem = $mem->inputs->[-1]
+    $mem = $mem->v1_inputs->[-1]
         while $mem && $SoN::FromOptree::PINNED_MAY_DIE{ Scalar::Util::refaddr($mem) };
     return $mem;
 }
 
 sub _literal_element_type {
     my ($node) = @_;
-    my $inputs = $node->inputs // [];
+    my $inputs = $node->v1_inputs // [];
     my ( $agg, $index, $mem ) = $inputs->@[ 0, 1, 2 ];
     return undef unless defined $agg && defined $index;
     $mem = _before_pinned_reads($mem);
@@ -1724,7 +1730,7 @@ sub _literal_element_type {
     my $is_hash  = $agg->isa('SoN::IR::Node::HashLiteral');
     return undef unless $is_array || $is_hash;
 
-    my @elems = ( $agg->inputs // [] )->@*;
+    my @elems = ( $agg->v1_inputs // [] )->@*;
 
     # AN INPUT CAN STAND FOR MORE THAN ONE ELEMENT, and this code counts
     # INPUTS. A slice FLATTENS into its container, so `my @t = @_[-2,-1]` is
@@ -1865,7 +1871,7 @@ sub _stamp_merges {
                 next unless _is_merge_node($node);
                 next unless ( $node->stamp ? $node->stamp->type : '' ) eq 'Unknown';
 
-                my @inputs = ( $node->inputs // [] )->@*;
+                my @inputs = ( $node->v1_inputs // [] )->@*;
                 next unless @inputs;
 
                 my $joined;
@@ -1933,7 +1939,7 @@ sub _stamp_derived {
 sub _derived_type {
     my ($node) = @_;
     my $op     = $node->operation;
-    my @inputs = ( $node->inputs // [] )->@*;
+    my @inputs = ( $node->v1_inputs // [] )->@*;
 
     # A compiled regex says so in its own const_type.
     if ( $op eq 'Constant' ) {
@@ -2095,18 +2101,18 @@ sub _infer_backward {
             my %param;       # symbol => 1
             for my $node ( $graph->nodes->@* ) {
                 next unless $node->operation eq 'Assign';
-                my @in = ( $node->inputs // [] )->@*;
+                my @in = ( $node->v1_inputs // [] )->@*;
                 my $src = $in[-1];
                 my $from_args = Scalar::Util::blessed($src) && ( $src->operation eq 'ArgsSource'
                     || ( $src->operation eq 'Call' && ( $src->name // '' ) eq 'shift'
-                         && grep { Scalar::Util::blessed($_) && $_->operation eq 'ArgsSource' } ( $src->inputs // [] )->@* ) );
+                         && grep { Scalar::Util::blessed($_) && $_->operation eq 'ArgsSource' } ( $src->v1_inputs // [] )->@* ) );
                 next unless $from_args;
                 $param{ $_->symbol // '' } = 1
                     for grep { Scalar::Util::blessed($_) && $_->operation eq 'PadAccess' } @in[ 0 .. $#in - 1 ];
             }
             for my $node ( $graph->nodes->@* ) {
                 my $op_name = B::SoN::TypeLibrary::type_key($node);
-                my @inputs  = ( $node->inputs // [] )->@*;
+                my @inputs  = ( $node->v1_inputs // [] )->@*;
                 my $targets = $node->operation eq 'Assign'
                     ? ( ( $node->can('targets') ? $node->targets : undef ) // 1 )
                     : $node->operation eq 'VarDecl' ? 1 : 0;
@@ -2238,7 +2244,7 @@ sub _thread_through_coerce {
     my ($node) = @_;
     my $hops = 0;
     while ( $node && $node->operation eq 'Coerce' && $hops++ < 8 ) {
-        $node = ( $node->inputs // [] )->[0];
+        $node = ( $node->v1_inputs // [] )->[0];
     }
     return $node;
 }
@@ -2487,12 +2493,12 @@ sub _plain_parent_named {
     my @found;
     for my $node ( $prog->nodes->@* ) {
         next unless $node->operation eq 'EntryWrite';
-        my ( $entry, $value ) = ( $node->inputs // [] )->@*;
+        my ( $entry, $value ) = ( $node->v1_inputs // [] )->@*;
         next unless $entry && $entry->operation eq 'EntryDef'
             && ( eval { $entry->sigil } // '' ) eq '@'
             && ( eval { $entry->symbol } // '' ) eq 'ISA'
             && ( eval { $entry->package } // '' ) eq $pkg;
-        my @el = $value && $value->operation eq 'ArrayLiteral' ? ( $value->inputs // [] )->@* : ();
+        my @el = $value && $value->operation eq 'ArrayLiteral' ? ( $value->v1_inputs // [] )->@* : ();
         return undef unless @el == 1 && $el[0]->operation eq 'Constant'
             && defined( my $v = eval { $el[0]->value } );
         return undef unless $main{ Scalar::Util::refaddr($node) };
@@ -3729,6 +3735,8 @@ sub _wire_field_defaults {
         # inputs=[value], control_in=predecessor.
         my $ret = $factory->make_cfg('Return', inputs => [ $value_node ] );
         $ret->set_control_in($start);
+        # (the memory it ends at is the graph's first: wire v2 names it)
+        $ret->set_mem_in( $factory->make('MemStart') );
 
         my $key = "${pkg_name}::__DEFAULT_${fix}";
         $graphs->{$key} = SoN::IR::Graph->new( start => $start, returns => [$ret] );

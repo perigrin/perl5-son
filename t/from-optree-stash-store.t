@@ -37,8 +37,8 @@ sub graph_of ($code) {
 # read is versioned by.
 sub stored_at ($read) {
     return undef unless $read->operation eq 'EntryDef';
-    my ($w) = grep { ref $_ && $_->operation eq 'EntryWrite' } $read->inputs->@*;
-    return $w ? $w->inputs->[1] : undef;
+    my ($w) = grep { ref $_ && $_->operation eq 'EntryWrite' } $read->v1_inputs->@*;
+    return $w ? $w->v1_inputs->[1] : undef;
 }
 
 sub nodes_of ($g, $op) { grep { $_->operation eq $op } $g->nodes->@* }
@@ -46,7 +46,7 @@ sub return_of ($g)     { (grep { $_->operation eq 'Return' } $g->nodes->@*)[0] }
 
 subtest 'a read is at the store, not a slot load' => sub {
     my $g = graph_of('sub { our $g = 5; $g }');
-    my $val = stored_at( return_of($g)->inputs->[-1] );
+    my $val = stored_at( return_of($g)->v1_inputs->[-1] );
     ok($val, 'the Return value is a read at the store\'s version') or return;
     is($val->operation, 'Constant', 'the store it reads holds the assigned value');
     is($val->value, 5, '... which is what was assigned');
@@ -57,7 +57,7 @@ subtest 'a read is at the store, not a slot load' => sub {
 
 subtest 'a second store is a new version — the read sees the LATER value' => sub {
     my $g = graph_of('sub { our $g = 5; $g = 7; $g }');
-    my $val = stored_at( return_of($g)->inputs->[-1] );
+    my $val = stored_at( return_of($g)->v1_inputs->[-1] );
     ok($val, 'the read is at a store\'s version') or return;
     is($val->value, 7, 'the read is at the second store, not the first')
         or diag('a dropped second store is the miscompile this pins');
@@ -68,14 +68,14 @@ subtest 'a definition may change representation — the bug the slot model had' 
     # second definition here wrote a slot family no read loaded from and was
     # silently lost. Each store carries its own value, of its own type.
     my $g = graph_of('sub { our $g = 1; $g = "hi"; $g }');
-    my $val = stored_at( return_of($g)->inputs->[-1] );
+    my $val = stored_at( return_of($g)->v1_inputs->[-1] );
     ok($val, 'the read is at a store\'s version') or return;
     is($val->operation, 'Constant', 'the store it reads holds a value');
     is($val->value, 'hi', 'the Str store wins, not the earlier Int')
         or diag('this returned 1 under the typed-slot model');
 
     my $g2 = graph_of('sub { our $g = "hi"; $g = 7; $g }');
-    my $val2 = stored_at( return_of($g2)->inputs->[-1] );
+    my $val2 = stored_at( return_of($g2)->v1_inputs->[-1] );
     is($val2 && $val2->value, 7, 'and in the other direction');
 };
 
@@ -92,7 +92,7 @@ subtest 'an UNBOUND read is the entry definition' => sub {
 
 subtest 'a lexical is unaffected' => sub {
     my $g = graph_of('sub { my $x = 5; $x = 7; $x }');
-    is(return_of($g)->inputs->[-1]->value, 7,
+    is(return_of($g)->v1_inputs->[-1]->value, 7,
         'the lexical path still resolves to the latest definition');
 };
 

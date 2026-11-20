@@ -31,7 +31,7 @@ class SoN::Render::Text 0.01 {
                 ref($_) eq 'ARRAY'
                     ? map { '%' . $display_id{$_->id} } $_->@*
                     : '%' . $display_id{$_->id}
-            } $node->inputs->@*;
+            } $node->v1_inputs->@*;
 
             # Format node-specific attributes. Dispatched by operation name
             # rather than isa() so this renderer works for any node sharing

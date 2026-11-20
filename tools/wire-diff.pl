@@ -23,6 +23,9 @@ sub load ($f) {
     my $t = <$fh>;
     $t =~ s{/tmp/[^/"]+/(\d+\.pl)}{$1}g;
     $t =~ s{"[^"]*/(docs/research/[^"]+\.pl)"}{"$1"}g;    # a probe, under whichever checkout
+    # A refusal that names where in the producer it was raised (a die with no
+    # newline) names a line the change under test may have moved.
+    $t =~ s{ at [^"]*?/lib/((?:SoN|B)/[\w/]+\.pm) line \d+\.}{ at $1}g;
     return eval { $json->decode($t) } // { undecodable => 1 };
 }
 

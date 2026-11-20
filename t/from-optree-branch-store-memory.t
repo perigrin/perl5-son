@@ -39,7 +39,7 @@ subtest 'the element store is control-dependent on Proj(If, true)' => sub {
     my $g = graph_of($SRC);
     # the store is the element-store Assign (a Subscript lvalue among its inputs)
     my ($store) = grep {
-        grep { ref $_ && $_->operation eq 'Subscript' } $_->inputs->@*
+        grep { ref $_ && $_->operation eq 'Subscript' } $_->v1_inputs->@*
     } of_op($g, 'Assign');
     ok(defined $store, 'has an element-store Assign') or return;
     # an element-store Assign carries control via control_in (produce-time
@@ -47,7 +47,7 @@ subtest 'the element store is control-dependent on Proj(If, true)' => sub {
     my $ctrl = $store->can('control_in') ? $store->control_in : undef;
     ok(defined $ctrl, 'the store has a control input') or return;
     is($ctrl->operation, 'Proj', 'store control is a Proj');
-    is($ctrl->inputs->[0]->operation, 'If', 'the Proj is off the If');
+    is($ctrl->v1_inputs->[0]->operation, 'If', 'the Proj is off the If');
     is($ctrl->index, 0, 'index 0 = the true arm (store runs when the guard is taken)');
 };
 
@@ -55,9 +55,9 @@ subtest 'the post-branch read memory is a Phi over the Region' => sub {
     my $g = graph_of($SRC);
     # the returned read is the LAST-evaluated Subscript feeding the Return
     my ($ret) = of_op($g, 'Return');
-    my $read = $ret->inputs->[-1];
+    my $read = $ret->v1_inputs->[-1];
     is($read->operation, 'Subscript', 'the return value is a Subscript (the read)') or return;
-    my $mem = $read->inputs->[2];
+    my $mem = $read->v1_inputs->[2];
     ok(defined $mem, 'the read has a memory input') or return;
     is($mem->operation, 'Phi', 'the read memory is a Phi (the memory merge)') or return;
     ok(defined $mem->region && $mem->region->operation eq 'Region',

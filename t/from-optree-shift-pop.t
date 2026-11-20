@@ -30,11 +30,11 @@ sub nodes_by_op ($graph, $op) {
 # passing badge.
 sub _reaches ($from, $target) {
     my %seen;
-    my @queue = $from->inputs->@*;
+    my @queue = $from->v1_inputs->@*;
     while (my $n = shift @queue) {
         next unless defined $n && !$seen{ $n->id }++;
         return 1 if $n->id eq $target->id;
-        push @queue, $n->inputs->@*;
+        push @queue, $n->v1_inputs->@*;
     }
     return 0;
 }
@@ -51,7 +51,7 @@ subtest 'shift @arr is a memory statement effect stamped with the element type' 
     my ($arr) = grep {
         my $r = $_->stamp ? $_->stamp->type : '';
         $_->operation eq 'ArrayLiteral'
-    } $shift->inputs->@*;
+    } $shift->v1_inputs->@*;
     ok($arr, 'the array is an input to the shift Call');
 };
 
@@ -82,7 +82,7 @@ subtest 'bare shift (from @_) drains @_ as a memory effect' => sub {
     ok($shift, 'a bare shift Call node exists');
     ok(defined $shift->control_in,
         'bare shift IS a statement effect -- it mutates @_');
-    my ($args) = grep { $_->operation eq 'ArgsSource' } $shift->inputs->@*;
+    my ($args) = grep { $_->operation eq 'ArgsSource' } $shift->v1_inputs->@*;
     ok($args, 'the ArgsSource is an input to the shift Call');
 };
 
@@ -96,7 +96,7 @@ subtest 'two bare shifts are ordered against each other' => sub {
 
     my %mem_input;
     for my $s (@shifts) {
-        my ($mem) = grep { $_->operation ne 'ArgsSource' } $s->inputs->@*;
+        my ($mem) = grep { $_->operation ne 'ArgsSource' } $s->v1_inputs->@*;
         ok($mem, 'each shift takes a memory input') or next;
         $mem_input{ $s->id } = $mem->id;
     }

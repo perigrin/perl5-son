@@ -196,7 +196,7 @@ class SoN::IR::Graph {
             my @next_frontier;
             for my $n (@frontier) {
                 my @neighbors;
-                for my $input ($n->inputs()->@*) {
+                for my $input ($n->v1_inputs->@*) {
                     if (ref($input) eq 'ARRAY') {
                         push @neighbors, grep { defined && blessed($_) } $input->@*;
                         next;
@@ -262,7 +262,7 @@ class SoN::IR::Graph {
                 && defined $n->region()
                 && $n->region()->operation() eq 'Loop';
             my $slot = -1;
-            for my $input ($n->inputs()->@*) {
+            for my $input ($n->v1_inputs->@*) {
                 $slot++;
                 next if $loop_phi && $slot == 1;
                 if (ref($input) eq 'ARRAY') {

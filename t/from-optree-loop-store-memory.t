@@ -34,10 +34,10 @@ sub loop_mem_phi ($g) {
         defined $_->region && $_->region->operation eq 'Loop'
     } of_op($g, 'Phi');
     my @mem = grep {
-        my @in = $_->inputs->@*;
+        my @in = $_->v1_inputs->@*;
         @in == 2
             && grep { ref $_ && $_->operation eq 'Assign'
-                && grep { ref $_ && $_->operation eq 'Subscript' } $_->inputs->@* }
+                && grep { ref $_ && $_->operation eq 'Subscript' } $_->v1_inputs->@* }
                $in[1];   # the back-edge input is an element store
     } @phis;
     return $mem[0];
@@ -55,16 +55,16 @@ subtest 'the body element store threads a loop-header memory-Phi' => sub {
     my $mem = loop_mem_phi($g);
     ok(defined $mem, 'a loop-header memory-Phi exists') or return;
     is($mem->region->operation, 'Loop', 'the memory-Phi region is the Loop');
-    is(scalar($mem->inputs->@*), 2, 'the memory-Phi has two inputs (init, back-edge)');
+    is(scalar($mem->v1_inputs->@*), 2, 'the memory-Phi has two inputs (init, back-edge)');
 
     # inputs[0] is the pre-loop memory (MemStart at entry -- no store before the loop).
-    my $init = $mem->inputs->[0];
+    my $init = $mem->v1_inputs->[0];
     is($init->operation, 'MemStart', 'inputs[0] is the pre-loop memory (MemStart)');
 
     # inputs[1] is the back-edge: the body's element store (an Assign over a Subscript lvalue).
-    my $back = $mem->inputs->[1];
+    my $back = $mem->v1_inputs->[1];
     is($back->operation, 'Assign', 'inputs[1] (back-edge) is the body element store');
-    ok((grep { ref $_ && $_->operation eq 'Subscript' } $back->inputs->@*),
+    ok((grep { ref $_ && $_->operation eq 'Subscript' } $back->v1_inputs->@*),
         'the back-edge store carries a Subscript lvalue');
 };
 
@@ -76,8 +76,8 @@ subtest 'the body store advances memory OFF the header Phi' => sub {
     # from the pre-loop init (so the Phi genuinely merges init OR back-edge -- not
     # a degenerate self-loop). The lvalue Subscript is a 2-input address node (no
     # memory input); the memory advance lives in the Assign, which IS the back-edge.
-    my $init = $mem->inputs->[0];
-    my $back = $mem->inputs->[1];
+    my $init = $mem->v1_inputs->[0];
+    my $back = $mem->v1_inputs->[1];
     isnt($back, $init, 'the back-edge (post-body memory) differs from the init memory');
     is($back->operation, 'Assign', 'the back-edge is the body element store (memory-out)');
     # The store is a statement effect threaded on the loop-body control chain.
@@ -90,14 +90,14 @@ subtest 'the post-loop read takes the loop exit memory' => sub {
     my $mem = loop_mem_phi($g);
     ok(defined $mem, 'loop-header memory-Phi exists') or return;
     my ($ret) = of_op($g, 'Return');
-    my $read = $ret->inputs->[-1];
+    my $read = $ret->v1_inputs->[-1];
     is($read->operation, 'Subscript', 'the return value is a Subscript (the read)') or return;
     # THE EXIT'S MERGE OF IT, not the header Phi itself: read at the header's
     # version, the read after the loop was the body's own read at the top of
     # the last pass -- one node, a pass behind (`$h{a}++`: 2 for perl's 3).
-    my $exit = $read->inputs->[2];
+    my $exit = $read->v1_inputs->[2];
     ok($exit->operation eq 'Phi' && $exit->region->operation eq 'Region'
-        && $exit->inputs->[0] == $mem,
+        && $exit->v1_inputs->[0] == $mem,
         'the post-loop read memory is the loop exit\'s merge of the header memory-Phi');
 };
 
@@ -114,22 +114,22 @@ subtest 'a foreach-range body store threads the same loop-header memory-Phi' => 
     my $mem = loop_mem_phi($g);
     ok(defined $mem, 'a loop-header memory-Phi exists') or return;
     is($mem->region->operation, 'Loop', 'the memory-Phi region is the Loop');
-    is(scalar($mem->inputs->@*), 2, 'the memory-Phi has two inputs (init, back-edge)');
-    is($mem->inputs->[0]->operation, 'MemStart',
+    is(scalar($mem->v1_inputs->@*), 2, 'the memory-Phi has two inputs (init, back-edge)');
+    is($mem->v1_inputs->[0]->operation, 'MemStart',
         'inputs[0] is the pre-loop memory (MemStart)');
-    my $back = $mem->inputs->[1];
+    my $back = $mem->v1_inputs->[1];
     is($back->operation, 'Assign', 'inputs[1] (back-edge) is the body element store');
-    ok((grep { ref $_ && $_->operation eq 'Subscript' } $back->inputs->@*),
+    ok((grep { ref $_ && $_->operation eq 'Subscript' } $back->v1_inputs->@*),
         'the back-edge store carries a Subscript lvalue');
     my ($ret) = of_op($g, 'Return');
-    my $read = $ret->inputs->[-1];
+    my $read = $ret->v1_inputs->[-1];
     is($read->operation, 'Subscript', 'the return value is a Subscript (the read)') or return;
     # THE EXIT'S MERGE OF IT, not the header Phi itself: read at the header's
     # version, the read after the loop was the body's own read at the top of
     # the last pass -- one node, a pass behind (`$h{a}++`: 2 for perl's 3).
-    my $exit = $read->inputs->[2];
+    my $exit = $read->v1_inputs->[2];
     ok($exit->operation eq 'Phi' && $exit->region->operation eq 'Region'
-        && $exit->inputs->[0] == $mem,
+        && $exit->v1_inputs->[0] == $mem,
         'the post-loop read memory is the loop exit\'s merge of the header memory-Phi');
 };
 

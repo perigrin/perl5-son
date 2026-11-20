@@ -71,12 +71,9 @@ class SoN::IR::Node::Call :isa(SoN::IR::Value) {
         return;
     }
 
-    # THE LAST INPUT IS A MEMORY EDGE, appended by the producer (keys, values,
-    # each; push, unshift, splice; shift, pop). Said here because the input
-    # alone cannot say it: a `shift` result passed as the last ARGUMENT is a
-    # memory point too, and taking it for the edge dropped the argument --
-    # `push @o, $n` rendered `push(@o)`.
-    field $memory_input :param :reader = false;
+    # (A builtin that reads memory takes it as `mem`, SoN::IR::Node's
+    # mem_in: never an input, so a `shift` result passed as the last ARGUMENT
+    # is not taken for the edge. Wire v1 says `memory_input` and puts it last.)
     field $paren_form :param :reader = false;
 
     # `&name;` -- ampersand, no parentheses -- hands the CALLER's @_ to the

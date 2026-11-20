@@ -31,10 +31,10 @@ subtest 'an element read carries a memory input' => sub {
     my $g = graph_of('sub { my @a = (1,2,3); $a[0] }');
     my ($sub) = subscripts($g);
     ok(defined $sub, 'has a Subscript') or return;
-    is(scalar $sub->inputs->@*, 3, 'Subscript has 3 inputs (container, index, memory)');
+    is(scalar $sub->v1_inputs->@*, 3, 'Subscript has 3 inputs (container, index, memory)');
     # container=[0], index=[1] unchanged; memory=[2].
-    is($sub->inputs->[0]->operation, 'ArrayLiteral', 'input[0] is the container');
-    my $mem = $sub->inputs->[2];
+    is($sub->v1_inputs->[0]->operation, 'ArrayLiteral', 'input[0] is the container');
+    my $mem = $sub->v1_inputs->[2];
     ok(defined $mem, 'input[2] is the memory value');
     is($mem->operation, 'MemStart', 'at entry the memory is MemStart');
 };
@@ -46,10 +46,10 @@ subtest 'pre-store and post-store reads of one slot are DISTINCT nodes' => sub {
     my @reads = grep {
         # a READ Subscript (not the store lvalue): its consumer is not an Assign
         my $s = $_;
-        !grep { $_->operation eq 'Assign' && $_->inputs->[-2] == $s } $g->nodes->@*;
+        !grep { $_->operation eq 'Assign' && $_->v1_inputs->[-2] == $s } $g->nodes->@*;
     } subscripts($g);
     # There should be two distinct read nodes with different memory inputs.
-    my %mem_ids = map { ($_->inputs->[2] ? $_->inputs->[2]->id : 'none') => 1 } subscripts($g);
+    my %mem_ids = map { ($_->v1_inputs->[2] ? $_->v1_inputs->[2]->id : 'none') => 1 } subscripts($g);
     ok(scalar(keys %mem_ids) >= 2,
         'reads at different program points have different memory inputs')
         or diag('memory input ids: ' . join(', ', keys %mem_ids));
@@ -65,8 +65,8 @@ subtest 'a store consumes memory and produces a new memory (the store node)' => 
     # passed whatever the read was pinned to, including MemStart, which is
     # exactly the bug it exists to catch.
     my ($read) = grep {
-        $_->operation eq 'Subscript' && $_->inputs->[2]
-            && $_->inputs->[2]->id eq $assign->id
+        $_->operation eq 'Subscript' && $_->v1_inputs->[2]
+            && $_->v1_inputs->[2]->id eq $assign->id
     } $g->nodes->@*;
     ok(defined $read, 'the post-store read takes the store Assign as its memory input');
 
@@ -74,9 +74,9 @@ subtest 'a store consumes memory and produces a new memory (the store node)' => 
     # 2-input lvalue form (an address, no memory input at all), and a version
     # of this check that accepted any node would not tell the two apart.
     my @pinned_to_memstart = grep {
-        $_->operation eq 'Subscript' && $_->inputs->[2]
-            && $_->inputs->[2]->operation eq 'MemStart'
-            && $_->inputs->[2]->id eq $assign->id
+        $_->operation eq 'Subscript' && $_->v1_inputs->[2]
+            && $_->v1_inputs->[2]->operation eq 'MemStart'
+            && $_->v1_inputs->[2]->id eq $assign->id
     } $g->nodes->@*;
     is(scalar @pinned_to_memstart, 0,
         'no read is reported as pinned to BOTH MemStart and the Assign');

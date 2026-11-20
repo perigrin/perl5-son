@@ -25,10 +25,12 @@ my $src = do {
     local $/; <$fh>;
 };
 
+# A node reads memory where it is built by `mem => ...` among make()'s
+# arguments (SoN::IR::Node's mem_in; wire v1 puts it last).
 my %builds_with_memory;
-while ( $src =~ /make\(\s*'(\w+)'\s*,\s*\n?\s*inputs\s*=>\s*\[([^\]]*)\]/gs ) {
-    my ( $kind, $inputs ) = ( $1, $2 );
-    $builds_with_memory{$kind} = 1 if $inputs =~ /memory/;
+while ( $src =~ /make(?:_unique)?\(\s*'(\w+)'\s*,((?:[^()]++|\((?2)\))*)\)/gs ) {
+    my ( $kind, $args ) = ( $1, $2 );
+    $builds_with_memory{$kind} = 1 if $args =~ /\bmem\s*=>/;
 }
 # A Phi OVER MEMORY STATES has no trailing edge to trim: every input is a
 # memory state, and the renderer knows such a merge by _is_memory, not by

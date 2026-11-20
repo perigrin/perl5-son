@@ -87,9 +87,9 @@ subtest 'a write after the reference is visible to a later read' => sub {
     my ($ret) = grep { $_->operation eq 'Return' } $g->nodes->@*;
     ok(defined $ret, 'the sub returns') or return;
 
-    my $read = $ret->inputs->[0];
+    my $read = $ret->v1_inputs->[0];
     is($read->operation, 'PadAccess', 'the return value is a location read');
-    is($read->inputs->[0]->operation, 'Assign',
+    is($read->v1_inputs->[0]->operation, 'Assign',
        'threaded to the STORE, so it observes the write rather than MemStart');
 };
 

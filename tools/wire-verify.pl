@@ -28,11 +28,17 @@ use SoN::Verify;
 #                 change to the producer.
 #   --jobs N      compile N wires at a time (default 1). The verifying is one
 #                 process either way; the compiles are where the time goes.
-my ( $corpus, $probes, $chalk, $list, $tsv, $wires, $jobs );
+#   --wire N      the wire version B::SoN writes (`wire=N`, default 1). The
+#                 sources of a v2 run are named corpus2, probes2, chalk2, and
+#                 SoN::Verify checks them by the v2 rules.
+my ( $corpus, $probes, $chalk, $list, $tsv, $wires, $jobs, $wire );
 GetOptions( 'corpus' => \$corpus, 'probes' => \$probes, 'chalk=s' => \$chalk,
-    'list' => \$list, 'tsv' => \$tsv, 'wires=s' => \$wires, 'jobs=i' => \$jobs )
-    or die "usage: $0 [--corpus] [--probes] [--chalk DIR] [--list] [--tsv] [--wires DIR] [--jobs N]\n";
+    'list' => \$list, 'tsv' => \$tsv, 'wires=s' => \$wires, 'jobs=i' => \$jobs, 'wire=i' => \$wire )
+    or die "usage: $0 [--corpus] [--probes] [--chalk DIR] [--list] [--tsv] [--wires DIR] [--jobs N] [--wire N]\n";
 $jobs //= 1;
+$wire //= 1;
+die "--wire: 1 or 2\n" unless $wire == 1 || $wire == 2;
+my $sfx = $wire == 2 ? '2' : '';
 $corpus = $probes = 1 unless $corpus || $probes || $chalk;
 
 my $root = "$FindBin::Bin/..";
@@ -47,10 +53,12 @@ sub wire ( $source, $name, $file, $cwd = undef ) {
         make_path("$wires/$source");
         my $cd = defined $cwd ? "cd '$cwd' && " : '';
         my $inc = defined $cwd ? '-Ilib' : '';
-        # 300 s and 4 GB: a producer that spins or balloons is a missing wire
-        # (counted below), not a hung census.
-        system( "ulimit -v 4000000; $cd/usr/bin/timeout 300 $^X -I$root/lib $inc "
-                . "-MO=-q,SoN,json,not_package=SoN '$file' > '$cache.tmp' 2>/dev/null" );
+        # 900 s and 4 GB: a producer that spins or balloons is a missing wire
+        # (counted below), not a hung census. (300 s was too few for chalk's
+        # Target/LLVM and Lower -- four minutes alone -- beside other jobs.)
+        my $limit = $ENV{SON_WIRE_TIMEOUT} // 900;
+        system( "ulimit -v 4000000; $cd/usr/bin/timeout $limit $^X -I$root/lib $inc "
+                . "-MO=-q,SoN,json,wire=$wire,not_package=SoN '$file' > '$cache.tmp' 2>/dev/null" );
         rename "$cache.tmp", $cache or die "$cache: $!";
     }
     return undef unless -s $cache;
@@ -102,18 +110,18 @@ if ($corpus) {
         close $o;
         push @cases, [ $id, "$tmp/$id.pl" ];
     }
-    run( corpus => @cases );
+    run( "corpus$sfx" => @cases );
 }
 if ($probes) {
     my $dir = "$root/docs/research/son-ir-audit-2026-11-19/probes";
-    run( probes => map { [ $_ =~ s{^\Q$dir\E/|\.pl$}{}gr, $_ ] } sort glob "$dir/*/*.pl" );
+    run( "probes$sfx" => map { [ $_ =~ s{^\Q$dir\E/|\.pl$}{}gr, $_ ] } sort glob "$dir/*/*.pl" );
 }
 if ($chalk) {
     -d "$chalk/lib" or die "no lib/ under $chalk\n";
     chomp( my $at = $ENV{SON_CHALK_AT} // `git -C '$chalk' rev-parse --short=8 HEAD 2>/dev/null` );
     say "# chalk at $at" unless $tsv;
     chomp( my @mods = `cd '$chalk' && find lib -name '*.pm' | sort` );
-    run( chalk => map { [ $_ =~ s{^lib/|\.pm$}{}gr, $_, $chalk ] } @mods );
+    run( "chalk$sfx" => map { [ $_ =~ s{^lib/|\.pm$}{}gr, $_, $chalk ] } @mods );
 }
 
 my %rules = map { $_ => 1 } map { keys %$_ } values %count;

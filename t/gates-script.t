@@ -5,7 +5,9 @@ use Test2::V0;
 
 # THE GATES OF docs/plans/2026-11-20-wire-v2.md, "Global constraints". A gate
 # dropped from the script is a gate nobody runs.
-my @gates = qw(producer-suite chalk-suite census corpus-gate probes ratchet);
+# downgrade is stage 3's proof (t/wire-v2-downgrades-to-v1.t over the whole
+# corpus and chalk's lib).
+my @gates = qw(producer-suite chalk-suite census corpus-gate probes ratchet downgrade);
 
 ok -x 'tools/gates.sh', 'tools/gates.sh is there and runs';
 my @listed = map { (split ' ')[0] } split /\n/, qx(tools/gates.sh --list 2>&1);
@@ -17,5 +19,7 @@ my $list = qx(tools/gates.sh --list 2>&1);
 like $list, qr/^census\b.*ROUNDTRIP >= 426.*DIFFERS 0.*LLI_FAIL 0/m, 'the census limits';
 like $list, qr/^corpus-gate\b.*>= 222/m,                              'the corpus gate limit';
 like $list, qr/^probes\b.*WRONG 0/m,                                  'the probe limit';
+like $list, qr/^ratchet\b.*wire 2/m,                                   'the ratchet holds the v2 rows too';
+like $list, qr/^downgrade\b.*0 wires differ/m,                         'the downgrade proof';
 
 done_testing;

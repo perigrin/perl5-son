@@ -104,9 +104,11 @@ my %STATEMENT = map { $_ => 1 } qw(
 #                    allowed => { record => N, 'param-bind' => N }, graphs => N }
 sub verify ($wire) {
     my %res = ( violations => [], allowed => {}, graphs => 0 );
+    my $v2 = ( $wire->{version} // 1 ) == 2;
     for my $name ( sort keys( ( $wire->{methods} // {} )->%* ) ) {
         $res{graphs}++;
-        _graph( $name, $wire->{methods}{$name}, \%res );
+        $v2 ? _graph_v2( $name, $wire->{methods}{$name}, \%res, { map { $_ => 1 } ( $wire->{profile} // [] )->@* } )
+            : _graph( $name, $wire->{methods}{$name}, \%res );
     }
     return \%res;
 }
@@ -409,6 +411,256 @@ sub _describe ( $n, $by ) {
     $s .= ' of ' . $c->{op} . ( defined _fields($c)->{symbol} ? ' ' . ( _fields($c)->{sigil} // '' ) . _fields($c)->{symbol} : '' )
         if $c && $n->{op} ne 'Call';
     return $s;
+}
+
+# ---------------------------------------------------------------- wire v2
+#
+# THE RULES OF docs/plans/2026-11-20-wire-v2.md, section 8.1, on a wire whose
+# `version` is 2: memory is named (`mem_in`, `mem_out`), not positional, so
+# what v1 could only guess is read here.
+#
+#   mem-in-not-version   V1: a mem_in, or an input of a memory Phi, names no
+#                        version (MemStart, a memory Phi, a node with mem_out).
+#   version-off-chain    V2: a node with mem_out lacks mem_in or control_in;
+#                        or a Return, an Unwind, a sub Call or an Assign that
+#                        is no record has no mem_in.
+#   write-unreachable    V3: a node with mem_out the backward walk over
+#                        mem_in and memory Phi inputs does not visit, from the
+#                        roots (V4): each Return's and Unwind's mem_in, and
+#                        the memory Phi of a Loop no exit Region names.
+#   control-sink         V4: a pinned node no control follows that is no root
+#                        (a Return, an Unwind) and no part of a loop's test.
+#   memory-order-disagrees  V5: a pinned node's mem_in is not the nearest
+#                        version back along its control chain.
+#   read-unversioned:C   V6: as on v1, with mem_in for the memory input.
+#   record               V7: a record Assign on a chain, or one whose targets
+#                        are not `my` scalars (or `my` aggregates bound from @_).
+#   phi-arity, phi-arity:eval-join, phi-no-region   V8, as on v1.
+#   phi:memory-as-value  V8: a memory Phi used as a value input.
+#   control-fork         V9, as on v1.
+sub _graph_v2 ( $name, $g, $res, $profile = {} ) {
+    my @nodes = ( $g->{nodes} // [] )->@*;
+    my %by    = map { $_->{id} => $_ } @nodes;
+    my ( %cons, %succ );
+    for my $n (@nodes) {
+        my $in = $n->{inputs} // [];
+        for my $i ( 0 .. $#$in ) {
+            push $cons{$_}->@*, [ $n, $i ] for grep { defined } ref $in->[$i] ? $in->[$i]->@* : $in->[$i];
+        }
+        push $succ{$_}->@*, $n->{id} for _control_preds($n);
+    }
+    my $bad = sub ( $n, $rule, $detail ) {
+        push $res->{violations}->@*,
+            { graph => $name, node => $n->{id}, op => $n->{op}, rule => $rule, detail => $detail };
+    };
+    my $say = sub ($id) { my $x = $by{ $id // '' }; $x ? "$x->{op}#$id" : 'nothing' };
+    my $memphi = sub ($n) { $n && $n->{op} eq 'Phi' && _fields($n)->{memory} };
+    my $is_version = sub ($id) {
+        my $x = $by{ $id // '' } or return 0;
+        return $x->{op} eq 'MemStart' || $memphi->($x) || $x->{mem_out};
+    };
+    my $record = sub ($n) { $n->{op} eq 'Assign' && _fields($n)->{record} };
+
+    # (V9) ONE CONTROL SUCCESSOR, except for the two kinds that branch.
+    for my $n (@nodes) {
+        next if $n->{op} eq 'If' || $n->{op} eq 'Loop';
+        my %s = map { $_ => 1 } ( $succ{ $n->{id} } // [] )->@*;
+        next if keys %s < 2;
+        $bad->( $n, 'control-fork', scalar( keys %s ) . ' successors: '
+                . join( ', ', map { $say->($_) } sort { $a <=> $b } keys %s ) );
+    }
+
+    # (V1, V2) EDGES NAME VERSIONS; VERSIONS ARE ON BOTH CHAINS.
+    for my $n (@nodes) {
+        my ( $op, $f ) = ( $n->{op}, _fields($n) );
+        $bad->( $n, 'mem-in-not-version', 'mem_in ' . $say->( $n->{mem_in} ) )
+            if defined $n->{mem_in} && !$is_version->( $n->{mem_in} );
+        if ( $memphi->($n) ) {
+            $bad->( $n, 'mem-in-not-version', 'memory Phi input ' . $say->($_) )
+                for grep { !$is_version->($_) } grep { defined } ( $n->{inputs} // [] )->@*;
+        }
+        if ( $n->{mem_out} ) {
+            $bad->( $n, 'version-off-chain', 'a version with no ' . join ' or ', grep { !defined $n->{$_} } qw(mem_in control_in) )
+                if !defined $n->{mem_in} || !defined $n->{control_in};
+        }
+        elsif ( !defined $n->{mem_in} && !$record->($n)
+            && ( $op =~ /^(?:Return|Unwind|Assign)$/ || $op eq 'Call' && ( $f->{dispatch_kind} // '' ) ne 'builtin' ) ) {
+            $bad->( $n, 'version-off-chain', "a $op that follows no memory" . ( $op eq 'Assign' ? ' and is no record' : '' ) );
+        }
+    }
+
+    # (V3, V4) EVERY VERSION IS REACHED BACKWARDS FROM A ROOT.
+    my @roots = map { $_->{mem_in} } grep { $_->{op} =~ /^(?:Return|Unwind)$/ && defined $_->{mem_in} } @nodes;
+    my %exit_head = map { ( $_->{head} // -1 ) => 1 } grep { $_->{op} eq 'Region' } @nodes;
+    for my $loop ( grep { $_->{op} eq 'Loop' && !$exit_head{ $_->{id} } } @nodes ) {
+        push @roots, map { $_->{id} } grep { $memphi->($_) && ( _fields($_)->{region} // -1 ) == $loop->{id} } @nodes;
+    }
+    my %seen;
+    my @q = grep { defined } @roots;
+    while ( defined( my $id = shift @q ) ) {
+        next if $seen{$id}++;
+        my $x = $by{$id} or next;
+        push @q, $x->{mem_in} if defined $x->{mem_in};
+        push @q, grep { defined } ( $x->{inputs} // [] )->@* if $memphi->($x);
+    }
+    $bad->( $_, 'write-unreachable', 'no Return or Unwind reaches it backwards' ) for grep { $_->{mem_out} && !$seen{ $_->{id} } } @nodes;
+    # A pinned node nothing follows is an end: a root -- or, on a wire
+    # without the `loop` profile, the end of a loop's test or of its body,
+    # which has no back edge to follow it (stage 9a gives it one): its walk
+    # back reaches the Loop itself or the Loop's body Proj.
+    my $in_a_loop = sub ($n) {
+        my ( $c, %seen ) = ( $by{ $n->{control_in} // '' } );
+        while ( $c && !$seen{ $c->{id} }++ ) {
+            my $op = $c->{op};
+            return 1 if $op eq 'Loop';
+            return 0 if $op eq 'Start';
+            if ( $op eq 'Proj' ) {
+                my $h = $by{ $c->{inputs}[0] // '' };
+                return 1 if $h && $h->{op} eq 'Loop' && ( _fields($c)->{index} // 0 ) == 0;
+                $c = $h && $h->{op} eq 'Loop' ? $by{ $h->{control_in} // $h->{inputs}[0] // '' } : $h;
+            }
+            elsif ( $op eq 'Region' ) { $c = $by{ $c->{inputs}[0] // '' } }
+            elsif ( $op eq 'If' )     { $c = $by{ $c->{control_in} // $c->{inputs}[0] // '' } }
+            else                      { $c = $by{ $c->{control_in} // '' } }
+        }
+        return 0;
+    };
+    my $loop_profile = $profile->{loop};
+    for my $n ( grep { defined $_->{control_in} && $_->{op} !~ /^(?:Return|Unwind)$/ } @nodes ) {
+        next if ( $succ{ $n->{id} } // [] )->@*;
+        next if !$loop_profile && $in_a_loop->($n);
+        $bad->( $n, 'control-sink', 'nothing follows it' );
+    }
+
+    # (V5) THE TWO ORDERINGS AGREE: a pinned node's mem_in is the nearest
+    # version back along its control chain (at a Region or a Loop, its memory
+    # Phi, else the way in's).
+    my %region_mem;
+    for my $p ( grep { $memphi->($_) } @nodes ) { $region_mem{ _fields($p)->{region} // -1 } //= $p->{id} }
+    my $back = sub ($p) {
+        for ( 1 .. 100000 ) {
+            my $pn = $by{ $p // '' } or return undef;
+            my $op = $pn->{op};
+            if ( $op eq 'Start' ) {
+                my ($ms) = grep { $_->{op} eq 'MemStart' } @nodes;
+                return $ms ? $ms->{id} : undef;
+            }
+            return $p if $pn->{mem_out};
+            if    ( $op eq 'Region' || $op eq 'Loop' ) { return $region_mem{$p} if exists $region_mem{$p}; $p = $pn->{inputs}[0] }
+            elsif ( $op eq 'Proj' )                    { $p = $pn->{inputs}[0] }
+            elsif ( $op eq 'If' )                      { $p = $pn->{control_in} // $pn->{inputs}[0] }
+            else                                       { $p = $pn->{control_in} }
+        }
+        return undef;
+    };
+    for my $n ( grep { defined $_->{control_in} && defined $_->{mem_in} } @nodes ) {
+        my $exp = $back->( $n->{control_in} ) // next;
+        next if $exp == $n->{mem_in};
+        $bad->( $n, 'memory-order-disagrees', 'mem_in ' . $say->( $n->{mem_in} ) . ', control says ' . $say->($exp) );
+    }
+
+    # (V6) READS NAME A VERSION, unless every use is a place use.
+    my $name_of = sub ($n) {
+        return undef unless $n && $n->{op} =~ /^(?:PadAccess|ArrayLiteral|HashLiteral)$/;
+        my $f = _fields($n);
+        return defined $f->{symbol} ? ( $f->{sigil} // '' ) . $f->{symbol} : undef;
+    };
+    my $container = sub ($n) { $by{ ( $n->{op} eq 'Slice' ? $n->{inputs}[-1] : $n->{inputs}[0] ) // '' } };
+    my $is_place_use = sub ( $c, $i ) {
+        my ( $op, $f ) = ( $c->{op}, _fields($c) );
+        return $i < ( $f->{targets} // 1 ) if $op eq 'Assign';
+        return $i == $#{ $c->{inputs} } if $op eq 'Slice';
+        return 1 if $op eq 'Call' && ( ( $f->{dispatch_kind} // '' ) ne 'builtin' || defined $c->{mem_in} );
+        return 1 if $op =~ /^(?:AnonSub|RegexSubst|Transliterate|Chomp)$/;
+        return $i == 0
+            if $op =~ /^(?:Subscript|Exists|Delete|Count|PostfixDeref|ElemRestore|Ref|LocalAlias|VarDecl|MakeCell|CellRead|EntryWrite|CellWrite)$/;
+        return 0;
+    };
+    my %mutated;
+    for my $n (@nodes) {
+        my ( $op, $f, $in ) = ( $n->{op}, _fields($n), $n->{inputs} // [] );
+        my @written =
+              $op eq 'Assign' ? @$in[ 0 .. ( $f->{targets} // 1 ) - 1 ]
+            : $op eq 'Call' ? ( ( $f->{dispatch_kind} // '' ) ne 'builtin' || B::SoN::EffectTable::writes( $f->{name} ) ? @$in : () )
+            : $op =~ /^(?:Ref|LocalAlias|Delete|ElemRestore|MakeCell|EntryWrite|CellWrite|Chomp)$/ ? ( $in->[0] )
+            : $op =~ /^(?:AnonSub|RegexSubst|Transliterate)$/ ? @$in
+            :                                                   ();
+        for my $t ( map { $by{$_} } grep { defined && !ref } @written ) {
+            $t = $container->($t) while $t && $t->{op} =~ /^(?:Subscript|Slice)$/;
+            my $k = $name_of->($t);
+            $mutated{$k} = 1 if defined $k;
+        }
+    }
+    my $place_class;
+    $place_class = sub ($n) {
+        return undef unless $n;
+        my ( $op, $f ) = ( $n->{op}, _fields($n) );
+        return 'package'     if $op eq 'EntryDef';
+        return 'field'       if $op eq 'FieldAccess';
+        return 'cell'        if $op =~ /^(?:CellRead|CellParam|MakeCell)$/;
+        return 'through-ref' if $op eq 'PostfixDeref';
+        return 'args'        if $op eq 'ArgsSource';
+        if ( $op eq 'PadAccess' && ( $f->{sigil} // '$' ) eq '$' ) { return $f->{shared} ? 'my-shared' : undef }
+        if ( defined( my $k = $name_of->($n) ) ) {
+            return 'package' if $op ne 'PadAccess' && $f->{symbol} =~ /::/;
+            return $mutated{$k} ? 'my-aggregate' : undef;
+        }
+        return undef if $op =~ /^(?:ArrayLiteral|HashLiteral|Constant|Range)$/;
+        if ( $op =~ /^(?:Subscript|Slice|Count)$/ ) {
+            my $c = $container->($n) or return undef;
+            return 'through-ref' if $c->{op} =~ /^(?:Subscript|Slice)$/;
+            return 'through-ref' if $c->{op} eq 'PadAccess' && ( _fields($c)->{sigil} // '$' ) eq '$';
+            return $place_class->($c);
+        }
+        return ( $n->{stamp} // '' ) =~ /^(?:Array|List|Hash)$/ ? undef : 'through-ref';
+    };
+    for my $n ( grep { !defined $_->{mem_in} } @nodes ) {
+        my ( $op, $f ) = ( $n->{op}, _fields($n) );
+        my $class;
+        if    ( $op =~ /^(?:Subscript|Slice|Count|PostfixDeref|CellRead|EntryDef|PadAccess|FieldAccess)$/ ) { $class = $place_class->($n) }
+        elsif ( $op eq 'RefType' ) { $class = 'object-class' }
+        elsif ( $op eq 'Call' && ( $f->{dispatch_kind} // '' ) eq 'builtin' ) { $class = B::SoN::EffectTable::reads_state( $f->{name} ) }
+        next unless $class && grep { !$is_place_use->(@$_) } ( $cons{ $n->{id} } // [] )->@*;
+        $bad->( $n, "read-unversioned:$class", _describe( $n, \%by ) );
+    }
+    for my $n ( grep { $_->{op} =~ /^(?:ArrayLiteral|HashLiteral)$/ && ( _fields($_)->{symbol} // '' ) =~ /::/ } @nodes ) {
+        my @uses = grep { !( $_->[0]{op} eq "EntryWrite" && $_->[1] == 1 ) && !$is_place_use->(@$_) } ( $cons{ $n->{id} } // [] )->@*;
+        $bad->( $n, 'read-unversioned:package-aggregate-literal',
+            _fields($n)->{symbol} . ' read by ' . join( ',', map { "$_->[0]{op}#$_->[0]{id}" } @uses ) ) if @uses;
+    }
+
+    # (V7) A RECORD IS A BINDING: on no chain, of `my` variables.
+    for my $n ( grep { $record->($_) } @nodes ) {
+        my $f = _fields($n);
+        if ( grep { defined $n->{$_} } qw(control_in mem_in mem_out) ) {
+            $bad->( $n, 'record', 'a record on a chain' );
+            next;
+        }
+        my $in = $n->{inputs} // [];
+        my %c = map { _target_class( $by{ $_ // '' } ) => 1 } @$in[ 0 .. ( $f->{targets} // 1 ) - 1 ];
+        my @mem = grep { $_ ne 'ssa-scalar' && $_ ne 'skip' } sort keys %c;
+        my $args = ( ( $by{ $in->[-1] // '' } // {} )->{op} // '' ) eq 'ArgsSource';
+        if    ( !@mem )                                  { $res->{allowed}{record}++ }
+        elsif ( $args && "@mem" eq 'my-aggregate' )      { $res->{allowed}{'param-bind'}++ }
+        else                                             { $bad->( $n, 'record', 'a record of ' . join( '+', @mem ) ) }
+    }
+
+    # (V8) PHIS PAIR WITH THEIR REGION; MEMORY AND VALUES DO NOT MIX.
+    for my $n ( grep { $_->{op} eq 'Phi' } @nodes ) {
+        my $f = _fields($n);
+        my $r = $by{ $f->{region} // '' };
+        if ( !$r || $r->{op} !~ /^(?:Region|Loop)$/ ) { $bad->( $n, 'phi-no-region', 'region=' . ( $f->{region} // 'none' ) ); next }
+        my $want = $r->{op} eq 'Loop' ? 2 : scalar grep { defined } $r->{inputs}->@*;
+        my $have = scalar( $n->{inputs}->@* );
+        $bad->( $n, defined _fields($r)->{eval_id} ? 'phi-arity:eval-join' : 'phi-arity',
+            "$have inputs for $want ways into $r->{op}#$r->{id}" . ( $f->{memory} ? ' (memory)' : '' ) )
+            if $have != $want;
+        if ( $f->{memory} ) {
+            my @v = grep { !$memphi->( $_->[0] ) } ( $cons{ $n->{id} } // [] )->@*;
+            $bad->( $n, 'phi:memory-as-value', 'used by ' . join( ',', map { "$_->[0]{op}#$_->[0]{id}" } @v ) ) if @v;
+        }
+    }
+    return;
 }
 
 1;

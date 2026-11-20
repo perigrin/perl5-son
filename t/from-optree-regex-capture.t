@@ -34,7 +34,7 @@ subtest '$1 after a match is RegexCapture wired to the RegexMatch (H1)' => sub {
     my $cap = node_of($g, 'RegexCapture');
     ok(defined $cap, 'has a RegexCapture node') or return;
     is($cap->n, 1, 'captures group 1');
-    is($cap->inputs->[0]->operation, 'RegexMatch',
+    is($cap->v1_inputs->[0]->operation, 'RegexMatch',
         'input is the preceding RegexMatch');
     is($cap->stamp->type, 'Str', 'capture is stamped Str');
 };
@@ -43,7 +43,7 @@ subtest 'guarded capture in a ternary arm sees the condition match (H2)' => sub 
     my $g = graph_of('sub { my $s = "foo"; $s =~ /(o+)/ ? length($1) : 0 }');
     my $cap = node_of($g, 'RegexCapture');
     ok(defined $cap, 'has a RegexCapture node in the arm') or return;
-    is($cap->inputs->[0]->operation, 'RegexMatch',
+    is($cap->v1_inputs->[0]->operation, 'RegexMatch',
         'arm capture wired to the condition match');
 };
 
@@ -74,9 +74,9 @@ subtest '=~ against a qr value is Match(subject, qr-constant) (R2)' => sub {
         'sub { my $re = qr/foo/; my $s = "foobar"; $s =~ $re ? 1 : 0 }');
     my $m = node_of($g, 'Match');
     ok(defined $m, 'has a Match node') or return;
-    is(scalar($m->inputs->@*), 2, 'two inputs: subject + matcher');
-    is($m->inputs->[0]->value, 'foobar', 'subject is the $s binding');
-    is($m->inputs->[1]->const_type, 'regex', 'matcher is the qr constant');
+    is(scalar($m->v1_inputs->@*), 2, 'two inputs: subject + matcher');
+    is($m->v1_inputs->[0]->value, 'foobar', 'subject is the $s binding');
+    is($m->v1_inputs->[1]->const_type, 'regex', 'matcher is the qr constant');
     is($m->stamp->type, 'Boolean', 'match result is stamped Boolean');
 };
 
@@ -101,7 +101,7 @@ subtest 's/// rebinds the pad so a later read sees the substituted value (R3)' =
     #     7 PadAccess  in=[6]              <- reads $s AFTER the subst
     #     8 Return     in=[7]
     #
-    # Asserting `$ret->inputs->[0] == $subst` was right while the subject was a
+    # Asserting `$ret->v1_inputs->[0] == $subst` was right while the subject was a
     # folded value and the subst WAS the binding. It is stricter than the fact
     # it was protecting, which is that the return must not see the PRE-subst
     # value -- so that is what this asserts now, by walking the read back to
@@ -109,10 +109,10 @@ subtest 's/// rebinds the pad so a later read sees the substituted value (R3)' =
     my ($ret) = grep { $_->operation eq 'Return' } $g->nodes->@*;
     ok(defined $ret, 'has a Return node') or return;
 
-    my $returned = $ret->inputs->[0];
+    my $returned = $ret->v1_inputs->[0];
     is($returned->operation, 'PadAccess',
         'the returned $s is a read of the demoted slot');
-    is(($returned->inputs // [])->[0], $subst,
+    is(($returned->v1_inputs // [])->[0], $subst,
         '... at the memory version the substitution produced');
 
     # THE OBSERVED STORE IS THIS SUBSTITUTION. Without it the two assertions
@@ -123,7 +123,7 @@ subtest 's/// rebinds the pad so a later read sees the substituted value (R3)' =
     # `bazbar` rather than `foobar` is asserted where it can be run --
     # t/deparse-regex.t's counted-s/// round trip and
     # t/from-optree-destructive-tr-names-its-pad.t.
-    is($returned->inputs->[0]->pattern, 'foo',
+    is($returned->v1_inputs->[0]->pattern, 'foo',
         'the observed store is this substitution, not an earlier one');
 };
 
@@ -134,7 +134,7 @@ subtest 's///r is non-destructive: the source pad is NOT rebound (R3 /r)' => sub
         'sub { my $s = "foobar"; my $t = $s =~ s/foo/baz/r; $s }');
     my ($ret) = grep { $_->operation eq 'Return' } $g->nodes->@*;
     ok(defined $ret, 'has a Return node') or return;
-    my $val = $ret->inputs->[0];
+    my $val = $ret->v1_inputs->[0];
     is($val->operation, 'Constant',
         'returned $s is the original Constant (/r did not rebind the pad)');
     is($val->value, 'foobar', 'and it still carries the pre-subst value');
@@ -173,7 +173,7 @@ subtest 's///e carries its non-foldable replacement as an operand' => sub {
     my $MEMORY = qr/\A SoN::IR::Node::
                     (?: MemStart | EntryWrite | CellWrite | Delete | Assign )
                     \z/x;
-    my @operands = $rs->inputs->@*;
+    my @operands = $rs->v1_inputs->@*;
     pop @operands if @operands && ref($operands[-1]) =~ $MEMORY;
     is(scalar(@operands), 2, 'subject and computed replacement');
     ok(!grep({ ref($_) =~ $MEMORY } @operands),

@@ -324,7 +324,9 @@ class SoN::IR::NodeFactory {
     }
 
     method _register_consumers($node, %args) {
-        my $inputs = $args{inputs} // [];
+        # A memory operand (`mem`) is a use like the inputs, registered after
+        # them: where wire v1 had it, as the last input.
+        my $inputs = [ ( $args{inputs} // [] )->@*, ( defined $args{mem} ? $args{mem} : () ) ];
         for my $input ($inputs->@*) {
             next unless defined $input;
             if ( ref($input) eq 'ARRAY' ) {
@@ -372,7 +374,7 @@ class SoN::IR::NodeFactory {
         # A REFERENCE TO AN ELEMENT THAT MAY DIE (an array's, at an index
         # that may be before the start), taken where it stands, names its
         # site (Ref's).
-        if ($op_name eq 'Ref' && ref $args{inputs} eq 'ARRAY' && $args{inputs}->@* == 2
+        if ($op_name eq 'Ref' && ref $args{inputs} eq 'ARRAY' && $args{inputs}->@* == 1 && defined $args{mem}
                 && SoN::IR::NodeFactory::_may_die($op_name, $args{inputs})
                 && !SoN::IR::NodeFactory::_index_not_before_start($args{inputs})) {
             @args{qw(file line)} = $SoN::IR::NodeFactory::SITE->@[0, 1]

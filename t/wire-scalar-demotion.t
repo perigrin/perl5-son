@@ -78,7 +78,7 @@ subtest 'a demoted write is a store, and the next read observes it' => sub {
     ok $ret, 'the sub returns' or return;
     my $read = $ret->inputs->[0];
     is $read->operation, 'PadAccess', 'it returns a location read';
-    is $read->inputs->[0]->operation, 'Assign',
+    is $read->mem_in->operation, 'Assign',
         'threaded to a STORE, not to MemStart -- it observes the write';
 };
 

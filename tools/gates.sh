@@ -21,6 +21,9 @@
 # taken again either, so DIR's results are all of one tree. A changed tree
 # needs a new DIR.
 #
+# THE PRODUCER SUITE ALSO LEAVES OUT t/wire-v2-downgrades-to-v1.t, run whole
+# as the downgrade gate against a checkout of the commit it names ($OUT/v1base).
+#
 # THE SUITES LEAVE OUT THREE FILES that are gates of their own, so that none
 # runs twice: chalk's t/bootstrap/corpus/son-corpus-wide.t (corpus-gate) and
 # t/bootstrap/ir/audit-probes.t (probes), the producer's
@@ -33,7 +36,7 @@ set -u
 
 ROUNDTRIP_MIN=426
 GATE_GREEN_MIN=222
-GATES="producer-suite chalk-suite census corpus-gate probes ratchet"
+GATES="producer-suite chalk-suite census corpus-gate probes ratchet downgrade"
 
 list() {
     cat <<EOF
@@ -42,7 +45,8 @@ chalk-suite     every t/**/*.t under prove -Ilib -It/lib: 0 failing files
 census          tools/corpus-llvm-roundtrip.pl: ROUNDTRIP >= $ROUNDTRIP_MIN, DIFFERS 0, LLI_FAIL 0
 corpus-gate     chalk t/bootstrap/corpus/son-corpus-wide.t: passes, gate-green >= $GATE_GREEN_MIN, paad/worklist.json untouched
 probes          chalk tools/audit-probes.pl: WRONG 0, TIMEOUT 0, no probe BASELINE.tsv records SAME is anything else
-ratchet         t/wire-verify-ratchet.t over corpus, probes and chalk's lib: no rule above t/data/wire-verify-baseline.tsv
+ratchet         t/wire-verify-ratchet.t over corpus, probes and chalk's lib, wire 1 and wire 2: no rule above t/data/wire-verify-baseline.tsv
+downgrade       t/wire-v2-downgrades-to-v1.t over every probe, the corpus and chalk's lib: 0 wires differ from the base commit's
 EOF
 }
 
@@ -149,6 +153,18 @@ ratchet_line() {
     [ $v = PASS ]
 }
 
+downgrade_line() {
+    local f=$OUT/downgrade.out
+    [ -f "$f" ] || { printf '%-15s PEND\n' downgrade; return 1; }
+    local rc v=PASS line
+    rc=$(cat "$OUT/downgrade.rc")
+    line=$(grep -o '# [0-9]* of [0-9]* wires differ' "$f" | tail -1)
+    [ "$rc" -eq 0 ] || v=MISS
+    printf '%-15s %s  prove exit %s; %s%s\n' downgrade $v "$rc" "${line:-no comparison}" "$(secs downgrade)"
+    [ $v = PASS ] || grep '^not ok\|^ *not ok\|: graph \|wire only in' "$f" | head -12 | sed 's/^/                  /'
+    [ $v = PASS ]
+}
+
 # secs(gate) -> " [12m34s]" once the gate has run, else nothing.
 secs() {
     local t
@@ -165,6 +181,7 @@ summary() {
     wanted corpus-gate    && { corpus_gate_line || miss=1; }
     wanted probes         && { probes_line      || miss=1; }
     wanted ratchet        && { ratchet_line     || miss=1; }
+    wanted downgrade      && { downgrade_line   || miss=1; }
     return $miss
 }
 
@@ -187,6 +204,11 @@ snap() {    # from to
     mv "$2.tmp" "$2"
 }
 if [ ! -d "$P" ]; then at "$HERE" > "$OUT/producer.at"; snap "$HERE" "$P" || exit 2; fi
+# The commit t/wire-v2-downgrades-to-v1.t compares with, checked out once.
+if wanted downgrade && [ ! -d "$OUT/v1base" ]; then
+    base=$(sed -n "s/^my \$BASE *= *'\([0-9a-f]*\)';.*/\1/p" "$P/t/wire-v2-downgrades-to-v1.t")
+    mkdir -p "$OUT/v1base.tmp" && git -C "$HERE" archive "$base" | tar -x -C "$OUT/v1base.tmp" && mv "$OUT/v1base.tmp" "$OUT/v1base" || exit 2
+fi
 if [ ! -d "$C" ]; then
     at "$CHALK" > "$OUT/chalk.at"
     snap "$CHALK" "$C.pre" || exit 2
@@ -262,6 +284,14 @@ ratchet() {
     mv "$OUT/ratchet.tmp" "$OUT/ratchet.out"
 }
 
+downgrade() {
+    [ -f "$OUT/downgrade.out" ] && return 0
+    ( cd "$P" && SON_V1_BASE=$OUT/v1base SON_DOWNGRADE_FULL=1 SON_CHALK=$C SON_DOWNGRADE_CACHE=$OUT/downgrade-base \
+        SON_WIRE_JOBS=$1 timeout 7200 prove -lv t/wire-v2-downgrades-to-v1.t ) > "$OUT/downgrade.tmp" 2>&1
+    echo $? > "$OUT/downgrade.rc"
+    mv "$OUT/downgrade.tmp" "$OUT/downgrade.out"
+}
+
 # timed(gate, command...): run it, and add its seconds to $OUT/GATE.secs (a
 # resumed gate adds to what it had; a gate with nothing left to do adds 0).
 timed() {
@@ -279,10 +309,11 @@ bg=""
 if wanted corpus-gate; then timed corpus-gate corpus_gate & bg="$bg $!"; fi
 if wanted ratchet;     then timed ratchet ratchet 2 & bg="$bg $!"; fi
 sj=$JOBS
-wanted producer-suite && timed producer-suite suite producer-suite "$P" -l "$sj" '^t/wire-verify-ratchet\.t$'
+wanted producer-suite && timed producer-suite suite producer-suite "$P" -l "$sj" '^t/(wire-verify-ratchet|wire-v2-downgrades-to-v1)\.t$'
 wanted chalk-suite    && timed chalk-suite suite chalk-suite "$C" '-Ilib -It/lib' "$sj" '^t/bootstrap/(corpus/son-corpus-wide|ir/audit-probes)\.t$'
 wanted census         && timed census census "$sj"
 wanted probes         && timed probes probes "$sj"
+wanted downgrade      && timed downgrade downgrade "$sj"
 [ -z "$bg" ] || wait $bg
 
 summary

@@ -12,6 +12,19 @@ our @EXPORT_OK = qw(to_json);
 use JSON::PP ();
 use Scalar::Util qw(blessed);
 
+# THE WIRE VERSION WRITTEN (B::SoN's `wire=N` option). 1, the default: a
+# memory version a node reads is its last input (by kind, %SoN::Wire's table).
+# 2 (docs/plans/2026-11-20-wire-v2.md, section 3): `inputs` are values only,
+# and `mem_in` / `mem_out` name the memory edges; `profile` says which parts
+# of v2 the wire obeys.
+our $WIRE = 1;
+
+# _operands($node) -- what the wire's `inputs` list for $node: its inputs and,
+# on wire v1, the memory it read where it was built.
+sub _operands ($node) {
+    return ( $node->inputs->@*, ( $WIRE == 1 && $node->mem_operand ? $node->mem_in : () ) );
+}
+
 # %main::'s keys at CHECK (B::SoN::compile): 1 where the program made one,
 # undef where the toolchain did. A constant-key read of the stash carries
 # whether its key was there (stash_has); chalk decides when that holds.
@@ -87,7 +100,7 @@ sub _extract_fields ($node, $id_remap) {
             ( defined $node->site_package ? ( package => $node->site_package ) : () ),
             ( $node->external ? ( external => JSON::PP::true ) : () ),
             ( $node->xs ? ( xs => JSON::PP::true ) : () ),
-            ( $node->memory_input ? ( memory_input => JSON::PP::true ) : () ),
+            ( $WIRE == 1 && $node->mem_operand ? ( memory_input => JSON::PP::true ) : () ),
             # The statically-known class for a method dispatch (Class->new).
             ( defined $node->class_name
                 ? ( class_name => $node->class_name )
@@ -197,6 +210,8 @@ sub _extract_fields ($node, $id_remap) {
     }
     if ($op eq 'Assign') {
         my %f = (
+            # A BINDING RECORD, not a store (wire v2): on neither chain.
+            ( $WIRE == 2 && !defined $node->control_in && !$node->mem_out ? ( record => JSON::PP::true ) : () ),
             ( $node->if_changed ? ( if_changed => JSON::PP::true ) : () ),
             ( defined $node->targets ? ( targets => 0 + $node->targets ) : () ),
             ( $node->local ? ( local => JSON::PP::true ) : () ),
@@ -527,7 +542,7 @@ sub _all_nodes_topo ($graph_or_nodes) {
     # pre-unification SoN::IR::Graph::nodes() cycle-cut. A MERGE Phi (region
     # is a Region, not a Loop) has no such cycle and keeps both inputs.
     my $predecessors = sub ($n) {
-        my @in = $n->inputs->@*;
+        my @in = _operands($n);
         if ($n->operation eq 'Phi' && defined $n->region
                 && $n->region->operation eq 'Loop') {
             @in = ($in[0]);
@@ -549,6 +564,8 @@ sub _all_nodes_topo ($graph_or_nodes) {
         if ($n->can('control_in') && defined $n->control_in) {
             push @preds, $n->control_in;
         }
+        # (on wire v2 the memory a node names is emitted before it, as an input is)
+        push @preds, $n->mem_in if $WIRE == 2 && $n->can('mem_in') && defined $n->mem_in;
         return @preds;
     };
 
@@ -601,9 +618,10 @@ sub _serialize_graph ($graph) {
     my @reachable;
     while (my $n = shift @worklist) {
         next unless blessed($n);
+        next if $WIRE == 1 && $n->v2_only;
         next if $seen{ $n->id }++;
         push @reachable, $n;
-        for my $input ($n->inputs->@*) {
+        for my $input (_operands($n)) {
             if (ref($input) eq 'ARRAY') {
                 push @worklist, $input->@*;
             }
@@ -614,6 +632,7 @@ sub _serialize_graph ($graph) {
         push @worklist, $n->consumers->@* if $n->can('consumers');
         push @worklist, $n->control_in
             if $n->can('control_in') && defined $n->control_in;
+        push @worklist, $n->mem_in if $WIRE == 2 && defined $n->mem_in;
     }
     my $topo_nodes = _all_nodes_topo(\@reachable);
 
@@ -635,7 +654,7 @@ sub _serialize_graph ($graph) {
             ref($_) eq 'ARRAY'
                 ? map { $id_remap{ $_->id } } $_->@*
                 : $id_remap{ $_->id }
-        } $node->inputs->@*;
+        } _operands($node);
         my $fields = _extract_fields($node, \%id_remap);
 
         my %entry = (
@@ -659,6 +678,10 @@ sub _serialize_graph ($graph) {
         if ($node->can('control_in') && defined $node->control_in
                 && exists $id_remap{ $node->control_in->id }) {
             $entry{control_in} = $id_remap{ $node->control_in->id };
+        }
+        if ($WIRE == 2) {
+            $entry{mem_in} = $id_remap{ $node->mem_in->id } if defined $node->mem_in;
+            $entry{mem_out} = JSON::PP::true if $node->mem_out;
         }
         # Region.head -> the owning If/Loop, set at produce time by
         # StackSim::merge / _build_single_exit / the Loop exit-Region
@@ -702,7 +725,8 @@ sub to_json ($named_graphs, $classes = undef, $data_section = undef,
     }
 
     my $data = {
-        version => 1,
+        version => $WIRE,
+        ( $WIRE == 2 ? ( profile => ['mem'] ) : () ),
         source  => undef,
         methods => \%methods,
     };

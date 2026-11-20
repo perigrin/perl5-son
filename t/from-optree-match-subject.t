@@ -50,7 +50,7 @@ subtest 'an unbound match reads $_, resolved to its reaching definition' => sub 
     # binding and reach the backend as an untyped entry definition.
     my ($match) = nodes_of($g, 'RegexMatch');
     ok($match, 'the match node exists') or return;
-    my $subject = $match->inputs->[0];
+    my $subject = $match->v1_inputs->[0];
     is($subject->operation, 'Constant', 'its subject is the reaching definition');
     is($subject->value, 'test', '... the value $_ was assigned');
 };
@@ -61,7 +61,7 @@ subtest 'the match observes the assignment, whatever its value' => sub {
     # else entirely (originally: an uninitialized pad slot).
     my $g = translate('sub { $_ = "nope"; /^test/ ? 1 : 0 }');
     my ($match) = nodes_of($g, 'RegexMatch');
-    is($match->inputs->[0]->value, 'nope',
+    is($match->v1_inputs->[0]->value, 'nope',
         'a different assignment gives the match a different subject');
 };
 
@@ -73,11 +73,11 @@ subtest 'a package-scalar subject is popped from the stack (OPf_STACKED)' => sub
     # A package scalar this body stores is read through memory: the subject
     # is the read at that store's version, and the store holds the value.
     my ($match) = nodes_of($g, 'RegexMatch');
-    my $subject = $match->inputs->[0];
+    my $subject = $match->v1_inputs->[0];
     is($subject->operation, 'EntryDef', 'the pushed subject is the read of the package scalar');
-    my ($store) = grep { ref $_ && $_->operation eq 'EntryWrite' } $subject->inputs->@*;
+    my ($store) = grep { ref $_ && $_->operation eq 'EntryWrite' } $subject->v1_inputs->@*;
     ok($store, '... at the version its store made') or return;
-    is($store->inputs->[1]->value, 'test', '... not a read of pad slot 0');
+    is($store->v1_inputs->[1]->value, 'test', '... not a read of pad slot 0');
 };
 
 subtest 'an UNASSIGNED $_ is the entry definition' => sub {
@@ -86,7 +86,7 @@ subtest 'an UNASSIGNED $_ is the entry definition' => sub {
     my $g = translate('sub { /^test/ ? 1 : 0 }');
     my ($match) = nodes_of($g, 'RegexMatch');
     ok($match, 'the match node exists') or return;
-    my $subject = $match->inputs->[0];
+    my $subject = $match->v1_inputs->[0];
     is($subject->operation, 'EntryDef', 'the subject is the entry definition');
     is($subject->symbol, '_', '... naming $_');
 };
@@ -95,7 +95,7 @@ subtest 'a lexical subject still comes from the pad target' => sub {
     my $g = translate('sub { my $s = "test"; $s =~ /^test/ ? 1 : 0 }');
 
     my ($match) = nodes_of($g, 'RegexMatch');
-    my $subject = $match->inputs->[0];
+    my $subject = $match->v1_inputs->[0];
     isnt($subject->operation, 'EntryDef',
         'a lexical subject is NOT rerouted to a package scalar');
 };
@@ -118,14 +118,14 @@ subtest 'a runtime pattern on a pushed subject pops in push order' => sub {
 
     my ($match) = nodes_of($g, 'Match');
     ok($match, 'it builds a Match rather than refusing') or return;
-    is(scalar($match->inputs->@*), 2, 'a binop: two operands');
+    is(scalar($match->v1_inputs->@*), 2, 'a binop: two operands');
 
-    my ($subject, $pattern) = $match->inputs->@*;
+    my ($subject, $pattern) = $match->v1_inputs->@*;
     # (the subject is the read of $ps at its store: a written package scalar
     # is read through memory, and the store holds "abc")
-    my ($store) = grep { ref $_ && $_->operation eq 'EntryWrite' } $subject->inputs->@*;
+    my ($store) = grep { ref $_ && $_->operation eq 'EntryWrite' } $subject->v1_inputs->@*;
     ok($store, 'operand 0 is a read at the store of $ps') or return;
-    is($store->inputs->[1]->value, 'abc', 'operand 0 is the SUBJECT');
+    is($store->v1_inputs->[1]->value, 'abc', 'operand 0 is the SUBJECT');
     is($pattern->value, 'b',   'operand 1 is the PATTERN');
     is($pattern->const_type, 'regex', '... and it is the compiled regex');
 };

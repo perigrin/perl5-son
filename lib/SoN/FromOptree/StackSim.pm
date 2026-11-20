@@ -181,8 +181,8 @@ class SoN::FromOptree::StackSim 0.01 {
                 # stopping there left an arm holding `eval $c` with no
                 # identity -- "a join Phi with 2 inputs and 0 predecessors".
                 if (!defined $head && $node->can('inputs')
-                    && $node->inputs->@* == 1) {
-                    $node = $node->inputs->[0];
+                    && $node->v1_inputs->@* == 1) {
+                    $node = $node->v1_inputs->[0];
                     next;
                 }
                 last unless defined $head && ref $head;
@@ -207,7 +207,7 @@ class SoN::FromOptree::StackSim 0.01 {
         return $proj unless defined $owner && defined $proj;
         my ($p, %seen) = ($proj);
         while (defined $p && !$seen{ $p->id }++) {
-            my $if = $p->inputs->[0];
+            my $if = $p->v1_inputs->[0];
             return $p if !defined $if || $if == $owner;
             $p = $if->can('control_in') ? _arm_proj($if->control_in) : undef;
         }
@@ -242,8 +242,8 @@ class SoN::FromOptree::StackSim 0.01 {
             my $t = $n->can('stamp') && $n->stamp ? $n->stamp->type : '';
             return $t eq 'Array' ? '@' : $t eq 'Hash' ? '%' : ''
                 if $t ne '' && $t ne 'Unknown';
-            my @in = $n->isa('SoN::IR::Node::Phi') ? ($n->inputs // [])->@*
-                   : $n->isa('SoN::IR::Node::TernaryExpr') ? (($n->inputs // [])->@*)[1, 2]
+            my @in = $n->isa('SoN::IR::Node::Phi') ? ($n->v1_inputs // [])->@*
+                   : $n->isa('SoN::IR::Node::TernaryExpr') ? (($n->v1_inputs // [])->@*)[1, 2]
                    : ();
             for my $i (@in) {
                 my $s = __SUB__->($i);

@@ -30,6 +30,52 @@ class SoN::IR::Node {
     # still hash-cons to the same node; control_in is a per-use decoration.
     field $control_in :reader = undef;
 
+    # THE MEMORY VERSION THIS NODE READS OR FOLLOWS (wire v2's `mem_in`): a
+    # MemStart, a memory Phi, or a node with mem_out. Given to make() as
+    # `mem => $sim->memory` by a node that READS memory where it is built --
+    # then it is part of the content hash, so reads at two versions are two
+    # nodes, and wire v1 carried it as the trailing input (mem_operand). Set
+    # by _pin otherwise, for what follows the chain (an Assign, a sub call, a
+    # Return): not identity, as control_in is not.
+    field $mem_in :param(mem) :reader = undef;
+    field $mem_operand :reader = 0;
+    # THIS NODE IS A MEMORY VERSION (wire v2's `mem_out`): what _place did.
+    field $mem_out :reader = 0;
+    ADJUST { $mem_operand = 1 if defined $mem_in }
+
+    method set_mem_in($m) {
+        die "set_mem_in: a memory operand is identity, not a decoration\n" if $mem_operand;
+        $mem_in = $m;
+        return;
+    }
+    method set_mem_out($b = 1) { $mem_out = $b ? 1 : 0; return }
+
+    # A NODE ONLY WIRE v2 HAS A PLACE FOR (the memory Phi a Return names where
+    # a sub's exits merge): wire v1 leaves it out.
+    field $v2_only :reader = 0;
+    method set_v2_only() { $v2_only = 1; return }
+
+    # THE INPUTS AS WIRE v1 HAD THEM: the memory operand last. What the
+    # walker's own questions were written against (a Subscript of two inputs
+    # is a place, the last input of a pinned read is the memory before it);
+    # a copy, so it cannot be written through.
+    # shortcut: the walker still asks its questions in v1's shape; read
+    # mem_in where a question is about memory, then retire this (wire v2
+    # plan, stage 6 deletes v1).
+    method v1_inputs() { [ $inputs->@*, ( $mem_operand ? $mem_in : () ) ] }
+
+    # Does a node of this kind read or write memory when it stands on the
+    # chain (wire v2 plan, 3.3)? _pin gives such a node the memory it follows.
+    # Print, the control nodes, a pinned value (a loop test, a division that
+    # may fault, an allocation) touch none.
+    my %TOUCHES_MEMORY = map { $_ => 1 } qw(
+        Assign EntryWrite CellWrite Delete ElemRestore MakeCell LocalAlias Call
+        RegexSubst Transliterate Chomp
+        Subscript Exists Count Slice RefType PostfixDeref Ref CellRead FieldAccess EntryDef PadAccess
+        Return Unwind
+    );
+    method touches_memory() { $TOUCHES_MEMORY{ $self->operation } ? 1 : 0 }
+
     # Per-node scheduler interpretation, populated lazily by the scheduler
     # via set_schedule_data(). Holds a ScheduleMeta from chalk's scheduler
     # subclass instance whose dialect (EagerPinning, GCM, ...) matches the
@@ -90,6 +136,8 @@ class SoN::IR::Node {
                 push @parts, $input->id();
             }
         }
+        # (where wire v1 put it, so a node's id is what it was)
+        push @parts, $mem_in->id() if $mem_operand;
         return @parts;
     }
 

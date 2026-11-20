@@ -44,7 +44,7 @@ subtest 'splice lowers, and the count that follows is memory-dependent' => sub {
     # be asserting that unrelated bug is fixed. The memory-threading claim is
     # pinned in t/wire-aggregate-read-observes-mutation.t, over a whole program
     # where the read is an ordinary statement.
-    is(scalar($splice->inputs->@*), 4,
+    is(scalar($splice->v1_inputs->@*), 4,
         'the splice carries a memory input (array, offset, length, memory)');
 };
 

@@ -52,10 +52,14 @@ else { note 'chalk lib not checked: SON_RATCHET=1 (and SON_CHALK) runs it' }
 push @args, '--wires', $ENV{SON_WIRE_CACHE} if $ENV{SON_WIRE_CACHE};
 push @args, '--jobs',  $ENV{SON_WIRE_JOBS}  if $ENV{SON_WIRE_JOBS};
 
+# Twice: wire 1 (corpus, probes, chalk) and wire 2 (corpus2, probes2, chalk2,
+# checked by the v2 rules of docs/plans/2026-11-20-wire-v2.md, section 8).
 my %got;
-for ( split /\n/, qx($^X tools/wire-verify.pl --tsv @args) ) {
-    my ( $source, $rule, $n ) = split /\t/;
-    $got{$source}{$rule} = $n;
+for my $wire ( 1, 2 ) {
+    for ( split /\n/, qx($^X tools/wire-verify.pl --tsv --wire $wire @args) ) {
+        my ( $source, $rule, $n ) = split /\t/;
+        $got{$source}{$rule} = $n;
+    }
 }
 
 for my $source ( sort keys %got ) {
@@ -71,6 +75,6 @@ for my $source ( sort keys %got ) {
         }
     };
 }
-ok scalar( grep { $got{$_} } qw(corpus probes) ) == 2, 'corpus and probes were both measured';
+ok scalar( grep { $got{$_} } qw(corpus probes corpus2 probes2) ) == 4, 'corpus and probes were measured, on both wires';
 
 done_testing;

@@ -39,7 +39,7 @@ subtest 'the if/else builds exactly one If + one Region' => sub {
 subtest 'both element stores are control-dependent on distinct Projs of the If' => sub {
     my $g = graph_of($SRC);
     my @stores = grep {
-        grep { ref $_ && $_->operation eq 'Subscript' } $_->inputs->@*
+        grep { ref $_ && $_->operation eq 'Subscript' } $_->v1_inputs->@*
     } of_op($g, 'Assign');
     is(scalar(@stores), 2, 'two element-store Assigns') or return;
     my ($if) = of_op($g, 'If');
@@ -48,7 +48,7 @@ subtest 'both element stores are control-dependent on distinct Projs of the If' 
         my $ctrl = $store->can('control_in') ? $store->control_in : undef;
         ok(defined $ctrl, 'store has a control input') or next;
         is($ctrl->operation, 'Proj', 'store control is a Proj');
-        is($ctrl->inputs->[0], $if, 'the Proj is off the one If');
+        is($ctrl->v1_inputs->[0], $if, 'the Proj is off the one If');
         $proj_index{$ctrl->index}++;
     }
     is([sort keys %proj_index], [0, 1],
@@ -58,20 +58,20 @@ subtest 'both element stores are control-dependent on distinct Projs of the If' 
 subtest 'the post-branch read memory is a Phi over the Region with two store inputs' => sub {
     my $g = graph_of($SRC);
     my ($ret) = of_op($g, 'Return');
-    my $read = $ret->inputs->[-1];
+    my $read = $ret->v1_inputs->[-1];
     is($read->operation, 'Subscript', 'the return value is a Subscript (the read)') or return;
-    my $mem = $read->inputs->[2];
+    my $mem = $read->v1_inputs->[2];
     ok(defined $mem, 'the read has a memory input') or return;
     is($mem->operation, 'Phi', 'the read memory is a Phi (the memory merge)') or return;
     ok(defined $mem->region && $mem->region->operation eq 'Region',
         'the Phi is over the Region');
-    is(scalar($mem->inputs->@*), 2, 'the memory-Phi has two inputs');
+    is(scalar($mem->v1_inputs->@*), 2, 'the memory-Phi has two inputs');
     # Both inputs are real stores (element-store Assigns), one per arm -- NOT
     # a base-memory passthrough. Each input carries a Subscript lvalue.
     my $both_stores = 0;
-    for my $in ($mem->inputs->@*) {
+    for my $in ($mem->v1_inputs->@*) {
         $both_stores++ if $in->operation eq 'Assign'
-            && grep { ref $_ && $_->operation eq 'Subscript' } $in->inputs->@*;
+            && grep { ref $_ && $_->operation eq 'Subscript' } $in->v1_inputs->@*;
     }
     is($both_stores, 2, 'both memory-Phi inputs are element stores (one per arm)');
     # Exactly one Phi: the memory merge, no spurious stack Phi from the
