@@ -245,12 +245,13 @@ ratchet() {
     mv "$OUT/ratchet.tmp" "$OUT/ratchet.out"
 }
 
-# The two one-process gates run beside the suites; the rest take every job.
-side=0
+# The corpus gate (one process) and the ratchet (two) run beside the suites,
+# which take every job: for their first minutes the machine is asked for
+# three more than it has, and after that for exactly what it has.
 bg=""
-if wanted corpus-gate; then corpus_gate & bg="$bg $!"; side=$((side + 1)); fi
-if wanted ratchet;     then ratchet 2 & bg="$bg $!"; side=$((side + 2)); fi
-sj=$((JOBS - side)); [ $sj -ge 1 ] || sj=1
+if wanted corpus-gate; then corpus_gate & bg="$bg $!"; fi
+if wanted ratchet;     then ratchet 2 & bg="$bg $!"; fi
+sj=$JOBS
 wanted producer-suite && suite producer-suite "$P" -l "$sj" '^t/wire-verify-ratchet\.t$'
 wanted chalk-suite    && suite chalk-suite "$C" '-Ilib -It/lib' "$sj" '^t/bootstrap/(corpus/son-corpus-wide|ir/audit-probes)\.t$'
 wanted census         && census "$sj"
