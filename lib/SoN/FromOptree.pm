@@ -10184,13 +10184,19 @@ class SoN::FromOptree 0.01 {
             if ($old->isa('SoN::IR::Node::Subscript')
                 && scalar($old->inputs->@*) == 2) {
                 $lvalue = $old;
-                # (make_unique: it is pinned HERE, below. Hash-consed, the
-                # same increment in the other arm of an if found this node --
-                # one container, key and memory -- pinned it again, and both
-                # arms' stores followed one read.)
-                $old = $factory->make_unique('Subscript', kind => $lvalue->kind,
+                $old = $factory->make('Subscript', kind => $lvalue->kind,
                     inputs => [$lvalue->inputs->[0], $lvalue->inputs->[1],
                                $sim->memory]);
+                # IT IS PINNED HERE, below -- so one ALREADY PINNED is not this
+                # one. Hash-consed, the same increment in the other arm of an
+                # if found the first arm's node (one container, key and
+                # memory), pinned it again, and both arms' stores followed one
+                # read. A read nothing has pinned yet is this one: `$s .=
+                # $h{n}; $h{n}--` reads $h{n} once, at one memory.
+                $old = $factory->make_unique('Subscript', kind => $lvalue->kind,
+                    inputs => [$lvalue->inputs->[0], $lvalue->inputs->[1],
+                               $sim->memory])
+                    if defined $old->control_in;
                 # AND PLACED: the read is at the pre-store memory, but nothing
                 # said WHERE, so it was spelled where it was used -- after the
                 # store. `next if $seen{$id}++` tested the new value (chalk's
