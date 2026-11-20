@@ -57,9 +57,13 @@ list.
   perl's peephole makes, and B::SoN suppresses the peephole. (2) `$st->{i}++`
   in two arms of one if shared ONE pinned read: the Subscript was
   hash-consed (same container, key and memory in both arms), pinned twice,
-  and both stores followed it; it is `make_unique` now, as the scalar-deref
-  and field forms beside it were. Any `make` followed by `_pin` is suspect
-  for the same reason: `control_in` is not in the content hash. (3)
+  and both stores followed it; a new one is made when the node found is
+  already pinned (not always: `$s .= $h{n}; $h{n}--` reads $h{n} once, and
+  making that two reads changed what the deparser said about the loop). Any
+  DATA node `make` followed by `_pin` is suspect for the same reason:
+  `control_in` is not in the content hash. Statement kinds (Assign, Call,
+  EntryWrite ...) are never hash-consed, so two identical stores in two arms
+  were always two nodes. (3)
   `Chalk::Bootstrap::Perl::Actions::SubroutineDefinition`: an elsif arm
   deep in a foreach whose inner if builds control while the arm itself got
   none. NOT fixed and not reduced to a small program (six tries); the chalk

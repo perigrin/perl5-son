@@ -27,7 +27,7 @@
 # t/wire-verify-ratchet.t (ratchet, here with chalk's lib).
 #
 # ENVIRONMENT: LLI (default /usr/bin/lli); SON_CHALK (the default for --chalk,
-# else ~/dev/chalk). PERL5_SON_LIB is set here, to the producer's snapshot,
+# else ~/dev/chalk); GATES_TEST_TIMEOUT (seconds one test file may take, 5400). PERL5_SON_LIB is set here, to the producer's snapshot,
 # and CHALK_WORKLIST_OUT to a file under DIR.
 set -u
 
@@ -209,12 +209,16 @@ one_test() {
     local d=$1 inc=$2 f=$3 key
     key=$(echo "$f" | sed 's/\//__/g')
     [ -f "$d/rc/$key" ] && return 0
-    timeout 2400 prove $inc "$f" > "$d/run.$$.$key" 2>&1
+    timeout "$TEST_TIMEOUT" prove $inc "$f" > "$d/run.$$.$key" 2>&1
     local rc=$?
     if [ $rc -ne 0 ]; then mv "$d/run.$$.$key" "$d/log/$key"; else rm -f "$d/run.$$.$key"; fi
     echo $rc > "$d/rc/$key.tmp" && mv "$d/rc/$key.tmp" "$d/rc/$key"
 }
 export -f one_test
+# One test file's limit, in seconds. chalk's t/grammar-conformance.t parses
+# every lib module with chalk's own grammar: 40 minutes of one core, more
+# beside three other workers. A file that runs out of it fails (exit 124).
+export TEST_TIMEOUT=${GATES_TEST_TIMEOUT:-5400}
 
 suite() {    # name tree inc jobs skip-regex
     local d=$OUT/$1

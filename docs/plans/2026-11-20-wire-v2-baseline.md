@@ -30,11 +30,36 @@ Times on this machine (4 cores, with other jobs running beside them, so upper bo
 
 The `chalk` rows of `t/data/wire-verify-baseline.tsv` were c1a48dfe's (2026-11-19), from before class reads took a memory version. Re-counted at the stage-1 heads (section 7); the middle column is the same chalk lib under the base producer, which is what tells this stage's effect from everything that landed between c1a48dfe and base.
 
-CHALK_ROWS_TABLE
+| rule | stale row (c1a48dfe, 2026-11-19) | base producer 6d212cc | stage-1 producer |
+|---|---|---|---|
+| `#cases` | 218 | 219 | 219 |
+| `#graphs` | 24215 | 24521 | 24521 |
+| `#wires` | 218 | 219 | 219 |
+| `allowed:param-bind` | 18 | 18 | 18 |
+| `allowed:record` | 389 | 392 | 392 |
+| `control-fork` | - | (rule not there) | 1 |
+| `effect-rides-value` | 64 | 58 | 58 |
+| `memory-order-disagrees` | 228 | 291 | 291 |
+| `phi-arity:eval-join` | 40 | 40 | 40 |
+| `read-unversioned:args` | 3 | 3 | 3 |
+| `read-unversioned:external` | 87 | 87 | 87 |
+| `read-unversioned:field` | 3560 | 3560 | 3560 |
+| `read-unversioned:my-aggregate` | 379 | 373 | 373 |
+| `read-unversioned:object-class` | 4451 | 0 | 0 |
+| `read-unversioned:package` | 17 | 5 | 5 |
+| `read-unversioned:package-aggregate-literal` | 1 | 1 | 1 |
+| `read-unversioned:through-ref` | 215 | 215 | 215 |
+| `write-floating` | 6 | 6 | 6 |
 
 What moved, and why:
 
-CHALK_ROWS_NOTES
+- `read-unversioned:object-class` 4451 -> 0 and `read-unversioned:package` 17 -> 5: the class-read work (`ref`, `blessed`, `reftype` read at a memory version; a hash or package array as a scalar is a Count at one), as the plan expected.
+- `memory-order-disagrees` 228 -> 291. **Not this stage**: the base producer gives 291 on the same wires. The rise happened between c1a48dfe and base and was invisible because the rows were not being compared (the ratchet skips chalk's rows when chalk is not at the commit the baseline names). 223 of the 291 are a `Subscript`, 40 a `PostfixDeref`; 74 distinct graph-and-node pairs, the same sub counted once per wire that loads it. The largest: `TypeLibrary::join_types` (20 wires: "input says Phi, control says LocalAlias"), `Node::Region::reached_by`, `Node::Ref::_reshaped`, `Node::Assign::is_placed`, `Graph::program_nodes`, `Graph::component` (10 to 14 wires each: "input says Call, control says Phi"). Rule V5 at zero is still the strictest new demand of the plan; this is its real size.
+- `#cases` and `#wires` 218 -> 219, `#graphs` 24215 -> 24521: one more module in chalk's lib.
+- `control-fork` 1: `Chalk::Bootstrap::Perl::Actions::SubroutineDefinition`, after stage 1 fixed the three other chalk-lib graphs that had one (section 7).
+- Every other row is unchanged between the base producer and stage 1. `#graphs` is equal too, which matters: see section 7.
+
+Time: 219 compiles at 4 jobs took about 10 minutes, and the verifying pass over the 219 decoded wires (two of them 24 MB) about 5. That is Q16's number: too slow to run cold in chalk's suite on every run, fine warm with the cache the plan describes.
 
 ## 4. The three measurements for Q6 and Q7
 
@@ -69,7 +94,14 @@ The scan was written for the measurement and is in the scratch commit (`_measure
 |---|---|---|---|---|
 | corpus | 431 (0 refused by the loader) | 753 | 298 | 0 |
 | probes | 462 (24 refused) | 716 | 379 | 4 |
-| chalk lib | PHI_CHALK |
+| chalk lib | 211 (8 refused) | 12834 | 6043 | 3 |
+
+The three in chalk's lib (each counted once; the graphs are in one wire each):
+
+- `Chalk::Target::LLVM::Builder::regex_split`, a Phi of `[Assign, Not]`: `is_memory` says memory (an input is an element store), the wire says value. A `Not` is a value, so the flag is right and the guess is wrong.
+- `Chalk::Bootstrap::Perl::Target::EmitHelpers::_repair_stale_merge`, two Phis, `[RegexSubst, Phi]` and the `[Phi]` over it: the wire says memory (a pinned `s///` is a version), `is_memory`'s case list has no `RegexSubst`.
+
+In all three the flag reads right. They are the subs whose lowering changes the day stage 6 takes the flag; run them by name then.
 
 The four are in probes cl5, cl19 and cl20 (a closure over a variable a loop writes): a loop's memory Phi over `MakeCell` and `CellWrite`, which the producer flags and `is_memory`'s case list does not know. The flag is right; chalk refuses all three probes today for other reasons. Nothing for the producer to fix before stage 6; chalk's lowering of a cell version under a Phi is new work when those probes are taken on.
 
@@ -88,4 +120,52 @@ The four are in probes cl5, cl19 and cl20 (a closure over a variable a loop writ
 
 ## 7. After stage 1
 
-STAGE1_SECTION
+Heads: producer `v2-s01` 6c03947 (plus this note and `tools/gates.sh`'s time limit, committed after the run), chalk `v2-s01` 45a1b8d5. One `tools/gates.sh` run on snapshots of those two commits:
+
+```
+producer-suite  PASS  743 files, 0 failing [12m43s]
+chalk-suite     PASS  917 files, 0 failing [64m29s]
+census          PASS  ROUNDTRIP 426 (>= 426) DIFFERS 0 LLI_FAIL 0; GAP 5 LOAD_FAIL 0 NOJSON 0 [2m33s]
+corpus-gate     PASS  gate-green 222 (>= 222), prove exit 0, paad/worklist.json untouched [7m52s]
+probes          PASS  LOUD=2 REFUSED=112 SAME=361; WRONG 0, SAME lost 0, changed 0 [1m44s]
+ratchet         PASS  prove exit 0; chalk's lib compared; rows that fell: 0 [2m46s]
+```
+
+(The ratchet's 2m46s is with the wires already compiled for section 3, from the same two commits; cold it is the 15 minutes of that section. chalk's suite is 64 minutes because one file, `t/grammar-conformance.t`, takes 40 minutes of one core.)
+
+| | base | stage 1 |
+|---|---|---|
+| producer suite | 741 files | 743 files (two new tests) |
+| chalk suite | 917 files at the last full run | 919 with the two gate files (two new tests) |
+| census | 426 / 0 / 0, GAP 5 | the same five GAPs |
+| corpus gate | 222 | 222 |
+| probes | SAME 348, REFUSED 114, LOUD 2 of 464 | SAME 361, REFUSED 112, LOUD 2 of 475: cr3, cr8 and st15 turned SAME; eleven new probes, ten SAME and one REFUSED (fk7: a list assignment to an array, chalk's gap) |
+| verifier, corpus and probes | rows as recorded | unchanged; `control-fork` 0 and 0 |
+| verifier, chalk lib | stale rows | re-counted (section 3); equal to the base producer's in every row |
+
+What stage 1 changed, in one line each (the notes are in `docs/memory`):
+
+- **1a.** The arm scans ask `B::SoN::EffectTable::on_chain`; `SoN::Verify` has `control-fork` (the plan's V9, on wire v1). The rule found the same hole in ten more statements, all fixed: `$#a = N` (three corpus wires, through Carp), `tr///`, array and hash slices assigned, a package aggregate or one behind a reference assigned whole, a list assignment with a `my` aggregate among its targets, a field stored, incremented or op-assigned alone in an arm (chalk's ReferenceFlow), and `$st->{i}++` in two arms sharing one pinned read (chalk's Regex::Parse). `the-arm-scan-asks-what-the-walk-pins.md`.
+- **1b.** `_list_count`: a list assignment to a hash in scalar context is the Count of its right side, taken before the store; `() = LIST` uses it too (two silent wrong counts fixed). chalk's `_hash_assigns_read_as_scalars` is deleted. `a-list-assign-counts-its-right-side.md`.
+- **1c.** chalk lowers `reftype` (`referent_type`, `t2_referent_type`); a reference to a reference is `REF` to `ref()` as well, which was `SCALAR`.
+- **1d.** Already merged before this stage (producer 714b191).
+
+The three refused probes the stage was asked to look at:
+
+- **hs5** (`while (%h) { delete $h{ (sort keys %h)[0] }; ... }`): REFUSED by chalk, "a slice taken as a scalar (Coerce)". The wire is right (the hash's truth is a Count at the header memory Phi). chalk has no lowering for a list slice in scalar context (its last element); a small arm in `Builder/Containers.pm`, not a wire matter.
+- **sg1**: SAME at base already.
+- **sr1** (`for my $c ("a".."c")`): the producer's own refusal, by name ("a foreach over a range of strings (perl's magic increment) is not yet lowered"). A feature, not a debt.
+
+## 8. What stages 2 and 3 should know
+
+1. **V9 is not zero on chalk's lib.** One fork is left: `Chalk::Bootstrap::Perl::Actions::SubroutineDefinition` (an elsif arm inside a foreach, whose inner if builds control while the arm got none; Proj#134 feeds both the join Region and the inner If). Six reductions did not reproduce it. Stage 3's "V9: 0 from stage 3" needs it fixed or the graph refused. chalk and the deparser both refuse a forked graph by name, so it is loud today.
+2. **V5's real size is 291 on chalk's lib, not 228** (section 3), 74 distinct sites.
+3. **`control_in` is not in a node's content hash, and that bites data nodes that are `make`d and then pinned.** `$st->{i}++` in two arms was one node. Stage 3 puts `mem_in` in the hash, which does not help here: both arms read at the same memory. Either a pinned data node is never hash-consed (`make_unique` where `_pin` follows), or `_pin` refuses a node that is already pinned elsewhere. The second is a three-line guard and would have caught this at build time.
+4. **The ratchet's chalk rows name a chalk commit** (`# chalk at 45a1b8d5`). Stage 2 is chalk-only and changes chalk's lib in every commit, so each stage-2 gate run needs the rows re-counted (15 minutes cold) and the line moved, or `tools/gates.sh` reports MISS. Consider holding chalk's rows to "no rise" at any chalk commit instead; that is a decision about the ratchet, not made here.
+5. **`#graphs` is held now.** A refusal added to the producer lowers it and fails the ratchet; that is intended (it is how a wrong refusal was caught in this stage). A stage that refuses on purpose lowers the row with its reason.
+6. **The census pin is still 8c512c2e** (`tools/corpus-llvm-roundtrip.pl`). `tools/gates.sh` reads chalk at the head it is given, so the gates do not depend on the pin; move the pin to chalk's merge commit when `v2-s01` is merged.
+7. **Stage 6's three subs** (section 5): `regex_split` and `_repair_stale_merge` are where the flag and `is_memory` differ in chalk's lib. Four probe Phis differ too (cells).
+8. **The corpus ir blocks are stale already** (section 6): 683 of 689.
+9. **Q7 is the journal; Q6's scan needs two more rules** (section 4). The scan and the cycle walk are on branch `v2-s01-measure`.
+10. **chalk does not lower a hash made of a call's list** (`my %h = f()`: "a {...} of an odd list"; with its count: "a call used both as a list and as a scalar"). The stage-1 wire is right and counted; the refusal is T2's.
+
