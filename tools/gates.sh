@@ -21,8 +21,9 @@
 # taken again either, so DIR's results are all of one tree. A changed tree
 # needs a new DIR.
 #
-# THE PRODUCER SUITE ALSO LEAVES OUT t/wire-v2-downgrades-to-v1.t, run whole
-# as the downgrade gate against a checkout of the commit it names ($OUT/v1base).
+# THE PRODUCER SUITE ALSO LEAVES OUT t/wire-v2-downgrades-to-v1.t, run whole by
+# the ratchet gate against a checkout of the commit it names ($OUT/v1base).
+# (One gate for both: chalk's t/bootstrap/gates-script.t holds the list.)
 #
 # THE SUITES LEAVE OUT THREE FILES that are gates of their own, so that none
 # runs twice: chalk's t/bootstrap/corpus/son-corpus-wide.t (corpus-gate) and
@@ -36,7 +37,7 @@ set -u
 
 ROUNDTRIP_MIN=426
 GATE_GREEN_MIN=222
-GATES="producer-suite chalk-suite census corpus-gate probes ratchet downgrade"
+GATES="producer-suite chalk-suite census corpus-gate probes ratchet"
 
 list() {
     cat <<EOF
@@ -45,8 +46,7 @@ chalk-suite     every t/**/*.t under prove -Ilib -It/lib: 0 failing files
 census          tools/corpus-llvm-roundtrip.pl: ROUNDTRIP >= $ROUNDTRIP_MIN, DIFFERS 0, LLI_FAIL 0
 corpus-gate     chalk t/bootstrap/corpus/son-corpus-wide.t: passes, gate-green >= $GATE_GREEN_MIN, paad/worklist.json untouched
 probes          chalk tools/audit-probes.pl: WRONG 0, TIMEOUT 0, no probe BASELINE.tsv records SAME is anything else
-ratchet         t/wire-verify-ratchet.t over corpus, probes and chalk's lib, wire 1 and wire 2: no rule above t/data/wire-verify-baseline.tsv
-downgrade       t/wire-v2-downgrades-to-v1.t over every probe, the corpus and chalk's lib: 0 wires differ from the base commit's
+ratchet         t/wire-verify-ratchet.t over corpus, probes and chalk's lib, wire 1 and wire 2: no rule above t/data/wire-verify-baseline.tsv; and t/wire-v2-downgrades-to-v1.t over all three: 0 wires differ from the base commit's
 EOF
 }
 
@@ -160,7 +160,7 @@ downgrade_line() {
     rc=$(cat "$OUT/downgrade.rc")
     line=$(grep -o '# [0-9]* of [0-9]* wires differ' "$f" | tail -1)
     [ "$rc" -eq 0 ] || v=MISS
-    printf '%-15s %s  prove exit %s; %s%s\n' downgrade $v "$rc" "${line:-no comparison}" "$(secs downgrade)"
+    printf '%-15s %s  (downgrade proof) prove exit %s; %s%s\n' '' $v "$rc" "${line:-no comparison}" "$(secs downgrade)"
     [ $v = PASS ] || grep '^not ok\|^ *not ok\|: graph \|wire only in' "$f" | head -12 | sed 's/^/                  /'
     [ $v = PASS ]
 }
@@ -181,7 +181,7 @@ summary() {
     wanted corpus-gate    && { corpus_gate_line || miss=1; }
     wanted probes         && { probes_line      || miss=1; }
     wanted ratchet        && { ratchet_line     || miss=1; }
-    wanted downgrade      && { downgrade_line   || miss=1; }
+    wanted ratchet        && { downgrade_line   || miss=1; }
     return $miss
 }
 
@@ -205,7 +205,7 @@ snap() {    # from to
 }
 if [ ! -d "$P" ]; then at "$HERE" > "$OUT/producer.at"; snap "$HERE" "$P" || exit 2; fi
 # The commit t/wire-v2-downgrades-to-v1.t compares with, checked out once.
-if wanted downgrade && [ ! -d "$OUT/v1base" ]; then
+if wanted ratchet && [ ! -d "$OUT/v1base" ]; then
     base=$(sed -n "s/^my \$BASE *= *'\([0-9a-f]*\)';.*/\1/p" "$P/t/wire-v2-downgrades-to-v1.t")
     mkdir -p "$OUT/v1base.tmp" && git -C "$HERE" archive "$base" | tar -x -C "$OUT/v1base.tmp" && mv "$OUT/v1base.tmp" "$OUT/v1base" || exit 2
 fi
@@ -307,13 +307,12 @@ timed() {
 # three more than it has, and after that for exactly what it has.
 bg=""
 if wanted corpus-gate; then timed corpus-gate corpus_gate & bg="$bg $!"; fi
-if wanted ratchet;     then timed ratchet ratchet 2 & bg="$bg $!"; fi
+if wanted ratchet;     then { timed ratchet ratchet 2; timed downgrade downgrade 2; } & bg="$bg $!"; fi
 sj=$JOBS
 wanted producer-suite && timed producer-suite suite producer-suite "$P" -l "$sj" '^t/(wire-verify-ratchet|wire-v2-downgrades-to-v1)\.t$'
 wanted chalk-suite    && timed chalk-suite suite chalk-suite "$C" '-Ilib -It/lib' "$sj" '^t/bootstrap/(corpus/son-corpus-wide|ir/audit-probes)\.t$'
 wanted census         && timed census census "$sj"
 wanted probes         && timed probes probes "$sj"
-wanted downgrade      && timed downgrade downgrade "$sj"
 [ -z "$bg" ] || wait $bg
 
 summary
