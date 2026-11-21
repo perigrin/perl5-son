@@ -11378,7 +11378,7 @@ class SoN::FromOptree 0.01 {
                     do { my ($sg, $sy) = _padparts($cv, $targ);
                          (sigil => $sg, symbol => $sy) },
                     ($ctx->{shared_lexicals}{$targ} ? (shared => 1) : ()),
-                    inputs => [ $store ]));
+                    mem => $store));
                 return ($op->next, 'handled');
             }
             # OPpLVAL_INTRO (0x80): a new lexical (`my $c = qq{...}`). The main
@@ -12172,6 +12172,14 @@ class SoN::FromOptree 0.01 {
                 _place($sim, $node) unless defined $node->control_in;
             }
 
+            # A VOID ONE THAT STORED A PACKAGE SCALAR BY POSITION is its
+            # EntryWrites and bindings: the Assign is nobody's value, on
+            # neither chain, and a record of no `my` (wire v2's V7). Not left.
+            if ( $positional && ( $op->flags & 3 ) == 1 && !defined $node->control_in
+                    && !$node->consumers->@* && grep { $_ eq 'package' } @storage ) {
+                $_->remove_consumer($node) for grep { blessed($_) } $node->inputs->@*;
+                return ($op->next, 'handled');
+            }
             $sim->push_node($node);
             return ($op->next, 'handled');
         }
@@ -15182,7 +15190,7 @@ class SoN::FromOptree 0.01 {
         # A body element store advances memory; seed a header memory-Phi from the
         # pre-loop memory (memory analog of the carried-slot Phi; no stamp).
         my $mem_phi;
-        if ($SCOUT_MOVED_MEMORY || _body_stores_memory($body_start)) {
+        if ($SCOUT_MOVED_MEMORY || _body_stores_memory($body_start, 1)) {
             $mem_phi = $factory->make_unique('Phi',
                 inputs => [$sim->memory], region => $loop_node, memory => 1);
             $sim->set_memory($mem_phi);
@@ -15896,7 +15904,11 @@ class SoN::FromOptree 0.01 {
         # A body element store advances memory; seed a header memory-Phi from the
         # pre-loop memory (same as the range form).
         my $mem_phi;
-        if ($SCOUT_MOVED_MEMORY || _body_stores_memory($body_start) || $tied) {
+        # (A BODY THAT WRITES ITS ALIAS stores back into the list's element
+        # each pass: the scout binds the alias to a placeholder, so its write
+        # moved no memory there, and the body's stores followed the memory
+        # before the loop -- probes al16, lp28.)
+        if ($SCOUT_MOVED_MEMORY || _body_stores_memory($body_start, 1) || $tied || $writes_iter) {
             $mem_phi = $factory->make_unique('Phi',
                 inputs => [$sim->memory], region => $loop_node, memory => 1);
             $sim->set_memory($mem_phi);
@@ -18806,11 +18818,18 @@ class SoN::FromOptree 0.01 {
     # while condition short-circuits AROUND the body), so descend there -- the
     # foreach caller passes body_start directly (no and/or to cross). Same
     # OPf_MOD lvalue test as _arm_has_element_store; the cycle guard bounds it.
-    sub _body_stores_memory ($start) {
+    # AN ARM IN THE BODY is scanned and so is what follows it: an `if` whose
+    # arm ends in `next` (or holds a loop of its own) no longer hid a push
+    # after it (corpus 205). A loop in the body is crossed: its own leaveloop
+    # ends it, not this body.
+    sub _body_stores_memory ($start, $in_body = 0) {
         my %seen;
+        my $depth = 0;
         for (my $op = $start; $$op && !$seen{$$op}; $op = $op->next) {
             $seen{$$op} = 1;
             my $name = $op->name;
+            $depth++ if $in_body && ( $name eq 'enterloop' || $name eq 'enteriter' );
+            if ( $depth && $name eq 'leaveloop' ) { $depth--; next }
             last if $name eq 'unstack' || $name eq 'leaveloop';
             # shift/pop MUTATE their array (a memory effect), so a loop whose
             # condition or body drains an array carries memory through the header.
@@ -18821,9 +18840,13 @@ class SoN::FromOptree 0.01 {
             # So does a store into a demoted slot: `my $h = {}; push @r, \$h`
             # left the post-loop read at the store inside the body.
             return 1 if _stores_demoted_slot($op);
+            if ( $in_body && $name =~ /\A(?:and|or|dor|cond_expr)\z/ ) {
+                return 1 if _body_stores_memory( $op->other, 1 );
+                next;
+            }
             if ($name eq 'and' || $name eq 'or') {
                 return 1 if _cond_drains_array($start, $$op);
-                return _body_stores_memory($op->other);
+                return _body_stores_memory($op->other, 1);
             }
             next unless $name eq 'aelem' || $name eq 'helem';
             return 1 if $op->flags & 0x20;   # OPf_MOD -- an lvalue element target
