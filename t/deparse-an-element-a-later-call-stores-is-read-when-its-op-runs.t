@@ -70,6 +70,18 @@ round_trips($f . 'print $r->[0] + f(4), "\n";',                            'an a
 round_trips('my $h = {k => 0}; sub g { $h->{k} = $_[0] + 1; $_[0] } print g(1), $h->{k}, g(0), $h->{k}, "\n";',
     'a hash element through a reference');
 
+# BY NAME, BY CAPTURE, THROUGH A METHOD, TWO CALLS DOWN.
+round_trips('our @a = (0); sub g { $a[0] = $_[0] + 1; $_[0] } print g(1), $a[0], g(0), $a[0], "\n";', 'a package array');
+round_trips('our %h = (k => 0); sub g { $h{k} = $_[0] + 1; $_[0] } print g(1), $h{k}, g(0), $h{k}, "\n";', 'a package hash');
+round_trips('my @a = (0); sub g { $a[0] = $_[0] + 1; $_[0] } print g(1), $a[0], g(0), $a[0], "\n";', 'a lexical array a sub closes over');
+round_trips('our @a = (1); sub g { $a[0] = 5; 0 } print $a[0] + g(), "\n";', 'added');
+round_trips('package K; sub new { bless { v => 0 }, $_[0] } sub bump { $_[0]{v} = $_[1] + 1; $_[1] } '
+    . 'package main; my $o = K->new; print $o->bump(1), $o->{v}, $o->bump(0), $o->{v}, "\n";', 'a method');
+round_trips('my $r = [0]; sub h { $r->[0] = 7 } sub f { h(); "" } print $r->[0], f(), "\n";', 'two calls down');
+round_trips('my $r = {a => {b => 1}}; sub f { $r->{a}{b} = 5; "" } print $r->{a}{b}, f(), "\n";', 'an element two references in');
+round_trips('my $r = [1, 2]; sub f { $_ = 9 for @$r; "" } print $r->[0], f(), "\n";', 'a foreach alias in the callee');
+round_trips('my $r = ["a"]; sub f { s/a/b/ for @$r; "" } print $r->[0], f(), "\n";', 's/// through the topic');
+
 # AN ELEMENT THAT DID NOT EXIST when pushed is undef, whatever the call stores.
 round_trips('my $r = []; sub f { $r->[0] = 5; "" } my @l = ($r->[0], f()); print $l[0] // "u", "\n";',
     'an element made by the call');
