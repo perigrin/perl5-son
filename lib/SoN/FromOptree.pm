@@ -860,6 +860,17 @@ class SoN::FromOptree 0.01 {
         $sim->set_control($node);
         return $node;
     }
+    # _unplace($sim, $node): the last node placed taken back off both chains
+    # (an :lvalue call made the location of the store that calls it): what it
+    # followed is the control and the memory again. It keeps the mem_in it reads.
+    sub _unplace ($sim, $node) {
+        return unless defined $node->control_in && $sim->control == $node;
+        $sim->set_control($node->control_in);
+        $node->set_control_in(undef);
+        return unless $node->mem_out && defined $sim->memory && $sim->memory == $node;
+        $node->set_mem_out(0);
+        $sim->set_memory($node->mem_in);
+    }
 
     # _may_fault($node) -> true for a Divide or Modulo that can die "Illegal
     # division by zero" / "Illegal modulus zero": any whose divisor is not a
@@ -10552,13 +10563,11 @@ class SoN::FromOptree 0.01 {
             # through whatever the sub returns. The catch-all below dropped the
             # store and left the call (corpus 199). The Call is the location,
             # as pos's is: taken off the chain it was pinned to, so the sub is
-            # called once, by the assignment.
+            # called once, by the assignment -- and no memory version: the
+            # Assign is (a version off the chain is wire v2's V2, corpus 398).
             elsif ($target->isa('SoN::IR::Node::Call')
                     && ($target->dispatch_kind // '') eq 'direct') {
-                if (defined $target->control_in && $sim->control == $target) {
-                    $sim->set_control($target->control_in);
-                    $target->set_control_in(undef);
-                }
+                _unplace($sim, $target);
                 my $store = $factory->make_unique('Assign',
                     inputs => [$target, $value]);
                 _place($sim, $store);
