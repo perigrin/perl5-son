@@ -63,16 +63,23 @@ main::__PROGRAM__: {start: 0, returns: [13], nodes: [
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: abc}, ~, ~, Str], # 2
   [MemStart], # 3
-  [PadAccess, {sigil: $, symbol: k}, [3], ~, Unknown], # 4
+  [PadAccess, {file: 1, shared: 1, sigil: $, symbol: k}, ~, ~, Unknown, 3], # 4
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 5
-  [Assign, ~, [4, 5], 0, Int], # 6
-  [RegexMatch, {flags: "", pattern: "b(?{ $k = 5 })"}, [2], 6, Boolean], # 7
-  [PadAccess, {sigil: $, symbol: k}, [7], ~, Str], # 8
+  [Assign, ~, [4, 5], 0, Int, 3, true], # 6
+  [RegexMatch, {code_bodies: [main::__PROGRAM__::__REGEXCODE__:1.0], flags: "", pattern: "b(?{ $k = 5 })"}, [2], 6, Boolean, 6, true], # 7
+  [PadAccess, {file: 1, shared: 1, sigil: $, symbol: k}, ~, ~, Str, 7], # 8
   [Coerce, {from_repr: Unknown, to_repr: Str}, [8], ~, Str], # 9
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
   [Concat, ~, [9, 10], ~, Str], # 11
-  [Print, ~, [11], 7, Scalar], # 12
-  [Return, {implicit: true}, [1], 12]]} # 13
+  [Print, ~, [11], 7, "Maybe[Boolean]"], # 12
+  [Return, {implicit: true}, [1], 12, ~, 7]]} # 13
+main::__PROGRAM__::__REGEXCODE__:1.0: {start: 0, returns: [5], nodes: [
+  [Start], # 0
+  [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 1
+  [MemStart], # 2
+  [PadAccess, {file: 1, shared: 1, sigil: $, symbol: k}, ~, ~, Unknown, 2], # 3
+  [Assign, ~, [3, 1], 0, Int, 2, true], # 4
+  [Return, {implicit: true}, [1], 4, ~, 4]]} # 5
 ```
 
 ## `qr//` carrying a block: code frozen into a value
@@ -126,16 +133,23 @@ main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Constant, {const_type: string, value: ab}, ~, ~, Str], # 2
   [Constant, {const_type: regex, value: "a(?{ $n = 7 })b"}, ~, ~, Regex], # 3
   [MemStart], # 4
-  [PadAccess, {sigil: $, symbol: "n"}, [4], ~, Unknown], # 5
+  [PadAccess, {file: 1, shared: 1, sigil: $, symbol: "n"}, ~, ~, Unknown, 4], # 5
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 6
-  [Assign, ~, [5, 6], 0, Int], # 7
-  [Match, ~, [2, 3], 7, Boolean], # 8
-  [PadAccess, {sigil: $, symbol: "n"}, [8], ~, Str], # 9
+  [Assign, ~, [5, 6], 0, Int, 4, true], # 7
+  [Match, {code_bodies: [main::__PROGRAM__::__REGEXCODE__:1.0], flags: ""}, [2, 3], 7, Boolean, 7, true], # 8
+  [PadAccess, {file: 1, shared: 1, sigil: $, symbol: "n"}, ~, ~, Str, 8], # 9
   [Coerce, {from_repr: Unknown, to_repr: Str}, [9], ~, Str], # 10
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 11
   [Concat, ~, [10, 11], ~, Str], # 12
-  [Print, ~, [12], 8, Scalar], # 13
-  [Return, {implicit: true}, [1], 13]]} # 14
+  [Print, ~, [12], 8, "Maybe[Boolean]"], # 13
+  [Return, {implicit: true}, [1], 13, ~, 8]]} # 14
+main::__PROGRAM__::__REGEXCODE__:1.0: {start: 0, returns: [5], nodes: [
+  [Start], # 0
+  [Constant, {const_type: integer, value: "7"}, ~, ~, Int], # 1
+  [MemStart], # 2
+  [PadAccess, {file: 1, shared: 1, sigil: $, symbol: "n"}, ~, ~, Unknown, 2], # 3
+  [Assign, ~, [3, 1], 0, Int, 2, true], # 4
+  [Return, {implicit: true}, [1], 4, ~, 4]]} # 5
 ```
 
 ## Hostile contents: proving the region is parsed, not counted
@@ -215,32 +229,47 @@ main::__PROGRAM__: {start: 0, returns: [29], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [PadAccess, {sigil: $, symbol: s}, [2], ~, Unknown], # 3
+  [PadAccess, {sigil: $, symbol: s}, ~, ~, Unknown, 2], # 3
   [Constant, {const_type: string, value: abc}, ~, ~, Str], # 4
-  [Assign, ~, [3, 4], 0, Str], # 5
-  [PadAccess, {sigil: $, symbol: k}, [5], ~, Unknown], # 6
+  [Assign, ~, [3, 4], 0, Str, 2, true], # 5
+  [PadAccess, {file: 1, shared: 1, sigil: $, symbol: k}, ~, ~, Unknown, 5], # 6
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 7
-  [Assign, ~, [6, 7], 5, Int], # 8
-  [PadAccess, {sigil: $, symbol: s}, [8], ~, Str], # 9
+  [Assign, ~, [6, 7], 5, Int, 5, true], # 8
+  [PadAccess, {sigil: $, symbol: s}, ~, ~, Str, 8], # 9
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 10
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 11
   [Add, ~, [10, 11], ~, Int], # 12
-  [RegexSubst, {flags: "", pattern: a, replacement: ""}, [9, 12, 8], 8, Str], # 13
-  [PadAccess, {sigil: $, symbol: s}, [13], ~, Str], # 14
-  [RegexMatch, {flags: "", pattern: "b(?{ $k = length(\"}}}\") })"}, [14], 13, Boolean], # 15
-  [PadAccess, {sigil: $, symbol: s}, [15], ~, Unknown], # 16
+  [RegexSubst, {flags: "", pattern: a, replacement: ""}, [9, 12], 8, Str, 8, true], # 13
+  [PadAccess, {sigil: $, symbol: s}, ~, ~, Str, 13], # 14
+  [RegexMatch, {code_bodies: [main::__PROGRAM__::__REGEXCODE__:1.0], flags: "", pattern: "b(?{ $k = length(\"}}}\") })"}, [14], 13, Boolean, 13, true], # 15
+  [PadAccess, {sigil: $, symbol: s}, ~, ~, Unknown, 15], # 16
   [Constant, {const_type: regex, value: "c(?{ $k = $k + length(\"}}\") })"}, ~, ~, Regex], # 17
-  [Match, ~, [16, 17], 15, Boolean], # 18
-  [PadAccess, {sigil: $, symbol: s}, [18], ~, Str], # 19
+  [Match, {code_bodies: [main::__PROGRAM__::__REGEXCODE__:2.0], flags: ""}, [16, 17], 15, Boolean, 15, true], # 18
+  [PadAccess, {sigil: $, symbol: s}, ~, ~, Str, 18], # 19
   [Coerce, {from_repr: Unknown, to_repr: Str}, [19], ~, Str], # 20
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 21
   [Concat, ~, [20, 21], ~, Str], # 22
-  [PadAccess, {sigil: $, symbol: k}, [18], ~, Str], # 23
+  [PadAccess, {file: 1, shared: 1, sigil: $, symbol: k}, ~, ~, Str, 18], # 23
   [Coerce, {from_repr: Unknown, to_repr: Str}, [23], ~, Str], # 24
   [Concat, ~, [22, 24], ~, Str], # 25
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 26
   [Concat, ~, [25, 26], ~, Str], # 27
-  [Print, ~, [27], 18, Scalar], # 28
-  [Return, {implicit: true}, [1], 28], # 29
+  [Print, ~, [27], 18, "Maybe[Boolean]"], # 28
+  [Return, {implicit: true}, [1], 28, ~, 18], # 29
   [RegexMatch, {flags: "", pattern: a}, [9], ~, Boolean]]} # 30
+main::__PROGRAM__::__REGEXCODE__:1.0: {start: 0, returns: [5], nodes: [
+  [Start], # 0
+  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 1
+  [MemStart], # 2
+  [PadAccess, {file: 1, shared: 1, sigil: $, symbol: k}, ~, ~, Unknown, 2], # 3
+  [Assign, ~, [3, 1], 0, Int, 2, true], # 4
+  [Return, {implicit: true}, [1], 4, ~, 4]]} # 5
+main::__PROGRAM__::__REGEXCODE__:2.0: {start: 0, returns: [6], nodes: [
+  [Start], # 0
+  [MemStart], # 1
+  [PadAccess, {file: 1, shared: 1, sigil: $, symbol: k}, ~, ~, Num, 1], # 2
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 3
+  [Add, ~, [2, 3], ~, Num], # 4
+  [Assign, ~, [2, 4], 0, Num, 1, true], # 5
+  [Return, {implicit: true}, [4], 5, ~, 5]]} # 6
 ```

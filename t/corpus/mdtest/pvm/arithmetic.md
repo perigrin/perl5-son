@@ -58,12 +58,12 @@ main::__PROGRAM__: {start: 0, returns: [44], nodes: [
   [EntryDef, {package: main, sigil: "@", symbol: ARGV}, ~, ~, Array], # 2
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 3
   [MemStart], # 4
-  [Subscript, {kind: array}, [2, 3, 4], ~, Scalar], # 5
+  [Subscript, {kind: array}, [2, 3], ~, Scalar, 4], # 5
   [Constant, {const_type: integer, value: "12"}, ~, ~, Int], # 6
   [DefinedOr, ~, [5, 6], ~, Scalar], # 7
   [Coerce, {from_repr: Scalar, to_repr: Num}, [7], ~, Num], # 8
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 9
-  [Subscript, {kind: array}, [2, 9, 4], ~, Scalar], # 10
+  [Subscript, {kind: array}, [2, 9], ~, Scalar, 4], # 10
   [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 11
   [DefinedOr, ~, [10, 11], ~, Scalar], # 12
   [Coerce, {from_repr: Scalar, to_repr: Num}, [12], ~, Num], # 13
@@ -79,11 +79,11 @@ main::__PROGRAM__: {start: 0, returns: [44], nodes: [
   [Coerce, {from_repr: Unknown, to_repr: Str}, [22], ~, Str], # 23
   [Concat, ~, [21, 23], ~, Str], # 24
   [Concat, ~, [24, 16], ~, Str], # 25
-  [Divide, ~, [8, 13], ~, Num], # 26
+  [Divide, {file: "/tmp/osrpJFXK1Z/case.pl", line: 6}, [8, 13], 0, Num], # 26
   [Coerce, {from_repr: Num, to_repr: Str}, [26], ~, Str], # 27
   [Concat, ~, [25, 27], ~, Str], # 28
   [Concat, ~, [28, 16], ~, Str], # 29
-  [Modulo, ~, [8, 13], ~, Int], # 30
+  [Modulo, {file: "/tmp/osrpJFXK1Z/case.pl", line: 7}, [8, 13], 26, Int], # 30
   [Coerce, {from_repr: Int, to_repr: Str}, [30], ~, Str], # 31
   [Concat, ~, [29, 31], ~, Str], # 32
   [Concat, ~, [32, 16], ~, Str], # 33
@@ -91,13 +91,13 @@ main::__PROGRAM__: {start: 0, returns: [44], nodes: [
   [Coerce, {from_repr: Num, to_repr: Str}, [34], ~, Str], # 35
   [Concat, ~, [33, 35], ~, Str], # 36
   [Concat, ~, [36, 16], ~, Str], # 37
-  [Negate, ~, [8], ~, Num], # 38
+  [Negate, ~, [7], ~, Scalar], # 38
   [Coerce, {from_repr: Unknown, to_repr: Str}, [38], ~, Str], # 39
   [Concat, ~, [37, 39], ~, Str], # 40
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 41
   [Concat, ~, [40, 41], ~, Str], # 42
-  [Print, ~, [42], 0, Scalar], # 43
-  [Return, {implicit: true}, [1], 43]]} # 44
+  [Print, ~, [42], 30, "Maybe[Boolean]"], # 43
+  [Return, {implicit: true}, [1], 43, ~, 4]]} # 44
 ```
 
 ## Concatenation and repetition
@@ -133,7 +133,7 @@ main::__PROGRAM__: {start: 0, returns: [22], nodes: [
   [EntryDef, {package: main, sigil: "@", symbol: ARGV}, ~, ~, Array], # 3
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 4
   [MemStart], # 5
-  [Subscript, {kind: array}, [3, 4, 5], ~, Scalar], # 6
+  [Subscript, {kind: array}, [3, 4], ~, Scalar, 5], # 6
   [Constant, {const_type: string, value: ab}, ~, ~, Str], # 7
   [DefinedOr, ~, [6, 7], ~, Scalar], # 8
   [Coerce, {from_repr: Scalar, to_repr: Str}, [8], ~, Str], # 9
@@ -142,14 +142,14 @@ main::__PROGRAM__: {start: 0, returns: [22], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 12
   [Constant, {const_type: string, value: "joined: "}, ~, ~, Str], # 13
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 14
-  [Subscript, {kind: array}, [3, 14, 5], ~, Scalar], # 15
+  [Subscript, {kind: array}, [3, 14], ~, Scalar, 5], # 15
   [Constant, {const_type: string, value: cd}, ~, ~, Str], # 16
   [DefinedOr, ~, [15, 16], ~, Scalar], # 17
   [Coerce, {from_repr: Scalar, to_repr: Str}, [17], ~, Str], # 18
   [Concat, ~, [9, 18], ~, Str], # 19
-  [Print, ~, [13, 19, 12], 0, Scalar], # 20
-  [Print, ~, [2, 11, 12], 20, Scalar], # 21
-  [Return, {implicit: true}, [1], 21]]} # 22
+  [Print, ~, [13, 19, 12], 0, "Maybe[Boolean]"], # 20
+  [Print, ~, [2, 11, 12], 20, "Maybe[Boolean]"], # 21
+  [Return, {implicit: true}, [1], 21, ~, 5]]} # 22
 ```
 
 ## `*` binds tighter than `+`
@@ -185,16 +185,16 @@ main::__PROGRAM__: {start: 0, returns: [30], nodes: [
   [EntryDef, {package: main, sigil: "@", symbol: ARGV}, ~, ~, Array], # 2
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 3
   [MemStart], # 4
-  [Subscript, {kind: array}, [2, 3, 4], ~, Scalar], # 5
+  [Subscript, {kind: array}, [2, 3], ~, Scalar, 4], # 5
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 6
   [DefinedOr, ~, [5, 6], ~, Scalar], # 7
   [Coerce, {from_repr: Scalar, to_repr: Num}, [7], ~, Num], # 8
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 9
-  [Subscript, {kind: array}, [2, 9, 4], ~, Scalar], # 10
+  [Subscript, {kind: array}, [2, 9], ~, Scalar, 4], # 10
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 11
   [DefinedOr, ~, [10, 11], ~, Scalar], # 12
   [Coerce, {from_repr: Scalar, to_repr: Num}, [12], ~, Num], # 13
-  [Subscript, {kind: array}, [2, 6, 4], ~, Scalar], # 14
+  [Subscript, {kind: array}, [2, 6], ~, Scalar, 4], # 14
   [Constant, {const_type: integer, value: "4"}, ~, ~, Int], # 15
   [DefinedOr, ~, [14, 15], ~, Scalar], # 16
   [Coerce, {from_repr: Scalar, to_repr: Num}, [16], ~, Num], # 17
@@ -209,8 +209,8 @@ main::__PROGRAM__: {start: 0, returns: [30], nodes: [
   [Concat, ~, [22, 25], ~, Str], # 26
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 27
   [Concat, ~, [26, 27], ~, Str], # 28
-  [Print, ~, [28], 0, Scalar], # 29
-  [Return, {implicit: true}, [1], 29]]} # 30
+  [Print, ~, [28], 0, "Maybe[Boolean]"], # 29
+  [Return, {implicit: true}, [1], 29, ~, 4]]} # 30
 ```
 
 ## `**` is right associative, `-` is left
@@ -249,16 +249,16 @@ main::__PROGRAM__: {start: 0, returns: [34], nodes: [
   [EntryDef, {package: main, sigil: "@", symbol: ARGV}, ~, ~, Array], # 2
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 3
   [MemStart], # 4
-  [Subscript, {kind: array}, [2, 3, 4], ~, Scalar], # 5
+  [Subscript, {kind: array}, [2, 3], ~, Scalar, 4], # 5
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 6
   [DefinedOr, ~, [5, 6], ~, Scalar], # 7
   [Coerce, {from_repr: Scalar, to_repr: Num}, [7], ~, Num], # 8
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 9
-  [Subscript, {kind: array}, [2, 9, 4], ~, Scalar], # 10
+  [Subscript, {kind: array}, [2, 9], ~, Scalar, 4], # 10
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 11
   [DefinedOr, ~, [10, 11], ~, Scalar], # 12
   [Coerce, {from_repr: Scalar, to_repr: Num}, [12], ~, Num], # 13
-  [Subscript, {kind: array}, [2, 6, 4], ~, Scalar], # 14
+  [Subscript, {kind: array}, [2, 6], ~, Scalar, 4], # 14
   [DefinedOr, ~, [14, 6], ~, Scalar], # 15
   [Coerce, {from_repr: Scalar, to_repr: Num}, [15], ~, Num], # 16
   [Power, ~, [13, 16], ~, Num], # 17
@@ -277,6 +277,6 @@ main::__PROGRAM__: {start: 0, returns: [34], nodes: [
   [Concat, ~, [26, 29], ~, Str], # 30
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 31
   [Concat, ~, [30, 31], ~, Str], # 32
-  [Print, ~, [32], 0, Scalar], # 33
-  [Return, {implicit: true}, [1], 33]]} # 34
+  [Print, ~, [32], 0, "Maybe[Boolean]"], # 33
+  [Return, {implicit: true}, [1], 33, ~, 4]]} # 34
 ```

@@ -52,17 +52,18 @@ opened
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [9], nodes: [
+main::__PROGRAM__: {start: 0, returns: [10], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [PadAccess, {sigil: $, symbol: fh}, ~, ~, GlobRef], # 2
   [Constant, {const_type: string, value: "opened\n"}, ~, ~, Str], # 3
   [Constant, {const_type: string, value: "<"}, ~, ~, Str], # 4
   [Constant, {const_type: ref, value: "x\n"}, ~, ~, ScalarRef], # 5
-  [Call, {dispatch_kind: builtin, name: open, param_names: []}, [2, 4, 5], 0, Scalar], # 6
-  [Print, ~, [3], 6, Scalar], # 7
-  [Call, {dispatch_kind: builtin, name: close, param_names: []}, [2], 7, Boolean], # 8
-  [Return, {implicit: true}, [1], 8]]} # 9
+  [MemStart], # 6
+  [Call, {dispatch_kind: builtin, name: open, param_names: []}, [2, 4, 5], 0, "Maybe[Int]", 6, true], # 7
+  [Print, ~, [3], 7, "Maybe[Boolean]"], # 8
+  [Call, {dispatch_kind: builtin, name: close, param_names: []}, [2], 8, Boolean, 7, true], # 9
+  [Return, {implicit: true}, [1], 9, ~, 9]]} # 10
 ```
 
 ## `<$fh>` in scalar context reads ONE line
@@ -108,18 +109,19 @@ no operator whose text is "<"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [10], nodes: [
+main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [PadAccess, {sigil: $, symbol: fh}, ~, ~, GlobRef], # 2
   [Constant, {const_type: string, value: "<"}, ~, ~, Str], # 3
   [Constant, {const_type: ref, value: "one\ntwo\n"}, ~, ~, ScalarRef], # 4
-  [Call, {dispatch_kind: builtin, name: open, param_names: []}, [2, 3, 4], 0, Scalar], # 5
-  [Call, {dispatch_kind: builtin, name: readline, param_names: []}, [2], 5, Scalar], # 6
-  [Coerce, {from_repr: Scalar, to_repr: Str}, [6], ~, Str], # 7
-  [Print, ~, [7], 6, Scalar], # 8
-  [Call, {dispatch_kind: builtin, name: close, param_names: []}, [2], 8, Boolean], # 9
-  [Return, {implicit: true}, [1], 9]]} # 10
+  [MemStart], # 5
+  [Call, {dispatch_kind: builtin, name: open, param_names: []}, [2, 3, 4], 0, "Maybe[Int]", 5, true], # 6
+  [Call, {dispatch_kind: builtin, name: readline, param_names: []}, [2], 6, Scalar, 6, true], # 7
+  [Coerce, {from_repr: Scalar, to_repr: Str}, [7], ~, Str], # 8
+  [Print, ~, [8], 7, "Maybe[Boolean]"], # 9
+  [Call, {dispatch_kind: builtin, name: close, param_names: []}, [2], 9, Boolean, 7, true], # 10
+  [Return, {implicit: true}, [1], 10, ~, 10]]} # 11
 ```
 
 ## `<$fh>` in list context reads EVERY remaining line
@@ -166,16 +168,16 @@ main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [PadAccess, {sigil: $, symbol: fh}, ~, ~, GlobRef], # 2
   [Constant, {const_type: string, value: "<"}, ~, ~, Str], # 3
   [Constant, {const_type: ref, value: "one\ntwo\n"}, ~, ~, ScalarRef], # 4
-  [Call, {dispatch_kind: builtin, name: open, param_names: []}, [2, 3, 4], 0, Scalar], # 5
-  [Call, {dispatch_kind: builtin, name: readline, param_names: []}, [2], 5, List], # 6
-  [ArrayLiteral, {sigil: "@", symbol: lines}, [6], ~, Array], # 7
-  [MemStart], # 8
-  [Count, ~, [7, 8], ~, Int], # 9
+  [MemStart], # 5
+  [Call, {dispatch_kind: builtin, name: open, param_names: []}, [2, 3, 4], 0, "Maybe[Int]", 5, true], # 6
+  [Call, {dispatch_kind: builtin, name: readline, param_names: []}, [2], 6, List, 6, true], # 7
+  [ArrayLiteral, {sigil: "@", symbol: lines}, [7], ~, Array], # 8
+  [Count, ~, [8], ~, Int, 7], # 9
   [Coerce, {from_repr: Int, to_repr: Str}, [9], ~, Str], # 10
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 11
-  [Print, ~, [10, 11], 6, Scalar], # 12
-  [Call, {dispatch_kind: builtin, name: close, param_names: []}, [2], 12, Boolean], # 13
-  [Return, {implicit: true}, [1], 13]]} # 14
+  [Print, ~, [10, 11], 7, "Maybe[Boolean]"], # 12
+  [Call, {dispatch_kind: builtin, name: close, param_names: []}, [2], 12, Boolean, 7, true], # 13
+  [Return, {implicit: true}, [1], 13, ~, 13]]} # 14
 ```
 
 ## `eof($fh)` inspects the glob without making it real
@@ -209,21 +211,22 @@ eof
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [15], nodes: [
+main::__PROGRAM__: {start: 0, returns: [16], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [PadAccess, {sigil: $, symbol: fh}, ~, ~, GlobRef], # 2
   [Constant, {const_type: string, value: "<"}, ~, ~, Str], # 3
   [Constant, {const_type: ref, value: "only\n"}, ~, ~, ScalarRef], # 4
-  [Call, {dispatch_kind: builtin, name: open, param_names: []}, [2, 3, 4], 0, Scalar], # 5
-  [Call, {dispatch_kind: builtin, name: readline, param_names: []}, [2], 5, Scalar], # 6
-  [Call, {dispatch_kind: builtin, name: eof, param_names: []}, [2], 6, Unknown], # 7
-  [If, ~, [7, 7], 7], # 8
-  [Proj, {index: 1}, [8]], # 9
-  [Constant, {const_type: string, value: "eof\n"}, ~, ~, Str], # 10
-  [Proj, {index: 0}, [8]], # 11
-  [Print, ~, [10], 11, Scalar], # 12
-  [Region, {head: 8}, [9, 12]], # 13
-  [Call, {dispatch_kind: builtin, name: close, param_names: []}, [2], 13, Boolean], # 14
-  [Return, {implicit: true}, [1], 14]]} # 15
+  [MemStart], # 5
+  [Call, {dispatch_kind: builtin, name: open, param_names: []}, [2, 3, 4], 0, "Maybe[Int]", 5, true], # 6
+  [Call, {dispatch_kind: builtin, name: readline, param_names: []}, [2], 6, Scalar, 6, true], # 7
+  [Call, {dispatch_kind: builtin, name: eof, param_names: []}, [2], 7, Boolean, 7, true], # 8
+  [If, ~, [8, 8], 8], # 9
+  [Proj, {index: 1}, [9]], # 10
+  [Constant, {const_type: string, value: "eof\n"}, ~, ~, Str], # 11
+  [Proj, {index: 0}, [9]], # 12
+  [Print, ~, [11], 12, "Maybe[Boolean]"], # 13
+  [Region, {head: 9}, [10, 13]], # 14
+  [Call, {dispatch_kind: builtin, name: close, param_names: []}, [2], 14, Boolean, 8, true], # 15
+  [Return, {implicit: true}, [1], 15, ~, 15]]} # 16
 ```

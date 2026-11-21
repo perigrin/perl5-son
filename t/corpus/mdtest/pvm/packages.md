@@ -47,18 +47,20 @@ hello
 ```
 
 ```ir
-Greet::hello: {start: 0, returns: [2], nodes: [
+Greet::hello: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: hello}, ~, ~, Str], # 1
-  [Return, ~, [1], 0]]} # 2
-main::__PROGRAM__: {start: 0, returns: [6], nodes: [
+  [MemStart], # 2
+  [Return, ~, [1], 0, ~, 2]]} # 3
+main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Call, {dispatch_kind: direct, name: Greet::hello, param_names: [], want: list}, ~, 0, Str], # 2
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [2], ~, Str], # 3
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
-  [Print, ~, [3, 4], 2, Scalar], # 5
-  [Return, {implicit: true}, [1], 5]]} # 6
+  [MemStart], # 2
+  [Call, {dispatch_kind: direct, file: "/tmp/osrpJFXK1Z/case.pl", line: 4, name: Greet::hello, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
+  [Print, ~, [4, 5], 3, "Maybe[Boolean]"], # 6
+  [Return, {implicit: true}, [1], 6, ~, 3]]} # 7
 ```
 
 ## `package Foo { ... }` scopes the switch to a block
@@ -89,18 +91,20 @@ HELLO
 ```
 
 ```ir
-Louder::shout: {start: 0, returns: [2], nodes: [
+Louder::shout: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: HELLO}, ~, ~, Str], # 1
-  [Return, ~, [1], 0]]} # 2
-main::__PROGRAM__: {start: 0, returns: [6], nodes: [
+  [MemStart], # 2
+  [Return, ~, [1], 0, ~, 2]]} # 3
+main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Call, {dispatch_kind: direct, name: Louder::shout, param_names: [], want: list}, ~, 0, Str], # 2
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [2], ~, Str], # 3
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
-  [Print, ~, [3, 4], 2, Scalar], # 5
-  [Return, {implicit: true}, [1], 5]]} # 6
+  [MemStart], # 2
+  [Call, {dispatch_kind: direct, file: "/tmp/osrpJFXK1Z/case.pl", line: 4, name: Louder::shout, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
+  [Print, ~, [4, 5], 3, "Maybe[Boolean]"], # 6
+  [Return, {implicit: true}, [1], 6, ~, 3]]} # 7
 ```
 
 ## A LEADING `::` elides `main`
@@ -155,23 +159,26 @@ hello
 ```
 
 ```ir
-Greet::hello: {start: 0, returns: [2], nodes: [
+Greet::hello: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: hello}, ~, ~, Str], # 1
-  [Return, ~, [1], 0]]} # 2
-main::__PROGRAM__: {start: 0, returns: [9], nodes: [
+  [MemStart], # 2
+  [Return, ~, [1], 0, ~, 2]]} # 3
+main::__PROGRAM__: {start: 0, returns: [10], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Call, {dispatch_kind: direct, name: main::shout, param_names: [], want: list}, ~, 0, Str], # 2
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [2], ~, Str], # 3
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
-  [Print, ~, [3, 4], 2, Scalar], # 5
-  [Call, {dispatch_kind: direct, name: Greet::hello, param_names: [], want: list}, ~, 5, Str], # 6
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
-  [Print, ~, [7, 4], 6, Scalar], # 8
-  [Return, {implicit: true}, [1], 8]]} # 9
-main::shout: {start: 0, returns: [2], nodes: [
+  [MemStart], # 2
+  [Call, {dispatch_kind: direct, file: "/tmp/osrpJFXK1Z/case.pl", line: 5, name: main::shout, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
+  [Print, ~, [4, 5], 3, "Maybe[Boolean]"], # 6
+  [Call, {dispatch_kind: direct, file: "/tmp/osrpJFXK1Z/case.pl", line: 6, name: Greet::hello, package: main, param_names: [], want: list}, ~, 6, Str, 3, true], # 7
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
+  [Print, ~, [8, 5], 7, "Maybe[Boolean]"], # 9
+  [Return, {implicit: true}, [1], 9, ~, 7]]} # 10
+main::shout: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: HELLO}, ~, ~, Str], # 1
-  [Return, ~, [1], 0]]} # 2
+  [MemStart], # 2
+  [Return, ~, [1], 0, ~, 2]]} # 3
 ```

@@ -140,37 +140,38 @@ one data section whose text is "__END__\nfrom the data section\n"
 ```
 
 ```ir
-main::__FORMAT__:main::STDOUT: {start: 0, returns: [3], nodes: [
+main::__FORMAT__:main::STDOUT: {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "a report line\n"}, ~, ~, Str], # 1
-  [Call, {dispatch_kind: builtin, name: formline, param_names: []}, [1], ~, Scalar], # 2
-  [Return, {implicit: true}, [2], 0]]} # 3
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: formline, param_names: []}, [1], 0, Scalar, 2], # 3
+  [Return, {implicit: true}, [3], 3, ~, 2]]} # 4
 main::__PROGRAM__: {start: 0, returns: [19], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: glob, value: DATA}, ~, ~, Glob], # 2
-  [Call, {dispatch_kind: builtin, name: readline, param_names: []}, [2], 0, List], # 3
-  [Coerce, {from_repr: List, to_repr: Str}, [3], ~, Str], # 4
-  [Constant, {const_type: string, value: "echo hi"}, ~, ~, Str], # 5
-  [BacktickExpr, ~, [5], ~, Str], # 6
-  [Constant, {const_type: string, value: "heredoc line\n"}, ~, ~, Str], # 7
-  [Constant, {const_type: string, value: "glob "}, ~, ~, Str], # 8
-  [Constant, {const_type: string, value: "*.nonexistent-xyz"}, ~, ~, Str], # 9
-  [Call, {dispatch_kind: builtin, name: glob, param_names: []}, [9], ~, Unknown], # 10
-  [ArrayLiteral, {sigil: "@", symbol: none}, [10], ~, Array], # 11
-  [MemStart], # 12
-  [Count, ~, [11, 12], ~, Int], # 13
+  [MemStart], # 3
+  [Call, {dispatch_kind: builtin, name: readline, param_names: []}, [2], 0, List, 3, true], # 4
+  [Coerce, {from_repr: List, to_repr: Str}, [4], ~, Str], # 5
+  [Constant, {const_type: string, value: "echo hi"}, ~, ~, Str], # 6
+  [BacktickExpr, ~, [6], ~, Str], # 7
+  [Constant, {const_type: string, value: "heredoc line\n"}, ~, ~, Str], # 8
+  [Constant, {const_type: string, value: "glob "}, ~, ~, Str], # 9
+  [Constant, {const_type: string, value: "*.nonexistent-xyz"}, ~, ~, Str], # 10
+  [Call, {dispatch_kind: builtin, name: glob, param_names: []}, [10], ~, List], # 11
+  [ArrayLiteral, {sigil: "@", symbol: none}, [11], ~, Array], # 12
+  [Count, ~, [12], ~, Int, 4], # 13
   [Coerce, {from_repr: Int, to_repr: Str}, [13], ~, Str], # 14
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 15
-  [Print, ~, [6, 7, 8, 14, 15], 3, Scalar], # 16
-  [Call, {dispatch_kind: direct, name: main::__FORMAT__:main::STDOUT, param_names: [], want: void}, ~, 16, Scalar], # 17
-  [Print, ~, [4], 17, Scalar], # 18
-  [Return, {implicit: true}, [1], 18], # 19
-  [ArrayLiteral, {sigil: "@", symbol: data}, [3], ~, Array]]} # 20
+  [Print, ~, [7, 8, 9, 14, 15], 4, "Maybe[Boolean]"], # 16
+  [Call, {dispatch_kind: direct, file: "/tmp/osrpJFXK1Z/case.pl", line: 19, name: main::__FORMAT__:main::STDOUT, package: main, param_names: [], want: void}, ~, 16, Scalar, 4, true], # 17
+  [Print, ~, [5], 17, "Maybe[Boolean]"], # 18
+  [Return, {implicit: true}, [1], 18, ~, 17], # 19
+  [ArrayLiteral, {sigil: "@", symbol: data}, [4], ~, Array]]} # 20
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "File/Glob.pm"}, ~, ~, Str], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 ```

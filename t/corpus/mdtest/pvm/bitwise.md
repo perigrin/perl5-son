@@ -40,7 +40,7 @@ one operator whose text is "^"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [17], nodes: [
+main::__PROGRAM__: {start: 0, returns: [18], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [EnvRead, {key: X}, ~, ~, Str], # 2
@@ -48,17 +48,18 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [DefinedOr, ~, [2, 3], ~, Str], # 4
   [Coerce, {from_repr: Str, to_repr: Int}, [4], ~, Int], # 5
   [Constant, {const_type: integer, value: "10"}, ~, ~, Int], # 6
-  [BitAnd, ~, [5, 6], ~, Int], # 7
+  [BitAnd, ~, [5, 6], 0, Int], # 7
   [Coerce, {from_repr: Int, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 9
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 10
-  [BitOr, ~, [5, 10], ~, Int], # 11
+  [BitOr, ~, [5, 10], 7, Int], # 11
   [Coerce, {from_repr: Int, to_repr: Str}, [11], ~, Str], # 12
-  [BitXor, ~, [5, 10], ~, Int], # 13
+  [BitXor, ~, [5, 10], 11, Int], # 13
   [Coerce, {from_repr: Int, to_repr: Str}, [13], ~, Str], # 14
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 15
-  [Print, ~, [8, 9, 12, 9, 14, 15], 0, Scalar], # 16
-  [Return, {implicit: true}, [1], 16]]} # 17
+  [Print, ~, [8, 9, 12, 9, 14, 15], 13, "Maybe[Boolean]"], # 16
+  [MemStart], # 17
+  [Return, {implicit: true}, [1], 16, ~, 17]]} # 18
 ```
 
 ## Bitwise precedence: `&` binds tighter than `|`
@@ -88,7 +89,7 @@ one operator whose text is "("
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [23], nodes: [
+main::__PROGRAM__: {start: 0, returns: [24], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [EnvRead, {key: X}, ~, ~, Str], # 2
@@ -103,16 +104,17 @@ main::__PROGRAM__: {start: 0, returns: [23], nodes: [
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 11
   [DefinedOr, ~, [10, 11], ~, Str], # 12
   [Coerce, {from_repr: Str, to_repr: Int}, [12], ~, Int], # 13
-  [BitAnd, ~, [9, 13], ~, Int], # 14
-  [BitOr, ~, [5, 14], ~, Int], # 15
+  [BitAnd, ~, [9, 13], 0, Int], # 14
+  [BitOr, ~, [5, 14], 14, Int], # 15
   [Coerce, {from_repr: Int, to_repr: Str}, [15], ~, Str], # 16
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 17
-  [BitOr, ~, [5, 9], ~, Int], # 18
-  [BitAnd, ~, [18, 13], ~, Int], # 19
+  [BitOr, ~, [5, 9], 15, Int], # 18
+  [BitAnd, ~, [18, 13], 18, Int], # 19
   [Coerce, {from_repr: Int, to_repr: Str}, [19], ~, Str], # 20
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 21
-  [Print, ~, [16, 17, 20, 21], 0, Scalar], # 22
-  [Return, {implicit: true}, [1], 22]]} # 23
+  [Print, ~, [16, 17, 20, 21], 19, "Maybe[Boolean]"], # 22
+  [MemStart], # 23
+  [Return, {implicit: true}, [1], 22, ~, 23]]} # 24
 ```
 
 ## The shift operators
@@ -141,7 +143,7 @@ no heredoc opener whose text is "<< 3"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [19], nodes: [
+main::__PROGRAM__: {start: 0, returns: [20], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [EnvRead, {key: X}, ~, ~, Str], # 2
@@ -149,7 +151,7 @@ main::__PROGRAM__: {start: 0, returns: [19], nodes: [
   [DefinedOr, ~, [2, 3], ~, Str], # 4
   [Coerce, {from_repr: Str, to_repr: Int}, [4], ~, Int], # 5
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 6
-  [LeftShift, ~, [5, 6], ~, Int], # 7
+  [LeftShift, ~, [5, 6], 0, Int], # 7
   [Coerce, {from_repr: Int, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 9
   [EnvRead, {key: "Y"}, ~, ~, Str], # 10
@@ -157,11 +159,12 @@ main::__PROGRAM__: {start: 0, returns: [19], nodes: [
   [DefinedOr, ~, [10, 11], ~, Str], # 12
   [Coerce, {from_repr: Str, to_repr: Int}, [12], ~, Int], # 13
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 14
-  [RightShift, ~, [13, 14], ~, Int], # 15
+  [RightShift, ~, [13, 14], 7, Int], # 15
   [Coerce, {from_repr: Int, to_repr: Str}, [15], ~, Str], # 16
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 17
-  [Print, ~, [8, 9, 16, 17], 0, Scalar], # 18
-  [Return, {implicit: true}, [1], 18]]} # 19
+  [Print, ~, [8, 9, 16, 17], 15, "Maybe[Boolean]"], # 18
+  [MemStart], # 19
+  [Return, {implicit: true}, [1], 18, ~, 19]]} # 20
 ```
 
 ## Complement
@@ -187,20 +190,21 @@ one operator whose text is "~"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [12], nodes: [
+main::__PROGRAM__: {start: 0, returns: [13], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [EnvRead, {key: X}, ~, ~, Str], # 2
   [Constant, {const_type: integer, value: "12"}, ~, ~, Int], # 3
   [DefinedOr, ~, [2, 3], ~, Str], # 4
   [Coerce, {from_repr: Str, to_repr: Int}, [4], ~, Int], # 5
-  [Complement, ~, [5], ~, Int], # 6
+  [Complement, ~, [5], 0, Int], # 6
   [Constant, {const_type: integer, value: "255"}, ~, ~, Int], # 7
   [BitAnd, ~, [6, 7], ~, Int], # 8
   [Coerce, {from_repr: Int, to_repr: Str}, [8], ~, Str], # 9
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
-  [Print, ~, [9, 10], 0, Scalar], # 11
-  [Return, {implicit: true}, [1], 11]]} # 12
+  [Print, ~, [9, 10], 6, "Maybe[Boolean]"], # 11
+  [MemStart], # 12
+  [Return, {implicit: true}, [1], 11, ~, 12]]} # 13
 ```
 
 ## `&` on strings, ungated: the string bitwise operation
@@ -233,7 +237,7 @@ one operator whose text is "&"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [14], nodes: [
+main::__PROGRAM__: {start: 0, returns: [15], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [EnvRead, {key: X}, ~, ~, Str], # 2
@@ -244,11 +248,12 @@ main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Constant, {const_type: string, value: "10"}, ~, ~, Str], # 7
   [DefinedOr, ~, [6, 7], ~, Str], # 8
   [Coerce, {from_repr: Str, to_repr: Int}, [8], ~, Int], # 9
-  [BitAnd, ~, [5, 9], ~, Int], # 10
+  [BitAnd, ~, [5, 9], 0, Int], # 10
   [Coerce, {from_repr: Int, to_repr: Str}, [10], ~, Str], # 11
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 12
-  [Print, ~, [11, 12], 0, Scalar], # 13
-  [Return, {implicit: true}, [1], 13]]} # 14
+  [Print, ~, [11, 12], 10, "Maybe[Boolean]"], # 13
+  [MemStart], # 14
+  [Return, {implicit: true}, [1], 13, ~, 14]]} # 15
 ```
 
 ## `&` on strings, gated: the numeric operation
@@ -289,7 +294,7 @@ one operator whose text is "&"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [14], nodes: [
+main::__PROGRAM__: {start: 0, returns: [15], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [EnvRead, {key: X}, ~, ~, Str], # 2
@@ -300,15 +305,16 @@ main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Constant, {const_type: string, value: "10"}, ~, ~, Str], # 7
   [DefinedOr, ~, [6, 7], ~, Str], # 8
   [Coerce, {from_repr: Str, to_repr: Int}, [8], ~, Int], # 9
-  [BitAnd, {flavor: numeric}, [5, 9], ~, Int], # 10
+  [BitAnd, {flavor: numeric}, [5, 9], 0, Int], # 10
   [Coerce, {from_repr: Int, to_repr: Str}, [10], ~, Str], # 11
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 12
-  [Print, ~, [11, 12], 0, Scalar], # 13
-  [Return, {implicit: true}, [1], 13]]} # 14
+  [Print, ~, [11, 12], 10, "Maybe[Boolean]"], # 13
+  [MemStart], # 14
+  [Return, {implicit: true}, [1], 13, ~, 14]]} # 15
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.028"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 ```

@@ -65,19 +65,19 @@ main::__PROGRAM__: {start: 0, returns: [15], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [EntryDef, {package: main, sigil: $, symbol: "\""}, [2], ~, Scalar], # 3
+  [EntryDef, {package: main, sigil: $, symbol: "\""}, ~, ~, Scalar, 2], # 3
   [Coerce, {from_repr: Scalar, to_repr: Str}, [3], ~, Str], # 4
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 5
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 6
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 7
   [ArrayLiteral, {sigil: "@", symbol: a}, [5, 6, 7], ~, Array], # 8
-  [Count, ~, [8, 2], ~, Int], # 9
+  [Count, ~, [8], ~, Int, 2], # 9
   [Range, ~, [5, 9], ~, List], # 10
-  [Call, {dispatch_kind: builtin, memory_input: true, name: join, param_names: []}, [4, 10, 2], ~, Str], # 11
+  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [4, 10], ~, Str, 2], # 11
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 12
   [Concat, ~, [11, 12], ~, Str], # 13
-  [Print, ~, [13], 0, Scalar], # 14
-  [Return, {implicit: true}, [1], 14], # 15
+  [Print, ~, [13], 0, "Maybe[Boolean]"], # 14
+  [Return, {implicit: true}, [1], 14, ~, 2], # 15
   [ArrayLiteral, {sigil: "@", symbol: r}, [10], ~, Array]]} # 16
 ```
 
@@ -121,25 +121,25 @@ main::__PROGRAM__: {start: 0, returns: [21], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [EntryDef, {package: main, sigil: $, symbol: "\""}, [2], ~, Scalar], # 3
+  [EntryDef, {package: main, sigil: $, symbol: "\""}, ~, ~, Scalar, 2], # 3
   [Coerce, {from_repr: Scalar, to_repr: Str}, [3], ~, Str], # 4
   [Constant, {const_type: string, value: az}, ~, ~, Str], # 5
   [ArrayLiteral, {sigil: "@", symbol: seed}, [5], ~, Array], # 6
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 7
-  [Subscript, {kind: array}, [6, 7, 2], ~, Str], # 8
+  [Subscript, {kind: array}, [6, 7], ~, Str, 2], # 8
   [Coerce, {from_repr: Str, to_repr: Int}, [8], ~, Int], # 9
   [Constant, {const_type: string, value: bb}, ~, ~, Str], # 10
   [Coerce, {from_repr: Str, to_repr: Int}, [10], ~, Int], # 11
   [Range, ~, [9, 11], ~, List], # 12
-  [Call, {dispatch_kind: builtin, memory_input: true, name: join, param_names: []}, [4, 12, 2], ~, Str], # 13
+  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [4, 12], ~, Str, 2], # 13
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 14
   [Concat, ~, [13, 14], ~, Str], # 15
   [ArrayLiteral, {sigil: "@", symbol: r}, [12], ~, Array], # 16
-  [Count, ~, [16, 2], ~, Int], # 17
+  [Count, ~, [16], ~, Int, 2], # 17
   [Coerce, {from_repr: Int, to_repr: Str}, [17], ~, Str], # 18
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 19
-  [Print, ~, [15, 18, 19], 0, Scalar], # 20
-  [Return, {implicit: true}, [1], 20]]} # 21
+  [Print, ~, [15, 18, 19], 0, "Maybe[Boolean]"], # 20
+  [Return, {implicit: true}, [1], 20, ~, 2]]} # 21
 ```
 
 ## `..` in scalar context is stateful
@@ -191,18 +191,18 @@ main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [EntryDef, {package: main, sigil: $, symbol: "\""}, [2], ~, Scalar], # 3
+  [EntryDef, {package: main, sigil: $, symbol: "\""}, ~, ~, Scalar, 2], # 3
   [Coerce, {from_repr: Scalar, to_repr: Str}, [3], ~, Str], # 4
   [ArrayLiteral, ~, ~, ~, Array], # 5
   [Loop, {bound: entry}, [0], 0], # 6
-  [Phi, {region: 6}, [5, 48], ~, Array], # 7
-  [Call, {dispatch_kind: builtin, memory_input: true, name: join, param_names: []}, [4, 7, 2], ~, Str], # 8
+  [Phi, {region: 6}, [5, 47], ~, Array], # 7
+  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [4, 7], ~, Str, 2], # 8
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
   [Concat, ~, [8, 9], ~, Str], # 10
   [Proj, {index: 1}, [6]], # 11
   [Region, {head: 6}, [11]], # 12
-  [Print, ~, [10], 12, Scalar], # 13
-  [Return, {implicit: true}, [1], 13], # 14
+  [Print, ~, [10], 12, "Maybe[Boolean]"], # 13
+  [Return, {implicit: true}, [1], 13, ~, 2], # 14
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 15
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 16
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 17
@@ -210,31 +210,31 @@ main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Constant, {const_type: integer, value: "4"}, ~, ~, Int], # 19
   [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 20
   [ArrayLiteral, {sigil: "@", symbol: i}, [15, 16, 17, 18, 19, 20], ~, Array], # 21
-  [Count, ~, [21, 2], ~, Int], # 22
-  [Phi, {region: 6}, [15, 47], ~, Int], # 23
+  [Count, ~, [21], ~, Int, 2], # 22
+  [Phi, {region: 6}, [15, 48], ~, Int], # 23
   [NumGt, ~, [22, 23], 6, Boolean], # 24
   [Proj, {index: 0}, [6]], # 25
-  [Phi, {region: 6}, [1, 37], ~, Scalar], # 26
-  [ArrayLiteral, {sigil: "@", symbol: "off"}, [15, 15, 15, 15, 16, 15], ~, Array], # 27
-  [Subscript, {kind: array}, [21, 23, 2], ~, Int], # 28
-  [Subscript, {kind: array}, [27, 28, 2], ~, Int], # 29
-  [Coerce, {from_repr: Scalar, to_repr: Num}, [26], ~, Num], # 30
-  [Add, ~, [30, 16], ~, Num], # 31
-  [TernaryExpr, ~, [29, 15, 31], ~, Num], # 32
-  [ArrayLiteral, {sigil: "@", symbol: "on"}, [15, 16, 15, 15, 15, 15], ~, Array], # 33
-  [Subscript, {kind: array}, [33, 28, 2], ~, Int], # 34
+  [Phi, {region: 6}, [1, 37], ~, "Maybe[Int]"], # 26
+  [Subscript, {kind: array}, [21, 23], ~, Int, 2], # 27
+  [ArrayLiteral, {sigil: "@", symbol: "off"}, [15, 15, 15, 15, 16, 15], ~, Array], # 28
+  [Subscript, {kind: array}, [28, 27], ~, Int, 2], # 29
+  [ArrayLiteral, {sigil: "@", symbol: "on"}, [15, 16, 15, 15, 15, 15], ~, Array], # 30
+  [Subscript, {kind: array}, [30, 27], ~, Int, 2], # 31
+  [Coerce, {from_repr: "Maybe[Int]", to_repr: Num}, [26], ~, Num], # 32
+  [Add, ~, [32, 16], ~, Num], # 33
+  [TernaryExpr, ~, [29, 15, 33], ~, Int], # 34
   [TernaryExpr, ~, [29, 15, 16], ~, Int], # 35
-  [TernaryExpr, ~, [34, 35, 15], ~, Int], # 36
-  [TernaryExpr, ~, [26, 32, 36], ~, Num], # 37
-  [Coerce, {from_repr: Int, to_repr: Str}, [31], ~, Str], # 38
+  [TernaryExpr, ~, [31, 35, 15], ~, Int], # 36
+  [TernaryExpr, ~, [26, 34, 36], ~, Int], # 37
+  [Coerce, {from_repr: Int, to_repr: Str}, [33], ~, Str], # 38
   [Constant, {const_type: string, value: E0}, ~, ~, Str], # 39
   [Concat, ~, [38, 39], ~, Str], # 40
-  [TernaryExpr, ~, [29, 40, 31], ~, Str], # 41
+  [TernaryExpr, ~, [29, 40, 33], ~, Str], # 41
   [Constant, {const_type: string, value: "1E0"}, ~, ~, Str], # 42
   [TernaryExpr, ~, [29, 42, 16], ~, Str], # 43
   [Constant, {const_type: string, value: ""}, ~, ~, Str], # 44
-  [TernaryExpr, ~, [34, 43, 44], ~, Str], # 45
+  [TernaryExpr, ~, [31, 43, 44], ~, Str], # 45
   [TernaryExpr, ~, [26, 41, 45], ~, Str], # 46
-  [Add, ~, [23, 16], ~, Int], # 47
-  [ListAppend, {collector: grep}, [7, 28, 46], ~, Array]]} # 48
+  [ListAppend, {collector: grep}, [7, 27, 46], ~, Array], # 47
+  [Add, ~, [23, 16], ~, Int]]} # 48
 ```

@@ -65,14 +65,15 @@ no numeric literal whose text is "65.66.67"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [6], nodes: [
+main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: ABC}, ~, ~, Str], # 2
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 3
   [Concat, ~, [2, 3], ~, Str], # 4
-  [Print, ~, [4], 0, Scalar], # 5
-  [Return, {implicit: true}, [1], 5]]} # 6
+  [Print, ~, [4], 0, "Maybe[Boolean]"], # 5
+  [MemStart], # 6
+  [Return, {implicit: true}, [1], 5, ~, 6]]} # 7
 ```
 
 ## The `v` prefix
@@ -165,12 +166,13 @@ no word whose text is "v65"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [6], nodes: [
+main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: ABC}, ~, ~, Str], # 2
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 3
   [Concat, ~, [2, 3], ~, Str], # 4
-  [Print, ~, [4], 0, Scalar], # 5
-  [Return, {implicit: true}, [1], 5]]} # 6
+  [Print, ~, [4], 0, "Maybe[Boolean]"], # 5
+  [MemStart], # 6
+  [Return, {implicit: true}, [1], 5, ~, 6]]} # 7
 ```

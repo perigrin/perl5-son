@@ -78,7 +78,7 @@ one word whose text is "do"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [12], nodes: [
+main::__PROGRAM__: {start: 0, returns: [13], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [EnvRead, {key: X}, ~, ~, Str], # 2
@@ -90,8 +90,9 @@ main::__PROGRAM__: {start: 0, returns: [12], nodes: [
   [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
   [Concat, ~, [8, 9], ~, Str], # 10
-  [Print, ~, [10], 0, Scalar], # 11
-  [Return, {implicit: true}, [1], 11]]} # 12
+  [Print, ~, [10], 0, "Maybe[Boolean]"], # 11
+  [MemStart], # 12
+  [Return, {implicit: true}, [1], 11, ~, 12]]} # 13
 ```
 
 ## `eval BLOCK` is a control construct
@@ -151,7 +152,7 @@ one word whose text is "eval"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [17], nodes: [
+main::__PROGRAM__: {start: 0, returns: [22], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: integer, value: "10"}, ~, ~, Int], # 2
@@ -160,16 +161,21 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 5
   [DefinedOr, ~, [4, 5], ~, Str], # 6
   [Coerce, {from_repr: Str, to_repr: Num}, [6], ~, Num], # 7
-  [Divide, ~, [3, 7], ~, Num], # 8
-  [Region, {eval_entry: 0}, [0]], # 9
-  [Phi, {region: 9}, [8, 1], ~, Scalar], # 10
-  [Constant, {const_type: string, value: trapped}, ~, ~, Str], # 11
-  [DefinedOr, ~, [10, 11], ~, Scalar], # 12
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [12], ~, Str], # 13
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 14
-  [Concat, ~, [13, 14], ~, Str], # 15
-  [Print, ~, [15], 9, Scalar], # 16
-  [Return, {implicit: true}, [1], 16]]} # 17
+  [MemStart], # 8
+  [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 8], # 9
+  [Constant, {const_type: string, value: ""}, ~, ~, Str], # 10
+  [EntryWrite, ~, [9, 10], 0, Unknown, 8, true], # 11
+  [Divide, {eval_id: 1, file: "/tmp/osrpJFXK1Z/case.pl", line: 2}, [3, 7], 11, Num], # 12
+  [Region, {eval_entry: 0, eval_id: 1}, [12]], # 13
+  [Phi, {region: 13}, [12, 1], ~, "Maybe[Num]"], # 14
+  [Constant, {const_type: string, value: trapped}, ~, ~, Str], # 15
+  [DefinedOr, ~, [14, 15], ~, "Maybe[Str]"], # 16
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [16], ~, Str], # 17
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 18
+  [Concat, ~, [17, 18], ~, Str], # 19
+  [Print, ~, [19], 13, "Maybe[Boolean]"], # 20
+  [Phi, {memory: true, region: 13}, [11], ~, Unknown], # 21
+  [Return, {implicit: true}, [1], 20, ~, 21]]} # 22
 ```
 
 ## `die` is a list operator, and its extent is a parse question
@@ -220,26 +226,33 @@ no word whose text is "wide"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [18], nodes: [
+main::__PROGRAM__: {start: 0, returns: [25], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: "wide="}, ~, ~, Str], # 2
-  [MemStart], # 3
-  [EnvRead, {key: X}, ~, ~, Str], # 4
-  [Constant, {const_type: string, value: "a\n"}, ~, ~, Str], # 5
-  [DefinedOr, ~, [4, 5], ~, Str], # 6
-  [Constant, {const_type: string, value: "b\n"}, ~, ~, Str], # 7
-  [Unwind, ~, [6, 7], 0], # 8
-  [Region, {eval_entry: 0}, [8]], # 9
-  [EntryDef, {package: main, sigil: $, symbol: "@"}, [3], 9, Scalar], # 10
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [10], ~, Str], # 11
-  [Constant, {const_type: string, value: "narrow="}, ~, ~, Str], # 12
-  [Unwind, ~, [6], 10], # 13
-  [Region, {eval_entry: 10}, [13]], # 14
-  [EntryDef, {package: main, sigil: $, symbol: "@"}, [3], 14, Scalar], # 15
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [15], ~, Str], # 16
-  [Print, ~, [2, 11, 12, 16], 15, Scalar], # 17
-  [Return, {implicit: true}, [1], 17]]} # 18
+  [EnvRead, {key: X}, ~, ~, Str], # 3
+  [Constant, {const_type: string, value: "a\n"}, ~, ~, Str], # 4
+  [DefinedOr, ~, [3, 4], ~, Str], # 5
+  [Constant, {const_type: string, value: "b\n"}, ~, ~, Str], # 6
+  [MemStart], # 7
+  [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 7], # 8
+  [Constant, {const_type: string, value: ""}, ~, ~, Str], # 9
+  [EntryWrite, ~, [8, 9], 0, Unknown, 7, true], # 10
+  [Unwind, {eval_id: 1, file: "/tmp/osrpJFXK1Z/case.pl", line: 2}, [5, 6], 10, ~, 10], # 11
+  [Region, {eval_entry: 0, eval_id: 1}, [11]], # 12
+  [Phi, {memory: true, region: 12}, [10], ~, Unknown], # 13
+  [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, 12, Scalar, 13], # 14
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [14], ~, Str], # 15
+  [Constant, {const_type: string, value: "narrow="}, ~, ~, Str], # 16
+  [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 13], # 17
+  [EntryWrite, ~, [17, 9], 14, Unknown, 13, true], # 18
+  [Unwind, {eval_id: 2, file: "/tmp/osrpJFXK1Z/case.pl", line: 4}, [5], 18, ~, 18], # 19
+  [Region, {eval_entry: 14, eval_id: 2}, [19]], # 20
+  [Phi, {memory: true, region: 20}, [18], ~, Unknown], # 21
+  [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, 20, Scalar, 21], # 22
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [22], ~, Str], # 23
+  [Print, ~, [2, 15, 16, 23], 22, "Maybe[Boolean]"], # 24
+  [Return, {implicit: true}, [1], 24, ~, 21]]} # 25
 ```
 
 ## `exit` leaves the program, and `eval BLOCK` does not catch it
@@ -293,19 +306,24 @@ one word whose text is "exit"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [11], nodes: [
+main::__PROGRAM__: {start: 0, returns: [16], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: "trapped\n"}, ~, ~, Str], # 2
   [EnvRead, {key: X}, ~, ~, Str], # 3
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 4
   [DefinedOr, ~, [3, 4], ~, Str], # 5
-  [Constant, {const_type: string, value: "ran\n"}, ~, ~, Str], # 6
-  [Print, ~, [6], 0, Scalar], # 7
-  [Call, {dispatch_kind: builtin, name: exit, param_names: []}, [5], 7, Unknown], # 8
-  [Region, {eval_entry: 7}, [8]], # 9
-  [Print, ~, [2], 9, Scalar], # 10
-  [Return, {implicit: true}, [1], 10]]} # 11
+  [MemStart], # 6
+  [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 6], # 7
+  [Constant, {const_type: string, value: ""}, ~, ~, Str], # 8
+  [Constant, {const_type: string, value: "ran\n"}, ~, ~, Str], # 9
+  [Print, ~, [9], 0, "Maybe[Boolean]"], # 10
+  [EntryWrite, ~, [7, 8], 10, Unknown, 6, true], # 11
+  [Call, {dispatch_kind: builtin, name: exit, param_names: []}, [5], 11, Unknown, 11], # 12
+  [Region, {eval_entry: 10, eval_id: 1}, [12]], # 13
+  [Print, ~, [2], 13, "Maybe[Boolean]"], # 14
+  [Phi, {memory: true, region: 13}, [11], ~, Unknown], # 15
+  [Return, {implicit: true}, [1], 14, ~, 15]]} # 16
 ```
 
 ## `time` is niladic
@@ -372,16 +390,17 @@ one word whose text is "time"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [10], nodes: [
+main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Call, {dispatch_kind: builtin, name: time, param_names: []}, ~, ~, Unknown], # 2
+  [Call, {dispatch_kind: builtin, name: time, param_names: []}, ~, ~, Int], # 2
   [Constant, {const_type: integer, value: "1000000000"}, ~, ~, Int], # 3
   [NumGt, ~, [2, 3], ~, Boolean], # 4
   [Constant, {const_type: string, value: past}, ~, ~, Str], # 5
   [Constant, {const_type: string, value: impossible}, ~, ~, Str], # 6
   [TernaryExpr, ~, [4, 5, 6], ~, Str], # 7
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
-  [Print, ~, [7, 8], 0, Scalar], # 9
-  [Return, {implicit: true}, [1], 9]]} # 10
+  [Print, ~, [7, 8], 0, "Maybe[Boolean]"], # 9
+  [MemStart], # 10
+  [Return, {implicit: true}, [1], 9, ~, 10]]} # 11
 ```

@@ -120,10 +120,10 @@ main::__PROGRAM__: {start: 0, returns: [89], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [PadAccess, {sigil: $, symbol: s}, [2], ~, Unknown], # 3
+  [PadAccess, {sigil: $, symbol: s}, ~, ~, Unknown, 2], # 3
   [Constant, {const_type: string, value: abcd}, ~, ~, Str], # 4
-  [Assign, ~, [3, 4], 0, Str], # 5
-  [PadAccess, {sigil: $, symbol: s}, [5], ~, Str], # 6
+  [Assign, ~, [3, 4], 0, Str, 2, true], # 5
+  [PadAccess, {sigil: $, symbol: s}, ~, ~, Str, 5], # 6
   [RegexMatch, {flags: "", pattern: abc}, [6], 5, Boolean], # 7
   [Coerce, {from_repr: Boolean, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 9
@@ -147,7 +147,7 @@ main::__PROGRAM__: {start: 0, returns: [89], nodes: [
   [Concat, ~, [23, 26], ~, Str], # 27
   [Concat, ~, [27, 9], ~, Str], # 28
   [Constant, {const_type: string, value: b}, ~, ~, Str], # 29
-  [Match, ~, [6, 29], 20, Boolean], # 30
+  [Match, {flags: ""}, [6, 29], 20, Boolean], # 30
   [Coerce, {from_repr: Boolean, to_repr: Str}, [30], ~, Str], # 31
   [Concat, ~, [28, 31], ~, Str], # 32
   [Concat, ~, [32, 9], ~, Str], # 33
@@ -155,34 +155,34 @@ main::__PROGRAM__: {start: 0, returns: [89], nodes: [
   [Coerce, {from_repr: Regex, to_repr: Str}, [34], ~, Str], # 35
   [Concat, ~, [33, 35], ~, Str], # 36
   [Concat, ~, [36, 9], ~, Str], # 37
-  [RegexSubst, {flags: "", pattern: a, replacement: z}, [6, 5], 30, Str], # 38
-  [PadAccess, {sigil: $, symbol: s}, [38], ~, Unknown], # 39
-  [RegexSubst, {flags: "", pattern: c, replacement: "y"}, [39, 38], 38, Str], # 40
-  [PadAccess, {sigil: $, symbol: s}, [40], ~, Unknown], # 41
-  [RegexSubst, {flags: "", pattern: d, replacement: w}, [41, 40], 40, Str], # 42
-  [PadAccess, {sigil: $, symbol: "n"}, [42], ~, Unknown], # 43
-  [Assign, ~, [43, 24], 42, Str], # 44
-  [PadAccess, {sigil: $, symbol: "n"}, [44], ~, Unknown], # 45
-  [RegexSubst, {flags: "", pattern: "a{b}c", replacement: ok}, [45, 44], 44, Str], # 46
-  [PadAccess, {sigil: $, symbol: tr}, [46], ~, Unknown], # 47
+  [RegexSubst, {flags: "", pattern: a, replacement: z}, [6], 30, Str, 5, true], # 38
+  [PadAccess, {sigil: $, symbol: s}, ~, ~, Unknown, 38], # 39
+  [RegexSubst, {flags: "", pattern: c, replacement: "y"}, [39], 38, Str, 38, true], # 40
+  [PadAccess, {sigil: $, symbol: s}, ~, ~, Unknown, 40], # 41
+  [RegexSubst, {flags: "", pattern: d, replacement: w}, [41], 40, Str, 40, true], # 42
+  [PadAccess, {sigil: $, symbol: "n"}, ~, ~, Unknown, 42], # 43
+  [Assign, ~, [43, 24], 42, Str, 42, true], # 44
+  [PadAccess, {sigil: $, symbol: "n"}, ~, ~, Unknown, 44], # 45
+  [RegexSubst, {flags: "", pattern: "a{b}c", replacement: ok}, [45], 44, Str, 44, true], # 46
+  [PadAccess, {sigil: $, symbol: tr}, ~, ~, Unknown, 46], # 47
   [Constant, {const_type: string, value: a.c}, ~, ~, Str], # 48
-  [Assign, ~, [47, 48], 46, Str], # 49
-  [PadAccess, {sigil: $, symbol: tr}, [49], ~, Unknown], # 50
-  [Transliterate, {flags: "", from: ".", to: Z}, [50, 49], 49, Str], # 51
-  [PadAccess, {sigil: $, symbol: pos}, [51], ~, Unknown], # 52
+  [Assign, ~, [47, 48], 46, Str, 46, true], # 49
+  [PadAccess, {sigil: $, symbol: tr}, ~, ~, Unknown, 49], # 50
+  [Transliterate, {flags: "", from: ".", to: Z}, [50], 49, Str, 49, true], # 51
+  [PadAccess, {sigil: $, symbol: pos}, ~, ~, Unknown, 51], # 52
   [Constant, {const_type: string, value: abcabc}, ~, ~, Str], # 53
-  [Assign, ~, [52, 53], 51, Str], # 54
-  [PadAccess, {sigil: $, symbol: pos}, [54], ~, Str], # 55
-  [RegexMatch, {flags: g, pattern: b}, [55], 54, Boolean], # 56
-  [PadAccess, {sigil: $, symbol: s}, [56], ~, Str], # 57
+  [Assign, ~, [52, 53], 51, Str, 51, true], # 54
+  [PadAccess, {sigil: $, symbol: pos}, ~, ~, Str, 54], # 55
+  [RegexMatch, {flags: g, pattern: b}, [55], 54, Boolean, 54, true], # 56
+  [PadAccess, {sigil: $, symbol: s}, ~, ~, Str, 56], # 57
   [Coerce, {from_repr: Unknown, to_repr: Str}, [57], ~, Str], # 58
   [Concat, ~, [37, 58], ~, Str], # 59
   [Concat, ~, [59, 9], ~, Str], # 60
-  [PadAccess, {sigil: $, symbol: "n"}, [56], ~, Str], # 61
+  [PadAccess, {sigil: $, symbol: "n"}, ~, ~, Str, 56], # 61
   [Coerce, {from_repr: Unknown, to_repr: Str}, [61], ~, Str], # 62
   [Concat, ~, [60, 62], ~, Str], # 63
   [Concat, ~, [63, 9], ~, Str], # 64
-  [PadAccess, {sigil: $, symbol: tr}, [56], ~, Str], # 65
+  [PadAccess, {sigil: $, symbol: tr}, ~, ~, Str, 56], # 65
   [Coerce, {from_repr: Unknown, to_repr: Str}, [65], ~, Str], # 66
   [Concat, ~, [64, 66], ~, Str], # 67
   [Concat, ~, [67, 9], ~, Str], # 68
@@ -190,21 +190,21 @@ main::__PROGRAM__: {start: 0, returns: [89], nodes: [
   [Coerce, {from_repr: Int, to_repr: Str}, [69], ~, Str], # 70
   [Concat, ~, [68, 70], ~, Str], # 71
   [Concat, ~, [71, 9], ~, Str], # 72
-  [EntryDef, {package: main, sigil: $, symbol: "\""}, [56], ~, Scalar], # 73
+  [EntryDef, {package: main, sigil: $, symbol: "\""}, ~, ~, Scalar, 56], # 73
   [Coerce, {from_repr: Scalar, to_repr: Str}, [73], ~, Str], # 74
   [Constant, {const_type: regex, value: " "}, ~, ~, Regex], # 75
   [Constant, {const_type: string, value: "p q"}, ~, ~, Str], # 76
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 77
   [Call, {dispatch_kind: builtin, name: split, param_names: []}, [75, 76, 77], ~, List], # 78
-  [Call, {dispatch_kind: builtin, memory_input: true, name: join, param_names: []}, [74, 78, 56], ~, Str], # 79
+  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [74, 78], ~, Str, 56], # 79
   [Concat, ~, [72, 79], ~, Str], # 80
   [Concat, ~, [80, 9], ~, Str], # 81
-  [PadAccess, {sigil: $, symbol: pos}, [56], ~, Unknown], # 82
-  [Call, {dispatch_kind: builtin, name: pos, param_names: []}, [82], 56, Unknown], # 83
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [83], ~, Str], # 84
+  [PadAccess, {sigil: $, symbol: pos}, ~, ~, Unknown, 56], # 82
+  [Call, {dispatch_kind: builtin, name: pos, param_names: []}, [82], 56, Scalar, 56], # 83
+  [Coerce, {from_repr: Scalar, to_repr: Str}, [83], ~, Str], # 84
   [Concat, ~, [81, 84], ~, Str], # 85
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 86
   [Concat, ~, [85, 86], ~, Str], # 87
-  [Print, ~, [87], 83, Scalar], # 88
-  [Return, {implicit: true}, [1], 88]]} # 89
+  [Print, ~, [87], 83, "Maybe[Boolean]"], # 88
+  [Return, {implicit: true}, [1], 88, ~, 56]]} # 89
 ```

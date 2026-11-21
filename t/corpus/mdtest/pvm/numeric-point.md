@@ -56,15 +56,16 @@ no operator whose text is "."
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [7], nodes: [
+main::__PROGRAM__: {start: 0, returns: [8], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: number, value: "0.5"}, ~, ~, Num], # 2
   [Coerce, {from_repr: Num, to_repr: Str}, [2], ~, Str], # 3
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
   [Concat, ~, [3, 4], ~, Str], # 5
-  [Print, ~, [5], 0, Scalar], # 6
-  [Return, {implicit: true}, [1], 6]]} # 7
+  [Print, ~, [5], 0, "Maybe[Boolean]"], # 6
+  [MemStart], # 7
+  [Return, {implicit: true}, [1], 6, ~, 7]]} # 8
 ```
 
 ## A leading decimal point
@@ -103,15 +104,16 @@ no operator whose text is "."
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [7], nodes: [
+main::__PROGRAM__: {start: 0, returns: [8], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: number, value: "0.5"}, ~, ~, Num], # 2
   [Coerce, {from_repr: Num, to_repr: Str}, [2], ~, Str], # 3
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
   [Concat, ~, [3, 4], ~, Str], # 5
-  [Print, ~, [5], 0, Scalar], # 6
-  [Return, {implicit: true}, [1], 6]]} # 7
+  [Print, ~, [5], 0, "Maybe[Boolean]"], # 6
+  [MemStart], # 7
+  [Return, {implicit: true}, [1], 6, ~, 7]]} # 8
 ```
 
 ## A trailing decimal point
@@ -154,15 +156,16 @@ no operator whose text is "."
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [7], nodes: [
+main::__PROGRAM__: {start: 0, returns: [8], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: number, value: "1"}, ~, ~, Num], # 2
   [Coerce, {from_repr: Num, to_repr: Str}, [2], ~, Str], # 3
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
   [Concat, ~, [3, 4], ~, Str], # 5
-  [Print, ~, [5], 0, Scalar], # 6
-  [Return, {implicit: true}, [1], 6]]} # 7
+  [Print, ~, [5], 0, "Maybe[Boolean]"], # 6
+  [MemStart], # 7
+  [Return, {implicit: true}, [1], 6, ~, 7]]} # 8
 ```
 
 ## A leading minus is not part of the literal
@@ -209,15 +212,16 @@ no numeric literal whose text is "-1"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [7], nodes: [
+main::__PROGRAM__: {start: 0, returns: [8], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: integer, value: "-1"}, ~, ~, Int], # 2
   [Coerce, {from_repr: Int, to_repr: Str}, [2], ~, Str], # 3
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
   [Concat, ~, [3, 4], ~, Str], # 5
-  [Print, ~, [5], 0, Scalar], # 6
-  [Return, {implicit: true}, [1], 6]]} # 7
+  [Print, ~, [5], 0, "Maybe[Boolean]"], # 6
+  [MemStart], # 7
+  [Return, {implicit: true}, [1], 6, ~, 7]]} # 8
 ```
 
 ## The sign of an exponent is part of the literal
@@ -268,13 +272,14 @@ no operator whose text is "-"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [7], nodes: [
+main::__PROGRAM__: {start: 0, returns: [8], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: number, value: "0.5"}, ~, ~, Num], # 2
   [Coerce, {from_repr: Num, to_repr: Str}, [2], ~, Str], # 3
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
   [Concat, ~, [3, 4], ~, Str], # 5
-  [Print, ~, [5], 0, Scalar], # 6
-  [Return, {implicit: true}, [1], 6]]} # 7
+  [Print, ~, [5], 0, "Maybe[Boolean]"], # 6
+  [MemStart], # 7
+  [Return, {implicit: true}, [1], 6, ~, 7]]} # 8
 ```

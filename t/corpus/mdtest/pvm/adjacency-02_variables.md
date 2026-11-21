@@ -115,7 +115,7 @@ parses: yes
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [105], nodes: [
+main::__PROGRAM__: {start: 0, returns: [107], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: integer, value: "42"}, ~, ~, Int], # 2
@@ -123,106 +123,107 @@ main::__PROGRAM__: {start: 0, returns: [105], nodes: [
   [Constant, {const_type: string, value: plain}, ~, ~, Str], # 4
   [ArrayLiteral, {sigil: "@", symbol: a}, [2, 3, 4], ~, Array], # 5
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 6
-  [Constant, {const_type: string, value: solo}, ~, ~, Str], # 7
-  [Constant, {const_type: integer, value: "11"}, ~, ~, Int], # 8
-  [HashLiteral, {sigil: "%", symbol: one}, [7, 8], ~, Hash], # 9
-  [Constant, {const_type: string, value: a}, ~, ~, Str], # 10
-  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 11
-  [Constant, {const_type: string, value: b}, ~, ~, Str], # 12
-  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 13
-  [Constant, {const_type: string, value: c}, ~, ~, Str], # 14
-  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 15
-  [Constant, {const_type: string, value: d}, ~, ~, Str], # 16
-  [Constant, {const_type: integer, value: "4"}, ~, ~, Int], # 17
-  [HashLiteral, {sigil: "%", symbol: h}, [10, 11, 12, 13, 14, 15, 16, 17], ~, Hash], # 18
-  [EntryDef, {package: main, sigil: "%", symbol: g}, ~, ~, Hash], # 19
-  [Constant, {const_type: string, value: z}, ~, ~, Str], # 20
-  [Constant, {const_type: integer, value: "10"}, ~, ~, Int], # 21
-  [HashLiteral, {sigil: "%", symbol: "%main::g"}, [20, 21], ~, Hash], # 22
-  [EntryDef, {package: main, sigil: "@", symbol: p}, ~, ~, Array], # 23
-  [Constant, {const_type: integer, value: "8"}, ~, ~, Int], # 24
-  [Constant, {const_type: integer, value: "9"}, ~, ~, Int], # 25
-  [ArrayLiteral, {sigil: "@", symbol: "@main::p"}, [24, 25], ~, Array], # 26
-  [EntryDef, {package: main, sigil: $, symbol: s}, ~, ~, Scalar], # 27
-  [Subscript, {kind: array}, [5, 6], ~, Str], # 28
-  [Constant, {const_type: integer, value: "7"}, ~, ~, Int], # 29
-  [Assign, ~, [28, 29], 0, Int], # 30
-  [Delete, {kind: hash}, [18, 14, 30], 30, Scalar], # 31
-  [Delete, {kind: hash}, [18, 16, 31], 31, Scalar], # 32
-  [Subscript, {kind: array}, [5, 6, 32], ~, Scalar], # 33
-  [EntryWrite, ~, [27, 33, 32], 32, Unknown], # 34
-  [EntryWrite, ~, [23, 26, 34], 34, Unknown], # 35
-  [EntryWrite, ~, [19, 22, 35], 35, Unknown], # 36
-  [Call, {dispatch_kind: builtin, memory_input: true, name: values, param_names: [], want: scalar}, [18, 36], ~, Int], # 37
-  [EntryDef, {package: main, sigil: $, symbol: s}, [36], ~, Scalar], # 38
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [38], ~, Str], # 39
-  [Subscript, {kind: array}, [26, 6, 36], ~, Scalar], # 40
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [40], ~, Str], # 41
-  [Count, ~, [26, 36], ~, Int], # 42
-  [Coerce, {from_repr: Int, to_repr: Str}, [42], ~, Str], # 43
-  [Call, {dispatch_kind: builtin, memory_input: true, name: keys, param_names: [], want: scalar}, [19, 36], ~, Int], # 44
-  [Coerce, {from_repr: Int, to_repr: Str}, [44], ~, Str], # 45
-  [Subscript, {kind: hash}, [22, 20, 36], ~, Scalar], # 46
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [46], ~, Str], # 47
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 48
-  [Exists, {kind: hash}, [18, 10, 36], ~, Boolean], # 49
-  [Coerce, {from_repr: Boolean, to_repr: Str}, [49], ~, Str], # 50
-  [Exists, {kind: hash}, [18, 14, 36], ~, Boolean], # 51
-  [Coerce, {from_repr: Boolean, to_repr: Str}, [51], ~, Str], # 52
-  [Coerce, {from_repr: Scalar, to_repr: Str}, [32], ~, Str], # 53
-  [Constant, {const_type: string, value: x}, ~, ~, Str], # 54
-  [Constant, {const_type: string, value: "y"}, ~, ~, Str], # 55
-  [ArrayLiteral, {sigil: "@", symbol: w}, [54, 55], ~, Array], # 56
-  [Count, ~, [56, 36], ~, Int], # 57
-  [Coerce, {from_repr: Int, to_repr: Str}, [57], ~, Str], # 58
-  [Slice, {kind: array}, [6, 11, 5], ~, List], # 59
-  [Coerce, {from_repr: List, to_repr: Str}, [59], ~, Str], # 60
-  [Subscript, {kind: hash}, [18, 10, 36], ~, Scalar], # 61
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [61], ~, Str], # 62
-  [ArrayLiteral, {sigil: "@", symbol: k}, [12], ~, Array], # 63
-  [Subscript, {kind: array}, [63, 6, 36], ~, Scalar], # 64
-  [Subscript, {kind: hash}, [18, 64, 36], ~, Scalar], # 65
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [65], ~, Str], # 66
-  [Slice, {kind: hash}, [10, 18], ~, List], # 67
-  [Coerce, {from_repr: List, to_repr: Str}, [67], ~, Str], # 68
-  [Call, {dispatch_kind: builtin, memory_input: true, name: keys, param_names: [], want: scalar}, [18, 36], ~, Int], # 69
-  [Coerce, {from_repr: Int, to_repr: Str}, [69], ~, Str], # 70
-  [Subscript, {kind: array}, [5, 6, 36], ~, Scalar], # 71
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [71], ~, Str], # 72
-  [Count, ~, [5, 36], ~, Int], # 73
-  [Subtract, ~, [73, 11], ~, Int], # 74
-  [Subscript, {kind: array}, [5, 74, 36], ~, Str], # 75
-  [Coerce, {from_repr: Int, to_repr: Str}, [74], ~, Str], # 76
-  [Coerce, {from_repr: Int, to_repr: Str}, [73], ~, Str], # 77
-  [Subscript, {kind: array}, [56, 6, 32], ~, Scalar], # 78
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [78], ~, Str], # 79
-  [Constant, {const_type: string, value: "-"}, ~, ~, Str], # 80
-  [Concat, ~, [79, 80], ~, Str], # 81
-  [Subscript, {kind: array}, [56, 11, 32], ~, Scalar], # 82
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [82], ~, Str], # 83
-  [Concat, ~, [81, 83], ~, Str], # 84
-  [Print, ~, [72, 75, 76, 77, 84, 48], 36, Scalar], # 85
-  [Print, ~, [60, 62, 66, 68, 70, 48], 85, Scalar], # 86
-  [Print, ~, [50, 52, 53, 58, 48], 86, Scalar], # 87
-  [Print, ~, [39, 41, 43, 45, 47, 48], 87, Scalar], # 88
-  [Call, {dispatch_kind: builtin, memory_input: true, name: push, param_names: []}, [5, 37, 36], 88, Int], # 89
-  [Count, ~, [5, 89], ~, Int], # 90
-  [Subtract, ~, [90, 11], ~, Int], # 91
-  [Call, {dispatch_kind: builtin, memory_input: true, name: unshift, param_names: []}, [5, 91, 89], 89, Int], # 92
-  [Call, {dispatch_kind: builtin, memory_input: true, name: each, param_names: [], want: list}, [9, 92], 92, Unknown], # 93
-  [Subscript, {kind: array}, [5, 6, 93], ~, Scalar], # 94
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [94], ~, Str], # 95
-  [Count, ~, [5, 93], ~, Int], # 96
-  [Subtract, ~, [96, 11], ~, Int], # 97
-  [Subscript, {kind: array}, [5, 97, 93], ~, Str], # 98
-  [Coerce, {from_repr: Int, to_repr: Str}, [96], ~, Str], # 99
-  [PadAccess, {sigil: $, symbol: ek}, ~, ~, Str], # 100
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [100], ~, Str], # 101
-  [PadAccess, {sigil: $, symbol: ev}, ~, ~, Str], # 102
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [102], ~, Str], # 103
-  [Print, ~, [95, 98, 99, 101, 103, 48], 93, Scalar], # 104
-  [Return, {implicit: true}, [1], 104], # 105
-  [Assign, {targets: 2}, [100, 102, 93], ~, List], # 106
-  [PadAccess, {sigil: $, symbol: tag}, ~, ~, Str], # 107
-  [VarDecl, {scope: my}, [107, 84]]]} # 108
+  [PadAccess, {sigil: $, symbol: ek}, ~, ~, Str], # 7
+  [PadAccess, {sigil: $, symbol: ev}, ~, ~, Str], # 8
+  [Constant, {const_type: string, value: solo}, ~, ~, Str], # 9
+  [Constant, {const_type: integer, value: "11"}, ~, ~, Int], # 10
+  [HashLiteral, {sigil: "%", symbol: one}, [9, 10], ~, Hash], # 11
+  [Constant, {const_type: string, value: a}, ~, ~, Str], # 12
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 13
+  [Constant, {const_type: string, value: b}, ~, ~, Str], # 14
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 15
+  [Constant, {const_type: string, value: c}, ~, ~, Str], # 16
+  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 17
+  [Constant, {const_type: string, value: d}, ~, ~, Str], # 18
+  [Constant, {const_type: integer, value: "4"}, ~, ~, Int], # 19
+  [HashLiteral, {sigil: "%", symbol: h}, [12, 13, 14, 15, 16, 17, 18, 19], ~, Hash], # 20
+  [EntryDef, {package: main, sigil: "%", symbol: g}, ~, ~, Hash], # 21
+  [Constant, {const_type: string, value: z}, ~, ~, Str], # 22
+  [Constant, {const_type: integer, value: "10"}, ~, ~, Int], # 23
+  [HashLiteral, {sigil: "%", symbol: "%main::g"}, [22, 23], ~, Hash], # 24
+  [EntryDef, {package: main, sigil: "@", symbol: p}, ~, ~, Array], # 25
+  [Constant, {const_type: integer, value: "8"}, ~, ~, Int], # 26
+  [Constant, {const_type: integer, value: "9"}, ~, ~, Int], # 27
+  [ArrayLiteral, {sigil: "@", symbol: "@main::p"}, [26, 27], ~, Array], # 28
+  [EntryDef, {package: main, sigil: $, symbol: s}, ~, ~, Scalar], # 29
+  [Subscript, {kind: array}, [5, 6], ~, Str], # 30
+  [Constant, {const_type: integer, value: "7"}, ~, ~, Int], # 31
+  [MemStart], # 32
+  [Assign, ~, [30, 31], 0, Int, 32, true], # 33
+  [Delete, {kind: hash}, [20, 16], 33, Scalar, 33, true], # 34
+  [Delete, {kind: hash}, [20, 18], 34, Scalar, 34, true], # 35
+  [Subscript, {kind: array}, [5, 6], ~, Scalar, 35], # 36
+  [EntryWrite, ~, [29, 36], 35, Unknown, 35, true], # 37
+  [EntryWrite, ~, [25, 28], 37, Unknown, 37, true], # 38
+  [EntryWrite, ~, [21, 24], 38, Unknown, 38, true], # 39
+  [Call, {dispatch_kind: builtin, name: values, param_names: [], want: scalar}, [20], ~, Int, 39], # 40
+  [EntryDef, {package: main, sigil: $, symbol: s}, ~, ~, Scalar, 39], # 41
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [41], ~, Str], # 42
+  [Subscript, {kind: array}, [28, 6], ~, Scalar, 39], # 43
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [43], ~, Str], # 44
+  [Count, ~, [28], ~, Int, 39], # 45
+  [Coerce, {from_repr: Int, to_repr: Str}, [45], ~, Str], # 46
+  [Call, {dispatch_kind: builtin, name: keys, param_names: [], want: scalar}, [21], ~, Int, 39], # 47
+  [Coerce, {from_repr: Int, to_repr: Str}, [47], ~, Str], # 48
+  [Subscript, {kind: hash}, [24, 22], ~, Scalar, 39], # 49
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [49], ~, Str], # 50
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 51
+  [Exists, {kind: hash}, [20, 12], ~, Boolean, 39], # 52
+  [Coerce, {from_repr: Boolean, to_repr: Str}, [52], ~, Str], # 53
+  [Exists, {kind: hash}, [20, 16], ~, Boolean, 39], # 54
+  [Coerce, {from_repr: Boolean, to_repr: Str}, [54], ~, Str], # 55
+  [Coerce, {from_repr: Scalar, to_repr: Str}, [35], ~, Str], # 56
+  [Constant, {const_type: string, value: x}, ~, ~, Str], # 57
+  [Constant, {const_type: string, value: "y"}, ~, ~, Str], # 58
+  [ArrayLiteral, {sigil: "@", symbol: w}, [57, 58], ~, Array], # 59
+  [Count, ~, [59], ~, Int, 39], # 60
+  [Coerce, {from_repr: Int, to_repr: Str}, [60], ~, Str], # 61
+  [Slice, {kind: array}, [6, 13, 5], ~, List], # 62
+  [Coerce, {from_repr: List, to_repr: Str}, [62], ~, Str], # 63
+  [Subscript, {kind: hash}, [20, 12], ~, Scalar, 39], # 64
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [64], ~, Str], # 65
+  [ArrayLiteral, {sigil: "@", symbol: k}, [14], ~, Array], # 66
+  [Subscript, {kind: array}, [66, 6], ~, Scalar, 39], # 67
+  [Subscript, {kind: hash}, [20, 67], ~, Scalar, 39], # 68
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [68], ~, Str], # 69
+  [Slice, {kind: hash}, [12, 20], ~, List], # 70
+  [Coerce, {from_repr: List, to_repr: Str}, [70], ~, Str], # 71
+  [Call, {dispatch_kind: builtin, name: keys, param_names: [], want: scalar}, [20], ~, Int, 39], # 72
+  [Coerce, {from_repr: Int, to_repr: Str}, [72], ~, Str], # 73
+  [Subscript, {kind: array}, [5, 6], ~, Scalar, 39], # 74
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [74], ~, Str], # 75
+  [Count, ~, [5], ~, Int, 39], # 76
+  [Subtract, ~, [76, 13], ~, Int], # 77
+  [Subscript, {kind: array}, [5, 77], ~, Str, 39], # 78
+  [Coerce, {from_repr: Int, to_repr: Str}, [77], ~, Str], # 79
+  [Coerce, {from_repr: Int, to_repr: Str}, [76], ~, Str], # 80
+  [Subscript, {kind: array}, [59, 6], ~, Scalar, 35], # 81
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [81], ~, Str], # 82
+  [Constant, {const_type: string, value: "-"}, ~, ~, Str], # 83
+  [Concat, ~, [82, 83], ~, Str], # 84
+  [Subscript, {kind: array}, [59, 13], ~, Scalar, 35], # 85
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [85], ~, Str], # 86
+  [Concat, ~, [84, 86], ~, Str], # 87
+  [Print, ~, [75, 78, 79, 80, 87, 51], 39, "Maybe[Boolean]"], # 88
+  [Print, ~, [63, 65, 69, 71, 73, 51], 88, "Maybe[Boolean]"], # 89
+  [Print, ~, [53, 55, 56, 61, 51], 89, "Maybe[Boolean]"], # 90
+  [Print, ~, [42, 44, 46, 48, 50, 51], 90, "Maybe[Boolean]"], # 91
+  [Call, {dispatch_kind: builtin, name: push, param_names: []}, [5, 40], 91, Int, 39, true], # 92
+  [Count, ~, [5], ~, Int, 92], # 93
+  [Subtract, ~, [93, 13], ~, Int], # 94
+  [Call, {dispatch_kind: builtin, name: unshift, param_names: []}, [5, 94], 92, Int, 92, true], # 95
+  [Call, {dispatch_kind: builtin, name: each, param_names: [], want: list}, [11], 95, Unknown, 95, true], # 96
+  [Assign, {targets: 2}, [7, 8, 96], 96, List, 96, true], # 97
+  [Subscript, {kind: array}, [5, 6], ~, Scalar, 97], # 98
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [98], ~, Str], # 99
+  [Count, ~, [5], ~, Int, 97], # 100
+  [Subtract, ~, [100, 13], ~, Int], # 101
+  [Subscript, {kind: array}, [5, 101], ~, Str, 97], # 102
+  [Coerce, {from_repr: Int, to_repr: Str}, [100], ~, Str], # 103
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 104
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [8], ~, Str], # 105
+  [Print, ~, [99, 102, 103, 104, 105, 51], 97, "Maybe[Boolean]"], # 106
+  [Return, {implicit: true}, [1], 106, ~, 97], # 107
+  [PadAccess, {sigil: $, symbol: tag}, ~, ~, Str], # 108
+  [VarDecl, {scope: my}, [108, 87]]]} # 109
 ```

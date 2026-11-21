@@ -122,12 +122,12 @@ if-w0-w1-u3-d2-v3-et-Dx
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [101], nodes: [
+main::__PROGRAM__: {start: 0, returns: [108], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 2
   [Constant, {const_type: string, value: "-t"}, ~, ~, Str], # 3
-  [Call, {dispatch_kind: builtin, name: time, param_names: []}, ~, ~, Unknown], # 4
+  [Call, {dispatch_kind: builtin, name: time, param_names: []}, ~, ~, Int], # 4
   [Constant, {const_type: integer, value: "1000000000"}, ~, ~, Int], # 5
   [NumGt, ~, [4, 5], ~, Boolean], # 6
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 7
@@ -136,148 +136,155 @@ main::__PROGRAM__: {start: 0, returns: [101], nodes: [
   [Coerce, {from_repr: Int, to_repr: Str}, [9], ~, Str], # 10
   [Constant, {const_type: string, value: "-X"}, ~, ~, Str], # 11
   [Constant, {const_type: string, value: "-D"}, ~, ~, Str], # 12
-  [MemStart], # 13
-  [Constant, {const_type: string, value: "x\n"}, ~, ~, Str], # 14
-  [Constant, {const_type: string, value: "-e"}, ~, ~, Str], # 15
-  [Constant, {const_type: integer, value: "10"}, ~, ~, Int], # 16
-  [Coerce, {from_repr: Int, to_repr: Num}, [16], ~, Num], # 17
-  [EnvRead, {key: X}, ~, ~, Str], # 18
-  [DefinedOr, ~, [18, 8], ~, Str], # 19
-  [Coerce, {from_repr: Str, to_repr: Num}, [19], ~, Num], # 20
-  [Divide, ~, [17, 20], ~, Num], # 21
-  [Constant, {const_type: string, value: "-v"}, ~, ~, Str], # 22
-  [EnvRead, {key: "N"}, ~, ~, Str], # 23
-  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 24
-  [DefinedOr, ~, [23, 24], ~, Str], # 25
-  [Coerce, {from_repr: Str, to_repr: Num}, [25], ~, Num], # 26
-  [Add, ~, [26, 7], ~, Num], # 27
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [27], ~, Str], # 28
-  [Concat, ~, [22, 28], ~, Str], # 29
-  [Constant, {const_type: string, value: "-d"}, ~, ~, Str], # 30
-  [Add, ~, [8, 7], ~, Int], # 31
-  [Constant, {const_type: string, value: if}, ~, ~, Str], # 32
-  [If, ~, [0, 25], 0], # 33
-  [Proj, {index: 0}, [33]], # 34
-  [Print, ~, [32], 34, Scalar], # 35
-  [Constant, {const_type: string, value: else}, ~, ~, Str], # 36
-  [Proj, {index: 1}, [33]], # 37
-  [Print, ~, [36], 37, Scalar], # 38
-  [Region, {head: 33}, [35, 38]], # 39
-  [If, ~, [39, 25], 39], # 40
-  [Proj, {index: 0}, [40]], # 41
-  [Constant, {const_type: string, value: "-unless"}, ~, ~, Str], # 42
-  [Proj, {index: 1}, [40]], # 43
-  [Print, ~, [42], 43, Scalar], # 44
-  [Region, {head: 40}, [41, 44]], # 45
-  [Loop, {bound: each}, [45], 45], # 46
-  [Proj, {index: 1}, [46]], # 47
-  [Proj, {index: 0}, [46]], # 48
-  [Phi, {region: 46}, [8, 110], ~, Int], # 49
-  [NumGt, ~, [49, 7], ~, Boolean], # 50
-  [If, ~, [48, 50], 48], # 51
-  [Proj, {index: 0}, [51]], # 52
-  [Region, {head: 46}, [47, 52]], # 53
-  [Loop, {bound: each}, [53], 53], # 54
-  [Proj, {index: 1}, [54]], # 55
-  [Region, {head: 54}, [55]], # 56
-  [Loop, {bound: each}, [56], 56], # 57
-  [Phi, {region: 57}, [31, 112], ~, Int], # 58
-  [Coerce, {from_repr: Int, to_repr: Str}, [58], ~, Str], # 59
-  [Concat, ~, [30, 59], ~, Str], # 60
-  [Proj, {index: 1}, [57]], # 61
-  [Region, {head: 57}, [61]], # 62
-  [Print, ~, [60], 62, Scalar], # 63
-  [Print, ~, [29], 63, Scalar], # 64
-  [Region, {eval_entry: 64}, [64]], # 65
-  [Phi, {region: 65}, [21, 1], ~, Scalar], # 66
-  [Constant, {const_type: string, value: t}, ~, ~, Str], # 67
-  [DefinedOr, ~, [66, 67], ~, Scalar], # 68
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [68], ~, Str], # 69
-  [Concat, ~, [15, 69], ~, Str], # 70
-  [Print, ~, [70], 65, Scalar], # 71
-  [Unwind, ~, [14], 71], # 72
-  [Region, {eval_entry: 71}, [72]], # 73
-  [EntryDef, {package: main, sigil: $, symbol: "@"}, [13], 73, Scalar], # 74
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [74], ~, Str], # 75
-  [Concat, ~, [12, 75], ~, Str], # 76
-  [Print, ~, [76], 74, Scalar], # 77
-  [EnvRead, {key: R}, ~, ~, Str], # 78
-  [DefinedOr, ~, [78, 8], ~, Str], # 79
-  [If, ~, [77, 79], 77], # 80
-  [Proj, {index: 1}, [80]], # 81
-  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 82
-  [Proj, {index: 0}, [80]], # 83
-  [Call, {dispatch_kind: builtin, name: exit, param_names: []}, [82], 83, Unknown], # 84
-  [Region, {head: 80}, [81, 84]], # 85
-  [Print, ~, [11], 85, Scalar], # 86
-  [Print, ~, [3, 10], 86, Scalar], # 87
-  [Loop, {bound: each}, [87], 87], # 88
-  [Proj, {index: 1}, [88]], # 89
-  [Region, {head: 88}, [89]], # 90
-  [Loop, {bound: entry}, [90], 90], # 91
-  [Proj, {index: 1}, [91]], # 92
-  [Region, {head: 91}, [92]], # 93
-  [If, ~, [93, 25], 93], # 94
-  [Proj, {index: 1}, [94]], # 95
-  [Constant, {const_type: string, value: "-p"}, ~, ~, Str], # 96
-  [Proj, {index: 0}, [94]], # 97
-  [Print, ~, [96], 97, Scalar], # 98
-  [Region, {head: 94}, [95, 98]], # 99
-  [Print, ~, [2], 99, Scalar], # 100
-  [Return, {implicit: true}, [1], 100], # 101
-  [NumLt, ~, [49, 26], 46, Boolean], # 102
-  [Add, ~, [26, 24], ~, Num], # 103
-  [NumLt, ~, [58, 26], 57, Boolean], # 104
-  [Phi, {region: 54}, [49, 108], ~, Int], # 105
-  [NumGe, ~, [105, 103], ~, Boolean], # 106
-  [NumLt, ~, [105, 103], 54, Boolean], # 107
-  [Add, ~, [105, 7], ~, Int], # 108
-  [NumGt, ~, [108, 27], ~, Boolean], # 109
-  [Add, ~, [49, 7], ~, Int], # 110
-  [Coerce, {from_repr: Int, to_repr: Str}, [49], ~, Str], # 111
-  [Add, ~, [58, 7], ~, Int], # 112
-  [Phi, {region: 88}, [8, 115], ~, Int], # 113
-  [NumLt, ~, [113, 7], 88, Boolean], # 114
-  [Add, ~, [113, 7], ~, Int], # 115
-  [Phi, {region: 91}, [8, 117], ~, Int], # 116
-  [Add, ~, [116, 7], ~, Int], # 117
-  [Proj, {index: 0}, [54]], # 118
-  [If, ~, [118, 109], 118], # 119
-  [Proj, {index: 0}, [57]], # 120
-  [Constant, {const_type: string, value: "-w"}, ~, ~, Str], # 121
-  [Concat, ~, [121, 111], ~, Str], # 122
-  [Coerce, {from_repr: Int, to_repr: Str}, [108], ~, Str], # 123
-  [Proj, {index: 0}, [119]], # 124
-  [Proj, {index: 1}, [119]], # 125
-  [Proj, {index: 0}, [91]], # 126
-  [Loop, {bound: each}, [126], 126], # 127
-  [Coerce, {from_repr: Unknown, to_repr: Boolean}, [79], 127, Boolean], # 128
-  [Coerce, {from_repr: Int, to_repr: Str}, [113], ~, Str], # 129
-  [EnvRead, {key: A}, ~, ~, Str], # 130
-  [Constant, {const_type: string, value: a}, ~, ~, Str], # 131
-  [DefinedOr, ~, [130, 131], ~, Str], # 132
-  [Constant, {const_type: string, value: b}, ~, ~, Str], # 133
-  [ArrayLiteral, {sigil: "@", symbol: l}, [132, 133], ~, Array], # 134
-  [Count, ~, [134, 13], ~, Int], # 135
-  [NumGt, ~, [135, 116], 91, Boolean], # 136
-  [Subscript, {kind: array}, [134, 116, 13], ~, Scalar], # 137
-  [Proj, {index: 1}, [51]], # 138
-  [Print, ~, [122], 138, Scalar], # 139
-  [Constant, {const_type: string, value: "-u"}, ~, ~, Str], # 140
-  [Concat, ~, [140, 123], ~, Str], # 141
-  [Proj, {index: 0}, [88]], # 142
-  [Print, ~, [141], 125, Scalar], # 143
-  [Region, {head: 119}, [124, 143]], # 144
-  [Constant, {const_type: string, value: "-c"}, ~, ~, Str], # 145
-  [Concat, ~, [145, 129], ~, Str], # 146
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [137], ~, Str], # 147
-  [Print, ~, [146], 142, Scalar], # 148
-  [Proj, {index: 0}, [127]], # 149
-  [Proj, {index: 1}, [127]], # 150
-  [Constant, {const_type: string, value: "-f"}, ~, ~, Str], # 151
-  [Concat, ~, [151, 147], ~, Str], # 152
-  [Region, {head: 127}, [150]], # 153
-  [Print, ~, [152], 153, Scalar]]} # 154
+  [Constant, {const_type: string, value: "x\n"}, ~, ~, Str], # 13
+  [MemStart], # 14
+  [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 14], # 15
+  [Constant, {const_type: string, value: ""}, ~, ~, Str], # 16
+  [Constant, {const_type: string, value: "-v"}, ~, ~, Str], # 17
+  [EnvRead, {key: "N"}, ~, ~, Str], # 18
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 19
+  [DefinedOr, ~, [18, 19], ~, Str], # 20
+  [Coerce, {from_repr: Str, to_repr: Num}, [20], ~, Num], # 21
+  [Add, ~, [21, 7], ~, Num], # 22
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [22], ~, Str], # 23
+  [Concat, ~, [17, 23], ~, Str], # 24
+  [Constant, {const_type: string, value: "-d"}, ~, ~, Str], # 25
+  [Add, ~, [8, 7], ~, Int], # 26
+  [Constant, {const_type: string, value: if}, ~, ~, Str], # 27
+  [If, ~, [0, 20], 0], # 28
+  [Proj, {index: 0}, [28]], # 29
+  [Print, ~, [27], 29, "Maybe[Boolean]"], # 30
+  [Constant, {const_type: string, value: else}, ~, ~, Str], # 31
+  [Proj, {index: 1}, [28]], # 32
+  [Print, ~, [31], 32, "Maybe[Boolean]"], # 33
+  [Region, {head: 28}, [30, 33]], # 34
+  [If, ~, [34, 20], 34], # 35
+  [Proj, {index: 0}, [35]], # 36
+  [Constant, {const_type: string, value: "-unless"}, ~, ~, Str], # 37
+  [Proj, {index: 1}, [35]], # 38
+  [Print, ~, [37], 38, "Maybe[Boolean]"], # 39
+  [Region, {head: 35}, [36, 39]], # 40
+  [Loop, {bound: each}, [40], 40], # 41
+  [Proj, {index: 1}, [41]], # 42
+  [Proj, {index: 0}, [41]], # 43
+  [Phi, {region: 41}, [8, 130], ~, Int], # 44
+  [NumGt, ~, [44, 7], ~, Boolean], # 45
+  [If, ~, [43, 45], 43], # 46
+  [Proj, {index: 0}, [46]], # 47
+  [Region, {head: 41}, [42, 47]], # 48
+  [Loop, {bound: each}, [48], 48], # 49
+  [Proj, {index: 1}, [49]], # 50
+  [Region, {head: 49}, [50]], # 51
+  [Loop, {bound: each}, [51], 51], # 52
+  [Phi, {region: 52}, [26, 132], ~, Int], # 53
+  [Coerce, {from_repr: Int, to_repr: Str}, [53], ~, Str], # 54
+  [Concat, ~, [25, 54], ~, Str], # 55
+  [Proj, {index: 1}, [52]], # 56
+  [Region, {head: 52}, [56]], # 57
+  [Print, ~, [55], 57, "Maybe[Boolean]"], # 58
+  [Print, ~, [24], 58, "Maybe[Boolean]"], # 59
+  [EntryWrite, ~, [15, 16], 59, Unknown, 14, true], # 60
+  [Constant, {const_type: integer, value: "10"}, ~, ~, Int], # 61
+  [Coerce, {from_repr: Int, to_repr: Num}, [61], ~, Num], # 62
+  [EnvRead, {key: X}, ~, ~, Str], # 63
+  [DefinedOr, ~, [63, 8], ~, Str], # 64
+  [Coerce, {from_repr: Str, to_repr: Num}, [64], ~, Num], # 65
+  [Divide, {eval_id: 1, file: "/tmp/osrpJFXK1Z/case.pl", line: 14}, [62, 65], 60, Num], # 66
+  [Region, {eval_entry: 59, eval_id: 1}, [66]], # 67
+  [Phi, {memory: true, region: 67}, [60], ~, Unknown], # 68
+  [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 68], # 69
+  [Constant, {const_type: string, value: "-e"}, ~, ~, Str], # 70
+  [Phi, {region: 67}, [66, 1], ~, "Maybe[Num]"], # 71
+  [Constant, {const_type: string, value: t}, ~, ~, Str], # 72
+  [DefinedOr, ~, [71, 72], ~, "Maybe[Str]"], # 73
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [73], ~, Str], # 74
+  [Concat, ~, [70, 74], ~, Str], # 75
+  [Print, ~, [75], 67, "Maybe[Boolean]"], # 76
+  [EntryWrite, ~, [69, 16], 76, Unknown, 68, true], # 77
+  [Unwind, {eval_id: 2, file: "/tmp/osrpJFXK1Z/case.pl", line: 16}, [13], 77, ~, 77], # 78
+  [Region, {eval_entry: 76, eval_id: 2}, [78]], # 79
+  [Phi, {memory: true, region: 79}, [77], ~, Unknown], # 80
+  [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, 79, Scalar, 80], # 81
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [81], ~, Str], # 82
+  [Concat, ~, [12, 82], ~, Str], # 83
+  [Print, ~, [83], 81, "Maybe[Boolean]"], # 84
+  [EnvRead, {key: R}, ~, ~, Str], # 85
+  [DefinedOr, ~, [85, 8], ~, Str], # 86
+  [If, ~, [84, 86], 84], # 87
+  [Proj, {index: 1}, [87]], # 88
+  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 89
+  [Proj, {index: 0}, [87]], # 90
+  [Call, {dispatch_kind: builtin, name: exit, param_names: []}, [89], 90, Unknown, 80], # 91
+  [Region, {head: 87}, [88, 91]], # 92
+  [Print, ~, [11], 92, "Maybe[Boolean]"], # 93
+  [Print, ~, [3, 10], 93, "Maybe[Boolean]"], # 94
+  [Loop, {bound: each}, [94], 94], # 95
+  [Proj, {index: 1}, [95]], # 96
+  [Region, {head: 95}, [96]], # 97
+  [Loop, {bound: entry}, [97], 97], # 98
+  [Proj, {index: 1}, [98]], # 99
+  [Region, {head: 98}, [99]], # 100
+  [If, ~, [100, 20], 100], # 101
+  [Proj, {index: 1}, [101]], # 102
+  [Constant, {const_type: string, value: "-p"}, ~, ~, Str], # 103
+  [Proj, {index: 0}, [101]], # 104
+  [Print, ~, [103], 104, "Maybe[Boolean]"], # 105
+  [Region, {head: 101}, [102, 105]], # 106
+  [Print, ~, [2], 106, "Maybe[Boolean]"], # 107
+  [Return, {implicit: true}, [1], 107, ~, 80], # 108
+  [EnvRead, {key: A}, ~, ~, Str], # 109
+  [Constant, {const_type: string, value: a}, ~, ~, Str], # 110
+  [DefinedOr, ~, [109, 110], ~, Str], # 111
+  [Constant, {const_type: string, value: b}, ~, ~, Str], # 112
+  [ArrayLiteral, {sigil: "@", symbol: l}, [111, 112], ~, Array], # 113
+  [Count, ~, [113], ~, Int, 80], # 114
+  [Phi, {region: 98}, [8, 127], ~, Int], # 115
+  [Subscript, {kind: array}, [113, 115], ~, Scalar, 80], # 116
+  [NumLt, ~, [44, 21], 41, Boolean], # 117
+  [Add, ~, [21, 19], ~, Num], # 118
+  [NumLt, ~, [53, 21], 52, Boolean], # 119
+  [NumGt, ~, [114, 115], 98, Boolean], # 120
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [116], ~, Str], # 121
+  [Phi, {region: 49}, [44, 125], ~, Int], # 122
+  [NumGe, ~, [122, 118], ~, Boolean], # 123
+  [NumLt, ~, [122, 118], 49, Boolean], # 124
+  [Add, ~, [122, 7], ~, Int], # 125
+  [NumGt, ~, [125, 22], ~, Boolean], # 126
+  [Add, ~, [115, 7], ~, Int], # 127
+  [Constant, {const_type: string, value: "-f"}, ~, ~, Str], # 128
+  [Concat, ~, [128, 121], ~, Str], # 129
+  [Add, ~, [44, 7], ~, Int], # 130
+  [Coerce, {from_repr: Int, to_repr: Str}, [44], ~, Str], # 131
+  [Add, ~, [53, 7], ~, Int], # 132
+  [Phi, {region: 95}, [8, 135], ~, Int], # 133
+  [NumLt, ~, [133, 7], 95, Boolean], # 134
+  [Add, ~, [133, 7], ~, Int], # 135
+  [Proj, {index: 0}, [49]], # 136
+  [If, ~, [136, 126], 136], # 137
+  [Proj, {index: 0}, [52]], # 138
+  [Proj, {index: 0}, [98]], # 139
+  [Loop, {bound: each}, [139], 139], # 140
+  [Proj, {index: 1}, [140]], # 141
+  [Region, {head: 140}, [141]], # 142
+  [Print, ~, [129], 142, "Maybe[Boolean]"], # 143
+  [Constant, {const_type: string, value: "-w"}, ~, ~, Str], # 144
+  [Concat, ~, [144, 131], ~, Str], # 145
+  [Coerce, {from_repr: Int, to_repr: Str}, [125], ~, Str], # 146
+  [Proj, {index: 0}, [137]], # 147
+  [Proj, {index: 1}, [137]], # 148
+  [Coerce, {from_repr: Unknown, to_repr: Boolean}, [86], 140, Boolean], # 149
+  [Coerce, {from_repr: Int, to_repr: Str}, [133], ~, Str], # 150
+  [Proj, {index: 1}, [46]], # 151
+  [Print, ~, [145], 151, "Maybe[Boolean]"], # 152
+  [Constant, {const_type: string, value: "-u"}, ~, ~, Str], # 153
+  [Concat, ~, [153, 146], ~, Str], # 154
+  [Proj, {index: 0}, [95]], # 155
+  [Print, ~, [154], 148, "Maybe[Boolean]"], # 156
+  [Region, {head: 137}, [147, 156]], # 157
+  [Proj, {index: 0}, [140]], # 158
+  [Constant, {const_type: string, value: "-c"}, ~, ~, Str], # 159
+  [Concat, ~, [159, 150], ~, Str], # 160
+  [Print, ~, [160], 155, "Maybe[Boolean]"]]} # 161
 ```
 
 ## Two `next` guards in a row, where the first arm carries the second
@@ -318,40 +325,42 @@ parses: yes
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [31], nodes: [
+main::__PROGRAM__: {start: 0, returns: [15], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [PadAccess, {sigil: "@", symbol: out}, ~, ~, Unknown], # 3
-  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 4
-  [Loop, {bound: entry}, [0], 0], # 5
-  [Phi, {region: 5}, [4, 34], ~, Int], # 6
-  [Proj, {index: 0}, [5]], # 7
-  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 8
-  [NumEq, ~, [6, 8], ~, Boolean], # 9
-  [If, ~, [7, 9], 7], # 10
-  [Proj, {index: 1}, [10]], # 11
-  [Constant, {const_type: integer, value: "4"}, ~, ~, Int], # 12
-  [NumEq, ~, [6, 12], ~, Boolean], # 13
-  [If, ~, [11, 13], 11], # 14
-  [Proj, {index: 1}, [14]], # 15
-  [Call, {dispatch_kind: builtin, memory_input: true, name: push, param_names: []}, [3, 6, 2], 15, Int], # 16
-  [Proj, {index: 0}, [10]], # 17
-  [Region, {head: 10}, [17, 16]], # 18
-  [Phi, {memory: true, predecessors: [17, 11], region: 18}, [2, 16], ~, Unknown], # 19
-  [Proj, {index: 0}, [14]], # 20
-  [Region, {head: 5}, [18, 20]], # 21
-  [Phi, {memory: true, predecessors: [7, 20], region: 21}, [19, 2], ~, Unknown], # 22
-  [EntryDef, {package: main, sigil: $, symbol: "\""}, [22], ~, Scalar], # 23
-  [Coerce, {from_repr: Scalar, to_repr: Str}, [23], ~, Str], # 24
-  [Call, {dispatch_kind: builtin, memory_input: true, name: join, param_names: []}, [24, 3, 22], ~, Str], # 25
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 26
-  [Concat, ~, [25, 26], ~, Str], # 27
-  [Proj, {index: 1}, [5]], # 28
-  [Region, {head: 5}, [28]], # 29
-  [Print, ~, [27], 29, Scalar], # 30
-  [Return, {implicit: true}, [1], 30], # 31
-  [Constant, {const_type: integer, value: "7"}, ~, ~, Int], # 32
-  [NumGt, ~, [32, 6], 5, Boolean], # 33
-  [Add, ~, [6, 4], ~, Int]]} # 34
+  [Loop, {bound: entry}, [0], 0], # 3
+  [Phi, {memory: true, region: 3}, [2, 35], ~, Unknown], # 4
+  [Proj, {index: 1}, [3]], # 5
+  [Region, {head: 3}, [5]], # 6
+  [Phi, {memory: true, region: 6}, [4], ~, Unknown], # 7
+  [EntryDef, {package: main, sigil: $, symbol: "\""}, ~, ~, Scalar, 7], # 8
+  [Coerce, {from_repr: Scalar, to_repr: Str}, [8], ~, Str], # 9
+  [PadAccess, {sigil: "@", symbol: out}, ~, ~, Array], # 10
+  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [9, 10], ~, Str, 7], # 11
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 12
+  [Concat, ~, [11, 12], ~, Str], # 13
+  [Print, ~, [13], 6, "Maybe[Boolean]"], # 14
+  [Return, {implicit: true}, [1], 14, ~, 7], # 15
+  [Constant, {const_type: integer, value: "7"}, ~, ~, Int], # 16
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 17
+  [Phi, {region: 3}, [17, 36], ~, Int], # 18
+  [NumGt, ~, [16, 18], 3, Boolean], # 19
+  [Proj, {index: 0}, [3]], # 20
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 21
+  [NumEq, ~, [18, 21], ~, Boolean], # 22
+  [If, ~, [20, 22], 20], # 23
+  [Proj, {index: 1}, [23]], # 24
+  [Constant, {const_type: integer, value: "4"}, ~, ~, Int], # 25
+  [NumEq, ~, [18, 25], ~, Boolean], # 26
+  [If, ~, [24, 26], 24], # 27
+  [Proj, {index: 1}, [27]], # 28
+  [Call, {dispatch_kind: builtin, name: push, param_names: []}, [10, 18], 28, Int, 4, true], # 29
+  [Proj, {index: 0}, [23]], # 30
+  [Region, {head: 23}, [30, 29]], # 31
+  [Phi, {memory: true, predecessors: [30, 24], region: 31}, [4, 29], ~, Unknown], # 32
+  [Proj, {index: 0}, [27]], # 33
+  [Region, {head: 3}, [31, 33]], # 34
+  [Phi, {memory: true, predecessors: [20, 33], region: 34}, [32, 4], ~, Unknown], # 35
+  [Add, ~, [18, 17], ~, Int]]} # 36
 ```

@@ -60,12 +60,12 @@ main::__PROGRAM__: {start: 0, returns: [43], nodes: [
   [EntryDef, {package: main, sigil: "@", symbol: ARGV}, ~, ~, Array], # 3
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 4
   [MemStart], # 5
-  [Subscript, {kind: array}, [3, 4, 5], ~, Scalar], # 6
+  [Subscript, {kind: array}, [3, 4], ~, Scalar, 5], # 6
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 7
   [DefinedOr, ~, [6, 7], ~, Scalar], # 8
   [Coerce, {from_repr: Scalar, to_repr: Num}, [8], ~, Num], # 9
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 10
-  [Subscript, {kind: array}, [3, 10, 5], ~, Scalar], # 11
+  [Subscript, {kind: array}, [3, 10], ~, Scalar, 5], # 11
   [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 12
   [DefinedOr, ~, [11, 12], ~, Scalar], # 13
   [Coerce, {from_repr: Scalar, to_repr: Num}, [13], ~, Num], # 14
@@ -90,14 +90,14 @@ main::__PROGRAM__: {start: 0, returns: [43], nodes: [
   [Constant, {const_type: string, value: "eq ["}, ~, ~, Str], # 33
   [NumEq, ~, [9, 14], ~, Boolean], # 34
   [Coerce, {from_repr: Boolean, to_repr: Str}, [34], ~, Str], # 35
-  [Print, ~, [33, 35, 17], 0, Scalar], # 36
-  [Print, ~, [30, 32, 17], 36, Scalar], # 37
-  [Print, ~, [27, 29, 17], 37, Scalar], # 38
-  [Print, ~, [24, 26, 17], 38, Scalar], # 39
-  [Print, ~, [21, 23, 17], 39, Scalar], # 40
-  [Print, ~, [18, 20, 17], 40, Scalar], # 41
-  [Print, ~, [2, 16, 17], 41, Scalar], # 42
-  [Return, {implicit: true}, [1], 42]]} # 43
+  [Print, ~, [33, 35, 17], 0, "Maybe[Boolean]"], # 36
+  [Print, ~, [30, 32, 17], 36, "Maybe[Boolean]"], # 37
+  [Print, ~, [27, 29, 17], 37, "Maybe[Boolean]"], # 38
+  [Print, ~, [24, 26, 17], 38, "Maybe[Boolean]"], # 39
+  [Print, ~, [21, 23, 17], 39, "Maybe[Boolean]"], # 40
+  [Print, ~, [18, 20, 17], 40, "Maybe[Boolean]"], # 41
+  [Print, ~, [2, 16, 17], 41, "Maybe[Boolean]"], # 42
+  [Return, {implicit: true}, [1], 42, ~, 5]]} # 43
 ```
 
 ## The string relations and `cmp`
@@ -144,12 +144,12 @@ main::__PROGRAM__: {start: 0, returns: [45], nodes: [
   [EntryDef, {package: main, sigil: "@", symbol: ARGV}, ~, ~, Array], # 3
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 4
   [MemStart], # 5
-  [Subscript, {kind: array}, [3, 4, 5], ~, Scalar], # 6
+  [Subscript, {kind: array}, [3, 4], ~, Scalar, 5], # 6
   [Constant, {const_type: string, value: aa}, ~, ~, Str], # 7
   [DefinedOr, ~, [6, 7], ~, Scalar], # 8
   [Coerce, {from_repr: Scalar, to_repr: Str}, [8], ~, Str], # 9
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 10
-  [Subscript, {kind: array}, [3, 10, 5], ~, Scalar], # 11
+  [Subscript, {kind: array}, [3, 10], ~, Scalar, 5], # 11
   [Constant, {const_type: string, value: bb}, ~, ~, Str], # 12
   [DefinedOr, ~, [11, 12], ~, Scalar], # 13
   [Coerce, {from_repr: Scalar, to_repr: Str}, [13], ~, Str], # 14
@@ -176,14 +176,14 @@ main::__PROGRAM__: {start: 0, returns: [45], nodes: [
   [Constant, {const_type: string, value: "seq ["}, ~, ~, Str], # 35
   [StrEq, ~, [31, 32], ~, Boolean], # 36
   [Coerce, {from_repr: Boolean, to_repr: Str}, [36], ~, Str], # 37
-  [Print, ~, [35, 37, 17], 0, Scalar], # 38
-  [Print, ~, [30, 34, 17], 38, Scalar], # 39
-  [Print, ~, [27, 29, 17], 39, Scalar], # 40
-  [Print, ~, [24, 26, 17], 40, Scalar], # 41
-  [Print, ~, [21, 23, 17], 41, Scalar], # 42
-  [Print, ~, [18, 20, 17], 42, Scalar], # 43
-  [Print, ~, [2, 16, 17], 43, Scalar], # 44
-  [Return, {implicit: true}, [1], 44]]} # 45
+  [Print, ~, [35, 37, 17], 0, "Maybe[Boolean]"], # 38
+  [Print, ~, [30, 34, 17], 38, "Maybe[Boolean]"], # 39
+  [Print, ~, [27, 29, 17], 39, "Maybe[Boolean]"], # 40
+  [Print, ~, [24, 26, 17], 40, "Maybe[Boolean]"], # 41
+  [Print, ~, [21, 23, 17], 41, "Maybe[Boolean]"], # 42
+  [Print, ~, [18, 20, 17], 42, "Maybe[Boolean]"], # 43
+  [Print, ~, [2, 16, 17], 43, "Maybe[Boolean]"], # 44
+  [Return, {implicit: true}, [1], 44, ~, 5]]} # 45
 ```
 
 ## The five logical operators
@@ -224,10 +224,10 @@ main::__PROGRAM__: {start: 0, returns: [37], nodes: [
   [EntryDef, {package: main, sigil: "@", symbol: ARGV}, ~, ~, Array], # 3
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 4
   [MemStart], # 5
-  [Subscript, {kind: array}, [3, 4, 5], ~, Scalar], # 6
+  [Subscript, {kind: array}, [3, 4], ~, Scalar, 5], # 6
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 7
   [DefinedOr, ~, [6, 7], ~, Scalar], # 8
-  [Subscript, {kind: array}, [3, 7, 5], ~, Scalar], # 9
+  [Subscript, {kind: array}, [3, 7], ~, Scalar, 5], # 9
   [DefinedOr, ~, [9, 4], ~, Scalar], # 10
   [And, ~, [8, 10], ~, Scalar], # 11
   [Coerce, {from_repr: Unknown, to_repr: Str}, [11], ~, Str], # 12
@@ -254,8 +254,8 @@ main::__PROGRAM__: {start: 0, returns: [37], nodes: [
   [Concat, ~, [30, 32], ~, Str], # 33
   [Constant, {const_type: string, value: "]\n"}, ~, ~, Str], # 34
   [Concat, ~, [33, 34], ~, Str], # 35
-  [Print, ~, [35], 0, Scalar], # 36
-  [Return, {implicit: true}, [1], 36]]} # 37
+  [Print, ~, [35], 0, "Maybe[Boolean]"], # 36
+  [Return, {implicit: true}, [1], 36, ~, 5]]} # 37
 ```
 
 ## `&&` and `and` are one op at two precedences
@@ -292,7 +292,7 @@ main::__PROGRAM__: {start: 0, returns: [18], nodes: [
   [EntryDef, {package: main, sigil: "@", symbol: ARGV}, ~, ~, Array], # 2
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 3
   [MemStart], # 4
-  [Subscript, {kind: array}, [2, 3, 4], ~, Scalar], # 5
+  [Subscript, {kind: array}, [2, 3], ~, Scalar, 4], # 5
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 6
   [DefinedOr, ~, [5, 6], ~, Scalar], # 7
   [Constant, {const_type: integer, value: "9"}, ~, ~, Int], # 8
@@ -304,8 +304,8 @@ main::__PROGRAM__: {start: 0, returns: [18], nodes: [
   [Concat, ~, [12, 13], ~, Str], # 14
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 15
   [Concat, ~, [14, 15], ~, Str], # 16
-  [Print, ~, [16], 0, Scalar], # 17
-  [Return, {implicit: true}, [1], 17]]} # 18
+  [Print, ~, [16], 0, "Maybe[Boolean]"], # 17
+  [Return, {implicit: true}, [1], 17, ~, 4]]} # 18
 ```
 
 ## Punctuation `!`, and the double negative
@@ -337,7 +337,7 @@ no operator whose text is "!!"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [13], nodes: [
+main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: "["}, ~, ~, Str], # 2
@@ -350,8 +350,9 @@ main::__PROGRAM__: {start: 0, returns: [13], nodes: [
   [Not, ~, [6], ~, Boolean], # 9
   [Coerce, {from_repr: Boolean, to_repr: Str}, [9], ~, Str], # 10
   [Constant, {const_type: string, value: "]\n"}, ~, ~, Str], # 11
-  [Print, ~, [2, 7, 8, 10, 11], 0, Scalar], # 12
-  [Return, {implicit: true}, [1], 12]]} # 13
+  [Print, ~, [2, 7, 8, 10, 11], 0, "Maybe[Boolean]"], # 12
+  [MemStart], # 13
+  [Return, {implicit: true}, [1], 12, ~, 13]]} # 14
 ```
 
 ## Comparisons chain, and the answer flips
@@ -383,7 +384,7 @@ parses: yes
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [13], nodes: [
+main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: "["}, ~, ~, Str], # 2
@@ -395,9 +396,10 @@ main::__PROGRAM__: {start: 0, returns: [13], nodes: [
   [Constant, {const_type: integer, value: "9"}, ~, ~, Int], # 8
   [NumLt, ~, [8, 3], ~, Boolean], # 9
   [Coerce, {from_repr: Boolean, to_repr: Str}, [9], ~, Str], # 10
-  [Print, ~, [2, 10, 7], 0, Scalar], # 11
-  [Print, ~, [2, 6, 7], 11, Scalar], # 12
-  [Return, {implicit: true}, [1], 12]]} # 13
+  [Print, ~, [2, 10, 7], 0, "Maybe[Boolean]"], # 11
+  [Print, ~, [2, 6, 7], 11, "Maybe[Boolean]"], # 12
+  [MemStart], # 13
+  [Return, {implicit: true}, [1], 12, ~, 13]]} # 14
 ```
 
 ## Level 13 is `chain/na` and the halves differ

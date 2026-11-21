@@ -62,17 +62,17 @@ main::__PROGRAM__: {start: 0, returns: [19], nodes: [
   [Coerce, {from_repr: Boolean, to_repr: Str}, [5], ~, Str], # 6
   [Concat, ~, [4, 6], ~, Str], # 7
   [MemStart], # 8
-  [PadAccess, {sigil: $, symbol: s}, [8], ~, Unknown], # 9
-  [Assign, ~, [9, 2], 0, Str], # 10
-  [PadAccess, {sigil: $, symbol: s}, [10], ~, Unknown], # 11
-  [RegexSubst, {flags: "", pattern: a, replacement: z}, [11, 10], 10, Str], # 12
-  [PadAccess, {sigil: $, symbol: s}, [12], ~, Str], # 13
+  [PadAccess, {sigil: $, symbol: s}, ~, ~, Unknown, 8], # 9
+  [Assign, ~, [9, 2], 0, Str, 8, true], # 10
+  [PadAccess, {sigil: $, symbol: s}, ~, ~, Unknown, 10], # 11
+  [RegexSubst, {flags: "", pattern: a, replacement: z}, [11], 10, Str, 10, true], # 12
+  [PadAccess, {sigil: $, symbol: s}, ~, ~, Str, 12], # 13
   [Coerce, {from_repr: Unknown, to_repr: Str}, [13], ~, Str], # 14
   [Concat, ~, [7, 14], ~, Str], # 15
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 16
   [Concat, ~, [15, 16], ~, Str], # 17
-  [Print, ~, [17], 12, Scalar], # 18
-  [Return, {implicit: true}, [1], 18]]} # 19
+  [Print, ~, [17], 12, "Maybe[Boolean]"], # 18
+  [Return, {implicit: true}, [1], 18, ~, 12]]} # 19
 ```
 
 ## The comment character as a delimiter
@@ -123,17 +123,17 @@ main::__PROGRAM__: {start: 0, returns: [16], nodes: [
   [RegexMatch, {flags: "", pattern: abc}, [2], ~, Boolean], # 3
   [Coerce, {from_repr: Boolean, to_repr: Str}, [3], ~, Str], # 4
   [MemStart], # 5
-  [PadAccess, {sigil: $, symbol: s}, [5], ~, Unknown], # 6
-  [Assign, ~, [6, 2], 0, Str], # 7
-  [PadAccess, {sigil: $, symbol: s}, [7], ~, Unknown], # 8
-  [RegexSubst, {flags: "", pattern: a, replacement: z}, [8, 7], 7, Str], # 9
-  [PadAccess, {sigil: $, symbol: s}, [9], ~, Str], # 10
+  [PadAccess, {sigil: $, symbol: s}, ~, ~, Unknown, 5], # 6
+  [Assign, ~, [6, 2], 0, Str, 5, true], # 7
+  [PadAccess, {sigil: $, symbol: s}, ~, ~, Unknown, 7], # 8
+  [RegexSubst, {flags: "", pattern: a, replacement: z}, [8], 7, Str, 7, true], # 9
+  [PadAccess, {sigil: $, symbol: s}, ~, ~, Str, 9], # 10
   [Coerce, {from_repr: Unknown, to_repr: Str}, [10], ~, Str], # 11
   [Concat, ~, [4, 11], ~, Str], # 12
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 13
   [Concat, ~, [12, 13], ~, Str], # 14
-  [Print, ~, [14], 9, Scalar], # 15
-  [Return, {implicit: true}, [1], 15]]} # 16
+  [Print, ~, [14], 9, "Maybe[Boolean]"], # 15
+  [Return, {implicit: true}, [1], 15, ~, 9]]} # 16
 ```
 
 ## A bracketing delimiter nests
@@ -192,16 +192,16 @@ main::__PROGRAM__: {start: 0, returns: [21], nodes: [
   [Constant, {const_type: string, value: "]["}, ~, ~, Str], # 7
   [Concat, ~, [6, 7], ~, Str], # 8
   [MemStart], # 9
-  [PadAccess, {sigil: $, symbol: s}, [9], ~, Unknown], # 10
+  [PadAccess, {sigil: $, symbol: s}, ~, ~, Unknown, 9], # 10
   [Constant, {const_type: string, value: "xa{b}cy"}, ~, ~, Str], # 11
-  [Assign, ~, [10, 11], 0, Str], # 12
-  [PadAccess, {sigil: $, symbol: s}, [12], ~, Unknown], # 13
-  [RegexSubst, {flags: "", pattern: "a{b}c", replacement: ok}, [13, 12], 12, Str], # 14
-  [PadAccess, {sigil: $, symbol: s}, [14], ~, Str], # 15
+  [Assign, ~, [10, 11], 0, Str, 9, true], # 12
+  [PadAccess, {sigil: $, symbol: s}, ~, ~, Unknown, 12], # 13
+  [RegexSubst, {flags: "", pattern: "a{b}c", replacement: ok}, [13], 12, Str, 12, true], # 14
+  [PadAccess, {sigil: $, symbol: s}, ~, ~, Str, 14], # 15
   [Coerce, {from_repr: Unknown, to_repr: Str}, [15], ~, Str], # 16
   [Concat, ~, [8, 16], ~, Str], # 17
   [Constant, {const_type: string, value: "]\n"}, ~, ~, Str], # 18
   [Concat, ~, [17, 18], ~, Str], # 19
-  [Print, ~, [19], 14, Scalar], # 20
-  [Return, {implicit: true}, [1], 20]]} # 21
+  [Print, ~, [19], 14, "Maybe[Boolean]"], # 20
+  [Return, {implicit: true}, [1], 20, ~, 14]]} # 21
 ```

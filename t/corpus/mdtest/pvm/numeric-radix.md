@@ -61,15 +61,16 @@ one numeric literal whose text is "42"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [7], nodes: [
+main::__PROGRAM__: {start: 0, returns: [8], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: integer, value: "42"}, ~, ~, Int], # 2
   [Coerce, {from_repr: Int, to_repr: Str}, [2], ~, Str], # 3
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
   [Concat, ~, [3, 4], ~, Str], # 5
-  [Print, ~, [5], 0, Scalar], # 6
-  [Return, {implicit: true}, [1], 6]]} # 7
+  [Print, ~, [5], 0, "Maybe[Boolean]"], # 6
+  [MemStart], # 7
+  [Return, {implicit: true}, [1], 6, ~, 7]]} # 8
 ```
 
 ## Binary: the `0b` prefix
@@ -106,15 +107,16 @@ no operator whose text is "b"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [7], nodes: [
+main::__PROGRAM__: {start: 0, returns: [8], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: integer, value: "10"}, ~, ~, Int], # 2
   [Coerce, {from_repr: Int, to_repr: Str}, [2], ~, Str], # 3
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
   [Concat, ~, [3, 4], ~, Str], # 5
-  [Print, ~, [5], 0, Scalar], # 6
-  [Return, {implicit: true}, [1], 6]]} # 7
+  [Print, ~, [5], 0, "Maybe[Boolean]"], # 6
+  [MemStart], # 7
+  [Return, {implicit: true}, [1], 6, ~, 7]]} # 8
 ```
 
 ## Hexadecimal: the `0x` prefix
@@ -153,15 +155,16 @@ no word whose text is "xff"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [7], nodes: [
+main::__PROGRAM__: {start: 0, returns: [8], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: integer, value: "255"}, ~, ~, Int], # 2
   [Coerce, {from_repr: Int, to_repr: Str}, [2], ~, Str], # 3
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
   [Concat, ~, [3, 4], ~, Str], # 5
-  [Print, ~, [5], 0, Scalar], # 6
-  [Return, {implicit: true}, [1], 6]]} # 7
+  [Print, ~, [5], 0, "Maybe[Boolean]"], # 6
+  [MemStart], # 7
+  [Return, {implicit: true}, [1], 6, ~, 7]]} # 8
 ```
 
 ## Octal by leading zero
@@ -199,15 +202,16 @@ no numeric literal whose text is "377"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [7], nodes: [
+main::__PROGRAM__: {start: 0, returns: [8], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: integer, value: "255"}, ~, ~, Int], # 2
   [Coerce, {from_repr: Int, to_repr: Str}, [2], ~, Str], # 3
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
   [Concat, ~, [3, 4], ~, Str], # 5
-  [Print, ~, [5], 0, Scalar], # 6
-  [Return, {implicit: true}, [1], 6]]} # 7
+  [Print, ~, [5], 0, "Maybe[Boolean]"], # 6
+  [MemStart], # 7
+  [Return, {implicit: true}, [1], 6, ~, 7]]} # 8
 ```
 
 ## Octal by the `0o` prefix
@@ -245,15 +249,16 @@ no word whose text is "o377"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [7], nodes: [
+main::__PROGRAM__: {start: 0, returns: [8], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: integer, value: "255"}, ~, ~, Int], # 2
   [Coerce, {from_repr: Int, to_repr: Str}, [2], ~, Str], # 3
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
   [Concat, ~, [3, 4], ~, Str], # 5
-  [Print, ~, [5], 0, Scalar], # 6
-  [Return, {implicit: true}, [1], 6]]} # 7
+  [Print, ~, [5], 0, "Maybe[Boolean]"], # 6
+  [MemStart], # 7
+  [Return, {implicit: true}, [1], 6, ~, 7]]} # 8
 ```
 
 ## Underscore separators
@@ -295,13 +300,14 @@ no word whose text is "_294_967_296"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [7], nodes: [
+main::__PROGRAM__: {start: 0, returns: [8], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: integer, value: "4294967296"}, ~, ~, Int], # 2
   [Coerce, {from_repr: Int, to_repr: Str}, [2], ~, Str], # 3
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
   [Concat, ~, [3, 4], ~, Str], # 5
-  [Print, ~, [5], 0, Scalar], # 6
-  [Return, {implicit: true}, [1], 6]]} # 7
+  [Print, ~, [5], 0, "Maybe[Boolean]"], # 6
+  [MemStart], # 7
+  [Return, {implicit: true}, [1], 6, ~, 7]]} # 8
 ```

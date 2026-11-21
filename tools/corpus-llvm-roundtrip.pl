@@ -33,7 +33,7 @@ use CorpusLlvmCause;
 
 # chalk's bson/llvm-corpus branch, where the backend work for this census
 # lands -- not the chalk-lib census's 5948f648, which stays put.
-my $COMMIT  = '8c512c2e';
+my $COMMIT  = 'a1e31bc2';   # wire v2 stage 6 (v2 only)
 my $jobs    = 8;
 my $verbose = 0;
 my $timeout = 60;

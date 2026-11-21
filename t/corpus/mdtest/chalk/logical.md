@@ -64,31 +64,33 @@ L: GREEN
 ```
 
 ```son
-main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, {implicit: true}, [1], 0]]} # 2
-main::corpus_case: {start: 0, returns: [7], nodes: [
+  [MemStart], # 2
+  [Return, {implicit: true}, [1], 0, ~, 2]]} # 3
+main::corpus_case: {start: 0, returns: [8], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 1
   [Constant, {const_type: integer, value: "7"}, ~, ~, Int], # 2
   [And, ~, [1, 2], ~, Int], # 3
   [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
-  [Print, ~, [4, 5], 0, Scalar], # 6
-  [Return, {implicit: true}, [6], 6]]} # 7
+  [Print, ~, [4, 5], 0, "Maybe[Boolean]"], # 6
+  [MemStart], # 7
+  [Return, {implicit: true}, [6], 6, ~, 7]]} # 8
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 ```
 
 ## L2 logical or
@@ -125,31 +127,33 @@ L: GREEN
 ```
 
 ```son
-main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, {implicit: true}, [1], 0]]} # 2
-main::corpus_case: {start: 0, returns: [7], nodes: [
+  [MemStart], # 2
+  [Return, {implicit: true}, [1], 0, ~, 2]]} # 3
+main::corpus_case: {start: 0, returns: [8], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 1
   [Constant, {const_type: integer, value: "7"}, ~, ~, Int], # 2
   [Or, ~, [1, 2], ~, Int], # 3
   [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
-  [Print, ~, [4, 5], 0, Scalar], # 6
-  [Return, {implicit: true}, [6], 6]]} # 7
+  [Print, ~, [4, 5], 0, "Maybe[Boolean]"], # 6
+  [MemStart], # 7
+  [Return, {implicit: true}, [6], 6, ~, 7]]} # 8
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 ```
 
 ## L3 defined-or
@@ -201,31 +205,33 @@ L: GREEN
 ```
 
 ```son
-main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, {implicit: true}, [1], 0]]} # 2
-main::corpus_case: {start: 0, returns: [7], nodes: [
+  [MemStart], # 2
+  [Return, {implicit: true}, [1], 0, ~, 2]]} # 3
+main::corpus_case: {start: 0, returns: [8], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 1
   [Constant, {const_type: integer, value: "7"}, ~, ~, Int], # 2
   [DefinedOr, ~, [1, 2], ~, Int], # 3
   [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
-  [Print, ~, [4, 5], 0, Scalar], # 6
-  [Return, {implicit: true}, [6], 6]]} # 7
+  [Print, ~, [4, 5], 0, "Maybe[Boolean]"], # 6
+  [MemStart], # 7
+  [Return, {implicit: true}, [6], 6, ~, 7]]} # 8
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 ```
 
 ## L3b defined-or undef-left
@@ -275,31 +281,33 @@ L: GREEN
 ```
 
 ```son
-main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, {implicit: true}, [1], 0]]} # 2
-main::corpus_case: {start: 0, returns: [7], nodes: [
+  [MemStart], # 2
+  [Return, {implicit: true}, [1], 0, ~, 2]]} # 3
+main::corpus_case: {start: 0, returns: [8], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: integer, value: "7"}, ~, ~, Int], # 2
-  [DefinedOr, ~, [1, 2], ~, Scalar], # 3
+  [DefinedOr, ~, [1, 2], ~, "Maybe[Int]"], # 3
   [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
-  [Print, ~, [4, 5], 0, Scalar], # 6
-  [Return, {implicit: true}, [6], 6]]} # 7
+  [Print, ~, [4, 5], 0, "Maybe[Boolean]"], # 6
+  [MemStart], # 7
+  [Return, {implicit: true}, [6], 6, ~, 7]]} # 8
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 ```
 
 ## L3c defined-or with an early-return fallback
@@ -363,11 +371,12 @@ L: GREEN
 ```
 
 ```son
-main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, {implicit: true}, [1], 0]]} # 2
-main::corpus_case: {start: 0, returns: [15], nodes: [
+  [MemStart], # 2
+  [Return, {implicit: true}, [1], 0, ~, 2]]} # 3
+main::corpus_case: {start: 0, returns: [16], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "99"}, ~, ~, Int], # 1
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 2
@@ -379,23 +388,24 @@ main::corpus_case: {start: 0, returns: [15], nodes: [
   [Not, ~, [7], ~, Boolean], # 8
   [If, ~, [0, 8], 0], # 9
   [Proj, {index: 1}, [9]], # 10
-  [Print, ~, [5, 6], 10, Scalar], # 11
+  [Print, ~, [5, 6], 10, "Maybe[Boolean]"], # 11
   [Proj, {index: 0}, [9]], # 12
   [Region, {head: 9}, [12, 11]], # 13
   [Phi, {predecessors: [12, 10], region: 13}, [1, 11], ~, Scalar], # 14
-  [Return, ~, [14], 13]]} # 15
+  [MemStart], # 15
+  [Return, ~, [14], 13, ~, 15]]} # 16
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 ```
 
 THE ACCEPTANCE CRITERION THIS CASE CARRIED IS MET (2026-09-03). Its GAP said
@@ -458,11 +468,12 @@ L: GREEN
 ```
 
 ```son
-main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, {implicit: true}, [1], 0]]} # 2
-main::corpus_case: {start: 0, returns: [12], nodes: [
+  [MemStart], # 2
+  [Return, {implicit: true}, [1], 0, ~, 2]]} # 3
+main::corpus_case: {start: 0, returns: [13], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
   [Coerce, {from_repr: Int, to_repr: Str}, [1], ~, Str], # 2
@@ -472,22 +483,23 @@ main::corpus_case: {start: 0, returns: [12], nodes: [
   [Proj, {index: 1}, [5]], # 6
   [Constant, {const_type: string, value: "y\n"}, ~, ~, Str], # 7
   [Proj, {index: 0}, [5]], # 8
-  [Print, ~, [7], 8, Scalar], # 9
+  [Print, ~, [7], 8, "Maybe[Boolean]"], # 9
   [Region, {head: 5}, [6, 9]], # 10
-  [Print, ~, [2, 3], 10, Scalar], # 11
-  [Return, {implicit: true}, [11], 11]]} # 12
+  [Print, ~, [2, 3], 10, "Maybe[Boolean]"], # 11
+  [MemStart], # 12
+  [Return, {implicit: true}, [11], 11, ~, 12]]} # 13
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 ```
 
 ## L5b void print in a false && arm (does not fire)
@@ -523,11 +535,12 @@ L: GREEN
 ```
 
 ```son
-main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, {implicit: true}, [1], 0]]} # 2
-main::corpus_case: {start: 0, returns: [12], nodes: [
+  [MemStart], # 2
+  [Return, {implicit: true}, [1], 0, ~, 2]]} # 3
+main::corpus_case: {start: 0, returns: [13], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
   [Coerce, {from_repr: Int, to_repr: Str}, [1], ~, Str], # 2
@@ -537,22 +550,23 @@ main::corpus_case: {start: 0, returns: [12], nodes: [
   [Proj, {index: 1}, [5]], # 6
   [Constant, {const_type: string, value: "y\n"}, ~, ~, Str], # 7
   [Proj, {index: 0}, [5]], # 8
-  [Print, ~, [7], 8, Scalar], # 9
+  [Print, ~, [7], 8, "Maybe[Boolean]"], # 9
   [Region, {head: 5}, [6, 9]], # 10
-  [Print, ~, [2, 3], 10, Scalar], # 11
-  [Return, {implicit: true}, [11], 11]]} # 12
+  [Print, ~, [2, 3], 10, "Maybe[Boolean]"], # 11
+  [MemStart], # 12
+  [Return, {implicit: true}, [11], 11, ~, 12]]} # 13
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 ```
 
 ## L5c void print in a false || arm (fires when left is false)
@@ -590,11 +604,12 @@ L: GREEN
 ```
 
 ```son
-main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, {implicit: true}, [1], 0]]} # 2
-main::corpus_case: {start: 0, returns: [12], nodes: [
+  [MemStart], # 2
+  [Return, {implicit: true}, [1], 0, ~, 2]]} # 3
+main::corpus_case: {start: 0, returns: [13], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
   [Coerce, {from_repr: Int, to_repr: Str}, [1], ~, Str], # 2
@@ -604,22 +619,23 @@ main::corpus_case: {start: 0, returns: [12], nodes: [
   [Proj, {index: 0}, [5]], # 6
   [Constant, {const_type: string, value: "y\n"}, ~, ~, Str], # 7
   [Proj, {index: 1}, [5]], # 8
-  [Print, ~, [7], 8, Scalar], # 9
+  [Print, ~, [7], 8, "Maybe[Boolean]"], # 9
   [Region, {head: 5}, [6, 9]], # 10
-  [Print, ~, [2, 3], 10, Scalar], # 11
-  [Return, {implicit: true}, [11], 11]]} # 12
+  [Print, ~, [2, 3], 10, "Maybe[Boolean]"], # 11
+  [MemStart], # 12
+  [Return, {implicit: true}, [11], 11, ~, 12]]} # 13
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 ```
 
 ## L5d last-statement `&&` with a print arm (Boolean operands, WANT=0)
@@ -676,37 +692,39 @@ L: GREEN
 ```
 
 ```son
-main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, {implicit: true}, [1], 0]]} # 2
-main::corpus_case: {start: 0, returns: [13], nodes: [
+  [MemStart], # 2
+  [Return, {implicit: true}, [1], 0, ~, 2]]} # 3
+main::corpus_case: {start: 0, returns: [14], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: a}, ~, ~, Str], # 1
   [StrEq, ~, [1, 1], ~, Boolean], # 2
   [Constant, {const_type: string, value: "y\n"}, ~, ~, Str], # 3
   [If, ~, [0, 2], 0], # 4
   [Proj, {index: 0}, [4]], # 5
-  [Print, ~, [3], 5, Scalar], # 6
-  [And, ~, [2, 6], ~, Scalar], # 7
+  [Print, ~, [3], 5, "Maybe[Boolean]"], # 6
+  [And, ~, [2, 6], ~, "Maybe[Boolean]"], # 7
   [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
   [Proj, {index: 1}, [4]], # 10
   [Region, {head: 4}, [10, 6]], # 11
-  [Print, ~, [8, 9], 11, Scalar], # 12
-  [Return, {implicit: true}, [12], 12]]} # 13
+  [Print, ~, [8, 9], 11, "Maybe[Boolean]"], # 12
+  [MemStart], # 13
+  [Return, {implicit: true}, [12], 12, ~, 13]]} # 14
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 ```
 
 ## L5e last-statement `||` with a print arm (Boolean operands, WANT=0)
@@ -756,37 +774,39 @@ L: GREEN
 ```
 
 ```son
-main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, {implicit: true}, [1], 0]]} # 2
-main::corpus_case: {start: 0, returns: [13], nodes: [
+  [MemStart], # 2
+  [Return, {implicit: true}, [1], 0, ~, 2]]} # 3
+main::corpus_case: {start: 0, returns: [14], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: a}, ~, ~, Str], # 1
   [StrNe, ~, [1, 1], ~, Boolean], # 2
   [Constant, {const_type: string, value: "y\n"}, ~, ~, Str], # 3
   [If, ~, [0, 2], 0], # 4
   [Proj, {index: 1}, [4]], # 5
-  [Print, ~, [3], 5, Scalar], # 6
-  [Or, ~, [2, 6], ~, Scalar], # 7
+  [Print, ~, [3], 5, "Maybe[Boolean]"], # 6
+  [Or, ~, [2, 6], ~, "Maybe[Boolean]"], # 7
   [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
   [Proj, {index: 0}, [4]], # 10
   [Region, {head: 4}, [10, 6]], # 11
-  [Print, ~, [8, 9], 11, Scalar], # 12
-  [Return, {implicit: true}, [12], 12]]} # 13
+  [Print, ~, [8, 9], 11, "Maybe[Boolean]"], # 12
+  [MemStart], # 13
+  [Return, {implicit: true}, [12], 12, ~, 13]]} # 14
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 ```
 
 ## L4 not
@@ -841,30 +861,32 @@ L: GREEN
 ```
 
 ```son
-main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, {implicit: true}, [1], 0]]} # 2
-main::corpus_case: {start: 0, returns: [6], nodes: [
+  [MemStart], # 2
+  [Return, {implicit: true}, [1], 0, ~, 2]]} # 3
+main::corpus_case: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 1
   [Not, ~, [1], ~, Boolean], # 2
   [Coerce, {from_repr: Boolean, to_repr: Str}, [2], ~, Str], # 3
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
-  [Print, ~, [3, 4], 0, Scalar], # 5
-  [Return, {implicit: true}, [5], 5]]} # 6
+  [Print, ~, [3, 4], 0, "Maybe[Boolean]"], # 5
+  [MemStart], # 6
+  [Return, {implicit: true}, [5], 5, ~, 6]]} # 7
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 ```
 
 ## L6 string equality (eq) — t/base blocker (if.t/num.t string compare)
@@ -908,11 +930,12 @@ L: GREEN
 ```
 
 ```son
-main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, {implicit: true}, [1], 0]]} # 2
-main::corpus_case: {start: 0, returns: [9], nodes: [
+  [MemStart], # 2
+  [Return, {implicit: true}, [1], 0, ~, 2]]} # 3
+main::corpus_case: {start: 0, returns: [10], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: x}, ~, ~, Str], # 1
   [StrEq, ~, [1, 1], ~, Boolean], # 2
@@ -921,20 +944,21 @@ main::corpus_case: {start: 0, returns: [9], nodes: [
   [TernaryExpr, ~, [2, 3, 4], ~, Int], # 5
   [Coerce, {from_repr: Int, to_repr: Str}, [5], ~, Str], # 6
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 7
-  [Print, ~, [6, 7], 0, Scalar], # 8
-  [Return, {implicit: true}, [8], 8]]} # 9
+  [Print, ~, [6, 7], 0, "Maybe[Boolean]"], # 8
+  [MemStart], # 9
+  [Return, {implicit: true}, [8], 8, ~, 9]]} # 10
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 ```
 
 ## L6b string equality — unequal same-length (eq is false)
@@ -974,11 +998,12 @@ L: GREEN
 ```
 
 ```son
-main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, {implicit: true}, [1], 0]]} # 2
-main::corpus_case: {start: 0, returns: [10], nodes: [
+  [MemStart], # 2
+  [Return, {implicit: true}, [1], 0, ~, 2]]} # 3
+main::corpus_case: {start: 0, returns: [11], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: x}, ~, ~, Str], # 1
   [Constant, {const_type: string, value: "y"}, ~, ~, Str], # 2
@@ -988,20 +1013,21 @@ main::corpus_case: {start: 0, returns: [10], nodes: [
   [TernaryExpr, ~, [3, 4, 5], ~, Int], # 6
   [Coerce, {from_repr: Int, to_repr: Str}, [6], ~, Str], # 7
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
-  [Print, ~, [7, 8], 0, Scalar], # 9
-  [Return, {implicit: true}, [9], 9]]} # 10
+  [Print, ~, [7, 8], 0, "Maybe[Boolean]"], # 9
+  [MemStart], # 10
+  [Return, {implicit: true}, [9], 9, ~, 10]]} # 11
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 ```
 
 ## L6c string equality — different length (length guard, eq is false)
@@ -1042,11 +1068,12 @@ L: GREEN
 ```
 
 ```son
-main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, {implicit: true}, [1], 0]]} # 2
-main::corpus_case: {start: 0, returns: [10], nodes: [
+  [MemStart], # 2
+  [Return, {implicit: true}, [1], 0, ~, 2]]} # 3
+main::corpus_case: {start: 0, returns: [11], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: ab}, ~, ~, Str], # 1
   [Constant, {const_type: string, value: abc}, ~, ~, Str], # 2
@@ -1056,20 +1083,21 @@ main::corpus_case: {start: 0, returns: [10], nodes: [
   [TernaryExpr, ~, [3, 4, 5], ~, Int], # 6
   [Coerce, {from_repr: Int, to_repr: Str}, [6], ~, Str], # 7
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
-  [Print, ~, [7, 8], 0, Scalar], # 9
-  [Return, {implicit: true}, [9], 9]]} # 10
+  [Print, ~, [7, 8], 0, "Maybe[Boolean]"], # 9
+  [MemStart], # 10
+  [Return, {implicit: true}, [9], 9, ~, 10]]} # 11
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 ```
 
 ## L6d string equality with an INT operand (`$a eq "1"`, t/base/num.t blocker)
@@ -1111,11 +1139,12 @@ L: GREEN
 ```
 
 ```son
-main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, {implicit: true}, [1], 0]]} # 2
-main::corpus_case: {start: 0, returns: [10], nodes: [
+  [MemStart], # 2
+  [Return, {implicit: true}, [1], 0, ~, 2]]} # 3
+main::corpus_case: {start: 0, returns: [11], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
   [Coerce, {from_repr: Int, to_repr: Str}, [1], ~, Str], # 2
@@ -1125,20 +1154,21 @@ main::corpus_case: {start: 0, returns: [10], nodes: [
   [TernaryExpr, ~, [4, 1, 5], ~, Int], # 6
   [Coerce, {from_repr: Int, to_repr: Str}, [6], ~, Str], # 7
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
-  [Print, ~, [7, 8], 0, Scalar], # 9
-  [Return, {implicit: true}, [9], 9]]} # 10
+  [Print, ~, [7, 8], 0, "Maybe[Boolean]"], # 9
+  [MemStart], # 10
+  [Return, {implicit: true}, [9], 9, ~, 10]]} # 11
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 ```
 
 ## L6e int-eq is a real byte compare (negative int, and a mismatch is false)
@@ -1178,11 +1208,12 @@ L: GREEN
 ```
 
 ```son
-main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, {implicit: true}, [1], 0]]} # 2
-main::corpus_case: {start: 0, returns: [10], nodes: [
+  [MemStart], # 2
+  [Return, {implicit: true}, [1], 0, ~, 2]]} # 3
+main::corpus_case: {start: 0, returns: [11], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
   [Coerce, {from_repr: Int, to_repr: Str}, [1], ~, Str], # 2
@@ -1192,20 +1223,21 @@ main::corpus_case: {start: 0, returns: [10], nodes: [
   [TernaryExpr, ~, [4, 1, 5], ~, Int], # 6
   [Coerce, {from_repr: Int, to_repr: Str}, [6], ~, Str], # 7
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
-  [Print, ~, [7, 8], 0, Scalar], # 9
-  [Return, {implicit: true}, [9], 9]]} # 10
+  [Print, ~, [7, 8], 0, "Maybe[Boolean]"], # 9
+  [MemStart], # 10
+  [Return, {implicit: true}, [9], 9, ~, 10]]} # 11
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 ```
 
 ## L7 string inequality (ne) — t/base blocker
@@ -1245,11 +1277,12 @@ L: GREEN
 ```
 
 ```son
-main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, {implicit: true}, [1], 0]]} # 2
-main::corpus_case: {start: 0, returns: [10], nodes: [
+  [MemStart], # 2
+  [Return, {implicit: true}, [1], 0, ~, 2]]} # 3
+main::corpus_case: {start: 0, returns: [11], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: x}, ~, ~, Str], # 1
   [Constant, {const_type: string, value: "y"}, ~, ~, Str], # 2
@@ -1259,20 +1292,21 @@ main::corpus_case: {start: 0, returns: [10], nodes: [
   [TernaryExpr, ~, [3, 4, 5], ~, Int], # 6
   [Coerce, {from_repr: Int, to_repr: Str}, [6], ~, Str], # 7
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
-  [Print, ~, [7, 8], 0, Scalar], # 9
-  [Return, {implicit: true}, [9], 9]]} # 10
+  [Print, ~, [7, 8], 0, "Maybe[Boolean]"], # 9
+  [MemStart], # 10
+  [Return, {implicit: true}, [9], 9, ~, 10]]} # 11
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 ```
 
 ## L7b string inequality — equal strings (ne is false)
@@ -1312,11 +1346,12 @@ L: GREEN
 ```
 
 ```son
-main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, {implicit: true}, [1], 0]]} # 2
-main::corpus_case: {start: 0, returns: [9], nodes: [
+  [MemStart], # 2
+  [Return, {implicit: true}, [1], 0, ~, 2]]} # 3
+main::corpus_case: {start: 0, returns: [10], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: x}, ~, ~, Str], # 1
   [StrNe, ~, [1, 1], ~, Boolean], # 2
@@ -1325,20 +1360,21 @@ main::corpus_case: {start: 0, returns: [9], nodes: [
   [TernaryExpr, ~, [2, 3, 4], ~, Int], # 5
   [Coerce, {from_repr: Int, to_repr: Str}, [5], ~, Str], # 6
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 7
-  [Print, ~, [6, 7], 0, Scalar], # 8
-  [Return, {implicit: true}, [8], 8]]} # 9
+  [Print, ~, [6, 7], 0, "Maybe[Boolean]"], # 8
+  [MemStart], # 9
+  [Return, {implicit: true}, [8], 8, ~, 9]]} # 10
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 ```
 
 ## L9 numeric equality (==) over Str operands — t/base/cond.t blocker
@@ -1381,11 +1417,12 @@ L: GREEN
 ```
 
 ```son
-main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, {implicit: true}, [1], 0]]} # 2
-main::corpus_case: {start: 0, returns: [10], nodes: [
+  [MemStart], # 2
+  [Return, {implicit: true}, [1], 0, ~, 2]]} # 3
+main::corpus_case: {start: 0, returns: [11], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "0"}, ~, ~, Str], # 1
   [Coerce, {from_repr: Str, to_repr: Num}, [1], ~, Num], # 2
@@ -1395,20 +1432,21 @@ main::corpus_case: {start: 0, returns: [10], nodes: [
   [TernaryExpr, ~, [3, 4, 5], ~, Int], # 6
   [Coerce, {from_repr: Int, to_repr: Str}, [6], ~, Str], # 7
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
-  [Print, ~, [7, 8], 0, Scalar], # 9
-  [Return, {implicit: true}, [9], 9]]} # 10
+  [Print, ~, [7, 8], 0, "Maybe[Boolean]"], # 9
+  [MemStart], # 10
+  [Return, {implicit: true}, [9], 9, ~, 10]]} # 11
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 ```
 
 ## L9b numeric equality — byte-unequal but numerically equal (`" 3"` == `"3"`)
@@ -1446,11 +1484,12 @@ L: GREEN
 ```
 
 ```son
-main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, {implicit: true}, [1], 0]]} # 2
-main::corpus_case: {start: 0, returns: [12], nodes: [
+  [MemStart], # 2
+  [Return, {implicit: true}, [1], 0, ~, 2]]} # 3
+main::corpus_case: {start: 0, returns: [13], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: " 3"}, ~, ~, Str], # 1
   [Coerce, {from_repr: Str, to_repr: Num}, [1], ~, Num], # 2
@@ -1462,20 +1501,21 @@ main::corpus_case: {start: 0, returns: [12], nodes: [
   [TernaryExpr, ~, [5, 6, 7], ~, Int], # 8
   [Coerce, {from_repr: Int, to_repr: Str}, [8], ~, Str], # 9
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
-  [Print, ~, [9, 10], 0, Scalar], # 11
-  [Return, {implicit: true}, [11], 11]]} # 12
+  [Print, ~, [9, 10], 0, "Maybe[Boolean]"], # 11
+  [MemStart], # 12
+  [Return, {implicit: true}, [11], 11, ~, 12]]} # 13
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 ```
 
 ## L9c numeric inequality (!=) over Str operands (cond.t `$x != $x`)
@@ -1513,11 +1553,12 @@ L: GREEN
 ```
 
 ```son
-main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, {implicit: true}, [1], 0]]} # 2
-main::corpus_case: {start: 0, returns: [12], nodes: [
+  [MemStart], # 2
+  [Return, {implicit: true}, [1], 0, ~, 2]]} # 3
+main::corpus_case: {start: 0, returns: [13], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "0"}, ~, ~, Str], # 1
   [Coerce, {from_repr: Str, to_repr: Num}, [1], ~, Num], # 2
@@ -1529,20 +1570,21 @@ main::corpus_case: {start: 0, returns: [12], nodes: [
   [TernaryExpr, ~, [5, 6, 7], ~, Int], # 8
   [Coerce, {from_repr: Int, to_repr: Str}, [8], ~, Str], # 9
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
-  [Print, ~, [9, 10], 0, Scalar], # 11
-  [Return, {implicit: true}, [11], 11]]} # 12
+  [Print, ~, [9, 10], 0, "Maybe[Boolean]"], # 11
+  [MemStart], # 12
+  [Return, {implicit: true}, [11], 11, ~, 12]]} # 13
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 ```
 
 ## L8 void call in an `and` arm — t/ near-miss (simple form GREEN)
@@ -1585,11 +1627,12 @@ L: GREEN
 ```
 
 ```son
-main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, {implicit: true}, [1], 0]]} # 2
-main::corpus_case: {start: 0, returns: [11], nodes: [
+  [MemStart], # 2
+  [Return, {implicit: true}, [1], 0, ~, 2]]} # 3
+main::corpus_case: {start: 0, returns: [12], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
   [Coerce, {from_repr: Int, to_repr: Str}, [1], ~, Str], # 2
@@ -1598,22 +1641,23 @@ main::corpus_case: {start: 0, returns: [11], nodes: [
   [Proj, {index: 1}, [4]], # 5
   [Constant, {const_type: string, value: "y\n"}, ~, ~, Str], # 6
   [Proj, {index: 0}, [4]], # 7
-  [Print, ~, [6], 7, Scalar], # 8
+  [Print, ~, [6], 7, "Maybe[Boolean]"], # 8
   [Region, {head: 4}, [5, 8]], # 9
-  [Print, ~, [2, 3], 9, Scalar], # 10
-  [Return, {implicit: true}, [10], 10]]} # 11
+  [Print, ~, [2, 3], 9, "Maybe[Boolean]"], # 10
+  [MemStart], # 11
+  [Return, {implicit: true}, [10], 10, ~, 11]]} # 12
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 ```
 
 ## L6f `eq` coerces a NUM operand (t/base/num.t idiom)
@@ -1663,10 +1707,11 @@ L: GREEN
 ```
 
 ```son
-main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, {implicit: true}, [1], 0]]} # 2
+  [MemStart], # 2
+  [Return, {implicit: true}, [1], 0, ~, 2]]} # 3
 main::corpus_case: {start: 0, returns: [17], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
@@ -1675,29 +1720,29 @@ main::corpus_case: {start: 0, returns: [17], nodes: [
   [EntryDef, {package: main, sigil: $, symbol: a}, ~, ~, Scalar], # 4
   [Constant, {const_type: number, value: "0.1"}, ~, ~, Num], # 5
   [MemStart], # 6
-  [EntryWrite, ~, [4, 5, 6], 0, Unknown], # 7
-  [EntryDef, {package: main, sigil: $, symbol: a}, [7], ~, Num], # 8
+  [EntryWrite, ~, [4, 5], 0, Unknown, 6, true], # 7
+  [EntryDef, {package: main, sigil: $, symbol: a}, ~, ~, Num, 7], # 8
   [Coerce, {from_repr: Num, to_repr: Str}, [8], ~, Str], # 9
   [Constant, {const_type: string, value: "0.1"}, ~, ~, Str], # 10
   [StrEq, ~, [9, 10], ~, Boolean], # 11
   [Constant, {const_type: string, value: "y"}, ~, ~, Str], # 12
   [Constant, {const_type: string, value: "n"}, ~, ~, Str], # 13
   [TernaryExpr, ~, [11, 12, 13], ~, Str], # 14
-  [Print, ~, [14, 3], 7, Scalar], # 15
-  [Print, ~, [2, 3], 15, Scalar], # 16
-  [Return, {implicit: true}, [16], 16]]} # 17
+  [Print, ~, [14, 3], 7, "Maybe[Boolean]"], # 15
+  [Print, ~, [2, 3], 15, "Maybe[Boolean]"], # 16
+  [Return, {implicit: true}, [16], 16, ~, 7]]} # 17
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 ```
 
 ## L6g `eq` over a Num that does NOT match (bilateral)
@@ -1740,10 +1785,11 @@ L: GREEN
 ```
 
 ```son
-main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, {implicit: true}, [1], 0]]} # 2
+  [MemStart], # 2
+  [Return, {implicit: true}, [1], 0, ~, 2]]} # 3
 main::corpus_case: {start: 0, returns: [17], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
@@ -1752,29 +1798,29 @@ main::corpus_case: {start: 0, returns: [17], nodes: [
   [EntryDef, {package: main, sigil: $, symbol: a}, ~, ~, Scalar], # 4
   [Constant, {const_type: number, value: "0.1"}, ~, ~, Num], # 5
   [MemStart], # 6
-  [EntryWrite, ~, [4, 5, 6], 0, Unknown], # 7
-  [EntryDef, {package: main, sigil: $, symbol: a}, [7], ~, Num], # 8
+  [EntryWrite, ~, [4, 5], 0, Unknown, 6, true], # 7
+  [EntryDef, {package: main, sigil: $, symbol: a}, ~, ~, Num, 7], # 8
   [Coerce, {from_repr: Num, to_repr: Str}, [8], ~, Str], # 9
   [Constant, {const_type: string, value: "0.2"}, ~, ~, Str], # 10
   [StrEq, ~, [9, 10], ~, Boolean], # 11
   [Constant, {const_type: string, value: "y"}, ~, ~, Str], # 12
   [Constant, {const_type: string, value: "n"}, ~, ~, Str], # 13
   [TernaryExpr, ~, [11, 12, 13], ~, Str], # 14
-  [Print, ~, [14, 3], 7, Scalar], # 15
-  [Print, ~, [2, 3], 15, Scalar], # 16
-  [Return, {implicit: true}, [16], 16]]} # 17
+  [Print, ~, [14, 3], 7, "Maybe[Boolean]"], # 15
+  [Print, ~, [2, 3], 15, "Maybe[Boolean]"], # 16
+  [Return, {implicit: true}, [16], 16, ~, 7]]} # 17
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 ```
 
 ## L6h a Num whose value is INTEGRAL (1e3 stringifies as "1000")
@@ -1822,10 +1868,11 @@ L: GREEN
 ```
 
 ```son
-main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, {implicit: true}, [1], 0]]} # 2
+  [MemStart], # 2
+  [Return, {implicit: true}, [1], 0, ~, 2]]} # 3
 main::corpus_case: {start: 0, returns: [17], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
@@ -1834,29 +1881,29 @@ main::corpus_case: {start: 0, returns: [17], nodes: [
   [EntryDef, {package: main, sigil: $, symbol: a}, ~, ~, Scalar], # 4
   [Constant, {const_type: number, value: "1000"}, ~, ~, Num], # 5
   [MemStart], # 6
-  [EntryWrite, ~, [4, 5, 6], 0, Unknown], # 7
-  [EntryDef, {package: main, sigil: $, symbol: a}, [7], ~, Num], # 8
+  [EntryWrite, ~, [4, 5], 0, Unknown, 6, true], # 7
+  [EntryDef, {package: main, sigil: $, symbol: a}, ~, ~, Num, 7], # 8
   [Coerce, {from_repr: Num, to_repr: Str}, [8], ~, Str], # 9
   [Constant, {const_type: string, value: "1000"}, ~, ~, Str], # 10
   [StrEq, ~, [9, 10], ~, Boolean], # 11
   [Constant, {const_type: string, value: "y"}, ~, ~, Str], # 12
   [Constant, {const_type: string, value: "n"}, ~, ~, Str], # 13
   [TernaryExpr, ~, [11, 12, 13], ~, Str], # 14
-  [Print, ~, [14, 3], 7, Scalar], # 15
-  [Print, ~, [2, 3], 15, Scalar], # 16
-  [Return, {implicit: true}, [16], 16]]} # 17
+  [Print, ~, [14, 3], 7, "Maybe[Boolean]"], # 15
+  [Print, ~, [2, 3], 15, "Maybe[Boolean]"], # 16
+  [Return, {implicit: true}, [16], 16, ~, 7]]} # 17
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 ```
 
 ## L3d defined-or over an UNINITIALISED lexical
@@ -1932,34 +1979,36 @@ L: GREEN
 ```
 
 ```son
-main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, {implicit: true}, [1], 0]]} # 2
-main::corpus_case: {start: 0, returns: [10], nodes: [
+  [MemStart], # 2
+  [Return, {implicit: true}, [1], 0, ~, 2]]} # 3
+main::corpus_case: {start: 0, returns: [11], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
   [Coerce, {from_repr: Int, to_repr: Str}, [1], ~, Str], # 2
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 3
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 4
   [Constant, {const_type: integer, value: "9"}, ~, ~, Int], # 5
-  [DefinedOr, ~, [4, 5], ~, Scalar], # 6
+  [DefinedOr, ~, [4, 5], ~, "Maybe[Int]"], # 6
   [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
-  [Print, ~, [7, 3], 0, Scalar], # 8
-  [Print, ~, [2, 3], 8, Scalar], # 9
-  [Return, {implicit: true}, [9], 9]]} # 10
+  [Print, ~, [7, 3], 0, "Maybe[Boolean]"], # 8
+  [Print, ~, [2, 3], 8, "Maybe[Boolean]"], # 9
+  [MemStart], # 10
+  [Return, {implicit: true}, [9], 9, ~, 10]]} # 11
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 ```
 
 ## L3e defined-or whose LHS IS defined (bilateral)
@@ -1998,11 +2047,12 @@ L: GREEN
 ```
 
 ```son
-main::__PROGRAM__: {start: 0, returns: [2], nodes: [
+main::__PROGRAM__: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, {implicit: true}, [1], 0]]} # 2
-main::corpus_case: {start: 0, returns: [10], nodes: [
+  [MemStart], # 2
+  [Return, {implicit: true}, [1], 0, ~, 2]]} # 3
+main::corpus_case: {start: 0, returns: [11], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
   [Coerce, {from_repr: Int, to_repr: Str}, [1], ~, Str], # 2
@@ -2011,19 +2061,20 @@ main::corpus_case: {start: 0, returns: [10], nodes: [
   [Constant, {const_type: integer, value: "9"}, ~, ~, Int], # 5
   [DefinedOr, ~, [4, 5], ~, Int], # 6
   [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
-  [Print, ~, [7, 3], 0, Scalar], # 8
-  [Print, ~, [2, 3], 8, Scalar], # 9
-  [Return, {implicit: true}, [9], 9]]} # 10
+  [Print, ~, [7, 3], 0, "Maybe[Boolean]"], # 8
+  [Print, ~, [2, 3], 8, "Maybe[Boolean]"], # 9
+  [MemStart], # 10
+  [Return, {implicit: true}, [9], 9, ~, 10]]} # 11
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 ```

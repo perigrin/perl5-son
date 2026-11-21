@@ -88,25 +88,25 @@ main::__PROGRAM__: {start: 0, returns: [27], nodes: [
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 6
   [Call, {dispatch_kind: builtin, name: split, param_names: []}, [2, 5, 6], ~, List], # 7
   [MemStart], # 8
-  [Count, ~, [7, 8], ~, Int], # 9
+  [Count, ~, [7], ~, Int, 8], # 9
   [Coerce, {from_repr: Int, to_repr: Str}, [9], ~, Str], # 10
   [Constant, {const_type: string, value: " ["}, ~, ~, Str], # 11
-  [EntryDef, {package: main, sigil: $, symbol: "\""}, [8], ~, Scalar], # 12
+  [EntryDef, {package: main, sigil: $, symbol: "\""}, ~, ~, Scalar, 8], # 12
   [Coerce, {from_repr: Scalar, to_repr: Str}, [12], ~, Str], # 13
-  [Call, {dispatch_kind: builtin, memory_input: true, name: join, param_names: []}, [13, 7, 8], ~, Str], # 14
+  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [13, 7], ~, Str, 8], # 14
   [Concat, ~, [11, 14], ~, Str], # 15
   [Constant, {const_type: string, value: "] "}, ~, ~, Str], # 16
   [Concat, ~, [15, 16], ~, Str], # 17
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 18
   [Call, {dispatch_kind: builtin, name: split, param_names: []}, [18, 5, 6], ~, List], # 19
-  [Count, ~, [19, 8], ~, Int], # 20
+  [Count, ~, [19], ~, Int, 8], # 20
   [Coerce, {from_repr: Int, to_repr: Str}, [20], ~, Str], # 21
-  [Call, {dispatch_kind: builtin, memory_input: true, name: join, param_names: []}, [13, 19, 8], ~, Str], # 22
+  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [13, 19], ~, Str, 8], # 22
   [Concat, ~, [11, 22], ~, Str], # 23
   [Constant, {const_type: string, value: "]\n"}, ~, ~, Str], # 24
   [Concat, ~, [23, 24], ~, Str], # 25
-  [Print, ~, [10, 17, 21, 25], 0, Scalar], # 26
-  [Return, {implicit: true}, [1], 26]]} # 27
+  [Print, ~, [10, 17, 21, 25], 0, "Maybe[Boolean]"], # 26
+  [Return, {implicit: true}, [1], 26, ~, 8]]} # 27
 ```
 
 ## `pos` is a named operator in lvalue position
@@ -181,29 +181,29 @@ main::__PROGRAM__: {start: 0, returns: [27], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [PadAccess, {sigil: $, symbol: s}, [2], ~, Unknown], # 3
+  [PadAccess, {sigil: $, symbol: s}, ~, ~, Unknown, 2], # 3
   [EnvRead, {key: X}, ~, ~, Str], # 4
   [Constant, {const_type: string, value: abcabc}, ~, ~, Str], # 5
   [DefinedOr, ~, [4, 5], ~, Str], # 6
-  [Assign, ~, [3, 6], 0, Str], # 7
-  [PadAccess, {sigil: $, symbol: s}, [7], ~, Str], # 8
-  [RegexMatch, {flags: g, pattern: b}, [8], 7, Boolean], # 9
-  [PadAccess, {sigil: $, symbol: s}, [9], ~, Unknown], # 10
-  [Call, {dispatch_kind: builtin, name: pos, param_names: []}, [10], 9, Unknown], # 11
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [11], ~, Str], # 12
+  [Assign, ~, [3, 6], 0, Str, 2, true], # 7
+  [PadAccess, {sigil: $, symbol: s}, ~, ~, Str, 7], # 8
+  [RegexMatch, {flags: g, pattern: b}, [8], 7, Boolean, 7, true], # 9
+  [PadAccess, {sigil: $, symbol: s}, ~, ~, Unknown, 9], # 10
+  [Call, {dispatch_kind: builtin, name: pos, param_names: []}, [10], 9, Scalar, 9], # 11
+  [Coerce, {from_repr: Scalar, to_repr: Str}, [11], ~, Str], # 12
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 13
   [Concat, ~, [12, 13], ~, Str], # 14
-  [Call, {dispatch_kind: builtin, name: pos, param_names: []}, [10], ~, Unknown], # 15
+  [Call, {dispatch_kind: builtin, name: pos, param_names: []}, [10], ~, Scalar], # 15
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 16
-  [Assign, ~, [15, 16], 11, Int], # 17
-  [PadAccess, {sigil: $, symbol: s}, [17], ~, Str], # 18
-  [RegexMatch, {flags: g, pattern: b}, [18], 17, Boolean], # 19
-  [PadAccess, {sigil: $, symbol: s}, [19], ~, Unknown], # 20
-  [Call, {dispatch_kind: builtin, name: pos, param_names: []}, [20], 19, Unknown], # 21
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [21], ~, Str], # 22
+  [Assign, ~, [15, 16], 11, Int, 9, true], # 17
+  [PadAccess, {sigil: $, symbol: s}, ~, ~, Str, 17], # 18
+  [RegexMatch, {flags: g, pattern: b}, [18], 17, Boolean, 17, true], # 19
+  [PadAccess, {sigil: $, symbol: s}, ~, ~, Unknown, 19], # 20
+  [Call, {dispatch_kind: builtin, name: pos, param_names: []}, [20], 19, Scalar, 19], # 21
+  [Coerce, {from_repr: Scalar, to_repr: Str}, [21], ~, Str], # 22
   [Concat, ~, [14, 22], ~, Str], # 23
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 24
   [Concat, ~, [23, 24], ~, Str], # 25
-  [Print, ~, [25], 21, Scalar], # 26
-  [Return, {implicit: true}, [1], 26]]} # 27
+  [Print, ~, [25], 21, "Maybe[Boolean]"], # 26
+  [Return, {implicit: true}, [1], 26, ~, 19]]} # 27
 ```

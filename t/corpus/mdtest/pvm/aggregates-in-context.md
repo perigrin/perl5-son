@@ -58,15 +58,15 @@ main::__PROGRAM__: {start: 0, returns: [15], nodes: [
   [Constant, {const_type: integer, value: "30"}, ~, ~, Int], # 4
   [ArrayLiteral, {sigil: "@", symbol: a}, [2, 3, 4], ~, Array], # 5
   [MemStart], # 6
-  [Count, ~, [5, 6], ~, Int], # 7
+  [Count, ~, [5], ~, Int, 6], # 7
   [Coerce, {from_repr: Int, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 9
   [Concat, ~, [8, 9], ~, Str], # 10
   [Concat, ~, [10, 8], ~, Str], # 11
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 12
   [Concat, ~, [11, 12], ~, Str], # 13
-  [Print, ~, [13], 0, Scalar], # 14
-  [Return, {implicit: true}, [1], 14]]} # 15
+  [Print, ~, [13], 0, "Maybe[Boolean]"], # 14
+  [Return, {implicit: true}, [1], 14, ~, 6]]} # 15
 ```
 
 ## `"@a"` is a `join`, decided at compile time
@@ -109,7 +109,7 @@ main::__PROGRAM__: {start: 0, returns: [12], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [EntryDef, {package: main, sigil: $, symbol: "\""}, [2], ~, Scalar], # 3
+  [EntryDef, {package: main, sigil: $, symbol: "\""}, ~, ~, Scalar, 2], # 3
   [Coerce, {from_repr: Scalar, to_repr: Str}, [3], ~, Str], # 4
   [Constant, {const_type: string, value: x}, ~, ~, Str], # 5
   [Constant, {const_type: string, value: "y"}, ~, ~, Str], # 6
@@ -117,8 +117,8 @@ main::__PROGRAM__: {start: 0, returns: [12], nodes: [
   [Call, {dispatch_kind: builtin, name: join, param_names: []}, [4, 5, 6, 7], ~, Str], # 8
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
   [Concat, ~, [8, 9], ~, Str], # 10
-  [Print, ~, [10], 0, Scalar], # 11
-  [Return, {implicit: true}, [1], 11], # 12
+  [Print, ~, [10], 0, "Maybe[Boolean]"], # 11
+  [Return, {implicit: true}, [1], 11, ~, 2], # 12
   [ArrayLiteral, {sigil: "@", symbol: a}, [5, 6, 7], ~, Array]]} # 13
 ```
 
@@ -167,7 +167,7 @@ main::__PROGRAM__: {start: 0, returns: [16], nodes: [
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 4
   [Concat, ~, [3, 4], ~, Str], # 5
   [MemStart], # 6
-  [EntryDef, {package: main, sigil: $, symbol: "\""}, [6], ~, Scalar], # 7
+  [EntryDef, {package: main, sigil: $, symbol: "\""}, ~, ~, Scalar, 6], # 7
   [Coerce, {from_repr: Scalar, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: integer, value: "4"}, ~, ~, Int], # 9
   [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 10
@@ -175,7 +175,7 @@ main::__PROGRAM__: {start: 0, returns: [16], nodes: [
   [Concat, ~, [5, 11], ~, Str], # 12
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 13
   [Concat, ~, [12, 13], ~, Str], # 14
-  [Print, ~, [14], 0, Scalar], # 15
-  [Return, {implicit: true}, [1], 15], # 16
+  [Print, ~, [14], 0, "Maybe[Boolean]"], # 15
+  [Return, {implicit: true}, [1], 15, ~, 6], # 16
   [ArrayLiteral, {sigil: "@", symbol: all}, [9, 10, 2], ~, Array]]} # 17
 ```

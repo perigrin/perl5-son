@@ -76,7 +76,7 @@ main::__PROGRAM__: {start: 0, returns: [29], nodes: [
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 16
   [Phi, {region: 3}, [16, 33], ~, Int], # 17
   [MemStart], # 18
-  [Subscript, {kind: array}, [15, 17, 18], ~, Scalar], # 19
+  [Subscript, {kind: array}, [15, 17], ~, Scalar, 18], # 19
   [Coerce, {from_repr: Unknown, to_repr: Str}, [19], ~, Str], # 20
   [StrEq, ~, [20, 12], ~, Boolean], # 21
   [If, ~, [8, 21], 8], # 22
@@ -85,9 +85,9 @@ main::__PROGRAM__: {start: 0, returns: [29], nodes: [
   [If, ~, [23, 24], 23], # 25
   [Proj, {index: 0}, [25]], # 26
   [Region, {head: 3}, [4, 26]], # 27
-  [Print, ~, [2], 27, Scalar], # 28
-  [Return, {implicit: true}, [1], 28], # 29
-  [Count, ~, [15, 18], ~, Int], # 30
+  [Print, ~, [2], 27, "Maybe[Boolean]"], # 28
+  [Return, {implicit: true}, [1], 28, ~, 18], # 29
+  [Count, ~, [15], ~, Int, 18], # 30
   [NumGt, ~, [30, 17], 3, Boolean], # 31
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 32
   [Add, ~, [17, 32], ~, Int], # 33
@@ -96,7 +96,7 @@ main::__PROGRAM__: {start: 0, returns: [29], nodes: [
   [Coerce, {from_repr: Unknown, to_repr: Boolean}, [35], 6, Boolean], # 36
   [Proj, {index: 0}, [6]], # 37
   [Proj, {index: 1}, [25]], # 38
-  [Print, ~, [20], 38, Scalar], # 39
+  [Print, ~, [20], 38, "Maybe[Boolean]"], # 39
   [Proj, {index: 0}, [22]], # 40
   [Region, {head: 22}, [40, 39]]]} # 41
 ```
@@ -151,7 +151,7 @@ ace
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [35], nodes: [
+main::__PROGRAM__: {start: 0, returns: [36], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: "e\n"}, ~, ~, Str], # 2
@@ -164,17 +164,17 @@ main::__PROGRAM__: {start: 0, returns: [35], nodes: [
   [Constant, {const_type: string, value: c}, ~, ~, Str], # 9
   [Constant, {const_type: string, value: b}, ~, ~, Str], # 10
   [Constant, {const_type: string, value: a}, ~, ~, Str], # 11
-  [Print, ~, [11], 0, Scalar], # 12
+  [Print, ~, [11], 0, "Maybe[Boolean]"], # 12
   [EnvRead, {key: X}, ~, ~, Str], # 13
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 14
   [DefinedOr, ~, [13, 14], ~, Str], # 15
   [If, ~, [12, 15], 12], # 16
   [Proj, {index: 0}, [16]], # 17
-  [Print, ~, [10], 17, Scalar], # 18
+  [Print, ~, [10], 17, "Maybe[Boolean]"], # 18
   [Proj, {index: 1}, [16]], # 19
   [Region, ~, [18, 19]], # 20
   [Loop, {bound: each}, [20], 20], # 21
-  [Print, ~, [9], 21, Scalar], # 22
+  [Print, ~, [9], 21, "Maybe[Boolean]"], # 22
   [Constant, {const_type: string, value: SKIP}, ~, ~, Str], # 23
   [StrNe, ~, [7, 23], ~, Boolean], # 24
   [If, ~, [22, 24], 22], # 25
@@ -182,13 +182,14 @@ main::__PROGRAM__: {start: 0, returns: [35], nodes: [
   [StrEq, ~, [7, 6], ~, Boolean], # 27
   [If, ~, [26, 27], 26], # 28
   [Proj, {index: 1}, [28]], # 29
-  [Unwind, ~, [8], 29], # 30
-  [Print, ~, [3], 30, Scalar], # 31
-  [Proj, {index: 0}, [28]], # 32
-  [Region, ~, [31, 32]], # 33
-  [Print, ~, [2], 33, Scalar], # 34
-  [Return, {implicit: true}, [1], 34], # 35
-  [Proj, {index: 1}, [25]]]} # 36
+  [MemStart], # 30
+  [Unwind, {file: "/tmp/osrpJFXK1Z/case.pl", line: 8}, [8], 29, ~, 30], # 31
+  [Print, ~, [3], 31, "Maybe[Boolean]"], # 32
+  [Proj, {index: 0}, [28]], # 33
+  [Region, ~, [32, 33]], # 34
+  [Print, ~, [2], 34, "Maybe[Boolean]"], # 35
+  [Return, {implicit: true}, [1], 35, ~, 30], # 36
+  [Proj, {index: 1}, [25]]]} # 37
 ```
 
 ## A label AND a statement modifier on one jump
@@ -259,9 +260,9 @@ main::__PROGRAM__: {start: 0, returns: [28], nodes: [
   [Constant, {const_type: string, value: c}, ~, ~, Str], # 12
   [ArrayLiteral, {sigil: "@", symbol: l}, [10, 11, 12], ~, Array], # 13
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 14
-  [Phi, {region: 6}, [14, 38], ~, Int], # 15
+  [Phi, {region: 6}, [14, 36], ~, Int], # 15
   [MemStart], # 16
-  [Subscript, {kind: array}, [13, 15, 16], ~, Scalar], # 17
+  [Subscript, {kind: array}, [13, 15], ~, Scalar, 16], # 17
   [Coerce, {from_repr: Unknown, to_repr: Str}, [17], ~, Str], # 18
   [StrEq, ~, [18, 11], ~, Boolean], # 19
   [If, ~, [7, 19], 7], # 20
@@ -271,19 +272,19 @@ main::__PROGRAM__: {start: 0, returns: [28], nodes: [
   [If, ~, [21, 23], 21], # 24
   [Proj, {index: 0}, [24]], # 25
   [Region, {head: 3}, [4, 25]], # 26
-  [Print, ~, [2], 26, Scalar], # 27
-  [Return, {implicit: true}, [1], 27], # 28
-  [Count, ~, [13, 16], ~, Int], # 29
+  [Print, ~, [2], 26, "Maybe[Boolean]"], # 27
+  [Return, {implicit: true}, [1], 27, ~, 16], # 28
+  [Count, ~, [13], ~, Int, 16], # 29
   [Phi, {region: 3}, [14, 34], ~, Int], # 30
   [NumGt, ~, [29, 30], 3, Boolean], # 31
   [NumGt, ~, [29, 15], 6, Boolean], # 32
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 33
   [Add, ~, [30, 33], ~, Int], # 34
   [Proj, {index: 1}, [6]], # 35
-  [Region, {head: 6}, [35]], # 36
+  [Add, ~, [15, 33], ~, Int], # 36
   [Proj, {index: 1}, [24]], # 37
-  [Add, ~, [15, 33], ~, Int], # 38
-  [Proj, {index: 0}, [20]], # 39
-  [Region, {head: 3}, [36, 39]], # 40
-  [Print, ~, [18], 37, Scalar]]} # 41
+  [Print, ~, [18], 37, "Maybe[Boolean]"], # 38
+  [Region, {head: 6}, [35]], # 39
+  [Proj, {index: 0}, [20]], # 40
+  [Region, {head: 3}, [39, 40]]]} # 41
 ```

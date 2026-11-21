@@ -76,30 +76,37 @@ one word whose text is "state"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [11], nodes: [
+main::__PROGRAM__: {start: 0, returns: [16], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Call, {dispatch_kind: direct, name: main::c, param_names: [], want: scalar}, ~, 0, Scalar], # 2
-  [Region, {eval_entry: 0}, [2]], # 3
-  [Phi, {region: 3}, [2, 1], ~, Scalar], # 4
-  [Defined, ~, [4], ~, Boolean], # 5
-  [Constant, {const_type: string, value: ran}, ~, ~, Str], # 6
-  [Constant, {const_type: string, value: died}, ~, ~, Str], # 7
-  [TernaryExpr, ~, [5, 6, 7], ~, Str], # 8
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
-  [Print, ~, [8, 9], 3, Scalar], # 10
-  [Return, {implicit: true}, [1], 10]]} # 11
-main::c: {start: 0, returns: [9], nodes: [
+  [MemStart], # 2
+  [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 2], # 3
+  [Constant, {const_type: string, value: ""}, ~, ~, Str], # 4
+  [EntryWrite, ~, [3, 4], 0, Unknown, 2, true], # 5
+  [Call, {dispatch_kind: direct, eval_id: 1, file: "/tmp/osrpJFXK1Z/case.pl", line: 2, name: main::c, package: main, param_names: [], want: scalar}, ~, 5, Scalar, 5, true], # 6
+  [Region, {eval_entry: 0, eval_id: 1}, [6]], # 7
+  [Phi, {region: 7}, [6, 1], ~, Scalar], # 8
+  [Defined, ~, [8], ~, Boolean], # 9
+  [Constant, {const_type: string, value: ran}, ~, ~, Str], # 10
+  [Constant, {const_type: string, value: died}, ~, ~, Str], # 11
+  [TernaryExpr, ~, [9, 10, 11], ~, Str], # 12
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 13
+  [Print, ~, [12, 13], 7, "Maybe[Boolean]"], # 14
+  [Phi, {memory: true, region: 7}, [6], ~, Scalar], # 15
+  [Return, {implicit: true}, [1], 14, ~, 15]]} # 16
+main::c: {start: 0, returns: [11], nodes: [
   [Start], # 0
   [EntryDef, {package: main, sigil: $, symbol: "n"}, ~, ~, Scalar], # 1
-  [Call, {dispatch_kind: method, name: state, param_names: [], want: scalar}, [1], 0, Unknown], # 2
-  [EntryDef, {package: main, sigil: $, symbol: "n"}, [2], ~, Scalar], # 3
-  [Coerce, {from_repr: Scalar, to_repr: Num}, [3], ~, Num], # 4
-  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 5
-  [Add, ~, [4, 5], ~, Num], # 6
-  [EntryWrite, ~, [1, 6, 2], 2, Unknown], # 7
-  [EntryDef, {package: main, sigil: $, symbol: "n"}, [7], ~, Scalar], # 8
-  [Return, ~, [8], 7]]} # 9
+  [MemStart], # 2
+  [EntryDef, {package: main, sigil: $, symbol: "n"}, ~, ~, Scalar, 2], # 3
+  [Call, {dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 1, name: state, package: main, param_names: [], want: scalar}, [3], 0, Unknown, 2, true], # 4
+  [EntryDef, {package: main, sigil: $, symbol: "n"}, ~, ~, Scalar, 4], # 5
+  [Coerce, {from_repr: Scalar, to_repr: Num}, [5], ~, Num], # 6
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 7
+  [Add, ~, [6, 7], ~, Num], # 8
+  [EntryWrite, ~, [1, 8], 4, Unknown, 4, true], # 9
+  [EntryDef, {package: main, sigil: $, symbol: "n"}, ~, ~, Scalar, 9], # 10
+  [Return, ~, [10], 9, ~, 9]]} # 11
 ```
 
 ## `field` without the class feature is a method call
@@ -156,24 +163,28 @@ one word whose text is "field"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [16], nodes: [
+main::__PROGRAM__: {start: 0, returns: [20], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
   [MemStart], # 3
-  [PadAccess, {sigil: $, symbol: x}, [3], ~, Unknown], # 4
-  [Assign, ~, [4, 1], 0, Undef], # 5
-  [PadAccess, {sigil: $, symbol: x}, [5], ~, Unknown], # 6
-  [Call, {dispatch_kind: method, name: field, param_names: [], want: void}, [6], 5, Unknown], # 7
-  [Region, {eval_entry: 5}, [7]], # 8
-  [Phi, {region: 8}, [2, 1], ~, Scalar], # 9
-  [Defined, ~, [9], ~, Boolean], # 10
-  [Constant, {const_type: string, value: ran}, ~, ~, Str], # 11
-  [Constant, {const_type: string, value: died}, ~, ~, Str], # 12
-  [TernaryExpr, ~, [10, 11, 12], ~, Str], # 13
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 14
-  [Print, ~, [13, 14], 8, Scalar], # 15
-  [Return, {implicit: true}, [1], 15]]} # 16
+  [PadAccess, {sigil: $, symbol: x}, ~, ~, Unknown, 3], # 4
+  [Assign, ~, [4, 1], 0, Undef, 3, true], # 5
+  [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 5], # 6
+  [Constant, {const_type: string, value: ""}, ~, ~, Str], # 7
+  [EntryWrite, ~, [6, 7], 5, Unknown, 5, true], # 8
+  [PadAccess, {sigil: $, symbol: x}, ~, ~, Unknown, 8], # 9
+  [Call, {dispatch_kind: method, eval_id: 1, file: "/tmp/osrpJFXK1Z/case.pl", line: 2, name: field, package: main, param_names: [], want: void}, [9], 8, Unknown, 8, true], # 10
+  [Region, {eval_entry: 5, eval_id: 1}, [10]], # 11
+  [Phi, {region: 11}, [2, 1], ~, "Maybe[Int]"], # 12
+  [Defined, ~, [12], ~, Boolean], # 13
+  [Constant, {const_type: string, value: ran}, ~, ~, Str], # 14
+  [Constant, {const_type: string, value: died}, ~, ~, Str], # 15
+  [TernaryExpr, ~, [13, 14, 15], ~, Str], # 16
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 17
+  [Print, ~, [16, 17], 11, "Maybe[Boolean]"], # 18
+  [Phi, {memory: true, region: 11}, [10], ~, Unknown], # 19
+  [Return, {implicit: true}, [1], 18, ~, 19]]} # 20
 ```
 
 ## `__CLASS__` without the feature is a filehandle
@@ -231,11 +242,11 @@ main::__PROGRAM__: {start: 0, returns: [9], nodes: [
   [Constant, {const_type: string, value: "after\n"}, ~, ~, Str], # 2
   [Constant, {const_type: glob, value: __CLASS__}, ~, ~, Glob], # 3
   [MemStart], # 4
-  [EntryDef, {package: main, sigil: $, symbol: _}, [4], ~, Scalar], # 5
+  [EntryDef, {package: main, sigil: $, symbol: _}, ~, ~, Scalar, 4], # 5
   [Coerce, {from_repr: Unknown, to_repr: Str}, [5], ~, Str], # 6
-  [Print, {has_filehandle: true}, [3, 6], 0, Scalar], # 7
-  [Print, ~, [2], 7, Scalar], # 8
-  [Return, {implicit: true}, [1], 8]]} # 9
+  [Print, {has_filehandle: true}, [3, 6], 0, "Maybe[Boolean]"], # 7
+  [Print, ~, [2], 7, "Maybe[Boolean]"], # 8
+  [Return, {implicit: true}, [1], 8, ~, 4]]} # 9
 ```
 
 ## `defer` without its feature runs the block FIRST
@@ -321,20 +332,26 @@ one word whose text is "defer"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [6], nodes: [
+main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: "end\n"}, ~, ~, Str], # 2
-  [Call, {dispatch_kind: direct, name: main::f, param_names: [], want: void}, ~, 0, Unknown], # 3
-  [Region, {eval_entry: 0}, [3]], # 4
-  [Print, ~, [2], 4, Scalar], # 5
-  [Return, {implicit: true}, [1], 5]]} # 6
-main::f: {start: 0, returns: [6], nodes: [
+  [MemStart], # 3
+  [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 3], # 4
+  [Constant, {const_type: string, value: ""}, ~, ~, Str], # 5
+  [EntryWrite, ~, [4, 5], 0, Unknown, 3, true], # 6
+  [Call, {dispatch_kind: direct, eval_id: 1, file: "/tmp/osrpJFXK1Z/case.pl", line: 2, name: main::f, package: main, param_names: [], want: void}, ~, 6, Unknown, 6, true], # 7
+  [Region, {eval_entry: 0, eval_id: 1}, [7]], # 8
+  [Print, ~, [2], 8, "Maybe[Boolean]"], # 9
+  [Phi, {memory: true, region: 8}, [7], ~, Unknown], # 10
+  [Return, {implicit: true}, [1], 9, ~, 10]]} # 11
+main::f: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "D\n"}, ~, ~, Str], # 1
-  [Print, ~, [1], 0, Scalar], # 2
+  [Print, ~, [1], 0, "Maybe[Boolean]"], # 2
   [Constant, {const_type: string, value: "body\n"}, ~, ~, Str], # 3
-  [Print, ~, [3], 2, Scalar], # 4
-  [Call, {dispatch_kind: method, name: defer, param_names: []}, [2, 4], 4, Unknown], # 5
-  [Return, {implicit: true}, [5], 5]]} # 6
+  [Print, ~, [3], 2, "Maybe[Boolean]"], # 4
+  [MemStart], # 5
+  [Call, {dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 1, name: defer, package: main, param_names: []}, [2, 4], 4, Unknown, 5, true], # 6
+  [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 ```

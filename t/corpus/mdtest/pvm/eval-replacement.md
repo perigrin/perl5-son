@@ -65,19 +65,19 @@ main::__PROGRAM__: {start: 0, returns: [15], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [PadAccess, {sigil: $, symbol: s}, [2], ~, Unknown], # 3
+  [PadAccess, {sigil: $, symbol: s}, ~, ~, Unknown, 2], # 3
   [Constant, {const_type: string, value: abc}, ~, ~, Str], # 4
-  [Assign, ~, [3, 4], 0, Str], # 5
-  [PadAccess, {sigil: $, symbol: s}, [5], ~, Str], # 6
+  [Assign, ~, [3, 4], 0, Str, 2, true], # 5
+  [PadAccess, {sigil: $, symbol: s}, ~, ~, Str, 5], # 6
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 7
   [Add, ~, [7, 7], ~, Int], # 8
-  [RegexSubst, {flags: "", pattern: a, replacement: ""}, [6, 8, 5], 5, Str], # 9
-  [PadAccess, {sigil: $, symbol: s}, [9], ~, Str], # 10
+  [RegexSubst, {flags: "", pattern: a, replacement: ""}, [6, 8], 5, Str, 5, true], # 9
+  [PadAccess, {sigil: $, symbol: s}, ~, ~, Str, 9], # 10
   [Coerce, {from_repr: Unknown, to_repr: Str}, [10], ~, Str], # 11
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 12
   [Concat, ~, [11, 12], ~, Str], # 13
-  [Print, ~, [13], 9, Scalar], # 14
-  [Return, {implicit: true}, [1], 14], # 15
+  [Print, ~, [13], 9, "Maybe[Boolean]"], # 14
+  [Return, {implicit: true}, [1], 14, ~, 9], # 15
   [RegexMatch, {flags: "", pattern: a}, [6], ~, Boolean]]} # 16
 ```
 
@@ -119,8 +119,40 @@ no operator whose text is "*"
 ```
 
 ```ir
-refused: [
-  "skipped main::__PROGRAM__: GAP: a string eval with a lexical in scope ($s) can read or write it unseen by the graph"]
+main::__PROGRAM__: {start: 0, returns: [27], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [MemStart], # 2
+  [PadAccess, {sigil: $, symbol: s}, ~, ~, Unknown, 2], # 3
+  [Constant, {const_type: string, value: abc}, ~, ~, Str], # 4
+  [Assign, ~, [3, 4], 0, Str, 2, true], # 5
+  [PadAccess, {sigil: $, symbol: s}, ~, ~, Str, 5], # 6
+  [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 5], # 7
+  [Constant, {const_type: string, value: ""}, ~, ~, Str], # 8
+  [RegexMatch, {flags: "", pattern: b}, [6], ~, Boolean], # 9
+  [If, ~, [5, 9], 5], # 10
+  [Proj, {index: 0}, [10]], # 11
+  [EntryWrite, ~, [7, 8], 11, Unknown, 5, true], # 12
+  [Call, {dispatch_kind: direct, eval_id: 1, file: "/tmp/osrpJFXK1Z/case.pl", line: 3, name: main::__PROGRAM__::__EVAL__:3:1, package: main, param_names: [], string_eval: true, want: scalar}, ~, 12, Int, 12, true], # 13
+  [Region, {eval_entry: 11, eval_id: 1}, [13]], # 14
+  [Phi, {region: 14}, [13, 1], ~, "Maybe[Int]"], # 15
+  [Proj, {index: 1}, [10]], # 16
+  [Region, {head: 10}, [14, 16]], # 17
+  [Phi, {predecessors: [11, 16], region: 17}, [15, 1], ~, "Maybe[Int]"], # 18
+  [Phi, {memory: true, region: 14}, [13], ~, Int], # 19
+  [Phi, {memory: true, predecessors: [11, 16], region: 17}, [19, 5], ~, Str], # 20
+  [RegexSubst, {flags: "", pattern: b, replacement: ""}, [6, 18], 17, Str, 20, true], # 21
+  [PadAccess, {sigil: $, symbol: s}, ~, ~, Str, 21], # 22
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [22], ~, Str], # 23
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 24
+  [Concat, ~, [23, 24], ~, Str], # 25
+  [Print, ~, [25], 21, "Maybe[Boolean]"], # 26
+  [Return, {implicit: true}, [1], 26, ~, 21]]} # 27
+main::__PROGRAM__::__EVAL__:3:1: {start: 0, returns: [3], nodes: [
+  [Start], # 0
+  [Constant, {const_type: integer, value: "12"}, ~, ~, Int], # 1
+  [MemStart], # 2
+  [Return, {implicit: true}, [1], 0, ~, 2]]} # 3
 ```
 
 ## `eval STRING`: the re-entry with no delimiter
@@ -182,7 +214,7 @@ no operator whose text is "+"
 
 ```ir
 refused: [
-  "skipped main::__PROGRAM__: GAP: a string eval with a lexical in scope ($n) can read or write it unseen by the graph"]
+  "skipped main::__PROGRAM__: GAP: a string eval of code made at run time, with a lexical in scope ($n), can read or write it unseen by the graph"]
 ```
 
 ## `eval STRING` writes the lexical it shares a frame with
@@ -209,6 +241,34 @@ i=1
 ```
 
 ```ir
-refused: [
-  "skipped main::__PROGRAM__: GAP: a string eval with a lexical in scope ($i) can read or write it unseen by the graph"]
+main::__PROGRAM__: {start: 0, returns: [20], nodes: [
+  [Start], # 0
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
+  [Constant, {const_type: string, value: "i="}, ~, ~, Str], # 2
+  [MemStart], # 3
+  [PadAccess, {sigil: $, symbol: i}, ~, ~, Unknown, 3], # 4
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 5
+  [Assign, ~, [4, 5], 0, Int, 3, true], # 6
+  [MakeCell, {captured_written: true, cell_name: $i}, [1], 6, Ref, 6, true], # 7
+  [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 7], # 8
+  [Constant, {const_type: string, value: ""}, ~, ~, Str], # 9
+  [EntryWrite, ~, [8, 9], 7, Unknown, 7, true], # 10
+  [Call, {dispatch_kind: direct, eval_id: 1, file: "/tmp/osrpJFXK1Z/case.pl", line: 2, name: main::__PROGRAM__::__EVAL__:2:1, package: main, param_names: [], string_eval: true, want: void}, ~, 10, Int, 10, true], # 11
+  [Region, {eval_entry: 7, eval_id: 1}, [11]], # 12
+  [Phi, {memory: true, region: 12}, [11], ~, Int], # 13
+  [CellRead, ~, [7], ~, Unknown, 13], # 14
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [14], ~, Str], # 15
+  [Concat, ~, [2, 15], ~, Str], # 16
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 17
+  [Concat, ~, [16, 17], ~, Str], # 18
+  [Print, ~, [18], 12, "Maybe[Boolean]"], # 19
+  [Return, {implicit: true}, [1], 19, ~, 13], # 20
+  [AnonSub, {captures: [$i], name: main::__PROGRAM__::__EVAL__:2:1}, [7], ~, CodeRef]]} # 21
+main::__PROGRAM__::__EVAL__:2:1: {start: 0, returns: [5], nodes: [
+  [Start], # 0
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
+  [CellParam, {index: 0, name: $i}, ~, ~, Ref], # 2
+  [MemStart], # 3
+  [CellWrite, ~, [2, 1], 0, Scalar, 3, true], # 4
+  [Return, {implicit: true}, [1], 4, ~, 4]]} # 5
 ```

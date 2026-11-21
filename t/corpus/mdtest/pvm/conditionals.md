@@ -46,7 +46,7 @@ postfix
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [17], nodes: [
+main::__PROGRAM__: {start: 0, returns: [18], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [EnvRead, {key: X}, ~, ~, Str], # 2
@@ -56,15 +56,16 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [Proj, {index: 1}, [5]], # 6
   [Constant, {const_type: string, value: "block\n"}, ~, ~, Str], # 7
   [Proj, {index: 0}, [5]], # 8
-  [Print, ~, [7], 8, Scalar], # 9
+  [Print, ~, [7], 8, "Maybe[Boolean]"], # 9
   [Region, {head: 5}, [6, 9]], # 10
   [If, ~, [10, 4], 10], # 11
   [Proj, {index: 1}, [11]], # 12
   [Constant, {const_type: string, value: "postfix\n"}, ~, ~, Str], # 13
   [Proj, {index: 0}, [11]], # 14
-  [Print, ~, [13], 14, Scalar], # 15
+  [Print, ~, [13], 14, "Maybe[Boolean]"], # 15
   [Region, {head: 11}, [12, 15]], # 16
-  [Return, {implicit: true}, [1], 16]]} # 17
+  [MemStart], # 17
+  [Return, {implicit: true}, [1], 16, ~, 17]]} # 18
 ```
 
 ## `unless` is `or`, not an inverted `if`
@@ -96,7 +97,7 @@ postfix
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [17], nodes: [
+main::__PROGRAM__: {start: 0, returns: [18], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [EnvRead, {key: X}, ~, ~, Str], # 2
@@ -106,15 +107,16 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [Proj, {index: 0}, [5]], # 6
   [Constant, {const_type: string, value: "block\n"}, ~, ~, Str], # 7
   [Proj, {index: 1}, [5]], # 8
-  [Print, ~, [7], 8, Scalar], # 9
+  [Print, ~, [7], 8, "Maybe[Boolean]"], # 9
   [Region, {head: 5}, [6, 9]], # 10
   [If, ~, [10, 4], 10], # 11
   [Proj, {index: 0}, [11]], # 12
   [Constant, {const_type: string, value: "postfix\n"}, ~, ~, Str], # 13
   [Proj, {index: 1}, [11]], # 14
-  [Print, ~, [13], 14, Scalar], # 15
+  [Print, ~, [13], 14, "Maybe[Boolean]"], # 15
   [Region, {head: 11}, [12, 15]], # 16
-  [Return, {implicit: true}, [1], 16]]} # 17
+  [MemStart], # 17
+  [Return, {implicit: true}, [1], 16, ~, 17]]} # 18
 ```
 
 ## Adding an `else` changes the op
@@ -149,7 +151,7 @@ else
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [13], nodes: [
+main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: "taken\n"}, ~, ~, Str], # 2
@@ -158,12 +160,13 @@ main::__PROGRAM__: {start: 0, returns: [13], nodes: [
   [DefinedOr, ~, [3, 4], ~, Str], # 5
   [If, ~, [0, 5], 0], # 6
   [Proj, {index: 0}, [6]], # 7
-  [Print, ~, [2], 7, Scalar], # 8
+  [Print, ~, [2], 7, "Maybe[Boolean]"], # 8
   [Constant, {const_type: string, value: "else\n"}, ~, ~, Str], # 9
   [Proj, {index: 1}, [6]], # 10
-  [Print, ~, [9], 10, Scalar], # 11
+  [Print, ~, [9], 10, "Maybe[Boolean]"], # 11
   [Region, {head: 6}, [8, 11]], # 12
-  [Return, {implicit: true}, [1], 12]]} # 13
+  [MemStart], # 13
+  [Return, {implicit: true}, [1], 12, ~, 13]]} # 14
 ```
 
 ## `elsif` is a third form, not `else` followed by `if`
@@ -203,7 +206,7 @@ one word whose text is "else"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [23], nodes: [
+main::__PROGRAM__: {start: 0, returns: [24], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: "one\n"}, ~, ~, Str], # 2
@@ -215,17 +218,18 @@ main::__PROGRAM__: {start: 0, returns: [23], nodes: [
   [NumEq, ~, [6, 7], ~, Boolean], # 8
   [If, ~, [0, 8], 0], # 9
   [Proj, {index: 0}, [9]], # 10
-  [Print, ~, [2], 10, Scalar], # 11
+  [Print, ~, [2], 10, "Maybe[Boolean]"], # 11
   [Constant, {const_type: string, value: "zero\n"}, ~, ~, Str], # 12
   [Proj, {index: 1}, [9]], # 13
   [NumEq, ~, [6, 4], ~, Boolean], # 14
   [If, ~, [13, 14], 13], # 15
   [Proj, {index: 0}, [15]], # 16
-  [Print, ~, [12], 16, Scalar], # 17
+  [Print, ~, [12], 16, "Maybe[Boolean]"], # 17
   [Constant, {const_type: string, value: "other\n"}, ~, ~, Str], # 18
   [Proj, {index: 1}, [15]], # 19
-  [Print, ~, [18], 19, Scalar], # 20
+  [Print, ~, [18], 19, "Maybe[Boolean]"], # 20
   [Region, {head: 15}, [17, 20]], # 21
   [Region, {head: 9}, [11, 21]], # 22
-  [Return, {implicit: true}, [1], 22]]} # 23
+  [MemStart], # 23
+  [Return, {implicit: true}, [1], 22, ~, 23]]} # 24
 ```

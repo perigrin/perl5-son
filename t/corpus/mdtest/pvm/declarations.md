@@ -57,7 +57,7 @@ parses: yes
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [11], nodes: [
+main::__PROGRAM__: {start: 0, returns: [12], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
@@ -67,9 +67,10 @@ main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 6
   [Coerce, {from_repr: Int, to_repr: Str}, [6], ~, Str], # 7
   [Concat, ~, [7, 4], ~, Str], # 8
-  [Print, ~, [8], 0, Scalar], # 9
-  [Print, ~, [5], 9, Scalar], # 10
-  [Return, {implicit: true}, [1], 10]]} # 11
+  [Print, ~, [8], 0, "Maybe[Boolean]"], # 9
+  [Print, ~, [5], 9, "Maybe[Boolean]"], # 10
+  [MemStart], # 11
+  [Return, {implicit: true}, [1], 10, ~, 11]]} # 12
 ```
 
 ## `our` names a package variable, and the shadow proves it
@@ -116,8 +117,8 @@ main::__PROGRAM__: {start: 0, returns: [18], nodes: [
   [EntryDef, {package: main, sigil: $, symbol: x}, ~, ~, Scalar], # 2
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 3
   [MemStart], # 4
-  [EntryWrite, ~, [2, 3, 4], 0, Unknown], # 5
-  [EntryDef, {package: main, sigil: $, symbol: x}, [5], ~, Int], # 6
+  [EntryWrite, ~, [2, 3], 0, Unknown, 4, true], # 5
+  [EntryDef, {package: main, sigil: $, symbol: x}, ~, ~, Int, 5], # 6
   [Coerce, {from_repr: Int, to_repr: Str}, [6], ~, Str], # 7
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
   [Concat, ~, [7, 8], ~, Str], # 9
@@ -127,9 +128,9 @@ main::__PROGRAM__: {start: 0, returns: [18], nodes: [
   [Concat, ~, [11, 12], ~, Str], # 13
   [Concat, ~, [13, 7], ~, Str], # 14
   [Concat, ~, [14, 8], ~, Str], # 15
-  [Print, ~, [15], 5, Scalar], # 16
-  [Print, ~, [9], 16, Scalar], # 17
-  [Return, {implicit: true}, [1], 17]]} # 18
+  [Print, ~, [15], 5, "Maybe[Boolean]"], # 16
+  [Print, ~, [9], 16, "Maybe[Boolean]"], # 17
+  [Return, {implicit: true}, [1], 17, ~, 5]]} # 18
 ```
 
 ## `state` scopes like `my`, and initialises once
@@ -178,7 +179,7 @@ parses: yes
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [11], nodes: [
+main::__PROGRAM__: {start: 0, returns: [12], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
@@ -188,16 +189,17 @@ main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 6
   [Coerce, {from_repr: Int, to_repr: Str}, [6], ~, Str], # 7
   [Concat, ~, [7, 4], ~, Str], # 8
-  [Print, ~, [8], 0, Scalar], # 9
-  [Print, ~, [5], 9, Scalar], # 10
-  [Return, {implicit: true}, [1], 10]]} # 11
+  [Print, ~, [8], 0, "Maybe[Boolean]"], # 9
+  [Print, ~, [5], 9, "Maybe[Boolean]"], # 10
+  [MemStart], # 11
+  [Return, {implicit: true}, [1], 10, ~, 11]]} # 12
 "BEGIN 1": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: feature}, ~, ~, Str], # 1
   [Constant, {const_type: string, value: state}, ~, ~, Str], # 2
   [Constant, {const_type: string, value: feature.pm}, ~, ~, Str], # 3
   [MemStart], # 4
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
-  [Call, {class_name: feature, dispatch_kind: method, name: import, param_names: []}, [1, 2], 5, Unknown], # 6
-  [Return, {implicit: true}, [6], 6]]} # 7
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
+  [Call, {class_name: feature, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 ```

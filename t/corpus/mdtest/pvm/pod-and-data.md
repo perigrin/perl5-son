@@ -74,15 +74,16 @@ one pod block whose text is "=pod\n\nProse perl never compiles.\n\n=cut\n"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [7], nodes: [
+main::__PROGRAM__: {start: 0, returns: [8], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
   [Coerce, {from_repr: Int, to_repr: Str}, [2], ~, Str], # 3
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
   [Concat, ~, [3, 4], ~, Str], # 5
-  [Print, ~, [5], 0, Scalar], # 6
-  [Return, {implicit: true}, [1], 6]]} # 7
+  [Print, ~, [5], 0, "Maybe[Boolean]"], # 6
+  [MemStart], # 7
+  [Return, {implicit: true}, [1], 6, ~, 7]]} # 8
 ```
 
 ## A pod block holding text that is not a program
@@ -127,15 +128,16 @@ one pod block whose text is "=head1 NOT PERL\n\n$this is not( a variable; and th
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [7], nodes: [
+main::__PROGRAM__: {start: 0, returns: [8], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
   [Coerce, {from_repr: Int, to_repr: Str}, [2], ~, Str], # 3
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
   [Concat, ~, [3, 4], ~, Str], # 5
-  [Print, ~, [5], 0, Scalar], # 6
-  [Return, {implicit: true}, [1], 6]]} # 7
+  [Print, ~, [5], 0, "Maybe[Boolean]"], # 6
+  [MemStart], # 7
+  [Return, {implicit: true}, [1], 6, ~, 7]]} # 8
 ```
 
 ## A data section read back through `DATA`
@@ -192,15 +194,16 @@ one data section whose text is "__DATA__\none\ntwo\n"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [6], nodes: [
+main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: glob, value: DATA}, ~, ~, Glob], # 2
-  [Call, {dispatch_kind: builtin, name: readline, param_names: []}, [2], 0, List], # 3
-  [Coerce, {from_repr: List, to_repr: Str}, [3], ~, Str], # 4
-  [Print, ~, [4], 3, Scalar], # 5
-  [Return, {implicit: true}, [1], 5], # 6
-  [ArrayLiteral, {sigil: "@", symbol: lines}, [3], ~, Array]]} # 7
+  [MemStart], # 3
+  [Call, {dispatch_kind: builtin, name: readline, param_names: []}, [2], 0, List, 3, true], # 4
+  [Coerce, {from_repr: List, to_repr: Str}, [4], ~, Str], # 5
+  [Print, ~, [5], 4, "Maybe[Boolean]"], # 6
+  [Return, {implicit: true}, [1], 6, ~, 4], # 7
+  [ArrayLiteral, {sigil: "@", symbol: lines}, [4], ~, Array]]} # 8
 ```
 
 ## A data section holding bytes that are not a program
@@ -244,13 +247,14 @@ one data section whose text is "__DATA__\nsub not_compiled { $x <=> }\nq{ unbala
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [6], nodes: [
+main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: glob, value: DATA}, ~, ~, Glob], # 2
-  [Call, {dispatch_kind: builtin, name: readline, param_names: []}, [2], 0, List], # 3
-  [Coerce, {from_repr: List, to_repr: Str}, [3], ~, Str], # 4
-  [Print, ~, [4], 3, Scalar], # 5
-  [Return, {implicit: true}, [1], 5], # 6
-  [ArrayLiteral, {sigil: "@", symbol: lines}, [3], ~, Array]]} # 7
+  [MemStart], # 3
+  [Call, {dispatch_kind: builtin, name: readline, param_names: []}, [2], 0, List, 3, true], # 4
+  [Coerce, {from_repr: List, to_repr: Str}, [4], ~, Str], # 5
+  [Print, ~, [5], 4, "Maybe[Boolean]"], # 6
+  [Return, {implicit: true}, [1], 6, ~, 4], # 7
+  [ArrayLiteral, {sigil: "@", symbol: lines}, [4], ~, Array]]} # 8
 ```

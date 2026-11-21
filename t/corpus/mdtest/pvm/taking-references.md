@@ -54,18 +54,18 @@ main::__PROGRAM__: {start: 0, returns: [19], nodes: [
   [Ref, ~, [4], ~, ArrayRef], # 5
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 6
   [MemStart], # 7
-  [Subscript, {kind: array}, [5, 6, 7], ~, Scalar], # 8
+  [Subscript, {kind: array}, [5, 6], 0, Scalar, 7, true], # 8
   [Coerce, {from_repr: Unknown, to_repr: Str}, [8], ~, Str], # 9
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 10
   [Concat, ~, [9, 10], ~, Str], # 11
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 12
-  [Subscript, {kind: array}, [5, 12, 7], ~, Scalar], # 13
+  [Subscript, {kind: array}, [5, 12], 8, Scalar, 8, true], # 13
   [Coerce, {from_repr: Unknown, to_repr: Str}, [13], ~, Str], # 14
   [Concat, ~, [11, 14], ~, Str], # 15
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 16
   [Concat, ~, [15, 16], ~, Str], # 17
-  [Print, ~, [17], 0, Scalar], # 18
-  [Return, {implicit: true}, [1], 18]]} # 19
+  [Print, ~, [17], 13, "Maybe[Boolean]"], # 18
+  [Return, {implicit: true}, [1], 18, ~, 13]]} # 19
 ```
 
 ## The same backslash in list context
@@ -110,21 +110,21 @@ main::__PROGRAM__: {start: 0, returns: [19], nodes: [
   [Constant, {const_type: integer, value: "10"}, ~, ~, Int], # 2
   [Constant, {const_type: integer, value: "20"}, ~, ~, Int], # 3
   [ArrayLiteral, {sigil: "@", symbol: a}, [2, 3], ~, Array], # 4
-  [Ref, {each: true}, [4], ~, List], # 5
-  [ArrayLiteral, {sigil: "@", symbol: r}, [5], ~, Array], # 6
-  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 7
-  [MemStart], # 8
-  [Subscript, {kind: array}, [6, 7, 8], ~, Scalar], # 9
-  [PostfixDeref, {sigil: $}, [9, 8], ~, Scalar], # 10
+  [MemStart], # 5
+  [Ref, {each: true}, [4], 0, List, 5, true], # 6
+  [ArrayLiteral, {sigil: "@", symbol: r}, [6], ~, Array], # 7
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 8
+  [Subscript, {kind: array}, [7, 8], ~, Scalar, 6], # 9
+  [PostfixDeref, {eval_id: ~, file: "/tmp/osrpJFXK1Z/case.pl", line: 3, package: main, sigil: $, strict: false}, [9], 6, Scalar, 6, true], # 10
   [Coerce, {from_repr: Scalar, to_repr: Str}, [10], ~, Str], # 11
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 12
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 13
-  [Subscript, {kind: array}, [6, 13, 8], ~, Scalar], # 14
-  [PostfixDeref, {sigil: $}, [14, 8], ~, Scalar], # 15
+  [Subscript, {kind: array}, [7, 13], ~, Scalar, 10], # 14
+  [PostfixDeref, {eval_id: ~, file: "/tmp/osrpJFXK1Z/case.pl", line: 3, package: main, sigil: $, strict: false}, [14], 10, Scalar, 10, true], # 15
   [Coerce, {from_repr: Scalar, to_repr: Str}, [15], ~, Str], # 16
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 17
-  [Print, ~, [11, 12, 16, 17], 0, Scalar], # 18
-  [Return, {implicit: true}, [1], 18]]} # 19
+  [Print, ~, [11, 12, 16, 17], 15, "Maybe[Boolean]"], # 18
+  [Return, {implicit: true}, [1], 18, ~, 15]]} # 19
 ```
 
 ## The anonymous array constructor
@@ -167,14 +167,14 @@ main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Constant, {const_type: integer, value: "30"}, ~, ~, Int], # 4
   [ArrayLiteral, ~, [2, 3, 4], 0, ArrayRef], # 5
   [MemStart], # 6
-  [PostfixDeref, {sigil: "@"}, [5, 6], ~, Array], # 7
-  [Count, ~, [7, 6], ~, Int], # 8
+  [PostfixDeref, {eval_id: ~, file: "/tmp/osrpJFXK1Z/case.pl", line: 2, package: main, sigil: "@", strict: false}, [5], ~, Array, 6], # 7
+  [Count, ~, [7], ~, Int, 6], # 8
   [Coerce, {from_repr: Int, to_repr: Str}, [8], ~, Str], # 9
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 10
-  [RefType, ~, [5], ~, Str], # 11
+  [RefType, ~, [5], ~, Str, 6], # 11
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 12
-  [Print, ~, [9, 10, 11, 12], 5, Scalar], # 13
-  [Return, {implicit: true}, [1], 13]]} # 14
+  [Print, ~, [9, 10, 11, 12], 5, "Maybe[Boolean]"], # 13
+  [Return, {implicit: true}, [1], 13, ~, 6]]} # 14
 ```
 
 ## `ref` over all three referent kinds
@@ -221,22 +221,22 @@ main::__PROGRAM__: {start: 0, returns: [22], nodes: [
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
   [ArrayLiteral, {sigil: "@", symbol: a}, [2], ~, Array], # 3
   [Ref, ~, [3], ~, ArrayRef], # 4
-  [RefType, ~, [4], ~, Str], # 5
-  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 6
-  [Constant, {const_type: string, value: k}, ~, ~, Str], # 7
-  [HashLiteral, {sigil: "%", symbol: h}, [7, 2], ~, Hash], # 8
-  [Ref, ~, [8], ~, HashRef], # 9
-  [RefType, ~, [9], ~, Str], # 10
-  [MemStart], # 11
-  [PadAccess, {sigil: $, symbol: "n"}, [11], ~, Unknown], # 12
-  [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 13
-  [Assign, ~, [12, 13], 0, Int], # 14
-  [PadAccess, {sigil: $, symbol: "n"}, [14], ~, Unknown], # 15
+  [MemStart], # 5
+  [PadAccess, {sigil: $, symbol: "n"}, ~, ~, Unknown, 5], # 6
+  [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 7
+  [Assign, ~, [6, 7], 0, Int, 5, true], # 8
+  [RefType, ~, [4], ~, Str, 8], # 9
+  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 10
+  [Constant, {const_type: string, value: k}, ~, ~, Str], # 11
+  [HashLiteral, {sigil: "%", symbol: h}, [11, 2], ~, Hash], # 12
+  [Ref, ~, [12], ~, HashRef], # 13
+  [RefType, ~, [13], ~, Str, 8], # 14
+  [PadAccess, {sigil: $, symbol: "n"}, ~, ~, Unknown, 8], # 15
   [Ref, ~, [15], ~, Unknown], # 16
-  [RefType, ~, [16], ~, Str], # 17
-  [PostfixDeref, {sigil: $}, [16, 14], ~, Scalar], # 18
+  [RefType, ~, [16], ~, Str, 8], # 17
+  [PostfixDeref, {eval_id: ~, file: "/tmp/osrpJFXK1Z/case.pl", line: 7, package: main, sigil: $, strict: false}, [16], ~, Scalar, 8], # 18
   [Coerce, {from_repr: Scalar, to_repr: Str}, [18], ~, Str], # 19
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 20
-  [Print, ~, [5, 6, 10, 6, 17, 6, 19, 20], 14, Scalar], # 21
-  [Return, {implicit: true}, [1], 21]]} # 22
+  [Print, ~, [9, 10, 14, 10, 17, 10, 19, 20], 8, "Maybe[Boolean]"], # 21
+  [Return, {implicit: true}, [1], 21, ~, 8]]} # 22
 ```

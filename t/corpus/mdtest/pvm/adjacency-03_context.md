@@ -127,11 +127,11 @@ main::__PROGRAM__: {start: 0, returns: [115], nodes: [
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 4
   [ArrayLiteral, {sigil: "@", symbol: a}, [2, 3, 4], ~, Array], # 5
   [MemStart], # 6
-  [Count, ~, [5, 6], ~, Int], # 7
+  [Count, ~, [5], ~, Int, 6], # 7
   [Coerce, {from_repr: Int, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 9
   [Concat, ~, [8, 9], ~, Str], # 10
-  [EntryDef, {package: main, sigil: $, symbol: "\""}, [6], ~, Scalar], # 11
+  [EntryDef, {package: main, sigil: $, symbol: "\""}, ~, ~, Scalar, 6], # 11
   [Coerce, {from_repr: Scalar, to_repr: Str}, [11], ~, Str], # 12
   [Call, {dispatch_kind: builtin, name: join, param_names: []}, [12, 2, 3, 4], ~, Str], # 13
   [Concat, ~, [10, 13], ~, Str], # 14
@@ -144,50 +144,50 @@ main::__PROGRAM__: {start: 0, returns: [115], nodes: [
   [Concat, ~, [18, 20], ~, Str], # 21
   [Concat, ~, [21, 9], ~, Str], # 22
   [Call, {dispatch_kind: builtin, name: sort, param_names: [], sort_cmp: string, sort_order: ascending}, [2, 3, 4], ~, List], # 23
-  [Call, {dispatch_kind: builtin, memory_input: true, name: join, param_names: []}, [12, 23, 6], ~, Str], # 24
+  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [12, 23], ~, Str, 6], # 24
   [Concat, ~, [22, 24], ~, Str], # 25
   [Concat, ~, [25, 9], ~, Str], # 26
   [Call, {dispatch_kind: builtin, name: sort, param_names: [], sort_cmp: string, sort_order: ascending}, [2, 3, 4], ~, List], # 27
-  [Count, ~, [27, 6], ~, Int], # 28
+  [Count, ~, [27], ~, Int, 6], # 28
   [Coerce, {from_repr: Int, to_repr: Str}, [28], ~, Str], # 29
   [Concat, ~, [26, 29], ~, Str], # 30
   [Concat, ~, [30, 9], ~, Str], # 31
   [ArrayLiteral, {sigil: "@", symbol: kept}, ~, ~, Array], # 32
-  [Count, ~, [32, 6], ~, Int], # 33
+  [Count, ~, [32], ~, Int, 6], # 33
   [Coerce, {from_repr: Int, to_repr: Str}, [33], ~, Str], # 34
   [Call, {dispatch_kind: builtin, name: reverse, param_names: []}, [2, 3, 4], ~, Str], # 35
   [Concat, ~, [9, 35], ~, Str], # 36
   [Concat, ~, [36, 9], ~, Str], # 37
   [Call, {dispatch_kind: builtin, name: reverse, param_names: []}, [2, 3, 4], ~, List], # 38
-  [Call, {dispatch_kind: builtin, memory_input: true, name: join, param_names: []}, [12, 38, 6], ~, Str], # 39
+  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [12, 38], ~, Str, 6], # 39
   [Concat, ~, [37, 39], ~, Str], # 40
   [Concat, ~, [40, 9], ~, Str], # 41
   [Call, {dispatch_kind: builtin, name: localtime, param_names: []}, ~, ~, List], # 42
-  [Count, ~, [42, 6], ~, Int], # 43
+  [Count, ~, [42], ~, Int, 6], # 43
   [Coerce, {from_repr: Int, to_repr: Str}, [43], ~, Str], # 44
   [Concat, ~, [41, 44], ~, Str], # 45
   [Concat, ~, [45, 9], ~, Str], # 46
   [Wantarray, ~, ~, ~, Scalar], # 47
   [Call, {dispatch_kind: builtin, name: localtime, param_names: []}, ~, ~, Scalar], # 48
-  [Call, {dispatch_kind: builtin, name: caller, param_names: []}, ~, 0, Scalar], # 49
+  [Call, {dispatch_kind: builtin, name: caller, param_names: []}, ~, 0, Scalar, 6], # 49
   [ArrayLiteral, {sigil: "@", symbol: seen}, [47, 48, 49], ~, Array], # 50
-  [Count, ~, [50, 6], ~, Int], # 51
+  [Count, ~, [50], ~, Int, 6], # 51
   [Coerce, {from_repr: Int, to_repr: Str}, [51], ~, Str], # 52
-  [Call, {dispatch_kind: builtin, name: caller, param_names: []}, ~, 49, List], # 53
+  [Call, {dispatch_kind: builtin, name: caller, param_names: []}, ~, 49, List, 6], # 53
   [ArrayLiteral, {sigil: "@", symbol: frame}, [53], ~, Array], # 54
-  [Count, ~, [54, 6], ~, Int], # 55
+  [Count, ~, [54], ~, Int, 6], # 55
   [Coerce, {from_repr: Int, to_repr: Str}, [55], ~, Str], # 56
   [ArrayLiteral, ~, ~, ~, Array], # 57
   [Loop, {bound: entry}, [53], 53], # 58
-  [Phi, {region: 58}, [57, 165], ~, Array], # 59
-  [Call, {dispatch_kind: builtin, memory_input: true, name: join, param_names: []}, [12, 59, 6], ~, Str], # 60
+  [Phi, {region: 58}, [57, 154], ~, Array], # 59
+  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [12, 59], ~, Str, 6], # 60
   [Concat, ~, [9, 60], ~, Str], # 61
   [Concat, ~, [61, 9], ~, Str], # 62
   [ArrayLiteral, ~, ~, ~, Array], # 63
   [Proj, {index: 1}, [58]], # 64
   [Region, {head: 58}, [64]], # 65
   [Loop, {bound: entry}, [65], 65], # 66
-  [Phi, {region: 66}, [63, 166], ~, Array], # 67
+  [Phi, {region: 66}, [63, 155], ~, Array], # 67
   [Count, ~, [67], ~, Int], # 68
   [Coerce, {from_repr: Int, to_repr: Str}, [68], ~, Str], # 69
   [Concat, ~, [62, 69], ~, Str], # 70
@@ -196,102 +196,102 @@ main::__PROGRAM__: {start: 0, returns: [115], nodes: [
   [Proj, {index: 1}, [66]], # 73
   [Region, {head: 66}, [73]], # 74
   [Loop, {bound: entry}, [74], 74], # 75
-  [Phi, {region: 75}, [72, 167], ~, Array], # 76
-  [Call, {dispatch_kind: builtin, memory_input: true, name: join, param_names: []}, [12, 76, 6], ~, Str], # 77
+  [Phi, {region: 75}, [72, 156], ~, Array], # 76
+  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [12, 76], ~, Str, 6], # 77
   [Concat, ~, [71, 77], ~, Str], # 78
   [Concat, ~, [78, 9], ~, Str], # 79
   [ArrayLiteral, ~, ~, ~, Array], # 80
   [Proj, {index: 1}, [75]], # 81
   [Region, {head: 75}, [81]], # 82
   [Loop, {bound: entry}, [82], 82], # 83
-  [Phi, {region: 83}, [80, 168], ~, Array], # 84
+  [Phi, {region: 83}, [80, 157], ~, Array], # 84
   [Count, ~, [84], ~, Int], # 85
   [Coerce, {from_repr: Int, to_repr: Str}, [85], ~, Str], # 86
   [Concat, ~, [79, 86], ~, Str], # 87
   [Range, ~, [3, 7], ~, List], # 88
-  [Call, {dispatch_kind: builtin, memory_input: true, name: join, param_names: []}, [12, 88, 6], ~, Str], # 89
+  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [12, 88], ~, Str, 6], # 89
   [Concat, ~, [9, 89], ~, Str], # 90
   [Concat, ~, [90, 9], ~, Str], # 91
   [Constant, {const_type: string, value: az}, ~, ~, Str], # 92
   [ArrayLiteral, {sigil: "@", symbol: seed}, [92], ~, Array], # 93
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 94
-  [Subscript, {kind: array}, [93, 94, 6], ~, Str], # 95
+  [Subscript, {kind: array}, [93, 94], ~, Str, 6], # 95
   [Coerce, {from_repr: Str, to_repr: Int}, [95], ~, Int], # 96
   [Constant, {const_type: string, value: bb}, ~, ~, Str], # 97
   [Coerce, {from_repr: Str, to_repr: Int}, [97], ~, Int], # 98
   [Range, ~, [96, 98], ~, List], # 99
-  [Call, {dispatch_kind: builtin, memory_input: true, name: join, param_names: []}, [12, 99, 6], ~, Str], # 100
+  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [12, 99], ~, Str, 6], # 100
   [Concat, ~, [91, 100], ~, Str], # 101
   [Concat, ~, [101, 9], ~, Str], # 102
   [ArrayLiteral, ~, ~, ~, Array], # 103
   [Proj, {index: 1}, [83]], # 104
   [Region, {head: 83}, [104]], # 105
   [Loop, {bound: entry}, [105], 105], # 106
-  [Phi, {region: 106}, [103, 144], ~, Array], # 107
-  [Call, {dispatch_kind: builtin, memory_input: true, name: join, param_names: []}, [12, 107, 6], ~, Str], # 108
+  [Phi, {region: 106}, [103, 159], ~, Array], # 107
+  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [12, 107], ~, Str, 6], # 108
   [Concat, ~, [102, 108], ~, Str], # 109
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 110
   [Concat, ~, [109, 110], ~, Str], # 111
   [Proj, {index: 1}, [106]], # 112
   [Region, {head: 106}, [112]], # 113
-  [Print, ~, [31, 34, 46, 52, 9, 56, 87, 111], 113, Scalar], # 114
-  [Return, {implicit: true}, [1], 114], # 115
-  [Phi, {region: 106}, [1, 131], ~, Scalar], # 116
-  [ArrayLiteral, {sigil: "@", symbol: "off"}, [94, 94, 94, 94, 3, 94], ~, Array], # 117
-  [Constant, {const_type: integer, value: "4"}, ~, ~, Int], # 118
-  [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 119
-  [ArrayLiteral, {sigil: "@", symbol: idx}, [94, 3, 4, 2, 118, 119], ~, Array], # 120
-  [Phi, {region: 106}, [94, 159], ~, Int], # 121
-  [Subscript, {kind: array}, [120, 121, 6], ~, Int], # 122
-  [Subscript, {kind: array}, [117, 122, 6], ~, Int], # 123
-  [Coerce, {from_repr: Scalar, to_repr: Num}, [116], ~, Num], # 124
-  [Add, ~, [124, 3], ~, Num], # 125
-  [TernaryExpr, ~, [123, 94, 125], ~, Num], # 126
-  [ArrayLiteral, {sigil: "@", symbol: "on"}, [94, 3, 94, 94, 94, 94], ~, Array], # 127
-  [Subscript, {kind: array}, [127, 122, 6], ~, Int], # 128
-  [TernaryExpr, ~, [123, 94, 3], ~, Int], # 129
-  [TernaryExpr, ~, [128, 129, 94], ~, Int], # 130
-  [TernaryExpr, ~, [116, 126, 130], ~, Num], # 131
-  [Coerce, {from_repr: Int, to_repr: Str}, [125], ~, Str], # 132
-  [Constant, {const_type: string, value: E0}, ~, ~, Str], # 133
-  [Concat, ~, [132, 133], ~, Str], # 134
-  [TernaryExpr, ~, [123, 134, 125], ~, Str], # 135
-  [Constant, {const_type: string, value: "1E0"}, ~, ~, Str], # 136
-  [TernaryExpr, ~, [123, 136, 3], ~, Str], # 137
-  [Constant, {const_type: string, value: ""}, ~, ~, Str], # 138
-  [TernaryExpr, ~, [128, 137, 138], ~, Str], # 139
-  [TernaryExpr, ~, [116, 135, 139], ~, Str], # 140
-  [Phi, {region: 58}, [94, 155], ~, Int], # 141
-  [NumGt, ~, [7, 141], 58, Boolean], # 142
-  [Proj, {index: 0}, [58]], # 143
-  [ListAppend, {collector: grep}, [107, 122, 140], ~, Array], # 144
-  [Subscript, {kind: array}, [5, 141, 6], ~, Int], # 145
-  [Phi, {region: 66}, [94, 156], ~, Int], # 146
-  [Subscript, {kind: array}, [5, 146, 6], ~, Int], # 147
-  [Phi, {region: 75}, [94, 157], ~, Int], # 148
-  [Subscript, {kind: array}, [5, 148, 6], ~, Int], # 149
-  [Phi, {region: 83}, [94, 158], ~, Int], # 150
-  [Subscript, {kind: array}, [5, 150, 6], ~, Int], # 151
-  [Count, ~, [120, 6], ~, Int], # 152
-  [ArrayLiteral, {sigil: "@", symbol: copy}, [2, 3, 4], ~, Array], # 153
-  [Call, {dispatch_kind: builtin, name: sort, param_names: [], sort_cmp: string, sort_order: ascending}, [2, 3, 4], ~, List], # 154
-  [Add, ~, [141, 3], ~, Int], # 155
-  [Add, ~, [146, 3], ~, Int], # 156
-  [Add, ~, [148, 3], ~, Int], # 157
-  [Add, ~, [150, 3], ~, Int], # 158
-  [Add, ~, [121, 3], ~, Int], # 159
-  [NumGt, ~, [152, 121], 106, Boolean], # 160
-  [Proj, {index: 0}, [106]], # 161
-  [NumGt, ~, [7, 146], 66, Boolean], # 162
-  [NumGt, ~, [7, 148], 75, Boolean], # 163
-  [NumGt, ~, [7, 150], 83, Boolean], # 164
-  [ListAppend, {collector: map}, [59, 145], ~, Array], # 165
-  [ListAppend, {collector: map}, [67, 147], ~, Array], # 166
-  [ListAppend, {collector: grep}, [76, 149, 149], ~, Array], # 167
-  [ListAppend, {collector: grep}, [84, 151, 151], ~, Array], # 168
-  [ArrayLiteral, {sigil: "@", symbol: ranged}, [88], ~, Array], # 169
-  [Proj, {index: 0}, [66]], # 170
-  [ArrayLiteral, {sigil: "@", symbol: lettered}, [99], ~, Array], # 171
+  [Print, ~, [31, 34, 46, 52, 9, 56, 87, 111], 113, "Maybe[Boolean]"], # 114
+  [Return, {implicit: true}, [1], 114, ~, 6], # 115
+  [Phi, {region: 106}, [1, 140], ~, "Maybe[Int]"], # 116
+  [Phi, {region: 58}, [94, 162], ~, Int], # 117
+  [Subscript, {kind: array}, [5, 117], ~, Int, 6], # 118
+  [Phi, {region: 66}, [94, 163], ~, Int], # 119
+  [Subscript, {kind: array}, [5, 119], ~, Int, 6], # 120
+  [Phi, {region: 75}, [94, 164], ~, Int], # 121
+  [Subscript, {kind: array}, [5, 121], ~, Int, 6], # 122
+  [Phi, {region: 83}, [94, 165], ~, Int], # 123
+  [Subscript, {kind: array}, [5, 123], ~, Int, 6], # 124
+  [Constant, {const_type: integer, value: "4"}, ~, ~, Int], # 125
+  [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 126
+  [ArrayLiteral, {sigil: "@", symbol: idx}, [94, 3, 4, 2, 125, 126], ~, Array], # 127
+  [Count, ~, [127], ~, Int, 6], # 128
+  [Phi, {region: 106}, [94, 167], ~, Int], # 129
+  [Subscript, {kind: array}, [127, 129], ~, Int, 6], # 130
+  [ArrayLiteral, {sigil: "@", symbol: "off"}, [94, 94, 94, 94, 3, 94], ~, Array], # 131
+  [Subscript, {kind: array}, [131, 130], ~, Int, 6], # 132
+  [ArrayLiteral, {sigil: "@", symbol: "on"}, [94, 3, 94, 94, 94, 94], ~, Array], # 133
+  [Subscript, {kind: array}, [133, 130], ~, Int, 6], # 134
+  [Coerce, {from_repr: "Maybe[Int]", to_repr: Num}, [116], ~, Num], # 135
+  [Add, ~, [135, 3], ~, Num], # 136
+  [TernaryExpr, ~, [132, 94, 136], ~, Int], # 137
+  [TernaryExpr, ~, [132, 94, 3], ~, Int], # 138
+  [TernaryExpr, ~, [134, 138, 94], ~, Int], # 139
+  [TernaryExpr, ~, [116, 137, 139], ~, Int], # 140
+  [Coerce, {from_repr: Int, to_repr: Str}, [136], ~, Str], # 141
+  [Constant, {const_type: string, value: E0}, ~, ~, Str], # 142
+  [Concat, ~, [141, 142], ~, Str], # 143
+  [TernaryExpr, ~, [132, 143, 136], ~, Str], # 144
+  [Constant, {const_type: string, value: "1E0"}, ~, ~, Str], # 145
+  [TernaryExpr, ~, [132, 145, 3], ~, Str], # 146
+  [Constant, {const_type: string, value: ""}, ~, ~, Str], # 147
+  [TernaryExpr, ~, [134, 146, 147], ~, Str], # 148
+  [TernaryExpr, ~, [116, 144, 148], ~, Str], # 149
+  [NumGt, ~, [7, 117], 58, Boolean], # 150
+  [NumGt, ~, [7, 119], 66, Boolean], # 151
+  [NumGt, ~, [7, 121], 75, Boolean], # 152
+  [NumGt, ~, [7, 123], 83, Boolean], # 153
+  [ListAppend, {collector: map}, [59, 118], ~, Array], # 154
+  [ListAppend, {collector: map}, [67, 120], ~, Array], # 155
+  [ListAppend, {collector: grep}, [76, 122, 122], ~, Array], # 156
+  [ListAppend, {collector: grep}, [84, 124, 124], ~, Array], # 157
+  [NumGt, ~, [128, 129], 106, Boolean], # 158
+  [ListAppend, {collector: grep}, [107, 130, 149], ~, Array], # 159
+  [Proj, {index: 0}, [58]], # 160
+  [ArrayLiteral, {sigil: "@", symbol: ranged}, [88], ~, Array], # 161
+  [Add, ~, [117, 3], ~, Int], # 162
+  [Add, ~, [119, 3], ~, Int], # 163
+  [Add, ~, [121, 3], ~, Int], # 164
+  [Add, ~, [123, 3], ~, Int], # 165
+  [ArrayLiteral, {sigil: "@", symbol: lettered}, [99], ~, Array], # 166
+  [Add, ~, [129, 3], ~, Int], # 167
+  [ArrayLiteral, {sigil: "@", symbol: copy}, [2, 3, 4], ~, Array], # 168
+  [Call, {dispatch_kind: builtin, name: sort, param_names: [], sort_cmp: string, sort_order: ascending}, [2, 3, 4], ~, List], # 169
+  [Proj, {index: 0}, [106]], # 170
+  [Proj, {index: 0}, [66]], # 171
   [Proj, {index: 0}, [75]], # 172
   [Proj, {index: 0}, [83]]]} # 173
 ```

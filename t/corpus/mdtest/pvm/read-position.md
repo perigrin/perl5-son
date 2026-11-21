@@ -54,12 +54,12 @@ main::__PROGRAM__: {start: 0, returns: [20], nodes: [
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: "both "}, ~, ~, Str], # 2
   [MemStart], # 3
-  [PadAccess, {sigil: $, symbol: t}, [3], ~, Unknown], # 4
+  [PadAccess, {sigil: $, symbol: t}, ~, ~, Unknown, 3], # 4
   [Constant, {const_type: string, value: a.c}, ~, ~, Str], # 5
-  [Assign, ~, [4, 5], 0, Str], # 6
-  [PadAccess, {sigil: $, symbol: t}, [6], ~, Unknown], # 7
-  [Transliterate, {flags: "", from: ".", to: Z}, [7, 6], 6, Str], # 8
-  [PadAccess, {sigil: $, symbol: t}, [8], ~, Str], # 9
+  [Assign, ~, [4, 5], 0, Str, 3, true], # 6
+  [PadAccess, {sigil: $, symbol: t}, ~, ~, Unknown, 6], # 7
+  [Transliterate, {flags: "", from: ".", to: Z}, [7], 6, Str, 6, true], # 8
+  [PadAccess, {sigil: $, symbol: t}, ~, ~, Str, 8], # 9
   [Coerce, {from_repr: Unknown, to_repr: Str}, [9], ~, Str], # 10
   [Concat, ~, [2, 10], ~, Str], # 11
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 12
@@ -69,8 +69,8 @@ main::__PROGRAM__: {start: 0, returns: [20], nodes: [
   [Concat, ~, [13, 15], ~, Str], # 16
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 17
   [Concat, ~, [16, 17], ~, Str], # 18
-  [Print, ~, [18], 8, Scalar], # 19
-  [Return, {implicit: true}, [1], 19]]} # 20
+  [Print, ~, [18], 8, "Maybe[Boolean]"], # 19
+  [Return, {implicit: true}, [1], 19, ~, 8]]} # 20
 ```
 
 ## A read between the `tr///` and its count
@@ -107,24 +107,24 @@ main::__PROGRAM__: {start: 0, returns: [21], nodes: [
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: "end "}, ~, ~, Str], # 2
   [MemStart], # 3
-  [PadAccess, {sigil: $, symbol: t}, [3], ~, Unknown], # 4
+  [PadAccess, {sigil: $, symbol: t}, ~, ~, Unknown, 3], # 4
   [Constant, {const_type: string, value: a.c}, ~, ~, Str], # 5
-  [Assign, ~, [4, 5], 0, Str], # 6
-  [PadAccess, {sigil: $, symbol: t}, [6], ~, Unknown], # 7
-  [Transliterate, {flags: "", from: ".", to: Z}, [7, 6], 6, Str], # 8
+  [Assign, ~, [4, 5], 0, Str, 3, true], # 6
+  [PadAccess, {sigil: $, symbol: t}, ~, ~, Unknown, 6], # 7
+  [Transliterate, {flags: "", from: ".", to: Z}, [7], 6, Str, 6, true], # 8
   [TransliterateCount, ~, [8], ~, Int], # 9
   [Coerce, {from_repr: Int, to_repr: Str}, [9], ~, Str], # 10
   [Concat, ~, [2, 10], ~, Str], # 11
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 12
   [Concat, ~, [11, 12], ~, Str], # 13
   [Constant, {const_type: string, value: "mid "}, ~, ~, Str], # 14
-  [PadAccess, {sigil: $, symbol: t}, [8], ~, Str], # 15
+  [PadAccess, {sigil: $, symbol: t}, ~, ~, Str, 8], # 15
   [Coerce, {from_repr: Unknown, to_repr: Str}, [15], ~, Str], # 16
   [Concat, ~, [14, 16], ~, Str], # 17
   [Concat, ~, [17, 12], ~, Str], # 18
-  [Print, ~, [18], 8, Scalar], # 19
-  [Print, ~, [13], 19, Scalar], # 20
-  [Return, {implicit: true}, [1], 20]]} # 21
+  [Print, ~, [18], 8, "Maybe[Boolean]"], # 19
+  [Print, ~, [13], 19, "Maybe[Boolean]"], # 20
+  [Return, {implicit: true}, [1], 20, ~, 8]]} # 21
 ```
 
 ## The same read between an `s///` and its count
@@ -156,21 +156,21 @@ main::__PROGRAM__: {start: 0, returns: [20], nodes: [
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: "end "}, ~, ~, Str], # 2
   [MemStart], # 3
-  [PadAccess, {sigil: $, symbol: s}, [3], ~, Unknown], # 4
+  [PadAccess, {sigil: $, symbol: s}, ~, ~, Unknown, 3], # 4
   [Constant, {const_type: string, value: aaa}, ~, ~, Str], # 5
-  [Assign, ~, [4, 5], 0, Str], # 6
-  [PadAccess, {sigil: $, symbol: s}, [6], ~, Unknown], # 7
-  [RegexSubst, {flags: g, pattern: a, replacement: b}, [7, 6], 6, Str], # 8
+  [Assign, ~, [4, 5], 0, Str, 3, true], # 6
+  [PadAccess, {sigil: $, symbol: s}, ~, ~, Unknown, 6], # 7
+  [RegexSubst, {flags: g, pattern: a, replacement: b}, [7], 6, Str, 6, true], # 8
   [RegexSubstCount, ~, [8], ~, Str], # 9
   [Concat, ~, [2, 9], ~, Str], # 10
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 11
   [Concat, ~, [10, 11], ~, Str], # 12
   [Constant, {const_type: string, value: "mid "}, ~, ~, Str], # 13
-  [PadAccess, {sigil: $, symbol: s}, [8], ~, Str], # 14
+  [PadAccess, {sigil: $, symbol: s}, ~, ~, Str, 8], # 14
   [Coerce, {from_repr: Unknown, to_repr: Str}, [14], ~, Str], # 15
   [Concat, ~, [13, 15], ~, Str], # 16
   [Concat, ~, [16, 11], ~, Str], # 17
-  [Print, ~, [17], 8, Scalar], # 18
-  [Print, ~, [12], 18, Scalar], # 19
-  [Return, {implicit: true}, [1], 19]]} # 20
+  [Print, ~, [17], 8, "Maybe[Boolean]"], # 18
+  [Print, ~, [12], 18, "Maybe[Boolean]"], # 19
+  [Return, {implicit: true}, [1], 19, ~, 8]]} # 20
 ```

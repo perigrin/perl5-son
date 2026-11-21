@@ -63,14 +63,14 @@ main::__PROGRAM__: {start: 0, returns: [13], nodes: [
   [Constant, {const_type: integer, value: "8"}, ~, ~, Int], # 3
   [ArrayLiteral, {sigil: "@", symbol: a}, [2, 3], ~, Array], # 4
   [MemStart], # 5
-  [Count, ~, [4, 5], ~, Int], # 6
+  [Count, ~, [4], ~, Int, 5], # 6
   [Coerce, {from_repr: Int, to_repr: Str}, [6], ~, Str], # 7
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
   [Constant, {const_type: integer, value: "42"}, ~, ~, Int], # 9
   [Coerce, {from_repr: Int, to_repr: Str}, [9], ~, Str], # 10
-  [Print, ~, [10, 8], 0, Scalar], # 11
-  [Print, ~, [7, 8], 11, Scalar], # 12
-  [Return, {implicit: true}, [1], 12]]} # 13
+  [Print, ~, [10, 8], 0, "Maybe[Boolean]"], # 11
+  [Print, ~, [7, 8], 11, "Maybe[Boolean]"], # 12
+  [Return, {implicit: true}, [1], 12, ~, 5]]} # 13
 ```
 
 ## `$^O` is one variable and a bare `$^` is another
@@ -158,20 +158,20 @@ main::__PROGRAM__: {start: 0, returns: [21], nodes: [
   [EntryDef, {package: main, sigil: $, symbol: o}, ~, ~, Scalar], # 5
   [EntryDef, {package: main, sigil: $, symbol: w}, ~, ~, Scalar], # 6
   [MemStart], # 7
-  [EntryDef, {package: main, sigil: $, symbol: "\u0017"}, [7], ~, Scalar], # 8
-  [EntryWrite, ~, [6, 8, 7], 0, Unknown], # 9
-  [EntryDef, {package: main, sigil: $, symbol: "\u000f"}, [9], ~, Scalar], # 10
-  [EntryWrite, ~, [5, 10, 9], 9, Unknown], # 11
-  [EntryDef, {package: main, sigil: $, symbol: "\u0014"}, [11], ~, Scalar], # 12
-  [EntryWrite, ~, [4, 12, 11], 11, Unknown], # 13
-  [EntryDef, {package: main, sigil: $, symbol: "^"}, [13], ~, Scalar], # 14
-  [EntryWrite, ~, [3, 14, 13], 13, Unknown], # 15
-  [EntryDef, {package: main, sigil: $, symbol: w}, [15], ~, Scalar], # 16
+  [EntryDef, {package: main, sigil: $, symbol: "\u0017"}, ~, ~, Scalar, 7], # 8
+  [EntryWrite, ~, [6, 8], 0, Unknown, 7, true], # 9
+  [EntryDef, {package: main, sigil: $, symbol: "\u000f"}, ~, ~, Scalar, 9], # 10
+  [EntryWrite, ~, [5, 10], 9, Unknown, 9, true], # 11
+  [EntryDef, {package: main, sigil: $, symbol: "\u0014"}, ~, ~, Scalar, 11], # 12
+  [EntryWrite, ~, [4, 12], 11, Unknown, 11, true], # 13
+  [EntryDef, {package: main, sigil: $, symbol: "^"}, ~, ~, Scalar, 13], # 14
+  [EntryWrite, ~, [3, 14], 13, Unknown, 13, true], # 15
+  [EntryDef, {package: main, sigil: $, symbol: w}, ~, ~, Scalar, 15], # 16
   [Coerce, {from_repr: Unknown, to_repr: Str}, [16], ~, Str], # 17
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 18
-  [Print, ~, [17, 18], 15, Scalar], # 19
-  [Print, ~, [2], 19, Scalar], # 20
-  [Return, {implicit: true}, [1], 20]]} # 21
+  [Print, ~, [17, 18], 15, "Maybe[Boolean]"], # 19
+  [Print, ~, [2], 19, "Maybe[Boolean]"], # 20
+  [Return, {implicit: true}, [1], 20, ~, 15]]} # 21
 ```
 
 ## A package array subscripts through `rv2av`
@@ -207,16 +207,16 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [ArrayLiteral, {sigil: "@", symbol: "@main::a"}, [2, 3, 4], ~, Array], # 5
   [EntryDef, {package: main, sigil: "@", symbol: a}, ~, ~, Array], # 6
   [MemStart], # 7
-  [EntryWrite, ~, [6, 5, 7], 0, Unknown], # 8
-  [Count, ~, [5, 8], ~, Int], # 9
+  [EntryWrite, ~, [6, 5], 0, Unknown, 7, true], # 8
+  [Count, ~, [5], ~, Int, 8], # 9
   [Coerce, {from_repr: Int, to_repr: Str}, [9], ~, Str], # 10
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 11
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 12
-  [Subscript, {kind: array}, [5, 12, 8], ~, Scalar], # 13
+  [Subscript, {kind: array}, [5, 12], ~, Scalar, 8], # 13
   [Coerce, {from_repr: Unknown, to_repr: Str}, [13], ~, Str], # 14
-  [Print, ~, [14, 11], 8, Scalar], # 15
-  [Print, ~, [10, 11], 15, Scalar], # 16
-  [Return, {implicit: true}, [1], 16]]} # 17
+  [Print, ~, [14, 11], 8, "Maybe[Boolean]"], # 15
+  [Print, ~, [10, 11], 15, "Maybe[Boolean]"], # 16
+  [Return, {implicit: true}, [1], 16, ~, 8]]} # 17
 ```
 
 ## A package hash reaches storage through `rv2hv`
@@ -253,15 +253,15 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [HashLiteral, {sigil: "%", symbol: "%main::h"}, [2, 3, 4, 5], ~, Hash], # 6
   [EntryDef, {package: main, sigil: "%", symbol: h}, ~, ~, Hash], # 7
   [MemStart], # 8
-  [EntryWrite, ~, [7, 6, 8], 0, Unknown], # 9
-  [Subscript, {kind: hash}, [6, 2, 9], ~, Scalar], # 10
+  [EntryWrite, ~, [7, 6], 0, Unknown, 8, true], # 9
+  [Subscript, {kind: hash}, [6, 2], ~, Scalar, 9], # 10
   [Coerce, {from_repr: Unknown, to_repr: Str}, [10], ~, Str], # 11
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 12
-  [Call, {dispatch_kind: builtin, memory_input: true, name: keys, param_names: [], want: scalar}, [7, 9], ~, Int], # 13
+  [Call, {dispatch_kind: builtin, name: keys, param_names: [], want: scalar}, [7], ~, Int, 9], # 13
   [Coerce, {from_repr: Int, to_repr: Str}, [13], ~, Str], # 14
-  [Print, ~, [14, 12], 9, Scalar], # 15
-  [Print, ~, [11, 12], 15, Scalar], # 16
-  [Return, {implicit: true}, [1], 16]]} # 17
+  [Print, ~, [14, 12], 9, "Maybe[Boolean]"], # 15
+  [Print, ~, [11, 12], 15, "Maybe[Boolean]"], # 16
+  [Return, {implicit: true}, [1], 16, ~, 9]]} # 17
 ```
 
 ## A package scalar is where `sassign` enters the corpus
@@ -298,12 +298,12 @@ main::__PROGRAM__: {start: 0, returns: [10], nodes: [
   [EntryDef, {package: main, sigil: $, symbol: x}, ~, ~, Scalar], # 2
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 3
   [MemStart], # 4
-  [EntryWrite, ~, [2, 3, 4], 0, Unknown], # 5
-  [EntryDef, {package: main, sigil: $, symbol: x}, [5], ~, Int], # 6
+  [EntryWrite, ~, [2, 3], 0, Unknown, 4, true], # 5
+  [EntryDef, {package: main, sigil: $, symbol: x}, ~, ~, Int, 5], # 6
   [Coerce, {from_repr: Int, to_repr: Str}, [6], ~, Str], # 7
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
-  [Print, ~, [7, 8], 5, Scalar], # 9
-  [Return, {implicit: true}, [1], 9]]} # 10
+  [Print, ~, [7, 8], 5, "Maybe[Boolean]"], # 9
+  [Return, {implicit: true}, [1], 9, ~, 5]]} # 10
 ```
 
 ## The bare main stash is `$::{...}` with an EMPTY package name
@@ -364,17 +364,17 @@ main::__PROGRAM__: {start: 0, returns: [20], nodes: [
   [EntryDef, {package: main, sigil: $, symbol: answer}, ~, ~, Scalar], # 5
   [Constant, {const_type: integer, value: "42"}, ~, ~, Int], # 6
   [MemStart], # 7
-  [EntryWrite, ~, [5, 6, 7], 0, Unknown], # 8
-  [Exists, {kind: hash}, [3, 4, 8], ~, Boolean], # 9
+  [EntryWrite, ~, [5, 6], 0, Unknown, 7, true], # 8
+  [Exists, {kind: hash, stash_has: 1}, [3, 4], ~, Boolean, 8], # 9
   [Coerce, {from_repr: Boolean, to_repr: Str}, [9], ~, Str], # 10
   [Constant, {const_type: string, value: "]\n"}, ~, ~, Str], # 11
   [Constant, {const_type: string, value: "gone: ["}, ~, ~, Str], # 12
   [Constant, {const_type: string, value: nosuch}, ~, ~, Str], # 13
-  [Exists, {kind: hash}, [3, 13, 8], ~, Boolean], # 14
+  [Exists, {kind: hash, stash_has: 0}, [3, 13], ~, Boolean, 8], # 14
   [Coerce, {from_repr: Boolean, to_repr: Str}, [14], ~, Str], # 15
   [Constant, {const_type: string, value: "found: ["}, ~, ~, Str], # 16
-  [Print, ~, [16, 10, 11], 8, Scalar], # 17
-  [Print, ~, [12, 15, 11], 17, Scalar], # 18
-  [Print, ~, [2, 10, 11], 18, Scalar], # 19
-  [Return, {implicit: true}, [1], 19]]} # 20
+  [Print, ~, [16, 10, 11], 8, "Maybe[Boolean]"], # 17
+  [Print, ~, [12, 15, 11], 17, "Maybe[Boolean]"], # 18
+  [Print, ~, [2, 10, 11], 18, "Maybe[Boolean]"], # 19
+  [Return, {implicit: true}, [1], 19, ~, 8]]} # 20
 ```

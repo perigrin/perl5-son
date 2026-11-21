@@ -76,32 +76,32 @@ main::__PROGRAM__: {start: 0, returns: [21], nodes: [
   [EntryDef, {package: main, sigil: "&", symbol: sq}, ~, ~, Unknown], # 2
   [AnonSub, {name: main::__PROGRAM__::__ANON__:2:4}, ~, ~, CodeRef], # 3
   [MemStart], # 4
-  [PadAccess, {sigil: $, symbol: "n"}, [4], ~, Unknown], # 5
+  [PadAccess, {sigil: $, symbol: "n"}, ~, ~, Unknown, 4], # 5
   [EnvRead, {key: X}, ~, ~, Str], # 6
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 7
   [DefinedOr, ~, [6, 7], ~, Str], # 8
-  [Assign, ~, [5, 8], 0, Str], # 9
-  [EntryWrite, {binds: true}, [2, 3, 9], 9, Unknown], # 10
-  [PadAccess, {sigil: $, symbol: "n"}, [10], ~, Unknown], # 11
-  [Call, {dispatch_kind: direct, name: main::sq, param_names: [], want: list}, [11], 10, Unknown], # 12
+  [Assign, ~, [5, 8], 0, Str, 4, true], # 9
+  [EntryWrite, {binds: true}, [2, 3], 9, Unknown, 9, true], # 10
+  [PadAccess, {sigil: $, symbol: "n"}, ~, ~, Unknown, 10], # 11
+  [Call, {dispatch_kind: direct, file: "/tmp/osrpJFXK1Z/case.pl", line: 3, name: main::sq, package: main, param_names: [], want: list}, [11], 10, Unknown, 10, true], # 12
   [Coerce, {from_repr: Unknown, to_repr: Str}, [12], ~, Str], # 13
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 14
-  [PadAccess, {sigil: $, symbol: "n"}, [12], ~, Num], # 15
+  [PadAccess, {sigil: $, symbol: "n"}, ~, ~, Num, 12], # 15
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 16
   [Multiply, ~, [15, 16], ~, Num], # 17
   [Coerce, {from_repr: Unknown, to_repr: Str}, [17], ~, Str], # 18
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 19
-  [Print, ~, [13, 14, 18, 19], 12, Scalar], # 20
-  [Return, {implicit: true}, [1], 20]]} # 21
+  [Print, ~, [13, 14, 18, 19], 12, "Maybe[Boolean]"], # 20
+  [Return, {implicit: true}, [1], 20, ~, 12]]} # 21
 main::__PROGRAM__::__ANON__:2:4: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [ArgsSource, ~, ~, ~, Array], # 1
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 2
   [MemStart], # 3
-  [Subscript, {kind: array}, [1, 2, 3], ~, Scalar], # 4
+  [Subscript, {kind: array}, [1, 2], ~, Scalar, 3], # 4
   [Coerce, {from_repr: Scalar, to_repr: Num}, [4], ~, Num], # 5
   [Multiply, ~, [5, 5], ~, Num], # 6
-  [Return, {implicit: true}, [6], 0]]} # 7
+  [Return, {implicit: true}, [6], 0, ~, 3]]} # 7
 ```
 
 ## `\*STDOUT` is a reference to a GLOB, its own type
@@ -138,15 +138,16 @@ one word whose text is "ref"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [7], nodes: [
+main::__PROGRAM__: {start: 0, returns: [8], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: glob, value: STDOUT}, ~, ~, Glob], # 2
   [Ref, ~, [2], ~, GlobRef], # 3
-  [RefType, ~, [3], ~, Str], # 4
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
-  [Print, ~, [4, 5], 0, Scalar], # 6
-  [Return, {implicit: true}, [1], 6]]} # 7
+  [MemStart], # 4
+  [RefType, ~, [3], ~, Str, 4], # 5
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 6
+  [Print, ~, [5, 6], 0, "Maybe[Boolean]"], # 7
+  [Return, {implicit: true}, [1], 7, ~, 4]]} # 8
 ```
 
 ## `AUTOLOAD` catches a call to a sub that does not exist
@@ -202,23 +203,25 @@ main::AUTOLOAD: {start: 0, returns: [11], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "auto:"}, ~, ~, Str], # 1
   [MemStart], # 2
-  [PadAccess, {sigil: $, symbol: "n"}, [2], ~, Unknown], # 3
-  [EntryDef, {package: main, sigil: $, symbol: AUTOLOAD}, [2], ~, Scalar], # 4
-  [Assign, ~, [3, 4], 0, Scalar], # 5
-  [PadAccess, {sigil: $, symbol: "n"}, [5], ~, Unknown], # 6
-  [RegexSubst, {flags: "", pattern: ".*::", replacement: ""}, [6, 5], 5, Str], # 7
-  [PadAccess, {sigil: $, symbol: "n"}, [7], ~, Str], # 8
+  [PadAccess, {sigil: $, symbol: "n"}, ~, ~, Unknown, 2], # 3
+  [EntryDef, {package: main, sigil: $, symbol: AUTOLOAD}, ~, ~, Scalar, 2], # 4
+  [Assign, ~, [3, 4], 0, Scalar, 2, true], # 5
+  [PadAccess, {sigil: $, symbol: "n"}, ~, ~, Unknown, 5], # 6
+  [RegexSubst, {flags: "", pattern: ".*::", replacement: ""}, [6], 5, Str, 5, true], # 7
+  [PadAccess, {sigil: $, symbol: "n"}, ~, ~, Str, 7], # 8
   [Coerce, {from_repr: Unknown, to_repr: Str}, [8], ~, Str], # 9
   [Concat, ~, [1, 9], ~, Str], # 10
-  [Return, ~, [10], 7]]} # 11
-main::__PROGRAM__: {start: 0, returns: [6], nodes: [
+  [Return, ~, [10], 7, ~, 7]]} # 11
+main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Call, {dispatch_kind: direct, name: main::missing, param_names: [], want: list}, ~, 0, Unknown], # 2
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [2], ~, Str], # 3
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
-  [Print, ~, [3, 4], 2, Scalar], # 5
-  [Return, {implicit: true}, [1], 5]]} # 6
+  [MemStart], # 2
+  [Call, {dispatch_kind: direct, file: "/tmp/osrpJFXK1Z/case.pl", line: 3, name: main::missing, package: main, param_names: [], want: list}, ~, 0, Unknown, 2, true], # 3
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
+  [Print, ~, [4, 5], 3, "Maybe[Boolean]"], # 6
+  [Return, {implicit: true}, [1], 6, ~, 3], # 7
+  [EntryDef, {package: main, sigil: $, symbol: AUTOLOAD}, ~, ~, Unknown, 2]]} # 8
 ```
 
 ## `foreach $pkg (LIST)` aliases a PACKAGE variable and restores it
@@ -281,29 +284,29 @@ main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [EntryDef, {package: main, sigil: $, symbol: i}, ~, ~, Scalar], # 2
   [Constant, {const_type: string, value: before}, ~, ~, Str], # 3
   [MemStart], # 4
-  [EntryWrite, ~, [2, 3, 4], 0, Unknown], # 5
-  [EntryDef, {package: main, sigil: $, symbol: i}, [5], ~, Str], # 6
+  [EntryWrite, ~, [2, 3], 0, Unknown, 4, true], # 5
+  [EntryDef, {package: main, sigil: $, symbol: i}, ~, ~, Str, 5], # 6
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 7
   [Concat, ~, [6, 7], ~, Str], # 8
   [Loop, {bound: entry}, [5], 5], # 9
   [Proj, {index: 1}, [9]], # 10
   [Region, {head: 9}, [10]], # 11
-  [Print, ~, [7], 11, Scalar], # 12
-  [Print, ~, [8], 12, Scalar], # 13
-  [Return, {implicit: true}, [1], 13], # 14
+  [Print, ~, [7], 11, "Maybe[Boolean]"], # 12
+  [Print, ~, [8], 12, "Maybe[Boolean]"], # 13
+  [Return, {implicit: true}, [1], 13, ~, 5], # 14
   [EnvRead, {key: A}, ~, ~, Str], # 15
   [Constant, {const_type: string, value: a}, ~, ~, Str], # 16
   [DefinedOr, ~, [15, 16], ~, Str], # 17
   [Constant, {const_type: string, value: b}, ~, ~, Str], # 18
   [ArrayLiteral, {sigil: "@", symbol: l}, [17, 18], ~, Array], # 19
-  [Count, ~, [19, 5], ~, Int], # 20
+  [Count, ~, [19], ~, Int, 5], # 20
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 21
   [Phi, {region: 9}, [21, 29], ~, Int], # 22
-  [Subscript, {kind: array}, [19, 22, 5], ~, Scalar], # 23
+  [Subscript, {kind: array}, [19, 22], ~, Scalar, 5], # 23
   [NumGt, ~, [20, 22], 9, Boolean], # 24
   [Proj, {index: 0}, [9]], # 25
   [Coerce, {from_repr: Unknown, to_repr: Str}, [23], ~, Str], # 26
-  [Print, ~, [26], 25, Scalar], # 27
+  [Print, ~, [26], 25, "Maybe[Boolean]"], # 27
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 28
   [Add, ~, [22, 28], ~, Int]]} # 29
 ```

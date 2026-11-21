@@ -48,11 +48,11 @@ main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 4
   [ArrayLiteral, {sigil: "@", symbol: a}, [2, 3, 4], ~, Array], # 5
   [MemStart], # 6
-  [Count, ~, [5, 6], ~, Int], # 7
+  [Count, ~, [5], ~, Int, 6], # 7
   [Coerce, {from_repr: Int, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
-  [Print, ~, [8, 9], 0, Scalar], # 10
-  [Return, {implicit: true}, [1], 10]]} # 11
+  [Print, ~, [8, 9], 0, "Maybe[Boolean]"], # 10
+  [Return, {implicit: true}, [1], 10, ~, 6]]} # 11
 ```
 
 ## A constant subscript reads as one op and writes as another
@@ -82,7 +82,7 @@ parses: yes
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [14], nodes: [
+main::__PROGRAM__: {start: 0, returns: [15], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
@@ -92,12 +92,13 @@ main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 6
   [Subscript, {kind: array}, [5, 6], ~, Int], # 7
   [Constant, {const_type: integer, value: "9"}, ~, ~, Int], # 8
-  [Assign, ~, [7, 8], 0, Int], # 9
-  [Subscript, {kind: array}, [5, 6, 9], ~, Int], # 10
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [10], ~, Str], # 11
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 12
-  [Print, ~, [11, 12], 9, Scalar], # 13
-  [Return, {implicit: true}, [1], 13]]} # 14
+  [MemStart], # 9
+  [Assign, ~, [7, 8], 0, Int, 9, true], # 10
+  [Subscript, {kind: array}, [5, 6], ~, Int, 10], # 11
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [11], ~, Str], # 12
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 13
+  [Print, ~, [12, 13], 10, "Maybe[Boolean]"], # 14
+  [Return, {implicit: true}, [1], 14, ~, 10]]} # 15
 ```
 
 ## `$#a`, and the subscript the optimiser will not fold
@@ -133,15 +134,15 @@ main::__PROGRAM__: {start: 0, returns: [15], nodes: [
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 4
   [ArrayLiteral, {sigil: "@", symbol: a}, [2, 3, 4], ~, Array], # 5
   [MemStart], # 6
-  [Count, ~, [5, 6], ~, Int], # 7
+  [Count, ~, [5], ~, Int, 6], # 7
   [Subtract, ~, [7, 2], ~, Int], # 8
-  [Subscript, {kind: array}, [5, 8, 6], ~, Int], # 9
+  [Subscript, {kind: array}, [5, 8], ~, Int, 6], # 9
   [Coerce, {from_repr: Int, to_repr: Str}, [9], ~, Str], # 10
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 11
   [Coerce, {from_repr: Int, to_repr: Str}, [8], ~, Str], # 12
-  [Print, ~, [12, 11], 0, Scalar], # 13
-  [Print, ~, [10, 11], 13, Scalar], # 14
-  [Return, {implicit: true}, [1], 14]]} # 15
+  [Print, ~, [12, 11], 0, "Maybe[Boolean]"], # 13
+  [Print, ~, [10, 11], 13, "Maybe[Boolean]"], # 14
+  [Return, {implicit: true}, [1], 14, ~, 6]]} # 15
 ```
 
 ## An array slice: the sigil decides, not the name
@@ -171,7 +172,7 @@ parses: yes
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [11], nodes: [
+main::__PROGRAM__: {start: 0, returns: [12], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 2
@@ -182,6 +183,7 @@ main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [Slice, {kind: array}, [2, 3, 6], ~, List], # 7
   [Coerce, {from_repr: List, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
-  [Print, ~, [8, 9], 0, Scalar], # 10
-  [Return, {implicit: true}, [1], 10]]} # 11
+  [Print, ~, [8, 9], 0, "Maybe[Boolean]"], # 10
+  [MemStart], # 11
+  [Return, {implicit: true}, [1], 10, ~, 11]]} # 12
 ```

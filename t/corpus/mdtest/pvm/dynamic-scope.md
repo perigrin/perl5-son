@@ -57,26 +57,27 @@ parses: yes
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [18], nodes: [
+main::__PROGRAM__: {start: 0, returns: [19], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [EntryDef, {package: main, sigil: $, symbol: x}, ~, ~, Scalar], # 2
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 3
-  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 4
-  [MemStart], # 5
-  [EntryWrite, ~, [2, 3, 5], 0, Unknown], # 6
-  [EntryWrite, ~, [2, 4, 6], 6, Unknown], # 7
-  [EntryDef, {package: main, sigil: $, symbol: x}, [7], ~, Int], # 8
-  [Coerce, {from_repr: Int, to_repr: Str}, [8], ~, Str], # 9
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
-  [Concat, ~, [9, 10], ~, Str], # 11
-  [Print, ~, [11], 7, Scalar], # 12
-  [EntryWrite, ~, [2, 3, 7], 12, Unknown], # 13
-  [EntryDef, {package: main, sigil: $, symbol: x}, [13], ~, Int], # 14
-  [Coerce, {from_repr: Int, to_repr: Str}, [14], ~, Str], # 15
-  [Concat, ~, [15, 10], ~, Str], # 16
-  [Print, ~, [16], 13, Scalar], # 17
-  [Return, {implicit: true}, [1], 17]]} # 18
+  [MemStart], # 4
+  [EntryWrite, ~, [2, 3], 0, Unknown, 4, true], # 5
+  [EntryDef, {package: main, sigil: $, symbol: x}, ~, ~, Int, 5], # 6
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 7
+  [EntryWrite, ~, [2, 7], 5, Unknown, 5, true], # 8
+  [EntryDef, {package: main, sigil: $, symbol: x}, ~, ~, Int, 8], # 9
+  [Coerce, {from_repr: Int, to_repr: Str}, [9], ~, Str], # 10
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 11
+  [Concat, ~, [10, 11], ~, Str], # 12
+  [Print, ~, [12], 8, "Maybe[Boolean]"], # 13
+  [EntryWrite, ~, [2, 6], 13, Unknown, 8, true], # 14
+  [EntryDef, {package: main, sigil: $, symbol: x}, ~, ~, Int, 14], # 15
+  [Coerce, {from_repr: Int, to_repr: Str}, [15], ~, Str], # 16
+  [Concat, ~, [16, 11], ~, Str], # 17
+  [Print, ~, [17], 14, "Maybe[Boolean]"], # 18
+  [Return, {implicit: true}, [1], 18, ~, 14]]} # 19
 ```
 
 ## A bare block is a scope, and a loop that runs once
@@ -139,7 +140,7 @@ again
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [17], nodes: [
+main::__PROGRAM__: {start: 0, returns: [18], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: "again\n"}, ~, ~, Str], # 2
@@ -154,8 +155,9 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [Coerce, {from_repr: Int, to_repr: Str}, [10], ~, Str], # 11
   [Concat, ~, [9, 11], ~, Str], # 12
   [Concat, ~, [12, 7], ~, Str], # 13
-  [Print, ~, [13], 0, Scalar], # 14
-  [Print, ~, [8], 14, Scalar], # 15
-  [Print, ~, [2], 15, Scalar], # 16
-  [Return, {implicit: true}, [1], 16]]} # 17
+  [Print, ~, [13], 0, "Maybe[Boolean]"], # 14
+  [Print, ~, [8], 14, "Maybe[Boolean]"], # 15
+  [Print, ~, [2], 15, "Maybe[Boolean]"], # 16
+  [MemStart], # 17
+  [Return, {implicit: true}, [1], 16, ~, 17]]} # 18
 ```

@@ -62,7 +62,7 @@ one heredoc body whose text is "hello $name\nEOT\n"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [8], nodes: [
+main::__PROGRAM__: {start: 0, returns: [9], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: "hello "}, ~, ~, Str], # 2
@@ -70,8 +70,9 @@ main::__PROGRAM__: {start: 0, returns: [8], nodes: [
   [Concat, ~, [2, 3], ~, Str], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
   [Concat, ~, [4, 5], ~, Str], # 6
-  [Print, ~, [6], 0, Scalar], # 7
-  [Return, {implicit: true}, [1], 7]]} # 8
+  [Print, ~, [6], 0, "Maybe[Boolean]"], # 7
+  [MemStart], # 8
+  [Return, {implicit: true}, [1], 7, ~, 8]]} # 9
 ```
 
 ## The non-interpolating heredoc
@@ -119,16 +120,17 @@ one heredoc body whose text is "hello $name\nEOT\n"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [8], nodes: [
+main::__PROGRAM__: {start: 0, returns: [9], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: world}, ~, ~, Str], # 2
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 3
   [Concat, ~, [2, 3], ~, Str], # 4
   [Constant, {const_type: string, value: "hello $name\n"}, ~, ~, Str], # 5
-  [Print, ~, [5], 0, Scalar], # 6
-  [Print, ~, [4], 6, Scalar], # 7
-  [Return, {implicit: true}, [1], 7]]} # 8
+  [Print, ~, [5], 0, "Maybe[Boolean]"], # 6
+  [Print, ~, [4], 6, "Maybe[Boolean]"], # 7
+  [MemStart], # 8
+  [Return, {implicit: true}, [1], 7, ~, 8]]} # 9
 ```
 
 ## The indentation-stripping heredoc
@@ -164,10 +166,11 @@ one heredoc body whose text is "    trimmed\n    EOT\n"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [4], nodes: [
+main::__PROGRAM__: {start: 0, returns: [5], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: "trimmed\n"}, ~, ~, Str], # 2
-  [Print, ~, [2], 0, Scalar], # 3
-  [Return, {implicit: true}, [1], 3]]} # 4
+  [Print, ~, [2], 0, "Maybe[Boolean]"], # 3
+  [MemStart], # 4
+  [Return, {implicit: true}, [1], 3, ~, 4]]} # 5
 ```

@@ -81,12 +81,12 @@ main::__PROGRAM__: {start: 0, returns: [38], nodes: [
   [EntryDef, {package: main, sigil: $, symbol: g}, ~, ~, Scalar], # 2
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 3
   [MemStart], # 4
-  [EntryWrite, ~, [2, 3, 4], 0, Unknown], # 5
-  [EntryDef, {package: main, sigil: $, symbol: g}, [5], ~, Int], # 6
+  [EntryWrite, ~, [2, 3], 0, Unknown, 4, true], # 5
+  [EntryDef, {package: main, sigil: $, symbol: g}, ~, ~, Int, 5], # 6
   [Constant, {const_type: integer, value: "10"}, ~, ~, Int], # 7
   [Add, ~, [6, 7], ~, Int], # 8
-  [EntryWrite, ~, [2, 8, 5], 5, Unknown], # 9
-  [EntryDef, {package: main, sigil: $, symbol: g}, [9], ~, Int], # 10
+  [EntryWrite, ~, [2, 8], 5, Unknown, 5, true], # 9
+  [EntryDef, {package: main, sigil: $, symbol: g}, ~, ~, Int, 9], # 10
   [Coerce, {from_repr: Int, to_repr: Str}, [10], ~, Str], # 11
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 12
   [Concat, ~, [11, 12], ~, Str], # 13
@@ -102,9 +102,9 @@ main::__PROGRAM__: {start: 0, returns: [38], nodes: [
   [Concat, ~, [18, 22], ~, Str], # 23
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 24
   [Concat, ~, [23, 24], ~, Str], # 25
-  [Print, ~, [25], 9, Scalar], # 26
-  [EntryWrite, ~, [2, 3, 9], 26, Unknown], # 27
-  [EntryDef, {package: main, sigil: $, symbol: g}, [27], ~, Int], # 28
+  [Print, ~, [25], 9, "Maybe[Boolean]"], # 26
+  [EntryWrite, ~, [2, 6], 26, Unknown, 9, true], # 27
+  [EntryDef, {package: main, sigil: $, symbol: g}, ~, ~, Int, 27], # 28
   [Coerce, {from_repr: Int, to_repr: Str}, [28], ~, Str], # 29
   [Concat, ~, [29, 12], ~, Str], # 30
   [Coerce, {from_repr: Int, to_repr: Str}, [14], ~, Str], # 31
@@ -113,15 +113,15 @@ main::__PROGRAM__: {start: 0, returns: [38], nodes: [
   [Coerce, {from_repr: Int, to_repr: Str}, [19], ~, Str], # 34
   [Concat, ~, [33, 34], ~, Str], # 35
   [Concat, ~, [35, 24], ~, Str], # 36
-  [Print, ~, [36], 27, Scalar], # 37
-  [Return, {implicit: true}, [1], 37]]} # 38
+  [Print, ~, [36], 27, "Maybe[Boolean]"], # 37
+  [Return, {implicit: true}, [1], 37, ~, 27]]} # 38
 "BEGIN 1": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: feature}, ~, ~, Str], # 1
   [Constant, {const_type: string, value: state}, ~, ~, Str], # 2
   [Constant, {const_type: string, value: feature.pm}, ~, ~, Str], # 3
   [MemStart], # 4
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
-  [Call, {class_name: feature, dispatch_kind: method, name: import, param_names: []}, [1, 2], 5, Unknown], # 6
-  [Return, {implicit: true}, [6], 6]]} # 7
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
+  [Call, {class_name: feature, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 ```

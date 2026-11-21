@@ -83,19 +83,19 @@ main::__PROGRAM__: {start: 0, returns: [20], nodes: [
   [Constant, {const_type: integer, value: "20"}, ~, ~, Int], # 5
   [Constant, {const_type: integer, value: "30"}, ~, ~, Int], # 6
   [MemStart], # 7
-  [Call, {dispatch_kind: builtin, memory_input: true, name: push, param_names: []}, [3, 5, 6, 7], 0, Int], # 8
-  [Subscript, {kind: array}, [3, 4, 8], ~, Scalar], # 9
+  [Call, {dispatch_kind: builtin, name: push, param_names: []}, [3, 5, 6], 0, Int, 7, true], # 8
+  [Subscript, {kind: array}, [3, 4], ~, Scalar, 8], # 9
   [Coerce, {from_repr: Unknown, to_repr: Str}, [9], ~, Str], # 10
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 11
-  [Count, ~, [3, 8], ~, Int], # 12
+  [Count, ~, [3], ~, Int, 8], # 12
   [Coerce, {from_repr: Int, to_repr: Str}, [12], ~, Str], # 13
   [ArrayLiteral, {sigil: "@", symbol: tail}, [5, 6], ~, Array], # 14
-  [Count, ~, [14, 8], ~, Int], # 15
+  [Count, ~, [14], ~, Int, 8], # 15
   [Coerce, {from_repr: Int, to_repr: Str}, [15], ~, Str], # 16
-  [Print, ~, [16, 11], 8, Scalar], # 17
-  [Print, ~, [13, 11], 17, Scalar], # 18
-  [Print, ~, [10, 11], 18, Scalar], # 19
-  [Return, {implicit: true}, [1], 19]]} # 20
+  [Print, ~, [16, 11], 8, "Maybe[Boolean]"], # 17
+  [Print, ~, [13, 11], 17, "Maybe[Boolean]"], # 18
+  [Print, ~, [10, 11], 18, "Maybe[Boolean]"], # 19
+  [Return, {implicit: true}, [1], 19, ~, 8]]} # 20
 ```
 
 ## `unshift`: the same rule at the other end
@@ -158,19 +158,19 @@ main::__PROGRAM__: {start: 0, returns: [20], nodes: [
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 5
   [Constant, {const_type: integer, value: "10"}, ~, ~, Int], # 6
   [MemStart], # 7
-  [Call, {dispatch_kind: builtin, memory_input: true, name: unshift, param_names: []}, [4, 6, 7], 0, Int], # 8
-  [Subscript, {kind: array}, [4, 5, 8], ~, Scalar], # 9
+  [Call, {dispatch_kind: builtin, name: unshift, param_names: []}, [4, 6], 0, Int, 7, true], # 8
+  [Subscript, {kind: array}, [4, 5], ~, Scalar, 8], # 9
   [Coerce, {from_repr: Unknown, to_repr: Str}, [9], ~, Str], # 10
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 11
-  [Count, ~, [4, 8], ~, Int], # 12
+  [Count, ~, [4], ~, Int, 8], # 12
   [Coerce, {from_repr: Int, to_repr: Str}, [12], ~, Str], # 13
   [ArrayLiteral, {sigil: "@", symbol: head}, [6], ~, Array], # 14
-  [Count, ~, [14, 8], ~, Int], # 15
+  [Count, ~, [14], ~, Int, 8], # 15
   [Coerce, {from_repr: Int, to_repr: Str}, [15], ~, Str], # 16
-  [Print, ~, [16, 11], 8, Scalar], # 17
-  [Print, ~, [13, 11], 17, Scalar], # 18
-  [Print, ~, [10, 11], 18, Scalar], # 19
-  [Return, {implicit: true}, [1], 19]]} # 20
+  [Print, ~, [16, 11], 8, "Maybe[Boolean]"], # 17
+  [Print, ~, [13, 11], 17, "Maybe[Boolean]"], # 18
+  [Print, ~, [10, 11], 18, "Maybe[Boolean]"], # 19
+  [Return, {implicit: true}, [1], 19, ~, 8]]} # 20
 ```
 
 ## `shift`: the rule again, and the array gives up an element
@@ -210,14 +210,14 @@ main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Constant, {const_type: integer, value: "30"}, ~, ~, Int], # 4
   [ArrayLiteral, {sigil: "@", symbol: a}, [2, 3, 4], ~, Array], # 5
   [MemStart], # 6
-  [Call, {dispatch_kind: builtin, memory_input: true, name: shift, param_names: []}, [5, 6], 0, Int], # 7
-  [Count, ~, [5, 7], ~, Int], # 8
+  [Call, {dispatch_kind: builtin, name: shift, param_names: []}, [5], 0, Int, 6, true], # 7
+  [Count, ~, [5], ~, Int, 7], # 8
   [Coerce, {from_repr: Int, to_repr: Str}, [8], ~, Str], # 9
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
   [Coerce, {from_repr: Int, to_repr: Str}, [7], ~, Str], # 11
-  [Print, ~, [11, 10], 7, Scalar], # 12
-  [Print, ~, [9, 10], 12, Scalar], # 13
-  [Return, {implicit: true}, [1], 13]]} # 14
+  [Print, ~, [11, 10], 7, "Maybe[Boolean]"], # 12
+  [Print, ~, [9, 10], 12, "Maybe[Boolean]"], # 13
+  [Return, {implicit: true}, [1], 13, ~, 7]]} # 14
 ```
 
 ## `values` takes the container, not a flattened list
@@ -266,16 +266,16 @@ main::__PROGRAM__: {start: 0, returns: [15], nodes: [
   [Constant, {const_type: integer, value: "7"}, ~, ~, Int], # 3
   [HashLiteral, {sigil: "%", symbol: h}, [2, 3], ~, Hash], # 4
   [MemStart], # 5
-  [Call, {dispatch_kind: builtin, memory_input: true, name: values, param_names: [], want: list}, [4, 5], ~, List], # 6
+  [Call, {dispatch_kind: builtin, name: values, param_names: [], want: list}, [4], ~, List, 5], # 6
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 7
-  [Subscript, {kind: array}, [6, 7, 5], ~, Scalar], # 8
+  [Subscript, {kind: array}, [6, 7], ~, Scalar, 5], # 8
   [Coerce, {from_repr: Unknown, to_repr: Str}, [8], ~, Str], # 9
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
-  [Count, ~, [6, 5], ~, Int], # 11
+  [Count, ~, [6], ~, Int, 5], # 11
   [Coerce, {from_repr: Int, to_repr: Str}, [11], ~, Str], # 12
-  [Print, ~, [12, 10], 0, Scalar], # 13
-  [Print, ~, [9, 10], 13, Scalar], # 14
-  [Return, {implicit: true}, [1], 14]]} # 15
+  [Print, ~, [12, 10], 0, "Maybe[Boolean]"], # 13
+  [Print, ~, [9, 10], 13, "Maybe[Boolean]"], # 14
+  [Return, {implicit: true}, [1], 14, ~, 5]]} # 15
 ```
 
 ## `keys` in list context is an op, not a flag
@@ -319,16 +319,16 @@ main::__PROGRAM__: {start: 0, returns: [15], nodes: [
   [Constant, {const_type: integer, value: "7"}, ~, ~, Int], # 3
   [HashLiteral, {sigil: "%", symbol: h}, [2, 3], ~, Hash], # 4
   [MemStart], # 5
-  [Call, {dispatch_kind: builtin, memory_input: true, name: keys, param_names: [], want: list}, [4, 5], ~, List], # 6
+  [Call, {dispatch_kind: builtin, name: keys, param_names: [], want: list}, [4], ~, List, 5], # 6
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 7
-  [Subscript, {kind: array}, [6, 7, 5], ~, Scalar], # 8
+  [Subscript, {kind: array}, [6, 7], ~, Scalar, 5], # 8
   [Coerce, {from_repr: Unknown, to_repr: Str}, [8], ~, Str], # 9
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
-  [Count, ~, [6, 5], ~, Int], # 11
+  [Count, ~, [6], ~, Int, 5], # 11
   [Coerce, {from_repr: Int, to_repr: Str}, [11], ~, Str], # 12
-  [Print, ~, [12, 10], 0, Scalar], # 13
-  [Print, ~, [9, 10], 13, Scalar], # 14
-  [Return, {implicit: true}, [1], 14]]} # 15
+  [Print, ~, [12, 10], 0, "Maybe[Boolean]"], # 13
+  [Print, ~, [9, 10], 13, "Maybe[Boolean]"], # 14
+  [Return, {implicit: true}, [1], 14, ~, 5]]} # 15
 ```
 
 ## `each` returns a PAIR where its siblings return a flat list
@@ -378,7 +378,7 @@ one word whose text is "each"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [14], nodes: [
+main::__PROGRAM__: {start: 0, returns: [15], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [PadAccess, {sigil: $, symbol: v}, ~, ~, Str], # 2
@@ -390,9 +390,9 @@ main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Constant, {const_type: integer, value: "7"}, ~, ~, Int], # 8
   [HashLiteral, {sigil: "%", symbol: h}, [7, 8], ~, Hash], # 9
   [MemStart], # 10
-  [Call, {dispatch_kind: builtin, memory_input: true, name: each, param_names: [], want: list}, [9, 10], 0, Unknown], # 11
-  [Print, ~, [6, 4], 11, Scalar], # 12
-  [Print, ~, [3, 4], 12, Scalar], # 13
-  [Return, {implicit: true}, [1], 13], # 14
-  [Assign, {targets: 2}, [5, 2, 11], ~, List]]} # 15
+  [Call, {dispatch_kind: builtin, name: each, param_names: [], want: list}, [9], 0, Unknown, 10, true], # 11
+  [Assign, {targets: 2}, [5, 2, 11], 11, List, 11, true], # 12
+  [Print, ~, [6, 4], 12, "Maybe[Boolean]"], # 13
+  [Print, ~, [3, 4], 13, "Maybe[Boolean]"], # 14
+  [Return, {implicit: true}, [1], 14, ~, 12]]} # 15
 ```

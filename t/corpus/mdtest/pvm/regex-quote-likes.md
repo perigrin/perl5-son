@@ -46,15 +46,16 @@ one quote-like operator whose text is "qr/abc/"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [7], nodes: [
+main::__PROGRAM__: {start: 0, returns: [8], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: regex, value: abc}, ~, ~, Regex], # 2
   [Coerce, {from_repr: Regex, to_repr: Str}, [2], ~, Str], # 3
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
   [Concat, ~, [3, 4], ~, Str], # 5
-  [Print, ~, [5], 0, Scalar], # 6
-  [Return, {implicit: true}, [1], 6]]} # 7
+  [Print, ~, [5], 0, "Maybe[Boolean]"], # 6
+  [MemStart], # 7
+  [Return, {implicit: true}, [1], 6, ~, 7]]} # 8
 ```
 
 ## `tr///` wears `s///`'s syntax and is not a regex
@@ -130,18 +131,18 @@ main::__PROGRAM__: {start: 0, returns: [28], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [PadAccess, {sigil: $, symbol: t}, [2], ~, Unknown], # 3
+  [PadAccess, {sigil: $, symbol: t}, ~, ~, Unknown, 2], # 3
   [EnvRead, {key: X}, ~, ~, Str], # 4
   [Constant, {const_type: string, value: a.c}, ~, ~, Str], # 5
   [DefinedOr, ~, [4, 5], ~, Str], # 6
-  [Assign, ~, [3, 6], 0, Str], # 7
-  [PadAccess, {sigil: $, symbol: t}, [7], ~, Unknown], # 8
-  [Transliterate, {flags: "", from: ".", to: Z}, [8, 7], 7, Str], # 9
-  [PadAccess, {sigil: $, symbol: u}, [9], ~, Unknown], # 10
-  [Assign, ~, [10, 6], 9, Str], # 11
-  [PadAccess, {sigil: $, symbol: u}, [11], ~, Unknown], # 12
-  [RegexSubst, {flags: "", pattern: ".", replacement: Z}, [12, 11], 11, Str], # 13
-  [PadAccess, {sigil: $, symbol: t}, [13], ~, Str], # 14
+  [Assign, ~, [3, 6], 0, Str, 2, true], # 7
+  [PadAccess, {sigil: $, symbol: t}, ~, ~, Unknown, 7], # 8
+  [Transliterate, {flags: "", from: ".", to: Z}, [8], 7, Str, 7, true], # 9
+  [PadAccess, {sigil: $, symbol: u}, ~, ~, Unknown, 9], # 10
+  [Assign, ~, [10, 6], 9, Str, 9, true], # 11
+  [PadAccess, {sigil: $, symbol: u}, ~, ~, Unknown, 11], # 12
+  [RegexSubst, {flags: "", pattern: ".", replacement: Z}, [12], 11, Str, 11, true], # 13
+  [PadAccess, {sigil: $, symbol: t}, ~, ~, Str, 13], # 14
   [Coerce, {from_repr: Unknown, to_repr: Str}, [14], ~, Str], # 15
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 16
   [Concat, ~, [15, 16], ~, Str], # 17
@@ -149,11 +150,11 @@ main::__PROGRAM__: {start: 0, returns: [28], nodes: [
   [Coerce, {from_repr: Int, to_repr: Str}, [18], ~, Str], # 19
   [Concat, ~, [17, 19], ~, Str], # 20
   [Concat, ~, [20, 16], ~, Str], # 21
-  [PadAccess, {sigil: $, symbol: u}, [13], ~, Str], # 22
+  [PadAccess, {sigil: $, symbol: u}, ~, ~, Str, 13], # 22
   [Coerce, {from_repr: Unknown, to_repr: Str}, [22], ~, Str], # 23
   [Concat, ~, [21, 23], ~, Str], # 24
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 25
   [Concat, ~, [24, 25], ~, Str], # 26
-  [Print, ~, [26], 13, Scalar], # 27
-  [Return, {implicit: true}, [1], 27]]} # 28
+  [Print, ~, [26], 13, "Maybe[Boolean]"], # 27
+  [Return, {implicit: true}, [1], 27, ~, 13]]} # 28
 ```

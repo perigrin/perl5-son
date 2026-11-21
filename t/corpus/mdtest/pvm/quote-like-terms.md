@@ -53,13 +53,14 @@ one quote-like operator whose text is "qx{echo hi}"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [5], nodes: [
+main::__PROGRAM__: {start: 0, returns: [6], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: "echo hi"}, ~, ~, Str], # 2
   [BacktickExpr, ~, [2], ~, Str], # 3
-  [Print, ~, [3], 0, Scalar], # 4
-  [Return, {implicit: true}, [1], 4]]} # 5
+  [Print, ~, [3], 0, "Maybe[Boolean]"], # 4
+  [MemStart], # 5
+  [Return, {implicit: true}, [1], 4, ~, 5]]} # 6
 ```
 
 ## The angle-bracket glob
@@ -101,20 +102,20 @@ main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: "got "}, ~, ~, Str], # 2
   [Constant, {const_type: string, value: "*.nonexistent-xyz"}, ~, ~, Str], # 3
-  [Call, {dispatch_kind: builtin, name: glob, param_names: []}, [3], ~, Unknown], # 4
+  [Call, {dispatch_kind: builtin, name: glob, param_names: []}, [3], ~, List], # 4
   [ArrayLiteral, {sigil: "@", symbol: none}, [4], ~, Array], # 5
   [MemStart], # 6
-  [Count, ~, [5, 6], ~, Int], # 7
+  [Count, ~, [5], ~, Int, 6], # 7
   [Coerce, {from_repr: Int, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
-  [Print, ~, [2, 8, 9], 0, Scalar], # 10
-  [Return, {implicit: true}, [1], 10]]} # 11
+  [Print, ~, [2, 8, 9], 0, "Maybe[Boolean]"], # 10
+  [Return, {implicit: true}, [1], 10, ~, 6]]} # 11
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "File/Glob.pm"}, ~, ~, Str], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 ```
 
 ## The `pack` template
@@ -165,7 +166,7 @@ no numeric literal whose text is "3"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [14], nodes: [
+main::__PROGRAM__: {start: 0, returns: [15], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: C3}, ~, ~, Str], # 2
@@ -179,8 +180,9 @@ main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Add, ~, [6, 9], ~, Num], # 10
   [Call, {dispatch_kind: builtin, name: pack, param_names: []}, [2, 5, 8, 10], ~, Str], # 11
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 12
-  [Print, ~, [11, 12], 0, Scalar], # 13
-  [Return, {implicit: true}, [1], 13]]} # 14
+  [Print, ~, [11, 12], 0, "Maybe[Boolean]"], # 13
+  [MemStart], # 14
+  [Return, {implicit: true}, [1], 13, ~, 14]]} # 15
 ```
 
 ## The `unpack` template
@@ -233,18 +235,18 @@ main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [EntryDef, {package: main, sigil: $, symbol: "\""}, [2], ~, Scalar], # 3
+  [EntryDef, {package: main, sigil: $, symbol: "\""}, ~, ~, Scalar, 2], # 3
   [Coerce, {from_repr: Scalar, to_repr: Str}, [3], ~, Str], # 4
   [Constant, {const_type: string, value: C3}, ~, ~, Str], # 5
   [EnvRead, {key: X}, ~, ~, Str], # 6
   [Constant, {const_type: string, value: ABC}, ~, ~, Str], # 7
   [DefinedOr, ~, [6, 7], ~, Str], # 8
-  [Call, {dispatch_kind: builtin, name: unpack, param_names: []}, [5, 8], ~, Unknown], # 9
-  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [4, 9], ~, Str], # 10
+  [Call, {dispatch_kind: builtin, name: unpack, param_names: []}, [5, 8], ~, List], # 9
+  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [4, 9], ~, Str, 2], # 10
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 11
   [Concat, ~, [10, 11], ~, Str], # 12
-  [Print, ~, [12], 0, Scalar], # 13
-  [Return, {implicit: true}, [1], 13], # 14
+  [Print, ~, [12], 0, "Maybe[Boolean]"], # 13
+  [Return, {implicit: true}, [1], 13, ~, 2], # 14
   [ArrayLiteral, {sigil: "@", symbol: c}, [9], ~, Array]]} # 15
 ```
 
@@ -296,7 +298,7 @@ one quote-like operator whose text is "qq!r!"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [13], nodes: [
+main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: "a{b}c="}, ~, ~, Str], # 2
@@ -309,8 +311,9 @@ main::__PROGRAM__: {start: 0, returns: [13], nodes: [
   [Constant, {const_type: string, value: q}, ~, ~, Str], # 9
   [Constant, {const_type: string, value: r}, ~, ~, Str], # 10
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 11
-  [Print, ~, [7, 8, 9, 10, 11], 0, Scalar], # 12
-  [Return, {implicit: true}, [1], 12]]} # 13
+  [Print, ~, [7, 8, 9, 10, 11], 0, "Maybe[Boolean]"], # 12
+  [MemStart], # 13
+  [Return, {implicit: true}, [1], 12, ~, 13]]} # 14
 ```
 
 ## `glob` and `readpipe`, spelled as functions without parens
@@ -375,21 +378,21 @@ main::__PROGRAM__: {start: 0, returns: [16], nodes: [
   [EnvRead, {key: X}, ~, ~, Str], # 3
   [Constant, {const_type: string, value: "*.nonexistent-xyz"}, ~, ~, Str], # 4
   [DefinedOr, ~, [3, 4], ~, Str], # 5
-  [Call, {dispatch_kind: builtin, name: glob, param_names: []}, [5], ~, Unknown], # 6
+  [Call, {dispatch_kind: builtin, name: glob, param_names: []}, [5], ~, List], # 6
   [ArrayLiteral, {sigil: "@", symbol: none}, [6], ~, Array], # 7
   [MemStart], # 8
-  [Count, ~, [7, 8], ~, Int], # 9
+  [Count, ~, [7], ~, Int, 8], # 9
   [Coerce, {from_repr: Int, to_repr: Str}, [9], ~, Str], # 10
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 11
   [Constant, {const_type: string, value: "echo hi"}, ~, ~, Str], # 12
   [DefinedOr, ~, [3, 12], ~, Str], # 13
   [BacktickExpr, ~, [13], ~, Str], # 14
-  [Print, ~, [2, 10, 11, 14], 0, Scalar], # 15
-  [Return, {implicit: true}, [1], 15]]} # 16
+  [Print, ~, [2, 10, 11, 14], 0, "Maybe[Boolean]"], # 15
+  [Return, {implicit: true}, [1], 15, ~, 8]]} # 16
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "File/Glob.pm"}, ~, ~, Str], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 ```

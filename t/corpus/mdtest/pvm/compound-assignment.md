@@ -46,7 +46,7 @@ one operator whose text is "/="
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [30], nodes: [
+main::__PROGRAM__: {start: 0, returns: [31], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [EnvRead, {key: X}, ~, ~, Str], # 2
@@ -76,8 +76,9 @@ main::__PROGRAM__: {start: 0, returns: [30], nodes: [
   [Concat, ~, [18, 25], ~, Str], # 26
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 27
   [Concat, ~, [26, 27], ~, Str], # 28
-  [Print, ~, [28], 0, Scalar], # 29
-  [Return, {implicit: true}, [1], 29]]} # 30
+  [Print, ~, [28], 0, "Maybe[Boolean]"], # 29
+  [MemStart], # 30
+  [Return, {implicit: true}, [1], 29, ~, 30]]} # 31
 ```
 
 ## `.=` emits `multiconcat`, not `concat`
@@ -104,7 +105,7 @@ one operator whose text is ".="
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [10], nodes: [
+main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [EnvRead, {key: X}, ~, ~, Str], # 2
@@ -114,8 +115,9 @@ main::__PROGRAM__: {start: 0, returns: [10], nodes: [
   [Concat, ~, [4, 5], ~, Str], # 6
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 7
   [Concat, ~, [6, 7], ~, Str], # 8
-  [Print, ~, [8], 0, Scalar], # 9
-  [Return, {implicit: true}, [1], 9]]} # 10
+  [Print, ~, [8], 0, "Maybe[Boolean]"], # 9
+  [MemStart], # 10
+  [Return, {implicit: true}, [1], 9, ~, 10]]} # 11
 ```
 
 ## `x=` is word-shaped
@@ -153,7 +155,7 @@ one word-shaped operator whose text is "x="
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [10], nodes: [
+main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [EnvRead, {key: X}, ~, ~, Str], # 2
@@ -163,8 +165,9 @@ main::__PROGRAM__: {start: 0, returns: [10], nodes: [
   [Repeat, ~, [4, 5], ~, Str], # 6
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 7
   [Concat, ~, [6, 7], ~, Str], # 8
-  [Print, ~, [8], 0, Scalar], # 9
-  [Return, {implicit: true}, [1], 9]]} # 10
+  [Print, ~, [8], 0, "Maybe[Boolean]"], # 9
+  [MemStart], # 10
+  [Return, {implicit: true}, [1], 9, ~, 10]]} # 11
 ```
 
 ## `//=`, `||=` and `&&=` short-circuit
@@ -199,7 +202,7 @@ one operator whose text is "||="
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [27], nodes: [
+main::__PROGRAM__: {start: 0, returns: [28], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [EnvRead, {key: X}, ~, ~, Str], # 2
@@ -226,8 +229,9 @@ main::__PROGRAM__: {start: 0, returns: [27], nodes: [
   [Concat, ~, [20, 22], ~, Str], # 23
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 24
   [Concat, ~, [23, 24], ~, Str], # 25
-  [Print, ~, [25], 0, Scalar], # 26
-  [Return, {implicit: true}, [1], 26]]} # 27
+  [Print, ~, [25], 0, "Maybe[Boolean]"], # 26
+  [MemStart], # 27
+  [Return, {implicit: true}, [1], 26, ~, 27]]} # 28
 ```
 
 ## The bitwise and shift forms
@@ -266,7 +270,7 @@ one operator whose text is ">>="
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [39], nodes: [
+main::__PROGRAM__: {start: 0, returns: [40], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [EnvRead, {key: X}, ~, ~, Str], # 2
@@ -283,7 +287,7 @@ main::__PROGRAM__: {start: 0, returns: [39], nodes: [
   [Coerce, {from_repr: Int, to_repr: Str}, [12], ~, Str], # 13
   [Concat, ~, [10, 13], ~, Str], # 14
   [Concat, ~, [14, 9], ~, Str], # 15
-  [BitXor, ~, [5, 6], ~, Int], # 16
+  [BitXor, ~, [5, 6], 0, Int], # 16
   [Coerce, {from_repr: Int, to_repr: Str}, [16], ~, Str], # 17
   [Concat, ~, [15, 17], ~, Str], # 18
   [Concat, ~, [18, 9], ~, Str], # 19
@@ -291,7 +295,7 @@ main::__PROGRAM__: {start: 0, returns: [39], nodes: [
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 21
   [DefinedOr, ~, [20, 21], ~, Str], # 22
   [Coerce, {from_repr: Str, to_repr: Int}, [22], ~, Int], # 23
-  [LeftShift, ~, [23, 6], ~, Int], # 24
+  [LeftShift, ~, [23, 6], 16, Int], # 24
   [Coerce, {from_repr: Int, to_repr: Str}, [24], ~, Str], # 25
   [Concat, ~, [19, 25], ~, Str], # 26
   [Concat, ~, [26, 9], ~, Str], # 27
@@ -300,11 +304,12 @@ main::__PROGRAM__: {start: 0, returns: [39], nodes: [
   [DefinedOr, ~, [28, 29], ~, Str], # 30
   [Coerce, {from_repr: Str, to_repr: Int}, [30], ~, Int], # 31
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 32
-  [RightShift, ~, [31, 32], ~, Int], # 33
+  [RightShift, ~, [31, 32], 24, Int], # 33
   [Coerce, {from_repr: Int, to_repr: Str}, [33], ~, Str], # 34
   [Concat, ~, [27, 34], ~, Str], # 35
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 36
   [Concat, ~, [35, 36], ~, Str], # 37
-  [Print, ~, [37], 0, Scalar], # 38
-  [Return, {implicit: true}, [1], 38]]} # 39
+  [Print, ~, [37], 33, "Maybe[Boolean]"], # 38
+  [MemStart], # 39
+  [Return, {implicit: true}, [1], 38, ~, 39]]} # 40
 ```

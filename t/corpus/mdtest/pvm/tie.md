@@ -104,18 +104,19 @@ one word whose text is "tie"
 ```
 
 ```ir
-Counter::FETCH: {start: 0, returns: [2], nodes: [
+Counter::FETCH: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "42"}, ~, ~, Int], # 1
-  [Return, ~, [1], 0]]} # 2
+  [MemStart], # 2
+  [Return, ~, [1], 0, ~, 2]]} # 3
 Counter::TIESCALAR: {start: 0, returns: [5], nodes: [
   [Start], # 0
   [HashLiteral, ~, ~, 0, HashRef], # 1
   [Constant, {const_type: string, value: Counter}, ~, ~, Str], # 2
   [MemStart], # 3
-  [Call, {dispatch_kind: builtin, memory_input: true, name: bless, param_names: []}, [1, 2, 3], ~, Unknown], # 4
-  [Return, ~, [4], 1]]} # 5
-main::__PROGRAM__: {start: 0, returns: [12], nodes: [
+  [Call, {dispatch_kind: builtin, name: bless, param_names: []}, [1, 2], 1, Unknown, 3, true], # 4
+  [Return, ~, [4], 4, ~, 4]]} # 5
+main::__PROGRAM__: {start: 0, returns: [13], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [PadAccess, {sigil: $, symbol: x}, ~, ~, Str], # 2
@@ -126,9 +127,10 @@ main::__PROGRAM__: {start: 0, returns: [12], nodes: [
   [DefinedOr, ~, [5, 6], ~, Str], # 7
   [Constant, {const_type: string, value: a}, ~, ~, Str], # 8
   [Constant, {const_type: string, value: b}, ~, ~, Str], # 9
-  [Call, {dispatch_kind: builtin, name: tie, param_names: []}, [2, 7, 8, 9], 0, Unknown], # 10
-  [Print, ~, [3, 4], 10, Scalar], # 11
-  [Return, {implicit: true}, [1], 11]]} # 12
+  [MemStart], # 10
+  [Call, {dispatch_kind: builtin, name: tie, param_names: []}, [2, 7, 8, 9], 0, Unknown, 10, true], # 11
+  [Print, ~, [3, 4], 11, "Maybe[Boolean]"], # 12
+  [Return, {implicit: true}, [1], 12, ~, 11]]} # 13
 ```
 
 ## `tied` is a named unary, in boolean position
@@ -194,18 +196,19 @@ one word whose text is "tie"
 ```
 
 ```ir
-Counter::FETCH: {start: 0, returns: [2], nodes: [
+Counter::FETCH: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "42"}, ~, ~, Int], # 1
-  [Return, ~, [1], 0]]} # 2
+  [MemStart], # 2
+  [Return, ~, [1], 0, ~, 2]]} # 3
 Counter::TIESCALAR: {start: 0, returns: [5], nodes: [
   [Start], # 0
   [HashLiteral, ~, ~, 0, HashRef], # 1
   [Constant, {const_type: string, value: Counter}, ~, ~, Str], # 2
   [MemStart], # 3
-  [Call, {dispatch_kind: builtin, memory_input: true, name: bless, param_names: []}, [1, 2, 3], ~, Unknown], # 4
-  [Return, ~, [4], 1]]} # 5
-main::__PROGRAM__: {start: 0, returns: [16], nodes: [
+  [Call, {dispatch_kind: builtin, name: bless, param_names: []}, [1, 2], 1, Unknown, 3, true], # 4
+  [Return, ~, [4], 4, ~, 4]]} # 5
+main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [PadAccess, {sigil: $, symbol: x}, ~, ~, Unknown], # 2
@@ -220,7 +223,8 @@ main::__PROGRAM__: {start: 0, returns: [16], nodes: [
   [EnvRead, {key: X}, ~, ~, Str], # 11
   [Constant, {const_type: string, value: Counter}, ~, ~, Str], # 12
   [DefinedOr, ~, [11, 12], ~, Str], # 13
-  [Call, {dispatch_kind: builtin, name: tie, param_names: []}, [2, 13], 0, Unknown], # 14
-  [Print, ~, [6, 9, 10], 14, Scalar], # 15
-  [Return, {implicit: true}, [1], 15]]} # 16
+  [MemStart], # 14
+  [Call, {dispatch_kind: builtin, name: tie, param_names: []}, [2, 13], 0, Unknown, 14, true], # 15
+  [Print, ~, [6, 9, 10], 15, "Maybe[Boolean]"], # 16
+  [Return, {implicit: true}, [1], 16, ~, 15]]} # 17
 ```

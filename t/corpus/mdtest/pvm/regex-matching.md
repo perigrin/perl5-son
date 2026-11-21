@@ -48,7 +48,7 @@ no word whose text is "abc"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [8], nodes: [
+main::__PROGRAM__: {start: 0, returns: [9], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: abc}, ~, ~, Str], # 2
@@ -56,8 +56,9 @@ main::__PROGRAM__: {start: 0, returns: [8], nodes: [
   [Coerce, {from_repr: Boolean, to_repr: Str}, [3], ~, Str], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
   [Concat, ~, [4, 5], ~, Str], # 6
-  [Print, ~, [6], 0, Scalar], # 7
-  [Return, {implicit: true}, [1], 7]]} # 8
+  [Print, ~, [6], 0, "Maybe[Boolean]"], # 7
+  [MemStart], # 8
+  [Return, {implicit: true}, [1], 7, ~, 8]]} # 9
 ```
 
 ## The binding operator emits nothing
@@ -92,7 +93,7 @@ no operator whose text is "/"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [8], nodes: [
+main::__PROGRAM__: {start: 0, returns: [9], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: abc}, ~, ~, Str], # 2
@@ -100,8 +101,9 @@ main::__PROGRAM__: {start: 0, returns: [8], nodes: [
   [Coerce, {from_repr: Boolean, to_repr: Str}, [3], ~, Str], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
   [Concat, ~, [4, 5], ~, Str], # 6
-  [Print, ~, [6], 0, Scalar], # 7
-  [Return, {implicit: true}, [1], 7]]} # 8
+  [Print, ~, [6], 0, "Maybe[Boolean]"], # 7
+  [MemStart], # 8
+  [Return, {implicit: true}, [1], 7, ~, 8]]} # 9
 ```
 
 ## The negated binding is two ops
@@ -139,7 +141,7 @@ no operator whose text is "/"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [11], nodes: [
+main::__PROGRAM__: {start: 0, returns: [12], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: "["}, ~, ~, Str], # 2
@@ -150,8 +152,9 @@ main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [Concat, ~, [2, 6], ~, Str], # 7
   [Constant, {const_type: string, value: "]\n"}, ~, ~, Str], # 8
   [Concat, ~, [7, 8], ~, Str], # 9
-  [Print, ~, [9], 0, Scalar], # 10
-  [Return, {implicit: true}, [1], 10]]} # 11
+  [Print, ~, [9], 0, "Maybe[Boolean]"], # 10
+  [MemStart], # 11
+  [Return, {implicit: true}, [1], 10, ~, 11]]} # 12
 ```
 
 ## Substitution mutates in place
@@ -187,17 +190,17 @@ main::__PROGRAM__: {start: 0, returns: [13], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [PadAccess, {sigil: $, symbol: s}, [2], ~, Unknown], # 3
+  [PadAccess, {sigil: $, symbol: s}, ~, ~, Unknown, 2], # 3
   [Constant, {const_type: string, value: abc}, ~, ~, Str], # 4
-  [Assign, ~, [3, 4], 0, Str], # 5
-  [PadAccess, {sigil: $, symbol: s}, [5], ~, Unknown], # 6
-  [RegexSubst, {flags: "", pattern: a, replacement: z}, [6, 5], 5, Str], # 7
-  [PadAccess, {sigil: $, symbol: s}, [7], ~, Str], # 8
+  [Assign, ~, [3, 4], 0, Str, 2, true], # 5
+  [PadAccess, {sigil: $, symbol: s}, ~, ~, Unknown, 5], # 6
+  [RegexSubst, {flags: "", pattern: a, replacement: z}, [6], 5, Str, 5, true], # 7
+  [PadAccess, {sigil: $, symbol: s}, ~, ~, Str, 7], # 8
   [Coerce, {from_repr: Unknown, to_repr: Str}, [8], ~, Str], # 9
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
   [Concat, ~, [9, 10], ~, Str], # 11
-  [Print, ~, [11], 7, Scalar], # 12
-  [Return, {implicit: true}, [1], 12]]} # 13
+  [Print, ~, [11], 7, "Maybe[Boolean]"], # 12
+  [Return, {implicit: true}, [1], 12, ~, 7]]} # 13
 ```
 
 ## An interpolated pattern adds `regcomp`
@@ -240,17 +243,18 @@ no operator whose text is "/"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [9], nodes: [
+main::__PROGRAM__: {start: 0, returns: [10], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: abc}, ~, ~, Str], # 2
   [Constant, {const_type: string, value: b}, ~, ~, Str], # 3
-  [Match, ~, [2, 3], ~, Boolean], # 4
+  [Match, {flags: ""}, [2, 3], ~, Boolean], # 4
   [Coerce, {from_repr: Boolean, to_repr: Str}, [4], ~, Str], # 5
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 6
   [Concat, ~, [5, 6], ~, Str], # 7
-  [Print, ~, [7], 0, Scalar], # 8
-  [Return, {implicit: true}, [1], 8]]} # 9
+  [Print, ~, [7], 0, "Maybe[Boolean]"], # 8
+  [MemStart], # 9
+  [Return, {implicit: true}, [1], 8, ~, 9]]} # 10
 ```
 
 ## `pos` and `\G` on a signature parameter
@@ -281,58 +285,59 @@ parses: yes
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [20], nodes: [
+main::__PROGRAM__: {start: 0, returns: [21], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: aab}, ~, ~, Str], # 2
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 3
   [Constant, {const_type: string, value: "a+"}, ~, ~, Str], # 4
-  [Call, {dispatch_kind: direct, name: main::token_end, param_names: [], want: list}, [2, 3, 4], 0, Unknown], # 5
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [5], ~, Str], # 6
-  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 7
-  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 8
-  [Constant, {const_type: string, value: b}, ~, ~, Str], # 9
-  [Call, {dispatch_kind: direct, name: main::token_end, param_names: [], want: list}, [2, 8, 9], 5, Unknown], # 10
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [10], ~, Str], # 11
-  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 12
-  [Call, {dispatch_kind: direct, name: main::token_end, param_names: [], want: scalar}, [2, 12, 9], 10, Unknown], # 13
-  [Defined, ~, [13], ~, Boolean], # 14
-  [Constant, {const_type: string, value: matched}, ~, ~, Str], # 15
-  [Constant, {const_type: string, value: none}, ~, ~, Str], # 16
-  [TernaryExpr, ~, [14, 15, 16], ~, Str], # 17
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 18
-  [Print, ~, [6, 7, 11, 7, 17, 18], 13, Scalar], # 19
-  [Return, {implicit: true}, [1], 19]]} # 20
+  [MemStart], # 5
+  [Call, {dispatch_kind: direct, file: "/tmp/osrpJFXK1Z/case.pl", line: 6, name: main::token_end, package: main, param_names: [], want: list}, [2, 3, 4], 0, Unknown, 5, true], # 6
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
+  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 8
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 9
+  [Constant, {const_type: string, value: b}, ~, ~, Str], # 10
+  [Call, {dispatch_kind: direct, file: "/tmp/osrpJFXK1Z/case.pl", line: 6, name: main::token_end, package: main, param_names: [], want: list}, [2, 9, 10], 6, Unknown, 6, true], # 11
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [11], ~, Str], # 12
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 13
+  [Call, {dispatch_kind: direct, file: "/tmp/osrpJFXK1Z/case.pl", line: 6, name: main::token_end, package: main, param_names: [], want: scalar}, [2, 13, 10], 11, Unknown, 11, true], # 14
+  [Defined, ~, [14], ~, Boolean], # 15
+  [Constant, {const_type: string, value: matched}, ~, ~, Str], # 16
+  [Constant, {const_type: string, value: none}, ~, ~, Str], # 17
+  [TernaryExpr, ~, [15, 16, 17], ~, Str], # 18
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 19
+  [Print, ~, [7, 8, 12, 8, 18, 19], 14, "Maybe[Boolean]"], # 20
+  [Return, {implicit: true}, [1], 20, ~, 14]]} # 21
 main::token_end: {start: 0, returns: [22], nodes: [
   [Start], # 0
   [MemStart], # 1
-  [PadAccess, {sigil: $, symbol: input}, [1], ~, Unknown], # 2
+  [PadAccess, {sigil: $, symbol: input}, ~, ~, Unknown, 1], # 2
   [Parameter, {index: 0, name: $input, sigil: $}, ~, ~, Unknown], # 3
-  [Assign, ~, [2, 3], 0, Unknown], # 4
-  [PadAccess, {sigil: $, symbol: input}, [4], ~, Unknown], # 5
-  [Call, {dispatch_kind: builtin, name: pos, param_names: []}, [5], ~, Unknown], # 6
-  [Parameter, {index: 1, name: $position, sigil: $}, ~, ~, Num], # 7
-  [Assign, ~, [6, 7], 4, Num], # 8
-  [PadAccess, {sigil: $, symbol: input}, [8], ~, Unknown], # 9
+  [Assign, ~, [2, 3], 0, Unknown, 1, true], # 4
+  [PadAccess, {sigil: $, symbol: input}, ~, ~, Unknown, 4], # 5
+  [Call, {dispatch_kind: builtin, name: pos, param_names: []}, [5], ~, Scalar], # 6
+  [Parameter, {index: 1, name: $position, sigil: $}, ~, ~, Unknown], # 7
+  [Assign, ~, [6, 7], 4, Unknown, 4, true], # 8
+  [PadAccess, {sigil: $, symbol: input}, ~, ~, Unknown, 8], # 9
   [Constant, {const_type: string, value: "\\G("}, ~, ~, Str], # 10
   [Parameter, {index: 2, name: $pattern, sigil: $}, ~, ~, Str], # 11
   [Coerce, {from_repr: Unknown, to_repr: Str}, [11], ~, Str], # 12
   [Concat, ~, [10, 12], ~, Str], # 13
   [Constant, {const_type: string, value: ")"}, ~, ~, Str], # 14
   [Concat, ~, [13, 14], ~, Str], # 15
-  [Match, ~, [9, 15], 8, Boolean], # 16
+  [Match, {flags: u}, [9, 15], 8, Boolean], # 16
   [RegexCapture, {"n": 1}, [16], ~, Str], # 17
   [Length, ~, [17], ~, Int], # 18
-  [Add, ~, [7, 18], ~, Num], # 19
+  [Add, ~, [7, 18], ~, Unknown], # 19
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 20
   [TernaryExpr, ~, [16, 19, 20], ~, Unknown], # 21
-  [Return, ~, [21], 16]]} # 22
+  [Return, ~, [21], 16, ~, 8]]} # 22
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.036"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 ```
 
 ## A match in void context, kept for its captures
@@ -357,7 +362,7 @@ value key
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [12], nodes: [
+main::__PROGRAM__: {start: 0, returns: [13], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: "key=value"}, ~, ~, Str], # 2
@@ -369,6 +374,7 @@ main::__PROGRAM__: {start: 0, returns: [12], nodes: [
   [Concat, ~, [6, 7], ~, Str], # 8
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
   [Concat, ~, [8, 9], ~, Str], # 10
-  [Print, ~, [10], 3, Scalar], # 11
-  [Return, {implicit: true}, [1], 11]]} # 12
+  [Print, ~, [10], 3, "Maybe[Boolean]"], # 11
+  [MemStart], # 12
+  [Return, {implicit: true}, [1], 11, ~, 12]]} # 13
 ```

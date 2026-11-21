@@ -62,22 +62,25 @@ one word whose text is "END"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [4], nodes: [
+main::__PROGRAM__: {start: 0, returns: [5], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: "main\n"}, ~, ~, Str], # 2
-  [Print, ~, [2], 0, Scalar], # 3
-  [Return, {implicit: true}, [1], 3]]} # 4
-"BEGIN 1": {start: 0, returns: [3], nodes: [
+  [Print, ~, [2], 0, "Maybe[Boolean]"], # 3
+  [MemStart], # 4
+  [Return, {implicit: true}, [1], 3, ~, 4]]} # 5
+"BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "begin\n"}, ~, ~, Str], # 1
-  [Print, ~, [1], 0, Scalar], # 2
-  [Return, {implicit: true}, [2], 2]]} # 3
-"END 2": {start: 0, returns: [3], nodes: [
+  [Print, ~, [1], 0, "Maybe[Boolean]"], # 2
+  [MemStart], # 3
+  [Return, {implicit: true}, [2], 2, ~, 3]]} # 4
+"END 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "end\n"}, ~, ~, Str], # 1
-  [Print, ~, [1], 0, Scalar], # 2
-  [Return, {implicit: true}, [2], 2]]} # 3
+  [Print, ~, [1], 0, "Maybe[Boolean]"], # 2
+  [MemStart], # 3
+  [Return, {implicit: true}, [2], 2, ~, 3]]} # 4
 ```
 
 ## `__PACKAGE__` is a bareword that is not a bareword
@@ -129,17 +132,18 @@ one word whose text is "Foo"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [9], nodes: [
+main::__PROGRAM__: {start: 0, returns: [10], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: main}, ~, ~, Str], # 2
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 3
   [Constant, {const_type: string, value: Foo}, ~, ~, Str], # 4
   [PackageMark, {package: Foo}, ~, 0], # 5
-  [Print, ~, [4, 3], 5, Scalar], # 6
+  [Print, ~, [4, 3], 5, "Maybe[Boolean]"], # 6
   [PackageMark, {package: main}, ~, 6], # 7
-  [Print, ~, [2, 3], 7, Scalar], # 8
-  [Return, {implicit: true}, [1], 8]]} # 9
+  [Print, ~, [2, 3], 7, "Maybe[Boolean]"], # 8
+  [MemStart], # 9
+  [Return, {implicit: true}, [1], 8, ~, 9]]} # 10
 ```
 
 ## A `#` at column zero that is not a comment
@@ -202,15 +206,16 @@ one word whose text is "__FILE__"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [7], nodes: [
+main::__PROGRAM__: {start: 0, returns: [8], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: "200"}, ~, ~, Str], # 2
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 3
   [Constant, {const_type: string, value: bzzzt}, ~, ~, Str], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
-  [Print, ~, [2, 3, 4, 5], 0, Scalar], # 6
-  [Return, {implicit: true}, [1], 6]]} # 7
+  [Print, ~, [2, 3, 4, 5], 0, "Maybe[Boolean]"], # 6
+  [MemStart], # 7
+  [Return, {implicit: true}, [1], 6, ~, 7]]} # 8
 ```
 
 ## `use constant` installs a bareword that parses as a call
@@ -274,14 +279,15 @@ one word whose text is "constant"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [6], nodes: [
+main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: integer, value: "4"}, ~, ~, Int], # 2
   [Coerce, {from_repr: Int, to_repr: Str}, [2], ~, Str], # 3
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
-  [Print, ~, [3, 4], 0, Scalar], # 5
-  [Return, {implicit: true}, [1], 5]]} # 6
+  [Print, ~, [3, 4], 0, "Maybe[Boolean]"], # 5
+  [MemStart], # 6
+  [Return, {implicit: true}, [1], 5, ~, 6]]} # 7
 "BEGIN 1": {start: 0, returns: [8], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: constant}, ~, ~, Str], # 1
@@ -289,7 +295,7 @@ main::__PROGRAM__: {start: 0, returns: [6], nodes: [
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 3
   [Constant, {const_type: string, value: constant.pm}, ~, ~, Str], # 4
   [MemStart], # 5
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [4, 5], 0, Unknown], # 6
-  [Call, {class_name: constant, dispatch_kind: method, name: import, param_names: []}, [1, 2, 3], 6, Unknown], # 7
-  [Return, {implicit: true}, [7], 7]]} # 8
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [4], 0, Unknown, 5, true], # 6
+  [Call, {class_name: constant, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2, 3], 6, Unknown, 6, true], # 7
+  [Return, {implicit: true}, [7], 7, ~, 7]]} # 8
 ```

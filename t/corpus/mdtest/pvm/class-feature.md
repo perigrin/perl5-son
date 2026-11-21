@@ -46,32 +46,33 @@ Empty
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [6], nodes: [
+main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Call, {class_name: Empty, dispatch_kind: method, name: new, param_names: [], want: scalar}, ~, 0, Object], # 2
-  [RefType, ~, [2], ~, Str], # 3
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
-  [Print, ~, [3, 4], 2, Scalar], # 5
-  [Return, {implicit: true}, [1], 5]]} # 6
+  [MemStart], # 2
+  [Call, {class_name: Empty, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 4, name: new, package: main, param_names: [], want: scalar}, ~, 0, Object, 2, true], # 3
+  [RefType, ~, [3], ~, Str, 3], # 4
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
+  [Print, ~, [4, 5], 3, "Maybe[Boolean]"], # 6
+  [Return, {implicit: true}, [1], 6, ~, 3]]} # 7
 "BEGIN 1": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: feature}, ~, ~, Str], # 1
   [Constant, {const_type: string, value: class}, ~, ~, Str], # 2
   [Constant, {const_type: string, value: feature.pm}, ~, ~, Str], # 3
   [MemStart], # 4
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
-  [Call, {class_name: feature, dispatch_kind: method, name: import, param_names: []}, [1, 2], 5, Unknown], # 6
-  [Return, {implicit: true}, [6], 6]]} # 7
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
+  [Call, {class_name: feature, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 "BEGIN 2": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: warnings}, ~, ~, Str], # 1
   [Constant, {const_type: string, value: experimental::class}, ~, ~, Str], # 2
   [Constant, {const_type: string, value: warnings.pm}, ~, ~, Str], # 3
   [MemStart], # 4
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
-  [Call, {class_name: warnings, dispatch_kind: method, name: unimport, param_names: []}, [1, 2], 5, Unknown], # 6
-  [Return, {implicit: true}, [6], 6]]} # 7
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
+  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 2, name: unimport, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 ```
 
 ## `field` and `method` in a class body
@@ -120,44 +121,46 @@ parses: yes
 ```
 
 ```ir
-Foo::__DEFAULT_0: {start: 0, returns: [2], nodes: [
+Foo::__DEFAULT_0: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 1
-  [Return, ~, [1], 0]]} # 2
+  [MemStart], # 2
+  [Return, ~, [1], 0, ~, 2]]} # 3
 Foo::m: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [MemStart], # 1
-  [FieldAccess, {field_index: 0, field_stash: Foo}, [1], ~, Int], # 2
-  [Return, {implicit: true}, [2], 0]]} # 3
-main::__PROGRAM__: {start: 0, returns: [9], nodes: [
+  [FieldAccess, {field_index: 0, field_stash: Foo}, ~, ~, Int, 1], # 2
+  [Return, {implicit: true}, [2], 0, ~, 1]]} # 3
+main::__PROGRAM__: {start: 0, returns: [10], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [PackageMark, {package: Foo}, ~, 0], # 2
   [PackageMark, {package: main}, ~, 2], # 3
-  [Call, {class_name: Foo, dispatch_kind: method, name: new, param_names: [], want: scalar}, ~, 3, Object], # 4
-  [Call, {class_name: Foo, dispatch_kind: method, name: m, param_names: [], want: list}, [4], 4, Int], # 5
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [5], ~, Str], # 6
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 7
-  [Print, ~, [6, 7], 5, Scalar], # 8
-  [Return, {implicit: true}, [1], 8]]} # 9
+  [MemStart], # 4
+  [Call, {class_name: Foo, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 7, name: new, package: main, param_names: [], want: scalar}, ~, 3, Object, 4, true], # 5
+  [Call, {class_name: Foo, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 8, name: m, package: main, param_names: [], want: list}, [5], 5, Int, 5, true], # 6
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
+  [Print, ~, [7, 8], 6, "Maybe[Boolean]"], # 9
+  [Return, {implicit: true}, [1], 9, ~, 6]]} # 10
 "BEGIN 1": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: feature}, ~, ~, Str], # 1
   [Constant, {const_type: string, value: class}, ~, ~, Str], # 2
   [Constant, {const_type: string, value: feature.pm}, ~, ~, Str], # 3
   [MemStart], # 4
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
-  [Call, {class_name: feature, dispatch_kind: method, name: import, param_names: []}, [1, 2], 5, Unknown], # 6
-  [Return, {implicit: true}, [6], 6]]} # 7
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
+  [Call, {class_name: feature, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 "BEGIN 2": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: warnings}, ~, ~, Str], # 1
   [Constant, {const_type: string, value: experimental::class}, ~, ~, Str], # 2
   [Constant, {const_type: string, value: warnings.pm}, ~, ~, Str], # 3
   [MemStart], # 4
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
-  [Call, {class_name: warnings, dispatch_kind: method, name: unimport, param_names: []}, [1, 2], 5, Unknown], # 6
-  [Return, {implicit: true}, [6], 6]]} # 7
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
+  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 2, name: unimport, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 ```
 
 ## `ADJUST` alone in a class body
@@ -197,44 +200,47 @@ Foo
 ```
 
 ```ir
-Foo::__ADJUST_0: {start: 0, returns: [4], nodes: [
+Foo::__ADJUST_0: {start: 0, returns: [5], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 1
   [FieldAccess, {field_index: 0, field_stash: Foo}, ~, ~, Int], # 2
-  [Assign, ~, [2, 1], 0, Int], # 3
-  [Return, {implicit: true}, [1], 3]]} # 4
-Foo::__DEFAULT_0: {start: 0, returns: [2], nodes: [
+  [MemStart], # 3
+  [Assign, ~, [2, 1], 0, Int, 3, true], # 4
+  [Return, {implicit: true}, [1], 4, ~, 4]]} # 5
+Foo::__DEFAULT_0: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
-  [Return, ~, [1], 0]]} # 2
-main::__PROGRAM__: {start: 0, returns: [8], nodes: [
+  [MemStart], # 2
+  [Return, ~, [1], 0, ~, 2]]} # 3
+main::__PROGRAM__: {start: 0, returns: [9], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [PackageMark, {package: Foo}, ~, 0], # 2
   [PackageMark, {package: main}, ~, 2], # 3
-  [Call, {class_name: Foo, dispatch_kind: method, name: new, param_names: [], want: scalar}, ~, 3, Object], # 4
-  [RefType, ~, [4], ~, Str], # 5
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 6
-  [Print, ~, [5, 6], 4, Scalar], # 7
-  [Return, {implicit: true}, [1], 7]]} # 8
+  [MemStart], # 4
+  [Call, {class_name: Foo, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 7, name: new, package: main, param_names: [], want: scalar}, ~, 3, Object, 4, true], # 5
+  [RefType, ~, [5], ~, Str, 5], # 6
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 7
+  [Print, ~, [6, 7], 5, "Maybe[Boolean]"], # 8
+  [Return, {implicit: true}, [1], 8, ~, 5]]} # 9
 "BEGIN 1": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: feature}, ~, ~, Str], # 1
   [Constant, {const_type: string, value: class}, ~, ~, Str], # 2
   [Constant, {const_type: string, value: feature.pm}, ~, ~, Str], # 3
   [MemStart], # 4
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
-  [Call, {class_name: feature, dispatch_kind: method, name: import, param_names: []}, [1, 2], 5, Unknown], # 6
-  [Return, {implicit: true}, [6], 6]]} # 7
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
+  [Call, {class_name: feature, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 "BEGIN 2": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: warnings}, ~, ~, Str], # 1
   [Constant, {const_type: string, value: experimental::class}, ~, ~, Str], # 2
   [Constant, {const_type: string, value: warnings.pm}, ~, ~, Str], # 3
   [MemStart], # 4
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
-  [Call, {class_name: warnings, dispatch_kind: method, name: unimport, param_names: []}, [1, 2], 5, Unknown], # 6
-  [Return, {implicit: true}, [6], 6]]} # 7
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
+  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 2, name: unimport, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 ```
 
 ## A `:param` field defaulting to a folded boolean
@@ -263,61 +269,66 @@ parses: yes
 ```
 
 ```ir
-Flags::__DEFAULT_0: {start: 0, returns: [2], nodes: [
+Flags::__DEFAULT_0: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: boolean, value: ""}, ~, ~, Boolean], # 1
-  [Return, ~, [1], 0]]} # 2
-Flags::__DEFAULT_1: {start: 0, returns: [2], nodes: [
+  [MemStart], # 2
+  [Return, ~, [1], 0, ~, 2]]} # 3
+Flags::__DEFAULT_1: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: boolean, value: "1"}, ~, ~, Boolean], # 1
-  [Return, ~, [1], 0]]} # 2
-Flags::loud: {start: 0, returns: [2], nodes: [
+  [MemStart], # 2
+  [Return, ~, [1], 0, ~, 2]]} # 3
+Flags::loud: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [FieldAccess, {field_index: 1, field_stash: Flags}, ~, ~, Scalar], # 1
-  [Return, ~, [1], 0]]} # 2
-Flags::quiet: {start: 0, returns: [2], nodes: [
+  [MemStart], # 2
+  [Return, ~, [1], 0, ~, 2]]} # 3
+Flags::quiet: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [FieldAccess, {field_index: 0, field_stash: Flags}, ~, ~, Scalar], # 1
-  [Return, ~, [1], 0]]} # 2
-main::__PROGRAM__: {start: 0, returns: [19], nodes: [
+  [MemStart], # 2
+  [Return, ~, [1], 0, ~, 2]]} # 3
+main::__PROGRAM__: {start: 0, returns: [20], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [PackageMark, {package: Flags}, ~, 0], # 2
   [PackageMark, {package: main}, ~, 2], # 3
-  [Call, {class_name: Flags, dispatch_kind: method, name: new, param_names: [], want: scalar}, ~, 3, Object], # 4
-  [Call, {class_name: Flags, dispatch_kind: method, name: quiet, param_names: [], want: scalar}, [4], 4, Scalar], # 5
-  [Constant, {const_type: string, value: q}, ~, ~, Str], # 6
-  [Constant, {const_type: string, value: "-"}, ~, ~, Str], # 7
-  [TernaryExpr, ~, [5, 6, 7], ~, Str], # 8
-  [Call, {class_name: Flags, dispatch_kind: method, name: loud, param_names: [], want: scalar}, [4], 5, Scalar], # 9
-  [Constant, {const_type: string, value: l}, ~, ~, Str], # 10
-  [TernaryExpr, ~, [9, 10, 7], ~, Str], # 11
-  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 12
-  [Call, {class_name: Flags, dispatch_kind: method, name: new, param_names: [quiet], want: scalar}, [12], 9, Object], # 13
-  [Call, {class_name: Flags, dispatch_kind: method, name: quiet, param_names: [], want: scalar}, [13], 13, Scalar], # 14
-  [Constant, {const_type: string, value: Q}, ~, ~, Str], # 15
-  [TernaryExpr, ~, [14, 15, 7], ~, Str], # 16
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 17
-  [Print, ~, [8, 11, 16, 17], 14, Scalar], # 18
-  [Return, {implicit: true}, [1], 18]]} # 19
+  [MemStart], # 4
+  [Call, {class_name: Flags, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 4, name: new, package: main, param_names: [], want: scalar}, ~, 3, Object, 4, true], # 5
+  [Call, {class_name: Flags, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 5, name: quiet, package: main, param_names: [], want: scalar}, [5], 5, Scalar, 5, true], # 6
+  [Constant, {const_type: string, value: q}, ~, ~, Str], # 7
+  [Constant, {const_type: string, value: "-"}, ~, ~, Str], # 8
+  [TernaryExpr, ~, [6, 7, 8], ~, Str], # 9
+  [Call, {class_name: Flags, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 5, name: loud, package: main, param_names: [], want: scalar}, [5], 6, Scalar, 6, true], # 10
+  [Constant, {const_type: string, value: l}, ~, ~, Str], # 11
+  [TernaryExpr, ~, [10, 11, 8], ~, Str], # 12
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 13
+  [Call, {class_name: Flags, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 5, name: new, package: main, param_names: [quiet], want: scalar}, [13], 10, Object, 10, true], # 14
+  [Call, {class_name: Flags, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 5, name: quiet, package: main, param_names: [], want: scalar}, [14], 14, Scalar, 14, true], # 15
+  [Constant, {const_type: string, value: Q}, ~, ~, Str], # 16
+  [TernaryExpr, ~, [15, 16, 8], ~, Str], # 17
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 18
+  [Print, ~, [9, 12, 17, 18], 15, "Maybe[Boolean]"], # 19
+  [Return, {implicit: true}, [1], 19, ~, 15]]} # 20
 "BEGIN 1": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: feature}, ~, ~, Str], # 1
   [Constant, {const_type: string, value: class}, ~, ~, Str], # 2
   [Constant, {const_type: string, value: feature.pm}, ~, ~, Str], # 3
   [MemStart], # 4
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
-  [Call, {class_name: feature, dispatch_kind: method, name: import, param_names: []}, [1, 2], 5, Unknown], # 6
-  [Return, {implicit: true}, [6], 6]]} # 7
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
+  [Call, {class_name: feature, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 "BEGIN 2": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: warnings}, ~, ~, Str], # 1
   [Constant, {const_type: string, value: experimental::class}, ~, ~, Str], # 2
   [Constant, {const_type: string, value: warnings.pm}, ~, ~, Str], # 3
   [MemStart], # 4
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
-  [Call, {class_name: warnings, dispatch_kind: method, name: unimport, param_names: []}, [1, 2], 5, Unknown], # 6
-  [Return, {implicit: true}, [6], 6]]} # 7
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
+  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 2, name: unimport, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 ```
 
 ## A field post-increment whose value is used
@@ -353,67 +364,70 @@ parses: yes
 ```
 
 ```ir
-Index::__DEFAULT_1: {start: 0, returns: [2], nodes: [
+Index::__DEFAULT_1: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 1
-  [Return, ~, [1], 0]]} # 2
-Index::register: {start: 0, returns: [19], nodes: [
+  [MemStart], # 2
+  [Return, ~, [1], 0, ~, 2]]} # 3
+Index::register: {start: 0, returns: [20], nodes: [
   [Start], # 0
   [FieldAccess, {field_index: 0, field_stash: Index}, ~, ~, Unknown], # 1
   [Parameter, {index: 0, name: $key, sigil: $}, ~, ~, Unknown], # 2
   [MemStart], # 3
-  [Subscript, {kind: hash}, [1, 2, 3], ~, Scalar], # 4
-  [Exists, {kind: hash}, [1, 2, 3], ~, Boolean], # 5
+  [Subscript, {kind: hash}, [1, 2], ~, Scalar, 3], # 4
+  [Exists, {kind: hash}, [1, 2], ~, Boolean, 3], # 5
   [If, ~, [0, 5], 0], # 6
   [Proj, {index: 1}, [6]], # 7
-  [FieldAccess, {field_index: 1, field_stash: Index}, ~, 7, Int], # 8
+  [FieldAccess, {field_index: 1, field_stash: Index}, ~, 7, Int, 3], # 8
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 9
   [DefinedOr, ~, [8, 9], ~, Scalar], # 10
   [Proj, {index: 0}, [6]], # 11
   [Subscript, {kind: hash}, [1, 2], ~, Scalar], # 12
   [FieldAccess, {field_index: 1, field_stash: Index}, ~, ~, Int], # 13
   [Increment, ~, [8], ~, Scalar], # 14
-  [Assign, ~, [13, 14], 8, Scalar], # 15
-  [Assign, ~, [12, 10], 15, Scalar], # 16
+  [Assign, ~, [13, 14], 8, Scalar, 3, true], # 15
+  [Assign, ~, [12, 10], 15, Scalar, 15, true], # 16
   [Region, {head: 6}, [11, 16]], # 17
   [Phi, {predecessors: [11, 7], region: 17}, [4, 10], ~, Scalar], # 18
-  [Return, ~, [18], 17]]} # 19
-main::__PROGRAM__: {start: 0, returns: [16], nodes: [
+  [Phi, {exits: true, memory: true, predecessors: [11, 7], region: 17}, [3, 16], ~, Unknown], # 19
+  [Return, ~, [18], 17, ~, 19]]} # 20
+main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: ","}, ~, ~, Str], # 2
   [PackageMark, {package: Index}, ~, 0], # 3
   [PackageMark, {package: main}, ~, 3], # 4
-  [Call, {class_name: Index, dispatch_kind: method, name: new, param_names: [], want: scalar}, ~, 4, Object], # 5
-  [Constant, {const_type: string, value: a}, ~, ~, Str], # 6
-  [Call, {class_name: Index, dispatch_kind: method, name: register, param_names: [], want: list}, [5, 6], 5, Scalar], # 7
-  [Constant, {const_type: string, value: b}, ~, ~, Str], # 8
-  [Call, {class_name: Index, dispatch_kind: method, name: register, param_names: [], want: list}, [5, 8], 7, Scalar], # 9
-  [Call, {class_name: Index, dispatch_kind: method, name: register, param_names: [], want: list}, [5, 6], 9, Scalar], # 10
-  [Constant, {const_type: string, value: c}, ~, ~, Str], # 11
-  [Call, {class_name: Index, dispatch_kind: method, name: register, param_names: [], want: list}, [5, 11], 10, Scalar], # 12
-  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [2, 7, 9, 10, 12], ~, Str], # 13
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 14
-  [Print, ~, [13, 14], 12, Scalar], # 15
-  [Return, {implicit: true}, [1], 15]]} # 16
+  [MemStart], # 5
+  [Call, {class_name: Index, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 13, name: new, package: main, param_names: [], want: scalar}, ~, 4, Object, 5, true], # 6
+  [Constant, {const_type: string, value: a}, ~, ~, Str], # 7
+  [Call, {class_name: Index, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 14, name: register, package: main, param_names: [], want: list}, [6, 7], 6, Scalar, 6, true], # 8
+  [Constant, {const_type: string, value: b}, ~, ~, Str], # 9
+  [Call, {class_name: Index, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 14, name: register, package: main, param_names: [], want: list}, [6, 9], 8, Scalar, 8, true], # 10
+  [Call, {class_name: Index, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 14, name: register, package: main, param_names: [], want: list}, [6, 7], 10, Scalar, 10, true], # 11
+  [Constant, {const_type: string, value: c}, ~, ~, Str], # 12
+  [Call, {class_name: Index, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 14, name: register, package: main, param_names: [], want: list}, [6, 12], 11, Scalar, 11, true], # 13
+  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [2, 8, 10, 11, 13], ~, Str], # 14
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 15
+  [Print, ~, [14, 15], 13, "Maybe[Boolean]"], # 16
+  [Return, {implicit: true}, [1], 16, ~, 13]]} # 17
 "BEGIN 1": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: feature}, ~, ~, Str], # 1
   [Constant, {const_type: string, value: class}, ~, ~, Str], # 2
   [Constant, {const_type: string, value: feature.pm}, ~, ~, Str], # 3
   [MemStart], # 4
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
-  [Call, {class_name: feature, dispatch_kind: method, name: import, param_names: []}, [1, 2], 5, Unknown], # 6
-  [Return, {implicit: true}, [6], 6]]} # 7
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
+  [Call, {class_name: feature, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 "BEGIN 2": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: warnings}, ~, ~, Str], # 1
   [Constant, {const_type: string, value: experimental::class}, ~, ~, Str], # 2
   [Constant, {const_type: string, value: warnings.pm}, ~, ~, Str], # 3
   [MemStart], # 4
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
-  [Call, {class_name: warnings, dispatch_kind: method, name: unimport, param_names: []}, [1, 2], 5, Unknown], # 6
-  [Return, {implicit: true}, [6], 6]]} # 7
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
+  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 2, name: unimport, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 ```
 
 ## A string built into a field
@@ -446,78 +460,82 @@ parses: yes
 ```
 
 ```ir
-Log::__ADJUST_0: {start: 0, returns: [6], nodes: [
+Log::__ADJUST_0: {start: 0, returns: [7], nodes: [
   [Start], # 0
-  [FieldAccess, {field_index: 0, field_stash: Log}, ~, 0, Str], # 1
-  [Constant, {const_type: string, value: start}, ~, ~, Str], # 2
-  [Concat, ~, [1, 2], ~, Str], # 3
-  [FieldAccess, {field_index: 0, field_stash: Log}, ~, ~, Str], # 4
-  [Assign, ~, [4, 3], 1, Str], # 5
-  [Return, {implicit: true}, [3], 5]]} # 6
-Log::__DEFAULT_0: {start: 0, returns: [2], nodes: [
+  [MemStart], # 1
+  [FieldAccess, {field_index: 0, field_stash: Log}, ~, 0, Str, 1], # 2
+  [Constant, {const_type: string, value: start}, ~, ~, Str], # 3
+  [Concat, ~, [2, 3], ~, Str], # 4
+  [FieldAccess, {field_index: 0, field_stash: Log}, ~, ~, Str], # 5
+  [Assign, ~, [5, 4], 2, Str, 1, true], # 6
+  [Return, {implicit: true}, [4], 6, ~, 6]]} # 7
+Log::__DEFAULT_0: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: ""}, ~, ~, Str], # 1
-  [Return, ~, [1], 0]]} # 2
-Log::add: {start: 0, returns: [12], nodes: [
+  [MemStart], # 2
+  [Return, ~, [1], 0, ~, 2]]} # 3
+Log::add: {start: 0, returns: [13], nodes: [
   [Start], # 0
   [PadAccess, {sigil: $, symbol: self}, ~, ~, Unknown], # 1
   [FieldAccess, {field_index: 0, field_stash: Log}, ~, ~, Str], # 2
-  [FieldAccess, {field_index: 0, field_stash: Log}, ~, 0, Str], # 3
-  [Constant, {const_type: string, value: "<"}, ~, ~, Str], # 4
-  [Concat, ~, [3, 4], ~, Str], # 5
-  [Parameter, {index: 0, name: $x, sigil: $}, ~, ~, Str], # 6
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
-  [Concat, ~, [5, 7], ~, Str], # 8
-  [Constant, {const_type: string, value: ">"}, ~, ~, Str], # 9
-  [Concat, ~, [8, 9], ~, Str], # 10
-  [Assign, ~, [2, 10], 3, Str], # 11
-  [Return, ~, [1], 11]]} # 12
+  [MemStart], # 3
+  [FieldAccess, {field_index: 0, field_stash: Log}, ~, 0, Str, 3], # 4
+  [Constant, {const_type: string, value: "<"}, ~, ~, Str], # 5
+  [Concat, ~, [4, 5], ~, Str], # 6
+  [Parameter, {index: 0, name: $x, sigil: $}, ~, ~, Str], # 7
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
+  [Concat, ~, [6, 8], ~, Str], # 9
+  [Constant, {const_type: string, value: ">"}, ~, ~, Str], # 10
+  [Concat, ~, [9, 10], ~, Str], # 11
+  [Assign, ~, [2, 11], 4, Str, 3, true], # 12
+  [Return, ~, [1], 12, ~, 12]]} # 13
 Log::close: {start: 0, returns: [11], nodes: [
   [Start], # 0
   [FieldAccess, {field_index: 0, field_stash: Log}, ~, ~, Str], # 1
   [Constant, {const_type: string, value: "["}, ~, ~, Str], # 2
   [MemStart], # 3
-  [FieldAccess, {field_index: 0, field_stash: Log}, [3], ~, Str], # 4
+  [FieldAccess, {field_index: 0, field_stash: Log}, ~, ~, Str, 3], # 4
   [Coerce, {from_repr: Unknown, to_repr: Str}, [4], ~, Str], # 5
   [Concat, ~, [2, 5], ~, Str], # 6
   [Constant, {const_type: string, value: "]"}, ~, ~, Str], # 7
   [Concat, ~, [6, 7], ~, Str], # 8
-  [Assign, ~, [1, 8], 0, Str], # 9
-  [FieldAccess, {field_index: 0, field_stash: Log}, [9], ~, Str], # 10
-  [Return, ~, [10], 9]]} # 11
-main::__PROGRAM__: {start: 0, returns: [13], nodes: [
+  [Assign, ~, [1, 8], 0, Str, 3, true], # 9
+  [FieldAccess, {field_index: 0, field_stash: Log}, ~, ~, Str, 9], # 10
+  [Return, ~, [10], 9, ~, 9]]} # 11
+main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [PackageMark, {package: Log}, ~, 0], # 2
   [PackageMark, {package: main}, ~, 2], # 3
-  [Call, {class_name: Log, dispatch_kind: method, name: new, param_names: [], want: scalar}, ~, 3, Object], # 4
-  [Constant, {const_type: string, value: a}, ~, ~, Str], # 5
-  [Call, {class_name: Log, dispatch_kind: method, name: add, param_names: [], want: scalar}, [4, 5], 4, Unknown], # 6
-  [Constant, {const_type: string, value: b}, ~, ~, Str], # 7
-  [Call, {class_name: Log, dispatch_kind: method, name: add, param_names: [], want: scalar}, [6, 7], 6, Unknown], # 8
-  [Call, {class_name: Log, dispatch_kind: method, name: close, param_names: [], want: list}, [8], 8, Str], # 9
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [9], ~, Str], # 10
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 11
-  [Print, ~, [10, 11], 9, Scalar], # 12
-  [Return, {implicit: true}, [1], 12]]} # 13
+  [MemStart], # 4
+  [Call, {class_name: Log, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 9, name: new, package: main, param_names: [], want: scalar}, ~, 3, Object, 4, true], # 5
+  [Constant, {const_type: string, value: a}, ~, ~, Str], # 6
+  [Call, {class_name: Log, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 9, name: add, package: main, param_names: [], want: scalar}, [5, 6], 5, Unknown, 5, true], # 7
+  [Constant, {const_type: string, value: b}, ~, ~, Str], # 8
+  [Call, {dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 9, name: add, package: main, param_names: [], want: scalar}, [7, 8], 7, Unknown, 7, true], # 9
+  [Call, {dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 9, name: close, package: main, param_names: [], want: list}, [9], 9, Unknown, 9, true], # 10
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [10], ~, Str], # 11
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 12
+  [Print, ~, [11, 12], 10, "Maybe[Boolean]"], # 13
+  [Return, {implicit: true}, [1], 13, ~, 10]]} # 14
 "BEGIN 1": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: feature}, ~, ~, Str], # 1
   [Constant, {const_type: string, value: class}, ~, ~, Str], # 2
   [Constant, {const_type: string, value: feature.pm}, ~, ~, Str], # 3
   [MemStart], # 4
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
-  [Call, {class_name: feature, dispatch_kind: method, name: import, param_names: []}, [1, 2], 5, Unknown], # 6
-  [Return, {implicit: true}, [6], 6]]} # 7
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
+  [Call, {class_name: feature, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 "BEGIN 2": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: warnings}, ~, ~, Str], # 1
   [Constant, {const_type: string, value: experimental::class}, ~, ~, Str], # 2
   [Constant, {const_type: string, value: warnings.pm}, ~, ~, Str], # 3
   [MemStart], # 4
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
-  [Call, {class_name: warnings, dispatch_kind: method, name: unimport, param_names: []}, [1, 2], 5, Unknown], # 6
-  [Return, {implicit: true}, [6], 6]]} # 7
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
+  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 2, name: unimport, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 ```
 
 ## `//=` into a field from a call
@@ -554,51 +572,54 @@ parses: yes
 ```
 
 ```ir
-Node::__ADJUST_0: {start: 0, returns: [12], nodes: [
+Node::__ADJUST_0: {start: 0, returns: [14], nodes: [
   [Start], # 0
-  [FieldAccess, {field_index: 1, field_stash: Node}, ~, 0, Scalar], # 1
-  [Defined, ~, [1], ~, Boolean], # 2
-  [If, ~, [1, 2], 1], # 3
-  [Proj, {index: 0}, [3]], # 4
-  [FieldAccess, {field_index: 1, field_stash: Node}, ~, ~, Scalar], # 5
-  [PadAccess, {sigil: $, symbol: self}, ~, ~, Object], # 6
-  [Proj, {index: 1}, [3]], # 7
-  [Call, {class_name: Node, dispatch_kind: method, name: first, param_names: [], want: scalar}, [6], 7, Scalar], # 8
-  [Assign, ~, [5, 8], 8, Scalar], # 9
-  [Region, {head: 3}, [4, 9]], # 10
-  [FieldAccess, {field_index: 1, field_stash: Node}, ~, 10, Scalar], # 11
-  [Return, {implicit: true}, [11], 11], # 12
-  [MemStart], # 13
-  [Phi, {memory: true, predecessors: [4, 7], region: 10}, [13, 9], ~, Unknown]]} # 14
-Node::__DEFAULT_1: {start: 0, returns: [2], nodes: [
+  [MemStart], # 1
+  [FieldAccess, {field_index: 1, field_stash: Node}, ~, 0, Scalar, 1], # 2
+  [Defined, ~, [2], ~, Boolean], # 3
+  [If, ~, [2, 3], 2], # 4
+  [Proj, {index: 0}, [4]], # 5
+  [FieldAccess, {field_index: 1, field_stash: Node}, ~, ~, Scalar], # 6
+  [PadAccess, {sigil: $, symbol: self}, ~, ~, Object], # 7
+  [Proj, {index: 1}, [4]], # 8
+  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 7, name: first, package: Node, param_names: [], want: scalar}, [7], 8, Scalar, 1, true], # 9
+  [Assign, ~, [6, 9], 9, Scalar, 9, true], # 10
+  [Region, {head: 4}, [5, 10]], # 11
+  [Phi, {memory: true, predecessors: [5, 8], region: 11}, [1, 10], ~, Unknown], # 12
+  [FieldAccess, {field_index: 1, field_stash: Node}, ~, 11, Scalar, 12], # 13
+  [Return, {implicit: true}, [13], 13, ~, 12]]} # 14
+Node::__DEFAULT_1: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, ~, [1], 0]]} # 2
-Node::__DEFAULT_2: {start: 0, returns: [2], nodes: [
+  [MemStart], # 2
+  [Return, ~, [1], 0, ~, 2]]} # 3
+Node::__DEFAULT_2: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 1
-  [Return, ~, [1], 0]]} # 2
+  [MemStart], # 2
+  [Return, ~, [1], 0, ~, 2]]} # 3
 Node::calls: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [MemStart], # 1
-  [FieldAccess, {field_index: 2, field_stash: Node}, [1], ~, Int], # 2
-  [Return, ~, [2], 0]]} # 3
-Node::first: {start: 0, returns: [8], nodes: [
+  [FieldAccess, {field_index: 2, field_stash: Node}, ~, ~, Int, 1], # 2
+  [Return, ~, [2], 0, ~, 1]]} # 3
+Node::first: {start: 0, returns: [9], nodes: [
   [Start], # 0
   [FieldAccess, {field_index: 2, field_stash: Node}, ~, ~, Int], # 1
-  [FieldAccess, {field_index: 2, field_stash: Node}, ~, 0, Int], # 2
-  [Increment, ~, [2], ~, Scalar], # 3
-  [Assign, ~, [1, 3], 2, Scalar], # 4
-  [FieldAccess, {field_index: 0, field_stash: Node}, [4], ~, Unknown], # 5
-  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 6
-  [Subscript, {kind: array}, [5, 6, 4], ~, Scalar], # 7
-  [Return, ~, [7], 4]]} # 8
+  [MemStart], # 2
+  [FieldAccess, {field_index: 2, field_stash: Node}, ~, 0, Int, 2], # 3
+  [Increment, ~, [3], ~, Scalar], # 4
+  [Assign, ~, [1, 4], 3, Scalar, 2, true], # 5
+  [FieldAccess, {field_index: 0, field_stash: Node}, ~, ~, Unknown, 5], # 6
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 7
+  [Subscript, {kind: array}, [6, 7], 5, Scalar, 5, true], # 8
+  [Return, ~, [8], 8, ~, 8]]} # 9
 Node::left: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [MemStart], # 1
-  [FieldAccess, {field_index: 1, field_stash: Node}, [1], ~, Scalar], # 2
-  [Return, ~, [2], 0]]} # 3
-main::__PROGRAM__: {start: 0, returns: [19], nodes: [
+  [FieldAccess, {field_index: 1, field_stash: Node}, ~, ~, Scalar, 1], # 2
+  [Return, ~, [2], 0, ~, 1]]} # 3
+main::__PROGRAM__: {start: 0, returns: [20], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: ","}, ~, ~, Str], # 2
@@ -607,36 +628,37 @@ main::__PROGRAM__: {start: 0, returns: [19], nodes: [
   [PackageMark, {package: Node}, ~, 0], # 5
   [PackageMark, {package: main}, ~, 5], # 6
   [ArrayLiteral, ~, [3, 4], 6, ArrayRef], # 7
-  [Call, {class_name: Node, dispatch_kind: method, name: new, param_names: [inputs], want: scalar}, [7], 7, Object], # 8
-  [ArrayLiteral, ~, [3, 4], 8, ArrayRef], # 9
-  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 10
-  [Call, {class_name: Node, dispatch_kind: method, name: new, param_names: [inputs, left], want: scalar}, [9, 10], 9, Object], # 11
-  [Call, {class_name: Node, dispatch_kind: method, name: left, param_names: [], want: list}, [8], 11, Scalar], # 12
-  [Call, {class_name: Node, dispatch_kind: method, name: calls, param_names: [], want: list}, [8], 12, Int], # 13
-  [Call, {class_name: Node, dispatch_kind: method, name: left, param_names: [], want: list}, [11], 13, Scalar], # 14
-  [Call, {class_name: Node, dispatch_kind: method, name: calls, param_names: [], want: list}, [11], 14, Int], # 15
-  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [2, 12, 13, 14, 15], ~, Str], # 16
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 17
-  [Print, ~, [16, 17], 15, Scalar], # 18
-  [Return, {implicit: true}, [1], 18]]} # 19
+  [MemStart], # 8
+  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 12, name: new, package: main, param_names: [inputs], want: scalar}, [7], 7, Object, 8, true], # 9
+  [ArrayLiteral, ~, [3, 4], 9, ArrayRef], # 10
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 11
+  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 13, name: new, package: main, param_names: [inputs, left], want: scalar}, [10, 11], 10, Object, 9, true], # 12
+  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 14, name: left, package: main, param_names: [], want: list}, [9], 12, Scalar, 12, true], # 13
+  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 14, name: calls, package: main, param_names: [], want: list}, [9], 13, Int, 13, true], # 14
+  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 14, name: left, package: main, param_names: [], want: list}, [12], 14, Scalar, 14, true], # 15
+  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 14, name: calls, package: main, param_names: [], want: list}, [12], 15, Int, 15, true], # 16
+  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [2, 13, 14, 15, 16], ~, Str], # 17
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 18
+  [Print, ~, [17, 18], 16, "Maybe[Boolean]"], # 19
+  [Return, {implicit: true}, [1], 19, ~, 16]]} # 20
 "BEGIN 1": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: feature}, ~, ~, Str], # 1
   [Constant, {const_type: string, value: class}, ~, ~, Str], # 2
   [Constant, {const_type: string, value: feature.pm}, ~, ~, Str], # 3
   [MemStart], # 4
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
-  [Call, {class_name: feature, dispatch_kind: method, name: import, param_names: []}, [1, 2], 5, Unknown], # 6
-  [Return, {implicit: true}, [6], 6]]} # 7
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
+  [Call, {class_name: feature, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 "BEGIN 2": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: warnings}, ~, ~, Str], # 1
   [Constant, {const_type: string, value: experimental::class}, ~, ~, Str], # 2
   [Constant, {const_type: string, value: warnings.pm}, ~, ~, Str], # 3
   [MemStart], # 4
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
-  [Call, {class_name: warnings, dispatch_kind: method, name: unimport, param_names: []}, [1, 2], 5, Unknown], # 6
-  [Return, {implicit: true}, [6], 6]]} # 7
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
+  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 2, name: unimport, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 ```
 
 ## A subclass's ADJUST when its parent has one
@@ -671,69 +693,74 @@ bd
 ```
 
 ```ir
-Base::__ADJUST_0: {start: 0, returns: [6], nodes: [
+Base::__ADJUST_0: {start: 0, returns: [7], nodes: [
   [Start], # 0
-  [FieldAccess, {field_index: 0, field_stash: Base}, ~, 0, Str], # 1
-  [Constant, {const_type: string, value: b}, ~, ~, Str], # 2
-  [Concat, ~, [1, 2], ~, Str], # 3
-  [FieldAccess, {field_index: 0, field_stash: Base}, ~, ~, Str], # 4
-  [Assign, ~, [4, 3], 1, Str], # 5
-  [Return, {implicit: true}, [3], 5]]} # 6
-Base::__DEFAULT_0: {start: 0, returns: [2], nodes: [
+  [MemStart], # 1
+  [FieldAccess, {field_index: 0, field_stash: Base}, ~, 0, Str, 1], # 2
+  [Constant, {const_type: string, value: b}, ~, ~, Str], # 3
+  [Concat, ~, [2, 3], ~, Str], # 4
+  [FieldAccess, {field_index: 0, field_stash: Base}, ~, ~, Str], # 5
+  [Assign, ~, [5, 4], 2, Str, 1, true], # 6
+  [Return, {implicit: true}, [4], 6, ~, 6]]} # 7
+Base::__DEFAULT_0: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: ""}, ~, ~, Str], # 1
-  [Return, ~, [1], 0]]} # 2
-Base::mark: {start: 0, returns: [9], nodes: [
+  [MemStart], # 2
+  [Return, ~, [1], 0, ~, 2]]} # 3
+Base::mark: {start: 0, returns: [10], nodes: [
   [Start], # 0
   [ArrayLiteral, ~, ~, ~, List], # 1
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 2
   [FieldAccess, {field_index: 0, field_stash: Base}, ~, ~, Str], # 3
-  [FieldAccess, {field_index: 0, field_stash: Base}, ~, 0, Str], # 4
-  [Parameter, {index: 0, name: $c, sigil: $}, ~, ~, Str], # 5
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [5], ~, Str], # 6
-  [Concat, ~, [4, 6], ~, Str], # 7
-  [Assign, ~, [3, 7], 4, Str], # 8
-  [Return, ~, [1, 2], 8]]} # 9
+  [MemStart], # 4
+  [FieldAccess, {field_index: 0, field_stash: Base}, ~, 0, Str, 4], # 5
+  [Parameter, {index: 0, name: $c, sigil: $}, ~, ~, Str], # 6
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
+  [Concat, ~, [5, 7], ~, Str], # 8
+  [Assign, ~, [3, 8], 5, Str, 4, true], # 9
+  [Return, ~, [1, 2], 9, ~, 9]]} # 10
 Base::trail: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [MemStart], # 1
-  [FieldAccess, {field_index: 0, field_stash: Base}, [1], ~, Str], # 2
-  [Return, ~, [2], 0]]} # 3
-Derived::__ADJUST_0: {start: 0, returns: [4], nodes: [
+  [FieldAccess, {field_index: 0, field_stash: Base}, ~, ~, Str, 1], # 2
+  [Return, ~, [2], 0, ~, 1]]} # 3
+Derived::__ADJUST_0: {start: 0, returns: [5], nodes: [
   [Start], # 0
   [PadAccess, {sigil: $, symbol: self}, ~, ~, Object], # 1
   [Constant, {const_type: string, value: d}, ~, ~, Str], # 2
-  [Call, {class_name: Derived, dispatch_kind: method, name: mark, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
-main::__PROGRAM__: {start: 0, returns: [9], nodes: [
+  [MemStart], # 3
+  [Call, {class_name: Derived, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 10, name: mark, package: Derived, param_names: []}, [1, 2], 0, Unknown, 3, true], # 4
+  [Return, {implicit: true}, [4], 4, ~, 4]]} # 5
+main::__PROGRAM__: {start: 0, returns: [10], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [PackageMark, {package: Base}, ~, 0], # 2
   [PackageMark, {package: main}, ~, 2], # 3
-  [Call, {class_name: Derived, dispatch_kind: method, name: new, param_names: [], want: scalar}, ~, 3, Object], # 4
-  [Call, {class_name: Derived, dispatch_kind: method, name: trail, param_names: [], want: list}, [4], 4, Unknown], # 5
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [5], ~, Str], # 6
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 7
-  [Print, ~, [6, 7], 5, Scalar], # 8
-  [Return, {implicit: true}, [1], 8]]} # 9
+  [MemStart], # 4
+  [Call, {class_name: Derived, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 12, name: new, package: main, param_names: [], want: scalar}, ~, 3, Object, 4, true], # 5
+  [Call, {class_name: Derived, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 12, name: trail, package: main, param_names: [], want: list}, [5], 5, Unknown, 5, true], # 6
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
+  [Print, ~, [7, 8], 6, "Maybe[Boolean]"], # 9
+  [Return, {implicit: true}, [1], 9, ~, 6]]} # 10
 "BEGIN 1": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: feature}, ~, ~, Str], # 1
   [Constant, {const_type: string, value: class}, ~, ~, Str], # 2
   [Constant, {const_type: string, value: feature.pm}, ~, ~, Str], # 3
   [MemStart], # 4
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
-  [Call, {class_name: feature, dispatch_kind: method, name: import, param_names: []}, [1, 2], 5, Unknown], # 6
-  [Return, {implicit: true}, [6], 6]]} # 7
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
+  [Call, {class_name: feature, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 "BEGIN 2": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: warnings}, ~, ~, Str], # 1
   [Constant, {const_type: string, value: experimental::class}, ~, ~, Str], # 2
   [Constant, {const_type: string, value: warnings.pm}, ~, ~, Str], # 3
   [MemStart], # 4
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
-  [Call, {class_name: warnings, dispatch_kind: method, name: unimport, param_names: []}, [1, 2], 5, Unknown], # 6
-  [Return, {implicit: true}, [6], 6]]} # 7
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
+  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 2, name: unimport, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 ```
 
 ## A list builtin a sub returns takes the caller's context
@@ -764,61 +791,63 @@ parses: yes
 ```
 
 ```ir
-Registry::add: {start: 0, returns: [7], nodes: [
+Registry::add: {start: 0, returns: [8], nodes: [
   [Start], # 0
   [PadAccess, {sigil: $, symbol: self}, ~, ~, Unknown], # 1
   [FieldAccess, {field_index: 0, field_stash: Registry}, ~, ~, Unknown], # 2
   [Parameter, {index: 0, name: $name, sigil: $}, ~, ~, Unknown], # 3
   [Subscript, {kind: hash}, [2, 3], ~, Scalar], # 4
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 5
-  [Assign, ~, [4, 5], 0, Int], # 6
-  [Return, ~, [1], 6]]} # 7
+  [MemStart], # 6
+  [Assign, ~, [4, 5], 0, Int, 6, true], # 7
+  [Return, ~, [1], 7, ~, 7]]} # 8
 Registry::classes: {start: 0, returns: [4], nodes: [
   [Start], # 0
   [FieldAccess, {field_index: 0, field_stash: Registry}, ~, ~, Unknown], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: values, param_names: []}, [1, 2], ~, Unknown], # 3
-  [Return, ~, [3], 0]]} # 4
-main::__PROGRAM__: {start: 0, returns: [20], nodes: [
+  [Call, {dispatch_kind: builtin, name: values, param_names: []}, [1], ~, Unknown, 2], # 3
+  [Return, ~, [3], 0, ~, 2]]} # 4
+main::__PROGRAM__: {start: 0, returns: [21], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [PackageMark, {package: Registry}, ~, 0], # 2
   [PackageMark, {package: main}, ~, 2], # 3
-  [Call, {class_name: Registry, dispatch_kind: method, name: new, param_names: [], want: scalar}, ~, 3, Object], # 4
-  [Constant, {const_type: string, value: A}, ~, ~, Str], # 5
-  [Call, {class_name: Registry, dispatch_kind: method, name: add, param_names: [], want: scalar}, [4, 5], 4, Unknown], # 6
-  [Constant, {const_type: string, value: B}, ~, ~, Str], # 7
-  [Call, {class_name: Registry, dispatch_kind: method, name: add, param_names: [], want: scalar}, [6, 7], 6, Unknown], # 8
-  [Call, {class_name: Registry, dispatch_kind: method, name: classes, param_names: [], want: list}, [8], 8, Unknown], # 9
-  [ArrayLiteral, {sigil: "@", symbol: all}, [9], ~, Array], # 10
-  [Call, {class_name: Registry, dispatch_kind: method, name: classes, param_names: [], want: scalar}, [8], 9, Unknown], # 11
-  [Count, ~, [10, 11], ~, Int], # 12
-  [Coerce, {from_repr: Int, to_repr: Str}, [12], ~, Str], # 13
-  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 14
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [11], ~, Str], # 15
-  [Concat, ~, [14, 15], ~, Str], # 16
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 17
-  [Concat, ~, [16, 17], ~, Str], # 18
-  [Print, ~, [13, 18], 11, Scalar], # 19
-  [Return, {implicit: true}, [1], 19]]} # 20
+  [MemStart], # 4
+  [Call, {class_name: Registry, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 8, name: new, package: main, param_names: [], want: scalar}, ~, 3, Object, 4, true], # 5
+  [Constant, {const_type: string, value: A}, ~, ~, Str], # 6
+  [Call, {class_name: Registry, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 8, name: add, package: main, param_names: [], want: scalar}, [5, 6], 5, Unknown, 5, true], # 7
+  [Constant, {const_type: string, value: B}, ~, ~, Str], # 8
+  [Call, {dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 8, name: add, package: main, param_names: [], want: scalar}, [7, 8], 7, Unknown, 7, true], # 9
+  [Call, {dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 9, name: classes, package: main, param_names: [], want: list}, [9], 9, Unknown, 9, true], # 10
+  [ArrayLiteral, {sigil: "@", symbol: all}, [10], ~, Array], # 11
+  [Call, {dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 10, name: classes, package: main, param_names: [], want: scalar}, [9], 10, Unknown, 10, true], # 12
+  [Count, ~, [11], ~, Int, 12], # 13
+  [Coerce, {from_repr: Int, to_repr: Str}, [13], ~, Str], # 14
+  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 15
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [12], ~, Str], # 16
+  [Concat, ~, [15, 16], ~, Str], # 17
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 18
+  [Concat, ~, [17, 18], ~, Str], # 19
+  [Print, ~, [14, 19], 12, "Maybe[Boolean]"], # 20
+  [Return, {implicit: true}, [1], 20, ~, 12]]} # 21
 "BEGIN 1": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: feature}, ~, ~, Str], # 1
   [Constant, {const_type: string, value: class}, ~, ~, Str], # 2
   [Constant, {const_type: string, value: feature.pm}, ~, ~, Str], # 3
   [MemStart], # 4
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
-  [Call, {class_name: feature, dispatch_kind: method, name: import, param_names: []}, [1, 2], 5, Unknown], # 6
-  [Return, {implicit: true}, [6], 6]]} # 7
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
+  [Call, {class_name: feature, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 "BEGIN 2": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: warnings}, ~, ~, Str], # 1
   [Constant, {const_type: string, value: experimental::class}, ~, ~, Str], # 2
   [Constant, {const_type: string, value: warnings.pm}, ~, ~, Str], # 3
   [MemStart], # 4
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
-  [Call, {class_name: warnings, dispatch_kind: method, name: unimport, param_names: []}, [1, 2], 5, Unknown], # 6
-  [Return, {implicit: true}, [6], 6]]} # 7
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
+  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 2, name: unimport, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 ```
 
 ## A list assignment into a field aggregate
@@ -849,12 +878,13 @@ parses: yes
 ```
 
 ```ir
-Holder::clear: {start: 0, returns: [4], nodes: [
+Holder::clear: {start: 0, returns: [5], nodes: [
   [Start], # 0
   [PadAccess, {sigil: $, symbol: self}, ~, ~, Unknown], # 1
   [FieldAccess, {field_index: 1, field_stash: Holder}, ~, ~, Unknown], # 2
-  [Assign, {targets: 1}, [2], 0, Unknown], # 3
-  [Return, ~, [1], 3]]} # 4
+  [MemStart], # 3
+  [Assign, {targets: 1}, [2], 0, Unknown, 3, true], # 4
+  [Return, ~, [1], 4, ~, 4]]} # 5
 Holder::register: {start: 0, returns: [11], nodes: [
   [Start], # 0
   [PadAccess, {sigil: $, symbol: self}, ~, ~, Unknown], # 1
@@ -862,17 +892,17 @@ Holder::register: {start: 0, returns: [11], nodes: [
   [FieldAccess, {field_index: 0, field_stash: Holder}, ~, ~, Unknown], # 3
   [Parameter, {index: 0, name: $graphs, sigil: $}, ~, ~, Unknown], # 4
   [MemStart], # 5
-  [PostfixDeref, {sigil: "%"}, [4, 5], ~, Hash], # 6
-  [Assign, {targets: 1}, [3, 6], 0, List], # 7
-  [Call, {dispatch_kind: builtin, memory_input: true, name: keys, param_names: [], want: list}, [3, 7], ~, List], # 8
-  [Call, {dispatch_kind: builtin, memory_input: true, name: sort, param_names: [], sort_cmp: string, sort_order: ascending}, [8, 7], ~, List], # 9
-  [Assign, {targets: 1}, [2, 9], 7, List], # 10
-  [Return, ~, [1], 10]]} # 11
+  [PostfixDeref, {eval_id: ~, file: "/tmp/osrpJFXK1Z/case.pl", line: 6, package: Holder, sigil: "%", strict: false}, [4], 0, Hash, 5, true], # 6
+  [Assign, {targets: 1}, [3, 6], 6, List, 6, true], # 7
+  [Call, {dispatch_kind: builtin, name: keys, param_names: [], want: list}, [3], ~, List, 7], # 8
+  [Call, {dispatch_kind: builtin, name: sort, param_names: [], sort_cmp: string, sort_order: ascending}, [8], ~, List, 7], # 9
+  [Assign, {targets: 1}, [2, 9], 7, List, 7, true], # 10
+  [Return, ~, [1], 10, ~, 10]]} # 11
 Holder::summary: {start: 0, returns: [11], nodes: [
   [Start], # 0
   [FieldAccess, {field_index: 0, field_stash: Holder}, ~, ~, Unknown], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: keys, param_names: [], want: scalar}, [1, 2], ~, Int], # 3
+  [Call, {dispatch_kind: builtin, name: keys, param_names: [], want: scalar}, [1], ~, Int, 2], # 3
   [Coerce, {from_repr: Int, to_repr: Str}, [3], ~, Str], # 4
   [Constant, {const_type: string, value: ":"}, ~, ~, Str], # 5
   [Concat, ~, [4, 5], ~, Str], # 6
@@ -880,46 +910,47 @@ Holder::summary: {start: 0, returns: [11], nodes: [
   [FieldAccess, {field_index: 1, field_stash: Holder}, ~, ~, Unknown], # 8
   [Call, {dispatch_kind: builtin, name: join, param_names: []}, [7, 8], ~, Str], # 9
   [Concat, ~, [6, 9], ~, Str], # 10
-  [Return, ~, [10], 0]]} # 11
-main::__PROGRAM__: {start: 0, returns: [19], nodes: [
+  [Return, ~, [10], 0, ~, 2]]} # 11
+main::__PROGRAM__: {start: 0, returns: [20], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [PackageMark, {package: Holder}, ~, 0], # 2
   [PackageMark, {package: main}, ~, 2], # 3
-  [Call, {class_name: Holder, dispatch_kind: method, name: new, param_names: [], want: scalar}, ~, 3, Object], # 4
-  [Constant, {const_type: string, value: b}, ~, ~, Str], # 5
-  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 6
-  [Constant, {const_type: string, value: a}, ~, ~, Str], # 7
-  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 8
-  [HashLiteral, ~, [5, 6, 7, 8], 4, HashRef], # 9
-  [Call, {class_name: Holder, dispatch_kind: method, name: register, param_names: [], want: scalar}, [4, 9], 9, Unknown], # 10
-  [Call, {class_name: Holder, dispatch_kind: method, name: summary, param_names: [], want: list}, [10], 10, Str], # 11
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [11], ~, Str], # 12
-  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 13
-  [Call, {class_name: Holder, dispatch_kind: method, name: clear, param_names: [], want: scalar}, [10], 11, Unknown], # 14
-  [Call, {class_name: Holder, dispatch_kind: method, name: summary, param_names: [], want: list}, [14], 14, Str], # 15
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [15], ~, Str], # 16
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 17
-  [Print, ~, [12, 13, 16, 17], 15, Scalar], # 18
-  [Return, {implicit: true}, [1], 18]]} # 19
+  [MemStart], # 4
+  [Call, {class_name: Holder, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 10, name: new, package: main, param_names: [], want: scalar}, ~, 3, Object, 4, true], # 5
+  [Constant, {const_type: string, value: b}, ~, ~, Str], # 6
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 7
+  [Constant, {const_type: string, value: a}, ~, ~, Str], # 8
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 9
+  [HashLiteral, ~, [6, 7, 8, 9], 5, HashRef], # 10
+  [Call, {class_name: Holder, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 10, name: register, package: main, param_names: [], want: scalar}, [5, 10], 10, Unknown, 5, true], # 11
+  [Call, {dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 11, name: summary, package: main, param_names: [], want: list}, [11], 11, Unknown, 11, true], # 12
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [12], ~, Str], # 13
+  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 14
+  [Call, {dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 11, name: clear, package: main, param_names: [], want: scalar}, [11], 12, Unknown, 12, true], # 15
+  [Call, {dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 11, name: summary, package: main, param_names: [], want: list}, [15], 15, Unknown, 15, true], # 16
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [16], ~, Str], # 17
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 18
+  [Print, ~, [13, 14, 17, 18], 16, "Maybe[Boolean]"], # 19
+  [Return, {implicit: true}, [1], 19, ~, 16]]} # 20
 "BEGIN 1": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: feature}, ~, ~, Str], # 1
   [Constant, {const_type: string, value: class}, ~, ~, Str], # 2
   [Constant, {const_type: string, value: feature.pm}, ~, ~, Str], # 3
   [MemStart], # 4
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
-  [Call, {class_name: feature, dispatch_kind: method, name: import, param_names: []}, [1, 2], 5, Unknown], # 6
-  [Return, {implicit: true}, [6], 6]]} # 7
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
+  [Call, {class_name: feature, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 "BEGIN 2": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: warnings}, ~, ~, Str], # 1
   [Constant, {const_type: string, value: experimental::class}, ~, ~, Str], # 2
   [Constant, {const_type: string, value: warnings.pm}, ~, ~, Str], # 3
   [MemStart], # 4
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
-  [Call, {class_name: warnings, dispatch_kind: method, name: unimport, param_names: []}, [1, 2], 5, Unknown], # 6
-  [Return, {implicit: true}, [6], 6]]} # 7
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
+  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 2, name: unimport, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 ```
 
 ## A call in a ternary arm runs only on that arm
@@ -949,46 +980,47 @@ parses: yes
 Node::id: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [MemStart], # 1
-  [FieldAccess, {field_index: 0, field_stash: Node}, [1], ~, Unknown], # 2
-  [Return, ~, [2], 0]]} # 3
-main::__PROGRAM__: {start: 0, returns: [17], nodes: [
+  [FieldAccess, {field_index: 0, field_stash: Node}, ~, ~, Unknown, 1], # 2
+  [Return, ~, [2], 0, ~, 1]]} # 3
+main::__PROGRAM__: {start: 0, returns: [18], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
   [PackageMark, {package: Node}, ~, 0], # 3
   [PackageMark, {package: main}, ~, 3], # 4
-  [Call, {class_name: Node, dispatch_kind: method, name: new, param_names: [id], want: list}, [2], 4, Object], # 5
-  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 6
-  [Call, {class_name: Node, dispatch_kind: method, name: new, param_names: [id], want: list}, [6], 5, Object], # 7
-  [ArrayLiteral, ~, [5, 1, 7], 7, ArrayRef], # 8
-  [Call, {dispatch_kind: direct, name: main::ids, param_names: [], want: list}, [8], 8, Str], # 9
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [9], ~, Str], # 10
-  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 11
-  [Constant, {const_type: integer, value: "10"}, ~, ~, Int], # 12
-  [Call, {dispatch_kind: direct, name: main::fib, param_names: [], want: list}, [12], 9, Unknown], # 13
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [13], ~, Str], # 14
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 15
-  [Print, ~, [10, 11, 14, 15], 13, Scalar], # 16
-  [Return, {implicit: true}, [1], 16]]} # 17
-main::fib: {start: 0, returns: [15], nodes: [
+  [MemStart], # 5
+  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 7, name: new, package: main, param_names: [id], want: list}, [2], 4, Object, 5, true], # 6
+  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 7
+  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 7, name: new, package: main, param_names: [id], want: list}, [7], 6, Object, 6, true], # 8
+  [ArrayLiteral, ~, [6, 1, 8], 8, ArrayRef], # 9
+  [Call, {dispatch_kind: direct, file: "/tmp/osrpJFXK1Z/case.pl", line: 7, name: main::ids, package: main, param_names: [], want: list}, [9], 9, Str, 8, true], # 10
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [10], ~, Str], # 11
+  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 12
+  [Constant, {const_type: integer, value: "10"}, ~, ~, Int], # 13
+  [Call, {dispatch_kind: direct, file: "/tmp/osrpJFXK1Z/case.pl", line: 7, name: main::fib, package: main, param_names: [], want: list}, [13], 10, Unknown, 10, true], # 14
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [14], ~, Str], # 15
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 16
+  [Print, ~, [11, 12, 15, 16], 14, "Maybe[Boolean]"], # 17
+  [Return, {implicit: true}, [1], 17, ~, 14]]} # 18
+main::fib: {start: 0, returns: [17], nodes: [
   [Start], # 0
-  [Parameter, {index: 0, name: $n, sigil: $}, ~, ~, Num], # 1
+  [Parameter, {index: 0, name: $n, sigil: $}, ~, ~, Unknown], # 1
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
-  [Subtract, ~, [1, 2], ~, Num], # 3
+  [Subtract, ~, [1, 2], ~, Unknown], # 3
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 4
   [NumLt, ~, [1, 4], ~, Boolean], # 5
   [If, ~, [0, 5], 0], # 6
   [Proj, {index: 1}, [6]], # 7
-  [Call, {dispatch_kind: direct, name: main::fib, param_names: [], want: scalar}, [3], 7, Unknown], # 8
-  [Subtract, ~, [1, 4], ~, Num], # 9
-  [Call, {dispatch_kind: direct, name: main::fib, param_names: [], want: scalar}, [9], 8, Unknown], # 10
-  [Add, ~, [8, 10], ~, Unknown], # 11
-  [Proj, {index: 0}, [6]], # 12
-  [Region, {head: 6}, [12, 10]], # 13
-  [Phi, {predecessors: [12, 7], region: 13}, [1, 11], ~, Unknown], # 14
-  [Return, ~, [14], 13], # 15
-  [MemStart], # 16
-  [Phi, {memory: true, predecessors: [12, 7], region: 13}, [16, 10], ~, Unknown]]} # 17
+  [MemStart], # 8
+  [Call, {dispatch_kind: direct, file: "/tmp/osrpJFXK1Z/case.pl", line: 6, name: main::fib, package: main, param_names: [], want: scalar}, [3], 7, Unknown, 8, true], # 9
+  [Subtract, ~, [1, 4], ~, Unknown], # 10
+  [Call, {dispatch_kind: direct, file: "/tmp/osrpJFXK1Z/case.pl", line: 6, name: main::fib, package: main, param_names: [], want: scalar}, [10], 9, Unknown, 9, true], # 11
+  [Add, ~, [9, 11], ~, Unknown], # 12
+  [Proj, {index: 0}, [6]], # 13
+  [Region, {head: 6}, [13, 11]], # 14
+  [Phi, {predecessors: [13, 7], region: 14}, [1, 12], ~, Unknown], # 15
+  [Phi, {memory: true, predecessors: [13, 7], region: 14}, [8, 11], ~, Unknown], # 16
+  [Return, ~, [15], 14, ~, 16]]} # 17
 main::ids: {start: 0, returns: [11], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: ","}, ~, ~, Str], # 1
@@ -996,63 +1028,63 @@ main::ids: {start: 0, returns: [11], nodes: [
   [Loop, {bound: entry}, [0], 0], # 3
   [Phi, {region: 3}, [2, 34], ~, Array], # 4
   [MemStart], # 5
-  [Phi, {memory: true, region: 3}, [5, 37], ~, Unknown], # 6
+  [Phi, {memory: true, region: 3}, [5, 35], ~, Unknown], # 6
   [Proj, {index: 1}, [3]], # 7
   [Region, {head: 3}, [7]], # 8
   [Phi, {memory: true, region: 8}, [6], ~, Unknown], # 9
-  [Call, {dispatch_kind: builtin, memory_input: true, name: join, param_names: []}, [1, 4, 9], ~, Str], # 10
-  [Return, ~, [10], 8], # 11
+  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [1, 4], ~, Str, 9], # 10
+  [Return, ~, [10], 8, ~, 9], # 11
   [Parameter, {index: 0, name: $in, sigil: $}, ~, ~, Unknown], # 12
-  [PostfixDeref, {sigil: "@"}, [12, 5], ~, Array], # 13
-  [Count, ~, [13, 6], ~, Int], # 14
+  [PostfixDeref, {sigil: "@"}, [12], ~, Array, 5], # 13
+  [Count, ~, [13], ~, Int, 6], # 14
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 15
-  [Phi, {region: 3}, [15, 36], ~, Int], # 16
+  [Phi, {region: 3}, [15, 37], ~, Int], # 16
   [NumGt, ~, [14, 16], 3, Boolean], # 17
   [Proj, {index: 0}, [3]], # 18
-  [Exists, {kind: array}, [13, 16, 6], 18, Boolean], # 19
-  [Subscript, {kind: array}, [13, 16, 6], ~, Scalar], # 20
+  [Exists, {kind: array}, [13, 16], 18, Boolean, 6], # 19
+  [Subscript, {kind: array}, [13, 16], ~, Scalar, 6], # 20
   [Subscript, {kind: array}, [13, 16], ~, Scalar], # 21
   [Ref, ~, [21], ~, ScalarRef], # 22
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 23
-  [TernaryExpr, ~, [19, 22, 23], ~, Scalar], # 24
-  [LocalAlias, {name: _}, [24], 19, Unknown], # 25
+  [TernaryExpr, ~, [19, 22, 23], ~, "Maybe[ScalarRef]"], # 24
+  [LocalAlias, {name: _}, [24], 19, Unknown, 6], # 25
   [Defined, ~, [20], ~, Boolean], # 26
   [If, ~, [25, 26], 25], # 27
   [Proj, {index: 0}, [27]], # 28
-  [Call, {dispatch_kind: method, name: id, param_names: [], want: list}, [20], 28, Unknown], # 29
+  [Call, {dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 5, name: id, package: main, param_names: [], want: list}, [20], 28, Unknown, 6, true], # 29
   [Constant, {const_type: string, value: undef}, ~, ~, Str], # 30
   [Proj, {index: 1}, [27]], # 31
   [Region, {head: 27}, [29, 31]], # 32
   [Phi, {predecessors: [28, 31], region: 32}, [29, 30], ~, Unknown], # 33
   [ListAppend, {collector: map}, [4, 33], ~, Array], # 34
-  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 35
-  [Add, ~, [16, 35], ~, Int], # 36
-  [Phi, {memory: true, predecessors: [28, 31], region: 32}, [29, 6], ~, Unknown], # 37
-  [Count, ~, [13, 5], ~, Int]]} # 38
+  [Phi, {memory: true, predecessors: [28, 31], region: 32}, [29, 6], ~, Unknown], # 35
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 36
+  [Add, ~, [16, 36], ~, Int], # 37
+  [Count, ~, [13], ~, Int, 5]]} # 38
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.036"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 "BEGIN 2": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: feature}, ~, ~, Str], # 1
   [Constant, {const_type: string, value: class}, ~, ~, Str], # 2
   [Constant, {const_type: string, value: feature.pm}, ~, ~, Str], # 3
   [MemStart], # 4
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
-  [Call, {class_name: feature, dispatch_kind: method, name: import, param_names: []}, [1, 2], 5, Unknown], # 6
-  [Return, {implicit: true}, [6], 6]]} # 7
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
+  [Call, {class_name: feature, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 2, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 "BEGIN 3": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: warnings}, ~, ~, Str], # 1
   [Constant, {const_type: string, value: experimental::class}, ~, ~, Str], # 2
   [Constant, {const_type: string, value: warnings.pm}, ~, ~, Str], # 3
   [MemStart], # 4
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
-  [Call, {class_name: warnings, dispatch_kind: method, name: unimport, param_names: []}, [1, 2], 5, Unknown], # 6
-  [Return, {implicit: true}, [6], 6]]} # 7
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
+  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 3, name: unimport, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 ```
 
 ## A method returning an array, called in list context
@@ -1080,56 +1112,59 @@ op|a|b 2
 ```
 
 ```ir
-Node::count: {start: 0, returns: [3], nodes: [
+Node::count: {start: 0, returns: [4], nodes: [
   [Start], # 0
   [PadAccess, {sigil: $, symbol: self}, ~, ~, Object], # 1
-  [Call, {class_name: Node, dispatch_kind: method, name: parts, param_names: [], want: scalar}, [1], 0, Unknown], # 2
-  [Return, ~, [2], 2]]} # 3
-Node::hash: {start: 0, returns: [6], nodes: [
+  [MemStart], # 2
+  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 6, name: parts, package: Node, param_names: [], want: scalar}, [1], 0, Array, 2, true], # 3
+  [Return, ~, [3], 3, ~, 3]]} # 4
+Node::hash: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "|"}, ~, ~, Str], # 1
   [Constant, {const_type: string, value: op}, ~, ~, Str], # 2
   [PadAccess, {sigil: $, symbol: self}, ~, ~, Object], # 3
-  [Call, {class_name: Node, dispatch_kind: method, name: parts, param_names: [], want: list}, [3], 0, Unknown], # 4
-  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [1, 2, 4], ~, Str], # 5
-  [Return, ~, [5], 4]]} # 6
+  [MemStart], # 4
+  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 5, name: parts, package: Node, param_names: [], want: list}, [3], 0, Array, 4, true], # 5
+  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [1, 2, 5], ~, Str], # 6
+  [Return, ~, [6], 5, ~, 5]]} # 7
 Node::parts: {start: 0, returns: [6], nodes: [
   [Start], # 0
-  [PadAccess, {sigil: "@", symbol: p}, ~, ~, Unknown], # 1
+  [PadAccess, {sigil: "@", symbol: p}, ~, ~, Array], # 1
   [Constant, {const_type: string, value: a}, ~, ~, Str], # 2
   [Constant, {const_type: string, value: b}, ~, ~, Str], # 3
   [MemStart], # 4
-  [Call, {dispatch_kind: builtin, memory_input: true, name: push, param_names: []}, [1, 2, 3, 4], 0, Int], # 5
-  [Return, ~, [1], 5]]} # 6
-main::__PROGRAM__: {start: 0, returns: [11], nodes: [
+  [Call, {dispatch_kind: builtin, name: push, param_names: []}, [1, 2, 3], 0, Int, 4, true], # 5
+  [Return, ~, [1], 5, ~, 5]]} # 6
+main::__PROGRAM__: {start: 0, returns: [12], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Call, {class_name: Node, dispatch_kind: method, name: new, param_names: [], want: scalar}, ~, 0, Object], # 2
-  [Call, {class_name: Node, dispatch_kind: method, name: hash, param_names: [], want: list}, [2], 2, Str], # 3
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
-  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 5
-  [Call, {class_name: Node, dispatch_kind: method, name: new, param_names: [], want: scalar}, ~, 3, Object], # 6
-  [Call, {class_name: Node, dispatch_kind: method, name: count, param_names: [], want: list}, [6], 6, Unknown], # 7
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
-  [Print, ~, [4, 5, 8, 9], 7, Scalar], # 10
-  [Return, {implicit: true}, [1], 10]]} # 11
+  [MemStart], # 2
+  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 8, name: new, package: main, param_names: [], want: scalar}, ~, 0, Object, 2, true], # 3
+  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 8, name: hash, package: main, param_names: [], want: list}, [3], 3, Str, 3, true], # 4
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [4], ~, Str], # 5
+  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 6
+  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 8, name: new, package: main, param_names: [], want: scalar}, ~, 4, Object, 4, true], # 7
+  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 8, name: count, package: main, param_names: [], want: list}, [7], 7, Array, 7, true], # 8
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [8], ~, Str], # 9
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
+  [Print, ~, [5, 6, 9, 10], 8, "Maybe[Boolean]"], # 11
+  [Return, {implicit: true}, [1], 11, ~, 8]]} # 12
 "BEGIN 1": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: feature}, ~, ~, Str], # 1
   [Constant, {const_type: string, value: class}, ~, ~, Str], # 2
   [Constant, {const_type: string, value: feature.pm}, ~, ~, Str], # 3
   [MemStart], # 4
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
-  [Call, {class_name: feature, dispatch_kind: method, name: import, param_names: []}, [1, 2], 5, Unknown], # 6
-  [Return, {implicit: true}, [6], 6]]} # 7
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
+  [Call, {class_name: feature, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 "BEGIN 2": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: warnings}, ~, ~, Str], # 1
   [Constant, {const_type: string, value: experimental::class}, ~, ~, Str], # 2
   [Constant, {const_type: string, value: warnings.pm}, ~, ~, Str], # 3
   [MemStart], # 4
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
-  [Call, {class_name: warnings, dispatch_kind: method, name: unimport, param_names: []}, [1, 2], 5, Unknown], # 6
-  [Return, {implicit: true}, [6], 6]]} # 7
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
+  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 2, name: unimport, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 ```

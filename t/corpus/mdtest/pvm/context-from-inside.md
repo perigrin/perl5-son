@@ -59,11 +59,11 @@ main::__PROGRAM__: {start: 0, returns: [9], nodes: [
   [Wantarray, ~, ~, ~, Scalar], # 2
   [ArrayLiteral, {sigil: "@", symbol: seen}, [2], ~, Array], # 3
   [MemStart], # 4
-  [Count, ~, [3, 4], ~, Int], # 5
+  [Count, ~, [3], ~, Int, 4], # 5
   [Coerce, {from_repr: Int, to_repr: Str}, [5], ~, Str], # 6
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 7
-  [Print, ~, [6, 7], 0, Scalar], # 8
-  [Return, {implicit: true}, [1], 8]]} # 9
+  [Print, ~, [6, 7], 0, "Maybe[Boolean]"], # 8
+  [Return, {implicit: true}, [1], 8, ~, 4]]} # 9
 ```
 
 ## `caller` returns different AMOUNTS in the two contexts
@@ -123,17 +123,17 @@ one word whose text is "print"
 main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Call, {dispatch_kind: builtin, name: caller, param_names: []}, ~, 0, Scalar], # 2
-  [ArrayLiteral, {sigil: "@", symbol: one}, [2], ~, Array], # 3
-  [MemStart], # 4
-  [Count, ~, [3, 4], ~, Int], # 5
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: caller, param_names: []}, ~, 0, Scalar, 2], # 3
+  [ArrayLiteral, {sigil: "@", symbol: one}, [3], ~, Array], # 4
+  [Count, ~, [4], ~, Int, 2], # 5
   [Coerce, {from_repr: Int, to_repr: Str}, [5], ~, Str], # 6
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 7
-  [Call, {dispatch_kind: builtin, name: caller, param_names: []}, ~, 2, List], # 8
+  [Call, {dispatch_kind: builtin, name: caller, param_names: []}, ~, 3, List, 2], # 8
   [ArrayLiteral, {sigil: "@", symbol: l}, [8], ~, Array], # 9
-  [Count, ~, [9, 4], ~, Int], # 10
+  [Count, ~, [9], ~, Int, 2], # 10
   [Coerce, {from_repr: Int, to_repr: Str}, [10], ~, Str], # 11
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 12
-  [Print, ~, [6, 7, 11, 12], 8, Scalar], # 13
-  [Return, {implicit: true}, [1], 13]]} # 14
+  [Print, ~, [6, 7, 11, 12], 8, "Maybe[Boolean]"], # 13
+  [Return, {implicit: true}, [1], 13, ~, 2]]} # 14
 ```

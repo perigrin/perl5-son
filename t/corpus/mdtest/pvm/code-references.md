@@ -44,27 +44,28 @@ one operator whose text is "->"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [9], nodes: [
+main::__PROGRAM__: {start: 0, returns: [10], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: code, value: main::twice}, ~, ~, Code], # 2
   [Ref, ~, [2], ~, CodeRef], # 3
   [Constant, {const_type: integer, value: "21"}, ~, ~, Int], # 4
-  [Call, {dispatch_kind: indirect, name: "", param_names: [], want: list}, [3, 4], 0, Unknown], # 5
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [5], ~, Str], # 6
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 7
-  [Print, ~, [6, 7], 5, Scalar], # 8
-  [Return, {implicit: true}, [1], 8]]} # 9
+  [MemStart], # 5
+  [Call, {dispatch_kind: indirect, file: "/tmp/osrpJFXK1Z/case.pl", line: 3, name: "", package: main, param_names: [], want: list}, [3, 4], 0, Unknown, 5, true], # 6
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
+  [Print, ~, [7, 8], 6, "Maybe[Boolean]"], # 9
+  [Return, {implicit: true}, [1], 9, ~, 6]]} # 10
 main::twice: {start: 0, returns: [8], nodes: [
   [Start], # 0
   [ArgsSource, ~, ~, ~, Array], # 1
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 2
   [MemStart], # 3
-  [Subscript, {kind: array}, [1, 2, 3], ~, Scalar], # 4
+  [Subscript, {kind: array}, [1, 2], ~, Scalar, 3], # 4
   [Coerce, {from_repr: Scalar, to_repr: Num}, [4], ~, Num], # 5
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 6
   [Multiply, ~, [5, 6], ~, Num], # 7
-  [Return, ~, [7], 0]]} # 8
+  [Return, ~, [7], 0, ~, 3]]} # 8
 ```
 
 ## `prototype` reads the parser's own input back
@@ -144,7 +145,7 @@ no operator whose text is "\\&"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [11], nodes: [
+main::__PROGRAM__: {start: 0, returns: [12], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: "["}, ~, ~, Str], # 2
@@ -155,10 +156,12 @@ main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [Concat, ~, [2, 6], ~, Str], # 7
   [Constant, {const_type: string, value: "]\n"}, ~, ~, Str], # 8
   [Concat, ~, [7, 8], ~, Str], # 9
-  [Print, ~, [9], 0, Scalar], # 10
-  [Return, {implicit: true}, [1], 10]]} # 11
-main::f: {start: 0, returns: [2], nodes: [
+  [Print, ~, [9], 0, "Maybe[Boolean]"], # 10
+  [MemStart], # 11
+  [Return, {implicit: true}, [1], 10, ~, 11]]} # 12
+main::f: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1
-  [Return, {implicit: true}, [1], 0]]} # 2
+  [MemStart], # 2
+  [Return, {implicit: true}, [1], 0, ~, 2]]} # 3
 ```

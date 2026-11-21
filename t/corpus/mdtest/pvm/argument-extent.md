@@ -73,29 +73,30 @@ one numeric literal whose text is "2"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [9], nodes: [
+main::__PROGRAM__: {start: 0, returns: [10], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 2
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 3
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 4
-  [Call, {dispatch_kind: direct, name: main::f, param_names: [], want: list}, [3, 4], 0, Str], # 5
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [5], ~, Str], # 6
-  [Print, ~, [6], 5, Scalar], # 7
-  [Print, ~, [2], 7, Scalar], # 8
-  [Return, {implicit: true}, [1], 8]]} # 9
+  [MemStart], # 5
+  [Call, {dispatch_kind: direct, file: "/tmp/osrpJFXK1Z/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, [3, 4], 0, Str, 5, true], # 6
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
+  [Print, ~, [7], 6, "Maybe[Boolean]"], # 8
+  [Print, ~, [2], 8, "Maybe[Boolean]"], # 9
+  [Return, {implicit: true}, [1], 9, ~, 6]]} # 10
 main::f: {start: 0, returns: [10], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "f["}, ~, ~, Str], # 1
   [MemStart], # 2
-  [EntryDef, {package: main, sigil: $, symbol: "\""}, [2], ~, Scalar], # 3
+  [EntryDef, {package: main, sigil: $, symbol: "\""}, ~, ~, Scalar, 2], # 3
   [Coerce, {from_repr: Scalar, to_repr: Str}, [3], ~, Str], # 4
   [ArgsSource, ~, ~, ~, Array], # 5
-  [Call, {dispatch_kind: builtin, memory_input: true, name: join, param_names: []}, [4, 5, 2], ~, Str], # 6
+  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [4, 5], ~, Str, 2], # 6
   [Concat, ~, [1, 6], ~, Str], # 7
   [Constant, {const_type: string, value: "]"}, ~, ~, Str], # 8
   [Concat, ~, [7, 8], ~, Str], # 9
-  [Return, ~, [9], 0]]} # 10
+  [Return, ~, [9], 0, ~, 2]]} # 10
 ```
 
 ## A `($)` prototype cuts the extent to one
@@ -154,30 +155,31 @@ one numeric literal whose text is "2"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [10], nodes: [
+main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 2
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 3
-  [Call, {dispatch_kind: direct, name: main::g, param_names: [], want: list}, [3], 0, Str], # 4
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [4], ~, Str], # 5
-  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 6
-  [Coerce, {from_repr: Int, to_repr: Str}, [6], ~, Str], # 7
-  [Print, ~, [5, 7], 4, Scalar], # 8
-  [Print, ~, [2], 8, Scalar], # 9
-  [Return, {implicit: true}, [1], 9]]} # 10
+  [MemStart], # 4
+  [Call, {dispatch_kind: direct, file: "/tmp/osrpJFXK1Z/case.pl", line: 2, name: main::g, package: main, param_names: [], want: list}, [3], 0, Str, 4, true], # 5
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [5], ~, Str], # 6
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 7
+  [Coerce, {from_repr: Int, to_repr: Str}, [7], ~, Str], # 8
+  [Print, ~, [6, 8], 5, "Maybe[Boolean]"], # 9
+  [Print, ~, [2], 9, "Maybe[Boolean]"], # 10
+  [Return, {implicit: true}, [1], 10, ~, 5]]} # 11
 main::g: {start: 0, returns: [10], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "g["}, ~, ~, Str], # 1
   [MemStart], # 2
-  [EntryDef, {package: main, sigil: $, symbol: "\""}, [2], ~, Scalar], # 3
+  [EntryDef, {package: main, sigil: $, symbol: "\""}, ~, ~, Scalar, 2], # 3
   [Coerce, {from_repr: Scalar, to_repr: Str}, [3], ~, Str], # 4
   [ArgsSource, ~, ~, ~, Array], # 5
-  [Call, {dispatch_kind: builtin, memory_input: true, name: join, param_names: []}, [4, 5, 2], ~, Str], # 6
+  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [4, 5], ~, Str, 2], # 6
   [Concat, ~, [1, 6], ~, Str], # 7
   [Constant, {const_type: string, value: "]"}, ~, ~, Str], # 8
   [Concat, ~, [7, 8], ~, Str], # 9
-  [Return, ~, [9], 0]]} # 10
+  [Return, ~, [9], 0, ~, 2]]} # 10
 ```
 
 ## An undeclared callee is a syntax error
@@ -306,31 +308,33 @@ one word whose text is "local"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [19], nodes: [
+main::__PROGRAM__: {start: 0, returns: [20], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: a}, ~, ~, Str], # 2
   [Constant, {const_type: string, value: b}, ~, ~, Str], # 3
-  [Call, {dispatch_kind: builtin, name: warn, param_names: []}, [2, 3], ~, Unknown], # 4
-  [ArrayLiteral, {sigil: "@", symbol: greedy}, [4], ~, Array], # 5
-  [EntryDef, {package: main, sigil: "%", symbol: SIG}, ~, ~, Hash], # 6
-  [Constant, {const_type: string, value: __WARN__}, ~, ~, Str], # 7
-  [Subscript, {kind: hash}, [6, 7], ~, Scalar], # 8
-  [AnonSub, {name: main::__PROGRAM__::__ANON__:1:2}, ~, ~, CodeRef], # 9
-  [Assign, ~, [8, 9], 0, CodeRef], # 10
-  [Count, ~, [5, 10], ~, Int], # 11
-  [Coerce, {from_repr: Int, to_repr: Str}, [11], ~, Str], # 12
-  [Call, {dispatch_kind: builtin, name: warn, param_names: []}, [2], ~, Unknown], # 13
-  [ArrayLiteral, {sigil: "@", symbol: cut}, [13, 3], ~, Array], # 14
-  [Count, ~, [14, 10], ~, Int], # 15
-  [Coerce, {from_repr: Int, to_repr: Str}, [15], ~, Str], # 16
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 17
-  [Print, ~, [12, 16, 17], 10, Scalar], # 18
-  [Return, {implicit: true}, [1], 18]]} # 19
-main::__PROGRAM__::__ANON__:1:2: {start: 0, returns: [2], nodes: [
+  [EntryDef, {package: main, sigil: "%", symbol: SIG}, ~, ~, Hash], # 4
+  [Constant, {const_type: string, value: __WARN__}, ~, ~, Str], # 5
+  [Subscript, {kind: hash}, [4, 5], ~, Scalar], # 6
+  [AnonSub, {name: main::__PROGRAM__::__ANON__:1:2}, ~, ~, CodeRef], # 7
+  [MemStart], # 8
+  [Assign, ~, [6, 7], 0, CodeRef, 8, true], # 9
+  [Call, {dispatch_kind: builtin, file: "/tmp/osrpJFXK1Z/case.pl", line: 2, name: warn, param_names: []}, [2, 3], 9, Boolean, 9, true], # 10
+  [ArrayLiteral, {sigil: "@", symbol: greedy}, [10], ~, Array], # 11
+  [Call, {dispatch_kind: builtin, file: "/tmp/osrpJFXK1Z/case.pl", line: 3, name: warn, param_names: []}, [2], 10, Boolean, 10, true], # 12
+  [Count, ~, [11], ~, Int, 12], # 13
+  [Coerce, {from_repr: Int, to_repr: Str}, [13], ~, Str], # 14
+  [ArrayLiteral, {sigil: "@", symbol: cut}, [12, 3], ~, Array], # 15
+  [Count, ~, [15], ~, Int, 12], # 16
+  [Coerce, {from_repr: Int, to_repr: Str}, [16], ~, Str], # 17
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 18
+  [Print, ~, [14, 17, 18], 12, "Maybe[Boolean]"], # 19
+  [Return, {implicit: true}, [1], 19, ~, 12]]} # 20
+main::__PROGRAM__::__ANON__:1:2: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Return, {implicit: true, valueless: true}, [1], 0]]} # 2
+  [MemStart], # 2
+  [Return, {implicit: true, valueless: true}, [1], 0, ~, 2]]} # 3
 ```
 
 ## `lock` is a named unary with its own op
@@ -394,7 +398,7 @@ one word whose text is "lock"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [11], nodes: [
+main::__PROGRAM__: {start: 0, returns: [12], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: "locked "}, ~, ~, Str], # 2
@@ -404,7 +408,8 @@ main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [Coerce, {from_repr: Unknown, to_repr: Str}, [5], ~, Str], # 6
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 7
   [PadAccess, {sigil: $, symbol: "n"}, ~, ~, Unknown], # 8
-  [Call, {dispatch_kind: builtin, name: lock, param_names: []}, [8], 0, Unknown], # 9
-  [Print, ~, [2, 6, 7], 9, Scalar], # 10
-  [Return, {implicit: true}, [1], 10]]} # 11
+  [MemStart], # 9
+  [Call, {dispatch_kind: builtin, name: lock, param_names: []}, [8], 0, Unknown, 9], # 10
+  [Print, ~, [2, 6, 7], 10, "Maybe[Boolean]"], # 11
+  [Return, {implicit: true}, [1], 11, ~, 9]]} # 12
 ```

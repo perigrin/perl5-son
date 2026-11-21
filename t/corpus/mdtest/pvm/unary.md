@@ -39,7 +39,7 @@ no operator whose text is "+"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [28], nodes: [
+main::__PROGRAM__: {start: 0, returns: [29], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [EnvRead, {key: X}, ~, ~, Str], # 2
@@ -67,8 +67,9 @@ main::__PROGRAM__: {start: 0, returns: [28], nodes: [
   [Concat, ~, [23, 11], ~, Str], # 24
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 25
   [Concat, ~, [24, 25], ~, Str], # 26
-  [Print, ~, [26], 0, Scalar], # 27
-  [Return, {implicit: true}, [1], 27]]} # 28
+  [Print, ~, [26], 0, "Maybe[Boolean]"], # 27
+  [MemStart], # 28
+  [Return, {implicit: true}, [1], 27, ~, 28]]} # 29
 ```
 
 ## The magic string increment
@@ -101,7 +102,7 @@ no operator whose text is "+"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [25], nodes: [
+main::__PROGRAM__: {start: 0, returns: [26], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [EnvRead, {key: X}, ~, ~, Str], # 2
@@ -126,8 +127,9 @@ main::__PROGRAM__: {start: 0, returns: [25], nodes: [
   [Concat, ~, [15, 20], ~, Str], # 21
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 22
   [Concat, ~, [21, 22], ~, Str], # 23
-  [Print, ~, [23], 0, Scalar], # 24
-  [Return, {implicit: true}, [1], 24]]} # 25
+  [Print, ~, [23], 0, "Maybe[Boolean]"], # 24
+  [MemStart], # 25
+  [Return, {implicit: true}, [1], 24, ~, 25]]} # 26
 ```
 
 ## Unary `+` computes nothing and disambiguates
@@ -164,7 +166,7 @@ parses: yes
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [11], nodes: [
+main::__PROGRAM__: {start: 0, returns: [12], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 2
@@ -172,12 +174,13 @@ main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [Coerce, {from_repr: Int, to_repr: Str}, [3], ~, Str], # 4
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 5
   [Coerce, {from_repr: Int, to_repr: Str}, [5], ~, Str], # 6
-  [Print, ~, [6], 0, Scalar], # 7
-  [Print, ~, [2], 7, Scalar], # 8
-  [Print, ~, [4], 8, Scalar], # 9
-  [Print, ~, [2], 9, Scalar], # 10
-  [Return, {implicit: true}, [1], 10], # 11
-  [Multiply, ~, [7, 5], ~, Num]]} # 12
+  [Print, ~, [6], 0, "Maybe[Boolean]"], # 7
+  [Print, ~, [2], 7, "Maybe[Boolean]"], # 8
+  [Print, ~, [4], 8, "Maybe[Boolean]"], # 9
+  [Print, ~, [2], 9, "Maybe[Boolean]"], # 10
+  [MemStart], # 11
+  [Return, {implicit: true}, [1], 10, ~, 11], # 12
+  [Multiply, ~, [7, 5], ~, Num]]} # 13
 ```
 
 ## The file-test operators
@@ -229,21 +232,22 @@ no operator whose text is "-"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [13], nodes: [
+main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: "["}, ~, ~, Str], # 2
   [EnvRead, {key: X}, ~, ~, Str], # 3
   [Constant, {const_type: string, value: "/etc/hostname"}, ~, ~, Str], # 4
   [DefinedOr, ~, [3, 4], ~, Str], # 5
-  [Call, {dispatch_kind: builtin, name: ftis, param_names: []}, [5], ~, Unknown], # 6
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
+  [Call, {dispatch_kind: builtin, name: ftis, param_names: []}, [5], ~, Scalar], # 6
+  [Coerce, {from_repr: Scalar, to_repr: Str}, [6], ~, Str], # 7
   [Constant, {const_type: string, value: "]["}, ~, ~, Str], # 8
-  [Call, {dispatch_kind: builtin, name: ftis, param_names: []}, [5], ~, Unknown], # 9
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [9], ~, Str], # 10
+  [Call, {dispatch_kind: builtin, name: ftis, param_names: []}, [5], ~, Scalar], # 9
+  [Coerce, {from_repr: Scalar, to_repr: Str}, [9], ~, Str], # 10
   [Constant, {const_type: string, value: "]\n"}, ~, ~, Str], # 11
-  [Print, ~, [2, 7, 8, 10, 11], 0, Scalar], # 12
-  [Return, {implicit: true}, [1], 12]]} # 13
+  [Print, ~, [2, 7, 8, 10, 11], 0, "Maybe[Boolean]"], # 12
+  [MemStart], # 13
+  [Return, {implicit: true}, [1], 12, ~, 13]]} # 14
 ```
 
 ## Pre- and post-increment of an element, used
@@ -272,10 +276,10 @@ parses: yes
 main::__PROGRAM__: {start: 0, returns: [45], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [PadAccess, {sigil: "%", symbol: h}, ~, ~, Unknown], # 2
+  [PadAccess, {sigil: "%", symbol: h}, ~, ~, Hash], # 2
   [Constant, {const_type: string, value: a}, ~, ~, Str], # 3
   [MemStart], # 4
-  [Subscript, {kind: hash}, [2, 3, 4], 0, Scalar], # 5
+  [Subscript, {kind: hash}, [2, 3], 0, Scalar, 4], # 5
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 6
   [DefinedOr, ~, [5, 6], ~, Scalar], # 7
   [Coerce, {from_repr: Scalar, to_repr: Str}, [7], ~, Str], # 8
@@ -283,8 +287,8 @@ main::__PROGRAM__: {start: 0, returns: [45], nodes: [
   [Concat, ~, [8, 9], ~, Str], # 10
   [Subscript, {kind: hash}, [2, 3], ~, Scalar], # 11
   [Increment, ~, [5], ~, Scalar], # 12
-  [Assign, ~, [11, 12], 5, Scalar], # 13
-  [Subscript, {kind: hash}, [2, 3, 13], 13, Scalar], # 14
+  [Assign, ~, [11, 12], 5, Scalar, 4, true], # 13
+  [Subscript, {kind: hash}, [2, 3], 13, Scalar, 13], # 14
   [DefinedOr, ~, [14, 6], ~, Scalar], # 15
   [Coerce, {from_repr: Scalar, to_repr: Str}, [15], ~, Str], # 16
   [Concat, ~, [10, 16], ~, Str], # 17
@@ -292,14 +296,14 @@ main::__PROGRAM__: {start: 0, returns: [45], nodes: [
   [Constant, {const_type: string, value: b}, ~, ~, Str], # 19
   [Subscript, {kind: hash}, [2, 19], ~, Scalar], # 20
   [Increment, ~, [14], ~, Scalar], # 21
-  [Assign, ~, [11, 21], 14, Scalar], # 22
-  [Subscript, {kind: hash}, [2, 19, 22], 22, Scalar], # 23
+  [Assign, ~, [11, 21], 14, Scalar, 13, true], # 22
+  [Subscript, {kind: hash}, [2, 19], 22, Scalar, 22], # 23
   [Increment, ~, [23], ~, Scalar], # 24
-  [Assign, ~, [20, 24], 23, Scalar], # 25
-  [Subscript, {kind: hash}, [2, 19, 25], 25, Scalar], # 26
+  [Assign, ~, [20, 24], 23, Scalar, 22, true], # 25
+  [Subscript, {kind: hash}, [2, 19], 25, Scalar, 25], # 26
   [Increment, ~, [26], ~, Scalar], # 27
-  [Assign, ~, [20, 27], 26, Scalar], # 28
-  [Subscript, {kind: hash}, [2, 3, 28], ~, Scalar], # 29
+  [Assign, ~, [20, 27], 26, Scalar, 25, true], # 28
+  [Subscript, {kind: hash}, [2, 3], ~, Scalar, 28], # 29
   [Coerce, {from_repr: Unknown, to_repr: Str}, [29], ~, Str], # 30
   [Concat, ~, [18, 30], ~, Str], # 31
   [Concat, ~, [31, 9], ~, Str], # 32
@@ -309,11 +313,11 @@ main::__PROGRAM__: {start: 0, returns: [45], nodes: [
   [Coerce, {from_repr: Scalar, to_repr: Str}, [27], ~, Str], # 36
   [Concat, ~, [35, 36], ~, Str], # 37
   [Concat, ~, [37, 9], ~, Str], # 38
-  [Subscript, {kind: hash}, [2, 19, 28], ~, Scalar], # 39
+  [Subscript, {kind: hash}, [2, 19], ~, Scalar, 28], # 39
   [Coerce, {from_repr: Unknown, to_repr: Str}, [39], ~, Str], # 40
   [Concat, ~, [38, 40], ~, Str], # 41
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 42
   [Concat, ~, [41, 42], ~, Str], # 43
-  [Print, ~, [43], 28, Scalar], # 44
-  [Return, {implicit: true}, [1], 44]]} # 45
+  [Print, ~, [43], 28, "Maybe[Boolean]"], # 44
+  [Return, {implicit: true}, [1], 44, ~, 28]]} # 45
 ```

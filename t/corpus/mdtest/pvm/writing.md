@@ -54,21 +54,22 @@ captured
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [13], nodes: [
+main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [MemStart], # 2
-  [PadAccess, {sigil: $, symbol: buf}, [2], ~, Str], # 3
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
-  [PadAccess, {sigil: $, symbol: out}, ~, ~, GlobRef], # 5
-  [Constant, {const_type: string, value: "captured\n"}, ~, ~, Str], # 6
-  [Constant, {const_type: string, value: ">"}, ~, ~, Str], # 7
-  [Ref, ~, [3], ~, ScalarRef], # 8
-  [Call, {dispatch_kind: builtin, name: open, param_names: []}, [5, 7, 8], 0, Scalar], # 9
-  [Print, {has_filehandle: true}, [5, 6], 9, Scalar], # 10
-  [Call, {dispatch_kind: builtin, name: close, param_names: []}, [5], 10, Boolean], # 11
-  [Print, ~, [4], 11, Scalar], # 12
-  [Return, {implicit: true}, [1], 12]]} # 13
+  [PadAccess, {sigil: $, symbol: out}, ~, ~, GlobRef], # 2
+  [Constant, {const_type: string, value: "captured\n"}, ~, ~, Str], # 3
+  [Constant, {const_type: string, value: ">"}, ~, ~, Str], # 4
+  [MemStart], # 5
+  [PadAccess, {sigil: $, symbol: buf}, ~, ~, Unknown, 5], # 6
+  [Ref, ~, [6], ~, Unknown], # 7
+  [Call, {dispatch_kind: builtin, name: open, param_names: []}, [2, 4, 7], 0, "Maybe[Int]", 5, true], # 8
+  [Print, {has_filehandle: true}, [2, 3], 8, "Maybe[Boolean]"], # 9
+  [Call, {dispatch_kind: builtin, name: close, param_names: []}, [2], 9, Boolean, 8, true], # 10
+  [PadAccess, {sigil: $, symbol: buf}, ~, ~, Str, 10], # 11
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [11], ~, Str], # 12
+  [Print, ~, [12], 10, "Maybe[Boolean]"], # 13
+  [Return, {implicit: true}, [1], 13, ~, 10]]} # 14
 ```
 
 ## A bareword handle reaches `print` through `gv`
@@ -98,13 +99,14 @@ to stdout
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [5], nodes: [
+main::__PROGRAM__: {start: 0, returns: [6], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: glob, value: STDOUT}, ~, ~, Glob], # 2
   [Constant, {const_type: string, value: "to stdout\n"}, ~, ~, Str], # 3
-  [Print, {has_filehandle: true}, [2, 3], 0, Scalar], # 4
-  [Return, {implicit: true}, [1], 4]]} # 5
+  [Print, {has_filehandle: true}, [2, 3], 0, "Maybe[Boolean]"], # 4
+  [MemStart], # 5
+  [Return, {implicit: true}, [1], 4, ~, 5]]} # 6
 ```
 
 ## `say` is feature-gated, and the featureless spelling compiles
@@ -184,40 +186,41 @@ one word whose text is "say"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [23], nodes: [
+main::__PROGRAM__: {start: 0, returns: [24], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: "["}, ~, ~, Str], # 2
-  [MemStart], # 3
-  [PadAccess, {sigil: $, symbol: buf}, [3], ~, Str], # 4
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [4], ~, Str], # 5
-  [Concat, ~, [2, 5], ~, Str], # 6
-  [Constant, {const_type: string, value: "]\n"}, ~, ~, Str], # 7
-  [Concat, ~, [6, 7], ~, Str], # 8
-  [PadAccess, {sigil: $, symbol: out}, ~, ~, GlobRef], # 9
-  [Constant, {const_type: string, value: printed}, ~, ~, Str], # 10
-  [EnvRead, {key: X}, ~, ~, Str], # 11
-  [Constant, {const_type: string, value: said}, ~, ~, Str], # 12
-  [DefinedOr, ~, [11, 12], ~, Str], # 13
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [13], ~, Str], # 14
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 15
-  [Constant, {const_type: string, value: ">"}, ~, ~, Str], # 16
-  [Ref, ~, [4], ~, ScalarRef], # 17
-  [Call, {dispatch_kind: builtin, name: open, param_names: []}, [9, 16, 17], 0, Scalar], # 18
-  [Print, {has_filehandle: true}, [9, 14, 15], 18, Scalar], # 19
-  [Print, {has_filehandle: true}, [9, 10], 19, Scalar], # 20
-  [Call, {dispatch_kind: builtin, name: close, param_names: []}, [9], 20, Boolean], # 21
-  [Print, ~, [8], 21, Scalar], # 22
-  [Return, {implicit: true}, [1], 22]]} # 23
+  [PadAccess, {sigil: $, symbol: out}, ~, ~, GlobRef], # 3
+  [Constant, {const_type: string, value: printed}, ~, ~, Str], # 4
+  [EnvRead, {key: X}, ~, ~, Str], # 5
+  [Constant, {const_type: string, value: said}, ~, ~, Str], # 6
+  [DefinedOr, ~, [5, 6], ~, Str], # 7
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
+  [Constant, {const_type: string, value: ">"}, ~, ~, Str], # 10
+  [MemStart], # 11
+  [PadAccess, {sigil: $, symbol: buf}, ~, ~, Unknown, 11], # 12
+  [Ref, ~, [12], ~, Unknown], # 13
+  [Call, {dispatch_kind: builtin, name: open, param_names: []}, [3, 10, 13], 0, "Maybe[Int]", 11, true], # 14
+  [Print, {has_filehandle: true}, [3, 8, 9], 14, "Maybe[Boolean]"], # 15
+  [Print, {has_filehandle: true}, [3, 4], 15, "Maybe[Boolean]"], # 16
+  [Call, {dispatch_kind: builtin, name: close, param_names: []}, [3], 16, Boolean, 14, true], # 17
+  [PadAccess, {sigil: $, symbol: buf}, ~, ~, Str, 17], # 18
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [18], ~, Str], # 19
+  [Concat, ~, [2, 19], ~, Str], # 20
+  [Constant, {const_type: string, value: "]\n"}, ~, ~, Str], # 21
+  [Concat, ~, [20, 21], ~, Str], # 22
+  [Print, ~, [22], 17, "Maybe[Boolean]"], # 23
+  [Return, {implicit: true}, [1], 23, ~, 17]]} # 24
 "BEGIN 1": {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: feature}, ~, ~, Str], # 1
   [Constant, {const_type: string, value: say}, ~, ~, Str], # 2
   [Constant, {const_type: string, value: feature.pm}, ~, ~, Str], # 3
   [MemStart], # 4
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [3, 4], 0, Unknown], # 5
-  [Call, {class_name: feature, dispatch_kind: method, name: import, param_names: []}, [1, 2], 5, Unknown], # 6
-  [Return, {implicit: true}, [6], 6]]} # 7
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
+  [Call, {class_name: feature, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 ```
 
 ## `select` is two operators sharing a name, told apart by arity
@@ -297,31 +300,32 @@ parses: yes
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [25], nodes: [
+main::__PROGRAM__: {start: 0, returns: [26], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: "["}, ~, ~, Str], # 2
-  [MemStart], # 3
-  [PadAccess, {sigil: $, symbol: buf}, [3], ~, Str], # 4
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [4], ~, Str], # 5
-  [Concat, ~, [2, 5], ~, Str], # 6
-  [Constant, {const_type: string, value: "]["}, ~, ~, Str], # 7
-  [Concat, ~, [6, 7], ~, Str], # 8
-  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 9
-  [Call, {dispatch_kind: builtin, name: sselect, param_names: []}, [1, 1, 1, 9], ~, Unknown], # 10
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [10], ~, Str], # 11
-  [Concat, ~, [8, 11], ~, Str], # 12
-  [Constant, {const_type: string, value: "]\n"}, ~, ~, Str], # 13
-  [Concat, ~, [12, 13], ~, Str], # 14
-  [PadAccess, {sigil: $, symbol: out}, ~, ~, GlobRef], # 15
-  [Constant, {const_type: string, value: ">"}, ~, ~, Str], # 16
-  [Ref, ~, [4], ~, ScalarRef], # 17
-  [Call, {dispatch_kind: builtin, name: open, param_names: []}, [15, 16, 17], 0, Scalar], # 18
-  [Call, {dispatch_kind: builtin, name: select, param_names: []}, [15], 18, Unknown], # 19
-  [Constant, {const_type: string, value: "captured\n"}, ~, ~, Str], # 20
-  [Print, ~, [20], 19, Scalar], # 21
-  [Call, {dispatch_kind: builtin, name: select, param_names: []}, [19], 21, Unknown], # 22
-  [Call, {dispatch_kind: builtin, name: close, param_names: []}, [15], 22, Boolean], # 23
-  [Print, ~, [14], 23, Scalar], # 24
-  [Return, {implicit: true}, [1], 24]]} # 25
+  [PadAccess, {sigil: $, symbol: out}, ~, ~, GlobRef], # 3
+  [Constant, {const_type: string, value: ">"}, ~, ~, Str], # 4
+  [MemStart], # 5
+  [PadAccess, {sigil: $, symbol: buf}, ~, ~, Unknown, 5], # 6
+  [Ref, ~, [6], ~, Unknown], # 7
+  [Call, {dispatch_kind: builtin, name: open, param_names: []}, [3, 4, 7], 0, "Maybe[Int]", 5, true], # 8
+  [Call, {dispatch_kind: builtin, name: select, param_names: []}, [3], 8, Unknown, 8], # 9
+  [Constant, {const_type: string, value: "captured\n"}, ~, ~, Str], # 10
+  [Print, ~, [10], 9, "Maybe[Boolean]"], # 11
+  [Call, {dispatch_kind: builtin, name: select, param_names: []}, [9], 11, Unknown, 8], # 12
+  [Call, {dispatch_kind: builtin, name: close, param_names: []}, [3], 12, Boolean, 8, true], # 13
+  [PadAccess, {sigil: $, symbol: buf}, ~, ~, Str, 13], # 14
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [14], ~, Str], # 15
+  [Concat, ~, [2, 15], ~, Str], # 16
+  [Constant, {const_type: string, value: "]["}, ~, ~, Str], # 17
+  [Concat, ~, [16, 17], ~, Str], # 18
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 19
+  [Call, {dispatch_kind: builtin, name: sselect, param_names: []}, [1, 1, 1, 19], ~, Unknown], # 20
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [20], ~, Str], # 21
+  [Concat, ~, [18, 21], ~, Str], # 22
+  [Constant, {const_type: string, value: "]\n"}, ~, ~, Str], # 23
+  [Concat, ~, [22, 23], ~, Str], # 24
+  [Print, ~, [24], 13, "Maybe[Boolean]"], # 25
+  [Return, {implicit: true}, [1], 25, ~, 13]]} # 26
 ```

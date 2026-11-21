@@ -54,11 +54,11 @@ main::__PROGRAM__: {start: 0, returns: [9], nodes: [
   [HashLiteral, ~, ~, 0, HashRef], # 2
   [Constant, {const_type: string, value: Foo}, ~, ~, Str], # 3
   [MemStart], # 4
-  [Call, {dispatch_kind: builtin, memory_input: true, name: bless, param_names: []}, [2, 3, 4], ~, Unknown], # 5
-  [RefType, ~, [5], ~, Str], # 6
+  [Call, {dispatch_kind: builtin, name: bless, param_names: []}, [2, 3], 2, Unknown, 4, true], # 5
+  [RefType, ~, [5], ~, Str, 5], # 6
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 7
-  [Print, ~, [6, 7], 2, Scalar], # 8
-  [Return, {implicit: true}, [1], 8]]} # 9
+  [Print, ~, [6, 7], 5, "Maybe[Boolean]"], # 8
+  [Return, {implicit: true}, [1], 8, ~, 5]]} # 9
 ```
 
 ## bless of a POPULATED anonymous hash
@@ -104,11 +104,11 @@ main::__PROGRAM__: {start: 0, returns: [12], nodes: [
   [HashLiteral, ~, [4], 0, HashRef], # 5
   [Constant, {const_type: string, value: Foo}, ~, ~, Str], # 6
   [MemStart], # 7
-  [Call, {dispatch_kind: builtin, memory_input: true, name: bless, param_names: []}, [5, 6, 7], ~, Unknown], # 8
-  [RefType, ~, [8], ~, Str], # 9
+  [Call, {dispatch_kind: builtin, name: bless, param_names: []}, [5, 6], 5, Unknown, 7, true], # 8
+  [RefType, ~, [8], ~, Str, 8], # 9
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
-  [Print, ~, [9, 10], 5, Scalar], # 11
-  [Return, {implicit: true}, [1], 11]]} # 12
+  [Print, ~, [9, 10], 8, "Maybe[Boolean]"], # 11
+  [Return, {implicit: true}, [1], 11, ~, 8]]} # 12
 ```
 
 ## A method name written out
@@ -156,22 +156,23 @@ one operator whose text is "->"
 ```
 
 ```ir
-Foo::hi: {start: 0, returns: [2], nodes: [
+Foo::hi: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: hi}, ~, ~, Str], # 1
-  [Return, ~, [1], 0]]} # 2
+  [MemStart], # 2
+  [Return, ~, [1], 0, ~, 2]]} # 3
 main::__PROGRAM__: {start: 0, returns: [10], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [HashLiteral, ~, ~, 0, HashRef], # 2
   [Constant, {const_type: string, value: Foo}, ~, ~, Str], # 3
   [MemStart], # 4
-  [Call, {dispatch_kind: builtin, memory_input: true, name: bless, param_names: []}, [2, 3, 4], ~, Unknown], # 5
-  [Call, {dispatch_kind: method, name: hi, param_names: [], want: list}, [5], 2, Unknown], # 6
+  [Call, {dispatch_kind: builtin, name: bless, param_names: []}, [2, 3], 2, Unknown, 4, true], # 5
+  [Call, {class_name: Foo, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 5, name: hi, package: main, param_names: [], want: list}, [5], 5, Str, 5, true], # 6
   [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
-  [Print, ~, [7, 8], 6, Scalar], # 9
-  [Return, {implicit: true}, [1], 9]]} # 10
+  [Print, ~, [7, 8], 6, "Maybe[Boolean]"], # 9
+  [Return, {implicit: true}, [1], 9, ~, 6]]} # 10
 ```
 
 ## A method name in a scalar
@@ -206,23 +207,24 @@ hi
 ```
 
 ```ir
-Foo::hi: {start: 0, returns: [2], nodes: [
+Foo::hi: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: hi}, ~, ~, Str], # 1
-  [Return, ~, [1], 0]]} # 2
+  [MemStart], # 2
+  [Return, ~, [1], 0, ~, 2]]} # 3
 main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [HashLiteral, ~, ~, 0, HashRef], # 2
   [Constant, {const_type: string, value: Foo}, ~, ~, Str], # 3
   [MemStart], # 4
-  [Call, {dispatch_kind: builtin, memory_input: true, name: bless, param_names: []}, [2, 3, 4], ~, Unknown], # 5
+  [Call, {dispatch_kind: builtin, name: bless, param_names: []}, [2, 3], 2, Unknown, 4, true], # 5
   [Constant, {const_type: string, value: hi}, ~, ~, Str], # 6
-  [Call, {dispatch_kind: dynamic_method, name: "", param_names: []}, [5, 6], ~, Unknown], # 7
+  [Call, {dispatch_kind: dynamic_method, name: "", param_names: [], want: list}, [5, 6], 5, Unknown, 5, true], # 7
   [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
-  [Print, ~, [8, 9], 2, Scalar], # 10
-  [Return, {implicit: true}, [1], 10]]} # 11
+  [Print, ~, [8, 9], 7, "Maybe[Boolean]"], # 10
+  [Return, {implicit: true}, [1], 10, ~, 7]]} # 11
 ```
 
 ## SUPER:: dispatch
@@ -261,27 +263,28 @@ base
 ```
 
 ```ir
-Base::hi: {start: 0, returns: [2], nodes: [
+Base::hi: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: base}, ~, ~, Str], # 1
-  [Return, ~, [1], 0]]} # 2
+  [MemStart], # 2
+  [Return, ~, [1], 0, ~, 2]]} # 3
 main::__PROGRAM__: {start: 0, returns: [15], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [EntryDef, {package: Derived, sigil: "@", symbol: ISA}, ~, ~, Array], # 2
   [Constant, {const_type: string, value: Base}, ~, ~, Str], # 3
   [ArrayLiteral, {sigil: "@", symbol: "@Derived::ISA"}, [3], ~, Array], # 4
-  [MemStart], # 5
-  [PackageMark, {package: Derived}, ~, 0], # 6
-  [EntryWrite, ~, [2, 4, 5], 6, Unknown], # 7
+  [PackageMark, {package: Derived}, ~, 0], # 5
+  [MemStart], # 6
+  [EntryWrite, ~, [2, 4], 5, Unknown, 6, true], # 7
   [HashLiteral, ~, ~, 7, HashRef], # 8
   [Constant, {const_type: string, value: Derived}, ~, ~, Str], # 9
-  [Call, {dispatch_kind: builtin, memory_input: true, name: bless, param_names: []}, [8, 9, 7], ~, Unknown], # 10
-  [Call, {dispatch_kind: method, name: Derived::SUPER::hi, param_names: [], want: list}, [10], 8, Unknown], # 11
+  [Call, {dispatch_kind: builtin, name: bless, param_names: []}, [8, 9], 8, Unknown, 7, true], # 10
+  [Call, {class_name: Derived, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 6, name: Derived::SUPER::hi, package: Derived, param_names: [], want: list}, [10], 10, Unknown, 10, true], # 11
   [Coerce, {from_repr: Unknown, to_repr: Str}, [11], ~, Str], # 12
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 13
-  [Print, ~, [12, 13], 11, Scalar], # 14
-  [Return, {implicit: true}, [1], 14]]} # 15
+  [Print, ~, [12, 13], 11, "Maybe[Boolean]"], # 14
+  [Return, {implicit: true}, [1], 14, ~, 11]]} # 15
 ```
 
 ## Indirect object notation: `new Foo`
@@ -325,18 +328,20 @@ Foo::new: {start: 0, returns: [6], nodes: [
   [Start], # 0
   [ArgsSource, ~, ~, ~, Array], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: shift, param_names: []}, [1, 2], 0, Scalar], # 3
+  [Call, {dispatch_kind: builtin, name: shift, param_names: []}, [1], 0, Scalar, 2, true], # 3
   [HashLiteral, ~, ~, 3, HashRef], # 4
-  [Call, {dispatch_kind: builtin, memory_input: true, name: bless, param_names: []}, [4, 3, 3], ~, Unknown], # 5
-  [Return, ~, [5], 4]]} # 6
-main::__PROGRAM__: {start: 0, returns: [6], nodes: [
+  [Call, {dispatch_kind: builtin, name: bless, param_names: []}, [4, 3], 4, Unknown, 3, true], # 5
+  [Return, ~, [5], 5, ~, 5]]} # 6
+main::__PROGRAM__: {start: 0, returns: [8], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Call, {class_name: Foo, dispatch_kind: method, name: new, param_names: [], want: scalar}, ~, 0, Object], # 2
-  [RefType, ~, [2], ~, Str], # 3
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
-  [Print, ~, [3, 4], 2, Scalar], # 5
-  [Return, {implicit: true}, [1], 5]]} # 6
+  [Constant, {const_type: string, value: Foo}, ~, ~, Str], # 2
+  [MemStart], # 3
+  [Call, {class_name: Foo, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 4, name: new, package: main, param_names: [], want: scalar}, [2], 0, Object, 3, true], # 4
+  [RefType, ~, [4], ~, Str, 4], # 5
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 6
+  [Print, ~, [5, 6], 4, "Maybe[Boolean]"], # 7
+  [Return, {implicit: true}, [1], 7, ~, 4]]} # 8
 ```
 
 ## `isa` is an infix operator, not dispatch
@@ -406,7 +411,7 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [Constant, {const_type: string, value: Foo}, ~, ~, Str], # 4
   [DefinedOr, ~, [3, 4], ~, Str], # 5
   [MemStart], # 6
-  [Call, {dispatch_kind: builtin, memory_input: true, name: bless, param_names: []}, [2, 5, 6], ~, Unknown], # 7
+  [Call, {dispatch_kind: builtin, name: bless, param_names: []}, [2, 5], 2, Unknown, 6, true], # 7
   [IsaOp, ~, [7, 4], ~, Boolean], # 8
   [Coerce, {from_repr: Boolean, to_repr: Str}, [8], ~, Str], # 9
   [Constant, {const_type: string, value: Bar}, ~, ~, Str], # 10
@@ -415,14 +420,14 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [Concat, ~, [9, 12], ~, Str], # 13
   [Constant, {const_type: string, value: "|\n"}, ~, ~, Str], # 14
   [Concat, ~, [13, 14], ~, Str], # 15
-  [Print, ~, [15], 2, Scalar], # 16
-  [Return, {implicit: true}, [1], 16]]} # 17
+  [Print, ~, [15], 7, "Maybe[Boolean]"], # 16
+  [Return, {implicit: true}, [1], 16, ~, 7]]} # 17
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.036"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 ```
 
 ## The `->can(...)->()` chain is two calls
@@ -483,29 +488,30 @@ one word whose text is "can"
 ```
 
 ```ir
-Foo::hi: {start: 0, returns: [2], nodes: [
+Foo::hi: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: called}, ~, ~, Str], # 1
-  [Return, ~, [1], 0]]} # 2
+  [MemStart], # 2
+  [Return, ~, [1], 0, ~, 2]]} # 3
 main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [MemStart], # 2
-  [PadAccess, {sigil: $, symbol: o}, [2], ~, Unknown], # 3
-  [HashLiteral, ~, ~, 0, HashRef], # 4
-  [EnvRead, {key: X}, ~, ~, Str], # 5
-  [Constant, {const_type: string, value: Foo}, ~, ~, Str], # 6
-  [DefinedOr, ~, [5, 6], ~, Str], # 7
-  [Call, {dispatch_kind: builtin, memory_input: true, name: bless, param_names: []}, [4, 7, 2], ~, Unknown], # 8
-  [Assign, ~, [3, 8], 4, Unknown], # 9
-  [PadAccess, {sigil: $, symbol: o}, [9], ~, Unknown], # 10
+  [HashLiteral, ~, ~, 0, HashRef], # 2
+  [EnvRead, {key: X}, ~, ~, Str], # 3
+  [Constant, {const_type: string, value: Foo}, ~, ~, Str], # 4
+  [DefinedOr, ~, [3, 4], ~, Str], # 5
+  [MemStart], # 6
+  [Call, {dispatch_kind: builtin, name: bless, param_names: []}, [2, 5], 2, Unknown, 6, true], # 7
+  [PadAccess, {sigil: $, symbol: o}, ~, ~, Unknown, 7], # 8
+  [Assign, ~, [8, 7], 7, Unknown, 7, true], # 9
+  [PadAccess, {sigil: $, symbol: o}, ~, ~, Unknown, 9], # 10
   [Constant, {const_type: string, value: hi}, ~, ~, Str], # 11
-  [Call, {dispatch_kind: method, name: can, param_names: [], want: scalar}, [10, 11], 9, Unknown], # 12
-  [Call, {dispatch_kind: indirect, name: "", param_names: [], want: list}, [12, 10], 12, Unknown], # 13
+  [Call, {dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 5, name: can, package: main, param_names: [], want: scalar}, [10, 11], 9, Unknown, 9, true], # 12
+  [Call, {dispatch_kind: indirect, file: "/tmp/osrpJFXK1Z/case.pl", line: 5, name: "", package: main, param_names: [], want: list}, [12, 10], 12, Unknown, 12, true], # 13
   [Coerce, {from_repr: Unknown, to_repr: Str}, [13], ~, Str], # 14
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 15
-  [Print, ~, [14, 15], 13, Scalar], # 16
-  [Return, {implicit: true}, [1], 16]]} # 17
+  [Print, ~, [14, 15], 13, "Maybe[Boolean]"], # 16
+  [Return, {implicit: true}, [1], 16, ~, 13]]} # 17
 ```
 
 ## A signature's placeholder parameter keeps its place
@@ -528,35 +534,41 @@ c7 too few
 ```
 
 ```ir
-Optimizer::collapse: {start: 0, returns: [5], nodes: [
+Optimizer::collapse: {start: 0, returns: [6], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: c}, ~, ~, Str], # 1
   [Parameter, {index: 1, name: $phi, sigil: $}, ~, ~, Str], # 2
   [Coerce, {from_repr: Unknown, to_repr: Str}, [2], ~, Str], # 3
   [Concat, ~, [1, 3], ~, Str], # 4
-  [Return, ~, [4], 0]]} # 5
-main::__PROGRAM__: {start: 0, returns: [16], nodes: [
+  [MemStart], # 5
+  [Return, ~, [4], 0, ~, 5]]} # 6
+main::__PROGRAM__: {start: 0, returns: [21], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: Optimizer}, ~, ~, Str], # 2
   [Constant, {const_type: integer, value: "7"}, ~, ~, Int], # 3
-  [Call, {class_name: Optimizer, dispatch_kind: method, name: collapse, param_names: [], want: list}, [2, 3], 0, Unknown], # 4
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [4], ~, Str], # 5
-  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 6
-  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 7
-  [Call, {class_name: Optimizer, dispatch_kind: method, name: collapse, param_names: [], want: void}, [2], 4, Unknown], # 8
-  [Region, {eval_entry: 4}, [8]], # 9
-  [Phi, {region: 9}, [7, 1], ~, Scalar], # 10
-  [Constant, {const_type: string, value: ran}, ~, ~, Str], # 11
-  [Constant, {const_type: string, value: "too few"}, ~, ~, Str], # 12
-  [TernaryExpr, ~, [10, 11, 12], ~, Str], # 13
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 14
-  [Print, ~, [5, 6, 13, 14], 9, Scalar], # 15
-  [Return, {implicit: true}, [1], 15]]} # 16
+  [MemStart], # 4
+  [Call, {class_name: Optimizer, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 3, name: collapse, package: main, param_names: [], want: list}, [2, 3], 0, Str, 4, true], # 5
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [5], ~, Str], # 6
+  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 7
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 8
+  [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 5], # 9
+  [Constant, {const_type: string, value: ""}, ~, ~, Str], # 10
+  [EntryWrite, ~, [9, 10], 5, Unknown, 5, true], # 11
+  [Call, {class_name: Optimizer, dispatch_kind: method, eval_id: 1, file: "/tmp/osrpJFXK1Z/case.pl", line: 3, name: collapse, package: main, param_names: [], want: void}, [2], 11, Str, 11, true], # 12
+  [Region, {eval_entry: 5, eval_id: 1}, [12]], # 13
+  [Phi, {region: 13}, [8, 1], ~, "Maybe[Int]"], # 14
+  [Constant, {const_type: string, value: ran}, ~, ~, Str], # 15
+  [Constant, {const_type: string, value: "too few"}, ~, ~, Str], # 16
+  [TernaryExpr, ~, [14, 15, 16], ~, Str], # 17
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 18
+  [Print, ~, [6, 7, 17, 18], 13, "Maybe[Boolean]"], # 19
+  [Phi, {memory: true, region: 13}, [12], ~, Str], # 20
+  [Return, {implicit: true}, [1], 19, ~, 20]]} # 21
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.036"}, ~, ~, Num], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: require, param_names: []}, [1, 2], 0, Unknown], # 3
-  [Return, {implicit: true}, [3], 3]]} # 4
+  [Call, {dispatch_kind: builtin, name: require, param_names: []}, [1], 0, Unknown, 2, true], # 3
+  [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 ```

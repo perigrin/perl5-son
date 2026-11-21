@@ -50,7 +50,7 @@ main::__PROGRAM__: {start: 0, returns: [23], nodes: [
   [EntryDef, {package: main, sigil: "@", symbol: ARGV}, ~, ~, Array], # 2
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 3
   [MemStart], # 4
-  [Subscript, {kind: array}, [2, 3, 4], ~, Scalar], # 5
+  [Subscript, {kind: array}, [2, 3], ~, Scalar, 4], # 5
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 6
   [DefinedOr, ~, [5, 6], ~, Scalar], # 7
   [Coerce, {from_repr: Scalar, to_repr: Num}, [7], ~, Num], # 8
@@ -67,8 +67,8 @@ main::__PROGRAM__: {start: 0, returns: [23], nodes: [
   [Concat, ~, [14, 18], ~, Str], # 19
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 20
   [Concat, ~, [19, 20], ~, Str], # 21
-  [Print, ~, [21], 0, Scalar], # 22
-  [Return, {implicit: true}, [1], 22]]} # 23
+  [Print, ~, [21], 0, "Maybe[Boolean]"], # 22
+  [Return, {implicit: true}, [1], 22, ~, 4]]} # 23
 ```
 
 ## `undef` is two operators wearing one word
@@ -105,14 +105,14 @@ main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [ArrayLiteral, ~, ~, ~, Array], # 2
   [MemStart], # 3
-  [Count, ~, [2, 3], ~, Int], # 4
+  [Count, ~, [2], ~, Int, 3], # 4
   [Coerce, {from_repr: Int, to_repr: Str}, [4], ~, Str], # 5
   [ArrayLiteral, {sigil: "@", symbol: b}, [1], ~, Array], # 6
-  [Count, ~, [6, 3], ~, Int], # 7
+  [Count, ~, [6], ~, Int, 3], # 7
   [Coerce, {from_repr: Int, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
-  [Print, ~, [5, 8, 9], 0, Scalar], # 10
-  [Return, {implicit: true}, [1], 10]]} # 11
+  [Print, ~, [5, 8, 9], 0, "Maybe[Boolean]"], # 10
+  [Return, {implicit: true}, [1], 10, ~, 3]]} # 11
 ```
 
 ## `chr` and `ord`, folded and unfolded
@@ -143,7 +143,7 @@ one word whose text is "ord"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [19], nodes: [
+main::__PROGRAM__: {start: 0, returns: [20], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: "["}, ~, ~, Str], # 2
@@ -162,8 +162,9 @@ main::__PROGRAM__: {start: 0, returns: [19], nodes: [
   [Concat, ~, [12, 14], ~, Str], # 15
   [Constant, {const_type: string, value: "]\n"}, ~, ~, Str], # 16
   [Concat, ~, [15, 16], ~, Str], # 17
-  [Print, ~, [17], 0, Scalar], # 18
-  [Return, {implicit: true}, [1], 18]]} # 19
+  [Print, ~, [17], 0, "Maybe[Boolean]"], # 18
+  [MemStart], # 19
+  [Return, {implicit: true}, [1], 18, ~, 19]]} # 20
 ```
 
 ## `index` reports failure as -1, not undef
@@ -193,7 +194,7 @@ one operator whose text is "+"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [25], nodes: [
+main::__PROGRAM__: {start: 0, returns: [26], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: "["}, ~, ~, Str], # 2
@@ -218,8 +219,9 @@ main::__PROGRAM__: {start: 0, returns: [25], nodes: [
   [Concat, ~, [17, 20], ~, Str], # 21
   [Constant, {const_type: string, value: "]\n"}, ~, ~, Str], # 22
   [Concat, ~, [21, 22], ~, Str], # 23
-  [Print, ~, [23], 0, Scalar], # 24
-  [Return, {implicit: true}, [1], 24]]} # 25
+  [Print, ~, [23], 0, "Maybe[Boolean]"], # 24
+  [MemStart], # 25
+  [Return, {implicit: true}, [1], 24, ~, 25]]} # 26
 ```
 
 ## `%*d` makes the format consume an argument
@@ -251,7 +253,7 @@ no word whose text is "printf"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [25], nodes: [
+main::__PROGRAM__: {start: 0, returns: [26], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: "["}, ~, ~, Str], # 2
@@ -276,8 +278,9 @@ main::__PROGRAM__: {start: 0, returns: [25], nodes: [
   [Modulo, ~, [19, 20], ~, Int], # 21
   [Coerce, {from_repr: Int, to_repr: Str}, [21], ~, Str], # 22
   [Constant, {const_type: string, value: "]\n"}, ~, ~, Str], # 23
-  [Print, ~, [18, 22, 23], 0, Scalar], # 24
-  [Return, {implicit: true}, [1], 24]]} # 25
+  [Print, ~, [18, 22, 23], 0, "Maybe[Boolean]"], # 24
+  [MemStart], # 25
+  [Return, {implicit: true}, [1], 24, ~, 25]]} # 26
 ```
 
 ## `substr` takes two, three or four arguments
@@ -306,7 +309,7 @@ one operator whose text is "-"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [22], nodes: [
+main::__PROGRAM__: {start: 0, returns: [23], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: "["}, ~, ~, Str], # 2
@@ -328,8 +331,9 @@ main::__PROGRAM__: {start: 0, returns: [22], nodes: [
   [Concat, ~, [15, 17], ~, Str], # 18
   [Constant, {const_type: string, value: "]\n"}, ~, ~, Str], # 19
   [Concat, ~, [18, 19], ~, Str], # 20
-  [Print, ~, [20], 0, Scalar], # 21
-  [Return, {implicit: true}, [1], 21]]} # 22
+  [Print, ~, [20], 0, "Maybe[Boolean]"], # 21
+  [MemStart], # 22
+  [Return, {implicit: true}, [1], 21, ~, 22]]} # 23
 ```
 
 ## `substr` is an lvalue
@@ -365,34 +369,34 @@ main::__PROGRAM__: {start: 0, returns: [31], nodes: [
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: "["}, ~, ~, Str], # 2
   [MemStart], # 3
-  [PadAccess, {sigil: $, symbol: a}, [3], ~, Unknown], # 4
+  [PadAccess, {sigil: $, symbol: a}, ~, ~, Unknown, 3], # 4
   [EnvRead, {key: X}, ~, ~, Str], # 5
   [Constant, {const_type: string, value: hello}, ~, ~, Str], # 6
   [DefinedOr, ~, [5, 6], ~, Str], # 7
-  [Assign, ~, [4, 7], 0, Str], # 8
-  [PadAccess, {sigil: $, symbol: b}, [8], ~, Unknown], # 9
-  [Assign, ~, [9, 7], 8, Str], # 10
-  [PadAccess, {sigil: $, symbol: a}, [10], ~, Str], # 11
+  [Assign, ~, [4, 7], 0, Str, 3, true], # 8
+  [PadAccess, {sigil: $, symbol: b}, ~, ~, Unknown, 8], # 9
+  [Assign, ~, [9, 7], 8, Str, 8, true], # 10
+  [PadAccess, {sigil: $, symbol: a}, ~, ~, Str, 10], # 11
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 12
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 13
   [Constant, {const_type: string, value: J}, ~, ~, Str], # 14
-  [Call, {dispatch_kind: builtin, name: substr, param_names: []}, [11, 12, 13, 14], 10, Str], # 15
-  [PadAccess, {sigil: $, symbol: b}, [15], ~, Str], # 16
-  [Call, {dispatch_kind: builtin, name: substr, param_names: []}, [16, 12, 13, 14], 15, Str], # 17
-  [PadAccess, {sigil: $, symbol: a}, [17], ~, Str], # 18
+  [Call, {dispatch_kind: builtin, name: substr, param_names: []}, [11, 12, 13, 14], 10, Str, 10, true], # 15
+  [PadAccess, {sigil: $, symbol: b}, ~, ~, Str, 15], # 16
+  [Call, {dispatch_kind: builtin, name: substr, param_names: []}, [16, 12, 13, 14], 15, Str, 15, true], # 17
+  [PadAccess, {sigil: $, symbol: a}, ~, ~, Str, 17], # 18
   [Coerce, {from_repr: Unknown, to_repr: Str}, [18], ~, Str], # 19
   [Concat, ~, [2, 19], ~, Str], # 20
   [Constant, {const_type: string, value: "]["}, ~, ~, Str], # 21
   [Concat, ~, [20, 21], ~, Str], # 22
-  [PadAccess, {sigil: $, symbol: b}, [17], ~, Str], # 23
+  [PadAccess, {sigil: $, symbol: b}, ~, ~, Str, 17], # 23
   [Coerce, {from_repr: Unknown, to_repr: Str}, [23], ~, Str], # 24
   [Concat, ~, [22, 24], ~, Str], # 25
   [Concat, ~, [25, 21], ~, Str], # 26
   [Concat, ~, [26, 17], ~, Str], # 27
   [Constant, {const_type: string, value: "]\n"}, ~, ~, Str], # 28
   [Concat, ~, [27, 28], ~, Str], # 29
-  [Print, ~, [29], 17, Scalar], # 30
-  [Return, {implicit: true}, [1], 30], # 31
+  [Print, ~, [29], 17, "Maybe[Boolean]"], # 30
+  [Return, {implicit: true}, [1], 30, ~, 17], # 31
   [Call, {dispatch_kind: builtin, name: substr, param_names: []}, [11, 12, 13], ~, Str]]} # 32
 ```
 
@@ -418,7 +422,7 @@ ABC-def
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [8], nodes: [
+main::__PROGRAM__: {start: 0, returns: [9], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: abc}, ~, ~, Str], # 2
@@ -426,8 +430,9 @@ main::__PROGRAM__: {start: 0, returns: [8], nodes: [
   [Constant, {const_type: string, value: "-"}, ~, ~, Str], # 4
   [Constant, {const_type: string, value: def}, ~, ~, Str], # 5
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 6
-  [Print, ~, [3, 4, 5, 6], 0, Scalar], # 7
-  [Return, {implicit: true}, [1], 7]]} # 8
+  [Print, ~, [3, 4, 5, 6], 0, "Maybe[Boolean]"], # 7
+  [MemStart], # 8
+  [Return, {implicit: true}, [1], 7, ~, 8]]} # 9
 ```
 
 ## `length` measures a concatenation, and a comma ends it
@@ -453,7 +458,7 @@ parses: yes
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [12], nodes: [
+main::__PROGRAM__: {start: 0, returns: [13], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: abc}, ~, ~, Str], # 2
@@ -465,6 +470,7 @@ main::__PROGRAM__: {start: 0, returns: [12], nodes: [
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 8
   [Coerce, {from_repr: Int, to_repr: Str}, [8], ~, Str], # 9
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
-  [Print, ~, [6, 7, 9, 10], 0, Scalar], # 11
-  [Return, {implicit: true}, [1], 11]]} # 12
+  [Print, ~, [6, 7, 9, 10], 0, "Maybe[Boolean]"], # 11
+  [MemStart], # 12
+  [Return, {implicit: true}, [1], 11, ~, 12]]} # 13
 ```

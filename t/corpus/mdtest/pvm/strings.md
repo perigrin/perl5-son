@@ -65,13 +65,14 @@ one string literal whose text is "\"a\\nb\""
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [5], nodes: [
+main::__PROGRAM__: {start: 0, returns: [6], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: "a\nb"}, ~, ~, Str], # 2
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 3
-  [Print, ~, [2, 3], 0, Scalar], # 4
-  [Return, {implicit: true}, [1], 4]]} # 5
+  [Print, ~, [2, 3], 0, "Maybe[Boolean]"], # 4
+  [MemStart], # 5
+  [Return, {implicit: true}, [1], 4, ~, 5]]} # 6
 ```
 
 ## Single quotes do not
@@ -118,14 +119,15 @@ one string literal whose text is "'a\\nb'"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [6], nodes: [
+main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: plain}, ~, ~, Str], # 2
   [Constant, {const_type: string, value: "a\\nb"}, ~, ~, Str], # 3
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
-  [Print, ~, [2, 3, 4], 0, Scalar], # 5
-  [Return, {implicit: true}, [1], 5]]} # 6
+  [Print, ~, [2, 3, 4], 0, "Maybe[Boolean]"], # 5
+  [MemStart], # 6
+  [Return, {implicit: true}, [1], 5, ~, 6]]} # 7
 ```
 
 ## `q` with three delimiters
@@ -180,13 +182,14 @@ one quote-like operator whose text is "q!three!"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [7], nodes: [
+main::__PROGRAM__: {start: 0, returns: [8], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: one}, ~, ~, Str], # 2
   [Constant, {const_type: string, value: two}, ~, ~, Str], # 3
   [Constant, {const_type: string, value: three}, ~, ~, Str], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
-  [Print, ~, [2, 3, 4, 5], 0, Scalar], # 6
-  [Return, {implicit: true}, [1], 6]]} # 7
+  [Print, ~, [2, 3, 4, 5], 0, "Maybe[Boolean]"], # 6
+  [MemStart], # 7
+  [Return, {implicit: true}, [1], 6, ~, 7]]} # 8
 ```

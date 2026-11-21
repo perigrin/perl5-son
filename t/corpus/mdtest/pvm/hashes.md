@@ -51,14 +51,14 @@ main::__PROGRAM__: {start: 0, returns: [15], nodes: [
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 5
   [HashLiteral, {sigil: "%", symbol: h}, [2, 3, 4, 5], ~, Hash], # 6
   [MemStart], # 7
-  [Subscript, {kind: hash}, [6, 2, 7], ~, Int], # 8
+  [Subscript, {kind: hash}, [6, 2], ~, Int, 7], # 8
   [Coerce, {from_repr: Unknown, to_repr: Str}, [8], ~, Str], # 9
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
-  [Call, {dispatch_kind: builtin, memory_input: true, name: keys, param_names: [], want: scalar}, [6, 7], ~, Int], # 11
+  [Call, {dispatch_kind: builtin, name: keys, param_names: [], want: scalar}, [6], ~, Int, 7], # 11
   [Coerce, {from_repr: Int, to_repr: Str}, [11], ~, Str], # 12
-  [Print, ~, [12, 10], 0, Scalar], # 13
-  [Print, ~, [9, 10], 13, Scalar], # 14
-  [Return, {implicit: true}, [1], 14]]} # 15
+  [Print, ~, [12, 10], 0, "Maybe[Boolean]"], # 13
+  [Print, ~, [9, 10], 13, "Maybe[Boolean]"], # 14
+  [Return, {implicit: true}, [1], 14, ~, 7]]} # 15
 ```
 
 ## A bareword key may be spelled like a quote-like operator
@@ -123,17 +123,17 @@ main::__PROGRAM__: {start: 0, returns: [22], nodes: [
   [Constant, {const_type: integer, value: "4"}, ~, ~, Int], # 9
   [HashLiteral, {sigil: "%", symbol: h}, [2, 3, 4, 5, 6, 7, 8, 9], ~, Hash], # 10
   [MemStart], # 11
-  [Subscript, {kind: hash}, [10, 2, 11], ~, Int], # 12
+  [Subscript, {kind: hash}, [10, 2], ~, Int, 11], # 12
   [Coerce, {from_repr: Unknown, to_repr: Str}, [12], ~, Str], # 13
-  [Subscript, {kind: hash}, [10, 4, 11], ~, Int], # 14
+  [Subscript, {kind: hash}, [10, 4], ~, Int, 11], # 14
   [Coerce, {from_repr: Unknown, to_repr: Str}, [14], ~, Str], # 15
-  [Subscript, {kind: hash}, [10, 6, 11], ~, Int], # 16
+  [Subscript, {kind: hash}, [10, 6], ~, Int, 11], # 16
   [Coerce, {from_repr: Unknown, to_repr: Str}, [16], ~, Str], # 17
-  [Subscript, {kind: hash}, [10, 8, 11], ~, Int], # 18
+  [Subscript, {kind: hash}, [10, 8], ~, Int, 11], # 18
   [Coerce, {from_repr: Unknown, to_repr: Str}, [18], ~, Str], # 19
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 20
-  [Print, ~, [13, 15, 17, 19, 20], 0, Scalar], # 21
-  [Return, {implicit: true}, [1], 21]]} # 22
+  [Print, ~, [13, 15, 17, 19, 20], 0, "Maybe[Boolean]"], # 21
+  [Return, {implicit: true}, [1], 21, ~, 11]]} # 22
 ```
 
 ## A computed subscript is the only route to `helem`
@@ -170,12 +170,12 @@ main::__PROGRAM__: {start: 0, returns: [15], nodes: [
   [ArrayLiteral, {sigil: "@", symbol: k}, [4], ~, Array], # 7
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 8
   [MemStart], # 9
-  [Subscript, {kind: array}, [7, 8, 9], ~, Str], # 10
-  [Subscript, {kind: hash}, [6, 10, 9], ~, Scalar], # 11
+  [Subscript, {kind: array}, [7, 8], ~, Str, 9], # 10
+  [Subscript, {kind: hash}, [6, 10], ~, Scalar, 9], # 11
   [Coerce, {from_repr: Unknown, to_repr: Str}, [11], ~, Str], # 12
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 13
-  [Print, ~, [12, 13], 0, Scalar], # 14
-  [Return, {implicit: true}, [1], 14]]} # 15
+  [Print, ~, [12, 13], 0, "Maybe[Boolean]"], # 14
+  [Return, {implicit: true}, [1], 14, ~, 9]]} # 15
 ```
 
 ## `exists` and `delete` on an element leave no op of their own
@@ -232,22 +232,22 @@ main::__PROGRAM__: {start: 0, returns: [22], nodes: [
   [Constant, {const_type: string, value: b}, ~, ~, Str], # 4
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 5
   [HashLiteral, {sigil: "%", symbol: h}, [2, 3, 4, 5], ~, Hash], # 6
-  [MemStart], # 7
-  [Constant, {const_type: string, value: z}, ~, ~, Str], # 8
-  [Exists, {kind: hash}, [6, 8, 7], ~, Boolean], # 9
+  [Constant, {const_type: string, value: z}, ~, ~, Str], # 7
+  [MemStart], # 8
+  [Exists, {kind: hash}, [6, 7], ~, Boolean, 8], # 9
   [Coerce, {from_repr: Boolean, to_repr: Str}, [9], ~, Str], # 10
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 11
-  [Exists, {kind: hash}, [6, 2, 7], ~, Boolean], # 12
+  [Exists, {kind: hash}, [6, 2], ~, Boolean, 8], # 12
   [Coerce, {from_repr: Boolean, to_repr: Str}, [12], ~, Str], # 13
-  [Print, ~, [13, 11], 0, Scalar], # 14
-  [Print, ~, [10, 11], 14, Scalar], # 15
-  [Delete, {kind: hash}, [6, 2, 7], 15, Scalar], # 16
-  [Call, {dispatch_kind: builtin, memory_input: true, name: keys, param_names: [], want: scalar}, [6, 16], ~, Int], # 17
+  [Print, ~, [13, 11], 0, "Maybe[Boolean]"], # 14
+  [Print, ~, [10, 11], 14, "Maybe[Boolean]"], # 15
+  [Delete, {kind: hash}, [6, 2], 15, Scalar, 8, true], # 16
+  [Call, {dispatch_kind: builtin, name: keys, param_names: [], want: scalar}, [6], ~, Int, 16], # 17
   [Coerce, {from_repr: Int, to_repr: Str}, [17], ~, Str], # 18
   [Coerce, {from_repr: Scalar, to_repr: Str}, [16], ~, Str], # 19
-  [Print, ~, [19, 11], 16, Scalar], # 20
-  [Print, ~, [18, 11], 20, Scalar], # 21
-  [Return, {implicit: true}, [1], 21]]} # 22
+  [Print, ~, [19, 11], 16, "Maybe[Boolean]"], # 20
+  [Print, ~, [18, 11], 20, "Maybe[Boolean]"], # 21
+  [Return, {implicit: true}, [1], 21, ~, 16]]} # 22
 ```
 
 ## A hash slice, where `delete` becomes a real op
@@ -289,11 +289,11 @@ main::__PROGRAM__: {start: 0, returns: [19], nodes: [
   [Coerce, {from_repr: List, to_repr: Str}, [9], ~, Str], # 10
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 11
   [MemStart], # 12
-  [Delete, {kind: hash}, [8, 3, 12], 0, Scalar], # 13
-  [Delete, {kind: hash}, [8, 5, 13], 13, Scalar], # 14
-  [Call, {dispatch_kind: builtin, memory_input: true, name: keys, param_names: [], want: scalar}, [8, 14], ~, Int], # 15
+  [Delete, {kind: hash}, [8, 3], 0, Scalar, 12, true], # 13
+  [Delete, {kind: hash}, [8, 5], 13, Scalar, 13, true], # 14
+  [Call, {dispatch_kind: builtin, name: keys, param_names: [], want: scalar}, [8], ~, Int, 14], # 15
   [Coerce, {from_repr: Int, to_repr: Str}, [15], ~, Str], # 16
-  [Print, ~, [16, 11], 14, Scalar], # 17
-  [Print, ~, [10, 11], 17, Scalar], # 18
-  [Return, {implicit: true}, [1], 18]]} # 19
+  [Print, ~, [16, 11], 14, "Maybe[Boolean]"], # 17
+  [Print, ~, [10, 11], 17, "Maybe[Boolean]"], # 18
+  [Return, {implicit: true}, [1], 18, ~, 14]]} # 19
 ```

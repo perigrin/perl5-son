@@ -65,11 +65,11 @@ main::__PROGRAM__: {start: 0, returns: [12], nodes: [
   [ArrayLiteral, ~, [2, 3, 4], 0, ArrayRef], # 5
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 6
   [MemStart], # 7
-  [Subscript, {kind: array}, [5, 6, 7], ~, Int], # 8
+  [Subscript, {kind: array}, [5, 6], ~, Int, 7], # 8
   [Coerce, {from_repr: Unknown, to_repr: Str}, [8], ~, Str], # 9
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
-  [Print, ~, [9, 10], 5, Scalar], # 11
-  [Return, {implicit: true}, [1], 11]]} # 12
+  [Print, ~, [9, 10], 5, "Maybe[Boolean]"], # 11
+  [Return, {implicit: true}, [1], 11, ~, 7]]} # 12
 ```
 
 ## The brace dereference of an array reference
@@ -118,11 +118,11 @@ main::__PROGRAM__: {start: 0, returns: [12], nodes: [
   [ArrayLiteral, ~, [2, 3, 4], 0, ArrayRef], # 5
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 6
   [MemStart], # 7
-  [Subscript, {kind: array}, [5, 6, 7], ~, Int], # 8
+  [Subscript, {kind: array}, [5, 6], ~, Int, 7], # 8
   [Coerce, {from_repr: Unknown, to_repr: Str}, [8], ~, Str], # 9
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
-  [Print, ~, [9, 10], 5, Scalar], # 11
-  [Return, {implicit: true}, [1], 11]]} # 12
+  [Print, ~, [9, 10], 5, "Maybe[Boolean]"], # 11
+  [Return, {implicit: true}, [1], 11, ~, 7]]} # 12
 ```
 
 ## The `@{ }` whole-array dereference
@@ -170,7 +170,7 @@ no variable whose text is "@{$r}"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [19], nodes: [
+main::__PROGRAM__: {start: 0, returns: [20], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: integer, value: "10"}, ~, ~, Int], # 2
@@ -179,18 +179,19 @@ main::__PROGRAM__: {start: 0, returns: [19], nodes: [
   [ArrayLiteral, {sigil: "@", symbol: a}, [2, 3, 4], ~, Array], # 5
   [Ref, ~, [5], ~, ArrayRef], # 6
   [MemStart], # 7
-  [PostfixDeref, {copy: 1, sigil: "@"}, [6, 7], ~, Array], # 8
-  [Count, ~, [8, 7], ~, Int], # 9
-  [Coerce, {from_repr: Int, to_repr: Str}, [9], ~, Str], # 10
-  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 11
-  [EntryDef, {package: main, sigil: $, symbol: "\""}, [7], ~, Scalar], # 12
-  [Coerce, {from_repr: Scalar, to_repr: Str}, [12], ~, Str], # 13
-  [PostfixDeref, {sigil: "@"}, [6, 7], ~, Array], # 14
-  [Call, {dispatch_kind: builtin, memory_input: true, name: join, param_names: []}, [13, 14, 7], ~, Str], # 15
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 16
-  [Concat, ~, [15, 16], ~, Str], # 17
-  [Print, ~, [10, 11, 17], 0, Scalar], # 18
-  [Return, {implicit: true}, [1], 18]]} # 19
+  [PostfixDeref, {copy: 1, eval_id: ~, file: "/tmp/osrpJFXK1Z/case.pl", line: 3, package: main, sigil: "@", strict: false}, [6], ~, Array, 7], # 8
+  [PostfixDeref, {eval_id: ~, file: "/tmp/osrpJFXK1Z/case.pl", line: 3, package: main, sigil: "@", strict: false}, [6], 0, Array, 7, true], # 9
+  [Count, ~, [8], ~, Int, 9], # 10
+  [Coerce, {from_repr: Int, to_repr: Str}, [10], ~, Str], # 11
+  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 12
+  [EntryDef, {package: main, sigil: $, symbol: "\""}, ~, ~, Scalar, 9], # 13
+  [Coerce, {from_repr: Scalar, to_repr: Str}, [13], ~, Str], # 14
+  [PostfixDeref, {eval_id: ~, file: "/tmp/osrpJFXK1Z/case.pl", line: 4, package: main, sigil: "@", strict: false}, [6], 9, Array, 9, true], # 15
+  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [14, 15], ~, Str, 15], # 16
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 17
+  [Concat, ~, [16, 17], ~, Str], # 18
+  [Print, ~, [11, 12, 18], 15, "Maybe[Boolean]"], # 19
+  [Return, {implicit: true}, [1], 19, ~, 15]]} # 20
 ```
 
 ## The sigil-only `@$r` dereference
@@ -249,7 +250,7 @@ no variable whose text is "@$r"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [17], nodes: [
+main::__PROGRAM__: {start: 0, returns: [18], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: integer, value: "10"}, ~, ~, Int], # 2
@@ -258,17 +259,17 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [ArrayLiteral, {sigil: "@", symbol: a}, [2, 3, 4], ~, Array], # 5
   [Ref, ~, [5], ~, ArrayRef], # 6
   [MemStart], # 7
-  [PostfixDeref, {copy: 1, sigil: "@"}, [6, 7], ~, Array], # 8
-  [Count, ~, [8, 7], ~, Int], # 9
-  [Coerce, {from_repr: Int, to_repr: Str}, [9], ~, Str], # 10
-  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 11
-  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 12
-  [Subscript, {kind: array}, [8, 12, 7], ~, Scalar], # 13
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [13], ~, Str], # 14
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 15
-  [Print, ~, [10, 11, 14, 15], 0, Scalar], # 16
-  [Return, {implicit: true}, [1], 16], # 17
-  [PostfixDeref, {sigil: "@"}, [6, 7], ~, Array]]} # 18
+  [PostfixDeref, {copy: 1, eval_id: ~, file: "/tmp/osrpJFXK1Z/case.pl", line: 3, package: main, sigil: "@", strict: false}, [6], ~, Array, 7], # 8
+  [PostfixDeref, {eval_id: ~, file: "/tmp/osrpJFXK1Z/case.pl", line: 3, package: main, sigil: "@", strict: false}, [6], 0, Array, 7, true], # 9
+  [Count, ~, [8], ~, Int, 9], # 10
+  [Coerce, {from_repr: Int, to_repr: Str}, [10], ~, Str], # 11
+  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 12
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 13
+  [Subscript, {kind: array}, [8, 13], ~, Scalar, 9], # 14
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [14], ~, Str], # 15
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 16
+  [Print, ~, [11, 12, 15, 16], 9, "Maybe[Boolean]"], # 17
+  [Return, {implicit: true}, [1], 17, ~, 9]]} # 18
 ```
 
 ## The postfix `$r->@*` dereference
@@ -322,7 +323,7 @@ no variable whose text is "$r->@*"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [17], nodes: [
+main::__PROGRAM__: {start: 0, returns: [18], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: integer, value: "10"}, ~, ~, Int], # 2
@@ -331,17 +332,17 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [ArrayLiteral, {sigil: "@", symbol: a}, [2, 3, 4], ~, Array], # 5
   [Ref, ~, [5], ~, ArrayRef], # 6
   [MemStart], # 7
-  [PostfixDeref, {copy: 1, sigil: "@"}, [6, 7], ~, Array], # 8
-  [Count, ~, [8, 7], ~, Int], # 9
-  [Coerce, {from_repr: Int, to_repr: Str}, [9], ~, Str], # 10
-  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 11
-  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 12
-  [Subscript, {kind: array}, [8, 12, 7], ~, Scalar], # 13
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [13], ~, Str], # 14
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 15
-  [Print, ~, [10, 11, 14, 15], 0, Scalar], # 16
-  [Return, {implicit: true}, [1], 16], # 17
-  [PostfixDeref, {sigil: "@"}, [6, 7], ~, Array]]} # 18
+  [PostfixDeref, {copy: 1, eval_id: ~, file: "/tmp/osrpJFXK1Z/case.pl", line: 3, package: main, sigil: "@", strict: false}, [6], ~, Array, 7], # 8
+  [PostfixDeref, {eval_id: ~, file: "/tmp/osrpJFXK1Z/case.pl", line: 3, package: main, sigil: "@", strict: false}, [6], 0, Array, 7, true], # 9
+  [Count, ~, [8], ~, Int, 9], # 10
+  [Coerce, {from_repr: Int, to_repr: Str}, [10], ~, Str], # 11
+  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 12
+  [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 13
+  [Subscript, {kind: array}, [8, 13], ~, Scalar, 9], # 14
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [14], ~, Str], # 15
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 16
+  [Print, ~, [11, 12, 15, 16], 9, "Maybe[Boolean]"], # 17
+  [Return, {implicit: true}, [1], 17, ~, 9]]} # 18
 ```
 
 ## The `%{ }` and `${ }{ }` hash dereferences
@@ -380,7 +381,7 @@ one operator whose text is "\\"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [17], nodes: [
+main::__PROGRAM__: {start: 0, returns: [18], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: a}, ~, ~, Str], # 2
@@ -390,16 +391,16 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [HashLiteral, {sigil: "%", symbol: h}, [2, 3, 4, 5], ~, Hash], # 6
   [Ref, ~, [6], ~, HashRef], # 7
   [MemStart], # 8
-  [PostfixDeref, {copy: 1, sigil: "%"}, [7, 8], ~, Hash], # 9
-  [Call, {dispatch_kind: builtin, memory_input: true, name: keys, param_names: [], want: scalar}, [9, 8], ~, Int], # 10
-  [Coerce, {from_repr: Int, to_repr: Str}, [10], ~, Str], # 11
-  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 12
-  [Subscript, {kind: hash}, [7, 2, 8], ~, Scalar], # 13
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [13], ~, Str], # 14
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 15
-  [Print, ~, [11, 12, 14, 15], 0, Scalar], # 16
-  [Return, {implicit: true}, [1], 16], # 17
-  [PostfixDeref, {sigil: "%"}, [7, 8], ~, Hash]]} # 18
+  [PostfixDeref, {copy: 1, eval_id: ~, file: "/tmp/osrpJFXK1Z/case.pl", line: 3, package: main, sigil: "%", strict: false}, [7], ~, Hash, 8], # 9
+  [PostfixDeref, {eval_id: ~, file: "/tmp/osrpJFXK1Z/case.pl", line: 3, package: main, sigil: "%", strict: false}, [7], 0, Hash, 8, true], # 10
+  [Call, {dispatch_kind: builtin, name: keys, param_names: [], want: scalar}, [9], ~, Int, 10], # 11
+  [Coerce, {from_repr: Int, to_repr: Str}, [11], ~, Str], # 12
+  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 13
+  [Subscript, {kind: hash}, [7, 2], 10, Scalar, 10, true], # 14
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [14], ~, Str], # 15
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 16
+  [Print, ~, [12, 13, 15, 16], 14, "Maybe[Boolean]"], # 17
+  [Return, {implicit: true}, [1], 17, ~, 14]]} # 18
 ```
 
 ## The last index through a reference, three ways
@@ -431,14 +432,14 @@ main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Constant, {const_type: integer, value: "7"}, ~, ~, Int], # 4
   [ArrayLiteral, ~, [2, 3, 4], 0, ArrayRef], # 5
   [MemStart], # 6
-  [Count, ~, [5, 6], ~, Int], # 7
+  [Count, ~, [5], ~, Int, 6], # 7
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 8
   [Subtract, ~, [7, 8], ~, Int], # 9
   [Coerce, {from_repr: Int, to_repr: Str}, [9], ~, Str], # 10
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 11
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 12
-  [Print, ~, [10, 11, 10, 11, 10, 12], 5, Scalar], # 13
-  [Return, {implicit: true}, [1], 13]]} # 14
+  [Print, ~, [10, 11, 10, 11, 10, 12], 5, "Maybe[Boolean]"], # 13
+  [Return, {implicit: true}, [1], 13, ~, 6]]} # 14
 ```
 
 ## A dereference returned takes the caller's context
@@ -464,34 +465,35 @@ parses: yes
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [18], nodes: [
+main::__PROGRAM__: {start: 0, returns: [19], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 3
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 4
   [ArrayLiteral, ~, [2, 3, 4], 0, ArrayRef], # 5
-  [Call, {dispatch_kind: direct, name: main::items, param_names: [], want: list}, [5], 5, List], # 6
-  [ArrayLiteral, {sigil: "@", symbol: got}, [6], ~, Array], # 7
-  [Constant, {const_type: integer, value: "4"}, ~, ~, Int], # 8
-  [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 9
-  [ArrayLiteral, ~, [8, 9], 6, ArrayRef], # 10
-  [Call, {dispatch_kind: direct, name: main::items, param_names: [], want: scalar}, [10], 10, List], # 11
-  [Count, ~, [7, 11], ~, Int], # 12
-  [Coerce, {from_repr: Int, to_repr: Str}, [12], ~, Str], # 13
-  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 14
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [11], ~, Str], # 15
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 16
-  [Print, ~, [13, 14, 15, 16], 11, Scalar], # 17
-  [Return, {implicit: true}, [1], 17]]} # 18
+  [MemStart], # 6
+  [Call, {dispatch_kind: direct, file: "/tmp/osrpJFXK1Z/case.pl", line: 2, name: main::items, package: main, param_names: [], want: list}, [5], 5, List, 6, true], # 7
+  [ArrayLiteral, {sigil: "@", symbol: got}, [7], ~, Array], # 8
+  [Constant, {const_type: integer, value: "4"}, ~, ~, Int], # 9
+  [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 10
+  [ArrayLiteral, ~, [9, 10], 7, ArrayRef], # 11
+  [Call, {dispatch_kind: direct, file: "/tmp/osrpJFXK1Z/case.pl", line: 3, name: main::items, package: main, param_names: [], want: scalar}, [11], 11, List, 7, true], # 12
+  [Count, ~, [8], ~, Int, 12], # 13
+  [Coerce, {from_repr: Int, to_repr: Str}, [13], ~, Str], # 14
+  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 15
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [12], ~, Str], # 16
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 17
+  [Print, ~, [14, 15, 16, 17], 12, "Maybe[Boolean]"], # 18
+  [Return, {implicit: true}, [1], 18, ~, 12]]} # 19
 main::items: {start: 0, returns: [8], nodes: [
   [Start], # 0
   [ArgsSource, ~, ~, ~, Array], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: builtin, memory_input: true, name: shift, param_names: []}, [1, 2], 0, Scalar], # 3
-  [PostfixDeref, {sigil: "@"}, [3, 3], ~, Array], # 4
+  [Call, {dispatch_kind: builtin, name: shift, param_names: []}, [1], 0, Scalar, 2, true], # 3
+  [PostfixDeref, {eval_id: ~, file: "/tmp/osrpJFXK1Z/case.pl", line: 1, package: main, sigil: "@", strict: false}, [3], 3, Array, 3, true], # 4
   [ArrayLiteral, ~, [4], ~, List], # 5
   [Count, ~, [4], ~, Int], # 6
   [Coerce, {from_repr: List, to_repr: Scalar}, [6], ~, Scalar], # 7
-  [Return, ~, [5, 7], 3]]} # 8
+  [Return, ~, [5, 7], 4, ~, 4]]} # 8
 ```
