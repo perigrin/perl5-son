@@ -258,3 +258,26 @@ The census on wire 2 (chalk 1eaafd8a, report only): ROUNDTRIP 412, DIFFERS 0, LL
 - 1, "a bless of one argument": 027.
 
 Stage 5 owns these.
+
+## 11. After stage 5
+
+Heads: producer `v2-s5` (315512d to the commit that adds this section, on 8d63628), chalk `v2-s5` (2c8f1a58 to its last, on 1eaafd8a).
+
+**The 14 cases the wire-2 census lost** were chalk's, two causes (docs/memory/a-memory-edge-is-not-a-version.md): an Impl class (%SIG's, %INC's, a stash's) was compiled at wire 1 into a v2 program's wire, and `Ref::taken_where_it_stands` asked for a memory edge (every pinned read has one on v2) where it meant a version (`mem_out`).
+
+**The loader invariant** (`Chalk::IR::Serialize::WireInvariant`) holds every graph of a B::SoN v2 wire to L1-L6; a v1 wire (upgraded) and a graph chalk wrote itself (no `dowarn`) are not held. L5 is V2's (a non-record Assign and a sub call name memory) until stage 6; L6 lets a trap's value Phi keep its extra input until stage 8 (docs/memory/the-loader-holds-v2-to-its-invariant.md).
+
+**chalk's `t/bootstrap/ir/wire-verify.t`** runs SoN::Verify over chalk's lib (219 wires) and its 477 probes at wire 2: no V1-V5 or V7 violation except three held by name (probe pl13; DynaLoader::bootstrap and ::bootstrap_inherit, a floating Assign of `@isa` not yet traced); V6, V8, V9 held to `t/data/wire-verify-v2-baseline.tsv`.
+
+The rows the stage had to resolve, before -> after (wire 2):
+
+| rule | corpus2 | probes2 | chalk2 (graphs) |
+|---|---|---|---|
+| V2 version-off-chain | 1 -> 0 (398, an :lvalue call left the memory version off the chain) | 0 | 0 |
+| V5 memory-order-disagrees | 7 -> 0 | 4 -> 0 | 290 -> 0 |
+| V7 record | 0 | 5 -> 1 (pl13, held) | 6 -> 2 (DynaLoader, held) |
+| phi-arity | 1 | 3 -> 4 (al1: a one-pass loop's new memory Phi, like al2's; refused by name) | 0 |
+
+V5 was mostly the verifier (a loop body follows its test's last version on a wire without the `loop` profile); the rest were producer faults: a foreach body writing its alias and a while body storing after an arm got no header memory Phi before the walk (al16, lp28, 205; corpus 140's graph changed with it, and chalk's intervals oracle rows for it were renamed). Also fixed: an append's result read with its store as an input on v2 (probe ev10, refused on wire 2 only).
+
+Found, not fixed (not v2's): `print f(1), $g, f(0), $g` with `f` storing `$g` prints `1122` for perl's `1222` on both wires (print's arguments are aliases).
