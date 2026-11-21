@@ -11758,7 +11758,9 @@ class SoN::FromOptree 0.01 {
                             # %$val_map`). The renderer snapshots it when a
                             # store through the source follows.
                             $only = $factory->make('PostfixDeref',
-                                inputs => [ $only->v1_inputs->@* ],
+                                # (its memory as mem: v1_inputs put it among the inputs on v2)
+                                inputs => [ $only->inputs->@* ],
+                                ( $only->mem_operand ? ( mem => $only->mem_in ) : () ),
                                 sigil  => $only->sigil,
                                 stamp  => $only->stamp,
                                 copy   => 1,
