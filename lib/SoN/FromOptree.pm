@@ -1292,7 +1292,12 @@ class SoN::FromOptree 0.01 {
     # a format IS a CV (B::FM isa B::CV) whose body is walked exactly like an
     # anon sub's, so it needs no second mechanism.
 
+    # THE CODE TRANSLATED IS HELD for the process: the package-write scan
+    # knows a CV by its address (%PKG_SCALAR_CV), and a freed CV's address is
+    # a later one's -- whose writes were then never read.
+    my @TRANSLATED;
     sub translate ($class_or_self, $coderef) {
+        push @TRANSLATED, $coderef;
         my $cv = B::svref_2object($coderef);
         die "Not a CODE ref" unless $cv->isa('B::CV');
         return _translate_from($cv, $cv->START);
