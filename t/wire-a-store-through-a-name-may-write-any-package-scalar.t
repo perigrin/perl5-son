@@ -16,7 +16,8 @@ my $walk; $walk = sub ($x) {
 };
 $walk->($j->{methods}{'main::__PROGRAM__'});
 my ($store) = grep { $_->{op} eq 'Assign' } values %n;
-my ($read)  = grep { $_->{op} eq 'EntryDef' && ( $_->{fields}{symbol} // '' ) eq 'y' } values %n;
-ok($store && $read, 'a store and a read of $y');
-is($read->{mem_in}, $store->{id}, 'the read is at the store\'s version');
+my @read = grep { $_->{op} eq 'EntryDef' && ( $_->{fields}{symbol} // '' ) eq 'y' } values %n;
+ok($store && @read, 'a store and a read of $y');
+# (the read printed; an unread one of the `our` stands at MemStart)
+ok(( grep { ( $_->{mem_in} // -1 ) == $store->{id} } @read ), 'the read is at the store\'s version');
 done_testing;
