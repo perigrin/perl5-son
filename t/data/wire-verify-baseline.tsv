@@ -37,6 +37,8 @@
 # 2026-11-21 (stages 2+3 integrated): the chalk and chalk2 rows moved, per graph, to
 # t/data/wire-verify-chalk-graphs.tsv (perigrin: chalk's lib is held per graph). Recorded
 # there at chalk 45a1b8d5 with every total equal to the rows deleted here.
+# 2026-11-21 (77c664b): corpus2 read-unversioned:through-ref 39 -> 35: a dereference remade
+# as a copy names its memory as mem_in on v2, no longer as a positional input.
 corpus	#cases	431
 corpus	#graphs	1082
 corpus	#wires	431
@@ -103,7 +105,7 @@ corpus2	read-unversioned:field	5
 corpus2	read-unversioned:my-aggregate	24
 corpus2	read-unversioned:package	7
 corpus2	read-unversioned:package-aggregate-literal	0
-corpus2	read-unversioned:through-ref	39
+corpus2	read-unversioned:through-ref	35
 corpus2	record	0
 corpus2	version-off-chain	14
 corpus2	write-unreachable	0
