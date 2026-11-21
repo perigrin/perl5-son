@@ -42,6 +42,10 @@ use B::SoN::EffectTable;
 # shortcut: implicit calls -- an overloaded operator, a tie's FETCH/STORE, a
 # DESTROY -- are not seen; upgrade when a probe shows one storing an operand.
 
+# In a CALLER's terms (op_effects, stores_var) a store into a variable the
+# sub declares is one; in a summary it is seen by no caller.
+our $KEEP_OWN = 0;
+
 my %SUMMARY;      # cv address -> [ effects ]
 my %DIRECT;       # cv address -> { effects => [...], sites => [...] }
 my %CV_OF;        # cv address -> B::CV
@@ -129,7 +133,7 @@ sub _referenced ($cv) {
 sub _lex_effects ( $cv, $targ, $reshape, $key = '*' ) {
     my ( $loc, $own ) = _lex( $cv, $targ );
     return () unless defined $loc;
-    return _effect( $loc, $key, $reshape ) unless $own;
+    return _effect( $loc, $key, $reshape ) unless $own && !$KEEP_OWN;
     return () unless _referenced($cv)->{$targ};
     my $kind = { '$' => 'scalar', '@' => 'array', '%' => 'hash' }->{ substr( $loc, 2, 1 ) };
     return ( _effect( $loc, $key, $reshape ), _effect( "R:$kind", $key, $reshape ) );
@@ -388,11 +392,10 @@ sub _code_ref_of ( $cv, $targ ) {
     my $val = _strip( ( _kids( $stores[0] ) )[0] );
     if ( $val->name eq 'anoncode' ) { return _fo('_anoncode_cv')->( $cv, $val ) }
     if ( $val->name =~ /\As?refgen\z/ ) {
-        my @cvs = grep { $_->name eq 'rv2cv' } _fo('_subtree_ops')->($val);
-        return undef unless @cvs == 1;
-        my $g = _strip( $cvs[0]->first );
-        return undef unless $g->name eq 'gv';
-        my $gv = _fo('_op_gv')->( $cv, $g );
+        my @ops = _fo('_subtree_ops')->($val);
+        my @g = grep { $_->name eq 'gv' } @ops;
+        return undef unless @g == 1 && grep { $_->name eq 'rv2cv' } @ops;
+        my $gv = _fo('_op_gv')->( $cv, $g[0] );
         my $code = $gv && $$gv ? $gv->CV : undef;
         return $code && $$code && $code->isa('B::CV') && _root($code) ? $code : undef;
     }
@@ -554,9 +557,20 @@ sub op_effects ( $cv, $op ) {
         next unless _is_call($o);
         my $site = _site( $cv, $o );
         my %sum = map { ( $$_ => summary($_) ) } ( $site->{cvs} // [] )->@*;
+        local $KEEP_OWN = 1;
         push @e, _site_effects( $cv, $site, \%sum );
     }
     return @e;
+}
+
+# stores_var($cv, $op, $key) -> true when $op itself stores the variable
+# $key names: 'p<pad index>' or 'g<sigil><stash>::<name>' (as
+# SoN::FromOptree::_reread_alias_operand_stored_later spells it).
+sub stores_var ( $cv, $op, $key ) {
+    my $loc = $key =~ /\Ap(\d+)\z/ ? ( _lex( $cv, $1 ) )[0] : $key =~ /\Ag(.+)\z/s ? "N:$1" : undef;
+    return 0 unless defined $loc;
+    local $KEEP_OWN = 1;
+    return scalar grep { $_->{loc} eq $loc } _stores( $cv, $op );
 }
 
 # place($cv, $op) -> where an element operand lives: { levels => [ { loc,

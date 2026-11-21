@@ -23518,8 +23518,8 @@ class SoN::FromOptree 0.01 {
     # (1101, where the read where its op stood said 1201). A branch
     # condition is consumed before its arm, so a LOGOP is not an alias
     # consumer; a postinc copies, and is not a padsv.
-    # ponytail: only the direct stores (=, op=, ++/--) and calls are seen;
-    # chomp, s/// or a list assign storing the variable still pass unread.
+    # A builtin storing its operand (chomp, s///, tr///) or a list assign
+    # storing it is a store too (ModSets::stores_var).
     # (%OPERAND_DEPTH: declared above _step, which records an element's too)
     sub _reread_alias_operand_stored_later ($cv, $op, $sim, $factory, $opmap, $ctx) {
         $OPERAND_DEPTH{$$op} = $sim->stack_depth if $op->name =~ /\A(?:padsv|gvsv)\z/;
@@ -23564,6 +23564,9 @@ class SoN::FromOptree 0.01 {
         my $stores;
         $stores = sub ($o, $key) {
             return 1 if $o->name eq q{padsv_store} && "p" . $o->targ eq $key;
+            # A BUILTIN OR A LIST ASSIGNMENT storing it: chomp, chop, s///,
+            # tr///, `($x, $y) = ...` (SoN::FromOptree::ModSets::_stores).
+            return 1 if SoN::FromOptree::ModSets::stores_var($cv, $o, $key);
             # `$n = $y + 3` is `add[$n]` with OPpTARGET_MY: the op stores
             # into its own targ, with no sassign to find.
             return 1 if ( $o->private & B::OPpTARGET_MY() )
