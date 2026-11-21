@@ -93,7 +93,7 @@ corpus2	allowed:record	57
 corpus2	control-fork	0
 corpus2	control-sink	0
 corpus2	mem-in-not-version	0
-corpus2	memory-order-disagrees	17
+corpus2	memory-order-disagrees	7
 corpus2	phi-arity	1
 corpus2	phi-arity:eval-join	32
 corpus2	phi-no-region	0
@@ -107,7 +107,7 @@ corpus2	read-unversioned:package	7
 corpus2	read-unversioned:package-aggregate-literal	0
 corpus2	read-unversioned:through-ref	35
 corpus2	record	0
-corpus2	version-off-chain	14
+corpus2	version-off-chain	1
 corpus2	write-unreachable	0
 probes2	#cases	486
 probes2	#graphs	693
@@ -117,7 +117,7 @@ probes2	allowed:record	12
 probes2	control-fork	0
 probes2	control-sink	0
 probes2	mem-in-not-version	0
-probes2	memory-order-disagrees	31
+probes2	memory-order-disagrees	4
 probes2	phi-arity	3
 probes2	phi-arity:eval-join	25
 probes2	phi-no-region	0
@@ -131,5 +131,5 @@ probes2	read-unversioned:package	4
 probes2	read-unversioned:package-aggregate-literal	5
 probes2	read-unversioned:through-ref	1
 probes2	record	5
-probes2	version-off-chain	34
+probes2	version-off-chain	0
 probes2	write-unreachable	0

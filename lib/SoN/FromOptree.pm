@@ -5952,8 +5952,9 @@ class SoN::FromOptree 0.01 {
 
                 # The allocation is a memory effect: it must be ordered
                 # against the stores that follow, or a later CellWrite
-                # could be scheduled before the cell exists.
-                _call_memory_barrier($sim, $cell, $ctx);
+                # could be scheduled before the cell exists. A version, made
+                # where it stands (wire v2's V2; v1's writer leaves the pin out).
+                _place($sim, $cell);
                 $ctx->{cells}{$slot} = $cell;
             }
             elsif ($cap->{written} && !$cell->captured_written) {

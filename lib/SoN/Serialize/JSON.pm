@@ -19,10 +19,45 @@ use Scalar::Util qw(blessed);
 # of v2 the wire obeys.
 our $WIRE = 1;
 
+# _control_in($node) -- the node the wire names as $node's control_in. On
+# wire v1 a MakeCell is not on the chain (it was not before wire v2 pinned
+# it; v1 has no place for the pin): it names none, and what follows it names
+# what it follows.
+sub _control_in ($node) {
+    return undef unless $node->can('control_in');
+    return undef if $WIRE == 1 && $node->operation eq 'MakeCell';
+    return _on_chain( $node->control_in );
+}
+# _on_chain($c) -- a control node as the wire names it: on v1, past any MakeCell.
+sub _on_chain ($c) {
+    $c = $c->control_in while $WIRE == 1 && defined $c && $c->operation eq 'MakeCell';
+    return $c;
+}
+
 # _operands($node) -- what the wire's `inputs` list for $node: its inputs and,
 # on wire v1, the memory it read where it was built.
+my %CONTROL_INPUTS = map { $_ => 1 } qw(If Loop Region);
+
+# _v1_after_cell($n, $c) -- on wire v1, where $c is a MakeCell pinned after
+# $n: what follows it on the chain, met where v1 met it -- as a consumer of
+# $n, right after the cell (v1's order of nodes is this walk's).
+sub _v1_after_cell ( $n, $c ) {
+    return () unless $WIRE == 1 && blessed($c) && $c->operation eq 'MakeCell'
+        && defined $c->control_in && $c->control_in == $n;
+    my @after;
+    for my $s ( grep { blessed($_) } $c->consumers->@* ) {
+        if ( $s->operation eq 'MakeCell' ) { push @after, _v1_after_cell( $n, $s ) if defined $s->control_in && $s->control_in == $c; next }
+        push @after, $s if ( defined $s->control_in && $s->control_in == $c )
+            || ( $CONTROL_INPUTS{ $s->operation } && grep { blessed($_) && $_ == $c } $s->inputs->@* );
+    }
+    return @after;
+}
+
+# A control node's inputs are control: on v1, past any MakeCell (_on_chain).
 sub _operands ($node) {
-    return ( $node->inputs->@*, ( $WIRE == 1 && $node->mem_operand ? $node->mem_in : () ) );
+    my @in = $node->inputs->@*;
+    @in = map { _on_chain($_) } @in if $WIRE == 1 && $CONTROL_INPUTS{ $node->operation };
+    return ( @in, ( $WIRE == 1 && $node->mem_operand ? $node->mem_in : () ) );
 }
 
 # %main::'s keys at CHECK (B::SoN::compile): 1 where the program made one,
@@ -188,7 +223,7 @@ sub _extract_fields ($node, $id_remap) {
         my $preds = $node->can('predecessors') ? $node->predecessors : undef;
         my @pred_ids;
         if (defined $preds && ref $preds eq 'ARRAY') {
-            for my $p (@$preds) {
+            for my $p (map { _on_chain($_) } @$preds) {
                 # A predecessor outside the emitted set cannot be referenced by
                 # index. Drop the whole list rather than emit a partial one the
                 # consumer would silently mis-pair.
@@ -357,7 +392,7 @@ sub _extract_fields ($node, $id_remap) {
         return %f ? \%f : undef;
     }
     if ($op eq 'Region') {
-        my $entry = $node->can('eval_entry') ? $node->eval_entry : undef;
+        my $entry = $node->can('eval_entry') ? _on_chain( $node->eval_entry ) : undef;
         # As a node INDEX, like `region` and `predecessors`. An entry outside
         # the emitted set is dropped rather than referenced by a hash the
         # consumer cannot resolve.
@@ -490,8 +525,8 @@ sub _all_nodes_topo ($graph_or_nodes) {
                 }
             }
             # (a) backward: this node's own control predecessor.
-            if ($node->can('control_in') && defined $node->control_in) {
-                my $ctrl = $node->control_in;
+            if (defined _control_in($node)) {
+                my $ctrl = _control_in($node);
                 if (!$seen{ $ctrl->id }++) {
                     push @extra, $ctrl;
                     push @next_frontier, $ctrl;
@@ -501,8 +536,8 @@ sub _all_nodes_topo ($graph_or_nodes) {
             if ($node->can('consumers')) {
                 for my $c ($node->consumers->@*) {
                     next unless blessed($c);
-                    next unless $c->can('control_in') && defined $c->control_in
-                        && $c->control_in->id eq $node->id;
+                    next unless defined _control_in($c)
+                        && _control_in($c)->id eq $node->id;
                     next if $seen{ $c->id }++;
                     push @extra, $c;
                     push @next_frontier, $c;
@@ -566,8 +601,8 @@ sub _all_nodes_topo ($graph_or_nodes) {
         if ($n->operation eq 'Phi' && defined $n->region) {
             push @preds, $n->region;
         }
-        if ($n->can('control_in') && defined $n->control_in) {
-            push @preds, $n->control_in;
+        if (defined _control_in($n)) {
+            push @preds, _control_in($n);
         }
         # (on wire v2 the memory a node names is emitted before it, as an input is)
         push @preds, $n->mem_in if $WIRE == 2 && $n->can('mem_in') && defined $n->mem_in;
@@ -634,9 +669,9 @@ sub _serialize_graph ($graph) {
                 push @worklist, $input;
             }
         }
-        push @worklist, $n->consumers->@* if $n->can('consumers');
-        push @worklist, $n->control_in
-            if $n->can('control_in') && defined $n->control_in;
+        push @worklist, map { $_, _v1_after_cell( $n, $_ ) } $n->consumers->@* if $n->can('consumers');
+        push @worklist, _control_in($n)
+            if defined _control_in($n);
         push @worklist, $n->mem_in if $WIRE == 2 && defined $n->mem_in;
     }
     my $topo_nodes = _all_nodes_topo(\@reachable);
@@ -680,9 +715,9 @@ sub _serialize_graph ($graph) {
         # emit when the predecessor is itself part of the serialized set
         # (guaranteed here whenever the node itself is, by
         # _all_nodes_topo's control-aware membership walk).
-        if ($node->can('control_in') && defined $node->control_in
-                && exists $id_remap{ $node->control_in->id }) {
-            $entry{control_in} = $id_remap{ $node->control_in->id };
+        if (defined _control_in($node)
+                && exists $id_remap{ _control_in($node)->id }) {
+            $entry{control_in} = $id_remap{ _control_in($node)->id };
         }
         if ($WIRE == 2) {
             $entry{mem_in} = $id_remap{ $node->mem_in->id } if defined $node->mem_in;

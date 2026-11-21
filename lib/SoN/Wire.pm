@@ -13,6 +13,7 @@ use JSON::PP ();
 # - `mem_in` goes back to the end of `inputs` where v1 had it as an operand,
 #   and a builtin Call that gets one says so (`memory_input`);
 # - `mem_in`, `mem_out` and `record` are dropped, and `version` is 1;
+# - a MakeCell leaves the control chain (v1 never put it there);
 # - the memory Phi where a sub's exits merge (`exits`; v1 has no place for
 #   it) is dropped, and so is a node only a mem_in reached (a MemStart); the
 #   nodes are numbered again in order.
@@ -47,6 +48,20 @@ sub as_v1 ($wire) {
     delete $w->{profile};
     for my $g ( values( ( $w->{methods} // {} )->%* ) ) {
         my $nodes = $g->{nodes} // [];
+
+        # A MakeCell is not on v1's chain: what follows it follows what it
+        # does, wherever control is named (SoN::Serialize::JSON::_on_chain).
+        my %cell = map { $_->{id} => $_->{control_in} } grep { $_->{op} eq 'MakeCell' } @$nodes;
+        my $on_chain = sub ($i) { $i = $cell{$i} while defined $i && exists $cell{$i}; $i };
+        for my $n (@$nodes) {
+            my $f = $n->{fields} // {};
+            if ( exists $cell{ $n->{id} } ) { delete $n->{control_in} }
+            elsif ( defined $n->{control_in} ) { $n->{control_in} = $on_chain->( $n->{control_in} ) }
+            $n->{inputs} = [ map { $on_chain->($_) } $n->{inputs}->@* ] if $n->{op} =~ /\A(?:If|Loop|Region)\z/;
+            $f->{predecessors} = [ map { $on_chain->($_) } $f->{predecessors}->@* ] if ref $f->{predecessors} eq 'ARRAY';
+            $f->{eval_entry} = $on_chain->( $f->{eval_entry} ) if $n->{op} eq 'Region' && defined $f->{eval_entry};
+            delete $n->{control_in} unless defined $n->{control_in};
+        }
 
         for my $n (@$nodes) {
             my $operand = _operand($n);
