@@ -216,12 +216,12 @@ What stages 4 and 5 should know:
 
 ## 10. After stage 4
 
-Heads: producer `v2-s4` (c44ad95 to 54f0c1d on 7d5d8f2), chalk `v2-s4` 1eaafd8a (one commit on eef945c6: T2 walks past a MakeCell on the chain).
+Heads: producer `v2-s4` (c44ad95 to 999c490 on 7d5d8f2), chalk `v2-s4` 1eaafd8a (one commit on eef945c6: T2 walks past a MakeCell on the chain).
 
 What changed, in one line each (notes in `docs/memory`):
 
 - **Stage 4.** `SoN::Deparse` reads v2 through `SoN::Wire::as_v1` (`the-deparser-reads-v2-through-as-v1.md`). Over corpus and probes every v2 wire renders as its v1 wire does (up to names made from node ids) or prints the same. The exit memory Phi is marked on v2 (`fields.exits`).
-- **Known issue 1, fixed.** MakeCell is `_place`d; v1 is unchanged (its writer and `as_v1` leave the pin out); chalk T2 walks past it (`a-cell-is-a-version-made-where-it-stands.md`).
+- **Known issue 1, fixed.** MakeCell is `_place`d; v1 is unchanged (its writer and `as_v1` leave the pin out, and v1's node order is kept by when each consumer edge was made); chalk T2 walks past it (`a-cell-is-a-version-made-where-it-stands.md`).
 - **Known issue 4, explained.** `phi:memory-as-value` 25 was the copy 77c664b fixed (0 at the merge). `write-unreachable` 7 was one graph, `Earley::_force`: an endless loop in an else arm lost the if's join, a silent wrong answer, fixed (`an-endless-loop-in-an-arm-lost-the-join.md`). It changes v1 for that graph: the downgrade proof lists it (`t/data/wire-v1-changed-on-purpose.tsv`).
 - **L8 (forward memory references).** The writer has listed a node's `mem_in` before it since stage 3: 0 forward references on corpus2, probes2 and chalk2. `t/wire-v2-a-nodes-memory-comes-before-it.t` holds it (it names ten when the rule is taken out).
 - **A flake at the base.** `t/from-optree-match-subject.t` failed about 3 runs in 100: the package-write scan knew a CV by its address and a freed one's was reused (`a-freed-cvs-address-is-another-cvs.md`).
