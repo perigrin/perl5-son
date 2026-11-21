@@ -101,15 +101,25 @@ class SoN::IR::Node {
     # typed-ir-representation.md) bridge between representations on edges.
     field $representation :reader = undef;
 
+    # WHEN EACH CONSUMER EDGE WAS MADE, one count over every node: wire v1's
+    # writer orders the nodes by a walk over consumer lists, and to keep v1
+    # as it was where wire v2 moved an edge (a pinned MakeCell) it puts the
+    # edge back where it was made (SoN::Serialize::JSON::_v1_consumers).
+    my $EDGE_SEQ = 0;
+    field $consumer_seq :reader = [];
+
     # Add a consumer to this node's consumer list
     method add_consumer($node) {
         push $consumers->@*, $node;
+        push $consumer_seq->@*, ++$EDGE_SEQ;
     }
 
     # Remove a consumer from this node's consumer list
     method remove_consumer($node) {
         my $target_id = $node->id();
-        $consumers->@* = grep { $_->id() ne $target_id } $consumers->@*;
+        my @keep = grep { $consumers->[$_]->id() ne $target_id } 0 .. $consumers->$#*;
+        $consumer_seq->@* = $consumer_seq->@[@keep];
+        $consumers->@* = $consumers->@[@keep];
     }
 
     # Abstract method - subclasses must implement

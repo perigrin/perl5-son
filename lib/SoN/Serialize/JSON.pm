@@ -10,7 +10,7 @@ use Exporter 'import';
 our @EXPORT_OK = qw(to_json);
 
 use JSON::PP ();
-use Scalar::Util qw(blessed);
+use Scalar::Util qw(blessed refaddr);
 
 # THE WIRE VERSION WRITTEN (B::SoN's `wire=N` option). 1, the default: a
 # memory version a node reads is its last input (by kind, %SoN::Wire's table).
@@ -38,19 +38,37 @@ sub _on_chain ($c) {
 # on wire v1, the memory it read where it was built.
 my %CONTROL_INPUTS = map { $_ => 1 } qw(If Loop Region);
 
-# _v1_after_cell($n, $c) -- on wire v1, where $c is a MakeCell pinned after
-# $n: what follows it on the chain, met where v1 met it -- as a consumer of
-# $n, right after the cell (v1's order of nodes is this walk's).
-sub _v1_after_cell ( $n, $c ) {
-    return () unless $WIRE == 1 && blessed($c) && $c->operation eq 'MakeCell'
-        && defined $c->control_in && $c->control_in == $n;
-    my @after;
-    for my $s ( grep { blessed($_) } $c->consumers->@* ) {
-        if ( $s->operation eq 'MakeCell' ) { push @after, _v1_after_cell( $n, $s ) if defined $s->control_in && $s->control_in == $c; next }
-        push @after, $s if ( defined $s->control_in && $s->control_in == $c )
-            || ( $CONTROL_INPUTS{ $s->operation } && grep { blessed($_) && $_ == $c } $s->inputs->@* );
+# _v1_consumers($n) -- $n's consumers in the order wire v1 met them. v1's
+# ids are this order's (a walk over consumer lists), and pinning a MakeCell
+# moved edges: what follows a cell on the chain is now the cell's consumer,
+# where it was the consumer of what the cell follows, and the cell is a
+# consumer of that by its pin, where it was none. Each edge is put back
+# where it was made, in the order it was made (Node::consumer_seq).
+sub _v1_consumers ($n) {
+    return $n->consumers->@* unless $WIRE == 1;
+    return map { $_->[1] } sort { $a->[0] <=> $b->[0] } ( _v1_edges($n) )[0]->@*;
+}
+# _v1_edges($n) -> (\@kept, \@moved), [seq, consumer] each: the edges v1 has
+# on $n, and, for a pinned cell, those v1 made on what it follows.
+sub _v1_edges ($n) {
+    my ( $c, $s ) = ( $n->consumers, $n->consumer_seq );
+    my $cell = $n->operation eq 'MakeCell' && defined $n->control_in;
+    my %pin;    # a consumer pinned after $n: its last edge here is the pin
+    for my $i ( 0 .. $#$c ) {
+        $pin{ refaddr $c->[$i] } = $i if blessed( $c->[$i] ) && defined $c->[$i]->control_in && $c->[$i]->control_in == $n;
     }
-    return @after;
+    my ( @kept, @moved );
+    for my $i ( 0 .. $#$c ) {
+        my $x   = $c->[$i];
+        my $pin = blessed($x) && ( $pin{ refaddr $x } // -1 ) == $i;
+        if ( $pin && $x->operation eq 'MakeCell' ) {   # (a cell's pin is no edge of v1's; what follows it is)
+            push( ( $cell ? \@moved : \@kept )->@*, ( _v1_edges($x) )[1]->@* );
+            next;
+        }
+        my $control = $pin || ( blessed($x) && $CONTROL_INPUTS{ $x->operation } && grep { blessed($_) && $_ == $n } $x->inputs->@* );
+        push( ( $cell && $control ? \@moved : \@kept )->@*, [ $s->[$i], $x ] );
+    }
+    return ( \@kept, \@moved );
 }
 
 # A control node's inputs are control: on v1, past any MakeCell (_on_chain).
@@ -534,7 +552,7 @@ sub _all_nodes_topo ($graph_or_nodes) {
             }
             # (b) forward: a consumer whose control_in IS this node.
             if ($node->can('consumers')) {
-                for my $c ($node->consumers->@*) {
+                for my $c (_v1_consumers($node)) {
                     next unless blessed($c);
                     next unless defined _control_in($c)
                         && _control_in($c)->id eq $node->id;
@@ -669,7 +687,7 @@ sub _serialize_graph ($graph) {
                 push @worklist, $input;
             }
         }
-        push @worklist, map { $_, _v1_after_cell( $n, $_ ) } $n->consumers->@* if $n->can('consumers');
+        push @worklist, _v1_consumers($n) if $n->can('consumers');
         push @worklist, _control_in($n)
             if defined _control_in($n);
         push @worklist, $n->mem_in if $WIRE == 2 && defined $n->mem_in;
