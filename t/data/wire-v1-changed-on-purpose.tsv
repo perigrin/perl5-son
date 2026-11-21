@@ -2,3 +2,18 @@
 # compares with ($BASE). One per line: GRAPH<TAB>why[<TAB>WIRE: in that wire only, SOURCE/NAME.json].
 # Everything else stays byte for byte.
 Chalk::Bootstrap::Earley::_force	an endless loop in an if's arm rejoins it (t/deparse-an-endless-loop-in-an-arm-rejoins-its-if.t)
+main::f	a while body storing after an arm gets its header memory Phi before the walk (t/wire-v2-a-loop-body-follows-its-header-memory.t)	corpus/205.json
+main::__PROGRAM__	a foreach body writing its alias gets a header memory Phi (t/wire-v2-a-loop-body-follows-its-header-memory.t)	probes/p__al1.json
+main::__PROGRAM__	a foreach body writing its alias gets a header memory Phi (t/wire-v2-a-loop-body-follows-its-header-memory.t)	probes/p__al16.json
+main::__PROGRAM__	a foreach body writing its alias gets a header memory Phi (t/wire-v2-a-loop-body-follows-its-header-memory.t)	probes/p__lp28.json
+main::__PROGRAM__	a void list assign of package scalars leaves no Assign (t/wire-v2-a-list-assign-to-package-scalars-is-no-record.t)	probes/p__lo12.json
+main::__PROGRAM__	a void list assign of package scalars leaves no Assign (t/wire-v2-a-list-assign-to-package-scalars-is-no-record.t)	probes/p__pl13.json
+main::__PROGRAM__	a void list assign of package scalars leaves no Assign (t/wire-v2-a-list-assign-to-package-scalars-is-no-record.t)	probes/w__m3.json
+DynaLoader::bootstrap	a void list assign of package scalars leaves no Assign (t/wire-v2-a-list-assign-to-package-scalars-is-no-record.t)
+File::Basename::dirname	a void list assign of package scalars leaves no Assign (t/wire-v2-a-list-assign-to-package-scalars-is-no-record.t)
+Chalk::IR::Analysis::_answer_sub_defined	a loop body storing after an arm gets its header memory Phi before the walk (t/wire-v2-a-loop-body-follows-its-header-memory.t)
+Chalk::IR::ReferenceFlow::__ADJUST_0	a loop body storing after an arm gets its header memory Phi before the walk (t/wire-v2-a-loop-body-follows-its-header-memory.t)
+Chalk::Regex::Parse::parse	a loop body storing after an arm gets its header memory Phi before the walk (t/wire-v2-a-loop-body-follows-its-header-memory.t)
+Chalk::Target::LLVM::Builder::construct_with	a loop body storing after an arm gets its header memory Phi before the walk (t/wire-v2-a-loop-body-follows-its-header-memory.t)
+Chalk::Target::LLVM::Printer::print_module	a loop body storing after an arm gets its header memory Phi before the walk (t/wire-v2-a-loop-body-follows-its-header-memory.t)
+Chalk::Target::LLVM::Builder::Args::_collect_positional_arg_reads	a loop body storing after an arm gets its header memory Phi before the walk (t/wire-v2-a-loop-body-follows-its-header-memory.t)
