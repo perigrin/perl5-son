@@ -19,7 +19,7 @@ flap.
 
 **How to apply:** until it is fixed, every place that compiles wires for a
 comparison runs the producer under `PERL_HASH_SEED=0 PERL_PERTURB_KEYS=0`
-(t/wire-verify-ratchet.t and t/wire-v2-downgrades-to-v1.t do), and a record
+(t/wire-verify-ratchet.t does; t/wire-v2-downgrades-to-v1.t did until stage 6), and a record
 is made the same way. The seed hides the bug; it does not fix it. To fix:
 compile Lower.pm under several seeds, diff the two Builder graphs, and find
 the hash walk whose order reaches the graph (see
