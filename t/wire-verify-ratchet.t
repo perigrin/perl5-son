@@ -86,15 +86,13 @@ for my $wire ( 1, 2 ) {
 for my $source ( sort keys %got ) {
     subtest $source => sub {
         my $g = $got{$source};
+        is $g->{'#dropped'} // 0, 0, 'no wire dropped (a failed or timed-out compile)';
         if ( $source =~ /^chalk/ ) {
-            is $g->{'#dropped'} // 0, 0, 'no wire dropped (a failed or timed-out compile)';
             note "$source: $_ $g->{$_}" for sort keys %$g;
             return;
         }
         ok exists $want{$source}, 'the baseline has this source' or return;
         my $w = $want{$source};
-        # (a program perl itself rejects is a dropped wire too: its row names it)
-        cmp_ok $g->{'#dropped'} // 0, '<=', $w->{'#dropped'} // 0, 'no more wires dropped than the baseline';
         cmp_ok $g->{'#wires'}, '>=', $w->{'#wires'}, 'no fewer wires than the baseline';
         cmp_ok $g->{'#graphs'}, '>=', $w->{'#graphs'}, 'no fewer graphs than the baseline';
         for my $rule ( sort grep { !/^#|^allowed:/ } keys %{ { %$g, %$w } } ) {
