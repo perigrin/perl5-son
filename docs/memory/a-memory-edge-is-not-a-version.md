@@ -34,6 +34,6 @@ wires (t/bootstrap/ir/t2-reads-a-v2-wire.t does).
 **Found on the way, open:** `our $g; sub f { ... $g = ... } print f(1), $g,
 f(0), $g` prints `1122` for perl's `1222`, on both wires: perl puts `$g`
 itself on print's stack (an alias), so both reads see the last store; B::SoN
-reads it at its version. A silent wrong answer, not v2's; not fixed.
+reads it at its version. A silent wrong answer, not v2's; fixed on `fix-alias-args`: [[an-element-is-an-alias-a-call-can-store]].
 
 Related: [[the-loader-holds-v2-to-its-invariant]], [[the-wire-names-its-memory-edges]].
