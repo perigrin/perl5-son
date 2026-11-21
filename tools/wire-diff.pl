@@ -11,14 +11,20 @@ use Getopt::Long;
 #   `NNN.pl`, and a probe as its path from docs/research. A file missing on one side is a difference; a file empty on both
 #   (no wire: the producer refused or died) is not.
 #   Prints `SOURCE/NAME: graph G` per differing graph, then a count line.
-#   --allow FILE: graphs a v1 bug fix changed on purpose (`GRAPH<TAB>why`, # comments),
+#   --allow FILE: graphs a v1 bug fix changed on purpose (`GRAPH<TAB>why`, # comments;
+#   a third column names the one wire, SOURCE/NAME.json, a graph is allowed in),
 #   printed as `allowed` and not counted.
 my ( $quiet, $allow );
 GetOptions( quiet => \$quiet, 'allow=s' => \$allow ) && @ARGV == 2 or die "usage: $0 [--quiet] [--allow FILE] OLD NEW\n";
 my %allowed;
 if ($allow) {
     open my $fh, '<', $allow or die "$allow: $!";
-    while (<$fh>) { next if /^\s*(?:#|$)/; my ($g) = split /\t/; $allowed{"method $g"} = 1 }
+    while (<$fh>) {
+        next if /^\s*(?:#|$)/;
+        chomp;
+        my ( $g, undef, $in ) = split /\t/;
+        $allowed{ ( length( $in // '' ) ? "$in " : '' ) . "method $g" } = 1;
+    }
 }
 my ( $old, $new ) = @ARGV;
 my $json = JSON::PP->new->utf8->canonical;
@@ -61,9 +67,9 @@ for my $f ( sort keys %files ) {
     my @d = grep {
         !defined $ga->{$_} || !defined $gb->{$_} || $json->encode( $ga->{$_} ) ne $json->encode( $gb->{$_} )
     } sort( keys %{ { %$ga, %$gb } } );
-    if ( my @ok = grep { $allowed{$_} } @d ) {
+    if ( my @ok = grep { $allowed{$_} || $allowed{"$f $_"} } @d ) {
         say "$f: graph $_ (allowed)" for $quiet ? () : @ok;
-        @d = grep { !$allowed{$_} } @d;
+        @d = grep { !$allowed{$_} && !$allowed{"$f $_"} } @d;
     }
     next unless @d;
     $differ++;
