@@ -1,5 +1,5 @@
 # SoN::Verify's counts per chalk graph, per rule: the `@` lines of
-# `tools/wire-verify.pl --tsv --wire N --chalk DIR` (N = 1: chalk, 2: chalk2), compiled
+# `tools/wire-verify.pl --tsv --chalk DIR` (wire v2; until stage 6 also wire 1: chalk2), compiled
 # under PERL_HASH_SEED=0 PERL_PERTURB_KEYS=0. Each line is SOURCE, @GRAPH, rule=n,... (the
 # most one wire counts for that graph; empty for a clean one). A graph's file-level code is
 # named by its wire (`Chalk/Foo:main::__PROGRAM__`). t/wire-verify-ratchet.t fails if a
