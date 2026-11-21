@@ -257,15 +257,19 @@ round_trips('my $n=1; sub g { $n = 5 } sub f { g(); my $x = $n; $n = 7; $x } pri
 round_trips('my $n=1; sub g { $n = 5 } sub f { g(); my $x = $n; $n++; $x } print f(), " $n\n";',
     'a copy after a call, then an increment');
 
-# A PACKAGE SCALAR operand is not read again, and is refused.
+# A PACKAGE SCALAR operand is read again too (since 2026-11-21; see
+# t/deparse-a-package-scalar-operand-is-read-when-its-op-runs.t).
+round_trips('our $n = 1; sub f { return $n . ($n = 5) } print f(), " $n\n";',
+    'the package-scalar form');
+# AN op= TARGET stored by its own operand is still refused.
 sub alias_refused ($src, $name) {
     my $data = graph_of($src);
     ok !( $data && $data->{methods}{"main::f"} ), "$name: f does not translate";
     like producer_stderr(), qr/read by alias.*a later operand stores it/,
         "$name: the refusal names the alias";
 }
-alias_refused('our $n = 1; sub f { return $n . ($n = 5) } print f(), " $n\n";',
-    'the package-scalar form');
+alias_refused('our $n = 1; sub f { $n .= ($n = 5); $n } print f(), " $n\n";',
+    'an op= target its operand stores');
 
 # A BRANCH CONDITION is consumed before its arm runs, and a copy before the
 # store is a statement of its own: neither is an alias.

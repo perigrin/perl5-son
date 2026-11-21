@@ -3687,6 +3687,7 @@ class SoN::FromOptree 0.01 {
             # exit; reached inside a branch arm it is recorded by _walk_branch
             # the same way.
             if ($name eq 'return') {
+                _reread_exit_operands($cv, $op, $sim, $factory, $opmap, $ctx);
                 # Pass the CV's ROOT: the scalar reading of a multi-value
                 _restore_locals_for_return($sim, $ctx, $factory);
                 # return is its LAST OPERAND, which only the OPTREE still
@@ -3749,6 +3750,7 @@ class SoN::FromOptree 0.01 {
                 # be ordered ahead of the exit. The return value is already on
                 # the simulated stack, so restoring first cannot change it.
                 # A sub's end puts its `local`s back itself, as a return does.
+                _reread_exit_operands($cv, $op, $sim, $factory, $opmap, $ctx) unless $is_program_exit;
                 _restore_locals($sim, $ctx, $factory, 0, !$is_program_exit);
 
                 push @exits, _exit_record($sim, $factory, 'leavesub', $op,
@@ -16703,6 +16705,7 @@ class SoN::FromOptree 0.01 {
             # of the body ends with it. Recorded only on a real walk -- a
             # scout's nodes are throwaway.
             if ($name eq 'return' && $FN_EXITS) {
+                _reread_exit_operands($cv, $op, $sim, $factory, $opmap, $ctx);
                 _restore_locals_for_return($sim, $ctx, $factory);
                 my $rec = _exit_record($sim, $factory, 'return', $op);
                 push @$FN_EXITS, $rec if defined $break_projs && !$IN_SCOUT;
@@ -21078,6 +21081,7 @@ class SoN::FromOptree 0.01 {
                 && ($name eq 'return' || (!$stop_at_exit && $is_leavesub));
             if ($exit_here) {
                 $visited->{$$op}++;
+                _reread_exit_operands($cv, $op, $sim, $factory, $opmap, $ctx);
                 _restore_locals_for_return($sim, $ctx, $factory) if $name eq 'return';
                 push @$exits, _exit_record($sim, $factory,
                     $name eq 'return' ? 'return' : 'leavesub', $op);
@@ -23486,14 +23490,20 @@ class SoN::FromOptree 0.01 {
     # operands have run: its padsv is stepped a second time and the new read
     # takes the old one's stack slot. A call in a later operand may store it
     # too (a shared lexical, a captured one), so a call counts as a store for
-    # a lexical. A package scalar is not read again, and is refused. A branch
+    # a lexical. A PACKAGE SCALAR is read again the same way: a call counts
+    # when some sub in the program stores it (_package_scalars_written), so
+    # `print f(1), $g, f(0), $g` reads both $g after f(0), as perl does
+    # (1101, where the read where its op stood said 1201). A branch
     # condition is consumed before its arm, so a LOGOP is not an alias
     # consumer; a postinc copies, and is not a padsv.
     # ponytail: only the direct stores (=, op=, ++/--) and calls are seen;
     # chomp, s/// or a list assign storing the variable still pass unread.
-    my %OPERAND_DEPTH;      # padsv op address -> the stack slot its read took
+    my %OPERAND_DEPTH;      # padsv/gvsv/rv2sv op address -> the stack slot its read took
     sub _reread_alias_operand_stored_later ($cv, $op, $sim, $factory, $opmap, $ctx) {
-        $OPERAND_DEPTH{$$op} = $sim->stack_depth if $op->name eq q{padsv};
+        $OPERAND_DEPTH{$$op} = $sim->stack_depth if $op->name =~ /\A(?:padsv|gvsv)\z/;
+        # (rv2sv pops the name its gv kid pushed: its read takes that slot)
+        $OPERAND_DEPTH{$$op} = $sim->stack_depth - 1
+            if $op->name eq q{rv2sv} && ( $op->flags & B::OPf_KIDS ) && $op->first->name eq q{gv};
         return unless $op->flags & B::OPf_KIDS;
         return if $op->isa('B::LOGOP');
         return if $op->name =~ /\A(?:leave|enter|lineseq|scope)/;
@@ -23518,7 +23528,7 @@ class SoN::FromOptree 0.01 {
             return undef unless $o->name eq q{gvsv}
                 || ( $rv2sv && $o->name eq q{gv} );
             my $gv = _op_gv($cv, $o);
-            return $gv ? "g" . ${$gv} : undef;
+            return $gv ? "g" . _stash_name_key( '$', $gv->STASH->NAME, $gv->NAME ) : undef;
         };
         # Slots a reference or a closure reaches -- NOT ones merely passed
         # to a call, which $ADDR_TAKEN counts too.
@@ -23545,6 +23555,12 @@ class SoN::FromOptree 0.01 {
             if ( $o->name eq q{entersub} && $key =~ /\Ap(\d+)\z/ ) {
                 return 1 if ( $SHARED_SLOTS && $SHARED_SLOTS->{$1} )
                     || ( $REFERENCED->{$1} );
+            }
+            # A CALL WRITES A PACKAGE SCALAR some sub in the program stores, and
+            # a string eval may store any.
+            if ( $o->name =~ /\Aenter(?:sub|eval)\z/ && $key =~ /\Ag(.+)\z/s ) {
+                my $w = _package_scalars_written();
+                return 1 if $o->name eq q{entereval} || $w->{$1} || $w->{'*'};
             }
             # SO DOES AN EVAL STRING compiled here, of what it captures and
             # writes (_const_eval).
@@ -23683,23 +23699,44 @@ class SoN::FromOptree 0.01 {
             undef $key if ( $kid->flags & B::OPf_WANT ) == B::OPf_WANT_VOID;
             if ( defined $key
                 && grep { $stores->($_, $key) } _later_siblings($kid) ) {
-                my $depth = $OPERAND_DEPTH{$$kid};
-                my $old   = defined $depth && $kid->name eq q{padsv}
+                # The op that read it: padsv, gvsv, rv2sv over its gv, or the
+                # gvsv under a nulled rv2sv -- stepped again in that order.
+                my $reader = $kid->name eq q{null} && ( $kid->flags & B::OPf_KIDS ) ? $kid->first : $kid;
+                my @again  = $reader->name eq q{rv2sv} ? ( $reader->first, $reader ) : ($reader);
+                my $depth = $OPERAND_DEPTH{$$reader};
+                my $old   = defined $depth && $reader->name =~ /\A(?:padsv|gvsv|rv2sv)\z/
                     && $depth < $sim->stack_depth ? $sim->node_at($depth) : undef;
                 # An op= target is stored, not only read; a declaration
                 # introduces the slot.
                 die "GAP: a scalar operand is read by alias and a later operand stores it\n"
                     if !$old
                     || ( $first && ( $op->flags & B::OPf_STACKED ) )
-                    || ( $kid->private & B::OPpLVAL_INTRO );
-                my ( undef, $how ) = _step($cv, $kid, $sim, $factory, $opmap, $ctx);
-                die "GAP: a scalar operand is read by alias and a later operand stores it\n"
-                    unless $how eq 'handled';
+                    || ( $kid->private & B::OPpLVAL_INTRO )
+                    || ( $reader->private & B::OPpLVAL_INTRO );
+                for my $o (@again) {
+                    my ( undef, $how ) = _step($cv, $o, $sim, $factory, $opmap, $ctx);
+                    die "GAP: a scalar operand is read by alias and a later operand stores it\n"
+                        unless $how eq 'handled';
+                }
                 $sim->replace_at($depth, $sim->pop_node);
             }
             ( $kid, $first ) = ( $kid->sibling, 0 );
         }
         return;
+    }
+
+    # _reread_exit_operands(...) -- a sub's exit reads its list by alias too:
+    # `return (f(1), $g, f(0), $g)` gives both $g as f(0) left it. The walkers
+    # take `return` and `leavesub` before _step, so they are asked here: a
+    # return's own operands, or those of the trailing return perl nulled.
+    sub _reread_exit_operands ($cv, $op, $sim, $factory, $opmap, $ctx) {
+        if ( $op->name =~ /\Aleavesub(?:lv)?\z/ ) {
+            my $body = $op->first;
+            return unless $body && $$body && $body->name eq q{lineseq} && ( $body->flags & B::OPf_KIDS );
+            $op = $body->last;
+            return unless $op && $$op && $op->name eq q{null} && $op->targ == B::opnumber(q{return});
+        }
+        _reread_alias_operand_stored_later($cv, $op, $sim, $factory, $opmap, $ctx);
     }
 
     # _stores_of_slot($cv, $targ) -> how many places in $cv store pad slot $targ:
