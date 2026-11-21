@@ -19,5 +19,6 @@ like $list, qr/^corpus-gate\b.*>= 222/m,                              'the corpu
 like $list, qr/^probes\b.*WRONG 0/m,                                  'the probe limit';
 like $list, qr/^ratchet\b.*wire 2/m,                                   'the ratchet holds the v2 rows too';
 like $list, qr/^ratchet\b.*downgrades-to-v1.*0 wires differ/m,         "and stage 3's downgrade proof";
+like $list, qr/^ratchet\b.*chalk's lib per graph.*no wire dropped/m,   "chalk per graph (perigrin), and a dropped wire fails";
 
 done_testing;

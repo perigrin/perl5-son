@@ -46,7 +46,7 @@ chalk-suite     every t/**/*.t under prove -Ilib -It/lib: 0 failing files
 census          tools/corpus-llvm-roundtrip.pl: ROUNDTRIP >= $ROUNDTRIP_MIN, DIFFERS 0, LLI_FAIL 0
 corpus-gate     chalk t/bootstrap/corpus/son-corpus-wide.t: passes, gate-green >= $GATE_GREEN_MIN, paad/worklist.json untouched
 probes          chalk tools/audit-probes.pl: WRONG 0, TIMEOUT 0, no probe BASELINE.tsv records SAME is anything else
-ratchet         t/wire-verify-ratchet.t over corpus, probes and chalk's lib, wire 1 and wire 2: no rule above t/data/wire-verify-baseline.tsv; and t/wire-v2-downgrades-to-v1.t over all three: 0 wires differ from the base commit's
+ratchet         t/wire-verify-ratchet.t over corpus, probes and chalk's lib, wire 1 and wire 2: no rule above t/data/wire-verify-baseline.tsv, chalk's lib per graph (t/data/wire-verify-chalk-graphs.tsv: no recorded graph rises), no wire dropped; and t/wire-v2-downgrades-to-v1.t over all three: 0 wires differ from the base commit's
 EOF
 }
 
@@ -148,7 +148,8 @@ ratchet_line() {
     chalk="chalk's lib compared"
     grep -q 'not compared\|chalk lib not checked' "$f" && { chalk="CHALK'S LIB NOT COMPARED ($(grep -o 'chalk is at.*' "$f" | head -1))"; v=MISS; }
     [ "$rc" -eq 0 ] || v=MISS
-    printf '%-15s %s  prove exit %s; %s; rows that fell: %s%s\n' ratchet $v "$rc" "$chalk" "$(grep -c ' fell ' "$f")" "$(secs ratchet)"
+    printf '%-15s %s  prove exit %s; %s; rows that fell: %s; %s%s\n' ratchet $v "$rc" "$chalk" "$(grep -c ' fell ' "$f")" \
+        "$(grep -o 'new graphs: [0-9]*, [0-9]* of them with violations' "$f" | head -1)" "$(secs ratchet)"
     [ $v = PASS ] || grep '^not ok\|^ *not ok' "$f" | head -12 | sed 's/^/                  /'
     [ $v = PASS ]
 }
