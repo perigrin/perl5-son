@@ -206,10 +206,41 @@ downgrade       PASS  t/wire-v2-downgrades-to-v1.t, SON_DOWNGRADE_FULL with chal
 
 What stages 4 and 5 should know:
 
-1. **MakeCell is a version made off the control chain** (V2: every chalk2 violation, 13 of 14 corpus2, all 34 probes2; most of V5). `_place`-ing it is one line and breaks the deparser's closure round trips (t/wire-a-write-to-a-captured-lexical-goes-through-its-cell.t, 50 cases): the deparser (stage 4's adapter, or before it) and chalk must accept a pinned MakeCell first. Then V2 and most of V5 fall.
-2. **A sub's exits merge their memory in a Phi only v2 writes** (`v2_only`): chalk reading v2 meets a memory Phi at a function-exit Region, with predecessors, named only by the Return's `mem_in`.
+1. **FIXED in stage 4** (section 10). **MakeCell is a version made off the control chain** (V2: every chalk2 violation, 13 of 14 corpus2, all 34 probes2; most of V5). `_place`-ing it is one line and breaks the deparser's closure round trips (t/wire-a-write-to-a-captured-lexical-goes-through-its-cell.t, 50 cases): the deparser (stage 4's adapter, or before it) and chalk must accept a pinned MakeCell first. Then V2 and most of V5 fall.
+2. **A sub's exits merge their memory in a Phi only v2 writes** (stage 4 marks it: `fields.exits`) (`v2_only`): chalk reading v2 meets a memory Phi at a function-exit Region, with predecessors, named only by the Return's `mem_in`.
 3. **`record` is derived by the writer** (an Assign on neither chain). V7's 5 + 6 are `($p, my $q) = LIST` with a package target: the store is a separate EntryWrite and the Assign floats (v1's `write-floating`).
-4. **phi:memory-as-value 25 and write-unreachable 7, chalk's lib only**, are new findings of the v2 rules and unexplained.
+4. **EXPLAINED in stage 4** (section 10). **phi:memory-as-value 25 and write-unreachable 7, chalk's lib only**, are new findings of the v2 rules and unexplained.
 5. **`v1_inputs`** is how the walker still asks its questions; `%MEM_MIN_INPUTS` stays in SoN::Deparse (stage 4's `as_v1` can take it from there or put `mem_in` back by `mem_operand`'s rule, which the v1 writer uses).
 6. **The producer is not deterministic on chalk's Target/LLVM/Lower.pm** (two graph shapes, two refusals, run to run). The downgrade proof sets one hash seed; the ratchet's chalk rows may move by it.
 7. **An elsif that is a sub's last statement, with its only store in a nested if's true arm, still forks** (none in the three sets): the value short-circuit handler does not ask the field-store question, and asking it there refused chalk graphs.
+
+## 10. After stage 4
+
+Heads: producer `v2-s4` (c44ad95 to 54f0c1d on 7d5d8f2), chalk `v2-s4` 1eaafd8a (one commit on eef945c6: T2 walks past a MakeCell on the chain).
+
+What changed, in one line each (notes in `docs/memory`):
+
+- **Stage 4.** `SoN::Deparse` reads v2 through `SoN::Wire::as_v1` (`the-deparser-reads-v2-through-as-v1.md`). Over corpus and probes every v2 wire renders as its v1 wire does (up to names made from node ids) or prints the same. The exit memory Phi is marked on v2 (`fields.exits`).
+- **Known issue 1, fixed.** MakeCell is `_place`d; v1 is unchanged (its writer and `as_v1` leave the pin out); chalk T2 walks past it (`a-cell-is-a-version-made-where-it-stands.md`).
+- **Known issue 4, explained.** `phi:memory-as-value` 25 was the copy 77c664b fixed (0 at the merge). `write-unreachable` 7 was one graph, `Earley::_force`: an endless loop in an else arm lost the if's join, a silent wrong answer, fixed (`an-endless-loop-in-an-arm-lost-the-join.md`). It changes v1 for that graph: the downgrade proof lists it (`t/data/wire-v1-changed-on-purpose.tsv`).
+- **L8 (forward memory references).** The writer has listed a node's `mem_in` before it since stage 3: 0 forward references on corpus2, probes2 and chalk2. `t/wire-v2-a-nodes-memory-comes-before-it.t` holds it (it names ten when the rule is taken out).
+- **A flake at the base.** `t/from-optree-match-subject.t` failed about 3 runs in 100: the package-write scan knew a CV by its address and a freed one's was reused (`a-freed-cvs-address-is-another-cvs.md`).
+
+The v2 rules, stage 3 -> stage 4:
+
+| rule | corpus2 | probes2 | chalk2 |
+|---|---|---|---|
+| V2 version-off-chain | 14 -> 1 | 34 -> 0 | 646 -> 0 |
+| V3 write-unreachable | 0 | 0 | 7 -> 0 |
+| V5 memory-order-disagrees | 17 -> 7 | 31 -> 4 | 522 -> 290 |
+| V8 phi:memory-as-value | 0 | 0 | 0 (25 at stage 3, 0 since 77c664b) |
+
+corpus2's one V2 left is a builtin version left unpinned (stage 3's note).
+
+The census on wire 2 (chalk 1eaafd8a, report only): ROUNDTRIP 412, DIFFERS 0, LLI_FAIL 0, GAP 19, unchanged from the integration. Of the 14 cases v1 round-trips and v2 does not, none is cured; all are T2's "out of its slices":
+
+- 7, "a reference to an element at an index not a constant": 073 123 188 195 217 232 233;
+- 6, "a variable that is not a `my` scalar kept here (PadAccess ... not-location)": 013 316 317 318 319 346;
+- 1, "a bless of one argument": 027.
+
+Stage 5 owns these.
