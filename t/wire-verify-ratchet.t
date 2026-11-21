@@ -48,11 +48,12 @@ $ENV{PERL_PERTURB_KEYS} = 0;
 # SON_WIRE_JOBS=N compiles N wires at a time.
 
 my $baseline = 't/data/wire-verify-baseline.tsv';
-my ( %want, $chalk_at );
+my $graphs   = 't/data/wire-verify-chalk-graphs.tsv';
+my %want;
+my ($chalk_at) = do { open my $g, '<', $graphs or die "$graphs: $!"; map {/^# chalk at (\w+)/} <$g> };
 open my $fh, '<', $baseline or die "$baseline: $!";
 while (<$fh>) {
     chomp;
-    $chalk_at = $1 if /^# chalk at (\w+)/;
     next if /^#/ || !length;
     my ( $source, $rule, $n ) = split /\t/;
     $want{$source}{$rule} = $n;
@@ -105,7 +106,7 @@ for my $source ( sort keys %got ) {
 ok scalar( grep { $got{$_} } qw(corpus probes corpus2 probes2) ) == 4, 'corpus and probes were measured, on both wires';
 
 if ( my @chalk = grep {/^chalk/} sort keys %got ) {
-    my $file = 't/data/wire-verify-chalk-graphs.tsv';
+    my $file = $graphs;
     open my $gf, '<', $file or die "$file: $!";
     my $record = parse_graph_lines(<$gf>);
     my $now    = parse_graph_lines(@graph_lines);

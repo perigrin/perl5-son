@@ -34,7 +34,9 @@
 # 642 of its 642 version-off-chain are MakeCell. Pinning MakeCell breaks the deparser's
 # closure round trips (t/wire-a-write-to-a-captured-lexical-goes-through-its-cell.t), so
 # it waits for its consumers.
-# chalk at 45a1b8d5
+# 2026-11-21 (stages 2+3 integrated): the chalk and chalk2 rows moved, per graph, to
+# t/data/wire-verify-chalk-graphs.tsv (perigrin: chalk's lib is held per graph). Recorded
+# there at chalk 45a1b8d5 with every total equal to the rows deleted here.
 corpus	#cases	431
 corpus	#graphs	1082
 corpus	#wires	431
@@ -81,26 +83,6 @@ probes	read-unversioned:package	4
 probes	read-unversioned:package-aggregate-literal	5
 probes	read-unversioned:through-ref	1
 probes	write-floating	4
-chalk	#cases	219
-chalk	#graphs	24521
-chalk	#wires	219
-chalk	allowed:param-bind	18
-chalk	allowed:record	392
-chalk	control-fork	0
-chalk	effect-rides-value	58
-chalk	fault-floating	0
-chalk	memory-order-disagrees	291
-chalk	phi-arity	0
-chalk	phi-arity:eval-join	40
-chalk	read-unversioned:args	3
-chalk	read-unversioned:cell	0
-chalk	read-unversioned:external	87
-chalk	read-unversioned:field	3560
-chalk	read-unversioned:my-aggregate	373
-chalk	read-unversioned:package	5
-chalk	read-unversioned:package-aggregate-literal	1
-chalk	read-unversioned:through-ref	215
-chalk	write-floating	6
 corpus2	#cases	431
 corpus2	#graphs	1082
 corpus2	#wires	431
@@ -149,26 +131,3 @@ probes2	read-unversioned:through-ref	1
 probes2	record	5
 probes2	version-off-chain	34
 probes2	write-unreachable	0
-chalk2	#cases	219
-chalk2	#graphs	24521
-chalk2	#wires	219
-chalk2	allowed:param-bind	18
-chalk2	allowed:record	392
-chalk2	control-fork	0
-chalk2	control-sink	0
-chalk2	mem-in-not-version	0
-chalk2	memory-order-disagrees	518
-chalk2	phi-arity	0
-chalk2	phi-arity:eval-join	40
-chalk2	phi-no-region	0
-chalk2	phi:memory-as-value	25
-chalk2	read-unversioned:args	3
-chalk2	read-unversioned:external	87
-chalk2	read-unversioned:field	3559
-chalk2	read-unversioned:my-aggregate	373
-chalk2	read-unversioned:package	5
-chalk2	read-unversioned:package-aggregate-literal	1
-chalk2	read-unversioned:through-ref	297
-chalk2	record	6
-chalk2	version-off-chain	642
-chalk2	write-unreachable	7
