@@ -4,6 +4,7 @@ use v5.42.0;
 use utf8;
 use experimental 'class';
 use B::SoN::EffectTable ();    # which builtins read at a memory version
+use SoN::Wire ();              # a v2 wire is read in v1's shape (stage 11 reads it natively)
 
 # WHY THIS EXISTS. Every correctness check on the producer is otherwise
 # STRUCTURAL -- read the graph and reason about whether it says what perl says.
@@ -314,6 +315,7 @@ class SoN::Deparse 0.01 {
     # always recorded.
     method render ($data) {
         $gap = undef;
+        $data = SoN::Wire::as_v1($data) if ( $data->{version} // 1 ) == 2;
         my $methods = $data->{methods} // {};
         my $graph = $methods->{'main::__PROGRAM__'};
         unless ($graph) { $gap = 'no main::__PROGRAM__ in the graph'; return undef }

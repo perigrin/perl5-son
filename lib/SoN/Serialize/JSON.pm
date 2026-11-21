@@ -203,6 +203,11 @@ sub _extract_fields ($node, $id_remap) {
             region => $id_remap->{ $node->region->id },
             (@pred_ids ? (predecessors => \@pred_ids) : ()),
             ($node->memory ? (memory => JSON::PP::true()) : ()),
+            # THE MEMORY WHERE A SUB'S EXITS MERGE (wire v2): only its Return
+            # names it, and v1 has no place for it. Said, so a reader of v1
+            # (SoN::Wire::as_v1) can leave it out: on the wire it is shaped
+            # like a merge's memory Phi a Return names, which v1 keeps.
+            ($node->v2_only ? (exits => JSON::PP::true()) : ()),
         };
     }
     if ($op eq 'Proj') {
