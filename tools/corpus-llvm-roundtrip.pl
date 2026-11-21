@@ -48,6 +48,9 @@ die "no chalk clone at $chalk (set SON_CHALK)\n"     unless -d "$chalk/.git";
 my ($lli) = grep { -x } map { "$_/lli" } split /:/, $ENV{PATH};
 die "no lli on PATH\n" unless $lli;
 
+# THE WIRE VERSION B::SoN WRITES: SON_WIRE's (`wire=2`), else its default.
+my $WIRE = length($ENV{SON_WIRE} // '') ? ",wire=$ENV{SON_WIRE}" : '';
+
 my $dir  = tempdir(CLEANUP => 1);
 my $snap = "$dir/chalk";
 mkdir $snap;
@@ -62,7 +65,7 @@ printf "cases: %d\n", scalar @cases;
 sub run_case ($id, $c) {
     my $base = "$dir/c$id";
     open my $o, '>', "$base.pl" or die $!; print $o $c->{src}; close $o;
-    qx($^X -I$FindBin::Bin/../lib -MO=-q,SoN,json,not_package=SoN $base.pl > $base.json 2> $base.err);
+    qx($^X -I$FindBin::Bin/../lib -MO=-q,SoN,json,not_package=SoN$WIRE $base.pl > $base.json 2> $base.err);
     # A PROGRAM THE PRODUCER REFUSES is skipped, and B::SoN says why on
     # stderr: a refusal by name, so a GAP with that reason -- not the load
     # failure chalk reports for a graph set with no program in it.
