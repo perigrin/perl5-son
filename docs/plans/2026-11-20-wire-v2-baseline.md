@@ -281,3 +281,25 @@ The rows the stage had to resolve, before -> after (wire 2):
 V5 was mostly the verifier (a loop body follows its test's last version on a wire without the `loop` profile); the rest were producer faults: a foreach body writing its alias and a while body storing after an arm got no header memory Phi before the walk (al16, lp28, 205; corpus 140's graph changed with it, and chalk's intervals oracle rows for it were renamed). Also fixed: an append's result read with its store as an input on v2 (probe ev10, refused on wire 2 only).
 
 Found, not fixed (not v2's): `print f(1), $g, f(0), $g` with `f` storing `$g` prints `1122` for perl's `1222` on both wires (print's arguments are aliases).
+
+`tools/gates.sh` at producer 2ddf303, chalk d5f06c06 (wire 1, B::SoN's default):
+
+```
+producer-suite  PASS  763 files, 0 failing [10m43s]
+chalk-suite     PASS  923 files, 0 failing [88m19s]
+census          PASS  ROUNDTRIP 426 (>= 426) DIFFERS 0 LLI_FAIL 0; GAP 5 LOAD_FAIL 0 NOJSON 0 [2m57s]
+corpus-gate     PASS  gate-green 222 (>= 222), prove exit 0, paad/worklist.json untouched [5m31s]
+probes          PASS  LOUD=2 REFUSED=112 SAME=361; WRONG 0, SAME lost 0, changed 0 [1m57s]
+ratchet         PASS  prove exit 0; chalk's lib compared; rows that fell: 48; new graphs: 38, 3 of them with violations [66m45s]
+                PASS  (downgrade proof) prove exit 0; no comparison [49m10s]
+```
+
+With `SON_WIRE=2` exported (`--only census,corpus-gate,probes`, producer lib as at 2ddf303, chalk d5f06c06):
+
+```
+census          PASS  ROUNDTRIP 426 (>= 426) DIFFERS 0 LLI_FAIL 0; GAP 5 LOAD_FAIL 0 NOJSON 0 [4m38s]
+corpus-gate     PASS  gate-green 222 (>= 222), prove exit 0, paad/worklist.json untouched [6m39s]
+probes          PASS  LOUD=2 REFUSED=107 SAME=366; WRONG 0, SAME lost 0, changed 5 [2m09s]
+```
+
+(The five changed on wire 2 are cl5, cl6, cl13, cl19, cl20, REFUSED -> SAME: the cell pinned on the chain. The downgrade proof's v1 changes on purpose are listed in t/data/wire-v1-changed-on-purpose.tsv, now scoped to a wire where the graph is a program's own.)
