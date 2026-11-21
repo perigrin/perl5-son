@@ -1,6 +1,6 @@
 ---
 name: an-element-is-an-alias-a-call-can-store
-description: "SILENT WRONG fixed: `print f(1), $g, f(0), $g` said 1201 for perl's 1101 (both wires) -- a package scalar operand is now read again after a later call that may store it, return lists too; an element a call reaches by name is refused; OPEN: an element through a reference beside a call (needs a design)"
+description: "SILENT WRONG fixed: `print f(1), $g, f(0), $g` said 1201 for perl's 1101 (both wires) -- a package scalar operand is now read again after a later call that may store it, return lists too; an element a call reaches by name is refused; element through a reference beside a call: fixed by MOD sets, see a-call-s-stores-are-its-mod-set"
 metadata:
   type: project
 ---
@@ -47,3 +47,5 @@ an op reads an operand perl pushes by alias, ask what later operands may
 store -- including calls, and including exits the walkers intercept before
 `_step`. Refusing what a call MAY reach is cheap for names and ruinous for
 references: measure the census and chalk's lib before keeping a refusal.
+
+**RESOLVED 2026-11-21 by option (a):** [[a-call-s-stores-are-its-mod-set]].
