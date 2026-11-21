@@ -16,6 +16,7 @@ class SoN::FromOptree 0.01 {
     use B::SoN::EffectTable;
     use SoN::FromOptree::OpMap;
     use SoN::FromOptree::StackSim;
+    use SoN::FromOptree::ModSets;
     use SoN;
 
     # Subst PMOP pmflags bits. /r (non-destructive) returns a new string and
@@ -6053,7 +6054,26 @@ class SoN::FromOptree 0.01 {
         return;
     }
 
+    # _step: one op, and, for an element operand its consumer will read again
+    # (_elem_alias_plan), whether the element EXISTED where it was read: perl
+    # pushes the element itself only then, and undef otherwise.
+    my %EXISTED;   # refaddr of an element read -> the Exists made beside it
+    my %OPERAND_DEPTH;      # padsv/gvsv/rv2sv op, or element operand, address -> the stack slot its read took
     sub _step ($cv, $op, $sim, $factory, $opmap, $ctx) {
+        my $k = _elem_operand_reread($cv, $op) or return _step_op($cv, $op, $sim, $factory, $opmap, $ctx);
+        my @r = _step_op($cv, $op, $sim, $factory, $opmap, $ctx);
+        return @r unless ( $r[1] // '' ) eq 'handled' && $sim->stack_depth;
+        my $read = $sim->node_at( $sim->stack_depth - 1 );
+        return @r unless blessed($read) && $read->isa('SoN::IR::Node::Subscript') && defined $read->mem_in;
+        my $ex = $factory->make('Exists', kind => $read->kind, inputs => [ $read->inputs->@* ],
+            mem => $sim->memory, stamp => SoN::IR::Stamp->new(type => 'Boolean'));
+        { local $PIN_OP = $op; _pin_tied_read($sim, $ex) }
+        $EXISTED{ refaddr $read } = [ $read, $ex ];   # (the read held: its address is not reused)
+        $OPERAND_DEPTH{$$k} = $sim->stack_depth - 1;
+        return @r;
+    }
+
+    sub _step_op ($cv, $op, $sim, $factory, $opmap, $ctx) {
         # (not a store's target: `$a[1] = 1` is a STORE, not a FETCH)
         # (NOR IN A BRANCH ARM WITHOUT ITS OWN PROJ: a select merges no control,
         # and pinned there the read forked the chain -- "a control node with 2
@@ -23500,7 +23520,7 @@ class SoN::FromOptree 0.01 {
     # consumer; a postinc copies, and is not a padsv.
     # ponytail: only the direct stores (=, op=, ++/--) and calls are seen;
     # chomp, s/// or a list assign storing the variable still pass unread.
-    my %OPERAND_DEPTH;      # padsv/gvsv/rv2sv op address -> the stack slot its read took
+    # (%OPERAND_DEPTH: declared above _step, which records an element's too)
     sub _reread_alias_operand_stored_later ($cv, $op, $sim, $factory, $opmap, $ctx) {
         $OPERAND_DEPTH{$$op} = $sim->stack_depth if $op->name =~ /\A(?:padsv|gvsv)\z/;
         # (rv2sv pops the name its gv kid pushed: its read takes that slot)
@@ -23649,31 +23669,6 @@ class SoN::FromOptree 0.01 {
             my $text = eval { $o->string($cv) } // return undef;
             return $text =~ /\A(\$\$?[\w:]+(?:->)?[\[{])/ ? $1 =~ s/\A\$main::/\$/r : undef;
         };
-        # Can a call reach the element's container BY NAME? A package
-        # aggregate, or a lexical one a closure shares or a reference takes.
-        # OPEN, NOT REFUSED: a container through a reference (`$r->[0] .
-        # f()`). Any call may reach it, and refusing every such pair cost
-        # corpus 009 (`$l->[0], $c->(21)`) and seven of chalk's graphs
-        # (`[ $g->{s}, $pos, $g->int_(1) ]`): a right answer needs what the
-        # callee stores (an effect summary) or a re-read the wire can say only
-        # if the element existed -- a design decision (docs/memory/
-        # an-element-is-an-alias-a-call-can-store.md).
-        # ponytail: an aggregate handed to the call (`f(@a)`, `$_[0]` stored)
-        # is not seen, as for a scalar.
-        my $elem_reachable = sub ($o) {
-            $o = $o->first while $o->name eq 'null' && ( $o->flags & B::OPf_KIDS ) && ${ $o->first };
-            my $pad = sub ($t) { ( $SHARED_SLOTS && $SHARED_SLOTS->{$t} ) || $REFERENCED->{$t} ? 1 : 0 };
-            my $n = $o->name;
-            return $pad->( $o->targ ) if $n eq 'aelemfast_lex' || $n eq 'aelemfastlex_store';
-            return 1 if $n eq 'aelemfast';
-            if ( $n eq 'aelem' || $n eq 'helem' ) {
-                my $c = $o->first;
-                return $pad->( $c->targ ) if $c->name =~ /\Apad[ah]v\z/;
-                return $c->name =~ /\Arv2[ah]v\z/ && ( $c->flags & B::OPf_KIDS ) && $c->first->name eq 'gv' ? 1 : 0;
-            }
-            # (a multideref: its text names a package aggregate, or a reference)
-            return ( $elem_key->($o) // '->' ) !~ /->/ && $n eq 'multideref' ? 1 : 0;
-        };
         my $elem_stored;
         # A STORE IS AN ASSIGNMENT'S TARGET, not whatever perl marks OPf_MOD:
         # a call's argument is marked (it is passed as an alias), as is an
@@ -23717,17 +23712,27 @@ class SoN::FromOptree 0.01 {
             die "GAP: an element operand is read by alias and a later operand"
               . " stores into its container -- not yet lowered\n"
                 if grep { $elem_stored->( $_, $ekey ) } @later;
-            # A CALL STORES IT TOO where the callee can reach the container: a
-            # package aggregate, a lexical one shared or referenced, anything
-            # through a reference. Refused for the same reason: not re-read.
-            die "GAP: an element operand is read by alias and a later operand"
-              . " calls a sub that may store into its container -- not yet lowered\n"
-                if $elem_reachable->($k)
-                && grep { $_->name =~ /\Aenter(?:sub|eval)\z/ } map { _subtree_ops($_) } @later;
+            # A CALL MAY STORE IT TOO: read again after the call, or refused
+            # by name (_elem_alias_plan).
+            _elem_alias_plan($cv, $k, $op);
         }
         undef $elem_stored;
         my ( $kid, $first ) = ( $op->first, 1 );
         while ( $kid && $$kid ) {
+            # AN ELEMENT A LATER CALL MAY STORE is read again, where it existed
+            # when it was read (the Exists _step made beside that read).
+            if ( _elem_alias_plan($cv, $kid, $op) ) {
+                my $depth = $OPERAND_DEPTH{$$kid};
+                my $old   = defined $depth && $depth < $sim->stack_depth ? $sim->node_at($depth) : undef;
+                my $was   = $old && $EXISTED{ refaddr $old };
+                die "GAP: an element operand is read by alias and a later operand calls a sub that may"
+                  . " store into it, and its read is not one the walk marked -- not yet lowered\n"
+                    unless $was && $was->[0] == $old;
+                my $new = $factory->make('Subscript', kind => $old->kind, inputs => [ $old->inputs->@* ],
+                    mem => $sim->memory, ( $old->stamp ? ( stamp => $old->stamp ) : () ));
+                { local $PIN_OP = _elem_reader($kid); _pin_tied_read($sim, $new) }
+                $sim->replace_at($depth, _make_ternary($factory, $was->[1], $new, $old));
+            }
             my $key = $var->($kid);
             # A statement in void context is not an operand.
             undef $key if ( $kid->flags & B::OPf_WANT ) == B::OPf_WANT_VOID;
@@ -23758,6 +23763,54 @@ class SoN::FromOptree 0.01 {
             ( $kid, $first ) = ( $kid->sibling, 0 );
         }
         return;
+    }
+
+    sub _elem_reader ($k) {
+        $k = $k->first while $k->name eq 'null' && ( $k->flags & B::OPf_KIDS ) && ${ $k->first };
+        return $k;
+    }
+
+    # _elem_operand_reread($cv, $op) -> the operand op (itself, or the null
+    # wrapping it) when $op reads an element its consumer will read again.
+    sub _elem_operand_reread ($cv, $op) {
+        return undef unless $op->name =~ /\A(?:aelem|helem|multideref|aelemfast|aelemfast_lex)\z/;
+        return undef if $op->flags & B::OPf_MOD;
+        my $k = $op;
+        while (1) {
+            my $p = eval { $k->parent };
+            return undef unless $p && $$p;
+            last unless $p->name eq 'null' && ${ $p->first } == $$k && !${ $k->sibling };
+            $k = $p;
+        }
+        # (a null consumer too: an ex-list perl runs, a nulled return)
+        return _elem_alias_plan($cv, $k, $k->parent) ? $k : undef;
+    }
+
+    # _elem_alias_plan($cv, $k, $op) -> true when the element operand $k of
+    # $op may be stored by a CALL in a later operand, so that $op, reading it
+    # by alias when it runs, must read it again; dies, by name, where the call
+    # may reshape its container or cannot be seen into. What each callee may
+    # store is its MOD set (SoN::FromOptree::ModSets): a callee that stores
+    # nothing there leaves the read where its op stood.
+    sub _elem_alias_plan ($cv, $k, $op) {
+        return undef unless $op->flags & B::OPf_KIDS;
+        return undef if $op->isa('B::LOGOP') || $op->name =~ /\A(?:leave|enter|lineseq|scope)/;
+        return undef if ( $k->flags & B::OPf_WANT ) == B::OPf_WANT_VOID || ( $k->flags & B::OPf_MOD );
+        my $was = $k->name eq 'null' && $k->targ ? ( B::ppname( $k->targ ) =~ s/\App_//r ) : $k->name;
+        return undef unless $was =~ /\A(?:aelem|helem|aelemfast_lex|aelemfast|multideref)\z/;
+        my @later = _later_siblings($k);
+        pop @later if $op->name =~ /\A(?:sassign|multiconcat)\z/;
+        my @eff = map { SoN::FromOptree::ModSets::op_effects($cv, $_) } @later;
+        return undef unless @eff;
+        my $place = SoN::FromOptree::ModSets::place($cv, $k);
+        my $c = $place ? SoN::FromOptree::ModSets::conflict($place, \@eff) : 'unknown';
+        return undef unless $c;
+        die "GAP: an element operand is read by alias and a later operand calls code whose stores"
+          . " cannot be known here (a dynamic method or code ref, a string eval, a sub outside the"
+          . " program) -- not yet lowered\n" if $c eq 'unknown';
+        die "GAP: an element operand is read by alias and a later operand calls a sub that may"
+          . " reshape its container or replace what holds it -- not yet lowered\n" if $c eq 'reshape';
+        return 1;
     }
 
     # _reread_exit_operands(...) -- a sub's exit reads its list by alias too:

@@ -159,6 +159,18 @@ sub reads_at_version ($name) { return ( ( $ROW{ $name // '' } // {} )->{reads} /
 # follows and is the memory after it.
 sub is_version ($name) { return ( $ROW{ $name // '' } // {} )->{version} ? 1 : 0 }
 
+# stores_operands($name) -> which operands the builtin STORES INTO, by alias:
+# 'first', 'second' or 'all' (each element of an array among them), or undef.
+# What a sub may store (SoN::FromOptree::ModSets) is built from these, with the
+# assignment, op=, ++/--, s///, tr/// and container ops the walk names itself.
+# (binmode is not here: it changes a handle's layers, not the variable.)
+my %STORES_OPERANDS = (
+    ( map { $_ => 'all' }    qw(chomp chop pipe_op sockpair) ),
+    ( map { $_ => 'first' }  qw(schomp schop open opendir socket accept) ),
+    ( map { $_ => 'second' } qw(read sysread recv) ),
+);
+sub stores_operands ($name) { return $STORES_OPERANDS{ $name // '' } }
+
 # names() -> every builtin with a row, sorted (for the tests).
 sub names () { return sort keys %ROW }
 

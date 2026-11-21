@@ -58,18 +58,26 @@ unlike translate('sub st { $_[0][$_[1]] = "$_[2]!" } my @o = ([]); st($o[0], 0, 
 unlike translate('sub f { $_[0] } my @r = (1,2); print $r[0], f($r[0]) ? "b" : "-", "\n";'), qr/GAP/, 'an element also passed to a call';
 like translate('my @a = (1,2); my @l = ($a[0], $a[0]++); print "@l\n";'), $gap, 'a post-increment in a list';
 
-# A CALL IN A LATER OPERAND may store the element too, where the callee can
-# reach the container by name: a package aggregate, one a sub closes over.
-# `print g(1), $a[0], g(0), $a[0]` is 1101 in perl; the read where its op
-# stood said 1201. Refused by name, as the direct store is. THROUGH A
-# REFERENCE it is OPEN (FromOptree's $elem_reachable says why): refusing it
-# refused right programs (`$e->{l} == nul()`, corpus 009).
-my $call_gap = qr/GAP: an element operand is read by alias and a later operand calls a sub that may store into its container/;
-like translate('our @a = (0); sub g { $a[0] = $_[0] + 1; $_[0] } print g(1), $a[0], g(0), $a[0], "\n";'), $call_gap, 'a package array';
-like translate('our %h = (k => 0); sub g { $h{k} = $_[0] + 1; $_[0] } print g(1), $h{k}, g(0), $h{k}, "\n";'), $call_gap, 'a package hash';
-like translate('my @a = (0); sub g { $a[0] = $_[0] + 1; $_[0] } print g(1), $a[0], g(0), $a[0], "\n";'), $call_gap, 'a lexical array a sub closes over';
-like translate('our @a = (1); sub g { $a[0] = 5; 0 } print $a[0] + g(), "\n";'), $call_gap, 'added';
+# A CALL IN A LATER OPERAND may store the element too. Since 2026-11-21 the
+# element is read again where the callee's MOD set says it may store into the
+# container (t/deparse-an-element-a-later-call-stores-is-read-when-its-op-runs.t);
+# REFUSED BY NAME where the callee may reshape the container or replace what
+# holds it (an alias to a removed element is not the element at its index),
+# or where nothing can be said of the call.
+unlike translate('our @a = (0); sub g { $a[0] = $_[0] + 1; $_[0] } print g(1), $a[0], g(0), $a[0], "\n";'), qr/GAP/, 'a package array';
+unlike translate('our %h = (k => 0); sub g { $h{k} = $_[0] + 1; $_[0] } print g(1), $h{k}, g(0), $h{k}, "\n";'), qr/GAP/, 'a package hash';
+unlike translate('my @a = (0); sub g { $a[0] = $_[0] + 1; $_[0] } print g(1), $a[0], g(0), $a[0], "\n";'), qr/GAP/, 'a lexical array a sub closes over';
 unlike translate('my @a = (1); sub g { 0 } print $a[0], g(), $a[0], "\n";'), qr/GAP/, 'a lexical array no sub reaches';
 unlike translate('our @a = (1); sub g { 0 } print g(), $a[0], "\n";'), qr/GAP/, 'the call before the element';
+my $reshape = qr/GAP: an element operand is read by alias and a later operand calls a sub that may reshape its container or replace what holds it/;
+my $unknown = qr/GAP: an element operand is read by alias and a later operand calls code whose stores cannot be known here/;
+like translate('my $r = [1, 2]; sub f { shift @$r; "" } print $r->[0], f(), "\n";'), $reshape, 'a shift through a reference';
+like translate('my $r = {k => 1}; sub f { delete $r->{k}; "" } print $r->{k}, f(), "\n";'), $reshape, 'a delete';
+like translate('our @a = (1); sub f { @a = (7); "" } print $a[0], f(), "\n";'), $reshape, 'a list assign of the array';
+like translate('my $r = [1]; sub f { $r = [7]; "" } print $r->[0], f(), "\n";'), $reshape, 'the reference replaced';
+like translate('my $r = {a => {b => 1}}; sub f { $r->{a} = {}; "" } print $r->{a}{b}, f(), "\n";'), $reshape, 'an inner reference replaced';
+like translate('my $r = [1]; sub f { 0 } my $c = $ARGV[0] ? \&f : sub { 1 }; print $r->[0], $c->(), "\n";'), $unknown, 'a code ref of two subs';
+like translate('my $r = [1]; print $r->[0], eval "2", "\n";'), $unknown, 'a string eval';
+like translate('my $r = [1]; my $m = "x"; print $r->[0], main->$m(), "\n";'), $unknown, 'a dynamic method';
 
 done_testing;
