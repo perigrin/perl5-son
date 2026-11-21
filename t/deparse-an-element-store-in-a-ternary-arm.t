@@ -58,6 +58,9 @@ sub refuses ($src, $cause, $name) {
 
 my $not_const = qr/GAP: a consumed ternary arm stores an element and yields a value that is not a constant/;
 my $key_mem   = qr/GAP: a consumed ternary arm stores an element whose key reads memory or has an effect/;
+# (A key that stores the stored value -- `$h{chop $k} = $k` -- makes the value
+# read again after it, since 2026-11-21, and that is refused first.)
+my $key_or_value = qr/$key_mem|$not_const/;
 
 # A constant stored value merges, in scalar, list and the caller's context.
 # WANT 0 is the caller's context: taken for void, the value was dropped and
@@ -120,13 +123,15 @@ refuses(q{my @a=(1); my $r=\$a[0]; for my $c (1,0) { my $x = $c ? ($a[0] = $$r +
 refuses(q{my @a=(1,2); for my $c (1,0) { for my $e (@a) { my $x = $c ? ($a[0] = $e + 1) : 8; print "$x @a;" } print "\n" }},
     $not_const, 'a stored value reading a foreach alias of the element');
 refuses(q{my %h; my $k="ab"; for my $c (1,0) { my $x = $c ? ($h{chop $k} = $k) : 8; print "$x $k ", join(",", map {"$_=$h{$_}"} sort keys %h), "\n" }},
-    $key_mem, 'a chop in the key');
+    $key_or_value, 'a chop in the key');
 refuses(q{my %h; my $k="ab\n"; for my $c (1,0) { my $x = $c ? ($h{chomp $k} = $k) : 8; print "[$x] [$k] ", join(",", map {"$_=$h{$_}"} sort keys %h), "\n" }},
-    $key_mem, 'a chomp in the key');
-refuses(q{my %h; my $k="ab"; for my $c (1,0) { my $x = $c ? ($h{undef $k} = $k) : 8; print defined $x ? $x : "u", " ", join(",", map {"$_=".($h{$_}//"u")} sort keys %h), "\n" }},
-    $not_const, 'an undef in the key');
+    $key_or_value, 'a chomp in the key');
+# (THE STORED `$k` IS READ AFTER THE KEY'S undef, as perl reads it by alias,
+# since 2026-11-21: the stored value is then the constant undef, and merges.)
+round_trips(q{my %h; my $k="ab"; for my $c (1,0) { my $x = $c ? ($h{undef $k} = $k) : 8; print defined $x ? $x : "u", " ", join(",", map {"$_=".($h{$_}//"u")} sort keys %h), "\n" }},
+    'an undef in the key');
 refuses(q{my @a; my $k="ab"; for my $c (1,0) { my $x = $c ? ($a[chop $k] = $k) : 8; print "$x $k\n" }},
-    $key_mem, 'a chop in the index');
+    $key_or_value, 'a chop in the index');
 refuses(q{my %h; my $k="ab"; for my $c (1,0) { my $x = $c ? ($h{$k =~ tr/a/z/} = $k) : 8; print "$x $k ", join(",", map {"$_=$h{$_}"} sort keys %h), "\n" }},
     $not_const, 'a tr/// in the key');
 refuses(q{sub inc { $_[0]++ } my @a=(0); for my $c (1,0) { my $x = $c ? inc($a[0]) : 5; print "$x @a\n" }},
