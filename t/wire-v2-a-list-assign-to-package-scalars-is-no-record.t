@@ -10,7 +10,10 @@ use SoN::Verify;
 # WHY. `($a1, $b1) = ($b1 + 1, $a1 + 2)` stores each package scalar by an
 # EntryWrite, position by position; the list Assign the handler made first
 # stayed on the wire, on neither chain, read by nothing -- a `record` whose
-# targets are not `my` variables (V7: probes lo12, pl13, m3; chalk's lib 4).
+# targets are not `my` variables (V7: probes lo12, m3; chalk's lib 4).
+# STILL OPEN: probe pl13, the same assignment as its sub's last statement --
+# then the Assign is the sub's value, and what node that value is (a list,
+# or the right side's count) wants a design; chalk's wire-verify.t holds it.
 my $dir = tempdir( CLEANUP => 1 );
 my $n = 0;
 sub wire ($src) {
@@ -23,7 +26,7 @@ sub wire ($src) {
 sub v7 ($w) { [ map { "$_->{graph}#$_->{node}" } grep { $_->{rule} eq 'record' } SoN::Verify::verify($w)->{violations}->@* ] }
 
 for my $case (
-    [ q{our ($a1, $b1) = (0, 0); sub sw { ($a1, $b1) = ($b1 + 1, $a1 + 2) } for (1..3) { $a1 = $a1 + 1; sw() } print "$a1 $b1\n";}, 'a swap of package scalars in a sub (pl13)' ],
+    [ q{our ($a1, $b1) = (0, 0); sub sw { ($a1, $b1) = ($b1 + 1, $a1 + 2); 1 } for (1..3) { $a1 = $a1 + 1; sw() } print "$a1 $b1\n";}, 'a swap of package scalars in a sub' ],
     [ q{our ($a1, $b1) = (1, 2); { local ($a1, $b1) = ($b1, $a1); print "$a1$b1" } print "$a1$b1\n";}, 'a local list assignment (lo12)' ],
     [ q{our $p = 1; ($p, my $q) = (3, 4); print "$p $q\n";}, 'a package scalar beside a `my` (m3)' ],
 ) {
