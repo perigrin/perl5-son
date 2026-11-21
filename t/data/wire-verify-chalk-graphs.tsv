@@ -17,7 +17,13 @@
 # 24ccba5. No graph rose; 118 fell, all chalk2: version-off-chain 646 -> 0 (MakeCell placed),
 # memory-order-disagrees 522 -> 290 (63 graphs), write-unreachable 7 -> 0 (Earley::_force:
 # an endless loop in an arm). One anon sub renamed by its line (Builder::alias_saves).
-# chalk at 1eaafd8a
+# 2026-11-21 (wire v2 stage 6, branch v2-s6): re-recorded at chalk 5284360b with producer
+# 785135c (the gate run's wires; the four that hold Lower.pm and Builder/Variables.pm compiled
+# again at 5284360b). Against the 1eaafd8a record one graph rose: Chalk::Regex::Graph::stmt,
+# read-unversioned:through-ref 0 -> 1 (stage 6 rewrote it: `mem => $g->{mem}` and
+# `$g->{mem} = ...` are one hash-consed Subscript, read and place -- stage 7's through-ref
+# class); 43 fell, 84 new (none with violations), 90 gone (WireUpgrade, is_placed, is_memory, ...).
+# chalk at 5284360b
 chalk	@Chalk/Bootstrap/BNF/Target/C:main::__PROGRAM__	
 chalk	@Chalk/Bootstrap/BNF/Target/Perl:main::__PROGRAM__	
 chalk	@Chalk/Bootstrap/BNF/Target/XS/AST/CompositeNode:main::__PROGRAM__	
@@ -59,7 +65,7 @@ chalk	@Chalk/Bootstrap/Terminal:main::__PROGRAM__
 chalk	@Chalk/Grammar/BNF/Actions:main::__PROGRAM__	
 chalk	@Chalk/Grammar/BNF/Generated:main::__PROGRAM__	
 chalk	@Chalk/Grammar/BNF:main::__PROGRAM__	
-chalk	@Chalk/Grammar/Perl/BuiltinTable:main::__PROGRAM__	memory-order-disagrees=1
+chalk	@Chalk/Grammar/Perl/BuiltinTable:main::__PROGRAM__	
 chalk	@Chalk/Grammar/Perl/KeywordTable:main::__PROGRAM__	
 chalk	@Chalk/Grammar/Perl/PrecedenceTable:main::__PROGRAM__	
 chalk	@Chalk/Grammar/Perl/TypeLibrary:main::__PROGRAM__	
@@ -188,7 +194,7 @@ chalk	@Chalk/IR/Schedule:main::__PROGRAM__
 chalk	@Chalk/IR/Scheduler/EagerPinning:main::__PROGRAM__	
 chalk	@Chalk/IR/Serialize/JSON:main::__PROGRAM__	
 chalk	@Chalk/IR/Serialize/WireCheck:main::__PROGRAM__	
-chalk	@Chalk/IR/Serialize/WireUpgrade:main::__PROGRAM__	
+chalk	@Chalk/IR/Serialize/WireInvariant:main::__PROGRAM__	
 chalk	@Chalk/IR/SubInfo:main::__PROGRAM__	
 chalk	@Chalk/IR/Target:main::__PROGRAM__	
 chalk	@Chalk/IR/Transform/BackwardInference:main::__PROGRAM__	
@@ -412,7 +418,7 @@ chalk	@Chalk::Bootstrap::Earley::_make_complete_context
 chalk	@Chalk::Bootstrap::Earley::_make_scan_context	
 chalk	@Chalk::Bootstrap::Earley::_predict	
 chalk	@Chalk::Bootstrap::Earley::_queue_late	phi-arity:eval-join=1
-chalk	@Chalk::Bootstrap::Earley::_run_parse	memory-order-disagrees=1,phi-arity:eval-join=3
+chalk	@Chalk::Bootstrap::Earley::_run_parse	phi-arity:eval-join=3
 chalk	@Chalk::Bootstrap::Earley::_run_parse::__ANON__:648:65	
 chalk	@Chalk::Bootstrap::Earley::_scan	phi-arity:eval-join=1
 chalk	@Chalk::Bootstrap::Earley::_symbol_after_dot_for	
@@ -439,7 +445,7 @@ chalk	@Chalk::Bootstrap::LR0DFA::__DEFAULT_8
 chalk	@Chalk::Bootstrap::LR0DFA::_build_dfa_states	
 chalk	@Chalk::Bootstrap::LR0DFA::_closure	
 chalk	@Chalk::Bootstrap::LR0DFA::_compute_nullable_set	
-chalk	@Chalk::Bootstrap::LR0DFA::_compute_prediction_closure	memory-order-disagrees=3
+chalk	@Chalk::Bootstrap::LR0DFA::_compute_prediction_closure	
 chalk	@Chalk::Bootstrap::LR0DFA::_is_nullable_symbol	
 chalk	@Chalk::Bootstrap::LR0DFA::_register_state	
 chalk	@Chalk::Bootstrap::LR0DFA::build	
@@ -451,7 +457,7 @@ chalk	@Chalk::Bootstrap::LR0DFA::rule_table	read-unversioned:field=1
 chalk	@Chalk::Bootstrap::LR0DFA::state	
 chalk	@Chalk::Bootstrap::LR0DFA::state_count	read-unversioned:field=1
 chalk	@Chalk::Bootstrap::LR0DFA::states	
-chalk	@Chalk::Bootstrap::Optimizer::DCE::_mark_reachable	memory-order-disagrees=1
+chalk	@Chalk::Bootstrap::Optimizer::DCE::_mark_reachable	
 chalk	@Chalk::Bootstrap::Optimizer::DCE::name	
 chalk	@Chalk::Bootstrap::Optimizer::DCE::run	
 chalk	@Chalk::Bootstrap::Optimizer::DCE::scope	
@@ -475,11 +481,11 @@ chalk	@Chalk::Bootstrap::Optimizer::StructPromotion::_find_class_decl
 chalk	@Chalk::Bootstrap::Optimizer::StructPromotion::_infer_field_type	
 chalk	@Chalk::Bootstrap::Optimizer::StructPromotion::_mark_integer_context	
 chalk	@Chalk::Bootstrap::Optimizer::StructPromotion::_rebuild_constructor	
-chalk	@Chalk::Bootstrap::Optimizer::StructPromotion::_rewrite_method_body	memory-order-disagrees=2
+chalk	@Chalk::Bootstrap::Optimizer::StructPromotion::_rewrite_method_body	
 chalk	@Chalk::Bootstrap::Optimizer::StructPromotion::_rewrite_node	
 chalk	@Chalk::Bootstrap::Optimizer::StructPromotion::_run_legacy	
 chalk	@Chalk::Bootstrap::Optimizer::StructPromotion::_run_mop	
-chalk	@Chalk::Bootstrap::Optimizer::StructPromotion::_walk_stmt	memory-order-disagrees=1
+chalk	@Chalk::Bootstrap::Optimizer::StructPromotion::_walk_stmt	
 chalk	@Chalk::Bootstrap::Optimizer::StructPromotion::analyze	
 chalk	@Chalk::Bootstrap::Optimizer::StructPromotion::name	
 chalk	@Chalk::Bootstrap::Optimizer::StructPromotion::rewrite	
@@ -520,7 +526,7 @@ chalk	@Chalk::Bootstrap::Perl::Actions::BinaryExpression::__ANON__:183:4	read-un
 chalk	@Chalk::Bootstrap::Perl::Actions::BinaryExpression::__ANON__:223:20	
 chalk	@Chalk::Bootstrap::Perl::Actions::BinaryOp	
 chalk	@Chalk::Bootstrap::Perl::Actions::BinaryOp::__ANON__:223:5	
-chalk	@Chalk::Bootstrap::Perl::Actions::Block	memory-order-disagrees=1
+chalk	@Chalk::Bootstrap::Perl::Actions::Block	
 chalk	@Chalk::Bootstrap::Perl::Actions::Block::__ANON__:195:5	
 chalk	@Chalk::Bootstrap::Perl::Actions::Block::__ANON__:292:30	
 chalk	@Chalk::Bootstrap::Perl::Actions::CallExpression	read-unversioned:my-aggregate=1
@@ -530,7 +536,7 @@ chalk	@Chalk::Bootstrap::Perl::Actions::CallExpression::__ANON__:274:28
 chalk	@Chalk::Bootstrap::Perl::Actions::CircumfixDeref	
 chalk	@Chalk::Bootstrap::Perl::Actions::CircumfixDeref::__ANON__:195:8	
 chalk	@Chalk::Bootstrap::Perl::Actions::CircumfixDeref::__ANON__:223:12	
-chalk	@Chalk::Bootstrap::Perl::Actions::ClassBlock	memory-order-disagrees=1
+chalk	@Chalk::Bootstrap::Perl::Actions::ClassBlock	
 chalk	@Chalk::Bootstrap::Perl::Actions::ClassBlock::__ANON__:183:4	read-unversioned:my-aggregate=1
 chalk	@Chalk::Bootstrap::Perl::Actions::ClassBlock::__ANON__:259:88	
 chalk	@Chalk::Bootstrap::Perl::Actions::ClassBlock::__ANON__:274:15	
@@ -687,13 +693,13 @@ chalk	@Chalk::Bootstrap::Perl::Actions::_dq_escape
 chalk	@Chalk::Bootstrap::Perl::Actions::_dq_one_part	
 chalk	@Chalk::Bootstrap::Perl::Actions::_dq_one_part::__ANON__:223:22	
 chalk	@Chalk::Bootstrap::Perl::Actions::_dq_one_part::__ANON__:228:5	
-chalk	@Chalk::Bootstrap::Perl::Actions::_dq_parts	memory-order-disagrees=1
+chalk	@Chalk::Bootstrap::Perl::Actions::_dq_parts	
 chalk	@Chalk::Bootstrap::Perl::Actions::_dq_parts::__ANON__:1838:10	
 chalk	@Chalk::Bootstrap::Perl::Actions::_dq_parts::__ANON__:1841:12	
 chalk	@Chalk::Bootstrap::Perl::Actions::_dq_parts::__ANON__:1844:15	
 chalk	@Chalk::Bootstrap::Perl::Actions::_dq_value	
 chalk	@Chalk::Bootstrap::Perl::Actions::_dq_value::__ANON__:223:4	
-chalk	@Chalk::Bootstrap::Perl::Actions::_finalize_body_graph	memory-order-disagrees=1,read-unversioned:my-aggregate=1
+chalk	@Chalk::Bootstrap::Perl::Actions::_finalize_body_graph	read-unversioned:my-aggregate=1
 chalk	@Chalk::Bootstrap::Perl::Actions::_finalize_body_graph::__ANON__:1179:48	
 chalk	@Chalk::Bootstrap::Perl::Actions::_find_constant::__ANON__:183:3	read-unversioned:my-aggregate=1
 chalk	@Chalk::Bootstrap::Perl::Actions::_list_declaration	
@@ -716,7 +722,7 @@ chalk	@Chalk::Bootstrap::Perl::Target::C::__DEFAULT_27
 chalk	@Chalk::Bootstrap::Perl::Target::C::_analyze_class	
 chalk	@Chalk::Bootstrap::Perl::Target::C::_class_slug_for	
 chalk	@Chalk::Bootstrap::Perl::Target::C::_emit_anon_sub_expr	phi-arity:eval-join=1
-chalk	@Chalk::Bootstrap::Perl::Target::C::_emit_builtin_call	memory-order-disagrees=1,read-unversioned:through-ref=1
+chalk	@Chalk::Bootstrap::Perl::Target::C::_emit_builtin_call	read-unversioned:through-ref=1
 chalk	@Chalk::Bootstrap::Perl::Target::C::_emit_c_block_close_tail	
 chalk	@Chalk::Bootstrap::Perl::Target::C::_emit_c_block_open_head	
 chalk	@Chalk::Bootstrap::Perl::Target::C::_emit_c_catch_head	
@@ -780,7 +786,7 @@ chalk	@Chalk::Bootstrap::Perl::Target::EmitHelpers::_emit_const_expr
 chalk	@Chalk::Bootstrap::Perl::Target::EmitHelpers::_emit_die_call	
 chalk	@Chalk::Bootstrap::Perl::Target::EmitHelpers::_emit_expr	
 chalk	@Chalk::Bootstrap::Perl::Target::EmitHelpers::_emit_field_access_expr	
-chalk	@Chalk::Bootstrap::Perl::Target::EmitHelpers::_emit_hash_ref_expr	memory-order-disagrees=1
+chalk	@Chalk::Bootstrap::Perl::Target::EmitHelpers::_emit_hash_ref_expr	
 chalk	@Chalk::Bootstrap::Perl::Target::EmitHelpers::_emit_interp_expr	
 chalk	@Chalk::Bootstrap::Perl::Target::EmitHelpers::_emit_keys_list	
 chalk	@Chalk::Bootstrap::Perl::Target::EmitHelpers::_emit_loop_jump	
@@ -1231,7 +1237,7 @@ chalk	@Chalk::IR::Analysis::_class_of_self_chains::__ANON__:1764:5
 chalk	@Chalk::IR::Analysis::_classes_in_parent_order	
 chalk	@Chalk::IR::Analysis::_classes_in_parent_order::__ANON__:4101:6	
 chalk	@Chalk::IR::Analysis::_coercion_exists	
-chalk	@Chalk::IR::Analysis::_control_chain_nodes	memory-order-disagrees=1,read-unversioned:my-aggregate=1
+chalk	@Chalk::IR::Analysis::_control_chain_nodes	read-unversioned:my-aggregate=1
 chalk	@Chalk::IR::Analysis::_ctor_arg_reprs	read-unversioned:my-aggregate=1
 chalk	@Chalk::IR::Analysis::_element_repr	read-unversioned:through-ref=1
 chalk	@Chalk::IR::Analysis::_element_store_values	
@@ -1239,7 +1245,7 @@ chalk	@Chalk::IR::Analysis::_element_stores
 chalk	@Chalk::IR::Analysis::_element_stores::__SORTCMP__:1	
 chalk	@Chalk::IR::Analysis::_handed_to_a_call	
 chalk	@Chalk::IR::Analysis::_has_element_store	
-chalk	@Chalk::IR::Analysis::_infer_field_types_from_stores	memory-order-disagrees=1
+chalk	@Chalk::IR::Analysis::_infer_field_types_from_stores	
 chalk	@Chalk::IR::Analysis::_infer_param_field_types	
 chalk	@Chalk::IR::Analysis::_insert_str_coercions	
 chalk	@Chalk::IR::Analysis::_is_narrowed	
@@ -1249,7 +1255,7 @@ chalk	@Chalk::IR::Analysis::_iv_const
 chalk	@Chalk::IR::Analysis::_iv_corner	
 chalk	@Chalk::IR::Analysis::_iv_ctl_in_body	
 chalk	@Chalk::IR::Analysis::_iv_eq	
-chalk	@Chalk::IR::Analysis::_iv_guard	memory-order-disagrees=1
+chalk	@Chalk::IR::Analysis::_iv_guard	
 chalk	@Chalk::IR::Analysis::_iv_in_body	
 chalk	@Chalk::IR::Analysis::_iv_loop_phi	
 chalk	@Chalk::IR::Analysis::_iv_modelled	
@@ -1266,7 +1272,7 @@ chalk	@Chalk::IR::Analysis::_narrow_unknown_coercions
 chalk	@Chalk::IR::Analysis::_propagate_computed_reprs	
 chalk	@Chalk::IR::Analysis::_replay_classes	read-unversioned:through-ref=1
 chalk	@Chalk::IR::Analysis::_required_operand_repr	
-chalk	@Chalk::IR::Analysis::_resolve_aggregate	memory-order-disagrees=1
+chalk	@Chalk::IR::Analysis::_resolve_aggregate	
 chalk	@Chalk::IR::Analysis::_resolve_direct_calls	
 chalk	@Chalk::IR::Analysis::_seed_and_propagate_reprs	
 chalk	@Chalk::IR::Analysis::_seed_direct_call_arg_reprs	
@@ -1275,7 +1281,7 @@ chalk	@Chalk::IR::Analysis::_seed_direct_call_arg_reprs::__SORTCMP__:1
 chalk	@Chalk::IR::Analysis::_stamp_field_access_reprs	
 chalk	@Chalk::IR::Analysis::_stamp_is_absent	
 chalk	@Chalk::IR::Analysis::_stamp_list_assign_targets	read-unversioned:through-ref=1
-chalk	@Chalk::IR::Analysis::_stamp_method_call_reprs	memory-order-disagrees=2
+chalk	@Chalk::IR::Analysis::_stamp_method_call_reprs	
 chalk	@Chalk::IR::Analysis::_stamp_method_call_reprs::__SORTCMP__:1	
 chalk	@Chalk::IR::Analysis::_static_miss	
 chalk	@Chalk::IR::Analysis::_the_class_with	
@@ -1333,7 +1339,7 @@ chalk	@Chalk::IR::Graph::__DEFAULT_2
 chalk	@Chalk::IR::Graph::__DEFAULT_3	
 chalk	@Chalk::IR::Graph::__DEFAULT_5	
 chalk	@Chalk::IR::Graph::_seed	
-chalk	@Chalk::IR::Graph::component	memory-order-disagrees=2,read-unversioned:my-aggregate=1
+chalk	@Chalk::IR::Graph::component	read-unversioned:my-aggregate=1
 chalk	@Chalk::IR::Graph::members	
 chalk	@Chalk::IR::Graph::merge	
 chalk	@Chalk::IR::Graph::mop	read-unversioned:field=1
@@ -1343,7 +1349,7 @@ chalk	@Chalk::IR::Graph::nodes::__ANON__:186:7
 chalk	@Chalk::IR::Graph::nodes::__ANON__:271:57	read-unversioned:my-aggregate=1
 chalk	@Chalk::IR::Graph::nodes::__SORTCMP__:1	
 chalk	@Chalk::IR::Graph::own_nodes	
-chalk	@Chalk::IR::Graph::program_nodes	memory-order-disagrees=2,read-unversioned:my-aggregate=1
+chalk	@Chalk::IR::Graph::program_nodes	read-unversioned:my-aggregate=1
 chalk	@Chalk::IR::Graph::returns	
 chalk	@Chalk::IR::Graph::schedule	read-unversioned:field=1
 chalk	@Chalk::IR::Graph::set_mop	
@@ -1407,8 +1413,6 @@ chalk	@Chalk::IR::Node::Assign::content_hash
 chalk	@Chalk::IR::Node::Assign::is_args_list_assign	
 chalk	@Chalk::IR::Node::Assign::is_fixed	
 chalk	@Chalk::IR::Node::Assign::is_memory_version	
-chalk	@Chalk::IR::Node::Assign::is_placed	memory-order-disagrees=2
-chalk	@Chalk::IR::Node::Assign::is_placed::__ANON__:52:40	
 chalk	@Chalk::IR::Node::Assign::local	read-unversioned:field=1
 chalk	@Chalk::IR::Node::Assign::op_str	
 chalk	@Chalk::IR::Node::Assign::operation	
@@ -1851,7 +1855,6 @@ chalk	@Chalk::IR::Node::Parameter::sigil	read-unversioned:field=1
 chalk	@Chalk::IR::Node::Phi::__DEFAULT_10	
 chalk	@Chalk::IR::Node::Phi::__DEFAULT_11	
 chalk	@Chalk::IR::Node::Phi::content_hash	
-chalk	@Chalk::IR::Node::Phi::is_memory	
 chalk	@Chalk::IR::Node::Phi::is_memory_version	
 chalk	@Chalk::IR::Node::Phi::memory	read-unversioned:field=1
 chalk	@Chalk::IR::Node::Phi::operation	
@@ -1905,14 +1908,14 @@ chalk	@Chalk::IR::Node::Ref::__DEFAULT_13
 chalk	@Chalk::IR::Node::Ref::_guards	
 chalk	@Chalk::IR::Node::Ref::_nonnegative_constant	
 chalk	@Chalk::IR::Node::Ref::_reshaped	read-unversioned:my-aggregate=1
-chalk	@Chalk::IR::Node::Ref::_reshaped::__ANON__:203:37	
-chalk	@Chalk::IR::Node::Ref::_reshaped::__ANON__:203:38	
-chalk	@Chalk::IR::Node::Ref::_reshaped::__ANON__:208:51	
-chalk	@Chalk::IR::Node::Ref::_reshaped::__ANON__:208:52	
-chalk	@Chalk::IR::Node::Ref::_reshaped::__ANON__:208:53	
-chalk	@Chalk::IR::Node::Ref::_reshaped::__ANON__:218:82	
-chalk	@Chalk::IR::Node::Ref::_reshaped::__ANON__:218:84	
-chalk	@Chalk::IR::Node::Ref::_reshaped::__ANON__:218:85	
+chalk	@Chalk::IR::Node::Ref::_reshaped::__ANON__:204:37	
+chalk	@Chalk::IR::Node::Ref::_reshaped::__ANON__:204:38	
+chalk	@Chalk::IR::Node::Ref::_reshaped::__ANON__:209:51	
+chalk	@Chalk::IR::Node::Ref::_reshaped::__ANON__:209:52	
+chalk	@Chalk::IR::Node::Ref::_reshaped::__ANON__:209:53	
+chalk	@Chalk::IR::Node::Ref::_reshaped::__ANON__:219:82	
+chalk	@Chalk::IR::Node::Ref::_reshaped::__ANON__:219:84	
+chalk	@Chalk::IR::Node::Ref::_reshaped::__ANON__:219:85	
 chalk	@Chalk::IR::Node::Ref::content_hash	
 chalk	@Chalk::IR::Node::Ref::each	read-unversioned:field=1
 chalk	@Chalk::IR::Node::Ref::element_ref_unseen	
@@ -1980,7 +1983,7 @@ chalk	@Chalk::IR::Node::Region::goes_on
 chalk	@Chalk::IR::Node::Region::head	read-unversioned:field=1
 chalk	@Chalk::IR::Node::Region::operation	
 chalk	@Chalk::IR::Node::Region::out_regions	
-chalk	@Chalk::IR::Node::Region::reached_by	memory-order-disagrees=2
+chalk	@Chalk::IR::Node::Region::reached_by	
 chalk	@Chalk::IR::Node::Region::set_eval_entry	
 chalk	@Chalk::IR::Node::Region::set_eval_id	
 chalk	@Chalk::IR::Node::Region::set_eval_may_die	
@@ -2199,7 +2202,7 @@ chalk	@Chalk::IR::Program::id
 chalk	@Chalk::IR::Program::other_stmts	read-unversioned:field=1
 chalk	@Chalk::IR::Program::top_level_subs	read-unversioned:field=1
 chalk	@Chalk::IR::Program::use_decls	read-unversioned:field=1
-chalk	@Chalk::IR::ReferenceFlow::__ADJUST_0	memory-order-disagrees=2,read-unversioned:field=1
+chalk	@Chalk::IR::ReferenceFlow::__ADJUST_0	read-unversioned:field=1
 chalk	@Chalk::IR::ReferenceFlow::__ANON__::__ANON__:76:65	
 chalk	@Chalk::IR::ReferenceFlow::__DEFAULT_1	
 chalk	@Chalk::IR::ReferenceFlow::__DEFAULT_12	
@@ -2234,7 +2237,7 @@ chalk	@Chalk::IR::Serialize::JSON::_all_nodes_topo	read-unversioned:my-aggregate
 chalk	@Chalk::IR::Serialize::JSON::_all_nodes_topo::__ANON__:371:59	read-unversioned:through-ref=1
 chalk	@Chalk::IR::Serialize::JSON::_all_nodes_topo::__ANON__:388:61	
 chalk	@Chalk::IR::Serialize::JSON::_extract_fields	
-chalk	@Chalk::IR::Serialize::JSON::_reachable_methods	memory-order-disagrees=2
+chalk	@Chalk::IR::Serialize::JSON::_reachable_methods	
 chalk	@Chalk::IR::Serialize::JSON::_serialize_graph	
 chalk	@Chalk::IR::Serialize::JSON::_wire_nodes	
 chalk	@Chalk::IR::Serialize::JSON::is_lowerable_stamp	
@@ -2242,11 +2245,9 @@ chalk	@Chalk::IR::Serialize::JSON::to_json
 chalk	@Chalk::IR::Serialize::WireCheck::__DEFAULT_1	
 chalk	@Chalk::IR::Serialize::WireCheck::_all_nodes	
 chalk	@Chalk::IR::Serialize::WireCheck::_autovivifying_reads	
-chalk	@Chalk::IR::Serialize::WireCheck::_blesses_a_fresh_reference	
 chalk	@Chalk::IR::Serialize::WireCheck::_builtin_fact	
 chalk	@Chalk::IR::Serialize::WireCheck::_captured_arguments_written	
 chalk	@Chalk::IR::Serialize::WireCheck::_deps	
-chalk	@Chalk::IR::Serialize::WireCheck::_effect_before_first_use	memory-order-disagrees=4,read-unversioned:my-aggregate=1
 chalk	@Chalk::IR::Serialize::WireCheck::_f	
 chalk	@Chalk::IR::Serialize::WireCheck::_follows_memory	
 chalk	@Chalk::IR::Serialize::WireCheck::_gap	
@@ -2255,27 +2256,24 @@ chalk	@Chalk::IR::Serialize::WireCheck::_graph::__SORTCMP__:1
 chalk	@Chalk::IR::Serialize::WireCheck::_has_eval	
 chalk	@Chalk::IR::Serialize::WireCheck::_inert	
 chalk	@Chalk::IR::Serialize::WireCheck::_inputs	
-chalk	@Chalk::IR::Serialize::WireCheck::_is_a_stores_place	
 chalk	@Chalk::IR::Serialize::WireCheck::_is_bless	
 chalk	@Chalk::IR::Serialize::WireCheck::_is_sub_call	
-chalk	@Chalk::IR::Serialize::WireCheck::_locals_a_die_skips	memory-order-disagrees=1
+chalk	@Chalk::IR::Serialize::WireCheck::_locals_a_die_skips	
 chalk	@Chalk::IR::Serialize::WireCheck::_may_be_a_local	
 chalk	@Chalk::IR::Serialize::WireCheck::_pinned	
 chalk	@Chalk::IR::Serialize::WireCheck::_pkg_aggregate	
 chalk	@Chalk::IR::Serialize::WireCheck::_pkg_name	
-chalk	@Chalk::IR::Serialize::WireCheck::_place	
-chalk	@Chalk::IR::Serialize::WireCheck::_stores_in_a_dying_eval	memory-order-disagrees=1
+chalk	@Chalk::IR::Serialize::WireCheck::_stores_in_a_dying_eval	
 chalk	@Chalk::IR::Serialize::WireCheck::_unread_derefs	
 chalk	@Chalk::IR::Serialize::WireCheck::_written_pkg	
-chalk	@Chalk::IR::Serialize::WireUpgrade::_insert_memstart	
-chalk	@Chalk::IR::Serialize::WireUpgrade::_insert_memstart::__ANON__:132:8	
-chalk	@Chalk::IR::Serialize::WireUpgrade::_is_location	
-chalk	@Chalk::IR::Serialize::WireUpgrade::_is_record	read-unversioned:through-ref=1
-chalk	@Chalk::IR::Serialize::WireUpgrade::_memory_slot	
-chalk	@Chalk::IR::Serialize::WireUpgrade::_version_before	memory-order-disagrees=1
-chalk	@Chalk::IR::Serialize::WireUpgrade::_was_a_version	
-chalk	@Chalk::IR::Serialize::WireUpgrade::upgrade	
-chalk	@Chalk::IR::Serialize::WireUpgrade::upgrade_graph	
+chalk	@Chalk::IR::Serialize::WireInvariant::__DEFAULT_0	
+chalk	@Chalk::IR::Serialize::WireInvariant::check	
+chalk	@Chalk::IR::Serialize::WireInvariant::check::__ANON__:43:29	
+chalk	@Chalk::IR::Serialize::WireInvariant::check::__ANON__:44:31	
+chalk	@Chalk::IR::Serialize::WireInvariant::check::__ANON__:45:33	
+chalk	@Chalk::IR::Serialize::WireInvariant::check::__ANON__:46:35	
+chalk	@Chalk::IR::Serialize::WireInvariant::check::__ANON__:82:123	
+chalk	@Chalk::IR::Serialize::WireInvariant::check::__SORTCMP__:1	
 chalk	@Chalk::IR::SubInfo::__DEFAULT_1	
 chalk	@Chalk::IR::SubInfo::__DEFAULT_2	
 chalk	@Chalk::IR::SubInfo::__DEFAULT_3	
@@ -2292,7 +2290,7 @@ chalk	@Chalk::IR::SubInfo::scope	read-unversioned:field=1
 chalk	@Chalk::IR::Target::lower	
 chalk	@Chalk::IR::Transform::BackwardInference::_declared_slot_type	
 chalk	@Chalk::IR::Transform::BackwardInference::_is_backward_inferable	
-chalk	@Chalk::IR::Transform::BackwardInference::_thread_through_coerce	memory-order-disagrees=1
+chalk	@Chalk::IR::Transform::BackwardInference::_thread_through_coerce	
 chalk	@Chalk::IR::Transform::BackwardInference::run	
 chalk	@Chalk::IR::Transform::TypeInference::__DEFAULT_0	
 chalk	@Chalk::IR::Transform::TypeInference::_count_unknown	
@@ -2471,29 +2469,29 @@ chalk	@Chalk::MOP::was_declared
 chalk	@Chalk::Regex::Graph::__ANON__::__ANON__:117:8	
 chalk	@Chalk::Regex::Graph::__ANON__::__ANON__:120:8	
 chalk	@Chalk::Regex::Graph::__ANON__::__ANON__:121:10	
-chalk	@Chalk::Regex::Graph::__ANON__::__ANON__:452:8	
-chalk	@Chalk::Regex::Graph::__ANON__::__ANON__:506:5	
-chalk	@Chalk::Regex::Graph::__ANON__::__ANON__:507:6	
-chalk	@Chalk::Regex::Graph::__ANON__::__ANON__:511:12	
-chalk	@Chalk::Regex::Graph::__ANON__::__ANON__:512:9	
-chalk	@Chalk::Regex::Graph::__ANON__::__ANON__:513:11	
-chalk	@Chalk::Regex::Graph::__ANON__::__ANON__:516:16	
-chalk	@Chalk::Regex::Graph::__ANON__::__ANON__:527:14	
-chalk	@Chalk::Regex::Graph::__ANON__::__ANON__:529:23	
-chalk	@Chalk::Regex::Graph::__ANON__::__ANON__:532:28	
-chalk	@Chalk::Regex::Graph::__ANON__::__ANON__:533:4	
-chalk	@Chalk::Regex::Graph::__ANON__::__ANON__:534:6	
-chalk	@Chalk::Regex::Graph::__ANON__::__ANON__:536:12	
-chalk	@Chalk::Regex::Graph::__ANON__::__ANON__:620:5	
-chalk	@Chalk::Regex::Graph::__ANON__::__ANON__:621:10	
-chalk	@Chalk::Regex::Graph::__ANON__::__ANON__:722:9	
-chalk	@Chalk::Regex::Graph::__ANON__::__ANON__:725:6	
-chalk	@Chalk::Regex::Graph::__ANON__::__ANON__:725:9	
-chalk	@Chalk::Regex::Graph::__ANON__::__ANON__:727:11	
-chalk	@Chalk::Regex::Graph::__ANON__::__ANON__:729:9	
-chalk	@Chalk::Regex::Graph::__ANON__::__ANON__:733:12	
-chalk	@Chalk::Regex::Graph::__ANON__::__ANON__:760:5	
-chalk	@Chalk::Regex::Graph::__ANON__::__ANON__:781:7	
+chalk	@Chalk::Regex::Graph::__ANON__::__ANON__:481:8	
+chalk	@Chalk::Regex::Graph::__ANON__::__ANON__:535:5	
+chalk	@Chalk::Regex::Graph::__ANON__::__ANON__:536:6	
+chalk	@Chalk::Regex::Graph::__ANON__::__ANON__:540:12	
+chalk	@Chalk::Regex::Graph::__ANON__::__ANON__:541:9	
+chalk	@Chalk::Regex::Graph::__ANON__::__ANON__:542:11	
+chalk	@Chalk::Regex::Graph::__ANON__::__ANON__:545:16	
+chalk	@Chalk::Regex::Graph::__ANON__::__ANON__:556:14	
+chalk	@Chalk::Regex::Graph::__ANON__::__ANON__:558:23	
+chalk	@Chalk::Regex::Graph::__ANON__::__ANON__:561:28	
+chalk	@Chalk::Regex::Graph::__ANON__::__ANON__:562:4	
+chalk	@Chalk::Regex::Graph::__ANON__::__ANON__:563:6	
+chalk	@Chalk::Regex::Graph::__ANON__::__ANON__:565:12	
+chalk	@Chalk::Regex::Graph::__ANON__::__ANON__:649:5	
+chalk	@Chalk::Regex::Graph::__ANON__::__ANON__:650:10	
+chalk	@Chalk::Regex::Graph::__ANON__::__ANON__:751:9	
+chalk	@Chalk::Regex::Graph::__ANON__::__ANON__:754:6	
+chalk	@Chalk::Regex::Graph::__ANON__::__ANON__:754:9	
+chalk	@Chalk::Regex::Graph::__ANON__::__ANON__:756:11	
+chalk	@Chalk::Regex::Graph::__ANON__::__ANON__:758:9	
+chalk	@Chalk::Regex::Graph::__ANON__::__ANON__:762:12	
+chalk	@Chalk::Regex::Graph::__ANON__::__ANON__:789:5	
+chalk	@Chalk::Regex::Graph::__ANON__::__ANON__:810:7	
 chalk	@Chalk::Regex::Graph::_all_literal	
 chalk	@Chalk::Regex::Graph::_any_ascii	
 chalk	@Chalk::Regex::Graph::_has_group	
@@ -2503,28 +2501,28 @@ chalk	@Chalk::Regex::Graph::accept
 chalk	@Chalk::Regex::Graph::add	
 chalk	@Chalk::Regex::Graph::and_	
 chalk	@Chalk::Regex::Graph::ascii_only	
-chalk	@Chalk::Regex::Graph::ascii_only::__ANON__:800:4	
-chalk	@Chalk::Regex::Graph::ascii_only::__ANON__:801:5	
-chalk	@Chalk::Regex::Graph::ascii_only::__ANON__:804:10	
+chalk	@Chalk::Regex::Graph::ascii_only::__ANON__:829:4	
+chalk	@Chalk::Regex::Graph::ascii_only::__ANON__:830:5	
+chalk	@Chalk::Regex::Graph::ascii_only::__ANON__:833:10	
 chalk	@Chalk::Regex::Graph::assertion	
-chalk	@Chalk::Regex::Graph::assertion::__ANON__:769:9	
-chalk	@Chalk::Regex::Graph::assertion::__ANON__:780:29	
-chalk	@Chalk::Regex::Graph::assertion::__ANON__:781:30	
+chalk	@Chalk::Regex::Graph::assertion::__ANON__:798:9	
+chalk	@Chalk::Regex::Graph::assertion::__ANON__:809:29	
+chalk	@Chalk::Regex::Graph::assertion::__ANON__:810:30	
 chalk	@Chalk::Regex::Graph::attempt	
-chalk	@Chalk::Regex::Graph::attempt::__ANON__:617:22	
-chalk	@Chalk::Regex::Graph::attempt::__ANON__:619:23	
-chalk	@Chalk::Regex::Graph::attempt::__ANON__:626:25	
-chalk	@Chalk::Regex::Graph::attempt::__ANON__:626:26	
+chalk	@Chalk::Regex::Graph::attempt::__ANON__:646:22	
+chalk	@Chalk::Regex::Graph::attempt::__ANON__:648:23	
+chalk	@Chalk::Regex::Graph::attempt::__ANON__:655:25	
+chalk	@Chalk::Regex::Graph::attempt::__ANON__:655:26	
 chalk	@Chalk::Regex::Graph::backtrack	
-chalk	@Chalk::Regex::Graph::backtrack::__ANON__:716:7	
-chalk	@Chalk::Regex::Graph::backtrack::__ANON__:718:8	
-chalk	@Chalk::Regex::Graph::backtrack::__ANON__:738:13	
+chalk	@Chalk::Regex::Graph::backtrack::__ANON__:745:7	
+chalk	@Chalk::Regex::Graph::backtrack::__ANON__:747:8	
+chalk	@Chalk::Regex::Graph::backtrack::__ANON__:767:13	
 chalk	@Chalk::Regex::Graph::build_split	
-chalk	@Chalk::Regex::Graph::build_split::__ANON__:502:5	
-chalk	@Chalk::Regex::Graph::build_split::__ANON__:504:9	
+chalk	@Chalk::Regex::Graph::build_split::__ANON__:531:5	
+chalk	@Chalk::Regex::Graph::build_split::__ANON__:533:9	
 chalk	@Chalk::Regex::Graph::build_subst	
-chalk	@Chalk::Regex::Graph::build_subst::__ANON__:450:15	
-chalk	@Chalk::Regex::Graph::build_subst::__ANON__:451:16	
+chalk	@Chalk::Regex::Graph::build_subst::__ANON__:479:15	
+chalk	@Chalk::Regex::Graph::build_subst::__ANON__:480:16	
 chalk	@Chalk::Regex::Graph::cat	
 chalk	@Chalk::Regex::Graph::char	
 chalk	@Chalk::Regex::Graph::depth	
@@ -2537,7 +2535,7 @@ chalk	@Chalk::Regex::Graph::in_set
 chalk	@Chalk::Regex::Graph::ins	
 chalk	@Chalk::Regex::Graph::int_	
 chalk	@Chalk::Regex::Graph::is_word	
-chalk	@Chalk::Regex::Graph::is_word::__ANON__:760:10	
+chalk	@Chalk::Regex::Graph::is_word::__ANON__:789:10	
 chalk	@Chalk::Regex::Graph::lt_	
 chalk	@Chalk::Regex::Graph::matcher	
 chalk	@Chalk::Regex::Graph::next_	
@@ -2547,44 +2545,46 @@ chalk	@Chalk::Regex::Graph::op2
 chalk	@Chalk::Regex::Graph::or_	
 chalk	@Chalk::Regex::Graph::pop_	
 chalk	@Chalk::Regex::Graph::prune	
-chalk	@Chalk::Regex::Graph::prune::__ANON__:817:6	
-chalk	@Chalk::Regex::Graph::prune::__ANON__:833:41	
+chalk	@Chalk::Regex::Graph::prune::__ANON__:846:6	
+chalk	@Chalk::Regex::Graph::prune::__ANON__:862:41	
 chalk	@Chalk::Regex::Graph::push_	
 chalk	@Chalk::Regex::Graph::replacement	
-chalk	@Chalk::Regex::Graph::replacement::__ANON__:552:10	
+chalk	@Chalk::Regex::Graph::replacement::__ANON__:581:10	
+chalk	@Chalk::Regex::Graph::ret	
 chalk	@Chalk::Regex::Graph::search	
-chalk	@Chalk::Regex::Graph::search::__ANON__:602:20	
-chalk	@Chalk::Regex::Graph::search::__ANON__:603:21	
+chalk	@Chalk::Regex::Graph::search::__ANON__:631:20	
+chalk	@Chalk::Regex::Graph::search::__ANON__:632:21	
 chalk	@Chalk::Regex::Graph::set	
+chalk	@Chalk::Regex::Graph::start	
 chalk	@Chalk::Regex::Graph::step	
-chalk	@Chalk::Regex::Graph::step::__ANON__:639:16	
-chalk	@Chalk::Regex::Graph::step::__ANON__:639:17	
-chalk	@Chalk::Regex::Graph::step::__ANON__:648:36	
-chalk	@Chalk::Regex::Graph::step::__ANON__:648:37	
-chalk	@Chalk::Regex::Graph::step::__ANON__:657:60	
-chalk	@Chalk::Regex::Graph::step::__ANON__:657:61	
-chalk	@Chalk::Regex::Graph::step::__ANON__:658:64	
-chalk	@Chalk::Regex::Graph::step::__ANON__:658:65	
-chalk	@Chalk::Regex::Graph::step::__ANON__:665:82	
-chalk	@Chalk::Regex::Graph::step::__ANON__:666:83	
-chalk	@Chalk::Regex::Graph::step::__ANON__:679:97	
-chalk	@Chalk::Regex::Graph::step::__ANON__:680:98	
-chalk	@Chalk::Regex::Graph::step::__ANON__:687:114	
-chalk	@Chalk::Regex::Graph::step::__ANON__:687:115	
-chalk	@Chalk::Regex::Graph::stmt	
+chalk	@Chalk::Regex::Graph::step::__ANON__:668:16	
+chalk	@Chalk::Regex::Graph::step::__ANON__:668:17	
+chalk	@Chalk::Regex::Graph::step::__ANON__:677:36	
+chalk	@Chalk::Regex::Graph::step::__ANON__:677:37	
+chalk	@Chalk::Regex::Graph::step::__ANON__:686:60	
+chalk	@Chalk::Regex::Graph::step::__ANON__:686:61	
+chalk	@Chalk::Regex::Graph::step::__ANON__:687:64	
+chalk	@Chalk::Regex::Graph::step::__ANON__:687:65	
+chalk	@Chalk::Regex::Graph::step::__ANON__:694:82	
+chalk	@Chalk::Regex::Graph::step::__ANON__:695:83	
+chalk	@Chalk::Regex::Graph::step::__ANON__:708:97	
+chalk	@Chalk::Regex::Graph::step::__ANON__:709:98	
+chalk	@Chalk::Regex::Graph::step::__ANON__:716:114	
+chalk	@Chalk::Regex::Graph::step::__ANON__:716:115	
+chalk	@Chalk::Regex::Graph::stmt	read-unversioned:through-ref=1
 chalk	@Chalk::Regex::Graph::str_	
 chalk	@Chalk::Regex::Graph::sub_	
 chalk	@Chalk::Regex::Graph::switch_	
-chalk	@Chalk::Regex::Graph::switch_::__ANON__:362:15	
-chalk	@Chalk::Regex::Graph::switch_::__ANON__:362:16	
+chalk	@Chalk::Regex::Graph::switch_::__ANON__:391:15	
+chalk	@Chalk::Regex::Graph::switch_::__ANON__:391:16	
 chalk	@Chalk::Regex::Graph::text	
 chalk	@Chalk::Regex::Graph::translit	
-chalk	@Chalk::Regex::Graph::translit::__ANON__:113:54	
-chalk	@Chalk::Regex::Graph::translit::__ANON__:114:55	
+chalk	@Chalk::Regex::Graph::translit::__ANON__:113:53	
+chalk	@Chalk::Regex::Graph::translit::__ANON__:114:54	
 chalk	@Chalk::Regex::Graph::undef_	
 chalk	@Chalk::Regex::Graph::while_	
-chalk	@Chalk::Regex::Parse::_alt	memory-order-disagrees=2
-chalk	@Chalk::Regex::Parse::_atom	memory-order-disagrees=2
+chalk	@Chalk::Regex::Parse::_alt	
+chalk	@Chalk::Regex::Parse::_atom	
 chalk	@Chalk::Regex::Parse::_close	
 chalk	@Chalk::Regex::Parse::_escape	
 chalk	@Chalk::Regex::Parse::_fold	
@@ -2592,7 +2592,7 @@ chalk	@Chalk::Regex::Parse::_gap
 chalk	@Chalk::Regex::Parse::_lit	
 chalk	@Chalk::Regex::Parse::_peek	
 chalk	@Chalk::Regex::Parse::_quant	
-chalk	@Chalk::Regex::Parse::_seq	memory-order-disagrees=6
+chalk	@Chalk::Regex::Parse::_seq	
 chalk	@Chalk::Regex::Parse::parse	
 chalk	@Chalk::Regex::Pattern::escape_byte	
 chalk	@Chalk::Regex::Pattern::without_inert_u	
@@ -2623,7 +2623,7 @@ chalk	@Chalk::Scheduler::EagerPinning::TryCatch::catch_stmts	read-unversioned:fi
 chalk	@Chalk::Scheduler::EagerPinning::TryCatch::catch_var	read-unversioned:field=1
 chalk	@Chalk::Scheduler::EagerPinning::TryCatch::try_stmts	read-unversioned:field=1
 chalk	@Chalk::Scheduler::ScheduleMeta::node	read-unversioned:field=1
-chalk	@Chalk::Target::LLVM::Builder::Args::_collect_positional_arg_reads	memory-order-disagrees=2,read-unversioned:my-aggregate=2,read-unversioned:through-ref=2
+chalk	@Chalk::Target::LLVM::Builder::Args::_collect_positional_arg_reads	read-unversioned:my-aggregate=2,read-unversioned:through-ref=2
 chalk	@Chalk::Target::LLVM::Builder::Args::_is_args_array	
 chalk	@Chalk::Target::LLVM::Builder::Args::_may_write_topic	
 chalk	@Chalk::Target::LLVM::Builder::Args::_may_write_topic::__ANON__:25:13	
@@ -2633,7 +2633,7 @@ chalk	@Chalk::Target::LLVM::Builder::_argv_may_be
 chalk	@Chalk::Target::LLVM::Builder::_bit_inner	
 chalk	@Chalk::Target::LLVM::Builder::_bit_ops_of	
 chalk	@Chalk::Target::LLVM::Builder::_bit_readers	
-chalk	@Chalk::Target::LLVM::Builder::_bit_source_numified	memory-order-disagrees=1,read-unversioned:my-aggregate=1
+chalk	@Chalk::Target::LLVM::Builder::_bit_source_numified	read-unversioned:my-aggregate=1
 chalk	@Chalk::Target::LLVM::Builder::_bit_source_numified::__ANON__:1342:50	
 chalk	@Chalk::Target::LLVM::Builder::_bit_source_numified::__ANON__:1342:51	
 chalk	@Chalk::Target::LLVM::Builder::_cell_variable	
@@ -2647,12 +2647,12 @@ chalk	@Chalk::Target::LLVM::Builder::_fresh_arrays
 chalk	@Chalk::Target::LLVM::Builder::_glob_name	
 chalk	@Chalk::Target::LLVM::Builder::_glob_of	
 chalk	@Chalk::Target::LLVM::Builder::_hash_name	
-chalk	@Chalk::Target::LLVM::Builder::_head_aggregates	memory-order-disagrees=1,read-unversioned:my-aggregate=1
+chalk	@Chalk::Target::LLVM::Builder::_head_aggregates	read-unversioned:my-aggregate=1
 chalk	@Chalk::Target::LLVM::Builder::_is_feature_class	
 chalk	@Chalk::Target::LLVM::Builder::_is_list	phi-arity:eval-join=1
 chalk	@Chalk::Target::LLVM::Builder::_list_use	
 chalk	@Chalk::Target::LLVM::Builder::_loop_scope	
-chalk	@Chalk::Target::LLVM::Builder::_loop_test	memory-order-disagrees=1
+chalk	@Chalk::Target::LLVM::Builder::_loop_test	
 chalk	@Chalk::Target::LLVM::Builder::_made_in_scope	
 chalk	@Chalk::Target::LLVM::Builder::_needs_unmade_phi	
 chalk	@Chalk::Target::LLVM::Builder::_never_numified	read-unversioned:through-ref=1
@@ -2663,7 +2663,7 @@ chalk	@Chalk::Target::LLVM::Builder::_opens_it
 chalk	@Chalk::Target::LLVM::Builder::_own_array	
 chalk	@Chalk::Target::LLVM::Builder::_own_shared	
 chalk	@Chalk::Target::LLVM::Builder::_pattern_parts	
-chalk	@Chalk::Target::LLVM::Builder::_pattern_parts::__ANON__:411:8	
+chalk	@Chalk::Target::LLVM::Builder::_pattern_parts::__ANON__:409:8	
 chalk	@Chalk::Target::LLVM::Builder::_pkg_agg_name	
 chalk	@Chalk::Target::LLVM::Builder::_read_as_a_number	
 chalk	@Chalk::Target::LLVM::Builder::_refs_each_item	read-unversioned:through-ref=1
@@ -2674,13 +2674,13 @@ chalk	@Chalk::Target::LLVM::Builder::_rx_arm
 chalk	@Chalk::Target::LLVM::Builder::_scalar_ref_of	
 chalk	@Chalk::Target::LLVM::Builder::_self_made	
 chalk	@Chalk::Target::LLVM::Builder::_stood_already	
-chalk	@Chalk::Target::LLVM::Builder::_through_ref	memory-order-disagrees=1
+chalk	@Chalk::Target::LLVM::Builder::_through_ref	
 chalk	@Chalk::Target::LLVM::Builder::_use_counts	
 chalk	@Chalk::Target::LLVM::Builder::_uv_constant	
 chalk	@Chalk::Target::LLVM::Builder::_value_read	
 chalk	@Chalk::Target::LLVM::Builder::_value_users	
 chalk	@Chalk::Target::LLVM::Builder::_way_into_returned_list	
-chalk	@Chalk::Target::LLVM::Builder::_writes_args_in	memory-order-disagrees=1
+chalk	@Chalk::Target::LLVM::Builder::_writes_args_in	
 chalk	@Chalk::Target::LLVM::Builder::_written	
 chalk	@Chalk::Target::LLVM::Builder::_written::__ANON__:249:8	
 chalk	@Chalk::Target::LLVM::Builder::_written_off_memory	
@@ -2688,7 +2688,7 @@ chalk	@Chalk::Target::LLVM::Builder::_written_off_memory::__ANON__:235:8
 chalk	@Chalk::Target::LLVM::Builder::agg_home	
 chalk	@Chalk::Target::LLVM::Builder::agg_home_here	
 chalk	@Chalk::Target::LLVM::Builder::agg_made_here	
-chalk	@Chalk::Target::LLVM::Builder::agg_versions	memory-order-disagrees=2,read-unversioned:my-aggregate=1
+chalk	@Chalk::Target::LLVM::Builder::agg_versions	read-unversioned:my-aggregate=1
 chalk	@Chalk::Target::LLVM::Builder::alias_list	
 chalk	@Chalk::Target::LLVM::Builder::alias_list::__ANON__:797:38	
 chalk	@Chalk::Target::LLVM::Builder::alias_list::__ANON__:797:39	
@@ -2713,7 +2713,7 @@ chalk	@Chalk::Target::LLVM::Builder::build
 chalk	@Chalk::Target::LLVM::Builder::builtin_emitter	
 chalk	@Chalk::Target::LLVM::Builder::builtin_type	
 chalk	@Chalk::Target::LLVM::Builder::builtin_value	read-unversioned:my-aggregate=1
-chalk	@Chalk::Target::LLVM::Builder::call	memory-order-disagrees=1
+chalk	@Chalk::Target::LLVM::Builder::call	
 chalk	@Chalk::Target::LLVM::Builder::call_refs_args	
 chalk	@Chalk::Target::LLVM::Builder::call_writes_args	
 chalk	@Chalk::Target::LLVM::Builder::captured	
@@ -2742,7 +2742,7 @@ chalk	@Chalk::Target::LLVM::Builder::eval_catch
 chalk	@Chalk::Target::LLVM::Builder::eval_region_after	
 chalk	@Chalk::Target::LLVM::Builder::fh_cell	
 chalk	@Chalk::Target::LLVM::Builder::fh_handle	
-chalk	@Chalk::Target::LLVM::Builder::field_of	memory-order-disagrees=1
+chalk	@Chalk::Target::LLVM::Builder::field_of	
 chalk	@Chalk::Target::LLVM::Builder::fresh_cell	
 chalk	@Chalk::Target::LLVM::Builder::fresh_var	
 chalk	@Chalk::Target::LLVM::Builder::full_jump	
@@ -2768,7 +2768,7 @@ chalk	@Chalk::Target::LLVM::Builder::list_only	phi-arity:eval-join=1
 chalk	@Chalk::Target::LLVM::Builder::location	
 chalk	@Chalk::Target::LLVM::Builder::loop	read-unversioned:my-aggregate=1
 chalk	@Chalk::Target::LLVM::Builder::loop_breaks	read-unversioned:through-ref=1
-chalk	@Chalk::Target::LLVM::Builder::loop_edge	memory-order-disagrees=1
+chalk	@Chalk::Target::LLVM::Builder::loop_edge	
 chalk	@Chalk::Target::LLVM::Builder::loop_exit	
 chalk	@Chalk::Target::LLVM::Builder::loop_jump	
 chalk	@Chalk::Target::LLVM::Builder::loop_type	
@@ -2817,7 +2817,7 @@ chalk	@Chalk::Target::LLVM::Builder::sprintf_value	read-unversioned:my-aggregate
 chalk	@Chalk::Target::LLVM::Builder::sprintf_value::__ANON__:1460:23	
 chalk	@Chalk::Target::LLVM::Builder::sprintf_value::__ANON__:1460:26	
 chalk	@Chalk::Target::LLVM::Builder::subst_call	
-chalk	@Chalk::Target::LLVM::Builder::subst_replacement	memory-order-disagrees=2
+chalk	@Chalk::Target::LLVM::Builder::subst_replacement	
 chalk	@Chalk::Target::LLVM::Builder::substr_write	
 chalk	@Chalk::Target::LLVM::Builder::swapped	
 chalk	@Chalk::Target::LLVM::Builder::topic_alias	
@@ -3103,7 +3103,7 @@ chalk	@Digest::base::b64digest
 chalk	@Digest::base::base64_padded_digest	
 chalk	@Digest::base::hexdigest	
 chalk	@Digest::base::reset	
-chalk	@DynaLoader::bootstrap	phi-arity:eval-join=1,read-unversioned:external=3,read-unversioned:package=2,read-unversioned:package-aggregate-literal=1,record=2
+chalk	@DynaLoader::bootstrap	phi-arity:eval-join=1,read-unversioned:external=3,read-unversioned:package=2,read-unversioned:package-aggregate-literal=1,record=1
 chalk	@DynaLoader::bootstrap_inherit	record=1
 chalk	@DynaLoader::croak	
 chalk	@DynaLoader::dl_expandspec	read-unversioned:external=1
@@ -3112,7 +3112,7 @@ chalk	@DynaLoader::dl_load_flags
 chalk	@Exporter::as_heavy	
 chalk	@Exporter::export_fail	
 chalk	@File::Basename::basename	
-chalk	@File::Basename::dirname	record=1
+chalk	@File::Basename::dirname	
 chalk	@File::Basename::fileparse_set_fstype	
 chalk	@File::Path::__is_arg	
 chalk	@File::Path::_error	
@@ -3126,7 +3126,7 @@ chalk	@File::Spec::Unix::_collapse
 chalk	@File::Spec::Unix::_pp_catdir	
 chalk	@File::Spec::Unix::_pp_catfile	
 chalk	@File::Spec::Unix::_same	
-chalk	@File::Spec::Unix::abs2rel	memory-order-disagrees=2
+chalk	@File::Spec::Unix::abs2rel	
 chalk	@File::Spec::Unix::case_tolerant	
 chalk	@File::Spec::Unix::catpath	
 chalk	@File::Spec::Unix::curdir	
@@ -3202,7 +3202,7 @@ chalk	@JSON::PP::object
 chalk	@JSON::PP::object_to_json	
 chalk	@JSON::PP::pretty	
 chalk	@JSON::PP::sort_by	
-chalk	@JSON::PP::string	memory-order-disagrees=3
+chalk	@JSON::PP::string	
 chalk	@JSON::PP::tag	phi-arity:eval-join=1
 chalk	@JSON::PP::to_json	
 chalk	@JSON::PP::true	
