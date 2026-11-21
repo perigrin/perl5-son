@@ -23647,6 +23647,21 @@ class SoN::FromOptree 0.01 {
             my $text = eval { $o->string($cv) } // return undef;
             return $text =~ /\A(\$\$?[\w:]+(?:->)?[\[{])/ ? $1 =~ s/\A\$main::/\$/r : undef;
         };
+        # Can a call reach the element's container? Only a lexical aggregate no
+        # closure shares and no reference takes is out of its reach.
+        # ponytail: an aggregate handed to the call (`f(@a)`, `$_[0]` stored)
+        # is not seen, as for a scalar.
+        my $elem_reachable = sub ($o) {
+            $o = $o->first while $o->name eq 'null' && ( $o->flags & B::OPf_KIDS ) && ${ $o->first };
+            my $pad = sub ($t) { ( $SHARED_SLOTS && $SHARED_SLOTS->{$t} ) || $REFERENCED->{$t} ? 1 : 0 };
+            my $n = $o->name;
+            return $pad->( $o->targ ) if $n eq 'aelemfast_lex' || $n eq 'aelemfastlex_store';
+            if ( $n eq 'aelem' || $n eq 'helem' ) {
+                my $c = $o->first;
+                return $pad->( $c->targ ) if $c->name =~ /\Apad[ah]v\z/;
+            }
+            return 1;
+        };
         my $elem_stored;
         # A STORE IS AN ASSIGNMENT'S TARGET, not whatever perl marks OPf_MOD:
         # a call's argument is marked (it is passed as an alias), as is an
@@ -23690,6 +23705,13 @@ class SoN::FromOptree 0.01 {
             die "GAP: an element operand is read by alias and a later operand"
               . " stores into its container -- not yet lowered\n"
                 if grep { $elem_stored->( $_, $ekey ) } @later;
+            # A CALL STORES IT TOO where the callee can reach the container: a
+            # package aggregate, a lexical one shared or referenced, anything
+            # through a reference. Refused for the same reason: not re-read.
+            die "GAP: an element operand is read by alias and a later operand"
+              . " calls a sub that may store into its container -- not yet lowered\n"
+                if $elem_reachable->($k)
+                && grep { $_->name =~ /\Aenter(?:sub|eval)\z/ } map { _subtree_ops($_) } @later;
         }
         undef $elem_stored;
         my ( $kid, $first ) = ( $op->first, 1 );
@@ -23707,10 +23729,11 @@ class SoN::FromOptree 0.01 {
                 my $old   = defined $depth && $reader->name =~ /\A(?:padsv|gvsv|rv2sv)\z/
                     && $depth < $sim->stack_depth ? $sim->node_at($depth) : undef;
                 # An op= target is stored, not only read; a declaration
-                # introduces the slot.
+                # introduces the slot. (sassign is STACKED too, but its first
+                # kid is the value: `$m{ $_->id } = $_` reads $_ after the call.)
                 die "GAP: a scalar operand is read by alias and a later operand stores it\n"
                     if !$old
-                    || ( $first && ( $op->flags & B::OPf_STACKED ) )
+                    || ( $first && ( $op->flags & B::OPf_STACKED ) && $op->name ne q{sassign} )
                     || ( $kid->private & B::OPpLVAL_INTRO )
                     || ( $reader->private & B::OPpLVAL_INTRO );
                 for my $o (@again) {
