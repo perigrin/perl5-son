@@ -12151,8 +12151,10 @@ class SoN::FromOptree 0.01 {
             # earlier is bound to its old value, and left alone it kept it:
             # `my ($a,$b); ($a,$b) = g(); $b += 1` read undef for $b (perl
             # 3, emitted 1). It is rebound to the target, which reads the slot
-            # by name -- so the Assign is pinned where it stands, ahead of
-            # every read of that name.
+            # by name -- so the Assign is placed where it stands, ahead of
+            # every read of that name: it fills their slots, a store, and the
+            # memory version what follows takes (wire v2's L5: a pin that
+            # followed memory and was none was no record and no store).
             # (an aggregate among the targets changes nothing for the scalars
             # beside it: `($x, @r) = f()` left $x at its old value.)
             elsif (!$introduces) {
@@ -12160,7 +12162,7 @@ class SoN::FromOptree 0.01 {
                                  && ($_->sigil // '') eq '$' && $_->targ
                                  && !$ctx->{addr_taken}{ $_->targ } } @targets;
                 if (@pad) {
-                    _pin($sim, $node) unless defined $node->control_in;
+                    _place($sim, $node) unless defined $node->control_in;
                     $sim->define($_->targ, $_) for @pad;
                 }
             }

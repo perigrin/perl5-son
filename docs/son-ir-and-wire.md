@@ -24,7 +24,10 @@ Repos:
 - **The wire is pretty-printed, canonical, UTF-8 JSON.** There is one
   document per compiled file, written to stdout by
   `perl -MO=SoN,json file.pl`. The top-level keys are:
-  - `version`: always 1, and nothing checks it;
+  - `version`: 2 (wire v2, `docs/plans/2026-11-20-wire-v2.md`); chalk's loader
+    refuses any other by name;
+  - `profile`: the parts of v2 the wire obeys, `["mem"]` (the migration's;
+    `eval` and `loop` follow);
   - `source`: always null;
   - `methods`: one graph per sub;
   - optionally `classes`, `data_section` and `phase_blocks`;
@@ -32,13 +35,17 @@ Repos:
     (-w or a compile-time `$^W`, -W, -X), each a boolean (2026-11-15).
 - **Each graph is a flat array of nodes in topological order.** A node's
   id is its index in that array. A node is
-  `{id, op, inputs:[idx…], fields?:{…}, stamp?, control_in?, head?}`. The
-  only forward reference the loader allows is a loop Phi's back edge.
+  `{id, op, inputs:[idx…], fields?:{…}, stamp?, control_in?, mem_in?, mem_out?, head?}`.
+  `inputs` are values; `mem_in` names the memory version a node reads or
+  follows, `mem_out` says it is one. The only forward reference the loader
+  allows is a loop Phi's back edge.
 - **A non-perl producer only has to emit this JSON.** Chalk's loader never
   sees perl internals. It does enforce a set of invariants (§3.2):
   ordering, required sigils, op names it knows, stamps that are lattice
-  names, memory as a trailing positional input, and a `main::__PROGRAM__`
-  graph with a Return.
+  names, the memory invariant (L1-L6: every memory edge names a version
+  listed before it, every version reached from a Return or Unwind, every
+  Assign a record or on both chains), and a `main::__PROGRAM__` graph with a
+  Return.
 - **Chalk already has an Earley front end** that builds this same IR
   directly (`lib/Chalk/Bootstrap/Earley.pm`,
   `lib/Chalk/Bootstrap/Perl/Actions.pm`). Chalk's Phase 4 brief calls it
@@ -134,7 +141,7 @@ serializes (§2.4). The rest are internal to the producer.
 | ExpressionList, StructRef, StructFieldAccess, BacktickExpr | Value | — |
 | TernaryExpr | Value | **rebind_arm** |
 | **Calls and effects** | | |
-| Call | Value | **dispatch_kind** (`builtin`, `direct`, `method`, `dynamic_method`, `indirect`), **name**, **want**, **memory_input**, **class_name**, **param_names**, **shares_args**, **string_eval**, **eval_id**, **external**, **sort_cmp**, **sort_order**, **sort_cmp_body**, **sort_package**. Internal only: paren_form, target, resolved_graph. |
+| Call | Value | **dispatch_kind** (`builtin`, `direct`, `method`, `dynamic_method`, `indirect`), **name**, **want**, **class_name**, **param_names**, **shares_args**, **string_eval**, **eval_id**, **external**, **sort_cmp**, **sort_order**, **sort_cmp_body**, **sort_package**. Internal only: paren_form, target, resolved_graph. |
 | Print | Node | **has_filehandle** |
 | Assign | BinOp | **targets**, **if_changed**, **local** |
 | CompoundAssign | Value | **op** |
@@ -294,13 +301,17 @@ inputs `[invocant, method-name value, args...]`.
 - `MemStart.pm`: *"Initial aggregate-memory value … Has no inputs; the
   memory state at function entry, before any element store."*
 - **A memory version is the effect node that produced it:** an Assign,
-  Call, EntryWrite, CellWrite, Delete and so on. A read that must come after
-  a store takes that node as its **trailing input**. In §2.5, `PadAccess $x`
-  has `inputs:[2]` (MemStart) before the store and `inputs:[5]` (the Assign)
-  after it.
-- **Memory is positional, with no flag on the edge.** The only flags are
-  `Call.memory_input` and `Phi.memory`. The deparser's table of real
-  operands (`lib/SoN/Deparse.pm`):
+  Call, EntryWrite, CellWrite, Delete and so on, flagged `mem_out` on the
+  wire (and MemStart, and a Phi flagged `memory`). A read that must come
+  after a store names that node as its **`mem_in`**; a write, a sub call, a
+  Return and an Unwind name the version they follow the same way. In §2.5,
+  `PadAccess $x` has `mem_in:2` (MemStart) before the store and `mem_in:5`
+  (the Assign) after it.
+- **Memory is named, not positional (wire v2).** Until stage 6 of the wire v2
+  plan the memory a node read was its trailing input (wire v1), told by
+  `Call.memory_input` and a per-kind table. The table survives only in the
+  deparser, which reads v2 through `SoN::Wire::as_v1` (stage 11 retires
+  both). It was (`lib/SoN/Deparse.pm`):
 
   ```
   Call         => 1,   # [arg, ..., memory]
@@ -347,7 +358,7 @@ inputs `[invocant, method-name value, args...]`.
 - **A write in place to a merged aggregate** -- push, unshift, splice, shift
   or pop on a value Phi of an array's versions (`@p = ()` in an arm or a loop
   body, merged at the join or the loop's head) -- takes the memory it runs at
-  as its last input (`memory_input`), is the memory version after it, and
+  as its `mem_in`, is the memory version after it (`mem_out`), and
   merges at the next join and round the loop's back edge, as one on a `my`
   array does. A count after it reads at it (pvm c140). One onto a merge
   B::SoN cannot tell is an array's is refused (a GAP), never left off the
@@ -485,18 +496,19 @@ sorts each case into ROUNDTRIP, DIFFERS, LLI_FAIL, GAP, LOAD_FAIL or NOJSON
   (`t/bootstrap/ir/loader-reproduces-the-wire.t`).
 - **Consumer:** chalk's `Chalk::IR::Serialize::JSON::from_json`. This repo
   no longer has a `from_json`.
-- **Versioning: in effect, none.** From
-  `docs/plans/2026-09-26-wire-additions-chalk-must-agree.md`:
-
-  > chalk reads our `lib/` LIVE … and `Serialize/JSON.pm:568` emits
-  > `version => 1` that nothing on either side checks. There is no released
-  > wire between the projects. … Adding a field is the safe direction (an
-  > unknown field is ignorable); adding a KIND is not, because chalk's
-  > NodeFactory dispatches on kind and an unknown one is a hard failure.
-
-  Chalk's loader never reads `version`. Compatibility is kept by pinning a
-  chalk commit (`tools/corpus-llvm-roundtrip.pl`, `$COMMIT`). Optional fields
-  are emitted only when set, so an older consumer sees unchanged bytes.
+- **Versioning: `version` is 2, and checked.** B::SoN writes wire v2 only
+  (stage 6 of `docs/plans/2026-11-20-wire-v2.md`); `-MO=SoN,json,wire=2`
+  names it and changes nothing, any other `wire=` is refused (`B::SoN:
+  wire=1: the wire is version 2 (wire v1 is gone)`). Chalk's loader refuses a
+  wire of any other version by name (`GAP: wire version 1 is not one chalk
+  reads`), and holds a B::SoN wire to the memory invariant before it makes a
+  graph. `profile` says which parts of v2 the wire obeys (`mem` today);
+  the loader refuses a part it does not read yet. Compatibility is still
+  kept by pinning a chalk commit (`tools/corpus-llvm-roundtrip.pl`,
+  `$COMMIT`). Optional fields are emitted only when set. Adding a field is
+  the safe direction (an unknown field is ignorable); adding a KIND is not,
+  because chalk's NodeFactory dispatches on kind
+  (`docs/plans/2026-09-26-wire-additions-chalk-must-agree.md`).
 
 ### 2.2 The serializer (`lib/SoN/Serialize/JSON.pm`)
 
@@ -510,7 +522,7 @@ sub to_json ($named_graphs, $classes = undef, $data_section = undef,
     for my $name (sort keys $named_graphs->%*) {
         $methods{$name} = _serialize_graph($named_graphs->{$name});
     }
-    my $data = { version => 1, source => undef, methods => \%methods };
+    my $data = { version => 2, profile => ['mem'], source => undef, methods => \%methods };
     # The declarative class section (4c): name, parent, fields, method-refs.
     # Chalk's loader replays it through the MOP declare_*/seal API.
     $data->{classes} = _json_booleans($classes) if defined $classes && %$classes;
@@ -534,7 +546,8 @@ sub to_json ($named_graphs, $classes = undef, $data_section = undef,
 
 ```
 {
-  "version": 1,                       # unchecked
+  "version": 2,                       # checked: chalk reads v2 only
+  "profile": ["mem"],                 # the parts of v2 this wire obeys
   "source": null,
   "methods": {                         # graph name -> graph
      "main::__PROGRAM__": GRAPH,       # the file's top level (the entry graph)
@@ -550,7 +563,9 @@ sub to_json ($named_graphs, $classes = undef, $data_section = undef,
 GRAPH = { "nodes": [NODE...], "start": <idx>, "returns": [<idx>...] }
 NODE  = { "id": <idx == array position>, "op": "<Op>", "inputs": [<idx>...],
           "fields"?: {...}, "stamp"?: "<lattice type>",
-          "control_in"?: <idx>, "head"?: <idx (Region only)> }
+          "control_in"?: <idx>, "head"?: <idx (Region only)>,
+          "mem_in"?: <idx: the memory version read or followed, listed before>,
+          "mem_out"?: true (this node is a memory version) }
 ```
 
 CLASS, as observed:
@@ -579,11 +594,12 @@ CLASS, as observed:
 - **Constant** `{const_type, value, flags?}`
 - **Call** `{dispatch_kind, name, sort_cmp?, sort_order?, sort_cmp_body?,
   sort_package?, want?, shares_args?, string_eval?, eval_id?, external?,
-  memory_input?, class_name?, param_names?}` -- `string_eval` (true, or
+  class_name?, param_names?}` (v1's `memory_input` is gone: a builtin's
+  memory is its `mem_in`) -- `string_eval` (true, or
   absent) on the direct call of an eval string's compiled body (§1.3).
 - **Ref** `{each?, fresh_each_pass?, file?, line?}`
-  Inputs `[operand]`, or `[location, memory]` for a reference to an
-  aggregate's element (`\$a[i]`, `\$h{k}`, `\$r->[i]`, `\(@a)`, `\($a[0],
+  Inputs `[operand]`; one to an aggregate's element (`mem_in`: the memory it
+  reads) (`\$a[i]`, `\$h{k}`, `\$r->[i]`, `\(@a)`, `\($a[0],
   ...)`): the element at its index where it is taken, read at that memory
   version; pinned on control there and the memory version after it (taking
   it may make the element). A slice's references (`\(@a[0, 1])`) are refused.
@@ -596,9 +612,12 @@ CLASS, as observed:
 - **AnonSub** `{name?, captures?}`
 - **MakeCell** `{cell_name?, captured_written}`
 - **CellParam** `{index, name?}`
-- **Phi** `{region, predecessors?, memory?}`
+- **Phi** `{region, predecessors?, memory?, exits?}` -- `exits`: the memory
+  Phi where a sub's exits merge, which only its Return names
 - **Proj** `{index}`
-- **Assign** `{if_changed?, targets?, local?}`
+- **Assign** `{if_changed?, targets?, local?, record?}` -- `record`: a
+  binding (of SSA `my` scalars, or of `@_` into `my` aggregates) on neither
+  chain, not a store; every other Assign is on both
 - **Return** `{implicit?, valueless?}`
 - **PackageMark** `{package}`
 - **TernaryExpr** `{rebind_arm?}`
@@ -657,44 +676,50 @@ shown one node per line with canonical keys:
 {"id":0,"inputs":[],"op":"Start"}
 {"fields":{"const_type":"undef","value":null},"id":1,"inputs":[],"op":"Constant","stamp":"Undef"}
 {"id":2,"inputs":[],"op":"MemStart"}
-{"fields":{"sigil":"$","symbol":"x"},"id":3,"inputs":[2],"op":"PadAccess","stamp":"Unknown"}
+{"fields":{"sigil":"$","symbol":"x"},"id":3,"inputs":[],"mem_in":2,"op":"PadAccess","stamp":"Unknown"}
 {"fields":{"const_type":"integer","value":"3"},"id":4,"inputs":[],"op":"Constant","stamp":"Int"}
-{"control_in":0,"id":5,"inputs":[3,4],"op":"Assign","stamp":"Int"}
-{"fields":{"sigil":"$","symbol":"x"},"id":6,"inputs":[5],"op":"PadAccess","stamp":"Num"}
+{"control_in":0,"id":5,"inputs":[3,4],"mem_in":2,"mem_out":true,"op":"Assign","stamp":"Int"}
+{"fields":{"sigil":"$","symbol":"x"},"id":6,"inputs":[],"mem_in":5,"op":"PadAccess","stamp":"Num"}
 {"fields":{"const_type":"integer","value":"4"},"id":7,"inputs":[],"op":"Constant","stamp":"Int"}
 {"fields":{"const_type":"integer","value":"1"},"id":8,"inputs":[],"op":"Constant","stamp":"Int"}
 {"id":9,"inputs":[6,8],"op":"NumGt","stamp":"Boolean"}
 {"control_in":5,"id":10,"inputs":[5,9],"op":"If"}
 {"fields":{"index":0},"id":11,"inputs":[10],"op":"Proj"}
-{"control_in":11,"fields":{"dispatch_kind":"direct","name":"main::add","param_names":[],"want":"scalar"},"id":12,"inputs":[6,7],"op":"Call","stamp":"Num"}
-{"fields":{"sigil":"$","symbol":"x"},"id":13,"inputs":[12],"op":"PadAccess","stamp":"Unknown"}
-{"control_in":12,"id":14,"inputs":[13,12],"op":"Assign","stamp":"Num"}
+{"control_in":11,"fields":{"dispatch_kind":"direct","name":"main::add","param_names":[],"want":"scalar"},"id":12,"inputs":[6,7],"mem_in":5,"mem_out":true,"op":"Call","stamp":"Num"}
+{"fields":{"sigil":"$","symbol":"x"},"id":13,"inputs":[],"mem_in":12,"op":"PadAccess","stamp":"Unknown"}
+{"control_in":12,"id":14,"inputs":[13,12],"mem_in":12,"mem_out":true,"op":"Assign","stamp":"Num"}
 {"fields":{"const_type":"integer","value":"0"},"id":15,"inputs":[],"op":"Constant","stamp":"Int"}
 {"fields":{"index":1},"id":16,"inputs":[10],"op":"Proj"}
-{"control_in":16,"id":17,"inputs":[6,15],"op":"Assign","stamp":"Int"}
+{"control_in":16,"id":17,"inputs":[6,15],"mem_in":5,"mem_out":true,"op":"Assign","stamp":"Int"}
 {"head":10,"id":18,"inputs":[14,17],"op":"Region"}
 {"fields":{"memory":true,"predecessors":[11,16],"region":18},"id":19,"inputs":[14,17],"op":"Phi","stamp":"Num"}
-{"fields":{"sigil":"$","symbol":"x"},"id":20,"inputs":[19],"op":"PadAccess","stamp":"Str"}
+{"fields":{"sigil":"$","symbol":"x"},"id":20,"inputs":[],"mem_in":19,"op":"PadAccess","stamp":"Str"}
 {"fields":{"from_repr":"Unknown","to_repr":"Str"},"id":21,"inputs":[20],"op":"Coerce","stamp":"Str"}
 {"fields":{"const_type":"string","value":"\n"},"id":22,"inputs":[],"op":"Constant","stamp":"Str"}
 {"id":23,"inputs":[21,22],"op":"Concat","stamp":"Str"}
-{"control_in":18,"id":24,"inputs":[23],"op":"Print","stamp":"Scalar"}
-{"control_in":24,"fields":{"implicit":true},"id":25,"inputs":[1],"op":"Return"}
-== main::add start=0 returns=4
+{"control_in":18,"id":24,"inputs":[23],"op":"Print","stamp":"Maybe[Boolean]"}
+{"control_in":24,"fields":{"implicit":true},"id":25,"inputs":[1],"mem_in":19,"op":"Return"}
+== main::add start=0 returns=5
 {"id":0,"inputs":[],"op":"Start"}
 {"fields":{"sigil":"$","symbol":"a"},"id":1,"inputs":[],"op":"PadAccess","stamp":"Num"}
 {"fields":{"sigil":"$","symbol":"b"},"id":2,"inputs":[],"op":"PadAccess","stamp":"Num"}
 {"id":3,"inputs":[1,2],"op":"Add","stamp":"Num"}
-{"control_in":0,"id":4,"inputs":[3],"op":"Return"}
-{"id":5,"inputs":[],"op":"ArgsSource","stamp":"Array"}
-{"fields":{"targets":2},"id":6,"inputs":[1,2,5],"op":"Assign","stamp":"List"}
+{"id":4,"inputs":[],"op":"MemStart"}
+{"control_in":0,"id":5,"inputs":[3],"mem_in":4,"op":"Return"}
+{"id":6,"inputs":[],"op":"ArgsSource","stamp":"Array"}
+{"fields":{"record":true,"targets":2},"id":7,"inputs":[1,2,6],"op":"Assign","stamp":"List"}
 ```
 
 Things to notice:
 - The Region's inputs are the arms' last effects (the Assigns), not their
   Projs; `predecessors` gives the Projs.
 - The memory Phi merges the two Assigns.
-- Each PadAccess read takes a memory version as its input.
+- Each PadAccess read of `$x` (a `my` the program keeps in memory) names
+  the memory version it reads as `mem_in`; its `inputs` are empty.
+- The call is a value (the Assign's input) and a memory version (`mem_out`,
+  the Assign's `mem_in`): one node, two faces, told apart by the edge.
+- `add`'s `my ($a, $b) = @_` is a `record`, on neither chain.
+- (`file`, `line` and `package` of the call are left out here.)
 
 A loop with a die
 (`while ($i < 3) { $s = $s + $i; $i++ } die "neg" if $s < 0; print $s / 2, "\n";`),
@@ -767,10 +792,11 @@ These come from `lib/Chalk/IR/Serialize/JSON.pm` (`_deserialize_graph`,
 `from_json`). A producer that meets all of them will load:
 
 1. **Valid JSON** with a `methods` hash of `{nodes, start, returns}`.
-   `version` and `source` are ignored.
+   `version` must be 2 (a GAP names another); `source` is ignored.
 2. **Nodes are addressed by array position.** `id` must equal the node's
    position.
-3. **No forward references except a loop Phi's back edge:**
+3. **No forward references except a loop Phi's back edge** (a `mem_in` too
+   names a node listed before it: since stage 6, when v1's upgrade went):
 
    > The one sanctioned forward edge is a loop Phi's backedge (inputs[1]),
    > deferred and patched below. Any OTHER forward index is a producer
@@ -798,8 +824,16 @@ These come from `lib/Chalk/IR/Serialize/JSON.pm` (`_deserialize_graph`,
    - a Ref of a PadAccess becomes a typed ref;
    - a builtin Call or ArrayLiteral stamped `List` becomes `Array`;
    - Print becomes Boolean.
-7. **Memory is positional and trailing** (§1.5). A Call that carries it has
-   `memory_input: true`; a memory Phi has `memory: true`.
+7. **Memory is named** (§1.5): `mem_in`, `mem_out`, and `memory: true` on a
+   memory Phi. A B::SoN wire (one with `dowarn`) is held to the memory
+   invariant, `Chalk::IR::Serialize::WireInvariant`: L1 every `mem_in` names
+   a version; L2 a version is on the control chain and follows one; L3 every
+   Return and Unwind names its memory; L4 every version is reached backwards
+   from a Return or Unwind (or a loop with no exit); L5 an Assign is a
+   `record` or has all three edges, as a sub Call does (but an :lvalue call,
+   the place an Assign stores through); L6 a Phi's inputs pair with its
+   Region's ways in (a trap's value Phi keeps one more until the `eval`
+   profile).
 8. **The control chain:**
    - Statement effects need `control_in`.
    - Each Return's `control_in` chain decides which nodes belong to the
@@ -925,7 +959,8 @@ right."* A new producer passes the same perl-oracle round trip.
   `type`, because no pass here produces the other components yet"*.
 
 **Missing for a parser front end:**
-- **A wire version check, or a schema file.** The schema is
+- **A schema file.** The version is checked (2) and the memory edges are
+  (the loader's invariant, `SoN::Verify`); the rest of the schema is
   `_extract_fields` plus the loader's matching branches, kept in step by
   tests and the chalk pin.
 - **Source spans** beyond file and line on Unwind, Divide and Modulo, and
