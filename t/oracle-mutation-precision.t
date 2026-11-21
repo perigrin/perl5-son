@@ -142,7 +142,11 @@ subtest 'the producer stamp admits the value perl produced' => sub {
         my $w = ($out =~ /^\{/) ? eval { JSON::PP->new->decode($out) } : undef;
         ok $w, "$name lowers" or next;
 
-        my @nodes = map { $_->{nodes}->@* } values $w->{methods}->%*;
+        # (ids are per graph: the Print's own graph, not every graph's nodes
+        # in one map, where another graph's node of that id may win -- v2's
+        # MemStart moved main::f's ids, and the lookup went to it half the time)
+        my ($g) = grep { grep { $_->{op} eq 'Print' } $_->{nodes}->@* } map { $w->{methods}{$_} } sort keys $w->{methods}->%*;
+        my @nodes = $g ? $g->{nodes}->@* : ();
         my %by = map { $_->{id} => $_ } @nodes;
         my ($print) = grep { $_->{op} eq 'Print' } @nodes;
         ok $print, "$name builds a Print" or next;
