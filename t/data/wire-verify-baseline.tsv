@@ -73,7 +73,7 @@ probes	fault-floating	1
 probes	memory-input-not-version	0
 probes	memory-order-disagrees	5
 probes	package-scalar-loop-value	0
-probes	phi-arity	3
+probes	phi-arity	4
 probes	phi-arity:eval-join	25
 probes	read-unversioned:args	1
 probes	read-unversioned:cell	1
@@ -84,7 +84,7 @@ probes	read-unversioned:object-class	0
 probes	read-unversioned:package	4
 probes	read-unversioned:package-aggregate-literal	5
 probes	read-unversioned:through-ref	1
-probes	write-floating	4
+probes	write-floating	0
 corpus2	#cases	431
 corpus2	#graphs	1082
 corpus2	#wires	431
@@ -93,7 +93,7 @@ corpus2	allowed:record	57
 corpus2	control-fork	0
 corpus2	control-sink	0
 corpus2	mem-in-not-version	0
-corpus2	memory-order-disagrees	7
+corpus2	memory-order-disagrees	0
 corpus2	phi-arity	1
 corpus2	phi-arity:eval-join	32
 corpus2	phi-no-region	0
@@ -107,7 +107,7 @@ corpus2	read-unversioned:package	7
 corpus2	read-unversioned:package-aggregate-literal	0
 corpus2	read-unversioned:through-ref	35
 corpus2	record	0
-corpus2	version-off-chain	1
+corpus2	version-off-chain	0
 corpus2	write-unreachable	0
 probes2	#cases	486
 probes2	#graphs	693
@@ -117,8 +117,8 @@ probes2	allowed:record	12
 probes2	control-fork	0
 probes2	control-sink	0
 probes2	mem-in-not-version	0
-probes2	memory-order-disagrees	4
-probes2	phi-arity	3
+probes2	memory-order-disagrees	0
+probes2	phi-arity	4
 probes2	phi-arity:eval-join	25
 probes2	phi-no-region	0
 probes2	phi:memory-as-value	0
@@ -130,6 +130,14 @@ probes2	read-unversioned:my-aggregate	2
 probes2	read-unversioned:package	4
 probes2	read-unversioned:package-aggregate-literal	5
 probes2	read-unversioned:through-ref	1
-probes2	record	5
+probes2	record	1
 probes2	version-off-chain	0
 probes2	write-unreachable	0
+# 2026-11-21 (wire v2, stage 5): corpus2 V5 7 -> 0 and V2 1 -> 0, probes2 V5 4 -> 0 and V7 5 -> 1
+# (pl13, held in chalk's wire-verify.t), probes write-floating 4 -> 0: the verifier at a loop's
+# test chain, the producer's header memory Phi for a body writing its foreach alias or storing
+# after an arm, a void list assign of package scalars, an :lvalue call off the memory chain.
+# phi-arity RISES 3 -> 4 on probes and probes2: al1 (`for my $y ($x) { $y = 5 }`), a one-pass
+# loop whose value Phis already have no back edge, now has a header memory Phi (the body writes
+# its alias) with none either -- the shape al2 has; chalk refuses both by name (L6, and T2's
+# "a loop phi with other than two ways in").
