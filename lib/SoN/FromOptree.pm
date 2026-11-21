@@ -23574,9 +23574,10 @@ class SoN::FromOptree 0.01 {
             # A CALL WRITES A PAD SCALAR it can reach: one shared with a
             # closure or whose address was taken. Any call at all refused 48
             # of chalk's graphs (`$old->remove_consumer($self)`).
-            # ponytail: a callee assigning `$_[0]` to a scalar it was handed
-            # is not seen; counting every handed scalar refused ordinary code
-            # (`"$r" . f($r)` in chalk's LLVM::Context::_lower_vardecl).
+            # (A callee assigning `$_[0]` to a scalar it was handed is the
+            # argument alias's: t/deparse-a-scalar-an-argument-or-builtin-
+            # stores-is-read-when-its-op-runs.t. Counting every handed scalar
+            # here refused ordinary code, `"$r" . f($r)` in chalk.)
             if ( $o->name eq q{entersub} && $key =~ /\Ap(\d+)\z/ ) {
                 return 1 if ( $SHARED_SLOTS && $SHARED_SLOTS->{$1} )
                     || ( $REFERENCED->{$1} );
@@ -23630,8 +23631,10 @@ class SoN::FromOptree 0.01 {
         # multideref, whose text up to its first subscript (`$a[`, `$h{`,
         # `$r->[`) says which container. A later sibling that holds an lvalue
         # element of the same text stores into it.
-        # ponytail: two references to one array are two containers here, and a
-        # call in a later operand that stores the element is not seen.
+        # A CALL in a later operand that may store the element is
+        # _elem_alias_plan's (read again, guarded by whether it existed).
+        # ponytail: for a DIRECT store, two references to one array are two
+        # containers here.
         my $elem_key = sub ($o) {
             return undef unless $o && $$o;
             $o = $o->first while $o->name eq 'null' && ( $o->flags & B::OPf_KIDS ) && ${ $o->first };
