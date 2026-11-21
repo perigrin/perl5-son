@@ -23795,7 +23795,16 @@ class SoN::FromOptree 0.01 {
     # may reshape its container or cannot be seen into. What each callee may
     # store is its MOD set (SoN::FromOptree::ModSets): a callee that stores
     # nothing there leaves the read where its op stood.
+    my %ELEM_PLAN;   # operand op address -> [ answer, refusal ] (the optree does not change)
     sub _elem_alias_plan ($cv, $k, $op) {
+        my $memo = $ELEM_PLAN{ $$cv . ':' . $$k } //= do {
+            my $r = eval { _elem_alias_plan_of($cv, $k, $op) };
+            [ $r, $@ ];
+        };
+        die $memo->[1] if $memo->[1];
+        return $memo->[0];
+    }
+    sub _elem_alias_plan_of ($cv, $k, $op) {
         return undef unless $op->flags & B::OPf_KIDS;
         return undef if $op->isa('B::LOGOP') || $op->name =~ /\A(?:leave|enter|lineseq|scope)/;
         return undef if ( $k->flags & B::OPf_WANT ) == B::OPf_WANT_VOID || ( $k->flags & B::OPf_MOD );
