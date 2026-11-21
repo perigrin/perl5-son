@@ -1,0 +1,3 @@
+# Graphs whose wire v1 a producer bug fix changed after the commit t/wire-v2-downgrades-to-v1.t
+# compares with ($BASE). One per line: GRAPH<TAB>why. Everything else stays byte for byte.
+Chalk::Bootstrap::Earley::_force	an endless loop in an if's arm rejoins it (t/deparse-an-endless-loop-in-an-arm-rejoins-its-if.t)

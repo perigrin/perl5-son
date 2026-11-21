@@ -17755,13 +17755,21 @@ class SoN::FromOptree 0.01 {
     # share: a linear op_next scan follows SOME path through any nested
     # branches, and all paths rejoin, so the join lies on every chain.
     # Returns 0 when no common op is found (degenerate/cyclic chains).
+    # A LOOP IS STEPPED OVER, enter to leave: a loop that ends only by `last`
+    # (`while (1)`, `for (;;)`) has a chain that cycles in its body and never
+    # reaches the op after it, so the arm holding one found no join, and what
+    # follows the if was walked as that arm's alone.
     sub _find_join_addr ($a_start, $b_start) {
+        my $step = sub ($op) {
+            $op = $op->lastop if $op->name =~ /\Aenter(?:loop|iter)\z/ && $op->can('lastop') && ${ $op->lastop };
+            return $op->next;
+        };
         my %a_seen;
-        for (my $op = $a_start; $$op && !$a_seen{$$op}; $op = $op->next) {
+        for (my $op = $a_start; $$op && !$a_seen{$$op}; $op = $step->($op)) {
             $a_seen{$$op} = 1;
         }
         my %b_seen;
-        for (my $op = $b_start; $$op && !$b_seen{$$op}; $op = $op->next) {
+        for (my $op = $b_start; $$op && !$b_seen{$$op}; $op = $step->($op)) {
             return $$op if $a_seen{$$op};
             $b_seen{$$op} = 1;
         }

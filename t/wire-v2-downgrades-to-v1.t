@@ -92,7 +92,9 @@ for my $pair ( [ $base, $cache ], [ $root, $now ] ) {
     waitpid $_, 0 for keys %kids;
 }
 
-my $diff = qx($^X $root/tools/wire-diff.pl '$cache' '$now' 2>&1);
+# EXCEPT what a v1 bug fix changed on purpose since $BASE, graph by graph
+# (t/data/wire-v1-changed-on-purpose.tsv, each with its test).
+my $diff = qx($^X $root/tools/wire-diff.pl --allow '$root/t/data/wire-v1-changed-on-purpose.tsv' '$cache' '$now' 2>&1);
 my ($line) = $diff =~ /^(# \d+ of \d+ wires differ)$/m;
 like $line // $diff, qr/^# 0 of [1-9]\d* wires differ$/, "v1 is the base's wire, byte for byte ($BASE)"
     or diag $diff;
