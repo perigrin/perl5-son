@@ -28,7 +28,7 @@ use SoN::Verify;
 #                 `source<TAB>@GRAPH<TAB>rule=n,...` (tools/lib/WireRatchet.pm),
 #                 the most any one wire counted for it; a file's own graph,
 #                 main::__PROGRAM__, is named by its wire (`Mod::Name:main::...`).
-#   A DROPPED WIRE (the compile failed, timed out, or wrote no JSON) is named
+#   A DROPPED WIRE (the compile timed out, was killed, or wrote no JSON) is named
 #   on stderr, counted as #dropped, and not cached: the next run compiles it.
 #   --wires DIR   keep each wire as DIR/SOURCE/NAME.json and reuse one that is
 #                 there. A STALE CACHE LIES: empty the directory after any
@@ -66,7 +66,14 @@ sub wire ( $source, $name, $file, $cwd = undef ) {
         my $limit = $ENV{SON_WIRE_TIMEOUT} // 900;
         my $rc = system( "ulimit -v 4000000; $cd/usr/bin/timeout $limit $^X -I$root/lib $inc "
                 . "-MO=-q,SoN,json,wire=$wire,not_package=SoN '$file' > '$cache.tmp' 2>/dev/null" );
-        if ( $rc == 0 && -s "$cache.tmp" ) { rename "$cache.tmp", $cache or die "$cache: $!" }
+        # Dropped: timed out (124), killed (the shell says 128 + signal), or no
+        # JSON. A program perl rejects (exit 255) keeps the wire B::SoN wrote of
+        # what compiled, as it always did.
+        my $exit   = $rc >> 8;
+        my $killed = $exit == 124 || ( $exit > 128 && $exit < 160 ) || ( $rc & 127 );
+        if ( !$killed && -s "$cache.tmp" && eval { $json->decode( do { local ( @ARGV, $/ ) = "$cache.tmp"; <> } ); 1 } ) {
+            rename "$cache.tmp", $cache or die "$cache: $!";
+        }
         else {
             unlink "$cache.tmp";
             return undef;
@@ -102,7 +109,7 @@ sub run ( $source, @cases ) {    # each case: [name, file, cwd]
         my $w = wire( $source, @$c );
         if ( !$w ) {
             $count{$source}{'#dropped'}++;
-            warn "dropped: $source $c->[0] (no wire: the compile failed or timed out)\n";
+            warn "dropped: $source $c->[0] (no wire: the compile timed out, was killed or wrote no JSON)\n";
             next;
         }
         $count{$source}{'#wires'}++;
