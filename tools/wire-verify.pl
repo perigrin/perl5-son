@@ -10,6 +10,7 @@ use File::Path qw(make_path);
 use File::Basename qw(basename);
 use Getopt::Long;
 use PvmCorpus qw(read_cases);
+use WireRatchet qw(graph_line);
 use SoN::Verify;
 
 # usage: wire-verify.pl [--corpus] [--probes] [--chalk DIR] [--list] [--tsv]
@@ -21,8 +22,14 @@ use SoN::Verify;
 #   --tsv         only `source<TAB>rule<TAB>count` lines -- the format of
 #                 t/data/wire-verify-baseline.tsv, which t/wire-verify-ratchet.t
 #                 holds these numbers to. Rules are sorted; `#wires` and
-#                 `#graphs` are the denominators, `allowed:*` the floating
-#                 Assigns that are records or parameter binds.
+#                 `#graphs` are the denominators, `#dropped` the cases with no
+#                 wire, `allowed:*` the floating Assigns that are records or
+#                 parameter binds. chalk's lib also gets one line per graph,
+#                 `source<TAB>@GRAPH<TAB>rule=n,...` (tools/lib/WireRatchet.pm),
+#                 the most any one wire counted for it; a file's own graph,
+#                 main::__PROGRAM__, is named by its wire (`Mod::Name:main::...`).
+#   A DROPPED WIRE (the compile failed, timed out, or wrote no JSON) is named
+#   on stderr, counted as #dropped, and not cached: the next run compiles it.
 #   --wires DIR   keep each wire as DIR/SOURCE/NAME.json and reuse one that is
 #                 there. A STALE CACHE LIES: empty the directory after any
 #                 change to the producer.
@@ -57,11 +64,14 @@ sub wire ( $source, $name, $file, $cwd = undef ) {
         # (counted below), not a hung census. (300 s was too few for chalk's
         # Target/LLVM and Lower -- four minutes alone -- beside other jobs.)
         my $limit = $ENV{SON_WIRE_TIMEOUT} // 900;
-        system( "ulimit -v 4000000; $cd/usr/bin/timeout $limit $^X -I$root/lib $inc "
+        my $rc = system( "ulimit -v 4000000; $cd/usr/bin/timeout $limit $^X -I$root/lib $inc "
                 . "-MO=-q,SoN,json,wire=$wire,not_package=SoN '$file' > '$cache.tmp' 2>/dev/null" );
-        rename "$cache.tmp", $cache or die "$cache: $!";
+        if ( $rc == 0 && -s "$cache.tmp" ) { rename "$cache.tmp", $cache or die "$cache: $!" }
+        else {
+            unlink "$cache.tmp";
+            return undef;
+        }
     }
-    return undef unless -s $cache;
     open my $fh, '<', $cache or die "$cache: $!";
     local $/;
     return eval { $json->decode(<$fh>) };
@@ -80,22 +90,37 @@ sub compile_ahead ( $source, @cases ) {
     waitpid $_, 0 for keys %kids;
 }
 
-my ( %count, @violations, @sources );
+my ( %count, @violations, @sources, %graph );
 
 sub run ( $source, @cases ) {    # each case: [name, file, cwd]
     push @sources, $source;
-    $count{$source}{$_} = 0 for '#cases', '#wires', '#graphs';
+    $count{$source}{$_} = 0 for '#cases', '#wires', '#graphs', '#dropped';
     compile_ahead( $source, @cases ) if $jobs > 1;
+    my $per_graph = $source =~ /^chalk/;
     for my $c (@cases) {
         $count{$source}{'#cases'}++;
-        my $w = wire( $source, @$c ) or next;
+        my $w = wire( $source, @$c );
+        if ( !$w ) {
+            $count{$source}{'#dropped'}++;
+            warn "dropped: $source $c->[0] (no wire: the compile failed or timed out)\n";
+            next;
+        }
         $count{$source}{'#wires'}++;
         my $r = SoN::Verify::verify($w);
         $count{$source}{'#graphs'} += $r->{graphs};
         $count{$source}{"allowed:$_"} += $r->{allowed}{$_} for keys $r->{allowed}->%*;
+        my $key = sub ($g) { $g eq 'main::__PROGRAM__' ? "$c->[0]:$g" : $g };
+        my %here = map { $key->($_) => {} } keys( ( $w->{methods} // {} )->%* );
         for my $v ( $r->{violations}->@* ) {
             $count{$source}{ $v->{rule} }++;
+            $here{ $key->( $v->{graph} ) }{ $v->{rule} }++;
             push @violations, [ $source, "$c->[0]:$v->{graph}#$v->{node}", @$v{qw(op rule detail)} ];
+        }
+        next unless $per_graph;
+        # A graph is in every wire that loads its module: hold the most one wire counts.
+        for my $g ( keys %here ) {
+            my $h = $graph{$source}{$g} //= {};
+            $h->{$_} = $here{$g}{$_} for grep { $here{$g}{$_} > ( $h->{$_} // 0 ) } keys $here{$g}->%*;
         }
     }
 }
@@ -128,6 +153,7 @@ my %rules = map { $_ => 1 } map { keys %$_ } values %count;
 my @rules = sort keys %rules;
 if ($tsv) {
     for my $s (@sources) { say join "\t", $s, $_, $count{$s}{$_} // 0 for @rules }
+    for my $s (@sources) { say graph_line( $s, $_, $graph{$s}{$_} ) for sort keys( ( $graph{$s} // {} )->%* ) }
     exit 0;
 }
 printf "%-44s" . ( ' %8s' x @sources ) . "\n", 'rule', @sources;
