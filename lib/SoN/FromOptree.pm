@@ -23647,8 +23647,15 @@ class SoN::FromOptree 0.01 {
             my $text = eval { $o->string($cv) } // return undef;
             return $text =~ /\A(\$\$?[\w:]+(?:->)?[\[{])/ ? $1 =~ s/\A\$main::/\$/r : undef;
         };
-        # Can a call reach the element's container? Only a lexical aggregate no
-        # closure shares and no reference takes is out of its reach.
+        # Can a call reach the element's container BY NAME? A package
+        # aggregate, or a lexical one a closure shares or a reference takes.
+        # OPEN, NOT REFUSED: a container through a reference (`$r->[0] .
+        # f()`). Any call may reach it, and refusing every such pair cost
+        # corpus 009 (`$l->[0], $c->(21)`) and seven of chalk's graphs
+        # (`[ $g->{s}, $pos, $g->int_(1) ]`): a right answer needs what the
+        # callee stores (an effect summary) or a re-read the wire can say only
+        # if the element existed -- a design decision (docs/memory/
+        # an-element-is-an-alias-a-call-can-store.md).
         # ponytail: an aggregate handed to the call (`f(@a)`, `$_[0]` stored)
         # is not seen, as for a scalar.
         my $elem_reachable = sub ($o) {
@@ -23656,11 +23663,14 @@ class SoN::FromOptree 0.01 {
             my $pad = sub ($t) { ( $SHARED_SLOTS && $SHARED_SLOTS->{$t} ) || $REFERENCED->{$t} ? 1 : 0 };
             my $n = $o->name;
             return $pad->( $o->targ ) if $n eq 'aelemfast_lex' || $n eq 'aelemfastlex_store';
+            return 1 if $n eq 'aelemfast';
             if ( $n eq 'aelem' || $n eq 'helem' ) {
                 my $c = $o->first;
                 return $pad->( $c->targ ) if $c->name =~ /\Apad[ah]v\z/;
+                return $c->name =~ /\Arv2[ah]v\z/ && ( $c->flags & B::OPf_KIDS ) && $c->first->name eq 'gv' ? 1 : 0;
             }
-            return 1;
+            # (a multideref: its text names a package aggregate, or a reference)
+            return ( $elem_key->($o) // '->' ) !~ /->/ && $n eq 'multideref' ? 1 : 0;
         };
         my $elem_stored;
         # A STORE IS AN ASSIGNMENT'S TARGET, not whatever perl marks OPf_MOD:

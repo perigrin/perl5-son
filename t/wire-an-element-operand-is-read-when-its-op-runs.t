@@ -59,14 +59,15 @@ unlike translate('sub f { $_[0] } my @r = (1,2); print $r[0], f($r[0]) ? "b" : "
 like translate('my @a = (1,2); my @l = ($a[0], $a[0]++); print "@l\n";'), $gap, 'a post-increment in a list';
 
 # A CALL IN A LATER OPERAND may store the element too, where the callee can
-# reach the container: a package aggregate, one a sub closes over, one through
-# a reference. `print g(1), $a[0], g(0), $a[0]` is 1101 in perl; the read
-# where its op stood said 1201. Refused by name, as the direct store is.
+# reach the container by name: a package aggregate, one a sub closes over.
+# `print g(1), $a[0], g(0), $a[0]` is 1101 in perl; the read where its op
+# stood said 1201. Refused by name, as the direct store is. THROUGH A
+# REFERENCE it is OPEN (FromOptree's $elem_reachable says why): refusing it
+# refused right programs (`$e->{l} == nul()`, corpus 009).
 my $call_gap = qr/GAP: an element operand is read by alias and a later operand calls a sub that may store into its container/;
 like translate('our @a = (0); sub g { $a[0] = $_[0] + 1; $_[0] } print g(1), $a[0], g(0), $a[0], "\n";'), $call_gap, 'a package array';
 like translate('our %h = (k => 0); sub g { $h{k} = $_[0] + 1; $_[0] } print g(1), $h{k}, g(0), $h{k}, "\n";'), $call_gap, 'a package hash';
 like translate('my @a = (0); sub g { $a[0] = $_[0] + 1; $_[0] } print g(1), $a[0], g(0), $a[0], "\n";'), $call_gap, 'a lexical array a sub closes over';
-like translate('my $r = [0]; sub g { $r->[0] = $_[0] + 1; $_[0] } print g(1), $r->[0], g(0), $r->[0], "\n";'), $call_gap, 'through a reference';
 like translate('our @a = (1); sub g { $a[0] = 5; 0 } print $a[0] + g(), "\n";'), $call_gap, 'added';
 unlike translate('my @a = (1); sub g { 0 } print $a[0], g(), $a[0], "\n";'), qr/GAP/, 'a lexical array no sub reaches';
 unlike translate('our @a = (1); sub g { 0 } print g(), $a[0], "\n";'), qr/GAP/, 'the call before the element';
