@@ -34,6 +34,10 @@
 # 642 of its 642 version-off-chain are MakeCell. Pinning MakeCell breaks the deparser's
 # closure round trips (t/wire-a-write-to-a-captured-lexical-goes-through-its-cell.t), so
 # it waits for its consumers.
+# 2026-11-21 (wire v2, stages 2+3 integrated): a compile that exits non-zero is a DROPPED
+# wire now (tools/wire-verify.pl, #dropped), where its JSON used to count. probes p/st3 is
+# one: perl rejects it (`isa` with no feature), and B::SoN still wrote a wire of no graphs.
+# probes #wires 486 -> 485, #dropped 1 (and probes2). #graphs is unchanged.
 # chalk at 45a1b8d5
 corpus	#cases	431
 corpus	#graphs	1082
@@ -60,7 +64,8 @@ corpus	read-unversioned:through-ref	35
 corpus	write-floating	0
 probes	#cases	486
 probes	#graphs	693
-probes	#wires	486
+probes	#dropped	1
+probes	#wires	485
 probes	allowed:param-bind	1
 probes	allowed:record	12
 probes	control-fork	0
@@ -127,7 +132,8 @@ corpus2	version-off-chain	14
 corpus2	write-unreachable	0
 probes2	#cases	486
 probes2	#graphs	693
-probes2	#wires	486
+probes2	#dropped	1
+probes2	#wires	485
 probes2	allowed:param-bind	1
 probes2	allowed:record	12
 probes2	control-fork	0
