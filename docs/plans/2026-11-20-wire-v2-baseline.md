@@ -218,6 +218,20 @@ What stages 4 and 5 should know:
 
 Heads: producer `v2-s4` (c44ad95 to 999c490 on 7d5d8f2), chalk `v2-s4` 1eaafd8a (one commit on eef945c6: T2 walks past a MakeCell on the chain).
 
+`tools/gates.sh` at producer 353560d, chalk 1eaafd8a:
+
+```
+producer-suite  PASS  757 files, 0 failing [10m17s]
+chalk-suite     PASS  919 files, 0 failing [77m50s]
+census          PASS  ROUNDTRIP 426 (>= 426) DIFFERS 0 LLI_FAIL 0; GAP 5 LOAD_FAIL 0 NOJSON 0 [2m41s]
+corpus-gate     PASS  gate-green 222 (>= 222), prove exit 0, paad/worklist.json untouched [5m16s]
+probes          PASS  LOUD=2 REFUSED=112 SAME=361; WRONG 0, SAME lost 0, changed 0 [1m50s]
+ratchet         PASS  prove exit 0; chalk's lib compared; rows that fell: 0; new graphs: 0, 0 of them with violations [59m38s]
+                PASS  (downgrade proof) prove exit 0; no comparison [44m16s]
+```
+
+("no comparison" is how the summary prints a passing proof: the test prints its count only when it fails; it passes only on `0 of N wires differ` with N > 0, chalk's lib included, `Earley::_force` allowed.)
+
 What changed, in one line each (notes in `docs/memory`):
 
 - **Stage 4.** `SoN::Deparse` reads v2 through `SoN::Wire::as_v1` (`the-deparser-reads-v2-through-as-v1.md`). Over corpus and probes every v2 wire renders as its v1 wire does (up to names made from node ids) or prints the same. The exit memory Phi is marked on v2 (`fields.exits`).
