@@ -160,4 +160,21 @@ subtest 'programs made with wire=2' => sub {
     is $l->{'write-unreachable'}, undef, '`while (1) { $g++ }`: its writes reach the header memory Phi';
 };
 
+# A LOOP'S TEST CHAIN (a wire without the `loop` profile: the test's effects
+# pinned to the Loop, its body hung off Proj 0 beside them): what the body
+# follows is the test's last version, which control reaches only through the
+# Loop. V5 asked the Loop's memory Phi and called 51 chalk graphs wrong.
+subtest 'V5 at a loop whose test writes, without the loop profile' => sub {
+    is rules('my @q = (1,2,3); my $s = 0; while (my $x = shift @q) { $s += $x; push @q, 10 if $x == 1 } print "$s\n";')
+        ->{'memory-order-disagrees'}, undef, 'a body after `while (my $x = shift @q)` follows the shift';
+    is rules('sub g { "<$_[0]>" } sub f { my @w = (1, 2); my $s = ""; while (my $n = shift @w) { $s .= g($n) } $s } print f(), "\n";')
+        ->{'memory-order-disagrees'}, undef, 'a call in such a body (corpus 151)';
+    # (falsified: the store's memory taken from before the test is still one)
+    my $w = wire('my @q = (1,2); while (shift @q) { $q[0] = 5 } print "@q\n";');
+    my ($st) = grep { $_->{op} eq 'Assign' } $w->{methods}{'main::__PROGRAM__'}{nodes}->@*;
+    my ($ms) = grep { $_->{op} eq 'MemStart' } $w->{methods}{'main::__PROGRAM__'}{nodes}->@*;
+    $st->{mem_in} = $ms->{id};
+    ok rules($w)->{'memory-order-disagrees'}, 'a body store that skips the test still disagrees';
+};
+
 done_testing;

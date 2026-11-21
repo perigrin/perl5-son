@@ -537,6 +537,27 @@ sub _graph_v2 ( $name, $g, $res, $profile = {} ) {
     # Phi, else the way in's).
     my %region_mem;
     for my $p ( grep { $memphi->($_) } @nodes ) { $region_mem{ _fields($p)->{region} // -1 } //= $p->{id} }
+    # A LOOP'S TEST, on a wire without the `loop` profile: its effects are
+    # pinned to the Loop beside the body's Proj 0 (stage 9a gives the test an
+    # If), and the body follows the last of them -- the test's version no
+    # other on its chain follows. Undef where the test writes nothing.
+    my $test_version = sub ($loop) {
+        my ( @q, %seen, %v ) = ( $loop->{id} );
+        while ( defined( my $id = shift @q ) ) {
+            next if $seen{$id}++;
+            for my $s ( grep { $by{$_}{op} ne 'Proj' || $id != $loop->{id} } ( $succ{$id} // [] )->@* ) {
+                $v{$s} = 1 if $by{$s}{mem_out};
+                # (a test with arms -- `while (C && shift @q)` -- merges its
+                # memory at a Region of its own)
+                $v{ $region_mem{$s} } = 1 if $by{$s}{op} eq 'Region' && exists $region_mem{$s};
+                push @q, $s;
+            }
+        }
+        for my $x ( map { $by{$_} } keys %v ) {
+            delete @v{ grep { defined } $x->{mem_in}, ( $memphi->($x) ? ( $x->{inputs} // [] )->@* : () ) };
+        }
+        return keys %v == 1 ? ( keys %v )[0] : undef;
+    };
     my $back = sub ($p) {
         for ( 1 .. 100000 ) {
             my $pn = $by{ $p // '' } or return undef;
@@ -547,7 +568,14 @@ sub _graph_v2 ( $name, $g, $res, $profile = {} ) {
             }
             return $p if $pn->{mem_out};
             if    ( $op eq 'Region' || $op eq 'Loop' ) { return $region_mem{$p} if exists $region_mem{$p}; $p = $pn->{inputs}[0] }
-            elsif ( $op eq 'Proj' )                    { $p = $pn->{inputs}[0] }
+            elsif ( $op eq 'Proj' ) {
+                my $h = $by{ $pn->{inputs}[0] // '' };
+                if ( !$loop_profile && $h && $h->{op} eq 'Loop' && ( _fields($pn)->{index} // 0 ) == 0 ) {
+                    my $t = $test_version->($h);
+                    return $t if defined $t;
+                }
+                $p = $pn->{inputs}[0];
+            }
             elsif ( $op eq 'If' )                      { $p = $pn->{control_in} // $pn->{inputs}[0] }
             else                                       { $p = $pn->{control_in} }
         }
