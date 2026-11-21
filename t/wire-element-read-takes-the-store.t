@@ -19,14 +19,14 @@ sub wire_for ($src, $name) {
     return JSON::PP->new->decode($json);
 }
 
-# The Subscript that READS -- three inputs (container, index, memory), where a
-# store target has two.
+# The Subscript that READS -- at a memory version (mem_in), where a store
+# target names none.
 sub threaded_read ($src, $name) {
     my $wire = wire_for($src, $name);
     for my $g (keys $wire->{methods}->%*) {
         for my $n (( $wire->{methods}{$g}{nodes} // [] )->@*) {
             next unless $n->{op} eq 'Subscript';
-            next unless scalar( ( $n->{inputs} // [] )->@* ) >= 3;
+            next unless defined $n->{mem_in};
             return $n->{stamp} // 'Unknown';
         }
     }

@@ -246,7 +246,7 @@ sub compile {
     # names it and changes nothing; any other `wire=` asks for a wire this
     # producer no longer writes, and is refused rather than answered with v2.
     for my $w ( map { /\Awire=(.*)\z/ ? $1 : () } @opts ) {
-        die "B::SoN: wire=$w: wire v1 is gone; the wire is version 2\n" unless $w eq '2';
+        die "B::SoN: wire=$w: the wire is version 2 (wire v1 is gone)\n" unless $w eq '2';
     }
 
     # Two filters, and the difference is which way they fail.

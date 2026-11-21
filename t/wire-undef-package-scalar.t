@@ -85,7 +85,7 @@ subtest 'a later read sees the rebound undef' => sub {
     }
     else {
         is $tested->{op}, 'EntryDef', 'it tests a read of the package scalar';
-        my $mem = $by{ ( $tested->{inputs} // [] )->[0] // '' };
+        my $mem = $by{ $tested->{mem_in} // q() };
         ok $mem, 'and that read carries a memory version' or return;
         is $mem->{op}, 'EntryWrite', 'whose producer is a store' or return;
         is $mem->{inputs}[1], $undef_id,

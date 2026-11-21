@@ -26,5 +26,5 @@ $c = $n{$c}{control_in} while defined $c && !$seen{$c}++ && $c != $tie->{id};
 is($c, $tie->{id}, 'the store comes after the tie');
 my @counts = grep { $_->{op} eq 'Count' } values %n;
 is(scalar @counts, 2, 'a count after untie is not the count before it');
-ok(( grep { $_ == $untie->{id} } map { @{ $_->{inputs} } } @counts ), 'the later count reads the untie\'s memory');
+ok(( grep { $_ == $untie->{id} } map { $_->{mem_in} // () } @counts ), 'the later count reads the untie\'s memory');
 done_testing;

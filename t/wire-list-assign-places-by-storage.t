@@ -83,7 +83,7 @@ subtest 'a read after the store names it as its memory version' => sub {
     my @elems = grep { $_->{op} eq 'Subscript' } map { $by{$_} } grep { defined && !ref } $join->{inputs}->@*;
     # Either the join reads the container at the Assign's version, or each
     # element read does.
-    my @versions = ( $join->{fields}{memory_input} ? $join->{inputs}[-1] : () ), map { $_->{inputs}[2] } @elems;
+    my @versions = ( $join->{mem_in} // () ), map { $_->{mem_in} } @elems;
     ok scalar( grep { defined && $_ == $a->{id} } @versions ), 'a later read is at the Assign'
         or diag "versions: @versions, Assign: $a->{id}";
 };
@@ -116,7 +116,7 @@ subtest 'a scalar from an array is a copy of the element, not the array' => sub 
     my @elem = grep { $_->{op} eq 'Subscript' } map { $by{$_} } keys %seen;
     is scalar(@elem), 1, 'the print reads one element' or return;
     is $by{ $elem[0]{inputs}[0] }{fields}{symbol}, 'r', 'of @r';
-    is $elem[0]{inputs}[2], $push->{id}, 'at the memory version after the push';
+    is $elem[0]{mem_in}, $push->{id}, 'at the memory version after the push';
     my @whole = grep { $_->{op} eq 'Coerce' && $by{ $_->{inputs}[0] }{op} eq 'PadAccess' } map { $by{$_} } keys %seen;
     is scalar(@whole), 0, 'and never the array as a value';
 };

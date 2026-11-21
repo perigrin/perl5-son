@@ -29,7 +29,7 @@ my $TA = q{package TA; sub TIEARRAY { bless {}, shift } sub FETCH { "e" } sub FE
 {   # a count in a loop over a tied array is made each pass: in the loop, after the memory phi
     my ($n) = graph($TA . q{my @a; tie @a, "TA"; for my $e (@a) { print $e } print "\n";});
     my ($count) = grep { $_->{op} eq 'Count' } values %$n;
-    my $mem = $count ? $n->{ $count->{inputs}[1] } : undef;
+    my $mem = $count ? $n->{ $count->{mem_in} // -1 } : undef;
     ok($mem && $mem->{op} eq 'Phi', 'the loop\'s count of a tied array reads the loop\'s memory phi');
     is(scalar( grep { $_->{op} eq 'Count' } values %$n ), 1, 'and is not also made once before the loop');
 }
@@ -37,7 +37,7 @@ my $TA = q{package TA; sub TIEARRAY { bless {}, shift } sub FETCH { "e" } sub FE
     my ($n) = graph($TA . q{my @a; tie @a, "TA"; my $x = $a[0]; print "$main::L\n";});
     my ($read) = grep { $_->{op} eq 'Subscript' } values %$n;
     my ($l) = grep { $_->{op} eq 'EntryDef' && ( $_->{fields}{symbol} // '' ) eq 'L' } values %$n;
-    is($l->{inputs}[0], $read->{id}, 'a later package read is at the FETCH\'s memory version');
+    is($l->{mem_in}, $read->{id}, 'a later package read is at the FETCH\'s memory version');
 }
 {   # a whole assign to a tied hash is a store into it (CLEAR and STOREs), not refused --
     # see wire-a-whole-assign-to-a-tied-aggregate-is-in-place.t

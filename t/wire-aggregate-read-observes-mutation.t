@@ -55,9 +55,8 @@ subtest 'a count after shift observes the shortened array' => sub {
     # The read must carry a memory input, and that input must be the mutation
     # -- not MemStart, which is the pre-mutation version.
     my %by = map { $_->{id} => $_ } @n;
-    my @in = ($count->{inputs} // [])->@*;
-    cmp_ok scalar(@in), '>=', 2, 'the Count has a memory input';
-    my $mem = $by{ $in[-1] } if @in >= 2;
+    ok defined $count->{mem_in}, q(the Count has a memory input);
+    my $mem = $by{ $count->{mem_in} // -1 };
     is +($mem->{op} // ''), 'Call',
         '... and it is the mutation, not the initial memory';
 };
@@ -74,8 +73,7 @@ subtest 'a count after push observes the lengthened array' => sub {
     my @n = prog_nodes($w)->@*;
     my ($count) = grep { $_->{op} eq 'Count' } @n;
     ok $count, 'a Count is built' or return;
-    my @in = ($count->{inputs} // [])->@*;
-    cmp_ok scalar(@in), '>=', 2, 'the Count is memory-dependent';
+    ok defined $count->{mem_in}, q(the Count is memory-dependent);
 };
 
 # TWO READS EITHER SIDE OF A MUTATION ARE DIFFERENT VALUES, and this is what

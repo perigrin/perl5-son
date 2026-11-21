@@ -137,7 +137,7 @@ subtest 'the loop reads $i through memory, with an honest stamp' => sub {
     ok $mem, 'the loop has a memory Phi' or return;
 
     my @reads = grep { $_->{op} eq 'EntryDef' && ( $_->{fields}{symbol} // '' ) eq 'i'
-                       && ( $_->{inputs} // [] )->@* && $_->{inputs}[0] == $mem->{id} } @n;
+                       && ( $_->{mem_in} // -1 ) == $mem->{id} } @n;
     ok scalar(@reads), '$i is read at the loop\'s memory Phi' or return;
     for my $r (@reads) {
         my $st = $r->{stamp} // 'Unknown';

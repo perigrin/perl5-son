@@ -53,14 +53,14 @@ sub pinned (@r) { @r && !grep { !defined $_->{control_in} } @r }
     ok(@r && !grep({ defined $_->{control_in} } @r), 'nor a fresh {...}: it is a hash reference');
 }
 {   my $n = graph(q{sub f { my ($r) = @_; my $v = $$r; $$r = 2; $v } my $x = 1; print f(\$x), "\n";}, 'main::f');
-    ok(pinned(grep { @{ $_->{inputs} } > 1 } reads($n, 'PostfixDeref', '$')), 'a scalar deref is on the chain');
+    ok(pinned(grep { defined $_->{mem_in} } reads($n, q(PostfixDeref), q($))), 'a scalar deref is on the chain');
 }
 {   my $n = graph(q{my $x = 1; my $r = \$x; my $v = $$r; print "$v\n";});
     my @r = reads($n, 'PostfixDeref', '$');
     ok(@r && !grep({ defined $_->{control_in} } @r), 'not one of a reference just made: it cannot die');
 }
 {   my $n = graph(q{sub f { my ($k, $r) = @_; if ($k) { print $$r, "\n" } else { print $$r + 1, "\n" } } f(1, \2); f(0, \2);}, 'main::f');
-    my @r = grep { @{ $_->{inputs} } > 1 } reads($n, 'PostfixDeref', '$');
+    my @r = grep { defined $_->{mem_in} } reads($n, q(PostfixDeref), q($));
     ok(@r == 2 && pinned(@r), 'one read in each arm, each pinned in its own');
 }
 {   my $n = graph(q{sub f { my @s; for my $v (@_) { if (ref($v) eq 'ARRAY') { } elsif (ref($v) eq 'HASH' && exists $v->{a}) { push @s, $v } } scalar @s } print f({ a => 1 }, [2], { b => 1 }), "\n";}, 'main::f');

@@ -35,7 +35,7 @@ for my $case (
     my @w = warns_of($w, 'main::__PROGRAM__');
     is scalar(@w), 1, "$name: one warn on the wire";
     ok defined $w[0]{control_in}, "$name: on the control chain";
-    ok $w[0]{fields}{memory_input}, "$name: a memory version (its handler may store)";
+    ok $w[0]{mem_out} && defined $w[0]{mem_in}, "$name: a memory version (its handler may store)";
 }
 
 # A sub's last statement runs in its caller's context, not void.

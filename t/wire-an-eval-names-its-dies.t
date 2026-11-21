@@ -48,7 +48,7 @@ is $msg_of{"top\n"}, undef,  'a die in no eval names none';
 # same memory version (a guard: chalk relies on it to order the two).
 $n = nodes_of(q{my $i = eval { my $j = eval { die "x\n"; 1 }; print "in[$@]"; 2 }; print "out[$@]";});
 my @at_reads = grep { $_->{op} eq 'EntryDef' && ($_->{fields}{symbol} // '') eq '@'
-    && @{ $_->{inputs} // [] } } @$n;
+    && defined $_->{mem_in} } @$n;
 my @pinned = grep { defined $_->{control_in} } @at_reads;
 is scalar(@pinned), 1, 'the read after the evals is pinned';
 ok !(grep { $_->{id} == $pinned[0]{id} } grep { !defined $_->{control_in} } @at_reads),

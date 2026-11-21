@@ -57,7 +57,7 @@ subtest 'json output is parseable JSON with correct structure' => sub {
 
 subtest "wire v1 is gone: asked for, it is refused by name" => sub {
     my $err = `$perl -Ilib -MO=SoN,json,wire=1 -e "1" 2>&1 >/dev/null`;
-    like($err, qr/wire=1: wire v1 is gone/, "wire=1 refused");
+    like($err, qr/wire=1: the wire is version 2 \(wire v1 is gone\)/, "wire=1 refused");
     my $out = `$perl -Ilib -MO=SoN,json,wire=2 -e "1" 2>/dev/null`;
     is(JSON::PP::decode_json($out)->{version}, 2, "wire=2 names the one version");
 };

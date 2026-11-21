@@ -58,8 +58,8 @@ subtest 'push lowers and threads onto memory' => sub {
     unlike $err, qr/GAP:|INTERNAL/, 'no longer refused' or return;
     my ($p) = grep { ($_->{name} // '') eq 'push' } $n->@*;
     ok defined $p, 'the push Call exists' or return;
-    cmp_ok scalar(($p->{inputs} // [])->@*), '>=', 3,
-        'it carries array, value and memory';
+    ok scalar(($p->{inputs} // [])->@*) >= 2 && defined $p->{mem_in},
+        q(it carries array, value and memory);
 };
 
 # THE MUTATION MUST BE OBSERVABLE. This is the assertion the refusal existed to
@@ -73,13 +73,13 @@ subtest 'a later read observes the push' => sub {
         my ($count) = grep { $_->{op} eq 'Count' } $n->@*;
         ok defined $count, 'the scalar(@a) Count exists' or return;
         # walk back from Count: it must reach the push Call
-        my (@q, %seen) = (($count->{inputs} // [])->@*);
+        my (@q, %seen) = (($count->{inputs} // [])->@*, $count->{mem_in} // ());
         my $reaches = 0;
         while (my $id = shift @q) {
             next if $seen{$id}++;
             my $nd = $byid{$id} or next;
             $reaches = 1, last if ($nd->{name} // '') eq 'push';
-            push @q, ($nd->{inputs} // [])->@*;
+            push @q, ($nd->{inputs} // [])->@*, $nd->{mem_in} // ();
         }
         ok $reaches, 'the later read reaches the push, not the pre-push binding';
     }

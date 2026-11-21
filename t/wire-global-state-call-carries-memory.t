@@ -42,12 +42,10 @@ subtest 'require carries the memory it advances' => sub {
                 $g->{nodes}->@*;
     ok $req, 'there is a require Call' or return;
 
-    my @in = ($req->{inputs} // [])->@*;
-    is scalar(@in), 2, 'it has a memory input beside its argument'
-        or diag "inputs: @in";
-    return unless @in >= 2;
+    is scalar( ($req->{inputs} // [])->@* ), 1, q(its argument is its one input);
+    ok defined $req->{mem_in}, q(it has a memory input beside its argument) or return;
 
-    my $mem = $by{ $in[-1] };
+    my $mem = $by{ $req->{mem_in} };
     like +($mem->{op} // ''), qr/\A(?:MemStart|EntryWrite|Assign|Call|Phi|CellWrite|Delete)\z/,
         '... and that input is a memory point';
 };
@@ -64,8 +62,7 @@ subtest 'two requires chain through memory' => sub {
               $g->{nodes}->@*;
     is scalar(@req), 2, 'two require Calls' or return;
 
-    my @in = ($req[1]{inputs} // [])->@*;
-    is $in[-1], $req[0]{id},
+    is $req[1]{mem_in}, $req[0]{id},
         'the second names the first as its memory';
 };
 
@@ -101,11 +98,10 @@ subtest 'a destructive s/// carries the memory it advances' => sub {
     my ($sub) = grep { ($_->{op} // '') eq 'RegexSubst' } $g->{nodes}->@*;
     ok $sub, 'there is a RegexSubst' or return;
 
-    my @in = ($sub->{inputs} // [])->@*;
-    my $mem = $by{ $in[-1] // -1 };
+    my $mem = $by{ $sub->{mem_in} // -1 };
     like +($mem->{op} // ''),
         qr/\A(?:MemStart|EntryWrite|Assign|Call|Phi|CellWrite|Delete|RegexSubst)\z/,
-        'its last input is a memory point';
+        q(its memory edge names a memory point);
 };
 
 done_testing;

@@ -21,7 +21,7 @@ sub graph_of ($src) {
 my $data  = graph_of(q{my %h = (b => 2, c => 3); $h{d} = 4; print join(",", map { "$_=$h{$_}" } sort keys %h), "\n";});
 my @nodes = $data->{methods}{'main::__PROGRAM__'}{nodes}->@*;
 my %by_id = map { $_->{id} => $_ } @nodes;
-my @reads = grep { $_->{op} eq 'Subscript' && $_->{inputs}->@* == 3 } @nodes;
+my @reads = grep { $_->{op} eq q(Subscript) && defined $_->{mem_in} } @nodes;
 ok scalar(@reads), 'the reads are there';
 for my $r (@reads) {
     isnt $r->{stamp}, 'Int', "read $r->{id} of another slot is not the store's Int";
@@ -30,7 +30,7 @@ for my $r (@reads) {
 # THE SAME SLOT keeps the store's type.
 $data  = graph_of(q{my @a = (1); $a[0] = "foo"; print $a[0], "\n";});
 @nodes = $data->{methods}{'main::__PROGRAM__'}{nodes}->@*;
-my ($same) = grep { $_->{op} eq 'Subscript' && $_->{inputs}->@* == 3 } @nodes;
+my ($same) = grep { $_->{op} eq q(Subscript) && defined $_->{mem_in} } @nodes;
 is $same->{stamp}, 'Str', 'a read of the slot stored is the stored Str';
 
 done_testing;

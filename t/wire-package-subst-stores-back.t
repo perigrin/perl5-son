@@ -70,7 +70,7 @@ subtest 'chained package substitutions thread memory in order' => sub {
     ok $writes{ $subst[1]{id} }, 'the second substitution is stored back';
 
     # The second subst must READ the first one's store, not the initialiser.
-    my $second_mem = $subst[1]{inputs}[-1];
+    my $second_mem = $subst[1]{mem_in};
     is $second_mem, $writes{ $subst[0]{id} }{id},
         'the second substitution supersedes the first store, not the initialiser';
 };

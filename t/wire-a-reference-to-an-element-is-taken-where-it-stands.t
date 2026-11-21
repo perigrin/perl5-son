@@ -65,23 +65,23 @@ sub round_trips ($src, $name) {
     my ($rb) = elem_refs($before);
     my ($ra) = elem_refs($after);
     ok $rb && $ra, 'each takes a reference to an element' or last;
-    is scalar $rb->{inputs}->@*, 2, 'the reference reads memory: its location, then the memory version';
-    is $before->{ $rb->{inputs}[1] }{op}, 'MemStart', 'taken before the shift, it reads the memory before it';
-    is $after->{ $ra->{inputs}[1] }{op} . '/' . ( $after->{ $ra->{inputs}[1] }{fields}{name} // '' ), 'Call/shift',
+    ok scalar( $rb->{inputs}->@* ) == 1 && defined $rb->{mem_in}, q(the reference reads memory: its location, at a memory version);
+    is $before->{ $rb->{mem_in} }{op}, 'MemStart', 'taken before the shift, it reads the memory before it';
+    is $after->{ $ra->{mem_in} }{op} . '/' . ( $after->{ $ra->{mem_in} }{fields}{name} // '' ), 'Call/shift',
         'taken after the shift, it reads the memory the shift made';
     ok defined $rb->{control_in}, 'it stands where it is taken, on the control chain';
     my ($shift) = grep { $_->{op} eq 'Call' && ( $_->{fields}{name} // '' ) eq 'shift' } values %$before;
-    is $shift->{inputs}[-1], $rb->{id}, 'and the shift after it is ordered after it (the memory version it is)';
+    is $shift->{mem_in}, $rb->{id}, 'and the shift after it is ordered after it (the memory version it is)';
 }
 {
     my $n = nodes(wire(q{my %h = (k => 1); my $r = \$h{k}; delete $h{k}; print "$$r\n";}));
     my ($r) = elem_refs($n);
-    ok $r && $r->{inputs}->@* == 2 && $n->{ $r->{inputs}[1] }{op} eq 'MemStart', 'a hash element too';
+    ok $r && $r->{inputs}->@* == 1 && $n->{ $r->{mem_in} // -1 }{op} eq q(MemStart), 'a hash element too';
 }
 {
     my $n = nodes(wire(q{my @a = (1, 2); shift @a; my @r = \(@a); print ${$r[0]}, "\n";}));
     my ($r) = grep { $_->{op} eq 'Ref' && $_->{fields}{each} } values %$n;
-    ok $r && $r->{inputs}->@* == 2 && is_memory($n, $r->{inputs}[1]), 'a reference to each element reads memory too';
+    ok $r && $r->{inputs}->@* == 1 && is_memory($n, $r->{mem_in}), 'a reference to each element reads memory too';
 }
 
 # ONE THAT MAY DIE NAMES ITS SITE: `\$a[$i]` with $i before the start dies

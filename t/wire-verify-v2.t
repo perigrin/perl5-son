@@ -1,5 +1,5 @@
 # ABOUTME: SoN::Verify's wire v2 rules (the plan's section 8.1, V1 to V9): one hand-built
-# ABOUTME: graph that breaks each, clean programs made with wire=2, and review focus 1 and 2.
+# ABOUTME: graph that breaks each, clean programs B::SoN made, and review focus 1 and 2.
 use v5.42.0;
 use Test2::V0;
 use JSON::PP;
@@ -15,7 +15,7 @@ sub wire ($src) {
     open my $o, '>', $f or die $!;
     print $o $src;
     close $o;
-    my $json = qx($^X -Ilib -MO=-q,SoN,json,wire=2,not_package=SoN $f 2>$dir/err);
+    my $json = qx($^X -Ilib -MO=-q,SoN,json,not_package=SoN $f 2>$dir/err);
     return JSON::PP->new->utf8->decode($json);
 }
 sub rules ($w) {
@@ -148,7 +148,7 @@ subtest 'V9 control-fork holds on v2' => sub {
     ok scalar( grep { $_ eq 'control-fork' } rule_names( rules($g) )->@* ), 'two successors of Start';
 };
 
-subtest 'programs made with wire=2' => sub {
+subtest 'programs B::SoN made' => sub {
     is rules('my @a = (1,2,3); $a[0] = 10; my $x = $a[0]; $a[1] = $x + 1; print "$a[0] $a[1]\n";'), {},
         'stores and reads in one chain';
     is rules('our $g; sub bump { $g += 10 } bump(); bump(); print "$g\n";'), {}, 'calls and a sub that stores';
@@ -175,6 +175,43 @@ subtest 'V5 at a loop whose test writes, without the loop profile' => sub {
     my ($ms) = grep { $_->{op} eq 'MemStart' } $w->{methods}{'main::__PROGRAM__'}{nodes}->@*;
     $st->{mem_in} = $ms->{id};
     ok rules($w)->{'memory-order-disagrees'}, 'a body store that skips the test still disagrees';
+};
+
+# WIRE V1 IS GONE (stage 6), and with it the rules only it needed
+# (write-floating, effect-rides-value, fault-floating,
+# package-scalar-loop-value): a wire of another version is refused by name,
+# not checked by rules it does not obey.
+subtest 'a wire that is not v2 is refused by name' => sub {
+    my $v1 = good();
+    $v1->{version} = 1;
+    like dies { SoN::Verify::verify($v1) }, qr/\ASoN::Verify: wire version 1: the rules are wire v2's/, 'version 1';
+    delete $v1->{version};
+    like dies { SoN::Verify::verify($v1) }, qr/wire version none/, 'no version';
+};
+
+# V6, ITS CLASSES (moved from the v1 rules' test): a read of changeable state
+# with no memory edge whose value is used.
+subtest 'V6 read-unversioned:object-class: a ref() at no version (ef9)' => sub {
+    my $r = rules( v2(
+        nd( 0, 'Start', [] ), nd( 1, 'MemStart', [] ), nd( 2, 'HashLiteral', [] ), nd( 3, 'Constant', [] ),
+        nd( 4, 'RefType', [2] ),
+        nd( 5, 'Call', [ 2, 3 ], ctl => 0, mem => 1, out => 1, dispatch_kind => 'builtin', name => 'bless' ),
+        nd( 6, 'Print', [4], ctl => 5 ),
+        nd( 7, 'Return', [3], ctl => 6, mem => 5 ),
+    ) );
+    is [ map { $_->{op} } ( $r->{'read-unversioned:object-class'} // [] )->@* ], ['RefType'], 'a RefType with no mem_in';
+    my $p = rules('my $o = {}; my $c = ref($o); bless $o, "K"; my $d = ref($o); print "$c $d\n";');
+    is $p->{'read-unversioned:object-class'}, undef, 'the producer\'s ef9 reads each at its version';
+};
+subtest 'V6 read-unversioned:package-aggregate-literal: a flattened package array (nv1)' => sub {
+    my $r = rules('our @st = (1); my @c = (@st, 2); @st = (); print "@c\n";');
+    ok scalar( ( $r->{'read-unversioned:package-aggregate-literal'} // [] )->@* ),
+        '@st read through its named literal (stage 7 gives it a version)';
+};
+subtest 'V8 phi-arity:eval-join: the eval join has one way in, two-input Phis' => sub {
+    my $r = rules('my $x = 1; my $r = eval { $x = 2; die "a\n" if @ARGV; 5 }; print "$x $r $@\n";');
+    is [ map { $_->{op} } ( $r->{'phi-arity:eval-join'} // [] )->@* ], ['Phi'], 'the value Phi of the eval (stage 8 gives it its edge)';
+    is $r->{'phi-arity'}, undef, 'and it is not counted as an unknown mismatch';
 };
 
 done_testing;

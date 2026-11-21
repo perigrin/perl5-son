@@ -45,10 +45,10 @@ subtest 'a scalar deref through a lexical ref lowers' => sub {
     # A READ IS A LOAD: the reference, then the memory version it reads at,
     # so a later store through the same ref cannot float above it.
     my @in = ( $d->{inputs} // [] )->@*;
-    is scalar(@in), 2, '... over the reference and the memory it reads';
+    is scalar(@in), 1, q(... over the reference);
     my %by_id = map { $_->{id} => $_ } $ns->@*;
-    is $by_id{ $in[0] }{op}, 'Ref', '... the reference first';
-    is $by_id{ $in[1] }{op}, 'Assign', '... then the store it observes';
+    is $by_id{ $in[0] }{op}, q(Ref), q(... the reference);
+    is $by_id{ $d->{mem_in} // -1 }{op}, q(Assign), q(... at the memory of the store it observes);
 };
 
 # THE lex.t IDIOM. `${\ EXPR }` takes a ref to a temporary and immediately

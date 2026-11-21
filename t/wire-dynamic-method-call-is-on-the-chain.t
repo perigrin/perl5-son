@@ -43,11 +43,11 @@ for my $name ( sort keys %shape ) {
         is [ map { "$_->{rule} $_->{detail}" } grep { $_->{detail} =~ /dynamic_method/ }
              SoN::Verify::verify($w)->{violations}->@* ], [], 'the verifier sees none off the chain';
         # The read of $o->{n} after it names a version at or after the call.
-        my ($read) = grep { $_->{op} eq 'Subscript' && @{ $_->{inputs} } == 3 } reverse @nodes;
+        my ($read) = grep { $_->{op} eq q(Subscript) && defined $_->{mem_in} } reverse @nodes;
         ok $read, 'the element is read at a memory version' or return;
         my %dyn = map { $_->{id} => 1 } @dyn;
         my %by  = map { $_->{id} => $_ } @nodes;
-        my $v   = $by{ $read->{inputs}[2] };
+        my $v   = $by{ $read->{mem_in} };
         ok $dyn{ $v->{id} } || ( $v->{op} eq 'Phi' && $v->{fields}{memory} ),
             'and that version is the call (or the merge of the arms that made it)';
     };

@@ -69,9 +69,9 @@ for my $name ( sort keys %shape ) {
         # read of the pre-loop version: nothing computed from before the loop
         # is stored on every pass.
         my @reads = grep { $_->{op} eq 'EntryDef' && ( $_->{fields}{sigil} // '' ) eq '$'
-                           && $_->{fields}{symbol} =~ /\A[gsn]\z/ && ( $_->{inputs} // [] )->@* } @nodes;
+                           && $_->{fields}{symbol} =~ /\A[gsn]\z/ && defined $_->{mem_in} } @nodes;
         ok scalar(@reads), 'the scalar is read through memory';
-        my @pre = grep { $by{ $_->{inputs}[0] }{op} eq 'MemStart' } @reads;
+        my @pre = grep { $by{ $_->{mem_in} }{op} eq q(MemStart) } @reads;
         my @stored_from_pre = grep {
             my $r = $_;
             grep { $_->{op} eq 'EntryWrite' && defined $_->{control_in} && _reaches( \%by, $_->{inputs}[1], $r->{id} ) } @nodes
@@ -100,7 +100,7 @@ for my $name ( sort keys %rmw ) {
         my ($call) = grep { $_->{op} eq 'Call' && ( $_->{fields}{name} // '' ) eq 'main::ap' } @nodes;
         my ($write) = grep { $_->{op} eq 'EntryWrite' && ( $_->{control_in} // -1 ) == $call->{id} } @nodes;
         ok $write, 'a store follows the first call' or return;
-        my @reads = grep { $_->{op} eq 'EntryDef' && ( $_->{inputs} // [] )->@* && $_->{inputs}[0] == $call->{id} } @nodes;
+        my @reads = grep { $_->{op} eq q(EntryDef) && ( $_->{mem_in} // -1 ) == $call->{id} } @nodes;
         ok scalar( grep { _reaches( \%by, $write->{inputs}[1], $_->{id} ) } @reads ),
             'its value is computed from a read at the call';
     };

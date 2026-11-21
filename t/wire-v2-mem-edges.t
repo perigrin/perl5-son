@@ -1,4 +1,4 @@
-# ABOUTME: Wire v2 (`wire=2`): the five examples of the plan's section 3.4, node by node --
+# ABOUTME: Wire v2 (B::SoN's one wire): the five examples of the plan's section 3.4, node by node --
 # ABOUTME: inputs are values, `mem_in` names the version read or followed, `mem_out` a version.
 use v5.42.0;
 use Test2::V0;
@@ -11,7 +11,7 @@ use File::Temp qw(tempdir);
 my $dir = tempdir( CLEANUP => 1 );
 my $n   = 0;
 
-sub wire ( $src, $opt = ',wire=2' ) {
+sub wire ( $src, $opt = q() ) {
     my $f = "$dir/p" . ++$n . ".pl";
     open my $o, '>', $f or die $!;
     print $o $src;
@@ -25,14 +25,12 @@ sub graph ( $w, $name = 'main::__PROGRAM__' ) {
 }
 sub op_of ( $by, $id ) { defined $id && $by->{$id} ? $by->{$id}{op} : 'none' }
 
-subtest 'the top level says version 2 and its profile; wire=1 is v1' => sub {
+subtest 'the top level says version 2 and its profile; wire v1 is gone' => sub {
     my $w = wire('print 1;');
-    is $w->{version}, 2, 'version 2';
+    is $w->{version}, 2, 'version 2 (the default, and the only one)';
     is $w->{profile}, ['mem'], 'profile: mem';
-    my $v1 = wire( 'print 1;', '' );
-    is $v1->{version}, 1, 'the default is still v1';
-    ok !exists $v1->{profile}, '... with no profile';
-    like scalar( `$^X -Ilib -MO=-q,SoN,json,wire=3 -e 1 2>&1` ), qr/wire=3: the wire versions are 1 and 2/,
+    is wire( 'print 1;', ',wire=2' )->{version}, 2, 'wire=2 names it';
+    like scalar( `$^X -Ilib -MO=-q,SoN,json,wire=1 -e 1 2>&1` ), qr/wire=1: the wire is version 2 \(wire v1 is gone\)/,
         'another version is refused by name';
 };
 

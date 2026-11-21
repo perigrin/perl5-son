@@ -18,5 +18,5 @@ $walk->($j->{methods}{'main::__PROGRAM__'});
 my ($store) = grep { $_->{op} eq 'Assign' } values %n;
 my ($read)  = grep { $_->{op} eq 'EntryDef' && ( $_->{fields}{symbol} // '' ) eq 'y' } values %n;
 ok($store && $read, 'a store and a read of $y');
-is($read->{inputs}[0], $store->{id}, 'the read is at the store\'s version');
+is($read->{mem_in}, $store->{id}, 'the read is at the store\'s version');
 done_testing;

@@ -48,7 +48,8 @@ die "no chalk clone at $chalk (set SON_CHALK)\n"     unless -d "$chalk/.git";
 my ($lli) = grep { -x } map { "$_/lli" } split /:/, $ENV{PATH};
 die "no lli on PATH\n" unless $lli;
 
-# THE WIRE VERSION B::SoN WRITES: SON_WIRE's (`wire=2`), else its default.
+# THE WIRE VERSION B::SoN IS ASKED FOR: SON_WIRE's (`wire=2`), else none (v2,
+# the one wire since stage 6; another is refused by B::SoN).
 my $WIRE = length($ENV{SON_WIRE} // '') ? ",wire=$ENV{SON_WIRE}" : '';
 
 my $dir  = tempdir(CLEANUP => 1);

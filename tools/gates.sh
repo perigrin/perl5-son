@@ -21,9 +21,10 @@
 # taken again either, so DIR's results are all of one tree. A changed tree
 # needs a new DIR.
 #
-# THE PRODUCER SUITE ALSO LEAVES OUT t/wire-v2-downgrades-to-v1.t, run whole by
-# the ratchet gate against a checkout of the commit it names ($OUT/v1base).
-# (One gate for both: chalk's t/bootstrap/gates-script.t holds the list.)
+# THE RATCHET GATE ALSO RUNS tools/corpus-roundtrip.pl: the deparser's round
+# trip over the corpus, through SoN::Wire::as_v1 (what is left of wire v1; it
+# took the place of stage 3's downgrade proof when the v1 writer went, stage
+# 6). One gate for both: chalk's t/bootstrap/gates-script.t holds the list.
 #
 # THE SUITES LEAVE OUT THREE FILES that are gates of their own, so that none
 # runs twice: chalk's t/bootstrap/corpus/son-corpus-wide.t (corpus-gate) and
@@ -36,6 +37,7 @@
 set -u
 
 ROUNDTRIP_MIN=426
+DEPARSE_MIN=430
 GATE_GREEN_MIN=222
 GATES="producer-suite chalk-suite census corpus-gate probes ratchet"
 
@@ -46,7 +48,7 @@ chalk-suite     every t/**/*.t under prove -Ilib -It/lib: 0 failing files
 census          tools/corpus-llvm-roundtrip.pl: ROUNDTRIP >= $ROUNDTRIP_MIN, DIFFERS 0, LLI_FAIL 0
 corpus-gate     chalk t/bootstrap/corpus/son-corpus-wide.t: passes, gate-green >= $GATE_GREEN_MIN, paad/worklist.json untouched
 probes          chalk tools/audit-probes.pl: WRONG 0, TIMEOUT 0, no probe BASELINE.tsv records SAME is anything else
-ratchet         t/wire-verify-ratchet.t over corpus, probes and chalk's lib, wire 1 and wire 2: no rule above t/data/wire-verify-baseline.tsv, chalk's lib per graph (t/data/wire-verify-chalk-graphs.tsv: no recorded graph rises), no wire dropped; and t/wire-v2-downgrades-to-v1.t over all three: 0 wires differ from the base commit's
+ratchet         t/wire-verify-ratchet.t over corpus, probes and chalk's lib: no rule above t/data/wire-verify-baseline.tsv, chalk's lib per graph (t/data/wire-verify-chalk-graphs.tsv: no recorded graph rises), no wire dropped; and tools/corpus-roundtrip.pl (the deparser's round trip, through SoN::Wire::as_v1): ROUNDTRIP >= $DEPARSE_MIN, EMITS_INVALID_PERL 0
 EOF
 }
 
@@ -154,15 +156,13 @@ ratchet_line() {
     [ $v = PASS ]
 }
 
-downgrade_line() {
-    local f=$OUT/downgrade.out
-    [ -f "$f" ] || { printf '%-15s PEND\n' downgrade; return 1; }
-    local rc v=PASS line
-    rc=$(cat "$OUT/downgrade.rc")
-    line=$(grep -o '# [0-9]* of [0-9]* wires differ' "$f" | tail -1)
-    [ "$rc" -eq 0 ] || v=MISS
-    printf '%-15s %s  (downgrade proof) prove exit %s; %s%s\n' '' $v "$rc" "${line:-no comparison}" "$(secs downgrade)"
-    [ $v = PASS ] || grep '^not ok\|^ *not ok\|: graph \|wire only in' "$f" | head -12 | sed 's/^/                  /'
+deparse_line() {
+    local f=$OUT/deparse.out
+    [ -f "$f" ] || { printf '%-15s PEND\n' deparse; return 1; }
+    local rt inv v=PASS
+    rt=$(awk '$1=="ROUNDTRIP"{print $2}' "$f"); inv=$(awk '$1=="EMITS_INVALID_PERL"{print $2}' "$f")
+    [ "${rt:-0}" -ge $DEPARSE_MIN ] && [ "${inv:-1}" -eq 0 ] || v=MISS
+    printf '%-15s %s  (deparser round trip) ROUNDTRIP %s (>= %d) EMITS_INVALID_PERL %s%s\n' '' $v "${rt:-?}" $DEPARSE_MIN "${inv:-?}" "$(secs deparse)"
     [ $v = PASS ]
 }
 
@@ -182,7 +182,7 @@ summary() {
     wanted corpus-gate    && { corpus_gate_line || miss=1; }
     wanted probes         && { probes_line      || miss=1; }
     wanted ratchet        && { ratchet_line     || miss=1; }
-    wanted ratchet        && { downgrade_line   || miss=1; }
+    wanted ratchet        && { deparse_line     || miss=1; }
     return $miss
 }
 
@@ -205,11 +205,6 @@ snap() {    # from to
     mv "$2.tmp" "$2"
 }
 if [ ! -d "$P" ]; then at "$HERE" > "$OUT/producer.at"; snap "$HERE" "$P" || exit 2; fi
-# The commit t/wire-v2-downgrades-to-v1.t compares with, checked out once.
-if wanted ratchet && [ ! -d "$OUT/v1base" ]; then
-    base=$(sed -n "s/^my \$BASE *= *'\([0-9a-f]*\)';.*/\1/p" "$P/t/wire-v2-downgrades-to-v1.t")
-    mkdir -p "$OUT/v1base.tmp" && git -C "$HERE" archive "$base" | tar -x -C "$OUT/v1base.tmp" && mv "$OUT/v1base.tmp" "$OUT/v1base" || exit 2
-fi
 if [ ! -d "$C" ]; then
     at "$CHALK" > "$OUT/chalk.at"
     snap "$CHALK" "$C.pre" || exit 2
@@ -285,12 +280,10 @@ ratchet() {
     mv "$OUT/ratchet.tmp" "$OUT/ratchet.out"
 }
 
-downgrade() {
-    [ -f "$OUT/downgrade.out" ] && return 0
-    ( cd "$P" && SON_V1_BASE=$OUT/v1base SON_DOWNGRADE_FULL=1 SON_CHALK=$C SON_DOWNGRADE_CACHE=$OUT/downgrade-base \
-        SON_WIRE_JOBS=$1 timeout 7200 prove -lv t/wire-v2-downgrades-to-v1.t ) > "$OUT/downgrade.tmp" 2>&1
-    echo $? > "$OUT/downgrade.rc"
-    mv "$OUT/downgrade.tmp" "$OUT/downgrade.out"
+deparse() {
+    [ -f "$OUT/deparse.out" ] && return 0
+    ( cd "$P" && timeout 3600 perl tools/corpus-roundtrip.pl ) > "$OUT/deparse.tmp" 2>&1
+    grep -q '^ROUNDTRIP' "$OUT/deparse.tmp" && mv "$OUT/deparse.tmp" "$OUT/deparse.out"
 }
 
 # timed(gate, command...): run it, and add its seconds to $OUT/GATE.secs (a
@@ -308,9 +301,9 @@ timed() {
 # three more than it has, and after that for exactly what it has.
 bg=""
 if wanted corpus-gate; then timed corpus-gate corpus_gate & bg="$bg $!"; fi
-if wanted ratchet;     then { timed ratchet ratchet 2; timed downgrade downgrade 2; } & bg="$bg $!"; fi
+if wanted ratchet;     then { timed ratchet ratchet 2; timed deparse deparse; } & bg="$bg $!"; fi
 sj=$JOBS
-wanted producer-suite && timed producer-suite suite producer-suite "$P" -l "$sj" '^t/(wire-verify-ratchet|wire-v2-downgrades-to-v1)\.t$'
+wanted producer-suite && timed producer-suite suite producer-suite "$P" -l "$sj" '^t/wire-verify-ratchet\.t$'
 wanted chalk-suite    && timed chalk-suite suite chalk-suite "$C" '-Ilib -It/lib' "$sj" '^t/bootstrap/(corpus/son-corpus-wide|ir/audit-probes)\.t$'
 wanted census         && timed census census "$sj"
 wanted probes         && timed probes probes "$sj"

@@ -33,7 +33,7 @@ for my $case (
             "$name: eval $r->{fields}{eval_id}'s join versions memory" );
     }
     my @reads = grep { $_->{op} eq 'EntryDef' && ( $_->{fields}{symbol} // '' ) eq '@' && defined $_->{control_in} } @nodes;
-    my %mem; $mem{ join ',', $_->{inputs}->@* }++ for @reads;
+    my %mem; $mem{ $_->{mem_in} // q(none) }++ for @reads;
     ok !( grep { $_ > 1 } values %mem ), "$name: no two pinned reads of \$@ share a memory version";
 }
 

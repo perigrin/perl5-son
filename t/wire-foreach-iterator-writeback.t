@@ -107,11 +107,11 @@ subtest 'a list read observes the alias write' => sub {
     my %by = map { $_->{id} => $_ } $nodes->@*;
 
     my ($read) = grep {
-        $_->{op} eq 'PostfixDeref' && ($_->{inputs} // [])->@* >= 2
+        $_->{op} eq q(PostfixDeref) && defined $_->{mem_in}
     } $nodes->@*;
     ok $read, 'the list read is a memory-threaded PostfixDeref' or return;
 
-    my $mem = $by{ $read->{inputs}[1] };
+    my $mem = $by{ $read->{mem_in} };
     isnt $mem->{op}, 'MemStart',
         '... threaded to the write, not to the pre-loop memory';
 };

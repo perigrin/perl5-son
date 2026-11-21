@@ -90,7 +90,7 @@ subtest 'a subscript after a store does not trust the literal' => sub {
 
     # The READ is the one whose memory input is the store, not MemStart.
     my ($read) = grep {
-        my $m = $byid{ ($_->{inputs} // [])->[2] // -1 };
+        my $m = $byid{ $_->{mem_in} // -1 };
         $m && $m->{op} ne 'MemStart';
     } @subs;
     ok defined $read, 'the post-store read exists' or return;
@@ -165,7 +165,7 @@ subtest 'a subscript after a store takes the stored type' => sub {
     my @nodes = ($wire->{methods}{'main::__PROGRAM__'}{nodes} // [])->@*;
     my %byid  = map { $_->{id} => $_ } @nodes;
     my ($read) = grep {
-        my $m = $byid{ ($_->{inputs} // [])->[2] // -1 };
+        my $m = $byid{ $_->{mem_in} // -1 };
         $_->{op} eq 'Subscript' && $m && $m->{op} ne 'MemStart';
     } @nodes;
     ok defined $read, 'the post-store read exists' or return;
@@ -180,7 +180,7 @@ subtest 'a hash element after a store takes the stored type' => sub {
     my @nodes = ($wire->{methods}{'main::__PROGRAM__'}{nodes} // [])->@*;
     my %byid  = map { $_->{id} => $_ } @nodes;
     my ($read) = grep {
-        my $m = $byid{ ($_->{inputs} // [])->[2] // -1 };
+        my $m = $byid{ $_->{mem_in} // -1 };
         $_->{op} eq 'Subscript' && $m && $m->{op} ne 'MemStart';
     } @nodes;
     ok defined $read, 'the post-store read exists' or return;
@@ -233,8 +233,8 @@ subtest 'an lvalue subscript is not stamped at all' => sub {
     my $wire = wire_for('my @a = (1, 2, 3); $a[0] = 42; say($a[0]);', 'floor_lvalue');
     my @subs = grep { $_->{op} eq 'Subscript' }
                ($wire->{methods}{'main::__PROGRAM__'}{nodes} // [])->@*;
-    my @lvalues = grep { scalar(($_->{inputs} // [])->@*) == 2 } @subs;
-    ok @lvalues >= 1, 'a 2-input lvalue subscript exists' or return;
+    my @lvalues = grep { !defined $_->{mem_in} } @subs;   # (a place: no memory edge)
+    ok @lvalues >= 1, q(an lvalue subscript exists) or return;
     for my $lv (@lvalues) {
         isnt $lv->{stamp}, 'Scalar',
             'a store ADDRESS is not given a value type by the floor';

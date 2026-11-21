@@ -15,8 +15,8 @@ open my $o, '>', "$dir/c.pl" or die $!;
 print $o 'sub c { my ($b, $s) = @_; my @in = $s->inputs->@*; my ($x, @v) = @in; return scalar @v } 1;', "\n";
 close $o;
 
-sub wire ($n) {
-    my $j = qx($^X -Ilib -MO=-q,SoN,json,wire=$n,not_package=SoN $dir/c.pl 2>/dev/null);
+sub wire () {
+    my $j = qx($^X -Ilib -MO=-q,SoN,json,not_package=SoN $dir/c.pl 2>/dev/null);
     return decode_json($j);
 }
 sub copy_of ($w) {
@@ -25,14 +25,11 @@ sub copy_of ($w) {
     return $c;
 }
 
-my $w2 = wire(2);
+my $w2 = wire();
 my $c2 = copy_of($w2);
 ok $c2, 'wire 2 has the copy';
 is scalar $c2->{inputs}->@*, 1, '... with its reference as its one input';
 ok defined $c2->{mem_in}, '... and its memory version as mem_in';
 is [ grep { $_->{graph} eq 'main::c' } SoN::Verify::verify($w2)->{violations}->@* ], [], 'no violation in the graph';
-
-my $c1 = copy_of( wire(1) );
-is scalar $c1->{inputs}->@*, 2, 'wire 1 keeps the memory operand last, as it was';
 
 done_testing;

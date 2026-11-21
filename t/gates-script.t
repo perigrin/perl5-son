@@ -17,8 +17,12 @@ my $list = qx(tools/gates.sh --list 2>&1);
 like $list, qr/^census\b.*ROUNDTRIP >= 426.*DIFFERS 0.*LLI_FAIL 0/m, 'the census limits';
 like $list, qr/^corpus-gate\b.*>= 222/m,                              'the corpus gate limit';
 like $list, qr/^probes\b.*WRONG 0/m,                                  'the probe limit';
-like $list, qr/^ratchet\b.*wire 2/m,                                   'the ratchet holds the v2 rows too';
-like $list, qr/^ratchet\b.*downgrades-to-v1.*0 wires differ/m,         "and stage 3's downgrade proof";
+like $list, qr/^ratchet\b.*wire-verify-baseline/m,                    q(the ratchet holds the rows);
+# (stage 3's downgrade proof compared the v1 writer with the commit before
+# it; the v1 writer is gone. What is left of v1 is SoN::Wire::as_v1, the
+# deparser's reader: its round trip over the corpus holds it.)
+like $list, qr/^ratchet\b.*corpus-roundtrip\.pl.*ROUNDTRIP >= 430.*EMITS_INVALID_PERL 0/m, "and the deparser's round trip";
+unlike $list, qr/downgrade|wire 1/,                                     'no v1 left in it';
 like $list, qr/^ratchet\b.*chalk's lib per graph.*no wire dropped/m,   "chalk per graph (perigrin), and a dropped wire fails";
 
 done_testing;
