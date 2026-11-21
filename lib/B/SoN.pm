@@ -242,11 +242,12 @@ sub compile {
     my @opts   = @_;
     my $format = 'text';
     $format    = 'json' if grep { $_ eq 'json' } @opts;
-    # wire=N: the JSON wire's version (SoN::Serialize::JSON's $WIRE). 1 is the
-    # default until chalk reads 2 (docs/plans/2026-11-20-wire-v2.md, stage 6).
-    my ($wire) = map { /\Awire=(.*)\z/ ? $1 : () } @opts;
-    $wire //= 1;
-    die "B::SoN: wire=$wire: the wire versions are 1 and 2\n" unless $wire eq '1' || $wire eq '2';
+    # THE WIRE IS VERSION 2 (docs/plans/2026-11-20-wire-v2.md, stage 6). `wire=2`
+    # names it and changes nothing; any other `wire=` asks for a wire this
+    # producer no longer writes, and is refused rather than answered with v2.
+    for my $w ( map { /\Awire=(.*)\z/ ? $1 : () } @opts ) {
+        die "B::SoN: wire=$w: wire v1 is gone; the wire is version 2\n" unless $w eq '2';
+    }
 
     # Two filters, and the difference is which way they fail.
     #
@@ -301,7 +302,6 @@ sub compile {
         my ( $graphs, $classes, $phases ) = _translate_until_settled($filter);
 
         if ( $format eq 'json' ) {
-            local $SoN::Serialize::JSON::WIRE = $wire;
             my $mods = _followed_modules();
             print to_json( $graphs, $classes, _data_section(),
                 $phases,

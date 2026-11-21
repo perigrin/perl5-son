@@ -23,6 +23,6 @@ my $walk; $walk = sub ($x) {
 };
 $walk->($j);
 is(scalar @push, 1, 'one push onto the field array');
-ok($push[0] && $push[0]{fields}{memory_input}, 'it takes memory');
-ok(@count && $count[0]{inputs}[1] == $push[0]{id}, 'the count after it reads its version');
+ok($push[0] && defined $push[0]{mem_in}, q(it takes memory));
+ok(@count && ($count[0]{mem_in} // -1) == $push[0]{id}, 'the count after it reads its version');
 done_testing;

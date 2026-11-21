@@ -36,7 +36,7 @@ subtest 'to_json produces expected top-level structure' => sub {
     my $json  = to_json({ 'Foo::bar' => $graph });
 
     ok(defined $json, 'to_json returns a value');
-    like($json, qr/"version"\s*:\s*1/, 'version field is 1');
+    like($json, qr/"version"\s*:\s*2/, q(version field is 2));
     like($json, qr/"methods"/, 'methods key present');
     like($json, qr/"Foo::bar"/, 'method name in output');
     like($json, qr/"nodes"/, 'nodes key present');

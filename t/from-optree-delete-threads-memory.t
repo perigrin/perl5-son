@@ -74,13 +74,13 @@ SRC
     # The later read is a Subscript over the same hash; its memory input must
     # be the delete, not the MemStart the delete started from.
     my ($read) = grep {
-        $_->{op} eq 'Subscript' && $_->{inputs}->@* >= 3
+        $_->{op} eq q(Subscript) && defined $_->{mem_in}
     } $g->{nodes}->@*;
     ok defined $read, 'the later read is a Subscript carrying memory' or return;
 
-    is $read->{inputs}[2], $del->{id},
+    is $read->{mem_in}, $del->{id},
         'the read observes the delete rather than the pre-delete memory'
-        or diag "read mem=$read->{inputs}[2] delete=$del->{id}";
+        or diag "read mem=$read->{mem_in} delete=$del->{id}";
 };
 
 # DELETE YIELDS THE REMOVED VALUE, so a scalar-context use has a value to bind.
@@ -136,7 +136,7 @@ subtest 'a delete slice removes every key it names' => sub {
 
         # CHAINED, not parallel: the second Delete's memory input is the first,
         # which is what makes a later read observe both removals.
-        is $del[1]{inputs}[2], $del[0]{id},
+        is $del[1]{mem_in}, $del[0]{id},
             "$name slice: the second removal threads onto the first";
     }
 };

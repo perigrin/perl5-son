@@ -10,73 +10,19 @@ use Exporter 'import';
 our @EXPORT_OK = qw(to_json);
 
 use JSON::PP ();
-use Scalar::Util qw(blessed refaddr);
+use Scalar::Util qw(blessed);
 
-# THE WIRE VERSION WRITTEN (B::SoN's `wire=N` option). 1, the default: a
-# memory version a node reads is its last input (by kind, %SoN::Wire's table).
-# 2 (docs/plans/2026-11-20-wire-v2.md, section 3): `inputs` are values only,
-# and `mem_in` / `mem_out` name the memory edges; `profile` says which parts
-# of v2 the wire obeys.
-our $WIRE = 1;
+# THE WIRE IS VERSION 2 (docs/plans/2026-11-20-wire-v2.md, section 3): `inputs`
+# are values only, and `mem_in` / `mem_out` name the memory edges; `profile`
+# says which parts of v2 the wire obeys. Wire v1 is gone (stage 6); its reader
+# for the deparser is SoN::Wire::as_v1.
 
-# _control_in($node) -- the node the wire names as $node's control_in. On
-# wire v1 a MakeCell is not on the chain (it was not before wire v2 pinned
-# it; v1 has no place for the pin): it names none, and what follows it names
-# what it follows.
+# _control_in($node) -- the node the wire names as $node's control_in.
 sub _control_in ($node) {
     return undef unless $node->can('control_in');
-    return undef if $WIRE == 1 && $node->operation eq 'MakeCell';
-    return _on_chain( $node->control_in );
-}
-# _on_chain($c) -- a control node as the wire names it: on v1, past any MakeCell.
-sub _on_chain ($c) {
-    $c = $c->control_in while $WIRE == 1 && defined $c && $c->operation eq 'MakeCell';
-    return $c;
+    return $node->control_in;
 }
 
-# _operands($node) -- what the wire's `inputs` list for $node: its inputs and,
-# on wire v1, the memory it read where it was built.
-my %CONTROL_INPUTS = map { $_ => 1 } qw(If Loop Region);
-
-# _v1_consumers($n) -- $n's consumers in the order wire v1 met them. v1's
-# ids are this order's (a walk over consumer lists), and pinning a MakeCell
-# moved edges: what follows a cell on the chain is now the cell's consumer,
-# where it was the consumer of what the cell follows, and the cell is a
-# consumer of that by its pin, where it was none. Each edge is put back
-# where it was made, in the order it was made (Node::consumer_seq).
-sub _v1_consumers ($n) {
-    return $n->consumers->@* unless $WIRE == 1;
-    return map { $_->[1] } sort { $a->[0] <=> $b->[0] } ( _v1_edges($n) )[0]->@*;
-}
-# _v1_edges($n) -> (\@kept, \@moved), [seq, consumer] each: the edges v1 has
-# on $n, and, for a pinned cell, those v1 made on what it follows.
-sub _v1_edges ($n) {
-    my ( $c, $s ) = ( $n->consumers, $n->consumer_seq );
-    my $cell = $n->operation eq 'MakeCell' && defined $n->control_in;
-    my %pin;    # a consumer pinned after $n: its last edge here is the pin
-    for my $i ( 0 .. $#$c ) {
-        $pin{ refaddr $c->[$i] } = $i if blessed( $c->[$i] ) && defined $c->[$i]->control_in && $c->[$i]->control_in == $n;
-    }
-    my ( @kept, @moved );
-    for my $i ( 0 .. $#$c ) {
-        my $x   = $c->[$i];
-        my $pin = blessed($x) && ( $pin{ refaddr $x } // -1 ) == $i;
-        if ( $pin && $x->operation eq 'MakeCell' ) {   # (a cell's pin is no edge of v1's; what follows it is)
-            push( ( $cell ? \@moved : \@kept )->@*, ( _v1_edges($x) )[1]->@* );
-            next;
-        }
-        my $control = $pin || ( blessed($x) && $CONTROL_INPUTS{ $x->operation } && grep { blessed($_) && $_ == $n } $x->inputs->@* );
-        push( ( $cell && $control ? \@moved : \@kept )->@*, [ $s->[$i], $x ] );
-    }
-    return ( \@kept, \@moved );
-}
-
-# A control node's inputs are control: on v1, past any MakeCell (_on_chain).
-sub _operands ($node) {
-    my @in = $node->inputs->@*;
-    @in = map { _on_chain($_) } @in if $WIRE == 1 && $CONTROL_INPUTS{ $node->operation };
-    return ( @in, ( $WIRE == 1 && $node->mem_operand ? $node->mem_in : () ) );
-}
 
 # %main::'s keys at CHECK (B::SoN::compile): 1 where the program made one,
 # undef where the toolchain did. A constant-key read of the stash carries
@@ -153,7 +99,6 @@ sub _extract_fields ($node, $id_remap) {
             ( defined $node->site_package ? ( package => $node->site_package ) : () ),
             ( $node->external ? ( external => JSON::PP::true ) : () ),
             ( $node->xs ? ( xs => JSON::PP::true ) : () ),
-            ( $WIRE == 1 && $node->mem_operand ? ( memory_input => JSON::PP::true ) : () ),
             # The statically-known class for a method dispatch (Class->new).
             ( defined $node->class_name
                 ? ( class_name => $node->class_name )
@@ -241,7 +186,7 @@ sub _extract_fields ($node, $id_remap) {
         my $preds = $node->can('predecessors') ? $node->predecessors : undef;
         my @pred_ids;
         if (defined $preds && ref $preds eq 'ARRAY') {
-            for my $p (map { _on_chain($_) } @$preds) {
+            for my $p (@$preds) {
                 # A predecessor outside the emitted set cannot be referenced by
                 # index. Drop the whole list rather than emit a partial one the
                 # consumer would silently mis-pair.
@@ -269,7 +214,7 @@ sub _extract_fields ($node, $id_remap) {
     if ($op eq 'Assign') {
         my %f = (
             # A BINDING RECORD, not a store (wire v2): on neither chain.
-            ( $WIRE == 2 && !defined $node->control_in && !$node->mem_out ? ( record => JSON::PP::true ) : () ),
+            ( !defined $node->control_in && !$node->mem_out ? ( record => JSON::PP::true ) : () ),
             ( $node->if_changed ? ( if_changed => JSON::PP::true ) : () ),
             ( defined $node->targets ? ( targets => 0 + $node->targets ) : () ),
             ( $node->local ? ( local => JSON::PP::true ) : () ),
@@ -410,7 +355,7 @@ sub _extract_fields ($node, $id_remap) {
         return %f ? \%f : undef;
     }
     if ($op eq 'Region') {
-        my $entry = $node->can('eval_entry') ? _on_chain( $node->eval_entry ) : undef;
+        my $entry = $node->can('eval_entry') ? $node->eval_entry : undef;
         # As a node INDEX, like `region` and `predecessors`. An entry outside
         # the emitted set is dropped rather than referenced by a hash the
         # consumer cannot resolve.
@@ -552,7 +497,7 @@ sub _all_nodes_topo ($graph_or_nodes) {
             }
             # (b) forward: a consumer whose control_in IS this node.
             if ($node->can('consumers')) {
-                for my $c (_v1_consumers($node)) {
+                for my $c ($node->consumers->@*) {
                     next unless blessed($c);
                     next unless defined _control_in($c)
                         && _control_in($c)->id eq $node->id;
@@ -600,7 +545,7 @@ sub _all_nodes_topo ($graph_or_nodes) {
     # pre-unification SoN::IR::Graph::nodes() cycle-cut. A MERGE Phi (region
     # is a Region, not a Loop) has no such cycle and keeps both inputs.
     my $predecessors = sub ($n) {
-        my @in = _operands($n);
+        my @in = $n->inputs->@*;
         if ($n->operation eq 'Phi' && defined $n->region
                 && $n->region->operation eq 'Loop') {
             @in = ($in[0]);
@@ -623,7 +568,7 @@ sub _all_nodes_topo ($graph_or_nodes) {
             push @preds, _control_in($n);
         }
         # (on wire v2 the memory a node names is emitted before it, as an input is)
-        push @preds, $n->mem_in if $WIRE == 2 && $n->can('mem_in') && defined $n->mem_in;
+        push @preds, $n->mem_in if $n->can('mem_in') && defined $n->mem_in;
         return @preds;
     };
 
@@ -676,10 +621,9 @@ sub _serialize_graph ($graph) {
     my @reachable;
     while (my $n = shift @worklist) {
         next unless blessed($n);
-        next if $WIRE == 1 && $n->v2_only;
         next if $seen{ $n->id }++;
         push @reachable, $n;
-        for my $input (_operands($n)) {
+        for my $input ($n->inputs->@*) {
             if (ref($input) eq 'ARRAY') {
                 push @worklist, $input->@*;
             }
@@ -687,10 +631,10 @@ sub _serialize_graph ($graph) {
                 push @worklist, $input;
             }
         }
-        push @worklist, _v1_consumers($n) if $n->can('consumers');
+        push @worklist, $n->consumers->@* if $n->can('consumers');
         push @worklist, _control_in($n)
             if defined _control_in($n);
-        push @worklist, $n->mem_in if $WIRE == 2 && defined $n->mem_in;
+        push @worklist, $n->mem_in if defined $n->mem_in;
     }
     my $topo_nodes = _all_nodes_topo(\@reachable);
 
@@ -712,7 +656,7 @@ sub _serialize_graph ($graph) {
             ref($_) eq 'ARRAY'
                 ? map { $id_remap{ $_->id } } $_->@*
                 : $id_remap{ $_->id }
-        } _operands($node);
+        } $node->inputs->@*;
         my $fields = _extract_fields($node, \%id_remap);
 
         my %entry = (
@@ -737,10 +681,8 @@ sub _serialize_graph ($graph) {
                 && exists $id_remap{ _control_in($node)->id }) {
             $entry{control_in} = $id_remap{ _control_in($node)->id };
         }
-        if ($WIRE == 2) {
-            $entry{mem_in} = $id_remap{ $node->mem_in->id } if defined $node->mem_in;
-            $entry{mem_out} = JSON::PP::true if $node->mem_out;
-        }
+        $entry{mem_in} = $id_remap{ $node->mem_in->id } if defined $node->mem_in;
+        $entry{mem_out} = JSON::PP::true if $node->mem_out;
         # Region.head -> the owning If/Loop, set at produce time by
         # StackSim::merge / _build_single_exit / the Loop exit-Region
         # sites. An If/Loop is always a control predecessor of the Region
@@ -783,8 +725,8 @@ sub to_json ($named_graphs, $classes = undef, $data_section = undef,
     }
 
     my $data = {
-        version => $WIRE,
-        ( $WIRE == 2 ? ( profile => ['mem'] ) : () ),
+        version => 2,
+        profile => ['mem'],
         source  => undef,
         methods => \%methods,
     };

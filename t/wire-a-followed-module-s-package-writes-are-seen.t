@@ -19,7 +19,7 @@ my %consumers;
 for my $n (@n) { push @{ $consumers{$_} }, $n for grep { defined } @{ $n->{inputs} // [] } }
 my @target_reads = grep {
     my $id = $_->{id};
-    $_->{op} eq 'EntryDef' && !@{ $_->{inputs} // [] }
+    $_->{op} eq q(EntryDef) && !defined $_->{mem_in}
         && grep { $_->{op} ne 'EntryWrite' } @{ $consumers{$id} // [] }
 } @n;
 ok @n, 'the module sub is on the wire';

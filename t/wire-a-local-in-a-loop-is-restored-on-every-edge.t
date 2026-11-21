@@ -64,7 +64,7 @@ subtest 'a `last` after the local puts it back on its way out' => sub {
     is scalar(@restore), 1, 'a store to $g stands between the local and the exit';
     my $saved = $by{ $restore[0]{inputs}[1] };
     is $saved->{op}, 'EntryDef', 'it stores a read of $g';
-    is $saved->{inputs}[0], $local->{inputs}[2], '...made at the version the local\'s store follows';
+    is $saved->{mem_in}, $local->{mem_in}, '...made at the version the local\'s store follows';
 };
 
 subtest 'the pass that runs on puts it back too, past a guarded `last`' => sub {
@@ -93,7 +93,7 @@ subtest 'what is put back is what the scalar held at the local' => sub {
     my $restore = $writes[-1];
     my $saved   = $by{ $restore->{inputs}[1] };
     is $saved->{op}, 'EntryDef', 'the restore stores a read of $g' or return;
-    is $saved->{inputs}[0], $call->{id}, '...at the version the call left, not the constant bound before it';
+    is $saved->{mem_in}, $call->{id}, '...at the version the call left, not the constant bound before it';
 };
 
 done_testing;

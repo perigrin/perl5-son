@@ -80,9 +80,9 @@ for my $case (
         my @counts = grep { $_->{op} eq 'Count' } $data->{methods}{'main::__PROGRAM__'}{nodes}->@*;
         @counts = grep { $_->{op} eq 'Count' } @all unless @counts;
         ok scalar(@counts), 'the wire counts the hash';
-        is [ grep { $_->{inputs}->@* < 2 } @counts ], [], 'every Count is [hash, memory]';
+        is [ grep { !defined $_->{mem_in} } @counts ], [], q(every Count is of its hash, at a memory version);
         if ( defined $versions ) {
-            my %seen = map { $_->{inputs}[1] => 1 } @counts;
+            my %seen = map { $_->{mem_in} => 1 } @counts;
             is scalar( keys %seen ), $versions, "they read $versions memory versions";
         }
         my $d   = SoN::Deparse->new;

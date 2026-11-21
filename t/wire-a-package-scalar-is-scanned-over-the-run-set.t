@@ -90,8 +90,8 @@ for my $name ( sort keys %shape ) {
         ok $mphi, 'the loop has a memory Phi' or return;
         # The loop's store is computed from a read at a version made in the
         # loop (the memory Phi, or what follows it), not from a value Phi.
-        my @in_loop = grep { $_->{op} eq 'EntryDef' && ( $_->{inputs} // [] )->@*
-                             && $by{ $_->{inputs}[0] }{op} ne 'MemStart' } @nodes;
+        my @in_loop = grep { $_->{op} eq q(EntryDef) && defined $_->{mem_in}
+                             && $by{ $_->{mem_in} }{op} ne q(MemStart) } @nodes;
         my @stores = grep { $_->{op} eq 'EntryWrite' && defined $_->{control_in} } @nodes;
         ok scalar( grep { my $s = $_; grep { _reaches( \%by, $s->{inputs}[1], $_->{id} ) } @in_loop } @stores ),
             'a store in the loop is computed from a read through memory';
@@ -141,10 +141,10 @@ for my $name ( sort keys %reader ) {
         my ($loop) = grep { $_->{op} eq 'Loop' } @nodes or return fail 'no Loop';
         my ($mphi) = grep { $_->{op} eq 'Phi' && $_->{fields}{memory} && $_->{fields}{region} == $loop->{id} } @nodes;
         ok $mphi, 'the loop has a memory Phi' or return;
-        my @reads = grep { $_->{op} eq 'EntryDef' && ( $_->{fields}{symbol} // '' ) eq $sym && ( $_->{inputs} // [] )->@* } @nodes;
-        ok scalar( grep { $_->{inputs}[0] == $mphi->{id} } @reads ), 'the read in the loop is at the loop\'s memory Phi';
+        my @reads = grep { $_->{op} eq 'EntryDef' && ( $_->{fields}{symbol} // '' ) eq $sym && defined $_->{mem_in} } @nodes;
+        ok scalar( grep { $_->{mem_in} == $mphi->{id} } @reads ), 'the read in the loop is at the loop\'s memory Phi';
         my @prints = grep { $_->{op} eq 'Print' } @nodes;
-        my ($pre) = grep { $by{ $_->{inputs}[0] }{op} eq 'MemStart' } @reads;
+        my ($pre) = grep { $by{ $_->{mem_in} }{op} eq q(MemStart) } @reads;
         ok !( $pre && grep { _reaches( \%by, $_->{id}, $pre->{id} ) } @prints ),
             'nothing printed is computed from the read before the loop';
     };

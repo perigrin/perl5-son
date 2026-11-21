@@ -81,7 +81,7 @@ SRC
     # version is the loop exit's merge, over the header's, whose inputs are
     # the store before the loop and the restore at the end of each pass.
     my (@stores, %seen);
-    my @mq = ( ($read->{inputs} // [])->[0] // () );
+    my @mq = ( $read->{mem_in} // () );
     while (defined(my $m = shift @mq)) {
         next if $seen{$m}++;
         my $n = $by{$m} or next;
@@ -99,7 +99,7 @@ SRC
         my $n = $by{$id} or return '?';
         return () if $seen->{$id}++;                      # round the loop: nothing new
         return $n->{fields}{value} // '?' if $n->{op} eq 'Constant';
-        return $value_of->( $n->{inputs}[0], $seen ) if $n->{op} eq 'EntryDef' && @{ $n->{inputs} };
+        return $value_of->( $n->{mem_in}, $seen ) if $n->{op} eq q(EntryDef) && defined $n->{mem_in};
         return $value_of->( $n->{inputs}[1], $seen ) if $n->{op} eq 'EntryWrite';
         return map { $value_of->( $_, $seen ) } $n->{inputs}->@* if $n->{op} eq 'Phi';
         return '?';

@@ -42,7 +42,7 @@ subtest 'one arm that only blesses' => sub {
     is $arm && $arm->{op}, 'Proj', q{the bless follows a Proj};
     is $arm && $arm->{inputs}[0], $if->{id}, '... of that If';
     my ($ref) = grep { $_->{op} eq 'RefType' } @n;
-    my $mem = $by{ $ref->{inputs}[1] // '' };
+    my $mem = $by{ $ref->{mem_in} // q() };
     is $mem && $mem->{op}, 'Phi', 'the ref() after the join reads a Phi';
     ok $mem && $mem->{fields}{memory}, '... a memory Phi';
     ok scalar( grep { $_ == $bless->{id} } $mem->{inputs}->@* ), '... one of whose inputs is the bless';
@@ -59,7 +59,7 @@ subtest 'both arms only bless (cr8)' => sub {
     my @bless = grep { $_->{op} eq 'Call' && $_->{fields}{name} eq 'bless' } @n;
     is scalar @bless, 2, 'two blesses';
     is [ sort map { $by{ $_->{control_in} }{fields}{index} } @bless ], [ 0, 1 ], 'one on each Proj';
-    my ($after) = grep { $_->{op} eq 'RefType' && $by{ $_->{inputs}[1] }{op} eq 'Phi' } @n;
+    my ($after) = grep { $_->{op} eq q(RefType) && ($by{ $_->{mem_in} // q() }{op} // q()) eq q(Phi) } @n;
     ok $after, 'the ref() after the join reads the memory Phi';
     is forks($w), [], 'no control node has two successors';
 };

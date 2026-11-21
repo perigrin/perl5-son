@@ -50,8 +50,16 @@ subtest 'json output is parseable JSON with correct structure' => sub {
 
     my $data = eval { JSON::PP::decode_json($output) };
     ok(!$@, "JSON parses without error: $@");
-    is($data->{version}, 1, 'JSON version is 1');
+    is($data->{version}, 2, "plain -MO=SoN,json writes wire v2");
+    is($data->{profile}, ["mem"], "the parts of v2 it obeys");
     ok(exists $data->{methods}{'main::foo'}, 'JSON has main::foo method');
+};
+
+subtest "wire v1 is gone: asked for, it is refused by name" => sub {
+    my $err = `$perl -Ilib -MO=SoN,json,wire=1 -e "1" 2>&1 >/dev/null`;
+    like($err, qr/wire=1: wire v1 is gone/, "wire=1 refused");
+    my $out = `$perl -Ilib -MO=SoN,json,wire=2 -e "1" 2>/dev/null`;
+    is(JSON::PP::decode_json($out)->{version}, 2, "wire=2 names the one version");
 };
 
 # ====================================================

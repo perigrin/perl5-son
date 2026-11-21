@@ -44,11 +44,10 @@ subtest 'keys observes a store to the hash' => sub {
     } $g->{nodes}->@*;
     ok $call, 'the keys call is in the graph' or return;
 
-    ok scalar($call->{inputs}->@*) >= 2,
-        'it carries a memory input, not just the container'
-        or diag "inputs: " . join(',', map { $by{$_}{op} // '?' } $call->{inputs}->@*);
+    ok defined $call->{mem_in},
+        q(it carries a memory input, not just the container);
 
-    my $mem = $by{ $call->{inputs}[1] };
+    my $mem = $by{ $call->{mem_in} // -1 } // {};
     isnt $mem->{op}, 'MemStart',
         '... threaded to the store, not to the pre-store memory';
 };
@@ -61,7 +60,7 @@ subtest 'values observes a store to the hash' => sub {
     my ($call) = grep {
         $_->{op} eq 'Call' && ($_->{fields}{name} // '') eq 'values'
     } ($g ? $g->{nodes}->@* : ());
-    ok $call && scalar($call->{inputs}->@*) >= 2,
+    ok $call && defined $call->{mem_in},
         'values carries a memory input';
 };
 
@@ -80,7 +79,7 @@ subtest 'each advances memory as well as reading it' => sub {
         $_->{op} eq 'Call' && ($_->{fields}{name} // '') eq 'each'
     } $g->{nodes}->@*;
     return unless @each;
-    ok scalar($each[0]{inputs}->@*) >= 2, 'each carries a memory input';
+    ok defined $each[0]{mem_in}, q(each carries a memory input);
 };
 
 # TWO CALLS TO each ARE TWO DIFFERENT VALUES even on the same hash, so they

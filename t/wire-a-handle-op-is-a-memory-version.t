@@ -38,10 +38,10 @@ my @nodes = $data->{methods}{'main::__PROGRAM__'}{nodes}->@*;
 my %by_id = map { $_->{id} => $_ } @nodes;
 my %call  = map { $_->{fields}{name} => $_ } grep { $_->{op} eq 'Call' } @nodes;
 for my $n (qw(open readline eof close)) {
-    ok $call{$n}{fields}{memory_input}, "$n takes the memory before it";
+    ok defined $call{$n}{mem_in}, "$n takes the memory before it";
 }
 my ($count) = grep { $_->{op} eq 'Count' } @nodes;
-is $count->{inputs}[1], $call{readline}{id}, 'the count of @l reads the memory the readline made';
+is $count->{mem_in}, $call{readline}{id}, 'the count of @l reads the memory the readline made';
 
 my $d = SoN::Deparse->new;
 my $out = $d->render($data);

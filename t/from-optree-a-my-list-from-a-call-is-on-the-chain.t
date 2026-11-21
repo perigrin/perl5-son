@@ -40,7 +40,7 @@ for my $case (
     my $nodes = $data->{methods}{'main::__PROGRAM__'}{nodes} // [];
     my ($assign) = grep { $_->{op} eq 'Assign' && ( $_->{fields}{targets} // 0 ) > 1 } @$nodes;
     my ($join)   = grep { $_->{op} eq 'Call' && ( $_->{fields}{name} // '' ) eq 'join' } @$nodes;
-    ok $assign && $join && $join->{inputs}[-1] == $assign->{id}, 'a later read takes the assignment as its memory';
+    ok $assign && $join && ($join->{mem_in} // -1) == $assign->{id}, 'a later read takes the assignment as its memory';
 }
 
 done_testing;

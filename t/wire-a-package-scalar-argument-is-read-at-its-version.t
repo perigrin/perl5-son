@@ -15,5 +15,5 @@ my %by = map { $_->{id} => $_ } @n;
 my @args = map { $by{ $_->{inputs}[0] } } grep { $_->{op} eq 'Call' && $_->{fields}{name} eq 'main::r' } @n;
 is scalar @args, 2, 'two calls of r';
 isnt $args[0]{id}, $args[1]{id}, 'each reads $G for itself';
-ok( ( @{ $args[0]{inputs} // [] } && @{ $args[1]{inputs} // [] } ), '... at a memory version (after the w that wrote it)' );
+ok( ( defined $args[0]{mem_in} && defined $args[1]{mem_in} ), '... at a memory version (after the w that wrote it)' );
 done_testing;

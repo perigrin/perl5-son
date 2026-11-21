@@ -95,23 +95,22 @@ subtest 'a read after a call goes through memory, not the initial value' => sub 
         or diag 'print cone ops: ' . join ', ',
             map { $_->{op} . ($_->{fields}{value} // '') } @cone;
 
-    ok scalar(($read->{inputs} // [])->@*),
-        'and that read carries a memory input'
-        or diag 'EntryDef inputs: ' . JSON::PP->new->encode($read->{inputs} // []);
+    ok defined $read->{mem_in},
+        q(and that read carries a memory input);
 
     # The memory it reads must be downstream of the calls, or it cannot
     # observe them.
     my @calls = grep { $_->{op} eq 'Call' } $prog->{nodes}->@*;
     ok scalar(@calls) >= 2, 'both bump() calls are in the graph' or return;
     my %mem_cone;
-    @queue = ($read->{inputs}->@*);
+    @queue = ($read->{mem_in} // ());
     %seen = ();
     while (@queue) {
         my $id = shift @queue;
         next if $seen{$id}++;
         my $n = $by_id{$id} or next;
         $mem_cone{$n->{op}}++;
-        push @queue, ($n->{inputs} // [])->@*;
+        push @queue, ($n->{inputs} // [])->@*, $n->{mem_in} // ();
     }
     ok $mem_cone{Call},
         'the read memory is downstream of a Call, so the callee write is visible'

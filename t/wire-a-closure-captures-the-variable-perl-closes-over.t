@@ -23,7 +23,7 @@ my $shadow = q{my $i = 1; { my $i = 5; my $f = sub { $i = 7 }; $f->(); print "$i
 {   my $n = nodes(json_of($shadow));
     my ($cell) = grep { $_->{op} eq 'MakeCell' } values %$n;
     # (the variable is kept in memory: the store before the cell is made is its value)
-    my $st = $cell && $n->{ $cell->{inputs}[-1] };
+    my $st = $cell && $n->{ $cell->{mem_in} // -1 };
     is($st && $st->{op} eq 'Assign' && $n->{ $st->{inputs}[1] }{fields}{value}, 5, "the cell is the inner \$i's, the one the closure closes over");
     is($st && '$' . $n->{ $st->{inputs}[0] }{fields}{symbol}, $cell->{fields}{cell_name}, 'and named as it is');
 }

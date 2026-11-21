@@ -58,9 +58,8 @@ subtest 'a package scalar read takes a memory input' => sub {
 
     my ($ed) = grep { $_->{op} eq 'EntryDef' } $peek->{nodes}->@*;
     ok defined $ed, 'the read is an EntryDef' or return;
-    ok scalar($ed->{inputs}->@*),
-        'it has a memory input, so a later write is observable'
-        or diag "EntryDef inputs: " . JSON::PP->new->encode($ed->{inputs} // []);
+    ok defined $ed->{mem_in},
+        q(it has a memory input, so a later write is observable);
 };
 
 # The pad case must not acquire memory it does not need: a lexical is private

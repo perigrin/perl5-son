@@ -46,12 +46,12 @@ subtest 'a list read after shift sees the mutated array' => sub {
     # THE READ MUST CARRY MEMORY. Without it the node cannot observe the
     # shift, whatever else the graph looks like.
     my ($read) = grep {
-        $_->{op} eq 'PostfixDeref' && ($_->{inputs} // [])->@* >= 2
+        $_->{op} eq 'PostfixDeref' && defined $_->{mem_in}
     } $g->{nodes}->@*;
     ok $read, 'the list read is a memory-threaded PostfixDeref' or return;
 
     my %by = map { $_->{id} => $_ } $g->{nodes}->@*;
-    my $mem = $by{ $read->{inputs}[1] };
+    my $mem = $by{ $read->{mem_in} };
     isnt $mem->{op}, 'MemStart',
         '... threaded to the mutation, not to the pre-mutation memory';
 };
@@ -96,10 +96,10 @@ subtest 'a list read after an element store sees the new value' => sub {
     ok !$lit, 'join does not read the pre-store constant';
 
     my ($read) = grep {
-        ($_->{op} // '') eq 'PostfixDeref' && ($_->{inputs} // [])->@* >= 2
+        ($_->{op} // '') eq 'PostfixDeref' && defined $_->{mem_in}
     } $g->{nodes}->@*;
     ok $read, 'the list read is a memory-threaded PostfixDeref' or return;
-    isnt +($by{ $read->{inputs}[1] }{op} // ''), 'MemStart',
+    isnt +($by{ $read->{mem_in} }{op} // ''), 'MemStart',
         '... threaded to the store, not to the pre-store memory';
 };
 

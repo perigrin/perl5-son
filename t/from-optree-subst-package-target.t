@@ -75,7 +75,7 @@ print peek(), qq{\n};
         'the writing sub emits a store' or diag "mangle: @mangle";
 
     my ($ed) = grep { $_->{op} eq 'EntryDef' } $data->{methods}{'main::peek'}{nodes}->@*;
-    ok defined $ed && scalar($ed->{inputs}->@*),
+    ok defined $ed && defined $ed->{mem_in},
         'and the reading sub reads through memory';
 };
 

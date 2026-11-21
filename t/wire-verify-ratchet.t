@@ -38,7 +38,7 @@ $ENV{PERL_PERTURB_KEYS} = 0;
 #
 # ONE HASH ORDER. The producer is not deterministic on every input (chalk's
 # Target/LLVM/Lower.pm has two graph shapes run to run), so every wire is
-# compiled under PERL_HASH_SEED=0, as t/wire-v2-downgrades-to-v1.t does.
+# compiled under PERL_HASH_SEED=0.
 #
 # RUNS BY DEFAULT (about three minutes: 870 compiles). An opt-in guard is the
 # kind nobody runs. chalk's lib is opt-in -- SON_RATCHET=1, with SON_CHALK or
@@ -73,15 +73,12 @@ else { note 'chalk lib not checked: SON_RATCHET=1 (and SON_CHALK) runs it' }
 push @args, '--wires', $ENV{SON_WIRE_CACHE} if $ENV{SON_WIRE_CACHE};
 push @args, '--jobs',  $ENV{SON_WIRE_JOBS}  if $ENV{SON_WIRE_JOBS};
 
-# Twice: wire 1 (corpus, probes, chalk) and wire 2 (corpus2, probes2, chalk2,
-# checked by the v2 rules of docs/plans/2026-11-20-wire-v2.md, section 8).
+# The v2 rules of docs/plans/2026-11-20-wire-v2.md, section 8 (the one wire).
 my ( %got, @graph_lines );
-for my $wire ( 1, 2 ) {
-    for ( split /\n/, qx($^X tools/wire-verify.pl --tsv --wire $wire @args) ) {
-        if (/^\w+\t@/) { push @graph_lines, $_; next }
-        my ( $source, $rule, $n ) = split /\t/;
-        $got{$source}{$rule} = $n;
-    }
+for ( split /\n/, qx($^X tools/wire-verify.pl --tsv @args) ) {
+    if (/^\w+\t@/) { push @graph_lines, $_; next }
+    my ( $source, $rule, $n ) = split /\t/;
+    $got{$source}{$rule} = $n;
 }
 
 for my $source ( sort keys %got ) {
@@ -103,7 +100,7 @@ for my $source ( sort keys %got ) {
         }
     };
 }
-ok scalar( grep { $got{$_} } qw(corpus probes corpus2 probes2) ) == 4, 'corpus and probes were measured, on both wires';
+ok scalar( grep { $got{$_} } qw(corpus probes) ) == 2, 'corpus and probes were measured';
 
 if ( my @chalk = grep {/^chalk/} sort keys %got ) {
     my $file = $graphs;

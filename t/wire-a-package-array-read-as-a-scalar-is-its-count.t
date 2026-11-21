@@ -54,9 +54,9 @@ for my $case (
         is [ map { "$_->{op}#$_->{id}" } @bare ], [], 'no array is handed to what wants a scalar';
         my @counts = grep { $_->{op} eq 'Count' } @nodes;
         ok scalar(@counts), 'the wire counts the array';
-        is [ grep { $_->{inputs}->@* < 2 } @counts ], [], 'every Count is [array, memory]';
+        is [ grep { !defined $_->{mem_in} } @counts ], [], q(every Count is of its array, at a memory version);
         if ( defined $versions ) {
-            my %seen = map { $_->{inputs}[1] => 1 } @counts;
+            my %seen = map { $_->{mem_in} => 1 } @counts;
             is scalar( keys %seen ), $versions, "they read $versions memory versions";
         }
         my $d   = SoN::Deparse->new;

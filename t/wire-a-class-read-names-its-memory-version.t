@@ -34,11 +34,8 @@ sub class_reads (@nodes) {
             || $_->{op} eq 'Call' && ( $_->{fields}{name} // '' ) =~ /\A(?:blessed|reftype)\z/
     } @nodes;
 }
-# The memory input of a class read: a RefType's second input, a flagged Call's last.
-sub memory_of ($n) {
-    return $n->{inputs}[1] if $n->{op} eq 'RefType';
-    return $n->{fields}{memory_input} ? $n->{inputs}[-1] : undef;
-}
+# The memory a class read is at (wire v2: its mem_in).
+sub memory_of ($n) { return $n->{mem_in} }
 
 sub renders_the_same ( $src, $data, $what ) {
     my $d   = SoN::Deparse->new;
@@ -65,11 +62,11 @@ subtest 'ref() after a bless and ref() before it are two wires' => sub {
         my %by      = map { $_->{id} => $_ } program($data);
         my ($bless) = grep { $_->{op} eq 'Call' && $_->{fields}{name} eq 'bless' } program($data);
         my ($read)  = grep { $_->{op} eq 'RefType' } program($data);
-        ok $bless->{fields}{memory_input}, "$what: the bless carries the memory it follows";
+        ok defined $bless->{mem_in} && $bless->{mem_out}, "$what: the bless follows memory and is a version";
         ok defined $bless->{control_in}, "$what: the bless is on the control chain";
-        is scalar( $read->{inputs}->@* ), 2, "$what: the RefType is [reference, memory]";
-        is $by{ $read->{inputs}[1] }{op}, $want, "$what: it reads the memory $want";
-        is $read->{inputs}[1], $bless->{id}, 'after: that memory is the bless' if $what eq 'after';
+        is scalar( $read->{inputs}->@* ), 1, "$what: the RefType's input is its reference";
+        is $by{ $read->{mem_in} }{op}, $want, "$what: it reads the memory $want";
+        is $read->{mem_in}, $bless->{id}, 'after: that memory is the bless' if $what eq 'after';
         no_unversioned_class_read( $data, $what );
     }
     renders_the_same( $after,  $da, 'after' );

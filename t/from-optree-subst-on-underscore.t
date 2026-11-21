@@ -76,7 +76,7 @@ subtest 'the read after s/// sees the substituted value' => sub {
     }
     else {
         is $arg->{op}, 'EntryDef', 'the print reads $_' or return;
-        my $mem = $by{ ( $arg->{inputs} // [] )->[0] // -1 };
+        my $mem = $by{ $arg->{mem_in} // -1 };
         ok $mem && $mem->{op} eq 'EntryWrite',
             'and reads it at a store' or return;
         is $by{ $mem->{inputs}[1] }{op}, 'RegexSubst',
