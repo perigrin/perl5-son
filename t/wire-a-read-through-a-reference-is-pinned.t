@@ -31,7 +31,9 @@ sub pinned (@r) { @r && !grep { !defined $_->{control_in} } @r }
     ok(pinned(reads($n, 'Subscript')), 'an array element through a reference too');
 }
 {   my $n = graph(q{sub f { my $r = [[1, 2]]; my $v = $r->[0][1]; $r->[0][1] = 9; $v } print f(), "\n";}, 'main::f');
-    my @r = grep { ( $n->{ $_->{inputs}[0] }{op} // '' ) eq 'Subscript' } reads($n, 'Subscript');
+    # (the element it is through is vivified first, audit 2026-11-22 W9: a
+    # read of `$r->[0] // []`, a DefinedOr)
+    my @r = grep { ( $n->{ $_->{inputs}[0] }{op} // '' ) =~ /\A(?:Subscript|DefinedOr)\z/ && defined $_->{mem_in} } reads($n, 'Subscript');
     ok(pinned(@r), 'an element through an element holding a reference');
 }
 {   my $n = graph(q{sub f { my ($h) = @_; my $k = join ",", sort keys %$h; $h->{b} = 2; $k } print f({a => 1}), "\n";}, 'main::f');

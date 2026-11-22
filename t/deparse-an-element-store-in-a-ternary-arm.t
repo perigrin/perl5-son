@@ -165,10 +165,14 @@ round_trips(q{package O { sub new { bless {v=>$_[1]}, $_[0] } sub value { $_[0]{
 # A READ THROUGH AN AUTOVIVIFYING ELEMENT (`$u->[0]{k}`: `$u->[0]` is an
 # lvalue) stores nothing after it: it reads the arm's last memory, so the
 # merge reads the same.
-round_trips(q{sub g { my ($u, $c) = @_; my $l = $c ? $u->[0]{ll} : 5; print defined $l ? "d" : "u", scalar(@$u), "\n" } g([], $_) for 1, 0;},
-    'an arm that reads through an autovivifying element');
-round_trips(q{sub f { ([], $_[0]) } my ($u, $e) = f(0); my $l = !$e && $u->[0]{ok} ? $u->[0]{ll} : undef; print defined $l ? "d" : "u", scalar(@$u), "\n";},
-    'the same read after an autovivifying condition');
+# A READ THROUGH AN ELEMENT VIVIFIES IT (audit 2026-11-22, W9): the arm now
+# stores $u->[0], as perl does, and that store in a consumed arm is refused.
+# (The round trip passed before only because the deparsed perl vivified on
+# its own; chalk printed u0 for perl's u1.)
+refuses(q{sub g { my ($u, $c) = @_; my $l = $c ? $u->[0]{ll} : 5; print defined $l ? "d" : "u", scalar(@$u), "\n" } g([], $_) for 1, 0;},
+    qr/GAP: a consumed ternary arm stores an element/, 'an arm that reads through an autovivifying element');
+refuses(q{sub f { ([], $_[0]) } my ($u, $e) = f(0); my $l = !$e && $u->[0]{ok} ? $u->[0]{ll} : undef; print defined $l ? "d" : "u", scalar(@$u), "\n";},
+    qr/GAP: a consumed ternary arm stores an element/, 'the same read after an autovivifying condition');
 round_trips(q{my @a = (0,5); my $i = 1; for my $c (1,0) { my $x = $c ? ($a[$i] = 1) : 8; print "$x @a\n" }},
     'a lexical scalar index');
 round_trips(q{my @a = (0,0); my $i = 0; for my $c (1,0) { my $x = $c ? ($a[$i+1] = 1) : 8; print "$x @a\n" }},
