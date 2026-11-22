@@ -117,9 +117,8 @@ sub _describe ( $n, $by ) {
 #                        are not `my` scalars (or `my` aggregates bound from @_).
 #   phi-arity            V8: a Phi's inputs do not pair with its Region's
 #                        control inputs (a Loop's Phi has two: way in, way round).
-#   phi-arity:eval-join  the known class of that: an `eval` join has one
-#                        control input and Phis with one more (the catch edge
-#                        the wire lacks until the `eval` profile).
+#                        An eval's join too: since the `eval` profile (stage
+#                        8) its catch is a way in like the body's end.
 #   phi-no-region        a Phi whose `region` is no Region or Loop.
 #   phi:memory-as-value  V8: a memory Phi used as a value input.
 #   control-fork         V9: a node other than an If or a Loop has more than
@@ -366,7 +365,7 @@ sub _graph_v2 ( $name, $g, $res, $profile = {} ) {
         if ( !$r || $r->{op} !~ /^(?:Region|Loop)$/ ) { $bad->( $n, 'phi-no-region', 'region=' . ( $f->{region} // 'none' ) ); next }
         my $want = $r->{op} eq 'Loop' ? 2 : scalar grep { defined } $r->{inputs}->@*;
         my $have = scalar( $n->{inputs}->@* );
-        $bad->( $n, defined _fields($r)->{eval_id} ? 'phi-arity:eval-join' : 'phi-arity',
+        $bad->( $n, 'phi-arity',
             "$have inputs for $want ways into $r->{op}#$r->{id}" . ( $f->{memory} ? ' (memory)' : '' ) )
             if $have != $want;
         if ( $f->{memory} ) {

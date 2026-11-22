@@ -41,17 +41,10 @@ SRC
 
     my %by = map { $_->{id} => $_ } $g->{nodes}->@*;
 
-    # A single-input Region with a Phi over it whose second input is the undef
-    # -- the eval join, in either form.
+    # The eval's join: a Region with an eval_id that is not its catch (nothing
+    # in this body may die: no catch, one way in, the body's end).
     my ($region) = grep {
-        my $r = $_;
-        ($r->{op} // '') eq 'Region' && ($r->{inputs} // [])->@* == 1
-            && grep {
-                   ($_->{op} // '') eq 'Phi'
-                && ((($_->{fields} // {})->{region} // -1) == $r->{id})
-                && ((($by{ ($_->{inputs} // [])->[1] // -1 }{fields} // {})
-                     ->{const_type} // '') eq 'undef')
-               } $g->{nodes}->@*;
+        ($_->{op} // '') eq 'Region' && defined( ( $_->{fields} // {} )->{eval_id} ) && !( $_->{fields} // {} )->{catch}
     } $g->{nodes}->@*;
     ok $region, 'the eval join is present' or return;
 
@@ -73,15 +66,16 @@ SRC
         or diag "chain: @back  entry: $entry";
 
     # THE BODY IS WHAT LIES BETWEEN THEM, and it must be exactly the one store
-    # the eval protects -- not the three before it -- after the `$@ = ""` the
-    # eval itself makes as it begins (see wire-an-eval-clears-its-error-first.t).
+    # the eval protects -- not the three before it -- between the `$@ = ""` the
+    # eval itself makes as it begins (see wire-an-eval-clears-its-error-first.t)
+    # and the one it makes where it ends without a die (wire v2's `eval` profile).
     my @body;
     for my $id (@back) {
         last if $id == $entry;
         push @body, $id;
     }
-    is scalar(@body), 2,
-        'and the body between entry and join is the clear and one statement'
+    is scalar(@body), 3,
+        'and the body between entry and join is the clear, one statement and the clear at its end'
         or diag "body: @body";
 };
 

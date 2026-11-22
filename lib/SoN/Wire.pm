@@ -16,7 +16,12 @@ use JSON::PP ();
 # - a MakeCell leaves the control chain (v1 never put it there);
 # - the memory Phi where a sub's exits merge (`exits`; v1 has no place for
 #   it) is dropped, and so is a node only a mem_in reached (a MemStart); the
-#   nodes are numbered again in order.
+#   nodes are numbered again in order;
+# - an eval's exceptional edges (the `eval` profile: each Exc, what stands
+#   on it, the catch Region and its Phis, the $@ store after it) are dropped,
+#   and so is the store of "" to $@ where its body ends: its join is v1's
+#   again, the body's end its way in (the die, where the body always dies),
+#   and a memory edge to a dropped version names the one it followed.
 #
 # The ids differ from v1's: v2 lists a node's memory before it.
 #
@@ -48,6 +53,7 @@ sub as_v1 ($wire) {
     delete $w->{profile};
     for my $g ( values( ( $w->{methods} // {} )->%* ) ) {
         my $nodes = $g->{nodes} // [];
+        _drop_catch_edges($g);
 
         # A MakeCell is not on v1's chain: what follows it follows what it
         # does, wherever control is named (SoN::Serialize::JSON::_on_chain).
@@ -116,6 +122,81 @@ sub as_v1 ($wire) {
         $g->{returns} = [ map { $re->($_) } ( $g->{returns} // [] )->@* ];
     }
     return $w;
+}
+
+# _drop_catch_edges($graph): the `eval` profile's edges out of a decoded v2
+# graph, in place (see as_v1).
+sub _drop_catch_edges ($g) {
+    my $nodes = $g->{nodes} // [];
+    my %by = map { $_->{id} => $_ } @$nodes;
+    my @catch = grep { $_->{op} eq 'Region' && ( $_->{fields} // {} )->{catch} } @$nodes or return;
+    my %succ;    # control successors
+    push $succ{ $_->{control_in} }->@*, $_ for grep { defined $_->{control_in} } @$nodes;
+    my %region_in;    # a node => the Regions it is a way into
+    for my $r ( grep { $_->{op} eq 'Region' } @$nodes ) { push $region_in{$_}->@*, $r for grep { defined } $r->{inputs}->@* }
+    my $f = sub ( $n, $k ) { ( $n->{fields} // {} )->{$k} };
+    my $is_err = sub ($n) { $n && $n->{op} eq 'EntryWrite' && do { my $t = $by{ $n->{inputs}[0] // '' }; $t && $t->{op} eq 'EntryDef' && ( $f->( $t, 'symbol' ) // '' ) eq '@' } };
+    my ( %drop, %fwd );
+    # chain($from) -> the nodes control reaches from $from, to (not into) a Region
+    my $chain = sub ($from) {
+        my @c;
+        for ( my @s = ( $succ{$from} // [] )->@*; @s == 1; @s = ( $succ{ $s[0]{id} } // [] )->@* ) { push @c, $s[0] }
+        return @c;
+    };
+    for my $c (@catch) {
+        my @exc = map { my $x = $_; while ( $x && $x->{op} ne 'Exc' ) { $x = $by{ $x->{control_in} // '' } } $x // () } map { $by{$_} } $c->{inputs}->@*;
+        $drop{ $_->{id} } = 1 for $c, @exc, map { $chain->( $_->{id} ) } @exc;
+        $drop{ $_->{id} } = 1 for grep { $_->{op} eq 'Phi' && ( $f->( $_, 'region' ) // -1 ) == $c->{id} } @$nodes;
+        my @after = $chain->( $c->{id} );
+        $drop{ $_->{id} } = 1 for @after;
+        my $end = @after ? $after[-1] : $c;
+        for my $j ( ( $region_in{ $end->{id} } // [] )->@* ) {
+            my @keep = grep { $j->{inputs}[$_] != $end->{id} } 0 .. $j->{inputs}->$#*;
+            # (the body's end clears $@: v1's way in is what it follows)
+            my @clear = grep { my $n = $by{ $j->{inputs}[$_] }; $is_err->($n) && ( ( ( $by{ $n->{inputs}[1] // '' } // {} )->{fields} // {} )->{const_type} // '' ) eq 'string' && ( $by{ $n->{inputs}[1] }{fields}{value} // 'x' ) eq '' } @keep;
+            my @phis = grep { $_->{op} eq 'Phi' && ( $f->( $_, 'region' ) // -1 ) == $j->{id} } @$nodes;
+            for my $p (@phis) {
+                next unless $f->( $p, 'memory' );
+                $p->{inputs} = [ map { $p->{inputs}[$_] } @keep ];
+            }
+            for my $k (@clear) {
+                my $n = $by{ $j->{inputs}[$k] };
+                $drop{ $n->{id} } = 1;
+                $j->{inputs}[$k] = $n->{control_in};
+                for my $p ( grep { $f->( $_, 'memory' ) } @phis ) {
+                    $_ == $n->{id} and $_ = $n->{mem_in} for $p->{inputs}->@*;
+                }
+            }
+            $j->{inputs} = [ map { $j->{inputs}[$_] } @keep ];
+            # (a body that always dies: its die was v1's way in)
+            unless ( $j->{inputs}->@* ) {
+                my ($u) = grep { $_->{op} eq 'Unwind' && !$region_in{ $_->{id} } && !$succ{ $_->{id} } } map { $by{ $_->{inputs}[0] } } @exc;
+                $j->{inputs} = [ $u ? $u->{id} : () ];
+            }
+            # (a trap with no entry -- a string eval's -- had no memory Phi)
+            next if defined $f->( $j, 'eval_entry' );
+            for my $p ( grep { $f->( $_, 'memory' ) && $_->{inputs}->@* == 1 } @phis ) {
+                $drop{ $p->{id} } = 1;
+                $fwd{ $p->{id} } = $p->{inputs}[0];
+            }
+        }
+    }
+    # A MEMORY EDGE TO A DROPPED VERSION names the one it followed.
+    my $alive = sub ($i) {
+        my %seen;
+        while ( defined $i && $drop{$i} && !$seen{$i}++ ) {
+            my $n = $by{$i};
+            $i = exists $fwd{$i} ? $fwd{$i} : $n->{op} eq 'Phi' ? $n->{inputs}[0] : $n->{mem_in};
+        }
+        return $i;
+    };
+    @$nodes = grep { !$drop{ $_->{id} } } @$nodes;
+    for my $n (@$nodes) {
+        $n->{mem_in} = $alive->( $n->{mem_in} ) if defined $n->{mem_in};
+        $n->{inputs} = [ map { $alive->($_) } $n->{inputs}->@* ] if $n->{op} eq 'Phi' && $f->( $n, 'memory' );
+    }
+    $g->{returns} = [ grep { !$drop{$_} } ( $g->{returns} // [] )->@* ];
+    return;
 }
 
 1;

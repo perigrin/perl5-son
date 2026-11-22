@@ -354,6 +354,9 @@ sub _extract_fields ($node, $id_remap) {
         );
         return %f ? \%f : undef;
     }
+    if ($op eq 'Region' && $node->catch) {
+        return { catch => JSON::PP::true, ( defined $node->eval_id ? ( eval_id => $node->eval_id ) : () ) };
+    }
     if ($op eq 'Region') {
         my $entry = $node->can('eval_entry') ? $node->eval_entry : undef;
         # As a node INDEX, like `region` and `predecessors`. An entry outside
@@ -726,7 +729,7 @@ sub to_json ($named_graphs, $classes = undef, $data_section = undef,
 
     my $data = {
         version => 2,
-        profile => ['mem'],
+        profile => [ 'mem', 'eval' ],
         source  => undef,
         methods => \%methods,
     };

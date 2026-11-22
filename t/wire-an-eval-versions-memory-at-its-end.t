@@ -1,5 +1,5 @@
-# ABOUTME: A block eval's (and a try's) join is a memory version: a caught die sets $@ with
-# ABOUTME: no store on the chain, so a read after the eval must not share the version of one in it.
+# ABOUTME: A block eval's (and a try's) caught die stores $@ after its catch: a version of its
+# ABOUTME: own, so a read after the eval does not share the version of one in it.
 
 use v5.42.0;
 use Test2::V0;
@@ -26,11 +26,13 @@ for my $case (
     my $data  = graph_of($src);
     my @nodes = $data->{methods}{'main::__PROGRAM__'}{nodes}->@*;
     my %by_id = map { $_->{id} => $_ } @nodes;
-    my @joins = grep { $_->{op} eq 'Region' && defined $_->{fields}{eval_id} } @nodes;
-    ok scalar(@joins), "$name: the evals have their joins";
-    for my $r (@joins) {
-        ok( ( grep { $_->{op} eq 'Phi' && $_->{fields}{memory} && ( $_->{fields}{region} // -1 ) == $r->{id} } @nodes ),
-            "$name: eval $r->{fields}{eval_id}'s join versions memory" );
+    # (wire v2's `eval` profile: the caught die's $@ is a store, after the catch)
+    my @catches = grep { $_->{op} eq 'Region' && $_->{fields}{catch} } @nodes;
+    ok scalar(@catches), "$name: the evals have their catches";
+    for my $r (@catches) {
+        ok( ( grep { $_->{op} eq 'EntryWrite' && ( $_->{control_in} // -1 ) == $r->{id}
+                     && ( $by_id{ $_->{inputs}[0] }{fields}{symbol} // '' ) eq '@' } @nodes ),
+            "$name: eval $r->{fields}{eval_id}'s catch stores \$@, a version of its own" );
     }
     my @reads = grep { $_->{op} eq 'EntryDef' && ( $_->{fields}{symbol} // '' ) eq '@' && defined $_->{control_in} } @nodes;
     my %mem; $mem{ $_->{mem_in} // q(none) }++ for @reads;

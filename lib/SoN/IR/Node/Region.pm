@@ -51,6 +51,16 @@ class SoN::IR::Node::Region :isa(SoN::IR::Node) {
     # This eval's identity in its graph: each die it catches carries it.
     field $eval_id :reader = undef;
 
+    # A BLOCK EVAL'S CATCH (wire v2's `eval` profile): the merge of the
+    # exceptional edges (Exc) of what may die in its body, before $@ is
+    # stored and the catch joins the body's end.
+    field $catch :reader = 0;
+
+    method set_catch($v) {
+        $catch = $v ? 1 : 0;
+        return;
+    }
+
     method set_eval_id($id) {
         $eval_id = $id;
         return;

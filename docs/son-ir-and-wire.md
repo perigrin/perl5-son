@@ -26,8 +26,8 @@ Repos:
   `perl -MO=SoN,json file.pl`. The top-level keys are:
   - `version`: 2 (wire v2, `docs/plans/2026-11-20-wire-v2.md`); chalk's loader
     refuses any other by name;
-  - `profile`: the parts of v2 the wire obeys, `["mem"]` (the migration's;
-    `eval` and `loop` follow);
+  - `profile`: the parts of v2 the wire obeys, `["mem", "eval"]` (the
+    migration's; `loop` follows);
   - `source`: always null;
   - `methods`: one graph per sub;
   - optionally `classes`, `data_section` and `phase_blocks`;
@@ -236,6 +236,21 @@ There are no basic blocks. Control is carried by CFG nodes and by a
   `eval_entry` and the Region itself."* Each die in the body is an Unwind
   with the same `eval_id`. A Call or a may-die Divide/Modulo in the body
   carries `eval_id` too.
+- **The exceptional edge** (`eval` profile, 2026-11-22; the plan's 3.5).
+  Each node in an eval's body that may die -- an Unwind, a sub call, a
+  may-fault Divide/Modulo, a read pinned because it may die -- has its way
+  out: an `Exc` (a control node, `inputs: [T]`, its value the exception in
+  flight). On it stand the restores of the `local`s the eval made that are
+  live at T, innermost first, threaded from the memory after T (T itself
+  when it is a version). The edges merge at a **catch Region**
+  (`fields.catch`, `eval_id`), with a memory Phi and a Phi of the Excs where
+  there is more than one; `$@` is stored there from it (an EntryWrite).
+  The join Region takes the body's end (where `$@ = ""` is stored: perl
+  clears it there; a body that ends in a die has no such way in), each
+  `return`, and the catch's end, and its Phis have one input per way in. A
+  try and a string eval (known or run-time) are traps of the same shape. A
+  die where no eval of its graph is open puts the `local`s live there back
+  first: their restores stand on the chain immediately before the Unwind.
 - **String eval of code known when B::SoN runs** (2026-11-16, perigrin's
   design): a block eval whose body is one direct Call, `string_eval: true`,
   of the body B::SoN compiled from the string. The string is known when it
@@ -252,7 +267,8 @@ There are no basic blocks. Control is carried by CFG nodes and by a
 
   ```
   MakeCell($i) ... EntryWrite($@ = "") -> Call(direct, string_eval, eval_id=K)
-     -> Region([Call], eval_entry, eval_id=K) ; Phi(memory) ; Phi([Call, undef]) (unless void)
+     -> EntryWrite($@ = "") -> Region([that, catch's end], eval_entry, eval_id=K) ; Phi(memory) ; Phi([Call, undef]) (unless void)
+  Call -> Exc -> Region(catch) -> EntryWrite($@ = Exc)
   AnonSub([cells], name=__EVAL__:LINE:N, captures)
   ```
 
@@ -502,7 +518,7 @@ sorts each case into ROUNDTRIP, DIFFERS, LLI_FAIL, GAP, LOAD_FAIL or NOJSON
   wire=1: the wire is version 2 (wire v1 is gone)`). Chalk's loader refuses a
   wire of any other version by name (`GAP: wire version 1 is not one chalk
   reads`), and holds a B::SoN wire to the memory invariant before it makes a
-  graph. `profile` says which parts of v2 the wire obeys (`mem` today);
+  graph. `profile` says which parts of v2 the wire obeys (`mem` and `eval` today);
   the loader refuses a part it does not read yet. Compatibility is still
   kept by pinning a chalk commit (`tools/corpus-llvm-roundtrip.pl`,
   `$COMMIT`). Optional fields are emitted only when set. Adding a field is
@@ -547,7 +563,7 @@ sub to_json ($named_graphs, $classes = undef, $data_section = undef,
 ```
 {
   "version": 2,                       # checked: chalk reads v2 only
-  "profile": ["mem"],                 # the parts of v2 this wire obeys
+  "profile": ["mem", "eval"],         # the parts of v2 this wire obeys
   "source": null,
   "methods": {                         # graph name -> graph
      "main::__PROGRAM__": GRAPH,       # the file's top level (the entry graph)
@@ -638,7 +654,8 @@ CLASS, as observed:
 - **Divide/Modulo** `{eval_id?, file, line}`, only when a line is set
 - **Unwind** `{eval_id?, file?, line?}`
 - **Region** `{eval_entry, eval_want?, eval_may_die?, eval_id?}`, eval joins
-  only
+  only; `{catch: true, eval_id}` on an eval's catch
+- **Exc** no fields; `inputs: [the node that may die]`
 - **Chomp/ChompValue** `{kind}`
 - **Transliterate** `{from, to, flags}`
 - **ListAppend** `{collector}`
@@ -762,7 +779,7 @@ excerpt:
 - **Node identity** (`lib/SoN/IR/NodeFactory.pm`):
   - Data nodes are hash-consed by `content_hash`, which becomes the node id.
   - These get per-call ids `Op#N` instead:
-    - CFG nodes (`Start Return Unwind If Proj Region Loop PackageMark`);
+    - CFG nodes (`Start Return Unwind If Proj Region Loop PackageMark Exc`);
     - the routed CFG ops (`If Proj Region Phi Loop`);
     - VarDecl and ListAssign;
     - `%STATEMENT_EFFECT_OPS`;
@@ -806,7 +823,7 @@ These come from `lib/Chalk/IR/Serialize/JSON.pm` (`_deserialize_graph`,
    current count`. `control_in`, `head`, `region`, `predecessors` and
    `eval_entry` must all point backwards.
 4. **`op` must be a name chalk's NodeFactory knows.** CFG ops are
-   `Start Return Unwind If Proj Region Loop`. Any other op goes through
+   `Start Return Unwind If Proj Region Loop Exc`. Any other op goes through
    `make()`, which dies with `"Unknown data node operation: $op_name"`.
    Fields the loader does not name are dropped silently.
 5. **Required fields:**
@@ -832,8 +849,9 @@ These come from `lib/Chalk/IR/Serialize/JSON.pm` (`_deserialize_graph`,
    from a Return or Unwind (or a loop with no exit); L5 an Assign is a
    `record` or has all three edges, as a sub Call does (but an :lvalue call,
    the place an Assign stores through); L6 a Phi's inputs pair with its
-   Region's ways in (a trap's value Phi keeps one more until the `eval`
-   profile).
+   Region's ways in (a trap's value Phi keeps one more on a wire without
+   the `eval` profile); L7 (`eval`) every way into a catch Region leads back
+   to an Exc.
 8. **The control chain:**
    - Statement effects need `control_in`.
    - Each Return's `control_in` chain decides which nodes belong to the

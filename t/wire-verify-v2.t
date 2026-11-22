@@ -208,10 +208,21 @@ subtest 'V6 read-unversioned:package-aggregate-literal: a flattened package arra
     ok scalar( ( $r->{'read-unversioned:package-aggregate-literal'} // [] )->@* ),
         '@st read through its named literal (stage 7 gives it a version)';
 };
-subtest 'V8 phi-arity:eval-join: the eval join has one way in, two-input Phis' => sub {
-    my $r = rules('my $x = 1; my $r = eval { $x = 2; die "a\n" if @ARGV; 5 }; print "$x $r $@\n";');
-    is [ map { $_->{op} } ( $r->{'phi-arity:eval-join'} // [] )->@* ], ['Phi'], 'the value Phi of the eval (stage 8 gives it its edge)';
-    is $r->{'phi-arity'}, undef, 'and it is not counted as an unknown mismatch';
+subtest 'V8 phi-arity: an eval join is a merge like any other (stage 8: the catch edge)' => sub {
+    # (stage 6's shape: one way in, the body's end, and a value Phi with the
+    # catch's undef besides -- a mismatch now, no class of its own)
+    my $r = rules( v2(
+        nd( 0, 'Start', [] ), nd( 1, 'MemStart', [] ), nd( 2, 'Constant', [] ), nd( 3, 'Constant', [] ),
+        nd( 4, 'EntryDef', [], package => 'main', sigil => '$', symbol => 'g' ),
+        nd( 5, 'EntryWrite', [ 4, 2 ], ctl => 0, mem => 1, out => 1 ),
+        nd( 6, 'Region', [5], eval_entry => 0, eval_id => 1 ),
+        nd( 7, 'Phi', [ 2, 3 ], region => 6 ),
+        nd( 8, 'Return', [7], ctl => 6, mem => 5 ),
+    ) );
+    is [ map { $_->{op} } ( $r->{'phi-arity'} // [] )->@* ], ['Phi'], 'the eval\'s value Phi with one input more than its ways in';
+    is $r->{'phi-arity:eval-join'}, undef, '... is no known class any more';
+    my $p = rules('our $x = 1; my $r = eval { $x = 2; die "a\n" if @ARGV; 5 }; print "$x $r $@\n";');
+    is $p->{'phi-arity'}, undef, 'the producer\'s eval join: as many inputs as ways in (the end, the catch)';
 };
 
 done_testing;
