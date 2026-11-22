@@ -949,26 +949,6 @@ class SoN::FromOptree 0.01 {
         $PINS_MADE++;
         return;
     }
-    # _deref_chain_writes($elem) -> true when the element $elem holds is
-    # dereferenced for a write: the chain of derefs after it ends in a store
-    # to an element (OPf_MOD on the last), or in a container op that may
-    # change it (push @{...}, keys %{...}: OPf_MOD on the rv2av/rv2hv). perl
-    # marks every intermediate of a READ chain too (`$h{x}{$_}`); one only
-    # read is left as it was.
-    # shortcut: a read through an undef intermediate does not vivify it here, as perl's does.
-    sub _deref_chain_writes ($elem) {
-        # UP THE TREE, not along the run order: a key computed by a call
-        # (`$self->{t}{ $n->op } = 1`) runs between the deref and its store.
-        my $up = sub ($o) { my $p = eval { $o->parent }; $p = eval { $p->parent } while $p && $$p && $p->name =~ /\A(?:null|scope|leave)\z/; $p && $$p ? $p : undef };
-        my $rv = $up->($elem) or return 0;
-        return 0 unless $rv->name eq 'rv2av' || $rv->name eq 'rv2hv';
-        my $use = $up->($rv);
-        if ($use && ( $use->name eq 'aelem' || $use->name eq 'helem' )) {
-            return _deref_chain_writes($use) if $use->private & 48;   # another intermediate
-            return $use->flags & 32;                                   # the element stored into
-        }
-        return $rv->flags & 32;                                        # push @{...}, keys %{...}
-    }
     # _may_die_through_ref($node) -> true for a READ THROUGH A REFERENCE that
     # may die where it stands -- no HASH or ARRAY reference there (perlref):
     # an element, an exists, a whole hash or array (`keys %$h`, `@$r`) of what
@@ -10319,8 +10299,11 @@ class SoN::FromOptree 0.01 {
             # store. (Measured before: `my %h; push @{$h{l}}, 4` printed nothing.)
             # Not for a tied container (a STORE perl does not make).
             my $deref = $op->private & 48;   # OPpDEREF_AV 16, OPpDEREF_HV 32
+            # A READ THROUGH IT VIVIFIES IT TOO -- `my $x = $h{a}{b}` leaves
+            # $h{a} a hash: perl marks the intermediate OPf_MOD and DEREF in
+            # an rvalue chain as well. Only a chain ending in a store was
+            # taken, and the read made nothing (audit 2026-11-22, W9).
             if ($is_lvalue && ( $deref == 16 || $deref == 32 ) && defined $sim->memory && !$local
-                    && _deref_chain_writes($op)
                     # WHEREVER THE CONTAINER CAME FROM: a `my %h`/`my @a`, a hash or
                     # array just made, or one through a reference from elsewhere
                     # (`$self->{t}{$k} = v` with $self an argument) -- and in a loop
@@ -15382,7 +15365,7 @@ class SoN::FromOptree 0.01 {
                 && grep({ $_->name eq 'entersub' } _subtree_ops($enteriter->parent))
                 && !$writes_iter->()) {
             my $alias = $factory->make('LocalAlias', name => '_', inputs => [$i_phi]);
-            _pin($sim, $alias);
+            _place($sim, $alias);
         }
 
         # AND THE STASH KEYS THIS LOOP CARRIES, for the same reason and the same
@@ -16103,7 +16086,7 @@ class SoN::FromOptree 0.01 {
             $topic_alias = $factory->make('LocalAlias', name => '_', inputs => [
                 $factory->make('Ref', inputs => [$elem_read],
                     stamp => SoN::IR::Stamp->new(type => 'ScalarRef'))]);
-            _pin($sim, $topic_alias);
+            _place($sim, $topic_alias);
         }
         elsif ($topic_ok) {
             # ONLY A CONTAINER HAS HOLES, and only a container is an operand
@@ -16126,7 +16109,7 @@ class SoN::FromOptree 0.01 {
                     stamp => SoN::IR::Stamp->new(type => 'Undef')))
                 if $exists;
             $topic_alias = $factory->make('LocalAlias', name => '_', inputs => [$ref]);
-            _pin($sim, $topic_alias);
+            _place($sim, $topic_alias);
             # Any callee may now write the element through it.
             $MUTATED_LITERALS{ $array->id } = 1 if $array->can('id');
         }
