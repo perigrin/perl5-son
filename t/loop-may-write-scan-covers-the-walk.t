@@ -1,14 +1,15 @@
 # ABOUTME: The syntactic may-write scan of a loop body (wire v2 plan 5.2, Q6) holds every
-# ABOUTME: slot the scout finds rebound, including a flip-flop's state and slot 0 under a call.
+# ABOUTME: slot the walk rebinds, so its header needs no second walk: a flip-flop's state, slot 0.
 use v5.42.0;
 use Test2::V0;
 use File::Temp qw(tempdir);
 
-# WHY. Stage 9b replaces the scout (a throwaway walk of the body) by a Braun
-# header whose Phis are made for the slots a linear scan of the body's ops says
-# may be written. A slot the scan misses gets no Phi. Stage 0 measured the scan
-# against the scout over the corpus, the probes and chalk's lib: it missed two
-# slot kinds, in four loops --
+# WHY. Braun's header (stage 9b) has a Phi for each slot a linear scan of the
+# body's ops says it may rebind. A slot the scan misses is found at sealing
+# (it is rebound and has no Phi): learned, and the sub walked again -- right,
+# but a second walk. Stage 0 measured the scan against the scouts it replaced
+# over the corpus, the probes and chalk's lib: it missed two slot kinds, in
+# four loops --
 #   - the state slot of a scalar-context range (flip-flop): corpus 003, 373;
 #   - "pad slot 0" in chalk's Bootstrap/Perl/Target/Perl.pm at 1691 and 1857,
 #     first read as "slot 0 under a method call". It was no slot: a `split`
@@ -17,7 +18,7 @@ use File::Temp qw(tempdir);
 #     holding one after another split looked as if it wrote "slot 0". The
 #     producer binds nothing for a split with no target now; the scan needs
 #     no rule for it.
-# t/lib/MayWriteCheck.pm compares the two on every loop the real walk makes.
+# t/lib/MayWriteCheck.pm says MISS for each slot a sealing learns.
 
 my $dir = tempdir( CLEANUP => 1 );
 
@@ -72,7 +73,7 @@ EOS
 
 for my $name ( sort keys %cases ) {
     my ( $m, $err ) = misses( $name =~ s/\W+/-/gr, $cases{$name} );
-    is $m, [], "$name: the scan holds what the scout found" or diag $err;
+    is $m, [], "$name: the scan holds what the walk rebinds" or diag $err;
 }
 
 # The two measured corpus loops themselves.
@@ -81,7 +82,7 @@ use PvmCorpus qw(read_cases);
 my @corpus = read_cases('t/corpus/mdtest/pvm');
 for my $n ( 3, 373 ) {
     my ( $m, $err ) = misses( "corpus$n", $corpus[ $n - 1 ]{src} );
-    is $m, [], sprintf( 'corpus %03d: the scan holds what the scout found', $n ) or diag $err;
+    is $m, [], sprintf( 'corpus %03d: the scan holds what the walk rebinds', $n ) or diag $err;
 }
 
 done_testing;

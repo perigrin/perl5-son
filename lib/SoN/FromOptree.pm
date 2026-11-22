@@ -1126,17 +1126,6 @@ class SoN::FromOptree 0.01 {
         }
         return \%rename;
     }
-    # True while a scout or probe (_scout_mutated_targs, _body_writes_targ)
-    # is walking. A refusal raised under it is
-    # a refusal by the slot-discovery pass rather than by the pass that builds
-    # the graph, and saying so is what makes the difference testable.
-    our $IN_SCOUT = 0;
-
-    # WHETHER THE LAST SCOUT'S BODY WALK MOVED MEMORY -- set by
-    # _scout_mutated_targs, read by the loop that ran it to decide on a
-    # header memory Phi. See _body_stores_memory.
-    our $SCOUT_MOVED_MEMORY = 0;
-
     # The pad aggregates the walked sub MUTATES -- shift, pop, push, unshift,
     # splice, delete, or an element store -- by targ. A list assign whose
     # value names other storage (`my @q = @_`) must COPY into such a target,
@@ -6051,7 +6040,7 @@ class SoN::FromOptree 0.01 {
     # is in it). Recorded in the eval's frame; _catch_way merges them.
     sub _exc_edge ($sim, $node) {
         my $f = $EXC_FRAMES[-1] or return;
-        return if $IN_SCOUT || !defined $EVAL_ID || $f->{eval_id} != $EVAL_ID || !defined $sim->memory;
+        return if !defined $EVAL_ID || $f->{eval_id} != $EVAL_ID || !defined $sim->memory;
         return if $f->{edged}{ refaddr $node }++;   # (one way out each)
         my $factory = $f->{factory};
         my $edge = $sim->snapshot;
@@ -6252,14 +6241,6 @@ class SoN::FromOptree 0.01 {
         }
         # A STRING EVAL OF CODE KNOWN HERE (one of a few pure literals) is its
         # value, folded: it reads and writes nothing, so no lexical is seen.
-        # (A SCOUT'S PLACEHOLDER VALUES ARE NOT THE CODE: it builds no graph, so
-        # its eval is opaque; the real walk folds it or refuses.)
-        if ($name eq 'entereval' && $IN_SCOUT && !defined _fold_string_eval($sim, $factory)) {
-            $sim->pop_node;
-            $sim->push_node($factory->make('Constant', value => '', const_type => 'string',
-                stamp => SoN::IR::Stamp->new(type => 'Str'))) unless ($op->flags & 3) == 1;
-            return ($op->next, 'handled');
-        }
         if ($name eq 'entereval' && defined(my $folded = _fold_string_eval($sim, $factory))) {
             $sim->pop_node;
             # (eval STRING clears $@ as it succeeds, as a block eval does)
@@ -7870,7 +7851,7 @@ class SoN::FromOptree 0.01 {
             # NOT IN A SCOUT: its own factory must not reach the real nodes
             # the reference is built from -- a probe's push, hung on them,
             # leaked into the graph as a second successor of Start.
-            if (!$is_lvalue && !$IN_SCOUT && (my $al = $ITER_ALIAS_REF{$targ})) {
+            if (!$is_lvalue && (my $al = $ITER_ALIAS_REF{$targ})) {
                 my $through = $factory->make_unique('PostfixDeref', sigil => '$',
                     inputs => [$al->{ref}], mem => $sim->memory,
                     stamp  => SoN::IR::Stamp->new(type => 'Scalar'));
@@ -11240,17 +11221,6 @@ class SoN::FromOptree 0.01 {
                 _translate_foreach_array($cv, $op, $sim, $factory, $opmap,
                     $ctx->{visited}, $bounds->[0], $iter_key);
             }
-            elsif ($IN_SCOUT && $bounds->@* == 1) {
-                # A SCOUT SEEDS EVERY SLOT WITH A PLACEHOLDER, so `@a` arrives
-                # here as a string Constant, not an array. Refusing stopped the
-                # scout at an inner loop the real walk lowers, and the outer
-                # loop built no Phi for what the inner body writes: `$s .= $x`
-                # restarted every outer pass (`11` for perl's `111`). The scout
-                # asks only which slots the body writes, and walking the body
-                # over the placeholder answers that.
-                _translate_foreach_array($cv, $op, $sim, $factory, $opmap,
-                    $ctx->{visited}, $bounds->[0], $iter_key);
-            }
             else {
                 die "GAP: foreach with unrecognized bounds shape not yet lowered\n";
             }
@@ -13698,7 +13668,6 @@ class SoN::FromOptree 0.01 {
     # of the saves, so the paths that do not return still have them to restore
     # (pvm 176: `local $self->{c} = ...; return h($self)` kept the store).
     sub _restore_locals_for_return ($sim, $ctx, $factory) {
-        return if $IN_SCOUT;    # a scout records no exit; its restore would be an orphan node
         local $ctx->{local_saves} = [ map { $_->@* } @SAVES_STACK ];
         _restore_locals($sim, $ctx, $factory, 0, 1);
         return;
@@ -13709,7 +13678,7 @@ class SoN::FromOptree 0.01 {
     # (_loop_controls_follow_local_elems allowed only those). From a copy, as
     # for a return; a restore the iteration's end repeats puts back the same.
     sub _restore_local_elems_on_edge ($sim, $factory) {
-        return if $IN_SCOUT || !defined $LOOP_SAVES_BASE;
+        return if !defined $LOOP_SAVES_BASE;
         my %seen;
         # A NAME'S TOO (audit 2026-11-19, W6, probe lo3): `local $g` in a loop
         # body is put back as the pass ends, by whatever way it ends. Only
@@ -13839,102 +13808,6 @@ class SoN::FromOptree 0.01 {
         return 0;
     }
 
-    # Walk a loop body (condition + body), handling the internal and/or
-    # Translate a while loop (enterloop) to the corpus Loop/Phi contract:
-    # Loop(entry) IS the header (no If inside it); Proj(loop,0) is the body
-    # edge, Proj(loop,1) the exit edge, Region(exit Proj) the post-loop
-    # control; every loop-carried variable reads through a header Phi
-    # (inputs[0]=init, inputs[1]=backedge, region=Loop) so the condition and
-    # body see the current iteration's value, not the pre-loop bindings.
-    #
-    # The body computes the back-edge values FROM the Phis, so the Phis must
-    # exist before the body is walked -- but which variables need one is only
-    # known from the body. Two-phase: (1) SCOUT the condition+body on a
-    # throwaway sim and factory to discover the mutated pad slots (scout
-    # nodes never reach the real graph); (2) create a header Phi per mutated
-    # slot, rebind, walk for real, then patch each Phi's back-edge and stamp.
-    # Scout a loop's ops on an insulated sim (own factory, own Start,
-    # placeholder bindings) to discover which pad slots the walk mutates.
-    # Constructing a scout node over a real node would leak it into the real
-    # graph through the use-def consumer edge registered at construction, so
-    # no real node is shared. $extra_targs introduces slots that do not exist
-    # pre-loop (a foreach induction variable). Returns the sorted mutated
-    # pre-existing slots.
-    # _body_writes_targ($cv, $start_op, $sim, $opmap, $targ) -> bool
-    #
-    # True if walking the loop body rebinds pad slot $targ (a write). Used to
-    # detect a foreach body that assigns its iterator variable (an aliasing
-    # write-back to the array). The scout seeds ONLY $targ with a placeholder and
-    # reports whether the body rebound it -- _scout_mutated_targs cannot answer
-    # this for the iterator because it excludes $extra_targs from its result and
-    # only seeds slots already in scope (the iterator is not in the outer scope).
-    # A SCOUT PLACEHOLDER CARRIES ITS BINDING'S STAMP. An unstamped string
-    # stands in for every slot, so an inner `for my $y (@b)` in a scouted body
-    # saw a string where an array belongs, died "unrecognized bounds shape",
-    # and the scout returned the slots found so far -- the outer loop then had
-    # no Phi for a slot written after the inner loop, and printed "25,26,"
-    # where perl prints "15,16,25,26,".
-    sub _scout_placeholder ($factory, $sim, $targ) {
-        my $b = $sim->scope_bindings->{$targ};
-        my $stamp = $b ? $b->stamp : undef;
-        return $factory->make_unique('Constant',
-            value => 'scout', const_type => 'string',
-            (defined $stamp ? (stamp => $stamp) : ()));
-    }
-
-    sub _body_writes_targ ($cv, $start_op, $sim, $opmap, $targ, $cond_consumed = 0) {
-        # A SCOUT DOES NOT SEE THE CELLS: a CellRead it built would be a
-        # consumer of the real CellParam, and its throwaway nodes reachable
-        # from the real graph (a stray call at Start).
-        local $CELLS;
-        my $scout_factory = SoN::IR::NodeFactory->new();
-        my $scout_sim     = SoN::FromOptree::StackSim->new(
-            control => $scout_factory->make_cfg('Start'),
-            # A throwaway MemStart so a body element read (`$a[$i]`) builds a
-            # Subscript with a defined memory input during scouting -- else the
-            # Node ADJUST dies "consumers on undef" and B::SoN masks it as a
-            # silent sub-drop.
-            memory  => $scout_factory->make('MemStart'));
-        # Seed the current scope so body reads resolve, plus a placeholder for
-        # the iterator slot so a write to it is detectable.
-        for my $t (keys $sim->scope_bindings->%*) {
-            $scout_sim->define($t,
-                _scout_placeholder($scout_factory, $sim, $t));
-        }
-        my $ph = $scout_factory->make_unique('Constant',
-            value => 'scout-iter', const_type => 'string');
-        $scout_sim->define($targ, $ph);
-        # THIS IS A PROBE, NOT A TRANSLATION, and it must not be able to kill
-        # the compilation. It asks one question -- does the body write $targ?
-        # -- on a sim seeded with placeholders, so a body op the walker cannot
-        # handle here is a failure to ANSWER, not a failure of the program.
-        #
-        # Left unguarded it was: `foreach ($x) { s/(x)/ord $1/ge }` raised
-        # "Stack underflow" from inside this probe (a body op popping an
-        # operand the placeholder seeding never pushed), and B::SoN reported an
-        # INTERNAL ERROR for a construct whose real state is a clean GAP --
-        # s///ge is refused by name one frame away. That is the crash-masks-GAP
-        # shape: the reader is sent to StackSim instead of to `s///ge`.
-        #
-        # A failed probe answers FALSE: "no write detected". That is the
-        # conservative direction -- it declines the aliasing write-back path
-        # and leaves the body to the real walk, which then raises the honest
-        # refusal for whatever the body actually contains.
-        # A PROBE IS A SCOUT, and must say so: the function-exit list is
-        # global, and a guarded `return` in a nested loop walked here recorded
-        # a real exit built from probe nodes -- a second, scout-only inner
-        # loop leaked into the graph ("a control node with 2 successors").
-        local $IN_SCOUT = 1;
-        my $walked = eval {
-            _walk_loop_body($cv, $start_op, $scout_sim, $scout_factory, $opmap,
-                {}, {}, undef, undef, $cond_consumed);
-            1;
-        };
-        return 0 unless $walked;
-        my $after = $scout_sim->scope_bindings->{$targ};
-        return defined $after && $after != $ph;
-    }
-
     # _restore_iterator_binding($sim, $targ, $pre_scope)
     #
     # Put back whatever $targ was bound to before a foreach body ran. perl
@@ -13948,13 +13821,7 @@ class SoN::FromOptree 0.01 {
     # bindings a body legitimately makes to OTHER slots must survive.
     #
     # A SLOT WITH NO PRE-LOOP BINDING IS LEFT ALONE, not cleared. Clearing it
-    # would need a delete on the sim's scope, which lives in another file; and
-    # it is not needed, because every place the stale binding could be READ
-    # seeds its own placeholder first. Measured: both scouts
-    # (_body_writes_targ, _scout_mutated_targs) define every key in scope plus
-    # the iterator before walking, so the inner loop's restore inside a scout
-    # puts back the SCOUT's placeholder -- which is exactly what makes the
-    # outer loop's `writes_iter` read false for a body that never wrote it.
+    # would need a delete on the sim's scope, which lives in another file.
     #
     # The residue is a binding for an iterator key after its loop ends. On the
     # REAL walk that key is '$main::_' with no pre-loop binding, and a read of
@@ -14434,32 +14301,6 @@ class SoN::FromOptree 0.01 {
         return $w->{$key} || $w->{'*'} ? 1 : 0;
     }
 
-    # _refuse_unscouted_writes($sim, $pre_scope, \%phis, @skip) -- die when the
-    # real body walk rebound a slot the loop header carries no Phi for.
-    #
-    # THE SCOUT IS WHAT DECIDES THE PHIS, and a scout that stops at a refusal
-    # returns the slots it found so far. A slot the body writes after that
-    # point gets no Phi, and its value never crosses the back-edge: measured,
-    # an outer loop whose scout stopped at an inner foreach restarted `$s .=
-    # $x` every pass. The real walk sees every write, so comparing what it
-    # left against what the loop entered with names the miss. @skip is the
-    # loop's own iterator, which the body rebinds by design.
-    sub _refuse_unscouted_writes ($sim, $pre_scope, $phis, @skip) {
-        my %skip = map { $_ => 1 } @skip;
-        my $post = $sim->scope_bindings;
-        for my $key (keys $pre_scope->%*) {
-            next if $phis->{$key} || $skip{$key};
-            # (a written package scalar has no Phi by design: it is read
-            # through the loop's memory, _key_lives_in_memory)
-            next if _key_lives_in_memory($key);
-            next unless defined $post->{$key} && defined $pre_scope->{$key};
-            die "GAP: a loop body writes a variable its scout missed"
-              . " ($key) not yet lowered\n"
-                if $post->{$key} != $pre_scope->{$key};
-        }
-        return;
-    }
-
     sub _restore_iterator_binding ($sim, $targ, $pre_scope) {
         if (exists $pre_scope->{$targ}) {
             $sim->define($targ, $pre_scope->{$targ});
@@ -14728,48 +14569,16 @@ class SoN::FromOptree 0.01 {
         return;
     }
 
-    # _scout_mutated_targs(...) -> ($mutated, $unstamped)
-    #
-    # $mutated is the sorted list of slots the body rebinds; $unstamped is the
-    # set of those whose header Phi must be built WITHOUT its init's stamp --
-    # see _scout_loop_phi_stamps. $extra_stamps gives the stamp each extra slot
-    # (an iterator) will carry in the real walk.
-    sub _scout_mutated_targs ($cv, $start_op, $sim, $opmap, $extra_targs = [], $cond_consumed = 0, $extra_stamps = {}) {
-        my %unstamped;
-        $SCOUT_MOVED_MEMORY = 0;
-        while (1) {
-            my ($mutated, $placeholder, $scout_scope) = _scout_once($cv,
-                $start_op, $sim, $opmap, $extra_targs, $cond_consumed,
-                $extra_stamps, \%unstamped);
-            my @lost = grep {
-                !$unstamped{$_}
-                && _backedge_loses_stamp($scout_scope->{$_}, $placeholder->{$_})
-            } $mutated->@*;
-            return ($mutated, \%unstamped) unless @lost;
-            $unstamped{$_} = 1 for @lost;
-        }
-    }
-
-    # THE HEADER PHI'S STAMP IS DECIDED BEFORE THE BODY WALK. _make_loop_phi
+    # THE HEADER PHI'S STAMP IS GUESSED BEFORE THE BODY WALK. _make_loop_phi
     # copies a narrowed init stamp onto the Phi, and the body is walked against
     # it; a back-edge that cannot confirm that stamp would leave every consumer
     # that read it too narrow, and nothing may unstamp the Phi afterwards (a
-    # stamp is written once, from Unknown). So the scout walks the body with
-    # each placeholder carrying the stamp its Phi WOULD carry, and a slot whose
+    # stamp is written once, from Unknown). So at sealing a slot whose
     # back-edge comes out unstamped -- and is neither an arithmetic recurrence
     # over the Phi nor a package variable with a sigil floor, the two shapes
-    # _patch_loop_phi keeps -- gets an unstamped Phi instead. Measured on
-    # chalk: `my $v;` before a loop, conditionally overwritten with an element
-    # or a call result.
-    #
-    # A FIXPOINT, AND A MONOTONE ONE. Unstamping one placeholder can unstamp a
-    # back-edge that reads it, so the scout walks again with the larger set.
-    # The set only grows, so this ends within |mutated|+1 walks; the common
-    # case is one.
-    #
-    # A DISAGREEMENT IS STILL A REFUSAL. The scout runs without a loop node; if
-    # the real walk produces an unstamped back-edge the scout did not predict,
-    # _patch_loop_phi refuses as before rather than keep the stale stamp.
+    # _patch_loop_phi keeps -- is learned unstamped, and the sub walked again
+    # (_braun_seal). Measured on chalk: `my $v;` before a loop, conditionally
+    # overwritten with an element or a call result.
     sub _backedge_loses_stamp ($post, $ph) {
         return false unless _is_narrowed($ph->stamp);
         return false unless blessed($post) && $post->can('stamp');
@@ -14779,98 +14588,13 @@ class SoN::FromOptree 0.01 {
         return true;
     }
 
-    sub _scout_once ($cv, $start_op, $sim, $opmap, $extra_targs, $cond_consumed, $extra_stamps, $unstamped) {
-        local $CELLS;   # see _body_writes_targ
-        my $scout_factory = SoN::IR::NodeFactory->new();
-        my $scout_mem     = $scout_factory->make('MemStart');
-        my $scout_sim     = SoN::FromOptree::StackSim->new(
-            control => $scout_factory->make_cfg('Start'),
-            # A throwaway MemStart so a body element read builds a Subscript with
-            # a defined memory input during scouting (see _body_writes_targ).
-            memory  => $scout_mem);
-        my %placeholder;
-        my $scope = $sim->scope_bindings;
-        my $unknown = SoN::IR::Stamp->new(type => 'Unknown');
-        # A SHARED AGGREGATE IS BOUND TO ITS CONTAINER before the body and
-        # after it, whatever the body stores there: no value to carry.
-        my $container = sub ($n) {
-            blessed($n) && $n->isa('SoN::IR::Node::PadAccess') && $n->shared
-                && ($n->sigil // '') =~ /\A[\@%]\z/
-                && !$n->v1_inputs->@*;
-        };
-        for my $targ (keys $scope->%*, $extra_targs->@*) {
-            # The stamp the real walk will see in this slot: an extra slot's
-            # from the caller, a carried slot's as _make_loop_phi would copy it.
-            my $b = $scope->{$targ};
-            my $st = exists $extra_stamps->{$targ} ? $extra_stamps->{$targ}
-                   : !$unstamped->{$targ} && blessed($b) && $b->can('stamp')
-                     && _is_narrowed($b->stamp) ? $b->stamp
-                   : $unknown;
-            # A SHARED AGGREGATE STAYS ITS CONTAINER (see below), which an
-            # arm's store rebinds to the same node: a Constant there made
-            # every join over it a Phi.
-            my $ph = $container->($b)
-                ? $scout_factory->make('PadAccess', targ => $b->targ,
-                    sigil => $b->sigil, symbol => $b->symbol, shared => 1)
-                : $scout_factory->make_unique('Constant',
-                    value => 'scout', const_type => 'string', stamp => $st);
-            $placeholder{$targ} = $ph;
-            $scout_sim->define($targ, $ph);
-        }
-        # THE SCOUT IS MARKED so a refusal raised inside it is identifiable.
-        # It builds a throwaway factory and sim and emits nothing that reaches
-        # the wire, so a `die` about LOWERING raised here is raised by a pass
-        # that is not lowering -- and it aborts the loop before the real pass,
-        # which has a loop node and @break_projs and may well handle the
-        # construct. Traced on `next if A; next if B` inside a foreach: the
-        # second guard's refusal came from _scout_mutated_targs, not from the
-        # walk that builds the graph.
-        # A SCOUT REFUSAL IS NOT A TRANSLATION REFUSAL. The scout learns which
-        # slots the body mutates; it decides nothing about lowerability. So a
-        # `die` from the walk is CAUGHT here and the slots found so far are
-        # returned, leaving the real pass to refuse or lower on its own terms.
-        #
-        # THE PARTIAL SET IS THE RISK, and it is why this catches rather than
-        # ignores. If the scout stops early it may miss a slot the body writes
-        # LATER, and the header would then build no Phi for it -- a silent
-        # miscompile far worse than the refusal. Measured: the real pass refuses
-        # every case that makes the scout die today, so no such graph reaches
-        # the wire. If a case ever lowers on the real pass after a partial
-        # scout, that is the shape to look at first.
-        local $IN_SCOUT = 1;
-        my $scout_died = eval {
-            _walk_loop_body($cv, $start_op, $scout_sim, $scout_factory, $opmap,
-                {}, {}, undef, undef, $cond_consumed);
-            1;
-        } ? undef : ($@ || 'unknown');
-        my $scout_scope = $scout_sim->scope_bindings;
-        # A SCOUT THAT DIED may have stopped before a store, so it says yes.
-        $SCOUT_MOVED_MEMORY ||= defined $scout_died
-            || !defined $scout_sim->memory || $scout_sim->memory != $scout_mem;
-        my %extra = map { $_ => 1 } $extra_targs->@*;
-        # A WRITTEN PACKAGE SCALAR IS NOT CARRIED (audit 2026-11-19, W1). It
-        # lives in memory, where a sub the body calls can write it, and a
-        # header Phi is a value no callee's store reaches: `our $g; sub bump
-        # { $g += 10 } for (1..3) { $g = $g + 1; bump() }` read the Phi each
-        # pass and ended at 13 for perl's 33. Its store moved the scout's
-        # memory, so the loop has a memory Phi, and the body reads it there.
-        # (A foreach's alias of the name is this loop's own binding and stays.)
-        return ([ sort _scope_key_order
-            grep {
-                !$extra{$_}
-                && defined $scout_scope->{$_}
-                && $scout_scope->{$_} != $placeholder{$_}
-                && !_key_lives_in_memory($_)
-            } keys %placeholder ], \%placeholder, $scout_scope);
-    }
-
     # Create a loop header Phi for a slot (make_unique: two Phis with the
     # same init are distinct recurrences until their back-edges wire). The
     # Phi carries its init's stamp so the body's join-stamped nodes, which
     # read the Phi, can derive theirs; _patch_loop_phi verifies the
     # back-edge does not widen it.
-    # $unstamped: the scout found this slot's back-edge cannot confirm the
-    # init's stamp (_scout_mutated_targs), so the Phi starts unstamped.
+    # $unstamped: a walk found this slot's back-edge cannot confirm the init's
+    # stamp (_braun_seal), so the Phi starts unstamped.
     sub _make_loop_phi ($factory, $loop_node, $init, $unstamped = 0) {
         return $factory->make_unique('Phi',
             inputs => [$init],
@@ -15080,14 +14804,6 @@ class SoN::FromOptree 0.01 {
     sub _patch_loop_phi ($sim, $targ, $phi, $post) {
         $phi->set_backedge($post);
         $sim->define($targ, $phi);
-        # A SCOUT CHECKS NO STAMPS. It asks which slots a body writes, and its
-        # placeholders only approximate the real bindings' stamps -- the outer
-        # iterator's carries none. An inner loop storing that iterator into a
-        # stamped slot died on the refusal below, the scout returned the slots
-        # found so far, and a slot written after the inner loop got no outer
-        # Phi (perl 6, emitted 3). The real walk makes these checks on the
-        # real stamps.
-        return if $IN_SCOUT;
         my $init = $phi->v1_inputs->[0];
         # "Has a stamp" is not the question -- every Value node carries one
         # now. The question is whether it says anything, and `Unknown` is how
@@ -15271,11 +14987,10 @@ class SoN::FromOptree 0.01 {
     # Perl evaluates a while CONDITION N+1 times: the final, FAILING evaluation
     # still applies its side effects. `while ($i-- > 0)` decrements $i on the
     # failing pass too, so the post-loop $i is the value AFTER that pass, not the
-    # header Phi's exit value. Scout the condition ops alone on an insulated sim
-    # (stopping at the and/or that closes the condition) and return the sorted set
-    # of pad slots the condition rebinds. _translate_while_loop re-binds these
-    # slots to their loop-Phi BACK-EDGE post-loop (the value after the failing
-    # pass) instead of to the header Phi (the value that failed the test).
+    # header Phi's exit value. _translate_while_loop re-binds the slots the
+    # condition rebinds (bound at its test to other than their Phi) to their
+    # loop-Phi BACK-EDGE post-loop (the value after the failing pass) instead of
+    # to the header Phi (the value that failed the test).
     #
     # A condition that also STORES to memory (an lvalue element `$a[$i]++` in the
     # guard) advances the memory chain on the failing pass -- the exit-path rebind
@@ -15292,60 +15007,6 @@ class SoN::FromOptree 0.01 {
         die "GAP: side-effecting loop condition with a memory store not yet lowered\n"
             if _cond_stores_memory($cond_start);
         return;
-    }
-
-    sub _scout_condition_mutated_targs ($cv, $cond_start, $sim, $opmap) {
-        my $probe = $cond_start;
-        my %probe_seen;
-        $probe = $probe->next
-            while $$probe && !$probe_seen{$$probe}++
-                && $probe->name ne 'and' && $probe->name ne 'or';
-        return [] unless $$probe
-            && ($probe->name eq 'and' || $probe->name eq 'or');
-        # A COMPOUND CONDITION CLOSES AT ITS OUTERMOST and/or. The first one
-        # in exec order is the left operand's -- `while ($n > 3 && $h++ < 8)`
-        # stopped the scout at `$n > 3`, so the increment on the right was
-        # not a condition write and the loop exited with the value before it.
-        $probe = _loop_closing_logop($cond_start) // $probe;
-
-        die "GAP: side-effecting loop condition with a memory store not yet lowered\n"
-            if _cond_stores_memory($cond_start);
-
-        my $cond_factory = SoN::IR::NodeFactory->new();
-        my $cond_sim     = SoN::FromOptree::StackSim->new(
-            control => $cond_factory->make_cfg('Start'));
-        my %placeholder;
-        for my $targ (keys $sim->scope_bindings->%*) {
-            my $ph = $cond_factory->make_unique('Constant',
-                value => 'scout', const_type => 'string');
-            $placeholder{$targ} = $ph;
-            $cond_sim->define($targ, $ph);
-        }
-        _walk_branch($cv, $cond_start, $cond_sim, $cond_factory, $opmap,
-            {}, undef, 0, $$probe);
-        my $after = $cond_sim->scope_bindings;
-        return [ sort _scope_key_order
-            grep { defined $after->{$_} && $after->{$_} != $placeholder{$_} }
-            keys %placeholder ];
-    }
-
-    # The and/or that closes a loop's condition: the outermost one between the
-    # condition's first op and its leaveloop, found by climbing parents. undef
-    # when the condition does not sit under a leaveloop.
-    sub _loop_closing_logop ($op) {
-        my ($last, %seen);
-        while ($$op && !$seen{$$op}++) {
-            my $p = eval { $op->parent } or return undef;
-            return undef unless $$p;
-            return $last if $p->name eq 'leaveloop';
-            # A STATEMENT BOUNDARY MEANS THIS IS NOT ITS LOOP'S CONDITION: a
-            # postfix `EXPR while COND` has no leaveloop of its own, and the
-            # climb went on to an enclosing foreach's and scouted its body.
-            return undef if $p->name =~ /\A(?:lineseq|scope|leave\w*)\z/;
-            $last = $p if $p->name eq 'and' || $p->name eq 'or';
-            $op = $p;
-        }
-        return undef;
     }
 
     # Does a loop CONDITION store to memory (an lvalue element `$a[$i]++` /
@@ -15371,9 +15032,8 @@ class SoN::FromOptree 0.01 {
         # This loop's redo op, when an enterloop opened it; see $LOOP_REDO.
         local $LOOP_REDO = $NEXT_LOOP_REDO;
         local $NEXT_LOOP_REDO;
-        # nexts from creation: a scout records this loop's own `next`
-        # edges too, so a variable changed only on a path that `next`s is
-        # still seen as loop-carried. The real walk starts a fresh list.
+        # nexts from creation: the walk records this loop's own `next` edges,
+        # merged at the latch.
         my $frame = { label => $STMT_LABEL, nexts => [],
                       ( $BARE_LOOP ? ( bare => 1, bare_leave => ${ $BARE_LOOP->parent } ) : () ) };
         local $BARE_LOOP;   # (a loop inside it is not the bare block)
@@ -15559,9 +15219,8 @@ class SoN::FromOptree 0.01 {
     # lexical, `stash::$name` for a package scalar. Defaults to the op's targ so
     # existing callers are unchanged.
     sub _translate_foreach_range ($cv, $enteriter, $sim, $factory, $opmap, $visited, $low, $high, $iter_key = undef) {
-        # nexts from creation: a scout records this loop's own `next`
-        # edges too, so a variable changed only on a path that `next`s is
-        # still seen as loop-carried. The real walk starts a fresh list.
+        # nexts from creation: the walk records this loop's own `next` edges,
+        # merged at the latch.
         my $frame = { label => $STMT_LABEL, nexts => [] };
         local @LOOP_STACK = (@LOOP_STACK, $frame);
         # A RANGE OF STRINGS STEPS BY THE MAGIC INCREMENT ("a".."c", "aa".."ad"),
@@ -15569,8 +15228,7 @@ class SoN::FromOptree 0.01 {
         # and ran "a".."c" as 0..0, one pass. Known only of constants.
         for my $b ($low, $high) {
             die "GAP: a foreach over a range of strings (perl's magic increment) is not yet lowered\n"
-                if !$IN_SCOUT   # (a scout's placeholder is a string Constant, not the program's)
-                && $b->isa('SoN::IR::Node::Constant') && ( $b->const_type // '' ) eq 'string'
+                if $b->isa('SoN::IR::Node::Constant') && ( $b->const_type // '' ) eq 'string'
                 && !Scalar::Util::looks_like_number( $b->value );
         }
         my $i_targ = $iter_key // $enteriter->targ;
@@ -15585,9 +15243,9 @@ class SoN::FromOptree 0.01 {
             unless $$and_op && $and_op->name eq 'and';
         my $body_start = $and_op->other;
 
-        # Phase 1: scout the body ($i is introduced by enteriter itself, so
-        # it rides as an extra slot and is excluded from the mutated set --
-        # it gets the induction Phi, not a carried-value Phi).
+        # Phase 1: what the walk guesses (%LOOP_HINTS). $i is introduced by
+        # enteriter itself, so it is left out of the carried slots -- it gets
+        # the induction Phi, not a carried-value Phi.
         my $pre_scope = $sim->scope_bindings;
         my $hint = _loop_hint($body_start);
         # (whether the body writes its iterator, where that is asked: guessed
@@ -16319,8 +15977,8 @@ class SoN::FromOptree 0.01 {
             stamp => SoN::IR::Stamp->new(type => 'Int'));
         my $elem_stamp = _array_element_stamp($array);
 
-        # Phase 1: scout the body. $x rides on enteriter (its own slot) and gets
-        # the element binding, not a carried-value Phi, so exclude it.
+        # Phase 1: $x rides on enteriter (its own slot) and gets the element
+        # binding, not a carried-value Phi, so it is left out of the header's.
         my $pre_scope = $sim->scope_bindings;
         my $iter_save = _save_package_iterator($cv, $factory, $sim, $x_targ,
             sub { $writes_iter }, $enteriter);
@@ -17201,7 +16859,7 @@ class SoN::FromOptree 0.01 {
                 _reread_exit_operands($cv, $op, $sim, $factory, $opmap, $ctx);
                 _restore_locals_for_return($sim, $ctx, $factory);
                 my $rec = _exit_record($sim, $factory, 'return', $op);
-                push @$FN_EXITS, $rec if defined $break_projs && !$IN_SCOUT;
+                push @$FN_EXITS, $rec if defined $break_projs;
                 # THE BODY GOES ROUND BY AN EARLIER `next`, as a `last` after
                 # one does: left as the body's end, the return's path also
                 # joined the latch -- one Proj with two successors.
@@ -17553,7 +17211,7 @@ class SoN::FromOptree 0.01 {
                 # path that goes on; dropped, the rest assigned whatever lay beneath.
                 $rest_sim->push_node($guard_val) if ($op->flags & 3) >= 2;
                 # A `return` in the rest is a function exit; see $FN_EXITS.
-                my $rest_exits = (defined $break_projs && !$IN_SCOUT)
+                my $rest_exits = defined $break_projs
                     ? $FN_EXITS : [];
                 my ($rest_end, $rest_sig) =
                     _walk_branch($cv, $op->next, $rest_sim, $factory, $opmap,
@@ -17804,7 +17462,7 @@ class SoN::FromOptree 0.01 {
                 my $taken_sim = $sim->snapshot;
                 $taken_sim->set_control($factory->make_cfg('Proj',
                     inputs => [$if_node], index => $taken_idx));
-                my $exits = (defined $break_projs && !$IN_SCOUT)
+                my $exits = defined $break_projs
                     ? $FN_EXITS : [];
                 my (undef, $sig) =
                     _walk_branch($cv, $op->other, $taken_sim, $factory, $opmap,
@@ -19298,49 +18956,6 @@ class SoN::FromOptree 0.01 {
         return 0;
     }
 
-    # Does a loop body contain an ELEMENT STORE? A body store advances memory,
-    # so the loop needs a header memory-Phi (2b-4) exactly like a loop-carried
-    # scope slot. The condition head's ->next chain runs condition ops up to the
-    # and/or that closes it; the BODY hangs off that and/or's ->other branch (the
-    # while condition short-circuits AROUND the body), so descend there -- the
-    # foreach caller passes body_start directly (no and/or to cross). Same
-    # OPf_MOD lvalue test as _arm_has_element_store; the cycle guard bounds it.
-    # AN ARM IN THE BODY is scanned and so is what follows it: an `if` whose
-    # arm ends in `next` (or holds a loop of its own) no longer hid a push
-    # after it (corpus 205). A loop in the body is crossed: its own leaveloop
-    # ends it, not this body.
-    sub _body_stores_memory ($start, $in_body = 0) {
-        my %seen;
-        my $depth = 0;
-        for (my $op = $start; $$op && !$seen{$$op}; $op = $op->next) {
-            $seen{$$op} = 1;
-            my $name = $op->name;
-            $depth++ if $in_body && ( $name eq 'enterloop' || $name eq 'enteriter' );
-            if ( $depth && $name eq 'leaveloop' ) { $depth--; next }
-            last if $name eq 'unstack' || $name eq 'leaveloop';
-            # shift/pop MUTATE their array (a memory effect), so a loop whose
-            # condition or body drains an array carries memory through the header.
-            return 1 if $name eq 'shift' || $name eq 'pop';
-            # So do push and unshift: `for (...) { push @o, $_ } join ",", @o`
-            # read @o at the push inside the body, with no header memory-Phi.
-            return 1 if $name eq 'push' || $name eq 'unshift';
-            # So does a store into a demoted slot: `my $h = {}; push @r, \$h`
-            # left the post-loop read at the store inside the body.
-            return 1 if _stores_demoted_slot($op);
-            if ( $in_body && $name =~ /\A(?:and|or|dor|cond_expr)\z/ ) {
-                return 1 if _body_stores_memory( $op->other, 1 );
-                next;
-            }
-            if ($name eq 'and' || $name eq 'or') {
-                return 1 if _cond_drains_array($start, $$op);
-                return _body_stores_memory($op->other, 1);
-            }
-            next unless $name eq 'aelem' || $name eq 'helem';
-            return 1 if $op->flags & 0x20;   # OPf_MOD -- an lvalue element target
-        }
-        return 0;
-    }
-
     # Does the CONDITION segment (from $start up to the closing and/or at
     # $stop_addr) contain a shift/pop array drain? The condition ops precede the
     # and/or; _body_stores_memory's and/or branch recurses into the BODY
@@ -20450,7 +20065,7 @@ class SoN::FromOptree 0.01 {
     sub _loop_arm_exits ($break_projs) {
         return undef unless $FN_EXITS;
         return undef if $IN_EVAL_BODY;
-        return (defined $break_projs && !$IN_SCOUT) ? $FN_EXITS : [];
+        return defined $break_projs ? $FN_EXITS : [];
     }
 
     sub _handle_cond_expr ($cv, $op, $sim, $factory, $opmap, $visited, $exits = undef, $loop = undef) {
@@ -22341,9 +21956,6 @@ class SoN::FromOptree 0.01 {
 
                 die "GAP: a loop control (`$name`) inside a branch arm is not"
                   . " yet lowered"
-                  . ( $IN_SCOUT ? " (raised by the slot-discovery scout, which"
-                                . " builds no graph -- the real pass never ran)"
-                                : '' )
                   . ( $in_loop
                       ? " -- only `last` carries an exit edge"
                       : " -- the arm walk carries no loop exit edge to"
