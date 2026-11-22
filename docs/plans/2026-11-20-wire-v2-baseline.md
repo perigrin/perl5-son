@@ -303,3 +303,34 @@ probes          PASS  LOUD=2 REFUSED=107 SAME=366; WRONG 0, SAME lost 0, changed
 ```
 
 (The five changed on wire 2 are cl5, cl6, cl13, cl19, cl20, REFUSED -> SAME: the cell pinned on the chain. The downgrade proof's v1 changes on purpose are listed in t/data/wire-v1-changed-on-purpose.tsv, now scoped to a wire where the graph is a program's own.)
+
+## 12. After stage 6
+
+Heads: producer `v2-s6` (8fdb3e8 to the commit that adds this section, on a752617), chalk `v2-s6` (a1e31bc2 to 645a0d4a, on 56bc0efe). B::SoN writes wire v2 only; chalk reads v2 only (docs/memory/wire-v1-is-gone.md).
+
+`tools/gates.sh` at producer 0b61e281, chalk 645a0d4a (the chalk suite and the census ran at 5284360b; 645a0d4a changes only the probes' BASELINE.tsv, and the probe gate ran again at it):
+
+```
+producer-suite  PASS  763 files, 0 failing [20m23s]
+chalk-suite     PASS  924 files, 0 failing [110m36s]
+census          PASS  ROUNDTRIP 426 (>= 426) DIFFERS 0 LLI_FAIL 0; GAP 5 LOAD_FAIL 0 NOJSON 0 [2m57s]
+corpus-gate     PASS  gate-green 222 (>= 222), prove exit 0, paad/worklist.json untouched [10m48s]
+probes          PASS  LOUD=2 REFUSED=115 SAME=390; WRONG 0, SAME lost 0, changed 0 [4m29s]
+ratchet         PASS  prove exit 0; chalk's lib compared; rows that fell: 0; new graphs: 0, 0 of them with violations [67m30s]
+                PASS  (deparser round trip) ROUNDTRIP 430 (>= 430) EMITS_INVALID_PERL 0 [5m16s]
+```
+
+The ratchet gate's second line is new: the downgrade proof (v1 writer against the commit before stage 3) had nothing left to compare, and the deparser's round trip through `SoN::Wire::as_v1` holds what is left of v1 (430, as a752617 measured it with v1 direct).
+
+Probes against the stage's start (56bc0efe): cl5, cl6, cl13, cl19, cl20 REFUSED -> SAME (the cell on the chain, wire 2 the default); al1, al2, ef31 refused by another name; fk7 REFUSED by another name (`a my scalar two list assignments bind one after the other`).
+
+Corpus and probe verifier rows (one wire now: corpus, probes): unchanged from corpus2 and probes2 but for the probes' denominators (519 wires, ag1-ag33 added since). chalk's lib re-recorded per graph at 5284360b; one graph rose against 1eaafd8a (Chalk::Regex::Graph::stmt, read-unversioned:through-ref 0 -> 1, a hash-consed read and place in code stage 6 wrote).
+
+What stage 7 and later should know:
+
+1. **A `my` scalar a list assign rebinds after a read is read by name** (one node, no memory version): T2 refuses two list assigns of one scalar where control reaches one from the other. It refuses fk7, which is right only because `$x` is read after the second alone. The fix is the producer's: those reads at a version (V6).
+2. **`_flattened_package_aggregates` stays** in chalk's WireCheck: off, nv1, nv4, nv5, nv7, nv8, lo14 are WRONG. Stage 7's `package` row removes the need.
+3. **Kept, by kind:** chalk's store classes (Assign, EntryWrite, CellWrite, Delete, ElemRestore) answer `is_memory_version` 1 by class, not by `mem_out` (chalk's own Earley-built graphs set no `mem_out`); WireCheck's `_follows_memory` is a kind list (Return, Unwind, Assign, sub calls). Both could read the wire's flags once nothing builds a graph without them.
+4. **`wire=2` is accepted** by B::SoN (it changes nothing); `SON_WIRE` still passes through the harnesses. Any other `wire=` is refused by name.
+5. **The :lvalue call of corpus 398** is the one sub call L5 lets off both chains: the place its Assign stores through.
+6. **Stage 7's text names `t/wire-verify.t`** for the V6 hard rule; that file (v1's rules) is gone, its v2 cases are in `t/wire-verify-v2.t`, and the counts are `t/wire-verify-ratchet.t`'s.

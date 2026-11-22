@@ -32,6 +32,8 @@ the v1 verifier rules, chalk's WireUpgrade, `Phi::is_memory`,
   any scope, so an if/else binding the scalar in each arm (corpus 165) was
   refused, and only the gates' t2-census-cases.t saw it. The graph says it:
   one list assign control reaches from the other.
+  It refuses fk7 (right: `$x` bound in two ifs, read after the second only);
+  fk7 was REFUSED at the stage's start too, by is_placed.
 - **Delete a covered rule by turning it off and running the probes.** With
   `_floating_effects` and `_floating_divisions` off nothing changed; with
   `_flattened_package_aggregates` off nv1 nv4 nv5 nv7 nv8 lo14 went WRONG
