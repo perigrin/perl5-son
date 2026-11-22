@@ -313,6 +313,8 @@ class SoN::IR::Graph {
             }
         }
 
-        return \@order;
+        # (a loop Phi forwarded at sealing is not in the graph: the node it
+        # stands for is -- wire v2 stage 9b, as the serializer writes it)
+        return [ grep { $_->operation ne 'Phi' || $_->resolved == $_ } @order ];
     }
 }

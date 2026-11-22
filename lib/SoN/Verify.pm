@@ -127,6 +127,8 @@ sub _describe ( $n, $by ) {
 #   phi:memory-as-value  V8: a memory Phi used as a value input.
 #   control-fork         V9: a node other than an If or a Loop has more than
 #                        one control successor: two things claim to run next.
+#   phi-trivial          V8 (`loop` profile, stage 9b): a loop's Phi whose
+#                        inputs other than itself are all one node.
 #   loop                 V11 (`loop` profile): a Loop has one or two inputs
 #                        and one control successor, and no Proj takes it; a
 #                        Phi at it has one input per input of it.
@@ -423,6 +425,13 @@ sub _graph_v2 ( $name, $g, $res, $profile = {} ) {
         $bad->( $n, 'phi-arity',
             "$have inputs for $want ways into $r->{op}#$r->{id}" . ( $f->{memory} ? ' (memory)' : '' ) )
             if $have != $want;
+        # (stage 9b, Braun: a loop's Phi the pass never wrote -- its inputs
+        # but itself all one node -- is forwarded, not written)
+        if ( $loop_profile && $r->{op} eq 'Loop' ) {
+            my %v = map { ( $_ => 1 ) } grep { defined && $_ != $n->{id} } $n->{inputs}->@*;
+            $bad->( $n, 'phi-trivial', 'a loop Phi of ' . ( keys %v ? $say->( ( keys %v )[0] ) : 'nothing' ) . ' alone' )
+                if keys %v < 2;
+        }
         if ( $f->{memory} ) {
             my @v = grep { !$memphi->( $_->[0] ) } ( $cons{ $n->{id} } // [] )->@*;
             $bad->( $n, 'phi:memory-as-value', 'used by ' . join( ',', map { "$_->[0]{op}#$_->[0]{id}" } @v ) ) if @v;

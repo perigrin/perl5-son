@@ -644,11 +644,21 @@ sub _serialize_graph ($graph) {
     }
     my $topo_nodes = _all_nodes_topo(\@reachable);
 
+    # A FORWARDED LOOP PHI (trivial at sealing: wire v2 stage 9b) is not
+    # written: where it is named, the node it stands for is (its init, made
+    # before it, so the order holds).
+    my @forwarded = grep { $_->operation eq 'Phi' && $_->resolved != $_ } $topo_nodes->@*;
+    if (@forwarded) {
+        my %fwd = map { ( $_->id => 1 ) } @forwarded;
+        $topo_nodes = [ grep { !$fwd{ $_->id } } $topo_nodes->@* ];
+    }
+
     # Build positional ID remap: node->id => positional index (0, 1, 2, ...)
     my %id_remap;
     for my ($pos, $node) (indexed $topo_nodes->@*) {
         $id_remap{ $node->id } = $pos;
     }
+    $id_remap{ $_->id } = $id_remap{ $_->resolved->id } for @forwarded;
 
     # Emit each node
     my @nodes;

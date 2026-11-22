@@ -91,12 +91,12 @@ subtest 'the corpus shape: three stacked memory Phis' => sub {
             && ((($by{ ($p->{inputs} // [])->[0] // -1 }{op}) // '') eq 'MemStart'
                 || ($p->{inputs} // [])->[1] == $p->{id})
     } $g->{nodes}->@*;
-    ok scalar(@mem) >= 1, 'it has a loop-carried memory Phi' or return;
-
-    # THE SECOND INPUT IS THE PHI ITSELF -- correct SSA for a back edge, and
-    # the shape that made this look like a value worth naming.
+    # A LOOP PHI WHOSE SECOND INPUT IS ITSELF is trivial: the pass moved no
+    # memory. It was the shape that made this look like a value worth naming;
+    # since wire v2 stage 9b (Braun) it is forwarded to the memory before the
+    # loop, and not written.
     my ($self_ref) = grep { (($_->{inputs} // [])->[1] // -1) == $_->{id} } @mem;
-    ok $self_ref, 'whose second input is itself';
+    ok !$self_ref, 'no loop memory Phi whose second input is itself (stage 9b: forwarded)';
 
     # THE MemStart REFUSAL IS GONE. This method also holds a `ListAppend`
     # (a map/grep accumulator), which is a separate node with no rule yet --

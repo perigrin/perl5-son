@@ -56,6 +56,9 @@
 # If, its Phis one input per input of it. probes phi-arity 4 -> 0: al1 and al2's loop leaves
 # by its exit and goes round (the iterator written back to a scalar source returned before
 # either); a loop no path goes round has one input and its Phis one. `loop` (V11) is new, 0.
+# 2026-11-22 (wire v2, stage 9b): Braun's construction. `phi-trivial` (V8: a loop's Phi whose
+# inputs other than itself are all one node) is new, and 0: such a Phi is forwarded to its init
+# at sealing and not written (the 9a producer wrote 25 over the corpus and the probes).
 corpus	#cases	431
 corpus	#graphs	1082
 corpus	#wires	431
@@ -68,6 +71,7 @@ corpus	mem-in-not-version	0
 corpus	memory-order-disagrees	0
 corpus	phi-arity	0
 corpus	phi-no-region	0
+corpus	phi-trivial	0
 corpus	phi:memory-as-value	0
 corpus	record	0
 corpus	version-off-chain	0
@@ -84,6 +88,7 @@ probes	mem-in-not-version	0
 probes	memory-order-disagrees	0
 probes	phi-arity	0
 probes	phi-no-region	0
+probes	phi-trivial	0
 probes	phi:memory-as-value	0
 probes	record	1
 probes	version-off-chain	0

@@ -34,17 +34,18 @@ class SoN::IR::Node::Phi :isa(SoN::IR::Value) {
 
     method operation() { 'Phi' }
 
+    # A TRIVIAL PHI IS FORWARDED (wire v2 stage 9b, Braun's construction):
+    # a loop's Phi made for a variable the body may write, sealed with the
+    # init and itself (the body never wrote it), stands for its init. The
+    # walk's bindings go back to the init; a node made in the body still
+    # holds the Phi, and the serializer writes the init where it is named.
+    field $forward :reader = undef;
+    method set_forward($n) { $forward = $n; return }
+    method resolved() { defined $forward ? $forward->resolved : $self }
+
     method content_hash() {
         return join('|', 'Phi', "region=" . $region->id(),
             ($memory ? ('memory') : ()), $self->_serialize_inputs());
-    }
-
-    # drop_backedge: a loop's Phi whose loop never goes round keeps its init.
-    method drop_backedge() {
-        my $old = $self->inputs()->[1];
-        splice $self->inputs()->@*, 1;
-        $old->remove_consumer($self) if defined $old;
-        return;
     }
 
     method set_backedge($value) {

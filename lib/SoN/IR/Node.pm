@@ -101,6 +101,10 @@ class SoN::IR::Node {
     # typed-ir-representation.md) bridge between representations on edges.
     field $representation :reader = undef;
 
+    # resolved -> the node this one stands for: itself, except a loop Phi
+    # found trivial at sealing (SoN::IR::Node::Phi::forward).
+    method resolved() { $self }
+
     # Add a consumer to this node's consumer list
     method add_consumer($node) {
         push $consumers->@*, $node;

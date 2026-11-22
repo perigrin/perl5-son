@@ -262,6 +262,8 @@ class SoN::FromOptree::StackSim 0.01 {
         return (stamp => SoN::IR::Stamp::join($sx, $sy));
     }
 
+    sub _r ($n) { blessed($n) && $n->can('resolved') ? $n->resolved : $n }
+
     method merge ($other, $factory, $owner = undef) {
         # The Region input stays the arm's LAST control node -- it is the
         # control-chain link, and substituting the Proj here severs the effects
@@ -283,10 +285,11 @@ class SoN::FromOptree::StackSim 0.01 {
 
         # Create Phi nodes for scope variables that differ, in a fixed order:
         # hash order made the node ids, and so the IR, differ between runs.
+        # (a forwarded loop Phi is the node it stands for: _r)
         my $other_scope = $other->scope_bindings;
         for my $targ (sort keys %scope) {
             if (exists $other_scope->{$targ}
-                && $scope{$targ} != $other_scope->{$targ}) {
+                && _r($scope{$targ}) != _r($other_scope->{$targ})) {
                 my $phi = $factory->make('Phi',
                     inputs => [$scope{$targ}, $other_scope->{$targ}],
                     region => $region,
@@ -302,7 +305,7 @@ class SoN::FromOptree::StackSim 0.01 {
         if (@stack && $other->stack_depth) {
             my $other_top = $other->pop_node;
             my $my_top = pop @stack;
-            if ($my_top != $other_top) {
+            if (_r($my_top) != _r($other_top)) {
                 my $phi = $factory->make('Phi',
                     inputs => [$my_top, $other_top],
                     region => $region,
@@ -321,7 +324,7 @@ class SoN::FromOptree::StackSim 0.01 {
         # 2b -- a branch-with-store read that reaches a memory Phi is an honest
         # backend GAP until then, never a miscompile.
         my $other_memory = $other->memory;
-        if (defined $memory && defined $other_memory && $memory != $other_memory) {
+        if (defined $memory && defined $other_memory && _r($memory) != _r($other_memory)) {
             $memory = $factory->make('Phi',
                 inputs => [$memory, $other_memory],
                 region => $region,

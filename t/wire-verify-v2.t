@@ -155,9 +155,23 @@ subtest 'programs B::SoN made' => sub {
     # REVIEW FOCUS 1: a write on a path that ends in a die outside any eval.
     my $r = rules('our $g = 0; sub f { $g = 1; die "x\n" } f();');
     is $r->{'write-unreachable'}, undef, '`$g = 1; die`: the Unwind is a root';
-    # REVIEW FOCUS 2: a loop with no way out.
-    my $l = rules('our $g = 0; while (1) { $g++ }');
-    is $l->{'write-unreachable'}, undef, '`while (1) { $g++ }`: its writes reach the header memory Phi';
+    # REVIEW FOCUS 2: a loop with no way out. B::SoN refuses the program by
+    # name (no exit Region to go on from), so the wire is written by hand, in
+    # the `loop` profile's shape: Loop [entry, back], the header's memory Phi
+    # over the store, no exit -- and no Return (nothing after it runs).
+    like scalar( `$^X -Ilib -MO=-q,SoN,json -e 'our \$g = 0; while (1) { \$g++ }' 2>&1` ),
+        qr/GAP: loop without a lowerable condition/, '`while (1) { $g++ }`: B::SoN refuses it by name';
+    my $spin = { version => 2, profile => [ 'mem', 'eval', 'loop' ], methods => { g => { returns => [], nodes => [
+        nd( 0, 'Start', [] ), nd( 1, 'MemStart', [] ),
+        nd( 2, 'EntryDef', [], package => 'main', sigil => '$', symbol => 'g' ),
+        nd( 3, 'Loop', [ 0, 7 ] ),
+        nd( 4, 'Phi', [ 1, 7 ], region => 3, memory => 1 ),
+        nd( 5, 'EntryDef', [], mem => 4, package => 'main', sigil => '$', symbol => 'g' ),
+        nd( 6, 'Increment', [5] ),
+        nd( 7, 'EntryWrite', [ 2, 6 ], ctl => 3, mem => 4, out => 1 ),
+    ] } } };
+    my $l = rules($spin);
+    is [ sort keys %$l ], [], '... and its v2 wire, by hand: the header memory Phi is a root, its store reached, no rule broken';
 };
 
 # A LOOP'S TEST CHAIN (a wire without the `loop` profile: the test's effects

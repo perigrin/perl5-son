@@ -2600,7 +2600,7 @@ class SoN::FromOptree 0.01 {
         } @captures;
     }
 
-    sub _translate_from ($cv, $start_op, %opts) {
+    sub _translate_from_once ($cv, $start_op, %opts) {
         my $program_root = $opts{program_root};
         # Its stores of package scalars are known before it is walked.
         _scan_run_set_cv($cv);
@@ -14491,12 +14491,18 @@ class SoN::FromOptree 0.01 {
         return map { $fwd{$_} } grep { $back{$_} } keys %fwd;
     }
 
+    # (a builtin that changes an aggregate in place, its slot bound as it was)
+    our %IN_PLACE_OP = map { $_ => 1 } qw(push unshift pop shift splice keys values each delete exists);
+
     # _may_write_targs($start) -> { targ => 1 } -- the pad slots a loop body MAY
-    # write, read off its ops with no node built (wire v2 plan, 5.2: the set W
-    # a Braun header makes its Phis for). An over-approximation: a slot the
-    # body never writes costs a trivial Phi. A slot it misses is caught by
-    # _refuse_unscouted_writes. t/loop-may-write-scan-covers-the-scout.t holds
-    # it to the scout's answer.
+    # rebind, read off its ops with no node built (wire v2 plan, 5.2: the set W
+    # a Braun header makes its Phis for). An over-approximation where it can
+    # be: a slot the body never rebinds costs a trivial Phi, forwarded at
+    # sealing -- but the walk reads a binding's class (a literal's element
+    # stamp, a sub known by its binding), so the scan leaves out what changes
+    # memory and not the binding. A slot it misses is found at sealing, and
+    # learned for a second walk (_braun_seal); over the corpus and the probes
+    # it misses none (stage 9b measured 63 extra slots over 482 loops).
     sub _may_write_targs ($start) {
         my %w;
         my $pads;
@@ -14510,22 +14516,216 @@ class SoN::FromOptree 0.01 {
             my $name  = $op->name;
             my $mod   = $op->flags & B::OPf_MOD();
             my $intro = $op->private & B::OPpLVAL_INTRO();
-            $w{ $op->targ } = 1 if $name =~ /\Apad(?:sv|av|hv|any)\z/ && ( $mod || $intro );
-            $w{ $op->targ } = 1 if $name =~ /\A(?:padsv_store|aelemfastlex_store|enteriter|iter)\z/ && $op->targ;
+            my $up    = eval { $op->parent };
+            my $pname = $up && $$up ? $up->name : '';
+            # A PAD OP IN AN LVALUE PLACE -- but not an aggregate a builtin
+            # changes in place (push, shift, ...), an element's container, or a
+            # sub's argument: those change memory, not what the slot is bound
+            # to, and a Phi for them only stands where the walk reads the
+            # binding's class (a literal's element stamp, a known sub).
+            # (nor a foreach's list: its elements are aliased, not its slot)
+            $pname = 'enteriter' if $pname eq 'null' && $up->parent && ${ $up->parent } && $up->parent->name eq 'enteriter';
+            $w{ $op->targ } = 1
+                if $name =~ /\Apad(?:sv|av|hv|any)\z/ && ( $mod || $intro )
+                && ( $intro || !( $IN_PLACE_OP{$pname} || $pname eq 'enteriter' || _is_call_argument_op($op)
+                    || $pname =~ /\A(?:aelem|helem|aslice|hslice|kvaslice|kvhslice|multideref|rv2av|rv2hv|rv2sv)\z/ ) );
+            # (a scalar's store; an element's, aelemfastlex_store, is memory)
+            $w{ $op->targ } = 1 if $name eq 'padsv_store' && $op->targ;
             $w{ $op->targ } = 1 if ( $op->private & B::OPpTARGET_MY() ) && $op->targ && $name !~ /\Apad/;
             # a scalar-context range (flip-flop) keeps its state in its own slot
             $w{ $op->targ } = 1 if $name =~ /\A(?:flip|flop|range)\z/ && $op->targ;
             if ( $name eq 'padrange' && $intro ) { $w{$_} = 1 for $op->targ .. $op->targ + ( $op->private & B::OPpPADRANGE_COUNTMASK() ) - 1 }
-            $pads->($op) if $mod;    # an lvalue's subtree: `$a[$i] = ...` writes @a
-            $pads->( $op->last ) if $name =~ /\A[sa]assign\z/ && ( $op->flags & B::OPf_KIDS() );
+            # an assignment's target (not an element's: memory)
+            $pads->( $op->last )
+                if $name =~ /\A[sa]assign\z/ && $op->can('last') && ( $op->flags & B::OPf_KIDS() ) && $op->last->name !~ /\A(?:aelem|helem|multideref)\z/;
             $pads->( $op->first )
                 if ( $name =~ /\A(?:i_)?(?:pre|post)(?:inc|dec)\z/ || $name =~ /assign\z/ && $name !~ /\A[sa]assign\z/ )
-                && ( $op->flags & B::OPf_KIDS() );
-            # writers through an operand perl does not flag OPf_MOD on the pad op
-            $pads->($op)
-                if $name =~ /\A(?:push|unshift|pop|shift|splice|chomp|chop|schomp|schop|subst|trans|undef|delete|each|keys|values|read|sysread|open|sprintf|substr|vec|pos|local|refgen|srefgen|entersub|sort|reverse)\z/;
+                && ( $op->flags & B::OPf_KIDS() ) && $op->first->name =~ /\Apad/;
+            # a substitution into a lexical names it by its targ (the pads
+            # under it are its subject's makings: `(my $b = $raw) =~ s///`
+            # writes $b, not $raw); the other writers of an operand flag the
+            # pad op OPf_MOD (chomp, undef, read, ...)
+            $w{ $op->targ } = 1 if $name =~ /\A(?:subst|trans|transr)\z/ && $op->targ;
+        }
+        # A `my` THE PASS DECLARES is fresh each pass, and its binding goes
+        # back where its block ends: no loop carries it. (A Phi for it stood
+        # where `(my $b = $raw) =~ s///` looks the copy up, and the
+        # substitution went into $raw.)
+        for my $op ( _loop_cycle_ops($start) ) {
+            next unless $op->private & B::OPpLVAL_INTRO();
+            my $name = $op->name;
+            if ( $name eq 'padrange' ) { delete @w{ $op->targ .. $op->targ + ( $op->private & B::OPpPADRANGE_COUNTMASK() ) - 1 } }
+            elsif ( $name =~ /\Apad(?:sv|av|hv|any)(?:_store)?\z/ ) { delete $w{ $op->targ } }
         }
         return \%w;
+    }
+
+    # _is_call_argument_op($op) -> the op is an argument of a sub call (its
+    # OPf_MOD says the callee may alias it, not that the caller rebinds it).
+    sub _is_call_argument_op ($op) {
+        my $p = $op;
+        for ( 1 .. 6 ) {
+            $p = eval { $p->parent } or return 0;
+            return 0 unless $$p;
+            return 1 if $p->name eq 'entersub';
+            return 0 if $p->name =~ /\A(?:sassign|aassign|nextstate|leave|lineseq|scope|and|or|cond_expr)\z/;
+        }
+        return 0;
+    }
+
+    # BRAUN'S CONSTRUCTION (wire v2 plan, 5.2; stage 9b). A loop's header is
+    # built before its body is walked, with an incomplete Phi for every
+    # variable the body may write (_may_write_targs) and for memory; the body
+    # is walked once against them; at the latch the header is sealed: each
+    # Phi gets its back input, and one the body never wrote (its back input
+    # is itself) is forwarded to its init (SoN::IR::Node::Phi::forward).
+    #
+    # WHAT THE WALK GUESSED is checked at sealing: a variable the scan missed
+    # (the body rebound a key with no Phi), a Phi whose init's stamp the back
+    # edge cannot confirm (the walk read it stamped), whether the body writes
+    # the loop's iterator. A wrong guess is learned (%LOOP_HINTS, by the
+    # loop's first op) and the sub is translated again (_translate_from):
+    # the second walk is made only where a guess failed (stage 0 measured
+    # 34 loops in 2059).
+    our %LOOP_HINTS;
+    # A WALK THAT GUESSED WRONG goes on to its end (its graph is thrown away),
+    # so that every loop of a nest learns in one walk: an inner loop's Phi
+    # unstamped at sealing unstamps the outer loops' back edges too, and they
+    # learn it at their own sealing, not one walk each.
+    our $DIRTY = 0;
+
+    sub _loop_hint ($start) {
+        return $LOOP_HINTS{ $$start } //= { unstamped => {}, extra => {}, writes => {} };
+    }
+
+    # _braun_phis($factory, $sim, $loop_node, $start, $pre_scope, $hint, @skip)
+    # -> \%phis: the header's incomplete Phis, one per key the body may write
+    # (and is bound before the loop), each bound in the sim.
+    sub _braun_phis ($factory, $sim, $loop_node, $start, $pre_scope, $hint, @skip) {
+        my $w = _may_write_targs($start);
+        my %skip = map { $_ => 1 } @skip;
+        # A SHARED AGGREGATE IS BOUND TO ITS CONTAINER before the body and
+        # after it, whatever the body stores there: no value to carry.
+        my $container = sub ($n) {
+            blessed($n) && $n->isa('SoN::IR::Node::PadAccess') && $n->shared
+                && ($n->sigil // '') =~ /\A[\@%]\z/ && !$n->v1_inputs->@*;
+        };
+        my %phis;
+        for my $k ( sort _scope_key_order grep {
+                ( $w->{$_} || $hint->{extra}{$_} ) && !$skip{$_}
+                && defined $pre_scope->{$_} && !_key_lives_in_memory($_)
+                && !$container->( $pre_scope->{$_} )
+            } keys %$pre_scope ) {
+            $phis{$k} = _make_loop_phi($factory, $loop_node, $pre_scope->{$k}, $hint->{unstamped}{$k});
+            $sim->define($k, $phis{$k});
+        }
+        return \%phis;
+    }
+
+    # _braun_mem_phi($factory, $sim, $loop_node) -> the header's memory Phi
+    # (memory is one more variable, `#mem`: every loop has one until sealing).
+    sub _braun_mem_phi ($factory, $sim, $loop_node) {
+        return undef unless defined $sim->memory;
+        my $mem_phi = $factory->make_unique('Phi',
+            inputs => [$sim->memory], region => $loop_node, memory => 1);
+        $sim->set_memory($mem_phi);
+        return $mem_phi;
+    }
+
+    # _braun_seal($sim, \%phis, $pre_scope, $hint, @skip) -> [ the keys whose
+    # Phi stays ]: the guesses checked (a wrong one is learned in $hint, and
+    # the walk marked $DIRTY), and each trivial Phi forwarded, its key bound
+    # to its init again.
+    sub _braun_seal ($sim, $phis, $pre_scope, $hint, @skip) {
+        my %skip = map { $_ => 1 } @skip;
+        my $post = $sim->scope_bindings;
+        my $again = 0;
+        for my $k ( keys %$pre_scope ) {
+            next if $phis->{$k} || $skip{$k} || _key_lives_in_memory($k);
+            next unless defined $post->{$k} && defined $pre_scope->{$k};
+            next if $post->{$k}->resolved == $pre_scope->{$k}->resolved;
+            die "GAP: a loop body writes a variable its pre-scan missed ($k) not yet lowered\n"
+                if $hint->{extra}{$k}++;
+            $DIRTY = 1;
+        }
+        for my $k ( sort keys %$phis ) {
+            my $ph = $phis->{$k};
+            next if $hint->{unstamped}{$k} || !defined $post->{$k};
+            next unless _backedge_loses_stamp( $post->{$k}->resolved, $ph );
+            $hint->{unstamped}{$k} = 1;
+            $ph->set_stamp( SoN::IR::Stamp->new(type => 'Unknown') );   # (for the walk that goes on)
+            $DIRTY = 1;
+        }
+        my @stay;
+        for my $k ( sort _scope_key_order keys %$phis ) {
+            my $ph = $phis->{$k};
+            my $b  = $post->{$k};
+            if ( !defined $b || $b->resolved == $ph ) {
+                $ph->set_forward( $ph->inputs->[0] );
+                $sim->define( $k, $ph->inputs->[0]->resolved );
+                # (what the walk learned of the Phi it learned of the node it
+                # stands for: an inner foreach's write into the elements of
+                # @b marked the outer loop's Phi for @b mutated, and a read
+                # after the loops flattened the literal -- `5 6` for `5z 6z`)
+                $MUTATED_LITERALS{ $ph->inputs->[0]->resolved->id } = 1 if $MUTATED_LITERALS{ $ph->id };
+            }
+            else { push @stay, $k }
+        }
+        return \@stay;
+    }
+
+    # _braun_seal_memory($sim, $mem_phi) -> the memory Phi, or undef where it
+    # was trivial (the pass moved no memory): forwarded, the memory the one
+    # before the loop again.
+    sub _braun_seal_memory ($sim, $mem_phi) {
+        return undef unless defined $mem_phi;
+        return $mem_phi unless !defined $sim->memory || $sim->memory->resolved == $mem_phi;
+        $mem_phi->set_forward( $mem_phi->inputs->[0] );
+        $sim->set_memory($mem_phi->resolved);
+        return undef;
+    }
+
+    # _writes_guess($start, $key, $hint) -> whether the body writes $key (a
+    # loop's iterator), as learned, else as its ops say: a pad op of the slot,
+    # or a package scalar's gv, in an lvalue place that is not a sub call's
+    # argument. A wrong guess is found after the walk (_check_writes).
+    sub _writes_guess ($start, $key, $hint) {
+        return $hint->{writes}{$key} if exists $hint->{writes}{$key};
+        my ($name) = $key =~ /\A\$(?:main)?::(\w+)\z/;
+        for my $op ( _loop_cycle_ops($start) ) {
+            my $n = $op->name;
+            return 1 if $key =~ /\A\d+\z/ && $op->targ == $key
+                && ( $n eq 'padsv_store' || ( $op->private & B::OPpTARGET_MY() ) && $n !~ /\Apad/ );
+            my $hit = $key =~ /\A\d+\z/
+                ? $n =~ /\Apad(?:sv|any)\z/ && $op->targ == $key
+                : defined $name && $n eq 'gvsv' && ( eval { $op->gv->NAME } // '' ) eq $name;
+            next unless $hit && ( $op->flags & B::OPf_MOD() );
+            # WHAT PUTS IT IN AN LVALUE PLACE: an assignment (its target), an
+            # op-assign or an increment (its operand), a builtin that writes
+            # its operand -- not a call's argument, a reference taken, an
+            # element's container or a reference's target, sprintf's list.
+            my $up = eval { $op->parent };
+            $up = eval { $up->parent } while $up && $$up && $up->name eq 'null';
+            next unless $up && $$up;
+            my $u = $up->name;
+            return 1 if $u =~ /\A(?:sassign|aassign)\z/;
+            return 1 if $u =~ /\A(?:i_)?(?:pre|post)(?:inc|dec)\z/ || $u =~ /assign\z/;
+            return 1 if $u =~ /\A(?:chomp|chop|schomp|schop|undef|subst|trans|transr|read|sysread|substr|vec|local)\z/;
+            # (a list assign's target list)
+            return 1 if $u eq 'list' && eval { $up->parent->name } eq 'aassign';
+        }
+        return 0;
+    }
+
+    # _check_writes($hint, $key, $guess, $wrote): the guess against what the
+    # walk did; wrong, it is learned and the sub walked again.
+    sub _check_writes ($hint, $key, $guess, $wrote) {
+        return if ( $guess ? 1 : 0 ) == ( $wrote ? 1 : 0 );
+        die "GAP: a loop whose iterator write is not settled by a second walk ($key)\n"
+            if exists $hint->{writes}{$key};
+        $hint->{writes}{$key} = $wrote ? 1 : 0;
+        $DIRTY = 1;
+        return;
     }
 
     # _scout_mutated_targs(...) -> ($mutated, $unstamped)
@@ -15080,6 +15280,20 @@ class SoN::FromOptree 0.01 {
     # A condition that also STORES to memory (an lvalue element `$a[$i]++` in the
     # guard) advances the memory chain on the failing pass -- the exit-path rebind
     # models only pad slots, not that memory back-edge -- so refuse loudly.
+    # _refuse_condition_store($cond_start): a loop condition closing at an
+    # and/or that stores to memory (an lvalue element in the guard) is refused.
+    sub _refuse_condition_store ($cond_start) {
+        my $probe = $cond_start;
+        my %probe_seen;
+        $probe = $probe->next
+            while $$probe && !$probe_seen{$$probe}++
+                && $probe->name ne 'and' && $probe->name ne 'or';
+        return unless $$probe && ($probe->name eq 'and' || $probe->name eq 'or');
+        die "GAP: side-effecting loop condition with a memory store not yet lowered\n"
+            if _cond_stores_memory($cond_start);
+        return;
+    }
+
     sub _scout_condition_mutated_targs ($cv, $cond_start, $sim, $opmap) {
         my $probe = $cond_start;
         my %probe_seen;
@@ -15164,37 +15378,17 @@ class SoN::FromOptree 0.01 {
                       ( $BARE_LOOP ? ( bare => 1, bare_leave => ${ $BARE_LOOP->parent } ) : () ) };
         local $BARE_LOOP;   # (a loop inside it is not the bare block)
         local @LOOP_STACK = (@LOOP_STACK, $frame);
-        # Which pad slots does the CONDITION mutate? These run once more than the
-        # body (the failing N+1th eval), so post-loop they read their Phi back-edge
-        # (the value after that failing pass), not the header Phi (see Phase 4b).
-        my $cond_mutated = _scout_condition_mutated_targs($cv, $cond_start, $sim, $opmap);
+        _refuse_condition_store($cond_start);
 
-        # Phase 1: scout the condition + body for mutated pad slots.
+        # Phase 1-2: the loop header, its incomplete Phis (one per slot the
+        # condition or body may write) and its memory Phi -- Braun's
+        # construction, see %LOOP_HINTS.
         my $pre_scope = $sim->scope_bindings;
-        my ($mutated, $unstamped) = _scout_mutated_targs($cv, $cond_start, $sim, $opmap);
-
-        # Phase 2: the loop header and its Phis.
+        my $hint = _loop_hint($cond_start);
         my $loop_node = $factory->make_cfg('Loop', inputs => [$sim->control]);
         $sim->set_control($loop_node);
-        my %phis;
-        for my $targ ($mutated->@*) {
-            my $phi = _make_loop_phi($factory, $loop_node, $pre_scope->{$targ},
-                $unstamped->{$targ});
-            $phis{$targ} = $phi;
-            $sim->define($targ, $phi);
-        }
-
-        # A body element store advances memory; seed a header memory-Phi from the
-        # pre-loop memory so the body's store advances OFF the Phi and the
-        # post-loop read (which the loop may reach with zero iterations) observes
-        # init OR back-edge. Memory has no scalar stamp, so this is a plain Phi
-        # (no _make_loop_phi stamp copy, no _patch_loop_phi stamp join).
-        my $mem_phi;
-        if ($SCOUT_MOVED_MEMORY || _body_stores_memory($cond_start)) {
-            $mem_phi = $factory->make_unique('Phi',
-                inputs => [$sim->memory], region => $loop_node, memory => 1);
-            $sim->set_memory($mem_phi);
-        }
+        my %phis = _braun_phis($factory, $sim, $loop_node, $cond_start, $pre_scope, $hint)->%*;
+        my $mem_phi = _braun_mem_phi($factory, $sim, $loop_node);
 
         # Phase 3: the real walk (condition + body against the Phi bindings).
         # $break_projs collects a mid-body `last if C` exit edge (Proj + the
@@ -15213,7 +15407,15 @@ class SoN::FromOptree 0.01 {
         my $exit_proj = _walk_loop_body($cv, $cond_start, $sim, $factory,
             $opmap, {}, $visited, $loop_node, \@break_projs);
         _set_loop_back($loop_node, $sim);
-        _refuse_unscouted_writes($sim, $pre_scope, \%phis);
+        # Sealing: the Phis the body wrote stay; the rest are forwarded.
+        my $mutated = _braun_seal($sim, \%phis, $pre_scope, $hint);
+        $mem_phi = _braun_seal_memory($sim, $mem_phi);
+        # Which slots does the CONDITION mutate? These run once more than the
+        # body (the failing N+1th eval), so post-loop they read their Phi
+        # back-edge (the value after that failing pass), not the header Phi
+        # (see Phase 4b): those bound at the test to other than their Phi.
+        my $at_test = $frame->{test_scope} // {};
+        my $cond_mutated = [ grep { defined $at_test->{$_} && $at_test->{$_}->resolved != $phis{$_} } $mutated->@* ];
         # A LOOP MAY EXIT BY ITS BREAK ALONE. `while (1) { ... last if C }` has
         # NO header test -- perl folds the constant condition away entirely, so
         # `enterloop` carries no condition op and the `last` is the only way
@@ -15319,7 +15521,8 @@ class SoN::FromOptree 0.01 {
             my $header = $scope->{$targ};   # header Phi (patched)
             next unless defined $header;
             my @bvals = map { $_->{bindings}{$targ} // $header } @$break_projs;
-            next unless grep { $_ != $header } @bvals;
+            # (a forwarded loop Phi is the node it stands for)
+            next unless grep { $_->resolved != $header->resolved } @bvals;
             my $exit_phi = $factory->make('Phi',
                 inputs => [ ($header_exit ? ($header) : ()), @bvals ],
                 region => $exit_region,
@@ -15336,7 +15539,7 @@ class SoN::FromOptree 0.01 {
         # node, so `$h{a}++` in the body and `$h{a}` after it gave 2 for 3.
         my $mem = $sim->memory;
         if ((defined $mem_phi && defined $mem && $mem == $mem_phi)
-            || grep { defined $_->{memory} && $_->{memory} != $mem } @$break_projs) {
+            || grep { defined $_->{memory} && defined $mem && $_->{memory}->resolved != $mem->resolved } @$break_projs) {
             $sim->set_memory($factory->make('Phi',
                 inputs => [ ($header_exit ? ($mem) : ()),
                             map { $_->{memory} // $mem } @$break_projs ],
@@ -15386,11 +15589,13 @@ class SoN::FromOptree 0.01 {
         # it rides as an extra slot and is excluded from the mutated set --
         # it gets the induction Phi, not a carried-value Phi).
         my $pre_scope = $sim->scope_bindings;
-        my ($mutated, $unstamped) = _scout_mutated_targs($cv, $body_start, $sim, $opmap, [$i_targ], 1,
-            { $i_targ => _is_narrowed($low->stamp) ? $low->stamp
-                : SoN::IR::Stamp->new(type => q{Int}) });
+        my $hint = _loop_hint($body_start);
+        # (whether the body writes its iterator, where that is asked: guessed
+        # from its ops, checked after the walk)
+        my %asked;
+        my $writes_iter = sub { $asked{w} //= _writes_guess($body_start, $i_targ, $hint) };
         my $iter_save = _save_package_iterator($cv, $factory, $sim, $i_targ,
-            sub { _body_writes_targ($cv, $body_start, $sim, $opmap, $i_targ, 1) }, $enteriter);
+            $writes_iter, $enteriter);
 
         # Phase 2: header -- induction Phi plus one Phi per mutated slot.
         # A FOREACH FIXES ITS BOUND AT ENTRY. perl evaluates the
@@ -15417,13 +15622,7 @@ class SoN::FromOptree 0.01 {
         $i_phi->set_stamp(SoN::IR::Stamp->new(type => 'Int'))
             unless _is_narrowed($i_phi->stamp);
         $sim->define($i_targ, $i_phi);
-        my %phis;
-        for my $targ ($mutated->@*) {
-            my $phi = _make_loop_phi($factory, $loop_node, $pre_scope->{$targ},
-                $unstamped->{$targ});
-            $phis{$targ} = $phi;
-            $sim->define($targ, $phi);
-        }
+        my %phis = _braun_phis($factory, $sim, $loop_node, $body_start, $pre_scope, $hint, $i_targ)->%*;
 
         # Continuation condition: loop while i <= high, authored as
         # NumGt(high+1, i_phi) per the corpus D3 ir-block. The backend recovers
@@ -15460,12 +15659,7 @@ class SoN::FromOptree 0.01 {
 
         # A body element store advances memory; seed a header memory-Phi from the
         # pre-loop memory (memory analog of the carried-slot Phi; no stamp).
-        my $mem_phi;
-        if ($SCOUT_MOVED_MEMORY || _body_stores_memory($body_start, 1)) {
-            $mem_phi = $factory->make_unique('Phi',
-                inputs => [$sim->memory], region => $loop_node, memory => 1);
-            $sim->set_memory($mem_phi);
-        }
+        my $mem_phi = _braun_mem_phi($factory, $sim, $loop_node);
 
         # A foreach has no and/or loop condition of its own (the range iterator
         # drives it, and its iteration `and` was consumed at $and_op above), so
@@ -15520,7 +15714,7 @@ class SoN::FromOptree 0.01 {
         # the copy would not see it.
         if ($i_targ eq '$main::_'
                 && grep({ $_->name eq 'entersub' } _subtree_ops($enteriter->parent))
-                && !_body_writes_targ($cv, $body_start, $sim, $opmap, $i_targ, 1)) {
+                && !$writes_iter->()) {
             my $alias = $factory->make('LocalAlias', name => '_', inputs => [$i_phi]);
             _pin($sim, $alias);
         }
@@ -15553,7 +15747,11 @@ class SoN::FromOptree 0.01 {
         _walk_loop_body($cv, $body_start, $sim, $factory, $opmap, {}, $visited,
             undef, \@break_projs, 1);
         _set_loop_back($loop_node, $sim);
-        _refuse_unscouted_writes($sim, $pre_scope, \%phis, $i_targ);
+        # Sealing (see %LOOP_HINTS), and the iterator's write as guessed.
+        _check_writes($hint, $i_targ, $asked{w}, ( $sim->lookup($i_targ) // $i_phi )->resolved != $i_phi)
+            if exists $asked{w};
+        my $mutated = _braun_seal($sim, \%phis, $pre_scope, $hint, $i_targ);
+        $mem_phi = _braun_seal_memory($sim, $mem_phi);
         # THE ALIAS ENDS WITH THE LOOP, as the array form restores it: a nested
         # `for $p (5..5)` inside `for $p (1..2)` left the inner binding for the
         # outer body to read (`77` for perl's `12`).
@@ -15942,8 +16140,9 @@ class SoN::FromOptree 0.01 {
         # A LITERAL LIST CANNOT REACH THIS. `for my $y (1,2) { $y = 9 }` dies
         # at runtime with a readonly error, so there is no legal program whose
         # write-back would target a constant.
-        my $writes_iter =
-            _body_writes_targ($cv, $body_start, $sim, $opmap, $x_targ, 1);
+        # (guessed from the body's ops, checked after the walk: %LOOP_HINTS)
+        my $hint = _loop_hint($body_start);
+        my $writes_iter = _writes_guess($body_start, $x_targ, $hint);
 
         # AN UNPROVEN LIST lowers only a body that reaches it through the
         # iterator alone -- see _unproven_list_reach. Read once: a nested loop
@@ -16123,18 +16322,8 @@ class SoN::FromOptree 0.01 {
         # Phase 1: scout the body. $x rides on enteriter (its own slot) and gets
         # the element binding, not a carried-value Phi, so exclude it.
         my $pre_scope = $sim->scope_bindings;
-        my ($mutated, $unstamped) = _scout_mutated_targs($cv, $body_start, $sim, $opmap, [$x_targ], 1,
-            { $x_targ => $elem_stamp // SoN::IR::Stamp->new(type => q{Unknown}) });
         my $iter_save = _save_package_iterator($cv, $factory, $sim, $x_targ,
             sub { $writes_iter }, $enteriter);
-
-        # A BODY THAT REBINDS THE ARRAY'S SLOT -- `@a = sort @a`, `undef @a`,
-        # `@a = ()` -- carries the new array on a loop Phi, and the loop still
-        # indexed the binding it was entered with: `312` for perl's `323`.
-        die "GAP: a foreach whose body reassigns the array it iterates not yet"
-          . " lowered\n"
-            if !$collect && grep { defined $pre_scope->{$_}
-                                   && $pre_scope->{$_} == $array } $mutated->@*;
 
         # Phase 2: header -- induction Phi (i: 0..len-1) plus one Phi per mutated
         # slot. The induction Phi is NOT bound to $x; $x is the element read below.
@@ -16161,28 +16350,13 @@ class SoN::FromOptree 0.01 {
             $acc_phi = _make_loop_phi($factory, $loop_node, $empty);
         }
 
-        my %phis;
-        for my $targ ($mutated->@*) {
-            my $phi = _make_loop_phi($factory, $loop_node, $pre_scope->{$targ},
-                $unstamped->{$targ});
-            $phis{$targ} = $phi;
-            $sim->define($targ, $phi);
-        }
+        my %phis = _braun_phis($factory, $sim, $loop_node, $body_start, $pre_scope, $hint, $x_targ)->%*;
 
-        # Continuation: loop while i < len, authored as NumGt(len, i_phi) -- the
-        # same shape the backend recovers as "the comparison consuming a header
-        # Phi" (structural loop_control edge to the Loop).
-        # A body element store advances memory; seed a header memory-Phi from the
-        # pre-loop memory (same as the range form).
-        my $mem_phi;
-        # (A BODY THAT WRITES ITS ALIAS stores back into the list's element
-        # each pass: the scout binds the alias to a placeholder, so its write
-        # moved no memory there, and the body's stores followed the memory
-        # before the loop -- probes al16, lp28.)
-        if ($SCOUT_MOVED_MEMORY || _body_stores_memory($body_start, 1) || $tied || $writes_iter) {
-            $mem_phi = $factory->make_unique('Phi',
-                inputs => [$sim->memory], region => $loop_node, memory => 1);
-            $sim->set_memory($mem_phi);
+        # Continuation: loop while i < len, authored as NumGt(len, i_phi), at
+        # the header's memory Phi (Braun's `#mem`: forwarded at sealing where
+        # the pass moves no memory).
+        my $mem_phi = _braun_mem_phi($factory, $sim, $loop_node);
+        if (defined $mem_phi) {
             # PERL RE-READS THE LENGTH EACH PASS, and a body that moves memory
             # may grow the array -- through a closure, out of sight: counted
             # at entry, `$c->($x)` pushing onto @p ran one pass for four.
@@ -16190,7 +16364,6 @@ class SoN::FromOptree 0.01 {
             local $SoN::IR::NodeFactory::ON_VALUE;
             $len = _make_count($factory, $array, $sim);
         }
-        my $pre_body_memory = $sim->memory;
         my $range_cond = $factory->make('NumGt',
             inputs => [$len, $i_phi],
             stamp  => SoN::IR::Stamp->new(type => 'Boolean'));
@@ -16393,7 +16566,9 @@ class SoN::FromOptree 0.01 {
         @$frame{qw(loop breaks nexts phis)} = ($loop_node, \@break_projs, [], \%phis);
         _walk_loop_body($cv, $body_start, $sim, $factory, $opmap, {}, $visited,
             undef, \@break_projs, 1);
-        _refuse_unscouted_writes($sim, $pre_scope, \%phis, $x_targ);
+        # The iterator's write as guessed (it is checked before the sealing:
+        # a wrong guess walks again either way).
+        _check_writes($hint, $x_targ, $writes_iter, ( $sim->lookup($x_targ) // $elem )->resolved != $elem);
         # THE COPY NOTHING READ -- under a reference, or an iterator the body
         # never names -- is unhooked: graph membership walks consumers, so it
         # rode in dead, and a stale-read snapshot of it was spelled ahead of
@@ -16500,10 +16675,8 @@ class SoN::FromOptree 0.01 {
                 # bound to the body's value with no exit, the loop had no way
                 # round and a Phi of one input: probes al1, al2.)
                 my $slot = $array->v1_inputs->[0]->targ;
-                if (defined $slot && !$phis{$slot} && defined $pre_scope->{$slot}) {
-                    $phis{$slot} = _make_loop_phi($factory, $loop_node, $pre_scope->{$slot});
-                    push @$mutated, $slot;
-                }
+                $phis{$slot} = _make_loop_phi($factory, $loop_node, $pre_scope->{$slot})
+                    if defined $slot && !$phis{$slot} && defined $pre_scope->{$slot};
                 $sim->define($slot, $new_val) if defined $slot;
             }
             elsif (defined $new_val && $new_val != $elem) {
@@ -16698,6 +16871,16 @@ class SoN::FromOptree 0.01 {
         # Phase 4: back-edges. The induction step is +1; carried slots patch like
         # the while loop. (The pass ends after the write-back above.)
         _set_loop_back($loop_node, $sim);
+        # Sealing (see %LOOP_HINTS): the Phis the pass wrote stay.
+        my $mutated = _braun_seal($sim, \%phis, $pre_scope, $hint, $x_targ);
+        $mem_phi = _braun_seal_memory($sim, $mem_phi);
+        # A BODY THAT REBINDS THE ARRAY'S SLOT -- `@a = sort @a`, `undef @a`,
+        # `@a = ()` -- carries the new array on a loop Phi, and the loop still
+        # indexed the binding it was entered with: `312` for perl's `323`.
+        die "GAP: a foreach whose body reassigns the array it iterates not yet"
+          . " lowered\n"
+            if !$collect && grep { defined $pre_scope->{$_}
+                                   && $pre_scope->{$_} == $array } $mutated->@*;
         my $one = $factory->make('Constant',
             value => 1, const_type => 'integer',
             stamp => SoN::IR::Stamp->new(type => 'Int'));
@@ -16707,16 +16890,6 @@ class SoN::FromOptree 0.01 {
         $i_phi->set_backedge($i_next);
         my $post_scope = $sim->scope_bindings;
         _patch_loop_phi($sim, $_, $phis{$_}, $post_scope->{$_}) for $mutated->@*;
-        # A BODY THAT MOVED MEMORY UNFORESEEN still leaves by the header, so
-        # the exit's memory is a header Phi: left at the body's last version,
-        # a demoted read after the loop took a branch join inside it, and the
-        # `my @w = ($x)` reading it was spelled in the body (chalk's
-        # Perl::Actions::Block). The body's own reads keep the entry version.
-        if (!defined $mem_phi && defined $pre_body_memory
-                && defined $sim->memory && $sim->memory != $pre_body_memory) {
-            $mem_phi = $factory->make_unique('Phi',
-                inputs => [$pre_body_memory], region => $loop_node, memory => 1);
-        }
         if (defined $mem_phi) {
             $mem_phi->set_backedge($sim->memory);
             $sim->set_memory($mem_phi);
@@ -16769,7 +16942,10 @@ class SoN::FromOptree 0.01 {
     # reached -- the Loop, or the last effect of its condition pinned after it
     # (`while (my $n = shift @w)`: the shift). $cond is an ordinary value.
     # Proj 0 is the body, where the walk goes on; Proj 1 the header's way out.
-    sub _loop_test_if ($factory, $sim, $cond) {
+    sub _loop_test_if ($factory, $sim, $cond, $own_frame = 1) {
+        # (what the condition left bound: _translate_while_loop's Phase 4b --
+        # where the loop being walked is the frame on top)
+        $LOOP_STACK[-1]{test_scope} = $sim->scope_bindings if $own_frame && @LOOP_STACK;
         my $if = $factory->make_cfg('If', inputs => [$sim->control, $cond]);
         my $body = $factory->make_cfg('Proj', inputs => [$if], index => 0);
         my $exit = $factory->make_cfg('Proj', inputs => [$if], index => 1);
@@ -16782,7 +16958,7 @@ class SoN::FromOptree 0.01 {
     # the body's end, or the latch where the `next`s meet it.
     # A PASS THAT ALWAYS RETURNS (every path in the body leaves the sub, and
     # no `next` goes round) has no way round: the Loop keeps one input, and
-    # _one_way_loop drops its Phis' back inputs.
+    # _one_way_loop forwards its Phis.
     sub _set_loop_back ($loop_node, $sim) {
         return if @LOOP_STACK && delete $LOOP_STACK[-1]{no_way_round};
         $loop_node->set_backedge_ctrl($sim->control) if defined $sim->control;
@@ -16790,11 +16966,12 @@ class SoN::FromOptree 0.01 {
     }
 
     # _one_way_loop($loop_node): A LOOP NO PATH GOES ROUND has one input, and
-    # its Phis one input each, the value it is entered with (the plan's 3.6).
+    # no Phis: each is forwarded to the value it is entered with (the plan's
+    # 3.6).
     sub _one_way_loop ($loop_node) {
         return if $loop_node->inputs->@* > 1;
-        $_->drop_backedge for grep {
-            $_->operation eq 'Phi' && $_->region == $loop_node && $_->inputs->@* > 1
+        $_->set_forward( $_->inputs->[0] ) for grep {
+            $_->operation eq 'Phi' && $_->region == $loop_node && $_->resolved == $_
         } $loop_node->consumers->@*;
         return;
     }
@@ -16865,6 +17042,12 @@ class SoN::FromOptree 0.01 {
 
             my $name = $op->name;
             $name = _lc_kind($name, $op) if $name =~ /\A(?:next|last|redo|leaveloop)\z/;   # (a bare block's: see _lc_kind)
+            # WHAT A while's CONDITION LEFT BOUND (its Phase 4b): where the
+            # walk first comes to an and/or -- the condition's own test sets
+            # it again where it is made (_loop_test_if), and a loop with no
+            # test (`while (1) { ...; last if C }`) keeps this one.
+            $LOOP_STACK[-1]{test_scope} //= $sim->scope_bindings
+                if ( $name eq 'and' || $name eq 'or' ) && defined $loop_node && @LOOP_STACK;
 
             # A map/grep BODY ends by jumping back to its own mapwhile/grepwhile
             # -- that op IS the loop, reached along the back-edge, so the body is
@@ -17239,7 +17422,7 @@ class SoN::FromOptree 0.01 {
                     stamp     => SoN::IR::Stamp->new(type => 'Boolean'));
                 $sim->set_control($spin);
                 # (the test's Proj 0 is the whole pass: the way round)
-                my ($round, $out) = _loop_test_if($factory, $sim, $test);
+                my ($round, $out) = _loop_test_if($factory, $sim, $test, 0);
                 $spin->set_backedge_ctrl($round);
                 my $join = $factory->make_cfg('Region', inputs => [$out]);
                 $spin->set_region($join);
@@ -24884,6 +25067,34 @@ class SoN::FromOptree 0.01 {
         die "GAP: a pad slot whose name carries no recognisable sigil"
           . " ($name) is not yet lowered -- a named node needs its sigil, and"
           . " inventing one would merge unrelated variables\n";
+    }
+
+    # _translate_from($cv, $start_op, %opts): _translate_from_once, again
+    # where a loop's walk guessed wrong (Braun's construction, see
+    # %LOOP_HINTS): what it learned is kept for the next walk, and what the
+    # walk that died changed outside its graph is put back first.
+    sub _translate_from ($cv, $start_op, %opts) {
+        local %LOOP_HINTS = %LOOP_HINTS;
+        for (my $try = 1; ; $try++) {
+            my @saved = ( {%MUTATED_LITERALS}, {%ANON_CAPTURES}, {%ANON_BODIES}, {%SORT_BODIES},
+                {%SUBST_BODIES}, {%SORT_BODY_SEQ}, {%LOCAL_ELEM_STORE}, {%BRANCHED_DEFAULT},
+                {%EVAL_COMPILED}, {%EVAL_ORDINAL}, {%REPLROOT_OF}, {%SUBST_OWN_CAPTURE},
+                {%PINNED_MAY_DIE}, {%ITER_ALIAS_REF}, $EVAL_COUNT, $EVAL_SCANNED, $PINS_MADE,
+                scalar @TRANSLATED );
+            local $DIRTY = 0;
+            my $g = eval { _translate_from_once($cv, $start_op, %opts) };
+            # (a walk that guessed wrong is walked again, whatever it ended
+            # in: what it refused may be what the guess made of it)
+            return $g unless $@ || $DIRTY;
+            die $@ unless $DIRTY && $try < 8;
+            ( my ( $ml, $ac, $ab, $sb, $sub, $sbs, $les, $bd, $ec, $eo, $rr, $soc, $pmd, $iar ),
+              $EVAL_COUNT, $EVAL_SCANNED, $PINS_MADE, my $nt ) = @saved;
+            %MUTATED_LITERALS = %$ml; %ANON_CAPTURES = %$ac; %ANON_BODIES = %$ab; %SORT_BODIES = %$sb;
+            %SUBST_BODIES = %$sub; %SORT_BODY_SEQ = %$sbs; %LOCAL_ELEM_STORE = %$les; %BRANCHED_DEFAULT = %$bd;
+            %EVAL_COMPILED = %$ec; %EVAL_ORDINAL = %$eo; %REPLROOT_OF = %$rr; %SUBST_OWN_CAPTURE = %$soc;
+            %PINNED_MAY_DIE = %$pmd; %ITER_ALIAS_REF = %$iar;
+            splice @TRANSLATED, $nt;
+        }
     }
 
     # Convert a PMOP pmflags bitmask to a flag string (e.g. "gi")
