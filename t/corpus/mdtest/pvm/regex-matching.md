@@ -292,15 +292,15 @@ main::__PROGRAM__: {start: 0, returns: [21], nodes: [
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 3
   [Constant, {const_type: string, value: "a+"}, ~, ~, Str], # 4
   [MemStart], # 5
-  [Call, {dispatch_kind: direct, file: "/tmp/osrpJFXK1Z/case.pl", line: 6, name: main::token_end, package: main, param_names: [], want: list}, [2, 3, 4], 0, Unknown, 5, true], # 6
+  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 6, name: main::token_end, package: main, param_names: [], want: list}, [2, 3, 4], 0, Unknown, 5, true], # 6
   [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 8
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 9
   [Constant, {const_type: string, value: b}, ~, ~, Str], # 10
-  [Call, {dispatch_kind: direct, file: "/tmp/osrpJFXK1Z/case.pl", line: 6, name: main::token_end, package: main, param_names: [], want: list}, [2, 9, 10], 6, Unknown, 6, true], # 11
+  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 6, name: main::token_end, package: main, param_names: [], want: list}, [2, 9, 10], 6, Unknown, 6, true], # 11
   [Coerce, {from_repr: Unknown, to_repr: Str}, [11], ~, Str], # 12
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 13
-  [Call, {dispatch_kind: direct, file: "/tmp/osrpJFXK1Z/case.pl", line: 6, name: main::token_end, package: main, param_names: [], want: scalar}, [2, 13, 10], 11, Unknown, 11, true], # 14
+  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 6, name: main::token_end, package: main, param_names: [], want: scalar}, [2, 13, 10], 11, Unknown, 11, true], # 14
   [Defined, ~, [14], ~, Boolean], # 15
   [Constant, {const_type: string, value: matched}, ~, ~, Str], # 16
   [Constant, {const_type: string, value: none}, ~, ~, Str], # 17

@@ -50,7 +50,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [Call, {class_name: Empty, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 4, name: new, package: main, param_names: [], want: scalar}, ~, 0, Object, 2, true], # 3
+  [Call, {class_name: Empty, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: new, package: main, param_names: [], want: scalar}, ~, 0, Object, 2, true], # 3
   [RefType, ~, [3], ~, Str, 3], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
   [Print, ~, [4, 5], 3, "Maybe[Boolean]"], # 6
@@ -62,7 +62,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Constant, {const_type: string, value: feature.pm}, ~, ~, Str], # 3
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
-  [Call, {class_name: feature, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Call, {class_name: feature, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
   [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 "BEGIN 2": {start: 0, returns: [7], nodes: [
   [Start], # 0
@@ -71,7 +71,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Constant, {const_type: string, value: warnings.pm}, ~, ~, Str], # 3
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
-  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 2, name: unimport, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: unimport, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
   [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 ```
 
@@ -137,8 +137,8 @@ main::__PROGRAM__: {start: 0, returns: [10], nodes: [
   [PackageMark, {package: Foo}, ~, 0], # 2
   [PackageMark, {package: main}, ~, 2], # 3
   [MemStart], # 4
-  [Call, {class_name: Foo, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 7, name: new, package: main, param_names: [], want: scalar}, ~, 3, Object, 4, true], # 5
-  [Call, {class_name: Foo, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 8, name: m, package: main, param_names: [], want: list}, [5], 5, Int, 5, true], # 6
+  [Call, {class_name: Foo, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 7, name: new, package: main, param_names: [], want: scalar}, ~, 3, Object, 4, true], # 5
+  [Call, {class_name: Foo, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 8, name: m, package: main, param_names: [], want: list}, [5], 5, Int, 5, true], # 6
   [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
   [Print, ~, [7, 8], 6, "Maybe[Boolean]"], # 9
@@ -150,7 +150,7 @@ main::__PROGRAM__: {start: 0, returns: [10], nodes: [
   [Constant, {const_type: string, value: feature.pm}, ~, ~, Str], # 3
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
-  [Call, {class_name: feature, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Call, {class_name: feature, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
   [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 "BEGIN 2": {start: 0, returns: [7], nodes: [
   [Start], # 0
@@ -159,7 +159,7 @@ main::__PROGRAM__: {start: 0, returns: [10], nodes: [
   [Constant, {const_type: string, value: warnings.pm}, ~, ~, Str], # 3
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
-  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 2, name: unimport, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: unimport, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
   [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 ```
 
@@ -218,7 +218,7 @@ main::__PROGRAM__: {start: 0, returns: [9], nodes: [
   [PackageMark, {package: Foo}, ~, 0], # 2
   [PackageMark, {package: main}, ~, 2], # 3
   [MemStart], # 4
-  [Call, {class_name: Foo, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 7, name: new, package: main, param_names: [], want: scalar}, ~, 3, Object, 4, true], # 5
+  [Call, {class_name: Foo, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 7, name: new, package: main, param_names: [], want: scalar}, ~, 3, Object, 4, true], # 5
   [RefType, ~, [5], ~, Str, 5], # 6
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 7
   [Print, ~, [6, 7], 5, "Maybe[Boolean]"], # 8
@@ -230,7 +230,7 @@ main::__PROGRAM__: {start: 0, returns: [9], nodes: [
   [Constant, {const_type: string, value: feature.pm}, ~, ~, Str], # 3
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
-  [Call, {class_name: feature, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Call, {class_name: feature, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
   [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 "BEGIN 2": {start: 0, returns: [7], nodes: [
   [Start], # 0
@@ -239,7 +239,7 @@ main::__PROGRAM__: {start: 0, returns: [9], nodes: [
   [Constant, {const_type: string, value: warnings.pm}, ~, ~, Str], # 3
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
-  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 2, name: unimport, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: unimport, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
   [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 ```
 
@@ -295,17 +295,17 @@ main::__PROGRAM__: {start: 0, returns: [20], nodes: [
   [PackageMark, {package: Flags}, ~, 0], # 2
   [PackageMark, {package: main}, ~, 2], # 3
   [MemStart], # 4
-  [Call, {class_name: Flags, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 4, name: new, package: main, param_names: [], want: scalar}, ~, 3, Object, 4, true], # 5
-  [Call, {class_name: Flags, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 5, name: quiet, package: main, param_names: [], want: scalar}, [5], 5, Scalar, 5, true], # 6
+  [Call, {class_name: Flags, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: new, package: main, param_names: [], want: scalar}, ~, 3, Object, 4, true], # 5
+  [Call, {class_name: Flags, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 5, name: quiet, package: main, param_names: [], want: scalar}, [5], 5, Scalar, 5, true], # 6
   [Constant, {const_type: string, value: q}, ~, ~, Str], # 7
   [Constant, {const_type: string, value: "-"}, ~, ~, Str], # 8
   [TernaryExpr, ~, [6, 7, 8], ~, Str], # 9
-  [Call, {class_name: Flags, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 5, name: loud, package: main, param_names: [], want: scalar}, [5], 6, Scalar, 6, true], # 10
+  [Call, {class_name: Flags, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 5, name: loud, package: main, param_names: [], want: scalar}, [5], 6, Scalar, 6, true], # 10
   [Constant, {const_type: string, value: l}, ~, ~, Str], # 11
   [TernaryExpr, ~, [10, 11, 8], ~, Str], # 12
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 13
-  [Call, {class_name: Flags, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 5, name: new, package: main, param_names: [quiet], want: scalar}, [13], 10, Object, 10, true], # 14
-  [Call, {class_name: Flags, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 5, name: quiet, package: main, param_names: [], want: scalar}, [14], 14, Scalar, 14, true], # 15
+  [Call, {class_name: Flags, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 5, name: new, package: main, param_names: [quiet], want: scalar}, [13], 10, Object, 10, true], # 14
+  [Call, {class_name: Flags, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 5, name: quiet, package: main, param_names: [], want: scalar}, [14], 14, Scalar, 14, true], # 15
   [Constant, {const_type: string, value: Q}, ~, ~, Str], # 16
   [TernaryExpr, ~, [15, 16, 8], ~, Str], # 17
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 18
@@ -318,7 +318,7 @@ main::__PROGRAM__: {start: 0, returns: [20], nodes: [
   [Constant, {const_type: string, value: feature.pm}, ~, ~, Str], # 3
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
-  [Call, {class_name: feature, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Call, {class_name: feature, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
   [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 "BEGIN 2": {start: 0, returns: [7], nodes: [
   [Start], # 0
@@ -327,7 +327,7 @@ main::__PROGRAM__: {start: 0, returns: [20], nodes: [
   [Constant, {const_type: string, value: warnings.pm}, ~, ~, Str], # 3
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
-  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 2, name: unimport, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: unimport, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
   [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 ```
 
@@ -398,14 +398,14 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [PackageMark, {package: Index}, ~, 0], # 3
   [PackageMark, {package: main}, ~, 3], # 4
   [MemStart], # 5
-  [Call, {class_name: Index, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 13, name: new, package: main, param_names: [], want: scalar}, ~, 4, Object, 5, true], # 6
+  [Call, {class_name: Index, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 13, name: new, package: main, param_names: [], want: scalar}, ~, 4, Object, 5, true], # 6
   [Constant, {const_type: string, value: a}, ~, ~, Str], # 7
-  [Call, {class_name: Index, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 14, name: register, package: main, param_names: [], want: list}, [6, 7], 6, Scalar, 6, true], # 8
+  [Call, {class_name: Index, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 14, name: register, package: main, param_names: [], want: list}, [6, 7], 6, Scalar, 6, true], # 8
   [Constant, {const_type: string, value: b}, ~, ~, Str], # 9
-  [Call, {class_name: Index, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 14, name: register, package: main, param_names: [], want: list}, [6, 9], 8, Scalar, 8, true], # 10
-  [Call, {class_name: Index, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 14, name: register, package: main, param_names: [], want: list}, [6, 7], 10, Scalar, 10, true], # 11
+  [Call, {class_name: Index, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 14, name: register, package: main, param_names: [], want: list}, [6, 9], 8, Scalar, 8, true], # 10
+  [Call, {class_name: Index, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 14, name: register, package: main, param_names: [], want: list}, [6, 7], 10, Scalar, 10, true], # 11
   [Constant, {const_type: string, value: c}, ~, ~, Str], # 12
-  [Call, {class_name: Index, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 14, name: register, package: main, param_names: [], want: list}, [6, 12], 11, Scalar, 11, true], # 13
+  [Call, {class_name: Index, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 14, name: register, package: main, param_names: [], want: list}, [6, 12], 11, Scalar, 11, true], # 13
   [Call, {dispatch_kind: builtin, name: join, param_names: []}, [2, 8, 10, 11, 13], ~, Str], # 14
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 15
   [Print, ~, [14, 15], 13, "Maybe[Boolean]"], # 16
@@ -417,7 +417,7 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [Constant, {const_type: string, value: feature.pm}, ~, ~, Str], # 3
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
-  [Call, {class_name: feature, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Call, {class_name: feature, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
   [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 "BEGIN 2": {start: 0, returns: [7], nodes: [
   [Start], # 0
@@ -426,7 +426,7 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [Constant, {const_type: string, value: warnings.pm}, ~, ~, Str], # 3
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
-  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 2, name: unimport, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: unimport, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
   [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 ```
 
@@ -508,12 +508,12 @@ main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [PackageMark, {package: Log}, ~, 0], # 2
   [PackageMark, {package: main}, ~, 2], # 3
   [MemStart], # 4
-  [Call, {class_name: Log, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 9, name: new, package: main, param_names: [], want: scalar}, ~, 3, Object, 4, true], # 5
+  [Call, {class_name: Log, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 9, name: new, package: main, param_names: [], want: scalar}, ~, 3, Object, 4, true], # 5
   [Constant, {const_type: string, value: a}, ~, ~, Str], # 6
-  [Call, {class_name: Log, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 9, name: add, package: main, param_names: [], want: scalar}, [5, 6], 5, Unknown, 5, true], # 7
+  [Call, {class_name: Log, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 9, name: add, package: main, param_names: [], want: scalar}, [5, 6], 5, Unknown, 5, true], # 7
   [Constant, {const_type: string, value: b}, ~, ~, Str], # 8
-  [Call, {dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 9, name: add, package: main, param_names: [], want: scalar}, [7, 8], 7, Unknown, 7, true], # 9
-  [Call, {dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 9, name: close, package: main, param_names: [], want: list}, [9], 9, Unknown, 9, true], # 10
+  [Call, {dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 9, name: add, package: main, param_names: [], want: scalar}, [7, 8], 7, Unknown, 7, true], # 9
+  [Call, {dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 9, name: close, package: main, param_names: [], want: list}, [9], 9, Unknown, 9, true], # 10
   [Coerce, {from_repr: Unknown, to_repr: Str}, [10], ~, Str], # 11
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 12
   [Print, ~, [11, 12], 10, "Maybe[Boolean]"], # 13
@@ -525,7 +525,7 @@ main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Constant, {const_type: string, value: feature.pm}, ~, ~, Str], # 3
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
-  [Call, {class_name: feature, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Call, {class_name: feature, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
   [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 "BEGIN 2": {start: 0, returns: [7], nodes: [
   [Start], # 0
@@ -534,7 +534,7 @@ main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Constant, {const_type: string, value: warnings.pm}, ~, ~, Str], # 3
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
-  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 2, name: unimport, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: unimport, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
   [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 ```
 
@@ -582,7 +582,7 @@ Node::__ADJUST_0: {start: 0, returns: [14], nodes: [
   [FieldAccess, {field_index: 1, field_stash: Node}, ~, ~, Scalar], # 6
   [PadAccess, {sigil: $, symbol: self}, ~, ~, Object], # 7
   [Proj, {index: 1}, [4]], # 8
-  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 7, name: first, package: Node, param_names: [], want: scalar}, [7], 8, Scalar, 1, true], # 9
+  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 7, name: first, package: Node, param_names: [], want: scalar}, [7], 8, Scalar, 1, true], # 9
   [Assign, ~, [6, 9], 9, Scalar, 9, true], # 10
   [Region, {head: 4}, [5, 10]], # 11
   [Phi, {memory: true, predecessors: [5, 8], region: 11}, [1, 10], ~, Unknown], # 12
@@ -629,14 +629,14 @@ main::__PROGRAM__: {start: 0, returns: [20], nodes: [
   [PackageMark, {package: main}, ~, 5], # 6
   [ArrayLiteral, ~, [3, 4], 6, ArrayRef], # 7
   [MemStart], # 8
-  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 12, name: new, package: main, param_names: [inputs], want: scalar}, [7], 7, Object, 8, true], # 9
+  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 12, name: new, package: main, param_names: [inputs], want: scalar}, [7], 7, Object, 8, true], # 9
   [ArrayLiteral, ~, [3, 4], 9, ArrayRef], # 10
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 11
-  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 13, name: new, package: main, param_names: [inputs, left], want: scalar}, [10, 11], 10, Object, 9, true], # 12
-  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 14, name: left, package: main, param_names: [], want: list}, [9], 12, Scalar, 12, true], # 13
-  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 14, name: calls, package: main, param_names: [], want: list}, [9], 13, Int, 13, true], # 14
-  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 14, name: left, package: main, param_names: [], want: list}, [12], 14, Scalar, 14, true], # 15
-  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 14, name: calls, package: main, param_names: [], want: list}, [12], 15, Int, 15, true], # 16
+  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 13, name: new, package: main, param_names: [inputs, left], want: scalar}, [10, 11], 10, Object, 9, true], # 12
+  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 14, name: left, package: main, param_names: [], want: list}, [9], 12, Scalar, 12, true], # 13
+  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 14, name: calls, package: main, param_names: [], want: list}, [9], 13, Int, 13, true], # 14
+  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 14, name: left, package: main, param_names: [], want: list}, [12], 14, Scalar, 14, true], # 15
+  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 14, name: calls, package: main, param_names: [], want: list}, [12], 15, Int, 15, true], # 16
   [Call, {dispatch_kind: builtin, name: join, param_names: []}, [2, 13, 14, 15, 16], ~, Str], # 17
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 18
   [Print, ~, [17, 18], 16, "Maybe[Boolean]"], # 19
@@ -648,7 +648,7 @@ main::__PROGRAM__: {start: 0, returns: [20], nodes: [
   [Constant, {const_type: string, value: feature.pm}, ~, ~, Str], # 3
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
-  [Call, {class_name: feature, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Call, {class_name: feature, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
   [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 "BEGIN 2": {start: 0, returns: [7], nodes: [
   [Start], # 0
@@ -657,7 +657,7 @@ main::__PROGRAM__: {start: 0, returns: [20], nodes: [
   [Constant, {const_type: string, value: warnings.pm}, ~, ~, Str], # 3
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
-  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 2, name: unimport, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: unimport, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
   [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 ```
 
@@ -729,7 +729,7 @@ Derived::__ADJUST_0: {start: 0, returns: [5], nodes: [
   [PadAccess, {sigil: $, symbol: self}, ~, ~, Object], # 1
   [Constant, {const_type: string, value: d}, ~, ~, Str], # 2
   [MemStart], # 3
-  [Call, {class_name: Derived, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 10, name: mark, package: Derived, param_names: []}, [1, 2], 0, Unknown, 3, true], # 4
+  [Call, {class_name: Derived, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 10, name: mark, package: Derived, param_names: []}, [1, 2], 0, Unknown, 3, true], # 4
   [Return, {implicit: true}, [4], 4, ~, 4]]} # 5
 main::__PROGRAM__: {start: 0, returns: [10], nodes: [
   [Start], # 0
@@ -737,8 +737,8 @@ main::__PROGRAM__: {start: 0, returns: [10], nodes: [
   [PackageMark, {package: Base}, ~, 0], # 2
   [PackageMark, {package: main}, ~, 2], # 3
   [MemStart], # 4
-  [Call, {class_name: Derived, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 12, name: new, package: main, param_names: [], want: scalar}, ~, 3, Object, 4, true], # 5
-  [Call, {class_name: Derived, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 12, name: trail, package: main, param_names: [], want: list}, [5], 5, Unknown, 5, true], # 6
+  [Call, {class_name: Derived, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 12, name: new, package: main, param_names: [], want: scalar}, ~, 3, Object, 4, true], # 5
+  [Call, {class_name: Derived, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 12, name: trail, package: main, param_names: [], want: list}, [5], 5, Unknown, 5, true], # 6
   [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
   [Print, ~, [7, 8], 6, "Maybe[Boolean]"], # 9
@@ -750,7 +750,7 @@ main::__PROGRAM__: {start: 0, returns: [10], nodes: [
   [Constant, {const_type: string, value: feature.pm}, ~, ~, Str], # 3
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
-  [Call, {class_name: feature, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Call, {class_name: feature, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
   [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 "BEGIN 2": {start: 0, returns: [7], nodes: [
   [Start], # 0
@@ -759,7 +759,7 @@ main::__PROGRAM__: {start: 0, returns: [10], nodes: [
   [Constant, {const_type: string, value: warnings.pm}, ~, ~, Str], # 3
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
-  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 2, name: unimport, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: unimport, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
   [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 ```
 
@@ -813,14 +813,14 @@ main::__PROGRAM__: {start: 0, returns: [21], nodes: [
   [PackageMark, {package: Registry}, ~, 0], # 2
   [PackageMark, {package: main}, ~, 2], # 3
   [MemStart], # 4
-  [Call, {class_name: Registry, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 8, name: new, package: main, param_names: [], want: scalar}, ~, 3, Object, 4, true], # 5
+  [Call, {class_name: Registry, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 8, name: new, package: main, param_names: [], want: scalar}, ~, 3, Object, 4, true], # 5
   [Constant, {const_type: string, value: A}, ~, ~, Str], # 6
-  [Call, {class_name: Registry, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 8, name: add, package: main, param_names: [], want: scalar}, [5, 6], 5, Unknown, 5, true], # 7
+  [Call, {class_name: Registry, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 8, name: add, package: main, param_names: [], want: scalar}, [5, 6], 5, Unknown, 5, true], # 7
   [Constant, {const_type: string, value: B}, ~, ~, Str], # 8
-  [Call, {dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 8, name: add, package: main, param_names: [], want: scalar}, [7, 8], 7, Unknown, 7, true], # 9
-  [Call, {dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 9, name: classes, package: main, param_names: [], want: list}, [9], 9, Unknown, 9, true], # 10
+  [Call, {dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 8, name: add, package: main, param_names: [], want: scalar}, [7, 8], 7, Unknown, 7, true], # 9
+  [Call, {dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 9, name: classes, package: main, param_names: [], want: list}, [9], 9, Unknown, 9, true], # 10
   [ArrayLiteral, {sigil: "@", symbol: all}, [10], ~, Array], # 11
-  [Call, {dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 10, name: classes, package: main, param_names: [], want: scalar}, [9], 10, Unknown, 10, true], # 12
+  [Call, {dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 10, name: classes, package: main, param_names: [], want: scalar}, [9], 10, Unknown, 10, true], # 12
   [Count, ~, [11], ~, Int, 12], # 13
   [Coerce, {from_repr: Int, to_repr: Str}, [13], ~, Str], # 14
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 15
@@ -837,7 +837,7 @@ main::__PROGRAM__: {start: 0, returns: [21], nodes: [
   [Constant, {const_type: string, value: feature.pm}, ~, ~, Str], # 3
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
-  [Call, {class_name: feature, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Call, {class_name: feature, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
   [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 "BEGIN 2": {start: 0, returns: [7], nodes: [
   [Start], # 0
@@ -846,7 +846,7 @@ main::__PROGRAM__: {start: 0, returns: [21], nodes: [
   [Constant, {const_type: string, value: warnings.pm}, ~, ~, Str], # 3
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
-  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 2, name: unimport, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: unimport, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
   [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 ```
 
@@ -892,7 +892,7 @@ Holder::register: {start: 0, returns: [11], nodes: [
   [FieldAccess, {field_index: 0, field_stash: Holder}, ~, ~, Unknown], # 3
   [Parameter, {index: 0, name: $graphs, sigil: $}, ~, ~, Unknown], # 4
   [MemStart], # 5
-  [PostfixDeref, {eval_id: ~, file: "/tmp/osrpJFXK1Z/case.pl", line: 6, package: Holder, sigil: "%", strict: false}, [4], 0, Hash, 5, true], # 6
+  [PostfixDeref, {eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 6, package: Holder, sigil: "%", strict: false}, [4], 0, Hash, 5, true], # 6
   [Assign, {targets: 1}, [3, 6], 6, List, 6, true], # 7
   [Call, {dispatch_kind: builtin, name: keys, param_names: [], want: list}, [3], ~, List, 7], # 8
   [Call, {dispatch_kind: builtin, name: sort, param_names: [], sort_cmp: string, sort_order: ascending}, [8], ~, List, 7], # 9
@@ -917,18 +917,18 @@ main::__PROGRAM__: {start: 0, returns: [20], nodes: [
   [PackageMark, {package: Holder}, ~, 0], # 2
   [PackageMark, {package: main}, ~, 2], # 3
   [MemStart], # 4
-  [Call, {class_name: Holder, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 10, name: new, package: main, param_names: [], want: scalar}, ~, 3, Object, 4, true], # 5
+  [Call, {class_name: Holder, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 10, name: new, package: main, param_names: [], want: scalar}, ~, 3, Object, 4, true], # 5
   [Constant, {const_type: string, value: b}, ~, ~, Str], # 6
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 7
   [Constant, {const_type: string, value: a}, ~, ~, Str], # 8
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 9
   [HashLiteral, ~, [6, 7, 8, 9], 5, HashRef], # 10
-  [Call, {class_name: Holder, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 10, name: register, package: main, param_names: [], want: scalar}, [5, 10], 10, Unknown, 5, true], # 11
-  [Call, {dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 11, name: summary, package: main, param_names: [], want: list}, [11], 11, Unknown, 11, true], # 12
+  [Call, {class_name: Holder, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 10, name: register, package: main, param_names: [], want: scalar}, [5, 10], 10, Unknown, 5, true], # 11
+  [Call, {dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 11, name: summary, package: main, param_names: [], want: list}, [11], 11, Unknown, 11, true], # 12
   [Coerce, {from_repr: Unknown, to_repr: Str}, [12], ~, Str], # 13
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 14
-  [Call, {dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 11, name: clear, package: main, param_names: [], want: scalar}, [11], 12, Unknown, 12, true], # 15
-  [Call, {dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 11, name: summary, package: main, param_names: [], want: list}, [15], 15, Unknown, 15, true], # 16
+  [Call, {dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 11, name: clear, package: main, param_names: [], want: scalar}, [11], 12, Unknown, 12, true], # 15
+  [Call, {dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 11, name: summary, package: main, param_names: [], want: list}, [15], 15, Unknown, 15, true], # 16
   [Coerce, {from_repr: Unknown, to_repr: Str}, [16], ~, Str], # 17
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 18
   [Print, ~, [13, 14, 17, 18], 16, "Maybe[Boolean]"], # 19
@@ -940,7 +940,7 @@ main::__PROGRAM__: {start: 0, returns: [20], nodes: [
   [Constant, {const_type: string, value: feature.pm}, ~, ~, Str], # 3
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
-  [Call, {class_name: feature, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Call, {class_name: feature, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
   [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 "BEGIN 2": {start: 0, returns: [7], nodes: [
   [Start], # 0
@@ -949,7 +949,7 @@ main::__PROGRAM__: {start: 0, returns: [20], nodes: [
   [Constant, {const_type: string, value: warnings.pm}, ~, ~, Str], # 3
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
-  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 2, name: unimport, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: unimport, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
   [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 ```
 
@@ -989,15 +989,15 @@ main::__PROGRAM__: {start: 0, returns: [18], nodes: [
   [PackageMark, {package: Node}, ~, 0], # 3
   [PackageMark, {package: main}, ~, 3], # 4
   [MemStart], # 5
-  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 7, name: new, package: main, param_names: [id], want: list}, [2], 4, Object, 5, true], # 6
+  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 7, name: new, package: main, param_names: [id], want: list}, [2], 4, Object, 5, true], # 6
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 7
-  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 7, name: new, package: main, param_names: [id], want: list}, [7], 6, Object, 6, true], # 8
+  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 7, name: new, package: main, param_names: [id], want: list}, [7], 6, Object, 6, true], # 8
   [ArrayLiteral, ~, [6, 1, 8], 8, ArrayRef], # 9
-  [Call, {dispatch_kind: direct, file: "/tmp/osrpJFXK1Z/case.pl", line: 7, name: main::ids, package: main, param_names: [], want: list}, [9], 9, Str, 8, true], # 10
+  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 7, name: main::ids, package: main, param_names: [], want: list}, [9], 9, Str, 8, true], # 10
   [Coerce, {from_repr: Unknown, to_repr: Str}, [10], ~, Str], # 11
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 12
   [Constant, {const_type: integer, value: "10"}, ~, ~, Int], # 13
-  [Call, {dispatch_kind: direct, file: "/tmp/osrpJFXK1Z/case.pl", line: 7, name: main::fib, package: main, param_names: [], want: list}, [13], 10, Unknown, 10, true], # 14
+  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 7, name: main::fib, package: main, param_names: [], want: list}, [13], 10, Unknown, 10, true], # 14
   [Coerce, {from_repr: Unknown, to_repr: Str}, [14], ~, Str], # 15
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 16
   [Print, ~, [11, 12, 15, 16], 14, "Maybe[Boolean]"], # 17
@@ -1012,9 +1012,9 @@ main::fib: {start: 0, returns: [17], nodes: [
   [If, ~, [0, 5], 0], # 6
   [Proj, {index: 1}, [6]], # 7
   [MemStart], # 8
-  [Call, {dispatch_kind: direct, file: "/tmp/osrpJFXK1Z/case.pl", line: 6, name: main::fib, package: main, param_names: [], want: scalar}, [3], 7, Unknown, 8, true], # 9
+  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 6, name: main::fib, package: main, param_names: [], want: scalar}, [3], 7, Unknown, 8, true], # 9
   [Subtract, ~, [1, 4], ~, Unknown], # 10
-  [Call, {dispatch_kind: direct, file: "/tmp/osrpJFXK1Z/case.pl", line: 6, name: main::fib, package: main, param_names: [], want: scalar}, [10], 9, Unknown, 9, true], # 11
+  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 6, name: main::fib, package: main, param_names: [], want: scalar}, [10], 9, Unknown, 9, true], # 11
   [Add, ~, [9, 11], ~, Unknown], # 12
   [Proj, {index: 0}, [6]], # 13
   [Region, {head: 6}, [13, 11]], # 14
@@ -1051,7 +1051,7 @@ main::ids: {start: 0, returns: [11], nodes: [
   [Defined, ~, [20], ~, Boolean], # 26
   [If, ~, [25, 26], 25], # 27
   [Proj, {index: 0}, [27]], # 28
-  [Call, {dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 5, name: id, package: main, param_names: [], want: list}, [20], 28, Unknown, 6, true], # 29
+  [Call, {dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 5, name: id, package: main, param_names: [], want: list}, [20], 28, Unknown, 6, true], # 29
   [Constant, {const_type: string, value: undef}, ~, ~, Str], # 30
   [Proj, {index: 1}, [27]], # 31
   [Region, {head: 27}, [29, 31]], # 32
@@ -1074,7 +1074,7 @@ main::ids: {start: 0, returns: [11], nodes: [
   [Constant, {const_type: string, value: feature.pm}, ~, ~, Str], # 3
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
-  [Call, {class_name: feature, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 2, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Call, {class_name: feature, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
   [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 "BEGIN 3": {start: 0, returns: [7], nodes: [
   [Start], # 0
@@ -1083,7 +1083,7 @@ main::ids: {start: 0, returns: [11], nodes: [
   [Constant, {const_type: string, value: warnings.pm}, ~, ~, Str], # 3
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
-  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 3, name: unimport, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: unimport, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
   [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 ```
 
@@ -1116,7 +1116,7 @@ Node::count: {start: 0, returns: [4], nodes: [
   [Start], # 0
   [PadAccess, {sigil: $, symbol: self}, ~, ~, Object], # 1
   [MemStart], # 2
-  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 6, name: parts, package: Node, param_names: [], want: scalar}, [1], 0, Array, 2, true], # 3
+  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 6, name: parts, package: Node, param_names: [], want: scalar}, [1], 0, Array, 2, true], # 3
   [Return, ~, [3], 3, ~, 3]]} # 4
 Node::hash: {start: 0, returns: [7], nodes: [
   [Start], # 0
@@ -1124,7 +1124,7 @@ Node::hash: {start: 0, returns: [7], nodes: [
   [Constant, {const_type: string, value: op}, ~, ~, Str], # 2
   [PadAccess, {sigil: $, symbol: self}, ~, ~, Object], # 3
   [MemStart], # 4
-  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 5, name: parts, package: Node, param_names: [], want: list}, [3], 0, Array, 4, true], # 5
+  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 5, name: parts, package: Node, param_names: [], want: list}, [3], 0, Array, 4, true], # 5
   [Call, {dispatch_kind: builtin, name: join, param_names: []}, [1, 2, 5], ~, Str], # 6
   [Return, ~, [6], 5, ~, 5]]} # 7
 Node::parts: {start: 0, returns: [6], nodes: [
@@ -1139,12 +1139,12 @@ main::__PROGRAM__: {start: 0, returns: [12], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 8, name: new, package: main, param_names: [], want: scalar}, ~, 0, Object, 2, true], # 3
-  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 8, name: hash, package: main, param_names: [], want: list}, [3], 3, Str, 3, true], # 4
+  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 8, name: new, package: main, param_names: [], want: scalar}, ~, 0, Object, 2, true], # 3
+  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 8, name: hash, package: main, param_names: [], want: list}, [3], 3, Str, 3, true], # 4
   [Coerce, {from_repr: Unknown, to_repr: Str}, [4], ~, Str], # 5
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 6
-  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 8, name: new, package: main, param_names: [], want: scalar}, ~, 4, Object, 4, true], # 7
-  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 8, name: count, package: main, param_names: [], want: list}, [7], 7, Array, 7, true], # 8
+  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 8, name: new, package: main, param_names: [], want: scalar}, ~, 4, Object, 4, true], # 7
+  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 8, name: count, package: main, param_names: [], want: list}, [7], 7, Array, 7, true], # 8
   [Coerce, {from_repr: Unknown, to_repr: Str}, [8], ~, Str], # 9
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
   [Print, ~, [5, 6, 9, 10], 8, "Maybe[Boolean]"], # 11
@@ -1156,7 +1156,7 @@ main::__PROGRAM__: {start: 0, returns: [12], nodes: [
   [Constant, {const_type: string, value: feature.pm}, ~, ~, Str], # 3
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
-  [Call, {class_name: feature, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Call, {class_name: feature, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
   [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 "BEGIN 2": {start: 0, returns: [7], nodes: [
   [Start], # 0
@@ -1165,6 +1165,6 @@ main::__PROGRAM__: {start: 0, returns: [12], nodes: [
   [Constant, {const_type: string, value: warnings.pm}, ~, ~, Str], # 3
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
-  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 2, name: unimport, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: unimport, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
   [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 ```

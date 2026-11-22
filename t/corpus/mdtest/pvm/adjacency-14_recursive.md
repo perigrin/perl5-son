@@ -81,7 +81,7 @@ no numeric literal whose text is "5"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [52], nodes: [
+main::__PROGRAM__: {start: 0, returns: [57], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
@@ -99,43 +99,48 @@ main::__PROGRAM__: {start: 0, returns: [52], nodes: [
   [If, ~, [9, 13], 9], # 14
   [Proj, {index: 0}, [14]], # 15
   [EntryWrite, ~, [11, 12], 15, Unknown, 9, true], # 16
-  [Call, {dispatch_kind: direct, eval_id: 1, file: "/tmp/osrpJFXK1Z/case.pl", line: 5, name: main::__PROGRAM__::__EVAL__:5:1, package: main, param_names: [], string_eval: true, want: scalar}, ~, 16, Int, 16, true], # 17
-  [Region, {eval_entry: 15, eval_id: 1}, [17]], # 18
-  [Phi, {region: 18}, [17, 1], ~, "Maybe[Int]"], # 19
-  [Proj, {index: 1}, [14]], # 20
-  [Region, {head: 14}, [18, 20]], # 21
-  [Phi, {predecessors: [15, 20], region: 21}, [19, 1], ~, "Maybe[Int]"], # 22
-  [Phi, {memory: true, region: 18}, [17], ~, Int], # 23
-  [Phi, {memory: true, predecessors: [15, 20], region: 21}, [23, 9], ~, Str], # 24
-  [RegexSubst, {flags: "", pattern: b, replacement: ""}, [10, 22], 21, Str, 24, true], # 25
-  [PadAccess, {file: 1, shared: 1, sigil: $, symbol: k}, ~, ~, Unknown, 25], # 26
-  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 27
-  [Assign, ~, [26, 27], 25, Int, 25, true], # 28
-  [PadAccess, {sigil: $, symbol: s}, ~, ~, Str, 28], # 29
-  [RegexMatch, {code_bodies: [main::__PROGRAM__::__REGEXCODE__:1.0], flags: "", pattern: "2(?{ $k = 5 })"}, [29], 28, Boolean, 28, true], # 30
-  [PadAccess, {file: 1, shared: 1, sigil: $, symbol: i}, ~, ~, Unknown, 30], # 31
-  [Constant, {const_type: regex, value: c}, ~, ~, Regex], # 32
-  [Assign, ~, [31, 32], 30, Regex, 30, true], # 33
+  [Call, {dispatch_kind: direct, eval_id: 1, file: "/tmp/yDlL8UMbFX/case.pl", line: 5, name: main::__PROGRAM__::__EVAL__:5:1, package: main, param_names: [], string_eval: true, want: scalar}, ~, 16, Int, 16, true], # 17
+  [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 17], # 18
+  [EntryWrite, ~, [18, 12], 17, Unknown, 17, true], # 19
+  [Exc, ~, [17]], # 20
+  [Region, {catch: true, eval_id: 1}, [20]], # 21
+  [EntryWrite, ~, [18, 20], 21, Unknown, 17, true], # 22
+  [Region, {eval_entry: 15, eval_id: 1}, [19, 22]], # 23
+  [Phi, {region: 23}, [17, 1], ~, "Maybe[Int]"], # 24
+  [Proj, {index: 1}, [14]], # 25
+  [Region, {head: 14}, [23, 25]], # 26
+  [Phi, {region: 26}, [24, 1], ~, "Maybe[Int]"], # 27
+  [Phi, {memory: true, region: 23}, [19, 22], ~, Unknown], # 28
+  [Phi, {memory: true, region: 26}, [28, 9], ~, Unknown], # 29
+  [RegexSubst, {flags: "", pattern: b, replacement: ""}, [10, 27], 26, Str, 29, true], # 30
+  [PadAccess, {file: 1, shared: 1, sigil: $, symbol: k}, ~, ~, Unknown, 30], # 31
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 32
+  [Assign, ~, [31, 32], 30, Int, 30, true], # 33
   [PadAccess, {sigil: $, symbol: s}, ~, ~, Str, 33], # 34
-  [RegexMatch, {code_bodies: [main::__PROGRAM__::__REGEXCODE__:2.0], flags: "", pattern: "(??{ $i })"}, [34], 33, Boolean, 33, true], # 35
-  [PadAccess, {sigil: $, symbol: s}, ~, ~, Str, 35], # 36
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [36], ~, Str], # 37
-  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 38
-  [Concat, ~, [37, 38], ~, Str], # 39
-  [PadAccess, {file: 1, shared: 1, sigil: $, symbol: k}, ~, ~, Str, 35], # 40
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [40], ~, Str], # 41
-  [Concat, ~, [39, 41], ~, Str], # 42
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 43
+  [RegexMatch, {code_bodies: [main::__PROGRAM__::__REGEXCODE__:1.0], flags: "", pattern: "2(?{ $k = 5 })"}, [34], 33, Boolean, 33, true], # 35
+  [PadAccess, {file: 1, shared: 1, sigil: $, symbol: i}, ~, ~, Unknown, 35], # 36
+  [Constant, {const_type: regex, value: c}, ~, ~, Regex], # 37
+  [Assign, ~, [36, 37], 35, Regex, 35, true], # 38
+  [PadAccess, {sigil: $, symbol: s}, ~, ~, Str, 38], # 39
+  [RegexMatch, {code_bodies: [main::__PROGRAM__::__REGEXCODE__:2.0], flags: "", pattern: "(??{ $i })"}, [39], 38, Boolean, 38, true], # 40
+  [PadAccess, {sigil: $, symbol: s}, ~, ~, Str, 40], # 41
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [41], ~, Str], # 42
+  [Constant, {const_type: string, value: " "}, ~, ~, Str], # 43
   [Concat, ~, [42, 43], ~, Str], # 44
-  [If, ~, [35, 35], 35], # 45
-  [Proj, {index: 1}, [45]], # 46
-  [Constant, {const_type: string, value: "hit\n"}, ~, ~, Str], # 47
-  [Proj, {index: 0}, [45]], # 48
-  [Print, ~, [47], 48, "Maybe[Boolean]"], # 49
-  [Region, {head: 45}, [46, 49]], # 50
-  [Print, ~, [44], 50, "Maybe[Boolean]"], # 51
-  [Return, {implicit: true}, [1], 51, ~, 35], # 52
-  [RegexMatch, {flags: "", pattern: a}, [6], ~, Boolean]]} # 53
+  [PadAccess, {file: 1, shared: 1, sigil: $, symbol: k}, ~, ~, Str, 40], # 45
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [45], ~, Str], # 46
+  [Concat, ~, [44, 46], ~, Str], # 47
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 48
+  [Concat, ~, [47, 48], ~, Str], # 49
+  [If, ~, [40, 40], 40], # 50
+  [Proj, {index: 1}, [50]], # 51
+  [Constant, {const_type: string, value: "hit\n"}, ~, ~, Str], # 52
+  [Proj, {index: 0}, [50]], # 53
+  [Print, ~, [52], 53, "Maybe[Boolean]"], # 54
+  [Region, {head: 50}, [51, 54]], # 55
+  [Print, ~, [49], 55, "Maybe[Boolean]"], # 56
+  [Return, {implicit: true}, [1], 56, ~, 40], # 57
+  [RegexMatch, {flags: "", pattern: a}, [6], ~, Boolean]]} # 58
 main::__PROGRAM__::__EVAL__:5:1: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "12"}, ~, ~, Int], # 1
