@@ -13152,6 +13152,11 @@ class SoN::FromOptree 0.01 {
                 # borrowing this flag to do that also suppressed the push. See
                 # the widening below.
                 my $pin_on_control   = false;
+                # A BUILTIN THE EFFECT TABLE DOES NOT KNOW is refused, not
+                # taken for pure (audit 2026-11-22: `log` floated and was dropped).
+                die "GAP: the builtin `$name` has no row in B::SoN::EffectTable --"
+                  . " what it does to memory is not recorded\n"
+                    if $node_type eq 'Call' && !B::SoN::EffectTable::known($name);
                 if ($node_type eq 'Call' && defined $sim->control) {
                     my $void      = ($op->flags & 3) == 1;    # OPf_WANT_VOID
                     my $lvalue    = ($op->flags & 64);         # OPf_STACKED (store form)
@@ -17911,11 +17916,11 @@ class SoN::FromOptree 0.01 {
             }
 
             my ($next, $sig) = _step($cv, $op, $sim, $factory, $opmap, $ctx);
-            if ($sig eq 'unhandled') {
-                # Unknown - skip
-                $op = $op->next;
-                next;
-            }
+            # AN OP THIS WALK HAS NO CASE FOR is refused, not stepped past:
+            # stepping past `die` lost it (audit 2026-11-22, risk 1). Measured
+            # over every audit probe once `die` had its case: none comes here.
+            die "GAP: `$name` inside a loop body has no case in the body walk\n"
+                if $sig eq 'unhandled';
             $op = $next;
         }
         # THE PASS ENDS HERE TOO. The `unstack` above is where a body that

@@ -113,11 +113,53 @@ _rows { reads => 'external' }, qw(
     ftis ftsize ftdir ftfile ftlink ftzero ftchr ftmtime fteread fteexec
 );
 
+_rows { reads => 'external' }, qw(
+    ftatime ftbinary ftblk ftctime fteowned ftewrite ftpipe ftrexec ftrowned ftrread
+    ftrwrite ftsgid ftsock ftsuid ftsvtx fttext fttty getsockname getpeername gsockopt
+);
+_rows { writes => 1, version => 1, reads => 'handle' }, qw(rcatline);
+# the four-argument select waits: the world's clock moves
+_rows { writes => 1 }, qw(sselect);
+
+# --- dies on a value out of its domain ---------------------------------------
+# `log(0)`, `sqrt(-1)`: perl dies ("Can't take log of 0"). On the chain in
+# every context, as a division that may fault is: floating and unused it was
+# dropped, and the program ran on (audit 2026-11-22).
+_rows { faults => 1 }, qw(log sqrt);
+
+# --- pure: the value is of the operands alone, and nothing is changed --------
+# A ROW, NOT A DEFAULT: a builtin with no row at all is taken to write
+# (writes) and refused by the walk (known), so a new one cannot float by
+# omission (audit 2026-11-22: the table was an allow-list).
+my %PURE = map { $_ => 1 } qw(
+    substr index rindex uc ucfirst lc lcfirst fc quotemeta sprintf join pack unpack
+    reverse refaddr is_weak is_bool is_tainted abs int sin cos atan2 exp ceil floor
+    chr ord hex oct crypt prototype runcv anonconst
+);
+
 # --- placed by their own handlers (see WHAT IS NOT HERE) ---------------------
 my %OWN_HANDLER = map { $_ => 1 } qw(
     push pop shift unshift splice delete each undef local chomp chop
     print say die exit eval set_arylen vec write
+    subst preinc predec postinc postdec i_preinc i_predec i_postinc i_postdec
+    lvref lvavref lvrefslice substr_left
 );
+# (a container op that is the memory version after it, as a bless is: its
+# Call carries mem_out -- SoN::Verify asks)
+my %OWN_VERSION = map { $_ => 1 } qw(push pop shift unshift splice);
+# AND KNOWN, placed by their own handlers, writing nothing this table says:
+# a read of a container or a list, a call, a block run per item.
+my %ELSEWHERE = map { $_ => 1 } qw(
+    keys values aeach akeys avalues sort split entersub
+    grepstart mapstart allstart anystart coreargs custom
+);
+
+# known($name) -> true when the table says what the builtin does: a row, pure,
+# or placed by its own handler. The walk refuses a builtin Call that is not.
+sub known ($name) { $name //= ''; return $ROW{$name} || $PURE{$name} || $OWN_HANDLER{$name} || $ELSEWHERE{$name} ? 1 : 0 }
+
+# faults($name) -> true when the builtin may die on its operands' values.
+sub faults ($name) { return ( $ROW{ $name // '' } // {} )->{faults} ? 1 : 0 }
 
 # effect($name) -> the row, or undef for a builtin with no effect recorded.
 sub effect ($name) { return $ROW{ $name // '' } }
@@ -126,6 +168,7 @@ sub effect ($name) { return $ROW{ $name // '' } }
 sub writes ($name) {
     $name //= '';
     return 1 if $OWN_HANDLER{$name};
+    return 1 unless known($name);    # (no row: may write)
     return ( $ROW{$name} // {} )->{writes} ? 1 : 0;
 }
 
@@ -142,7 +185,7 @@ my %ORDERED_READ = map { $_ => 1 } qw(handle stack variable);
 # to the control chain whatever context its value is in.
 sub on_chain ( $name, %opt ) {
     my $row = $ROW{ $name // '' } or return 0;
-    return 1 if $row->{writes};
+    return 1 if $row->{writes} || $row->{faults};
     my $reads = $row->{reads} // return 0;
     return 0 unless $ORDERED_READ{$reads};
     # `pos($s) = 0` is the store's target, not a read of the position.
@@ -157,7 +200,7 @@ sub reads_at_version ($name) { return ( ( $ROW{ $name // '' } // {} )->{reads} /
 
 # is_version($name) -> true when the builtin's Call carries the memory it
 # follows and is the memory after it.
-sub is_version ($name) { return ( $ROW{ $name // '' } // {} )->{version} ? 1 : 0 }
+sub is_version ($name) { return $OWN_VERSION{ $name // '' } || ( $ROW{ $name // '' } // {} )->{version} ? 1 : 0 }
 
 # stores_operands($name) -> which operands the builtin STORES INTO, by alias:
 # 'first', 'second' or 'all' (each element of an array among them), or undef.
