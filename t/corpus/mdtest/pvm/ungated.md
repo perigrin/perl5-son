@@ -76,30 +76,35 @@ one word whose text is "state"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [16], nodes: [
+main::__PROGRAM__: {start: 0, returns: [21], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
   [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 2], # 3
   [Constant, {const_type: string, value: ""}, ~, ~, Str], # 4
   [EntryWrite, ~, [3, 4], 0, Unknown, 2, true], # 5
-  [Call, {dispatch_kind: direct, eval_id: 1, file: "/tmp/osrpJFXK1Z/case.pl", line: 2, name: main::c, package: main, param_names: [], want: scalar}, ~, 5, Scalar, 5, true], # 6
-  [Region, {eval_entry: 0, eval_id: 1}, [6]], # 7
-  [Phi, {region: 7}, [6, 1], ~, Scalar], # 8
-  [Defined, ~, [8], ~, Boolean], # 9
-  [Constant, {const_type: string, value: ran}, ~, ~, Str], # 10
-  [Constant, {const_type: string, value: died}, ~, ~, Str], # 11
-  [TernaryExpr, ~, [9, 10, 11], ~, Str], # 12
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 13
-  [Print, ~, [12, 13], 7, "Maybe[Boolean]"], # 14
-  [Phi, {memory: true, region: 7}, [6], ~, Scalar], # 15
-  [Return, {implicit: true}, [1], 14, ~, 15]]} # 16
+  [Call, {dispatch_kind: direct, eval_id: 1, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::c, package: main, param_names: [], want: scalar}, ~, 5, Scalar, 5, true], # 6
+  [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 6], # 7
+  [EntryWrite, ~, [7, 4], 6, Unknown, 6, true], # 8
+  [Exc, ~, [6]], # 9
+  [Region, {catch: true, eval_id: 1}, [9]], # 10
+  [EntryWrite, ~, [7, 9], 10, Unknown, 6, true], # 11
+  [Region, {eval_entry: 0, eval_id: 1}, [8, 11]], # 12
+  [Phi, {region: 12}, [6, 1], ~, Scalar], # 13
+  [Defined, ~, [13], ~, Boolean], # 14
+  [Constant, {const_type: string, value: ran}, ~, ~, Str], # 15
+  [Constant, {const_type: string, value: died}, ~, ~, Str], # 16
+  [TernaryExpr, ~, [14, 15, 16], ~, Str], # 17
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 18
+  [Print, ~, [17, 18], 12, "Maybe[Boolean]"], # 19
+  [Phi, {memory: true, region: 12}, [8, 11], ~, Unknown], # 20
+  [Return, {implicit: true}, [1], 19, ~, 20]]} # 21
 main::c: {start: 0, returns: [11], nodes: [
   [Start], # 0
   [EntryDef, {package: main, sigil: $, symbol: "n"}, ~, ~, Scalar], # 1
   [MemStart], # 2
   [EntryDef, {package: main, sigil: $, symbol: "n"}, ~, ~, Scalar, 2], # 3
-  [Call, {dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 1, name: state, package: main, param_names: [], want: scalar}, [3], 0, Unknown, 2, true], # 4
+  [Call, {dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: state, package: main, param_names: [], want: scalar}, [3], 0, Unknown, 2, true], # 4
   [EntryDef, {package: main, sigil: $, symbol: "n"}, ~, ~, Scalar, 4], # 5
   [Coerce, {from_repr: Scalar, to_repr: Num}, [5], ~, Num], # 6
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 7
@@ -163,7 +168,7 @@ one word whose text is "field"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [20], nodes: [
+main::__PROGRAM__: {start: 0, returns: [25], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
@@ -174,17 +179,22 @@ main::__PROGRAM__: {start: 0, returns: [20], nodes: [
   [Constant, {const_type: string, value: ""}, ~, ~, Str], # 7
   [EntryWrite, ~, [6, 7], 5, Unknown, 5, true], # 8
   [PadAccess, {sigil: $, symbol: x}, ~, ~, Unknown, 8], # 9
-  [Call, {dispatch_kind: method, eval_id: 1, file: "/tmp/osrpJFXK1Z/case.pl", line: 2, name: field, package: main, param_names: [], want: void}, [9], 8, Unknown, 8, true], # 10
-  [Region, {eval_entry: 5, eval_id: 1}, [10]], # 11
-  [Phi, {region: 11}, [2, 1], ~, "Maybe[Int]"], # 12
-  [Defined, ~, [12], ~, Boolean], # 13
-  [Constant, {const_type: string, value: ran}, ~, ~, Str], # 14
-  [Constant, {const_type: string, value: died}, ~, ~, Str], # 15
-  [TernaryExpr, ~, [13, 14, 15], ~, Str], # 16
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 17
-  [Print, ~, [16, 17], 11, "Maybe[Boolean]"], # 18
-  [Phi, {memory: true, region: 11}, [10], ~, Unknown], # 19
-  [Return, {implicit: true}, [1], 18, ~, 19]]} # 20
+  [Call, {dispatch_kind: method, eval_id: 1, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: field, package: main, param_names: [], want: void}, [9], 8, Unknown, 8, true], # 10
+  [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 10], # 11
+  [EntryWrite, ~, [11, 7], 10, Unknown, 10, true], # 12
+  [Exc, ~, [10]], # 13
+  [Region, {catch: true, eval_id: 1}, [13]], # 14
+  [EntryWrite, ~, [11, 13], 14, Unknown, 10, true], # 15
+  [Region, {eval_entry: 5, eval_id: 1}, [12, 15]], # 16
+  [Phi, {region: 16}, [2, 1], ~, "Maybe[Int]"], # 17
+  [Defined, ~, [17], ~, Boolean], # 18
+  [Constant, {const_type: string, value: ran}, ~, ~, Str], # 19
+  [Constant, {const_type: string, value: died}, ~, ~, Str], # 20
+  [TernaryExpr, ~, [18, 19, 20], ~, Str], # 21
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 22
+  [Print, ~, [21, 22], 16, "Maybe[Boolean]"], # 23
+  [Phi, {memory: true, region: 16}, [12, 15], ~, Unknown], # 24
+  [Return, {implicit: true}, [1], 23, ~, 24]]} # 25
 ```
 
 ## `__CLASS__` without the feature is a filehandle
@@ -332,7 +342,7 @@ one word whose text is "defer"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [11], nodes: [
+main::__PROGRAM__: {start: 0, returns: [16], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: "end\n"}, ~, ~, Str], # 2
@@ -340,11 +350,16 @@ main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 3], # 4
   [Constant, {const_type: string, value: ""}, ~, ~, Str], # 5
   [EntryWrite, ~, [4, 5], 0, Unknown, 3, true], # 6
-  [Call, {dispatch_kind: direct, eval_id: 1, file: "/tmp/osrpJFXK1Z/case.pl", line: 2, name: main::f, package: main, param_names: [], want: void}, ~, 6, Unknown, 6, true], # 7
-  [Region, {eval_entry: 0, eval_id: 1}, [7]], # 8
-  [Print, ~, [2], 8, "Maybe[Boolean]"], # 9
-  [Phi, {memory: true, region: 8}, [7], ~, Unknown], # 10
-  [Return, {implicit: true}, [1], 9, ~, 10]]} # 11
+  [Call, {dispatch_kind: direct, eval_id: 1, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::f, package: main, param_names: [], want: void}, ~, 6, Unknown, 6, true], # 7
+  [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 7], # 8
+  [EntryWrite, ~, [8, 5], 7, Unknown, 7, true], # 9
+  [Exc, ~, [7]], # 10
+  [Region, {catch: true, eval_id: 1}, [10]], # 11
+  [EntryWrite, ~, [8, 10], 11, Unknown, 7, true], # 12
+  [Region, {eval_entry: 0, eval_id: 1}, [9, 12]], # 13
+  [Print, ~, [2], 13, "Maybe[Boolean]"], # 14
+  [Phi, {memory: true, region: 13}, [9, 12], ~, Unknown], # 15
+  [Return, {implicit: true}, [1], 14, ~, 15]]} # 16
 main::f: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "D\n"}, ~, ~, Str], # 1
@@ -352,6 +367,6 @@ main::f: {start: 0, returns: [7], nodes: [
   [Constant, {const_type: string, value: "body\n"}, ~, ~, Str], # 3
   [Print, ~, [3], 2, "Maybe[Boolean]"], # 4
   [MemStart], # 5
-  [Call, {dispatch_kind: method, file: "/tmp/osrpJFXK1Z/case.pl", line: 1, name: defer, package: main, param_names: []}, [2, 4], 4, Unknown, 5, true], # 6
+  [Call, {dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: defer, package: main, param_names: []}, [2, 4], 4, Unknown, 5, true], # 6
   [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 ```

@@ -119,7 +119,7 @@ no operator whose text is "*"
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [27], nodes: [
+main::__PROGRAM__: {start: 0, returns: [32], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
@@ -133,21 +133,26 @@ main::__PROGRAM__: {start: 0, returns: [27], nodes: [
   [If, ~, [5, 9], 5], # 10
   [Proj, {index: 0}, [10]], # 11
   [EntryWrite, ~, [7, 8], 11, Unknown, 5, true], # 12
-  [Call, {dispatch_kind: direct, eval_id: 1, file: "/tmp/osrpJFXK1Z/case.pl", line: 3, name: main::__PROGRAM__::__EVAL__:3:1, package: main, param_names: [], string_eval: true, want: scalar}, ~, 12, Int, 12, true], # 13
-  [Region, {eval_entry: 11, eval_id: 1}, [13]], # 14
-  [Phi, {region: 14}, [13, 1], ~, "Maybe[Int]"], # 15
-  [Proj, {index: 1}, [10]], # 16
-  [Region, {head: 10}, [14, 16]], # 17
-  [Phi, {predecessors: [11, 16], region: 17}, [15, 1], ~, "Maybe[Int]"], # 18
-  [Phi, {memory: true, region: 14}, [13], ~, Int], # 19
-  [Phi, {memory: true, predecessors: [11, 16], region: 17}, [19, 5], ~, Str], # 20
-  [RegexSubst, {flags: "", pattern: b, replacement: ""}, [6, 18], 17, Str, 20, true], # 21
-  [PadAccess, {sigil: $, symbol: s}, ~, ~, Str, 21], # 22
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [22], ~, Str], # 23
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 24
-  [Concat, ~, [23, 24], ~, Str], # 25
-  [Print, ~, [25], 21, "Maybe[Boolean]"], # 26
-  [Return, {implicit: true}, [1], 26, ~, 21]]} # 27
+  [Call, {dispatch_kind: direct, eval_id: 1, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::__PROGRAM__::__EVAL__:3:1, package: main, param_names: [], string_eval: true, want: scalar}, ~, 12, Int, 12, true], # 13
+  [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 13], # 14
+  [EntryWrite, ~, [14, 8], 13, Unknown, 13, true], # 15
+  [Exc, ~, [13]], # 16
+  [Region, {catch: true, eval_id: 1}, [16]], # 17
+  [EntryWrite, ~, [14, 16], 17, Unknown, 13, true], # 18
+  [Region, {eval_entry: 11, eval_id: 1}, [15, 18]], # 19
+  [Phi, {region: 19}, [13, 1], ~, "Maybe[Int]"], # 20
+  [Proj, {index: 1}, [10]], # 21
+  [Region, {head: 10}, [19, 21]], # 22
+  [Phi, {region: 22}, [20, 1], ~, "Maybe[Int]"], # 23
+  [Phi, {memory: true, region: 19}, [15, 18], ~, Unknown], # 24
+  [Phi, {memory: true, region: 22}, [24, 5], ~, Unknown], # 25
+  [RegexSubst, {flags: "", pattern: b, replacement: ""}, [6, 23], 22, Str, 25, true], # 26
+  [PadAccess, {sigil: $, symbol: s}, ~, ~, Str, 26], # 27
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [27], ~, Str], # 28
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 29
+  [Concat, ~, [28, 29], ~, Str], # 30
+  [Print, ~, [30], 26, "Maybe[Boolean]"], # 31
+  [Return, {implicit: true}, [1], 31, ~, 26]]} # 32
 main::__PROGRAM__::__EVAL__:3:1: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "12"}, ~, ~, Int], # 1
@@ -241,7 +246,7 @@ i=1
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [20], nodes: [
+main::__PROGRAM__: {start: 0, returns: [25], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: "i="}, ~, ~, Str], # 2
@@ -253,17 +258,22 @@ main::__PROGRAM__: {start: 0, returns: [20], nodes: [
   [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 7], # 8
   [Constant, {const_type: string, value: ""}, ~, ~, Str], # 9
   [EntryWrite, ~, [8, 9], 7, Unknown, 7, true], # 10
-  [Call, {dispatch_kind: direct, eval_id: 1, file: "/tmp/osrpJFXK1Z/case.pl", line: 2, name: main::__PROGRAM__::__EVAL__:2:1, package: main, param_names: [], string_eval: true, want: void}, ~, 10, Int, 10, true], # 11
-  [Region, {eval_entry: 7, eval_id: 1}, [11]], # 12
-  [Phi, {memory: true, region: 12}, [11], ~, Int], # 13
-  [CellRead, ~, [7], ~, Unknown, 13], # 14
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [14], ~, Str], # 15
-  [Concat, ~, [2, 15], ~, Str], # 16
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 17
-  [Concat, ~, [16, 17], ~, Str], # 18
-  [Print, ~, [18], 12, "Maybe[Boolean]"], # 19
-  [Return, {implicit: true}, [1], 19, ~, 13], # 20
-  [AnonSub, {captures: [$i], name: main::__PROGRAM__::__EVAL__:2:1}, [7], ~, CodeRef]]} # 21
+  [Call, {dispatch_kind: direct, eval_id: 1, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::__PROGRAM__::__EVAL__:2:1, package: main, param_names: [], string_eval: true, want: void}, ~, 10, Int, 10, true], # 11
+  [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 11], # 12
+  [EntryWrite, ~, [12, 9], 11, Unknown, 11, true], # 13
+  [Exc, ~, [11]], # 14
+  [Region, {catch: true, eval_id: 1}, [14]], # 15
+  [EntryWrite, ~, [12, 14], 15, Unknown, 11, true], # 16
+  [Region, {eval_entry: 7, eval_id: 1}, [13, 16]], # 17
+  [Phi, {memory: true, region: 17}, [13, 16], ~, Unknown], # 18
+  [CellRead, ~, [7], ~, Unknown, 18], # 19
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [19], ~, Str], # 20
+  [Concat, ~, [2, 20], ~, Str], # 21
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 22
+  [Concat, ~, [21, 22], ~, Str], # 23
+  [Print, ~, [23], 17, "Maybe[Boolean]"], # 24
+  [Return, {implicit: true}, [1], 24, ~, 18], # 25
+  [AnonSub, {captures: [$i], name: main::__PROGRAM__::__EVAL__:2:1}, [7], ~, CodeRef]]} # 26
 main::__PROGRAM__::__EVAL__:2:1: {start: 0, returns: [5], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 1

@@ -179,14 +179,14 @@ main::__PROGRAM__: {start: 0, returns: [20], nodes: [
   [ArrayLiteral, {sigil: "@", symbol: a}, [2, 3, 4], ~, Array], # 5
   [Ref, ~, [5], ~, ArrayRef], # 6
   [MemStart], # 7
-  [PostfixDeref, {copy: 1, eval_id: ~, file: "/tmp/osrpJFXK1Z/case.pl", line: 3, package: main, sigil: "@", strict: false}, [6], ~, Array, 7], # 8
-  [PostfixDeref, {eval_id: ~, file: "/tmp/osrpJFXK1Z/case.pl", line: 3, package: main, sigil: "@", strict: false}, [6], 0, Array, 7, true], # 9
+  [PostfixDeref, {copy: 1, eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, package: main, sigil: "@", strict: false}, [6], ~, Array, 7], # 8
+  [PostfixDeref, {eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, package: main, sigil: "@", strict: false}, [6], 0, Array, 7, true], # 9
   [Count, ~, [8], ~, Int, 9], # 10
   [Coerce, {from_repr: Int, to_repr: Str}, [10], ~, Str], # 11
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 12
   [EntryDef, {package: main, sigil: $, symbol: "\""}, ~, ~, Scalar, 9], # 13
   [Coerce, {from_repr: Scalar, to_repr: Str}, [13], ~, Str], # 14
-  [PostfixDeref, {eval_id: ~, file: "/tmp/osrpJFXK1Z/case.pl", line: 4, package: main, sigil: "@", strict: false}, [6], 9, Array, 9, true], # 15
+  [PostfixDeref, {eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, package: main, sigil: "@", strict: false}, [6], 9, Array, 9, true], # 15
   [Call, {dispatch_kind: builtin, name: join, param_names: []}, [14, 15], ~, Str, 15], # 16
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 17
   [Concat, ~, [16, 17], ~, Str], # 18
@@ -259,8 +259,8 @@ main::__PROGRAM__: {start: 0, returns: [18], nodes: [
   [ArrayLiteral, {sigil: "@", symbol: a}, [2, 3, 4], ~, Array], # 5
   [Ref, ~, [5], ~, ArrayRef], # 6
   [MemStart], # 7
-  [PostfixDeref, {copy: 1, eval_id: ~, file: "/tmp/osrpJFXK1Z/case.pl", line: 3, package: main, sigil: "@", strict: false}, [6], ~, Array, 7], # 8
-  [PostfixDeref, {eval_id: ~, file: "/tmp/osrpJFXK1Z/case.pl", line: 3, package: main, sigil: "@", strict: false}, [6], 0, Array, 7, true], # 9
+  [PostfixDeref, {copy: 1, eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, package: main, sigil: "@", strict: false}, [6], ~, Array, 7], # 8
+  [PostfixDeref, {eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, package: main, sigil: "@", strict: false}, [6], 0, Array, 7, true], # 9
   [Count, ~, [8], ~, Int, 9], # 10
   [Coerce, {from_repr: Int, to_repr: Str}, [10], ~, Str], # 11
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 12
@@ -332,8 +332,8 @@ main::__PROGRAM__: {start: 0, returns: [18], nodes: [
   [ArrayLiteral, {sigil: "@", symbol: a}, [2, 3, 4], ~, Array], # 5
   [Ref, ~, [5], ~, ArrayRef], # 6
   [MemStart], # 7
-  [PostfixDeref, {copy: 1, eval_id: ~, file: "/tmp/osrpJFXK1Z/case.pl", line: 3, package: main, sigil: "@", strict: false}, [6], ~, Array, 7], # 8
-  [PostfixDeref, {eval_id: ~, file: "/tmp/osrpJFXK1Z/case.pl", line: 3, package: main, sigil: "@", strict: false}, [6], 0, Array, 7, true], # 9
+  [PostfixDeref, {copy: 1, eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, package: main, sigil: "@", strict: false}, [6], ~, Array, 7], # 8
+  [PostfixDeref, {eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, package: main, sigil: "@", strict: false}, [6], 0, Array, 7, true], # 9
   [Count, ~, [8], ~, Int, 9], # 10
   [Coerce, {from_repr: Int, to_repr: Str}, [10], ~, Str], # 11
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 12
@@ -391,8 +391,8 @@ main::__PROGRAM__: {start: 0, returns: [18], nodes: [
   [HashLiteral, {sigil: "%", symbol: h}, [2, 3, 4, 5], ~, Hash], # 6
   [Ref, ~, [6], ~, HashRef], # 7
   [MemStart], # 8
-  [PostfixDeref, {copy: 1, eval_id: ~, file: "/tmp/osrpJFXK1Z/case.pl", line: 3, package: main, sigil: "%", strict: false}, [7], ~, Hash, 8], # 9
-  [PostfixDeref, {eval_id: ~, file: "/tmp/osrpJFXK1Z/case.pl", line: 3, package: main, sigil: "%", strict: false}, [7], 0, Hash, 8, true], # 10
+  [PostfixDeref, {copy: 1, eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, package: main, sigil: "%", strict: false}, [7], ~, Hash, 8], # 9
+  [PostfixDeref, {eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, package: main, sigil: "%", strict: false}, [7], 0, Hash, 8, true], # 10
   [Call, {dispatch_kind: builtin, name: keys, param_names: [], want: scalar}, [9], ~, Int, 10], # 11
   [Coerce, {from_repr: Int, to_repr: Str}, [11], ~, Str], # 12
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 13
@@ -473,12 +473,12 @@ main::__PROGRAM__: {start: 0, returns: [19], nodes: [
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 4
   [ArrayLiteral, ~, [2, 3, 4], 0, ArrayRef], # 5
   [MemStart], # 6
-  [Call, {dispatch_kind: direct, file: "/tmp/osrpJFXK1Z/case.pl", line: 2, name: main::items, package: main, param_names: [], want: list}, [5], 5, List, 6, true], # 7
+  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::items, package: main, param_names: [], want: list}, [5], 5, List, 6, true], # 7
   [ArrayLiteral, {sigil: "@", symbol: got}, [7], ~, Array], # 8
   [Constant, {const_type: integer, value: "4"}, ~, ~, Int], # 9
   [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 10
   [ArrayLiteral, ~, [9, 10], 7, ArrayRef], # 11
-  [Call, {dispatch_kind: direct, file: "/tmp/osrpJFXK1Z/case.pl", line: 3, name: main::items, package: main, param_names: [], want: scalar}, [11], 11, List, 7, true], # 12
+  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::items, package: main, param_names: [], want: scalar}, [11], 11, List, 7, true], # 12
   [Count, ~, [8], ~, Int, 12], # 13
   [Coerce, {from_repr: Int, to_repr: Str}, [13], ~, Str], # 14
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 15
@@ -491,7 +491,7 @@ main::items: {start: 0, returns: [8], nodes: [
   [ArgsSource, ~, ~, ~, Array], # 1
   [MemStart], # 2
   [Call, {dispatch_kind: builtin, name: shift, param_names: []}, [1], 0, Scalar, 2, true], # 3
-  [PostfixDeref, {eval_id: ~, file: "/tmp/osrpJFXK1Z/case.pl", line: 1, package: main, sigil: "@", strict: false}, [3], 3, Array, 3, true], # 4
+  [PostfixDeref, {eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, package: main, sigil: "@", strict: false}, [3], 3, Array, 3, true], # 4
   [ArrayLiteral, ~, [4], ~, List], # 5
   [Count, ~, [4], ~, Int], # 6
   [Coerce, {from_repr: List, to_repr: Scalar}, [6], ~, Scalar], # 7
