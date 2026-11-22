@@ -869,7 +869,26 @@ class SoN::FromOptree 0.01 {
             if defined $was && $was != $sim->control;
         $node->set_control_in($sim->control);
         $sim->set_control($node);
+        # (one that dies by a value it is made of, made with it: its way out)
+        # (a sub call's is made at its memory barrier: the memory after it)
+        _exc_edge($sim, $node) if @EXC_FRAMES && !( $node->operation eq 'Call' && ( $node->dispatch_kind // '' ) ne 'builtin' )
+            && _dies_by_its_values($node);
         return $node;
+    }
+    # _dies_by_its_values($node) -> true when a value $node is made of, not
+    # on the chain itself, names where it dies (a dereference, an element
+    # reference, a division: they carry a site): made where $node is, its die
+    # is $node's -- `eval { ${$r[-1]} = 2 }` stores through what may be no
+    # reference, or a read-only one.
+    sub _dies_by_its_values ($node) {
+        my ( %seen, @q );
+        @q = grep { blessed($_) } map { ref $_ eq 'ARRAY' ? @$_ : $_ } ( $node->v1_inputs // [] )->@*;
+        while ( defined( my $n = shift @q ) ) {
+            next if $seen{ refaddr $n }++ || defined $n->control_in;
+            return 1 if $n->operation =~ /\A(?:PostfixDeref|Ref|Divide|Modulo)\z/ && $n->can('line') && defined $n->line;
+            push @q, grep { blessed($_) } map { ref $_ eq 'ARRAY' ? @$_ : $_ } ( $n->v1_inputs // [] )->@*;
+        }
+        return 0;
     }
     # _unplace($sim, $node): the last node placed taken back off both chains
     # (an :lvalue call made the location of the store that calls it): what it
@@ -6031,11 +6050,14 @@ class SoN::FromOptree 0.01 {
     sub _exc_edge ($sim, $node) {
         my $f = $EXC_FRAMES[-1] or return;
         return if $IN_SCOUT || !defined $EVAL_ID || $f->{eval_id} != $EVAL_ID || !defined $sim->memory;
+        return if $f->{edged}{ refaddr $node }++;   # (one way out each)
         my $factory = $f->{factory};
         my $edge = $sim->snapshot;
         my $exc  = $factory->make_cfg('Exc', inputs => [$node]);
         $edge->set_control($exc);
-        $edge->set_memory( $node->mem_out ? $node : $node->mem_in // $sim->memory );
+        # (a version already: $node, or the one it followed)
+        my @memory = ( $node->mem_out ? $node : $node->mem_in // $sim->memory );
+        $edge->set_memory($memory[0]);
         my @saves = map { $_->@* } @SAVES_STACK[ $f->{base} .. $#SAVES_STACK ];
         if (@saves) {
             local $EXC_EDGE = 1;
@@ -6072,8 +6094,9 @@ class SoN::FromOptree 0.01 {
         $catch->set_eval_id( $f->{eval_id} );
         my $c = $sim->snapshot;
         $c->set_control($catch);
-        my @m = map { $_->{sim}->memory } @e;
-        $c->set_memory( @m == 1 ? $m[0] : $factory->make_unique('Phi', inputs => \@m, region => $catch, memory => 1) );
+        my @memory  = map { $_->{sim}->memory } @e;
+        my $mem_phi = @memory == 1 ? $memory[0] : $factory->make_unique('Phi', inputs => \@memory, region => $catch, memory => 1);
+        $c->set_memory($mem_phi);
         my $err = @e == 1 ? $e[0]{exc}
             : $factory->make_unique('Phi', inputs => [ map { $_->{exc} } @e ], region => $catch,
                 stamp => SoN::IR::Stamp->new(type => 'Scalar'));

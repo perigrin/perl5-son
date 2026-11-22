@@ -85,4 +85,14 @@ is $ret->{mem_in}, $err->{id}, 'the Return names it too';
     is [ map { scalar $_->{inputs}->@* } @phi ], [ map { 2 } @phi ], '... every Phi of the join with as many inputs as its ways in';
     ok( ( grep { f( $_, 'memory' ) } @phi ), '... one of them its memory' );
 }
+# A STORE THAT DIES WHERE IT STANDS (through a reference to a read-only
+# value, or none): its target dies as the store is made, so the store has
+# the way out -- the memory before it, the store not made.
+{
+    my ( $n3, $by3 ) = graph( wire(q{my @r = \(3); eval { ${$r[-1]} = 2 }; print $@ ? "ro\n" : "rw\n";}) );
+    my ($st) = grep { $_->{op} eq 'Assign' && defined $_->{control_in} && ( $by3->{ $_->{inputs}[0] }{op} // '' ) eq 'PostfixDeref' } @$n3;
+    ok $st, 'the store through the dereference' or last;
+    my ($x) = grep { $_->{op} eq 'Exc' && $_->{inputs}[0] == $st->{id} } @$n3;
+    ok $x, '... has its way out';
+}
 done_testing;
