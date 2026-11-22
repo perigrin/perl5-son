@@ -77,16 +77,17 @@ subtest 'a FIRST-statement `last if` in a while(1) body now lowers (hoisted)' =>
     ok($graph, 'the first-statement `last if` loop translates cleanly (no GAP)');
     ok((grep { $_->operation eq 'Loop' } $graph->nodes->@*), 'has a Loop node');
 
-    # Exactly one node carries control_in pointed at a Loop, and it is the
-    # NEGATED comparison (NumLt, the continuation `$i < 3`) -- not the
-    # original NumGe guard.
+    # Exactly one node follows the Loop: the test's If (wire v2 `loop`
+    # profile), and it tests the NEGATED comparison (NumLt, the continuation
+    # `$i < 3`) -- not the original NumGe guard.
     my @wired = grep {
         $_->can('control_in') && defined $_->control_in
             && $_->control_in->operation eq 'Loop'
     } $graph->nodes->@*;
-    is(scalar @wired, 1, 'exactly one condition is control-wired to the Loop');
-    is($wired[0] && $wired[0]->operation, 'NumLt',
-        'the wired continuation is the negated guard (NumGe last-if -> NumLt continue)');
+    is(scalar @wired, 1, 'exactly one test follows the Loop');
+    is($wired[0] && $wired[0]->operation, 'If', '... an If');
+    is($wired[0] && $wired[0]->inputs->[1]->operation, 'NumLt',
+        'its condition is the negated guard (NumGe last-if -> NumLt continue)');
     is($wired[0] && $wired[0]->control_in && $wired[0]->control_in->operation, 'Loop',
         'it points at the Loop node');
 };
@@ -181,7 +182,8 @@ subtest 'a postfix modifier in a FOREACH body lowers to a guarded merge' => sub 
         'sub { my $s = 100; for my $i (1..3) { $s = $s + $i if $i != 2; } $s }',
     ) {
         my $g = graph_of($src);
-        my @if = grep { $_->operation eq 'If' } $g->nodes->@*;
+        # (the loop's test is an If on the Loop: wire v2 `loop` profile)
+        my @if = grep { $_->operation eq 'If' && $_->inputs->[0]->operation ne 'Loop' } $g->nodes->@*;
         is(scalar(@if), 1, 'the guard builds exactly one If');
 
         # The accumulator's merge Phi: one arm is the Add, the other is the
@@ -259,11 +261,14 @@ subtest 'loop condition with a body decoy comparison wires structurally (zhi 019
         $_->can('control_in') && defined $_->control_in
             && $_->control_in->operation eq 'Loop'
     } $graph->nodes->@*;
-    is(scalar @wired, 1, 'exactly one condition is control-wired to the Loop');
-    is($wired[0] && $wired[0]->control_in && $wired[0]->control_in->operation, 'Loop',
-        'the wired condition points at the Loop node');
-    ok($wired[0] && $ICMP_OP{ $wired[0]->operation },
-        'the wired node is a comparison (the header condition, not the decoy)');
+    # (wire v2's `loop` profile: what follows the Loop is its test, an If,
+    # whose condition is the header's)
+    is(scalar @wired, 1, 'exactly one test follows the Loop');
+    is($wired[0] && $wired[0]->operation, 'If', '... an If');
+    my $cond = $wired[0] && $wired[0]->inputs->[1];
+    ok($cond && $ICMP_OP{ $cond->operation }
+            && ( $cond->inputs->[1]->can('value') ? $cond->inputs->[1]->value // '' : '' ) eq '0',
+        'its condition is a comparison (the header condition $n > 0, not the decoy)');
 };
 
 subtest 'bare-truthiness loop condition synthesizes a comparison (zhi 019f29ed)' => sub {
@@ -287,10 +292,11 @@ subtest 'bare-truthiness loop condition synthesizes a comparison (zhi 019f29ed)'
         $_->can('control_in') && defined $_->control_in
             && $_->control_in->operation eq 'Loop'
     } $graph->nodes->@*;
-    is(scalar @wired, 1, 'exactly one condition is control-wired to the Loop');
-    ok($wired[0] && $ICMP_OP{ $wired[0]->operation },
-        'the wired node is a synthesized comparison, not the bare Phi');
-    is($wired[0] && $wired[0]->operation, 'NumNe',
+    is(scalar @wired, 1, 'exactly one test follows the Loop');
+    my $cond = $wired[0] && $wired[0]->operation eq 'If' ? $wired[0]->inputs->[1] : undef;
+    ok($cond && $ICMP_OP{ $cond->operation },
+        'its condition is a synthesized comparison, not the bare Phi');
+    is($cond && $cond->operation, 'NumNe',
         'the synthesized truthiness test is NumNe(cond, 0)');
 };
 

@@ -592,6 +592,9 @@ class SoN::IR::NodeFactory {
         my $id = "${op_name}#unique${cfg_counter}";
         my $node = $class->new( id => $id, %args );
         $self->_register_consumers($node, %args);
+        # (a Phi is a use of its region, as make's Phis are: a loop's Phis
+        # are found from its Loop)
+        $args{region}->add_consumer($node) if $op_name eq 'Phi' && defined $args{region};
         $cache{$id} = $node;
         return $node;
     }

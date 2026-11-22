@@ -36,7 +36,9 @@ subtest 'block while with a condition-only mutation reads the AT-EXIT value post
 
     my ($loop) = nodes_of($g, 'Loop');
     ok(defined $loop, 'has a Loop node');
-    is([nodes_of($g, 'If')], [], 'no If -- the Loop IS the header');
+    my @if = nodes_of($g, 'If');
+    is(scalar @if, 1, 'one If: the test (wire v2 `loop` profile)');
+    is($if[0] && $if[0]->inputs->[0]->id, $loop->id, '... on the Loop');
 
     my @phis = nodes_of($g, 'Phi');
     is(scalar @phis, 1, 'one header Phi for $i');

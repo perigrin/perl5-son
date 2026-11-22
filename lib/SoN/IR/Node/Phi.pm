@@ -39,6 +39,14 @@ class SoN::IR::Node::Phi :isa(SoN::IR::Value) {
             ($memory ? ('memory') : ()), $self->_serialize_inputs());
     }
 
+    # drop_backedge: a loop's Phi whose loop never goes round keeps its init.
+    method drop_backedge() {
+        my $old = $self->inputs()->[1];
+        splice $self->inputs()->@*, 1;
+        $old->remove_consumer($self) if defined $old;
+        return;
+    }
+
     method set_backedge($value) {
         my $old = $self->inputs()->[1];
         $old->remove_consumer($self) if defined $old;

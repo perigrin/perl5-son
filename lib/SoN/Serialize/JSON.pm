@@ -553,6 +553,9 @@ sub _all_nodes_topo ($graph_or_nodes) {
                 && $n->region->operation eq 'Loop') {
             @in = ($in[0]);
         }
+        # (so is a Loop's back input, the last control of its pass: it closes
+        # the control cycle -- the `loop` profile's other forward reference)
+        @in = ($in[0]) if $n->operation eq 'Loop';
         # An input may itself be an arrayref of nodes rather than a bare node
         # (e.g. Unwind's exception-args list). Its elements are still
         # producer edges -- omitting them here (as a plain `blessed($_)`
@@ -680,7 +683,8 @@ sub _serialize_graph ($graph) {
         # emit when the predecessor is itself part of the serialized set
         # (guaranteed here whenever the node itself is, by
         # _all_nodes_topo's control-aware membership walk).
-        if (defined _control_in($node)
+        # (a Loop's control is its way in, inputs[0], and only that: v2)
+        if (defined _control_in($node) && $node->operation ne 'Loop'
                 && exists $id_remap{ _control_in($node)->id }) {
             $entry{control_in} = $id_remap{ _control_in($node)->id };
         }
@@ -729,7 +733,7 @@ sub to_json ($named_graphs, $classes = undef, $data_section = undef,
 
     my $data = {
         version => 2,
-        profile => [ 'mem', 'eval' ],
+        profile => [ 'mem', 'eval', 'loop' ],
         source  => undef,
         methods => \%methods,
     };

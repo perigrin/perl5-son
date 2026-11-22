@@ -56,6 +56,9 @@ sub _fields ($n) { $n->{fields} // {} }
 sub _control_preds ($n) {
     my $in = $n->{inputs} // [];
     return grep { defined } @$in if $n->{op} eq 'Region';
+    # (a Loop's back input, on the `loop` profile, is the pass's end: the
+    # Loop follows it)
+    return grep { defined } @$in if $n->{op} eq 'Loop';
     my @p = $n->{op} =~ /^(?:If|Loop|Proj)$/ ? ( $in->[0] ) : ();
     push @p, $n->{control_in};
     return grep { defined } @p;
@@ -124,6 +127,9 @@ sub _describe ( $n, $by ) {
 #   phi:memory-as-value  V8: a memory Phi used as a value input.
 #   control-fork         V9: a node other than an If or a Loop has more than
 #                        one control successor: two things claim to run next.
+#   loop                 V11 (`loop` profile): a Loop has one or two inputs
+#                        and one control successor, and no Proj takes it; a
+#                        Phi at it has one input per input of it.
 sub _graph_v2 ( $name, $g, $res, $profile = {} ) {
     my @nodes = ( $g->{nodes} // [] )->@*;
     my %by    = map { $_->{id} => $_ } @nodes;
@@ -394,12 +400,25 @@ sub _graph_v2 ( $name, $g, $res, $profile = {} ) {
         else                                             { $bad->( $n, 'record', 'a record of ' . join( '+', @mem ) ) }
     }
 
+    # (V11) A LOOP IS ENTERED ONCE AND GOES ROUND ONCE; ITS TEST IS AN If.
+    if ($loop_profile) {
+        for my $L ( grep { $_->{op} eq 'Loop' } @nodes ) {
+            my $k = scalar( ( $L->{inputs} // [] )->@* );
+            $bad->( $L, 'loop', "$k inputs (one or two)" ) if $k < 1 || $k > 2;
+            my %u;
+            my @s = grep { $by{$_}{op} ne 'Proj' && !$u{$_}++ } ( $succ{ $L->{id} } // [] )->@*;
+            $bad->( $L, 'loop', scalar(@s) . ' control successors' ) if @s > 1;
+            $bad->( $L, 'loop', 'a Proj of it: ' . join ', ', map { $say->($_) } @{ [ grep { $by{$_}{op} eq 'Proj' } ( $succ{ $L->{id} } // [] )->@* ] } )
+                if grep { $by{$_}{op} eq 'Proj' } ( $succ{ $L->{id} } // [] )->@*;
+        }
+    }
+
     # (V8) PHIS PAIR WITH THEIR REGION; MEMORY AND VALUES DO NOT MIX.
     for my $n ( grep { $_->{op} eq 'Phi' } @nodes ) {
         my $f = _fields($n);
         my $r = $by{ $f->{region} // '' };
         if ( !$r || $r->{op} !~ /^(?:Region|Loop)$/ ) { $bad->( $n, 'phi-no-region', 'region=' . ( $f->{region} // 'none' ) ); next }
-        my $want = $r->{op} eq 'Loop' ? 2 : scalar grep { defined } $r->{inputs}->@*;
+        my $want = $r->{op} eq 'Loop' ? ( $loop_profile ? scalar $r->{inputs}->@* : 2 ) : scalar grep { defined } $r->{inputs}->@*;
         my $have = scalar( $n->{inputs}->@* );
         $bad->( $n, 'phi-arity',
             "$have inputs for $want ways into $r->{op}#$r->{id}" . ( $f->{memory} ? ' (memory)' : '' ) )

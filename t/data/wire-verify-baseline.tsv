@@ -52,6 +52,10 @@
 # 0, probes 25 -> 0, the rows deleted; a mismatch at an eval join is plain phi-arity, held at
 # 0 on the corpus (1 -> 0: a run-time string eval's trap, now with its own catch). probes
 # phi-arity stays 4: al1 and al2, two Phis each at a one-pass Loop (stage 9's loop shape).
+# 2026-11-22 (wire v2, stage 9a): the `loop` profile -- a Loop is [entry, back], its test an
+# If, its Phis one input per input of it. probes phi-arity 4 -> 0: al1 and al2's loop leaves
+# by its exit and goes round (the iterator written back to a scalar source returned before
+# either); a loop no path goes round has one input and its Phis one. `loop` (V11) is new, 0.
 corpus	#cases	431
 corpus	#graphs	1082
 corpus	#wires	431
@@ -59,6 +63,7 @@ corpus	allowed:param-bind	8
 corpus	allowed:record	57
 corpus	control-fork	0
 corpus	control-sink	0
+corpus	loop	0
 corpus	mem-in-not-version	0
 corpus	memory-order-disagrees	0
 corpus	phi-arity	0
@@ -74,9 +79,10 @@ probes	allowed:param-bind	1
 probes	allowed:record	12
 probes	control-fork	0
 probes	control-sink	0
+probes	loop	0
 probes	mem-in-not-version	0
 probes	memory-order-disagrees	0
-probes	phi-arity	4
+probes	phi-arity	0
 probes	phi-no-region	0
 probes	phi:memory-as-value	0
 probes	record	1

@@ -57,8 +57,9 @@ subtest 'a `last` after the local puts it back on its way out' => sub {
     my ($exit) = grep { $_->{op} eq 'Region' && ( $_->{head} // -1 ) == $loop->{id} } @n or return fail 'no exit Region';
     my ($local) = grep { $_->{op} eq 'EntryWrite' && $by{ $_->{inputs}[1] }{op} eq 'Add' } @n;
     ok $local, 'the local\'s store' or return;
-    # the exit's way in from the `last`: not the loop's own exit Proj
-    my @break = grep { !( $by{$_}{op} eq 'Proj' && $by{$_}{inputs}[0] == $loop->{id} ) } $exit->{inputs}->@*;
+    # the exit's way in from the `last`: not the loop's own exit Proj (its
+    # test's, the If on the Loop)
+    my @break = grep { !( $by{$_}{op} eq 'Proj' && $by{ $by{$_}{inputs}[0] }{op} eq 'If' && $by{ $by{$_}{inputs}[0] }{inputs}[0] == $loop->{id} ) } $exit->{inputs}->@*;
     is scalar(@break), 1, 'one break edge' or return;
     my @restore = grep { $_->{id} != $local->{id} } stores_back( \%by, $break[0], $local->{id} );
     is scalar(@restore), 1, 'a store to $g stands between the local and the exit';

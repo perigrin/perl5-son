@@ -19,7 +19,9 @@ subtest 'Simple arithmetic without loops still works' => sub {
 subtest 'While loop produces Loop node' => sub {
     my ($graph, $text) = _translate(eval 'sub { my $i = 0; while ($i < 10) { $i = $i + 1 } $i }');
     like($text, qr/Loop/, 'has Loop node');
-    unlike($text, qr/If/, 'no If -- the Loop IS the header (corpus contract)');
+    my @if = grep { $_->operation eq 'If' } $graph->nodes->@*;
+    is(scalar @if, 1, 'one If: the test (wire v2 `loop` profile)');
+    is($if[0] && $if[0]->inputs->[0]->operation, 'Loop', '... on the Loop');
     like($text, qr/NumLt/, 'has less-than comparison');
     like($text, qr/Region/, 'has the exit Region');
     note($text);
@@ -41,7 +43,8 @@ subtest 'foreach over a range lowers as a counted loop' => sub {
     my @nodes = $graph->nodes->@*;
     my ($loop) = grep { $_->operation eq 'Loop' } @nodes;
     ok(defined $loop, 'has a Loop node');
-    ok(!(grep { $_->operation eq 'If' } @nodes), 'no If in the header');
+    my @if = grep { $_->operation eq 'If' } @nodes;
+    ok(@if == 1 && $if[0]->inputs->[0]->id eq $loop->id, 'the header: one If on the Loop, its test');
 
     my @phis = grep { $_->operation eq 'Phi' } @nodes;
     is(scalar @phis, 2, 'two Phis: induction $i and carried $s');

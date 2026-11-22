@@ -2880,7 +2880,9 @@ class SoN::FromOptree 0.01 {
                         stamp  => SoN::IR::Stamp->new(type => 'Boolean'));
                     my $if = $factory->make_cfg('If',
                         inputs => [$sim->control, $ne]);
-                    $factory->make_cfg('Proj', inputs => [$if], index => 1);
+                    # (Proj 1, $t naming the label behind: the way round)
+                    $ll->{loop}->set_backedge_ctrl(
+                        $factory->make_cfg('Proj', inputs => [$if], index => 1));
                     $sim->set_control($factory->make_cfg('Proj',
                         inputs => [$if], index => 0));
                     undef $label_loop;
@@ -15210,6 +15212,7 @@ class SoN::FromOptree 0.01 {
         @$frame{qw(loop breaks nexts phis)} = ($loop_node, \@break_projs, [], \%phis);
         my $exit_proj = _walk_loop_body($cv, $cond_start, $sim, $factory,
             $opmap, {}, $visited, $loop_node, \@break_projs);
+        _set_loop_back($loop_node, $sim);
         _refuse_unscouted_writes($sim, $pre_scope, \%phis);
         # A LOOP MAY EXIT BY ITS BREAK ALONE. `while (1) { ... last if C }` has
         # NO header test -- perl folds the constant condition away entirely, so
@@ -15281,6 +15284,7 @@ class SoN::FromOptree 0.01 {
         # it when the slot is dead post-loop (the common `last` that only breaks),
         # and a live read turns it into a loud GAP rather than a miscompile.
         _bind_break_exit_phis($factory, $sim, $exit_region, \@break_projs, $mem_phi);
+        _one_way_loop($loop_node);
         return;
     }
 
@@ -15452,9 +15456,7 @@ class SoN::FromOptree 0.01 {
         my $range_cond = $factory->make('NumGt',
             inputs => [$bound, $i_phi],
             stamp  => SoN::IR::Stamp->new(type => 'Boolean'));
-        # Structural control edge to the Loop (see _walk_loop_body), so the
-        # backend recovers this continuation test unambiguously.
-        $range_cond->set_control_in($loop_node);
+        # (its If is made where the body begins: _loop_test_if, below)
 
         # A body element store advances memory; seed a header memory-Phi from the
         # pre-loop memory (memory analog of the carried-slot Phi; no stamp).
@@ -15474,10 +15476,8 @@ class SoN::FromOptree 0.01 {
         # statement every iteration (`$s=$s+$i unless $i==2` over 1..3 gave 106,
         # not 104, zhi 019f5a27).
 
-        # Phase 3: body under Proj(loop,0); exit on Proj(loop,1).
-        my $body_proj = $factory->make_cfg('Proj', inputs => [$loop_node], index => 0);
-        my $exit_proj = $factory->make_cfg('Proj', inputs => [$loop_node], index => 1);
-        $sim->set_control($body_proj);
+        # Phase 3: body under the test's Proj 0; exit on its Proj 1.
+        my ($body_proj, $exit_proj) = _loop_test_if($factory, $sim, $range_cond);
 
         # THE RANGE FORM ALIASES ITS ITERATOR TOO, and an implicit `$_` here is
         # the same package scalar the array form binds -- so the same demotion
@@ -15552,6 +15552,7 @@ class SoN::FromOptree 0.01 {
         @$frame{qw(loop breaks nexts phis)} = ($loop_node, \@break_projs, [], \%phis);
         _walk_loop_body($cv, $body_start, $sim, $factory, $opmap, {}, $visited,
             undef, \@break_projs, 1);
+        _set_loop_back($loop_node, $sim);
         _refuse_unscouted_writes($sim, $pre_scope, \%phis, $i_targ);
         # THE ALIAS ENDS WITH THE LOOP, as the array form restores it: a nested
         # `for $p (5..5)` inside `for $p (1..2)` left the inner binding for the
@@ -15584,6 +15585,7 @@ class SoN::FromOptree 0.01 {
         $sim->set_control($exit_region);
         _entry_store($factory, $sim, $iter_save->{target}, $iter_save->{node})
             if $iter_save;
+        _one_way_loop($loop_node);
         return;
     }
 
@@ -16192,14 +16194,11 @@ class SoN::FromOptree 0.01 {
         my $range_cond = $factory->make('NumGt',
             inputs => [$len, $i_phi],
             stamp  => SoN::IR::Stamp->new(type => 'Boolean'));
-        $range_cond->set_control_in($loop_node);
 
-        # Phase 3: body under Proj(loop,0); exit on Proj(loop,1). Bind $x to the
-        # element read Subscript(arr, i_phi, memory) BEFORE walking the body, so a
-        # body reference to $x reads element[i].
-        my $body_proj = $factory->make_cfg('Proj', inputs => [$loop_node], index => 0);
-        my $exit_proj = $factory->make_cfg('Proj', inputs => [$loop_node], index => 1);
-        $sim->set_control($body_proj);
+        # Phase 3: body under the test's Proj 0; exit on its Proj 1. Bind $x to
+        # the element read Subscript(arr, i_phi, memory) BEFORE walking the
+        # body, so a body reference to $x reads element[i].
+        my ($body_proj, $exit_proj) = _loop_test_if($factory, $sim, $range_cond);
         my $elem = $factory->make('Subscript', kind => 'array',
             inputs => [$array, $i_phi], mem => $sim->memory,
             (defined $elem_stamp ? (stamp => $elem_stamp) : ()));
@@ -16495,12 +16494,19 @@ class SoN::FromOptree 0.01 {
                 && scalar($array->v1_inputs->@*) == 1
                 && $array->v1_inputs->[0]->can('operation')
                 && $array->v1_inputs->[0]->operation eq 'PadAccess') {
+                # (CARRIED ROUND THE LOOP like any variable the body writes:
+                # a Phi at the Loop, its back edge the new value -- the pass
+                # is still a pass, and the loop leaves by its exit. Left
+                # bound to the body's value with no exit, the loop had no way
+                # round and a Phi of one input: probes al1, al2.)
                 my $slot = $array->v1_inputs->[0]->targ;
+                if (defined $slot && !$phis{$slot} && defined $pre_scope->{$slot}) {
+                    $phis{$slot} = _make_loop_phi($factory, $loop_node, $pre_scope->{$slot});
+                    push @$mutated, $slot;
+                }
                 $sim->define($slot, $new_val) if defined $slot;
-                return;
             }
-
-            if (defined $new_val && $new_val != $elem) {
+            elsif (defined $new_val && $new_val != $elem) {
                 my $lvalue = $factory->make('Subscript', kind => 'array',
                     inputs => [$array, $i_phi]);
                 my $store = $factory->make('Assign',
@@ -16690,7 +16696,8 @@ class SoN::FromOptree 0.01 {
         }
 
         # Phase 4: back-edges. The induction step is +1; carried slots patch like
-        # the while loop.
+        # the while loop. (The pass ends after the write-back above.)
+        _set_loop_back($loop_node, $sim);
         my $one = $factory->make('Constant',
             value => 1, const_type => 'integer',
             stamp => SoN::IR::Stamp->new(type => 'Int'));
@@ -16753,6 +16760,42 @@ class SoN::FromOptree 0.01 {
                     ? $acc_phi
                     : _make_count($factory, $acc_phi, undef));
         }
+        _one_way_loop($loop_node);
+        return;
+    }
+
+    # _loop_test_if($factory, $sim, $cond) -> (body Proj, exit Proj): A LOOP'S
+    # TEST (wire v2's `loop` profile) is an If on the control the pass has
+    # reached -- the Loop, or the last effect of its condition pinned after it
+    # (`while (my $n = shift @w)`: the shift). $cond is an ordinary value.
+    # Proj 0 is the body, where the walk goes on; Proj 1 the header's way out.
+    sub _loop_test_if ($factory, $sim, $cond) {
+        my $if = $factory->make_cfg('If', inputs => [$sim->control, $cond]);
+        my $body = $factory->make_cfg('Proj', inputs => [$if], index => 0);
+        my $exit = $factory->make_cfg('Proj', inputs => [$if], index => 1);
+        $sim->set_control($body);
+        return ($body, $exit);
+    }
+
+    # _set_loop_back($loop_node, $sim): THE WAY ROUND (wire v2's `loop`
+    # profile) -- the Loop's second input is the control the pass ends at:
+    # the body's end, or the latch where the `next`s meet it.
+    # A PASS THAT ALWAYS RETURNS (every path in the body leaves the sub, and
+    # no `next` goes round) has no way round: the Loop keeps one input, and
+    # _one_way_loop drops its Phis' back inputs.
+    sub _set_loop_back ($loop_node, $sim) {
+        return if @LOOP_STACK && delete $LOOP_STACK[-1]{no_way_round};
+        $loop_node->set_backedge_ctrl($sim->control) if defined $sim->control;
+        return;
+    }
+
+    # _one_way_loop($loop_node): A LOOP NO PATH GOES ROUND has one input, and
+    # its Phis one input each, the value it is entered with (the plan's 3.6).
+    sub _one_way_loop ($loop_node) {
+        return if $loop_node->inputs->@* > 1;
+        $_->drop_backedge for grep {
+            $_->operation eq 'Phi' && $_->region == $loop_node && $_->inputs->@* > 1
+        } $loop_node->consumers->@*;
         return;
     }
 
@@ -16979,7 +17022,9 @@ class SoN::FromOptree 0.01 {
                 # THE BODY GOES ROUND BY AN EARLIER `next`, as a `last` after
                 # one does: left as the body's end, the return's path also
                 # joined the latch -- one Proj with two successors.
-                _adopt_first_next($sim);
+                # (with none, no path goes round: _set_loop_back)
+                $LOOP_STACK[-1]{no_way_round} = 1
+                    if !_adopt_first_next($sim) && @LOOP_STACK;
                 last;
             }
             if ($name eq 'return' || $name eq 'leavesub' || $name eq 'leavesublv') {
@@ -17192,10 +17237,10 @@ class SoN::FromOptree 0.01 {
                     to_repr   => 'Boolean',
                     inputs    => [$cond],
                     stamp     => SoN::IR::Stamp->new(type => 'Boolean'));
-                $test->set_control_in($spin);
-                $factory->make_cfg('Proj', inputs => [$spin], index => 0);
-                my $out = $factory->make_cfg('Proj',
-                    inputs => [$spin], index => 1);
+                $sim->set_control($spin);
+                # (the test's Proj 0 is the whole pass: the way round)
+                my ($round, $out) = _loop_test_if($factory, $sim, $test);
+                $spin->set_backedge_ctrl($round);
                 my $join = $factory->make_cfg('Region', inputs => [$out]);
                 $spin->set_region($join);
                 $sim->set_control($join);
@@ -17250,12 +17295,7 @@ class SoN::FromOptree 0.01 {
                     my $neg = _negate_comparison($cond, $factory)
                         or die "GAP: non-comparison `last if` guard inside a loop"
                              . " body not yet lowered\n";
-                    $neg->set_control_in($loop_node);
-                    my $body_proj = $factory->make_cfg('Proj',
-                        inputs => [$loop_node], index => 0);
-                    $exit_proj = $factory->make_cfg('Proj',
-                        inputs => [$loop_node], index => 1);
-                    $sim->set_control($body_proj);
+                    (undef, $exit_proj) = _loop_test_if($factory, $sim, $neg);
                 }
                 # Continue on the false arm -- the rest of the body runs when the
                 # `last` guard is NOT taken.
@@ -17845,13 +17885,7 @@ class SoN::FromOptree 0.01 {
                           . " comparison is not yet lowered\n" unless $neg;
                         $cond = $neg;
                     }
-                    $cond->set_control_in($loop_node);
-
-                    my $body_proj = $factory->make_cfg('Proj',
-                        inputs => [$loop_node], index => 0);
-                    $exit_proj = $factory->make_cfg('Proj',
-                        inputs => [$loop_node], index => 1);
-                    $sim->set_control($body_proj);
+                    (undef, $exit_proj) = _loop_test_if($factory, $sim, $cond);
                 }
                 else {
                     my $if_node = $factory->make_cfg('If', inputs => [$sim->control, $cond]);

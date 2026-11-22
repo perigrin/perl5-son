@@ -22,7 +22,11 @@ use B::SoN::EffectTable ();
 #   on it, the catch Region and its Phis, the $@ store after it) are dropped,
 #   and so is the store of "" to $@ where its body ends: its join is v1's
 #   again, the body's end its way in (the die, where the body always dies),
-#   and a memory edge to a dropped version names the one it followed.
+#   and a memory edge to a dropped version names the one it followed;
+# - a loop (the `loop` profile) loses its back input, and its test If: the
+#   If's Projs are the Loop's again and its condition is pinned on the Loop,
+#   as v1 had them; the Phis of a loop no path goes round get their init
+#   again as their back input.
 #
 # The ids differ from v1's: v2 lists a node's memory before it.
 #
@@ -62,6 +66,7 @@ sub as_v1 ($wire) {
         my $nodes = $g->{nodes} // [];
         # (dropped: the ids are positions again below, renumbered)
         my $dropped = _drop_catch_edges($g);
+        $dropped = _loop_as_v1($g) || $dropped;
 
         # A MakeCell is not on v1's chain: what follows it follows what it
         # does, wherever control is named (SoN::Serialize::JSON::_on_chain).
@@ -130,6 +135,56 @@ sub as_v1 ($wire) {
         $g->{returns} = [ map { $re->($_) } ( $g->{returns} // [] )->@* ];
     }
     return $w;
+}
+
+# _loop_as_v1($graph) -> true where a test If was dropped: the `loop`
+# profile's shape out of a decoded v2 graph, in place (see as_v1). A Loop's
+# test is the If its chain comes to through pinned nodes alone whose Proj 1
+# is a way into the exit Region the Loop heads.
+sub _loop_as_v1 ($g) {
+    my $nodes = $g->{nodes} // [];
+    my %by = map { $_->{id} => $_ } @$nodes;
+    my %succ;
+    push $succ{ $_->{control_in} }->@*, $_ for grep { defined $_->{control_in} } @$nodes;
+    push $succ{ $_->{inputs}[0] }->@*, $_ for grep { $_->{op} =~ /\A(?:If|Proj)\z/ && defined $_->{inputs}[0] } @$nodes;
+    my %drop;
+    for my $L ( grep { $_->{op} eq 'Loop' } @$nodes ) {
+        # (a loop no path goes round: v1 gave its Phis a back input all the
+        # same, from a pass that never went round -- here, their init)
+        if ( $L->{inputs}->@* == 1 ) {
+            push $_->{inputs}->@*, $_->{inputs}[0]
+                for grep { $_->{op} eq 'Phi' && ( ( $_->{fields} // {} )->{region} // -1 ) == $L->{id} && $_->{inputs}->@* == 1 } @$nodes;
+        }
+        $L->{inputs} = [ $L->{inputs}[0] ];
+        $L->{control_in} = $L->{inputs}[0];
+        my $c = $L;
+        while (1) {
+            my %u;
+            my @s = grep { $_->{op} ne 'Phi' && !$u{ $_->{id} }++ } ( $succ{ $c->{id} } // [] )->@*;
+            last unless @s == 1;
+            my $s = $s[0];
+            if ( $s->{op} eq 'If' ) {
+                my @p = grep { $_->{op} eq 'Proj' } ( $succ{ $s->{id} } // [] )->@*;
+                my ($out) = grep { ( ( $_->{fields} // {} )->{index} // 0 ) == 1 } @p;
+                unless ( $out && grep { $_->{op} eq 'Region' && ( $_->{head} // -1 ) == $L->{id} && grep { $_ == $out->{id} } $_->{inputs}->@* } @$nodes ) {
+                    # (a branch in the test, `while ($n && f($n))`: the chain
+                    # goes on where its arms meet; v1 pinned it on the Loop)
+                    my ($r) = grep { $_->{op} eq 'Region' && ( $_->{head} // -1 ) == $s->{id} } @$nodes;
+                    last unless $r;
+                    $c = $r;
+                    next;
+                }
+                $_->{inputs} = [ $L->{id} ] for @p;
+                $by{ $s->{inputs}[1] }{control_in} = $L->{id};
+                $drop{ $s->{id} } = 1;
+                last;
+            }
+            last if $s->{op} =~ /\A(?:Region|Loop|Proj|Return|Unwind|Exc|Start)\z/;
+            $c = $s;
+        }
+    }
+    @$nodes = grep { !$drop{ $_->{id} } } @$nodes;
+    return scalar keys %drop;
 }
 
 # _drop_catch_edges($graph): the `eval` profile's edges out of a decoded v2

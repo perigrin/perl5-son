@@ -122,14 +122,15 @@ subtest 'an unconditional next ends the body, and the dead tail is dropped' => s
 #
 # The two forms are deliberately asymmetric, and both halves are asserted here:
 #
-#   header `while (C)`   -- C attaches to the Loop by control_in; Projs hang off
-#                           the Loop itself. No If.
+#   header `while (C)`   -- C is the condition of the If on the Loop (wire
+#                           v2's `loop` profile); its Projs are the body and
+#                           the way out.
 #   mid-body `last if C` -- C is consumed by a real If; a break is a genuine
 #                           control split, so it branches.
 #
 # Asserted because a reader auditing this graph for liveness WILL read the NumNe
 # as an unwired dead node and "fix" it into an infinite loop that now branches.
-subtest 'a written header condition attaches to the Loop' => sub {
+subtest 'a written header condition is the test If on the Loop' => sub {
     my $g = graph_of('sub { my $x = 0; while ($x != 3) { $x = $x + 1; } $x }');
     ok($g, 'the graph exists') or return;
 
@@ -137,12 +138,13 @@ subtest 'a written header condition attaches to the Loop' => sub {
     my ($cmp)  = ops_of($g, 'NumNe');
     ok($loop && $cmp, 'the Loop and its condition both exist') or return;
 
-    ok($cmp->control_in, 'the condition carries a control edge') or return;
-    is($cmp->control_in->id, $loop->id,
-        'the header condition attaches to the Loop -- not dead, just not an If');
-
-    is(scalar(ops_of($g, 'If')), 0,
-        'a header-only loop builds no If: the Loop IS the test');
+    # (wire v2's `loop` profile: the header test is an If on the Loop, its
+    # condition an ordinary value)
+    my @if = ops_of($g, 'If');
+    is(scalar(@if), 1, 'a header-only loop builds one If: its test') or return;
+    is($if[0]->inputs->[0]->id, $loop->id, '... on the Loop');
+    is($if[0]->inputs->[1]->id, $cmp->id, '... of the header condition');
+    ok(!$cmp->control_in, 'the condition itself is pinned to nothing');
 };
 
 # THE OTHER HALF. A mid-body break is a real control split, so its condition is

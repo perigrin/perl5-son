@@ -36,7 +36,9 @@ subtest 'while loop emits the corpus Loop/Phi shape' => sub {
     my $loop = $loops[0];
     is($loop->inputs->[0]->operation, 'Start', 'Loop entry control is Start');
 
-    is([nodes_of($g, 'If')], [], 'no If node -- the Loop IS the header');
+    my @if = nodes_of($g, 'If');
+    is(scalar @if, 1, 'one If: the test (wire v2 `loop` profile)');
+    is($if[0] && $if[0]->inputs->[0]->id, $loop->id, '... on the Loop');
 
     my @phis = nodes_of($g, 'Phi');
     is(scalar @phis, 2, 'two header Phis (one per mutated variable)');
@@ -68,10 +70,12 @@ subtest 'while loop emits the corpus Loop/Phi shape' => sub {
     ok(defined $s_phi->stamp, '$s Phi is stamped');
     is($s_phi->stamp->type, 'Int', '$s Phi stamp is Int');
 
-    # Control shape: Proj(loop,0) body, Proj(loop,1) exit, Region(exit Proj),
-    # Return control = that Region, Return value = the $s Phi.
-    my @projs = grep { $_->inputs->[0]->id eq $loop->id } nodes_of($g, 'Proj');
-    is(scalar @projs, 2, 'two Projs hang directly on the Loop');
+    # Control shape: Proj(test,0) body, Proj(test,1) exit, Region(exit Proj),
+    # Return control = that Region, Return value = the $s Phi; the Loop's
+    # second input is the body's end (wire v2 `loop` profile).
+    my @projs = grep { $_->inputs->[0]->id eq $if[0]->id } nodes_of($g, 'Proj');
+    is(scalar @projs, 2, 'two Projs hang on the test');
+    is(scalar $loop->inputs->@*, 2, 'the Loop has its way round');
     my ($exit_proj) = grep { $_->index == 1 } @projs;
     ok(defined $exit_proj, 'has the exit Proj (index 1)');
 
@@ -95,7 +99,7 @@ subtest 'unchanged variables read through, no spurious Phi' => sub {
     ok(defined $k_read, 'the invariant $k is read as its binding, not a Phi');
 };
 
-subtest 'topological order cuts only the Phi backedges' => sub {
+subtest 'topological order cuts only the Phi and Loop backedges' => sub {
     # The serializer emits nodes in graph order and the Chalk loader resolves
     # inputs single-pass, deferring ONLY a Phi's inputs[1] (the sanctioned
     # backedge patch). So the order contract is: every input precedes its
@@ -107,8 +111,9 @@ subtest 'topological order cuts only the Phi backedges' => sub {
     $pos{ $nodes->[$_]->id } = $_ for 0 .. $nodes->$#*;
     my @violations;
     for my $node ($nodes->@*) {
+        # (and a Loop's back input, the end of its pass: wire v2 `loop`)
         my $is_loop_phi = $node->operation eq 'Phi'
-            && $node->region->operation eq 'Loop';
+            && $node->region->operation eq 'Loop' || $node->operation eq 'Loop';
         my $ins = $node->inputs;
         for my $slot (0 .. $ins->$#*) {
             next if $is_loop_phi && $slot == 1;   # the one sanctioned forward edge
@@ -121,7 +126,7 @@ subtest 'topological order cuts only the Phi backedges' => sub {
                 if $pos{ $in->id } > $pos{ $node->id };
         }
     }
-    is(\@violations, [], 'no forward references outside Phi backedges');
+    is(\@violations, [], 'no forward references outside Phi and Loop backedges');
 };
 
 # A RETURN IN THE BODY IS A FUNCTION EXIT: an edge from inside the loop to the

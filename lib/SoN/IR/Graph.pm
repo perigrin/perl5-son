@@ -258,9 +258,11 @@ class SoN::IR::Graph {
         # yields the original left-to-right visit order.
         my $producers_of = sub ($n) {
             my @preds;
+            # (a loop Phi's back input, and a Loop's: the end of its pass)
             my $loop_phi = $n->operation() eq 'Phi'
                 && defined $n->region()
-                && $n->region()->operation() eq 'Loop';
+                && $n->region()->operation() eq 'Loop'
+                || $n->operation() eq 'Loop';
             my $slot = -1;
             for my $input ($n->v1_inputs->@*) {
                 $slot++;
