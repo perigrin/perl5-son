@@ -1,0 +1,289 @@
+aue1.pl: REFUSED no program graph
+aue2.pl: REFUSED GAP: T2: out of its slices (a statement Call builtin sleep)
+aue3.pl: SAME 
+aue4.pl: REFUSED GAP: T2: out of its slices (a statement Call builtin srand)
+aue5.pl: REFUSED GAP: T2: out of its slices (an each in a program with a keys or values (which reset it, B::SoN places them nowhere))
+auk1.pl: WRONG got=[after ] want=[] (exit differs)
+auk10.pl: REFUSED GAP: T2: out of its slices (an array first made in an arm or a loop body)
+auk11.pl: WRONG got=[ok ] want=[died ]
+auk12.pl: SAME 
+auk13.pl: WRONG got=[[] ] want=[[a ] ]
+auk14.pl: SAME 
+auk15.pl: REFUSED GAP: T2: out of its slices (a loop body that ends neither going round nor leaving)
+auk16.pl: WRONG got=[end ] want=[died ]
+auk17.pl: SAME 
+auk18.pl: REFUSED GAP: T2: out of its slices (a loop that never goes round)
+auk2.pl: SAME 
+auk3.pl: WRONG got=[p1 p2 [] ] want=[p1 [m ] ]
+auk4.pl: WRONG got=[[] ] want=[[w1 ] ]
+auk5.pl: WRONG got=[after ] want=[] (exit differs)
+auk6.pl: WRONG got=[v [] ] want=[u [f1 ] ]
+auk7.pl: SAME 
+auk8.pl: SAME 
+auk9.pl: SAME 
+aum1.pl: WRONG got=[2 ] want=[1 ]
+aum10.pl: WRONG got=[1 [] ] want=[1 [m ] ]
+aum11.pl: WRONG got=[[] ] want=[[m ] ]
+aum12.pl: REFUSED no program graph
+aum13.pl: WRONG got=[[] ] want=[[m ] ]
+aum14.pl: REFUSED GAP: T2: out of its slices (a phi stamped List)
+aum15.pl: WRONG got=[ok ] want=[died ]
+aum16.pl: REFUSED GAP: T2: out of its slices (a phi stamped List)
+aum17.pl: SAME 
+aum18.pl: SAME 
+aum19.pl: SAME 
+aum2.pl: WRONG got=[2 ] want=[1 ]
+aum20.pl: SAME 
+aum21.pl: SAME 
+aum22.pl: SAME 
+aum23.pl: SAME 
+aum24.pl: REFUSED no program graph
+aum25.pl: WRONG got=[2 ] want=[1 ]
+aum26.pl: WRONG got=[2 ] want=[1 ]
+aum3.pl: WRONG got=[2 5 ] want=[1 5 ]
+aum30.pl: WRONG got=[2 2 ] want=[2 1 ]
+aum31.pl: WRONG got=[1 1 ] want=[2 1 ]
+aum32.pl: SAME 
+aum33.pl: SAME 
+aum34.pl: SAME 
+aum35.pl: SAME 
+aum36.pl: SAME 
+aum37.pl: WRONG got=[3 1 1 ] want=[3 1 2 ]
+aum38.pl: SAME 
+aum4.pl: WRONG got=[252 ] want=[151 ]
+aum40.pl: WRONG got=[1 2 0 ] want=[1 0 ]
+aum41.pl: SAME 
+aum42.pl: WRONG got=[1 2 0 1 2 ] want=[1 0 1 2 ]
+aum43.pl: WRONG got=[5 ] want=[3 ]
+aum44.pl: SAME 
+aum45.pl: WRONG got=[1,2,,1,2 ] want=[1,,1,2 ]
+aum46.pl: WRONG got=[3 ] want=[2 ]
+aum5.pl: REFUSED no program graph
+aum50.pl: WRONG got=[1 2 ] want=[9 9 ]
+aum51.pl: WRONG got=[11 22 ] want=[19 29 ]
+aum52.pl: SAME 
+aum53.pl: SAME 
+aum54.pl: REFUSED GAP: T2: out of its slices (a read of $_ B::SoN folds to the element it aliases, where the program writes $_ (B::SoN sees no write through $_))
+aum55.pl: SAME 
+aum56.pl: WRONG got=[1 2 ] want=[9 9 ]
+aum57.pl: SAME 
+aum58.pl: SAME 
+aum6.pl: WRONG got=[in2 2 ] want=[in2 1 ]
+aum60.pl: WRONG got=[e ] want=[A:main::DESTROY e ]
+aum61.pl: WRONG got=[e ] want=[auto e ]
+aum62.pl: WRONG got=[e ] want=[d e ]
+aum63.pl: REFUSED load: from_json failed: GAP: a DESTROY method (B1::DESTROY): chalk never destroys an object, so it would never run
+aum64.pl: REFUSED load: from_json failed: GAP: a DESTROY method (B2::DESTROY): chalk never destroys an object, so it would never run
+aum7.pl: WRONG got=[2 ] want=[1 ]
+aum70.pl: WRONG got=[0 ] want=[1 ]
+aum71.pl: WRONG got=[0 ] want=[1 ]
+aum72.pl: WRONG got=[0 ] want=[2 ]
+aum73.pl: REFUSED load: from_json failed: GAP: a read through an element that is not there, which perl makes (autovivification) (in main::__PROGRAM__)
+aum74.pl: WRONG got=[0 ] want=[1 ]
+aum75.pl: WRONG got=[0 ] want=[1 ]
+aum76.pl: WRONG got=[ ] want=[opt ]
+aum77.pl: SAME 
+aum78.pl: SAME 
+aum79.pl: SAME 
+aum8.pl: WRONG got=[mid2 2 ] want=[mid1 1 ]
+aum9.pl: WRONG got=[2 ] want=[1 ]
+aun1.pl: REFUSED no program graph
+aun10.pl: SAME 
+aun100.pl: SAME 
+aun101.pl: SAME 
+aun102.pl: SAME 
+aun103.pl: SAME 
+aun104.pl: SAME 
+aun105.pl: SAME 
+aun106.pl: SAME 
+aun107.pl: REFUSED GAP: T2: out of its slices (a read through a reference waiting across a hash store)
+aun108.pl: SAME 
+aun110.pl: SAME 
+aun111.pl: SAME 
+aun112.pl: SAME 
+aun113.pl: SAME 
+aun114.pl: SAME 
+aun115.pl: SAME 
+aun116.pl: REFUSED GAP: T2: out of its slices (a list perl may alias (Call) passed where a sub writes @_)
+aun117.pl: SAME 
+aun118.pl: SAME 
+aun119.pl: SAME 
+aun12.pl: SAME 
+aun120.pl: SAME 
+aun121.pl: SAME 
+aun122.pl: SAME 
+aun123.pl: SAME 
+aun124.pl: SAME 
+aun125.pl: SAME 
+aun126.pl: REFUSED GAP: T2: out of its slices (a list assignment to an array or hash)
+aun127.pl: SAME 
+aun128.pl: SAME 
+aun129.pl: SAME 
+aun12a.pl: SAME 
+aun12b.pl: SAME 
+aun12c.pl: SAME 
+aun12d.pl: SAME 
+aun12e.pl: REFUSED GAP: T2: out of its slices (a slice taken as a scalar (Coerce))
+aun12f.pl: SAME 
+aun13.pl: SAME 
+aun130.pl: SAME 
+aun131.pl: SAME 
+aun132.pl: SAME 
+aun133.pl: REFUSED GAP: T2: out of its slices (a direct call with no sub)
+aun134.pl: SAME 
+aun135.pl: REFUSED GAP: T2: out of its slices (a list assignment to a slice of @_)
+aun136.pl: SAME 
+aun137.pl: REFUSED GAP: T2: out of its slices (sub main::m1 reads @_ other than by shifts, $_[N] or a signature)
+aun138.pl: SAME 
+aun139.pl: REFUSED GAP: T2: out of its slices (PadAccess)
+aun14.pl: SAME 
+aun140.pl: SAME 
+aun141.pl: SAME 
+aun142.pl: SAME 
+aun143.pl: SAME 
+aun144.pl: SAME 
+aun145.pl: SAME 
+aun146.pl: SAME 
+aun147.pl: SAME 
+aun148.pl: SAME 
+aun149.pl: SAME 
+aun15.pl: SAME 
+aun150.pl: SAME 
+aun151.pl: SAME 
+aun152.pl: SAME 
+aun153.pl: SAME 
+aun154.pl: SAME 
+aun155.pl: SAME 
+aun156.pl: SAME 
+aun16.pl: WRONG got=[1 2 0 1 2 ] want=[1 0 1 2 ]
+aun160.pl: REFUSED load: from_json failed: GAP: a DESTROY method (E::DESTROY): chalk never destroys an object, so it would never run
+aun161.pl: WRONG got=[e ] want=[main::DESTROY e ]
+aun162.pl: WRONG got=[none ] want=[viv ]
+aun163.pl: WRONG got=[0 ] want=[3 ]
+aun164.pl: REFUSED load: from_json failed: GAP: a dereference nothing reads, which may still die (of undef, under strict refs) (in main::__PROGRAM__)
+aun165.pl: WRONG got=[none ] want=[viv ]
+aun166.pl: SAME 
+aun167.pl: SAME 
+aun168.pl: SAME 
+aun169.pl: WRONG got=[: ] want=[a:b ]
+aun16a.pl: SAME 
+aun16b.pl: REFUSED load: from_json failed: GAP: a read through an element that is not there, which perl makes (autovivification) (in main::__PROGRAM__)
+aun16c.pl: WRONG got=[0 ] want=[1 ]
+aun16d.pl: REFUSED load: from_json failed: GAP: a DESTROY method (main::DESTROY): chalk never destroys an object, so it would never run
+aun16e.pl: REFUSED load: from_json failed: GAP: a DESTROY method (T::DESTROY): chalk never destroys an object, so it would never run
+aun16f.pl: REFUSED load: from_json failed: GAP: a DESTROY method (T::DESTROY): chalk never destroys an object, so it would never run
+aun17.pl: SAME 
+aun170.pl: SAME 
+aun171.pl: SAME 
+aun172.pl: SAME 
+aun173.pl: REFUSED no program graph
+aun174.pl: REFUSED no program graph
+aun175.pl: REFUSED no program graph
+aun176.pl: SAME 
+aun177.pl: REFUSED GAP: T2: out of its slices (an each in a program with a keys or values (which reset it, B::SoN places them nowhere))
+aun178.pl: SAME 
+aun179.pl: SAME 
+aun17a.pl: SAME 
+aun17b.pl: WRONG got=[11 22 1 2 ] want=[19 29 9 9 ]
+aun17c.pl: SAME 
+aun17d.pl: SAME 
+aun17e.pl: REFUSED no program graph
+aun17f.pl: REFUSED GAP: T2: out of its slices (the value of a list assignment to scalars)
+aun18.pl: SAME 
+aun19.pl: SAME 
+aun2.pl: SAME 
+aun20.pl: WRONG got=[2 2 2 ] want=[2 2 1 ]
+aun21.pl: SAME 
+aun22.pl: SAME 
+aun23.pl: SAME 
+aun24.pl: SAME 
+aun25.pl: SAME 
+aun26.pl: SAME 
+aun27.pl: SAME 
+aun28.pl: SAME 
+aun29.pl: SAME 
+aun3.pl: SAME 
+aun30.pl: SAME 
+aun31.pl: SAME 
+aun33.pl: SAME 
+aun34.pl: SAME 
+aun35.pl: SAME 
+aun36.pl: SAME 
+aun37.pl: REFUSED GAP: T2: out of its slices (a list assignment to an array or hash)
+aun38.pl: SAME 
+aun4.pl: SAME 
+aun40.pl: SAME 
+aun41.pl: LOUD a method named at run time by other than a plain name: stopped (chalk, T2)
+aun42.pl: SAME 
+aun43.pl: SAME 
+aun44.pl: SAME 
+aun45.pl: SAME 
+aun46.pl: SAME 
+aun47.pl: SAME 
+aun48.pl: REFUSED GAP: T2: out of its slices (Call builtin splice)
+aun49.pl: SAME 
+aun5.pl: SAME 
+aun50.pl: SAME 
+aun51.pl: REFUSED no program graph
+aun52.pl: SAME 
+aun53.pl: SAME 
+aun55.pl: SAME 
+aun56.pl: SAME 
+aun57.pl: SAME 
+aun58.pl: SAME 
+aun59.pl: SAME 
+aun5a.pl: SAME 
+aun5b.pl: SAME 
+aun5c.pl: SAME 
+aun5d.pl: SAME 
+aun6.pl: SAME 
+aun60.pl: SAME 
+aun61.pl: SAME 
+aun62.pl: SAME 
+aun63.pl: SAME 
+aun64.pl: SAME 
+aun7.pl: SAME 
+aun70.pl: REFUSED load: from_json failed: GAP: a call that may die under a `local` ($main::g), in a sub with no eval (in main::t)
+aun71.pl: SAME 
+aun72.pl: SAME 
+aun73.pl: REFUSED GAP: T2: out of its slices (a local of an element where a die may unwind past it)
+aun74.pl: SAME 
+aun75.pl: SAME 
+aun76.pl: REFUSED GAP: T2: out of its slices (an eval whose body returns)
+aun77.pl: SAME 
+aun78.pl: SAME 
+aun79.pl: REFUSED GAP: T2: out of its slices (a phi stamped List)
+aun8.pl: SAME 
+aun80.pl: REFUSED GAP: T2: out of its slices (a require of No/Such/Mod.pm, not compiled in)
+aun81.pl: REFUSED GAP: T2: out of its slices (a direct call with no sub)
+aun82.pl: REFUSED GAP: T2: out of its slices (an eval whose body returns)
+aun83.pl: REFUSED GAP: T2: out of its slices (an open of a file (or of what is not a reference to a constant string))
+aun84.pl: SAME 
+aun85.pl: SAME 
+aun87.pl: SAME 
+aun88.pl: SAME 
+aun89.pl: SAME 
+aun9.pl: SAME 
+aun90.pl: SAME 
+aun91.pl: SAME 
+aun92.pl: WRONG got=[2 ] want=[1 m ]
+aun93.pl: SAME 
+aun94.pl: SAME 
+aun95.pl: REFUSED no program graph
+aun96.pl: SAME 
+aun97.pl: SAME 
+aun98.pl: WRONG got=[2 3 ] want=[1 3 ]
+aun99.pl: SAME 
+aux1.pl: REFUSED GAP: T2: out of its slices (Call builtin log)
+aux10.pl: SAME 
+aux11.pl: REFUSED GAP: T2: out of its slices (an eval whose body returns)
+aux12.pl: REFUSED load: from_json failed: GAP: a read through an element that is not there, which perl makes (autovivification) (in main::__PROGRAM__)
+aux2.pl: REFUSED GAP: T2: out of its slices (Call builtin sqrt)
+aux3.pl: WRONG got=[2 [] ] want=[1 [died] ]
+aux4.pl: WRONG got=[after ] want=[] (exit differs)
+aux5.pl: REFUSED GAP: T2: out of its slices (an eval whose body returns)
+aux6.pl: REFUSED GAP: T2: out of its slices (a phi stamped List)
+aux7.pl: LOUD chalk: refused at run time: a call of what is not a code value (T2)
+aux8.pl: SAME 
+aux9.pl: SAME 
+LOUD=2 REFUSED=55 SAME=176 WRONG=55

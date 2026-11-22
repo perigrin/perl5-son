@@ -8,6 +8,10 @@
 - `probes/p/`, `probes/q/`: the 418 probe programs (perl in, compared with
   chalk's output), with the run logs (`_all.log`, `_run*.log`).
   `probes/w/`: programs whose wires the report quotes.
+  `probes/a/`: the 288 one-line probes of the 2026-11-22 goal audit
+  (../2026-11-22-memory-model-goal-audit.md, section 2), named `au` plus the
+  audit's batch letter and number (`aun1` is its batch n, probe 1);
+  `_run1.log` is their sweep at producer 2d67c84, chalk 287e5da1 (55 WRONG).
 - `tools/`: the audit's scripts -- `ch.sh`/`runp.sh` (run a probe: B::SoN,
   then chalk T2, then lli, against perl), `d.pl`/`dump.pl` (compact wire
   dump), `census.pl` (which effects are on the memory chain),
