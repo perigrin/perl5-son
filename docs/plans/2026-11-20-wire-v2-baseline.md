@@ -377,3 +377,30 @@ ratchet         PASS  prove exit 0; chalk's lib compared; rows that fell: 0; new
 ```
 
 The first gate run (5d1f110 / 81f674dc) found three things fixed since: chalk's copy of a versioned `my` aggregate took the variable's storage, not what `my ($c, @x) = @_` bound (t2-slurpy-args.t: " 1 2" for "1 2 9 1 2"); as_v1 handed an external read memory v1 never had (corpus 006 REFUSED by the deparser, 430 -> 429); two chalk tests expected refusals stage 7 lifts, and the intervals oracle named 8 Counts by their old memory input.
+
+## 14. After stage 8
+
+Heads: producer `v2-s8` (fd3b147 to d326a6f, rebased on stage 7's 0497211), chalk `v2-s8` (fab4a30f to 99ef3cc0, on 22dcedc4). The eval exceptional edge: profile `["mem","eval"]` (docs/memory/an-eval-s-die-has-its-way-out.md).
+
+`tools/gates.sh` at producer d326a6f, chalk 99ef3cc0:
+
+```
+producer-suite  PASS  775 files, 0 failing [10m29s]
+chalk-suite     PASS  927 files, 0 failing [74m12s]
+census          PASS  ROUNDTRIP 426 (>= 426) DIFFERS 0 LLI_FAIL 0; GAP 5 LOAD_FAIL 0 NOJSON 0 [1m53s]
+corpus-gate     PASS  gate-green 222 (>= 222), prove exit 0, paad/worklist.json untouched [5m19s]
+probes          PASS  LOUD=2 REFUSED=98 SAME=433; WRONG 0, SAME lost 0, changed 0 [1m31s]
+ratchet         PASS  prove exit 0; chalk's lib compared; rows that fell: 0; new graphs: 30, 0 of them with violations [32m14s]
+                PASS  (deparser round trip) ROUNDTRIP 430 (>= 430) EMITS_INVALID_PERL 0 [3m04s]
+```
+
+Verifier: `phi-arity:eval-join` is no class (corpus 32, probes 25, chalk's lib 40 -> 0, rows deleted); corpus `phi-arity` 1 -> 0 (the run-time string eval's trap). probes `phi-arity` stays 4: al1 and al2 (one-pass loops, stage 9), held by name in chalk's `wire-verify.t`, where phi-arity is now hard -- with V6 hard since stage 7, chalk's `t/data/wire-verify-v2-baseline.tsv` holds no row. The 30 "new graphs" of the ratchet are chalk graphs whose only recorded entry was an eval-join or read-unversioned count (rows emptied; none has a violation).
+
+Probes (against 22dcedc4): lo2, lo16, ex1, ex2, ex3, ex4, ev6 REFUSED -> SAME. Two silent wrong answers found that no probe had: a call that dies under a live `local` in a sub with no eval (`sub t { local $g = 2; u() } eval { t() }`), refused by name (WireCheck `_calls_a_local_dies_through`, the plan's Q9); a list-context eval whose body always dies (`my @r = eval { die "x\n" }`), refused by name (T2, a list eval typed a scalar). The interval oracle re-recorded (compared modulo ids: one key moved, own:edges' 7 allowed losses kept).
+
+What later stages should know:
+
+1. **Q9 is open**: a call dying under a live `local` in a sub with no eval needs a rethrow pad (Exc, restores, Unwind `rethrow`); refused by name until then, only where the callee may die.
+2. **V10 (`exc`) is not written**; L7 is chalk's.
+3. **`$@ = ""` is not stored at a `return` from an eval** (T2 refuses an eval whose body returns).
+4. **The eval's value stays a Phi at its join even of one way in** (list context reads it); memory Phis of one input are not emitted.
