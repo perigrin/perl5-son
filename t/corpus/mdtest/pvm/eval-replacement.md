@@ -133,7 +133,7 @@ main::__PROGRAM__: {start: 0, returns: [32], nodes: [
   [If, ~, [5, 9], 5], # 10
   [Proj, {index: 0}, [10]], # 11
   [EntryWrite, ~, [7, 8], 11, Unknown, 5, true], # 12
-  [Call, {dispatch_kind: direct, eval_id: 1, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::__PROGRAM__::__EVAL__:3:1, package: main, param_names: [], string_eval: true, want: scalar}, ~, 12, Int, 12, true], # 13
+  [Call, {dispatch_kind: direct, eval_id: 1, file: "/tmp/ucZOh245UI/case.pl", line: 3, name: main::__PROGRAM__::__EVAL__:3:1, package: main, param_names: [], string_eval: true, want: scalar}, ~, 12, Int, 12, true], # 13
   [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 13], # 14
   [EntryWrite, ~, [14, 8], 13, Unknown, 13, true], # 15
   [Exc, ~, [13]], # 16
@@ -258,7 +258,7 @@ main::__PROGRAM__: {start: 0, returns: [25], nodes: [
   [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 7], # 8
   [Constant, {const_type: string, value: ""}, ~, ~, Str], # 9
   [EntryWrite, ~, [8, 9], 7, Unknown, 7, true], # 10
-  [Call, {dispatch_kind: direct, eval_id: 1, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::__PROGRAM__::__EVAL__:2:1, package: main, param_names: [], string_eval: true, want: void}, ~, 10, Int, 10, true], # 11
+  [Call, {dispatch_kind: direct, eval_id: 1, file: "/tmp/ucZOh245UI/case.pl", line: 2, name: main::__PROGRAM__::__EVAL__:2:1, package: main, param_names: [], string_eval: true, want: void}, ~, 10, Int, 10, true], # 11
   [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 11], # 12
   [EntryWrite, ~, [12, 9], 11, Unknown, 11, true], # 13
   [Exc, ~, [11]], # 14

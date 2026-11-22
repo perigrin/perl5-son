@@ -285,15 +285,15 @@ main::__PROGRAM__: {start: 0, returns: [19], nodes: [
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 6
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 7
   [HashLiteral, {sigil: "%", symbol: h}, [3, 4, 5, 6, 2, 7], ~, Hash], # 8
-  [Slice, {kind: hash}, [2, 8], ~, List], # 9
-  [Coerce, {from_repr: List, to_repr: Str}, [9], ~, Str], # 10
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 11
-  [MemStart], # 12
-  [Delete, {kind: hash}, [8, 3], 0, Scalar, 12, true], # 13
-  [Delete, {kind: hash}, [8, 5], 13, Scalar, 13, true], # 14
-  [Call, {dispatch_kind: builtin, name: keys, param_names: [], want: scalar}, [8], ~, Int, 14], # 15
+  [MemStart], # 9
+  [Delete, {kind: hash}, [8, 3], 0, Scalar, 9, true], # 10
+  [Delete, {kind: hash}, [8, 5], 10, Scalar, 10, true], # 11
+  [Slice, {kind: hash}, [2, 8], ~, List, 11], # 12
+  [Coerce, {from_repr: List, to_repr: Str}, [12], ~, Str], # 13
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 14
+  [Call, {dispatch_kind: builtin, name: keys, param_names: [], want: scalar}, [8], ~, Int, 11], # 15
   [Coerce, {from_repr: Int, to_repr: Str}, [15], ~, Str], # 16
-  [Print, ~, [16, 11], 14, "Maybe[Boolean]"], # 17
-  [Print, ~, [10, 11], 17, "Maybe[Boolean]"], # 18
-  [Return, {implicit: true}, [1], 18, ~, 14]]} # 19
+  [Print, ~, [16, 14], 11, "Maybe[Boolean]"], # 17
+  [Print, ~, [13, 14], 17, "Maybe[Boolean]"], # 18
+  [Return, {implicit: true}, [1], 18, ~, 11]]} # 19
 ```

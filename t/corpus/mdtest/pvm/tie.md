@@ -212,19 +212,19 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [PadAccess, {sigil: $, symbol: x}, ~, ~, Unknown], # 2
-  [Call, {dispatch_kind: builtin, name: tied, param_names: []}, [2], ~, Unknown], # 3
-  [Constant, {const_type: string, value: t}, ~, ~, Str], # 4
-  [Constant, {const_type: string, value: u}, ~, ~, Str], # 5
-  [TernaryExpr, ~, [3, 4, 5], ~, Str], # 6
-  [PadAccess, {sigil: $, symbol: plain}, ~, ~, Unknown], # 7
-  [Call, {dispatch_kind: builtin, name: tied, param_names: []}, [7], ~, Unknown], # 8
-  [TernaryExpr, ~, [8, 4, 5], ~, Str], # 9
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
-  [EnvRead, {key: X}, ~, ~, Str], # 11
-  [Constant, {const_type: string, value: Counter}, ~, ~, Str], # 12
-  [DefinedOr, ~, [11, 12], ~, Str], # 13
-  [MemStart], # 14
-  [Call, {dispatch_kind: builtin, name: tie, param_names: []}, [2, 13], 0, Unknown, 14, true], # 15
-  [Print, ~, [6, 9, 10], 15, "Maybe[Boolean]"], # 16
-  [Return, {implicit: true}, [1], 16, ~, 15]]} # 17
+  [EnvRead, {key: X}, ~, ~, Str], # 3
+  [Constant, {const_type: string, value: Counter}, ~, ~, Str], # 4
+  [DefinedOr, ~, [3, 4], ~, Str], # 5
+  [MemStart], # 6
+  [Call, {dispatch_kind: builtin, name: tie, param_names: []}, [2, 5], 0, Unknown, 6, true], # 7
+  [Call, {dispatch_kind: builtin, name: tied, param_names: []}, [2], ~, Unknown, 7], # 8
+  [Constant, {const_type: string, value: t}, ~, ~, Str], # 9
+  [Constant, {const_type: string, value: u}, ~, ~, Str], # 10
+  [TernaryExpr, ~, [8, 9, 10], ~, Str], # 11
+  [PadAccess, {sigil: $, symbol: plain}, ~, ~, Unknown], # 12
+  [Call, {dispatch_kind: builtin, name: tied, param_names: []}, [12], ~, Unknown, 7], # 13
+  [TernaryExpr, ~, [13, 9, 10], ~, Str], # 14
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 15
+  [Print, ~, [11, 14, 15], 7, "Maybe[Boolean]"], # 16
+  [Return, {implicit: true}, [1], 16, ~, 7]]} # 17
 ```

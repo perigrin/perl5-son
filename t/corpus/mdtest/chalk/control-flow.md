@@ -2802,7 +2802,7 @@ main::corpus_case: {start: 0, returns: [27], nodes: [
   [Constant, {const_type: string, value: feature.pm}, ~, ~, Str], # 3
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
-  [Call, {class_name: feature, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Call, {class_name: feature, dispatch_kind: method, file: "/tmp/ucZOh245UI/case.pl", line: 2, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
   [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 "BEGIN 3": {start: 0, returns: [7], nodes: [
   [Start], # 0
@@ -2811,7 +2811,7 @@ main::corpus_case: {start: 0, returns: [27], nodes: [
   [Constant, {const_type: string, value: warnings.pm}, ~, ~, Str], # 3
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
-  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: unimport, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/ucZOh245UI/case.pl", line: 3, name: unimport, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
   [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 ```
 
@@ -3012,7 +3012,7 @@ main::corpus_case: {start: 0, returns: [13], nodes: [
   [Constant, {const_type: string, value: "boom\n"}, ~, ~, Str], # 8
   [Proj, {index: 0}, [5]], # 9
   [MemStart], # 10
-  [Unwind, {file: "/tmp/mvrHQew3rs/case.pl", line: 6}, [8], 9, ~, 10], # 11
+  [Unwind, {file: "/tmp/ucZOh245UI/case.pl", line: 6}, [8], 9, ~, 10], # 11
   [Region, {head: 5}, [11, 7]], # 12
   [Return, {implicit: true}, [7], 12, ~, 10]]} # 13
 "BEGIN 1": {start: 0, returns: [4], nodes: [
@@ -3076,7 +3076,7 @@ main::corpus_case: {start: 0, returns: [10], nodes: [
   [If, ~, [0, 3], 0], # 4
   [Proj, {index: 0}, [4]], # 5
   [MemStart], # 6
-  [Unwind, {file: "/tmp/mvrHQew3rs/case.pl", line: 5}, [2], 5, ~, 6], # 7
+  [Unwind, {file: "/tmp/ucZOh245UI/case.pl", line: 5}, [2], 5, ~, 6], # 7
   [Proj, {index: 1}, [4]], # 8
   [Region, {head: 4}, [7, 8]], # 9
   [Return, {implicit: true}, [1], 9, ~, 6]]} # 10
@@ -3148,7 +3148,7 @@ main::corpus_case: {start: 0, returns: [5], nodes: [
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: "boom\n"}, ~, ~, Str], # 2
   [MemStart], # 3
-  [Unwind, {file: "/tmp/mvrHQew3rs/case.pl", line: 5}, [2], 0, ~, 3], # 4
+  [Unwind, {file: "/tmp/ucZOh245UI/case.pl", line: 5}, [2], 0, ~, 3], # 4
   [Return, {implicit: true}, [1], 4, ~, 3]]} # 5
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
@@ -3642,7 +3642,7 @@ main::__PROGRAM__: {start: 0, returns: [3], nodes: [
 main::corpus_case: {start: 0, returns: [6], nodes: [
   [Start], # 0
   [MemStart], # 1
-  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 6, name: main::helper, package: main, param_names: [], want: scalar}, ~, 0, Int, 1, true], # 2
+  [Call, {dispatch_kind: direct, file: "/tmp/ucZOh245UI/case.pl", line: 6, name: main::helper, package: main, param_names: [], want: scalar}, ~, 0, Int, 1, true], # 2
   [Coerce, {from_repr: Unknown, to_repr: Str}, [2], ~, Str], # 3
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 4
   [Print, ~, [3, 4], 2, "Maybe[Boolean]"], # 5
@@ -4645,7 +4645,7 @@ main::corpus_case: {start: 0, returns: [15], nodes: [
   [Constant, {const_type: string, value: "boom\n"}, ~, ~, Str], # 9
   [Proj, {index: 0}, [7]], # 10
   [MemStart], # 11
-  [Unwind, {file: "/tmp/mvrHQew3rs/case.pl", line: 7}, [9], 10, ~, 11], # 12
+  [Unwind, {file: "/tmp/ucZOh245UI/case.pl", line: 7}, [9], 10, ~, 11], # 12
   [Region, {head: 7}, [8, 12]], # 13
   [Print, ~, [2, 3], 13, "Maybe[Boolean]"], # 14
   [Return, {implicit: true}, [14], 14, ~, 11]]} # 15
@@ -4979,7 +4979,7 @@ main::corpus_case: {start: 0, returns: [17], nodes: [
   [Constant, {const_type: string, value: "boom\n"}, ~, ~, Str], # 10
   [Proj, {index: 0}, [8]], # 11
   [MemStart], # 12
-  [Unwind, {file: "/tmp/mvrHQew3rs/case.pl", line: 7}, [10], 11, ~, 12], # 13
+  [Unwind, {file: "/tmp/ucZOh245UI/case.pl", line: 7}, [10], 11, ~, 12], # 13
   [Region, {head: 8}, [9, 13]], # 14
   [Region, {head: 5}, [6, 14]], # 15
   [Print, ~, [1], 15, "Maybe[Boolean]"], # 16

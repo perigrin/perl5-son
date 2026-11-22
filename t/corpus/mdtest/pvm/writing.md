@@ -219,7 +219,7 @@ main::__PROGRAM__: {start: 0, returns: [24], nodes: [
   [Constant, {const_type: string, value: feature.pm}, ~, ~, Str], # 3
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
-  [Call, {class_name: feature, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Call, {class_name: feature, dispatch_kind: method, file: "/tmp/ucZOh245UI/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
   [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 ```
 

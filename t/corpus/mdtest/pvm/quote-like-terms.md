@@ -102,14 +102,14 @@ main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: "got "}, ~, ~, Str], # 2
   [Constant, {const_type: string, value: "*.nonexistent-xyz"}, ~, ~, Str], # 3
-  [Call, {dispatch_kind: builtin, name: glob, param_names: []}, [3], ~, List], # 4
-  [ArrayLiteral, {sigil: "@", symbol: none}, [4], ~, Array], # 5
-  [MemStart], # 6
-  [Count, ~, [5], ~, Int, 6], # 7
+  [MemStart], # 4
+  [Call, {dispatch_kind: builtin, name: glob, param_names: []}, [3], ~, List, 4], # 5
+  [ArrayLiteral, {sigil: "@", symbol: none}, [5], ~, Array], # 6
+  [Count, ~, [6], ~, Int, 4], # 7
   [Coerce, {from_repr: Int, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
   [Print, ~, [2, 8, 9], 0, "Maybe[Boolean]"], # 10
-  [Return, {implicit: true}, [1], 10, ~, 6]]} # 11
+  [Return, {implicit: true}, [1], 10, ~, 4]]} # 11
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "File/Glob.pm"}, ~, ~, Str], # 1
@@ -378,17 +378,17 @@ main::__PROGRAM__: {start: 0, returns: [16], nodes: [
   [EnvRead, {key: X}, ~, ~, Str], # 3
   [Constant, {const_type: string, value: "*.nonexistent-xyz"}, ~, ~, Str], # 4
   [DefinedOr, ~, [3, 4], ~, Str], # 5
-  [Call, {dispatch_kind: builtin, name: glob, param_names: []}, [5], ~, List], # 6
-  [ArrayLiteral, {sigil: "@", symbol: none}, [6], ~, Array], # 7
-  [MemStart], # 8
-  [Count, ~, [7], ~, Int, 8], # 9
+  [MemStart], # 6
+  [Call, {dispatch_kind: builtin, name: glob, param_names: []}, [5], ~, List, 6], # 7
+  [ArrayLiteral, {sigil: "@", symbol: none}, [7], ~, Array], # 8
+  [Count, ~, [8], ~, Int, 6], # 9
   [Coerce, {from_repr: Int, to_repr: Str}, [9], ~, Str], # 10
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 11
   [Constant, {const_type: string, value: "echo hi"}, ~, ~, Str], # 12
   [DefinedOr, ~, [3, 12], ~, Str], # 13
   [BacktickExpr, ~, [13], ~, Str], # 14
   [Print, ~, [2, 10, 11, 14], 0, "Maybe[Boolean]"], # 15
-  [Return, {implicit: true}, [1], 15, ~, 8]]} # 16
+  [Return, {implicit: true}, [1], 15, ~, 6]]} # 16
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "File/Glob.pm"}, ~, ~, Str], # 1

@@ -162,13 +162,13 @@ main::__PROGRAM__: {start: 0, returns: [115], nodes: [
   [Call, {dispatch_kind: builtin, name: join, param_names: []}, [12, 38], ~, Str, 6], # 39
   [Concat, ~, [37, 39], ~, Str], # 40
   [Concat, ~, [40, 9], ~, Str], # 41
-  [Call, {dispatch_kind: builtin, name: localtime, param_names: []}, ~, ~, List], # 42
+  [Call, {dispatch_kind: builtin, name: localtime, param_names: []}, ~, ~, List, 6], # 42
   [Count, ~, [42], ~, Int, 6], # 43
   [Coerce, {from_repr: Int, to_repr: Str}, [43], ~, Str], # 44
   [Concat, ~, [41, 44], ~, Str], # 45
   [Concat, ~, [45, 9], ~, Str], # 46
   [Wantarray, ~, ~, ~, Scalar], # 47
-  [Call, {dispatch_kind: builtin, name: localtime, param_names: []}, ~, ~, Scalar], # 48
+  [Call, {dispatch_kind: builtin, name: localtime, param_names: []}, ~, ~, Scalar, 6], # 48
   [Call, {dispatch_kind: builtin, name: caller, param_names: []}, ~, 0, Scalar, 6], # 49
   [ArrayLiteral, {sigil: "@", symbol: seen}, [47, 48, 49], ~, Array], # 50
   [Count, ~, [50], ~, Int, 6], # 51

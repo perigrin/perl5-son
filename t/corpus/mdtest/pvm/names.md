@@ -355,26 +355,29 @@ stash: [1]
 ```
 
 ```ir
-main::__PROGRAM__: {start: 0, returns: [20], nodes: [
+main::__PROGRAM__: {start: 0, returns: [23], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: "stash: ["}, ~, ~, Str], # 2
-  [EntryDef, {package: main, sigil: "%", symbol: "main::"}, ~, ~, Hash], # 3
-  [Constant, {const_type: string, value: answer}, ~, ~, Str], # 4
-  [EntryDef, {package: main, sigil: $, symbol: answer}, ~, ~, Scalar], # 5
-  [Constant, {const_type: integer, value: "42"}, ~, ~, Int], # 6
-  [MemStart], # 7
-  [EntryWrite, ~, [5, 6], 0, Unknown, 7, true], # 8
-  [Exists, {kind: hash, stash_has: 1}, [3, 4], ~, Boolean, 8], # 9
+  [EntryDef, {package: main, sigil: $, symbol: answer}, ~, ~, Scalar], # 3
+  [Constant, {const_type: integer, value: "42"}, ~, ~, Int], # 4
+  [MemStart], # 5
+  [EntryWrite, ~, [3, 4], 0, Unknown, 5, true], # 6
+  [EntryDef, {package: main, sigil: "%", symbol: "main::"}, ~, ~, Hash, 6], # 7
+  [Constant, {const_type: string, value: answer}, ~, ~, Str], # 8
+  [Exists, {kind: hash, stash_has: 1}, [7, 8], ~, Boolean, 6], # 9
   [Coerce, {from_repr: Boolean, to_repr: Str}, [9], ~, Str], # 10
   [Constant, {const_type: string, value: "]\n"}, ~, ~, Str], # 11
   [Constant, {const_type: string, value: "gone: ["}, ~, ~, Str], # 12
-  [Constant, {const_type: string, value: nosuch}, ~, ~, Str], # 13
-  [Exists, {kind: hash, stash_has: 0}, [3, 13], ~, Boolean, 8], # 14
-  [Coerce, {from_repr: Boolean, to_repr: Str}, [14], ~, Str], # 15
-  [Constant, {const_type: string, value: "found: ["}, ~, ~, Str], # 16
-  [Print, ~, [16, 10, 11], 8, "Maybe[Boolean]"], # 17
-  [Print, ~, [12, 15, 11], 17, "Maybe[Boolean]"], # 18
-  [Print, ~, [2, 10, 11], 18, "Maybe[Boolean]"], # 19
-  [Return, {implicit: true}, [1], 19, ~, 8]]} # 20
+  [EntryDef, {package: main, sigil: "%", symbol: "main::"}, ~, ~, Hash], # 13
+  [Constant, {const_type: string, value: nosuch}, ~, ~, Str], # 14
+  [Exists, {kind: hash, stash_has: 0}, [13, 14], ~, Boolean, 6], # 15
+  [Coerce, {from_repr: Boolean, to_repr: Str}, [15], ~, Str], # 16
+  [Constant, {const_type: string, value: "found: ["}, ~, ~, Str], # 17
+  [Exists, {kind: hash, stash_has: 1}, [13, 8], ~, Boolean, 6], # 18
+  [Coerce, {from_repr: Boolean, to_repr: Str}, [18], ~, Str], # 19
+  [Print, ~, [17, 19, 11], 6, "Maybe[Boolean]"], # 20
+  [Print, ~, [12, 16, 11], 20, "Maybe[Boolean]"], # 21
+  [Print, ~, [2, 10, 11], 21, "Maybe[Boolean]"], # 22
+  [Return, {implicit: true}, [1], 22, ~, 6]]} # 23
 ```

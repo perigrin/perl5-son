@@ -187,19 +187,19 @@ one word whose text is "scalar"
 main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
-  [Call, {dispatch_kind: builtin, name: localtime, param_names: []}, ~, ~, List], # 2
-  [MemStart], # 3
-  [Count, ~, [2], ~, Int, 3], # 4
+  [MemStart], # 2
+  [Call, {dispatch_kind: builtin, name: localtime, param_names: []}, ~, ~, List, 2], # 3
+  [Count, ~, [3], ~, Int, 2], # 4
   [Coerce, {from_repr: Int, to_repr: Str}, [4], ~, Str], # 5
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 6
   [Concat, ~, [5, 6], ~, Str], # 7
-  [Call, {dispatch_kind: builtin, name: localtime, param_names: []}, ~, ~, Scalar], # 8
+  [Call, {dispatch_kind: builtin, name: localtime, param_names: []}, ~, ~, Scalar, 2], # 8
   [ArrayLiteral, {sigil: "@", symbol: c}, [8], ~, Array], # 9
-  [Count, ~, [9], ~, Int, 3], # 10
+  [Count, ~, [9], ~, Int, 2], # 10
   [Coerce, {from_repr: Int, to_repr: Str}, [10], ~, Str], # 11
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 12
   [Print, ~, [7, 11, 12], 0, "Maybe[Boolean]"], # 13
-  [Return, {implicit: true}, [1], 13, ~, 3]]} # 14
+  [Return, {implicit: true}, [1], 13, ~, 2]]} # 14
 ```
 
 ## `map BLOCK` and `map EXPR`, a fork the optree cannot see

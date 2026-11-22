@@ -80,7 +80,7 @@ main::__PROGRAM__: {start: 0, returns: [10], nodes: [
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 3
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 4
   [MemStart], # 5
-  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, [3, 4], 0, Str, 5, true], # 6
+  [Call, {dispatch_kind: direct, file: "/tmp/ucZOh245UI/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, [3, 4], 0, Str, 5, true], # 6
   [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
   [Print, ~, [7], 6, "Maybe[Boolean]"], # 8
   [Print, ~, [2], 8, "Maybe[Boolean]"], # 9
@@ -161,7 +161,7 @@ main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 2
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 3
   [MemStart], # 4
-  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::g, package: main, param_names: [], want: list}, [3], 0, Str, 4, true], # 5
+  [Call, {dispatch_kind: direct, file: "/tmp/ucZOh245UI/case.pl", line: 2, name: main::g, package: main, param_names: [], want: list}, [3], 0, Str, 4, true], # 5
   [Coerce, {from_repr: Unknown, to_repr: Str}, [5], ~, Str], # 6
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 7
   [Coerce, {from_repr: Int, to_repr: Str}, [7], ~, Str], # 8
@@ -319,9 +319,9 @@ main::__PROGRAM__: {start: 0, returns: [20], nodes: [
   [AnonSub, {name: main::__PROGRAM__::__ANON__:1:2}, ~, ~, CodeRef], # 7
   [MemStart], # 8
   [Assign, ~, [6, 7], 0, CodeRef, 8, true], # 9
-  [Call, {dispatch_kind: builtin, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: warn, param_names: []}, [2, 3], 9, Boolean, 9, true], # 10
+  [Call, {dispatch_kind: builtin, file: "/tmp/ucZOh245UI/case.pl", line: 2, name: warn, param_names: []}, [2, 3], 9, Boolean, 9, true], # 10
   [ArrayLiteral, {sigil: "@", symbol: greedy}, [10], ~, Array], # 11
-  [Call, {dispatch_kind: builtin, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: warn, param_names: []}, [2], 10, Boolean, 10, true], # 12
+  [Call, {dispatch_kind: builtin, file: "/tmp/ucZOh245UI/case.pl", line: 3, name: warn, param_names: []}, [2], 10, Boolean, 10, true], # 12
   [Count, ~, [11], ~, Int, 12], # 13
   [Coerce, {from_repr: Int, to_repr: Str}, [13], ~, Str], # 14
   [ArrayLiteral, {sigil: "@", symbol: cut}, [12, 3], ~, Array], # 15

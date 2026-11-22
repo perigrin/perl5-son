@@ -296,6 +296,6 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Constant, {const_type: string, value: constant.pm}, ~, ~, Str], # 4
   [MemStart], # 5
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [4], 0, Unknown, 5, true], # 6
-  [Call, {class_name: constant, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2, 3], 6, Unknown, 6, true], # 7
+  [Call, {class_name: constant, dispatch_kind: method, file: "/tmp/ucZOh245UI/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2, 3], 6, Unknown, 6, true], # 7
   [Return, {implicit: true}, [7], 7, ~, 7]]} # 8
 ```

@@ -72,7 +72,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Constant, {const_type: string, value: strict.pm}, ~, ~, Str], # 2
   [MemStart], # 3
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [2], 0, Unknown, 3, true], # 4
-  [Call, {class_name: strict, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: import, package: main, param_names: []}, [1], 4, Unknown, 4, true], # 5
+  [Call, {class_name: strict, dispatch_kind: method, file: "/tmp/ucZOh245UI/case.pl", line: 1, name: import, package: main, param_names: []}, [1], 4, Unknown, 4, true], # 5
   [Return, {implicit: true}, [5], 5, ~, 5]]} # 6
 "BEGIN 2": {start: 0, returns: [6], nodes: [
   [Start], # 0
@@ -80,7 +80,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Constant, {const_type: string, value: warnings.pm}, ~, ~, Str], # 2
   [MemStart], # 3
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [2], 0, Unknown, 3, true], # 4
-  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: import, package: main, param_names: []}, [1], 4, Unknown, 4, true], # 5
+  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/ucZOh245UI/case.pl", line: 2, name: import, package: main, param_names: []}, [1], 4, Unknown, 4, true], # 5
   [Return, {implicit: true}, [5], 5, ~, 5]]} # 6
 ```
 
@@ -170,7 +170,7 @@ Carp::_fetch_sub: {start: 0, returns: [64], nodes: [
   [Constant, {const_type: string, value: GLOB}, ~, ~, Str], # 34
   [StrEq, ~, [33, 34], ~, Boolean], # 35
   [Constant, {const_type: string, value: HASH}, ~, ~, Str], # 36
-  [Subscript, ~, [28, 36], ~, Scalar], # 37
+  [Subscript, ~, [28, 36], ~, Scalar, 18], # 37
   [And, ~, [35, 37], ~, Scalar], # 38
   [If, ~, [32, 38], 32], # 39
   [Proj, {index: 0}, [39]], # 40
@@ -186,7 +186,7 @@ Carp::_fetch_sub: {start: 0, returns: [64], nodes: [
   [Call, {dispatch_kind: builtin, name: reftype_of_ref, param_names: []}, [49], ~, Str, 18], # 50
   [StrEq, ~, [50, 34], ~, Boolean], # 51
   [Constant, {const_type: string, value: CODE}, ~, ~, Str], # 52
-  [Subscript, ~, [49, 52], ~, Scalar], # 53
+  [Subscript, ~, [49, 52], ~, Scalar, 18], # 53
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 54
   [TernaryExpr, ~, [51, 53, 54], ~, Unknown], # 55
   [Proj, {index: 1}, [45]], # 56
@@ -248,7 +248,7 @@ Carp::_univ_mod_loaded: {start: 0, returns: [89], nodes: [
   [Constant, {const_type: string, value: GLOB}, ~, ~, Str], # 34
   [StrEq, ~, [33, 34], ~, Boolean], # 35
   [Constant, {const_type: string, value: HASH}, ~, ~, Str], # 36
-  [Subscript, ~, [24, 36], ~, Scalar], # 37
+  [Subscript, ~, [24, 36], ~, Scalar, 16], # 37
   [And, ~, [35, 37], ~, Scalar], # 38
   [If, ~, [32, 38], 32], # 39
   [Proj, {index: 0}, [39]], # 40
@@ -268,7 +268,7 @@ Carp::_univ_mod_loaded: {start: 0, returns: [89], nodes: [
   [Proj, {index: 0}, [47]], # 54
   [Call, {dispatch_kind: builtin, name: reftype_of_ref, param_names: []}, [50], ~, Str, 49], # 55
   [StrEq, ~, [55, 34], ~, Boolean], # 56
-  [Subscript, ~, [50, 36], ~, Scalar], # 57
+  [Subscript, ~, [50, 36], ~, Scalar, 49], # 57
   [And, ~, [56, 57], ~, Scalar], # 58
   [If, ~, [54, 58], 54], # 59
   [Proj, {index: 0}, [59]], # 60
@@ -283,7 +283,7 @@ Carp::_univ_mod_loaded: {start: 0, returns: [89], nodes: [
   [Phi, {memory: true, region: 67}, [49, 78], ~, Unknown], # 69
   [Subscript, {kind: array}, [53, 68], ~, Scalar, 69], # 70
   [Constant, {const_type: string, value: SCALAR}, ~, ~, Str], # 71
-  [Subscript, ~, [70, 71], ~, Scalar], # 72
+  [Subscript, ~, [70, 71], ~, Scalar, 69], # 72
   [Proj, {index: 0}, [67]], # 73
   [Call, {dispatch_kind: builtin, name: reftype_of_ref, param_names: []}, [70], ~, Str, 69], # 74
   [StrEq, ~, [74, 34], ~, Boolean], # 75
@@ -321,248 +321,249 @@ Carp::_univ_mod_loaded: {start: 0, returns: [89], nodes: [
   [Count, ~, [53], ~, Int, 69], # 107
   [NumGt, ~, [107, 68], 67, Boolean], # 108
   [Count, ~, [22], ~, Int, 5]]} # 109
-Carp::caller_info: {start: 0, returns: [193], nodes: [
+Carp::caller_info: {start: 0, returns: [194], nodes: [
   [Start], # 0
   [ArrayLiteral, ~, ~, ~, List], # 1
   [Wantarray, ~, ~, ~, Scalar], # 2
   [PadAccess, {sigil: "%", symbol: call_info}, ~, ~, Hash], # 3
-  [Ref, ~, [3], ~, HashRef], # 4
-  [TernaryExpr, ~, [2, 3, 4], ~, Unknown], # 5
-  [Constant, {const_type: string, value: pack}, ~, ~, Str], # 6
-  [Constant, {const_type: string, value: file}, ~, ~, Str], # 7
-  [Constant, {const_type: string, value: line}, ~, ~, Str], # 8
-  [Constant, {const_type: string, value: sub}, ~, ~, Str], # 9
-  [Constant, {const_type: string, value: has_args}, ~, ~, Str], # 10
-  [Constant, {const_type: string, value: wantarray}, ~, ~, Str], # 11
-  [Constant, {const_type: string, value: evaltext}, ~, ~, Str], # 12
-  [Constant, {const_type: string, value: is_require}, ~, ~, Str], # 13
-  [Slice, {kind: hash}, [6, 7, 8, 9, 10, 11, 12, 13, 3], ~, List], # 14
-  [ArgsSource, ~, ~, ~, Array], # 15
-  [MemStart], # 16
-  [Call, {dispatch_kind: builtin, name: shift, param_names: []}, [15], 0, Scalar, 16, true], # 17
-  [PadAccess, {sigil: $, symbol: i}, ~, ~, Unknown, 17], # 18
-  [Coerce, {from_repr: Scalar, to_repr: Num}, [17], ~, Num], # 19
-  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 20
-  [Add, ~, [19, 20], ~, Num], # 21
-  [Assign, ~, [18, 21], 17, Num, 17, true], # 22
-  [Call, {dispatch_kind: direct, file: "/home/runner/.local/share/pvm/versions/5.42.0/lib/perl5/5.42.0/Carp.pm", line: 308, name: Carp::_cgc, package: Carp, param_names: [], want: scalar}, ~, 22, List, 22, true], # 23
-  [EntryDef, {package: DB, sigil: "@", symbol: args}, ~, ~, Array], # 24
-  [PadAccess, {sigil: $, symbol: i}, ~, ~, Unknown, 23], # 25
-  [Ref, ~, [25], ~, Unknown], # 26
-  [ArrayLiteral, {sigil: "@", symbol: "@DB::args"}, [26], ~, Array], # 27
-  [EntryWrite, ~, [24, 27], 23, Unknown, 23, true], # 28
-  [PadAccess, {sigil: $, symbol: i}, ~, ~, Unknown, 28], # 29
-  [If, ~, [28, 23], 28], # 30
-  [Proj, {index: 0}, [30]], # 31
-  [Call, {dispatch_kind: indirect, file: "/home/runner/.local/share/pvm/versions/5.42.0/lib/perl5/5.42.0/Carp.pm", line: 320, name: "", package: DB, param_names: [], want: list}, [23, 29], 31, Unknown, 28, true], # 32
-  [Proj, {index: 1}, [30]], # 33
-  [Call, {dispatch_kind: builtin, name: caller, param_names: []}, [29], 33, List, 28], # 34
-  [Region, {head: 30}, [32, 34]], # 35
-  [Phi, {predecessors: [31, 33], region: 35}, [32, 34], ~, Unknown], # 36
-  [Phi, {memory: true, predecessors: [31, 33], region: 35}, [32, 28], ~, Unknown], # 37
-  [Assign, {targets: 1}, [14, 36], 35, Unknown, 37, true], # 38
-  [Subscript, {kind: hash}, [3, 7], ~, Scalar, 38], # 39
-  [Defined, ~, [39], ~, Boolean], # 40
-  [Not, ~, [40], ~, Boolean], # 41
-  [If, ~, [38, 41], 38], # 42
-  [Proj, {index: 0}, [42]], # 43
-  [Constant, {const_type: string, value: sub_name}, ~, ~, Str], # 44
-  [Subscript, {kind: hash}, [3, 44], ~, Scalar], # 45
-  [Proj, {index: 1}, [42]], # 46
-  [Call, {dispatch_kind: direct, file: "/home/runner/.local/share/pvm/versions/5.42.0/lib/perl5/5.42.0/Carp.pm", line: 328, name: Carp::get_subname, package: Carp, param_names: [], want: scalar}, [4], 46, Scalar, 38, true], # 47
-  [Coerce, {from_repr: Scalar, to_repr: Str}, [47], ~, Str], # 48
-  [Constant, {const_type: string, value: "("}, ~, ~, Str], # 49
-  [Concat, ~, [48, 49], ~, Str], # 50
-  [Constant, {const_type: string, value: ", "}, ~, ~, Str], # 51
-  [Constant, {const_type: string, value: "** Incomplete caller override detected"}, ~, ~, Str], # 52
-  [Constant, {const_type: string, value: " in &"}, ~, ~, Str], # 53
-  [Constant, {const_type: string, value: B}, ~, ~, Str], # 54
-  [Constant, {const_type: string, value: svref_2object}, ~, ~, Str], # 55
-  [Subscript, {kind: hash}, [3, 10], ~, Scalar, 47], # 56
-  [If, ~, [47, 56], 47], # 57
-  [Proj, {index: 0}, [57]], # 58
-  [Loop, {bound: entry}, [58], 58], # 59
-  [Phi, {memory: true, region: 59}, [47, 228], ~, Unknown], # 60
-  [Proj, {index: 1}, [59]], # 61
-  [Region, {head: 59}, [61]], # 62
-  [Phi, {memory: true, region: 62}, [60], ~, Unknown], # 63
-  [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 63], # 64
-  [Constant, {const_type: string, value: ""}, ~, ~, Str], # 65
-  [ArrayLiteral, ~, ~, ~, Array], # 66
-  [Phi, {region: 59}, [66, 237], ~, Array], # 67
-  [Count, ~, [67], ~, Int, 63], # 68
-  [NumEq, ~, [68, 20], ~, Boolean], # 69
-  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 70
-  [Subscript, {kind: array}, [67, 70], ~, Scalar, 63], # 71
-  [RefType, ~, [71], ~, Str, 63], # 72
-  [PadAccess, {sigil: $, symbol: i}, ~, ~, Unknown, 63], # 73
-  [Call, {dispatch_kind: builtin, name: reftype_of_ref, param_names: []}, [73], ~, Str, 63], # 74
-  [StrEq, ~, [72, 74], ~, Boolean], # 75
-  [And, ~, [69, 75], ~, Boolean], # 76
-  [Coerce, {from_repr: Scalar, to_repr: Num}, [71], ~, Num], # 77
-  [Ref, ~, [73], ~, Unknown], # 78
-  [NumEq, ~, [77, 78], ~, Boolean], # 79
-  [And, ~, [76, 79], ~, Boolean], # 80
-  [If, ~, [62, 80], 62], # 81
-  [Proj, {index: 0}, [81]], # 82
-  [EntryWrite, ~, [64, 65], 82, Unknown, 63, true], # 83
-  [PadAccess, {sigil: $, symbol: func}, ~, ~, Unknown, 83], # 84
-  [Assign, ~, [84, 23], 83, List, 83, true], # 85
-  [If, ~, [85, 23], 85], # 86
-  [Proj, {index: 0}, [86]], # 87
-  [Call, {dispatch_kind: direct, eval_id: 4, file: "/home/runner/.local/share/pvm/versions/5.42.0/lib/perl5/5.42.0/Carp.pm", line: 360, name: Carp::_fetch_sub, package: Carp, param_names: [], want: scalar}, [54, 55], 87, Unknown, 85, true], # 88
-  [PadAccess, {sigil: $, symbol: func}, ~, ~, Unknown, 88], # 89
-  [Not, ~, [88], ~, Boolean], # 90
-  [If, ~, [88, 90], 88], # 91
-  [Proj, {index: 1}, [91]], # 92
-  [Call, {dispatch_kind: indirect, eval_id: 4, file: "/home/runner/.local/share/pvm/versions/5.42.0/lib/perl5/5.42.0/Carp.pm", line: 360, name: "", package: Carp, param_names: [], want: scalar}, [88, 89], 92, Unknown, 88, true], # 93
-  [Call, {dispatch_kind: method, eval_id: 4, file: "/home/runner/.local/share/pvm/versions/5.42.0/lib/perl5/5.42.0/Carp.pm", line: 360, name: GV, package: Carp, param_names: [], want: scalar}, [93], 93, Unknown, 93, true], # 94
+  [Constant, {const_type: string, value: sub_name}, ~, ~, Str], # 4
+  [Subscript, {kind: hash}, [3, 4], ~, Scalar], # 5
+  [Ref, ~, [3], ~, HashRef], # 6
+  [Constant, {const_type: string, value: pack}, ~, ~, Str], # 7
+  [Constant, {const_type: string, value: file}, ~, ~, Str], # 8
+  [Constant, {const_type: string, value: line}, ~, ~, Str], # 9
+  [Constant, {const_type: string, value: sub}, ~, ~, Str], # 10
+  [Constant, {const_type: string, value: has_args}, ~, ~, Str], # 11
+  [Constant, {const_type: string, value: wantarray}, ~, ~, Str], # 12
+  [Constant, {const_type: string, value: evaltext}, ~, ~, Str], # 13
+  [Constant, {const_type: string, value: is_require}, ~, ~, Str], # 14
+  [Slice, {kind: hash}, [7, 8, 9, 10, 11, 12, 13, 14, 3], ~, List], # 15
+  [ArgsSource, ~, ~, ~, Array], # 16
+  [MemStart], # 17
+  [Call, {dispatch_kind: builtin, name: shift, param_names: []}, [16], 0, Scalar, 17, true], # 18
+  [PadAccess, {sigil: $, symbol: i}, ~, ~, Unknown, 18], # 19
+  [Coerce, {from_repr: Scalar, to_repr: Num}, [18], ~, Num], # 20
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 21
+  [Add, ~, [20, 21], ~, Num], # 22
+  [Assign, ~, [19, 22], 18, Num, 18, true], # 23
+  [Call, {dispatch_kind: direct, file: "/home/runner/.local/share/pvm/versions/5.42.0/lib/perl5/5.42.0/Carp.pm", line: 308, name: Carp::_cgc, package: Carp, param_names: [], want: scalar}, ~, 23, List, 23, true], # 24
+  [EntryDef, {package: DB, sigil: "@", symbol: args}, ~, ~, Array], # 25
+  [PadAccess, {sigil: $, symbol: i}, ~, ~, Unknown, 24], # 26
+  [Ref, ~, [26], ~, Unknown], # 27
+  [ArrayLiteral, {sigil: "@", symbol: "@DB::args"}, [27], ~, Array], # 28
+  [EntryWrite, ~, [25, 28], 24, Unknown, 24, true], # 29
+  [PadAccess, {sigil: $, symbol: i}, ~, ~, Unknown, 29], # 30
+  [If, ~, [29, 24], 29], # 31
+  [Proj, {index: 0}, [31]], # 32
+  [Call, {dispatch_kind: indirect, file: "/home/runner/.local/share/pvm/versions/5.42.0/lib/perl5/5.42.0/Carp.pm", line: 320, name: "", package: DB, param_names: [], want: list}, [24, 30], 32, Unknown, 29, true], # 33
+  [Proj, {index: 1}, [31]], # 34
+  [Call, {dispatch_kind: builtin, name: caller, param_names: []}, [30], 34, List, 29], # 35
+  [Region, {head: 31}, [33, 35]], # 36
+  [Phi, {predecessors: [32, 34], region: 36}, [33, 35], ~, Unknown], # 37
+  [Phi, {memory: true, predecessors: [32, 34], region: 36}, [33, 29], ~, Unknown], # 38
+  [Assign, {targets: 1}, [15, 37], 36, Unknown, 38, true], # 39
+  [Subscript, {kind: hash}, [3, 8], ~, Scalar, 39], # 40
+  [Defined, ~, [40], ~, Boolean], # 41
+  [Not, ~, [41], ~, Boolean], # 42
+  [If, ~, [39, 42], 39], # 43
+  [Proj, {index: 1}, [43]], # 44
+  [Call, {dispatch_kind: direct, file: "/home/runner/.local/share/pvm/versions/5.42.0/lib/perl5/5.42.0/Carp.pm", line: 328, name: Carp::get_subname, package: Carp, param_names: [], want: scalar}, [6], 44, Scalar, 39, true], # 45
+  [Coerce, {from_repr: Scalar, to_repr: Str}, [45], ~, Str], # 46
+  [Constant, {const_type: string, value: "("}, ~, ~, Str], # 47
+  [Concat, ~, [46, 47], ~, Str], # 48
+  [Constant, {const_type: string, value: ", "}, ~, ~, Str], # 49
+  [Constant, {const_type: string, value: "** Incomplete caller override detected"}, ~, ~, Str], # 50
+  [Constant, {const_type: string, value: " in &"}, ~, ~, Str], # 51
+  [Constant, {const_type: string, value: B}, ~, ~, Str], # 52
+  [Constant, {const_type: string, value: svref_2object}, ~, ~, Str], # 53
+  [Subscript, {kind: hash}, [3, 11], ~, Scalar, 45], # 54
+  [If, ~, [45, 54], 45], # 55
+  [Proj, {index: 0}, [55]], # 56
+  [Loop, {bound: entry}, [56], 56], # 57
+  [Phi, {memory: true, region: 57}, [45, 229], ~, Unknown], # 58
+  [Proj, {index: 1}, [57]], # 59
+  [Region, {head: 57}, [59]], # 60
+  [Phi, {memory: true, region: 60}, [58], ~, Unknown], # 61
+  [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 61], # 62
+  [Constant, {const_type: string, value: ""}, ~, ~, Str], # 63
+  [ArrayLiteral, ~, ~, ~, Array], # 64
+  [Phi, {region: 57}, [64, 238], ~, Array], # 65
+  [Count, ~, [65], ~, Int, 61], # 66
+  [NumEq, ~, [66, 21], ~, Boolean], # 67
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 68
+  [Subscript, {kind: array}, [65, 68], ~, Scalar, 61], # 69
+  [RefType, ~, [69], ~, Str, 61], # 70
+  [PadAccess, {sigil: $, symbol: i}, ~, ~, Unknown, 61], # 71
+  [Call, {dispatch_kind: builtin, name: reftype_of_ref, param_names: []}, [71], ~, Str, 61], # 72
+  [StrEq, ~, [70, 72], ~, Boolean], # 73
+  [And, ~, [67, 73], ~, Boolean], # 74
+  [Coerce, {from_repr: Scalar, to_repr: Num}, [69], ~, Num], # 75
+  [Ref, ~, [71], ~, Unknown], # 76
+  [NumEq, ~, [75, 76], ~, Boolean], # 77
+  [And, ~, [74, 77], ~, Boolean], # 78
+  [If, ~, [60, 78], 60], # 79
+  [Proj, {index: 0}, [79]], # 80
+  [EntryWrite, ~, [62, 63], 80, Unknown, 61, true], # 81
+  [PadAccess, {sigil: $, symbol: func}, ~, ~, Unknown, 81], # 82
+  [Assign, ~, [82, 24], 81, List, 81, true], # 83
+  [If, ~, [83, 24], 83], # 84
+  [Proj, {index: 0}, [84]], # 85
+  [Call, {dispatch_kind: direct, eval_id: 4, file: "/home/runner/.local/share/pvm/versions/5.42.0/lib/perl5/5.42.0/Carp.pm", line: 360, name: Carp::_fetch_sub, package: Carp, param_names: [], want: scalar}, [52, 53], 85, Unknown, 83, true], # 86
+  [PadAccess, {sigil: $, symbol: func}, ~, ~, Unknown, 86], # 87
+  [Not, ~, [86], ~, Boolean], # 88
+  [If, ~, [86, 88], 86], # 89
+  [Proj, {index: 1}, [89]], # 90
+  [Call, {dispatch_kind: indirect, eval_id: 4, file: "/home/runner/.local/share/pvm/versions/5.42.0/lib/perl5/5.42.0/Carp.pm", line: 360, name: "", package: Carp, param_names: [], want: scalar}, [86, 87], 90, Unknown, 86, true], # 91
+  [Call, {dispatch_kind: method, eval_id: 4, file: "/home/runner/.local/share/pvm/versions/5.42.0/lib/perl5/5.42.0/Carp.pm", line: 360, name: GV, package: Carp, param_names: [], want: scalar}, [91], 91, Unknown, 91, true], # 92
+  [PadAccess, {sigil: $, symbol: gv}, ~, ~, Unknown, 92], # 93
+  [Assign, ~, [93, 92], 92, Unknown, 92, true], # 94
   [PadAccess, {sigil: $, symbol: gv}, ~, ~, Unknown, 94], # 95
-  [Assign, ~, [95, 94], 94, Unknown, 94, true], # 96
-  [PadAccess, {sigil: $, symbol: gv}, ~, ~, Unknown, 96], # 97
-  [Call, {dispatch_kind: method, eval_id: 4, file: "/home/runner/.local/share/pvm/versions/5.42.0/lib/perl5/5.42.0/Carp.pm", line: 363, name: STASH, package: Carp, param_names: [], want: scalar}, [97], 96, Unknown, 96, true], # 98
-  [Call, {dispatch_kind: method, eval_id: 4, file: "/home/runner/.local/share/pvm/versions/5.42.0/lib/perl5/5.42.0/Carp.pm", line: 363, name: NAME, package: Carp, param_names: [], want: scalar}, [98], 98, Unknown, 98, true], # 99
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [99], ~, Str], # 100
-  [Concat, ~, [53, 100], ~, Str], # 101
-  [Constant, {const_type: string, value: "::"}, ~, ~, Str], # 102
-  [Concat, ~, [101, 102], ~, Str], # 103
-  [PadAccess, {sigil: $, symbol: gv}, ~, ~, Unknown, 99], # 104
-  [Call, {dispatch_kind: method, eval_id: 4, file: "/home/runner/.local/share/pvm/versions/5.42.0/lib/perl5/5.42.0/Carp.pm", line: 364, name: NAME, package: Carp, param_names: [], want: scalar}, [104], 99, Unknown, 99, true], # 105
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [105], ~, Str], # 106
-  [Concat, ~, [103, 106], ~, Str], # 107
-  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 108
-  [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 105], # 109
-  [Defined, ~, [99], ~, Boolean], # 110
-  [Defined, ~, [105], ~, Boolean], # 111
-  [And, ~, [110, 111], ~, Boolean], # 112
-  [If, ~, [105, 112], 105], # 113
-  [Proj, {index: 0}, [113]], # 114
-  [Constant, {const_type: string, value: CORE::GLOBAL}, ~, ~, Str], # 115
-  [StrEq, ~, [100, 115], ~, Boolean], # 116
-  [Constant, {const_type: string, value: caller}, ~, ~, Str], # 117
-  [StrEq, ~, [106, 117], ~, Boolean], # 118
-  [And, ~, [116, 118], ~, Boolean], # 119
-  [If, ~, [114, 119], 114], # 120
-  [Proj, {index: 1}, [120]], # 121
-  [EntryWrite, ~, [109, 65], 121, Unknown, 105, true], # 122
-  [Proj, {index: 1}, [86]], # 123
-  [Proj, {index: 0}, [91]], # 124
-  [Proj, {index: 1}, [113]], # 125
-  [Proj, {index: 0}, [120]], # 126
-  [Exc, ~, [88]], # 127
-  [Exc, ~, [93]], # 128
-  [Exc, ~, [94]], # 129
-  [Exc, ~, [98]], # 130
-  [Exc, ~, [99]], # 131
-  [Exc, ~, [105]], # 132
-  [Region, {catch: true, eval_id: 4}, [127, 128, 129, 130, 131, 132]], # 133
-  [Phi, {memory: true, region: 133}, [88, 93, 94, 98, 99, 105], ~, Unknown], # 134
-  [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 134], # 135
-  [Phi, {region: 133}, [127, 128, 129, 130, 131, 132], ~, Scalar], # 136
-  [EntryWrite, ~, [135, 136], 133, Unknown, 134, true], # 137
-  [Region, {eval_entry: 82, eval_id: 4}, [122, 123, 124, 125, 126, 137]], # 138
-  [Phi, {region: 138}, [107, 65, 65, 108, 108, 108], ~, "Maybe[Str]"], # 139
-  [Or, ~, [139, 65], ~, "Maybe[Str]"], # 140
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [140], ~, Str], # 141
-  [Concat, ~, [52, 141], ~, Str], # 142
-  [Constant, {const_type: string, value: "; @DB::args were not set **"}, ~, ~, Str], # 143
-  [Concat, ~, [142, 143], ~, Str], # 144
-  [ArrayLiteral, {sigil: "@", symbol: args}, [144], ~, Array], # 145
-  [ArrayLiteral, ~, ~, ~, Array], # 146
-  [Proj, {index: 1}, [81]], # 147
-  [EntryDef, {package: Carp, sigil: $, symbol: MaxArgNums}, ~, ~, Scalar, 63], # 148
-  [Coerce, {from_repr: Scalar, to_repr: Num}, [148], ~, Num], # 149
-  [NumGt, ~, [68, 149], ~, Boolean], # 150
-  [And, ~, [148, 150], ~, Scalar], # 151
-  [If, ~, [147, 151], 147], # 152
-  [Proj, {index: 1}, [152]], # 153
-  [Subtract, ~, [149, 20], ~, Num], # 154
-  [Proj, {index: 0}, [152]], # 155
-  [Call, {dispatch_kind: builtin, name: set_arylen, param_names: []}, [67, 154], 155, Int, 63, true], # 156
-  [Region, {head: 152}, [153, 156]], # 157
-  [Loop, {bound: entry}, [157], 157], # 158
-  [Phi, {region: 158}, [146, 240], ~, Array], # 159
-  [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar], # 160
-  [Phi, {memory: true, region: 138}, [122, 85, 88, 105, 105, 137], ~, Unknown], # 161
-  [EntryWrite, ~, [160, 64], 138, Unknown, 161, true], # 162
-  [Proj, {index: 1}, [158]], # 163
-  [Region, {head: 158}, [163]], # 164
-  [Phi, {predecessors: [153, 155], region: 157}, [108, 20], ~, "Maybe[Int]"], # 165
-  [If, ~, [164, 165], 164], # 166
-  [Proj, {index: 1}, [166]], # 167
-  [Constant, {const_type: string, value: "..."}, ~, ~, Str], # 168
-  [Proj, {index: 0}, [166]], # 169
-  [Phi, {memory: true, predecessors: [153, 155], region: 157}, [63, 156], ~, Unknown], # 170
-  [Phi, {memory: true, region: 158}, [170, 232], ~, Unknown], # 171
-  [Phi, {memory: true, region: 164}, [171], ~, Unknown], # 172
-  [Call, {dispatch_kind: builtin, name: push, param_names: []}, [159, 168], 169, Int, 172, true], # 173
-  [Region, {head: 166}, [167, 173]], # 174
-  [Region, {head: 81}, [162, 174]], # 175
-  [Phi, {region: 175}, [145, 159], ~, Array], # 176
-  [Phi, {memory: true, predecessors: [167, 169], region: 174}, [172, 173], ~, Unknown], # 177
-  [Phi, {memory: true, region: 175}, [162, 177], ~, Unknown], # 178
-  [PostfixDeref, {sigil: "@"}, [176], ~, Array, 178], # 179
-  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [51, 179], ~, Str, 178], # 180
-  [Concat, ~, [50, 180], ~, Str], # 181
-  [Constant, {const_type: string, value: ")"}, ~, ~, Str], # 182
-  [Concat, ~, [181, 182], ~, Str], # 183
-  [Proj, {index: 1}, [57]], # 184
-  [Region, {head: 57}, [184, 175]], # 185
-  [Phi, {predecessors: [184, 58], region: 185}, [47, 183], ~, Scalar], # 186
-  [Phi, {memory: true, predecessors: [184, 58], region: 185}, [47, 178], ~, Unknown], # 187
-  [Assign, ~, [45, 186], 185, Scalar, 187, true], # 188
-  [Region, {head: 42}, [43, 188]], # 189
-  [Phi, {predecessors: [43, 46], region: 189}, [1, 5], ~, Unknown], # 190
-  [Phi, {predecessors: [43, 46], region: 189}, [108, 5], ~, Unknown], # 191
-  [Phi, {exits: true, memory: true, predecessors: [43, 46], region: 189}, [38, 188], ~, Unknown], # 192
-  [Return, ~, [190, 191], 189, ~, 192], # 193
-  [PadAccess, {sigil: $, symbol: arg}, ~, ~, Unknown, 60], # 194
-  [Proj, {index: 0}, [59]], # 195
-  [Assign, ~, [194, 108], 195, Undef, 60, true], # 196
-  [Phi, {region: 158}, [70, 216], ~, Int], # 197
-  [Proj, {index: 0}, [158]], # 198
-  [Exists, {kind: array}, [67, 197], 198, Boolean, 171], # 199
-  [Subscript, {kind: array}, [67, 197], ~, Scalar], # 200
-  [Ref, ~, [200], ~, ScalarRef], # 201
-  [TernaryExpr, ~, [199, 201, 108], ~, "Maybe[ScalarRef]"], # 202
-  [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 196], # 203
-  [EntryWrite, ~, [160, 203], 196, Unknown, 196, true], # 204
-  [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 204], # 205
-  [EntryWrite, ~, [205, 65], 204, Unknown, 204, true], # 206
-  [PadAccess, {sigil: $, symbol: arg}, ~, ~, Unknown, 206], # 207
-  [Phi, {region: 59}, [70, 215], ~, Int], # 208
-  [Subscript, {kind: array}, [24, 208], ~, Scalar, 60], # 209
-  [Assign, ~, [207, 209], 206, Scalar, 206, true], # 210
-  [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 210], # 211
-  [EntryWrite, ~, [211, 65], 210, Unknown, 210, true], # 212
-  [Region, {eval_entry: 204, eval_id: 3}, [212]], # 213
-  [Phi, {region: 213}, [20], ~, "Maybe[Int]"], # 214
-  [Add, ~, [208, 20], ~, Int], # 215
-  [Add, ~, [197, 20], ~, Int], # 216
-  [LocalAlias, {name: _}, [202], 199, Unknown, 171], # 217
-  [If, ~, [213, 214], 213], # 218
-  [PadAccess, {sigil: $, symbol: func}, ~, ~, Unknown, 85], # 219
-  [Count, ~, [24], ~, Int, 47], # 220
-  [Proj, {index: 0}, [218]], # 221
-  [PadAccess, {sigil: $, symbol: arg}, ~, ~, Unknown, 212], # 222
-  [Constant, {const_type: string, value: "** argument not available anymore **"}, ~, ~, Str], # 223
-  [Proj, {index: 1}, [218]], # 224
-  [Assign, ~, [222, 223], 224, Str, 212, true], # 225
-  [Region, {head: 218}, [221, 225]], # 226
-  [Phi, {memory: true, predecessors: [221, 224], region: 226}, [212, 225], ~, Unknown], # 227
-  [EntryWrite, ~, [160, 203], 226, Unknown, 227, true], # 228
-  [Phi, {region: 175}, [64, 203], ~, Scalar], # 229
-  [Count, ~, [24], ~, Int, 60], # 230
-  [Subscript, {kind: array}, [67, 197], ~, Scalar, 171], # 231
-  [Call, {dispatch_kind: direct, file: "/home/runner/.local/share/pvm/versions/5.42.0/lib/perl5/5.42.0/Carp.pm", line: 382, name: Carp::format_arg, package: Carp, param_names: [], want: list}, [231], 217, Unknown, 171, true], # 232
-  [NumGt, ~, [230, 208], 59, Boolean], # 233
-  [Count, ~, [67], ~, Int, 171], # 234
-  [NumGt, ~, [234, 197], 158, Boolean], # 235
-  [PadAccess, {sigil: $, symbol: arg}, ~, ~, Unknown, 227], # 236
-  [ListAppend, {collector: map}, [67, 236], ~, Array], # 237
-  [Call, {dispatch_kind: builtin, name: arylen, param_names: []}, [67], ~, Int], # 238
-  [Count, ~, [67], ~, Int, 170], # 239
-  [ListAppend, {collector: map}, [159, 232], ~, Array]]} # 240
+  [Call, {dispatch_kind: method, eval_id: 4, file: "/home/runner/.local/share/pvm/versions/5.42.0/lib/perl5/5.42.0/Carp.pm", line: 363, name: STASH, package: Carp, param_names: [], want: scalar}, [95], 94, Unknown, 94, true], # 96
+  [Call, {dispatch_kind: method, eval_id: 4, file: "/home/runner/.local/share/pvm/versions/5.42.0/lib/perl5/5.42.0/Carp.pm", line: 363, name: NAME, package: Carp, param_names: [], want: scalar}, [96], 96, Unknown, 96, true], # 97
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [97], ~, Str], # 98
+  [Concat, ~, [51, 98], ~, Str], # 99
+  [Constant, {const_type: string, value: "::"}, ~, ~, Str], # 100
+  [Concat, ~, [99, 100], ~, Str], # 101
+  [PadAccess, {sigil: $, symbol: gv}, ~, ~, Unknown, 97], # 102
+  [Call, {dispatch_kind: method, eval_id: 4, file: "/home/runner/.local/share/pvm/versions/5.42.0/lib/perl5/5.42.0/Carp.pm", line: 364, name: NAME, package: Carp, param_names: [], want: scalar}, [102], 97, Unknown, 97, true], # 103
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [103], ~, Str], # 104
+  [Concat, ~, [101, 104], ~, Str], # 105
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 106
+  [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 103], # 107
+  [Defined, ~, [97], ~, Boolean], # 108
+  [Defined, ~, [103], ~, Boolean], # 109
+  [And, ~, [108, 109], ~, Boolean], # 110
+  [If, ~, [103, 110], 103], # 111
+  [Proj, {index: 0}, [111]], # 112
+  [Constant, {const_type: string, value: CORE::GLOBAL}, ~, ~, Str], # 113
+  [StrEq, ~, [98, 113], ~, Boolean], # 114
+  [Constant, {const_type: string, value: caller}, ~, ~, Str], # 115
+  [StrEq, ~, [104, 115], ~, Boolean], # 116
+  [And, ~, [114, 116], ~, Boolean], # 117
+  [If, ~, [112, 117], 112], # 118
+  [Proj, {index: 1}, [118]], # 119
+  [EntryWrite, ~, [107, 63], 119, Unknown, 103, true], # 120
+  [Proj, {index: 1}, [84]], # 121
+  [Proj, {index: 0}, [89]], # 122
+  [Proj, {index: 1}, [111]], # 123
+  [Proj, {index: 0}, [118]], # 124
+  [Exc, ~, [86]], # 125
+  [Exc, ~, [91]], # 126
+  [Exc, ~, [92]], # 127
+  [Exc, ~, [96]], # 128
+  [Exc, ~, [97]], # 129
+  [Exc, ~, [103]], # 130
+  [Region, {catch: true, eval_id: 4}, [125, 126, 127, 128, 129, 130]], # 131
+  [Phi, {memory: true, region: 131}, [86, 91, 92, 96, 97, 103], ~, Unknown], # 132
+  [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 132], # 133
+  [Phi, {region: 131}, [125, 126, 127, 128, 129, 130], ~, Scalar], # 134
+  [EntryWrite, ~, [133, 134], 131, Unknown, 132, true], # 135
+  [Region, {eval_entry: 80, eval_id: 4}, [120, 121, 122, 123, 124, 135]], # 136
+  [Phi, {region: 136}, [105, 63, 63, 106, 106, 106], ~, "Maybe[Str]"], # 137
+  [Or, ~, [137, 63], ~, "Maybe[Str]"], # 138
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [138], ~, Str], # 139
+  [Concat, ~, [50, 139], ~, Str], # 140
+  [Constant, {const_type: string, value: "; @DB::args were not set **"}, ~, ~, Str], # 141
+  [Concat, ~, [140, 141], ~, Str], # 142
+  [ArrayLiteral, {sigil: "@", symbol: args}, [142], ~, Array], # 143
+  [ArrayLiteral, ~, ~, ~, Array], # 144
+  [Proj, {index: 1}, [79]], # 145
+  [EntryDef, {package: Carp, sigil: $, symbol: MaxArgNums}, ~, ~, Scalar, 61], # 146
+  [Coerce, {from_repr: Scalar, to_repr: Num}, [146], ~, Num], # 147
+  [NumGt, ~, [66, 147], ~, Boolean], # 148
+  [And, ~, [146, 148], ~, Scalar], # 149
+  [If, ~, [145, 149], 145], # 150
+  [Proj, {index: 1}, [150]], # 151
+  [Subtract, ~, [147, 21], ~, Num], # 152
+  [Proj, {index: 0}, [150]], # 153
+  [Call, {dispatch_kind: builtin, name: set_arylen, param_names: []}, [65, 152], 153, Int, 61, true], # 154
+  [Region, {head: 150}, [151, 154]], # 155
+  [Loop, {bound: entry}, [155], 155], # 156
+  [Phi, {region: 156}, [144, 241], ~, Array], # 157
+  [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar], # 158
+  [Phi, {memory: true, region: 136}, [120, 83, 86, 103, 103, 135], ~, Unknown], # 159
+  [EntryWrite, ~, [158, 62], 136, Unknown, 159, true], # 160
+  [Proj, {index: 1}, [156]], # 161
+  [Region, {head: 156}, [161]], # 162
+  [Phi, {predecessors: [151, 153], region: 155}, [106, 21], ~, "Maybe[Int]"], # 163
+  [If, ~, [162, 163], 162], # 164
+  [Proj, {index: 1}, [164]], # 165
+  [Constant, {const_type: string, value: "..."}, ~, ~, Str], # 166
+  [Proj, {index: 0}, [164]], # 167
+  [Phi, {memory: true, predecessors: [151, 153], region: 155}, [61, 154], ~, Unknown], # 168
+  [Phi, {memory: true, region: 156}, [168, 233], ~, Unknown], # 169
+  [Phi, {memory: true, region: 162}, [169], ~, Unknown], # 170
+  [Call, {dispatch_kind: builtin, name: push, param_names: []}, [157, 166], 167, Int, 170, true], # 171
+  [Region, {head: 164}, [165, 171]], # 172
+  [Region, {head: 79}, [160, 172]], # 173
+  [Phi, {region: 173}, [143, 157], ~, Array], # 174
+  [Phi, {memory: true, predecessors: [165, 167], region: 172}, [170, 171], ~, Unknown], # 175
+  [Phi, {memory: true, region: 173}, [160, 175], ~, Unknown], # 176
+  [PostfixDeref, {sigil: "@"}, [174], ~, Array, 176], # 177
+  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [49, 177], ~, Str, 176], # 178
+  [Concat, ~, [48, 178], ~, Str], # 179
+  [Constant, {const_type: string, value: ")"}, ~, ~, Str], # 180
+  [Concat, ~, [179, 180], ~, Str], # 181
+  [Proj, {index: 1}, [55]], # 182
+  [Region, {head: 55}, [182, 173]], # 183
+  [Phi, {predecessors: [182, 56], region: 183}, [45, 181], ~, Scalar], # 184
+  [Phi, {memory: true, predecessors: [182, 56], region: 183}, [45, 176], ~, Unknown], # 185
+  [Assign, ~, [5, 184], 183, Scalar, 185, true], # 186
+  [PadAccess, {sigil: "%", symbol: call_info}, ~, ~, Hash, 186], # 187
+  [TernaryExpr, ~, [2, 187, 6], ~, Unknown], # 188
+  [Proj, {index: 0}, [43]], # 189
+  [Region, {head: 43}, [189, 186]], # 190
+  [Phi, {predecessors: [189, 44], region: 190}, [1, 188], ~, Unknown], # 191
+  [Phi, {predecessors: [189, 44], region: 190}, [106, 188], ~, Unknown], # 192
+  [Phi, {exits: true, memory: true, predecessors: [189, 44], region: 190}, [39, 186], ~, Unknown], # 193
+  [Return, ~, [191, 192], 190, ~, 193], # 194
+  [PadAccess, {sigil: $, symbol: arg}, ~, ~, Unknown, 58], # 195
+  [Proj, {index: 0}, [57]], # 196
+  [Assign, ~, [195, 106], 196, Undef, 58, true], # 197
+  [Phi, {region: 156}, [68, 217], ~, Int], # 198
+  [Proj, {index: 0}, [156]], # 199
+  [Exists, {kind: array}, [65, 198], 199, Boolean, 169], # 200
+  [Subscript, {kind: array}, [65, 198], ~, Scalar], # 201
+  [Ref, ~, [201], ~, ScalarRef], # 202
+  [TernaryExpr, ~, [200, 202, 106], ~, "Maybe[ScalarRef]"], # 203
+  [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 197], # 204
+  [EntryWrite, ~, [158, 204], 197, Unknown, 197, true], # 205
+  [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 205], # 206
+  [EntryWrite, ~, [206, 63], 205, Unknown, 205, true], # 207
+  [PadAccess, {sigil: $, symbol: arg}, ~, ~, Unknown, 207], # 208
+  [Phi, {region: 57}, [68, 216], ~, Int], # 209
+  [Subscript, {kind: array}, [25, 209], ~, Scalar, 58], # 210
+  [Assign, ~, [208, 210], 207, Scalar, 207, true], # 211
+  [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 211], # 212
+  [EntryWrite, ~, [212, 63], 211, Unknown, 211, true], # 213
+  [Region, {eval_entry: 205, eval_id: 3}, [213]], # 214
+  [Phi, {region: 214}, [21], ~, "Maybe[Int]"], # 215
+  [Add, ~, [209, 21], ~, Int], # 216
+  [Add, ~, [198, 21], ~, Int], # 217
+  [LocalAlias, {name: _}, [203], 200, Unknown, 169], # 218
+  [If, ~, [214, 215], 214], # 219
+  [PadAccess, {sigil: $, symbol: func}, ~, ~, Unknown, 83], # 220
+  [Count, ~, [25], ~, Int, 45], # 221
+  [Proj, {index: 0}, [219]], # 222
+  [PadAccess, {sigil: $, symbol: arg}, ~, ~, Unknown, 213], # 223
+  [Constant, {const_type: string, value: "** argument not available anymore **"}, ~, ~, Str], # 224
+  [Proj, {index: 1}, [219]], # 225
+  [Assign, ~, [223, 224], 225, Str, 213, true], # 226
+  [Region, {head: 219}, [222, 226]], # 227
+  [Phi, {memory: true, predecessors: [222, 225], region: 227}, [213, 226], ~, Unknown], # 228
+  [EntryWrite, ~, [158, 204], 227, Unknown, 228, true], # 229
+  [Phi, {region: 173}, [62, 204], ~, Scalar], # 230
+  [Count, ~, [25], ~, Int, 58], # 231
+  [Subscript, {kind: array}, [65, 198], ~, Scalar, 169], # 232
+  [Call, {dispatch_kind: direct, file: "/home/runner/.local/share/pvm/versions/5.42.0/lib/perl5/5.42.0/Carp.pm", line: 382, name: Carp::format_arg, package: Carp, param_names: [], want: list}, [232], 218, Unknown, 169, true], # 233
+  [NumGt, ~, [231, 209], 57, Boolean], # 234
+  [Count, ~, [65], ~, Int, 169], # 235
+  [NumGt, ~, [235, 198], 156, Boolean], # 236
+  [PadAccess, {sigil: $, symbol: arg}, ~, ~, Unknown, 228], # 237
+  [ListAppend, {collector: map}, [65, 237], ~, Array], # 238
+  [Call, {dispatch_kind: builtin, name: arylen, param_names: []}, [65], ~, Int], # 239
+  [Count, ~, [65], ~, Int, 168], # 240
+  [ListAppend, {collector: map}, [157, 233], ~, Array]]} # 241
 Carp::carp: {start: 0, returns: [5], nodes: [
   [Start], # 0
   [ArgsSource, ~, ~, ~, Array], # 1
@@ -840,7 +841,7 @@ Carp::get_status: {start: 0, returns: [35], nodes: [
   [Subscript, {kind: hash}, [3, 29], 27, Scalar, 28, true], # 30
   [PostfixDeref, {eval_id: ~, file: "/home/runner/.local/share/pvm/versions/5.42.0/lib/perl5/5.42.0/Carp.pm", line: 500, package: Carp, sigil: "@", strict: true}, [30], 30, Array, 30, true], # 31
   [ArrayLiteral, ~, [31], ~, List], # 32
-  [Count, ~, [31], ~, Int], # 33
+  [Count, ~, [31], ~, Int, 31], # 33
   [Coerce, {from_repr: List, to_repr: Scalar}, [33], ~, Scalar], # 34
   [Return, ~, [32, 34], 31, ~, 31]]} # 35
 Carp::get_subname: {start: 0, returns: [70], nodes: [
@@ -1112,7 +1113,7 @@ Carp::ret_backtrace: {start: 0, returns: [76], nodes: [
   [Proj, {index: 0}, [46]], # 47
   [PostfixDeref, {eval_id: ~, file: "/home/runner/.local/share/pvm/versions/5.42.0/lib/perl5/5.42.0/Carp.pm", line: 605, package: Carp, sigil: $, strict: true}, [41], 47, Scalar, 45, true], # 48
   [Constant, {const_type: string, value: NAME}, ~, ~, Str], # 49
-  [Subscript, ~, [48, 49], ~, Scalar], # 50
+  [Subscript, ~, [48, 49], ~, Scalar, 48], # 50
   [EntryDef, {package: main, sigil: $, symbol: "/"}, ~, ~, Scalar, 48], # 51
   [Coerce, {from_repr: Unknown, to_repr: Str}, [51], ~, Str], # 52
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 53
@@ -1541,7 +1542,7 @@ Carp::trusts_directly: {start: 0, returns: [57], nodes: [
   [Proj, {index: 1}, [33]], # 35
   [Region, {head: 33}, [34, 35]], # 36
   [Constant, {const_type: string, value: ARRAY}, ~, ~, Str], # 37
-  [Subscript, ~, [19, 37], ~, Scalar], # 38
+  [Subscript, ~, [19, 37], ~, Scalar, 18], # 38
   [Phi, {predecessors: [34, 35], region: 36}, [38, 32], ~, Scalar], # 39
   [If, ~, [36, 39], 36], # 40
   [Proj, {index: 0}, [40]], # 41
@@ -3469,7 +3470,7 @@ main::__PROGRAM__: {start: 0, returns: [18], nodes: [
   [Constant, {const_type: string, value: POSIX.pm}, ~, ~, Str], # 2
   [MemStart], # 3
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [2], 0, Unknown, 3, true], # 4
-  [Call, {class_name: POSIX, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: import, package: main, param_names: []}, [1], 4, Unknown, 4, true], # 5
+  [Call, {class_name: POSIX, dispatch_kind: method, file: "/tmp/ucZOh245UI/case.pl", line: 1, name: import, package: main, param_names: []}, [1], 4, Unknown, 4, true], # 5
   [Return, {implicit: true}, [5], 5, ~, 5]]} # 6
 ```
 
@@ -3566,7 +3567,7 @@ Carp::_fetch_sub: {start: 0, returns: [64], nodes: [
   [Constant, {const_type: string, value: GLOB}, ~, ~, Str], # 34
   [StrEq, ~, [33, 34], ~, Boolean], # 35
   [Constant, {const_type: string, value: HASH}, ~, ~, Str], # 36
-  [Subscript, ~, [28, 36], ~, Scalar], # 37
+  [Subscript, ~, [28, 36], ~, Scalar, 18], # 37
   [And, ~, [35, 37], ~, Scalar], # 38
   [If, ~, [32, 38], 32], # 39
   [Proj, {index: 0}, [39]], # 40
@@ -3582,7 +3583,7 @@ Carp::_fetch_sub: {start: 0, returns: [64], nodes: [
   [Call, {dispatch_kind: builtin, name: reftype_of_ref, param_names: []}, [49], ~, Str, 18], # 50
   [StrEq, ~, [50, 34], ~, Boolean], # 51
   [Constant, {const_type: string, value: CODE}, ~, ~, Str], # 52
-  [Subscript, ~, [49, 52], ~, Scalar], # 53
+  [Subscript, ~, [49, 52], ~, Scalar, 18], # 53
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 54
   [TernaryExpr, ~, [51, 53, 54], ~, Unknown], # 55
   [Proj, {index: 1}, [45]], # 56
@@ -3644,7 +3645,7 @@ Carp::_univ_mod_loaded: {start: 0, returns: [89], nodes: [
   [Constant, {const_type: string, value: GLOB}, ~, ~, Str], # 34
   [StrEq, ~, [33, 34], ~, Boolean], # 35
   [Constant, {const_type: string, value: HASH}, ~, ~, Str], # 36
-  [Subscript, ~, [24, 36], ~, Scalar], # 37
+  [Subscript, ~, [24, 36], ~, Scalar, 16], # 37
   [And, ~, [35, 37], ~, Scalar], # 38
   [If, ~, [32, 38], 32], # 39
   [Proj, {index: 0}, [39]], # 40
@@ -3664,7 +3665,7 @@ Carp::_univ_mod_loaded: {start: 0, returns: [89], nodes: [
   [Proj, {index: 0}, [47]], # 54
   [Call, {dispatch_kind: builtin, name: reftype_of_ref, param_names: []}, [50], ~, Str, 49], # 55
   [StrEq, ~, [55, 34], ~, Boolean], # 56
-  [Subscript, ~, [50, 36], ~, Scalar], # 57
+  [Subscript, ~, [50, 36], ~, Scalar, 49], # 57
   [And, ~, [56, 57], ~, Scalar], # 58
   [If, ~, [54, 58], 54], # 59
   [Proj, {index: 0}, [59]], # 60
@@ -3679,7 +3680,7 @@ Carp::_univ_mod_loaded: {start: 0, returns: [89], nodes: [
   [Phi, {memory: true, region: 67}, [49, 78], ~, Unknown], # 69
   [Subscript, {kind: array}, [53, 68], ~, Scalar, 69], # 70
   [Constant, {const_type: string, value: SCALAR}, ~, ~, Str], # 71
-  [Subscript, ~, [70, 71], ~, Scalar], # 72
+  [Subscript, ~, [70, 71], ~, Scalar, 69], # 72
   [Proj, {index: 0}, [67]], # 73
   [Call, {dispatch_kind: builtin, name: reftype_of_ref, param_names: []}, [70], ~, Str, 69], # 74
   [StrEq, ~, [74, 34], ~, Boolean], # 75
@@ -3717,248 +3718,249 @@ Carp::_univ_mod_loaded: {start: 0, returns: [89], nodes: [
   [Count, ~, [53], ~, Int, 69], # 107
   [NumGt, ~, [107, 68], 67, Boolean], # 108
   [Count, ~, [22], ~, Int, 5]]} # 109
-Carp::caller_info: {start: 0, returns: [193], nodes: [
+Carp::caller_info: {start: 0, returns: [194], nodes: [
   [Start], # 0
   [ArrayLiteral, ~, ~, ~, List], # 1
   [Wantarray, ~, ~, ~, Scalar], # 2
   [PadAccess, {sigil: "%", symbol: call_info}, ~, ~, Hash], # 3
-  [Ref, ~, [3], ~, HashRef], # 4
-  [TernaryExpr, ~, [2, 3, 4], ~, Unknown], # 5
-  [Constant, {const_type: string, value: pack}, ~, ~, Str], # 6
-  [Constant, {const_type: string, value: file}, ~, ~, Str], # 7
-  [Constant, {const_type: string, value: line}, ~, ~, Str], # 8
-  [Constant, {const_type: string, value: sub}, ~, ~, Str], # 9
-  [Constant, {const_type: string, value: has_args}, ~, ~, Str], # 10
-  [Constant, {const_type: string, value: wantarray}, ~, ~, Str], # 11
-  [Constant, {const_type: string, value: evaltext}, ~, ~, Str], # 12
-  [Constant, {const_type: string, value: is_require}, ~, ~, Str], # 13
-  [Slice, {kind: hash}, [6, 7, 8, 9, 10, 11, 12, 13, 3], ~, List], # 14
-  [ArgsSource, ~, ~, ~, Array], # 15
-  [MemStart], # 16
-  [Call, {dispatch_kind: builtin, name: shift, param_names: []}, [15], 0, Scalar, 16, true], # 17
-  [PadAccess, {sigil: $, symbol: i}, ~, ~, Unknown, 17], # 18
-  [Coerce, {from_repr: Scalar, to_repr: Num}, [17], ~, Num], # 19
-  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 20
-  [Add, ~, [19, 20], ~, Num], # 21
-  [Assign, ~, [18, 21], 17, Num, 17, true], # 22
-  [Call, {dispatch_kind: direct, file: "/home/runner/.local/share/pvm/versions/5.42.0/lib/perl5/5.42.0/Carp.pm", line: 308, name: Carp::_cgc, package: Carp, param_names: [], want: scalar}, ~, 22, List, 22, true], # 23
-  [EntryDef, {package: DB, sigil: "@", symbol: args}, ~, ~, Array], # 24
-  [PadAccess, {sigil: $, symbol: i}, ~, ~, Unknown, 23], # 25
-  [Ref, ~, [25], ~, Unknown], # 26
-  [ArrayLiteral, {sigil: "@", symbol: "@DB::args"}, [26], ~, Array], # 27
-  [EntryWrite, ~, [24, 27], 23, Unknown, 23, true], # 28
-  [PadAccess, {sigil: $, symbol: i}, ~, ~, Unknown, 28], # 29
-  [If, ~, [28, 23], 28], # 30
-  [Proj, {index: 0}, [30]], # 31
-  [Call, {dispatch_kind: indirect, file: "/home/runner/.local/share/pvm/versions/5.42.0/lib/perl5/5.42.0/Carp.pm", line: 320, name: "", package: DB, param_names: [], want: list}, [23, 29], 31, Unknown, 28, true], # 32
-  [Proj, {index: 1}, [30]], # 33
-  [Call, {dispatch_kind: builtin, name: caller, param_names: []}, [29], 33, List, 28], # 34
-  [Region, {head: 30}, [32, 34]], # 35
-  [Phi, {predecessors: [31, 33], region: 35}, [32, 34], ~, Unknown], # 36
-  [Phi, {memory: true, predecessors: [31, 33], region: 35}, [32, 28], ~, Unknown], # 37
-  [Assign, {targets: 1}, [14, 36], 35, Unknown, 37, true], # 38
-  [Subscript, {kind: hash}, [3, 7], ~, Scalar, 38], # 39
-  [Defined, ~, [39], ~, Boolean], # 40
-  [Not, ~, [40], ~, Boolean], # 41
-  [If, ~, [38, 41], 38], # 42
-  [Proj, {index: 0}, [42]], # 43
-  [Constant, {const_type: string, value: sub_name}, ~, ~, Str], # 44
-  [Subscript, {kind: hash}, [3, 44], ~, Scalar], # 45
-  [Proj, {index: 1}, [42]], # 46
-  [Call, {dispatch_kind: direct, file: "/home/runner/.local/share/pvm/versions/5.42.0/lib/perl5/5.42.0/Carp.pm", line: 328, name: Carp::get_subname, package: Carp, param_names: [], want: scalar}, [4], 46, Scalar, 38, true], # 47
-  [Coerce, {from_repr: Scalar, to_repr: Str}, [47], ~, Str], # 48
-  [Constant, {const_type: string, value: "("}, ~, ~, Str], # 49
-  [Concat, ~, [48, 49], ~, Str], # 50
-  [Constant, {const_type: string, value: ", "}, ~, ~, Str], # 51
-  [Constant, {const_type: string, value: "** Incomplete caller override detected"}, ~, ~, Str], # 52
-  [Constant, {const_type: string, value: " in &"}, ~, ~, Str], # 53
-  [Constant, {const_type: string, value: B}, ~, ~, Str], # 54
-  [Constant, {const_type: string, value: svref_2object}, ~, ~, Str], # 55
-  [Subscript, {kind: hash}, [3, 10], ~, Scalar, 47], # 56
-  [If, ~, [47, 56], 47], # 57
-  [Proj, {index: 0}, [57]], # 58
-  [Loop, {bound: entry}, [58], 58], # 59
-  [Phi, {memory: true, region: 59}, [47, 228], ~, Unknown], # 60
-  [Proj, {index: 1}, [59]], # 61
-  [Region, {head: 59}, [61]], # 62
-  [Phi, {memory: true, region: 62}, [60], ~, Unknown], # 63
-  [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 63], # 64
-  [Constant, {const_type: string, value: ""}, ~, ~, Str], # 65
-  [ArrayLiteral, ~, ~, ~, Array], # 66
-  [Phi, {region: 59}, [66, 237], ~, Array], # 67
-  [Count, ~, [67], ~, Int, 63], # 68
-  [NumEq, ~, [68, 20], ~, Boolean], # 69
-  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 70
-  [Subscript, {kind: array}, [67, 70], ~, Scalar, 63], # 71
-  [RefType, ~, [71], ~, Str, 63], # 72
-  [PadAccess, {sigil: $, symbol: i}, ~, ~, Unknown, 63], # 73
-  [Call, {dispatch_kind: builtin, name: reftype_of_ref, param_names: []}, [73], ~, Str, 63], # 74
-  [StrEq, ~, [72, 74], ~, Boolean], # 75
-  [And, ~, [69, 75], ~, Boolean], # 76
-  [Coerce, {from_repr: Scalar, to_repr: Num}, [71], ~, Num], # 77
-  [Ref, ~, [73], ~, Unknown], # 78
-  [NumEq, ~, [77, 78], ~, Boolean], # 79
-  [And, ~, [76, 79], ~, Boolean], # 80
-  [If, ~, [62, 80], 62], # 81
-  [Proj, {index: 0}, [81]], # 82
-  [EntryWrite, ~, [64, 65], 82, Unknown, 63, true], # 83
-  [PadAccess, {sigil: $, symbol: func}, ~, ~, Unknown, 83], # 84
-  [Assign, ~, [84, 23], 83, List, 83, true], # 85
-  [If, ~, [85, 23], 85], # 86
-  [Proj, {index: 0}, [86]], # 87
-  [Call, {dispatch_kind: direct, eval_id: 4, file: "/home/runner/.local/share/pvm/versions/5.42.0/lib/perl5/5.42.0/Carp.pm", line: 360, name: Carp::_fetch_sub, package: Carp, param_names: [], want: scalar}, [54, 55], 87, Unknown, 85, true], # 88
-  [PadAccess, {sigil: $, symbol: func}, ~, ~, Unknown, 88], # 89
-  [Not, ~, [88], ~, Boolean], # 90
-  [If, ~, [88, 90], 88], # 91
-  [Proj, {index: 1}, [91]], # 92
-  [Call, {dispatch_kind: indirect, eval_id: 4, file: "/home/runner/.local/share/pvm/versions/5.42.0/lib/perl5/5.42.0/Carp.pm", line: 360, name: "", package: Carp, param_names: [], want: scalar}, [88, 89], 92, Unknown, 88, true], # 93
-  [Call, {dispatch_kind: method, eval_id: 4, file: "/home/runner/.local/share/pvm/versions/5.42.0/lib/perl5/5.42.0/Carp.pm", line: 360, name: GV, package: Carp, param_names: [], want: scalar}, [93], 93, Unknown, 93, true], # 94
+  [Constant, {const_type: string, value: sub_name}, ~, ~, Str], # 4
+  [Subscript, {kind: hash}, [3, 4], ~, Scalar], # 5
+  [Ref, ~, [3], ~, HashRef], # 6
+  [Constant, {const_type: string, value: pack}, ~, ~, Str], # 7
+  [Constant, {const_type: string, value: file}, ~, ~, Str], # 8
+  [Constant, {const_type: string, value: line}, ~, ~, Str], # 9
+  [Constant, {const_type: string, value: sub}, ~, ~, Str], # 10
+  [Constant, {const_type: string, value: has_args}, ~, ~, Str], # 11
+  [Constant, {const_type: string, value: wantarray}, ~, ~, Str], # 12
+  [Constant, {const_type: string, value: evaltext}, ~, ~, Str], # 13
+  [Constant, {const_type: string, value: is_require}, ~, ~, Str], # 14
+  [Slice, {kind: hash}, [7, 8, 9, 10, 11, 12, 13, 14, 3], ~, List], # 15
+  [ArgsSource, ~, ~, ~, Array], # 16
+  [MemStart], # 17
+  [Call, {dispatch_kind: builtin, name: shift, param_names: []}, [16], 0, Scalar, 17, true], # 18
+  [PadAccess, {sigil: $, symbol: i}, ~, ~, Unknown, 18], # 19
+  [Coerce, {from_repr: Scalar, to_repr: Num}, [18], ~, Num], # 20
+  [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 21
+  [Add, ~, [20, 21], ~, Num], # 22
+  [Assign, ~, [19, 22], 18, Num, 18, true], # 23
+  [Call, {dispatch_kind: direct, file: "/home/runner/.local/share/pvm/versions/5.42.0/lib/perl5/5.42.0/Carp.pm", line: 308, name: Carp::_cgc, package: Carp, param_names: [], want: scalar}, ~, 23, List, 23, true], # 24
+  [EntryDef, {package: DB, sigil: "@", symbol: args}, ~, ~, Array], # 25
+  [PadAccess, {sigil: $, symbol: i}, ~, ~, Unknown, 24], # 26
+  [Ref, ~, [26], ~, Unknown], # 27
+  [ArrayLiteral, {sigil: "@", symbol: "@DB::args"}, [27], ~, Array], # 28
+  [EntryWrite, ~, [25, 28], 24, Unknown, 24, true], # 29
+  [PadAccess, {sigil: $, symbol: i}, ~, ~, Unknown, 29], # 30
+  [If, ~, [29, 24], 29], # 31
+  [Proj, {index: 0}, [31]], # 32
+  [Call, {dispatch_kind: indirect, file: "/home/runner/.local/share/pvm/versions/5.42.0/lib/perl5/5.42.0/Carp.pm", line: 320, name: "", package: DB, param_names: [], want: list}, [24, 30], 32, Unknown, 29, true], # 33
+  [Proj, {index: 1}, [31]], # 34
+  [Call, {dispatch_kind: builtin, name: caller, param_names: []}, [30], 34, List, 29], # 35
+  [Region, {head: 31}, [33, 35]], # 36
+  [Phi, {predecessors: [32, 34], region: 36}, [33, 35], ~, Unknown], # 37
+  [Phi, {memory: true, predecessors: [32, 34], region: 36}, [33, 29], ~, Unknown], # 38
+  [Assign, {targets: 1}, [15, 37], 36, Unknown, 38, true], # 39
+  [Subscript, {kind: hash}, [3, 8], ~, Scalar, 39], # 40
+  [Defined, ~, [40], ~, Boolean], # 41
+  [Not, ~, [41], ~, Boolean], # 42
+  [If, ~, [39, 42], 39], # 43
+  [Proj, {index: 1}, [43]], # 44
+  [Call, {dispatch_kind: direct, file: "/home/runner/.local/share/pvm/versions/5.42.0/lib/perl5/5.42.0/Carp.pm", line: 328, name: Carp::get_subname, package: Carp, param_names: [], want: scalar}, [6], 44, Scalar, 39, true], # 45
+  [Coerce, {from_repr: Scalar, to_repr: Str}, [45], ~, Str], # 46
+  [Constant, {const_type: string, value: "("}, ~, ~, Str], # 47
+  [Concat, ~, [46, 47], ~, Str], # 48
+  [Constant, {const_type: string, value: ", "}, ~, ~, Str], # 49
+  [Constant, {const_type: string, value: "** Incomplete caller override detected"}, ~, ~, Str], # 50
+  [Constant, {const_type: string, value: " in &"}, ~, ~, Str], # 51
+  [Constant, {const_type: string, value: B}, ~, ~, Str], # 52
+  [Constant, {const_type: string, value: svref_2object}, ~, ~, Str], # 53
+  [Subscript, {kind: hash}, [3, 11], ~, Scalar, 45], # 54
+  [If, ~, [45, 54], 45], # 55
+  [Proj, {index: 0}, [55]], # 56
+  [Loop, {bound: entry}, [56], 56], # 57
+  [Phi, {memory: true, region: 57}, [45, 229], ~, Unknown], # 58
+  [Proj, {index: 1}, [57]], # 59
+  [Region, {head: 57}, [59]], # 60
+  [Phi, {memory: true, region: 60}, [58], ~, Unknown], # 61
+  [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 61], # 62
+  [Constant, {const_type: string, value: ""}, ~, ~, Str], # 63
+  [ArrayLiteral, ~, ~, ~, Array], # 64
+  [Phi, {region: 57}, [64, 238], ~, Array], # 65
+  [Count, ~, [65], ~, Int, 61], # 66
+  [NumEq, ~, [66, 21], ~, Boolean], # 67
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 68
+  [Subscript, {kind: array}, [65, 68], ~, Scalar, 61], # 69
+  [RefType, ~, [69], ~, Str, 61], # 70
+  [PadAccess, {sigil: $, symbol: i}, ~, ~, Unknown, 61], # 71
+  [Call, {dispatch_kind: builtin, name: reftype_of_ref, param_names: []}, [71], ~, Str, 61], # 72
+  [StrEq, ~, [70, 72], ~, Boolean], # 73
+  [And, ~, [67, 73], ~, Boolean], # 74
+  [Coerce, {from_repr: Scalar, to_repr: Num}, [69], ~, Num], # 75
+  [Ref, ~, [71], ~, Unknown], # 76
+  [NumEq, ~, [75, 76], ~, Boolean], # 77
+  [And, ~, [74, 77], ~, Boolean], # 78
+  [If, ~, [60, 78], 60], # 79
+  [Proj, {index: 0}, [79]], # 80
+  [EntryWrite, ~, [62, 63], 80, Unknown, 61, true], # 81
+  [PadAccess, {sigil: $, symbol: func}, ~, ~, Unknown, 81], # 82
+  [Assign, ~, [82, 24], 81, List, 81, true], # 83
+  [If, ~, [83, 24], 83], # 84
+  [Proj, {index: 0}, [84]], # 85
+  [Call, {dispatch_kind: direct, eval_id: 4, file: "/home/runner/.local/share/pvm/versions/5.42.0/lib/perl5/5.42.0/Carp.pm", line: 360, name: Carp::_fetch_sub, package: Carp, param_names: [], want: scalar}, [52, 53], 85, Unknown, 83, true], # 86
+  [PadAccess, {sigil: $, symbol: func}, ~, ~, Unknown, 86], # 87
+  [Not, ~, [86], ~, Boolean], # 88
+  [If, ~, [86, 88], 86], # 89
+  [Proj, {index: 1}, [89]], # 90
+  [Call, {dispatch_kind: indirect, eval_id: 4, file: "/home/runner/.local/share/pvm/versions/5.42.0/lib/perl5/5.42.0/Carp.pm", line: 360, name: "", package: Carp, param_names: [], want: scalar}, [86, 87], 90, Unknown, 86, true], # 91
+  [Call, {dispatch_kind: method, eval_id: 4, file: "/home/runner/.local/share/pvm/versions/5.42.0/lib/perl5/5.42.0/Carp.pm", line: 360, name: GV, package: Carp, param_names: [], want: scalar}, [91], 91, Unknown, 91, true], # 92
+  [PadAccess, {sigil: $, symbol: gv}, ~, ~, Unknown, 92], # 93
+  [Assign, ~, [93, 92], 92, Unknown, 92, true], # 94
   [PadAccess, {sigil: $, symbol: gv}, ~, ~, Unknown, 94], # 95
-  [Assign, ~, [95, 94], 94, Unknown, 94, true], # 96
-  [PadAccess, {sigil: $, symbol: gv}, ~, ~, Unknown, 96], # 97
-  [Call, {dispatch_kind: method, eval_id: 4, file: "/home/runner/.local/share/pvm/versions/5.42.0/lib/perl5/5.42.0/Carp.pm", line: 363, name: STASH, package: Carp, param_names: [], want: scalar}, [97], 96, Unknown, 96, true], # 98
-  [Call, {dispatch_kind: method, eval_id: 4, file: "/home/runner/.local/share/pvm/versions/5.42.0/lib/perl5/5.42.0/Carp.pm", line: 363, name: NAME, package: Carp, param_names: [], want: scalar}, [98], 98, Unknown, 98, true], # 99
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [99], ~, Str], # 100
-  [Concat, ~, [53, 100], ~, Str], # 101
-  [Constant, {const_type: string, value: "::"}, ~, ~, Str], # 102
-  [Concat, ~, [101, 102], ~, Str], # 103
-  [PadAccess, {sigil: $, symbol: gv}, ~, ~, Unknown, 99], # 104
-  [Call, {dispatch_kind: method, eval_id: 4, file: "/home/runner/.local/share/pvm/versions/5.42.0/lib/perl5/5.42.0/Carp.pm", line: 364, name: NAME, package: Carp, param_names: [], want: scalar}, [104], 99, Unknown, 99, true], # 105
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [105], ~, Str], # 106
-  [Concat, ~, [103, 106], ~, Str], # 107
-  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 108
-  [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 105], # 109
-  [Defined, ~, [99], ~, Boolean], # 110
-  [Defined, ~, [105], ~, Boolean], # 111
-  [And, ~, [110, 111], ~, Boolean], # 112
-  [If, ~, [105, 112], 105], # 113
-  [Proj, {index: 0}, [113]], # 114
-  [Constant, {const_type: string, value: CORE::GLOBAL}, ~, ~, Str], # 115
-  [StrEq, ~, [100, 115], ~, Boolean], # 116
-  [Constant, {const_type: string, value: caller}, ~, ~, Str], # 117
-  [StrEq, ~, [106, 117], ~, Boolean], # 118
-  [And, ~, [116, 118], ~, Boolean], # 119
-  [If, ~, [114, 119], 114], # 120
-  [Proj, {index: 1}, [120]], # 121
-  [EntryWrite, ~, [109, 65], 121, Unknown, 105, true], # 122
-  [Proj, {index: 1}, [86]], # 123
-  [Proj, {index: 0}, [91]], # 124
-  [Proj, {index: 1}, [113]], # 125
-  [Proj, {index: 0}, [120]], # 126
-  [Exc, ~, [88]], # 127
-  [Exc, ~, [93]], # 128
-  [Exc, ~, [94]], # 129
-  [Exc, ~, [98]], # 130
-  [Exc, ~, [99]], # 131
-  [Exc, ~, [105]], # 132
-  [Region, {catch: true, eval_id: 4}, [127, 128, 129, 130, 131, 132]], # 133
-  [Phi, {memory: true, region: 133}, [88, 93, 94, 98, 99, 105], ~, Unknown], # 134
-  [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 134], # 135
-  [Phi, {region: 133}, [127, 128, 129, 130, 131, 132], ~, Scalar], # 136
-  [EntryWrite, ~, [135, 136], 133, Unknown, 134, true], # 137
-  [Region, {eval_entry: 82, eval_id: 4}, [122, 123, 124, 125, 126, 137]], # 138
-  [Phi, {region: 138}, [107, 65, 65, 108, 108, 108], ~, "Maybe[Str]"], # 139
-  [Or, ~, [139, 65], ~, "Maybe[Str]"], # 140
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [140], ~, Str], # 141
-  [Concat, ~, [52, 141], ~, Str], # 142
-  [Constant, {const_type: string, value: "; @DB::args were not set **"}, ~, ~, Str], # 143
-  [Concat, ~, [142, 143], ~, Str], # 144
-  [ArrayLiteral, {sigil: "@", symbol: args}, [144], ~, Array], # 145
-  [ArrayLiteral, ~, ~, ~, Array], # 146
-  [Proj, {index: 1}, [81]], # 147
-  [EntryDef, {package: Carp, sigil: $, symbol: MaxArgNums}, ~, ~, Scalar, 63], # 148
-  [Coerce, {from_repr: Scalar, to_repr: Num}, [148], ~, Num], # 149
-  [NumGt, ~, [68, 149], ~, Boolean], # 150
-  [And, ~, [148, 150], ~, Scalar], # 151
-  [If, ~, [147, 151], 147], # 152
-  [Proj, {index: 1}, [152]], # 153
-  [Subtract, ~, [149, 20], ~, Num], # 154
-  [Proj, {index: 0}, [152]], # 155
-  [Call, {dispatch_kind: builtin, name: set_arylen, param_names: []}, [67, 154], 155, Int, 63, true], # 156
-  [Region, {head: 152}, [153, 156]], # 157
-  [Loop, {bound: entry}, [157], 157], # 158
-  [Phi, {region: 158}, [146, 240], ~, Array], # 159
-  [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar], # 160
-  [Phi, {memory: true, region: 138}, [122, 85, 88, 105, 105, 137], ~, Unknown], # 161
-  [EntryWrite, ~, [160, 64], 138, Unknown, 161, true], # 162
-  [Proj, {index: 1}, [158]], # 163
-  [Region, {head: 158}, [163]], # 164
-  [Phi, {predecessors: [153, 155], region: 157}, [108, 20], ~, "Maybe[Int]"], # 165
-  [If, ~, [164, 165], 164], # 166
-  [Proj, {index: 1}, [166]], # 167
-  [Constant, {const_type: string, value: "..."}, ~, ~, Str], # 168
-  [Proj, {index: 0}, [166]], # 169
-  [Phi, {memory: true, predecessors: [153, 155], region: 157}, [63, 156], ~, Unknown], # 170
-  [Phi, {memory: true, region: 158}, [170, 232], ~, Unknown], # 171
-  [Phi, {memory: true, region: 164}, [171], ~, Unknown], # 172
-  [Call, {dispatch_kind: builtin, name: push, param_names: []}, [159, 168], 169, Int, 172, true], # 173
-  [Region, {head: 166}, [167, 173]], # 174
-  [Region, {head: 81}, [162, 174]], # 175
-  [Phi, {region: 175}, [145, 159], ~, Array], # 176
-  [Phi, {memory: true, predecessors: [167, 169], region: 174}, [172, 173], ~, Unknown], # 177
-  [Phi, {memory: true, region: 175}, [162, 177], ~, Unknown], # 178
-  [PostfixDeref, {sigil: "@"}, [176], ~, Array, 178], # 179
-  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [51, 179], ~, Str, 178], # 180
-  [Concat, ~, [50, 180], ~, Str], # 181
-  [Constant, {const_type: string, value: ")"}, ~, ~, Str], # 182
-  [Concat, ~, [181, 182], ~, Str], # 183
-  [Proj, {index: 1}, [57]], # 184
-  [Region, {head: 57}, [184, 175]], # 185
-  [Phi, {predecessors: [184, 58], region: 185}, [47, 183], ~, Scalar], # 186
-  [Phi, {memory: true, predecessors: [184, 58], region: 185}, [47, 178], ~, Unknown], # 187
-  [Assign, ~, [45, 186], 185, Scalar, 187, true], # 188
-  [Region, {head: 42}, [43, 188]], # 189
-  [Phi, {predecessors: [43, 46], region: 189}, [1, 5], ~, Unknown], # 190
-  [Phi, {predecessors: [43, 46], region: 189}, [108, 5], ~, Unknown], # 191
-  [Phi, {exits: true, memory: true, predecessors: [43, 46], region: 189}, [38, 188], ~, Unknown], # 192
-  [Return, ~, [190, 191], 189, ~, 192], # 193
-  [PadAccess, {sigil: $, symbol: arg}, ~, ~, Unknown, 60], # 194
-  [Proj, {index: 0}, [59]], # 195
-  [Assign, ~, [194, 108], 195, Undef, 60, true], # 196
-  [Phi, {region: 158}, [70, 216], ~, Int], # 197
-  [Proj, {index: 0}, [158]], # 198
-  [Exists, {kind: array}, [67, 197], 198, Boolean, 171], # 199
-  [Subscript, {kind: array}, [67, 197], ~, Scalar], # 200
-  [Ref, ~, [200], ~, ScalarRef], # 201
-  [TernaryExpr, ~, [199, 201, 108], ~, "Maybe[ScalarRef]"], # 202
-  [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 196], # 203
-  [EntryWrite, ~, [160, 203], 196, Unknown, 196, true], # 204
-  [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 204], # 205
-  [EntryWrite, ~, [205, 65], 204, Unknown, 204, true], # 206
-  [PadAccess, {sigil: $, symbol: arg}, ~, ~, Unknown, 206], # 207
-  [Phi, {region: 59}, [70, 215], ~, Int], # 208
-  [Subscript, {kind: array}, [24, 208], ~, Scalar, 60], # 209
-  [Assign, ~, [207, 209], 206, Scalar, 206, true], # 210
-  [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 210], # 211
-  [EntryWrite, ~, [211, 65], 210, Unknown, 210, true], # 212
-  [Region, {eval_entry: 204, eval_id: 3}, [212]], # 213
-  [Phi, {region: 213}, [20], ~, "Maybe[Int]"], # 214
-  [Add, ~, [208, 20], ~, Int], # 215
-  [Add, ~, [197, 20], ~, Int], # 216
-  [LocalAlias, {name: _}, [202], 199, Unknown, 171], # 217
-  [If, ~, [213, 214], 213], # 218
-  [PadAccess, {sigil: $, symbol: func}, ~, ~, Unknown, 85], # 219
-  [Count, ~, [24], ~, Int, 47], # 220
-  [Proj, {index: 0}, [218]], # 221
-  [PadAccess, {sigil: $, symbol: arg}, ~, ~, Unknown, 212], # 222
-  [Constant, {const_type: string, value: "** argument not available anymore **"}, ~, ~, Str], # 223
-  [Proj, {index: 1}, [218]], # 224
-  [Assign, ~, [222, 223], 224, Str, 212, true], # 225
-  [Region, {head: 218}, [221, 225]], # 226
-  [Phi, {memory: true, predecessors: [221, 224], region: 226}, [212, 225], ~, Unknown], # 227
-  [EntryWrite, ~, [160, 203], 226, Unknown, 227, true], # 228
-  [Phi, {region: 175}, [64, 203], ~, Scalar], # 229
-  [Count, ~, [24], ~, Int, 60], # 230
-  [Subscript, {kind: array}, [67, 197], ~, Scalar, 171], # 231
-  [Call, {dispatch_kind: direct, file: "/home/runner/.local/share/pvm/versions/5.42.0/lib/perl5/5.42.0/Carp.pm", line: 382, name: Carp::format_arg, package: Carp, param_names: [], want: list}, [231], 217, Unknown, 171, true], # 232
-  [NumGt, ~, [230, 208], 59, Boolean], # 233
-  [Count, ~, [67], ~, Int, 171], # 234
-  [NumGt, ~, [234, 197], 158, Boolean], # 235
-  [PadAccess, {sigil: $, symbol: arg}, ~, ~, Unknown, 227], # 236
-  [ListAppend, {collector: map}, [67, 236], ~, Array], # 237
-  [Call, {dispatch_kind: builtin, name: arylen, param_names: []}, [67], ~, Int], # 238
-  [Count, ~, [67], ~, Int, 170], # 239
-  [ListAppend, {collector: map}, [159, 232], ~, Array]]} # 240
+  [Call, {dispatch_kind: method, eval_id: 4, file: "/home/runner/.local/share/pvm/versions/5.42.0/lib/perl5/5.42.0/Carp.pm", line: 363, name: STASH, package: Carp, param_names: [], want: scalar}, [95], 94, Unknown, 94, true], # 96
+  [Call, {dispatch_kind: method, eval_id: 4, file: "/home/runner/.local/share/pvm/versions/5.42.0/lib/perl5/5.42.0/Carp.pm", line: 363, name: NAME, package: Carp, param_names: [], want: scalar}, [96], 96, Unknown, 96, true], # 97
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [97], ~, Str], # 98
+  [Concat, ~, [51, 98], ~, Str], # 99
+  [Constant, {const_type: string, value: "::"}, ~, ~, Str], # 100
+  [Concat, ~, [99, 100], ~, Str], # 101
+  [PadAccess, {sigil: $, symbol: gv}, ~, ~, Unknown, 97], # 102
+  [Call, {dispatch_kind: method, eval_id: 4, file: "/home/runner/.local/share/pvm/versions/5.42.0/lib/perl5/5.42.0/Carp.pm", line: 364, name: NAME, package: Carp, param_names: [], want: scalar}, [102], 97, Unknown, 97, true], # 103
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [103], ~, Str], # 104
+  [Concat, ~, [101, 104], ~, Str], # 105
+  [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 106
+  [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 103], # 107
+  [Defined, ~, [97], ~, Boolean], # 108
+  [Defined, ~, [103], ~, Boolean], # 109
+  [And, ~, [108, 109], ~, Boolean], # 110
+  [If, ~, [103, 110], 103], # 111
+  [Proj, {index: 0}, [111]], # 112
+  [Constant, {const_type: string, value: CORE::GLOBAL}, ~, ~, Str], # 113
+  [StrEq, ~, [98, 113], ~, Boolean], # 114
+  [Constant, {const_type: string, value: caller}, ~, ~, Str], # 115
+  [StrEq, ~, [104, 115], ~, Boolean], # 116
+  [And, ~, [114, 116], ~, Boolean], # 117
+  [If, ~, [112, 117], 112], # 118
+  [Proj, {index: 1}, [118]], # 119
+  [EntryWrite, ~, [107, 63], 119, Unknown, 103, true], # 120
+  [Proj, {index: 1}, [84]], # 121
+  [Proj, {index: 0}, [89]], # 122
+  [Proj, {index: 1}, [111]], # 123
+  [Proj, {index: 0}, [118]], # 124
+  [Exc, ~, [86]], # 125
+  [Exc, ~, [91]], # 126
+  [Exc, ~, [92]], # 127
+  [Exc, ~, [96]], # 128
+  [Exc, ~, [97]], # 129
+  [Exc, ~, [103]], # 130
+  [Region, {catch: true, eval_id: 4}, [125, 126, 127, 128, 129, 130]], # 131
+  [Phi, {memory: true, region: 131}, [86, 91, 92, 96, 97, 103], ~, Unknown], # 132
+  [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 132], # 133
+  [Phi, {region: 131}, [125, 126, 127, 128, 129, 130], ~, Scalar], # 134
+  [EntryWrite, ~, [133, 134], 131, Unknown, 132, true], # 135
+  [Region, {eval_entry: 80, eval_id: 4}, [120, 121, 122, 123, 124, 135]], # 136
+  [Phi, {region: 136}, [105, 63, 63, 106, 106, 106], ~, "Maybe[Str]"], # 137
+  [Or, ~, [137, 63], ~, "Maybe[Str]"], # 138
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [138], ~, Str], # 139
+  [Concat, ~, [50, 139], ~, Str], # 140
+  [Constant, {const_type: string, value: "; @DB::args were not set **"}, ~, ~, Str], # 141
+  [Concat, ~, [140, 141], ~, Str], # 142
+  [ArrayLiteral, {sigil: "@", symbol: args}, [142], ~, Array], # 143
+  [ArrayLiteral, ~, ~, ~, Array], # 144
+  [Proj, {index: 1}, [79]], # 145
+  [EntryDef, {package: Carp, sigil: $, symbol: MaxArgNums}, ~, ~, Scalar, 61], # 146
+  [Coerce, {from_repr: Scalar, to_repr: Num}, [146], ~, Num], # 147
+  [NumGt, ~, [66, 147], ~, Boolean], # 148
+  [And, ~, [146, 148], ~, Scalar], # 149
+  [If, ~, [145, 149], 145], # 150
+  [Proj, {index: 1}, [150]], # 151
+  [Subtract, ~, [147, 21], ~, Num], # 152
+  [Proj, {index: 0}, [150]], # 153
+  [Call, {dispatch_kind: builtin, name: set_arylen, param_names: []}, [65, 152], 153, Int, 61, true], # 154
+  [Region, {head: 150}, [151, 154]], # 155
+  [Loop, {bound: entry}, [155], 155], # 156
+  [Phi, {region: 156}, [144, 241], ~, Array], # 157
+  [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar], # 158
+  [Phi, {memory: true, region: 136}, [120, 83, 86, 103, 103, 135], ~, Unknown], # 159
+  [EntryWrite, ~, [158, 62], 136, Unknown, 159, true], # 160
+  [Proj, {index: 1}, [156]], # 161
+  [Region, {head: 156}, [161]], # 162
+  [Phi, {predecessors: [151, 153], region: 155}, [106, 21], ~, "Maybe[Int]"], # 163
+  [If, ~, [162, 163], 162], # 164
+  [Proj, {index: 1}, [164]], # 165
+  [Constant, {const_type: string, value: "..."}, ~, ~, Str], # 166
+  [Proj, {index: 0}, [164]], # 167
+  [Phi, {memory: true, predecessors: [151, 153], region: 155}, [61, 154], ~, Unknown], # 168
+  [Phi, {memory: true, region: 156}, [168, 233], ~, Unknown], # 169
+  [Phi, {memory: true, region: 162}, [169], ~, Unknown], # 170
+  [Call, {dispatch_kind: builtin, name: push, param_names: []}, [157, 166], 167, Int, 170, true], # 171
+  [Region, {head: 164}, [165, 171]], # 172
+  [Region, {head: 79}, [160, 172]], # 173
+  [Phi, {region: 173}, [143, 157], ~, Array], # 174
+  [Phi, {memory: true, predecessors: [165, 167], region: 172}, [170, 171], ~, Unknown], # 175
+  [Phi, {memory: true, region: 173}, [160, 175], ~, Unknown], # 176
+  [PostfixDeref, {sigil: "@"}, [174], ~, Array, 176], # 177
+  [Call, {dispatch_kind: builtin, name: join, param_names: []}, [49, 177], ~, Str, 176], # 178
+  [Concat, ~, [48, 178], ~, Str], # 179
+  [Constant, {const_type: string, value: ")"}, ~, ~, Str], # 180
+  [Concat, ~, [179, 180], ~, Str], # 181
+  [Proj, {index: 1}, [55]], # 182
+  [Region, {head: 55}, [182, 173]], # 183
+  [Phi, {predecessors: [182, 56], region: 183}, [45, 181], ~, Scalar], # 184
+  [Phi, {memory: true, predecessors: [182, 56], region: 183}, [45, 176], ~, Unknown], # 185
+  [Assign, ~, [5, 184], 183, Scalar, 185, true], # 186
+  [PadAccess, {sigil: "%", symbol: call_info}, ~, ~, Hash, 186], # 187
+  [TernaryExpr, ~, [2, 187, 6], ~, Unknown], # 188
+  [Proj, {index: 0}, [43]], # 189
+  [Region, {head: 43}, [189, 186]], # 190
+  [Phi, {predecessors: [189, 44], region: 190}, [1, 188], ~, Unknown], # 191
+  [Phi, {predecessors: [189, 44], region: 190}, [106, 188], ~, Unknown], # 192
+  [Phi, {exits: true, memory: true, predecessors: [189, 44], region: 190}, [39, 186], ~, Unknown], # 193
+  [Return, ~, [191, 192], 190, ~, 193], # 194
+  [PadAccess, {sigil: $, symbol: arg}, ~, ~, Unknown, 58], # 195
+  [Proj, {index: 0}, [57]], # 196
+  [Assign, ~, [195, 106], 196, Undef, 58, true], # 197
+  [Phi, {region: 156}, [68, 217], ~, Int], # 198
+  [Proj, {index: 0}, [156]], # 199
+  [Exists, {kind: array}, [65, 198], 199, Boolean, 169], # 200
+  [Subscript, {kind: array}, [65, 198], ~, Scalar], # 201
+  [Ref, ~, [201], ~, ScalarRef], # 202
+  [TernaryExpr, ~, [200, 202, 106], ~, "Maybe[ScalarRef]"], # 203
+  [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 197], # 204
+  [EntryWrite, ~, [158, 204], 197, Unknown, 197, true], # 205
+  [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 205], # 206
+  [EntryWrite, ~, [206, 63], 205, Unknown, 205, true], # 207
+  [PadAccess, {sigil: $, symbol: arg}, ~, ~, Unknown, 207], # 208
+  [Phi, {region: 57}, [68, 216], ~, Int], # 209
+  [Subscript, {kind: array}, [25, 209], ~, Scalar, 58], # 210
+  [Assign, ~, [208, 210], 207, Scalar, 207, true], # 211
+  [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 211], # 212
+  [EntryWrite, ~, [212, 63], 211, Unknown, 211, true], # 213
+  [Region, {eval_entry: 205, eval_id: 3}, [213]], # 214
+  [Phi, {region: 214}, [21], ~, "Maybe[Int]"], # 215
+  [Add, ~, [209, 21], ~, Int], # 216
+  [Add, ~, [198, 21], ~, Int], # 217
+  [LocalAlias, {name: _}, [203], 200, Unknown, 169], # 218
+  [If, ~, [214, 215], 214], # 219
+  [PadAccess, {sigil: $, symbol: func}, ~, ~, Unknown, 83], # 220
+  [Count, ~, [25], ~, Int, 45], # 221
+  [Proj, {index: 0}, [219]], # 222
+  [PadAccess, {sigil: $, symbol: arg}, ~, ~, Unknown, 213], # 223
+  [Constant, {const_type: string, value: "** argument not available anymore **"}, ~, ~, Str], # 224
+  [Proj, {index: 1}, [219]], # 225
+  [Assign, ~, [223, 224], 225, Str, 213, true], # 226
+  [Region, {head: 219}, [222, 226]], # 227
+  [Phi, {memory: true, predecessors: [222, 225], region: 227}, [213, 226], ~, Unknown], # 228
+  [EntryWrite, ~, [158, 204], 227, Unknown, 228, true], # 229
+  [Phi, {region: 173}, [62, 204], ~, Scalar], # 230
+  [Count, ~, [25], ~, Int, 58], # 231
+  [Subscript, {kind: array}, [65, 198], ~, Scalar, 169], # 232
+  [Call, {dispatch_kind: direct, file: "/home/runner/.local/share/pvm/versions/5.42.0/lib/perl5/5.42.0/Carp.pm", line: 382, name: Carp::format_arg, package: Carp, param_names: [], want: list}, [232], 218, Unknown, 169, true], # 233
+  [NumGt, ~, [231, 209], 57, Boolean], # 234
+  [Count, ~, [65], ~, Int, 169], # 235
+  [NumGt, ~, [235, 198], 156, Boolean], # 236
+  [PadAccess, {sigil: $, symbol: arg}, ~, ~, Unknown, 228], # 237
+  [ListAppend, {collector: map}, [65, 237], ~, Array], # 238
+  [Call, {dispatch_kind: builtin, name: arylen, param_names: []}, [65], ~, Int], # 239
+  [Count, ~, [65], ~, Int, 168], # 240
+  [ListAppend, {collector: map}, [157, 233], ~, Array]]} # 241
 Carp::carp: {start: 0, returns: [5], nodes: [
   [Start], # 0
   [ArgsSource, ~, ~, ~, Array], # 1
@@ -4236,7 +4238,7 @@ Carp::get_status: {start: 0, returns: [35], nodes: [
   [Subscript, {kind: hash}, [3, 29], 27, Scalar, 28, true], # 30
   [PostfixDeref, {eval_id: ~, file: "/home/runner/.local/share/pvm/versions/5.42.0/lib/perl5/5.42.0/Carp.pm", line: 500, package: Carp, sigil: "@", strict: true}, [30], 30, Array, 30, true], # 31
   [ArrayLiteral, ~, [31], ~, List], # 32
-  [Count, ~, [31], ~, Int], # 33
+  [Count, ~, [31], ~, Int, 31], # 33
   [Coerce, {from_repr: List, to_repr: Scalar}, [33], ~, Scalar], # 34
   [Return, ~, [32, 34], 31, ~, 31]]} # 35
 Carp::get_subname: {start: 0, returns: [70], nodes: [
@@ -4508,7 +4510,7 @@ Carp::ret_backtrace: {start: 0, returns: [76], nodes: [
   [Proj, {index: 0}, [46]], # 47
   [PostfixDeref, {eval_id: ~, file: "/home/runner/.local/share/pvm/versions/5.42.0/lib/perl5/5.42.0/Carp.pm", line: 605, package: Carp, sigil: $, strict: true}, [41], 47, Scalar, 45, true], # 48
   [Constant, {const_type: string, value: NAME}, ~, ~, Str], # 49
-  [Subscript, ~, [48, 49], ~, Scalar], # 50
+  [Subscript, ~, [48, 49], ~, Scalar, 48], # 50
   [EntryDef, {package: main, sigil: $, symbol: "/"}, ~, ~, Scalar, 48], # 51
   [Coerce, {from_repr: Unknown, to_repr: Str}, [51], ~, Str], # 52
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 53
@@ -4937,7 +4939,7 @@ Carp::trusts_directly: {start: 0, returns: [57], nodes: [
   [Proj, {index: 1}, [33]], # 35
   [Region, {head: 33}, [34, 35]], # 36
   [Constant, {const_type: string, value: ARRAY}, ~, ~, Str], # 37
-  [Subscript, ~, [19, 37], ~, Scalar], # 38
+  [Subscript, ~, [19, 37], ~, Scalar, 18], # 38
   [Phi, {predecessors: [34, 35], region: 36}, [38, 32], ~, Scalar], # 39
   [If, ~, [36, 39], 36], # 40
   [Proj, {index: 0}, [40]], # 41
@@ -7024,7 +7026,7 @@ main::__PROGRAM__: {start: 0, returns: [8], nodes: [
   [Constant, {const_type: string, value: Marker}, ~, ~, Str], # 3
   [Constant, {const_type: string, value: tag}, ~, ~, Str], # 4
   [MemStart], # 5
-  [Call, {class_name: Marker, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: import, package: main, param_names: [], want: void}, [3, 4], 0, "Maybe[Boolean]", 5, true], # 6
+  [Call, {class_name: Marker, dispatch_kind: method, file: "/tmp/ucZOh245UI/case.pl", line: 4, name: import, package: main, param_names: [], want: void}, [3, 4], 0, "Maybe[Boolean]", 5, true], # 6
   [Print, ~, [2], 6, "Maybe[Boolean]"], # 7
   [Return, {implicit: true}, [1], 7, ~, 6]]} # 8
 ```

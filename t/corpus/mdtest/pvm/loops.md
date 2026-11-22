@@ -538,7 +538,7 @@ main::__PROGRAM__: {start: 0, returns: [28], nodes: [
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
   [Loop, {bound: each}, [0], 0], # 3
-  [Phi, {memory: true, region: 3}, [2, 45], ~, Unknown], # 4
+  [Phi, {memory: true, region: 3}, [2, 46], ~, Unknown], # 4
   [Proj, {index: 1}, [3]], # 5
   [Proj, {index: 0}, [3]], # 6
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 7
@@ -557,7 +557,7 @@ main::__PROGRAM__: {start: 0, returns: [28], nodes: [
   [Phi, {memory: true, region: 19}, [4, 4], ~, Unknown], # 20
   [EntryDef, {package: main, sigil: $, symbol: "\""}, ~, ~, Scalar, 20], # 21
   [Coerce, {from_repr: Scalar, to_repr: Str}, [21], ~, Str], # 22
-  [PadAccess, {sigil: "@", symbol: s}, ~, ~, Array], # 23
+  [PadAccess, {sigil: "@", symbol: s}, ~, ~, Array, 20], # 23
   [Call, {dispatch_kind: builtin, name: join, param_names: []}, [22, 23], ~, Str, 20], # 24
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 25
   [Concat, ~, [24, 25], ~, Str], # 26
@@ -569,17 +569,18 @@ main::__PROGRAM__: {start: 0, returns: [28], nodes: [
   [Coerce, {from_repr: Str, to_repr: Num}, [31], ~, Num], # 32
   [NumLt, ~, [8, 32], 3, Boolean], # 33
   [Phi, {region: 19}, [8, 10], ~, Int], # 34
-  [Constant, {const_type: string, value: c}, ~, ~, Str], # 35
-  [Coerce, {from_repr: Int, to_repr: Str}, [10], ~, Str], # 36
-  [Concat, ~, [35, 36], ~, Str], # 37
-  [Proj, {index: 0}, [13]], # 38
-  [Constant, {const_type: string, value: b}, ~, ~, Str], # 39
-  [Concat, ~, [39, 36], ~, Str], # 40
-  [Proj, {index: 1}, [17]], # 41
-  [Call, {dispatch_kind: builtin, name: push, param_names: []}, [23, 40], 41, Int, 4, true], # 42
-  [Region, {head: 13}, [38, 42]], # 43
-  [Phi, {memory: true, predecessors: [38, 14], region: 43}, [4, 42], ~, Unknown], # 44
-  [Call, {dispatch_kind: builtin, name: push, param_names: []}, [23, 37], 43, Int, 44, true]]} # 45
+  [PadAccess, {sigil: "@", symbol: s}, ~, ~, Array], # 35
+  [Constant, {const_type: string, value: c}, ~, ~, Str], # 36
+  [Coerce, {from_repr: Int, to_repr: Str}, [10], ~, Str], # 37
+  [Concat, ~, [36, 37], ~, Str], # 38
+  [Proj, {index: 0}, [13]], # 39
+  [Constant, {const_type: string, value: b}, ~, ~, Str], # 40
+  [Concat, ~, [40, 37], ~, Str], # 41
+  [Proj, {index: 1}, [17]], # 42
+  [Call, {dispatch_kind: builtin, name: push, param_names: []}, [35, 41], 42, Int, 4, true], # 43
+  [Region, {head: 13}, [39, 43]], # 44
+  [Phi, {memory: true, predecessors: [39, 14], region: 44}, [4, 43], ~, Unknown], # 45
+  [Call, {dispatch_kind: builtin, name: push, param_names: []}, [35, 38], 44, Int, 45, true]]} # 46
 ```
 
 ## The seen-hash idiom
@@ -772,12 +773,12 @@ main::__PROGRAM__: {start: 0, returns: [26], nodes: [
   [Print, ~, [10, 11, 17, 22], 24, "Maybe[Boolean]"], # 25
   [Return, {implicit: true}, [1], 25, ~, 9], # 26
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 27
-  [Call, {dispatch_kind: builtin, name: time, param_names: []}, ~, ~, Int], # 28
+  [Call, {dispatch_kind: builtin, name: time, param_names: []}, ~, ~, Int, 9], # 28
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 29
   [Multiply, ~, [28, 29], ~, Int], # 30
   [Add, ~, [27, 30], ~, Int], # 31
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 32
-  [Call, {dispatch_kind: builtin, name: time, param_names: []}, ~, ~, Int], # 33
+  [Call, {dispatch_kind: builtin, name: time, param_names: []}, ~, ~, Int, 9], # 33
   [Multiply, ~, [33, 29], ~, Int], # 34
   [Add, ~, [32, 34], ~, Int], # 35
   [ArrayLiteral, ~, [31, 35], ~, Array], # 36

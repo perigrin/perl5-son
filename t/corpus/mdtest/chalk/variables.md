@@ -205,8 +205,8 @@ main::corpus_case: {start: 0, returns: [8], nodes: [
   [Start], # 0
   [Constant, {const_type: integer, value: "42"}, ~, ~, Int], # 1
   [MemStart], # 2
-  [Call, {class_name: _A5Tmp, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 8, name: new, package: main, param_names: [x], want: scalar}, [1], 0, Object, 2, true], # 3
-  [Call, {class_name: _A5Tmp, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 8, name: val, package: main, param_names: [], want: list}, [3], 3, Unknown, 3, true], # 4
+  [Call, {class_name: _A5Tmp, dispatch_kind: method, file: "/tmp/ucZOh245UI/case.pl", line: 8, name: new, package: main, param_names: [x], want: scalar}, [1], 0, Object, 2, true], # 3
+  [Call, {class_name: _A5Tmp, dispatch_kind: method, file: "/tmp/ucZOh245UI/case.pl", line: 8, name: val, package: main, param_names: [], want: list}, [3], 3, Unknown, 3, true], # 4
   [Coerce, {from_repr: Unknown, to_repr: Str}, [4], ~, Str], # 5
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 6
   [Print, ~, [5, 6], 4, "Maybe[Boolean]"], # 7
@@ -230,7 +230,7 @@ main::corpus_case: {start: 0, returns: [8], nodes: [
   [Constant, {const_type: string, value: feature.pm}, ~, ~, Str], # 3
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
-  [Call, {class_name: feature, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Call, {class_name: feature, dispatch_kind: method, file: "/tmp/ucZOh245UI/case.pl", line: 3, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
   [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 "BEGIN 4": {start: 0, returns: [7], nodes: [
   [Start], # 0
@@ -239,7 +239,7 @@ main::corpus_case: {start: 0, returns: [8], nodes: [
   [Constant, {const_type: string, value: warnings.pm}, ~, ~, Str], # 3
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
-  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: unimport, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/ucZOh245UI/case.pl", line: 4, name: unimport, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
   [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 ```
 
@@ -863,13 +863,13 @@ main::corpus_case: {start: 0, returns: [11], nodes: [
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 3
   [ArrayLiteral, ~, [1, 2, 3], 0, ArrayRef], # 4
   [MemStart], # 5
-  [PostfixDeref, {copy: 1, eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 6, package: main, sigil: "@", strict: true}, [4], ~, Array, 5], # 6
+  [PostfixDeref, {copy: 1, eval_id: ~, file: "/tmp/ucZOh245UI/case.pl", line: 6, package: main, sigil: "@", strict: true}, [4], ~, Array, 5], # 6
   [Count, ~, [6], ~, Int, 5], # 7
   [Coerce, {from_repr: Int, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
   [Print, ~, [8, 9], 4, "Maybe[Boolean]"], # 10
   [Return, {implicit: true}, [10], 10, ~, 5], # 11
-  [PostfixDeref, {eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 6, package: main, sigil: "@", strict: true}, [4], ~, Array, 5]]} # 12
+  [PostfixDeref, {eval_id: ~, file: "/tmp/ucZOh245UI/case.pl", line: 6, package: main, sigil: "@", strict: true}, [4], ~, Array, 5]]} # 12
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
@@ -1043,8 +1043,8 @@ main::corpus_case: {start: 0, returns: [10], nodes: [
   [ArrayLiteral, {sigil: "@", symbol: a}, [1, 2, 3], ~, Array], # 4
   [Ref, ~, [4], ~, ArrayRef], # 5
   [MemStart], # 6
-  [PostfixDeref, {copy: 1, eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 6, package: main, sigil: "@", strict: true}, [5], ~, Array, 6], # 7
-  [PostfixDeref, {eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 6, package: main, sigil: "@", strict: true}, [5], 0, Array, 6, true], # 8
+  [PostfixDeref, {copy: 1, eval_id: ~, file: "/tmp/ucZOh245UI/case.pl", line: 6, package: main, sigil: "@", strict: true}, [5], ~, Array, 6], # 7
+  [PostfixDeref, {eval_id: ~, file: "/tmp/ucZOh245UI/case.pl", line: 6, package: main, sigil: "@", strict: true}, [5], 0, Array, 6, true], # 8
   [Count, ~, [7], ~, Int, 8], # 9
   [Return, {implicit: true}, [9], 8, ~, 8]]} # 10
 "BEGIN 1": {start: 0, returns: [4], nodes: [

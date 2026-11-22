@@ -239,15 +239,15 @@ main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [EnvRead, {key: X}, ~, ~, Str], # 3
   [Constant, {const_type: string, value: "/etc/hostname"}, ~, ~, Str], # 4
   [DefinedOr, ~, [3, 4], ~, Str], # 5
-  [Call, {dispatch_kind: builtin, name: ftis, param_names: []}, [5], ~, Scalar], # 6
-  [Coerce, {from_repr: Scalar, to_repr: Str}, [6], ~, Str], # 7
-  [Constant, {const_type: string, value: "]["}, ~, ~, Str], # 8
-  [Call, {dispatch_kind: builtin, name: ftis, param_names: []}, [5], ~, Scalar], # 9
-  [Coerce, {from_repr: Scalar, to_repr: Str}, [9], ~, Str], # 10
-  [Constant, {const_type: string, value: "]\n"}, ~, ~, Str], # 11
-  [Print, ~, [2, 7, 8, 10, 11], 0, "Maybe[Boolean]"], # 12
-  [MemStart], # 13
-  [Return, {implicit: true}, [1], 12, ~, 13]]} # 14
+  [MemStart], # 6
+  [Call, {dispatch_kind: builtin, name: ftis, param_names: []}, [5], ~, Scalar, 6], # 7
+  [Coerce, {from_repr: Scalar, to_repr: Str}, [7], ~, Str], # 8
+  [Constant, {const_type: string, value: "]["}, ~, ~, Str], # 9
+  [Call, {dispatch_kind: builtin, name: ftis, param_names: []}, [5], ~, Scalar, 6], # 10
+  [Coerce, {from_repr: Scalar, to_repr: Str}, [10], ~, Str], # 11
+  [Constant, {const_type: string, value: "]\n"}, ~, ~, Str], # 12
+  [Print, ~, [2, 8, 9, 11, 12], 0, "Maybe[Boolean]"], # 13
+  [Return, {implicit: true}, [1], 13, ~, 6]]} # 14
 ```
 
 ## Pre- and post-increment of an element, used

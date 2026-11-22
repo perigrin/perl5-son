@@ -83,7 +83,7 @@ main::__PROGRAM__: {start: 0, returns: [21], nodes: [
   [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 2], # 3
   [Constant, {const_type: string, value: ""}, ~, ~, Str], # 4
   [EntryWrite, ~, [3, 4], 0, Unknown, 2, true], # 5
-  [Call, {dispatch_kind: direct, eval_id: 1, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::c, package: main, param_names: [], want: scalar}, ~, 5, Scalar, 5, true], # 6
+  [Call, {dispatch_kind: direct, eval_id: 1, file: "/tmp/ucZOh245UI/case.pl", line: 2, name: main::c, package: main, param_names: [], want: scalar}, ~, 5, Scalar, 5, true], # 6
   [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 6], # 7
   [EntryWrite, ~, [7, 4], 6, Unknown, 6, true], # 8
   [Exc, ~, [6]], # 9
@@ -104,7 +104,7 @@ main::c: {start: 0, returns: [11], nodes: [
   [EntryDef, {package: main, sigil: $, symbol: "n"}, ~, ~, Scalar], # 1
   [MemStart], # 2
   [EntryDef, {package: main, sigil: $, symbol: "n"}, ~, ~, Scalar, 2], # 3
-  [Call, {dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: state, package: main, param_names: [], want: scalar}, [3], 0, Unknown, 2, true], # 4
+  [Call, {dispatch_kind: method, file: "/tmp/ucZOh245UI/case.pl", line: 1, name: state, package: main, param_names: [], want: scalar}, [3], 0, Unknown, 2, true], # 4
   [EntryDef, {package: main, sigil: $, symbol: "n"}, ~, ~, Scalar, 4], # 5
   [Coerce, {from_repr: Scalar, to_repr: Num}, [5], ~, Num], # 6
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 7
@@ -179,7 +179,7 @@ main::__PROGRAM__: {start: 0, returns: [25], nodes: [
   [Constant, {const_type: string, value: ""}, ~, ~, Str], # 7
   [EntryWrite, ~, [6, 7], 5, Unknown, 5, true], # 8
   [PadAccess, {sigil: $, symbol: x}, ~, ~, Unknown, 8], # 9
-  [Call, {dispatch_kind: method, eval_id: 1, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: field, package: main, param_names: [], want: void}, [9], 8, Unknown, 8, true], # 10
+  [Call, {dispatch_kind: method, eval_id: 1, file: "/tmp/ucZOh245UI/case.pl", line: 2, name: field, package: main, param_names: [], want: void}, [9], 8, Unknown, 8, true], # 10
   [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 10], # 11
   [EntryWrite, ~, [11, 7], 10, Unknown, 10, true], # 12
   [Exc, ~, [10]], # 13
@@ -350,7 +350,7 @@ main::__PROGRAM__: {start: 0, returns: [16], nodes: [
   [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 3], # 4
   [Constant, {const_type: string, value: ""}, ~, ~, Str], # 5
   [EntryWrite, ~, [4, 5], 0, Unknown, 3, true], # 6
-  [Call, {dispatch_kind: direct, eval_id: 1, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::f, package: main, param_names: [], want: void}, ~, 6, Unknown, 6, true], # 7
+  [Call, {dispatch_kind: direct, eval_id: 1, file: "/tmp/ucZOh245UI/case.pl", line: 2, name: main::f, package: main, param_names: [], want: void}, ~, 6, Unknown, 6, true], # 7
   [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 7], # 8
   [EntryWrite, ~, [8, 5], 7, Unknown, 7, true], # 9
   [Exc, ~, [7]], # 10
@@ -367,6 +367,6 @@ main::f: {start: 0, returns: [7], nodes: [
   [Constant, {const_type: string, value: "body\n"}, ~, ~, Str], # 3
   [Print, ~, [3], 2, "Maybe[Boolean]"], # 4
   [MemStart], # 5
-  [Call, {dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: defer, package: main, param_names: []}, [2, 4], 4, Unknown, 5, true], # 6
+  [Call, {dispatch_kind: method, file: "/tmp/ucZOh245UI/case.pl", line: 1, name: defer, package: main, param_names: []}, [2, 4], 4, Unknown, 5, true], # 6
   [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 ```

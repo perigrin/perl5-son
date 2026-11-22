@@ -180,10 +180,10 @@ main::__PROGRAM__: {start: 0, returns: [12], nodes: [
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 4
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 5
   [ArrayLiteral, {sigil: "@", symbol: a}, [4, 3, 5], ~, Array], # 6
-  [Slice, {kind: array}, [2, 3, 6], ~, List], # 7
-  [Coerce, {from_repr: List, to_repr: Str}, [7], ~, Str], # 8
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
-  [Print, ~, [8, 9], 0, "Maybe[Boolean]"], # 10
-  [MemStart], # 11
-  [Return, {implicit: true}, [1], 10, ~, 11]]} # 12
+  [MemStart], # 7
+  [Slice, {kind: array}, [2, 3, 6], ~, List, 7], # 8
+  [Coerce, {from_repr: List, to_repr: Str}, [8], ~, Str], # 9
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
+  [Print, ~, [9, 10], 0, "Maybe[Boolean]"], # 11
+  [Return, {implicit: true}, [1], 11, ~, 7]]} # 12
 ```
