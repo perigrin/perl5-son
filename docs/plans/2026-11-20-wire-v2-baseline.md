@@ -337,7 +337,7 @@ What stage 7 and later should know:
 
 ## 13. After stage 7
 
-Heads: producer `v2-s7` (ad8080f to the commit that adds this section, on bfa4d40), chalk `v2-s7` (f95685ee to 27c376e2 and the wire-verify commit after it, on 22685dbf). Lessons: docs/memory/every-read-names-a-version.md.
+Heads: producer `v2-s7` (ad8080f to the commit that adds this section, on bfa4d40), chalk `v2-s7` (f95685ee to the probe-baseline commit after acac1715, on 22685dbf). Lessons: docs/memory/every-read-names-a-version.md.
 
 V6 (`read-unversioned:C`) per class, before (stage 6's rows; chalk's lib the most one wire counts, summed over its graphs at 22685dbf with bfa4d40's producer) and after:
 
@@ -354,7 +354,7 @@ V6 (`read-unversioned:C`) per class, before (stage 6's rows; chalk's lib the mos
 
 (chalk's lib by every violation listed, not per graph, at base: field 3813, my-aggregate 369, through-ref 215, external 87, package 5, args 3, package-aggregate-literal 1.) The probes' denominators are 542 wires and 799 graphs (ag34-ag43 and rv1-rv13 added). V6 is hard now: `t/wire-verify-ratchet.t` (corpus, probes, chalk's lib) and chalk's `t/bootstrap/ir/wire-verify.t` fail on any; the rows are deleted from both baselines and from `t/data/wire-verify-chalk-graphs.tsv`.
 
-Probes (chalk, against 22685dbf): fk7, lo14, nv1, nv4, nv5, nv7, nv8 REFUSED -> SAME; rv1-rv13 new (rv8, rv9, rv10, rv12 WRONG at base; rv4 REFUSED by name). LOUD 2, REFUSED 105, SAME 424, WRONG 0. WireCheck's W10 is deleted (with it off the probes were the same).
+Probes (chalk, against 22685dbf): fk7, lo14, nv1, nv4, nv5, nv7, nv8 REFUSED -> SAME; rv1-rv15 new (rv8, rv9, rv10, rv12 WRONG at base, rv14 WRONG through the first form of chalk's copy; rv4 REFUSED by name). LOUD 2, REFUSED 105, SAME 426, WRONG 0. WireCheck's W10 is deleted (with it off the probes were the same).
 
 What later stages should know:
 
@@ -364,6 +364,16 @@ What later stages should know:
 
 The gates at the stage's last commits:
 
+`tools/gates.sh` at producer b548d6f4, chalk acac1715 (the chalk commit after it changes only the probes' BASELINE.tsv: rv14, rv15 SAME, as the probe gate measured):
+
 ```
-GATES_PENDING
+producer-suite  PASS  772 files, 0 failing [20m39s]
+chalk-suite     PASS  925 files, 0 failing [110m06s]
+census          PASS  ROUNDTRIP 426 (>= 426) DIFFERS 0 LLI_FAIL 0; GAP 5 LOAD_FAIL 0 NOJSON 0 [3m54s]
+corpus-gate     PASS  gate-green 222 (>= 222), prove exit 0, paad/worklist.json untouched [10m17s]
+probes          PASS  LOUD=2 REFUSED=105 SAME=426; WRONG 0, SAME lost 0, changed 0 [3m10s]
+ratchet         PASS  prove exit 0; chalk's lib compared; rows that fell: 0; new graphs: 12, 0 of them with violations [66m47s]
+                PASS  (deparser round trip) ROUNDTRIP 430 (>= 430) EMITS_INVALID_PERL 0 [5m51s]
 ```
+
+The first gate run (5d1f110 / 81f674dc) found three things fixed since: chalk's copy of a versioned `my` aggregate took the variable's storage, not what `my ($c, @x) = @_` bound (t2-slurpy-args.t: " 1 2" for "1 2 9 1 2"); as_v1 handed an external read memory v1 never had (corpus 006 REFUSED by the deparser, 430 -> 429); two chalk tests expected refusals stage 7 lifts, and the intervals oracle named 8 Counts by their old memory input.
