@@ -112,7 +112,8 @@ sub _describe ( $n, $by ) {
 #   memory-order-disagrees  V5: a pinned node's mem_in is not the nearest
 #                        version back along its control chain.
 #   read-unversioned:C   V6: a read of changeable state with no mem_in whose
-#                        value is used (C: the classes above).
+#                        value is used -- by a node that runs, or one whose
+#                        value reaches one (C: the classes above).
 #   record               V7: a record Assign on a chain, or one whose targets
 #                        are not `my` scalars (or `my` aggregates bound from @_).
 #   phi-arity            V8: a Phi's inputs do not pair with its Region's
@@ -280,8 +281,36 @@ sub _graph_v2 ( $name, $g, $res, $profile = {} ) {
         return defined $f->{symbol} ? ( $f->{sigil} // '' ) . $f->{symbol} : undef;
     };
     my $container = sub ($n) { $by{ ( $n->{op} eq 'Slice' ? $n->{inputs}[-1] : $n->{inputs}[0] ) // '' } };
-    my $is_place_use = sub ( $c, $i ) {
+    # WHAT IS USED: a value reaches something that runs -- a node on the
+    # control chain, a control node, a Return -- through inputs, mem_in and a
+    # Phi's region. A read only a dead node takes (a loop scout's leftover
+    # condition) is not used.
+    my %live;
+    {
+        my @q = map { $_->{id} } grep { defined $_->{control_in} || $_->{op} =~ /^(?:Start|Return|Unwind|Region|If|Loop|Proj)$/ } @nodes;
+        while ( defined( my $id = shift @q ) ) {
+            next if $live{$id}++;
+            my $x = $by{$id} or next;
+            push @q, grep { defined && !ref } ( $x->{inputs} // [] )->@*;
+            push @q, map { ref $_ ? @$_ : () } ( $x->{inputs} // [] )->@*;
+            push @q, grep { defined } $x->{mem_in}, $x->{control_in}, _fields($x)->{region};
+        }
+    }
+    # AN ALIAS LIST -- the list a foreach, map or grep walks, whose items are
+    # the variables or elements themselves -- is used only as a container
+    # (its per-pass Subscript, its Count): an item of it is a place too.
+    # Only the ITEM is excused: the per-pass read of it names its version.
+    my ( %alias_list, $is_place_use );
+    $is_place_use = sub ( $c, $i ) {
         my ( $op, $f ) = ( $c->{op}, _fields($c) );
+        # (so is a merge of an aggregate's bindings -- `@l = @n` in an arm, a
+        # Phi or a ?: of the two -- that is only a container after the join)
+        if ( $op eq 'ArrayLiteral' && !defined $f->{symbol} || $op eq 'Phi' && !$f->{memory} || $op eq 'TernaryExpr' && $i > 0 ) {
+            return $alias_list{ $c->{id} } if exists $alias_list{ $c->{id} };
+            $alias_list{ $c->{id} } = 0;
+            my @u = grep { $live{ $_->[0]{id} } } ( $cons{ $c->{id} } // [] )->@*;
+            return $alias_list{ $c->{id} } = ( @u && !grep { !$is_place_use->(@$_) } @u ) ? 1 : 0;
+        }
         return $i < ( $f->{targets} // 1 ) if $op eq 'Assign';
         return $i == $#{ $c->{inputs} } if $op eq 'Slice';
         return 1 if $op eq 'Call' && ( ( $f->{dispatch_kind} // '' ) ne 'builtin' || defined $c->{mem_in} );
@@ -293,6 +322,9 @@ sub _graph_v2 ( $name, $g, $res, $profile = {} ) {
     my %mutated;
     for my $n (@nodes) {
         my ( $op, $f, $in ) = ( $n->{op}, _fields($n), $n->{inputs} // [] );
+        # (a record is a binding -- a `my (...) = @_` filling its targets as
+        # the sub starts -- not a store a read could be on either side of)
+        next if $record->($n);
         my @written =
               $op eq 'Assign' ? @$in[ 0 .. ( $f->{targets} // 1 ) - 1 ]
             : $op eq 'Call' ? ( ( $f->{dispatch_kind} // '' ) ne 'builtin' || B::SoN::EffectTable::writes( $f->{name} ) ? @$in : () )
@@ -331,10 +363,12 @@ sub _graph_v2 ( $name, $g, $res, $profile = {} ) {
     for my $n ( grep { !defined $_->{mem_in} } @nodes ) {
         my ( $op, $f ) = ( $n->{op}, _fields($n) );
         my $class;
+        # (a list slice, `(f())[0]`, picks from values: index_count says so)
+        next if $op eq 'Slice' && defined $f->{index_count};
         if    ( $op =~ /^(?:Subscript|Slice|Count|PostfixDeref|CellRead|EntryDef|PadAccess|FieldAccess)$/ ) { $class = $place_class->($n) }
         elsif ( $op eq 'RefType' ) { $class = 'object-class' }
         elsif ( $op eq 'Call' && ( $f->{dispatch_kind} // '' ) eq 'builtin' ) { $class = B::SoN::EffectTable::reads_state( $f->{name} ) }
-        next unless $class && grep { !$is_place_use->(@$_) } ( $cons{ $n->{id} } // [] )->@*;
+        next unless $class && grep { $live{ $_->[0]{id} } && !$is_place_use->(@$_) } ( $cons{ $n->{id} } // [] )->@*;
         $bad->( $n, "read-unversioned:$class", _describe( $n, \%by ) );
     }
     for my $n ( grep { $_->{op} =~ /^(?:ArrayLiteral|HashLiteral)$/ && ( _fields($_)->{symbol} // '' ) =~ /::/ } @nodes ) {

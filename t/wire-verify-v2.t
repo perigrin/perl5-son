@@ -204,9 +204,51 @@ subtest 'V6 read-unversioned:object-class: a ref() at no version (ef9)' => sub {
     is $p->{'read-unversioned:object-class'}, undef, 'the producer\'s ef9 reads each at its version';
 };
 subtest 'V6 read-unversioned:package-aggregate-literal: a flattened package array (nv1)' => sub {
-    my $r = rules('our @st = (1); my @c = (@st, 2); @st = (); print "@c\n";');
-    ok scalar( ( $r->{'read-unversioned:package-aggregate-literal'} // [] )->@* ),
-        '@st read through its named literal (stage 7 gives it a version)';
+    my $r = rules( v2(
+        nd( 0, 'Start', [] ), nd( 1, 'MemStart', [] ), nd( 2, 'Constant', [] ),
+        nd( 3, 'ArrayLiteral', [2], sigil => '@', symbol => '@main::st' ),
+        nd( 4, 'ArrayLiteral', [ 3, 2 ], sigil => '@', symbol => 'c' ),
+        nd( 5, 'Print', [4], ctl => 0 ),
+        nd( 6, 'Return', [2], ctl => 5, mem => 1 ),
+    ) );
+    is [ map { $_->{op} } ( $r->{'read-unversioned:package-aggregate-literal'} // [] )->@* ], ['ArrayLiteral'],
+        '@st read through its named literal';
+    my $p = rules('our @st = (1); my @c = (@st, 2); @st = (); print "@c\n";');
+    is [ grep { /\Aread-unversioned/ } keys %$p ], [], 'the producer reads @st at its version (stage 7)';
+};
+subtest 'V6: a read only a dead node takes is not used' => sub {
+    my $r = rules( v2(
+        nd( 0, 'Start', [] ), nd( 1, 'MemStart', [] ), nd( 2, 'Constant', [] ),
+        nd( 3, 'EntryDef', [], package => 'main', sigil => '$', symbol => 'g' ),
+        nd( 4, 'NumLt', [ 3, 2 ] ),
+        nd( 5, 'Return', [2], ctl => 0, mem => 1 ),
+    ) );
+    is $r, {}, 'an EntryDef read by an unused NumLt: no violation';
+    my $u = rules( v2(
+        nd( 0, 'Start', [] ), nd( 1, 'MemStart', [] ), nd( 2, 'Constant', [] ),
+        nd( 3, 'EntryDef', [], package => 'main', sigil => '$', symbol => 'g' ),
+        nd( 4, 'NumLt', [ 3, 2 ] ),
+        nd( 5, 'Return', [4], ctl => 0, mem => 1 ),
+    ) );
+    is [ keys %$u ], ['read-unversioned:package'], 'returned, it is';
+};
+subtest 'V6: an item of an alias list, a binding merged and read as a container, a parameter bind' => sub {
+    is [ grep { /\Aread-unversioned/ } keys rules('our @g = (1, 2); my @n; push @n, 3; for my $x (@n, $g[0]) { print $x } print "\n";')->%* ], [],
+        'foreach over a my array the sub writes, and an element';
+    is [ grep { /\Aread-unversioned/ } keys rules('sub f { my @l; push @l, 1; if ($_[0]) { my @n = (2); @l = @n } return scalar(@l) . $l[0] } print f(1), f(0), "\n";')->%* ], [],
+        'an array rebound in an arm, counted and indexed after the join';
+    is [ grep { /\Aread-unversioned/ } keys rules('sub n { my ($c, %a) = @_; return bless {%a}, $c } print ref(n("K", a => 1)), "\n";')->%* ], [],
+        'a slurpy hash bound from @_ and read whole';
+};
+subtest 'V6: a list slice is of values, not a read of memory' => sub {
+    my $r = rules( v2(
+        nd( 0, 'Start', [] ), nd( 1, 'MemStart', [] ), nd( 2, 'Constant', [] ),
+        nd( 3, 'Call', [], ctl => 0, mem => 1, out => 1, dispatch_kind => 'direct', name => 'main::f' ),
+        nd( 4, 'Slice', [ 2, 3 ], index_count => 1 ),
+        nd( 5, 'Print', [4], ctl => 3 ),
+        nd( 6, 'Return', [2], ctl => 5, mem => 3 ),
+    ) );
+    is $r, {}, '(f())[0] has no violation';
 };
 subtest 'V8 phi-arity:eval-join: the eval join has one way in, two-input Phis' => sub {
     my $r = rules('my $x = 1; my $r = eval { $x = 2; die "a\n" if @ARGV; 5 }; print "$x $r $@\n";');
