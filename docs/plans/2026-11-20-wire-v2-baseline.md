@@ -404,3 +404,42 @@ What later stages should know:
 2. **V10 (`exc`) is not written**; L7 is chalk's.
 3. **`$@ = ""` is not stored at a `return` from an eval** (T2 refuses an eval whose body returns).
 4. **The eval's value stays a Phi at its join even of one way in** (list context reads it); memory Phis of one input are not emitted.
+
+## 15. After stage 9
+
+### 9a: the `loop` profile (the gated 9a point)
+
+Heads: producer `v2-s9` 006b485 (on 1e190aa), chalk `v2-s9` d99ac083, d4db080e, 89317de9 (on 99ef3cc0). A Loop is [entry, back], its test an If; profile `["mem","eval","loop"]` (docs/memory/a-loop-goes-round-by-an-edge.md).
+
+`tools/gates.sh` at producer 006b485, chalk 89317de9 (run from a worktree of 006b485; the first run, at chalk d4db080e, failed three chalk tests that 89317de9 fixes -- T1's intervals and `Ref::is_alias_ref` read the old shape; the intervals oracle re-recorded, equal modulo ids):
+
+```
+producer-suite  PASS  776 files, 0 failing [13m14s]
+chalk-suite     PASS  928 files, 0 failing [82m22s]
+census          PASS  ROUNDTRIP 426 (>= 426) DIFFERS 0 LLI_FAIL 0; GAP 5 LOAD_FAIL 0 NOJSON 0 [4m06s]
+corpus-gate     PASS  gate-green 222 (>= 222), prove exit 0, paad/worklist.json untouched [6m42s]
+probes          PASS  LOUD=2 REFUSED=98 SAME=433; WRONG 0, SAME lost 0, changed 0 [2m54s]
+ratchet         PASS  prove exit 0; chalk's lib compared; rows that fell: 0; new graphs: 94, 0 of them with violations [39m53s]
+                PASS  (deparser round trip) ROUNDTRIP 430 (>= 430) EMITS_INVALID_PERL 0 [3m27s]
+```
+
+Verifier: probes `phi-arity` 4 -> 0 (al1, al2: the foreach write-back to a scalar source returned before the loop's back edges and exit); `loop` (V11) new, 0 everywhere. al1 and al2 stay REFUSED, now by T2's `out of its slices (PadAccess)` (the list's PadAccess), no longer held by name in chalk's wire-verify.t. The deparser reads the new shape through `as_v1` (430 held).
+
+### 9b: Braun's construction
+
+Heads: producer `v2-s9` fde4976 (Braun), 15cc7f9 (scouts deleted), f743cdb (the proof in gates.sh), 5305f64 (memory), 5d55bde, 6fdb254; chalk b7923c82, 22037842, daaf243f (probes baseline: al1, al2 refused by T2 by name; ev8 SAME). Depth-14 nest: under 2 s; each body walked once (docs/memory/a-loop-is-walked-once.md).
+
+`tools/gates.sh` at producer 6fdb254, chalk daaf243f:
+
+```
+producer-suite  PASS  780 files, 0 failing [10m13s]
+chalk-suite     PASS  928 files, 0 failing [81m25s]
+census          PASS  ROUNDTRIP 426 (>= 426) DIFFERS 0 LLI_FAIL 0; GAP 5 LOAD_FAIL 0 NOJSON 0 [1m48s]
+corpus-gate     PASS  gate-green 223 (>= 222), prove exit 0, paad/worklist.json untouched [5m16s]
+probes          PASS  LOUD=2 REFUSED=97 SAME=434; WRONG 0, SAME lost 0, changed 0 [1m32s]
+ratchet         PASS  prove exit 0; chalk's lib compared; rows that fell: 0; new graphs: 94, 0 of them with violations [29m24s]
+                PASS  (deparser round trip) ROUNDTRIP 430 (>= 430) EMITS_INVALID_PERL 0 [3m01s]
+                MISS  (wire-braun-proof against 006b485) chalk DIFFERS 17; chalk SAME 193; chalk SAME-BUT-STAMPS 11; corpus SAME 427; corpus SAME-BUT-STAMPS 4; probes GAINED 1; probes SAME 541; probes SAME-BUT-STAMPS 2 [47m13s]
+```
+
+The Braun proof holds over the corpus and the probes (SAME up to the listed stamps; GAINED: ev8) and MISSES over chalk's lib: 17 rows, 10 graphs. Read node by node, they are the 9a wire's scout artifacts, not Braun's: a pinned `PostfixDeref '@'` on one side, from `%MUTATED_LITERALS` node-id collisions that moved with the counters (docs/memory/pending-bug-mutated-literals-keyed-by-node-id.md) or a scout's `mutated_aggregate` mark (Builder::_common_memo); and check_nodes' `@controls = ... if ...` as a TernaryExpr where 9a built an If (no Phi for a `my @a`). No WRONG anywhere (probes, census, the deparser's round trip, chalk's suite).
