@@ -54,13 +54,21 @@ sub verify ($wire) {
 
 sub _fields ($n) { $n->{fields} // {} }
 
+# _may_fault($n, \%by) -> a Divide or Modulo whose divisor is not a constant
+# known not to be zero (through its coercions): perl dies there.
+sub _may_fault ( $n, $by ) {
+    my $d = $by->{ ( $n->{inputs} // [] )->[1] // '' } or return 1;
+    $d = $by->{ $d->{inputs}[0] // '' } // return 1 while $d->{op} eq 'Coerce';
+    return 1 unless $d->{op} eq 'Constant' && ( _fields($d)->{const_type} // '' ) =~ /\A(?:integer|number)\z/;
+    my $v = _fields($d)->{value} // 0;
+    return ( $n->{op} eq 'Modulo' ? int($v) : $v ) == 0 ? 1 : 0;
+}
+
 # The kinds that store whenever they run (the plan's 3.3: each a version).
-# HELD BY NAME, NOT IN IT: LocalAlias (`$_` aliased per pass) is pinned and
-# follows memory (mem_in) but is no version: B::SoN forwards its binding to
-# the reads of `$_` in its body, and a callee's reads are in its own graph.
-# The plan's 3.3 lists it with mem_out; making it a version is a placement
-# change the producer has not made (stage 10's report).
-my %WRITE = map { $_ => 1 } qw(EntryWrite CellWrite Delete ElemRestore MakeCell);
+# LocalAlias among them: after it a store to `$_` -- a callee's too -- is a
+# store to the element it aliases (audit 2026-11-22: held out, it hid
+# `for (@l) { f() } sub f { $_ = 9 }` leaving @l as it was).
+my %WRITE = map { $_ => 1 } qw(EntryWrite CellWrite Delete ElemRestore MakeCell LocalAlias);
 
 
 # The nodes control reaches $n from: a Region's every input; the first input
@@ -76,14 +84,17 @@ sub _control_preds ($n) {
 }
 
 # What kind of place an Assign target is (the audit census's classes).
-sub _target_class ($t) {
+sub _target_class ( $t, $in_memory = {} ) {
     return 'skip' unless $t;
     my ( $op, $f ) = ( $t->{op}, _fields($t) );
     return 'element' if $op eq 'Subscript';
     return 'slice'   if $op eq 'Slice';
     if ( $op eq 'PadAccess' ) {
         return 'my-aggregate' if ( $f->{sigil} // '$' ) ne '$';
-        return 'my-scalar-in-memory' if ( $t->{inputs} // [] )->@* || $f->{shared};
+        # (on v2 one kept in memory follows it: a mem_in, here or on another
+        # read of it -- the record flag is the serializer's guess, not a fact)
+        return 'my-scalar-in-memory' if ( $t->{inputs} // [] )->@* || $f->{shared} || defined $t->{mem_in}
+            || $in_memory->{ '$' . ( $f->{symbol} // '' ) };
         return 'ssa-scalar';
     }
     return 'package-var'     if $op eq 'EntryDef';
@@ -169,6 +180,9 @@ sub _graph_v2 ( $name, $g, $res ) {
         return $x->{op} eq 'MemStart' || $memphi->($x) || $x->{mem_out};
     };
     my $record = sub ($n) { $n->{op} eq 'Assign' && _fields($n)->{record} };
+    # The `my` scalars this graph keeps in memory: some read of them names a version.
+    my %in_memory = map { ( '$' . _fields($_)->{symbol} => 1 ) }
+        grep { $_->{op} eq 'PadAccess' && ( _fields($_)->{sigil} // '$' ) eq '$' && defined $_->{mem_in} && defined _fields($_)->{symbol} } @nodes;
 
     # (V9) ONE CONTROL SUCCESSOR, except for the two kinds that branch.
     for my $n (@nodes) {
@@ -192,6 +206,13 @@ sub _graph_v2 ( $name, $g, $res ) {
             $bad->( $n, 'version-off-chain', 'a version with no ' . join ' or ', grep { !defined $n->{$_} } qw(mem_in control_in) )
                 if !defined $n->{mem_in} || !defined $n->{control_in};
         }
+        # (an :lvalue call an Assign stores through is that Assign's place:
+        # the Assign is the version -- t/wire-v2-an-lvalue-call-target-is-no-version.t)
+        elsif ( defined $n->{mem_in} && !$record->($n)
+            && ( $op eq 'Assign' || $op eq 'Call' && ( $f->{dispatch_kind} // '' ) ne 'builtin'
+                 && !grep { $_->[0]{op} eq 'Assign' && $_->[1] == 0 } ( $cons{ $n->{id} } // [] )->@* ) ) {
+            $bad->( $n, 'version-off-chain', "a $op that follows memory and is no version" );
+        }
         elsif ( !defined $n->{mem_in} && !$record->($n)
             && ( $op =~ /^(?:Return|Unwind|Assign)$/ || $op eq 'Call' && ( $f->{dispatch_kind} // '' ) ne 'builtin' ) ) {
             $bad->( $n, 'version-off-chain', "a $op that follows no memory" . ( $op eq 'Assign' ? ' and is no record' : '' ) );
@@ -202,6 +223,22 @@ sub _graph_v2 ( $name, $g, $res ) {
         elsif ( $WRITE{$op} || $op eq 'Call' && ( $f->{dispatch_kind} // '' ) eq 'builtin' && B::SoN::EffectTable::is_version( $f->{name} ) ) {
             $bad->( $n, 'version-off-chain', 'a write that is no memory version' . ( $op eq 'Call' ? " ($f->{name})" : '' ) );
         }
+    }
+
+    # (V2b) AN EFFECT RUNS WHERE IT STANDS: on the control chain. A Print, a
+    # builtin the EffectTable pins in every context (or does not know: it may
+    # write), a division that may fault. (v1's effect-rides-value and
+    # fault-floating, deleted in stage 6 with nothing in their place: audit
+    # 2026-11-22, M3, M6, M7, M11.)
+    for my $n ( grep { !defined $_->{control_in} } @nodes ) {
+        my ( $op, $f ) = ( $n->{op}, _fields($n) );
+        my $why = $op =~ /^(?:Print|Unwind|Return)$/ ? $op
+            : $op eq 'Call' && ( $f->{dispatch_kind} // '' ) eq 'builtin'
+                && ( B::SoN::EffectTable::on_chain( $f->{name} ) || B::SoN::EffectTable::is_version( $f->{name} )
+                     || !B::SoN::EffectTable::known( $f->{name} ) ) ? "the builtin $f->{name}"
+            : $op =~ /^(?:Divide|Modulo)$/ && _may_fault( $n, \%by ) ? "a $op that may fault"
+            : undef;
+        $bad->( $n, 'effect-floating', "$why on no control chain" ) if defined $why;
     }
 
     # (V3, V4) EVERY VERSION IS REACHED BACKWARDS FROM A ROOT.
@@ -326,7 +363,11 @@ sub _graph_v2 ( $name, $g, $res ) {
         return 'cell'        if $op =~ /^(?:CellRead|CellParam|MakeCell)$/;
         return 'through-ref' if $op eq 'PostfixDeref';
         return 'args'        if $op eq 'ArgsSource';
-        if ( $op eq 'PadAccess' && ( $f->{sigil} // '$' ) eq '$' ) { return $f->{shared} ? 'my-shared' : undef }
+        if ( $op eq 'PadAccess' && ( $f->{sigil} // '$' ) eq '$' ) {
+            return 'my-shared' if $f->{shared};
+            # (a `my` scalar another read of names a version is kept in memory)
+            return $in_memory{ '$' . ( $f->{symbol} // '' ) } ? 'my-in-memory' : undef;
+        }
         if ( defined( my $k = $name_of->($n) ) ) {
             return 'package' if $op ne 'PadAccess' && $f->{symbol} =~ /::/;
             return $mutated{$k} ? 'my-aggregate' : undef;
@@ -365,7 +406,7 @@ sub _graph_v2 ( $name, $g, $res ) {
             next;
         }
         my $in = $n->{inputs} // [];
-        my %c = map { _target_class( $by{ $_ // '' } ) => 1 } @$in[ 0 .. ( $f->{targets} // 1 ) - 1 ];
+        my %c = map { _target_class( $by{ $_ // '' }, \%in_memory ) => 1 } @$in[ 0 .. ( $f->{targets} // 1 ) - 1 ];
         my @mem = grep { $_ ne 'ssa-scalar' && $_ ne 'skip' } sort keys %c;
         my $args = ( ( $by{ $in->[-1] // '' } // {} )->{op} // '' ) eq 'ArgsSource';
         if    ( !@mem )                                  { $res->{allowed}{record}++ }
@@ -406,6 +447,63 @@ sub _graph_v2 ( $name, $g, $res ) {
             $bad->( $n, 'phi:memory-as-value', 'used by ' . join( ',', map { "$_->[0]{op}#$_->[0]{id}" } @v ) ) if @v;
         }
     }
+    # (V10) AN EVAL'S WAYS OUT. Each thing in an eval's body that may die --
+    # a sub call, a die, what B::SoN pinned because it may fault -- has its
+    # Exc, and the way out from it puts back every `local` the body's own end
+    # puts back that was made before it. (Never written in stage 8: audit
+    # 2026-11-22, M8, M9.)
+    {
+        my %join = map { ( _fields($_)->{eval_id} => $_ ) }
+            grep { $_->{op} eq 'Region' && defined _fields($_)->{eval_id} && !_fields($_)->{catch} } @nodes;
+        my %exc_of = map { ( $_->{inputs}[0] // -1 ) => $_ } grep { $_->{op} eq 'Exc' } @nodes;
+        for my $t (@nodes) {
+            my $e = _fields($t)->{eval_id};
+            next unless defined $e && $join{$e} && defined $t->{control_in};
+            next unless $t->{op} eq 'Unwind' || $t->{op} eq 'Call' && ( _fields($t)->{dispatch_kind} // '' ) ne 'builtin';
+            $bad->( $t, 'exc', "it may die in eval $e and has no way out to its catch" ) unless $exc_of{ $t->{id} };
+        }
+        # (the nodes a control path from $from reaches before a catch, or before $stop)
+        my $path = sub ( $from, $stop ) {
+            my ( @q, %s ) = ($from);
+            while ( defined( my $id = shift @q ) ) {
+                next if $s{$id}++ || $id == $stop;
+                my $x = $by{$id} or next;
+                next if $x->{op} eq 'Region' && ( _fields($x)->{catch} || defined _fields($x)->{eval_id} );
+                push @q, ( $succ{$id} // [] )->@*;
+            }
+            return \%s;
+        };
+        my $sym = sub ($x) { my $f = _fields( $x // {} ); join ':', map { $_ // '' } $f->@{qw(package sigil symbol)} };
+        # A RESTORE: an EntryWrite storing back the value its target held -- an
+        # EntryDef of the same name read at an earlier version (the save).
+        my @restores = grep {
+            my $s = $by{ $_->{inputs}[1] // '' };
+            $_->{op} eq 'EntryWrite' && $s && $s->{op} eq 'EntryDef' && defined $s->{mem_in}
+                && $sym->( $by{ $_->{inputs}[0] // '' } ) eq $sym->($s)
+        } @nodes;
+        for my $e ( sort keys %join ) {
+            my $j = $join{$e};
+            my $entry = _fields($j)->{eval_entry} // next;
+            my @exc = grep { ( _fields( $by{ $_->{inputs}[0] // '' } // {} )->{eval_id} // '' ) eq $e } values %exc_of;
+            my %on_exc = map { %{ $path->( $_->{id}, -1 ) } } @exc;
+            my $body = $path->( $entry, $j->{id} );
+            for my $r ( grep { $body->{ $_->{id} } && !$on_exc{ $_->{id} } } @restores ) {
+                my $save = $by{ $r->{inputs}[1] };
+                my ($local) = grep { $_->{op} eq 'EntryWrite' && ( $_->{mem_in} // -1 ) == $save->{mem_in} && $sym->( $by{ $_->{inputs}[0] // '' } ) eq $sym->($save) } @nodes;
+                next unless $local;
+                for my $x (@exc) {
+                    # (the thrower comes after the local: back along memory from it)
+                    my ( $m, $after ) = ( $by{ $x->{inputs}[0] }{mem_in}, 0 );
+                    for ( 1 .. 100000 ) { last unless defined $m; if ( $m == $local->{id} ) { $after = 1; last } $m = ( $by{$m} // {} )->{mem_in} }
+                    next unless $after;
+                    my $p = $path->( $x->{id}, -1 );
+                    $bad->( $x, 'exc', 'its way out does not put back the local of ' . $sym->($save) )
+                        unless grep { $p->{ $_->{id} } && ( $_->{inputs}[1] // -1 ) == $save->{id} } @restores;
+                }
+            }
+        }
+    }
+
     # (INPUTS ARE VALUES ONLY: MemStart is a version and no value)
     for my $n ( grep { $_->{op} eq 'MemStart' } @nodes ) {
         my @v = grep { !$memphi->( $_->[0] ) } ( $cons{ $n->{id} } // [] )->@*;

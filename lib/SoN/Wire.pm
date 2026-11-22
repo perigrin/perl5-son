@@ -81,9 +81,16 @@ sub as_v1 ($wire) {
             delete $n->{control_in} unless defined $n->{control_in};
         }
 
+        # A LocalAlias IS A VERSION ON v2 (audit 2026-11-22), and on v1 none:
+        # what reads memory after it read the memory before it.
+        my %alias_mem = map { ( $_->{id} => $_->{mem_in} ) } grep { $_->{op} eq 'LocalAlias' } @$nodes;
+        my $past_alias = sub ($m) { $m = $alias_mem{$m} while defined $m && exists $alias_mem{$m}; $m };
+        for my $n ( grep { $_->{op} eq 'Phi' && ( $_->{fields} // {} )->{memory} } @$nodes ) {
+            $n->{inputs} = [ map { $past_alias->($_) } $n->{inputs}->@* ];
+        }
         for my $n (@$nodes) {
             my $operand = _operand($n);
-            my $m = delete $n->{mem_in};
+            my $m = $past_alias->( delete $n->{mem_in} );
             delete $n->{mem_out};
             delete $n->{fields}{record} if $n->{fields};
             next unless defined $m && $operand;
