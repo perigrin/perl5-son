@@ -374,14 +374,14 @@ Carp::caller_info: {start: 0, returns: [193], nodes: [
   [If, ~, [47, 56], 47], # 57
   [Proj, {index: 0}, [57]], # 58
   [Loop, {bound: entry}, [58], 58], # 59
-  [Phi, {memory: true, region: 59}, [47, 227], ~, Unknown], # 60
+  [Phi, {memory: true, region: 59}, [47, 228], ~, Unknown], # 60
   [Proj, {index: 1}, [59]], # 61
   [Region, {head: 59}, [61]], # 62
   [Phi, {memory: true, region: 62}, [60], ~, Unknown], # 63
   [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 63], # 64
   [Constant, {const_type: string, value: ""}, ~, ~, Str], # 65
   [ArrayLiteral, ~, ~, ~, Array], # 66
-  [Phi, {region: 59}, [66, 236], ~, Array], # 67
+  [Phi, {region: 59}, [66, 237], ~, Array], # 67
   [Count, ~, [67], ~, Int, 63], # 68
   [NumEq, ~, [68, 20], ~, Boolean], # 69
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 70
@@ -473,7 +473,7 @@ Carp::caller_info: {start: 0, returns: [193], nodes: [
   [Call, {dispatch_kind: builtin, name: set_arylen, param_names: []}, [67, 154], 155, Int, 63, true], # 156
   [Region, {head: 152}, [153, 156]], # 157
   [Loop, {bound: entry}, [157], 157], # 158
-  [Phi, {region: 158}, [146, 239], ~, Array], # 159
+  [Phi, {region: 158}, [146, 240], ~, Array], # 159
   [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar], # 160
   [Phi, {memory: true, region: 138}, [122, 85, 88, 105, 105, 137], ~, Unknown], # 161
   [EntryWrite, ~, [160, 64], 138, Unknown, 161, true], # 162
@@ -485,7 +485,7 @@ Carp::caller_info: {start: 0, returns: [193], nodes: [
   [Constant, {const_type: string, value: "..."}, ~, ~, Str], # 168
   [Proj, {index: 0}, [166]], # 169
   [Phi, {memory: true, predecessors: [153, 155], region: 157}, [63, 156], ~, Unknown], # 170
-  [Phi, {memory: true, region: 158}, [170, 231], ~, Unknown], # 171
+  [Phi, {memory: true, region: 158}, [170, 232], ~, Unknown], # 171
   [Phi, {memory: true, region: 164}, [171], ~, Unknown], # 172
   [Call, {dispatch_kind: builtin, name: push, param_names: []}, [159, 168], 169, Int, 172, true], # 173
   [Region, {head: 166}, [167, 173]], # 174
@@ -528,32 +528,33 @@ Carp::caller_info: {start: 0, returns: [193], nodes: [
   [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 210], # 211
   [EntryWrite, ~, [211, 65], 210, Unknown, 210, true], # 212
   [Region, {eval_entry: 204, eval_id: 3}, [212]], # 213
-  [If, ~, [213, 20], 213], # 214
+  [Phi, {region: 213}, [20], ~, "Maybe[Int]"], # 214
   [Add, ~, [208, 20], ~, Int], # 215
   [Add, ~, [197, 20], ~, Int], # 216
   [LocalAlias, {name: _}, [202], 199, Unknown, 171], # 217
-  [Proj, {index: 1}, [214]], # 218
-  [Proj, {index: 0}, [214]], # 219
-  [PadAccess, {sigil: $, symbol: func}, ~, ~, Unknown, 85], # 220
-  [Count, ~, [24], ~, Int, 47], # 221
+  [If, ~, [213, 214], 213], # 218
+  [PadAccess, {sigil: $, symbol: func}, ~, ~, Unknown, 85], # 219
+  [Count, ~, [24], ~, Int, 47], # 220
+  [Proj, {index: 0}, [218]], # 221
   [PadAccess, {sigil: $, symbol: arg}, ~, ~, Unknown, 212], # 222
   [Constant, {const_type: string, value: "** argument not available anymore **"}, ~, ~, Str], # 223
-  [Assign, ~, [222, 223], 218, Str, 212, true], # 224
-  [Region, {head: 214}, [219, 224]], # 225
-  [Phi, {memory: true, predecessors: [219, 218], region: 225}, [212, 224], ~, Unknown], # 226
-  [EntryWrite, ~, [160, 203], 225, Unknown, 226, true], # 227
-  [Phi, {region: 175}, [64, 203], ~, Scalar], # 228
-  [Count, ~, [24], ~, Int, 60], # 229
-  [Subscript, {kind: array}, [67, 197], ~, Scalar, 171], # 230
-  [Call, {dispatch_kind: direct, file: "/home/runner/.local/share/pvm/versions/5.42.0/lib/perl5/5.42.0/Carp.pm", line: 382, name: Carp::format_arg, package: Carp, param_names: [], want: list}, [230], 217, Unknown, 171, true], # 231
-  [NumGt, ~, [229, 208], 59, Boolean], # 232
-  [Count, ~, [67], ~, Int, 171], # 233
-  [NumGt, ~, [233, 197], 158, Boolean], # 234
-  [PadAccess, {sigil: $, symbol: arg}, ~, ~, Unknown, 226], # 235
-  [ListAppend, {collector: map}, [67, 235], ~, Array], # 236
-  [Call, {dispatch_kind: builtin, name: arylen, param_names: []}, [67], ~, Int], # 237
-  [Count, ~, [67], ~, Int, 170], # 238
-  [ListAppend, {collector: map}, [159, 231], ~, Array]]} # 239
+  [Proj, {index: 1}, [218]], # 224
+  [Assign, ~, [222, 223], 224, Str, 212, true], # 225
+  [Region, {head: 218}, [221, 225]], # 226
+  [Phi, {memory: true, predecessors: [221, 224], region: 226}, [212, 225], ~, Unknown], # 227
+  [EntryWrite, ~, [160, 203], 226, Unknown, 227, true], # 228
+  [Phi, {region: 175}, [64, 203], ~, Scalar], # 229
+  [Count, ~, [24], ~, Int, 60], # 230
+  [Subscript, {kind: array}, [67, 197], ~, Scalar, 171], # 231
+  [Call, {dispatch_kind: direct, file: "/home/runner/.local/share/pvm/versions/5.42.0/lib/perl5/5.42.0/Carp.pm", line: 382, name: Carp::format_arg, package: Carp, param_names: [], want: list}, [231], 217, Unknown, 171, true], # 232
+  [NumGt, ~, [230, 208], 59, Boolean], # 233
+  [Count, ~, [67], ~, Int, 171], # 234
+  [NumGt, ~, [234, 197], 158, Boolean], # 235
+  [PadAccess, {sigil: $, symbol: arg}, ~, ~, Unknown, 227], # 236
+  [ListAppend, {collector: map}, [67, 236], ~, Array], # 237
+  [Call, {dispatch_kind: builtin, name: arylen, param_names: []}, [67], ~, Int], # 238
+  [Count, ~, [67], ~, Int, 170], # 239
+  [ListAppend, {collector: map}, [159, 232], ~, Array]]} # 240
 Carp::carp: {start: 0, returns: [5], nodes: [
   [Start], # 0
   [ArgsSource, ~, ~, ~, Array], # 1
@@ -3481,9 +3482,9 @@ main::__PROGRAM__: {start: 0, returns: [46], nodes: [
   [MemStart], # 20
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [17], 19, Unknown, 20, true], # 21
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [16], 21, Unknown, 21, true], # 22
-  [Call, {class_name: Greet, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 16, name: import, package: main, param_names: [], want: void}, [14, 15], 22, "Maybe[Boolean]", 22, true], # 23
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 17, name: Greet::hello, package: main, param_names: [], want: list}, ~, 23, Str, 23, true], # 24
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 17, name: Louder::shout, package: main, param_names: [], want: list}, ~, 24, Str, 24, true], # 25
+  [Call, {class_name: Greet, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 16, name: import, package: main, param_names: [], want: void}, [14, 15], 22, "Maybe[Boolean]", 22, true], # 23
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 17, name: Greet::hello, package: main, param_names: [], want: list}, ~, 23, Str, 23, true], # 24
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 17, name: Louder::shout, package: main, param_names: [], want: list}, ~, 24, Str, 24, true], # 25
   [Subscript, {kind: hash, stash_has: 1}, [12, 13], ~, Scalar, 25], # 26
   [Constant, {const_type: string, value: "yes"}, ~, ~, Str], # 27
   [Constant, {const_type: string, value: "no"}, ~, ~, Str], # 28
@@ -3511,7 +3512,7 @@ main::__PROGRAM__: {start: 0, returns: [46], nodes: [
   [Constant, {const_type: string, value: POSIX.pm}, ~, ~, Str], # 2
   [MemStart], # 3
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [2], 0, Unknown, 3, true], # 4
-  [Call, {class_name: POSIX, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: import, package: main, param_names: []}, [1], 4, Unknown, 4, true], # 5
+  [Call, {class_name: POSIX, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: import, package: main, param_names: []}, [1], 4, Unknown, 4, true], # 5
   [Return, {implicit: true}, [5], 5, ~, 5]]} # 6
 "BEGIN 2": {start: 0, returns: [4], nodes: [
   [Start], # 0
@@ -3527,7 +3528,7 @@ main::__PROGRAM__: {start: 0, returns: [46], nodes: [
   [Constant, {const_type: string, value: constant.pm}, ~, ~, Str], # 4
   [MemStart], # 5
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [4], 0, Unknown, 5, true], # 6
-  [Call, {class_name: constant, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: import, package: main, param_names: []}, [1, 2, 3], 6, Unknown, 6, true], # 7
+  [Call, {class_name: constant, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: import, package: main, param_names: []}, [1, 2, 3], 6, Unknown, 6, true], # 7
   [Return, {implicit: true}, [7], 7, ~, 7]]} # 8
 "BEGIN 4": {start: 0, returns: [4], nodes: [
   [Start], # 0

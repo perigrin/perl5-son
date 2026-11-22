@@ -99,7 +99,7 @@ main::__PROGRAM__: {start: 0, returns: [57], nodes: [
   [If, ~, [9, 13], 9], # 14
   [Proj, {index: 0}, [14]], # 15
   [EntryWrite, ~, [11, 12], 15, Unknown, 9, true], # 16
-  [Call, {dispatch_kind: direct, eval_id: 1, file: "/tmp/yDlL8UMbFX/case.pl", line: 5, name: main::__PROGRAM__::__EVAL__:5:1, package: main, param_names: [], string_eval: true, want: scalar}, ~, 16, Int, 16, true], # 17
+  [Call, {dispatch_kind: direct, eval_id: 1, file: "/tmp/mvrHQew3rs/case.pl", line: 5, name: main::__PROGRAM__::__EVAL__:5:1, package: main, param_names: [], string_eval: true, want: scalar}, ~, 16, Int, 16, true], # 17
   [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 17], # 18
   [EntryWrite, ~, [18, 12], 17, Unknown, 17, true], # 19
   [Exc, ~, [17]], # 20

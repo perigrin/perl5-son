@@ -42,14 +42,14 @@ main::__PROGRAM__: {start: 0, returns: [20], nodes: [
   [Constant, {const_type: string, value: cached}, ~, ~, Str], # 6
   [HashLiteral, {sigil: "%", symbol: cache}, [5, 6], 0, Hash], # 7
   [Assign, ~, [4, 7], 7, List, 3, true], # 8
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 9, name: main::make, package: main, param_names: [], want: list}, [2], 8, Scalar, 8, true], # 9
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 9, name: main::make, package: main, param_names: [], want: list}, [2], 8, Scalar, 8, true], # 9
   [Coerce, {from_repr: Unknown, to_repr: Str}, [9], ~, Str], # 10
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 11
   [Constant, {const_type: string, value: a}, ~, ~, Str], # 12
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 9, name: main::make, package: main, param_names: [], want: list}, [12], 9, Scalar, 9, true], # 13
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 9, name: main::make, package: main, param_names: [], want: list}, [12], 9, Scalar, 9, true], # 13
   [Coerce, {from_repr: Unknown, to_repr: Str}, [13], ~, Str], # 14
   [Constant, {const_type: string, value: b}, ~, ~, Str], # 15
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 9, name: main::make, package: main, param_names: [], want: list}, [15], 13, Scalar, 13, true], # 16
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 9, name: main::make, package: main, param_names: [], want: list}, [15], 13, Scalar, 13, true], # 16
   [Coerce, {from_repr: Unknown, to_repr: Str}, [16], ~, Str], # 17
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 18
   [Print, ~, [10, 11, 14, 11, 17, 18], 16, "Maybe[Boolean]"], # 19
@@ -74,7 +74,7 @@ main::make: {start: 0, returns: [30], nodes: [
   [Proj, {index: 0}, [15]], # 16
   [Constant, {const_type: string, value: "no op\n"}, ~, ~, Str], # 17
   [Proj, {index: 1}, [15]], # 18
-  [Unwind, {file: "/tmp/yDlL8UMbFX/case.pl", line: 5}, [17], 18, ~, 7], # 19
+  [Unwind, {file: "/tmp/mvrHQew3rs/case.pl", line: 5}, [17], 18, ~, 7], # 19
   [Region, {head: 15}, [16, 19]], # 20
   [Exists, {kind: hash}, [2, 6], ~, Boolean, 7], # 21
   [If, ~, [20, 21], 20], # 22
@@ -124,24 +124,24 @@ Other::helper: {start: 0, returns: [3], nodes: [
 Widget::call_main: {start: 0, returns: [3], nodes: [
   [Start], # 0
   [MemStart], # 1
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 6, name: main::helper, package: Widget, param_names: []}, ~, 0, Str, 1, true], # 2
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 6, name: main::helper, package: Widget, param_names: []}, ~, 0, Str, 1, true], # 2
   [Return, {implicit: true}, [2], 2, ~, 2]]} # 3
 Widget::ref_other: {start: 0, returns: [5], nodes: [
   [Start], # 0
   [Constant, {const_type: code, value: Other::helper}, ~, ~, Code], # 1
   [Ref, ~, [1], ~, CodeRef], # 2
   [MemStart], # 3
-  [Call, {dispatch_kind: indirect, file: "/tmp/yDlL8UMbFX/case.pl", line: 7, name: "", package: Widget, param_names: []}, [2], 0, Unknown, 3, true], # 4
+  [Call, {dispatch_kind: indirect, file: "/tmp/mvrHQew3rs/case.pl", line: 7, name: "", package: Widget, param_names: []}, [2], 0, Unknown, 3, true], # 4
   [Return, {implicit: true}, [4], 4, ~, 4]]} # 5
 main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [Call, {class_name: Widget, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 9, name: new, package: main, param_names: [], want: scalar}, ~, 0, Object, 2, true], # 3
-  [Call, {class_name: Widget, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 10, name: call_main, package: main, param_names: [], want: list}, [3], 3, Str, 3, true], # 4
+  [Call, {class_name: Widget, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 9, name: new, package: main, param_names: [], want: scalar}, ~, 0, Object, 2, true], # 3
+  [Call, {class_name: Widget, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 10, name: call_main, package: main, param_names: [], want: list}, [3], 3, Str, 3, true], # 4
   [Coerce, {from_repr: Unknown, to_repr: Str}, [4], ~, Str], # 5
   [Constant, {const_type: string, value: "; "}, ~, ~, Str], # 6
-  [Call, {class_name: Widget, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 10, name: ref_other, package: main, param_names: [], want: list}, [3], 4, Unknown, 4, true], # 7
+  [Call, {class_name: Widget, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 10, name: ref_other, package: main, param_names: [], want: list}, [3], 4, Unknown, 4, true], # 7
   [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
   [Print, ~, [5, 6, 8, 9], 7, "Maybe[Boolean]"], # 10
@@ -164,7 +164,7 @@ main::helper: {start: 0, returns: [3], nodes: [
   [Constant, {const_type: string, value: experimental.pm}, ~, ~, Str], # 3
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
-  [Call, {class_name: experimental, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Call, {class_name: experimental, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
   [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 ```
 
@@ -254,22 +254,22 @@ main::__PROGRAM__: {start: 0, returns: [30], nodes: [
   [Constant, {const_type: string, value: X}, ~, ~, Str], # 8
   [Constant, {const_type: string, value: L}, ~, ~, Str], # 9
   [MemStart], # 10
-  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 17, name: new, package: main, param_names: [], want: scalar}, [2, 6, 9], 0, Object, 10, true], # 11
+  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 17, name: new, package: main, param_names: [], want: scalar}, [2, 6, 9], 0, Object, 10, true], # 11
   [PadAccess, {sigil: $, symbol: loop}, ~, ~, Unknown, 11], # 12
   [Assign, ~, [12, 11], 11, Object, 11, true], # 13
   [PadAccess, {sigil: $, symbol: loop}, ~, ~, Unknown, 13], # 14
   [Constant, {const_type: string, value: a}, ~, ~, Str], # 15
-  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 18, name: new, package: main, param_names: [], want: list}, [2, 3, 4, 5, 14, 6, 15], 13, Object, 13, true], # 16
-  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 18, name: new, package: main, param_names: [], want: list}, [2, 3, 8], 16, Object, 16, true], # 17
-  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 18, name: new, package: main, param_names: [], want: list}, [2, 6, 7], 17, Object, 17, true], # 18
+  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 18, name: new, package: main, param_names: [], want: list}, [2, 3, 4, 5, 14, 6, 15], 13, Object, 13, true], # 16
+  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 18, name: new, package: main, param_names: [], want: list}, [2, 3, 8], 16, Object, 16, true], # 17
+  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 18, name: new, package: main, param_names: [], want: list}, [2, 6, 7], 17, Object, 17, true], # 18
   [Constant, {const_type: string, value: b}, ~, ~, Str], # 19
-  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 18, name: new, package: main, param_names: [], want: list}, [2, 3, 4, 5, 18, 6, 19], 18, Object, 18, true], # 20
+  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 18, name: new, package: main, param_names: [], want: list}, [2, 3, 4, 5, 18, 6, 19], 18, Object, 18, true], # 20
   [PadAccess, {sigil: $, symbol: loop}, ~, ~, Unknown, 20], # 21
-  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 18, name: new, package: main, param_names: [], want: list}, [2, 3, 4, 5, 21], 20, Object, 20, true], # 22
+  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 18, name: new, package: main, param_names: [], want: list}, [2, 3, 4, 5, 21], 20, Object, 20, true], # 22
   [PadAccess, {sigil: $, symbol: loop}, ~, ~, Unknown, 22], # 23
   [ArrayLiteral, {sigil: "@", symbol: nodes}, [16, 1, 17, 20, 22], ~, Array], # 24
   [Ref, ~, [24], ~, ArrayRef], # 25
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 21, name: main::matching, package: main, param_names: [], want: list}, [23, 25], 22, Str, 22, true], # 26
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 21, name: main::matching, package: main, param_names: [], want: list}, [23, 25], 22, Str, 22, true], # 26
   [Coerce, {from_repr: Unknown, to_repr: Str}, [26], ~, Str], # 27
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 28
   [Print, ~, [27, 28], 26, "Maybe[Boolean]"], # 29
@@ -309,7 +309,7 @@ main::matching: {start: 0, returns: [10], nodes: [
   [Defined, ~, [30], ~, Boolean], # 31
   [If, ~, [30, 31], 30], # 32
   [Proj, {index: 0}, [32]], # 33
-  [Call, {dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 6, name: can, package: main, param_names: [], want: scalar}, [26, 27], 33, Unknown, 5, true], # 34
+  [Call, {dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 6, name: can, package: main, param_names: [], want: scalar}, [26, 27], 33, Unknown, 5, true], # 34
   [Proj, {index: 1}, [32]], # 35
   [Region, {head: 32}, [34, 35]], # 36
   [Phi, {memory: true, predecessors: [33, 35], region: 36}, [34, 5], ~, Unknown], # 37
@@ -319,7 +319,7 @@ main::matching: {start: 0, returns: [10], nodes: [
   [Phi, {predecessors: [33, 35], region: 36}, [34, 31], ~, Unknown], # 41
   [If, ~, [36, 41], 36], # 42
   [Proj, {index: 0}, [42]], # 43
-  [Call, {dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 7, name: kind, package: main, param_names: [], want: scalar}, [40], 43, Unknown, 37, true], # 44
+  [Call, {dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 7, name: kind, package: main, param_names: [], want: scalar}, [40], 43, Unknown, 37, true], # 44
   [PostfixDeref, {sigil: $}, [22], ~, Scalar, 44], # 45
   [Subscript, {kind: array}, [12, 15], ~, Scalar, 44], # 46
   [TernaryExpr, ~, [18, 45, 46], ~, Scalar], # 47
@@ -328,12 +328,12 @@ main::matching: {start: 0, returns: [10], nodes: [
   [StrEq, ~, [48, 49], ~, Boolean], # 50
   [If, ~, [44, 50], 44], # 51
   [Proj, {index: 0}, [51]], # 52
-  [Call, {dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 8, name: owner, package: main, param_names: [], want: scalar}, [47], 52, Unknown, 44, true], # 53
+  [Call, {dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 8, name: owner, package: main, param_names: [], want: scalar}, [47], 52, Unknown, 44, true], # 53
   [Defined, ~, [53], ~, Boolean], # 54
   [If, ~, [53, 54], 53], # 55
   [Proj, {index: 0}, [55]], # 56
-  [Call, {dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 9, name: name, package: main, param_names: [], want: scalar}, [53], 56, Unknown, 53, true], # 57
-  [Call, {dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 9, name: name, package: main, param_names: [], want: scalar}, [23], 57, Unknown, 57, true], # 58
+  [Call, {dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 9, name: name, package: main, param_names: [], want: scalar}, [53], 56, Unknown, 53, true], # 57
+  [Call, {dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 9, name: name, package: main, param_names: [], want: scalar}, [23], 57, Unknown, 57, true], # 58
   [Proj, {index: 1}, [55]], # 59
   [Region, {head: 55}, [58, 59]], # 60
   [Phi, {memory: true, predecessors: [56, 59], region: 60}, [58, 53], ~, Unknown], # 61
@@ -346,7 +346,7 @@ main::matching: {start: 0, returns: [10], nodes: [
   [Phi, {predecessors: [56, 59], region: 60}, [67, 54], ~, Boolean], # 68
   [If, ~, [60, 68], 60], # 69
   [Proj, {index: 0}, [69]], # 70
-  [Call, {dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 10, name: name, package: main, param_names: [], want: scalar}, [64], 70, Unknown, 61, true], # 71
+  [Call, {dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 10, name: name, package: main, param_names: [], want: scalar}, [64], 70, Unknown, 61, true], # 71
   [Defined, ~, [71], ~, Boolean], # 72
   [If, ~, [71, 72], 71], # 73
   [Proj, {index: 0}, [73]], # 74
@@ -404,19 +404,19 @@ main::__PROGRAM__: {start: 0, returns: [22], nodes: [
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 3
   [ArrayLiteral, ~, [3], 0, ArrayRef], # 4
   [MemStart], # 5
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 11, name: main::walk, package: main, param_names: [], want: list}, [2, 4], 4, Str, 5, true], # 6
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 11, name: main::walk, package: main, param_names: [], want: list}, [2, 4], 4, Str, 5, true], # 6
   [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
   [Constant, {const_type: string, value: " | "}, ~, ~, Str], # 8
   [Constant, {const_type: string, value: S}, ~, ~, Str], # 9
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 10
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 11
   [ArrayLiteral, ~, [10, 11], 6, ArrayRef], # 12
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 11, name: main::walk, package: main, param_names: [], want: list}, [9, 12], 12, Str, 6, true], # 13
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 11, name: main::walk, package: main, param_names: [], want: list}, [9, 12], 12, Str, 6, true], # 13
   [Coerce, {from_repr: Unknown, to_repr: Str}, [13], ~, Str], # 14
   [Constant, {const_type: string, value: X}, ~, ~, Str], # 15
   [Constant, {const_type: integer, value: "4"}, ~, ~, Int], # 16
   [ArrayLiteral, ~, [16], 13, ArrayRef], # 17
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 11, name: main::walk, package: main, param_names: [], want: list}, [15, 17], 17, Str, 13, true], # 18
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 11, name: main::walk, package: main, param_names: [], want: list}, [15, 17], 17, Str, 13, true], # 18
   [Coerce, {from_repr: Unknown, to_repr: Str}, [18], ~, Str], # 19
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 20
   [Print, ~, [7, 8, 14, 8, 19, 20], 18, "Maybe[Boolean]"], # 21
@@ -513,10 +513,10 @@ main::__PROGRAM__: {start: 0, returns: [15], nodes: [
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 5
   [ArrayLiteral, ~, [3, 4, 5], 0, ArrayRef], # 6
   [MemStart], # 7
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 7, name: main::build, package: main, param_names: [], want: list}, [2, 6], 6, Str, 7, true], # 8
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 7, name: main::build, package: main, param_names: [], want: list}, [2, 6], 6, Str, 7, true], # 8
   [Coerce, {from_repr: Unknown, to_repr: Str}, [8], ~, Str], # 9
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 10
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 7, name: main::build, package: main, param_names: [], want: list}, ~, 8, Str, 8, true], # 11
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 7, name: main::build, package: main, param_names: [], want: list}, ~, 8, Str, 8, true], # 11
   [Coerce, {from_repr: Unknown, to_repr: Str}, [11], ~, Str], # 12
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 13
   [Print, ~, [9, 10, 12, 13], 11, "Maybe[Boolean]"], # 14
@@ -539,7 +539,7 @@ main::build: {start: 0, returns: [18], nodes: [
   [Proj, {index: 0}, [11]], # 14
   [Region, {head: 11}, [14, 13]], # 15
   [Phi, {predecessors: [14, 12], region: 15}, [9, 13], ~, Unknown], # 16
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 5, name: main::count_of, package: main, param_names: []}, [1, 16], 15, Str, 8, true], # 17
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 5, name: main::count_of, package: main, param_names: []}, [1, 16], 15, Str, 8, true], # 17
   [Return, ~, [17], 17, ~, 17]]} # 18
 main::count_of: {start: 0, returns: [10], nodes: [
   [Start], # 0
@@ -549,7 +549,7 @@ main::count_of: {start: 0, returns: [10], nodes: [
   [Concat, ~, [2, 3], ~, Str], # 4
   [PadAccess, {sigil: $, symbol: list}, ~, ~, Unknown], # 5
   [MemStart], # 6
-  [PostfixDeref, {eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, package: main, sigil: "@", strict: false}, [5], 0, Array, 6, true], # 7
+  [PostfixDeref, {eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 1, package: main, sigil: "@", strict: false}, [5], 0, Array, 6, true], # 7
   [Count, ~, [7], ~, Int, 7], # 8
   [Concat, ~, [4, 8], ~, Str], # 9
   [Return, ~, [9], 7, ~, 7], # 10
@@ -582,16 +582,16 @@ main::__PROGRAM__: {start: 0, returns: [18], nodes: [
   [Constant, {const_type: string, value: "["}, ~, ~, Str], # 2
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 3
   [MemStart], # 4
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::big, package: main, param_names: [], want: scalar}, [3], 0, Scalar, 4, true], # 5
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::big, package: main, param_names: [], want: scalar}, [3], 0, Scalar, 4, true], # 5
   [Coerce, {from_repr: Unknown, to_repr: Str}, [5], ~, Str], # 6
   [Constant, {const_type: string, value: "] ["}, ~, ~, Str], # 7
   [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 8
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::big, package: main, param_names: [], want: list}, [8], 5, Scalar, 5, true], # 9
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::big, package: main, param_names: [], want: list}, [8], 5, Scalar, 5, true], # 9
   [Coerce, {from_repr: Unknown, to_repr: Str}, [9], ~, Str], # 10
   [Constant, {const_type: string, value: value}, ~, ~, Str], # 11
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::truthy, package: main, param_names: [], want: list}, [11], 9, Unknown, 9, true], # 12
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::truthy, package: main, param_names: [], want: list}, [11], 9, Unknown, 9, true], # 12
   [Coerce, {from_repr: Unknown, to_repr: Str}, [12], ~, Str], # 13
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::truthy, package: main, param_names: [], want: list}, [3], 12, Unknown, 12, true], # 14
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::truthy, package: main, param_names: [], want: list}, [3], 12, Unknown, 12, true], # 14
   [Coerce, {from_repr: Unknown, to_repr: Str}, [14], ~, Str], # 15
   [Constant, {const_type: string, value: "]\n"}, ~, ~, Str], # 16
   [Print, ~, [2, 6, 7, 10, 7, 13, 7, 15, 16], 14, "Maybe[Boolean]"], # 17
@@ -667,7 +667,7 @@ main::__PROGRAM__: {start: 0, returns: [16], nodes: [
   [PadAccess, {file: 1, shared: 1, sigil: $, symbol: seen}, ~, ~, Unknown, 8], # 9
   [Assign, ~, [9, 4], 0, Int, 8, true], # 10
   [EntryWrite, ~, [7, 4], 10, Unknown, 10, true], # 11
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 11, name: main::tally, package: main, param_names: [], want: list}, [2, 3, 4, 5, 6], 11, Str, 11, true], # 12
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 11, name: main::tally, package: main, param_names: [], want: list}, [2, 3, 4, 5, 6], 11, Str, 11, true], # 12
   [Coerce, {from_repr: Unknown, to_repr: Str}, [12], ~, Str], # 13
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 14
   [Print, ~, [13, 14], 12, "Maybe[Boolean]"], # 15
@@ -778,14 +778,14 @@ main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [Proj, {index: 0}, [5]], # 22
   [Ref, ~, [20], 22, ScalarRef, 9], # 23
   [PostfixDeref, {sigil: $}, [23], ~, Scalar, 9], # 24
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: main::by_ternary, package: main, param_names: [], want: scalar}, [24], 23, Unknown, 9, true], # 25
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: main::by_ternary, package: main, param_names: [], want: scalar}, [24], 23, Unknown, 9, true], # 25
   [Subscript, {kind: array}, [15, 16], ~, Scalar, 25], # 26
   [PostfixDeref, {sigil: $}, [23], ~, Scalar, 25], # 27
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: main::by_dor, package: main, param_names: [], want: scalar}, [27], 25, Unknown, 25, true], # 28
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: main::by_dor, package: main, param_names: [], want: scalar}, [27], 25, Unknown, 25, true], # 28
   [Subscript, {kind: array}, [15, 16], ~, Scalar, 28], # 29
   [NumGt, ~, [19, 16], 5, Boolean], # 30
   [PostfixDeref, {sigil: $}, [23], ~, Scalar, 28], # 31
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: main::by_dor, package: main, param_names: [], want: list}, [31], 28, Unknown, 28, true], # 32
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: main::by_dor, package: main, param_names: [], want: list}, [31], 28, Unknown, 28, true], # 32
   [Coerce, {from_repr: Unknown, to_repr: Str}, [32], ~, Str], # 33
   [Coerce, {from_repr: Unknown, to_repr: Str}, [25], ~, Str], # 34
   [Coerce, {from_repr: Unknown, to_repr: Str}, [28], ~, Str], # 35
@@ -810,7 +810,7 @@ main::by_dor: {start: 0, returns: [24], nodes: [
   [RefType, ~, [7], ~, Str, 10], # 11
   [If, ~, [9, 11], 9], # 12
   [Proj, {index: 0}, [12]], # 13
-  [PostfixDeref, {eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, package: main, sigil: "@", strict: false}, [7], 13, Array, 10, true], # 14
+  [PostfixDeref, {eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 2, package: main, sigil: "@", strict: false}, [7], 13, Array, 10, true], # 14
   [Count, ~, [14], ~, Int, 14], # 15
   [Coerce, {from_repr: Int, to_repr: Str}, [15], ~, Str], # 16
   [Concat, ~, [1, 16], ~, Str], # 17
@@ -838,7 +838,7 @@ main::by_ternary: {start: 0, returns: [24], nodes: [
   [RefType, ~, [9], ~, Str, 10], # 11
   [If, ~, [8, 11], 8], # 12
   [Proj, {index: 0}, [12]], # 13
-  [PostfixDeref, {eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, package: main, sigil: "@", strict: false}, [9], 13, Array, 10, true], # 14
+  [PostfixDeref, {eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 1, package: main, sigil: "@", strict: false}, [9], 13, Array, 10, true], # 14
   [Count, ~, [14], ~, Int, 14], # 15
   [Coerce, {from_repr: Int, to_repr: Str}, [15], ~, Str], # 16
   [Concat, ~, [1, 16], ~, Str], # 17
@@ -884,11 +884,11 @@ main::__PROGRAM__: {start: 0, returns: [41], nodes: [
   [Assign, ~, [4, 5], 0, Int, 3, true], # 6
   [PadAccess, {file: 1, shared: 1, sigil: $, symbol: fetches}, ~, ~, Unknown, 6], # 7
   [Assign, ~, [7, 5], 6, Int, 6, true], # 8
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::next_value, package: main, param_names: [], want: scalar}, ~, 8, Str, 8, true], # 9
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::next_value, package: main, param_names: [], want: scalar}, ~, 8, Str, 8, true], # 9
   [Defined, ~, [9], ~, Boolean], # 10
   [If, ~, [9, 10], 9], # 11
   [Proj, {index: 0}, [11]], # 12
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::next_value, package: main, param_names: [], want: scalar}, ~, 12, Str, 9, true], # 13
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::next_value, package: main, param_names: [], want: scalar}, ~, 12, Str, 9, true], # 13
   [Proj, {index: 1}, [11]], # 14
   [Region, {head: 11}, [13, 14]], # 15
   [Phi, {memory: true, predecessors: [12, 14], region: 15}, [13, 9], ~, Str], # 16
@@ -906,7 +906,7 @@ main::__PROGRAM__: {start: 0, returns: [41], nodes: [
   [Concat, ~, [26, 27], ~, Str], # 28
   [Print, ~, [28], 15, "Maybe[Boolean]"], # 29
   [Assign, ~, [17, 5], 29, Int, 16, true], # 30
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: main::next_value, package: main, param_names: [], want: scalar}, ~, 30, Str, 30, true], # 31
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: main::next_value, package: main, param_names: [], want: scalar}, ~, 30, Str, 30, true], # 31
   [DefinedOr, ~, [31, 19], ~, Str], # 32
   [Coerce, {from_repr: Unknown, to_repr: Str}, [32], ~, Str], # 33
   [Concat, ~, [2, 33], ~, Str], # 34
@@ -957,13 +957,13 @@ main::__PROGRAM__: {start: 0, returns: [25], nodes: [
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 2
   [MemStart], # 3
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::collect, package: main, param_names: [], want: list}, [2], 0, List, 3, true], # 4
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::collect, package: main, param_names: [], want: list}, [2], 0, List, 3, true], # 4
   [ArrayLiteral, {sigil: "@", symbol: a}, [4], ~, Array], # 5
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 6
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 7
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::collect, package: main, param_names: [], want: list}, [1], 4, List, 4, true], # 8
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::pair, package: main, param_names: [], want: list}, [7], 8, List, 8, true], # 9
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::pair, package: main, param_names: [], want: scalar}, [6], 9, List, 9, true], # 10
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::collect, package: main, param_names: [], want: list}, [1], 4, List, 4, true], # 8
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::pair, package: main, param_names: [], want: list}, [7], 8, List, 8, true], # 9
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::pair, package: main, param_names: [], want: scalar}, [6], 9, List, 9, true], # 10
   [Count, ~, [5], ~, Int, 10], # 11
   [Coerce, {from_repr: Int, to_repr: Str}, [11], ~, Str], # 12
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 13
@@ -1062,11 +1062,11 @@ main::__PROGRAM__: {start: 0, returns: [12], nodes: [
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 2
   [MemStart], # 3
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::range_of, package: main, param_names: [], want: list}, [2], 0, Int, 3, true], # 4
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::range_of, package: main, param_names: [], want: list}, [2], 0, Int, 3, true], # 4
   [Coerce, {from_repr: Unknown, to_repr: Str}, [4], ~, Str], # 5
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 6
   [Constant, {const_type: integer, value: "4"}, ~, ~, Int], # 7
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::range_of, package: main, param_names: [], want: list}, [7], 4, Int, 4, true], # 8
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::range_of, package: main, param_names: [], want: list}, [7], 4, Int, 4, true], # 8
   [Coerce, {from_repr: Unknown, to_repr: Str}, [8], ~, Str], # 9
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
   [Print, ~, [5, 6, 9, 10], 8, "Maybe[Boolean]"], # 11
@@ -1115,10 +1115,10 @@ main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
   [MemStart], # 3
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::pick, package: main, param_names: [], want: list}, [2], 0, Int, 3, true], # 4
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::pick, package: main, param_names: [], want: list}, [2], 0, Int, 3, true], # 4
   [Coerce, {from_repr: Unknown, to_repr: Str}, [4], ~, Str], # 5
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 6
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::pick, package: main, param_names: [], want: list}, [1], 4, Int, 4, true], # 7
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::pick, package: main, param_names: [], want: list}, [1], 4, Int, 4, true], # 7
   [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
   [Print, ~, [5, 6, 8, 9], 7, "Maybe[Boolean]"], # 10
@@ -1130,7 +1130,7 @@ main::pick: {start: 0, returns: [14], nodes: [
   [If, ~, [0, 2], 0], # 3
   [Proj, {index: 0}, [3]], # 4
   [MemStart], # 5
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::two, package: main, param_names: [], want: list}, ~, 4, List, 5, true], # 6
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::two, package: main, param_names: [], want: list}, ~, 4, List, 5, true], # 6
   [ArrayLiteral, ~, ~, ~, List], # 7
   [Proj, {index: 1}, [3]], # 8
   [Region, {head: 3}, [6, 8]], # 9
@@ -1178,7 +1178,7 @@ main::__PROGRAM__: {start: 0, returns: [10], nodes: [
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 3
   [HashLiteral, ~, [2, 3], 0, HashRef], # 4
   [MemStart], # 5
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: main::branch, package: main, param_names: [], want: list}, [4], 4, Str, 5, true], # 6
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: main::branch, package: main, param_names: [], want: list}, [4], 4, Str, 5, true], # 6
   [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
   [Print, ~, [7, 8], 6, "Maybe[Boolean]"], # 9
@@ -1199,11 +1199,11 @@ main::branch: {start: 0, returns: [18], nodes: [
   [Constant, {const_type: string, value: ","}, ~, ~, Str], # 1
   [PadAccess, {sigil: $, symbol: src}, ~, ~, Unknown], # 2
   [MemStart], # 3
-  [PostfixDeref, {copy: 1, eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, package: main, sigil: "%", strict: false}, [2], ~, Hash, 3], # 4
+  [PostfixDeref, {copy: 1, eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 2, package: main, sigil: "%", strict: false}, [2], ~, Hash, 3], # 4
   [HashLiteral, {sigil: "%", symbol: then}, [4], ~, Hash], # 5
   [Ref, ~, [5], ~, HashRef], # 6
-  [PostfixDeref, {eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, package: main, sigil: "%", strict: false}, [2], 0, Hash, 3, true], # 7
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::add_key, package: main, param_names: [], want: void}, [6], 7, Int, 7, true], # 8
+  [PostfixDeref, {eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 2, package: main, sigil: "%", strict: false}, [2], 0, Hash, 3, true], # 7
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::add_key, package: main, param_names: [], want: void}, [6], 7, Int, 7, true], # 8
   [Call, {dispatch_kind: builtin, name: keys, param_names: [], want: list}, [4], ~, List, 8], # 9
   [Call, {dispatch_kind: builtin, name: sort, param_names: [], sort_cmp: string, sort_order: ascending}, [9], ~, List, 8], # 10
   [Call, {dispatch_kind: builtin, name: join, param_names: []}, [1, 10], ~, Str, 8], # 11
@@ -1242,11 +1242,11 @@ main::__PROGRAM__: {start: 0, returns: [12], nodes: [
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
   [MemStart], # 3
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::find, package: main, param_names: [], want: list}, [2], 0, Str, 3, true], # 4
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::find, package: main, param_names: [], want: list}, [2], 0, Str, 3, true], # 4
   [Coerce, {from_repr: Unknown, to_repr: Str}, [4], ~, Str], # 5
   [Constant, {const_type: string, value: "; "}, ~, ~, Str], # 6
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 7
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::find, package: main, param_names: [], want: list}, [7], 4, Str, 4, true], # 8
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::find, package: main, param_names: [], want: list}, [7], 4, Str, 4, true], # 8
   [Coerce, {from_repr: Unknown, to_repr: Str}, [8], ~, Str], # 9
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
   [Print, ~, [5, 6, 9, 10], 8, "Maybe[Boolean]"], # 11
@@ -1267,7 +1267,7 @@ main::find: {start: 0, returns: [16], nodes: [
   [Region, {head: 8}, [11, 10]], # 12
   [Phi, {memory: true, predecessors: [11, 9], region: 12}, [4, 10], ~, "Maybe[Str]"], # 13
   [PadAccess, {sigil: $, symbol: found}, ~, ~, Unknown, 13], # 14
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::load, package: main, param_names: []}, [14], 12, Str, 13, true], # 15
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::load, package: main, param_names: []}, [14], 12, Str, 13, true], # 15
   [Return, ~, [15], 15, ~, 15], # 16
   [ArgsSource, ~, ~, ~, Array], # 17
   [Assign, {record: true, targets: 1}, [7, 17], ~, List]]} # 18
@@ -1311,10 +1311,10 @@ main::__PROGRAM__: {start: 0, returns: [13], nodes: [
   [Constant, {const_type: string, value: b}, ~, ~, Str], # 3
   [Constant, {const_type: string, value: c}, ~, ~, Str], # 4
   [MemStart], # 5
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::search, package: main, param_names: [], want: list}, [2, 3, 4], 0, Str, 5, true], # 6
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::search, package: main, param_names: [], want: list}, [2, 3, 4], 0, Str, 5, true], # 6
   [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
   [Constant, {const_type: string, value: "; "}, ~, ~, Str], # 8
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::search, package: main, param_names: [], want: list}, [2], 6, Str, 6, true], # 9
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::search, package: main, param_names: [], want: list}, [2], 6, Str, 6, true], # 9
   [Coerce, {from_repr: Unknown, to_repr: Str}, [9], ~, Str], # 10
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 11
   [Print, ~, [7, 8, 10, 11], 9, "Maybe[Boolean]"], # 12
@@ -1355,7 +1355,7 @@ main::search: {start: 0, returns: [24], nodes: [
   [Region, {head: 5}, [19, 18]], # 20
   [Phi, {memory: true, region: 20}, [6, 18], ~, Unknown], # 21
   [PadAccess, {sigil: $, symbol: found}, ~, ~, Unknown, 21], # 22
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::load, package: main, param_names: []}, [22], 20, Str, 21, true], # 23
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::load, package: main, param_names: []}, [22], 20, Str, 21, true], # 23
   [Return, ~, [23], 23, ~, 23], # 24
   [Count, ~, [8], ~, Int, 4], # 25
   [Count, ~, [8], ~, Int, 6], # 26
@@ -1448,16 +1448,16 @@ main::__PROGRAM__: {start: 0, returns: [18], nodes: [
   [Constant, {const_type: string, value: a}, ~, ~, Str], # 2
   [Constant, {const_type: string, value: "*"}, ~, ~, Str], # 3
   [MemStart], # 4
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 9, name: main::describe, package: main, param_names: [], want: list}, [2, 3], 0, Str, 4, true], # 5
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 9, name: main::describe, package: main, param_names: [], want: list}, [2, 3], 0, Str, 4, true], # 5
   [Coerce, {from_repr: Unknown, to_repr: Str}, [5], ~, Str], # 6
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 7
   [Constant, {const_type: string, value: z}, ~, ~, Str], # 8
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 9, name: main::describe, package: main, param_names: [], want: list}, [8], 5, Str, 5, true], # 9
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 9, name: main::describe, package: main, param_names: [], want: list}, [8], 5, Str, 5, true], # 9
   [Coerce, {from_repr: Unknown, to_repr: Str}, [9], ~, Str], # 10
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 11
   [ArrayLiteral, ~, [11], 9, ArrayRef], # 12
   [Constant, {const_type: string, value: "?"}, ~, ~, Str], # 13
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 9, name: main::describe, package: main, param_names: [], want: list}, [12, 13], 12, Str, 9, true], # 14
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 9, name: main::describe, package: main, param_names: [], want: list}, [12, 13], 12, Str, 9, true], # 14
   [Coerce, {from_repr: Unknown, to_repr: Str}, [14], ~, Str], # 15
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 16
   [Print, ~, [6, 7, 10, 7, 15, 16], 14, "Maybe[Boolean]"], # 17
@@ -1509,10 +1509,10 @@ main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
   [MemStart], # 3
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, [2], 0, Int, 3, true], # 4
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, [2], 0, Int, 3, true], # 4
   [Coerce, {from_repr: Unknown, to_repr: Str}, [4], ~, Str], # 5
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 6
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, [6], 4, Int, 4, true], # 7
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, [6], 4, Int, 4, true], # 7
   [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
   [Print, ~, [5, 8, 9], 7, "Maybe[Boolean]"], # 10
@@ -1563,12 +1563,12 @@ main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Constant, {const_type: string, value: a}, ~, ~, Str], # 2
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 3
   [MemStart], # 4
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [2, 3], 0, Str, 4, true], # 5
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [2, 3], 0, Str, 4, true], # 5
   [Coerce, {from_repr: Unknown, to_repr: Str}, [5], ~, Str], # 6
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 7
   [Constant, {const_type: string, value: b}, ~, ~, Str], # 8
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 9
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [8, 9], 5, Str, 5, true], # 10
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [8, 9], 5, Str, 5, true], # 10
   [Coerce, {from_repr: Unknown, to_repr: Str}, [10], ~, Str], # 11
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 12
   [Print, ~, [6, 7, 11, 12], 10, "Maybe[Boolean]"], # 13
@@ -1584,7 +1584,7 @@ main::f: {start: 0, returns: [11], nodes: [
   [Subscript, {kind: hash}, [3, 4], ~, Scalar], # 7
   [Constant, {const_type: string, value: dflt}, ~, ~, Str], # 8
   [TernaryExpr, ~, [6, 7, 8], ~, Unknown], # 9
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::g, package: main, param_names: []}, [1, 9], 0, Str, 5, true], # 10
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::g, package: main, param_names: []}, [1, 9], 0, Str, 5, true], # 10
   [Return, ~, [10], 10, ~, 10]]} # 11
 main::g: {start: 0, returns: [5], nodes: [
   [Start], # 0
@@ -1632,7 +1632,7 @@ main::__PROGRAM__: {start: 0, returns: [21], nodes: [
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 11
   [Concat, ~, [10, 11], ~, Str], # 12
   [Subscript, {kind: hash}, [5, 4], ~, Int], # 13
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 5, name: main::g, package: main, param_names: [], want: void}, [13], 0, Int, 6, true], # 14
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 5, name: main::g, package: main, param_names: [], want: void}, [13], 0, Int, 6, true], # 14
   [Subscript, {kind: hash}, [5, 4], ~, Scalar, 14], # 15
   [Coerce, {from_repr: Unknown, to_repr: Str}, [15], ~, Str], # 16
   [Concat, ~, [12, 16], ~, Str], # 17
@@ -1804,13 +1804,13 @@ main::__PROGRAM__: {start: 0, returns: [32], nodes: [
   [Ref, ~, [47], ~, ScalarRef], # 48
   [Proj, {index: 0}, [24]], # 49
   [LocalAlias, {name: _}, [48], 49, Unknown, 26], # 50
-  [Call, {dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 6, name: name, package: main, param_names: [], want: list}, [46], 50, Unknown, 26, true], # 51
+  [Call, {dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 6, name: name, package: main, param_names: [], want: list}, [46], 50, Unknown, 26, true], # 51
   [Count, ~, [23], ~, Int, 26], # 52
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 53
   [Add, ~, [39, 53], ~, Int], # 54
   [Subscript, {kind: array}, [36, 39], ~, Str, 11], # 55
   [Constant, {const_type: string, value: "N"}, ~, ~, Str], # 56
-  [Call, {class_name: "N", dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: new, package: main, param_names: [], want: list}, [56, 55], 44, Object, 11, true], # 57
+  [Call, {class_name: "N", dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: new, package: main, param_names: [], want: list}, [56, 55], 44, Object, 11, true], # 57
   [ListAppend, {collector: map}, [25, 51], ~, Array], # 58
   [Count, ~, [23], ~, Int, 23], # 59
   [NumGt, ~, [52, 45], 24, Boolean], # 60
@@ -1827,25 +1827,25 @@ main::__PROGRAM__: {start: 0, returns: [32], nodes: [
   [Proj, {index: 0}, [14]], # 71
   [Ref, ~, [67], ~, ScalarRef], # 72
   [LocalAlias, {name: _}, [72], 71, Unknown, 16], # 73
-  [Call, {dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: name, package: main, param_names: [], want: list}, [66], 73, Unknown, 16, true], # 74
+  [Call, {dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: name, package: main, param_names: [], want: list}, [66], 73, Unknown, 16, true], # 74
   [ListAppend, {collector: map}, [15, 74], ~, Array]]} # 75
 main::__PROGRAM__::__SORTCMP__:1: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [MemStart], # 1
   [EntryDef, {package: main, sigil: $, symbol: a}, ~, ~, Scalar, 1], # 2
-  [Call, {dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: name, package: main, param_names: [], want: scalar}, [2], 0, Unknown, 1, true], # 3
+  [Call, {dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: name, package: main, param_names: [], want: scalar}, [2], 0, Unknown, 1, true], # 3
   [EntryDef, {package: main, sigil: $, symbol: b}, ~, ~, Scalar, 3], # 4
-  [Call, {dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: name, package: main, param_names: [], want: scalar}, [4], 3, Unknown, 3, true], # 5
+  [Call, {dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: name, package: main, param_names: [], want: scalar}, [4], 3, Unknown, 3, true], # 5
   [StrCmp, ~, [3, 5], ~, Int], # 6
   [Return, {implicit: true}, [6], 5, ~, 5]]} # 7
 main::__PROGRAM__::__SORTCMP__:2: {start: 0, returns: [9], nodes: [
   [Start], # 0
   [MemStart], # 1
   [EntryDef, {package: main, sigil: $, symbol: a}, ~, ~, Scalar, 1], # 2
-  [Call, {dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 5, name: name, package: main, param_names: [], want: scalar}, [2], 0, Unknown, 1, true], # 3
+  [Call, {dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 5, name: name, package: main, param_names: [], want: scalar}, [2], 0, Unknown, 1, true], # 3
   [Length, ~, [3], ~, Int], # 4
   [EntryDef, {package: main, sigil: $, symbol: b}, ~, ~, Scalar, 3], # 5
-  [Call, {dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 5, name: name, package: main, param_names: [], want: scalar}, [5], 3, Unknown, 3, true], # 6
+  [Call, {dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 5, name: name, package: main, param_names: [], want: scalar}, [5], 3, Unknown, 3, true], # 6
   [Length, ~, [6], ~, Int], # 7
   [NumCmp, ~, [4, 7], ~, Int], # 8
   [Return, {implicit: true}, [8], 6, ~, 6]]} # 9
@@ -1995,7 +1995,7 @@ main::__PROGRAM__: {start: 0, returns: [25], nodes: [
   [Not, ~, [13], ~, Boolean], # 14
   [If, ~, [0, 14], 0], # 15
   [Proj, {index: 0}, [15]], # 16
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, ~, 16, List, 12, true], # 17
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, ~, 16, List, 12, true], # 17
   [ArrayLiteral, ~, ~, ~, List], # 18
   [Proj, {index: 1}, [15]], # 19
   [Region, {head: 15}, [17, 19]], # 20
@@ -2038,9 +2038,9 @@ main::__PROGRAM__: {start: 0, returns: [19], nodes: [
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
   [MemStart], # 3
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::w, package: main, param_names: [], want: list}, [2], 0, "Maybe[Int]", 3, true], # 4
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::w, package: main, param_names: [], want: list}, [2], 0, "Maybe[Int]", 3, true], # 4
   [ArrayLiteral, {sigil: "@", symbol: r}, [4], ~, Array], # 5
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::w, package: main, param_names: [], want: scalar}, [2], 4, "Maybe[Int]", 4, true], # 6
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::w, package: main, param_names: [], want: scalar}, [2], 4, "Maybe[Int]", 4, true], # 6
   [Count, ~, [5], ~, Int, 6], # 7
   [Coerce, {from_repr: Int, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 9
@@ -2049,7 +2049,7 @@ main::__PROGRAM__: {start: 0, returns: [19], nodes: [
   [Constant, {const_type: string, value: u}, ~, ~, Str], # 12
   [TernaryExpr, ~, [10, 11, 12], ~, Str], # 13
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 14
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::w, package: main, param_names: [], want: list}, [14], 6, "Maybe[Int]", 6, true], # 15
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::w, package: main, param_names: [], want: list}, [14], 6, "Maybe[Int]", 6, true], # 15
   [Coerce, {from_repr: Unknown, to_repr: Str}, [15], ~, Str], # 16
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 17
   [Print, ~, [8, 9, 13, 9, 16, 17], 15, "Maybe[Boolean]"], # 18
@@ -2070,7 +2070,7 @@ main::w: {start: 0, returns: [24], nodes: [
   [Proj, {index: 1}, [11]], # 12
   [Constant, {const_type: string, value: "x\n"}, ~, ~, Str], # 13
   [Proj, {index: 0}, [11]], # 14
-  [Unwind, {eval_id: 1, file: "/tmp/yDlL8UMbFX/case.pl", line: 1}, [13], 14, ~, 6], # 15
+  [Unwind, {eval_id: 1, file: "/tmp/mvrHQew3rs/case.pl", line: 1}, [13], 14, ~, 6], # 15
   [Region, {head: 11}, [12, 15]], # 16
   [EntryWrite, ~, [7, 5], 16, Unknown, 6, true], # 17
   [Exc, ~, [15]], # 18
@@ -2158,13 +2158,13 @@ main::__PROGRAM__: {start: 0, returns: [24], nodes: [
   [Ref, ~, [39], ~, ScalarRef], # 40
   [Proj, {index: 0}, [15]], # 41
   [LocalAlias, {name: _}, [40], 41, Unknown, 17], # 42
-  [Call, {dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: id, package: main, param_names: [], want: list}, [38], 42, Unknown, 17, true], # 43
+  [Call, {dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: id, package: main, param_names: [], want: list}, [38], 42, Unknown, 17, true], # 43
   [Count, ~, [14], ~, Int, 17], # 44
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 45
   [Add, ~, [31, 45], ~, Int], # 46
   [Subscript, {kind: array}, [28, 31], ~, Str, 9], # 47
   [Constant, {const_type: string, value: Node}, ~, ~, Str], # 48
-  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: new, package: main, param_names: [], want: list}, [48, 47], 36, Object, 9, true], # 49
+  [Call, {class_name: Node, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: new, package: main, param_names: [], want: list}, [48, 47], 36, Object, 9, true], # 49
   [ListAppend, {collector: map}, [16, 43], ~, Array], # 50
   [Count, ~, [14], ~, Int, 14], # 51
   [NumGt, ~, [44, 37], 15, Boolean], # 52
@@ -2175,9 +2175,9 @@ main::__PROGRAM__::__SORTCMP__:1: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [MemStart], # 1
   [EntryDef, {package: main, sigil: $, symbol: a}, ~, ~, Scalar, 1], # 2
-  [Call, {dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: id, package: main, param_names: [], want: scalar}, [2], 0, Unknown, 1, true], # 3
+  [Call, {dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: id, package: main, param_names: [], want: scalar}, [2], 0, Unknown, 1, true], # 3
   [EntryDef, {package: main, sigil: $, symbol: b}, ~, ~, Scalar, 3], # 4
-  [Call, {dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: id, package: main, param_names: [], want: scalar}, [4], 3, Unknown, 3, true], # 5
+  [Call, {dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: id, package: main, param_names: [], want: scalar}, [4], 3, Unknown, 3, true], # 5
   [StrCmp, ~, [3, 5], ~, Int], # 6
   [Return, {implicit: true}, [6], 5, ~, 5]]} # 7
 ```
@@ -2246,7 +2246,7 @@ main::__PROGRAM__::__SORTCMP__:1: {start: 0, returns: [15], nodes: [
   [Proj, {index: 1}, [9]], # 10
   [Constant, {const_type: string, value: "boom\n"}, ~, ~, Str], # 11
   [Proj, {index: 0}, [9]], # 12
-  [Unwind, {file: "/tmp/yDlL8UMbFX/case.pl", line: 1}, [11], 12, ~, 1], # 13
+  [Unwind, {file: "/tmp/mvrHQew3rs/case.pl", line: 1}, [11], 12, ~, 1], # 13
   [Region, {head: 9}, [10, 13]], # 14
   [Return, {implicit: true}, [6], 14, ~, 1]]} # 15
 ```
@@ -2287,15 +2287,15 @@ main::__PROGRAM__: {start: 0, returns: [19], nodes: [
   [HashLiteral, ~, [2, 3], 0, HashRef], # 4
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 5
   [MemStart], # 6
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 12, name: main::repr, package: main, param_names: [], want: list}, [4, 5], 4, Str, 6, true], # 7
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 12, name: main::repr, package: main, param_names: [], want: list}, [4, 5], 4, Str, 6, true], # 7
   [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 9
   [HashLiteral, ~, ~, 7, HashRef], # 10
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 12, name: main::repr, package: main, param_names: [], want: list}, [10, 5], 10, Str, 7, true], # 11
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 12, name: main::repr, package: main, param_names: [], want: list}, [10, 5], 10, Str, 7, true], # 11
   [Coerce, {from_repr: Unknown, to_repr: Str}, [11], ~, Str], # 12
   [HashLiteral, ~, ~, 11, HashRef], # 13
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 14
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 12, name: main::repr, package: main, param_names: [], want: list}, [13, 14], 13, Str, 11, true], # 15
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 12, name: main::repr, package: main, param_names: [], want: list}, [13, 14], 13, Str, 11, true], # 15
   [Coerce, {from_repr: Unknown, to_repr: Str}, [15], ~, Str], # 16
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 17
   [Print, ~, [8, 9, 12, 9, 16, 17], 15, "Maybe[Boolean]"], # 18
@@ -2365,7 +2365,7 @@ main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 4
   [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 5
   [MemStart], # 6
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 10, name: main::count, package: main, param_names: [], want: list}, [2, 3, 4, 3, 5], 0, Int, 6, true], # 7
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 10, name: main::count, package: main, param_names: [], want: list}, [2, 3, 4, 3, 5], 0, Int, 6, true], # 7
   [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
   [Print, ~, [8, 9], 7, "Maybe[Boolean]"], # 10
@@ -2443,7 +2443,7 @@ main::__PROGRAM__: {start: 0, returns: [10], nodes: [
   [Constant, {const_type: string, value: V}, ~, ~, Str], # 3
   [Constant, {const_type: string, value: ""}, ~, ~, Str], # 4
   [MemStart], # 5
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 10, name: main::unknowns, package: main, param_names: [], want: list}, [2, 1, 3, 4, 2], 0, Int, 5, true], # 6
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 10, name: main::unknowns, package: main, param_names: [], want: list}, [2, 1, 3, 4, 2], 0, Int, 5, true], # 6
   [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
   [Print, ~, [7, 8], 6, "Maybe[Boolean]"], # 9
@@ -2520,7 +2520,7 @@ main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 4
   [Constant, {const_type: string, value: c}, ~, ~, Str], # 5
   [MemStart], # 6
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 9, name: main::upto_false, package: main, param_names: [], want: list}, [2, 3, 4, 5], 0, Str, 6, true], # 7
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 9, name: main::upto_false, package: main, param_names: [], want: list}, [2, 3, 4, 5], 0, Str, 6, true], # 7
   [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
   [Print, ~, [8, 9], 7, "Maybe[Boolean]"], # 10
@@ -2590,7 +2590,7 @@ main::__PROGRAM__: {start: 0, returns: [12], nodes: [
   [Constant, {const_type: string, value: b}, ~, ~, Str], # 5
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 6
   [MemStart], # 7
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 15, name: main::pairs, package: main, param_names: [], want: list}, [2, 3, 4, 5, 6], 0, Str, 7, true], # 8
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 15, name: main::pairs, package: main, param_names: [], want: list}, [2, 3, 4, 5, 6], 0, Str, 7, true], # 8
   [Coerce, {from_repr: Unknown, to_repr: Str}, [8], ~, Str], # 9
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
   [Print, ~, [9, 10], 8, "Maybe[Boolean]"], # 11
@@ -2677,7 +2677,7 @@ main::__PROGRAM__: {start: 0, returns: [13], nodes: [
   [Ref, ~, [3], ~, HashRef], # 4
   [Constant, {const_type: string, value: "+"}, ~, ~, Str], # 5
   [MemStart], # 6
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 10, name: main::helpers, package: main, param_names: [], want: void}, [4, 5], 0, Int, 6, true], # 7
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 10, name: main::helpers, package: main, param_names: [], want: void}, [4, 5], 0, Int, 6, true], # 7
   [Call, {dispatch_kind: builtin, name: keys, param_names: [], want: list}, [3], ~, List, 7], # 8
   [Call, {dispatch_kind: builtin, name: sort, param_names: [], sort_cmp: string, sort_order: ascending}, [8], ~, List, 7], # 9
   [Call, {dispatch_kind: builtin, name: join, param_names: []}, [2, 9], ~, Str, 7], # 10
@@ -2852,10 +2852,10 @@ main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 2
   [MemStart], # 3
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: main::f, package: main, param_names: [], want: list}, [2], 0, Str, 3, true], # 4
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: main::f, package: main, param_names: [], want: list}, [2], 0, Str, 3, true], # 4
   [Coerce, {from_repr: Unknown, to_repr: Str}, [4], ~, Str], # 5
   [Constant, {const_type: integer, value: "9"}, ~, ~, Int], # 6
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: main::f, package: main, param_names: [], want: list}, [6], 4, Str, 4, true], # 7
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: main::f, package: main, param_names: [], want: list}, [6], 4, Str, 4, true], # 7
   [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
   [Print, ~, [5, 8, 9], 7, "Maybe[Boolean]"], # 10
@@ -2966,10 +2966,10 @@ main::__PROGRAM__: {start: 0, returns: [18], nodes: [
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 3
   [MemStart], # 4
   [EntryWrite, ~, [2, 3], 0, Unknown, 4, true], # 5
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: main::f, package: main, param_names: [], want: list}, ~, 5, Unknown, 5, true], # 6
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: main::f, package: main, param_names: [], want: list}, ~, 5, Unknown, 5, true], # 6
   [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 8
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: main::f, package: main, param_names: [], want: list}, [8], 6, Unknown, 6, true], # 9
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: main::f, package: main, param_names: [], want: list}, [8], 6, Unknown, 6, true], # 9
   [Coerce, {from_repr: Unknown, to_repr: Str}, [9], ~, Str], # 10
   [Constant, {const_type: string, value: " c="}, ~, ~, Str], # 11
   [EntryDef, {package: main, sigil: $, symbol: c}, ~, ~, Int, 9], # 12
@@ -2989,7 +2989,7 @@ main::f: {start: 0, returns: [16], nodes: [
   [NumGt, ~, [4, 5], ~, Boolean], # 6
   [If, ~, [0, 6], 0], # 7
   [Proj, {index: 1}, [7]], # 8
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: main::g, package: main, param_names: [], want: scalar}, ~, 8, Int, 3, true], # 9
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: main::g, package: main, param_names: [], want: scalar}, ~, 8, Int, 3, true], # 9
   [Proj, {index: 0}, [7]], # 10
   [Region, {head: 7}, [10, 9]], # 11
   [Phi, {predecessors: [10, 8], region: 11}, [1, 9], ~, Unknown], # 12
@@ -3036,11 +3036,11 @@ main::__PROGRAM__: {start: 0, returns: [12], nodes: [
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
   [MemStart], # 3
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: main::__PROGRAM__::__ANON__:1:2, package: main, param_names: [], want: list}, [2], 0, Num, 3, true], # 4
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: main::__PROGRAM__::__ANON__:1:2, package: main, param_names: [], want: list}, [2], 0, Num, 3, true], # 4
   [Coerce, {from_repr: Unknown, to_repr: Str}, [4], ~, Str], # 5
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 6
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 7
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: main::__PROGRAM__::__ANON__:1:2, package: main, param_names: [], want: list}, [7], 4, Num, 4, true], # 8
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: main::__PROGRAM__::__ANON__:1:2, package: main, param_names: [], want: list}, [7], 4, Num, 4, true], # 8
   [Coerce, {from_repr: Unknown, to_repr: Str}, [8], ~, Str], # 9
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
   [Print, ~, [5, 6, 9, 10], 8, "Maybe[Boolean]"], # 11
@@ -3052,7 +3052,7 @@ main::__PROGRAM__::__ANON__:1:2: {start: 0, returns: [9], nodes: [
   [Parameter, {index: 0, name: $x, sigil: $}, ~, ~, Unknown], # 3
   [Assign, ~, [2, 3], 0, Unknown, 1, true], # 4
   [PadAccess, {sigil: $, symbol: x}, ~, ~, Unknown, 4], # 5
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: main::b::__ANON__:1:2, package: main, param_names: [], want: scalar}, [5], 4, Num, 4, true], # 6
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: main::b::__ANON__:1:2, package: main, param_names: [], want: scalar}, [5], 4, Num, 4, true], # 6
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 7
   [Multiply, ~, [6, 7], ~, Num], # 8
   [Return, {implicit: true}, [8], 6, ~, 6]]} # 9
@@ -3092,13 +3092,13 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: main::f, package: main, param_names: [], want: list}, ~, 0, List, 2, true], # 3
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: main::f, package: main, param_names: [], want: list}, ~, 0, List, 2, true], # 3
   [ArrayLiteral, ~, [3], ~, Array], # 4
   [Count, ~, [4], ~, Int, 3], # 5
   [Coerce, {from_repr: Int, to_repr: Str}, [5], ~, Str], # 6
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 7
   [Concat, ~, [6, 7], ~, Str], # 8
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: main::g, package: main, param_names: [], want: list}, ~, 3, Undef, 3, true], # 9
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: main::g, package: main, param_names: [], want: list}, ~, 3, Undef, 3, true], # 9
   [ArrayLiteral, ~, [9], ~, Array], # 10
   [Count, ~, [10], ~, Int, 9], # 11
   [Coerce, {from_repr: Int, to_repr: Str}, [11], ~, Str], # 12
@@ -3183,7 +3183,7 @@ main::__PROGRAM__: {start: 0, returns: [10], nodes: [
   [Constant, {const_type: integer, value: "4"}, ~, ~, Int], # 3
   [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 4
   [MemStart], # 5
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: main::f, package: main, param_names: [], want: list}, [2, 3, 4], 0, Scalar, 5, true], # 6
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: main::f, package: main, param_names: [], want: list}, [2, 3, 4], 0, Scalar, 5, true], # 6
   [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
   [Print, ~, [7, 8], 6, "Maybe[Boolean]"], # 9
@@ -3229,7 +3229,7 @@ main::__PROGRAM__: {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: main::f, package: main, param_names: [], want: void}, ~, 0, "Maybe[Boolean]", 2, true], # 3
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: main::f, package: main, param_names: [], want: void}, ~, 0, "Maybe[Boolean]", 2, true], # 3
   [Return, {implicit: true}, [1], 3, ~, 3]]} # 4
 main::f: {start: 0, returns: [23], nodes: [
   [Start], # 0
@@ -3297,7 +3297,7 @@ main::__PROGRAM__: {start: 0, returns: [12], nodes: [
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 5
   [ArrayLiteral, {sigil: "@", symbol: arr}, [4, 5], 0, Array], # 6
   [Assign, ~, [3, 6], 6, List, 2, true], # 7
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: main::__PROGRAM__::__ANON__:1:3, package: main, param_names: [], want: list}, ~, 7, Int, 7, true], # 8
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: main::__PROGRAM__::__ANON__:1:3, package: main, param_names: [], want: list}, ~, 7, Int, 7, true], # 8
   [Coerce, {from_repr: Unknown, to_repr: Str}, [8], ~, Str], # 9
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
   [Print, ~, [9, 10], 8, "Maybe[Boolean]"], # 11
@@ -3499,7 +3499,7 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [Constant, {const_type: string, value: b1}, ~, ~, Str], # 3
   [ArrayLiteral, {sigil: "@", symbol: a}, [2, 3], ~, Array], # 4
   [MemStart], # 5
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: main::e, package: main, param_names: [], want: list}, [4], 0, Str, 5, true], # 6
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: main::e, package: main, param_names: [], want: list}, [4], 0, Str, 5, true], # 6
   [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 8
   [EntryDef, {package: main, sigil: $, symbol: "\""}, ~, ~, Scalar, 6], # 9
@@ -3534,7 +3534,7 @@ main::e: {start: 0, returns: [11], nodes: [
   [Ref, ~, [18], ~, ScalarRef], # 19
   [LocalAlias, {name: _}, [19], 17, Unknown, 6], # 20
   [Subscript, {kind: array}, [12, 15], ~, Scalar, 6], # 21
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: main::e::__ANON__:1:1, package: main, param_names: [], want: list}, [21], 20, Str, 6, true], # 22
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: main::e::__ANON__:1:1, package: main, param_names: [], want: list}, [21], 20, Str, 6, true], # 22
   [ListAppend, {collector: map}, [4, 22], ~, Array], # 23
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 24
   [Add, ~, [15, 24], ~, Int], # 25
@@ -3586,43 +3586,44 @@ main::__PROGRAM__: {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: main::f, package: main, param_names: [], want: void}, ~, 0, "Maybe[Boolean]", 2, true], # 3
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: main::f, package: main, param_names: [], want: void}, ~, 0, "Maybe[Boolean]", 2, true], # 3
   [Return, {implicit: true}, [1], 3, ~, 3]]} # 4
-main::f: {start: 0, returns: [23], nodes: [
+main::f: {start: 0, returns: [24], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: "r="}, ~, ~, Str], # 1
   [Constant, {const_type: integer, value: "7"}, ~, ~, Int], # 2
-  [Coerce, {from_repr: Int, to_repr: Str}, [2], ~, Str], # 3
-  [Concat, ~, [1, 3], ~, Str], # 4
-  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
-  [Concat, ~, [4, 5], ~, Str], # 6
-  [MemStart], # 7
-  [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 7], # 8
-  [Constant, {const_type: string, value: ""}, ~, ~, Str], # 9
-  [EntryWrite, ~, [8, 9], 0, Unknown, 7, true], # 10
-  [PadAccess, {sigil: $, symbol: i}, ~, ~, Unknown, 10], # 11
-  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 12
-  [Assign, ~, [11, 12], 10, Int, 10, true], # 13
-  [Loop, {bound: each}, [13], 13], # 14
-  [Phi, {memory: true, region: 14}, [13, 29], ~, Scalar], # 15
-  [Proj, {index: 1}, [14]], # 16
-  [Region, {head: 14}, [16]], # 17
-  [Phi, {memory: true, region: 17}, [15], ~, Scalar], # 18
-  [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 18], # 19
-  [EntryWrite, ~, [19, 9], 17, Unknown, 18, true], # 20
-  [Region, {eval_entry: 0, eval_id: 1}, [20]], # 21
-  [Print, ~, [6], 21, "Maybe[Boolean]"], # 22
-  [Return, {implicit: true}, [22], 22, ~, 20], # 23
-  [PadAccess, {sigil: $, symbol: i}, ~, ~, Num, 15], # 24
-  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 25
-  [NumLt, ~, [24, 25], 14, Boolean], # 26
-  [Proj, {index: 0}, [14]], # 27
-  [Increment, ~, [24], ~, Scalar], # 28
-  [Assign, ~, [24, 28], 27, Scalar, 15, true], # 29
-  [PadAccess, {sigil: $, symbol: i}, ~, ~, Str, 29], # 30
-  [Coerce, {from_repr: Unknown, to_repr: Str}, [30], ~, Str], # 31
-  [Concat, ~, [31, 5], ~, Str], # 32
-  [Print, ~, [32], 29, "Maybe[Boolean]"]]} # 33
+  [MemStart], # 3
+  [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 3], # 4
+  [Constant, {const_type: string, value: ""}, ~, ~, Str], # 5
+  [EntryWrite, ~, [4, 5], 0, Unknown, 3, true], # 6
+  [PadAccess, {sigil: $, symbol: i}, ~, ~, Unknown, 6], # 7
+  [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 8
+  [Assign, ~, [7, 8], 6, Int, 6, true], # 9
+  [Loop, {bound: each}, [9], 9], # 10
+  [Phi, {memory: true, region: 10}, [9, 30], ~, Scalar], # 11
+  [Proj, {index: 1}, [10]], # 12
+  [Region, {head: 10}, [12]], # 13
+  [Phi, {memory: true, region: 13}, [11], ~, Scalar], # 14
+  [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 14], # 15
+  [EntryWrite, ~, [15, 5], 13, Unknown, 14, true], # 16
+  [Region, {eval_entry: 0, eval_id: 1}, [16]], # 17
+  [Phi, {region: 17}, [2], ~, "Maybe[Int]"], # 18
+  [Coerce, {from_repr: "Maybe[Int]", to_repr: Str}, [18], ~, Str], # 19
+  [Concat, ~, [1, 19], ~, Str], # 20
+  [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 21
+  [Concat, ~, [20, 21], ~, Str], # 22
+  [Print, ~, [22], 17, "Maybe[Boolean]"], # 23
+  [Return, {implicit: true}, [23], 23, ~, 16], # 24
+  [PadAccess, {sigil: $, symbol: i}, ~, ~, Num, 11], # 25
+  [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 26
+  [NumLt, ~, [25, 26], 10, Boolean], # 27
+  [Proj, {index: 0}, [10]], # 28
+  [Increment, ~, [25], ~, Scalar], # 29
+  [Assign, ~, [25, 29], 28, Scalar, 11, true], # 30
+  [PadAccess, {sigil: $, symbol: i}, ~, ~, Str, 30], # 31
+  [Coerce, {from_repr: Unknown, to_repr: Str}, [31], ~, Str], # 32
+  [Concat, ~, [32, 21], ~, Str], # 33
+  [Print, ~, [33], 30, "Maybe[Boolean]"]]} # 34
 ```
 
 ## A break in the rest after a next if
@@ -3912,7 +3913,7 @@ K::__DEFAULT_0: {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: Box}, ~, ~, Str], # 1
   [MemStart], # 2
-  [Call, {class_name: Box, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: new, package: Box, param_names: [], want: scalar}, [1], 0, Object, 2, true], # 3
+  [Call, {class_name: Box, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: new, package: Box, param_names: [], want: scalar}, [1], 0, Object, 2, true], # 3
   [Return, {implicit: true}, [3], 3, ~, 3]]} # 4
 K::b: {start: 0, returns: [3], nodes: [
   [Start], # 0
@@ -3928,22 +3929,22 @@ main::__PROGRAM__: {start: 0, returns: [32], nodes: [
   [Assign, ~, [3, 4], 0, Int, 2, true], # 5
   [PackageMark, {package: K}, ~, 5], # 6
   [PackageMark, {package: main}, ~, 6], # 7
-  [Call, {class_name: K, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 5, name: new, package: main, param_names: [], want: scalar}, ~, 7, Object, 5, true], # 8
+  [Call, {class_name: K, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 5, name: new, package: main, param_names: [], want: scalar}, ~, 7, Object, 5, true], # 8
   [Constant, {const_type: string, value: "n"}, ~, ~, Str], # 9
   [Constant, {const_type: integer, value: "9"}, ~, ~, Int], # 10
-  [Call, {class_name: K, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 6, name: new, package: main, param_names: [], want: scalar}, ~, 8, Object, 8, true], # 11
+  [Call, {class_name: K, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 6, name: new, package: main, param_names: [], want: scalar}, ~, 8, Object, 8, true], # 11
   [HashLiteral, ~, [9, 10], 11, HashRef], # 12
   [Constant, {const_type: string, value: Box}, ~, ~, Str], # 13
   [Call, {dispatch_kind: builtin, name: bless, param_names: []}, [12, 13], 12, Unknown, 11, true], # 14
-  [Call, {class_name: K, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 7, name: new, package: main, param_names: [b], want: scalar}, [14], 14, Object, 14, true], # 15
-  [Call, {class_name: K, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 8, name: b, package: main, param_names: [], want: scalar}, [8], 15, Scalar, 15, true], # 16
-  [Call, {dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 8, name: "n", package: main, param_names: [], want: list}, [16], 16, Unknown, 16, true], # 17
+  [Call, {class_name: K, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 7, name: new, package: main, param_names: [b], want: scalar}, [14], 14, Object, 14, true], # 15
+  [Call, {class_name: K, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 8, name: b, package: main, param_names: [], want: scalar}, [8], 15, Scalar, 15, true], # 16
+  [Call, {dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 8, name: "n", package: main, param_names: [], want: list}, [16], 16, Unknown, 16, true], # 17
   [Coerce, {from_repr: Unknown, to_repr: Str}, [17], ~, Str], # 18
-  [Call, {class_name: K, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 8, name: b, package: main, param_names: [], want: scalar}, [11], 17, Scalar, 17, true], # 19
-  [Call, {dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 8, name: "n", package: main, param_names: [], want: list}, [19], 19, Unknown, 19, true], # 20
+  [Call, {class_name: K, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 8, name: b, package: main, param_names: [], want: scalar}, [11], 17, Scalar, 17, true], # 19
+  [Call, {dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 8, name: "n", package: main, param_names: [], want: list}, [19], 19, Unknown, 19, true], # 20
   [Coerce, {from_repr: Unknown, to_repr: Str}, [20], ~, Str], # 21
-  [Call, {class_name: K, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 8, name: b, package: main, param_names: [], want: scalar}, [15], 20, Scalar, 20, true], # 22
-  [Call, {dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 8, name: "n", package: main, param_names: [], want: list}, [22], 22, Unknown, 22, true], # 23
+  [Call, {class_name: K, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 8, name: b, package: main, param_names: [], want: scalar}, [15], 20, Scalar, 20, true], # 22
+  [Call, {dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 8, name: "n", package: main, param_names: [], want: list}, [22], 22, Unknown, 22, true], # 23
   [Coerce, {from_repr: Unknown, to_repr: Str}, [23], ~, Str], # 24
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 25
   [PadAccess, {file: 1, shared: 1, sigil: $, symbol: made}, ~, ~, Str, 23], # 26
@@ -3966,7 +3967,7 @@ main::__PROGRAM__: {start: 0, returns: [32], nodes: [
   [Constant, {const_type: string, value: experimental.pm}, ~, ~, Str], # 3
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
-  [Call, {class_name: experimental, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Call, {class_name: experimental, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
   [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 ```
 
@@ -4008,9 +4009,9 @@ C::n: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: a}, ~, ~, Str], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 5, name: C::n::__ANON__:5:4, package: C, param_names: [], want: scalar}, [1], 0, Int, 2, true], # 3
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 5, name: C::n::__ANON__:5:4, package: C, param_names: [], want: scalar}, [1], 0, Int, 2, true], # 3
   [Constant, {const_type: string, value: b}, ~, ~, Str], # 4
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 5, name: C::n::__ANON__:5:4, package: C, param_names: [], want: scalar}, [4], 3, Int, 3, true], # 5
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 5, name: C::n::__ANON__:5:4, package: C, param_names: [], want: scalar}, [4], 3, Int, 3, true], # 5
   [Concat, ~, [3, 5], ~, Str], # 6
   [Return, ~, [6], 5, ~, 5]]} # 7
 C::n::__ANON__:5:4: {start: 0, returns: [8], nodes: [
@@ -4029,15 +4030,15 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [PackageMark, {package: C}, ~, 0], # 2
   [PackageMark, {package: main}, ~, 2], # 3
   [MemStart], # 4
-  [Call, {class_name: C, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 7, name: new, package: main, param_names: [], want: scalar}, ~, 3, Object, 4, true], # 5
-  [Call, {class_name: C, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 7, name: new, package: main, param_names: [], want: scalar}, ~, 5, Object, 5, true], # 6
+  [Call, {class_name: C, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 7, name: new, package: main, param_names: [], want: scalar}, ~, 3, Object, 4, true], # 5
+  [Call, {class_name: C, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 7, name: new, package: main, param_names: [], want: scalar}, ~, 5, Object, 5, true], # 6
   [Constant, {const_type: string, value: b}, ~, ~, Str], # 7
   [Constant, {const_type: string, value: a}, ~, ~, Str], # 8
-  [Call, {class_name: C, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 8, name: add, package: main, param_names: [], want: void}, [5, 8], 6, Int, 6, true], # 9
-  [Call, {class_name: C, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 8, name: add, package: main, param_names: [], want: void}, [6, 7], 9, Int, 9, true], # 10
-  [Call, {class_name: C, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 9, name: "n", package: main, param_names: [], want: list}, [5], 10, Str, 10, true], # 11
+  [Call, {class_name: C, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 8, name: add, package: main, param_names: [], want: void}, [5, 8], 6, Int, 6, true], # 9
+  [Call, {class_name: C, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 8, name: add, package: main, param_names: [], want: void}, [6, 7], 9, Int, 9, true], # 10
+  [Call, {class_name: C, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 9, name: "n", package: main, param_names: [], want: list}, [5], 10, Str, 10, true], # 11
   [Coerce, {from_repr: Unknown, to_repr: Str}, [11], ~, Str], # 12
-  [Call, {class_name: C, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 9, name: "n", package: main, param_names: [], want: list}, [6], 11, Str, 11, true], # 13
+  [Call, {class_name: C, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 9, name: "n", package: main, param_names: [], want: list}, [6], 11, Str, 11, true], # 13
   [Coerce, {from_repr: Unknown, to_repr: Str}, [13], ~, Str], # 14
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 15
   [Print, ~, [12, 14, 15], 13, "Maybe[Boolean]"], # 16
@@ -4055,7 +4056,7 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [Constant, {const_type: string, value: experimental.pm}, ~, ~, Str], # 3
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
-  [Call, {class_name: experimental, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Call, {class_name: experimental, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
   [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 ```
 
@@ -4113,11 +4114,11 @@ main::__PROGRAM__: {start: 0, returns: [13], nodes: [
   [PackageMark, {package: K}, ~, 0], # 2
   [PackageMark, {package: main}, ~, 2], # 3
   [MemStart], # 4
-  [Call, {class_name: K, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 7, name: new, package: main, param_names: [], want: scalar}, ~, 3, Object, 4, true], # 5
-  [Call, {class_name: K, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 8, name: swap, package: main, param_names: [], want: list}, [5], 5, Str, 5, true], # 6
+  [Call, {class_name: K, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 7, name: new, package: main, param_names: [], want: scalar}, ~, 3, Object, 4, true], # 5
+  [Call, {class_name: K, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 8, name: swap, package: main, param_names: [], want: list}, [5], 5, Str, 5, true], # 6
   [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 8
-  [Call, {class_name: K, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 8, name: bump, package: main, param_names: [], want: list}, [5], 6, Int, 6, true], # 9
+  [Call, {class_name: K, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 8, name: bump, package: main, param_names: [], want: list}, [5], 6, Int, 6, true], # 9
   [Coerce, {from_repr: Unknown, to_repr: Str}, [9], ~, Str], # 10
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 11
   [Print, ~, [7, 8, 10, 11], 9, "Maybe[Boolean]"], # 12
@@ -4135,7 +4136,7 @@ main::__PROGRAM__: {start: 0, returns: [13], nodes: [
   [Constant, {const_type: string, value: experimental.pm}, ~, ~, Str], # 3
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
-  [Call, {class_name: experimental, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Call, {class_name: experimental, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
   [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 ```
 
@@ -4357,7 +4358,7 @@ main::__PROGRAM__: {start: 0, returns: [39], nodes: [
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: F}, ~, ~, Str], # 2
   [MemStart], # 3
-  [Call, {class_name: F, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 6, name: new, package: main, param_names: [], want: scalar}, [2], 0, Object, 3, true], # 4
+  [Call, {class_name: F, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 6, name: new, package: main, param_names: [], want: scalar}, [2], 0, Object, 3, true], # 4
   [Constant, {const_type: string, value: "n"}, ~, ~, Str], # 5
   [Subscript, {kind: hash}, [4, 5], 4, Scalar, 4], # 6
   [HashLiteral, ~, ~, 6, HashRef], # 7
@@ -4401,10 +4402,10 @@ main::__PROGRAM__: {start: 0, returns: [39], nodes: [
   [Proj, {index: 0}, [17]], # 45
   [Assign, ~, [40, 44], 45, Scalar, 18, true], # 46
   [PadAccess, {sigil: $, symbol: d}, ~, ~, Unknown, 46], # 47
-  [Call, {class_name: F, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 9, name: get, package: main, param_names: [], want: list}, [4, 47], 46, Scalar, 46, true], # 48
+  [Call, {class_name: F, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 9, name: get, package: main, param_names: [], want: list}, [4, 47], 46, Scalar, 46, true], # 48
   [Call, {dispatch_kind: builtin, name: push, param_names: []}, [24, 48], 48, Int, 48, true], # 49
   [PadAccess, {sigil: $, symbol: d}, ~, ~, Unknown, 49], # 50
-  [Call, {class_name: F, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 9, name: drop, package: main, param_names: [], want: void}, [4, 50], 49, Scalar, 49, true], # 51
+  [Call, {class_name: F, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 9, name: drop, package: main, param_names: [], want: void}, [4, 50], 49, Scalar, 49, true], # 51
   [PadAccess, {sigil: $, symbol: d}, ~, ~, Unknown, 51], # 52
   [Subscript, {kind: array}, [41, 43], ~, Scalar], # 53
   [Assign, {if_changed: true}, [53, 52], 51, Unknown, 51, true], # 54
@@ -4701,7 +4702,7 @@ C::leaves: {start: 0, returns: [5], nodes: [
   [PadAccess, {sigil: $, symbol: self}, ~, ~, Object], # 1
   [AnonSub, {name: C::leaves::__ANON__:10:2}, ~, ~, CodeRef], # 2
   [MemStart], # 3
-  [Call, {class_name: C, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 10, name: walk_all, package: C, param_names: []}, [1, 2], 0, Array, 3, true], # 4
+  [Call, {class_name: C, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 10, name: walk_all, package: C, param_names: []}, [1, 2], 0, Array, 3, true], # 4
   [Return, ~, [4], 4, ~, 4]]} # 5
 C::leaves::__ANON__:10:2: {start: 0, returns: [3], nodes: [
   [Start], # 0
@@ -4729,11 +4730,11 @@ C::walk_all: {start: 0, returns: [8], nodes: [
   [PadAccess, {sigil: $, symbol: node}, ~, ~, Unknown, 16], # 17
   [Assign, ~, [17, 16], 16, Scalar, 16, true], # 18
   [PadAccess, {sigil: $, symbol: node}, ~, ~, Unknown, 18], # 19
-  [Call, {dispatch_kind: indirect, file: "/tmp/yDlL8UMbFX/case.pl", line: 7, name: "", package: C, param_names: [], want: list}, [15, 19], 18, Unknown, 18, true], # 20
+  [Call, {dispatch_kind: indirect, file: "/tmp/mvrHQew3rs/case.pl", line: 7, name: "", package: C, param_names: [], want: list}, [15, 19], 18, Unknown, 18, true], # 20
   [Call, {dispatch_kind: builtin, name: push, param_names: []}, [1, 20], 20, Int, 20, true], # 21
   [PadAccess, {sigil: $, symbol: node}, ~, ~, Unknown, 21], # 22
-  [Call, {dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 7, name: children, package: C, param_names: [], want: scalar}, [22], 21, Unknown, 21, true], # 23
-  [PostfixDeref, {eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 7, package: C, sigil: "@", strict: true}, [23], 23, Array, 23, true], # 24
+  [Call, {dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 7, name: children, package: C, param_names: [], want: scalar}, [22], 21, Unknown, 21, true], # 23
+  [PostfixDeref, {eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 7, package: C, sigil: "@", strict: true}, [23], 23, Array, 23, true], # 24
   [Call, {dispatch_kind: builtin, name: push, param_names: []}, [10, 24], 24, Int, 24, true]]} # 25
 main::__PROGRAM__: {start: 0, returns: [20], nodes: [
   [Start], # 0
@@ -4741,13 +4742,13 @@ main::__PROGRAM__: {start: 0, returns: [20], nodes: [
   [PackageMark, {package: C}, ~, 0], # 2
   [PackageMark, {package: main}, ~, 2], # 3
   [MemStart], # 4
-  [Call, {class_name: C, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 12, name: new, package: main, param_names: [], want: list}, ~, 3, Object, 4, true], # 5
-  [Call, {class_name: C, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 12, name: new, package: main, param_names: [], want: list}, ~, 5, Object, 5, true], # 6
+  [Call, {class_name: C, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 12, name: new, package: main, param_names: [], want: list}, ~, 3, Object, 4, true], # 5
+  [Call, {class_name: C, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 12, name: new, package: main, param_names: [], want: list}, ~, 5, Object, 5, true], # 6
   [ArrayLiteral, ~, [5, 6], 6, ArrayRef], # 7
-  [Call, {class_name: C, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 12, name: new, package: main, param_names: [kids], want: scalar}, [7], 7, Object, 6, true], # 8
-  [Call, {class_name: C, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 13, name: leaves, package: main, param_names: [], want: list}, [8], 8, Array, 8, true], # 9
+  [Call, {class_name: C, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 12, name: new, package: main, param_names: [kids], want: scalar}, [7], 7, Object, 6, true], # 8
+  [Call, {class_name: C, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 13, name: leaves, package: main, param_names: [], want: list}, [8], 8, Array, 8, true], # 9
   [ArrayLiteral, {sigil: "@", symbol: l}, [9], ~, Array], # 10
-  [Call, {class_name: C, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 13, name: leaves, package: main, param_names: [], want: scalar}, [8], 9, Array, 9, true], # 11
+  [Call, {class_name: C, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 13, name: leaves, package: main, param_names: [], want: scalar}, [8], 9, Array, 9, true], # 11
   [Count, ~, [10], ~, Int, 11], # 12
   [Coerce, {from_repr: Int, to_repr: Str}, [12], ~, Str], # 13
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 14
@@ -4770,7 +4771,7 @@ main::__PROGRAM__: {start: 0, returns: [20], nodes: [
   [Constant, {const_type: string, value: experimental.pm}, ~, ~, Str], # 3
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
-  [Call, {class_name: experimental, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Call, {class_name: experimental, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
   [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 ```
 
@@ -4808,10 +4809,10 @@ main::__PROGRAM__: {start: 0, returns: [21], nodes: [
   [MemStart], # 11
   [Call, {dispatch_kind: builtin, name: push, param_names: []}, [8, 9, 10], 0, Int, 11, true], # 12
   [Count, ~, [7], ~, Int, 12], # 13
-  [Call, {class_name: main, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: new, package: main, param_names: [], want: list}, [2, 3, 13], 12, Object, 12, true], # 14
+  [Call, {class_name: main, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: new, package: main, param_names: [], want: list}, [2, 3, 13], 12, Object, 12, true], # 14
   [Coerce, {from_repr: Object, to_repr: Str}, [14], ~, Str], # 15
   [Count, ~, [8], ~, Int, 14], # 16
-  [Call, {class_name: main, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: new, package: main, param_names: [], want: list}, [2, 3, 16], 14, Object, 14, true], # 17
+  [Call, {class_name: main, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: new, package: main, param_names: [], want: list}, [2, 3, 16], 14, Object, 14, true], # 17
   [Coerce, {from_repr: Object, to_repr: Str}, [17], ~, Str], # 18
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 19
   [Print, ~, [15, 18, 19], 17, "Maybe[Boolean]"], # 20
@@ -4853,10 +4854,10 @@ main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 2
   [MemStart], # 3
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: main::only, package: main, param_names: [], want: list}, [2], 0, Str, 3, true], # 4
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: main::only, package: main, param_names: [], want: list}, [2], 0, Str, 3, true], # 4
   [Coerce, {from_repr: Unknown, to_repr: Str}, [4], ~, Str], # 5
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 6
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: main::only, package: main, param_names: [], want: list}, [6], 4, Str, 4, true], # 7
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: main::only, package: main, param_names: [], want: list}, [6], 4, Str, 4, true], # 7
   [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
   [Print, ~, [5, 8, 9], 7, "Maybe[Boolean]"], # 10
@@ -4870,7 +4871,7 @@ main::only: {start: 0, returns: [9], nodes: [
   [Assign, ~, [3, 4], 0, Unknown, 2, true], # 5
   [MakeCell, {captured_written: false, cell_name: $want}, [1], 5, Ref, 5, true], # 6
   [AnonSub, {captures: [$want], name: main::only::__ANON__:3:4}, [6], ~, CodeRef], # 7
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::walk, package: main, param_names: []}, [7], 6, Str, 6, true], # 8
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::walk, package: main, param_names: []}, [7], 6, Str, 6, true], # 8
   [Return, {implicit: true}, [8], 8, ~, 8]]} # 9
 main::only::__ANON__:3:4: {start: 0, returns: [8], nodes: [
   [Start], # 0
@@ -4921,7 +4922,7 @@ main::walk: {start: 0, returns: [14], nodes: [
   [ListAppend, {collector: grep}, [7, 28, 34], ~, Array], # 35
   [Parameter, {index: 0, name: $cb, sigil: $}, ~, ~, Unknown], # 36
   [Subscript, {kind: array}, [18, 21], ~, Int, 9], # 37
-  [Call, {dispatch_kind: indirect, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: "", package: main, param_names: [], want: list}, [36, 37], 33, Unknown, 9, true], # 38
+  [Call, {dispatch_kind: indirect, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: "", package: main, param_names: [], want: list}, [36, 37], 33, Unknown, 9, true], # 38
   [NumGt, ~, [26, 27], 6, Boolean], # 39
   [Subscript, {kind: array}, [25, 27], ~, Scalar], # 40
   [Ref, ~, [40], ~, ScalarRef], # 41
@@ -4965,11 +4966,11 @@ main::__PROGRAM__: {start: 0, returns: [15], nodes: [
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
   [MemStart], # 3
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [2], 0, List, 3, true], # 4
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [2], 0, List, 3, true], # 4
   [ArrayLiteral, {sigil: "@", symbol: a}, [4], ~, Array], # 5
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 6
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::f, package: main, param_names: [], want: scalar}, [2], 4, List, 4, true], # 7
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::f, package: main, param_names: [], want: scalar}, [6], 7, List, 7, true], # 8
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::f, package: main, param_names: [], want: scalar}, [2], 4, List, 4, true], # 7
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::f, package: main, param_names: [], want: scalar}, [6], 7, List, 7, true], # 8
   [Count, ~, [5], ~, Int, 8], # 9
   [Coerce, {from_repr: Int, to_repr: Str}, [9], ~, Str], # 10
   [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 11
@@ -4983,7 +4984,7 @@ main::f: {start: 0, returns: [11], nodes: [
   [If, ~, [0, 1], 0], # 2
   [Proj, {index: 0}, [2]], # 3
   [MemStart], # 4
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::g, package: main, param_names: []}, ~, 3, List, 4, true], # 5
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::g, package: main, param_names: []}, ~, 3, List, 4, true], # 5
   [Constant, {const_type: integer, value: "7"}, ~, ~, Int], # 6
   [Proj, {index: 1}, [2]], # 7
   [Region, {head: 2}, [5, 7]], # 8
@@ -5028,7 +5029,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 5, name: main::f, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 5, name: main::f, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
   [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
   [Print, ~, [4, 5], 3, "Maybe[Boolean]"], # 6
@@ -5055,7 +5056,7 @@ main::f: {start: 0, returns: [14], nodes: [
   [Proj, {index: 0}, [8]], # 18
   [Assign, ~, [15, 17], 18, Int, 12, true], # 19
   [PadAccess, {sigil: $, symbol: pos}, ~, ~, Unknown, 19], # 20
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::f::__ANON__:1:3, package: main, param_names: [], want: void}, [20], 19, Int, 19, true], # 21
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::f::__ANON__:1:3, package: main, param_names: [], want: void}, [20], 19, Int, 19, true], # 21
   [PadAccess, {sigil: $, symbol: pos}, ~, ~, Num, 21], # 22
   [Constant, {const_type: integer, value: "10"}, ~, ~, Int], # 23
   [Multiply, ~, [22, 23], ~, Num], # 24
@@ -5063,7 +5064,7 @@ main::f: {start: 0, returns: [14], nodes: [
   [NumEq, ~, [22, 25], ~, Boolean], # 26
   [If, ~, [21, 26], 21], # 27
   [Proj, {index: 0}, [27]], # 28
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::f::__ANON__:1:3, package: main, param_names: [], want: void}, [24], 28, Int, 21, true], # 29
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::f::__ANON__:1:3, package: main, param_names: [], want: void}, [24], 28, Int, 21, true], # 29
   [Proj, {index: 1}, [27]], # 30
   [Region, {head: 27}, [29, 30]], # 31
   [Phi, {memory: true, predecessors: [28, 30], region: 31}, [29, 21], ~, Int], # 32
@@ -5141,7 +5142,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
   [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
   [Print, ~, [4, 5], 3, "Maybe[Boolean]"], # 6
@@ -5157,8 +5158,8 @@ main::f: {start: 0, returns: [25], nodes: [
   [ArrayLiteral, {sigil: "@", symbol: p}, [6], 0, Array], # 7
   [Assign, ~, [5, 7], 7, List, 4, true], # 8
   [MakeCell, {captured_written: false, cell_name: "@p"}, [3], 8, Ref, 8, true], # 9
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: main::f::__ANON__:1:4, package: main, param_names: [], want: void}, [2], 9, Int, 9, true], # 10
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: main::f::__ANON__:1:4, package: main, param_names: [], want: void}, [1], 10, Int, 10, true], # 11
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: main::f::__ANON__:1:4, package: main, param_names: [], want: void}, [2], 9, Int, 9, true], # 10
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: main::f::__ANON__:1:4, package: main, param_names: [], want: void}, [1], 10, Int, 10, true], # 11
   [EntryDef, {package: main, sigil: $, symbol: "\""}, ~, ~, Scalar, 11], # 12
   [Coerce, {from_repr: Scalar, to_repr: Str}, [12], ~, Str], # 13
   [PadAccess, {shared: 1, sigil: "@", symbol: p}, ~, ~, Array, 11], # 14
@@ -5168,7 +5169,7 @@ main::f: {start: 0, returns: [25], nodes: [
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 18
   [ArrayLiteral, {sigil: "@", symbol: p}, ~, 11, Array], # 19
   [Assign, ~, [14, 19], 19, List, 11, true], # 20
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: main::f::__ANON__:1:4, package: main, param_names: [], want: void}, [18], 20, Int, 20, true], # 21
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: main::f::__ANON__:1:4, package: main, param_names: [], want: void}, [18], 20, Int, 20, true], # 21
   [PadAccess, {shared: 1, sigil: "@", symbol: p}, ~, ~, Array, 21], # 22
   [Call, {dispatch_kind: builtin, name: join, param_names: []}, [13, 22], ~, Str, 21], # 23
   [Concat, ~, [17, 23], ~, Str], # 24
@@ -5207,7 +5208,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
   [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
   [Print, ~, [4, 5], 3, "Maybe[Boolean]"], # 6
@@ -5236,7 +5237,7 @@ main::f: {start: 0, returns: [15], nodes: [
   [Proj, {index: 0}, [9]], # 20
   [Assign, ~, [16, 19], 20, Scalar, 13, true], # 21
   [PadAccess, {sigil: $, symbol: x}, ~, ~, Unknown, 21], # 22
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: main::f::__ANON__:1:4, package: main, param_names: [], want: void}, [22], 21, Scalar, 21, true], # 23
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: main::f::__ANON__:1:4, package: main, param_names: [], want: void}, [22], 21, Scalar, 21, true], # 23
   [PadAccess, {sigil: $, symbol: x}, ~, ~, Str, 23], # 24
   [Coerce, {from_repr: Unknown, to_repr: Str}, [24], ~, Str], # 25
   [Concat, ~, [10, 25], ~, Str], # 26
@@ -5291,7 +5292,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::g, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::g, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
   [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
   [Print, ~, [4, 5], 3, "Maybe[Boolean]"], # 6
@@ -5307,12 +5308,12 @@ main::g: {start: 0, returns: [17], nodes: [
   [HashLiteral, ~, ~, ~, Hash], # 7
   [Assign, ~, [6, 7], 0, List, 5, true], # 8
   [MakeCell, {captured_written: false, cell_name: "%h"}, [4], 8, Ref, 8, true], # 9
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: main::g::__ANON__:1:3, package: main, param_names: [], want: list}, [2, 3], 9, Scalar, 9, true], # 10
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: main::g::__ANON__:1:3, package: main, param_names: [], want: list}, [2, 3], 9, Scalar, 9, true], # 10
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 11
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: main::g::__ANON__:1:3, package: main, param_names: [], want: list}, [2, 11], 10, Scalar, 10, true], # 12
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: main::g::__ANON__:1:3, package: main, param_names: [], want: list}, [2, 11], 10, Scalar, 10, true], # 12
   [Constant, {const_type: string, value: b}, ~, ~, Str], # 13
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 14
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: main::g::__ANON__:1:3, package: main, param_names: [], want: list}, [13, 14], 12, Scalar, 12, true], # 15
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: main::g::__ANON__:1:3, package: main, param_names: [], want: list}, [13, 14], 12, Scalar, 12, true], # 15
   [Call, {dispatch_kind: builtin, name: join, param_names: []}, [1, 10, 12, 15], ~, Str], # 16
   [Return, ~, [16], 15, ~, 15], # 17
   [AnonSub, {captures: ["%h"], name: main::g::__ANON__:1:3}, [9], ~, CodeRef]]} # 18
@@ -5362,7 +5363,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, ~, 0, Unknown, 2, true], # 3
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, ~, 0, Unknown, 2, true], # 3
   [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
   [Print, ~, [4, 5], 3, "Maybe[Boolean]"], # 6
@@ -5378,7 +5379,7 @@ main::f: {start: 0, returns: [11], nodes: [
   [CellWrite, ~, [5, 6], 5, Scalar, 5, true], # 7
   [CellRead, ~, [5], ~, Unknown, 7], # 8
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 9
-  [Call, {dispatch_kind: indirect, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: "", package: main, param_names: []}, [8, 9], 7, Unknown, 7, true], # 10
+  [Call, {dispatch_kind: indirect, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: "", package: main, param_names: []}, [8, 9], 7, Unknown, 7, true], # 10
   [Return, ~, [10], 10, ~, 10]]} # 11
 main::f::__ANON__:1:2: {start: 0, returns: [19], nodes: [
   [Start], # 0
@@ -5394,7 +5395,7 @@ main::f::__ANON__:1:2: {start: 0, returns: [19], nodes: [
   [NumLe, ~, [5, 1], ~, Boolean], # 10
   [If, ~, [4, 10], 4], # 11
   [Proj, {index: 1}, [11]], # 12
-  [Call, {dispatch_kind: indirect, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: "", package: main, param_names: [], want: scalar}, [7, 9], 12, Unknown, 4, true], # 13
+  [Call, {dispatch_kind: indirect, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: "", package: main, param_names: [], want: scalar}, [7, 9], 12, Unknown, 4, true], # 13
   [Add, ~, [5, 13], ~, Unknown], # 14
   [Proj, {index: 0}, [11]], # 15
   [Region, {head: 11}, [15, 13]], # 16
@@ -5440,7 +5441,7 @@ main::__PROGRAM__: {start: 0, returns: [22], nodes: [
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 15
   [HashLiteral, ~, [14, 15], 13, HashRef], # 16
   [MemStart], # 17
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::collect, package: main, param_names: [], want: list}, [13, 16], 16, Str, 17, true], # 18
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::collect, package: main, param_names: [], want: list}, [13, 16], 16, Str, 17, true], # 18
   [Coerce, {from_repr: Unknown, to_repr: Str}, [18], ~, Str], # 19
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 20
   [Print, ~, [19, 20], 18, "Maybe[Boolean]"], # 21
@@ -5464,7 +5465,7 @@ main::collect: {start: 0, returns: [24], nodes: [
   [CellWrite, ~, [13, 14], 13, Scalar, 13, true], # 15
   [CellRead, ~, [13], ~, Unknown, 15], # 16
   [PadAccess, {sigil: $, symbol: tree}, ~, ~, Unknown, 15], # 17
-  [Call, {dispatch_kind: indirect, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: "", package: main, param_names: [], want: void}, [16, 17], 15, Unknown, 15, true], # 18
+  [Call, {dispatch_kind: indirect, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: "", package: main, param_names: [], want: void}, [16, 17], 15, Unknown, 15, true], # 18
   [CellRead, ~, [12], ~, Unknown, 18], # 19
   [PostfixDeref, {sigil: "%"}, [19], 18, Hash, 18, true], # 20
   [Call, {dispatch_kind: builtin, name: keys, param_names: [], want: list}, [20], ~, List, 20], # 21
@@ -5533,7 +5534,7 @@ main::collect::__ANON__:1:4: {start: 0, returns: [47], nodes: [
   [CellRead, ~, [57], ~, Unknown, 44], # 58
   [Subscript, {kind: array}, [48, 50], ~, Scalar, 44], # 59
   [TernaryExpr, ~, [52, 56, 59], ~, Scalar], # 60
-  [Call, {dispatch_kind: indirect, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: "", package: main, param_names: [], want: void}, [58, 60], 55, Unknown, 44, true], # 61
+  [Call, {dispatch_kind: indirect, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: "", package: main, param_names: [], want: void}, [58, 60], 55, Unknown, 44, true], # 61
   [Count, ~, [48], ~, Int, 44], # 62
   [NumGt, ~, [62, 50], 38, Boolean], # 63
   [Count, ~, [48], ~, Int, 37], # 64
@@ -5588,7 +5589,7 @@ S::add: {start: 0, returns: [14], nodes: [
   [Constant, {const_type: string, value: "clash\n"}, ~, ~, Str], # 9
   [Proj, {index: 0}, [7]], # 10
   [MemStart], # 11
-  [Unwind, {file: "/tmp/yDlL8UMbFX/case.pl", line: 2}, [9], 10, ~, 11], # 12
+  [Unwind, {file: "/tmp/mvrHQew3rs/case.pl", line: 2}, [9], 10, ~, 11], # 12
   [Region, {head: 7}, [8, 12]], # 13
   [Return, ~, [3], 13, ~, 11], # 14
   [PadAccess, {sigil: $, symbol: s}, ~, ~, Unknown], # 15
@@ -5607,23 +5608,23 @@ main::__PROGRAM__: {start: 0, returns: [36], nodes: [
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: S}, ~, ~, Str], # 2
   [MemStart], # 3
-  [Call, {class_name: S, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 12, name: new, package: main, param_names: [], want: scalar}, [2], 0, Object, 3, true], # 4
+  [Call, {class_name: S, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 12, name: new, package: main, param_names: [], want: scalar}, [2], 0, Object, 3, true], # 4
   [PadAccess, {sigil: $, symbol: s}, ~, ~, Unknown, 4], # 5
   [Assign, ~, [5, 4], 4, Object, 4, true], # 6
   [PadAccess, {sigil: $, symbol: s}, ~, ~, Unknown, 6], # 7
   [Constant, {const_type: string, value: a}, ~, ~, Str], # 8
   [Constant, {const_type: string, value: b}, ~, ~, Str], # 9
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 13, name: main::merge, package: main, param_names: [], want: list}, [7, 8, 9], 6, Unknown, 6, true], # 10
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 13, name: main::merge, package: main, param_names: [], want: list}, [7, 8, 9], 6, Unknown, 6, true], # 10
   [Coerce, {from_repr: Unknown, to_repr: Str}, [10], ~, Str], # 11
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 12
   [PadAccess, {sigil: $, symbol: s}, ~, ~, Unknown, 10], # 13
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 13, name: main::merge, package: main, param_names: [], want: list}, [13, 1, 9], 10, Unknown, 10, true], # 14
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 13, name: main::merge, package: main, param_names: [], want: list}, [13, 1, 9], 10, Unknown, 10, true], # 14
   [Coerce, {from_repr: Unknown, to_repr: Str}, [14], ~, Str], # 15
   [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 14], # 16
   [Constant, {const_type: string, value: ""}, ~, ~, Str], # 17
   [EntryWrite, ~, [16, 17], 14, Unknown, 14, true], # 18
   [PadAccess, {sigil: $, symbol: s}, ~, ~, Unknown, 18], # 19
-  [Call, {dispatch_kind: direct, eval_id: 2, file: "/tmp/yDlL8UMbFX/case.pl", line: 13, name: main::merge, package: main, param_names: [], want: scalar}, [19, 8, 8], 18, Unknown, 18, true], # 20
+  [Call, {dispatch_kind: direct, eval_id: 2, file: "/tmp/mvrHQew3rs/case.pl", line: 13, name: main::merge, package: main, param_names: [], want: scalar}, [19, 8, 8], 18, Unknown, 18, true], # 20
   [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 20], # 21
   [EntryWrite, ~, [21, 17], 20, Unknown, 20, true], # 22
   [Exc, ~, [20]], # 23
@@ -5667,7 +5668,7 @@ main::merge: {start: 0, returns: [47], nodes: [
   [PadAccess, {sigil: $, symbol: s}, ~, ~, Unknown, 19], # 21
   [PadAccess, {sigil: $, symbol: x}, ~, ~, Unknown, 19], # 22
   [PadAccess, {sigil: $, symbol: "y"}, ~, ~, Unknown, 19], # 23
-  [Call, {dispatch_kind: method, eval_id: 1, file: "/tmp/yDlL8UMbFX/case.pl", line: 7, name: add, package: main, param_names: [], want: scalar}, [21, 22, 23], 19, Unknown, 19, true], # 24
+  [Call, {dispatch_kind: method, eval_id: 1, file: "/tmp/mvrHQew3rs/case.pl", line: 7, name: add, package: main, param_names: [], want: scalar}, [21, 22, 23], 19, Unknown, 19, true], # 24
   [PadAccess, {sigil: $, symbol: merged}, ~, ~, Unknown, 24], # 25
   [Assign, ~, [25, 24], 24, Unknown, 24, true], # 26
   [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 26], # 27
@@ -5700,7 +5701,7 @@ main::merge: {start: 0, returns: [47], nodes: [
   [Constant, {const_type: string, value: "': "}, ~, ~, Str], # 54
   [Concat, ~, [53, 54], ~, Str], # 55
   [Concat, ~, [55, 51], ~, Str], # 56
-  [Unwind, {file: "/tmp/yDlL8UMbFX/case.pl", line: 7}, [56], 49, ~, 37]]} # 57
+  [Unwind, {file: "/tmp/mvrHQew3rs/case.pl", line: 7}, [56], 49, ~, 37]]} # 57
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
@@ -5713,7 +5714,7 @@ main::merge: {start: 0, returns: [47], nodes: [
   [Constant, {const_type: string, value: warnings.pm}, ~, ~, Str], # 2
   [MemStart], # 3
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [2], 0, Unknown, 3, true], # 4
-  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: unimport, package: main, param_names: []}, [1], 4, Unknown, 4, true], # 5
+  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: unimport, package: main, param_names: []}, [1], 4, Unknown, 4, true], # 5
   [Return, {implicit: true}, [5], 5, ~, 5]]} # 6
 ```
 
@@ -5746,11 +5747,11 @@ main::__PROGRAM__: {start: 0, returns: [19], nodes: [
   [Constant, {const_type: string, value: before}, ~, ~, Str], # 4
   [MemStart], # 5
   [EntryWrite, ~, [3, 4], 0, Unknown, 5, true], # 6
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 5, name: main::h, package: main, param_names: [], want: list}, [2], 6, Str, 6, true], # 7
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 5, name: main::h, package: main, param_names: [], want: list}, [2], 6, Str, 6, true], # 7
   [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 9
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 10
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 5, name: main::h, package: main, param_names: [], want: list}, [10], 7, Str, 7, true], # 11
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 5, name: main::h, package: main, param_names: [], want: list}, [10], 7, Str, 7, true], # 11
   [Coerce, {from_repr: Unknown, to_repr: Str}, [11], ~, Str], # 12
   [Constant, {const_type: string, value: " ["}, ~, ~, Str], # 13
   [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, 11, Str, 11], # 14
@@ -5773,7 +5774,7 @@ main::g: {start: 0, returns: [15], nodes: [
   [Concat, ~, [8, 9], ~, Str], # 10
   [Proj, {index: 0}, [4]], # 11
   [MemStart], # 12
-  [Unwind, {file: "/tmp/yDlL8UMbFX/case.pl", line: 2}, [10], 11, ~, 12], # 13
+  [Unwind, {file: "/tmp/mvrHQew3rs/case.pl", line: 2}, [10], 11, ~, 12], # 13
   [Region, {head: 4}, [5, 13]], # 14
   [Return, ~, [1], 14, ~, 12]]} # 15
 main::h: {start: 0, returns: [31], nodes: [
@@ -5785,7 +5786,7 @@ main::h: {start: 0, returns: [31], nodes: [
   [Parameter, {index: 0, name: $x, sigil: $}, ~, ~, Unknown], # 5
   [Assign, ~, [4, 5], 0, Unknown, 3, true], # 6
   [PadAccess, {sigil: $, symbol: x}, ~, ~, Unknown, 6], # 7
-  [Call, {dispatch_kind: direct, eval_id: 1, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::g, package: main, param_names: []}, [7], 6, Unknown, 6, true], # 8
+  [Call, {dispatch_kind: direct, eval_id: 1, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::g, package: main, param_names: []}, [7], 6, Unknown, 6, true], # 8
   [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 8], # 9
   [Constant, {const_type: string, value: ""}, ~, ~, Str], # 10
   [EntryWrite, ~, [9, 10], 8, Unknown, 8, true], # 11
@@ -5823,7 +5824,7 @@ main::h: {start: 0, returns: [31], nodes: [
   [Constant, {const_type: string, value: warnings.pm}, ~, ~, Str], # 2
   [MemStart], # 3
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [2], 0, Unknown, 3, true], # 4
-  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: unimport, package: main, param_names: []}, [1], 4, Unknown, 4, true], # 5
+  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: unimport, package: main, param_names: []}, [1], 4, Unknown, 4, true], # 5
   [Return, {implicit: true}, [5], 5, ~, 5]]} # 6
 ```
 
@@ -5863,15 +5864,15 @@ main::__PROGRAM__: {start: 0, returns: [20], nodes: [
   [HashLiteral, ~, [2, 4], 4, HashRef], # 5
   [HashLiteral, ~, [2, 5], 5, HashRef], # 6
   [MemStart], # 7
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 11, name: main::find, package: main, param_names: [], want: list}, [6], 6, Str, 7, true], # 8
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 11, name: main::find, package: main, param_names: [], want: list}, [6], 6, Str, 7, true], # 8
   [Coerce, {from_repr: Unknown, to_repr: Str}, [8], ~, Str], # 9
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 10
   [Constant, {const_type: ref, value: "1"}, ~, ~, ScalarRef], # 11
   [HashLiteral, ~, [2, 11], 8, HashRef], # 12
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 11, name: main::find, package: main, param_names: [], want: list}, [12], 12, Str, 8, true], # 13
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 11, name: main::find, package: main, param_names: [], want: list}, [12], 12, Str, 8, true], # 13
   [Coerce, {from_repr: Unknown, to_repr: Str}, [13], ~, Str], # 14
   [HashLiteral, ~, [2, 1], 13, HashRef], # 15
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 11, name: main::find, package: main, param_names: [], want: list}, [15], 15, Str, 13, true], # 16
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 11, name: main::find, package: main, param_names: [], want: list}, [15], 15, Str, 13, true], # 16
   [Coerce, {from_repr: Unknown, to_repr: Str}, [16], ~, Str], # 17
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 18
   [Print, ~, [9, 10, 14, 10, 17, 18], 16, "Maybe[Boolean]"], # 19
@@ -5955,12 +5956,12 @@ main::__PROGRAM__: {start: 0, returns: [27], nodes: [
   [Constant, {const_type: string, value: d}, ~, ~, Str], # 7
   [HashLiteral, {sigil: "%", symbol: PARENT}, [2, 6, 6, 3, 3, 7], 0, Hash], # 8
   [Assign, ~, [5, 8], 8, List, 4, true], # 9
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 5, name: main::is_sub, package: main, param_names: [], want: list}, [2, 3], 9, Int, 9, true], # 10
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 5, name: main::is_sub, package: main, param_names: [], want: list}, [2, 3], 9, Int, 9, true], # 10
   [Coerce, {from_repr: Unknown, to_repr: Str}, [10], ~, Str], # 11
   [Constant, {const_type: string, value: x}, ~, ~, Str], # 12
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 5, name: main::is_sub, package: main, param_names: [], want: list}, [2, 12], 10, Int, 10, true], # 13
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 5, name: main::is_sub, package: main, param_names: [], want: list}, [2, 12], 10, Int, 10, true], # 13
   [Coerce, {from_repr: Unknown, to_repr: Str}, [13], ~, Str], # 14
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 5, name: main::is_sub, package: main, param_names: [], want: list}, [3, 7], 13, Int, 13, true], # 15
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 5, name: main::is_sub, package: main, param_names: [], want: list}, [3, 7], 13, Int, 13, true], # 15
   [Coerce, {from_repr: Unknown, to_repr: Str}, [15], ~, Str], # 16
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 17
   [Constant, {const_type: string, value: ","}, ~, ~, Str], # 18
@@ -6051,7 +6052,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
   [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
   [Print, ~, [4, 5], 3, "Maybe[Boolean]"], # 6
@@ -6189,14 +6190,14 @@ main::__PROGRAM__: {start: 0, returns: [16], nodes: [
   [PackageMark, {package: K}, ~, 0], # 2
   [PackageMark, {package: main}, ~, 2], # 3
   [MemStart], # 4
-  [Call, {class_name: K, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: new, package: main, param_names: [], want: scalar}, ~, 3, Object, 4, true], # 5
-  [Call, {class_name: K, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: reset_h, package: main, param_names: [], want: scalar}, [5], 5, Unknown, 5, true], # 6
+  [Call, {class_name: K, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: new, package: main, param_names: [], want: scalar}, ~, 3, Object, 4, true], # 5
+  [Call, {class_name: K, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: reset_h, package: main, param_names: [], want: scalar}, [5], 5, Unknown, 5, true], # 6
   [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
-  [Call, {class_name: K, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: reset_l, package: main, param_names: [], want: list}, [5], 6, Int, 6, true], # 8
+  [Call, {class_name: K, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: reset_l, package: main, param_names: [], want: list}, [5], 6, Int, 6, true], # 8
   [ArrayLiteral, {sigil: "@", symbol: b}, [8], ~, Array], # 9
   [Count, ~, [9], ~, Int, 8], # 10
   [Coerce, {from_repr: Int, to_repr: Str}, [10], ~, Str], # 11
-  [Call, {class_name: K, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: "n", package: main, param_names: [], want: list}, [5], 8, Str, 8, true], # 12
+  [Call, {class_name: K, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: "n", package: main, param_names: [], want: list}, [5], 8, Str, 8, true], # 12
   [Coerce, {from_repr: Unknown, to_repr: Str}, [12], ~, Str], # 13
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 14
   [Print, ~, [7, 11, 13, 14], 12, "Maybe[Boolean]"], # 15
@@ -6214,7 +6215,7 @@ main::__PROGRAM__: {start: 0, returns: [16], nodes: [
   [Constant, {const_type: string, value: experimental.pm}, ~, ~, Str], # 3
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
-  [Call, {class_name: experimental, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Call, {class_name: experimental, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
   [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 ```
 
@@ -6244,11 +6245,11 @@ main::__PROGRAM__: {start: 0, returns: [20], nodes: [
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
   [Constant, {const_type: string, value: X}, ~, ~, Str], # 3
   [MemStart], # 4
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: main::g, package: main, param_names: [], want: list}, [2, 3], 0, Int, 4, true], # 5
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: main::g, package: main, param_names: [], want: list}, [2, 3], 0, Int, 4, true], # 5
   [Coerce, {from_repr: Unknown, to_repr: Str}, [5], ~, Str], # 6
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 7
   [Constant, {const_type: string, value: "Y"}, ~, ~, Str], # 8
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: main::g, package: main, param_names: [], want: list}, [7, 8], 5, Int, 5, true], # 9
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: main::g, package: main, param_names: [], want: list}, [7, 8], 5, Int, 5, true], # 9
   [Coerce, {from_repr: Unknown, to_repr: Str}, [9], ~, Str], # 10
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 11
   [PadAccess, {file: 1, shared: 1, sigil: "%", symbol: h}, ~, ~, Hash], # 12
@@ -6289,7 +6290,7 @@ main::g: {start: 0, returns: [15], nodes: [
   [Constant, {const_type: string, value: warnings.pm}, ~, ~, Str], # 2
   [MemStart], # 3
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [2], 0, Unknown, 3, true], # 4
-  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: unimport, package: main, param_names: []}, [1], 4, Unknown, 4, true], # 5
+  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: unimport, package: main, param_names: []}, [1], 4, Unknown, 4, true], # 5
   [Return, {implicit: true}, [5], 5, ~, 5]]} # 6
 ```
 
@@ -6332,9 +6333,9 @@ main::__PROGRAM__: {start: 0, returns: [30], nodes: [
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 11
   [Constant, {const_type: string, value: x}, ~, ~, Str], # 12
   [MemStart], # 13
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 8, name: main::g, package: main, param_names: [], want: scalar}, [9, 12, 11, 11, 8], 0, Unknown, 13, true], # 14
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 8, name: main::g, package: main, param_names: [], want: scalar}, [9, 10, 11, 6, 8], 14, Unknown, 14, true], # 15
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 8, name: main::g, package: main, param_names: [], want: scalar}, [4, 5, 6, 6, 8], 15, Unknown, 15, true], # 16
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 8, name: main::g, package: main, param_names: [], want: scalar}, [9, 12, 11, 11, 8], 0, Unknown, 13, true], # 14
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 8, name: main::g, package: main, param_names: [], want: scalar}, [9, 10, 11, 6, 8], 14, Unknown, 14, true], # 15
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 8, name: main::g, package: main, param_names: [], want: scalar}, [4, 5, 6, 6, 8], 15, Unknown, 15, true], # 16
   [Loop, {bound: entry}, [16], 16], # 17
   [Phi, {region: 17}, [3, 43], ~, Array], # 18
   [Call, {dispatch_kind: builtin, name: join, param_names: []}, [2, 18], ~, Str, 16], # 19
@@ -6418,7 +6419,7 @@ main::g: {start: 0, returns: [41], nodes: [
   [Constant, {const_type: string, value: warnings.pm}, ~, ~, Str], # 2
   [MemStart], # 3
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [2], 0, Unknown, 3, true], # 4
-  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: unimport, package: main, param_names: []}, [1], 4, Unknown, 4, true], # 5
+  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: unimport, package: main, param_names: []}, [1], 4, Unknown, 4, true], # 5
   [Return, {implicit: true}, [5], 5, ~, 5]]} # 6
 ```
 
@@ -6452,14 +6453,14 @@ main::__PROGRAM__: {start: 0, returns: [21], nodes: [
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 5
   [MemStart], # 6
   [Assign, ~, [4, 5], 0, Int, 6, true], # 7
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 5, name: main::g, package: main, param_names: [], want: list}, [2], 7, List, 7, true], # 8
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 5, name: main::g, package: main, param_names: [], want: list}, [2], 7, List, 7, true], # 8
   [Coerce, {from_repr: Unknown, to_repr: Str}, [8], ~, Str], # 9
   [Constant, {const_type: string, value: b}, ~, ~, Str], # 10
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 5, name: main::g, package: main, param_names: [], want: list}, [10], 8, List, 8, true], # 11
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 5, name: main::g, package: main, param_names: [], want: list}, [10], 8, List, 8, true], # 11
   [Coerce, {from_repr: Unknown, to_repr: Str}, [11], ~, Str], # 12
   [Constant, {const_type: string, value: "["}, ~, ~, Str], # 13
   [Constant, {const_type: string, value: z}, ~, ~, Str], # 14
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 5, name: main::g, package: main, param_names: [], want: scalar}, [14], 11, List, 11, true], # 15
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 5, name: main::g, package: main, param_names: [], want: scalar}, [14], 11, List, 11, true], # 15
   [Constant, {const_type: string, value: u}, ~, ~, Str], # 16
   [DefinedOr, ~, [15, 16], ~, List], # 17
   [Coerce, {from_repr: Unknown, to_repr: Str}, [17], ~, Str], # 18
@@ -6489,7 +6490,7 @@ main::g: {start: 0, returns: [41], nodes: [
   [Exists, {kind: hash}, [13, 7], ~, Boolean, 5], # 14
   [If, ~, [12, 14], 12], # 15
   [Proj, {index: 0}, [15]], # 16
-  [Call, {dispatch_kind: direct, eval_id: 1, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: main::f, package: main, param_names: []}, ~, 16, Int, 5, true], # 17
+  [Call, {dispatch_kind: direct, eval_id: 1, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: main::f, package: main, param_names: []}, ~, 16, Int, 5, true], # 17
   [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 17], # 18
   [Constant, {const_type: string, value: ""}, ~, ~, Str], # 19
   [EntryWrite, ~, [18, 19], 17, Unknown, 17, true], # 20
@@ -6518,7 +6519,7 @@ main::g: {start: 0, returns: [41], nodes: [
   [Coerce, {from_repr: Unknown, to_repr: Str}, [26], ~, Str], # 43
   [Constant, {const_type: string, value: "A: "}, ~, ~, Str], # 44
   [Concat, ~, [44, 43], ~, Str], # 45
-  [Unwind, {file: "/tmp/yDlL8UMbFX/case.pl", line: 4}, [45], 42, ~, 27]]} # 46
+  [Unwind, {file: "/tmp/mvrHQew3rs/case.pl", line: 4}, [45], 42, ~, 27]]} # 46
 "BEGIN 1": {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: number, value: "5.042"}, ~, ~, Num], # 1
@@ -6531,7 +6532,7 @@ main::g: {start: 0, returns: [41], nodes: [
   [Constant, {const_type: string, value: warnings.pm}, ~, ~, Str], # 2
   [MemStart], # 3
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [2], 0, Unknown, 3, true], # 4
-  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: unimport, package: main, param_names: []}, [1], 4, Unknown, 4, true], # 5
+  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: unimport, package: main, param_names: []}, [1], 4, Unknown, 4, true], # 5
   [Return, {implicit: true}, [5], 5, ~, 5]]} # 6
 ```
 
@@ -6571,7 +6572,7 @@ main::__PROGRAM__: {start: 0, returns: [26], nodes: [
   [ArrayLiteral, ~, [10, 11], ~, Array], # 12
   [ArrayLiteral, ~, ~, ~, Array], # 13
   [TernaryExpr, ~, [2, 12, 13], ~, Array], # 14
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::g, package: main, param_names: [], want: void}, [14], 9, Int, 9, true], # 15
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::g, package: main, param_names: [], want: void}, [14], 9, Int, 9, true], # 15
   [PadAccess, {sigil: $, symbol: s}, ~, ~, Str, 15], # 16
   [Coerce, {from_repr: Unknown, to_repr: Str}, [16], ~, Str], # 17
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 18
@@ -6634,7 +6635,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, ~, 0, Unknown, 2, true], # 3
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, ~, 0, Unknown, 2, true], # 3
   [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
   [Print, ~, [4, 5], 3, "Maybe[Boolean]"], # 6
@@ -6643,12 +6644,12 @@ main::f: {start: 0, returns: [10], nodes: [
   [Start], # 0
   [Constant, {const_type: string, value: O}, ~, ~, Str], # 1
   [MemStart], # 2
-  [Call, {class_name: O, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: new, package: main, param_names: [], want: scalar}, [1], 0, Object, 2, true], # 3
+  [Call, {class_name: O, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: new, package: main, param_names: [], want: scalar}, [1], 0, Object, 2, true], # 3
   [PadAccess, {sigil: $, symbol: x}, ~, ~, Unknown, 3], # 4
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 5
   [Assign, ~, [4, 5], 3, Int, 3, true], # 6
   [PadAccess, {sigil: $, symbol: x}, ~, ~, Unknown, 6], # 7
-  [Call, {class_name: O, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: m, package: main, param_names: [], want: void}, [3, 7], 6, Int, 6, true], # 8
+  [Call, {class_name: O, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: m, package: main, param_names: [], want: void}, [3, 7], 6, Int, 6, true], # 8
   [PadAccess, {sigil: $, symbol: x}, ~, ~, Unknown, 8], # 9
   [Return, ~, [9], 8, ~, 8]]} # 10
 ```
@@ -6686,11 +6687,11 @@ main::__PROGRAM__: {start: 0, returns: [12], nodes: [
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: S}, ~, ~, Str], # 2
   [MemStart], # 3
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [2, 1], 0, Str, 3, true], # 4
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [2, 1], 0, Str, 3, true], # 4
   [Coerce, {from_repr: Unknown, to_repr: Str}, [4], ~, Str], # 5
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 6
   [Constant, {const_type: string, value: P}, ~, ~, Str], # 7
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [1, 7], 4, Str, 4, true], # 8
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [1, 7], 4, Str, 4, true], # 8
   [Coerce, {from_repr: Unknown, to_repr: Str}, [8], ~, Str], # 9
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
   [Print, ~, [5, 6, 9, 10], 8, "Maybe[Boolean]"], # 11
@@ -6719,7 +6720,7 @@ main::f: {start: 0, returns: [32], nodes: [
   [ArrayLiteral, ~, [19, 17], ~, Array], # 20
   [ArrayLiteral, ~, ~, ~, Array], # 21
   [TernaryExpr, ~, [18, 20, 21], ~, Array], # 22
-  [Call, {class_name: K, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: new, package: main, param_names: [], want: scalar}, [3, 4, 5, 16, 22], 10, Object, 10, true], # 23
+  [Call, {class_name: K, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: new, package: main, param_names: [], want: scalar}, [3, 4, 5, 16, 22], 10, Object, 10, true], # 23
   [PostfixDeref, {sigil: "%"}, [23], 23, Hash, 23, true], # 24
   [Loop, {bound: entry}, [24], 24], # 25
   [Phi, {region: 25}, [2, 45], ~, Array], # 26
@@ -6771,7 +6772,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
   [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
   [Print, ~, [4, 5], 3, "Maybe[Boolean]"], # 6
@@ -6787,8 +6788,8 @@ main::f: {start: 0, returns: [25], nodes: [
   [ArrayLiteral, {sigil: "@", symbol: p}, [6], 0, Array], # 7
   [Assign, ~, [5, 7], 7, List, 4, true], # 8
   [MakeCell, {captured_written: false, cell_name: "@p"}, [3], 8, Ref, 8, true], # 9
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: main::f::__ANON__:1:4, package: main, param_names: [], want: void}, [2], 9, Int, 9, true], # 10
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: main::f::__ANON__:1:4, package: main, param_names: [], want: void}, [1], 10, Int, 10, true], # 11
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: main::f::__ANON__:1:4, package: main, param_names: [], want: void}, [2], 9, Int, 9, true], # 10
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: main::f::__ANON__:1:4, package: main, param_names: [], want: void}, [1], 10, Int, 10, true], # 11
   [EntryDef, {package: main, sigil: $, symbol: "\""}, ~, ~, Scalar, 11], # 12
   [Coerce, {from_repr: Scalar, to_repr: Str}, [12], ~, Str], # 13
   [PadAccess, {shared: 1, sigil: "@", symbol: p}, ~, ~, Array, 11], # 14
@@ -6798,7 +6799,7 @@ main::f: {start: 0, returns: [25], nodes: [
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 18
   [ArrayLiteral, {sigil: "@", symbol: p}, ~, 11, Array], # 19
   [Assign, ~, [14, 19], 19, List, 11, true], # 20
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: main::f::__ANON__:1:4, package: main, param_names: [], want: void}, [18], 20, Int, 20, true], # 21
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: main::f::__ANON__:1:4, package: main, param_names: [], want: void}, [18], 20, Int, 20, true], # 21
   [PadAccess, {shared: 1, sigil: "@", symbol: p}, ~, ~, Array, 21], # 22
   [Call, {dispatch_kind: builtin, name: join, param_names: []}, [13, 22], ~, Str, 21], # 23
   [Concat, ~, [17, 23], ~, Str], # 24
@@ -6837,7 +6838,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
   [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
   [Print, ~, [4, 5], 3, "Maybe[Boolean]"], # 6
@@ -6858,14 +6859,14 @@ main::f: {start: 0, returns: [27], nodes: [
   [Call, {dispatch_kind: builtin, name: sort, param_names: [], sort_cmp: string, sort_order: ascending}, [11], ~, List, 9], # 12
   [Constant, {const_type: string, value: "|"}, ~, ~, Str], # 13
   [Constant, {const_type: string, value: b}, ~, ~, Str], # 14
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: main::f::__ANON__:1:4, package: main, param_names: [], want: void}, [14], 9, Int, 9, true], # 15
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: main::f::__ANON__:1:4, package: main, param_names: [], want: void}, [14], 9, Int, 9, true], # 15
   [PadAccess, {shared: 1, sigil: "%", symbol: h}, ~, ~, Hash, 15], # 16
   [Call, {dispatch_kind: builtin, name: keys, param_names: [], want: list}, [16], ~, List, 15], # 17
   [Call, {dispatch_kind: builtin, name: sort, param_names: [], sort_cmp: string, sort_order: ascending}, [17], ~, List, 15], # 18
   [Constant, {const_type: string, value: c}, ~, ~, Str], # 19
   [HashLiteral, {sigil: "%", symbol: h}, ~, 15, Hash], # 20
   [Assign, ~, [16, 20], 20, List, 15, true], # 21
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: main::f::__ANON__:1:4, package: main, param_names: [], want: void}, [19], 21, Int, 21, true], # 22
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: main::f::__ANON__:1:4, package: main, param_names: [], want: void}, [19], 21, Int, 21, true], # 22
   [PadAccess, {shared: 1, sigil: "%", symbol: h}, ~, ~, Hash, 22], # 23
   [Call, {dispatch_kind: builtin, name: keys, param_names: [], want: list}, [23], ~, List, 22], # 24
   [Call, {dispatch_kind: builtin, name: sort, param_names: [], sort_cmp: string, sort_order: ascending}, [24], ~, List, 22], # 25
@@ -6942,7 +6943,7 @@ main::__PROGRAM__: {start: 0, returns: [23], nodes: [
   [Assign, ~, [29, 30], 28, Int, 4, true], # 31
   [Subscript, {kind: array}, [12, 26], ~, Scalar], # 32
   [PadAccess, {sigil: $, symbol: i}, ~, ~, Unknown, 31], # 33
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 5, name: main::__PROGRAM__::__ANON__:3:17, package: main, param_names: [], want: scalar}, [33, 10], 31, Num, 31, true], # 34
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 5, name: main::__PROGRAM__::__ANON__:3:17, package: main, param_names: [], want: scalar}, [33, 10], 31, Num, 31, true], # 34
   [Call, {dispatch_kind: builtin, name: push, param_names: []}, [17, 34], 34, Int, 34, true], # 35
   [PadAccess, {sigil: $, symbol: i}, ~, ~, Unknown, 35], # 36
   [Assign, {if_changed: true}, [32, 36], 35, Unknown, 35, true], # 37
@@ -6986,7 +6987,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
   [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
   [Print, ~, [4, 5], 3, "Maybe[Boolean]"], # 6
@@ -7012,7 +7013,7 @@ main::f: {start: 0, returns: [9], nodes: [
   [PadAccess, {sigil: $, symbol: "n"}, ~, ~, Unknown, 13], # 17
   [Assign, ~, [17, 13], 13, Int, 13, true], # 18
   [PadAccess, {sigil: $, symbol: "n"}, ~, ~, Unknown, 18], # 19
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::g, package: main, param_names: [], want: scalar}, [19], 16, Str, 18, true], # 20
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::g, package: main, param_names: [], want: scalar}, [19], 16, Str, 18, true], # 20
   [Coerce, {from_repr: Unknown, to_repr: Str}, [20], ~, Str], # 21
   [Concat, ~, [3, 21], ~, Str]]} # 22
 main::g: {start: 0, returns: [10], nodes: [
@@ -7060,13 +7061,13 @@ main::__PROGRAM__: {start: 0, returns: [21], nodes: [
   [HashLiteral, ~, [6, 7], 0, HashRef], # 8
   [HashLiteral, {sigil: "%", symbol: h}, [2, 8], 8, Hash], # 9
   [Assign, ~, [5, 9], 9, List, 4, true], # 10
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [2, 3], 10, Scalar, 10, true], # 11
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [2, 3], 10, Scalar, 10, true], # 11
   [Coerce, {from_repr: Unknown, to_repr: Str}, [11], ~, Str], # 12
   [Constant, {const_type: string, value: b}, ~, ~, Str], # 13
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [13, 3], 11, Scalar, 11, true], # 14
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [13, 3], 11, Scalar, 11, true], # 14
   [Coerce, {from_repr: Unknown, to_repr: Str}, [14], ~, Str], # 15
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 16
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [2, 16], 14, Scalar, 14, true], # 17
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [2, 16], 14, Scalar, 14, true], # 17
   [Coerce, {from_repr: Unknown, to_repr: Str}, [17], ~, Str], # 18
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 19
   [Print, ~, [12, 15, 18, 19], 17, "Maybe[Boolean]"], # 20
@@ -7139,7 +7140,7 @@ K::g: {start: 0, returns: [19], nodes: [
   [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
   [Constant, {const_type: string, value: s}, ~, ~, Str], # 8
   [Subscript, {kind: hash}, [1, 8], ~, Scalar, 6], # 9
-  [PostfixDeref, {eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, package: K, sigil: "@", strict: true}, [9], 6, Array, 6, true], # 10
+  [PostfixDeref, {eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 2, package: K, sigil: "@", strict: true}, [9], 6, Array, 6, true], # 10
   [Count, ~, [10], ~, Int, 10], # 11
   [Coerce, {from_repr: Int, to_repr: Str}, [11], ~, Str], # 12
   [Concat, ~, [7, 12], ~, Str], # 13
@@ -7155,8 +7156,8 @@ main::__PROGRAM__: {start: 0, returns: [10], nodes: [
   [PackageMark, {package: K}, ~, 0], # 2
   [PackageMark, {package: main}, ~, 2], # 3
   [MemStart], # 4
-  [Call, {class_name: K, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: new, package: main, param_names: [], want: scalar}, ~, 3, Object, 4, true], # 5
-  [Call, {class_name: K, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: g, package: main, param_names: [], want: list}, [5], 5, Str, 5, true], # 6
+  [Call, {class_name: K, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: new, package: main, param_names: [], want: scalar}, ~, 3, Object, 4, true], # 5
+  [Call, {class_name: K, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: g, package: main, param_names: [], want: list}, [5], 5, Str, 5, true], # 6
   [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
   [Print, ~, [7, 8], 6, "Maybe[Boolean]"], # 9
@@ -7174,7 +7175,7 @@ main::__PROGRAM__: {start: 0, returns: [10], nodes: [
   [Constant, {const_type: string, value: experimental.pm}, ~, ~, Str], # 3
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
-  [Call, {class_name: experimental, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Call, {class_name: experimental, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
   [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 ```
 
@@ -7202,7 +7203,7 @@ main::__PROGRAM__: {start: 0, returns: [8], nodes: [
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: "ab@xcd"}, ~, ~, Str], # 2
   [MemStart], # 3
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::run, package: main, param_names: [], want: list}, [2], 0, Str, 3, true], # 4
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::run, package: main, param_names: [], want: list}, [2], 0, Str, 3, true], # 4
   [Coerce, {from_repr: Unknown, to_repr: Str}, [4], ~, Str], # 5
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 6
   [Print, ~, [5, 6], 4, "Maybe[Boolean]"], # 7
@@ -7247,7 +7248,7 @@ main::run: {start: 0, returns: [15], nodes: [
   [Proj, {index: 1}, [25]], # 26
   [Assign, ~, [17, 21], 26, Scalar, 13, true], # 27
   [Proj, {index: 0}, [25]], # 28
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::g, package: main, param_names: [], want: scalar}, [16, 17], 28, Num, 13, true], # 29
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::g, package: main, param_names: [], want: scalar}, [16, 17], 28, Num, 13, true], # 29
   [PadAccess, {sigil: $, symbol: pos}, ~, ~, Unknown, 29], # 30
   [Assign, ~, [30, 29], 29, Num, 29, true], # 31
   [Region, {head: 9}, [27, 31]], # 32
@@ -7289,11 +7290,11 @@ main::__PROGRAM__: {start: 0, returns: [12], nodes: [
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: "ab@xcd@yz"}, ~, ~, Str], # 2
   [MemStart], # 3
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 11, name: main::run, package: main, param_names: [], want: list}, [2], 0, Str, 3, true], # 4
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 11, name: main::run, package: main, param_names: [], want: list}, [2], 0, Str, 3, true], # 4
   [Coerce, {from_repr: Unknown, to_repr: Str}, [4], ~, Str], # 5
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 6
   [Constant, {const_type: string, value: "ab@x"}, ~, ~, Str], # 7
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 11, name: main::run, package: main, param_names: [], want: list}, [7], 4, Str, 4, true], # 8
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 11, name: main::run, package: main, param_names: [], want: list}, [7], 4, Str, 4, true], # 8
   [Coerce, {from_repr: Unknown, to_repr: Str}, [8], ~, Str], # 9
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
   [Print, ~, [5, 6, 9, 10], 8, "Maybe[Boolean]"], # 11
@@ -7394,7 +7395,7 @@ main::__PROGRAM__: {start: 0, returns: [10], nodes: [
   [Constant, {const_type: string, value: b}, ~, ~, Str], # 3
   [Constant, {const_type: string, value: c}, ~, ~, Str], # 4
   [MemStart], # 5
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, [2, 3, 4], 0, Unknown, 5, true], # 6
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, [2, 3, 4], 0, Unknown, 5, true], # 6
   [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
   [Print, ~, [7, 8], 6, "Maybe[Boolean]"], # 9
@@ -7428,7 +7429,7 @@ main::f: {start: 0, returns: [35], nodes: [
   [StrEq, ~, [23, 24], ~, Boolean], # 25
   [If, ~, [20, 25], 20], # 26
   [Proj, {index: 0}, [26]], # 27
-  [Unwind, {eval_id: 1, file: "/tmp/yDlL8UMbFX/case.pl", line: 1}, [22], 27, ~, 20], # 28
+  [Unwind, {eval_id: 1, file: "/tmp/mvrHQew3rs/case.pl", line: 1}, [22], 27, ~, 20], # 28
   [Exc, ~, [28]], # 29
   [Region, {catch: true, eval_id: 1}, [29]], # 30
   [EntryWrite, ~, [21, 29], 30, Unknown, 20, true], # 31
@@ -7469,10 +7470,10 @@ main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 2
   [MemStart], # 3
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [2], 0, Unknown, 3, true], # 4
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [2], 0, Unknown, 3, true], # 4
   [Coerce, {from_repr: Unknown, to_repr: Str}, [4], ~, Str], # 5
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 6
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [6], 4, Unknown, 4, true], # 7
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [6], 4, Unknown, 4, true], # 7
   [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
   [Print, ~, [5, 8, 9], 7, "Maybe[Boolean]"], # 10
@@ -7495,7 +7496,7 @@ main::f: {start: 0, returns: [40], nodes: [
   [Proj, {index: 1}, [13]], # 14
   [Constant, {const_type: string, value: "no\n"}, ~, ~, Str], # 15
   [Proj, {index: 0}, [13]], # 16
-  [Unwind, {eval_id: 1, file: "/tmp/yDlL8UMbFX/case.pl", line: 2}, [15], 16, ~, 9], # 17
+  [Unwind, {eval_id: 1, file: "/tmp/mvrHQew3rs/case.pl", line: 2}, [15], 16, ~, 9], # 17
   [Region, {head: 13}, [14, 17]], # 18
   [Assign, ~, [10, 11], 18, Int, 9, true], # 19
   [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 19], # 20
@@ -7532,7 +7533,7 @@ main::f: {start: 0, returns: [40], nodes: [
   [Constant, {const_type: string, value: warnings.pm}, ~, ~, Str], # 2
   [MemStart], # 3
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [2], 0, Unknown, 3, true], # 4
-  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: unimport, package: main, param_names: []}, [1], 4, Unknown, 4, true], # 5
+  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: unimport, package: main, param_names: []}, [1], 4, Unknown, 4, true], # 5
   [Return, {implicit: true}, [5], 5, ~, 5]]} # 6
 ```
 
@@ -7606,7 +7607,7 @@ main::__PROGRAM__: {start: 0, returns: [20], nodes: [
   [Subscript, {kind: array}, [14, 23], ~, Scalar], # 29
   [Constant, {const_type: string, value: O}, ~, ~, Str], # 30
   [PadAccess, {sigil: $, symbol: x}, ~, ~, Unknown, 28], # 31
-  [Call, {class_name: O, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: m, package: main, param_names: [], want: void}, [30, 31], 28, Scalar, 28, true], # 32
+  [Call, {class_name: O, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: m, package: main, param_names: [], want: void}, [30, 31], 28, Scalar, 28, true], # 32
   [PadAccess, {sigil: $, symbol: x}, ~, ~, Unknown, 32], # 33
   [Assign, {if_changed: true}, [29, 33], 32, Unknown, 32, true], # 34
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 35
@@ -7638,7 +7639,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: main::f, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: main::f, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
   [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
   [Print, ~, [4, 5], 3, "Maybe[Boolean]"], # 6
@@ -7746,7 +7747,7 @@ main::__PROGRAM__: {start: 0, returns: [16], nodes: [
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 9
   [HashLiteral, ~, [6, 7, 8, 9], 5, HashRef], # 10
   [MemStart], # 11
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [5, 10], 10, Str, 11, true], # 12
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [5, 10], 10, Str, 11, true], # 12
   [Coerce, {from_repr: Unknown, to_repr: Str}, [12], ~, Str], # 13
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 14
   [Print, ~, [13, 14], 12, "Maybe[Boolean]"], # 15
@@ -7825,8 +7826,8 @@ main::__PROGRAM__: {start: 0, returns: [10], nodes: [
   [PackageMark, {package: K}, ~, 0], # 2
   [PackageMark, {package: main}, ~, 2], # 3
   [MemStart], # 4
-  [Call, {class_name: K, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: new, package: main, param_names: [], want: scalar}, ~, 3, Object, 4, true], # 5
-  [Call, {class_name: K, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: s, package: main, param_names: [], want: list}, [5], 5, Str, 5, true], # 6
+  [Call, {class_name: K, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: new, package: main, param_names: [], want: scalar}, ~, 3, Object, 4, true], # 5
+  [Call, {class_name: K, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: s, package: main, param_names: [], want: list}, [5], 5, Str, 5, true], # 6
   [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
   [Print, ~, [7, 8], 6, "Maybe[Boolean]"], # 9
@@ -7844,7 +7845,7 @@ main::__PROGRAM__: {start: 0, returns: [10], nodes: [
   [Constant, {const_type: string, value: experimental.pm}, ~, ~, Str], # 3
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
-  [Call, {class_name: experimental, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Call, {class_name: experimental, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
   [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 ```
 
@@ -7873,12 +7874,12 @@ main::__PROGRAM__: {start: 0, returns: [15], nodes: [
   [Constant, {const_type: string, value: "y"}, ~, ~, Str], # 3
   [Constant, {const_type: string, value: z}, ~, ~, Str], # 4
   [MemStart], # 5
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::order, package: main, param_names: [], want: list}, [2, 3, 4], 0, Str, 5, true], # 6
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::order, package: main, param_names: [], want: list}, [2, 3, 4], 0, Str, 5, true], # 6
   [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 8
   [Constant, {const_type: string, value: p}, ~, ~, Str], # 9
   [Constant, {const_type: string, value: q}, ~, ~, Str], # 10
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::order, package: main, param_names: [], want: list}, [9, 10], 6, Str, 6, true], # 11
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::order, package: main, param_names: [], want: list}, [9, 10], 6, Str, 6, true], # 11
   [Coerce, {from_repr: Unknown, to_repr: Str}, [11], ~, Str], # 12
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 13
   [Print, ~, [7, 8, 12, 13], 11, "Maybe[Boolean]"], # 14
@@ -7952,7 +7953,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
   [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
   [Print, ~, [4, 5], 3, "Maybe[Boolean]"], # 6
@@ -7968,9 +7969,9 @@ main::f: {start: 0, returns: [22], nodes: [
   [ArrayLiteral, ~, ~, ~, Array], # 7
   [Assign, ~, [6, 7], 0, List, 5, true], # 8
   [MakeCell, {captured_written: false, cell_name: "@seen"}, [4], 8, Ref, 8, true], # 9
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::f::__ANON__:2:3, package: main, param_names: [], want: scalar}, [1, 2, 3], 9, Int, 9, true], # 10
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::f::__ANON__:2:3, package: main, param_names: [], want: scalar}, [1, 2, 3], 9, Int, 9, true], # 10
   [Constant, {const_type: integer, value: "4"}, ~, ~, Int], # 11
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::f::__ANON__:2:3, package: main, param_names: [], want: scalar}, [11], 10, Int, 10, true], # 12
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::f::__ANON__:2:3, package: main, param_names: [], want: scalar}, [11], 10, Int, 10, true], # 12
   [Add, ~, [10, 12], ~, Int], # 13
   [Coerce, {from_repr: Unknown, to_repr: Str}, [13], ~, Str], # 14
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 15
@@ -8071,8 +8072,8 @@ main::__PROGRAM__: {start: 0, returns: [10], nodes: [
   [PackageMark, {package: K}, ~, 0], # 2
   [PackageMark, {package: main}, ~, 2], # 3
   [MemStart], # 4
-  [Call, {class_name: K, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: new, package: main, param_names: [], want: scalar}, ~, 3, Object, 4, true], # 5
-  [Call, {class_name: K, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: s, package: main, param_names: [], want: list}, [5], 5, Str, 5, true], # 6
+  [Call, {class_name: K, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: new, package: main, param_names: [], want: scalar}, ~, 3, Object, 4, true], # 5
+  [Call, {class_name: K, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: s, package: main, param_names: [], want: list}, [5], 5, Str, 5, true], # 6
   [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
   [Print, ~, [7, 8], 6, "Maybe[Boolean]"], # 9
@@ -8090,7 +8091,7 @@ main::__PROGRAM__: {start: 0, returns: [10], nodes: [
   [Constant, {const_type: string, value: experimental.pm}, ~, ~, Str], # 3
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
-  [Call, {class_name: experimental, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Call, {class_name: experimental, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
   [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 ```
 
@@ -8126,10 +8127,10 @@ main::__PROGRAM__: {start: 0, returns: [12], nodes: [
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 3
   [MemStart], # 4
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [2, 3, 2], 0, Str, 4, true], # 5
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [2, 3, 2], 0, Str, 4, true], # 5
   [Coerce, {from_repr: Unknown, to_repr: Str}, [5], ~, Str], # 6
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 7
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [2, 3, 7], 5, Str, 5, true], # 8
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [2, 3, 7], 5, Str, 5, true], # 8
   [Coerce, {from_repr: Unknown, to_repr: Str}, [8], ~, Str], # 9
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
   [Print, ~, [6, 9, 10], 8, "Maybe[Boolean]"], # 11
@@ -8145,9 +8146,9 @@ main::f: {start: 0, returns: [40], nodes: [
   [Parameter, {index: 1, name: $r, sigil: $}, ~, ~, Unknown], # 7
   [Assign, ~, [6, 7], 5, Unknown, 5, true], # 8
   [PadAccess, {sigil: $, symbol: l}, ~, ~, Unknown, 8], # 9
-  [Call, {class_name: O, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: m, package: main, param_names: [], want: void}, [1, 9], 8, Scalar, 8, true], # 10
+  [Call, {class_name: O, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: m, package: main, param_names: [], want: void}, [1, 9], 8, Scalar, 8, true], # 10
   [PadAccess, {sigil: $, symbol: r}, ~, ~, Unknown, 10], # 11
-  [Call, {class_name: O, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: m, package: main, param_names: [], want: void}, [1, 11], 10, Scalar, 10, true], # 12
+  [Call, {class_name: O, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: m, package: main, param_names: [], want: void}, [1, 11], 10, Scalar, 10, true], # 12
   [PadAccess, {sigil: $, symbol: c}, ~, ~, Unknown, 12], # 13
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 14
   [Assign, ~, [13, 14], 12, Undef, 12, true], # 15
@@ -8167,7 +8168,7 @@ main::f: {start: 0, returns: [40], nodes: [
   [Phi, {memory: true, predecessors: [24, 26], region: 28}, [25, 27], ~, List], # 29
   [PadAccess, {sigil: $, symbol: c}, ~, ~, Unknown, 29], # 30
   [PadAccess, {sigil: $, symbol: j}, ~, ~, Unknown, 29], # 31
-  [Call, {class_name: O, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: m, package: main, param_names: [], want: void}, [1, 30, 31], 28, Scalar, 29, true], # 32
+  [Call, {class_name: O, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: m, package: main, param_names: [], want: void}, [1, 30, 31], 28, Scalar, 29, true], # 32
   [PadAccess, {sigil: $, symbol: c}, ~, ~, Str, 32], # 33
   [Coerce, {from_repr: Unknown, to_repr: Str}, [33], ~, Str], # 34
   [Constant, {const_type: string, value: ">"}, ~, ~, Str], # 35
@@ -8208,7 +8209,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
   [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
   [Print, ~, [4, 5], 3, "Maybe[Boolean]"], # 6
@@ -8269,7 +8270,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
   [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
   [Print, ~, [4, 5], 3, "Maybe[Boolean]"], # 6
@@ -8286,7 +8287,7 @@ main::f: {start: 0, returns: [13], nodes: [
   [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
   [Concat, ~, [4, 8], ~, Str], # 9
   [MemStart], # 10
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::g, package: main, param_names: [], want: list}, ~, 0, List, 10, true], # 11
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::g, package: main, param_names: [], want: list}, ~, 0, List, 10, true], # 11
   [Assign, {targets: 2}, [1, 5, 11], 11, List, 11, true], # 12
   [Return, {implicit: true}, [9], 12, ~, 12]]} # 13
 main::g: {start: 0, returns: [6], nodes: [
@@ -8323,10 +8324,10 @@ main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
   [MemStart], # 3
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [2], 0, Str, 3, true], # 4
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [2], 0, Str, 3, true], # 4
   [Coerce, {from_repr: Unknown, to_repr: Str}, [4], ~, Str], # 5
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 6
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [6], 4, Str, 4, true], # 7
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [6], 4, Str, 4, true], # 7
   [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
   [Print, ~, [5, 8, 9], 7, "Maybe[Boolean]"], # 10
@@ -8341,7 +8342,7 @@ main::f: {start: 0, returns: [15], nodes: [
   [If, ~, [0, 5], 0], # 6
   [Proj, {index: 1}, [6]], # 7
   [Proj, {index: 0}, [6]], # 8
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::g, package: main, param_names: [], want: list}, ~, 8, List, 4, true], # 9
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::g, package: main, param_names: [], want: list}, ~, 8, List, 4, true], # 9
   [Assign, {targets: 1}, [2, 9], 9, List, 9, true], # 10
   [Region, {head: 6}, [7, 10]], # 11
   [Phi, {predecessors: [7, 8], region: 11}, [1, 2], ~, Unknown], # 12
@@ -8397,7 +8398,7 @@ main::__PROGRAM__: {start: 0, returns: [8], nodes: [
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: "a\\nb-d]"}, ~, ~, Str], # 2
   [MemStart], # 3
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 18, name: main::f, package: main, param_names: [], want: list}, [2], 0, Str, 3, true], # 4
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 18, name: main::f, package: main, param_names: [], want: list}, [2], 0, Str, 3, true], # 4
   [Coerce, {from_repr: Unknown, to_repr: Str}, [4], ~, Str], # 5
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 6
   [Print, ~, [5, 6], 4, "Maybe[Boolean]"], # 7
@@ -8456,7 +8457,7 @@ main::f: {start: 0, returns: [25], nodes: [
   [StrEq, ~, [14, 34], ~, Boolean], # 35
   [If, ~, [33, 35], 33], # 36
   [Proj, {index: 0}, [36]], # 37
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 9, name: main::esc, package: main, param_names: [], want: list}, [27, 32], 37, List, 9, true], # 38
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 9, name: main::esc, package: main, param_names: [], want: list}, [27, 32], 37, List, 9, true], # 38
   [Assign, {targets: 2}, [31, 28, 38], 38, List, 38, true], # 39
   [Call, {dispatch_kind: builtin, name: ord, param_names: []}, [13], ~, Int], # 40
   [Proj, {index: 1}, [36]], # 41
@@ -8515,7 +8516,7 @@ main::__PROGRAM__: {start: 0, returns: [8], nodes: [
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: "a,b"}, ~, ~, Str], # 2
   [MemStart], # 3
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [2], 0, Str, 3, true], # 4
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [2], 0, Str, 3, true], # 4
   [Coerce, {from_repr: Unknown, to_repr: Str}, [4], ~, Str], # 5
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 6
   [Print, ~, [5, 6], 4, "Maybe[Boolean]"], # 7
@@ -8532,7 +8533,7 @@ main::f: {start: 0, returns: [20], nodes: [
   [Ref, ~, [7], ~, ArrayRef], # 8
   [Constant, {const_type: string, value: z}, ~, ~, Str], # 9
   [Call, {dispatch_kind: builtin, name: push, param_names: []}, [7, 9], 7, Int, 4, true], # 10
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::g, package: main, param_names: [], want: scalar}, [8], 10, Int, 10, true], # 11
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::g, package: main, param_names: [], want: scalar}, [8], 10, Int, 10, true], # 11
   [Coerce, {from_repr: Unknown, to_repr: Str}, [11], ~, Str], # 12
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 13
   [Concat, ~, [12, 13], ~, Str], # 14
@@ -8548,7 +8549,7 @@ main::g: {start: 0, returns: [7], nodes: [
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 2
   [MemStart], # 3
   [Subscript, {kind: array}, [1, 2], ~, Scalar, 3], # 4
-  [PostfixDeref, {eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, package: main, sigil: "@", strict: false}, [4], 0, Array, 3, true], # 5
+  [PostfixDeref, {eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 1, package: main, sigil: "@", strict: false}, [4], 0, Array, 3, true], # 5
   [Count, ~, [5], ~, Int, 5], # 6
   [Return, {implicit: true}, [6], 5, ~, 5]]} # 7
 ```
@@ -8581,10 +8582,10 @@ main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 4
   [Constant, {const_type: integer, value: "4"}, ~, ~, Int], # 5
   [MemStart], # 6
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: main::f, package: main, param_names: [], want: list}, [2, 3, 4, 5], 0, Str, 6, true], # 7
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: main::f, package: main, param_names: [], want: list}, [2, 3, 4, 5], 0, Str, 6, true], # 7
   [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 9
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: main::f, package: main, param_names: [], want: list}, [2, 3], 7, Str, 7, true], # 10
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: main::f, package: main, param_names: [], want: list}, [2, 3], 7, Str, 7, true], # 10
   [Coerce, {from_repr: Unknown, to_repr: Str}, [10], ~, Str], # 11
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 12
   [Print, ~, [8, 9, 11, 12], 10, "Maybe[Boolean]"], # 13
@@ -8612,7 +8613,7 @@ main::f: {start: 0, returns: [50], nodes: [
   [PostfixDeref, {sigil: $}, [16], ~, Scalar, 17], # 19
   [Subscript, {kind: array}, [10, 11], ~, Scalar, 17], # 20
   [TernaryExpr, ~, [13, 19, 20], ~, Scalar], # 21
-  [Call, {dispatch_kind: direct, eval_id: 3, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::g, package: main, param_names: [], want: scalar}, [21], 17, Num, 17, true], # 22
+  [Call, {dispatch_kind: direct, eval_id: 3, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::g, package: main, param_names: [], want: scalar}, [21], 17, Num, 17, true], # 22
   [PadAccess, {sigil: $, symbol: c}, ~, ~, Unknown, 22], # 23
   [Assign, ~, [23, 22], 22, Num, 22, true], # 24
   [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 24], # 25
@@ -8663,7 +8664,7 @@ main::g: {start: 0, returns: [16], nodes: [
   [Proj, {index: 1}, [10]], # 11
   [Constant, {const_type: string, value: "no\n"}, ~, ~, Str], # 12
   [Proj, {index: 0}, [10]], # 13
-  [Unwind, {file: "/tmp/yDlL8UMbFX/case.pl", line: 2}, [12], 13, ~, 3], # 14
+  [Unwind, {file: "/tmp/mvrHQew3rs/case.pl", line: 2}, [12], 13, ~, 3], # 14
   [Region, {head: 10}, [11, 14]], # 15
   [Return, ~, [7], 15, ~, 3]]} # 16
 "BEGIN 1": {start: 0, returns: [4], nodes: [
@@ -8678,7 +8679,7 @@ main::g: {start: 0, returns: [16], nodes: [
   [Constant, {const_type: string, value: warnings.pm}, ~, ~, Str], # 2
   [MemStart], # 3
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [2], 0, Unknown, 3, true], # 4
-  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: unimport, package: main, param_names: []}, [1], 4, Unknown, 4, true], # 5
+  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: unimport, package: main, param_names: []}, [1], 4, Unknown, 4, true], # 5
   [Return, {implicit: true}, [5], 5, ~, 5]]} # 6
 ```
 
@@ -8710,7 +8711,7 @@ main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 4
   [Constant, {const_type: integer, value: "4"}, ~, ~, Int], # 5
   [MemStart], # 6
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: main::f, package: main, param_names: [], want: list}, [2, 3, 4, 5], 0, Str, 6, true], # 7
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: main::f, package: main, param_names: [], want: list}, [2, 3, 4, 5], 0, Str, 6, true], # 7
   [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
   [Print, ~, [8, 9], 7, "Maybe[Boolean]"], # 10
@@ -8751,7 +8752,7 @@ main::f: {start: 0, returns: [17], nodes: [
   [PostfixDeref, {sigil: $}, [29], ~, Scalar, 30], # 32
   [Subscript, {kind: array}, [18, 20], ~, Scalar, 30], # 33
   [TernaryExpr, ~, [23, 32, 33], ~, Scalar], # 34
-  [Call, {dispatch_kind: direct, eval_id: 3, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::g, package: main, param_names: [], want: scalar}, [34], 30, Num, 30, true], # 35
+  [Call, {dispatch_kind: direct, eval_id: 3, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::g, package: main, param_names: [], want: scalar}, [34], 30, Num, 30, true], # 35
   [PadAccess, {sigil: $, symbol: c}, ~, ~, Unknown, 35], # 36
   [Assign, ~, [36, 35], 35, Num, 35, true], # 37
   [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 37], # 38
@@ -8793,7 +8794,7 @@ main::g: {start: 0, returns: [16], nodes: [
   [Proj, {index: 1}, [10]], # 11
   [Constant, {const_type: string, value: "no\n"}, ~, ~, Str], # 12
   [Proj, {index: 0}, [10]], # 13
-  [Unwind, {file: "/tmp/yDlL8UMbFX/case.pl", line: 2}, [12], 13, ~, 3], # 14
+  [Unwind, {file: "/tmp/mvrHQew3rs/case.pl", line: 2}, [12], 13, ~, 3], # 14
   [Region, {head: 10}, [11, 14]], # 15
   [Return, ~, [7], 15, ~, 3]]} # 16
 "BEGIN 1": {start: 0, returns: [4], nodes: [
@@ -8808,7 +8809,7 @@ main::g: {start: 0, returns: [16], nodes: [
   [Constant, {const_type: string, value: warnings.pm}, ~, ~, Str], # 2
   [MemStart], # 3
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [2], 0, Unknown, 3, true], # 4
-  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: unimport, package: main, param_names: []}, [1], 4, Unknown, 4, true], # 5
+  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: unimport, package: main, param_names: []}, [1], 4, Unknown, 4, true], # 5
   [Return, {implicit: true}, [5], 5, ~, 5]]} # 6
 ```
 
@@ -8840,10 +8841,10 @@ main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 4
   [Constant, {const_type: integer, value: "4"}, ~, ~, Int], # 5
   [MemStart], # 6
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: main::f, package: main, param_names: [], want: list}, [2, 3, 4, 5], 0, Str, 6, true], # 7
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: main::f, package: main, param_names: [], want: list}, [2, 3, 4, 5], 0, Str, 6, true], # 7
   [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 9
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: main::f, package: main, param_names: [], want: list}, [2, 3], 7, Str, 7, true], # 10
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: main::f, package: main, param_names: [], want: list}, [2, 3], 7, Str, 7, true], # 10
   [Coerce, {from_repr: Unknown, to_repr: Str}, [10], ~, Str], # 11
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 12
   [Print, ~, [8, 9, 11, 12], 10, "Maybe[Boolean]"], # 13
@@ -8870,7 +8871,7 @@ main::f: {start: 0, returns: [53], nodes: [
   [PostfixDeref, {sigil: $}, [15], ~, Scalar, 16], # 18
   [Subscript, {kind: array}, [8, 10], ~, Scalar, 16], # 19
   [TernaryExpr, ~, [12, 18, 19], ~, Scalar], # 20
-  [Call, {dispatch_kind: direct, eval_id: 3, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::g, package: main, param_names: [], want: scalar}, [20], 16, Num, 16, true], # 21
+  [Call, {dispatch_kind: direct, eval_id: 3, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::g, package: main, param_names: [], want: scalar}, [20], 16, Num, 16, true], # 21
   [PadAccess, {sigil: $, symbol: c}, ~, ~, Unknown, 21], # 22
   [Assign, ~, [22, 21], 21, Num, 21, true], # 23
   [EntryDef, {package: main, sigil: $, symbol: "@"}, ~, ~, Scalar, 23], # 24
@@ -8925,7 +8926,7 @@ main::g: {start: 0, returns: [16], nodes: [
   [Proj, {index: 1}, [10]], # 11
   [Constant, {const_type: string, value: "no\n"}, ~, ~, Str], # 12
   [Proj, {index: 0}, [10]], # 13
-  [Unwind, {file: "/tmp/yDlL8UMbFX/case.pl", line: 2}, [12], 13, ~, 3], # 14
+  [Unwind, {file: "/tmp/mvrHQew3rs/case.pl", line: 2}, [12], 13, ~, 3], # 14
   [Region, {head: 10}, [11, 14]], # 15
   [Return, ~, [7], 15, ~, 3]]} # 16
 "BEGIN 1": {start: 0, returns: [4], nodes: [
@@ -8940,7 +8941,7 @@ main::g: {start: 0, returns: [16], nodes: [
   [Constant, {const_type: string, value: warnings.pm}, ~, ~, Str], # 2
   [MemStart], # 3
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [2], 0, Unknown, 3, true], # 4
-  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: unimport, package: main, param_names: []}, [1], 4, Unknown, 4, true], # 5
+  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: unimport, package: main, param_names: []}, [1], 4, Unknown, 4, true], # 5
   [Return, {implicit: true}, [5], 5, ~, 5]]} # 6
 ```
 
@@ -8985,7 +8986,7 @@ main::__PROGRAM__: {start: 0, returns: [39], nodes: [
   [MemStart], # 16
   [Phi, {memory: true, region: 13}, [16, 69], ~, Unknown], # 17
   [Phi, {memory: true, region: 15}, [17], ~, Unknown], # 18
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: main::f, package: main, param_names: [], want: list}, [2, 3, 4], 15, Unknown, 18, true], # 19
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: main::f, package: main, param_names: [], want: list}, [2, 3, 4], 15, Unknown, 18, true], # 19
   [EntryDef, {package: main, sigil: $, symbol: "\""}, ~, ~, Scalar, 19], # 20
   [Coerce, {from_repr: Scalar, to_repr: Str}, [20], ~, Str], # 21
   [ArrayLiteral, ~, ~, ~, Array], # 22
@@ -9035,7 +9036,7 @@ main::__PROGRAM__: {start: 0, returns: [39], nodes: [
   [ListAppend, {collector: map}, [33, 65], ~, Array], # 66
   [Proj, {index: 0}, [13]], # 67
   [LocalAlias, {name: _}, [62], 67, Unknown, 17], # 68
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::f, package: main, param_names: [], want: scalar}, [61], 68, Unknown, 17, true], # 69
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::f, package: main, param_names: [], want: scalar}, [61], 68, Unknown, 17, true], # 69
   [Constant, {const_type: string, value: u}, ~, ~, Str], # 70
   [DefinedOr, ~, [69, 70], ~, Unknown], # 71
   [ListAppend, {collector: map}, [23, 71], ~, Array]]} # 72
@@ -9150,28 +9151,28 @@ main::__PROGRAM__: {start: 0, returns: [60], nodes: [
   [Constant, {const_type: string, value: VarDecl}, ~, ~, Str], # 12
   [ArrayLiteral, ~, ~, 7, ArrayRef], # 13
   [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 14
-  [Call, {class_name: "N", dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: new, package: main, param_names: [], want: list}, [9, 12, 13, 14], 13, Object, 7, true], # 15
+  [Call, {class_name: "N", dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: new, package: main, param_names: [], want: list}, [9, 12, 13, 14], 13, Object, 7, true], # 15
   [ArrayLiteral, ~, [15], 15, ArrayRef], # 16
-  [Call, {class_name: "N", dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: new, package: main, param_names: [], want: list}, [9, 11, 16], 16, Object, 15, true], # 17
+  [Call, {class_name: "N", dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: new, package: main, param_names: [], want: list}, [9, 11, 16], 16, Object, 15, true], # 17
   [ArrayLiteral, ~, [17], 17, ArrayRef], # 18
   [Constant, {const_type: integer, value: "9"}, ~, ~, Int], # 19
-  [Call, {class_name: "N", dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: new, package: main, param_names: [], want: list}, [9, 10, 18, 19], 18, Object, 17, true], # 20
+  [Call, {class_name: "N", dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: new, package: main, param_names: [], want: list}, [9, 10, 18, 19], 18, Object, 17, true], # 20
   [Constant, {const_type: string, value: R}, ~, ~, Str], # 21
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: main::upd, package: main, param_names: [], want: void}, [8, 20, 21], 20, List, 20, true], # 22
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: main::upd, package: main, param_names: [], want: void}, [8, 20, 21], 20, List, 20, true], # 22
   [PadAccess, {sigil: $, symbol: s}, ~, ~, Unknown, 22], # 23
   [ArrayLiteral, ~, [1], 22, ArrayRef], # 24
-  [Call, {class_name: "N", dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: new, package: main, param_names: [], want: list}, [9, 11, 24], 24, Object, 22, true], # 25
+  [Call, {class_name: "N", dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: new, package: main, param_names: [], want: list}, [9, 11, 24], 24, Object, 22, true], # 25
   [ArrayLiteral, ~, [25], 25, ArrayRef], # 26
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 27
-  [Call, {class_name: "N", dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: new, package: main, param_names: [], want: list}, [9, 10, 26, 27], 26, Object, 25, true], # 28
+  [Call, {class_name: "N", dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: new, package: main, param_names: [], want: list}, [9, 10, 26, 27], 26, Object, 25, true], # 28
   [Constant, {const_type: string, value: Q}, ~, ~, Str], # 29
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: main::upd, package: main, param_names: [], want: void}, [23, 28, 29], 28, List, 28, true], # 30
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: main::upd, package: main, param_names: [], want: void}, [23, 28, 29], 28, List, 28, true], # 30
   [PadAccess, {sigil: $, symbol: s}, ~, ~, Unknown, 30], # 31
   [ArrayLiteral, ~, ~, 30, ArrayRef], # 32
   [Constant, {const_type: integer, value: "4"}, ~, ~, Int], # 33
-  [Call, {class_name: "N", dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: new, package: main, param_names: [], want: list}, [9, 10, 32, 33], 32, Object, 30, true], # 34
+  [Call, {class_name: "N", dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: new, package: main, param_names: [], want: list}, [9, 10, 32, 33], 32, Object, 30, true], # 34
   [Constant, {const_type: string, value: Z}, ~, ~, Str], # 35
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: main::upd, package: main, param_names: [], want: void}, [31, 34, 35], 34, List, 34, true], # 36
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: main::upd, package: main, param_names: [], want: void}, [31, 34, 35], 34, List, 34, true], # 36
   [PadAccess, {sigil: $, symbol: s}, ~, ~, Unknown, 36], # 37
   [Constant, {const_type: string, value: t}, ~, ~, Str], # 38
   [Subscript, {kind: hash}, [37, 38], 36, Scalar, 36], # 39
@@ -9191,7 +9192,7 @@ main::__PROGRAM__: {start: 0, returns: [60], nodes: [
   [PadAccess, {sigil: $, symbol: s}, ~, ~, Unknown, 50], # 53
   [Constant, {const_type: string, value: p}, ~, ~, Str], # 54
   [Subscript, {kind: hash}, [53, 54], 49, Scalar, 50, true], # 55
-  [PostfixDeref, {eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 5, package: main, sigil: "%", strict: false}, [55], 55, Hash, 55, true], # 56
+  [PostfixDeref, {eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 5, package: main, sigil: "%", strict: false}, [55], 55, Hash, 55, true], # 56
   [Call, {dispatch_kind: builtin, name: join, param_names: []}, [2, 56], ~, Str, 56], # 57
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 58
   [Print, ~, [51, 52, 57, 58], 56, "Maybe[Boolean]"], # 59
@@ -9222,13 +9223,13 @@ main::upd: {start: 0, returns: [87], nodes: [
   [ArrayLiteral, ~, ~, ~, List], # 2
   [PadAccess, {sigil: $, symbol: phi}, ~, ~, Unknown], # 3
   [MemStart], # 4
-  [Call, {dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: inputs, package: main, param_names: [], want: scalar}, [3], 0, Unknown, 4, true], # 5
+  [Call, {dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: inputs, package: main, param_names: [], want: scalar}, [3], 0, Unknown, 4, true], # 5
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 6
   [Defined, ~, [5], ~, Boolean], # 7
   [If, ~, [5, 7], 5], # 8
   [Proj, {index: 1}, [8]], # 9
   [Proj, {index: 0}, [8]], # 10
-  [PostfixDeref, {eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, package: main, sigil: "@", strict: false}, [5], 10, Array, 5, true], # 11
+  [PostfixDeref, {eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 2, package: main, sigil: "@", strict: false}, [5], 10, Array, 5, true], # 11
   [Region, {head: 8}, [9, 11]], # 12
   [Count, ~, [11], ~, Int, 11], # 13
   [Phi, {predecessors: [9, 10], region: 12}, [7, 13], ~, Scalar], # 14
@@ -9241,18 +9242,18 @@ main::upd: {start: 0, returns: [87], nodes: [
   [Not, ~, [20], ~, Boolean], # 21
   [If, ~, [19, 21], 19], # 22
   [Proj, {index: 1}, [22]], # 23
-  [Call, {dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: operation, package: main, param_names: [], want: scalar}, [19], 23, Unknown, 19, true], # 24
+  [Call, {dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: operation, package: main, param_names: [], want: scalar}, [19], 23, Unknown, 19, true], # 24
   [Coerce, {from_repr: Unknown, to_repr: Str}, [24], ~, Str], # 25
   [Constant, {const_type: string, value: PadAccess}, ~, ~, Str], # 26
   [StrEq, ~, [25, 26], ~, Boolean], # 27
   [If, ~, [24, 27], 24], # 28
   [Proj, {index: 0}, [28]], # 29
-  [Call, {dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: inputs, package: main, param_names: [], want: scalar}, [19], 29, Unknown, 24, true], # 30
+  [Call, {dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: inputs, package: main, param_names: [], want: scalar}, [19], 29, Unknown, 24, true], # 30
   [Subscript, {kind: array}, [30, 6], 30, Scalar, 30, true], # 31
   [Defined, ~, [31], ~, Boolean], # 32
   [If, ~, [31, 32], 31], # 33
   [Proj, {index: 0}, [33]], # 34
-  [Call, {dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: operation, package: main, param_names: [], want: scalar}, [31], 34, Unknown, 31, true], # 35
+  [Call, {dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: operation, package: main, param_names: [], want: scalar}, [31], 34, Unknown, 31, true], # 35
   [Coerce, {from_repr: Unknown, to_repr: Str}, [35], ~, Str], # 36
   [Constant, {const_type: string, value: VarDecl}, ~, ~, Str], # 37
   [StrEq, ~, [36, 37], ~, Boolean], # 38
@@ -9281,17 +9282,17 @@ main::upd: {start: 0, returns: [87], nodes: [
   [DefinedOr, ~, [59, 60], ~, Scalar], # 61
   [Subscript, {kind: hash}, [54, 56], ~, Scalar], # 62
   [Assign, ~, [62, 61], 60, Scalar, 58, true], # 63
-  [Call, {dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: id, package: main, param_names: [], want: scalar}, [31], 63, Unknown, 63, true], # 64
+  [Call, {dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: id, package: main, param_names: [], want: scalar}, [31], 63, Unknown, 63, true], # 64
   [Subscript, {kind: hash}, [61, 64], ~, Scalar], # 65
   [PadAccess, {sigil: $, symbol: ref}, ~, ~, Unknown], # 66
   [Assign, ~, [65, 66], 64, Unknown, 64, true], # 67
-  [Call, {dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: id, package: main, param_names: [], want: scalar}, [31], 67, Unknown, 67, true], # 68
+  [Call, {dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: id, package: main, param_names: [], want: scalar}, [31], 67, Unknown, 67, true], # 68
   [Subscript, {kind: hash}, [54, 55], 68, Scalar, 68], # 69
   [HashLiteral, ~, ~, 69, HashRef], # 70
   [DefinedOr, ~, [69, 70], ~, Scalar], # 71
   [Subscript, {kind: hash}, [54, 55], ~, Scalar], # 72
   [Assign, ~, [72, 71], 70, Scalar, 68, true], # 73
-  [Call, {dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: id, package: main, param_names: [], want: scalar}, [3], 73, Unknown, 73, true], # 74
+  [Call, {dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: id, package: main, param_names: [], want: scalar}, [3], 73, Unknown, 73, true], # 74
   [Subscript, {kind: hash}, [71, 74], ~, Scalar], # 75
   [Assign, ~, [75, 68], 74, Unknown, 74, true], # 76
   [Region, ~, [51, 76]], # 77
@@ -9340,11 +9341,11 @@ main::__PROGRAM__: {start: 0, returns: [18], nodes: [
   [Assign, ~, [3, 6], 6, HashRef, 2, true], # 7
   [PadAccess, {sigil: $, symbol: s}, ~, ~, Unknown, 7], # 8
   [Constant, {const_type: string, value: x}, ~, ~, Str], # 9
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [8, 9], 7, Str, 7, true], # 10
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [8, 9], 7, Str, 7, true], # 10
   [Coerce, {from_repr: Unknown, to_repr: Str}, [10], ~, Str], # 11
   [Constant, {const_type: string, value: " | "}, ~, ~, Str], # 12
   [PadAccess, {sigil: $, symbol: s}, ~, ~, Unknown, 10], # 13
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::h, package: main, param_names: [], want: list}, [13], 10, Str, 10, true], # 14
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::h, package: main, param_names: [], want: list}, [13], 10, Str, 10, true], # 14
   [Coerce, {from_repr: Unknown, to_repr: Str}, [14], ~, Str], # 15
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 16
   [Print, ~, [11, 12, 15, 16], 14, "Maybe[Boolean]"], # 17
@@ -9366,14 +9367,14 @@ main::f: {start: 0, returns: [27], nodes: [
   [DefinedOr, ~, [8, 12], ~, Scalar], # 13
   [Proj, {index: 0}, [10]], # 14
   [Region, {head: 10}, [14, 12]], # 15
-  [PostfixDeref, {eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, package: main, sigil: "%", strict: false}, [13], 15, Hash, 8, true], # 16
+  [PostfixDeref, {eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 2, package: main, sigil: "%", strict: false}, [13], 15, Hash, 8, true], # 16
   [PadAccess, {sigil: $, symbol: self}, ~, ~, Unknown, 16], # 17
   [Subscript, {kind: hash}, [17, 7], ~, Scalar], # 18
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 19
   [HashLiteral, ~, [16, 3, 19], 16, HashRef], # 20
   [Assign, {local: true}, [18, 20], 20, HashRef, 16, true], # 21
   [PadAccess, {sigil: $, symbol: self}, ~, ~, Unknown, 21], # 22
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::h, package: main, param_names: []}, [22], 21, Str, 21, true], # 23
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::h, package: main, param_names: []}, [22], 21, Str, 21, true], # 23
   [Subscript, {kind: hash}, [17, 7], ~, Scalar, 16], # 24
   [Exists, {kind: hash}, [17, 7], ~, Boolean, 16], # 25
   [ElemRestore, {at_return: 1, kind: hash}, [17, 7, 24, 25], 23, Unknown, 23, true], # 26
@@ -9470,15 +9471,15 @@ main::__PROGRAM__: {start: 0, returns: [24], nodes: [
   [Assign, ~, [3, 8], 8, HashRef, 2, true], # 9
   [PadAccess, {sigil: $, symbol: s}, ~, ~, Unknown, 9], # 10
   [Constant, {const_type: string, value: x}, ~, ~, Str], # 11
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [10, 11], 9, Str, 9, true], # 12
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [10, 11], 9, Str, 9, true], # 12
   [Coerce, {from_repr: Unknown, to_repr: Str}, [12], ~, Str], # 13
   [Constant, {const_type: string, value: " | "}, ~, ~, Str], # 14
   [PadAccess, {sigil: $, symbol: s}, ~, ~, Unknown, 12], # 15
   [Constant, {const_type: string, value: ""}, ~, ~, Str], # 16
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [15, 16], 12, Str, 12, true], # 17
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [15, 16], 12, Str, 12, true], # 17
   [Coerce, {from_repr: Unknown, to_repr: Str}, [17], ~, Str], # 18
   [PadAccess, {sigil: $, symbol: s}, ~, ~, Unknown, 17], # 19
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::h, package: main, param_names: [], want: list}, [19], 17, Str, 17, true], # 20
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::h, package: main, param_names: [], want: list}, [19], 17, Str, 17, true], # 20
   [Coerce, {from_repr: Unknown, to_repr: Str}, [20], ~, Str], # 21
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 22
   [Print, ~, [13, 14, 18, 14, 21, 22], 20, "Maybe[Boolean]"], # 23
@@ -9498,7 +9499,7 @@ main::f: {start: 0, returns: [28], nodes: [
   [Proj, {index: 0}, [10]], # 11
   [Assign, {local: true}, [9, 4], 11, Unknown, 6, true], # 12
   [PadAccess, {sigil: $, symbol: self}, ~, ~, Unknown, 12], # 13
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::h, package: main, param_names: [], want: scalar}, [13], 12, Str, 12, true], # 14
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::h, package: main, param_names: [], want: scalar}, [13], 12, Str, 12, true], # 14
   [Proj, {index: 1}, [10]], # 15
   [Subscript, {kind: hash}, [7, 8], ~, Scalar, 6], # 16
   [Exists, {kind: hash}, [7, 8], ~, Boolean, 6], # 17
@@ -9510,7 +9511,7 @@ main::f: {start: 0, returns: [28], nodes: [
   [Concat, ~, [21, 22], ~, Str], # 23
   [Phi, {memory: true, predecessors: [15, 11], region: 19}, [6, 18], ~, Unknown], # 24
   [PadAccess, {sigil: $, symbol: self}, ~, ~, Unknown, 24], # 25
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::h, package: main, param_names: [], want: scalar}, [25], 19, Str, 24, true], # 26
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::h, package: main, param_names: [], want: scalar}, [25], 19, Str, 24, true], # 26
   [Concat, ~, [23, 26], ~, Str], # 27
   [Return, ~, [27], 26, ~, 26]]} # 28
 main::h: {start: 0, returns: [14], nodes: [
@@ -9576,7 +9577,7 @@ main::__PROGRAM__: {start: 0, returns: [10], nodes: [
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 3
   [HashLiteral, ~, [2, 3], 0, HashRef], # 4
   [MemStart], # 5
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, [4], 4, Str, 5, true], # 6
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, [4], 4, Str, 5, true], # 6
   [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
   [Print, ~, [7, 8], 6, "Maybe[Boolean]"], # 9
@@ -9635,11 +9636,11 @@ main::__PROGRAM__: {start: 0, returns: [18], nodes: [
   [EntryDef, {package: main, sigil: $, symbol: g}, ~, ~, Scalar], # 3
   [MemStart], # 4
   [EntryWrite, ~, [3, 2], 0, Unknown, 4, true], # 5
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [2], 5, Str, 5, true], # 6
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [2], 5, Str, 5, true], # 6
   [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
   [Constant, {const_type: string, value: " | "}, ~, ~, Str], # 8
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 9
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [9], 6, Str, 6, true], # 10
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [9], 6, Str, 6, true], # 10
   [Coerce, {from_repr: Unknown, to_repr: Str}, [10], ~, Str], # 11
   [EntryDef, {package: main, sigil: $, symbol: g}, ~, ~, Int, 10], # 12
   [Coerce, {from_repr: Int, to_repr: Str}, [12], ~, Str], # 13
@@ -9660,7 +9661,7 @@ main::f: {start: 0, returns: [23], nodes: [
   [If, ~, [0, 7], 0], # 8
   [Proj, {index: 0}, [8]], # 9
   [EntryWrite, ~, [2, 3], 9, Unknown, 6, true], # 10
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::g, package: main, param_names: [], want: scalar}, ~, 10, Str, 10, true], # 11
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::g, package: main, param_names: [], want: scalar}, ~, 10, Str, 10, true], # 11
   [Proj, {index: 1}, [8]], # 12
   [EntryDef, {package: main, sigil: $, symbol: g}, ~, ~, Scalar, 6], # 13
   [EntryWrite, ~, [2, 13], 11, Unknown, 11, true], # 14
@@ -9670,7 +9671,7 @@ main::f: {start: 0, returns: [23], nodes: [
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 18
   [Concat, ~, [17, 18], ~, Str], # 19
   [Phi, {memory: true, predecessors: [12, 9], region: 15}, [6, 14], ~, Unknown], # 20
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::g, package: main, param_names: [], want: scalar}, ~, 15, Str, 20, true], # 21
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::g, package: main, param_names: [], want: scalar}, ~, 15, Str, 20, true], # 21
   [Concat, ~, [19, 21], ~, Str], # 22
   [Return, ~, [22], 21, ~, 21]]} # 23
 main::g: {start: 0, returns: [6], nodes: [
@@ -9765,8 +9766,8 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [ArrayLiteral, ~, ~, ~, Array], # 2
   [Constant, {const_type: string, value: K}, ~, ~, Str], # 3
   [MemStart], # 4
-  [Call, {class_name: K, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: new, package: main, param_names: [], want: list}, [3], 0, Object, 4, true], # 5
-  [Call, {class_name: K, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: new, package: main, param_names: [], want: list}, [3], 5, Object, 5, true], # 6
+  [Call, {class_name: K, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: new, package: main, param_names: [], want: list}, [3], 0, Object, 4, true], # 5
+  [Call, {class_name: K, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: new, package: main, param_names: [], want: list}, [3], 5, Object, 5, true], # 6
   [Loop, {bound: entry}, [6], 6], # 7
   [Phi, {region: 7}, [2, 40], ~, Array], # 8
   [Phi, {memory: true, region: 7}, [6, 37], ~, Unknown], # 9
@@ -9794,7 +9795,7 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [Call, {dispatch_kind: builtin, name: blessed, param_names: []}, [29], ~, Scalar, 9], # 31
   [If, ~, [30, 31], 30], # 32
   [Proj, {index: 0}, [32]], # 33
-  [Call, {dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: ok, package: main, param_names: [], want: scalar}, [29], 33, Unknown, 9, true], # 34
+  [Call, {dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: ok, package: main, param_names: [], want: scalar}, [29], 33, Unknown, 9, true], # 34
   [Proj, {index: 1}, [32]], # 35
   [Region, {head: 32}, [34, 35]], # 36
   [Phi, {memory: true, predecessors: [33, 35], region: 36}, [34, 9], ~, Unknown], # 37
@@ -9810,7 +9811,7 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [Constant, {const_type: string, value: "Scalar/Util.pm"}, ~, ~, Str], # 3
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
-  [Call, {class_name: Scalar::Util, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Call, {class_name: Scalar::Util, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
   [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 ```
 
@@ -9841,13 +9842,13 @@ main::__PROGRAM__: {start: 0, returns: [15], nodes: [
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 3
   [MemStart], # 4
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 5, name: main::f, package: main, param_names: [], want: list}, [2, 3], 0, Str, 4, true], # 5
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 5, name: main::f, package: main, param_names: [], want: list}, [2, 3], 0, Str, 4, true], # 5
   [Coerce, {from_repr: Unknown, to_repr: Str}, [5], ~, Str], # 6
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 5, name: main::f, package: main, param_names: [], want: list}, [3, 2], 5, Str, 5, true], # 7
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 5, name: main::f, package: main, param_names: [], want: list}, [3, 2], 5, Str, 5, true], # 7
   [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 5, name: main::f, package: main, param_names: [], want: list}, [2, 2], 7, Str, 7, true], # 9
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 5, name: main::f, package: main, param_names: [], want: list}, [2, 2], 7, Str, 7, true], # 9
   [Coerce, {from_repr: Unknown, to_repr: Str}, [9], ~, Str], # 10
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 5, name: main::f, package: main, param_names: [], want: list}, [3, 3], 9, Str, 9, true], # 11
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 5, name: main::f, package: main, param_names: [], want: list}, [3, 3], 9, Str, 9, true], # 11
   [Coerce, {from_repr: Unknown, to_repr: Str}, [11], ~, Str], # 12
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 13
   [Print, ~, [6, 8, 10, 12, 13], 11, "Maybe[Boolean]"], # 14
@@ -9948,10 +9949,10 @@ main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
   [MemStart], # 3
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, [2, 2], 0, Str, 3, true], # 4
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, [2, 2], 0, Str, 3, true], # 4
   [Coerce, {from_repr: Unknown, to_repr: Str}, [4], ~, Str], # 5
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 6
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, [6, 2], 4, Str, 4, true], # 7
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, [6, 2], 4, Str, 4, true], # 7
   [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
   [Print, ~, [5, 8, 9], 7, "Maybe[Boolean]"], # 10
@@ -10018,10 +10019,10 @@ main::__PROGRAM__: {start: 0, returns: [10], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::mk, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::mk, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
   [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
   [Constant, {const_type: string, value: "|"}, ~, ~, Str], # 5
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::mk, package: main, param_names: [], want: list}, ~, 3, Str, 3, true], # 6
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::mk, package: main, param_names: [], want: list}, ~, 3, Str, 3, true], # 6
   [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
   [Print, ~, [4, 5, 7, 8], 6, "Maybe[Boolean]"], # 9
@@ -10036,8 +10037,8 @@ main::mk: {start: 0, returns: [15], nodes: [
   [ArrayLiteral, ~, ~, ~, Array], # 6
   [Assign, ~, [5, 6], 0, List, 4, true], # 7
   [MakeCell, {captured_written: false, cell_name: "@p"}, [3], 7, Ref, 7, true], # 8
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: main::mk::__ANON__:1:3, package: main, param_names: [], want: void}, [2], 8, Int, 8, true], # 9
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: main::mk::__ANON__:1:3, package: main, param_names: [], want: void}, [1], 9, Int, 9, true], # 10
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: main::mk::__ANON__:1:3, package: main, param_names: [], want: void}, [2], 8, Int, 8, true], # 9
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: main::mk::__ANON__:1:3, package: main, param_names: [], want: void}, [1], 9, Int, 9, true], # 10
   [EntryDef, {package: main, sigil: $, symbol: "\""}, ~, ~, Scalar, 10], # 11
   [Coerce, {from_repr: Scalar, to_repr: Str}, [11], ~, Str], # 12
   [PadAccess, {shared: 1, sigil: "@", symbol: p}, ~, ~, Array, 10], # 13
@@ -10078,7 +10079,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
   [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
   [Print, ~, [4, 5], 3, "Maybe[Boolean]"], # 6
@@ -10104,7 +10105,7 @@ main::f: {start: 0, returns: [23], nodes: [
   [EntryDef, {package: main, sigil: $, symbol: "\""}, ~, ~, Scalar, 16], # 17
   [Coerce, {from_repr: Scalar, to_repr: Str}, [17], ~, Str], # 18
   [PadAccess, {sigil: $, symbol: l}, ~, ~, Unknown, 16], # 19
-  [PostfixDeref, {eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, package: main, sigil: "@", strict: false}, [19], 15, Array, 16, true], # 20
+  [PostfixDeref, {eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 2, package: main, sigil: "@", strict: false}, [19], 15, Array, 16, true], # 20
   [Call, {dispatch_kind: builtin, name: join, param_names: []}, [18, 20], ~, Str, 20], # 21
   [Concat, ~, [12, 21], ~, Str], # 22
   [Return, {implicit: true}, [22], 20, ~, 20], # 23
@@ -10122,7 +10123,7 @@ main::f: {start: 0, returns: [23], nodes: [
   [Ref, ~, [32], ~, ScalarRef], # 35
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 36
   [TernaryExpr, ~, [31, 35, 36], 31, "Maybe[ScalarRef]"], # 37
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::g, package: main, param_names: [], want: void}, [33, 34], 37, Str, 13, true], # 38
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::g, package: main, param_names: [], want: void}, [33, 34], 37, Str, 13, true], # 38
   [Subscript, {kind: array}, [25, 29], ~, Scalar, 38], # 39
   [NumGt, ~, [27, 29], 9, Boolean], # 40
   [PostfixDeref, {sigil: $}, [37], ~, Scalar, 38], # 41
@@ -10173,7 +10174,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
   [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
   [Print, ~, [4, 5], 3, "Maybe[Boolean]"], # 6
@@ -10200,7 +10201,7 @@ main::f: {start: 0, returns: [24], nodes: [
   [EntryDef, {package: main, sigil: $, symbol: "\""}, ~, ~, Scalar, 17], # 18
   [Coerce, {from_repr: Scalar, to_repr: Str}, [18], ~, Str], # 19
   [PadAccess, {sigil: $, symbol: l}, ~, ~, Unknown, 17], # 20
-  [PostfixDeref, {eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, package: main, sigil: "@", strict: false}, [20], 16, Array, 17, true], # 21
+  [PostfixDeref, {eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 2, package: main, sigil: "@", strict: false}, [20], 16, Array, 17, true], # 21
   [Call, {dispatch_kind: builtin, name: join, param_names: []}, [19, 21], ~, Str, 21], # 22
   [Concat, ~, [13, 22], ~, Str], # 23
   [Return, {implicit: true}, [23], 21, ~, 21], # 24
@@ -10220,7 +10221,7 @@ main::f: {start: 0, returns: [24], nodes: [
   [TernaryExpr, ~, [32, 36, 37], 32, "Maybe[ScalarRef]"], # 38
   [PostfixDeref, {sigil: $}, [38], ~, Scalar, 14], # 39
   [TernaryExpr, ~, [32, 39, 34], 38, Scalar], # 40
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::g, package: main, param_names: [], want: void}, [35], 40, Scalar, 14, true], # 41
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::g, package: main, param_names: [], want: void}, [35], 40, Scalar, 14, true], # 41
   [Subscript, {kind: array}, [26, 30], ~, Scalar, 41], # 42
   [NumGt, ~, [28, 30], 10, Boolean], # 43
   [Coerce, {from_repr: Scalar, to_repr: Str}, [40], ~, Str], # 44
@@ -10267,7 +10268,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
   [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
   [Print, ~, [4, 5], 3, "Maybe[Boolean]"], # 6
@@ -10289,7 +10290,7 @@ main::f: {start: 0, returns: [19], nodes: [
   [Phi, {memory: true, region: 12}, [10], ~, Unknown], # 13
   [EntryDef, {package: main, sigil: $, symbol: "\""}, ~, ~, Scalar, 13], # 14
   [Coerce, {from_repr: Scalar, to_repr: Str}, [14], ~, Str], # 15
-  [PostfixDeref, {eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, package: main, sigil: "@", strict: false}, [4], ~, Array, 13], # 16
+  [PostfixDeref, {eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 2, package: main, sigil: "@", strict: false}, [4], ~, Array, 13], # 16
   [Call, {dispatch_kind: builtin, name: join, param_names: []}, [15, 16], ~, Str, 13], # 17
   [Concat, ~, [8, 17], ~, Str], # 18
   [Return, {implicit: true}, [18], 12, ~, 13], # 19
@@ -10306,7 +10307,7 @@ main::f: {start: 0, returns: [19], nodes: [
   [TernaryExpr, ~, [25, 28, 29], 25, "Maybe[ScalarRef]"], # 30
   [PostfixDeref, {sigil: $}, [30], ~, Scalar, 10], # 31
   [TernaryExpr, ~, [25, 31, 27], ~, Scalar], # 32
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::g, package: main, param_names: [], want: void}, [32], 30, Str, 10, true], # 33
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::g, package: main, param_names: [], want: void}, [32], 30, Str, 10, true], # 33
   [Subscript, {kind: array}, [4, 23], ~, Scalar, 33], # 34
   [NumGt, ~, [21, 23], 5, Boolean], # 35
   [PostfixDeref, {sigil: $}, [30], ~, Scalar, 33], # 36
@@ -10349,7 +10350,7 @@ main::__PROGRAM__: {start: 0, returns: [4], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::f, package: main, param_names: [], want: void}, ~, 0, "Maybe[Boolean]", 2, true], # 3
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::f, package: main, param_names: [], want: void}, ~, 0, "Maybe[Boolean]", 2, true], # 3
   [Return, {implicit: true}, [1], 3, ~, 3]]} # 4
 main::f: {start: 0, returns: [20], nodes: [
   [Start], # 0
@@ -10432,10 +10433,10 @@ C::subs: {start: 0, returns: [10], nodes: [
   [Constant, {const_type: string, value: S}, ~, ~, Str], # 1
   [Constant, {const_type: string, value: a}, ~, ~, Str], # 2
   [MemStart], # 3
-  [Call, {class_name: S, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: new, package: C, param_names: []}, [1, 2], 0, Object, 3, true], # 4
+  [Call, {class_name: S, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: new, package: C, param_names: []}, [1, 2], 0, Object, 3, true], # 4
   [Constant, {const_type: string, value: b}, ~, ~, Str], # 5
-  [Call, {class_name: S, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: new, package: C, param_names: []}, [1, 5], 4, Object, 4, true], # 6
-  [Call, {class_name: S, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: new, package: C, param_names: []}, [1, 2], 6, Object, 6, true], # 7
+  [Call, {class_name: S, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: new, package: C, param_names: []}, [1, 5], 4, Object, 4, true], # 6
+  [Call, {class_name: S, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: new, package: C, param_names: []}, [1, 2], 6, Object, 6, true], # 7
   [ArrayLiteral, ~, [4, 6, 7], ~, List], # 8
   [Coerce, {from_repr: List, to_repr: Scalar}, [7], ~, Scalar], # 9
   [Return, {implicit: true}, [8, 9], 7, ~, 7]]} # 10
@@ -10465,8 +10466,8 @@ main::__PROGRAM__: {start: 0, returns: [9], nodes: [
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: C}, ~, ~, Str], # 2
   [MemStart], # 3
-  [Call, {class_name: C, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 7, name: new, package: main, param_names: [], want: list}, [2], 0, Object, 3, true], # 4
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 7, name: main::f, package: main, param_names: [], want: list}, [4], 4, Str, 4, true], # 5
+  [Call, {class_name: C, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 7, name: new, package: main, param_names: [], want: list}, [2], 0, Object, 3, true], # 4
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 7, name: main::f, package: main, param_names: [], want: list}, [4], 4, Str, 4, true], # 5
   [Coerce, {from_repr: Unknown, to_repr: Str}, [5], ~, Str], # 6
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 7
   [Print, ~, [6, 7], 5, "Maybe[Boolean]"], # 8
@@ -10481,7 +10482,7 @@ main::f: {start: 0, returns: [26], nodes: [
   [Subscript, {kind: hash}, [5, 3], ~, ArrayRef], # 6
   [PadAccess, {sigil: $, symbol: cls}, ~, ~, Unknown], # 7
   [MemStart], # 8
-  [Call, {dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 5, name: subs, package: main, param_names: [], want: list}, [7], 5, Unknown, 8, true], # 9
+  [Call, {dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 5, name: subs, package: main, param_names: [], want: list}, [7], 5, Unknown, 8, true], # 9
   [Loop, {bound: entry}, [9], 9], # 10
   [Proj, {index: 1}, [10]], # 11
   [Region, {head: 10}, [11]], # 12
@@ -10506,7 +10507,7 @@ main::f: {start: 0, returns: [26], nodes: [
   [Proj, {index: 0}, [10]], # 31
   [Ref, ~, [30], 31, ScalarRef, 13], # 32
   [PostfixDeref, {sigil: $}, [32], ~, Scalar, 13], # 33
-  [Call, {dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 5, name: name, package: main, param_names: [], want: scalar}, [33], 32, Unknown, 13, true], # 34
+  [Call, {dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 5, name: name, package: main, param_names: [], want: scalar}, [33], 32, Unknown, 13, true], # 34
   [Subscript, {kind: hash}, [5, 3], 34, Scalar, 34], # 35
   [ArrayLiteral, ~, ~, 35, ArrayRef], # 36
   [DefinedOr, ~, [35, 36], ~, Scalar], # 37
@@ -10522,7 +10523,7 @@ main::f: {start: 0, returns: [26], nodes: [
   [Count, ~, [46], ~, Int], # 47
   [If, ~, [42, 47], 42], # 48
   [Proj, {index: 1}, [48]], # 49
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 5, name: main::root, package: main, param_names: [], want: scalar}, [44], 49, ScalarRef, 43, true], # 50
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 5, name: main::root, package: main, param_names: [], want: scalar}, [44], 49, ScalarRef, 43, true], # 50
   [Subscript, {kind: hash}, [5, 3], 50, Scalar, 50], # 51
   [PostfixDeref, {sigil: "@"}, [17], ~, Array, 18], # 52
   [Phi, {region: 19}, [28, 96], ~, Int], # 53
@@ -10553,7 +10554,7 @@ main::f: {start: 0, returns: [26], nodes: [
   [Subscript, {kind: array}, [27, 29], ~, Scalar, 70], # 78
   [NumGt, ~, [75, 29], 10, Boolean], # 79
   [PostfixDeref, {sigil: "@"}, [69], ~, Array, 70], # 80
-  [PostfixDeref, {eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 5, package: main, sigil: $, strict: false}, [50], ~, Scalar, 70], # 81
+  [PostfixDeref, {eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 5, package: main, sigil: $, strict: false}, [50], ~, Scalar, 70], # 81
   [Coerce, {from_repr: Scalar, to_repr: Num}, [81], ~, Num], # 82
   [PostfixDeref, {sigil: $}, [32], 70, Scalar, 70], # 83
   [Coerce, {from_repr: Scalar, to_repr: Num}, [83], ~, Num], # 84
@@ -10616,7 +10617,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
   [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
   [Print, ~, [4, 5], 3, "Maybe[Boolean]"], # 6
@@ -10663,7 +10664,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: main::f, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: main::f, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
   [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
   [Print, ~, [4, 5], 3, "Maybe[Boolean]"], # 6
@@ -10748,7 +10749,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: main::f, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: main::f, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
   [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
   [Print, ~, [4, 5], 3, "Maybe[Boolean]"], # 6
@@ -10822,7 +10823,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
   [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
   [Print, ~, [4, 5], 3, "Maybe[Boolean]"], # 6
@@ -10840,7 +10841,7 @@ main::f: {start: 0, returns: [21], nodes: [
   [ArrayLiteral, {sigil: "@", symbol: "n"}, [4, 5], ~, Array], # 9
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 10
   [Subscript, {kind: array}, [9, 10], ~, Int], # 11
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::g, package: main, param_names: [], want: void}, [11], 0, Int, 1, true], # 12
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::g, package: main, param_names: [], want: void}, [11], 0, Int, 1, true], # 12
   [Loop, {bound: entry}, [12], 12], # 13
   [Phi, {memory: true, region: 13}, [12, 35], ~, Int], # 14
   [Proj, {index: 1}, [13]], # 15
@@ -10863,7 +10864,7 @@ main::f: {start: 0, returns: [21], nodes: [
   [Subscript, {kind: array}, [25, 28], ~, Scalar], # 32
   [Ref, ~, [32], ~, ScalarRef], # 33
   [LocalAlias, {name: _}, [33], 30, Unknown, 14], # 34
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::g, package: main, param_names: [], want: void}, [31], 34, Int, 14, true], # 35
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::g, package: main, param_names: [], want: void}, [31], 34, Int, 14, true], # 35
   [Add, ~, [28, 4], ~, Int]]} # 36
 main::g: {start: 0, returns: [7], nodes: [
   [Start], # 0
@@ -10899,7 +10900,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
   [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
   [Print, ~, [4, 5], 3, "Maybe[Boolean]"], # 6
@@ -10932,7 +10933,7 @@ main::f: {start: 0, returns: [14], nodes: [
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 24
   [TernaryExpr, ~, [20, 23, 24], ~, "Maybe[ScalarRef]"], # 25
   [LocalAlias, {name: _}, [25], 20, Unknown, 3], # 26
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::g, package: main, param_names: [], want: void}, [21], 26, Num, 3, true], # 27
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::g, package: main, param_names: [], want: void}, [21], 26, Num, 3, true], # 27
   [Add, ~, [17, 9], ~, Int], # 28
   [Count, ~, [11], ~, Int, 1]]} # 29
 main::g: {start: 0, returns: [10], nodes: [
@@ -10976,7 +10977,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 7, name: main::f, package: main, param_names: [], want: list}, ~, 0, Int, 2, true], # 3
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 7, name: main::f, package: main, param_names: [], want: list}, ~, 0, Int, 2, true], # 3
   [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
   [Print, ~, [4, 5], 3, "Maybe[Boolean]"], # 6
@@ -11013,7 +11014,7 @@ main::f: {start: 0, returns: [14], nodes: [
   [Proj, {index: 0}, [5]], # 28
   [Assign, ~, [26, 27], 28, Int, 12, true], # 29
   [PadAccess, {sigil: $, symbol: pos}, ~, ~, Unknown, 29], # 30
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::set, package: main, param_names: [], want: void}, [25, 30], 29, Int, 29, true], # 31
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::set, package: main, param_names: [], want: void}, [25, 30], 29, Int, 29, true], # 31
   [PadAccess, {sigil: $, symbol: pos}, ~, ~, Unknown, 31], # 32
   [Subscript, {kind: array}, [24, 32], ~, Scalar], # 33
   [EnvRead, {key: P}, ~, ~, Str], # 34
@@ -11143,9 +11144,9 @@ main::__PROGRAM__: {start: 0, returns: [12], nodes: [
   [Constant, {const_type: string, value: a}, ~, ~, Str], # 3
   [Constant, {const_type: string, value: b}, ~, ~, Str], # 4
   [MemStart], # 5
-  [Call, {class_name: "N", dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 9, name: new, package: main, param_names: [], want: list}, [2, 4], 0, Object, 5, true], # 6
-  [Call, {class_name: "N", dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 9, name: new, package: main, param_names: [], want: list}, [2, 3, 6], 6, Object, 6, true], # 7
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 9, name: main::f, package: main, param_names: [], want: list}, [7], 7, Str, 7, true], # 8
+  [Call, {class_name: "N", dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 9, name: new, package: main, param_names: [], want: list}, [2, 4], 0, Object, 5, true], # 6
+  [Call, {class_name: "N", dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 9, name: new, package: main, param_names: [], want: list}, [2, 3, 6], 6, Object, 6, true], # 7
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 9, name: main::f, package: main, param_names: [], want: list}, [7], 7, Str, 7, true], # 8
   [Coerce, {from_repr: Unknown, to_repr: Str}, [8], ~, Str], # 9
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
   [Print, ~, [9, 10], 8, "Maybe[Boolean]"], # 11
@@ -11158,7 +11159,7 @@ main::f: {start: 0, returns: [22], nodes: [
   [ArgsSource, ~, ~, ~, Array], # 4
   [Assign, {targets: 1}, [3, 4], 0, List, 2, true], # 5
   [PadAccess, {sigil: $, symbol: ctx}, ~, ~, Unknown, 5], # 6
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: main::vals, package: main, param_names: [], want: list}, [6], 5, List, 5, true], # 7
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: main::vals, package: main, param_names: [], want: list}, [6], 5, List, 5, true], # 7
   [Loop, {bound: entry}, [7], 7], # 8
   [Proj, {index: 1}, [8]], # 9
   [Region, {head: 8}, [9]], # 10
@@ -11180,11 +11181,11 @@ main::f: {start: 0, returns: [22], nodes: [
   [ArrayLiteral, {sigil: "@", symbol: walk}, [25], ~, Array], # 26
   [Call, {dispatch_kind: builtin, name: pop, param_names: []}, [26], 11, Scalar, 16, true], # 27
   [Proj, {index: 0}, [11]], # 28
-  [Call, {dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 7, name: "n", package: main, param_names: [], want: scalar}, [27], 28, Unknown, 27, true], # 29
+  [Call, {dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 7, name: "n", package: main, param_names: [], want: scalar}, [27], 28, Unknown, 27, true], # 29
   [Coerce, {from_repr: Unknown, to_repr: Str}, [29], ~, Str], # 30
   [Concat, ~, [12, 30], ~, Str], # 31
-  [Call, {dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 7, name: kids, package: main, param_names: [], want: scalar}, [27], 29, Unknown, 29, true], # 32
-  [PostfixDeref, {eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 7, package: main, sigil: "@", strict: false}, [32], 32, Array, 32, true], # 33
+  [Call, {dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 7, name: kids, package: main, param_names: [], want: scalar}, [27], 29, Unknown, 29, true], # 32
+  [PostfixDeref, {eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 7, package: main, sigil: "@", strict: false}, [32], 32, Array, 32, true], # 33
   [Call, {dispatch_kind: builtin, name: push, param_names: []}, [26, 33], 33, Int, 33, true], # 34
   [Count, ~, [23], ~, Int, 14], # 35
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 36
@@ -11268,7 +11269,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
   [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
   [Print, ~, [4, 5], 3, "Maybe[Boolean]"], # 6
@@ -11313,7 +11314,7 @@ main::f: {start: 0, returns: [24], nodes: [
   [Phi, {region: 13}, [35, 64], ~, Int], # 36
   [Proj, {index: 0}, [13]], # 37
   [LocalAlias, {name: _}, [36], 37, Unknown, 14], # 38
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::show, package: main, param_names: [], want: void}, ~, 38, "Maybe[Boolean]", 14, true], # 39
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::show, package: main, param_names: [], want: void}, ~, 38, "Maybe[Boolean]", 14, true], # 39
   [Add, ~, [31, 35], ~, Int], # 40
   [Subscript, {kind: array}, [28, 31], ~, Str, 4], # 41
   [Subscript, {kind: array}, [28, 31], ~, Scalar], # 42
@@ -11321,7 +11322,7 @@ main::f: {start: 0, returns: [24], nodes: [
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 44
   [TernaryExpr, ~, [34, 43, 44], ~, "Maybe[ScalarRef]"], # 45
   [LocalAlias, {name: _}, [45], 34, Unknown, 4], # 46
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::is_x, package: main, param_names: [], want: scalar}, ~, 46, Boolean, 4, true], # 47
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::is_x, package: main, param_names: [], want: scalar}, ~, 46, Boolean, 4, true], # 47
   [ListAppend, {collector: grep}, [21, 41, 47], ~, Array], # 48
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 49
   [NumGt, ~, [49, 36], 13, Boolean], # 50
@@ -11336,7 +11337,7 @@ main::f: {start: 0, returns: [24], nodes: [
   [Ref, ~, [57], ~, ScalarRef], # 59
   [TernaryExpr, ~, [56, 59, 44], ~, "Maybe[ScalarRef]"], # 60
   [LocalAlias, {name: _}, [60], 56, Unknown, 9], # 61
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::show, package: main, param_names: [], want: void}, ~, 61, "Maybe[Boolean]", 9, true], # 62
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::show, package: main, param_names: [], want: void}, ~, 61, "Maybe[Boolean]", 9, true], # 62
   [Add, ~, [54, 35], ~, Int], # 63
   [Add, ~, [36, 35], ~, Int]]} # 64
 main::is_x: {start: 0, returns: [5], nodes: [
@@ -11378,7 +11379,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
   [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
   [Print, ~, [4, 5], 3, "Maybe[Boolean]"], # 6
@@ -11428,7 +11429,7 @@ main::f: {start: 0, returns: [21], nodes: [
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 31
   [TernaryExpr, ~, [28, 30, 31], ~, "Maybe[ScalarRef]"], # 32
   [LocalAlias, {name: _}, [32], 28, Unknown, 6], # 33
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::bump, package: main, param_names: [], want: void}, ~, 33, Str, 6, true], # 34
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::bump, package: main, param_names: [], want: void}, ~, 33, Str, 6, true], # 34
   [Add, ~, [25, 15], ~, Int]]} # 35
 ```
 
@@ -11490,7 +11491,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
   [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
   [Print, ~, [4, 5], 3, "Maybe[Boolean]"], # 6
@@ -11503,9 +11504,9 @@ main::f: {start: 0, returns: [23], nodes: [
   [Constant, {const_type: string, value: "N"}, ~, ~, Str], # 4
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 5
   [MemStart], # 6
-  [Call, {class_name: "N", dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: new, package: main, param_names: [], want: list}, [4, 5], 0, Object, 6, true], # 7
+  [Call, {class_name: "N", dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: new, package: main, param_names: [], want: list}, [4, 5], 0, Object, 6, true], # 7
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 8
-  [Call, {class_name: "N", dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: new, package: main, param_names: [], want: list}, [4, 8], 7, Object, 7, true], # 9
+  [Call, {class_name: "N", dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: new, package: main, param_names: [], want: list}, [4, 8], 7, Object, 7, true], # 9
   [Call, {dispatch_kind: builtin, name: push, param_names: []}, [3, 7, 9], 9, Int, 9, true], # 10
   [Loop, {bound: entry}, [10], 10], # 11
   [Proj, {index: 1}, [11]], # 12
@@ -11532,7 +11533,7 @@ main::f: {start: 0, returns: [23], nodes: [
   [Ref, ~, [32], ~, ScalarRef], # 33
   [Proj, {index: 0}, [14]], # 34
   [LocalAlias, {name: _}, [33], 34, Unknown, 18], # 35
-  [Call, {dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: s, package: main, param_names: [], want: list}, [31], 35, Unknown, 18, true], # 36
+  [Call, {dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: s, package: main, param_names: [], want: list}, [31], 35, Unknown, 18, true], # 36
   [ListAppend, {collector: map}, [15, 36], ~, Array], # 37
   [Count, ~, [30], ~, Int, 18], # 38
   [Count, ~, [3], ~, Int, 16], # 39
@@ -11546,7 +11547,7 @@ main::f: {start: 0, returns: [23], nodes: [
   [Ref, ~, [43], ~, ScalarRef], # 47
   [TernaryExpr, ~, [42, 47, 46], ~, "Maybe[ScalarRef]"], # 48
   [LocalAlias, {name: _}, [48], 42, Unknown, 16], # 49
-  [Call, {dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: set_stamp, package: main, param_names: [], want: void}, [40, 46], 49, Unknown, 16, true], # 50
+  [Call, {dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: set_stamp, package: main, param_names: [], want: void}, [40, 46], 49, Unknown, 16, true], # 50
   [NumGt, ~, [38, 27], 14, Boolean], # 51
   [Count, ~, [30], ~, Int, 17]]} # 52
 ```
@@ -11582,13 +11583,13 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 4
   [ArrayLiteral, ~, [2, 3, 4], 0, ArrayRef], # 5
   [MemStart], # 6
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 7, name: main::f, package: main, param_names: [], want: list}, [5, 2], 5, Str, 6, true], # 7
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 7, name: main::f, package: main, param_names: [], want: list}, [5, 2], 5, Str, 6, true], # 7
   [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 9
   [Constant, {const_type: integer, value: "4"}, ~, ~, Int], # 10
   [ArrayLiteral, ~, [10], 7, ArrayRef], # 11
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 12
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 7, name: main::f, package: main, param_names: [], want: list}, [11, 12], 11, Str, 7, true], # 13
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 7, name: main::f, package: main, param_names: [], want: list}, [11, 12], 11, Str, 7, true], # 13
   [Coerce, {from_repr: Unknown, to_repr: Str}, [13], ~, Str], # 14
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 15
   [Print, ~, [8, 9, 14, 15], 13, "Maybe[Boolean]"], # 16
@@ -11620,13 +11621,13 @@ main::f: {start: 0, returns: [35], nodes: [
   [ArrayLiteral, ~, [22], ~, Array], # 23
   [ArrayLiteral, ~, ~, ~, Array], # 24
   [TernaryExpr, ~, [20, 23, 24], ~, Array], # 25
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 5, name: main::g, package: main, param_names: [], want: scalar}, [25], 15, Int, 16, true], # 26
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 5, name: main::g, package: main, param_names: [], want: scalar}, [25], 15, Int, 16, true], # 26
   [Coerce, {from_repr: Unknown, to_repr: Str}, [26], ~, Str], # 27
   [Concat, ~, [19, 27], ~, Str], # 28
   [Concat, ~, [28, 4], ~, Str], # 29
   [EntryDef, {package: main, sigil: $, symbol: "\""}, ~, ~, Scalar, 26], # 30
   [Coerce, {from_repr: Scalar, to_repr: Str}, [30], ~, Str], # 31
-  [PostfixDeref, {eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 6, package: main, sigil: "@", strict: false}, [21], 26, Array, 26, true], # 32
+  [PostfixDeref, {eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 6, package: main, sigil: "@", strict: false}, [21], 26, Array, 26, true], # 32
   [Call, {dispatch_kind: builtin, name: join, param_names: []}, [31, 32], ~, Str, 32], # 33
   [Concat, ~, [29, 33], ~, Str], # 34
   [Return, ~, [34], 32, ~, 32], # 35
@@ -11657,7 +11658,7 @@ main::f: {start: 0, returns: [35], nodes: [
   [Subscript, {kind: array}, [53, 55], ~, Scalar, 13], # 60
   [Ref, ~, [60], ~, ScalarRef], # 61
   [LocalAlias, {name: _}, [61], 59, Unknown, 13], # 62
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: main::ok1, package: main, param_names: [], want: scalar}, ~, 62, Boolean, 13, true], # 63
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: main::ok1, package: main, param_names: [], want: scalar}, ~, 62, Boolean, 13, true], # 63
   [Add, ~, [55, 48], ~, Int], # 64
   [Concat, ~, [3, 56], ~, Str], # 65
   [ListAppend, {collector: grep}, [11, 60, 63], ~, Array]]} # 66
@@ -11707,7 +11708,7 @@ main::__PROGRAM__: {start: 0, returns: [8], nodes: [
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: Z}, ~, ~, Str], # 2
   [MemStart], # 3
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 5, name: main::f, package: main, param_names: [], want: list}, [2], 0, Str, 3, true], # 4
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 5, name: main::f, package: main, param_names: [], want: list}, [2], 0, Str, 3, true], # 4
   [Coerce, {from_repr: Unknown, to_repr: Str}, [4], ~, Str], # 5
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 6
   [Print, ~, [5, 6], 4, "Maybe[Boolean]"], # 7
@@ -11776,12 +11777,12 @@ main::__PROGRAM__: {start: 0, returns: [13], nodes: [
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: "%$abc"}, ~, ~, Str], # 2
   [MemStart], # 3
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, [2], 0, Str, 3, true], # 4
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, [2], 0, Str, 3, true], # 4
   [Coerce, {from_repr: Unknown, to_repr: Str}, [4], ~, Str], # 5
   [Constant, {const_type: string, value: x}, ~, ~, Str], # 6
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, [6], 4, Str, 4, true], # 7
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, [6], 4, Str, 4, true], # 7
   [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, [1], 7, Str, 7, true], # 9
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, [1], 7, Str, 7, true], # 9
   [Coerce, {from_repr: Unknown, to_repr: Str}, [9], ~, Str], # 10
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 11
   [Print, ~, [5, 8, 10, 11], 9, "Maybe[Boolean]"], # 12
@@ -11850,7 +11851,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: main::f, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: main::f, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
   [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
   [Print, ~, [4, 5], 3, "Maybe[Boolean]"], # 6
@@ -11862,8 +11863,8 @@ main::f: {start: 0, returns: [19], nodes: [
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 3
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 4
   [MemStart], # 5
-  [Call, {class_name: "N", dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: new, package: main, param_names: [], want: list}, [2, 4], 0, Object, 5, true], # 6
-  [Call, {class_name: "N", dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: new, package: main, param_names: [], want: list}, [2, 3], 6, Object, 6, true], # 7
+  [Call, {class_name: "N", dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: new, package: main, param_names: [], want: list}, [2, 4], 0, Object, 5, true], # 6
+  [Call, {class_name: "N", dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: new, package: main, param_names: [], want: list}, [2, 3], 6, Object, 6, true], # 7
   [Loop, {bound: entry}, [7], 7], # 8
   [Proj, {index: 1}, [8]], # 9
   [Region, {head: 8}, [9]], # 10
@@ -11889,7 +11890,7 @@ main::f: {start: 0, returns: [19], nodes: [
   [Ref, ~, [29], ~, ScalarRef], # 30
   [Proj, {index: 0}, [11]], # 31
   [LocalAlias, {name: _}, [30], 31, Unknown, 17], # 32
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::g, package: main, param_names: [], want: scalar}, ~, 32, Scalar, 17, true], # 33
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::g, package: main, param_names: [], want: scalar}, ~, 32, Scalar, 17, true], # 33
   [Coerce, {from_repr: Unknown, to_repr: Str}, [33], ~, Str], # 34
   [Concat, ~, [12, 34], ~, Str], # 35
   [Phi, {region: 8}, [27, 37], ~, Int], # 36
@@ -11905,7 +11906,7 @@ main::f: {start: 0, returns: [19], nodes: [
   [Proj, {index: 0}, [8]], # 46
   [Ref, ~, [44], ~, ScalarRef], # 47
   [LocalAlias, {name: _}, [47], 46, Unknown, 15], # 48
-  [Call, {dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: id, package: main, param_names: [], want: scalar}, [43], 48, Unknown, 15, true], # 49
+  [Call, {dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: id, package: main, param_names: [], want: scalar}, [43], 48, Unknown, 15, true], # 49
   [Subscript, {kind: hash}, [23, 49], ~, Scalar], # 50
   [Assign, ~, [50, 43], 49, Scalar, 49, true], # 51
   [NumGt, ~, [41, 28], 11, Boolean], # 52
@@ -11941,7 +11942,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: main::f, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: main::f, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
   [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
   [Print, ~, [4, 5], 3, "Maybe[Boolean]"], # 6
@@ -11950,23 +11951,23 @@ main::f: {start: 0, returns: [39], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::g, package: main, param_names: [], want: list}, ~, 0, List, 2, true], # 3
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::g, package: main, param_names: [], want: list}, ~, 0, List, 2, true], # 3
   [Loop, {bound: entry}, [3], 3], # 4
   [Phi, {region: 4}, [1, 53], ~, "Maybe[ScalarRef]"], # 5
-  [PostfixDeref, {eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, package: main, sigil: $, strict: false}, [5], ~, Scalar], # 6
+  [PostfixDeref, {eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 2, package: main, sigil: $, strict: false}, [5], ~, Scalar], # 6
   [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 7
   [Proj, {index: 1}, [4]], # 8
   [Region, {head: 4}, [8]], # 9
   [Phi, {memory: true, region: 4}, [3, 53], ~, List], # 10
   [Phi, {memory: true, region: 9}, [10], ~, List], # 11
   [Assign, ~, [6, 7], 9, Int, 11, true], # 12
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::g, package: main, param_names: [], want: list}, ~, 12, List, 12, true], # 13
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::g, package: main, param_names: [], want: list}, ~, 12, List, 12, true], # 13
   [Loop, {bound: entry}, [13], 13], # 14
   [Proj, {index: 1}, [14]], # 15
   [Region, {head: 14}, [15]], # 16
   [Loop, {bound: entry}, [16], 16], # 17
   [Phi, {region: 17}, [1, 68], ~, Unknown], # 18
-  [PostfixDeref, {eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, package: main, sigil: $, strict: false}, [18], ~, Scalar], # 19
+  [PostfixDeref, {eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 3, package: main, sigil: $, strict: false}, [18], ~, Scalar], # 19
   [Constant, {const_type: integer, value: "7"}, ~, ~, Int], # 20
   [Proj, {index: 1}, [17]], # 21
   [Region, {head: 17}, [21]], # 22
@@ -12000,7 +12001,7 @@ main::f: {start: 0, returns: [39], nodes: [
   [TernaryExpr, ~, [45, 49, 1], 45, "Maybe[ScalarRef]"], # 50
   [PostfixDeref, {sigil: $}, [50], ~, Scalar, 10], # 51
   [TernaryExpr, ~, [45, 51, 47], ~, Scalar], # 52
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::k, package: main, param_names: [], want: scalar}, [52], 50, ScalarRef, 10, true], # 53
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::k, package: main, param_names: [], want: scalar}, [52], 50, ScalarRef, 10, true], # 53
   [ArrayLiteral, ~, [13], ~, List], # 54
   [Phi, {region: 14}, [42, 79], ~, Int], # 55
   [Subscript, {kind: array}, [54, 55], ~, Scalar, 23], # 56
@@ -12020,7 +12021,7 @@ main::f: {start: 0, returns: [39], nodes: [
   [TernaryExpr, ~, [65, 69, 1], 65, "Maybe[ScalarRef]"], # 70
   [PostfixDeref, {sigil: $}, [70], ~, Scalar, 25], # 71
   [TernaryExpr, ~, [65, 71, 67], ~, Scalar], # 72
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::k, package: main, param_names: [], want: list}, [72], 70, ScalarRef, 25, true], # 73
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::k, package: main, param_names: [], want: list}, [72], 70, ScalarRef, 25, true], # 73
   [Assign, {targets: 1}, [68, 73], 73, ScalarRef, 73, true], # 74
   [Add, ~, [43, 58], ~, Int], # 75
   [NumGt, ~, [62, 63], 17, Boolean], # 76
@@ -12115,11 +12116,11 @@ main::__PROGRAM__: {start: 0, returns: [16], nodes: [
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 5
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 6
   [MemStart], # 7
-  [Call, {class_name: "N", dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 5, name: new, package: main, param_names: [], want: list}, [2, 6], 0, Object, 7, true], # 8
-  [Call, {class_name: "N", dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 5, name: new, package: main, param_names: [], want: list}, [2, 5, 8], 8, Object, 8, true], # 9
-  [Call, {class_name: "N", dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 5, name: new, package: main, param_names: [], want: list}, [2, 4, 9], 9, Object, 9, true], # 10
-  [Call, {class_name: "N", dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 5, name: new, package: main, param_names: [], want: list}, [2, 3, 10], 10, Object, 10, true], # 11
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 5, name: main::f, package: main, param_names: [], want: list}, [11], 11, Str, 11, true], # 12
+  [Call, {class_name: "N", dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 5, name: new, package: main, param_names: [], want: list}, [2, 6], 0, Object, 7, true], # 8
+  [Call, {class_name: "N", dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 5, name: new, package: main, param_names: [], want: list}, [2, 5, 8], 8, Object, 8, true], # 9
+  [Call, {class_name: "N", dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 5, name: new, package: main, param_names: [], want: list}, [2, 4, 9], 9, Object, 9, true], # 10
+  [Call, {class_name: "N", dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 5, name: new, package: main, param_names: [], want: list}, [2, 3, 10], 10, Object, 10, true], # 11
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 5, name: main::f, package: main, param_names: [], want: list}, [11], 11, Str, 11, true], # 12
   [Coerce, {from_repr: Unknown, to_repr: Str}, [12], ~, Str], # 13
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 14
   [Print, ~, [13, 14], 12, "Maybe[Boolean]"], # 15
@@ -12128,7 +12129,7 @@ main::f: {start: 0, returns: [24], nodes: [
   [Start], # 0
   [PadAccess, {sigil: $, symbol: ret}, ~, ~, Unknown], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: prev, package: main, param_names: [], want: list}, [1], 0, Unknown, 2, true], # 3
+  [Call, {dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: prev, package: main, param_names: [], want: list}, [1], 0, Unknown, 2, true], # 3
   [Loop, {bound: entry}, [3], 3], # 4
   [Phi, {memory: true, region: 4}, [3, 5], ~, Unknown], # 5
   [Proj, {index: 1}, [4]], # 6
@@ -12171,7 +12172,7 @@ main::f: {start: 0, returns: [24], nodes: [
   [PadAccess, {sigil: "%", symbol: seen}, ~, ~, Hash], # 43
   [Proj, {index: 0}, [40]], # 44
   [Phi, {memory: true, region: 40}, [10, 67], ~, Unknown], # 45
-  [Call, {dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: id, package: main, param_names: [], want: scalar}, [41], 44, Unknown, 45, true], # 46
+  [Call, {dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: id, package: main, param_names: [], want: scalar}, [41], 44, Unknown, 45, true], # 46
   [Subscript, {kind: hash}, [43, 46], ~, Scalar], # 47
   [Subscript, {kind: hash}, [43, 46], 46, Scalar, 46], # 48
   [Increment, ~, [48], ~, Scalar], # 49
@@ -12190,9 +12191,9 @@ main::f: {start: 0, returns: [24], nodes: [
   [Count, ~, [21], ~, Int, 8], # 62
   [NumGt, ~, [57, 36], 9, Boolean], # 63
   [Proj, {index: 1}, [52]], # 64
-  [Call, {dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: id, package: main, param_names: [], want: list}, [41], 64, Unknown, 50, true], # 65
+  [Call, {dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: id, package: main, param_names: [], want: list}, [41], 64, Unknown, 50, true], # 65
   [Call, {dispatch_kind: builtin, name: push, param_names: []}, [16, 65], 65, Int, 65, true], # 66
-  [Call, {dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: prev, package: main, param_names: [], want: scalar}, [41], 66, Unknown, 66, true], # 67
+  [Call, {dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: prev, package: main, param_names: [], want: scalar}, [41], 66, Unknown, 66, true], # 67
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 68
   [Add, ~, [31, 68], ~, Int], # 69
   [Defined, ~, [41], 40, Boolean], # 70
@@ -12233,10 +12234,10 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [Constant, {const_type: string, value: x}, ~, ~, Str], # 7
   [Constant, {const_type: string, value: "y"}, ~, ~, Str], # 8
   [MemStart], # 9
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 7, name: main::f, package: main, param_names: [], want: list}, [2, 3, 4, 5, 6, 3, 7, 8], 0, Str, 9, true], # 10
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 7, name: main::f, package: main, param_names: [], want: list}, [2, 3, 4, 5, 6, 3, 7, 8], 0, Str, 9, true], # 10
   [Coerce, {from_repr: Unknown, to_repr: Str}, [10], ~, Str], # 11
   [Constant, {const_type: string, value: "|"}, ~, ~, Str], # 12
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 7, name: main::f, package: main, param_names: [], want: list}, [2, 5, 3, 7], 10, Str, 10, true], # 13
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 7, name: main::f, package: main, param_names: [], want: list}, [2, 5, 3, 7], 10, Str, 10, true], # 13
   [Coerce, {from_repr: Unknown, to_repr: Str}, [13], ~, Str], # 14
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 15
   [Print, ~, [11, 12, 14, 15], 13, "Maybe[Boolean]"], # 16
@@ -12337,7 +12338,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 8, name: main::f, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 8, name: main::f, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
   [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
   [Print, ~, [4, 5], 3, "Maybe[Boolean]"], # 6
@@ -12401,7 +12402,7 @@ main::f: {start: 0, returns: [19], nodes: [
   [Concat, ~, [9, 33], ~, Str], # 34
   [Subscript, {kind: array}, [31, 32], ~, Scalar], # 35
   [Proj, {index: 0}, [8]], # 36
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 6, name: main::bump, package: main, param_names: [], want: void}, [35], 36, Str, 17, true], # 37
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 6, name: main::bump, package: main, param_names: [], want: void}, [35], 36, Str, 17, true], # 37
   [Subscript, {kind: array}, [31, 32], ~, Str, 37], # 38
   [Concat, ~, [34, 38], ~, Str], # 39
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 40
@@ -12434,8 +12435,8 @@ main::f: {start: 0, returns: [19], nodes: [
   [Coerce, {from_repr: Unknown, to_repr: Str}, [66], ~, Str], # 67
   [Concat, ~, [59, 67], ~, Str], # 68
   [Subscript, {kind: array}, [52, 49], ~, Scalar], # 69
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: main::emit, package: main, param_names: [], want: void}, [69], 57, "Maybe[Boolean]", 15, true], # 70
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: main::emit, package: main, param_names: [], want: void}, [68], 70, "Maybe[Boolean]", 70, true], # 71
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: main::emit, package: main, param_names: [], want: void}, [69], 57, "Maybe[Boolean]", 15, true], # 70
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: main::emit, package: main, param_names: [], want: void}, [68], 70, "Maybe[Boolean]", 70, true], # 71
   [Constant, {const_type: string, value: L}, ~, ~, Str], # 72
   [Concat, ~, [72, 50], ~, Str], # 73
   [ListAppend, {collector: map}, [52, 73], ~, Array]]} # 74
@@ -12566,7 +12567,7 @@ C::f: {start: 0, returns: [9], nodes: [
   [StrNe, ~, [24, 26], ~, Boolean], # 27
   [If, ~, [22, 27], 22], # 28
   [Proj, {index: 0}, [28]], # 29
-  [Call, {class_name: C, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: g, package: C, param_names: [], want: scalar}, [19, 23], 29, Str, 22, true], # 30
+  [Call, {class_name: C, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: g, package: C, param_names: [], want: scalar}, [19, 23], 29, Str, 22, true], # 30
   [Proj, {index: 1}, [28]], # 31
   [Region, {head: 28}, [30, 31]], # 32
   [Phi, {predecessors: [29, 31], region: 32}, [30, 3], ~, Unknown], # 33
@@ -12597,11 +12598,11 @@ main::__PROGRAM__: {start: 0, returns: [12], nodes: [
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: C}, ~, ~, Str], # 2
   [MemStart], # 3
-  [Call, {class_name: C, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 5, name: new, package: main, param_names: [], want: scalar}, [2], 0, Object, 3, true], # 4
+  [Call, {class_name: C, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 5, name: new, package: main, param_names: [], want: scalar}, [2], 0, Object, 3, true], # 4
   [Constant, {const_type: string, value: Str}, ~, ~, Str], # 5
   [Constant, {const_type: string, value: Int}, ~, ~, Str], # 6
   [Constant, {const_type: string, value: Num}, ~, ~, Str], # 7
-  [Call, {class_name: C, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 5, name: f, package: main, param_names: [], want: list}, [4, 5, 6, 7, 5], 4, Unknown, 4, true], # 8
+  [Call, {class_name: C, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 5, name: f, package: main, param_names: [], want: list}, [4, 5, 6, 7, 5], 4, Unknown, 4, true], # 8
   [Coerce, {from_repr: Unknown, to_repr: Str}, [8], ~, Str], # 9
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
   [Print, ~, [9, 10], 8, "Maybe[Boolean]"], # 11
@@ -12643,7 +12644,7 @@ B::f: {start: 0, returns: [6], nodes: [
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 2
   [Subscript, {kind: array}, [1, 2], ~, Scalar], # 3
   [MemStart], # 4
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: B::rr, package: B, param_names: []}, [3], 0, Unknown, 4, true], # 5
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: B::rr, package: B, param_names: []}, [3], 0, Unknown, 4, true], # 5
   [Return, ~, [5], 5, ~, 5]]} # 6
 main::__PROGRAM__: {start: 0, returns: [19], nodes: [
   [Start], # 0
@@ -12658,10 +12659,10 @@ main::__PROGRAM__: {start: 0, returns: [19], nodes: [
   [EntryWrite, {binds: true}, [6, 5], 7, Unknown, 8, true], # 9
   [PackageMark, {package: main}, ~, 9], # 10
   [EntryWrite, {binds: true}, [3, 5], 10, Unknown, 9, true], # 11
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: B::f, package: main, param_names: [], want: list}, [2], 11, Unknown, 11, true], # 12
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: B::f, package: main, param_names: [], want: list}, [2], 11, Unknown, 11, true], # 12
   [Coerce, {from_repr: Unknown, to_repr: Str}, [12], ~, Str], # 13
   [Constant, {const_type: integer, value: "4"}, ~, ~, Int], # 14
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::rr, package: main, param_names: [], want: list}, [14], 12, Unknown, 12, true], # 15
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::rr, package: main, param_names: [], want: list}, [14], 12, Unknown, 12, true], # 15
   [Coerce, {from_repr: Unknown, to_repr: Str}, [15], ~, Str], # 16
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 17
   [Print, ~, [13, 16, 17], 15, "Maybe[Boolean]"], # 18
@@ -12706,9 +12707,9 @@ main::__PROGRAM__: {start: 0, returns: [24], nodes: [
   [Proj, {index: 0}, [14]], # 15
   [Proj, {index: 1}, [14]], # 16
   [Phi, {memory: true, region: 12}, [8, 11], ~, Unknown], # 17
-  [Unwind, {file: "/tmp/yDlL8UMbFX/case.pl", line: 1}, ~, 16, ~, 17], # 18
+  [Unwind, {file: "/tmp/mvrHQew3rs/case.pl", line: 1}, ~, 16, ~, 17], # 18
   [Region, {head: 14}, [15, 18]], # 19
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [2], 19, Unknown, 17, true], # 20
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [2], 19, Unknown, 17, true], # 20
   [Coerce, {from_repr: Unknown, to_repr: Str}, [20], ~, Str], # 21
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 22
   [Print, ~, [21, 22], 20, "Maybe[Boolean]"], # 23
@@ -12719,7 +12720,7 @@ main::f: {start: 0, returns: [6], nodes: [
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 2
   [Subscript, {kind: array}, [1, 2], ~, Scalar], # 3
   [MemStart], # 4
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: Other::g, package: main, param_names: []}, [3], 0, Unknown, 4, true], # 5
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: Other::g, package: main, param_names: []}, [3], 0, Unknown, 4, true], # 5
   [Return, ~, [5], 5, ~, 5]]} # 6
 ```
 
@@ -12750,16 +12751,16 @@ main::__PROGRAM__: {start: 0, returns: [21], nodes: [
   [ArrayLiteral, ~, [3, 4], 0, ArrayRef], # 5
   [HashLiteral, ~, [2, 5], 5, HashRef], # 6
   [MemStart], # 7
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, [6, 3], 6, Str, 7, true], # 8
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, [6, 3], 6, Str, 7, true], # 8
   [Coerce, {from_repr: Unknown, to_repr: Str}, [8], ~, Str], # 9
   [HashLiteral, ~, ~, 8, HashRef], # 10
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, [10, 3], 10, Str, 8, true], # 11
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, [10, 3], 10, Str, 8, true], # 11
   [Coerce, {from_repr: Unknown, to_repr: Str}, [11], ~, Str], # 12
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 13
   [ArrayLiteral, ~, [13], 11, ArrayRef], # 14
   [HashLiteral, ~, [2, 14], 14, HashRef], # 15
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 16
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, [15, 16], 15, Str, 11, true], # 17
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, [15, 16], 15, Str, 11, true], # 17
   [Coerce, {from_repr: Unknown, to_repr: Str}, [17], ~, Str], # 18
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 19
   [Print, ~, [9, 12, 18, 19], 17, "Maybe[Boolean]"], # 20
@@ -12854,18 +12855,18 @@ main::__PROGRAM__: {start: 0, returns: [20], nodes: [
   [Constant, {const_type: string, value: "N"}, ~, ~, Str], # 2
   [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 3
   [MemStart], # 4
-  [Call, {class_name: "N", dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: new, package: main, param_names: [], want: list}, [2, 3], 0, Object, 4, true], # 5
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: main::f, package: main, param_names: [], want: list}, [5], 5, Str, 5, true], # 6
+  [Call, {class_name: "N", dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: new, package: main, param_names: [], want: list}, [2, 3], 0, Object, 4, true], # 5
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: main::f, package: main, param_names: [], want: list}, [5], 5, Str, 5, true], # 6
   [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
-  [Call, {class_name: "N", dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: new, package: main, param_names: [], want: list}, [2, 1], 6, Object, 6, true], # 8
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: main::f, package: main, param_names: [], want: list}, [8], 8, Str, 8, true], # 9
+  [Call, {class_name: "N", dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: new, package: main, param_names: [], want: list}, [2, 1], 6, Object, 6, true], # 8
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: main::f, package: main, param_names: [], want: list}, [8], 8, Str, 8, true], # 9
   [Coerce, {from_repr: Unknown, to_repr: Str}, [9], ~, Str], # 10
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 11
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 12
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: main::g, package: main, param_names: [], want: list}, [12], 9, Str, 9, true], # 13
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: main::g, package: main, param_names: [], want: list}, [12], 9, Str, 9, true], # 13
   [Coerce, {from_repr: Unknown, to_repr: Str}, [13], ~, Str], # 14
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 15
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: main::g, package: main, param_names: [], want: list}, [15], 13, Str, 13, true], # 16
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: main::g, package: main, param_names: [], want: list}, [15], 13, Str, 13, true], # 16
   [Coerce, {from_repr: Unknown, to_repr: Str}, [16], ~, Str], # 17
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 18
   [Print, ~, [7, 10, 11, 14, 11, 17, 18], 16, "Maybe[Boolean]"], # 19
@@ -12875,7 +12876,7 @@ main::f: {start: 0, returns: [15], nodes: [
   [Constant, {const_type: string, value: "v="}, ~, ~, Str], # 1
   [PadAccess, {sigil: $, symbol: "n"}, ~, ~, Unknown], # 2
   [MemStart], # 3
-  [Call, {dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: val, package: main, param_names: [], want: scalar}, [2], 0, Unknown, 3, true], # 4
+  [Call, {dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: val, package: main, param_names: [], want: scalar}, [2], 0, Unknown, 3, true], # 4
   [PadAccess, {sigil: $, symbol: v}, ~, ~, Unknown, 4], # 5
   [Assign, ~, [5, 4], 4, Unknown, 4, true], # 6
   [PadAccess, {sigil: $, symbol: v}, ~, ~, Unknown, 6], # 7
@@ -12883,7 +12884,7 @@ main::f: {start: 0, returns: [15], nodes: [
   [Constant, {const_type: string, value: u}, ~, ~, Str], # 9
   [TernaryExpr, ~, [8, 7, 9], ~, Unknown], # 10
   [Ref, ~, [10], ~, Unknown], # 11
-  [PostfixDeref, {eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, package: main, sigil: $, strict: false}, [11], ~, Scalar, 6], # 12
+  [PostfixDeref, {eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 2, package: main, sigil: $, strict: false}, [11], ~, Scalar, 6], # 12
   [Coerce, {from_repr: Scalar, to_repr: Str}, [12], ~, Str], # 13
   [Concat, ~, [1, 13], ~, Str], # 14
   [Return, ~, [14], 6, ~, 6], # 15
@@ -12900,7 +12901,7 @@ main::g: {start: 0, returns: [51], nodes: [
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 7
   [TernaryExpr, ~, [5, 6, 7], ~, Unknown], # 8
   [Ref, ~, [8], ~, Unknown], # 9
-  [PostfixDeref, {eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, package: main, sigil: $, strict: false}, [9], ~, Scalar], # 10
+  [PostfixDeref, {eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 3, package: main, sigil: $, strict: false}, [9], ~, Scalar], # 10
   [Constant, {const_type: integer, value: "9"}, ~, ~, Int], # 11
   [If, ~, [4, 5], 4], # 12
   [Proj, {index: 0}, [12]], # 13
@@ -12923,7 +12924,7 @@ main::g: {start: 0, returns: [51], nodes: [
   [ArrayLiteral, {sigil: "@", symbol: r}, [29], ~, Array], # 30
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 31
   [Subscript, {kind: array}, [30, 31], ~, Undef], # 32
-  [PostfixDeref, {eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, package: main, sigil: $, strict: false}, [32], ~, Scalar], # 33
+  [PostfixDeref, {eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 3, package: main, sigil: $, strict: false}, [32], ~, Scalar], # 33
   [If, ~, [23, 5], 23], # 34
   [Proj, {index: 0}, [34]], # 35
   [Assign, ~, [33, 7], 35, Int, 23, true], # 36
@@ -12974,11 +12975,11 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [ArrayLiteral, ~, [3, 4, 5], 0, ArrayRef], # 6
   [HashLiteral, ~, [2, 6], 6, HashRef], # 7
   [MemStart], # 8
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, [7], 7, Str, 8, true], # 9
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, [7], 7, Str, 8, true], # 9
   [Coerce, {from_repr: Unknown, to_repr: Str}, [9], ~, Str], # 10
   [Constant, {const_type: string, value: "|"}, ~, ~, Str], # 11
   [HashLiteral, ~, ~, 9, HashRef], # 12
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, [12], 12, Str, 9, true], # 13
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, [12], 12, Str, 9, true], # 13
   [Coerce, {from_repr: Unknown, to_repr: Str}, [13], ~, Str], # 14
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 15
   [Print, ~, [10, 11, 14, 15], 13, "Maybe[Boolean]"], # 16
@@ -13051,7 +13052,7 @@ main::__PROGRAM__: {start: 0, returns: [9], nodes: [
   [Constant, {const_type: string, value: x}, ~, ~, Str], # 2
   [Constant, {const_type: string, value: yy}, ~, ~, Str], # 3
   [MemStart], # 4
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [2, 3], 0, Str, 4, true], # 5
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [2, 3], 0, Str, 4, true], # 5
   [Coerce, {from_repr: Unknown, to_repr: Str}, [5], ~, Str], # 6
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 7
   [Print, ~, [6, 7], 5, "Maybe[Boolean]"], # 8
@@ -13068,10 +13069,10 @@ main::f: {start: 0, returns: [41], nodes: [
   [ArgsSource, ~, ~, ~, Array], # 8
   [Assign, {targets: 2}, [6, 7, 8], 0, List, 5, true], # 9
   [PadAccess, {sigil: $, symbol: a}, ~, ~, Unknown, 9], # 10
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::p, package: main, param_names: [], want: list}, [10], 9, List, 9, true], # 11
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::p, package: main, param_names: [], want: list}, [10], 9, List, 9, true], # 11
   [Assign, {targets: 2}, [3, 4, 11], 11, List, 11, true], # 12
   [PadAccess, {sigil: $, symbol: b}, ~, ~, Unknown, 12], # 13
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::p, package: main, param_names: [], want: list}, [13], 12, List, 12, true], # 14
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::p, package: main, param_names: [], want: list}, [13], 12, List, 12, true], # 14
   [Assign, {targets: 2}, [1, 2, 14], 14, List, 14, true], # 15
   [PadAccess, {sigil: $, symbol: a}, ~, ~, Unknown, 15], # 16
   [PadAccess, {sigil: $, symbol: b}, ~, ~, Unknown, 15], # 17
@@ -13096,7 +13097,7 @@ main::f: {start: 0, returns: [41], nodes: [
   [Constant, {const_type: string, value: ")"}, ~, ~, Str], # 36
   [Concat, ~, [35, 36], ~, Str], # 37
   [Proj, {index: 1}, [32]], # 38
-  [Unwind, {file: "/tmp/yDlL8UMbFX/case.pl", line: 2}, [37], 38, ~, 18], # 39
+  [Unwind, {file: "/tmp/mvrHQew3rs/case.pl", line: 2}, [37], 38, ~, 18], # 39
   [Region, {head: 32}, [33, 39]], # 40
   [Return, ~, [30], 40, ~, 18]]} # 41
 main::p: {start: 0, returns: [12], nodes: [
@@ -13153,7 +13154,7 @@ main::__PROGRAM__: {start: 0, returns: [16], nodes: [
   [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 9
   [ArrayLiteral, ~, [7, 8, 9], 6, ArrayRef], # 10
   [MemStart], # 11
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 9, name: main::f, package: main, param_names: [], want: list}, [2, 3, 6, 10], 10, Str, 11, true], # 12
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 9, name: main::f, package: main, param_names: [], want: list}, [2, 3, 6, 10], 10, Str, 11, true], # 12
   [Coerce, {from_repr: Unknown, to_repr: Str}, [12], ~, Str], # 13
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 14
   [Print, ~, [13, 14], 12, "Maybe[Boolean]"], # 15
@@ -13203,13 +13204,13 @@ main::f: {start: 0, returns: [21], nodes: [
   [PostfixDeref, {sigil: $}, [31], ~, Scalar, 7], # 41
   [Subscript, {kind: array}, [22, 25], ~, Scalar, 7], # 42
   [TernaryExpr, ~, [28, 41, 42], ~, Scalar], # 43
-  [PostfixDeref, {eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 5, package: main, sigil: "@", strict: false}, [43], ~, Array, 7], # 44
-  [PostfixDeref, {copy: 1, eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 5, package: main, sigil: "@", strict: false}, [43], ~, Array, 7], # 45
+  [PostfixDeref, {eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 5, package: main, sigil: "@", strict: false}, [43], ~, Array, 7], # 44
+  [PostfixDeref, {copy: 1, eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 5, package: main, sigil: "@", strict: false}, [43], ~, Array, 7], # 45
   [PostfixDeref, {sigil: $}, [31], ~, Scalar, 7], # 46
   [Subscript, {kind: array}, [22, 25], ~, Scalar, 7], # 47
   [TernaryExpr, ~, [28, 46, 47], ~, Scalar], # 48
-  [PostfixDeref, {eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 5, package: main, sigil: "@", strict: false}, [48], ~, Array, 7], # 49
-  [PostfixDeref, {copy: 1, eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 5, package: main, sigil: "@", strict: false}, [48], ~, Array, 7], # 50
+  [PostfixDeref, {eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 5, package: main, sigil: "@", strict: false}, [48], ~, Array, 7], # 49
+  [PostfixDeref, {copy: 1, eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 5, package: main, sigil: "@", strict: false}, [48], ~, Array, 7], # 50
   [PostfixDeref, {sigil: $}, [31], ~, Scalar, 7], # 51
   [Subscript, {kind: array}, [22, 25], ~, Scalar, 7], # 52
   [PostfixDeref, {sigil: $}, [31], ~, Scalar, 7], # 53
@@ -13269,11 +13270,11 @@ main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 3
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 4
   [MemStart], # 5
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, [2, 3, 4], 0, Str, 5, true], # 6
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, [2, 3, 4], 0, Str, 5, true], # 6
   [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
   [Constant, {const_type: string, value: "|"}, ~, ~, Str], # 8
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 9
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, [9, 3], 6, Str, 6, true], # 10
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, [9, 3], 6, Str, 6, true], # 10
   [Coerce, {from_repr: Unknown, to_repr: Str}, [10], ~, Str], # 11
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 12
   [Print, ~, [7, 8, 11, 12], 10, "Maybe[Boolean]"], # 13
@@ -13358,7 +13359,7 @@ main::__PROGRAM__: {start: 0, returns: [21], nodes: [
   [HashLiteral, ~, [5, 13], 13, HashRef], # 14
   [HashLiteral, ~, [2, 11, 12, 14], 14, HashRef], # 15
   [MemStart], # 16
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 6, name: main::f, package: main, param_names: [], want: list}, [15], 15, Str, 16, true], # 17
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 6, name: main::f, package: main, param_names: [], want: list}, [15], 15, Str, 16, true], # 17
   [Coerce, {from_repr: Unknown, to_repr: Str}, [17], ~, Str], # 18
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 19
   [Print, ~, [18, 19], 17, "Maybe[Boolean]"], # 20
@@ -13480,13 +13481,13 @@ main::__PROGRAM__: {start: 0, returns: [15], nodes: [
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 3
   [MemStart], # 4
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [2, 3], 0, Str, 4, true], # 5
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [2, 3], 0, Str, 4, true], # 5
   [Coerce, {from_repr: Unknown, to_repr: Str}, [5], ~, Str], # 6
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [3, 2], 5, Str, 5, true], # 7
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [3, 2], 5, Str, 5, true], # 7
   [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [2, 2], 7, Str, 7, true], # 9
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [2, 2], 7, Str, 7, true], # 9
   [Coerce, {from_repr: Unknown, to_repr: Str}, [9], ~, Str], # 10
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [3, 3], 9, Str, 9, true], # 11
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [3, 3], 9, Str, 9, true], # 11
   [Coerce, {from_repr: Unknown, to_repr: Str}, [11], ~, Str], # 12
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 13
   [Print, ~, [6, 8, 10, 12, 13], 11, "Maybe[Boolean]"], # 14
@@ -13588,11 +13589,11 @@ main::__PROGRAM__: {start: 0, returns: [12], nodes: [
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
   [MemStart], # 3
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [2], 0, Str, 3, true], # 4
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [2], 0, Str, 3, true], # 4
   [Coerce, {from_repr: Unknown, to_repr: Str}, [4], ~, Str], # 5
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 6
   [Constant, {const_type: integer, value: "5"}, ~, ~, Int], # 7
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::h, package: main, param_names: [], want: list}, [7], 4, Str, 4, true], # 8
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::h, package: main, param_names: [], want: list}, [7], 4, Str, 4, true], # 8
   [Coerce, {from_repr: Unknown, to_repr: Str}, [8], ~, Str], # 9
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
   [Print, ~, [5, 6, 9, 10], 8, "Maybe[Boolean]"], # 11
@@ -13604,11 +13605,11 @@ main::f: {start: 0, returns: [11], nodes: [
   [Parameter, {index: 0, name: $c, sigil: $}, ~, ~, Unknown], # 3
   [Assign, ~, [2, 3], 0, Unknown, 1, true], # 4
   [PadAccess, {sigil: $, symbol: c}, ~, ~, Unknown, 4], # 5
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: main::g, package: main, param_names: [], want: scalar}, [5], 4, Str, 4, true], # 6
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: main::g, package: main, param_names: [], want: scalar}, [5], 4, Str, 4, true], # 6
   [PadAccess, {sigil: $, symbol: c}, ~, ~, Unknown, 6], # 7
   [Assign, ~, [7, 6], 6, Str, 6, true], # 8
   [PadAccess, {sigil: $, symbol: c}, ~, ~, Unknown, 8], # 9
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: main::g, package: main, param_names: []}, [9], 8, Str, 8, true], # 10
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: main::g, package: main, param_names: []}, [9], 8, Str, 8, true], # 10
   [Return, ~, [10], 10, ~, 10]]} # 11
 main::g: {start: 0, returns: [6], nodes: [
   [Start], # 0
@@ -13627,7 +13628,7 @@ main::h: {start: 0, returns: [25], nodes: [
   [Assign, ~, [3, 4], 0, Unknown, 2, true], # 5
   [PadAccess, {sigil: $, symbol: x}, ~, ~, Unknown, 5], # 6
   [Ref, ~, [6], ~, Unknown], # 7
-  [PostfixDeref, {eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, package: main, sigil: $, strict: true}, [7], ~, Scalar], # 8
+  [PostfixDeref, {eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 2, package: main, sigil: $, strict: true}, [7], ~, Scalar], # 8
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 9
   [Loop, {bound: entry}, [5], 5], # 10
   [Proj, {index: 1}, [10]], # 11
@@ -13660,7 +13661,7 @@ main::h: {start: 0, returns: [25], nodes: [
   [Phi, {region: 18}, [9, 48], ~, Int], # 38
   [Subscript, {kind: array}, [37, 38], ~, Scalar, 20], # 39
   [Proj, {index: 0}, [18]], # 40
-  [PostfixDeref, {eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, package: main, sigil: $, strict: true}, [39], 40, Scalar, 20, true], # 41
+  [PostfixDeref, {eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 2, package: main, sigil: $, strict: true}, [39], 40, Scalar, 20, true], # 41
   [ListAppend, {collector: map}, [19, 41], ~, Array], # 42
   [Count, ~, [37], ~, Int, 20], # 43
   [Count, ~, [37], ~, Int, 15], # 44
@@ -13703,19 +13704,19 @@ main::__PROGRAM__: {start: 0, returns: [22], nodes: [
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 3
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 4
   [MemStart], # 5
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: main::mk, package: main, param_names: [], want: list}, [2, 3, 4], 0, HashRef, 5, true], # 6
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: main::f, package: main, param_names: [], want: list}, [6], 6, Str, 6, true], # 7
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: main::mk, package: main, param_names: [], want: list}, [2, 3, 4], 0, HashRef, 5, true], # 6
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: main::f, package: main, param_names: [], want: list}, [6], 6, Str, 6, true], # 7
   [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: "|"}, ~, ~, Str], # 9
   [Constant, {const_type: string, value: H}, ~, ~, Str], # 10
   [Constant, {const_type: string, value: k}, ~, ~, Str], # 11
   [Constant, {const_type: string, value: j}, ~, ~, Str], # 12
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: main::mk, package: main, param_names: [], want: list}, [10, 11, 3, 12, 4], 7, HashRef, 7, true], # 13
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: main::f, package: main, param_names: [], want: list}, [13], 13, Str, 13, true], # 14
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: main::mk, package: main, param_names: [], want: list}, [10, 11, 3, 12, 4], 7, HashRef, 7, true], # 13
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: main::f, package: main, param_names: [], want: list}, [13], 13, Str, 13, true], # 14
   [Coerce, {from_repr: Unknown, to_repr: Str}, [14], ~, Str], # 15
   [Constant, {const_type: string, value: X}, ~, ~, Str], # 16
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: main::mk, package: main, param_names: [], want: list}, [16], 14, HashRef, 14, true], # 17
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: main::f, package: main, param_names: [], want: list}, [17], 17, Str, 17, true], # 18
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: main::mk, package: main, param_names: [], want: list}, [16], 14, HashRef, 14, true], # 17
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: main::f, package: main, param_names: [], want: list}, [17], 17, Str, 17, true], # 18
   [Coerce, {from_repr: Unknown, to_repr: Str}, [18], ~, Str], # 19
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 20
   [Print, ~, [8, 9, 15, 9, 19, 20], 18, "Maybe[Boolean]"], # 21
@@ -13728,13 +13729,13 @@ main::f: {start: 0, returns: [37], nodes: [
   [ArgsSource, ~, ~, ~, Array], # 4
   [Assign, {targets: 1}, [3, 4], 0, List, 2, true], # 5
   [PadAccess, {sigil: $, symbol: c}, ~, ~, Unknown, 5], # 6
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::operation, package: main, param_names: [], want: scalar}, [6], 5, Scalar, 5, true], # 7
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::operation, package: main, param_names: [], want: scalar}, [6], 5, Scalar, 5, true], # 7
   [PadAccess, {sigil: $, symbol: c}, ~, ~, Unknown, 7], # 8
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::inputs, package: main, param_names: [], want: scalar}, [8], 7, Scalar, 7, true], # 9
-  [PostfixDeref, {eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, package: main, sigil: "@", strict: false}, [9], 9, Array, 9, true], # 10
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::inputs, package: main, param_names: [], want: scalar}, [8], 7, Scalar, 7, true], # 9
+  [PostfixDeref, {eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 2, package: main, sigil: "@", strict: false}, [9], 9, Array, 9, true], # 10
   [EntryDef, {package: main, sigil: $, symbol: "\""}, ~, ~, Scalar, 10], # 11
   [Coerce, {from_repr: Scalar, to_repr: Str}, [11], ~, Str], # 12
-  [PostfixDeref, {copy: 1, eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, package: main, sigil: "@", strict: false}, [9], ~, Array, 9], # 13
+  [PostfixDeref, {copy: 1, eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 2, package: main, sigil: "@", strict: false}, [9], ~, Array, 9], # 13
   [ArrayLiteral, ~, ~, ~, Array], # 14
   [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 15
   [Constant, {const_type: string, value: A}, ~, ~, Str], # 16
@@ -13836,10 +13837,10 @@ main::__PROGRAM__: {start: 0, returns: [16], nodes: [
   [ArrayLiteral, ~, [5], 0, ArrayRef], # 6
   [HashLiteral, ~, [2, 3, 4, 6], 6, HashRef], # 7
   [MemStart], # 8
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: main::f, package: main, param_names: [], want: list}, [7], 7, Str, 8, true], # 9
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: main::f, package: main, param_names: [], want: list}, [7], 7, Str, 8, true], # 9
   [Coerce, {from_repr: Unknown, to_repr: Str}, [9], ~, Str], # 10
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 11
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: main::f, package: main, param_names: [], want: list}, [11], 9, Str, 9, true], # 12
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: main::f, package: main, param_names: [], want: list}, [11], 9, Str, 9, true], # 12
   [Coerce, {from_repr: Unknown, to_repr: Str}, [12], ~, Str], # 13
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 14
   [Print, ~, [10, 13, 14], 12, "Maybe[Boolean]"], # 15
@@ -13862,7 +13863,7 @@ main::f: {start: 0, returns: [38], nodes: [
   [Proj, {index: 1}, [3]], # 14
   [Constant, {const_type: string, value: a}, ~, ~, Str], # 15
   [Subscript, {kind: hash}, [4, 15], 13, Scalar, 13, true], # 16
-  [PostfixDeref, {eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, package: main, sigil: "@", strict: false}, [16], 16, Array, 16, true], # 17
+  [PostfixDeref, {eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 2, package: main, sigil: "@", strict: false}, [16], 16, Array, 16, true], # 17
   [Count, ~, [17], ~, Int, 17], # 18
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 19
   [NumGt, ~, [18, 19], ~, Boolean], # 20
@@ -13920,7 +13921,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
   [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
   [Print, ~, [4, 5], 3, "Maybe[Boolean]"], # 6
@@ -13949,7 +13950,7 @@ main::f: {start: 0, returns: [17], nodes: [
   [Constant, {const_type: string, value: "|"}, ~, ~, Str], # 9
   [Concat, ~, [8, 9], ~, Str], # 10
   [Ref, ~, [4], ~, HashRef], # 11
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::add, package: main, param_names: [], want: void}, [11], 0, Int, 5, true], # 12
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::add, package: main, param_names: [], want: void}, [11], 0, Int, 5, true], # 12
   [Call, {dispatch_kind: builtin, name: keys, param_names: [], want: list}, [4], ~, List, 12], # 13
   [Call, {dispatch_kind: builtin, name: sort, param_names: [], sort_cmp: string, sort_order: ascending}, [13], ~, List, 12], # 14
   [Call, {dispatch_kind: builtin, name: join, param_names: []}, [1, 14], ~, Str, 12], # 15
@@ -13985,15 +13986,15 @@ main::__PROGRAM__: {start: 0, returns: [21], nodes: [
   [ArrayLiteral, ~, [2, 3, 4, 5], 0, ArrayRef], # 6
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 7
   [MemStart], # 8
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, [6, 7], 6, Str, 8, true], # 9
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, [6, 7], 6, Str, 8, true], # 9
   [Coerce, {from_repr: Unknown, to_repr: Str}, [9], ~, Str], # 10
   [ArrayLiteral, ~, [2, 3], 9, ArrayRef], # 11
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, [11, 7], 11, Str, 9, true], # 12
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, [11, 7], 11, Str, 9, true], # 12
   [Coerce, {from_repr: Unknown, to_repr: Str}, [12], ~, Str], # 13
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 14
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 15
   [HashLiteral, ~, [2, 14, 3, 15], 12, HashRef], # 16
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::g, package: main, param_names: [], want: list}, [16], 16, Str, 12, true], # 17
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::g, package: main, param_names: [], want: list}, [16], 16, Str, 12, true], # 17
   [Coerce, {from_repr: Unknown, to_repr: Str}, [17], ~, Str], # 18
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 19
   [Print, ~, [10, 13, 18, 19], 17, "Maybe[Boolean]"], # 20
@@ -14073,7 +14074,7 @@ C::f: {start: 0, returns: [49], nodes: [
   [Count, ~, [2], ~, Int, 3], # 4
   [If, ~, [0, 4], 0], # 5
   [Proj, {index: 1}, [5]], # 6
-  [Call, {class_name: C, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: inner, package: C, param_names: [], want: scalar}, [1], 6, Str, 3, true], # 7
+  [Call, {class_name: C, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: inner, package: C, param_names: [], want: scalar}, [1], 6, Str, 3, true], # 7
   [Constant, {const_type: string, value: bind}, ~, ~, Str], # 8
   [Subscript, {kind: hash}, [1, 8], ~, Scalar], # 9
   [Proj, {index: 0}, [5]], # 10
@@ -14085,7 +14086,7 @@ C::f: {start: 0, returns: [49], nodes: [
   [DefinedOr, ~, [11, 15], ~, Scalar], # 16
   [Proj, {index: 0}, [13]], # 17
   [Region, {head: 13}, [17, 15]], # 18
-  [PostfixDeref, {eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 5, package: C, sigil: "%", strict: false}, [16], 18, Hash, 11, true], # 19
+  [PostfixDeref, {eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 5, package: C, sigil: "%", strict: false}, [16], 18, Hash, 11, true], # 19
   [HashLiteral, ~, [19], 19, HashRef], # 20
   [Assign, {local: true}, [9, 20], 20, HashRef, 19, true], # 21
   [Loop, {bound: entry}, [21], 21], # 22
@@ -14093,7 +14094,7 @@ C::f: {start: 0, returns: [49], nodes: [
   [Region, {head: 22}, [23]], # 24
   [Phi, {memory: true, region: 22}, [21, 65], ~, Scalar], # 25
   [Phi, {memory: true, region: 24}, [25], ~, Scalar], # 26
-  [Call, {class_name: C, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 7, name: inner, package: C, param_names: [], want: scalar}, [1], 24, Str, 26, true], # 27
+  [Call, {class_name: C, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 7, name: inner, package: C, param_names: [], want: scalar}, [1], 24, Str, 26, true], # 27
   [Constant, {const_type: string, value: cache}, ~, ~, Str], # 28
   [Subscript, {kind: hash}, [1, 28], 7, Scalar, 7], # 29
   [HashLiteral, ~, ~, 29, HashRef], # 30
@@ -14171,15 +14172,15 @@ main::__PROGRAM__: {start: 0, returns: [16], nodes: [
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: C}, ~, ~, Str], # 2
   [MemStart], # 3
-  [Call, {class_name: C, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 8, name: new, package: main, param_names: [], want: scalar}, [2], 0, Object, 3, true], # 4
-  [Call, {class_name: C, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 8, name: f, package: main, param_names: [], want: list}, [4], 4, Str, 4, true], # 5
+  [Call, {class_name: C, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 8, name: new, package: main, param_names: [], want: scalar}, [2], 0, Object, 3, true], # 4
+  [Call, {class_name: C, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 8, name: f, package: main, param_names: [], want: list}, [4], 4, Str, 4, true], # 5
   [Coerce, {from_repr: Unknown, to_repr: Str}, [5], ~, Str], # 6
   [Constant, {const_type: string, value: "|"}, ~, ~, Str], # 7
   [Constant, {const_type: string, value: a}, ~, ~, Str], # 8
   [Constant, {const_type: string, value: b}, ~, ~, Str], # 9
-  [Call, {class_name: C, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 8, name: f, package: main, param_names: [], want: list}, [4, 8, 9], 5, Str, 5, true], # 10
+  [Call, {class_name: C, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 8, name: f, package: main, param_names: [], want: list}, [4, 8, 9], 5, Str, 5, true], # 10
   [Coerce, {from_repr: Unknown, to_repr: Str}, [10], ~, Str], # 11
-  [Call, {class_name: C, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 8, name: inner, package: main, param_names: [], want: list}, [4], 10, Str, 10, true], # 12
+  [Call, {class_name: C, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 8, name: inner, package: main, param_names: [], want: list}, [4], 10, Str, 10, true], # 12
   [Coerce, {from_repr: Unknown, to_repr: Str}, [12], ~, Str], # 13
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 14
   [Print, ~, [6, 7, 11, 7, 13, 14], 12, "Maybe[Boolean]"], # 15
@@ -14225,7 +14226,7 @@ C::f: {start: 0, returns: [68], nodes: [
   [Subscript, {kind: hash}, [4, 5], ~, Scalar], # 12
   [Assign, ~, [12, 9], 8, Scalar, 6, true], # 13
   [Assign, ~, [11, 1], 13, Int, 13, true], # 14
-  [Call, {dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: inputs, package: C, param_names: [], want: scalar}, [3], 14, Unknown, 14, true], # 15
+  [Call, {dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: inputs, package: C, param_names: [], want: scalar}, [3], 14, Unknown, 14, true], # 15
   [Loop, {bound: entry}, [15], 15], # 16
   [Proj, {index: 1}, [16]], # 17
   [Phi, {memory: true, region: 16}, [15, 85], ~, Unknown], # 18
@@ -14246,7 +14247,7 @@ C::f: {start: 0, returns: [68], nodes: [
   [PostfixDeref, {sigil: $}, [26], ~, Scalar, 18], # 33
   [Subscript, {kind: array}, [19, 20], ~, Scalar, 18], # 34
   [TernaryExpr, ~, [22, 33, 34], ~, Scalar], # 35
-  [PostfixDeref, {eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, package: C, sigil: "@", strict: false}, [35], ~, Array, 18], # 36
+  [PostfixDeref, {eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 4, package: C, sigil: "@", strict: false}, [35], ~, Array, 18], # 36
   [PostfixDeref, {sigil: $}, [26], ~, Scalar, 18], # 37
   [Subscript, {kind: array}, [19, 20], ~, Scalar, 18], # 38
   [TernaryExpr, ~, [22, 37, 38], ~, Scalar], # 39
@@ -14265,7 +14266,7 @@ C::f: {start: 0, returns: [68], nodes: [
   [And, ~, [50, 51], ~, Scalar], # 52
   [If, ~, [48, 52], 48], # 53
   [Proj, {index: 0}, [53]], # 54
-  [Call, {class_name: C, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 5, name: f, package: C, param_names: [], want: scalar}, [4, 49], 54, Int, 48, true], # 55
+  [Call, {class_name: C, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 5, name: f, package: C, param_names: [], want: scalar}, [4, 49], 54, Int, 48, true], # 55
   [If, ~, [55, 55], 55], # 56
   [Proj, {index: 0}, [56]], # 57
   [Region, {head: 16}, [17, 57]], # 58
@@ -14335,20 +14336,20 @@ main::__PROGRAM__: {start: 0, returns: [21], nodes: [
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [Constant, {const_type: string, value: C}, ~, ~, Str], # 2
   [MemStart], # 3
-  [Call, {class_name: C, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 7, name: new, package: main, param_names: [], want: scalar}, [2], 0, Object, 3, true], # 4
+  [Call, {class_name: C, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 7, name: new, package: main, param_names: [], want: scalar}, [2], 0, Object, 3, true], # 4
   [Constant, {const_type: string, value: "N"}, ~, ~, Str], # 5
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 6
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 7
   [Constant, {const_type: integer, value: "3"}, ~, ~, Int], # 8
   [ArrayLiteral, ~, [7, 8], 4, ArrayRef], # 9
-  [Call, {class_name: "N", dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 7, name: new, package: main, param_names: [], want: list}, [5, 6, 9], 9, Object, 4, true], # 10
-  [Call, {class_name: C, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 7, name: f, package: main, param_names: [], want: list}, [4, 10], 10, Int, 10, true], # 11
+  [Call, {class_name: "N", dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 7, name: new, package: main, param_names: [], want: list}, [5, 6, 9], 9, Object, 4, true], # 10
+  [Call, {class_name: C, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 7, name: f, package: main, param_names: [], want: list}, [4, 10], 10, Int, 10, true], # 11
   [Coerce, {from_repr: Unknown, to_repr: Str}, [11], ~, Str], # 12
-  [Call, {class_name: C, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 7, name: new, package: main, param_names: [], want: scalar}, [2], 11, Object, 11, true], # 13
-  [Call, {class_name: "N", dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 7, name: new, package: main, param_names: [], want: list}, [5], 13, Object, 13, true], # 14
+  [Call, {class_name: C, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 7, name: new, package: main, param_names: [], want: scalar}, [2], 11, Object, 11, true], # 13
+  [Call, {class_name: "N", dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 7, name: new, package: main, param_names: [], want: list}, [5], 13, Object, 13, true], # 14
   [ArrayLiteral, ~, [7, 14], 14, ArrayRef], # 15
-  [Call, {class_name: "N", dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 7, name: new, package: main, param_names: [], want: list}, [5, 6, 15], 15, Object, 14, true], # 16
-  [Call, {class_name: C, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 7, name: f, package: main, param_names: [], want: list}, [13, 16], 16, Int, 16, true], # 17
+  [Call, {class_name: "N", dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 7, name: new, package: main, param_names: [], want: list}, [5, 6, 15], 15, Object, 14, true], # 16
+  [Call, {class_name: C, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 7, name: f, package: main, param_names: [], want: list}, [13, 16], 16, Int, 16, true], # 17
   [Coerce, {from_repr: Unknown, to_repr: Str}, [17], ~, Str], # 18
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 19
   [Print, ~, [12, 18, 19], 17, "Maybe[Boolean]"], # 20
@@ -14386,11 +14387,11 @@ main::__PROGRAM__: {start: 0, returns: [24], nodes: [
   [MemStart], # 8
   [Assign, {targets: 1}, [6, 7], 0, Boolean, 8, true], # 9
   [Assign, {targets: 1}, [3, 5], 9, Boolean, 9, true], # 10
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [2], 10, Str, 10, true], # 11
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [2], 10, Str, 10, true], # 11
   [Coerce, {from_repr: Unknown, to_repr: Str}, [11], ~, Str], # 12
   [Constant, {const_type: string, value: "|"}, ~, ~, Str], # 13
   [Constant, {const_type: string, value: q}, ~, ~, Str], # 14
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [14], 11, Str, 11, true], # 15
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, [14], 11, Str, 11, true], # 15
   [Coerce, {from_repr: Unknown, to_repr: Str}, [15], ~, Str], # 16
   [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 17
   [Defined, ~, [3], ~, Boolean], # 18
@@ -14511,11 +14512,11 @@ main::__PROGRAM__: {start: 0, returns: [29], nodes: [
   [Phi, {region: 11}, [17, 38], ~, Array], # 18
   [HashLiteral, {sigil: "%", symbol: I}, [18], 14, Hash], # 19
   [Assign, ~, [16, 19], 19, List, 15, true], # 20
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::ix, package: main, param_names: [], want: list}, [2], 20, Scalar, 20, true], # 21
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::ix, package: main, param_names: [], want: list}, [2], 20, Scalar, 20, true], # 21
   [Coerce, {from_repr: Unknown, to_repr: Str}, [21], ~, Str], # 22
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::ix, package: main, param_names: [], want: list}, [7], 21, Scalar, 21, true], # 23
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::ix, package: main, param_names: [], want: list}, [7], 21, Scalar, 21, true], # 23
   [Coerce, {from_repr: Unknown, to_repr: Str}, [23], ~, Str], # 24
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::ff, package: main, param_names: [], want: scalar}, ~, 23, Array, 23, true], # 25
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::ff, package: main, param_names: [], want: scalar}, ~, 23, Array, 23, true], # 25
   [Coerce, {from_repr: Unknown, to_repr: Str}, [25], ~, Str], # 26
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 27
   [Print, ~, [22, 24, 26, 27], 25, "Maybe[Boolean]"], # 28
@@ -14578,7 +14579,7 @@ main::__PROGRAM__: {start: 0, returns: [16], nodes: [
   [Constant, {const_type: string, value: "\u00e9"}, ~, ~, Str], # 4
   [Assign, ~, [3, 4], 0, Str, 2, true], # 5
   [PadAccess, {sigil: $, symbol: s}, ~, ~, Unknown, 5], # 6
-  [Call, {dispatch_kind: direct, external: true, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: utf8::upgrade, package: main, param_names: [], want: void, xs: true}, [6], 5, Unknown, 5, true], # 7
+  [Call, {dispatch_kind: direct, external: true, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: utf8::upgrade, package: main, param_names: [], want: void, xs: true}, [6], 5, Unknown, 5, true], # 7
   [PadAccess, {sigil: $, symbol: s}, ~, ~, Str, 7], # 8
   [Length, ~, [8], ~, Int], # 9
   [Coerce, {from_repr: Int, to_repr: Str}, [9], ~, Str], # 10
@@ -14594,7 +14595,7 @@ main::__PROGRAM__: {start: 0, returns: [16], nodes: [
   [Constant, {const_type: string, value: bytes.pm}, ~, ~, Str], # 2
   [MemStart], # 3
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [2], 0, Unknown, 3, true], # 4
-  [Call, {class_name: bytes, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: import, package: main, param_names: []}, [1], 4, Unknown, 4, true], # 5
+  [Call, {class_name: bytes, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: import, package: main, param_names: []}, [1], 4, Unknown, 4, true], # 5
   [Return, {implicit: true}, [5], 5, ~, 5]]} # 6
 ```
 
@@ -14627,11 +14628,11 @@ main::__PROGRAM__: {start: 0, returns: [18], nodes: [
   [Assign, ~, [3, 6], 6, HashRef, 2, true], # 7
   [PadAccess, {sigil: $, symbol: o}, ~, ~, Unknown, 7], # 8
   [Constant, {const_type: string, value: a}, ~, ~, Str], # 9
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, [8, 9], 7, Str, 7, true], # 10
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, [8, 9], 7, Str, 7, true], # 10
   [Coerce, {from_repr: Unknown, to_repr: Str}, [10], ~, Str], # 11
   [PadAccess, {sigil: $, symbol: o}, ~, ~, Unknown, 10], # 12
   [Constant, {const_type: string, value: b}, ~, ~, Str], # 13
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, [12, 13], 10, Str, 10, true], # 14
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::f, package: main, param_names: [], want: list}, [12, 13], 10, Str, 10, true], # 14
   [Coerce, {from_repr: Unknown, to_repr: Str}, [14], ~, Str], # 15
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 16
   [Print, ~, [11, 15, 16], 14, "Maybe[Boolean]"], # 17
@@ -14643,7 +14644,7 @@ main::f: {start: 0, returns: [18], nodes: [
   [Constant, {const_type: string, value: s}, ~, ~, Str], # 3
   [MemStart], # 4
   [Subscript, {kind: hash}, [2, 3], 0, Scalar, 4, true], # 5
-  [PostfixDeref, {eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, package: main, sigil: "@", strict: false}, [5], 5, Array, 5, true], # 6
+  [PostfixDeref, {eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 1, package: main, sigil: "@", strict: false}, [5], 5, Array, 5, true], # 6
   [Count, ~, [6], ~, Int, 6], # 7
   [Coerce, {from_repr: Int, to_repr: Str}, [7], ~, Str], # 8
   [Concat, ~, [1, 8], ~, Str], # 9
@@ -14706,7 +14707,7 @@ K::f: {start: 0, returns: [12], nodes: [
   [LocalAlias, {name: _}, [21], 19, Unknown, 3], # 22
   [Subscript, {kind: array}, [14, 17], ~, Scalar, 3], # 23
   [PadAccess, {sigil: $, symbol: self}, ~, ~, Object], # 24
-  [Call, {class_name: K, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: isn, package: K, param_names: [], want: scalar}, [24, 23], 22, Boolean, 3, true], # 25
+  [Call, {class_name: K, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: isn, package: K, param_names: [], want: scalar}, [24, 23], 22, Boolean, 3, true], # 25
   [ListAppend, {collector: grep}, [10, 23, 25], ~, Array], # 26
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 27
   [Add, ~, [17, 27], ~, Int], # 28
@@ -14721,11 +14722,11 @@ main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [Call, {class_name: K, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: new, package: main, param_names: [], want: scalar}, ~, 0, Object, 2, true], # 3
+  [Call, {class_name: K, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: new, package: main, param_names: [], want: scalar}, ~, 0, Object, 2, true], # 3
   [Constant, {const_type: string, value: ba}, ~, ~, Str], # 4
   [Constant, {const_type: string, value: x}, ~, ~, Str], # 5
   [Constant, {const_type: string, value: aa}, ~, ~, Str], # 6
-  [Call, {class_name: K, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: f, package: main, param_names: [], want: list}, [3, 4, 5, 6], 3, Str, 3, true], # 7
+  [Call, {class_name: K, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: f, package: main, param_names: [], want: list}, [3, 4, 5, 6], 3, Str, 3, true], # 7
   [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 9
   [Print, ~, [8, 9], 7, "Maybe[Boolean]"], # 10
@@ -14743,7 +14744,7 @@ main::__PROGRAM__: {start: 0, returns: [11], nodes: [
   [Constant, {const_type: string, value: experimental.pm}, ~, ~, Str], # 3
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
-  [Call, {class_name: experimental, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Call, {class_name: experimental, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
   [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 ```
 
@@ -14780,7 +14781,7 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [HashLiteral, ~, [5, 9], 7, HashRef], # 10
   [HashLiteral, {sigil: "%", symbol: v}, [4, 7, 8, 10], 10, Hash], # 11
   [Assign, ~, [3, 11], 11, List, 2, true], # 12
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, ~, 12, Str, 12, true], # 13
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, ~, 12, Str, 12, true], # 13
   [Coerce, {from_repr: Unknown, to_repr: Str}, [13], ~, Str], # 14
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 15
   [Print, ~, [14, 15], 13, "Maybe[Boolean]"], # 16
@@ -14800,7 +14801,7 @@ main::emit: {start: 0, returns: [10], nodes: [
 main::f: {start: 0, returns: [13], nodes: [
   [Start], # 0
   [MemStart], # 1
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::vars, package: main, param_names: [], want: scalar}, ~, 0, HashRef, 1, true], # 2
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::vars, package: main, param_names: [], want: scalar}, ~, 0, HashRef, 1, true], # 2
   [PostfixDeref, {sigil: "%"}, [2], 2, Hash, 2, true], # 3
   [Loop, {bound: entry}, [3], 3], # 4
   [Phi, {memory: true, region: 4}, [3, 38], ~, List], # 5
@@ -14821,7 +14822,7 @@ main::f: {start: 0, returns: [13], nodes: [
   [Subscript, {kind: array}, [16, 19], ~, Scalar], # 20
   [Proj, {index: 0}, [4]], # 21
   [Ref, ~, [20], 21, ScalarRef, 5], # 22
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::vars, package: main, param_names: [], want: scalar}, ~, 22, HashRef, 5, true], # 23
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::vars, package: main, param_names: [], want: scalar}, ~, 22, HashRef, 5, true], # 23
   [PostfixDeref, {sigil: $}, [22], 23, Scalar, 23], # 24
   [Subscript, {kind: hash}, [23, 24], 24, Scalar, 23, true], # 25
   [PadAccess, {sigil: $, symbol: info}, ~, ~, Unknown, 25], # 26
@@ -14833,7 +14834,7 @@ main::f: {start: 0, returns: [13], nodes: [
   [Constant, {const_type: string, value: "="}, ~, ~, Str], # 32
   [Concat, ~, [31, 32], ~, Str], # 33
   [PadAccess, {sigil: $, symbol: info}, ~, ~, Unknown, 30], # 34
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::emit, package: main, param_names: [], want: scalar}, [34], 30, Str, 30, true], # 35
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::emit, package: main, param_names: [], want: scalar}, [34], 30, Str, 30, true], # 35
   [Coerce, {from_repr: Unknown, to_repr: Str}, [35], ~, Str], # 36
   [Concat, ~, [33, 36], ~, Str], # 37
   [Call, {dispatch_kind: builtin, name: push, param_names: []}, [11, 37], 35, Int, 35, true], # 38
@@ -14883,7 +14884,7 @@ main::__PROGRAM__: {start: 0, returns: [17], nodes: [
   [HashLiteral, ~, [5, 9], 7, HashRef], # 10
   [HashLiteral, {sigil: "%", symbol: v}, [4, 7, 8, 10], 10, Hash], # 11
   [Assign, ~, [3, 11], 11, List, 2, true], # 12
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, ~, 12, Str, 12, true], # 13
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 3, name: main::f, package: main, param_names: [], want: list}, ~, 12, Str, 12, true], # 13
   [Coerce, {from_repr: Unknown, to_repr: Str}, [13], ~, Str], # 14
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 15
   [Print, ~, [14, 15], 13, "Maybe[Boolean]"], # 16
@@ -14904,7 +14905,7 @@ main::emit: {start: 0, returns: [11], nodes: [
 main::f: {start: 0, returns: [13], nodes: [
   [Start], # 0
   [MemStart], # 1
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::vars, package: main, param_names: [], want: scalar}, ~, 0, HashRef, 1, true], # 2
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::vars, package: main, param_names: [], want: scalar}, ~, 0, HashRef, 1, true], # 2
   [PostfixDeref, {sigil: "%"}, [2], 2, Hash, 2, true], # 3
   [Loop, {bound: entry}, [3], 3], # 4
   [Phi, {memory: true, region: 4}, [3, 51], ~, List], # 5
@@ -14925,7 +14926,7 @@ main::f: {start: 0, returns: [13], nodes: [
   [Subscript, {kind: array}, [16, 19], ~, Scalar], # 20
   [Proj, {index: 0}, [4]], # 21
   [Ref, ~, [20], 21, ScalarRef, 5], # 22
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::vars, package: main, param_names: [], want: scalar}, ~, 22, HashRef, 5, true], # 23
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::vars, package: main, param_names: [], want: scalar}, ~, 22, HashRef, 5, true], # 23
   [PostfixDeref, {sigil: $}, [22], 23, Scalar, 23], # 24
   [Subscript, {kind: hash}, [23, 24], 24, Scalar, 23, true], # 25
   [PadAccess, {sigil: $, symbol: info}, ~, ~, Unknown, 25], # 26
@@ -14944,7 +14945,7 @@ main::f: {start: 0, returns: [13], nodes: [
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 39
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 40
   [TernaryExpr, ~, [38, 39, 40], ~, "Maybe[Int]"], # 41
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: main::emit, package: main, param_names: [], want: scalar}, [34, 41], 35, Scalar, 30, true], # 42
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: main::emit, package: main, param_names: [], want: scalar}, [34, 41], 35, Scalar, 30, true], # 42
   [Coerce, {from_repr: Unknown, to_repr: Str}, [42], ~, Str], # 43
   [Concat, ~, [33, 43], ~, Str], # 44
   [Defined, ~, [42], ~, Boolean], # 45
@@ -14988,7 +14989,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: main::f, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: main::f, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
   [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
   [Print, ~, [4, 5], 3, "Maybe[Boolean]"], # 6
@@ -15028,7 +15029,7 @@ main::f: {start: 0, returns: [20], nodes: [
   [If, ~, [25, 30], 25], # 31
   [Ref, ~, [16], ~, ArrayRef], # 32
   [Proj, {index: 0}, [31]], # 33
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: main::w, package: main, param_names: [], want: void}, [32, 27], 33, Int, 7, true], # 34
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: main::w, package: main, param_names: [], want: void}, [32, 27], 33, Int, 7, true], # 34
   [Proj, {index: 1}, [31]], # 35
   [Region, {head: 31}, [34, 35]], # 36
   [Phi, {memory: true, predecessors: [33, 35], region: 36}, [34, 7], ~, Unknown], # 37
@@ -15071,7 +15072,7 @@ main::__PROGRAM__: {start: 0, returns: [10], nodes: [
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 3
   [HashLiteral, ~, [2, 3], 0, HashRef], # 4
   [MemStart], # 5
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: main::f, package: main, param_names: [], want: list}, [4], 4, Str, 5, true], # 6
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: main::f, package: main, param_names: [], want: list}, [4], 4, Str, 5, true], # 6
   [Coerce, {from_repr: Unknown, to_repr: Str}, [6], ~, Str], # 7
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 8
   [Print, ~, [7, 8], 6, "Maybe[Boolean]"], # 9
@@ -15080,11 +15081,11 @@ main::f: {start: 0, returns: [16], nodes: [
   [Start], # 0
   [PadAccess, {sigil: $, symbol: h}, ~, ~, Unknown], # 1
   [MemStart], # 2
-  [PostfixDeref, {copy: 1, eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, package: main, sigil: "%", strict: false}, [1], ~, Hash, 2], # 3
+  [PostfixDeref, {copy: 1, eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 1, package: main, sigil: "%", strict: false}, [1], ~, Hash, 2], # 3
   [Constant, {const_type: string, value: a}, ~, ~, Str], # 4
   [Subscript, {kind: hash}, [1, 4], ~, Scalar], # 5
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 6
-  [PostfixDeref, {eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, package: main, sigil: "%", strict: false}, [1], 0, Hash, 2, true], # 7
+  [PostfixDeref, {eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 1, package: main, sigil: "%", strict: false}, [1], 0, Hash, 2, true], # 7
   [Assign, ~, [5, 6], 7, Int, 7, true], # 8
   [Subscript, {kind: hash}, [3, 4], ~, Scalar, 8], # 9
   [Coerce, {from_repr: Unknown, to_repr: Str}, [9], ~, Str], # 10
@@ -15121,7 +15122,7 @@ main::__PROGRAM__: {start: 0, returns: [9], nodes: [
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 2
   [ArrayLiteral, ~, [2], 0, ArrayRef], # 3
   [MemStart], # 4
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: main::f, package: main, param_names: [], want: list}, [3], 3, Str, 4, true], # 5
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: main::f, package: main, param_names: [], want: list}, [3], 3, Str, 4, true], # 5
   [Coerce, {from_repr: Unknown, to_repr: Str}, [5], ~, Str], # 6
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 7
   [Print, ~, [6, 7], 5, "Maybe[Boolean]"], # 8
@@ -15130,11 +15131,11 @@ main::f: {start: 0, returns: [16], nodes: [
   [Start], # 0
   [PadAccess, {sigil: $, symbol: h}, ~, ~, Unknown], # 1
   [MemStart], # 2
-  [PostfixDeref, {copy: 1, eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, package: main, sigil: "@", strict: false}, [1], ~, Array, 2], # 3
+  [PostfixDeref, {copy: 1, eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 1, package: main, sigil: "@", strict: false}, [1], ~, Array, 2], # 3
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 4
   [Subscript, {kind: array}, [1, 4], ~, Scalar], # 5
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 6
-  [PostfixDeref, {eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, package: main, sigil: "@", strict: false}, [1], 0, Array, 2, true], # 7
+  [PostfixDeref, {eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 1, package: main, sigil: "@", strict: false}, [1], 0, Array, 2, true], # 7
   [Assign, ~, [5, 6], 7, Int, 7, true], # 8
   [Subscript, {kind: array}, [3, 4], ~, Scalar, 8], # 9
   [Coerce, {from_repr: Unknown, to_repr: Str}, [9], ~, Str], # 10
@@ -15174,7 +15175,7 @@ main::__PROGRAM__: {start: 0, returns: [12], nodes: [
   [Constant, {const_type: integer, value: "2"}, ~, ~, Int], # 5
   [HashLiteral, ~, [2, 3, 4, 5], 0, HashRef], # 6
   [MemStart], # 7
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: main::f, package: main, param_names: [], want: list}, [6], 6, Str, 7, true], # 8
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: main::f, package: main, param_names: [], want: list}, [6], 6, Str, 7, true], # 8
   [Coerce, {from_repr: Unknown, to_repr: Str}, [8], ~, Str], # 9
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 10
   [Print, ~, [9, 10], 8, "Maybe[Boolean]"], # 11
@@ -15184,14 +15185,14 @@ main::f: {start: 0, returns: [10], nodes: [
   [Constant, {const_type: string, value: ""}, ~, ~, Str], # 1
   [PadAccess, {sigil: $, symbol: h}, ~, ~, Unknown], # 2
   [MemStart], # 3
-  [PostfixDeref, {eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, package: main, sigil: "%", strict: false}, [2], 0, Hash, 3, true], # 4
+  [PostfixDeref, {eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 1, package: main, sigil: "%", strict: false}, [2], 0, Hash, 3, true], # 4
   [Loop, {bound: entry}, [4], 4], # 5
   [Proj, {index: 1}, [5]], # 6
   [Region, {head: 5}, [6]], # 7
   [Phi, {memory: true, region: 5}, [4, 29], ~, List], # 8
   [Phi, {memory: true, region: 7}, [8], ~, List], # 9
   [Return, ~, [1], 7, ~, 9], # 10
-  [PostfixDeref, {copy: 1, eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, package: main, sigil: "%", strict: false}, [2], ~, Hash, 3], # 11
+  [PostfixDeref, {copy: 1, eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 1, package: main, sigil: "%", strict: false}, [2], ~, Hash, 3], # 11
   [Call, {dispatch_kind: builtin, name: keys, param_names: [], want: list}, [11], ~, List, 4], # 12
   [Call, {dispatch_kind: builtin, name: sort, param_names: [], sort_cmp: string, sort_order: ascending}, [12], ~, List, 4], # 13
   [ArrayLiteral, ~, [13], ~, Array], # 14

@@ -151,7 +151,7 @@ main::__PROGRAM__: {start: 0, returns: [38], nodes: [
   [PackageMark, {package: Foo}, ~, 0], # 2
   [PackageMark, {package: main}, ~, 2], # 3
   [MemStart], # 4
-  [Call, {class_name: Foo, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 13, name: new, package: main, param_names: [], want: scalar}, ~, 3, Object, 4, true], # 5
+  [Call, {class_name: Foo, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 13, name: new, package: main, param_names: [], want: scalar}, ~, 3, Object, 4, true], # 5
   [PadAccess, {sigil: $, symbol: t}, ~, ~, Str], # 6
   [Constant, {const_type: string, value: Bar}, ~, ~, Str], # 7
   [Constant, {const_type: string, value: arg}, ~, ~, Str], # 8
@@ -161,15 +161,15 @@ main::__PROGRAM__: {start: 0, returns: [38], nodes: [
   [Assign, ~, [11, 10], 10, Unknown, 10, true], # 12
   [PadAccess, {sigil: $, symbol: b}, ~, ~, Scalar, 12], # 13
   [Constant, {const_type: string, value: hi}, ~, ~, Str], # 14
-  [Call, {dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 17, name: can, package: main, param_names: [], want: scalar}, [13, 14], 12, Unknown, 12, true], # 15
-  [Call, {dispatch_kind: indirect, file: "/tmp/yDlL8UMbFX/case.pl", line: 17, name: "", package: main, param_names: [], want: scalar}, [15, 13], 15, Unknown, 15, true], # 16
+  [Call, {dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 17, name: can, package: main, param_names: [], want: scalar}, [13, 14], 12, Unknown, 12, true], # 15
+  [Call, {dispatch_kind: indirect, file: "/tmp/mvrHQew3rs/case.pl", line: 17, name: "", package: main, param_names: [], want: scalar}, [15, 13], 15, Unknown, 15, true], # 16
   [Call, {dispatch_kind: builtin, name: tie, param_names: []}, [6, 7, 8], 16, Unknown, 16, true], # 17
   [RefType, ~, [5], ~, Str, 17], # 18
-  [Call, {class_name: Foo, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 20, name: m, package: main, param_names: [], want: list}, [5], 17, Int, 17, true], # 19
+  [Call, {class_name: Foo, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 20, name: m, package: main, param_names: [], want: list}, [5], 17, Int, 17, true], # 19
   [Coerce, {from_repr: Unknown, to_repr: Str}, [19], ~, Str], # 20
   [PadAccess, {sigil: $, symbol: b}, ~, ~, Unknown, 19], # 21
   [RefType, ~, [21], ~, Str, 19], # 22
-  [Call, {dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 20, name: hi, package: main, param_names: [], want: list}, [21], 19, Unknown, 19, true], # 23
+  [Call, {dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 20, name: hi, package: main, param_names: [], want: list}, [21], 19, Unknown, 19, true], # 23
   [Coerce, {from_repr: Unknown, to_repr: Str}, [23], ~, Str], # 24
   [PadAccess, {sigil: $, symbol: b}, ~, ~, Unknown, 23], # 25
   [Call, {dispatch_kind: dynamic_method, name: "", param_names: [], want: list}, [25, 14], 23, Unknown, 23, true], # 26
@@ -193,7 +193,7 @@ main::__PROGRAM__: {start: 0, returns: [38], nodes: [
   [Constant, {const_type: string, value: feature.pm}, ~, ~, Str], # 4
   [MemStart], # 5
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [4], 0, Unknown, 5, true], # 6
-  [Call, {class_name: feature, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2, 3], 6, Unknown, 6, true], # 7
+  [Call, {class_name: feature, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 1, name: import, package: main, param_names: []}, [1, 2, 3], 6, Unknown, 6, true], # 7
   [Return, {implicit: true}, [7], 7, ~, 7]]} # 8
 "BEGIN 2": {start: 0, returns: [7], nodes: [
   [Start], # 0
@@ -202,6 +202,6 @@ main::__PROGRAM__: {start: 0, returns: [38], nodes: [
   [Constant, {const_type: string, value: warnings.pm}, ~, ~, Str], # 3
   [MemStart], # 4
   [Call, {dispatch_kind: builtin, name: require, param_names: []}, [3], 0, Unknown, 4, true], # 5
-  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, name: unimport, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
+  [Call, {class_name: warnings, dispatch_kind: method, file: "/tmp/mvrHQew3rs/case.pl", line: 2, name: unimport, package: main, param_names: []}, [1, 2], 5, Unknown, 5, true], # 6
   [Return, {implicit: true}, [6], 6, ~, 6]]} # 7
 ```

@@ -56,7 +56,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: Greet::hello, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: Greet::hello, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
   [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
   [Print, ~, [4, 5], 3, "Maybe[Boolean]"], # 6
@@ -100,7 +100,7 @@ main::__PROGRAM__: {start: 0, returns: [7], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 4, name: Louder::shout, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 4, name: Louder::shout, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
   [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
   [Print, ~, [4, 5], 3, "Maybe[Boolean]"], # 6
@@ -168,11 +168,11 @@ main::__PROGRAM__: {start: 0, returns: [10], nodes: [
   [Start], # 0
   [Constant, {const_type: undef, value: ~}, ~, ~, Undef], # 1
   [MemStart], # 2
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 5, name: main::shout, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 5, name: main::shout, package: main, param_names: [], want: list}, ~, 0, Str, 2, true], # 3
   [Coerce, {from_repr: Unknown, to_repr: Str}, [3], ~, Str], # 4
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 5
   [Print, ~, [4, 5], 3, "Maybe[Boolean]"], # 6
-  [Call, {dispatch_kind: direct, file: "/tmp/yDlL8UMbFX/case.pl", line: 6, name: Greet::hello, package: main, param_names: [], want: list}, ~, 6, Str, 3, true], # 7
+  [Call, {dispatch_kind: direct, file: "/tmp/mvrHQew3rs/case.pl", line: 6, name: Greet::hello, package: main, param_names: [], want: list}, ~, 6, Str, 3, true], # 7
   [Coerce, {from_repr: Unknown, to_repr: Str}, [7], ~, Str], # 8
   [Print, ~, [8, 5], 7, "Maybe[Boolean]"], # 9
   [Return, {implicit: true}, [1], 9, ~, 7]]} # 10

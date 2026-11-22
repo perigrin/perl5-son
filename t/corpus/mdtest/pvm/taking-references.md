@@ -115,12 +115,12 @@ main::__PROGRAM__: {start: 0, returns: [19], nodes: [
   [ArrayLiteral, {sigil: "@", symbol: r}, [6], ~, Array], # 7
   [Constant, {const_type: integer, value: "0"}, ~, ~, Int], # 8
   [Subscript, {kind: array}, [7, 8], ~, Scalar, 6], # 9
-  [PostfixDeref, {eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, package: main, sigil: $, strict: false}, [9], 6, Scalar, 6, true], # 10
+  [PostfixDeref, {eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 3, package: main, sigil: $, strict: false}, [9], 6, Scalar, 6, true], # 10
   [Coerce, {from_repr: Scalar, to_repr: Str}, [10], ~, Str], # 11
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 12
   [Constant, {const_type: integer, value: "1"}, ~, ~, Int], # 13
   [Subscript, {kind: array}, [7, 13], ~, Scalar, 10], # 14
-  [PostfixDeref, {eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 3, package: main, sigil: $, strict: false}, [14], 10, Scalar, 10, true], # 15
+  [PostfixDeref, {eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 3, package: main, sigil: $, strict: false}, [14], 10, Scalar, 10, true], # 15
   [Coerce, {from_repr: Scalar, to_repr: Str}, [15], ~, Str], # 16
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 17
   [Print, ~, [11, 12, 16, 17], 15, "Maybe[Boolean]"], # 18
@@ -167,7 +167,7 @@ main::__PROGRAM__: {start: 0, returns: [14], nodes: [
   [Constant, {const_type: integer, value: "30"}, ~, ~, Int], # 4
   [ArrayLiteral, ~, [2, 3, 4], 0, ArrayRef], # 5
   [MemStart], # 6
-  [PostfixDeref, {eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 2, package: main, sigil: "@", strict: false}, [5], ~, Array, 6], # 7
+  [PostfixDeref, {eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 2, package: main, sigil: "@", strict: false}, [5], ~, Array, 6], # 7
   [Count, ~, [7], ~, Int, 6], # 8
   [Coerce, {from_repr: Int, to_repr: Str}, [8], ~, Str], # 9
   [Constant, {const_type: string, value: " "}, ~, ~, Str], # 10
@@ -234,7 +234,7 @@ main::__PROGRAM__: {start: 0, returns: [22], nodes: [
   [PadAccess, {sigil: $, symbol: "n"}, ~, ~, Unknown, 8], # 15
   [Ref, ~, [15], ~, Unknown], # 16
   [RefType, ~, [16], ~, Str, 8], # 17
-  [PostfixDeref, {eval_id: ~, file: "/tmp/yDlL8UMbFX/case.pl", line: 7, package: main, sigil: $, strict: false}, [16], ~, Scalar, 8], # 18
+  [PostfixDeref, {eval_id: ~, file: "/tmp/mvrHQew3rs/case.pl", line: 7, package: main, sigil: $, strict: false}, [16], ~, Scalar, 8], # 18
   [Coerce, {from_repr: Scalar, to_repr: Str}, [18], ~, Str], # 19
   [Constant, {const_type: string, value: "\n"}, ~, ~, Str], # 20
   [Print, ~, [9, 10, 14, 10, 17, 10, 19, 20], 8, "Maybe[Boolean]"], # 21
