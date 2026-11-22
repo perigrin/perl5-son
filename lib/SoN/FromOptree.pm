@@ -6145,6 +6145,12 @@ class SoN::FromOptree 0.01 {
     my %EXISTED;   # refaddr of an element read -> the Exists made beside it
     my %OPERAND_DEPTH;      # padsv/gvsv/rv2sv op, or element operand, address -> the stack slot its read took
     sub _step ($cv, $op, $sim, $factory, $opmap, $ctx) {
+        # A FUSED ELEMENT OF A PACKAGE ARRAY is the peephole's, in code perl
+        # compiled before B::SoN turned it off (DynaLoader, loaded at
+        # startup). The op map made it an element of nothing, and the list
+        # assign beside it lost its list (audit 2026-11-22: the held record).
+        die "GAP: an aelemfast of a package array (compiled with the peephole optimizer on, before B::SoN) is not translated\n"
+            if $op->name eq 'aelemfast';
         my $k = _elem_operand_reread($cv, $op) or return _step_op($cv, $op, $sim, $factory, $opmap, $ctx);
         my @r = _step_op($cv, $op, $sim, $factory, $opmap, $ctx);
         return @r unless ( $r[1] // '' ) eq 'handled' && $sim->stack_depth;

@@ -51,7 +51,9 @@ COMBINED
 subtest 'a bare arithmetic-and-print program translates via translate_root()' => sub {
     # @ARGV[0] keeps the addend a genuine runtime value (a literal `2 + 3`
     # folds to a Constant at parse time, before translate_root() ever runs).
-    my $out = probe(qq{my \$x = \$ARGV[0] + 3;\nprint "\$x\\n";});
+    # (not `$ARGV[0]`: compiled here with the peephole on it is an aelemfast,
+    # which B::SoN refuses by name -- it was an element of nothing)
+    my $out = probe(qq{my \$x = scalar(\@ARGV) + 3;\nprint "\$x\\n";});
     diag($out) unless $out =~ /OPS:/;
     like($out, qr/HAS_START: yes/, 'graph has a Start node');
     like($out, qr/HAS_RETURN: yes/, 'graph has a Return (program exit) node');

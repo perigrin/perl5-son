@@ -39,11 +39,10 @@ my %HELD = (
     'probes p/pl13:main::sw record' =>
         'a list assignment to package scalars that is its sub\'s value: its EntryWrites store, and the Assign '
       . 'is the value, on neither chain; what node that value is wants a design (chalk T2 refuses it by name)',
-    # (perl's own DynaLoader, which chalk's runtime module follows)
-    map( { ( "chalk Chalk/Bootstrap/Runtime:$_ record" =>
-        'an Assign of @isa alone, on neither chain, beside `local *isa = ...; local @isa = (...)`: a v1 floating '
-      . 'store the v2 writer calls a record; small programs of that shape do not reproduce it, not traced yet' ) }
-        qw(DynaLoader::bootstrap DynaLoader::bootstrap_inherit) ),
+    # (perl's own DynaLoader, which chalk's runtime module follows, was held
+    # here as "not traced yet": traced, its subs were compiled with the
+    # peephole on, and B::SoN now refuses their aelemfast by name --
+    # t/wire-a-fused-element-op-is-refused.t)
 );
 
 my $baseline = 't/data/wire-verify-baseline.tsv';
