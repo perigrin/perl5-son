@@ -14349,7 +14349,10 @@ class SoN::FromOptree 0.01 {
         my $pads;
         $pads = sub ($op) {
             return unless ref $op && $$op;
-            $w{ $op->targ } = 1 if $op->name =~ /\A(?:pad(?:sv|av|hv|any)|aelemfast_lex)\z/;
+            # (an element's container or a reference's target is memory:
+            # `($a[0], $a[1]) = ...` stores into @a and leaves it bound)
+            return if $op->name =~ /\A(?:aelem|helem|multideref|aelemfast_lex|aslice|hslice|kvaslice|kvhslice|rv2[ash]v)\z/;
+            $w{ $op->targ } = 1 if $op->name =~ /\Apad(?:sv|av|hv|any)\z/;
             return unless $op->flags & B::OPf_KIDS();
             for ( my $k = $op->first; ref $k && $$k; $k = $k->sibling ) { $pads->($k) }
         };
@@ -14387,16 +14390,6 @@ class SoN::FromOptree 0.01 {
             # writes $b, not $raw); the other writers of an operand flag the
             # pad op OPf_MOD (chomp, undef, read, ...)
             $w{ $op->targ } = 1 if $name =~ /\A(?:subst|trans|transr)\z/ && $op->targ;
-        }
-        # A `my` THE PASS DECLARES is fresh each pass, and its binding goes
-        # back where its block ends: no loop carries it. (A Phi for it stood
-        # where `(my $b = $raw) =~ s///` looks the copy up, and the
-        # substitution went into $raw.)
-        for my $op ( _loop_cycle_ops($start) ) {
-            next unless $op->private & B::OPpLVAL_INTRO();
-            my $name = $op->name;
-            if ( $name eq 'padrange' ) { delete @w{ $op->targ .. $op->targ + ( $op->private & B::OPpPADRANGE_COUNTMASK() ) - 1 } }
-            elsif ( $name =~ /\Apad(?:sv|av|hv|any)(?:_store)?\z/ ) { delete $w{ $op->targ } }
         }
         return \%w;
     }
