@@ -314,6 +314,8 @@ sub _graph_v2 ( $name, $g, $res, $profile = {} ) {
         return $i < ( $f->{targets} // 1 ) if $op eq 'Assign';
         return $i == $#{ $c->{inputs} } if $op eq 'Slice';
         return 1 if $op eq 'Call' && ( ( $f->{dispatch_kind} // '' ) ne 'builtin' || defined $c->{mem_in} );
+        # (pos() names the variable whose position it is, not its value)
+        return 1 if $op eq 'Call' && ( B::SoN::EffectTable::reads_state( $f->{name} ) // '' ) eq 'variable';
         return 1 if $op =~ /^(?:AnonSub|RegexSubst|Transliterate|Chomp)$/;
         return $i == 0
             if $op =~ /^(?:Subscript|Exists|Delete|Count|PostfixDeref|ElemRestore|Ref|LocalAlias|VarDecl|MakeCell|CellRead|EntryWrite|CellWrite)$/;
@@ -372,7 +374,7 @@ sub _graph_v2 ( $name, $g, $res, $profile = {} ) {
         $bad->( $n, "read-unversioned:$class", _describe( $n, \%by ) );
     }
     for my $n ( grep { $_->{op} =~ /^(?:ArrayLiteral|HashLiteral)$/ && ( _fields($_)->{symbol} // '' ) =~ /::/ } @nodes ) {
-        my @uses = grep { !( $_->[0]{op} eq "EntryWrite" && $_->[1] == 1 ) && !$is_place_use->(@$_) } ( $cons{ $n->{id} } // [] )->@*;
+        my @uses = grep { $live{ $_->[0]{id} } && !( $_->[0]{op} eq "EntryWrite" && $_->[1] == 1 ) && !$is_place_use->(@$_) } ( $cons{ $n->{id} } // [] )->@*;
         $bad->( $n, 'read-unversioned:package-aggregate-literal',
             _fields($n)->{symbol} . ' read by ' . join( ',', map { "$_->[0]{op}#$_->[0]{id}" } @uses ) ) if @uses;
     }

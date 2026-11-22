@@ -8753,6 +8753,14 @@ class SoN::FromOptree 0.01 {
                     $target = _make_pad_or_field($cv, $targ, $factory);
                     $sim->define($targ, $target);
                 }
+                # A FIELD SUBJECT is the field at this memory version, as the
+                # padsv handler reads one (V6, `field`): `$type =~ /\*$/`.
+                $target = $factory->make('FieldAccess',
+                    field_index => $target->field_index,
+                    field_stash => $target->field_stash,
+                    mem         => $sim->memory)
+                    if $target->isa('SoN::IR::Node::FieldAccess') && !defined $target->mem_in
+                    && defined $sim->memory;
             }
             else {
                 # An unbound match reads $_ — the package scalar main::_, which

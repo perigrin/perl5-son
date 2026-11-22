@@ -33,6 +33,9 @@ for my $case (
         $H . q{class H { field %r; field @o; method reg ($g) { %r = $g->%*; @o = sort keys %r; return $self } method clear { @o = (); return $self }
                method summary { return scalar(keys %r) . ":" . join(",", @o) } }
                my $h = H->new->reg({ b => 2, a => 1 }); print $h->summary, " ", $h->clear->summary, "\n";} ],
+    [ 'a field the subject of a match (chalk XS::AST::VarDecl::emit)',
+        $H . q{class K { field $t :param = "a*"; method m { return $t =~ /\*$/ ? "p" : "n" } } print K->new->m, K->new(t => "b")->m, "\n";} ],
+    [ 'a field matched in ADJUST', $H . q{class K { field $n :param; ADJUST { die "bad\n" unless $n =~ /^\w+$/ } method n { $n } } print K->new(n => "ok")->n, "\n";} ],
     [ 'a field array read whole either side of a push',
         $H . q{class K { field @f = (1); method m { my @a = @f; push @f, 2; my @b = @f; return "@a|@b" } } print K->new->m, "\n";} ],
 ) {

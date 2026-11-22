@@ -231,6 +231,14 @@ subtest 'V6: a read only a dead node takes is not used' => sub {
         nd( 5, 'Return', [4], ctl => 0, mem => 1 ),
     ) );
     is [ keys %$u ], ['read-unversioned:package'], 'returned, it is';
+    my $l = rules( v2(
+        nd( 0, 'Start', [] ), nd( 1, 'MemStart', [] ), nd( 2, 'Constant', [] ),
+        nd( 3, 'ArrayLiteral', [2], sigil => '@', symbol => '@main::INC' ),
+        nd( 4, 'Region', [0] ),
+        nd( 5, 'Phi', [3], region => 4 ),
+        nd( 6, 'Return', [2], ctl => 4, mem => 1 ),
+    ) );
+    is $l, {}, 'a package literal only a dead Phi takes (DynaLoader::bootstrap): none';
 };
 subtest 'V6: an item of an alias list, a binding merged and read as a container, a parameter bind' => sub {
     is [ grep { /\Aread-unversioned/ } keys rules('our @g = (1, 2); my @n; push @n, 3; for my $x (@n, $g[0]) { print $x } print "\n";')->%* ], [],
@@ -239,6 +247,8 @@ subtest 'V6: an item of an alias list, a binding merged and read as a container,
         'an array rebound in an arm, counted and indexed after the join';
     is [ grep { /\Aread-unversioned/ } keys rules('sub n { my ($c, %a) = @_; return bless {%a}, $c } print ref(n("K", a => 1)), "\n";')->%* ], [],
         'a slurpy hash bound from @_ and read whole';
+    is [ grep { /\Aread-unversioned/ } keys rules('sub m1 { my ($r, $p) = @_; pos($r->$*) = $p; return $r->$* =~ /\Gb/gc ? pos($r->$*) : -1 } my $s = "abc"; print m1(\$s, 1), "\n";')->%* ], [],
+        'pos() of a scalar through a reference, set: the variable, not its value (chalk Terminal::match_at)';
 };
 subtest 'V6: a list slice is of values, not a read of memory' => sub {
     my $r = rules( v2(
